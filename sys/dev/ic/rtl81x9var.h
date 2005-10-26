@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl81x9var.h,v 1.11 2003/10/25 23:48:45 fvdl Exp $	*/
+/*	$NetBSD: rtl81x9var.h,v 1.11.2.2.2.1 2005/04/16 12:16:16 tron Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998
@@ -33,6 +33,12 @@
  *
  *	FreeBSD Id: if_rlreg.h,v 1.9 1999/06/20 18:56:09 wpaul Exp
  */
+
+#include "rnd.h"
+
+#if NRND > 0
+#include <sys/rnd.h>
+#endif
 
 #define RTK_ETHER_ALIGN	2
 #define RTK_RXSTAT_LEN	4
@@ -75,6 +81,29 @@ struct rtk_mii_frame {
 #define RTK_ISCPLUS(x)	((x)->rtk_type == RTK_8139CPLUS || \
 			 (x)->rtk_type == RTK_8169)
 
+/*
+ * The 8139C+ and 8160 gigE chips support descriptor-based TX
+ * and RX. In fact, they even support TCP large send. Descriptors
+ * must be allocated in contiguous blocks that are aligned on a
+ * 256-byte boundary. The rings can hold a maximum of 64 descriptors.
+ */
+
+struct rtk_list_data {
+	struct mbuf		*rtk_tx_mbuf[RTK_TX_DESC_CNT];
+	struct mbuf		*rtk_rx_mbuf[RTK_RX_DESC_CNT];
+	int			rtk_tx_prodidx;
+	int			rtk_rx_prodidx;
+	int			rtk_tx_considx;
+	int			rtk_tx_free;
+	bus_dmamap_t		rtk_tx_dmamap[RTK_TX_DESC_CNT];
+	bus_dmamap_t		rtk_rx_dmamap[RTK_RX_DESC_CNT];
+	bus_dmamap_t		rtk_rx_list_map;
+	struct rtk_desc		*rtk_rx_list;
+	bus_dma_segment_t 	rtk_rx_listseg;
+	bus_dmamap_t		rtk_tx_list_map;
+	struct rtk_desc		*rtk_tx_list;
+	bus_dma_segment_t 	rtk_tx_listseg;
+};
 struct rtk_tx_desc {
 	SIMPLEQ_ENTRY(rtk_tx_desc) txd_q;
 	struct mbuf		*txd_mbuf;
@@ -101,6 +130,11 @@ struct rtk_softc {
 	struct rtk_tx_desc	rtk_tx_descs[RTK_TX_LIST_CNT];
 	SIMPLEQ_HEAD(, rtk_tx_desc) rtk_tx_free;
 	SIMPLEQ_HEAD(, rtk_tx_desc) rtk_tx_dirty;
+	struct rtk_list_data	rtk_ldata;
+	struct mbuf		*rtk_head;
+	struct mbuf		*rtk_tail;
+	u_int32_t		rtk_rxlenmask;
+	int			rtk_testmode;
 
 	int			sc_flags;	/* misc flags */
 	int			sc_txthresh;	/* Early tx threshold */
@@ -112,6 +146,9 @@ struct rtk_softc {
 	int	(*sc_enable)	__P((struct rtk_softc *));
 	void	(*sc_disable)	__P((struct rtk_softc *));
 	void	(*sc_power)	__P((struct rtk_softc *, int));
+#if NRND > 0
+	rndsource_element_t     rnd_source;
+#endif
 };
 
 #define RTK_ATTACHED 0x00000001 /* attach has succeeded */
@@ -162,6 +199,8 @@ struct rtk_softc {
 #define RTK_PME_STATUS		0x8000
 
 #ifdef _KERNEL
+u_int16_t rtk_read_eeprom __P((struct rtk_softc *, int, int));
+void	rtk_setmulti	__P((struct rtk_softc *));
 void	rtk_attach	__P((struct rtk_softc *));
 int	rtk_detach	__P((struct rtk_softc *));
 int	rtk_activate	__P((struct device *, enum devact));

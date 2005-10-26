@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfsmount.h,v 1.5 2003/10/03 16:34:31 yamt Exp $	*/
+/*	$NetBSD: msdosfsmount.h,v 1.5.2.2 2004/05/23 10:46:11 tron Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -56,13 +56,13 @@ struct msdosfs_args {
 	uid_t	uid;		/* uid that owns msdosfs files */
 	gid_t	gid;		/* gid that owns msdosfs files */
 	mode_t  mask;		/* mask to be applied for msdosfs perms */
-	int	gmtoff;		/* offset from UTC in seconds */
 	int	flags;		/* see below */
 
 	/* Following items added after versioning support */
 	int	version;	/* version of the struct */
-#define MSDOSFSMNT_VERSION	2
+#define MSDOSFSMNT_VERSION	3
 	mode_t  dirmask;	/* v2: mask to be applied for msdosfs perms */
+	int	gmtoff;		/* v3: offset from UTC in seconds */
 };
 
 /*
@@ -230,4 +230,7 @@ void msdosfs_init __P((void));
 void msdosfs_reinit __P((void));
 void msdosfs_done __P((void));
 
+#ifdef SYSCTL_SETUP_PROTO
+SYSCTL_SETUP_PROTO(sysctl_vfs_msdosfs_setup);
+#endif /* SYSCTL_SETUP_PROTO */
 #endif /* _KERNEL */

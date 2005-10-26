@@ -1,4 +1,4 @@
-/*	$NetBSD: if_stge.c,v 1.19 2003/03/01 19:49:45 mjacob Exp $	*/
+/*	$NetBSD: if_stge.c,v 1.19.6.3 2005/07/05 22:06:09 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_stge.c,v 1.19 2003/03/01 19:49:45 mjacob Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_stge.c,v 1.19.6.3 2005/07/05 22:06:09 riz Exp $");
 
 #include "bpfilter.h"
 
@@ -902,15 +902,15 @@ stge_start(struct ifnet *ifp)
 		csum_flags = 0;
 		if (m0->m_pkthdr.csum_flags & M_CSUM_IPv4) {
 			STGE_EVCNT_INCR(&sc->sc_ev_txipsum);
-			csum_flags |= htole64(TFD_IPChecksumEnable);
+			csum_flags |= TFD_IPChecksumEnable;
 		}
 
 		if (m0->m_pkthdr.csum_flags & M_CSUM_TCPv4) {
 			STGE_EVCNT_INCR(&sc->sc_ev_txtcpsum);
-			csum_flags |= htole64(TFD_TCPChecksumEnable);
+			csum_flags |= TFD_TCPChecksumEnable;
 		} else if (m0->m_pkthdr.csum_flags & M_CSUM_UDPv4) {
 			STGE_EVCNT_INCR(&sc->sc_ev_txudpsum);
-			csum_flags |= htole64(TFD_UDPChecksumEnable);
+			csum_flags |= TFD_UDPChecksumEnable;
 		}
 
 		/*
@@ -1036,7 +1036,8 @@ stge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			stge_set_filter(sc);
+			if (ifp->if_flags & IFF_RUNNING)
+				stge_set_filter(sc);
 			error = 0;
 		}
 		break;
@@ -1514,8 +1515,8 @@ stge_init(struct ifnet *ifp)
 	 */
 	memset(sc->sc_txdescs, 0, sizeof(sc->sc_txdescs));
 	for (i = 0; i < STGE_NTXDESC; i++) {
-		sc->sc_txdescs[i].tfd_next =
-		    (uint64_t) STGE_CDTXADDR(sc, STGE_NEXTTX(i));
+		sc->sc_txdescs[i].tfd_next = htole64(
+		    STGE_CDTXADDR(sc, STGE_NEXTTX(i)));
 		sc->sc_txdescs[i].tfd_control = htole64(TFD_TFDDone);
 	}
 	sc->sc_txpending = 0;
@@ -1548,12 +1549,9 @@ stge_init(struct ifnet *ifp)
 	STGE_RXCHAIN_RESET(sc);
 
 	/* Set the station address. */
-	bus_space_write_2(st, sh, STGE_StationAddress0,
-	    LLADDR(ifp->if_sadl)[0] | (LLADDR(ifp->if_sadl)[1] << 8));
-	bus_space_write_2(st, sh, STGE_StationAddress1,
-	    LLADDR(ifp->if_sadl)[2] | (LLADDR(ifp->if_sadl)[3] << 8));
-	bus_space_write_2(st, sh, STGE_StationAddress2,
-	    LLADDR(ifp->if_sadl)[4] | (LLADDR(ifp->if_sadl)[5] << 8));
+	for (i = 0; i < 6; i++)
+		bus_space_write_1(st, sh, STGE_StationAddress0 + i,
+		    LLADDR(ifp->if_sadl)[i]);
 
 	/*
 	 * Set the statistics masks.  Disable all the RMON stats,
@@ -1592,6 +1590,10 @@ stge_init(struct ifnet *ifp)
 
 	/* Initialize the Tx start threshold. */
 	bus_space_write_2(st, sh, STGE_TxStartThresh, sc->sc_txthresh);
+
+	/* RX DMA thresholds, from linux */
+	bus_space_write_1(st, sh, STGE_RxDMABurstThresh, 0x30);
+	bus_space_write_1(st, sh, STGE_RxDMAUrgentThresh, 0x30);
 
 	/*
 	 * Initialize the Rx DMA interrupt control register.  We
@@ -1656,6 +1658,9 @@ stge_init(struct ifnet *ifp)
 		/* Tx Poll Now bug work-around. */
 		bus_space_write_2(st, sh, STGE_DebugCtrl,
 		    bus_space_read_2(st, sh, STGE_DebugCtrl) | 0x0010);
+		/* XXX ? from linux */
+		bus_space_write_2(st, sh, STGE_DebugCtrl,
+		    bus_space_read_2(st, sh, STGE_DebugCtrl) | 0x0020);
 	}
 
 	/*
@@ -1865,16 +1870,6 @@ stge_set_filter(struct stge_softc *sc)
 	sc->sc_ReceiveMode = RM_ReceiveUnicast;
 	if (ifp->if_flags & IFF_BROADCAST)
 		sc->sc_ReceiveMode |= RM_ReceiveBroadcast;
-
-#ifdef	STGE_CU_BUG
-	/*
-	 * Some cards (Sundance TI, copper) only seem to work
-	 * right now if we put them into promiscuous mode. It
-	 * probably is the Marvell PHY stuff that isn't quite
-	 * right.
-	 */
-	ifp->if_flags |= IFF_PROMISC;
-#endif
 
 	if (ifp->if_flags & IFF_PROMISC) {
 		sc->sc_ReceiveMode |= RM_ReceiveAllFrames;

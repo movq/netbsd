@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_var.h,v 1.42 2003/07/23 13:52:25 yamt Exp $	*/
+/*	$NetBSD: nfs_var.h,v 1.42.2.2.2.1 2005/01/11 06:39:07 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -100,7 +100,9 @@ void nfs_kqinit __P((void));
 void nfs_nhinit __P((void));
 void nfs_nhreinit __P((void));
 void nfs_nhdone __P((void));
-int nfs_nget __P((struct mount *, nfsfh_t *, int, struct nfsnode **));
+int nfs_nget1 __P((struct mount *, nfsfh_t *, int, struct nfsnode **, int));
+#define	nfs_nget(mp, fhp, fhsize, npp) \
+	nfs_nget1((mp), (fhp), (fhsize), (npp), 0)
 
 /* nfs_vnops.c */
 int nfs_null __P((struct vnode *, struct ucred *, struct proc *));
@@ -218,7 +220,7 @@ int nfs_receive __P((struct nfsreq *, struct mbuf **, struct mbuf **));
 int nfs_reply __P((struct nfsreq *));
 int nfs_request __P((struct nfsnode *, struct mbuf *, int, struct proc *,
 		     struct ucred *, struct mbuf **, struct mbuf **,
-		     caddr_t *));
+		     caddr_t *, int *));
 int nfs_rephead __P((int, struct nfsrv_descript *, struct nfssvc_sock *,
 		     int, int, u_quad_t *, struct mbuf **, struct mbuf **,			     caddr_t *));
 void nfs_timer __P((void *));
@@ -258,6 +260,7 @@ void nfs_initdircache __P((struct vnode *));
 void nfs_initdirxlatecookie __P((struct vnode *));
 struct nfsdircache *nfs_searchdircache __P((struct vnode *, off_t, int, int *));
 struct nfsdircache *nfs_enterdircache __P((struct vnode *, off_t, off_t,						   int, daddr_t));
+void nfs_putdircache __P((struct nfsnode *, struct nfsdircache *));
 void nfs_invaldircache __P((struct vnode *, int));
 void nfs_init __P((void));
 int nfsm_loadattrcache __P((struct vnode **, struct mbuf **, caddr_t *,

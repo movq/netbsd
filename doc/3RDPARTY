@@ -1,4 +1,4 @@
-#	$NetBSD: 3RDPARTY,v 1.201 2004/03/28 18:02:17 christos Exp $
+#	$NetBSD: 3RDPARTY,v 1.201.2.3.2.11 2005/10/11 16:49:51 riz Exp $
 #
 # This file contains a list of the software that has been integrated into
 # NetBSD where we are not the primary maintainer.
@@ -293,8 +293,8 @@ Use groff2netbsd from src/gnu/dist/groff to prepare the distribution
 for import.
 
 Package:	heimdal
-Version:	0.6
-Current Vers:	0.6
+Version:	0.6.2
+Current Vers:	0.6.2
 Maintainer:	Heimdal <heimdal@pdc.kth.se>
 Archive Site:	ftp://ftp.pdc.kth.se/pub/heimdal/src/
 Mailing List:	heimdal-discuss@pdc.kth.se
@@ -310,10 +310,10 @@ Responsible:	mrg
 Notes:
 
 Package:	ip-filter
-Version:	4.1.1
-Current Vers:	4.1.1
+Version:	4.1.3
+Current Vers:	4.1.8
 Maintainer:	Darren Reed
-Archive Site:	http://www.ipfilter.org/
+Archive Site:	http://coombs.anu.edu.au/~avalon/
 Mailing List:	ipfilter@postbox.anu.edu.au
 Responsible:	darrenr, mike, martti
 Notes:
@@ -702,8 +702,8 @@ Responsible:
 Notes:
 
 Package:	tz
-Version:	tzcode2003e / tzdata2003e
-Current Vers:	tzcode2003e / tzdata2003e
+Version:	tzcode2004a / tzdata2005n
+Current Vers:	tzcode2005n / tzdata2005n
 Maintainer:	Arthur David Olson <ado@elsie.nci.nih.gov>
 Archive Site:	ftp://elsie.nci.nih.gov/pub/
 Mailing List:	tz@elsie.nci.nih.gov
@@ -759,7 +759,7 @@ zlib, used by the free NetBSD gzip(1).
 
 Package:      Vinum
 Version:      2003-10-10
-Current:      2003-10-10
+Current Vers: 2003-10-10
 Maintainer:   grog
 URL:          http://www.vinumvm.org/
 Archive Site: none 

@@ -1,4 +1,4 @@
-/*	$NetBSD: bootblock.h,v 1.24 2004/03/22 07:11:00 lukem Exp $	*/
+/*	$NetBSD: bootblock.h,v 1.24.2.1.2.1 2005/04/06 11:05:59 tron Exp $	*/
 
 /*-
  * Copyright (c) 2002-2004 The NetBSD Foundation, Inc.
@@ -199,6 +199,7 @@
 #define	MBR_BPB_OFFSET		11	/* offsetof(mbr_sector, mbr_bpb) */
 #define	MBR_BOOTCODE_OFFSET	90	/* offsetof(mbr_sector, mbr_bootcode) */
 #define	MBR_BS_OFFSET		400	/* offsetof(mbr_sector, mbr_bootsel) */
+#define	MBR_BS_OLD_OFFSET	404	/* where mbr_bootsel used to be */
 #define	MBR_DSN_OFFSET		440	/* offsetof(mbr_sector, mbr_dsn) */
 #define	MBR_BS_MAGIC_OFFSET	444	/* offsetof(mbr_sector, mbr_bootsel_magic) */
 #define	MBR_PART_OFFSET		446	/* offsetof(mbr_sector, mbr_part[0]) */
@@ -243,8 +244,9 @@
 		/* values for mbr_bootsel.mbrbs_flags */
 #define	MBR_BS_ACTIVE	0x01	/* Bootselector active (or code present) */
 #define	MBR_BS_EXTINT13	0x02	/* Set by fdisk if LBA needed (deprecated) */
-#define	MBR_BS_READ_LBA	0x04	/* Force LBA reads - even for low numbers */
+#define	MBR_BS_READ_LBA	0x04	/* Force LBA reads (deprecated) */
 #define	MBR_BS_EXTLBA	0x08	/* Extended ptn capable (LBA reads) */
+/* This is always set, the bootsel is located using the magic number...  */
 #define	MBR_BS_NEWMBR	0x80	/* New bootsel at offset 440 */
 
 #if !defined(__ASSEMBLER__)					/* { */
@@ -780,6 +782,91 @@ struct pmax_boot_block {
 #define	PMAX_BOOT_BLOCK_OFFSET		0
 #define	PMAX_BOOT_BLOCK_BLOCKSIZE	512
 
+
+/* ------------------------------------------
+ * sgimips
+ */
+
+/*
+ * Some IRIX man pages refer to the size being a multiple of whole cylinders.
+ * Later ones only refer to the size being "typically" 2MB.  IRIX fx(1)
+ * uses a default drive geometry if one can't be determined, suggesting
+ * that "whole cylinder" multiples are not required.
+ */
+
+#define SGI_BOOT_BLOCK_SIZE_VOLHDR	3135
+#define SGI_BOOT_BLOCK_MAGIC		0xbe5a941
+#define SGI_BOOT_BLOCK_MAXPARTITIONS	16
+#define SGI_BOOT_BLOCK_BLOCKSIZE	512
+
+/*
+ * SGI partition conventions:
+ *
+ * Partition 0 - root
+ * Partition 1 - swap
+ * Partition 6 - usr
+ * Partition 7 - volume body
+ * Partition 8 - volume header
+ * Partition 10 - whole disk
+ */
+
+struct sgi_boot_devparms {
+	u_int8_t	dp_skew;
+	u_int8_t	dp_gap1;
+	u_int8_t	dp_gap2;
+	u_int8_t	dp_spares_cyl;
+	u_int16_t	dp_cyls;
+	u_int16_t	dp_shd0;
+	u_int16_t	dp_trks0;
+	u_int8_t	dp_ctq_depth;
+	u_int8_t	dp_cylshi;
+	u_int16_t	dp_unused;
+	u_int16_t	dp_secs;
+	u_int16_t	dp_secbytes;
+	u_int16_t	dp_interleave;
+	u_int32_t	dp_flags;
+	u_int32_t	dp_datarate;
+	u_int32_t	dp_nretries;
+	u_int32_t	dp_mspw;
+	u_int16_t	dp_xgap1;
+	u_int16_t	dp_xsync;
+	u_int16_t	dp_xrdly;
+	u_int16_t	dp_xgap2;
+	u_int16_t	dp_xrgate;
+	u_int16_t	dp_xwcont;
+} __packed;
+
+struct sgi_boot_block {
+	u_int32_t	magic;
+	int16_t		root;
+	int16_t		swap;
+	char		bootfile[16];
+	struct sgi_boot_devparms dp;
+	struct {
+		char		name[8];
+		int32_t		block;
+		int32_t		bytes;
+	}		voldir[15];
+	struct {
+		int32_t		blocks;
+		int32_t		first;
+		int32_t		type;
+	}		partitions[SGI_BOOT_BLOCK_MAXPARTITIONS];
+	int32_t		checksum;
+	int32_t		_pad;
+} __packed;
+
+#define SGI_PTYPE_VOLHDR	0
+#define SGI_PTYPE_RAW		3
+#define SGI_PTYPE_BSD		4
+#define SGI_PTYPE_VOLUME	6
+#define SGI_PTYPE_EFS		7
+#define SGI_PTYPE_LVOL		8
+#define SGI_PTYPE_RLVOL		9
+#define SGI_PTYPE_XFS		10
+#define SGI_PTYPE_XFSLOG	11
+#define SGI_PTYPE_XLV		12
+#define SGI_PTYPE_XVM		13
 
 /* ------------------------------------------
  * sparc

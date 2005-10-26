@@ -1,4 +1,4 @@
-/*	$NetBSD: pax.c,v 1.33 2004/02/13 23:10:14 matt Exp $	*/
+/*	$NetBSD: pax.c,v 1.33.2.1.2.1 2005/07/23 17:32:16 snj Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -44,7 +44,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
 #if 0
 static char sccsid[] = "@(#)pax.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: pax.c,v 1.33 2004/02/13 23:10:14 matt Exp $");
+__RCSID("$NetBSD: pax.c,v 1.33.2.1.2.1 2005/07/23 17:32:16 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -75,7 +75,7 @@ static int gen_init(void);
 int	act = ERROR;		/* read/write/append/copy */
 FSUB	*frmt = NULL;		/* archive format type */
 int	cflag;			/* match all EXCEPT pattern/file */
-int	cwdfd;			/* starting cwd */
+int	cwdfd = -1;		/* starting cwd */
 int	dflag;			/* directory member match only  */
 int	iflag;			/* interactive file/archive rename */
 int	jflag;			/* pass through bzip2 */
@@ -107,7 +107,7 @@ int	docrc;			/* check/create file crc */
 int	to_stdout;		/* extract to stdout */
 char	*dirptr;		/* destination dir in a copy */
 char	*ltmfrmt;		/* -v locale time format (if any) */
-char	*argv0;			/* root of argv[0] */
+const char *argv0;		/* root of argv[0] */
 sigset_t s_mask;		/* signal mask for cleanup critical sect */
 FILE	*listf;			/* file pointer to print file list to */
 char	*tempfile;		/* tempfile to use for mkstemp(3) */
@@ -240,12 +240,23 @@ int	secure = 1;		/* don't extract names that contain .. */
 int
 main(int argc, char **argv)
 {
-	char *tmpdir;
+	const char *tmpdir;
 	size_t tdlen;
 
 	setprogname(argv[0]);
 
 	listf = stderr;
+
+	/*
+	 * parse options, determine operational mode
+	 */
+	options(argc, argv);
+
+	/*
+	 * general init
+	 */
+	if ((gen_init() < 0) || (tty_init() < 0))
+		return(exit_val);
 
 	/*
 	 * Keep a reference to cwd, so we can always come back home.
@@ -255,6 +266,8 @@ main(int argc, char **argv)
 		syswarn(0, errno, "Can't open current working directory.");
 		return(exit_val);
 	}
+	if (updatepath() == -1)
+		return(exit_val);
 
 	/*
 	 * Where should we put temporary files?
@@ -273,13 +286,6 @@ main(int argc, char **argv)
 		memcpy(tempfile, tmpdir, tdlen);
 	tempbase = tempfile + tdlen;
 	*tempbase++ = '/';
-
-	/*
-	 * parse options, determine operational mode, general init
-	 */
-	options(argc, argv);
-	if ((gen_init() < 0) || (tty_init() < 0))
-		return(exit_val);
 
 	(void)time(&starttime);
 #ifdef SIGINFO
@@ -337,9 +343,11 @@ sig_cleanup(int which_sig)
 	 * will clearly see the message on a line by itself.
 	 */
 	vflag = vfpart = 1;
+#ifdef SIGXCPU
 	if (which_sig == SIGXCPU)
 		tty_warn(0, "CPU time limit reached, cleaning up.");
 	else
+#endif
 		tty_warn(0, "Signal caught, cleaning up.");
 
 	/* delete any open temporary file */
@@ -416,11 +424,23 @@ gen_init(void)
 	 */
 	if ((sigemptyset(&s_mask) < 0) || (sigaddset(&s_mask, SIGTERM) < 0) ||
 	    (sigaddset(&s_mask,SIGINT) < 0)||(sigaddset(&s_mask,SIGHUP) < 0) ||
-	    (sigaddset(&s_mask,SIGPIPE) < 0)||(sigaddset(&s_mask,SIGQUIT)<0) ||
-	    (sigaddset(&s_mask,SIGXCPU) < 0)||(sigaddset(&s_mask,SIGXFSZ)<0)) {
+	    (sigaddset(&s_mask,SIGPIPE) < 0)||(sigaddset(&s_mask,SIGQUIT)<0)){
 		tty_warn(1, "Unable to set up signal mask");
 		return(-1);
 	}
+#ifdef SIGXCPU
+	if (sigaddset(&s_mask,SIGXCPU) < 0) {
+		tty_warn(1, "Unable to set up signal mask");
+		return(-1);
+	}
+#endif
+#ifdef SIGXFSZ
+	if (sigaddset(&s_mask,SIGXFSZ) < 0) {
+		tty_warn(1, "Unable to set up signal mask");
+		return(-1);
+	}
+#endif
+
 	memset(&n_hand, 0, sizeof n_hand);
 	n_hand.sa_mask = s_mask;
 	n_hand.sa_flags = 0;
@@ -446,15 +466,19 @@ gen_init(void)
 	    (sigaction(SIGQUIT, &o_hand, &o_hand) < 0))
 		goto out;
 
+#ifdef SIGXCPU
 	if ((sigaction(SIGXCPU, &n_hand, &o_hand) < 0) &&
 	    (o_hand.sa_handler == SIG_IGN) &&
 	    (sigaction(SIGXCPU, &o_hand, &o_hand) < 0))
 		goto out;
-
+#endif
 	n_hand.sa_handler = SIG_IGN;
-	if ((sigaction(SIGPIPE, &n_hand, &o_hand) < 0) ||
-	    (sigaction(SIGXFSZ, &n_hand, &o_hand) < 0))
+	if (sigaction(SIGPIPE, &n_hand, &o_hand) < 0)
 		goto out;
+#ifdef SIGXFSZ
+	if (sigaction(SIGXFSZ, &n_hand, &o_hand) < 0)
+		goto out;
+#endif
 	return(0);
 
     out:

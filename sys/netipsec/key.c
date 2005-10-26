@@ -1,4 +1,4 @@
-/*	$NetBSD: key.c,v 1.11 2004/03/24 15:34:55 atatat Exp $	*/
+/*	$NetBSD: key.c,v 1.11.2.7 2004/06/17 09:26:57 tron Exp $	*/
 /*	$FreeBSD: /usr/local/www/cvsroot/FreeBSD/src/sys/netipsec/key.c,v 1.3.2.2 2003/07/01 01:38:13 sam Exp $	*/
 /*	$KAME: key.c,v 1.191 2001/06/27 10:46:49 sakane Exp $	*/
 
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: key.c,v 1.11 2004/03/24 15:34:55 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: key.c,v 1.11.2.7 2004/06/17 09:26:57 tron Exp $");
 
 /*
  * This code is referd to RFC 2367
@@ -131,7 +131,7 @@ static u_int key_int_random = 60;	/*interval to initialize randseed,1(m)*/
 static u_int key_larval_lifetime = 30;	/* interval to expire acquiring, 30(s)*/
 static int key_blockacq_count = 10;	/* counter for blocking SADB_ACQUIRE.*/
 static int key_blockacq_lifetime = 20;	/* lifetime for blocking SADB_ACQUIRE.*/
-static int key_prefered_oldsa = 1;	/* prefered old sa rather than new sa.*/
+static int key_prefered_oldsa = 0;	/* prefered old sa rather than new sa.*/
 
 static u_int32_t acq_seq = 0;
 static int key_tick_init_random = 0;
@@ -385,8 +385,10 @@ static int key_spdflush __P((struct socket *, struct mbuf *,
 	const struct sadb_msghdr *));
 static int key_spddump __P((struct socket *, struct mbuf *,
 	const struct sadb_msghdr *));
+static struct mbuf * key_setspddump __P((int *errorp, pid_t));
+static struct mbuf * key_setspddump_chain __P((int *errorp, int *lenp, pid_t pid));
 static struct mbuf *key_setdumpsp __P((struct secpolicy *,
-	u_int8_t, u_int32_t, u_int32_t));
+	u_int8_t, u_int32_t, pid_t));
 static u_int key_getspreqmsglen __P((struct secpolicy *));
 static int key_spdexpire __P((struct secpolicy *));
 static struct secashead *key_newsah __P((struct secasindex *));
@@ -477,6 +479,8 @@ static int key_register __P((struct socket *, struct mbuf *,
 static int key_expire __P((struct secasvar *));
 static int key_flush __P((struct socket *, struct mbuf *,
 	const struct sadb_msghdr *));
+static struct mbuf *key_setdump_chain __P((u_int8_t req_satype, int *errorp,
+	int *lenp, pid_t pid));
 static int key_dump __P((struct socket *, struct mbuf *,
 	const struct sadb_msghdr *));
 static int key_promisc __P((struct socket *, struct mbuf *,
@@ -489,6 +493,9 @@ static const char *key_getfqdn __P((void));
 static const char *key_getuserfqdn __P((void));
 #endif
 static void key_sa_chgstate __P((struct secasvar *, u_int8_t));
+static  __inline void key_sp_dead __P((struct secpolicy *));
+static void key_sp_unlink __P((struct secpolicy *sp));
+
 static struct mbuf *key_alloc_mbuf __P((int));
 struct callout key_timehandler_ch;
 
@@ -513,6 +520,28 @@ struct callout key_timehandler_ch;
 		("SP refcnt underflow at %s:%u", __FILE__, __LINE__));	\
 	(p)->refcnt--;							\
 } while (0)
+
+
+static __inline void
+key_sp_dead(struct secpolicy *sp)
+{
+
+	/* mark the SP dead */
+	sp->state = IPSEC_SPSTATE_DEAD;
+}
+
+static void
+key_sp_unlink(struct secpolicy *sp)
+{
+
+	/* remove from SP index */
+	if (__LIST_CHAINED(sp)) {
+		LIST_REMOVE(sp, chain);
+		/* Release refcount held just for being on chain */
+		KEY_FREESP(&sp);
+	}
+}
+
 
 /*
  * Return 0 when there are known to be no SP's for the specified
@@ -1188,16 +1217,13 @@ key_delsp(struct secpolicy *sp)
 
 	IPSEC_ASSERT(sp != NULL, ("key_delsp: null sp"));
 
-	sp->state = IPSEC_SPSTATE_DEAD;
+	key_sp_dead(sp);
 
 	IPSEC_ASSERT(sp->refcnt == 0,
 		("key_delsp: SP with references deleted (refcnt %u)",
 		sp->refcnt));
 
 	s = splsoftnet();	/*called from softclock()*/
-	/* remove from SP index */
-	if (__LIST_CHAINED(sp))
-		LIST_REMOVE(sp, chain);
 
     {
 	struct ipsecrequest *isr = sp->req, *nextisr;
@@ -1740,6 +1766,32 @@ key_spdadd(so, m, mhp)
 	dst0 = (struct sadb_address *)mhp->ext[SADB_EXT_ADDRESS_DST];
 	xpl0 = (struct sadb_x_policy *)mhp->ext[SADB_X_EXT_POLICY];
 
+#if defined(__NetBSD__) && defined(INET6)
+	/*
+	 * On NetBSD, FAST_IPSEC and INET6 can be configured together,
+	 * but FAST_IPSEC does not protect IPv6 traffic.
+	 * Rather than silently leaking IPv6 traffic for which IPsec
+	 * is configured, forbid  specifying IPsec for IPv6 traffic.
+	 *
+	 * (On FreeBSD, both FAST_IPSEC and INET6 gives a compile-time error.)
+	 */
+	if (((const struct sockaddr *)(src0 + 1))->sa_family == AF_INET6 ||
+	    ((const struct sockaddr *)(dst0 + 1))->sa_family == AF_INET6) {
+		static int v6_warned = 0;
+
+		if (v6_warned == 0) {
+			printf("key_spdadd: FAST_IPSEC does not support IPv6.");
+			printf("Check syslog for more per-SPD warnings.\n");
+			v6_warned++;
+		}
+		log(LOG_WARNING,
+		    "FAST_IPSEC does not support PF_INET6 SPDs. "
+		    "Request refused.\n");
+
+		return EOPNOTSUPP;	/* EPROTOTYPE?  EAFNOSUPPORT? */
+	}
+#endif /* __NetBSD__ && INET6 */
+
 	/* make secindex */
 	/* XXX boundary check against sa_len */
 	KEY_SETSECSPIDX(xpl0->sadb_x_policy_dir,
@@ -1786,8 +1838,10 @@ key_spdadd(so, m, mhp)
 	newsp = key_getsp(&spidx);
 	if (mhp->msg->sadb_msg_type == SADB_X_SPDUPDATE) {
 		if (newsp) {
-			newsp->state = IPSEC_SPSTATE_DEAD;
+			key_sp_dead(newsp);
+			key_sp_unlink(newsp);	/* XXX jrs ordering */
 			KEY_FREESP(&newsp);
+			newsp = NULL;
 		}
 	} else {
 		if (newsp != NULL) {
@@ -2025,8 +2079,9 @@ key_spddelete(so, m, mhp)
 	/* save policy id to buffer to be returned. */
 	xpl0->sadb_x_policy_id = sp->id;
 
-	sp->state = IPSEC_SPSTATE_DEAD;
-	KEY_FREESP(&sp);
+	key_sp_dead(sp);
+	key_sp_unlink(sp);	/* XXX jrs ordering */
+	KEY_FREESP(&sp);	/* ref gained by key_getspbyid */
 
 #if defined(__NetBSD__)
 	/* Invalidate all cached SPD pointers in the PCBs. */
@@ -2094,8 +2149,10 @@ key_spddelete2(so, m, mhp)
 		key_senderror(so, m, EINVAL);
 	}
 
-	sp->state = IPSEC_SPSTATE_DEAD;
-	KEY_FREESP(&sp);
+	key_sp_dead(sp);
+	key_sp_unlink(sp);	/* XXX jrs ordering */
+	KEY_FREESP(&sp);	/* ref gained by key_getsp */
+	sp = NULL;
 
 #if defined(__NetBSD__)
 	/* Invalidate all cached SPD pointers in the PCBs. */
@@ -2308,8 +2365,18 @@ key_spdflush(so, m, mhp)
 		return key_senderror(so, m, EINVAL);
 
 	for (dir = 0; dir < IPSEC_DIR_MAX; dir++) {
-		LIST_FOREACH(sp, &sptree[dir], chain) {
-			sp->state = IPSEC_SPSTATE_DEAD;
+		struct secpolicy * nextsp;
+		for (sp = LIST_FIRST(&sptree[dir]);
+		     sp != NULL;
+		     sp = nextsp) {
+
+ 			nextsp = LIST_NEXT(sp, chain);
+			if (sp->state == IPSEC_SPSTATE_DEAD)
+				continue;
+			key_sp_dead(sp);
+			key_sp_unlink(sp);
+			/* 'sp' dead; continue transfers to 'sp = nextsp' */
+			continue;
 		}
 	}
 
@@ -2336,6 +2403,61 @@ key_spdflush(so, m, mhp)
 	return key_sendup_mbuf(so, m, KEY_SENDUP_ALL);
 }
 
+static struct sockaddr key_src = { 2, PF_KEY, };
+
+static struct mbuf *
+key_setspddump_chain(int *errorp, int *lenp, pid_t pid)
+{
+	struct secpolicy *sp;
+	int cnt;
+	u_int dir;
+	struct mbuf *m, *n, *prev;
+	int totlen;
+
+	*lenp = 0;
+
+	/* search SPD entry and get buffer size. */
+	cnt = 0;
+	for (dir = 0; dir < IPSEC_DIR_MAX; dir++) {
+		LIST_FOREACH(sp, &sptree[dir], chain) {
+			cnt++;
+		}
+	}
+
+	if (cnt == 0) {
+		*errorp = ENOENT;
+		return (NULL);
+	}
+
+	m = NULL;
+	prev = m;
+	totlen = 0;
+	for (dir = 0; dir < IPSEC_DIR_MAX; dir++) {
+		LIST_FOREACH(sp, &sptree[dir], chain) {
+			--cnt;
+			n = key_setdumpsp(sp, SADB_X_SPDDUMP, cnt, pid);
+
+			if (!n) {
+				*errorp = ENOBUFS;
+				if (m) m_freem(m);
+				return (NULL);
+			}
+
+			totlen += n->m_pkthdr.len;
+			if (!m) {
+				m = n;
+			} else {
+				prev->m_nextpkt = n;
+			}
+			prev = n;
+		}
+	}
+
+	*lenp = totlen;
+	*errorp = 0;
+	return (m);
+}
+
 /*
  * SADB_SPDDUMP processing
  * receive
@@ -2348,51 +2470,75 @@ key_spdflush(so, m, mhp)
  * m will always be freed.
  */
 static int
-key_spddump(so, m, mhp)
+key_spddump(so, m0, mhp)
 	struct socket *so;
-	struct mbuf *m;
+	struct mbuf *m0;
 	const struct sadb_msghdr *mhp;
 {
-	struct secpolicy *sp;
-	int cnt;
-	u_int dir;
 	struct mbuf *n;
+	int error, len;
+	int ok, s;
+	pid_t pid;
 
 	/* sanity check */
-	if (so == NULL || m == NULL || mhp == NULL || mhp->msg == NULL)
+	if (so == NULL || m0 == NULL || mhp == NULL || mhp->msg == NULL)
 		panic("key_spddump: NULL pointer is passed.\n");
 
-	/* search SPD entry and get buffer size. */
-	cnt = 0;
-	for (dir = 0; dir < IPSEC_DIR_MAX; dir++) {
-		LIST_FOREACH(sp, &sptree[dir], chain) {
-			cnt++;
-		}
+
+	pid = mhp->msg->sadb_msg_pid;
+	/*
+	 * If the requestor has insufficient socket-buffer space
+	 * for the entire chain, nobody gets any response to the DUMP.
+	 * XXX For now, only the requestor ever gets anything.
+	 * Moreover, if the requestor has any space at all, they receive
+	 * the entire chain, otherwise the request is refused with  ENOBUFS.
+	 */
+	if (sbspace(&so->so_rcv) <= 0) {
+		return key_senderror(so, m0, ENOBUFS);
 	}
 
-	if (cnt == 0)
-		return key_senderror(so, m, ENOENT);
+	s = splsoftnet();
+	n = key_setspddump_chain(&error, &len, pid);
+	splx(s);
 
-	for (dir = 0; dir < IPSEC_DIR_MAX; dir++) {
-		LIST_FOREACH(sp, &sptree[dir], chain) {
-			--cnt;
-			n = key_setdumpsp(sp, SADB_X_SPDDUMP, cnt,
-			    mhp->msg->sadb_msg_pid);
+	if (n == NULL) {
+		return key_senderror(so, m0, ENOENT);
+	}
+	pfkeystat.in_total++;
+	pfkeystat.in_bytes += len;
 
-			if (n)
-				key_sendup_mbuf(so, n, KEY_SENDUP_ONE);
-		}
+	/*
+	 * PF_KEY DUMP responses are no longer broadcast to all PF_KEY sockets.
+	 * The requestor receives either the entire chain, or an
+	 * error message with ENOBUFS.
+	 */
+
+	/*
+	 * sbappendchainwith record takes the chain of entries, one
+	 * packet-record per SPD entry, prepends the key_src sockaddr
+	 * to each packet-record, links the sockaddr mbufs into a new
+	 * list of records, then   appends the entire resulting
+	 * list to the requesting socket.
+	 */
+	ok = sbappendaddrchain(&so->so_rcv, (struct sockaddr *)&key_src,
+	        n, SB_PRIO_ONESHOT_OVERFLOW);
+
+	if (!ok) {
+		pfkeystat.in_nomem++;
+		m_freem(n);
+		return key_senderror(so, m0, ENOBUFS);
 	}
 
-	m_freem(m);
-	return 0;
+	m_freem(m0);
+	return error;
 }
 
 static struct mbuf *
 key_setdumpsp(sp, type, seq, pid)
 	struct secpolicy *sp;
 	u_int8_t type;
-	u_int32_t seq, pid;
+	u_int32_t seq;
+	pid_t pid;
 {
 	struct mbuf *result = NULL, *m;
 
@@ -4089,7 +4235,11 @@ key_timehandler(void* arg)
 			nextsp = LIST_NEXT(sp, chain);
 
 			if (sp->state == IPSEC_SPSTATE_DEAD) {
-				KEY_FREESP(&sp);
+				key_sp_unlink(sp);	/*XXX*/
+
+				/* 'sp' dead; continue transfers to
+				 * 'sp = nextsp'
+				 */
 				continue;
 			}
 
@@ -4099,7 +4249,7 @@ key_timehandler(void* arg)
 			/* the deletion will occur next time */
 			if ((sp->lifetime && now - sp->created > sp->lifetime)
 			 || (sp->validtime && now - sp->lastused > sp->validtime)) {
-				sp->state = IPSEC_SPSTATE_DEAD;
+			  	key_sp_dead(sp);
 				key_spdexpire(sp);
 				continue;
 			}
@@ -6477,6 +6627,103 @@ key_flush(so, m, mhp)
 	return key_sendup_mbuf(so, m, KEY_SENDUP_ALL);
 }
 
+
+static struct mbuf *
+key_setdump_chain(u_int8_t req_satype, int *errorp, int *lenp, pid_t pid)
+{
+	struct secashead *sah;
+	struct secasvar *sav;
+	u_int16_t proto;
+	u_int stateidx;
+	u_int8_t satype;
+	u_int8_t state;
+	int cnt;
+	struct mbuf *m, *n, *prev;
+	int totlen;
+
+	*lenp = 0;
+
+	/* map satype to proto */
+	if ((proto = key_satype2proto(req_satype)) == 0) {
+		*errorp = EINVAL;
+		return (NULL);
+	}
+
+	/* count sav entries to be sent to userland. */
+	cnt = 0;
+	LIST_FOREACH(sah, &sahtree, chain) {
+		if (req_satype != SADB_SATYPE_UNSPEC &&
+		    proto != sah->saidx.proto)
+			continue;
+
+		for (stateidx = 0;
+		     stateidx < _ARRAYLEN(saorder_state_any);
+		     stateidx++) {
+			state = saorder_state_any[stateidx];
+			LIST_FOREACH(sav, &sah->savtree[state], chain) {
+				cnt++;
+			}
+		}
+	}
+
+	if (cnt == 0) {
+		*errorp = ENOENT;
+		return (NULL);
+	}
+
+	/* send this to the userland, one at a time. */
+	m = NULL;
+	prev = m;
+	LIST_FOREACH(sah, &sahtree, chain) {
+		if (req_satype != SADB_SATYPE_UNSPEC &&
+		    proto != sah->saidx.proto)
+			continue;
+
+		/* map proto to satype */
+		if ((satype = key_proto2satype(sah->saidx.proto)) == 0) {
+			m_freem(m);
+			*errorp = EINVAL;
+			return (NULL);
+		}
+
+		for (stateidx = 0;
+		     stateidx < _ARRAYLEN(saorder_state_any);
+		     stateidx++) {
+			state = saorder_state_any[stateidx];
+			LIST_FOREACH(sav, &sah->savtree[state], chain) {
+				n = key_setdumpsa(sav, SADB_DUMP, satype,
+				    --cnt, pid);
+				if (!n) {
+					m_freem(m);
+					*errorp = ENOBUFS;
+					return (NULL);
+				}
+
+				totlen += n->m_pkthdr.len;
+				if (!m)
+					m = n;
+				else
+					prev->m_nextpkt = n;
+				prev = n;
+			}
+		}
+	}
+
+	if (!m) {
+		*errorp = EINVAL;
+		return (NULL);
+	}
+
+	if ((m->m_flags & M_PKTHDR) != 0) {
+		m->m_pkthdr.len = 0;
+		for (n = m; n; n = n->m_next)
+			m->m_pkthdr.len += n->m_len;
+	}
+
+	*errorp = 0;
+	return (m);
+}
+
 /*
  * SADB_DUMP processing
  * dump all entries including status of DEAD in SAD.
@@ -6490,80 +6737,70 @@ key_flush(so, m, mhp)
  * m will always be freed.
  */
 static int
-key_dump(so, m, mhp)
+key_dump(so, m0, mhp)
 	struct socket *so;
-	struct mbuf *m;
+	struct mbuf *m0;
 	const struct sadb_msghdr *mhp;
 {
-	struct secashead *sah;
-	struct secasvar *sav;
 	u_int16_t proto;
-	u_int stateidx;
 	u_int8_t satype;
-	u_int8_t state;
-	int cnt;
-	struct sadb_msg *newmsg;
 	struct mbuf *n;
+	int s;
+	int error, len, ok;
 
 	/* sanity check */
-	if (so == NULL || m == NULL || mhp == NULL || mhp->msg == NULL)
+	if (so == NULL || m0 == NULL || mhp == NULL || mhp->msg == NULL)
 		panic("key_dump: NULL pointer is passed.\n");
 
 	/* map satype to proto */
-	if ((proto = key_satype2proto(mhp->msg->sadb_msg_satype)) == 0) {
+	satype = mhp->msg->sadb_msg_satype;
+	if ((proto = key_satype2proto(satype)) == 0) {
 		ipseclog((LOG_DEBUG, "key_dump: invalid satype is passed.\n"));
-		return key_senderror(so, m, EINVAL);
+		return key_senderror(so, m0, EINVAL);
 	}
 
-	/* count sav entries to be sent to the userland. */
-	cnt = 0;
-	LIST_FOREACH(sah, &sahtree, chain) {
-		if (mhp->msg->sadb_msg_satype != SADB_SATYPE_UNSPEC
-		 && proto != sah->saidx.proto)
-			continue;
-
-		for (stateidx = 0;
-		     stateidx < _ARRAYLEN(saorder_state_any);
-		     stateidx++) {
-			state = saorder_state_any[stateidx];
-			LIST_FOREACH(sav, &sah->savtree[state], chain) {
-				cnt++;
-			}
-		}
+	/*
+	 * If the requestor has insufficient socket-buffer space
+	 * for the entire chain, nobody gets any response to the DUMP.
+	 * XXX For now, only the requestor ever gets anything.
+	 * Moreover, if the requestor has any space at all, they receive
+	 * the entire chain, otherwise the request is refused with ENOBUFS.
+	 */
+	if (sbspace(&so->so_rcv) <= 0) {
+		return key_senderror(so, m0, ENOBUFS);
 	}
 
-	if (cnt == 0)
-		return key_senderror(so, m, ENOENT);
+	s = splsoftnet();
+	n = key_setdump_chain(satype, &error, &len, mhp->msg->sadb_msg_pid);
+	splx(s);
 
-	/* send this to the userland, one at a time. */
-	newmsg = NULL;
-	LIST_FOREACH(sah, &sahtree, chain) {
-		if (mhp->msg->sadb_msg_satype != SADB_SATYPE_UNSPEC
-		 && proto != sah->saidx.proto)
-			continue;
+	if (n == NULL) {
+		return key_senderror(so, m0, ENOENT);
+	}
+	pfkeystat.in_total++;
+	pfkeystat.in_bytes += len;
 
-		/* map proto to satype */
-		if ((satype = key_proto2satype(sah->saidx.proto)) == 0) {
-			ipseclog((LOG_DEBUG, "key_dump: there was invalid proto in SAD.\n"));
-			return key_senderror(so, m, EINVAL);
-		}
+	/*
+	 * PF_KEY DUMP responses are no longer broadcast to all PF_KEY sockets.
+	 * The requestor receives either the entire chain, or an
+	 * error message with ENOBUFS.
+	 *
+	 * sbappendaddrchain() takes the chain of entries, one
+	 * packet-record per SPD entry, prepends the key_src sockaddr
+	 * to each packet-record, links the sockaddr mbufs into a new
+	 * list of records, then   appends the entire resulting
+	 * list to the requesting socket.
+	 */
+	ok = sbappendaddrchain(&so->so_rcv, (struct sockaddr *)&key_src,
+	        n, SB_PRIO_ONESHOT_OVERFLOW);
 
-		for (stateidx = 0;
-		     stateidx < _ARRAYLEN(saorder_state_any);
-		     stateidx++) {
-			state = saorder_state_any[stateidx];
-			LIST_FOREACH(sav, &sah->savtree[state], chain) {
-				n = key_setdumpsa(sav, SADB_DUMP, satype,
-				    --cnt, mhp->msg->sadb_msg_pid);
-				if (!n)
-					return key_senderror(so, m, ENOBUFS);
-
-				key_sendup_mbuf(so, n, KEY_SENDUP_ONE);
-			}
-		}
+	if (!ok) {
+		pfkeystat.in_nomem++;
+		m_freem(n);
+		return key_senderror(so, m0, ENOBUFS);
 	}
 
-	m_freem(m);
+	m_freem(m0);
 	return 0;
 }
 
@@ -7356,7 +7593,7 @@ key_alloc_mbuf(l)
 }
 
 static struct mbuf *
-key_setdump(u_int8_t req_satype, int *errorp)
+key_setdump(u_int8_t req_satype, int *errorp, uint32_t pid)
 {
 	struct secashead *sah;
 	struct secasvar *sav;
@@ -7415,7 +7652,7 @@ key_setdump(u_int8_t req_satype, int *errorp)
 			state = saorder_state_any[stateidx];
 			LIST_FOREACH(sav, &sah->savtree[state], chain) {
 				n = key_setdumpsa(sav, SADB_DUMP, satype,
-				    --cnt, 0);
+				    --cnt, pid);
 				if (!n) {
 					m_freem(m);
 					*errorp = ENOBUFS;
@@ -7446,7 +7683,7 @@ key_setdump(u_int8_t req_satype, int *errorp)
 }
 
 static struct mbuf *
-key_setspddump(int *errorp)
+key_setspddump(int *errorp, pid_t pid)
 {
 	struct secpolicy *sp;
 	int cnt;
@@ -7470,7 +7707,7 @@ key_setspddump(int *errorp)
 	for (dir = 0; dir < IPSEC_DIR_MAX; dir++) {
 		LIST_FOREACH(sp, &sptree[dir], chain) {
 			--cnt;
-			n = key_setdumpsp(sp, SADB_X_SPDDUMP, cnt, 0);
+			n = key_setdumpsp(sp, SADB_X_SPDDUMP, cnt, pid);
 
 			if (!n) {
 				*errorp = ENOBUFS;
@@ -7505,7 +7742,7 @@ sysctl_net_key_dumpsa(SYSCTLFN_ARGS)
 		return (EINVAL);
 
 	s = splsoftnet();
-	m = key_setdump(name[1], &error);
+	m = key_setdump(name[0], &error, l->l_proc->p_pid);
 	splx(s);
 	if (!m)
 		return (error);
@@ -7551,7 +7788,7 @@ sysctl_net_key_dumpsp(SYSCTLFN_ARGS)
 		return (EINVAL);
 
 	s = splsoftnet();
-	m = key_setspddump(&error);
+	m = key_setspddump(&error, l->l_proc->p_pid);
 	splx(s);
 	if (!m)
 		return (error);
@@ -7582,6 +7819,27 @@ sysctl_net_key_dumpsp(SYSCTLFN_ARGS)
 	return (error);
 }
 
+/*
+ * Create sysctl tree for native FAST_IPSEC key knobs, originally
+ * under name "net.keyv2"  * with MIB number { CTL_NET, PF_KEY_V2. }.
+ * However, sysctl(8) never checked for nodes under { CTL_NET, PF_KEY_V2 };
+ * and in any case the part of our sysctl namespace used for dumping the
+ * SPD and SA database  *HAS* to be compatible with the KAME sysctl
+ * namespace, for API reasons.
+ *
+ * Pending a consensus on the right way  to fix this, add a level of
+ * indirection in how we number the `native' FAST_IPSEC key nodes;
+ * and (as requested by Andrew Brown)  move registration of the
+ * KAME-compatible names  to a separate function.
+ */
+#if 0
+#  define FAST_IPSEC_PFKEY PF_KEY_V2
+# define FAST_IPSEC_PFKEY_NAME "keyv2"
+#else
+#  define FAST_IPSEC_PFKEY PF_KEY
+# define FAST_IPSEC_PFKEY_NAME "key"
+#endif
+
 SYSCTL_SETUP(sysctl_net_keyv2_setup, "sysctl net.keyv2 subtree setup")
 {
 
@@ -7592,65 +7850,93 @@ SYSCTL_SETUP(sysctl_net_keyv2_setup, "sysctl net.keyv2 subtree setup")
 		       CTL_NET, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "keyv2", NULL,
+		       CTLTYPE_NODE, FAST_IPSEC_PFKEY_NAME, NULL,
 		       NULL, 0, NULL, 0,
-		       CTL_NET, PF_KEY_V2, CTL_EOL);
+		       CTL_NET, FAST_IPSEC_PFKEY, CTL_EOL);
 
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "debug", NULL,
 		       NULL, 0, &key_debug_level, 0,
-		       CTL_NET, PF_KEY_V2, KEYCTL_DEBUG_LEVEL, CTL_EOL);
+		       CTL_NET, FAST_IPSEC_PFKEY, KEYCTL_DEBUG_LEVEL, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "spi_try", NULL,
 		       NULL, 0, &key_spi_trycnt, 0,
-		       CTL_NET, PF_KEY_V2, KEYCTL_SPI_TRY, CTL_EOL);
+		       CTL_NET, FAST_IPSEC_PFKEY, KEYCTL_SPI_TRY, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "spi_min_value", NULL,
 		       NULL, 0, &key_spi_minval, 0,
-		       CTL_NET, PF_KEY_V2, KEYCTL_SPI_MIN_VALUE, CTL_EOL);
+		       CTL_NET, FAST_IPSEC_PFKEY, KEYCTL_SPI_MIN_VALUE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "spi_max_value", NULL,
 		       NULL, 0, &key_spi_maxval, 0,
-		       CTL_NET, PF_KEY_V2, KEYCTL_SPI_MAX_VALUE, CTL_EOL);
+		       CTL_NET, FAST_IPSEC_PFKEY, KEYCTL_SPI_MAX_VALUE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "random_int", NULL,
 		       NULL, 0, &key_int_random, 0,
-		       CTL_NET, PF_KEY_V2, KEYCTL_RANDOM_INT, CTL_EOL);
+		       CTL_NET, FAST_IPSEC_PFKEY, KEYCTL_RANDOM_INT, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "larval_lifetime", NULL,
 		       NULL, 0, &key_larval_lifetime, 0,
-		       CTL_NET, PF_KEY_V2, KEYCTL_LARVAL_LIFETIME, CTL_EOL);
+		       CTL_NET, FAST_IPSEC_PFKEY, KEYCTL_LARVAL_LIFETIME, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "blockacq_count", NULL,
 		       NULL, 0, &key_blockacq_count, 0,
-		       CTL_NET, PF_KEY_V2, KEYCTL_BLOCKACQ_COUNT, CTL_EOL);
+		       CTL_NET, FAST_IPSEC_PFKEY, KEYCTL_BLOCKACQ_COUNT, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "blockacq_lifetime", NULL,
 		       NULL, 0, &key_blockacq_lifetime, 0,
-		       CTL_NET, PF_KEY_V2, KEYCTL_BLOCKACQ_LIFETIME, CTL_EOL);
+		       CTL_NET, FAST_IPSEC_PFKEY, KEYCTL_BLOCKACQ_LIFETIME, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "esp_keymin", NULL,
 		       NULL, 0, &ipsec_esp_keymin, 0,
-		       CTL_NET, PF_KEY_V2, KEYCTL_ESP_KEYMIN, CTL_EOL);
+		       CTL_NET, FAST_IPSEC_PFKEY, KEYCTL_ESP_KEYMIN, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "prefered_oldsa", NULL,
+		       NULL, 0, &key_prefered_oldsa, 0,
+		       CTL_NET, PF_KEY, KEYCTL_PREFERED_OLDSA, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "esp_auth", NULL,
 		       NULL, 0, &ipsec_esp_auth, 0,
-		       CTL_NET, PF_KEY_V2, KEYCTL_ESP_AUTH, CTL_EOL);
+		       CTL_NET, FAST_IPSEC_PFKEY, KEYCTL_ESP_AUTH, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "ah_keymin", NULL,
 		       NULL, 0, &ipsec_ah_keymin, 0,
-		       CTL_NET, PF_KEY_V2, KEYCTL_AH_KEYMIN, CTL_EOL);
+		       CTL_NET, FAST_IPSEC_PFKEY, KEYCTL_AH_KEYMIN, CTL_EOL);
+}
+
+/*
+ * Register sysctl names used by setkey(8). For historical reasons,
+ * and to share a single API, these names appear under { CTL_NET, PF_KEY }
+ * for both FAST_IPSEC and KAME IPSEC.
+ */
+SYSCTL_SETUP(sysctl_net_key_compat_setup, "sysctl net.key subtree setup for FAST_IPSEC")
+{
+
+	/* Make sure net.key exists before we register nodes underneath it. */
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "net", NULL,
+		       NULL, 0, NULL, 0,
+		       CTL_NET, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "key", NULL,
+		       NULL, 0, NULL, 0,
+		       CTL_NET, PF_KEY, CTL_EOL);
+
+	/* Register the net.key.dump{sa,sp} nodes used by setkey(8). */
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
 		       CTLTYPE_STRUCT, "dumpsa", NULL,

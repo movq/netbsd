@@ -1,4 +1,4 @@
-/*	$NetBSD: stat.c,v 1.17 2003/10/29 04:25:46 atatat Exp $ */
+/*	$NetBSD: stat.c,v 1.17.2.2 2004/06/22 07:22:16 tron Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: stat.c,v 1.17 2003/10/29 04:25:46 atatat Exp $");
+__RCSID("$NetBSD: stat.c,v 1.17.2.2 2004/06/22 07:22:16 tron Exp $");
 #endif
 
 #if ! HAVE_NBTOOL_CONFIG_H
@@ -58,6 +58,7 @@ __RCSID("$NetBSD: stat.c,v 1.17 2003/10/29 04:25:46 atatat Exp $");
 
 #include <ctype.h>
 #include <err.h>
+#include <errno.h>
 #include <grp.h>
 #include <limits.h>
 #include <pwd.h>
@@ -306,8 +307,17 @@ main(int argc, char *argv[])
 	do {
 		if (argc == 0)
 			rc = fstat(STDIN_FILENO, &st);
-		else if (usestat)
-			rc = stat(argv[0], &st);
+		else if (usestat) {
+			/*
+			 * Try stat() and if it fails, fall back to
+			 * lstat() just in case we're examining a
+			 * broken symlink.
+			 */
+			if ((rc = stat(argv[0], &st)) == -1 &&
+			    errno == ENOENT &&
+			    (rc = lstat(argv[0], &st)) == -1)
+				errno = ENOENT;
+		}
 		else
 			rc = lstat(argv[0], &st);
 
@@ -696,8 +706,8 @@ format1(const struct stat *st,
 	case SHOW_st_btime:
 		if (!gottime) {
 			gottime = 1;
-			secs = st->st_birthtimespec.tv_sec;
-			nsecs = st->st_birthtimespec.tv_nsec;
+			secs = st->st_birthtime;
+			nsecs = st->st_birthtimensec;
 		}
 #endif /* HAVE_STRUCT_STAT_ST_BIRTHTIME */
 		small = (sizeof(secs) == 4);
@@ -792,7 +802,9 @@ format1(const struct stat *st,
 					(void)strcat(sdata, "*");
 				break;
 			case S_IFLNK:	(void)strcat(sdata, "@");	break;
+#ifdef S_IFSOCK
 			case S_IFSOCK:	(void)strcat(sdata, "=");	break;
+#endif
 #ifdef S_IFWHT
 			case S_IFWHT:	(void)strcat(sdata, "%");	break;
 #endif /* S_IFWHT */
@@ -810,7 +822,9 @@ format1(const struct stat *st,
 			case S_IFBLK:	sdata = "Block Device";		break;
 			case S_IFREG:	sdata = "Regular File";		break;
 			case S_IFLNK:	sdata = "Symbolic Link";	break;
+#ifdef S_IFSOCK
 			case S_IFSOCK:	sdata = "Socket";		break;
+#endif
 #ifdef S_IFWHT
 			case S_IFWHT:	sdata = "Whiteout File";	break;
 #endif /* S_IFWHT */

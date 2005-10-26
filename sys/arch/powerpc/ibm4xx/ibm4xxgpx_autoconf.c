@@ -1,4 +1,4 @@
-/*	$NetBSD: ibm4xxgpx_autoconf.c,v 1.1 2003/09/24 11:47:02 shige Exp $	*/
+/*	$NetBSD: ibm4xxgpx_autoconf.c,v 1.1.6.1 2005/09/15 14:28:44 riz Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibm4xxgpx_autoconf.c,v 1.1 2003/09/24 11:47:02 shige Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibm4xxgpx_autoconf.c,v 1.1.6.1 2005/09/15 14:28:44 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -43,9 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: ibm4xxgpx_autoconf.c,v 1.1 2003/09/24 11:47:02 shige
 
 #include <powerpc/ibm4xx/dcr405gp.h>
 #include <powerpc/ibm4xx/dev/plbvar.h>
-
-struct device *booted_device;
-int booted_partition;
 
 /*
  * List of port-specific devices to attach to the processor local bus.
@@ -80,46 +77,4 @@ cpu_configure(void)
 	 * Now allow hardware interrupts.
 	 */
 	asm volatile ("wrteei 1");
-}
-
-/*
- * Setup root device.
- * Configure swap area.
- */
-void
-cpu_rootconf(void)
-{
-
-	setroot(booted_device, booted_partition);
-}
-
-void
-device_register(struct device *dev, void *aux)
-{
-	struct device *parent = dev->dv_parent;
-
-	if (strcmp(dev->dv_cfdata->cf_name, "com") == 0 &&
-	    strcmp(parent->dv_cfdata->cf_name, "opb") == 0) {
-		/* Set the frequency of the on-chip UART. */
-		int freq = COM_FREQ * 6;
-
-		if (prop_set(dev_propdb, dev, "frequency",
-			     &freq, sizeof(freq), PROP_INT, 0) != 0)
-			printf("WARNING: unable to set frequency "
-			    "property for %s\n", dev->dv_xname);
-		return;
-	}
-
-	if (strcmp(dev->dv_cfdata->cf_name, "emac") == 0 &&
-	    strcmp(parent->dv_cfdata->cf_name, "opb") == 0) {
-		/* Set the mac-addr of the on-chip Ethernet. */
-		/* XXX 405GP only has one; what about CPUs with two? */
-		if (prop_set(dev_propdb, dev, "mac-addr",
-			     &board_data.mac_address_local,
-			     sizeof(board_data.mac_address_local),
-			     PROP_CONST, 0) != 0)
-			printf("WARNING: unable to set mac-addr "
-			    "property for %s\n", dev->dv_xname);
-		return;
-	}
 }

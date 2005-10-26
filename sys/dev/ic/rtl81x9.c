@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl81x9.c,v 1.45 2003/02/21 17:14:07 tsutsui Exp $	*/
+/*	$NetBSD: rtl81x9.c,v 1.45.4.1.2.2 2005/04/16 12:16:08 tron Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtl81x9.c,v 1.45 2003/02/21 17:14:07 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtl81x9.c,v 1.45.4.1.2.2 2005/04/16 12:16:08 tron Exp $");
 
 #include "bpfilter.h"
 #include "rnd.h"
@@ -144,7 +144,6 @@ STATIC void rtk_shutdown	__P((void *));
 STATIC int rtk_ifmedia_upd	__P((struct ifnet *));
 STATIC void rtk_ifmedia_sts	__P((struct ifnet *, struct ifmediareq *));
 
-STATIC u_int16_t rtk_read_eeprom __P((struct rtk_softc *, int, int));
 STATIC void rtk_eeprom_putbyte	__P((struct rtk_softc *, int, int));
 STATIC void rtk_mii_sync	__P((struct rtk_softc *));
 STATIC void rtk_mii_send	__P((struct rtk_softc *, u_int32_t, int));
@@ -160,7 +159,6 @@ STATIC int rtk_enable		__P((struct rtk_softc *));
 STATIC void rtk_disable		__P((struct rtk_softc *));
 STATIC void rtk_power		__P((int, void *));
 
-STATIC void rtk_setmulti	__P((struct rtk_softc *));
 STATIC int rtk_list_tx_init	__P((struct rtk_softc *));
 
 #define EE_SET(x)					\
@@ -544,7 +542,7 @@ rtk_phy_statchg(v)
 /*
  * Program the 64-bit multicast hash filter.
  */
-STATIC void rtk_setmulti(sc)
+void rtk_setmulti(sc)
 	struct rtk_softc	*sc;
 {
 	struct ifnet		*ifp;
@@ -770,6 +768,12 @@ rtk_attach(sc)
 		printf("%s: WARNING: unable to establish power hook\n",
 		    sc->sc_dev.dv_xname);
 
+
+#if NRND > 0
+	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
+	    RND_TYPE_NET, 0);
+#endif
+
 	return;
  fail_4:
 	for (i = 0; i < RTK_TX_LIST_CNT; i++) {
@@ -864,6 +868,10 @@ rtk_detach(sc)
 
 	/* Delete all remaining media. */
 	ifmedia_delete_instance(&sc->mii.mii_media, IFM_INST_ANY);
+
+#if NRND > 0
+	rnd_detach_source(&sc->rnd_source);
+#endif
 
 	ether_ifdetach(ifp);
 	if_detach(ifp);
@@ -1267,6 +1275,11 @@ int rtk_intr(arg)
 	if (IFQ_IS_EMPTY(&ifp->if_snd) == 0)
 		rtk_start(ifp);
 
+#if NRND > 0
+	if (RND_ENABLED(&sc->rnd_source))
+		rnd_add_uint32(&sc->rnd_source, status);
+#endif
+
 	return (handled);
 }
 
@@ -1533,7 +1546,7 @@ STATIC int rtk_ioctl(ifp, command, data)
 	default:
 		error = ether_ioctl(ifp, command, data);
 		if (error == ENETRESET) {
-			if (RTK_IS_ENABLED(sc)) {
+			if (ifp->if_flags & IFF_RUNNING) {
 				/*
 				 * Multicast list has changed.  Set the
 				 * hardware filter accordingly.

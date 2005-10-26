@@ -1,10 +1,11 @@
-#	$NetBSD: Makefile.inc,v 1.38 2003/01/04 15:49:31 lukem Exp $
+#	$NetBSD: Makefile.inc,v 1.38.2.1.2.1 2005/05/11 15:28:31 riz Exp $
 #
 #	etc.i386/Makefile.inc -- i386-specific etc Makefile targets
 #
 
 KERNEL_SETS=		GENERIC GENERIC_TINY GENERIC_LAPTOP \
-			GENERIC_DIAGNOSTIC GENERIC_PS2TINY GENERIC.MP
+			GENERIC_DIAGNOSTIC GENERIC_PS2TINY GENERIC.MP \
+			GENERIC.MPACPI
 
 BUILD_KERNELS=		INSTALL INSTALL_SMALL INSTALL_TINY \
 			INSTALL_LAPTOP INSTALL_PS2
@@ -21,4 +22,6 @@ snap_md_post:
 
 # For "make iso-image"
 # mkisofs arguments to generate bootable iso image
-MKISOFS_FLAGS+=	-b ${MACHINE}/installation/floppy/boot-big.fs -c boot.catalog
+CDROM_BOOT_IMAGE?=	boot-big.fs
+
+MKISOFS_FLAGS+=	-b ${MACHINE}/installation/floppy/${CDROM_BOOT_IMAGE} -c boot.catalog

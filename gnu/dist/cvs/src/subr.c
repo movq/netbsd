@@ -1,6 +1,11 @@
 /*
- * Copyright (c) 1992, Brian Berliner and Jeff Polk
- * Copyright (c) 1989-1992, Brian Berliner
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (C) 1992, Brian Berliner and Jeff Polk
+ * Portions Copyright (C) 1989-1992, Brian Berliner
  * 
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with the CVS source distribution.
@@ -189,49 +194,47 @@ strip_trailing_newlines (str)
 
 
 
-/* Return the number of levels that path ascends above where it starts.
-   For example:
-   "../../foo" -> 2
-   "foo/../../bar" -> 1
-   */
-/* FIXME: Should be using ISDIRSEP, last_component, or some other
-   mechanism which is more general than just looking at slashes,
-   particularly for the client.c caller.  The server.c caller might
-   want something different, so be careful.  */
+/* Return the number of levels that PATH ascends above where it starts.
+ * For example:
+ *
+ *   "../../foo" -> 2
+ *   "foo/../../bar" -> 1
+ */
 int
-pathname_levels (path)
-    char *path;
+pathname_levels (p)
+    const char *p;
 {
-    char *p;
-    char *q;
     int level;
     int max_level;
 
+    if (p == NULL) return 0;
+
     max_level = 0;
-    p = path;
     level = 0;
     do
     {
-	q = strchr (p, '/');
-	if (q != NULL)
-	    ++q;
-	if (p[0] == '.' && p[1] == '.' && (p[2] == '\0' || p[2] == '/'))
+	/* Now look for pathname level-ups.  */
+	if (p[0] == '.' && p[1] == '.' && (p[2] == '\0' || ISDIRSEP (p[2])))
 	{
 	    --level;
 	    if (-level > max_level)
 		max_level = -level;
 	}
-	else if (p[0] == '\0' || p[0] == '/' ||
-		 (p[0] == '.' && (p[1] == '\0' || p[1] == '/')))
+	else if (p[0] == '\0' || ISDIRSEP (p[0]) ||
+		 (p[0] == '.' && (p[1] == '\0' || ISDIRSEP (p[1]))))
 	    ;
 	else
 	    ++level;
-	p = q;
-    } while (p != NULL);
+
+	/* q = strchr (p, '/'); but sub ISDIRSEP() for '/': */
+	while (*p != '\0' && !ISDIRSEP (*p)) p++;
+	if (*p != '\0') p++;
+    } while (*p != '\0');
     return max_level;
 }
 
-
+
+
 /* Free a vector, where (*ARGV)[0], (*ARGV)[1], ... (*ARGV)[*PARGC - 1]
    are malloc'd and so is *ARGV itself.  Such a vector is allocated by
    line2argv or expand_wild, for example.  */
@@ -311,13 +314,12 @@ compare_revnums (rev1, rev2)
     const char *rev1;
     const char *rev2;
 {
-    const char *s, *sp;
-    const char *t, *tp;
+    const char *sp, *tp;
     char *snext, *tnext;
     int result = 0;
 
-    sp = s = rev1;
-    tp = t = rev2;
+    sp = rev1;
+    tp = rev2;
     while (result == 0)
     {
 	result = strtoul (sp, &snext, 10) - strtoul (tp, &tnext, 10);
@@ -330,6 +332,9 @@ compare_revnums (rev1, rev2)
     return result;
 }
 
+/* Increment a revision number.  Working on the string is a bit awkward,
+   but it avoid problems with integer overflow should the revision numbers
+   get really big.  */
 char *
 increment_revnum (rev)
     const char *rev;
@@ -338,17 +343,29 @@ increment_revnum (rev)
     int lastfield;
     size_t len = strlen (rev);
 
-    newrev = (char *) xmalloc (len + 2);
+    newrev = xmalloc (len + 2);
     memcpy (newrev, rev, len + 1);
-    p = strrchr (newrev, '.');
-    if (p == NULL)
+    for (p = newrev + len; p != newrev; )
     {
-	free (newrev);
-	return NULL;
+	--p;
+	if (!isdigit(*p))
+	{
+	    ++p;
+	    break;
+	}
+	if (*p != '9')
+	{
+	    ++*p;
+	    return newrev;
+	}
+	*p = '0';
     }
-    lastfield = atoi (++p);
-    sprintf (p, "%d", lastfield + 1);
-
+    /* The number was all 9s, so change the first character to 1 and add
+       a 0 to the end.  */
+    *p = '1';
+    p = newrev + len;
+    *p++ = '0';
+    *p = '\0';
     return newrev;
 }
 
@@ -420,6 +437,71 @@ get_date (date, now)
 }
 #endif
 #endif
+
+
+
+/* Given some revision, REV, return the first prior revision that exists in the
+ * RCS file, RCS.
+ *
+ * ASSUMPTIONS
+ *   REV exists.
+ *
+ * INPUTS
+ *   RCS	The RCS node pointer.
+ *   REV	An existing revision in the RCS file referred to by RCS.
+ *
+ * RETURNS
+ *   The first prior revision that exists in the RCS file, or NULL if no prior
+ *   revision exists.  The caller is responsible for disposing of this string.
+ *
+ * NOTES
+ *   This function currently neglects the case where we are on the trunk with
+ *   rev = X.1, where X != 1.  If rev = X.Y, where X != 1 and Y > 1, then this
+ *   function should work fine, as revision X.1 must exist, due to RCS rules.
+ */
+char *
+previous_rev (rcs, rev)
+    RCSNode *rcs;
+    const char *rev;
+{
+    char *p;
+    char *tmp = xstrdup (rev);
+    long r1;
+    char *retval;
+
+    /* Our retval can have no more digits and dots than our input revision.  */
+    retval = xmalloc (strlen (rev) + 1);
+    p = strrchr (tmp, '.');
+    *p = '\0';
+    r1 = strtol (p+1, NULL, 10);
+    do {
+	if (--r1 == 0)
+	{
+		/* If r1 == 0, then we must be on a branch and our parent must
+		 * exist, or we must be on the trunk with a REV like X.1.
+		 * We are neglecting the X.1 with X != 1 case by assuming that
+		 * there is no previous revision when we discover we were on
+		 * the trunk.
+		 */
+		p = strrchr (tmp, '.');
+		if (p == NULL)
+		    /* We are on the trunk.  */
+		    retval = NULL;
+		else
+		{
+		    *p = '\0';
+		    sprintf (retval, "%s", tmp);
+		}
+		break;
+	}
+	sprintf (retval, "%s.%ld", tmp, r1);
+    } while (!RCS_exist_rev (rcs, retval));
+
+    free (tmp);
+    return retval;
+}
+
+
 
 /* Given two revisions, find their greatest common ancestor.  If the
    two input revisions exist, then rcs guarantees that the gca will
@@ -546,9 +628,10 @@ check_numeric (rev, argc, argv)
  */
 char *
 make_message_rcslegal (message)
-     char *message;
+     const char *message;
 {
-    char *dst, *dp, *mp;
+    char *dst, *dp;
+    const char *mp;
 
     if (message == NULL) message = "";
 
@@ -612,7 +695,7 @@ file_has_conflict (finfo, ts_conflict)
     /* If ts_conflict is NULL, there was no merge since the last
      * commit and there can be no conflict.
      */
-    assert ( ts_conflict );
+    assert (ts_conflict);
 
     /*
      * If the timestamp has changed and no
@@ -621,14 +704,14 @@ file_has_conflict (finfo, ts_conflict)
      */
 
 #ifdef SERVER_SUPPORT
-    if ( server_active )
+    if (server_active)
 	retcode = ts_conflict[0] == '=';
     else 
 #endif /* SERVER_SUPPORT */
     {
-	filestamp = time_stamp ( finfo->file );
-	retcode = !strcmp ( ts_conflict, filestamp );
-	free ( filestamp );
+	filestamp = time_stamp (finfo->file);
+	retcode = !strcmp (ts_conflict, filestamp);
+	free (filestamp);
     }
 
     return retcode;
@@ -778,19 +861,18 @@ void
 resolve_symlink (filename)
      char **filename;
 {
-    if ((! filename) || (! *filename))
+    if (filename == NULL || *filename == NULL)
 	return;
 
     while (islink (*filename))
     {
-	char *newname;
 #ifdef HAVE_READLINK
 	/* The clean thing to do is probably to have each filesubr.c
 	   implement this (with an error if not supported by the
 	   platform, in which case islink would presumably return 0).
 	   But that would require editing each filesubr.c and so the
 	   expedient hack seems to be looking at HAVE_READLINK.  */
-	newname = xreadlink (*filename);
+	char *newname = xreadlink (*filename);
 	
 	if (isabsolute (newname))
 	{
@@ -799,7 +881,7 @@ resolve_symlink (filename)
 	}
 	else
 	{
-	    char *oldname = last_component (*filename);
+	    const char *oldname = last_component (*filename);
 	    int dirlen = oldname - *filename;
 	    char *fullnewname = xmalloc (dirlen + strlen (newname) + 1);
 	    strncpy (fullnewname, *filename, dirlen);
@@ -880,6 +962,8 @@ shell_escape(buf, str)
     return buf;
 }
 
+
+
 /*
  * We can only travel forwards in time, not backwards.  :)
  */
@@ -932,7 +1016,8 @@ sleep_past (desttime)
 	    struct timeval tv;
 	    tv.tv_sec = s;
 	    tv.tv_usec = us;
-	    (void)select (0, (fd_set *)NULL, (fd_set *)NULL, (fd_set *)NULL, &tv);
+	    (void)select (0, (fd_set *)NULL, (fd_set *)NULL, (fd_set *)NULL,
+                          &tv);
 	}
 #else
 	if (us > 0) s++;
@@ -943,92 +1028,11 @@ sleep_past (desttime)
 
 
 
-#if defined (SERVER_SUPPORT) && !defined (FILENAMES_CASE_INSENSITIVE)
-/* char *
- * locate_file_in_dir (const char *dir, const char *file)
- *
- * Search a directory for a filename, case insensitively.
- *
- * INPUTS
- *
- *  dir		Path to directory to be searched.
- *  file	File name to be located, perhaps case insensitively.
- *
- * RETURNS
- *
- *  A newly malloc'd array containing the full path to the located file
- *  or NULL of the file was not found in dir or if the file found was
- *  not readable.
- *
- * ERRORS
- *
- *  When this function returns NULL, errno will be set to the system's
- *  existence error value (sometimes ENOENT) if DIR did not exist or ENOENT if
- *  no matching files were found in the directory.
- */
-char *
-locate_file_in_dir (dir, file)
-    const char *dir;
-    const char *file;
+/* Return non-zero iff FILENAME is absolute.
+   Trivial under Unix, but more complicated under other systems.  */
+int
+isabsolute (filename)
+    const char *filename;
 {
-    char *retval;
-    DIR *dirp;
-    struct dirent *dp;
-    char *found_name = NULL;
-
-    if ((dirp = CVS_OPENDIR (dir)) == NULL)
-    {
-	if (existence_error (errno))
-	{
-	    /* This can happen if we are looking in the Attic and the Attic
-	       directory does not exist.  Pass errno through to the caller;
-	       they know what to do with it.  */
-	    return NULL;
-	}
-	else
-	{
-	    /* Give a fatal error; that way the error message can be
-	     * more specific than if we returned the error to the caller.
-	     */
-	    error (1, errno, "cannot read directory %s", dir);
-	}
-    }
-    errno = 0;
-    while ((dp = CVS_READDIR (dirp)) != NULL)
-    {
-	if (cvs_casecmp (dp->d_name, file) == 0)
-	{
-	    if (found_name != NULL)
-		error (1, 0, "%s is ambiguous; could mean %s or %s",
-		       file, dp->d_name, found_name);
-	    found_name = xstrdup (dp->d_name);
-	}
-    }
-    if (errno != 0)
-	error (1, errno, "cannot read directory %s", dir);
-
-    CVS_CLOSEDIR (dirp);
-
-    if (found_name == NULL)
-    {
-	errno = ENOENT;
-	return NULL;
-    }
-
-    /* Copy the found name back into DIR.  We are assuming that
-       found_name is the same length as fname, which is true as
-       long as the above code is just ignoring case and not other
-       aspects of filename syntax.  */
-    retval = xmalloc (strlen (dir)
-		      + strlen (found_name)
-		      + 2);
-    sprintf (retval, "%s/%s", dir, found_name);
-
-    return retval;
+    return ISABSOLUTE (filename);
 }
-#endif /* defined (SERVER_SUPPORT) && !defined (FILENAMES_CASE_INSENSITIVE) */
-
-
-
-/* vim:tabstop=8:shiftwidth=4
- */

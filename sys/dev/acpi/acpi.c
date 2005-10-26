@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi.c,v 1.59 2004/03/23 19:00:03 drochner Exp $	*/
+/*	$NetBSD: acpi.c,v 1.59.2.3 2004/06/14 03:18:58 jmc Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi.c,v 1.59 2004/03/23 19:00:03 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi.c,v 1.59.2.3 2004/06/14 03:18:58 jmc Exp $");
 
 #include "opt_acpi.h"
 
@@ -292,6 +292,12 @@ acpi_attach(struct device *parent, struct device *self, void *aux)
 		    sc->sc_dev.dv_xname, AcpiFormatException(rv));
 		return;
 	}
+
+	/* early EC handler initialization if ECDT table is available */
+#if NACPIEC > 0
+	acpiec_early_attach(&sc->sc_dev);
+#endif
+
 	rv = AcpiInitializeObjects(0);
 	if (ACPI_FAILURE(rv)) {
 		printf("%s: unable to initialize ACPI objects: %s\n",
@@ -374,11 +380,13 @@ acpi_disable(struct acpi_softc *sc)
 {
 	ACPI_STATUS rv = AE_OK;
 
+#ifdef ACPI_DISABLE_ON_POWEROFF
 	if (acpi_active) {
 		rv = AcpiDisable();
 		if (ACPI_SUCCESS(rv))
 			acpi_active = 0;
 	}
+#endif
 	return (rv);
 }
 

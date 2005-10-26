@@ -1,4 +1,4 @@
-/*      $NetBSD: ac97.c,v 1.52 2003/11/24 16:05:10 kent Exp $ */
+/*      $NetBSD: ac97.c,v 1.52.2.3 2004/09/22 20:58:04 jmc Exp $ */
 /*	$OpenBSD: ac97.c,v 1.8 2000/07/19 09:01:35 csapuntz Exp $	*/
 
 /*
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ac97.c,v 1.52 2003/11/24 16:05:10 kent Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ac97.c,v 1.52.2.3 2004/09/22 20:58:04 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -371,6 +371,8 @@ static const struct ac97_codecid {
 	  0xffffffff,			"Analog Devices AD1886" },
 	{ AC97_CODEC_ID('A', 'D', 'S', 0x63),
 	  0xffffffff,			"Analog Devices AD1886A" },
+	{ AC97_CODEC_ID('A', 'D', 'S', 0x68),
+	  0xffffffff,			"Analog Devices AD1888", ac97_ad198x_init },
 	{ AC97_CODEC_ID('A', 'D', 'S', 0x70),
 	  0xffffffff,			"Analog Devices AD1980", ac97_ad198x_init },
 	{ AC97_CODEC_ID('A', 'D', 'S', 0x72),
@@ -407,6 +409,9 @@ static const struct ac97_codecid {
 	/*
 	 * Realtek & Avance Logic
 	 *	http://www.realtek.com.tw/downloads/downloads1-3.aspx?lineid=5&famid=All&series=All&Spec=True
+	 *
+	 * ALC650 and ALC658 support VRA, but it supports only 8000, 11025,
+	 * 12000, 16000, 22050, 24000, 32000, 44100, and 48000 Hz.
 	 */
 	{ AC97_CODEC_ID('A', 'L', 'C', 0x00),
 	  0xfffffff0,			"Realtek RL5306"	},
@@ -417,17 +422,32 @@ static const struct ac97_codecid {
 	{ AC97_CODEC_ID('A', 'L', 'G', 0x10),
 	  0xffffffff,			"Avance Logic ALC200/ALC201"	},
 	{ AC97_CODEC_ID('A', 'L', 'G', 0x20),
-	  0xffffffff,			"Avance Logic ALC650", ac97_alc650_init },
+	  0xfffffff0,			"Avance Logic ALC650", ac97_alc650_init },
 	{ AC97_CODEC_ID('A', 'L', 'G', 0x30),
 	  0xffffffff,			"Avance Logic ALC101"	},
 	{ AC97_CODEC_ID('A', 'L', 'G', 0x40),
 	  0xffffffff,			"Avance Logic ALC202"	},
 	{ AC97_CODEC_ID('A', 'L', 'G', 0x50),
 	  0xffffffff,			"Avance Logic ALC250"	},
+	{ AC97_CODEC_ID('A', 'L', 'G', 0x60),
+	  0xfffffff0,			"Avance Logic ALC655"	},
+	{ AC97_CODEC_ID('A', 'L', 'G', 0x80),
+	  0xfffffff0,			"Avance Logic ALC658"	},
+	{ AC97_CODEC_ID('A', 'L', 'G', 0x90),
+	  0xfffffff0,			"Avance Logic ALC850"	},
 	{ AC97_CODEC_ID('A', 'L', 'C', 0),
 	  AC97_VENDOR_ID_MASK,		"Realtek unknown"	},
 	{ AC97_CODEC_ID('A', 'L', 'G', 0),
 	  AC97_VENDOR_ID_MASK,		"Avance Logic unknown"	},
+
+	/**
+	 * C-Media Electronics Inc.
+	 * http://www.cmedia.com.tw/doc/CMI9739%206CH%20Audio%20Codec%20SPEC_Ver12.pdf
+	 */
+	{ AC97_CODEC_ID('C', 'M', 'I', 0x61),
+	  0xffffffff,			"C-Media CMI9739"	},
+	{ AC97_CODEC_ID('C', 'M', 'I', 0),
+	  AC97_VENDOR_ID_MASK,		"C-Media unknown"	},
 
 	/* Cirrus Logic, Crystal series:
 	 *  'C' 'R' 'Y' 0x0[0-7]  - CS4297
@@ -488,8 +508,10 @@ static const struct ac97_codecid {
 	  0xffffffff,			"ICEnsemble ICE1232A",	},
 	{ AC97_CODEC_ID('I', 'C', 'E', 0x51),
 	  0xffffffff,			"VIA Technologies VT1616", ac97_vt1616_init },
+	{ AC97_CODEC_ID('I', 'C', 'E', 0x52),
+	  0xffffffff,			"VIA Technologies VT1616i", ac97_vt1616_init },
 	{ AC97_CODEC_ID('I', 'C', 'E', 0),
-	  AC97_VENDOR_ID_MASK,		"ICEnsemble unknown",	},
+	  AC97_VENDOR_ID_MASK,		"ICEnsemble/VIA unknown",	},
 
 	{ AC97_CODEC_ID('N', 'S', 'C', 0),
 	  0xffffffff,			"National Semiconductor LM454[03568]", },
@@ -702,11 +724,26 @@ ac97_restore_shadow(struct ac97_codec_if *self)
 	struct ac97_softc *as;
 	const struct ac97_source_info *si;
 	int idx;
+	uint16_t val;
 
 	as = (struct ac97_softc *) self;
+
+	/* make sure chip is fully operational */
+#define	AC97_POWER_ALL	(AC97_POWER_REF | AC97_POWER_ANL | AC97_POWER_DAC \
+			| AC97_POWER_ADC)
+	for (idx = 500000; idx >= 0; idx--) {
+		ac97_read(as, AC97_REG_POWER, &val);
+		if ((val & AC97_POWER_ALL) == AC97_POWER_ALL)
+		       break;
+		DELAY(1);
+	}
+#undef AC97_POWER_ALL
+
 	for (idx = 0; idx < SOURCE_INFO_SIZE; idx++) {
 		si = &source_info[idx];
-		ac97_write(as, si->reg, as->shadow_reg[si->reg >> 1]);
+		/* don't "restore" to the reset reg! */
+		if (si->reg != AC97_REG_RESET)
+			ac97_write(as, si->reg, as->shadow_reg[si->reg >> 1]);
 	}
 
 	if (as->ext_id & (AC97_EXT_AUDIO_VRA | AC97_EXT_AUDIO_DRA
@@ -855,9 +892,10 @@ ac97_attach(struct ac97_host_if *host_if)
 	struct ac97_softc *as;
 	struct device *sc_dev;
 	int error, i, j;
-	u_int32_t id;
-	u_int16_t id1, id2;
-	u_int16_t extstat, rate;
+	uint32_t id;
+	uint16_t id1, id2;
+	uint16_t extstat, rate;
+	uint16_t val;
 	mixer_ctrl_t ctl;
 	void (*initfunc)(struct ac97_softc *);
 #define FLAGBUFLEN	140
@@ -878,13 +916,26 @@ ac97_attach(struct ac97_host_if *host_if)
 		return error;
 	}
 
-	host_if->reset(host_if->arg);
+	if ((error = host_if->reset(host_if->arg))) {
+		free(as, M_DEVBUF);
+		return error;
+	}
 
 	host_if->write(host_if->arg, AC97_REG_POWER, 0);
 	host_if->write(host_if->arg, AC97_REG_RESET, 0);
 
 	if (host_if->flags)
 		as->host_flags = host_if->flags(host_if->arg);
+
+#define	AC97_POWER_ALL	(AC97_POWER_REF | AC97_POWER_ANL | AC97_POWER_DAC \
+			| AC97_POWER_ADC)
+	for (i = 500000; i >= 0; i--) {
+		ac97_read(as, AC97_REG_POWER, &val);
+		if ((val & AC97_POWER_ALL) == AC97_POWER_ALL)
+		       break;
+		DELAY(1);
+	}
+#undef AC97_POWER_ALL
 
 	ac97_setup_defaults(as);
 	ac97_read(as, AC97_REG_RESET, &as->caps);
@@ -994,9 +1045,7 @@ ac97_attach(struct ac97_host_if *host_if)
 
 	ac97_setup_source_info(as);
 
-	DELAY(900 * 1000);
 	memset(&ctl, 0, sizeof(ctl));
-
 	/* disable mutes */
 	for (i = 0; i < 11; i++) {
 		static struct {
@@ -1458,37 +1507,33 @@ ac97_add_port(struct ac97_softc *as, const struct ac97_source_info *src)
  */
 
 #define	AD1980_REG_MISC	0x76
-#define		AD1980_MISC_MBG0	0x0001	/* 0 */
-#define		AD1980_MISC_MBG1	0x0002	/* 1 */
-#define		AD1980_MISC_VREFD	0x0004	/* 2 */
-#define		AD1980_MISC_VREFH	0x0008	/* 3 */
-#define		AD1980_MISC_SRU		0x0010	/* 4 */
-#define		AD1980_MISC_LOSEL	0x0020	/* 5 */
-#define		AD1980_MISC_2CMIC	0x0040	/* 6 */
-#define		AD1980_MISC_SPRD	0x0080	/* 7 */
-#define		AD1980_MISC_DMIX0	0x0100	/* 8 */
-#define		AD1980_MISC_DMIX1	0x0200	/* 9 */
-#define		AD1980_MISC_HPSEL	0x0400	/*10 */
-#define		AD1980_MISC_CLDIS	0x0800	/*11 */
-#define		AD1980_MISC_LODIS	0x1000	/*12 */
-#define		AD1980_MISC_MSPLT	0x2000	/*13 */
-#define		AD1980_MISC_AC97NC	0x4000	/*14 */
-#define		AD1980_MISC_DACZ	0x8000	/*15 */
+#define		AD1980_MISC_MBG0	0x0001	/* 0 1888/1980/1981 /1985 */
+#define		AD1980_MISC_MBG1	0x0002	/* 1 1888/1980/1981 /1985 */
+#define		AD1980_MISC_VREFD	0x0004	/* 2 1888/1980/1981 /1985 */
+#define		AD1980_MISC_VREFH	0x0008	/* 3 1888/1980/1981 /1985 */
+#define		AD1980_MISC_SRU		0x0010	/* 4 1888/1980      /1985 */
+#define		AD1980_MISC_LOSEL	0x0020	/* 5 1888/1980/1981 /1985 */
+#define		AD1980_MISC_2CMIC	0x0040	/* 6      1980/1981B/1985 */
+#define		AD1980_MISC_SPRD	0x0080	/* 7 1888/1980      /1985 */
+#define		AD1980_MISC_DMIX0	0x0100	/* 8 1888/1980      /1985 */
+#define		AD1980_MISC_DMIX1	0x0200	/* 9 1888/1980      /1985 */
+#define		AD1980_MISC_HPSEL	0x0400	/*10 1888/1980      /1985 */
+#define		AD1980_MISC_CLDIS	0x0800	/*11 1888/1980      /1985 */
+#define		AD1980_MISC_LODIS	0x1000	/*12 1888/1980/1981 /1985 */
+#define		AD1980_MISC_MSPLT	0x2000	/*13 1888/1980/1981 /1985 */
+#define		AD1980_MISC_AC97NC	0x4000	/*14 1888/1980      /1985 */
+#define		AD1980_MISC_DACZ	0x8000	/*15 1888/1980/1981 /1985 */
 #define	AD1981_REG_MISC	0x76
-#define		AD1981_MISC_MBG		0x0001  /* 0 */
-#define		AD1981_MISC_VREFD	0x0002  /* 1 */
-#define		AD1981_MISC_VREFH	0x0004  /* 2 */
-#define		AD1981_MISC_MADST	0x0008  /* 3 */
-#define		AD1981_MISC_MADPD	0x0020  /* 5 */
-#define		AD1981_MISC_FMXE	0x0100  /* 8 */
-#define		AD1981_MISC_DAM		0x0400  /*10 */
-#define		AD1981_MISC_MSPLT	0x1000  /*12 */
-#define		AD1981_MISC_DACZ	0x4000  /*14 */
+#define		AD1981_MISC_MADST	0x0010  /* 4 */
+#define		AD1981A_MISC_MADPD	0x0040  /* 6 */
+#define		AD1981B_MISC_MADPD	0x0080  /* 7 */
+#define		AD1981_MISC_FMXE	0x0200  /* 9 */
+#define		AD1981_MISC_DAM		0x0800  /*11 */
 static void
 ac97_ad198x_init(struct ac97_softc *as)
 {
 	int i;
-	unsigned short misc;
+	uint16_t misc;
 
 	ac97_read(as, AD1980_REG_MISC, &misc);
 	ac97_write(as, AD1980_REG_MISC,
@@ -1587,4 +1632,3 @@ ac97_vt1616_init(struct ac97_softc *as)
 	ac97_add_port(as, &sources[1]);
 	ac97_add_port(as, &sources[2]);
 }
-

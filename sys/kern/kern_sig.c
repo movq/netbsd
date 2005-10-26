@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sig.c,v 1.189 2004/03/26 17:13:37 drochner Exp $	*/
+/*	$NetBSD: kern_sig.c,v 1.189.2.6 2004/10/01 03:46:37 jmc Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sig.c,v 1.189 2004/03/26 17:13:37 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sig.c,v 1.189.2.6 2004/10/01 03:46:37 jmc Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_compat_sunos.h"
@@ -78,6 +78,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_sig.c,v 1.189 2004/03/26 17:13:37 drochner Exp 
 
 #include <sys/user.h>		/* for coredump */
 
+#include <uvm/uvm.h>
 #include <uvm/uvm_extern.h>
 
 static void	child_psignal(struct proc *, int);
@@ -90,6 +91,30 @@ static void	kpsignal2(struct proc *, const ksiginfo_t *, int);
 sigset_t	contsigmask, stopsigmask, sigcantmask;
 
 struct pool	sigacts_pool;	/* memory pool for sigacts structures */
+
+/*
+ * struct sigacts memory pool allocator.
+ */
+
+static void *
+sigacts_poolpage_alloc(struct pool *pp, int flags)
+{
+
+	return (void *)uvm_km_kmemalloc1(kernel_map,
+	    uvm.kernel_object, (PAGE_SIZE)*2, (PAGE_SIZE)*2, UVM_UNKNOWN_OFFSET,
+	    (flags & PR_WAITOK) ? 0 : UVM_KMF_NOWAIT | UVM_KMF_TRYLOCK);
+}
+
+static void
+sigacts_poolpage_free(struct pool *pp, void *v)
+{
+        uvm_km_free(kernel_map, (vaddr_t)v, (PAGE_SIZE)*2);
+}
+
+static struct pool_allocator sigactspool_allocator = {
+        sigacts_poolpage_alloc, sigacts_poolpage_free,
+};
+
 struct pool	siginfo_pool;	/* memory pool for siginfo structures */
 struct pool	ksiginfo_pool;	/* memory pool for ksiginfo structures */
 
@@ -143,6 +168,11 @@ ksiginfo_put(struct proc *p, const ksiginfo_t *ksi)
 	int s;
 
 	if ((sa->sa_flags & SA_SIGINFO) == 0)
+		return;
+	/*
+	 * If there's no info, don't save it.
+	 */
+	if (KSI_EMPTY_P(ksi))
 		return;
 
 	s = splsoftclock();
@@ -198,8 +228,12 @@ ksiginfo_exithook(struct proc *p, void *v)
 void
 signal_init(void)
 {
+
+	sigactspool_allocator.pa_pagesz = (PAGE_SIZE)*2;
+
 	pool_init(&sigacts_pool, sizeof(struct sigacts), 0, 0, 0, "sigapl",
-	    &pool_allocator_nointr);
+	    sizeof(struct sigacts) > PAGE_SIZE ?
+	    &sigactspool_allocator : &pool_allocator_nointr);
 	pool_init(&siginfo_pool, sizeof(siginfo_t), 0, 0, 0, "siginfo",
 	    &pool_allocator_nointr);
 	pool_init(&ksiginfo_pool, sizeof(ksiginfo_t), 0, 0, 0, "ksiginfo",
@@ -736,7 +770,7 @@ sys_kill(struct lwp *l, void *v, register_t *retval)
 	pc = cp->p_cred;
 	if ((u_int)SCARG(uap, signum) >= NSIG)
 		return (EINVAL);
-	memset(&ksi, 0, sizeof(ksi));
+	KSI_INIT(&ksi);
 	ksi.ksi_signo = SCARG(uap, signum);
 	ksi.ksi_code = SI_USER;
 	ksi.ksi_pid = cp->p_pid;
@@ -821,7 +855,7 @@ void
 gsignal(int pgid, int signum)
 {
 	ksiginfo_t ksi;
-	memset(&ksi, 0, sizeof(ksi));
+	KSI_INIT_EMPTY(&ksi);
 	ksi.ksi_signo = signum;
 	kgsignal(pgid, &ksi, NULL);
 }
@@ -843,7 +877,7 @@ void
 pgsignal(struct pgrp *pgrp, int sig, int checkctty)
 {
 	ksiginfo_t ksi;
-	memset(&ksi, 0, sizeof(ksi));
+	KSI_INIT_EMPTY(&ksi);
 	ksi.ksi_signo = sig;
 	kpgsignal(pgrp, &ksi, NULL, checkctty);
 }
@@ -912,7 +946,7 @@ child_psignal(struct proc *p, int dolock)
 {
 	ksiginfo_t ksi;
 
-	(void)memset(&ksi, 0, sizeof(ksi));
+	KSI_INIT(&ksi);
 	ksi.ksi_signo = SIGCHLD;
 	ksi.ksi_code = p->p_xstat == SIGCONT ? CLD_CONTINUED : CLD_STOPPED;
 	ksi.ksi_pid = p->p_pid;
@@ -943,7 +977,7 @@ psignal1(struct proc *p, int signum, int dolock)
 {
 	ksiginfo_t ksi;
 
-	memset(&ksi, 0, sizeof(ksi));
+	KSI_INIT_EMPTY(&ksi);
 	ksi.ksi_signo = signum;
 	kpsignal2(p, &ksi, dolock);
 }
@@ -999,9 +1033,31 @@ kpsignal2(struct proc *p, const ksiginfo_t *ksi, int dolock)
 	/*
 	 * If proc is traced, always give parent a chance.
 	 */
-	if (p->p_flag & P_TRACED)
+	if (p->p_flag & P_TRACED) {
 		action = SIG_DFL;
-	else {
+
+		/*
+		 * If the process is being traced and the signal is being
+		 * caught, make sure to save any ksiginfo.
+		 */
+		if (sigismember(&p->p_sigctx.ps_sigcatch, signum))
+			ksiginfo_put(p, ksi);
+	} else {
+		/*
+		 * If the signal was the result of a trap, reset it
+		 * to default action if it's currently masked, so that it would
+		 * coredump immediatelly instead of spinning repeatedly
+		 * taking the signal.
+		 */
+		if (KSI_TRAP_P(ksi)
+		    && sigismember(&p->p_sigctx.ps_sigmask, signum)
+		    && !sigismember(&p->p_sigctx.ps_sigcatch, signum)) {
+			sigdelset(&p->p_sigctx.ps_sigignore, signum);
+			sigdelset(&p->p_sigctx.ps_sigcatch, signum);
+			sigdelset(&p->p_sigctx.ps_sigmask, signum);
+			SIGACTION(p, signum).sa_handler = SIG_DFL;
+		}
+
 		/*
 		 * If the signal is being ignored,
 		 * then we forget about it immediately.
@@ -1836,7 +1892,7 @@ postsig(int signum)
 			 * because the signal was not caught, or because the
 			 * user did not request SA_SIGINFO
 			 */
-			(void)memset(&ksi1, 0, sizeof(ksi1));
+			KSI_INIT_EMPTY(&ksi1);
 			ksi1.ksi_signo = signum;
 			kpsendsig(l, &ksi1, returnmask);
 		} else {

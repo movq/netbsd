@@ -1,4 +1,4 @@
-/*	$NetBSD: gethnamaddr.c,v 1.58 2003/10/11 03:35:42 enami Exp $	*/
+/*	$NetBSD: gethnamaddr.c,v 1.58.2.3 2004/11/29 06:15:48 jmc Exp $	*/
 
 /*
  * ++Copyright++ 1985, 1988, 1993
@@ -57,7 +57,7 @@
 static char sccsid[] = "@(#)gethostnamadr.c	8.1 (Berkeley) 6/4/93";
 static char rcsid[] = "Id: gethnamaddr.c,v 8.21 1997/06/01 20:34:37 vixie Exp ";
 #else
-__RCSID("$NetBSD: gethnamaddr.c,v 1.58 2003/10/11 03:35:42 enami Exp $");
+__RCSID("$NetBSD: gethnamaddr.c,v 1.58.2.3 2004/11/29 06:15:48 jmc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -98,6 +98,7 @@ __RCSID("$NetBSD: gethnamaddr.c,v 1.58 2003/10/11 03:35:42 enami Exp $");
 #if defined(_LIBC) && defined(__weak_alias)
 __weak_alias(gethostbyaddr,_gethostbyaddr)
 __weak_alias(gethostbyname,_gethostbyname)
+__weak_alias(gethostent,_gethostent)
 #endif
 
 #define	MAXALIASES	35
@@ -768,9 +769,9 @@ _gethtent()
 		goto again;
 	}
 	/* if this is not something we're looking for, skip it. */
-	if (host.h_addrtype != af)
+	if (host.h_addrtype != 0 && host.h_addrtype != af)
 		goto again;
-	if (host.h_length != len)
+	if (host.h_length != 0 && host.h_length != len)
 		goto again;
 	h_addr_ptrs[0] = (char *)(void *)host_addr;
 	h_addr_ptrs[1] = NULL;
@@ -844,7 +845,7 @@ _gethtbyname2(name, af)
 
 	_DIAGASSERT(name != NULL);
 
-	_sethtent(0);
+	_sethtent(stayopen);
 	ptr = tmpbuf = NULL;
 	num = 0;
 	while ((p = _gethtent()) != NULL && num < MAXADDRS) {
@@ -943,7 +944,7 @@ _gethtbyaddr(rv, cb_data, ap)
 	host.h_length = len;
 	host.h_addrtype = af;
 
-	_sethtent(0);
+	_sethtent(stayopen);
 	while ((p = _gethtent()) != NULL)
 		if (p->h_addrtype == af && !memcmp(p->h_addr, addr,
 		    (size_t)len))
@@ -1058,56 +1059,13 @@ addrsort(ap, num)
 }
 #endif
 
-#if defined(BSD43_BSD43_NFS) || defined(sun)
-/* XXX: should we remove this cruft? - lukem */
-/* some libc's out there are bound internally to these names (UMIPS) */
-void
-ht_sethostent(stayopen)
-	int stayopen;
-{
-	_sethtent(stayopen);
-}
-
-void
-ht_endhostent()
-{
-	_endhtent();
-}
-
-struct hostent *
-ht_gethostbyname(name)
-	char *name;
-{
-	return (_gethtbyname(name));
-}
-
-struct hostent *
-ht_gethostbyaddr(addr, len, af)
-	const char *addr;
-	int len, af;
-{
-	return (_gethtbyaddr(addr, len, af));
-}
-
 struct hostent *
 gethostent()
 {
+	host.h_addrtype = 0;
+	host.h_length = 0;
 	return (_gethtent());
 }
-
-void
-dns_service()
-{
-	return;
-}
-
-int
-dn_skipname(comp_dn, eom)
-	const u_char *comp_dn, *eom;
-{
-	return (__dn_skipname(comp_dn, eom));
-}
-#endif /*old-style libc with yp junk in it*/
 
 /*ARGSUSED*/
 int
@@ -1220,15 +1178,6 @@ _dns_gethtbyaddr(rv, cb_data, ap)
 		return NS_NOTFOUND;
 	}
 	n = res_query(qbuf, C_IN, T_PTR, buf->buf, sizeof(buf->buf));
-	if (n < 0 && af == AF_INET6) {
-		*qp = '\0';
-		if (strlcat(qbuf, "ip6.int", sizeof(qbuf)) >= sizeof(qbuf)) {
-			free(buf);
-			h_errno = NETDB_INTERNAL;
-			return NS_NOTFOUND;
-		}
-		n = res_query(qbuf, C_IN, T_PTR, buf->buf, sizeof(buf->buf));
-	}
 	if (n < 0) {
 		free(buf);
 		dprintf("res_query failed (%d)\n", n);

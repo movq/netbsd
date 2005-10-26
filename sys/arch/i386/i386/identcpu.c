@@ -1,4 +1,4 @@
-/*	$NetBSD: identcpu.c,v 1.10 2004/03/26 13:57:44 minoura Exp $	*/
+/*	$NetBSD: identcpu.c,v 1.10.2.2.2.2 2005/08/07 15:34:10 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.10 2004/03/26 13:57:44 minoura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.10.2.2.2.2 2005/08/07 15:34:10 riz Exp $");
 
 #include "opt_cputype.h"
 
@@ -109,6 +109,7 @@ static const char * const i386_intel_brand[] = {
 	"Celeron",	    /* Intel (R) Celeron (TM) processor */
 	"Xeon",		    /* Intel (R) Xeon (TM) processor */
 	"Xeon MP",	    /* Intel (R) Xeon (TM) processor MP */
+	"",		    /* Reserved */
 	"Mobile Pentium 4", /* Mobile Intel (R) Pentium (R) 4 processor-M */
 	"Mobile Celeron",   /* Mobile Intel (R) Celeron (R) processor */
 };
@@ -461,12 +462,12 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			{
 				0, 0, 0, 0, 0, 0, "C3 Samuel",
 				"C3 Samuel 2/Ezra", "C3 Ezra-T",
-				0, 0, 0, 0, 0, 0, 0,
+				"C3 Nehemiah", 0, 0, 0, 0, 0, 0,
 				"C3"	/* Default */
 			},
 			NULL,
 			via_cpu_probe,
-			NULL,
+			via_cpu_cacheinfo,
 		},
 		/* Family > 6, not yet available from VIA */
 		{
@@ -536,6 +537,19 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 	}
 };
 
+/*
+ * disable the TSC such that we don't use the TSC in microtime(9)
+ * because some CPUs got the implementation wrong.
+ */
+static void
+disable_tsc(struct cpu_info *ci)
+{
+	if (cpu_feature & CPUID_TSC) {
+		cpu_feature &= ~CPUID_TSC;
+		printf("WARNING: broken TSC disabled\n");
+	}
+}
+
 void
 cyrix6x86_cpu_setup(ci)
 	struct cpu_info *ci;
@@ -543,8 +557,13 @@ cyrix6x86_cpu_setup(ci)
 	/*
 	 * i8254 latch check routine:
 	 *     National Geode (formerly Cyrix MediaGX) has a serious bug in
-	 *     its built-in i8254-compatible clock module.
+	 *     its built-in i8254-compatible clock module (cs5510 cs5520).
 	 *     Set the variable 'clock_broken_latch' to indicate it.
+	 *
+	 * This bug is not present in the cs5530, and the flag
+	 * is disabled again in sys/arch/i386/pci/pcib.c if this later
+	 * model device is detected. Ideally, this work-around should not
+	 * even be in here, it should be in there. XXX
 	 */
 
 	extern int clock_broken_latch;
@@ -557,8 +576,22 @@ cyrix6x86_cpu_setup(ci)
 	}
 
 	/* set up various cyrix registers */
-	/* Enable suspend on halt */
+	/*
+	 * Enable suspend on halt (powersave mode).
+	 * When powersave mode is enabled, the TSC stops counting
+	 * while the CPU is halted in idle() waiting for an interrupt.
+	 * This means we can't use the TSC for interval time in
+	 * microtime(9), and thus it is disabled here.
+	 *
+	 * It still makes a perfectly good cycle counter
+	 * for program profiling, so long as you remember you're
+	 * counting cycles, and not time. Further, if you don't
+	 * mind not using powersave mode, the TSC works just fine,
+	 * so this should really be optional. XXX
+	 */
 	cyrix_write_reg(0xc2, cyrix_read_reg(0xc2) | 0x08);
+	disable_tsc(ci);
+
 	/* enable access to ccr4/ccr5 */
 	cyrix_write_reg(0xC3, cyrix_read_reg(0xC3) | 0x10);
 	/* cyrix's workaround  for the "coma bug" */
@@ -583,8 +616,7 @@ winchip_cpu_setup(ci)
 #if defined(I586_CPU)
 	switch (CPUID2MODEL(ci->ci_signature)) { /* model */
 	case 4:	/* WinChip C6 */
-		cpu_feature &= ~CPUID_TSC;
-		printf("WARNING: WinChip C6: broken TSC disabled\n");
+		disable_tsc(ci);
 	}
 #endif
 }
@@ -606,7 +638,7 @@ via_cpu_probe(struct cpu_info *ci)
 	 */
 	if (lfunc >= 0x80000001) {
 		CPUID(0x80000001, descs[0], descs[1], descs[2], descs[3]);
-		ci->ci_feature_flags = descs[3];
+		ci->ci_feature_flags |= descs[3];
 	}
 }
 
@@ -658,11 +690,15 @@ intel_family6_name(struct cpu_info *ci)
 				if (ci->ci_signature == 0x6B1)
 					ret = "Celeron";
 				break;
-			case 0x08:
+			case 0x8:
 				if (ci->ci_signature >= 0xF13)
 					ret = "genuine processor";
 				break;
-			case 0x0E:
+			case 0xB:
+				if (ci->ci_signature >= 0xF13)
+					ret = "Xeon MP";
+				break;
+			case 0xE:
 				if (ci->ci_signature < 0xF13)
 					ret = "Xeon";
 				break;
@@ -1118,6 +1154,9 @@ identifycpu(struct cpu_info *ci)
 						name = tmp;
 				}
 				if (family == CPU_MAXFAMILY &&
+				    ci->ci_brand_id <
+				    (sizeof(i386_intel_brand) /
+				     sizeof(i386_intel_brand[0])) &&
 				    i386_intel_brand[ci->ci_brand_id])
 					name =
 					     i386_intel_brand[ci->ci_brand_id];
@@ -1156,9 +1195,6 @@ identifycpu(struct cpu_info *ci)
 		last_tsc = rdtsc();
 		delay(100000);
 		ci->ci_tsc_freq = (rdtsc() - last_tsc) * 10;
-#ifndef NO_TSC_TIME
-		microtime_func = cc_microtime;
-#endif
 	}
 	/* XXX end XXX */
 #endif

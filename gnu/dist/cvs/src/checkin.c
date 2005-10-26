@@ -1,6 +1,11 @@
 /*
- * Copyright (c) 1992, Brian Berliner and Jeff Polk
- * Copyright (c) 1989-1992, Brian Berliner
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (C) 1992, Brian Berliner and Jeff Polk
+ * Portions Copyright (C) 1989-1992, Brian Berliner
  * 
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with the CVS source distribution.
@@ -58,13 +63,10 @@ Checkin (type, finfo, rev, tag, options, message)
      * if the RCS file hasn't already been parsed in one of the
      * check functions.
      */
-    assert ( finfo->rcs != NULL );
+    assert (finfo->rcs != NULL);
 
-    switch ( RCS_checkin ( finfo->rcs,
-			   finfo->file,
-			   message,
-			   rev,
-			   RCS_FLAGS_KEEPFILE ) )
+    switch (RCS_checkin (finfo->rcs, finfo->file, message, rev, 0,
+                         RCS_FLAGS_KEEPFILE))
     {
 	case 0:			/* everything normal */
 
@@ -185,5 +187,5 @@ Checkin (type, finfo, rev, tag, options, message)
 	mark_up_to_date (finfo->file);
 
     freevers_ts (&vers);
-    return (0);
+    return 0;
 }

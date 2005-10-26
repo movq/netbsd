@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_vnops.c,v 1.113 2004/01/26 10:39:30 hannken Exp $	*/
+/*	$NetBSD: ufs_vnops.c,v 1.113.2.2 2004/07/28 11:30:07 tron Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993, 1995
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_vnops.c,v 1.113 2004/01/26 10:39:30 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_vnops.c,v 1.113.2.2 2004/07/28 11:30:07 tron Exp $");
 
 #ifndef _LKM
 #include "opt_quota.h"
@@ -533,7 +533,8 @@ ufs_chown(struct vnode *vp, uid_t uid, gid_t gid, struct ucred *cred,
 	 * or the call fails.
 	 */
 	if ((cred->cr_uid != ip->i_uid || uid != ip->i_uid ||
-	    (gid != ip->i_gid && !groupmember((gid_t)gid, cred))) &&
+	    (gid != ip->i_gid &&
+	     !(cred->cr_gid == gid || groupmember((gid_t)gid, cred)))) &&
 	    ((error = suser(cred, &p->p_acflag)) != 0))
 		return (error);
 
@@ -1723,10 +1724,10 @@ ufs_strategy(void *v)
 			biodone(bp);
 			return (error);
 		}
-		if ((long)bp->b_blkno == -1) /* no valid data */
+		if (bp->b_blkno == -1) /* no valid data */
 			clrbuf(bp);
 	}
-	if ((long)bp->b_blkno < 0) { /* block is not on disk */
+	if (bp->b_blkno < 0) { /* block is not on disk */
 		biodone(bp);
 		return (0);
 	}

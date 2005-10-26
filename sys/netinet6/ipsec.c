@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec.c,v 1.95 2004/03/24 15:34:55 atatat Exp $	*/
+/*	$NetBSD: ipsec.c,v 1.95.2.1.2.2 2005/03/16 22:59:09 tron Exp $	*/
 /*	$KAME: ipsec.c,v 1.136 2002/05/19 00:36:39 itojun Exp $	*/
 
 /*
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipsec.c,v 1.95 2004/03/24 15:34:55 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipsec.c,v 1.95.2.1.2.2 2005/03/16 22:59:09 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -1008,7 +1008,7 @@ ipsec4_get_ulp(m, spidx, needport)
 			    uh.uh_dport;
 			return;
 		case IPPROTO_AH:
-			if (m->m_pkthdr.len > off + sizeof(ip6e))
+			if (off + sizeof(ip6e) > m->m_pkthdr.len)
 				return;
 			m_copydata(m, off, sizeof(ip6e), (caddr_t)&ip6e);
 			off += (ip6e.ip6e_len + 2) << 2;
@@ -1682,12 +1682,18 @@ ipsec_get_reqlevel(isr, af)
 				level = ah_net_deflev;
 			else
 				level = ah_trans_deflev;
+			break;
 		case IPPROTO_IPCOMP:
 			/*
 			 * we don't really care, as IPcomp document says that
 			 * we shouldn't compress small packets
 			 */
 			level = IPSEC_LEVEL_USE;
+			break;
+		case IPPROTO_IPV4:
+		case IPPROTO_IPV6:
+			/* should never go into here */
+			level = IPSEC_LEVEL_REQUIRE;
 			break;
 		default:
 			panic("ipsec_get_reqlevel: "
@@ -1779,6 +1785,13 @@ ipsec_in_reject(sp, m)
 			 * we don't really care, as IPcomp document says that
 			 * we shouldn't compress small packets, IPComp policy
 			 * should always be treated as being in "use" level.
+			 */
+			break;
+		case IPPROTO_IPV4:
+		case IPPROTO_IPV6:
+			/*
+			 * XXX what shall we do, until introducing more complex
+			 * policy checking code?
 			 */
 			break;
 		}
@@ -1953,6 +1966,11 @@ ipsec_hdrsiz(sp)
 			break;
 		case IPPROTO_IPCOMP:
 			clen = sizeof(struct ipcomp);
+			break;
+		case IPPROTO_IPV4:
+		case IPPROTO_IPV6:
+			/* the next "if" clause will compute it */
+			clen = 0;
 			break;
 		}
 
@@ -2653,6 +2671,9 @@ ipsec4_output(state, sp, flags)
 			case IPSEC_LEVEL_USE:
 				continue;
 			case IPSEC_LEVEL_REQUIRE:
+				if (isr->saidx.proto == AF_INET ||
+				    isr->saidx.proto == AF_INET6)
+					break;
 				/* must be not reached here. */
 				panic("ipsec4_output: no SA found, but required.");
 			}
@@ -2768,6 +2789,14 @@ ipsec4_output(state, sp, flags)
 				goto bad;
 			}
 			break;
+		case IPPROTO_IPV4:
+			break;
+		case IPPROTO_IPV6:
+			ipseclog((LOG_ERR, "ipsec4_output: "
+			    "family mismatched between inner and outer "
+			    "header\n"));
+			error = EAFNOSUPPORT;
+			goto bad;
 		default:
 			ipseclog((LOG_ERR,
 			    "ipsec4_output: unknown ipsec protocol %d\n",
@@ -3625,43 +3654,54 @@ SYSCTL_SETUP(sysctl_net_inet_ipsec_setup, "sysctl net.inet.ipsec subtree setup")
 		       CTL_NET, PF_INET, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "ipsec", NULL,
+		       CTLTYPE_NODE, "ipsec",
+		       SYSCTL_DESCR("IPv4 related IPSec settings"),
 		       NULL, 0, NULL, 0,
 		       CTL_NET, PF_INET, IPPROTO_AH, CTL_EOL);
 
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_STRUCT, "stats", NULL,
+		       CTLTYPE_STRUCT, "stats",
+		       SYSCTL_DESCR("IPSec statistics and counters"),
 		       NULL, 0, &ipsecstat, sizeof(ipsecstat),
 		       CTL_NET, PF_INET, IPPROTO_AH,
 		       IPSECCTL_STATS, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "def_policy", NULL,
+		       CTLTYPE_INT, "def_policy",
+		       SYSCTL_DESCR("Default action for non-IPSec packets"),
 		       sysctl_ipsec, 0, &ip4_def_policy, 0,
 		       CTL_NET, PF_INET, IPPROTO_AH,
 		       IPSECCTL_DEF_POLICY, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "esp_trans_deflev", NULL,
+		       CTLTYPE_INT, "esp_trans_deflev",
+		       SYSCTL_DESCR("Default required security level for "
+				    "transport mode traffic"),
 		       sysctl_ipsec, 0, &ip4_esp_trans_deflev, 0,
 		       CTL_NET, PF_INET, IPPROTO_AH,
 		       IPSECCTL_DEF_ESP_TRANSLEV, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "esp_net_deflev", NULL,
+		       CTLTYPE_INT, "esp_net_deflev",
+		       SYSCTL_DESCR("Default required security level for "
+				    "tunneled traffic"),
 		       sysctl_ipsec, 0, &ip4_esp_net_deflev, 0,
 		       CTL_NET, PF_INET, IPPROTO_AH,
 		       IPSECCTL_DEF_ESP_NETLEV, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "ah_trans_deflev", NULL,
+		       CTLTYPE_INT, "ah_trans_deflev",
+		       SYSCTL_DESCR("Default required security level for "
+				    "transport mode headers"),
 		       sysctl_ipsec, 0, &ip4_ah_trans_deflev, 0,
 		       CTL_NET, PF_INET, IPPROTO_AH,
 		       IPSECCTL_DEF_AH_TRANSLEV, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "ah_net_deflev", NULL,
+		       CTLTYPE_INT, "ah_net_deflev",
+		       SYSCTL_DESCR("Default required security level for "
+				    "tunneled headers"),
 		       sysctl_ipsec, 0, &ip4_ah_net_deflev, 0,
 		       CTL_NET, PF_INET, IPPROTO_AH,
 		       IPSECCTL_DEF_AH_NETLEV, CTL_EOL);
@@ -3675,31 +3715,38 @@ SYSCTL_SETUP(sysctl_net_inet_ipsec_setup, "sysctl net.inet.ipsec subtree setup")
 #endif
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "ah_cleartos", NULL,
+		       CTLTYPE_INT, "ah_cleartos",
+		       SYSCTL_DESCR("Clear IP TOS field before calculating AH"),
 		       NULL, 0, &ip4_ah_cleartos, 0,
 		       CTL_NET, PF_INET, IPPROTO_AH,
 		       IPSECCTL_AH_CLEARTOS, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "ah_offsetmask", NULL,
+		       CTLTYPE_INT, "ah_offsetmask",
+		       SYSCTL_DESCR("Mask for IP fragment offset field when "
+				    "calculating AH"),
 		       NULL, 0, &ip4_ah_offsetmask, 0,
 		       CTL_NET, PF_INET, IPPROTO_AH,
 		       IPSECCTL_AH_OFFSETMASK, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "dfbit", NULL,
+		       CTLTYPE_INT, "dfbit",
+		       SYSCTL_DESCR("IP header DF bit setting for tunneled "
+				    "traffic"),
 		       NULL, 0, &ip4_ipsec_dfbit, 0,
 		       CTL_NET, PF_INET, IPPROTO_AH,
 		       IPSECCTL_DFBIT, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "ecn", NULL,
+		       CTLTYPE_INT, "ecn",
+		       SYSCTL_DESCR("Behavior of ECN for tunneled traffic"),
 		       NULL, 0, &ip4_ipsec_ecn, 0,
 		       CTL_NET, PF_INET, IPPROTO_AH,
 		       IPSECCTL_ECN, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "debug", NULL,
+		       CTLTYPE_INT, "debug",
+		       SYSCTL_DESCR("Enable IPSec debugging output"),
 		       NULL, 0, &ipsec_debug, 0,
 		       CTL_NET, PF_INET, IPPROTO_AH,
 		       IPSECCTL_DEBUG, CTL_EOL);
@@ -3753,55 +3800,68 @@ SYSCTL_SETUP(sysctl_net_inet6_ipsec6_setup,
 		       CTL_NET, PF_INET6, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "ipsec6", NULL,
+		       CTLTYPE_NODE, "ipsec6",
+		       SYSCTL_DESCR("IPv6 related IPSec settings"),
 		       NULL, 0, NULL, 0,
 		       CTL_NET, PF_INET6, IPPROTO_AH, CTL_EOL);
 
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_STRUCT, "stats", NULL,
+		       CTLTYPE_STRUCT, "stats",
+		       SYSCTL_DESCR("IPSec statistics and counters"),
 		       NULL, 0, &ipsec6stat, sizeof(ipsec6stat),
 		       CTL_NET, PF_INET6, IPPROTO_AH,
 		       IPSECCTL_STATS, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "def_policy", NULL,
+		       CTLTYPE_INT, "def_policy",
+		       SYSCTL_DESCR("Default action for non-IPSec packets"),
 		       sysctl_ipsec, 0, &ip6_def_policy, 0,
 		       CTL_NET, PF_INET6, IPPROTO_AH,
 		       IPSECCTL_DEF_POLICY, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "esp_trans_deflev", NULL,
+		       CTLTYPE_INT, "esp_trans_deflev",
+		       SYSCTL_DESCR("Default required security level for "
+				    "transport mode traffic"),
 		       sysctl_ipsec, 0, &ip6_esp_trans_deflev, 0,
 		       CTL_NET, PF_INET6, IPPROTO_AH,
 		       IPSECCTL_DEF_ESP_TRANSLEV, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "esp_net_deflev", NULL,
+		       CTLTYPE_INT, "esp_net_deflev",
+		       SYSCTL_DESCR("Default required security level for "
+				    "tunneled traffic"),
 		       sysctl_ipsec, 0, &ip6_esp_net_deflev, 0,
 		       CTL_NET, PF_INET6, IPPROTO_AH,
 		       IPSECCTL_DEF_ESP_NETLEV, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "ah_trans_deflev", NULL,
+		       CTLTYPE_INT, "ah_trans_deflev",
+		       SYSCTL_DESCR("Default required security level for "
+				    "transport mode headers"),
 		       sysctl_ipsec, 0, &ip6_ah_trans_deflev, 0,
 		       CTL_NET, PF_INET6, IPPROTO_AH,
 		       IPSECCTL_DEF_AH_TRANSLEV, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "ah_net_deflev", NULL,
+		       CTLTYPE_INT, "ah_net_deflev",
+		       SYSCTL_DESCR("Default required security level for "
+				    "tunneled headers"),
 		       sysctl_ipsec, 0, &ip6_ah_net_deflev, 0,
 		       CTL_NET, PF_INET6, IPPROTO_AH,
 		       IPSECCTL_DEF_AH_NETLEV, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "ecn", NULL,
+		       CTLTYPE_INT, "ecn",
+		       SYSCTL_DESCR("Behavior of ECN for tunneled traffic"),
 		       NULL, 0, &ip6_ipsec_ecn, 0,
 		       CTL_NET, PF_INET6, IPPROTO_AH,
 		       IPSECCTL_ECN, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "debug", NULL,
+		       CTLTYPE_INT, "debug",
+		       SYSCTL_DESCR("Enable IPSec debugging output"),
 		       NULL, 0, &ipsec_debug, 0,
 		       CTL_NET, PF_INET6, IPPROTO_AH,
 		       IPSECCTL_DEBUG, CTL_EOL);

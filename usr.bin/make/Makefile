@@ -1,7 +1,6 @@
-#	$NetBSD: Makefile,v 1.31 2004/02/15 19:05:45 sjg Exp $
+#	$NetBSD: Makefile,v 1.31.2.2 2004/05/10 15:44:22 tron Exp $
 #	@(#)Makefile	5.2 (Berkeley) 12/28/90
 
-CPPFLAGS+= -I${.CURDIR}
 PROG=	make
 SRCS=	arch.c buf.c compat.c cond.c dir.c for.c hash.c job.c main.c \
 	make.c parse.c str.c suff.c targ.c trace.c var.c util.c 
@@ -27,7 +26,7 @@ SUBDIR+= unit-tests
 BUILD_DATE!= date +%Y%m%d
 MAKE_VERSION:= netbsd-${BUILD_DATE}
 CPPFLAGS_main.o:= "-DMAKE_VERSION=\"${MAKE_VERSION}\""
-CPPFLAGS+= ${CPPFLAGS_${.TARGET}}
+CPPFLAGS+= ${CPPFLAGS_${.TARGET}} -DMAKE_NATIVE
 main.o:	${OBJS:Nmain.o} ${MAKEFILE}
 COPTS.var.c+= -Wno-cast-qual
 

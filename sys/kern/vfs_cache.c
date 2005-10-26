@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_cache.c,v 1.54 2003/09/01 12:13:55 yamt Exp $	*/
+/*	$NetBSD: vfs_cache.c,v 1.54.2.2 2004/07/23 23:48:21 he Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.54 2003/09/01 12:13:55 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.54.2.2 2004/07/23 23:48:21 he Exp $");
 
 #include "opt_ddb.h"
 #include "opt_revcache.h"
@@ -96,6 +96,8 @@ static struct simplelock namecache_slock = SIMPLELOCK_INITIALIZER;
 
 static void cache_remove(struct namecache *);
 static void cache_free(struct namecache *);
+static __inline struct namecache *cache_lookup_entry(
+    const struct vnode *, const struct componentname *);
 
 static void
 cache_remove(struct namecache *ncp)
@@ -130,7 +132,27 @@ cache_free(struct namecache *ncp)
 {
 
 	pool_put(&namecache_pool, ncp);
-	numcache--; /* XXX MP */
+	numcache--;
+}
+
+static __inline struct namecache *
+cache_lookup_entry(const struct vnode *dvp, const struct componentname *cnp)
+{
+	struct nchashhead *ncpp;
+	struct namecache *ncp;
+
+	LOCK_ASSERT(simple_lock_held(&namecache_slock));
+
+	ncpp = &nchashtbl[NCHASH(cnp, dvp)];
+
+	LIST_FOREACH(ncp, ncpp, nc_hash) {
+		if (ncp->nc_dvp == dvp &&
+		    ncp->nc_nlen == cnp->cn_namelen &&
+		    !memcmp(ncp->nc_name, cnp->cn_nameptr, (u_int)ncp->nc_nlen))
+			break;
+	}
+
+	return ncp;
 }
 
 /*
@@ -153,7 +175,6 @@ int
 cache_lookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 {
 	struct namecache *ncp;
-	struct nchashhead *ncpp;
 	struct vnode *vp;
 	int error;
 
@@ -169,15 +190,9 @@ cache_lookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 		cnp->cn_flags &= ~MAKEENTRY;
 		goto fail;
 	}
-	ncpp = &nchashtbl[NCHASH(cnp, dvp)];
 	simple_lock(&namecache_slock);
-	LIST_FOREACH(ncp, ncpp, nc_hash) {
-		if (ncp->nc_dvp == dvp &&
-		    ncp->nc_nlen == cnp->cn_namelen &&
-		    !memcmp(ncp->nc_name, cnp->cn_nameptr, (u_int)ncp->nc_nlen))
-			break;
-	}
-	if (ncp == 0) {
+	ncp = cache_lookup_entry(dvp, cnp);
+	if (ncp == NULL) {
 		nchstats.ncs_miss++;
 		goto fail_wlock;
 	}
@@ -304,14 +319,8 @@ remove:
 	 * the cache entry is invalid, or otherwise don't
 	 * want cache entry to exist.
 	 */
-	TAILQ_REMOVE(&nclruhead, ncp, nc_lru);
-	LIST_REMOVE(ncp, nc_hash);
-	ncp->nc_hash.le_prev = NULL;
-	if (ncp->nc_vhash.le_prev != NULL) {
-		LIST_REMOVE(ncp, nc_vhash);
-		ncp->nc_vhash.le_prev = NULL;
-	}
-	TAILQ_INSERT_HEAD(&nclruhead, ncp, nc_lru);
+	cache_remove(ncp);
+	cache_free(ncp);
 
 fail_wlock:
 	simple_unlock(&namecache_slock);
@@ -420,6 +429,17 @@ cache_enter(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 		simple_unlock(&namecache_slock);
 		return;
 	}
+
+	/*
+	 * Concurrent lookups in the same directory may race for a
+	 * cache entry. If we loose, free our tentative entry and return.
+	 */
+	if (cache_lookup_entry(dvp, cnp) != NULL) {
+		cache_free(ncp);
+		simple_unlock(&namecache_slock);
+		return;
+	}
+
 	/* Grab the vnode we just found. */
 	ncp->nc_vp = vp;
 	if (vp == NULL) {
@@ -529,20 +549,33 @@ nchreinit(void)
  * hide entries that would now be invalid
  */
 void
-cache_purge(struct vnode *vp)
+cache_purge1(struct vnode *vp, const struct componentname *cnp, int flags)
 {
 	struct namecache *ncp, *ncnext;
 
 	simple_lock(&namecache_slock);
-	for (ncp = LIST_FIRST(&vp->v_nclist); ncp != NULL; ncp = ncnext) {
-		ncnext = LIST_NEXT(ncp, nc_vlist);
-		cache_remove(ncp);
-		cache_free(ncp);
+	if (flags & PURGE_PARENTS) {
+		for (ncp = LIST_FIRST(&vp->v_nclist); ncp != NULL;
+		    ncp = ncnext) {
+			ncnext = LIST_NEXT(ncp, nc_vlist);
+			cache_remove(ncp);
+			cache_free(ncp);
+		}
 	}
-	for (ncp = LIST_FIRST(&vp->v_dnclist); ncp != NULL; ncp = ncnext) {
-		ncnext = LIST_NEXT(ncp, nc_dvlist);
-		cache_remove(ncp);
-		cache_free(ncp);
+	if (flags & PURGE_CHILDREN) {
+		for (ncp = LIST_FIRST(&vp->v_dnclist); ncp != NULL;
+		    ncp = ncnext) {
+			ncnext = LIST_NEXT(ncp, nc_dvlist);
+			cache_remove(ncp);
+			cache_free(ncp);
+		}
+	}
+	if (cnp != NULL) {
+		ncp = cache_lookup_entry(vp, cnp);
+		if (ncp) {
+			cache_remove(ncp);
+			cache_free(ncp);
+		}
 	}
 	simple_unlock(&namecache_slock);
 }

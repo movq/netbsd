@@ -1,4 +1,4 @@
-/*	$NetBSD: buf_subs.c,v 1.23 2003/10/27 00:12:41 lukem Exp $	*/
+/*	$NetBSD: buf_subs.c,v 1.23.2.2.2.1 2005/07/23 17:32:16 snj Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)buf_subs.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: buf_subs.c,v 1.23 2003/10/27 00:12:41 lukem Exp $");
+__RCSID("$NetBSD: buf_subs.c,v 1.23.2.2.2.1 2005/07/23 17:32:16 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -696,7 +696,7 @@ rd_wrfile(ARCHD *arcn, int ofd, off_t *left)
 	 * pass the blocksize of the file being written to the write routine,
 	 * if the size is zero, use the default MINFBSZ
 	 */
-	if (ofd == -1)
+	if (ofd < 0)
 		sz = PAXPATHLEN+1;
 	else if (fstat(ofd, &sb) == 0) {
 		if (sb.st_blksize > 0)
@@ -745,7 +745,7 @@ rd_wrfile(ARCHD *arcn, int ofd, off_t *left)
 	 * written. just closing with the file offset moved forward may not put
 	 * a hole at the end of the file.
 	 */
-	if (ofd != -1 && isem && (arcn->sb.st_size > 0L))
+	if (ofd >= 0 && isem && (arcn->sb.st_size > 0L))
 		file_flush(ofd, fnm, isem);
 
 	/*
@@ -885,10 +885,13 @@ buf_fill(void)
 
 		/*
 		 * errors require resync, EOF goes to next archive
+		 * but in case we have not determined yet the format,
+		 * this means that we have a very short file, so we
+		 * are done again.
 		 */
 		if (cnt < 0)
 			break;
-		if (ar_next() < 0) {
+		if (frmt == NULL || ar_next() < 0) {
 			fini = 1;
 			return(0);
 		}

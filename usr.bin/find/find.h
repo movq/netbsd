@@ -1,4 +1,4 @@
-/*	$NetBSD: find.h,v 1.18 2003/08/07 11:13:41 agc Exp $	*/
+/*	$NetBSD: find.h,v 1.18.4.2 2005/10/11 23:47:05 reed Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993

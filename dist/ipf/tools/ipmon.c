@@ -1,4 +1,4 @@
-/*	$NetBSD: ipmon.c,v 1.2 2004/03/28 14:33:35 he Exp $	*/
+/*	$NetBSD: ipmon.c,v 1.2.2.2.2.1 2005/02/06 07:44:23 jmc Exp $	*/
 
 /*
  * Copyright (C) 1993-2001, 2003 by Darren Reed.
@@ -78,7 +78,7 @@
 
 #if !defined(lint)
 static const char sccsid[] = "@(#)ipmon.c	1.21 6/5/96 (C)1993-2000 Darren Reed";
-static const char rcsid[] = "@(#)Id: ipmon.c,v 1.33.2.3 2004/03/19 23:08:45 darrenr Exp";
+static const char rcsid[] = "@(#)Id: ipmon.c,v 1.33.2.6 2004/06/20 10:24:24 darrenr Exp";
 #endif
 
 
@@ -668,7 +668,7 @@ int	len;
 			sprintf((char *)t, "        ");
 			t += 8;
 			for (k = 16; k; k--, s++)
-				*t++ = (isprint(*s) ? *s : '.');
+				*t++ = (ISPRINT(*s) ? *s : '.');
 			s--;
 		}
 			
@@ -686,7 +686,7 @@ int	len;
 		t += 7;
 		s -= j & 0xf;
 		for (k = j & 0xf; k; k--, s++)
-			*t++ = (isprint(*s) ? *s : '.');
+			*t++ = (ISPRINT(*s) ? *s : '.');
 		*t++ = '\n';
 		*t = '\0';
 	}
@@ -866,6 +866,13 @@ int	blen;
 		(void) sprintf(t, "%s PR icmpv6 %d",
 			hostname(res, sl->isl_v, (u_32_t *)&sl->isl_dst),
 			sl->isl_itype);
+	} else {
+		(void) sprintf(t, "%s -> ",
+			hostname(res, sl->isl_v, (u_32_t *)&sl->isl_src));
+		t += strlen(t);
+		(void) sprintf(t, "%s PR %s",
+			hostname(res, sl->isl_v, (u_32_t *)&sl->isl_dst),
+			proto);
 	}
 	t += strlen(t);
 	if (sl->isl_tag != FR_NOLOGTAG) {
@@ -875,9 +882,9 @@ int	blen;
 	if (sl->isl_type != ISL_NEW) {
 		sprintf(t,
 #ifdef	USE_QUAD_T
-#ifdef  PRId64
-			" Forward: Pkts in %" PRId64 " Bytes in %" PRId64 
-			" Pkts out %" PRId64 " Bytes out %" PRId64 
+#ifdef	PRId64
+			" Forward: Pkts in %" PRId64 " Bytes in %" PRId64
+			" Pkts out %" PRId64 " Bytes out %" PRId64
 			" Backward: Pkts in %" PRId64 " Bytes in %" PRId64
 			" Pkts out %" PRId64 " Bytes out %" PRId64,
 #else
@@ -1014,7 +1021,7 @@ int	blen;
 	(void) sprintf(t, "%s", ifname);
 	t += strlen(t);
 # if defined(MENTAT) || defined(linux)
-	if (isalpha(*(t - 1))) {
+	if (ISALPHA(*(t - 1))) {
 		sprintf(t, "%d", ipf->fl_unit);
 		t += strlen(t);
 	}
@@ -1029,11 +1036,7 @@ int	blen;
 	(void) sprintf(t, "%*.*s%u", len, len, ipf->fl_ifname, ipf->fl_unit);
 	t += strlen(t);
 #endif
-#ifdef __sgi
-	if ((ipf->fl_group[0] == 255) && (ipf->fl_group[1] == '\0'))
-#else
-	if ((ipf->fl_group[0] == -1) && (ipf->fl_group[1] == '\0'))
-#endif
+	if ((ipf->fl_group[0] == (char)~0) && (ipf->fl_group[1] == '\0'))
 		strcat(t, " @-1:");
 	else if (ipf->fl_group[0] == '\0')
 		(void) strcpy(t, " @0:");
@@ -1087,7 +1090,7 @@ int	blen;
 		p = (u_short)ip6->ip6_nxt;
 		s = (u_32_t *)&ip6->ip6_src;
 		d = (u_32_t *)&ip6->ip6_dst;
-		plen = ntohs(ip6->ip6_plen);
+		plen = hl + ntohs(ip6->ip6_plen);
 #else
 		sprintf(t, "ipv6");
 		goto printipflog;

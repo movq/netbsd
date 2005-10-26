@@ -1,4 +1,4 @@
-/*	$NetBSD: fparseln.c,v 1.2 2003/01/18 11:29:52 thorpej Exp $	*/
+/*	$NetBSD: fparseln.c,v 1.2.2.4 2004/06/22 21:42:28 tron Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -29,9 +29,13 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fparseln.c,v 1.2 2003/01/18 11:29:52 thorpej Exp $");
+__RCSID("$NetBSD: fparseln.c,v 1.2.2.4 2004/06/22 21:42:28 tron Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"

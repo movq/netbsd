@@ -1,6 +1,11 @@
 /*
- * Copyright (c) 1992, Brian Berliner and Jeff Polk
- * Copyright (c) 1989-1992, Brian Berliner
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (C) 1992, Brian Berliner and Jeff Polk
+ * Portions Copyright (C) 1989-1992, Brian Berliner
  * 
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with the CVS source distribution.
@@ -9,8 +14,10 @@
 #include "cvs.h"
 
 #ifdef SERVER_SUPPORT
-static void time_stamp_server PROTO((char *, Vers_TS *, Entnode *));
+static void time_stamp_server PROTO((const char *, Vers_TS *, Entnode *));
 #endif
+
+
 
 /* Fill in and return a Vers_TS structure for the file FINFO.  TAG and
    DATE are from the command line.  */
@@ -55,13 +62,13 @@ Version_TS (finfo, options, tag, date, force_tag_match, set_time)
     else
     {
 	p = findnode_fn (finfo->entries, finfo->file);
-	sdtp = (struct stickydirtag *) finfo->entries->list->data; /* list-private */
+	sdtp = finfo->entries->list->data; /* list-private */
     }
 
     entdata = NULL;
     if (p != NULL)
     {
-	entdata = (Entnode *) p->data;
+	entdata = p->data;
 
 	if (entdata->type == ENT_SUBDIR)
 	{
@@ -260,7 +267,7 @@ Version_TS (finfo, options, tag, date, force_tag_match, set_time)
 
 static void
 time_stamp_server (file, vers_ts, entdata)
-    char *file;
+    const char *file;
     Vers_TS *vers_ts;
     Entnode *entdata;
 {
@@ -285,7 +292,7 @@ time_stamp_server (file, vers_ts, entdata)
 	else if (entdata->timestamp
 		 && entdata->timestamp[0] == '=')
 	    mark_unchanged (vers_ts);
-	else if (entdata->timestamp != NULL
+	else if (entdata->timestamp
 		 && (entdata->timestamp[0] == 'M'
 		     || entdata->timestamp[0] == 'D')
 		 && entdata->timestamp[1] == '\0')
@@ -326,7 +333,7 @@ time_stamp_server (file, vers_ts, entdata)
  */
 char *
 time_stamp (file)
-    char *file;
+    const char *file;
 {
     struct stat sb;
     char *cp;

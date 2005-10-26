@@ -1,4 +1,4 @@
-/*	$NetBSD: math.h,v 1.34 2004/03/04 23:42:38 kleink Exp $	*/
+/*	$NetBSD: math.h,v 1.34.2.2 2004/07/16 20:32:10 he Exp $	*/
 
 /*
  * ====================================================
@@ -254,6 +254,9 @@ double	scalb __P((double, double));
 
 /* 7.12.3.6 int signbit(real-floating x) */
 #define	signbit(__x)	__fpmacro_unary_floating(signbit, __x)
+
+double	round __P((double));
+float	roundf __P((float));
 
 #endif /* !_ANSI_SOURCE && ... */
 

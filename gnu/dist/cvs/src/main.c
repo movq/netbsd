@@ -1,9 +1,14 @@
 /*
- *    Copyright (c) 1992, Brian Berliner and Jeff Polk
- *    Copyright (c) 1989-1992, Brian Berliner
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
  *
- *    You may distribute under the terms of the GNU General Public License
- *    as specified in the README file that comes with the CVS source distribution.
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (C) 1992, Brian Berliner and Jeff Polk
+ * Portions Copyright (C) 1989-1992, Brian Berliner
+ *
+ * You may distribute under the terms of the GNU General Public License
+ * as specified in the README file that comes with the CVS source distribution.
  *
  * This is the main C driver for the CVS system.
  *
@@ -21,9 +26,9 @@
 extern int gethostname ();
 #endif
 
-char *program_name;
-char *program_path;
-char *command_name;
+const char *program_name;
+const char *program_path;
+const char *cvs_cmd_name;
 
 /* I'd dynamically allocate this, but it seems like gethostname
    requires a fixed size array.  If I'm remembering the RFCs right,
@@ -51,6 +56,8 @@ int top_level_admin = 0;
 
 mode_t cvsumask = UMASK_DFLT;
 char *RCS_citag = NULL;
+char *CVS_admin_group = NULL;
+char *CVS_admin_options = NULL;
 const char *cvsDir = "CVS";
 
 char *CurDir;
@@ -65,15 +72,6 @@ char *Editor = EDITOR_DFLT;
 /* When our working directory contains subdirectories with different
    values in CVS/Root files, we maintain a list of them.  */
 List *root_directories = NULL;
-
-/* We step through the above values.  This variable is set to reflect
- * the currently active value.
- *
- * Now static.  FIXME - this variable should be removable (well, localizable)
- * with a little more work.
- */
-static char *current_root = NULL;
-
 
 static const struct cmd
 {
@@ -277,9 +275,9 @@ set_root_directory (p, ignored)
     Node *p;
     void *ignored;
 {
-    if (current_root == NULL && p->data == NULL)
+    if (current_parsed_root == NULL && p->data != NULL)
     {
-	current_root = p->key;
+	current_parsed_root = p->data;
 	return 1;
     }
     return 0;
@@ -403,12 +401,12 @@ main (argc, argv)
     int argc;
     char **argv;
 {
-    char *CVSroot = CVSROOT_DFLT;
+    cvsroot_t *CVSroot_parsed = NULL;
+    int cvsroot_update_env = 1;
     char *cp, *end;
     const struct cmd *cm;
     int c, err = 0;
-    int tmpdir_update_env, cvs_update_env;
-    int free_CVSroot = 0;
+    int tmpdir_update_env;
     int free_Editor = 0;
     int free_Tmpdir = 0;
 
@@ -458,7 +456,6 @@ main (argc, argv)
      * Query the environment variables up-front, so that
      * they can be overridden by command line arguments
      */
-    cvs_update_env = 0;
     tmpdir_update_env = *Tmpdir;	/* TMPDIR_DFLT must be set */
     if ((cp = getenv (TMPDIR_ENV)) != NULL)
     {
@@ -471,11 +468,6 @@ main (argc, argv)
 	Editor = cp;
     else if ((cp = getenv (EDITOR3_ENV)) != NULL)
 	Editor = cp;
-    if ((cp = getenv (CVSROOT_ENV)) != NULL)
-    {
-	CVSroot = cp;
-	cvs_update_env = 0;		/* it's already there */
-    }
     if (getenv (CVSREAD_ENV) != NULL)
 	cvswrite = 0;
 
@@ -555,8 +547,12 @@ main (argc, argv)
 		version (0, (char **) NULL);    
 		(void) fputs ("\n", stdout);
 		(void) fputs ("\
-Copyright (c) 1989-2003 Brian Berliner, david d `zoo' zuhn, \n\
-                        Jeff Polk, and other authors\n", stdout);
+Copyright (C) 2005 Free Software Foundation, Inc.\n\
+\n\
+Senior active maintainers include Larry Jones, Derek R. Price,\n\
+and Mark D. Baushke.  Please see the AUTHORS and README files from the CVS\n\
+distribution kit for a complete list of contributors and copyrights.\n",
+		              stdout);
 		(void) fputs ("\n", stdout);
 		(void) fputs ("CVS may be copied only under the terms of the GNU General Public License,\n", stdout);
 		(void) fputs ("a copy of which can be found with the CVS distribution kit.\n", stdout);
@@ -574,11 +570,13 @@ Copyright (c) 1989-2003 Brian Berliner, david d `zoo' zuhn, \n\
 		   either new or old CVS.  */
 		break;
 	    case 'T':
+		if (free_Tmpdir) free (Tmpdir);
 		Tmpdir = xstrdup (optarg);
 		free_Tmpdir = 1;
 		tmpdir_update_env = 1;	/* need to update environment */
 		break;
 	    case 'e':
+		if (free_Editor) free (Editor);
 		Editor = xstrdup (optarg);
 		free_Editor = 1;
 		break;
@@ -586,11 +584,6 @@ Copyright (c) 1989-2003 Brian Berliner, david d `zoo' zuhn, \n\
 		if (CVSroot_cmdline != NULL)
 		    free (CVSroot_cmdline);
 		CVSroot_cmdline = xstrdup (optarg);
-		if (free_CVSroot)
-		    free (CVSroot);
-		CVSroot = xstrdup (optarg);
-		free_CVSroot = 1;
-		cvs_update_env = 1;	/* need to update environment */
 		break;
 	    case 'H':
 	        help = 1;
@@ -654,24 +647,24 @@ Copyright (c) 1989-2003 Brian Berliner, david d `zoo' zuhn, \n\
 
     /* Look up the command name. */
 
-    command_name = argv[0];
+    cvs_cmd_name = argv[0];
     for (cm = cmds; cm->fullname; cm++)
     {
-	if (cm->nick1 && !strcmp (command_name, cm->nick1))
+	if (cm->nick1 && !strcmp (cvs_cmd_name, cm->nick1))
 	    break;
-	if (cm->nick2 && !strcmp (command_name, cm->nick2))
+	if (cm->nick2 && !strcmp (cvs_cmd_name, cm->nick2))
 	    break;
-	if (!strcmp (command_name, cm->fullname))
+	if (!strcmp (cvs_cmd_name, cm->fullname))
 	    break;
     }
 
     if (!cm->fullname)
     {
-	fprintf (stderr, "Unknown command: `%s'\n\n", command_name);
+	fprintf (stderr, "Unknown command: `%s'\n\n", cvs_cmd_name);
 	usage (cmd_usage);
     }
     else
-	command_name = cm->fullname;	/* Global pointer for later use */
+	cvs_cmd_name = cm->fullname;	/* Global pointer for later use */
 
     if (help)
     {
@@ -705,18 +698,18 @@ Copyright (c) 1989-2003 Brian Berliner, david d `zoo' zuhn, \n\
 	   running as Kerberos server as root.  Do the authentication as
 	   the very first thing, to minimize the amount of time we are
 	   running as root.  */
-	if (strcmp (command_name, "kserver") == 0)
+	if (strcmp (cvs_cmd_name, "kserver") == 0)
 	{
 	    kserver_authenticate_connection ();
 
 	    /* Pretend we were invoked as a plain server.  */
-	    command_name = "server";
+	    cvs_cmd_name = "server";
 	}
 # endif /* HAVE_KERBEROS */
 
 
 # if defined (AUTH_SERVER_SUPPORT) || defined (HAVE_GSSAPI)
-	if (strcmp (command_name, "pserver") == 0)
+	if (strcmp (cvs_cmd_name, "pserver") == 0)
 	{
 	    /* The reason that --allow-root is not a command option
 	       is mainly the comment in server() about how argc,argv
@@ -730,11 +723,11 @@ Copyright (c) 1989-2003 Brian Berliner, david d `zoo' zuhn, \n\
 	    pserver_authenticate_connection ();
       
 	    /* Pretend we were invoked as a plain server.  */
-	    command_name = "server";
+	    cvs_cmd_name = "server";
 	}
 # endif /* AUTH_SERVER_SUPPORT || HAVE_GSSAPI */
 
-	server_active = strcmp (command_name, "server") == 0;
+	server_active = strcmp (cvs_cmd_name, "server") == 0;
 
 #endif /* SERVER_SUPPORT */
 
@@ -755,7 +748,10 @@ Copyright (c) 1989-2003 Brian Berliner, david d `zoo' zuhn, \n\
 	}
 
 	if (Tmpdir == NULL || Tmpdir[0] == '\0')
+	{
+	    if (free_Tmpdir) free (Tmpdir);
 	    Tmpdir = "/tmp";
+	}
 
 #ifdef HAVE_PUTENV
 	if (tmpdir_update_env)
@@ -801,69 +797,69 @@ Copyright (c) 1989-2003 Brian Berliner, david d `zoo' zuhn, \n\
 #endif /* KLUDGE_FOR_WNT_TESTSUITE */
 
 	if (use_cvsrc)
-	    read_cvsrc (&argc, &argv, command_name);
+	    read_cvsrc (&argc, &argv, cvs_cmd_name);
 
 #ifdef SERVER_SUPPORT
 	/* Fiddling with CVSROOT doesn't make sense if we're running
-	       in server mode, since the client will send the repository
-	       directory after the connection is made. */
-
+	 * in server mode, since the client will send the repository
+	 * directory after the connection is made.
+	 */
 	if (!server_active)
 #endif
 	{
-	    char *CVSADM_Root;
-	    
-	    /* See if we are able to find a 'better' value for CVSroot
-	       in the CVSADM_ROOT directory. */
-
-	    CVSADM_Root = NULL;
-
-	    /* "cvs import" shouldn't check CVS/Root; in general it
-	       ignores CVS directories and CVS/Root is likely to
-	       specify a different repository than the one we are
-	       importing to.  */
-
-	    if (!(cm->attr & CVS_CMD_IGNORE_ADMROOT)
-
-		/* -d overrides CVS/Root, so don't give an error if the
-		   latter points to a nonexistent repository.  */
-		&& CVSroot_cmdline == NULL)
+	    /* First check if a root was set via the command line.  */
+	    if (CVSroot_cmdline)
 	    {
-		CVSADM_Root = Name_Root((char *) NULL, (char *) NULL);
+		 if (!(CVSroot_parsed = parse_cvsroot (CVSroot_cmdline)))
+		     error (1, 0, "Bad CVSROOT: `%s'.", CVSroot_cmdline);
 	    }
 
-	    if (CVSADM_Root != NULL)
+	    /* See if we are able to find a 'better' value for CVSroot
+	     * in the CVSADM_ROOT directory.
+	     *
+	     * "cvs import" shouldn't check CVS/Root; in general it
+	     * ignores CVS directories and CVS/Root is likely to
+	     * specify a different repository than the one we are
+	     * importing to, but if this is not import and no root was
+	     * specified on the command line, set the root from the
+	     * CVS/Root file.
+	     */
+	    if (!CVSroot_parsed
+		&& !(cm->attr & CVS_CMD_IGNORE_ADMROOT)
+	       )
+		CVSroot_parsed = Name_Root (NULL, NULL);
+
+	    /* Now, if there is no root on the command line and we didn't find
+	     * one in a file, set it via the $CVSROOT env var.
+	     */
+	    if (!CVSroot_parsed)
 	    {
-		if (CVSroot == NULL || !cvs_update_env)
+		char *tmp = getenv (CVSROOT_ENV);
+		if (tmp)
 		{
-		    CVSroot = CVSADM_Root;
-		    cvs_update_env = 1;	/* need to update environment */
+		    if (!(CVSroot_parsed = parse_cvsroot (tmp)))
+			error (1, 0, "Bad CVSROOT: `%s'.", tmp);
+		    cvsroot_update_env = 0;
 		}
 	    }
+
+#ifdef CVSROOT_DFLT
+	    if (!CVSroot_parsed)
+	    {
+		if (!(CVSroot_parsed = parse_cvsroot (CVSROOT_DFLT)))
+		    error (1, 0, "Bad CVSROOT: `%s'.", CVSROOT_DFLT);
+	    }
+#endif /* CVSROOT_DFLT */
 
 	    /* Now we've reconciled CVSROOT from the command line, the
 	       CVS/Root file, and the environment variable.  Do the
 	       last sanity checks on the variable. */
-
-	    if (! CVSroot)
+	    if (!CVSroot_parsed)
 	    {
 		error (0, 0,
 		       "No CVSROOT specified!  Please use the `-d' option");
 		error (1, 0,
 		       "or set the %s environment variable.", CVSROOT_ENV);
-	    }
-	    
-	    if (! *CVSroot)
-	    {
-		error (0, 0,
-		       "CVSROOT is set but empty!  Make sure that the");
-		error (0, 0,
-		       "specification of CVSROOT is valid, either via the");
-		error (0, 0,
-		       "`-d' option, the %s environment variable, or the",
-		       CVSROOT_ENV);
-		error (1, 0,
-		       "CVS/Root file (if any).");
 	    }
 	}
 
@@ -876,19 +872,19 @@ Copyright (c) 1989-2003 Brian Berliner, david d `zoo' zuhn, \n\
 	root_directories = getlist ();
 
 	/* Prime it. */
-	if (CVSroot != NULL)
+	if (CVSroot_parsed)
 	{
 	    Node *n;
 	    n = getnode ();
 	    n->type = NT_UNKNOWN;
-	    n->key = xstrdup (CVSroot);
-	    n->data = NULL;
+	    n->key = xstrdup (CVSroot_parsed->original);
+	    n->data = CVSroot_parsed;
 
 	    if (addnode (root_directories, n))
 		error (1, 0, "cannot add initial CVSROOT %s", n->key);
 	}
 
-	assert (current_root == NULL);
+	assert (current_parsed_root == NULL);
 
 	/* If we're running the server, we want to execute this main
 	   loop once and only once (we won't be serving multiple roots
@@ -915,14 +911,9 @@ Copyright (c) 1989-2003 Brian Berliner, david d `zoo' zuhn, \n\
 		   variable.  Parse it to see if we're supposed to do
 		   remote accesses or use a special access method. */
 
-		if (current_parsed_root != NULL)
-		    free_cvsroot_t (current_parsed_root);
-		if ((current_parsed_root = parse_cvsroot (current_root)) == NULL)
-		    error (1, 0, "Bad CVSROOT: `%s'.", current_root);
-
 		if (trace)
 		    fprintf (stderr, "%s-> main loop with CVSROOT=%s\n",
-			   CLIENT_SERVER_STR, current_root);
+			   CLIENT_SERVER_STR, current_parsed_root->original);
 
 		/*
 		 * Check to see if the repository exists.
@@ -935,31 +926,33 @@ Copyright (c) 1989-2003 Brian Berliner, david d `zoo' zuhn, \n\
 		    int save_errno;
 
 		    path = xmalloc (strlen (current_parsed_root->directory)
-				    + sizeof (CVSROOTADM)
-				    + 2);
-		    (void) sprintf (path, "%s/%s", current_parsed_root->directory, CVSROOTADM);
+				    + strlen (CVSROOTADM) + 2);
+		    sprintf (path, "%s/%s", current_parsed_root->directory,
+			     CVSROOTADM);
 		    if (!isaccessible (path, R_OK | X_OK))
 		    {
 			save_errno = errno;
-			/* If this is "cvs init", the root need not exist yet.  */
-			if (strcmp (command_name, "init") != 0)
-			{
+			/* If this is "cvs init", the root need not exist yet.
+			 */
+			if (strcmp (cvs_cmd_name, "init"))
 			    error (1, save_errno, "%s", path);
 			}
-		    }
 		    free (path);
 		}
 
 #ifdef HAVE_PUTENV
-		/* Update the CVSROOT environment variable if necessary. */
-		/* FIXME (njc): should we always set this with the CVSROOT from the command line? */
-		if (cvs_update_env)
+		/* Update the CVSROOT environment variable.  */
+		if (cvsroot_update_env)
 		{
 		    static char *prev;
 		    char *env;
-		    env = xmalloc (strlen (CVSROOT_ENV) + strlen (CVSroot)
-				   + 1 + 1);
-		    (void) sprintf (env, "%s=%s", CVSROOT_ENV, CVSroot);
+		    size_t dummy;
+
+		    env = xmalloc (strlen (CVSROOT_ENV)
+				   + strlen (current_parsed_root->original)
+				   + 2);
+		    sprintf (env, "%s=%s", CVSROOT_ENV,
+			     current_parsed_root->original);
 		    (void) putenv (env);
 		    /* do not free env yet, as putenv has control of it */
 		    /* but do free the previous value, if any */
@@ -1011,21 +1004,21 @@ Copyright (c) 1989-2003 Brian Berliner, david d `zoo' zuhn, \n\
 	    err = (*(cm->func)) (argc, argv);
 	
 	    /* Mark this root directory as done.  When the server is
-               active, current_root will be NULL -- don't try and
+               active, our list will be empty -- don't try and
                remove it from the list. */
 
-	    if (current_root != NULL)
+#ifdef SERVER_SUPPORT
+	    if (!server_active)
+#endif /* SERVER_SUPPORT */
 	    {
-		Node *n = findnode (root_directories, current_root);
+		Node *n = findnode (root_directories,
+				    current_parsed_root->original);
 		assert (n != NULL);
-		n->data = (void *) 1;
-		current_root = NULL;
+		assert (n->data != NULL);
+		free_cvsroot_t (n->data);
+		n->data = NULL;
+		current_parsed_root = NULL;
 	    }
-	
-#if 0
-	    /* This will not work yet, since it tries to free (void *) 1. */
-	    dellist (&root_directories);
-#endif
 
 #ifdef SERVER_SUPPORT
 	    if (server_active)
@@ -1036,15 +1029,18 @@ Copyright (c) 1989-2003 Brian Berliner, david d `zoo' zuhn, \n\
 #endif
 	} /* end of loop for cvsroot values */
 
+	dellist (&root_directories);
     } /* end of stuff that gets done if the user DOESN'T ask for help */
 
     Lock_Cleanup ();
 
-    free (program_path);
+    /* It's okay to cast out the const below since we know we allocated this in
+     * this function.  The const was to keep other functions from messing with
+     * this.
+     */
+    free ((char *)program_path);
     if (CVSroot_cmdline != NULL)
 	free (CVSroot_cmdline);
-    if (free_CVSroot)
-	free (CVSroot);
     if (free_Editor)
 	free (Editor);
     if (free_Tmpdir)
@@ -1194,7 +1190,7 @@ void
 usage (cpp)
     register const char *const *cpp;
 {
-    (void) fprintf (stderr, *cpp++, program_name, command_name);
+    (void) fprintf (stderr, *cpp++, program_name, cvs_cmd_name);
     for (; *cpp; cpp++)
 	(void) fprintf (stderr, *cpp);
     error_exit ();

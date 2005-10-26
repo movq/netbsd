@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_ip6.c,v 1.63 2003/10/30 01:43:10 simonb Exp $	*/
+/*	$NetBSD: raw_ip6.c,v 1.63.2.2 2004/09/11 12:09:08 he Exp $	*/
 /*	$KAME: raw_ip6.c,v 1.82 2001/07/23 18:57:56 jinmei Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: raw_ip6.c,v 1.63 2003/10/30 01:43:10 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: raw_ip6.c,v 1.63.2.2 2004/09/11 12:09:08 he Exp $");
 
 #include "opt_ipsec.h"
 
@@ -494,16 +494,24 @@ rip6_output(m, va_alist)
 		off += sizeof(struct ip6_hdr);
 
 		sum = 0;
-		m_copyback(m, off, sizeof(sum), (caddr_t)&sum);
+		m = m_copyback_cow(m, off, sizeof(sum), (caddr_t)&sum,
+		    M_DONTWAIT);
+		if (m == NULL) {
+			error = ENOBUFS;
+			goto bad;
+		}
 		sum = in6_cksum(m, ip6->ip6_nxt, sizeof(*ip6), plen);
-		m_copyback(m, off, sizeof(sum), (caddr_t)&sum);
+		m = m_copyback_cow(m, off, sizeof(sum), (caddr_t)&sum,
+		    M_DONTWAIT);
+		if (m == NULL) {
+			error = ENOBUFS;
+			goto bad;
+		}
 	}
 
 	flags = 0;
-#ifdef IN6P_MINMTU
 	if (in6p->in6p_flags & IN6P_MINMTU)
 		flags |= IPV6_MINMTU;
-#endif
 
 	error = ip6_output(m, optp, &in6p->in6p_route, flags,
 	    in6p->in6p_moptions, so, &oifp);

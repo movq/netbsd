@@ -1,4 +1,4 @@
-/*	$NetBSD: if_se.c,v 1.45 2003/09/08 01:27:09 mycroft Exp $	*/
+/*	$NetBSD: if_se.c,v 1.45.2.1.2.1 2005/01/24 21:43:22 he Exp $	*/
 
 /*
  * Copyright (c) 1997 Ian W. Dall <ian.dall@dsto.defence.gov.au>
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_se.c,v 1.45 2003/09/08 01:27:09 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_se.c,v 1.45.2.1.2.1 2005/01/24 21:43:22 he Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
@@ -387,7 +387,7 @@ se_scsipi_cmd(periph, scsipi_cmd, cmdlen, data_addr, datalen,
 	int error;
 	int s = splbio();
 
-	error = scsipi_command(periph, scsipi_cmd, cmdlen, data_addr,
+	error = scsipi_command(periph, NULL, scsipi_cmd, cmdlen, data_addr,
 	    datalen, retries, timeout, bp, flags);
 	splx(s);
 	return (error);
@@ -1093,24 +1093,18 @@ se_ioctl(ifp, cmd, data)
 		break;
 
 	case SIOCADDMULTI:
-		if (sc->sc_enabled == 0) {
-			error = EIO;
-			break;
-		}
-		if (ether_addmulti(ifr, &sc->sc_ethercom) == ENETRESET)
-			error = se_set_multi(sc, ifr->ifr_addr.sa_data);
-		else
-			error = 0;
-		break;
 	case SIOCDELMULTI:
-		if (sc->sc_enabled == 0) {
-			error = EIO;
-			break;
+		error = (cmd == SIOCADDMULTI) ?
+		    ether_addmulti(ifr, &sc->sc_ethercom) :
+		    ether_delmulti(ifr, &sc->sc_ethercom);
+		if (error == ENETRESET) {
+			if (ifp->if_flags & IFF_RUNNING) {
+				error = (cmd == SIOCADDMULTI) ?
+				   se_set_multi(sc, ifr->ifr_addr.sa_data) :
+				   se_remove_multi(sc, ifr->ifr_addr.sa_data);
+			} else
+				error = 0;
 		}
-		if (ether_delmulti(ifr, &sc->sc_ethercom) == ENETRESET)
-			error = se_remove_multi(sc, ifr->ifr_addr.sa_data);
-		else
-			error = 0;
 		break;
 
 	default:

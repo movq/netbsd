@@ -1,6 +1,11 @@
 /*
- * Copyright (c) 1992, Brian Berliner and Jeff Polk
- * Copyright (c) 1989-1992, Brian Berliner
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (C) 1992, Brian Berliner and Jeff Polk
+ * Portions Copyright (C) 1989-1992, Brian Berliner
  * 
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with the CVS source distribution.
@@ -266,7 +271,7 @@ Classify_File (finfo, tag, date, options, force_tag_match, aflag, versp,
 		 * There is no user file, so note that it was lost and
 		 * extract a new version
 		 */
-		/* Comparing the command_name against "update", in
+		/* Comparing the cvs_cmd_name against "update", in
 		   addition to being an ugly way to operate, means
 		   that this message does not get printed by the
 		   server.  That might be considered just a straight
@@ -274,7 +279,7 @@ Classify_File (finfo, tag, date, options, force_tag_match, aflag, versp,
 		   gets hit when a patch fails and the client fetches
 		   a file.  I'm not sure there is currently any way
 		   for the server to distinguish those two cases.  */
-		if (strcmp (command_name, "update") == 0)
+		if (strcmp (cvs_cmd_name, "update") == 0)
 		    if (!really_quiet)
 			error (0, 0, "warning: %s was lost", finfo->fullname);
 		ret = T_CHECKOUT;
@@ -344,7 +349,7 @@ Classify_File (finfo, tag, date, options, force_tag_match, aflag, versp,
 
 		/* See comment at other "update" compare, for more
 		   thoughts on this comparison.  */
-		if (strcmp (command_name, "update") == 0)
+		if (strcmp (cvs_cmd_name, "update") == 0)
 		    if (!really_quiet)
 			error (0, 0, "warning: %s was lost", finfo->fullname);
 		ret = T_CHECKOUT;

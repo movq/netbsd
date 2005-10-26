@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC_LAPTOP,v 1.90 2004/03/14 08:09:42 minoura Exp $
+#	$NetBSD: GENERIC_LAPTOP,v 1.90.2.10.2.2 2005/07/21 19:28:02 riz Exp $
 #	From: NetBSD: GENERIC,v 1.414 2001/07/30 19:59:05 ad Exp
 #
 #	GENERIC_LAPTOP -- GENERIC with cardbus and some USB devices enabled
@@ -8,7 +8,7 @@ include "arch/i386/conf/std.i386"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.90 $"
+#ident 		"GENERIC-$Revision: 1.90.2.10.2.2 $"
 
 maxusers	32		# estimated number of users
 
@@ -62,11 +62,13 @@ options 	SYSVSEM		# System V-like semaphores
 #options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
 #options 	SHMMAXPGS=2048	# 2048 pages is the default
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 options 	LKM		# loadable kernel modules
 
 options 	USERCONF	# userconf(4) support
-#options	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
+#options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
+#options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 # Diagnostic/debugging support options
 #options 	DIAGNOSTIC	# expensive kernel consistency checks
@@ -152,6 +154,19 @@ options 	IPFILTER_LOG	# ipmon(8) log support
 #options	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
+#options 	ALTQ		# Manipulate network interfaces' output queues
+#options 	ALTQ_BLUE	# Stochastic Fair Blue
+#options 	ALTQ_CBQ	# Class-Based Queueing
+#options 	ALTQ_CDNR	# Diffserv Traffic Conditioner
+#options 	ALTQ_FIFOQ	# First-In First-Out Queue
+#options 	ALTQ_FLOWVALVE	# RED/flow-valve (red-penalty-box)
+#options 	ALTQ_HFSC	# Hierarchical Fair Service Curve
+#options 	ALTQ_LOCALQ	# Local queueing discipline
+#options 	ALTQ_PRIQ	# Priority Queueing
+#options 	ALTQ_RED	# Random Early Detection
+#options 	ALTQ_RIO	# RED with IN/OUT
+#options 	ALTQ_WFQ	# Weighted Fair Queueing
+
 # These options enable verbose messages for several subsystems.
 # Warning, these may compile large string tables into the kernel!
 options 	MIIVERBOSE	# verbose PHY autoconfig messages
@@ -219,6 +234,8 @@ apm0	at mainbus0			# Advanced power management
 #acpi0 		at mainbus0
 #options 	ACPI_PCI_FIXUP		# PCI interrupt routing via ACPI
 #options 	ACPI_ACTIVATE_DEV	# If set, activate inactive devices
+#options 	ACPICA_PEDANTIC		# force strict conformance to the Spec.
+#options	ACPI_DISABLE_ON_POWEROFF	# disable acpi on power off
 
 # ACPI devices
 #acpiacad* 	at acpi?		# ACPI AC Adapter
@@ -286,7 +303,7 @@ options 	PCIBIOS_INTR_GUESS	# see pcibios(4)
 # PCI bridges
 pchb*	at pci? dev ? function ?	# PCI-Host bridges
 pcib*	at pci? dev ? function ?	# PCI-ISA bridges
-ichlpcib* at pci? dev ? function ?	# Intel ICH PCI-ISA w/ watchdog support
+#ichlpcib* at pci? dev ? function ?	# Intel ICH PCI-ISA w/ watchdog support
 ppb*	at pci? dev ? function ?	# PCI-PCI bridges
 # XXX 'puc's aren't really bridges, but there's no better place for them here
 puc*	at pci? dev ? function ?	# PCI "universal" comm. cards
@@ -296,7 +313,7 @@ agp* 	at pchb?
 # ISA bus support
 isa0	at mainbus?
 isa0	at pcib?
-isa0	at ichlpcib?
+#isa0	at ichlpcib?
 
 # PCMCIA bus support
 pcmcia*	at pcic? controller ? socket ?
@@ -428,6 +445,7 @@ esp*	at pcmcia? function ?		# Qlogic ESP406/FAS408 SCSI
 # CardBus SCSI cards
 ahc*	at cardbus? dev ? function ?	# Adaptec ADP-1480
 adv*	at cardbus? dev ? function ?	# AdvanSys 1200[A,B], 9xx[U,UA] SCSI
+njs*	at cardbus? dev ? function ?	# Workbit NinjaSCSI-32
 
 # SCSI bus support
 scsibus* at scsi?
@@ -452,10 +470,12 @@ aceride* 	at pci? dev ? function ?	# Acer Lab IDE controllers
 artsata*	at pci? dev ? function ?	# Intel i31244 SATA controller
 cmdide* 	at pci? dev ? function ?	# CMD tech IDE controllers
 cypide* 	at pci? dev ? function ?	# Cypress IDE controllers
+#geodeide* 	at pci? dev ? function ?	# AMD Geode IDE controllers
 hptide* 	at pci? dev ? function ?	# Triones/HighPoint IDE controllers
 optiide* 	at pci? dev ? function ?	# Opti IDE controllers
 piixide* 	at pci? dev ? function ?	# Intel IDE controllers
 pdcide* 	at pci? dev ? function ?	# Promise IDE controllers
+pdcsata*	at pci? dev ? function ?	# Promise SATA150 controllers
 satalink*	at pci? dev ? function ?	# SiI SATALink controllers
 siside* 	at pci? dev ? function ?	# SiS IDE controllers
 slide*  	at pci? dev ? function ?	# Symphony Labs IDE controllers
@@ -519,6 +539,7 @@ bge* 	at pci? dev ? function ?	# Broadcom 570x gigabit Ethernet
 ex*	at pci? dev ? function ?	# 3Com 90x[BC]
 fxp*	at pci? dev ? function ?	# Intel EtherExpress PRO 10+/100B
 ne* 	at pci? dev ? function ?	# NE2000-compatible Ethernet
+re*	at pci? dev ? function ?	# Realtek 8139C+/8169/8169S/8110S
 rtk* 	at pci? dev ? function ?	# Realtek 8129/8139
 tlp*	at pci? dev ? function ?	# DECchip 21x4x and clones
 wm*	at pci? dev ? function ?	# Intel 8254x gigabit
@@ -569,6 +590,7 @@ ukphy*	at mii? phy ?			# generic unknown PHYs
 # USB Controller and Devices
 
 # PCI USB controllers
+ehci*	at pci?	dev ? function ?	# Enhanced Host Controller
 ohci*	at pci?	dev ? function ?	# Open Host Controller
 uhci*	at pci?	dev ? function ?	# Universal Host Controller (Intel)
 
@@ -576,6 +598,7 @@ uhci*	at pci?	dev ? function ?	# Universal Host Controller (Intel)
 #ohci*	at cardbus? dev ? function ?	# Open Host Controller
 
 # USB bus support
+usb*	at ehci?
 usb*	at ohci?
 usb*	at uhci?
 
@@ -606,6 +629,7 @@ ucom*	at umodem?
 
 # USB Mass Storage
 umass*	at uhub? port ? configuration ? interface ?
+wd*	at umass?
 
 # USB audio
 uaudio*	at uhub? port ? configuration ?
@@ -649,6 +673,10 @@ urio*	at uhub? port ?
 # USB Handspring Visor
 uvisor*	at uhub? port ?
 ucom*	at uvisor?
+
+# Kyocera AIR-EDGE PHONE
+ukyopon* at uhub? port ?
+ucom*	at ukyopon? portno ?
 
 # Y@P firmware loader
 uyap* at uhub? port ?

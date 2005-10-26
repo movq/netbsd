@@ -1,7 +1,8 @@
-#	$NetBSD: Makefile.gzboot,v 1.9 2003/10/26 07:25:36 lukem Exp $
+#	$NetBSD: Makefile.gzboot,v 1.9.2.1.2.1 2005/05/11 05:35:51 riz Exp $
 
 NOMAN=  # defined
 
+.include <bsd.obj.mk>		# Pull in OBJDIR name rules.
 .include <bsd.own.mk>
 
 EVBARM_STAND=	${S}/arch/evbarm/stand
@@ -86,7 +87,7 @@ LIBSA=		${SALIB}
 cleandir distclean: cleanlibdir
 
 cleanlibdir:
-	rm -rf lib
+	-rm -rf lib
 
 LDFLAGS= -M -T ${LDSCRIPT}
 

@@ -1,6 +1,11 @@
 /*
- * Copyright (c) 1992, Brian Berliner and Jeff Polk
- * Copyright (c) 1989-1992, Brian Berliner
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (C) 1992, Brian Berliner and Jeff Polk
+ * Portions Copyright (C) 1989-1992, Brian Berliner
  * 
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with the CVS source distribution.
@@ -22,8 +27,8 @@ static int remove_force_fileproc PROTO ((void *callerdat,
 					 struct file_info *finfo));
 #endif
 static int remove_fileproc PROTO ((void *callerdat, struct file_info *finfo));
-static Dtype remove_dirproc PROTO ((void *callerdat, char *dir,
-				    char *repos, char *update_dir,
+static Dtype remove_dirproc PROTO ((void *callerdat, const char *dir,
+				    const char *repos, const char *update_dir,
 				    List *entries));
 
 static int force;
@@ -274,9 +279,9 @@ cannot remove file `%s' which has a sticky date of `%s'",
 static Dtype
 remove_dirproc (callerdat, dir, repos, update_dir, entries)
     void *callerdat;
-    char *dir;
-    char *repos;
-    char *update_dir;
+    const char *dir;
+    const char *repos;
+    const char *update_dir;
     List *entries;
 {
     if (!quiet)

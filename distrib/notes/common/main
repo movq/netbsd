@@ -1,6 +1,6 @@
-.\"	$NetBSD: main,v 1.253 2004/02/06 07:47:10 minskim Exp $
+.\"	$NetBSD: main,v 1.253.2.10.2.6 2005/08/23 23:09:19 riz Exp $
 .\"
-.\" Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1999-2005 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -44,16 +44,16 @@
 .
 .nr FOR_RELEASE 1
 .nr DOC_XR 1
-.ds MACHINE_LIST acorn26 acorn32 algor alpha amiga amigappc arc atari bebox
-.as MACHINE_LIST " cats cesfic cobalt dreamcast evbarm evbmips evbppc evbsh3
-.as MACHINE_LIST " hp300 hp700 hpcarm hpcmips hpcsh i386 luna68k mac68k macppc
+.ds MACHINE_LIST acorn26 acorn32 algor alpha amd64 amiga amigappc arc atari bebox
+.as MACHINE_LIST " cats cesfic cobalt dreamcast evbarm evbmips evbppc evbsh3 evbsh5 
+.as MACHINE_LIST " hp300 hp700 hpcarm hpcmips hpcsh hppa i386 ibmnws luna68k mac68k macppc
 .as MACHINE_LIST " mipsco mmeye mvme68k mvmeppc netwinder news68k newsmips
-.as MACHINE_LIST " next68k ofppc pc532 playstation2 pmax pmppc prep sandpoint
+.as MACHINE_LIST " next68k ofppc openblocks pc532 pdp10 playstation2 pmax pmppc prep sandpoint
 .as MACHINE_LIST " sbmips sgimips shark sparc sparc64 sun2 sun3 vax 
-.as MACHINE_LIST " x68k x86_64 .
+.as MACHINE_LIST " x68k xen .
 .so \*[.CURDIR]/../common/macros
 .
-.Dd September 7, 2002
+.Dd August 23, 2005
 .Dt INSTALL 8
 .Os NetBSD
 .Sh NAME
@@ -104,7 +104,7 @@ You are reading the
 .Em \*[format]
 version.
 .
-.if \n[i386]:\n[macppc]:\n[sparc] \{
+.if \n[i386]:\n[macppc]:\n[sparc]:\n[sparc64]:\n[amd64] \{
 .Ss "Quick install notes for the impatient"
 .Pp
 This section contains some brief notes describing what you need to
@@ -114,19 +114,26 @@ on a machine of the \*M architecture.
 .Bl -bullet
 .It
 Fetch the
-.if \n[i386] \{\
+.if \n[i386]:\n[amd64] \{\
 appropriate pair of boot floppy images from the
-.Pa installation/floppy/
-directory.
+.Pa \*M/installation/floppy/
+directory, or a CD-ROM image.
 Most people will need the
 .Pa boot1.fs
 and
 .Pa boot2.fs
-images, or possibly (but not necessarily)
+images for VGA console installation, or the
+.Pa boot-com1.fs
+and
+.Pa boot-com2.fs
+images for installation via serial console.
+.if \n[i386] \{\
+You may also possibly (but not necessarily) want to use
 .Pa bootlap1.fs
 and
 .Pa bootlap2.fs
 if installing on a laptop.
+.\}
 .\}
 .if \n[macppc] \{\
 files necessary to boot your system.
@@ -134,15 +141,15 @@ The files depend on what model you
 are using and how you plan to boot your machine.
 For systems with built-in floppy drives (Open Firmware 1 or 2), 
 fetch the pair of boot floppy images
-.Pa installation/floppy/boot1.fs
+.Pa macppc/installation/floppy/boot1.fs
 and
-.Pa installation/floppy/boot2.fs ,
+.Pa macppc/installation/floppy/boot2.fs ,
 which include the bootloader and installation kernel.
 For systems without floppy drives (most are Open Firmware 3), fetch the
 bootloader
-.Pa installation/ofwboot.xcf
+.Pa macppc/installation/ofwboot.xcf
 and the installation kernel
-.Pa binary/kernel/netbsd-GENERIC_MD.gz .
+.Pa macppc/binary/kernel/netbsd-GENERIC_MD.gz .
 If you have a CD-R, you can fetch the CD image,
 .Pa macppccd.iso .
 .\}
@@ -150,21 +157,33 @@ If you have a CD-R, you can fetch the CD image,
 CD image,
 .Pa sparccd.iso
 or the floppy disk images,
-.Pa install/floppy/disk1.gz No and Pa install/floppy/disk2 .
+.Pa sparc/install/floppy/disk1.gz No and Pa sparc/install/floppy/disk2 .
 You need either the pair of floppies or the CD to boot your system.
 .\}
-.if \n[macppc]:\n[sparc] \{\
-Alternatively, you may netboot the installation kernel.  This process is
-covered below, in detail.
+.if \n[sparc64] \{\
+CD image,
+.Pa sparc64cd.iso
+or the installation kernel and bootloader,
+.Pa sparc64/binary/kernel/netbsd-INSTALL.gz No and Pa sparc64/installation/misc/ofwboot
+which can be booted from a
+.Tn Solaris
+or
+.Nx
+partition.
+.\}
+.if \n[macppc]:\n[sparc]:\n[sparc64] \{\
+Alternatively, you may netboot the installation kernel.
+This process is covered below, in detail.
 .\}
 .It
 The actual binary distribution is in the
-.Pa binary/sets/
+.Pa \*M/binary/sets/
 directory.
 When you boot the install
 .if \n[i386] floppies,
 .if \n[macppc] kernel from floppies, hard drive, or CD-ROM,
 .if \n[sparc] floppies or CD-ROM,
+.if \n[sparc64] CD-ROM or installation kernel,
 the installation program
 can fetch these files for you (using e.g. ftp),
 if you have a network connection.
@@ -172,14 +191,14 @@ There are several other methods to get the binary sets onto
 your machine.
 .Pp
 You will at a minimum need
-.ie \n[i386] \{\
+.ie \n[i386]:\n[amd64] \{\
 one of the kernel sets, typically
 .Pa kern-GENERIC.tgz ,
 as well as
 .\}
 .el \{\
 the following sets:
-.Pa kern-GENERIC.tgz ,
+.Pa kern-GENERIC.tgz , 
 .\}
 .Pa base.tgz
 and
@@ -198,7 +217,7 @@ or the
 Windows32 program (inside
 .Pa rawrite32.zip )
 in the
-.Pa utilities/
+.Pa i386/installation/misc/
 directory may be of help.
 .\}
 .if \n[macppc] \{
@@ -211,7 +230,8 @@ If your \*M has a floppy drive, create the pair of boot floppies using
 .Ic dd
 (any
 .Ul
-system with floppy support).  If your system has Open Firmware 3, drag
+system with floppy support).
+If your system has Open Firmware 3, drag
 .Pa ofwboot.xcf No and Pa netbsd-GENERIC_MD.gz
 to your hard drive icon (the top level of the drive, not the desktop).
 If you are using the CD image, burn it now.
@@ -222,6 +242,15 @@ Make sure your sparc's CD-ROM drive is bootable.
 Burn the CD.
 Otherwise, write the floppy images directly to a pair of floppies
 (after uncompressing disk1.gz).
+.\}
+.if \n[sparc64] \{
+.It
+Burn the CD or put the installation kernel and bootloader 
+at the root level of a bootable
+.Tn Solaris
+or
+.Nx
+partition.
 .\}
 .Pp
 The disk(s) you just prepared will be used to boot the installation
@@ -303,19 +332,23 @@ kernel is called
 You may want to read the section below on
 .Sx Open Firmware boot syntax
 .\}
-.if \n[sparc] \{\
+.if \n[sparc]:\n[sparc64] \{\
 .It
-You will need to get to the OpenBoot PROM
+You will need to get to the 
+.if \n[sparc] OpenBoot PROM
+.if \n[sparc64] OpenFirmware
 .Dq Ic "ok"
 prompt.
 After your system first powers on, and displays some initial information,
 press the
 .Key STOP-A
-keys.
+keys, or send a BREAK if you're on a serial console.
 At the
 .Dq Ic "ok"
 prompt, type the command to boot your system into
 .Nx .
+.\}
+.if \n[sparc] \{\
 The command to boot from CD is one of the following commands (depending on
 your model):
 .Dq Ic b sd(,30,) ,
@@ -330,12 +363,27 @@ or
 The installer will prompt you to insert the second floppy when it is ready
 for it.
 .\}
+.if \n[sparc64] \{\
+The command to boot from CD is:
+.Dq Ic boot cdrom .
+The command to boot the
+.Nx
+kernel from a 
+.Tn Solaris
+or
+.Nx
+partition depends on which disk and partition it is on.
+To boot from the first partition of the first (primary) disk:
+.Dq Ic "boot disk:a /ofwboot -a" .
+When it asks you for a kernel, specify
+.Dq Ic "netbsd-INSTALL.gz"
+.\}
 .It
 For third-party programs which are not part of the base
 .Nx
 distribution, you will want to explore the
 .Ic pkgsrc
-system with its more than 3000 program packages.
+system with its more than 5400 program packages.
 .El
 .\}
 .Ss "What is NetBSD?"
@@ -349,15 +397,15 @@ Operating System is a fully functional
 operating system derived from the University of California, Berkeley
 Networking Release 2 (Net/2), 4.4BSD-Lite, and 4.4BSD-Lite2 sources.
 .Nx
-runs on fifty three different system architectures (ports),
+runs on fifty four different system architectures (ports),
 featuring seventeen machine architectures
-across eleven distinct CPU families,
+across fifteen distinct CPU families,
 and is being ported to more.
 The
 .Nx \*V
-release contains complete binary releases for thirty eight different
+release contains complete binary releases for many different
 system architectures.
-(The fifteen remaining are not fully supported at this time
+(A few ports are not fully supported at this time 
 and are thus not part of the binary distribution.
 For information on them, please see the
 .Nx
@@ -381,57 +429,206 @@ Without the unique cooperation and coordination the net makes
 possible, it's likely that
 .Nx
 wouldn't exist.
-.Ss Upgrade path to NetBSD 1.6
-If you are not installing your system ``from scratch'' but instead
-are going to upgrade an existing system already running
-.Nx
-you need to know which versions you can upgrade with
-.Nx 1.6 .
-.Pp
-.Nx 1.6
-is an upgrade of
-.Nx 1.5.3
-and earlier major and patch releases of
-.Nx .
-.Pp
-The intermediate development versions of code available on the main trunk
-in our CVS repository (also known as ``NetBSD-current'') from
-.Em after
-the point where the release cycle for 1.6 was started are designated
-by version identifiers such as 1.6A, 1.6B, etc.
-These identifiers do not designate releases, but indicate major changes
-in internal kernel APIs.
-Note that the kernel from
-.Nx
-1.6 can
-.Em not
-be used to upgrade a system running one of those intermediate development
-versions.
-Trying to use the
-.Nx
-1.6 kernel on such a system
-.Em will
-probably result in problems.
-.Pp
-Please also note that it is not possible to do a direct ``version''
-comparison between any of the intermediate development versions mentioned
-above and 1.6 to determine if a given feature is present or absent
-in 1.6.
-The development of 1.6 and the subsequent ``point'' releases
-is done on a separate branch in the CVS repository.
-The branch was created when the release cycle for 1.6 was started,
-and during the release cycle of 1.6 and its patch releases selected
-fixes and enhancements have been imported from the main development
-trunk.
-.ig
-For example, there may be features in 1.6.1 which were not in 1.6B,
-and vice versa.
-..
+.
 .if \n[FOR_RELEASE] \{\
-.Ss Changes Between The NetBSD 1.5 and 1.6 Releases
+.Ss Changes Between The NetBSD 2.0 and 2.1 Releases
 .Pp
 The
-.Nx 1.6
+.Nx 2.1
+release
+is the first functional update release of the
+.Nx 2
+release branch.
+This provides numerous functional enhancements, including support
+for many new devices, hundreds of bug fixes, patches and updates to
+kernel subsystems, and many enhancements to the user environment.
+In addition, all of the security fixes and critical bug fixes from the
+.Nx 2.0.3
+update are included as well.
+The result of these improvements is a stable operating system fit
+for production use that rivals most commercially available systems.
+.Pp
+It is impossible to completely summarize all the changes that have gone
+in over the over nine months since the release of
+.Nx 2.0.
+Some highlights include:
+.Ss2 Kernel
+.(bullet
+Fix a bug that caused spontaneous reboot under heavy load on SH3/4
+platforms.
+.It
+Fixed some sparc64 and alpha pmap issues.
+.It
+A longstanding bug in the SYSV semaphore code has been fixed.
+.It
+Eliminated hangs when large processes fork.
+.It
+.Xr ata 4
+and
+.Xr wdc 4
+drives now only downgrade modes due to actual CRC errors, and UDMA modes
+are downgraded more slowly.
+.It
+The
+.Xr pdcsata 4
+driver was added, with support for the Promise SATA150 series of
+controllers, including RAID support.
+.It
+The RAIDframe disk driver had various bugfixes and improvements.
+.It
+Added support for various devices from the nVidia nForce3 chipset. (i386,
+amd64)
+.It
+Fixed interrupt problems on some Intel Xeon systems.
+.It
+Added support for the VT642 SATA RAID Controller.
+.It
+Various fixes to the
+.Xr esiop 4
+driver.
+.It
+Added support for the Dell CERC SATA RAID to the
+.Xr aac 4
+driver.
+.It
+Added support for additional Dell boards to the
+.Xr ahd 4
+driver.
+.It
+Fix a number of issues with the
+.Xr ehci 4
+driver.
+.It
+Added
+.Xr ukyopon 4
+: Kyocera AIR-EDGE phone driver.
+.It
+The
+.Xr wdc 4
+driver has been fixed for commands with opaque data structures.
+.Pa atactl smart status
+now works on big-endian hosts.
+.bullet)
+.
+.Ss2 Networking
+.(bullet
+.Xr wm 4
+fixed major performance issues with the i82547 Gig-E chip.
+.It
+.Xr sk 4
+improved chip identification and improved performance, and added support
+for the Belkin Gigabit Desktop Network PCI card.
+.It
+Fix a bug which would crash the system when destroying
+.Xr vlan 4
+interfaces.
+.It
+Added
+.Xr rtk 4
+and
+.Xr tl 4
+interfaces as
+.Xr rnd 4
+sources.
+.It
+Added support for the Compaq Netelligent 10 T/2 PCI UTP/Coax Controller to the
+.Xr tl 4
+driver.
+.It
+Added support for changing the MTU of an
+.Xr stf 4
+interface.
+.It
+Added support for IPv6 over
+.Xr gre 4
+interfaces.
+.It
+The
+.Xr hme 4
+driver now supports Sun QFE boards on non-sparc hardware.
+.It
+.Xr stge 4
+Fix some bigendian issues, and some other issues.  Now works on sparc64
+with hardware checksums.
+.bullet)
+.
+.Ss2 File system
+.(bullet
+Fix a number of NFS issues.
+.It
+Fixed file access problems via SMBFS when the file is already open
+on the server.
+.It
+Various improvements to LFS, the BSD log-structured file system.
+.bullet)
+.
+.Ss2 Security
+.(bullet
+.Xr krb5 3
+Support changing passwords in a Windows 2000 (or later) domain.
+.It
+Fixed a possible Denial of Service attack via IPSec AH packets.
+.It
+NetBSD-SA2005-07 AES-XCBC-MAC always caculated with same key
+.It
+NetBSD-SA2005-06 Multiple vulnerabilites in CVS
+.It
+NetBSD-SA2005-05
+.Xr cgd 4
+key destruction on unconfigure
+.It
+NetBSD-SA2005-04 Buffer overflows in MIT Kerberos 5 telnet client
+.It
+NetBSD-SA2005-03 F_CLOSEM local denial of service
+.It
+NetBSD-SA2005-02 Local DoS via audio device with specific drivers
+.bullet)
+.
+.Ss2 System administration and user tools
+.(bullet
+.Xr ntpd 8
+coredump if local system and NTP server did not have overlapping protocol
+family support (IPv4 vs. IPv6, for example) fixed.
+.It
+.Xr pax 1
+has a number of bugfixes and new features.
+.It
+.Xr ifwatchd 8
+has been fixed to call the CARRIER script if a link is already up
+during the initial interface scan.
+.It
+CVS has been upgraded to version 1.11.20.
+.It
+Avoid crashes in
+.Xr grep 1
+on empty or very large files.
+.It
+Fixed a number of issues in
+.Xr gzip 1
+.bullet)
+.
+.Ss2 Miscellaneous
+.(bullet
+Added VT switching for the cats port.
+.It
+Various fixes and improvements to the cross-build system.
+.It
+Fixed some issues in libpthread and libpthread_dbg.
+.It
+Implement a USB memory reserve to work around problems plugging in
+(for example)
+.Xr umass 4
+devices after boot.
+.It
+Package tools have been upgraded to version 20050530.
+.bullet)
+.
+.Ss2 \*M specific
+.so whatis -----------------------------------------------
+.Ss Changes Between The NetBSD 1.6 and 2.0 Releases
+.Pp
+The
+.Nx 2.0
 release
 provides numerous significant functional enhancements, including
 support for many new devices, integration of hundreds of bug fixes,
@@ -439,7 +636,7 @@ new and updated kernel subsystems, and many user-land enhancements.
 The result of these improvements is a stable operating system fit for
 production use that rivals most commercially available systems.
 .Pp
-It is impossible to completely summarize over eighteen months of
+It is impossible to completely summarize over two years of
 development that went into the
 .Nx \*V
 release.
@@ -449,382 +646,186 @@ Some highlights include:
 .
 .(bullet
 Ports to new platforms including:
-algor,
-dreamcast,
-evbarm,
-evbppc,
-hp700,
-hpcarm,
-hpcsh,
-newsmips,
-sandpoint,
-sgimips,
+amd64,
+evbsh5,
 and
-sun2.
+xen.
 .It
-Unified Buffer Cache (UBC) removes size restriction of the file system's
-buffer cache to use all available RAM (if not otherwise used!) and
-improves overall system performance.
+Native thread support has been added, based on Scheduler Activations.
+Applications which support native threads can now take full advantage of the 
+high-performance NetBSD POSIX threads implementation.
 .It
-Round-robin page colouring implemented for various ports for better
-cache utilisation, more deterministic run-time behaviour, and faster
-program execution.
+Kernel events notification framework - kqueue
+.
+kqueue provides a stateful and efficient event notification framework.
+Currently supported events include socket, file, directory, fifo, pipe, tty 
+and device changes, and monitoring of processes and signals.
+.
+kqueue is supported by all writable filesystems in the NetBSD tree (with
+the exception of Coda) and all device drivers supporting poll(2).
 .It
-A rewritten SCSI middle layer to provide a cleaner interface between
-the different kernel layers, including a kernel thread to handle error
-recovery outside of the interrupt context.
-See
-.Xr scsipi 9 .
+Improvements have been made to NetBSD's Linux emulation to support the latest 
+Sun JDK/JRE for Linux.
+Testing has shown that it now runs as well as it does on Linux natively.
 .It
-A new pipe implementation with significantly higher performance
-due to lower overheads, which uses the UVM Page Loan facility.
-.if !\n[mac68k] \{\
+NetBSD 2.0 enforces non-executable mappings on many platforms. 
+This means that parts of the stack and heap are made non-executable
+when they are marked writable.
+This makes exploiting potential buffer overflows harder.
 .It
-New boot loader flags
-.Fl v
-.Pq Em bootverbose
-and
-.Fl q
-.Pq Em bootquiet ,
-to be used by kernel code to optionally print information during boot.
+For the i386 port it now supports SMP and has a new ACPI and power management 
+framework which takes advantage of Intel's ACPI implementation.
 .It
-An in-kernel boot time device configuration manager
-.Xr userconf 4 ,
-activated with the
-.Fl c
-boot loader flag.
-.\}
+The macppc port also now supports SMP as well as hardware support for newer 
+G4 models has been added.
 .It
-A work-in-progress snapshot of ACPI support,
-based on the 20010831 snapshot of the Intel ACPICA reference implementation.
+SMP support has been added to the sparc port as well.
+.It 
+New generic i2c framework, supporting bit-bang and "intelligent" controllers.
 .It
-USB 2.0 support, in the form of a preliminary driver for the
-.Xr ehci 4
-host controller.
+.Xr sysctl 9
+was switched from a static binding to a dynamic implementation.
 .It
-Basic kernel support for IrDA in the form of the
-.Xr irframe 4
-IrDA frame level driver.
-Serial dongles and the
-.Xr oboe 4
-driver are currently supported.
-.It
-Kernel configuration files can be embedded into the kernel for later
-retrieval.
-Refer to
-.Dv INCLUDE_CONFIG_FILE
-in
-.Xr options 4
-for more information.
-.It
-Many more kernel tunable variables added to
-.Xr sysctl 8 .
-.It
-Linux binary emulation has been greatly improved,
-and now supports Linux kernel version 2.4.18.
+Add a new driver
+.Xr satalink 4
+and move SATA support from other controllers into this along with adding support
+for new controllers.
 .bullet)
 .
 .Ss2 Networking
 .
 .(bullet
-Hardware assisted IPv4 TCP and UDP checksumming and caching of the
-IPv6 TCP pseudo header.
-Support for checksum offloading on the DP83820 Gigabit Ethernet, 3Com 3c90xB,
-3Com 3c90xC, and Alteon Tigon/Tigon2 Gigabit Ethernet cards.
+.Xr ipf 8
+has been upgraded to version 4.1.3.
 .It
-Zero-Copy for TCP and UDP transmit path achieved through page
-loaning code for
-.Fn sosend .
+.Xr tcp 4
+now implements path MTU discovery blackhole detection (i.e. it will turn off
+path MTU discovery if the connection is losing).
 .It
-In-kernel ISDN support, from the ISDN4BSD project.
-.It
-802.1Q VLAN (virtual LAN) support.
-See
-.Xr vlan 4 .
-.It
-IPFilter now supports IPv6 filtering.
-.It
-.Xr ndbootd 8
-added;
-used to netboot
-.Nx Ns /sun2
-machines.
-.It
-.Xr racoon 8
-added;
-IKE key management daemon for IPsec key negotiation, from the KAME project.
-.It
-WEP encryption supported in
-.Xr ifconfig 8
-and
-.Xr awi 4
-driver.
+Socket buffer insertion is now O(C).
+This can provide a substantial 
+performance boost to some applications which use large socket buffers.
 .It
 .Xr wi 4
+has support for Host-AP mode, allowing Intersil Prism2/2.5/3-based boards to 
+be used to make an 802.11 Access Point.
+.It
+Support for 
+.Xr ipf 8
+has been added to 
+.Xr bridge 4
 and
-.Xr wiconfig 8
-now support scanning for access points,
-and defaults to BSS instead of ad-hoc mode.
+.Xr brconfig 8
 .It
-Bridging support; currently only for ethernet.
-See
-.Xr bridge 4 .
-.It
-In-kernel PPP over Ethernet (PPPoE) - RFC 2516,
-with much lower overhead than user-land PPPoE clients.
-See
-.Xr pppoe 4 .
-.It
-.Xr ifwatchd 8
-added;
-invokes up-script and down-script when a network interface goes up and down.
-Used by
-.Xr pppoe 4 .
+Change port allocation from linked list to a hash table for better performance.
 .bullet)
 .
 .Ss2 File system
 .
 .(bullet
-Enhanced stability of LFS version 2, the BSD log-structured file system.
+FreeBSD's UFS2 has been ported to NetBSD.
+UFS2 is an extension to FFS, adding 
+64 bit block pointers and support for extended file storage.
+Among other 
+enhancements, UFS2 allows for file systems larger than 1Terabyte.
 .It
-.Xr dump 8 ,
-.Xr dumpfs 8 ,
-.Xr fsck_ffs 8 ,
-.Xr fsirand 8 ,
-.Xr newfs 8 ,
-and
-.Xr tunefs 8
-support a
-.Fl F
-option to manipulate file system images in regular files.
-.It
-.Xr makefs 8
-added;
-creates file system images from a directory tree.
-(Currently ffs only.)
-.It
-Enhanced
-.Fn ffs_dirpref
-by Grigoriy Orlov, which noticeably improves performance on FFS file systems
-when creating directories, and subsequently manipulating them.
-.It
-Fixes for free block tracking and directory block allocation in FFS softdeps.
-.It
-Correctly support FFS file systems with a large number of cylinder groups.
-.It
-Fix the endian independant FFS (FFS_EI) support.
-.It
-.Xr newfs 8 
-calculates default block size from the file system size,
-and uses the largest possible cylinders/group (cpg) value if
-.Fl c
-isn't given.
-.It
-.Xr dpti 4
-driver added;
-an implementation of the DPT/Adaptec SCSI/I2O RAID management interface.
-Allows the use of the Linux versions of
-.Ic dptmgr ,
-.Ic raidutil ,
-.Ic dptelog ,
-(etc).
-.It
-Support for
-.Tn "Windows 2000"
-.Sq NTFS
-(NTFS5).
-.It
-Tagged queueing support for SCSI drivers based on the ncr53c9x controller.
+The cryptographic disk driver (cgd) can be used to encrypt disks or 
+partitions, using some strong encryption algorithms, like AES (Rijndael) 
+and Blowfish.
+cgd can also be configured to encrypt swap.
 .bullet)
 .
 .Ss2 Security
 .
 .(bullet
-Addition of a
-.Xr chroot 8
-hierarchy for services including
-.Xr named 8 ,
-.Xr ntpd 8 ,
-and
-.Xr sshd 8 .
-.It
-Additional
-.Xr passwd 5
-ciphers:
-MD5, and
-DES with more encryption rounds.
-See
-.Xr passwd.conf 5 .
-.It
-Several more code audits were performed.
-.It
-.Pa /etc/security
-performs many more checks and is far more flexible in how it monitors
-changes.
-See
-.Xr security.conf 5 .
+The systrace utility has been added to the system.
+systrace monitors and controls an application access to the system
+by enforcing access policies for system calls.
+The systrace utility might be used to trace an untrusted
+application's access to the system.
+In addition, it can be used to protect the
+system from software bugs (such as buffer overflows) by constraining a
+daemon's access to the system.
 .
-.\" XXX: list security advisories here?
+The privilege elevation feature of systrace can be used to obviate the need to
+run large, untrusted programs as root when only one or two system calls
+require the elevated privilege.
+.It
+Verified Exec support has been added in this release.
+Verified Exec verifies a
+cryptographic hash before allowing execution of binaries and scripts.
 .
+This can be used to prevent a system from running binaries or scripts which
+have been illegally modified or installed.
+In addition, Verified Exec can also be used to limit the use of
+script interpreters to authorized scripts only and disallow
+interactive use.
 .bullet)
 .
 .Ss2 System administration and user tools
 .
 .(bullet
-.Xr sushi 8
-added;
-a menu based system administration tool.
-.It
-.Xr pgrep 1
-and
-.Xr pkill 1
-added;
-find or signal processes by name or other attributes.
-.It
-System upgrades are made easier through the
-.Xr etcupdate 8
-script which helps updating the
-.Pa /etc
-config files interactively, and the
-.Pa /etc/postinstall
-script which is provided to check for or fix configuration changes
-that have occurred in
-.Nx .
-.It
-.Xr stat 1
-added;
-a user interface to the information returned by the
-.Xr stat 2
-system call.
-.It
-BSD
-.Xr sort 1
-replaces
-GNU
-.Xr sort 1 .
-.It
-The
-.Dq stop
-operation for
-.Xr rc.d 8
-scripts waits until the service terminates before returning.
-This improves the reliability of
-.Dq restart
-operations as well.
-.It
-Swap devices can be removed at system shutdown by enabling
-.Li swapoff
-in
-.Xr rc.conf 5 .
-.It
-An optional watchdog timer which will terminate
-.Xr rc.shutdown 8
-after the number of seconds provided in
-.Li rcshutdown_timeout
-from
-.Xr rc.conf 5 .
+Switched from the GPL version to a non-GPL version of various tools including
+gzip and awk.
 .bullet)
 .
 .Ss2 Miscellaneous
 .
 .(bullet
-Support for multibyte LC_CTYPE locales has been integrated from the
-Citrus project.
-Many Chinese, Japanese, Korean, and other encodings are now available.
-.It
-Full support for cross-compilation of the base system, even as a
-non-root user!
-.Pa src/build.sh
-is available for doing arbitrary cross-builds; see
-.Pa src/BUILDING
-for more information.
-At least 38 ports for the
-.Nx \*V
-release were cross-built on a
-.Nx Ns /i386
-system using this mechanism.
-.It
-Migrated the following CPU platforms to ELF: arm, and m68k (including
-amiga, hp300, mac68k, mvme68k, sun2, and x68k).
+NetBSD 2.0 supports a new toolchain based on gcc 3.3.3 and binutils 2.14.
+gcc 3.3.1 adds support for a number of CPU targets and greatly improved 
+support for i386 and other targets.
+The support for new platforms in gcc 3.3.3 has
+enabled the porting of NetBSD to even more architectures.
 .It
 Updates of most third party packages that are shipped in the base
 system to the following latest stable releases:
 .(bullet -compact -offset indent
-amd 6.0.6
+bind 8.3.7
 .It
-BIND 8.3.3
+binutils 2.14
 .It
-binutils 2.11.2
+cvs 1.11.17
 .It
-bzip2 1.0.2
+diffutils 2.8.1
 .It
-cvs 1.11
+file 4.08
 .It
-dhcp 3.0.1rc9
+gcc 3.3.3
 .It
-file 3.38
+gdb 5.3
 .It
-gcc 2.95.3
+grep 2.5.1
 .It
-groff 1.16.1
+groff 1.19
 .It
-Heimdal 0.4e
+less 381
 .It
-IPfilter 3.4.27
+openssl 0.9.7d
 .It
-kerberos4 1.1
+postfix 2.0.19
 .It
-ksh from pdksh 5.2.14p2
+sendmail 8.12.11
 .It
-less 374
+tcpump 3.7.1
 .It
-nvi 1.79
-.It
-OpenSSH 3.4
-.It
-OpenSSL 0.9.6g
-.It
-Postfix 1.1.11
-.It
-ppp 2.4.0
-.It
-routed 2.24
-.It
-sendmail 8.11.6
-.It
-tcpdump 3.7.1
-.if \n[i386] \{\
-.It
-XFree86 4.2.0 (i386 only)
-\}
+texinfo 4.6
 .bullet)
 .It
 Many new packages in the
 .Em pkgsrc
 system, including the latest open source desktop KDE3, OpenOffice,
 perl, Apache and many more.
-At the time of writing, there are over 3000 third party packages
+.
+A number of new platforms are supported, including Darwin, FreeBSD, IRIX, 
+Linux, OpenBSD and Solaris.
+Support for various other platforms (among them 
+AIX, BSD/OS and HP-UX) is currently being worked on thanks to our new, 
+portable bootstrap kit which makes it much simpler to port pkgsrc support to 
+new operating systems.
+.
+At the time of writing, there are over 5400 third party packages
 available in pkgsrc.
-.It
-Added AGP GART driver
-.Xr agp 4
-for faster access to graphics boards.
-.It
-.Xr init 8
-will create an mfs (memory based file system)
-.Pa /dev
-if
-.Pa /dev/console
-is missing.
-.It
-.Xr vmstat 8
-displays kernel hash statistics with
-.Fl H
-and
-.Fl h Ar hash .
-.It
-.Xr wscons 4
-supports blanking of VGA consoles.
 .bullet)
 .
 .Pp
@@ -832,9 +833,41 @@ Kernel interfaces have continued to be refined, and more subsystems
 and device drivers are shared among the different ports.
 You can look for this trend to continue.
 .
-.Ss2 \*M specific
-.so whatis -----------------------------------------------
 .\} \" \n[FOR_RELEASE]
+.Ss Important notes about NetBSD \*V
+.Pp
+.(bullet
+As noted above, the sendmail third-party program has been upgraded
+since the last release.
+The new version of sendmail runs without requiring being
+set-user-ID to ``root''.
+.Pp
+In order to retain the functionality that a newly installed system
+can send mail ``out of the box'', the default has changed so that
+sendmail will now start by default, and listen for host-local
+connections.
+.Pp
+If this behaviour is not desired, you can either
+.(enum -compact
+explicitly set
+the sendmail variable to ``NO'' in
+.Pa /etc/rc.conf ,
+.It
+modify
+.Pa /etc/mail/submit.cf
+to point to another host,
+.It
+modify
+.Pa /etc/mailer.conf
+to point to something else than sendmail, or
+.It
+make sendmail set-user-ID to ``root'', remove
+.Pa /etc/mail/submit.cf ,
+and set the sendmail_suid variable to ``YES'' in
+.Pa /etc/rc.conf .
+.enum)
+The latter method is strongly discouraged.
+.bullet)
 .
 .Ss "The Future of NetBSD"
 .Pp
@@ -906,7 +939,7 @@ exists.
 .Pp
 .
 Refer to
-.Lk http://www.NetBSD.org/Sites/net.html .
+.Lk http://www.NetBSD.org/mirrors/ .
 .br_ne 10P
 .
 .Ss "NetBSD \*V Release Contents
@@ -944,19 +977,6 @@ In addition to the files and directories listed above, there is one
 directory per architecture, for each of the architectures for which
 .Nx \*V
 has a binary distribution.
-There are also
-.Pa README.export-control
-files sprinkled liberally throughout the
-distribution tree, which point out that there are some portions of the
-distribution that may be subject to
-export regulations of the United States, e.g.
-code under
-.Pa src/crypto
-and
-.Pa src/sys/crypto .
-It is your responsibility
-to determine whether or not it is legal for you to export these portions
-and to act accordingly.
 .Pp
 The source distribution sets can be found in subdirectories of the
 .Pa source
@@ -969,19 +989,19 @@ This set contains the
 .Dq gnu
 sources, including the source for the compiler, assembler, groff,
 and the other GNU utilities in the binary distribution sets.
-.showsize 55 247
+.showsize 79 367
 .It Sy pkgsrc
 This set contains the
 .Dq pkgsrc
 sources, which contain the infrastructure to build third-party packages.
-.showsize 12 94
+.showsize 24 200
 .It Sy sharesrc
 This set contains the
 .Dq share
 sources, which include the sources for the man pages not associated
 with any particular program; the sources for the typesettable document
 set; the dictionaries; and more.
-.showsize 4 16
+.showsize 5 20
 .It Sy src
 This set contains all of the base
 .Nx \*V
@@ -990,7 +1010,7 @@ sources which are not in
 .Sy sharesrc ,
 or
 .Sy syssrc .
-.showsize 27 136
+.showsize 37 176
 .It Sy syssrc
 This set contains the sources to the
 .Nx \*V
@@ -998,10 +1018,10 @@ kernel for all architectures;
 .Xr config 8 ;
 and
 .Xr dbsym 8 .
-.showsize 22 114
+.showsize 26 140
 .It Sy xsrc
 This set contains the sources to the X Window System.
-.showsize 78 394
+.showsize 84 450
 .tag)
 .Pp
 All the above source sets are located in the
@@ -1017,34 +1037,6 @@ all sets may be unpacked into
 .Pa /usr/src
 with the command:
 .Dl # Ic "( cd / ; tar -zxpf - ) \*< set_name.tgz"
-.Pp
-The
-.Pa sets/Split/
-subdirectory contains split
-versions of the source sets for those users who need to load the
-source sets from floppy or otherwise need a split distribution.
-The split sets are named
-.Pa "set_name." Ns Ar xx
-where
-.Pa set_name
-is the distribution set name, and
-.Ar xx
-is the sequence number of the file,
-starting with
-.Dq aa
-for the first file in the distribution set, then
-.Dq ab
-for the next, and so on.
-All of these files except the last one of each set should be exactly
-240,640 bytes long.
-(The last file is just long enough to contain the remainder of the data
-for that distribution set.)
-.Pp
-The split distributions may be reassembled and extracted with
-.Ic cat
-as follows:
-.Pp
-.Dl # Ic "cat set_name.?? | ( cd / ; tar -zxpf - )"
 .Pp
 In each of the source distribution set directories, there are
 files which contain the checksums of the files in the directory:
@@ -1087,8 +1079,6 @@ of the release files.
 .Pp
 .Pa \&.../NetBSD-current/tar_files/
 .(item -compact -offset indent
-.Pa doc.tar.gz
-.It
 .Pa pkgsrc.tar.gz
 .It
 .Pa src/*.tar.gz
@@ -1096,9 +1086,11 @@ of the release files.
 .Pa xsrc/*.tar.gz
 .item)
 .Pp
-Other directories provide unpacked source trees for distribution via
-the source update protocol, for more information see:
-.Lk http://www.NetBSD.org/Sites/net.html#sup
+Other directories provide unpacked source trees e.g. for distribution via
+the the software update protocol (SUP) or the
+concurrent version system (CVS).
+For more information see:
+.Lk http://www.NetBSD.org/mirrors/
 .\}
 .
 .
@@ -1115,6 +1107,12 @@ own checksum files, just as the source distribution does.
 .
 .so hardware -----------------------------------------------
 .br_ne 7P
+.
+.if \n[xen] \{.Ss "Installation options"
+.br_ne 7P
+.
+.so instopt -----------------------------------------------
+.\}
 .
 .Ss "Getting the NetBSD System on to Useful Media"
 .
@@ -1151,7 +1149,7 @@ may wish to bear the
 following problems and compatibility issues in mind when upgrading to
 .Nx \*V .
 .
-.Ss2 Issues affecting an upgrade from NetBSD 1.5
+.Ss2 Issues affecting an upgrade from NetBSD 1.6
 The following issues can generally be resolved by extracting the
 .Sy etc
 set into a temporary directory and running
@@ -1195,62 +1193,21 @@ These include:
 .
 .It
 The following files are now obsolete:
+.Pa /etc/rc.d/fsck.sh
+.Pa /etc/rc.d/gated
+.Pa /etc/rc.d/kerberos
 .Pa /etc/rc.d/NETWORK
+.Pa /etc/rc.d/systemfs
+.Pa /etc/rc.d/xntpd
 and
-.Pa /etc/rc.d/gated .
-.
-.It
-The following
-.Xr rc.conf 5
-entries are now obsolete:
-.Li amd_master ,
-.Li ip6forwarding ,
-.Li defcorename ,
-and
-.Li nfsiod_flags .
-.Li critical_filesystems_beforenet
-has been replaced by
-.Li critical_filesystems_local .
-.Li critical_filesystems
-has been replaced by
-.Li critical_filesystems_remote .
+.Pa /etc/rc.d/ypset .
 .
 .It
 The users and groups
-.Sq named ,
-.Sq ntpd ,
-and
-.Sq sshd
-need to be created.
-.
-.It
-The configuration files for
-.Xr ssh 1
-and
-.Xr sshd 8
-were moved from
-.Pa /etc
-to
-.Pa /etc/ssh ,
-including 
-.Pa ssh_known_hosts*
-files and the
-host key files
-.Pa ssh_host*_key* .
-.Pa /etc/ssh.conf
-was renamed to
-.Pa /etc/ssh/ssh_config ,
-and
-.Pa /etc/sshd.conf
-was renamed to
-.Pa /etc/ssh/sshd_config .
-.
-.It
-The
-.Ic mux
-entries in
-.Xr wscons.conf 5
-are now obsolete.
+.Sq smmsp ,
+needs to be created,
+.Sq news
+is no longer part of the system.
 .bullet)
 .
 .Pp
@@ -1265,151 +1222,7 @@ cp post-install postfix-files postfix-script /etc/postfix
 postfix check
 .disp)
 .
-.It
-The
-.Em de
-ethernet driver was replaced with the
-.Em tlp
-driver.
-This may require the renaming of the files
-.Pa /etc/ifconfig.de*
-to
-.Pa /etc/ifconfig.tlp* ,
-renaming of
-.Xr rc.conf 5
-entries
-.Li ifconfig_de*
-to
-.Li ifconfig_tlp* ,
-and the reconfiguration of files such as
-.Pa /etc/dhclient.conf
-and
-.Pa /etc/ipf.conf .
-.
 .bullet)
-.
-.Ss2 Issues affecting an upgrade from NetBSD 1.4 or prior
-.(bullet
-.Pa /etc/rc
-modified to use
-.Pa /etc/rc.d/*
-.Pp
-Prior to
-.Nx 1.5 ,
-.Pa /etc/rc
-was a traditional
-.Bx
-style monolithic file; each discrete program or substem from
-.Pa /etc/rc
-and
-.Pa /etc/netstart
-has been moved into separate scripts in
-.Pa /etc/rc.d/ .
-.Pp
-At system startup,
-.Pa /etc/rc
-uses
-.Xr rcorder 8
-to build a dependency list of the files in
-.Pa /etc/rc.d
-and then executes each script in turn with an argument of
-.Sq start .
-Many
-.Pa rc.d
-scripts won't start unless the appropriate
-.Xr rc.conf 5
-entry in
-.Pa /etc/rc.conf
-is set to
-.Sq YES.
-.Pp
-At system shutdown,
-.Pa /etc/rc.shutdown
-uses
-.Xr rcorder 8
-to build a dependency list of the files in
-.Pa /etc/rc.d
-that have a
-.Dq "KEYWORD: shutdown"
-line, reverses the resulting list, and then executes each script in turn
-with an argument of
-.Sq stop .
-The following scripts support a specific shutdown method:
-.Pa cron ,
-.Pa inetd ,
-.Pa local ,
-and
-.Pa xdm .
-.Pp
-Local and third-party scripts may be installed into
-.Pa /etc/rc.d
-as necessary.
-Refer to the other scripts in that directory and
-.Xr rc 8
-for more information on implementing
-.Pa rc.d
-scripts.
-.
-.It
-.Xr named 8
-leaks version information.
-.Pp
-Previous releases of
-.Nx
-disabled a feature of
-.Xr named 8
-where the version number of the server could be determined by remote clients.
-This feature has not been disabled in
-.Nx 1.5 ,
-because there is a
-.Xr named.conf 5
-option to change the version string:
-.(disp
- option {
-        version "newstring";
- };
-.disp)
-.
-.It
-.Xr sysctl 8
-was moved from
-.Pa /usr/sbin/sysctl
-to
-.Pa /sbin/sysctl .
-If you have hardcoded references to the full pathname
-.Pq in shell scripts, for example
-please be sure to update those.
-.
-.It
-.Xr sendmail 8
-configuration file pathname changed.
-.Pp
-Due to
-.Xr sendmail 8
-upgrade from 8.9.x to 8.10.x,
-.Pa /etc/sendmail.cf
-is moved to
-.Pa /etc/mail/sendmail.cf .
-Also, the default
-.Xr sendmail.cf 5
-refers different pathnames than before.
-For example,
-.Pa /etc/aliases
-is now located at
-.Pa /etc/mail/aliases ,
-.Pa /etc/sendmail.cw
-is now called
-.Pa /etc/mail/local-host-names ,
-and so forth.
-If you have customized
-.Xr sendmail.cf 5
-and friends, you will need to move the files to the new locations.
-See
-.Pa /usr/share/sendmail/README
-for more information.
-.bullet)
-.
-.Pp
 .
 .
 .Ss "Using online NetBSD documentation"
@@ -1466,6 +1279,7 @@ enter
 instead.
 .Pp
 If you are unsure of what man page you are looking for, enter
+.Pp
 .Ic apropos Ar subject-word
 .Pp
 where
@@ -1545,39 +1359,21 @@ for their ongoing work on
 .Bx
 systems, support, and encouragement.
 .It
-Also, our thanks go to:
-.Bd -unfilled -offset indent
-Mike Hibler
-Rick Macklem
-Jan-Simon Pendry
-Chris Torek
-.Ed
-.Pp
-for answering lots of questions, fixing bugs, and doing the various work
-they've done.
-.It
-UC Berkeley's Experimental Computing Facility provided a home for
-sun-lamp in the past, people to look after it, and a sense of humor.
-Rob Robertson, too, has added his unique sense of humor to things, and
-for a long time provided the primary FTP site for
-.Nx .
-.It
-Vixie Enterprises for hosting the
+The Internet Systems Consortium, Inc. for hosting the
 .Nx
-FTP, SUP, and WWW servers.
-.It
-Redback Networks, Inc. for hosting the
-.Nx
-mail and GNATS server.
-.It
-The Helsinki University of Technology in Finland for hosting the
-.Nx
-CVS server.
+FTP, CVS, AnonCVS, mail, mail archive, GNATS, SUP, Rsync and WWW servers.
 .It
 The Internet Research Institute in Japan for hosting the server
 which runs the CVSweb interface to the
 .Nx
 source tree.
+.It
+The Helsinki University of Technology in Finland for hosting the
+.Nx
+backup CVS and backup server.
+.It
+SSH Communications Security in Finland for operating
+the backup server.
 .It
 The many organisations that provide
 .Nx
@@ -1586,12 +1382,6 @@ mirror sites.
 Without CVS, this project would be impossible to manage, so our hats
 go off to Brian Berliner, Jeff Polk, and the various other people
 who've had a hand in making CVS a useful tool.
-.It
-Dave Burgess
-.Mt burgess@cynjut.infonet.net
-has been maintaining the
-386BSD/NetBSD/FreeBSD FAQ for quite some time, and deserves to be
-recognized for it.
 .It
 The following individuals and organizations (each in alphabetical order)
 have made donations or loans of hardware and/or money, to support
@@ -1617,79 +1407,105 @@ If you're one of them, and would like to mentioned, tell us!)
 .Pp
 .
 .
-.Bl -column xxx "Jun-ichiro itojun Hagino" Mt sommerfeld@NetBSD.org newsmips
+.Bl -column xxx "Jun-ichiro itojun Hagino" Mt sommerfeld@NetBSD.org Sy playstation2
 .
 .br_ne 1i
-.It-span Em "The NetBSD core group:"
+.It Em "The NetBSD core group:"
 .It Ta Ta
 .It Ta Allen Briggs Ta Mt briggs@NetBSD.org
-.It Ta Frank van der Linden Ta Mt fvdl@NetBSD.org
-.It Ta Luke Mewburn Ta Mt lukem@NetBSD.org
 .It Ta Matt Thomas Ta Mt matt@NetBSD.org
+.It Ta Valeriy E. Ushakov Ta Mt uwe@NetBSD.org
+.It Ta YAMAMOTO Takashi Ta Mt yamt@NetBSD.org
 .It Ta Christos Zoulas Ta Mt christos@NetBSD.org
 .It Ta Ta
 .
 .br_ne 2i
-.It-span Em "The portmasters (and their ports):"
-.It Ta Ta
-.It Ta Lennart Augustsson Ta Mt augustss@NetBSD.org Ta Sy pmppc
-.It Ta Simon Burge Ta Mt simonb@NetBSD.org Ta Sy pmax
-.It Ta Simon Burge Ta Mt simonb@NetBSD.org Ta Sy sbmips
-.It Ta Jeremy Cooper Ta Mt jeremy@NetBSD.org Ta Sy sun3x
-.It Ta Matt Fredette Ta Mt fredette@NetBSD.org Ta Sy hp700
-.It Ta Matt Fredette Ta Mt fredette@NetBSD.org Ta Sy sun2
-.It Ta Chris Gilbert Ta Mt chris@NetBSD.org Ta Sy cats
-.It Ta Ross Harvey Ta Mt ross@NetBSD.org Ta Sy alpha
-.It Ta "Jun-ichiro itojun Hagino" Ta Mt itojun@NetBSD.org Ta Sy sh3
-.It Ta Ben Harris Ta Mt bjh21@NetBSD.org Ta Sy acorn26
-.It Ta Martin Husemann Ta Mt martin@NetBSD.org Ta Sy sparc64
-.It Ta Darrin Jewell Ta Mt dbj@NetBSD.org Ta Sy next68k
-.It Ta S\(/oren J\(/orvang Ta Mt soren@NetBSD.org Ta Sy cobalt
-.It Ta S\(/oren J\(/orvang Ta Mt soren@NetBSD.org Ta Sy sgimips
-.It Ta Wayne Knowles Ta Mt wdk@NetBSD.org Ta Sy mipsco
-.It Ta Paul Kranenburg Ta Mt pk@NetBSD.org Ta Sy sparc
-.It Ta "Frank van der Linden" Ta Mt fvdl@NetBSD.org Ta Sy i386
-.It Ta "Frank van der Linden" Ta Mt fvdl@NetBSD.org Ta Sy amd64
-.It Ta Anders Magnusson Ta Mt ragge@NetBSD.org Ta Sy vax
-.It Ta Phil Nelson Ta Mt phil@NetBSD.org Ta Sy pc532
-.It Ta NISHIMURA Takeshi Ta Mt nsmrtks@NetBSD.org Ta Sy x68k
-.It Ta Tohru Nishimura Ta Mt nisimura@NetBSD.org Ta Sy luna68k
-.It Ta NONAKA Kimihiro Ta Mt nonaka@NetBSD.org Ta Sy prep
-.It Ta Scott Reynolds Ta Mt scottr@NetBSD.org Ta Sy mac68k
-.It Ta Andrey Petrov Ta Mt petrov@NetBSD.org Ta Sy sparc64
-.It Ta Kazuki Sakamoto Ta Mt sakamoto@NetBSD.org Ta Sy bebox
-.It Ta Noriyuki Soda Ta Mt soda@NetBSD.org Ta Sy arc
-.It Ta Wolfgang Solfrank Ta Mt ws@NetBSD.org Ta Sy ofppc
-.It Ta Ignatios Souvatzis Ta Mt is@NetBSD.org Ta Sy amiga
-.It Ta Jonathan Stone Ta Mt jonathan@NetBSD.org Ta Sy pmax
-.It Ta Shin Takemura Ta Mt takemura@NetBSD.org Ta Sy hpcmips
-.It Ta Jason Thorpe Ta Mt thorpej@NetBSD.org Ta Sy alpha
-.It Ta Jason Thorpe Ta Mt thorpej@NetBSD.org Ta Sy hp300
-.It Ta Tsubai Masanari Ta Mt tsubai@NetBSD.org Ta Sy macppc
-.It Ta Tsubai Masanari Ta Mt tsubai@NetBSD.org Ta Sy newsmips
-.It Ta Izumi Tsutsui Ta Mt tsutsui@NetBSD.org Ta Sy news68k
-.It Ta Leo Weppelman Ta Mt leo@NetBSD.org Ta Sy atari
-.It Ta Nathan Williams Ta Mt nathanw@NetBSD.org Ta Sy sun3
-.It Ta Steve Woodford Ta Mt scw@NetBSD.org Ta Sy evbsh5
-.It Ta Steve Woodford Ta Mt scw@NetBSD.org Ta Sy mvme68k
-.It Ta Steve Woodford Ta Mt scw@NetBSD.org Ta Sy mvmeppc
-.It Ta Reinoud Zandijk Ta Mt reinoud@NetBSD.org Ta Sy acorn32
+.It Em "The portmasters (and their ports):"
+.\"
+.\" XXX created by list-portmasters.pl
+.\"
+.It Ta                                Ta Mt                      Ta Sy 
+.It Ta Allen Briggs                   Ta Mt    briggs@NetBSD.org Ta Sy sandpoint
+.It Ta Anders Magnusson               Ta Mt     ragge@NetBSD.org Ta Sy vax
+.It Ta Andrey Petrov                  Ta Mt    petrov@NetBSD.org Ta Sy sparc64
+.It Ta Ben Harris                     Ta Mt     bjh21@NetBSD.org Ta Sy acorn26
+.It Ta Chris Gilbert                  Ta Mt     chris@NetBSD.org Ta Sy cats
+.It Ta Christian Limpach              Ta Mt        cl@NetBSD.org Ta Sy xen
+.It Ta Eduardo Horvath                Ta Mt       eeh@NetBSD.org Ta Sy evbppc
+.It Ta Frank van der Linden           Ta Mt      fvdl@NetBSD.org Ta Sy amd64
+.It Ta Frank van der Linden           Ta Mt      fvdl@NetBSD.org Ta Sy i386
+.It Ta Gavan Fantom                   Ta Mt     gavan@NetBSD.org Ta Sy iyonix
+.It Ta IWAMOTO Toshihiro              Ta Mt    toshii@NetBSD.org Ta Sy hpcarm
+.It Ta Ichiro Fukuhara                Ta Mt    ichiro@NetBSD.org Ta Sy hpcarm
+.It Ta Ignatios Souvatzis             Ta Mt        is@NetBSD.org Ta Sy amiga
+.It Ta Izumi Tsutsui                  Ta Mt   tsutsui@NetBSD.org Ta Sy hp300
+.It Ta Izumi Tsutsui                  Ta Mt   tsutsui@NetBSD.org Ta Sy news68k
+.It Ta Jason Thorpe                   Ta Mt   thorpej@NetBSD.org Ta Sy algor
+.It Ta Jason Thorpe                   Ta Mt   thorpej@NetBSD.org Ta Sy evbarm
+.It Ta Jason Thorpe                   Ta Mt   thorpej@NetBSD.org Ta Sy shark
+.It Ta Jeremy Cooper                  Ta Mt    jeremy@NetBSD.org Ta Sy sun3
+.It Ta Jonathan Stone                 Ta Mt  jonathan@NetBSD.org Ta Sy pmax
+.It Ta Julian Coleman                 Ta Mt       jdc@NetBSD.org Ta Sy atari
+.It Ta Jun-ichiro itojun Hagino       Ta Mt    itojun@NetBSD.org Ta Sy evbsh3
+.It Ta Jun-ichiro itojun Hagino       Ta Mt    itojun@NetBSD.org Ta Sy mmeye
+.It Ta Kazuki Sakamoto                Ta Mt  sakamoto@NetBSD.org Ta Sy bebox
+.It Ta Lennart Augustsson             Ta Mt  augustss@NetBSD.org Ta Sy pmppc
+.It Ta Marcus Comstedt                Ta Mt    marcus@NetBSD.org Ta Sy dreamcast
+.It Ta Martin Husemann                Ta Mt    martin@NetBSD.org Ta Sy sparc64
+.It Ta Matt DeBergalis                Ta Mt    deberg@NetBSD.org Ta Sy next68k
+.It Ta Matt Fredette                  Ta Mt  fredette@NetBSD.org Ta Sy hp700
+.It Ta Matt Fredette                  Ta Mt  fredette@NetBSD.org Ta Sy sun2
+.It Ta Matt Thomas                    Ta Mt      matt@NetBSD.org Ta Sy alpha
+.It Ta Matt Thomas                    Ta Mt      matt@NetBSD.org Ta Sy netwinder
+.It Ta Matthias Drochner              Ta Mt  drochner@NetBSD.org Ta Sy cesfic
+.It Ta NISHIMURA Takeshi              Ta Mt   nsmrtks@NetBSD.org Ta Sy x68k
+.It Ta NONAKA Kimihiro                Ta Mt    nonaka@NetBSD.org Ta Sy prep
+.It Ta Nathan Williams                Ta Mt   nathanw@NetBSD.org Ta Sy sun3
+.It Ta Noriyuki Soda                  Ta Mt      soda@NetBSD.org Ta Sy arc
+.It Ta Paul Kranenburg                Ta Mt        pk@NetBSD.org Ta Sy sparc
+.It Ta Phil Nelson                    Ta Mt      phil@NetBSD.org Ta Sy pc532
+.It Ta Reinoud Zandijk                Ta Mt   reinoud@NetBSD.org Ta Sy acorn32
+.It Ta Ross Harvey                    Ta Mt      ross@NetBSD.org Ta Sy alpha
+.It Ta S\(/oren J\(/orvang            Ta Mt     soren@NetBSD.org Ta Sy cobalt
+.It Ta S\(/oren J\(/orvang            Ta Mt     soren@NetBSD.org Ta Sy sgimips
+.It Ta Scott Reynolds                 Ta Mt    scottr@NetBSD.org Ta Sy mac68k
+.It Ta Shin Takemura                  Ta Mt  takemura@NetBSD.org Ta Sy hpcmips
+.It Ta Simon Burge                    Ta Mt    simonb@NetBSD.org Ta Sy evbmips
+.It Ta Simon Burge                    Ta Mt    simonb@NetBSD.org Ta Sy evbppc
+.It Ta Simon Burge                    Ta Mt    simonb@NetBSD.org Ta Sy pmax
+.It Ta Simon Burge                    Ta Mt    simonb@NetBSD.org Ta Sy sbmips
+.It Ta Steve Woodford                 Ta Mt       scw@NetBSD.org Ta Sy evbsh5
+.It Ta Steve Woodford                 Ta Mt       scw@NetBSD.org Ta Sy mvme68k
+.It Ta Steve Woodford                 Ta Mt       scw@NetBSD.org Ta Sy mvmeppc
+.It Ta Tohru Nishimura                Ta Mt  nisimura@NetBSD.org Ta Sy luna68k
+.It Ta Tsubai Masanari                Ta Mt    tsubai@NetBSD.org Ta Sy macppc
+.It Ta Tsubai Masanari                Ta Mt    tsubai@NetBSD.org Ta Sy newsmips
+.It Ta UCHIYAMA Yasushi               Ta Mt       uch@NetBSD.org Ta Sy hpcsh
+.It Ta UCHIYAMA Yasushi               Ta Mt       uch@NetBSD.org Ta Sy playstation2
+.It Ta Wayne Knowles                  Ta Mt       wdk@NetBSD.org Ta Sy mipsco
+.It Ta Wolfgang Solfrank              Ta Mt        ws@NetBSD.org Ta Sy ofppc
 .It Ta Ta
 .
 .br_ne 1i
-.It-span Em "The NetBSD \*V Release Engineering team:"
+.It Em "The NetBSD \*V Release Engineering team:"
 .It Ta Ta
 .It Ta Grant Beattie Ta Mt grant@NetBSD.org
 .It Ta Erik Berls Ta Mt cyber@NetBSD.org
 .It Ta James Chacon Ta Mt jmc@NetBSD.org
+.It Ta Julian Coleman Ta Mt jdc@NetBSD.org
 .It Ta H\(oavard Eidnes Ta Mt he@NetBSD.org
-.It Ta Perry Metzger Ta Mt perry@NetBSD.org
+.It Ta Jun-ichiro itojun Hagino Ta Mt itojun@NetBSD.org
+.It Ta Soren Jacobsen Ta Mt snj@NetBSD.org
+.It Ta SAITOH Masanobu Ta Mt msaitoh@NetBSD.org
 .It Ta Luke Mewburn Ta Mt lukem@NetBSD.org
-.It Ta Jason Thorpe Ta Mt thorpej@NetBSD.org
+.It Ta Jeff Rizzo Ta Mt riz@NetBSD.org
+.It Ta Matthias Scheler Ta Mt tron@NetBSD.org
+.It Ta Curt Sampson Ta Mt cjs@NetBSD.org
+.It Ta Jim Wise Ta Mt jwise@NetBSD.org
 .It Ta Ta
 .
 .br_ne 2i
-.It-span Em "NetBSD Developers:"
+.It Em "NetBSD Developers:"
 .It Ta Ta
 .It Ta Nathan Ahlstrom Ta Mt nra@NetBSD.org
 .It Ta Steve Allen Ta Mt wormey@NetBSD.org
@@ -1708,6 +1524,7 @@ If you're one of them, and would like to mentioned, tell us!)
 .It Ta Mason Loring Bliss Ta Mt mason@NetBSD.org
 .It Ta Charles Blundell Ta Mt cb@NetBSD.org
 .It Ta Rafal Boni Ta Mt rafal@NetBSD.org
+.It Ta Sean Boudreau Ta Mt seanb@NetBSD.org
 .It Ta Manuel Bouyer Ta Mt bouyer@NetBSD.org
 .It Ta John Brezak Ta Mt brezak@NetBSD.org
 .It Ta Allen Briggs Ta Mt briggs@NetBSD.org
@@ -1742,8 +1559,10 @@ If you're one of them, and would like to mentioned, tell us!)
 .It Ta Emmanuel Dreyfus Ta Mt manu@NetBSD.org
 .It Ta Matthias Drochner Ta Mt drochner@NetBSD.org
 .It Ta Jun Ebihara Ta Mt jun@NetBSD.org
+.It Ta Elad Efrat Ta Mt elad@NetBSD.org
 .It Ta H\(oavard Eidnes Ta Mt he@NetBSD.org
 .It Ta Stoned Elipot Ta Mt seb@NetBSD.org
+.It Ta Michael van Elst Ta Mt mlelstv@NetBSD.org
 .It Ta Enami Tsugutomo Ta Mt enami@NetBSD.org
 .It Ta Bernd Ernesti Ta Mt veego@NetBSD.org
 .It Ta Erik Fair Ta Mt fair@NetBSD.org
@@ -1772,9 +1591,11 @@ If you're one of them, and would like to mentioned, tell us!)
 .It Ta Ross Harvey Ta Mt ross@NetBSD.org
 .It Ta Eric Haszlakiewicz Ta Mt erh@NetBSD.org
 .It Ta John Hawkinson Ta Mt jhawk@NetBSD.org
+.It Ta HAMAJIMA Katsuomi Ta Mt hamajima@NetBSD.org
 .It Ta HAYAKAWA Koichi Ta Mt haya@NetBSD.org
 .It Ta John Heasley Ta Mt heas@NetBSD.org
 .It Ta Ren\('e Hexel Ta Mt rh@NetBSD.org
+.It Ta Kouichirou Hiratsuka Ta Mt hira@NetBSD.org
 .It Ta Michael L. Hitch Ta Mt mhitch@NetBSD.org
 .It Ta Christian E. Hopps Ta Mt chopps@NetBSD.org
 .It Ta Ken Hornstein Ta Mt kenh@NetBSD.org
@@ -1804,12 +1625,14 @@ If you're one of them, and would like to mentioned, tell us!)
 .It Ta Min Sik Kim Ta Mt minskim@NetBSD.org
 .It Ta Thomas Klausner Ta Mt wiz@NetBSD.org
 .It Ta Klaus Klein Ta Mt kleink@NetBSD.org
+.It Ta John Klos Ta Mt jklos@NetBSD.org
 .It Ta Wayne Knowles Ta Mt wdk@NetBSD.org
 .It Ta Takayoshi Kochi Ta Mt kochi@NetBSD.org
 .It Ta John Kohl Ta Mt jtk@NetBSD.org
 .It Ta Daniel de Kok Ta Mt daniel@NetBSD.org
 .It Ta Paul Kranenburg Ta Mt pk@NetBSD.org
 .It Ta Martti Kuparinen Ta Mt martti@NetBSD.org
+.It Ta Kentaro A. Kurahone Ta Mt kurahone@NetBSD.org
 .It Ta Kevin Lahey Ta Mt kml@NetBSD.org
 .It Ta Johnny C. Lam Ta Mt jlam@NetBSD.org
 .It Ta Martin J. Laubach Ta Mt mjl@NetBSD.org
@@ -1819,6 +1642,7 @@ If you're one of them, and would like to mentioned, tell us!)
 .It Ta Frank van der Linden Ta Mt fvdl@NetBSD.org
 .It Ta Joel Lindholm Ta Mt joel@NetBSD.org
 .It Ta Mike Long Ta Mt mikel@NetBSD.org
+.It Ta Michael Lorenz Ta Mt macallan@NetBSD.org
 .It Ta Warner Losh Ta Mt imp@NetBSD.org
 .It Ta Tomasz Luchowski Ta Mt zuntum@NetBSD.org
 .It Ta Federico Lupi Ta Mt federico@NetBSD.org
@@ -1832,6 +1656,7 @@ If you're one of them, and would like to mentioned, tell us!)
 .It Ta Jared D. McNeill Ta Mt jmcneill@NetBSD.org
 .It Ta Neil J. McRae Ta Mt neil@NetBSD.org
 .It Ta Perry Metzger Ta Mt perry@NetBSD.org
+.It Ta Simas Mockevicius Ta Mt symka@NetBSD.org
 .It Ta Juan Romero Pardines Ta Mt xtraeme@NetBSD.org
 .It Ta Julio M. Merino Vidal Ta Mt jmmv@NetBSD.org
 .It Ta Minoura Makoto Ta Mt minoura@NetBSD.org
@@ -1845,6 +1670,7 @@ If you're one of them, and would like to mentioned, tell us!)
 .It Ta NISHIMURA Takeshi Ta Mt nsmrtks@NetBSD.org
 .It Ta Tohru Nishimura Ta Mt nisimura@NetBSD.org
 .It Ta NONAKA Kimihiro Ta Mt nonaka@NetBSD.org
+.It Ta Takehiko NOZAKI Ta Mt tnozaki@NetBSD.org
 .It Ta Jesse Off Ta Mt joff@NetBSD.org
 .It Ta Tatoku Ogaito Ta Mt tacha@NetBSD.org
 .It Ta OKANO Takayoshi Ta Mt kano@NetBSD.org
@@ -1855,6 +1681,9 @@ If you're one of them, and would like to mentioned, tell us!)
 .It Ta Herb Peyerl Ta Mt hpeyerl@NetBSD.org
 .It Ta Matthias Pfaller Ta Mt matthias@NetBSD.org
 .It Ta Chris Pinnock Ta Mt cjep@NetBSD.org
+.It Ta Adrian Portelli Ta Mt adrianp@NetBSD.org
+.It Ta Rui Paulo Ta Mt rpaulo@NetBSD.org
+.It Ta Peter Postma Ta Mt peter@NetBSD.org
 .It Ta Dante Profeta Ta Mt dante@NetBSD.org
 .It Ta Chris Provenzano Ta Mt proven@NetBSD.org
 .It Ta Niels Provos Ta Mt provos@NetBSD.org
@@ -1862,11 +1691,14 @@ If you're one of them, and would like to mentioned, tell us!)
 .It Ta Marc Recht Ta Mt recht@NetBSD.org
 .It Ta Darren Reed Ta Mt darrenr@NetBSD.org
 .It Ta Jeremy C. Reed Ta Mt reed@NetBSD.org
+.It Ta Antoine Reilles Ta Mt tonio@NetBSD.org
 .It Ta Tyler R. Retzlaff Ta Mt rtr@NetBSD.org
 .It Ta Scott Reynolds Ta Mt scottr@NetBSD.org
 .It Ta Michael Richardson Ta Mt mcr@NetBSD.org
 .It Ta Tim Rightnour Ta Mt garbled@NetBSD.org
+.It Ta Jeff Rizzo Ta Mt riz@NetBSD.org
 .It Ta Gordon Ross Ta Mt gwr@NetBSD.org
+.It Ta Steve Rumble Ta Mt rumble@NetBSD.org
 .It Ta Ilpo Ruotsalainen Ta Mt lonewolf@NetBSD.org
 .It Ta Heiko W. Rupp Ta Mt hwr@NetBSD.org
 .It Ta David Sainty Ta Mt dsainty@NetBSD.org
@@ -1881,9 +1713,11 @@ If you're one of them, and would like to mentioned, tell us!)
 .It Ta Karl Schilke (rAT) Ta Mt rat@NetBSD.org
 .It Ta Amitai Schlair Ta Mt schmonz@NetBSD.org
 .It Ta Konrad Schroder Ta Mt perseant@NetBSD.org
+.It Ta Georg Schwarz Ta Mt schwarz@NetBSD.org
 .It Ta Lubomir Sedlacik Ta Mt salo@NetBSD.org
 .It Ta Christopher SEKIYA Ta Mt sekiya@NetBSD.org
 .It Ta Reed Shadgett Ta Mt dent@NetBSD.org
+.It Ta John Shannon Ta Mt shannonjr@NetBSD.org
 .It Ta Tim Shepard Ta Mt shep@NetBSD.org
 .It Ta Takeshi Shibagaki Ta Mt shiba@NetBSD.org
 .It Ta Naoto Shimazaki Ta Mt igy@NetBSD.org
@@ -1906,9 +1740,11 @@ If you're one of them, and would like to mentioned, tell us!)
 .It Ta Shin Takemura Ta Mt takemura@NetBSD.org
 .It Ta TAMURA Kent Ta Mt kent@NetBSD.org
 .It Ta Shin'ichiro TAYA Ta Mt taya@NetBSD.org
+.It Ta Ian Lance Taylor Ta Mt ian@NetBSD.org
 .It Ta Matt Thomas Ta Mt matt@NetBSD.org
 .It Ta Jason Thorpe Ta Mt thorpej@NetBSD.org
 .It Ta Christoph Toshok Ta Mt toshok@NetBSD.org
+.It Ta Greg Troxel Ta Mt gdt@NetBSD.org
 .It Ta Tsubai Masanari Ta Mt tsubai@NetBSD.org
 .It Ta Izumi Tsutsui Ta Mt tsutsui@NetBSD.org
 .It Ta UCHIYAMA Yasushi Ta Mt uch@NetBSD.org
@@ -1917,6 +1753,7 @@ If you're one of them, and would like to mentioned, tell us!)
 .It Ta Todd Vierling Ta Mt tv@NetBSD.org
 .It Ta Aymeric Vincent Ta Mt aymeric@NetBSD.org
 .It Ta Paul Vixie Ta Mt vixie@NetBSD.org
+.It Ta Mike M. Volokhov Ta Mt mishka@NetBSD.org
 .It Ta Krister Walfridsson Ta Mt kristerw@NetBSD.org
 .It Ta Lex Wennmacher Ta Mt wennmach@NetBSD.org
 .It Ta Leo Weppelman Ta Mt leo@NetBSD.org
@@ -1932,12 +1769,13 @@ If you're one of them, and would like to mentioned, tell us!)
 .It Ta YAMAMOTO Takashi Ta Mt yamt@NetBSD.org
 .It Ta Yuji Yamano Ta Mt yyamano@NetBSD.org
 .It Ta Reinoud Zandijk Ta Mt reinoud@NetBSD.org
+.It Ta S.P.Zeidler Ta Mt spz@NetBSD.org
 .It Ta Maria Zevenhoven Ta Mt maria7@NetBSD.org
 .It Ta Christos Zoulas Ta Mt christos@NetBSD.org
 .It Ta Ta
 .
 .br_ne 2i
-.It-span Em "Other contributors:"
+.It Em "Other contributors:"
 .It Ta Ta
 .It Ta Dave Burgess Ta Mt burgess@cynjut.infonet.net
 .It Ta Brian R. Gaeke Ta Mt brg@dgate.org

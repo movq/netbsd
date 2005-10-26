@@ -1,10 +1,10 @@
-/*	$NetBSD: cardbusdevs_data.h,v 1.24 2003/10/24 17:04:35 mycroft Exp $	*/
+/*	$NetBSD: cardbusdevs_data.h,v 1.24.2.2 2004/08/30 09:32:11 tron Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: cardbusdevs,v 1.27 2003/10/24 17:04:16 mycroft Exp 
+ *	NetBSD: cardbusdevs,v 1.27.2.2 2004/08/30 09:31:08 tron Exp 
  */
 
 /*
@@ -92,16 +92,34 @@ struct cardbus_knowndev cardbus_knowndevs[] = {
 	    "3CCFEM656 10/100 Ethernet",
 	},
 	{
+	    CARDBUS_VENDOR_3COM, CARDBUS_PRODUCT_3COM_3C656_M,
+	    0,
+	    "3Com",
+	    "3CCFEM656 56k Modem",
+	},
+	{
 	    CARDBUS_VENDOR_3COM, CARDBUS_PRODUCT_3COM_3C656B_E,
 	    0,
 	    "3Com",
 	    "3CCFEM656B 10/100 Ethernet",
 	},
 	{
+	    CARDBUS_VENDOR_3COM, CARDBUS_PRODUCT_3COM_3C656B_M,
+	    0,
+	    "3Com",
+	    "3CCFEM656B 56k Modem",
+	},
+	{
 	    CARDBUS_VENDOR_3COM, CARDBUS_PRODUCT_3COM_3C656C_E,
 	    0,
 	    "3Com",
 	    "3CXFEM656C 10/100 Ethernet",
+	},
+	{
+	    CARDBUS_VENDOR_3COM, CARDBUS_PRODUCT_3COM_3C656C_M,
+	    0,
+	    "3Com",
+	    "3CXFEM656C 56k Modem",
 	},
 	{
 	    CARDBUS_VENDOR_ADVSYS, CARDBUS_PRODUCT_ADVSYS_ULTRA,
@@ -126,6 +144,12 @@ struct cardbus_knowndev cardbus_knowndevs[] = {
 	    0,
 	    "IO Data",
 	    "CBIDE2 IDE controller",
+	},
+	{
+	    CARDBUS_VENDOR_IODATA, CARDBUS_PRODUCT_IODATA_CBSCII,
+	    0,
+	    "IO Data",
+	    "CBSCII NinjaSCSI-32Bi SCSI",
 	},
 	{
 	    CARDBUS_VENDOR_ACCTON, CARDBUS_PRODUCT_ACCTON_MPX5030,
@@ -248,6 +272,24 @@ struct cardbus_knowndev cardbus_knowndevs[] = {
 	    "AR5001 Wireless LAN 802.11a/b/g CardBus Card",
 	},
 	{
+	    CARDBUS_VENDOR_WORKBIT, CARDBUS_PRODUCT_WORKBIT_NJSC32BI,
+	    0,
+	    "Workbit",
+	    "NinjaSCSI-32Bi SCSI",
+	},
+	{
+	    CARDBUS_VENDOR_WORKBIT, CARDBUS_PRODUCT_WORKBIT_NJSC32UDE,
+	    0,
+	    "Workbit",
+	    "NinjaSCSI-32UDE SCSI",
+	},
+	{
+	    CARDBUS_VENDOR_WORKBIT, CARDBUS_PRODUCT_WORKBIT_NJSC32BI_KME,
+	    0,
+	    "Workbit",
+	    "NinjaSCSI-32Bi SCSI (KME)",
+	},
+	{
 	    CARDBUS_VENDOR_DEC, 0,
 	    CARDBUS_KNOWNDEV_NOPROD,
 	    "Digital Equipment",
@@ -293,6 +335,12 @@ struct cardbus_knowndev cardbus_knowndevs[] = {
 	    CARDBUS_VENDOR_ACCTON, 0,
 	    CARDBUS_KNOWNDEV_NOPROD,
 	    "Accton Technology",
+	    NULL,
+	},
+	{
+	    CARDBUS_VENDOR_WORKBIT, 0,
+	    CARDBUS_KNOWNDEV_NOPROD,
+	    "Workbit",
 	    NULL,
 	},
 	{

@@ -1,4 +1,4 @@
-/*	$NetBSD: ulpt.c,v 1.61 2004/03/22 14:55:42 tls Exp $	*/
+/*	$NetBSD: ulpt.c,v 1.61.2.2 2004/07/10 13:40:54 tron Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/ulpt.c,v 1.24 1999/11/17 22:33:44 n_hibma Exp $	*/
 
 /*
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ulpt.c,v 1.61 2004/03/22 14:55:42 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ulpt.c,v 1.61.2.2 2004/07/10 13:40:54 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -252,7 +252,7 @@ USB_ATTACH(ulpt)
 	    ifcd >= iend)
 		panic("ulpt: iface desc out of range");
 #endif
-#if 0
+
 	/* Step through all the descriptors looking for bidir mode */
 	for (id = ifcd, altno = 0;
 	     id < iend;
@@ -280,11 +280,6 @@ USB_ATTACH(ulpt)
 			USB_ATTACH_ERROR_RETURN;
 		}
 	}
-#else
-	id = ifcd;
-	err = 0;
-	altno = 0;
-#endif
 
 	epcount = 0;
 	(void)usbd_endpoint_count(iface, &epcount);
@@ -548,8 +543,10 @@ ulptopen(dev_t dev, int flag, int mode, usb_proc_ptr p)
 	error = 0;
 	sc->sc_refcnt++;
 
+#if 0 /* XXX causes some printers to disconnect */
 	if ((flags & ULPT_NOPRIME) == 0)
 		ulpt_reset(sc);
+#endif
 
 	for (spin = 0; (ulpt_status(sc) & LPS_SELECT) == 0; spin += STEP) {
 		DPRINTF(("ulpt_open: waiting a while\n"));

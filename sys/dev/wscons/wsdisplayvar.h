@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplayvar.h,v 1.25 2003/06/29 22:31:03 fvdl Exp $ */
+/* $NetBSD: wsdisplayvar.h,v 1.25.4.2 2004/06/07 09:47:19 tron Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -111,6 +111,7 @@ struct wsdisplay_accessops {
 	void	(*pollc)(void *, int);
 	int	(*getwschar)(void *, struct wsdisplay_char *);
 	int	(*putwschar)(void *, struct wsdisplay_char *);
+	void	(*scroll) __P((void *, void *, int));
 };
 
 /*
@@ -195,6 +196,15 @@ int wsdisplay_stat_ioctl(struct wsdisplay_softc *sc, u_long cmd, caddr_t data,
 
 int wsdisplay_cfg_ioctl(struct wsdisplay_softc *sc, u_long cmd, caddr_t data,
 			int flag, struct proc *p);
+
+#ifdef WSDISPLAY_SCROLLSUPPORT
+void wsdisplay_scroll (void *v, int op);
+#endif
+
+#define WSDISPLAY_SCROLL_BACKWARD	1
+#define WSDISPLAY_SCROLL_FORWARD	(1 << 1)
+#define WSDISPLAY_SCROLL_RESET		(1 << 2)
+#define WSDISPLAY_SCROLL_LOW		(1 << 3)
 
 int wsdisplay_stat_inject(struct device *dev, u_int type, int value);
 

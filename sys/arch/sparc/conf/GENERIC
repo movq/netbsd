@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.149 2003/12/17 08:08:02 martin Exp $
+# $NetBSD: GENERIC,v 1.149.2.4 2004/07/15 20:31:06 he Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include 	"arch/sparc/conf/std.sparc"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.149 $"
+#ident 		"GENERIC-$Revision: 1.149.2.4 $"
 
 maxusers	32
 
@@ -79,12 +79,14 @@ options 	SYSVSEM		# System V semaphores
 #options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V shared memory
 #options 	SHMMAXPGS=1024	# 1024 pages is the default
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 ## Loadable kernel module support; still under development.
 options 	LKM
 
 options 	USERCONF	# userconf(4) support
-#options	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
+#options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
+options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 # Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
@@ -211,6 +213,19 @@ options 	IPFILTER_LOG	# Add ipmon(8) logging for ipfilter device
 options 	PPP_BSDCOMP	# Add BSD compression to ppp device
 options 	PPP_DEFLATE	# Add deflate (libz) compression to ppp device
 options 	PPP_FILTER	# Add active filters for ppp (via bpf)
+
+#options 	ALTQ		# Manipulate network interfaces' output queues
+#options 	ALTQ_BLUE	# Stochastic Fair Blue
+#options 	ALTQ_CBQ	# Class-Based Queueing
+#options 	ALTQ_CDNR	# Diffserv Traffic Conditioner
+#options 	ALTQ_FIFOQ	# First-In First-Out Queue
+#options 	ALTQ_FLOWVALVE	# RED/flow-valve (red-penalty-box)
+#options 	ALTQ_HFSC	# Hierarchical Fair Service Curve
+#options 	ALTQ_LOCALQ	# Local queueing discipline
+#options 	ALTQ_PRIQ	# Priority Queueing
+#options 	ALTQ_RED	# Random Early Detection
+#options 	ALTQ_RIO	# RED with IN/OUT
+#options 	ALTQ_WFQ	# Weighted Fair Queueing
 
 
 
@@ -340,9 +355,9 @@ dma0	at sbus0 slot ? offset ?			# sun4c/sun4m
 esp0	at sbus0 slot ? offset ? flags 0x0000		# sun4c
 esp0	at dma0 flags 0x0000				# sun4m
 
-# FSBE/S SCSI
+# FSBE/S SCSI & SunSwift Sbus FAS366
 dma*	at sbus? slot ? offset ?			# SBus
-esp*	at sbus? slot ? offset ? flags 0x0000		# SBus (older proms)
+esp*	at sbus? slot ? offset ? flags 0x0000		# SBus
 esp*	at dma? flags 0x0000				# SBus
 
 scsibus* at esp?

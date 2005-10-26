@@ -1,4 +1,4 @@
-/*	$NetBSD: tar.c,v 1.47 2004/01/30 20:46:12 christos Exp $	*/
+/*	$NetBSD: tar.c,v 1.47.2.8.2.1 2005/07/23 17:32:16 snj Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)tar.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: tar.c,v 1.47 2004/01/30 20:46:12 christos Exp $");
+__RCSID("$NetBSD: tar.c,v 1.47.2.8.2.1 2005/07/23 17:32:16 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -68,8 +68,8 @@ __RCSID("$NetBSD: tar.c,v 1.47 2004/01/30 20:46:12 christos Exp $");
  * Routines for reading, writing and header identify of various versions of tar
  */
 
-static int expandname(char *, size_t,  char **, const char *, size_t);
-static void longlink(ARCHD *);
+static int expandname(char *, size_t,  char **, size_t *, const char *, size_t);
+static void longlink(ARCHD *, int);
 static u_long tar_chksm(char *, int);
 static char *name_split(char *, int);
 static int ul_oct(u_long, char *, int, int);
@@ -93,6 +93,20 @@ static char *gnu_hack_string;		/* ././@LongLink hackery */
 static int gnu_hack_len;		/* len of gnu_hack_string */
 char *gnu_name_string;			/* ././@LongLink hackery name */
 char *gnu_link_string;			/* ././@LongLink hackery link */
+size_t gnu_name_length;			/* ././@LongLink hackery name */
+size_t gnu_link_length;			/* ././@LongLink hackery link */
+static int gnu_short_trailer;		/* gnu short trailer */
+
+static const char LONG_LINK[] = "././@LongLink";
+
+#ifdef _PAX_
+char DEV_0[] = "/dev/rst0";
+char DEV_1[] = "/dev/rst1";
+char DEV_4[] = "/dev/rst4";
+char DEV_5[] = "/dev/rst5";
+char DEV_7[] = "/dev/rst7";
+char DEV_8[] = "/dev/rst8";
+#endif
 
 static int
 check_sum(char *hd, size_t hdlen, char *bl, size_t bllen, int quiet)
@@ -122,7 +136,7 @@ check_sum(char *hd, size_t hdlen, char *bl, size_t bllen, int quiet)
 int
 tar_endwr(void)
 {
-	return(wr_skip((off_t)(NULLCNT*BLKMULT)));
+	return(wr_skip((off_t)(NULLCNT * BLKMULT)));
 }
 
 /*
@@ -135,7 +149,7 @@ tar_endwr(void)
 off_t
 tar_endrd(void)
 {
-	return((off_t)BLKMULT);
+	return((off_t)((gnu_short_trailer ? 1 : NULLCNT) * BLKMULT));
 }
 
 /*
@@ -154,6 +168,7 @@ tar_trail(char *buf, int in_resync, int *cnt)
 {
 	int i;
 
+	gnu_short_trailer = 0;
 	/*
 	 * look for all zero, trailer is two consecutive blocks of zero
 	 */
@@ -182,8 +197,10 @@ tar_trail(char *buf, int in_resync, int *cnt)
 		 * old GNU tar (up through 1.13) only writes one block of
 		 * trailers, so we pretend we got another
 		 */
-		if (is_gnutar)
+		if (is_gnutar) {
+			gnu_short_trailer = 1;
 			++*cnt;
+		}
 		if (*cnt >= NULLCNT)
 			return(0);
 	}
@@ -356,6 +373,7 @@ tar_id(char *blk, int size)
 {
 	HD_TAR *hd;
 	HD_USTAR *uhd;
+	static int is_ustar = -1;
 
 	if (size < BLKMULT)
 		return(-1);
@@ -371,8 +389,16 @@ tar_id(char *blk, int size)
 	 */
 	if (hd->name[0] == '\0')
 		return(-1);
-	if (strncmp(uhd->magic, TMAGIC, TMAGLEN - 1) == 0)
-		return(-1);
+	if (strncmp(uhd->magic, TMAGIC, TMAGLEN - 1) == 0) {
+		if (is_ustar == -1) {
+			is_ustar = 1;
+			return(-1);
+		} else
+			tty_warn(0,
+			    "Busted tar archive: has both ustar and old tar "
+			    "records");
+	} else
+		is_ustar = 0; 
 	return check_sum(hd->chksum, sizeof(hd->chksum), blk, BLKMULT, 1);
 }
 
@@ -444,9 +470,11 @@ tar_rd(ARCHD *arcn, char *buf)
 	hd = (HD_TAR *)buf;
 	if (hd->linkflag != LONGLINKTYPE && hd->linkflag != LONGNAMETYPE) {
 		arcn->nlen = expandname(arcn->name, sizeof(arcn->name),
-		    &gnu_name_string, hd->name, sizeof(hd->name));
+		    &gnu_name_string, &gnu_name_length, hd->name,
+		    sizeof(hd->name));
 		arcn->ln_nlen = expandname(arcn->ln_name, sizeof(arcn->ln_name),
-		    &gnu_link_string, hd->linkname, sizeof(hd->linkname));
+		    &gnu_link_string, &gnu_link_length, hd->linkname,
+		    sizeof(hd->linkname));
 	}
 	arcn->sb.st_mode = (mode_t)(asc_ul(hd->mode,sizeof(hd->mode),OCT) &
 	    0xfff);
@@ -487,8 +515,6 @@ tar_rd(ARCHD *arcn, char *buf)
 		arcn->sb.st_mode |= S_IFREG;
 		break;
 	case LONGLINKTYPE:
-		arcn->type = PAX_GLL;
-		/* FALLTHROUGH */
 	case LONGNAMETYPE:
 		/*
 		 * GNU long link/file; we tag these here and let the
@@ -496,6 +522,8 @@ tar_rd(ARCHD *arcn, char *buf)
 		 */
 		if (hd->linkflag != LONGLINKTYPE)
 			arcn->type = PAX_GLF;
+		else
+			arcn->type = PAX_GLL;
 		arcn->pad = TAR_PAD(arcn->sb.st_size);
 		arcn->skip = arcn->sb.st_size;
 		break;
@@ -811,9 +839,11 @@ ustar_rd(ARCHD *arcn, char *buf)
 
 	if (hd->typeflag != LONGLINKTYPE && hd->typeflag != LONGNAMETYPE) {
 		arcn->nlen = expandname(dest, sizeof(arcn->name) - cnt,
-		    &gnu_name_string, hd->name, sizeof(hd->name));
-		arcn->ln_nlen = expandname(arcn->ln_name, sizeof(arcn->ln_name),
-		    &gnu_link_string, hd->linkname, sizeof(hd->linkname));
+		    &gnu_name_string, &gnu_name_length, hd->name,
+		    sizeof(hd->name)) + cnt;
+		arcn->ln_nlen = expandname(arcn->ln_name,
+		    sizeof(arcn->ln_name), &gnu_link_string, &gnu_link_length,
+		    hd->linkname, sizeof(hd->linkname));
 	}
 
 	/*
@@ -898,9 +928,6 @@ ustar_rd(ARCHD *arcn, char *buf)
 		}
 		break;
 	case LONGLINKTYPE:
-		if (is_gnutar)
-			arcn->type = PAX_GLL;
-		/* FALLTHROUGH */
 	case LONGNAMETYPE:
 		if (is_gnutar) {
 			/*
@@ -909,6 +936,8 @@ ustar_rd(ARCHD *arcn, char *buf)
 			 */
 			if (hd->typeflag != LONGLINKTYPE)
 				arcn->type = PAX_GLF;
+			else
+				arcn->type = PAX_GLL;
 			arcn->pad = TAR_PAD(arcn->sb.st_size);
 			arcn->skip = arcn->sb.st_size;
 		} else {
@@ -934,13 +963,14 @@ ustar_rd(ARCHD *arcn, char *buf)
 }
 
 static int
-expandname(char *buf, size_t len, char **gnu_name, const char *name,
-    size_t nlen)
+expandname(char *buf, size_t len, char **gnu_name, size_t *gnu_length,
+    const char *name, size_t nlen)
 {
 	if (*gnu_name) {
 		len = strlcpy(buf, *gnu_name, len);
 		free(*gnu_name);
 		*gnu_name = NULL;
+		*gnu_length = 0;
 	} else {
 		if (len > ++nlen)
 			len = nlen;
@@ -950,29 +980,28 @@ expandname(char *buf, size_t len, char **gnu_name, const char *name,
 }
 
 static void
-longlink(ARCHD *arcn)
+longlink(ARCHD *arcn, int type)
 {
 	ARCHD larc;
 
-	memset(&larc, 0, sizeof(larc));
+	(void)memset(&larc, 0, sizeof(larc));
 
-	switch (arcn->type) {
-	case PAX_SLK:
-	case PAX_HRG:
-	case PAX_HLK:
-		larc.type = PAX_GLL;
-		larc.ln_nlen = strlcpy(larc.ln_name, "././@LongLink",
-		    sizeof(larc.ln_name));
+	larc.type = type;
+	larc.nlen = strlcpy(larc.name, LONG_LINK, sizeof(larc.name));
+
+	switch (type) {
+	case PAX_GLL:
 		gnu_hack_string = arcn->ln_name;
 		gnu_hack_len = arcn->ln_nlen + 1;
 		break;
-	default:
-		larc.nlen = strlcpy(larc.name, "././@LongLink",
-		    sizeof(larc.name));
+	case PAX_GLF:
 		gnu_hack_string = arcn->name;
 		gnu_hack_len = arcn->nlen + 1;
-		larc.type = PAX_GLF;
+		break;
+	default:
+		errx(1, "Invalid type in GNU longlink %d\n", type);
 	}
+
 	/*
 	 * We need a longlink now.
 	 */
@@ -991,6 +1020,17 @@ longlink(ARCHD *arcn)
  *	data to write after the header, -1 if archive write failed
  */
 
+static int
+size_err(const char *what, ARCHD *arcn)
+{
+	/*
+	 * header field is out of range
+	 */
+	tty_warn(1, "Ustar %s header field is too small for %s",
+		what, arcn->org_name);
+	return 1;
+}
+
 int
 ustar_wr(ARCHD *arcn)
 {
@@ -999,29 +1039,34 @@ ustar_wr(ARCHD *arcn)
 	char hdblk[sizeof(HD_USTAR)];
 	const char *user, *group;
 
-	/*
-	 * check for those file system types ustar cannot store
-	 */
-	if (arcn->type == PAX_SCK) {
+	switch (arcn->type) {
+	case PAX_SCK:
+		/*
+		 * check for those file system types ustar cannot store
+		 */
 		if (!is_gnutar)
 			tty_warn(1, "Ustar cannot archive a socket %s",
 			    arcn->org_name);
 		return(1);
-	}
 
-	/*
-	 * check the length of the linkname
-	 */
-	if (((arcn->type == PAX_SLK) || (arcn->type == PAX_HLK) ||
-	    (arcn->type == PAX_HRG)) &&
-	    (arcn->ln_nlen >= sizeof(hd->linkname))){
-		if (is_gnutar) {
-			longlink(arcn);
-		} else {
-			tty_warn(1, "Link name too long for ustar %s",
-			    arcn->ln_name);
-			return(1);
+	case PAX_SLK:
+	case PAX_HLK:
+	case PAX_HRG:
+		/*
+		 * check the length of the linkname
+		 */
+		if (arcn->ln_nlen >= sizeof(hd->linkname)) {
+			if (is_gnutar) {
+				longlink(arcn, PAX_GLL);
+			} else {
+				tty_warn(1, "Link name too long for ustar %s",
+				    arcn->ln_name);
+				return(1);
+			}
 		}
+		break;
+	default:
+		break;
 	}
 
 	/*
@@ -1030,7 +1075,7 @@ ustar_wr(ARCHD *arcn)
 	 */
 	if ((pt = name_split(arcn->name, arcn->nlen)) == NULL) {
 		if (is_gnutar) {
-			longlink(arcn);
+			longlink(arcn, PAX_GLF);
 			pt = arcn->name;
 		} else {
 			tty_warn(1, "File name too long for ustar %s",
@@ -1072,7 +1117,7 @@ ustar_wr(ARCHD *arcn)
 	case PAX_DIR:
 		hd->typeflag = DIRTYPE;
 		if (ul_oct((u_long)0L, hd->size, sizeof(hd->size), 3))
-			goto out;
+			return size_err("DIRTYPE", arcn);
 		break;
 	case PAX_CHR:
 	case PAX_BLK:
@@ -1085,12 +1130,12 @@ ustar_wr(ARCHD *arcn)
 		   ul_oct((u_long)MINOR(arcn->sb.st_rdev), hd->devminor,
 		   sizeof(hd->devminor), 3) ||
 		   ul_oct((u_long)0L, hd->size, sizeof(hd->size), 3))
-			goto out;
+			return size_err("DEVTYPE", arcn);
 		break;
 	case PAX_FIF:
 		hd->typeflag = FIFOTYPE;
 		if (ul_oct((u_long)0L, hd->size, sizeof(hd->size), 3))
-			goto out;
+			return size_err("FIFOTYPE", arcn);
 		break;
 	case PAX_GLL:
 	case PAX_SLK:
@@ -1105,7 +1150,7 @@ ustar_wr(ARCHD *arcn)
 		strlcpy(hd->linkname, arcn->ln_name, sizeof(hd->linkname));
 		if (ul_oct((u_long)gnu_hack_len, hd->size,
 		    sizeof(hd->size), 3))
-			goto out;
+			return size_err("LINKTYPE", arcn);
 		break;
 	case PAX_GLF:
 	case PAX_REG:
@@ -1149,11 +1194,14 @@ ustar_wr(ARCHD *arcn)
 	 * set the remaining fields. Some versions want all 16 bits of mode
 	 * we better humor them (they really do not meet spec though)....
 	 */
-	if (ul_oct((u_long)arcn->sb.st_mode, hd->mode, sizeof(hd->mode), 3) ||
-	    ul_oct((u_long)arcn->sb.st_uid, hd->uid, sizeof(hd->uid), 3)  ||
-	    ul_oct((u_long)arcn->sb.st_gid, hd->gid, sizeof(hd->gid), 3) ||
-	    ul_oct((u_long)arcn->sb.st_mtime,hd->mtime,sizeof(hd->mtime),3))
-		goto out;
+	if (ul_oct((u_long)arcn->sb.st_mode, hd->mode, sizeof(hd->mode), 3))
+		return size_err("MODE", arcn);
+	if (ul_oct((u_long)arcn->sb.st_uid, hd->uid, sizeof(hd->uid), 3))
+		return size_err("UID", arcn);
+	if (ul_oct((u_long)arcn->sb.st_gid, hd->gid, sizeof(hd->gid), 3))
+		return size_err("GID", arcn);
+	if (ul_oct((u_long)arcn->sb.st_mtime,hd->mtime,sizeof(hd->mtime),3))
+		return size_err("MTIME", arcn);
 	user = user_from_uid(arcn->sb.st_uid, 1);
 	group = group_from_gid(arcn->sb.st_gid, 1);
 	strncpy(hd->uname, user ? user : "", sizeof(hd->uname));
@@ -1166,7 +1214,7 @@ ustar_wr(ARCHD *arcn)
 	 */
 	if (ul_oct(tar_chksm(hdblk, sizeof(HD_USTAR)), hd->chksum,
 	   sizeof(hd->chksum), 3))
-		goto out;
+		return size_err("CHKSUM", arcn);
 	if (wr_rdbuf(hdblk, sizeof(HD_USTAR)) < 0)
 		return(-1);
 	if (wr_skip((off_t)(BLKMULT - sizeof(HD_USTAR))) < 0)
@@ -1183,13 +1231,6 @@ ustar_wr(ARCHD *arcn)
 	}
 	if ((arcn->type == PAX_CTG) || (arcn->type == PAX_REG))
 		return(0);
-	return(1);
-
-    out:
-	/*
-	 * header field is out of range
-	 */
-	tty_warn(1, "Ustar header field is too small for %s", arcn->org_name);
 	return(1);
 }
 
@@ -1216,7 +1257,15 @@ name_split(char *name, int len)
 	 */
 	if (len < TNMSZ)
 		return(name);
-	if (len > (TPFSZ + TNMSZ))
+	/*
+	 * GNU tar does not honor the prefix+name mode if the magic
+	 * is not "ustar\0". So in GNU tar compatibility mode, we don't
+	 * split the filename into prefix+name because we are setting
+	 * the magic to "ustar " as GNU tar does. This of course will
+	 * end up creating a LongLink record in cases where it does not
+	 * really need do, but we are behaving like GNU tar after all.
+	 */
+	if (is_gnutar || len > (TPFSZ + TNMSZ))
 		return(NULL);
 
 	/*
@@ -1253,16 +1302,27 @@ name_split(char *name, int len)
 	return(start);
 }
 
-/* convert a glob into a RE, and add it to the list */
+/*
+ * convert a glob into a RE, and add it to the list.  we convert to
+ * four different RE's (because we're using BRE's and can't use |
+ * alternation :-() with this padding:
+ *	.*\/ and $
+ *	.*\/ and \/.*
+ *	^ and $
+ *	^ and \/.*
+ */
 static int
 tar_gnutar_exclude_one(const char *line, size_t len)
 {
-	char sbuf[MAXPATHLEN * 2 + 1 + 5];
-	int i, j;
+	/* 2 * buffer len + nul */
+	char sbuf[MAXPATHLEN * 2 + 1];
+	/* + / + // + .*""/\/ + \/.* */
+	char rabuf[MAXPATHLEN * 2 + 1 + 1 + 2 + 4 + 4];
+	int i, j = 0;
 
 	if (line[len - 1] == '\n')
 		len--;
-	for (i = 0, j = 2; i < len; i++) {
+	for (i = 0; i < len; i++) {
 		/*
 		 * convert glob to regexp, escaping everything
 		 */
@@ -1271,15 +1331,27 @@ tar_gnutar_exclude_one(const char *line, size_t len)
 		else if (line[i] == '?') {
 			sbuf[j++] = '.';
 			continue;
-		} else if (!isalnum(line[i]) && !isblank(line[i]))
+		} else if (!isalnum((unsigned char)line[i]) &&
+		    !isblank((unsigned char)line[i]))
 			sbuf[j++] = '\\';
 		sbuf[j++] = line[i];
 	}
-	sbuf[0] = sbuf[j + 1] = sbuf[j + 2] = '/';
-	sbuf[1] = '^';
-	sbuf[j] = '$';
-	sbuf[j + 3] = '\0';
-	if (rep_add(sbuf) < 0)
+	sbuf[j] = '\0';
+	/* don't need the .*\/ ones if we start with /, i guess */
+	if (line[0] != '/') {
+		(void)snprintf(rabuf, sizeof rabuf, "/.*\\/%s$//", sbuf);
+		if (rep_add(rabuf) < 0)
+			return (-1);
+		(void)snprintf(rabuf, sizeof rabuf, "/.*\\/%s\\/.*//", sbuf);
+		if (rep_add(rabuf) < 0)
+			return (-1);
+	}
+
+	(void)snprintf(rabuf, sizeof rabuf, "/^%s$//", sbuf);
+	if (rep_add(rabuf) < 0)
+		return (-1);
+	(void)snprintf(rabuf, sizeof rabuf, "/^%s\\/.*//", sbuf);
+	if (rep_add(rabuf) < 0)
 		return (-1);
 
 	return (0);

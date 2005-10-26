@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_driver.h,v 1.11 2004/03/13 02:04:02 oster Exp $	*/
+/*	$NetBSD: rf_driver.h,v 1.11.2.1.2.1 2005/04/06 12:13:43 tron Exp $	*/
 /*
  * rf_driver.h
  */
@@ -37,6 +37,10 @@
 #include "rf_threadstuff.h"
 #include "rf_netbsd.h"
 
+#ifndef RF_RETRY_THRESHOLD
+#define RF_RETRY_THRESHOLD 5
+#endif
+
 RF_DECLARE_EXTERN_MUTEX(rf_printf_mutex)
 int rf_BootRaidframe(void);
 int rf_UnbootRaidframe(void);
@@ -46,7 +50,7 @@ RF_RaidAccessDesc_t *rf_AllocRaidAccDesc(RF_Raid_t *, RF_IoType_t,
 					 RF_RaidAddr_t, RF_SectorCount_t, 
 					 caddr_t, void *, 
 					 RF_RaidAccessFlags_t, 
-					 RF_AccessState_t *);
+					 const RF_AccessState_t *);
 void rf_FreeRaidAccDesc(RF_RaidAccessDesc_t *);
 int rf_DoAccess(RF_Raid_t *, RF_IoType_t, int, RF_RaidAddr_t, 
 		RF_SectorCount_t, caddr_t, void *, RF_RaidAccessFlags_t);

@@ -1,4 +1,4 @@
-#	$NetBSD: list,v 1.19 2003/12/27 20:57:21 jmc Exp $
+#	$NetBSD: list,v 1.19.2.2 2004/04/30 03:48:28 jmc Exp $
 #
 
 SRCDIRS	usr.bin/less
@@ -43,6 +43,7 @@ PROG	sbin/mount_ntfs
 PROG	sbin/newfs	sbin/mount_mfs
 PROG	sbin/ping
 PROG	sbin/ping6
+PROG	sbin/raidctl
 PROG	sbin/reboot	sbin/halt
 PROG	sbin/restore	sbin/rrestore
 PROG	sbin/route
@@ -80,7 +81,3 @@ COPY	${NETBSDSRCDIR}/usr.sbin/dhcp/clientscript/dhclient-script sbin/dhclient-sc
 
 # the disktab explanation file
 COPY	${CURDIR}/disktab.preinstall		etc/disktab.preinstall
-
-# Foreign texts for sysinst
-COPY	${OBJDIR}/sysinst/sysinstmsgs.fr	sysinstmsgs.fr
-COPY	${OBJDIR}/sysinst/sysinstmsgs.pl	sysinstmsgs.pl

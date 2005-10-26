@@ -1,4 +1,4 @@
-/* 	$NetBSD: binary.c,v 1.1.1.2 2004/01/02 15:00:27 cjep Exp $	*/
+/* 	$NetBSD: binary.c,v 1.1.1.2.4.2 2005/07/16 15:30:38 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999 James Howard and Dag-Erling Coïdan Smørgrav
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: binary.c,v 1.1.1.2 2004/01/02 15:00:27 cjep Exp $");
+__RCSID("$NetBSD: binary.c,v 1.1.1.2.4.2 2005/07/16 15:30:38 riz Exp $");
 #endif /* not lint */
 
 #include <ctype.h>
@@ -87,7 +87,7 @@ mmbin_file(mmf_t *f)
 {
 	int i;
 	/* XXX knows too much about mmf internals */
-	for (i = 0; i < BUFFER_SIZE && i < f->len - 1; i++)
+	for (i = 0; i < BUFFER_SIZE && i < f->len; i++)
 		if (!isprint(f->base[i]) && !isspace(f->base[i]) &&
 		    f->base[i] != line_endchar) 
 			return 1;

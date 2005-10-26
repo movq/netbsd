@@ -1,4 +1,4 @@
-/*	$NetBSD: atapi_wdc.c,v 1.69 2004/02/03 20:55:02 bouyer Exp $	*/
+/*	$NetBSD: atapi_wdc.c,v 1.69.2.2.2.1 2005/07/18 03:57:34 riz Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atapi_wdc.c,v 1.69 2004/02/03 20:55:02 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atapi_wdc.c,v 1.69.2.2.2.1 2005/07/18 03:57:34 riz Exp $");
 
 #ifndef WDCDEBUG
 #define WDCDEBUG
@@ -88,7 +88,8 @@ static void	wdc_atapi_probe_device(struct atapibus_softc *, int);
 static void	wdc_atapi_minphys (struct buf *bp);
 static void	wdc_atapi_start(struct wdc_channel *,struct ata_xfer *);
 static int	wdc_atapi_intr(struct wdc_channel *, struct ata_xfer *, int);
-static void	wdc_atapi_kill_xfer(struct wdc_channel *, struct ata_xfer *);
+static void	wdc_atapi_kill_xfer(struct wdc_channel *,
+				    struct ata_xfer *, int);
 static void	wdc_atapi_phase_complete(struct ata_xfer *);
 static void	wdc_atapi_done(struct wdc_channel *, struct ata_xfer *);
 static void	wdc_atapi_reset(struct wdc_channel *, struct ata_xfer *);
@@ -168,15 +169,27 @@ wdc_atapi_kill_pending(struct scsipi_periph *periph)
 }
 
 static void
-wdc_atapi_kill_xfer(struct wdc_channel *chp, struct ata_xfer *xfer)
+wdc_atapi_kill_xfer(struct wdc_channel *chp, struct ata_xfer *xfer, int reason)
 {
 	struct scsipi_xfer *sc_xfer = xfer->c_cmd;
 
 	callout_stop(&chp->ch_callout);
 	/* remove this command from xfer queue */
 	wdc_free_xfer(chp, xfer);
-	sc_xfer->error = XS_DRIVER_STUFFUP;
-	scsipi_done(sc_xfer);
+	switch (reason) {
+	case KILL_GONE:
+		sc_xfer->error = XS_DRIVER_STUFFUP;
+		scsipi_done(sc_xfer);
+		break;
+	case KILL_RESET:
+		sc_xfer->error = XS_RESET;
+		wdc_atapi_reset(chp, xfer);
+		break;
+	default:
+		printf("wdc_ata_bio_kill_xfer: unknown reason %d\n",
+		    reason);
+		panic("wdc_ata_bio_kill_xfer");
+	}
 }
 
 static int
@@ -475,6 +488,7 @@ ready:
 		drvp->state = READY;
 		bus_space_write_1(chp->ctl_iot, chp->ctl_ioh, wd_aux_ctlr,
 		    WDCTL_4BIT);
+		delay(10); /* some drives need a little delay here */
 	}
 	/* start timeout machinery */
 	if ((sc_xfer->xs_control & XS_CTL_POLL) == 0)
@@ -543,6 +557,7 @@ timeout:
 	    errstring);
 	sc_xfer->error = XS_TIMEOUT;
 	bus_space_write_1(chp->ctl_iot, chp->ctl_ioh, wd_aux_ctlr, WDCTL_4BIT);
+	delay(10); /* some drives need a little delay here */
 	wdc_atapi_reset(chp, xfer);
 	return;
 error:
@@ -553,6 +568,7 @@ error:
 	sc_xfer->error = XS_SHORTSENSE;
 	sc_xfer->sense.atapi_sense = chp->ch_error;
 	bus_space_write_1(chp->ctl_iot, chp->ctl_ioh, wd_aux_ctlr, WDCTL_4BIT);
+	delay(10); /* some drives need a little delay here */
 	wdc_atapi_reset(chp, xfer);
 	return;
 }
@@ -564,7 +580,7 @@ wdc_atapi_intr(struct wdc_channel *chp, struct ata_xfer *xfer, int irq)
 	struct scsipi_xfer *sc_xfer = xfer->c_cmd;
 	struct ata_drive_datas *drvp = &chp->ch_drive[xfer->c_drive];
 	int len, phase, i, retries=0;
-	int ire;
+	int ire, error;
 	int dma_flags = 0;
 	void *cmd;
 
@@ -645,11 +661,22 @@ again:
 		WDCDEBUG_PRINT(("PHASE_CMDOUT\n"), DEBUG_INTR);
 		/* Init the DMA channel if necessary */
 		if (xfer->c_flags & C_DMA) {
-			if ((*wdc->dma_init)(wdc->dma_arg,
+			error = (*wdc->dma_init)(wdc->dma_arg,
 			    chp->ch_channel, xfer->c_drive,
-			    xfer->c_databuf, xfer->c_bcount, dma_flags) != 0) {
-				sc_xfer->error = XS_DRIVER_STUFFUP;
-				break;
+			    xfer->c_databuf, xfer->c_bcount, dma_flags);
+			if (error) {
+				if (error == EINVAL) {
+					/*
+					 * We can't do DMA on this transfer
+					 * for some reason.  Fall back to
+					 * PIO.
+					 */
+					xfer->c_flags &= ~C_DMA;
+					error = 0;
+				} else {
+					sc_xfer->error = XS_DRIVER_STUFFUP;
+					break;
+				}
 			}
 		}
 		/* send packet command */

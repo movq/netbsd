@@ -1,4 +1,4 @@
-/*	$NetBSD: install.c,v 1.38 2003/09/27 10:47:17 dsl Exp $	*/
+/*	$NetBSD: install.c,v 1.38.2.2.2.1 2005/07/24 02:25:24 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -59,7 +59,9 @@ do_install(void)
 
 	if (find_disks(msg_string(MSG_install)) < 0)
 		return;
-
+	clear();
+	refresh();
+	
 	if (check_swap(diskdev, 0) > 0) {
 		msg_display(MSG_swapactive);
 		process_menu(MENU_ok, NULL);
@@ -114,17 +116,9 @@ do_install(void)
 	if (md_post_newfs() != 0)
 		return;
 
-	/* Done to here. */
-	msg_display(MSG_disksetupdone);
-
-	getchar();
-	wrefresh(curscr);
-	wmove(stdscr,0, 0);
-	wclear(stdscr);
-	wrefresh(stdscr);
-
 	/* Unpack the distribution. */
-	if (get_and_unpack_sets(MSG_extractcomplete, MSG_abortinst) != 0)
+	if (get_and_unpack_sets(0, MSG_disksetupdone,
+	    MSG_extractcomplete, MSG_abortinst) != 0)
 		return;
 
 	set_timezone();

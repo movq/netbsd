@@ -1,9 +1,20 @@
-#	$NetBSD: Makefile.inc,v 1.34 2004/02/29 18:46:43 jschauma Exp $
+#	$NetBSD: Makefile.inc,v 1.34.2.2.2.1 2005/07/24 02:25:24 snj Exp $
 #
 # Makefile for sysinst
 
 PROG=		sysinst
 NOMAN=		# defined
+
+WARNS=		3
+
+SRCS+=	menu_defs.c msg_defs.c main.c install.c upgrade.c \
+	txtwalk.c run.c factor.c net.c disks.c disks_lfs.c util.c geom.c \
+	label.c target.c md.c sizemultname.c
+
+SRCS+=	${MD_OPTIONS:MAOUT2ELF:S/AOUT2ELF/aout2elf.c/}
+SRCS+=	${MENUS_MD:Mmenus.mbr:S/menus.mbr/mbr.c/}
+SRCS+=	${CPPFLAGS:M-DWSKBD:S/-DWSKBD/wskbd.c/}
+SRCS+=	${NODISKLABEL:D:Ubsddisklabel.c savenewlabel.c}
 
 SYSINSTLANG?=	en
 LANGUAGES?=	de en fr pl
@@ -19,7 +30,6 @@ _MKSHTARGET_CREATE?=	${_MKSHMSG_CREATE} ${.CURDIR:T}/${.TARGET}
 
 DPADD=		${LIBCURSES} ${LIBTERMCAP} ${LIBUTIL}
 LDADD=		-lcurses -ltermcap -lutil
-LDSTATIC?=	-static
 
 UNIF_AWK=	${.CURDIR}/../../unif.awk
 MSG_XLAT_SH=	${.CURDIR}/../../msg_xlat.sh
@@ -27,7 +37,7 @@ MSG_XLAT_SH=	${.CURDIR}/../../msg_xlat.sh
 CPPFLAGS+=	-I. -I${.CURDIR}/../.. -I${.CURDIR} \
 		-DREL=\"${DISTRIBVER}\" -DMACH=\"${MACHINE}\"
 
-.if defined(SMALLPROG_INET6)
+.if defined(SMALLPROG_INET6) && (${USE_INET6} != "no")
 CPPFLAGS+=-DINET6
 .endif
 
@@ -53,8 +63,6 @@ CPPFLAGS+=	-DSYSINST_FTP_DIR=\"${SYSINST_FTP_DIR}\"
 CPPFLAGS+=	-DSYSINST_CDROM_DIR=\"${SYSINST_CDROM_DIR}\"
 .endif
 
-
-WARNS=		3
 
 DPSRCS+=	msg_defs.h menu_defs.h
 
@@ -94,18 +102,18 @@ msgtouch: ${DISTRIBVERDEP}
 
 msg.def: msg.mi.${SYSINSTLANG} ${MSG_MD} msgtouch
 	${_MKTARGET_CREATE}
-	sed "s/@@VERSION@@/${VER}/" ${.ALLSRC} | \
+	sed "s/@@VERSION@@/${DISTRIBVER}/" ${.ALLSRC} | \
 	awk -f ${UNIF_AWK} -v defines="${MD_OPTIONS}" > ${.TARGET}
 
 menus.def: menus.mi ${MENUS_MD} msgtouch
 	${_MKTARGET_CREATE}
-	sed "s/@@VERSION@@/${VER}/" ${.ALLSRC} | \
+	sed "s/@@VERSION@@/${DISTRIBVER}/" ${.ALLSRC} | \
 	awk -f ${UNIF_AWK} -v defines="${MD_OPTIONS}" > ${.TARGET}
 
 .for LANG in ${LANGUAGES:N${SYSINSTLANG}}
 sysinstmsgs.${LANG}: msg.mi.${LANG} ${MSG_MD:S/.${SYSINSTLANG}$/.${LANG}/} msgtouch msg_defs.h
 	${_MKTARGET_CREATE}
-	sed "s/@@VERSION@@/${VER}/" ${.ALLSRC:M*.${LANG}} | \
+	sed "s/@@VERSION@@/${DISTRIBVER}/" ${.ALLSRC:M*.${LANG}} | \
 	awk -f ${UNIF_AWK} -v defines="${MD_OPTIONS}" | \
 	${HOST_SH} ${MSG_XLAT_SH} > ${.TARGET}
 

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2001/12/12 23:46:45 lukem Exp $
+#	$NetBSD: Makefile,v 1.4.6.2 2005/07/07 14:18:03 snj Exp $
 
 NOLINT=		# defined
 NOPIC=		# defined

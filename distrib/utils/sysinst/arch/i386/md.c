@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.100 2004/03/22 07:11:00 lukem Exp $ */
+/*	$NetBSD: md.c,v 1.100.2.2.2.1 2005/07/24 02:25:25 snj Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -70,6 +70,8 @@ static int md_read_bootcode(const char *, struct mbr_sector *);
 static unsigned int get_bootmodel(void);
 static char *md_bootxx_name(void);
 
+const char *fdtype = "msdos";
+
 
 int
 md_get_info(void)
@@ -83,6 +85,9 @@ md_get_info(void)
 #define	NETBSD_ACTIVE	0x0200
 #define	NETBSD_NAMED	0x0400
 #define	ACTIVE_NAMED	0x0800
+
+	if (no_mbr)
+		return 1;
 
 	if (read_mbr(diskdev, &mbr) < 0)
 		memset(&mbr.mbr, 0, sizeof mbr.mbr - 2);
@@ -104,8 +109,13 @@ edit:
 			root_limit = bcyl * bhead * bsec;
 	}
 
-	/* Ensure the install partition and active partition are bootable */
-	fl = MBR_BS_NEWMBR;
+	/*
+	 * Ensure the install partition (at sector ptstart) and the active
+	 * partition are bootable.
+	 * Determine whether the bootselect code is needed.
+	 * Note that MBR_BS_NEWMBR is always set, so we ignore it!
+	 */
+	fl = 0;
 	names = 0;
 	for (ext = &mbr; ext != NULL; ext = ext->extended) {
 		p = ext->mbr.mbr_parts;
@@ -115,14 +125,19 @@ edit:
 			    if (ext->sector + p->mbrp_start == ptstart)
 				fl |= NETBSD_ACTIVE;
 			}
-			if (ext->nametab[i][0] == 0) {
+			if (ext->mbrb.mbrbs_nametab[i][0] == 0) {
+				/* No bootmenu label... */
 				if (ext->sector == 0)
 					continue;
 				if (ext->sector + p->mbrp_start == ptstart)
-					/* force name & bootsel... */
+					/*
+					 * Have installed into an extended ptn
+					 * force name & bootsel...
+					 */
 					names++;
 				continue;
 			}
+			/* Partition has a bootmenu label... */
 			if (ext->sector != 0)
 				fl |= MBR_BS_EXTLBA;
 			if (ext->sector + p->mbrp_start == ptstart)
@@ -159,6 +174,7 @@ edit:
 			goto edit;
 	}
 
+	/* Sort out the name of the mbr code we need */
 	if (names > 0 || fl & (NETBSD_NAMED | ACTIVE_NAMED)) {
 		/* Need bootselect code */
 		fl |= MBR_BS_ACTIVE;
@@ -166,27 +182,21 @@ edit:
 	} else
 		bootcode = _PATH_MBR;
 
-	/* Look at what is installed */
-	if (mbr.mbr.mbr_bootsel_magic == htole16(MBR_BS_MAGIC))
-		/* Netbsd bootcode, grab its features */
-		ofl = mbr.mbr.mbr_bootsel.mbrbs_flags;
-	else {
-		/* Not netbsd code, might be ok if we are booting the active
-		 * partition.
-		 */
-/* XXXLUKEM: unconditionally set ofl=0 with new bootsel code? */
-		if (mbr.mbr.mbr_magic == htole16(MBR_MAGIC) &&
-		    mbr.mbr.mbr_jmpboot[0] != 0 &&
-		    (fl & (MBR_BS_ACTIVE | MBR_BS_EXTLBA)) == 0 &&
-		    !mbr_root_above_chs())
-			ofl = MBR_BS_NEWMBR;
-		else
-			ofl = 0;
-	}
+	fl &=  MBR_BS_ACTIVE | MBR_BS_EXTLBA;
 
-	fl &=  MBR_BS_NEWMBR | MBR_BS_ACTIVE | MBR_BS_EXTLBA;
-	ofl &= MBR_BS_NEWMBR | MBR_BS_ACTIVE | MBR_BS_EXTLBA;
-	if (fl & ~ofl) {
+	/* Look at what is installed */
+	ofl = mbr.mbrb.mbrbs_flags;
+	if (ofl == 0) {
+		/* Check there is some bootcode at all... */
+		if (mbr.mbr.mbr_magic != htole16(MBR_MAGIC) ||
+		    mbr.mbr.mbr_jmpboot[0] == 0 ||
+		    mbr_root_above_chs())
+			/* Existing won't do, force update */
+			fl |= MBR_BS_NEWMBR;
+	}
+	ofl = mbr.oflags & (MBR_BS_ACTIVE | MBR_BS_EXTLBA);
+
+	if (fl & ~ofl || (fl == 0 && ofl & MBR_BS_ACTIVE)) {
 		/* Existing boot code isn't the right one... */
 		if (fl & MBR_BS_ACTIVE)
 			msg_display(MSG_installbootsel);
@@ -197,8 +207,17 @@ edit:
 		msg_display(MSG_updatembr);
 
 	process_menu(MENU_yesno, NULL);
-	if (yesno)
-		md_read_bootcode(bootcode, &mbr.mbr);
+	if (!yesno)
+		/* User doesn't want to update mbr code */
+		return 1;
+
+	if (md_read_bootcode(bootcode, &mbr.mbr) == 0)
+		/* update suceeded - to memory copy */
+		return 1;
+
+	/* This shouldn't happen since the files are in the floppy fs... */
+	msg_display("Can't find %s", bootcode);
+	process_menu(MENU_yesno, NULL);
 
 	return 1;
 }
@@ -249,6 +268,9 @@ md_read_bootcode(const char *path, struct mbr_sector *mbrs)
 int
 md_pre_disklabel(void)
 {
+	if (no_mbr)
+		return 0;
+
 	msg_display(MSG_dofdisk);
 
 	/* write edited MBR onto disk. */
@@ -263,7 +285,7 @@ md_pre_disklabel(void)
 int
 md_post_disklabel(void)
 {
-	if (rammb <= 32)
+	if (get_ramsize() <= 32)
 		set_swap(diskdev, bsdlabel);
 
 	return 0;
@@ -278,7 +300,7 @@ md_post_newfs(void)
 	char bootxx[8192 + 4];
 	char *bootxx_filename;
 	static struct x86_boot_params boottype =
-		{sizeof boottype, 0, 10, 0, 9600, ""};
+		{sizeof boottype, 0, 10, 0, 9600, { '\0' }};
 	static int conmib[] = {CTL_MACHDEP, CPU_CONSDEV};
 	struct termios t;
 	dev_t condev;
@@ -316,8 +338,11 @@ md_post_newfs(void)
 	snprintf(bootxx, sizeof bootxx, "/dev/r%s%c", diskdev, 'a' + rootpart);
 	td = open(bootxx, O_RDWR, 0);
 	bootxx_filename = md_bootxx_name();
-	sd = open(bootxx_filename, O_RDONLY);
-	free(bootxx_filename);
+	if (bootxx_filename != NULL) {
+		sd = open(bootxx_filename, O_RDONLY);
+		free(bootxx_filename);
+	} else
+		sd = -1;
 	if (td == -1 || sd == -1)
 		goto bad_bootxx;
 	len = read(sd, bootxx, sizeof bootxx);
@@ -361,7 +386,7 @@ md_make_bsd_partitions(void)
 int
 md_pre_update(void)
 {
-	if (rammb <= 8)
+	if (get_ramsize() <= 8)
 		set_swap(diskdev, NULL);
 	return 1;
 }
@@ -407,6 +432,9 @@ md_upgrade_mbrtype(void)
 {
 	struct mbr_partition *mbrp;
 	int i, netbsdpart = -1, oldbsdpart = -1, oldbsdcount = 0;
+
+	if (no_mbr)
+		return;
 
 	if (read_mbr(diskdev, &mbr) < 0)
 		return;
@@ -533,28 +561,8 @@ nogeom:
 		bhead = biosdisk->bi_head;
 		bsec = biosdisk->bi_sec;
 	}
-	if (biosdisk != NULL && (biosdisk->bi_flags & BIFLAG_EXTINT13))
-		bsize = dlsize;
-	else
-		bsize = bcyl * bhead * bsec;
-	bcylsize = bhead * bsec;
 	return 0;
 }
-
-#if 0
-static int
-count_mbr_parts(pt)
-	struct mbr_partition *pt;
-{
-	int i, count = 0;
-
-	for (i = 0; i < MBR_PART_COUNT; i++)
-		if (pt[i].mbrp_type != 0)
-			count++;
-
-	return count;
-}
-#endif
 
 static int
 mbr_root_above_chs(void)
@@ -597,13 +605,6 @@ md_init(void)
 	sets_selected = (sets_selected & ~SET_KERNEL) | get_bootmodel();
 }
 
-void
-md_set_sizemultname(void)
-{
-
-	set_sizemultname_meg();
-}
-
 static char *
 md_bootxx_name(void)
 {
@@ -618,6 +619,8 @@ md_bootxx_name(void)
 			bootfs = "ffsv2";
 		else
 			bootfs = "ffsv1";
+	else if (fstype == FS_BSDLFS)
+			bootfs = "lfsv2";
 	else
 		bootfs = mountnames[fstype];
 

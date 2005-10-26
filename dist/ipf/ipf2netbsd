@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: ipf2netbsd,v 1.14 2004/03/28 08:45:02 martti Exp $
+#	$NetBSD: ipf2netbsd,v 1.14.2.1.2.1 2005/02/06 07:44:53 jmc Exp $
 #
 # Copyright (c) 1999 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -34,7 +34,8 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #
 # ipf2netbsd:  convert a ipf source tree into a netbsd ipf source tree,
-# under src/dist/ipf, src/sys/netinet and src/sys/lkm/netinet/if_ipl
+# under src/dist/ipf, src/sys/dist/ipf/netinet, src/sys/lkm/netinet/if_ipl
+# and src/regress/sys/kern/ipf
 
 if [ $# -ne 2 ]; then echo "ipf2netbsd src dest"; exit 1; fi
 
@@ -50,7 +51,7 @@ case "$dest" in
 esac
 
 dbase=$dest/src/dist/ipf
-dsys=$dest/src/sys/netinet
+dsys=$dest/src/sys/dist/ipf/netinet
 dlkm=$dest/src/sys/lkm/netinet/if_ipl
 dregress=$dest/src/regress/sys/kern/ipf
 
@@ -90,7 +91,7 @@ mv /tmp/ipf2n$$ $c && echo added RCS tag to $c
 	)
 done
 
-find $dest -type f -name '*.[0-9]' -a \! -name 'example.*' -print | while read m; do
+find $dest -type f -name '*.[0-9]' -a \! -name 'example.*' -a \! -name 'ipv6.*' -print | while read m; do
 	sed 1q < $m | grep -q '\$NetBSD' || (
 echo ".\\\"	\$NetBSD\$" >/tmp/ipf2m$$
 echo ".\\\"" >>/tmp/ipf2m$$

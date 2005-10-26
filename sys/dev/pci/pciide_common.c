@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide_common.c,v 1.8 2004/01/03 22:56:53 thorpej Exp $	*/
+/*	$NetBSD: pciide_common.c,v 1.8.2.3.2.1 2005/03/16 13:04:31 tron Exp $	*/
 
 
 /*
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pciide_common.c,v 1.8 2004/01/03 22:56:53 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pciide_common.c,v 1.8.2.3.2.1 2005/03/16 13:04:31 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -238,7 +238,6 @@ pciide_mapregs_compat(pa, cp, compatchan, cmdsizep, ctlsizep)
 	}
 	wdc_cp->data32iot = wdc_cp->cmd_iot;
 	wdc_cp->data32ioh = wdc_cp->cmd_iohs[0];
-	pciide_map_compat_intr(pa, cp, compatchan);
 	return;
 
 bad:
@@ -412,6 +411,9 @@ pciide_mapreg_dma(sc, pa)
 		    ", but unsupported register maptype (0x%x)", maptype);
 	}
 
+	if (sc->sc_dma_ok == 0)
+		return;
+
 	/*
 	 * Set up the default handles for the DMA registers.
 	 * Just reserve 32 bits for each handle, unless space
@@ -577,14 +579,13 @@ pciide_dma_table_setup(sc, channel, drive)
 }
 
 int
-pciide_dma_init(v, channel, drive, databuf, datalen, flags)
-	void *v;
+pciide_dma_dmamap_setup(sc, channel, drive, databuf, datalen, flags)
+	struct pciide_softc *sc;
 	int channel, drive;
 	void *databuf;
 	size_t datalen;
 	int flags;
 {
-	struct pciide_softc *sc = v;
 	int error, seg;
 	struct pciide_channel *cp = &sc->pciide_channels[channel];
 	struct pciide_dma_maps *dma_maps = &cp->dma_maps[drive];
@@ -636,15 +637,37 @@ pciide_dma_init(v, channel, drive, databuf, datalen, flags)
 	    dma_maps->dmamap_table->dm_mapsize,
 	    BUS_DMASYNC_PREWRITE);
 
-	/* Maps are ready. Start DMA function */
 #ifdef DIAGNOSTIC
 	if (dma_maps->dmamap_table->dm_segs[0].ds_addr & ~IDEDMA_TBL_MASK) {
-		printf("pciide_dma_init: addr 0x%lx not properly aligned\n",
+		printf("pciide_dma_dmamap_setup: addr 0x%lx "
+		    "not properly aligned\n",
 		    (u_long)dma_maps->dmamap_table->dm_segs[0].ds_addr);
 		panic("pciide_dma_init: table align");
 	}
 #endif
+	/* remember flags */
+	dma_maps->dma_flags = flags;
 
+	return 0;
+}
+
+int
+pciide_dma_init(v, channel, drive, databuf, datalen, flags)
+	void *v;
+	int channel, drive;
+	void *databuf;
+	size_t datalen;
+	int flags;
+{
+	struct pciide_softc *sc = v;
+	int error;
+	struct pciide_channel *cp = &sc->pciide_channels[channel];
+	struct pciide_dma_maps *dma_maps = &cp->dma_maps[drive];
+
+	if ((error = pciide_dma_dmamap_setup(sc, channel, drive,
+	    databuf, datalen, flags)) != 0)
+		return error;
+	/* Maps are ready. Start DMA function */
 	/* Clear status bits */
 	bus_space_write_1(sc->sc_dma_iot, cp->dma_iohs[IDEDMA_CTL], 0,
 	    bus_space_read_1(sc->sc_dma_iot, cp->dma_iohs[IDEDMA_CTL], 0));
@@ -654,8 +677,6 @@ pciide_dma_init(v, channel, drive, databuf, datalen, flags)
 	/* set read/write */
 	bus_space_write_1(sc->sc_dma_iot, cp->dma_iohs[IDEDMA_CMD], 0,
 	    ((flags & WDC_DMA_READ) ? IDEDMA_CMD_WRITE : 0) | cp->idedma_cmd);
-	/* remember flags */
-	dma_maps->dma_flags = flags;
 	return 0;
 }
 
@@ -778,9 +799,12 @@ pciide_mapchan(pa, cp, interface, cmdsizep, ctlsizep, pci_intr)
 
 	if (interface & PCIIDE_INTERFACE_PCI(wdc_cp->ch_channel))
 		pciide_mapregs_native(pa, cp, cmdsizep, ctlsizep, pci_intr);
-	else
+	else {
 		pciide_mapregs_compat(pa, cp, wdc_cp->ch_channel, cmdsizep,
 		    ctlsizep);
+		if ((cp->wdc_channel.ch_flags & WDCF_DISABLED) == 0)
+			pciide_map_compat_intr(pa, cp, wdc_cp->ch_channel);
+	}
 	wdcattach(wdc_cp);
 }
 
@@ -860,8 +884,12 @@ default_chip_map(sc, pa)
 		cp = &sc->pciide_channels[channel];
 		if (pciide_chansetup(sc, channel, interface) == 0)
 			continue;
-		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
-		    pciide_pci_intr);
+		if (interface & PCIIDE_INTERFACE_PCI(channel))
+			pciide_mapregs_native(pa, cp, &cmdsize, &ctlsize,
+			    pciide_pci_intr);
+		else
+			pciide_mapregs_compat(pa, cp,
+			    cp->wdc_channel.ch_channel, &cmdsize, &ctlsize);
 		if (cp->wdc_channel.ch_flags & WDCF_DISABLED)
 			continue;
 		/*
@@ -873,8 +901,10 @@ default_chip_map(sc, pa)
 		 * not possible to have an ISA board using the same address
 		 * anyway.
 		 */
-		if (interface & PCIIDE_INTERFACE_PCI(channel))
-			goto next;
+		if (interface & PCIIDE_INTERFACE_PCI(channel)) {
+			wdcattach(&cp->wdc_channel);
+			continue;
+		}
 		if (!wdcprobe(&cp->wdc_channel)) {
 			failreason = "not responding; disabled or no drives?";
 			goto next;
@@ -904,7 +934,10 @@ next:
 			    cp->wdc_channel.cmd_baseioh, cmdsize);
 			bus_space_unmap(cp->wdc_channel.ctl_iot,
 			    cp->wdc_channel.ctl_ioh, ctlsize);
-
+		} else {
+			pciide_map_compat_intr(pa, cp,
+			    cp->wdc_channel.ch_channel);
+			wdcattach(&cp->wdc_channel);
 		}
 	}
 

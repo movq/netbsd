@@ -1,7 +1,7 @@
-/*	$NetBSD: ftpcmd.y,v 1.77 2003/08/07 09:46:39 agc Exp $	*/
+/*	$NetBSD: ftpcmd.y,v 1.77.2.3 2004/08/12 20:44:26 jmc Exp $	*/
 
 /*-
- * Copyright (c) 1997-2002 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -79,7 +79,7 @@
 #if 0
 static char sccsid[] = "@(#)ftpcmd.y	8.3 (Berkeley) 4/6/94";
 #else
-__RCSID("$NetBSD: ftpcmd.y,v 1.77 2003/08/07 09:46:39 agc Exp $");
+__RCSID("$NetBSD: ftpcmd.y,v 1.77.2.3 2004/08/12 20:44:26 jmc Exp $");
 #endif
 #endif /* not lint */
 
@@ -94,8 +94,6 @@ __RCSID("$NetBSD: ftpcmd.y,v 1.77 2003/08/07 09:46:39 agc Exp $");
 #include <ctype.h>
 #include <errno.h>
 #include <pwd.h>
-#include <setjmp.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -134,7 +132,7 @@ char	*fromname;
 	A	B	C	E	F	I
 	L	N	P	R	S	T
 
-	SP	CRLF	COMMA
+	SP	CRLF	COMMA	ALL
 
 	USER	PASS	ACCT	CWD	CDUP	SMNT
 	QUIT	REIN	PORT	PASV	TYPE	STRU
@@ -160,7 +158,6 @@ char	*fromname;
 	LEXERR
 
 %token	<s> STRING
-%token	<s> ALL
 %token	<u> NUMBER
 
 %type	<u.i> check_login octal_number byte_size
@@ -175,7 +172,7 @@ char	*fromname;
 cmd_sel
 	: cmd
 		{
-			fromname = NULL;
+			REASSIGN(fromname, NULL);
 			restart_point = (off_t) 0;
 		}
 
@@ -455,8 +452,7 @@ cmd
 			if (check_write($3, 0)) {
 				if (fromname) {
 					renamecmd(fromname, $3);
-					free(fromname);
-					fromname = NULL;
+					REASSIGN(fromname, NULL);
 				} else {
 					reply(503, "Bad sequence of commands.");
 				}
@@ -544,7 +540,7 @@ cmd
 	| SITE SP CHMOD SP octal_number SP pathname CRLF
 		{
 			if (check_write($7, 0)) {
-				if ($5 > 0777)
+				if (($5 == -1) || ($5 > 0777))
 					reply(501,
 				"CHMOD: Mode value must be between 0 and 0777");
 				else if (chmod($7, $5) < 0)
@@ -879,7 +875,7 @@ rcmd
 	: REST check_login SP NUMBER CRLF
 		{
 			if ($2) {
-				fromname = NULL;
+				REASSIGN(fromname, NULL);
 				restart_point = (off_t)$4.ll;
 				reply(350,
     "Restarting at " LLF ". Send STORE or RETRIEVE to initiate transfer.",
@@ -890,8 +886,10 @@ rcmd
 	| RNFR SP pathname CRLF
 		{
 			restart_point = (off_t) 0;
-			if (check_write($3, 0))
+			if (check_write($3, 0)) {
+				REASSIGN(fromname, NULL);
 				fromname = renamefrom($3);
+			}
 			if ($3 != NULL)
 				free($3);
 		}
@@ -1298,7 +1296,6 @@ struct tab sitetab[] = {
 static	int	check_write(const char *, int);
 static	void	help(struct tab *, const char *);
 static	void	port_check(const char *, int);
-static	void	toolong(int);
 	int	yylex(void);
 
 extern int epsvall;
@@ -1445,19 +1442,6 @@ getline(char *s, int n, FILE *iop)
 	return (s);
 }
 
-static void
-toolong(int signo)
-{
-
-	reply(421,
-	    "Timeout (" LLF " seconds): closing control connection.",
-	    (LLT)curclass.timeout);
-	if (logging)
-		syslog(LOG_INFO, "User %s timed out after " LLF " seconds",
-		    (pw ? pw->pw_name : "unknown"), (LLT)curclass.timeout);
-	dologout(1);
-}
-
 void
 ftp_handle_line(char *cp)
 {
@@ -1471,7 +1455,6 @@ ftp_loop(void)
 {
 
 	while (1) {
-		(void) signal(SIGALRM, toolong);
 		(void) alarm(curclass.timeout);
 		if (getline(cbuf, sizeof(cbuf)-1, stdin) == NULL) {
 			reply(221, "You could at least say goodbye.");
@@ -1627,10 +1610,9 @@ yylex(void)
 			return (NUMBER);
 		}
 		if (strncasecmp(&cmdp[cpos], "ALL", 3) == 0
-		 && !isalnum(cmdp[cpos + 3])) {
-			yylval.s = xstrdup("ALL");
+		    && !isalnum(cmdp[cpos + 3])) {
 			cpos += 3;
-			return ALL;
+			return (ALL);
 		}
 		switch (cmdp[cpos++]) {
 
@@ -1716,9 +1698,7 @@ yylex(void)
 	}
 	yyerror(NULL);
 	state = CMD;
-	is_oob = 0;
-	longjmp(errcatch, 0);
-	/* NOTREACHED */
+	return (0);
 }
 
 /* ARGSUSED */

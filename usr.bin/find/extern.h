@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.20 2003/08/07 11:13:40 agc Exp $	*/
+/*	$NetBSD: extern.h,v 1.20.4.2 2005/10/11 23:47:05 reed Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994

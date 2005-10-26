@@ -1,4 +1,4 @@
-/*	$NetBSD: cs89x0.c,v 1.12 2004/03/24 00:31:15 matt Exp $	*/
+/*	$NetBSD: cs89x0.c,v 1.12.2.1.2.1 2005/01/24 21:43:45 he Exp $	*/
 
 /*
  * Copyright 1997
@@ -186,7 +186,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs89x0.c,v 1.12 2004/03/24 00:31:15 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs89x0.c,v 1.12.2.1.2.1 2005/01/24 21:43:45 he Exp $");
 
 #include "opt_inet.h"
 
@@ -1131,7 +1131,7 @@ cs_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	default:
 		result = ether_ioctl(ifp, cmd, data);
 		if (result == ENETRESET) {
-			if (CS_IS_ENABLED(sc)) {
+			if (ifp->if_flags & IFF_RUNNING) {
 				/*
 				 * Multicast list has changed.  Set the
 				 * hardware filter accordingly.
@@ -1467,7 +1467,6 @@ cs_ether_input(struct cs_softc *sc, struct mbuf *m)
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 
 	ifp->if_ipackets++;
-	m->m_flags |= M_HASFCS;
 
 #if NBPFILTER > 0
 	/*
@@ -1518,7 +1517,8 @@ cs_process_receive(struct cs_softc *sc)
 	}
 
 	if (totlen > ETHER_MAX_LEN) {
-		printf("%s: invalid packet length\n", sc->sc_dev.dv_xname);
+		printf("%s: invalid packet length %d\n",
+		    sc->sc_dev.dv_xname, totlen);
 
 		/* skip the received frame */
 		CS_WRITE_PACKET_PAGE(sc, PKTPG_RX_CFG,

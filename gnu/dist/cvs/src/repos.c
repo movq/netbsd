@@ -1,6 +1,11 @@
 /*
- * Copyright (c) 1992, Brian Berliner and Jeff Polk
- * Copyright (c) 1989-1992, Brian Berliner
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (C) 1992, Brian Berliner and Jeff Polk
+ * Portions Copyright (C) 1989-1992, Brian Berliner
  * 
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with the CVS source distribution.
@@ -21,11 +26,11 @@
 
 char *
 Name_Repository (dir, update_dir)
-    char *dir;
-    char *update_dir;
+    const char *dir;
+    const char *update_dir;
 {
     FILE *fpin;
-    char *xupdate_dir;
+    const char *xupdate_dir;
     char *repos = NULL;
     size_t repos_allocated = 0;
     char *tmp;
@@ -117,8 +122,9 @@ Name_Repository (dir, update_dir)
 	    error (0, 0, "`..'-relative repositories are not supported.");
 	    error (1, 0, "illegal source repository");
 	}
-	newrepos = xmalloc (strlen (current_parsed_root->directory) + strlen (repos) + 2);
-	(void) sprintf (newrepos, "%s/%s", current_parsed_root->directory, repos);
+	newrepos = xmalloc (strlen (current_parsed_root->directory)
+	                    + strlen (repos) + 2);
+	sprintf (newrepos, "%s/%s", current_parsed_root->directory, repos);
 	free (repos);
 	repos = newrepos;
     }
@@ -128,28 +134,32 @@ Name_Repository (dir, update_dir)
     return repos;
 }
 
+
+
 /*
  * Return a pointer to the repository name relative to CVSROOT from a
  * possibly fully qualified repository
  */
-char *
+const char *
 Short_Repository (repository)
-    char *repository;
+    const char *repository;
 {
     if (repository == NULL)
-	return (NULL);
+	return NULL;
 
     /* If repository matches CVSroot at the beginning, strip off CVSroot */
     /* And skip leading '/' in rep, in case CVSroot ended with '/'. */
     if (strncmp (current_parsed_root->directory, repository,
 		 strlen (current_parsed_root->directory)) == 0)
     {
-	char *rep = repository + strlen (current_parsed_root->directory);
+	const char *rep = repository + strlen (current_parsed_root->directory);
 	return (*rep == '/') ? rep+1 : rep;
     }
     else
-	return (repository);
+	return repository;
 }
+
+
 
 /* Sanitize the repository name (in place) by removing trailing
  * slashes and a trailing "." if present.  It should be safe for

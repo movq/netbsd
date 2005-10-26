@@ -20,6 +20,8 @@
 #include <assert.h>
 #include "cvs.h"
 
+#include "xsize.h"
+
 static int deep_remove_dir PROTO((const char *path));
 
 /*
@@ -379,7 +381,7 @@ mkdir_if_needed (name)
  */
 void
 xchmod (fname, writable)
-    char *fname;
+    const char *fname;
     int writable;
 {
     struct stat sb;
@@ -879,15 +881,6 @@ FILE *cvs_temp_file (filename)
     return fp;
 }
 
-/* Return non-zero iff FILENAME is absolute.
-   Trivial under Unix, but more complicated under other systems.  */
-int
-isabsolute (filename)
-    const char *filename;
-{
-    return filename[0] == '/';
-}
-
 
 
 #ifdef HAVE_READLINK
@@ -907,31 +900,48 @@ isabsolute (filename)
  *  This function exits with a fatal error if it fails to read the link for
  *  any reason.
  */
+#define MAXSIZE (SIZE_MAX < SSIZE_MAX ? SIZE_MAX : SSIZE_MAX)
+
 char *
 xreadlink (link)
     const char *link;
 {
     char *file = NULL;
-    int buflen = 128;
-    int link_name_len;
+    size_t buflen = 128;
 
-    /* Get the name of the file to which `from' is linked.
-       FIXME: what portability issues arise here?  Are readlink &
-       ENAMETOOLONG defined on all systems? -twp */
-    do
+    /* Get the name of the file to which `from' is linked. */
+    while (1)
     {
+	ssize_t r;
+	size_t link_name_len;
+
 	file = xrealloc (file, buflen);
-	link_name_len = readlink (link, file, buflen - 1);
-	buflen *= 2;
+	r = readlink (link, file, buflen);
+	link_name_len = r;
+
+	if (r < 0
+#ifdef ERANGE
+	    /* AIX 4 and HP-UX report ERANGE if the buffer is too small. */
+	    && errno != ERANGE
+#endif
+	    )
+	    error (1, errno, "cannot readlink %s", link);
+
+	/* If there is space for the NUL byte, set it and return. */
+	if (r >= 0 && link_name_len < buflen)
+	{
+	    file[link_name_len] = '\0';
+	    return file;
+	}
+
+	if (buflen <= MAXSIZE / 2)
+	    buflen *= 2;
+	else if (buflen < MAXSIZE)
+	    buflen = MAXSIZE;
+	else
+	    /* Our buffer cannot grow any bigger.  */
+	    error (1, ENAMETOOLONG, "cannot readlink %s", link);
     }
-    while (link_name_len < 0 && errno == ENAMETOOLONG);
-
-    if (link_name_len < 0)
-	error (1, errno, "cannot readlink %s", link);
-
-    file[link_name_len] = '\0';
-
-    return file;
 }
 #endif /* HAVE_READLINK */
 
@@ -969,7 +979,7 @@ xresolvepath ( path )
     if ( CVS_CHDIR ( path ) < 0)
 	error ( 1, errno, "cannot chdir to %s", path );
     if ( ( hardpath = xgetwd() ) == NULL )
-	error (1, errno, "cannot readlink %s", hardpath);
+	error (1, errno, "cannot getwd in %s", path);
     if ( CVS_CHDIR ( owd ) < 0)
 	error ( 1, errno, "cannot chdir to %s", owd );
     free (owd);
@@ -979,11 +989,11 @@ xresolvepath ( path )
 
 
 /* Return a pointer into PATH's last component.  */
-char *
+const char *
 last_component (path)
-    char *path;
+    const char *path;
 {
-    char *last = strrchr (path, '/');
+    const char *last = strrchr (path, '/');
     
     if (last && (last != path))
         return last + 1;
@@ -1069,8 +1079,14 @@ expand_wild (argc, argv, pargc, pargv)
     char ***pargv;
 {
     int i;
+    if (size_overflow_p (xtimes (argc, sizeof (char *)))) {
+	*pargc = 0;
+	*pargv = NULL;
+	error (0, 0, "expand_wild: too many arguments");
+	return;
+    }
     *pargc = argc;
-    *pargv = (char **) xmalloc (argc * sizeof (char *));
+    *pargv = xmalloc (xtimes (argc, sizeof (char *)));
     for (i = 0; i < argc; ++i)
 	(*pargv)[i] = xstrdup (argv[i]);
 }
@@ -1104,8 +1120,3 @@ cvs_casecmp (str1, str2)
     return pqdiff;
 }
 #endif /* SERVER_SUPPORT */
-
-
-
-/* vim:tabstop=8:shiftwidth=4
- */

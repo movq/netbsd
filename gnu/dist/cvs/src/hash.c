@@ -1,5 +1,10 @@
 /*
- * Copyright (c) 1992, Brian Berliner and Jeff Polk
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (C) 1992, Brian Berliner and Jeff Polk
  * 
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with the CVS source distribution.
@@ -195,7 +200,7 @@ freenode_mem (p)
 	free (p->key);
 
     /* to be safe, re-initialize these */
-    p->key = p->data = (char *) NULL;
+    p->key = p->data = NULL;
     p->delproc = (void (*) ()) NULL;
 }
 
@@ -493,7 +498,7 @@ printnode (node, closure)
 
     (void) printf("Node at %p: type = %s, key = %p = \"%s\", data = %p, next = %p, prev = %p\n",
 	   (void *)node, nodetypestring(node->type),
-	   (void *)node->key, node->key, (void *)node->data,
+	   (void *)node->key, node->key, node->data,
 	   (void *)node->next, (void *)node->prev);
 
     return(0);

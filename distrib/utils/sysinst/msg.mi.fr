@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.fr,v 1.74 2004/03/28 19:06:49 bouyer Exp $	*/
+/*	$NetBSD: msg.mi.fr,v 1.74.2.5.2.3 2005/09/13 22:49:09 riz Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -56,6 +56,7 @@ message ok {ok}
 message unchanged {non-modifié}
 message On {On}
 message Off {Off}
+message Delete {Supprimer ?}
 
 message install
 {installer}
@@ -175,11 +176,8 @@ L'installation standard requière au moins %d Mo.
 L'installation standard avec X requière au moins %d Mo.
 }
 
-message sizechoice
-{Vous avez choisi de définir vous même vos partitions
-(pour le disklabel BSD ou, pour certains portages, le MBR).
-Vous devez spécifier l'unité que vous voulez utiliser.
-Si vous choisissez par "Mega-octets", la taille sera proche de votre
+message Choose_your_size_specifier
+{Si vous choisissez par "Mega-octets", la taille sera proche de votre
 choix tout en conservant un nombre entier de cylindres.
 Si vous choisissez par "Secteurs", vous pourrez choisir précisément
 les tailles.
@@ -187,7 +185,8 @@ Sur les disques modernes, la taille réelle des cylindres est variable
 et il y a peu d'intéret à aligner les partitions sur les cylindres.
 Pour les disques plus ancien, il est plus efficace de choisir des tailles
 de partitions multiples de la taille d'un cylindre.
-}
+
+Choisissez votre unité d'espace disque}
 
 message defaultunit
 {Tailles et décalages ("offsets") sont en %s, sauf si vous spécifiez une unitée ('M' pour
@@ -264,7 +263,7 @@ message show_all_unused_partitions
 {Afficher les partitions libres}
 
 message partition_sizes_ok
-{Taille des partitions correcte}
+{Taille et options des partitions correcte}
 
 message edfspart
 {Vous devez d'abord préciser le type de système de fichier (FS),
@@ -364,18 +363,12 @@ message disksetupdone
 {La première partie de la procédure est terminée.
 Sysinst a écrit, sur votre disque de destination, un disklabel,
 créé (via newfs) et testé (via fsck) vos nouvelles partitions.
-
-L'étape suivant consiste a recopier les différents composants. 
-Appuyer sur <entrée> pour continuer.
 }
 
 message disksetupdoneupdate
 {La première partie de la procédure est terminée.
 Sysinst a écrit, sur votre disque de destination, un disklabel
 et testé (via fsck) vos nouvelles partitions.
-
-L'étape suivant consiste a recopier les différents composants. 
-Appuyer sur <entrée> pour continuer.
 }
 
 message openfail
@@ -445,7 +438,6 @@ message unpackcomplete
 {La mise à jour de NetBSD-@@VERSION@@ est terminée.
 Suivez les instructions du document d'installation (INSTALL) pour finir
 de reconfigurer votre ordinateur.
-Votre ancien /etc a été sauvegardé sous /etc.old .
 
 Vous devez éditer /etc/rc.conf et ajouter la variable
 "RC_CONFIGURED=yes" pour redémarrer en mode multi-utilisateur.
@@ -453,8 +445,7 @@ Vous devez éditer /etc/rc.conf et ajouter la variable
 
 message upgrcomplete
 { L'installation de composants de NetBSD-@@VERSION@@ supplémentaires est
-terminée. L'installation a modifié le /etc de destination.
-Un /etc.old sauvé par une mise à jour précédente n'a pas été touché.
+terminée.
 Suivez les instructions du document d'installation (INSTALL) afin de
 reconfigurer votre ordinateur.
 
@@ -483,31 +474,19 @@ composants optionnels.
 }
 
 message ftpsource
-{Vous trouverez ci dessous le site ftp, le répertoire, le code utilisateur et
-le mot de passe prêt à l'emplois actuellement. Si l'utilisateur est ftp, alors
-le mot de passe n'est pas nécessaire.
+{Vous trouverez ci dessous le site %s, le répertoire, le code utilisateur
+et le mot de passe prêt à l'emplois actuellement.
+Si l'utilisateur est ftp, alors le mot de passe n'est pas nécessaire.
+Le répertoire des composants est relatif au répertoire de base, et
+doit contenir les fichiers .tgz.
 
-serveur:	%s
-répertoire:	%s
-utilisateur:	%s
-mot de passe:	%s
-proxy:		%s
+serveur:		   %s 
+répertoire de base:	   %s 
+répertoire des composants: %s 
+utilisateur:		   %s 
+mot de passe:		   %s 
+proxy:			   %s
 }
-
-message host
-{serveur}
-
-message dir
-{répertoire}
-
-message user
-{utilisateur}
-
-message passwd
-{mot de passe}
-
-message proxy
-{proxy}
 
 message email
 {adresse e-mail}
@@ -518,15 +497,17 @@ message dev
 message nfssource
 {Donnez le nom du serveur nfs et du répertoire sur ce serveur
 où se trouvent les composants. 
-Rappelez vous que le répertoire doit contenir les
-fichiers .tgz et qu'il doit être accessible par nfs.
+Le répertoire de base doit etre accessible par NFS, le répertoire des
+composants est relatif au répertoire de base et doit contenir les fichiers
+.tgz.
 
-serveur:	%s 
-répertoire:	%s
+serveur:		   %s 
+répertoire de base:	   %s 
+répertoire des composants: %s
 }
 
 message nfsbadmount
-{Le répertoire %s n'est pas montable par nfs.}
+{Le répertoire %s:%s n'est pas montable par nfs.}
 
 message cdromsource
 {Donnez le nom de périphérique du CD-Rom à utiliser ainsi que
@@ -541,11 +522,13 @@ répertoire:	%s
 message localfssource
 {Donnez le nom du périphérique local (non-monté) à utiliser
 ainsi que le répertoire contenant les composants. 
-Rappelez vous que le répertoire doit contenir les fichiers .tgz .
+Le répertoire des composants est relatif au répertoire de base et doit
+contenir les fichiers .tgz.
 
 device:			%s 
-système de fichiers:	%s 
-répertoire:		%s
+système de fichiers:		%s 
+répertoire de base:		%s 
+répertoire des composants:	%s
 }
 
 message localdir
@@ -553,7 +536,8 @@ message localdir
 distribution. 
 Rapellez vous que ce répertoire doit contenir les fichiers .tgz.
 
-Répertoire:	%s
+Répertoire de base:	        %s
+Répertoire des composants:	%s
 }
 
 message filesys
@@ -608,6 +592,9 @@ message net_host
 message net_ip
 {Votre adresse IPv4}
 
+message net_ip_2nd
+{Server IPv4 number}
+
 message net_mask
 {Votre masque de réseau (IPv4)}
 
@@ -624,20 +611,42 @@ message net_media
 {Type de réseau (media)}
 
 message netok
-{Vous avez spécifié les valeurs suivantes. Veuillez confirmer.
+{Vous avez spécifié les valeurs suivantes.
 
 Domaine (DNS):			 %s 
 Nom de machine:			 %s 
-Adresse IP:			 %s 
-Masque de réseau (Netmask):	 %s 
-Adresse du serveur de noms:	 %s 
-Adresse de la paserelle:	 %s 
+Adapteur de réseau		 %s
+Adresse IPv4			 %s
+Masque de réseau (Netmask):	 %s
+Adresse IPv4 du serveur de noms: %s
+Adresse IPv4 de la passerelle: 	 %s
 Type de réseau (media):		 %s 
+}
+
+message netok_slip
+{Vous avez spécifié les valeurs suivantes. Sont-ils d'accord?
+
+Domaine (DNS):			 %s
+Nom de machine:			 %s
+Adapteur de réseau		 %s
+Adresse IPv4			 %s
+Adresse IPv4 du serveur:	 %s
+Masque de réseau (Netmask):	 %s
+Adresse IPv4 du serveur de noms: %s
+Adresse IPv4 de la passerelle:	 %s
+Type de réseau (media):		 %s
 }
 
 message netokv6
 {Autoconfiguration IPv6:		 %s 
 Adresse du serveur de noms IPv6: %s 
+}
+
+message netok_ok
+{Les valeurs sont-elles correctes ?}
+
+message slattach {
+Enter slattach flags
 }
 
 message netagain
@@ -655,33 +664,35 @@ L'installation a échoué.
 }
 
 message realdir
-{Impossible de se déplacer sur le répertoire %s.
+{Impossible de se déplacer sur le répertoire %s/%s.
 L'installation a échoué.
 }
 
-message ftperror_cont
-{Ftp a détecté une erreur. Appuyer sur <entrée> pour continuer.}
-
 message ftperror
-{Impossible de télécharger un fichier par ftp. Voulez vous réessayer ?}
+{Impossible de télécharger un fichier par ftp.
+Voulez vous réessayer ?}
 
 message distdir
 {Quel répertoire dois je utiliser pour %s ?}
 
 message delete_dist_files
-{Voulez-vous supprimer les fichiers de distribution de NetBSD de %s ?
-Vous pouvez les conserver pour installer ou mettre a jour d'autre systèmes.)}
+{Voulez-vous supprimer les fichiers de distribution de NetBSD de %s ? 
+Vous pouvez les conserver pour installer ou mettre a jour d'autre systèmes.}
 
 message verboseextract
-{Pendant la procédure d'extraction des fichiers,
+{
+L'étape suivant consiste a recopier les différents composants. 
+
+Pendant la procédure d'extraction des fichiers,
 voulez-vous voir les noms de fichiers au fur et à mesure ?
 voir pendant qu'ils seront extraits ?
 }
 
 message notarfile
-{Le composant %s n'existe pas.
+{Le composant %s n'existe pas.}
 
-Voulez-vous continuer à extraire les composants ?}
+message notarfile_ok
+{Voulez-vous continuer à extraire les composants ?}
 
 message endtarok
 {Tous les fichiers sont extraits. Veuillez appuyer sur <entrée> pour continuer.}
@@ -731,20 +742,6 @@ Arrêt de la mise à jour.
 
 message badetcfstab
 {Erreur fatale ! Impossible de décoder /etc/fstab sur le disque cible %s.
-Arrêt de la mise à jour.
-}
-
-message etc_oldexists
-{Impossible de sauvegarder /etc en /etc.old. Le disque cible a déjà un /etc.old.
-Veuillez corriger avant de continuer.
-
-Une solution est de démarrer un shell depuis le menu `Utilitaires'
-et d'examiner les répertoires /etc et /etc.old sur le disque destination.
-Si /etc.old provient d'une mise à jour précédente,
-vous pouvez l'effacer.
-Si /etc.old provient d'une mise à jour récente et incomplete,
-vous pouvez effacer /etc et renommer /etc.old en /etc.
-
 Arrêt de la mise à jour.
 }
 
@@ -857,7 +854,7 @@ message set_text_tools
 {Outils de manipulation de textes}
 
 message set_X11
-{X11 tout}
+{X11}
 
 message set_X11_base
 {X11 base et clients}
@@ -936,12 +933,12 @@ message upgradeparttype
 NetBSD/386BSD/FreeBSD. Voulez-vous le changer pour le nouveau ? }
 
 message choose_timezone	
-{Sélectionnez votre zone horaire dans la liste suivante.
+{Sélectionnez votre zone horaire dans la liste suivante. 
 Appuyez sur ENTREE pour confirmer votre choix. 
 Appuyez sur 'x' puis ENTREE pour quitter la selection de la zone horaire.
 
- Défaut:	%s
- Séléctionée:	%s
+ Défaut:	%s 
+ Séléctionée:	%s 
  Heure Locale:	%s %s
 }
 
@@ -982,7 +979,7 @@ pour le système maintenant ?}
 
 message rootsh	
 {Vous pouvez maintenant choisir quel shell utiliser pour l'utilisateur root.
-Par default il s'agit de /bin/csh}
+Par default il s'agit de /bin/sh}
 
 message postuseexisting
 {
@@ -1028,23 +1025,25 @@ message Hit_enter_to_continue {Presser entrée pour continuer}
 message Choose_your_installation {Choisissez votre type d'installation}
 message Set_Sizes {Specifier les tailles de partitions NetBSD}
 message Use_Existing {Utiliser les partitions existantes}
-message Choose_your_size_specifier {Choisissez votre unité d'espace disque}
 message Megabytes {Megaoctets}
 message Cylinders {Cylindres}
 message Sectors {Secteurs}
 message Select_medium {Sélection du media d'installation}
-message ftp {ftp}
-message nfs {nfs}
-message cdrom {cdrom}
-message floppy {disquette}
-message local_fs {systeme de fichier non-monté}
-message local_dir {répertoire local}
+message ftp {FTP}
+message http {HTTP}
+message nfs {NFS}
+message cdrom {CD-ROM / DVD}
+message floppy {Disquette}
+message local_fs {Systeme de fichier non-monté}
+message local_dir {Répertoire local}
 message Select_your_distribution {Sélection de la distribution}
 message Full_installation {Installation complète}
 message Custom_installation {Installation personnalisée}
 message Change {Changer}
 message hidden {** caché **}
 message Host {Serveur ftp}
+message Base_dir {Répertoire de base}
+message Set_dir {Répertoire des composants}
 message Directory {Répertoire}
 message User {Utilisateur}
 message Password {Mot de passe}
@@ -1064,16 +1063,15 @@ message Blowfish_2_7_round {Blowfish 2^7 round}
 message do_not_change {ne rien changer}
 message Device {Device}
 message File_system {Système de fichier}
-message Change_directory_path {Changer le chemin d'accès}
 message Select_IPv6_DNS_server {  Choisissez un serveur de noms IPv6 :}
 message other {autre }
 message Perform_IPv6_autoconfiguration {Faire la configuration automatique IPv6 ?}
 message Perform_DHCP_autoconfiguration {Exécutez la configuration automatique de DHCP?}
 message Root_shell {Interpreteur de commande de root}
 message Select_set_extraction_verbosity {Methode d'indication de l'extraction d'ensemble ?}
-message Progress_bar_recommended {Barre de progression (recommendeé)}
+message Progress_bar {Barre de progression (recommendeé)}
 message Silent {Silencieux}
-message Verbose_file_name_listing_slow {Liste verbeuse des fichiers (lent)}
+message Verbose {Liste verbeuse des fichiers (lent)}
 
 .if AOUT2ELF
 message aoutfail

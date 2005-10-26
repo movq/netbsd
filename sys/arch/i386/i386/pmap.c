@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.171 2004/02/20 17:35:01 yamt Exp $	*/
+/*	$NetBSD: pmap.c,v 1.171.2.1.2.2 2005/08/24 04:08:09 riz Exp $	*/
 
 /*
  *
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.171 2004/02/20 17:35:01 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.171.2.1.2.2 2005/08/24 04:08:09 riz Exp $");
 
 #include "opt_cputype.h"
 #include "opt_user_ldt.h"
@@ -1939,12 +1939,11 @@ pmap_activate(l)
 	struct lwp *l;
 {
 	struct cpu_info *ci = curcpu();
-	struct pcb *pcb = &l->l_addr->u_pcb;
 	struct pmap *pmap = vm_map_pmap(&l->l_proc->p_vmspace->vm_map);
 
-	pcb->pcb_ldt_sel = pmap->pm_ldt_sel;
-	pcb->pcb_cr3 = pmap->pm_pdirpa;
 	if (l == ci->ci_curlwp) {
+		struct pcb *pcb;
+
 		KASSERT(ci->ci_want_pmapload == 0);
 		KASSERT(ci->ci_tlbstate != TLBSTATE_VALID);
 #ifdef KSTACK_CHECK_DR0
@@ -1966,6 +1965,9 @@ pmap_activate(l)
 			ci->ci_want_pmapload = 0;
 			return;
 		}
+
+		pcb = &l->l_addr->u_pcb;
+		pcb->pcb_ldt_sel = pmap->pm_ldt_sel;
 
 		ci->ci_want_pmapload = 1;
 	}
@@ -2021,6 +2023,7 @@ pmap_load()
 	struct pmap *pmap;
 	struct pmap *oldpmap;
 	struct lwp *l;
+	struct pcb *pcb;
 	int s;
 
 	KASSERT(ci->ci_want_pmapload);
@@ -2031,8 +2034,10 @@ pmap_load()
 	KASSERT(pmap != pmap_kernel());
 	oldpmap = ci->ci_pmap;
 
-	KASSERT(pmap->pm_ldt_sel == l->l_addr->u_pcb.pcb_ldt_sel);
-	lldt(pmap->pm_ldt_sel);
+	pcb = ci->ci_curpcb;
+	KASSERT(pcb == &l->l_addr->u_pcb);
+	/* loaded by pmap_activate */
+	KASSERT(pcb->pcb_ldt_sel == pmap->pm_ldt_sel);
 
 	if (pmap == oldpmap) {
 		if (!pmap_reactivate(pmap)) {
@@ -2071,7 +2076,14 @@ pmap_load()
 	ci->ci_pmap = pmap;
 	ci->ci_tlbstate = TLBSTATE_VALID;
 	splx(s);
-	lcr3(pmap->pm_pdirpa);
+
+	/*
+	 * update tss and load corresponding registers.
+	 */
+
+	lldt(pcb->pcb_ldt_sel);
+	pcb->pcb_cr3 = pmap->pm_pdirpa;
+	lcr3(pcb->pcb_cr3);
 
 	ci->ci_want_pmapload = 0;
 
@@ -3268,6 +3280,13 @@ pmap_enter(pmap, va, pa, prot, flags)
 		npte |= (PG_u | PG_RW);	/* XXXCDC: no longer needed? */
 	if (pmap == pmap_kernel())
 		npte |= pmap_pg_g;
+#if 1
+	if (flags & VM_PROT_ALL) {
+		npte |= PG_U;
+		if (flags & VM_PROT_WRITE)
+			npte |= PG_M;
+	}
+#endif
 
 	/* get lock */
 	PMAP_MAP_TO_HEAD_LOCK();
@@ -3439,10 +3458,12 @@ shootdown_test:
 	/* Update page attributes if needed */
 	if ((opte & (PG_V | PG_U)) == (PG_V | PG_U)) {
 #if defined(MULTIPROCESSOR)
-		int32_t cpumask = 0;
+		int32_t cpumask;
 #endif
 shootdown_now:
 #if defined(MULTIPROCESSOR)
+		cpumask = 0;
+
 		pmap_tlb_shootdown(pmap, va, opte, &cpumask);
 		pmap_tlb_shootnow(cpumask);
 #else

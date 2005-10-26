@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_netbsdkintf.c,v 1.178 2004/03/07 22:15:19 oster Exp $	*/
+/*	$NetBSD: rf_netbsdkintf.c,v 1.178.2.1.2.3 2005/04/06 12:17:58 tron Exp $	*/
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -146,7 +146,7 @@
  ***********************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_netbsdkintf.c,v 1.178 2004/03/07 22:15:19 oster Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_netbsdkintf.c,v 1.178.2.1.2.3 2005/04/06 12:17:58 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>
@@ -1283,6 +1283,12 @@ raidioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct proc *p)
 
 
 		RF_LOCK_MUTEX(raidPtr->mutex);
+		if (raidPtr->status == rf_rs_reconstructing) {
+			/* you can't fail a disk while we're reconstructing! */
+			/* XXX wrong for RAID6 */
+			RF_UNLOCK_MUTEX(raidPtr->mutex);
+			return (EINVAL);
+		}
 		if ((raidPtr->Disks[rr->col].status == 
 		     rf_ds_optimal) && (raidPtr->numFailures > 0)) { 
 			/* some other component has failed.  Let's not make
@@ -1672,6 +1678,7 @@ raidstart(RF_Raid_t *raidPtr)
 	struct raid_softc *rs;
 	int     do_async;
 	struct buf *bp;
+	int rc;
 
 	unit = raidPtr->raidid;
 	rs = &raid_softc[unit];
@@ -1766,13 +1773,17 @@ raidstart(RF_Raid_t *raidPtr)
 		/* don't ever condition on bp->b_flags & B_WRITE.  
 		 * always condition on B_READ instead */
 		
-		bp->b_error = rf_DoAccess(raidPtr, (bp->b_flags & B_READ) ?
-				      RF_IO_TYPE_READ : RF_IO_TYPE_WRITE,
-				      do_async, raid_addr, num_blocks,
-				      bp->b_data, bp, RF_DAG_NONBLOCKING_IO);
+		rc = rf_DoAccess(raidPtr, (bp->b_flags & B_READ) ?
+				 RF_IO_TYPE_READ : RF_IO_TYPE_WRITE,
+				 do_async, raid_addr, num_blocks,
+				 bp->b_data, bp, RF_DAG_NONBLOCKING_IO);
 
-		if (bp->b_error) {
+		if (rc) {
+			bp->b_error = rc;
 			bp->b_flags |= B_ERROR;
+			bp->b_resid = bp->b_bcount;
+			biodone(bp);
+			/* continue loop */
 		}	
 
 		RF_LOCK_MUTEX(raidPtr->mutex);
@@ -1939,8 +1950,11 @@ KernelWakeupFunc(struct buf *vbp)
 	if (bp->b_flags & B_ERROR) {
 		/* Mark the disk as dead */
 		/* but only mark it once... */
-		if (queue->raidPtr->Disks[queue->col].status ==
-		    rf_ds_optimal) {
+		/* and only if it wouldn't leave this RAID set 
+		   completely broken */
+		if ((queue->raidPtr->Disks[queue->col].status ==
+		    rf_ds_optimal) && (queue->raidPtr->numFailures < 
+				       queue->raidPtr->Layout.map->faultsTolerated)) {
 			printf("raid%d: IO Error.  Marking %s as failed.\n",
 			       queue->raidPtr->raidid,
 			       queue->raidPtr->Disks[queue->col].devname);
@@ -2533,6 +2547,7 @@ rf_RewriteParityThread(RF_Raid_t *raidPtr)
 	int retcode;
 	int s;
 
+	raidPtr->parity_rewrite_stripes_done = 0;
 	raidPtr->parity_rewrite_in_progress = 1;
 	s = splbio();
 	retcode = rf_RewriteParity(raidPtr);

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ste.c,v 1.17 2003/06/05 16:33:43 tsutsui Exp $	*/
+/*	$NetBSD: if_ste.c,v 1.17.4.1.2.1 2005/01/24 21:41:43 he Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ste.c,v 1.17 2003/06/05 16:33:43 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ste.c,v 1.17.4.1.2.1 2005/01/24 21:41:43 he Exp $");
 
 #include "bpfilter.h"
 
@@ -832,7 +832,8 @@ ste_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			ste_set_filter(sc);
+			if (ifp->if_flags & IFF_RUNNING)
+				ste_set_filter(sc);
 			error = 0;
 		}
 		break;
@@ -1317,6 +1318,12 @@ ste_init(struct ifnet *ifp)
 
 	/* Set the FIFO release threshold to 512 bytes. */
 	bus_space_write_1(st, sh, STE_TxReleaseThresh, 512 >> 4);
+
+	/* Set maximum packet size for VLAN. */
+	if (sc->sc_ethercom.ec_capenable & ETHERCAP_VLAN_MTU)
+		bus_space_write_2(st, sh, STE_MaxFrameSize, ETHER_MAX_LEN + 4);
+	else
+		bus_space_write_2(st, sh, STE_MaxFrameSize, ETHER_MAX_LEN);
 
 	/*
 	 * Initialize the interrupt mask.

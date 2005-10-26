@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_disks.c,v 1.51 2004/03/21 06:32:03 oster Exp $	*/
+/*	$NetBSD: rf_disks.c,v 1.51.2.2 2004/08/30 08:42:48 tron Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -67,7 +67,7 @@
  ***************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.51 2004/03/21 06:32:03 oster Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.51.2.2 2004/08/30 08:42:48 tron Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -591,6 +591,13 @@ rf_ConfigureDisk(RF_Raid_t *raidPtr, char *buf, RF_RaidDisk_t *diskPtr,
 	raidPtr->raid_cinfo[col].ci_vp = NULL;
 	raidPtr->raid_cinfo[col].ci_dev = 0;
 
+	if (!strcmp("absent", diskPtr->devname)) {
+		printf("Ignoring missing component at column %d\n", col);
+		sprintf(diskPtr->devname, "component%d", col);
+		diskPtr->status = rf_ds_failed;
+		return (0);
+	}
+
 	error = raidlookup(diskPtr->devname, proc, &vp);
 	if (error) {
 		printf("raidlookup on device: %s failed!\n", diskPtr->devname);
@@ -894,16 +901,19 @@ rf_CheckLabels(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 		   Bail -- make things fail so that the user must force
 		   the issue... */
 		hosed_column = -1;
+		fatal_error = 1;
 	}
 
 	if (num_ser > 2) {
 		printf("raid%d: Too many different serial numbers!\n", 
 		       raidPtr->raidid);
+		fatal_error = 1;
 	}
 
 	if (num_mod > 2) {
 		printf("raid%d: Too many different mod counters!\n", 
 		       raidPtr->raidid);
+		fatal_error = 1;
 	}
 
 	/* we start by assuming the parity will be good, and flee from

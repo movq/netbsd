@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_misc.c,v 1.122 2003/12/04 19:38:23 atatat Exp $	*/
+/*	$NetBSD: linux_misc.c,v 1.122.2.4 2004/11/12 06:18:59 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 1999 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.122 2003/12/04 19:38:23 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.122.2.4 2004/11/12 06:18:59 jmc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -172,6 +172,9 @@ static void bsd_to_linux_statfs __P((struct statfs *, struct linux_statfs *));
 static int linux_to_bsd_limit __P((int));
 static void linux_to_bsd_mmap_args __P((struct sys_mmap_args *,
     const struct linux_sys_mmap_args *));
+static int linux_mmap __P((struct lwp *, struct linux_sys_mmap_args *,
+    register_t *, off_t));
+
 
 /*
  * The information on a terminated (or stopped) process needs
@@ -198,7 +201,9 @@ bsd_to_linux_wstat(st)
 }
 
 /*
- * This is very much the same as waitpid()
+ * wait4(2).  Passed on to the NetBSD call, surrounded by code to
+ * reserve some space for a NetBSD-style wait status, and converting
+ * it to what Linux wants.
  */
 int
 linux_sys_wait4(l, v, retval)
@@ -225,9 +230,7 @@ linux_sys_wait4(l, v, retval)
 
 	linux_options = SCARG(uap, options);
 	options = 0;
-	if (linux_options &
-	    ~(LINUX_WAIT4_WNOHANG|LINUX_WAIT4_WUNTRACED|LINUX_WAIT4_WALL|
-	      LINUX_WAIT4_WCLONE))
+	if (linux_options & ~(LINUX_WAIT4_KNOWNFLAGS))
 		return (EINVAL);
 
 	if (linux_options & LINUX_WAIT4_WNOHANG)
@@ -238,6 +241,13 @@ linux_sys_wait4(l, v, retval)
 		options |= WALLSIG;
 	if (linux_options & LINUX_WAIT4_WCLONE)
 		options |= WALTSIG;
+#ifdef DIAGNOSTIC
+	if (linux_options & LINUX_WAIT4_WNOTHREAD)
+		printf("WARNING: %s: linux process %d.%d called "
+		       "waitpid with __WNOTHREAD set!",
+		       __FILE__, p->p_pid, l->l_lid);
+
+#endif
 
 	SCARG(&w4a, pid) = SCARG(uap, pid);
 	SCARG(&w4a, status) = status;
@@ -282,9 +292,9 @@ linux_sys_brk(l, v, retval)
 	SCARG(&oba, nsize) = nbrk;
 
 	if ((caddr_t) nbrk > vm->vm_daddr && sys_obreak(l, &oba, retval) == 0)
-		ed->p_break = (char*)nbrk;
+		ed->s->p_break = (char*)nbrk;
 	else 
-		nbrk = ed->p_break;
+		nbrk = ed->s->p_break;
 
 	retval[0] = (register_t)nbrk;
 
@@ -450,15 +460,11 @@ linux_sys_mmap(l, v, retval)
 		syscallarg(int) fd;
 		syscallarg(linux_off_t) offset;
 	} */ *uap = v;
-	struct sys_mmap_args cma;
 
 	if (SCARG(uap, offset) & PAGE_MASK)
 		return EINVAL;
 
-	linux_to_bsd_mmap_args(&cma, uap);
-	SCARG(&cma, pos) = (off_t)SCARG(uap, offset);
-
-	return sys_mmap(l, &cma, retval);
+	return linux_mmap(l, uap, retval, SCARG(uap, offset));
 }
 
 /*
@@ -484,12 +490,61 @@ linux_sys_mmap2(l, v, retval)
 		syscallarg(int) fd;
 		syscallarg(linux_off_t) offset;
 	} */ *uap = v;
+
+	return linux_mmap(l, uap, retval,
+	    ((off_t)SCARG(uap, offset)) << PAGE_SHIFT);
+}
+
+/*
+ * Massage arguments and call system mmap(2).
+ */
+static int
+linux_mmap(l, uap, retval, offset)
+	struct lwp *l;
+	struct linux_sys_mmap_args *uap;
+	register_t *retval;
+	off_t offset;
+{
 	struct sys_mmap_args cma;
+	int error;
+	size_t mmoff=0;
+
+	if (SCARG(uap, flags) & LINUX_MAP_GROWSDOWN) {
+		/*
+		 * Request for stack-like memory segment. On linux, this
+		 * works by mmap()ping (small) segment, which is automatically
+		 * extended when page fault happens below the currently
+		 * allocated area. We emulate this by allocating (typically
+		 * bigger) segment sized at current stack size limit, and
+		 * offsetting the requested and returned address accordingly.
+		 * Since physical pages are only allocated on-demand, this
+		 * is effectively identical.
+		 */
+		rlim_t ssl = l->l_proc->p_rlimit[RLIMIT_STACK].rlim_cur;
+
+		if (SCARG(uap, len) < ssl) {
+			/* Compute the address offset */
+			mmoff = round_page(ssl) - SCARG(uap, len);
+
+			if (SCARG(uap, addr))
+				SCARG(uap, addr) -= mmoff;
+
+			SCARG(uap, len) = (size_t) ssl;
+		}
+	}
 
 	linux_to_bsd_mmap_args(&cma, uap);
-	SCARG(&cma, pos) = ((off_t)SCARG(uap, offset)) << PAGE_SHIFT;
+	SCARG(&cma, pos) = offset;
 
-	return sys_mmap(l, &cma, retval);
+	error = sys_mmap(l, &cma, retval);
+	if (error)
+		return (error);
+
+	/* Shift the returned address for stack-like segment if necessary */
+	if (SCARG(uap, flags) & LINUX_MAP_GROWSDOWN && mmoff)
+		retval[0] += mmoff;
+
+	return (0);
 }
 
 static void
@@ -625,7 +680,7 @@ linux_sys_mprotect(l, v, retval)
 #endif
 	if (!uvm_map_lookup_entry(map, start, &entry) || entry->start > start) {
 		vm_map_unlock(map);
-		return EFAULT;
+		return ENOMEM;
 	}
 	vm_map_unlock(map);
 	return uvm_map_protect(map, start, end, prot, FALSE);

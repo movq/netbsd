@@ -1,6 +1,6 @@
-.\"	$NetBSD: postinstall,v 1.54 2003/11/01 03:02:59 grant Exp $
+.\"	$NetBSD: postinstall,v 1.54.2.3.2.1 2005/08/15 05:30:22 snj Exp $
 .\"
-.\" Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1999-2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -78,7 +78,7 @@ the correct terminal type as discussed in the
 section.
 .\}
 .el \{\
-.ie \n[sparc] \{\
+.ie \n[sparc]:\n[sparc64] \{\
 .ds termtype sun
 .Ic \*[termtype]
 for a local console, or whatever is appropriate for your serial
@@ -189,6 +189,7 @@ For example:
 .if \n[mac68k]  .ds IFname sn0
 .if \n[macppc]  .ds IFname mc0
 .if \n[sgimips] .ds IFname sq0
+.if \n[sparc64] .ds IFname hme0
 .
 .Dl ifconfig_\*[IFname]="inet 123.45.67.89 netmask 255.255.255.0"
 .Pp
@@ -208,6 +209,11 @@ See
 or
 .Xr named 8
 for more information.
+Instead of manually configuring network and naming service,
+DHCP can be used by setting
+.Li dhclient=YES
+in
+.Pa /etc/rc.conf .
 .Pp
 Other files in
 .Pa /etc
@@ -252,6 +258,17 @@ facility to work with the a.out and elf kernel images supplied with
 \*M installations you will need to set
 .Li savecore_flags="-z -N /netbsd"
 .\}
+.if \n[sparc]:\n[sparc64] \{\
+.It
+Select the proper terminal devices
+.Pp
+If you are using a serial console, you will have to edit the
+.Pa /etc/ttys
+file and change 
+.if \n[sparc] sun
+.if \n[sparc64] sun-ss5
+to the appropriate terminal type, such as vt220.
+.\}
 .It
 Logging in
 .Pp
@@ -287,14 +304,15 @@ Adding accounts
 .Pp
 Use the
 .Xr useradd 8
-command to add accounts to your system;
-.Em do not
+command to add accounts to your system.
+Do not
 edit
 .Pa /etc/passwd
-directly.
-See
-.Xr useradd 8
-for more information on how to add a new user to the system.
+directly! See
+.Xr vipw 8
+and
+.Xr pwd_mkdb 8
+if you want to edit the password database.
 .if !\n[hp700]:\n[next68k] \{\
 .It
 The X Window System
@@ -323,8 +341,10 @@ You will need to set up a configuration file, see
 .Pa /usr/X11R6/lib/X11/XF86Config.eg
 for an example.
 The
+.Xr xf86cfg 1
+and
 .Xr xf86config 1
-utility can interactively create a first version of such a configuration
+utilities can interactively create a first version of such a configuration
 file for you.
 .if \n[mac68k] \{\
 .(tag [Color_X]
@@ -379,8 +399,11 @@ You can install them with the following commands under
 .Ic # PKG_PATH=ftp://ftp.NetBSD.org/pub/NetBSD/packages/\*V/\*M/All
 .Ic # export PKG_PATH
 .Ic # pkg_add -v tcsh
-.Ic # pkg_add -v apache
+.Ic # pkg_add -v bash
 .Ic # pkg_add -v perl
+.Ic # pkg_add -v apache
+.Ic # pkg_add -v kde
+.Ic # pkg_add -v mozilla
 \&...
 .Ed
 .Pp
@@ -393,10 +416,10 @@ then replace the first two lines with the following:
 \&...
 .Ed
 .Pp
-The above commands will install the tcsh shell,
-the Apache web server and
-the perl programming language as well as all the packages they
-depend on.
+The above commands will install the Tenex-csh and Bourne Again shell,
+the Perl programming language, Apache web server, KDE desktop
+environment and the Mozilla web browser 
+as well as all the packages they depend on.
 .It
 Package sources for compiling packages on your own can be obtained by
 retrieving the file
@@ -408,9 +431,11 @@ They are typically extracted into
 .Dl # Ic "mkdir /usr/pkgsrc"
 .Dl # Ic "( cd /usr/pkgsrc ; tar -zxpf - ) \*< pkgsrc.tar.gz"
 .Pp
-After extracting, then see the
+After extracting, see the
 .Pa README
-file in the extraction directory (e.g.
+and
+.Pa doc/pkgsrc.txt
+files in the extraction directory (e.g.
 .Pa /usr/pkgsrc/README )
 for more information.
 .bullet)
@@ -430,8 +455,10 @@ file will almost definitely need to be adjusted;
 files aiding in this can be found in
 .Pa /usr/share/sendmail .
 See the
-.Li Tn README
+.Li README
 file there for more information.
+If you prefer postfix as MTA, adjust
+.Pa /etc/mailer.conf .
 .It
 Edit
 .Pa /etc/rc.local

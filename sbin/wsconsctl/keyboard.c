@@ -1,4 +1,4 @@
-/*	$NetBSD: keyboard.c,v 1.3 2001/09/19 12:45:24 ad Exp $ */
+/*	$NetBSD: keyboard.c,v 1.3.4.2 2004/07/02 17:50:13 he Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -41,6 +41,7 @@
 #include <dev/wscons/wsksymdef.h>
 #include <dev/wscons/wsconsio.h>
 #include <err.h>
+#include <errno.h>
 #include "wsconsctl.h"
 
 static int kbtype;
@@ -52,8 +53,10 @@ struct wskbd_map_data kbmap = { KS_NUMKEYCODES, mapdata };	/* used in map_parse.
 							   and in util.c */
 static struct wskbd_keyrepeat_data repeat;
 static struct wskbd_keyrepeat_data dfrepeat;
+static struct wskbd_scroll_data scroll;
 static int ledstate;
 static kbd_t kbdencoding;
+static int havescroll = 1;
 
 struct field keyboard_field_tab[] = {
     { "type",			&kbtype,	FMT_KBDTYPE,	FLG_RDONLY },
@@ -71,6 +74,8 @@ struct field keyboard_field_tab[] = {
     { "ledstate",		&ledstate,	FMT_UINT,	0 },
     { "encoding",		&kbdencoding,	FMT_KBDENC,	FLG_MODIFY },
     { "keyclick",		&keyclick,	FMT_UINT,	FLG_MODIFY },
+	{ "scroll.mode",	&scroll.mode,	FMT_UINT,	FLG_MODIFY },
+	{ "scroll.modifier",	&scroll.modifier,	FMT_UINT,	FLG_MODIFY },
 };
 
 int keyboard_field_tab_len = sizeof(keyboard_field_tab)/
@@ -140,6 +145,20 @@ keyboard_get_values(fd)
 	if (field_by_value(&keyclick)->flags & FLG_GET) {
 		ioctl(fd, WSKBDIO_GETKEYCLICK, &keyclick);
 		/* Optional; don't complain. */
+	}
+	
+	scroll.which = 0;
+	if (field_by_value(&scroll.mode)->flags & FLG_GET)
+		scroll.which |= WSKBD_SCROLL_DOMODE;
+	if (field_by_value(&scroll.modifier)->flags & FLG_GET)
+		scroll.which |= WSKBD_SCROLL_DOMODIFIER;
+	if (scroll.which != 0) {
+		if (ioctl(fd, WSKBDIO_GETSCROLL, &scroll) == -1) {
+			if (errno != ENODEV)
+				err(1, "WSKBDIO_GETSCROLL");
+			else
+				havescroll = 0;
+		}
 	}
 }
 
@@ -229,4 +248,30 @@ keyboard_put_values(fd)
 			err(1, "WSKBDIO_SETKEYCLICK");
 		pr_field(field_by_value(&keyclick), " -> ");
 	}
+
+
+	if (havescroll == 0)
+		return;
+
+	scroll.which = 0;
+	if (field_by_value(&scroll.mode)->flags & FLG_SET)
+		scroll.which |= WSKBD_SCROLL_DOMODE;
+	if (field_by_value(&scroll.modifier)->flags & FLG_SET)
+		scroll.which |= WSKBD_SCROLL_DOMODIFIER;
+
+	if (scroll.which & WSKBD_SCROLL_DOMODE)
+		pr_field(field_by_value(&scroll.mode), " -> ");
+	if (scroll.which & WSKBD_SCROLL_DOMODIFIER)
+		pr_field(field_by_value(&scroll.modifier), " -> ");
+	if (scroll.which != 0) {
+		if (ioctl(fd, WSKBDIO_SETSCROLL, &scroll) == -1) {
+			if (errno != ENODEV)
+				err(1, "WSKBDIO_SETSCROLL");
+			else {
+				warnx("scrolling is not supported by this kernel");
+				havescroll = 0;
+			}
+		}
+	}
 }
+

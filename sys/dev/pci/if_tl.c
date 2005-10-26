@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tl.c,v 1.64 2003/11/10 08:51:52 wiz Exp $	*/
+/*	$NetBSD: if_tl.c,v 1.64.2.1.2.3 2005/05/01 10:19:50 tron Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.  All rights reserved.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.64 2003/11/10 08:51:52 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.64.2.1.2.3 2005/05/01 10:19:50 tron Exp $");
 
 #undef TLDEBUG
 #define TL_PRIV_STATS
@@ -72,6 +72,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.64 2003/11/10 08:51:52 wiz Exp $");
 #if NBPFILTER > 0
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
+#endif
+
+#include "rnd.h"
+#if NRND > 0
+#include <sys/rnd.h>
 #endif
 
 #ifdef INET
@@ -212,8 +217,12 @@ CFATTACH_DECL(tl, sizeof(tl_softc_t),
 const struct tl_product_desc tl_compaq_products[] = {
 	{ PCI_PRODUCT_COMPAQ_N100TX, TLPHY_MEDIA_NO_10_T,
 	  "Compaq Netelligent 10/100 TX" },
+	{ PCI_PRODUCT_COMPAQ_INT100TX, TLPHY_MEDIA_NO_10_T,
+	  "Integrated Compaq Netelligent 10/100 TX" },
 	{ PCI_PRODUCT_COMPAQ_N10T, TLPHY_MEDIA_10_5,
 	  "Compaq Netelligent 10 T" },
+	{ PCI_PRODUCT_COMPAQ_N10T2, TLPHY_MEDIA_10_2,
+	  "Compaq Netelligent 10 T/2 UTP/Coax" },
 	{ PCI_PRODUCT_COMPAQ_IntNF3P, TLPHY_MEDIA_10_2,
 	  "Compaq Integrated NetFlex 3/P" },
 	{ PCI_PRODUCT_COMPAQ_IntPL100TX, TLPHY_MEDIA_10_2|TLPHY_MEDIA_NO_10_T,
@@ -480,6 +489,11 @@ tl_pci_attach(parent, self, aux)
 	IFQ_SET_READY(&ifp->if_snd);
 	if_attach(ifp);
 	ether_ifattach(&(sc)->tl_if, (sc)->tl_enaddr);
+
+#if NRND > 0
+	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
+	    RND_TYPE_NET, 0);
+#endif
 }
 
 static void
@@ -1222,6 +1236,10 @@ tl_intr(v)
 		/* Ack the interrupt and enable interrupts */
 		TL_HR_WRITE(sc, TL_HOST_CMD, ack | int_type | HOST_CMD_ACK |
 		    HOST_CMD_IntOn);
+#if NRND > 0
+		if (RND_ENABLED(&sc->rnd_source))
+			rnd_add_uint32(&sc->rnd_source, int_reg);
+#endif
 		return 1;
 	}
 	/* ack = 0 ; interrupt was perhaps not our. Just enable interrupts */
@@ -1248,7 +1266,8 @@ tl_ifioctl(ifp, cmd, data)
 	default:
 		error = ether_ioctl(ifp, cmd, data);
 		if (error == ENETRESET) {
-			tl_addr_filter(sc);
+			if (ifp->if_flags & IFF_RUNNING)
+				tl_addr_filter(sc);
 			error = 0;
 		}
 	}

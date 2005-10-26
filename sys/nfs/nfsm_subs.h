@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsm_subs.h,v 1.34 2004/03/19 13:52:07 yamt Exp $	*/
+/*	$NetBSD: nfsm_subs.h,v 1.34.2.2.2.1 2005/01/11 06:39:18 jmc Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -158,11 +158,14 @@
 
 #define nfsm_mtofh(d, v, v3, f) \
 		{ struct nfsnode *ttnp; nfsfh_t *ttfhp; int ttfhsize; \
+		int hasattr = 0; \
 		if (v3) { \
 			nfsm_dissect(tl, u_int32_t *, NFSX_UNSIGNED); \
 			(f) = fxdr_unsigned(int, *tl); \
-		} else \
+		} else { \
 			(f) = 1; \
+			hasattr = 1; \
+		} \
 		if (f) { \
 			nfsm_getfh(ttfhp, ttfhsize, (v3)); \
 			if ((t1 = nfs_nget((d)->v_mount, ttfhp, ttfhsize, \
@@ -176,11 +179,11 @@
 		if (v3) { \
 			nfsm_dissect(tl, u_int32_t *, NFSX_UNSIGNED); \
 			if (f) \
-				(f) = fxdr_unsigned(int, *tl); \
+				hasattr = fxdr_unsigned(int, *tl); \
 			else if (fxdr_unsigned(int, *tl)) \
 				nfsm_adv(NFSX_V3FATTR); \
 		} \
-		if (f) \
+		if (f && hasattr) \
 			nfsm_loadattr((v), (struct vattr *)0, 0); \
 		}
 
@@ -258,10 +261,19 @@
 #define NFSV3_WCCCHK	1
 
 #define	nfsm_wcc_data(v, f, flags) \
-		{ int ttattrf, ttretf = 0; \
+		{ int ttattrf, ttretf = 0, renewctime = 0, renewnctime = 0; \
 		nfsm_dissect(tl, u_int32_t *, NFSX_UNSIGNED); \
 		if (*tl == nfs_true) { \
+			struct timespec ctime; \
 			nfsm_dissect(tl, u_int32_t *, 6 * NFSX_UNSIGNED); \
+			fxdr_nfsv3time(tl + 4, &ctime); \
+			if (VTONFS(v)->n_ctime == ctime.tv_sec) \
+				renewctime = 1; \
+			if ((v)->v_type == VDIR) { \
+				if (timespeccmp(&VTONFS(v)->n_nctime, \
+				    &ctime, ==)) \
+					renewnctime = 1; \
+			} \
 			if (f) { \
 				struct timespec mtime; \
 				fxdr_nfsv3time(tl + 2, &mtime); \
@@ -270,6 +282,10 @@
 			} \
 		} \
 		nfsm_postop_attr((v), ttattrf, (flags)); \
+		if (renewctime && ttattrf) \
+			VTONFS(v)->n_ctime = VTONFS(v)->n_vattr->va_ctime.tv_sec; \
+		if (renewnctime && ttattrf) \
+			VTONFS(v)->n_nctime = VTONFS(v)->n_vattr->va_ctime; \
 		if (f) { \
 			(f) = ttretf; \
 		} else { \
@@ -379,14 +395,16 @@
 #define nfsm_rndup(a)	(((a)+3)&(~0x3))
 #define nfsm_padlen(a)	(nfsm_rndup(a) - (a))
 
-#define	nfsm_request(v, t, p, c)	\
+#define	nfsm_request1(v, t, p, c, rexmitp)	\
 		if ((error = nfs_request((v), mreq, (t), (p), \
-		   (c), &mrep, &md, &dpos)) != 0) { \
+		   (c), &mrep, &md, &dpos, (rexmitp))) != 0) { \
 			if (error & NFSERR_RETERR) \
 				error &= ~NFSERR_RETERR; \
 			else \
 				goto nfsmout; \
 		}
+
+#define	nfsm_request(v, t, p, c)	nfsm_request1((v), (t), (p), (c), NULL)
 
 #define	nfsm_strtom(a,s,m) \
 		if ((s) > (m)) { \

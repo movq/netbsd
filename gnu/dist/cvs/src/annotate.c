@@ -1,6 +1,11 @@
 /*
- * Copyright (c) 1992, Brian Berliner and Jeff Polk
- * Copyright (c) 1989-1992, Brian Berliner
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (c) 1992, Brian Berliner and Jeff Polk
+ * Portions Copyright (c) 1989-1992, Brian Berliner
  * 
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with the CVS source distribution.
@@ -54,7 +59,7 @@ annotate (argc, argv)
     int err = 0;
     int c;
 
-    is_rannotate = (strcmp(command_name, "rannotate") == 0);
+    is_rannotate = (strcmp(cvs_cmd_name, "rannotate") == 0);
 
     if (argc == -1)
 	usage (annotate_usage);
@@ -221,6 +226,7 @@ rannotate_proc (argc, argv, xwhere, mwhere, mfile, shorten, local, mname, msg)
 	{
 	    error (0, errno, "cannot chdir to %s", repository);
 	    free (repository);
+	    free (where);
 	    return (1);
 	}
 	/* End section which is identical to patch_proc.  */
@@ -247,7 +253,10 @@ rannotate_proc (argc, argv, xwhere, mwhere, mfile, shorten, local, mname, msg)
 			   (DIRENTPROC) NULL, (DIRLEAVEPROC) NULL, NULL,
 			   argc - 1, argv + 1, local, which, 0, CVS_LOCK_READ,
 			   where, 1, repository);
-    if ( which & W_REPOS ) free ( repository );
+    if ( which & W_REPOS )
+	free ( repository );
+    if ( where != NULL )
+	free (where);
     return err;
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_fork.c,v 1.114 2004/02/12 23:47:21 enami Exp $	*/
+/*	$NetBSD: kern_fork.c,v 1.114.2.3 2004/08/15 14:06:29 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2001 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.114 2004/02/12 23:47:21 enami Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.114.2.3 2004/08/15 14:06:29 tron Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_systrace.h"
@@ -163,6 +163,13 @@ sys___clone(struct lwp *l, void *v, register_t *retval)
 	 * We don't support the CLONE_PID or CLONE_PTRACE flags.
 	 */
 	if (SCARG(uap, flags) & (CLONE_PID|CLONE_PTRACE))
+		return (EINVAL);
+
+	/*
+	 * Linux enforces CLONE_VM with CLONE_SIGHAND, do same.
+	 */
+	if (SCARG(uap, flags) & CLONE_SIGHAND
+	    && (SCARG(uap, flags) & CLONE_VM) == 0)
 		return (EINVAL);
 
 	flags = 0;
@@ -375,7 +382,7 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	 * If emulation has process fork hook, call it now.
 	 */
 	if (p2->p_emul->e_proc_fork)
-		(*p2->p_emul->e_proc_fork)(p2, p1);
+		(*p2->p_emul->e_proc_fork)(p2, p1, flags);
 
 	/*
 	 * ...and finally, any other random fork hooks that subsystems
@@ -423,12 +430,13 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	SCHED_LOCK(s);
 	p2->p_stats->p_start = time;
 	p2->p_acflag = AFORK;
-	p2->p_nrlwps = 1;
 	if (p1->p_flag & P_STOPFORK) {
+		p2->p_nrlwps = 0;
 		p1->p_nstopchild++;
 		p2->p_stat = SSTOP;
 		l2->l_stat = LSSTOP;
 	} else {
+		p2->p_nrlwps = 1;
 		p2->p_stat = SACTIVE;
 		l2->l_stat = LSRUN;
 		setrunqueue(l2);

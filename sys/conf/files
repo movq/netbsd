@@ -1,4 +1,4 @@
-#	$NetBSD: files,v 1.662 2004/03/28 22:43:56 matt Exp $
+#	$NetBSD: files,v 1.662.2.9.2.1 2005/05/13 17:09:34 riz Exp $
 
 #	@(#)files.newconf	7.5 (Berkeley) 5/10/93
 
@@ -142,7 +142,7 @@ defparam			SB_MAX
 # UVM options
 #
 defflag	opt_uvmhist.h		UVMHIST UVMHIST_PRINT
-defflag	opt_uvm.h		USE_TOPDOWN_VM
+defflag	opt_uvm.h		USE_TOPDOWN_VM UVMMAP_NOCOUNTERS
 
 # file system options
 #
@@ -157,6 +157,12 @@ defparam opt_bufcache.h		BUFCACHE BUFPAGES
 # userconf
 #
 defflag				USERCONF
+
+# sysctl related
+#
+defflag opt_sysctl.h		SYSCTL_DISALLOW_CREATE SYSCTL_DISALLOW_KWRITE
+				SYSCTL_DEBUG_SETUP SYSCTL_DEBUG_CREATE
+				SYSCTL_INCLUDE_DESCR
 
 #
 # Not entirely MI, but present on multiple arch's
@@ -428,6 +434,10 @@ device	mpt: scsi
 file	dev/ic/mpt.c			mpt
 file	dev/ic/mpt_debug.c		mpt
 file	dev/ic/mpt_netbsd.c		mpt
+
+# Workbit NinjaSCSI-32 controllers
+device	njs: scsi
+file	dev/ic/ninjascsi32.c		njs
 
 # Symbios/NCR 53c700 SCSI controllers
 device	oosiop: scsi
@@ -742,7 +752,11 @@ file	dev/ic/rtl80x9.c		rtl80x9
 # Realtek 8129/8139 Ethernet controllers
 #
 device	rtk: ether, ifnet, arp, mii
-file	dev/ic/rtl81x9.c		rtk
+file	dev/ic/rtl81x9.c		rtk | re
+
+# Realtek 8169 Ethernet controllers
+#
+device	re: ether, ifnet, arp, mii
 
 # Common code for ESDI/IDE/etc. controllers
 #
@@ -890,6 +904,9 @@ define	pcmciaslot {[slot = -1]}	# PCMCIA slot itself
 # use them in an 'attach-with'.
 # UHCI USB controller
 #
+
+defparam USB_MEM_RESERVE
+
 device	uhci: usbus
 file	dev/usb/uhci.c			uhci			needs-flag
 
@@ -1101,7 +1118,7 @@ file	dev/cgd.c			cgd			needs-flag
 file	dev/cgd_crypto.c		cgd
 file	dev/clock_subr.c
 file	dev/clockctl.c			clockctl		needs-flag
-file	dev/dksubr.c			cgd
+file	dev/dksubr.c			cgd | xbd
 file	dev/fss.c			fss			needs-count
 file	dev/md.c			md			needs-count
 file	dev/midi.c			midi | midibus		needs-flag

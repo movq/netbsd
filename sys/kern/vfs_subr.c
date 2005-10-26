@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_subr.c,v 1.218 2004/03/24 15:34:53 atatat Exp $	*/
+/*	$NetBSD: vfs_subr.c,v 1.218.2.4 2004/06/21 10:20:07 tron Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_subr.c,v 1.218 2004/03/24 15:34:53 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_subr.c,v 1.218.2.4 2004/06/21 10:20:07 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_ddb.h"
@@ -246,10 +246,12 @@ getcleanvnode(p)
 	for (; vp != NULL; vp = TAILQ_NEXT(vp, v_freelist)) {
 		if (!simple_lock_try(&vp->v_interlock))
 			continue;
-		if ((vp->v_flag & VLAYER) == 0) {
-			if (vn_start_write(vp, &mp, V_NOWAIT) == 0)
-				break;
-		} else if (VOP_ISLOCKED(vp) == 0) {
+		/*
+		 * as our lwp might hold the underlying vnode locked,
+		 * don't try to reclaim the VLAYER vnode if it's locked.
+		 */
+		if ((vp->v_flag & VXLOCK) == 0 &&
+		    ((vp->v_flag & VLAYER) == 0 || VOP_ISLOCKED(vp) == 0)) {
 			if (vn_start_write(vp, &mp, V_NOWAIT) == 0)
 				break;
 		}
@@ -1145,7 +1147,7 @@ loop:
 			vgonel(vp, p);
 			goto loop;
 		}
-		if (vget(vp, LK_EXCLUSIVE | LK_INTERLOCK)) {
+		if (vget(vp, LK_EXCLUSIVE | LK_INTERLOCK | LK_NOWAIT)) {
 			simple_unlock(&spechash_slock);
 			goto loop;
 		}
@@ -2051,26 +2053,31 @@ SYSCTL_SETUP(sysctl_vfs_setup, "sysctl vfs subtree setup")
 		       CTL_VFS, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "generic", NULL,
+		       CTLTYPE_NODE, "generic",
+		       SYSCTL_DESCR("Non-specific vfs related information"),
 		       NULL, 0, NULL, 0,
 		       CTL_VFS, VFS_GENERIC, CTL_EOL);
 
 #if defined(COMPAT_09) || defined(COMPAT_43) || defined(COMPAT_44)
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
-		       CTLTYPE_INT, "maxtypenum", NULL,
+		       CTLTYPE_INT, "maxtypenum",
+		       SYSCTL_DESCR("Highest valid filesystem type number"),
 		       NULL, nmountcompatnames, NULL, 0,
 		       CTL_VFS, VFS_GENERIC, VFS_MAXTYPENUM, CTL_EOL);
 #endif
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "usermount", NULL,
+		       CTLTYPE_INT, "usermount",
+		       SYSCTL_DESCR("Whether unprivileged users may mount "
+				    "filesystems"),
 		       NULL, 0, &dovfsusermount, 0,
 		       CTL_VFS, VFS_GENERIC, VFS_USERMOUNT, CTL_EOL);
 #if defined(COMPAT_09) || defined(COMPAT_43) || defined(COMPAT_44)
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
-		       CTLTYPE_STRUCT, "conf", NULL,
+		       CTLTYPE_STRUCT, "conf",
+		       SYSCTL_DESCR("Filesystem configuration information"),
 		       sysctl_vfs_generic_conf, 0, NULL,
 		       sizeof(struct vfsconf),
 		       CTL_VFS, VFS_GENERIC, VFS_CONF, CTL_EOL);

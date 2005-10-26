@@ -1,4 +1,4 @@
-/*	$NetBSD: mbuf.h,v 1.90 2004/03/22 17:56:30 matt Exp $	*/
+/*	$NetBSD: mbuf.h,v 1.90.2.4 2004/09/11 18:08:57 he Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999, 2001 The NetBSD Foundation, Inc.
@@ -82,7 +82,7 @@
 #include <sys/queue.h>
 
 /* For offsetof() */
-#ifdef _KERNEL
+#if defined(_KERNEL) || defined(_STANDALONE)
 #include <sys/systm.h>
 #else
 #include <stddef.h>
@@ -387,7 +387,7 @@ do {									\
 #define	MCLAIM(m, mowner) 		do { } while (/* CONSTCOND */ 0)
 #define	MOWNER_ATTACH(mo)		do { } while (/* CONSTCOND */ 0)
 #define	MOWNER_DETACH(mo)		do { } while (/* CONSTCOND */ 0)
-#define	m_claim(m, mo)			do { } while (/* CONSTCOND */ 0)
+#define	m_claimm(m, mo)			do { } while (/* CONSTCOND */ 0)
 #define MBUFTRACE_ASSERT(cond)		do { } while (/* CONSTCOND */ 0)
 #endif
 
@@ -846,15 +846,20 @@ int	m_apply(struct mbuf *, int, int,
 		int (*)(void *, caddr_t, unsigned int), void *);
 void	m_cat(struct mbuf *,struct mbuf *);
 #ifdef MBUFTRACE
-void	m_claim(struct mbuf *, struct mowner *);
+void	m_claimm(struct mbuf *, struct mowner *);
 #endif
 void	m_clget(struct mbuf *, int);
 int	m_mballoc(int, int);
 void	m_copyback(struct mbuf *, int, int, caddr_t);
+struct	mbuf *m_copyback_cow(struct mbuf *, int, int, caddr_t, int);
+int 	m_makewritable(struct mbuf **, int, int, int);
 void	m_copydata(struct mbuf *, int, int, caddr_t);
 void	m_freem(struct mbuf *);
 void	m_reclaim(void *, int);
 void	mbinit(void);
+
+/* Inline routines. */
+static	u_int m_length(struct mbuf *);
 
 /* Packet tag routines */
 struct	m_tag *m_tag_get(int, int, int);
@@ -892,6 +897,23 @@ struct	m_tag *m_tag_next(struct mbuf *, struct m_tag *);
 #define	PACKET_TAG_IPSEC_SOCKET			22 /* IPSEC socket ref */
 #define	PACKET_TAG_IPSEC_HISTORY		23 /* IPSEC history */
 
+/*
+ * Return the number of bytes in the mbuf chain, m.
+ */
+static __inline u_int
+m_length(struct mbuf *m)
+{
+	struct mbuf *m0;
+	u_int pktlen;
+
+	if ((m->m_flags & M_PKTHDR) != 0) 
+		return m->m_pkthdr.len;
+
+	pktlen = 0;
+	for (m0 = m; m0 != NULL; m0 = m0->m_next)
+		pktlen += m0->m_len;
+	return pktlen;
+}
 
 #endif /* _KERNEL */
 #endif /* !_SYS_MBUF_H_ */

@@ -1,6 +1,11 @@
 /*
- * Copyright (c) 1992, Brian Berliner and Jeff Polk
- * Copyright (c) 1989-1992, Brian Berliner
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (C) 1992, Brian Berliner and Jeff Polk
+ * Portions Copyright (C) 1989-1992, Brian Berliner
  * 
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with the CVS source distribution.
@@ -33,11 +38,10 @@ add_entries_proc (node, closure)
      Node *node;
      void *closure;
 {
-    Entnode *entnode;
     Node *fnode;
-    List *filelist = (List *) closure;
+    List *filelist = closure;
+    Entnode *entnode = node->data;
 
-    entnode = (Entnode *) node->data;
     if (entnode->type != ENT_FILE)
 	return (0);
 
@@ -127,11 +131,10 @@ add_subdir_proc (p, closure)
      Node *p;
      void *closure;
 {
-    List *dirlist = (List *) closure;
-    Entnode *entnode;
+    List *dirlist = closure;
+    Entnode *entnode = p->data;
     Node *dnode;
 
-    entnode = (Entnode *) p->data;
     if (entnode->type != ENT_SUBDIR)
 	return 0;
 
@@ -189,7 +192,7 @@ Find_Directories (repository, which, entries)
 	    tmpentries = NULL;
 
 	if (tmpentries != NULL)
-	    sdtp = (struct stickydirtag *) tmpentries->list->data;
+	    sdtp = tmpentries->list->data;
 
 	/* If we do have an entries list, then if sdtp is NULL, or if
            sdtp->subdirs is nonzero, all subdirectory information is

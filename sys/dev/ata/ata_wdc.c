@@ -1,4 +1,4 @@
-/*	$NetBSD: ata_wdc.c,v 1.53 2004/03/02 13:13:57 fvdl Exp $	*/
+/*	$NetBSD: ata_wdc.c,v 1.53.2.3.2.4 2005/07/18 03:57:36 riz Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001, 2003 Manuel Bouyer.
@@ -30,7 +30,7 @@
  */
 
 /*-
- * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ata_wdc.c,v 1.53 2004/03/02 13:13:57 fvdl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ata_wdc.c,v 1.53.2.3.2.4 2005/07/18 03:57:36 riz Exp $");
 
 #ifndef WDCDEBUG
 #define WDCDEBUG
@@ -119,7 +119,8 @@ static void	wdc_ata_bio_start(struct wdc_channel *,struct ata_xfer *);
 static void	_wdc_ata_bio_start(struct wdc_channel *,struct ata_xfer *);
 static int	wdc_ata_bio_intr(struct wdc_channel *, struct ata_xfer *,
 				 int);
-static void	wdc_ata_bio_kill_xfer(struct wdc_channel *,struct ata_xfer *);
+static void	wdc_ata_bio_kill_xfer(struct wdc_channel *,
+				      struct ata_xfer *, int);
 static void	wdc_ata_bio_done(struct wdc_channel *, struct ata_xfer *); 
 static int	wdc_ata_err(struct ata_drive_datas *, struct ata_bio *);
 #define WDC_ATA_NOERR 0x00 /* Drive doesn't report an error */
@@ -303,6 +304,7 @@ ready:
 		 */
 		bus_space_write_1(chp->ctl_iot, chp->ctl_ioh, wd_aux_ctlr,
 		    WDCTL_4BIT);
+		delay(10); /* some drives need a little delay here */
 	}
 
 	_wdc_ata_bio_start(chp, xfer);
@@ -341,7 +343,7 @@ _wdc_ata_bio_start(struct wdc_channel *chp, struct ata_xfer *xfer)
 	int wait_flags = (xfer->c_flags & C_POLL) ? AT_POLL : 0;
 	u_int16_t cyl;
 	u_int8_t head, sect, cmd = 0;
-	int nblks;
+	int nblks, error;
 	int dma_flags = 0;
 
 	WDCDEBUG_PRINT(("_wdc_ata_bio_start %s:%d:%d\n",
@@ -415,10 +417,21 @@ again:
 			cmd = (ata_bio->flags & ATA_READ) ?
 			    WDCC_READDMA : WDCC_WRITEDMA;
 	    		/* Init the DMA channel. */
-			if ((*wdc->dma_init)(wdc->dma_arg,
+			error = (*wdc->dma_init)(wdc->dma_arg,
 			    chp->ch_channel, xfer->c_drive,
 			    (char *)xfer->c_databuf + xfer->c_skip, 
-			    ata_bio->nbytes, dma_flags) != 0) {
+			    ata_bio->nbytes, dma_flags);
+			if (error) {
+				if (error == EINVAL) {
+					/*
+					 * We can't do DMA on this transfer
+					 * for some reason.  Fall back to
+					 * PIO.
+					 */
+					xfer->c_flags &= ~C_DMA;
+					error = 0;
+					goto do_pio;
+				}
 				ata_bio->error = ERR_DMA;
 				ata_bio->r_error = 0;
 				wdc_ata_bio_done(chp, xfer);
@@ -455,9 +468,11 @@ again:
 			/* wait for irq */
 			goto intr;
 		} /* else not DMA */
+ do_pio:
 		ata_bio->nblks = min(nblks, ata_bio->multi);
 		ata_bio->nbytes = ata_bio->nblks * ata_bio->lp->d_secsize;
-		if (ata_bio->nblks > 1 && (ata_bio->flags & ATA_SINGLE) == 0) {
+		KASSERT(nblks == 1 || (ata_bio->flags & ATA_SINGLE) == 0);
+		if (ata_bio->nblks > 1) {
 			cmd = (ata_bio->flags & ATA_READ) ?
 			    WDCC_READMULTI : WDCC_WRITEMULTI;
 		} else {
@@ -612,11 +627,6 @@ wdc_ata_bio_intr(struct wdc_channel *chp, struct ata_xfer *xfer, int irq)
 		printf("%s:%d:%d: device timeout, c_bcount=%d, c_skip%d\n",
 		    wdc->sc_dev.dv_xname, chp->ch_channel, xfer->c_drive,
 		    xfer->c_bcount, xfer->c_skip);
-		/* if we were using DMA, flag a DMA error */
-		if (xfer->c_flags & C_DMA) {
-			ata_dmaerr(drvp,
-			    (xfer->c_flags & C_POLL) ? AT_POLL : 0);
-		}
 		ata_bio->error = TIMEOUT;
 		wdc_ata_bio_done(chp, xfer);
 		return 1;
@@ -662,7 +672,8 @@ wdc_ata_bio_intr(struct wdc_channel *chp, struct ata_xfer *xfer, int irq)
 		}
 		if (drv_err != WDC_ATA_ERR)
 			goto end;
-		ata_dmaerr(drvp, (xfer->c_flags & C_POLL) ? AT_POLL : 0);
+		if (ata_bio->r_error & WDCE_CRC || ata_bio->error == ERR_DMA)
+			ata_dmaerr(drvp, (xfer->c_flags & C_POLL) ? AT_POLL : 0);
 	}
 
 	/* if we had an error, end */
@@ -742,7 +753,8 @@ wdc_ata_kill_pending(struct ata_drive_datas *drvp)
 }
 
 static void
-wdc_ata_bio_kill_xfer(struct wdc_channel *chp, struct ata_xfer *xfer)
+wdc_ata_bio_kill_xfer(struct wdc_channel *chp, struct ata_xfer *xfer,
+    int reason)
 {
 	struct ata_bio *ata_bio = xfer->c_cmd;
 	int drive = xfer->c_drive;
@@ -752,7 +764,18 @@ wdc_ata_bio_kill_xfer(struct wdc_channel *chp, struct ata_xfer *xfer)
 	wdc_free_xfer(chp, xfer);
 
 	ata_bio->flags |= ATA_ITSDONE;
-	ata_bio->error = ERR_NODEV;
+	switch (reason) {
+	case KILL_GONE:
+		ata_bio->error = ERR_NODEV;
+		break;
+	case KILL_RESET:
+		ata_bio->error = ERR_RESET;
+		break;
+	default:
+		printf("wdc_ata_bio_kill_xfer: unknown reason %d\n",
+		    reason);
+		panic("wdc_ata_bio_kill_xfer");
+	}
 	ata_bio->r_error = WDCE_ABRT;
 	WDCDEBUG_PRINT(("wdc_ata_done: drv_done\n"), DEBUG_XFERS);
 	(*chp->ch_drive[drive].drv_done)(chp->ch_drive[drive].drv_softc);
@@ -804,14 +827,6 @@ wdc_ata_err(struct ata_drive_datas *drvp, struct ata_bio *ata_bio)
 	if (chp->ch_status & WDCS_ERR) {
 		ata_bio->error = ERROR;
 		ata_bio->r_error = chp->ch_error;
-		if (drvp->drive_flags & DRIVE_UDMA &&
-		    (ata_bio->r_error & WDCE_CRC)) {
-			/*
-			 * Record the CRC error, to avoid downgrading to
-			 * multiword DMA
-			 */
-			drvp->drive_flags |= DRIVE_DMAERR;
-		}
 		if (ata_bio->r_error & (WDCE_BBK | WDCE_UNC | WDCE_IDNF |
 		    WDCE_ABRT | WDCE_TK0NF | WDCE_AMNF))
 			return WDC_ATA_ERR;

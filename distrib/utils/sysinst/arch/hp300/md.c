@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.13 2003/11/30 14:36:44 dsl Exp $ */
+/*	$NetBSD: md.c,v 1.13.2.1.2.1 2005/07/24 02:25:25 snj Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -50,6 +50,8 @@
 #include "md.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
+
+const char *fdtype = "ffs";
 
 
 int
@@ -125,7 +127,7 @@ int
 md_post_disklabel(void)
 {
 
-	if (rammb < 6)
+	if (get_ramsize() < 6)
 		set_swap(diskdev, bsdlabel);
 
 	return (0);
@@ -146,11 +148,11 @@ md_post_newfs(void)
 
 	/* boot blocks ... */
 	msg_display(MSG_dobootblks, diskdev);
-	cp_to_target("/usr/mdec/boot", "/boot");
 	if (run_program(RUN_DISPLAY | RUN_NO_CLEAR,
-	    "/usr/mdec/installboot /usr/mdec/uboot.lif /dev/r%sa",
+	    "/usr/mdec/installboot /usr/mdec/uboot.lif /dev/r%sc",
 	    diskdev))
-		process_menu(MENU_ok, "Warning: disk is probably not bootable");
+		process_menu(MENU_ok,
+			 deconst("Warning: disk is probably not bootable"));
 	return (0);
 }
 
@@ -238,7 +240,7 @@ int
 md_pre_update()
 {
 
-	if (rammb < 6)
+	if (get_ramsize() < 6)
 		set_swap(diskdev, NULL);
 	return (1);
 }
@@ -246,11 +248,4 @@ md_pre_update()
 void
 md_init()
 {
-}
-
-void
-md_set_sizemultname()
-{
-
-	set_sizemultname_meg();
 }

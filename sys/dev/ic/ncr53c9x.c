@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr53c9x.c,v 1.110 2003/11/02 11:07:45 wiz Exp $	*/
+/*	$NetBSD: ncr53c9x.c,v 1.110.2.2 2004/09/11 13:03:49 he Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ncr53c9x.c,v 1.110 2003/11/02 11:07:45 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ncr53c9x.c,v 1.110.2.2 2004/09/11 13:03:49 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -444,6 +444,10 @@ ncr53c9x_init(sc, doreset)
 		/* All instances share this pool */
 		pool_init(&ecb_pool, sizeof(struct ncr53c9x_ecb), 0, 0, 0,
 		    "ncr53c9x_ecb", NULL);
+		/* make sure to always have some items to play with */
+		if (pool_prime(&ecb_pool, 1) == ENOMEM) {
+			printf("WARNING: not enough memory for ncr53c9x_ecb\n");
+		}
 		ecb_pool_initialized = 1;
 	}
 
@@ -495,7 +499,10 @@ ncr53c9x_init(sc, doreset)
 	 */
 	ncr53c9x_reset(sc);
 
+	sc->sc_flags = 0;
+	sc->sc_msgpriq = sc->sc_msgout = sc->sc_msgoutq = 0;
 	sc->sc_phase = sc->sc_prevphase = INVALID_PHASE;
+
 	for (r = 0; r < sc->sc_ntarg; r++) {
 		struct ncr53c9x_tinfo *ti = &sc->sc_tinfo[r];
 /* XXX - config flags per target: low bits: no reselect; high bits: no synch */
@@ -521,6 +528,9 @@ ncr53c9x_init(sc, doreset)
 		sc->sc_state = NCR_IDLE;
 		ncr53c9x_sched(sc);
 	}
+
+	/* Notify upper layer */
+	scsipi_async_event(&sc->sc_channel, ASYNC_EVENT_RESET, NULL);
 }
 
 /*
@@ -852,7 +862,8 @@ ncr53c9x_scsipi_request(chan, req, arg)
 		ecb = ncr53c9x_get_ecb(sc, xs->xs_control);
 		/*
 		 * This should never happen as we track resources
-		 * in the mid-layer.
+		 * in the mid-layer, but for now it can as pool_get()
+		 * can fail.
 		 */
 		if (ecb == NULL) {
 			scsipi_printaddr(periph);

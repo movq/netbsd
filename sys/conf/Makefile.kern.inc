@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.kern.inc,v 1.51 2003/12/04 02:33:41 lukem Exp $
+#	$NetBSD: Makefile.kern.inc,v 1.51.2.3 2004/09/13 17:32:31 tron Exp $
 #
 # This file contains common `MI' targets and definitions and it is included
 # at the bottom of each `MD' ${MACHINE}/conf/Makefile.${MACHINE}.
@@ -29,6 +29,7 @@ OBJCOPY?=	objcopy
 OBJDUMP?=	objdump
 CSCOPE?=	cscope
 MKID?=		mkid
+UUDECODE?=	${TOOL_UUDECODE:Uuudecode}
 .MAKEOVERRIDES+=USETOOLS	# make sure proper value is propagated
 
 _MKMSG?=		@\#
@@ -68,16 +69,19 @@ CWARNFLAGS+=	-Wmissing-prototypes -Wstrict-prototypes
 CWARNFLAGS+=	-Wno-sign-compare
 .endif
 
+CFLAGS+=	${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}}
+CFLAGS+=	${CPPFLAGS.${.IMPSRC:T}}
+CFLAGS+=	${CPUFLAGS} -ffreestanding
+CFLAGS+=	${CPUFLAGS} ${DEBUG} ${COPTS} ${CWARNFLAGS}
+AFLAGS+=	${CPUFLAGS} -D_LOCORE
+
 # Disable unitialized warnings with 2.95 - it gets it wrong way too often
 _ISGCC295!=		${CC} --version 2>/dev/null | grep 2.95 2>/dev/null || echo 0
 .if ${_ISGCC295}
 CWARNFLAGS+=	-Wno-uninitialized
+.else
+CFLAGS+=	-fno-zero-initialized-in-bss
 .endif
-
-CFLAGS+=	${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}}
-CFLAGS+=	${CPPFLAGS.${.IMPSRC:T}}
-CFLAGS+=	${CPUFLAGS} -ffreestanding ${DEBUG} ${COPTS} ${CWARNFLAGS}
-AFLAGS+=	${CPUFLAGS} -D_LOCORE
 
 # Use the per-source COPTS variables to add -g to just those
 # files that match the shell patterns given in ${DEBUGLIST}
@@ -199,6 +203,7 @@ EXTRA_KERNELS+= ${KERNELS:@.KERNEL.@${.KERNEL.}.gdb@}
 LINKFLAGS+=	${LINKFLAGS_NORMAL}
 .endif
 
+SYSTEM_LD_HEAD+=${SYSTEM_LD_HEAD_EXTRA}
 SYSTEM_LD_TAIL+=${SYSTEM_LD_TAIL_EXTRA}
 
 ##

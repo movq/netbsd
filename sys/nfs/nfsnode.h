@@ -1,4 +1,4 @@
-/*	 $NetBSD: nfsnode.h,v 1.46 2004/03/12 16:52:38 yamt Exp $	*/
+/*	 $NetBSD: nfsnode.h,v 1.46.2.2.2.3 2005/01/30 13:43:32 he Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -81,10 +81,17 @@ struct nfsdircache {
 	LIST_ENTRY(nfsdircache) dc_hash;	/* Hash chain */
 	TAILQ_ENTRY(nfsdircache) dc_chain;	/* Least recently entered chn */
 	u_int32_t	dc_cookie32;		/* Key for 64<->32 xlate case */
-	daddr_t		dc_blkno;		/* Number of block we're in */
 	int		dc_entry;		/* Entry number within block */
+	int		dc_refcnt;		/* Reference count */
+	int		dc_flags;		/* NFSDC_ flags */
 };
 
+#define	NFSDC_INVALID	1
+
+/*
+ * NFSDC_BLKNO: get buffer cache index
+ */
+#define	NFSDC_BLKNO(ndp)	((daddr_t)(ndp)->dc_blkcookie)
 
 /*
  * The nfsnode is the nfs equivalent to ufs's inode. Any similarity
@@ -112,10 +119,9 @@ struct nfsnode_reg {
 struct nfsnode_dir {
 	off_t ndir_direof;		/* EOF offset cache */
 	nfsuint64 ndir_cookieverf;	/* Cookie verifier */
-	daddr_t ndir_dblkno;		/* faked dir blkno */
 	struct nfsdirhashhead *ndir_dircache; /* offset -> cache hash heads */
 	struct nfsdirchainhead ndir_dirchain; /* Chain of dir cookies */
-	struct timespec ndir_nctime;	/* Last neg cache entry */
+	struct timespec ndir_nctime;	/* Last name cache entry */
 	unsigned ndir_dircachesize;	/* Size of dir cookie cache */
 };
 
@@ -142,7 +148,6 @@ struct nfsnode {
 
 #define n_direofoffset	n_un1.nu_dir.ndir_direof
 #define n_cookieverf	n_un1.nu_dir.ndir_cookieverf
-#define	n_dblkno	n_un1.nu_dir.ndir_dblkno
 #define n_dircache	n_un1.nu_dir.ndir_dircache
 #define	n_dirchain	n_un1.nu_dir.ndir_dirchain
 #define	n_nctime	n_un1.nu_dir.ndir_nctime
@@ -201,8 +206,10 @@ LIST_HEAD(nfsnodehashhead, nfsnode);
 #define	NACC		0x0100	/* Special file accessed */
 #define	NUPD		0x0200	/* Special file updated */
 #define	NCHG		0x0400	/* Special file times changed */
-#define	NTRUNCDELAYED	0x1000	/* Should be truncated later */
+#define	NTRUNCDELAYED	0x1000	/* Should be truncated later;
+				   implies stale cache */
 #define	NREMOVED	0x2000	/* Has been removed */
+#define	NUSEOPENCRED	0x4000	/* Try open cred first rather than owner's */
 
 /*
  * Convert between nfsnode pointers and vnode pointers

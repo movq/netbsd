@@ -1,6 +1,6 @@
-.\"	$NetBSD: donations,v 1.24 2002/07/19 07:17:46 scottr Exp $
+.\"	$NetBSD: donations,v 1.24.2.2 2004/08/30 08:13:37 tron Exp $
 .\"
-.\" Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1999-2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -32,89 +32,118 @@
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
 .Bd -unfilled -offset indent
-Steve Allen
-Jason Birnschein
-Mason Loring Bliss
-Jason Brazile
-Mark Brinicombe
-David Brownlee
-Simon Burge
-Dave Burgess
-Ralph Campbell
-Brian Carlstrom
-James Chacon
-Bill Coldwell
-Charles Conn
-Tom Coulter
-Charles D. Cranor
-Christopher G. Demetriou
-Scott Ellis
-Hubert Feyrer
-Castor Fu
-Greg Gingerich
-William Gnadt
-Michael Graff
-Guenther Grau
-Ross Harvey
-Charles M. Hannum
-Michael L. Hitch
-Kenneth Alan Hornstein
-Jordan K. Hubbard
-S\(/oren J\(/orvang
-Scott Kaplan
-Noah M. Keiserman
-Harald Koerfgen
-John Kohl
-Chris Legrow
-Ted Lemon
-Norman R. McBride
-Neil J. McRae
-Perry E. Metzger
-Luke Mewburn
-Toru Nishimura
-Herb Peyerl
-Mike Price
-Dave Rand
-Michael Richardson
-Heiko W. Rupp
-Brad Salai
-Chuck Silvers
-Thor Lancelot Simon
-Bill Sommerfeld
-Paul Southworth
-Eric and Rosemary Spahr
-Ted Spradley
-Kimmo Suominen
-Jason R. Thorpe
-Steve Wadlow
-Krister Walfridsson
-Rob Windsor
-Jim Wise
-Reinoud Zandijk
-Christos Zoulas
-.Ed
-.Pp
-.Bd -unfilled -offset indent
 AboveNet Communications, Inc.
 Advanced System Products, Inc.
+Alex Poylisher
+Alistair Crooks
+Andrew Brown
+Atsushi YOKOYAMA
 Avalon Computer Systems
 Bay Area Internet Solutions
+Ben Collver
+Bill Coldwell
+Bill Sommerfeld
+Brad Salai
 Brains Corporation, Japan
+Brian Carlstrom
+Brian McGroarty
 Canada Connect Corporation
-Co-operative Research Centre for Enterprise Distributed Systems Technology
+Castor Fu
+Central Iowa (Model) Railroad
+Charles Conn
+Charles D. Cranor
+Charles M. Hannum
+Chris Legrow
+Christer O. Andersson
+Christopher g. Demetriou
+Christos Zoulas
+Chuck Silvers
+Co-operative Research Centre for Enterprise Distributed
+Curt Sampson
+Dave Burgess
+Dave Rand
+David Brownlee
 Demon Internet, UK
+Derek Fellion
 Digital Equipment Corporation
 Distributed Processing Technology
+Douglas J. Trainor
 Easynet, UK
+Ed Braaten
+Edward Richley
+Eric and Rosemary Spahr
 Free Hardware Foundation
+Greg Gingerich
+Guenther Grau
+Harald Koerfgen
+Harry McDonald
+Heiko W. Rupp
+Herb Peyerl
+Hubert Feyrer
 Innovation Development Enterprises of America
 Internet Software Consortium
+James Chacon
+Jan Joris Vereijken
+Jason Birnschein
+Jason Brazile
+Jason R. Thorpe
+Jim Wise
+John Kohl
+Jonathan P. Kay
+Jordan K. Hubbard
+Kenneth Alan Hornstein
+Kevin Keith Woo
+Kimmo Suominen
+Krister Waldfridsson
+Lex Wennmacher
+LinuxFest Northwest
+Luke Mewburn
 MS Macro System GmbH, Germany
-Numerical Aerospace Simulation Facility, NASA Ames Research Center
+Mark Brinicombe
+Mark S. Thomas
+Mason Loring Bliss
+Mattias Karlsson
+Michael Graff
+Michael L. Hitch
+Michael Richardson
+Michael Thompson
+Michael W. James
+Mike Price
+Neil J. McRae
+Noah M. Keiserman
+Norman R. McBride
+Numerical Aerospace Simulation Facility, NASA Ames Research
+Oliver Cahagne
+Perry E. Metzger
+Petri T. Koistinen
 Piermont Information Systems Inc.
 Precedence Technologies Ltd
+Ralph Campbell
+Reinoud Zandijk
+Richard Nelson
+Rob Windsor
+Ross Harvey
+SDF Public Access Unix, Inc. 501(c)(7)
 Salient Systems Inc.
+Scott Ellis
+Scott Kaplan
+Simon Burge
+Soren Jacobsen
+Soren Jorvang
+Steve Allen
+Steve Wadlow
+SunROOT# Project
+Ted Lemon
+Ted Spradley
+Thor Lancelot Simon
+Tim Law
+Tom Coulter
+Toru Nishimura
 VMC Harald Frank, Germany
 Warped Communications, Inc.
+Wasabi Systems
 Whitecross Database Systems Ltd.
+William Gnadt
+Worria Web Hosting
 .Ed
+.Pp

@@ -1,4 +1,4 @@
-/*	$NetBSD: aac_pci.c,v 1.8 2004/03/26 22:11:46 gendalia Exp $	*/
+/*	$NetBSD: aac_pci.c,v 1.8.2.2.2.1 2005/05/11 17:29:09 riz Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aac_pci.c,v 1.8 2004/03/26 22:11:46 gendalia Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aac_pci.c,v 1.8.2.2.2.1 2005/05/11 17:29:09 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -237,6 +237,15 @@ struct aac_ident {
 	},
 	{
 		PCI_VENDOR_ADP2,
+		PCI_PRODUCT_ADP2_ASR2200S,
+		PCI_VENDOR_DELL,
+		PCI_PRODUCT_DELL_CERC_1_5,
+		AAC_HWIF_I960RX,
+		AAC_QUIRK_NO4GB,
+		"Dell CERC SATA RAID 1.5/6ch"
+	},
+	{
+		PCI_VENDOR_ADP2,
 		PCI_PRODUCT_ADP2_AAC2622,
 		PCI_VENDOR_ADP2,
 		PCI_PRODUCT_ADP2_AAC2622,
@@ -275,10 +284,28 @@ struct aac_ident {
 		PCI_VENDOR_ADP2,
 		PCI_PRODUCT_ADP2_ASR2200S,
 		PCI_VENDOR_ADP2,
+		PCI_PRODUCT_ADP2_AAR2810SA,
+		AAC_HWIF_I960RX,
+		0,
+		"Adaptec AAR-2810SA"
+	},
+	{
+		PCI_VENDOR_ADP2,
+		PCI_PRODUCT_ADP2_ASR2200S,
+		PCI_VENDOR_ADP2,
 		PCI_PRODUCT_ADP2_ASR2120S,
 		AAC_HWIF_I960RX,
 		0,
 		"Adaptec ASR-2120S"
+	},
+	{
+		PCI_VENDOR_ADP2,
+		PCI_PRODUCT_ADP2_ASR2200S,
+		PCI_VENDOR_ADP2,
+		0x0290,
+		AAC_HWIF_I960RX,
+		0,
+		"Adaptec ASR-2410SA"
 	},
 	{
 		PCI_VENDOR_DEC,

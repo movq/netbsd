@@ -1,4 +1,4 @@
-#	$NetBSD: P6032,v 1.21 2004/02/13 10:05:49 wiz Exp $
+#	$NetBSD: P6032,v 1.21.2.1.2.2 2005/07/21 19:27:29 riz Exp $
 #
 # Algorithmics P-6032 kernel.
 #
@@ -7,7 +7,7 @@ include	"arch/algor/conf/std.algor"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"P6032-$Revision: 1.21 $"
+#ident 		"P6032-$Revision: 1.21.2.1.2.2 $"
 
 maxusers 32
 
@@ -85,6 +85,7 @@ options 	MIIVERBOSE		# verbose PHY autoconfig messages
 options 	SCSIVERBOSE		# Verbose SCSI errors
 #options 	PCMCIAVERBOSE
 #options	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
+#options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 # The Alpha console firmware network boots using the BOOTP
 # protocol, so we ask the NFS code to use BOOTP/DHCP as well,
@@ -145,6 +146,7 @@ hptide* at pci? dev ? function ?		# Triones/HighPoint IDE controllers
 optiide* at pci? dev ? function ?		# Opti IDE controllers
 piixide* at pci? dev ? function ?		# Intel IDE controllers
 pdcide* at pci? dev ? function ?		# Promise IDE controllers
+pdcsata* at pci? dev ? function ?		# Promise SATA150 controllers
 satalink* at pci? dev ? function ?		# SiI SATALink controllers
 siside* at pci? dev ? function ?		# SiS IDE controllers
 slide*  at pci? dev ? function ?		# Symphony Labs IDE controllers
@@ -346,6 +348,10 @@ fd*	at	fdc? drive ?
 # FTDI FT8U100AX serial adapter
 #uftdi*	at uhub? port ?
 #ucom*	at uftdi? portno ?
+
+# Kyocera AIR-EDGE PHONE
+#ukyopon* at uhub? port ?
+#ucom*	at ukyopon? portno ?
 
 # USB scanners
 #uscanner* at uhub? port ?

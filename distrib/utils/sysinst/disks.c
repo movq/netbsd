@@ -1,4 +1,4 @@
-/*	$NetBSD: disks.c,v 1.76 2004/03/26 19:55:13 dsl Exp $ */
+/*	$NetBSD: disks.c,v 1.76.2.4.2.2 2005/09/13 22:32:44 riz Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -65,28 +65,23 @@
 /* Disk descriptions */
 #define MAX_DISKS 15
 struct disk_desc {
-	char dd_name[SSTRSIZE];
-	struct disk_geom {
-		int  dg_cyl;
-		int  dg_head;
-		int  dg_sec;
-		int  dg_secsize;
-		int  dg_totsec;
-	} dg;
+	char	dd_name[SSTRSIZE];
+	uint	dd_no_mbr;
+	uint	dd_cyl;
+	uint	dd_head;
+	uint	dd_sec;
+	uint	dd_secsize;
+	uint	dd_totsec;
 };
-#define dd_cyl dg.dg_cyl
-#define dd_head dg.dg_head
-#define dd_sec dg.dg_sec
-#define dd_secsize dg.dg_secsize
-#define dd_totsec dg.dg_totsec
 
 /* Local prototypes */
 static int foundffs(struct data *, size_t);
 static int mount_root(void);
 static int fsck_preen(const char *, int, const char *);
+static void fixsb(const char *, const char *, char);
 
 #ifndef DISK_NAMES
-#define DISK_NAMES "wd", "sd", "ld"
+#define DISK_NAMES "wd", "sd", "ld", "raid"
 #endif
 
 static const char *disk_names[] = { DISK_NAMES, "vnd", NULL };
@@ -95,7 +90,7 @@ static int
 get_disks(struct disk_desc *dd)
 {
 	const char **xd;
-	char d_name[SSTRSIZE];
+	char *cp;
 	struct disklabel l;
 	int i;
 	int numdisks;
@@ -105,13 +100,21 @@ get_disks(struct disk_desc *dd)
 
 	for (xd = disk_names; *xd != NULL; xd++) {
 		for (i = 0; i < MAX_DISKS; i++) {
-			snprintf(d_name, sizeof d_name, "%s%d", *xd, i);
-			if (!get_geom(d_name, &l)) {
+			strlcpy(dd->dd_name, *xd, sizeof dd->dd_name - 2);
+			cp = strchr(dd->dd_name, ':');
+			if (cp != NULL)
+				dd->dd_no_mbr = ~strcmp(cp, ":no_mbr");
+			else {
+				dd->dd_no_mbr = 0;
+				cp = strchr(dd->dd_name, 0);
+			}
+
+			snprintf(cp, 2 + 1, "%d", i);
+			if (!get_geom(dd->dd_name, &l)) {
 				if (errno == ENOENT)
 					break;
 				continue;
 			}
-			strlcpy(dd->dd_name, d_name, sizeof dd->dd_name);
 			dd->dd_cyl = l.d_ncylinders;
 			dd->dd_head = l.d_ntracks;
 			dd->dd_sec = l.d_nsectors;
@@ -190,6 +193,7 @@ find_disks(const char *doingwhat)
 	dlhead = disk->dd_head;
 	dlsec = disk->dd_sec;
 	dlsize = disk->dd_totsec;
+	no_mbr = disk->dd_no_mbr;
 	if (dlsize == 0)
 		dlsize = disk->dd_cyl * disk->dd_head * disk->dd_sec;
 	dlcylsize = dlhead * dlsec;
@@ -444,6 +448,10 @@ make_fstab(void)
 			s = "# ";
 			break;
 		}
+		/* The code that remounts root rw doesn't check the partition */
+		if (strcmp(mp, "/") == 0 && !(bsdlabel[i].pi_flags & PIF_MOUNT))
+			s = "# ";
+
 		scripting_fprintf(f, "%s/dev/%s%c %s %s rw%s%s%s%s%s%s%s%s %d %d\n",
 		   s, diskdev, 'a' + i, mp, fstype,
 		   bsdlabel[i].pi_flags & PIF_MOUNT ? "" : ",noauto",
@@ -504,7 +512,7 @@ foundffs(struct data *list, size_t num)
 }
 
 /*
- * Do an fsck. On failure,  inform the user by showing a warning
+ * Do an fsck. On failure, inform the user by showing a warning
  * message and doing menu_ok() before proceeding.
  * Returns 0 on success, or nonzero return code from fsck() on failure.
  */
@@ -523,13 +531,70 @@ fsck_preen(const char *disk, int ptn, const char *fsname)
 		return 0;
 	if (access(prog, X_OK) != 0)
 		return 0;
+	if (!strcmp(fsname,"ffs"))
+		fixsb(prog, disk, ptn);
 	error = run_program(0, "%s -p -q /dev/r%s%c", prog, disk, ptn);
 	free(prog);
 	if (error != 0) {
 		msg_display(MSG_badfs, disk, ptn, error);
 		process_menu(MENU_ok, NULL);
+		/* XXX at this point maybe we should run a full fsck? */
 	}
 	return error;
+}
+
+/* This performs the same function as the etc/rc.d/fixsb script
+ * which attempts to correct problems with ffs1 filesystems
+ * which may have been introduced by booting a netbsd-current kernel
+ * from between April of 2003 and January 2004. For more information
+ * This script was developed as a response to NetBSD pr install/25138
+ * Additional prs regarding the original issue include:
+ *  bin/17910 kern/21283 kern/21404 port-macppc/23925 port-macppc/23926
+ */
+static void
+fixsb(const char *prog, const char *disk, char ptn)
+{
+	int fd;
+	int rval;
+	union {
+		struct fs fs;
+		char buf[SBLOCKSIZE];
+	} sblk;
+	struct fs *fs = &sblk.fs;
+
+	snprintf(sblk.buf, sizeof(sblk.buf), "/dev/r%s%c",
+		disk, ptn == ' ' ? 0 : ptn);
+	fd = open(sblk.buf, O_RDONLY);
+	if (fd == -1)
+		return;
+
+	/* Read ffsv1 main superblock */
+	rval = pread(fd, sblk.buf, sizeof sblk.buf, SBLOCK_UFS1);
+	close(fd);
+	if (rval != sizeof sblk.buf)
+		return;
+
+	if (fs->fs_magic != FS_UFS1_MAGIC &&
+	    fs->fs_magic != FS_UFS1_MAGIC_SWAPPED)
+		/* Not FFSv1 */
+		return;
+	if (fs->fs_old_flags & FS_FLAGS_UPDATED)
+		/* properly updated fslevel 4 */
+		return;
+	if (fs->fs_bsize != fs->fs_maxbsize)
+		/* not messed up */
+		return;
+
+	/*
+	 * OK we have a munged fs, first 'upgrade' to fslevel 4,
+	 * We specify -b16 in order to stop fsck bleating that the
+	 * sb doesn't match the first alternate.
+	 */
+	run_program(RUN_DISPLAY | RUN_PROGRESS,
+	    "%s -p -b 16 -c 4 /dev/r%s%c", prog, disk, ptn);
+	/* Then downgrade to fslevel 3 */
+	run_program(RUN_DISPLAY | RUN_PROGRESS,
+	    "%s -p -c 3 /dev/r%s%c", prog, disk, ptn);
 }
 
 /*
@@ -563,7 +628,6 @@ mount_disks(void)
 {
 	char *fstab;
 	int   fstabsize;
-	int   i;
 	int   error;
 
 	static struct lookfor fstabbuf[] = {

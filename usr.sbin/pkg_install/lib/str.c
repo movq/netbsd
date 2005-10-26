@@ -1,11 +1,11 @@
-/*	$NetBSD: str.c,v 1.46 2003/10/04 00:50:34 wiz Exp $	*/
+/*	$NetBSD: str.c,v 1.46.4.4 2005/06/21 11:16:50 tron Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static const char *rcsid = "Id: str.c,v 1.5 1997/10/08 07:48:21 charnier Exp";
 #else
-__RCSID("$NetBSD: str.c,v 1.46 2003/10/04 00:50:34 wiz Exp $");
+__RCSID("$NetBSD: str.c,v 1.46.4.4 2005/06/21 11:16:50 tron Exp $");
 #endif
 #endif
 
@@ -97,7 +97,7 @@ void
 str_lowercase(char *s)
 {
 	for (; *s; s++) {
-		*s = tolower(*s);
+		*s = tolower((unsigned char)*s);
 	}
 }
 
@@ -151,18 +151,19 @@ static const test_t   tests[] = {
 static const test_t	modifiers[] = {
 	{	"alpha",	5,	Alpha	},
 	{	"beta",		4,	Beta	},
+	{	"pre",		3,	RC	},
 	{	"rc",		2,	RC	},
 	{	"pl",		2,	Dot	},
 	{	"_",		1,	Dot	},
 	{	".",		1,	Dot	},
-        {	NULL,		0,	0	}
+	{	NULL,		0,	0	}
 };
 
 
 
 /* locate the test in the tests array */
 static int
-mktest(int *op, char *test)
+mktest(int *op, const char *test)
 {
 	const test_t *tp;
 
@@ -187,19 +188,19 @@ mktest(int *op, char *test)
  * 'nb' encodes as 'netbsd version', which is used after all other tests
  */
 static int
-mkcomponent(arr_t *ap, char *num)
+mkcomponent(arr_t *ap, const char *num)
 {
 	static const char       alphas[] = "abcdefghijklmnopqrstuvwxyz";
 	const test_t	       *modp;
 	int64_t                 n;
-	char                   *cp;
+	const char             *cp;
 
 	if (*num == 0) {
 		return 0;
 	}
 	ALLOC(int64_t, ap->v, ap->size, ap->c, 62, "mkver", exit(EXIT_FAILURE));
-	if (isdigit(*num)) {
-		for (cp = num, n = 0 ; isdigit(*num) ; num++) {
+	if (isdigit((unsigned char)*num)) {
+		for (cp = num, n = 0 ; isdigit((unsigned char)*num) ; num++) {
 			n = (n * 10) + (*num - '0');
 		}
 		ap->v[ap->c++] = n;
@@ -212,15 +213,15 @@ mkcomponent(arr_t *ap, char *num)
 		}
 	}
 	if (strncasecmp(num, "nb", 2) == 0) {
-		for (cp = num, num += 2, n = 0 ; isdigit(*num) ; num++) {
+		for (cp = num, num += 2, n = 0 ; isdigit((unsigned char)*num) ; num++) {
 			n = (n * 10) + (*num - '0');
 		}
 		ap->netbsd = n;
 		return (int)(num - cp);
 	}
-	if (isalpha(*num)) {
+	if (isalpha((unsigned char)*num)) {
 		ap->v[ap->c++] = Dot;
-		cp = strchr(alphas, tolower(*num));
+		cp = strchr(alphas, tolower((unsigned char)*num));
 		ALLOC(int64_t, ap->v, ap->size, ap->c, 62, "mkver", exit(EXIT_FAILURE));
 		ap->v[ap->c++] = (int64_t)(cp - alphas) + 1;
 		return 1;
@@ -231,7 +232,7 @@ mkcomponent(arr_t *ap, char *num)
 
 /* make a version number string into an array of comparable 64bit ints */
 static int
-mkversion(arr_t *ap, char *num)
+mkversion(arr_t *ap, const char *num)
 {
 	(void) memset(ap, 0, sizeof(arr_t));
 	while (*num) {
@@ -285,7 +286,7 @@ vtest(arr_t *lhs, int tst, arr_t *rhs)
  * Compare two dewey decimal numbers
  */
 static int
-deweycmp(char *lhs, int op, char *rhs)
+deweycmp(const char *lhs, int op, const char *rhs)
 {
 	arr_t	right;
 	arr_t	left;
@@ -312,7 +313,7 @@ static int
 alternate_match(const char *pattern, const char *pkg)
 {
 	char   *sep;
-	char    buf[FILENAME_MAX];
+	char    buf[MaxPathSize];
 	char   *last;
 	char   *alt;
 	char   *cp;
@@ -358,31 +359,63 @@ alternate_match(const char *pattern, const char *pkg)
 static int
 dewey_match(const char *pattern, const char *pkg)
 {
-	char   *cp;
-	char   *sep;
-	char   *ver;
-	char    name[FILENAME_MAX];
-	int	op;
-	int     n;
+	const char *version;
+	const char *sep, *sep2;
+	int op, op2;
+	int n;
 
-	if ((sep = strpbrk(pattern, "<>")) == NULL) {
-		errx(EXIT_FAILURE, "dewey_match(): '<' or '>' expected in `%s'", pattern);
+	/* compare names */
+	if ((version=strrchr(pkg, '-')) == NULL) {
+#if 0
+		/* too noisy, warns about "pkgdb.byfile.db" on
+		 * every invocation */
+		warnx("Invalid package name `%s'", pkg);
+#endif
+		return 0;
 	}
-	(void) snprintf(name, sizeof(name), "%.*s", (int) (sep - pattern), pattern);
+	if ((sep = strpbrk(pattern, "<>")) == NULL)
+		errx(EXIT_FAILURE, "dewey_match: '<' or '>' expected in `%s'", pattern);
+	/* compare name lengths */
+	if ((sep-pattern != version-pkg) ||
+	    strncmp(pkg, pattern, (size_t)(version-pkg)) != 0)
+		return 0;
+	version++;
+	
+	/* extract comparison operator */
         if ((n = mktest(&op, sep)) < 0) {
                 warnx("Bad comparison `%s'", sep);
 		return 0;
         }
-	ver = sep + n;
-	n = (int) (sep - pattern);
-	if ((cp = strrchr(pkg, '-')) != (char *) NULL) {
-		if (strncmp(pkg, name, (size_t) (cp - pkg)) == 0 &&
-		    n == (int)(cp - pkg)) {
-			if (deweycmp(cp + 1, op, ver)) {
-				return 1;
+	/* skip operator */
+	sep += n;
+
+	/* if greater than, look for less than */
+	sep2 = NULL;
+	if (op == GT || op == GE) {
+		if ((sep2 = strchr(sep, '<')) != NULL) {
+			if ((n = mktest(&op2, sep2)) < 0) {
+				warnx("Bad comparison `%s'", sep2);
+				return 0;
 			}
+			/* compare upper limit */
+			if (!deweycmp(version, op2, sep2+n))
+				return 0;
 		}
 	}
+
+	/* compare only pattern / lower limit */
+	if (sep2) {
+		char ver[PKG_PATTERN_MAX];
+
+		strlcpy(ver, sep, MIN(sizeof(ver), sep2-sep+1));
+		if (deweycmp(version, op, ver))
+			return 1;
+	}
+	else {
+		if (deweycmp(version, op, sep))
+			return 1;
+	}
+
 	return 0;
 }
 
@@ -457,7 +490,7 @@ findmatchingname(const char *dir, const char *pattern, matchfn match, void *data
 	strip_txz(tmp_pattern, pat_sfx, pattern);
 	
 	while ((dp = readdir(dirp)) != (struct dirent *) NULL) {
-		char    tmp_file[FILENAME_MAX];
+		char    tmp_file[MaxPathSize];
 		
 		if (strcmp(dp->d_name, ".") == 0 ||
 		    strcmp(dp->d_name, "..") == 0)
@@ -472,7 +505,7 @@ findmatchingname(const char *dir, const char *pattern, matchfn match, void *data
 		 * each is a different pattern class (e.g. dewey and
 		 * character class (.t[bg]z)) */
 		if (pmatch(tmp_pattern, tmp_file)
-		    && pmatch(pat_sfx, file_sfx)) {
+		    && (pat_sfx[0] == '\0' || pmatch(pat_sfx, file_sfx))) {
 			if (match) {
 				match(dp->d_name, data);
 				/* return value ignored for now */
@@ -553,7 +586,7 @@ findbestmatchingname_fn(const char *found, void *vp)
 char *
 findbestmatchingname(const char *dir, const char *pattern)
 {
-	char    buf[FILENAME_MAX];
+	char    buf[MaxPathSize];
 
 	buf[0] = '\0';
 	if (findmatchingname(dir, pattern, findbestmatchingname_fn, buf) > 0
@@ -613,7 +646,7 @@ note_whats_installed(const char *found, void *vp)
 {
 	char *note = vp;
 
-	(void) strlcpy(note, found, FILENAME_MAX);
+	(void) strlcpy(note, found, MaxPathSize);
 	return 0;
 }
 
@@ -625,7 +658,7 @@ add_to_list_fn(const char *pkg, void *vp)
 {
 	lpkg_head_t *pkgs = vp;
 	lpkg_t *lpp;
-	char fn[FILENAME_MAX];
+	char fn[MaxPathSize];
 
 	snprintf(fn, sizeof(fn), "%s/%s", _pkgdb_getPKGDB_DIR(), pkg);
 	if (isdir(fn) || islinktodir(fn)) {

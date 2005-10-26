@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2002/11/24 21:54:38 fvdl Exp $
+#	$NetBSD: Makefile,v 1.4.2.2 2004/06/18 09:48:42 tron Exp $
 
 NOPIC=		# defined
 NOPROFILE=	# defined

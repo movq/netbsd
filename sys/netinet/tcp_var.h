@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_var.h,v 1.106 2003/10/22 02:45:57 thorpej Exp $	*/
+/*	$NetBSD: tcp_var.h,v 1.106.2.2 2004/09/18 19:35:55 he Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -599,7 +599,8 @@ struct	tcpstat {
 #define	TCPCTL_DELACK_TICKS	25	/* # ticks to delay ACK */
 #define	TCPCTL_INIT_WIN_LOCAL	26	/* initial window for local nets */
 #define	TCPCTL_IDENT		27	/* rfc 931 identd */
-#define	TCPCTL_MAXID		28
+#define	TCPCTL_ACKDROPRATELIMIT	28	/* SYN/RST -> ACK rate limit */
+#define	TCPCTL_MAXID		29
 
 #define	TCPCTL_NAMES { \
 	{ 0, 0 }, \
@@ -630,6 +631,7 @@ struct	tcpstat {
 	{ "delack_ticks", CTLTYPE_INT }, \
 	{ "init_win_local", CTLTYPE_INT }, \
 	{ "ident", CTLTYPE_STRUCT }, \
+	{ "ackdropppslimit", CTLTYPE_INT }, \
 }
 
 #ifdef _KERNEL
@@ -654,10 +656,13 @@ extern	int tcp_syn_bucket_limit;/* max entries per hash bucket */
 extern	int tcp_log_refused;	/* log refused connections */
 
 extern	int tcp_rst_ppslim;
+extern	int tcp_ackdrop_ppslim;
 
 extern	int tcp_syn_cache_size;
 extern	struct syn_cache_head tcp_syn_cache[];
 extern	u_long syn_cache_count;
+
+extern	struct pool tcpipqent_pool;
 
 #ifdef MBUFTRACE
 extern	struct mowner tcp_rx_mowner;
@@ -693,6 +698,7 @@ extern	struct mowner tcp_mowner;
 	{ 1, 0, &tcp_rst_ppslim },		\
 	{ 1, 0, &tcp_delack_ticks },		\
 	{ 1, 0, &tcp_init_win_local },		\
+	{ 1, 0, &tcp_ackdrop_ppslim },		\
 }
 
 #ifdef __NO_STRICT_ALIGNMENT

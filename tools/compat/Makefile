@@ -1,9 +1,9 @@
-#	$NetBSD: Makefile,v 1.28 2003/10/27 00:12:42 lukem Exp $
+#	$NetBSD: Makefile,v 1.28.2.1.2.1 2005/04/06 10:13:22 he Exp $
 
 HOSTLIB=	nbcompat
 
 SRCS=		atoll.c basename.c dirname.c fgetln.c flock.c fparseln.c \
-		getmode.c getopt_long.c gettemp.c issetugid.c \
+		getmode.c getopt_long.c gettemp.c heapsort.c issetugid.c \
 		lchflags.c lchmod.c lchown.c libyywrap.c \
 		md2c.c md2hl.c md4c.c md4hl.c md5c.c md5hl.c mkdtemp.c \
 		mkstemp.c pread.c putc_unlocked.c pwcache.c pwrite.c \
@@ -23,11 +23,8 @@ CPPFLAGS+=	-no-cpp-precomp
 # -D_FILE_OFFSET_BITS=64 produces a much more amenable `struct stat', and
 # other file ops, on many systems, without changing function names.
 
-# -D_NETBSD_SOURCE is necessary for some of the NetBSD headers that we
-# also use on the host system.
-
 CPPFLAGS+=	-I. -I./include -I${.CURDIR} -DHAVE_NBTOOL_CONFIG_H=1 \
-		-D_FILE_OFFSET_BITS=64 -D_NETBSD_SOURCE
+		-D_FILE_OFFSET_BITS=64
 
 .PATH:		${.CURDIR}/../../lib/libc/gen \
 		${.CURDIR}/../../lib/libc/hash \
