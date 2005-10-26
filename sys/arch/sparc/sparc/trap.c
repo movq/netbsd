@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.153 2004/03/14 01:08:48 cl Exp $ */
+/*	$NetBSD: trap.c,v 1.153.2.1.2.1 2005/03/16 12:16:06 tron Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.153 2004/03/14 01:08:48 cl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.153.2.1.2.1 2005/03/16 12:16:06 tron Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ktrace.h"
@@ -487,8 +487,19 @@ badtrap:
 	case T_AST:
 		break;	/* the work is all in userret() */
 
-	case T_ILLINST:
 	case T_UNIMPLFLUSH:
+		/* Invalidate the entire I-cache */
+#if defined(MULTIPROCESSOR)
+		/* Broadcast to all CPUs */
+		XCALL0(*cpuinfo.pure_vcache_flush, CPUSET_ALL);
+#else
+		(*cpuinfo.pure_vcache_flush)();
+#endif
+		ADVANCE;
+		break;
+
+	case T_ILLINST:
+		/* Note: Cypress generates a T_ILLINST on FLUSH instructions */
 		if ((sig = emulinstr(pc, tf)) == 0) {
 			ADVANCE;
 			break;
@@ -936,6 +947,17 @@ mem_access_fault(type, ser, v, pc, psr, tf)
 		goto fault;
 	}
 	atype = ser & SER_WRITE ? VM_PROT_WRITE : VM_PROT_READ;
+	if ((ser & SER_PROT) && atype == VM_PROT_READ && type != T_TEXTFAULT) {
+
+		/*
+		 * The hardware reports faults by the atomic load/store
+		 * instructions as read faults, so if the faulting instruction
+		 * is one of those, relabel this fault as both read and write.
+		 */
+		if ((fuword((void *)pc) & 0xc1680000) == 0xc0680000) {
+			atype = VM_PROT_READ | VM_PROT_WRITE;
+		}
+	}
 	va = trunc_page(v);
 	if (psr & PSR_PS) {
 		extern char Lfsbail[];

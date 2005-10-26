@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL,v 1.79 2004/02/13 10:05:49 wiz Exp $
+# $NetBSD: INSTALL,v 1.79.2.1.2.1 2005/04/02 21:29:42 he Exp $
 #
 # Alpha INSTALL kernel.
 
@@ -74,6 +74,7 @@ options 	COMPAT_14
 options 	INSECURE		# disable `kernel security level'
 options 	USERCONF		# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
+#options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 options 	MALLOC_NOINLINE		# Not inlining MALLOC saves memory
 options 	FONT_GALLANT12x22	# Console font for TC devices
 
@@ -209,6 +210,7 @@ hptide* at pci? dev ? function ?		# Triones/HighPoint IDE controllers
 optiide* at pci? dev ? function ?		# Opti IDE controllers
 piixide* at pci? dev ? function ?		# Intel IDE controllers
 pdcide* at pci? dev ? function ?		# Promise IDE controllers
+pdcsata* at pci? dev ? function ?		# Promise SATA150 controllers
 satalink* at pci? dev ? function ?		# SiI SATALink controllers
 siside* at pci? dev ? function ?		# SiS IDE controllers
 slide*  at pci? dev ? function ?		# Symphony Labs IDE controllers

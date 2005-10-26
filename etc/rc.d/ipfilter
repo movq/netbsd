@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: ipfilter,v 1.10 2001/02/28 17:03:50 lukem Exp $
+# $NetBSD: ipfilter,v 1.10.4.2 2004/11/12 06:44:17 jmc Exp $
 #
 
 # PROVIDE: ipfilter
@@ -43,7 +43,9 @@ ipfilter_prestart()
 ipfilter_start()
 {
 	echo "Enabling ipfilter."
-	/sbin/ipf -E -Fa
+	/sbin/ipf -E
+	/sbin/ipf -Fa
+	/sbin/ipf -6 -Fa
 	if [ -f /etc/ipf.conf ]; then
 		/sbin/ipf -f /etc/ipf.conf
 	fi
@@ -63,6 +65,7 @@ ipfilter_reload()
 	echo "Reloading ipfilter rules."
 
 	/sbin/ipf -I -Fa
+	/sbin/ipf -6 -I -Fa
 	if [ -f /etc/ipf.conf ] && ! /sbin/ipf -I -f /etc/ipf.conf; then
 		err 1 "reload of ipf.conf failed; not swapping to new ruleset."
 	fi

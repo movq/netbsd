@@ -1,4 +1,4 @@
-/*	$NetBSD: eval.c,v 1.17 2003/08/07 11:14:30 agc Exp $	*/
+/*	$NetBSD: eval.c,v 1.17.2.2 2004/07/10 12:40:21 tron Exp $	*/
 /*	$OpenBSD: eval.c,v 1.41 2001/10/10 23:25:31 espie Exp $	*/
 
 /*
@@ -33,12 +33,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)eval.c	8.2 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: eval.c,v 1.17 2003/08/07 11:14:30 agc Exp $");
+__RCSID("$NetBSD: eval.c,v 1.17.2.2 2004/07/10 12:40:21 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -657,19 +661,20 @@ static void
 dump_one_def(p)
 	ndptr p;
 {
+	FILE *out = traceout ? traceout : stderr;
 	const char *real;
 
 	if (mimic_gnu) {
 		if ((p->type & TYPEMASK) == MACRTYPE)
-			fprintf(traceout, "%s:\t%s\n", p->name, p->defn);
+			fprintf(out, "%s:\t%s\n", p->name, p->defn);
 		else {
 			real = builtin_realname(p->type);
 			if (real == NULL)
 				real = null;
-			fprintf(traceout, "%s:\t<%s>\n", p->name, real);
+			fprintf(out, "%s:\t<%s>\n", p->name, real);
 	    	}
 	} else
-		fprintf(traceout, "`%s'\t`%s'\n", p->name, p->defn);
+		fprintf(out, "`%s'\t`%s'\n", p->name, p->defn);
 }
 
 /*

@@ -1,4 +1,4 @@
-# 	$NetBSD: POWEROFSEVEN.inc,v 1.24 2003/12/14 01:32:02 thorpej Exp $
+# 	$NetBSD: POWEROFSEVEN.inc,v 1.24.2.1.2.1 2005/04/02 21:29:47 he Exp $
 #
 # from: NetBSD: GENERIC32,v 1.13 2001/02/28 00:08:18 mjacob Exp
 #
@@ -59,6 +59,7 @@ options 	LKM
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
+#options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 ## NFS boot options; default on sparc is the bootparam protocol
 options 	NFS_BOOT_BOOTPARAM
@@ -300,6 +301,7 @@ hptide* at pci? dev ? function ?	# Triones/HighPoint IDE controllers
 optiide* at pci? dev ? function ?	# Opti IDE controllers
 piixide* at pci? dev ? function ?	# Intel IDE controllers
 pdcide* at pci? dev ? function ?	# Promise IDE controllers
+pdcsata* at pci? dev ? function ?	# Promise SATA150 controllers
 satalink* at pci? dev ? function ?	# SiI SATALink controllers
 siside* at pci? dev ? function ?	# SiS IDE controllers
 slide*  at pci? dev ? function ?	# Symphony Labs IDE controllers

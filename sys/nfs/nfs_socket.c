@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_socket.c,v 1.102 2004/03/17 10:40:34 yamt Exp $	*/
+/*	$NetBSD: nfs_socket.c,v 1.102.2.3.2.1 2005/01/11 06:39:04 jmc Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1995
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_socket.c,v 1.102 2004/03/17 10:40:34 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_socket.c,v 1.102.2.3.2.1 2005/01/11 06:39:04 jmc Exp $");
 
 #include "fs_nfs.h"
 #include "opt_nfs.h"
@@ -268,7 +268,11 @@ nfs_connect(nmp, rep)
 		so->so_rcv.sb_timeo = (5 * hz);
 		so->so_snd.sb_timeo = (5 * hz);
 	} else {
-		so->so_rcv.sb_timeo = 0;
+		/*
+		 * enable receive timeout to detect server crash and reconnect.
+		 * otherwise, we can be stuck in soreceive forever.
+		 */
+		so->so_rcv.sb_timeo = (5 * hz);
 		so->so_snd.sb_timeo = 0;
 	}
 	if (nmp->nm_sotype == SOCK_DGRAM) {
@@ -351,8 +355,11 @@ nfs_reconnect(rep)
 	 * on old socket.
 	 */
 	TAILQ_FOREACH(rp, &nfs_reqq, r_chain) {
-		if (rp->r_nmp == nmp)
-			rp->r_flags |= R_MUSTRESEND;
+		if (rp->r_nmp == nmp) {
+			if ((rp->r_flags & R_MUSTRESEND) == 0)
+				rp->r_flags |= R_MUSTRESEND | R_REXMITTED;
+			rp->r_rexmit = 0;
+		}
 	}
 	return (0);
 }
@@ -574,6 +581,8 @@ tryagain:
 		while (rep->r_flags & R_MUSTRESEND) {
 			m = m_copym(rep->r_mreq, 0, M_COPYALL, M_WAIT);
 			nfsstats.rpcretries++;
+			rep->r_rtt = 0;
+			rep->r_flags &= ~R_TIMING;
 			error = nfs_send(so, rep->r_nmp->nm_nam, m, rep);
 			if (error) {
 				if (error == EINTR || error == ERESTART ||
@@ -602,6 +611,15 @@ tryagain:
 			   if (error == EWOULDBLOCK && rep) {
 				if (rep->r_flags & R_SOFTTERM)
 					return (EINTR);
+				/*
+				 * if it seems that the server died after it
+				 * received our request, set EPIPE so that
+				 * we'll reconnect and retransmit requests.
+				 */
+				if (rep->r_rexmit >= rep->r_nmp->nm_retry) {
+					nfsstats.rpctimeouts++;
+					error = EPIPE;
+				}
 			   }
 			} while (error == EWOULDBLOCK);
 			if (!error && auio.uio_resid > 0) {
@@ -910,7 +928,7 @@ nfsmout:
  * nb: always frees up mreq mbuf list
  */
 int
-nfs_request(np, mrest, procnum, procp, cred, mrp, mdp, dposp)
+nfs_request(np, mrest, procnum, procp, cred, mrp, mdp, dposp, rexmitp)
 	struct nfsnode *np;
 	struct mbuf *mrest;
 	int procnum;
@@ -919,12 +937,13 @@ nfs_request(np, mrest, procnum, procp, cred, mrp, mdp, dposp)
 	struct mbuf **mrp;
 	struct mbuf **mdp;
 	caddr_t *dposp;
+	int *rexmitp;
 {
 	struct mbuf *m, *mrep;
 	struct nfsreq *rep;
 	u_int32_t *tl;
 	int i;
-	struct nfsmount *nmp;
+	struct nfsmount *nmp = VFSTONFS(np->n_vnode->v_mount);
 	struct mbuf *md, *mheadend;
 	char nickv[RPCX_NICKVERF];
 	time_t reqtime, waituntil;
@@ -940,9 +959,16 @@ nfs_request(np, mrest, procnum, procp, cred, mrp, mdp, dposp)
 	int nqlflag, cachable;
 	u_quad_t frev;
 #endif
+	struct mbuf *mrest_backup = NULL;
+	struct ucred *origcred = NULL; /* XXX: gcc */
+	boolean_t retry_cred = TRUE;
+	boolean_t use_opencred = (np->n_flag & NUSEOPENCRED) != 0;
 
+	if (rexmitp != NULL)
+		*rexmitp = 0;
+
+tryagain_cred:
 	KASSERT(cred != NULL);
-	nmp = VFSTONFS(np->n_vnode->v_mount);
 	MALLOC(rep, struct nfsreq *, sizeof(struct nfsreq), M_NFSREQ, M_WAITOK);
 	rep->r_nmp = nmp;
 	rep->r_procp = procp;
@@ -975,18 +1001,53 @@ kerbauth:
 				return (error);
 			}
 		}
+		retry_cred = FALSE;
 	} else {
+		/* AUTH_UNIX */
+		uid_t uid;
+		gid_t gid;
+
+		/*
+		 * on the most unix filesystems, permission checks are
+		 * done when the file is open(2)'ed.
+		 * ie. once a file is successfully open'ed,
+		 * following i/o operations never fail with EACCES.
+		 * we try to follow the semantics as far as possible.
+		 *
+		 * note that we expect that the nfs server always grant
+		 * accesses by the file's owner.
+		 */
+		origcred = cred;
 		switch (procnum) {
 		case NFSPROC_READ:
 		case NFSPROC_WRITE:
 		case NFSPROC_COMMIT:
-			acred.cr_uid = np->n_vattr->va_uid;
-			acred.cr_gid = np->n_vattr->va_gid;
+			uid = np->n_vattr->va_uid;
+			gid = np->n_vattr->va_gid;
+			if (cred->cr_uid == uid && cred->cr_gid == gid) {
+				retry_cred = FALSE;
+				break;
+			}
+			if (use_opencred)
+				break;
+			acred.cr_uid = uid;
+			acred.cr_gid = gid;
 			acred.cr_ngroups = 0;
 			acred.cr_ref = 2;	/* Just to be safe.. */
 			cred = &acred;
 			break;
+		default:
+			retry_cred = FALSE;
+			break;
 		}
+		/*
+		 * backup mbuf chain if we can need it later to retry.
+		 *
+		 * XXX maybe we can keep a direct reference to
+		 * mrest without doing m_copym, but it's ...ugly.
+		 */
+		if (retry_cred)
+			mrest_backup = m_copym(mrest, 0, M_COPYALL, M_WAIT);
 		auth_type = RPCAUTH_UNIX;
 		auth_len = (((cred->cr_ngroups > nmp->nm_numgrps) ?
 			nmp->nm_numgrps : cred->cr_ngroups) << 2) +
@@ -1080,6 +1141,16 @@ tryagain:
 		nmp->nm_sent -= NFS_CWNDSCALE;
 	}
 
+	if (rexmitp != NULL) {
+		int rexmit;
+
+		if (nmp->nm_sotype != SOCK_DGRAM)
+			rexmit = (rep->r_flags & R_REXMITTED) != 0;
+		else
+			rexmit = rep->r_rexmit;
+		*rexmitp = rexmit;
+	}
+
 	/*
 	 * If there was a successful reply and a tprintf msg.
 	 * tprintf a response.
@@ -1090,11 +1161,8 @@ tryagain:
 	mrep = rep->r_mrep;
 	md = rep->r_md;
 	dpos = rep->r_dpos;
-	if (error) {
-		m_freem(rep->r_mreq);
-		free((caddr_t)rep, M_NFSREQ);
-		return (error);
-	}
+	if (error)
+		goto nfsmout;
 
 	/*
 	 * break down the rpc header and check if ok
@@ -1115,9 +1183,7 @@ tryagain:
 		} else
 			error = EACCES;
 		m_freem(mrep);
-		m_freem(rep->r_mreq);
-		free((caddr_t)rep, M_NFSREQ);
-		return (error);
+		goto nfsmout;
 	}
 
 	/*
@@ -1137,6 +1203,20 @@ tryagain:
 		nfsm_dissect(tl, u_int32_t *, NFSX_UNSIGNED);
 		if (*tl != 0) {
 			error = fxdr_unsigned(int, *tl);
+			if (error == NFSERR_ACCES && retry_cred) {
+				m_freem(mrep);
+				m_freem(rep->r_mreq);
+				FREE(rep, M_NFSREQ);
+				use_opencred = !use_opencred;
+				if (mrest_backup == NULL)
+					return ENOMEM; /* m_copym failure */
+				mrest = mrest_backup;
+				mrest_backup = NULL;
+				cred = origcred;
+				error = 0;
+				retry_cred = FALSE;
+				goto tryagain_cred;
+			}
 			if ((nmp->nm_flag & NFSMNT_NFSV3) &&
 				error == NFSERR_TRYLATER) {
 				m_freem(mrep);
@@ -1170,10 +1250,16 @@ tryagain:
 				error |= NFSERR_RETERR;
 			} else
 				m_freem(mrep);
-			m_freem(rep->r_mreq);
-			free((caddr_t)rep, M_NFSREQ);
-			return (error);
+			goto nfsmout;
 		}
+
+		/*
+		 * note which credential worked to minimize number of retries.
+		 */
+		if (use_opencred)
+			np->n_flag |= NUSEOPENCRED;
+		else
+			np->n_flag &= ~NUSEOPENCRED;
 
 #ifndef NFS_V2_ONLY
 		/*
@@ -1197,15 +1283,16 @@ tryagain:
 		*mrp = mrep;
 		*mdp = md;
 		*dposp = dpos;
-		m_freem(rep->r_mreq);
-		FREE((caddr_t)rep, M_NFSREQ);
-		return (0);
+
+		KASSERT(error == 0);
+		goto nfsmout;
 	}
 	m_freem(mrep);
 	error = EPROTONOSUPPORT;
 nfsmout:
 	m_freem(rep->r_mreq);
 	free((caddr_t)rep, M_NFSREQ);
+	m_freem(mrest_backup);
 	return (error);
 }
 #endif /* NFS */
@@ -2136,7 +2223,7 @@ nfsrv_getstream(slp, waitflag)
 				slp->ns_flag &= ~SLP_GETSTREAM;
 				return (EWOULDBLOCK);
 			}
-			m_claim(recm, &nfs_mowner);
+			m_claimm(recm, &nfs_mowner);
 			slp->ns_raw = m;
 			if (m->m_next == NULL)
 				slp->ns_rawend = m;

@@ -1,4 +1,4 @@
-/*	$NetBSD: atavar.h,v 1.40 2004/01/03 01:50:53 thorpej Exp $	*/
+/*	$NetBSD: atavar.h,v 1.40.2.2.2.2 2005/04/16 10:59:39 tron Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.
@@ -58,13 +58,21 @@ struct ata_xfer {
 	/* Low-level protocol handlers. */
 	void	(*c_start)(struct wdc_channel *, struct ata_xfer *);
 	int	(*c_intr)(struct wdc_channel *, struct ata_xfer *, int);
-	void	(*c_kill_xfer)(struct wdc_channel *, struct ata_xfer *);
+	void	(*c_kill_xfer)(struct wdc_channel *, struct ata_xfer *, int);
 };
 
+/* vlags in c_flags */
 #define	C_ATAPI		0x0001		/* xfer is ATAPI request */
 #define	C_TIMEOU	0x0002		/* xfer processing timed out */
 #define	C_POLL		0x0004		/* command is polled */
 #define	C_DMA		0x0008		/* command uses DMA */
+#define	C_WAIT		0x0010		/* can use tsleep */
+#define	C_WAITACT	0x0020		/* wakeup when active */
+#define	C_FREE		0x0040		/* call wdc_free_xfer() asap */
+
+/* reasons for c_kill_xfer() */
+#define KILL_GONE 1 /* device is gone */
+#define KILL_RESET 2 /* xfer was reset */
 
 /* Per-channel queue of ata_xfers.  May be shared by multiple channels. */
 struct ata_queue {
@@ -111,8 +119,7 @@ struct ata_drive_datas {
 #define	DRIVE_UDMA	0x0020
 #define	DRIVE_MODE	0x0040	/* the drive reported its mode */
 #define	DRIVE_RESET	0x0080	/* reset the drive state at next xfer */
-#define	DRIVE_DMAERR	0x0100	/* Udma transfer had crc error, don't try DMA */
-#define	DRIVE_ATAPIST	0x0100	/* device is an ATAPI tape drive */
+#define	DRIVE_ATAPIST	0x0200	/* device is an ATAPI tape drive */
 
 	/*
 	 * Current setting of drive's PIO, DMA and UDMA modes.
@@ -193,6 +200,7 @@ struct ata_bio {
 #define	ERR_DMA		3	/* DMA error */
 #define	TIMEOUT		4	/* device timed out */
 #define	ERR_NODEV	5	/* device has been gone */
+#define ERR_RESET	6	/* command was terminated by channel reset */
 	u_int8_t	r_error;/* copy of error register */
 	daddr_t		badsect[127];/* 126 plus trailing -1 marker */
 };
@@ -233,7 +241,9 @@ struct wdc_command {
 #define AT_ERROR    0x0080 /* command is done with error */
 #define AT_TIMEOU   0x0100 /* command timed out */
 #define AT_DF       0x0200 /* Drive fault */
-#define AT_READREG  0x0400 /* Read registers on completion */
+#define AT_RESET    0x0400 /* command terminated by channel reset */
+#define AT_GONE     0x0800 /* command terminated because device is gone */
+#define AT_READREG  0x1000 /* Read registers on completion */
 
 	int timeout;		/* timeout (in ms) */
 	void *data;		/* Data buffer address */
@@ -250,6 +260,10 @@ struct ata_bustype {
 	int	bustype_type;	/* symbolic name of type */
 	int	(*ata_bio)(struct ata_drive_datas *, struct ata_bio *);
 	void	(*ata_reset_channel)(struct ata_drive_datas *, int);
+/* extra flags for ata_reset_channel(), in addition to AT_* */
+#define AT_RST_EMERG 0x10000 /* emergency - e.g. for a dump */
+#define	AT_RST_NOCMD 0x20000 /* XXX has to go - temporary until we have tagged queuing */
+
 	int	(*ata_exec_command)(struct ata_drive_datas *,
 				    struct wdc_command *);
 

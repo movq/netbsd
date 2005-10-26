@@ -1,5 +1,3 @@
-/*	$NetBSD: lexer.h,v 1.1.1.1 2004/03/28 08:56:35 martti Exp $	*/
-
 
 typedef	struct	wordtab	{
 	char	*w_word;
@@ -23,9 +21,11 @@ typedef	struct	wordtab	{
 #define	YYBUFSIZ	8192
 
 extern	wordtab_t	*yysettab __P((wordtab_t *));
+extern	void		yysetdict __P((wordtab_t *));
 extern	int		yylex __P((void));
 extern	void		yyerror __P((char *));
 extern	char		*yykeytostr __P((int));
+extern	void		yyresetdict __P((void));
 
 extern	FILE	*yyin;
 extern	int	yylineNum;

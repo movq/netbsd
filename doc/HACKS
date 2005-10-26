@@ -1,4 +1,4 @@
-# $NetBSD: HACKS,v 1.32 2004/03/22 00:46:06 martin Exp $
+# $NetBSD: HACKS,v 1.32.2.4 2004/08/12 18:17:40 jmc Exp $
 #
 # This file is intended to document workarounds for currently unsolved
 # (mostly) compiler bugs.
@@ -96,6 +96,20 @@ descr
 	when all platforms have switched away from GCC2.
 kcah
 
+hack	gcc-strict-aliasing
+cdate	6 August 2004
+who	junyoung
+pr	26516
+file	src/usr.sbin/racoon/racoon/Makefile : 1.21
+descr
+	GCC issues a warning "dereferencing type-punned pointer will break
+	strict-aliasing rules" when compiling
+	crypto/dist/kame/racoon/crypto/openssl.c with -O[23s]. Note that this
+	is due to use of type casting in a non-standard way in the code and
+	not a compiler bug. Once a new release of KAME with a proper fix
+	applied is imported this should be backed out.
+kcah
+
 
 port	vax
 
@@ -149,6 +163,15 @@ port	vax
 		reverted when gcc 3.3.2 is ready for vax.
 	kcah
 
+	hack	vax gcc 2.95.3 structure initialization
+	cdat	13 May 2004
+	who	cl
+	file	sys/miscfs/kernfs/kernfs_vnops.c : 1.104
+	descr
+		Workaround for gcc 2.95.3 failing to initialize structures
+		and/or unions inside structures using nested designators.
+		Should be reverted when gcc >=3.3.3 is ready for vax.
+	kcah
 
 port	sparc64
 
@@ -253,15 +276,6 @@ port	sh3
 		with optimization for SuperH.  Hack is to build with -O0.
 	kcah
 
-	hack	gcc3-optimization-11937
-	cdate	Sun Feb 22 04:25:39 MSK 2004
-	who	uwe
-	file	gnu/usr.bin/gcc3/backend/Makefile	: 1.14 : 58 : 61
-	pr	toolchain/22489
-	descr
-		Work around toolchain/22489 (gcc optimization/11937)
-		by compiling function.c with -O0.
-	kcah
 
 port	sh5
 

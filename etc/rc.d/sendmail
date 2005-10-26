@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: sendmail,v 1.16 2003/04/02 18:00:13 atatat Exp $
+# $NetBSD: sendmail,v 1.16.2.4 2004/08/22 13:40:07 tron Exp $
 #
 
 # PROVIDE: mail
@@ -32,7 +32,7 @@ sendmail_precmd()
 
 	# check modifications on /etc/mail/aliases
 	if [ -f "/etc/mail/aliases.db" ]; then
-		if [ "/etc/mail/aliases" -nt "/etc/mail/aliases.db" ]; then
+		if [ ! "/etc/mail/aliases" -ot "/etc/mail/aliases.db" ]; then
 			echo \
 	    "${name}: /etc/mail/aliases newer than /etc/mail/aliases.db, regenerating"
 			/usr/bin/newaliases
@@ -46,7 +46,7 @@ sendmail_precmd()
 	# check couple of common db files, too
 	for f in access genericstable virtusertable domaintable mailertable; do
 		if [ -r "/etc/mail/$f" -a \
-		    "/etc/mail/$f" -nt "/etc/mail/$f.db" ]; then
+		    ! "/etc/mail/$f" -ot "/etc/mail/$f.db" ]; then
 			echo \
     "${name}: /etc/mail/$f newer than /etc/mail/$f.db, regenerating"
 			/usr/sbin/makemap hash /etc/mail/$f < /etc/mail/$f
@@ -102,5 +102,33 @@ sendmail_precmd()
 	fi
 }
 
+check_need_sendmail()
+{
+	_mta_path=$(awk '/^sendmail[ \t]/{print$2}' /etc/mailer.conf)
+	_sendmail_path="/usr/libexec/sendmail/sendmail"
+	_mta_host=$(sed -n '/^D{MTAHost}/s/.*\[\([^]\.]*\)\.*]/\1/p' \
+	    /etc/mail/submit.cf 2>/dev/null | tr A-Z a-z)
+	if [ "${sendmail}" != "check" ]; then
+		echo "${sendmail}"
+	elif [ "${_mta_path}" != "${_sendmail_path}" -o \
+	    ! -x "${_sendmail_path}" -o \
+	    $(checkyesno sendmail_suidroot; echo $?) = 0 -o \
+	    "$(stat -qf "%Mp %Sg" "$_sendmail_path")" != "2 smmsp" ]; then
+		echo NO
+	else
+		case "$_mta_host" in
+		localhost|127.0.0.1|::1|localhost.*)
+			echo YES;;
+		*)
+			echo NO;;
+		esac
+	fi
+}
+
+# force re-evaluation of /etc/rc.conf and resetting of $sendmail
+_rc_conf_loaded=false
+_rc_d_sendmail=check
 load_rc_config $name
+unset _rc_d_sendmail
+sendmail=$(check_need_sendmail)
 run_rc_command "$1"

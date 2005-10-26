@@ -1,4 +1,4 @@
-/*	$NetBSD: wd.c,v 1.274 2004/02/28 06:28:47 yamt Exp $ */
+/*	$NetBSD: wd.c,v 1.274.2.8.2.6 2005/09/06 16:28:33 riz Exp $ */
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 /*-
- * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2003, 2004 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wd.c,v 1.274 2004/02/28 06:28:47 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wd.c,v 1.274.2.8.2.6 2005/09/06 16:28:33 riz Exp $");
 
 #ifndef WDCDEBUG
 #define WDCDEBUG
@@ -188,7 +188,7 @@ void  __wdstart(struct wd_softc*, struct buf *);
 void  wdrestart(void *);
 void  wddone(void *);
 int   wd_get_params(struct wd_softc *, u_int8_t, struct ataparams *);
-void  wd_flushcache(struct wd_softc *, int);
+int   wd_flushcache(struct wd_softc *, int);
 void  wd_shutdown(void *);
 
 int   wd_getcache(struct wd_softc *, int *);
@@ -201,6 +201,7 @@ static void bad144intern(struct wd_softc *);
 #endif
 
 #define	WD_QUIRK_SPLIT_MOD15_WRITE	0x0001	/* must split certain writes */
+#define	WD_QUIRK_FORCE_LBA48		0x0002	/* must use LBA48 commands */
 
 /*
  * Quirk table for IDE drives.  Put more-specific matches first, since
@@ -226,6 +227,22 @@ static const struct wd_quirk {
 	  WD_QUIRK_SPLIT_MOD15_WRITE },
 	{ "ST380023AS",
 	  WD_QUIRK_SPLIT_MOD15_WRITE },
+
+	/*
+	 * This seagate drive seems to have issue addressing sector 0xfffffff
+	 * (aka LBA48_THRESHOLD) in LBA mode. The workaround is to force
+	 * LBA48
+	 */
+	{ "ST3160023A*",
+	  WD_QUIRK_FORCE_LBA48 },
+	{ "ST3200822A*",
+	  WD_QUIRK_FORCE_LBA48 },
+	{ "ST3250823A*",
+	  WD_QUIRK_FORCE_LBA48 },
+	{ "ST3200826A*",
+	  WD_QUIRK_FORCE_LBA48 },
+	{ "ST3300831A*",
+	  WD_QUIRK_FORCE_LBA48 },
 
 	{ NULL,
 	  0 }
@@ -415,16 +432,6 @@ wddetach(struct device *self, int flags)
 	struct buf *bp;
 	int s, bmaj, cmaj, i, mn;
 
-	lockmgr(&sc->sc_lock, LK_DRAIN, NULL);
-
-	/* Clean out the bad sector list */
-	while (!SLIST_EMPTY(&sc->sc_bslist)) {
-		void *head = SLIST_FIRST(&sc->sc_bslist);
-		SLIST_REMOVE_HEAD(&sc->sc_bslist, dbs_next);
-		free(head, M_TEMP);
-	}
-	sc->sc_bscount = 0;
-
 	/* locate the major number */
 	bmaj = bdevsw_lookup_major(&wd_bdevsw);
 	cmaj = cdevsw_lookup_major(&wd_cdevsw);
@@ -453,6 +460,14 @@ wddetach(struct device *self, int flags)
 	/* Detach disk. */
 	disk_detach(&sc->sc_dk);
 
+	/* Clean out the bad sector list */
+	while (!SLIST_EMPTY(&sc->sc_bslist)) {
+		void *head = SLIST_FIRST(&sc->sc_bslist);
+		SLIST_REMOVE_HEAD(&sc->sc_bslist, dbs_next);
+		free(head, M_TEMP);
+	}
+	sc->sc_bscount = 0;
+
 	/* Get rid of the shutdown hook. */
 	if (sc->sc_sdhook != NULL)
 		shutdownhook_disestablish(sc->sc_sdhook);
@@ -461,6 +476,8 @@ wddetach(struct device *self, int flags)
 	/* Unhook the entropy source. */
 	rnd_detach_source(&sc->rnd_source);
 #endif
+
+	lockmgr(&sc->sc_lock, LK_DRAIN, NULL);
 
 	return (0);
 }
@@ -536,7 +553,7 @@ wdstrategy(struct buf *bp)
 	 */
 	if (__predict_false(!SLIST_EMPTY(&wd->sc_bslist))) {
 		struct disk_badsectors *dbs;
-		daddr_t maxblk = blkno + (bp->b_bcount / DEV_BSIZE) - 1;
+		daddr_t maxblk = blkno + (bp->b_bcount >> DEV_BSHIFT) - 1;
 
 		SLIST_FOREACH(dbs, &wd->sc_bslist, dbs_next)
 			if ((dbs->dbs_min <= blkno && blkno <= dbs->dbs_max) ||
@@ -693,11 +710,13 @@ __wdstart(struct wd_softc *wd, struct buf *bp)
 	 * the sector number of the problem, and will eventually allow the
 	 * transfer to succeed.
 	 */
-	if (wd->sc_multi == 1 || wd->retries >= WDIORETRIES_SINGLE)
+	if (wd->retries >= WDIORETRIES_SINGLE)
 		wd->sc_wdc_bio.flags = ATA_SINGLE;
 	else
 		wd->sc_wdc_bio.flags = 0;
-	if (wd->sc_flags & WDF_LBA48 && wd->sc_wdc_bio.blkno > LBA48_THRESHOLD)
+	if (wd->sc_flags & WDF_LBA48 &&
+	    (wd->sc_wdc_bio.blkno > LBA48_THRESHOLD ||
+	    (wd->sc_quirks & WD_QUIRK_FORCE_LBA48) != 0))
 		wd->sc_wdc_bio.flags |= ATA_LBA48;
 	if (wd->sc_flags & WDF_LBA)
 		wd->sc_wdc_bio.flags |= ATA_LBA;
@@ -742,6 +761,9 @@ wddone(void *v)
 	case TIMEOUT:
 		errmsg = "device timeout";
 		goto retry;
+	case ERR_RESET:
+		errmsg = "channel reset";
+		goto retry2;
 	case ERROR:
 		/* Don't care about media change bits */
 		if (wd->sc_wdc_bio.r_error != 0 &&
@@ -750,7 +772,8 @@ wddone(void *v)
 		errmsg = "error";
 		do_perror = 1;
 retry:		/* Just reset and retry. Can we do more ? */
-		wd->atabus->ata_reset_channel(wd->drvp, 0);
+		wd->atabus->ata_reset_channel(wd->drvp, AT_RST_NOCMD);
+retry2:
 		diskerr(bp, "wd", errmsg, LOG_PRINTF,
 		    wd->sc_wdc_bio.blkdone, wd->sc_dk.dk_label);
 		if (wd->retries < WDIORETRIES)
@@ -778,7 +801,7 @@ retry:		/* Just reset and retry. Can we do more ? */
 
 			dbs = malloc(sizeof *dbs, M_TEMP, M_WAITOK);
 			dbs->dbs_min = bp->b_rawblkno;
-			dbs->dbs_max = dbs->dbs_min + bp->b_bcount - 1;
+			dbs->dbs_max = dbs->dbs_min + (bp->b_bcount >> DEV_BSHIFT) - 1;
 			microtime(&dbs->dbs_failedat);
 			SLIST_INSERT_HEAD(&wd->sc_bslist, dbs, dbs_next);
 			wd->sc_bscount++;
@@ -853,6 +876,9 @@ wdopen(dev_t dev, int flag, int fmt, struct proc *p)
 	wd = device_lookup(&wd_cd, WDUNIT(dev));
 	if (wd == NULL)
 		return (ENXIO);
+
+	if ((wd->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+		return (ENODEV);
 
 	/*
 	 * If this is the first open of this device, add a reference
@@ -1307,6 +1333,9 @@ bad:
 	case DIOCSCACHE:
 		return wd_setcache(wd, *(int *)addr);
 
+	case DIOCCACHESYNC:
+		return wd_flushcache(wd, AT_WAIT);
+
 	case ATAIOCCOMMAND:
 		/*
 		 * Make sure this command is (relatively) safe first
@@ -1446,17 +1475,17 @@ wddump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
 	if (wddumprecalibrated == 0) {
 		wddumpmulti = wd->sc_multi;
 		wddumprecalibrated = 1;
+		wd->atabus->ata_reset_channel(wd->drvp, AT_POLL | AT_RST_EMERG);
 		wd->drvp->state = RESET;
 	}
 
 	while (nblks > 0) {
-again:
 		wd->sc_bp = NULL;
 		wd->sc_wdc_bio.blkno = blkno;
 		wd->sc_wdc_bio.flags = ATA_POLL;
-		if (wddumpmulti == 1)
-			wd->sc_wdc_bio.flags |= ATA_SINGLE;
-		if (wd->sc_flags & WDF_LBA48 && blkno > LBA48_THRESHOLD)
+		if (wd->sc_flags & WDF_LBA48 &&
+		    (blkno > LBA48_THRESHOLD ||
+	    	    (wd->sc_quirks & WD_QUIRK_FORCE_LBA48) != 0))
 			wd->sc_wdc_bio.flags |= ATA_LBA48;
 		if (wd->sc_flags & WDF_LBA)
 			wd->sc_wdc_bio.flags |= ATA_LBA;
@@ -1499,11 +1528,6 @@ again:
 			panic("wddump: unknown error type");
 		}
 		if (err != 0) {
-			if (wddumpmulti != 1) {
-				wddumpmulti = 1; /* retry in single-sector */
-				printf(", retrying\n");
-				goto again;
-			}
 			printf("\n");
 			return err;
 		}
@@ -1643,15 +1667,25 @@ wd_setcache(struct wd_softc *wd, int bits)
 	return 0;
 }
 
-void
+int
 wd_flushcache(struct wd_softc *wd, int flags)
 {
 	struct wdc_command wdc_c;
 
-	if (wd->drvp->ata_vers < 4) /* WDCC_FLUSHCACHE is here since ATA-4 */
-		return;
+	/*
+	 * WDCC_FLUSHCACHE is here since ATA-4, but some drives report
+	 * only ATA-2 and still support it.
+	 */
+	if (wd->drvp->ata_vers < 4 &&
+	    ((wd->sc_params.atap_cmd_set2 & WDC_CMD2_FC) == 0 ||
+	    wd->sc_params.atap_cmd_set2 == 0xffff))
+		return ENODEV;
 	memset(&wdc_c, 0, sizeof(struct wdc_command));
-	wdc_c.r_command = WDCC_FLUSHCACHE;
+	if ((wd->sc_params.atap_cmd2_en & ATA_CMD2_LBA48) != 0 &&
+	    (wd->sc_params.atap_cmd2_en & ATA_CMD2_FCE) != 0)
+		wdc_c.r_command = WDCC_FLUSHCACHE_EXT;
+	else
+		wdc_c.r_command = WDCC_FLUSHCACHE;
 	wdc_c.r_st_bmask = WDCS_DRDY;
 	wdc_c.r_st_pmask = WDCS_DRDY;
 	wdc_c.flags = flags;
@@ -1659,20 +1693,28 @@ wd_flushcache(struct wd_softc *wd, int flags)
 	if (wd->atabus->ata_exec_command(wd->drvp, &wdc_c) != WDC_COMPLETE) {
 		printf("%s: flush cache command didn't complete\n",
 		    wd->sc_dev.dv_xname);
+		return EIO;
 	}
+	if (wdc_c.flags & ERR_NODEV)
+		return ENODEV;
 	if (wdc_c.flags & AT_TIMEOU) {
 		printf("%s: flush cache command timeout\n",
 		    wd->sc_dev.dv_xname);
+		return EIO;
+	}
+	if (wdc_c.flags & AT_ERROR) {
+		if (wdc_c.r_error == WDCE_ABRT) /* command not supported */
+			return ENODEV;
+		printf("%s: flush cache command: error 0x%x\n",
+		    wd->sc_dev.dv_xname, wdc_c.r_error);
+		return EIO;
 	}
 	if (wdc_c.flags & AT_DF) {
 		printf("%s: flush cache command: drive fault\n",
 		    wd->sc_dev.dv_xname);
+		return EIO;
 	}
-	/*
-	 * Ignore error register, it shouldn't report anything else
-	 * than COMMAND ABORTED, which means the device doesn't support
-	 * flush cache
-	 */
+	return 0;
 }
 
 void

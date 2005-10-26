@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: postinstall,v 1.74 2004/03/16 23:15:40 lukem Exp $
+# $NetBSD: postinstall,v 1.74.2.4 2004/08/30 19:37:12 tron Exp $
 #
 # Copyright (c) 2002-2004 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -434,7 +434,7 @@ do_rc()
 	compare_dir ${op} ${SRC_DIR}/etc/rc.d ${DEST_DIR}/etc/rc.d 555 \
 		DAEMON LOGIN NETWORKING SERVERS accounting altqd amd \
 		apmd bootparams bootconf.sh ccd cgd cleartmp cron \
-		dhclient dhcpd dhcrelay dmesg downinterfaces fsck \
+		dhclient dhcpd dhcrelay dmesg downinterfaces fixsb fsck \
 		identd ifwatchd inetd ipfilter ipfs ipmon ipnat ipsec isdnd \
 		kdc ldconfig lkm1 lkm2 lkm3 local lpd mopd motd \
 		mountall mountcritlocal mountcritremote mountd moused \
@@ -873,6 +873,49 @@ do_sendmail()
 	return ${failed}
 }
 
+#
+#	hosts
+#
+additem hosts "/etc/hosts being up to date"
+do_hosts()
+{
+	[ -n "$1" ] || err 2 "USAGE: do_hosts  fix|check"
+	op=$1
+
+	failed=0
+	h=${DEST_DIR}/etc/hosts
+	if ! grep ^127 $h | sed 's/^[^ 	]*//' | grep '\.' > /dev/null; then
+		msg "/etc/hosts entry for localhost (ipv4) missing dotted alias"
+
+		if [ "${op}" = "fix" ]; then
+			if ! sed 's/^\(127.*\)$/\1 localhost./' < $h \
+			    > ${SCRATCHDIR}/hosts ||
+			    ! mv ${SCRATCHDIR}/hosts $h; then
+				msg "Can't update /etc/hosts"
+				failed=1
+			fi
+		else
+			failed=1
+		fi
+	fi
+	if ! grep ^::1 $h | sed 's/^[^ 	]*//' | grep '\.' > /dev/null; then
+		msg "/etc/hosts entry for localhost (ipv6) missing dotted alias"
+
+		if [ "${op}" = "fix" ]; then
+			if ! sed 's/^\(::1.*\)$/\1 localhost./' < $h \
+			    > ${SCRATCHDIR}/hosts ||
+			    ! mv ${SCRATCHDIR}/hosts $h; then
+				msg "Can't update /etc/hosts"
+				failed=1
+			fi
+		else
+			failed=1
+		fi
+	fi
+
+	return ${failed}
+}
+
 
 #
 #	end of items
@@ -923,7 +966,7 @@ list()
 
 main()
 {
-	while getopts s:d:m: ch; do
+	while getopts s:d:m:a: ch; do
 		case ${ch} in
 		s)
 			SRC_DIR=${OPTARG}

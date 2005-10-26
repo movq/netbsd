@@ -1,4 +1,4 @@
-/*	$NetBSD: ftree.c,v 1.29 2003/10/27 00:12:41 lukem Exp $	*/
+/*	$NetBSD: ftree.c,v 1.29.2.1.2.1 2005/07/23 17:32:16 snj Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -78,7 +78,7 @@
 #if 0
 static char sccsid[] = "@(#)ftree.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: ftree.c,v 1.29 2003/10/27 00:12:41 lukem Exp $");
+__RCSID("$NetBSD: ftree.c,v 1.29.2.1.2.1 2005/07/23 17:32:16 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -146,7 +146,7 @@ static int ftree_arg(void);
  */
 
 int
-ftree_start(void)
+ftree_start()
 {
 
 #ifndef SMALL
@@ -342,8 +342,6 @@ ftree_chk(void)
 static int
 ftree_arg(void)
 {
-	char *pt;
-
 	/*
 	 * close off the current file tree
 	 */
@@ -358,14 +356,24 @@ ftree_arg(void)
 	 */
 	for(;;) {
 		if (fthead == NULL) {
+			int i, c = EOF;
 			/*
 			 * the user didn't supply any args, get the file trees
 			 * to process from stdin;
 			 */
-			if (fgets(farray[0], PAXPATHLEN+1, stdin) == NULL)
-				return(-1);
-			if ((pt = strchr(farray[0], '\n')) != NULL)
-				*pt = '\0';
+			for (i = 0; i < PAXPATHLEN + 2; i++) {
+				c = getchar();
+				if (c == EOF)
+					break;
+				else if (c == sep) {
+					if (i != 0)
+						break;
+				} else
+					farray[0][i] = c;
+			}
+			if (i == 0)
+				return -1;
+			farray[0][i] = '\0';
 		} else {
 			/*
 			 * the user supplied the file args as arguements to pax
@@ -513,7 +521,7 @@ next_file(ARCHD *arcn)
 			statbuf.st_flags = ftnode->st_flags;
 #endif
 		if (ftnode->flags & F_TIME)
-#ifdef BSD4_4
+#if BSD4_4 && !HAVE_NBTOOL_CONFIG_H
 			statbuf.st_mtimespec = ftnode->st_mtimespec;
 #else
 			statbuf.st_mtime = ftnode->st_mtimespec.tv_sec;
@@ -717,6 +725,7 @@ next_file(ARCHD *arcn)
 			arcn->ln_name[cnt] = '\0';
 			arcn->ln_nlen = cnt;
 			break;
+#ifdef S_IFSOCK
 		case S_IFSOCK:
 			/*
 			 * under BSD storing a socket is senseless but we will
@@ -725,6 +734,7 @@ next_file(ARCHD *arcn)
 			 */
 			arcn->type = PAX_SCK;
 			break;
+#endif
 		case S_IFIFO:
 			arcn->type = PAX_FIF;
 			break;

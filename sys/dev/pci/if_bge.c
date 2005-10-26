@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bge.c,v 1.66 2004/03/27 04:37:59 atatat Exp $	*/
+/*	$NetBSD: if_bge.c,v 1.66.2.3.2.1 2005/01/24 21:41:20 he Exp $	*/
 
 /*
  * Copyright (c) 2001 Wind River Systems
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bge.c,v 1.66 2004/03/27 04:37:59 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bge.c,v 1.66.2.3.2.1 2005/01/24 21:41:20 he Exp $");
 
 #include "bpfilter.h"
 #include "vlan.h"
@@ -643,11 +643,11 @@ bge_update_all_threshes(int lvl)
 	 * Now search all the interfaces for this name/number
 	 */
 	TAILQ_FOREACH(ifp, &ifnet, if_list) {
-		if (strncmp(ifp->if_xname, namebuf, namelen) != 0 ) 
+		if (strncmp(ifp->if_xname, namebuf, namelen) != 0)
 		      continue;
 		/* We got a match: update if doing auto-threshold-tuning */
 		if (bge_auto_thresh)
-			bge_set_thresh(ifp->if_softc, lvl);
+			bge_set_thresh(ifp, lvl);
 	}
 }
 
@@ -2021,17 +2021,21 @@ static const struct bge_product {
 	  },
 
    	{ PCI_VENDOR_BROADCOM,
+	  PCI_PRODUCT_BROADCOM_BCM5782,
+	  "Broadcom BCM5782 Gigabit Ethernet",
+	  },
+   	{ PCI_VENDOR_BROADCOM,
+	  PCI_PRODUCT_BROADCOM_BCM5788,
+	  "Broadcom BCM5788 Gigabit Ethernet",
+	  },
+
+   	{ PCI_VENDOR_BROADCOM,
 	  PCI_PRODUCT_BROADCOM_BCM5901,
 	  "Broadcom BCM5901 Fast Ethernet",
 	  },
    	{ PCI_VENDOR_BROADCOM,
 	  PCI_PRODUCT_BROADCOM_BCM5901A2,
 	  "Broadcom BCM5901A2 Fast Ethernet",
-	  },
-
-   	{ PCI_VENDOR_BROADCOM,
-	  PCI_PRODUCT_BROADCOM_BCM5782,
-	  "Broadcom BCM5782 Gigabit Ethernet",
 	  },
 
 	{ PCI_VENDOR_SCHNEIDERKOCH,
@@ -3579,7 +3583,8 @@ bge_ioctl(ifp, command, data)
 	default:
 		error = ether_ioctl(ifp, command, data);
 		if (error == ENETRESET) {
-			bge_setmulti(sc);
+			if (ifp->if_flags & IFF_RUNNING)
+				bge_setmulti(sc);
 			error = 0;
 		}
 		break;
@@ -3772,7 +3777,8 @@ SYSCTL_SETUP(sysctl_bge, "sysctl bge subtree setup")
 	}
 
 	if ((rc = sysctl_createv(clog, 0, NULL, &node,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "bge", NULL,
+	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "bge",
+	    SYSCTL_DESCR("BGE interface controls"),
 	    NULL, 0, NULL, 0, CTL_HW, CTL_CREATE, CTL_EOL)) != 0) {
 		goto err;
 	}
@@ -3782,7 +3788,9 @@ SYSCTL_SETUP(sysctl_bge, "sysctl bge subtree setup")
 	/* BGE Rx interrupt mitigation level */
 	if ((rc = sysctl_createv(clog, 0, NULL, &node, 
 	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-	    CTLTYPE_INT, "rx_lvl", NULL, sysctl_bge_verify, 0,
+	    CTLTYPE_INT, "rx_lvl",
+	    SYSCTL_DESCR("BGE receive interrupt mitigation level"),
+	    sysctl_bge_verify, 0,
 	    &bge_rx_thresh_lvl,
 	    0, CTL_HW, bge_root_num, CTL_CREATE,
 	    CTL_EOL)) != 0) {

@@ -1,6 +1,11 @@
 /*
- * Copyright (c) 1992, Brian Berliner and Jeff Polk
- * Copyright (c) 1989-1992, Brian Berliner
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (C) 1992, Brian Berliner and Jeff Polk
+ * Portions Copyright (C) 1989-1992, Brian Berliner
  * 
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with the CVS source distribution.
@@ -23,6 +28,8 @@ static Entnode *subdir_record PROTO((int, const char *, const char *));
 
 static FILE *entfile;
 static char *entfilename;		/* for error messages */
+
+
 
 /*
  * Construct an Entnode
@@ -90,9 +97,7 @@ write_ent_proc (node, closure)
      Node *node;
      void *closure;
 {
-    Entnode *entnode;
-
-    entnode = (Entnode *) node->data;
+    Entnode *entnode = node->data;
 
     if (closure != NULL && entnode->type != ENT_FILE)
 	closure = (void *)1;
@@ -145,7 +150,7 @@ write_entries (list)
 	/* We didn't write out any directories.  Check the list
            private data to see whether subdirectory information is
            known.  If it is, we need to write out an empty D line.  */
-	sdtp = (struct stickydirtag *) list->list->data;
+	sdtp = list->list->data;
 	if (sdtp == NULL || sdtp->subdirs)
 	    if (fprintf (entfile, "D\n") < 0)
 		error (1, errno, "cannot write %s", entfilename);
@@ -162,13 +167,15 @@ write_entries (list)
 	error (0, errno, "cannot remove %s", CVSADM_ENTLOG);
 }
 
+
+
 /*
  * Removes the argument file from the Entries file if necessary.
  */
 void
 Scratch_Entry (list, fname)
     List *list;
-    char *fname;
+    const char *fname;
 {
     Node *node;
 
@@ -202,6 +209,8 @@ Scratch_Entry (list, fname)
     }
 }
 
+
+
 /*
  * Enters the given file name/version/time-stamp into the Entries file,
  * removing the old entry first, if necessary.
@@ -209,13 +218,13 @@ Scratch_Entry (list, fname)
 void
 Register (list, fname, vn, ts, options, tag, date, ts_conflict)
     List *list;
-    char *fname;
-    char *vn;
-    char *ts;
-    char *options;
-    char *tag;
-    char *date;
-    char *ts_conflict;
+    const char *fname;
+    const char *vn;
+    const char *ts;
+    const char *options;
+    const char *tag;
+    const char *date;
+    const char *ts_conflict;
 {
     Entnode *entnode;
     Node *node;
@@ -270,9 +279,8 @@ static void
 freesdt (p)
     Node *p;
 {
-    struct stickydirtag *sdtp;
+    struct stickydirtag *sdtp = p->data;
 
-    sdtp = (struct stickydirtag *) p->data;
     if (sdtp->tag)
 	free (sdtp->tag);
     if (sdtp->date)
@@ -488,7 +496,7 @@ Entries_Open (aflag, update_dir)
 	sdtp->nonbranch = dirnonbranch;
 
 	/* feed it into the list-private area */
-	entries->list->data = (char *) sdtp;
+	entries->list->data = sdtp;
 	entries->list->delproc = freesdt;
     }
 
@@ -534,6 +542,7 @@ Entries_Open (aflag, update_dir)
 		break;
 	    default:
 		/* Ignore unrecognized commands.  */
+		Entnode_Destroy (ent);
 	        break;
 	    }
 	}
@@ -553,7 +562,7 @@ Entries_Open (aflag, update_dir)
 	sdtp = (struct stickydirtag *) xmalloc (sizeof (*sdtp));
 	memset ((char *) sdtp, 0, sizeof (*sdtp));
 	sdtp->subdirs = 0;
-	entries->list->data = (char *) sdtp;
+	entries->list->data = sdtp;
 	entries->list->delproc = freesdt;
     }
 
@@ -592,9 +601,8 @@ static void
 Entries_delproc (node)
     Node *node;
 {
-    Entnode *p;
+    Entnode *p = node->data;
 
-    p = (Entnode *) node->data;
     Entnode_Destroy(p);
 }
 
@@ -626,7 +634,7 @@ AddEntryNode (list, entdata)
        assume that the key is dynamically allocated.  The user's free proc
        should be responsible for freeing the key. */
     p->key = xstrdup (entdata->user);
-    p->data = (char *) entdata;
+    p->data = entdata;
 
     /* put the node into the list */
     addnode (list, p);
@@ -638,12 +646,12 @@ AddEntryNode (list, entdata)
  */
 void
 WriteTag (dir, tag, date, nonbranch, update_dir, repository)
-    char *dir;
-    char *tag;
-    char *date;
+    const char *dir;
+    const char *tag;
+    const char *date;
     int nonbranch;
-    char *update_dir;
-    char *repository;
+    const char *update_dir;
+    const char *repository;
 {
     FILE *fout;
     char *tmp;
@@ -793,11 +801,10 @@ void
 Subdirs_Known (entries)
      List *entries;
 {
-    struct stickydirtag *sdtp;
+    struct stickydirtag *sdtp = entries->list->data;
 
     /* If there is no list private data, that means that the
        subdirectory information is known.  */
-    sdtp = (struct stickydirtag *) entries->list->data;
     if (sdtp != NULL && ! sdtp->subdirs)
     {
 	FILE *fp;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ehcireg.h,v 1.14 2003/10/13 00:05:10 enami Exp $	*/
+/*	$NetBSD: ehcireg.h,v 1.14.2.3.2.1 2005/05/13 23:13:09 riz Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -214,7 +214,7 @@ typedef struct {
 #define  EHCI_QTD_MISSEDMICRO	0x04
 #define  EHCI_QTD_SPLITXSTATE	0x02
 #define  EHCI_QTD_PINGSTATE	0x01
-#define  EHCI_QTD_STATERRS	0x7c
+#define  EHCI_QTD_STATERRS	0x3c
 #define EHCI_QTD_GET_PID(x)	(((x) >>  8) & 0x3)
 #define EHCI_QTD_SET_PID(x)	((x) <<  8)
 #define  EHCI_QTD_PID_OUT	0x0
@@ -229,7 +229,8 @@ typedef struct {
 #define EHCI_QTD_GET_BYTES(x)	(((x) >> 16) &  0x7fff)
 #define EHCI_QTD_SET_BYTES(x)	((x) << 16)
 #define EHCI_QTD_GET_TOGGLE(x)	(((x) >> 31) &  0x1)
-#define EHCI_QTD_TOGGLE		0x80000000
+#define	EHCI_QTD_SET_TOGGLE(x)	((x) << 31)
+#define EHCI_QTD_TOGGLE_MASK	0x80000000
 	ehci_physaddr_t	qtd_buffer[EHCI_QTD_NBUFFERS];
 	ehci_physaddr_t qtd_buffer_hi[EHCI_QTD_NBUFFERS];
 } ehci_qtd_t;
@@ -257,8 +258,8 @@ typedef struct {
 #define EHCI_QH_HRECL		0x00008000
 #define EHCI_QH_GET_MPL(x)	(((x) >> 16) & 0x7ff) /* max packet len */
 #define EHCI_QH_SET_MPL(x)	((x) << 16)
-#define EHCI_QG_MPLMASK		0x07ff0000
-#define EHCI_QH_GET_CTL(x)	(((x) >> 26) & 0x01) /* control endpoint */
+#define EHCI_QH_MPLMASK		0x07ff0000
+#define EHCI_QH_GET_CTL(x)	(((x) >> 27) & 0x01) /* control endpoint */
 #define EHCI_QH_CTL		0x08000000
 #define EHCI_QH_GET_NRL(x)	(((x) >> 28) & 0x0f) /* NAK reload */
 #define EHCI_QH_SET_NRL(x)	((x) << 28)

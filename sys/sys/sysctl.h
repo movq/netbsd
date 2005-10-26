@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.h,v 1.116 2004/03/26 22:54:42 he Exp $	*/
+/*	$NetBSD: sysctl.h,v 1.116.2.8 2004/05/23 10:45:52 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -47,7 +47,7 @@
 #include <uvm/uvm_extern.h>
 
 /* For offsetof() */
-#ifdef _KERNEL
+#if defined(_KERNEL) || defined(_STANDALONE)
 #include <sys/systm.h>
 #else
 #include <stddef.h>
@@ -840,7 +840,12 @@ struct buf_sysctl {
 	{ "darwin", CTLTYPE_NODE }, \
 }
 
-#ifdef	_KERNEL
+#ifdef _KERNEL
+
+#if defined(_KERNEL_OPT)
+#include "opt_sysctl.h"
+#endif
+
 /*
  * A log of nodes created by a setup function or set of setup
  * functions so that they can be torn down in one "transaction"
@@ -894,6 +899,27 @@ extern struct ctldebug debug15, debug16, debug17, debug18, debug19;
 	oldlenp, newp, newlen, \
 	oname, l, (struct sysctlnode *)node
 
+#ifdef _LKM
+
+#define SYSCTL_SETUP_PROTO(name)				\
+	void name(struct sysctllog **)
+#ifdef SYSCTL_DEBUG_SETUP
+#define SYSCTL_SETUP(name, desc)				\
+	static void __CONCAT(___,name)(struct sysctllog **);	\
+	void name(struct sysctllog **clog) {			\
+		printf("%s\n", desc);				\
+		__CONCAT(___,name)(clog); }			\
+	__link_set_add_text(sysctl_funcs, name);		\
+	static void __CONCAT(___,name)(struct sysctllog **clog)
+#else /* SYSCTL_DEBUG_SETUP */
+#define SYSCTL_SETUP(name, desc)				\
+	__link_set_add_text(sysctl_funcs, name);		\
+	void name(struct sysctllog **clog)
+#endif /* SYSCTL_DEBUG_SETUP */
+
+#else /* _LKM */
+
+#define SYSCTL_SETUP_PROTO(name)
 #ifdef SYSCTL_DEBUG_SETUP
 #define SYSCTL_SETUP(name, desc)				\
 	static void __CONCAT(___,name)(struct sysctllog **);	\
@@ -909,6 +935,8 @@ extern struct ctldebug debug15, debug16, debug17, debug18, debug19;
 	static void name(struct sysctllog **clog)
 #endif /* SYSCTL_DEBUG_SETUP */
 typedef void (*sysctl_setup_func)(struct sysctllog **);
+
+#endif /* _LKM */
 
 /*
  * Internal sysctl function calling convention:
@@ -971,6 +999,12 @@ void	sysctl_dump(const struct sysctlnode *);
 void	sysctl_free(struct sysctlnode *);
 void	sysctl_teardown(struct sysctllog **);
 
+#if SYSCTL_INCLUDE_DESCR
+#define SYSCTL_DESCR(s) s
+#else /* SYSCTL_INCLUDE_DESCR */
+#define SYSCTL_DESCR(s) NULL
+#endif /* SYSCTL_INCLUDE_DESCR */
+
 /*
  * simple interface similar to old interface for in-kernel consumption
  */
@@ -1014,37 +1048,8 @@ __END_DECLS
 
 #ifdef __COMPAT_SYSCTL
 /*
- * node version 0
+ * old node definitions go here
  */
-struct sysctlnode0 {
-	uint sysctl0_flags;		/* flags and type */
-	int sysctl0_num;		/* mib number */ 
-	size_t sysctl0_size;		/* size of instrumented data */
-	char sysctl0_name[SYSCTL_NAMELEN]; /* node name */
-	union {
-		struct {
-			uint scn0_csize; /* size of child node array */
-			uint scn0_clen;	/* number of valid children */
-			struct sysctlnode0 *scn0_child; /* array of child nodes */
-		} scu0_node;
-		int scu0_alias;		/* node this node refers to */
-		int scu0_idata;		/* immediate "int" data */
-		u_quad_t scu0_qdata;	/* immediate "u_quad_t" data */
-		void *scu0_data;	/* pointer to external data */
-	} sysctl0_un;
-	sysctlfn sysctl0_func;		/* access helper function */
-	struct sysctlnode0 *sysctl0_parent; /* parent of this node */
-	uint sysctl0_ver;		/* node's version vs. rest of tree */
-};
-
-#define sysctl0_csize	sysctl0_un.scu0_node.scn0_csize
-#define sysctl0_clen	sysctl0_un.scu0_node.scn0_clen
-#define sysctl0_child	sysctl0_un.scu0_node.scn0_child
-#define sysctl0_alias	sysctl0_un.scu0_alias
-#define sysctl0_data	sysctl0_un.scu0_data
-#define sysctl0_idata	sysctl0_un.scu0_idata
-#define sysctl0_qdata	sysctl0_un.scu0_qdata
-
 #endif /* __COMPAT_SYSCTL */
 
 /*
@@ -1134,10 +1139,10 @@ struct sysctldesc {
 
 #define __sysc_desc_roundup(x) ((((x) - 1) | (sizeof(int32_t) - 1)) + 1)
 #define __sysc_desc_adv(d, l) \
+	(/*LINTED ptr cast*/(struct sysctldesc *) \
 	(((const char*)(d)) + offsetof(struct sysctldesc, descr_str) + \
-		__sysc_desc_roundup(l))
-#define NEXT_DESCR(d) ((struct sysctldesc *) \
-	__sysc_desc_adv((d), (d)->descr_len))
+		__sysc_desc_roundup(l)))
+#define NEXT_DESCR(d) __sysc_desc_adv((d), (d)->descr_len)
 
 static __inline struct sysctlnode *
 sysctl_rootof(struct sysctlnode *n)

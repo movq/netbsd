@@ -1,5 +1,5 @@
-# $Heimdal: Makefile.am,v 1.156.2.1 2003/05/12 15:20:47 joda Exp $
-# $NetBSD: Makefile.am,v 1.1.1.7 2003/05/15 20:28:47 lha Exp $
+# $Heimdal: Makefile.am,v 1.156.2.4 2004/06/21 10:52:01 lha Exp $
+# $NetBSD: Makefile.am,v 1.1.1.7.2.2 2004/09/17 04:36:18 jmc Exp $
 
 include $(top_srcdir)/Makefile.am.common
 
@@ -133,7 +133,7 @@ libkrb5_la_SOURCES =				\
 	write_message.c				\
 	$(ERR_FILES)
 
-libkrb5_la_LDFLAGS = -version-info 19:0:2
+libkrb5_la_LDFLAGS = -version-info 20:0:3
 
 $(libkrb5_la_OBJECTS): $(srcdir)/krb5-protos.h $(srcdir)/krb5-private.h
 
@@ -174,6 +174,7 @@ man_MANS =					\
 	krb5_parse_name.3			\
 	krb5_principal_get_realm.3		\
 	krb5_set_default_realm.3		\
+	krb5_set_password.3			\
 	krb5_sname_to_principal.3		\
 	krb5_timeofday.3			\
 	krb5_unparse_name.3			\

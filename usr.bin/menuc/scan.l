@@ -1,4 +1,4 @@
-/*	$NetBSD: scan.l,v 1.12 2003/11/30 09:22:25 dsl Exp $	*/
+/*	$NetBSD: scan.l,v 1.12.4.2 2005/07/23 23:55:56 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -112,6 +112,10 @@ shortcut { return SHORTCUT; }
 
 clear { return CLEAR; }
 
+always { return ALWAYS; }
+
+scroll { return SCROLL; }
+
 \"([^\"\n]*(\\\")?)*\"  {
 	  yylval.s_value = strdup (yytext);
 	  max_strlen = max_strlen > strlen(yytext)
@@ -124,7 +128,7 @@ clear { return CLEAR; }
 	  return(NAME);
 	}
 
-[-1-9][0-9]* {
+0|[-1-9][0-9]* {
 	  yylval.s_value = strdup(yytext); 
 	  return(INT_CONST);
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_subs.c,v 1.132 2004/03/19 13:53:28 yamt Exp $	*/
+/*	$NetBSD: nfs_subs.c,v 1.132.2.3.2.3 2005/03/16 11:54:53 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_subs.c,v 1.132 2004/03/19 13:53:28 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_subs.c,v 1.132.2.3.2.3 2005/03/16 11:54:53 tron Exp $");
 
 #include "fs_nfs.h"
 #include "opt_nfs.h"
@@ -1214,19 +1214,31 @@ nfs_dirhash(off)
 	return sum;
 }
 
+#define	_NFSDC_MTX(np)		(&NFSTOV(np)->v_interlock)
+#define	NFSDC_LOCK(np)		simple_lock(_NFSDC_MTX(np))
+#define	NFSDC_UNLOCK(np)	simple_unlock(_NFSDC_MTX(np))
+#define	NFSDC_ASSERT_LOCKED(np) LOCK_ASSERT(simple_lock_held(_NFSDC_MTX(np)))
+
 void
 nfs_initdircache(vp)
 	struct vnode *vp;
 {
 	struct nfsnode *np = VTONFS(vp);
+	struct nfsdirhashhead *dircache;
 
-	KASSERT(np->n_dircache == NULL);
-
-	np->n_dircachesize = 0;
-	np->n_dblkno = 1;
-	np->n_dircache = hashinit(NFS_DIRHASHSIZ, HASH_LIST, M_NFSDIROFF,
+	dircache = hashinit(NFS_DIRHASHSIZ, HASH_LIST, M_NFSDIROFF,
 	    M_WAITOK, &nfsdirhashmask);
-	TAILQ_INIT(&np->n_dirchain);
+
+	NFSDC_LOCK(np);
+	if (np->n_dircache == NULL) {
+		np->n_dircachesize = 0;
+		np->n_dircache = dircache;
+		dircache = NULL;
+		TAILQ_INIT(&np->n_dirchain);
+	}
+	NFSDC_UNLOCK(np);
+	if (dircache)
+		hashdone(dircache, M_NFSDIROFF);
 }
 
 void
@@ -1234,16 +1246,83 @@ nfs_initdirxlatecookie(vp)
 	struct vnode *vp;
 {
 	struct nfsnode *np = VTONFS(vp);
+	unsigned *dirgens;
 
 	KASSERT(VFSTONFS(vp->v_mount)->nm_flag & NFSMNT_XLATECOOKIE);
-	KASSERT(np->n_dirgens == NULL);
 
-	MALLOC(np->n_dirgens, unsigned *,
-	    NFS_DIRHASHSIZ * sizeof (unsigned), M_NFSDIROFF, M_WAITOK);
-	memset((caddr_t)np->n_dirgens, 0, NFS_DIRHASHSIZ * sizeof (unsigned));
+	dirgens = malloc(NFS_DIRHASHSIZ * sizeof (unsigned), M_NFSDIROFF,
+	    M_WAITOK|M_ZERO);
+	NFSDC_LOCK(np);
+	if (np->n_dirgens == NULL) {
+		np->n_dirgens = dirgens;
+		dirgens = NULL;
+	}
+	NFSDC_UNLOCK(np);
+	if (dirgens)
+		free(dirgens, M_NFSDIROFF);
 }
 
-static struct nfsdircache dzero = {0, 0, {0, 0}, {0, 0}, 0, 0, 0};
+static const struct nfsdircache dzero;
+
+static void nfs_unlinkdircache __P((struct nfsnode *np, struct nfsdircache *));
+static void nfs_putdircache_unlocked __P((struct nfsnode *,
+    struct nfsdircache *));
+
+static void
+nfs_unlinkdircache(np, ndp)
+	struct nfsnode *np;
+	struct nfsdircache *ndp;
+{
+
+	NFSDC_ASSERT_LOCKED(np);
+	KASSERT(ndp != &dzero);
+
+	if (LIST_NEXT(ndp, dc_hash) == (void *)-1)
+		return;
+
+	TAILQ_REMOVE(&np->n_dirchain, ndp, dc_chain);
+	LIST_REMOVE(ndp, dc_hash);
+	LIST_NEXT(ndp, dc_hash) = (void *)-1; /* mark as unlinked */
+
+	nfs_putdircache_unlocked(np, ndp);
+}
+
+void
+nfs_putdircache(np, ndp)
+	struct nfsnode *np;
+	struct nfsdircache *ndp;
+{
+	int ref;
+
+	if (ndp == &dzero)
+		return;
+
+	KASSERT(ndp->dc_refcnt > 0);
+	NFSDC_LOCK(np);
+	ref = --ndp->dc_refcnt;
+	NFSDC_UNLOCK(np);
+
+	if (ref == 0)
+		free(ndp, M_NFSDIROFF);
+}
+
+static void
+nfs_putdircache_unlocked(np, ndp)
+	struct nfsnode *np;
+	struct nfsdircache *ndp;
+{
+	int ref;
+
+	NFSDC_ASSERT_LOCKED(np);
+
+	if (ndp == &dzero)
+		return;
+
+	KASSERT(ndp->dc_refcnt > 0);
+	ref = --ndp->dc_refcnt;
+	if (ref == 0)
+		free(ndp, M_NFSDIROFF);
+}
 
 struct nfsdircache *
 nfs_searchdircache(vp, off, do32, hashent)
@@ -1261,7 +1340,11 @@ nfs_searchdircache(vp, off, do32, hashent)
 	 * Zero is always a valid cookie.
 	 */
 	if (off == 0)
-		return &dzero;
+		/* LINTED const cast away */
+		return (struct nfsdircache *)&dzero;
+
+	if (!np->n_dircache)
+		return NULL;
 
 	/*
 	 * We use a 32bit cookie as search key, directly reconstruct
@@ -1278,6 +1361,8 @@ nfs_searchdircache(vp, off, do32, hashent)
 
 	if (hashent)
 		*hashent = (int)(ndhp - np->n_dircache);
+
+	NFSDC_LOCK(np);
 	if (do32) {
 		LIST_FOREACH(ndp, ndhp, dc_hash) {
 			if (ndp->dc_cookie32 == (u_int32_t)off) {
@@ -1286,10 +1371,10 @@ nfs_searchdircache(vp, off, do32, hashent)
 				 * start of a new block fetched from
 				 * the server.
 				 */
-				if (ndp->dc_blkno == -1) {
+				if (ndp->dc_flags & NFSDC_INVALID) {
 					ndp->dc_blkcookie = ndp->dc_cookie;
-					ndp->dc_blkno = np->n_dblkno++;
 					ndp->dc_entry = 0;
+					ndp->dc_flags &= ~NFSDC_INVALID;
 				}
 				break;
 			}
@@ -1300,6 +1385,9 @@ nfs_searchdircache(vp, off, do32, hashent)
 				break;
 		}
 	}
+	if (ndp != NULL)
+		ndp->dc_refcnt++;
+	NFSDC_UNLOCK(np);
 	return ndp;
 }
 
@@ -1313,9 +1401,19 @@ nfs_enterdircache(vp, off, blkoff, en, blkno)
 {
 	struct nfsnode *np = VTONFS(vp);
 	struct nfsdirhashhead *ndhp;
-	struct nfsdircache *ndp = NULL, *first;
+	struct nfsdircache *ndp = NULL;
+	struct nfsdircache *newndp = NULL;
 	struct nfsmount *nmp = VFSTONFS(vp->v_mount);
 	int hashent, gen, overwrite;
+
+	/*
+	 * XXX refuse entries for offset 0. amd(8) erroneously sets
+	 * cookie 0 for the '.' entry, making this necessary. This
+	 * isn't so bad, as 0 is a special case anyway.
+	 */
+	if (off == 0)
+		/* LINTED const cast away */
+		return (struct nfsdircache *)&dzero;
 
 	if (!np->n_dircache)
 		/*
@@ -1327,34 +1425,34 @@ nfs_enterdircache(vp, off, blkoff, en, blkno)
 	if ((nmp->nm_flag & NFSMNT_XLATECOOKIE) && !np->n_dirgens)
 		nfs_initdirxlatecookie(vp);
 
-	/*
-	 * XXX refuse entries for offset 0. amd(8) erroneously sets
-	 * cookie 0 for the '.' entry, making this necessary. This
-	 * isn't so bad, as 0 is a special case anyway.
-	 */
-	if (off == 0)
-		return &dzero;
-
+retry:
 	ndp = nfs_searchdircache(vp, off, 0, &hashent);
 
-	if (ndp && ndp->dc_blkno != -1) {
+	NFSDC_LOCK(np);
+	if (ndp && (ndp->dc_flags & NFSDC_INVALID) == 0) {
 		/*
 		 * Overwriting an old entry. Check if it's the same.
 		 * If so, just return. If not, remove the old entry.
 		 */
 		if (ndp->dc_blkcookie == blkoff && ndp->dc_entry == en)
-			return ndp;
-		TAILQ_REMOVE(&np->n_dirchain, ndp, dc_chain);
-		LIST_REMOVE(ndp, dc_hash);
-		FREE(ndp, M_NFSDIROFF);
-		ndp = 0;
+			goto done;
+		nfs_unlinkdircache(np, ndp);
+		nfs_putdircache_unlocked(np, ndp);
+		ndp = NULL;
 	}
 
 	ndhp = &np->n_dircache[hashent];
 
 	if (!ndp) {
-		MALLOC(ndp, struct nfsdircache *, sizeof (*ndp), M_NFSDIROFF,
-		    M_WAITOK);
+		if (newndp == NULL) {
+			NFSDC_UNLOCK(np);
+			newndp = malloc(sizeof(*ndp), M_NFSDIROFF, M_WAITOK);
+			newndp->dc_refcnt = 1;
+			LIST_NEXT(newndp, dc_hash) = (void *)-1;
+			goto retry;
+		}
+		ndp = newndp;
+		newndp = NULL;
 		overwrite = 0;
 		if (nmp->nm_flag & NFSMNT_XLATECOOKIE) {
 			/*
@@ -1371,21 +1469,13 @@ nfs_enterdircache(vp, off, blkoff, en, blkno)
 	} else
 		overwrite = 1;
 
-	/*
-	 * If the entry number is 0, we are at the start of a new block, so
-	 * allocate a new blocknumber.
-	 */
-	if (en == 0)
-		ndp->dc_blkno = np->n_dblkno++;
-	else
-		ndp->dc_blkno = blkno;
-
 	ndp->dc_cookie = off;
 	ndp->dc_blkcookie = blkoff;
 	ndp->dc_entry = en;
+	ndp->dc_flags = 0;
 
 	if (overwrite)
-		return ndp;
+		goto done;
 
 	/*
 	 * If the maximum directory cookie cache size has been reached
@@ -1395,15 +1485,19 @@ nfs_enterdircache(vp, off, blkoff, en, blkno)
 	 * loss.
 	 */
 	if (np->n_dircachesize == NFS_MAXDIRCACHE) {
-		first = TAILQ_FIRST(&np->n_dirchain);
-		TAILQ_REMOVE(&np->n_dirchain, first, dc_chain);
-		LIST_REMOVE(first, dc_hash);
-		FREE(first, M_NFSDIROFF);
+		nfs_unlinkdircache(np, TAILQ_FIRST(&np->n_dirchain));
 	} else
 		np->n_dircachesize++;
 		
+	KASSERT(ndp->dc_refcnt == 1);
 	LIST_INSERT_HEAD(ndhp, ndp, dc_hash);
 	TAILQ_INSERT_TAIL(&np->n_dirchain, ndp, dc_chain);
+	ndp->dc_refcnt++;
+done:
+	KASSERT(ndp->dc_refcnt > 0);
+	NFSDC_UNLOCK(np);
+	if (newndp)
+		nfs_putdircache(np, newndp);
 	return ndp;
 }
 
@@ -1424,11 +1518,11 @@ nfs_invaldircache(vp, forcefree)
 	if (!np->n_dircache)
 		return;
 
+	NFSDC_LOCK(np);
 	if (!(nmp->nm_flag & NFSMNT_XLATECOOKIE) || forcefree) {
-		while ((ndp = TAILQ_FIRST(&np->n_dirchain)) != 0) {
-			TAILQ_REMOVE(&np->n_dirchain, ndp, dc_chain);
-			LIST_REMOVE(ndp, dc_hash);
-			FREE(ndp, M_NFSDIROFF);
+		while ((ndp = TAILQ_FIRST(&np->n_dirchain)) != NULL) {
+			KASSERT(!forcefree || ndp->dc_refcnt == 1);
+			nfs_unlinkdircache(np, ndp);
 		}
 		np->n_dircachesize = 0;
 		if (forcefree && np->n_dirgens) {
@@ -1436,12 +1530,11 @@ nfs_invaldircache(vp, forcefree)
 			np->n_dirgens = NULL;
 		}
 	} else {
-		TAILQ_FOREACH(ndp, &np->n_dirchain, dc_chain) {
-			ndp->dc_blkno = -1;
-		}
+		TAILQ_FOREACH(ndp, &np->n_dirchain, dc_chain)
+			ndp->dc_flags |= NFSDC_INVALID;
 	}
 
-	np->n_dblkno = 1;
+	NFSDC_UNLOCK(np);
 }
 
 /*
@@ -1720,15 +1813,17 @@ nfs_loadattrcache(vpp, fp, vaper, flags)
 		} else {
 			np->n_size = vap->va_size;
 			if (vap->va_type == VREG) {
-				if ((flags & NAC_NOTRUNC)
-				    && np->n_size < vp->v_size) {
-					/*
-					 * we can't free pages now because
-					 * the pages can be owned by ourselves.
-					 */
+				/*
+				 * we can't free pages if NAC_NOTRUNC because
+				 * the pages can be owned by ourselves.
+				 */
+				if (flags & NAC_NOTRUNC) {
 					np->n_flag |= NTRUNCDELAYED;
-				}
-				else {
+				} else {
+					simple_lock(&vp->v_interlock);
+					(void)VOP_PUTPAGES(vp, 0,
+					    0, PGO_SYNCIO | PGO_CLEANIT |
+					    PGO_FREE | PGO_ALLPAGES);
 					uvm_vnp_setsize(vp, np->n_size);
 				}
 			}
@@ -1798,6 +1893,9 @@ nfs_delayedtruncate(vp)
 
 	if (np->n_flag & NTRUNCDELAYED) {
 		np->n_flag &= ~NTRUNCDELAYED;
+		simple_lock(&vp->v_interlock);
+		(void)VOP_PUTPAGES(vp, 0,
+		    0, PGO_SYNCIO | PGO_CLEANIT | PGO_FREE | PGO_ALLPAGES);
 		uvm_vnp_setsize(vp, np->n_size);
 	}
 }
@@ -2485,7 +2583,7 @@ nfs_clearcommit(mp)
 
 	LIST_FOREACH(vp, &mp->mnt_vnodelist, v_mntvnodes) {
 		KASSERT(vp->v_mount == mp);
-		if (vp->v_type == VNON)
+		if (vp->v_type != VREG)
 			continue;
 		np = VTONFS(vp);
 		np->n_pushlo = np->n_pushhi = np->n_pushedlo =

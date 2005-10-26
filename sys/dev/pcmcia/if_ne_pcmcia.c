@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_pcmcia.c,v 1.110 2004/03/13 15:09:16 cube Exp $	*/
+/*	$NetBSD: if_ne_pcmcia.c,v 1.110.2.4 2004/07/05 21:41:47 he Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_pcmcia.c,v 1.110 2004/03/13 15:09:16 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_pcmcia.c,v 1.110.2.4 2004/07/05 21:41:47 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -149,7 +149,7 @@ static const struct ne2000dev {
     { PCMCIA_STR_RPTI_EP400,
       PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
       PCMCIA_CIS_RPTI_EP400,
-      0, -1, { 0x00, 0x40, 0x95 } },
+      0, 0x110, { 0x00, 0x40, 0x95 } },
 
     { PCMCIA_STR_RPTI_EP401,
       PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
@@ -292,16 +292,29 @@ static const struct ne2000dev {
      * There are two entries for the DFE-670TXD because there are
      * several possible Vendor IDs for the MAC address.  Both are
      * from D-Link, though.
+     *
+     * Oh, wait, there's a third possible vendor code, apparently.
+     * And it's from "ANI Communications" this time...
      */
     { PCMCIA_STR_DLINK_DFE670TXD,
-      PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_NETGEAR_FA410TXC,
+      PCMCIA_VENDOR_NETGEAR, PCMCIA_PRODUCT_NETGEAR_FA410TXC,
       PCMCIA_CIS_DLINK_DFE670TXD,
       0, -1, { 0x00, 0x50, 0xba }, NE2000DVF_DL10019 },
 
     { PCMCIA_STR_DLINK_DFE670TXD,
-      PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_NETGEAR_FA410TXC,
+      PCMCIA_VENDOR_NETGEAR, PCMCIA_PRODUCT_NETGEAR_FA410TXC,
       PCMCIA_CIS_DLINK_DFE670TXD,
       0, -1, { 0x00, 0x0d, 0x88 }, NE2000DVF_DL10019 },
+
+    { PCMCIA_STR_DLINK_DFE670TXD,
+      PCMCIA_VENDOR_NETGEAR, PCMCIA_PRODUCT_NETGEAR_FA410TXC,
+      PCMCIA_CIS_DLINK_DFE670TXD,
+      0, -1, { 0x00, 0x40, 0x05 }, NE2000DVF_DL10019 },
+
+    { PCMCIA_STR_NETGEAR_FA410TXC,
+      PCMCIA_VENDOR_NETGEAR, PCMCIA_PRODUCT_NETGEAR_FA410TXC,
+      PCMCIA_CIS_NETGEAR_FA410TXC,
+      0, -1, { 0x00, 0x48, 0x54 }, NE2000DVF_DL10019 },
 
     { PCMCIA_STR_MELCO_LPC2_TX,
       PCMCIA_VENDOR_LINKSYS, PCMCIA_PRODUCT_LINKSYS_ETHERFAST,
@@ -777,6 +790,9 @@ again:
 	       dsc->sc_dev.dv_xname,
 	       pa->manufacturer, pa->product,
 	       pa->card->cis1_info[0], pa->card->cis1_info[1]);
+	if (enaddr != NULL)
+		aprint_error("%s: ethernet vendor code %02x:%02x:%02x\n",
+	            dsc->sc_dev.dv_xname, enaddr[0], enaddr[1], enaddr[2]);
 	goto fail_5;
 
 found:

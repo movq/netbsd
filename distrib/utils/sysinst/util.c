@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.117 2004/01/29 08:48:23 lukem Exp $	*/
+/*	$NetBSD: util.c,v 1.117.2.4.2.2 2005/09/01 16:54:49 riz Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -119,8 +119,8 @@ struct  tarstats {
 	int nskipped;
 } tarstats;
 
-static int extract_file(char *path);
-static int extract_dist(void);
+static int extract_file(int, int, int, char *path);
+static int extract_dist(int, int);
 int	distribution_sets_exist_p(const char *path);
 static int check_for(unsigned int mode, const char *pathname);
 
@@ -134,7 +134,6 @@ static int check_for(unsigned int mode, const char *pathname);
 unsigned int sets_valid = MD_SETS_VALID;
 unsigned int sets_selected = (MD_SETS_SELECTED) & (MD_SETS_VALID);
 unsigned int sets_installed = 0;
-
 
 int
 dir_exists_p(const char *path)
@@ -171,43 +170,26 @@ distribution_sets_exist_p(const char *path)
 	snprintf(buf, sizeof buf, "%s/%s", path, "base.tgz");
 	result = result && file_exists_p(buf);
 
-	return(result);
+	if (result == 0) {
+		msg_display(MSG_badsetdir, path);
+		process_menu(MENU_ok, NULL);
+	}
+
+	return result;
 }
 
 
-void
+uint
 get_ramsize(void)
 {
-	size_t len = sizeof(ramsize);
-	int mib[2] = {CTL_HW, HW_PHYSMEM};
+	uint64_t ramsize;
+	size_t len = sizeof ramsize;
+	int mib[2] = {CTL_HW, HW_PHYSMEM64};
 	
 	sysctl(mib, 2, &ramsize, &len, NULL, 0);
 
 	/* Find out how many Megs ... round up. */
-	rammb = ((unsigned int)ramsize + MEG - 1) / MEG;
-}
-
-static int asked = 0;
-
-void
-ask_sizemult(int cylsize)
-{
-
-	current_cylsize = cylsize;	/* XXX */
-
-	if (!asked) {
-		msg_display(MSG_sizechoice);
-		process_menu(MENU_sizechoice, NULL);
-	}
-	asked = 1;
-}
-
-void
-reask_sizemult(int cylsize)
-{
-
-	asked = 0;
-	ask_sizemult(cylsize);
+	return (ramsize + MEG - 1) / MEG;
 }
 
 void
@@ -215,10 +197,8 @@ run_makedev(void)
 {
 	char *owd;
 
-	wclear(stdscr);
-	wrefresh(stdscr);
-	msg_display(MSG_makedev);
-	sleep (1);
+	msg_display_add("\n\n");
+	msg_display_add(MSG_makedev);
 
 	owd = getcwd(NULL, 0);
 
@@ -238,7 +218,7 @@ run_makedev(void)
 int
 get_via_floppy(void)
 {
-	char fddev[STRSIZE] = "/dev/fd0a";
+	char fddev[STRSIZE];
 	char fname[STRSIZE];
 	char full_name[STRSIZE];
 	char catcmd[STRSIZE];
@@ -247,6 +227,7 @@ get_via_floppy(void)
 	int  first;
 	struct stat sb;
 
+	(void)strlcpy(fddev, "/dev/fd0a", STRSIZE);
 	cd_dist_dir("unloading from floppy");
 
 	msg_prompt_add(MSG_fddev, fddev, fddev, STRSIZE);
@@ -314,47 +295,30 @@ get_via_floppy(void)
 int
 get_via_cdrom(void)
 {
-	char tmpdir[STRSIZE];
-	int retries;
 
 	/* Get CD-rom device name and path within CD-rom */
 	process_menu(MENU_cdromsource, NULL);
 
-again:
 	umount_mnt2();
 
 	/* Mount it */
-	for (retries = 5;; --retries) {
-		if (run_program(retries > 0 ? RUN_SILENT : 0, 
-		    "/sbin/mount -rt cd9660 /dev/%s /mnt2", cdrom_dev) == 0)
+	for (;;) {
+		if (run_program(0, "/sbin/mount -rt cd9660 /dev/%s /mnt2",
+				cdrom_dev) == 0)
 			break;
-		if (retries > 0) {
-			sleep(1);
-			continue;
-		}
-		msg_display(MSG_badsetdir, cdrom_dev);
 		process_menu(MENU_cdrombadmount, NULL);
 		if (!yesno)
-			return 0;
-		if (ignorerror)
-			break;
+			return -1;
 	}
 	mnt2_mounted = 1;
 
-	snprintf(tmpdir, sizeof tmpdir, "%s/%s", "/mnt2", cdrom_dir);
+	snprintf(ext_dir, sizeof ext_dir, "%s/%s", "/mnt2", set_dir);
 
 	/* Verify distribution files exist.  */
-	if (distribution_sets_exist_p(tmpdir) == 0) {
-		msg_display(MSG_badsetdir, tmpdir);
-		process_menu(MENU_cdrombadmount, NULL);
-		if (!yesno)
-			return (0);
-		if (!ignorerror)
-			goto again;
-	}
+	if (distribution_sets_exist_p(ext_dir) == 0)
+		return -1;
 
 	/* return location, don't clean... */
-	strlcpy(ext_dir, tmpdir, STRSIZE);
 	clean_dist_dir = 0;
 	return 1;
 }
@@ -367,7 +331,6 @@ again:
 int
 get_via_localfs(void)
 {
-	char tmpdir[STRSIZE];
 
 	/* Get device, filesystem, and filepath */
 	process_menu (MENU_localfssource, NULL);
@@ -388,20 +351,14 @@ again:
 	}
 	mnt2_mounted = 1;
 
-	snprintf(tmpdir, sizeof tmpdir, "%s/%s", "/mnt2", localfs_dir);
+	snprintf(ext_dir, sizeof ext_dir, "%s/%s/%s",
+		"/mnt2", localfs_dir, set_dir);
 
 	/* Verify distribution files exist.  */
-	if (distribution_sets_exist_p(tmpdir) == 0) {
-		msg_display(MSG_badsetdir, tmpdir);
-		process_menu(MENU_localfsbadmount, NULL);
-		if (!yesno)
-			return 0;
-		if (!ignorerror)
-			goto again;
-	}
+	if (distribution_sets_exist_p(ext_dir) == 0)
+		return -1;
 
 	/* return location, don't clean... */
-	strlcpy(ext_dir, tmpdir, STRSIZE);
 	clean_dist_dir = 0;
 	return 1;
 }
@@ -413,33 +370,20 @@ again:
 int
 get_via_localdir(void)
 {
-	msg errmsg;
 
-	/* Get device, filesystem, and filepath */
+	/* Get filepath */
 	process_menu(MENU_localdirsource, NULL);
 
-	/* Complain if not a directory or distribution files absent */
-	for (;;) {
-		/*
-		 * We have to have an absolute path ('cos pax runs in a
-		 * different directory), make it so.
-		 */
-		if (localfs_dir[0] != '/') {
-			memmove(localfs_dir + 1, localfs_dir, sizeof localfs_dir - 1);
-			localfs_dir[0] = '/';
-		}
-		if ((errmsg = MSG_badlocalsetdir, dir_exists_p(localfs_dir)) &&
-		    (errmsg = MSG_badsetdir, distribution_sets_exist_p(localfs_dir)))
-			break;
-		process_menu(MENU_localdirbad, &errmsg);
-		if (!yesno)
-			return (0);
-		if (ignorerror)
-			break;
-	}
+	/*
+	 * We have to have an absolute path ('cos pax runs in a
+	 * different directory), make it so.
+	 */
+	snprintf(ext_dir, sizeof ext_dir, "/%s/%s", localfs_dir, set_dir);
+
+	if (distribution_sets_exist_p(ext_dir) == 0)
+		return -1;
 
 	/* return location, don't clean... */
-	strlcpy(ext_dir, localfs_dir, sizeof ext_dir);
 	clean_dist_dir = 0;
 	return 1;
 }
@@ -607,7 +551,7 @@ set_sublist(menudesc *menu, void *arg)
 	}
 
 	menu_no = new_menu(NULL, me, sets, 20, 10, 0, 44,
-		MC_SCROLL | MC_DFLTEXIT,
+		MC_SUBMENU | MC_SCROLL | MC_DFLTEXIT,
 		set_selected_sets, NULL, NULL, NULL, MSG_install_selected_sets);
 
 	if (menu_no == -1)
@@ -667,24 +611,25 @@ customise_sets(void)
 	free_menu(menu_no);
 }
 
-/* Do we want a verbose extract? */
-static	int verbose = -1;
-
-void
-ask_verbose_dist(void)
+static int
+ask_verbose_dist(msg setup_done)
 {
+	int verbose = 0;
 
-	if (verbose < 0) {
-		msg_display(MSG_verboseextract);
-		process_menu(MENU_extract, NULL);
-		verbose = yesno;
-		wclear(stdscr);
-		wrefresh(stdscr);
-	}
+	wclear(stdscr);
+	wrefresh(stdscr);
+	if (setup_done != NULL)
+		msg_display(setup_done);
+	msg_display_add(MSG_verboseextract);
+	process_menu(MENU_extract, &verbose);
+	wclear(stdscr);
+	wrefresh(stdscr);
+
+	return verbose;
 }
 
 static int
-extract_file(char *path)
+extract_file(int set, int update, int verbose, char *path)
 {
 	char *owd;
 	int   tarexit;
@@ -696,24 +641,28 @@ extract_file(char *path)
 		tarstats.nnotfound++;
 
 		msg_display(MSG_notarfile, path);
-		process_menu(MENU_noyes, NULL);
+		process_menu(MENU_noyes, deconst(MSG_notarfile_ok));
 		return yesno;
 	}
 
 	tarstats.nfound++;	
 	/* cd to the target root. */
-	target_chdir_or_die("/");	
+	if (update && set == SET_ETC) {
+		make_target_dir("/.sysinst");
+		target_chdir_or_die("/.sysinst");
+	} else
+		target_chdir_or_die("/");
 
-	/* now extract set files files into "./". */
-	if (verbose == 1)
+	/* now extract set files into "./". */
+	if (verbose == 0)
 		tarexit = run_program(RUN_DISPLAY | RUN_PROGRESS, 
-				    "progress -zf %s tar -xepf -", path);
-	else if (verbose == 2)
-		tarexit = run_program(RUN_DISPLAY | RUN_PROGRESS, 
-				    "tar -zxvepf %s", path);
-	else
+				"progress -zf %s tar --chroot -xhepf -", path);
+	else if (verbose == 1)
 		tarexit = run_program(RUN_DISPLAY, 
-				    "tar -zxepf %s", path);
+				"tar --chroot -zxhepf %s", path);
+	else
+		tarexit = run_program(RUN_DISPLAY | RUN_PROGRESS, 
+				"tar --chroot -zxhvepf %s", path);
 
 	chdir(owd);
 	free(owd);
@@ -724,6 +673,11 @@ extract_file(char *path)
 		msg_display(MSG_tarerror, path);
 		process_menu(MENU_noyes, NULL);
 		return yesno;
+	}
+
+	if (update && set == SET_ETC) {
+		run_program(RUN_DISPLAY | RUN_CHROOT,
+			"/etc/postinstall -s /.sysinst -d / fix");
 	}
 
 	tarstats.nsuccess++;
@@ -738,7 +692,7 @@ extract_file(char *path)
  */
 
 static int
-extract_dist(void)
+extract_dist(int update, int verbose)
 {
 	char fname[STRSIZE];
 	distinfo *list;
@@ -758,17 +712,11 @@ extract_dist(void)
 			tarstats.nskipped++;
 			continue;
 		}
-#if 0
-		if (cleanup_dist(list->name) == 0) {
-			msg_display(MSG_cleanup_warn);
-			process_menu(MENU_ok, NULL);
-		}
-#endif
 		(void)snprintf(fname, sizeof fname, "%s/%s%s",
 		    ext_dir, list->name, dist_postfix);
 
 		/* if extraction failed and user aborted, punt. */
-		extracted = extract_file(fname);
+		extracted = extract_file(list->set, update, verbose, fname);
 		if (extracted == 2)
 			sets_installed |= list->set;
 	}
@@ -780,7 +728,8 @@ extract_dist(void)
 
 	if (tarstats.nerror == 0 && tarstats.nsuccess == tarstats.nselected) {
 		msg_display(MSG_endtarok);
-		process_menu(MENU_ok, NULL);
+		/* Give user a chance to see the success message */
+		sleep(1);
 		return 0;
 	}
 	/* We encountered errors. Let the user know. */
@@ -788,190 +737,9 @@ extract_dist(void)
 	    tarstats.nselected, tarstats.nnotfound, tarstats.nskipped,
 	    tarstats.nfound, tarstats.nsuccess, tarstats.nerror);
 	process_menu(MENU_ok, NULL);
+	msg_clear();
 	return extracted == 0;
 }
-
-#if 0	/* { NOMORE */
-
-/*
- * Do pre-extract cleanup for set 'name':
- * open a file named '/var/db/obsolete/<name>', which contain a list of
- * files to kill from the target. For each file, test if it is present on
- * the target. Then display the list of files which will be removed,
- * ask user for confirmation, and process.
- * Non-empty directories will be renamed to <directory.old>.
- */
-
-/* definition for a list of files. */
-struct filelist {
-	struct filelist *next;
-	char name[MAXPATHLEN];
-	mode_t type;
-};
-
-int 
-cleanup_dist(const char *name)
-{
-	char file_path[MAXPATHLEN];
-	char file_name[MAXPATHLEN];
-	const char *file_prefix;
-	FILE *list_file;
-	struct filelist *head = NULL;
-	struct filelist *current;
-	int saved_errno;
-	struct stat st;
-	int retval = 1;
-	int needok = 0;
-
-	snprintf(file_path, MAXPATHLEN, "/var/db/obsolete/%s", name);
-	list_file = fopen(file_path, "r");
-	if (list_file == NULL) {
-		saved_errno = errno;
-		if (logging)
-			fprintf(logfp, "Open of %s failed: %s\n", file_path,
-			    strerror(saved_errno));
-		if (saved_errno == ENOENT)
-			return 1;
-		msg_display_add(MSG_openfail, name, strerror(saved_errno));
-		process_menu(MENU_ok, NULL);
-		return 0;
-	}
-	file_prefix = target_prefix();
-	while (fgets(file_name, MAXPATHLEN, list_file)) {
-		/* Remove trailing \n if any */
-		if (file_name[strlen(file_name)-1] == '\n')
-			file_name[strlen(file_name)-1] = '\0';
-		snprintf(file_path, MAXPATHLEN, "%s/%s", file_prefix,
-		    file_name);
-		if (lstat(file_path, &st) != 0) {
-			saved_errno = errno;
-			if (logging)
-				fprintf(logfp, "stat() of %s failed: %s\n",
-				    file_path, strerror(saved_errno));
-			if (saved_errno == ENOENT)
-				continue;
-			msg_display_add(MSG_statfail, file_path,
-			    strerror(saved_errno));
-			process_menu(MENU_ok, NULL);
-			return 0;
-		}
-		if (head == NULL) {
-			head = current = malloc(sizeof(struct filelist));
-			if (head == NULL) {
-				fprintf(stderr, "out of memory\n");
-				exit(1);
-			}
-		} else {
-			current->next = malloc(sizeof(struct filelist));
-			if (current->next == NULL) {
-				fprintf(stderr, "out of memory\n");
-				exit(1);
-			}
-			current = current->next;
-		}
-		current->next = NULL;
-		snprintf(current->name, MAXPATHLEN, "%s", file_path);
-		current->type = st.st_mode & S_IFMT;
-		if (logging)
-			fprintf(logfp, "Adding file %s, type %d to list of "
-			    "obsolete file\n", current->name, current->type);
-	}
-	fclose(list_file);
-	if (head == NULL)
-		return 1;
-#if 0
-	/* XXX doesn't work, too many files printed ! */
-	msg_display(MSG_deleting_files);
-	for (current = head; current != NULL; current = current->next) {
-		if (current->type != S_IFDIR) {
-			/* XXX msg_printf_add going/gone away */
-			msg_printf_add("%s ", current->name);
-		}
-	}
-	msg_display_add(MSG_deleting_dirs);
-	for (current = head; current != NULL; current = current->next) {
-		if (current->type == S_IFDIR) {
-			/* XXX msg_printf_add going/gone away */
-			msg_printf_add("%s ", current->name);
-		}
-	}
-	process_menu(MENU_ok, NULL);
-#endif
-	/* first remove files */
-	for (current = head; current != NULL; current = current->next) {
-		if (current->type == S_IFDIR)
-			continue;
-		if (scripting)
-			(void)fprintf(script, "rm %s\n", current->name);
-		if (unlink(current->name) != 0) {
-			saved_errno = errno;
-			if (saved_errno == ENOENT)
-				continue;	/* don't worry about
-						   non-existing files */
-			if (logging)
-				fprintf(logfp, "rm %s failed: %s\n",
-				    current->name, strerror(saved_errno));
-			msg_display_add(MSG_unlink_fail, current->name,
-			    strerror(saved_errno));
-			retval = 0;
-			needok = 1;
-		}
-
-	}
-	/* now dirs */
-	for (current = head; current != NULL; current = current->next) {
-		if (current->type != S_IFDIR)
-			continue;
-		if (rmdir(current->name) == 0) {
-			if (scripting)
-				(void)fprintf(script, "rmdir %s\n",
-				    current->name);
-			continue;
-		}
-		saved_errno = errno;
-		if (saved_errno == ENOTEMPTY) {
-			if (logging)
-				fprintf(logfp, "dir %s not empty, "
-				    "trying to rename to %s.old\n",
-				    current->name, current->name);
-			snprintf(file_path, MAXPATHLEN,
-			    "%s.old", current->name);
-			if (scripting)
-				(void)fprintf(script, "mv %s %s\n",
-				    current->name, file_path);
-			needok = 1;
-			if (rename(current->name, file_path) != 0) {
-				saved_errno = errno;
-				if (logging)
-					fprintf(logfp, "mv %s %s failed: %s\n", 
-					    current->name, file_path,
-					    strerror(saved_errno));
-				msg_display_add(MSG_rename_fail, current->name,
-				    file_path, strerror(errno));
-				 retval = 0;
-			}
-			msg_display_add(MSG_renamed_dir, current->name,
-			    file_path);
-		} else { /* rmdir error */
-			/*
-			 * Don't worry about non-existing directories.
-			 */
-			if (saved_errno == ENOENT)
-				continue;
-			if (logging)
-				fprintf(logfp, "rm %s failed: %s\n",
-				    current->name, strerror(saved_errno));
-			msg_display_add(MSG_unlink_fail, current->name,
-			    strerror(saved_errno));
-			retval = 0;
-			needok = 1;
-		}
-	}
-	if (needok)
-		process_menu(MENU_ok, NULL);
-	return retval;
-}
-#endif	/* } NOMORE */
 
 /*
  * Get and unpack the distribution.
@@ -980,9 +748,11 @@ cleanup_dist(const char *name)
  * success_msg and failure_msg must both be 0-adic messages.
  */
 int
-get_and_unpack_sets(msg success_msg, msg failure_msg)
+get_and_unpack_sets(int update, msg setupdone_msg, msg success_msg, msg failure_msg)
 {
 	int got_dist;
+	int verbose;
+	distinfo *list;
 
 	/* Ensure mountpoint for distribution files exists in current root. */
 	(void)mkdir("/mnt2", S_IRWXU| S_IRGRP|S_IXGRP | S_IROTH|S_IXOTH);
@@ -990,12 +760,11 @@ get_and_unpack_sets(msg success_msg, msg failure_msg)
 		(void)fprintf(script, "mkdir /mnt2\nchmod 755 /mnt2\n");
 
 	/* Find out which files to "get" if we get files. */
-	wclear(stdscr);
-	wrefresh(stdscr);
 
 	/* ask user whether to do normal or verbose extraction */
-	ask_verbose_dist();
+	verbose = ask_verbose_dist(setupdone_msg);
 
+   again:
 	/* Get the distribution files */
 	do {
 		process_menu(MENU_distmedium, &got_dist);
@@ -1010,24 +779,37 @@ get_and_unpack_sets(msg success_msg, msg failure_msg)
 		return 1;
 	}
 
-	/* Extract the distribution, abort on errors. */
-	if (extract_dist())
-		return 1;
+	/* Extract the distribution, retry from top on errors. */
+	if (extract_dist(update, verbose))
+		goto again;
 
 	/* Configure the system */
-	if (sets_installed & SET_ETC)
+	if (sets_installed & SET_BASE)
 		run_makedev();
+
+	/* Save keybard type */
+	save_kb_encoding();
 
 	/* Other configuration. */
 	mnt_net_config();
 	
 	/* Clean up dist dir (use absolute path name) */
-	if (clean_dist_dir && ext_dir[0] == '/' && ext_dir[1] != 0) {
-		msg_display(MSG_delete_dist_files,
-		    ext_dir + strlen(target_prefix()));
-		process_menu(MENU_yesno, NULL);
-		if (yesno)
-			run_program(0, "/bin/rm -rf %s", ext_dir);
+	if (clean_dist_dir) {
+		msg_display(MSG_delete_dist_files, dist_dir);
+		process_menu(MENU_yesno, deconst(MSG_Delete));
+		if (yesno) {
+			for (list = dist_list; list->desc != NULL; list++) {
+				if (list->name == NULL)
+					/* menu entry for a group of sets */
+					continue;
+				run_program(0, "/bin/rm -f %s/%s/%s%s",
+					target_prefix(), dist_dir,
+					list->name, dist_postfix);
+			}
+			/* chroot 'cos no rmdir in install fs */
+			run_program(RUN_CHROOT | RUN_SILENT | RUN_ERROR_OK,
+					"/bin/rmdir %s", dist_dir);
+		}
 	}
 
 	/* Mounted dist dir? */
@@ -1137,6 +919,7 @@ set_tz_select(menudesc *m, void *arg)
 	char *new;
 
 	if (m && strcmp(tz_selected, m->opts[m->cursel].opt_name) != 0) {
+		/* Change the displayed timezone */
 		new = strdup(m->opts[m->cursel].opt_name);
 		if (new == NULL)
 			return 0;
@@ -1146,6 +929,11 @@ set_tz_select(menudesc *m, void *arg)
 			 zonerootlen, zoneinfo_dir, tz_selected);
 		setenv("TZ", tz_env, 1);
 	}
+	if (m)
+		/* Warp curser to 'Exit' line on menu */
+		m->cursel = -1;
+
+	/* Update displayed time */
 	t = time(NULL);
 	msg_display(MSG_choose_timezone, 
 		    tz_default, tz_selected, ctime(&t), localtime(&t)->tm_zone);
@@ -1387,17 +1175,19 @@ set_root_password(void)
 	msg_display(MSG_rootpw);
 	process_menu(MENU_yesno, NULL);
 	if (yesno)
-		run_program(RUN_DISPLAY|RUN_CHROOT, "passwd -l root");
+		run_program(RUN_DISPLAY | RUN_PROGRESS | RUN_CHROOT,
+			    "passwd -l root");
 	return 0;
 }
 
 int
 set_root_shell(void)
 {
+	const char *shellpath;
 
 	msg_display(MSG_rootsh);
-	process_menu(MENU_rootsh, NULL);
-	run_program(RUN_DISPLAY|RUN_CHROOT, "chpass -s %s root", shellpath);
+	process_menu(MENU_rootsh, &shellpath);
+	run_program(RUN_DISPLAY | RUN_CHROOT, "chpass -s %s root", shellpath);
 	return 0;
 }
 

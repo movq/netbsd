@@ -1,4 +1,4 @@
-#	$NetBSD: files.pci,v 1.210 2004/03/12 13:46:52 ragge Exp $
+#	$NetBSD: files.pci,v 1.210.2.3.2.1 2005/04/02 21:26:46 he Exp $
 #
 # Config file and device description for machine-independent PCI code.
 # Included by ports that need it.  Requires that the SCSI files be
@@ -225,6 +225,11 @@ device	cypide {[channel = -1]}: ata, pciide_common, cy82c693
 attach	cypide at pci
 file	dev/pci/cypide.c		cypide
 
+# AMD Geode IDE controllers
+device	geodeide {[channel = -1]}: ata, pciide_common
+attach	geodeide at pci
+file	dev/pci/geodeide.c		geodeide
+
 # Triones/HighPoint IDE controllers
 device	hptide {[channel = -1]}: ata, pciide_common
 attach	hptide at pci
@@ -239,6 +244,11 @@ file	dev/pci/optiide.c		optiide
 device	piixide {[channel = -1]}: ata, pciide_common
 attach	piixide at pci
 file	dev/pci/piixide.c		piixide
+
+# Promise Serial ATA controllers
+device	pdcsata {[channel = -1]}: ata, pciide_common
+attach	pdcsata at pci
+file	dev/pci/pdcsata.c		pdcsata
 
 # Promise IDE controllers
 device	pdcide {[channel = -1]}: ata, pciide_common
@@ -703,3 +713,12 @@ file	dev/pci/if_bce.c		bce
 device	dge: ether, ifnet, arp
 attach	dge at pci
 file	dev/pci/if_dge.c		dge
+
+# Realtek 8129/8139 Ethernet controllers
+attach	re at pci
+file	dev/pci/if_re.c			re
+
+# Workbit NinjaSCSI-32 controllers
+# device declaration in sys/conf/files
+attach	njs at pci with njs_pci
+file	dev/pci/njs_pci.c		njs_pci

@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.282 2004/03/24 15:34:46 atatat Exp $ */
+/* $NetBSD: machdep.c,v 1.282.2.1.2.1 2005/08/29 00:57:12 tron Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.282 2004/03/24 15:34:46 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.282.2.1.2.1 2005/08/29 00:57:12 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -1023,6 +1023,9 @@ cpu_reboot(howto, bootstr)
 	 */
 	alpha_broadcast_ipi(ALPHA_IPI_HALT);
 
+	/* Ensure any CPUs paused by DDB resume execution so they can halt */
+	cpus_paused = 0;
+
 	for (i = 0; i < 10000; i++) {
 		alpha_mb();
 		if (cpus_running == wait_mask)
@@ -1703,6 +1706,7 @@ fpusave_cpu(struct cpu_info *ci, int save)
 	KDASSERT(ci == curcpu());
 
 #if defined(MULTIPROCESSOR)
+	s = splhigh();		/* block IPIs for the duration */
 	atomic_setbits_ulong(&ci->ci_flags, CPUF_FPUSAVE);
 #endif
 
@@ -1717,16 +1721,17 @@ fpusave_cpu(struct cpu_info *ci, int save)
 
 	alpha_pal_wrfen(0);
 
-	FPCPU_LOCK(&l->l_addr->u_pcb, s);
+	FPCPU_LOCK(&l->l_addr->u_pcb);
 
 	l->l_addr->u_pcb.pcb_fpcpu = NULL;
 	ci->ci_fpcurlwp = NULL;
 
-	FPCPU_UNLOCK(&l->l_addr->u_pcb, s);
+	FPCPU_UNLOCK(&l->l_addr->u_pcb);
 
  out:
 #if defined(MULTIPROCESSOR)
 	atomic_clearbits_ulong(&ci->ci_flags, CPUF_FPUSAVE);
+	splx(s);
 #endif
 	return;
 }
@@ -1746,25 +1751,32 @@ fpusave_proc(struct lwp *l, int save)
 
 	KDASSERT(l->l_addr != NULL);
 
-	FPCPU_LOCK(&l->l_addr->u_pcb, s);
+#if defined(MULTIPROCESSOR)
+	s = splhigh();		/* block IPIs for the duration */
+#endif
+	FPCPU_LOCK(&l->l_addr->u_pcb);
 
 	oci = l->l_addr->u_pcb.pcb_fpcpu;
 	if (oci == NULL) {
-		FPCPU_UNLOCK(&l->l_addr->u_pcb, s);
+		FPCPU_UNLOCK(&l->l_addr->u_pcb);
+#if defined(MULTIPROCESSOR)
+		splx(s);
+#endif
 		return;
 	}
 
 #if defined(MULTIPROCESSOR)
 	if (oci == ci) {
 		KASSERT(ci->ci_fpcurlwp == l);
-		FPCPU_UNLOCK(&l->l_addr->u_pcb, s);
+		FPCPU_UNLOCK(&l->l_addr->u_pcb);
+		splx(s);
 		fpusave_cpu(ci, save);
 		return;
 	}
 
 	KASSERT(oci->ci_fpcurlwp == l);
 	alpha_send_ipi(oci->ci_cpuid, ipi);
-	FPCPU_UNLOCK(&l->l_addr->u_pcb, s);
+	FPCPU_UNLOCK(&l->l_addr->u_pcb);
 
 	spincount = 0;
 	while (l->l_addr->u_pcb.pcb_fpcpu != NULL) {
@@ -1775,7 +1787,7 @@ fpusave_proc(struct lwp *l, int save)
 	}
 #else
 	KASSERT(ci->ci_fpcurlwp == l);
-	FPCPU_UNLOCK(&l->l_addr->u_pcb, s);
+	FPCPU_UNLOCK(&l->l_addr->u_pcb);
 	fpusave_cpu(ci, save);
 #endif /* MULTIPROCESSOR */
 }

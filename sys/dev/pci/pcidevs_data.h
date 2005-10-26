@@ -1,10 +1,10 @@
-/*	$NetBSD: pcidevs_data.h,v 1.613 2004/03/26 22:06:31 gendalia Exp $	*/
+/*	$NetBSD: pcidevs_data.h,v 1.613.2.17.2.12 2005/07/21 21:10:05 snj Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: pcidevs,v 1.615 2004/03/26 22:05:08 gendalia Exp 
+ *	NetBSD: pcidevs,v 1.615.2.17.2.12 2005/07/21 21:09:09 snj Exp 
  */
 
 /*
@@ -200,6 +200,12 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "3Com",
 	    "3c905CX-TX 10/100 Ethernet with mngmt",
+	},
+	{
+	    PCI_VENDOR_3COM, PCI_PRODUCT_3COM_3C920BEMBW,
+	    0,
+	    "3Com",
+	    "3c920B-EMB-WNM Integrated Fast Ethernet",
 	},
 	{
 	    PCI_VENDOR_3COM, PCI_PRODUCT_3COM_3C910SOHOB,
@@ -788,6 +794,18 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "Adaptec (2nd PCI Vendor ID)",
 	    "ASR-2200S",
+	},
+	{
+	    PCI_VENDOR_ADP2, PCI_PRODUCT_ADP2_ASR2410SA,
+	    0,
+	    "Adaptec (2nd PCI Vendor ID)",
+	    "ASR-2410SA",
+	},
+	{
+	    PCI_VENDOR_ADP2, PCI_PRODUCT_ADP2_AAR2810SA,
+	    0,
+	    "Adaptec (2nd PCI Vendor ID)",
+	    "AAR-2810SA",
 	},
 	{
 	    PCI_VENDOR_ADP2, PCI_PRODUCT_ADP2_AAC364,
@@ -2038,6 +2056,18 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    "Radeon 9200SE",
 	},
 	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_X300,
+	    0,
+	    "ATI Technologies",
+	    "Radeon X300 Series",
+	},
+	{
+	    PCI_VENDOR_ATI, PCI_PRODUCT_ATI_RADEON_X300_S,
+	    0,
+	    "ATI Technologies",
+	    "Radeon X300 Series Secondary",
+	},
+	{
 	    PCI_VENDOR_AURAVISION, PCI_PRODUCT_AURAVISION_VXP524,
 	    0,
 	    "Auravision",
@@ -2350,10 +2380,34 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    "BCM5705 10/100/1000 Ethernet",
 	},
 	{
+	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5750,
+	    0,
+	    "Broadcom Corporation",
+	    "BCM5750 10/100/1000 Ethernet",
+	},
+	{
+	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5751,
+	    0,
+	    "Broadcom Corporation",
+	    "BCM5751 10/100/1000 Ethernet",
+	},
+	{
+	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5750M,
+	    0,
+	    "Broadcom Corporation",
+	    "BCM5750M 10/100/1000 Ethernet",
+	},
+	{
 	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5782,
 	    0,
 	    "Broadcom Corporation",
 	    "BCM5782 10/100/1000 Ethernet",
+	},
+	{
+	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5788,
+	    0,
+	    "Broadcom Corporation",
+	    "BCM5788 10/100/1000 Ethernet",
 	},
 	{
 	    PCI_VENDOR_BROADCOM, PCI_PRODUCT_BROADCOM_BCM5901,
@@ -2728,6 +2782,12 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    "SiI3112 SATALink",
 	},
 	{
+	    PCI_VENDOR_CMDTECH, PCI_PRODUCT_CMDTECH_3512,
+	    0,
+	    "CMD Technology",
+	    "SiI3512 SATALink",
+	},
+	{
 	    PCI_VENDOR_CMDTECH, PCI_PRODUCT_CMDTECH_3114,
 	    0,
 	    "CMD Technology",
@@ -2878,6 +2938,18 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    "Netelligent 10/100 TX",
 	},
 	{
+	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_N10T2,
+	    0,
+	    "Compaq",
+	    "Netelligent 10 T/2 UTP/Coax",
+	},
+	{
+	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_INT100TX,
+	    0,
+	    "Compaq",
+	    "Integrated Netelligent 10/100 TX",
+	},
+	{
 	    PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_N10T,
 	    0,
 	    "Compaq",
@@ -2980,6 +3052,12 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    "SBLive! EMU 10000",
 	},
 	{
+	    PCI_VENDOR_CREATIVELABS, PCI_PRODUCT_CREATIVELABS_SBLIVE2,
+	    0,
+	    "Creative Labs",
+	    "SBLive! EMU 10000",
+	},
+	{
 	    PCI_VENDOR_CREATIVELABS, PCI_PRODUCT_CREATIVELABS_SBAUDIGYLS,
 	    0,
 	    "Creative Labs",
@@ -2987,6 +3065,12 @@ const struct pci_knowndev pci_knowndevs[] = {
 	},
 	{
 	    PCI_VENDOR_CREATIVELABS, PCI_PRODUCT_CREATIVELABS_SBJOY,
+	    0,
+	    "Creative Labs",
+	    "PCI Gameport Joystick",
+	},
+	{
+	    PCI_VENDOR_CREATIVELABS, PCI_PRODUCT_CREATIVELABS_SBJOY2,
 	    0,
 	    "Creative Labs",
 	    "PCI Gameport Joystick",
@@ -3256,6 +3340,12 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    "PERC 4/Di",
 	},
 	{
+	    PCI_VENDOR_DELL, PCI_PRODUCT_DELL_PERC_4ESI,
+	    0,
+	    "Dell Computer",
+	    "PERC 4e/Si",
+	},
+	{
 	    PCI_VENDOR_DELL, PCI_PRODUCT_DELL_PERC_3DI_2_SUB,
 	    0,
 	    "Dell Computer",
@@ -3296,6 +3386,12 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "Dell Computer",
 	    "PERC 3/Di",
+	},
+	{
+	    PCI_VENDOR_DELL, PCI_PRODUCT_DELL_CERC_1_5,
+	    0,
+	    "Dell Computer",
+	    "CERC SATA RAID 1.5/6ch",
 	},
 	{
 	    PCI_VENDOR_DELTA, PCI_PRODUCT_DELTA_8139,
@@ -3770,6 +3866,12 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "Galileo Technology",
 	    "GT-64120 System Controller",
+	},
+	{
+	    PCI_VENDOR_GALILEO, PCI_PRODUCT_GALILEO_BELKIN,
+	    0,
+	    "Galileo Technology",
+	    "Belkin Gigabit Ethernet",
 	},
 	{
 	    PCI_VENDOR_GALILEO, PCI_PRODUCT_GALILEO_GT64130,
@@ -4468,6 +4570,12 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    "PRO/100 M Network Controller",
 	},
 	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_LAN,
+	    0,
+	    "Intel",
+	    "82801FB 10/100 Ethernet",
+	},
+	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82547GI,
 	    0,
 	    "Intel",
@@ -4508,6 +4616,12 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "Intel",
 	    "i82546GB Gigabit Ethernet (SERDES)",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82541PI,
+	    0,
+	    "Intel",
+	    "i82541PI Gigabit Ethernet",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82815_DC100_HUB,
@@ -5312,6 +5426,150 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "Intel",
 	    "82875P AGP",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82875P_CSA,
+	    0,
+	    "Intel",
+	    "82875P PCI-CSA Bridge",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915P_HB,
+	    0,
+	    "Intel",
+	    "82915P/G/GL Host",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915P_EXP,
+	    0,
+	    "Intel",
+	    "82915P/G/GL PCI Express Bridge",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915G_IGD,
+	    0,
+	    "Intel",
+	    "82915G/GL Integrated Graphics Device",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82925X_HB,
+	    0,
+	    "Intel",
+	    "82925X Host",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82925X_EXP,
+	    0,
+	    "Intel",
+	    "82925X PCI Express Bridge",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_6300ESB_LPC,
+	    0,
+	    "Intel",
+	    "6300ESB LPC Interface Bridge",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_6300ESB_IDE,
+	    0,
+	    "Intel",
+	    "6300ESB IDE Controller",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_6300ESB_SATA,
+	    0,
+	    "Intel",
+	    "6300ESB SATA Controller",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_LPC,
+	    0,
+	    "Intel",
+	    "82801FB LPC Interface Bridge",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_SATA,
+	    0,
+	    "Intel",
+	    "82801FB Serial ATA Controller",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FR_SATA,
+	    0,
+	    "Intel",
+	    "82801FR Serial ATA Controller",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FBM_SATA,
+	    0,
+	    "Intel",
+	    "82801FBM Serial ATA Controller",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_USB_0,
+	    0,
+	    "Intel",
+	    "82801FB/FR USB UHCI Controller #0",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_USB_1,
+	    0,
+	    "Intel",
+	    "82801FB/FR USB UHCI Controller #1",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_USB_2,
+	    0,
+	    "Intel",
+	    "82801FB/FR USB UHCI Controller #2",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_USB_3,
+	    0,
+	    "Intel",
+	    "82801FB/FR USB UHCI Controller #3",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_EHCI,
+	    0,
+	    "Intel",
+	    "82801FB/FR USB EHCI Controller",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_EXP_0,
+	    0,
+	    "Intel",
+	    "82801FB/FR PCI Express Port #0",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_EXP_1,
+	    0,
+	    "Intel",
+	    "82801FB/FR PCI Express Port #1",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_SMB,
+	    0,
+	    "Intel",
+	    "82801FB/FR SMBus Controller",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_AC,
+	    0,
+	    "Intel",
+	    "82801FB/FR AC'97 Audio Controller",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_IDE,
+	    0,
+	    "Intel",
+	    "82801FB/FR IDE Controller",
+	},
+	{
+	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82915G_IGDC,
+	    0,
+	    "Intel",
+	    "82915G/GL IGD Companion",
 	},
 	{
 	    PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_31244,
@@ -6274,18 +6532,6 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    "NS87410",
 	},
 	{
-	    PCI_VENDOR_NS, PCI_PRODUCT_NS_SC1100_ISA,
-	    0,
-	    "National Semiconductor",
-	    "SC1100 PCI-ISA bridge",
-	},
-	{
-	    PCI_VENDOR_NS, PCI_PRODUCT_NS_SC1100_ACPI,
-	    0,
-	    "National Semiconductor",
-	    "SC1100 SMI/ACPI",
-	},
-	{
 	    PCI_VENDOR_NS, PCI_PRODUCT_NS_SC1100_IDE,
 	    0,
 	    "National Semiconductor",
@@ -6296,6 +6542,18 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "National Semiconductor",
 	    "SC1100 XpressAUDIO",
+	},
+	{
+	    PCI_VENDOR_NS, PCI_PRODUCT_NS_SC1100_ISA,
+	    0,
+	    "National Semiconductor",
+	    "SC1100 PCI-ISA bridge",
+	},
+	{
+	    PCI_VENDOR_NS, PCI_PRODUCT_NS_SC1100_ACPI,
+	    0,
+	    "National Semiconductor",
+	    "SC1100 SMI/ACPI",
 	},
 	{
 	    PCI_VENDOR_NS, PCI_PRODUCT_NS_SC1100_XBUS,
@@ -6482,6 +6740,18 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "Symbios Logic",
 	    "FC919",
+	},
+	{
+	    PCI_VENDOR_SYMBIOS, PCI_PRODUCT_SYMBIOS_FC929X,
+	    0,
+	    "Symbios Logic",
+	    "FC929X",
+	},
+	{
+	    PCI_VENDOR_SYMBIOS, PCI_PRODUCT_SYMBIOS_PERC_4SC,
+	    0,
+	    "Symbios Logic",
+	    "PERC 4/SC",
 	},
 	{
 	    PCI_VENDOR_SYMBIOS, PCI_PRODUCT_SYMBIOS_PE_GNIC,
@@ -6818,6 +7088,66 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "Nvidia Corporation",
 	    "nForce3 PCI-PCI bridge",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_PCHB,
+	    0,
+	    "Nvidia Corporation",
+	    "nForce3 250 Host-PCI bridge",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_AGP,
+	    0,
+	    "Nvidia Corporation",
+	    "nForce3 250 AGP",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_PCIB,
+	    0,
+	    "Nvidia Corporation",
+	    "nForce3 250 PCI-ISA bridge",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_SMBUS,
+	    0,
+	    "Nvidia Corporation",
+	    "nForce3 250 SMBus Controller",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_ATA133,
+	    0,
+	    "Nvidia Corporation",
+	    "nForce3 250 ATA133 IDE",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_SATA,
+	    0,
+	    "Nvidia Corporation",
+	    "nForce3 250 Serial ATA Controller",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_OHCI,
+	    0,
+	    "Nvidia Corporation",
+	    "nForce3 250 USB Host Controller",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_EHCI,
+	    0,
+	    "Nvidia Corporation",
+	    "nForce3 250 USB2 Host Controller",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_MCPT_AC,
+	    0,
+	    "Nvidia Corporation",
+	    "nForce3 250 MCP-T AC-97",
+	},
+	{
+	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_PPB,
+	    0,
+	    "Nvidia Corporation",
+	    "nForce3 250 PCI-PCI bridge",
 	},
 	{
 	    PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_ALADDINTNT2,
@@ -7894,82 +8224,100 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    "Broadband Adapter",
 	},
 	{
-	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_XX5,
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CNB20_LE_AGP,
 	    0,
 	    "ServerWorks",
-	    "PCIHB5",
+	    "CNB20-LE PCI/AGP bridge",
 	},
 	{
-	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CIOB20,
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CNB30_LE_PCI,
 	    0,
 	    "ServerWorks",
-	    "I/O Bridge",
+	    "CNB30-LE PCI bridge",
 	},
 	{
-	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_XX7,
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CNB20_LE_PCI,
 	    0,
 	    "ServerWorks",
-	    "PCIHB7",
+	    "CNB20-LE PCI bridge",
 	},
 	{
-	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CNB20HE,
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CNB20_HE_PCI,
 	    0,
 	    "ServerWorks",
-	    "CNB20HE Host",
+	    "CNB20-HE PCI bridge",
 	},
 	{
-	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CNB20LE,
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CNB20_HE_AGP,
 	    0,
 	    "ServerWorks",
-	    "CNB20LE Host",
+	    "CNB20-HE PCI/AGP bridge",
 	},
 	{
-	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CIOB30,
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CIOB_X,
 	    0,
 	    "ServerWorks",
-	    "CIOB30",
+	    "CIOB-X PCI-X bridge",
 	},
 	{
 	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CMIC_HE,
 	    0,
 	    "ServerWorks",
-	    "CMIC_HE Host",
+	    "CMIC-HE PCI/AGP bridge",
+	},
+	{
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CNB30_HE,
+	    0,
+	    "ServerWorks",
+	    "CNB30-HE PCI bridge",
+	},
+	{
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CNB20_HE_PCI2,
+	    0,
+	    "ServerWorks",
+	    "CNB20-HE PCI/AGP bridge",
 	},
 	{
 	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CMIC_LE,
 	    0,
 	    "ServerWorks",
-	    "CMIC_LE Host",
+	    "CMIC-LE PCI/AGP bridge",
 	},
 	{
 	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CMIC_SL,
 	    0,
 	    "ServerWorks",
-	    "CMIC_SL Host",
+	    "CMIC-SL PCI/AGP bridge",
 	},
 	{
-	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CIOBX2,
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CIOB_X2,
 	    0,
 	    "ServerWorks",
-	    "CIOB-X2",
+	    "CIOB-X2 PCI-X bridge",
+	},
+	{
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CIOB_E,
+	    0,
+	    "ServerWorks",
+	    "CIOB-E PCI-X bridge",
 	},
 	{
 	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_OSB4,
 	    0,
 	    "ServerWorks",
-	    "OSB4 SouthBridge",
+	    "OSB4 ISA bridge",
 	},
 	{
 	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CSB5,
 	    0,
 	    "ServerWorks",
-	    "CSB5 SouthBridge",
+	    "CSB5 ISA bridge",
 	},
 	{
 	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CSB6,
 	    0,
 	    "ServerWorks",
-	    "CSB6 SouthBridge",
+	    "CSB6 ISA bridge",
 	},
 	{
 	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_OSB4_IDE,
@@ -7987,13 +8335,13 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CSB6_RAID,
 	    0,
 	    "ServerWorks",
-	    "CSB6 RAID/IDE",
+	    "CSB6 IDE/RAID",
 	},
 	{
 	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CSB6_IDE,
 	    0,
 	    "ServerWorks",
-	    "CSB6 IDE",
+	    "CSB6 IDE/RAID",
 	},
 	{
 	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_OSB4_USB,
@@ -8008,10 +8356,10 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    "CSB6 USB Host Controller",
 	},
 	{
-	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CSB6_IB,
+	    PCI_VENDOR_SERVERWORKS, PCI_PRODUCT_SERVERWORKS_CSB6_LPC,
 	    0,
 	    "ServerWorks",
-	    "CSB6 ISA bridge",
+	    "CSB6 LPC bridge",
 	},
 	{
 	    PCI_VENDOR_SGI, PCI_PRODUCT_SGI_IOC3,
@@ -8458,6 +8806,12 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    "SiS 740 Host Bridge",
 	},
 	{
+	    PCI_VENDOR_SIS, PCI_PRODUCT_SIS_741,
+	    0,
+	    "Silicon Integrated System",
+	    "SiS 741 Host Bridge",
+	},
+	{
 	    PCI_VENDOR_SIS, PCI_PRODUCT_SIS_745,
 	    0,
 	    "Silicon Integrated System",
@@ -8522,6 +8876,18 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "Silicon Integrated System",
 	    "SiS 963 Host Bridge",
+	},
+	{
+	    PCI_VENDOR_SIS, PCI_PRODUCT_SIS_964,
+	    0,
+	    "Silicon Integrated System",
+	    "SiS 964 Host Bridge",
+	},
+	{
+	    PCI_VENDOR_SIS, PCI_PRODUCT_SIS_965,
+	    0,
+	    "Silicon Integrated System",
+	    "SiS 965 Host Bridge",
 	},
 	{
 	    PCI_VENDOR_SIS, PCI_PRODUCT_SIS_5597_IDE,
@@ -9874,6 +10240,12 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    "VT8237 Integrated SATA Controller",
 	},
 	{
+	    PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT6421_RAID,
+	    0,
+	    "VIA Technologies",
+	    "VT6421 Serial RAID Controller",
+	},
+	{
 	    PCI_VENDOR_VIATECH, PCI_PRODUCT_VIATECH_VT8235,
 	    0,
 	    "VIA Technologies",
@@ -10538,6 +10910,30 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    0,
 	    "Winbond Electronics",
 	    "W6692 ISDN",
+	},
+	{
+	    PCI_VENDOR_WORKBIT, PCI_PRODUCT_WORKBIT_NJSC32UDE_IODATA,
+	    0,
+	    "Workbit",
+	    "NinjaSCSI-32UDE SCSI (IODATA)",
+	},
+	{
+	    PCI_VENDOR_WORKBIT, PCI_PRODUCT_WORKBIT_NJSC32UDE_LOGITEC,
+	    0,
+	    "Workbit",
+	    "NinjaSCSI-32UDE SCSI (LOGITEC)",
+	},
+	{
+	    PCI_VENDOR_WORKBIT, PCI_PRODUCT_WORKBIT_NJSC32UDE_LOGITEC2,
+	    0,
+	    "Workbit",
+	    "NinjaSCSI-32UDE SCSI (LOGITEC2)",
+	},
+	{
+	    PCI_VENDOR_WORKBIT, PCI_PRODUCT_WORKBIT_NJSC32UDE_BUFFALO,
+	    0,
+	    "Workbit",
+	    "NinjaSCSI-32UDE SCSI (BUFFALO)",
 	},
 	{
 	    PCI_VENDOR_XIRCOM, PCI_PRODUCT_XIRCOM_X3201_3,
@@ -13072,9 +13468,9 @@ const struct pci_knowndev pci_knowndevs[] = {
 	    NULL,
 	},
 	{
-	    PCI_VENDOR_PROLOG, 0,
+	    PCI_VENDOR_AVID, 0,
 	    PCI_KNOWNDEV_NOPROD,
-	    "Pro-Log Corporation",
+	    "Avid Technology Inc.",
 	    NULL,
 	},
 	{

@@ -1,4 +1,4 @@
-/*	$NetBSD: kdump.c,v 1.77 2004/03/07 17:20:53 dsl Exp $	*/
+/*	$NetBSD: kdump.c,v 1.77.2.2 2004/08/30 08:00:06 tron Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
 #if 0
 static char sccsid[] = "@(#)kdump.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: kdump.c,v 1.77 2004/03/07 17:20:53 dsl Exp $");
+__RCSID("$NetBSD: kdump.c,v 1.77.2.2 2004/08/30 08:00:06 tron Exp $");
 #endif
 #endif /* not lint */
 
@@ -78,13 +78,18 @@ int emul_changed = 0;
 #define eqs(s1, s2)	(strcmp((s1), (s2)) == 0)
 #define small(v)	(((long)(v) >= 0) && ((long)(v) < 10))
 
-static const char *ptrace_ops[] = {
+static const char * const ptrace_ops[] = {
 	"PT_TRACE_ME",	"PT_READ_I",	"PT_READ_D",	"PT_READ_U",
 	"PT_WRITE_I",	"PT_WRITE_D",	"PT_WRITE_U",	"PT_CONTINUE",
-	"PT_KILL",	"PT_ATTACH",	"PT_DETACH",
+	"PT_KILL",	"PT_ATTACH",	"PT_DETACH",	"PT_IO",
+	"PT_DUMPCORE",	"PT_LWPINFO"
 };
 
-static const char *linux_ptrace_ops[] = {
+#ifdef PT_MACHDEP_STRINGS
+static const char * const ptrace_machdep_ops[] = { PT_MACHDEP_STRINGS };
+#endif
+
+static const char * const linux_ptrace_ops[] = {
 	"PTRACE_TRACEME",
 	"PTRACE_PEEKTEXT", "PTRACE_PEEKDATA", "PTRACE_PEEKUSER",
 	"PTRACE_POKETEXT", "PTRACE_POKEDATA", "PTRACE_POKEUSER",
@@ -274,7 +279,7 @@ main(argc, argv)
 			break;
 		default:
 			putchar('\n');
-			hexdump_buf(m, ktrlen, word_size);
+			hexdump_buf(m, ktrlen, word_size ? word_size : 1);
 		}
 		if (tail)
 			(void)fflush(stdout);
@@ -474,6 +479,13 @@ ktrsyscall(ktr)
 				if (*ap >= 0 && *ap <
 				    sizeof(ptrace_ops) / sizeof(ptrace_ops[0]))
 					(void)printf("%s", ptrace_ops[*ap]);
+#ifdef PT_MACHDEP_STRINGS
+				else if (*ap >= PT_FIRSTMACH &&
+				    *ap - PT_FIRSTMACH <
+						sizeof(ptrace_machdep_ops) /
+						sizeof(ptrace_machdep_ops[0]))
+					(void)printf("%s", ptrace_machdep_ops[*ap - PT_FIRSTMACH]);
+#endif
 				else
 					output_long((long)*ap, 1);
 			}
@@ -656,7 +668,7 @@ hexdump_buf(vdp, datalen, word_sz)
 		break;
 	}
 	width = 16 * bsize + (16 / (divmask + 1)) * gdelim;
-	if (word_size != 1)
+	if (word_sz != 1)
 		width += 2;
 
 	for (off = 0; dp < datalim; off += l) {

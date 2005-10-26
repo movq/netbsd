@@ -1,4 +1,4 @@
-/*	$NetBSD: umass.c,v 1.109 2003/12/04 13:57:31 keihan Exp $	*/
+/*	$NetBSD: umass.c,v 1.109.2.3 2004/07/10 13:45:19 tron Exp $	*/
 
 /*
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -131,7 +131,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umass.c,v 1.109 2003/12/04 13:57:31 keihan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umass.c,v 1.109.2.3 2004/07/10 13:45:19 tron Exp $");
 
 #include "atapibus.h"
 #include "scsibus.h"
@@ -896,6 +896,9 @@ umass_bbb_transfer(struct umass_softc *sc, int lun, void *cmd, int cmdlen,
 		("sc->sc_wire == 0x%02x wrong for umass_bbb_transfer\n",
 		sc->sc_wire));
 
+	if (sc->sc_dying)
+		return;
+
 	/* Be a little generous. */
 	sc->timeout = timeout + USBD_DEFAULT_TIMEOUT;
 
@@ -1489,7 +1492,7 @@ umass_cbi_state(usbd_xfer_handle xfer, usbd_private_handle priv,
 		sc->transfer_state = TSTATE_CBI_DATA;
 		if (sc->transfer_dir == DIR_IN) {
 			if (umass_setup_transfer(sc, sc->sc_pipe[UMASS_BULKIN],
-					sc->transfer_data, sc->transfer_datalen,
+					sc->data_buffer, sc->transfer_datalen,
 					USBD_SHORT_XFER_OK | USBD_NO_COPY,
 					sc->transfer_xfer[XFER_CBI_DATA]))
 				umass_cbi_reset(sc, STATUS_WIRE_FAILED);
@@ -1499,7 +1502,7 @@ umass_cbi_state(usbd_xfer_handle xfer, usbd_private_handle priv,
 			memcpy(sc->data_buffer, sc->transfer_data,
 			       sc->transfer_datalen);
 			if (umass_setup_transfer(sc, sc->sc_pipe[UMASS_BULKOUT],
-					sc->transfer_data, sc->transfer_datalen,
+					sc->data_buffer, sc->transfer_datalen,
 					USBD_NO_COPY,/* fixed length transfer */
 					sc->transfer_xfer[XFER_CBI_DATA]))
 				umass_cbi_reset(sc, STATUS_WIRE_FAILED);
@@ -1654,21 +1657,29 @@ umass_cbi_state(usbd_xfer_handle xfer, usbd_private_handle priv,
 		return;
 
 	case TSTATE_CBI_DCLEAR:
-		if (err)	/* should not occur */
+		if (err) {	/* should not occur */
 			printf("%s: CBI bulk-%s stall clear failed, %s\n",
 			    USBDEVNAME(sc->sc_dev),
 			    (sc->transfer_dir == DIR_IN? "in":"out"),
 			    usbd_errstr(err));
-		umass_cbi_reset(sc, STATUS_WIRE_FAILED);
+			umass_cbi_reset(sc, STATUS_WIRE_FAILED);
+		} else {
+			sc->transfer_state = TSTATE_IDLE;
+			sc->transfer_cb(sc, sc->transfer_priv,
+			    sc->transfer_datalen, STATUS_CMD_FAILED);
+		}
 		return;
 
 	case TSTATE_CBI_SCLEAR:
-		if (err)	/* should not occur */
+		if (err) {	/* should not occur */
 			printf("%s: CBI intr-in stall clear failed, %s\n",
 			       USBDEVNAME(sc->sc_dev), usbd_errstr(err));
-
-		/* Something really bad is going on. Reset the device */
-		umass_cbi_reset(sc, STATUS_CMD_FAILED);
+			umass_cbi_reset(sc, STATUS_WIRE_FAILED);
+		} else {
+			sc->transfer_state = TSTATE_IDLE;
+			sc->transfer_cb(sc, sc->transfer_priv,
+			    sc->transfer_datalen, STATUS_CMD_FAILED);
+		}
 		return;
 
 	/***** CBI Reset *****/
@@ -1797,7 +1808,7 @@ Static void
 umass_bbb_dump_csw(struct umass_softc *sc, umass_bbb_csw_t *csw)
 {
 	int sig = UGETDW(csw->dCSWSignature);
-	int tag = UGETW(csw->dCSWTag);
+	int tag = UGETDW(csw->dCSWTag);
 	int res = UGETDW(csw->dCSWDataResidue);
 	int status = csw->bCSWStatus;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: auich.c,v 1.58 2004/01/13 14:42:50 kent Exp $	*/
+/*	$NetBSD: auich.c,v 1.58.2.1.2.2 2005/05/19 10:26:17 tron Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -118,7 +118,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auich.c,v 1.58 2004/01/13 14:42:50 kent Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auich.c,v 1.58.2.1.2.2 2005/05/19 10:26:17 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -322,7 +322,7 @@ struct audio_hw_if auich_hw_if = {
 int	auich_attach_codec(void *, struct ac97_codec_if *);
 int	auich_read_codec(void *, u_int8_t, u_int16_t *);
 int	auich_write_codec(void *, u_int8_t, u_int16_t);
-void	auich_reset_codec(void *);
+int	auich_reset_codec(void *);
 
 static const struct auich_devtype {
 	int	vendor;
@@ -344,6 +344,8 @@ static const struct auich_devtype {
 	    "i82801DB/DBM (ICH4/ICH4M) AC-97 Audio",	"ICH4" },
 	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801EB_AC,
 	    "i82801EB (ICH5) AC-97 Audio",   "ICH5" },
+	{ PCI_VENDOR_INTEL, PCI_PRODUCT_INTEL_82801FB_AC,
+	    "i82801FB (ICH6) AC-97 Audio",   "ICH6" },
 	{ PCI_VENDOR_SIS, PCI_PRODUCT_SIS_7012_AC,
 	    "SiS 7012 AC-97 Audio",		"SiS7012" },
 	{ PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE_MCP_AC,
@@ -352,6 +354,8 @@ static const struct auich_devtype {
 	    "nForce2 MCP-T AC-97 Audio",	"nForce2" },
 	{ PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_MCPT_AC,
 	    "nForce3 MCP-T AC-97 Audio",	"nForce3" },
+	{ PCI_VENDOR_NVIDIA, PCI_PRODUCT_NVIDIA_NFORCE3_250_MCPT_AC,
+	    "nForce3 250 MCP-T AC-97 Audio",	"nForce3" },
 	{ PCI_VENDOR_AMD, PCI_PRODUCT_AMD_PBC768_AC,
 	    "AMD768 AC-97 Audio",		"AMD768" },
 	{ PCI_VENDOR_AMD, PCI_PRODUCT_AMD_PBC8111_AC,
@@ -409,12 +413,12 @@ auich_attach(struct device *parent, struct device *self, void *aux)
 
 	aprint_normal(": %s\n", d->name);
 
-	if ((d->vendor == PCI_VENDOR_INTEL
-	     && d->product == PCI_PRODUCT_INTEL_82801DB_AC)
-	    || (d->vendor == PCI_VENDOR_INTEL
-		&& d->product == PCI_PRODUCT_INTEL_82801EB_AC)) {
+	if (d->vendor == PCI_VENDOR_INTEL &&
+	    (d->product == PCI_PRODUCT_INTEL_82801DB_AC ||
+	    d->product == PCI_PRODUCT_INTEL_82801EB_AC ||
+	    d->product == PCI_PRODUCT_INTEL_82801FB_AC)) {
 		/*
-		 * Use native mode for ICH4/ICH5
+		 * Use native mode for ICH4/ICH5/ICH6
 		 */
 		if (pci_mapreg_map(pa, ICH_MMBAR, PCI_MAPREG_TYPE_MEM, 0,
 				   &sc->iot, &sc->mix_ioh, NULL, &mix_size)) {
@@ -600,7 +604,7 @@ auich_attach_codec(void *v, struct ac97_codec_if *cif)
 	return 0;
 }
 
-void
+int
 auich_reset_codec(void *v)
 {
 	struct auich_softc *sc = v;
@@ -620,17 +624,17 @@ auich_reset_codec(void *v)
 	}
 	if (i <= 0) {
 		printf("%s: auich_reset_codec: time out\n", sc->sc_dev.dv_xname);
-		/* XXX: should not attach the audio device */
-	} else {
-#ifdef DEBUG
-		if (status & ICH_SCR)
-			printf("%s: The 2nd codec is ready.\n",
-			       sc->sc_dev.dv_xname);
-		if (status & ICH_S2CR)
-			printf("%s: The 3rd codec is ready.\n",
-			       sc->sc_dev.dv_xname);
-#endif
+		return ETIMEDOUT;
 	}
+#ifdef DEBUG
+	if (status & ICH_SCR)
+		printf("%s: The 2nd codec is ready.\n",
+		       sc->sc_dev.dv_xname);
+	if (status & ICH_S2CR)
+		printf("%s: The 3rd codec is ready.\n",
+		       sc->sc_dev.dv_xname);
+#endif
+	return 0;
 }
 
 int

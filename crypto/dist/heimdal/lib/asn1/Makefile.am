@@ -1,12 +1,12 @@
-# $Heimdal: Makefile.am,v 1.69.2.1 2003/05/12 15:20:44 joda Exp $
-# $NetBSD: Makefile.am,v 1.1.1.7 2003/05/15 20:28:45 lha Exp $
+# $Heimdal: Makefile.am,v 1.69.2.3 2004/06/21 08:26:44 lha Exp $
+# $NetBSD: Makefile.am,v 1.1.1.7.2.2 2004/09/17 04:36:00 jmc Exp $
 
 include $(top_srcdir)/Makefile.am.common
 
 YFLAGS = -d
 
 lib_LTLIBRARIES = libasn1.la
-libasn1_la_LDFLAGS = -version-info 6:1:0
+libasn1_la_LDFLAGS = -version-info 6:2:0
 
 libasn1_la_LIBADD = @LIB_com_err@
 
@@ -24,6 +24,7 @@ gen_files =					\
 	asn1_Authenticator.x			\
 	asn1_AuthorizationData.x		\
 	asn1_CKSUMTYPE.x			\
+	asn1_ChangePasswdDataMS.x		\
 	asn1_Checksum.x				\
 	asn1_ENCTYPE.x				\
 	asn1_ETYPE_INFO.x			\

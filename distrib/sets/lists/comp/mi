@@ -1,4 +1,4 @@
-#	$NetBSD: mi,v 1.689 2004/03/28 18:23:27 he Exp $
+#	$NetBSD: mi,v 1.689.2.10.2.5 2005/07/24 00:50:33 snj Exp $
 ./etc/mtree/set.comp				comp-sys-root
 ./usr/bin/addr2line				comp-debug-bin		bfd
 ./usr/bin/ar					comp-util-bin		bfd
@@ -447,6 +447,7 @@
 ./usr/include/dev/tc/tcdsvar.h			comp-obsolete		obsolete
 ./usr/include/dev/tc/tcreg.h			comp-obsolete		obsolete
 ./usr/include/dev/tc/tcvar.h			comp-obsolete		obsolete
+./usr/include/dev/usb/ukyopon.h			comp-c-include
 ./usr/include/dev/usb/urio.h			comp-c-include
 ./usr/include/dev/usb/usb.h			comp-c-include
 ./usr/include/dev/usb/usbcdc.h			comp-obsolete		obsolete
@@ -951,11 +952,12 @@
 ./usr/include/netinet/ip_nat.h			comp-c-include
 ./usr/include/netinet/ip_pool.h			comp-c-include
 ./usr/include/netinet/ip_proxy.h		comp-c-include
-./usr/include/netinet/ip_rules.h		comp-c-include
+./usr/include/netinet/ip_rules.h		comp-obsolete		obsolete
 ./usr/include/netinet/ip_scan.h			comp-c-include
 ./usr/include/netinet/ip_state.h		comp-c-include
 ./usr/include/netinet/ip_sync.h			comp-c-include
 ./usr/include/netinet/ip_var.h			comp-c-include
+./usr/include/netinet/ipl.h			comp-c-include
 ./usr/include/netinet/tcp.h			comp-c-include
 ./usr/include/netinet/tcp_debug.h		comp-c-include
 ./usr/include/netinet/tcp_fsm.h			comp-c-include
@@ -986,6 +988,12 @@
 ./usr/include/netinet6/raw_ip6.h		comp-c-include
 ./usr/include/netinet6/udp6.h			comp-c-include
 ./usr/include/netinet6/udp6_var.h		comp-c-include
+./usr/include/netipsec/ah_var.h			comp-c-include
+./usr/include/netipsec/esp_var.h		comp-c-include
+./usr/include/netipsec/ipcomp_var.h		comp-c-include
+./usr/include/netipsec/ipip_var.h		comp-c-include
+./usr/include/netipsec/ipsec_var.h		comp-c-include
+./usr/include/netipsec/keydb.h			comp-c-include
 ./usr/include/netisdn/i4b_cause.h		comp-c-include
 ./usr/include/netisdn/i4b_debug.h		comp-c-include
 ./usr/include/netisdn/i4b_ioctl.h		comp-c-include
@@ -3006,7 +3014,7 @@
 ./usr/share/man/cat3/gethostbyaddr.0		comp-c-catman		.cat
 ./usr/share/man/cat3/gethostbyname.0		comp-c-catman		.cat
 ./usr/share/man/cat3/gethostbyname2.0		comp-c-catman		.cat
-./usr/share/man/cat3/gethostent.0		comp-obsolete		obsolete
+./usr/share/man/cat3/gethostent.0		comp-c-catman		.cat
 ./usr/share/man/cat3/gethostid.0		comp-c-catman		.cat
 ./usr/share/man/cat3/gethostname.0		comp-c-catman		.cat
 ./usr/share/man/cat3/getifaddrs.0		comp-c-catman		.cat
@@ -3353,6 +3361,7 @@
 ./usr/share/man/cat3/krb5_cc_set_flags.0	comp-krb5-catman	kerberos,.cat
 ./usr/share/man/cat3/krb5_cc_store_cred.0	comp-krb5-catman	kerberos,.cat
 ./usr/share/man/cat3/krb5_ccache.0		comp-krb5-catman	kerberos,.cat
+./usr/share/man/cat3/krb5_change_password.0	comp-krb5-catman	kerberos,.cat
 ./usr/share/man/cat3/krb5_checksum_is_collision_proof.0	comp-krb5-catman	kerberos,.cat
 ./usr/share/man/cat3/krb5_checksum_is_keyed.0	comp-krb5-catman	kerberos,.cat
 ./usr/share/man/cat3/krb5_checksumsize.0	comp-krb5-catman	kerberos,.cat
@@ -3445,6 +3454,7 @@
 ./usr/share/man/cat3/krb5_principal_get_realm.0	comp-krb5-catman	kerberos,.cat
 ./usr/share/man/cat3/krb5_print_address.0	comp-krb5-catman	kerberos,.cat
 ./usr/share/man/cat3/krb5_set_default_realm.0	comp-krb5-catman	kerberos,.cat
+./usr/share/man/cat3/krb5_set_password.0		comp-krb5-catman	kerberos,.cat
 ./usr/share/man/cat3/krb5_set_warn_dest.0	comp-krb5-catman	kerberos,.cat
 ./usr/share/man/cat3/krb5_sname_to_principal.0	comp-krb5-catman	kerberos,.cat
 ./usr/share/man/cat3/krb5_sock_to_principal.0	comp-krb5-catman	kerberos,.cat
@@ -3660,6 +3670,10 @@
 ./usr/share/man/cat3/mvgetnstr.0		comp-c-catman		.cat
 ./usr/share/man/cat3/mvgetstr.0			comp-c-catman		.cat
 ./usr/share/man/cat3/mvhline.0			comp-c-catman		.cat
+./usr/share/man/cat3/mvinchnstr.0		comp-c-catman		.cat
+./usr/share/man/cat3/mvinchstr.0		comp-c-catman		.cat
+./usr/share/man/cat3/mvinnstr.0			comp-c-catman		.cat
+./usr/share/man/cat3/mvinstr.0			comp-c-catman		.cat
 ./usr/share/man/cat3/mvprintw.0			comp-c-catman		.cat
 ./usr/share/man/cat3/mvvline.0			comp-c-catman		.cat
 ./usr/share/man/cat3/mvwaddch.0			comp-c-catman		.cat
@@ -3672,6 +3686,10 @@
 ./usr/share/man/cat3/mvwgetstr.0		comp-c-catman		.cat
 ./usr/share/man/cat3/mvwhline.0			comp-c-catman		.cat
 ./usr/share/man/cat3/mvwin.0			comp-c-catman		.cat
+./usr/share/man/cat3/mvwinchnstr.0		comp-c-catman		.cat
+./usr/share/man/cat3/mvwinchstr.0		comp-c-catman		.cat
+./usr/share/man/cat3/mvwinnstr.0		comp-c-catman		.cat
+./usr/share/man/cat3/mvwinstr.0			comp-c-catman		.cat
 ./usr/share/man/cat3/mvwprintw.0		comp-c-catman		.cat
 ./usr/share/man/cat3/mvwvline.0			comp-c-catman		.cat
 ./usr/share/man/cat3/napms.0			comp-c-catman		.cat
@@ -3780,8 +3798,12 @@
 ./usr/share/man/cat3/pthread_attr_init.0	comp-c-catman		.cat
 ./usr/share/man/cat3/pthread_attr_setcreatesuspend_np.0	comp-c-catman		.cat
 ./usr/share/man/cat3/pthread_attr_setdetachstate.0	comp-c-catman		.cat
-./usr/share/man/cat3/pthread_barierattr_destroy.0	comp-c-catman		.cat
-./usr/share/man/cat3/pthread_barierattr_init.0	comp-c-catman		.cat
+./usr/share/man/cat3/pthread_attr_getschedparam.0	comp-c-catman		.cat
+./usr/share/man/cat3/pthread_attr_setschedparam.0	comp-c-catman		.cat
+./usr/share/man/cat3/pthread_barierattr_destroy.0	comp-obsolete		obsolete
+./usr/share/man/cat3/pthread_barierattr_init.0		comp-obsolete		obsolete
+./usr/share/man/cat3/pthread_barrierattr_destroy.0	comp-c-catman		.cat
+./usr/share/man/cat3/pthread_barrierattr_init.0		comp-c-catman		.cat
 ./usr/share/man/cat3/pthread_barrier_destroy.0	comp-c-catman		.cat
 ./usr/share/man/cat3/pthread_barrier_init.0	comp-c-catman		.cat
 ./usr/share/man/cat3/pthread_barrier_wait.0	comp-c-catman		.cat
@@ -3930,6 +3952,8 @@
 ./usr/share/man/cat3/ripemd.0			comp-obsolete		obsolete
 ./usr/share/man/cat3/rmd160.0			comp-c-catman		.cat
 ./usr/share/man/cat3/rmtops.0			comp-c-catman		.cat
+./usr/share/man/cat3/round.0			comp-c-catman		.cat
+./usr/share/man/cat3/roundf.0			comp-c-catman		.cat
 ./usr/share/man/cat3/rpc.0			comp-c-catman		.cat
 ./usr/share/man/cat3/rpc_broadcast.0		comp-c-catman		.cat
 ./usr/share/man/cat3/rpc_broadcast_exp.0	comp-c-catman		.cat
@@ -4131,6 +4155,7 @@
 ./usr/share/man/cat3/stdarg.0			comp-c-catman		.cat
 ./usr/share/man/cat3/stdio.0			comp-c-catman		.cat
 ./usr/share/man/cat3/strcasecmp.0		comp-c-catman		.cat
+./usr/share/man/cat3/strcasestr.0		comp-c-catman		.cat
 ./usr/share/man/cat3/strcat.0			comp-c-catman		.cat
 ./usr/share/man/cat3/strchr.0			comp-c-catman		.cat
 ./usr/share/man/cat3/strcmp.0			comp-c-catman		.cat
@@ -4985,6 +5010,7 @@
 ./usr/share/man/cat9/m_adj.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/m_cat.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/m_copyback.0		comp-sys-catman		.cat
+./usr/share/man/cat9/m_copyback_cow.0		comp-sys-catman		.cat
 ./usr/share/man/cat9/m_copydata.0		comp-sys-catman		.cat
 ./usr/share/man/cat9/m_copym.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/m_copypacket.0		comp-sys-catman		.cat
@@ -4995,6 +5021,7 @@
 ./usr/share/man/cat9/m_get.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/m_getclr.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/m_gethdr.0			comp-sys-catman		.cat
+./usr/share/man/cat9/m_makewritable.0		comp-sys-catman		.cat
 ./usr/share/man/cat9/m_prepend.0		comp-sys-catman		.cat
 ./usr/share/man/cat9/m_pulldown.0		comp-sys-catman		.cat
 ./usr/share/man/cat9/m_pullup.0			comp-sys-catman		.cat
@@ -6656,7 +6683,7 @@
 ./usr/share/man/man3/gethostbyaddr.3		comp-c-man		.man
 ./usr/share/man/man3/gethostbyname.3		comp-c-man		.man
 ./usr/share/man/man3/gethostbyname2.3		comp-c-man		.man
-./usr/share/man/man3/gethostent.3		comp-obsolete		obsolete
+./usr/share/man/man3/gethostent.3		comp-c-man		.man
 ./usr/share/man/man3/gethostid.3		comp-c-man		.man
 ./usr/share/man/man3/gethostname.3		comp-c-man		.man
 ./usr/share/man/man3/getifaddrs.3		comp-c-man		.man
@@ -7003,6 +7030,7 @@
 ./usr/share/man/man3/krb5_cc_set_flags.3	comp-krb5-man		kerberos,.man
 ./usr/share/man/man3/krb5_cc_store_cred.3	comp-krb5-man		kerberos,.man
 ./usr/share/man/man3/krb5_ccache.3		comp-krb5-man		kerberos,.man
+./usr/share/man/man3/krb5_change_password.3	comp-krb5-catman	kerberos,.man
 ./usr/share/man/man3/krb5_checksum_is_collision_proof.3	comp-krb5-man		kerberos,.man
 ./usr/share/man/man3/krb5_checksum_is_keyed.3	comp-krb5-man		kerberos,.man
 ./usr/share/man/man3/krb5_checksumsize.3	comp-krb5-man		kerberos,.man
@@ -7095,6 +7123,7 @@
 ./usr/share/man/man3/krb5_principal_get_realm.3	comp-krb5-man		kerberos,.man
 ./usr/share/man/man3/krb5_print_address.3	comp-krb5-man		kerberos,.man
 ./usr/share/man/man3/krb5_set_default_realm.3	comp-krb5-man		kerberos,.man
+./usr/share/man/man3/krb5_set_password.3	comp-krb5-man		kerberos,.man
 ./usr/share/man/man3/krb5_set_warn_dest.3	comp-krb5-man		kerberos,.man
 ./usr/share/man/man3/krb5_sname_to_principal.3	comp-krb5-man		kerberos,.man
 ./usr/share/man/man3/krb5_sock_to_principal.3	comp-krb5-man		kerberos,.man
@@ -7310,6 +7339,10 @@
 ./usr/share/man/man3/mvgetnstr.3		comp-c-man		.man
 ./usr/share/man/man3/mvgetstr.3			comp-c-man		.man
 ./usr/share/man/man3/mvhline.3			comp-c-man		.man
+./usr/share/man/man3/mvinchnstr.3		comp-c-man		.man
+./usr/share/man/man3/mvinchstr.3		comp-c-man		.man
+./usr/share/man/man3/mvinnstr.3			comp-c-man		.man
+./usr/share/man/man3/mvinstr.3			comp-c-man		.man
 ./usr/share/man/man3/mvprintw.3			comp-c-man		.man
 ./usr/share/man/man3/mvvline.3			comp-c-man		.man
 ./usr/share/man/man3/mvwaddch.3			comp-c-man		.man
@@ -7322,6 +7355,10 @@
 ./usr/share/man/man3/mvwgetstr.3		comp-c-man		.man
 ./usr/share/man/man3/mvwhline.3			comp-c-man		.man
 ./usr/share/man/man3/mvwin.3			comp-c-man		.man
+./usr/share/man/man3/mvwinchnstr.3		comp-c-man		.man
+./usr/share/man/man3/mvwinchstr.3		comp-c-man		.man
+./usr/share/man/man3/mvwinnstr.3		comp-c-man		.man
+./usr/share/man/man3/mvwinstr.3			comp-c-man		.man
 ./usr/share/man/man3/mvwprintw.3		comp-c-man		.man
 ./usr/share/man/man3/mvwvline.3			comp-c-man		.man
 ./usr/share/man/man3/napms.3			comp-c-man		.man
@@ -7430,8 +7467,12 @@
 ./usr/share/man/man3/pthread_attr_init.3	comp-c-man		.man
 ./usr/share/man/man3/pthread_attr_setcreatesuspend_np.3	comp-c-man		.man
 ./usr/share/man/man3/pthread_attr_setdetachstate.3	comp-c-man		.man
-./usr/share/man/man3/pthread_barierattr_destroy.3	comp-c-man		.man
-./usr/share/man/man3/pthread_barierattr_init.3	comp-c-man		.man
+./usr/share/man/man3/pthread_attr_getschedparam.3	comp-c-man		.man
+./usr/share/man/man3/pthread_attr_setschedparam.3	comp-c-man		.man
+./usr/share/man/man3/pthread_barierattr_destroy.3	comp-obsolete		obsolete
+./usr/share/man/man3/pthread_barierattr_init.3		comp-obsolete		obsolete
+./usr/share/man/man3/pthread_barrierattr_destroy.3	comp-c-man		.man
+./usr/share/man/man3/pthread_barrierattr_init.3		comp-c-man		.man
 ./usr/share/man/man3/pthread_barrier_destroy.3	comp-c-man		.man
 ./usr/share/man/man3/pthread_barrier_init.3	comp-c-man		.man
 ./usr/share/man/man3/pthread_barrier_wait.3	comp-c-man		.man
@@ -7580,6 +7621,8 @@
 ./usr/share/man/man3/ripemd.3			comp-obsolete		obsolete
 ./usr/share/man/man3/rmd160.3			comp-c-man		.man
 ./usr/share/man/man3/rmtops.3			comp-c-man		.man
+./usr/share/man/man3/round.3			comp-c-man		.man
+./usr/share/man/man3/roundf.3			comp-c-man		.man
 ./usr/share/man/man3/rpc.3			comp-c-man		.man
 ./usr/share/man/man3/rpc_broadcast.3		comp-c-man		.man
 ./usr/share/man/man3/rpc_broadcast_exp.3	comp-c-man		.man
@@ -7777,6 +7820,7 @@
 ./usr/share/man/man3/stdarg.3			comp-c-man		.man
 ./usr/share/man/man3/stdio.3			comp-c-man		.man
 ./usr/share/man/man3/strcasecmp.3		comp-c-man		.man
+./usr/share/man/man3/strcasestr.3		comp-c-man		.man
 ./usr/share/man/man3/strcat.3			comp-c-man		.man
 ./usr/share/man/man3/strchr.3			comp-c-man		.man
 ./usr/share/man/man3/strcmp.3			comp-c-man		.man
@@ -8630,6 +8674,7 @@
 ./usr/share/man/man9/m_adj.9			comp-sys-man		.man
 ./usr/share/man/man9/m_cat.9			comp-sys-man		.man
 ./usr/share/man/man9/m_copyback.9		comp-sys-man		.man
+./usr/share/man/man9/m_copyback_cow.9		comp-sys-man		.man
 ./usr/share/man/man9/m_copydata.9		comp-sys-man		.man
 ./usr/share/man/man9/m_copym.9			comp-sys-man		.man
 ./usr/share/man/man9/m_copypacket.9		comp-sys-man		.man
@@ -8640,6 +8685,7 @@
 ./usr/share/man/man9/m_get.9			comp-sys-man		.man
 ./usr/share/man/man9/m_getclr.9			comp-sys-man		.man
 ./usr/share/man/man9/m_gethdr.9			comp-sys-man		.man
+./usr/share/man/man9/m_makewritable.9		comp-sys-man		.man
 ./usr/share/man/man9/m_prepend.9		comp-sys-man		.man
 ./usr/share/man/man9/m_pulldown.9		comp-sys-man		.man
 ./usr/share/man/man9/m_pullup.9			comp-sys-man		.man

@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs_msdos.c,v 1.14 2004/01/05 23:23:33 jmmv Exp $	*/
+/*	$NetBSD: newfs_msdos.c,v 1.14.2.2 2004/09/23 02:44:44 jmc Exp $	*/
 
 /*
  * Copyright (c) 1998 Robert Nordier
@@ -33,7 +33,7 @@
 static const char rcsid[] =
   "$FreeBSD: src/sbin/newfs_msdos/newfs_msdos.c,v 1.15 2000/10/10 01:49:37 wollman Exp $";
 #else
-__RCSID("$NetBSD: newfs_msdos.c,v 1.14 2004/01/05 23:23:33 jmmv Exp $");
+__RCSID("$NetBSD: newfs_msdos.c,v 1.14.2.2 2004/09/23 02:44:44 jmc Exp $");
 #endif
 #endif /* not lint */
 
@@ -656,7 +656,7 @@ main(int argc, char *argv[])
 			 ((u_int)tm->tm_hour << 8 |
 			  (u_int)tm->tm_min));
 		mk4(bsx->volid, x);
-		mklabel(bsx->label, opt_L ? opt_L : "NO NAME");
+		mklabel(bsx->label, opt_L ? opt_L : "NO_NAME");
 		snprintf(buf, sizeof(buf), "FAT%u", fat);
 		setstr(bsx->type, buf, sizeof(bsx->type));
 		if (!opt_B) {
@@ -665,7 +665,7 @@ main(int argc, char *argv[])
 		    mk1(bs->jmp[0], 0xeb);
 		    mk1(bs->jmp[1], x1 - 2);
 		    mk1(bs->jmp[2], 0x90);
-		    setstr(bs->oem, opt_O ? opt_O : "BSD  4.4",
+		    setstr(bs->oem, opt_O ? opt_O : "NetBSD",
 			   sizeof(bs->oem));
 		    memcpy(img + x1, bootcode, sizeof(bootcode));
 		    mk2(img + bpb.bps - 2, DOSMAGIC);

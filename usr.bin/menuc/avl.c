@@ -1,4 +1,4 @@
-/*	$NetBSD: avl.c,v 1.5 2003/07/17 08:33:43 lukem Exp $	*/
+/*	$NetBSD: avl.c,v 1.5.2.1.2.1 2005/07/23 23:55:04 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Philip A. Nelson.
@@ -46,10 +46,14 @@
  *	} id_rec;
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
 
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: avl.c,v 1.5 2003/07/17 08:33:43 lukem Exp $");
+__RCSID("$NetBSD: avl.c,v 1.5.2.1.2.1 2005/07/23 23:55:04 snj Exp $");
 #endif
 
 
@@ -106,7 +110,7 @@ int insert_id (id_rec **root, id_rec *new_id)
       if (insert_id (&((*root)->left), new_id))
 	{
 	  /* The height increased. */
-	  (*root)->balance --;
+	  (*root)->balance--;
 	  
 	  switch ((*root)->balance)
 	    {
@@ -160,7 +164,7 @@ int insert_id (id_rec **root, id_rec *new_id)
       if (insert_id (&((*root)->right), new_id))
 	{
 	  /* The height increased. */
-	  (*root)->balance ++;
+	  (*root)->balance++;
 	  switch ((*root)->balance)
 	    {
 	    case 0:  /* no height increase. */

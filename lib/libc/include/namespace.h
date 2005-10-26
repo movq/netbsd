@@ -1,4 +1,4 @@
-/*	$NetBSD: namespace.h,v 1.84 2004/03/04 23:42:39 kleink Exp $	*/
+/*	$NetBSD: namespace.h,v 1.84.2.3 2004/09/11 11:55:16 he Exp $	*/
 
 /*-
  * Copyright (c) 1997-2002 The NetBSD Foundation, Inc.
@@ -45,6 +45,9 @@
 #define daylight	_daylight
 #define err		_err
 #define errx		_errx
+#ifdef _REENTRANT
+#define fileno		_fileno
+#endif
 #define fork		_fork
 #define fseeko		_fseeko
 #define ftello		_ftello
@@ -232,6 +235,7 @@
 #define getgrouplist		_getgrouplist
 #define gethostbyaddr		_gethostbyaddr
 #define gethostbyname		_gethostbyname
+#define gethostent		_gethostent
 #define gethostname		_gethostname
 #define getifaddrs		_getifaddrs
 #define getloadavg		_getloadavg
@@ -261,8 +265,11 @@
 #define getpwnam		_getpwnam
 #define getpwuid		_getpwuid
 #define getrpcbyname		_getrpcbyname
+#define getrpcbyname_r		_getrpcbyname_r
 #define getrpcbynumber		_getrpcbynumber
+#define getrpcbynumber_r	_getrpcbynumber_r
 #define getrpcent		_getrpcent
+#define getrpcent_r		_getrpcent_r
 #define getrpcport		_getrpcport
 #define getservbyname		_getservbyname
 #define getservbyname_r		_getservbyname_r
@@ -447,6 +454,7 @@
 #define siginterrupt		_siginterrupt
 #define signal			_signal
 #define sl_add			_sl_add
+#define sl_create		_sl_create
 #define sl_find			_sl_find
 #define sl_free			_sl_free
 #define sl_init			_sl_init
@@ -503,6 +511,9 @@
 #define svis			_svis
 #define sysarch			_sys_sysarch
 #define sysctl			_sysctl
+#define sysctlbyname		_sysctlbyname
+#define sysctlgetmibinfo	_sysctlgetmibinfo
+#define sysctlnametomib		_sysctlnametomib
 #define syslog			_syslog
 #define tcdrain			_tcdrain
 #define tcflow			_tcflow
@@ -650,6 +661,7 @@
 #define dlerror			__dlerror
 #define dladdr			__dladdr
 #define fmtcheck		__fmtcheck
+#define __learn_tree		___learn_tree
 #endif /* __weak_alias */
 
 #endif /* _NAMESPACE_H_ */

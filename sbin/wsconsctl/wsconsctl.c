@@ -1,4 +1,4 @@
-/*	$NetBSD: wsconsctl.c,v 1.6 2003/05/04 11:54:59 jmmv Exp $ */
+/*	$NetBSD: wsconsctl.c,v 1.6.2.1.2.1 2005/05/13 18:50:07 riz Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -44,8 +44,8 @@
 #include <unistd.h>
 #include "wsconsctl.h"
 
-#define PATH_KEYBOARD		"/dev/wskbd0"
-#define PATH_MOUSE		"/dev/wsmouse0"
+#define PATH_KEYBOARD		"/dev/wskbd"
+#define PATH_MOUSE		"/dev/wsmouse"
 #define PATH_DISPLAY		"/dev/ttyE0"
 
 extern struct field keyboard_field_tab[];
@@ -70,6 +70,8 @@ usage(msg)
 	fprintf(stderr, "usage: %s [-kmd] [-f file] [-n] name ...\n",
 		progname);
 	fprintf(stderr, " -or-  %s [-kmd] [-f file] [-n] -w name=value ...\n",
+		progname);
+	fprintf(stderr, " -or-  %s [-kmd] [-f file] [-n] -w name+=value ...\n",
 		progname);
 	fprintf(stderr, " -or-  %s [-kmd] [-f file] [-n] -a\n", progname);
 

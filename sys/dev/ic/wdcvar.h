@@ -1,4 +1,4 @@
-/*	$NetBSD: wdcvar.h,v 1.55 2004/01/03 23:59:58 thorpej Exp $	*/
+/*	$NetBSD: wdcvar.h,v 1.55.2.1.2.1 2005/08/07 15:51:34 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
@@ -70,7 +70,7 @@ struct wdc_channel {
 	bus_space_handle_t      data32ioh;
 
 	/* Our state */
-	int ch_flags;
+	volatile int ch_flags;
 #define WDCF_ACTIVE   0x01	/* channel is active */
 #define WDCF_SHUTDOWN 0x02	/* channel is shutting down */
 #define WDCF_IRQ_WAIT 0x10	/* controller is waiting for irq */
@@ -165,6 +165,8 @@ struct wdc_softc {
 
 	/* if WDC_CAPABILITY_IRQACK set in 'cap' */
 	void		(*irqack)(struct wdc_channel *);
+	/* Optional callback to perform a bus reset */
+	void		(*reset)(struct wdc_channel *, int);
 };
 
 /*
@@ -205,6 +207,7 @@ void	wdccommandext(struct wdc_channel *, u_int8_t, u_int8_t, u_int64_t,
 void	wdccommandshort(struct wdc_channel *, int, int);
 void	wdctimeout(void *arg);
 void	wdc_reset_channel(struct ata_drive_datas *, int);
+void	wdc_do_reset(struct wdc_channel *, int);
 
 int	wdc_exec_command(struct ata_drive_datas *, struct wdc_command*);
 #define WDC_COMPLETE 0x01

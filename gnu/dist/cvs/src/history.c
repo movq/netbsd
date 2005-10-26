@@ -27,6 +27,7 @@
  *		M	"Commit" cmd - "Modified" file.
  *		A	"Commit" cmd - "Added" file.
  *		R	"Commit" cmd - "Removed" file.
+ *		X	"Admin"  cmd.
  *
  *  date	is a fixed length 8-char hex representation of a Unix time_t.
  *		[Starting here, variable fields are delimited by '|' chars.]
@@ -236,7 +237,7 @@ static short tz_local;
 static time_t tz_seconds_east_of_GMT;
 static char *tz_name = "+0000";
 
-char *logHistory = ALL_HISTORY_REC_TYPES;
+char *logHistory;
 
 /* -r, -t, or -b options, malloc'd.  These are "" if the option in
    question is not specified or is overridden by another option.  The
@@ -416,8 +417,11 @@ history (argc, argv)
 		working = 1;
 		break;
 	    case 'X':			/* Undocumented debugging flag */
+#ifdef DEBUG
 		histfile = optarg;
+#endif
 		break;
+
 	    case 'D':			/* Since specified date */
 		if (*since_rev || *since_tag || *backto)
 		{
@@ -439,7 +443,7 @@ history (argc, argv)
 		backto = xstrdup (optarg);
 		break;
 	    case 'f':			/* For specified file */
-		save_file ("", optarg, (char *) NULL);
+		save_file (NULL, optarg, NULL);
 		break;
 	    case 'm':			/* Full module report */
 		if (!module_report++) report_count++;
@@ -448,7 +452,7 @@ history (argc, argv)
 		save_module (optarg);
 		break;
 	    case 'p':			/* For specified directory */
-		save_file (optarg, "", (char *) NULL);
+		save_file (optarg, NULL, NULL);
 		break;
 	    case 'r':			/* Since specified Tag/Rev */
 		if (since_date || *since_tag || *backto)
@@ -531,7 +535,7 @@ history (argc, argv)
     argc -= optind;
     argv += optind;
     for (i = 0; i < argc; i++)
-	save_file ("", argv[i], (char *) NULL);
+	save_file (NULL, argv[i], NULL);
 
 
     /* ================ Now analyze the arguments a bit */
@@ -701,17 +705,18 @@ history (argc, argv)
 void
 history_write (type, update_dir, revs, name, repository)
     int type;
-    char *update_dir;
-    char *revs;
-    char *name;
-    char *repository;
+    const char *update_dir;
+    const char *revs;
+    const char *name;
+    const char *repository;
 {
     char *fname;
     char *workdir;
     char *username = getcaller ();
     int fd;
     char *line;
-    char *slash = "", *cp, *cp2, *repos;
+    char *slash = "", *cp;
+    const char *cp2, *repos;
     int i;
     static char *tilde = "";
     static char *PrCurDir = NULL;
@@ -905,9 +910,13 @@ save_user (name)
 {
     if (user_count == user_max)
     {
-	user_max += USER_INCREMENT;
-	user_list = (char **) xrealloc ((char *) user_list,
-					(int) user_max * sizeof (char *));
+	user_max = xsum (user_max, USER_INCREMENT);
+	if (size_overflow_p (xtimes (user_max, sizeof (char *))))
+	{
+	    error (0, 0, "save_user: too many users");
+	    return;
+	}
+	user_list = xrealloc (user_list, xtimes (user_max, sizeof (char *)));
     }
     user_list[user_count++] = xstrdup (name);
 }
@@ -935,12 +944,18 @@ save_file (dir, name, module)
 
     if (file_count == file_max)
     {
-	file_max += FILE_INCREMENT;
-	file_list = (struct file_list_str *) xrealloc ((char *) file_list,
-						   file_max * sizeof (*fl));
+	file_max = xsum (file_max, FILE_INCREMENT);
+	if (size_overflow_p (xtimes (file_max, sizeof (*fl))))
+	{
+	    error (0, 0, "save_file: too many files");
+	    return;
+	}
+	file_list = xrealloc (file_list, xtimes (file_max, sizeof (*fl)));
     }
     fl = &file_list[file_count++];
-    fl->l_file = cp = xmalloc (strlen (dir) + strlen (name) + 2);
+    fl->l_file = cp = xmalloc (dir ? strlen (dir) : 0
+			       + name ? strlen (name) : 0
+			       + 2);
     fl->l_module = module;
 
     if (dir && *dir)
@@ -976,9 +991,13 @@ save_module (module)
 {
     if (mod_count == mod_max)
     {
-	mod_max += MODULE_INCREMENT;
-	mod_list = (char **) xrealloc ((char *) mod_list,
-				       mod_max * sizeof (char *));
+	mod_max = xsum (mod_max, MODULE_INCREMENT);
+	if (size_overflow_p (xtimes (mod_max, sizeof (char *))))
+	{
+	    error (0, 0, "save_module: too many modules");
+	    return;
+	}
+	mod_list = xrealloc (mod_list, xtimes (mod_max, sizeof (char *)));
     }
     mod_list[mod_count++] = xstrdup (module);
 }
@@ -1377,6 +1396,8 @@ select_hrec (hr)
 		    if (within (cp, cp2))
 		    {
 			hr->mod = fl->l_module;
+			if (cmpfile != NULL)
+			    free (cmpfile);
 			break;
 		    }
 		    if (cmpfile != NULL)

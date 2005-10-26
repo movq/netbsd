@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.238 2004/02/16 17:11:26 wiz Exp $
+#	$NetBSD: INSTALL,v 1.238.2.6.2.1 2005/04/02 21:30:25 he Exp $
 #
 #	INSTALL - Installation kernel.
 #
@@ -70,6 +70,7 @@ options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 
 options 	USERCONF	# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
+#options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 options 	MALLOC_NOINLINE		# Not inlining MALLOC saves memory
 
 # Diagnostic/debugging support options
@@ -407,10 +408,12 @@ aceride* 	at pci? dev ? function ?	# Acer Lab IDE controllers
 artsata*	at pci? dev ? function ?	# Intel i31244 SATA controller
 cmdide* 	at pci? dev ? function ?	# CMD tech IDE controllers
 cypide* 	at pci? dev ? function ?	# Cypress IDE controllers
+geodeide* 	at pci? dev ? function ?	# AMD Geode IDE controllers
 hptide* 	at pci? dev ? function ?	# Triones/HighPoint IDE controllers
 optiide* 	at pci? dev ? function ?	# Opti IDE controllers
 piixide* 	at pci? dev ? function ?	# Intel IDE controllers
 pdcide* 	at pci? dev ? function ?	# Promise IDE controllers
+pdcsata*	at pci? dev ? function ?	# Promise SATA150 controllers
 rccide* 	at pci? dev ? function ?	# ServerWorks IDE controllers
 satalink*	at pci? dev ? function ?	# SiI SATALink controllers
 siside* 	at pci? dev ? function ?	# SiS IDE controllers
@@ -500,9 +503,11 @@ gsip*	at pci? dev ? function ?	# NS83820 Gigabit Ethernet
 #hme*	at pci? dev ? function ?	# Sun Microelectronics STP2002-STQ
 le*	at pci? dev ? function ?	# PCnet-PCI Ethernet
 #lmc*	at pci? dev ? function ?	# Lan Media Corp SSI/HSSI/DS3
+mtd*	at pci? dev ? function ?	# Myson MTD803 3-in-1 Ethernet
 ne*	at pci? dev ? function ?	# NE2000-compatible Ethernet
 #ntwoc*	at pci? dev ? function ?	# Riscom/N2 PCI Sync Serial
 pcn*	at pci? dev ? function ?	# AMD PCnet-PCI Ethernet
+re*	at pci? dev ? function ?	# Realtek 8139C+/8169/8169S/8110S
 rtk*	at pci? dev ? function ?	# Realtek 8129/8139
 sf*	at pci? dev ? function ?	# Adaptec AIC-6915 Ethernet
 sip*	at pci? dev ? function ?	# SiS 900/DP83815 Ethernet
@@ -602,10 +607,12 @@ ukphy*	at mii? phy ?			# generic unknown PHYs
 # USB Controller and Devices
 
 # PCI USB controllers
+ehci*	at pci?	dev ? function ?	# Enhanced Host Controller
 uhci*	at pci?				# Universal Host Controller (Intel)
 ohci*	at pci?				# Open Host Controller
 
 # USB bus support
+usb*	at ehci?
 usb*	at uhci?
 usb*	at ohci?
 
@@ -718,7 +725,8 @@ include	"arch/i386/conf/GENERIC.local"
 
 # disk/mass storage pseudo-devices
 #pseudo-device	ccd		4	# concatenated/striped disk devices
-#pseudo-device	raid		4	# RAIDframe disk driver
+pseudo-device	raid		8	# RAIDframe disk driver
+options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 pseudo-device	md		1	# memory disk device (ramdisk)
 #pseudo-device	vnd		4	# disk-like interface to files
 

@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.x11.mk,v 1.38 2004/03/27 20:16:16 fredb Exp $
+#	$NetBSD: bsd.x11.mk,v 1.38.2.3.2.1 2005/03/16 13:11:19 tron Exp $
 
 .include <bsd.init.mk>
 
@@ -70,7 +70,8 @@ X11FLAGS.EXTENSION+=	-D__GLX_ALIGN64
 .if ${MACHINE} == "amd64"	|| \
     ${MACHINE} == "cats"	|| \
     ${MACHINE} == "i386"	|| \
-    ${MACHINE} == "macppc"
+    ${MACHINE} == "macppc"	|| \
+    ${MACHINE} == "sgimips"
 #	LOADABLE
 X11FLAGS.LOADABLE=	-DXFree86LOADER -DIN_MODULE -DXFree86Module
 .endif
@@ -96,6 +97,10 @@ X11TOOL_UNXCOMM=    sed	-e '/^\#  *[0-9][0-9]*  *.*$$/d' \
 
 CPPFLAGS+=		-DCSRG_BASED -DFUNCPROTO=15 -DNARROWPROTO
 CPPFLAGS+=		-I${DESTDIR}${X11INCDIR}
+
+.if ${MACHINE_ARCH} == "x86_64"
+CPPFLAGS+=		-D__AMD64__
+.endif
 
 LDFLAGS+=		-Wl,-rpath-link,${DESTDIR}${X11USRLIBDIR} \
 			-R${X11USRLIBDIR} \
@@ -159,12 +164,16 @@ cleanx11man: .PHONY
 .man.1 .man.3 .man.4 .man.5 .man.7:
 	${_MKTARGET_CREATE}
 	rm -f ${.TARGET}
-	${CPP} -undef -traditional \
+	sed -e 's/\\$$/\\ /' ${.IMPSRC} \
+	| ${CPP} -undef -traditional \
 	    -D__apploaddir__=${X11ROOTDIR}/lib/X11/app-defaults \
-	    -D__filemansuffix__=5 -D__libmansuffix__=3 \
-	    -D__miscmansuffix__=7 -D__drivermansuffix__=4 \
+	    -D__libmansuffix__=3 \
+	    -D__filemansuffix__=5 \
+	    -D__miscmansuffix__=7 \
+	    -D__drivermansuffix__=4 \
+	    -D__adminmansuffix__=8 \
 	    -D__projectroot__=${X11ROOTDIR} \
 	    -D__xorgversion__='"Release 6.6" "X Version 11"' \
 	    -D__vendorversion__="XFree86 4.4.0" \
 	    ${X11EXTRAMANDEFS} \
-	< ${.IMPSRC} | ${X11TOOL_UNXCOMM} > ${.TARGET}
+	| ${X11TOOL_UNXCOMM} > ${.TARGET}

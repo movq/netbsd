@@ -1,6 +1,11 @@
 /*
- * Copyright (c) 1992, Brian Berliner and Jeff Polk
- * Copyright (c) 1989-1992, Brian Berliner
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (C) 1992, Brian Berliner and Jeff Polk
+ * Portions Copyright (C) 1989-1992, Brian Berliner
  * 
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with the CVS source distribution.
@@ -9,20 +14,22 @@
 #include "cvs.h"
 #include "getline.h"
 #include <assert.h>
+#include "history.h"
 
 extern char *logHistory;
 
 /*
  * Parse the INFOFILE file for the specified REPOSITORY.  Invoke CALLPROC for
- * the first line in the file that matches the REPOSITORY, or if ALL != 0, any lines
- * matching "ALL", or if no lines match, the last line matching "DEFAULT".
+ * the first line in the file that matches the REPOSITORY, or if ALL != 0, any
+ * lines matching "ALL", or if no lines match, the last line matching
+ * "DEFAULT".
  *
  * Return 0 for success, -1 if there was not an INFOFILE, and >0 for failure.
  */
 int
 Parse_Info (infofile, repository, callproc, all)
-    char *infofile;
-    char *repository;
+    const char *infofile;
+    const char *repository;
     CALLPROC callproc;
     int all;
 {
@@ -35,8 +42,11 @@ Parse_Info (infofile, repository, callproc, all)
     int default_line = 0;
     char *expanded_value;
     int callback_done, line_number;
-    char *cp, *exp, *value, *srepos;
+    char *cp, *exp, *value;
+    const char *srepos;
     const char *regex_err;
+
+    assert (repository);
 
     if (current_parsed_root == NULL)
     {
@@ -146,7 +156,8 @@ Parse_Info (infofile, repository, callproc, all)
 	    if (!all)
 		error(0, 0, "Keyword `ALL' is ignored at line %d in %s file",
 		      line_number, infofile);
-	    else if ((expanded_value = expand_path (value, infofile, line_number)) != NULL)
+	    else if ((expanded_value = expand_path (value, infofile,
+                                                    line_number)) != NULL)
 	    {
 		err += callproc (repository, expanded_value);
 		free (expanded_value);
@@ -215,8 +226,9 @@ Parse_Info (infofile, repository, callproc, all)
    KEYWORD=VALUE.  There is currently no way to have a multi-line
    VALUE (would be nice if there was, probably).
 
-   CVSROOT is the $CVSROOT directory (current_parsed_root->directory might not be
-   set yet).
+   CVSROOT is the $CVSROOT directory
+   (current_parsed_root->directory might not be set yet, so this
+   function takes the cvsroot as a function argument).
 
    Returns 0 for success, negative value for failure.  Call
    error(0, ...) on errors in addition to the return value.  */
@@ -266,8 +278,7 @@ parse_config (cvsroot)
 	       value, currently at least.  */
 	    error (0, errno, "cannot open %s", infopath);
 	}
-	free (infopath);
-	return 0;
+	goto set_defaults_and_return;
     }
 
     while (getline (&line, &line_allocated, fp_info) >= 0)
@@ -291,7 +302,7 @@ parse_config (cvsroot)
 	   for making sure the syntax is consistent.  Any good examples
 	   to follow there (Apache?)?  */
 
-	/* Strip the training newline.  There will be one unless we
+	/* Strip the trailing newline.  There will be one unless we
 	   read a partial line without a newline, and then got end of
 	   file (or error?).  */
 
@@ -347,12 +358,13 @@ parse_config (cvsroot)
 	    }
 	}
 	else if (strcmp (line, "tag") == 0) {
-	    RCS_citag = strdup(p);
-	    if (RCS_citag == NULL) {
-		error (0, 0, "%s: no memory for local tag '%s'",
-		       infopath, p);
-		goto error_return;
-	    }
+	    RCS_citag = xstrdup(p);
+	}
+	else if (strcmp (line, "AdminGroup") == 0) {
+	    CVS_admin_group = xstrdup(p);
+	}
+	else if (strcmp (line, "AdminOptions") == 0) {
+	    CVS_admin_options = xstrdup(p);
 	}
 	else if (strcmp (line, "PreservePermissions") == 0)
 	{
@@ -399,8 +411,8 @@ warning: this CVS does not support PreservePermissions");
 	{
 	    if (strcmp (p, "all") != 0)
 	    {
-		logHistory=xmalloc(strlen (p) + 1);
-		strcpy (logHistory, p);
+		if (logHistory) free (logHistory);
+		logHistory = xstrdup (p);
 	    }
 	}
 	else if (strcmp (line, "RereadLogAfterVerify") == 0)
@@ -440,12 +452,17 @@ warning: this CVS does not support PreservePermissions");
 	error (0, errno, "cannot close %s", infopath);
 	goto error_return;
     }
+set_defaults_and_return:
+    if (!logHistory)
+	logHistory = xstrdup (ALL_HISTORY_REC_TYPES);
     free (infopath);
     if (line != NULL)
 	free (line);
     return 0;
 
  error_return:
+    if (!logHistory)
+	logHistory = xstrdup (ALL_HISTORY_REC_TYPES);
     if (infopath != NULL)
 	free (infopath);
     if (line != NULL)

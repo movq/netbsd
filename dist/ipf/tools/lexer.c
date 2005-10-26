@@ -1,5 +1,3 @@
-/*	$NetBSD: lexer.c,v 1.1.1.1 2004/03/28 08:56:35 martti Exp $	*/
-
 /*
  * Copyright (C) 2003 by Darren Reed.
  *
@@ -26,7 +24,7 @@ union	{
 
 FILE *yyin;
 
-#define	ishex(c)	(isdigit(c) || ((c) >= 'a' && (c) <= 'f') || \
+#define	ishex(c)	(ISDIGIT(c) || ((c) >= 'a' && (c) <= 'f') || \
 			 ((c) >= 'A' && (c) <= 'F'))
 #define	TOOLONG		-3
 
@@ -34,6 +32,7 @@ extern int	string_start;
 extern int	string_end;
 extern char	*string_val;
 extern int	pos;
+extern int	yydebug;
 
 char		*yystr = NULL;
 int		yytext[YYBUFSIZ+1];
@@ -45,6 +44,9 @@ int		yybreakondot = 0;
 int		yyvarnext = 0;
 int		yytokentype = 0;
 wordtab_t	*yywordtab = NULL;
+int		yysavedepth = 0;
+wordtab_t	*yysavewords[30];
+
 
 static	wordtab_t	*yyfindkey __P((char *));
 static	int		yygetc __P((void));
@@ -52,7 +54,6 @@ static	void		yyunputc __P((int));
 static	int		yyswallow __P((int));
 static	char		*yytexttostr __P((int, int));
 static	void		yystrtotext __P((char *));
-
 
 static int yygetc()
 {
@@ -71,6 +72,8 @@ static int yygetc()
 		yypos++;
 	} else {
 		c = fgetc(yyin);
+		if (c == '\n')
+			yylineNum++;
 	}
 	yytext[yypos++] = c;
 	yylast = yypos;
@@ -83,8 +86,6 @@ static int yygetc()
 static void yyunputc(c)
 int c;
 {
-	if (c == '\n')
-		yylineNum--;
 	yytext[--yypos] = c;
 }
 
@@ -147,7 +148,7 @@ int offset, max;
 
 int yylex()
 {
-	int c, n, isbuilding, rval, lnext;
+	int c, n, isbuilding, rval, lnext, nokey = 0;
 	char *name;
 
 	isbuilding = 0;
@@ -165,7 +166,8 @@ nextchar:
 	switch (c)
 	{
 	case '\n' :
-		yylineNum++;
+		lnext = 0;
+		nokey = 0;
 	case '\t' :
 	case '\r' :
 	case ' ' :
@@ -189,6 +191,8 @@ nextchar:
 				yypos--;
 			} else
 				yypos--;
+			if (yypos == 0)
+				nokey = 1;
 			goto nextchar;
 		}
 		break;
@@ -223,13 +227,13 @@ nextchar:
 			}
 			(void) yygetc();
 		} else {
-			if (!isalpha(n)) {
+			if (!ISALPHA(n)) {
 				yyunputc(n);
 				break;
 			}
 			do {
 				n = yygetc();
-			} while (isalpha(n) || isdigit(n) || n == '_');
+			} while (ISALPHA(n) || ISDIGIT(n) || n == '_');
 			yyunputc(n);
 		}
 
@@ -424,10 +428,10 @@ nextchar:
 	/*
 	 * No negative numbers with leading - sign..
 	 */
-	if (isbuilding == 0 && isdigit(c)) {
+	if (isbuilding == 0 && ISDIGIT(c)) {
 		do {
 			n = yygetc();
-		} while (isdigit(n));
+		} while (ISDIGIT(n));
 		yyunputc(n);
 		rval = YY_NUMBER;
 		goto done;
@@ -445,16 +449,27 @@ done:
 		w = NULL;
 		isbuilding = 0;
 
-		if (yyvarnext == 0)
+		if ((yyvarnext == 0) && (nokey == 0)) {
 			w = yyfindkey(yystr);
-		else
+			if (w == NULL && yywordtab != NULL) {
+				yyresetdict();
+				w = yyfindkey(yystr);
+			}
+		} else
 			yyvarnext = 0;
 		if (w != NULL)
 			rval = w->w_value;
 		else
 			rval = YY_STR;
 	}
+
+	if (rval == YY_STR && yysavedepth > 0)
+		yyresetdict();
+
 	yytokentype = rval;
+
+	if (yydebug)
+		printf("lexed(%s) => %d\n", yystr, rval);
 
 	switch (rval)
 	{
@@ -551,6 +566,31 @@ char *msg;
 		free(txt);
 	exit(1);
 }
+
+
+void yysetdict(newdict)
+wordtab_t *newdict;
+{
+	if (yysavedepth == sizeof(yysavewords)/sizeof(yysavewords[0])) {
+		fprintf(stderr, "%d: at maximum dictionary depth\n",
+			yylineNum);
+		return;
+	}
+
+	yysavewords[yysavedepth++] = yysettab(newdict);
+	if (yydebug)
+		printf("yysavedepth++ => %d\n", yysavedepth);
+}
+
+void yyresetdict()
+{
+	if (yysavedepth > 0) {
+		yysettab(yysavewords[--yysavedepth]);
+		if (yydebug)
+			printf("yysavedepth-- => %d\n", yysavedepth);
+	}
+}
+
 
 
 #ifdef	TEST_LEXER

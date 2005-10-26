@@ -1,4 +1,4 @@
-/*	$NetBSD: audio.c,v 1.182 2004/01/31 00:07:56 fredb Exp $	*/
+/*	$NetBSD: audio.c,v 1.182.2.1.2.2 2005/06/12 21:28:22 tron Exp $	*/
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: audio.c,v 1.182 2004/01/31 00:07:56 fredb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: audio.c,v 1.182.2.1.2.2 2005/06/12 21:28:22 tron Exp $");
 
 #include "audio.h"
 #if NAUDIO > 0
@@ -2164,8 +2164,10 @@ audiostartp(struct audio_softc *sc)
 		 sc->sc_pr.start, sc->sc_pr.used, sc->sc_pr.usedhigh,
 		 sc->sc_pr.mmapped));
 
-	if (!sc->sc_pr.mmapped && sc->sc_pr.used < sc->sc_pr.blksize)
+	if (!sc->sc_pr.mmapped && sc->sc_pr.used < sc->sc_pr.blksize) {
+		wakeup(&sc->sc_wchan);
 		return 0;
+	}
 
 	if (sc->hw_if->trigger_output)
 		error = sc->hw_if->trigger_output(sc->hw_hdl, sc->sc_pr.start,
@@ -2435,7 +2437,7 @@ audio_rint(void *v)
 		if (cb->outp >= cb->end)
 			cb->outp = cb->start;
 		cb->used -= blksize;
-	} else if (cb->used + blksize >= cb->usedhigh && !cb->copying) {
+	} else if (cb->used + blksize > cb->usedhigh && !cb->copying) {
 		DPRINTFN(1, ("audio_rint: drops %lu\n", cb->drops));
 		cb->drops += blksize;
 		cb->outp += blksize;
@@ -2845,7 +2847,7 @@ int
 audiosetinfo(struct audio_softc *sc, struct audio_info *ai)
 {
 	struct audio_prinfo *r = &ai->record, *p = &ai->play;
-	int cleared;
+	int cleared, pausechange;
 	int s, setmode, modechange = 0;
 	int error;
 	struct audio_hw_if *hw = sc->hw_if;
@@ -2864,6 +2866,7 @@ audiosetinfo(struct audio_softc *sc, struct audio_info *ai)
 	pbus = sc->sc_pbus;
 	error = 0;
 	cleared = 0;
+	pausechange = 0;
 
 	pp = sc->sc_pparams;	/* Temporary encoding storage in */
 	rp = sc->sc_rparams;	/* case setting the modes fails. */
@@ -3089,24 +3092,13 @@ audiosetinfo(struct audio_softc *sc, struct audio_info *ai)
 
 	if (p->pause != (u_char)~0) {
 		sc->sc_pr.pause = p->pause;
-		if (!p->pause && !sc->sc_pbus && (sc->sc_mode & AUMODE_PLAY)) {
-			s = splaudio();
-			error = audiostartp(sc);
-			splx(s);
-			if (error)
-				return error;
-		}
+		pbus = !p->pause;
+		pausechange=1;
 	}
 	if (r->pause != (u_char)~0) {
 		sc->sc_rr.pause = r->pause;
-		if (!r->pause && !sc->sc_rbus &&
-		    (sc->sc_mode & AUMODE_RECORD)) {
-			s = splaudio();
-			error = audiostartr(sc);
-			splx(s);
-			if (error)
-				return error;
-		}
+		rbus = !r->pause;
+		pausechange=1;
 	}
 
 	if (ai->blocksize != ~0) {
@@ -3138,7 +3130,7 @@ audiosetinfo(struct audio_softc *sc, struct audio_info *ai)
 			return (error);
 	}
 
-	if (cleared) {
+	if (cleared || pausechange) {
 		s = splaudio();
 		error = audio_initbufs(sc);
 		if (error) goto err;

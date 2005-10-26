@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.25 2004/03/26 19:05:33 drochner Exp $	*/
+/*	$NetBSD: locore.S,v 1.25.2.2.2.1 2005/03/16 11:49:59 tron Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -524,17 +524,24 @@ try586:	/* Use the `cpuid' instruction. */
 
 	/*
 	 * Calculate the size of the kernel page table directory, and
-	 * how many entries it will have.
+	 * how many entries it will have.  Adjust nkpde to the actual
+	 * kernel size automatically.  Account for the bootstrap tables,
+	 * round up, and add an extra 4MB.
 	 */
+	leal	TABLESIZE+NBPD+PDOFSET(%edi),%eax
+	shrl	$PDSHIFT,%eax
 	movl	RELOC(nkpde),%ecx		# get nkpde
-	cmpl	$NKPTP_MIN,%ecx			# larger than min?
+	cmpl	%ecx,%eax
+	jb	1f
+	movl	%eax,%ecx
+1:	cmpl	$NKPTP_MIN,%ecx			# larger than min?
 	jge	1f
 	movl	$NKPTP_MIN,%ecx			# set at min
 	jmp	2f
 1:	cmpl	$NKPTP_MAX,%ecx			# larger than max?
 	jle	2f
 	movl	$NKPTP_MAX,%ecx
-2:
+2:	movl	%ecx,RELOC(nkpde)
 
 	/* Clear memory for bootstrap tables. */
 	shll	$PGSHIFT,%ecx
@@ -1173,6 +1180,7 @@ ENTRY(copyoutstr)
 	 */
 	movl	$VM_MAXUSER_ADDRESS,%eax
 	subl	%edi,%eax
+	jc	_C_LABEL(copystr_efault)
 	cmpl	%edx,%eax
 	jae	1f
 	movl	%eax,%edx
@@ -1227,6 +1235,7 @@ ENTRY(copyinstr)
 	 */
 	movl	$VM_MAXUSER_ADDRESS,%eax
 	subl	%esi,%eax
+	jc	_C_LABEL(copystr_efault)
 	cmpl	%edx,%eax
 	jae	1f
 	movl	%eax,%edx
@@ -1775,6 +1784,8 @@ ENTRY(cpu_switch)
 	movl	PCB_EBP(%edi),%ebp
 
 	/* Switch TSS. Reset "task busy" flag before loading. */
+	movl	%cr3,%eax
+	movl	%eax,PCB_CR3(%edi)
 #ifdef MULTIPROCESSOR
 	movl	CPUVAR(GDT),%eax
 #else
@@ -1925,6 +1936,9 @@ switch_exited:
 	jnz	switch_restored
 #endif
 
+	/* Switch TSS. Reset "task busy" flag before loading. */
+	movl	%cr3,%eax
+	movl	%eax,PCB_CR3(%esi) /* XXX should be done by pmap_activate? */
 #ifdef MULTIPROCESSOR
 	movl	CPUVAR(GDT),%eax
 #else	
@@ -1933,7 +1947,6 @@ switch_exited:
 #endif
 	movl	L_MD_TSS_SEL(%edi),%edx
 
-	/* Switch TSS. Reset "task busy" flag before loading. */
 	andl	$~0x0200,4(%eax,%edx, 1)
 	ltr	%dx
 
@@ -2078,7 +2091,9 @@ ENTRY(cpu_exit)
 	movl	PCB_ESP(%esi),%esp
 	movl	PCB_EBP(%esi),%ebp
 
-	/* Load TSS info. */
+	/* Switch TSS. Reset "task busy" flag before loading. */
+	movl	%cr3,%eax
+	movl	%eax,PCB_CR3(%esi)
 #ifdef MULTIPROCESSOR
 	movl	CPUVAR(GDT),%eax
 #else	
@@ -2086,7 +2101,6 @@ ENTRY(cpu_exit)
 	movl	_C_LABEL(gdt),%eax
 #endif
 
-	/* Switch TSS. */
 	andl	$~0x0200,4-SEL_KPL(%eax,%edx,1)
 	ltr	%dx
 

@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.100 2004/01/30 08:44:11 lukem Exp $
+# $NetBSD: mi,v 1.100.2.2 2004/09/10 02:56:52 jmc Exp $
 ./etc/mtree/set.misc				misc-sys-root
 ./usr/share/dict/README				misc-reference-share	share
 ./usr/share/dict/eign				misc-reference-share	share

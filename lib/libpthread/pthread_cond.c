@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_cond.c,v 1.14 2003/11/24 23:54:13 cl Exp $	*/
+/*	$NetBSD: pthread_cond.c,v 1.14.2.2.2.1 2005/04/08 21:57:47 tron Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_cond.c,v 1.14 2003/11/24 23:54:13 cl Exp $");
+__RCSID("$NetBSD: pthread_cond.c,v 1.14.2.2.2.1 2005/04/08 21:57:47 tron Exp $");
 
 #include <errno.h>
 #include <sys/time.h>
@@ -145,15 +145,14 @@ pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
 	pthread__block(self, &cond->ptc_lock);
 	/* Spinlock is unlocked on return */
 	pthread_mutex_lock(mutex);
-	if (__predict_false(self->pt_cancel)) {
 #ifdef ERRORCHECK
-		pthread_spinlock(self, &cond->ptc_lock);
-		if (PTQ_EMPTY(&cond->ptc_waiters))
-			cond->ptc_mutex = NULL;
-		pthread_spinunlock(self, &cond->ptc_lock);
+	pthread_spinlock(self, &cond->ptc_lock);
+	if (PTQ_EMPTY(&cond->ptc_waiters))
+		cond->ptc_mutex = NULL;
+	pthread_spinunlock(self, &cond->ptc_lock);
 #endif		
+	if (__predict_false(self->pt_cancel))
 		pthread_exit(PTHREAD_CANCELED);
-	}
 
 	SDPRINTF(("(cond wait %p) Woke up on %p, mutex %p\n",
 	    self, cond, mutex));
@@ -236,15 +235,14 @@ pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
 	SDPRINTF(("(cond timed wait %p) %s\n",
 	    self, (retval == ETIMEDOUT) ? "(timed out)" : ""));
 	pthread_mutex_lock(mutex);
-	if (__predict_false(self->pt_cancel)) {
 #ifdef ERRORCHECK
-		pthread_spinlock(self, &cond->ptc_lock);
-		if (PTQ_EMPTY(&cond->ptc_waiters))
-			cond->ptc_mutex = NULL;
-		pthread_spinunlock(self, &cond->ptc_lock);
+	pthread_spinlock(self, &cond->ptc_lock);
+	if (PTQ_EMPTY(&cond->ptc_waiters))
+		cond->ptc_mutex = NULL;
+	pthread_spinunlock(self, &cond->ptc_lock);
 #endif		
+	if (__predict_false(self->pt_cancel))
 		pthread_exit(PTHREAD_CANCELED);
-	}
 
 	return retval;
 }
@@ -374,7 +372,11 @@ pthread_cond_wait_nothread(pthread_t self, pthread_mutex_t *mutex,
 		tvp = &tv;
 		gettimeofday(&now, NULL);
 		TIMESPEC_TO_TIMEVAL(tvp, abstime);
-		timersub(tvp, &now, tvp);
+
+		if  (timercmp(tvp, &now, <))
+			timerclear(tvp);
+		else
+			timersub(tvp, &now, tvp);
 	}
 
 	/*
@@ -392,5 +394,6 @@ pthread_cond_wait_nothread(pthread_t self, pthread_mutex_t *mutex,
 	if (retval == 0)
 		return ETIMEDOUT;
 	else
-		return EINTR;
+		/* spurious wakeup */
+		return 0;
 }

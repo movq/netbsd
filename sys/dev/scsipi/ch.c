@@ -1,4 +1,4 @@
-/*	$NetBSD: ch.c,v 1.58 2003/09/08 01:27:08 mycroft Exp $	*/
+/*	$NetBSD: ch.c,v 1.58.2.2 2004/09/11 12:51:07 he Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 1999 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ch.c,v 1.58 2003/09/08 01:27:08 mycroft Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ch.c,v 1.58.2.2 2004/09/11 12:51:07 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -579,13 +579,6 @@ ch_interpret_sense(xs)
 		 */
 		if ((xs->xs_control & XS_CTL_IGNORE_MEDIA_CHANGE) == 0)
 			ch_event(sc, CHEV_ELEMENT_STATUS_CHANGED);
-		if ((periph->periph_flags & PERIPH_OPEN) == 0) {
-			/*
-			 * if the device is not yet open, we can ignore this
-			 * information.
-			 */
-			return (0);
-		}
 		break;
 	default:
 		break;
@@ -647,7 +640,7 @@ ch_move(sc, cm)
 	/*
 	 * Send command to changer.
 	 */
-	return (scsipi_command(sc->sc_periph,
+	return (scsipi_command(sc->sc_periph, NULL,
 	    (struct scsipi_generic *)&cmd, sizeof(cmd), NULL, 0, CHRETRIES,
 	    100000, NULL, 0));
 }
@@ -704,7 +697,7 @@ ch_exchange(sc, ce)
 	/*
 	 * Send command to changer.
 	 */
-	return (scsipi_command(sc->sc_periph,
+	return (scsipi_command(sc->sc_periph, NULL,
 	    (struct scsipi_generic *)&cmd, sizeof(cmd), NULL, 0, CHRETRIES,
 	    100000, NULL, 0));
 }
@@ -743,7 +736,7 @@ ch_position(sc, cp)
 	/*
 	 * Send command to changer.
 	 */
-	return (scsipi_command(sc->sc_periph,
+	return (scsipi_command(sc->sc_periph, NULL,
 	    (struct scsipi_generic *)&cmd, sizeof(cmd), NULL, 0, CHRETRIES,
 	    100000, NULL, 0));
 }
@@ -1091,7 +1084,7 @@ ch_getelemstatus(sc, first, count, data, datalen, scsiflags, flags)
 	/*
 	 * Send command to changer.
 	 */
-	return (scsipi_command(sc->sc_periph,
+	return (scsipi_command(sc->sc_periph, NULL,
 	    (struct scsipi_generic *)&cmd, sizeof(cmd),
 	    (u_char *)data, datalen, CHRETRIES, 100000, NULL,
 	    scsiflags | XS_CTL_DATA_IN));
@@ -1159,7 +1152,7 @@ ch_setvoltag(sc, csvr)
 	/*
 	 * Send command to changer.
 	 */
-	return (scsipi_command(sc->sc_periph,
+	return (scsipi_command(sc->sc_periph, NULL,
 	    (struct scsipi_generic *)&cmd, sizeof(cmd),
 	    (u_char *)data, datalen, CHRETRIES, 100000, NULL,
 	    datalen ? XS_CTL_DATA_OUT | XS_CTL_DATA_ONSTACK : 0));
@@ -1197,7 +1190,7 @@ ch_ielem(sc)
 	tmo *= 5 * 60 * 1000;
 	tmo += (10 * 60 * 1000);
 
-	return (scsipi_command(sc->sc_periph,
+	return (scsipi_command(sc->sc_periph, NULL,
 	    (struct scsipi_generic *)&cmd, sizeof(cmd),
 	    NULL, 0, CHRETRIES, tmo, NULL, XS_CTL_IGNORE_ILLEGAL_REQUEST));
 }

@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.hostprog.mk,v 1.41 2004/01/29 01:48:45 lukem Exp $
+#	$NetBSD: bsd.hostprog.mk,v 1.41.2.2 2004/06/22 07:30:28 tron Exp $
 #	@(#)bsd.prog.mk	8.2 (Berkeley) 4/2/94
 
 .include <bsd.init.mk>
@@ -29,6 +29,7 @@ LIBKRB?=	/usr/lib/libkrb.a
 LIBKVM?=	/usr/lib/libkvm.a
 LIBL?=		/usr/lib/libl.a
 LIBM?=		/usr/lib/libm.a
+LIBMAGIC?=	/usr/lib/libmagic.a
 LIBMENU?=	/usr/lib/libmenu.a
 LIBMP?=		/usr/lib/libmp.a
 LIBNTP?=	/usr/lib/libntp.a
@@ -111,3 +112,21 @@ lint: ${LOBJS}
 .include <bsd.dep.mk>
 
 ${TARGETS}:	# ensure existence
+
+# Override YACC/LEX rules so nbtool_config.h can be forced as the 1st include
+.l.c:
+	${_MKTARGET_LEX}
+	${LEX.l} -o${.TARGET} ${.IMPSRC}
+	echo '#if HAVE_NBTOOL_CONFIG_H' > ${.TARGET}.1
+	echo '#include "nbtool_config.h"' >> ${.TARGET}.1
+	echo '#endif' >> ${.TARGET}.1
+	cat ${.TARGET} >> ${.TARGET}.1
+	mv ${.TARGET}.1 ${.TARGET}
+.y.c:
+	${_MKTARGET_YACC}
+	${YACC.y} -o ${.TARGET} ${.IMPSRC}
+	echo '#if HAVE_NBTOOL_CONFIG_H' > ${.TARGET}.1
+	echo '#include "nbtool_config.h"' >> ${.TARGET}.1
+	echo '#endif' >> ${.TARGET}.1
+	cat ${.TARGET} >> ${.TARGET}.1
+	mv ${.TARGET}.1 ${.TARGET}

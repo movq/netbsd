@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_icmp.c,v 1.82 2004/03/24 15:34:54 atatat Exp $	*/
+/*	$NetBSD: ip_icmp.c,v 1.82.2.2 2004/08/03 22:37:09 jmc Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -101,7 +101,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_icmp.c,v 1.82 2004/03/24 15:34:54 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_icmp.c,v 1.82.2.2 2004/08/03 22:37:09 jmc Exp $");
 
 #include "opt_ipsec.h"
 
@@ -151,6 +151,8 @@ int	icmpmaskrepl = 0;
 int	icmpprintfs = 0;
 #endif
 int	icmpreturndatabytes = 8;
+
+struct icmpstat	icmpstat;
 
 /*
  * List of callbacks to notify when Path MTU changes are made.
@@ -671,7 +673,8 @@ icmp_reflect(m)
 	INADDR_TO_IA(t, ia);
 
 	/* look for packet sent to broadcast address */
-	if (ia == NULL && (m->m_pkthdr.rcvif->if_flags & IFF_BROADCAST)) {
+	if (ia == NULL && m->m_pkthdr.rcvif &&
+	    (m->m_pkthdr.rcvif->if_flags & IFF_BROADCAST)) {
 		TAILQ_FOREACH(ifa, &m->m_pkthdr.rcvif->if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family != AF_INET)
 				continue;
@@ -693,7 +696,7 @@ icmp_reflect(m)
 	 * use that, if it's an address on the interface which
 	 * received the packet
 	 */
-	if (sin == (struct sockaddr_in *)0) {
+	if (sin == (struct sockaddr_in *)0 && m->m_pkthdr.rcvif) {
 		struct sockaddr_in sin_dst;
 		struct route icmproute;
 		int errornum;
@@ -728,7 +731,7 @@ icmp_reflect(m)
 	 * interface.  This can happen when routing is asymmetric, or
 	 * when the incoming packet was encapsulated
 	 */
-	if (sin == (struct sockaddr_in *)0) {
+	if (sin == (struct sockaddr_in *)0 && m->m_pkthdr.rcvif) {
 		TAILQ_FOREACH(ifa, &m->m_pkthdr.rcvif->if_addrlist, ifa_list) {
 			if (ifa->ifa_addr->sa_family != AF_INET)
 				continue;
@@ -841,7 +844,8 @@ icmp_reflect(m)
 	/*      
 	 * Clear any in-bound checksum flags for this packet.
 	 */
-	m->m_pkthdr.csum_flags = 0;
+	if (m->m_flags & M_PKTHDR)
+		m->m_pkthdr.csum_flags = 0;
 
 	icmp_send(m, opts);
 done:
@@ -970,38 +974,47 @@ SYSCTL_SETUP(sysctl_net_inet_icmp_setup, "sysctl net.inet.icmp subtree setup")
 		       CTL_NET, PF_INET, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "icmp", NULL,
+		       CTLTYPE_NODE, "icmp",
+		       SYSCTL_DESCR("ICMPv4 related settings"),
 		       NULL, 0, NULL, 0,
 		       CTL_NET, PF_INET, IPPROTO_ICMP, CTL_EOL);
 
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "maskrepl", NULL,
+		       CTLTYPE_INT, "maskrepl",
+		       SYSCTL_DESCR("Respond to ICMP_MASKREQ messages"),
 		       NULL, 0, &icmpmaskrepl, 0,
 		       CTL_NET, PF_INET, IPPROTO_ICMP,
 		       ICMPCTL_MASKREPL, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "returndatabytes", NULL,
+		       CTLTYPE_INT, "returndatabytes",
+		       SYSCTL_DESCR("Number of bytes to return in an ICMP "
+				    "error message"),
 		       sysctl_net_inet_icmp_returndatabytes, 0,
 		       &icmpreturndatabytes, 0,
 		       CTL_NET, PF_INET, IPPROTO_ICMP,
 		       ICMPCTL_RETURNDATABYTES, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "errppslimit", NULL,
+		       CTLTYPE_INT, "errppslimit",
+		       SYSCTL_DESCR("Maximum number of outgoing ICMP error "
+				    "messages per second"),
 		       NULL, 0, &icmperrppslim, 0,
 		       CTL_NET, PF_INET, IPPROTO_ICMP,
 		       ICMPCTL_ERRPPSLIMIT, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "rediraccept", NULL,
+		       CTLTYPE_INT, "rediraccept",
+		       SYSCTL_DESCR("Accept ICMP_REDIRECT messages"),
 		       NULL, 0, &icmp_rediraccept, 0,
 		       CTL_NET, PF_INET, IPPROTO_ICMP,
 		       ICMPCTL_REDIRACCEPT, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "redirtimeout", NULL,
+		       CTLTYPE_INT, "redirtimeout",
+		       SYSCTL_DESCR("Lifetime of ICMP_REDIRECT generated "
+				    "routes"),
 		       sysctl_net_inet_icmp_redirtimeout, 0,
 		       &icmp_redirtimeout, 0,
 		       CTL_NET, PF_INET, IPPROTO_ICMP,

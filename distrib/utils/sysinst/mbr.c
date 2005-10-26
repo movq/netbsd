@@ -1,4 +1,4 @@
-/*	$NetBSD: mbr.c,v 1.61 2004/03/27 20:47:33 dsl Exp $ */
+/*	$NetBSD: mbr.c,v 1.61.2.1.2.1 2005/07/24 02:25:24 snj Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -106,13 +106,16 @@ struct part_id {
 	{MBR_PTYPE_FAT32L,	"Windows FAT32, LBA"},
 	{MBR_PTYPE_NTFSVOL,	"NTFS volume set"},
 	{MBR_PTYPE_NTFS,	"NTFS"},
+#ifdef MBR_PTYPE_SOLARIS
+	{MBR_PTYPE_SOLARIS,	"Solaris"},
+#endif
 	{-1,			"Unknown"},
 };
 
 static int get_mapping(struct mbr_partition *, int, int *, int *, int *,
 			    unsigned long *);
-static void convert_mbr_chs(int, int, int, u_int8_t *, u_int8_t *,
-				 u_int8_t *, u_int32_t);
+static void convert_mbr_chs(int, int, int, uint8_t *, uint8_t *,
+				 uint8_t *, uint32_t);
 
 /*
  * Notes on the extended partition editor.
@@ -373,7 +376,8 @@ set_mbr_type(menudesc *m, void *arg)
 		if (ombri->bootsec == mbri->sector + mbrp->mbrp_start)
 			ombri->bootsec = 0;
 				
-		memset(mbri->nametab[opt], 0, sizeof mbri->nametab[opt]);
+		memset(mbri->mbrb.mbrbs_nametab[opt], 0,
+		    sizeof mbri->mbrb.mbrbs_nametab[opt]);
 #endif
 		if (mbri->sector == 0) {
 			/* A main partition */
@@ -484,8 +488,8 @@ edit_mbr_type(menudesc *m, void *arg)
 			type_opts[i].opt_action = set_mbr_type;
 		}
 		type_menu = new_menu(NULL, type_opts, nelem(type_opts),
-			15, 12, 0, 30,
-			MC_SCROLL | MC_NOEXITOPT | MC_NOCLEAR,
+			13, 12, 0, 30,
+			MC_SUBMENU | MC_SCROLL | MC_NOEXITOPT | MC_NOCLEAR,
 			NULL, set_type_label, NULL,
 			NULL, NULL);
 	}
@@ -721,11 +725,11 @@ edit_mbr_size(menudesc *m, void *arg)
 				/* Round end to cylinder boundary */
 				if (sizemult != 1) {
 					new *= sizemult;
-					new += ROUNDDOWN(start, bcylsize);
-					new = ROUNDUP(new, bcylsize);
+					new += ROUNDDOWN(start,current_cylsize);
+					new = ROUNDUP(new, current_cylsize);
 					new -= start;
 					while (new <= 0)
-						new += bcylsize;
+						new += current_cylsize;
 				}
 			}
 		}
@@ -894,15 +898,14 @@ edit_mbr_bootmenu(menudesc *m, void *arg)
 		opt = 0;
 
 	msg_prompt_win(/* XXX translate? */ "bootmenu", -1, 18, 0, 0,
-		mbri->nametab[opt],
-		mbri->nametab[opt], sizeof mbri->nametab[opt]);
-	if (mbri->nametab[opt][0] == ' ')
-		mbri->nametab[opt][0] = 0;
-	if (mbri->nametab[opt][0] == 0) {
-		if (ombri->bootsec == mbri->sector + mbrp->mbrp_start)
-			ombri->bootsec = 0;
-		return 0;
-	}
+		mbri->mbrb.mbrbs_nametab[opt],
+		mbri->mbrb.mbrbs_nametab[opt],
+		sizeof mbri->mbrb.mbrbs_nametab[opt]);
+	if (mbri->mbrb.mbrbs_nametab[opt][0] == ' ')
+		mbri->mbrb.mbrbs_nametab[opt][0] = 0;
+	if (mbri->mbrb.mbrbs_nametab[opt][0] == 0
+	    && ombri->bootsec == mbri->sector + mbrp->mbrp_start)
+		ombri->bootsec = 0;
 	return 0;
 }
 
@@ -954,7 +957,7 @@ edit_mbr_entry(menudesc *m, void *arg)
 	if (ptn_menu == -1)
 		ptn_menu = new_menu(NULL, ptn_opts, nelem(ptn_opts),
 			15, 6, 0, 50,
-			MC_SCROLL | MC_NOCLEAR,
+			MC_SUBMENU | MC_SCROLL | MC_NOCLEAR,
 			set_ptn_header, set_ptn_label, NULL,
 			NULL, MSG_Partition_OK);
 	if (ptn_menu == -1)
@@ -1015,7 +1018,8 @@ set_ptn_label(menudesc *m, int line, void *arg)
 		break;
 #ifdef BOOTSEL
 	case PTN_OPT_BOOTMENU:
-		wprintw(m->mw, msg_string(MSG_bootmenu), mbri->nametab[opt]);
+		wprintw(m->mw, msg_string(MSG_bootmenu),
+		    mbri->mbrb.mbrbs_nametab[opt]);
 		break;
 	case PTN_OPT_BOOTDEFAULT:
 		wprintw(m->mw, msg_string(MSG_boot_dflt),
@@ -1068,10 +1072,10 @@ set_ptn_header(menudesc *m, void *arg)
 	DISABLE(PTN_OPT_BOOTMENU, MBR_IS_EXTENDED(typ) || typ == 0);
 
 	if (typ == 0)
-		mbri->nametab[opt][0] = 0;
+		mbri->mbrb.mbrbs_nametab[opt][0] = 0;
 
 	/* Only partitions with bootmenu names can be made the default */
-	DISABLE(PTN_OPT_BOOTDEFAULT, mbri->nametab[opt][0] == 0);
+	DISABLE(PTN_OPT_BOOTDEFAULT, mbri->mbrb.mbrbs_nametab[opt][0] == 0);
 #endif
 #undef DISABLE
 }
@@ -1118,7 +1122,7 @@ set_mbr_label(menudesc *m, int opt, void *arg)
 	} else
 		wprintw(m->mw, " %.*s", len, name);
 #ifdef BOOTSEL
-	if (mbri->nametab[opt][0] != 0) {
+	if (mbri->mbrb.mbrbs_nametab[opt][0] != 0) {
 		int x, y;
 		if (opt >= MBR_PART_COUNT)
 			opt = 0;
@@ -1127,7 +1131,8 @@ set_mbr_label(menudesc *m, int opt, void *arg)
 			x = 52;
 			wmove(m->mw, y, x);
 		}
-		wprintw(m->mw, "%*s %s", 53 - x, "", mbri->nametab[opt]);
+		wprintw(m->mw, "%*s %s", 53 - x, "",
+		    mbri->mbrb.mbrbs_nametab[opt]);
 	}
 #endif
 }
@@ -1249,7 +1254,7 @@ edit_mbr(mbr_info_t *mbri)
 		}
 		memset(part, 0, MBR_PART_COUNT * sizeof *part);
 #ifdef BOOTSEL
-		memset(&mbri->nametab, 0, sizeof mbri->nametab);
+		memset(&mbri->mbrb, 0, sizeof mbri->mbrb);
 #endif
 		part[0].mbrp_type = MBR_PTYPE_NETBSD;
 		part[0].mbrp_size = dlsize - bsec;
@@ -1268,9 +1273,9 @@ edit_mbr(mbr_info_t *mbri)
 	if (mbr_menu == -1)
 		return 0;
 
-	/* Ask for sizes, which partitions, ... */
-	sizemult = MEG / sectorsize;
-	ask_sizemult(bcylsize);
+	/* Default to MB, and use bios geometry for cylinder size */
+	set_sizemultname_meg();
+	current_cylsize = bhead * bsec;
 
 	for (;;) {
 		ptstart = 0;
@@ -1403,20 +1408,19 @@ read_mbr(const char *disk, mbr_info_t *mbri)
 		}
 #if BOOTSEL
 		if (mbrs->mbr_bootsel_magic == htole16(MBR_MAGIC)) {
-			/* old bootsel, move to new location */
-			memmove(&mbrs->mbr_bootsel,
-				(u_int8_t *)&mbrs->mbr_bootsel + 4,
-				sizeof mbrs->mbr_bootsel);
-			mbrs->mbr_bootsel_magic = htole16(MBR_BS_MAGIC);
-			mbrs->mbr_bootsel.mbrbs_flags &= ~MBR_BS_NEWMBR;
-		}
-		if (mbrs->mbr_bootsel_magic == htole16(MBR_BS_MAGIC)) {
+			/* old bootsel, grab bootsel info */
+			mbri->mbrb = *(struct mbr_bootsel *)
+				((uint8_t *)mbrs + MBR_BS_OLD_OFFSET);
 			if (ext_base == 0)
-				bootkey = mbrs->mbr_bootsel.mbrbs_defkey
-					    - SCAN_1;
-			memcpy(mbri->nametab, mbrs->mbr_bootsel.mbrbs_nametab,
-				sizeof mbri->nametab);
+				bootkey = mbri->mbrb.mbrbs_defkey - SCAN_1;
+		} else if (mbrs->mbr_bootsel_magic == htole16(MBR_BS_MAGIC)) {
+			/* new location */
+			mbri->mbrb = mbrs->mbr_bootsel;
+			if (ext_base == 0)
+				bootkey = mbri->mbrb.mbrbs_defkey - SCAN_1;
 		}
+		/* Save original flags for mbr code update tests */
+		mbri->oflags = mbri->mbrb.mbrbs_flags;
 #endif
 		mbri->sector = next_ext + ext_base;
 		next_ext = 0;
@@ -1444,7 +1448,8 @@ read_mbr(const char *disk, mbr_info_t *mbri)
 #endif
 			}
 #if BOOTSEL
-			if (mbri->nametab[i][0] != 0 && bootkey-- == 0)
+			if (mbri->mbrb.mbrbs_nametab[i][0] != 0
+			    && bootkey-- == 0)
 				ombri->bootsec = mbri->sector +
 							mbrp->mbrp_start;
 #endif
@@ -1486,7 +1491,7 @@ read_mbr(const char *disk, mbr_info_t *mbri)
 			ext_base = next_ext;
 			next_ext = 0;
 		}
-		ext = malloc(sizeof *ext);
+		ext = calloc(sizeof *ext, 1);
 		if (!ext)
 			break;
 		mbrs = &ext->mbr;
@@ -1511,7 +1516,10 @@ write_mbr(const char *disk, mbr_info_t *mbri, int convert)
 	int fd, i, ret = 0;
 	struct mbr_partition *mbrp;
 	u_int32_t pstart, psize;
-	struct mbr_sector *mbrs, mbrsec;
+#ifdef BOOTSEL
+	struct mbr_sector *mbrs;
+#endif
+	struct mbr_sector mbrsec;
 	mbr_info_t *ext;
 	uint sector;
 
@@ -1525,26 +1533,37 @@ write_mbr(const char *disk, mbr_info_t *mbri, int convert)
 	 * If the main boot code (appears to) contain the netbsd bootcode,
 	 * copy in all the menu strings and set the default keycode
 	 * to be that for the default partition.
+	 * Unfortunately we can't rely on the user having actually updated
+	 * to the new mbr code :-(
 	 */
-	if (mbri->mbr.mbr_bootsel_magic == htole16(MBR_BS_MAGIC)) {
+	if (mbri->mbr.mbr_bootsel_magic == htole16(MBR_BS_MAGIC)
+	    || mbri->mbr.mbr_bootsel_magic == htole16(MBR_MAGIC)) {
 		int8_t key = SCAN_1;
-		mbri->mbr.mbr_bootsel.mbrbs_defkey = SCAN_ENTER;
+		uint offset = MBR_BS_OFFSET;
+		if (mbri->mbr.mbr_bootsel_magic == htole16(MBR_MAGIC))
+			offset = MBR_BS_OLD_OFFSET;
+		mbri->mbrb.mbrbs_defkey = SCAN_ENTER;
+		if (mbri->mbrb.mbrbs_timeo == 0)
+			mbri->mbrb.mbrbs_timeo = 182;	/* 10 seconds */
 		for (ext = mbri; ext != NULL; ext = ext->extended) {
 			mbrs = &ext->mbr;
 			mbrp = &mbrs->mbr_parts[0];
 			/* Ensure marker is set in each sector */
-			mbrs->mbr_bootsel_magic = htole16(MBR_BS_MAGIC);
-			/* and copy in menu strings */
-			memcpy(&mbrs->mbr_bootsel.mbrbs_nametab, &ext->nametab,
-			    sizeof mbrs->mbr_bootsel.mbrbs_nametab);
+			mbrs->mbr_bootsel_magic = mbri->mbr.mbr_bootsel_magic;
+			/* and copy in bootsel parameters */
+			*(struct mbr_bootsel *)((uint8_t *)mbrs + offset) =
+								    ext->mbrb;
 			for (i = 0; i < MBR_PART_COUNT; i++) {
-				if (ext->nametab[i][0] == 0)
+				if (ext->mbrb.mbrbs_nametab[i][0] == 0)
 					continue;
 				if (ext->sector + pstart == mbri->bootsec)
-					mbri->mbr.mbr_bootsel.mbrbs_defkey = key;
+					mbri->mbrb.mbrbs_defkey = key;
 				key++;
 			}
 		}
+		/* copy main data (again) since we've put the 'key' in */
+		*(struct mbr_bootsel *)((uint8_t *)&mbri->mbr + offset) =
+								    mbri->mbrb;
 	}
 #endif
 
@@ -1606,8 +1625,8 @@ valid_mbr(struct mbr_sector *mbrs)
 
 static void
 convert_mbr_chs(int cyl, int head, int sec,
-		u_int8_t *cylp, u_int8_t *headp, u_int8_t *secp,
-		u_int32_t relsecs)
+		uint8_t *cylp, uint8_t *headp, uint8_t *secp,
+		uint32_t relsecs)
 {
 	unsigned int tcyl, temp, thead, tsec;
 
@@ -1673,10 +1692,10 @@ guess_biosgeom_from_mbr(mbr_info_t *mbri, int *cyl, int *head, int *sec)
 	for (i = 0; i < MBR_PART_COUNT * 2 - 1; i++) {
 		if (get_mapping(parts, i, &c1, &h1, &s1, &a1) < 0)
 			continue;
+		a1 -= s1;
 		for (j = i + 1; j < MBR_PART_COUNT * 2; j++) {
 			if (get_mapping(parts, j, &c2, &h2, &s2, &a2) < 0)
 				continue;
-			a1 -= s1;
 			a2 -= s2;
 			num = (uint64_t)h1 * a2 - (quad_t)h2 * a1;
 			denom = (uint64_t)c2 * a1 - (quad_t)c1 * a2;

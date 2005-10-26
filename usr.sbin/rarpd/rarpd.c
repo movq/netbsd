@@ -1,4 +1,4 @@
-/*	$NetBSD: rarpd.c,v 1.49 2003/07/13 12:29:20 itojun Exp $	*/
+/*	$NetBSD: rarpd.c,v 1.49.2.2 2004/05/22 13:21:36 he Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -28,7 +28,7 @@ __COPYRIGHT(
 #endif /* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: rarpd.c,v 1.49 2003/07/13 12:29:20 itojun Exp $");
+__RCSID("$NetBSD: rarpd.c,v 1.49.2.2 2004/05/22 13:21:36 he Exp $");
 #endif
 
 
@@ -96,7 +96,7 @@ struct if_info *iflist;
 u_int32_t choose_ipaddr(u_int32_t **, u_int32_t, u_int32_t);
 void	debug(const char *,...)
 	__attribute__((__format__(__printf__, 1, 2)));
-void	init_all(void);
+void	init_some(char *name);
 void	init_one(char *, u_int32_t);
 u_int32_t	ipaddrtonetmask(u_int32_t);
 void	lookup_eaddr(char *, u_char *);
@@ -175,10 +175,10 @@ main(int argc, char **argv)
 	}
 
 	if (aflag)
-		init_all();
+		init_some(NULL);
 	else {
 		while (argc--)
-			init_one(*argv++, INADDR_ANY);
+			init_some(*argv++);
 	}
 
 	rarp_loop();
@@ -239,7 +239,7 @@ init_one(char *ifname, u_int32_t ipaddr)
  * point to point.
  */
 void
-init_all(void)
+init_some(char *name)
 {
 	struct ifaddrs *ifap, *ifa, *p;
 
@@ -252,6 +252,8 @@ init_all(void)
 	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
 #define SIN(s)	((struct sockaddr_in *) (s))
 		if (ifa->ifa_addr->sa_family != AF_INET)
+			continue;
+		if (name && strcmp(name, ifa->ifa_name))
 			continue;
 		if (p && !strcmp(p->ifa_name, ifa->ifa_name) &&
 		    SIN(p->ifa_addr)->sin_addr.s_addr == SIN(ifa->ifa_addr)->sin_addr.s_addr)
@@ -304,6 +306,7 @@ rarp_open(char *device)
 	struct ifreq ifr;
 	u_int   dlt;
 	int     immediate;
+	u_int	bufsize;
 
 	static struct bpf_insn insns[] = {
 		BPF_STMT(BPF_LD | BPF_H | BPF_ABS, 12),
@@ -328,6 +331,11 @@ rarp_open(char *device)
 	if (ioctl(fd, BIOCIMMEDIATE, &immediate) < 0) {
 		rarperr(FATAL, "BIOCIMMEDIATE: %s", strerror(errno));
 		/* NOTREACHED */
+	}
+	/* Set a 32k buffer size for kernel use */
+	bufsize = 32768;
+	if (ioctl(fd, BIOCSBLEN, &bufsize) < 0) {
+		rarperr(NONFATAL, "BIOCSBLEN:%d: %s", bufsize, strerror(errno));
 	}
 	(void)strncpy(ifr.ifr_name, device, sizeof ifr.ifr_name - 1);
 	ifr.ifr_name[sizeof ifr.ifr_name - 1] = '\0';

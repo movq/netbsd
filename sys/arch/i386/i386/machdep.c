@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.552 2004/03/24 15:34:49 atatat Exp $	*/
+/*	$NetBSD: machdep.c,v 1.552.2.3 2004/08/16 17:46:05 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.552 2004/03/24 15:34:49 atatat Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.552.2.3 2004/08/16 17:46:05 jmc Exp $");
 
 #include "opt_beep.h"
 #include "opt_compat_ibcs2.h"
@@ -469,10 +469,12 @@ sysctl_machdep_diskinfo(SYSCTLFN_ARGS)
 	struct sysctlnode node;
 
 	node = *rnode;
+	if (!i386_alldisks)
+		return(EOPNOTSUPP);
 	node.sysctl_data = i386_alldisks;
 	node.sysctl_size = sizeof(struct disklist) +
 	    (i386_ndisks - 1) * sizeof(struct nativedisk_info);
-        return (sysctl_lookup(SYSCTLFN_CALL(&node)));
+	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 }
 
 /*
@@ -957,7 +959,7 @@ reserve_dumppages(vaddr_t p)
 void
 dumpsys()
 {
-	u_long totalbytesleft, bytes, i, n, memseg;
+	u_long totalbytesleft, bytes, i, n, m, memseg;
 	u_long maddr;
 	int psize;
 	daddr_t blkno;
@@ -1023,8 +1025,9 @@ dumpsys()
 			if (n > BYTES_PER_DUMP)
 				n = BYTES_PER_DUMP;
 
-			(void) pmap_map(dumpspace, maddr, maddr + n,
-			    VM_PROT_READ);
+			for (m = 0; m < n; m += NBPG)
+				pmap_kenter_pa(dumpspace + m, maddr + m,
+				    VM_PROT_READ);
 
 			error = (*dump)(dumpdev, blkno, (caddr_t)dumpspace, n);
 			if (error)
@@ -2032,6 +2035,7 @@ lookup_bootinfo(int type)
 void
 cpu_reset()
 {
+	struct region_descriptor region;
 
 	disable_intr();
 
@@ -2057,6 +2061,8 @@ cpu_reset()
 	 * invalid and causing a fault.
 	 */
 	memset((caddr_t)idt, 0, NIDT * sizeof(idt[0]));
+	setregion(&region, idt, NIDT * sizeof(idt[0]) - 1);
+        lidt(&region);
 	__asm __volatile("divl %0,%1" : : "q" (0), "a" (0));
 
 #if 0

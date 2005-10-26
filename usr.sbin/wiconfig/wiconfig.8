@@ -1,4 +1,4 @@
-.\"	$NetBSD: wiconfig.8,v 1.27 2003/04/16 12:43:43 wiz Exp $
+.\"	$NetBSD: wiconfig.8,v 1.27.2.2 2004/08/30 08:33:12 tron Exp $
 .\"
 .\" Copyright (c) 1997, 1998, 1999
 .\"	Bill Paul <wpaul@ctr.columbia.edu> All rights reserved.
@@ -32,7 +32,7 @@
 .\"
 .\"	From: wicontrol.8,v 1.6 1999/05/22 16:12:47 wpaul Exp $
 .\"
-.Dd March 31, 2003
+.Dd August 25, 2004
 .Dt WICONFIG 8
 .Os
 .Sh NAME
@@ -42,6 +42,9 @@
 .Nm wiconfig
 .Ar interface
 .Op Fl \&Do
+.Bk -words
+.Op Fl A Ar 1|2
+.Ek
 .Bk -words
 .Op Fl a Ar access point density
 .Ek
@@ -104,6 +107,14 @@ interface.
 The options are as follows:
 .Pp
 .Bl -tag -width Fl
+.It Fl A Ar 1|2
+Set the authentication type for a specified interface.
+Permitted values are
+.Ar 1
+(Open System Authentication) or
+.Ar 2
+(Shared Key Authentication).
+The default is 1.
 .It Fl a Ar access_point_density
 Specify the
 .Ar access point density

@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL_LAPTOP,v 1.57 2004/02/16 17:11:27 wiz Exp $
+#	$NetBSD: INSTALL_LAPTOP,v 1.57.2.5.2.1 2005/04/02 21:29:53 he Exp $
 #
 #	INSTALL - Installation kernel.
 #
@@ -70,6 +70,7 @@ options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 
 options 	USERCONF	# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
+#options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 options 	MALLOC_NOINLINE		# Not inlining MALLOC saves memory
 
 # Diagnostic/debugging support options
@@ -349,10 +350,12 @@ aceride* 	at pci? dev ? function ?	# Acer Lab IDE controllers
 artsata*	at pci? dev ? function ?	# Intel i31244 SATA controller
 cmdide* 	at pci? dev ? function ?	# CMD tech IDE controllers
 cypide* 	at pci? dev ? function ?	# Cypress IDE controllers
+#geodeide* 	at pci? dev ? function ?	# AMD Geode IDE controllers
 hptide* 	at pci? dev ? function ?	# Triones/HighPoint IDE controllers
 optiide* 	at pci? dev ? function ?	# Opti IDE controllers
 piixide* 	at pci? dev ? function ?	# Intel IDE controllers
 pdcide* 	at pci? dev ? function ?	# Promise IDE controllers
+pdcsata*	at pci? dev ? function ?	# Promise SATA150 controllers
 satalink*	at pci? dev ? function ?	# SiI SATALink controllers
 siside* 	at pci? dev ? function ?	# SiS IDE controllers
 slide* 		at pci? dev ? function ?	# Symphony Labs IDE controllers
@@ -410,11 +413,13 @@ fd*	at fdc? drive ?			# the drives themselves
 # Network Interfaces
 
 # PCI network interfaces
+ath*	at pci? dev ? function ?	# Atheros 5210/5211/5212 802.11
 bce* 	at pci? dev ? function ?	# Broadcom 4401 10/100 Ethernet
 bge* 	at pci? dev ? function ?	# Broadcom 570x gigabit Ethernet
 ex*	at pci? dev ? function ?	# 3Com 90x[BC]
 fxp*	at pci? dev ? function ?	# Intel EtherExpress PRO 10+/100B
 ne* 	at pci? dev ? function ?	# NE2000-compatible Ethernet
+re*	at pci? dev ? function ?	# Realtek 8139C+/8169/8169S/8110S
 rtk* 	at pci? dev ? function ? 	# Realtek 8129/8139
 tlp*	at pci? dev ? function ?	# DECchip 21x4x and clones
 wm*	at pci? dev ? function ?	# Intel 8254x gigabit
@@ -464,10 +469,12 @@ ukphy*	at mii? phy ?			# generic unknown PHYs
 # USB Controller and Devices
 
 # PCI USB controllers
+ehci*	at pci?	dev ? function ?	# Enhanced Host Controller
 uhci*	at pci?				# Universal Host Controller (Intel)
 ohci*	at pci?				# Open Host Controller
 
 # USB bus support
+usb*	at ehci?
 usb*	at uhci?
 usb*	at ohci?
 

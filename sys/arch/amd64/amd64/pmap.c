@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.9 2004/02/19 17:18:38 drochner Exp $	*/
+/*	$NetBSD: pmap.c,v 1.9.2.1.2.1 2005/06/08 11:34:04 tron Exp $	*/
 
 /*
  *
@@ -108,7 +108,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.9 2004/02/19 17:18:38 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.9.2.1.2.1 2005/06/08 11:34:04 tron Exp $");
 
 #ifndef __x86_64__
 #include "opt_cputype.h"
@@ -3087,6 +3087,11 @@ void
 pmap_collect(pmap)
 	struct pmap *pmap;
 {
+	/* Because of the multiple page table levels, this will cause a system
+	 * pause lasting up to three minutes while scanning for valid PTEs.
+	 * Since it is an optional function, disable for now.
+	 */
+#if 0
 	/*
 	 * free all of the pt pages by removing the physical mappings
 	 * for its entire address space.
@@ -3094,6 +3099,7 @@ pmap_collect(pmap)
 
 	pmap_do_remove(pmap, VM_MIN_ADDRESS, VM_MAX_ADDRESS,
 	    PMAP_REMOVE_SKIPWIRED);
+#endif
 }
 
 /*
@@ -3303,6 +3309,11 @@ enter_now:
 		npte |= (PG_u | PG_RW);	/* XXXCDC: no longer needed? */
 	if (pmap == pmap_kernel())
 		npte |= pmap_pg_g;
+	if (flags & VM_PROT_ALL) {
+		npte |= PG_U;
+		if (flags & VM_PROT_WRITE)
+			npte |= PG_M;
+	}
 
 	ptes[pl1_i(va)] = npte;		/* zap! */
 

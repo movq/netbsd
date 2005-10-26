@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.c,v 1.23 2004/03/26 22:54:42 he Exp $	*/
+/*	$NetBSD: sysctl.c,v 1.23.2.3 2004/04/28 05:32:31 jmc Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)sysctl.c	8.2 (Berkeley) 1/4/94";
 #else
-__RCSID("$NetBSD: sysctl.c,v 1.23 2004/03/26 22:54:42 he Exp $");
+__RCSID("$NetBSD: sysctl.c,v 1.23.2.3 2004/04/28 05:32:31 jmc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -149,61 +149,112 @@ user_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 			.sysctl_un = { .scu_data = { 
 				sysc_init_field(_sud_data, _PATH_STDPATH),
 				}, },
-			sysc_init_field(_sysctl_desc, NULL),
+			sysc_init_field(_sysctl_desc,
+				"A value for the PATH environment variable "
+				"that finds all the standard utilities"),
 		},
-		_INT("bc_base_max", USER_BC_BASE_MAX, BC_BASE_MAX, NULL),
-		_INT("bc_dim_max", USER_BC_DIM_MAX, BC_DIM_MAX, NULL),
-		_INT("bc_scale_max", USER_BC_SCALE_MAX, BC_SCALE_MAX, NULL),
-		_INT("bc_string_max", USER_BC_STRING_MAX, BC_STRING_MAX, NULL),
+		_INT("bc_base_max", USER_BC_BASE_MAX, BC_BASE_MAX,
+		     "The maximum ibase/obase values in the bc(1) utility"),
+		_INT("bc_dim_max", USER_BC_DIM_MAX, BC_DIM_MAX,
+		     "The maximum array size in the bc(1) utility"),
+		_INT("bc_scale_max", USER_BC_SCALE_MAX, BC_SCALE_MAX,
+		     "The maximum scale value in the bc(1) utility"),
+		_INT("bc_string_max", USER_BC_STRING_MAX, BC_STRING_MAX,
+		     "The maximum string length in the bc(1) utility"),
 		_INT("coll_weights_max", USER_COLL_WEIGHTS_MAX,
-		     COLL_WEIGHTS_MAX, NULL),
-		_INT("expr_nest_max", USER_EXPR_NEST_MAX, EXPR_NEST_MAX, NULL),
-		_INT("line_max", USER_LINE_MAX, LINE_MAX, NULL),
-		_INT("re_dup_max", USER_RE_DUP_MAX, RE_DUP_MAX, NULL),
-		_INT("posix2_version", USER_POSIX2_VERSION, _POSIX2_VERSION, NULL),
+		     COLL_WEIGHTS_MAX, "The maximum number of weights that can "
+		     "be assigned to any entry of the LC_COLLATE order keyword "
+		     "in the locale definition file"),
+		_INT("expr_nest_max", USER_EXPR_NEST_MAX, EXPR_NEST_MAX,
+		     "The maximum number of expressions that can be nested "
+		     "within parenthesis by the expr(1) utility"),
+		_INT("line_max", USER_LINE_MAX, LINE_MAX, "The maximum length "
+		     "in bytes of a text-processing utility's input line"),
+		_INT("re_dup_max", USER_RE_DUP_MAX, RE_DUP_MAX, "The maximum "
+		     "number of repeated occurrences of a regular expression "
+		     "permitted when using interval notation"),
+		_INT("posix2_version", USER_POSIX2_VERSION, _POSIX2_VERSION,
+		     "The version of POSIX 1003.2 with which the system "
+		     "attempts to comply"),
 #ifdef POSIX2_C_BIND
-		_INT("posix2_c_bind", USER_POSIX2_C_BIND, 1, NULL),
+		_INT("posix2_c_bind", USER_POSIX2_C_BIND, 1,
+		     "Whether the system's C-language development facilities "
+		     "support the C-Language Bindings Option"),
 #else
-		_INT("posix2_c_bind", USER_POSIX2_C_BIND, 0, NULL),
+		_INT("posix2_c_bind", USER_POSIX2_C_BIND, 0,
+		     "Whether the system's C-language development facilities "
+		     "support the C-Language Bindings Option"),
 #endif
 #ifdef POSIX2_C_DEV
-		_INT("posix2_c_dev", USER_POSIX2_C_DEV, 1, NULL),
+		_INT("posix2_c_dev", USER_POSIX2_C_DEV, 1,
+		     "Whether the system supports the C-Language Development "
+		     "Utilities Option"),
 #else
-		_INT("posix2_c_dev", USER_POSIX2_C_DEV, 0, NULL),
+		_INT("posix2_c_dev", USER_POSIX2_C_DEV, 0,
+		     "Whether the system supports the C-Language Development "
+		     "Utilities Option"),
 #endif
 #ifdef POSIX2_CHAR_TERM
-		_INT("posix2_char_term", USER_POSIX2_CHAR_TERM, 1, NULL),
+		_INT("posix2_char_term", USER_POSIX2_CHAR_TERM, 1,
+		     "Whether the system supports at least one terminal type "
+		     "capable of all operations described in POSIX 1003.2"),
 #else
-		_INT("posix2_char_term", USER_POSIX2_CHAR_TERM, 0, NULL),
+		_INT("posix2_char_term", USER_POSIX2_CHAR_TERM, 0,
+		     "Whether the system supports at least one terminal type "
+		     "capable of all operations described in POSIX 1003.2"),
 #endif
 #ifdef POSIX2_FORT_DEV
-		_INT("posix2_fort_dev", USER_POSIX2_FORT_DEV, 1, NULL),
+		_INT("posix2_fort_dev", USER_POSIX2_FORT_DEV, 1,
+		     "Whether the system supports the FORTRAN Development "
+		     "Utilities Option"),
 #else
-		_INT("posix2_fort_dev", USER_POSIX2_FORT_DEV, 0, NULL),
+		_INT("posix2_fort_dev", USER_POSIX2_FORT_DEV, 0,
+		     "Whether the system supports the FORTRAN Development "
+		     "Utilities Option"),
 #endif
 #ifdef POSIX2_FORT_RUN
-		_INT("posix2_fort_run", USER_POSIX2_FORT_RUN, 1, NULL),
+		_INT("posix2_fort_run", USER_POSIX2_FORT_RUN, 1,
+		     "Whether the system supports the FORTRAN Runtime "
+		     "Utilities Option"),
 #else
-		_INT("posix2_fort_run", USER_POSIX2_FORT_RUN, 0, NULL),
+		_INT("posix2_fort_run", USER_POSIX2_FORT_RUN, 0,
+		     "Whether the system supports the FORTRAN Runtime "
+		     "Utilities Option"),
 #endif
 #ifdef POSIX2_LOCALEDEF
-		_INT("posix2_localedef", USER_POSIX2_LOCALEDEF, 1, NULL),
+		_INT("posix2_localedef", USER_POSIX2_LOCALEDEF, 1,
+		     "Whether the system supports the creation of locales"),
 #else
-		_INT("posix2_localedef", USER_POSIX2_LOCALEDEF, 0, NULL),
+		_INT("posix2_localedef", USER_POSIX2_LOCALEDEF, 0,
+		     "Whether the system supports the creation of locales"),
 #endif
 #ifdef POSIX2_SW_DEV
-		_INT("posix2_sw_dev", USER_POSIX2_SW_DEV, 1, NULL),
+		_INT("posix2_sw_dev", USER_POSIX2_SW_DEV, 1,
+		     "Whether the system supports the Software Development "
+		     "Utilities Option"),
 #else
-		_INT("posix2_sw_dev", USER_POSIX2_SW_DEV, 0, NULL),
+		_INT("posix2_sw_dev", USER_POSIX2_SW_DEV, 0,
+		     "Whether the system supports the Software Development "
+		     "Utilities Option"),
 #endif
 #ifdef POSIX2_UPE
-		_INT("posix2_upe", USER_POSIX2_UPE, 1, NULL),
+		_INT("posix2_upe", USER_POSIX2_UPE, 1,
+		     "Whether the system supports the User Portability "
+		     "Utilities Option"),
 #else
-		_INT("posix2_upe", USER_POSIX2_UPE, 0, NULL),
+		_INT("posix2_upe", USER_POSIX2_UPE, 0,
+		     "Whether the system supports the User Portability "
+		     "Utilities Option"),
 #endif
-		_INT("stream_max", USER_STREAM_MAX, FOPEN_MAX, NULL),
-		_INT("tzname_max", USER_TZNAME_MAX, NAME_MAX, NULL),
-		_INT("atexit_max", USER_ATEXIT_MAX, -1, NULL),
+		_INT("stream_max", USER_STREAM_MAX, FOPEN_MAX,
+		     "The minimum maximum number of streams that a process "
+		     "may have open at any one time"),
+		_INT("tzname_max", USER_TZNAME_MAX, NAME_MAX,
+		     "The minimum maximum number of types supported for the "
+		     "name of a timezone"),
+		_INT("atexit_max", USER_ATEXIT_MAX, -1,
+		     "The maximum number of functions that may be registered "
+		     "with atexit(3)"),
 #endif /* !lint */
 	};
 #undef _INT
@@ -225,13 +276,8 @@ user_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 	if (name[0] == CTL_QUERY) {
 		uint v;
 		node = newp;
-		if (node == NULL) {
-			v = SYSCTL_VERS_0;
-			newlen = sizeof(struct sysctlnode);
-		}
-		else if (SYSCTL_VERS(node->sysctl_flags) == SYSCTL_VERS_0 &&
-			 newlen == sizeof(struct sysctlnode0))
-			v = SYSCTL_VERS_0;
+		if (node == NULL)
+			return (EINVAL);
 		else if (SYSCTL_VERS(node->sysctl_flags) == SYSCTL_VERS_1 &&
 			 newlen == sizeof(struct sysctlnode))
 			v = SYSCTL_VERS_1;
@@ -246,7 +292,11 @@ user_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 	}
 
 	if (name[0] == CTL_DESCRIBE) {
-		char buf[128];
+		/*
+		 * XXX make sure this is larger than the largest
+		 * "user" description
+		 */
+		char buf[192];
 		struct sysctldesc *d1 = (void *)&buf[0], *d2 = oldp;
 		size_t d;
 
@@ -327,33 +377,10 @@ user_sysctl(name, namelen, oldp, oldlenp, newp, newlen)
 static size_t
 __cvt_node_out(uint v, const struct sysctlnode *n, void **o, size_t *l)
 {
-	struct sysctlnode0 node0;
 	const void *src = n;
 	size_t sz;
 
 	switch (v) {
-	    case SYSCTL_VERS_0:
-		memset(&node0, 0, sizeof(node0));
-		node0.sysctl0_flags = n->sysctl_flags;
-		node0.sysctl0_num = n->sysctl_num;
-		node0.sysctl0_size = n->sysctl_size;
-		memcpy(node0.sysctl0_name, n->sysctl_name, SYSCTL_NAMELEN);
-		node0.sysctl0_csize = n->sysctl_csize;
-		node0.sysctl0_clen = n->sysctl_clen;
-		node0.sysctl0_child = NULL;
-		node0.sysctl0_alias = n->sysctl_alias;
-		node0.sysctl0_idata = n->sysctl_idata;
-		node0.sysctl0_qdata = n->sysctl_qdata;
-		node0.sysctl0_data = n->sysctl_data;
-		node0.sysctl0_func = NULL;
-		node0.sysctl0_parent = NULL;
-		node0.sysctl0_ver = n->sysctl_ver;
-		node0.sysctl0_flags &= ~SYSCTL_VERS_MASK;
-		node0.sysctl0_flags |= SYSCTL_VERS_0;
-		src = &node0;
-		sz = sizeof(node0);
-		break;
-
 #if (SYSCTL_VERSION != SYSCTL_VERS_1)
 #error __cvt_node_out: no support for SYSCTL_VERSION
 #endif /* (SYSCTL_VERSION != SYSCTL_VERS_1) */
@@ -361,6 +388,7 @@ __cvt_node_out(uint v, const struct sysctlnode *n, void **o, size_t *l)
 	case SYSCTL_VERSION:
 		sz = sizeof(struct sysctlnode);
 		break;
+
 	default:
 		sz = 0;
 		break;

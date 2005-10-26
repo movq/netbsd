@@ -1,5 +1,10 @@
 /*
- * Copyright (c) 1995, Cyclic Software, Bloomington, IN, USA
+ * Copyright (C) 1986-2005 The Free Software Foundation, Inc.
+ *
+ * Portions Copyright (C) 1998-2005 Derek Price, Ximbiot <http://ximbiot.com>,
+ *                                  and others.
+ *
+ * Portions Copyright (c) 1995, Cyclic Software, Bloomington, IN, USA
  * 
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with CVS.
@@ -114,7 +119,7 @@ password_entry_parseline (cvsroot_canonical, warn, linenumber, linebuf)
 
 	if (isspace(*(linebuf + 1)))
 	    /* special case since strtoul ignores leading white space */
-	    entry_version = 0;
+	    q = linebuf + 1;
 	else
 	    entry_version = strtoul (linebuf + 1, &q, 10);
 
@@ -220,8 +225,10 @@ password_entry_parseline (cvsroot_canonical, warn, linenumber, linebuf)
  *
  *	Mode				Action
  *	password_entry_lookup		Return the password
- *	password_entry_delete		Delete the entry from the file, if it exists
- *	password_entry_add		Replace the line with the new one, else append it
+ *	password_entry_delete		Delete the entry from the file, if it
+ *                                      exists.
+ *	password_entry_add		Replace the line with the new one, else
+ *                                      append it.
  *
  * Because the user might be accessing multiple repositories, with
  * different passwords for each one, the format of ~/.cvspass is:
@@ -282,7 +289,7 @@ password_entry_operation (operation, root, newpassword)
     char *cvsroot_canonical = NULL;
     char *password = NULL;
     int line_length;
-    long line;
+    long line = -1;
     char *linebuf = NULL;
     size_t linebuf_len;
     char *p;
@@ -290,7 +297,8 @@ password_entry_operation (operation, root, newpassword)
 
     if (root->method != pserver_method)
     {
-	error (0, 0, "internal error: can only call password_entry_operation with pserver method");
+	error (0, 0, "\
+internal error: can only call password_entry_operation with pserver method");
 	error (1, 0, "CVSROOT: %s", root->original);
     }
 
@@ -314,7 +322,8 @@ password_entry_operation (operation, root, newpassword)
     while ((line_length = getline (&linebuf, &linebuf_len, fp)) >= 0)
     {
 	line++;
-	password = password_entry_parseline(cvsroot_canonical, 1, line, linebuf);
+	password = password_entry_parseline (cvsroot_canonical, 1, line,
+                                             linebuf);
 	if (password != NULL)
 	    /* this is it!  break out and deal with linebuf */
 	    break;
@@ -364,7 +373,8 @@ process:
      * add
      */
     if (!noexec && password != NULL && (operation == password_entry_delete
-	    || (operation == password_entry_add && strcmp (password, newpassword))))
+        || (operation == password_entry_add
+            && strcmp (password, newpassword))))
     {
 	long found_at = line;
 	char *tmp_name;
@@ -385,7 +395,8 @@ process:
 	    line++;
 	    if (line < found_at
 		|| (line != found_at
-		    && !password_entry_parseline(cvsroot_canonical, 0, line, linebuf)))
+		    && !password_entry_parseline (cvsroot_canonical, 0, line,
+                                                  linebuf)))
 	    {
 		if (fprintf (tmp_fp, "%s", linebuf) == EOF)
 		{
@@ -449,7 +460,7 @@ process:
 	if (fprintf (fp, "/1 %s %s\n", cvsroot_canonical, newpassword) == EOF)
 	    error (1, errno, "cannot write %s", passfile);
 	if (fclose (fp) < 0)
-	    error (0, errno, "cannot close %s", passfile);
+	    error (1, errno, "cannot close %s", passfile);
     }
 
     /* Utter, total, raving paranoia, I know. */
@@ -551,7 +562,8 @@ login (argc, argv)
 
     connect_to_pserver (current_parsed_root, NULL, NULL, 1, 0);
 
-    password_entry_operation (password_entry_add, current_parsed_root, typed_password);
+    password_entry_operation (password_entry_add, current_parsed_root,
+                              typed_password);
 
     memset (typed_password, 0, strlen (typed_password));
     free (typed_password);
@@ -563,6 +575,8 @@ login (argc, argv)
     return 0;
 }
 
+
+
 /* Returns the _scrambled_ password.  The server must descramble
    before hashing and comparing.  If password file not found, or
    password not found in the file, just return NULL. */
@@ -570,7 +584,7 @@ char *
 get_cvs_password ()
 {
     if (current_parsed_root->password)
-	return (scramble(current_parsed_root->password));
+	return scramble (current_parsed_root->password);
  
     /* If someone (i.e., login()) is calling connect_to_pserver() out of
        context, then assume they have supplied the correct, scrambled
@@ -598,8 +612,11 @@ get_cvs_password ()
 	error (1, 0, "CVSROOT: %s", current_parsed_root->original);
     }
 
-    return password_entry_operation (password_entry_lookup, current_parsed_root, NULL);
+    return password_entry_operation (password_entry_lookup,
+                                     current_parsed_root, NULL);
 }
+
+
 
 static const char *const logout_usage[] =
 {

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.14 2004/02/22 01:24:25 uwe Exp $
+#	$NetBSD: Makefile,v 1.14.2.2 2004/06/14 18:19:40 tron Exp $
 
 NOLINKLIB=	# defined
 NOLINT=		# defined
@@ -55,10 +55,6 @@ NOGCCERROR=			# defined
 COPTS.reload1.c=		-O1
 .endif
 
-# XXX: toolchain/22489 (gcc optimization/11937)
-.if ${MACHINE_CPU} == "sh3"
-COPTS.function.c=		-O0
-.endif
 
 
 # Headers that host objects depend on (except gen*rtl*)
@@ -153,8 +149,8 @@ auto-build.h: Makefile
 	mkdir .ab && \
 	(cd .ab && \
 		${HOST_SH} ${GNUHOSTDIST}/gcc/configure \
-			--build=`${.CURDIR}/../../../dist/gcc/config.guess` \
-			--host=`${.CURDIR}/../../../dist/gcc/config.guess` \
+			--build=`${HOST_SH} ${.CURDIR}/../../../dist/gcc/config.guess` \
+			--host=`${HOST_SH} ${.CURDIR}/../../../dist/gcc/config.guess` \
 			--target=${MACHINE_GNU_PLATFORM} && \
 		mv auto-host.h ../auto-build.h) && \
 	rm -rf .ab

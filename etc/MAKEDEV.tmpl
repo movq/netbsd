@@ -1,5 +1,5 @@
 #!/bin/sh -
-#	$NetBSD: MAKEDEV.tmpl,v 1.23 2004/03/10 18:33:12 jdolecek Exp $
+#	$NetBSD: MAKEDEV.tmpl,v 1.23.2.3 2004/11/12 04:52:26 jmc Exp $
 #
 # Copyright (c) 2003 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -164,7 +164,7 @@
 #	dn*	UNIBUS DN11 and emulations (e.g. Able Quadracall)
 #
 # Pseudo terminals:
-#	pty*	set of 62 master and slave pseudo terminals
+#	pty*	set of 16 master and slave pseudo terminals
 #	opty	first 16 ptys, to save inodes on install media
 #	ipty	first 2 ptys, for install media use only
 #
@@ -290,6 +290,18 @@ _USAGE_
 	exit 1
 }
 
+zeropad() {
+	case $(($1 - ${#2})) in
+	5)	echo 00000$2;;
+	4)	echo 0000$2;;
+	3)	echo 000$2;;
+	2)	echo 00$2;;
+	1)	echo 0$2;;
+	0)	echo $2;;
+	*)	echo "$0: bad padding" 1>&2; exit 1;;
+	esac
+}
+
 do_force=false
 do_specfile=false
 while getopts fm:s ch; do
@@ -408,7 +420,7 @@ case $i in
 
 all)
 	makedev all_md
-	makedev std fd pty0
+	makedev std fd pty0 pty1 pty2 pty3
 	makedev ccd0 ccd1 ccd2 ccd3
 	makedev cgd0 cgd1 cgd2 cgd3
 	makedev fss0 fss1 fss2 fss3
@@ -658,13 +670,13 @@ ofdisk*)
 	;;
 
 ttyCY*)
-	name=tyCY; chr=%cy_chr%; off=32; fmt="%03d"
+	name=tyCY; chr=%cy_chr%; off=32
 	unit=${i#t${name}}
 	minor=$(($unit * $off))
 	eminor=$(($minor + $off))
 	while [ $minor -lt $eminor ]
 	do
-		nminor=$(printf $fmt $minor)
+		nminor=$(zeropad 3 $minor)
 		mkdev t$name$nminor c $chr $(($minor + $dialin )) "" "" $u_uucp
 		mkdev d$name$nminor c $chr $(($minor + $dialout)) "" "" $u_uucp
 		minor=$(($minor + 1))
@@ -672,13 +684,13 @@ ttyCY*)
 	;;
 
 ttyCZ*)
-	name=tyCZ; chr=%cz_chr%; off=64; fmt="%04d"
+	name=tyCZ; chr=%cz_chr%; off=64
 	unit=${i#t${name}}
 	minor=$(($unit * $off))
 	eminor=$(($minor + $off))
 	while [ $minor -lt $eminor ]
 	do
-		nminor=$(printf $fmt $minor)
+		nminor=$(zeropad 4 $minor)
 		mkdev t$name$nminor c $chr $(($minor + $dialin )) "" "" $u_uucp
 		mkdev d$name$nminor c $chr $(($minor + $dialout)) "" "" $u_uucp
 		minor=$(($minor + 1))
@@ -699,7 +711,7 @@ tty[0-9]|tty0[0-9])
 
 tty0*|tty1*|tty[0-9])
 	unit=${i#tty}
-	ounit=$(printf "%02d" $unit)
+	ounit=$(zeropad 2 $unit)
 	mkdev tty$ounit c %com_chr% $(($unit + $dialin )) "" "" $u_uucp
 	mkdev dty$ounit c %com_chr% $(($unit + $dialout)) "" "" $u_uucp
 	;;
@@ -748,30 +760,49 @@ opty)
 
 pty*)
 	class=${i#pty}
-	set -- p q r s t u v w x y z P Q R S T
-	if [ "$class" -ge $# ]; then
-		warn "$i: pty unit must be between 0 and 15"
+	d1="p q r s t u v w x y z P Q R S T"
+	if [ "$class" -ge 64 ]
+	then
+		warn "$i: pty unit must be between 0 and 63"
 		continue
+	elif [ "$class" -lt 16 ]
+	then
+		offset=0
+		mult=0
+		d2="0 1 2 3 4 5 6 7 8 9 a b c d e f"
+	else
+		class=$(($class - 16))
+		offset=256
+		mult=2
+		d2="g h i j k l m n o p q r s t u v w x y z A B C D E F G H I J K L M N O P Q R S T U V W X Y Z"
 	fi
-	shift $class
-	name=$1
-	if [ "$name" = v ]; then
+	start=$(($class * 16))
+	set -- $d2
+	nt=$#
+	s1=$(($start / $nt))
+	set -- $d1
+	shift $s1
+	t1=$1
+	if [ "$t1" = v ]; then
 		warn "$i: pty unit conflicts with console ttyv0 device"
 		continue
 	fi
-	jn=0
-	unit=$(($class * 16))
-	set -- - 0 1 2 3 4 5 6 7 8 9 a b c d e f g h i j k l m n o p q r s t u v w x y z A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
-	while
-		shift
-		j=$1
-		[ -n "$j" ]
+	s2=$(($start % $nt - $s1 * $mult))
+	set -- $d2
+	shift $s2
+	t2=$1
+	unit=$(($start + $offset - $s1 * $mult))
+	end=$(($unit + 16))
+	while [ "$unit" -lt "$end" ]
 	do
-		if [ $j = g ]; then
-			unit=$(($unit + $class * 30 + 256 - 16))
+		mkdev tty$t1$t2 c %pts_chr% $unit 666
+		mkdev pty$t1$t2 c %ptc_chr% $unit 666
+		shift
+		t2=$1
+		if [ -z "$t2" ]
+		then
+			break
 		fi
-		mkdev tty$name$j c %pts_chr% $unit 666
-		mkdev pty$name$j c %ptc_chr% $unit 666
 		unit=$(($unit + 1))
 	done
 	;;

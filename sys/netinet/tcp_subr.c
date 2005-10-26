@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_subr.c,v 1.160 2004/01/07 19:15:43 matt Exp $	*/
+/*	$NetBSD: tcp_subr.c,v 1.160.2.5 2004/09/19 15:38:01 he Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_subr.c,v 1.160 2004/01/07 19:15:43 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_subr.c,v 1.160.2.5 2004/09/19 15:38:01 he Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -179,10 +179,10 @@ int	tcp_do_rfc1948 = 0;	/* ISS by cryptographic hash */
 int	tcp_do_sack = 1;	/* selective acknowledgement */
 int	tcp_do_win_scale = 1;	/* RFC1323 window scaling */
 int	tcp_do_timestamps = 1;	/* RFC1323 timestamps */
-int	tcp_do_newreno = 0;	/* Use the New Reno algorithms */
+int	tcp_do_newreno = 1;	/* Use the New Reno algorithms */
 int	tcp_ack_on_push = 0;	/* set to enable immediate ACK-on-PUSH */
 #ifndef TCP_INIT_WIN
-#define	TCP_INIT_WIN	1	/* initial slow start window */
+#define	TCP_INIT_WIN	0	/* initial slow start window */
 #endif
 #ifndef TCP_INIT_WIN_LOCAL
 #define	TCP_INIT_WIN_LOCAL 4	/* initial slow start window for local nets */
@@ -196,6 +196,7 @@ int	tcp_compat_42 = 1;
 int	tcp_compat_42 = 0;
 #endif
 int	tcp_rst_ppslim = 100;	/* 100pps */
+int	tcp_ackdrop_ppslim = 100;	/* 100pps */
 
 /* tcb hash */
 #ifndef TCBHASHSIZE
@@ -317,6 +318,9 @@ tcp_init()
 	pool_init(&tcpcb_pool, sizeof(struct tcpcb), 0, 0, 0, "tcpcbpl",
 	    NULL);
 	in_pcbinit(&tcbtable, tcbhashsize, tcbhashsize);
+
+	pool_init(&tcpipqent_pool, sizeof(struct ipqent), 0, 0, 0, "tcpipqepl",
+	    NULL);
 
 	hlen = sizeof(struct ip) + sizeof(struct tcphdr);
 #ifdef INET6
@@ -1066,9 +1070,9 @@ tcp_drop(tp, errno)
  * be taken, as we are about to release this tcpcb.  The release
  * of the storage will be done if this is the last timer running.
  *
- * This is typically called from the callout handler function before
- * callout_ack() is done, therefore we need to test the number of
- * running timer functions against 1 below, not 0.
+ * This should be called from the callout handler function after
+ * callout_ack() is done, so that the number of invoking timer
+ * functions is 0.
  */
 int
 tcp_isdead(tp)
@@ -1077,7 +1081,7 @@ tcp_isdead(tp)
 	int dead = (tp->t_flags & TF_DEAD);
 
 	if (__predict_false(dead)) {
-		if (tcp_timers_invoking(tp) > 1)
+		if (tcp_timers_invoking(tp) > 0)
 				/* not quite there yet -- count separately? */
 			return dead;
 		tcpstat.tcps_delayed_free++;
@@ -1246,7 +1250,7 @@ tcp_freeq(tp)
 		TAILQ_REMOVE(&tp->segq, qe, ipqe_q);
 		TAILQ_REMOVE(&tp->timeq, qe, ipqe_timeq);
 		m_freem(qe->ipqe_m);
-		pool_put(&ipqent_pool, qe);
+		pool_put(&tcpipqent_pool, qe);
 		rv = 1;
 	}
 	return (rv);

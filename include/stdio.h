@@ -1,4 +1,4 @@
-/*	$NetBSD: stdio.h,v 1.53 2003/08/07 09:44:11 agc Exp $	*/
+/*	$NetBSD: stdio.h,v 1.53.2.1.2.2 2005/05/29 23:41:31 riz Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,10 +37,9 @@
 #ifndef	_STDIO_H_
 #define	_STDIO_H_
 
-#include <sys/ansi.h>
-
 #include <sys/cdefs.h>
 #include <sys/featuretest.h>
+#include <sys/ansi.h>
 
 #include <machine/ansi.h>
 #ifdef	_BSD_SIZE_T_
@@ -317,17 +316,29 @@ __END_DECLS
 #endif
 
 /*
+ * Functions defined in ISO XPG4.2, ISO C99, POSIX 1003.1-2001 or later.
+ */
+#if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) && \
+    !defined(_XOPEN_SOURCE) || \
+    ((__STDC_VERSION__ - 0) >= 199901L) || \
+    ((_POSIX_C_SOURCE - 0) >= 200112L) || \
+    (defined(_XOPEN_SOURCE) && defined(_XOPEN_SOURCE_EXTENDED)) || \
+    ((_XOPEN_SOURCE - 0) >= 500) || \
+    defined(_ISOC99_SOURCE) || defined(_NETBSD_SOURCE)
+int	 snprintf __P((char * __restrict, size_t, const char * __restrict, ...))
+	    __attribute__((__format__(__printf__, 3, 4)));
+int	 vsnprintf __P((char * __restrict, size_t, const char * __restrict,
+	    _BSD_VA_LIST_))
+	    __attribute__((__format__(__printf__, 3, 0)));
+#endif
+
+/*
  * Functions defined in XPG4.2.
  */
 #if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 __BEGIN_DECLS
 int	 getw __P((FILE *));
 int	 putw __P((int, FILE *));
-int	 snprintf __P((char * __restrict, size_t, const char * __restrict, ...))
-	    __attribute__((__format__(__printf__, 3, 4)));
-int	 vsnprintf __P((char * __restrict, size_t, const char * __restrict,
-	    _BSD_VA_LIST_))
-	    __attribute__((__format__(__printf__, 3, 0)));
 
 #ifndef __AUDIT__
 char	*tempnam __P((const char *, const char *));
@@ -438,7 +449,7 @@ static __inline int __sputc(int _c, FILE *_p) {
 #define	__sclearerr(p)	((void)((p)->_flags &= ~(__SERR|__SEOF)))
 #define	__sfileno(p)	((p)->_file)
 
-#ifndef lint
+#ifndef __lint__
 #if !defined(_REENTRANT) && !defined(_PTHREADS)
 #define	feof(p)		__sfeof(p)
 #define	ferror(p)	__sferror(p)
@@ -447,7 +458,7 @@ static __inline int __sputc(int _c, FILE *_p) {
 #define	getc(fp)	__sgetc(fp)
 #define putc(x, fp)	__sputc(x, fp)
 #endif /* !_REENTRANT && !_PTHREADS */
-#endif /* lint */
+#endif /* __lint__ */
 
 #define	getchar()	getc(stdin)
 #define	putchar(x)	putc(x, stdout)

@@ -1,4 +1,4 @@
-.\"	$NetBSD: options.4,v 1.232 2004/03/27 19:29:36 snj Exp $
+.\"	$NetBSD: options.4,v 1.232.2.6.2.3 2005/08/15 05:16:37 snj Exp $
 .\"
 .\" Copyright (c) 1996
 .\" 	Perry E. Metzger.  All rights reserved.
@@ -30,7 +30,7 @@
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\"
-.Dd March 27, 2004
+.Dd January 21, 2005
 .Os
 .Dt OPTIONS 4
 .Sh NAME
@@ -341,9 +341,28 @@ support for some older pre
 .Bx 4.4
 socket calls.
 .It Cd options COMPAT_AOUT
-This option enables support for a.out format executables.  See
-.Em man a.out(5)
-for details on the ancient format.
+This option is deprecated.
+It was used in the
+.Xr a.out 5
+to
+.Xr elf 5
+transition phase to enable
+.Xr a.out 5
+binaries to find their shared libraries.
+This has been fixed in
+.Xr ld.so 1
+in the meantime.
+The effect is that for
+.Xr a.out 5
+binaries, each name lookup will first search in
+.Pa /emul/aout .
+This causes problems with programs like
+.Xr a.out 5
+shells and emulations that use
+.Xr a.out 5
+(like
+.Tn BSD/OS ) .
+If you use this option you should know what you are doing.
 .It Cd options COMPAT_SVR4
 On those architectures that support it, this enables binary
 compatibility with
@@ -475,8 +494,11 @@ binaries otherwise.
 Beware - if this option is on, the kernel would run
 .Em any
 unknown ELF binaries as if they were
-.Nx
-binaries.
+.It Cd options P1003_1B_SEMAPHORE
+Includes kernel support for the standard C library
+.Pq Pa libc
+functions that implement semaphores as specified in
+.St -p1003.1-96 .
 .El
 .Ss Debugging Options
 .Bl -ohang
@@ -1193,9 +1215,6 @@ Examples of such code include the
 routine, the
 .Xr ccd 4
 driver,
-the
-.Xr ncr 4
-driver,
 and much of the networking code.
 .It Cd options MAXUPRC=integer
 Sets the soft
@@ -1255,8 +1274,10 @@ file itself, e.g.
 .Pa GENERIC.local
 or
 .Pa std.$MACHINE .
-The embedded config file can be extracted from the resulting kernel by
-the following command:
+The embedded config file can be extracted from the resulting kernel with
+.Xr config 8
+.Ar -x ,
+or by the following command:
 .Bd -literal -offset indent
 strings netbsd | sed -n 's/^_CFG_//p' | unvis
 .Ed
@@ -1279,6 +1300,19 @@ See
 for details.
 .Em NOTE :
 not available on all architectures.
+.It Cd options XSERVER
+Compiles in kernel support for
+.Tn X11
+on architectures that still use (or can use) the legacy
+.Em pccons
+console drivers rather than
+.Xr wscons 4 .
+These include bebox, i386, shark.
+.It Cd options XSERVER_DDB
+A supplement to XSERVER that adds support for entering
+.Xr ddb 4
+while in
+.Tn X11 .
 .El
 .Ss Networking Options
 .Bl -ohang
@@ -1705,6 +1739,39 @@ This additional information can be viewed with
 .Xr netstat 1 :
 .Dl Ic netstat Fl mssv
 Not all devices or protocols support this option.
+.El
+.Ss Sysctl Related Options
+.Bl -ohang
+.It Cd options SYSCTL_DISALLOW_CREATE
+Disallows the creation or deletion of nodes from the sysctl tree, as
+well as the assigning of descriptions to nodes that lack them, by any
+process.
+These operations are still available to kernel sub-systems, including
+loadable kernel modules.
+.It Cd options SYSCTL_DISALLOW_KWRITE
+Prevents processes from adding nodes to the sysctl tree that make
+existing kernel memory areas writeable.
+Sections of kernel memory can still be read and new nodes that own
+their own data may still be be writeable.
+.It Cd options SYSCTL_DEBUG_SETUP
+Causes the SYSCTL_SETUP routines to print a brief message when they
+are invoked.
+This is merely meant as an aid in determining the order in which
+sections of the tree are created.
+.It Cd options SYSCTL_DEBUG_CREATE
+Prints a message each time
+.Fn sysctl_create ,
+the function that adds nodes to the tree, is called.
+.It Cd options SYSCTL_INCLUDE_DESCR
+Causes the kernel to include short, human readable descriptions for
+nodes in the sysctl tree.
+The descriptions can be retrieved programmatically (see
+.Xr sysctl 3 ) ,
+or by the sysctl binary itself (see
+.Xr sysctl 8 ) .
+The descriptions are meant to give an indication of the purpose and/or
+effects of a given node's value, not replace the documentation for the
+given subsystem as a whole.
 .El
 .Ss System V IPC Options
 .Bl -ohang
@@ -2133,6 +2200,29 @@ other purpose (e.g., hardware breakpoint) if you turn this on.
 Include support for accessing MTRR registers from user-space.
 See
 .Xr i386_get_mtrr 2 .
+.It Cd options BEEP_ONHALT
+Make the system speaker emit several beeps when it is completely safe to
+power down the computer after a
+.Xr halt 8
+command.
+Requires
+.Xr sysbeep 4
+support.
+.It Cd options BEEP_ONHALT_COUNT=times
+Number of times to beep the speaker when
+.Cd options BEEP_ONHALT
+is enabled.
+Defaults to 3.
+.It Cd options BEEP_ONHALT_PITCH=hz
+The tone frequency used when
+.Cd options BEEP_ONHALT
+option, in hertz.
+Defaults to 1500.
+.It Cd options BEEP_ONHALT_PERIOD=msecs
+The duration of each beep when
+.Cd options BEEP_ONHALT
+is enabled, in milliseconds.
+Defaults to 250.
 .El
 .Ss isa-specific Options
 Options specific to

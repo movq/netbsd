@@ -1,4 +1,4 @@
-/*	$NetBSD: signal.h,v 1.36 2003/09/12 20:27:50 christos Exp $	*/
+/*	$NetBSD: signal.h,v 1.36.2.2 2004/07/02 18:10:01 he Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -134,15 +134,25 @@ sigismember(const sigset_t *set, int signo)
 	}
 	return (__sigismember(set, signo));
 }
-#endif /* __GNUC__ && __STDC__ */
 
-/* List definitions after function declarations, or Reiser cpp gets upset. */
-#define	sigemptyset(set)	(__sigemptyset(set), /*LINTED*/0)
-#define	sigfillset(set)		(__sigfillset(set), /*LINTED*/ 0)
+extern __inline int
+sigemptyset(sigset_t *set)
+{
+	__sigemptyset(set);
+	return (0);
+}
+
+extern __inline int
+sigfillset(sigset_t *set)
+{
+	__sigfillset(set);
+	return (0);
+}
+#endif /* __GNUC__ && __STDC__ */
 #endif /* !__LIBC12_SOURCE__ */
 
 /*
- * X/Open CAE Specification Issue 5 Version 2
+ * X/Open CAE Specification Issue 4 Version 2
  */      
 #if (defined(_XOPEN_SOURCE) && defined(_XOPEN_SOURCE_EXTENDED)) || \
     (_XOPEN_SOURCE - 0) >= 500 || defined(_NETBSD_SOURCE)
@@ -155,20 +165,19 @@ int	__sigaltstack14 __P((const stack_t *, stack_t *));
 #else
 int	sigaltstack __P((const stack_t *, stack_t *)) __RENAME(__sigaltstack14);
 #endif
-#endif /* _XOPEN_SOURCE_EXTENDED || _XOPEN_SOURCE >= 500 || _NETBSD_SOURCE */
-
-
-/*
- * X/Open CAE Specification Issue 5 Version 2; IEEE Std 1003.1-2001 (POSIX)
- */      
-#if (_POSIX_C_SOURCE - 0) >= 200112L || \
-    (defined(_XOPEN_SOURCE) && defined(_XOPEN_SOURCE_EXTENDED)) || \
-    (_XOPEN_SOURCE - 0) >= 500 || defined(_NETBSD_SOURCE)
 int	sighold __P((int));
 int	sigignore __P((int));
 int	sigpause __P((int));
 int	sigrelse __P((int));
 void	(*sigset __P((int, void (*)(int)))) __P((int));
+#endif /* _XOPEN_SOURCE_EXTENDED || _XOPEN_SOURCE >= 500 || _NETBSD_SOURCE */
+
+
+/*
+ * X/Open CAE Specification Issue 5; IEEE Std 1003.1b-1993 (POSIX)
+ */      
+#if (_POSIX_C_SOURCE - 0) >= 199309L || (_XOPEN_SOURCE - 0) >= 500 || \
+    defined(_NETBSD_SOURCE)
 int	sigwait	__P((const sigset_t * __restrict, int * __restrict));
 int	sigwaitinfo __P((const sigset_t * __restrict, siginfo_t * __restrict));
 

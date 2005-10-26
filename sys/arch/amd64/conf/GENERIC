@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.21 2004/01/14 22:29:03 jonathan Exp $
+# $NetBSD: GENERIC,v 1.21.2.4.2.2 2005/07/21 19:27:09 riz Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include	"arch/amd64/conf/std.amd64"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.21 $"
+#ident 		"GENERIC-$Revision: 1.21.2.4.2.2 $"
 
 maxusers	32		# estimated number of users
 
@@ -68,6 +68,7 @@ options 	LKM		# loadable kernel modules
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
+options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 
 # Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
@@ -147,6 +148,19 @@ options 	IPFILTER_LOG	# ipmon(8) log support
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
+#options 	ALTQ		# Manipulate network interfaces' output queues
+#options 	ALTQ_BLUE	# Stochastic Fair Blue
+#options 	ALTQ_CBQ	# Class-Based Queueing
+#options 	ALTQ_CDNR	# Diffserv Traffic Conditioner
+#options 	ALTQ_FIFOQ	# First-In First-Out Queue
+#options 	ALTQ_FLOWVALVE	# RED/flow-valve (red-penalty-box)
+#options 	ALTQ_HFSC	# Hierarchical Fair Service Curve
+#options 	ALTQ_LOCALQ	# Local queueing discipline
+#options 	ALTQ_PRIQ	# Priority Queueing
+#options 	ALTQ_RED	# Random Early Detection
+#options 	ALTQ_RIO	# RED with IN/OUT
+#options 	ALTQ_WFQ	# Weighted Fair Queueing
+
 # These options enable verbose messages for several subsystems.
 # Warning, these may compile large string tables into the kernel!
 options		ACPIVERBOSE	# verboase ACPI configuration messages
@@ -209,6 +223,8 @@ mainbus0 at root
 #options 	MPACPI_SCANPCI		# MPBIOS configures PCI roots
 #options 	ACPI_PCI_FIXUP		# PCI interrupt routing via ACPI
 #options 	ACPI_ACTIVATE_DEV	# If set, activate inactive devices
+#options	ACPICA_PEDANTIC		# force strict conformance to the Spec.
+#options	ACPI_DISABLE_ON_POWEROFF	# disable acpi on power off
 
 # ACPI devices
 #acpiacad* 	at acpi?		# ACPI AC Adapter
@@ -407,6 +423,7 @@ hptide* at pci? dev ? function ?	# Triones/HighPoint IDE controllers
 optiide* at pci? dev ? function ?	# Opti IDE controllers
 piixide* at pci? dev ? function ?	# Intel IDE controllers
 pdcide* at pci? dev ? function ?	# Promise IDE controllers
+pdcsata* at pci? dev ? function ?	# Promise SATA150 controllers
 satalink* at pci? dev ? function ?	# SiI SATALink controllers
 siside* at pci? dev ? function ?	# SiS IDE controllers
 slide*  at pci? dev ? function ?	# Symphony Labs IDE controllers
@@ -483,6 +500,7 @@ mtd*	at pci? dev ? function ?	# Myson MTD803 3-in-1 Ethernet
 ne*	at pci? dev ? function ?	# NE2000-compatible Ethernet
 ntwoc*	at pci? dev ? function ?	# Riscom/N2 PCI Sync Serial
 pcn*	at pci? dev ? function ?	# AMD PCnet-PCI Ethernet
+re*	at pci? dev ? function ?	# Realtek 8139C+/8169/8169S/8110S
 rtk*	at pci? dev ? function ?	# Realtek 8129/8139
 skc* 	at pci? dev ? function ?	# SysKonnect SK9821 Gigabit Ethernet
 sk* 	at skc?				# SysKonnect SK9821 Gigabit Ethernet
@@ -645,6 +663,10 @@ urio*	at uhub? port ?
 # USB Handspring Visor
 uvisor*	at uhub? port ?
 ucom*	at uvisor?
+
+# Kyocera AIR-EDGE PHONE
+ukyopon* at uhub? port ?
+ucom*	at ukyopon? portno ?
 
 # USB scanners
 uscanner* at uhub? port ?

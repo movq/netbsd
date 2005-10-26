@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_fault.c,v 1.87 2004/03/24 07:55:01 junyoung Exp $	*/
+/*	$NetBSD: uvm_fault.c,v 1.87.2.1.2.1 2005/05/11 19:15:41 riz Exp $	*/
 
 /*
  *
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_fault.c,v 1.87 2004/03/24 07:55:01 junyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_fault.c,v 1.87.2.1.2.1 2005/05/11 19:15:41 riz Exp $");
 
 #include "opt_uvmhist.h"
 
@@ -428,8 +428,6 @@ uvmfault_anonget(ufi, amap, anon)
 				wakeup(pg);
 			}
 			if (error) {
-				/* remove page from anon */
-				anon->u.an_page = NULL;
 
 				/*
 				 * remove the swap slot from the anon
@@ -441,6 +439,9 @@ uvmfault_anonget(ufi, amap, anon)
 				if (anon->an_swslot > 0)
 					uvm_swap_markbad(anon->an_swslot, 1);
 				anon->an_swslot = SWSLOT_BAD;
+
+				if ((pg->flags & PG_RELEASED) != 0)
+					goto released;
 
 				/*
 				 * note: page was never !PG_BUSY, so it
@@ -459,6 +460,30 @@ uvmfault_anonget(ufi, amap, anon)
 					simple_unlock(&anon->an_lock);
 				UVMHIST_LOG(maphist, "<- ERROR", 0,0,0,0);
 				return error;
+			}
+
+			if ((pg->flags & PG_RELEASED) != 0) {
+released:
+				KASSERT(anon->an_ref == 0);
+
+				/*
+				 * released while we unlocked amap.
+				 */
+
+				if (locked)
+					uvmfault_unlockall(ufi, amap, NULL,
+					    NULL);
+
+				uvm_anon_release(anon);
+
+				if (error) {
+					UVMHIST_LOG(maphist,
+					    "<- ERROR/RELEASED", 0,0,0,0);
+					return error;
+				}
+
+				UVMHIST_LOG(maphist, "<- RELEASED", 0,0,0,0);
+				return ERESTART;
 			}
 
 			/*
@@ -536,7 +561,7 @@ uvm_fault(orig_map, vaddr, fault_type, access_type)
 	vm_prot_t enter_prot, check_prot;
 	boolean_t wired, narrow, promote, locked, shadowed, wire_fault, cow_now;
 	int npages, nback, nforw, centeridx, error, lcv, gotpages;
-	vaddr_t startva, objaddr, currva;
+	vaddr_t startva, currva;
 	voff_t uoff;
 	paddr_t pa;
 	struct vm_amap *amap;
@@ -743,10 +768,9 @@ ReFault:
 
 		/* flush object? */
 		if (uobj) {
-			objaddr =
-			    (startva - ufi.entry->start) + ufi.entry->offset;
+			uoff = (startva - ufi.entry->start) + ufi.entry->offset;
 			simple_lock(&uobj->vmobjlock);
-			(void) (uobj->pgops->pgo_put)(uobj, objaddr, objaddr +
+			(void) (uobj->pgops->pgo_put)(uobj, uoff, uoff +
 				    (nback << PAGE_SHIFT), PGO_DEACTIVATE);
 		}
 

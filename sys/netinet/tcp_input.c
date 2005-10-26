@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_input.c,v 1.190 2004/03/10 18:50:45 drochner Exp $	*/
+/*	$NetBSD: tcp_input.c,v 1.190.2.6.2.2 2005/04/22 06:58:50 tron Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -148,7 +148,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_input.c,v 1.190 2004/03/10 18:50:45 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_input.c,v 1.190.2.6.2.2 2005/04/22 06:58:50 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -220,6 +220,7 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_input.c,v 1.190 2004/03/10 18:50:45 drochner Exp
 
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
+#include <netipsec/ipsec_var.h>			/* XXX ipsecstat namespace */
 #include <netipsec/key.h>
 #ifdef INET6
 #include <netipsec/ipsec6.h>
@@ -232,6 +233,8 @@ int	tcp_log_refused;
 
 static int tcp_rst_ppslim_count = 0;
 static struct timeval tcp_rst_ppslim_last;
+static int tcp_ackdrop_ppslim_count = 0;
+static struct timeval tcp_ackdrop_ppslim_last;
 
 #define TCP_PAWS_IDLE	(24 * 24 * 60 * 60 * PR_SLOWHZ)
 
@@ -339,6 +342,8 @@ static void tcp4_log_refused __P((const struct ip *, const struct tcphdr *));
 static void tcp6_log_refused
     __P((const struct ip6_hdr *, const struct tcphdr *));
 #endif
+
+struct pool tcpipqent_pool;
 
 int
 tcp_reass(tp, th, m, tlen)
@@ -487,7 +492,7 @@ tcp_reass(tp, th, m, tlen)
 			tcpstat.tcps_rcvdupbyte += pkt_len;
 			m_freem(m);
 			if (tiqe != NULL)
-				pool_put(&ipqent_pool, tiqe);
+				pool_put(&tcpipqent_pool, tiqe);
 			TCP_REASS_COUNTER_INCR(&tcp_reass_segdup);
 			return (0);
 		}
@@ -566,7 +571,7 @@ tcp_reass(tp, th, m, tlen)
 			if (tiqe == NULL)
 				tiqe = q;
 			else
-				pool_put(&ipqent_pool, q);
+				pool_put(&tcpipqent_pool, q);
 			TCP_REASS_COUNTER_INCR(&tcp_reass_prepend);
 			break;
 		}
@@ -591,7 +596,7 @@ tcp_reass(tp, th, m, tlen)
 		if (tiqe == NULL)
 			tiqe = q;
 		else
-			pool_put(&ipqent_pool, q);
+			pool_put(&tcpipqent_pool, q);
 	}
 
 #ifdef TCP_REASS_COUNTERS
@@ -611,7 +616,7 @@ tcp_reass(tp, th, m, tlen)
 	 * XXX If we can't, just drop the packet.  XXX
 	 */
 	if (tiqe == NULL) {
-		tiqe = pool_get(&ipqent_pool, PR_NOWAIT);
+		tiqe = pool_get(&tcpipqent_pool, PR_NOWAIT);
 		if (tiqe == NULL) {
 			tcpstat.tcps_rcvmemdrop++;
 			m_freem(m);
@@ -679,7 +684,7 @@ present:
 		m_freem(q->ipqe_m);
 	else
 		sbappendstream(&so->so_rcv, q->ipqe_m);
-	pool_put(&ipqent_pool, q);
+	pool_put(&tcpipqent_pool, q);
 	sorwakeup(so);
 	return (pkt_flags);
 }
@@ -1440,6 +1445,21 @@ after_listen:
 	if (optp)
 		tcp_dooptions(tp, optp, optlen, th, &opti);
 
+	if (opti.ts_present && opti.ts_ecr) {
+		u_int32_t now;
+
+		/*
+		 * Calculate the RTT from the returned time stamp and the
+		 * connection's time base.  If the time stamp is later than
+		 * the current time, fall back to non-1323 RTT calculation.
+		 */
+		now = TCP_TIMESTAMP(tp);
+		if (SEQ_GEQ(now, opti.ts_ecr))
+			opti.ts_ecr = now - opti.ts_ecr + 1;
+		else
+			opti.ts_ecr = 0;
+	}
+
 	/*
 	 * Header prediction: check for the two common cases
 	 * of a uni-directional data xfer.  If the packet has
@@ -1482,8 +1502,7 @@ after_listen:
 				 */
 				++tcpstat.tcps_predack;
 				if (opti.ts_present && opti.ts_ecr)
-					tcp_xmit_timer(tp,
-					  TCP_TIMESTAMP(tp) - opti.ts_ecr + 1);
+					tcp_xmit_timer(tp, opti.ts_ecr);
 				else if (tp->t_rtttime &&
 				    SEQ_GT(th->th_ack, tp->t_rtseq))
 					tcp_xmit_timer(tp,
@@ -1764,11 +1783,13 @@ after_listen:
 		if (todrop > tlen ||
 		    (todrop == tlen && (tiflags & TH_FIN) == 0)) {
 			/*
-			 * Any valid FIN must be to the left of the window.
-			 * At this point the FIN must be a duplicate or
-			 * out of sequence; drop it.
+			 * Any valid FIN or RST must be to the left of the
+			 * window.  At this point the FIN or RST must be a
+			 * duplicate or out of sequence; drop it.
 			 */
-			tiflags &= ~TH_FIN;
+			if (tiflags & TH_RST)
+				goto drop;
+			tiflags &= ~(TH_FIN|TH_RST);
 			/*
 			 * Send an ACK to resynchronize and drop any data.
 			 * But keep on processing for RST or ACK.
@@ -1777,6 +1798,13 @@ after_listen:
 			todrop = tlen;
 			tcpstat.tcps_rcvdupbyte += todrop;
 			tcpstat.tcps_rcvduppack++;
+		} else if ((tiflags & TH_RST) &&
+			   th->th_seq != tp->last_ack_sent) {
+			/*
+			 * Test for reset before adjusting the sequence
+			 * number for overlapping data.
+			 */
+			goto dropafterack_ratelim;
 		} else {
 			tcpstat.tcps_rcvpartduppack++;
 			tcpstat.tcps_rcvpartdupbyte += todrop;
@@ -1811,6 +1839,12 @@ after_listen:
 	if (todrop > 0) {
 		tcpstat.tcps_rcvpackafterwin++;
 		if (todrop >= tlen) {
+			/*
+			 * The segment actually starts after the window.
+			 * th->th_seq + tlen - tp->rcv_nxt - tp->rcv_wnd >= tlen
+			 * th->th_seq - tp->rcv_nxt - tp->rcv_wnd >= 0
+			 * th->th_seq >= tp->rcv_nxt + tp->rcv_wnd
+			 */
 			tcpstat.tcps_rcvbyteafterwin += tlen;
 			/*
 			 * If a new connection request is received
@@ -1838,7 +1872,7 @@ after_listen:
 			 * window edge, and have to drop data and PUSH from
 			 * incoming segments.  Continue processing, but
 			 * remember to ack.  Otherwise, drop segment
-			 * and ack.
+			 * and (if not RST) ack.
 			 */
 			if (tp->rcv_wnd == 0 && th->th_seq == tp->rcv_nxt) {
 				tp->t_flags |= TF_ACKNOW;
@@ -1874,37 +1908,52 @@ after_listen:
 	 *    CLOSING, LAST_ACK, TIME_WAIT STATES
 	 *	Close the tcb.
 	 */
-	if (tiflags&TH_RST) switch (tp->t_state) {
+	if (tiflags & TH_RST) {
+		if (th->th_seq != tp->last_ack_sent)
+			goto dropafterack_ratelim;
 
-	case TCPS_SYN_RECEIVED:
-		so->so_error = ECONNREFUSED;
-		goto close;
+		switch (tp->t_state) {
+		case TCPS_SYN_RECEIVED:
+			so->so_error = ECONNREFUSED;
+			goto close;
 
-	case TCPS_ESTABLISHED:
-	case TCPS_FIN_WAIT_1:
-	case TCPS_FIN_WAIT_2:
-	case TCPS_CLOSE_WAIT:
-		so->so_error = ECONNRESET;
-	close:
-		tp->t_state = TCPS_CLOSED;
-		tcpstat.tcps_drops++;
-		tp = tcp_close(tp);
-		goto drop;
+		case TCPS_ESTABLISHED:
+		case TCPS_FIN_WAIT_1:
+		case TCPS_FIN_WAIT_2:
+		case TCPS_CLOSE_WAIT:
+			so->so_error = ECONNRESET;
+		close:
+			tp->t_state = TCPS_CLOSED;
+			tcpstat.tcps_drops++;
+			tp = tcp_close(tp);
+			goto drop;
 
-	case TCPS_CLOSING:
-	case TCPS_LAST_ACK:
-	case TCPS_TIME_WAIT:
-		tp = tcp_close(tp);
-		goto drop;
+		case TCPS_CLOSING:
+		case TCPS_LAST_ACK:
+		case TCPS_TIME_WAIT:
+			tp = tcp_close(tp);
+			goto drop;
+		}
 	}
 
 	/*
-	 * If a SYN is in the window, then this is an
-	 * error and we send an RST and drop the connection.
+	 * Since we've covered the SYN-SENT and SYN-RECEIVED states above
+	 * we must be in a synchronized state.  RFC791 states (under RST
+	 * generation) that any unacceptable segment (an out-of-order SYN
+	 * qualifies) received in a synchronized state must elicit only an
+	 * empty acknowledgment segment ... and the connection remains in
+	 * the same state.
 	 */
 	if (tiflags & TH_SYN) {
-		tp = tcp_drop(tp, ECONNRESET);
-		goto dropwithreset;
+		if (tp->rcv_nxt == th->th_seq) {
+			tcp_respond(tp, m, m, th, (tcp_seq)0, th->th_ack - 1,
+			    TH_ACK);
+			if (tcp_saveti)
+				m_freem(tcp_saveti);
+			return;
+		}
+			
+		goto dropafterack_ratelim;
 	}
 
 	/*
@@ -2028,6 +2077,15 @@ after_listen:
 					(void) tcp_output(tp);
 					goto drop;
 				}
+			} else if (tlen) {
+				tp->t_dupacks = 0;	/*XXX*/
+				/* drop very old ACKs unless th_seq matches */
+				if (th->th_seq != tp->rcv_nxt &&
+				    SEQ_LT(th->th_ack,
+				    tp->snd_una - tp->max_sndwnd)) {
+					goto drop;
+				}
+				break;
 			} else
 				tp->t_dupacks = 0;
 			break;
@@ -2073,7 +2131,7 @@ after_listen:
 		 * Recompute the initial retransmit timer.
 		 */
 		if (opti.ts_present && opti.ts_ecr)
-			tcp_xmit_timer(tp, TCP_TIMESTAMP(tp) - opti.ts_ecr + 1);
+			tcp_xmit_timer(tp, opti.ts_ecr);
 		else if (tp->t_rtttime && SEQ_GT(th->th_ack, tp->t_rtseq))
 			tcp_xmit_timer(tp, tcp_now - tp->t_rtttime);
 
@@ -2117,6 +2175,7 @@ after_listen:
 				tp->t_lastm = NULL;
 			sbdrop(&so->so_snd, acked);
 			tp->t_lastoff -= acked;
+			tp->snd_wnd -= acked;
 			ourfinisacked = 0;
 		}
 		sowwakeup(so);
@@ -2411,6 +2470,20 @@ dropafterack:
 	 */
 	if (tiflags & TH_RST)
 		goto drop;
+	goto dropafterack2;
+
+dropafterack_ratelim:
+	/*
+	 * We may want to rate-limit ACKs against SYN/RST attack.
+	 */
+	if (ppsratecheck(&tcp_ackdrop_ppslim_last, &tcp_ackdrop_ppslim_count,
+	    tcp_ackdrop_ppslim) == 0) {
+		/* XXX stat */
+		goto drop;
+	}
+	/* ...fall into dropafterack2... */
+
+dropafterack2:
 	m_freem(m);
 	tp->t_flags |= TF_ACKNOW;
 	(void) tcp_output(tp);

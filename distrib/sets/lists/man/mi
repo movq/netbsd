@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.672 2004/03/28 10:26:11 martti Exp $
+# $NetBSD: mi,v 1.672.2.10.2.5 2005/07/21 19:26:59 riz Exp $
 ./etc/mtree/set.man				man-sys-root
 ./usr/share/info/am-utils.info			man-amd-info		info
 ./usr/share/info/as.info			man-computil-info	bfd,info
@@ -19,6 +19,7 @@
 ./usr/share/info/gdbint.info			man-debug-info		gdb,info
 ./usr/share/info/gettext.info			man-sys-info		info
 ./usr/share/info/gprof.info			man-debug-info		bfd,info
+./usr/share/info/groff.info			man-groff-info		info
 ./usr/share/info/grep.info			man-util-info		info
 ./usr/share/info/gzip.info			man-obsolete		obsolete
 ./usr/share/info/heimdal.info			man-krb5-info		kerberos,info
@@ -529,6 +530,7 @@
 ./usr/share/man/cat4/aha.0			man-sys-catman		.cat
 ./usr/share/man/cat4/ahb.0			man-sys-catman		.cat
 ./usr/share/man/cat4/ahc.0			man-sys-catman		.cat
+./usr/share/man/cat4/ahd.0			man-sys-catman		.cat
 ./usr/share/man/cat4/ai.0			man-sys-catman		.cat
 ./usr/share/man/cat4/aic.0			man-sys-catman		.cat
 ./usr/share/man/cat4/akbd.0			man-sys-catman		.cat
@@ -686,11 +688,13 @@
 ./usr/share/man/cat4/cobalt/gt.0		man-sys-catman		.cat
 ./usr/share/man/cat4/cobalt/intro.0		man-sys-catman		.cat
 ./usr/share/man/cat4/com.0			man-sys-catman		.cat
+./usr/share/man/cat4/crypto.0			man-sys-catman		.cat
 ./usr/share/man/cat4/cs.0			man-sys-catman		.cat
 ./usr/share/man/cat4/cs80bus.0			man-sys-catman		.cat
 ./usr/share/man/cat4/cue.0			man-sys-catman		.cat
 ./usr/share/man/cat4/cy.0			man-sys-catman		.cat
 ./usr/share/man/cat4/cypide.0			man-sys-catman		.cat
+./usr/share/man/cat4/geodeide.0			man-sys-catman		.cat
 ./usr/share/man/cat4/cz.0			man-sys-catman		.cat
 ./usr/share/man/cat4/daic.0			man-sys-catman		.cat
 ./usr/share/man/cat4/ddb.0			man-sys-catman		.cat
@@ -747,6 +751,7 @@
 ./usr/share/man/cat4/ex.0			man-sys-catman		.cat
 ./usr/share/man/cat4/exphy.0			man-sys-catman		.cat
 ./usr/share/man/cat4/faith.0			man-sys-catman		.cat
+./usr/share/man/cat4/fast_ipsec.0		man-sys-catman		.cat
 ./usr/share/man/cat4/fd.0			man-sys-catman		.cat
 ./usr/share/man/cat4/fea.0			man-sys-catman		.cat
 ./usr/share/man/cat4/fms.0			man-sys-catman		.cat
@@ -767,6 +772,7 @@
 ./usr/share/man/cat4/gsip.0			man-sys-catman		.cat
 ./usr/share/man/cat4/gus.0			man-sys-catman		.cat
 ./usr/share/man/cat4/guspnp.0			man-sys-catman		.cat
+./usr/share/man/cat4/hifn.0			man-sys-catman		.cat
 ./usr/share/man/cat4/hcide.0			man-sys-catman		.cat
 ./usr/share/man/cat4/hme.0			man-sys-catman		.cat
 ./usr/share/man/cat4/hp300/apci.0		man-obsolete		obsolete
@@ -973,6 +979,7 @@
 ./usr/share/man/cat4/netintro.0			man-sys-catman		.cat
 ./usr/share/man/cat4/netsmb.0			man-sys-catman		.cat
 ./usr/share/man/cat4/networking.0		man-sys-catman		.cat
+./usr/share/man/cat4/njs.0			man-sys-catman		.cat
 ./usr/share/man/cat4/ns.0			man-sys-catman		.cat
 ./usr/share/man/cat4/nsclpcsio.0		man-sys-catman		.cat
 ./usr/share/man/cat4/nsip.0			man-sys-catman		.cat
@@ -1011,6 +1018,7 @@
 ./usr/share/man/cat4/pcppi.0			man-sys-catman		.cat
 ./usr/share/man/cat4/pcscp.0			man-sys-catman		.cat
 ./usr/share/man/cat4/pcweasel.0			man-sys-catman		.cat
+./usr/share/man/cat4/pdcsata.0			man-sys-catman		.cat
 ./usr/share/man/cat4/pdcide.0			man-sys-catman		.cat
 ./usr/share/man/cat4/phy.0			man-sys-catman		.cat
 ./usr/share/man/cat4/piixide.0			man-sys-catman		.cat
@@ -1051,6 +1059,7 @@
 ./usr/share/man/cat4/rasterconsole.0		man-sys-catman		.cat
 ./usr/share/man/cat4/ray.0			man-sys-catman		.cat
 ./usr/share/man/cat4/rcons.0			man-sys-catman		.cat
+./usr/share/man/cat4/re.0			man-sys-catman		.cat
 ./usr/share/man/cat4/rl.0			man-obsolete		obsolete
 ./usr/share/man/cat4/rmidi.0			man-sys-catman		.cat
 ./usr/share/man/cat4/rnd.0			man-sys-catman		.cat
@@ -1189,6 +1198,7 @@
 ./usr/share/man/cat4/uaudio.0			man-sys-catman		.cat
 ./usr/share/man/cat4/uax.0			man-sys-catman		.cat
 ./usr/share/man/cat4/ubsa.0			man-sys-catman		.cat
+./usr/share/man/cat4/ubsec.0			man-sys-catman		.cat
 ./usr/share/man/cat4/ucom.0			man-sys-catman		.cat
 ./usr/share/man/cat4/udav.0			man-sys-catman		.cat
 ./usr/share/man/cat4/udp.0			man-sys-catman		.cat
@@ -1204,6 +1214,7 @@
 ./usr/share/man/cat4/uk.0			man-sys-catman		.cat
 ./usr/share/man/cat4/ukbd.0			man-sys-catman		.cat
 ./usr/share/man/cat4/ukphy.0			man-sys-catman		.cat
+./usr/share/man/cat4/ukyopon.0			man-sys-catman		.cat
 ./usr/share/man/cat4/ulpt.0			man-sys-catman		.cat
 ./usr/share/man/cat4/umass.0			man-sys-catman		.cat
 ./usr/share/man/cat4/umct.0			man-sys-catman		.cat
@@ -1374,8 +1385,10 @@
 ./usr/share/man/cat5/ipf.0			man-ipf-catman		.cat
 ./usr/share/man/cat5/ipf.conf.0			man-ipf-catman		.cat
 ./usr/share/man/cat5/ipf6.conf.0		man-ipf-catman		.cat
+./usr/share/man/cat5/ipmon.0			man-ipf-catman		.cat
 ./usr/share/man/cat5/ipnat.0			man-ipf-catman		.cat
 ./usr/share/man/cat5/ipnat.conf.0		man-ipf-catman		.cat
+./usr/share/man/cat5/ippool.0			man-ipf-catman		.cat
 ./usr/share/man/cat5/ipsec.conf.0		man-netutil-catman	.cat
 ./usr/share/man/cat5/ipsend.0			man-ipf-catman		.cat
 ./usr/share/man/cat5/isdnd.acct.0		man-isdn-catman		.cat
@@ -1428,6 +1441,7 @@
 ./usr/share/man/cat5/remote.0			man-uucp-catman		.cat
 ./usr/share/man/cat5/resolv.conf.0		man-net-catman		.cat
 ./usr/share/man/cat5/rhosts.0			man-netutil-catman	.cat
+./usr/share/man/cat5/route.conf.0		man-sys-catman		.cat
 ./usr/share/man/cat5/rpc.0			man-net-catman		.cat
 ./usr/share/man/cat5/rtadvd.conf.0		man-router-catman	.cat
 ./usr/share/man/cat5/securenet.0		man-obsolete		obsolete
@@ -2596,6 +2610,7 @@
 ./usr/share/man/man4/aha.4			man-sys-man		.man
 ./usr/share/man/man4/ahb.4			man-sys-man		.man
 ./usr/share/man/man4/ahc.4			man-sys-man		.man
+./usr/share/man/man4/ahd.4			man-sys-man		.man
 ./usr/share/man/man4/ai.4			man-sys-man		.man
 ./usr/share/man/man4/aic.4			man-sys-man		.man
 ./usr/share/man/man4/akbd.4			man-sys-man		.man
@@ -2753,11 +2768,13 @@
 ./usr/share/man/man4/cobalt/gt.4		man-sys-man		.man
 ./usr/share/man/man4/cobalt/intro.4		man-sys-man		.man
 ./usr/share/man/man4/com.4			man-sys-man		.man
+./usr/share/man/man4/crypto.4			man-sys-man		.man
 ./usr/share/man/man4/cs.4			man-sys-man		.man
 ./usr/share/man/man4/cs80bus.4			man-sys-man		.man
 ./usr/share/man/man4/cue.4			man-sys-man		.man
 ./usr/share/man/man4/cy.4			man-sys-man		.man
 ./usr/share/man/man4/cypide.4			man-sys-man		.man
+./usr/share/man/man4/geodeide.4			man-sys-man		.man
 ./usr/share/man/man4/cz.4			man-sys-man		.man
 ./usr/share/man/man4/daic.4			man-sys-man		.man
 ./usr/share/man/man4/ddb.4			man-sys-man		.man
@@ -2814,6 +2831,7 @@
 ./usr/share/man/man4/ex.4			man-sys-man		.man
 ./usr/share/man/man4/exphy.4			man-sys-man		.man
 ./usr/share/man/man4/faith.4			man-sys-man		.man
+./usr/share/man/man4/fast_ipsec.4		man-sys-man		.man
 ./usr/share/man/man4/fd.4			man-sys-man		.man
 ./usr/share/man/man4/fea.4			man-sys-man		.man
 ./usr/share/man/man4/fms.4			man-sys-man		.man
@@ -2835,6 +2853,7 @@
 ./usr/share/man/man4/gus.4			man-sys-man		.man
 ./usr/share/man/man4/guspnp.4			man-sys-man		.man
 ./usr/share/man/man4/hcide.4			man-sys-man		.man
+./usr/share/man/man4/hifn.4			man-sys-man		.man
 ./usr/share/man/man4/hme.4			man-sys-man		.man
 ./usr/share/man/man4/hp300/apci.4		man-obsolete		obsolete
 ./usr/share/man/man4/hp300/autoconf.4		man-sys-man		.man
@@ -3040,6 +3059,7 @@
 ./usr/share/man/man4/netintro.4			man-sys-man		.man
 ./usr/share/man/man4/netsmb.4			man-sys-man		.man
 ./usr/share/man/man4/networking.4		man-sys-man		.man
+./usr/share/man/man4/njs.4			man-sys-man		.man
 ./usr/share/man/man4/ns.4			man-sys-man		.man
 ./usr/share/man/man4/nsclpcsio.4		man-sys-man		.man
 ./usr/share/man/man4/nsip.4			man-sys-man		.man
@@ -3079,6 +3099,7 @@
 ./usr/share/man/man4/pcppi.4			man-sys-man		.man
 ./usr/share/man/man4/pcscp.4			man-sys-man		.man
 ./usr/share/man/man4/pcweasel.4			man-sys-man		.man
+./usr/share/man/man4/pdcsata.4			man-sys-man		.man
 ./usr/share/man/man4/pdcide.4			man-sys-man		.man
 ./usr/share/man/man4/phy.4			man-sys-man		.man
 ./usr/share/man/man4/piixide.4			man-sys-man		.man
@@ -3119,6 +3140,7 @@
 ./usr/share/man/man4/rasterconsole.4		man-sys-man		.man
 ./usr/share/man/man4/ray.4			man-sys-man		.man
 ./usr/share/man/man4/rcons.4			man-sys-man		.man
+./usr/share/man/man4/re.4			man-sys-man		.man
 ./usr/share/man/man4/rl.4			man-obsolete		obsolete
 ./usr/share/man/man4/rmidi.4			man-sys-man		.man
 ./usr/share/man/man4/rnd.4			man-sys-man		.man
@@ -3257,6 +3279,7 @@
 ./usr/share/man/man4/uaudio.4			man-sys-man		.man
 ./usr/share/man/man4/uax.4			man-sys-man		.man
 ./usr/share/man/man4/ubsa.4			man-sys-man		.man
+./usr/share/man/man4/ubsec.4			man-sys-man		.man
 ./usr/share/man/man4/ucom.4			man-sys-man		.man
 ./usr/share/man/man4/udav.4			man-sys-man		.man
 ./usr/share/man/man4/udp.4			man-sys-man		.man
@@ -3272,6 +3295,7 @@
 ./usr/share/man/man4/uk.4			man-sys-man		.man
 ./usr/share/man/man4/ukbd.4			man-sys-man		.man
 ./usr/share/man/man4/ukphy.4			man-sys-man		.man
+./usr/share/man/man4/ukyopon.4			man-sys-man		.man
 ./usr/share/man/man4/ulpt.4			man-sys-man		.man
 ./usr/share/man/man4/umass.4			man-sys-man		.man
 ./usr/share/man/man4/umct.4			man-sys-man		.man
@@ -3442,8 +3466,10 @@
 ./usr/share/man/man5/ipf.5			man-ipf-man		.man
 ./usr/share/man/man5/ipf.conf.5			man-ipf-man		.man
 ./usr/share/man/man5/ipf6.conf.5		man-ipf-man		.man
+./usr/share/man/man5/ipmon.5			man-ipf-man		.man
 ./usr/share/man/man5/ipnat.5			man-ipf-man		.man
 ./usr/share/man/man5/ipnat.conf.5		man-ipf-man		.man
+./usr/share/man/man5/ippool.5			man-ipf-man		.man
 ./usr/share/man/man5/ipsec.conf.5		man-netutil-man		.man
 ./usr/share/man/man5/ipsend.5			man-ipf-man		.man
 ./usr/share/man/man5/isdnd.acct.5		man-isdn-man		.man
@@ -3496,6 +3522,7 @@
 ./usr/share/man/man5/remote.5			man-uucp-man		.man
 ./usr/share/man/man5/resolv.conf.5		man-net-man		.man
 ./usr/share/man/man5/rhosts.5			man-netutil-man		.man
+./usr/share/man/man5/route.conf.5		man-sys-man		.man
 ./usr/share/man/man5/rpc.5			man-net-man		.man
 ./usr/share/man/man5/rtadvd.conf.5		man-router-man		.man
 ./usr/share/man/man5/securenet.5		man-obsolete		obsolete

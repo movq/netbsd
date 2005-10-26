@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.81 2004/01/03 14:04:27 lukem Exp $
+#	$NetBSD: Makefile,v 1.81.2.1.2.3 2005/04/06 10:38:33 he Exp $
 
 .include <bsd.own.mk>
 
@@ -40,15 +40,15 @@ SUBDIR+=	groff
 SUBDIR+=	autoconf gettext
 .endif
 
-.if ${MACHINE} == ibmnws
+.if ${MACHINE} == "ibmnws"
 SUBDIR+=	ibmnws-ncdcs
 .endif
 
-.if ${MACHINE} == macppc
+.if ${MACHINE} == "macppc"
 SUBDIR+=	macppc-fixcoff
 .endif
 
-.if ${MACHINE} == prep
+.if ${MACHINE} == "prep"
 SUBDIR+=	prep-mkbootimage
 .endif
 
@@ -60,8 +60,27 @@ SUBDIR+=	mips-elf2ecoff
 SUBDIR+=	sgivol
 .endif
 
+.if ${MACHINE} == "acorn32"
+SUBDIR+=	sparkcrc
+.endif
+
 .if (${MACHINE} == "sparc" || ${MACHINE} == "sparc64")
 SUBDIR+=	fgen
+.endif
+
+.if ${MACHINE} == "hp300"
+SUBDIR+=	hp300-mkboot
+.endif
+
+.if ${MACHINE} == "amiga"
+SUBDIR+=	amiga-elf2bb
+SUBDIR+=	amiga-aout2bb
+SUBDIR+=	amiga-txlt
+.endif
+
+.if ${MACHINE} == "bebox"
+SUBDIR+=	bebox-elf2pef
+SUBDIR+=	bebox-mkbootimage
 .endif
 
 .endif	# ! NOSUBDIR					# }

@@ -1,4 +1,4 @@
-/*	$NetBSD: run.c,v 1.55 2003/11/30 14:36:44 dsl Exp $	*/
+/*	$NetBSD: run.c,v 1.55.2.2.2.1 2005/07/24 02:25:24 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -169,8 +169,9 @@ collect(int kind, char **buffer, const char *name, ...)
 	struct stat st;		/* stat information. */
 	int ch;
 	FILE *f;
-	char fileorcmd [STRSIZE];
+	char fileorcmd[STRSIZE];
 	va_list ap;
+	char *cp;
 
 	va_start(ap, name);
 	vsnprintf(fileorcmd, STRSIZE, name, ap);
@@ -204,16 +205,16 @@ collect(int kind, char **buffer, const char *name, ...)
 		fbytes = BUFSIZE;
 	
 	/* Allocate the buffer size. */
-	*buffer = (char *)malloc(fbytes + 1);
-	if (!*buffer) 
-		return -1;
-
-	/* Read the buffer. */
-	nbytes = 0;
-	while (nbytes < fbytes && (ch = fgetc(f)) != EOF)
-		(*buffer)[nbytes++] = ch;
-
-	(*buffer)[nbytes] = 0;
+	*buffer = cp = malloc(fbytes + 1);
+	if (!cp)
+		nbytes =  -1;
+	else {
+		/* Read the buffer. */
+		nbytes = 0;
+		while (nbytes < fbytes && (ch = fgetc(f)) != EOF)
+			cp[nbytes++] = ch;
+		cp[nbytes] = 0;
+	}
 
 	if (kind == T_FILE)
 		fclose(f);
@@ -265,6 +266,14 @@ make_argv(const char *cmd)
 		if (argv == NULL)
 			err(1, "realloc(argv) for %s", cmd);
 		asprintf(argv + argc, "%.*s", (int)(cp - cmd), cmd);
+		/* Hack to remove %xx encoded ftp password */
+		dp = strstr(cmd, ":%");
+		if (dp != NULL && dp < cp) {
+			for (fn = dp + 4; *fn == '%'; fn += 3)
+				continue;
+			if (*fn == '@')
+				memset(dp + 1, '*', fn - dp - 1);
+		}
 		if (*cp == '\'')
 			cp++;
 		if (cp[-1] != '*')
@@ -318,23 +327,12 @@ show_cmd(const char *scmd, struct winsize *win)
 {
 	int n, m;
 	WINDOW *actionwin;
+	int nrow;
 
 	wclear(stdscr);
 	clearok(stdscr, 1);
 	touchwin(stdscr);
 	refresh();
-
-	actionwin = subwin(stdscr, win->ws_row - 4, win->ws_col, 4, 0);
-	if (actionwin == NULL) {
-		fprintf(stderr, "sysinst: failed to allocate"
-			    " output window.\n");
-		exit(1);
-	}
-	scrollok(actionwin, TRUE);
-	if (has_colors()) {
-		wbkgd(actionwin, getbkgd(stdscr));
-		wattrset(actionwin, getattrs(stdscr));
-	}
 
 	mvaddstr(0, 4, msg_string(MSG_Status));
 	standout();
@@ -342,13 +340,25 @@ show_cmd(const char *scmd, struct winsize *win)
 	standend();
 	mvaddstr(1, 4, msg_string(MSG_Command));
 	standout();
-	printw("%.*s", win->ws_col - getcurx(stdscr) - 1, scmd);
+	printw("%s", scmd);
 	standend();
-
-	move(3, 0);
+	addstr("\n\n");
 	for (n = win->ws_col; (m = min(n, 30)) > 0; n -= m)
 		addstr( "------------------------------" + 30 - m);
 	refresh();
+
+	nrow = getcury(stdscr) + 1;
+
+	actionwin = subwin(stdscr, win->ws_row - nrow, win->ws_col, nrow, 0);
+	if (actionwin == NULL) {
+		fprintf(stderr, "sysinst: failed to allocate output window.\n");
+		exit(1);
+	}
+	scrollok(actionwin, TRUE);
+	if (has_colors()) {
+		wbkgd(actionwin, getbkgd(stdscr));
+		wattrset(actionwin, getattrs(stdscr));
+	}
 
 	wmove(actionwin, 0, 0);
 	wrefresh(actionwin);
@@ -404,6 +414,11 @@ launch_subwin(WINDOW **actionwin, char **args, struct winsize *win, int flags,
 		}
 	}
 
+	if (logging)
+		fflush(logfp);
+	if (scripting)
+		fflush(script);
+
 	child = fork();
 	switch (child) {
 	case -1:
@@ -424,27 +439,23 @@ launch_subwin(WINDOW **actionwin, char **args, struct winsize *win, int flags,
 		(void)tcsetattr(slave, TCSANOW, &rtt);
 		login_tty(slave);
 		if (logging) {
-			fprintf(logfp, "executing:");
-			for (i = 0; args[i]; i++)
-				fprintf(logfp, " %s", args[i]);
-			fprintf(logfp, "\n");
+			fprintf(logfp, "executing: %s\n", scmd);
 			fclose(logfp);
 		}
 		if (scripting) {
-			for (i = 0; args[i]; i++)
-				fprintf(script, "%s ", args[i]);
-			fprintf(script, "\n");
+			fprintf(script, "%s\n", scmd);
 			fclose(script);
 		}
 		/*
 		 * If target_prefix == "", the chroot will fail, but
 		 * that's ok, since we don't need it then.
 		 */
-		if ((flags & RUN_CHROOT) != 0)
-			chroot(target_prefix());
-		execvp(*args, args);
-		/* The parent will see this as the output from the child */
-		warn("execvp %s", *args);
+		if ((flags & RUN_CHROOT) != 0 && chroot(target_prefix()) != 0)
+			warn("chroot(%s) for %s", target_prefix(), *args);
+		else {
+			execvp(*args, args);
+			warn("execvp %s", *args);
+		}
 		_exit(EXIT_FAILURE);
 		break; /* end of child */
 	default:
@@ -552,7 +563,6 @@ loop:
  *	RUN_CHROOT	chroot to target before the exec
  *	RUN_FULLSCREEN	display output only
  *	RUN_SILENT	do not display program output
- *	RUN_DISPLAY_ERR	display status if program fails
  *	RUN_ERROR_OK	don't wait for key if program fails
  *	RUN_PROGRESS	don't wait for key if program has output
  * If both RUN_DISPLAY and RUN_SILENT are clear then the program name will
@@ -604,34 +614,44 @@ run_program(int flags, const char *cmd, ...)
 	ret = launch_subwin(&actionwin, args, &win, flags, scmd, &errstr);
 
 	/* If the command failed, show command name */
-	if (ret != 0 && actionwin == NULL && !(flags & RUN_SILENT_ERR))
+	if (actionwin == NULL && ret != 0 && !(flags & RUN_ERROR_OK))
 		actionwin = show_cmd(scmd, &win);
 
 	if (actionwin != NULL) {
 		int y, x;
 		getyx(actionwin, y, x);
-		standout();
+		if (actionwin != stdscr)
+			mvaddstr(0, 4, msg_string(MSG_Status));
 		if (ret != 0) {
-			if (actionwin != stdscr)
-				move(0, 13);
-			else if (x != 0)
+			if (actionwin == stdscr && x != 0)
 				addstr("\n");
-			addstr(errstr);
 			x = 1;	/* force newline below */
-		} else
-			if (actionwin != stdscr)
-				mvaddstr(0, 13, msg_string(MSG_Finished));
-		standend();
+			standout();
+			addstr(errstr);
+			standend();
+		} else {
+			if (actionwin != stdscr) {
+				standout();
+				addstr(msg_string(MSG_Finished));
+				standend();
+			}
+		}
 		refresh();
 		if ((ret != 0 && !(flags & RUN_ERROR_OK)) ||
 		    (y + x != 0 && !(flags & RUN_PROGRESS))) {
 			if (actionwin != stdscr)
-				move(2, 5);
+				move(getbegy(actionwin) - 2, 5);
 			else if (x != 0)
 				addstr("\n");
 			addstr(msg_string(MSG_Hit_enter_to_continue));
 			refresh();
 			getchar();
+		} else {
+			if (y + x != 0) {
+				/* give user 1 second to see messages */
+				refresh();
+				sleep(1);
+			}
 		}
 	}
 

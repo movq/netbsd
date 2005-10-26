@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_vfsops.c,v 1.140 2004/03/27 12:40:46 dsl Exp $	*/
+/*	$NetBSD: ffs_vfsops.c,v 1.140.2.3 2004/05/29 09:03:56 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1994
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_vfsops.c,v 1.140 2004/03/27 12:40:46 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_vfsops.c,v 1.140.2.3 2004/05/29 09:03:56 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -461,6 +461,7 @@ ffs_reload(mountp, cred, p)
 	int i, blks, size, error;
 	int32_t *lp;
 	struct ufsmount *ump;
+	daddr_t sblockloc;
 
 	if ((mountp->mnt_flag & MNT_RDONLY) == 0)
 		return (EINVAL);
@@ -483,6 +484,7 @@ ffs_reload(mountp, cred, p)
 		size = DEV_BSIZE;
 	else
 		size = dpart.disklab->d_secsize;
+	/* XXX we don't handle possibility that superblock moved. */
 	error = bread(devvp, fs->fs_sblockloc / size, fs->fs_sbsize,
 		      NOCRED, &bp);
 	if (error) {
@@ -506,6 +508,8 @@ ffs_reload(mountp, cred, p)
 		free(newfs, M_UFSMNT);
 		return (EIO);		/* XXX needs translation */
 	}
+	/* Store off old fs_sblockloc for fs_oldfscompat_read. */
+	sblockloc = fs->fs_sblockloc;
 	/* 
 	 * Copy pointer fields back into superblock before copying in	XXX
 	 * new superblock. These should really be in the ufsmount.	XXX
@@ -558,7 +562,7 @@ ffs_reload(mountp, cred, p)
 		/* see comment about NeXT below */
 		mountp->mnt_maxsymlinklen = APPLEUFS_MAXSYMLINKLEN;
 	}
-	ffs_oldfscompat_read(fs, VFSTOUFS(mountp), fs->fs_sblockloc);
+	ffs_oldfscompat_read(fs, VFSTOUFS(mountp), sblockloc);
 	if (fs->fs_pendingblocks != 0 || fs->fs_pendinginodes != 0) {
 		fs->fs_pendingblocks = 0;
 		fs->fs_pendinginodes = 0;
@@ -976,34 +980,9 @@ ffs_oldfscompat_read(fs, ump, sblockloc)
 	off_t maxfilesize;
 	int32_t *extrasave;
 
-	/* XXX This warning should be removed before the next release. -- dbj */
-	if (fs->fs_flags & 0x40000000) {
-		printf("WARNING: possible botched superblock upgrade detected\n"
-		    "on filesystem previously mounted on %s\n"
-		    "Extra bits discovered in fs_flags on filesystem (0x%08x)\n"
-		    "Consider running the program mentioned in\n"
-		    "http://mail-index.NetBSD.org/tech-kern/2003/10/07/0005.html\n",
-		    fs->fs_fsmnt, fs->fs_flags);
-	}
-
 	if ((fs->fs_magic != FS_UFS1_MAGIC) ||
 	    (fs->fs_old_flags & FS_FLAGS_UPDATED))
 		return;
-
-	/* XXX This warning should be removed before the next release. -- dbj */
-	if (fs->fs_maxbsize == fs->fs_bsize) {
-		printf("WARNING: possible botched superblock upgrade detected\n"
-		    "on filesystem previously mounted on %s\n"
-		    "fs_bsize == fs_maxbsize (0x%08x) but FS_FLAGS_UPDATED is not set\n"
-		    "Test your filesystem by running fsck_ffs -n -f on it.\n"
-		    "If it reports:\n"
-		    "``VALUES IN SUPER BLOCK DISAGREE WITH THOSE IN FIRST ALTERNATE''\n"
-		    "you should be able to recover with fsck_ffs -b 16 -c 4\n"
-		    "See the file src/UPDATING or\n"
-		    "http://mail-index.NetBSD.org/current-users/2004/01/11/0022.html\n"
-		    "for more details\n",
-		    fs->fs_fsmnt, fs->fs_maxbsize);
-	}
 
 	if (!ump->um_oldfscompat)
 		ump->um_oldfscompat = malloc(512 + 3*sizeof(int32_t),
@@ -1581,7 +1560,8 @@ SYSCTL_SETUP(sysctl_vfs_ffs_setup, "sysctl vfs.ffs subtree setup")
 		       CTL_VFS, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "ffs", NULL,
+		       CTLTYPE_NODE, "ffs",
+		       SYSCTL_DESCR("Berkeley Fast File System"),
 		       NULL, 0, NULL, 0,
 		       CTL_VFS, 1, CTL_EOL);
 
@@ -1605,12 +1585,14 @@ SYSCTL_SETUP(sysctl_vfs_ffs_setup, "sysctl vfs.ffs subtree setup")
 		       CTL_VFS, 1, FFS_REALLOCBLKS, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
-		       CTLTYPE_INT, "doasyncfree", NULL,
+		       CTLTYPE_INT, "doasyncfree",
+		       SYSCTL_DESCR("Release dirty blocks asynchronously"),
 		       NULL, 0, &doasyncfree, 0,
 		       CTL_VFS, 1, FFS_ASYNCFREE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
-		       CTLTYPE_INT, "log_changeopt", NULL,
+		       CTLTYPE_INT, "log_changeopt",
+		       SYSCTL_DESCR("Log changes in optimization strategy"),
 		       NULL, 0, &ffs_log_changeopt, 0,
 		       CTL_VFS, 1, FFS_LOG_CHANGEOPT, CTL_EOL);
 }
@@ -1634,18 +1616,6 @@ ffs_sbupdate(mp, waitfor)
 	saveflag = fs->fs_flags & FS_INTERNAL;
 	fs->fs_flags &= ~FS_INTERNAL;
 	
-	if (fs->fs_magic == FS_UFS1_MAGIC && fs->fs_sblockloc != SBLOCK_UFS1) {
-		printf("%s: correcting fs_sblockloc from %" PRId64 " to %d\n",
-		    fs->fs_fsmnt, fs->fs_sblockloc, SBLOCK_UFS1);
-		fs->fs_sblockloc = SBLOCK_UFS1;
-	}
-
-	if (fs->fs_magic == FS_UFS2_MAGIC && fs->fs_sblockloc != SBLOCK_UFS2) {
-		printf("%s: correcting fs_sblockloc from %" PRId64 " to %d\n",
-		    fs->fs_fsmnt, fs->fs_sblockloc, SBLOCK_UFS2);
-		fs->fs_sblockloc = SBLOCK_UFS2;
-	}
-
 	memcpy(bp->b_data, fs, fs->fs_sbsize);
 
 	ffs_oldfscompat_write((struct fs *)bp->b_data, mp);

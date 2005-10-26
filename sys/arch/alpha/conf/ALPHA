@@ -1,4 +1,4 @@
-# $NetBSD: ALPHA,v 1.191 2004/02/13 10:05:49 wiz Exp $
+# $NetBSD: ALPHA,v 1.191.2.2.2.2 2005/07/21 19:27:24 riz Exp $
 #
 # Alpha kernel with all the options you'd want, and more.
 
@@ -6,7 +6,7 @@ include 	"arch/alpha/conf/std.alpha"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-ident		"ALPHA-$Revision: 1.191 $"
+ident		"ALPHA-$Revision: 1.191.2.2.2.2 $"
 
 maxusers 32
 
@@ -153,6 +153,7 @@ options 	FIX_UNALIGNED_VAX_FP	# fix unaligned VAX FP loads & stores
 options 	PCMCIAVERBOSE
 options 	USERCONF		# userconf(4) support
 #options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
+options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 options 	FONT_GALLANT12x22	# Console font for TC devices
 
 # The Alpha console firmware network boots using the BOOTP
@@ -309,6 +310,7 @@ hptide* at pci? dev ? function ?		# Triones/HighPoint IDE controllers
 optiide* at pci? dev ? function ?		# Opti IDE controllers
 piixide* at pci? dev ? function ?		# Intel IDE controllers
 pdcide* at pci? dev ? function ?		# Promise IDE controllers
+pdcsata* at pci? dev ? function ?		# Promise SATA150 controllers
 satalink* at pci? dev ? function ?		# SiI SATALink controllers
 siside* at pci? dev ? function ?		# SiS IDE controllers
 slide*  at pci? dev ? function ?		# Symphony Labs IDE controllers
@@ -452,21 +454,7 @@ com*	at puc? port ?			# 16x50s on "universal" comm boards
 lpt*	at puc? port ?			# || ports on "universal" comm boards
 
 # SCSI bus support
-scsibus* at	adv?
-scsibus* at	adw?
-scsibus* at	aha?
-scsibus* at	ahb?
-scsibus* at	ahc?
-scsibus* at	aic?
-scsibus* at	asc?
-scsibus* at	bha?
-scsibus* at	dpt?
-scsibus* at	iha?
-scsibus* at	isp?
-scsibus* at	siop?
-scsibus* at	esiop?
-scsibus* at	pcscp?
-scsibus* at	uha?
+scsibus* at	scsi?
 
 # SCSI devices
 cd*	at	scsibus? target ? lun ?		# SCSI CD-ROM drives
@@ -547,6 +535,10 @@ url*	at uhub? port ?		# Realtek RTL8150L based adapters
 # FTDI FT8U100AX serial adapter
 uftdi*	at uhub? port ?
 ucom*	at uftdi? portno ?
+
+# Kyocera AIR-EDGE PHONE
+ukyopon* at uhub? port ?
+ucom*	at ukyopon? portno ?
 
 # USB scanners
 uscanner* at uhub? port ?

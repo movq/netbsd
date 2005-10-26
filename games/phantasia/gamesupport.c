@@ -1,10 +1,12 @@
-/*	$NetBSD: gamesupport.c,v 1.6 1999/09/08 21:57:19 jsm Exp $	*/
+/*	$NetBSD: gamesupport.c,v 1.6.16.2 2005/04/08 21:46:52 tron Exp $	*/
 
 /*
  * gamesupport.c - auxiliary routines for support of Phantasia
  */
 
 #include "include.h"
+#undef bool
+#include <curses.h>
 
 void
 changestats(ingameflag)

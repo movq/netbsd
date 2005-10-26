@@ -1,4 +1,4 @@
-/* $NetBSD: trap.c,v 1.92 2004/03/23 18:44:00 matt Exp $ */
+/* $NetBSD: trap.c,v 1.92.2.2.2.1 2005/08/29 00:57:12 tron Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -100,7 +100,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.92 2004/03/23 18:44:00 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.92.2.2.2.1 2005/08/29 00:57:12 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -243,6 +243,8 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 #if defined(DDB)
 	int call_debugger = 1;
 #endif
+
+	uvmexp.traps++;
 
 	l = curlwp;
 
@@ -636,12 +638,18 @@ alpha_enable_fp(struct lwp *l, int check)
 	KDASSERT(l->l_addr->u_pcb.pcb_fpcpu == NULL);
 #endif
 
-	FPCPU_LOCK(&l->l_addr->u_pcb, s);
+#if defined(MULTIPROCESSOR)
+	s = splhigh();		/* block IPIs */
+#endif
+	FPCPU_LOCK(&l->l_addr->u_pcb);
 
 	l->l_addr->u_pcb.pcb_fpcpu = ci;
 	ci->ci_fpcurlwp = l;
 
-	FPCPU_UNLOCK(&l->l_addr->u_pcb, s);
+	FPCPU_UNLOCK(&l->l_addr->u_pcb);
+#if defined(MULTIPROCESSOR)
+	splx(s);
+#endif
 
 	/*
 	 * Instrument FP usage -- if a process had not previously
@@ -1263,6 +1271,7 @@ startlwp(arg)
 void
 upcallret(struct lwp *l)
 {
+	KERNEL_PROC_UNLOCK(l);
 
 	userret(l);
 }

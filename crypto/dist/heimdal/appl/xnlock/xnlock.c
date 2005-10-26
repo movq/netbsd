@@ -8,8 +8,8 @@
  */
 #ifdef HAVE_CONFIG_H
 #include <config.h>
-__RCSID("$Heimdal: xnlock.c,v 1.93.2.1 2003/04/29 09:18:36 lha Exp $"
-        "$NetBSD: xnlock.c,v 1.1.1.7 2003/05/15 20:28:43 lha Exp $");
+__RCSID("$Heimdal: xnlock.c,v 1.93.2.4 2004/09/08 09:16:00 joda Exp $"
+        "$NetBSD: xnlock.c,v 1.1.1.7.2.2 2004/09/17 04:35:36 jmc Exp $");
 #endif
 
 #include <stdio.h>
@@ -30,6 +30,12 @@ __RCSID("$Heimdal: xnlock.c,v 1.93.2.1 2003/04/29 09:18:36 lha Exp $"
 #endif
 #ifdef HAVE_PWD_H
 #include <pwd.h>
+#endif
+#ifdef HAVE_CRYPT_H
+#undef des_encrypt
+#define des_encrypt wingless_pigs_mostly_fail_to_fly
+#include <crypt.h>
+#undef des_encrypt
 #endif
 
 #ifdef KRB5
@@ -574,6 +580,7 @@ verify_krb5(const char *password)
 {
     krb5_error_code ret;
     krb5_ccache id;
+    krb5_boolean get_v4_tgt;
     
     krb5_cc_default(context, &id);
     ret = krb5_verify_user(context,
@@ -584,10 +591,10 @@ verify_krb5(const char *password)
 			   NULL);
     if (ret == 0){
 #ifdef KRB4
-	if (krb5_config_get_bool(context, NULL,
-				 "libdefaults",
-				 "krb4_get_tickets",
-				 NULL)) {
+	krb5_appdefault_boolean(context, "xnlock", 
+				krb5_principal_get_realm(context, client),
+				"krb4_get_tickets", FALSE, &get_v4_tgt);
+	if(get_v4_tgt) {
 	    CREDENTIALS c;
 	    krb5_creds mcred, cred;
 

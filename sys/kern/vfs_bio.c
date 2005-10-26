@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_bio.c,v 1.122 2004/03/26 00:31:55 simonb Exp $	*/
+/*	$NetBSD: vfs_bio.c,v 1.122.2.4.2.1 2005/05/11 15:14:49 riz Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -81,7 +81,7 @@
 #include "opt_softdep.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.122 2004/03/26 00:31:55 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.122.2.4.2.1 2005/05/11 15:14:49 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -226,6 +226,7 @@ buf_setvalimit(vsize_t sz)
 	return 0;
 }
 
+static void buf_setwm(void);
 static int buf_trim(void);
 
 /*
@@ -241,6 +242,20 @@ int count_lock_queue(void);
  */
 #define	binsheadfree(bp, dp)	TAILQ_INSERT_HEAD(dp, bp, b_freelist)
 #define	binstailfree(bp, dp)	TAILQ_INSERT_TAIL(dp, bp, b_freelist)
+
+static void
+buf_setwm(void)
+{
+
+	bufmem_hiwater = buf_memcalc();
+	/* lowater is approx. 2% of memory (with bufcache = 15) */
+#define	BUFMEM_WMSHIFT	3
+#define	BUFMEM_HIWMMIN	(64 * 1024 << BUFMEM_WMSHIFT)
+	if (bufmem_hiwater < BUFMEM_HIWMMIN)
+		/* Ensure a reasonable minimum value */
+		bufmem_hiwater = BUFMEM_HIWMMIN;
+	bufmem_lowater = bufmem_hiwater >> BUFMEM_WMSHIFT;
+}
 
 #ifdef DEBUG
 int debug_verify_freelist = 0;
@@ -330,19 +345,14 @@ void
 bufinit(void)
 {
 	struct bqueues *dp;
-	int smallmem;
+	int use_std;
 	u_int i;
 
 	/*
 	 * Initialize buffer cache memory parameters.
 	 */
 	bufmem = 0;
-	bufmem_hiwater = buf_memcalc();
-	/* lowater is approx. 2% of memory (with bufcache=15) */
-	bufmem_lowater = (bufmem_hiwater >> 3);
-	if (bufmem_lowater < 64 * 1024)
-		/* Ensure a reasonable minimum value */
-		bufmem_lowater = 64 * 1024;
+	buf_setwm();
 
 	if (bufmem_valimit != 0) {
 		vaddr_t minaddr = 0, maxaddr;
@@ -360,7 +370,15 @@ bufinit(void)
 	pool_init(&bufpool, sizeof(struct buf), 0, 0, 0, "bufpl", NULL);
 
 	/* On "small" machines use small pool page sizes where possible */
-	smallmem = (physmem < atop(16*1024*1024));
+	use_std = (physmem < atop(16*1024*1024));
+
+	/*
+	 * Also use them on systems that can map the pool pages using
+	 * a direct-mapped segment.
+	 */
+#ifdef PMAP_MAP_POOLPAGE
+	use_std = 1;
+#endif
 
 	for (i = 0; i < NMEMPOOLS; i++) {
 		struct pool_allocator *pa;
@@ -368,11 +386,12 @@ bufinit(void)
 		u_int size = 1 << (i + MEMPOOL_INDEX_OFFSET);
 		char *name = malloc(8, M_TEMP, M_WAITOK);
 		snprintf(name, 8, "buf%dk", 1 << i);
-		pa = (size <= PAGE_SIZE && smallmem)
+		pa = (size <= PAGE_SIZE && use_std)
 			? &pool_allocator_nointr
 			: &bufmempool_allocator;
-		pool_init(pp, size, 0, 0, PR_IMMEDRELEASE, name, pa);
+		pool_init(pp, size, 0, 0, 0, name, pa);
 		pool_setlowat(pp, 1);
+		pool_sethiwat(pp, 1);
 	}
 
 	/* Initialize the buffer queues */
@@ -415,11 +434,11 @@ buf_lotsfree(void)
 	try = random() & 0x0000000fL;
 
 	/* Don't use "16 * bufmem" here to avoid a 32-bit overflow. */
-	thresh = bufmem / (bufmem_hiwater / 16);
+	thresh = (bufmem - bufmem_lowater) /
+	    ((bufmem_hiwater - bufmem_lowater) / 16);
 
-	if ((try > thresh) && (uvmexp.free > (2 * uvmexp.freetarg))) {
+	if (try >= thresh)
 		return 1;
-	}
 
 	/* Otherwise don't allocate. */
 	return 0;
@@ -1146,10 +1165,15 @@ start:
 		simple_lock(&bp->b_interlock);
 		bremfree(bp);
 	} else {
-		/* wait for a free buffer of any kind */
-		needbuffer = 1;
-		ltsleep(&needbuffer, slpflag|(PRIBIO + 1),
-			"getnewbuf", slptimeo, &bqueue_slock);
+		/*
+		 * XXX: !from_bufq should be removed.
+		 */
+		if (!from_bufq || curproc != uvm.pagedaemon_proc) {
+			/* wait for a free buffer of any kind */
+			needbuffer = 1;
+			ltsleep(&needbuffer, slpflag|(PRIBIO + 1),
+			    "getnewbuf", slptimeo, &bqueue_slock);
+		}
 		return (NULL);
 	}
 
@@ -1253,17 +1277,17 @@ out:
 int
 buf_drain(int n)
 {
-	int s, size = 0;
+	int s, size = 0, sz;
 
 	s = splbio();
 	simple_lock(&bqueue_slock);
 
-	/* If not asked for a specific amount, make our own estimate */
-	if (n == 0)
-		n = buf_canrelease();
-
-	while (size < n && bufmem > bufmem_lowater)
-		size += buf_trim();
+	while (size < n && bufmem > bufmem_lowater) {
+		sz = buf_trim();
+		if (sz <= 0)
+			break;
+		size += sz;
+	}
 
 	simple_unlock(&bqueue_slock);
 	splx(s);
@@ -1542,31 +1566,32 @@ sysctl_bufvm_update(SYSCTLFN_ARGS)
 
 	node = *rnode;
 	node.sysctl_data = &t;
-	t = *(int*)rnode->sysctl_data;
+	t = *(int *)rnode->sysctl_data;
 	error = sysctl_lookup(SYSCTLFN_CALL(&node));
 	if (error || newp == NULL)
 		return (error);
 
+	if (t < 0)
+		return EINVAL;
 	if (rnode->sysctl_data == &bufcache) {
-		if (t < 0 || t > 100)
+		if (t > 100)
 			return (EINVAL);
 		bufcache = t;
-		bufmem_hiwater = buf_memcalc();
-		bufmem_lowater = (bufmem_hiwater >> 3);
-		if (bufmem_lowater < 64 * 1024) 
-			/* Ensure a reasonable minimum value */
-			bufmem_lowater = 64 * 1024;
-
+		buf_setwm();
 	} else if (rnode->sysctl_data == &bufmem_lowater) {
+		if (bufmem_hiwater - t < 16)
+			return (EINVAL);
 		bufmem_lowater = t;
 	} else if (rnode->sysctl_data == &bufmem_hiwater) {
+		if (t - bufmem_lowater < 16)
+			return (EINVAL);
 		bufmem_hiwater = t;
 	} else
 		return (EINVAL);
 
 	/* Drain until below new high water mark */
 	while ((t = bufmem - bufmem_hiwater) >= 0) {
-		if (buf_drain(t / (2*1024)) <= 0)
+		if (buf_drain(t / (2 * 1024)) <= 0)
 			break;
 	}
 
@@ -1583,7 +1608,8 @@ SYSCTL_SETUP(sysctl_kern_buf_setup, "sysctl kern.buf subtree setup")
 		       CTL_KERN, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "buf", NULL,
+		       CTLTYPE_NODE, "buf",
+		       SYSCTL_DESCR("Kernel buffer cache information"),
 		       sysctl_dobuf, 0, NULL, 0,
 		       CTL_KERN, KERN_BUF, CTL_EOL);
 }
@@ -1599,22 +1625,30 @@ SYSCTL_SETUP(sysctl_vm_buf_setup, "sysctl vm.buf* subtree setup")
 
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "bufcache", NULL,
+		       CTLTYPE_INT, "bufcache",
+		       SYSCTL_DESCR("Percentage of kernel memory to use for "
+				    "buffer cache"),
 		       sysctl_bufvm_update, 0, &bufcache, 0,
 		       CTL_VM, CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READONLY,
-		       CTLTYPE_INT, "bufmem", NULL,
+		       CTLTYPE_INT, "bufmem",
+		       SYSCTL_DESCR("Amount of kernel memory used by buffer "
+				    "cache"),
 		       NULL, 0, &bufmem, 0,
 		       CTL_VM, CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "bufmem_lowater", NULL,
+		       CTLTYPE_INT, "bufmem_lowater",
+		       SYSCTL_DESCR("Minimum amount of kernel memory to "
+				    "reserve for buffer cache"),
 		       sysctl_bufvm_update, 0, &bufmem_lowater, 0,
 		       CTL_VM, CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "bufmem_hiwater", NULL,
+		       CTLTYPE_INT, "bufmem_hiwater",
+		       SYSCTL_DESCR("Maximum amount of kernel memory to use "
+				    "for buffer cache"),
 		       sysctl_bufvm_update, 0, &bufmem_hiwater, 0,
 		       CTL_VM, CTL_CREATE, CTL_EOL);
 }

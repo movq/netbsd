@@ -1,4 +1,4 @@
-# $NetBSD: md.cats,v 1.4 2004/03/28 06:51:12 jmc Exp $
+# $NetBSD: md.cats,v 1.4.4.2 2005/04/16 12:10:33 tron Exp $
 ./usr/X11R6/bin/X
 ./usr/X11R6/bin/XFree86
 ./usr/X11R6/bin/gtf
@@ -116,6 +116,7 @@
 ./usr/X11R6/lib/modules/drivers/r128_drv.o
 ./usr/X11R6/lib/modules/drivers/radeon_drv.o
 ./usr/X11R6/lib/modules/drivers/rendition_drv.o
+./usr/X11R6/lib/modules/drivers/riva128.o
 ./usr/X11R6/lib/modules/drivers/s3_drv.o
 ./usr/X11R6/lib/modules/drivers/s3virge_drv.o
 ./usr/X11R6/lib/modules/drivers/savage_drv.o
@@ -167,11 +168,13 @@
 ./usr/X11R6/lib/modules/libfb.a
 ./usr/X11R6/lib/modules/libi2c.a
 ./usr/X11R6/lib/modules/libint10.a
+./usr/X11R6/lib/modules/liblayer.a 
 ./usr/X11R6/lib/modules/libmfb.a
 ./usr/X11R6/lib/modules/libpcidata.a
 ./usr/X11R6/lib/modules/librac.a
 ./usr/X11R6/lib/modules/libramdac.a
 ./usr/X11R6/lib/modules/libscanpci.a
+./usr/X11R6/lib/modules/libshadow.a
 ./usr/X11R6/lib/modules/libshadowfb.a
 ./usr/X11R6/lib/modules/libvbe.a
 ./usr/X11R6/lib/modules/libvgahw.a

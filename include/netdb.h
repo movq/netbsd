@@ -1,4 +1,4 @@
-/*	$NetBSD: netdb.h,v 1.34 2004/03/20 18:22:22 christos Exp $	*/
+/*	$NetBSD: netdb.h,v 1.34.2.1.2.2 2005/07/05 18:34:32 riz Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -85,6 +85,7 @@
 #define _NETDB_H_
 
 #include <machine/ansi.h>
+#include <machine/endian_machdep.h>
 #include <sys/ansi.h>
 #include <sys/cdefs.h>
 #include <sys/featuretest.h>
@@ -135,7 +136,15 @@ struct	netent {
 	char		*n_name;	/* official name of net */
 	char		**n_aliases;	/* alias list */
 	int		n_addrtype;	/* net address type */
-	unsigned long	n_net;		/* network # XXX */
+#if (defined(__sparc__) && defined(_LP64)) || \
+    (defined(__sh__) && defined(_LP64) && (_BYTE_ORDER == _BIG_ENDIAN))
+	int		__n_pad0;	/* ABI compatibility */
+#endif
+	uint32_t	n_net;		/* network # */
+#if defined(__alpha__) || (defined(__i386__) && defined(_LP64)) || \
+    (defined(__sh__) && defined(_LP64) && (_BYTE_ORDER == _LITTLE_ENDIAN))
+	int		__n_pad0;	/* ABI compatibility */
+#endif
 };
 
 struct	servent {
@@ -169,12 +178,12 @@ struct addrinfo {
 	int	ai_family;	/* PF_xxx */
 	int	ai_socktype;	/* SOCK_xxx */
 	int	ai_protocol;	/* 0 or IPPROTO_xxx for IPv4 and IPv6 */
-#if defined(__sparc64__)
-	int	__ai_pad0;
+#if defined(__sparc__) && defined(_LP64)
+	int	__ai_pad0;	/* ABI compatibility */
 #endif
 	socklen_t ai_addrlen;	/* length of ai_addr */
 #if defined(__alpha__) || (defined(__i386__) && defined(_LP64))
-	int	__ai_pad0;
+	int	__ai_pad0;	/* ABI compatbility */
 #endif
 	char	*ai_canonname;	/* canonical name for hostname */
 	struct sockaddr *ai_addr;	/* binary address */
@@ -267,9 +276,11 @@ void		endhostent __P((void));
 void		endnetent __P((void));
 void		endprotoent __P((void));
 void		endservent __P((void));
-#if (_XOPEN_SOURCE - 0) >= 500 && (_XOPEN_SOURCE - 0) < 600 || \
+#if (_XOPEN_SOURCE - 0) >= 520 && (_XOPEN_SOURCE - 0) < 600 || \
     defined(_NETBSD_SOURCE)
+#if 0 /* we do not ship this */
 void		freehostent __P((struct hostent *));
+#endif
 #endif
 struct hostent	*gethostbyaddr __P((const char *, socklen_t, int));
 struct hostent	*gethostbyname __P((const char *));
@@ -284,7 +295,7 @@ struct hostent	*getipnodebyaddr __P((const void *, size_t, int, int *));
 struct hostent	*getipnodebyname __P((const char *, int, int, int *));
 #endif
 #endif
-struct netent	*getnetbyaddr __P((unsigned long, int));
+struct netent	*getnetbyaddr __P((uint32_t, int));
 struct netent	*getnetbyname __P((const char *));
 struct netent	*getnetent __P((void));
 struct protoent	*getprotobyname __P((const char *));
@@ -315,6 +326,8 @@ char		*gai_strerror __P((int));
 void		setservent __P((int));
 
 #if defined(_NETBSD_SOURCE) && defined(_LIBC)
+
+#include <stdio.h>	/* for FILE */
 
 struct protoent_data {
         FILE *fp;

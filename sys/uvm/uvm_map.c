@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_map.c,v 1.164 2004/03/24 07:47:33 junyoung Exp $	*/
+/*	$NetBSD: uvm_map.c,v 1.164.2.3.2.2 2005/05/11 19:15:43 riz Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -71,10 +71,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_map.c,v 1.164 2004/03/24 07:47:33 junyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_map.c,v 1.164.2.3.2.2 2005/05/11 19:15:43 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_uvmhist.h"
+#include "opt_uvm.h"
 #include "opt_sysv.h"
 
 #include <sys/param.h>
@@ -102,11 +103,50 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_map.c,v 1.164 2004/03/24 07:47:33 junyoung Exp $
 
 extern struct vm_map *pager_map;
 
-struct uvm_cnt map_ubackmerge, map_uforwmerge;
-struct uvm_cnt map_ubimerge, map_unomerge;
-struct uvm_cnt map_kbackmerge, map_kforwmerge;
-struct uvm_cnt map_kbimerge, map_knomerge;
-struct uvm_cnt uvm_map_call, uvm_mlk_call, uvm_mlk_hint;
+#ifndef UVMMAP_NOCOUNTERS
+#include <sys/device.h>
+struct evcnt map_ubackmerge = EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL,
+    "uvmmap", "ubackmerge");
+struct evcnt map_uforwmerge = EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL,
+    "uvmmap", "uforwmerge");
+struct evcnt map_ubimerge = EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL,
+    "uvmmap", "ubimerge");
+struct evcnt map_unomerge = EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL,
+    "uvmmap", "unomerge");
+struct evcnt map_kbackmerge = EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL,
+    "uvmmap", "kbackmerge");
+struct evcnt map_kforwmerge = EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL,
+    "uvmmap", "kforwmerge");
+struct evcnt map_kbimerge = EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL,
+    "uvmmap", "kbimerge");
+struct evcnt map_knomerge = EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL,
+    "uvmmap", "knomerge");
+struct evcnt uvm_map_call = EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL,
+    "uvmmap", "map_call");
+struct evcnt uvm_mlk_call = EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL,
+    "uvmmap", "mlk_call");
+struct evcnt uvm_mlk_hint = EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL,
+    "uvmmap", "mlk_hint");
+
+EVCNT_ATTACH_STATIC(map_ubackmerge);
+EVCNT_ATTACH_STATIC(map_uforwmerge);
+EVCNT_ATTACH_STATIC(map_ubimerge);
+EVCNT_ATTACH_STATIC(map_unomerge);
+EVCNT_ATTACH_STATIC(map_kbackmerge);
+EVCNT_ATTACH_STATIC(map_kforwmerge);
+EVCNT_ATTACH_STATIC(map_kbimerge);
+EVCNT_ATTACH_STATIC(map_knomerge);
+EVCNT_ATTACH_STATIC(uvm_map_call);
+EVCNT_ATTACH_STATIC(uvm_mlk_call);
+EVCNT_ATTACH_STATIC(uvm_mlk_hint);
+
+#define UVMCNT_INCR(ev)		ev.ev_count++
+#define UVMCNT_DECR(ev)		ev.ev_count--
+#else
+#define UVMCNT_INCR(ev)
+#define UVMCNT_DECR(ev)
+#endif
+
 const char vmmapbsy[] = "vmmapbsy";
 
 /*
@@ -520,29 +560,6 @@ uvm_map_init(void)
 	UVMHIST_INIT_STATIC(pdhist, pdhistbuf);
 	UVMHIST_CALLED(maphist);
 	UVMHIST_LOG(maphist,"<starting uvm map system>", 0, 0, 0, 0);
-	UVMCNT_INIT(uvm_map_call, UVMCNT_CNT, 0,
-	    "# uvm_map() successful calls", 0);
-
-	UVMCNT_INIT(map_ubackmerge, UVMCNT_CNT, 0,
-	    "# uvm_map() back umerges", 0);
-	UVMCNT_INIT(map_uforwmerge, UVMCNT_CNT, 0,
-	    "# uvm_map() forward umerges", 0);
-	UVMCNT_INIT(map_ubimerge, UVMCNT_CNT, 0,
-	    "# uvm_map() dual umerge", 0);
-	UVMCNT_INIT(map_unomerge, UVMCNT_CNT, 0,
-	    "# uvm_map() no umerge", 0);
-
-	UVMCNT_INIT(map_kbackmerge, UVMCNT_CNT, 0,
-	    "# uvm_map() back kmerges", 0);
-	UVMCNT_INIT(map_kforwmerge, UVMCNT_CNT, 0,
-	    "# uvm_map() forward kmerges", 0);
-	UVMCNT_INIT(map_kbimerge, UVMCNT_CNT, 0,
-	    "# uvm_map() dual kmerge", 0);
-	UVMCNT_INIT(map_knomerge, UVMCNT_CNT, 0,
-	    "# uvm_map() no kmerge", 0);
-
-	UVMCNT_INIT(uvm_mlk_call, UVMCNT_CNT, 0, "# map lookup calls", 0);
-	UVMCNT_INIT(uvm_mlk_hint, UVMCNT_CNT, 0, "# map lookup hint hits", 0);
 
 	/*
 	 * now set up static pool of kernel map entrys ...
@@ -699,10 +716,9 @@ uvm_map_clip_end(struct vm_map *map, struct vm_map_entry *entry, vaddr_t end)
  *    we've found a virtual address.   note that kernel object offsets are
  *    always relative to vm_map_min(kernel_map).
  *
- * => if `align' is non-zero, we try to align the virtual address to
- *	the specified alignment.  this is only a hint; if we can't
- *	do it, the address will be unaligned.  this is provided as
- *	a mechanism for large pages.
+ * => if `align' is non-zero, we align the virtual address to the specified
+ *	alignment.
+ *	this is provided as a mechanism for large pages.
  *
  * => XXXCDC: need way to map in external amap?
  */
@@ -719,6 +735,7 @@ uvm_map(struct vm_map *map, vaddr_t *startp /* IN/OUT */, vsize_t size,
 	vm_inherit_t inherit = UVM_INHERIT(flags);
 	int advice = UVM_ADVICE(flags);
 	int error, merged = 0, kmap = (vm_map_pmap(map) == pmap_kernel());
+	int newetype;
 	UVMHIST_FUNC("uvm_map");
 	UVMHIST_CALLED(maphist);
 
@@ -821,6 +838,17 @@ uvm_map(struct vm_map *map, vaddr_t *startp /* IN/OUT */, vsize_t size,
 		}
 	}
 
+	if (uobj)
+		newetype = UVM_ET_OBJ;
+	else
+		newetype = 0;
+
+	if (flags & UVM_FLAG_COPYONW) {
+		newetype |= UVM_ET_COPYONWRITE;
+		if ((flags & UVM_FLAG_OVERLAY) == 0)
+			newetype |= UVM_ET_NEEDSCOPY;
+	}
+
 	/*
 	 * try and insert in map by extending previous entry, if possible.
 	 * XXX: we don't try and pull back the next entry.   might be useful
@@ -830,7 +858,8 @@ uvm_map(struct vm_map *map, vaddr_t *startp /* IN/OUT */, vsize_t size,
 	if (flags & UVM_FLAG_NOMERGE)
 		goto nomerge;
 
-	if (prev_entry->end == *startp &&
+	if (prev_entry->etype == newetype &&
+	    prev_entry->end == *startp &&
 	    prev_entry != &map->header &&
 	    prev_entry->object.uvm_obj == uobj) {
 
@@ -839,9 +868,6 @@ uvm_map(struct vm_map *map, vaddr_t *startp /* IN/OUT */, vsize_t size,
 
 		if (uobj && prev_entry->offset +
 		    (prev_entry->end - prev_entry->start) != uoffset)
-			goto forwardmerge;
-
-		if (UVM_ET_ISSUBMAP(prev_entry))
 			goto forwardmerge;
 
 		if (prev_entry->protection != prot ||
@@ -907,7 +933,8 @@ uvm_map(struct vm_map *map, vaddr_t *startp /* IN/OUT */, vsize_t size,
 	}
 
 forwardmerge:
-	if (prev_entry->next->start == (*startp + size) &&
+	if (prev_entry->next->etype == newetype &&
+	    prev_entry->next->start == (*startp + size) &&
 	    prev_entry->next != &map->header &&
 	    prev_entry->next->object.uvm_obj == uobj) {
 
@@ -915,9 +942,6 @@ forwardmerge:
 			goto nomerge;
 
 		if (uobj && prev_entry->next->offset != uoffset + size)
-			goto nomerge;
-
-		if (UVM_ET_ISSUBMAP(prev_entry->next))
 			goto nomerge;
 
 		if (prev_entry->next->protection != prot ||
@@ -1087,16 +1111,8 @@ nomerge:
 		new_entry->object.uvm_obj = uobj;
 		new_entry->offset = uoffset;
 
-		if (uobj)
-			new_entry->etype = UVM_ET_OBJ;
-		else
-			new_entry->etype = 0;
+		new_entry->etype = newetype;
 
-		if (flags & UVM_FLAG_COPYONW) {
-			new_entry->etype |= UVM_ET_COPYONWRITE;
-			if ((flags & UVM_FLAG_OVERLAY) == 0)
-				new_entry->etype |= UVM_ET_NEEDSCOPY;
-		}
 		if (flags & UVM_FLAG_NOMERGE) {
 			new_entry->flags |= UVM_MAP_NOMERGE;
 		}
@@ -1651,13 +1667,11 @@ nextgap:
  wraparound:
 	UVMHIST_LOG(maphist, "<- failed (wrap around)", 0,0,0,0);
 
+	return (NULL);
+
  notfound:
-	if (align != 0) {
-		UVMHIST_LOG(maphist, "calling recursively, no align",
-		    0,0,0,0);
-		return (uvm_map_findspace(map, orig_hint,
-		    length, result, uobj, uoffset, 0, flags));
-	}
+	UVMHIST_LOG(maphist, "<- failed (notfound)", 0,0,0,0);
+
 	return (NULL);
 }
 
@@ -3200,6 +3214,7 @@ uvm_map_clean(struct vm_map *map, vaddr_t start, vaddr_t end, int flags)
 	struct vm_page *pg;
 	vaddr_t offset;
 	vsize_t size;
+	voff_t uoff;
 	int error, refs;
 	UVMHIST_FUNC("uvm_map_clean"); UVMHIST_CALLED(maphist);
 
@@ -3328,13 +3343,13 @@ uvm_map_clean(struct vm_map *map, vaddr_t start, vaddr_t end, int flags)
 		 * data from files.
 		 */
 
-		offset = current->offset + (start - current->start);
+		uoff = current->offset + (start - current->start);
 		size = MIN(end, current->end) - start;
 		if (uobj != NULL) {
 			simple_lock(&uobj->vmobjlock);
 			if (uobj->pgops->pgo_put != NULL)
-				error = (uobj->pgops->pgo_put)(uobj, offset,
-				    offset + size, flags | PGO_CLEANIT);
+				error = (uobj->pgops->pgo_put)(uobj, uoff,
+				    uoff + size, flags | PGO_CLEANIT);
 			else
 				error = 0;
 		}
