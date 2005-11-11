@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.h,v 1.1 2005/09/13 01:42:32 christos Exp $	*/
+/*	$NetBSD: sem.h,v 1.2 2005/11/11 17:10:42 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -47,6 +47,8 @@
 #define _COMPAT_SYS_SEM_H_
 
 #ifdef _KERNEL
+
+#include <compat/sys/ipc.h>
 
 struct semid_ds14 {
 	struct ipc_perm14 sem_perm;	/* operation permission struct */
