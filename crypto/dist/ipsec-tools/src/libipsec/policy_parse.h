@@ -1,4 +1,4 @@
-/*	$NetBSD: policy_parse.h,v 1.1 2005/11/21 14:12:17 manu Exp $	*/
+/*	$NetBSD: policy_parse.h,v 1.1.1.1 2005/11/21 14:12:17 manu Exp $	*/
 
 typedef union {
 	u_int num;
