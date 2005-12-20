@@ -1,4 +1,4 @@
-/*	$NetBSD: tty.c,v 1.2 2005/02/20 10:47:17 cube Exp $	*/
+/*	$NetBSD: tty.c,v 1.6 2006/11/05 09:16:20 martin Exp $	*/
 
 /*
  * tty.c - code for handling serial ports in pppd.
@@ -73,9 +73,9 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
-#define RCSID	"Id: tty.c,v 1.22 2004/11/13 12:07:29 paulus Exp"
+#define RCSID	"Id: tty.c,v 1.25 2006/06/04 07:04:57 paulus Exp"
 #else
-__RCSID("$NetBSD: tty.c,v 1.2 2005/02/20 10:47:17 cube Exp $");
+__RCSID("$NetBSD: tty.c,v 1.6 2006/11/05 09:16:20 martin Exp $");
 #endif
 #endif
 
@@ -87,7 +87,6 @@ __RCSID("$NetBSD: tty.c,v 1.2 2005/02/20 10:47:17 cube Exp $");
 #include <signal.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <syslog.h>
 #include <netdb.h>
 #include <pwd.h>
 #include <setjmp.h>
@@ -571,12 +570,16 @@ int connect_tty()
 			int err, prio;
 
 			prio = privopen? OPRIO_ROOT: tty_options[0].priority;
-			if (prio < OPRIO_ROOT)
-				seteuid(uid);
+			if (prio < OPRIO_ROOT && seteuid(uid) == -1) {
+				error("Unable to drop privileges before opening %s: %m\n",
+				      devnam);
+				status = EXIT_OPEN_FAILED;
+				goto errret;
+			}
 			real_ttyfd = open(devnam, O_NONBLOCK | O_RDWR, 0);
 			err = errno;
-			if (prio < OPRIO_ROOT)
-				seteuid(0);
+			if (prio < OPRIO_ROOT && seteuid(0) == -1)
+				fatal("Unable to regain privileges");
 			if (real_ttyfd >= 0)
 				break;
 			errno = err;
@@ -588,6 +591,13 @@ int connect_tty()
 				goto errret;
 		}
 		ttyfd = real_ttyfd;
+		if (lockflag) 
+			if(flock(ttyfd, (LOCK_EX|LOCK_NB)) != 0) {
+				status = EXIT_LOCK_FAILED;
+				close(ttyfd);
+				goto errret;
+			}
+
 		if ((fdflags = fcntl(ttyfd, F_GETFL)) == -1
 		    || fcntl(ttyfd, F_SETFL, fdflags & ~O_NONBLOCK) < 0)
 			warn("Couldn't reset non-blocking mode on device: %m");
@@ -763,14 +773,6 @@ int connect_tty()
 		close(pty_master);
 		pty_master = -1;
 	}
-	if (pty_slave >= 0) {
-		close(pty_slave);
-		pty_slave = -1;
-	}
-	if (real_ttyfd >= 0) {
-		close(real_ttyfd);
-		real_ttyfd = -1;
-	}
 	ttyfd = -1;
 	if (got_sigterm)
 		asked_to_quit = 1;
@@ -789,6 +791,7 @@ void disconnect_tty()
 	} else {
 		info("Serial link disconnected.");
 	}
+	stop_charshunt(NULL, 0);
 }
 
 void tty_close_fds()
@@ -939,7 +942,6 @@ start_charshunt(ifd, ofd)
     }
     if (cpid == 0) {
 	/* child */
-	reopen_log();
 	if (!nodetach)
 	    log_to_fd = -1;
 	else if (log_to_fd >= 0)
@@ -952,7 +954,6 @@ start_charshunt(ifd, ofd)
 	exit(0);
     }
     charshunt_pid = cpid;
-    add_notifier(&sigreceived, stop_charshunt, 0);
     record_child(cpid, "pppd (charshunt)", charshunt_done, NULL);
     return 1;
 }

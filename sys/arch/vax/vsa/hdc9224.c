@@ -1,4 +1,4 @@
-/*	$NetBSD: hdc9224.c,v 1.33 2005/12/11 12:19:37 christos Exp $ */
+/*	$NetBSD: hdc9224.c,v 1.37 2006/05/14 21:57:13 elad Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -51,7 +51,7 @@
 #undef	RDDEBUG
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hdc9224.c,v 1.33 2005/12/11 12:19:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hdc9224.c,v 1.37 2006/05/14 21:57:13 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -210,7 +210,7 @@ const struct cdevsw rd_cdevsw = {
 /* At least 0.7 uS between register accesses */
 static int rd_dmasize, inq = 0;
 static int u;
-#define	WAIT	asm("movl %0,%0;movl %0,%0;movl %0,%0; movl %0,%0" :: "m"(u))
+#define	WAIT	__asm("movl %0,%0;movl %0,%0;movl %0,%0; movl %0,%0" :: "m"(u))
 
 #define	HDC_WREG(x)	*(volatile char *)(sc->sc_regs) = (x)
 #define	HDC_RREG	*(volatile char *)(sc->sc_regs)
@@ -366,7 +366,7 @@ rdattach(struct device *parent, struct device *self, void *aux)
 	rdmakelabel(dl, &rd->sc_xbn);
 	printf("%s", rd->sc_dev.dv_xname);
 	msg = readdisklabel(MAKEDISKDEV(cdevsw_lookup_major(&rd_cdevsw),
-					rd->sc_dev.dv_unit, RAW_PART),
+					device_unit(&rd->sc_dev), RAW_PART),
 			    rdstrategy, dl, NULL);
 	if (msg)
 		printf(": %s", msg);
@@ -445,7 +445,7 @@ rdstrategy(struct buf *bp)
 		bp->b_flags |= B_ERROR;
 		goto done;
 	}
-	sc = (void *)rd->sc_dev.dv_parent;
+	sc = (void *)device_parent(&rd->sc_dev);
 
 	lp = rd->sc_disk.dk_label;
 	if ((bounds_check_with_label(&rd->sc_disk, bp, 1)) <= 0)

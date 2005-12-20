@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.34 2005/01/10 03:11:17 lukem Exp $
+# $NetBSD: Makefile,v 1.37 2006/09/11 22:24:09 dbj Exp $
 
 NOLINT=		# defined
 
@@ -188,7 +188,6 @@ MLINKS=									\
 	krb5_address.3			krb5_copy_address.3		\
 	krb5_address.3			krb5_copy_addresses.3		\
 	krb5_address.3			krb5_free_address.3		\
-	krb5_address.3			krb5_free_addresses.3		\
 	krb5_address.3			krb5_h_addr2addr.3		\
 	krb5_address.3			krb5_h_addr2sockaddr.3		\
 	krb5_address.3			krb5_make_addrport.3		\
@@ -359,6 +358,11 @@ CPPFLAGS+= -I.					\
 
 .if (${USE_INET6} != "no")
 CPPFLAGS+=-DHAVE_IPV6
+.endif
+
+.if ${HAVE_GCC} == 4
+COPTS.changepw.c+=	-Wno-pointer-sign -fno-strict-aliasing
+COPTS.crypto.c+=	-Wno-pointer-sign
 .endif
 
 CLEANFILES=	${ERR_FILES} krb5_err.h heim_err.h k524_err.h

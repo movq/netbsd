@@ -1,4 +1,4 @@
-/*	$NetBSD: ohci.c,v 1.169 2005/12/19 21:57:27 tron Exp $	*/
+/*	$NetBSD: ohci.c,v 1.179 2006/11/16 01:33:26 christos Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/ohci.c,v 1.22 1999/11/17 22:33:40 n_hibma Exp $	*/
 
 /*
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ohci.c,v 1.169 2005/12/19 21:57:27 tron Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ohci.c,v 1.179 2006/11/16 01:33:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -233,9 +233,29 @@ Static void		ohci_dump_itds(ohci_softc_t *, ohci_soft_itd_t *);
  do { OBARR(sc); bus_space_write_2((sc)->iot, (sc)->ioh, (r), (x)); } while (0)
 #define OWRITE4(sc, r, x) \
  do { OBARR(sc); bus_space_write_4((sc)->iot, (sc)->ioh, (r), (x)); } while (0)
-#define OREAD1(sc, r) (OBARR(sc), bus_space_read_1((sc)->iot, (sc)->ioh, (r)))
-#define OREAD2(sc, r) (OBARR(sc), bus_space_read_2((sc)->iot, (sc)->ioh, (r)))
-#define OREAD4(sc, r) (OBARR(sc), bus_space_read_4((sc)->iot, (sc)->ioh, (r)))
+static __inline uint8_t
+OREAD1(ohci_softc_t *sc, bus_size_t r)
+{
+
+	OBARR(sc);
+	return bus_space_read_1(sc->iot, sc->ioh, r);
+}
+
+static __inline uint16_t
+OREAD2(ohci_softc_t *sc, bus_size_t r)
+{
+
+	OBARR(sc);
+	return bus_space_read_2(sc->iot, sc->ioh, r);
+}
+
+static __inline uint32_t
+OREAD4(ohci_softc_t *sc, bus_size_t r)
+{
+
+	OBARR(sc);
+	return bus_space_read_4(sc->iot, sc->ioh, r);
+}
 
 /* Reverse the bits in a value 0 .. 31 */
 Static u_int8_t revbits[OHCI_NO_INTRS] =
@@ -884,7 +904,8 @@ ohci_init(ohci_softc_t *sc)
 
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 	sc->sc_control = sc->sc_intre = 0;
-	sc->sc_powerhook = powerhook_establish(ohci_power, sc);
+	sc->sc_powerhook = powerhook_establish(USBDEVNAME(sc->sc_bus.bdev),
+	    ohci_power, sc);
 	sc->sc_shutdownhook = shutdownhook_establish(ohci_shutdown, sc);
 #endif
 
@@ -1885,7 +1906,8 @@ ohci_timeout(void *addr)
 
 	/* Execute the abort in a process context. */
 	usb_init_task(&oxfer->abort_task, ohci_timeout_task, addr);
-	usb_add_task(oxfer->xfer.pipe->device, &oxfer->abort_task);
+	usb_add_task(oxfer->xfer.pipe->device, &oxfer->abort_task,
+	    USB_TASKQ_HC);
 }
 
 void
@@ -2167,6 +2189,7 @@ ohci_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 		usb_uncallout(xfer->timeout_handle, ohci_timeout, xfer);
 		usb_transfer_complete(xfer);
 		splx(s);
+		return;
 	}
 
 	if (xfer->device->bus->intr_context || !curproc)
@@ -2317,22 +2340,17 @@ Static usb_interface_descriptor_t ohci_ifcd = {
 };
 
 Static usb_endpoint_descriptor_t ohci_endpd = {
-	USB_ENDPOINT_DESCRIPTOR_SIZE,
-	UDESC_ENDPOINT,
-	UE_DIR_IN | OHCI_INTR_ENDPT,
-	UE_INTERRUPT,
-	{8, 0},			/* max packet */
-	255
+	.bLength = USB_ENDPOINT_DESCRIPTOR_SIZE,
+	.bDescriptorType = UDESC_ENDPOINT,
+	.bEndpointAddress = UE_DIR_IN | OHCI_INTR_ENDPT,
+	.bmAttributes = UE_INTERRUPT,
+	.wMaxPacketSize = {8, 0},			/* max packet */
+	.bInterval = 255,
 };
 
 Static usb_hub_descriptor_t ohci_hubd = {
-	USB_HUB_DESCRIPTOR_SIZE,
-	UDESC_HUB,
-	0,
-	{0,0},
-	0,
-	0,
-	{0},
+	.bDescLength = USB_HUB_DESCRIPTOR_SIZE,
+	.bDescriptorType = UDESC_HUB,
 };
 
 Static int
@@ -2420,6 +2438,8 @@ ohci_root_ctrl_start(usbd_xfer_handle xfer)
 		break;
 	case C(UR_GET_DESCRIPTOR, UT_READ_DEVICE):
 		DPRINTFN(8,("ohci_root_ctrl_control wValue=0x%04x\n", value));
+		if (len == 0)
+			break;
 		switch(value >> 8) {
 		case UDESC_DEVICE:
 			if ((value & 0xff) != 0) {
@@ -2449,8 +2469,6 @@ ohci_root_ctrl_start(usbd_xfer_handle xfer)
 			memcpy(buf, &ohci_endpd, l);
 			break;
 		case UDESC_STRING:
-			if (len == 0)
-				break;
 			*(u_int8_t *)buf = 0;
 			totlen = 1;
 			switch (value & 0xff) {
@@ -2571,6 +2589,8 @@ ohci_root_ctrl_start(usbd_xfer_handle xfer)
 		}
 		break;
 	case C(UR_GET_DESCRIPTOR, UT_READ_CLASS_DEVICE):
+		if (len == 0)
+			break;
 		if ((value & 0xff) != 0) {
 			err = USBD_IOERROR;
 			goto ret;
@@ -3089,7 +3109,7 @@ ohci_device_intr_close(usbd_pipe_handle pipe)
 		usb_delay_ms(&sc->sc_bus, 2);
 
 	for (p = sc->sc_eds[pos]; p && p->next != sed; p = p->next)
-		;
+		continue;
 #ifdef DIAGNOSTIC
 	if (p == NULL)
 		panic("ohci_device_intr_close: ED not found");

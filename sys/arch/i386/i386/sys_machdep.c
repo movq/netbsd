@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.72 2005/12/11 12:17:41 christos Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.78 2006/11/16 01:32:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.72 2005/12/11 12:17:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.78 2006/11/16 01:32:38 christos Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_mtrr.h"
@@ -57,6 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.72 2005/12/11 12:17:41 christos Ex
 #include <sys/buf.h>
 #include <sys/signal.h>
 #include <sys/malloc.h>
+#include <sys/kauth.h>
 
 #include <sys/mount.h>
 #include <sys/sa.h>
@@ -344,20 +345,15 @@ out:
 #endif	/* USER_LDT */
 
 int
-i386_iopl(l, args, retval)
-	struct lwp *l;
-	void *args;
-	register_t *retval;
+i386_iopl(struct lwp *l, void *args, register_t *retval)
 {
 	int error;
-	struct proc *p = l->l_proc;
 	struct trapframe *tf = l->l_md.md_regs;
 	struct i386_iopl_args ua;
 
-	if (securelevel > 1)
-		return EPERM;
-
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if ((error = kauth_authorize_machdep(l->l_cred,
+	    KAUTH_MACHDEP_X86, KAUTH_REQ_MACHDEP_X86_IOPL,
+	    NULL, NULL, NULL)) != 0)
 		return error;
 
 	if ((error = copyin(args, &ua, sizeof(ua))) != 0)
@@ -372,10 +368,7 @@ i386_iopl(l, args, retval)
 }
 
 int
-i386_get_ioperm(l, args, retval)
-	struct lwp *l;
-	void *args;
-	register_t *retval;
+i386_get_ioperm(struct lwp *l, void *args, register_t *retval)
 {
 	int error;
 	struct pcb *pcb = &l->l_addr->u_pcb;
@@ -388,20 +381,15 @@ i386_get_ioperm(l, args, retval)
 }
 
 int
-i386_set_ioperm(l, args, retval)
-	struct lwp *l;
-	void *args;
-	register_t *retval;
+i386_set_ioperm(struct lwp *l, void *args, register_t *retval)
 {
 	int error;
-	struct proc *p = l->l_proc;
 	struct pcb *pcb = &l->l_addr->u_pcb;
 	struct i386_set_ioperm_args ua;
 
-	if (securelevel > 1)
-		return EPERM;
-
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if ((error = kauth_authorize_machdep(l->l_cred,
+	    KAUTH_MACHDEP_X86, KAUTH_REQ_MACHDEP_X86_IOPERM,
+	    NULL, NULL, NULL)) != 0)
 		return error;
 
 	if ((error = copyin(args, &ua, sizeof(ua))) != 0)
@@ -416,7 +404,6 @@ i386_get_mtrr(struct lwp *l, void *args, register_t *retval)
 {
 	struct i386_get_mtrr_args ua;
 	int error, n;
-	struct proc *p = l->l_proc;
 
 	if (mtrr_funcs == NULL)
 		return ENOSYS;
@@ -429,7 +416,7 @@ i386_get_mtrr(struct lwp *l, void *args, register_t *retval)
 	if (error != 0)
 		return error;
 
-	error = mtrr_get(ua.mtrrp, &n, p, MTRR_GETSET_USER);
+	error = mtrr_get(ua.mtrrp, &n, l->l_proc, MTRR_GETSET_USER);
 
 	copyout(&n, ua.n, sizeof (int));
 
@@ -441,12 +428,12 @@ i386_set_mtrr(struct lwp *l, void *args, register_t *retval)
 {
 	int error, n;
 	struct i386_set_mtrr_args ua;
-	struct proc *p = l->l_proc;
 
 	if (mtrr_funcs == NULL)
 		return ENOSYS;
 
-	error = suser(p->p_ucred, &p->p_acflag);
+	error = kauth_authorize_machdep(l->l_cred, KAUTH_MACHDEP_X86,
+	    KAUTH_REQ_MACHDEP_X86_MTRR_SET, NULL, NULL, NULL);
 	if (error != 0)
 		return error;
 
@@ -458,7 +445,7 @@ i386_set_mtrr(struct lwp *l, void *args, register_t *retval)
 	if (error != 0)
 		return error;
 
-	error = mtrr_set(ua.mtrrp, &n, p, MTRR_GETSET_USER);
+	error = mtrr_set(ua.mtrrp, &n, l->l_proc, MTRR_GETSET_USER);
 	if (n != 0)
 		mtrr_commit();
 

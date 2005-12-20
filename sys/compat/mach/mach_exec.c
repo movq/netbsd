@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_exec.c,v 1.58 2005/12/11 12:20:20 christos Exp $	 */
+/*	$NetBSD: mach_exec.c,v 1.61 2006/11/16 01:32:44 christos Exp $	 */
 
 /*-
  * Copyright (c) 2001-2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_exec.c,v 1.58 2005/12/11 12:20:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_exec.c,v 1.61 2006/11/16 01:32:44 christos Exp $");
 
 #include "opt_syscall_debug.h"
 
@@ -117,10 +117,12 @@ const struct emul emul_mach = {
 #else
 	syscall,
 #endif
-	NULL,
-	NULL,
+	NULL,	/* e_fault */
+	NULL,	/* e_vm_default_addr */
 
 	uvm_default_mapaddr,
+	NULL,	/* e_usertrap */
+	NULL,	/* e_sa */
 };
 
 /*
@@ -208,10 +210,7 @@ mach_e_proc_exec(p, epp)
 }
 
 void
-mach_e_proc_fork(p, parent, forkflags)
-	struct proc *p;
-	struct proc *parent;
-	int forkflags;
+mach_e_proc_fork(struct proc *p, struct proc *parent, int forkflags)
 {
 	mach_e_proc_fork1(p, parent, 1);
 	return;
@@ -260,9 +259,7 @@ mach_e_proc_fork1(p, parent, allocate)
 }
 
 void
-mach_e_proc_init(p, vmspace)
-	struct proc *p;
-	struct vmspace *vmspace;
+mach_e_proc_init(struct proc *p, struct vmspace *vmspace)
 {
 	struct mach_emuldata *med;
 	struct mach_right *mr;
@@ -413,9 +410,7 @@ mach_e_proc_exit(p)
 }
 
 void
-mach_e_lwp_fork(l1, l2)
-	struct lwp *l1;
-	struct lwp *l2;
+mach_e_lwp_fork(struct lwp *l1, struct lwp *l2)
 {
 	struct mach_lwp_emuldata *mle;
 

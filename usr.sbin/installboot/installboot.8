@@ -1,4 +1,4 @@
-.\"	$NetBSD: installboot.8,v 1.51 2005/11/12 16:44:07 wiz Exp $
+.\"	$NetBSD: installboot.8,v 1.59 2006/11/25 15:12:02 tsutsui Exp $
 .\"
 .\" Copyright (c) 2002-2003 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -34,7 +34,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd November 12, 2005
+.Dd September 24, 2006
 .Dt INSTALLBOOT 8
 .Os
 .Sh NAME
@@ -191,9 +191,11 @@ The following machines are currently supported by
 .Sy alpha ,
 .Sy amd64 ,
 .Sy amiga ,
+.Sy ews4800mips ,
 .Sy hp300 ,
 .Sy hp700 ,
 .Sy i386 ,
+.Sy landisk ,
 .Sy macppc ,
 .Sy news68k ,
 .Sy newsmips ,
@@ -309,11 +311,14 @@ The default operation is to attempt to auto-detect this setting.
 The following file system types are currently supported by
 .Nm :
 .
-.Bl -tag -offset indent -width ffs
+.Bl -tag -offset indent -width raid
 .
 .It Sy ffs
 .Bx
 Fast File System.
+.
+.It Sy raid
+Mirrored RAIDframe File System.
 .
 .It Sy raw
 .Sq Raw
@@ -371,7 +376,7 @@ These are:
 .It macppc Ta ffs, raw
 .It news68k Ta ffs, raw
 .It newsmips Ta ffs, raw
-.It sparc Ta ffs, raw
+.It sparc Ta ffs, raid, raw
 .It sun2 Ta ffs, raw
 .It sun3 Ta ffs, raw
 .El
@@ -466,7 +471,26 @@ is not found.
 .
 .El
 .
-.Ss NetBSD/next68k files
+.Ss Nx Ns Tn /macppc files
+.
+.Bl -tag -width /usr/mdec/bootxx_ustarfs
+.
+.It Pa /usr/mdec/bootxx
+.Nx Ns Tn /macppc
+primary bootstrap.
+.
+.It Pa /usr/mdec/ofwboot
+.Nx Ns Tn /macppc
+secondary bootstrap.
+.
+.It Pa /ofwboot
+Installed copy of
+.Nx Ns Tn /macppc
+secondary bootstrap.
+.
+.El
+.
+.Ss Nx Ns Tn /next68k files
 .
 .Bl -tag -width /usr/mdec/bootxx_ustarfs
 .
@@ -476,7 +500,7 @@ bootstrap.
 .
 .El
 .
-.Ss NetBSD/sparc64 files
+.Ss Nx Ns Tn /sparc64 files
 .
 .Bl -tag -width /usr/mdec/bootxx_ustarfs
 .
@@ -501,17 +525,33 @@ secondary bootstrap.
 Verbosely install the Berkeley Fast File System primary bootstrap on to disk
 .Sq sd0 :
 .Dl Ic installboot -v /dev/rsd0c /usr/mdec/bootxx_ffs
+Note: the
+.Dq whole disk
+partition (c on some ports, d on others) is used here, since the a partition
+probably is already opened (mounted as
+.Pa / ) ,
+so
+.Nm
+would not be able to access it.
 .Pp
 Remove the primary bootstrap from disk
 .Sq sd1 :
 .Dl Ic installboot -c /dev/rsd1c
 .
-.Ss NetBSD/amiga
+.Ss Nx Ns Tn /amiga
 Modify the command line to change the default from "netbsd -ASn2" to
 "netbsd -S":
 .Dl Ic installboot -m amiga -o command="netbsd -S" /dev/rsd0a /usr/mdec/bootxx_ffs
 .
-.Ss NetBSD/i386 and NetBSD/amd64
+.Ss Nx Ns Tn /ews4800mips
+Install the System V Boot File System primary bootstrap on to disk
+.Sq sd0 ,
+with the secondary bootstrap
+.Sq Pa /boot
+already present in the SysVBFS partition on the disk:
+.Dl Ic installboot /dev/rsd0c /usr/mdec/bootxx_bfs
+.
+.Ss Nx Ns Tn /i386 and Nx Ns Tn /amd64
 Install new boot blocks on an existing mounted root file system on
 .Sq wd0 ,
 setting the timeout to five seconds, after copying a new secondary
@@ -585,13 +625,33 @@ disklabel on
 for the primary bootstrap to function correctly.
 .Ed
 .
-.Ss NetBSD/next68k
+.Ss Nx Ns Tn /macppc
+Note the
+.Nm
+utility is only required for macppc machines with OpenFirmware version 2
+to boot. OpenFirmware 3 can only load bootloader from HFS partitions.
+.Pp
+Install the Berkeley Fast File System primary bootstrap on to disk
+.Sq wd0 :
+.Dl Ic installboot /dev/rwd0c /usr/mdec/bootxx /ofwboot
+.Pp
+The secondary
+.Nx Ns Tn /macppc
+bootstrap is located in
+.Pa /usr/mdec/ofwboot .
+.Pp
+The primary bootstrap requires raw
+.Pa ofwboot
+for the secondary bootstrap, not
+.Pa ofwboot.xcf ,
+which is used for the OpenFirmware to load kernels.
+.Ss Nx Ns Tn /next68k
 Install the bootstrap on to disk
 .Sq sd0 :
 .Dl Ic installboot /dev/rsd0c /usr/mdec/boot
 .Pp
 .
-.Ss NetBSD/pmax
+.Ss Nx Ns Tn /pmax
 Install the Berkeley Fast File System primary bootstrap on to disk
 .Sq sd0 :
 .Dl Ic installboot /dev/rsd0c /usr/mdec/bootxx_ffs
@@ -617,7 +677,7 @@ and the secondary bootstrap
 .Dl ...
 .Dl Ic installboot -b `expr 48 \e* 4` /tmp/cd-image /usr/mdec/bootxx_cd9660
 .
-.Ss NetBSD/sparc
+.Ss Nx Ns Tn /sparc
 Install the Berkeley Fast File System primary bootstrap on to disk
 .Sq sd0 ,
 with the secondary bootstrap
@@ -625,7 +685,7 @@ with the secondary bootstrap
 already present:
 .Dl Ic installboot /dev/rsd0c /usr/mdec/bootxx /boot
 .
-.Ss NetBSD/sparc64
+.Ss Nx Ns Tn /sparc64
 Install the Berkeley Fast File System primary bootstrap on to disk
 .Sq wd0 :
 .Dl Ic installboot /dev/rwd0c /usr/mdec/bootblk
@@ -635,7 +695,7 @@ The secondary
 bootstrap is located in
 .Pa /usr/mdec/ofwboot .
 .
-.Ss NetBSD/sun2 and NetBSD/sun3
+.Ss Nx Ns Tn /sun2 and Nx Ns Tn /sun3
 Install the Berkeley Fast File System primary bootstrap on to disk
 .Sq sd0 ,
 with the secondary bootstrap
@@ -671,14 +731,27 @@ David Laight (i386),
 Christian Limpach (next68k),
 Luke Mewburn (macppc),
 Matt Thomas (vax),
+Izumi Tsutsui (news68k, newsmips),
 and
-Izumi Tsutsui (news68k, newsmips).
+UCHIYAMA Yasushi (ews4800mips).
 .
 .Sh BUGS
 There are not currently primary bootstraps to support all file systems
 types which are capable of being the root file system.
+.Pp
+If a disk has been converted from
+.Sy FFS
+to
+.Sy RAID
+without the contents of the disk erased, then the original
+.Sy FFS
+installation may be auto-detected instead of the
+.Sy RAID
+installation.  In this case, the
+.Fl t Ar raid
+option must be provided.
 .
-.Ss NetBSD/alpha
+.Ss Nx Ns Tn /alpha
 The
 .Nx Ns Tn /alpha
 primary bootstrap program can only load the secondary bootstrap program
@@ -690,11 +763,11 @@ The size of primary bootstrap programs is restricted to 7.5KB, even
 though some file systems (e.g., ISO 9660) are able to accommodate larger
 ones.
 .
-.Ss NetBSD/hp300
+.Ss Nx Ns Tn /hp300
 The disk must have a boot partition large enough to hold the bootstrap code.
 Currently the primary bootstrap must be a LIF format file.
 .
-.Ss NetBSD/i386 and NetBSD/amd64
+.Ss Nx Ns Tn /i386 and Nx Ns Tn /amd64
 The bootstrap must be installed in the
 .Nx
 partition that starts at the beginning of the mbr partition.
@@ -708,11 +781,27 @@ The size of primary bootstrap programs is restricted to 8KB, even
 though some file systems (e.g., ISO 9660) are able to accommodate larger
 ones.
 .
-.Ss NetBSD/next68k
+.Ss Nx Ns Tn /macppc
+Due to restriction of current
+.Nm
+and secondary bootstrap implementation, file system where kernels exist
+must start at the beginning of disks.
+.Pp
+Current
+.Nm
+doesn't recognize existing Apple partition map on the disk
+and always overwrites a faked map to make disks bootable.
+.Pp
+The
+.Nx Ns Tn /macppc
+bootstrap program can't load kernels from
+.Sy FFSv2
+partitions.
+.Ss Nx Ns Tn /next68k
 The size of bootstrap programs is restricted to the free space before
 the file system at the beginning of the disk minus 8KB.
 .
-.Ss NetBSD/pmax
+.Ss Nx Ns Tn /pmax
 The
 .Nx Ns Tn /pmax
 secondary bootstrap program can only load kernels from file
@@ -722,7 +811,7 @@ The size of primary bootstrap programs is restricted to 7.5KB, even
 though some file systems (e.g., ISO 9660) are able to accommodate larger
 ones.
 .
-.Ss NetBSD/sun2 and NetBSD/sun3
+.Ss Nx Ns Tn /sun2 and Nx Ns Tn /sun3
 The
 .Nx Ns Tn /sun2
 and
@@ -730,7 +819,7 @@ and
 secondary bootstrap program can only load kernels from file
 systems starting at the beginning of disks.
 .
-.Ss NetBSD/vax
+.Ss Nx Ns Tn /vax
 The
 .Nx Ns Tn /vax
 secondary bootstrap program can only load kernels from file systems

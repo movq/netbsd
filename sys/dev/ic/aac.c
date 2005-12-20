@@ -1,4 +1,4 @@
-/*	$NetBSD: aac.c,v 1.25 2005/11/26 21:33:46 jdolecek Exp $	*/
+/*	$NetBSD: aac.c,v 1.29 2006/11/16 01:32:50 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aac.c,v 1.25 2005/11/26 21:33:46 jdolecek Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aac.c,v 1.29 2006/11/16 01:32:50 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -344,8 +344,8 @@ aac_describe_controller(struct aac_softc *sc)
 	}
 	if (bufsize != sizeof(*info)) {
 		aprint_error("%s: "
-		    "RequestAdapterInfo returned wrong data size (%d != %lu)\n",
-		    sc->sc_dv.dv_xname, bufsize, (long unsigned) sizeof(*info));
+		    "RequestAdapterInfo returned wrong data size (%d != %zu)\n",
+		    sc->sc_dv.dv_xname, bufsize, sizeof(*info));
 		return;
 	}
 	info = (struct aac_adapter_info *)&tbuf[0];
@@ -671,8 +671,8 @@ aac_startup(struct aac_softc *sc)
 		}
 		if (rsize != sizeof(mir)) {
 			aprint_error("%s: container info response wrong size "
-			    "(%d should be %lu)\n",
-			    sc->sc_dv.dv_xname, rsize, (long unsigned) sizeof(mir));
+			    "(%d should be %zu)\n",
+			    sc->sc_dv.dv_xname, rsize, sizeof(mir));
 			continue;
 		}
 
@@ -1051,7 +1051,7 @@ aac_ccb_free(struct aac_softc *sc, struct aac_ccb *ac)
 	 * an intermediate stage may have destroyed them.  They're left
 	 * initialised here for debugging purposes only.
 	 */
-	ac->ac_fib->Header.SenderFibAddress = htole32((u_int32_t)(intptr_t/*XXX LP54*/)ac->ac_fib);
+	ac->ac_fib->Header.SenderFibAddress = htole32((u_int32_t)(intptr_t/*XXX LP64*/)ac->ac_fib);
 	ac->ac_fib->Header.ReceiverFibAddress = htole32(ac->ac_fibphys);
 #endif
 
@@ -1292,7 +1292,8 @@ aac_dequeue_fib(struct aac_softc *sc, int queue, u_int32_t *fib_size,
  * Print a FIB
  */
 static void
-aac_print_fib(struct aac_softc *sc, struct aac_fib *fib, const char *caller)
+aac_print_fib(struct aac_softc *sc, struct aac_fib *fib,
+    const char *caller)
 {
 	struct aac_blockread *br;
 	struct aac_blockwrite *bw;

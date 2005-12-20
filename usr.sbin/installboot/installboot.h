@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.h,v 1.27 2005/11/11 21:09:50 dsl Exp $	*/
+/*	$NetBSD: installboot.h,v 1.32 2006/09/01 21:47:21 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -118,6 +118,7 @@ struct ib_fs {
 	uint32_t	 blocksize;
 	uint32_t	 needswap;
 	off_t		sblockloc;	/* location of superblock */
+	off_t		offset;		/* file system offset (e.g. RAID) */
 };
 
 typedef enum {
@@ -137,7 +138,7 @@ struct bbinfo_params {
 	bbinfo_endian	endian;
 };
 
-extern struct ib_mach	machines[];
+extern struct ib_mach	*machines[];
 extern struct ib_fs	fstypes[];
 
 	/* installboot.c */
@@ -157,36 +158,29 @@ int		shared_bbinfo_setboot(ib_params *, struct bbinfo_params *,
 int		hardcode_stage2(ib_params *, uint32_t *, ib_block *);
 int		ffs_match(ib_params *);
 int		ffs_findstage2(ib_params *, uint32_t *, ib_block *);
+int		raid_match(ib_params *);
 int		raw_match(ib_params *);
 int		raw_findstage2(ib_params *, uint32_t *, ib_block *);
 
 	/* machines.c */
-int		alpha_setboot(ib_params *);
-int		alpha_clearboot(ib_params *);
-int		amiga_setboot(ib_params *);
-int		hp300_setboot(ib_params *);
-int		hp700_setboot(ib_params *);
-int		hp700_clearboot(ib_params *);
-int		i386_setboot(ib_params *);
-int		i386_editboot(ib_params *);
-int		macppc_setboot(ib_params *);
-int		macppc_clearboot(ib_params *);
-int		news68k_setboot(ib_params *);
-int		news68k_clearboot(ib_params *);
-int		next68k_setboot(ib_params *);
-int		newsmips_setboot(ib_params *);
-int		newsmips_clearboot(ib_params *);
-int		pmax_setboot(ib_params *);
-int		pmax_clearboot(ib_params *);
-int		sparc_setboot(ib_params *);
-int		sparc_clearboot(ib_params *);
-int		sparc64_setboot(ib_params *);
-int		sparc64_clearboot(ib_params *);
-int		sun68k_setboot(ib_params *);
-int		sun68k_clearboot(ib_params *);
-int		vax_setboot(ib_params *);
-int		vax_clearboot(ib_params *);
-int		x68k_setboot(ib_params *);
-int		x68k_clearboot(ib_params *);
+extern struct ib_mach ib_mach_alpha;
+extern struct ib_mach ib_mach_amd64;
+extern struct ib_mach ib_mach_amiga;
+extern struct ib_mach ib_mach_ews4800mips;
+extern struct ib_mach ib_mach_hp300;
+extern struct ib_mach ib_mach_hp700;
+extern struct ib_mach ib_mach_i386;
+extern struct ib_mach ib_mach_landisk;
+extern struct ib_mach ib_mach_macppc;
+extern struct ib_mach ib_mach_news68k;
+extern struct ib_mach ib_mach_newsmips;
+extern struct ib_mach ib_mach_next68k;
+extern struct ib_mach ib_mach_pmax;
+extern struct ib_mach ib_mach_sparc;
+extern struct ib_mach ib_mach_sparc64;
+extern struct ib_mach ib_mach_sun2;
+extern struct ib_mach ib_mach_sun3;
+extern struct ib_mach ib_mach_vax;
+extern struct ib_mach ib_mach_x68k;
 
 #endif	/* _INSTALLBOOT_H */

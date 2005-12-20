@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_driver.c,v 1.109 2005/12/11 12:23:37 christos Exp $	*/
+/*	$NetBSD: rf_driver.c,v 1.113 2006/11/16 01:33:23 christos Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -73,7 +73,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.109 2005/12/11 12:23:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.113 2006/11/16 01:33:23 christos Exp $");
 
 #include "opt_raid_diagnostic.h"
 
@@ -318,6 +318,7 @@ rf_Configure(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr, RF_AutoConfig_t *ac)
 		DO_INIT_CONFIGURE(rf_ConfigureReconstruction);
 		DO_INIT_CONFIGURE(rf_ConfigureCopyback);
 		DO_INIT_CONFIGURE(rf_ConfigureDiskQueueSystem);
+		DO_INIT_CONFIGURE(rf_ConfigurePSStatus);
 		isconfigged = 1;
 	}
 	RF_UNLOCK_LKMGR_MUTEX(configureMutex);
@@ -371,7 +372,8 @@ rf_Configure(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr, RF_AutoConfig_t *ac)
 
 	DO_RAID_INIT_CONFIGURE(rf_ConfigureLayout);
 
-	DO_RAID_INIT_CONFIGURE(rf_ConfigurePSStatus);
+	/* Initialize per-RAID PSS bits */
+	rf_InitPSStatus(raidPtr);
 
 #if RF_INCLUDE_CHAINDECLUSTER > 0
 	for (col = 0; col < raidPtr->numCol; col++) {
@@ -460,7 +462,7 @@ rf_AllocEmergBuffers(RF_Raid_t *raidPtr)
 	for (i = 0; i < raidPtr->numEmergencyBuffers; i++) {
 		tmpbuf = malloc( raidPtr->Layout.sectorsPerStripeUnit <<
 				 raidPtr->logBytesPerSector,
-				 M_RAIDFRAME, M_NOWAIT);
+				 M_RAIDFRAME, M_WAITOK);
 		if (tmpbuf) {
 			vple = rf_AllocVPListElem();
 			vple->p= tmpbuf;
@@ -470,7 +472,7 @@ rf_AllocEmergBuffers(RF_Raid_t *raidPtr)
 		} else {
 			printf("raid%d: failed to allocate emergency buffer!\n",
 			       raidPtr->raidid);
-			break;
+			return 1;
 		}
 	}
 
@@ -479,7 +481,7 @@ rf_AllocEmergBuffers(RF_Raid_t *raidPtr)
         for (i = 0; i < raidPtr->numEmergencyStripeBuffers; i++) {
                 tmpbuf = malloc( raidPtr->numCol * (raidPtr->Layout.sectorsPerStripeUnit <<
                                  raidPtr->logBytesPerSector),
-                                 M_RAIDFRAME, M_NOWAIT);
+                                 M_RAIDFRAME, M_WAITOK);
                 if (tmpbuf) {
                         vple = rf_AllocVPListElem();
                         vple->p= tmpbuf;
@@ -489,7 +491,7 @@ rf_AllocEmergBuffers(RF_Raid_t *raidPtr)
                 } else {
                         printf("raid%d: failed to allocate emergency stripe buffer!\n",
                                raidPtr->raidid);
-			break;
+			return 1;
                 }
         }
 

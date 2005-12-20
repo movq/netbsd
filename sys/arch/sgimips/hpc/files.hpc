@@ -1,16 +1,13 @@
-# $NetBSD: files.hpc,v 1.9 2005/12/11 12:18:53 christos Exp $
+# $NetBSD: files.hpc,v 1.12 2006/08/27 10:05:23 bjh21 Exp $
 
 device	sq: arp, ether, ifnet
 attach	sq at hpc
 file	arch/sgimips/hpc/if_sq.c	sq
 
-define	sbic
-file	arch/sgimips/hpc/sbic.c		sbic
-
 define	hpcdma
 file	arch/sgimips/hpc/hpcdma.c	hpcdma
 
-device	wdsc: sbic, scsi, hpcdma
+device	wdsc: wd33c93, scsi, hpcdma
 attach	wdsc at hpc
 file	arch/sgimips/hpc/wdsc.c		wdsc
 
@@ -30,3 +27,9 @@ attach	zsc at hpc with zsc_hpc
 
 attach	pckbc at hpc with pckbc_hpc
 file	arch/sgimips/hpc/pckbc_hpc.c	pckbc_hpc
+
+defflag	opt_pi1ppc.h			PI1PPC_INDY_ACK_HACK	
+device	pi1ppc: parport 
+attach	pi1ppc at hpc
+file	arch/sgimips/hpc/pi1ppc.c	pi1ppc
+

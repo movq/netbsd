@@ -1,4 +1,4 @@
-/* $NetBSD: genfs_node.h,v 1.9 2005/12/11 12:24:50 christos Exp $ */
+/* $NetBSD: genfs_node.h,v 1.14 2006/10/14 09:16:28 yamt Exp $ */
 
 /*
  * Copyright (c) 2001 Chuck Silvers.
@@ -34,10 +34,13 @@
 #define	_MISCFS_GENFS_GENFS_NODE_H_
 
 struct vm_page;
+struct kauth_cred;
+struct uio;
 
 struct genfs_ops {
 	void	(*gop_size)(struct vnode *, off_t, off_t *, int);
-	int	(*gop_alloc)(struct vnode *, off_t, off_t, int, struct ucred *);
+	int	(*gop_alloc)(struct vnode *, off_t, off_t, int,
+	    struct kauth_cred *);
 	int	(*gop_write)(struct vnode *, struct vm_page **, int, int);
 	void	(*gop_markupdate)(struct vnode *, int);
 };
@@ -62,8 +65,6 @@ struct genfs_ops {
 	(void)0;
 
 /* Flags to GOP_SIZE */
-#define	GOP_SIZE_READ	0x1	/* Advise how many pages to read */
-#define	GOP_SIZE_WRITE	0x2	/* Tell how many pages to write */
 #define	GOP_SIZE_MEM	0x4	/* in-memory size */
 
 /* Flags to GOP_MARKUPDATE */
@@ -82,5 +83,10 @@ void	genfs_size(struct vnode *, off_t, off_t *, int);
 void	genfs_node_init(struct vnode *, const struct genfs_ops *);
 int	genfs_gop_write(struct vnode *, struct vm_page **, int, int);
 int	genfs_compat_gop_write(struct vnode *, struct vm_page **, int, int);
+void	genfs_directio(struct vnode *, struct uio *, int);
+
+void	genfs_node_wrlock(struct vnode *);
+void	genfs_node_rdlock(struct vnode *);
+void	genfs_node_unlock(struct vnode *);
 
 #endif	/* _MISCFS_GENFS_GENFS_NODE_H_ */

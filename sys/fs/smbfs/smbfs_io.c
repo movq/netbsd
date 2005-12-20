@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_io.c,v 1.20 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: smbfs_io.c,v 1.24 2006/11/02 17:34:21 jmmv Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_io.c,v 1.20 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_io.c,v 1.24 2006/11/02 17:34:21 jmmv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,6 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: smbfs_io.c,v 1.20 2005/12/11 12:24:29 christos Exp $
 #include <sys/signalvar.h>
 #include <sys/sysctl.h>
 #include <sys/vmmeter.h>
+#include <sys/kauth.h>
 
 #ifndef __NetBSD__
 #include <vm/vm.h>
@@ -84,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: smbfs_io.c,v 1.20 2005/12/11 12:24:29 christos Exp $
 #define DE_SIZE	(sizeof(struct dirent))
 
 static int
-smbfs_readvdir(struct vnode *vp, struct uio *uio, struct ucred *cred)
+smbfs_readvdir(struct vnode *vp, struct uio *uio, kauth_cred_t cred)
 {
 	struct dirent de;
 	struct smb_cred scred;
@@ -99,7 +100,7 @@ smbfs_readvdir(struct vnode *vp, struct uio *uio, struct ucred *cred)
 		return EINVAL;
 
 	SMBVDEBUG("dirname='%.*s'\n", (int) np->n_nmlen, np->n_name);
-	smb_makescred(&scred, uio->uio_lwp, cred);
+	smb_makescred(&scred, curlwp, cred);
 	offset = uio->uio_offset / DE_SIZE; 	/* offset in the directory */
 	limit = uio->uio_resid / DE_SIZE;
 
@@ -120,7 +121,7 @@ smbfs_readvdir(struct vnode *vp, struct uio *uio, struct ucred *cred)
 	/* Simulate .. */
 	if (limit > 0 && offset < 2) {
 		memset(&de, 0, sizeof(de));
-		de.d_fileno = (np->n_parent ? np->n_parent->n_ino : 2);
+		de.d_fileno = (np->n_parent ? VTOSMB(np->n_parent)->n_ino : 2);
 		de.d_reclen = DE_SIZE;
 		de.d_type = DT_DIR;
 		de.d_namlen = 2;
@@ -187,11 +188,11 @@ smbfs_readvdir(struct vnode *vp, struct uio *uio, struct ucred *cred)
 }
 
 int
-smbfs_readvnode(struct vnode *vp, struct uio *uiop, struct ucred *cred)
+smbfs_readvnode(struct vnode *vp, struct uio *uiop, kauth_cred_t cred)
 {
 	struct smbmount *smp = VFSTOSMBFS(vp->v_mount);
 	struct smbnode *np = VTOSMB(vp);
-	struct lwp *l;
+	struct lwp *l = curlwp;
 	struct vattr vattr;
 	struct smb_cred scred;
 	int error;
@@ -209,7 +210,6 @@ smbfs_readvnode(struct vnode *vp, struct uio *uiop, struct ucred *cred)
 		return error;
 	}
 
-	l = uiop->uio_lwp;
 	if (np->n_flag & NMODIFIED) {
 		smbfs_attr_cacheremove(vp);
 		error = VOP_GETATTR(vp, &vattr, cred, l);
@@ -233,13 +233,13 @@ smbfs_readvnode(struct vnode *vp, struct uio *uiop, struct ucred *cred)
 
 int
 smbfs_writevnode(struct vnode *vp, struct uio *uiop,
-	struct ucred *cred, int ioflag)
+	kauth_cred_t cred, int ioflag)
 {
 	struct smbmount *smp = VTOSMBFS(vp);
 	struct smbnode *np = VTOSMB(vp);
 	struct smb_cred scred;
-	struct proc *p;
-	struct lwp *l;
+	struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
 	int error = 0;
 	int extended = 0;
 	size_t resid = uiop->uio_resid;
@@ -254,8 +254,6 @@ smbfs_writevnode(struct vnode *vp, struct uio *uiop,
 		return EINVAL;
 /*	if (uiop->uio_offset + uiop->uio_resid > smp->nm_maxfilesize)
 		return (EFBIG);*/
-	l = uiop->uio_lwp;
-	p = l ? l->l_proc : NULL;
 	if (ioflag & (IO_APPEND | IO_SYNC)) {
 		if (np->n_flag & NMODIFIED) {
 			smbfs_attr_cacheremove(vp);
@@ -302,7 +300,7 @@ smbfs_writevnode(struct vnode *vp, struct uio *uiop,
  * Do an I/O operation to/from a cache block.
  */
 int
-smbfs_doio(struct buf *bp, struct ucred *cr, struct lwp *l)
+smbfs_doio(struct buf *bp, kauth_cred_t cr, struct lwp *l)
 {
 	struct vnode *vp = bp->b_vp;
 	struct smbmount *smp = VFSTOSMBFS(vp->v_mount);
@@ -314,8 +312,7 @@ smbfs_doio(struct buf *bp, struct ucred *cr, struct lwp *l)
 
 	uiop->uio_iov = &io;
 	uiop->uio_iovcnt = 1;
-	uiop->uio_segflg = UIO_SYSSPACE;
-	uiop->uio_lwp = NULL;
+	UIO_SETUP_SYSSPACE(uiop);
 
 	smb_makescred(&scred, l, cr);
 
@@ -405,7 +402,7 @@ int
 smbfs_vinvalbuf(vp, flags, cred, l, intrflg)
 	struct vnode *vp;
 	int flags;
-	struct ucred *cred;
+	kauth_cred_t cred;
 	struct lwp *l;
 	int intrflg;
 {

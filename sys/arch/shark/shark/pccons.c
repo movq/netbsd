@@ -1,4 +1,4 @@
-/*      $NetBSD: pccons.c,v 1.23 2005/12/11 12:19:05 christos Exp $       */
+/*      $NetBSD: pccons.c,v 1.27 2006/10/01 18:56:22 elad Exp $       */
 
 /*
  * Copyright 1997
@@ -135,7 +135,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.23 2005/12/11 12:19:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.27 2006/10/01 18:56:22 elad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_xserver.h"
@@ -154,6 +154,7 @@ __KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.23 2005/12/11 12:19:05 christos Exp $")
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/conf.h>
+#include <sys/kauth.h>
 #include <machine/kerndebug.h>
 
 #include <uvm/uvm_extern.h>
@@ -603,7 +604,7 @@ kbd_init(bus_space_tag_t     iot,
 **
 **  IMPLICIT INPUTS:
 **
-**     addr_6845    -  Base adddress of the video registers 
+**     addr_6845    -  Base address of the video registers 
 **
 **  IMPLICIT OUTPUTS:
 **
@@ -651,7 +652,7 @@ set_cursor_shape(struct pc_softc *sc)
 **
 **  IMPLICIT INPUTS:
 **
-**     addr_6845    -  Base adddress of the video registers 
+**     addr_6845    -  Base address of the video registers 
 **
 **  IMPLICIT OUTPUTS:
 **
@@ -1191,6 +1192,9 @@ pcopen(dev_t       dev,
     tp->t_oproc = pcstart;
     tp->t_param = pcparam;
     tp->t_dev   = dev;
+
+    if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
+	return (EBUSY);
     
     if ((tp->t_state & TS_ISOPEN) == 0) 
     {
@@ -1207,15 +1211,6 @@ pcopen(dev_t       dev,
         pcparam(tp, &tp->t_termios);
         ttsetwater(tp);
     } 
-    else if ( tp->t_state & TS_XCLUDE && suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0 )
-    {
-        /*
-        ** Don't allow the open if the tty has been set up 
-        ** for exclusive use and this isn't root trying to 
-        ** open the device 
-        */
-        return EBUSY;
-    }
     tp->t_state |= TS_CARR_ON;
     /* 
     ** Invoke the line discipline open routine 

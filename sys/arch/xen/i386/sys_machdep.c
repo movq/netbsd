@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.4 2005/12/11 12:19:48 christos Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.9 2006/09/19 22:03:11 elad Exp $	*/
 /*	NetBSD: sys_machdep.c,v 1.70 2003/10/27 14:11:47 junyoung Exp 	*/
 
 /*-
@@ -38,13 +38,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.4 2005/12/11 12:19:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.9 2006/09/19 22:03:11 elad Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_mtrr.h"
 #include "opt_perfctrs.h"
 #include "opt_user_ldt.h"
 #include "opt_vm86.h"
+#include "opt_xen.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,6 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.4 2005/12/11 12:19:48 christos Exp
 #include <sys/buf.h>
 #include <sys/signal.h>
 #include <sys/malloc.h>
+#include <sys/kauth.h>
 
 #include <sys/mount.h>
 #include <sys/sa.h>
@@ -351,19 +353,15 @@ i386_iopl(l, args, retval)
 	register_t *retval;
 {
 	int error;
-	struct proc *p = l->l_proc;
 	struct pcb *pcb = &l->l_addr->u_pcb;
 	struct i386_iopl_args ua;
-	dom0_op_t op;
 
 	if ((xen_start_info.flags & SIF_PRIVILEGED) == 0)
 		return EPERM;
 
-	if (securelevel > 1)
+	if (kauth_authorize_machdep(l->l_cred, KAUTH_MACHDEP_X86,
+	    KAUTH_REQ_MACHDEP_X86_IOPL, NULL, NULL, NULL))
 		return EPERM;
-
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-		return error;
 
 	if ((error = copyin(args, &ua, sizeof(ua))) != 0)
 		return error;
@@ -375,10 +373,22 @@ i386_iopl(l, args, retval)
 		pcb->pcb_tss.tss_ioopt |= SEL_KPL; /* i/o pl */
 
 	/* Force the change at ring 0. */
-	op.cmd = DOM0_IOPL;
-	op.u.iopl.domain = DOMID_SELF;
-	op.u.iopl.iopl = pcb->pcb_tss.tss_ioopt & SEL_RPL; /* i/o pl */
-	HYPERVISOR_dom0_op(&op);
+#ifdef XEN3
+	{
+		struct physdev_op physop;
+		physop.cmd = PHYSDEVOP_SET_IOPL;
+		physop.u.set_iopl.iopl = pcb->pcb_tss.tss_ioopt & SEL_RPL;
+		HYPERVISOR_physdev_op(&physop);
+	}
+#else
+	{
+		dom0_op_t op;
+		op.cmd = DOM0_IOPL;
+		op.u.iopl.domain = DOMID_SELF;
+		op.u.iopl.iopl = pcb->pcb_tss.tss_ioopt & SEL_RPL; /* i/o pl */
+		HYPERVISOR_dom0_op(&op);
+	}
+#endif
 
 	return 0;
 }
@@ -406,15 +416,12 @@ i386_set_ioperm(l, args, retval)
 	register_t *retval;
 {
 	int error;
-	struct proc *p = l->l_proc;
 	struct pcb *pcb = &l->l_addr->u_pcb;
 	struct i386_set_ioperm_args ua;
 
-	if (securelevel > 1)
+	if (kauth_authorize_machdep(l->l_cred, KAUTH_MACHDEP_X86,
+	    KAUTH_REQ_MACHDEP_X86_IOPERM, NULL, NULL, NULL))
 		return EPERM;
-
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-		return error;
 
 	if ((error = copyin(args, &ua, sizeof(ua))) != 0)
 		return (error);
@@ -428,7 +435,6 @@ i386_get_mtrr(struct lwp *l, void *args, register_t *retval)
 {
 	struct i386_get_mtrr_args ua;
 	int error, n;
-	struct proc *p = l->l_proc;
 
 	if (mtrr_funcs == NULL)
 		return ENOSYS;
@@ -441,7 +447,7 @@ i386_get_mtrr(struct lwp *l, void *args, register_t *retval)
 	if (error != 0)
 		return error;
 
-	error = mtrr_get(ua.mtrrp, &n, p, MTRR_GETSET_USER);
+	error = mtrr_get(ua.mtrrp, &n, l->l_proc, MTRR_GETSET_USER);
 
 	copyout(&n, ua.n, sizeof (int));
 
@@ -453,12 +459,12 @@ i386_set_mtrr(struct lwp *l, void *args, register_t *retval)
 {
 	int error, n;
 	struct i386_set_mtrr_args ua;
-	struct proc *p = l->l_proc;
 
 	if (mtrr_funcs == NULL)
 		return ENOSYS;
 
-	error = suser(p->p_ucred, &p->p_acflag);
+	error = kauth_authorize_machdep(l->l_cred, KAUTH_MACHDEP_X86,
+	    KAUTH_REQ_MACHDEP_X86_MTRR_SET, NULL, NULL, NULL);
 	if (error != 0)
 		return error;
 
@@ -470,7 +476,7 @@ i386_set_mtrr(struct lwp *l, void *args, register_t *retval)
 	if (error != 0)
 		return error;
 
-	error = mtrr_set(ua.mtrrp, &n, p, MTRR_GETSET_USER);
+	error = mtrr_set(ua.mtrrp, &n, l->l_proc, MTRR_GETSET_USER);
 	if (n != 0)
 		mtrr_commit();
 

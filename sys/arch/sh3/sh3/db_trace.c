@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.17 2005/12/11 12:19:00 christos Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.19 2006/01/21 22:10:59 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.17 2005/12/11 12:19:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.19 2006/01/21 22:10:59 uwe Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.17 2005/12/11 12:19:00 christos Exp $
 #ifdef TRACE_DEBUG
 # define DPRINTF printf
 #else
-# define DPRINTF while (0) printf
+# define DPRINTF while (/* CONSTCOND */ 0) printf
 #endif
 
 extern char start[], etext[];
@@ -83,7 +83,7 @@ db_stack_trace_print(db_expr_t addr, boolean_t have_addr, db_expr_t count,
 	db_addr_t callpc, frame, lastframe;
 	uint32_t vbr;
 
-	asm volatile("stc vbr, %0" : "=r"(vbr));
+	__asm volatile("stc vbr, %0" : "=r"(vbr));
 
 	frame = ddb_regs.tf_r14;
 	callpc = ddb_regs.tf_spc;

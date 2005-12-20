@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.23 2005/12/11 12:16:39 christos Exp $	*/
+/*	$NetBSD: fd.c,v 1.27 2006/04/15 08:49:47 tsutsui Exp $	*/
 /*	$OpenBSD: fd.c,v 1.6 1998/10/03 21:18:57 millert Exp $	*/
 /*	NetBSD: fd.c,v 1.78 1995/07/04 07:23:09 mycroft Exp 	*/
 
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.23 2005/12/11 12:16:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.27 2006/04/15 08:49:47 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -101,6 +101,7 @@ __KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.23 2005/12/11 12:16:39 christos Exp $");
 #include <arc/jazz/fdreg.h>
 #include <arc/jazz/fdcvar.h>
 
+#include "ioconf.h"
 #include "locators.h"
 
 #define FDUNIT(dev)	DISKUNIT(dev)
@@ -185,8 +186,6 @@ struct fd_softc {
 int fdprobe(struct device *, struct cfdata *, void *);
 void fdattach(struct device *, struct device *, void *);
 
-extern struct cfdriver fd_cd;
-
 CFATTACH_DECL(fd, sizeof(struct fd_softc), fdprobe, fdattach, NULL, NULL);
 
 dev_type_open(fdopen);
@@ -225,7 +224,7 @@ void fdctimeout(void *);
 void fdcpseudointr(void *);
 void fdcretry(struct fdc_softc *);
 void fdfinish(struct fd_softc *, struct buf *);
-__inline const struct fd_type *fd_dev_to_type(struct fd_softc *, dev_t);
+inline const struct fd_type *fd_dev_to_type(struct fd_softc *, dev_t);
 void fd_mountroot_hook(struct device *);
 
 /*
@@ -404,7 +403,7 @@ fd_nvtotype(char *fdc, int nvraminfo, int drive)
 }
 #endif
 
-__inline const struct fd_type *
+inline const struct fd_type *
 fd_dev_to_type(struct fd_softc *fd, dev_t dev)
 {
 	int type = FDTYPE(dev);
@@ -467,7 +466,7 @@ fdstrategy(struct buf *bp)
 		fdstart(fd);
 #ifdef DIAGNOSTIC
 	else {
-		struct fdc_softc *fdc = (void *)fd->sc_dev.dv_parent;
+		struct fdc_softc *fdc = (void *) device_parent(&fd->sc_dev);
 		if (fdc->sc_state == DEVIDLE) {
 			printf("fdstrategy: controller inactive\n");
 			fdcstart(fdc);
@@ -488,7 +487,7 @@ done:
 void
 fdstart(struct fd_softc *fd)
 {
-	struct fdc_softc *fdc = (void *)fd->sc_dev.dv_parent;
+	struct fdc_softc *fdc = (void *) device_parent(&fd->sc_dev);
 	int active = TAILQ_FIRST(&fdc->sc_drives) != 0;
 
 	/* Link into controller queue. */
@@ -503,7 +502,7 @@ fdstart(struct fd_softc *fd)
 void
 fdfinish(struct fd_softc *fd, struct buf *bp)
 {
-	struct fdc_softc *fdc = (void *)fd->sc_dev.dv_parent;
+	struct fdc_softc *fdc = (void *) device_parent(&fd->sc_dev);
 
 	/*
 	 * Move this drive to the end of the queue to give others a `fair'
@@ -569,7 +568,7 @@ fd_motor_off(void *arg)
 
 	s = splbio();
 	fd->sc_flags &= ~(FD_MOTOR | FD_MOTOR_WAIT);
-	fd_set_motor((struct fdc_softc *)fd->sc_dev.dv_parent, 0);
+	fd_set_motor((struct fdc_softc *) device_parent(&fd->sc_dev), 0);
 	splx(s);
 }
 
@@ -577,7 +576,7 @@ void
 fd_motor_on(void *arg)
 {
 	struct fd_softc *fd = arg;
-	struct fdc_softc *fdc = (void *)fd->sc_dev.dv_parent;
+	struct fdc_softc *fdc = (void *) device_parent(&fd->sc_dev);
 	int s;
 
 	s = splbio();
@@ -684,7 +683,7 @@ fdcstart(struct fdc_softc *fdc)
 void
 fdcstatus(struct device *dv, int n, const char *s)
 {
-	struct fdc_softc *fdc = (void *)dv->dv_parent;
+	struct fdc_softc *fdc = (void *) device_parent(dv);
 	char bits[64];
 
 	if (n == 0) {
@@ -831,7 +830,7 @@ loop:
 		fd->sc_cylin = -1;
 		fdc->sc_state = SEEKWAIT;
 
-		fd->sc_dk.dk_seek++;
+		iostat_seek(fd->sc_dk.dk_stats);
 		disk_busy(&fd->sc_dk);
 
 		callout_reset(&fdc->sc_timo_ch, 4 * hz, fdctimeout, fdc);

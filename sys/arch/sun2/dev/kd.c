@@ -1,4 +1,4 @@
-/*	$NetBSD: kd.c,v 1.11 2005/12/11 12:19:16 christos Exp $	*/
+/*	$NetBSD: kd.c,v 1.14 2006/10/01 18:56:22 elad Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.11 2005/12/11 12:19:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.14 2006/10/01 18:56:22 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -56,6 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.11 2005/12/11 12:19:16 christos Exp $");
 #include <sys/file.h>
 #include <sys/conf.h>
 #include <sys/device.h>
+#include <sys/kauth.h>
 
 #include <machine/promlib.h>
 #include <machine/eeprom.h>
@@ -220,12 +221,8 @@ static	int firstopen = 1;
 	tp = kd->kd_tty;
 
 	/* It's simpler to do this up here. */
-	if (((tp->t_state & (TS_ISOPEN | TS_XCLUDE))
-	     ==             (TS_ISOPEN | TS_XCLUDE))
-	    && (suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0) )
-	{
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
 		return (EBUSY);
-	}
 
 	s = spltty();
 

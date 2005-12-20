@@ -1,27 +1,32 @@
-#	$NetBSD: Makefile,v 1.209 2005/12/06 11:55:19 skrll Exp $
+#	$NetBSD: Makefile,v 1.221 2006/09/29 19:03:11 macallan Exp $
 #	from: @(#)Makefile	5.20 (Berkeley) 6/12/93
 
 .include <bsd.own.mk>
 
-SUBDIR=	ac accton altq amd apm apmd arp bad144 bind bootp catman \
+SUBDIR=	ac accton altq amd apm apmd arp bad144 bind bootp \
+	btconfig btdevctl bthcid catman \
 	chown chroot chrtbl cnwctl cron dev_mkdb \
 	dhcp diskpart dumpfs dumplfs edquota eeprom \
 	envstat eshconfig etcupdate extattrctl fssconfig fwctl gpioctl \
 	grfconfig grfinfo gspa hilinfo ifwatchd inetd installboot \
 	iopctl iostat ipwctl irdaattach isdn iteconfig iwictl\
-	kgmon lastlogin link lmcconfig lpr mailwrapper makefs \
+	kgmon lastlogin link lmcconfig lockstat lpr mailwrapper makefs \
 	map-mbone mdconfig memswitch mlxctl mopd mountd moused \
 	mrinfo mrouted mscdlabel mtrace \
-	mtree ndbootd netgroup_mkdb nfsd ntp pcictl pkg_install pppd \
-	pstat pwd_mkdb postinstall powerd quot quotacheck quotaon \
+	mtree ndbootd ndiscvt netgroup_mkdb nfsd ntp ofctl pcictl pkg_install \
+	pppd pstat pwd_mkdb postinstall powerd quot quotacheck quotaon \
 	rarpd rbootd rdate \
 	repquota rmt rpc.bootparamd rpc.lockd rpc.pcnfsd \
-	rpc.statd rpcbind rwhod sa screenblank sesd \
-	sliplogin slstats sntp \
-	spray sti sunlabel sup sushi syslogd tadpolectl tcpdchk \
-	tcpdmatch tcpdump timed tpctl traceroute trpt trsp unlink \
-	usbdevs user videomode vipw vnconfig wiconfig wlanctl wpa \
+ 	rpc.statd rpcbind rwhod sa screenblank sdpd services_mkdb sesd \
+	sliplogin sntp \
+	spray sti sunlabel sup syslogd tadpolectl tcpdchk \
+	tcpdmatch tcpdump timed tpctl traceroute trpt unlink \
+	usbdevs user videomode vipw veriexecgen vnconfig wiconfig wlanctl wpa \
 	wsconscfg wsfontload wsmoused wsmuxctl zdump zic
+
+.if (${MKISCSI} != "no")
+SUBDIR+= iscsi 
+.endif
 
 .if (${MKKERBEROS} != "no")
 SUBDIR+= hprop kadmin kdc kstash ktutil

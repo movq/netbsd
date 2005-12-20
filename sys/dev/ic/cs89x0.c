@@ -1,4 +1,4 @@
-/*	$NetBSD: cs89x0.c,v 1.18 2005/12/11 12:21:26 christos Exp $	*/
+/*	$NetBSD: cs89x0.c,v 1.20 2006/09/24 03:53:08 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2004 Christopher Gilbert
@@ -212,7 +212,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs89x0.c,v 1.18 2005/12/11 12:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs89x0.c,v 1.20 2006/09/24 03:53:08 jmcneill Exp $");
 
 #include "opt_inet.h"
 
@@ -517,7 +517,8 @@ cs_attach(struct cs_softc *sc, u_int8_t *enaddr, int *media,
 		return 1;
 	}
 
-	sc->sc_powerhook = powerhook_establish(cs_power, sc);
+	sc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
+	    cs_power, sc);
 	if (sc->sc_powerhook == 0)
 		printf("%s: warning: powerhook_establish failed\n",
 			sc->sc_dev.dv_xname);
@@ -684,7 +685,7 @@ cs_read_pktpg_from_eeprom(struct cs_softc *sc, int pktpg, u_int16_t *pValue)
 	int x, maxword;
 
 	/* Check that we have eeprom data */
-	if (sc->eeprom_data == NULL && (sc->eeprom_size > 2))
+	if ((sc->eeprom_data == NULL) || (sc->eeprom_size < 2))
 		return (CS_ERROR);
 
 	/*

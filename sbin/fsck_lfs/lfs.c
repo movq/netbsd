@@ -1,4 +1,4 @@
-/* $NetBSD: lfs.c,v 1.19 2005/10/13 21:14:45 jmc Exp $ */
+/* $NetBSD: lfs.c,v 1.26 2006/11/09 19:36:36 christos Exp $ */
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -91,6 +91,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <util.h>
 
 #include "bufcache.h"
 #include "vnode.h"
@@ -106,6 +107,9 @@ extern void pwarn(const char *, ...);
 extern struct uvnodelst vnodelist;
 extern struct uvnodelst getvnodelist[VNODE_HASH_MAX];
 extern int nvnodes;
+
+static int
+lfs_fragextend(struct uvnode *, int, int, daddr_t, struct ubuf **);
 
 int fsdirty = 0;
 void (*panic_func)(int, const char *, va_list) = my_vpanic;
@@ -342,8 +346,7 @@ lfs_raw_vget(struct lfs * fs, ino_t ino, int fd, ufs_daddr_t daddr)
 	struct ubuf *bp;
 	int i, hash;
 
-	vp = (struct uvnode *) malloc(sizeof(*vp));
-	memset(vp, 0, sizeof(*vp));
+	vp = ecalloc(1, sizeof(*vp));
 	vp->v_fd = fd;
 	vp->v_fs = fs;
 	vp->v_usecount = 0;
@@ -353,16 +356,12 @@ lfs_raw_vget(struct lfs * fs, ino_t ino, int fd, ufs_daddr_t daddr)
 	LIST_INIT(&vp->v_cleanblkhd);
 	LIST_INIT(&vp->v_dirtyblkhd);
 
-	ip = (struct inode *) malloc(sizeof(*ip));
-	memset(ip, 0, sizeof(*ip));
+	ip = ecalloc(1, sizeof(*ip));
 
-	ip->i_din.ffs1_din = (struct ufs1_dinode *)
-	    malloc(sizeof(struct ufs1_dinode));
-	memset(ip->i_din.ffs1_din, 0, sizeof (struct ufs1_dinode));
+	ip->i_din.ffs1_din = ecalloc(1, sizeof(*ip->i_din.ffs1_din));
 
 	/* Initialize the inode -- from lfs_vcreate. */
-	ip->inode_ext.lfs = malloc(sizeof(struct lfs_inode_ext));
-	memset(ip->inode_ext.lfs, 0, sizeof(struct lfs_inode_ext));
+	ip->inode_ext.lfs = ecalloc(1, sizeof(*ip->inode_ext.lfs));
 	vp->v_data = ip;
 	/* ip->i_vnode = vp; */
 	ip->i_number = ino;
@@ -462,8 +461,7 @@ lfs_init(int devfd, daddr_t sblkno, daddr_t idaddr, int dummy_read, int debug)
 
 	vfs_init();
 
-	devvp = (struct uvnode *) malloc(sizeof(*devvp));
-	memset(devvp, 0, sizeof(*devvp));
+	devvp = ecalloc(1, sizeof(*devvp));
 	devvp->v_fs = NULL;
 	devvp->v_fd = devfd;
 	devvp->v_strategy_op = raw_vop_strategy;
@@ -476,8 +474,7 @@ lfs_init(int devfd, daddr_t sblkno, daddr_t idaddr, int dummy_read, int debug)
 	if (dummy_read) {
 		if (sblkno == 0)
 			sblkno = btodb(LFS_LABELPAD);
-		fs = (struct lfs *) malloc(sizeof(*fs));
-		memset(fs, 0, sizeof(*fs));
+		fs = ecalloc(1, sizeof(*fs));
 		fs->lfs_devvp = devvp;
 	} else {
 		if (sblkno == 0) {
@@ -487,8 +484,7 @@ lfs_init(int devfd, daddr_t sblkno, daddr_t idaddr, int dummy_read, int debug)
 			printf("No -b flag given, not attempting to verify checkpoint\n");
 		}
 		error = bread(devvp, sblkno, LFS_SBPAD, NOCRED, &bp);
-		fs = (struct lfs *) malloc(sizeof(*fs));
-		memset(fs, 0, sizeof(*fs));
+		fs = ecalloc(1, sizeof(*fs));
 		fs->lfs_dlfs = *((struct dlfs *) bp->b_data);
 		fs->lfs_devvp = devvp;
 		bp->b_flags |= B_INVAL;
@@ -497,8 +493,7 @@ lfs_init(int devfd, daddr_t sblkno, daddr_t idaddr, int dummy_read, int debug)
 		if (tryalt) {
 			error = bread(devvp, fsbtodb(fs, fs->lfs_sboffs[1]),
 		    	LFS_SBPAD, NOCRED, &bp);
-			altfs = (struct lfs *) malloc(sizeof(*altfs));
-			memset(altfs, 0, sizeof(*altfs));
+			altfs = ecalloc(1, sizeof(*altfs));
 			altfs->lfs_dlfs = *((struct dlfs *) bp->b_data);
 			altfs->lfs_devvp = devvp;
 			bp->b_flags |= B_INVAL;
@@ -541,9 +536,9 @@ lfs_init(int devfd, daddr_t sblkno, daddr_t idaddr, int dummy_read, int debug)
 	}
 
 	if (!dummy_read) {
-		fs->lfs_suflags = (u_int32_t **) malloc(2 * sizeof(u_int32_t *));
-		fs->lfs_suflags[0] = (u_int32_t *) malloc(fs->lfs_nseg * sizeof(u_int32_t));
-		fs->lfs_suflags[1] = (u_int32_t *) malloc(fs->lfs_nseg * sizeof(u_int32_t));
+		fs->lfs_suflags = emalloc(2 * sizeof(u_int32_t *));
+		fs->lfs_suflags[0] = emalloc(fs->lfs_nseg * sizeof(u_int32_t));
+		fs->lfs_suflags[1] = emalloc(fs->lfs_nseg * sizeof(u_int32_t));
 	}
 
 	if (idaddr == 0)
@@ -554,6 +549,8 @@ lfs_init(int devfd, daddr_t sblkno, daddr_t idaddr, int dummy_read, int debug)
 	fs->lfs_ivnode = lfs_raw_vget(fs,
 		(dummy_read ? LFS_IFILE_INUM : fs->lfs_ifile), devvp->v_fd,
 		idaddr);
+	if (fs->lfs_ivnode == NULL)
+		return NULL;
 
 	register_vget((void *)fs, lfs_vget);
 
@@ -575,56 +572,100 @@ try_verify(struct lfs *osb, struct uvnode *devvp, ufs_daddr_t goal, int debug)
 {
 	ufs_daddr_t daddr, odaddr;
 	SEGSUM *sp;
-	int bc, flag;
+	int i, bc, hitclean;
 	struct ubuf *bp;
 	ufs_daddr_t nodirop_daddr;
 	u_int64_t serial;
 
+	bc = 0;
+	hitclean = 0;
 	odaddr = -1;
 	daddr = osb->lfs_offset;
 	nodirop_daddr = daddr;
 	serial = osb->lfs_serial;
 	while (daddr != goal) {
-		flag = 0;
-oncemore:
+		/*
+		 * Don't mistakenly read a superblock, if there is one here.
+		 */
+		if (sntod(osb, dtosn(osb, daddr)) == daddr) {
+			if (daddr == osb->lfs_start)
+				daddr += btofsb(osb, LFS_LABELPAD);
+			for (i = 0; i < LFS_MAXNUMSB; i++) {
+				if (osb->lfs_sboffs[i] < daddr)
+					break;
+				if (osb->lfs_sboffs[i] == daddr)
+					daddr += btofsb(osb, LFS_SBPAD);
+			}
+		}
+
 		/* Read in summary block */
 		bread(devvp, fsbtodb(osb, daddr), osb->lfs_sumsize, NULL, &bp);
 		sp = (SEGSUM *)bp->b_data;
 
 		/*
-		 * Could be a superblock instead of a segment summary.
-		 * XXX should use gseguse, but right now we need to do more
-		 * setup before we can...fix this
+		 * Check for a valid segment summary belonging to our fs.
 		 */
 		if (sp->ss_magic != SS_MAGIC ||
 		    sp->ss_ident != osb->lfs_ident ||
-		    sp->ss_serial < serial ||
+		    sp->ss_serial < serial ||	/* XXX strengthen this */
 		    sp->ss_sumsum != cksum(&sp->ss_datasum, osb->lfs_sumsize -
 			sizeof(sp->ss_sumsum))) {
 			brelse(bp);
-			if (flag == 0) {
-				flag = 1;
-				daddr += btofsb(osb, LFS_SBPAD);
-				goto oncemore;
+			if (debug) {
+				if (sp->ss_magic != SS_MAGIC)
+					pwarn("pseg at 0x%x: "
+					      "wrong magic number\n",
+					      (int)daddr);
+				else if (sp->ss_ident != osb->lfs_ident)
+					pwarn("pseg at 0x%x: "
+					      "expected ident %llx, got %llx\n",
+					      (int)daddr,
+					      (long long)sp->ss_ident,
+					      (long long)osb->lfs_ident);
+				else if (sp->ss_serial >= serial)
+					pwarn("pseg at 0x%x: "
+					      "serial %d < %d\n", (int)daddr,
+					      (int)sp->ss_serial, (int)serial);
+				else
+					pwarn("pseg at 0x%x: "
+					      "summary checksum wrong\n",
+					      (int)daddr);
 			}
 			break;
 		}
+		if (debug && sp->ss_serial != serial)
+			pwarn("warning, serial=%d ss_serial=%d\n",
+				(int)serial, (int)sp->ss_serial);
 		++serial;
 		bc = check_summary(osb, sp, daddr, debug, devvp, NULL);
 		if (bc == 0) {
 			brelse(bp);
 			break;
 		}
+		if (debug)
+			pwarn("summary good: 0x%x/%d\n", (int)daddr,
+			      (int)sp->ss_serial);
 		assert (bc > 0);
 		odaddr = daddr;
 		daddr += btofsb(osb, osb->lfs_sumsize + bc);
 		if (dtosn(osb, odaddr) != dtosn(osb, daddr) ||
 		    dtosn(osb, daddr) != dtosn(osb, daddr +
-			btofsb(osb, osb->lfs_sumsize + osb->lfs_bsize))) {
+			btofsb(osb, osb->lfs_sumsize + osb->lfs_bsize) - 1)) {
 			daddr = sp->ss_next;
 		}
-		if (!(sp->ss_flags & SS_CONT))
+
+		/*
+		 * Check for the beginning and ending of a sequence of
+		 * dirops.  Writes from the cleaner never involve new
+		 * information, and are always checkpoints; so don't try
+		 * to roll forward through them.  Likewise, psegs written
+		 * by a previous roll-forward attempt are not interesting.
+		 */
+		if (sp->ss_flags & (SS_CLEAN | SS_RFW))
+			hitclean = 1;
+		if (hitclean == 0 && (sp->ss_flags & SS_CONT) == 0)
 			nodirop_daddr = daddr;
+
 		brelse(bp);
 	}
 
@@ -649,8 +690,9 @@ lfs_verify(struct lfs *sb0, struct lfs *sb1, struct uvnode *devvp, int debug)
 
 	osb = NULL;
 	if (debug)
-		printf("sb0 %lld, sb1 %lld\n", (long long) sb0->lfs_serial,
-		    (long long) sb1->lfs_serial);
+		pwarn("sb0 %lld, sb1 %lld",
+		      (long long) sb0->lfs_serial,
+		      (long long) sb1->lfs_serial);
 
 	if ((sb0->lfs_version == 1 &&
 		sb0->lfs_otstamp != sb1->lfs_otstamp) ||
@@ -727,8 +769,10 @@ check_summary(struct lfs *fs, SEGSUM *sp, ufs_daddr_t pseg_addr, int debug,
 					   << fs->lfs_bshift);
 		assert(bc >= 0);
 		fp = (FINFO *) (fp->fi_blocks + fp->fi_nblocks);
+		if (((char *)fp) - (char *)sp > fs->lfs_sumsize)
+			return 0;
 	}
-	datap = (u_int32_t *) malloc(nblocks * sizeof(*datap));
+	datap = emalloc(nblocks * sizeof(*datap));
 	datac = 0;
 
 	dp = (ufs_daddr_t *) sp;
@@ -851,6 +895,10 @@ lfs_valloc(struct lfs *fs, ino_t ino)
         return lfs_raw_vget(fs, ino, fs->lfs_devvp->v_fd, 0x0);
 }
 
+#ifdef IN_FSCK_LFS
+void reset_maxino(ino_t);
+#endif
+
 /*
  * Add a new block to the Ifile, to accommodate future file creations.
  */
@@ -870,8 +918,9 @@ extend_ifile(struct lfs *fs)
 	ip = VTOI(vp);
 	blkno = lblkno(fs, ip->i_ffs1_size);
 
-	bp = getblk(vp, blkno, fs->lfs_bsize);	/* XXX VOP_BALLOC() */
+	lfs_balloc(vp, ip->i_ffs1_size, fs->lfs_bsize, &bp);
 	ip->i_ffs1_size += fs->lfs_bsize;
+	ip->i_flag |= IN_MODIFIED;
 	
 	i = (blkno - fs->lfs_segtabsz - fs->lfs_cleansz) *
 		fs->lfs_ifpb;
@@ -901,6 +950,279 @@ extend_ifile(struct lfs *fs)
 
 	LFS_BWRITE_LOG(bp);
 
+#ifdef IN_FSCK_LFS
+	reset_maxino(((ip->i_ffs1_size >> fs->lfs_bshift) - fs->lfs_segtabsz -
+		     fs->lfs_cleansz) * fs->lfs_ifpb);
+#endif
 	return 0;
 }
 
+/*
+ * Allocate a block, and to inode and filesystem block accounting for it
+ * and for any indirect blocks the may need to be created in order for
+ * this block to be created.
+ *
+ * Blocks which have never been accounted for (i.e., which "do not exist")
+ * have disk address 0, which is translated by ufs_bmap to the special value
+ * UNASSIGNED == -1, as in the historical UFS.
+ *
+ * Blocks which have been accounted for but which have not yet been written
+ * to disk are given the new special disk address UNWRITTEN == -2, so that
+ * they can be differentiated from completely new blocks.
+ */
+int
+lfs_balloc(struct uvnode *vp, off_t startoffset, int iosize, struct ubuf **bpp)
+{
+	int offset;
+	daddr_t daddr, idaddr;
+	struct ubuf *ibp, *bp;
+	struct inode *ip;
+	struct lfs *fs;
+	struct indir indirs[NIADDR+2], *idp;
+	daddr_t	lbn, lastblock;
+	int bb, bcount;
+	int error, frags, i, nsize, osize, num;
+
+	ip = VTOI(vp);
+	fs = ip->i_lfs;
+	offset = blkoff(fs, startoffset);
+	lbn = lblkno(fs, startoffset);
+
+	/*
+	 * Three cases: it's a block beyond the end of file, it's a block in
+	 * the file that may or may not have been assigned a disk address or
+	 * we're writing an entire block.
+	 *
+	 * Note, if the daddr is UNWRITTEN, the block already exists in
+	 * the cache (it was read or written earlier).	If so, make sure
+	 * we don't count it as a new block or zero out its contents. If
+	 * it did not, make sure we allocate any necessary indirect
+	 * blocks.
+	 *
+	 * If we are writing a block beyond the end of the file, we need to
+	 * check if the old last block was a fragment.	If it was, we need
+	 * to rewrite it.
+	 */
+
+	if (bpp)
+		*bpp = NULL;
+
+	/* Check for block beyond end of file and fragment extension needed. */
+	lastblock = lblkno(fs, ip->i_ffs1_size);
+	if (lastblock < NDADDR && lastblock < lbn) {
+		osize = blksize(fs, ip, lastblock);
+		if (osize < fs->lfs_bsize && osize > 0) {
+			if ((error = lfs_fragextend(vp, osize, fs->lfs_bsize,
+						    lastblock,
+						    (bpp ? &bp : NULL))))
+				return (error);
+			ip->i_ffs1_size = ip->i_ffs1_size =
+			    (lastblock + 1) * fs->lfs_bsize;
+			ip->i_flag |= IN_CHANGE | IN_UPDATE;
+			if (bpp)
+				(void) VOP_BWRITE(bp);
+		}
+	}
+
+	/*
+	 * If the block we are writing is a direct block, it's the last
+	 * block in the file, and offset + iosize is less than a full
+	 * block, we can write one or more fragments.  There are two cases:
+	 * the block is brand new and we should allocate it the correct
+	 * size or it already exists and contains some fragments and
+	 * may need to extend it.
+	 */
+	if (lbn < NDADDR && lblkno(fs, ip->i_ffs1_size) <= lbn) {
+		osize = blksize(fs, ip, lbn);
+		nsize = fragroundup(fs, offset + iosize);
+		if (lblktosize(fs, lbn) >= ip->i_ffs1_size) {
+			/* Brand new block or fragment */
+			frags = numfrags(fs, nsize);
+			bb = fragstofsb(fs, frags);
+			if (bpp) {
+				*bpp = bp = getblk(vp, lbn, nsize);
+				bp->b_blkno = UNWRITTEN;
+			}
+			ip->i_lfs_effnblks += bb;
+			fs->lfs_bfree -= bb;
+			ip->i_ffs1_db[lbn] = UNWRITTEN;
+		} else {
+			if (nsize <= osize) {
+				/* No need to extend */
+				if (bpp && (error = bread(vp, lbn, osize, NOCRED, &bp)))
+					return error;
+			} else {
+				/* Extend existing block */
+				if ((error =
+				     lfs_fragextend(vp, osize, nsize, lbn,
+						    (bpp ? &bp : NULL))))
+					return error;
+			}
+			if (bpp)
+				*bpp = bp;
+		}
+		return 0;
+	}
+
+	error = ufs_bmaparray(fs, vp, lbn, &daddr, &indirs[0], &num);
+	if (error)
+		return (error);
+
+	daddr = (daddr_t)((int32_t)daddr); /* XXX ondisk32 */
+
+	/*
+	 * Do byte accounting all at once, so we can gracefully fail *before*
+	 * we start assigning blocks.
+	 */
+        bb = fsbtodb(fs, 1); /* bb = VFSTOUFS(vp->v_mount)->um_seqinc; */
+	bcount = 0;
+	if (daddr == UNASSIGNED) {
+		bcount = bb;
+	}
+	for (i = 1; i < num; ++i) {
+		if (!indirs[i].in_exists) {
+			bcount += bb;
+		}
+	}
+	fs->lfs_bfree -= bcount;
+	ip->i_lfs_effnblks += bcount;
+
+	if (daddr == UNASSIGNED) {
+		if (num > 0 && ip->i_ffs1_ib[indirs[0].in_off] == 0) {
+			ip->i_ffs1_ib[indirs[0].in_off] = UNWRITTEN;
+		}
+
+		/*
+		 * Create new indirect blocks if necessary
+		 */
+		if (num > 1) {
+			idaddr = ip->i_ffs1_ib[indirs[0].in_off];
+			for (i = 1; i < num; ++i) {
+				ibp = getblk(vp, indirs[i].in_lbn,
+				    fs->lfs_bsize);
+				if (!indirs[i].in_exists) {
+					memset(ibp->b_data, 0, ibp->b_bufsize);
+					ibp->b_blkno = UNWRITTEN;
+				} else if (!(ibp->b_flags & (B_DELWRI | B_DONE))) {
+					ibp->b_blkno = fsbtodb(fs, idaddr);
+					ibp->b_flags |= B_READ;
+					VOP_STRATEGY(ibp);
+				}
+				/*
+				 * This block exists, but the next one may not.
+				 * If that is the case mark it UNWRITTEN to
+                                 * keep the accounting straight.
+				 */
+				/* XXX ondisk32 */
+				if (((int32_t *)ibp->b_data)[indirs[i].in_off] == 0)
+					((int32_t *)ibp->b_data)[indirs[i].in_off] =
+						UNWRITTEN;
+				/* XXX ondisk32 */
+				idaddr = ((int32_t *)ibp->b_data)[indirs[i].in_off];
+				if ((error = VOP_BWRITE(ibp)))
+					return error;
+			}
+		}
+	}
+
+
+	/*
+	 * Get the existing block from the cache, if requested.
+	 */
+	frags = fsbtofrags(fs, bb);
+	if (bpp)
+		*bpp = bp = getblk(vp, lbn, blksize(fs, ip, lbn));
+
+	/*
+	 * The block we are writing may be a brand new block
+	 * in which case we need to do accounting.
+	 *
+	 * We can tell a truly new block because ufs_bmaparray will say
+	 * it is UNASSIGNED.  Once we allocate it we will assign it the
+	 * disk address UNWRITTEN.
+	 */
+	if (daddr == UNASSIGNED) {
+		if (bpp) {
+			/* Note the new address */
+			bp->b_blkno = UNWRITTEN;
+		}
+
+		switch (num) {
+		    case 0:
+			ip->i_ffs1_db[lbn] = UNWRITTEN;
+			break;
+		    case 1:
+			ip->i_ffs1_ib[indirs[0].in_off] = UNWRITTEN;
+			break;
+		    default:
+			idp = &indirs[num - 1];
+			if (bread(vp, idp->in_lbn, fs->lfs_bsize, NOCRED,
+				  &ibp))
+				panic("lfs_balloc: bread bno %lld",
+				    (long long)idp->in_lbn);
+			/* XXX ondisk32 */
+			((int32_t *)ibp->b_data)[idp->in_off] = UNWRITTEN;
+			VOP_BWRITE(ibp);
+		}
+	} else if (bpp && !(bp->b_flags & (B_DONE|B_DELWRI))) {
+		/*
+		 * Not a brand new block, also not in the cache;
+		 * read it in from disk.
+		 */
+		if (iosize == fs->lfs_bsize)
+			/* Optimization: I/O is unnecessary. */
+			bp->b_blkno = daddr;
+		else {
+			/*
+			 * We need to read the block to preserve the
+			 * existing bytes.
+			 */
+			bp->b_blkno = daddr;
+			bp->b_flags |= B_READ;
+			VOP_STRATEGY(bp);
+			return 0;
+		}
+	}
+
+	return (0);
+}
+
+int
+lfs_fragextend(struct uvnode *vp, int osize, int nsize, daddr_t lbn,
+               struct ubuf **bpp)
+{
+	struct inode *ip;
+	struct lfs *fs;
+	long bb;
+	int error;
+	size_t obufsize;
+
+	ip = VTOI(vp);
+	fs = ip->i_lfs;
+	bb = (long)fragstofsb(fs, numfrags(fs, nsize - osize));
+	error = 0;
+
+	/*
+	 * If we are not asked to actually return the block, all we need
+	 * to do is allocate space for it.  UBC will handle dirtying the
+	 * appropriate things and making sure it all goes to disk.
+	 * Don't bother to read in that case.
+	 */
+	if (bpp && (error = bread(vp, lbn, osize, NOCRED, bpp))) {
+		brelse(*bpp);
+		goto out;
+	}
+
+	fs->lfs_bfree -= bb;
+	ip->i_lfs_effnblks += bb;
+	ip->i_flag |= IN_CHANGE | IN_UPDATE;
+
+	if (bpp) {
+		obufsize = (*bpp)->b_bufsize;
+		(*bpp)->b_data = erealloc((*bpp)->b_data, nsize);
+		(void)memset((*bpp)->b_data + osize, 0, nsize - osize);
+	}
+
+    out:
+	return (error);
+}

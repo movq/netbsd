@@ -1,4 +1,4 @@
-/*	$NetBSD: process.c,v 1.35 2003/11/07 04:44:57 itojun Exp $	*/
+/*	$NetBSD: process.c,v 1.37 2006/06/18 05:16:41 gdamore Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -67,12 +67,16 @@
  * SUCH DAMAGE.
  */
 
+#if HAVE_NBTOOL_CONFIG_H
+#include "nbtool_config.h"
+#endif
+
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)process.c	8.6 (Berkeley) 4/20/94";
 #else
-__RCSID("$NetBSD: process.c,v 1.35 2003/11/07 04:44:57 itojun Exp $");
+__RCSID("$NetBSD: process.c,v 1.37 2006/06/18 05:16:41 gdamore Exp $");
 #endif
 #endif /* not lint */
 
@@ -327,7 +331,7 @@ applies(struct s_command *cp)
 				lastaddr = 1;
 			}
 			r = 1;
-		} else if (MATCH(cp->a1)) {
+		} else if (cp->a1 && MATCH(cp->a1)) {
 			/*
 			 * If the second address is a number less than or
 			 * equal to the line number first selected, only
@@ -502,15 +506,19 @@ lputs(char *s)
 {
 	int count;
 	char *escapes, *p;
+#ifndef HAVE_NBTOOL_CONFIG_H
 	struct winsize win;
+#endif
 	static int termwidth = -1;
 
 	if (termwidth == -1) {
 		if ((p = getenv("COLUMNS")) != NULL)
 			termwidth = atoi(p);
+#ifndef HAVE_NBTOOL_CONFIG_H
 		else if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &win) == 0 &&
 		    win.ws_col > 0)
 			termwidth = win.ws_col;
+#endif
 		else
 			termwidth = 60;
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: agpvar.h,v 1.10 2005/12/11 12:22:48 christos Exp $	*/
+/*	$NetBSD: agpvar.h,v 1.12 2006/08/17 17:11:28 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -69,15 +69,13 @@ struct agp_memory_info {
 	int		ami_is_bound;	/* non-zero if bound */
 };
 
-#define AGP_DEBUGxx
-
 #ifdef AGP_DEBUG
-#define AGP_DPF(x...) do {			\
+#define AGP_DPF(x) do {			\
     printf("agp: ");				\
-    printf(##x);				\
-} while (0)
+    printf x;				\
+} while (0) 
 #else
-#define AGP_DPF(x...) do {} while (0)
+#define AGP_DPF(x) 
 #endif
 
 #define AGPUNIT(x)	minor(x)
@@ -170,7 +168,7 @@ int agpbusprint(void *, const char *);
  */
 void agp_flush_cache(void);
 int agp_find_caps(pci_chipset_tag_t, pcitag_t);
-int agp_map_aperture(struct pci_attach_args *, struct agp_softc *);
+int agp_map_aperture(struct pci_attach_args *, struct agp_softc *, int);
 struct agp_gatt *agp_alloc_gatt(struct agp_softc *);
 void agp_free_gatt(struct agp_softc *, struct agp_gatt *);
 int agp_generic_attach(struct agp_softc *);

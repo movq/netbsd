@@ -1,4 +1,4 @@
-/*	$NetBSD: un.h,v 1.37 2005/12/11 12:25:21 christos Exp $	*/
+/*	$NetBSD: un.h,v 1.39 2006/07/23 22:06:14 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -46,7 +46,7 @@ typedef __sa_family_t	sa_family_t;
  * Definitions for UNIX IPC domain.
  */
 struct	sockaddr_un {
-	u_int8_t	sun_len;	/* total sockaddr length */
+	uint8_t		sun_len;	/* total sockaddr length */
 	sa_family_t	sun_family;	/* AF_LOCAL */
 	char		sun_path[104];	/* path name (gag) */
 };
@@ -83,7 +83,7 @@ int 	unp_externalize (struct mbuf *, struct lwp *);
 int	unp_internalize (struct mbuf *, struct lwp *);
 void 	unp_dispose (struct mbuf *);
 int	unp_output (struct mbuf *, struct mbuf *, struct unpcb *,
-	    struct proc *);
+	    struct lwp *);
 void	unp_setsockaddr (struct unpcb *, struct mbuf *);
 void	unp_setpeeraddr (struct unpcb *, struct mbuf *);
 #else /* !_KERNEL */

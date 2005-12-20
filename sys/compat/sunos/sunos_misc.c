@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos_misc.c,v 1.134 2005/12/11 12:20:23 christos Exp $	*/
+/*	$NetBSD: sunos_misc.c,v 1.143 2006/11/14 13:34:30 elad Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -50,10 +50,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos_misc.c,v 1.134 2005/12/11 12:20:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos_misc.c,v 1.143 2006/11/14 13:34:30 elad Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_nfsserver.h"
+#include "opt_ptrace.h"
 #include "fs_nfs.h"
 #endif
 
@@ -85,11 +86,13 @@ __KERNEL_RCSID(0, "$NetBSD: sunos_misc.c,v 1.134 2005/12/11 12:20:23 christos Ex
 #include <sys/utsname.h>
 #include <sys/unistd.h>
 #include <sys/sa.h>
+#include <sys/syscall.h>
 #include <sys/syscallargs.h>
 #include <sys/conf.h>
 #include <sys/socketvar.h>
 #include <sys/exec.h>
 #include <sys/swap.h>
+#include <sys/kauth.h>
 
 #include <compat/sys/signal.h>
 
@@ -417,7 +420,7 @@ async_daemon(l, v, retval)
 void	native_to_sunos_sigset __P((const sigset_t *, int *));
 void	sunos_to_native_sigset __P((const int, sigset_t *));
 
-__inline__ void
+inline void
 native_to_sunos_sigset(ss, mask)
 	const sigset_t *ss;
 	int *mask;
@@ -425,7 +428,7 @@ native_to_sunos_sigset(ss, mask)
 	*mask = ss->__bits[0];
 }
 
-__inline__ void
+inline void
 sunos_to_native_sigset(mask, ss)
 	const int mask;
 	sigset_t *ss;
@@ -525,10 +528,9 @@ again:
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
 	auio.uio_rw = UIO_READ;
-	auio.uio_segflg = UIO_SYSSPACE;
-	auio.uio_lwp = NULL;
 	auio.uio_resid = buflen;
 	auio.uio_offset = off;
+	UIO_SETUP_SYSSPACE(&auio);
 	/*
 	 * First we read into the malloc'ed buffer, then
 	 * we massage it into user space, one record at a time.
@@ -726,9 +728,9 @@ sunos_sys_setsockopt(l, v, retval)
 	return (error);
 }
 
-static __inline__ int sunos_sys_socket_common(struct lwp *, register_t *,
+static inline int sunos_sys_socket_common(struct lwp *, register_t *,
 					      int type);
-static __inline__ int
+static inline int
 sunos_sys_socket_common(l, retval, type)
 	struct lwp *l;
 	register_t *retval;
@@ -762,7 +764,7 @@ sunos_sys_socket(l, v, retval)
 	} */ *uap = v;
 	int error;
 
-	error = sys_socket(l, v, retval);
+	error = compat_30_sys_socket(l, v, retval);
 	if (error)
 		return (error);
 	return sunos_sys_socket_common(l, retval, SCARG(uap, type));
@@ -1178,6 +1180,7 @@ sunos_sys_setrlimit(l, v, retval)
 	return compat_43_sys_setrlimit(l, uap, retval);
 }
 
+#if defined(PTRACE) || defined(_LKM)
 /* for the m68k machines */
 #ifndef PT_GETFPREGS
 #define PT_GETFPREGS -1
@@ -1193,6 +1196,7 @@ static const int sreq2breq[] = {
 	PT_GETREGS,     PT_SETREGS,     PT_GETFPREGS,   PT_SETFPREGS
 };
 static const int nreqs = sizeof(sreq2breq) / sizeof(sreq2breq[0]);
+#endif /* PTRACE || _LKM */
 
 int
 sunos_sys_ptrace(l, v, retval)
@@ -1200,9 +1204,16 @@ sunos_sys_ptrace(l, v, retval)
 	void *v;
 	register_t *retval;
 {
+#if defined(PTRACE) || defined(_LKM)
 	struct sunos_sys_ptrace_args *uap = v;
 	struct sys_ptrace_args pa;
 	int req;
+
+#ifdef _LKM
+#define	sys_ptrace sysent[SYS_ptrace].sy_call 
+	if (sys_ptrace == sys_nosys)
+		return ENOSYS;
+#endif
 
 	req = SCARG(uap, req);
 
@@ -1219,6 +1230,9 @@ sunos_sys_ptrace(l, v, retval)
 	SCARG(&pa, data) = SCARG(uap, data);
 
 	return sys_ptrace(l, &pa, retval);
+#else
+	return ENOSYS;
+#endif /* PTRACE || _LKM */
 }
 
 /*
@@ -1254,13 +1268,13 @@ sunos_sys_reboot(l, v, retval)
 	register_t *retval;
 {
 	struct sunos_sys_reboot_args *uap = v;
-	struct proc *p = l->l_proc;
 	struct sys_reboot_args ua;
 	struct sunos_howto_conv *convp;
 	int error, bsd_howto, sun_howto;
 	char *bootstr;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if ((error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_REBOOT,
+	    0, NULL, NULL, NULL)) != 0)
 		return (error);
 
 	/*

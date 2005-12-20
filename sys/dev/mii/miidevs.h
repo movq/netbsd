@@ -1,10 +1,10 @@
-/*	$NetBSD: miidevs.h,v 1.64 2005/12/08 05:10:39 soren Exp $	*/
+/*	$NetBSD: miidevs.h,v 1.72 2006/11/26 16:28:19 tsutsui Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: miidevs,v 1.61 2005/12/08 03:16:43 jonathan Exp
+ *	NetBSD: miidevs,v 1.69 2006/11/26 16:26:35 tsutsui Exp
  */
 
 /*-
@@ -65,6 +65,7 @@
 #define	MII_OUI_CICADA	0x0003F1	/* Cicada Semiconductor */
 #define	MII_OUI_DAVICOM	0x00606e	/* Davicom Semiconductor */
 #define	MII_OUI_ENABLESEMI	0x0010dd	/* Enable Semiconductor */
+#define	MII_OUI_ICPLUS	0x0090c3	/* IC Plus Corp. */
 #define	MII_OUI_ICS	0x00a0be	/* Integrated Circuit Systems */
 #define	MII_OUI_INTEL	0x00aa00	/* Intel */
 #define	MII_OUI_LEVEL1	0x00207b	/* Level 1 */
@@ -106,7 +107,7 @@
 #define	MII_OUI_xxPMCSIERRA2	0x009057	/* PMC-Sierra */
 
 #define	MII_OUI_xxREALTEK	0x000732	/* Realtek */
-
+#define	MII_OUI_yyREALTEK	0x000004	/* Realtek */
 /*
  * List of known models.  Grouped by oui.
  */
@@ -159,6 +160,8 @@
 #define	MII_STR_BROADCOM_BCM5411	"BCM5411 1000BASE-T media interface"
 #define	MII_MODEL_BROADCOM_BCM5421	0x000e
 #define	MII_STR_BROADCOM_BCM5421	"BCM5421 1000BASE-T media interface"
+#define	MII_MODEL_BROADCOM_BCM5752	0x0010
+#define	MII_STR_BROADCOM_BCM5752	"BCM5752 1000BASE-T media interface"
 #define	MII_MODEL_BROADCOM_BCM5701	0x0011
 #define	MII_STR_BROADCOM_BCM5701	"BCM5701 1000BASE-T media interface"
 #define	MII_MODEL_BROADCOM_BCM5703	0x0016
@@ -171,6 +174,8 @@
 #define	MII_STR_BROADCOM_BCM5750	"BCM5750 1000BASE-T media interface"
 #define	MII_MODEL_BROADCOM_BCM5714	0x0034
 #define	MII_STR_BROADCOM_BCM5714	"BCM5714 1000BASE-T media interface"
+#define	MII_MODEL_BROADCOM_BCM5780	0x0035
+#define	MII_STR_BROADCOM_BCM5780	"BCM5780 1000BASE-T media interface"
  
 /* Cicada Semiconductor PHYs (now owned by Vitesse?) */
 #define	MII_MODEL_CICADA_CS8201	0x0001
@@ -189,6 +194,10 @@
 #define	MII_MODEL_xxDAVICOM_DM9102	0x0004
 #define	MII_STR_xxDAVICOM_DM9102	"DM9102 10/100 media interface"
 
+/* IC Plus Corp. PHYs */
+#define	MII_MODEL_ICPLUS_IP101	0x0005
+#define	MII_STR_ICPLUS_IP101	"IP101 10/100 PHY"
+
 /* Integrated Circuit Systems PHYs */
 #define	MII_MODEL_ICS_1889	0x0001
 #define	MII_STR_ICS_1889	"ICS1889 10/100 media interface"
@@ -206,12 +215,16 @@
 #define	MII_STR_yyINTEL_I82555	"i82555 10/100 media interface"
 #define	MII_MODEL_yyINTEL_I82562EH	0x0017
 #define	MII_STR_yyINTEL_I82562EH	"i82562EH HomePNA interface"
+#define	MII_MODEL_yyINTEL_I82562G	0x0031
+#define	MII_STR_yyINTEL_I82562G	"i82562G 10/100 media interface"
 #define	MII_MODEL_yyINTEL_I82562EM	0x0032
 #define	MII_STR_yyINTEL_I82562EM	"i82562EM 10/100 media interface"
 #define	MII_MODEL_yyINTEL_I82562ET	0x0033
 #define	MII_STR_yyINTEL_I82562ET	"i82562ET 10/100 media interface"
 #define	MII_MODEL_yyINTEL_I82553	0x0035
 #define	MII_STR_yyINTEL_I82553	"i82553 10/100 media interface"
+#define	MII_MODEL_xxMARVELL_I82563	0x000a
+#define	MII_STR_xxMARVELL_I82563	"i82563 10/100/1000 media interface"
 
 #define	MII_MODEL_yyINTEL_IGP01E1000	0x0038
 #define	MII_STR_yyINTEL_IGP01E1000	"Intel IGP01E1000 Gigabit PHY"
@@ -255,6 +268,8 @@
 #define	MII_STR_xxNATSEMI_DP83843	"DP83843 10/100 media interface"
 #define	MII_MODEL_xxNATSEMI_DP83815	0x0002
 #define	MII_STR_xxNATSEMI_DP83815	"DP83815 10/100 media interface"
+#define	MII_MODEL_xxNATSEMI_DP83847	0x0003
+#define	MII_STR_xxNATSEMI_DP83847	"DP83847 10/100 media interface"
 #define	MII_MODEL_xxNATSEMI_DP83891	0x0005
 #define	MII_STR_xxNATSEMI_DP83891	"DP83891 1000BASE-T media interface"
 #define	MII_MODEL_xxNATSEMI_DP83861	0x0006
@@ -275,6 +290,8 @@
 #define	MII_STR_xxQUALSEMI_QS6612	"QS6612 10/100 media interface"
 
 /* RealTek PHYs */
+#define	MII_MODEL_yyREALTEK_RTL8201L	0x0020
+#define	MII_STR_yyREALTEK_RTL8201L	"RTL8201L 10/100 media interface"
 #define	MII_MODEL_xxREALTEK_RTL8169S	0x0011
 #define	MII_STR_xxREALTEK_RTL8169S	"RTL8169S/8110S 1000BASE-T media interface"
 #define	MII_MODEL_REALTEK_RTL8169S	0x0011

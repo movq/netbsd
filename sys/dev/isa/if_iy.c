@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iy.c,v 1.69 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: if_iy.c,v 1.74 2006/11/16 01:33:00 christos Exp $	*/
 /* #define IYDEBUG */
 /* #define IYMEMDEBUG */
 
@@ -46,10 +46,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_iy.c,v 1.69 2005/12/11 12:22:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_iy.c,v 1.74 2006/11/16 01:33:00 christos Exp $");
 
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 #include "rnd.h"
 
@@ -87,10 +86,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_iy.c,v 1.69 2005/12/11 12:22:02 christos Exp $");
 #include <netinet/if_inarp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #if defined(SIOCSIFMEDIA)
 #include <net/if_media.h>
@@ -169,8 +164,8 @@ static void iy_mc_setup(struct iy_softc *);
 static void iy_mc_reset(struct iy_softc *);
 void iyget(struct iy_softc *, bus_space_tag_t, bus_space_handle_t, int);
 void iyprobemem(struct iy_softc *);
-static __inline void eepromwritebit(bus_space_tag_t, bus_space_handle_t, int);
-static __inline int eepromreadbit(bus_space_tag_t, bus_space_handle_t);
+static inline void eepromwritebit(bus_space_tag_t, bus_space_handle_t, int);
+static inline int eepromreadbit(bus_space_tag_t, bus_space_handle_t);
 
 #ifdef IYDEBUGX
 void print_rbd(volatile struct iy_recv_buf_desc *);
@@ -197,10 +192,8 @@ static u_int8_t eepro_irqmap[] = EEPP_INTMAP;
 static u_int8_t eepro_revirqmap[] = EEPP_RINTMAP;
 
 int
-iyprobe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+iyprobe(struct device *parent,  struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	u_int16_t eaddr[8];
@@ -299,9 +292,7 @@ out:
 }
 
 void
-iyattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+iyattach(struct device *parent, struct device *self, void *aux)
 {
 	struct iy_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
@@ -875,7 +866,7 @@ struct ifnet *ifp;
 }
 
 
-static __inline void
+static inline void
 eepromwritebit(iot, ioh, what)
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
@@ -889,7 +880,7 @@ eepromwritebit(iot, ioh, what)
 	delay(1);
 }
 
-static __inline int
+static inline int
 eepromreadbit(iot, ioh)
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
@@ -1080,8 +1071,13 @@ iyget(sc, iot, ioh, rxlen)
 		*mp = m;
 		mp = &m->m_next;
 	}
+
+	if (top == NULL)
+		return;
+
 	/* XXX receive the top here */
 	++ifp->if_ipackets;
+
 
 #if NBPFILTER > 0
 	if (ifp->if_bpf)
@@ -1230,23 +1226,6 @@ iyioctl(ifp, cmd, data)
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
-#ifdef NS
-		/* XXX - This code is probably wrong. */
-		case AF_NS:
-		    {
-			struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
-
-			if (ns_nullhost(*ina))
-				ina->x_host = *(union ns_host *)
-				    LLADDR(ifp->if_sadl);
-			else
-				memcpy(LLADDR(ifp->if_sadl), ina->x_host.c_host,
-				    ETHER_ADDR_LEN);
-			/* Set new address. */
-			iyinit(sc);
-			break;
-		    }
-#endif /* NS */
 		default:
 			iyinit(sc);
 			break;

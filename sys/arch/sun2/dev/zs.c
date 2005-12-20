@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.11 2005/12/11 12:19:16 christos Exp $	*/
+/*	$NetBSD: zs.c,v 1.13 2006/10/05 14:12:36 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.11 2005/12/11 12:19:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.13 2006/10/05 14:12:36 tsutsui Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -248,8 +248,7 @@ zs_attach(struct zsc_softc *zsc, struct zsdevice *zsd, int pri)
 		 * sunkbd and sunms line disciplines.
 		 */
 		if (child 
-		    && (!strcmp(child->dv_cfdata->cf_name,
-		    		"zstty"))) {
+		    && device_is_a(child, "zstty")) {
 			struct kbd_ms_tty_attach_args kma;
 			struct zstty_softc {	
 				/* The following are the only fields we need here */
@@ -289,9 +288,7 @@ zs_attach(struct zsc_softc *zsc, struct zsdevice *zsd, int pri)
 	}
 
 	/*
-	 * Now safe to install interrupt handlers.  Note the arguments
-	 * to the interrupt handlers aren't used.  Note, we only do this
-	 * once since both SCCs interrupt at the same level and vector.
+	 * Now safe to install interrupt handlers.
 	 */
 	bus_intr_establish(zsc->zsc_bustag, pri, IPL_SERIAL, 0, zshard, zsc);
 	if (!(zsc->zsc_softintr = softintr_establish(softpri, zssoft, zsc)))

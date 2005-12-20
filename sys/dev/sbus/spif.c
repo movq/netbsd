@@ -1,4 +1,4 @@
-/*	$NetBSD: spif.c,v 1.4 2005/12/11 12:23:44 christos Exp $	*/
+/*	$NetBSD: spif.c,v 1.9 2006/10/01 20:31:51 elad Exp $	*/
 /*	$OpenBSD: spif.c,v 1.12 2003/10/03 16:44:51 miod Exp $	*/
 
 /*
@@ -41,7 +41,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spif.c,v 1.4 2005/12/11 12:23:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spif.c,v 1.9 2006/10/01 20:31:51 elad Exp $");
 
 #include "spif.h"
 #if NSPIF > 0
@@ -59,6 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: spif.c,v 1.4 2005/12/11 12:23:44 christos Exp $");
 #include <sys/syslog.h>
 #include <sys/conf.h>
 #include <sys/errno.h>
+#include <sys/kauth.h>
 
 #include <machine/bus.h>
 #include <machine/intr.h>
@@ -351,6 +352,9 @@ stty_open(dev, flags, mode, l)
 	tp = sp->sp_tty;
 	tp->t_dev = dev;
 
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
+		return (EBUSY);
+
 	if (!ISSET(tp->t_state, TS_ISOPEN) && tp->t_wopen == 0) {
 		ttychars(tp);
 		tp->t_iflag = TTYDEF_IFLAG;
@@ -383,10 +387,6 @@ stty_open(dev, flags, mode, l)
 			SET(tp->t_state, TS_CARR_ON);
 		else
 			CLR(tp->t_state, TS_CARR_ON);
-	}
-	else if (ISSET(tp->t_state, TS_XCLUDE) &&
-		 suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0) {
-		return (EBUSY);
 	} else {
 		s = spltty();
 	}
@@ -497,7 +497,8 @@ stty_ioctl(dev, cmd, data, flags, l)
 		*((int *)data) = sp->sp_openflags;
 		break;
 	case TIOCSFLAGS:
-		if( suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) )
+		if (kauth_authorize_device_tty(l->l_cred,
+		    KAUTH_DEVICE_TTY_PRIVSET, tp))
 			error = EPERM;
 		else
 			sp->sp_openflags = *((int *)data) &

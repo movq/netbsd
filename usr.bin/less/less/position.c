@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 1984-2002  Mark Nudelman
+ * Copyright (C) 1984-2004  Mark Nudelman
  *
  * You may distribute under the terms of either the GNU General Public
  * License or the Less License, as specified in the README file.
@@ -107,6 +107,7 @@ pos_clear()
 pos_init()
 {
 	struct scrpos scrpos;
+	scrpos.pos = scrpos.ln = 0;	/* XXX: GCC */
 
 	if (sc_height <= table_size)
 		return;

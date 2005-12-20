@@ -1,4 +1,4 @@
-/*	$NetBSD: init_main.c,v 1.260 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: init_main.c,v 1.283 2006/11/26 16:22:36 elad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1992, 1993
@@ -71,21 +71,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.260 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.283 2006/11/26 16:22:36 elad Exp $");
 
 #include "opt_ipsec.h"
-#include "opt_sysv.h"
-#include "opt_maxuprc.h"
-#include "opt_multiprocessor.h"
-#include "opt_pipe.h"
-#include "opt_syscall_debug.h"
-#include "opt_systrace.h"
-#include "opt_posix.h"
 #include "opt_kcont.h"
-#include "opt_rootfs_magiclinks.h"
-#include "opt_verified_exec.h"
+#include "opt_multiprocessor.h"
+#include "opt_ntp.h"
+#include "opt_pipe.h"
+#include "opt_posix.h"
+#include "opt_syscall_debug.h"
+#include "opt_sysv.h"
+#include "opt_fileassoc.h"
+#include "opt_pax.h"
 
 #include "rnd.h"
+#include "veriexec.h"
 
 #include <sys/param.h>
 #include <sys/acct.h>
@@ -95,6 +95,7 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.260 2005/12/11 12:24:29 christos Exp
 #include <sys/callout.h>
 #include <sys/kernel.h>
 #include <sys/kcont.h>
+#include <sys/kmem.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/kthread.h>
@@ -130,9 +131,6 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.260 2005/12/11 12:24:29 christos Exp
 #ifdef P1003_1B_SEMAPHORE
 #include <sys/ksem.h>
 #endif
-#ifdef SYSTRACE
-#include <sys/systrace.h>
-#endif
 #include <sys/domain.h>
 #include <sys/namei.h>
 #if NRND > 0
@@ -144,15 +142,23 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.260 2005/12/11 12:24:29 christos Exp
 #ifdef LKM
 #include <sys/lkm.h>
 #endif
-#ifdef VERIFIED_EXEC
+#if NVERIEXEC > 0
 #include <sys/verified_exec.h>
-#endif
+#endif /* NVERIEXEC > 0 */
+#include <sys/kauth.h>
 #include <net80211/ieee80211_netbsd.h>
 
 #include <sys/syscall.h>
 #include <sys/sa.h>
 #include <sys/syscallargs.h>
 
+#ifdef FILEASSOC
+#include <sys/fileassoc.h>
+#endif /* FILEASSOC */
+
+#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD)
+#include <sys/pax.h>
+#endif /* PAX_MPROTECT || PAX_SEGVGUARD */
 #include <ufs/ufs/quota.h>
 
 #include <miscfs/genfs/genfs.h>
@@ -167,6 +173,8 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.260 2005/12/11 12:24:29 christos Exp
 #include <net/if.h>
 #include <net/raw_cb.h>
 
+#include <secmodel/secmodel.h>
+
 extern struct proc proc0;
 extern struct lwp lwp0;
 extern struct cwdinfo cwdi0;
@@ -179,14 +187,25 @@ struct	proc *initproc;
 struct	vnode *rootvp, *swapdev_vp;
 int	boothowto;
 int	cold = 1;			/* still working on startup */
-struct	timeval boottime;
+struct timeval boottime;	        /* time at system startup - will only follow settime deltas */
 time_t	rootfstime;			/* recorded root fs time, if known */
 
-__volatile int start_init_exec;		/* semaphore for start_init() */
+volatile int start_init_exec;		/* semaphore for start_init() */
 
 static void check_console(struct lwp *l);
 static void start_init(void *);
 void main(void);
+
+#if defined(__SSP__) || defined(__SSP_ALL__)
+long __stack_chk_guard[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+void __stack_chk_fail(void);
+
+void
+__stack_chk_fail(void)
+{
+	panic("stack overflow detected; terminated");
+}
+#endif
 
 /*
  * System startup; initialize the world, create process 0, mount root
@@ -197,6 +216,9 @@ void main(void);
 void
 main(void)
 {
+#ifdef __HAVE_TIMECOUNTER
+	struct timeval time;
+#endif
 	struct lwp *l;
 	struct proc *p;
 	struct pdevinit *pdev;
@@ -226,6 +248,8 @@ main(void)
 	KERNEL_LOCK_INIT();
 
 	uvm_init();
+
+	kmem_init();
 
 	/* Do machine-dependent initialization. */
 	cpu_startup();
@@ -262,6 +286,7 @@ main(void)
 
 	/* Initialize process and pgrp structures. */
 	procinit();
+	lwpinit();
 
 	/* Initialize signal-related data structures. */
 	signal_init();
@@ -289,9 +314,41 @@ main(void)
 #endif
 	vfsinit();
 
+
+#ifdef __HAVE_TIMECOUNTER
+	inittimecounter();
+	ntp_init();
+#endif /* __HAVE_TIMECOUNTER */
+
+	/* Initialize kauth. */
+	kauth_init();
+
 	/* Configure the system hardware.  This will enable interrupts. */
 	configure();
 
+#if defined(__SSP__) || defined(__SSP_ALL__)
+	{
+#ifdef DIAGNOSTIC
+		printf("Initializing SSP:");
+#endif
+		/*
+		 * We initialize ssp here carefully:
+		 *	1. after we got some entropy
+		 *	2. without calling a function
+		 */
+		size_t i;
+		long guard[__arraycount(__stack_chk_guard)];
+
+		arc4randbytes(guard, sizeof(guard));
+		for (i = 0; i < __arraycount(guard); i++)
+			__stack_chk_guard[i] = guard[i];
+#ifdef DIAGNOSTIC
+		for (i = 0; i < __arraycount(guard); i++)
+			printf("%lx ", guard[i]);
+		printf("\n");
+#endif
+	}
+#endif
 	ubc_init();		/* must be after autoconfig */
 
 	/* Lock the kernel on behalf of proc0. */
@@ -317,13 +374,23 @@ main(void)
 	ksem_init();
 #endif
 
-#ifdef VERIFIED_EXEC
-	  /*
-	   * Initialise the fingerprint operations vectors before
-	   * fingerprints can be loaded.
-	   */
-	veriexec_init_fp_ops();
-#endif
+	/* Initialize default security model. */
+	secmodel_start();
+
+#ifdef FILEASSOC
+	fileassoc_init();
+#endif /* FILEASSOC */
+
+#if NVERIEXEC > 0
+	/*
+	 * Initialise the Veriexec subsystem.
+	 */
+	veriexec_init();
+#endif /* NVERIEXEC > 0 */
+
+#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD)
+	pax_init();
+#endif /* PAX_MPROTECT || PAX_SEGVGUARD */
 
 	/* Attach pseudo-devices. */
 	for (pdev = pdevinit; pdev->pdev_attach != NULL; pdev++)
@@ -416,9 +483,6 @@ main(void)
 	inittodr(rootfstime);
 
 	CIRCLEQ_FIRST(&mountlist)->mnt_flag |= MNT_ROOTFS;
-#ifdef ROOTFS_MAGICLINKS
-	CIRCLEQ_FIRST(&mountlist)->mnt_flag |= MNT_MAGICLINKS;
-#endif
 	CIRCLEQ_FIRST(&mountlist)->mnt_op->vfs_refcount++;
 
 	/*
@@ -449,9 +513,15 @@ main(void)
 	 */
 	proclist_lock_read();
 	s = splsched();
+#ifdef __HAVE_TIMECOUNTER
+	getmicrotime(&time);
+#else
+	mono_time = time;
+#endif
+	boottime = time;
 	LIST_FOREACH(p, &allproc, p_list) {
 		KASSERT((p->p_flag & P_MARKER) == 0);
-		p->p_stats->p_start = mono_time = boottime = time;
+		p->p_stats->p_start = time;
 		LIST_FOREACH(l, &p->p_lwps, l_sibling) {
 			if (l->l_cpu != NULL)
 				l->l_cpu->ci_schedstate.spc_runtime = time;
@@ -497,7 +567,6 @@ main(void)
 void
 setrootfstime(time_t t)
 {
-
 	rootfstime = t;
 }
 

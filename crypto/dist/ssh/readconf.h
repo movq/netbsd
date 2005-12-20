@@ -1,5 +1,5 @@
-/*	$NetBSD: readconf.h,v 1.15 2005/04/23 16:53:28 christos Exp $	*/
-/*	$OpenBSD: readconf.h,v 1.66 2005/03/01 10:40:27 djm Exp $	*/
+/*	$NetBSD: readconf.h,v 1.17 2006/09/28 21:22:14 christos Exp $	*/
+/* $OpenBSD: readconf.h,v 1.71 2006/08/03 03:34:42 deraadt Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -17,8 +17,6 @@
 #ifndef READCONF_H
 #define READCONF_H
 
-#include "key.h"
-
 /* Data structure for representing a forwarding request. */
 
 typedef struct {
@@ -35,6 +33,7 @@ typedef struct {
 	int     forward_agent;	/* Forward authentication agent. */
 	int     forward_x11;	/* Forward X11 display. */
 	int     forward_x11_trusted;	/* Trust Forward X11 display. */
+	int     exit_on_forward_failure;	/* Exit if bind(2) fails for -L/-R */
 	char   *xauth_location;	/* Location for xauth program */
 	int     gateway_ports;	/* Allow remote connects to forwarded ports. */
 	int     use_privileged_port;	/* Don't use privileged port if false. */
@@ -124,8 +123,21 @@ typedef struct {
 	int	control_master;
 
 	int	hash_known_hosts;
+
+	int	tun_open;	/* tun(4) */
+	int     tun_local;	/* force tun device (optional) */
+	int     tun_remote;	/* force tun device (optional) */
+
+	char	*local_command;
+	int	permit_local_command;
+
 }       Options;
 
+#define SSHCTL_MASTER_NO	0
+#define SSHCTL_MASTER_YES	1
+#define SSHCTL_MASTER_AUTO	2
+#define SSHCTL_MASTER_ASK	3
+#define SSHCTL_MASTER_AUTO_ASK	4
 
 void     initialize_options(Options *);
 void     fill_default_options(Options *);

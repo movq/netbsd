@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.x11.mk,v 1.51 2005/11/12 22:57:46 spz Exp $
+#	$NetBSD: bsd.x11.mk,v 1.53 2006/04/17 12:50:51 uwe Exp $
 
 .include <bsd.init.mk>
 
@@ -72,6 +72,7 @@ X11FLAGS.EXTENSION+=	-D__GLX_ALIGN64
     ${MACHINE} == "cats"	|| \
     ${MACHINE} == "i386"	|| \
     ${MACHINE} == "macppc"	|| \
+    ${MACHINE} == "netwinder"	|| \
     ${MACHINE} == "sgimips"	|| \
     ${MACHINE} == "sparc64"	|| \
     ${MACHINE} == "sparc"
@@ -144,7 +145,7 @@ appdefsinstall:: .PHONY ${APPDEFS:@S@${DESTDIR}${X11LIBDIR}/app-defaults/${S:T:R
 
 __appdefinstall: .USE
 	${INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m ${NONBINMODE} \
-	    ${SYSPKGTAG} ${.ALLSRC} ${.TARGET}
+	    ${.ALLSRC} ${.TARGET}
 
 .for S in ${APPDEFS:O:u}
 ${DESTDIR}${X11LIBDIR}/app-defaults/${S:T:R}: ${S} __appdefinstall

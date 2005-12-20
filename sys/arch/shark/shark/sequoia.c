@@ -1,4 +1,4 @@
-/*	$NetBSD: sequoia.c,v 1.4 2005/12/11 12:19:05 christos Exp $	*/
+/*	$NetBSD: sequoia.c,v 1.7 2006/09/12 17:50:53 gdamore Exp $	*/
 
 /*
  * Copyright 1997
@@ -40,7 +40,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sequoia.c,v 1.4 2005/12/11 12:19:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sequoia.c,v 1.7 2006/09/12 17:50:53 gdamore Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,10 +67,6 @@ __KERNEL_RCSID(0, "$NetBSD: sequoia.c,v 1.4 2005/12/11 12:19:05 christos Exp $")
 ** MACROS 
 **
 */
-#define SET(t, f)       (t) |= (f)
-#define CLR(t, f)       (t) &= ~(f)
-#define ISSET(t, f)     ((t) & (f))
-#define ISCLR(t, f)     ( ((t) & (f)) == 0)
 
 /* define regisers on sequoia used by pins  */
 #define SEQUOIA_1GPIO       PMC_GPCR_REG         /* reg 0x007 gpio 0-3 */      
@@ -473,7 +469,7 @@ int  scrGetData (void)
 
 void ledNetActive (void)
 {
-    ledLastActive = time;
+    getmicrotime(&ledLastActive);
 }
 
 void ledNetBlock    (void)
@@ -495,15 +491,17 @@ void ledPanic       (void)
 static void   ledTimeout(void * arg)
 {
     int timeSpan;   /* in usec */
-    
-    if(time.tv_sec == ledLastActive.tv_sec)
+    struct timeval now;
+
+    getmicrotime(&now);
+    if(now.tv_sec == ledLastActive.tv_sec)
     {
-        timeSpan = time.tv_usec -  ledLastActive.tv_usec;
+        timeSpan = now.tv_usec -  ledLastActive.tv_usec;
     }
     
-    else if (time.tv_sec - 10  < ledLastActive.tv_sec) /* stop rollover problems */
+    else if (now.tv_sec - 10  < ledLastActive.tv_sec) /* stop rollover problems */
     {
-        timeSpan = (1000000 + time.tv_usec) -  ledLastActive.tv_usec;
+        timeSpan = (1000000 + now.tv_usec) -  ledLastActive.tv_usec;
     }
 
     else

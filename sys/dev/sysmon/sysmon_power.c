@@ -1,4 +1,4 @@
-/*	$NetBSD: sysmon_power.c,v 1.11 2005/12/11 12:23:56 christos Exp $	*/
+/*	$NetBSD: sysmon_power.c,v 1.14 2006/11/16 01:33:26 christos Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysmon_power.c,v 1.11 2005/12/11 12:23:56 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysmon_power.c,v 1.14 2006/11/16 01:33:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/reboot.h>
@@ -77,7 +77,7 @@ static char sysmon_power_type[32];
 
 #define	PEVQ_F_WAITING		0x01	/* daemon waiting for event */
 
-#define	SYSMON_NEXT_EVENT(x)		(((x) + 1) / SYSMON_MAX_POWER_EVENTS)
+#define	SYSMON_NEXT_EVENT(x)		(((x) + 1) % SYSMON_MAX_POWER_EVENTS)
 
 /*
  * sysmon_queue_power_event:
@@ -146,7 +146,8 @@ sysmon_power_event_queue_flush(void)
  *	Open the system monitor device.
  */
 int
-sysmonopen_power(dev_t dev, int flag, int mode, struct lwp *l)
+sysmonopen_power(dev_t dev, int flag, int mode,
+    struct lwp *l)
 {
 	int error = 0;
 
@@ -168,7 +169,8 @@ sysmonopen_power(dev_t dev, int flag, int mode, struct lwp *l)
  *	Close the system monitor device.
  */
 int
-sysmonclose_power(dev_t dev, int flag, int mode, struct lwp *l)
+sysmonclose_power(dev_t dev, int flag, int mode,
+    struct lwp *l)
 {
 	int count;
 
@@ -313,7 +315,8 @@ sysmonkqfilter_power(dev_t dev, struct knote *kn)
  *	Perform a power managmenet control request.
  */
 int
-sysmonioctl_power(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
+sysmonioctl_power(dev_t dev, u_long cmd, caddr_t data,
+    int flag, struct lwp *l)
 {
 	int error = 0;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs.c,v 1.37 2005/10/23 16:12:02 thorpej Exp $	*/
+/*	$NetBSD: ffs.c,v 1.41 2006/10/22 21:11:56 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -71,7 +71,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: ffs.c,v 1.37 2005/10/23 16:12:02 thorpej Exp $");
+__RCSID("$NetBSD: ffs.c,v 1.41 2006/10/22 21:11:56 christos Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>
@@ -208,7 +208,7 @@ ffs_parse_opts(const char *option, fsinfo_t *fsopts)
 					"max # of blocks per group" },
 		{ "version",	&ffs_opts->version,	1,	2,
 					"UFS version" },
-		{ NULL }
+		{ .name = NULL }
 	};
 
 	char	*var, *val;
@@ -509,10 +509,12 @@ ffs_create_image(const char *image, fsinfo_t *fsopts)
 		if (i == -1) {
 			warn("zeroing image, %lld bytes to go",
 			    (long long)bufrem);
+			free(buf);
 			return (-1);
 		}
 		bufrem -= i;
 	}
+	free(buf);
 
 		/* make the file system */
 	if (debug & DEBUG_FS_CREATE_IMAGE)
@@ -585,8 +587,6 @@ ffs_size_dir(fsnode *root, fsinfo_t *fsopts)
 	curdirsize = 0;
 	for (node = root; node != NULL; node = node->next) {
 		ADDDIRENT(node->name);
-		if (FSNODE_EXCLUDE_P(fsopts, node))
-			continue;
 		if (node == root) {			/* we're at "." */
 			assert(strcmp(node->name, ".") == 0);
 			ADDDIRENT("..");
@@ -744,8 +744,6 @@ ffs_populate_dir(const char *dir, fsnode *root, fsinfo_t *fsopts)
 		 * pass 1: allocate inode numbers, build directory `file'
 		 */
 	for (cur = root; cur != NULL; cur = cur->next) {
-		if (FSNODE_EXCLUDE_P(fsopts, cur))
-			continue;
 		if ((cur->inode->flags & FI_ALLOCATED) == 0) {
 			cur->inode->flags |= FI_ALLOCATED;
 			if (cur == root && cur->parent != NULL)
@@ -780,8 +778,6 @@ ffs_populate_dir(const char *dir, fsnode *root, fsinfo_t *fsopts)
 	if (debug & DEBUG_FS_POPULATE)
 		printf("ffs_populate_dir: PASS 2  dir %s\n", dir);
 	for (cur = root; cur != NULL; cur = cur->next) {
-		if (FSNODE_EXCLUDE_P(fsopts, cur))
-			continue;
 		if (cur->inode->flags & FI_WRITTEN)
 			continue;		/* skip hard-linked entries */
 		cur->inode->flags |= FI_WRITTEN;
@@ -825,8 +821,6 @@ ffs_populate_dir(const char *dir, fsnode *root, fsinfo_t *fsopts)
 	if (debug & DEBUG_FS_POPULATE)
 		printf("ffs_populate_dir: PASS 3  dir %s\n", dir);
 	for (cur = root; cur != NULL; cur = cur->next) {
-		if (FSNODE_EXCLUDE_P(fsopts, cur))
-			continue;
 		if (cur->child == NULL)
 			continue;
 		if (snprintf(path, sizeof(path), "%s/%s", dir, cur->name)
@@ -1020,7 +1014,7 @@ ffs_make_dirbuf(dirbuf_t *dbuf, const char *name, fsnode *node, int needswap)
 		dbuf->size += DIRBLKSIZ;
 		memset(dbuf->buf + dbuf->size - DIRBLKSIZ, 0, DIRBLKSIZ);
 		dbuf->cur = dbuf->size - DIRBLKSIZ;
-	} else {				/* shrink end of previous */
+	} else if (dp) {			/* shrink end of previous */
 		dp->d_reclen = ufs_rw16(llen,needswap);
 		dbuf->cur += llen;
 	}

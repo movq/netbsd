@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.10 2005/12/11 12:16:25 christos Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.12 2006/09/27 17:10:34 cube Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -89,13 +89,13 @@
 #define	DFLDSIZ32	(256*1024*1024)		/* initial data size limit */
 #endif
 #ifndef MAXDSIZ32
-#define	MAXDSIZ32	(2L*1024*1024*1024)	/* max data size */
+#define	MAXDSIZ32	(3U*1024*1024*1024)	/* max data size */
 #endif
 #ifndef	DFLSSIZ32
 #define	DFLSSIZ32	(2*1024*1024)		/* initial stack size limit */
 #endif
 #ifndef	MAXSSIZ32
-#define	MAXSSIZ32	(32*1024*1024)		/* max stack size */
+#define	MAXSSIZ32	(64*1024*1024)		/* max stack size */
 #endif
 
 /*
@@ -124,6 +124,18 @@
 #define VM_MAXUSER_ADDRESS32	0xfffff000
 
 /*
+ * The address to which unspecified mapping requests default
+ */
+#ifdef _KERNEL_OPT
+#include "opt_uvm.h"
+#endif
+#define __USE_TOPDOWN_VM
+#define VM_DEFAULT_ADDRESS(da, sz) \
+	trunc_page(USRSTACK - MAXSSIZ - (sz))
+#define VM_DEFAULT_ADDRESS32(da, sz) \
+	trunc_page(USRSTACK32 - MAXSSIZ32 - (sz))
+
+/*
  * XXXfvdl we have plenty of KVM now, remove this.
  */
 #ifndef VM_MAX_KERNEL_BUF
@@ -133,7 +145,7 @@
 /* virtual sizes (bytes) for various kernel submaps */
 #define VM_PHYS_SIZE		(USRIOSIZE*PAGE_SIZE)
 
-#define VM_PHYSSEG_MAX		5	/* 1 "hole" + 4 free lists */
+#define VM_PHYSSEG_MAX		10	/* 1 "hole" + 9 free lists */
 #define VM_PHYSSEG_STRAT	VM_PSTRAT_BIGFIRST
 #define VM_PHYSSEG_NOADD		/* can't add RAM after vm_mem_init */
 

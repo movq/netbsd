@@ -1,4 +1,4 @@
-/*	$NetBSD: elink3.c,v 1.113 2005/12/11 12:21:26 christos Exp $	*/
+/*	$NetBSD: elink3.c,v 1.120 2006/11/16 01:32:51 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -69,10 +69,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.113 2005/12/11 12:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.120 2006/11/16 01:32:51 christos Exp $");
 
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 #include "rnd.h"
 
@@ -225,7 +224,7 @@ u_int16_t ep_read_eeprom(struct ep_softc *, u_int16_t);
 static inline void ep_reset_cmd(struct ep_softc *sc, u_int cmd, u_int arg);
 static inline void ep_finish_reset(bus_space_tag_t, bus_space_handle_t);
 static inline void ep_discard_rxtop(bus_space_tag_t, bus_space_handle_t);
-static __inline int ep_w1_reg(struct ep_softc *, int);
+static inline int ep_w1_reg(struct ep_softc *, int);
 
 /*
  * MII bit-bang glue.
@@ -249,7 +248,7 @@ const struct mii_bitbang_ops ep_mii_bitbang_ops = {
  * Some chips (3c515 [Corkscrew] and 3c574 [RoadRunner]) have
  * Window 1 registers offset!
  */
-static __inline int
+static inline int
 ep_w1_reg(sc, reg)
 	struct ep_softc *sc;
 	int reg;
@@ -731,7 +730,7 @@ ep_tick(arg)
 		panic("ep_tick");
 #endif
 
-	if ((sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->sc_dev))
 		return;
 
 	s = splnet();
@@ -799,7 +798,8 @@ epinit(ifp)
 
 	GO_WINDOW(1);		/* Window 1 is operating window */
 	for (i = 0; i < 31; i++)
-		bus_space_read_2(iot, ioh, ep_w1_reg(sc, ELINK_W1_TX_STATUS));
+		(void)bus_space_read_2(iot, ioh,
+				       ep_w1_reg(sc, ELINK_W1_TX_STATUS));
 
 	/* Set threshold for Tx-space available interrupt. */
 	bus_space_write_2(iot, ioh, ELINK_COMMAND,
@@ -1410,8 +1410,7 @@ epintr(arg)
 	u_int16_t status;
 	int ret = 0;
 
-	if (sc->enabled == 0 ||
-	    (sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (sc->enabled == 0 || !device_is_active(&sc->sc_dev))
 		return (0);
 
 
@@ -2082,9 +2081,7 @@ ep_activate(self, act)
  *	Detach a elink3 interface.
  */
 int
-ep_detach(self, flags)
-	struct device *self;
-	int flags;
+ep_detach(struct device *self, int flags)
 {
 	struct ep_softc *sc = (struct ep_softc *)self;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
@@ -2188,4 +2185,30 @@ ep_statchg(self)
 		mctl &= ~MAC_CONTROL_FDX;
 	bus_space_write_2(iot, ioh, ELINK_W3_MAC_CONTROL, mctl);
 	GO_WINDOW(1);	/* back to operating window */
+}
+
+void
+ep_power(int why, void *arg)
+{
+	struct ep_softc *sc = arg;
+	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
+	int s;
+
+	s = splnet();
+	switch (why) {
+	case PWR_SUSPEND:
+	case PWR_STANDBY:
+		epstop(ifp, 1);
+		break;
+	case PWR_RESUME:
+		if (ifp->if_flags & IFF_UP) {
+			(void)epinit(ifp);
+		}
+		break;
+	case PWR_SOFTSUSPEND:
+	case PWR_SOFTSTANDBY:
+	case PWR_SOFTRESUME:
+		break;
+	}
+	splx(s);
 }

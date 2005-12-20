@@ -1,4 +1,4 @@
-/* $NetBSD: if_tr_mca.c,v 1.13 2005/12/11 12:22:18 christos Exp $ */
+/* $NetBSD: if_tr_mca.c,v 1.16 2006/11/16 01:33:05 christos Exp $ */
 
 /*_
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tr_mca.c,v 1.13 2005/12/11 12:22:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tr_mca.c,v 1.16 2006/11/16 01:33:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,10 +98,8 @@ tr_mca_lookup(id)
 }
 
 int
-tr_mca_probe(parent, match, aux)
-	struct device  *parent;
-	struct cfdata  *match;
-	void           *aux;
+tr_mca_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct mca_attach_args *ma = aux;
 
@@ -113,11 +111,9 @@ tr_mca_probe(parent, match, aux)
 
 
 void
-tr_mca_attach(parent, self, aux)
-	struct device  *parent, *self;
-	void           *aux;
+tr_mca_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct tr_softc *sc = (void *) self;
+	struct tr_softc *sc = device_private(self);
 	struct mca_attach_args *ma = aux;
 	bus_space_handle_t pioh, mmioh, sramh;
 	int iobase, irq, sram_size, sram_addr, rom_addr;

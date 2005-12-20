@@ -1,4 +1,4 @@
-/* $NetBSD: bufcache.c,v 1.7 2005/05/20 18:59:36 perseant Exp $ */
+/* $NetBSD: bufcache.c,v 1.10 2006/11/09 19:36:36 christos Exp $ */
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -48,6 +48,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <util.h>
 
 #include "bufcache.h"
 #include "vnode.h"
@@ -99,7 +100,7 @@ bufinit(int max)
 	for (i = 0; i < BQUEUES; i++) {
 		TAILQ_INIT(&bufqueues[i]);
 	}
-	bufhash = (struct bufhash_struct *)malloc(hashmax * sizeof(*bufhash));
+	bufhash = emalloc(hashmax * sizeof(*bufhash));
 	for (i = 0; i < hashmax; i++)
 		LIST_INIT(&bufhash[i]);
 }
@@ -120,9 +121,7 @@ void bufrehash(int max)
 	newhashmask = newhashmax - 1;
 
 	/* Allocate new empty hash table, if we can */
-	np = (struct bufhash_struct *)malloc(newhashmax * sizeof(*bufhash));
-		if (np == NULL)
-			return;
+	np = emalloc(newhashmax * sizeof(*bufhash));
 	for (i = 0; i < newhashmax; i++)
 		LIST_INIT(&np[i]);
 
@@ -247,7 +246,7 @@ getblk(struct uvnode * vp, daddr_t lbn, int size)
 		else if (bp->b_bcount > size) {
 			assert(!(bp->b_flags & B_DELWRI));
 			bp->b_bcount = size;
-			bp->b_data = realloc(bp->b_data, size);
+			bp->b_data = erealloc(bp->b_data, size);
 			return bp;
 		}
 
@@ -286,11 +285,8 @@ getblk(struct uvnode * vp, daddr_t lbn, int size)
 		break;
 	}
 	++nbufs;
-	bp = (struct ubuf *) malloc(sizeof(*bp));
-	memset(bp, 0, sizeof(*bp));
-	bp->b_data = malloc(size);
-	memset(bp->b_data, 0, size);
-
+	bp = ecalloc(1, sizeof(*bp));
+	bp->b_data = ecalloc(1, size);
 	bp->b_vp = vp;
 	bp->b_blkno = bp->b_lblkno = lbn;
 	bp->b_bcount = size;
@@ -348,7 +344,7 @@ brelse(struct ubuf * bp)
 
 /* Read the given block from disk, return it B_BUSY. */
 int
-bread(struct uvnode * vp, daddr_t lbn, int size, struct ucred * unused,
+bread(struct uvnode * vp, daddr_t lbn, int size, void * unused,
     struct ubuf ** bpp)
 {
 	struct ubuf *bp;

@@ -1,4 +1,4 @@
-/*	$NetBSD: wd.c,v 1.314 2005/12/11 12:21:14 christos Exp $ */
+/*	$NetBSD: wd.c,v 1.335 2006/11/16 01:32:48 christos Exp $ */
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.  All rights reserved.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wd.c,v 1.314 2005/12/11 12:21:14 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wd.c,v 1.335 2006/11/16 01:32:48 christos Exp $");
 
 #ifndef ATADEBUG
 #define ATADEBUG
@@ -104,6 +104,8 @@ __KERNEL_RCSID(0, "$NetBSD: wd.c,v 1.314 2005/12/11 12:21:14 christos Exp $");
 #include <dev/ic/wdcreg.h>
 #include <sys/ataio.h>
 #include "locators.h"
+
+#include <prop/proplib.h>
 
 #define	LBA48_THRESHOLD		(0xfffffff)	/* 128GB / DEV_BSIZE */
 
@@ -205,6 +207,8 @@ static void bad144intern(struct wd_softc *);
 #define	WD_QUIRK_SPLIT_MOD15_WRITE	0x0001	/* must split certain writes */
 #define	WD_QUIRK_FORCE_LBA48		0x0002	/* must use LBA48 commands */
 
+#define	WD_QUIRK_FMT "\20\1SPLIT_MOD15_WRITE\2FORCE_LBA48"
+
 /*
  * Quirk table for IDE drives.  Put more-specific matches first, since
  * a simple globbing routine is used for matching.
@@ -239,12 +243,18 @@ static const struct wd_quirk {
 	 * setups using LBA48 drives on non-LBA48-capable controllers
 	 * (and it's hard to get a list of such controllers)
 	 */
+	{ "ST3160021A*",
+	  WD_QUIRK_FORCE_LBA48 },
+	{ "ST3160811A*",
+	  WD_QUIRK_FORCE_LBA48 },
+	{ "ST3160812A*",
+	  WD_QUIRK_FORCE_LBA48 },
 	{ "ST3160023A*",
 	  WD_QUIRK_FORCE_LBA48 },
 	{ "ST3160827A*",
 	  WD_QUIRK_FORCE_LBA48 },
 	/* Attempt to catch all seagate drives larger than 200GB */
-	{ "ST3[2-9][0-9][0-9][0-9][0-9][0-9]A*",
+	{ "ST3[2-9][0-9][0-9][0-9][0-9][0-9][A-Z]*",
 	  WD_QUIRK_FORCE_LBA48 },
 	{ NULL,
 	  0 }
@@ -335,6 +345,13 @@ wdattach(struct device *parent, struct device *self, void *aux)
 	if (wdq != NULL)
 		wd->sc_quirks = wdq->wdq_quirks;
 
+	if (wd->sc_quirks != 0) {
+		char sbuf[sizeof(WD_QUIRK_FMT) + 64];
+		bitmask_snprintf(wd->sc_quirks, WD_QUIRK_FMT,
+		    sbuf, sizeof(sbuf));
+		aprint_normal("%s: quirks %s\n", wd->sc_dev.dv_xname, sbuf);
+	}
+
 	if ((wd->sc_params.atap_multi & 0xff) > 1) {
 		wd->sc_multi = wd->sc_params.atap_multi & 0xff;
 	} else {
@@ -368,7 +385,7 @@ wdattach(struct device *parent, struct device *self, void *aux)
 	} else if ((wd->sc_flags & WDF_LBA) != 0) {
 		aprint_normal(" LBA addressing\n");
 		wd->sc_capacity =
-		    (wd->sc_params.atap_capacity[1] << 16) |
+		    ((u_int64_t)wd->sc_params.atap_capacity[1] << 16) |
 		    wd->sc_params.atap_capacity[0];
 	} else {
 		aprint_normal(" chs addressing\n");
@@ -395,6 +412,7 @@ wdattach(struct device *parent, struct device *self, void *aux)
 	 */
 	wd->sc_dk.dk_driver = &wddkdriver;
 	wd->sc_dk.dk_name = wd->sc_dev.dv_xname;
+	/* we fill in dk_info later */
 	disk_attach(&wd->sc_dk);
 	wd->sc_wdc_bio.lp = wd->sc_dk.dk_label;
 	wd->sc_sdhook = shutdownhook_establish(wd_shutdown, wd);
@@ -441,7 +459,7 @@ wddetach(struct device *self, int flags)
 
 	/* Nuke the vnodes for any open instances. */
 	for (i = 0; i < MAXPARTITIONS; i++) {
-		mn = WDMINOR(self->dv_unit, i);
+		mn = WDMINOR(device_unit(self), i);
 		vdevgone(bmaj, mn, mn, VBLK);
 		vdevgone(cmaj, mn, mn, VCHR);
 	}
@@ -645,10 +663,10 @@ wd_split_mod15_write(struct buf *bp)
 	return;
 
  done:
-	obp->b_flags |= (bp->b_flags & (B_EINTR|B_ERROR));
+	obp->b_flags |= bp->b_flags & B_ERROR;
 	obp->b_error = bp->b_error;
 	obp->b_resid = bp->b_resid;
-	pool_put(&bufpool, bp);
+	putiobuf(bp);
 	biodone(obp);
 	sc->openings++;
 	/* wddone() will call wdstart() */
@@ -673,7 +691,7 @@ __wdstart(struct wd_softc *wd, struct buf *bp)
 		struct buf *nbp;
 
 		/* already at splbio */
-		nbp = pool_get(&bufpool, PR_NOWAIT);
+		nbp = getiobuf_nowait();
 		if (__predict_false(nbp == NULL)) {
 			/* No memory -- fail the iop. */
 			bp->b_error = ENOMEM;
@@ -684,7 +702,6 @@ __wdstart(struct wd_softc *wd, struct buf *bp)
 			return;
 		}
 
-		BUF_INIT(nbp);
 		nbp->b_error = 0;
 		nbp->b_proc = bp->b_proc;
 		nbp->b_vp = NULLVP;
@@ -884,7 +901,7 @@ wdopen(dev_t dev, int flag, int fmt, struct lwp *l)
 	if (wd == NULL)
 		return (ENXIO);
 
-	if ((wd->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (! device_is_active(&wd->sc_dev))
 		return (ENODEV);
 
 	part = WDPART(dev);
@@ -1061,8 +1078,9 @@ wdgetdisklabel(struct wd_softc *wd)
 		wd->drvp->drive_flags |= DRIVE_RESET;
 		splx(s);
 	}
-	errstring = readdisklabel(MAKEWDDEV(0, wd->sc_dev.dv_unit, RAW_PART),
-	    wdstrategy, lp, wd->sc_dk.dk_cpulabel);
+	errstring = readdisklabel(MAKEWDDEV(0, device_unit(&wd->sc_dev),
+				  RAW_PART), wdstrategy, lp,
+				  wd->sc_dk.dk_cpulabel);
 	if (errstring) {
 		/*
 		 * This probably happened because the drive's default
@@ -1075,7 +1093,7 @@ wdgetdisklabel(struct wd_softc *wd)
 			wd->drvp->drive_flags |= DRIVE_RESET;
 			splx(s);
 		}
-		errstring = readdisklabel(MAKEWDDEV(0, wd->sc_dev.dv_unit,
+		errstring = readdisklabel(MAKEWDDEV(0, device_unit(&wd->sc_dev),
 		    RAW_PART), wdstrategy, lp, wd->sc_dk.dk_cpulabel);
 	}
 	if (errstring) {
@@ -1146,6 +1164,10 @@ wdioctl(dev_t dev, u_long xfer, caddr_t addr, int flag, struct lwp *l)
 
 	if ((wd->sc_flags & WDF_LOADED) == 0)
 		return EIO;
+
+	error = disk_ioctl(&wd->sc_dk, xfer, addr, flag, l);
+	if (error != EPASSTHROUGH)
+		return (error);
 
 	switch (xfer) {
 #ifdef HAS_BAD144_HANDLING
@@ -1341,10 +1363,9 @@ bad:
 		auio.uio_iov = &aiov;
 		auio.uio_iovcnt = 1;
 		auio.uio_resid = fop->df_count;
-		auio.uio_segflg = 0;
 		auio.uio_offset =
 			fop->df_startblk * wd->sc_dk.dk_label->d_secsize;
-		auio.uio_lwp = l;
+		auio.uio_vmspace = l->l_proc->p_vmspace;
 		error = physio(wdformat, NULL, dev, B_WRITE, minphys,
 		    &auio);
 		fop->df_count -= auio.uio_resid;
@@ -1386,10 +1407,9 @@ bad:
 			wi->wi_uio.uio_iovcnt = 1;
 			wi->wi_uio.uio_resid = atareq->datalen;
 			wi->wi_uio.uio_offset = 0;
-			wi->wi_uio.uio_segflg = UIO_USERSPACE;
 			wi->wi_uio.uio_rw =
 			    (atareq->flags & ATACMD_READ) ? B_READ : B_WRITE;
-			wi->wi_uio.uio_lwp = l;
+			wi->wi_uio.uio_vmspace = l->l_proc->p_vmspace;
 			error1 = physio(wdioctlstrategy, &wi->wi_bp, dev,
 			    (atareq->flags & ATACMD_READ) ? B_READ : B_WRITE,
 			    minphys, &wi->wi_uio);
@@ -1438,6 +1458,47 @@ bad:
 	    	struct dkwedge_list *dkwl = (void *) addr;
 
 		return (dkwedge_list(&wd->sc_dk, dkwl, l));
+	    }
+
+	case DIOCGSTRATEGY:
+	    {
+		struct disk_strategy *dks = (void *)addr;
+
+		s = splbio();
+		strlcpy(dks->dks_name, bufq_getstrategyname(wd->sc_q),
+		    sizeof(dks->dks_name));
+		splx(s);
+		dks->dks_paramlen = 0;
+
+		return 0;
+	    }
+	
+	case DIOCSSTRATEGY:
+	    {
+		struct disk_strategy *dks = (void *)addr;
+		struct bufq_state *new;
+		struct bufq_state *old;
+
+		if ((flag & FWRITE) == 0) {
+			return EBADF;
+		}
+		if (dks->dks_param != NULL) {
+			return EINVAL;
+		}
+		dks->dks_name[sizeof(dks->dks_name) - 1] = 0; /* ensure term */
+		error = bufq_alloc(&new, dks->dks_name,
+		    BUFQ_EXACT|BUFQ_SORT_RAWBLOCK);
+		if (error) {
+			return error;
+		}
+		s = splbio();
+		old = wd->sc_q;
+		bufq_move(new, old);
+		wd->sc_q = new;
+		splx(s);
+		bufq_free(old);
+
+		return 0;
 	    }
 
 	default:
@@ -1622,6 +1683,61 @@ bad144intern(struct wd_softc *wd)
 }
 #endif
 
+static void
+wd_params_to_properties(struct wd_softc *wd, struct ataparams *params)
+{
+	prop_dictionary_t disk_info, odisk_info, geom;
+	const char *cp;
+
+	disk_info = prop_dictionary_create();
+
+	if (strcmp(wd->sc_params.atap_model, "ST506") == 0)
+		cp = "ST506";
+	else {
+		/* XXX Should have a case for ATA here, too. */
+		cp = "ESDI";
+	}
+	prop_dictionary_set_cstring_nocopy(disk_info, "type", cp);
+
+	geom = prop_dictionary_create();
+
+	prop_dictionary_set_uint64(geom, "sectors-per-unit", wd->sc_capacity);
+
+	prop_dictionary_set_uint32(geom, "sector-size",
+				   DEV_BSIZE /* XXX 512? */);
+
+	prop_dictionary_set_uint16(geom, "sectors-per-track",
+				   wd->sc_params.atap_sectors);
+
+	prop_dictionary_set_uint16(geom, "tracks-per-cylinder",
+				   wd->sc_params.atap_heads);
+
+	if (wd->sc_flags & WDF_LBA)
+		prop_dictionary_set_uint64(geom, "cylinders-per-unit",
+					   wd->sc_capacity /
+					       (wd->sc_params.atap_heads *
+					        wd->sc_params.atap_sectors));
+	else
+		prop_dictionary_set_uint16(geom, "cylinders-per-unit",
+					   wd->sc_params.atap_cylinders);
+
+	prop_dictionary_set(disk_info, "geometry", geom);
+	prop_object_release(geom);
+
+	prop_dictionary_set(device_properties(&wd->sc_dev),
+			    "disk-info", disk_info);
+
+	/*
+	 * Don't release disk_info here; we keep a reference to it.
+	 * disk_detach() will release it when we go away.
+	 */
+
+	odisk_info = wd->sc_dk.dk_info;
+	wd->sc_dk.dk_info = disk_info;
+	if (odisk_info)
+		prop_object_release(odisk_info);
+}
+
 int
 wd_get_params(struct wd_softc *wd, u_int8_t flags, struct ataparams *params)
 {
@@ -1643,8 +1759,9 @@ wd_get_params(struct wd_softc *wd, u_int8_t flags, struct ataparams *params)
 		params->atap_multi = 1;
 		params->atap_capabilities1 = params->atap_capabilities2 = 0;
 		wd->drvp->ata_vers = -1; /* Mark it as pre-ATA */
-		return 0;
+		/* FALLTHROUGH */
 	case CMD_OK:
+		wd_params_to_properties(wd, params);
 		return 0;
 	default:
 		panic("wd_get_params: bad return code from ata_get_params");

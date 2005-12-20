@@ -1,4 +1,4 @@
-/* $NetBSD: dtide.c,v 1.20 2005/12/11 12:23:28 christos Exp $ */
+/* $NetBSD: dtide.c,v 1.23 2006/10/01 21:34:30 bjh21 Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 Ben Harris
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dtide.c,v 1.20 2005/12/11 12:23:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dtide.c,v 1.23 2006/10/01 21:34:30 bjh21 Exp $");
 
 #include <sys/param.h>
 
@@ -80,7 +80,7 @@ static void
 dtide_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct podulebus_attach_args *pa = aux;
-	struct dtide_softc *sc = (void *)self;
+	struct dtide_softc *sc = device_private(self);
 	struct wdc_regs *wdr;
 	struct ata_channel *ch;
 	int i, j;
@@ -90,8 +90,6 @@ dtide_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_wdc.sc_atac.atac_cap = ATAC_CAP_DATA16 | ATAC_CAP_NOIRQ;
 	sc->sc_wdc.sc_atac.atac_pio_cap = 0; /* XXX correct? */
-	sc->sc_wdc.sc_atac.atac_dma_cap = 0; /* XXX correct? */
-	sc->sc_wdc.sc_atac.atac_udma_cap = 0;
 	sc->sc_wdc.sc_atac.atac_nchannels = DTIDE_NCHANNELS;
 	sc->sc_wdc.sc_atac.atac_channels = sc->sc_chp;
 	sc->sc_magict = pa->pa_fast_t;
@@ -107,6 +105,7 @@ dtide_attach(struct device *parent, struct device *self, void *aux)
 		wdr->cmd_iot = bst;
 		wdr->ctl_iot = bst;
 		ch->ch_queue = &sc->sc_chq[i];
+		ch->ch_ndrive = 2;
 		bus_space_map(pa->pa_fast_t,
 		    pa->pa_fast_base + dtide_cmdoffsets[i], 0, 8,
 		    &wdr->cmd_baseioh);

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_sysctl.c,v 1.18 2005/12/11 12:20:19 christos Exp $	*/
+/*	$NetBSD: linux_sysctl.c,v 1.24 2006/11/16 01:32:42 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -41,7 +41,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_sysctl.c,v 1.18 2005/12/11 12:20:19 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_sysctl.c,v 1.24 2006/11/16 01:32:42 christos Exp $");
+
+#if defined (_KERNEL_OPT)
+#include "opt_ktrace.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,6 +55,9 @@ __KERNEL_RCSID(0, "$NetBSD: linux_sysctl.c,v 1.18 2005/12/11 12:20:19 christos E
 #include <sys/sysctl.h>
 #include <sys/sa.h>
 #include <sys/syscallargs.h>
+#ifdef KTRACE
+#include <sys/ktrace.h>
+#endif
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
@@ -60,7 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_sysctl.c,v 1.18 2005/12/11 12:20:19 christos E
 #include <compat/linux/common/linux_exec.h>
 
 char linux_sysname[128] = "Linux";
-#if defined(__i386__) || defined(__powerpc__)
+#if defined(__amd64__) || defined(__i386__) || defined(__powerpc__)
 char linux_release[128] = "2.4.18";
 char linux_version[128] = "#0 Wed Feb 20 20:00:02 CET 2002";
 #else
@@ -149,6 +156,10 @@ linux_sys___sysctl(struct lwp *l, void *v, register_t *retval)
 	if (error)
 		return (error);
 
+#ifdef KTRACE
+       if (KTRPOINT(l->l_proc, KTR_MIB))
+               ktrmib(l, name, ls.nlen);
+#endif
 	/*
 	 * wire old so that copyout() is less likely to fail?
 	 */

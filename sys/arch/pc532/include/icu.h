@@ -1,4 +1,4 @@
-/*	$NetBSD: icu.h,v 1.13 2005/12/11 12:18:31 christos Exp $	*/
+/*	$NetBSD: icu.h,v 1.15 2006/02/16 20:17:14 perry Exp $	*/
 
 /*
  * Copyright (c) 1993 Philip A. Nelson.

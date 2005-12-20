@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365_isapnp.c,v 1.19 2005/12/11 12:22:16 christos Exp $	*/
+/*	$NetBSD: i82365_isapnp.c,v 1.23 2006/11/16 01:33:05 christos Exp $	*/
 
 /*
  * Copyright (c) 1998 Bill Sommerfeld.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82365_isapnp.c,v 1.19 2005/12/11 12:22:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82365_isapnp.c,v 1.23 2006/11/16 01:33:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -88,13 +88,12 @@ static struct pcmcia_chip_functions pcic_isa_functions = {
 	pcic_chip_socket_enable,
 	pcic_chip_socket_disable,
 	pcic_chip_socket_settype,
+	NULL,
 };
 
 int
-pcic_isapnp_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+pcic_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -105,12 +104,11 @@ pcic_isapnp_match(parent, match, aux)
 }
 
 void
-pcic_isapnp_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+pcic_isapnp_attach(struct device *parent, struct device *self,
+    void *aux)
 {
-	struct pcic_softc *sc = (void *) self;
-	struct pcic_isa_softc *isc = (void *) self;
+	struct pcic_softc *sc = device_private(self);
+	struct pcic_isa_softc *isc = device_private(self);
 	struct isapnp_attach_args *ipa = aux;
 	isa_chipset_tag_t ic = ipa->ipa_ic;
 	bus_space_tag_t iot = ipa->ipa_iot;

@@ -1,4 +1,4 @@
-/*	$NetBSD: aic79xx.c,v 1.32 2005/11/28 21:03:19 bouyer Exp $	*/
+/*	$NetBSD: aic79xx.c,v 1.36 2006/11/16 01:32:50 christos Exp $	*/
 
 /*
  * Core routines and tables shareable across OS platforms.
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic79xx.c,v 1.32 2005/11/28 21:03:19 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic79xx.c,v 1.36 2006/11/16 01:32:50 christos Exp $");
 
 #include <dev/ic/aic79xx_osm.h>
 #include <dev/ic/aic79xx_inline.h>
@@ -265,11 +265,11 @@ static void ahd_freedmamem(bus_dma_tag_t tag,
 			   int nseg);
 
 /******************************** Private Inlines *****************************/
-static __inline void	ahd_assert_atn(struct ahd_softc *ahd);
-static __inline int	ahd_currently_packetized(struct ahd_softc *ahd);
-static __inline int	ahd_set_active_fifo(struct ahd_softc *ahd);
+static inline void	ahd_assert_atn(struct ahd_softc *ahd);
+static inline int	ahd_currently_packetized(struct ahd_softc *ahd);
+static inline int	ahd_set_active_fifo(struct ahd_softc *ahd);
 
-static __inline void
+static inline void
 ahd_assert_atn(struct ahd_softc *ahd)
 {
 	ahd_outb(ahd, SCSISIGO, ATNO);
@@ -281,7 +281,7 @@ ahd_assert_atn(struct ahd_softc *ahd)
  * are currently in a packetized transfer.  We could
  * just as easily be sending or receiving a message.
  */
-static __inline int
+static inline int
 ahd_currently_packetized(struct ahd_softc *ahd)
 {
 	ahd_mode_state	 saved_modes;
@@ -304,7 +304,7 @@ ahd_currently_packetized(struct ahd_softc *ahd)
 	return (packetized);
 }
 
-static __inline int
+static inline int
 ahd_set_active_fifo(struct ahd_softc *ahd)
 {
 	u_int active_fifo;
@@ -3207,7 +3207,7 @@ ahd_update_neg_table(struct ahd_softc *ahd, struct ahd_devinfo *devinfo,
 
 			/*
 			 * Harpoon2A assumed that there would be a
-			 * fallback rate between 160MHz and 80Mhz,
+			 * fallback rate between 160 MHz and 80 MHz,
 			 * so 7 is used as the period factor rather
 			 * than 8 for 160MHz.
 			 */
@@ -4747,7 +4747,8 @@ ahd_handle_msg_reject(struct ahd_softc *ahd, struct ahd_devinfo *devinfo)
  * Process an ignore wide residue message.
  */
 static void
-ahd_handle_ign_wide_residue(struct ahd_softc *ahd, struct ahd_devinfo *devinfo)
+ahd_handle_ign_wide_residue(struct ahd_softc *ahd,
+    struct ahd_devinfo *devinfo)
 {
 	u_int scb_index;
 	struct scb *scb;
@@ -6902,7 +6903,7 @@ ahd_resume(struct ahd_softc *ahd)
  * scbid that should be restored once manipualtion
  * of the TCL entry is complete.
  */
-static __inline u_int
+static inline u_int
 ahd_index_busy_tcl(struct ahd_softc *ahd, u_int *saved_scbid, u_int tcl)
 {
 	/*
@@ -7420,12 +7421,14 @@ ahd_rem_wscb(struct ahd_softc *ahd, u_int scbid,
 static void
 ahd_add_scb_to_free_list(struct ahd_softc *ahd, u_int scbid)
 {
+#ifdef notdef
 /* XXX Need some other mechanism to designate "free". */
 	/*
 	 * Invalidate the tag so that our abort
 	 * routines don't think it's active.
-	ahd_outb(ahd, SCB_TAG, SCB_LIST_NULL);
 	 */
+	ahd_outb(ahd, SCB_TAG, SCB_LIST_NULL);
+#endif
 }
 
 /******************************** Error Handling ******************************/

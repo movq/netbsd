@@ -1,4 +1,4 @@
-/*	$NetBSD: quota.h,v 1.20 2005/12/11 12:25:28 christos Exp $	*/
+/*	$NetBSD: quota.h,v 1.22 2006/05/14 21:33:39 elad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -159,29 +159,19 @@ struct dquot {
 #define	FORCE	0x01	/* force usage changes independent of limits */
 #define	CHOWN	0x02	/* (advisory) change initiated by chown */
 
-/*
- * Macros to avoid subroutine calls to trivial functions.
- */
-#ifdef DIAGNOSTIC
-#define	DQREF(dq)	dqref(dq)
-#else
-#define	DQREF(dq)	(dq)->dq_cnt++
-#endif
-
 #include <sys/cdefs.h>
 
 struct dquot;
 struct inode;
 struct mount;
 struct proc;
-struct ucred;
 struct ufsmount;
 struct vnode;
 __BEGIN_DECLS
-int	chkdq(struct inode *, int64_t, struct ucred *, int);
-int	chkdqchg(struct inode *, int64_t, struct ucred *, int);
-int	chkiq(struct inode *, int32_t, struct ucred *, int);
-int	chkiqchg(struct inode *, int32_t, struct ucred *, int);
+int	chkdq(struct inode *, int64_t, kauth_cred_t, int);
+int	chkdqchg(struct inode *, int64_t, kauth_cred_t, int);
+int	chkiq(struct inode *, int32_t, kauth_cred_t, int);
+int	chkiqchg(struct inode *, int32_t, kauth_cred_t, int);
 void	dqflush(struct vnode *);
 int	dqget(struct vnode *,
 	    u_long, struct ufsmount *, int, struct dquot **);

@@ -1,4 +1,4 @@
-/*	$NetBSD: pch.c,v 1.19 2003/07/30 08:51:04 itojun Exp $	*/
+/*	$NetBSD: pch.c,v 1.22 2006/09/26 16:36:07 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, Larry Wall
@@ -24,7 +24,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: pch.c,v 1.19 2003/07/30 08:51:04 itojun Exp $");
+__RCSID("$NetBSD: pch.c,v 1.22 2006/09/26 16:36:07 christos Exp $");
 #endif /* not lint */
 
 #include "EXTERN.h"
@@ -167,7 +167,8 @@ there_is_another_patch(void)
 	while (filearg[0] == NULL) {
 		if (force || batch) {
 			say("No file to patch.  Skipping...\n");
-			filearg[0] = xstrdup(bestguess);
+			if (bestguess)
+				filearg[0] = xstrdup(bestguess);
 			skip_rest_of_patch = TRUE;
 			return TRUE;
 		}
@@ -259,24 +260,34 @@ intuit_diff_type(void)
 			fcl_line = p_input_line;
 			p_indent = indent;	/* assume this for now */
 		}
-		if (!stars_last_line && strnEQ(s, "*** ", 4))
+		if (!stars_last_line && strnEQ(s, "*** ", 4)) {
+			if (oldtmp)
+				free(oldtmp);
 			oldtmp = xstrdup(s + 4);
-		else if (strnEQ(s, "--- ", 4))
+		} else if (strnEQ(s, "--- ", 4)) {
+			if (newtmp)
+				free(newtmp);
 			newtmp = xstrdup(s + 4);
-		else if (strnEQ(s, "+++ ", 4))
+		} else if (strnEQ(s, "+++ ", 4)) {
+			if (oldtmp)
+				free(oldtmp);
 			oldtmp = xstrdup(s + 4);	/* pretend it is the old name */
-		else if (strnEQ(s, "Index:", 6))
+		} else if (strnEQ(s, "Index:", 6)) {
+			if (indtmp)
+				free(indtmp);
 			indtmp = xstrdup(s + 6);
-		else if (strnEQ(s, "Prereq:", 7)) {
+		} else if (strnEQ(s, "Prereq:", 7)) {
 			for (t = s + 7; isspace((unsigned char)*t); t++)
 				;
+			if (revision)
+				free(revision);
 			revision = xstrdup(t);
 			for (t = revision;
 			     *t && !isspace((unsigned char)*t);
 			     t++)
 				;
 			*t = '\0';
-			if (!*revision) {
+			if (*revision == '\0') {
 				free(revision);
 				revision = NULL;
 			}
@@ -371,8 +382,11 @@ intuit_diff_type(void)
 			oldname = fetchname(oldtmp, strippath, TRUE);
 			old_file_is_dev_null = filename_is_dev_null;
 		}
-		if (newtmp != NULL)
+		if (newtmp != NULL) {
+			if (newname)
+				free(newname);
 			newname = fetchname(newtmp, strippath, TRUE);
+		}
 		if (oldname && newname) {
 			if (strlen(oldname) < strlen(newname))
 				bestguess = xstrdup(oldname);

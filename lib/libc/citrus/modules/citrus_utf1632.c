@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_utf1632.c,v 1.4 2005/10/29 18:02:04 tshiozak Exp $	*/
+/*	$NetBSD: citrus_utf1632.c,v 1.7 2006/10/27 14:13:55 tnozaki Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_utf1632.c,v 1.4 2005/10/29 18:02:04 tshiozak Exp $");
+__RCSID("$NetBSD: citrus_utf1632.c,v 1.7 2006/10/27 14:13:55 tnozaki Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -41,7 +41,7 @@ __RCSID("$NetBSD: citrus_utf1632.c,v 1.4 2005/10/29 18:02:04 tshiozak Exp $");
 #include <limits.h>
 #include <wchar.h>
 #include <sys/types.h>
-#include <sys/endian.h>
+#include <machine/endian.h>
 
 #include "citrus_namespace.h"
 #include "citrus_types.h"
@@ -173,6 +173,8 @@ refetch:
 				wc = (psenc->ch[1] |
 				      ((wchar_t)psenc->ch[0] << 8));
 				break;
+			default:
+				goto ilseq;
 			}
 			if (wc >= 0xD800 && wc <= 0xDBFF) {
 				/* surrogate high */
@@ -196,6 +198,8 @@ refetch:
 				wc |= psenc->ch[3];
 				wc |= (wchar_t)(psenc->ch[2] & 3) << 8;
 				break;
+			default:
+				goto ilseq;
 			}
 			wc += 0x10000;
 		}
@@ -214,7 +218,11 @@ refetch:
 			      ((wchar_t)psenc->ch[1] << 16) |
 			      ((wchar_t)psenc->ch[0] << 24));
 			break;
+		default:
+			goto ilseq;
 		}
+		if (wc >= 0xD800 && wc <= 0xDFFF)
+			goto ilseq;
 	}
 
 
@@ -293,6 +301,8 @@ surrogate:
 		}
 	} else {
 		/* UTF32 */
+		if (wc >= 0xD800 && wc <= 0xDFFF)
+			goto err;
 		if (n < 4) {
 			ret = E2BIG;
 			goto err;

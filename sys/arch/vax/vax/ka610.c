@@ -1,4 +1,4 @@
-/*	$NetBSD: ka610.c,v 1.3 2005/12/11 12:19:36 christos Exp $	*/
+/*	$NetBSD: ka610.c,v 1.5 2006/09/05 19:32:57 matt Exp $	*/
 /*
  * Copyright (c) 2001 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka610.c,v 1.3 2005/12/11 12:19:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka610.c,v 1.5 2006/09/05 19:32:57 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -58,8 +58,8 @@ struct cpu_dep ka610_calls = {
 	ka610_mchk,
 	ka610_memerr, 
 	ka610_conf,
-	generic_clkread,
-	generic_clkwrite,
+	generic_gettime,
+	generic_settime,
 	1,	 /* ~VUPS */
 	2,	/* SCB pages */
 	ka610_halt,
@@ -93,12 +93,12 @@ ka610_mchk(caddr_t addr)
 static void
 ka610_halt()
 {
-	asm("halt");
+	__asm("halt");
 }
 
 static void
 ka610_reboot(int arg)
 {
-	asm("halt");
+	__asm("halt");
 }
 

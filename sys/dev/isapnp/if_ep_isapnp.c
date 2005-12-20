@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ep_isapnp.c,v 1.28 2005/12/11 12:22:16 christos Exp $	*/
+/*	$NetBSD: if_ep_isapnp.c,v 1.31 2006/11/16 01:33:05 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Jonathan Stone <jonathan@NetBSD.org>
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ep_isapnp.c,v 1.28 2005/12/11 12:22:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ep_isapnp.c,v 1.31 2006/11/16 01:33:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,10 +70,8 @@ CFATTACH_DECL(ep_isapnp, sizeof(struct ep_softc),
     ep_isapnp_match, ep_isapnp_attach, NULL, NULL);
 
 int
-ep_isapnp_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ep_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -84,11 +82,9 @@ ep_isapnp_match(parent, match, aux)
 }
 
 void
-ep_isapnp_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ep_isapnp_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct ep_softc *sc = (void *)self;
+	struct ep_softc *sc = device_private(self);
 	struct isapnp_attach_args *ipa = aux;
 	int chipset;
 

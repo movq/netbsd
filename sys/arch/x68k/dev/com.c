@@ -1,4 +1,4 @@
-/*	$NetBSD: com.c,v 1.37 2005/12/11 12:19:37 christos Exp $	*/
+/*	$NetBSD: com.c,v 1.42 2006/10/01 20:31:50 elad Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com.c,v 1.37 2005/12/11 12:19:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com.c,v 1.42 2006/10/01 20:31:50 elad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -93,6 +93,7 @@ __KERNEL_RCSID(0, "$NetBSD: com.c,v 1.37 2005/12/11 12:19:37 christos Exp $");
 #include <sys/syslog.h>
 #include <sys/types.h>
 #include <sys/device.h>
+#include <sys/kauth.h>
 
 #include <machine/cpu.h>
 #if 0
@@ -208,11 +209,6 @@ extern int kgdb_debug_init;
 
 #define	COMUNIT(x)	(minor(x) & 0x7F)
 #define	COMDIALOUT(x)	(minor(x) & 0x80)
-
-/* Macros to clear/set/test flags. */
-#define	SET(t, f)	(t) |= (f)
-#define	CLR(t, f)	(t) &= ~(f)
-#define	ISSET(t, f)	((t) & (f))
 
 static int
 comspeed(long speed)
@@ -417,9 +413,7 @@ comopen(dev_t dev, int flag, int mode, struct lwp *l)
 	tp->t_param = comparam;
 	tp->t_dev = dev;
 
-	if ((tp->t_state & TS_ISOPEN) &&
-	    (tp->t_state & TS_XCLUDE) &&
-	    suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0)
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
 		return (EBUSY);
 
 	s = spltty();
@@ -687,7 +681,8 @@ comioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 	case TIOCSFLAGS: {
 		int userbits, driverbits = 0;
 
-		error = suser(l->l_proc->p_ucred, &l->l_proc->p_acflag); 
+		error = kauth_authorize_device_tty(l->l_cred,
+		    KAUTH_DEVICE_TTY_PRIVSET, tp);
 		if (error != 0)
 			return(EPERM); 
 

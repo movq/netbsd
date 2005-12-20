@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_vfsops.c,v 1.51 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: smbfs_vfsops.c,v 1.60 2006/11/16 01:33:37 christos Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_vfsops.c,v 1.51 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_vfsops.c,v 1.60 2006/11/16 01:33:37 christos Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_quota.h"
@@ -52,6 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: smbfs_vfsops.c,v 1.51 2005/12/11 12:24:29 christos E
 #include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/malloc.h>
+#include <sys/kauth.h>
 
 
 #include <netsmb/smb.h>
@@ -102,7 +103,7 @@ int smbfs_root(struct mount *, struct vnode **);
 static int smbfs_setroot(struct mount *);
 int smbfs_start(struct mount *, int, struct lwp *);
 int smbfs_statvfs(struct mount *, struct statvfs *, struct lwp *);
-int smbfs_sync(struct mount *, int, struct ucred *, struct lwp *);
+int smbfs_sync(struct mount *, int, kauth_cred_t, struct lwp *);
 int smbfs_unmount(struct mount *, int, struct lwp *);
 void smbfs_init(void);
 void smbfs_reinit(void);
@@ -138,12 +139,14 @@ struct vfsops smbfs_vfsops = {
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
 	smbfs_vnodeopv_descs,
+	0,			/* vfs_refcount */
+	{ NULL, NULL },
 };
 VFS_ATTACH(smbfs_vfsops);
 
 int
 smbfs_mount(struct mount *mp, const char *path, void *data,
-	struct nameidata *ndp, struct lwp *l)
+    struct nameidata *ndp, struct lwp *l)
 {
 	struct smbfs_args args; 	  /* will hold data from mount request */
 	struct smbmount *smp = NULL;
@@ -173,7 +176,7 @@ smbfs_mount(struct mount *mp, const char *path, void *data,
 		    SMBFS_VERSION, args.version);
 		return EINVAL;
 	}
-	smb_makescred(&scred, l, l->l_proc->p_ucred);
+	smb_makescred(&scred, l, l->l_cred);
 	error = smb_dev2share(args.dev_fd, SMBM_EXEC, &scred, &ssp);
 	if (error)
 		return error;
@@ -249,11 +252,19 @@ smbfs_unmount(struct mount *mp, int mntflags, struct lwp *l)
 		smp->sm_root = NULL;
 	}
 
-	/* Flush all vnodes. */
-	if ((error = vflush(mp, NULLVP, flags)) != 0)
-		return error;
+	/* Flush all vnodes.
+	 * Keep trying to flush the vnode list for the mount while 
+	 * some are still busy and we are making progress towards
+	 * making them not busy. This is needed because smbfs vnodes
+	 * reference their parent directory but may appear after their
+	 * parent in the list; one pass over the vnode list is not
+	 * sufficient in this case. */
+	do {
+		smp->sm_didrele = 0;
+		error = vflush(mp, NULLVP, flags);
+	} while (error == EBUSY && smp->sm_didrele != 0);
 
-	smb_makescred(&scred, l, l->l_proc->p_ucred);
+	smb_makescred(&scred, l, l->l_cred);
 	smb_share_lock(smp->sm_share, 0);
 	smb_share_put(smp->sm_share, &scred);
 	mp->mnt_data = NULL;
@@ -278,7 +289,7 @@ smbfs_setroot(struct mount *mp)
 	struct vnode *vp;
 	struct smbfattr fattr;
 	struct lwp *l = curlwp;
-	struct ucred *cred = l->l_proc->p_ucred;
+	kauth_cred_t cred = l->l_cred;
 	struct smb_cred scred;
 	int error;
 
@@ -335,7 +346,8 @@ smbfs_root(struct mount *mp, struct vnode **vpp)
  */
 /* ARGSUSED */
 int
-smbfs_start(struct mount *mp, int flags, struct lwp *l)
+smbfs_start(struct mount *mp, int flags,
+    struct lwp *l)
 {
 	SMBVDEBUG("flags=%04x\n", flags);
 	return 0;
@@ -346,12 +358,8 @@ smbfs_start(struct mount *mp, int flags, struct lwp *l)
  */
 /* ARGSUSED */
 int
-smbfs_quotactl(mp, cmd, uid, arg, l)
-	struct mount *mp;
-	int cmd;
-	uid_t uid;
-	void *arg;
-	struct lwp *l;
+smbfs_quotactl(struct mount *mp, int cmd, uid_t uid,
+    void *arg, struct lwp *l)
 {
 	SMBVDEBUG("return EOPNOTSUPP\n");
 	return EOPNOTSUPP;
@@ -408,7 +416,7 @@ smbfs_statvfs(struct mount *mp, struct statvfs *sbp, struct lwp *l)
 	int error = 0;
 
 	sbp->f_iosize = SSTOVC(ssp)->vc_txmax;		/* optimal transfer block size */
-	smb_makescred(&scred, l, l->l_proc->p_ucred);
+	smb_makescred(&scred, l, l->l_cred);
 
 	error = smbfs_smb_statvfs(ssp, sbp, &scred);
 	if (error)
@@ -424,7 +432,7 @@ smbfs_statvfs(struct mount *mp, struct statvfs *sbp, struct lwp *l)
  * Flush out the buffer cache
  */
 int
-smbfs_sync(struct mount *mp, int waitfor, struct ucred *cred, struct lwp *l)
+smbfs_sync(struct mount *mp, int waitfor, kauth_cred_t cred, struct lwp *l)
 {
 	struct vnode *vp, *nvp;
 	struct smbnode *np;
@@ -434,7 +442,11 @@ smbfs_sync(struct mount *mp, int waitfor, struct ucred *cred, struct lwp *l)
 	 */
 	simple_lock(&mntvnode_slock);
 loop:
-	for (vp = LIST_FIRST(&mp->mnt_vnodelist); vp != NULL; vp = nvp) {
+	/*
+	 * NOTE: not using the TAILQ_FOREACH here since in this loop vgone()
+	 * and vclean() can be called indirectly
+	 */
+	for (vp = TAILQ_FIRST(&mp->mnt_vnodelist); vp; vp = nvp) {
 		/*
 		 * If the vnode that we are about to sync is no longer
 		 * associated with this mount point, start over.
@@ -442,7 +454,7 @@ loop:
 		if (vp->v_mount != mp)
 			goto loop;
 		simple_lock(&vp->v_interlock);
-		nvp = LIST_NEXT(vp, v_mntvnodes);
+		nvp = TAILQ_NEXT(vp, v_mntvnodes);
 		np = VTOSMB(vp);
 		if ((vp->v_type == VNON || (np->n_flag & NMODIFIED) == 0) &&
 		    LIST_EMPTY(&vp->v_dirtyblkhd) &&
@@ -474,10 +486,8 @@ loop:
  * smbfs flat namespace lookup. Unsupported.
  */
 /* ARGSUSED */
-int smbfs_vget(mp, ino, vpp)
-	struct mount *mp;
-	ino_t ino;
-	struct vnode **vpp;
+int smbfs_vget(struct mount *mp, ino_t ino,
+    struct vnode **vpp)
 {
 	return (EOPNOTSUPP);
 }

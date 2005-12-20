@@ -1,4 +1,4 @@
-/*	$NetBSD: rtcalarm.c,v 1.3 1998/08/04 16:10:45 minoura Exp $	*/
+/*	$NetBSD: rtcalarm.c,v 1.5 2006/08/04 02:32:30 mhitch Exp $	*/
 /*
  * Copyright (c) 1995 MINOURA Makoto.
  * All rights reserved.
@@ -32,7 +32,7 @@
 /* rtcalarm: X68k RTC alarm test program */
 
 #ifndef __GNUC__
-#define __volatile
+#define volatile
 #endif
 
 #include <stdio.h>
@@ -46,8 +46,8 @@
 
 char           *prog;
 
-static __volatile void usage __P((void));
-static __volatile void myperror __P((const char *, int));
+static void usage __P((void)) __attribute__((__noreturn__));
+static void myperror __P((const char *, int)) __attribute__((__noreturn__));
 
 static void showinfo __P((void));
 static char    *numstr __P((unsigned int));
@@ -75,7 +75,7 @@ main(argc, argv)
 	return 0;
 }
 
-static __volatile void
+static void
 usage(void)
 {
 	fprintf(stderr, "Usage: %s [[-w day-of-the-week] [-d day-of-the-month]\n", prog);
@@ -84,7 +84,7 @@ usage(void)
 	exit(1);
 }
 
-static __volatile void
+static void
 myperror(str, fd)
 	const char     *str;
 	int             fd;

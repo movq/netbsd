@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vr.c,v 1.75 2005/12/11 12:22:50 christos Exp $	*/
+/*	$NetBSD: if_vr.c,v 1.84 2006/11/16 01:33:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -104,7 +104,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vr.c,v 1.75 2005/12/11 12:22:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vr.c,v 1.84 2006/11/16 01:33:09 christos Exp $");
 
 #include "rnd.h"
 
@@ -217,11 +217,12 @@ struct vr_softc {
 	bus_space_handle_t	vr_bsh;		/* bus space handle */
 	bus_dma_tag_t		vr_dmat;	/* bus DMA tag */
 	pci_chipset_tag_t	vr_pc;		/* PCI chipset info */
+	pcitag_t		vr_tag;		/* PCI tag */
 	struct ethercom		vr_ec;		/* Ethernet common info */
-	u_int8_t 		vr_enaddr[ETHER_ADDR_LEN];
+	uint8_t 		vr_enaddr[ETHER_ADDR_LEN];
 	struct mii_data		vr_mii;		/* MII/media info */
 
-	u_int8_t		vr_revid;	/* Rhine chip revision */
+	uint8_t			vr_revid;	/* Rhine chip revision */
 
 	struct callout		vr_tick_ch;	/* tick callout */
 
@@ -244,6 +245,10 @@ struct vr_softc {
 	int	vr_txlast;		/* last used TX descriptor */
 
 	int	vr_rxptr;		/* next ready RX descriptor */
+
+	uint32_t	vr_save_iobase;
+	uint32_t	vr_save_membase;
+	uint32_t	vr_save_irq;
 
 #if NRND > 0
 	rndsource_element_t rnd_source;	/* random source */
@@ -276,11 +281,11 @@ do {									\
 	struct vr_descsoft *__ds = VR_DSRX((sc), (i));			\
 									\
 	__d->vr_next = htole32(VR_CDRXADDR((sc), VR_NEXTRX((i))));	\
-	__d->vr_status = htole32(VR_RXSTAT_FIRSTFRAG |			\
-	    VR_RXSTAT_LASTFRAG | VR_RXSTAT_OWN);			\
 	__d->vr_data = htole32(__ds->ds_dmamap->dm_segs[0].ds_addr);	\
 	__d->vr_ctl = htole32(VR_RXCTL_CHAIN | VR_RXCTL_RX_INTR |	\
 	    ((MCLBYTES - 1) & VR_RXCTL_BUFLEN));			\
+	__d->vr_status = htole32(VR_RXSTAT_FIRSTFRAG |			\
+	    VR_RXSTAT_LASTFRAG | VR_RXSTAT_OWN);			\
 	VR_CDRXSYNC((sc), (i), BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE); \
 } while (/* CONSTCOND */ 0)
 
@@ -326,6 +331,7 @@ static void	vr_mii_statchg(struct device *);
 
 static void	vr_setmulti(struct vr_softc *);
 static void	vr_reset(struct vr_softc *);
+static int	vr_restore_state(pci_chipset_tag_t, pcitag_t, void *, pcireg_t);
 
 int	vr_copy_small = 0;
 
@@ -356,8 +362,8 @@ int	vr_copy_small = 0;
 /*
  * MII bit-bang glue.
  */
-static u_int32_t vr_mii_bitbang_read(struct device *);
-static void	vr_mii_bitbang_write(struct device *, u_int32_t);
+static uint32_t vr_mii_bitbang_read(struct device *);
+static void	vr_mii_bitbang_write(struct device *, uint32_t);
 
 static const struct mii_bitbang_ops vr_mii_bitbang_ops = {
 	vr_mii_bitbang_read,
@@ -371,7 +377,7 @@ static const struct mii_bitbang_ops vr_mii_bitbang_ops = {
 	}
 };
 
-static u_int32_t
+static uint32_t
 vr_mii_bitbang_read(struct device *self)
 {
 	struct vr_softc *sc = (void *) self;
@@ -380,7 +386,7 @@ vr_mii_bitbang_read(struct device *self)
 }
 
 static void
-vr_mii_bitbang_write(struct device *self, u_int32_t val)
+vr_mii_bitbang_write(struct device *self, uint32_t val)
 {
 	struct vr_softc *sc = (void *) self;
 
@@ -443,11 +449,11 @@ vr_setmulti(struct vr_softc *sc)
 {
 	struct ifnet *ifp;
 	int h = 0;
-	u_int32_t hashes[2] = { 0, 0 };
+	uint32_t hashes[2] = { 0, 0 };
 	struct ether_multistep step;
 	struct ether_multi *enm;
 	int mcnt = 0;
-	u_int8_t rxfilt;
+	uint8_t rxfilt;
 
 	ifp = &sc->vr_ec.ec_if;
 
@@ -582,7 +588,7 @@ vr_rxeof(struct vr_softc *sc)
 	struct vr_desc *d;
 	struct vr_descsoft *ds;
 	int i, total_len;
-	u_int32_t rxstat;
+	uint32_t rxstat;
 
 	ifp = &sc->vr_ec.ec_if;
 
@@ -789,9 +795,27 @@ vr_rxeof(struct vr_softc *sc)
 void
 vr_rxeoc(struct vr_softc *sc)
 {
+	struct ifnet *ifp;
+	int i;
+
+	ifp = &sc->vr_ec.ec_if;
+
+	ifp->if_ierrors++;
+
+	VR_CLRBIT16(sc, VR_COMMAND, VR_CMD_RX_ON);
+	for (i = 0; i < VR_TIMEOUT; i++) {
+		DELAY(10);
+		if ((CSR_READ_2(sc, VR_COMMAND) & VR_CMD_RX_ON) == 0)
+			break;
+	}
+	if (i == VR_TIMEOUT) {
+		/* XXX need reset? */
+		printf("%s: RX shutdown never complete\n",
+		    sc->vr_dev.dv_xname);
+	}
 
 	vr_rxeof(sc);
-	VR_CLRBIT16(sc, VR_COMMAND, VR_CMD_RX_ON);
+
 	CSR_WRITE_4(sc, VR_RXADDR, VR_CDRXADDR(sc, sc->vr_rxptr));
 	VR_SETBIT16(sc, VR_COMMAND, VR_CMD_RX_ON);
 	VR_SETBIT16(sc, VR_COMMAND, VR_CMD_RX_GO);
@@ -807,8 +831,8 @@ vr_txeof(struct vr_softc *sc)
 	struct ifnet *ifp = &sc->vr_ec.ec_if;
 	struct vr_desc *d;
 	struct vr_descsoft *ds;
-	u_int32_t txstat;
-	int i;
+	uint32_t txstat;
+	int i, j;
 
 	ifp->if_flags &= ~IFF_OACTIVE;
 
@@ -824,6 +848,25 @@ vr_txeof(struct vr_softc *sc)
 		VR_CDTXSYNC(sc, i, BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
 
 		txstat = le32toh(d->vr_status);
+
+		if (txstat & (VR_TXSTAT_ABRT | VR_TXSTAT_UDF)) {
+			VR_CLRBIT16(sc, VR_COMMAND, VR_CMD_TX_ON);
+			for (j = 0; j < VR_TIMEOUT; j++) {
+				DELAY(10);
+				if ((CSR_READ_2(sc, VR_COMMAND) &
+				    VR_CMD_TX_ON) == 0)
+					break;
+			}
+			if (j == VR_TIMEOUT) {
+				/* XXX need reset? */
+				printf("%s: TX shutdown never complete\n",
+				    sc->vr_dev.dv_xname);
+			}
+			d->vr_status = htole32(VR_TXSTAT_OWN);
+			CSR_WRITE_4(sc, VR_TXADDR, VR_CDTXADDR(sc, i));
+			break;
+		}
+
 		if (txstat & VR_TXSTAT_OWN)
 			break;
 
@@ -861,7 +904,7 @@ vr_intr(void *arg)
 {
 	struct vr_softc *sc;
 	struct ifnet *ifp;
-	u_int16_t status;
+	uint16_t status;
 	int handled = 0, dotx = 0;
 
 	sc = arg;
@@ -894,22 +937,41 @@ vr_intr(void *arg)
 		if (status & VR_ISR_RX_OK)
 			vr_rxeof(sc);
 
+		if (status & VR_ISR_RX_DROPPED) {
+			printf("%s: rx packet lost\n", sc->vr_dev.dv_xname);
+			ifp->if_ierrors++;
+		}
+
 		if (status &
-		    (VR_ISR_RX_ERR | VR_ISR_RX_NOBUF | VR_ISR_RX_OFLOW |
-		     VR_ISR_RX_DROPPED))
+		    (VR_ISR_RX_ERR | VR_ISR_RX_NOBUF | VR_ISR_RX_OFLOW))
 			vr_rxeoc(sc);
+
+
+		if (status & (VR_ISR_BUSERR | VR_ISR_TX_UNDERRUN)) {
+			if (status & VR_ISR_BUSERR)
+				printf("%s: PCI bus error\n",
+				    sc->vr_dev.dv_xname);
+			if (status & VR_ISR_TX_UNDERRUN)
+				printf("%s: transmit underrun\n",
+				    sc->vr_dev.dv_xname);
+			/* vr_init() calls vr_start() */
+			dotx = 0;
+			(void)vr_init(ifp);
+
+		}
 
 		if (status & VR_ISR_TX_OK) {
 			dotx = 1;
 			vr_txeof(sc);
 		}
 
-		if (status & (VR_ISR_TX_UNDERRUN | VR_ISR_TX_ABRT)) {
-			if (status & VR_ISR_TX_UNDERRUN)
-				printf("%s: transmit underrun\n",
-				    sc->vr_dev.dv_xname);
-			if (status & VR_ISR_TX_ABRT)
+		if (status &
+		    (VR_ISR_TX_ABRT | VR_ISR_TX_ABRT2 | VR_ISR_TX_UDFI)) {
+			if (status & (VR_ISR_TX_ABRT | VR_ISR_TX_ABRT2))
 				printf("%s: transmit aborted\n",
+				    sc->vr_dev.dv_xname);
+			if (status & VR_ISR_TX_UDFI)
+				printf("%s: transmit underflow\n",
 				    sc->vr_dev.dv_xname);
 			ifp->if_oerrors++;
 			dotx = 1;
@@ -918,22 +980,6 @@ vr_intr(void *arg)
 				VR_SETBIT16(sc, VR_COMMAND, VR_CMD_TX_ON);
 				VR_SETBIT16(sc, VR_COMMAND, VR_CMD_TX_GO);
 			}
-			/*
-			 * Unfortunately many cards get stuck after
-			 * aborted transmits, so we reset them.
-			 */
-			if (status & VR_ISR_TX_ABRT) {
-				printf("%s: restarting\n", sc->vr_dev.dv_xname);
-				dotx = 0;
-				(void) vr_init(ifp);
-			}
-		}
-
-		if (status & VR_ISR_BUSERR) {
-			printf("%s: PCI bus error\n", sc->vr_dev.dv_xname);
-			/* vr_init() calls vr_start() */
-			dotx = 0;
-			(void) vr_init(ifp);
 		}
 	}
 
@@ -1413,7 +1459,8 @@ vr_lookup(struct pci_attach_args *pa)
 }
 
 static int
-vr_probe(struct device *parent, struct cfdata *match, void *aux)
+vr_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 
@@ -1446,14 +1493,16 @@ vr_attach(struct device *parent, struct device *self, void *aux)
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 	bus_dma_segment_t seg;
 	struct vr_type *vrt;
-	u_int32_t pmreg, reg;
+	uint32_t reg;
 	struct ifnet *ifp;
-	u_char eaddr[ETHER_ADDR_LEN];
+	uint8_t eaddr[ETHER_ADDR_LEN], mac;
 	int i, rseg, error;
 
-#define	PCI_CONF_WRITE(r, v)	pci_conf_write(pa->pa_pc, pa->pa_tag, (r), (v))
-#define	PCI_CONF_READ(r)	pci_conf_read(pa->pa_pc, pa->pa_tag, (r))
+#define	PCI_CONF_WRITE(r, v)	pci_conf_write(sc->vr_pc, sc->vr_tag, (r), (v))
+#define	PCI_CONF_READ(r)	pci_conf_read(sc->vr_pc, sc->vr_tag, (r))
 
+	sc->vr_pc = pa->pa_pc;
+	sc->vr_tag = pa->pa_tag;
 	callout_init(&sc->vr_tick_ch);
 
 	vrt = vr_lookup(pa);
@@ -1468,30 +1517,16 @@ vr_attach(struct device *parent, struct device *self, void *aux)
 	 * Handle power management nonsense.
 	 */
 
-	if (pci_get_capability(pa->pa_pc, pa->pa_tag,
-	    PCI_CAP_PWRMGMT, &pmreg, 0)) {
-		reg = PCI_CONF_READ(pmreg + PCI_PMCSR);
-		if ((reg & PCI_PMCSR_STATE_MASK) != PCI_PMCSR_STATE_D0) {
-			u_int32_t iobase, membase, irq;
+	sc->vr_save_iobase = PCI_CONF_READ(VR_PCI_LOIO);
+	sc->vr_save_membase = PCI_CONF_READ(VR_PCI_LOMEM);
+	sc->vr_save_irq = PCI_CONF_READ(PCI_INTERRUPT_REG);
 
-			/* Save important PCI config data. */
-			iobase = PCI_CONF_READ(VR_PCI_LOIO);
-			membase = PCI_CONF_READ(VR_PCI_LOMEM);
-			irq = PCI_CONF_READ(PCI_INTERRUPT_REG);
-
-			/* Reset the power state. */
-			printf("%s: chip is in D%d power mode "
-			    "-- setting to D0\n",
-			    sc->vr_dev.dv_xname, reg & PCI_PMCSR_STATE_MASK);
-			reg = (reg & ~PCI_PMCSR_STATE_MASK) |
-			    PCI_PMCSR_STATE_D0;
-			PCI_CONF_WRITE(pmreg + PCI_PMCSR, reg);
-
-			/* Restore PCI config data. */
-			PCI_CONF_WRITE(VR_PCI_LOIO, iobase);
-			PCI_CONF_WRITE(VR_PCI_LOMEM, membase);
-			PCI_CONF_WRITE(PCI_INTERRUPT_REG, irq);
-		}
+	/* power up chip */
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, sc,
+	    vr_restore_state)) && error != EOPNOTSUPP) {
+		aprint_error("%s: cannot activate %d\n", sc->vr_dev.dv_xname,
+		    error);
+		return;
 	}
 
 	/* Make sure bus mastering is enabled. */
@@ -1565,8 +1600,13 @@ vr_attach(struct device *parent, struct device *self, void *aux)
 	 * Windows may put the chip in suspend mode when it
 	 * shuts down. Be sure to kick it in the head to wake it
 	 * up again.
+	 *
+	 * Don't touch this register on VT3043 since it causes
+	 * kernel MCHK trap on macppc.
+	 * (Note some VT86C100A chip returns a product ID of VT3043)
 	 */
-	VR_CLRBIT(sc, VR_STICKHW, (VR_STICKHW_DS0|VR_STICKHW_DS1));
+	if (PCI_PRODUCT(pa->pa_id) != PCI_PRODUCT_VIATECH_VT3043)
+		VR_CLRBIT(sc, VR_STICKHW, (VR_STICKHW_DS0|VR_STICKHW_DS1));
 
 	/* Reset the adapter. */
 	vr_reset(sc);
@@ -1587,14 +1627,20 @@ vr_attach(struct device *parent, struct device *self, void *aux)
 	 *         (and the lack of anyone else noticing the problems this
 	 *         causes) I'm going to retain the old behaviour for the
 	 *         other parts.
+	 *         In some cases, the chip really does startup without having
+	 *         read the EEPROM (kern/34812). To handle this case, we force
+	 *         a reload if we see an all-zeroes MAC address.
 	 */
-	if (PCI_PRODUCT(pa->pa_id) != PCI_PRODUCT_VIATECH_VT6105 &&
-	    PCI_PRODUCT(pa->pa_id) != PCI_PRODUCT_VIATECH_VT6102) {
+	for (mac = 0, i = 0; i < ETHER_ADDR_LEN; i++)
+		mac |= (eaddr[i] = CSR_READ_1(sc, VR_PAR0 + i));
+
+	if (mac == 0 || (PCI_PRODUCT(pa->pa_id) != PCI_PRODUCT_VIATECH_VT6105 &&
+	    PCI_PRODUCT(pa->pa_id) != PCI_PRODUCT_VIATECH_VT6102)) {
 		VR_SETBIT(sc, VR_EECSR, VR_EECSR_LOAD);
 		DELAY(200);
+		for (i = 0; i < ETHER_ADDR_LEN; i++)
+			eaddr[i] = CSR_READ_1(sc, VR_PAR0 + i);
 	}
-	for (i = 0; i < ETHER_ADDR_LEN; i++)
-		eaddr[i] = CSR_READ_1(sc, VR_PAR0 + i);
 
 	/*
 	 * A Rhine chip was detected. Inform the world.
@@ -1738,4 +1784,22 @@ vr_attach(struct device *parent, struct device *self, void *aux)
 	bus_dmamem_free(sc->vr_dmat, &seg, rseg);
  fail_0:
 	return;
+}
+
+static int
+vr_restore_state(pci_chipset_tag_t pc, pcitag_t tag, void *ssc, pcireg_t state)
+{
+	struct vr_softc *sc = ssc;
+	int error;
+
+	if (state == PCI_PMCSR_STATE_D0)
+		return 0;
+	if ((error = pci_set_powerstate(pc, tag, PCI_PMCSR_STATE_D0)))
+		return error;
+
+	/* Restore PCI config data. */
+	PCI_CONF_WRITE(VR_PCI_LOIO, sc->vr_save_iobase);
+	PCI_CONF_WRITE(VR_PCI_LOMEM, sc->vr_save_membase);
+	PCI_CONF_WRITE(PCI_INTERRUPT_REG, sc->vr_save_irq);
+	return 0;
 }

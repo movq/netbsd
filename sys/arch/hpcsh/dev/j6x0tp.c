@@ -1,4 +1,4 @@
-/*	$NetBSD: j6x0tp.c,v 1.10 2005/12/11 12:17:36 christos Exp $ */
+/*	$NetBSD: j6x0tp.c,v 1.15 2006/11/12 19:00:42 plunky Exp $ */
 
 /*
  * Copyright (c) 2003 Valeriy E. Ushakov
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: j6x0tp.c,v 1.10 2005/12/11 12:17:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: j6x0tp.c,v 1.15 2006/11/12 19:00:42 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -36,9 +36,6 @@ __KERNEL_RCSID(0, "$NetBSD: j6x0tp.c,v 1.10 2005/12/11 12:17:36 christos Exp $")
 #include <sys/malloc.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
-#ifdef GPROF
-#include <sys/gmon.h>
-#endif
 
 #include "opt_j6x0tp.h"
 
@@ -160,7 +157,7 @@ static void	j6x0tp_get_raw_xy(int *, int *);
 static int	j6x0tp_get_hard_icon(int, int);
 
 
-const struct wsmouse_accessops j6x0tp_accessops = {
+static const struct wsmouse_accessops j6x0tp_accessops = {
 	j6x0tp_wsmouse_enable,
 	j6x0tp_wsmouse_ioctl,
 	j6x0tp_wsmouse_disable
@@ -175,7 +172,7 @@ static const struct wsmouse_calibcoords j6x0tp_default_calib = {
 	 { J6X0TP_FB_RIGHT, J6X0TP_FB_BOTTOM, 639, 239 }}
 };
 
-const struct wskbd_accessops j6x0tp_wskbd_accessops = {
+static const struct wskbd_accessops j6x0tp_wskbd_accessops = {
 	j6x0tp_wskbd_enable,
 	j6x0tp_wskbd_set_leds,
 	j6x0tp_wskbd_ioctl
@@ -202,7 +199,7 @@ static const keysym_t j6x0tp_wskbd_keydesc[] = {
 	KS_KEYCODE(4), J6X0TP_SWITCH_ICON_KEYSYM
 };
 
-const struct wscons_keydesc j6x0tp_wskbd_keydesctab[] = {
+static const struct wscons_keydesc j6x0tp_wskbd_keydesctab[] = {
 	{ KB_US, 0,
 	  sizeof(j6x0tp_wskbd_keydesc)/sizeof(keysym_t),
 	  j6x0tp_wskbd_keydesc
@@ -210,7 +207,7 @@ const struct wscons_keydesc j6x0tp_wskbd_keydesctab[] = {
 	{0, 0, 0, 0}
 };
 
-const struct wskbd_mapdata j6x0tp_wskbd_keymapdata = {
+static const struct wskbd_mapdata j6x0tp_wskbd_keymapdata = {
         j6x0tp_wskbd_keydesctab, KB_US
 };
 
@@ -576,7 +573,7 @@ j6x0tp_callout_wsmouse(void *self)
 		j6x0tp_wsmouse_input(sc, rawx, rawy); /* mouse dragged */
 		callout_schedule(&sc->sc_touch_ch, hz/32);
 	} else {
-		wsmouse_input(sc->sc_wsmousedev, 0, 0, 0, 0, /* button up */
+		wsmouse_input(sc->sc_wsmousedev, 0, 0, 0, 0, 0, /* button up */
 			      WSMOUSE_INPUT_DELTA);
 		j6x0tp_stop_polling(sc);
 	}
@@ -598,10 +595,9 @@ j6x0tp_wsmouse_input(struct j6x0tp_softc *sc, int rawx, int rawy)
 		     sc->sc_dev.dv_xname, rawx, rawy, x, y));
 
 	wsmouse_input(sc->sc_wsmousedev,
-		      1,	/* button */
-		      x, y,
-		      0,	/* flags */
-		      WSMOUSE_INPUT_ABSOLUTE_X | WSMOUSE_INPUT_ABSOLUTE_Y);
+			1,	/* button */
+			x, y, 0, 0,
+			WSMOUSE_INPUT_ABSOLUTE_X | WSMOUSE_INPUT_ABSOLUTE_Y);
 }
 
 

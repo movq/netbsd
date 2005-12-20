@@ -1,4 +1,4 @@
-/*	$NetBSD: ftp.c,v 1.135 2005/06/29 02:31:19 christos Exp $	*/
+/*	$NetBSD: ftp.c,v 1.142 2006/10/23 19:53:24 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996-2005 The NetBSD Foundation, Inc.
@@ -99,7 +99,7 @@
 #if 0
 static char sccsid[] = "@(#)ftp.c	8.6 (Berkeley) 10/27/94";
 #else
-__RCSID("$NetBSD: ftp.c,v 1.135 2005/06/29 02:31:19 christos Exp $");
+__RCSID("$NetBSD: ftp.c,v 1.142 2006/10/23 19:53:24 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -227,7 +227,7 @@ hookup(char *host, char *port)
 			cause = "socket";
 			continue;
 		}
-		error = xconnect(s, res->ai_addr, res->ai_addrlen);
+		error = ftp_connect(s, res->ai_addr, res->ai_addrlen);
 		if (error) {
 			/* this "if" clause is to prevent print warning twice */
 			if (res->ai_next) {
@@ -346,7 +346,7 @@ command(const char *fmt, ...)
 	sigfunc oldsigint;
 
 #ifndef NO_DEBUG
-	if (debug) {
+	if (ftp_debug) {
 		fputs("---> ", ttyout);
 		va_start(ap, fmt);
 		if (strncmp("PASS ", fmt, 5) == 0)
@@ -382,6 +382,12 @@ command(const char *fmt, ...)
 	return (r);
 }
 
+static const char *m421[] = {
+	"remote server timed out. Connection closed",
+	"user interrupt. Connection closed",
+	"remote server has closed connection",
+};
+
 int
 getreply(int expecteof)
 {
@@ -402,7 +408,8 @@ getreply(int expecteof)
 	for (line = 0 ;; line++) {
 		dig = n = code = 0;
 		cp = current_line;
-		while (alarmtimer(60),((c = getc(cin)) != '\n')) {
+		while (alarmtimer(quit_time ? quit_time : 60),
+		       ((c = getc(cin)) != '\n')) {
 			if (c == IAC) {     /* handle telnet commands */
 				switch (c = getc(cin)) {
 				case WILL:
@@ -441,18 +448,15 @@ getreply(int expecteof)
 				cpend = 0;
 				lostpeer(0);
 				if (verbose) {
+					size_t midx;
 					if (reply_timeoutflag)
-						fputs(
-    "421 Service not available, remote server timed out. Connection closed\n",
-						    ttyout);
+						midx = 0;
 					else if (reply_abrtflag)
-						fputs(
-    "421 Service not available, user interrupt. Connection closed.\n",
-						    ttyout);
+						midx = 1;
 					else
-						fputs(
-    "421 Service not available, remote server has closed connection.\n",
-						    ttyout);
+						midx = 2;
+   					(void)fprintf(ttyout,
+			    "421 Service not available, %s.\n", m421[midx]);
 					(void)fflush(ttyout);
 				}
 				code = 421;
@@ -549,7 +553,7 @@ empty(FILE *cin, FILE *din, int sec)
 		pfd[nfd++].events = POLLIN;
 	}
 
-	if ((nr = xpoll(pfd, nfd, sec * 1000)) <= 0)
+	if ((nr = ftp_poll(pfd, nfd, sec * 1000)) <= 0)
 		return nr;
 
 	nr = 0;
@@ -612,6 +616,7 @@ sendrequest(const char *cmd, const char *local, const char *remote,
 	(void)&oldintr;
 	(void)&oldintp;
 	(void)&lmode;
+	fin = NULL;	/* XXX gcc4 */
 #endif
 
 	hashbytes = mark;
@@ -621,7 +626,7 @@ sendrequest(const char *cmd, const char *local, const char *remote,
 	filesize = -1;
 	oprogress = progress;
 	if (verbose && printnames) {
-		if (local && *local != '-')
+		if (*local != '-')
 			fprintf(ttyout, "local: %s ", local);
 		if (remote)
 			fprintf(ttyout, "remote: %s\n", remote);
@@ -717,7 +722,7 @@ sendrequest(const char *cmd, const char *local, const char *remote,
 		if (buf)
 			(void)free(buf);
 		bufsize = sndbuf_size;
-		buf = xmalloc(bufsize);
+		buf = ftp_malloc(bufsize);
 	}
 
 	progressmeter(-1);
@@ -927,7 +932,7 @@ recvrequest(const char *cmd, const char *local, const char *remote,
 	opreserve = preserve;
 	is_retr = (strcmp(cmd, "RETR") == 0);
 	if (is_retr && verbose && printnames) {
-		if (local && (ignorespecial || *local != '-'))
+		if (ignorespecial || *local != '-')
 			fprintf(ttyout, "local: %s ", local);
 		if (remote)
 			fprintf(ttyout, "remote: %s\n", remote);
@@ -1045,7 +1050,7 @@ recvrequest(const char *cmd, const char *local, const char *remote,
 		if (buf)
 			(void)free(buf);
 		bufsize = rcvbuf_size;
-		buf = xmalloc(bufsize);
+		buf = ftp_malloc(bufsize);
 	}
 
 	progressmeter(-1);
@@ -1277,7 +1282,7 @@ initconn(void)
 
 #ifdef INET6
 #ifndef NO_DEBUG
-	if (myctladdr.su_family == AF_INET6 && debug &&
+	if (myctladdr.su_family == AF_INET6 && ftp_debug &&
 	    (IN6_IS_ADDR_LINKLOCAL(&myctladdr.si_su.su_sin6.sin6_addr) ||
 	     IN6_IS_ADDR_SITELOCAL(&myctladdr.si_su.su_sin6.sin6_addr))) {
 		warnx("use of scoped address can be troublesome");
@@ -1511,7 +1516,7 @@ initconn(void)
 		} else
 			goto bad;
 
-		while (xconnect(data, (struct sockaddr *)&data_addr.si_su,
+		while (ftp_connect(data, (struct sockaddr *)&data_addr.si_su,
 			    data_addr.su_len) < 0) {
 			if (activefallback) {
 				(void)close(data);
@@ -1574,7 +1579,7 @@ initconn(void)
 		goto bad;
 	}
 	data_addr.su_len = len;
-	if (xlisten(data, 1) < 0)
+	if (ftp_listen(data, 1) < 0)
 		warn("listen");
 
 	if (sendport) {
@@ -1709,7 +1714,7 @@ dataconn(const char *lmode)
 		timeout = td.tv_sec * 1000 + td.tv_usec/1000;
 		if (timeout < 0)
 			timeout = 0;
-		rv = xpoll(pfd, 1, timeout);
+		rv = ftp_poll(pfd, 1, timeout);
 	} while (rv == -1 && errno == EINTR);	/* loop until poll ! EINTR */
 	if (rv == -1) {
 		warn("poll waiting before accept");

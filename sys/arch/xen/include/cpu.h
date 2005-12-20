@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.10 2005/12/11 12:19:48 christos Exp $	*/
+/*	$NetBSD: cpu.h,v 1.12 2006/02/16 20:17:15 perry Exp $	*/
 /*	NetBSD: cpu.h,v 1.113 2004/02/20 17:35:01 yamt Exp 	*/
 
 /*-
@@ -198,7 +198,7 @@ curcpu()
 {
 	struct cpu_info *ci;
 
-	__asm __volatile("movl %%fs:%1, %0" :
+	__asm volatile("movl %%fs:%1, %0" :
 	    "=r" (ci) :
 	    "m"
 	    (*(struct cpuinfo * const *)offsetof(struct cpu_info, ci_self)));

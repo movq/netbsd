@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.45 2005/12/11 12:19:45 christos Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.49 2006/11/24 22:04:24 wiz Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.45 2005/12/11 12:19:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.49 2006/11/24 22:04:24 wiz Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "scsibus.h"
@@ -199,10 +199,10 @@ device_register(struct device *dev, void *aux)
 
 	/*
 	 * Handle network interfaces here, the attachment information is
-	 * not available driver independantly later.
+	 * not available driver independently later.
 	 * For disks, there is nothing useful available at attach time.
 	 */
-	if (dev->dv_class == DV_IFNET) {
+	if (device_class(dev) == DV_IFNET) {
 		majdev = B_TYPE(bootdev);
 		if (X68K_BOOT_DEV_IS_NETIF(majdev)) {
 			sprintf(tname, "%s%d",
@@ -238,8 +238,7 @@ scsi_find(dev_t bdev)
 	ifid = B_X68K_SCSI_IF(bdev);
 	if (ifid >= sizeof name_scsiif/sizeof name_scsiif[0] ||
 					!name_scsiif[ifid]) {
-#if defined(COMPAT_09) || defined(COMPAT_10) || defined(COMPAT_11) ||	\
-    defined(COMPAT_12) || defined(COMPAT_13)
+#ifdef COMPAT_13
 		/*
 		 * old boot didn't pass interface type
 		 * try "scsibus0"
@@ -261,8 +260,8 @@ scsi_find(dev_t bdev)
 
 		for (scsibus = TAILQ_FIRST(&alldevs); scsibus;
 					scsibus = TAILQ_NEXT(scsibus, dv_list))
-			if (scsibus->dv_parent
-			    && !strcmp(tname, scsibus->dv_parent->dv_xname))
+			if (device_parent(scsibus)
+			    && !strcmp(tname, device_parent(scsibus)->dv_xname))
 				break;
 	}
 	if (!scsibus)

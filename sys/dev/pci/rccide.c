@@ -1,4 +1,4 @@
-/*	$NetBSD: rccide.c,v 1.13 2005/12/11 12:22:50 christos Exp $	*/
+/*	$NetBSD: rccide.c,v 1.15 2006/11/16 01:33:10 christos Exp $	*/
 
 /*
  * Copyright (c) 2003 By Noon Software, Inc.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rccide.c,v 1.13 2005/12/11 12:22:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rccide.c,v 1.15 2006/11/16 01:33:10 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,7 +78,8 @@ static const struct pciide_product_desc pciide_serverworks_products[] =  {
 };
 
 static int
-rccide_match(struct device *parent, struct cfdata *match, void *aux)
+rccide_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 

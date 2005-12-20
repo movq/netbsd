@@ -1,4 +1,4 @@
-/*	$NetBSD: systrace.c,v 1.31 2005/06/25 18:47:42 elad Exp $	*/
+/*	$NetBSD: systrace.c,v 1.33 2006/05/10 21:53:14 mrg Exp $	*/
 /*	$OpenBSD: systrace.c,v 1.32 2002/08/05 23:27:53 provos Exp $	*/
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
@@ -84,12 +84,12 @@ systrace_parameters(void)
 	iamroot = getuid() == 0;
 
 	/* Find out current username. */
-	if ((pw = getpwuid(uid)) == NULL)
+	if ((pw = getpwuid(uid)) == NULL) {
 		snprintf(username, sizeof(username), "uid %u", uid);
-	else
+	} else {
 		strlcpy(username, pw->pw_name, sizeof(username));
-
-	strlcpy(home, pw->pw_dir, sizeof(home));
+		strlcpy(home, pw->pw_dir, sizeof(home));
+	}
 
 	/* Determine current working directory for filtering */
 	if (getcwd(cwd, sizeof(cwd)) == NULL)
@@ -574,6 +574,9 @@ main(int argc, char **argv)
 	int setcredentials = 0;
 	uid_t cr_uid;
 	gid_t cr_gid;
+
+	cr_uid = 0;	/* XXX gcc */
+	cr_gid = 0;	/* XXX gcc */
 
 	tv_wait.tv_sec = 60;
 	tv_wait.tv_usec = 0;

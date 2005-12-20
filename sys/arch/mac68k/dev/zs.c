@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.49 2005/12/11 12:18:02 christos Exp $	*/
+/*	$NetBSD: zs.c,v 1.51 2006/11/24 22:04:23 wiz Exp $	*/
 
 /*
  * Copyright (c) 1996-1998 Bill Studenmund
@@ -47,14 +47,14 @@
  * help from Allen Briggs and Gordon Ross <gwr@NetBSD.org>. Noud de
  * Brouwer field-tested the driver at a local ISP.
  *
- * Bill Studenmund and Gordon Ross then ported the machine-independant
+ * Bill Studenmund and Gordon Ross then ported the machine-independent
  * z8530 driver to work with port-mac68k. NetBSD 1.2 contained an
  * intermediate version (mac68k using a local, patched version of
  * the m.i. drivers), with NetBSD 1.3 containing a full version.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.49 2005/12/11 12:18:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.51 2006/11/24 22:04:23 wiz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_mac68k.h"
@@ -320,7 +320,7 @@ zsc_attach(struct device *parent, struct device *self, void *aux)
 			zsc_args.hwflags |= ZS_HWFLAG_NO_CTS;
 
 		printf("zsc%d channel %d: d_speed %6d DCD clk %ld CTS clk %ld",
-				self->dv_unit, channel, cs->cs_defspeed,
+				device_unit(self), channel, cs->cs_defspeed,
 				xcs->cs_clocks[1].clk, xcs->cs_clocks[2].clk);
 
 		/* Set defaults in our "extended" chanstate. */

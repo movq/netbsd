@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.12 2005/08/18 00:19:28 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.14 2006/09/28 21:24:58 christos Exp $
 
 .include <bsd.own.mk>
 
@@ -17,11 +17,7 @@ CPPFLAGS+=-DUSE_PAM
 .if (${USE_KERBEROS} != "no")
 
 CPPFLAGS+=-DGSSAPI -I${DESTDIR}/usr/include/gssapi
-CPPFLAGS+=-DKRB5 -I${DESTDIR}/usr/include/krb5
-
-.if ${MKKERBEROS4} != "no"
-CPPFLAGS+=-DKRB4 -DAFS -I${DESTDIR}/usr/include/kerberosIV
-.endif
+CPPFLAGS+=-DKRB5 -I${DESTDIR}/usr/include/krb5 -DHEIMDAL
 
 .endif
 

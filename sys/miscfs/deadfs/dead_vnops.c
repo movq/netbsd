@@ -1,4 +1,4 @@
-/*	$NetBSD: dead_vnops.c,v 1.38 2005/12/11 12:24:50 christos Exp $	*/
+/*	$NetBSD: dead_vnops.c,v 1.41 2006/11/16 01:33:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dead_vnops.c,v 1.38 2005/12/11 12:24:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dead_vnops.c,v 1.41 2006/11/16 01:33:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -161,8 +161,7 @@ dead_lookup(v)
  */
 /* ARGSUSED */
 int
-dead_open(v)
-	void *v;
+dead_open(void *v)
 {
 
 	return (ENXIO);
@@ -180,7 +179,7 @@ dead_read(v)
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		int  a_ioflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 
 	if (chkvnlock(ap->a_vp))
@@ -205,7 +204,7 @@ dead_write(v)
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		int  a_ioflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 
 	if (chkvnlock(ap->a_vp))
@@ -226,7 +225,7 @@ dead_ioctl(v)
 		u_long a_command;
 		void *a_data;
 		int  a_fflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 
@@ -319,8 +318,7 @@ dead_bmap(v)
  */
 /* ARGSUSED */
 int
-dead_print(v)
-	void *v;
+dead_print(void *v)
 {
 	printf("tag VT_NON, dead vnode\n");
 	return 0;

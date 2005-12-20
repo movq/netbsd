@@ -1,4 +1,4 @@
-/*	$NetBSD: xenfunc.h,v 1.8 2005/12/11 12:19:48 christos Exp $	*/
+/*	$NetBSD: xenfunc.h,v 1.10 2006/02/16 20:17:15 perry Exp $	*/
 
 /*
  *

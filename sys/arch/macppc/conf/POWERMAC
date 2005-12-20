@@ -1,4 +1,4 @@
-#	$NetBSD: POWERMAC,v 1.52 2005/12/07 09:10:16 tsutsui Exp $
+#	$NetBSD: POWERMAC,v 1.56 2006/09/27 21:42:05 manu Exp $
 #
 # POWERMAC config file
 #
@@ -28,6 +28,7 @@ options 	TRAP_PANICWAIT
 # Compatibility options
 options 	COMPAT_13	# NetBSD 1.3,
 options 	COMPAT_14	# NetBSD 1.4,
+options 	COMPAT_15	# NetBSD 1.5,
 options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
@@ -51,6 +52,7 @@ options 	APPLE_UFS	# Apple UFS support in FFS
 # Networking options
 options 	INET		# IP + ICMP + TCP + UDP
 options 	IPFILTER_LOG	# ipmon(8) log support
+options 	IPFILTER_LOOKUP	# ippool(8) support
 
 # These options enable verbose messages for several subsystems.
 options 	SCSIVERBOSE	# Verbose SCSI errors
@@ -105,10 +107,10 @@ scsibus* at scsi?
 sd*	at scsibus? target ? lun ?	# SCSI disks
 
 pseudo-device	loop			# network loopback
-pseudo-device	bpfilter	8	# packet filter
+pseudo-device	bpfilter		# packet filter
 pseudo-device	ipfilter		# IP filter (firewall) and NAT
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	vnd		4	# disk-like interface to files
+pseudo-device	vnd			# disk-like interface to files
 pseudo-device	ccd		4	# concatenated/striped disk devices
 #pseudo-device	fss		4	# file system snapshot device
 pseudo-device	rnd			# /dev/random and in-kernel generator

@@ -1,4 +1,4 @@
-/*	$NetBSD: opl_sv.c,v 1.9 2005/12/11 12:22:50 christos Exp $	*/
+/*	$NetBSD: opl_sv.c,v 1.11 2006/11/16 01:33:09 christos Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opl_sv.c,v 1.9 2005/12/11 12:22:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opl_sv.c,v 1.11 2006/11/16 01:33:09 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,7 +64,8 @@ __KERNEL_RCSID(0, "$NetBSD: opl_sv.c,v 1.9 2005/12/11 12:22:50 christos Exp $");
 #include <dev/pci/svvar.h>
 
 static int
-opl_sv_match(struct device *parent, struct cfdata *match, void *aux)
+opl_sv_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct audio_attach_args *aa = (struct audio_attach_args *)aux;
 

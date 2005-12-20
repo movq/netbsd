@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.52 2005/08/23 12:12:56 peter Exp $
+# $NetBSD: Makefile,v 1.62 2006/10/07 16:50:34 rpaulo Exp $
 
 .include <bsd.own.mk>
 
@@ -8,22 +8,30 @@
 #	src/usr.sbin/postinstall/postinstall
 
 CONFIGFILES=\
-	DAEMON LOGIN NETWORKING SERVERS \
-	accounting altqd amd apmd \
-	bootparams bootconf.sh ccd cgd cleartmp cron \
-	dhclient dhcpd dhcrelay dmesg downinterfaces fixsb fsck ftpd \
-	identd ifwatchd inetd ipfilter ipfs ipmon ipnat ipsec isdnd \
-	kdc ldconfig lkm1 lkm2 lkm3 local lpd \
-	mixerctl mopd motd mountall mountcritlocal mountcritremote mountd \
-	moused mrouted \
-	named ndbootd network newsyslog nfsd nfslocking ntpd ntpdate \
-	pf pf_boot pflogd poffd postfix powerd ppp pwcheck quota \
-	racoon rpcbind raidframe raidframeparity rarpd rbootd root \
-	route6d routed rtadvd rtclocaltime rtsold rwho \
-	savecore screenblank sendmail securelevel smmsp sshd \
-	staticroute swap1 swap2 sysdb sysctl syslogd \
-	timed tpctl ttys veriexec virecover wdogctl wscons wsmoused xdm xfs \
-	ypbind yppasswdd ypserv
+		DAEMON LOGIN NETWORKING SERVERS \
+		accounting altqd amd apmd \
+		bootconf.sh bootparams btconfig btdevctl bthcid \
+		ccd cgd cleartmp cron \
+		dhclient dhcpd dhcrelay dmesg downinterfaces \
+		fixsb fsck ftpd \
+		hostapd \
+		identd ifwatchd inetd ipfilter ipfs ipmon ipnat ipsec \
+		irdaattach iscsi_target isdnd \
+		kdc \
+		ldconfig lkm1 lkm2 lkm3 local lpd \
+		mixerctl mopd motd mountall mountcritlocal mountcritremote \
+		mountd moused mrouted \
+		named ndbootd network newsyslog nfsd nfslocking ntpd ntpdate \
+		pf pf_boot pflogd poffd postfix powerd ppp pwcheck \
+		quota \
+		racoon rpcbind raidframe raidframeparity rarpd rbootd root \
+		route6d routed rtadvd rtclocaltime rtsold rwho \
+		savecore screenblank sdpd securelevel sshd \
+		staticroute swap1 swap2 sysctl sysdb syslogd \
+		timed tpctl ttys \
+		veriexec virecover wdogctl wpa_supplicant wscons wsmoused \
+		xdm xfs \
+		ypbind yppasswdd ypserv
 FILESDIR=	/etc/rc.d
 FILESMODE=	${BINMODE}
 

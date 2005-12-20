@@ -1,6 +1,8 @@
-#	$NetBSD: Makefile.inc,v 1.41 2005/09/10 21:38:40 dsl Exp $
+#	$NetBSD: Makefile.inc,v 1.44 2006/05/17 05:24:25 mrg Exp $
 #
 # Makefile for sysinst
+
+COPTS += -Os
 
 PROG=		sysinst
 NOMAN=		# defined
@@ -22,8 +24,8 @@ LANGUAGES?=	de en es fr pl
 MSG_MD?=	msg.md.${SYSINSTLANG}
 MENUS_MD?=	menus.md.${SYSINSTLANG}
 
-.include <bsd.sys.mk>		# for HOST_SH
 .include <bsd.own.mk>		# for mk.conf
+.include <bsd.sys.mk>		# for HOST_SH
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
 _MKSHTARGET_CREATE?=	${_MKSHMSG_CREATE} ${.CURDIR:T}/${.TARGET}
@@ -41,6 +43,9 @@ CPPFLAGS+=	-I. -I${.CURDIR}/../.. -I${.CURDIR} \
 CPPFLAGS+=-DINET6
 .endif
 
+.if ${HAVE_GCC} == 4
+COPTS.label.c+=	-Wno-pointer-sign
+.endif
 
 # Host to ftp from.  Default:
 #	"ftp.NetBSD.org"

@@ -1,4 +1,4 @@
-/*	$NetBSD: vars.c,v 1.14 2005/07/19 23:07:10 christos Exp $	*/
+/*	$NetBSD: vars.c,v 1.17 2006/11/28 18:45:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,11 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)vars.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: vars.c,v 1.14 2005/07/19 23:07:10 christos Exp $");
+__RCSID("$NetBSD: vars.c,v 1.17 2006/11/28 18:45:32 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include "rcv.h"
+#include <util.h>
+
 #include "extern.h"
 
 /*
@@ -48,35 +50,11 @@ __RCSID("$NetBSD: vars.c,v 1.14 2005/07/19 23:07:10 christos Exp $");
  */
 
 /*
- * Assign a value to a variable.
- */
-void
-assign(const char name[], const char values[])
-{
-	struct var *vp;
-	int h;
-
-	h = hash(name);
-	vp = lookup(name);
-	if (vp == NULL) {
-		vp = (struct var *) calloc(1, sizeof *vp);
-		if (vp == NULL)
-			errx(1, "Out of memory");
-		vp->v_name = vcopy(name);
-		vp->v_link = variables[h];
-		variables[h] = vp;
-	}
-	else
-                v_free(vp->v_value);
-	vp->v_value = vcopy(values);
-}
-
-/*
  * Free up a variable string.  We do not bother to allocate
  * strings whose value is "" since they are expected to be frequent.
  * Thus, we cannot free same!
  */
-void
+PUBLIC void
 v_free(char *cp)
 {
 	if (*cp)
@@ -87,73 +65,108 @@ v_free(char *cp)
  * Copy a variable value into permanent (ie, not collected after each
  * command) space.  Do not bother to alloc space for ""
  */
-
-char *
+PUBLIC char *
 vcopy(const char str[])
 {
 	char *new;
 	size_t len;
 
 	if (*str == '\0')
-		return strdup("");
+		return estrdup("");
 	len = strlen(str) + 1;
-	if ((new = malloc(len)) == NULL)
-		errx(1, "Out of memory");
+	new = emalloc(len);
 	(void)memmove(new, str, len);
 	return new;
 }
 
 /*
- * Get the value of a variable and return it.
- * Look in the environment if its not available locally.
+ * Hash the passed string and return an index into
+ * the variable or group hash table.
  */
-
-char *
-value(const char name[])
+PUBLIC int
+hash(const char *name)
 {
-	struct var *vp;
+	int h = 0;
 
-	if ((vp = lookup(name)) == NULL)
-		return(getenv(name));
-	return(vp->v_value);
+	while (*name) {
+		h <<= 2;
+		h += *name++;
+	}
+	if (h < 0 && (h = -h) < 0)
+		h = 0;
+	return h % HSHSIZE;
 }
 
 /*
  * Locate a variable and return its variable
  * node.
  */
-
-struct var *
+PUBLIC struct var *
 lookup(const char name[])
 {
 	struct var *vp;
 
 	for (vp = variables[hash(name)]; vp != NULL; vp = vp->v_link)
 		if (*vp->v_name == *name && equal(vp->v_name, name))
-			return(vp);
-	return(NULL);
+			return vp;
+	return NULL;
+}
+
+/*
+ * Assign a value to a variable.
+ */
+PUBLIC void
+assign(const char name[], const char values[])
+{
+	struct var *vp;
+	int h;
+
+	h = hash(name);
+	vp = lookup(name);
+	if (vp == NULL) {
+		vp = (struct var *) ecalloc(1, sizeof *vp);
+		vp->v_name = vcopy(name);
+		vp->v_link = variables[h];
+		variables[h] = vp;
+	}
+	else
+                v_free(vp->v_value);
+	vp->v_value = vcopy(values);
+}
+
+/*
+ * Get the value of a variable and return it.
+ * Look in the environment if its not available locally.
+ */
+PUBLIC char *
+value(const char name[])
+{
+	struct var *vp;
+
+	if ((vp = lookup(name)) == NULL)
+		return getenv(name);
+	return vp->v_value;
 }
 
 /*
  * Locate a group name and return it.
  */
-
-struct grouphead *
-findgroup(char name[])
+PUBLIC struct grouphead *
+findgroup(const char name[])
 {
 	struct grouphead *gh;
 
 	for (gh = groups[hash(name)]; gh != NULL; gh = gh->g_link)
 		if (*gh->g_name == *name && equal(gh->g_name, name))
-			return(gh);
-	return(NULL);
+			return gh;
+	return NULL;
 }
 
 /*
  * Print a group out on stdout
  */
-void
-printgroup(char name[])
+PUBLIC void
+printgroup(const char name[])
 {
 	struct grouphead *gh;
 	struct group *gp;
@@ -166,22 +179,4 @@ printgroup(char name[])
 	for (gp = gh->g_list; gp != NULL; gp = gp->ge_link)
 		(void)printf(" %s", gp->ge_name);
 	(void)putchar('\n');
-}
-
-/*
- * Hash the passed string and return an index into
- * the variable or group hash table.
- */
-int
-hash(const char *name)
-{
-	int h = 0;
-
-	while (*name) {
-		h <<= 2;
-		h += *name++;
-	}
-	if (h < 0 && (h = -h) < 0)
-		h = 0;
-	return (h % HSHSIZE);
 }

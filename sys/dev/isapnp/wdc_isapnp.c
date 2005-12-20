@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_isapnp.c,v 1.32 2005/12/11 12:22:16 christos Exp $	*/
+/*	$NetBSD: wdc_isapnp.c,v 1.36 2006/11/16 01:33:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_isapnp.c,v 1.32 2005/12/11 12:22:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_isapnp.c,v 1.36 2006/11/16 01:33:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,7 +82,8 @@ static void	wdc_isapnp_dma_finish(void *);
 #endif
 
 static int
-wdc_isapnp_probe(struct device *parent, struct cfdata *match, void *aux)
+wdc_isapnp_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -93,9 +94,10 @@ wdc_isapnp_probe(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-wdc_isapnp_attach(struct device *parent, struct device *self, void *aux)
+wdc_isapnp_attach(struct device *parent, struct device *self,
+    void *aux)
 {
-	struct wdc_isapnp_softc *sc = (void *)self;
+	struct wdc_isapnp_softc *sc = device_private(self);
 	struct wdc_regs *wdr;
 	struct isapnp_attach_args *ipa = aux;
 	int i;
@@ -165,6 +167,7 @@ wdc_isapnp_attach(struct device *parent, struct device *self, void *aux)
 	sc->ata_channel.ch_channel = 0;
 	sc->ata_channel.ch_atac = &sc->sc_wdcdev.sc_atac;
 	sc->ata_channel.ch_queue = &sc->wdc_chqueue;
+	sc->ata_channel.ch_ndrive = 2;
 
 	wdc_init_shadow_regs(&sc->ata_channel);
 

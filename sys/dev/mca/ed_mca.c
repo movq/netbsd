@@ -1,4 +1,4 @@
-/*	$NetBSD: ed_mca.c,v 1.31 2005/12/11 12:22:18 christos Exp $	*/
+/*	$NetBSD: ed_mca.c,v 1.34 2006/11/16 01:33:05 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ed_mca.c,v 1.31 2005/12/11 12:22:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ed_mca.c,v 1.34 2006/11/16 01:33:05 christos Exp $");
 
 #include "rnd.h"
 
@@ -119,10 +119,8 @@ static struct dkdriver eddkdriver = { edmcastrategy, minphys };
  * Just check if it's possible to identify the disk.
  */
 static int
-ed_mca_probe(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ed_mca_probe(struct device *parent, struct cfdata *cf,
+    void *aux)
 {
 	u_int16_t cmd_args[2];
 	struct edc_mca_softc *sc = (void *) parent;
@@ -145,8 +143,8 @@ ed_mca_attach(parent, self, aux)
 	struct device *parent, *self;
 	void *aux;
 {
-	struct ed_softc *ed = (void *) self;
-	struct edc_mca_softc *sc = (void *) parent;
+	struct ed_softc *ed = device_private(self);
+	struct edc_mca_softc *sc = device_private(parent);
 	struct ed_attach_args *eda = (struct ed_attach_args *) aux;
 	char pbuf[8];
 	int drv_flags;
@@ -273,30 +271,21 @@ done:
 }
 
 int
-edmcaread(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+edmcaread(dev_t dev, struct uio *uio, int flags)
 {
 	ATADEBUG_PRINT(("edread\n"), DEBUG_XFERS);
 	return (physio(edmcastrategy, NULL, dev, B_READ, minphys, uio));
 }
 
 int
-edmcawrite(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+edmcawrite(dev_t dev, struct uio *uio, int flags)
 {
 	ATADEBUG_PRINT(("edwrite\n"), DEBUG_XFERS);
 	return (physio(edmcastrategy, NULL, dev, B_WRITE, minphys, uio));
 }
 
 int
-edmcaopen(dev, flag, fmt, l)
-	dev_t dev;
-	int flag, fmt;
-	struct lwp *l;
+edmcaopen(dev_t dev, int flag, int fmt, struct lwp *l)
 {
 	struct ed_softc *wd;
 	int part, error;
@@ -374,10 +363,7 @@ edmcaopen(dev, flag, fmt, l)
 }
 
 int
-edmcaclose(dev, flag, fmt, l)
-	dev_t dev;
-	int flag, fmt;
-	struct lwp *l;
+edmcaclose(dev_t dev, int flag, int fmt, struct lwp *l)
 {
 	struct ed_softc *wd = device_lookup(&ed_cd, DISKUNIT(dev));
 	int part = DISKPART(dev);

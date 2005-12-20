@@ -1,4 +1,4 @@
-/*	$NetBSD: if_rtk_pci.c,v 1.23 2005/12/11 12:22:49 christos Exp $	*/
+/*	$NetBSD: if_rtk_pci.c,v 1.30 2006/11/16 01:33:09 christos Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_rtk_pci.c,v 1.23 2005/12/11 12:22:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_rtk_pci.c,v 1.30 2006/11/16 01:33:09 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,7 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_rtk_pci.c,v 1.23 2005/12/11 12:22:49 christos Exp
  * on the part of Realtek. Memory mapped mode does appear to work on
  * uniprocessor systems though.
  */
-#ifndef dreamcast		/* XXX */
+#if !defined(__sh__)		/* XXX: dreamcast, landisk */
 #define RTK_USEIOSPACE
 #endif
 
@@ -116,6 +116,8 @@ static const struct rtk_type rtk_pci_devs[] = {
 		RTK_8139, "SEGA Broadband Adapter" },
 	{ PCI_VENDOR_DLINK, PCI_PRODUCT_DLINK_DFE530TXPLUS,
 		RTK_8139, "D-Link Systems DFE 530TX+" },
+	{ PCI_VENDOR_NORTEL, PCI_PRODUCT_NORTEL_BAYSTACK_21,
+		RTK_8139, "Baystack 21 (MPX EN5038) 10/100BaseTX" },
 	{ 0, 0, 0, NULL }
 };
 
@@ -141,7 +143,8 @@ rtk_pci_lookup(const struct pci_attach_args *pa)
 }
 
 static int
-rtk_pci_match(struct device *parent, struct cfdata *match, void *aux)
+rtk_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -176,15 +179,15 @@ rtk_pci_attach(struct device *parent, struct device *self, void *aux)
 		printf("\n");
 		panic("rtk_pci_attach: impossible");
 	}
-	printf(": %s\n", t->rtk_name);
+	printf(": %s (rev. 0x%02x)\n", t->rtk_name, PCI_REVISION(pa->pa_class));
 
 	/*
 	 * Handle power management nonsense.
 	 */
 
 	if (pci_get_capability(pc, pa->pa_tag, PCI_CAP_PWRMGMT, &pmreg, 0)) {
-		command = pci_conf_read(pc, pa->pa_tag, pmreg + 4);
-		if (command & RTK_PSTATE_MASK) {
+		command = pci_conf_read(pc, pa->pa_tag, pmreg + PCI_PMCSR);
+		if (command & PCI_PMCSR_STATE_MASK) {
 			pcireg_t iobase, membase, irq;
 
 			/* Save important PCI config data. */
@@ -195,9 +198,10 @@ rtk_pci_attach(struct device *parent, struct device *self, void *aux)
 			/* Reset the power state. */
 			printf("%s: chip is in D%d power mode "
 			    "-- setting to D0\n", sc->sc_dev.dv_xname,
-			    command & RTK_PSTATE_MASK);
-			command &= 0xFFFFFFFC;
-			pci_conf_write(pc, pa->pa_tag, pmreg + 4, command);
+			    command & PCI_PMCSR_STATE_MASK);
+			command &= ~PCI_PMCSR_STATE_MASK;
+			pci_conf_write(pc, pa->pa_tag,
+			    pmreg + PCI_PMCSR, command);
 
 			/* Restore PCI config data. */
 			pci_conf_write(pc, pa->pa_tag, RTK_PCI_LOIO, iobase);
@@ -246,7 +250,8 @@ rtk_pci_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_dmat = pa->pa_dmat;
 	sc->sc_flags |= RTK_ENABLED;
 
-	psc->sc_powerhook = powerhook_establish(rtk_pci_powerhook, psc);
+	psc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
+	    rtk_pci_powerhook, psc);
 	if (psc->sc_powerhook == NULL)
 		printf("%s: WARNING: unable to establish pci power hook\n",
 			sc->sc_dev.dv_xname);

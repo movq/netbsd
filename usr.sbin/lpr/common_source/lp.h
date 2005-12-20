@@ -1,4 +1,4 @@
-/*	$NetBSD: lp.h,v 1.19 2005/11/28 03:26:06 christos Exp $	*/
+/*	$NetBSD: lp.h,v 1.22 2006/03/21 22:47:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -55,6 +55,7 @@ extern const char	*MS;	/* stty flags to set if lp is a tty */
 extern long		 MX;	/* maximum number of blocks to copy */
 extern const char	*NF;	/* name of ditroff(1) filter (per job) */
 extern const char	*OF;	/* name of output filter (created once) */
+extern const char	*PF;	/* name of postscript filter (per job) */
 extern long		 PL;	/* page length */
 extern long		 PW;	/* page width */
 extern long		 PX;	/* page width in pixels */
@@ -107,8 +108,10 @@ void     dump(const char *, const char *, int);
 void	 fatal(const char *, ...)
 	__attribute__((__format__(__printf__, 1, 2)));
 int	 getline(FILE *);
-int	 getport(const char *, int);
+const char *gethost(const char *);
+int	 getport(const char *);
 int	 getq(struct queue *(*[]));
+void	 freeq(struct queue **, u_int);
 void     header(void);
 void     inform(const char *);
 int      inlist(const char *, const char *);

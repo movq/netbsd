@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fmv_isa.c,v 1.5 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: if_fmv_isa.c,v 1.9 2006/11/16 01:33:00 christos Exp $	*/
 
 /*
  * All Rights Reserved, Copyright (C) Fujitsu Limited 1995
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_fmv_isa.c,v 1.5 2005/12/11 12:22:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_fmv_isa.c,v 1.9 2006/11/16 01:33:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,7 +71,7 @@ struct fe_simple_probe_struct {
 	uint8_t bits;	/* Values to be compared against. */
 };
 
-static __inline__ int fe_simple_probe(bus_space_tag_t, bus_space_handle_t,
+static inline int fe_simple_probe(bus_space_tag_t, bus_space_handle_t,
     struct fe_simple_probe_struct const *);
 static int fmv_find(bus_space_tag_t, bus_space_handle_t, int *, int *);
 
@@ -95,7 +95,8 @@ static int const fmv_iomap[8] = {
  * Determine if the device is present.
  */
 int
-fmv_isa_match(struct device *parent, struct cfdata *match, void *aux)
+fmv_isa_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -178,7 +179,7 @@ fmv_isa_match(struct device *parent, struct cfdata *match, void *aux)
 /*
  * Check for specific bits in specific registers have specific values.
  */
-static __inline__ int
+static inline int
 fe_simple_probe(bus_space_tag_t iot, bus_space_handle_t ioh,
     struct fe_simple_probe_struct const *sp)
 {
@@ -236,7 +237,7 @@ fmv_find(bus_space_tag_t iot, bus_space_handle_t ioh, int *iobase, int *irq)
 	 */
 		{ FE_FMV4, 0x03, 0x00 },
 #endif
-		{ 0 }
+		{ 0,	   0x00, 0x00 },
 	};
 
 	/* Simple probe. */
@@ -260,7 +261,8 @@ fmv_find(bus_space_tag_t iot, bus_space_handle_t ioh, int *iobase, int *irq)
 }
 
 void
-fmv_isa_attach(struct device *parent, struct device *self, void *aux)
+fmv_isa_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct fmv_isa_softc *isc = (struct fmv_isa_softc *)self;
 	struct mb86960_softc *sc = &isc->sc_mb86960;

@@ -1,4 +1,4 @@
-/*	$NetBSD: pigs.c,v 1.28 2005/02/26 22:12:33 dsl Exp $	*/
+/*	$NetBSD: pigs.c,v 1.30 2006/10/22 16:43:24 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1992, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pigs.c	8.2 (Berkeley) 9/23/93";
 #endif
-__RCSID("$NetBSD: pigs.c,v 1.28 2005/02/26 22:12:33 dsl Exp $");
+__RCSID("$NetBSD: pigs.c,v 1.30 2006/10/22 16:43:24 christos Exp $");
 #endif /* not lint */
 
 /*
@@ -51,8 +51,8 @@ __RCSID("$NetBSD: pigs.c,v 1.28 2005/02/26 22:12:33 dsl Exp $");
 #include <stdlib.h>
 #include <string.h>
 
-#include "extern.h"
 #include "systat.h"
+#include "extern.h"
 #include "ps.h"
 
 int compare_pctcpu(const void *, const void *);
@@ -143,12 +143,12 @@ showpigs(void)
 static struct nlist namelist[] = {
 #define X_FIRST		0
 #define X_CCPU          0
-	{ "_ccpu" },
+	{ .n_name = "_ccpu" },
 #define X_FSCALE        1
-	{ "_fscale" },
+	{ .n_name = "_fscale" },
 #define X_PHYSMEM	2
-	{ "_physmem" },
-	{ "" }
+	{ .n_name = "_physmem" },
+	{ .n_name = NULL }
 };
 
 int

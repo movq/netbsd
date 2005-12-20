@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.35 2005/12/11 12:19:02 christos Exp $	*/
+/*	$NetBSD: trap.c,v 1.42 2006/09/04 20:08:56 scw Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -111,7 +111,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.35 2005/12/11 12:19:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.42 2006/09/04 20:08:56 scw Exp $");
 
 #include "opt_ddb.h"
 
@@ -123,6 +123,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.35 2005/12/11 12:19:02 christos Exp $");
 #include <sys/sa.h>
 #include <sys/savar.h>
 #include <sys/userret.h>
+#include <sys/kauth.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -176,13 +177,13 @@ trap(struct lwp *l, struct trapframe *tf)
 		KDASSERT(l != NULL);
 		traptype |= T_USER;
 		l->l_md.md_regs = tf;
-	} else
-	if (l == NULL)
+		LWP_CACHE_CREDS(l, l->l_proc);
+	} else if (l == NULL)
 		l = &lwp0;
 
+	p = l->l_proc;
 	pcb_onfault = l->l_addr->u_pcb.pcb_onfault;
 	l->l_addr->u_pcb.pcb_onfault = NULL;
-	p = l->l_proc;
 	vaddr = (vaddr_t) tf->tf_state.sf_tea;
 
 	switch (traptype) {
@@ -193,9 +194,9 @@ trap(struct lwp *l, struct trapframe *tf)
 			register_t sr;
 
 			/* Make sure the FPU is enabled */
-			__asm __volatile("getcon sr, %0" : "=r"(sr));
+			__asm volatile("getcon sr, %0" : "=r"(sr));
 			sr &= ~SH5_CONREG_SR_FD;
-			__asm __volatile("putcon %0, sr" :: "r"(sr));
+			__asm volatile("putcon %0, sr" :: "r"(sr));
 		}
 		printf("\ntrap: %s in %s mode\n",
 		    trap_type(traptype), USERMODE(tf) ? "user" : "kernel");
@@ -313,7 +314,7 @@ trap(struct lwp *l, struct trapframe *tf)
 			l->l_savp->savp_faultaddr = (vaddr_t)vaddr;
 			l->l_flag |= L_SA_PAGEFAULT;
 		}
-		rv = uvm_fault(map, va, 0, ftype);
+		rv = uvm_fault(map, va, ftype);
 
 		/*
 		 * If this was a stack access we keep track of the maximum
@@ -352,8 +353,8 @@ trap(struct lwp *l, struct trapframe *tf)
 		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			    p->p_pid, p->p_comm,
-			    (p->p_cred && p->p_ucred) ?
-			    p->p_ucred->cr_uid : -1);
+			    l->l_cred ?
+			    kauth_cred_geteuid(l->l_cred) : -1);
 			ksi.ksi_signo = SIGKILL;
 		} else
 		if (rv == EACCES)
@@ -367,7 +368,7 @@ trap(struct lwp *l, struct trapframe *tf)
 		int rv;
 
 		va = trunc_page(vaddr);
-		rv = uvm_fault(kernel_map, va, 0, ftype);
+		rv = uvm_fault(kernel_map, va, ftype);
 		if (rv == 0) {
 			l->l_addr->u_pcb.pcb_onfault = pcb_onfault;
 			return;
@@ -543,6 +544,7 @@ trapa(struct lwp *l, struct trapframe *tf)
 			/*NOTREACHED*/
 		}
 #endif
+		LWP_CACHE_CREDS(l, l->l_proc);
 		(l->l_proc->p_md.md_syscall)(l, tf);
 		userret(l);
 		break;
@@ -580,9 +582,9 @@ panic_trap(struct trapframe *tf, register_t ssr, register_t spc,
 		register_t sr;
 
 		/* Make sure the FPU is enabled */
-		__asm __volatile("getcon sr, %0" : "=r"(sr));
+		__asm volatile("getcon sr, %0" : "=r"(sr));
 		sr &= ~SH5_CONREG_SR_FD;
-		__asm __volatile("putcon %0, sr" :: "r"(sr));
+		__asm volatile("putcon %0, sr" :: "r"(sr));
 	}
 
 	/*

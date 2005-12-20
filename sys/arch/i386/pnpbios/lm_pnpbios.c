@@ -1,4 +1,4 @@
-/*	$NetBSD: lm_pnpbios.c,v 1.10 2005/12/11 12:17:47 christos Exp $ */
+/*	$NetBSD: lm_pnpbios.c,v 1.12 2006/11/24 22:04:23 wiz Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lm_pnpbios.c,v 1.10 2005/12/11 12:17:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lm_pnpbios.c,v 1.12 2006/11/24 22:04:23 wiz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,7 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: lm_pnpbios.c,v 1.10 2005/12/11 12:17:47 christos Exp
 int lm_pnpbios_match(struct device *, struct cfdata *, void *);
 void lm_pnpbios_attach(struct device *, struct device *, void *);
 int lm_pnpbios_hints_index(const char *);
-u_int8_t lm_pnpbios_readreg(struct lm_softc *, int);
+uint8_t lm_pnpbios_readreg(struct lm_softc *, int);
 void lm_pnpbios_writereg(struct lm_softc *, int, int);
 
 
@@ -155,14 +155,14 @@ lm_pnpbios_attach(parent, self, aux)
 
 	printf("%s", self->dv_xname);
 
-	/* Bus-independant attach */
+	/* Bus-independent attach */
 	sc->lm_writereg = lm_pnpbios_writereg;
 	sc->lm_readreg = lm_pnpbios_readreg;
 
 	lm_attach(sc);
 }
 
-u_int8_t
+uint8_t
 lm_pnpbios_readreg(sc, reg)
 	struct lm_softc *sc;
 	int reg;

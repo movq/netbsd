@@ -1,4 +1,4 @@
-/*	$NetBSD: profile.h,v 1.22 2005/10/02 15:34:17 chs Exp $	*/
+/*	$NetBSD: profile.h,v 1.25 2006/02/16 20:17:13 perry Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -49,7 +49,7 @@
 
 #define	MCOUNT \
 MCOUNT_COMPAT								\
-extern void mcount(void) __asm__(MCOUNT_ENTRY)				\
+extern void mcount(void) __asm(MCOUNT_ENTRY)				\
 	__attribute__((__no_instrument_function__));			\
 void									\
 mcount(void)								\
@@ -61,11 +61,11 @@ mcount(void)								\
 	 *								\
 	 * selfpc = pc pushed by mcount call				\
 	 */								\
-	__asm__ __volatile__("movl 4(%%ebp),%0" : "=r" (selfpc));	\
+	__asm volatile("movl 4(%%ebp),%0" : "=r" (selfpc));	\
 	/*								\
 	 * frompcindex = pc pushed by call into self.			\
 	 */								\
-	__asm__ __volatile__("movl (%%ebp),%0;movl 4(%0),%0"		\
+	__asm volatile("movl (%%ebp),%0;movl 4(%0),%0"		\
 	    : "=r" (frompcindex));					\
 	_mcount((u_long)frompcindex, (u_long)selfpc);			\
 }

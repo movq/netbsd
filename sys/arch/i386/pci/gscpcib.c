@@ -1,4 +1,4 @@
-/* $NetBSD: gscpcib.c,v 1.3 2005/12/11 12:17:43 christos Exp $ */
+/* $NetBSD: gscpcib.c,v 1.8 2006/11/16 01:32:39 christos Exp $ */
 /*	$OpenBSD: gscpcib.c,v 1.3 2004/10/05 19:02:33 grange Exp $	*/
 /*
  * Copyright (c) 2004 Alexander Yurchenko <grange@openbsd.org>
@@ -64,7 +64,8 @@ CFATTACH_DECL(gscpcib, sizeof(struct gscpcib_softc),
 extern struct cfdriver gscpcib_cd;
 
 int
-gscpcib_match(struct device *parent, struct cfdata *match, void *aux)
+gscpcib_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -82,7 +83,6 @@ gscpcib_match(struct device *parent, struct cfdata *match, void *aux)
 void
 gscpcib_attach(struct device *parent, struct device *self, void *aux)
 {
-#ifndef SMALL_KERNEL
 	struct gscpcib_softc *sc = (struct gscpcib_softc *)self;
 	struct pci_attach_args *pa = aux;
 	struct gpiobus_attach_args gba;
@@ -127,19 +127,15 @@ gscpcib_attach(struct device *parent, struct device *self, void *aux)
 	gpio_present = 1;
 
 corepcib:
-#endif	/* !SMALL_KERNEL */
 	/* Provide core pcib(4) functionality */
 	pcibattach(parent, self, aux);
 
-#ifndef SMALL_KERNEL
 	/* Attach GPIO framework */
 	if (gpio_present)
 		config_found_ia(&sc->sc_dev, "gpiobus", &gba, gpiobus_print);
-#endif	/* !SMALL_KERNEL */
 }
 
-#ifndef SMALL_KERNEL
-static __inline void
+static inline void
 gscpcib_gpio_pin_select(struct gscpcib_softc *sc, int pin)
 {
 	bus_space_write_4(sc->sc_gpio_iot, sc->sc_gpio_ioh, GSCGPIO_SEL, pin);
@@ -150,7 +146,7 @@ gscpcib_gpio_pin_read(void *arg, int pin)
 {
 	struct gscpcib_softc *sc = arg;
 	int reg, shift;
-	u_int32_t data;
+	uint32_t data;
 
 	reg = (pin < 32 ? GSCGPIO_GPDI0 : GSCGPIO_GPDI1);
 	shift = pin % 32;
@@ -164,7 +160,7 @@ gscpcib_gpio_pin_write(void *arg, int pin, int value)
 {
 	struct gscpcib_softc *sc = arg;
 	int reg, shift;
-	u_int32_t data;
+	uint32_t data;
 
 	reg = (pin < 32 ? GSCGPIO_GPDO0 : GSCGPIO_GPDO1);
 	shift = pin % 32;
@@ -181,7 +177,7 @@ void
 gscpcib_gpio_pin_ctl(void *arg, int pin, int flags)
 {
 	struct gscpcib_softc *sc = arg;
-	u_int32_t conf;
+	uint32_t conf;
 
 	gscpcib_gpio_pin_select(sc, pin);
 	conf = bus_space_read_4(sc->sc_gpio_iot, sc->sc_gpio_ioh,
@@ -198,4 +194,3 @@ gscpcib_gpio_pin_ctl(void *arg, int pin, int flags)
 	bus_space_write_4(sc->sc_gpio_iot, sc->sc_gpio_ioh,
 	    GSCGPIO_CONF, conf);
 }
-#endif	/* !SMALL_KERNEL */

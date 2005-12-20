@@ -1,4 +1,5 @@
-/*	$NetBSD: auth-krb5.c,v 1.15 2005/02/13 05:57:26 christos Exp $	*/
+/*	$NetBSD: auth-krb5.c,v 1.17 2006/09/28 21:22:14 christos Exp $	*/
+/* $OpenBSD: auth-krb5.c,v 1.19 2006/08/03 03:34:41 deraadt Exp $ */
 /*
  *    Kerberos v5 authentication and ticket-passing routines.
  *
@@ -29,16 +30,22 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: auth-krb5.c,v 1.15 2003/11/21 11:57:02 djm Exp $");
-__RCSID("$NetBSD: auth-krb5.c,v 1.15 2005/02/13 05:57:26 christos Exp $");
+__RCSID("$NetBSD: auth-krb5.c,v 1.17 2006/09/28 21:22:14 christos Exp $");
+#include <sys/types.h>
+#include <pwd.h>
+#include <stdarg.h>
+#include <string.h>
 
+#include "xmalloc.h"
 #include "ssh.h"
 #include "ssh1.h"
 #include "packet.h"
-#include "xmalloc.h"
 #include "log.h"
+#include "buffer.h"
 #include "servconf.h"
 #include "uidswap.h"
+#include "key.h"
+#include "hostfile.h"
 #include "auth.h"
 
 #ifdef KRB5
@@ -183,6 +190,10 @@ auth_krb5_tgt(Authctxt *authctxt, krb5_data *tgt)
 	if (problem)
 		goto fail;
 
+#ifdef USE_PAM
+	if (options.use_pam)
+		do_pam_putenv("KRB5CCNAME", authctxt->krb5_ticket_file);
+#endif
 	debug("Kerberos v5 TGT accepted (%s)", pname);
 
 	restore_uid();
@@ -207,9 +218,6 @@ auth_krb5_password(Authctxt *authctxt, const char *password)
 {
 	krb5_error_code problem;
 	krb5_ccache ccache = NULL;
-
-	if (!authctxt->valid)
-		return (0);
 
 	temporarily_use_uid(authctxt->pw);
 
@@ -277,7 +285,7 @@ auth_krb5_password(Authctxt *authctxt, const char *password)
 		else
 			return (0);
 	}
-	return (1);
+	return (authctxt->valid ? 1 : 0);
 }
 
 void

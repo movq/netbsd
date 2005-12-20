@@ -1,4 +1,4 @@
-/*	$NetBSD: aic79xx_inline.h,v 1.11 2005/12/11 12:21:25 christos Exp $	*/
+/*	$NetBSD: aic79xx_inline.h,v 1.15 2006/11/16 01:32:50 christos Exp $	*/
 
 /*
  * Inline routines shareable across OS platforms.
@@ -134,7 +134,7 @@ ahd_update_modes(struct ahd_softc *ahd)
 
 static __inline void
 ahd_assert_modes(struct ahd_softc *ahd, ahd_mode srcmode,
-		 ahd_mode dstmode, const char *file, int line)
+     ahd_mode dstmode, const char *file, int line)
 {
 #ifdef AHD_DEBUG
 	if ((srcmode & AHD_MK_MSK(ahd->src_mode)) == 0

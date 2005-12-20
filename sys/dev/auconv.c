@@ -1,4 +1,4 @@
-/*	$NetBSD: auconv.c,v 1.13 2005/12/11 12:20:53 christos Exp $	*/
+/*	$NetBSD: auconv.c,v 1.19 2006/11/16 01:32:44 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auconv.c,v 1.13 2005/12/11 12:20:53 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auconv.c,v 1.19 2006/11/16 01:32:44 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/audioio.h>
@@ -198,7 +198,7 @@ static const struct conv_table alaw_table[] = {
 	{0, 0, 0, NULL, NULL}};
 #endif
 #ifdef AUCONV_DEBUG
-static const char *encoding_names[] = {
+static const char *encoding_dbg_names[] = {
 	"none", AudioEmulaw, AudioEalaw, "pcm16",
 	"pcm8", AudioEadpcm, AudioEslinear_le, AudioEslinear_be,
 	AudioEulinear_le, AudioEulinear_be,
@@ -480,8 +480,8 @@ DEFINE_FILTER(linear16_to_linear8)
  */
 int
 auconv_set_converter(const struct audio_format *formats, int nformats,
-		     int mode, const audio_params_t *param, int rateconv,
-		     stream_filter_list_t *list)
+    int mode, const audio_params_t *param, int rateconv,
+    stream_filter_list_t *list)
 {
 	audio_params_t work;
 	const struct conv_table *table;
@@ -751,7 +751,7 @@ auconv_dump_formats(const struct audio_format *formats, int nformats)
 		} else {
 			printf("0x%x", f->mode);
 		}
-		printf(" enc=%s", encoding_names[f->encoding]);
+		printf(" enc=%s", encoding_dbg_names[f->encoding]);
 		printf(" %u/%ubit", f->validbits, f->precision);
 		printf(" %uch", f->channels);
 
@@ -783,7 +783,7 @@ auconv_dump_formats(const struct audio_format *formats, int nformats)
 static void
 auconv_dump_params(const audio_params_t *p)
 {
-	printf("enc=%s", encoding_names[p->encoding]);
+	printf("enc=%s", encoding_dbg_names[p->encoding]);
 	printf(" %u/%ubit", p->validbits, p->precision);
 	printf(" %uch", p->channels);
 	printf(" %uHz", p->sample_rate);
@@ -809,7 +809,8 @@ auconv_exact_match(const struct audio_format *formats, int nformats,
 	auconv_dump_params(param);
 	enc = auconv_normalize_encoding(param->encoding,
 					param->precision);
-	DPRINTF(("%s: target normalized: %s\n", __func__, encoding_names[enc]));
+	DPRINTF(("%s: target normalized: %s\n", __func__,
+	    encoding_dbg_names[enc]));
 	for (i = 0; i < nformats; i++) {
 		if (!AUFMT_IS_VALID(&formats[i]))
 			continue;
@@ -817,8 +818,8 @@ auconv_exact_match(const struct audio_format *formats, int nformats,
 			continue;
 		f_enc = auconv_normalize_encoding(formats[i].encoding,
 						  formats[i].precision);
-		DPRINTF(("%s: formtat[%d] normalized: %s\n",
-			 __func__, i, encoding_names[f_enc]));
+		DPRINTF(("%s: format[%d] normalized: %s\n",
+			 __func__, i, encoding_dbg_names[f_enc]));
 		if (f_enc != enc)
 			continue;
 		/**
@@ -928,6 +929,10 @@ auconv_create_encodings(const struct audio_format *formats, int nformats,
 
 	capacity = 10;
 	buf = AUCONV_MALLOC(ENCODING_SET_SIZE(capacity));
+	if (buf == NULL) {
+		err = ENOMEM;
+		goto err_exit;
+	}
 	buf->size = 0;
 	for (i = 0; i < nformats; i++) {
 		if (!AUFMT_IS_VALID(&formats[i]))

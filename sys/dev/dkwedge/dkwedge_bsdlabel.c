@@ -1,4 +1,4 @@
-/*	$NetBSD: dkwedge_bsdlabel.c,v 1.4 2005/12/11 12:21:20 christos Exp $	*/
+/*	$NetBSD: dkwedge_bsdlabel.c,v 1.9 2006/11/16 01:32:50 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dkwedge_bsdlabel.c,v 1.4 2005/12/11 12:21:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dkwedge_bsdlabel.c,v 1.9 2006/11/16 01:32:50 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -164,7 +164,6 @@ bsdlabel_fstype_to_str(uint8_t fstype)
 	case FS_RAID:		str = DKW_PTYPE_RAIDFRAME;	break;
 	case FS_CCD:		str = DKW_PTYPE_CCD;		break;
 	case FS_APPLEUFS:	str = DKW_PTYPE_APPLEUFS;	break;
-	case FS_VINUM:		str = "vinum";			break;
 	default:		str = NULL;			break;
 	}
 
@@ -420,7 +419,7 @@ scan_mbr(mbr_args_t *a, int (*actn)(mbr_args_t *, struct mbr_partition *,
 
 static int
 look_netbsd_part(mbr_args_t *a, struct mbr_partition *dp, int slot,
-		 u_int ext_base)
+    u_int ext_base)
 {
 	int ptn_base = ext_base + le32toh(dp->mbrp_start);
 	int rval;

@@ -1,4 +1,4 @@
-/* $NetBSD: utilities.c,v 1.22 2005/09/13 04:14:17 christos Exp $	 */
+/* $NetBSD: utilities.c,v 1.26 2006/11/09 19:36:36 christos Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -118,6 +118,9 @@ reply(const char *question)
 static void
 write_superblocks(void)
 {
+	if (debug)
+		pwarn("writing superblocks with lfs_idaddr = 0x%x\n",
+			(int)fs->lfs_idaddr);
 	lfs_writesuper(fs, fs->lfs_sboffs[0]);
 	lfs_writesuper(fs, fs->lfs_sboffs[1]);
 	fsmodified = 1;
@@ -136,12 +139,12 @@ ckfini(int markclean)
 		}
 	}
 
-	if ((fs->lfs_pflags & LFS_PF_CLEAN) == 0) {
+	if (!nflag && (fs->lfs_pflags & LFS_PF_CLEAN) == 0) {
+		fs->lfs_pflags |= LFS_PF_CLEAN;
 		fsmodified = 1;
 	}
-	fs->lfs_pflags |= LFS_PF_CLEAN;
 
-	if (fsmodified && (preen || reply("UPDATE STANDARD SUPERBLOCK"))) {
+	if (fsmodified && (preen || reply("UPDATE SUPERBLOCKS"))) {
 		sbdirty();
 		write_superblocks();
 	}
@@ -220,6 +223,8 @@ namelookup:
 		idesc.id_parent = ino;
 		idesc.id_func = findname;
 		idesc.id_name = namebuf;
+		if (ginode(idesc.id_number) == NULL)
+			break;
 		if ((ckinode(ginode(idesc.id_number), &idesc) & FOUND) == 0)
 			break;
 		len = strlen(namebuf);
@@ -300,7 +305,7 @@ dofix(struct inodesc * idesc, const char *msg)
 		return (0);
 
 	default:
-		err(8, "UNKNOWN INODESC FIX MODE %d\n", idesc->id_fix);
+		err(EEXIT, "UNKNOWN INODESC FIX MODE %d\n", idesc->id_fix);
 	}
 	/* NOTREACHED */
 }

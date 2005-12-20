@@ -1,4 +1,4 @@
-/*	$NetBSD: touchwin.c,v 1.20 2003/10/05 10:13:03 jdc Exp $	*/
+/*	$NetBSD: touchwin.c,v 1.22 2006/08/23 19:23:55 jdc Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)touchwin.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: touchwin.c,v 1.20 2003/10/05 10:13:03 jdc Exp $");
+__RCSID("$NetBSD: touchwin.c,v 1.22 2006/08/23 19:23:55 jdc Exp $");
 #endif
 #endif				/* not lint */
 
@@ -62,6 +62,9 @@ is_linetouched(WINDOW *win, int line)
 int
 touchline(WINDOW *win, int start, int count)
 {
+#ifdef DEBUG
+	__CTRACE("touchline: (%p, %d, %d)\n", win, start, count);
+#endif
 	return wtouchln(win, start, count, 1);
 }
 
@@ -129,6 +132,9 @@ redrawwin(WINDOW *win)
 int
 untouchwin(WINDOW *win)
 {
+#ifdef DEBUG
+	__CTRACE("untouchwin: (%p)\n", win);
+#endif
 	return wtouchln(win, 0, win->maxy, 0);
 }
 
@@ -146,6 +152,8 @@ wtouchln(WINDOW *win, int line, int n, int changed)
 #ifdef DEBUG
 	__CTRACE("wtouchln: (%p) %d, %d, %d\n", win, line, n, changed);
 #endif
+	if (line + n > win->maxy)
+		line = win->maxy - n;
 	for (y = line; y < line + n; y++) {
 		if (changed == 1)
 			__touchline(win, y, 0, (int) win->maxx - 1);
@@ -163,7 +171,6 @@ wtouchln(WINDOW *win, int line, int n, int changed)
 
 	return OK;
 }
-
 		
 int
 __touchwin(WINDOW *win)
@@ -171,7 +178,7 @@ __touchwin(WINDOW *win)
 	int     y, maxy;
 
 #ifdef DEBUG
-	__CTRACE("touchwin: (%p)\n", win);
+	__CTRACE("__touchwin: (%p)\n", win);
 #endif
 	maxy = win->maxy;
 	for (y = 0; y < maxy; y++)
@@ -183,8 +190,8 @@ int
 __touchline(WINDOW *win, int y, int sx, int ex)
 {
 #ifdef DEBUG
-	__CTRACE("touchline: (%p, %d, %d, %d)\n", win, y, sx, ex);
-	__CTRACE("touchline: first = %d, last = %d\n",
+	__CTRACE("__touchline: (%p, %d, %d, %d)\n", win, y, sx, ex);
+	__CTRACE("__touchline: first = %d, last = %d\n",
 	    *win->lines[y]->firstchp, *win->lines[y]->lastchp);
 #endif
 	sx += win->ch_off;
@@ -197,7 +204,7 @@ __touchline(WINDOW *win, int y, int sx, int ex)
 	if (*win->lines[y]->lastchp < ex)
 		*win->lines[y]->lastchp = ex;
 #ifdef DEBUG
-	__CTRACE("touchline: first = %d, last = %d\n",
+	__CTRACE("__touchline: first = %d, last = %d\n",
 	    *win->lines[y]->firstchp, *win->lines[y]->lastchp);
 #endif
 	return (OK);

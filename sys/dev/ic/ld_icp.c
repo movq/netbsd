@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_icp.c,v 1.12 2005/12/11 12:21:27 christos Exp $	*/
+/*	$NetBSD: ld_icp.c,v 1.16 2006/11/16 01:32:51 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_icp.c,v 1.12 2005/12/11 12:21:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_icp.c,v 1.16 2006/11/16 01:32:51 christos Exp $");
 
 #include "rnd.h"
 
@@ -92,7 +92,8 @@ static const struct icp_servicecb ld_icp_servicecb = {
 };
 
 int
-ld_icp_match(struct device *parent, struct cfdata *match, void *aux)
+ld_icp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct icp_attach_args *icpa;
 
@@ -200,7 +201,7 @@ ld_icp_dobio(struct ld_icp_softc *sc, void *data, int datasize, int blkno,
 	struct icp_softc *icp;
 	int s, rv;
 
-	icp = (struct icp_softc *)sc->sc_ld.sc_dv.dv_parent;
+	icp = (struct icp_softc *)device_parent(&sc->sc_ld.sc_dv);
 
 	/*
 	 * Allocate a command control block.
@@ -280,7 +281,7 @@ ld_icp_flush(struct ld_softc *ld)
 	int rv;
 
 	sc = (struct ld_icp_softc *)ld;
-	icp = (struct icp_softc *)ld->sc_dv.dv_parent;
+	icp = (struct icp_softc *)device_parent(&ld->sc_dv);
 
 	ic = icp_ccb_alloc_wait(icp);
 	ic->ic_cmd.cmd_opcode = htole16(ICP_FLUSH);
@@ -310,7 +311,7 @@ ld_icp_intr(struct icp_ccb *ic)
 
 	bp = ic->ic_context;
 	sc = (struct ld_icp_softc *)ic->ic_dv;
-	icp = (struct icp_softc *)sc->sc_ld.sc_dv.dv_parent;
+	icp = (struct icp_softc *)device_parent(&sc->sc_ld.sc_dv);
 
 	if (ic->ic_status != ICP_S_OK) {
 		printf("%s: request failed; status=0x%04x\n",
@@ -320,7 +321,7 @@ ld_icp_intr(struct icp_ccb *ic)
 		bp->b_resid = bp->b_bcount;
 
 		icp->icp_evt.size = sizeof(icp->icp_evt.eu.sync);
-		icp->icp_evt.eu.sync.ionode = icp->icp_dv.dv_unit;
+		icp->icp_evt.eu.sync.ionode = device_unit(&icp->icp_dv);
 		icp->icp_evt.eu.sync.service = icp->icp_service;
 		icp->icp_evt.eu.sync.status = icp->icp_status;
 		icp->icp_evt.eu.sync.info = icp->icp_info;

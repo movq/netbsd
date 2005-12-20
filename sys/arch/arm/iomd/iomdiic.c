@@ -1,4 +1,4 @@
-/*	$NetBSD: iomdiic.c,v 1.3 2005/12/11 12:16:47 christos Exp $	*/
+/*	$NetBSD: iomdiic.c,v 1.5 2006/06/26 18:21:39 drochner Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -76,8 +76,8 @@ static int	iomdiic_initiate_xfer(void *, i2c_addr_t, int);
 static int	iomdiic_read_byte(void *, uint8_t *, int);
 static int	iomdiic_write_byte(void *, uint8_t, int);
 
-#define	IOMDIIC_READ	 *(__volatile uint8_t *)(IOMD_ADDRESS(IOMD_IOCR))
-#define	IOMDIIC_WRITE(x) *(__volatile uint8_t *)(IOMD_ADDRESS(IOMD_IOCR)) = (x)
+#define	IOMDIIC_READ	 *(volatile uint8_t *)(IOMD_ADDRESS(IOMD_IOCR))
+#define	IOMDIIC_WRITE(x) *(volatile uint8_t *)(IOMD_ADDRESS(IOMD_IOCR)) = (x)
 
 #define	IOMD_IOCR_SDA		0x01
 #define	IOMD_IOCR_SCL		0x02
@@ -146,9 +146,8 @@ iomdiic_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_i2c.ic_read_byte = iomdiic_read_byte;
 	sc->sc_i2c.ic_write_byte = iomdiic_write_byte;
 
-	iba.iba_name = "iic";
 	iba.iba_tag = &sc->sc_i2c;
-	(void) config_found(&sc->sc_dev, &iba, iicbus_print);
+	(void) config_found_ia(&sc->sc_dev, "i2cbus", &iba, iicbus_print);
 }
 
 CFATTACH_DECL(iomdiic, sizeof(struct iomdiic_softc),

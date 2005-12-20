@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.49 2005/09/16 16:48:18 christos Exp $	*/
+/*	$NetBSD: extern.h,v 1.51 2006/04/16 16:20:21 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -86,11 +86,11 @@ int updatepath(void);
 int dochdir(const char *);
 int fdochdir(int);
 int domkdir(const char *, mode_t);
-void list(void);
-void extract(void);
-void append(void);
-void archive(void);
-void copy(void);
+int list(void);
+int extract(void);
+int append(void);
+int archive(void);
+int copy(void);
 
 /*
  * buf_subs.c
@@ -201,6 +201,7 @@ int getoldopt(int, char **, const char *, struct option *, int *);
 extern FSUB fsub[];
 extern int ford[];
 extern int sep;
+extern int havechd;
 void options(int, char **);
 OPLIST * opt_next(void);
 int opt_add(const char *);

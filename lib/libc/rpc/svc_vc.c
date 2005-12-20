@@ -1,4 +1,4 @@
-/*	$NetBSD: svc_vc.c,v 1.15 2005/12/13 05:54:50 jmc Exp $	*/
+/*	$NetBSD: svc_vc.c,v 1.20 2006/10/17 17:44:34 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -35,7 +35,7 @@
 static char *sccsid = "@(#)svc_tcp.c 1.21 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)svc_tcp.c	2.2 88/08/01 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: svc_vc.c,v 1.15 2005/12/13 05:54:50 jmc Exp $");
+__RCSID("$NetBSD: svc_vc.c,v 1.20 2006/10/17 17:44:34 christos Exp $");
 #endif
 #endif
 
@@ -56,7 +56,6 @@ __RCSID("$NetBSD: svc_vc.c,v 1.15 2005/12/13 05:54:50 jmc Exp $");
 #include <sys/un.h>
 #include <sys/time.h>
 #include <netinet/in.h>
-#include <netinet/tcp.h>
 
 #include <assert.h>
 #include <err.h>
@@ -94,9 +93,9 @@ static bool_t svc_vc_freeargs __P((SVCXPRT *, xdrproc_t, caddr_t));
 static bool_t svc_vc_reply __P((SVCXPRT *, struct rpc_msg *));
 static void svc_vc_rendezvous_ops __P((SVCXPRT *));
 static void svc_vc_ops __P((SVCXPRT *));
-static bool_t svc_vc_control __P((SVCXPRT *xprt, const u_int rq, void *in));
-static bool_t svc_vc_rendezvous_control __P((SVCXPRT *xprt, const u_int rq,
-					     void *in));
+static bool_t svc_vc_control __P((SVCXPRT *, const u_int, void *));
+static bool_t svc_vc_rendezvous_control __P((SVCXPRT *, const u_int,
+					     void *));
 
 struct cf_rendezvous { /* kept in xprt->xp_p1 for rendezvouser */
 	u_int sendsize;
@@ -145,13 +144,14 @@ svc_vc_create(fd, sendsize, recvsize)
 	socklen_t slen;
 	int one = 1;
 
+	if (!__rpc_fd2sockinfo(fd, &si))
+		return NULL;
+
 	r = mem_alloc(sizeof(*r));
 	if (r == NULL) {
 		warnx("svc_vc_create: out of memory");
-		goto cleanup_svc_vc_create;
-	}
-	if (!__rpc_fd2sockinfo(fd, &si))
 		return NULL;
+	}
 	r->sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsize);
 	r->recvsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)recvsize);
 	r->maxrec = __svc_maxrec;
@@ -194,6 +194,8 @@ svc_vc_create(fd, sendsize, recvsize)
 	xprt_register(xprt);
 	return (xprt);
 cleanup_svc_vc_create:
+	if (xprt)
+		mem_free(xprt, sizeof(*xprt));
 	if (r != NULL)
 		mem_free(r, sizeof(*r));
 	return (NULL);
@@ -333,8 +335,8 @@ again:
 		 */
 		if (errno == EMFILE || errno == ENFILE) {
 			cleanfds = svc_fdset;
-			__svc_clean_idle(&cleanfds, 0, FALSE);
-			goto again;
+			if (__svc_clean_idle(&cleanfds, 0, FALSE))
+				goto again;
 		}
 		return (FALSE);
 	}
@@ -353,11 +355,8 @@ again:
 		newxprt->xp_addrlen = sizeof (struct sockaddr_in);
 	}
 #endif
-	if (__rpc_fd2sockinfo(sock, &si) && si.si_proto == IPPROTO_TCP) {
-		len = 1;
-		/* XXX fvdl - is this useful? */
-		setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &len, sizeof (len));
-	}
+	if (__rpc_fd2sockinfo(sock, &si))
+		__rpc_setnodelay(sock, &si);
 
 	cd = (struct cf_conn *)newxprt->xp_p1;
 

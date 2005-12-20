@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_dir.h,v 1.11 2005/12/11 12:25:25 christos Exp $	*/
+/*	$NetBSD: ext2fs_dir.h,v 1.13 2006/02/16 20:17:20 perry Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -131,9 +131,9 @@ struct	ext2fs_direct {
 
 #define E2IFTODT(mode)    (((mode) & 0170000) >> 12)
 
-static __inline__ u_int8_t inot2ext2dt(u_int16_t)
+static __inline u_int8_t inot2ext2dt(u_int16_t)
     __attribute__((__unused__));
-static __inline__ u_int8_t
+static __inline u_int8_t
 inot2ext2dt(type)
 	u_int16_t type;
 {

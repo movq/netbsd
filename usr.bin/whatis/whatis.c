@@ -1,4 +1,4 @@
-/*	$NetBSD: whatis.c,v 1.20 2005/08/25 16:29:15 rpaulo Exp $	*/
+/*	$NetBSD: whatis.c,v 1.22 2006/09/26 04:16:24 daniel Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -40,7 +40,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
 #if 0
 static char sccsid[] = "@(#)whatis.c	8.5 (Berkeley) 1/2/94";
 #else
-__RCSID("$NetBSD: whatis.c,v 1.20 2005/08/25 16:29:15 rpaulo Exp $");
+__RCSID("$NetBSD: whatis.c,v 1.22 2006/09/26 04:16:24 daniel Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,16 +62,14 @@ __RCSID("$NetBSD: whatis.c,v 1.20 2005/08/25 16:29:15 rpaulo Exp $");
 
 static int *found, foundman;
 
-int main __P((int, char **));
-void dashtrunc __P((char *, char *));
-int match __P((char *, char *));
-void usage __P((void));
-void whatis __P((char **, char *, int));
+int	main(int, char **);
+void	dashtrunc(char *, char *);
+int	match(char *, char *);
+void	usage(void);
+void	whatis(char **, char *, int);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char **argv)
 {
 	ENTRY *ep;
 	TAG *tp;
@@ -117,8 +115,11 @@ main(argc, argv)
 		whatis(argv, p_path, 1);
 	else {
 		config(conffile);
-		tp = getlist("_whatdb", 0);
-		TAILQ_FOREACH(ep, &tp->list, q) {
+		tp = gettag("_whatdb", 0);
+		if (!tp)
+			errx(EXIT_FAILURE, 
+			    "no database dirs (_whatdb) in config file");
+		TAILQ_FOREACH(ep, &tp->entrylist, q) {
 			if ((rv = glob(ep->s, GLOB_BRACE | GLOB_NOSORT, NULL,
 			    &pg)) != 0) {
 				if (rv == GLOB_NOMATCH)
@@ -147,9 +148,7 @@ main(argc, argv)
 }
 
 void
-whatis(argv, path, buildpath)
-	char **argv, *path;
-	int buildpath;
+whatis(char **argv, char *path, int buildpath)
 {
 	char *end, *name, **p;
 	char buf[MAXLINELEN + 1], wbuf[MAXLINELEN + 1];
@@ -192,8 +191,7 @@ whatis(argv, path, buildpath)
  *	match a full word
  */
 int
-match(bp, str)
-	char *bp, *str;
+match(char *bp, char *str)
 {
 	int len;
 	char *start;
@@ -207,10 +205,20 @@ match(bp, str)
 		for (; *bp && *bp != '[' && !isalnum((unsigned char)*bp); ++bp);
 		if (!*bp)
 			break;
-		for (start = bp++;
-		    *bp && (*bp == '_'  || isalnum((unsigned char)*bp)); ++bp);
-		if (bp - start == len && !strncasecmp(start, str, len))
+
+		/* check for word match first */
+		for (start = bp++; *bp && (*bp == '_' ||
+			isalnum((unsigned char) *bp)); ++bp);
+		if (bp - start == len && strncasecmp(start, str, len) == 0) {
 			return(1);
+		} else if (*bp && *bp != ',') {
+			/* check for full string match */
+			for (bp = start; *bp && *bp != ',' && *bp != '(' &&
+				!isspace((unsigned char) *bp); ++bp);
+			if (bp - start == len &&
+				strncasecmp(start, str, len) == 0)
+				return(1);
+		}
 	}
 	return(0);
 }
@@ -220,8 +228,7 @@ match(bp, str)
  *	truncate a string at " - "
  */
 void
-dashtrunc(from, to)
-	char *from, *to;
+dashtrunc(char *from, char *to)
 {
 	int ch;
 
@@ -236,7 +243,7 @@ dashtrunc(from, to)
  *	print usage message and die
  */
 void
-usage()
+usage(void)
 {
 	(void)fprintf(stderr,
 	    "usage: whatis [-C file] [-M path] [-m path] command ...\n");

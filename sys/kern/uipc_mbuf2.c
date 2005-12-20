@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_mbuf2.c,v 1.21 2005/12/08 03:12:31 thorpej Exp $	*/
+/*	$NetBSD: uipc_mbuf2.c,v 1.25 2006/11/01 10:17:59 yamt Exp $	*/
 /*	$KAME: uipc_mbuf2.c,v 1.29 2001/02/14 13:42:10 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf2.c,v 1.21 2005/12/08 03:12:31 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf2.c,v 1.25 2006/11/01 10:17:59 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -239,7 +239,7 @@ m_getcl(int how, int type, int flags)
 	if ((flags & M_PKTHDR) != 0)
 		MGETHDR(mp, how, type);
 	else
-		MGET(mp, how,  type);
+		MGET(mp, how, type);
 
 	if (mp == NULL)
 		return NULL;
@@ -329,7 +329,7 @@ void
 m_tag_delete_nonpersistent(struct mbuf *m)
 {
 	/* NetBSD has no persistent tags yet, so just delete all tags. */
-	return m_tag_delete_chain(m, NULL);
+	m_tag_delete_chain(m, NULL);
 }
 
 

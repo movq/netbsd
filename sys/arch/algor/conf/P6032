@@ -1,4 +1,4 @@
-#	$NetBSD: P6032,v 1.38 2005/12/07 09:10:11 tsutsui Exp $
+#	$NetBSD: P6032,v 1.43 2006/09/27 21:42:04 manu Exp $
 #
 # Algorithmics P-6032 kernel.
 #
@@ -7,7 +7,7 @@ include	"arch/algor/conf/std.algor"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"P6032-$Revision: 1.38 $"
+#ident 		"P6032-$Revision: 1.43 $"
 
 maxusers 32
 
@@ -62,6 +62,7 @@ options 	COMPAT_11
 options 	COMPAT_12
 options 	COMPAT_13
 options 	COMPAT_14
+options 	COMPAT_15
 options 	COMPAT_16
 options 	COMPAT_20
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
@@ -328,7 +329,7 @@ fd*	at	fdc? drive ?
 #ukbd*	at uhidev? reportid ?
 #wskbd*	at ukbd? console ?
 
-# USB serial adpater
+# USB serial adapter
 #ucycom*	at uhidev? reportid ?
 
 # USB Generic HID devices
@@ -376,7 +377,7 @@ fd*	at	fdc? drive ?
 #wskbd*		at	pckbd?
 #wsmouse*	at	pms?
 
-pseudo-device	bpfilter	16
+pseudo-device	bpfilter
 pseudo-device	ccd		4
 #pseudo-device	cgd		4	# cryptographic disk devices
 #pseudo-device	raid		4		# RAIDframe disk driver
@@ -385,14 +386,14 @@ pseudo-device	ccd		4
 pseudo-device	ipfilter	1
 pseudo-device	loop		1
 pseudo-device	md		1
-pseudo-device	ppp		4
+pseudo-device	ppp		
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	sl		4
-pseudo-device	vnd		4
-#pseudo-device	gre		2	# generic L3 over IP tunnel
-pseudo-device	gif		4	# IPv[46] over IPv[46] tunnel (RFC1933)
-#pseudo-device	faith		1	# IPv[46] tcp relay translation i/f
-#pseudo-device	stf		1	# 6to4 IPv6 over IPv4 encapsulation
+pseudo-device	sl		
+pseudo-device	vnd		
+#pseudo-device	gre			# generic L3 over IP tunnel
+pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
+#pseudo-device	faith			# IPv[46] tcp relay translation i/f
+pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
 pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	sequencer	1	# MIDI sequencer
 pseudo-device	rnd			# /dev/random and in-kernel generator

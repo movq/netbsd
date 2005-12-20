@@ -1,4 +1,4 @@
-/*	$NetBSD: cs4231_ebus.c,v 1.19 2005/12/11 12:21:20 christos Exp $ */
+/*	$NetBSD: cs4231_ebus.c,v 1.22 2006/10/15 19:43:45 martin Exp $ */
 
 /*
  * Copyright (c) 2002 Valeriy E. Ushakov
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs4231_ebus.c,v 1.19 2005/12/11 12:21:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs4231_ebus.c,v 1.22 2006/10/15 19:43:45 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -112,6 +112,7 @@ const struct audio_hw_if audiocs_ebus_hw_if = {
 	cs4231_ebus_trigger_output,
 	cs4231_ebus_trigger_input,
 	NULL,			/* dev_ioctl */
+	NULL,			/* powerstate */
 };
 
 #ifdef AUDIO_DEBUG
@@ -157,7 +158,7 @@ cs4231_ebus_attach(struct device *parent, struct device *self, void *aux)
 	bus_space_handle_t bh;
 	int i;
 
-	ebsc = (struct cs4231_ebus_softc *)self;
+	ebsc = device_private(self);
 	sc = &ebsc->sc_cs4231;
 	ea = aux;
 	sc->sc_bustag = ebsc->sc_bt = ea->ea_bustag;

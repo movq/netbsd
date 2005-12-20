@@ -1,4 +1,4 @@
-/*	$NetBSD: dhu.c,v 1.41 2005/12/11 23:17:10 christos Exp $	*/
+/*	$NetBSD: dhu.c,v 1.46 2006/10/01 19:28:44 elad Exp $	*/
 /*
  * Copyright (c) 2003, Hugh Graham.
  * Copyright (c) 1992, 1993
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dhu.c,v 1.41 2005/12/11 23:17:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dhu.c,v 1.46 2006/10/01 19:28:44 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,6 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: dhu.c,v 1.41 2005/12/11 23:17:10 christos Exp $");
 #include <sys/kernel.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
+#include <sys/kauth.h>
 
 #include <machine/bus.h>
 #include <machine/scb.h>
@@ -243,7 +244,7 @@ dhu_attach(parent, self, aux)
 	struct device *parent, *self;
 	void *aux;
 {
-	struct dhu_softc *sc = (void *)self;
+	struct dhu_softc *sc = device_private(self);
 	struct uba_attach_args *ua = aux;
 	unsigned c;
 	int n, i;
@@ -455,6 +456,10 @@ dhuopen(dev, flag, mode, l)
 	tp->t_param   = dhuparam;
 	tp->t_hwiflow = dhuiflow;
 	tp->t_dev = dev;
+
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
+		return (EBUSY);
+
 	if ((tp->t_state & TS_ISOPEN) == 0) {
 		ttychars(tp);
 		if (tp->t_ispeed == 0) {
@@ -466,9 +471,7 @@ dhuopen(dev, flag, mode, l)
 		}
 		(void) dhuparam(tp, &tp->t_termios);
 		ttsetwater(tp);
-	} else if ((tp->t_state & TS_XCLUDE) &&
-	    suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0)
-		return (EBUSY);
+	}
 	/* Use DMBIS and *not* DMSET or else we clobber incoming bits */
 	if (dhumctl(sc, line, DML_DTR|DML_RTS, DMBIS) & DML_DCD)
 		tp->t_state |= TS_CARR_ON;

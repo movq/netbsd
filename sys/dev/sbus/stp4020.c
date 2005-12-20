@@ -1,4 +1,4 @@
-/*	$NetBSD: stp4020.c,v 1.46 2005/11/10 21:25:35 martin Exp $ */
+/*	$NetBSD: stp4020.c,v 1.48 2006/03/29 04:16:50 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: stp4020.c,v 1.46 2005/11/10 21:25:35 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: stp4020.c,v 1.48 2006/03/29 04:16:50 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -207,7 +207,7 @@ static struct pcmcia_chip_functions stp4020_functions = {
 };
 
 
-static __inline__ int
+static inline int
 stp4020_rd_sockctl(h, idx)
 	struct stp4020_socket *h;
 	int idx;
@@ -216,7 +216,7 @@ stp4020_rd_sockctl(h, idx)
 	return (bus_space_read_2(h->tag, h->regs, o));
 }
 
-static __inline__ void
+static inline void
 stp4020_wr_sockctl(h, idx, v)
 	struct stp4020_socket *h;
 	int idx;
@@ -226,7 +226,7 @@ stp4020_wr_sockctl(h, idx, v)
 	bus_space_write_2(h->tag, h->regs, o, v);
 }
 
-static __inline__ int
+static inline int
 stp4020_rd_winctl(h, win, idx)
 	struct stp4020_socket *h;
 	int win;
@@ -237,7 +237,7 @@ stp4020_rd_winctl(h, win, idx)
 	return (bus_space_read_2(h->tag, h->regs, o));
 }
 
-static __inline__ void
+static inline void
 stp4020_wr_winctl(h, win, idx, v)
 	struct stp4020_socket *h;
 	int win;
@@ -371,7 +371,7 @@ stp4020attach(parent, self, aux)
 	bus_space_handle_t bh;
 
 	/* lsb of our config flags decides which interrupt we use */
-	sbus_intno = sc->sc_dev.dv_cfdata->cf_flags & 1;
+	sbus_intno = device_cfdata(&sc->sc_dev)->cf_flags & 1;
 
 	/* Transfer bus tags */
 #ifdef SUN4U

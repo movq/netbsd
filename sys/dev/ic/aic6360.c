@@ -1,4 +1,4 @@
-/*	$NetBSD: aic6360.c,v 1.85 2005/12/11 12:21:25 christos Exp $	*/
+/*	$NetBSD: aic6360.c,v 1.92 2006/11/16 01:32:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Charles M. Hannum.  All rights reserved.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic6360.c,v 1.85 2005/12/11 12:21:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic6360.c,v 1.92 2006/11/16 01:32:50 christos Exp $");
 
 #include "opt_ddb.h"
 
@@ -521,7 +521,7 @@ aic_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 		AIC_CMDS(("[0x%x, %d]->%d ", (int)xs->cmd->opcode, xs->cmdlen,
 		    periph->periph_target));
 
-		if ((sc->sc_dev.dv_flags & DVF_ACTIVE) == 0) {
+		if (! device_is_active(&sc->sc_dev)) {
 			xs->error = XS_DRIVER_STUFFUP;
 			scsipi_done(xs);
 			return;
@@ -684,7 +684,7 @@ aic_poll(struct aic_softc *sc, struct scsipi_xfer *xs, int count)
  * LOW LEVEL SCSI UTILITIES
  */
 
-static __inline void
+static inline void
 aic_sched_msgout(struct aic_softc *sc, u_char m)
 {
 	bus_space_tag_t iot = sc->sc_iot;
@@ -701,7 +701,7 @@ aic_sched_msgout(struct aic_softc *sc, u_char m)
 #if !AIC_USE_SYNCHRONOUS
 /* ARGSUSED */
 #endif
-static __inline void
+static inline void
 aic_setsync(struct aic_softc *sc, struct aic_tinfo *ti)
 {
 #if AIC_USE_SYNCHRONOUS
@@ -829,7 +829,7 @@ aic_sched(struct aic_softc *sc)
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 
-	if ((sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (! device_is_active(&sc->sc_dev))
 		return;
 
 	/*
@@ -1071,7 +1071,6 @@ nextbyte:
 	/* We now have a complete message.  Parse it. */
 	switch (sc->sc_state) {
 		struct aic_acb *acb;
-		struct scsipi_periph *periph;
 		struct aic_tinfo *ti;
 
 	case AIC_CONNECTED:
@@ -1081,6 +1080,8 @@ nextbyte:
 
 		switch (sc->sc_imess[0]) {
 		case MSG_CMDCOMPLETE:
+#if 0
+			/* impossible dleft is unsigned */
 			if (sc->sc_dleft < 0) {
 				periph = acb->xs->xs_periph;
 				printf("%s: %ld extra bytes from %d:%d\n",
@@ -1088,6 +1089,7 @@ nextbyte:
 				    periph->periph_target, periph->periph_lun);
 				sc->sc_dleft = 0;
 			}
+#endif
 			acb->xs->resid = acb->data_length = sc->sc_dleft;
 			sc->sc_state = AIC_CMDCOMPLETE;
 			break;
@@ -1721,7 +1723,7 @@ aicintr(void *arg)
 	struct aic_tinfo *ti;
 	int n;
 
-	if ((sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (! device_is_active(&sc->sc_dev))
 		return (0);
 
 	/*

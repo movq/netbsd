@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_amr.c,v 1.8 2005/12/11 12:22:50 christos Exp $	*/
+/*	$NetBSD: ld_amr.c,v 1.12 2006/11/16 01:33:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_amr.c,v 1.8 2005/12/11 12:22:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_amr.c,v 1.12 2006/11/16 01:33:09 christos Exp $");
 
 #include "rnd.h"
 
@@ -81,7 +81,8 @@ static void	ld_amr_handler(struct amr_ccb *);
 static int	ld_amr_start(struct ld_softc *, struct buf *);
 
 static int
-ld_amr_match(struct device *parent, struct cfdata *match, void *aux)
+ld_amr_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 
 	return (1);
@@ -140,7 +141,7 @@ ld_amr_dobio(struct ld_amr_softc *sc, void *data, int datasize,
 	struct amr_mailbox_cmd *mb;
 	int s, rv;
 
-	amr = (struct amr_softc *)sc->sc_ld.sc_dv.dv_parent;
+	amr = (struct amr_softc *)device_parent(&sc->sc_ld.sc_dv);
 
 	if ((rv = amr_ccb_alloc(amr, &ac)) != 0)
 		return (rv);
@@ -151,7 +152,9 @@ ld_amr_dobio(struct ld_amr_softc *sc, void *data, int datasize,
 	mb->mb_blkcount = htole16(datasize / AMR_SECTOR_SIZE);
 	mb->mb_lba = htole32(blkno);
 
-	if ((rv = amr_ccb_map(amr, ac, data, datasize, dowrite)) != 0) {
+	rv = amr_ccb_map(amr, ac, data, datasize,
+	    (dowrite ? AC_XFER_OUT : AC_XFER_IN));
+	if (rv != 0) {
 		amr_ccb_free(amr, ac);
 		return (rv);
 	}
@@ -194,7 +197,7 @@ ld_amr_handler(struct amr_ccb *ac)
 
 	bp = ac->ac_context;
 	sc = (struct ld_amr_softc *)ac->ac_dv;
-	amr = (struct amr_softc *)sc->sc_ld.sc_dv.dv_parent;
+	amr = (struct amr_softc *)device_parent(&sc->sc_ld.sc_dv);
 
 	if (ac->ac_status != AMR_STATUS_SUCCESS) {
 		printf("%s: cmd status 0x%02x\n", sc->sc_ld.sc_dv.dv_xname,

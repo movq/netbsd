@@ -1,4 +1,4 @@
-/*	$NetBSD: pcmcia.c,v 1.78 2005/12/11 12:23:23 christos Exp $	*/
+/*	$NetBSD: pcmcia.c,v 1.82 2006/11/16 01:33:20 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 Charles M. Hannum.  All rights reserved.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcmcia.c,v 1.78 2005/12/11 12:23:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcmcia.c,v 1.82 2006/11/16 01:33:20 christos Exp $");
 
 #include "opt_pcmciaverbose.h"
 
@@ -112,10 +112,7 @@ pcmcia_ccr_write(pf, ccr, val)
 }
 
 int
-pcmcia_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+pcmcia_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct pcmciabus_attach_args *paa = aux;
 
@@ -127,9 +124,7 @@ pcmcia_match(parent, match, aux)
 }
 
 void
-pcmcia_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+pcmcia_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pcmciabus_attach_args *paa = aux;
 	struct pcmcia_softc *sc = (struct pcmcia_softc *) self;
@@ -152,7 +147,7 @@ pcmcia_card_attach(dev)
 	struct pcmcia_function *pf;
 	int error;
 	static const int wildcard[PCMCIACF_NLOCS] = {
-		PCMCIACF_FUNCTION_DEFAULT, PCMCIACF_IRQ_DEFAULT
+		PCMCIACF_FUNCTION_DEFAULT
 	};
 
 	/*
@@ -207,7 +202,8 @@ done:
 }
 
 int
-pcmcia_rescan(struct device *self, const char *ifattr, const int *locators)
+pcmcia_rescan(struct device *self, const char *ifattr,
+    const int *locators)
 {
 	struct pcmcia_softc *sc = (struct pcmcia_softc *)self;
 	struct pcmcia_function *pf;
@@ -232,7 +228,6 @@ pcmcia_rescan(struct device *self, const char *ifattr, const int *locators)
 			continue;
 
 		locs[PCMCIACF_FUNCTION] = pf->number;
-		locs[PCMCIACF_IRQ] = PCMCIACF_IRQ_DEFAULT;
 
 		paa.manufacturer = sc->card.manufacturer;
 		paa.product = sc->card.product;
@@ -294,7 +289,7 @@ pcmcia_childdetached(struct device *self, struct device *child)
 		if (SIMPLEQ_EMPTY(&pf->cfe_head))
 			continue;
 		if (pf->child == child) {
-			KASSERT(child->dv_locators[PCMCIACF_FUNCTION]
+			KASSERT(device_locator(child, PCMCIACF_FUNCTION)
 				== pf->number);
 			pf->child = NULL;
 			return;

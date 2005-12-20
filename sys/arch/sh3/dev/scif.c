@@ -1,4 +1,4 @@
-/*	$NetBSD: scif.c,v 1.42 2005/12/11 12:18:58 christos Exp $ */
+/*	$NetBSD: scif.c,v 1.49 2006/10/01 20:31:50 elad Exp $ */
 
 /*-
  * Copyright (C) 1999 T.Horiuchi and SAITOH Masanobu.  All rights reserved.
@@ -100,7 +100,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scif.c,v 1.42 2005/12/11 12:18:58 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scif.c,v 1.49 2006/10/01 20:31:50 elad Exp $");
 
 #include "opt_kgdb.h"
 #include "opt_scif.h"
@@ -116,6 +116,7 @@ __KERNEL_RCSID(0, "$NetBSD: scif.c,v 1.42 2005/12/11 12:18:58 christos Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/kgdb.h>
+#include <sys/kauth.h>
 
 #include <dev/cons.h>
 
@@ -221,11 +222,6 @@ void	scifdiag(void *);
 
 #define	SCIFUNIT(x)	(minor(x) & SCIFUNIT_MASK)
 #define	SCIFDIALOUT(x)	(minor(x) & SCIFDIALOUT_MASK)
-
-/* Macros to clear/set/test flags. */
-#define	SET(t, f)	(t) |= (f)
-#define	CLR(t, f)	(t) &= ~(f)
-#define	ISSET(t, f)	((t) & (f))
 
 /* Hardware flag masks */
 #define	SCIF_HW_NOIEN	0x01
@@ -418,7 +414,7 @@ scif_getc(void)
 {
 	unsigned char c, err_c;
 #ifdef SH4
-	unsigned short err_c2;
+	unsigned short err_c2 = 0; /* XXXGCC: -Wuninitialized */
 #endif
 
 	for (;;) {
@@ -607,7 +603,7 @@ scifparam(struct tty *tp, struct termios *t)
 	int ospeed = t->c_ospeed;
 	int s;
 
-	if (ISSET(sc->sc_dev.dv_flags, DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->sc_dev))
 		return (EIO);
 
 	/* Check requested parameters. */
@@ -754,7 +750,7 @@ scifopen(dev_t dev, int flag, int mode, struct lwp *l)
 	    sc->sc_rbuf == NULL)
 		return (ENXIO);
 
-	if (ISSET(sc->sc_dev.dv_flags, DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->sc_dev))
 		return (ENXIO);
 
 #ifdef KGDB
@@ -767,9 +763,7 @@ scifopen(dev_t dev, int flag, int mode, struct lwp *l)
 
 	tp = sc->sc_tty;
 
-	if (ISSET(tp->t_state, TS_ISOPEN) &&
-	    ISSET(tp->t_state, TS_XCLUDE) &&
-	    suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0)
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
 		return (EBUSY);
 
 	s = spltty();
@@ -866,7 +860,7 @@ scifclose(dev_t dev, int flag, int mode, struct lwp *l)
 	(*tp->t_linesw->l_close)(tp, flag);
 	ttyclose(tp);
 
-	if (ISSET(sc->sc_dev.dv_flags, DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->sc_dev))
 		return (0);
 
 	return (0);
@@ -916,7 +910,7 @@ scifioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 	int error;
 	int s;
 
-	if (ISSET(sc->sc_dev.dv_flags, DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->sc_dev))
 		return (EIO);
 
 	error = (*tp->t_linesw->l_ioctl)(tp, cmd, data, flag, l);
@@ -945,7 +939,8 @@ scifioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		break;
 
 	case TIOCSFLAGS:
-		error = suser(l->l_proc->p_ucred, &l->l_proc->p_acflag);
+		error = kauth_authorize_device_tty(l->l_cred,
+		    KAUTH_DEVICE_TTY_PRIVSET, tp);
 		if (error)
 			break;
 		sc->sc_swflags = *(int *)data;
@@ -1191,7 +1186,7 @@ scifsoft(void *arg)
 	struct scif_softc *sc = arg;
 	struct tty *tp;
 
-	if (ISSET(sc->sc_dev.dv_flags, DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->sc_dev))
 		return;
 
 	{
@@ -1218,7 +1213,7 @@ scifsoft(void *arg)
 		if (sc == NULL || !ISSET(sc->sc_hwflags, SCIF_HW_DEV_OK))
 			continue;
 
-		if (ISSET(sc->sc_dev.dv_flags, DVF_ACTIVE) == 0)
+		if (!device_is_active(&sc->sc_dev))
 			continue;
 
 		tp = sc->sc_tty;
@@ -1263,7 +1258,7 @@ scifintr(void *arg)
 	u_short ssr2;
 	int count;
 
-	if (ISSET(sc->sc_dev.dv_flags, DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->sc_dev))
 		return (0);
 
 	end = sc->sc_ebuf;

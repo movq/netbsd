@@ -1,4 +1,5 @@
-/*	$NetBSD: ssh-keyscan.c,v 1.22 2005/04/23 16:53:29 christos Exp $	*/
+/*	$NetBSD: ssh-keyscan.c,v 1.24 2006/09/28 21:22:15 christos Exp $	*/
+/* $OpenBSD: ssh-keyscan.c,v 1.73 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright 1995, 1996 by David Mazieres <dm@lcs.mit.edu>.
  *
@@ -8,26 +9,37 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: ssh-keyscan.c,v 1.52 2005/03/01 15:47:14 jmc Exp $");
-__RCSID("$NetBSD: ssh-keyscan.c,v 1.22 2005/04/23 16:53:29 christos Exp $");
+__RCSID("$NetBSD: ssh-keyscan.c,v 1.24 2006/09/28 21:22:15 christos Exp $");
 
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/queue.h>
-#include <errno.h>
+#include <sys/resource.h>
+#include <sys/time.h>
 
 #include <openssl/bn.h>
 
+#include <errno.h>
+#include <netdb.h>
 #include <setjmp.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <string.h>
+#include <unistd.h>
+
 #include "xmalloc.h"
 #include "ssh.h"
 #include "ssh1.h"
+#include "buffer.h"
 #include "key.h"
+#include "cipher.h"
 #include "kex.h"
 #include "compat.h"
 #include "myproposal.h"
 #include "packet.h"
 #include "dispatch.h"
-#include "buffer.h"
-#include "bufaux.h"
 #include "log.h"
 #include "atomicio.h"
 #include "misc.h"
@@ -57,7 +69,7 @@ int maxfd;
 
 extern char *__progname;
 fd_set *read_wait;
-size_t read_wait_size;
+size_t read_wait_nfdset;
 int ncon;
 int nonfatal_fatal = 0;
 jmp_buf kexjmp;
@@ -131,7 +143,7 @@ Linebuf_alloc(const char *filename, void (*errfun) (const char *,...))
 		lb->stream = stdin;
 	}
 
-	if (!(lb->buf = malloc(lb->size = LINEBUF_SIZE))) {
+	if (!(lb->buf = malloc((lb->size = LINEBUF_SIZE)))) {
 		if (errfun)
 			(*errfun) ("linebuf (%s): malloc failed\n", lb->filename);
 		xfree(lb);
@@ -169,7 +181,7 @@ Linebuf_lineno(Linebuf * lb)
 static char *
 Linebuf_getline(Linebuf * lb)
 {
-	int n = 0;
+	size_t n = 0;
 	void *p;
 
 	lb->lineno++;
@@ -343,6 +355,7 @@ keygrab_ssh2(con *c)
 	c->c_kex->kex[KEX_DH_GRP1_SHA1] = kexdh_client;
 	c->c_kex->kex[KEX_DH_GRP14_SHA1] = kexdh_client;
 	c->c_kex->kex[KEX_DH_GEX_SHA1] = kexgex_client;
+	c->c_kex->kex[KEX_DH_GEX_SHA256] = kexgex_client;
 	c->c_kex->verify_host_key = hostjump;
 
 	if (!(j = setjmp(kexjmp))) {
@@ -486,27 +499,36 @@ conrecycle(int s)
 static void
 congreet(int s)
 {
-	int remote_major = 0, remote_minor = 0, n = 0;
+	int n = 0, remote_major = 0, remote_minor = 0;
 	char buf[256], *cp;
 	char remote_version[sizeof buf];
 	size_t bufsiz;
 	con *c = &fdcon[s];
 
-	bufsiz = sizeof(buf);
-	cp = buf;
-	while (bufsiz-- && (n = atomicio(read, s, cp, 1)) == 1 && *cp != '\n') {
-		if (*cp == '\r')
-			*cp = '\n';
-		cp++;
-	}
-	if (n < 0) {
-		if (errno != ECONNREFUSED)
-			error("read (%s): %s", c->c_name, strerror(errno));
-		conrecycle(s);
-		return;
+	for (;;) {
+		memset(buf, '\0', sizeof(buf));
+		bufsiz = sizeof(buf);
+		cp = buf;
+		while (bufsiz-- &&
+		    (n = atomicio(read, s, cp, 1)) == 1 && *cp != '\n') {
+			if (*cp == '\r')
+				*cp = '\n';
+			cp++;
+		}
+		if (n != 1 || strncmp(buf, "SSH-", 4) == 0)
+			break;
 	}
 	if (n == 0) {
-		error("%s: Connection closed by remote host", c->c_name);
+		switch (errno) {
+		case EPIPE:
+			error("%s: Connection closed by remote host", c->c_name);
+			break;
+		case ECONNREFUSED:
+			break;
+		default:
+			error("read (%s): %s", c->c_name, strerror(errno));
+			break;
+		}
 		conrecycle(s);
 		return;
 	}
@@ -536,7 +558,12 @@ congreet(int s)
 	n = snprintf(buf, sizeof buf, "SSH-%d.%d-OpenSSH-keyscan\r\n",
 	    c->c_keytype == KT_RSA1? PROTOCOL_MAJOR_1 : PROTOCOL_MAJOR_2,
 	    c->c_keytype == KT_RSA1? PROTOCOL_MINOR_1 : PROTOCOL_MINOR_2);
-	if (atomicio(vwrite, s, buf, n) != n) {
+	if (n < 0 || (size_t)n >= sizeof(buf)) {
+		error("snprintf: buffer too small");
+		confree(s);
+		return;
+	}
+	if (atomicio(vwrite, s, buf, n) != (size_t)n) {
 		error("write (%s): %s", c->c_name, strerror(errno));
 		confree(s);
 		return;
@@ -554,14 +581,14 @@ static void
 conread(int s)
 {
 	con *c = &fdcon[s];
-	int n;
+	size_t n;
 
 	if (c->c_status == CS_CON) {
 		congreet(s);
 		return;
 	}
 	n = atomicio(read, s, c->c_data + c->c_off, c->c_len - c->c_off);
-	if (n < 0) {
+	if (n == 0) {
 		error("read (%s): %s", c->c_name, strerror(errno));
 		confree(s);
 		return;
@@ -581,7 +608,6 @@ conread(int s)
 			keyprint(c, keygrab_ssh1(c));
 			confree(s);
 			return;
-			break;
 		default:
 			fatal("conread: invalid status %d", c->c_status);
 			break;
@@ -613,10 +639,10 @@ conloop(void)
 	} else
 		seltime.tv_sec = seltime.tv_usec = 0;
 
-	r = xmalloc(read_wait_size);
-	memcpy(r, read_wait, read_wait_size);
-	e = xmalloc(read_wait_size);
-	memcpy(e, read_wait, read_wait_size);
+	r = xcalloc(read_wait_nfdset, sizeof(fd_mask));
+	e = xcalloc(read_wait_nfdset, sizeof(fd_mask));
+	memcpy(r, read_wait, read_wait_nfdset * sizeof(fd_mask));
+	memcpy(e, read_wait, read_wait_nfdset * sizeof(fd_mask));
 
 	while (select(maxfd, r, NULL, e, &seltime) == -1 &&
 	    (errno == EAGAIN || errno == EINTR))
@@ -693,6 +719,9 @@ main(int argc, char **argv)
 	extern char *optarg;
 
 	TAILQ_INIT(&tq);
+
+	/* Ensure that fds 0, 1 and 2 are open or directed to /dev/null */
+	sanitise_stdfd();
 
 	if (argc <= 1)
 		usage();
@@ -777,12 +806,10 @@ main(int argc, char **argv)
 		fatal("%s: not enough file descriptors", __progname);
 	if (maxfd > fdlim_get(0))
 		fdlim_set(maxfd);
-	fdcon = xmalloc(maxfd * sizeof(con));
-	memset(fdcon, 0, maxfd * sizeof(con));
+	fdcon = xcalloc(maxfd, sizeof(con));
 
-	read_wait_size = howmany(maxfd, NFDBITS) * sizeof(fd_mask);
-	read_wait = xmalloc(read_wait_size);
-	memset(read_wait, 0, read_wait_size);
+	read_wait_nfdset = howmany(maxfd, NFDBITS);
+	read_wait = xcalloc(read_wait_nfdset, sizeof(fd_mask));
 
 	if (fopt_count) {
 		Linebuf *lb;

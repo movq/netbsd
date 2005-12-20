@@ -1,4 +1,4 @@
-/*	$NetBSD: pam_krb5.c,v 1.10 2005/09/27 14:38:19 tsarna Exp $	*/
+/*	$NetBSD: pam_krb5.c,v 1.18 2006/11/03 18:55:40 christos Exp $	*/
 
 /*-
  * This pam_krb5 module contains code that is:
@@ -53,7 +53,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_krb5/pam_krb5.c,v 1.22 2005/01/24 16:49:50 rwatson Exp $");
 #else
-__RCSID("$NetBSD: pam_krb5.c,v 1.10 2005/09/27 14:38:19 tsarna Exp $");
+__RCSID("$NetBSD: pam_krb5.c,v 1.18 2006/11/03 18:55:40 christos Exp $");
 #endif
 
 #include <sys/types.h>
@@ -119,6 +119,7 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags __unused,
 	char password_prompt[80];
 	char pwbuf[1024];
 
+	princ_name = NULL;
 	retval = pam_get_user(pamh, &user, USER_PROMPT);
 	if (retval != PAM_SUCCESS)
 		return (retval);
@@ -183,7 +184,6 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags __unused,
 	PAM_LOG("Done krb5_parse_name()");
 
 	/* Now convert the principal name into something human readable */
-	princ_name = NULL;
 	krbret = krb5_unparse_name(pam_context, princ, &princ_name);
 	if (krbret != 0) {
 		PAM_LOG("Error krb5_unparse_name(): %s",
@@ -355,7 +355,7 @@ pam_sm_setcred(pam_handle_t *pamh, int flags,
 	const char *cache_name, *q;
 	const void *user;
 	void *cache_data;
-	char *cache_name_buf = NULL, *p;
+	char *cache_name_buf = NULL, *p, *cache_name_buf2 = NULL;
 	char pwbuf[1024];
 
 	uid_t euid;
@@ -441,7 +441,7 @@ pam_sm_setcred(pam_handle_t *pamh, int flags,
 		}
 
 		/* XXX potential overflow */
-		p = calloc(PATH_MAX + 16, sizeof(char));
+		cache_name_buf2 = p = calloc(PATH_MAX + 16, sizeof(char));
 		q = cache_name;
 	
 		if (p == NULL) {
@@ -565,7 +565,6 @@ pam_sm_setcred(pam_handle_t *pamh, int flags,
 	retval = pam_setenv(pamh, "KRB5CCNAME", cache_name, 1);
 	if (retval != PAM_SUCCESS) {
 		PAM_LOG("Error pam_setenv(): %s", pam_strerror(pamh, retval));
-		krb5_cc_destroy(pam_context, ccache_perm);
 		retval = PAM_SERVICE_ERR;
 		goto cleanup2;
 	}
@@ -586,6 +585,8 @@ cleanup3:
 
 	if (cache_name_buf != NULL)
 		free(cache_name_buf);
+	if (cache_name_buf2 != NULL)
+		free(cache_name_buf2);
 
 	return (retval);
 }
@@ -681,6 +682,7 @@ pam_sm_chauthtok(pam_handle_t *pamh, int flags,
 	char *princ_name, *passdup;
 	char password_prompt[80];
 
+	princ_name = NULL;
 	if (flags & PAM_PRELIM_CHECK) {
 		/* Nothing to do here. */
 		return (PAM_SUCCESS);
@@ -723,7 +725,6 @@ pam_sm_chauthtok(pam_handle_t *pamh, int flags,
 	}
 
 	/* Now convert the principal name into something human readable */
-	princ_name = NULL;
 	krbret = krb5_unparse_name(pam_context, princ, &princ_name);
 	if (krbret != 0) {
 		PAM_LOG("Error krb5_unparse_name(): %s",
@@ -842,11 +843,15 @@ verify_krb_v5_tgt(krb5_context context, krb5_ccache ccache,
 	krb5_principal princ;
 	krb5_keyblock *keyblock;
 	krb5_data packet;
-	krb5_auth_context auth_context;
+	krb5_auth_context auth_context = NULL;
 	char phost[BUFSIZ];
 	const char *services[3], **service;
+	struct syslog_data data = SYSLOG_DATA_INIT;
 
 	packet.data = 0;
+
+	if (debug)
+		openlog_r("pam_krb5", LOG_PID, LOG_AUTHPRIV, &data);
 
 	/* If possible we want to try and verify the ticket we have
 	 * received against a keytab.  We will try multiple service
@@ -867,7 +872,7 @@ verify_krb_v5_tgt(krb5_context context, krb5_ccache ccache,
 		    KRB5_NT_SRV_HST, &princ);
 		if (retval != 0) {
 			if (debug)
-				syslog(LOG_DEBUG,
+				syslog_r(LOG_DEBUG, &data,
 				    "pam_krb5: verify_krb_v5_tgt(): %s: %s",
 				    "krb5_sname_to_principal()",
 				    krb5_get_err_text(context, retval));
@@ -893,7 +898,7 @@ verify_krb_v5_tgt(krb5_context context, krb5_ccache ccache,
 	if (retval != 0) {	/* failed to find key */
 		/* Keytab or service key does not exist */
 		if (debug)
-			syslog(LOG_DEBUG,
+			syslog_r(LOG_DEBUG, &data,
 			    "pam_krb5: verify_krb_v5_tgt(): %s: %s",
 			    "krb5_kt_read_service_key()",
 			    krb5_get_err_text(context, retval));
@@ -913,7 +918,7 @@ verify_krb_v5_tgt(krb5_context context, krb5_ccache ccache,
 	}
 	if (retval) {
 		if (debug)
-			syslog(LOG_DEBUG,
+			syslog_r(LOG_DEBUG, &data,
 			    "pam_krb5: verify_krb_v5_tgt(): %s: %s",
 			    "krb5_mk_req()",
 			    krb5_get_err_text(context, retval));
@@ -926,7 +931,7 @@ verify_krb_v5_tgt(krb5_context context, krb5_ccache ccache,
 	    NULL, NULL);
 	if (retval) {
 		if (debug)
-			syslog(LOG_DEBUG,
+			syslog_r(LOG_DEBUG, &data,
 			    "pam_krb5: verify_krb_v5_tgt(): %s: %s",
 			    "krb5_rd_req()",
 			    krb5_get_err_text(context, retval));
@@ -936,8 +941,14 @@ verify_krb_v5_tgt(krb5_context context, krb5_ccache ccache,
 		retval = 1;
 
 cleanup:
+	if (debug)
+		closelog_r(&data);
 	if (packet.data)
 		compat_free_data_contents(context, &packet);
+	if (auth_context) {
+		krb5_auth_con_free(context, auth_context);
+		auth_context = NULL;	/* setup for rd_req */
+	}
 	krb5_free_principal(context, princ);
 	return retval;
 }

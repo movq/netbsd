@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_bat.c,v 1.41 2005/12/11 12:21:01 christos Exp $	*/
+/*	$NetBSD: acpi_bat.c,v 1.45 2006/11/16 01:32:47 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_bat.c,v 1.41 2005/12/11 12:21:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_bat.c,v 1.45 2006/11/16 01:32:47 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -230,7 +230,7 @@ static void acpibat_print_stat(struct acpibat_softc *);
 static void acpibat_update(void *);
 
 static void acpibat_init_envsys(struct acpibat_softc *);
-static void acpibat_notify_handler(ACPI_HANDLE, UINT32, void *context);
+static void acpibat_notify_handler(ACPI_HANDLE, UINT32, void *);
 static int acpibat_gtredata(struct sysmon_envsys *, struct envsys_tre_data *);
 static int acpibat_streinfo(struct sysmon_envsys *, struct envsys_basic_info *);
 
@@ -240,7 +240,8 @@ static int acpibat_streinfo(struct sysmon_envsys *, struct envsys_basic_info *);
  *	Autoconfiguration `match' routine.
  */
 static int
-acpibat_match(struct device *parent, struct cfdata *match, void *aux)
+acpibat_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -262,7 +263,8 @@ acpibat_attach(struct device *parent, struct device *self, void *aux)
 	struct acpi_attach_args *aa = aux;
 	ACPI_STATUS rv;
 
-	printf(": ACPI Battery (Control Method)\n");
+	aprint_naive(": ACPI Battery (Control Method)\n");
+	aprint_normal(": ACPI Battery (Control Method)\n");
 
 	sc->sc_node = aa->aa_node;
 	simple_lock_init(&sc->sc_lock);
@@ -271,7 +273,7 @@ acpibat_attach(struct device *parent, struct device *self, void *aux)
 				      ACPI_DEVICE_NOTIFY,
 				      acpibat_notify_handler, sc);
 	if (ACPI_FAILURE(rv)) {
-		printf("%s: unable to register DEVICE NOTIFY handler: %s\n",
+		aprint_error("%s: unable to register DEVICE NOTIFY handler: %s\n",
 		       sc->sc_dev.dv_xname, AcpiFormatException(rv));
 		return;
 	}
@@ -281,7 +283,7 @@ acpibat_attach(struct device *parent, struct device *self, void *aux)
 				      ACPI_SYSTEM_NOTIFY,
 				      acpibat_notify_handler, sc);
 	if (ACPI_FAILURE(rv)) {
-		printf("%s: unable to register SYSTEM NOTIFY handler: %s\n",
+		aprint_error("%s: unable to register SYSTEM NOTIFY handler: %s\n",
 		       sc->sc_dev.dv_xname, AcpiFormatException(rv));
 		return;
 	}
@@ -658,7 +660,8 @@ acpibat_update(void *arg)
  *	Callback from ACPI interrupt handler to notify us of an event.
  */
 static void
-acpibat_notify_handler(ACPI_HANDLE handle, UINT32 notify, void *context)
+acpibat_notify_handler(ACPI_HANDLE handle, UINT32 notify,
+    void *context)
 {
 	struct acpibat_softc *sc = context;
 	int rv, s;
@@ -780,7 +783,8 @@ acpibat_gtredata(struct sysmon_envsys *sme, struct envsys_tre_data *tred)
 }
 
 static int
-acpibat_streinfo(struct sysmon_envsys *sme, struct envsys_basic_info *binfo)
+acpibat_streinfo(struct sysmon_envsys *sme,
+    struct envsys_basic_info *binfo)
 {
 
 	/* XXX Not implemented */

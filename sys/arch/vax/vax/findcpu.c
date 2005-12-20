@@ -1,4 +1,4 @@
-/*	$NetBSD: findcpu.c,v 1.15 2005/12/11 12:19:36 christos Exp $	*/
+/*	$NetBSD: findcpu.c,v 1.17 2006/09/06 00:31:50 matt Exp $	*/
 /*
  * Copyright (c) 1994, 1998 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -30,10 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: findcpu.c,v 1.15 2005/12/11 12:19:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: findcpu.c,v 1.17 2006/09/06 00:31:50 matt Exp $");
 
 #include <sys/param.h>
+#ifdef _KERNEL
 #include <sys/device.h>
+#endif
 
 #include <machine/sid.h>
 #include <machine/nexus.h>
@@ -144,6 +146,6 @@ findcpu(void)
 
 	default:
 		/* CPU not supported, just give up */
-		asm("halt");
+		__asm("halt");
 	}
 }

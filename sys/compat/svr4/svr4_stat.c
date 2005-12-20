@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_stat.c,v 1.55 2005/12/11 12:20:26 christos Exp $	 */
+/*	$NetBSD: svr4_stat.c,v 1.58 2006/11/16 01:32:44 christos Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_stat.c,v 1.55 2005/12/11 12:20:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_stat.c,v 1.58 2006/11/16 01:32:44 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -522,10 +522,7 @@ struct svr4_ustat_args {
 };
 
 int
-svr4_ustat(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+svr4_ustat(struct lwp *l, void *v, register_t *retval)
 {
 	struct svr4_ustat_args /* {
 		syscallarg(svr4_dev_t)		dev;
@@ -549,33 +546,32 @@ svr4_ustat(l, v, retval)
 
 
 int
-svr4_sys_uname(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+svr4_sys_uname(struct lwp *l, void *v, register_t *retval)
 {
 	struct svr4_sys_uname_args *uap = v;
-	struct svr4_utsname	sut;
+	struct svr4_utsname *sut;
+	int error;
 
-	memset(&sut, 0, sizeof(sut));
+	sut = malloc(sizeof(*sut), M_TEMP, M_WAITOK|M_ZERO);
 
-	strncpy(sut.sysname, ostype, sizeof(sut.sysname));
-	sut.sysname[sizeof(sut.sysname) - 1] = '\0';
+	(void)strncpy(sut->sysname, ostype, sizeof(sut->sysname));
+	sut->sysname[sizeof(sut->sysname) - 1] = '\0';
 
-	strncpy(sut.nodename, hostname, sizeof(sut.nodename));
-	sut.nodename[sizeof(sut.nodename) - 1] = '\0';
+	(void)strncpy(sut->nodename, hostname, sizeof(sut->nodename));
+	sut->nodename[sizeof(sut->nodename) - 1] = '\0';
 
-	strncpy(sut.release, osrelease, sizeof(sut.release));
-	sut.release[sizeof(sut.release) - 1] = '\0';
+	(void)strncpy(sut->release, osrelease, sizeof(sut->release));
+	sut->release[sizeof(sut->release) - 1] = '\0';
 
-	strncpy(sut.version, version, sizeof(sut.version));
-	sut.version[sizeof(sut.version) - 1] = '\0';
+	(void)strncpy(sut->version, version, sizeof(sut->version));
+	sut->version[sizeof(sut->version) - 1] = '\0';
 
-	strncpy(sut.machine, machine, sizeof(sut.machine));
-	sut.machine[sizeof(sut.machine) - 1] = '\0';
+	(void)strncpy(sut->machine, machine, sizeof(sut->machine));
+	sut->machine[sizeof(sut->machine) - 1] = '\0';
 
-	return copyout((caddr_t) &sut, (caddr_t) SCARG(uap, name),
-		       sizeof(struct svr4_utsname));
+	error = copyout(sut, SCARG(uap, name), sizeof(*sut));
+	free(sut, M_TEMP);
+	return error;
 }
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pam_unix.c,v 1.9 2005/04/19 03:40:16 lukem Exp $	*/
+/*	$NetBSD: pam_unix.c,v 1.11 2006/05/30 19:48:07 jnemeth Exp $	*/
 
 /*-
  * Copyright 1998 Juniper Networks, Inc.
@@ -40,7 +40,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/lib/libpam/modules/pam_unix/pam_unix.c,v 1.49 2004/02/10 10:13:21 des Exp $");
 #else
-__RCSID("$NetBSD: pam_unix.c,v 1.9 2005/04/19 03:40:16 lukem Exp $");
+__RCSID("$NetBSD: pam_unix.c,v 1.11 2006/05/30 19:48:07 jnemeth Exp $");
 #endif
 
 
@@ -404,7 +404,7 @@ PAM_EXTERN int
 pam_sm_chauthtok(pam_handle_t *pamh, int flags,
     int argc __unused, const char *argv[] __unused)
 {
-	struct passwd *pwd, old_pwd;
+	struct passwd *pwd, new_pwd, old_pwd;
 	login_cap_t *lc;
 	const char *user, *passwd_db, *new_pass, *old_pass, *p;
 	int retval, tries, min_pw_len = 0, pw_expiry = 0;
@@ -416,10 +416,14 @@ pam_sm_chauthtok(pam_handle_t *pamh, int flags,
 #endif
 
 	pwd = NULL;
-	if (openpam_get_option(pamh, PAM_OPT_AUTH_AS_SELF))
-		(void) getpwnam_r(getlogin(), &old_pwd, old_pwbuf,
+	if (openpam_get_option(pamh, PAM_OPT_AUTH_AS_SELF)) {
+		if ((user = getlogin()) == NULL) {
+			pam_error(pamh, "Unable to determine user.");
+			return (PAM_SERVICE_ERR);
+		}
+		(void) getpwnam_r(user, &old_pwd, old_pwbuf,
 				  sizeof(old_pwbuf), &pwd);
-	else {
+	} else {
 		retval = pam_get_user(pamh, &user, NULL);
 		if (retval != PAM_SUCCESS)
 			return (retval);
@@ -461,11 +465,8 @@ pam_sm_chauthtok(pam_handle_t *pamh, int flags,
 			passwd_db = "files";
 		}
 
-		if (passwd_db == NULL) {
-			pam_error(pamh, "Unable to determine Unix password DB");
-			return (PAM_SERVICE_ERR);
-		} else if ((retval = openpam_set_option(pamh, "passwd_db",
-						passwd_db)) != PAM_SUCCESS) {
+		if ((retval = openpam_set_option(pamh, "passwd_db",
+		    passwd_db)) != PAM_SUCCESS) {
 			return (retval);
 		}
 	} else {
@@ -599,6 +600,8 @@ pam_sm_chauthtok(pam_handle_t *pamh, int flags,
 			return (PAM_SERVICE_ERR);
 		}
 
+		new_pwd = old_pwd;
+		pwd = &new_pwd;
 		pwd->pw_passwd = crypt(new_pass, salt);
 		pwd->pw_change = pw_expiry ? pw_expiry + time(NULL) : 0;
 

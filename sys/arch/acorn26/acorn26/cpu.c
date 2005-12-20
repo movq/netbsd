@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.c,v 1.18 2005/12/11 12:16:03 christos Exp $ */
+/* $NetBSD: cpu.c,v 1.21 2006/10/05 14:48:32 chs Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 Ben Harris
@@ -32,7 +32,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.18 2005/12/11 12:16:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.21 2006/10/05 14:48:32 chs Exp $");
 
 #include <sys/device.h>
 #include <sys/proc.h>
@@ -113,7 +113,7 @@ cpu_attach(struct device *parent, struct device *self, void *aux)
 		printf("ARM3 (rev. %d)", cpu_type & CPU_ID_REVISION_MASK);
 #ifdef CPU_ARM3
 		supported = 1;
-		cpu_arm3_setup(self, self->dv_cfdata->cf_flags);
+		cpu_arm3_setup(self, device_cfdata(self)->cf_flags);
 #endif
 		break;
 	default:
@@ -161,10 +161,10 @@ cpu_identify()
 	if (setjmp(&undef_jmp) == 0) {
 		id = CPU_ID_ARM2;
 		/* ARM250 and ARM3 support SWP. */
-		__asm __volatile ("swp r0, r0, [%0]" : : "r" (&dummy) : "r0");
+		__asm volatile ("swp r0, r0, [%0]" : : "r" (&dummy) : "r0");
 		id = CPU_ID_ARM250;
 		/* ARM3 has an internal coprocessor 15 with an ID register. */
-		__asm __volatile ("mrc 15, 0, %0, cr0, cr0" : "=r" (id));
+		__asm volatile ("mrc 15, 0, %0, cr0, cr0" : "=r" (id));
 	}
 	remove_coproc_handler(cp_core);
 	remove_coproc_handler(cp15);
@@ -219,7 +219,7 @@ swp_handler(u_int addr, u_int insn, struct trapframe *tf, int fault_code)
 	uaddr = (caddr_t)getreg(rn);
 	/* We want the page wired so we won't sleep */
 	/* XXX only wire one byte due to weirdness with unaligned words */
-	err = uvm_vslock(p, uaddr, 1, VM_PROT_READ | VM_PROT_WRITE);
+	err = uvm_vslock(p->p_vmspace, uaddr, 1, VM_PROT_READ | VM_PROT_WRITE);
 	if (err != 0) {
 		ksiginfo_t ksi;
 		KSI_INIT_TRAP(&ksi);
@@ -243,7 +243,7 @@ swp_handler(u_int addr, u_int insn, struct trapframe *tf, int fault_code)
 		suword(uaddr, getreg(rm));
 		getreg(rd) = temp;
 	}
-	uvm_vsunlock(p, uaddr, 1);
+	uvm_vsunlock(p->p_vmspace, uaddr, 1);
 	return 0;
 }
 #endif

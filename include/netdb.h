@@ -1,4 +1,4 @@
-/*	$NetBSD: netdb.h,v 1.51 2005/04/18 19:39:45 kleink Exp $	*/
+/*	$NetBSD: netdb.h,v 1.55 2006/11/24 19:46:58 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1983, 1988, 1993
@@ -123,6 +123,9 @@ typedef _BSD_SIZE_T_	size_t;
 #ifndef _PATH_SERVICES
 #define	_PATH_SERVICES	"/etc/services"
 #endif
+#ifndef _PATH_SERVICES_DB
+#define	_PATH_SERVICES_DB "/etc/services.db"
+#endif
 #endif
 
 __BEGIN_DECLS
@@ -140,7 +143,7 @@ struct	hostent {
 	int	h_addrtype;	/* host address type */
 	int	h_length;	/* length of address */
 	char	**h_addr_list;	/* list of addresses from name server */
-#define	h_addr	h_addr_list[0]	/* address, for backward compatiblity */
+#define	h_addr	h_addr_list[0]	/* address, for backward compatibility */
 };
 
 /*
@@ -179,7 +182,7 @@ struct	protoent {
  * Note: ai_addrlen used to be a size_t, per RFC 2553.
  * In XNS5.2, and subsequently in POSIX-2001 and
  * draft-ietf-ipngwg-rfc2553bis-02.txt it was changed to a socklen_t.
- * To accomodate for this while preserving binary compatibility with the
+ * To accommodate for this while preserving binary compatibility with the
  * old interface, we prepend or append 32 bits of padding, depending on
  * the (LP64) architecture's endianness.
  *
@@ -216,7 +219,7 @@ struct addrinfo {
 #define	NETDB_SUCCESS	0	/* no problem */
 #endif
 #define	HOST_NOT_FOUND	1 /* Authoritative Answer Host not found */
-#define	TRY_AGAIN	2 /* Non-Authoritive Host not found, or SERVERFAIL */
+#define	TRY_AGAIN	2 /* Non-Authoritative Host not found, or SERVERFAIL */
 #define	NO_RECOVERY	3 /* Non recoverable errors, FORMERR, REFUSED, NOTIMP */
 #define	NO_DATA		4 /* Valid name, no data record of requested type */
 #if defined(_NETBSD_SOURCE)
@@ -239,9 +242,10 @@ struct addrinfo {
 #define	EAI_SERVICE	 9	/* servname not supported for ai_socktype */
 #define	EAI_SOCKTYPE	10	/* ai_socktype not supported */
 #define	EAI_SYSTEM	11	/* system error returned in errno */
-#define	EAI_BADHINTS	12
-#define	EAI_PROTOCOL	13
-#define	EAI_MAX		14
+#define	EAI_BADHINTS	12	/* invalid value for hints */
+#define	EAI_PROTOCOL	13	/* resolved protocol is unknown */
+#define	EAI_OVERFLOW	14	/* argument buffer overflow */
+#define	EAI_MAX		15
 #endif /* _POSIX_C_SOURCE >= 200112 || _XOPEN_SOURCE >= 520 || _NETBSD_SOURCE */
 
 /*

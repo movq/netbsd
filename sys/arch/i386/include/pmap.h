@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.83 2005/08/08 05:54:07 junyoung Exp $	*/
+/*	$NetBSD: pmap.h,v 1.88 2006/11/16 01:32:38 christos Exp $	*/
 
 /*
  *
@@ -243,7 +243,7 @@ struct pmap {
 #define	pm_lock	pm_obj.vmobjlock
 	LIST_ENTRY(pmap) pm_list;	/* list (lck by pm_list lock) */
 	pd_entry_t *pm_pdir;		/* VA of PD (lck by object lock) */
-	u_int32_t pm_pdirpa;		/* PA of PD (read-only after create) */
+	uint32_t pm_pdirpa;		/* PA of PD (read-only after create) */
 	struct vm_page *pm_ptphint;	/* pointer to a PTP in our pmap */
 	struct pmap_statistics pm_stats;  /* pmap stats (lck by object lock) */
 
@@ -253,7 +253,7 @@ struct pmap {
 	union descriptor *pm_ldt;	/* user-set LDT */
 	int pm_ldt_len;			/* number of LDT entries */
 	int pm_ldt_sel;			/* LDT selector */
-	u_int32_t pm_cpus;		/* mask of CPUs using pmap */
+	uint32_t pm_cpus;		/* mask of CPUs using pmap */
 };
 
 /* pm_flags */

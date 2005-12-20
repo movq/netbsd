@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_lookup.c,v 1.64 2005/12/11 12:24:30 christos Exp $	*/
+/*	$NetBSD: vfs_lookup.c,v 1.72 2006/11/04 10:14:00 elad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -37,10 +37,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_lookup.c,v 1.64 2005/12/11 12:24:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_lookup.c,v 1.72 2006/11/04 10:14:00 elad Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_systrace.h"
+#include "opt_magiclinks.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,6 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_lookup.c,v 1.64 2005/12/11 12:24:30 christos Exp
 #include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/syslog.h>
+#include <sys/kauth.h>
 
 #ifdef KTRACE
 #include <sys/ktrace.h>
@@ -63,6 +65,12 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_lookup.c,v 1.64 2005/12/11 12:24:30 christos Exp
 #ifdef SYSTRACE
 #include <sys/systrace.h>
 #endif
+
+#ifndef MAGICLINKS
+#define MAGICLINKS 0
+#endif
+
+int vfs_magiclinks = MAGICLINKS;
 
 struct pool pnbuf_pool;		/* pathname buffer pool */
 struct pool_cache pnbuf_cache;	/* pathname buffer cache */
@@ -108,10 +116,11 @@ struct pool_cache pnbuf_cache;	/* pathname buffer cache */
 static int
 symlink_magic(struct proc *p, char *cp, int *len)
 {
-	char tmp[MAXPATHLEN];
+	char *tmp;
 	int change, i, newlen;
 	int termchar = '/';
 
+	tmp = PNBUF_GET();
 	for (change = i = newlen = 0; i < *len; ) {
 		if (cp[i] != '@') {
 			tmp[newlen++] = cp[i++];
@@ -154,6 +163,12 @@ symlink_magic(struct proc *p, char *cp, int *len)
 		} else if (MATCH("ostype")) {
 			SUBSTITUTE("ostype", ostype,
 			    strlen(ostype));
+		} else if (MATCH("uid")) {
+			char uidtmp[11]; /* XXX elad */
+
+			(void)snprintf(uidtmp, sizeof(uidtmp), "%u",
+			    kauth_cred_geteuid(kauth_cred_get()));
+			SUBSTITUTE("uid", uidtmp, strlen(uidtmp));
 		} else {
 			tmp[newlen++] = '@';
 			if (termchar == VC)
@@ -161,11 +176,11 @@ symlink_magic(struct proc *p, char *cp, int *len)
 		}
 	}
 
-	if (! change)
-		return (0);
-
-	memcpy(cp, tmp, newlen);
-	*len = newlen;
+	if (change) {
+		memcpy(cp, tmp, newlen);
+		*len = newlen;
+	}
+	PNBUF_PUT(tmp);
 
 	return (0);
 }
@@ -177,7 +192,7 @@ symlink_magic(struct proc *p, char *cp, int *len)
 #undef SUBSTITUTE
 
 /*
- * Convert a pathname into a pointer to a locked inode.
+ * Convert a pathname into a pointer to a locked vnode.
  *
  * The FOLLOW flag is set when symbolic links are to be followed
  * when they occur at the end of the name translation process.
@@ -312,9 +327,8 @@ namei(struct nameidata *ndp)
 		auio.uio_iovcnt = 1;
 		auio.uio_offset = 0;
 		auio.uio_rw = UIO_READ;
-		auio.uio_segflg = UIO_SYSSPACE;
-		auio.uio_lwp = NULL;
 		auio.uio_resid = MAXPATHLEN;
+		UIO_SETUP_SYSSPACE(&auio);
 		error = VOP_READLINK(ndp->ni_vp, &auio, cnp->cn_cred);
 		if (error) {
 		badlink:
@@ -331,7 +345,7 @@ namei(struct nameidata *ndp)
 		 * Do symlink substitution, if appropriate, and
 		 * check length for potential overflow.
 		 */
-		if (((ndp->ni_vp->v_mount->mnt_flag & MNT_MAGICLINKS) &&
+		if ((vfs_magiclinks &&
 		     symlink_magic(cnp->cn_lwp->l_proc, cp, &linklen)) ||
 		    (linklen + ndp->ni_pathlen >= MAXPATHLEN)) {
 			error = ENAMETOOLONG;
@@ -484,7 +498,17 @@ lookup(struct nameidata *ndp)
 		 */
 		if (cnp->cn_nameptr[0] == '\0') {
 			if (ndp->ni_dvp == NULL && wantparent) {
-				error = EISDIR;
+				switch (cnp->cn_nameiop) {
+				case CREATE:
+					error = EEXIST;
+					break;
+				case DELETE:
+				case RENAME:
+					error = EBUSY;
+					break;
+				default:
+					KASSERT(0);
+				}
 				goto bad;
 			}
 			ndp->ni_vp = dp;
@@ -588,7 +612,7 @@ dirloop:
 				    log(LOG_WARNING,
 					"chrooted pid %d uid %d (%s) "
 					"detected outside of its chroot\n",
-					p->p_pid, p->p_ucred->cr_uid,
+					p->p_pid, kauth_cred_geteuid(l->l_cred),
 					p->p_comm);
 				    /* Put us at the jail root. */
 				    vput(dp);
@@ -666,7 +690,7 @@ unionlookup:
 		/*
 		 * We return with ni_vp NULL to indicate that the entry
 		 * doesn't currently exist, leaving a pointer to the
-		 * (possibly locked) directory inode in ndp->ni_dvp.
+		 * (possibly locked) directory vnode in ndp->ni_dvp.
 		 */
 		if (cnp->cn_flags & SAVESTART) {
 			ndp->ni_startdir = ndp->ni_dvp;
@@ -866,7 +890,7 @@ relookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 		/*
 		 * We return with ni_vp NULL to indicate that the entry
 		 * doesn't currently exist, leaving a pointer to the
-		 * (possibly locked) directory inode in ndp->ni_dvp.
+		 * (possibly locked) directory vnode in ndp->ni_dvp.
 		 */
 		return (0);
 	}

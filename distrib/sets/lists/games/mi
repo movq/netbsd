@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.37 2005/07/01 03:32:49 snj Exp $
+# $NetBSD: mi,v 1.39 2006/01/24 19:06:35 elad Exp $
 ./etc/mtree/set.games				games-sys-root
 ./usr/games/adventure				games-games-bin
 ./usr/games/arithmetic				games-games-bin

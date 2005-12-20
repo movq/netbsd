@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pglist.c,v 1.34 2005/12/11 12:25:29 christos Exp $	*/
+/*	$NetBSD: uvm_pglist.c,v 1.36 2006/09/15 15:51:13 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_pglist.c,v 1.34 2005/12/11 12:25:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_pglist.c,v 1.36 2006/09/15 15:51:13 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,6 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_pglist.c,v 1.34 2005/12/11 12:25:29 christos Exp
 #include <sys/proc.h>
 
 #include <uvm/uvm.h>
+#include <uvm/uvm_pdpolicy.h>
 
 #ifdef VM_PAGE_ALLOC_MEMORY_STATS
 #define	STAT_INCR(v)	(v)++
@@ -132,7 +133,7 @@ uvm_pglistalloc_c_ps(struct vm_physseg *ps, int num, paddr_t low, paddr_t high,
 	int pagemask;
 #ifdef DEBUG
 	paddr_t idxpa, lastidxpa;
-	int cidx;
+	int cidx = 0;	/* XXX: GCC */
 #endif
 #ifdef PGALLOC_VERBOSE
 	printf("pgalloc: contig %d pgs from psi %ld\n", num,
@@ -277,7 +278,7 @@ out:
 	 * the pagedaemon.
 	 */
 
-	UVM_KICK_PDAEMON();
+	uvm_kick_pdaemon();
 	uvm_unlock_fpageq(s);
 	return (error);
 }
@@ -289,7 +290,7 @@ uvm_pglistalloc_s_ps(struct vm_physseg *ps, int num, paddr_t low, paddr_t high,
 	int todo, limit, try;
 	struct vm_page *pg;
 #ifdef DEBUG
-	int cidx;
+	int cidx = 0;	/* XXX: GCC */
 #endif
 #ifdef PGALLOC_VERBOSE
 	printf("pgalloc: simple %d pgs from psi %ld\n", num,
@@ -369,7 +370,7 @@ out:
 	 * the pagedaemon.
 	 */
 
-	UVM_KICK_PDAEMON();
+	uvm_kick_pdaemon();
 	uvm_unlock_fpageq(s);
 	if (error) {
 		if (waitok) {
@@ -443,7 +444,7 @@ uvm_pglistfree(struct pglist *list)
 	while ((pg = TAILQ_FIRST(list)) != NULL) {
 		boolean_t iszero;
 
-		KASSERT((pg->pqflags & (PQ_ACTIVE|PQ_INACTIVE)) == 0);
+		KASSERT(!uvmpdpol_pageisqueued_p(pg));
 		TAILQ_REMOVE(list, pg, pageq);
 		iszero = (pg->flags & PG_ZERO);
 		pg->pqflags = PQ_FREE;

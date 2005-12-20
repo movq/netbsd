@@ -1,8 +1,8 @@
-/*	$NetBSD: altq_afmap.c,v 1.9 2005/12/11 12:16:03 christos Exp $	*/
-/*	$KAME: altq_afmap.c,v 1.7 2000/12/14 08:12:45 thorpej Exp $	*/
+/*	$NetBSD: altq_afmap.c,v 1.17 2006/11/16 01:32:37 christos Exp $	*/
+/*	$KAME: altq_afmap.c,v 1.12 2005/04/13 03:44:24 suz Exp $	*/
 
 /*
- * Copyright (C) 1997-2000
+ * Copyright (C) 1997-2002
  *	Sony Computer Science Laboratories Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -36,12 +36,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altq_afmap.c,v 1.9 2005/12/11 12:16:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altq_afmap.c,v 1.17 2006/11/16 01:32:37 christos Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_altq.h"
 #include "opt_inet.h"
 #endif
+
+#ifdef ALTQ_AFMAP
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -53,6 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: altq_afmap.c,v 1.9 2005/12/11 12:16:03 christos Exp 
 #include <sys/errno.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
+#include <sys/kauth.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -62,11 +65,13 @@ __KERNEL_RCSID(0, "$NetBSD: altq_afmap.c,v 1.9 2005/12/11 12:16:03 christos Exp 
 #include <altq/altq_conf.h>
 #include <altq/altq_afmap.h>
 
+#ifdef ALTQ3_COMPAT
+
 LIST_HEAD(, afm_head) afhead_chain;
 
-static struct afm *afm_match4 __P((struct afm_head *, struct flowinfo_in *));
+static struct afm *afm_match4(struct afm_head *, struct flowinfo_in *);
 #ifdef INET6
-static struct afm *afm_match6 __P((struct afm_head *, struct flowinfo_in6 *));
+static struct afm *afm_match6(struct afm_head *, struct flowinfo_in6 *);
 #endif
 
 /*
@@ -75,16 +80,13 @@ static struct afm *afm_match6 __P((struct afm_head *, struct flowinfo_in6 *));
  * be called in splnet().
  */
 int
-afm_alloc(ifp)
-	struct ifnet *ifp;
+afm_alloc(struct ifnet *ifp)
 {
 	struct afm_head *head;
 
-	MALLOC(head, struct afm_head *, sizeof(struct afm_head),
-	       M_DEVBUF, M_WAITOK);
+	head = malloc(sizeof(struct afm_head), M_DEVBUF, M_WAITOK|M_ZERO);
 	if (head == NULL)
 		panic("afm_alloc: malloc failed!");
-	(void)memset(head, 0, sizeof(struct afm_head));
 
 	/* initialize per interface afmap list */
 	LIST_INIT(&head->afh_head);
@@ -98,8 +100,7 @@ afm_alloc(ifp)
 }
 
 int
-afm_dealloc(ifp)
-	struct ifnet *ifp;
+afm_dealloc(struct ifnet *ifp)
 {
 	struct afm_head *head;
 
@@ -114,13 +115,12 @@ afm_dealloc(ifp)
 
 	LIST_REMOVE(head, afh_chain);
 
-	FREE(head, M_DEVBUF);
+	free(head, M_DEVBUF);
 	return 0;
 }
 
 struct afm *
-afm_top(ifp)
-	struct ifnet *ifp;
+afm_top(struct ifnet *ifp)
 {
 	struct afm_head *head;
 
@@ -134,9 +134,8 @@ afm_top(ifp)
 	return (head->afh_head.lh_first);
 }
 
-int afm_add(ifp, flowmap)
-	struct ifnet *ifp;
-	struct atm_flowmap *flowmap;
+int
+afm_add(struct ifnet *ifp, struct atm_flowmap *flowmap)
 {
 	struct afm_head *head;
 	struct afm *afm;
@@ -159,11 +158,9 @@ int afm_add(ifp, flowmap)
 	} else
 		return (EINVAL);
 
-	MALLOC(afm, struct afm *, sizeof(struct afm),
-	       M_DEVBUF, M_WAITOK);
+	afm = malloc(sizeof(struct afm), M_DEVBUF, M_WAITOK|M_ZERO);
 	if (afm == NULL)
 		return (ENOMEM);
-	(void)memset(afm, 0, sizeof(struct afm));
 
 	afm->afm_vci = flowmap->af_vci;
 	afm->afm_vpi = flowmap->af_vpi;
@@ -175,17 +172,15 @@ int afm_add(ifp, flowmap)
 }
 
 int
-afm_remove(afm)
-	struct afm *afm;
+afm_remove(struct afm *afm)
 {
 	LIST_REMOVE(afm, afm_list);
-	FREE(afm, M_DEVBUF);
+	free(afm, M_DEVBUF);
 	return (0);
 }
 
 int
-afm_removeall(ifp)
-	struct ifnet *ifp;
+afm_removeall(struct ifnet *ifp)
 {
 	struct afm_head *head;
 	struct afm *afm;
@@ -203,9 +198,7 @@ afm_removeall(ifp)
 }
 
 struct afm *
-afm_lookup(ifp, vpi, vci)
-	struct ifnet *ifp;
-	int vpi, vci;
+afm_lookup(struct ifnet *ifp, int vpi, int vci)
 {
 	struct afm_head *head;
 	struct afm *afm;
@@ -225,9 +218,7 @@ afm_lookup(ifp, vpi, vci)
 }
 
 static struct afm *
-afm_match4(head, fp)
-	struct afm_head *head;
-	struct flowinfo_in *fp;
+afm_match4(struct afm_head *head, struct flowinfo_in *fp)
 {
 	struct afm *afm;
 
@@ -256,9 +247,7 @@ afm_match4(head, fp)
 
 #ifdef INET6
 static struct afm *
-afm_match6(head, fp)
-	struct afm_head *head;
-	struct flowinfo_in6 *fp;
+afm_match6(struct afm_head *head, struct flowinfo_in6 *fp)
 {
 	struct afm *afm;
 
@@ -297,9 +286,7 @@ afm_match6(head, fp)
 
 /* should be called in splnet() */
 struct afm *
-afm_match(ifp, flow)
-	struct ifnet *ifp;
-	struct flowinfo *flow;
+afm_match(struct ifnet *ifp, struct flowinfo *flow)
 {
 	struct afm_head *head;
 
@@ -330,19 +317,14 @@ afm_match(ifp, flow)
 altqdev_decl(afm);
 
 int
-afmopen(dev, flag, fmt, l)
-	dev_t dev;
-	int flag, fmt;
-	struct lwp *l;
+afmopen(dev_t dev, int flag, int fmt,
+    struct lwp *l)
 {
 	return 0;
 }
 
 int
-afmclose(dev, flag, fmt, l)
-	dev_t dev;
-	int flag, fmt;
-	struct lwp *l;
+afmclose(dev_t dev, int flag, int fmt, struct lwp *l)
 {
 	int err, error = 0;
 	struct atm_flowmap fmap;
@@ -352,12 +334,7 @@ afmclose(dev, flag, fmt, l)
 	     head = head->afh_chain.le_next) {
 
 		/* call interface to clean up maps */
-#if defined(__NetBSD__) || defined(__OpenBSD__)
 		sprintf(fmap.af_ifname, "%s", head->afh_ifp->if_xname);
-#else
-		sprintf(fmap.af_ifname, "%s%d",
-			head->afh_ifp->if_name, head->afh_ifp->if_unit);
-#endif
 		err = afmioctl(dev, AFM_CLEANFMAP, (caddr_t)&fmap, flag, l);
 		if (err && error == 0)
 			error = err;
@@ -367,17 +344,12 @@ afmclose(dev, flag, fmt, l)
 }
 
 int
-afmioctl(dev, cmd, addr, flag, l)
-	dev_t dev;
-	ioctlcmd_t cmd;
-	caddr_t addr;
-	int flag;
-	struct lwp *l;
+afmioctl(dev_t dev, ioctlcmd_t cmd, caddr_t addr, int flag,
+    struct lwp *l)
 {
 	int	error = 0;
 	struct atm_flowmap *flowmap;
 	struct ifnet *ifp;
-	struct proc *p = l->l_proc;
 
 	/* check cmd for superuser only */
 	switch (cmd) {
@@ -387,7 +359,8 @@ afmioctl(dev, cmd, addr, flag, l)
 #if (__FreeBSD_version > 400000)
 		error = suser(p);
 #else
-		error = suser(p->p_ucred, &p->p_acflag);
+		error = kauth_authorize_network(l->l_cred, KAUTH_NETWORK_ALTQ,
+		    KAUTH_REQ_NETWORK_ALTQ_AFMAP, NULL, NULL, NULL);
 #endif
 		if (error)
 			return (error);
@@ -406,3 +379,6 @@ afmioctl(dev, cmd, addr, flag, l)
 
 	return error;
 }
+
+#endif /* ALTQ3_COMPAT */
+#endif /* ALTQ_AFMAP */

@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_lookup.c,v 1.8 2005/12/11 12:24:25 christos Exp $	*/
+/*	$NetBSD: msdosfs_lookup.c,v 1.10 2006/11/25 12:17:30 scw Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_lookup.c,v 1.8 2005/12/11 12:24:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_lookup.c,v 1.10 2006/11/25 12:17:30 scw Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,6 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: msdosfs_lookup.c,v 1.8 2005/12/11 12:24:25 christos 
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/dirent.h>
+#include <sys/kauth.h>
 
 #include <fs/msdosfs/bpb.h>
 #include <fs/msdosfs/direntry.h>
@@ -224,7 +225,8 @@ msdosfs_lookup(v)
 				break;
 			return (error);
 		}
-		error = bread(pmp->pm_devvp, bn, blsize, NOCRED, &bp);
+		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
+		    &bp);
 		if (error) {
 			brelse(bp);
 			return (error);
@@ -656,7 +658,8 @@ createde(dep, ddep, depp, cnp)
 	clusoffset = ddep->de_fndoffset;
 	if (dirclust != MSDOSFSROOT)
 		clusoffset &= pmp->pm_crbomask;
-	if ((error = bread(pmp->pm_devvp, bn, blsize, NOCRED, &bp)) != 0) {
+	if ((error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
+	    &bp)) != 0) {
 		brelse(bp);
 		goto err_norollback;
 	}
@@ -693,8 +696,8 @@ createde(dep, ddep, depp, cnp)
 				if (error)
 					goto rollback;
 
-				error = bread(pmp->pm_devvp, bn, blsize,
-					      NOCRED, &bp);
+				error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn),
+				    blsize, NOCRED, &bp);
 				if (error) {
 					brelse(bp);
 					goto rollback;
@@ -746,7 +749,8 @@ createde(dep, ddep, depp, cnp)
 	       &bn, NULL, &blsize);
 	if (rberror)
 		goto err_norollback;
-	if ((rberror = bread(pmp->pm_devvp, bn, blsize, NOCRED, &bp)) != 0) {
+	if ((rberror = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
+	    &bp)) != 0) {
 		brelse(bp);
 		goto err_norollback;
 	}
@@ -773,8 +777,8 @@ createde(dep, ddep, depp, cnp)
 			if (rberror)
 				goto err_norollback;
 
-			rberror = bread(pmp->pm_devvp, bn, blsize,
-				      NOCRED, &bp);
+			rberror = bread(pmp->pm_devvp, de_bn2kb(pmp, bn),
+			    blsize, NOCRED, &bp);
 			if (rberror) {
 				brelse(bp);
 				goto err_norollback;
@@ -823,7 +827,8 @@ dosdirempty(dep)
 				return (1);	/* it's empty */
 			return (0);
 		}
-		error = bread(pmp->pm_devvp, bn, blsize, NOCRED, &bp);
+		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
+		    &bp);
 		if (error) {
 			brelse(bp);
 			return (0);
@@ -916,7 +921,7 @@ doscheckpath(source, target)
 			break;
 		}
 		scn = dep->de_StartCluster;
-		error = bread(pmp->pm_devvp, cntobn(pmp, scn),
+		error = bread(pmp->pm_devvp, de_bn2kb(pmp, cntobn(pmp, scn)),
 			      pmp->pm_bpcluster, NOCRED, &bp);
 		if (error)
 			break;
@@ -983,7 +988,8 @@ readep(pmp, dirclust, diroffset, bpp, epp)
 	    && de_blk(pmp, diroffset + blsize) > pmp->pm_rootdirsize)
 		blsize = de_bn2off(pmp, pmp->pm_rootdirsize) & pmp->pm_crbomask;
 	bn = detobn(pmp, dirclust, diroffset);
-	if ((error = bread(pmp->pm_devvp, bn, blsize, NOCRED, bpp)) != 0) {
+	if ((error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
+	    bpp)) != 0) {
 		brelse(*bpp);
 		*bpp = NULL;
 		return (error);
@@ -1042,7 +1048,8 @@ removede(pdep, dep)
 		error = pcbmap(pdep, de_cluster(pmp, offset), &bn, 0, &blsize);
 		if (error)
 			return error;
-		error = bread(pmp->pm_devvp, bn, blsize, NOCRED, &bp);
+		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
+		    &bp);
 		if (error) {
 			brelse(bp);
 			return error;
@@ -1118,7 +1125,8 @@ uniqdosname(dep, cnp, cp)
 					return 0;
 				return error;
 			}
-			error = bread(pmp->pm_devvp, bn, blsize, NOCRED, &bp);
+			error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize,
+			    NOCRED, &bp);
 			if (error) {
 				brelse(bp);
 				return error;
@@ -1169,7 +1177,8 @@ findwin95(dep)
 	for (cn = 0;; cn++) {
 		if (pcbmap(dep, cn, &bn, 0, &blsize))
 			return 0;
-		if (bread(pmp->pm_devvp, bn, blsize, NOCRED, &bp)) {
+		if (bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
+		    &bp)) {
 			brelse(bp);
 			return 0;
 		}

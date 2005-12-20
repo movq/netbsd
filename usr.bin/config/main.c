@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.8 2005/12/10 13:39:47 cube Exp $	*/
+/*	$NetBSD: main.c,v 1.18 2006/10/29 23:00:44 uwe Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -62,15 +62,18 @@ COPYRIGHT("@(#) Copyright (c) 1992, 1993\n\
 #include <sys/mman.h>
 #include <paths.h>
 #include <ctype.h>
+#include <err.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <vis.h>
+#include <util.h>
+
 #include "defs.h"
 #include "sem.h"
-#include <vis.h>
 
 #ifndef LINE_MAX
 #define LINE_MAX 1024
@@ -85,6 +88,7 @@ int	yyparse(void);
 extern int yydebug;
 #endif
 
+static struct hashtab *obsopttab;
 static struct hashtab *mkopttab;
 static struct nvlist **nextopt;
 static struct nvlist **nextmkopt;
@@ -114,7 +118,7 @@ static	int	kill_orphans_cb(const char *, void *, void *);
 static	int	cfcrosscheck(struct config *, const char *, struct nvlist *);
 static	const char *strtolower(const char *);
 void	defopt(struct hashtab *ht, const char *fname,
-	     struct nvlist *opts, struct nvlist *deps);
+	     struct nvlist *opts, struct nvlist *deps, int obs);
 
 #define LOGCONFIG_LARGE "INCLUDE_CONFIG_FILE"
 #define LOGCONFIG_SMALL "INCLUDE_JUST_CONFIG"
@@ -270,6 +274,7 @@ main(int argc, char **argv)
 	defparamtab = ht_new();
 	defflagtab = ht_new();
 	optfiletab = ht_new();
+	obsopttab = ht_new();
 	bdevmtab = ht_new();
 	maxbdevm = 0;
 	cdevmtab = ht_new();
@@ -444,6 +449,15 @@ dependopts(void)
 			}
 		}
 	}
+
+	for (nv = fsoptions; nv != NULL; nv = nv->nv_next) {
+		if ((opt = find_declared_option(nv->nv_name)) != NULL) {
+			for (opt = opt->nv_ptr; opt != NULL;
+			    opt = opt->nv_next) {
+				do_depend(opt);
+			}
+		}
+	}
 }
 
 static void
@@ -540,6 +554,36 @@ stop(void)
 	exit(1);
 }
 
+static void
+add_dependencies(struct nvlist *nv, struct nvlist *deps)
+{
+	struct nvlist *dep;
+	struct attr *a;
+
+	/* Use nv_ptr to link any other options that are implied. */
+	nv->nv_ptr = deps;
+	for (dep = deps; dep != NULL; dep = dep->nv_next) {
+		/*
+		 * If the dependency is an attribute, it must not
+		 * be an interface attribute.  Otherwise, it must
+		 * be a previously declared option.
+		 */
+		if ((a = ht_lookup(attrtab, dep->nv_name)) != NULL) {
+			if (a->a_iattr)
+				error("option `%s' dependency `%s' "
+				    "is an interface attribute",
+				    nv->nv_name, a->a_name);
+		} else if (OPT_OBSOLETE(dep->nv_name)) {
+			error("option `%s' dependency `%s' "
+			    "is obsolete", nv->nv_name, dep->nv_name);
+		} else if (find_declared_option(dep->nv_name) == NULL) {
+			error("option `%s' dependency `%s' "
+			    "is an unknown option",
+			    nv->nv_name, dep->nv_name);
+		}
+	}
+}
+
 /*
  * Define one or more file systems.  If file system options file name is
  * specified, a preprocessor #define for that file system will be placed
@@ -547,7 +591,7 @@ stop(void)
  * Otherwise, no preprocessor #defines will be generated.
  */
 void
-deffilesystem(const char *fname, struct nvlist *fses)
+deffilesystem(const char *fname, struct nvlist *fses, struct nvlist *deps)
 {
 	struct nvlist *nv;
 
@@ -586,6 +630,8 @@ deffilesystem(const char *fname, struct nvlist *fses)
 				return;
 			}
 		}
+
+		add_dependencies(nv, deps);
 	}
 }
 
@@ -641,10 +687,9 @@ find_declared_option(const char *name)
  */
 void
 defopt(struct hashtab *ht, const char *fname, struct nvlist *opts,
-       struct nvlist *deps)
+       struct nvlist *deps, int obs)
 {
-	struct nvlist *nv, *nextnv, *oldnv, *dep;
-	struct attr *a;
+	struct nvlist *nv, *nextnv, *oldnv;
 	const char *name;
 	char buf[500];
 
@@ -685,31 +730,21 @@ defopt(struct hashtab *ht, const char *fname, struct nvlist *opts,
 			name = fname;
 		}
 
-		/* Use nv_ptr to link any other options that are implied. */
-		nv->nv_ptr = deps;
-		for (dep = deps; dep != NULL; dep = dep->nv_next) {
-			/*
-			 * If the dependency is an attribute, it must not
-			 * be an interface attribute.  Otherwise, it must
-			 * be a previously declared option.
-			 */
-			if ((a = ht_lookup(attrtab, dep->nv_name)) != NULL) {
-				if (a->a_iattr)
-					error("option `%s' dependency `%s' "
-					    "is an interface attribute",
-					    nv->nv_name, a->a_name);
-			} else if (find_declared_option(dep->nv_name) == NULL) {
-				error("option `%s' dependency `%s' "
-				    "is an unknown option",
-				    nv->nv_name, dep->nv_name);
-			}
-		}
+		add_dependencies(nv, deps);
 
 		/*
 		 * Remove this option from the parameter list before adding
 		 * it to the list associated with this option file.
 		 */
 		nv->nv_next = NULL;
+
+		/*
+		 * Flag as obsolete, if requested.
+		 */
+		if (obs) {
+			nv->nv_flags |= NV_OBSOLETE;
+			(void)ht_insert(obsopttab, nv->nv_name, nv);
+		}
 
 		/*
 		 * Add this option file if we haven't seen it yet.
@@ -736,7 +771,7 @@ defoption(const char *fname, struct nvlist *opts, struct nvlist *deps)
 {
 
 	warn("The use of `defopt' is deprecated");
-	defopt(defopttab, fname, opts, deps);
+	defopt(defopttab, fname, opts, deps, 0);
 }
 
 
@@ -744,10 +779,10 @@ defoption(const char *fname, struct nvlist *opts, struct nvlist *deps)
  * Define an option for which a value is required. 
  */
 void
-defparam(const char *fname, struct nvlist *opts, struct nvlist *deps)
+defparam(const char *fname, struct nvlist *opts, struct nvlist *deps, int obs)
 {
 
-	defopt(defparamtab, fname, opts, deps);
+	defopt(defparamtab, fname, opts, deps, obs);
 }
 
 /*
@@ -755,10 +790,10 @@ defparam(const char *fname, struct nvlist *opts, struct nvlist *deps)
  * emits a "needs-flag" style output.
  */
 void
-defflag(const char *fname, struct nvlist *opts, struct nvlist *deps)
+defflag(const char *fname, struct nvlist *opts, struct nvlist *deps, int obs)
 {
 
-	defopt(defflagtab, fname, opts, deps);
+	defopt(defflagtab, fname, opts, deps, obs);
 }
 
 
@@ -770,7 +805,7 @@ void
 addoption(const char *name, const char *value)
 {
 	const char *n;
-	int is_fs, is_param, is_flag, is_opt, is_undecl;
+	int is_fs, is_param, is_flag, is_opt, is_undecl, is_obs;
 
 	/* 
 	 * Figure out how this option was declared (if at all.)
@@ -781,7 +816,14 @@ addoption(const char *name, const char *value)
 	is_param = OPT_DEFPARAM(name);
 	is_opt = OPT_DEFOPT(name);
 	is_flag =  OPT_DEFFLAG(name);
+	is_obs = OPT_OBSOLETE(name);
 	is_undecl = !DEFINED_OPTION(name);
+
+	/* Warn and pretend the user had not selected the option  */
+	if (is_obs) {
+		warn("obsolete option `%s' will be ignored", name);
+		return;
+	}
 
 	/* Make sure this is not a defined file system. */
 	if (is_fs) {
@@ -1201,6 +1243,7 @@ int
 mkident(void)
 {
 	FILE *fp;
+	int error = 0;
 
 	(void)unlink("ident");
 
@@ -1214,11 +1257,13 @@ mkident(void)
 	}
 	if (vflag)
 		(void)printf("using ident '%s'\n", ident);
-	if (fprintf(fp, "%s\n", ident) < 0)
-		return (1);
+	fprintf(fp, "%s\n", ident);
+	fflush(fp);
+	if (ferror(fp))
+		error = 1;
 	(void)fclose(fp);
 
-	return (0);
+	return error;
 }
 
 void
@@ -1249,6 +1294,7 @@ logconfig_start(void)
 	}
 	unlink(line);
 
+	(void)fprintf(cfg, "#include <sys/cdefs.h>\n\n");
 	(void)fprintf(cfg, "#include \"opt_config.h\"\n");
 	(void)fprintf(cfg, "\n");
 	(void)fprintf(cfg, "/*\n");
@@ -1273,8 +1319,7 @@ logconfig_start(void)
 	(void)fprintf(cfg, "#ifdef CONFIG_FILE\n");
 	(void)fprintf(cfg, "#if defined(%s) || defined(%s)\n\n",
 	    LOGCONFIG_LARGE, LOGCONFIG_SMALL);
-	(void)fprintf(cfg,
-	    "static const char config[] __attribute__((__unused__)) =\n\n");
+	(void)fprintf(cfg, "static const char config[] __used =\n\n");
 
 	(void)fprintf(cfg, "#ifdef %s\n\n", LOGCONFIG_LARGE);
 	(void)fprintf(cfg, "\"_CFG_### START CONFIG FILE \\\"%s\\\"\\n\"\n\n",
@@ -1358,6 +1403,9 @@ logconfig_end(void)
 	(void)fprintf(cfg, "#endif /* %s || %s */\n",
 	    LOGCONFIG_LARGE, LOGCONFIG_SMALL);
 	(void)fprintf(cfg, "#endif /* CONFIG_FILE */\n");
+	fflush(cfg);
+	if (ferror(cfg))
+		err(EXIT_FAILURE, "write to temporary file for config.h failed");
 	rewind(cfg);
 
 	if (stat("config_file.h", &st) != -1) {
@@ -1368,14 +1416,14 @@ logconfig_end(void)
 	}
 
 	fp = fopen("config_file.h", "w");
-	if(!fp) {
-		(void)fprintf(stderr,
-		    "config: cannot write to \"config_file.h\"\n");
-		exit(1);
-	}
+	if (!fp)
+		err(EXIT_FAILURE, "cannot open \"config.h\"");
 
 	while (fgets(line, sizeof(line), cfg) != NULL)
 		fputs(line, fp);
+	fflush(fp);
+	if (ferror(fp))
+		err(EXIT_FAILURE, "write to \"config.h\" failed");
 	fclose(fp);
 	fclose(cfg);
 }

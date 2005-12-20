@@ -1,4 +1,4 @@
-/*	$NetBSD: odsyntax.c,v 1.22 2005/06/02 01:53:01 lukem Exp $	*/
+/*	$NetBSD: odsyntax.c,v 1.24 2006/08/26 18:17:42 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)odsyntax.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: odsyntax.c,v 1.22 2005/06/02 01:53:01 lukem Exp $");
+__RCSID("$NetBSD: odsyntax.c,v 1.24 2006/08/26 18:17:42 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,6 +49,7 @@ __RCSID("$NetBSD: odsyntax.c,v 1.22 2005/06/02 01:53:01 lukem Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <util.h>
 
 #include "hexdump.h"
 
@@ -67,15 +68,13 @@ struct odaddrformat {
 
 int deprecated;
 
-static void odoffset __P((int, char ***));
-static void posixtypes __P((char const *));
-static void odprecede __P((void));
+static void odoffset(int, char ***);
+static void posixtypes(char const *);
+static void odprecede(void);
 
 
 void
-oldsyntax(argc, argvp)
-	int argc;
-	char ***argvp;
+oldsyntax(int argc, char ***argvp)
 {
 	int ch;
 	char *p, **argv;
@@ -211,8 +210,7 @@ static const struct odformat odftab[] = {
  * Interpret a POSIX-style -t argument.
  */
 static void
-posixtypes(type_string)
-	char const *type_string;
+posixtypes(char const *type_string)
 {
 	int nbytes = 0;
 	char *fmt, type, *tmp;
@@ -287,18 +285,15 @@ posixtypes(type_string)
 				break;
 		if (odf->type == 0)
 			errx(1, "%c%d: format not supported", type, nbytes);
-		asprintf(&fmt, "%d/%d  \"%*s%s \" \"\\n\"",
+		(void)easprintf(&fmt, "%d/%d  \"%*s%s \" \"\\n\"",
 		    16 / nbytes, nbytes,
 		    4 * nbytes - odf->minwidth, "", odf->format);
-		if (fmt == NULL) nomem();
 		add(fmt);
 	}
 }
 
 static void
-odoffset(argc, argvp)
-	int argc;
-	char ***argvp;
+odoffset(int argc, char ***argvp)
 {
 	char *num, *p;
 	int base;
@@ -396,7 +391,7 @@ odoffset(argc, argvp)
 }
 
 static void
-odprecede()
+odprecede(void)
 {
 	static int first = 1;
 

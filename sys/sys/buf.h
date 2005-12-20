@@ -1,4 +1,4 @@
-/*	$NetBSD: buf.h,v 1.84 2005/12/11 12:25:20 christos Exp $	*/
+/*	$NetBSD: buf.h,v 1.90 2006/11/14 15:50:00 reinoud Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -86,6 +86,7 @@
 struct buf;
 struct mount;
 struct vnode;
+struct kauth_cred;
 
 #define NOLIST ((struct buf *)0x87654321)
 
@@ -198,7 +199,6 @@ do {									\
 #define	B_DELWRI	0x00000080	/* Delay I/O until buffer reused. */
 #define	B_DIRTY		0x00000100	/* Dirty page to be pushed out async. */
 #define	B_DONE		0x00000200	/* I/O completed. */
-#define	B_EINTR		0x00000400	/* I/O was interrupted */
 #define	B_ERROR		0x00000800	/* I/O error occurred. */
 #define	B_GATHERED	0x00001000	/* LFS: already in a segment. */
 #define	B_INVAL		0x00002000	/* Does not contain valid info. */
@@ -216,7 +216,7 @@ do {									\
 
 #define BUF_FLAGBITS \
     "\20\1AGE\3ASYNC\4BAD\5BUSY\6SCANNED\7CALL\10DELWRI" \
-    "\11DIRTY\12DONE\13EINTR\14ERROR\15GATHERED\16INVAL\17LOCKED\20NOCACHE" \
+    "\11DIRTY\12DONE\14ERROR\15GATHERED\16INVAL\17LOCKED\20NOCACHE" \
     "\22CACHE\23PHYS\24RAW\25READ\26TAPE\30WANTED\32XXX\33VFLUSH"
 
 
@@ -263,12 +263,6 @@ do {									\
 extern	struct bio_ops bioops;
 extern	u_int nbuf;		/* The number of buffer headers */
 
-/*
- * Pool of I/O buffers.  Access to this pool must be protected with
- * splbio().
- */
-extern	struct pool bufpool;
-
 __BEGIN_DECLS
 void	allocbuf(struct buf *, int, int);
 void	bawrite(struct buf *);
@@ -276,18 +270,17 @@ void	bdirty(struct buf *);
 void	bdwrite(struct buf *);
 void	biodone(struct buf *);
 int	biowait(struct buf *);
-int	bread(struct vnode *, daddr_t, int, struct ucred *, struct buf **);
-int	breada(struct vnode *, daddr_t, int, daddr_t, int, struct ucred *,
+int	bread(struct vnode *, daddr_t, int, struct kauth_cred *, struct buf **);
+int	breada(struct vnode *, daddr_t, int, daddr_t, int, struct kauth_cred *,
 	       struct buf **);
 int	breadn(struct vnode *, daddr_t, int, daddr_t *, int *, int,
-	       struct ucred *, struct buf **);
+	       struct kauth_cred *, struct buf **);
 void	brelse(struct buf *);
 void	bremfree(struct buf *);
 void	bufinit(void);
 int	bwrite(struct buf *);
 struct buf *getblk(struct vnode *, daddr_t, int, int, int);
 struct buf *geteblk(int);
-struct buf *getnewbuf(int, int, int);
 struct buf *incore(struct vnode *, daddr_t);
 
 void	minphys(struct buf *);
@@ -304,7 +297,14 @@ int	buf_setvalimit(vsize_t);
 #ifdef DDB
 void	vfs_buf_print(struct buf *, int, void (*)(const char *, ...));
 #endif
+struct buf *getiobuf(void);
+struct buf *getiobuf_nowait(void);
+void putiobuf(struct buf *);
+
+void nestiobuf_iodone(struct buf *);
+void nestiobuf_setup(struct buf *, struct buf *, int, size_t);
+void nestiobuf_done(struct buf *, int, int);
 
 __END_DECLS
-#endif
+#endif /* _KERNEL */
 #endif /* !_SYS_BUF_H_ */

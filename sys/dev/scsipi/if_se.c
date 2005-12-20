@@ -1,4 +1,4 @@
-/*	$NetBSD: if_se.c,v 1.59 2005/12/11 12:23:50 christos Exp $	*/
+/*	$NetBSD: if_se.c,v 1.62 2006/09/07 02:40:33 dogcow Exp $	*/
 
 /*
  * Copyright (c) 1997 Ian W. Dall <ian.dall@dsto.defence.gov.au>
@@ -59,13 +59,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_se.c,v 1.59 2005/12/11 12:23:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_se.c,v 1.62 2006/09/07 02:40:33 dogcow Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
-#include "opt_ccitt.h"
-#include "opt_llc.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 
 #include <sys/param.h>
@@ -103,22 +100,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_se.c,v 1.59 2005/12/11 12:23:50 christos Exp $");
 #include <netinet/if_inarp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #ifdef NETATALK
 #include <netatalk/at.h>
 #endif
 
-#if defined(CCITT) && defined(LLC)
-#include <sys/socketvar.h>
-#include <netccitt/x25.h>
-#include <netccitt/pk.h>
-#include <netccitt/pk_var.h>
-#include <netccitt/pk_extern.h>
-#endif
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -216,7 +202,7 @@ static void	sedone(struct scsipi_xfer *, int);
 static int	se_ioctl(struct ifnet *, u_long, caddr_t);
 static void	sewatchdog(struct ifnet *);
 
-static __inline u_int16_t ether_cmp(void *, void *);
+static inline u_int16_t ether_cmp(void *, void *);
 static void	se_recv(void *);
 static struct mbuf *se_get(struct se_softc *, char *, int);
 static int	se_read(struct se_softc *, char *, int);
@@ -231,7 +217,7 @@ static int	se_remove_multi(struct se_softc *, u_int8_t *);
 static int	sc_set_all_multi(struct se_softc *, int);
 #endif
 static void	se_stop(struct se_softc *);
-static __inline int se_scsipi_cmd(struct scsipi_periph *periph,
+static inline int se_scsipi_cmd(struct scsipi_periph *periph,
 			struct scsipi_generic *scsipi_cmd,
 			int cmdlen, u_char *data_addr, int datalen,
 			int retries, int timeout, struct buf *bp,
@@ -275,7 +261,7 @@ const struct scsipi_inquiry_pattern se_patterns[] = {
  * unrolled for speed.
  * Note: use this like memcmp()
  */
-static __inline u_int16_t
+static inline u_int16_t
 ether_cmp(one, two)
 	void *one, *two;
 {
@@ -314,7 +300,7 @@ seattach(parent, self, aux)
 	struct device *parent, *self;
 	void *aux;
 {
-	struct se_softc *sc = (void *)self;
+	struct se_softc *sc = device_private(self);
 	struct scsipibus_attach_args *sa = aux;
 	struct scsipi_periph *periph = sa->sa_periph;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
@@ -371,7 +357,7 @@ seattach(parent, self, aux)
 }
 
 
-static __inline int
+static inline int
 se_scsipi_cmd(periph, cmd, cmdlen, data_addr, datalen,
 		       retries, timeout, bp, flags)
 	struct scsipi_periph *periph;
@@ -1013,23 +999,6 @@ se_ioctl(ifp, cmd, data)
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
-#ifdef NS
-		case AF_NS:
-		    {
-			struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
-
-			if (ns_nullhost(*ina))
-				ina->x_host =
-				    *(union ns_host *)LLADDR(ifp->if_sadl);
-			else
-				memcpy(LLADDR(ifp->if_sadl),
-				    ina->x_host.c_host, ETHER_ADDR_LEN);
-			/* Set new address. */
-
-			error = se_init(sc);
-			break;
-		    }
-#endif
 #ifdef NETATALK
 		case AF_APPLETALK:
 			sc->protos |= (PROTO_AT | PROTO_AARP);
@@ -1043,17 +1012,6 @@ se_ioctl(ifp, cmd, data)
 		}
 		break;
 
-#if defined(CCITT) && defined(LLC)
-	case SIOCSIFCONF_X25:
-		if ((error = se_enable(sc)) != 0)
-			break;
-		ifp->if_flags |= IFF_UP;
-		ifa->ifa_rtrequest = cons_rtrequest; /* XXX */
-		error = x25_llcglue(PRC_IFUP, ifa->ifa_addr);
-		if (error == 0)
-			error = se_init(sc);
-		break;
-#endif /* CCITT && LLC */
 
 	case SIOCSIFFLAGS:
 		if ((ifp->if_flags & IFF_UP) == 0 &&

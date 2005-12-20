@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_cac.c,v 1.12 2005/12/11 12:21:27 christos Exp $	*/
+/*	$NetBSD: ld_cac.c,v 1.16 2006/11/28 20:29:14 ad Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_cac.c,v 1.12 2005/12/11 12:21:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_cac.c,v 1.16 2006/11/28 20:29:14 ad Exp $");
 
 #include "rnd.h"
 
@@ -84,7 +84,8 @@ CFATTACH_DECL(ld_cac, sizeof(struct ld_cac_softc),
     ld_cac_match, ld_cac_attach, NULL, NULL);
 
 int
-ld_cac_match(struct device *parent, struct cfdata *match, void *aux)
+ld_cac_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 
 	return (1);
@@ -154,7 +155,7 @@ ld_cac_start(struct ld_softc *ld, struct buf *bp)
 	struct cac_context cc;
 
 	sc = (struct ld_cac_softc *)ld;
-	cac = (struct cac_softc *)ld->sc_dv.dv_parent;
+	cac = (struct cac_softc *)device_parent(&ld->sc_dv);
 
 	cc.cc_handler = ld_cac_done;
 	cc.cc_context = bp;
@@ -179,7 +180,7 @@ ld_cac_dump(struct ld_softc *ld, void *data, int blkno, int blkcnt)
 
 	sc = (struct ld_cac_softc *)ld;
 
-	return (cac_cmd((struct cac_softc *)ld->sc_dv.dv_parent,
+	return (cac_cmd((struct cac_softc *)device_parent(&ld->sc_dv),
 	    CAC_CMD_WRITE_MEDIA, data, blkcnt * ld->sc_secsize,
 	    sc->sc_hwunit, blkno, CAC_CCB_DATA_OUT, NULL));
 }
@@ -189,18 +190,24 @@ ld_cac_done(struct device *dv, void *context, int error)
 {
 	struct buf *bp;
 	struct ld_cac_softc *sc;
+	int rv;
 
 	bp = context;
+	rv = 0;
 
-	if ((error & CAC_RET_HARD_ERROR) != 0) {
+	if ((error & CAC_RET_CMD_REJECTED) == CAC_RET_CMD_REJECTED) {
+		printf("%s: command rejected\n", dv->dv_xname);
+		rv = EIO;
+	}
+	if (rv == 0 && (error & CAC_RET_INVAL_BLOCK) != 0) {
+		printf("%s: invalid request block\n", dv->dv_xname);
+		rv = EIO;
+	}
+	if (rv == 0 && (error & CAC_RET_HARD_ERROR) != 0) {
 		printf("%s: hard error\n", dv->dv_xname);
-		error = EIO;
+		rv = EIO;
 	}
-	if ((error & CAC_RET_CMD_REJECTED) != 0) {
-		printf("%s: invalid request\n", dv->dv_xname);
-		error = EIO;
-	}
-	if ((error & CAC_RET_SOFT_ERROR) != 0) {
+	if (rv == 0 && (error & CAC_RET_SOFT_ERROR) != 0) {
 		sc = (struct ld_cac_softc *)dv;
 		sc->sc_serrcnt++;
 		if (ratecheck(&sc->sc_serrtm, &ld_cac_serrintvl)) {
@@ -208,12 +215,11 @@ ld_cac_done(struct device *dv, void *context, int error)
 			    dv->dv_xname, sc->sc_serrcnt);
 			sc->sc_serrcnt = 0;
 		}
-		error = 0;
 	}
 
-	if (error) {
+	if (rv) {
 		bp->b_flags |= B_ERROR;
-		bp->b_error = error;
+		bp->b_error = rv;
 		bp->b_resid = bp->b_bcount;
 	} else
 		bp->b_resid = 0;

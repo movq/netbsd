@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.49 2005/12/11 12:19:10 christos Exp $ */
+/*	$NetBSD: cpu.h,v 1.59 2006/10/16 22:21:52 martin Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -77,7 +77,6 @@
 #include <sparc64/sparc64/intreg.h>
 
 #include <sys/cpu_data.h>
-#include <sys/cc_microtime.h>
 /*
  * The cpu_info structure is part of a 64KB structure mapped both the kernel
  * pmap and a single locked TTE a CPUINFO_VA for that particular processor.
@@ -105,28 +104,26 @@ struct cpu_info {
 	 * self-reference the global VA so that we can return it
 	 * in the curcpu() macro.
 	 */
-	struct cpu_info * __volatile ci_self;
+	struct cpu_info * volatile ci_self;
 
 	/* Most important fields first */
 	struct lwp		*ci_curlwp;
-	struct cpu_data		ci_data;	/* MI per-cpu data */
 	struct pcb		*ci_cpcb;
 	struct cpu_info		*ci_next;
 
 	struct lwp		*ci_fplwp;
+
+	void			*ci_eintstack;
+	struct pcb		*ci_idle_u;
+
+	/* Spinning up the CPU */
+	void			(*ci_spinup)(void);
+	void			*ci_initstack;
+	paddr_t			ci_paddr;
+
 	int			ci_number;
 	int			ci_upaid;
 	int			ci_cpuid;
-
-	/*
-	 * Variables used by cc_microtime().
-	 */
-	struct cc_microtime_state ci_cc;
-
-	/* Spinning up the CPU */
-	void			(*ci_spinup) __P((void));
-	void			*ci_initstack;
-	paddr_t			ci_paddr;
 
 	/* CPU PROM information. */
 	u_int			ci_node;
@@ -135,8 +132,9 @@ struct cpu_info {
 	int			ci_want_ast;
 	int			ci_want_resched;
 
-	void			*ci_eintstack;
-	struct pcb		*ci_idle_u;
+	struct cpu_data		ci_data;	/* MI per-cpu data */
+
+	volatile void		*ci_ddb_regs;	/* DDB regs */
 };
 
 #define CPUF_PRIMARY	1
@@ -146,7 +144,7 @@ struct cpu_info {
  */
 struct cpu_bootargs {
 	u_int	cb_node;	/* PROM CPU node */
-	__volatile int cb_flags;
+	volatile int cb_flags;
 
 	vaddr_t cb_ktext;
 	paddr_t cb_ktextp;
@@ -191,14 +189,29 @@ extern struct cpu_info *cpus;
 void cpu_proc_fork(struct proc *, struct proc *);
 
 #if defined(MULTIPROCESSOR)
-void	cpu_mp_startup __P((void));
-void	cpu_boot_secondary_processors __P((void));
-#endif
+extern vaddr_t cpu_spinup_trampoline;
+
+extern  char   *mp_tramp_code;
+extern  u_long  mp_tramp_code_len;
+extern  u_long  mp_tramp_tlb_slots;
+extern  u_long  mp_tramp_func;
+extern  u_long  mp_tramp_ci;
+
+void	cpu_hatch(void);
+void	cpu_boot_secondary_processors(void);
 
 /*
- * definitions for MI microtime().
+ * Call a function on other cpus:
+ *	multicast - send to everyone in the cpuset_t
+ *	broadcast - send to to all cpus but ourselves
+ *	send - send to just this cpu
  */
-#define microtime(tv)	cc_microtime(tv)
+typedef void (* ipifunc_t)(void *);
+
+void	sparc64_multicast_ipi (cpuset_t, ipifunc_t);
+void	sparc64_broadcast_ipi (ipifunc_t);
+void	sparc64_send_ipi (int, ipifunc_t);
+#endif
 
 extern uint64_t cpu_clockrate[];
 
@@ -248,8 +261,8 @@ struct clockframe {
 
 extern struct intrhand soft01intr, soft01net, soft01clock;
 
-void setsoftint __P((void));
-void setsoftnet __P((void));
+void setsoftint(void);
+void setsoftnet(void);
 
 /*
  * Preempt the current process if in interrupt from user mode,
@@ -277,101 +290,65 @@ void setsoftnet __P((void));
  * argument, or with a pointer to a clockframe if ih_arg is NULL.
  */
 struct intrhand {
-	int			(*ih_fun) __P((void *));
+	int			(*ih_fun)(void *);
 	void			*ih_arg;
 	short			ih_number;	/* interrupt number */
 						/* the H/W provides */
 	char			ih_pil;		/* interrupt priority */
 	struct intrhand		*ih_next;	/* global list */
 	struct intrhand		*ih_pending;	/* interrupt queued */
-	volatile u_int64_t	*ih_map;	/* Interrupt map reg */
-	volatile u_int64_t	*ih_clr;	/* clear interrupt reg */
+	volatile uint64_t	*ih_map;	/* Interrupt map reg */
+	volatile uint64_t	*ih_clr;	/* clear interrupt reg */
 };
 extern struct intrhand *intrhand[];
 extern struct intrhand *intrlev[MAXINTNUM];
 
-void	intr_establish __P((int level, struct intrhand *));
-
-/* cpu.c */
-paddr_t	cpu_alloc	__P((void));
-void	cpu_start	__P((int));
-
-#define mp_pause_cpus()		sparc64_ipi_pause_cpus()
-#define mp_resume_cpus()	sparc64_ipi_resume_cpus()
+void	intr_establish(int level, struct intrhand *);
 
 /* disksubr.c */
 struct dkbad;
-int isbad __P((struct dkbad *bt, int, int, int));
+int isbad(struct dkbad *bt, int, int, int);
 /* machdep.c */
-int	ldcontrolb __P((caddr_t));
-void	dumpconf __P((void));
-caddr_t	reserve_dumppages __P((caddr_t));
+caddr_t	reserve_dumppages(caddr_t);
 /* clock.c */
 struct timeval;
-int	tickintr __P((void *)); /* level 10 (tick) interrupt code */
-int	clockintr __P((void *));/* level 10 (clock) interrupt code */
-int	statintr __P((void *));	/* level 14 (statclock) interrupt code */
+int	tickintr(void *);	/* level 10 (tick) interrupt code */
+int	clockintr(void *);	/* level 10 (clock) interrupt code */
+int	statintr(void *);	/* level 14 (statclock) interrupt code */
 /* locore.s */
 struct fpstate64;
-void	savefpstate __P((struct fpstate64 *));
-void	loadfpstate __P((struct fpstate64 *));
-u_int64_t	probeget __P((paddr_t, int, int));
-int	probeset __P((paddr_t, int, int, u_int64_t));
+void	savefpstate(struct fpstate64 *);
+void	loadfpstate(struct fpstate64 *);
+void	clearfpstate(void);
+uint64_t	probeget(paddr_t, int, int);
+int	probeset(paddr_t, int, int, uint64_t);
 
-#define	 write_all_windows() __asm __volatile("flushw" : : )
-#define	 write_user_windows() __asm __volatile("flushw" : : )
+#define	 write_all_windows() __asm volatile("flushw" : : )
+#define	 write_user_windows() __asm volatile("flushw" : : )
 
-void 	proc_trampoline __P((void));
+void 	proc_trampoline(void);
 struct pcb;
-void	snapshot __P((struct pcb *));
-struct frame *getfp __P((void));
-int	xldcontrolb __P((caddr_t, struct pcb *));
-void	copywords __P((const void *, void *, size_t));
-void	qcopy __P((const void *, void *, size_t));
-void	qzero __P((void *, size_t));
-void	switchtoctx __P((int));
-/* locore2.c */
-void	remrq __P((struct proc *));
+void	snapshot(struct pcb *);
+struct frame *getfp(void);
+void	switchtoctx(int);
 /* trap.c */
-void	kill_user_windows __P((struct lwp *));
-int	rwindow_save __P((struct lwp *));
+void	kill_user_windows(struct lwp *);
+int	rwindow_save(struct lwp *);
 /* cons.c */
-int	cnrom __P((void));
+int	cnrom(void);
 /* zs.c */
-void zsconsole __P((struct tty *, int, int, void (**)(struct tty *, int)));
-#ifdef KGDB
-void zs_kgdb_init __P((void));
-#endif
+void zsconsole(struct tty *, int, int, void (**)(struct tty *, int));
 /* fb.c */
-void	fb_unblank __P((void));
+void	fb_unblank(void);
 /* kgdb_stub.c */
 #ifdef KGDB
-void kgdb_attach __P((int (*)(void *), void (*)(void *, int), void *));
-void kgdb_connect __P((int));
-void kgdb_panic __P((void));
+void kgdb_attach(int (*)(void *), void (*)(void *, int), void *);
+void kgdb_connect(int);
+void kgdb_panic(void);
 #endif
 /* emul.c */
-int	fixalign __P((struct lwp *, struct trapframe64 *));
-int	emulinstr __P((vaddr_t, struct trapframe64 *));
-
-/*
- *
- * The SPARC has a Trap Base Register (TBR) which holds the upper 20 bits
- * of the trap vector table.  The next eight bits are supplied by the
- * hardware when the trap occurs, and the bottom four bits are always
- * zero (so that we can shove up to 16 bytes of executable code---exactly
- * four instructions---into each trap vector).
- *
- * The hardware allocates half the trap vectors to hardware and half to
- * software.
- *
- * Traps have priorities assigned (lower number => higher priority).
- */
-
-struct trapvec {
-	int	tv_instr[8];		/* the eight instructions */
-};
-extern struct trapvec *trapbase;	/* the 256 vectors */
+int	fixalign(struct lwp *, struct trapframe64 *);
+int	emulinstr(vaddr_t, struct trapframe64 *);
 
 #endif /* _KERNEL */
 #endif /* _CPU_H_ */

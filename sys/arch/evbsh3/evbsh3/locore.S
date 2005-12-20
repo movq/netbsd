@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.9 2005/12/11 12:17:13 christos Exp $	*/
+/*	$NetBSD: locore.S,v 1.11 2006/10/07 01:21:47 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -92,6 +92,7 @@
 	((IOM_RAM_BEGIN + IOM_RAM_SIZE - 0x00001000) | 0x80000000)
 
 NENTRY(start)
+ALTENTRY(kernel_text)
 	/* Set SP to initial position */
 	mov.l	XLtmpstk, r15
 
@@ -218,8 +219,8 @@ main_label:
 XLInitializeBsc:.long	_C_LABEL(InitializeBsc)
 #endif /* DONT_INIT_BSC */
 ___start:	.long	start
-___etext:	.long	_etext
-___end:		.long	_end
+___etext:	.long	_C_LABEL(etext)
+___end:		.long	_C_LABEL(end)
 XLtmpstk:	.long	INIT_STACK
 _KERNBASE:	.long	0x8c000000
 _ROM_START:	.long	IOM_ROM_BEGIN

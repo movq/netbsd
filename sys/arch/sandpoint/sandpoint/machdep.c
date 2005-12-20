@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.32 2005/12/11 12:18:51 christos Exp $	*/
+/*	$NetBSD: machdep.c,v 1.34 2006/09/07 02:40:32 dogcow Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,14 +32,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.32 2005/12/11 12:18:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.34 2006/09/07 02:40:32 dogcow Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_inet.h"
-#include "opt_ccitt.h"
 #include "opt_iso.h"
-#include "opt_ns.h"
 #include "opt_ipkdb.h"
 
 #include <sys/param.h>
@@ -259,7 +257,7 @@ cpu_startup(void)
 	 * Now allow hardware interrupts.
 	 */
 	splhigh();
-	__asm __volatile ("mfmsr %0; ori %0,%0,%1; mtmsr %0"
+	__asm volatile ("mfmsr %0; ori %0,%0,%1; mtmsr %0"
 	    :	"=r"(msr)
 	    :	"K"(PSL_EE));
 }

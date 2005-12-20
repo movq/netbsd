@@ -1,4 +1,4 @@
-/*	$NetBSD: uhci.c,v 1.191 2005/12/11 12:24:01 christos Exp $	*/
+/*	$NetBSD: uhci.c,v 1.205 2006/11/16 01:33:26 christos Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/uhci.c,v 1.33 1999/11/17 22:33:41 n_hibma Exp $	*/
 
 /*
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhci.c,v 1.191 2005/12/11 12:24:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhci.c,v 1.205 2006/11/16 01:33:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -261,7 +261,7 @@ Static usbd_status	uhci_device_setintr(uhci_softc_t *sc,
 Static void		uhci_device_clear_toggle(usbd_pipe_handle pipe);
 Static void		uhci_noop(usbd_pipe_handle pipe);
 
-Static __inline__ uhci_soft_qh_t *uhci_find_prev_qh(uhci_soft_qh_t *,
+Static inline uhci_soft_qh_t *uhci_find_prev_qh(uhci_soft_qh_t *,
 						    uhci_soft_qh_t *);
 
 #ifdef UHCI_DEBUG
@@ -286,9 +286,29 @@ void			uhci_dump(void);
 #define UWRITE4(sc, r, x) \
  do { UBARR(sc); bus_space_write_4((sc)->iot, (sc)->ioh, (r), (x)); \
  } while (/*CONSTCOND*/0)
-#define UREAD1(sc, r) (UBARR(sc), bus_space_read_1((sc)->iot, (sc)->ioh, (r)))
-#define UREAD2(sc, r) (UBARR(sc), bus_space_read_2((sc)->iot, (sc)->ioh, (r)))
-#define UREAD4(sc, r) (UBARR(sc), bus_space_read_4((sc)->iot, (sc)->ioh, (r)))
+static __inline uint8_t
+UREAD1(uhci_softc_t *sc, bus_size_t r)
+{
+
+	UBARR(sc);
+	return bus_space_read_1(sc->iot, sc->ioh, r);
+}
+
+static __inline uint16_t
+UREAD2(uhci_softc_t *sc, bus_size_t r)
+{
+
+	UBARR(sc);
+	return bus_space_read_2(sc->iot, sc->ioh, r);
+}
+
+static __inline uint32_t
+UREAD4(uhci_softc_t *sc, bus_size_t r)
+{
+
+	UBARR(sc);
+	return bus_space_read_4(sc->iot, sc->ioh, r);
+}
 
 #define UHCICMD(sc, cmd) UWRITE2(sc, UHCI_CMD, cmd)
 #define UHCISTS(sc) UREAD2(sc, UHCI_STS)
@@ -372,7 +392,7 @@ struct usbd_pipe_methods uhci_device_isoc_methods = {
 	} while (0)
 #define uhci_active_intr_info(ii) ((ii)->list.le_prev != NULL)
 
-Static __inline__ uhci_soft_qh_t *
+Static inline uhci_soft_qh_t *
 uhci_find_prev_qh(uhci_soft_qh_t *pqh, uhci_soft_qh_t *sqh)
 {
 	DPRINTFN(15,("uhci_find_prev_qh: pqh=%p sqh=%p\n", pqh, sqh));
@@ -527,7 +547,8 @@ uhci_init(uhci_softc_t *sc)
 
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 	sc->sc_suspend = PWR_RESUME;
-	sc->sc_powerhook = powerhook_establish(uhci_power, sc);
+	sc->sc_powerhook = powerhook_establish(USBDEVNAME(sc->sc_bus.bdev),
+	    uhci_power, sc);
 	sc->sc_shutdownhook = shutdownhook_establish(uhci_shutdown, sc);
 #endif
 
@@ -698,9 +719,19 @@ void
 uhci_shutdown(void *v)
 {
 	uhci_softc_t *sc = v;
+	int s;
 
 	DPRINTF(("uhci_shutdown: stopping the HC\n"));
+
+	/*
+	 * Use polling mode to prevent the interrupts shutting
+	 * us down before we shut them down.
+	 */
+	s = splhardusb();
+	sc->sc_bus.use_polling++;
 	uhci_run(sc, 0); /* stop the controller */
+	sc->sc_bus.use_polling--;
+	splx(s);
 }
 
 /*
@@ -1226,8 +1257,10 @@ uhci_intr1(uhci_softc_t *sc)
 		return (0);
 
 	if (sc->sc_suspend != PWR_RESUME) {
+#ifdef DIAGNOSTIC
 		printf("%s: interrupt while not operating ignored\n",
 		       USBDEVNAME(sc->sc_bus.bdev));
+#endif
 		UWRITE2(sc, UHCI_STS, status); /* acknowledge the ints */
 		return (0);
 	}
@@ -1519,7 +1552,8 @@ uhci_timeout(void *addr)
 
 	/* Execute the abort in a process context. */
 	usb_init_task(&uxfer->abort_task, uhci_timeout_task, ii->xfer);
-	usb_add_task(uxfer->xfer.pipe->device, &uxfer->abort_task);
+	usb_add_task(uxfer->xfer.pipe->device, &uxfer->abort_task,
+	    USB_TASKQ_HC);
 }
 
 void
@@ -1773,6 +1807,7 @@ uhci_alloc_std_chain(struct uhci_pipe *upipe, uhci_softc_t *sc, int len,
 	for (i = ntd; i >= 0; i--) {
 		p = uhci_alloc_std(sc);
 		if (p == NULL) {
+			KASSERT(lastp != NULL);
 			uhci_free_std_chain(sc, lastp, NULL);
 			return (USBD_NOMEM);
 		}
@@ -1950,6 +1985,7 @@ uhci_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 		usb_uncallout(xfer->timeout_handle, uhci_timeout, xfer);
 		usb_transfer_complete(xfer);
 		splx(s);
+		return;
 	}
 
 	if (xfer->device->bus->intr_context || !curproc)
@@ -2645,7 +2681,8 @@ uhci_device_isoc_done(usbd_xfer_handle xfer)
 {
 	uhci_intr_info_t *ii = &UXFER(xfer)->iinfo;
 
-	DPRINTFN(4, ("uhci_isoc_done: length=%d\n", xfer->actlen));
+	DPRINTFN(4, ("uhci_isoc_done: length=%d, busy_free=0x%08x\n",
+			xfer->actlen, xfer->busy_free));
 
 	if (ii->xfer != xfer)
 		/* Not on interrupt list, ignore it. */
@@ -2655,12 +2692,6 @@ uhci_device_isoc_done(usbd_xfer_handle xfer)
 		return;
 
 #ifdef DIAGNOSTIC
-	if (xfer->busy_free != XFER_BUSY) {
-		printf("uhci_device_isoc_done: xfer=%p not busy 0x%08x\n",
-		       xfer, xfer->busy_free);
-		return;
-	}
-
         if (ii->stdend == NULL) {
                 printf("uhci_device_isoc_done: xfer=%p stdend==NULL\n", xfer);
 #ifdef UHCI_DEBUG
@@ -3022,6 +3053,7 @@ usb_hub_descriptor_t uhci_hubd_piix = {
 	50,			/* power on to power good */
 	0,
 	{ 0x00 },		/* both ports are removable */
+	{ 0 },
 };
 
 int
@@ -3204,6 +3236,8 @@ uhci_root_ctrl_start(usbd_xfer_handle xfer)
 		break;
 	case C(UR_GET_DESCRIPTOR, UT_READ_DEVICE):
 		DPRINTFN(2,("uhci_root_ctrl_control wValue=0x%04x\n", value));
+		if (len == 0)
+			break;
 		switch(value >> 8) {
 		case UDESC_DEVICE:
 			if ((value & 0xff) != 0) {
@@ -3233,8 +3267,6 @@ uhci_root_ctrl_start(usbd_xfer_handle xfer)
 			memcpy(buf, &uhci_endpd, l);
 			break;
 		case UDESC_STRING:
-			if (len == 0)
-				break;
 			*(u_int8_t *)buf = 0;
 			totlen = 1;
 			switch (value & 0xff) {
@@ -3369,6 +3401,8 @@ uhci_root_ctrl_start(usbd_xfer_handle xfer)
 		}
 		break;
 	case C(UR_GET_DESCRIPTOR, UT_READ_CLASS_DEVICE):
+		if (len == 0)
+			break;
 		if ((value & 0xff) != 0) {
 			err = USBD_IOERROR;
 			goto ret;

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ef.c,v 1.20 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: if_ef.c,v 1.23 2006/11/16 01:33:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ef.c,v 1.20 2005/12/11 12:22:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ef.c,v 1.23 2006/11/16 01:33:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -200,9 +200,7 @@ ef_reset(sc, why)
 }
 
 static void
-ef_atten(sc, why)
-	struct ie_softc *sc;
-	int why;
+ef_atten(struct ie_softc *sc, int why)
 {
 	struct ef_softc* esc = (struct ef_softc *) sc;
 	bus_space_write_1(esc->sc_regt, esc->sc_regh, EF_ATTN, 1);
@@ -351,10 +349,7 @@ ef_mediastatus(sc, ifmr)
 }
 
 int
-ef_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ef_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct isa_attach_args * const ia = aux;
 
@@ -407,7 +402,7 @@ ef_match(parent, cf, aux)
 		 * Reset and put card in CONFIG state without
 		 * changing address.
 		 */
-		elink_reset(iot, ioh, parent->dv_unit);
+		elink_reset(iot, ioh, device_unit(parent));
 		elink_idseq(iot, ioh, ELINK_507_POLY);
 		elink_idseq(iot, ioh, ELINK_507_POLY);
 		bus_space_write_1(iot, ioh, 0, 0xff);

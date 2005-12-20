@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.10 2003/08/07 11:16:04 agc Exp $	*/
+/*	$NetBSD: io.c,v 1.12 2006/10/07 17:27:57 elad Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)io.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: io.c,v 1.10 2003/08/07 11:16:04 agc Exp $");
+__RCSID("$NetBSD: io.c,v 1.12 2006/10/07 17:27:57 elad Exp $");
 #endif /* not lint */
 
 /*
@@ -81,7 +81,7 @@ talk()
 			if (errno == EINTR)
 				continue;
 			/* panic, we don't know what happened */
-			p_error("Unexpected error from select");
+			p_error("Unexpected error from poll");
 			quit();
 		}
 		if (set[0].revents & POLLIN) { 
@@ -102,7 +102,8 @@ talk()
 			nb = read(0, buf, nb);
 			display(&my_win, buf, nb);
 			/* might lose data here because sockt is non-blocking */
-			write(sockt, buf, nb);
+			if (nb > 0)
+				write(sockt, buf, nb);
 		}
 	}
 }

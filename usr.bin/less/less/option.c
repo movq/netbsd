@@ -1,7 +1,7 @@
-/*	$NetBSD: option.c,v 1.6 2003/04/14 02:56:47 mrg Exp $	*/
+/*	$NetBSD: option.c,v 1.8 2006/10/26 01:33:08 mrg Exp $	*/
 
 /*
- * Copyright (C) 1984-2002  Mark Nudelman
+ * Copyright (C) 1984-2004  Mark Nudelman
  *
  * You may distribute under the terms of either the GNU General Public
  * License or the Less License, as specified in the README file.
@@ -145,12 +145,12 @@ scan_option(s)
 		if (optname == NULL)
 		{
 			printopt = propt(optc);
-			lc = SIMPLE_IS_LOWER(optc);
+			lc = ASCII_IS_LOWER(optc);
 			o = findopt(optc);
 		} else
 		{
 			printopt = optname;
-			lc = SIMPLE_IS_LOWER(optname[0]);
+			lc = ASCII_IS_LOWER(optname[0]);
 			o = findopt_name(&optname, NULL, &err);
 			s = optname;
 			optname = NULL;
@@ -353,14 +353,14 @@ toggle_option(c, s, how_toggle)
 			{
 			case OPT_TOGGLE:
 				*(o->ovar) = flip_triple(*(o->ovar), 
-						islower(c));
+						ASCII_IS_LOWER(c));
 				break;
 			case OPT_UNSET:
 				*(o->ovar) = o->odefault;
 				break;
 			case OPT_SET:
 				*(o->ovar) = flip_triple(o->odefault,
-						islower(c));
+						ASCII_IS_LOWER(c));
 				break;
 			}
 			break;
@@ -422,6 +422,8 @@ toggle_option(c, s, how_toggle)
 		{
 		case BOOL:
 		case TRIPLE:
+			if (*(o->ovar) < 0)
+				error("Negative option is invalid", NULL_PARG);
 			/*
 			 * Print the odesc message.
 			 */

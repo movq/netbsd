@@ -1,4 +1,4 @@
-/*	$NetBSD: emuxki.c,v 1.43 2005/12/11 12:22:49 christos Exp $	*/
+/*	$NetBSD: emuxki.c,v 1.49 2006/11/16 01:33:08 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: emuxki.c,v 1.43 2005/12/11 12:22:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: emuxki.c,v 1.49 2006/11/16 01:33:08 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -207,6 +207,7 @@ static const struct audio_hw_if emuxki_hw_if = {
 	emuxki_trigger_output,
 	emuxki_trigger_input,
 	NULL,			/* dev_ioctl */
+	NULL,			/* powerstate */
 };
 
 #if 0
@@ -386,7 +387,8 @@ emuxki_ac97_init(struct emuxki_softc *sc)
 }
 
 static int
-emuxki_match(struct device *parent, struct cfdata *match, void *aux)
+emuxki_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -451,6 +453,7 @@ emuxki_attach(struct device *parent, struct device *self, void *aux)
 		bus_space_unmap(sc->sc_iot, sc->sc_ioh, sc->sc_ios);
 		return;
 	}
+	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
 
  /* XXX it's unknown whether APS is made from Audigy as well */
 	if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_CREATIVELABS_AUDIGY) {
@@ -478,7 +481,6 @@ emuxki_attach(struct device *parent, struct device *self, void *aux)
 		emuxki_pci_shutdown(sc);
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
 #if 0
 	sc->rsourcectl.dev =
 	    sc->codecif->vtbl->get_portnum_by_name(sc->codec_if, AudioCrecord,
@@ -1380,7 +1382,7 @@ emuxki_voice_channel_create(struct emuxki_voice *voice)
 
 	channel = voice->sc->channel;
 	stereo = voice->stereo;
-	for (i = 0; i < EMU_NUMCHAN; i += stereo + 1) {
+	for (i = 0; i < EMU_NUMCHAN - stereo; i += stereo + 1) {
 		if ((stereo && (channel[i + 1] != NULL)) ||
 		    (channel[i] != NULL))	/* Looking for free channels */
 			continue;
@@ -1427,7 +1429,7 @@ static int
 emuxki_recsrc_reserve(struct emuxki_voice *voice, emuxki_recsrc_t source)
 {
 
-	if (source < 0 || source >= EMU_NUMRECSRCS) {
+	if (source >= EMU_NUMRECSRCS) {
 #ifdef EMUXKI_DEBUG
 		printf("Tried to reserve invalid source: %d\n", source);
 #endif
@@ -1894,16 +1896,26 @@ emuxki_voice_start(struct emuxki_voice *voice,
 			break;
 		case EMU_RECSRC_NOTSET:
 		default:
+			printf("Bad dataloc.source %d\n",
+			    voice->dataloc.source);
 			break;
 		}
 #if 0
-		/* DMA completion interrupt is useless; use timer */
-		int s;
-		s = splaudio();
-		val = emu_rd(sc, INTE, 4);
-		val |= emuxki_recsrc_intrmasks[voice->dataloc.source];
-		emu_wr(sc, INTE, val, 4);
-		splx(s);
+		switch (voice->dataloc.source) {
+		case EMU_RECSRC_ADC:
+		case EMU_RECSRC_FX:
+		case EMU_RECSRC_MIC:
+			/* DMA completion interrupt is useless; use timer */
+			int s;
+			s = splaudio();
+			val = emu_rd(sc, INTE, 4);
+			val |= emuxki_recsrc_intrmasks[voice->dataloc.source];
+			emu_wr(sc, INTE, val, 4);
+			splx(s);
+			break;
+		default:
+			break;
+		}
 #endif
 	}
 	voice->state |= EMU_VOICE_STATE_STARTED;
@@ -1927,21 +1939,33 @@ emuxki_voice_halt(struct emuxki_voice *voice)
 		case EMU_RECSRC_MIC:
 			printf("unimplemented\n");
 			break;
+		default:
 		case EMU_RECSRC_NOTSET:
-			printf("Bad dataloc.source\n");
+			printf("Bad dataloc.source %d\n",
+			    voice->dataloc.source);
+			break;
 		}
-		/* This should reset buffer pointer */
-		emuxki_write(voice->sc, 0,
-		    emuxki_recsrc_szreg[voice->dataloc.source],
-		    EMU_RECBS_BUFSIZE_NONE);
+
+		switch (voice->dataloc.source) {
+		case EMU_RECSRC_ADC:
+		case EMU_RECSRC_FX:
+		case EMU_RECSRC_MIC:
+			/* This should reset buffer pointer */
+			emuxki_write(voice->sc, 0,
+			    emuxki_recsrc_szreg[voice->dataloc.source],
+			    EMU_RECBS_BUFSIZE_NONE);
 #if 0
-		int s;
-		s = splaudio();
-		val = emu_rd(sc, INTE, 4);
-		val &= ~emuxki_recsrc_intrmasks[voice->dataloc.source];
-		emu_wr(sc, INTE, val, 4);
-		splx(s);
+			int s;
+			s = splaudio();
+			val = emu_rd(sc, INTE, 4);
+			val &= ~emuxki_recsrc_intrmasks[voice->dataloc.source];
+			emu_wr(sc, INTE, val, 4);
+			splx(s);
 #endif
+			break;
+		default:
+			break;
+		}
 	}
 	voice->state &= ~EMU_VOICE_STATE_STARTED;
 	emuxki_resched_timer(voice->sc);

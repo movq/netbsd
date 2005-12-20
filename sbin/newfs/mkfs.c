@@ -1,4 +1,4 @@
-/*	$NetBSD: mkfs.c,v 1.92 2005/11/05 19:15:54 chs Exp $	*/
+/*	$NetBSD: mkfs.c,v 1.102 2006/10/16 03:04:45 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1989, 1993
@@ -73,7 +73,7 @@
 #if 0
 static char sccsid[] = "@(#)mkfs.c	8.11 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: mkfs.c,v 1.92 2005/11/05 19:15:54 chs Exp $");
+__RCSID("$NetBSD: mkfs.c,v 1.102 2006/10/16 03:04:45 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -86,6 +86,7 @@ __RCSID("$NetBSD: mkfs.c,v 1.92 2005/11/05 19:15:54 chs Exp $");
 #include <ufs/ufs/ufs_bswap.h>
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
+#include <sys/ioctl.h>
 #include <sys/disklabel.h>
 
 #include <err.h>
@@ -123,8 +124,6 @@ static void calc_memfree(void);
 static void *mkfs_malloc(size_t size);
 #endif
 
-static int count_digits(uint64_t);
-
 /*
  * make file system for cylinder-group style file systems
  */
@@ -160,16 +159,18 @@ int iobuf_memsize;		/* Actual buffer size */
 int	fsi, fso;
 
 void
-mkfs(struct partition *pp, const char *fsys, int fi, int fo,
+mkfs(const char *fsys, int fi, int fo,
     mode_t mfsmode, uid_t mfsuid, gid_t mfsgid)
 {
 	uint fragsperinodeblk, ncg;
 	uint cgzero;
 	uint64_t inodeblks, cgall;
 	int32_t cylno, i, csfrags;
+	int inodes_per_cg;
 	struct timeval tv;
 	long long sizepb;
-	int nprintcols, printcolwidth;
+	int len, col, delta, fld_width, max_cols;
+	struct winsize winsize;
 
 #ifndef STANDALONE
 	gettimeofday(&tv, NULL);
@@ -260,7 +261,8 @@ mkfs(struct partition *pp, const char *fsys, int fi, int fo,
 	sblock.fs_maxcontig = maxcontig;
 	if (sblock.fs_maxcontig < sblock.fs_maxbsize / sblock.fs_bsize) {
 		sblock.fs_maxcontig = sblock.fs_maxbsize / sblock.fs_bsize;
-		printf("Maxcontig raised to %d\n", sblock.fs_maxbsize);
+		if (verbosity > 0)
+			printf("Maxcontig raised to %d\n", sblock.fs_maxbsize);
 	}
 	if (sblock.fs_maxcontig > 1)
 		sblock.fs_contigsumsize = MIN(sblock.fs_maxcontig,FS_MAXCONTIG);
@@ -362,7 +364,7 @@ mkfs(struct partition *pp, const char *fsys, int fi, int fo,
 		 * 1 fragment per inode - useful for /dev.
 		 */
 		fragsperinodeblk = MAX(numfrags(&sblock,
-					density * INOPB(&sblock)), 1);
+					(uint64_t)density * INOPB(&sblock)), 1);
 		inodeblks = (sblock.fs_size - sblock.fs_iblkno) /	
 			(sblock.fs_frag + fragsperinodeblk);
 	}
@@ -377,12 +379,10 @@ mkfs(struct partition *pp, const char *fsys, int fi, int fo,
 	/*
 	 * See what would happen if we tried to use 1 cylinder group.
 	 * Assume space linear, so work out number of cylinder groups needed.
-	 * Subtract one from the allowed size to compensate for rounding
-	 * a number of bits up to a complete byte.
 	 */
 	cgzero = CGSIZE_IF(&sblock, 0, 0);
 	cgall = CGSIZE_IF(&sblock, inodeblks * INOPB(&sblock), sblock.fs_size);
-	ncg = howmany(cgall - cgzero, sblock.fs_bsize - cgzero - 1);
+	ncg = howmany(cgall - cgzero, sblock.fs_bsize - cgzero);
 	if (ncg < MINCYLGRPS) {
 		/*
 		 * We would like to allocate MINCLYGRPS cylinder groups,
@@ -405,24 +405,29 @@ mkfs(struct partition *pp, const char *fsys, int fi, int fo,
 	 * CGSIZE becomes too big (only happens if there are a lot of CGs).
 	 */
 	sblock.fs_fpg = roundup(howmany(sblock.fs_size, ncg), sblock.fs_frag);
-	i = CGSIZE_IF(&sblock, inodeblks * INOPB(&sblock) / ncg, sblock.fs_fpg);
-	if (i > sblock.fs_bsize)
+	/* Round up the fragments/group so the bitmap bytes are full */
+	sblock.fs_fpg = roundup(sblock.fs_fpg, NBBY);
+	inodes_per_cg = ((inodeblks - 1) / ncg + 1) * INOPB(&sblock);
+
+	i = CGSIZE_IF(&sblock, inodes_per_cg, sblock.fs_fpg);
+	if (i > sblock.fs_bsize) {
 		sblock.fs_fpg -= (i - sblock.fs_bsize) * NBBY;
-	/* ... and recalculate how many cylinder groups we now need */
-	ncg = howmany(sblock.fs_size, sblock.fs_fpg);
-	inodeblks /= ncg;
-	if (inodeblks == 0)
-		inodeblks = 1;
-	sblock.fs_ipg = inodeblks * INOPB(&sblock);
+		/* ... and recalculate how many cylinder groups we now need */
+		ncg = howmany(sblock.fs_size, sblock.fs_fpg);
+		inodes_per_cg = ((inodeblks - 1) / ncg + 1) * INOPB(&sblock);
+	}
+	sblock.fs_ipg = inodes_per_cg;
 	/* Sanity check on our sums... */
 	if (CGSIZE(&sblock) > sblock.fs_bsize) {
 		printf("CGSIZE miscalculated %d > %d\n",
 		    (int)CGSIZE(&sblock), sblock.fs_bsize);
 		exit(24);
 	}
+
+	sblock.fs_dblkno = sblock.fs_iblkno + sblock.fs_ipg / INOPF(&sblock);
 	/* Check that the last cylinder group has enough space for the inodes */
 	i = sblock.fs_size - sblock.fs_fpg * (ncg - 1ull);
-	if (i < sblock.fs_iblkno + inodeblks * sblock.fs_frag) {
+	if (i < sblock.fs_dblkno) {
 		/*
 		 * Since we make all the cylinder groups the same size, the
 		 * last will only be small if there are a large number of
@@ -436,7 +441,6 @@ mkfs(struct partition *pp, const char *fsys, int fi, int fo,
 	sblock.fs_ncg = ncg;
 
 	sblock.fs_cgsize = fragroundup(&sblock, CGSIZE(&sblock));
-	sblock.fs_dblkno = sblock.fs_iblkno + sblock.fs_ipg / INOPF(&sblock);
 	if (Oflag <= 1) {
 		sblock.fs_old_spc = sblock.fs_fpg * sblock.fs_old_nspf;
 		sblock.fs_old_nsect = sblock.fs_old_spc;
@@ -516,7 +520,7 @@ mkfs(struct partition *pp, const char *fsys, int fi, int fo,
 	/*
 	 * Dump out summary information about file system.
 	 */
-	if (!mfs || Nflag) {
+	if (verbosity > 0) {
 #define	B2MBFACTOR (1 / (1024.0 * 1024.0))
 		printf("%s: %.1fMB (%lld sectors) block size %d, "
 		       "fragment size %d\n",
@@ -530,13 +534,6 @@ mkfs(struct partition *pp, const char *fsys, int fi, int fo,
 		    sblock.fs_fpg / sblock.fs_frag, sblock.fs_ipg);
 #undef B2MBFACTOR
 	}
-	/*
-	 * Now determine how wide each column will be, and calculate how
-	 * many columns will fit in a 80 char line.
-	 */
-	printcolwidth = count_digits(
-			fsbtodb(&sblock, cgsblock(&sblock, sblock.fs_ncg -1)));
-	nprintcols = 80 / (printcolwidth + 2);
 
 	/*
 	 * allocate space for superblock, cylinder group map, and
@@ -570,50 +567,53 @@ mkfs(struct partition *pp, const char *fsys, int fi, int fo,
 	 * We now start writing to the filesystem
 	 */
 
-	/*
-	 * Validate the given file system size.
-	 * Verify that its last block can actually be accessed.
-	 * Convert to file system fragment sized units.
-	 */
-	if (fssize <= 0) {
-		printf("preposterous size %lld\n", (long long)fssize);
-		exit(13);
-	}
-	wtfs(fssize - 1, sectorsize, iobuf);
+	if (!Nflag) {
+		/*
+		 * Validate the given file system size.
+		 * Verify that its last block can actually be accessed.
+		 * Convert to file system fragment sized units.
+		 */
+		if (fssize <= 0) {
+			printf("preposterous size %lld\n", (long long)fssize);
+			exit(13);
+		}
+		wtfs(fssize - 1, sectorsize, iobuf);
 
-	/*
-	 * Ensure there is nothing that looks like a filesystem
-	 * superbock anywhere other than where ours will be.
-	 * If fsck finds the wrong one all hell breaks loose!
-	 */
-	for (i = 0; ; i++) {
-		static const int sblocklist[] = SBLOCKSEARCH;
-		int sblkoff = sblocklist[i];
-		int sz;
-		if (sblkoff == -1)
-			break;
-		/* Remove main superblock */
-		zap_old_sblock(sblkoff);
-		/* and all possible locations for the first alternate */
-		sblkoff += SBLOCKSIZE;
-		for (sz = SBLOCKSIZE; sz <= 0x10000; sz <<= 1)
-			zap_old_sblock(roundup(sblkoff, sz));
-	}
+		/*
+		 * Ensure there is nothing that looks like a filesystem
+		 * superbock anywhere other than where ours will be.
+		 * If fsck finds the wrong one all hell breaks loose!
+		 */
+		for (i = 0; ; i++) {
+			static const int sblocklist[] = SBLOCKSEARCH;
+			int sblkoff = sblocklist[i];
+			int sz;
+			if (sblkoff == -1)
+				break;
+			/* Remove main superblock */
+			zap_old_sblock(sblkoff);
+			/* and all possible locations for the first alternate */
+			sblkoff += SBLOCKSIZE;
+			for (sz = SBLOCKSIZE; sz <= 0x10000; sz <<= 1)
+				zap_old_sblock(roundup(sblkoff, sz));
+		}
 
-	if (isappleufs) {
-		struct appleufslabel appleufs;
-		ffs_appleufs_set(&appleufs, appleufs_volname, tv.tv_sec, 0);
-		wtfs(APPLEUFS_LABEL_OFFSET/sectorsize, APPLEUFS_LABEL_SIZE, 
-		    &appleufs);
-	} else {
-		struct appleufslabel appleufs;
-		/* Look for and zap any existing valid apple ufs labels */
-		rdfs(APPLEUFS_LABEL_OFFSET/sectorsize, APPLEUFS_LABEL_SIZE, 
-		    &appleufs);
-		if (ffs_appleufs_validate(fsys, &appleufs, NULL) == 0) {
-			memset(&appleufs, 0, sizeof(appleufs));
-			wtfs(APPLEUFS_LABEL_OFFSET/sectorsize, APPLEUFS_LABEL_SIZE, 
-			    &appleufs);
+		if (isappleufs) {
+			struct appleufslabel appleufs;
+			ffs_appleufs_set(&appleufs, appleufs_volname,
+			    tv.tv_sec, 0);
+			wtfs(APPLEUFS_LABEL_OFFSET/sectorsize,
+			    APPLEUFS_LABEL_SIZE, &appleufs);
+		} else {
+			struct appleufslabel appleufs;
+			/* Look for & zap any existing valid apple ufs labels */
+			rdfs(APPLEUFS_LABEL_OFFSET/sectorsize,
+			    APPLEUFS_LABEL_SIZE, &appleufs);
+			if (ffs_appleufs_validate(fsys, &appleufs, NULL) == 0) {
+				memset(&appleufs, 0, sizeof(appleufs));
+				wtfs(APPLEUFS_LABEL_OFFSET/sectorsize,
+				    APPLEUFS_LABEL_SIZE, &appleufs);
+			}
 		}
 	}
 
@@ -628,19 +628,60 @@ mkfs(struct partition *pp, const char *fsys, int fi, int fo,
 		memset(iobuf + offsetof(struct fs, fs_old_postbl_start),
 		    0xff, 256);
 
-	if (!mfs || Nflag)
-		printf("super-block backups (for fsck -b #) at:");
+	if (verbosity >= 3)
+		printf("super-block backups (for fsck_ffs -b #) at:\n");
+	/* If we are printing more than one line of numbers, line up columns */
+	fld_width = verbosity < 4 ? 1 : snprintf(NULL, 0, "%" PRIu64, 
+		(uint64_t)fsbtodb(&sblock, cgsblock(&sblock, sblock.fs_ncg-1)));
+	/* Get terminal width */
+	if (ioctl(fileno(stdout), TIOCGWINSZ, &winsize) == 0)
+		max_cols = winsize.ws_col;
+	else
+		max_cols = 80;
+	if (Nflag && verbosity == 3)
+		/* Leave space to add " ..." after one row of numbers */
+		max_cols -= 4;
+#define BASE 0x10000	/* For some fixed-point maths */
+	col = 0;
+	delta = verbosity > 2 ? 0 : max_cols * BASE / sblock.fs_ncg;
 	for (cylno = 0; cylno < sblock.fs_ncg; cylno++) {
-		initcg(cylno, &tv);
-		if (mfs && !Nflag)
-			continue;
-		if (cylno % nprintcols == 0)
-			printf("\n");
-		printf(" %*lld,", printcolwidth,
-			(long long)fsbtodb(&sblock, cgsblock(&sblock, cylno)));
 		fflush(stdout);
+		initcg(cylno, &tv);
+		if (verbosity < 2)
+			continue;
+		if (delta > 0) {
+			if (Nflag)
+				/* No point doing dots for -N */
+				break;
+			/* Print dots scaled to end near RH margin */
+			for (col += delta; col > BASE; col -= BASE)
+				printf(".");
+			continue;
+		}
+		/* Print superblock numbers */
+		len = printf(" %*" PRIu64 "," + !col, fld_width,
+		    (uint64_t)fsbtodb(&sblock, cgsblock(&sblock, cylno)));
+		col += len;
+		if (col + len < max_cols)
+			/* Next number fits */
+			continue;
+		/* Next number won't fit, need a newline */
+		if (verbosity <= 3) {
+			/* Print dots for subsequent cylinder groups */
+			delta = sblock.fs_ncg - cylno - 1;
+			if (delta != 0) {
+				if (Nflag) {
+					printf(" ...");
+					break;
+				}
+				delta = max_cols * BASE / delta;
+			}
+		}
+		col = 0;
+		printf("\n");
 	}
-	if (!mfs || Nflag)
+#undef BASE
+	if (col > 0)
 		printf("\n");
 	if (Nflag)
 		exit(0);
@@ -685,20 +726,6 @@ mkfs(struct partition *pp, const char *fsys, int fi, int fo,
 	/* mfs doesn't need these permanently allocated */
 	munmap(iobuf, iobuf_memsize);
 	munmap(fscs_0, 2 * sblock.fs_fsize);
-
-	/*
-	 * Update information about this partion in pack
-	 * label, to that it may be updated on disk.
-	 */
-	if (pp == NULL)
-		return;
-	if (isappleufs)
-		pp->p_fstype = FS_APPLEUFS;
-	else
-		pp->p_fstype = FS_BSDFFS;
-	pp->p_fsize = sblock.fs_fsize;
-	pp->p_frag = sblock.fs_frag;
-	pp->p_cpg = sblock.fs_fpg;
 }
 
 /*
@@ -1401,17 +1428,6 @@ copy_dir(struct direct *dir, struct direct *dbuf)
 	}
 }
 
-/* Determine how many digits are needed to print a given integer */
-static int
-count_digits(uint64_t num)
-{
-	int ndig;
-
-	for (ndig = 1; num > 9; num /= 10, ndig++);
-
-	return (ndig);
-}
-
 static int
 ilog2(int val)
 {
@@ -1438,7 +1454,7 @@ zap_old_sblock(int sblkoff)
 		{0, 0x70162, ~0u},		/* LFS_MAGIC */
 		{14, 0xef53, 0xffff},		/* EXT2FS (little) */
 		{14, 0xef530000, 0xffff0000},	/* EXT2FS (big) */
-		{~0u},
+		{.offset = ~0u},
 	};
 	const struct fsm *fsm;
 

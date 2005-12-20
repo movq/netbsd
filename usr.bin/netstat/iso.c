@@ -1,4 +1,4 @@
-/*	$NetBSD: iso.c,v 1.24 2005/08/04 19:41:28 rpaulo Exp $	*/
+/*	$NetBSD: iso.c,v 1.26 2006/05/27 23:57:32 elad Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)iso.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: iso.c,v 1.24 2005/08/04 19:41:28 rpaulo Exp $");
+__RCSID("$NetBSD: iso.c,v 1.26 2006/05/27 23:57:32 elad Exp $");
 #endif
 #endif /* not lint */
 
@@ -240,7 +240,6 @@ iso_protopr(off, name)
 	struct isopcb *prev, *next;
 
 	if (off == 0) {
-		printf("%s control block: symbol not in namelist\n", name);
 		return;
 	}
 	if (strcmp(name, "tp") == 0) {
@@ -367,6 +366,7 @@ tp_protopr(off, name)
 			printf(" %-12.12s", tp_sstring[tpcb.tp_state]);
 		putchar('\n');
 	}
+	free(tpr_base);
 }
 
 void
@@ -501,7 +501,6 @@ x25_protopr(off, name)
 	struct x25_pcb xpcb;
 
 	if (off == 0) {
-		printf("%s control block: symbol not in namelist\n", name);
 		return;
 	}
 	kread(off, &xpcb, sizeof (struct x25_pcb));

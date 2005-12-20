@@ -1,4 +1,4 @@
-/*	$NetBSD: dkio.h,v 1.11 2005/12/11 12:25:20 christos Exp $	*/
+/*	$NetBSD: dkio.h,v 1.13 2006/10/25 04:04:46 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1987, 1988, 1993
@@ -33,6 +33,7 @@
 #define _SYS_DKIO_H_
 
 #include <sys/ioccom.h>
+#include <prop/proplib.h>
 
 /*
  * Disk-specific ioctls.
@@ -93,5 +94,12 @@
 #define	DIOCGWEDGEINFO	_IOR('d', 122, struct dkwedge_info)  /* get wedge inf */
 #define	DIOCDWEDGE	_IOW('d', 123, struct dkwedge_info)  /* del wedge */
 #define	DIOCLWEDGES	_IOWR('d', 124, struct dkwedge_list) /* list wedges */
+
+		/* disk buffer queue strategy */
+#define	DIOCGSTRATEGY	_IOR('d', 125, struct disk_strategy)
+#define	DIOCSSTRATEGY	_IOW('d', 126, struct disk_strategy)
+
+		/* get disk-info dictionary */
+#define	DIOCGDISKINFO	_IOR('d', 127, struct plistref)
 
 #endif /* _SYS_DKIO_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr5380sbc.c,v 1.57 2005/12/11 12:21:28 christos Exp $	*/
+/*	$NetBSD: ncr5380sbc.c,v 1.62 2006/11/24 19:46:59 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 David Jones, Gordon W. Ross
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ncr5380sbc.c,v 1.57 2005/12/11 12:21:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ncr5380sbc.c,v 1.62 2006/11/24 19:46:59 christos Exp $");
 
 #include "opt_ddb.h"
 
@@ -184,12 +184,12 @@ int ncr5380_wait_phase_timo = 1000 * 10 * 300;	/* 5 min. */
 int ncr5380_wait_req_timo = 1000 * 50;	/* X2 = 100 mS. */
 int ncr5380_wait_nrq_timo = 1000 * 25;	/* X2 =  50 mS. */
 
-static __inline int ncr5380_wait_req(struct ncr5380_softc *);
-static __inline int ncr5380_wait_not_req(struct ncr5380_softc *);
-static __inline void ncr_sched_msgout(struct ncr5380_softc *, int);
+static inline int ncr5380_wait_req(struct ncr5380_softc *);
+static inline int ncr5380_wait_not_req(struct ncr5380_softc *);
+static inline void ncr_sched_msgout(struct ncr5380_softc *, int);
 
 /* Return zero on success. */
-static __inline int ncr5380_wait_req(sc)
+static inline int ncr5380_wait_req(sc)
 	struct ncr5380_softc *sc;
 {
 	int timo = ncr5380_wait_req_timo;
@@ -206,7 +206,7 @@ static __inline int ncr5380_wait_req(sc)
 }
 
 /* Return zero on success. */
-static __inline int ncr5380_wait_not_req(sc)
+static inline int ncr5380_wait_not_req(sc)
 	struct ncr5380_softc *sc;
 {
 	int timo = ncr5380_wait_nrq_timo;
@@ -223,7 +223,7 @@ static __inline int ncr5380_wait_not_req(sc)
 }
 
 /* Ask the target for a MSG_OUT phase. */
-static __inline void
+static inline void
 ncr_sched_msgout(sc, msg_code)
 	struct ncr5380_softc *sc;
 	int msg_code;
@@ -1520,7 +1520,7 @@ success:
 /*
  * The message system:
  *
- * This is a revamped message system that now should easier accomodate
+ * This is a revamped message system that now should easier accommodate
  * new messages, if necessary.
  *
  * Currently we accept these messages:
@@ -2440,13 +2440,13 @@ int ncr5380_traceidx = 0;
 
 #define	TRACE_MAX	1024
 struct trace_ent {
-	char *msg;
+	const char *msg;
 	long  val;
 } ncr5380_tracebuf[TRACE_MAX];
 
 void
 ncr5380_trace(msg, val)
-	char *msg;
+	const char *msg;
 	long  val;
 {
 	struct trace_ent *tr;
@@ -2615,9 +2615,7 @@ ncr5380_attach(sc)
 }
 
 int
-ncr5380_detach(sc, flags)
-	struct ncr5380_softc *sc;
-	int flags;
+ncr5380_detach(struct ncr5380_softc *sc, int flags)
 {
 
 	return (EOPNOTSUPP);

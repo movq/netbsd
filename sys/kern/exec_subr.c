@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_subr.c,v 1.46 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: exec_subr.c,v 1.50 2006/10/05 14:48:32 chs Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994, 1996 Christopher G. Demetriou
@@ -31,7 +31,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exec_subr.c,v 1.46 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exec_subr.c,v 1.50 2006/10/05 14:48:32 chs Exp $");
+
+#include "opt_pax.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,6 +45,10 @@ __KERNEL_RCSID(0, "$NetBSD: exec_subr.c,v 1.46 2005/12/11 12:24:29 christos Exp 
 #include <sys/mman.h>
 #include <sys/resourcevar.h>
 #include <sys/device.h>
+
+#ifdef PAX_MPROTECT
+#include <sys/pax.h>
+#endif /* PAX_MPROTECT */
 
 #include <uvm/uvm.h>
 
@@ -149,10 +155,12 @@ int
 vmcmd_map_pagedvn(struct lwp *l, struct exec_vmcmd *cmd)
 {
 	struct uvm_object *uobj;
+	struct vnode *vp = cmd->ev_vp;
 	struct proc *p = l->l_proc;
 	int error;
+	vm_prot_t prot, maxprot;
 
-	KASSERT(cmd->ev_vp->v_flag & VTEXT);
+	KASSERT(vp->v_flag & VTEXT);
 
 	/*
 	 * map the vnode in using uvm_map.
@@ -171,10 +179,24 @@ vmcmd_map_pagedvn(struct lwp *l, struct exec_vmcmd *cmd)
 	 * first, attach to the object
 	 */
 
-        uobj = uvn_attach(cmd->ev_vp, VM_PROT_READ|VM_PROT_EXECUTE);
+        uobj = uvn_attach(vp, VM_PROT_READ|VM_PROT_EXECUTE);
         if (uobj == NULL)
                 return(ENOMEM);
-	VREF(cmd->ev_vp);
+	VREF(vp);
+
+	if ((vp->v_flag & VMAPPED) == 0) {
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+		simple_lock(&vp->v_interlock);
+		vp->v_flag |= VMAPPED;
+		simple_unlock(&vp->v_interlock);
+		VOP_UNLOCK(vp, 0);
+	}
+
+	prot = cmd->ev_prot;
+	maxprot = UVM_PROT_ALL;
+#ifdef PAX_MPROTECT
+	pax_mprotect(l, &prot, &maxprot);
+#endif /* PAX_MPROTECT */
 
 	/*
 	 * do the map
@@ -182,7 +204,7 @@ vmcmd_map_pagedvn(struct lwp *l, struct exec_vmcmd *cmd)
 
 	error = uvm_map(&p->p_vmspace->vm_map, &cmd->ev_addr, cmd->ev_len,
 		uobj, cmd->ev_offset, 0,
-		UVM_MAPFLAG(cmd->ev_prot, VM_PROT_ALL, UVM_INH_COPY,
+		UVM_MAPFLAG(prot, maxprot, UVM_INH_COPY,
 			UVM_ADV_NORMAL, UVM_FLAG_COPYONW|UVM_FLAG_FIXED));
 	if (error) {
 		uobj->pgops->pgo_detach(uobj);
@@ -228,36 +250,53 @@ vmcmd_readvn(struct lwp *l, struct exec_vmcmd *cmd)
 {
 	struct proc *p = l->l_proc;
 	int error;
+	vm_prot_t prot, maxprot;
 
 	error = vn_rdwr(UIO_READ, cmd->ev_vp, (caddr_t)cmd->ev_addr,
 	    cmd->ev_len, cmd->ev_offset, UIO_USERSPACE, IO_UNIT,
-	    p->p_ucred, NULL, l);
+	    l->l_cred, NULL, l);
 	if (error)
 		return error;
+
+	prot = cmd->ev_prot;
+	maxprot = VM_PROT_ALL;
+#ifdef PAX_MPROTECT
+	pax_mprotect(l, &prot, &maxprot);
+#endif /* PAX_MPROTECT */
 
 #ifdef PMAP_NEED_PROCWR
 	/*
 	 * we had to write the process, make sure the pages are synched
 	 * with the instruction cache.
 	 */
-	if (cmd->ev_prot & VM_PROT_EXECUTE)
+	if (prot & VM_PROT_EXECUTE)
 		pmap_procwr(p, cmd->ev_addr, cmd->ev_len);
 #endif
 
-	if (cmd->ev_prot != (VM_PROT_READ|VM_PROT_WRITE|VM_PROT_EXECUTE)) {
-
-		/*
-		 * we had to map in the area at PROT_ALL so that vn_rdwr()
-		 * could write to it.   however, the caller seems to want
-		 * it mapped read-only, so now we are going to have to call
-		 * uvm_map_protect() to fix up the protection.  ICK.
-		 */
-
-		return uvm_map_protect(&p->p_vmspace->vm_map,
+	/*
+	 * we had to map in the area at PROT_ALL so that vn_rdwr()
+	 * could write to it.   however, the caller seems to want
+	 * it mapped read-only, so now we are going to have to call
+	 * uvm_map_protect() to fix up the protection.  ICK.
+	 */
+	if (maxprot != VM_PROT_ALL) {
+		error = uvm_map_protect(&p->p_vmspace->vm_map,
 				trunc_page(cmd->ev_addr),
 				round_page(cmd->ev_addr + cmd->ev_len),
-				cmd->ev_prot, FALSE);
+				maxprot, TRUE);
+		if (error)
+			return (error);
 	}
+
+	if (prot != maxprot) {
+		error = uvm_map_protect(&p->p_vmspace->vm_map,
+				trunc_page(cmd->ev_addr),
+				round_page(cmd->ev_addr + cmd->ev_len),
+				prot, FALSE);
+		if (error)
+			return (error);
+	}
+
 	return 0;
 }
 
@@ -273,14 +312,21 @@ vmcmd_map_zero(struct lwp *l, struct exec_vmcmd *cmd)
 	struct proc *p = l->l_proc;
 	int error;
 	long diff;
+	vm_prot_t prot, maxprot;
 
 	diff = cmd->ev_addr - trunc_page(cmd->ev_addr);
 	cmd->ev_addr -= diff;			/* required by uvm_map */
 	cmd->ev_len += diff;
 
+	prot = cmd->ev_prot;
+	maxprot = UVM_PROT_ALL;
+#ifdef PAX_MPROTECT
+	pax_mprotect(l, &prot, &maxprot);
+#endif /* PAX_MPROTECT */
+
 	error = uvm_map(&p->p_vmspace->vm_map, &cmd->ev_addr,
 			round_page(cmd->ev_len), NULL, UVM_UNKNOWN_OFFSET, 0,
-			UVM_MAPFLAG(cmd->ev_prot, UVM_PROT_ALL, UVM_INH_COPY,
+			UVM_MAPFLAG(prot, maxprot, UVM_INH_COPY,
 			UVM_ADV_NORMAL,
 			UVM_FLAG_FIXED|UVM_FLAG_COPYONW));
 	return error;
@@ -299,7 +345,7 @@ exec_read_from(struct lwp *l, struct vnode *vp, u_long off, void *bf,
 	size_t resid;
 
 	if ((error = vn_rdwr(UIO_READ, vp, bf, size, off, UIO_SYSSPACE,
-	    0, l->l_proc->p_ucred, &resid, NULL)) != 0)
+	    0, l->l_cred, &resid, NULL)) != 0)
 		return error;
 	/*
 	 * See if we got all of it

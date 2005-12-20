@@ -1,4 +1,4 @@
-/*	$NetBSD: genfs_vnops.c,v 1.117 2005/12/15 02:23:38 yamt Exp $	*/
+/*	$NetBSD: genfs_vnops.c,v 1.140 2006/11/30 06:11:03 pooka Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genfs_vnops.c,v 1.117 2005/12/15 02:23:38 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genfs_vnops.c,v 1.140 2006/11/30 06:11:03 pooka Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_nfsserver.h"
@@ -45,10 +45,11 @@ __KERNEL_RCSID(0, "$NetBSD: genfs_vnops.c,v 1.117 2005/12/15 02:23:38 yamt Exp $
 #include <sys/namei.h>
 #include <sys/vnode.h>
 #include <sys/fcntl.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 #include <sys/poll.h>
 #include <sys/mman.h>
 #include <sys/file.h>
+#include <sys/kauth.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/genfs/genfs_node.h>
@@ -65,12 +66,20 @@ __KERNEL_RCSID(0, "$NetBSD: genfs_vnops.c,v 1.117 2005/12/15 02:23:38 yamt Exp $
 #include <nfs/nfs_var.h>
 #endif
 
-static __inline void genfs_rel_pages(struct vm_page **, int);
+static int genfs_do_directio(struct vmspace *, vaddr_t, size_t, struct vnode *,
+    off_t, enum uio_rw);
+static void genfs_dio_iodone(struct buf *);
+
+static int genfs_do_io(struct vnode *, off_t, vaddr_t, size_t, int, enum uio_rw,
+    void (*)(struct buf *));
+static inline void genfs_rel_pages(struct vm_page **, int);
 static void filt_genfsdetach(struct knote *);
 static int filt_genfsread(struct knote *, long);
 static int filt_genfsvnode(struct knote *, long);
 
 #define MAX_READ_PAGES	16 	/* XXXUBC 16 */
+
+int genfs_maxdio = MAXPHYS;
 
 int
 genfs_poll(void *v)
@@ -91,7 +100,7 @@ genfs_seek(void *v)
 		struct vnode *a_vp;
 		off_t a_oldoff;
 		off_t a_newoff;
-		struct ucred *a_ucred;
+		kauth_cred_t cred;
 	} */ *ap = v;
 
 	if (ap->a_newoff < 0)
@@ -121,7 +130,7 @@ genfs_fcntl(void *v)
 		u_int a_command;
 		caddr_t a_data;
 		int a_fflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 
@@ -377,7 +386,7 @@ genfs_lease_check(void *v)
 	struct vop_lease_args /* {
 		struct vnode *a_vp;
 		struct lwp *a_l;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		int a_flag;
 	} */ *ap = v;
 	u_int32_t duration = 0;
@@ -388,6 +397,7 @@ genfs_lease_check(void *v)
 	    NQLOCALSLP, ap->a_l, (struct mbuf *)0, &cache, &frev, ap->a_cred);
 	return (0);
 #else
+	(void) v;
 	return (0);
 #endif /* NFSSERVER */
 }
@@ -399,7 +409,7 @@ genfs_mmap(void *v)
 	return (0);
 }
 
-static __inline void
+static inline void
 genfs_rel_pages(struct vm_page **pgs, int npages)
 {
 	int i;
@@ -407,7 +417,7 @@ genfs_rel_pages(struct vm_page **pgs, int npages)
 	for (i = 0; i < npages; i++) {
 		struct vm_page *pg = pgs[i];
 
-		if (pg == NULL)
+		if (pg == NULL || pg == PGO_DONTCARE)
 			continue;
 		if (pg->flags & PG_FAKE) {
 			pg->flags |= PG_RELEASED;
@@ -439,9 +449,9 @@ genfs_getpages(void *v)
 	} */ *ap = v;
 
 	off_t newsize, diskeof, memeof;
-	off_t offset, origoffset, startoffset, endoffset, raoffset;
+	off_t offset, origoffset, startoffset, endoffset;
 	daddr_t lbn, blkno;
-	int s, i, error, npages, orignpages, npgs, run, ridx, pidx, pcount;
+	int i, error, npages, orignpages, npgs, run, ridx, pidx, pcount;
 	int fs_bshift, fs_bsize, dev_bshift;
 	int flags = ap->a_flags;
 	size_t bytes, iobytes, tailbytes, totalbytes, skipbytes;
@@ -453,34 +463,38 @@ genfs_getpages(void *v)
 	struct uvm_object *uobj = &vp->v_uobj;
 	struct vm_page *pg, **pgs, *pgs_onstack[MAX_READ_PAGES];
 	int pgs_size;
-	struct ucred *cred = curproc->p_ucred;		/* XXXUBC curlwp */
+	kauth_cred_t cred = curlwp->l_cred;		/* XXXUBC curlwp */
 	boolean_t async = (flags & PGO_SYNCIO) == 0;
 	boolean_t write = (ap->a_access_type & VM_PROT_WRITE) != 0;
 	boolean_t sawhole = FALSE;
 	boolean_t overwrite = (flags & PGO_OVERWRITE) != 0;
 	boolean_t blockalloc = write && (flags & PGO_NOBLOCKALLOC) == 0;
+	voff_t origvsize;
 	UVMHIST_FUNC("genfs_getpages"); UVMHIST_CALLED(ubchist);
 
 	UVMHIST_LOG(ubchist, "vp %p off 0x%x/%x count %d",
 	    vp, ap->a_offset >> 32, ap->a_offset, *ap->a_count);
 
-	KASSERT(vp->v_type == VREG || vp->v_type == VBLK);
+	KASSERT(vp->v_type == VREG || vp->v_type == VDIR ||
+	    vp->v_type == VLNK || vp->v_type == VBLK);
 
 	/* XXXUBC temp limit */
 	if (*ap->a_count > MAX_READ_PAGES) {
 		panic("genfs_getpages: too many pages");
 	}
 
+startover:
 	error = 0;
+	origvsize = vp->v_size;
 	origoffset = ap->a_offset;
 	orignpages = *ap->a_count;
-	GOP_SIZE(vp, vp->v_size, &diskeof, GOP_SIZE_READ);
+	GOP_SIZE(vp, vp->v_size, &diskeof, 0);
 	if (flags & PGO_PASTEOF) {
 		newsize = MAX(vp->v_size,
 		    origoffset + (orignpages << PAGE_SHIFT));
-		GOP_SIZE(vp, newsize, &memeof, GOP_SIZE_READ|GOP_SIZE_MEM);
+		GOP_SIZE(vp, newsize, &memeof, GOP_SIZE_MEM);
 	} else {
-		GOP_SIZE(vp, vp->v_size, &memeof, GOP_SIZE_READ|GOP_SIZE_MEM);
+		GOP_SIZE(vp, vp->v_size, &memeof, GOP_SIZE_MEM);
 	}
 	KASSERT(ap->a_centeridx >= 0 || ap->a_centeridx <= orignpages);
 	KASSERT((origoffset & (PAGE_SIZE - 1)) == 0 && origoffset >= 0);
@@ -502,7 +516,7 @@ genfs_getpages(void *v)
 	/* uobj is locked */
 
 	if ((flags & PGO_NOTIMESTAMP) == 0 &&
-	    (vp->v_type == VREG ||
+	    (vp->v_type != VBLK ||
 	    (vp->v_mount->mnt_flag & MNT_NODEVMTIME) == 0)) {
 		int updflags = 0;
 
@@ -532,18 +546,48 @@ genfs_getpages(void *v)
 	 */
 
 	if (flags & PGO_LOCKED) {
-		uvn_findpages(uobj, origoffset, ap->a_count, ap->a_m,
-		    UFP_NOWAIT|UFP_NOALLOC| (write ? UFP_NORDONLY : 0));
+		int nfound;
 
+		npages = *ap->a_count;
+#if defined(DEBUG)
+		for (i = 0; i < npages; i++) {
+			pg = ap->a_m[i];
+			KASSERT(pg == NULL || pg == PGO_DONTCARE);
+		}
+#endif /* defined(DEBUG) */
+		nfound = uvn_findpages(uobj, origoffset, &npages,
+		    ap->a_m, UFP_NOWAIT|UFP_NOALLOC|(write ? UFP_NORDONLY : 0));
+		KASSERT(npages == *ap->a_count);
+		if (nfound == 0) {
+			return EBUSY;
+		}
+		if (lockmgr(&gp->g_glock, LK_SHARED | LK_NOWAIT, NULL)) {
+			genfs_rel_pages(ap->a_m, npages);
+
+			/*
+			 * restore the array.
+			 */
+
+			for (i = 0; i < npages; i++) {
+				pg = ap->a_m[i];
+
+				if (pg != NULL || pg != PGO_DONTCARE) {
+					ap->a_m[i] = NULL;
+				}
+			}
+		} else {
+			lockmgr(&gp->g_glock, LK_RELEASE, NULL);
+		}
 		return (ap->a_m[ap->a_centeridx] == NULL ? EBUSY : 0);
 	}
+	simple_unlock(&uobj->vmobjlock);
 
 	/*
 	 * find the requested pages and make some simple checks.
 	 * leave space in the page array for a whole block.
 	 */
 
-	if (vp->v_type == VREG) {
+	if (vp->v_type != VBLK) {
 		fs_bshift = vp->v_mount->mnt_fs_bshift;
 		dev_bshift = vp->v_mount->mnt_dev_bshift;
 	} else {
@@ -564,9 +608,8 @@ genfs_getpages(void *v)
 	pgs_size = sizeof(struct vm_page *) *
 	    ((endoffset - startoffset) >> PAGE_SHIFT);
 	if (pgs_size > sizeof(pgs_onstack)) {
-		pgs = malloc(pgs_size, M_DEVBUF, M_NOWAIT | M_ZERO);
+		pgs = kmem_zalloc(pgs_size, async ? KM_NOSLEEP : KM_SLEEP);
 		if (pgs == NULL) {
-			simple_unlock(&uobj->vmobjlock);
 			return (ENOMEM);
 		}
 	} else {
@@ -575,13 +618,34 @@ genfs_getpages(void *v)
 	}
 	UVMHIST_LOG(ubchist, "ridx %d npages %d startoff %ld endoff %ld",
 	    ridx, npages, startoffset, endoffset);
+
+	/*
+	 * hold g_glock to prevent a race with truncate.
+	 *
+	 * check if our idea of v_size is still valid.
+	 */
+
+	if (blockalloc) {
+		lockmgr(&gp->g_glock, LK_EXCLUSIVE, NULL);
+	} else {
+		lockmgr(&gp->g_glock, LK_SHARED, NULL);
+	}
+	simple_lock(&uobj->vmobjlock);
+	if (vp->v_size < origvsize) {
+		lockmgr(&gp->g_glock, LK_RELEASE, NULL);
+		if (pgs != pgs_onstack)
+			kmem_free(pgs, pgs_size);
+		goto startover;
+	}
+
 	if (uvn_findpages(uobj, origoffset, &npages, &pgs[ridx],
 	    async ? UFP_NOWAIT : UFP_ALL) != orignpages) {
+		lockmgr(&gp->g_glock, LK_RELEASE, NULL);
 		KASSERT(async != 0);
 		genfs_rel_pages(&pgs[ridx], orignpages);
 		simple_unlock(&uobj->vmobjlock);
 		if (pgs != pgs_onstack)
-			free(pgs, M_DEVBUF);
+			kmem_free(pgs, pgs_size);
 		return (EBUSY);
 	}
 
@@ -598,8 +662,8 @@ genfs_getpages(void *v)
 		}
 	}
 	if (i == npages) {
+		lockmgr(&gp->g_glock, LK_RELEASE, NULL);
 		UVMHIST_LOG(ubchist, "returning cached pages", 0,0,0,0);
-		raoffset = origoffset + (orignpages << PAGE_SHIFT);
 		npages += ridx;
 		goto out;
 	}
@@ -608,7 +672,8 @@ genfs_getpages(void *v)
 	 * if PGO_OVERWRITE is set, don't bother reading the pages.
 	 */
 
-	if (flags & PGO_OVERWRITE) {
+	if (overwrite) {
+		lockmgr(&gp->g_glock, LK_RELEASE, NULL);
 		UVMHIST_LOG(ubchist, "PGO_OVERWRITE",0,0,0,0);
 
 		for (i = 0; i < npages; i++) {
@@ -643,11 +708,12 @@ genfs_getpages(void *v)
 		npgs = npages;
 		if (uvn_findpages(uobj, startoffset, &npgs, pgs,
 		    async ? UFP_NOWAIT : UFP_ALL) != npages) {
+			lockmgr(&gp->g_glock, LK_RELEASE, NULL);
 			KASSERT(async != 0);
 			genfs_rel_pages(pgs, npages);
 			simple_unlock(&uobj->vmobjlock);
 			if (pgs != pgs_onstack)
-				free(pgs, M_DEVBUF);
+				kmem_free(pgs, pgs_size);
 			return (EBUSY);
 		}
 	}
@@ -665,16 +731,17 @@ genfs_getpages(void *v)
 	kva = uvm_pagermapin(pgs, npages,
 	    UVMPAGER_MAPIN_READ | UVMPAGER_MAPIN_WAITOK);
 
-	s = splbio();
-	mbp = pool_get(&bufpool, PR_WAITOK);
-	splx(s);
-	BUF_INIT(mbp);
+	mbp = getiobuf();
 	mbp->b_bufsize = totalbytes;
 	mbp->b_data = (void *)kva;
 	mbp->b_resid = mbp->b_bcount = bytes;
 	mbp->b_flags = B_BUSY|B_READ| (async ? B_CALL|B_ASYNC : 0);
 	mbp->b_iodone = (async ? uvm_aio_biodone : 0);
 	mbp->b_vp = vp;
+	if (async)
+		BIO_SETPRIO(mbp, BPRIO_TIMELIMITED);
+	else
+		BIO_SETPRIO(mbp, BPRIO_TIMECRITICAL);
 
 	/*
 	 * if EOF is in the middle of the range, zero the part past EOF.
@@ -697,12 +764,6 @@ genfs_getpages(void *v)
 	/*
 	 * now loop over the pages, reading as needed.
 	 */
-
-	if (blockalloc) {
-		lockmgr(&gp->g_glock, LK_EXCLUSIVE, NULL);
-	} else {
-		lockmgr(&gp->g_glock, LK_SHARED, NULL);
-	}
 
 	bp = NULL;
 	for (offset = startoffset;
@@ -802,19 +863,10 @@ genfs_getpages(void *v)
 		if (offset == startoffset && iobytes == bytes) {
 			bp = mbp;
 		} else {
-			s = splbio();
-			bp = pool_get(&bufpool, PR_WAITOK);
-			splx(s);
-			BUF_INIT(bp);
-			bp->b_data = (char *)kva + offset - startoffset;
-			bp->b_resid = bp->b_bcount = iobytes;
-			bp->b_flags = B_BUSY|B_READ|B_CALL|B_ASYNC;
-			bp->b_iodone = uvm_aio_biodone1;
-			bp->b_vp = vp;
-			bp->b_proc = NULL;
+			bp = getiobuf();
+			nestiobuf_setup(mbp, bp, offset - startoffset, iobytes);
 		}
 		bp->b_lblkno = 0;
-		bp->b_private = mbp;
 
 		/* adjust physical blkno for partial blocks */
 		bp->b_blkno = blkno + ((offset - ((off_t)lbn << fs_bshift)) >>
@@ -824,43 +876,23 @@ genfs_getpages(void *v)
 		    "bp %p offset 0x%x bcount 0x%x blkno 0x%x",
 		    bp, offset, iobytes, bp->b_blkno);
 
-		if (async)
-			BIO_SETPRIO(bp, BPRIO_TIMELIMITED);
-		else
-			BIO_SETPRIO(bp, BPRIO_TIMECRITICAL);
-
 		VOP_STRATEGY(devvp, bp);
 	}
 
 loopdone:
-	if (skipbytes) {
-		s = splbio();
-		if (error) {
-			mbp->b_flags |= B_ERROR;
-			mbp->b_error = error;
-		}
-		mbp->b_resid -= skipbytes;
-		if (mbp->b_resid == 0) {
-			biodone(mbp);
-		}
-		splx(s);
-	}
-
+	nestiobuf_done(mbp, skipbytes, error);
 	if (async) {
 		UVMHIST_LOG(ubchist, "returning 0 (async)",0,0,0,0);
 		lockmgr(&gp->g_glock, LK_RELEASE, NULL);
 		if (pgs != pgs_onstack)
-			free(pgs, M_DEVBUF);
+			kmem_free(pgs, pgs_size);
 		return (0);
 	}
 	if (bp != NULL) {
 		error = biowait(mbp);
 	}
-	s = splbio();
-	pool_put(&bufpool, mbp);
-	splx(s);
+	putiobuf(mbp);
 	uvm_pagermapout(kva, npages);
-	raoffset = startoffset + totalbytes;
 
 	/*
 	 * if this we encountered a hole then we have to do a little more work.
@@ -913,7 +945,7 @@ loopdone:
 		simple_unlock(&uobj->vmobjlock);
 		UVMHIST_LOG(ubchist, "returning error %d", error,0,0,0);
 		if (pgs != pgs_onstack)
-			free(pgs, M_DEVBUF);
+			kmem_free(pgs, pgs_size);
 		return (error);
 	}
 
@@ -946,7 +978,7 @@ out:
 				uvm_pagefree(pg);
 				continue;
 			}
-			uvm_pageactivate(pg);
+			uvm_pageenqueue(pg);
 			pg->flags &= ~(PG_WANTED|PG_BUSY|PG_FAKE);
 			UVM_PAGE_OWN(pg, NULL);
 		}
@@ -958,7 +990,7 @@ out:
 		    orignpages * sizeof(struct vm_page *));
 	}
 	if (pgs != pgs_onstack)
-		free(pgs, M_DEVBUF);
+		kmem_free(pgs, pgs_size);
 	return (0);
 }
 
@@ -967,15 +999,12 @@ out:
  * Write the given range of pages to backing store.
  *
  * => "offhi == 0" means flush all pages at or after "offlo".
- * => object should be locked by caller.   we may _unlock_ the object
- *	if (and only if) we need to clean a page (PGO_CLEANIT), or
- *	if PGO_SYNCIO is set and there are pages busy.
- *	we return with the object locked.
+ * => object should be locked by caller.  we return with the
+ *      object unlocked.
  * => if PGO_CLEANIT or PGO_SYNCIO is set, we may block (due to I/O).
  *	thus, a caller might want to unlock higher level resources
  *	(e.g. vm_map) before calling flush.
- * => if neither PGO_CLEANIT nor PGO_SYNCIO is set, then we will neither
- *	unlock the object nor block.
+ * => if neither PGO_CLEANIT nor PGO_SYNCIO is set, we will not block
  * => if PGO_ALLPAGES is set, then all pages in the object will be processed.
  * => NOTE: we rely on the fact that the object's memq is a TAILQ and
  *	that new pages are inserted on the tail end of the list.   thus,
@@ -1030,7 +1059,7 @@ genfs_putpages(void *v)
 	off_t off;
 	int flags = ap->a_flags;
 	/* Even for strange MAXPHYS, the shift rounds down to a page */
-	const int maxpages = MAXPHYS >> PAGE_SHIFT;
+#define maxpages (MAXPHYS >> PAGE_SHIFT)
 	int i, s, error, npages, nback;
 	int freeflag;
 	struct vm_page *pgs[maxpages], *pg, *nextpg, *tpg, curmp, endmp;
@@ -1058,10 +1087,8 @@ genfs_putpages(void *v)
 		s = splbio();
 		if (vp->v_flag & VONWORKLST) {
 			vp->v_flag &= ~VWRITEMAPDIRTY;
-			if (LIST_FIRST(&vp->v_dirtyblkhd) == NULL) {
-				vp->v_flag &= ~VONWORKLST;
-				LIST_REMOVE(vp, v_synclist);
-			}
+			if (LIST_FIRST(&vp->v_dirtyblkhd) == NULL)
+				vn_syncer_remove_from_worklist(vp);
 		}
 		splx(s);
 		simple_unlock(slock);
@@ -1307,9 +1334,8 @@ genfs_putpages(void *v)
 				pg = tpg;
 			if (tpg->offset < startoff || tpg->offset >= endoff)
 				continue;
-			if (flags & PGO_DEACTIVATE &&
-			    (tpg->pqflags & PQ_INACTIVE) == 0 &&
-			    tpg->wire_count == 0) {
+			if (flags & PGO_DEACTIVATE && tpg->wire_count == 0
+			    && tpg->loan_count == 0) {
 				(void) pmap_clear_reference(tpg);
 				uvm_pagedeactivate(tpg);
 			} else if (flags & PGO_FREE) {
@@ -1389,7 +1415,7 @@ genfs_putpages(void *v)
 	}
 
 	if (modified && (vp->v_flag & VWRITEMAPDIRTY) != 0 &&
-	    (vp->v_type == VREG ||
+	    (vp->v_type != VBLK ||
 	    (vp->v_mount->mnt_flag & MNT_NODEVMTIME) == 0)) {
 		GOP_MARKUPDATE(vp, GOP_UPDATE_MODIFIED);
 	}
@@ -1404,10 +1430,8 @@ genfs_putpages(void *v)
 	if (cleanall && wasclean && gp->g_dirtygen == dirtygen &&
 	    (vp->v_flag & VONWORKLST) != 0) {
 		vp->v_flag &= ~VWRITEMAPDIRTY;
-		if (LIST_FIRST(&vp->v_dirtyblkhd) == NULL) {
-			vp->v_flag &= ~VONWORKLST;
-			LIST_REMOVE(vp, v_synclist);
-		}
+		if (LIST_FIRST(&vp->v_dirtyblkhd) == NULL)
+			vn_syncer_remove_from_worklist(vp);
 	}
 	splx(s);
 
@@ -1430,30 +1454,60 @@ skip_scan:
 		}
 		splx(s);
 	}
-	simple_unlock(&uobj->vmobjlock);
+	simple_unlock(slock);
 	return (error);
 }
 
 int
 genfs_gop_write(struct vnode *vp, struct vm_page **pgs, int npages, int flags)
 {
-	int s, error, run;
-	int fs_bshift, dev_bshift;
+	off_t off;
 	vaddr_t kva;
-	off_t eof, offset, startoffset;
-	size_t bytes, iobytes, skipbytes;
-	daddr_t lbn, blkno;
-	struct vm_page *pg;
-	struct buf *mbp, *bp;
-	struct vnode *devvp;
-	boolean_t async = (flags & PGO_SYNCIO) == 0;
-	UVMHIST_FUNC("genfs_gop_write"); UVMHIST_CALLED(ubchist);
+	size_t len;
+	int error;
+	UVMHIST_FUNC(__func__); UVMHIST_CALLED(ubchist);
 
 	UVMHIST_LOG(ubchist, "vp %p pgs %p npages %d flags 0x%x",
 	    vp, pgs, npages, flags);
 
-	GOP_SIZE(vp, vp->v_size, &eof, GOP_SIZE_WRITE);
-	if (vp->v_type == VREG) {
+	off = pgs[0]->offset;
+	kva = uvm_pagermapin(pgs, npages,
+	    UVMPAGER_MAPIN_WRITE | UVMPAGER_MAPIN_WAITOK);
+	len = npages << PAGE_SHIFT;
+
+	error = genfs_do_io(vp, off, kva, len, flags, UIO_WRITE,
+			    uvm_aio_biodone);
+
+	return error;
+}
+
+/*
+ * Backend routine for doing I/O to vnode pages.  Pages are already locked
+ * and mapped into kernel memory.  Here we just look up the underlying
+ * device block addresses and call the strategy routine.
+ */
+
+static int
+genfs_do_io(struct vnode *vp, off_t off, vaddr_t kva, size_t len, int flags,
+    enum uio_rw rw, void (*iodone)(struct buf *))
+{
+	int s, error, run;
+	int fs_bshift, dev_bshift;
+	off_t eof, offset, startoffset;
+	size_t bytes, iobytes, skipbytes;
+	daddr_t lbn, blkno;
+	struct buf *mbp, *bp;
+	struct vnode *devvp;
+	boolean_t async = (flags & PGO_SYNCIO) == 0;
+	boolean_t write = rw == UIO_WRITE;
+	int brw = write ? B_WRITE : B_READ;
+	UVMHIST_FUNC(__func__); UVMHIST_CALLED(ubchist);
+
+	UVMHIST_LOG(ubchist, "vp %p kva %p len 0x%x flags 0x%x",
+	    vp, kva, len, flags);
+
+	GOP_SIZE(vp, vp->v_size, &eof, 0);
+	if (vp->v_type != VBLK) {
 		fs_bshift = vp->v_mount->mnt_fs_bshift;
 		dev_bshift = vp->v_mount->mnt_dev_bshift;
 	} else {
@@ -1461,30 +1515,33 @@ genfs_gop_write(struct vnode *vp, struct vm_page **pgs, int npages, int flags)
 		dev_bshift = DEV_BSHIFT;
 	}
 	error = 0;
-	pg = pgs[0];
-	startoffset = pg->offset;
-	bytes = MIN(npages << PAGE_SHIFT, eof - startoffset);
+	startoffset = off;
+	bytes = MIN(len, eof - startoffset);
 	skipbytes = 0;
 	KASSERT(bytes != 0);
 
-	kva = uvm_pagermapin(pgs, npages,
-	    UVMPAGER_MAPIN_WRITE | UVMPAGER_MAPIN_WAITOK);
-
-	s = splbio();
-	simple_lock(&global_v_numoutput_slock);
-	vp->v_numoutput += 2;
-	simple_unlock(&global_v_numoutput_slock);
-	mbp = pool_get(&bufpool, PR_WAITOK);
-	BUF_INIT(mbp);
+	if (write) {
+		s = splbio();
+		simple_lock(&global_v_numoutput_slock);
+		vp->v_numoutput += 2;
+		simple_unlock(&global_v_numoutput_slock);
+		splx(s);
+	}
+	mbp = getiobuf();
 	UVMHIST_LOG(ubchist, "vp %p mbp %p num now %d bytes 0x%x",
 	    vp, mbp, vp->v_numoutput, bytes);
-	splx(s);
-	mbp->b_bufsize = npages << PAGE_SHIFT;
+	mbp->b_bufsize = len;
 	mbp->b_data = (void *)kva;
 	mbp->b_resid = mbp->b_bcount = bytes;
-	mbp->b_flags = B_BUSY|B_WRITE|B_AGE| (async ? (B_CALL|B_ASYNC) : 0);
-	mbp->b_iodone = uvm_aio_biodone;
+	mbp->b_flags = B_BUSY | brw | B_AGE | (async ? (B_CALL | B_ASYNC) : 0);
+	mbp->b_iodone = iodone;
 	mbp->b_vp = vp;
+	if (curproc == uvm.pagedaemon_proc)
+		BIO_SETPRIO(mbp, BPRIO_TIMELIMITED);
+	else if (async)
+		BIO_SETPRIO(mbp, BPRIO_TIMENONCRITICAL);
+	else
+		BIO_SETPRIO(mbp, BPRIO_TIMECRITICAL);
 
 	bp = NULL;
 	for (offset = startoffset;
@@ -1502,6 +1559,10 @@ genfs_gop_write(struct vnode *vp, struct vm_page **pgs, int npages, int flags)
 		iobytes = MIN((((off_t)lbn + 1 + run) << fs_bshift) - offset,
 		    bytes);
 		if (blkno == (daddr_t)-1) {
+			if (!write) {
+				memset((char *)kva + (offset - startoffset), 0,
+				   iobytes);
+			}
 			skipbytes += iobytes;
 			continue;
 		}
@@ -1510,22 +1571,12 @@ genfs_gop_write(struct vnode *vp, struct vm_page **pgs, int npages, int flags)
 		if (offset == startoffset && iobytes == bytes) {
 			bp = mbp;
 		} else {
-			s = splbio();
-			V_INCR_NUMOUTPUT(vp);
-			bp = pool_get(&bufpool, PR_WAITOK);
 			UVMHIST_LOG(ubchist, "vp %p bp %p num now %d",
 			    vp, bp, vp->v_numoutput, 0);
-			splx(s);
-			BUF_INIT(bp);
-			bp->b_data = (char *)kva +
-			    (vaddr_t)(offset - pg->offset);
-			bp->b_resid = bp->b_bcount = iobytes;
-			bp->b_flags = B_BUSY|B_WRITE|B_CALL|B_ASYNC;
-			bp->b_iodone = uvm_aio_biodone1;
-			bp->b_vp = vp;
+			bp = getiobuf();
+			nestiobuf_setup(mbp, bp, offset - startoffset, iobytes);
 		}
 		bp->b_lblkno = 0;
-		bp->b_private = mbp;
 
 		/* adjust physical blkno for partial blocks */
 		bp->b_blkno = blkno + ((offset - ((off_t)lbn << fs_bshift)) >>
@@ -1533,35 +1584,22 @@ genfs_gop_write(struct vnode *vp, struct vm_page **pgs, int npages, int flags)
 		UVMHIST_LOG(ubchist,
 		    "vp %p offset 0x%x bcount 0x%x blkno 0x%x",
 		    vp, offset, bp->b_bcount, bp->b_blkno);
-		if (curproc == uvm.pagedaemon_proc)
-			BIO_SETPRIO(bp, BPRIO_TIMELIMITED);
-		else if (async)
-			BIO_SETPRIO(bp, BPRIO_TIMENONCRITICAL);
-		else
-			BIO_SETPRIO(bp, BPRIO_TIMECRITICAL);
 
 		VOP_STRATEGY(devvp, bp);
 	}
 	if (skipbytes) {
 		UVMHIST_LOG(ubchist, "skipbytes %d", skipbytes, 0,0,0);
-		s = splbio();
-		if (error) {
-			mbp->b_flags |= B_ERROR;
-			mbp->b_error = error;
-		}
-		mbp->b_resid -= skipbytes;
-		if (mbp->b_resid == 0) {
-			biodone(mbp);
-		}
-		splx(s);
 	}
+	nestiobuf_done(mbp, skipbytes, error);
 	if (async) {
 		UVMHIST_LOG(ubchist, "returning 0 (async)", 0,0,0,0);
 		return (0);
 	}
 	UVMHIST_LOG(ubchist, "waiting for mbp %p", mbp,0,0,0);
 	error = biowait(mbp);
-	uvm_aio_aiodone(mbp);
+	s = splbio();
+	(*iodone)(mbp);
+	splx(s);
 	UVMHIST_LOG(ubchist, "returning, error %d", error,0,0,0);
 	return (error);
 }
@@ -1626,7 +1664,7 @@ genfs_compat_getpages(void *v)
 	int i, error, orignpages, npages;
 	struct iovec iov;
 	struct uio uio;
-	struct ucred *cred = curproc->p_ucred;
+	kauth_cred_t cred = curlwp->l_cred;
 	boolean_t write = (ap->a_access_type & VM_PROT_WRITE) != 0;
 
 	error = 0;
@@ -1666,10 +1704,9 @@ genfs_compat_getpages(void *v)
 		uio.uio_iov = &iov;
 		uio.uio_iovcnt = 1;
 		uio.uio_offset = origoffset + (i << PAGE_SHIFT);
-		uio.uio_segflg = UIO_SYSSPACE;
 		uio.uio_rw = UIO_READ;
 		uio.uio_resid = PAGE_SIZE;
-		uio.uio_lwp = NULL;
+		UIO_SETUP_SYSSPACE(&uio);
 		/* XXX vn_lock */
 		error = VOP_READ(vp, &uio, 0, cred);
 		if (error) {
@@ -1706,7 +1743,7 @@ genfs_compat_gop_write(struct vnode *vp, struct vm_page **pgs, int npages,
 	off_t offset;
 	struct iovec iov;
 	struct uio uio;
-	struct ucred *cred = curproc->p_ucred;
+	kauth_cred_t cred = curlwp->l_cred;
 	struct buf *bp;
 	vaddr_t kva;
 	int s, error;
@@ -1720,19 +1757,17 @@ genfs_compat_gop_write(struct vnode *vp, struct vm_page **pgs, int npages,
 	uio.uio_iov = &iov;
 	uio.uio_iovcnt = 1;
 	uio.uio_offset = offset;
-	uio.uio_segflg = UIO_SYSSPACE;
 	uio.uio_rw = UIO_WRITE;
 	uio.uio_resid = npages << PAGE_SHIFT;
-	uio.uio_lwp = NULL;
+	UIO_SETUP_SYSSPACE(&uio);
 	/* XXX vn_lock */
 	error = VOP_WRITE(vp, &uio, 0, cred);
 
 	s = splbio();
 	V_INCR_NUMOUTPUT(vp);
-	bp = pool_get(&bufpool, PR_WAITOK);
 	splx(s);
 
-	BUF_INIT(bp);
+	bp = getiobuf();
 	bp->b_flags = B_BUSY | B_WRITE | B_AGE;
 	bp->b_vp = vp;
 	bp->b_lblkno = offset >> vp->v_mount->mnt_fs_bshift;
@@ -1747,6 +1782,215 @@ genfs_compat_gop_write(struct vnode *vp, struct vm_page **pgs, int npages,
 	uvm_aio_aiodone(bp);
 	return (error);
 }
+
+/*
+ * Process a uio using direct I/O.  If we reach a part of the request
+ * which cannot be processed in this fashion for some reason, just return.
+ * The caller must handle some additional part of the request using
+ * buffered I/O before trying direct I/O again.
+ */
+
+void
+genfs_directio(struct vnode *vp, struct uio *uio, int ioflag)
+{
+	struct vmspace *vs;
+	struct iovec *iov;
+	vaddr_t va;
+	size_t len;
+	const int mask = DEV_BSIZE - 1;
+	int error;
+
+	/*
+	 * We only support direct I/O to user space for now.
+	 */
+
+	if (VMSPACE_IS_KERNEL_P(uio->uio_vmspace)) {
+		return;
+	}
+
+	/*
+	 * If the vnode is mapped, we would need to get the getpages lock
+	 * to stabilize the bmap, but then we would get into trouble whil e
+	 * locking the pages if the pages belong to this same vnode (or a
+	 * multi-vnode cascade to the same effect).  Just fall back to
+	 * buffered I/O if the vnode is mapped to avoid this mess.
+	 */
+
+	if (vp->v_flag & VMAPPED) {
+		return;
+	}
+
+	/*
+	 * Do as much of the uio as possible with direct I/O.
+	 */
+
+	vs = uio->uio_vmspace;
+	while (uio->uio_resid) {
+		iov = uio->uio_iov;
+		if (iov->iov_len == 0) {
+			uio->uio_iov++;
+			uio->uio_iovcnt--;
+			continue;
+		}
+		va = (vaddr_t)iov->iov_base;
+		len = MIN(iov->iov_len, genfs_maxdio);
+		len &= ~mask;
+
+		/*
+		 * If the next chunk is smaller than DEV_BSIZE or extends past
+		 * the current EOF, then fall back to buffered I/O.
+		 */
+
+		if (len == 0 || uio->uio_offset + len > vp->v_size) {
+			return;
+		}
+
+		/*
+		 * Check alignment.  The file offset must be at least
+		 * sector-aligned.  The exact constraint on memory alignment
+		 * is very hardware-dependent, but requiring sector-aligned
+		 * addresses there too is safe.
+		 */
+
+		if (uio->uio_offset & mask || va & mask) {
+			return;
+		}
+		error = genfs_do_directio(vs, va, len, vp, uio->uio_offset,
+					  uio->uio_rw);
+		if (error) {
+			break;
+		}
+		iov->iov_base = (caddr_t)iov->iov_base + len;
+		iov->iov_len -= len;
+		uio->uio_offset += len;
+		uio->uio_resid -= len;
+	}
+}
+
+/*
+ * Iodone routine for direct I/O.  We don't do much here since the request is
+ * always synchronous, so the caller will do most of the work after biowait().
+ */
+
+static void
+genfs_dio_iodone(struct buf *bp)
+{
+	int s;
+
+	KASSERT((bp->b_flags & B_ASYNC) == 0);
+	s = splbio();
+	if ((bp->b_flags & (B_READ | B_AGE)) == B_AGE) {
+		vwakeup(bp);
+	}
+	putiobuf(bp);
+	splx(s);
+}
+
+/*
+ * Process one chunk of a direct I/O request.
+ */
+
+static int
+genfs_do_directio(struct vmspace *vs, vaddr_t uva, size_t len, struct vnode *vp,
+    off_t off, enum uio_rw rw)
+{
+	struct vm_map *map;
+	struct pmap *upm, *kpm;
+	size_t klen = round_page(uva + len) - trunc_page(uva);
+	off_t spoff, epoff;
+	vaddr_t kva, puva;
+	paddr_t pa;
+	vm_prot_t prot;
+	int error, rv, poff, koff;
+	const int pgoflags = PGO_CLEANIT | PGO_SYNCIO |
+		(rw == UIO_WRITE ? PGO_FREE : 0);
+
+	/*
+	 * For writes, verify that this range of the file already has fully
+	 * allocated backing store.  If there are any holes, just punt and
+	 * make the caller take the buffered write path.
+	 */
+
+	if (rw == UIO_WRITE) {
+		daddr_t lbn, elbn, blkno;
+		int bsize, bshift, run;
+
+		bshift = vp->v_mount->mnt_fs_bshift;
+		bsize = 1 << bshift;
+		lbn = off >> bshift;
+		elbn = (off + len + bsize - 1) >> bshift;
+		while (lbn < elbn) {
+			error = VOP_BMAP(vp, lbn, NULL, &blkno, &run);
+			if (error) {
+				return error;
+			}
+			if (blkno == (daddr_t)-1) {
+				return ENOSPC;
+			}
+			lbn += 1 + run;
+		}
+	}
+
+	/*
+	 * Flush any cached pages for parts of the file that we're about to
+	 * access.  If we're writing, invalidate pages as well.
+	 */
+
+	spoff = trunc_page(off);
+	epoff = round_page(off + len);
+	simple_lock(&vp->v_interlock);
+	error = VOP_PUTPAGES(vp, spoff, epoff, pgoflags);
+	if (error) {
+		return error;
+	}
+
+	/*
+	 * Wire the user pages and remap them into kernel memory.
+	 */
+
+	prot = rw == UIO_READ ? VM_PROT_READ | VM_PROT_WRITE : VM_PROT_READ;
+	error = uvm_vslock(vs, (void *)uva, len, prot);
+	if (error) {
+		return error;
+	}
+
+	map = &vs->vm_map;
+	upm = vm_map_pmap(map);
+	kpm = vm_map_pmap(kernel_map);
+	kva = uvm_km_alloc(kernel_map, klen, 0,
+			   UVM_KMF_VAONLY | UVM_KMF_WAITVA);
+	puva = trunc_page(uva);
+	for (poff = 0; poff < klen; poff += PAGE_SIZE) {
+		rv = pmap_extract(upm, puva + poff, &pa);
+		KASSERT(rv);
+		pmap_enter(kpm, kva + poff, pa, prot, prot | PMAP_WIRED);
+	}
+	pmap_update(kpm);
+
+	/*
+	 * Do the I/O.
+	 */
+
+	koff = uva - trunc_page(uva);
+	error = genfs_do_io(vp, off, kva + koff, len, PGO_SYNCIO, rw,
+			    genfs_dio_iodone);
+
+	/*
+	 * Tear down the kernel mapping.
+	 */
+
+	pmap_remove(kpm, kva, kva + klen);
+	pmap_update(kpm);
+	uvm_km_free(kernel_map, kva, klen, UVM_KMF_VAONLY);
+
+	/*
+	 * Unwire the user pages.
+	 */
+
+	uvm_vsunlock(vs, (void *)uva, len);
+	return error;
+}
+
 
 static void
 filt_genfsdetach(struct knote *kn)
@@ -1823,4 +2067,28 @@ genfs_kqfilter(void *v)
 	SLIST_INSERT_HEAD(&vp->v_klist, kn, kn_selnext);
 
 	return (0);
+}
+
+void
+genfs_node_wrlock(struct vnode *vp)
+{
+	struct genfs_node *gp = VTOG(vp);
+
+	lockmgr(&gp->g_glock, LK_EXCLUSIVE, NULL);
+}
+
+void
+genfs_node_rdlock(struct vnode *vp)
+{
+	struct genfs_node *gp = VTOG(vp);
+
+	lockmgr(&gp->g_glock, LK_SHARED, NULL);
+}
+
+void
+genfs_node_unlock(struct vnode *vp)
+{
+	struct genfs_node *gp = VTOG(vp);
+
+	lockmgr(&gp->g_glock, LK_RELEASE, NULL);
 }

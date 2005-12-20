@@ -1,5 +1,5 @@
-/*	$NetBSD: session.h,v 1.5 2005/02/13 05:57:26 christos Exp $	*/
-/*	$OpenBSD: session.h,v 1.23 2004/07/17 05:31:41 dtucker Exp $	*/
+/*	$NetBSD: session.h,v 1.7 2006/09/28 21:22:15 christos Exp $	*/
+/* $OpenBSD: session.h,v 1.29 2006/08/03 03:34:42 deraadt Exp $ */
 
 /*
  * Copyright (c) 2000, 2001 Markus Friedl.  All rights reserved.
@@ -37,11 +37,13 @@ struct Session {
 	struct passwd *pw;
 	Authctxt *authctxt;
 	pid_t	pid;
+
 	/* tty */
 	char	*term;
 	int	ptyfd, ttyfd, ptymaster;
 	u_int	row, col, xpixel, ypixel;
 	char	tty[TTYSZ];
+
 	/* X11 */
 	u_int	display_number;
 	char	*display;
@@ -50,14 +52,16 @@ struct Session {
 	char	*auth_proto;
 	char	*auth_data;
 	int	single_connection;
+
 	/* proto 2 */
 	int	chanid;
+	int	*x11_chanids;
 	int	is_subsystem;
-	int	num_env;
+	u_int	num_env;
 	struct {
 		char	*name;
 		char	*val;
-	}	*env;
+	} *env;
 };
 
 void	 do_authenticated(Authctxt *);

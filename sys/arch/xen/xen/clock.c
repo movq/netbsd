@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.15 2005/12/11 12:19:50 christos Exp $	*/
+/*	$NetBSD: clock.c,v 1.34 2006/11/11 23:33:12 jld Exp $	*/
 
 /*
  *
@@ -34,13 +34,14 @@
 #include "opt_xen.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.15 2005/12/11 12:19:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.34 2006/11/11 23:33:12 jld Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/time.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
+#include <sys/sysctl.h>
 
 #include <machine/xen.h>
 #include <machine/hypervisor.h>
@@ -53,15 +54,23 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.15 2005/12/11 12:19:50 christos Exp $");
 
 static int xen_timer_handler(void *, struct intrframe *);
 
-/* These are peridically updated in shared_info, and then copied here. */
-volatile static uint64_t shadow_tsc_stamp;
-volatile static uint64_t shadow_system_time;
-volatile static unsigned long shadow_time_version;
-volatile static struct timeval shadow_tv;
+/* These are periodically updated in shared_info, and then copied here. */
+static volatile uint64_t shadow_tsc_stamp;
+static volatile uint64_t shadow_system_time;
+static volatile unsigned long shadow_time_version; /* XXXSMP */
+static volatile uint32_t shadow_freq_mul;
+static volatile int8_t shadow_freq_shift;
+static volatile struct timeval shadow_tv;
 
 static int timeset;
 
 static uint64_t processed_system_time;
+
+#ifdef DOM0OPS
+/* If we're dom0, send our time to Xen every minute or so. */
+int xen_timepush_ticks = 0;
+static struct callout xen_timepush_co = CALLOUT_INITIALIZER;
+#endif
 
 #define NS_PER_TICK (1000000000ULL/hz)
 
@@ -72,25 +81,125 @@ static uint64_t processed_system_time;
 static void
 get_time_values_from_xen(void)
 {
+#ifdef XEN3
+	volatile struct vcpu_time_info *t =
+	    &HYPERVISOR_shared_info->vcpu_info[0].time;
+	uint32_t tversion;
+
+	do {
+		shadow_time_version = t->version;
+		x86_lfence();
+		shadow_tsc_stamp = t->tsc_timestamp;
+		shadow_system_time = t->system_time;
+		shadow_freq_mul = t->tsc_to_system_mul;
+		shadow_freq_shift = t->tsc_shift;
+		x86_lfence();
+	} while ((t->version & 1) || (shadow_time_version != t->version));
+	do {
+		tversion = HYPERVISOR_shared_info->wc_version;
+		x86_lfence();
+		shadow_tv.tv_sec = HYPERVISOR_shared_info->wc_sec;
+		shadow_tv.tv_usec = HYPERVISOR_shared_info->wc_nsec;
+		x86_lfence();
+	} while ((HYPERVISOR_shared_info->wc_version & 1) ||
+	    (tversion != HYPERVISOR_shared_info->wc_version));
+	shadow_tv.tv_usec = shadow_tv.tv_usec / 1000;
+#else /* XEN3 */
 	do {
 		shadow_time_version = HYPERVISOR_shared_info->time_version2;
-		__insn_barrier();
+		x86_lfence();
 		shadow_tv.tv_sec = HYPERVISOR_shared_info->wc_sec;
 		shadow_tv.tv_usec = HYPERVISOR_shared_info->wc_usec;
 		shadow_tsc_stamp = HYPERVISOR_shared_info->tsc_timestamp;
 		shadow_system_time = HYPERVISOR_shared_info->system_time;
-		__insn_barrier();
+		x86_lfence();
 	} while (shadow_time_version != HYPERVISOR_shared_info->time_version1);
+#endif
 }
+
+/*
+ * Are the values we have up to date?
+ */
+static inline int
+time_values_up_to_date(void)
+{
+	int rv;
+
+	x86_lfence();
+#ifndef XEN3
+	rv = shadow_time_version == HYPERVISOR_shared_info->time_version1;
+#else
+	rv = shadow_time_version == 
+	    HYPERVISOR_shared_info->vcpu_info[0].time.version;  /* XXXSMP */
+#endif
+	x86_lfence();
+
+	return rv;
+}
+
+#ifdef XEN3
+/*
+ * Xen 3 helpfully provides the CPU clock speed in the form of a multiplier
+ * and shift that can be used to convert a cycle count into nanoseconds
+ * without using an actual (slow) divide insn.
+ */
+static inline uint64_t
+scale_delta(uint64_t delta, uint32_t mul_frac, int8_t shift)
+{
+	if (shift < 0)
+		delta >>= -shift;
+	else
+		delta <<= shift;
+
+	/*
+	 * Here, we multiply a 64-bit and a 32-bit value, and take the top
+	 * 64 bits of that 96-bit product.  This is broken up into two
+	 * 32*32=>64-bit multiplies and a 64-bit add.  The casts are needed
+	 * to hint to GCC that both multiplicands really are 32-bit; the
+	 * generated code is still fairly bad, but not insanely so.
+	 */
+	return ((uint64_t)(uint32_t)(delta >> 32) * mul_frac)
+	    + ((((uint64_t)(uint32_t)(delta & 0xFFFFFFFF)) * mul_frac) >> 32);
+}
+#endif
 
 static uint64_t
 get_tsc_offset_ns(void)
 {
-	uint32_t tsc_delta;
+	uint64_t tsc_delta, offset;
+#ifndef XEN3
 	struct cpu_info *ci = curcpu();
+#endif
 
-	tsc_delta = cpu_counter32() - shadow_tsc_stamp;
-	return tsc_delta * 1000000000 / cpu_frequency(ci);
+	tsc_delta = cpu_counter() - shadow_tsc_stamp;
+#ifndef XEN3
+	offset = tsc_delta * 1000000000ULL / cpu_frequency(ci);
+#else
+	offset = scale_delta(tsc_delta, shadow_freq_mul,
+	    shadow_freq_shift);
+#endif
+#ifdef XEN_CLOCK_DEBUG
+	if (offset > 10000000000ULL)
+		printf("get_tsc_offset_ns: tsc_delta=%llu offset=%llu\n",
+		    tsc_delta, offset);
+#endif
+	return offset;
+}
+
+static uint64_t
+get_system_time(void)
+{
+	uint64_t stime;
+
+	for (;;) {
+		stime = shadow_system_time + get_tsc_offset_ns();
+		
+		/* if the timestamp went stale before we used it, refresh */
+		if (time_values_up_to_date())
+			break;
+		get_time_values_from_xen();
+	}
+	return stime;
 }
 
 void
@@ -98,6 +207,9 @@ inittodr(time_t base)
 {
 	int s;
 	struct cpu_info *ci = curcpu();
+#if defined(XEN3)
+	uint64_t t;
+#endif /* defined(XEN3) */
 
 	/*
 	 * if the file system time is more than a year older than the
@@ -112,9 +224,16 @@ inittodr(time_t base)
 	get_time_values_from_xen();
 	splx(s);
 
+#if defined(XEN3)
+	t = (shadow_tv.tv_sec + rtc_offset * 60) * UINT64_C(1000000) +
+	    shadow_tv.tv_usec + processed_system_time / 1000;
+	time.tv_usec = t % UINT64_C(1000000);
+	time.tv_sec = t / UINT64_C(1000000);
+#else /* defined(XEN3) */
 	time.tv_usec = shadow_tv.tv_usec;
 	time.tv_sec = shadow_tv.tv_sec + rtc_offset * 60;
-#ifdef DEBUG_CLOCK
+#endif /* defined(XEN3) */
+#ifdef XEN_CLOCK_DEBUG
 	printf("readclock: %ld (%ld)\n", time.tv_sec, base);
 #endif
 	/* reset microset, so that the next call to microset() will init */
@@ -137,15 +256,15 @@ fstime:
 	printf("WARNING: CHECK AND RESET THE DATE!\n");
 }
 
-void
-resettodr()
+static void
+resettodr_i(void)
 {
 #ifdef DOM0OPS
 	dom0_op_t op;
 	int s;
 #endif
 #ifdef DEBUG_CLOCK
-	struct clock_ymdhms dt;
+	struct timeval sent_delta;
 #endif
 
 	/*
@@ -156,10 +275,19 @@ resettodr()
 		return;
 
 #ifdef DEBUG_CLOCK
-	clock_secs_to_ymdhms(time.tv_sec - rtc_offset * 60, &dt);
-
-	printf("setclock: %d/%d/%d %02d:%02d:%02d\n", dt.dt_year,
-	    dt.dt_mon, dt.dt_day, dt.dt_hour, dt.dt_min, dt.dt_sec);
+        {
+		char pm;
+ 
+		if (timercmp(&time, &shadow_tv, >)) {
+			timersub(&time, &shadow_tv, &sent_delta);
+			pm = '+';
+		} else {
+			timersub(&shadow_tv, &time, &sent_delta);
+			pm = '-';
+		}
+		printf("resettodr: stepping Xen clock by %c%ld.%06ld\n",
+	    pm, sent_delta.tv_sec, sent_delta.tv_usec);
+	}
 #endif
 #ifdef DOM0OPS
 	if (xen_start_info.flags & SIF_PRIVILEGED) {
@@ -167,13 +295,33 @@ resettodr()
 
 		op.cmd = DOM0_SETTIME;
 		op.u.settime.secs	 = time.tv_sec - rtc_offset * 60;
+#ifdef XEN3
+		op.u.settime.nsecs	 = time.tv_usec * 1000;
+#else
 		op.u.settime.usecs	 = time.tv_usec;
-		op.u.settime.system_time = shadow_system_time;
+#endif
+		op.u.settime.system_time = processed_system_time;
 		HYPERVISOR_dom0_op(&op);
 
 		splx(s);
 	}
 #endif
+}
+
+/*
+ * When the clock is administratively set, in addition to resetting
+ * Xen's clock if possible, we should also allow xen_microtime to 
+ * step backwards without complaint.
+ */
+void
+resettodr()
+{
+	CPU_INFO_ITERATOR cii;
+	struct cpu_info *ci;
+
+	resettodr_i();
+	for (CPU_INFO_FOREACH(cii, ci))
+		timerclear(&ci->ci_cc.cc_time);
 }
 
 void
@@ -221,20 +369,139 @@ xen_delay(int n)
 	}
 }
 
+/*
+ * A MD microtime for xen.
+ *
+ * This abuses/reuses the cc_microtime fields already in cpuinfo:
+ *  cc_ms_delta = usec added to time(9) on last call to hardclock;
+ *                this is used to scale the actual elapsed time 
+ *        cc_cc = reference value of cpu_counter()
+ *     cc_denom = nsec between last hardclock(9) and time of cc_cc setting
+ *                (provided by Xen)
+ *
+ * We are taking Xen's word for the CPU frequency rather than trying to
+ * time it ourselves like cc_microtime does, since Xen could reschedule
+ * our virtual CPU(s) onto any physical CPU and only tell us afterwards
+ * with a clock interrupt -- and that could invalidate all stored
+ * cpu_counter values.
+ */
 void
 xen_microtime(struct timeval *tv)
 {
 	int s = splclock();
-	get_time_values_from_xen();
-	*tv = shadow_tv;
+	struct cpu_info *ci = curcpu();
+	int64_t cycles;
+	
+	*tv = time;
+	/* Extrapolate from hardclock()'s last step. */
+	cycles = cpu_counter() - ci->ci_cc.cc_cc;
+#ifdef XEN_CLOCK_DEBUG
+	if (cycles <= 0) {
+		printf("xen_microtime: CPU counter has decreased by %" PRId64
+		    " since last hardclock(9)\n", -cycles);
+ 	}
+#endif
+
+#ifndef XEN3
+	/*
+	 * Work around an intermittent Xen2 bug where, for a period of
+	 * 1<<32 ns, currently running domains don't get their timer
+	 * events as usual (and also aren't preempted in favor of
+	 * other runnable domains).  Setting the timer into the past
+	 * in this way causes it to fire immediately.
+	 */
+	if (cycles > cpu_frequency(ci) / 25 && time_values_up_to_date()) {
+		/*
+		 * 40ms; under Xen2 the timestamp updates and timer ticks
+		 * should arrive every 10ms.
+		 */
+#ifdef XEN_CLOCK_DEBUG
+		printf("xen_microtime: overlarge TSC offset %llu"
+		    " (pst=%llu sst=%llu); forcing timer...\n", cycles,
+		    processed_system_time, shadow_system_time);
+#endif
+		HYPERVISOR_set_timer_op(shadow_system_time);
+	}
+#endif
+	cycles += ci->ci_cc.cc_denom * cpu_frequency(ci) / 1000000000LL;
+	tv->tv_usec += cycles * ci->ci_cc.cc_ms_delta * hz / cpu_frequency(ci);
+#ifdef XEN_CLOCK_DEBUG
+	if (tv->tv_usec >= 2000000)
+		printf("xen_microtime: unexpectedly large tv_usec %ld\n", tv->tv_usec);
+#endif
+	if (tv->tv_usec >= 1000000) {
+		tv->tv_sec++;
+		tv->tv_usec -= 1000000;
+	}
+	/* Avoid small backsteps, e.g. at the beginning of a negative adjustment. */
+	if (timerisset(&ci->ci_cc.cc_time) &&	
+	    timercmp(tv, &ci->ci_cc.cc_time, <)) {
+		struct timeval backstep;
+
+		/* XXXjld: not sure if this check can be safely removed now */
+		timersub(&ci->ci_cc.cc_time, tv, &backstep);
+		if (backstep.tv_sec == 0) { /* if it was < 1sec */
+			*tv = ci->ci_cc.cc_time;
+#ifdef XEN_CLOCK_DEBUG
+			printf("xen_microtime[%d]: clamping at %ld.%06ld (-%ldus)\n",
+			    (int)ci->ci_cpuid, tv->tv_sec, tv->tv_usec, backstep.tv_usec);
+		} else {
+			printf("xen_microtime[%d]: allowing large backstep "
+			    "%lds to %ld.%06ld\n", (int)ci->ci_cpuid,
+			    backstep.tv_sec, tv->tv_sec, tv->tv_usec);
+#endif
+		}
+	}
+	ci->ci_cc.cc_time = *tv;
 	splx(s);
 }
+
+#ifdef DOM0OPS
+/* ARGSUSED */
+static void
+xen_timepush(void *arg)
+{
+	struct callout *co = arg;
+
+	resettodr_i();
+	if (xen_timepush_ticks > 0)
+		callout_schedule(co, xen_timepush_ticks);
+}
+
+/* ARGSUSED */
+static int
+sysctl_xen_timepush(SYSCTLFN_ARGS)
+{
+	int error, new_ticks;
+	struct sysctlnode node;
+
+	new_ticks = xen_timepush_ticks;
+	node = *rnode;
+	node.sysctl_data = &new_ticks;
+	error = sysctl_lookup(SYSCTLFN_CALL(&node));
+	if (error || newp == NULL)
+		return error;
+
+	if (new_ticks < 0)
+		return EINVAL;
+	if (new_ticks != xen_timepush_ticks) {
+		xen_timepush_ticks = new_ticks;
+		if (new_ticks > 0)
+			callout_schedule(&xen_timepush_co, new_ticks);
+		else
+			callout_stop(&xen_timepush_co);
+	}
+
+	return 0;
+}
+#endif
 
 void
 xen_initclocks()
 {
-	int evtch = bind_virq_to_evtch(VIRQ_TIMER);
+	int evtch;
 
+	evtch = bind_virq_to_evtch(VIRQ_TIMER);
 	aprint_verbose("Xen clock: using event channel %d\n", evtch);
 
 	get_time_values_from_xen();
@@ -243,38 +510,68 @@ xen_initclocks()
 	event_set_handler(evtch, (int (*)(void *))xen_timer_handler,
 	    NULL, IPL_CLOCK, "clock");
 	hypervisor_enable_event(evtch);
+
+#ifdef DOM0OPS
+	xen_timepush_ticks = 53 * hz + 3; /* avoid exact # of min/sec */
+	if (xen_start_info.flags & SIF_PRIVILEGED) {
+		sysctl_createv(NULL, 0, NULL, NULL, CTLFLAG_READWRITE,
+		    CTLTYPE_INT, "xen_timepush_ticks", SYSCTL_DESCR("How often"
+		    " to update the hypervisor's time-of-day; 0 to disable"),
+		    sysctl_xen_timepush, 0, &xen_timepush_ticks, 0, 
+		    CTL_MACHDEP, CTL_CREATE, CTL_EOL);
+		callout_reset(&xen_timepush_co, xen_timepush_ticks,
+		    &xen_timepush, &xen_timepush_co);
+	}
+#endif
 }
 
 static int
 xen_timer_handler(void *arg, struct intrframe *regs)
 {
-	int64_t delta;
-	static int microset_iter = 0; /* call cc_microset once/sec */
+	int64_t delta, newcc;
+	int ticks_done;
+	struct timeval oldtime, elapsed;
 	struct cpu_info *ci = curcpu();
 	
 	get_time_values_from_xen();
+	newcc = cpu_counter();
 
-	delta = (int64_t)(shadow_system_time + get_tsc_offset_ns() -
-			  processed_system_time);
-	while (delta >= NS_PER_TICK) {
-		if (ci->ci_feature_flags & CPUID_TSC) {
-			if (
-#if defined(MULTIPROCESSOR)
-		 	   CPU_IS_PRIMARY(ci) &&
-#endif
-			    (microset_iter--) == 0) {
-				microset_iter = hz - 1;
-#if defined(MULTIPROCESSOR)
-				x86_broadcast_ipi(X86_IPI_MICROSET);
-#endif
-				cc_microset_time = time;
-				cc_microset(ci);
-			}
-		}
+	ticks_done = 0;
+	delta = (int64_t)(get_system_time() - processed_system_time);
+	while (delta >= (int64_t)NS_PER_TICK) {
+		/* Have hardclock do its thing. */
+		oldtime = time;
 		hardclock((struct clockframe *)regs);
+		
+		/* Use that tick length for the coming tick's microtimes. */
+		timersub(&time, &oldtime, &elapsed);
+#ifdef XEN_CLOCK_DEBUG
+		if (elapsed.tv_sec != 0) {
+			printf("xen_timer_handler: hardclock(9) stepped by %ld.%06lds\n",
+			    elapsed.tv_sec, elapsed.tv_usec);
+		}
+#endif
+		ci->ci_cc.cc_ms_delta = elapsed.tv_usec;
+
 		delta -= NS_PER_TICK;
 		processed_system_time += NS_PER_TICK;
+		ticks_done++;
 	}
+	/*
+	 * Re-arm the timer here, if needed; Xen's auto-ticking while runnable
+	 * is useful only for HZ==100, and even then may be out of phase with
+	 * the processed_system_time steps.
+	 */
+	if (ticks_done != 0)
+		HYPERVISOR_set_timer_op(processed_system_time + NS_PER_TICK);
+
+	/*
+	 * Right now, delta holds the number of ns elapsed from when the last
+	 * hardclock(9) allegedly was to when this domain/vcpu was actually
+	 * rescheduled.
+	 */
+	ci->ci_cc.cc_denom = delta;
+	ci->ci_cc.cc_cc = newcc;
 
 	return 0;
 }
@@ -287,13 +584,16 @@ setstatclockrate(int arg)
 void
 idle_block(void)
 {
-
+	int s, r;
 	/*
 	 * We set the timer to when we expect the next timer
 	 * interrupt.  We could set the timer to later if we could
 	 * easily find out when we will have more work (callouts) to
 	 * process from hardclock.
 	 */
-	if (HYPERVISOR_set_timer_op(processed_system_time + NS_PER_TICK) == 0)
+	s = splclock();
+	r = HYPERVISOR_set_timer_op(processed_system_time + NS_PER_TICK);
+	splx(s);
+	if (r == 0)
 		HYPERVISOR_block();
 }

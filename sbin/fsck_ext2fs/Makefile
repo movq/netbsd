@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.11 2005/01/20 16:39:23 xtraeme Exp $
+#	$NetBSD: Makefile,v 1.13 2006/08/26 18:14:28 christos Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/5/93
 
 .include <bsd.own.mk>
@@ -12,3 +12,12 @@ CPPFLAGS+= -I${FSCK}
 .PATH:	${NETBSDSRCDIR}/sys/ufs/ext2fs ${FSCK}
 
 .include <bsd.prog.mk>
+
+LDADD+=-lutil
+DPADD+=${LIBUTIL}
+
+.if ${HAVE_GCC} == 4
+.for f in pass5 utilities
+COPTS.${f}.c+=  -Wno-pointer-sign
+.endfor
+.endif

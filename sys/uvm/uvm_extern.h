@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_extern.h,v 1.107 2005/11/29 22:52:03 yamt Exp $	*/
+/*	$NetBSD: uvm_extern.h,v 1.122 2006/12/01 16:06:09 elad Exp $	*/
 
 /*
  *
@@ -84,10 +84,10 @@
  */
 
 typedef unsigned int uvm_flag_t;
-typedef int vm_fault_t;
 
 typedef int vm_inherit_t;	/* XXX: inheritance codes */
 typedef off_t voff_t;		/* XXX: offset within a uvm_object */
+typedef voff_t pgoff_t;		/* XXX: number of pages within a uvm object */
 
 /*
  * defines
@@ -154,7 +154,7 @@ typedef off_t voff_t;		/* XXX: offset within a uvm_object */
 #define UVM_ADVICE(X)		(((X) >> 12) & UVM_ADV_MASK)
 
 #define UVM_MAPFLAG(PROT,MAXPROT,INH,ADVICE,FLAGS) \
-	((MAXPROT << 8)|(PROT)|(INH)|((ADVICE) << 12)|(FLAGS))
+	(((MAXPROT) << 8)|(PROT)|(INH)|((ADVICE) << 12)|(FLAGS))
 
 /* magic offset value: offset not known(obj) or don't care(!obj) */
 #define UVM_UNKNOWN_OFFSET ((voff_t) -1)
@@ -168,6 +168,7 @@ typedef off_t voff_t;		/* XXX: offset within a uvm_object */
 #define	UVM_KMF_TYPEMASK (UVM_KMF_VAONLY | UVM_KMF_PAGEABLE | UVM_KMF_WIRED)
 #define UVM_KMF_CANFAIL	0x8			/* caller handles failure */
 #define UVM_KMF_ZERO	0x10			/* want zero filled memory */
+#define UVM_KMF_EXEC	0x20			/* need executable mapping */
 #define UVM_KMF_TRYLOCK	UVM_FLAG_TRYLOCK	/* try locking only */
 #define UVM_KMF_NOWAIT	UVM_FLAG_NOWAIT		/* not allowed to sleep */
 #define UVM_KMF_WAITVA	UVM_FLAG_WAITVA		/* sleep for va */
@@ -233,7 +234,6 @@ struct loadavg;
 struct mount;
 struct pglist;
 struct proc;
-struct ucred;
 struct uio;
 struct uvm_object;
 struct vm_anon;
@@ -246,6 +246,20 @@ struct vm_map_entry;
 struct vm_map;
 struct vm_page;
 struct vmtotal;
+
+/*
+ * uvm_pctparam: parameter to be shown as percentage to user.
+ */
+
+#define	UVM_PCTPARAM_SHIFT	8
+#define	UVM_PCTPARAM_SCALE	(1 << UVM_PCTPARAM_SHIFT)
+#define	UVM_PCTPARAM_APPLY(pct, x) \
+	(((x) * (pct)->pct_scaled) >> UVM_PCTPARAM_SHIFT)
+struct uvm_pctparam {
+	int pct_pct;	/* percent [0, 100] */ /* should be the first member */
+	int pct_scaled;
+	int (*pct_check)(struct uvm_pctparam *, int);
+};
 
 /*
  * uvmexp: global data structures that are exported to parts of the kernel
@@ -261,8 +275,6 @@ struct uvmexp {
 	/* vm_page counters */
 	int npages;     /* number of pages we manage */
 	int free;       /* number of free pages */
-	int active;     /* number of active pages */
-	int inactive;   /* number of pages that we free'd but may want back */
 	int paging;	/* number of pages in the process of being paged out */
 	int wired;      /* number of wired pages */
 
@@ -284,20 +296,7 @@ struct uvmexp {
 	/* pageout params */
 	int freemin;    /* min number of free pages */
 	int freetarg;   /* target number of free pages */
-	int inactarg;   /* target number of inactive pages */
 	int wiredmax;   /* max number of wired pages */
-	int anonmin;	/* min threshold for anon pages */
-	int execmin;	/* min threshold for executable pages */
-	int filemin;	/* min threshold for file pages */
-	int anonminpct;	/* min percent anon pages */
-	int execminpct;	/* min percent executable pages */
-	int fileminpct;	/* min percent file pages */
-	int anonmax;	/* max threshold for anon pages */
-	int execmax;	/* max threshold for executable pages */
-	int filemax;	/* max threshold for file pages */
-	int anonmaxpct;	/* max percent anon pages */
-	int execmaxpct;	/* max percent executable pages */
-	int filemaxpct;	/* max percent file pages */
 
 	/* swap */
 	int nswapdev;	/* number of configured swap devices in system */
@@ -306,11 +305,8 @@ struct uvmexp {
 	int swpginuse;	/* number of swap pages in use */
 	int swpgonly;	/* number of swap pages in use, not also in RAM */
 	int nswget;	/* number of times fault calls uvm_swap_get() */
-	int unused1;	/* used to be nanon */
-	int unused2;	/* used to be nanonneeded */
-	int unused3;	/* used to be nfreeanon */
 
-	/* stat counters */
+	/* stat counters.  XXX: should be 64-bit counters */
 	int faults;		/* page fault count */
 	int traps;		/* trap count */
 	int intrs;		/* interrupt count */
@@ -335,7 +331,7 @@ struct uvmexp {
 	int colorhit;		/* pagealloc where we got optimal color */
 	int colormiss;		/* pagealloc where we didn't */
 
-	/* fault subcounters */
+	/* fault subcounters.  XXX: should be 64-bit counters */
 	int fltnoram;	/* number of times fault was out of ram */
 	int fltnoanon;	/* number of times fault was out of anons */
 	int fltpgwait;	/* number of times fault had to wait on a page */
@@ -355,7 +351,7 @@ struct uvmexp {
 	int flt_prcopy;	/* number of times fault promotes with copy (2b) */
 	int flt_przero;	/* number of times fault promotes with zerofill (2b) */
 
-	/* daemon counters */
+	/* daemon counters.  XXX: should be 64-bit counters */
 	int pdwoke;	/* number of times daemon woke up */
 	int pdrevs;	/* number of times daemon rev'd clock hand */
 	int pdswout;	/* number of times daemon called for swapout */
@@ -393,7 +389,7 @@ struct uvmexp_sysctl {
 	int64_t	reserve_kernel;
 	int64_t	freemin;
 	int64_t	freetarg;
-	int64_t	inactarg;
+	int64_t	inactarg; /* unused */
 	int64_t	wiredmax;
 	int64_t	nswapdev;
 	int64_t	swpages;
@@ -468,13 +464,12 @@ extern struct uvmexp uvmexp;
  */
 #include <sys/vmmeter.h>
 #include <sys/queue.h>
-#include <uvm/uvm_param.h>
 #include <sys/lock.h>
+#include <uvm/uvm_param.h>
 #include <uvm/uvm_prot.h>
 #include <uvm/uvm_page.h>
 #include <uvm/uvm_pmap.h>
 #include <uvm/uvm_map.h>
-#include <uvm/uvm_fault.h>
 #include <uvm/uvm_pager.h>
 
 /*
@@ -499,6 +494,7 @@ struct vmspace {
 	caddr_t vm_maxsaddr;	/* user VA at max stack growth */
 	caddr_t vm_minsaddr;	/* user VA at top of stack */
 };
+#define	VMSPACE_IS_KERNEL_P(vm)	VM_MAP_IS_KERNEL(&(vm)->vm_map)
 
 #ifdef _KERNEL
 
@@ -562,9 +558,9 @@ void			ubc_release(void *, int);
 void			ubc_flush(struct uvm_object *, voff_t, voff_t);
 
 /* uvm_fault.c */
-int			uvm_fault(struct vm_map *, vaddr_t, vm_fault_t,
-			    vm_prot_t);
-				/* handle a page fault */
+#define uvm_fault(m, a, p) uvm_fault_internal(m, a, p, 0)
+int		uvm_fault_internal(struct vm_map *, vaddr_t, vm_prot_t, int);
+			/* handle a page fault */
 
 /* uvm_glue.c */
 #if defined(KGDB)
@@ -585,8 +581,8 @@ __dead void		uvm_scheduler(void) __attribute__((noreturn));
 void			uvm_swapin(struct lwp *);
 boolean_t		uvm_uarea_alloc(vaddr_t *);
 void			uvm_uarea_drain(boolean_t);
-int			uvm_vslock(struct proc *, caddr_t, size_t, vm_prot_t);
-void			uvm_vsunlock(struct proc *, caddr_t, size_t);
+int			uvm_vslock(struct vmspace *, void *, size_t, vm_prot_t);
+void			uvm_vsunlock(struct vmspace *, void *, size_t);
 
 
 /* uvm_init.c */
@@ -627,6 +623,7 @@ void			uvmspace_init(struct vmspace *, struct pmap *,
 			    vaddr_t, vaddr_t);
 void			uvmspace_exec(struct lwp *, vaddr_t, vaddr_t);
 struct vmspace		*uvmspace_fork(struct vmspace *);
+void			uvmspace_addref(struct vmspace *);
 void			uvmspace_free(struct vmspace *);
 void			uvmspace_share(struct proc *, struct proc *);
 void			uvmspace_unshare(struct lwp *);
@@ -636,12 +633,31 @@ void			uvmspace_unshare(struct lwp *);
 void			uvm_meter(void);
 int			uvm_sysctl(int *, u_int, void *, size_t *,
 			    void *, size_t, struct proc *);
+int			uvm_pctparam_check(struct uvm_pctparam *, int);
+void			uvm_pctparam_set(struct uvm_pctparam *, int);
+int			uvm_pctparam_get(struct uvm_pctparam *);
+void			uvm_pctparam_init(struct uvm_pctparam *, int,
+			    int (*)(struct uvm_pctparam *, int));
+int			uvm_pctparam_createsysctlnode(struct uvm_pctparam *,
+			    const char *, const char *);
 
 /* uvm_mmap.c */
 int			uvm_mmap(struct vm_map *, vaddr_t *, vsize_t,
 			    vm_prot_t, vm_prot_t, int,
 			    void *, voff_t, vsize_t);
 vaddr_t			uvm_default_mapaddr(struct proc *, vaddr_t, vsize_t);
+
+/* uvm_mremap.c */
+int			uvm_mremap(struct vm_map *, vaddr_t, vsize_t,
+			    struct vm_map *, vaddr_t *, vsize_t,
+			    struct proc *, int);
+#define	UVM_MREMAP_FIXED	1
+
+/* uvm_object.c */
+int			uobj_wirepages(struct uvm_object *uobj, off_t start,
+			    off_t end);
+void			uobj_unwirepages(struct uvm_object *uobj, off_t start,
+			    off_t end);
 
 /* uvm_page.c */
 struct vm_page		*uvm_pagealloc_strat(struct uvm_object *,
@@ -666,6 +682,7 @@ void			uvm_aio_aiodone(struct buf *);
 /* uvm_pdaemon.c */
 void			uvm_pageout(void *);
 void			uvm_aiodone_daemon(void *);
+void			uvm_estimatepageable(int *, int *);
 
 /* uvm_pglist.c */
 int			uvm_pglistalloc(psize_t, paddr_t, paddr_t,
@@ -674,6 +691,7 @@ void			uvm_pglistfree(struct pglist *);
 
 /* uvm_swap.c */
 void			uvm_swap_init(void);
+boolean_t		uvm_is_swap_device(struct vnode *);
 
 /* uvm_unix.c */
 int			uvm_grow(struct proc *, vaddr_t);
@@ -688,6 +706,9 @@ struct uvm_object	*uvn_attach(void *, vm_prot_t);
 int			uvn_findpages(struct uvm_object *, voff_t,
 			    int *, struct vm_page **, int);
 void			uvm_vnp_zerorange(struct vnode *, off_t, size_t);
+boolean_t		uvn_text_p(struct uvm_object *);
+boolean_t		uvn_clean_p(struct uvm_object *);
+boolean_t		uvn_needs_writefault_p(struct uvm_object *);
 
 /* kern_malloc.c */
 void			kmeminit_nkmempages(void);

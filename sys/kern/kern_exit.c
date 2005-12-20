@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_exit.c,v 1.154 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: kern_exit.c,v 1.162 2006/11/01 10:17:58 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_exit.c,v 1.154 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_exit.c,v 1.162 2006/11/01 10:17:58 yamt Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_perfctrs.h"
@@ -84,7 +84,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_exit.c,v 1.154 2005/12/11 12:24:29 christos Exp
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/ioctl.h>
-#include <sys/proc.h>
 #include <sys/tty.h>
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -113,6 +112,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_exit.c,v 1.154 2005/12/11 12:24:29 christos Exp
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 #include <sys/systrace.h>
+#include <sys/kauth.h>
 
 #include <machine/cpu.h>
 
@@ -151,7 +151,7 @@ exit_psignal(struct proc *p, struct proc *pp, ksiginfo_t *ksi)
 	 * we fill those in, even for non-SIGCHLD.
 	 */
 	ksi->ksi_pid = p->p_pid;
-	ksi->ksi_uid = p->p_ucred->cr_uid;
+	ksi->ksi_uid = kauth_cred_geteuid(p->p_cred);
 	ksi->ksi_status = p->p_xstat;
 	/* XXX: is this still valid? */
 	ksi->ksi_utime = p->p_ru->ru_utime.tv_sec;
@@ -314,21 +314,40 @@ exit1(struct lwp *l, int rv)
 		sp->s_leader = NULL;
 	}
 	fixjobc(p, p->p_pgrp, 0);
+
+	/*
+	 * Collect accounting flags from the last remaining LWP (this one),
+	 * and write out accounting data.
+	 */
+	p->p_acflag |= l->l_acflag;
 	(void)acct_process(l);
+
 #ifdef KTRACE
 	/*
-	 * release trace file
+	 * Release trace file.
 	 */
 	ktrderef(p);
 #endif
 #ifdef SYSTRACE
 	systrace_sys_exit(p);
 #endif
+
 	/*
 	 * If emulation has process exit hook, call it now.
+	 * Set the exit status now so that the exit hook has
+	 * an opportunity to tweak it (COMPAT_LINUX requires
+	 * this for thread group emulation)
 	 */
+	p->p_xstat = rv;
 	if (p->p_emul->e_proc_exit)
 		(*p->p_emul->e_proc_exit)(p);
+
+	/*
+	 * Finalize the last LWP's specificdata, as well as the
+	 * specificdata for the proc itself.
+	 */
+	lwp_finispecific(l);
+	proc_finispecific(p);
 
 	/*
 	 * Free the VM resources we're still holding on to.
@@ -358,12 +377,10 @@ exit1(struct lwp *l, int rv)
 	 */
 
 	/*
-	 * Save exit status and final rusage info, adding in child rusage
-	 * info and self times.
+	 * Save final rusage info, adding in child rusage info and self times.
 	 * In order to pick up the time for the current execution, we must
 	 * do this before unlinking the lwp from l_list.
 	 */
-	p->p_xstat = rv;
 	*p->p_ru = p->p_stats->p_ru;
 	calcru(p, &p->p_ru->ru_utime, &p->p_ru->ru_stime, NULL);
 	ruadd(p->p_ru, &p->p_stats->p_cru);
@@ -423,7 +440,7 @@ exit1(struct lwp *l, int rv)
 				q->p_opptr = NULL;
 			} else
 				proc_reparent(q, initproc);
-			q->p_flag &= ~(P_TRACED|P_WAITED|P_FSTRACE);
+			q->p_flag &= ~(P_TRACED|P_WAITED|P_FSTRACE|P_SYSCALL);
 			killproc(q, "orphaned traced process");
 		} else {
 			proc_reparent(q, initproc);
@@ -523,6 +540,9 @@ exit1(struct lwp *l, int rv)
 	sigactsfree(ps);
 	limfree(plim);
 	pstatsfree(pstats);
+
+	/* Release cached credentials. */
+	kauth_cred_free(l->l_cred);
 
 #ifdef DEBUG
 	/* Nothing should use the process link anymore */
@@ -634,6 +654,7 @@ retry:
 static void
 lwp_exit_hook(struct lwp *l, void *arg)
 {
+
 	KERNEL_PROC_LOCK(l);
 	lwp_exit(l);
 }
@@ -803,7 +824,7 @@ proc_free(struct proc *p)
 			parent = initproc;
 		proc_reparent(p, parent);
 		p->p_opptr = NULL;
-		p->p_flag &= ~(P_TRACED|P_WAITED|P_FSTRACE);
+		p->p_flag &= ~(P_TRACED|P_WAITED|P_FSTRACE|P_SYSCALL);
 		if (p->p_exitsig != 0) {
 			exit_psignal(p, parent, &ksi);
 			kpsignal(parent, &ksi, NULL);
@@ -843,15 +864,12 @@ proc_free(struct proc *p)
 	/*
 	 * Decrement the count of procs running with this uid.
 	 */
-	(void)chgproccnt(p->p_cred->p_ruid, -1);
+	(void)chgproccnt(kauth_cred_getuid(p->p_cred), -1);
 
 	/*
 	 * Free up credentials.
 	 */
-	if (--p->p_cred->p_refcnt == 0) {
-		crfree(p->p_cred->pc_ucred);
-		pool_put(&pcred_pool, p->p_cred);
-	}
+	kauth_cred_free(p->p_cred);
 
 	/*
 	 * Release reference to text vnode

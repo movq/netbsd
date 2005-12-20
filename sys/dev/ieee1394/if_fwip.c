@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fwip.c,v 1.3 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: if_fwip.c,v 1.6 2006/11/16 01:32:59 christos Exp $	*/
 /*-
  * Copyright (c) 2004
  *	Doug Rabson
@@ -944,7 +944,7 @@ fwip_stream_input(struct fw_xferq *xferq)
 		fwip->fd.fc->irx_enable(fwip->fd.fc, fwip->dma_ch);
 }
 
-static __inline void
+static inline void
 fwip_unicast_input_recycle(struct fwip_softc *fwip, struct fw_xfer *xfer)
 {
 	struct mbuf *m;

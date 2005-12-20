@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_bswap.h,v 1.16 2005/12/11 12:25:28 christos Exp $	*/
+/*	$NetBSD: ufs_bswap.h,v 1.18 2006/01/29 21:42:42 dsl Exp $	*/
 
 /*
  * Copyright (c) 1998 Manuel Bouyer.
@@ -37,7 +37,7 @@
 #include "opt_ffs.h"
 #endif
 
-#include <machine/bswap.h>
+#include <sys/bswap.h>
 
 /* Macros to access UFS flags */
 #ifdef FFS_EI
@@ -52,19 +52,19 @@
 
 #if !defined(_KERNEL) || defined(FFS_EI)
 /* inlines for access to swapped data */
-static __inline u_int16_t
+static inline u_int16_t
 ufs_rw16(uint16_t a, int ns)
 {
 	return ((ns) ? bswap16(a) : (a));
 }
 
-static __inline u_int32_t
+static inline u_int32_t
 ufs_rw32(uint32_t a, int ns)
 {
 	return ((ns) ? bswap32(a) : (a));
 }
 
-static __inline u_int64_t
+static inline u_int64_t
 ufs_rw64(uint64_t a, int ns)
 {
 	return ((ns) ? bswap64(a) : (a));

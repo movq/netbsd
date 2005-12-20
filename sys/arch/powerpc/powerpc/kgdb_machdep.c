@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_machdep.c,v 1.14 2005/12/11 12:18:46 christos Exp $	*/
+/*	$NetBSD: kgdb_machdep.c,v 1.16 2006/08/05 21:26:49 sanjayl Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.14 2005/12/11 12:18:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.16 2006/08/05 21:26:49 sanjayl Exp $");
 
 #include "opt_ddb.h"
 
@@ -69,59 +69,61 @@ kgdb_acc(vaddr_t va, size_t len)
 	u_int batu, batl;
 
 	/* If translation is off, everything is fair game */
-	asm volatile ("mfmsr %0" : "=r"(msr));
+	__asm volatile ("mfmsr %0" : "=r"(msr));
 	if ((msr & PSL_DR) == 0) {
 		return 1;
 	}
 
+#if defined (PPC_OEA) && !defined (PPC_OEA64) && !defined (PPC_OEA64_BRIDGE)
 	/* Now check battable registers */
 	if ((mfpvr() >> 16) == MPC601) {
-		asm volatile ("mfibatl %0,0" : "=r"(batl));
-		asm volatile ("mfibatu %0,0" : "=r"(batu));
+		__asm volatile ("mfibatl %0,0" : "=r"(batl));
+		__asm volatile ("mfibatu %0,0" : "=r"(batu));
 		if (BAT601_VALID_P(batl) &&
 				BAT601_VA_MATCH_P(batu,batl,va))
 			return 1;
-		asm volatile ("mfibatl %0,1" : "=r"(batl));
-		asm volatile ("mfibatu %0,1" : "=r"(batu));
+		__asm volatile ("mfibatl %0,1" : "=r"(batl));
+		__asm volatile ("mfibatu %0,1" : "=r"(batu));
 		if (BAT601_VALID_P(batl) &&
 				BAT601_VA_MATCH_P(batu,batl,va))
 			return 1;
-		asm volatile ("mfibatl %0,2" : "=r"(batl));
-		asm volatile ("mfibatu %0,2" : "=r"(batu));
+		__asm volatile ("mfibatl %0,2" : "=r"(batl));
+		__asm volatile ("mfibatu %0,2" : "=r"(batu));
 		if (BAT601_VALID_P(batl) &&
 				BAT601_VA_MATCH_P(batu,batl,va))
 			return 1;
-		asm volatile ("mfibatl %0,3" : "=r"(batl));
-		asm volatile ("mfibatu %0,3" : "=r"(batu));
+		__asm volatile ("mfibatl %0,3" : "=r"(batl));
+		__asm volatile ("mfibatu %0,3" : "=r"(batu));
 		if (BAT601_VALID_P(batl) &&
 				BAT601_VA_MATCH_P(batu,batl,va))
 			return 1;
 	} else {
-		asm volatile ("mfdbatu %0,0" : "=r"(batu));
+		__asm volatile ("mfdbatu %0,0" : "=r"(batu));
 		if (BAT_VALID_P(batu,msr) &&
 				BAT_VA_MATCH_P(batu,va) &&
 				(batu & BAT_PP) != BAT_PP_NONE) {
 			return 1;
 		}
-		asm volatile ("mfdbatu %0,1" : "=r"(batu));
+		__asm volatile ("mfdbatu %0,1" : "=r"(batu));
 		if (BAT_VALID_P(batu,msr) &&
 				BAT_VA_MATCH_P(batu,va) &&
 				(batu & BAT_PP) != BAT_PP_NONE) {
 			return 1;
 		}
-		asm volatile ("mfdbatu %0,2" : "=r"(batu));
+		__asm volatile ("mfdbatu %0,2" : "=r"(batu));
 		if (BAT_VALID_P(batu,msr) &&
 				BAT_VA_MATCH_P(batu,va) &&
 				(batu & BAT_PP) != BAT_PP_NONE) {
 			return 1;
 		}
-		asm volatile ("mfdbatu %0,3" : "=r"(batu));
+		__asm volatile ("mfdbatu %0,3" : "=r"(batu));
 		if (BAT_VALID_P(batu,msr) &&
 				BAT_VA_MATCH_P(batu,va) &&
 				(batu & BAT_PP) != BAT_PP_NONE) {
 			return 1;
 		}
 	}
+#endif /* (PPC_OEA) && !(PPC_OEA64) && !(PPC_OEA64_BRIDGE) */
 
 	last_va = va + len;
 	va  &= ~PGOFSET;
@@ -164,7 +166,7 @@ kgdb_signal(int type)
 		return SIGSEGV;
 #endif
 
-#ifdef PPC_OEA
+#if defined (PPC_OEA) || defined (PPC_OEA64_BRIDGE)
 	case EXC_PERF:		/* 604/750/7400 - Performance monitoring */
 	case EXC_BPT:		/* 604/750/7400 - Instruction breakpoint */
 	case EXC_SMI:		/* 604/750/7400 - System management interrupt */
@@ -261,7 +263,7 @@ kgdb_connect(int verbose)
 	if (verbose)
 		printf("kgdb waiting...");
 
-	asm volatile(BKPT_ASM);
+	__asm volatile(BKPT_ASM);
 
 	if (verbose && kgdb_active) {
 		printf("kgdb connected.\n");

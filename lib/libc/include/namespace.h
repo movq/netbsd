@@ -1,4 +1,4 @@
-/*	$NetBSD: namespace.h,v 1.109 2005/09/26 02:12:24 christos Exp $	*/
+/*	$NetBSD: namespace.h,v 1.125 2006/11/08 20:37:14 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1997-2004 The NetBSD Foundation, Inc.
@@ -61,7 +61,9 @@
 #define strerror_r	_strerror_r
 #define strlcat		_strlcat
 #define strlcpy		_strlcpy
+#define strtof		_strtof
 #define strtoimax	_strtoimax
+#define strtold		_strtold
 #define strtoll		_strtoll
 #define strtoull	_strtoull
 #define strtoumax	_strtoumax
@@ -197,6 +199,7 @@
 #define clock_settime		_clock_settime
 #define closedir		_closedir
 #define closelog		_closelog
+#define closelog_r		_closelog_r
 #define confstr			_confstr
 #define ctermid			_ctermid
 #define ctime_r			_ctime_r
@@ -362,6 +365,13 @@
 #define inet6_option_init	_inet6_option_init
 #define inet6_option_next	_inet6_option_next
 #define inet6_option_space	_inet6_option_space
+#define inet6_opt_init		_inet6_opt_init
+#define inet6_opt_append	_inet6_opt_append
+#define inet6_opt_finish	_inet6_opt_finish
+#define inet6_opt_set_val	_inet6_opt_set_val
+#define inet6_opt_next		_inet6_opt_next
+#define inet6_opt_find		_inet6_opt_find
+#define inet6_opt_get_val	_inet6_opt_get_val
 #define inet6_rthdr_add		_inet6_rthdr_add
 #define inet6_rthdr_getaddr	_inet6_rthdr_getaddr
 #define inet6_rthdr_getflags	_inet6_rthdr_getflags
@@ -369,6 +379,12 @@
 #define inet6_rthdr_lasthop	_inet6_rthdr_lasthop
 #define inet6_rthdr_segments	_inet6_rthdr_segments
 #define inet6_rthdr_space	_inet6_rthdr_space
+#define inet6_rth_space		_inet6_rth_space
+#define inet6_rth_init		_inet6_rth_init
+#define inet6_rth_add		_inet6_rth_add
+#define inet6_rth_reverse	_inet6_rth_reverse
+#define inet6_rth_segments	_inet6_rth_segments
+#define inet6_rth_getaddr	_inet6_rth_getaddr
 #define inet_cidr_ntop		_inet_cidr_ntop
 #define inet_cidr_pton		_inet_cidr_pton
 #define inet_lnaof		_inet_lnaof
@@ -420,6 +436,7 @@
 #define offtime			_offtime
 #define opendir			_opendir
 #define openlog			_openlog
+#define openlog_r		_openlog_r
 #define pause			_pause
 #define pclose			_pclose
 #define pmap_getmaps		_pmap_getmaps
@@ -481,6 +498,7 @@
 #define sethostname		_sethostname
 #define setlogin		_setlogin
 #define setlogmask		_setlogmask
+#define setlogmask_r		_setlogmask_r
 #define setmode			_setmode
 #define setnetconfig		_setnetconfig
 #define setnetent		_setnetent
@@ -496,6 +514,7 @@
 #define setservent_r		_setservent_r
 #define setstate		_setstate
 #define setttyent		_setttyent
+#define setttyentpath		_setttyentpath
 #define settimeofday		_settimeofday
 #define setusershell		_setusershell
 #define shm_open		_shm_open
@@ -510,12 +529,15 @@
 #define sl_init			_sl_init
 #define sleep			_sleep
 #define snprintf		_snprintf
+#define snprintf_ss		_snprintf_ss
 #define sradixsort		_sradixsort
 #define srand48			_srand48
 #define srandom			_srandom
 #define statvfs(a, b)		_statvfs(a, b)
 #define strcasecmp		_strcasecmp
 #define strdup			_strdup
+#define stresep			_stresep
+#define strndup			_strndup
 #define strncasecmp		_strncasecmp
 #define strptime		_strptime
 #define strsep			_strsep
@@ -566,6 +588,8 @@
 #define sysctlgetmibinfo	_sysctlgetmibinfo
 #define sysctlnametomib		_sysctlnametomib
 #define syslog			_syslog
+#define syslog_r		_syslog_r
+#define syslog_ss		_syslog_ss
 #define taddr2uaddr		_taddr2uaddr
 #define tcdrain			_tcdrain
 #define tcflow			_tcflow
@@ -602,10 +626,19 @@
 #define valloc			_valloc
 #define vis			_vis
 #define vsnprintf		_vsnprintf
+#define vsnprintf_ss		_vsnprintf_ss
 #define vsyslog			_vsyslog
+#define vsyslog_r		_vsyslog_r
+#define vsyslog_ss		_vsyslog_ss
 #define wait			_wait
 #define wait3			_wait3
 #define waitpid			_waitpid
+#define wcscasecmp		_wcscasecmp
+#define wcsdup			_wcsdup
+#define wcsncasecmp		_wcsncasecmp
+#define wcstof			_wcstof
+#define wcstod			_wcstod
+#define wcstold			_wcstold
 #define wcwidth			_wcwidth
 #define xdr_accepted_reply	_xdr_accepted_reply
 #define xdr_array		_xdr_array
@@ -718,6 +751,28 @@
 #define dlerror			__dlerror
 #define dladdr			__dladdr
 #define fmtcheck		__fmtcheck
+
+/* rpc locks */
+#define authdes_lock		__rpc_authdes_lock
+#define authnone_lock		__rpc_authnone_lock
+#define authsvc_lock		__rpc_authsvc_lock
+#define clnt_fd_lock		__rpc_clnt_fd_lock
+#define clntraw_lock		__rpc_clntraw_lock
+#define dname_lock		__rpc_dname_lock
+#define dupreq_lock		__rpc_dupreq_lock
+#define keyserv_lock		__rpc_keyserv_lock
+#define libnsl_trace_lock	__rpc_libnsl_trace_lock
+#define loopnconf_lock		__rpc_loopnconf_lock
+#define ops_lock		__rpc_ops_lock
+#define portnum_lock		__rpc_portnum_lock
+#define proglst_lock		__rpc_proglst_lock
+#define rpcbaddr_cache_lock	__rpc_rpcbaddr_cache_lock
+#define rpcsoc_lock		__rpc_rpcsoc_lock
+#define svc_fd_lock		__rpc_svc_fd_lock
+#define svc_lock		__rpc_svc_lock
+#define svcraw_lock		__rpc_svcraw_lock
+#define xprtlist_lock		__rpc_xprtlist_lock
+
 #define __learn_tree		___learn_tree
 #endif /* __weak_alias */
 #endif /* !__lint__ */

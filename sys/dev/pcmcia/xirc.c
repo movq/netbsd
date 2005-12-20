@@ -1,4 +1,4 @@
-/*	$NetBSD: xirc.c,v 1.15 2005/12/11 12:23:23 christos Exp $	*/
+/*	$NetBSD: xirc.c,v 1.20 2006/11/16 01:33:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2004 The NetBSD Foundation, Inc.
@@ -38,10 +38,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xirc.c,v 1.15 2005/12/11 12:23:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xirc.c,v 1.20 2006/11/16 01:33:20 christos Exp $");
 
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 
 #include <sys/param.h>
@@ -68,10 +67,6 @@ __KERNEL_RCSID(0, "$NetBSD: xirc.c,v 1.15 2005/12/11 12:23:23 christos Exp $");
 #include <netinet/if_inarp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -157,10 +152,8 @@ void	xirc_disable(struct xirc_softc *, int, int);
 int	xirc_intr(void *);
 
 int
-xirc_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+xirc_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 
@@ -594,10 +587,8 @@ int	com_xirc_enable(struct com_softc *);
 void	com_xirc_disable(struct com_softc *);
 
 int
-com_xirc_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+com_xirc_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	extern struct cfdriver com_cd;
 	const char *name = aux;
@@ -609,21 +600,20 @@ com_xirc_match(parent, match, aux)
 }
 
 void
-com_xirc_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+com_xirc_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct com_softc *sc = (void *)self;
 	struct xirc_softc *msc = (void *)parent;
 
 	aprint_normal("\n");
 
-	sc->sc_iot = msc->sc_modem_pcioh.iot;
-	sc->sc_ioh = msc->sc_modem_pcioh.ioh;
+	COM_INIT_REGS(sc->sc_regs, 
+	    msc->sc_modem_pcioh.iot,
+	    msc->sc_modem_pcioh.ioh,
+	    -1);
 
 	sc->enabled = 1;
 
-	sc->sc_iobase = -1;
 	sc->sc_frequency = COM_FREQ;
 
 	sc->enable = com_xirc_enable;
@@ -640,7 +630,8 @@ int
 com_xirc_enable(sc)
 	struct com_softc *sc;
 {
-	struct xirc_softc *msc = (struct xirc_softc *)sc->sc_dev.dv_parent;
+	struct xirc_softc *msc =
+	    (struct xirc_softc *)device_parent(&sc->sc_dev);
 
 	return (xirc_enable(msc, XIRC_MODEM_ENABLED, XIMEDIA_MODEM));
 }
@@ -649,7 +640,8 @@ void
 com_xirc_disable(sc)
 	struct com_softc *sc;
 {
-	struct xirc_softc *msc = (struct xirc_softc *)sc->sc_dev.dv_parent;
+	struct xirc_softc *msc =
+	    (struct xirc_softc *)device_parent(&sc->sc_dev);
 
 	xirc_disable(msc, XIRC_MODEM_ENABLED, XIMEDIA_MODEM);
 }
@@ -671,10 +663,8 @@ void	xi_xirc_disable(struct xi_softc *);
 int	xi_xirc_lan_nid_ciscallback(struct pcmcia_tuple *, void *);
 
 int
-xi_xirc_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+xi_xirc_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	extern struct cfdriver xi_cd;
 	const char *name = aux;
@@ -686,9 +676,7 @@ xi_xirc_match(parent, match, aux)
 }
 
 void
-xi_xirc_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+xi_xirc_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct xi_softc *sc = (void *)self;
 	struct xirc_softc *msc = (void *)parent;
@@ -704,8 +692,8 @@ xi_xirc_attach(parent, self, aux)
 	sc->sc_enable = xi_xirc_enable;
 	sc->sc_disable = xi_xirc_disable;
 
-	if (!pcmcia_scan_cis(msc->sc_dev.dv_parent, xi_xirc_lan_nid_ciscallback,
-	    myla)) {
+	if (!pcmcia_scan_cis(device_parent(&msc->sc_dev),
+	    xi_xirc_lan_nid_ciscallback, myla)) {
 		aprint_error("%s: can't find MAC address\n", self->dv_xname);
 		return;
 	}
@@ -718,7 +706,8 @@ int
 xi_xirc_enable(sc)
 	struct xi_softc *sc;
 {
-	struct xirc_softc *msc = (struct xirc_softc *)sc->sc_dev.dv_parent;
+	struct xirc_softc *msc =
+	    (struct xirc_softc *)device_parent(&sc->sc_dev);
 
 	return (xirc_enable(msc, XIRC_ETHERNET_ENABLED, XIMEDIA_ETHER));
 }
@@ -727,7 +716,8 @@ void
 xi_xirc_disable(sc)
 	struct xi_softc *sc;
 {
-	struct xirc_softc *msc = (struct xirc_softc *)sc->sc_dev.dv_parent;
+	struct xirc_softc *msc =
+	    (struct xirc_softc *)device_parent(&sc->sc_dev);
 
 	xirc_disable(msc, XIRC_ETHERNET_ENABLED, XIMEDIA_ETHER);
 }

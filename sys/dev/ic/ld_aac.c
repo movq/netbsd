@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_aac.c,v 1.9 2005/12/11 12:21:27 christos Exp $	*/
+/*	$NetBSD: ld_aac.c,v 1.13 2006/11/16 01:32:51 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_aac.c,v 1.9 2005/12/11 12:21:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_aac.c,v 1.13 2006/11/16 01:32:51 christos Exp $");
 
 #include "rnd.h"
 
@@ -80,7 +80,8 @@ CFATTACH_DECL(ld_aac, sizeof(struct ld_aac_softc),
     ld_aac_match, ld_aac_attach, NULL, NULL);
 
 static int
-ld_aac_match(struct device *parent, struct cfdata *match, void *aux)
+ld_aac_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 
 	return (1);
@@ -133,7 +134,7 @@ ld_aac_dobio(struct ld_aac_softc *sc, void *data, int datasize, int blkno,
 	u_int16_t size;
 	int s, rv, i;
 
-	aac = (struct aac_softc *)sc->sc_ld.sc_dv.dv_parent;
+	aac = (struct aac_softc *)device_parent(&sc->sc_ld.sc_dv);
 
 	/*
 	 * Allocate a command control block and map the data transfer.
@@ -186,9 +187,9 @@ ld_aac_dobio(struct ld_aac_softc *sc, void *data, int datasize, int blkno,
 		sge->SgAddress = htole32(xfer->dm_segs[i].ds_addr);
 		sge->SgByteCount = htole32(xfer->dm_segs[i].ds_len);
 		AAC_DPRINTF(AAC_D_IO,
-		    ("#%d va %p pa %lx len %x\n", i, data,
+		    ("#%d va %p pa %lx len %lx\n", i, data,
 		    (u_long)xfer->dm_segs[i].ds_addr,
-		    xfer->dm_segs[i].ds_len));
+		    (u_long)xfer->dm_segs[i].ds_len));
 	}
 
 	size += xfer->dm_nsegs * sizeof(struct aac_sg_entry);
@@ -256,7 +257,7 @@ ld_aac_intr(struct aac_ccb *ac)
 
 	bp = ac->ac_context;
 	sc = (struct ld_aac_softc *)ac->ac_device;
-	aac = (struct aac_softc *)sc->sc_ld.sc_dv.dv_parent;
+	aac = (struct aac_softc *)device_parent(&sc->sc_ld.sc_dv);
 
 	if ((bp->b_flags & B_READ) != 0) {
 		brr = (struct aac_blockread_response *)&ac->ac_fib->data[0];

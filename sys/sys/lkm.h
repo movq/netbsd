@@ -1,4 +1,4 @@
-/*	$NetBSD: lkm.h,v 1.38 2005/11/25 20:13:54 thorpej Exp $	*/
+/*	$NetBSD: lkm.h,v 1.40 2006/09/22 15:17:55 elad Exp $	*/
 
 /*
  * Header file used by loadable kernel modules and loadable kernel module
@@ -53,8 +53,18 @@ typedef enum loadmod {
 	LM_EXEC,
 	LM_COMPAT,
 	LM_MISC,
-	LM_DRV,
+	LM_DRV
 } MODTYPE;
+
+#define MODTYPE_NAMES \
+	"SYSCALL", \
+	"VFS", \
+	"DEV", \
+	"STRMOD", \
+	"EXEC", \
+	"COMPAT", \
+	"MISC", \
+	"DRV"
 
 /*
  * Version of module interface. Bump if kernel structures or API affecting
@@ -261,12 +271,6 @@ struct lkm_table {
 /*
  * Environment encoding, for LKM<->kernel compatibility check.
  */
-#ifdef DIAGNOSTIC
-#define _LKM_E_DIAGNOSTIC	",DIAGNOSTIC"
-#else
-#define _LKM_E_DIAGNOSTIC	""
-#endif
-
 #ifdef DEBUG
 #define _LKM_E_DEBUG		",DEBUG"
 #else
@@ -292,7 +296,7 @@ struct lkm_table {
 #endif
 
 #define	_LKM_ENV_VERSION	\
-	_LKM_E_DEBUG _LKM_E_DIAGNOSTIC _LKM_E_LOCKDEBUG \
+	_LKM_E_DEBUG _LKM_E_LOCKDEBUG \
 	_LKM_E_MULTIPROCESSOR _LKM_E_MALLOCLOG
 
 int lkm_nofunc(struct lkm_table *, int);
@@ -424,7 +428,7 @@ struct lmc_stat {
 };
 
 #define	LKM_MAKEMAJOR(b, c)	((((b) & 0xffff) << 16) | ((c) & 0xffff))
-#define	LKM_BLOCK_MAJOR(v)	(int)((int16_t)(((v) >> 16) & 0xffff))
+#define	LKM_BLOCK_MAJOR(v)	(int)((int16_t)(((uint32_t)(v) >> 16) & 0xffff))
 #define	LKM_CHAR_MAJOR(v)	(int)((int16_t)((v) & 0xffff))
 
 #endif	/* !_SYS_LKM_H_ */

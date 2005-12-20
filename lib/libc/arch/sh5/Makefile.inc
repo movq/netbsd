@@ -1,6 +1,3 @@
-#	$NetBSD: Makefile.inc,v 1.3 2003/10/05 10:01:49 scw Exp $
+#	$NetBSD: Makefile.inc,v 1.5 2006/06/17 18:04:23 uwe Exp $
 
-KMINCLUDES=
-KMSRCS=
-
-SRCS+=	__sigaction14_sigtramp.c __sigtramp1.S __sigtramp2.S
+SRCS+=	__sigaction14_sigtramp.c __sigtramp2.S

@@ -1,4 +1,4 @@
-/*	$NetBSD: ufsmount.h,v 1.25 2005/12/11 12:25:28 christos Exp $	*/
+/*	$NetBSD: ufsmount.h,v 1.27 2006/05/14 21:33:39 elad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -63,7 +63,6 @@ struct buf;
 struct inode;
 struct nameidata;
 struct timeval;
-struct ucred;
 struct uio;
 struct vnode;
 
@@ -88,7 +87,7 @@ struct ufsmount {
 	struct ufs_extattr_per_mount um_extattr;
 
 	struct	vnode *um_quotas[MAXQUOTAS];	/* pointer to quota files */
-	struct	ucred *um_cred[MAXQUOTAS];	/* quota file access cred */
+	kauth_cred_t   um_cred[MAXQUOTAS];	/* quota file access cred */
 	u_long	um_nindir;			/* indirect ptrs per block */
 	u_long	um_lognindir;			/* log2 of um_nindir */
 	u_long	um_bptrtodb;			/* indir ptr to disk block */
@@ -111,13 +110,12 @@ struct ufs_ops {
 	    const struct timespec *, const struct timespec *);
 	int (*uo_update)(struct vnode *, const struct timespec *,
 	    const struct timespec *, int);
-	int (*uo_truncate)(struct vnode *, off_t, int, struct ucred *,
+	int (*uo_truncate)(struct vnode *, off_t, int, kauth_cred_t,
 	    struct lwp *);
-	int (*uo_valloc)(struct vnode *, int, struct ucred *, struct vnode **);
+	int (*uo_valloc)(struct vnode *, int, kauth_cred_t, struct vnode **);
 	int (*uo_vfree)(struct vnode *, ino_t, int);
-	int (*uo_balloc)(struct vnode *, off_t, int, struct ucred *, int,
+	int (*uo_balloc)(struct vnode *, off_t, int, kauth_cred_t, int,
 	    struct buf **);
-	int (*uo_blkatoff)(struct vnode *, off_t, char **, struct buf **);
 };
 
 #define	UFS_OPS(vp)	(VFSTOUFS((vp)->v_mount)->um_ops)
@@ -134,8 +132,6 @@ struct ufs_ops {
 	(*UFS_OPS(vp)->uo_vfree)((vp), (ino), (mode))
 #define	UFS_BALLOC(vp, off, size, cr, flags, bpp) \
 	(*UFS_OPS(vp)->uo_balloc)((vp), (off), (size), (cr), (flags), (bpp))
-#define	UFS_BLKATOFF(vp, off, res, bpp) \
-	(*UFS_OPS(vp)->uo_blkatoff)((vp), (off), (res), (bpp))
 
 /* UFS-specific flags */
 #define UFS_NEEDSWAP	0x01	/* filesystem metadata need byte-swapping */

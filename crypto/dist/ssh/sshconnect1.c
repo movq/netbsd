@@ -1,4 +1,5 @@
-/*	$NetBSD: sshconnect1.c,v 1.28 2005/02/13 05:57:27 christos Exp $	*/
+/*	$NetBSD: sshconnect1.c,v 1.31 2006/09/28 21:22:15 christos Exp $	*/
+/* $OpenBSD: sshconnect1.c,v 1.69 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -14,8 +15,10 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: sshconnect1.c,v 1.60 2004/07/28 09:40:29 markus Exp $");
-__RCSID("$NetBSD: sshconnect1.c,v 1.28 2005/02/13 05:57:27 christos Exp $");
+__RCSID("$NetBSD: sshconnect1.c,v 1.31 2006/09/28 21:22:15 christos Exp $");
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
 
 #include <openssl/bn.h>
 #include <openssl/md5.h>
@@ -31,23 +34,31 @@ __RCSID("$NetBSD: sshconnect1.c,v 1.28 2005/02/13 05:57:27 christos Exp $");
 #include <krb5.h>
 #endif
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <signal.h>
+#include <pwd.h>
+#include <unistd.h>
+
+#include "xmalloc.h"
 #include "ssh.h"
 #include "ssh1.h"
-#include "xmalloc.h"
 #include "rsa.h"
 #include "buffer.h"
 #include "packet.h"
+#include "key.h"
+#include "cipher.h"
 #include "kex.h"
 #include "uidswap.h"
 #include "log.h"
 #include "readconf.h"
-#include "key.h"
 #include "authfd.h"
 #include "sshconnect.h"
 #include "authfile.h"
 #include "misc.h"
-#include "cipher.h"
 #include "canohost.h"
+#include "hostfile.h"
 #include "auth.h"
 
 /* Session id for the current session. */
@@ -97,7 +108,7 @@ try_agent_authentication(void)
 		/* Wait for server's response. */
 		type = packet_read();
 
-		/* The server sends failure if it doesn\'t like our key or
+		/* The server sends failure if it doesn't like our key or
 		   does not support RSA authentication. */
 		if (type == SSH_SMSG_FAILURE) {
 			debug("Server refused our key.");
@@ -175,7 +186,7 @@ respond_to_rsa_challenge(BIGNUM * challenge, RSA * prv)
 	/* Compute the response. */
 	/* The response is MD5 of decrypted challenge plus session id. */
 	len = BN_num_bytes(challenge);
-	if (len <= 0 || len > sizeof(buf))
+	if (len <= 0 || (u_int)len > sizeof(buf))
 		packet_disconnect(
 		    "respond_to_rsa_challenge: bad challenge length %d", len);
 
@@ -210,7 +221,7 @@ try_rsa_authentication(int idx)
 	BIGNUM *challenge;
 	Key *public, *private;
 	char buf[300], *passphrase, *comment, *authfile;
-	int i, type, quit;
+	int i, perm_ok = 1, type, quit;
 
 	public = options.identity_keys[idx];
 	authfile = options.identity_files[idx];
@@ -228,8 +239,8 @@ try_rsa_authentication(int idx)
 	type = packet_read();
 
 	/*
-	 * The server responds with failure if it doesn\'t like our key or
-	 * doesn\'t support RSA authentication.
+	 * The server responds with failure if it doesn't like our key or
+	 * doesn't support RSA authentication.
 	 */
 	if (type == SSH_SMSG_FAILURE) {
 		debug("Server refused our key.");
@@ -256,15 +267,16 @@ try_rsa_authentication(int idx)
 	if (public->flags & KEY_FLAG_EXT)
 		private = public;
 	else
-		private = key_load_private_type(KEY_RSA1, authfile, "", NULL);
-	if (private == NULL && !options.batch_mode) {
+		private = key_load_private_type(KEY_RSA1, authfile, "", NULL,
+		    &perm_ok);
+	if (private == NULL && !options.batch_mode && perm_ok) {
 		snprintf(buf, sizeof(buf),
 		    "Enter passphrase for RSA key '%.100s': ", comment);
 		for (i = 0; i < options.number_of_password_prompts; i++) {
 			passphrase = read_passphrase(buf, 0);
 			if (strcmp(passphrase, "") != 0) {
 				private = key_load_private_type(KEY_RSA1,
-				    authfile, passphrase, NULL);
+				    authfile, passphrase, NULL, NULL);
 				quit = 0;
 			} else {
 				debug2("no passphrase given, try next key");
@@ -281,7 +293,7 @@ try_rsa_authentication(int idx)
 	xfree(comment);
 
 	if (private == NULL) {
-		if (!options.batch_mode)
+		if (!options.batch_mode && perm_ok)
 			error("Bad passphrase.");
 
 		/* Send a dummy response packet to avoid protocol error. */
@@ -473,8 +485,8 @@ try_krb4_authentication(void)
 		 * key, and the decrypted checksum fails to match, he's
 		 * bogus. Bail out.
 		 */
-		r = krb_rd_priv(auth.dat, auth.length, schedule, &cred.session,
-		    &foreign, &local, &msg_data);
+		r = krb_rd_priv(auth.dat, auth.length, (void *)schedule,
+		    &cred.session, &foreign, &local, &msg_data);
 		if (r != KSUCCESS) {
 			debug("Kerberos v4 krb_rd_priv failed: %s",
 			    krb_err_txt[r]);

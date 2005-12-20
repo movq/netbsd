@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.7 2005/11/23 13:00:51 nonaka Exp $	*/
+/*	$NetBSD: clock.c,v 1.9 2006/09/18 22:05:47 gdamore Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.7 2005/11/23 13:00:51 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.9 2006/09/18 22:05:47 gdamore Exp $");
 
 #include "opt_ppcparam.h"
 
@@ -65,10 +65,10 @@ static inline int yeartoday(int);
 #endif
 void decr_intr(struct clockframe *frame);
 
-static __inline void
+static inline void
 mttb(u_quad_t tb)
 {
-	__asm __volatile ("mttbl %0; mttbu %1; mttbl %1+1"
+	__asm volatile ("mttbl %0; mttbu %1; mttbl %1+1"
 	    ::	"r" (0), "r" (tb));
 }
 
@@ -87,130 +87,6 @@ yeartoday(int year)
 #define SECPERNYEAR	(365*SECPERDAY)
 #define SECPER4YEARS	(4*SECPERNYEAR+SECPERDAY)
 #define EPOCHYEAR	1970
-
-/*
- * Initialze the time of day register, based on the time base which is, e.g.
- * from a filesystem.  Base provides the time to within six months,
- * and the time of year clock (if any) provides the rest.
- */
-#define MINYEAR			2002	/* minimum plausible year */
-void
-inittodr(base)
-	time_t base;
-{
-#if NRTC > 0
-	rtc_t rtc;
-	int year;
-	struct clock_ymdhms dt;
-	time_t deltat;
-	int badbase;
-	int s;
-
-	if (base < (MINYEAR-1970)*SECYR) {
-		printf("WARNING: preposterous time in file system");
-		/* read the system clock anyway */
-		base = (MINYEAR-1970)*SECYR;
-		badbase = 1;
-	} else
-		badbase = 0;
-
-	s = splclock();
-	rtc_read(&rtc);
-	(void)splx(s);
-
-#if defined(DEBUG) && 0
-	printf("inittodr: %02d%02d/%02d/%02d %02d:%02d:%02d\n",
-		rtc.rtc_century, rtc.rtc_year, rtc.rtc_month, rtc.rtc_day,
-		rtc.rtc_hour, rtc.rtc_minute, rtc.rtc_second);
-#endif
-	clockinitted = 1;
-
-	year = (rtc.rtc_century * 100) + rtc.rtc_year;
-
-	/* simple sanity checks (2037 = time_t overflow) */
-	if (year < MINYEAR || year > 2037 ||
-	    rtc.rtc_month < 1 || rtc.rtc_month > 12 || rtc.rtc_day < 1 ||
-	    rtc.rtc_day > 31 || rtc.rtc_hour > 23 || rtc.rtc_minute > 59 ||
-	    rtc.rtc_second > 59) {
-		/*
-		 * Believe the time in the file system for lack of
-		 * anything better, resetting the TODR.
-		 */
-		time.tv_sec = base;
-		if (!badbase) {
-			printf("WARNING: preposterous clock chip time\n");
-			resettodr();
-		}
-		goto bad;
-	}
-
-	dt.dt_year = year;
-	dt.dt_mon = rtc.rtc_month;
-	dt.dt_day = rtc.rtc_day;
-	dt.dt_hour = rtc.rtc_hour;
-	dt.dt_min = rtc.rtc_minute;
-	dt.dt_sec = rtc.rtc_second;
-	time.tv_sec = clock_ymdhms_to_secs(&dt);
-
-	if (!badbase) {
-		/*
-		 * See if we gained/lost two or more days;
-		 * if so, assume something is amiss.
-		 */
-		deltat = time.tv_sec - base;
-		if (deltat < 0)
-			deltat = -deltat;
-		if (deltat < 2 * SECDAY)
-			return;				/* all is well */
-		printf("WARNING: clock %s %ld days\n",
-		    time.tv_sec < base ? "lost" : "gained",
-		    (long)deltat / SECDAY);
-	}
-bad:
-	printf("WARNING: CHECK AND RESET THE DATE!\n");
-#else	/* NRTC */
-	time.tv_sec = base;
-#endif /* NRTC */
-}
-
-/*
- * Reset the TODR based on the time value; used when the TODR
- * has a preposterous value and also when the time is reset
- * by the stime system call.  Also called when the TODR goes past
- * TODRZERO + 100*(SECYEAR+2*SECDAY) (e.g. on Jan 2 just after midnight)
- * to wrap the TODR around.
- */
-void
-resettodr()
-{
-#if NRTC > 0
-	struct clock_ymdhms dt;
-	rtc_t rtc;
-	int s;
-
-	if (!clockinitted)
-		return;
-
-	clock_secs_to_ymdhms(time.tv_sec, &dt);
-
-	rtc.rtc_century = dt.dt_year / 100;
-	rtc.rtc_year = dt.dt_year % 100;
-	rtc.rtc_month = dt.dt_mon;
-	rtc.rtc_day = dt.dt_day;
-	rtc.rtc_hour = dt.dt_hour;
-	rtc.rtc_minute = dt.dt_min;
-	rtc.rtc_second = dt.dt_sec;
-#if defined(DEBUG) && 0
-	printf("resettodr: %02d%02d/%02d/%02d %02d:%02d:%02d\n",
-		rtc.rtc_century, rtc.rtc_year, rtc.rtc_month, rtc.rtc_day,
-		rtc.rtc_hour, rtc.rtc_minute, rtc.rtc_second);
-#endif
-
-	s = splclock();
-	rtc_write(&rtc);
-	(void)splx(s);
-#endif /* NRTC */
-}
 
 #ifdef DEBUG
 struct clockframe *clockframe = 0;
@@ -249,10 +125,10 @@ decr_intr(struct clockframe *frame)
 	 * Based on the actual time delay since the last decrementer reload,
 	 * we arrange for earlier interrupt next time.
 	 */
-	__asm __volatile ("mfdec %0" : "=r"(decrtick));
+	__asm volatile ("mfdec %0" : "=r"(decrtick));
 	for (nticks = 0; decrtick < 0; nticks++)
 		decrtick += ticks_per_intr;
-	__asm __volatile ("mtdec %0" :: "r"(decrtick));
+	__asm volatile ("mtdec %0" :: "r"(decrtick));
 
 	uvmexp.intrs++;
 	curcpu()->ci_ev_clock.ev_count++;
@@ -339,7 +215,7 @@ calc_delayconst()
 	ns_per_tick = 1000000000 / ticks_per_sec;
 	ticks_per_intr = ticks_per_sec / hz;
 	curcpu()->ci_lasttb = mftb();
-	__asm __volatile ("mtdec %0" :: "r"(ticks_per_intr));
+	__asm volatile ("mtdec %0" :: "r"(ticks_per_intr));
 }
 
 /*
@@ -418,7 +294,7 @@ clock_stop_time(struct stop_time *stp)
 		return;
 
 	stp->st_msr = extintr_disable();
-	__asm __volatile ("mfdec %0" : "=r"(stp->st_decr));
+	__asm volatile ("mfdec %0" : "=r"(stp->st_decr));
 	stp->st_tb = mftb();
 	stp->st_state = STS_STOPPED;
 }
@@ -440,7 +316,7 @@ clock_restart_time(struct stop_time *stp)
 	}
 	stp->st_state = 0;
 	mttb(stp->st_tb);
-	__asm __volatile ("mtdec %0" :: "r"(stp->st_decr));
+	__asm volatile ("mtdec %0" :: "r"(stp->st_decr));
 	extintr_restore(stp->st_msr);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: unistd.h,v 1.108 2005/09/26 12:52:42 kleink Exp $	*/
+/*	$NetBSD: unistd.h,v 1.110 2005/12/26 19:01:47 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -315,7 +315,7 @@ mode_t	 getmode(const void *, mode_t);
 int	 getsubopt(char **, char * const *, char **);
 __aconst char *getusershell(void);
 int	 initgroups(const char *, gid_t);
-int	 iruserok(u_int32_t, int, const char *, const char *);
+int	 iruserok(uint32_t, int, const char *, const char *);
 int      issetugid(void);
 int	 nfssvc(int, void *);
 int	 profil(char *, size_t, u_long, u_int);
@@ -356,7 +356,7 @@ int	 iruserok_sa(const void *, int, int, const char *, const char *);
 #ifndef __SYS_SIGLIST_DECLARED
 #define __SYS_SIGLIST_DECLARED
 /* also in signal.h */
-extern __const char *__const *sys_siglist __RENAME(__sys_siglist14);
+extern const char *const *sys_siglist __RENAME(__sys_siglist14);
 #endif /* __SYS_SIGLIST_DECLARED */
 extern	 int optreset;		/* getopt(3) external variable */
 extern	 char *suboptarg;	/* getsubopt(3) external variable */

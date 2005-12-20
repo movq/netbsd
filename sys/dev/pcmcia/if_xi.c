@@ -1,4 +1,4 @@
-/*	$NetBSD: if_xi.c,v 1.53 2005/12/11 12:23:23 christos Exp $ */
+/*	$NetBSD: if_xi.c,v 1.59 2006/11/16 01:33:20 christos Exp $ */
 /*	OpenBSD: if_xe.c,v 1.9 1999/09/16 11:28:42 niklas Exp 	*/
 
 /*
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xi.c,v 1.53 2005/12/11 12:23:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xi.c,v 1.59 2006/11/16 01:33:20 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipx.h"
@@ -90,10 +90,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_xi.c,v 1.53 2005/12/11 12:23:23 christos Exp $");
 #include <netipx/ipx_if.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -118,7 +114,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_xi.c,v 1.53 2005/12/11 12:23:23 christos Exp $");
 #include <dev/pcmcia/if_xivar.h>
 
 #ifdef __GNUC__
-#define INLINE	__inline
+#define INLINE	inline
 #else
 #define INLINE
 #endif	/* __GNUC__ */
@@ -263,9 +259,7 @@ xi_attach(sc, myea)
 }
 
 int
-xi_detach(self, flags)
-	struct device *self;
-	int flags;
+xi_detach(struct device *self, int flags)
 {
 	struct xi_softc *sc = (void *)self;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
@@ -322,7 +316,7 @@ xi_intr(arg)
 	DPRINTF(XID_CONFIG, ("xi_intr()\n"));
 
 	if (sc->sc_enabled == 0 ||
-	    (sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+	    !device_is_active(&sc->sc_dev))
 		return (0);
 
 	ifp->if_timer = 0;	/* turn watchdog timer off */
@@ -464,18 +458,18 @@ xi_get(sc)
 	recvcount += pktlen;
 
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
-	if (m == 0)
+	if (m == NULL)
 		return (recvcount);
 	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = pktlen;
 	len = MHLEN;
-	top = 0;
+	top = NULL;
 	mp = &top;
 
 	while (pktlen > 0) {
 		if (top) {
 			MGET(m, M_DONTWAIT, MT_DATA);
-			if (m == 0) {
+			if (m == NULL) {
 				m_freem(top);
 				return (recvcount);
 			}
@@ -490,7 +484,7 @@ xi_get(sc)
 			}
 			len = MCLBYTES;
 		}
-		if (!top) {
+		if (top == NULL) {
 			caddr_t newdata = (caddr_t)ALIGN(m->m_data +
 			    sizeof(struct ether_header)) -
 			    sizeof(struct ether_header);
@@ -513,6 +507,9 @@ xi_get(sc)
 
 	/* Skip Rx packet. */
 	bus_space_write_2(sc->sc_bst, sc->sc_bsh, DO0, DO_SKIP_RX_PKT);
+
+	if (top == NULL)
+		return recvcount;
 
 	/* Trim the CRC off the end of the packet. */
 	m_adj(top, -ETHER_CRC_LEN);
@@ -668,8 +665,7 @@ xi_mdi_write(self, phy, reg, value)
 }
 
 STATIC void
-xi_statchg(self)
-	struct device *self;
+xi_statchg(struct device *self)
 {
 	/* XXX Update ifp->if_baudrate */
 }
@@ -951,22 +947,6 @@ xi_ether_ioctl(ifp, cmd, data)
 			break;
 #endif	/* INET */
 
-#ifdef NS
-		case AF_NS:
-		{
-			struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
-
-			if (ns_nullhost(*ina))
-				ina->x_host = *(union ns_host *)
-					LLADDR(ifp->if_sadl);
-			else
-				memcpy(LLADDR(ifp->if_sadl), ina->x_host.c_host,
-					ifp->if_addrlen);
-			/* Set new address. */
-			xi_init(sc);
-			break;
-		}
-#endif  /* NS */
 
 		default:
 			xi_init(sc);

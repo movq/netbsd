@@ -1,4 +1,4 @@
-/*	$NetBSD: vrpiu.c,v 1.35 2005/12/11 12:17:35 christos Exp $	*/
+/*	$NetBSD: vrpiu.c,v 1.38 2006/11/12 19:00:42 plunky Exp $	*/
 
 /*
  * Copyright (c) 1999-2003 TAKEMURA Shin All rights reserved.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vrpiu.c,v 1.35 2005/12/11 12:17:35 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vrpiu.c,v 1.38 2006/11/12 19:00:42 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -307,7 +307,7 @@ vrpiu_init(struct vrpiu_softc *sc, void *aux)
 #endif
 
 	/* install interrupt handler and enable interrupt */
-	if (!(sc->sc_handler = 
+	if (!(sc->sc_handler =
 	    vrip_intr_establish(sc->sc_vrip, sc->sc_unit, 0, IPL_TTY,
 		vrpiu_intr, sc))) {
 		printf (": can't map interrupt line.\n");
@@ -330,8 +330,12 @@ vrpiu_init(struct vrpiu_softc *sc, void *aux)
 	/*
 	 * power management events
 	 */
-	sc->sc_power_hook = powerhook_establish(vrpiu_power, sc);
- 
+	sc->sc_power_hook = powerhook_establish(sc->sc_dev.dv_xname,
+	    vrpiu_power, sc);
+	if (sc->sc_power_hook == NULL)
+		aprint_error("%s: WARNING: couldn't establish powerhook\n",
+		    sc->sc_dev.dv_xname);
+
 	/*
 	 * init A/D port polling.
 	 */
@@ -363,7 +367,7 @@ scan_interval(u_int data)
 	scale = WSMOUSE_RES_MAX - WSMOUSE_RES_MIN;
 	data += WSMOUSE_RES_MIN;
 
-	return PIUSIVL_SCANINTVAL_MIN + 
+	return PIUSIVL_SCANINTVAL_MIN +
 	    (PIUSIVL_SCANINTVAL_MAX - PIUSIVL_SCANINTVAL_MIN) *
 	    (scale - data) / scale;
 }
@@ -530,14 +534,14 @@ vrpiu_tp_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct lwp *l)
 			vrpiu_tp_disable(sc);
 		if (ad_enable)
 			vrpiu_ad_disable(sc);
-		
+
 		sc->sc_interval = scan_interval(*(u_int *)data);
 		DPRINTF(("%s(%d): WSMOUSEIO_SRES: *data=%d, interval=0x%03x\n",
 		    __FILE__, __LINE__, *(u_int *)data, sc->sc_interval));
-		
+
 		if (sc->sc_interval < PIUSIVL_SCANINTVAL_MIN)
 			sc->sc_interval = PIUSIVL_SCANINTVAL_MIN;
-			
+
 		if (PIUSIVL_SCANINTVAL_MAX < sc->sc_interval)
 			sc->sc_interval = PIUSIVL_SCANINTVAL_MAX;
 
@@ -688,7 +692,7 @@ vrpiu_tp_intr(struct vrpiu_softc *sc)
 					xraw = tpy1 * sc->sc_pb_paddata_max / (tpy0 + tpy1);
 					yraw = tpx1 * sc->sc_pb_paddata_max / (tpx0 + tpx1);
 					DPRINTF(("%3d %3d", xraw, yraw));
-					
+
 					tpcalib_trans(&sc->sc_tpcalib, xraw,
 					    yraw, &x, &y);
 
@@ -698,6 +702,7 @@ vrpiu_tp_intr(struct vrpiu_softc *sc)
 					    x, /* x */
 					    y, /* y */
 					    0, /* z */
+					    0, /* w */
 					    WSMOUSE_INPUT_ABSOLUTE_X |
 					    WSMOUSE_INPUT_ABSOLUTE_Y);
 					DPRINTF(("\n"));
@@ -748,7 +753,7 @@ vrpiu_tp_up(struct vrpiu_softc *sc)
 		callout_stop(&sc->sc_tptimeout);
 
 		/* button 0 UP */
-		wsmouse_input(sc->sc_wsmousedev, 0, 0, 0, 0, 0);
+		wsmouse_input(sc->sc_wsmousedev, 0, 0, 0, 0, 0, 0);
 	}
 }
 
@@ -820,10 +825,10 @@ vrpiu_calc_powerstate(struct vrpiu_softc *sc)
 		    vrpiu_start_powerstate, sc);
 	if (bootverbose)
 		vrgiu_diff_io();
-		
+
 }
 
-static void 
+static void
 vrpiu_power(int why, void *arg)
 {
 	struct vrpiu_softc *sc = arg;
@@ -847,11 +852,11 @@ vrpiu_send_battery_event(struct vrpiu_softc *sc)
 	static int batterylow = 0;
 	static int critical = 0;
 
-	if (sc->sc_battery_spec == NULL 
+	if (sc->sc_battery_spec == NULL
 	    || sc->sc_battery_spec->main_port == -1)
 		return;
 
-	if (sc->sc_battery.value[sc->sc_battery_spec->main_port] 
+	if (sc->sc_battery.value[sc->sc_battery_spec->main_port]
 	    <= sc->sc_battery_spec->dc_critical) {
 		batteryhigh = 0;
 		config_hook_call(CONFIG_HOOK_PMEVENT,
@@ -866,7 +871,7 @@ vrpiu_send_battery_event(struct vrpiu_softc *sc)
 			batterylow = 0;
 		}
 		critical++;
-	} else if (sc->sc_battery.value[sc->sc_battery_spec->main_port] 
+	} else if (sc->sc_battery.value[sc->sc_battery_spec->main_port]
 	    <= sc->sc_battery_spec->dc_20p) {
 		batteryhigh = 0;
 		if (batterylow == 1)
@@ -877,7 +882,7 @@ vrpiu_send_battery_event(struct vrpiu_softc *sc)
 		    CONFIG_HOOK_PMEVENT_BATTERY,
 		    (void *)CONFIG_HOOK_BATT_LOW);
 		batterylow = 2;
-	} else if (sc->sc_battery.value[sc->sc_battery_spec->main_port] 
+	} else if (sc->sc_battery.value[sc->sc_battery_spec->main_port]
 	    <= sc->sc_battery_spec->dc_50p) {
 		batteryhigh = 0;
 		if (batterylow == 0) {
@@ -886,7 +891,7 @@ vrpiu_send_battery_event(struct vrpiu_softc *sc)
 			    CONFIG_HOOK_PMEVENT_BATTERY,
 			    (void *)CONFIG_HOOK_BATT_50P);
 		}
-	} else if (sc->sc_battery.value[sc->sc_battery_spec->main_port] 
+	} else if (sc->sc_battery.value[sc->sc_battery_spec->main_port]
 	    >= sc->sc_battery_spec->ac_80p) {
 		batterylow = 0;
 		if (batteryhigh == 0) {
@@ -898,7 +903,7 @@ vrpiu_send_battery_event(struct vrpiu_softc *sc)
 			    CONFIG_HOOK_PMEVENT_BATTERY,
 			    (void *)CONFIG_HOOK_BATT_HIGH);
 		}
-	} 
+	}
 #else /* VRPIU_ADHOC_BATTERY_EVENT */
 	config_hook_call(CONFIG_HOOK_SET,
 	    CONFIG_HOOK_BATTERYVAL,

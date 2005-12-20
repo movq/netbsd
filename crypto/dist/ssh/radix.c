@@ -1,4 +1,4 @@
-/*	$NetBSD: radix.c,v 1.17 2005/04/23 16:55:03 christos Exp $	*/
+/*	$NetBSD: radix.c,v 1.19 2006/09/28 21:22:14 christos Exp $	*/
 /*
  * Copyright (c) 1999 Dug Song.  All rights reserved.
  * Copyright (c) 2002 Markus Friedl.  All rights reserved.
@@ -28,7 +28,7 @@
 #include "uuencode.h"
 
 RCSID("$OpenBSD: radix.c,v 1.22 2002/09/09 14:54:15 markus Exp $");
-__RCSID("$NetBSD: radix.c,v 1.17 2005/04/23 16:55:03 christos Exp $");
+__RCSID("$NetBSD: radix.c,v 1.19 2006/09/28 21:22:14 christos Exp $");
 
 #ifdef AFS
 #include <krb.h>
@@ -154,6 +154,7 @@ radix_to_creds(const char *buf, CREDENTIALS *creds)
 
 	ret = 1;
 done:
+	xfree(p);
 	buffer_free(&b);
 	return ret;
 }

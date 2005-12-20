@@ -1,4 +1,4 @@
-/*	$NetBSD: fdesc_vfsops.c,v 1.58 2005/12/11 12:24:50 christos Exp $	*/
+/*	$NetBSD: fdesc_vfsops.c,v 1.62 2006/11/16 01:33:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.58 2005/12/11 12:24:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.62 2006/11/16 01:33:38 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -59,6 +59,8 @@ __KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.58 2005/12/11 12:24:50 christos E
 #include <sys/dirent.h>
 #include <sys/namei.h>
 #include <sys/malloc.h>
+#include <sys/kauth.h>
+
 #include <miscfs/fdesc/fdesc.h>
 
 int	fdesc_mount(struct mount *, const char *, void *,
@@ -68,19 +70,15 @@ int	fdesc_unmount(struct mount *, int, struct lwp *);
 int	fdesc_quotactl(struct mount *, int, uid_t, void *,
 			    struct lwp *);
 int	fdesc_statvfs(struct mount *, struct statvfs *, struct lwp *);
-int	fdesc_sync(struct mount *, int, struct ucred *, struct lwp *);
+int	fdesc_sync(struct mount *, int, kauth_cred_t, struct lwp *);
 int	fdesc_vget(struct mount *, ino_t, struct vnode **);
 
 /*
  * Mount the per-process file descriptors (/dev/fd)
  */
 int
-fdesc_mount(mp, path, data, ndp, l)
-	struct mount *mp;
-	const char *path;
-	void *data;
-	struct nameidata *ndp;
-	struct lwp *l;
+fdesc_mount(struct mount *mp, const char *path, void *data,
+    struct nameidata *ndp, struct lwp *l)
 {
 	int error = 0;
 	struct fdescmount *fmp;
@@ -115,19 +113,14 @@ fdesc_mount(mp, path, data, ndp, l)
 }
 
 int
-fdesc_start(mp, flags, l)
-	struct mount *mp;
-	int flags;
-	struct lwp *l;
+fdesc_start(struct mount *mp, int flags, 
+    struct lwp *l)
 {
 	return (0);
 }
 
 int
-fdesc_unmount(mp, mntflags, l)
-	struct mount *mp;
-	int mntflags;
-	struct lwp *l;
+fdesc_unmount(struct mount *mp, int mntflags, struct lwp *l)
 {
 	int error;
 	int flags = 0;
@@ -181,12 +174,8 @@ fdesc_root(mp, vpp)
 }
 
 int
-fdesc_quotactl(mp, cmd, uid, arg, l)
-	struct mount *mp;
-	int cmd;
-	uid_t uid;
-	void *arg;
-	struct lwp *l;
+fdesc_quotactl(struct mount *mp, int cmd, uid_t uid,
+    void *arg, struct lwp *l)
 {
 
 	return (EOPNOTSUPP);
@@ -244,11 +233,8 @@ fdesc_statvfs(mp, sbp, l)
 
 /*ARGSUSED*/
 int
-fdesc_sync(mp, waitfor, uc, l)
-	struct mount *mp;
-	int waitfor;
-	struct ucred *uc;
-	struct lwp *l;
+fdesc_sync(struct mount *mp, int waitfor,
+    kauth_cred_t uc, struct lwp *l)
 {
 
 	return (0);
@@ -259,10 +245,8 @@ fdesc_sync(mp, waitfor, uc, l)
  * Currently unsupported.
  */
 int
-fdesc_vget(mp, ino, vpp)
-	struct mount *mp;
-	ino_t ino;
-	struct vnode **vpp;
+fdesc_vget(struct mount *mp, ino_t ino,
+    struct vnode **vpp)
 {
 
 	return (EOPNOTSUPP);
@@ -316,5 +300,7 @@ struct vfsops fdesc_vfsops = {
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
 	fdesc_vnodeopv_descs,
+	0,
+	{ NULL, NULL},
 };
 VFS_ATTACH(fdesc_vfsops);

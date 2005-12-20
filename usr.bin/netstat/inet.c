@@ -1,4 +1,4 @@
-/*	$NetBSD: inet.c,v 1.68 2005/08/12 14:08:16 elad Exp $	*/
+/*	$NetBSD: inet.c,v 1.77 2006/09/22 23:21:52 elad Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)inet.c	8.4 (Berkeley) 4/20/94";
 #else
-__RCSID("$NetBSD: inet.c,v 1.68 2005/08/12 14:08:16 elad Exp $");
+__RCSID("$NetBSD: inet.c,v 1.77 2006/09/22 23:21:52 elad Exp $");
 #endif
 #endif /* not lint */
 
@@ -72,6 +72,7 @@ __RCSID("$NetBSD: inet.c,v 1.68 2005/08/12 14:08:16 elad Exp $");
 #include <netinet/tcp_var.h>
 #include <netinet/tcp_debug.h>
 #include <netinet/udp.h>
+#include <netinet/ip_carp.h>
 #include <netinet/udp_var.h>
 
 #include <arpa/inet.h>
@@ -167,14 +168,6 @@ protopr(off, name)
 	int istcp;
 	static int first = 1;
 
-	if (off == 0)
-		return;
-	istcp = strcmp(name, "tcp") == 0;
-	kread(off, (char *)&table, sizeof table);
-	prev = head =
-	    (struct inpcb *)&((struct inpcbtable *)off)->inpt_queue.cqh_first;
-	next = (struct inpcb *)table.inpt_queue.cqh_first;
-
 	compact = 0;
 	if (Aflag) {
 		if (!numeric_addr)
@@ -199,13 +192,14 @@ protopr(off, name)
 
 		/* get dynamic pcblist node */
 		if (sysctlnametomib(mibname, mib, &namelen) == -1)
-			err(1, "sysctlnametomib");
+			err(1, "sysctlnametomib: %s", mibname);
 
 		if (sysctl(mib, sizeof(mib) / sizeof(*mib), NULL, &size,
 			   NULL, 0) == -1)
 			err(1, "sysctl (query)");
 
-		pcblist = malloc(size);
+		if ((pcblist = malloc(size)) == NULL)
+			err(1, "malloc");
 		memset(pcblist, 0, size);
 
 	        mib[6] = sizeof(*pcblist);
@@ -236,6 +230,14 @@ protopr(off, name)
 		free(pcblist);
 		return;
 	}
+
+	if (off == 0)
+		return;
+	istcp = strcmp(name, "tcp") == 0;
+	kread(off, (char *)&table, sizeof table);
+	prev = head =
+	    (struct inpcb *)&((struct inpcbtable *)off)->inpt_queue.cqh_first;
+	next = (struct inpcb *)table.inpt_queue.cqh_first;
 
 	while (next != head) {
 		kread((u_long)next, (char *)&inpcb, sizeof inpcb);
@@ -389,6 +391,9 @@ tcp_stats(off, name)
 	p(tcps_badsig, "\t%llu packet%s with bad signature\n");
 	p(tcps_goodsig, "\t%llu packet%s with good signature\n");
 
+	p(tcps_ecn_shs, "\t%llu sucessful ECN handshake%s\n");
+	p(tcps_ecn_ce, "\t%llu packet%s with ECN CE bit\n");
+	p(tcps_ecn_ect, "\t%llu packet%s ECN ECT(0) bit\n");
 #undef p
 #undef ps
 #undef p2
@@ -627,6 +632,61 @@ igmp_stats(off, name)
         p(igps_snd_reports, "\t%llu membership report%s sent\n");
 #undef p
 #undef py
+}
+
+/*
+ * Dump CARP statistics structure.
+ */
+void
+carp_stats(u_long off, char *name)
+{
+	struct carpstats carpstat;
+
+	if (use_sysctl) {
+		size_t size = sizeof(carpstat);
+
+		if (sysctlbyname("net.inet.carp.stats", &carpstat, &size,
+				 NULL, 0) == -1) {
+			/* most likely CARP is not compiled in the kernel */
+			return;
+		}
+	} else {
+		if (off == 0)
+			return;
+		kread(off, (char *)&carpstat, sizeof(carpstat));
+	}
+
+	printf("%s:\n", name);
+
+#define p(f, m) if (carpstat.f || sflag <= 1) \
+	printf(m, carpstat.f, plural(carpstat.f))
+#define p2(f, m) if (carpstat.f || sflag <= 1) \
+	printf(m, carpstat.f)
+
+	p(carps_ipackets, "\t%" PRIu64 " packet%s received (IPv4)\n");
+	p(carps_ipackets6, "\t%" PRIu64 " packet%s received (IPv6)\n");
+	p(carps_badif,
+	    "\t\t%" PRIu64 " packet%s discarded for bad interface\n");
+	p(carps_badttl,
+	    "\t\t%" PRIu64 " packet%s discarded for wrong TTL\n");
+	p(carps_hdrops, "\t\t%" PRIu64 " packet%s shorter than header\n");
+	p(carps_badsum, "\t\t%" PRIu64
+		" packet%s discarded for bad checksum\n");
+	p(carps_badver,
+	    "\t\t%" PRIu64 " packet%s discarded with a bad version\n");
+	p2(carps_badlen,
+	    "\t\t%" PRIu64 " discarded because packet was too short\n");
+	p(carps_badauth,
+	    "\t\t%" PRIu64 " packet%s discarded for bad authentication\n");
+	p(carps_badvhid, "\t\t%" PRIu64 " packet%s discarded for bad vhid\n");
+	p(carps_badaddrs, "\t\t%" PRIu64
+		" packet%s discarded because of a bad address list\n");
+	p(carps_opackets, "\t%" PRIu64 " packet%s sent (IPv4)\n");
+	p(carps_opackets6, "\t%" PRIu64 " packet%s sent (IPv6)\n");
+	p2(carps_onomem,
+	    "\t\t%" PRIu64 " send failed due to mbuf memory error\n");
+#undef p
+#undef p2
 }
 
 /*

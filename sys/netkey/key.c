@@ -1,4 +1,4 @@
-/*	$NetBSD: key.c,v 1.137 2005/12/11 12:25:16 christos Exp $	*/
+/*	$NetBSD: key.c,v 1.146 2006/11/16 01:33:51 christos Exp $	*/
 /*	$KAME: key.c,v 1.310 2003/09/08 02:23:44 itojun Exp $	*/
 
 /*
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: key.c,v 1.137 2005/12/11 12:25:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: key.c,v 1.146 2006/11/16 01:33:51 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -70,6 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: key.c,v 1.137 2005/12/11 12:25:16 christos Exp $");
 #include <netinet/ip6.h>
 #include <netinet6/in6_var.h>
 #include <netinet6/ip6_var.h>
+#include <netinet6/scope6_var.h>
 #endif /* INET6 */
 
 #ifdef INET
@@ -536,7 +537,7 @@ found:
 	KEY_CHKSPDIR(sp->dir, dir, "key_allocsp");
 
 	/* found a SPD entry */
-	sp->lastused = time.tv_sec;
+	sp->lastused = time_second;
 	sp->refcnt++;
 	splx(s);
 	KEYDEBUG(KEYDEBUG_IPSEC_STAMP,
@@ -746,16 +747,22 @@ key_do_allocsa_policy(sah, state)
  * sport and dport are used for NAT-T. network order is always used.
  */
 struct secasvar *
-key_allocsa(family, src, dst, proto, spi, sport, dport)
-	u_int family, proto;
-	caddr_t src, dst;
-	u_int32_t spi;
-	u_int16_t sport, dport;
+key_allocsa(
+    u_int family,
+    caddr_t src,
+    caddr_t dst,
+    u_int proto,
+    u_int32_t spi,
+    u_int16_t sport,
+    u_int16_t dport
+)
 {
 	struct secasvar *sav, *match;
 	u_int stateidx, state, tmpidx, matchidx;
 	struct sockaddr_in sin;
+#ifdef INET6
 	struct sockaddr_in6 sin6;
+#endif
 	int s;
 	int chkport = 0;
 
@@ -814,6 +821,7 @@ key_allocsa(family, src, dst, proto, spi, sport, dport)
 				continue;
 
 			break;
+#ifdef INET6
 		case AF_INET6:
 			bzero(&sin6, sizeof(sin6));
 			sin6.sin6_family = AF_INET6;
@@ -823,17 +831,14 @@ key_allocsa(family, src, dst, proto, spi, sport, dport)
 #ifdef IPSEC_NAT_T
 			sin6.sin6_port = sport;
 #endif
-			if (IN6_IS_SCOPE_LINKLOCAL(&sin6.sin6_addr)) {
-				/* kame fake scopeid */
-				sin6.sin6_scope_id =
-				    ntohs(sin6.sin6_addr.s6_addr16[1]);
-				sin6.sin6_addr.s6_addr16[1] = 0;
-			}
+			if (sa6_recoverscope(&sin6))
+				continue;
 			if (key_sockaddrcmp((struct sockaddr*)&sin6,
 			    (struct sockaddr *)&sav->sah->saidx.src,
 			    chkport) != 0)
 				continue;
 			break;
+#endif
 		default:
 			ipseclog((LOG_DEBUG, "key_allocsa: "
 			    "unknown address family=%d.\n",
@@ -859,6 +864,7 @@ key_allocsa(family, src, dst, proto, spi, sport, dport)
 				continue;
 
 			break;
+#ifdef INET6
 		case AF_INET6:
 			bzero(&sin6, sizeof(sin6));
 			sin6.sin6_family = AF_INET6;
@@ -868,17 +874,14 @@ key_allocsa(family, src, dst, proto, spi, sport, dport)
 #ifdef IPSEC_NAT_T
 			sin6.sin6_port = dport;
 #endif
-			if (IN6_IS_SCOPE_LINKLOCAL(&sin6.sin6_addr)) {
-				/* kame fake scopeid */
-				sin6.sin6_scope_id =
-				    ntohs(sin6.sin6_addr.s6_addr16[1]);
-				sin6.sin6_addr.s6_addr16[1] = 0;
-			}
+			if (sa6_recoverscope(&sin6))
+				continue;
 			if (key_sockaddrcmp((struct sockaddr*)&sin6,
 			    (struct sockaddr *)&sav->sah->saidx.dst,
 			    chkport) != 0)
 				continue;
 			break;
+#endif
 		default:
 			ipseclog((LOG_DEBUG, "key_allocsa: "
 			    "unknown address family=%d.\n", family));
@@ -1851,8 +1854,8 @@ key_spdadd(so, m, mhp)
 		}
 	}
 
-	newsp->created = time.tv_sec;
-	newsp->lastused = time.tv_sec;
+	newsp->created = time_second;
+	newsp->lastused = time_second;
 	newsp->lifetime = lft ? lft->sadb_lifetime_addtime : 0;
 	newsp->validtime = lft ? lft->sadb_lifetime_usetime : 0;
 
@@ -1866,7 +1869,7 @@ key_spdadd(so, m, mhp)
 		struct secspacq *spacq;
 		if ((spacq = key_getspacq(&spidx)) != NULL) {
 			/* reset counter in order to deletion by timehandler. */
-			spacq->created = time.tv_sec;
+			spacq->created = time_second;
 			spacq->count = 0;
 		}
     	}
@@ -2916,7 +2919,7 @@ key_newsav(m, mhp, sah, errp)
 	}
 
 	/* reset created */
-	newsav->created = time.tv_sec;
+	newsav->created = time_second;
 
 	newsav->pid = mhp->msg->sadb_msg_pid;
 
@@ -3226,7 +3229,7 @@ key_setsaval(sav, m, mhp)
 	}
 
 	/* reset created */
-	sav->created = time.tv_sec;
+	sav->created = time_second;
 
 	/* make lifetime for CURRENT */
 	KMALLOC(sav->lft_c, struct sadb_lifetime *,
@@ -3242,7 +3245,7 @@ key_setsaval(sav, m, mhp)
 	sav->lft_c->sadb_lifetime_exttype = SADB_EXT_LIFETIME_CURRENT;
 	sav->lft_c->sadb_lifetime_allocations = 0;
 	sav->lft_c->sadb_lifetime_bytes = 0;
-	sav->lft_c->sadb_lifetime_addtime = time.tv_sec;
+	sav->lft_c->sadb_lifetime_addtime = time_second;
 	sav->lft_c->sadb_lifetime_usetime = 0;
 
 	/* lifetimes for HARD and SOFT */
@@ -3354,7 +3357,7 @@ key_mature(sav)
 	switch (sav->sah->saidx.proto) {
 	case IPPROTO_ESP:
 	case IPPROTO_AH:
-		if (ntohl(sav->spi) >= 0 && ntohl(sav->spi) <= 255) {
+		if (ntohl(sav->spi) <= 255) {
 			ipseclog((LOG_DEBUG,
 			    "key_mature: illegal range of SPI %u.\n",
 			    (u_int32_t)ntohl(sav->spi)));
@@ -4254,6 +4257,9 @@ key_ismyaddr6(sin6)
 	struct in6_ifaddr *ia;
 	struct in6_multi *in6m;
 
+	if (sa6_embedscope(sin6, 0) != 0)
+		return 0;
+
 	for (ia = in6_ifaddr; ia; ia = ia->ia_next) {
 		if (key_sockaddrcmp((struct sockaddr *)&sin6,
 		    (struct sockaddr *)&ia->ia_addr, 0) == 0)
@@ -4646,14 +4652,13 @@ key_bbcmp(p1, p2, bits)
  * XXX: year 2038 problem may remain.
  */
 void
-key_timehandler(arg)
-	void *arg;
+key_timehandler(void *arg)
 {
 	u_int dir;
 	int s;
 	struct timeval tv;
 
-	tv = time;
+	getmicrotime(&tv);
 
 	s = splsoftnet();	/*called from softclock()*/
 
@@ -5112,7 +5117,7 @@ key_getspi(so, m, mhp)
 		struct secacq *acq;
 		if ((acq = key_getacqbyseq(mhp->msg->sadb_msg_seq)) != NULL) {
 			/* reset counter in order to deletion by timehandler. */
-			acq->created = time.tv_sec;
+			acq->created = time_second;
 			acq->count = 0;
 		}
     	}
@@ -6545,8 +6550,8 @@ key_acquire(saidx, sp)
 		id->sadb_ident_exttype = idexttype;
 		id->sadb_ident_type = SADB_IDENTTYPE_USERFQDN;
 		/* XXX is it correct? */
-		if (curproc && curproc->p_cred)
-			id->sadb_ident_id = curproc->p_cred->p_ruid;
+		if (curlwp)
+			id->sadb_ident_id = kauth_cred_getuid(curlwp->l_cred);
 		if (userfqdn && userfqdnlen)
 			bcopy(userfqdn, id + 1, userfqdnlen);
 		p += sizeof(struct sadb_ident) + PFKEY_ALIGN8(userfqdnlen);
@@ -6622,7 +6627,7 @@ key_newacq(saidx)
 	/* copy secindex */
 	bcopy(saidx, &newacq->saidx, sizeof(newacq->saidx));
 	newacq->seq = (acq_seq == ~0 ? 1 : ++acq_seq);
-	newacq->created = time.tv_sec;
+	newacq->created = time_second;
 	newacq->count = 1;
 
 	return newacq;
@@ -6676,7 +6681,7 @@ key_newspacq(spidx)
 
 	/* copy secindex */
 	bcopy(spidx, &acq->spidx, sizeof(acq->spidx));
-	acq->created = time.tv_sec;
+	acq->created = time_second;
 	acq->count = 0;
 
 	return acq;
@@ -6756,7 +6761,7 @@ key_acquire2(so, m, mhp)
 		}
 
 		/* reset acq counter in order to deletion by timehander. */
-		acq->created = time.tv_sec;
+		acq->created = time_second;
 		acq->count = 0;
 #endif
 		m_freem(m);
@@ -7579,6 +7584,9 @@ key_parse(m, so)
 	u_int orglen;
 	int error;
 	int target;
+#ifdef INET6
+	struct sockaddr_in6 *sin6;
+#endif
 
 	/* sanity check */
 	if (m == NULL || so == NULL)
@@ -7767,6 +7775,19 @@ key_parse(m, so)
 				error = EINVAL;
 				goto senderror;
 			}
+#ifdef INET6
+			/*
+			 * Check validity of the scope zone ID of the
+			 * addresses, and embed the zone ID into the address
+			 * if necessary.
+			 */
+			sin6 = (struct sockaddr_in6 *)PFKEY_ADDR_SADDR(src0);
+			if ((error = sa6_embedscope(sin6, 0)) != 0)
+				goto senderror;
+			sin6 = (struct sockaddr_in6 *)PFKEY_ADDR_SADDR(dst0);
+			if ((error = sa6_embedscope(sin6, 0)) != 0)
+				goto senderror;
+#endif
 			break;
 		default:
 			ipseclog((LOG_DEBUG,
@@ -8082,11 +8103,8 @@ key_init()
  * xxx more checks to be provided
  */
 int
-key_checktunnelsanity(sav, family, src, dst)
-	struct secasvar *sav;
-	u_int family;
-	caddr_t src;
-	caddr_t dst;
+key_checktunnelsanity(struct secasvar *sav, u_int family,
+    caddr_t src, caddr_t dst)
 {
 	/* sanity check */
 	if (sav->sah == NULL)
@@ -8199,7 +8217,7 @@ key_sa_recordxfer(sav, m)
 	 *	<-----> SOFT
 	 */
     {
-	sav->lft_c->sadb_lifetime_usetime = time.tv_sec;
+	sav->lft_c->sadb_lifetime_usetime = time_second;
 	/* XXX check for expires? */
     }
 

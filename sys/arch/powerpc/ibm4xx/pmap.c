@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.37 2005/12/11 12:18:42 christos Exp $	*/
+/*	$NetBSD: pmap.c,v 1.44 2006/11/29 19:56:46 freza Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.37 2005/12/11 12:18:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.44 2006/11/29 19:56:46 freza Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -96,12 +96,14 @@ caddr_t kernmap;
 
 #define MINCTX		2
 #define NUMCTX		256
+
 volatile struct pmap *ctxbusy[NUMCTX];
 
 #define TLBF_USED	0x1
 #define	TLBF_REF	0x2
 #define	TLBF_LOCKED	0x4
 #define	TLB_LOCKED(i)	(tlb_info[(i)].ti_flags & TLBF_LOCKED)
+
 typedef struct tlb_info_s {
 	char	ti_flags;
 	char	ti_ctx;		/* TLB_PID assiciated with the entry */
@@ -110,12 +112,10 @@ typedef struct tlb_info_s {
 
 volatile tlb_info_t tlb_info[NTLB];
 /* We'll use a modified FIFO replacement policy cause it's cheap */
-volatile int tlbnext = TLB_NRESERVED;
+volatile int tlbnext;
 
-u_long dtlb_miss_count = 0;
-u_long itlb_miss_count = 0;
-u_long ktlb_miss_count = 0;
-u_long utlb_miss_count = 0;
+static int tlb_nreserved = 0;
+static int pmap_bootstrap_done = 0;
 
 /* Event counters */
 struct evcnt tlbmiss_ev = EVCNT_INITIALIZER(EVCNT_TYPE_TRAP,
@@ -156,6 +156,18 @@ struct pv_entry {
 	struct pmap *pv_pm;
 };
 
+/* Each index corresponds to TLB_SIZE_* value. */
+static size_t tlbsize[] = {
+	1024, 		/* TLB_SIZE_1K */
+	4096, 		/* TLB_SIZE_4K */
+	16384, 		/* TLB_SIZE_16K */
+	65536, 		/* TLB_SIZE_64K */
+	262144, 	/* TLB_SIZE_256K */
+	1048576, 	/* TLB_SIZE_1M */
+	4194304, 	/* TLB_SIZE_4M */
+	16777216, 	/* TLB_SIZE_16M */
+};
+
 struct pv_entry *pv_table;
 static struct pool pv_pool;
 
@@ -171,6 +183,8 @@ static inline int pte_enter(struct pmap *, vaddr_t, u_int);
 
 static inline int pmap_enter_pv(struct pmap *, vaddr_t, paddr_t, boolean_t);
 static void pmap_remove_pv(struct pmap *, vaddr_t, paddr_t);
+
+static int ppc4xx_tlb_size_mask(size_t, int *, int *);
 
 
 inline struct pv_entry *
@@ -252,6 +266,8 @@ pmap_bootstrap(u_int kernelstart, u_int kernelend)
 	struct mem_region *mp, *mp1;
 	int cnt, i;
 	u_int s, e, sz;
+
+	tlbnext = tlb_nreserved;
 
 	/*
 	 * Allocate the kernel page table at the end of
@@ -396,11 +412,12 @@ pmap_bootstrap(u_int kernelstart, u_int kernelend)
 	pmap_kernel()->pm_ctx = KERNEL_PID;
 	nextavail = avail->start;
 
-
 	evcnt_attach_static(&tlbmiss_ev);
 	evcnt_attach_static(&tlbhit_ev);
 	evcnt_attach_static(&tlbflush_ev);
 	evcnt_attach_static(&tlbenter_ev);
+
+	pmap_bootstrap_done = 1;
 }
 
 /*
@@ -681,7 +698,7 @@ pmap_zero_page(paddr_t pa)
 	int i;
 
 	for (i = PAGE_SIZE/CACHELINESIZE; i > 0; i--) {
-		__asm __volatile ("dcbz 0,%0" :: "r"(pa));
+		__asm volatile ("dcbz 0,%0" :: "r"(pa));
 		pa += CACHELINESIZE;
 	}
 #endif
@@ -1156,7 +1173,7 @@ pmap_procwr(struct proc *p, vaddr_t va, size_t len)
 		ctx_alloc(pm);
 		ctx = pm->pm_ctx;
 	}
-	__asm __volatile("mfmsr %0;"
+	__asm volatile("mfmsr %0;"
 		"li %1, %7;"
 		"andc %1,%0,%1;"
 		"mtmsr %1;"
@@ -1190,7 +1207,7 @@ ppc4xx_tlb_flush(vaddr_t va, int pid)
 	if (!pid)
 		return;
 
-	asm("mfpid %1;"			/* Save PID */
+	__asm( 	"mfpid %1;"		/* Save PID */
 		"mfmsr %2;"		/* Save MSR */
 		"li %0,0;"		/* Now clear MSR */
 		"mtmsr %0;"
@@ -1210,7 +1227,7 @@ ppc4xx_tlb_flush(vaddr_t va, int pid)
 	if (found && !TLB_LOCKED(i)) {
 
 		/* Now flush translation */
-		asm volatile(
+		__asm volatile(
 			"tlbwe %0,%1,0;"
 			"sync;isync;"
 			: : "r" (0), "r" (i));
@@ -1230,7 +1247,7 @@ ppc4xx_tlb_flush_all(void)
 
 	for (i = 0; i < NTLB; i++)
 		if (!TLB_LOCKED(i)) {
-			asm volatile(
+			__asm volatile(
 				"tlbwe %0,%1,0;"
 				"sync;isync;"
 				: : "r" (0), "r" (i));
@@ -1238,7 +1255,7 @@ ppc4xx_tlb_flush_all(void)
 			tlb_info[i].ti_flags = 0;
 		}
 
-	asm volatile("sync;isync");
+	__asm volatile("sync;isync");
 }
 
 /* Find a TLB entry to evict. */
@@ -1249,7 +1266,7 @@ ppc4xx_tlb_find_victim(void)
 
 	for (;;) {
 		if (++tlbnext >= NTLB)
-			tlbnext = TLB_NRESERVED;
+			tlbnext = tlb_nreserved;
 		flags = tlb_info[tlbnext].ti_flags;
 		if (!(flags & TLBF_USED) ||
 			(flags & (TLBF_LOCKED | TLBF_REF)) == 0) {
@@ -1292,7 +1309,7 @@ ppc4xx_tlb_enter(int ctx, vaddr_t va, u_int pte)
 	idx = ppc4xx_tlb_find_victim();
 
 #ifdef DIAGNOSTIC
-	if ((idx < TLB_NRESERVED) || (idx >= NTLB)) {
+	if ((idx < tlb_nreserved) || (idx >= NTLB)) {
 		panic("ppc4xx_tlb_enter: replacing entry %ld", idx);
 	}
 #endif
@@ -1301,7 +1318,7 @@ ppc4xx_tlb_enter(int ctx, vaddr_t va, u_int pte)
 	tlb_info[idx].ti_ctx = ctx;
 	tlb_info[idx].ti_flags = TLBF_USED | TLBF_REF;
 
-	asm volatile(
+	__asm volatile(
 		"mfmsr %0;"			/* Save MSR */
 		"li %1,0;"
 		"tlbwe %1,%3,0;"		/* Invalidate old entry. */
@@ -1323,23 +1340,12 @@ ppc4xx_tlb_enter(int ctx, vaddr_t va, u_int pte)
 }
 
 void
-ppc4xx_tlb_unpin(int i)
-{
-
-	if (i == -1)
-		for (i = 0; i < TLB_NRESERVED; i++)
-			tlb_info[i].ti_flags &= ~TLBF_LOCKED;
-	else
-		tlb_info[i].ti_flags &= ~TLBF_LOCKED;
-}
-
-void
 ppc4xx_tlb_init(void)
 {
 	int i;
 
 	/* Mark reserved TLB entries */
-	for (i = 0; i < TLB_NRESERVED; i++) {
+	for (i = 0; i < tlb_nreserved; i++) {
 		tlb_info[i].ti_flags = TLBF_LOCKED | TLBF_USED;
 		tlb_info[i].ti_ctx = KERNEL_PID;
 	}
@@ -1350,12 +1356,115 @@ ppc4xx_tlb_init(void)
 	 * Z3 - full access regardless of TLB entry permissions
 	 */
 
-	asm volatile(
+	__asm volatile(
 		"mtspr %0,%1;"
 		"sync;"
 		::  "K"(SPR_ZPR), "r" (0x1b000000));
 }
 
+/*
+ * ppc4xx_tlb_size_mask:
+ *
+ * 	Roundup size to supported page size, return TLBHI mask and real size.
+ */
+static int
+ppc4xx_tlb_size_mask(size_t size, int *mask, int *rsiz)
+{
+	int 			i;
+
+	for (i = 0; i < __arraycount(tlbsize); i++)
+		if (size <= tlbsize[i]) {
+			*mask = (i << TLB_SIZE_SHFT);
+			*rsiz = tlbsize[i];
+			return (0);
+		}
+	return (EINVAL);
+}
+
+/*
+ * ppc4xx_tlb_mapiodev:
+ *
+ * 	Lookup virtual address of mapping previously entered via
+ * 	ppc4xx_tlb_reserve. Search TLB directly so that we don't
+ * 	need to waste extra storage for reserved mappings. Note
+ * 	that reading TLBHI also sets PID, but all reserved mappings
+ * 	use KERNEL_PID, so the side effect is nil.
+ */
+void *
+ppc4xx_tlb_mapiodev(paddr_t base, psize_t len)
+{
+	paddr_t 		pa;
+	vaddr_t 		va;
+	u_int 			lo, hi, sz;
+	int 			i;
+
+	/* tlb_nreserved is only allowed to grow, so this is safe. */
+	for (i = 0; i < tlb_nreserved; i++) {
+		__asm volatile (
+		    "	tlbre %0,%2,1 	\n" 	/* TLBLO */
+		    "	tlbre %1,%2,0 	\n" 	/* TLBHI */
+		    : "=&r" (lo), "=&r" (hi)
+		    : "r" (i));
+
+		KASSERT(hi & TLB_VALID);
+		KASSERT(mfspr(SPR_PID) == KERNEL_PID);
+
+		pa = (lo & TLB_RPN_MASK);
+		if (base < pa)
+			continue;
+
+		sz = tlbsize[(hi & TLB_SIZE_MASK) >> TLB_SIZE_SHFT];
+		if ((base + len) > (pa + sz))
+			continue;
+
+		va = (hi & TLB_EPN_MASK) + (base & (sz - 1)); 	/* sz = 2^n */
+		return (void *)(va);
+	}
+
+	return (NULL);
+}
+
+/*
+ * ppc4xx_tlb_reserve:
+ *
+ * 	Map physical range to kernel virtual chunk via reserved TLB entry.
+ */
+void
+ppc4xx_tlb_reserve(paddr_t pa, vaddr_t va, size_t size, int flags)
+{
+	u_int 			lo, hi;
+	int 			szmask, rsize;
+
+	/* Called before pmap_bootstrap(), va outside kernel space. */
+	KASSERT(va < VM_MIN_KERNEL_ADDRESS || va >= VM_MAX_KERNEL_ADDRESS);
+	KASSERT(! pmap_bootstrap_done);
+	KASSERT(tlb_nreserved < NTLB);
+
+	/* Resolve size. */
+	if (ppc4xx_tlb_size_mask(size, &szmask, &rsize) != 0)
+		panic("ppc4xx_tlb_reserve: entry %d, %zuB too large",
+		    size, tlb_nreserved);
+
+	/* Real size will be power of two >= 1024, so this is OK. */
+	pa &= ~(rsize - 1); 	/* RPN */
+	va &= ~(rsize - 1); 	/* EPN */
+
+	lo = pa | TLB_WR | flags;
+	hi = va | TLB_VALID | szmask;
+
+#ifdef PPC_4XX_NOCACHE
+	lo |= TLB_I;
+#endif
+
+	__asm volatile(
+	    "	tlbwe %1,%0,1 	\n" 	/* write TLBLO */
+	    "	tlbwe %2,%0,0 	\n" 	/* write TLBHI */
+	    "   sync 		\n"
+	    "	isync 		\n"
+	    : : "r" (tlb_nreserved), "r" (lo), "r" (hi));
+
+	tlb_nreserved++;
+}
 
 /*
  * We should pass the ctx in from trap code.
@@ -1369,9 +1478,12 @@ pmap_tlbmiss(vaddr_t va, int ctx)
 	tlbmiss_ev.ev_count++;
 
 	/*
-	 * XXXX We will reserve 0-0x80000000 for va==pa mappings.
+	 * We will reserve 0 upto VM_MIN_KERNEL_ADDRESS for va == pa mappings.
+	 * Physical RAM is expected to live in this range, care must be taken
+	 * to not clobber 0 upto ${physmem} with device mappings in machdep
+	 * code.
 	 */
-	if (ctx != KERNEL_PID || (va & 0x80000000)) {
+	if (ctx != KERNEL_PID || va >= VM_MIN_KERNEL_ADDRESS) {
 		pte = pte_find((struct pmap *)__UNVOLATILE(ctxbusy[ctx]), va);
 		if (pte == NULL) {
 			/* Map unmanaged addresses directly for kernel access */
@@ -1384,7 +1496,7 @@ pmap_tlbmiss(vaddr_t va, int ctx)
 	} else {
 		/* Create a 16MB writable mapping. */
 #ifdef PPC_4XX_NOCACHE
-		tte = TTE_PA(va) | TTE_ZONE(ZONE_PRIV) | TTE_SZ_16M | TTE_I | TTE_WR;
+		tte = TTE_PA(va) | TTE_ZONE(ZONE_PRIV) | TTE_SZ_16M | TTE_I |TTE_WR;
 #else
 		tte = TTE_PA(va) | TTE_ZONE(ZONE_PRIV) | TTE_SZ_16M | TTE_WR;
 #endif
@@ -1404,7 +1516,7 @@ ctx_flush(int cnum)
 	int i;
 
 	/* We gotta steal this context */
-	for (i = TLB_NRESERVED; i < NTLB; i++) {
+	for (i = tlb_nreserved; i < NTLB; i++) {
 		if (tlb_info[i].ti_ctx == cnum) {
 			/* Can't steal ctx if it has a locked entry. */
 			if (TLB_LOCKED(i)) {
@@ -1419,11 +1531,11 @@ ctx_flush(int cnum)
 				return (1);
 			}
 #ifdef DIAGNOSTIC
-			if (i < TLB_NRESERVED)
+			if (i < tlb_nreserved)
 				panic("TLB entry %d not locked", i);
 #endif
 			/* Invalidate particular TLB entry regardless of locked status */
-			asm volatile("tlbwe %0,%1,0" : :"r"(0),"r"(i));
+			__asm volatile("tlbwe %0,%1,0" : :"r"(0),"r"(i));
 			tlb_info[i].ti_flags = 0;
 		}
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.135 2005/12/11 12:19:36 christos Exp $	   */
+/*	$NetBSD: pmap.c,v 1.139 2006/10/02 02:59:38 chs Exp $	   */
 /*
  * Copyright (c) 1994, 1998, 1999, 2003 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.135 2005/12/11 12:19:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.139 2006/10/02 02:59:38 chs Exp $");
 
 #include "opt_ddb.h"
 #include "opt_cputype.h"
@@ -201,6 +201,11 @@ calc_kvmsize(vsize_t usrptsize)
 {
 	vsize_t kvmsize, bufsz;
 
+	/*
+	 * Compute the number of pages kmem_map will have.
+	 */
+	kmeminit_nkmempages();
+
 	/* All physical memory */
 	kvmsize = avail_end;
 	/* User Page table area. This may be large */
@@ -208,8 +213,7 @@ calc_kvmsize(vsize_t usrptsize)
 	/* Kernel stacks per process */
 	kvmsize += (USPACE * maxproc);
 	/* kernel malloc arena */
-	kvmsize += (NKMEMPAGES_MAX_DEFAULT * PAGE_SIZE +
-	    NKMEMPAGES_MAX_DEFAULT * sizeof(struct kmemusage));
+	kvmsize += nkmempages * PAGE_SIZE;
 	/* IO device register space */
 	kvmsize += (IOSPSZ * VAX_NBPG);
 	/* Pager allocations */
@@ -345,7 +349,7 @@ pmap_bootstrap()
 
 	/* Init SCB and set up stray vectors. */
 	avail_start = scb_init(avail_start);
-	bcopy((caddr_t)proc0paddr + REDZONEADDR, 0, sizeof(struct rpb));
+	*(struct rpb *) 0 = *(struct rpb *) ((caddr_t)proc0paddr + REDZONEADDR);
 
 	if (dep_call->cpu_steal_pages)
 		(*dep_call->cpu_steal_pages)();
@@ -1201,7 +1205,7 @@ pmap_map(virtuell, pstart, pend, prot)
 	pstart=(uint)pstart &0x7fffffff;
 	pend=(uint)pend &0x7fffffff;
 	virtuell=(uint)virtuell &0x7fffffff;
-	(uint)pentry= (((uint)(virtuell)>>VAX_PGSHIFT)*4)+(uint)Sysmap;
+	pentry = (int *)((((uint)(virtuell)>>VAX_PGSHIFT)*4)+(uint)Sysmap);
 	for(count=pstart;count<pend;count+=VAX_NBPG){
 		*pentry++ = (count>>VAX_PGSHIFT)|PG_V|
 		    (prot & VM_PROT_WRITE ? PG_KW : PG_KR);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ess.c,v 1.69 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: ess.c,v 1.73 2006/11/16 01:33:00 christos Exp $	*/
 
 /*
  * Copyright 1997
@@ -66,7 +66,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ess.c,v 1.69 2005/12/11 12:22:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ess.c,v 1.73 2006/11/16 01:33:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -240,6 +240,7 @@ const struct audio_hw_if ess_1788_hw_if = {
 	ess_audio1_trigger_output,
 	ess_audio1_trigger_input,
 	NULL,
+	NULL,
 };
 
 const struct audio_hw_if ess_1888_hw_if = {
@@ -269,6 +270,7 @@ const struct audio_hw_if ess_1888_hw_if = {
 	ess_1888_get_props,
 	ess_audio2_trigger_output,
 	ess_audio1_trigger_input,
+	NULL,
 	NULL,
 };
 
@@ -1633,7 +1635,8 @@ ess_audio2_poll(void *addr)
 }
 
 int
-ess_round_blocksize(void *addr, int blk, int mode, const audio_params_t *param)
+ess_round_blocksize(void *addr, int blk, int mode,
+    const audio_params_t *param)
 {
 
 	return blk & -8;	/* round for max DMA size */
@@ -2544,8 +2547,9 @@ ess_read_x_reg(struct ess_softc *sc, u_char reg)
 
 	if ((error = ess_wdsp(sc, 0xC0)) == 0)
 		error = ess_wdsp(sc, reg);
-	if (error)
+	if (error) {
 		DPRINTF(("Error reading extended register 0x%02x\n", reg));
+	}
 /* REVISIT: what if an error is returned above? */
 	val = ess_rdsp(sc);
 	DPRINTFN(2,("ess_read_x_reg: %02x=%02x\n", reg, val));
@@ -2555,17 +2559,19 @@ ess_read_x_reg(struct ess_softc *sc, u_char reg)
 void
 ess_clear_xreg_bits(struct ess_softc *sc, u_char reg, u_char mask)
 {
-	if (ess_write_x_reg(sc, reg, ess_read_x_reg(sc, reg) & ~mask) == -1)
+	if (ess_write_x_reg(sc, reg, ess_read_x_reg(sc, reg) & ~mask) == -1) {
 		DPRINTF(("Error clearing bits in extended register 0x%02x\n",
 			 reg));
+	}
 }
 
 void
 ess_set_xreg_bits(struct ess_softc *sc, u_char reg, u_char mask)
 {
-	if (ess_write_x_reg(sc, reg, ess_read_x_reg(sc, reg) | mask) == -1)
+	if (ess_write_x_reg(sc, reg, ess_read_x_reg(sc, reg) | mask) == -1) {
 		DPRINTF(("Error setting bits in extended register 0x%02x\n",
 			 reg));
+	}
 }
 
 

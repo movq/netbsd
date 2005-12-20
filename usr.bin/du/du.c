@@ -1,4 +1,4 @@
-/*	$NetBSD: du.c,v 1.26 2005/02/17 17:40:59 xtraeme Exp $	*/
+/*	$NetBSD: du.c,v 1.31 2006/09/24 07:19:57 wiz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)du.c	8.5 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: du.c,v 1.26 2005/02/17 17:40:59 xtraeme Exp $");
+__RCSID("$NetBSD: du.c,v 1.31 2006/09/24 07:19:57 wiz Exp $");
 #endif
 #endif /* not lint */
 
@@ -74,24 +74,25 @@ main(int argc, char *argv[])
 	FTSENT *p;
 	int64_t totalblocks;
 	int ftsoptions, listdirs, listfiles;
-	int Hflag, Lflag, Pflag, aflag, ch, cflag, gkmflag, nflag, rval, sflag;
+	int depth;
+	int Hflag, Lflag, aflag, ch, cflag, dflag, gkmflag, nflag, rval, sflag;
 	const char *noargv[2];
 
-	Hflag = Lflag = Pflag = aflag = cflag = gkmflag = nflag = sflag = 0;
+	Hflag = Lflag = aflag = cflag = dflag = gkmflag = nflag = sflag = 0;
 	totalblocks = 0;
 	ftsoptions = FTS_PHYSICAL;
-	while ((ch = getopt(argc, argv, "HLPacghkmnrsx")) != -1)
+	depth = INT_MAX;
+	while ((ch = getopt(argc, argv, "HLPacd:ghkmnrsx")) != -1)
 		switch (ch) {
 		case 'H':
 			Hflag = 1;
-			Lflag = Pflag = 0;
+			Lflag = 0;
 			break;
 		case 'L':
 			Lflag = 1;
-			Hflag = Pflag = 0;
+			Hflag = 0;
 			break;
 		case 'P':
-			Pflag = 1;
 			Hflag = Lflag = 0;
 			break;
 		case 'a':
@@ -99,6 +100,15 @@ main(int argc, char *argv[])
 			break;
 		case 'c':
 			cflag = 1;
+			break;
+		case 'd':
+			dflag = 1;
+			depth = atoi(optarg);
+			if (depth < 0 || depth > SHRT_MAX) {
+				warnx("invalid argument to option d: %s", 
+					optarg);
+				usage();
+			}
 			break;
 		case 'g':
 			blocksize = 1024 * 1024 * 1024;
@@ -153,12 +163,14 @@ main(int argc, char *argv[])
 	}
 
 	if (aflag) {
-		if (sflag)
+		if (sflag || dflag)
 			usage();
 		listdirs = listfiles = 1;
-	} else if (sflag)
-		listdirs = listfiles = 0;
-	else {
+	} else if (sflag) {
+		if (dflag)
+			usage();
+		listdirs = listfiles = depth = 0;
+	} else {
 		listfiles = 0;
 		listdirs = 1;
 	}
@@ -166,7 +178,7 @@ main(int argc, char *argv[])
 	if (!*argv) {
 		noargv[0] = ".";
 		noargv[1] = NULL;
-		(const char *)argv = noargv;
+		argv = __UNCONST(noargv);
 	}
 
 	if (!gkmflag)
@@ -196,6 +208,12 @@ main(int argc, char *argv[])
 		case FTS_DP:
 			p->fts_parent->fts_number += 
 			    p->fts_number += p->fts_statp->st_blocks;
+
+			if (p->fts_level > depth) {
+				fts_set(fts, p, FTS_SKIP);
+				continue;
+			}
+
 			if (cflag)
 				totalblocks += p->fts_statp->st_blocks;
 			/*
@@ -333,6 +351,6 @@ usage(void)
 {
 
 	(void)fprintf(stderr,
-		"usage: du [-H | -L | -P] [-a | -s] [-cghkmrx] [file ...]\n");
+		"usage: du [-H | -L | -P] [-a | -d depth | -s] [-cghkmnrx] [file ...]\n");
 	exit(1);
 }

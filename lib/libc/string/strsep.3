@@ -29,13 +29,14 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)strsep.3	8.1 (Berkeley) 6/9/93
-.\"	$NetBSD: strsep.3,v 1.16 2004/04/13 23:03:22 wiz Exp $
+.\"	$NetBSD: strsep.3,v 1.19 2006/10/16 08:48:45 wiz Exp $
 .\"
-.Dd August 11, 2002
+.Dd August 12, 2006
 .Dt STRSEP 3
 .Os
 .Sh NAME
-.Nm strsep
+.Nm strsep ,
+.Nm stresep
 .Nd separate strings
 .Sh LIBRARY
 .Lb libc
@@ -43,10 +44,12 @@
 .In string.h
 .Ft char *
 .Fn strsep "char **stringp" "const char *delim"
+.Ft char *
+.Fn stresep "char **stringp" "const char *delim" "int escape"
 .Sh DESCRIPTION
 The
 .Fn strsep
-function locates, in the null-terminated string referenced by
+function locates, in the nul-terminated string referenced by
 .Fa *stringp ,
 the first occurrence of any character in the string
 .Fa delim
@@ -79,6 +82,10 @@ is initially
 .Fn strsep
 returns
 .Dv NULL .
+The
+.Fn stresep
+function also takes an escape character that allows quoting the delimiter
+character so that it can be part of the source string.
 .Sh EXAMPLES
 The following uses
 .Fn strsep
@@ -87,7 +94,7 @@ argument vector:
 .Bd -literal -offset indent
 char **ap, *argv[10], *inputstring;
 
-for (ap = argv; ap < \*[Am]argv[9] \*[Am]\*[Am]
+for (ap = argv; ap \*[Lt] \*[Am]argv[9] \*[Am]\*[Am]
     (*ap = strsep(\*[Am]inputstring, " \et")) != NULL;) {
 	if (**ap != '\e0')
 		ap++;

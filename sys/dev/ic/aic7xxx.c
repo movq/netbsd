@@ -1,4 +1,4 @@
-/*	$NetBSD: aic7xxx.c,v 1.117 2005/11/28 21:03:19 bouyer Exp $	*/
+/*	$NetBSD: aic7xxx.c,v 1.123 2006/11/16 01:32:50 christos Exp $	*/
 
 /*
  * Core routines and tables shareable across OS platforms.
@@ -39,7 +39,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  *
- * $Id: aic7xxx.c,v 1.117 2005/11/28 21:03:19 bouyer Exp $
+ * $Id: aic7xxx.c,v 1.123 2006/11/16 01:32:50 christos Exp $
  *
  * //depot/aic7xxx/aic7xxx/aic7xxx.c#112 $
  *
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic7xxx.c,v 1.117 2005/11/28 21:03:19 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic7xxx.c,v 1.123 2006/11/16 01:32:50 christos Exp $");
 
 #include <dev/ic/aic7xxx_osm.h>
 #include <dev/ic/aic7xxx_inline.h>
@@ -82,7 +82,7 @@ const char *ahc_chip_names[] =
  * Hardware error codes.
  */
 struct ahc_hard_error_entry {
-        uint8_t errno;
+	uint8_t errno;
 	const char *errmesg;
 };
 
@@ -801,7 +801,7 @@ ahc_handle_seqint(struct ahc_softc *ahc, u_int intstat)
 							  /*init reset*/TRUE);
 				}
 			} else {
-				ahc_inb(ahc, SCSIDATL);
+				(void)ahc_inb(ahc, SCSIDATL);
 			}
 		}
 		break;
@@ -829,7 +829,7 @@ ahc_handle_seqint(struct ahc_softc *ahc, u_int intstat)
 		printf("data overrun detected %s."
 		       "  Tag == 0x%x.\n",
 		       ahc_phase_table[i].phasemsg,
-  		       scb->hscb->tag);
+		       scb->hscb->tag);
 		ahc_print_path(ahc, scb);
 		printf("%s seen Data Phase.  Length = %ld.  NumSGs = %d.\n",
 		       ahc_inb(ahc, SEQ_FLAGS) & DPHASE ? "Have" : "Haven't",
@@ -1888,8 +1888,8 @@ ahc_update_neg_request(struct ahc_softc *ahc, struct ahc_devinfo *devinfo,
  */
 void
 ahc_set_syncrate(struct ahc_softc *ahc, struct ahc_devinfo *devinfo,
-		 struct ahc_syncrate *syncrate, u_int period,
-		 u_int offset, u_int ppr_options, u_int type, int paused)
+    struct ahc_syncrate *syncrate, u_int period,
+    u_int offset, u_int ppr_options, u_int type, int paused)
 {
 	struct	ahc_initiator_tinfo *tinfo;
 	struct	ahc_tmode_tstate *tstate;
@@ -2015,7 +2015,7 @@ ahc_set_syncrate(struct ahc_softc *ahc, struct ahc_devinfo *devinfo,
  */
 void
 ahc_set_width(struct ahc_softc *ahc, struct ahc_devinfo *devinfo,
-	      u_int width, u_int type, int paused)
+    u_int width, u_int type, int paused)
 {
 	struct	ahc_initiator_tinfo *tinfo;
 	struct	ahc_tmode_tstate *tstate;
@@ -2799,7 +2799,7 @@ reswitch:
 		} else {
 			/* Ack the byte */
 			ahc_outb(ahc, CLRSINT1, CLRREQINIT);
-			ahc_inb(ahc, SCSIDATL);
+			(void)ahc_inb(ahc, SCSIDATL);
 		}
 		break;
 	}
@@ -2835,7 +2835,7 @@ reswitch:
 			ahc_outb(ahc, SCSISIGO, P_MESGOUT | BSYO);
 			ahc->msgin_index = 0;
 			/* Dummy read to REQ for first byte */
-			ahc_inb(ahc, SCSIDATL);
+			(void)ahc_inb(ahc, SCSIDATL);
 			ahc_outb(ahc, SXFRCTL0,
 				 ahc_inb(ahc, SXFRCTL0) | SPIOEN);
 			break;
@@ -3557,7 +3557,8 @@ ahc_handle_msg_reject(struct ahc_softc *ahc, struct ahc_devinfo *devinfo)
  * Process an ingnore wide residue message.
  */
 static void
-ahc_handle_ign_wide_residue(struct ahc_softc *ahc, struct ahc_devinfo *devinfo)
+ahc_handle_ign_wide_residue(struct ahc_softc *ahc,
+    struct ahc_devinfo *devinfo)
 {
 	u_int scb_index;
 	struct scb *scb;
@@ -4634,10 +4635,17 @@ ahc_init(struct ahc_softc *ahc)
 
 	/* Grab the disconnection disable table and invert it for our needs */
 	if ((ahc->flags & AHC_USEDEFAULTS) != 0) {
-		printf("%s: Host Adapter Bios disabled.  Using default SCSI "
-			"device parameters\n", ahc_name(ahc));
+		printf("%s: Host Adapter BIOS disabled. Using default SCSI "
+			"host and target device parameters\n", ahc_name(ahc));
 		ahc->flags |= AHC_EXTENDED_TRANS_A|AHC_EXTENDED_TRANS_B|
 			      AHC_TERM_ENB_A|AHC_TERM_ENB_B;
+		discenable = ALL_TARGETS_MASK;
+		if ((ahc->features & AHC_ULTRA) != 0)
+			ultraenb = ALL_TARGETS_MASK;
+	} else if ((ahc->flags & AHC_USETARGETDEFAULTS) != 0) {
+		printf("%s: Host Adapter has no SEEPROM. Using default SCSI"
+		    " target parameters\n", ahc_name(ahc));
+		ahc->flags |= AHC_EXTENDED_TRANS_A|AHC_EXTENDED_TRANS_B;
 		discenable = ALL_TARGETS_MASK;
 		if ((ahc->features & AHC_ULTRA) != 0)
 			ultraenb = ALL_TARGETS_MASK;
@@ -4671,7 +4679,7 @@ ahc_init(struct ahc_softc *ahc)
 					    target_id, &tstate);
 		/* Default to async narrow across the board */
 		memset(tinfo, 0, sizeof(*tinfo));
-		if (ahc->flags & AHC_USEDEFAULTS) {
+		if (ahc->flags & (AHC_USEDEFAULTS | AHC_USETARGETDEFAULTS)) {
 			if ((ahc->features & AHC_WIDE) != 0)
 				tinfo->user.width = MSG_EXT_WDTR_BUS_16_BIT;
 
@@ -4842,7 +4850,7 @@ ahc_init(struct ahc_softc *ahc)
 
 	/*
 	 * Setup the allowed SCSI Sequences based on operational mode.
-	 * If we are a target, we'll enalbe select in operations once
+	 * If we are a target, we'll enable select in operations once
 	 * we've had a lun enabled.
 	 */
 	scsiseq_template = ENSELO|ENAUTOATNO|ENAUTOATNP;
@@ -5174,7 +5182,7 @@ ahc_busy_tcl(struct ahc_softc *ahc, u_int tcl, u_int scbid)
 /************************** SCB and SCB queue management **********************/
 int
 ahc_match_scb(struct ahc_softc *ahc, struct scb *scb, int target,
-	      char channel, int lun, u_int tag, role_t role)
+    char channel, int lun, u_int tag, role_t role)
 {
 	int targ = SCB_GET_TARGET(ahc, scb);
 	char chan = SCB_GET_CHANNEL(ahc, scb);
@@ -5490,9 +5498,9 @@ ahc_search_qinfifo(struct ahc_softc *ahc, int target, char channel,
 }
 
 int
-ahc_search_untagged_queues(struct ahc_softc *ahc, struct scsipi_xfer *xs, /*ahc_io_ctx_t ctx,*/
-			   int target, char channel, int lun, uint32_t status,
-			   ahc_search_action action)
+ahc_search_untagged_queues(struct ahc_softc *ahc,
+    struct scsipi_xfer *xs, int target, char channel, int lun,
+    uint32_t status, ahc_search_action action)
 {
 	struct	scb *scb;
 	int	maxtarget;
@@ -6529,8 +6537,8 @@ ahc_download_instr(struct ahc_softc *ahc, u_int instrptr, uint8_t *dconsts)
 
 int
 ahc_print_register(ahc_reg_parse_entry_t *table, u_int num_entries,
-		   const char *name, u_int address, u_int value,
-		   u_int *cur_column, u_int wrap_point)
+    const char *name, u_int address, u_int value,
+    u_int *cur_column, u_int wrap_point)
 {
 	int	printed;
 	u_int	printed_mask;
@@ -7395,19 +7403,19 @@ ahc_createdmamem(tag, size, flags, mapp, vaddr, baddr, seg, nseg, myname, what)
 
 	if ((error = bus_dmamap_create(tag, size, 1, size, 0,
 				       BUS_DMA_WAITOK | flags, mapp)) != 0) {
-                printf("%s: failed to create DMA map for %s, error = %d\n",
+		printf("%s: failed to create DMA map for %s, error = %d\n",
 			myname, what, error);
 		goto out;
-        }
+	}
 	level++;
 
 
 	if ((error = bus_dmamap_load(tag, *mapp, *vaddr, size, NULL,
 				     BUS_DMA_WAITOK)) != 0) {
-                printf("%s: failed to load DMA map for %s, error = %d\n",
+		printf("%s: failed to load DMA map for %s, error = %d\n",
 			myname, what, error);
 		goto out;
-        }
+	}
 
 	*baddr = (*mapp)->dm_segs[0].ds_addr;
 

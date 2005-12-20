@@ -1,4 +1,4 @@
-/*	$NetBSD: af_inet.c,v 1.1 2005/03/20 02:43:50 thorpej Exp $	*/
+/*	$NetBSD: af_inet.c,v 1.5 2006/11/13 05:13:39 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: af_inet.c,v 1.1 2005/03/20 02:43:50 thorpej Exp $");
+__RCSID("$NetBSD: af_inet.c,v 1.5 2006/11/13 05:13:39 dyoung Exp $");
 #endif /* not lint */
 
 #include <sys/param.h> 
@@ -51,9 +51,12 @@ __RCSID("$NetBSD: af_inet.c,v 1.1 2005/03/20 02:43:50 thorpej Exp $");
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <util.h>
 
 #include "extern.h"
 #include "af_inet.h"
+
+static void in_preference(const char *, const struct sockaddr *);
 
 struct in_aliasreq in_addreq;
 
@@ -83,12 +86,12 @@ in_alias(struct ifreq *creq)
 	/* Get the non-alias address for this interface. */
 	getsock(AF_INET);
 	if (s < 0) {
-		if (errno == EPROTONOSUPPORT)
+		if (errno == EAFNOSUPPORT)
 			return;
 		err(EXIT_FAILURE, "socket");
 	}
 	(void) memset(&ifr, 0, sizeof(ifr));
-	(void) strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
+	estrlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
 	if (ioctl(s, SIOCGIFADDR, &ifr) == -1) {
 		if (errno == EADDRNOTAVAIL || errno == EAFNOSUPPORT) {
 			return;
@@ -100,7 +103,7 @@ in_alias(struct ifreq *creq)
 		   sizeof(creq->ifr_addr)) == 0)
 		alias = 0;
 	(void) memset(&in_addreq, 0, sizeof(in_addreq));
-	(void) strncpy(in_addreq.ifra_name, name, sizeof(in_addreq.ifra_name));
+	estrlcpy(in_addreq.ifra_name, name, sizeof(in_addreq.ifra_name));
 	memcpy(&in_addreq.ifra_addr, &creq->ifr_addr,
 	    sizeof(in_addreq.ifra_addr));
 	if (ioctl(s, SIOCGIFALIAS, &in_addreq) == -1) {
@@ -125,7 +128,41 @@ in_alias(struct ifreq *creq)
 		iasin = &in_addreq.ifra_broadaddr;
 		printf(" broadcast %s", inet_ntoa(iasin->sin_addr));
 	}
-	printf("\n");
+}
+
+static uint16_t
+in_get_preference(const char *ifname, const struct sockaddr *sa)
+{
+	struct if_addrprefreq ifap;
+
+	getsock(AF_INET);
+	if (s < 0) {
+		if (errno == EPROTONOSUPPORT)
+			return 0;
+		err(EXIT_FAILURE, "socket");
+	}
+	(void)memset(&ifap, 0, sizeof(ifap));
+	(void)strncpy(ifap.ifap_name, name, sizeof(ifap.ifap_name));
+	(void)memcpy(&ifap.ifap_addr, sa,
+	    MIN(sizeof(ifap.ifap_addr), sa->sa_len));
+	if (ioctl(s, SIOCGIFADDRPREF, &ifap) == -1) {
+		if (errno == EADDRNOTAVAIL || errno == EAFNOSUPPORT)
+			return 0;
+		warn("SIOCGIFADDRPREF");
+	}
+	return ifap.ifap_preference;
+}
+
+static void
+in_preference(const char *ifname, const struct sockaddr *sa)
+{
+	uint16_t preference;
+
+	if (lflag)
+		return;
+
+	preference = in_get_preference(ifname, sa);
+	printf(" preference %" PRIu16, preference);
 }
 
 void
@@ -133,9 +170,23 @@ in_status(int force)
 {
 	struct ifaddrs *ifap, *ifa;
 	struct ifreq isifr;
+	int printprefs = 0;
 
 	if (getifaddrs(&ifap) != 0)
 		err(EXIT_FAILURE, "getifaddrs");
+	/* Print address preference numbers if any address has a non-zero
+	 * preference assigned.
+	 */
+	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+		if (strcmp(name, ifa->ifa_name) != 0)
+			continue;
+		if (ifa->ifa_addr->sa_family != AF_INET)
+			continue;
+		if (in_get_preference(ifa->ifa_name, ifa->ifa_addr) != 0) {
+			printprefs = 1;
+			break;
+		}
+	}
 	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
 		if (strcmp(name, ifa->ifa_name) != 0)
 			continue;
@@ -145,9 +196,20 @@ in_status(int force)
 			continue;
 
 		memset(&isifr, 0, sizeof(isifr));
-		strncpy(isifr.ifr_name, ifa->ifa_name, sizeof(isifr.ifr_name));
+		estrlcpy(isifr.ifr_name, ifa->ifa_name, sizeof(isifr.ifr_name));
 		memcpy(&isifr.ifr_addr, ifa->ifa_addr, ifa->ifa_addr->sa_len);
 		in_alias(&isifr);
+		if (printprefs)
+			in_preference(ifa->ifa_name, ifa->ifa_addr);
+		printf("\n");
+	}
+	if (ifa != NULL) {
+		for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+			if (strcmp(name, ifa->ifa_name) != 0)
+				continue;
+			if (ifa->ifa_addr->sa_family != AF_INET)
+				continue;
+		}
 	}
 	freeifaddrs(ifap);
 }

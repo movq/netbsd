@@ -1,4 +1,4 @@
-/*	$NetBSD: xinstall.c,v 1.93 2005/10/01 20:25:45 christos Exp $	*/
+/*	$NetBSD: xinstall.c,v 1.100 2006/10/30 20:22:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -46,7 +46,7 @@ __COPYRIGHT("@(#) Copyright (c) 1987, 1993\n\
 #if 0
 static char sccsid[] = "@(#)xinstall.c	8.1 (Berkeley) 7/21/93";
 #else
-__RCSID("$NetBSD: xinstall.c,v 1.93 2005/10/01 20:25:45 christos Exp $");
+__RCSID("$NetBSD: xinstall.c,v 1.100 2006/10/30 20:22:54 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -71,7 +71,7 @@ __RCSID("$NetBSD: xinstall.c,v 1.93 2005/10/01 20:25:45 christos Exp $");
 #include <vis.h>
 
 #include <md5.h>
-#include <crypto/rmd160.h>
+#include <rmd160.h>
 #include <sha1.h>
 
 #include "pathnames.h"
@@ -310,6 +310,8 @@ main(int argc, char *argv[])
 	if (fflags && !dounpriv) {
 		if (string_to_flags(&fflags, &fileflags, NULL))
 			errx(1, "%s: invalid flag", fflags);
+		/* restore fflags since string_to_flags() changed it */
+		fflags = flags_to_string(fileflags, "-");
 		iflags |= SETFLAGS;
 	}
 #endif
@@ -334,8 +336,11 @@ main(int argc, char *argv[])
 	}
 
 	/* can't do file1 file2 directory/file */
-	if (argc != 2)
-		usage();
+	if (argc != 2) {
+		errx(EXIT_FAILURE, "the last argument (%s) "
+		    "must name an existing directory", argv[argc - 1]);
+		/* NOTREACHED */
+	}
 
 	if (!no_target) {
 		/* makelink() handles checks for links */
@@ -405,9 +410,11 @@ do_link(char *from_name, char *to_name)
 		ret = link(from_name, tmpl);
 		if (ret == 0) {
 			ret = rename(tmpl, to_name);
-			if (ret < 0)
-				/* remove temporary link before exiting */
-				(void)unlink(tmpl);
+			/* If rename has posix semantics, then the temporary
+			 * file may still exist when from_name and to_name point
+			 * to the smae file, so unlink it unconditionally.
+			 */
+			(void)unlink(tmpl);
 		}
 		return (ret);
 	} else
@@ -751,8 +758,8 @@ copy(int from_fd, char *from_name, int to_fd, char *to_name, off_t size)
 {
 	ssize_t	nr, nw;
 	int	serrno;
-	char	*p;
-	char	buf[MAXBSIZE];
+	u_char	*p;
+	u_char	buf[MAXBSIZE];
 	MD5_CTX		ctxMD5;
 	RMD160_CTX	ctxRMD160;
 	SHA1_CTX	ctxSHA1;
@@ -1001,6 +1008,9 @@ install_dir(char *path, u_int flags)
 					err(1, "%s: mkdir", path);
                                 }
                         }
+			else if (!S_ISDIR(sb.st_mode)) {
+				errx(1, "%s exists but is not a directory", path);
+			}
                         if (!(*p = ch))
 				break;
                 }
@@ -1045,6 +1055,7 @@ metadata_log(const char *path, const char *type, struct timeval *tv,
 	metalog_lock.l_type = F_WRLCK;
 	if (fcntl(fileno(metafp), F_SETLKW, &metalog_lock) == -1) {
 		warn("can't lock %s", metafile);
+		free(buf);
 		return;
 	}
 

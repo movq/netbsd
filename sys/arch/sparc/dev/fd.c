@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.121 2005/12/11 12:19:05 christos Exp $	*/
+/*	$NetBSD: fd.c,v 1.126 2006/04/14 13:09:05 blymn Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -108,7 +108,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.121 2005/12/11 12:19:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.126 2006/04/14 13:09:05 blymn Exp $");
 
 #include "opt_ddb.h"
 #include "opt_md.h"
@@ -873,7 +873,7 @@ fdstrategy(struct buf *bp)
 		fdstart(fd);
 #ifdef DIAGNOSTIC
 	else {
-		struct fdc_softc *fdc = (void *)fd->sc_dv.dv_parent;
+		struct fdc_softc *fdc = (void *)device_parent(&fd->sc_dv);
 		if (fdc->sc_state == DEVIDLE) {
 			printf("fdstrategy: controller inactive\n");
 			fdcstart(fdc);
@@ -893,7 +893,7 @@ done:
 void
 fdstart(struct fd_softc *fd)
 {
-	struct fdc_softc *fdc = (void *)fd->sc_dv.dv_parent;
+	struct fdc_softc *fdc = (void *)device_parent(&fd->sc_dv);
 	int active = fdc->sc_drives.tqh_first != 0;
 
 	/* Link into controller queue. */
@@ -908,7 +908,7 @@ fdstart(struct fd_softc *fd)
 void
 fdfinish(struct fd_softc *fd, struct buf *bp)
 {
-	struct fdc_softc *fdc = (void *)fd->sc_dv.dv_parent;
+	struct fdc_softc *fdc = (void *)device_parent(&fd->sc_dv);
 
 	/*
 	 * Move this drive to the end of the queue to give others a `fair'
@@ -997,7 +997,7 @@ fd_motor_off(void *arg)
 
 	s = splbio();
 	fd->sc_flags &= ~(FD_MOTOR | FD_MOTOR_WAIT);
-	fd_set_motor((struct fdc_softc *)fd->sc_dv.dv_parent);
+	fd_set_motor((struct fdc_softc *)device_parent(&fd->sc_dv));
 	splx(s);
 }
 
@@ -1005,7 +1005,7 @@ void
 fd_motor_on(void *arg)
 {
 	struct fd_softc *fd = arg;
-	struct fdc_softc *fdc = (void *)fd->sc_dv.dv_parent;
+	struct fdc_softc *fdc = (void *)device_parent(&fd->sc_dv);
 	int s;
 
 	s = splbio();
@@ -1490,7 +1490,7 @@ loop:
 		fdc->sc_state = SEEKWAIT;
 		fdc->sc_nstat = 0;
 
-		fd->sc_dk.dk_seek++;
+		iostat_seek(fd->sc_dk.dk_stats);
 
 		disk_busy(&fd->sc_dk);
 		callout_reset(&fdc->sc_timo_ch, 4 * hz, fdctimeout, fdc);
@@ -1923,7 +1923,7 @@ fdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 		return (ENXIO);
 
 	fd = fd_cd.cd_devs[FDUNIT(dev)];
-	fdc = (struct fdc_softc *)fd->sc_dv.dv_parent;
+	fdc = (struct fdc_softc *)device_parent(&fd->sc_dv);
 
 	switch (cmd) {
 	case DIOCGDINFO:
@@ -2138,20 +2138,17 @@ fdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 int
 fdformat(dev_t dev, struct ne7_fd_formb *finfo, struct proc *p)
 {
-	int rv = 0, s;
+	int rv = 0;
 	struct fd_softc *fd = fd_cd.cd_devs[FDUNIT(dev)];
 	struct fd_type *type = fd->sc_type;
 	struct buf *bp;
 
 	/* set up a buffer header for fdstrategy() */
-	s = splbio();
-	bp = (struct buf *)pool_get(&bufpool, PR_NOWAIT);
-	splx(s);
+	bp = getiobuf_nowait();
 	if (bp == NULL)
 		return (ENOBUFS);
 
-	memset((void *)bp, 0, sizeof(struct buf));
-	BUF_INIT(bp);
+	bp->b_vp = NULL;
 	bp->b_flags = B_BUSY | B_PHYS | B_FORMAT;
 	bp->b_proc = p;
 	bp->b_dev = dev;
@@ -2197,9 +2194,7 @@ fdformat(dev_t dev, struct ne7_fd_formb *finfo, struct proc *p)
 
 	/* ...and wait for it to complete */
 	rv = biowait(bp);
-	s = splbio();
-	pool_put(&bufpool, bp);
-	splx(s);
+	putiobuf(bp);
 	return (rv);
 }
 
@@ -2268,7 +2263,7 @@ fdgetdisklabel(dev_t dev)
 void
 fd_do_eject(struct fd_softc *fd)
 {
-	struct fdc_softc *fdc = (void *)fd->sc_dv.dv_parent;
+	struct fdc_softc *fdc = (void *)device_parent(&fd->sc_dv);
 
 	if (CPU_ISSUN4C) {
 		auxregbisc(AUXIO4C_FDS, AUXIO4C_FEJ);

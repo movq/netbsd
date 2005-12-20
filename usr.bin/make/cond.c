@@ -1,4 +1,4 @@
-/*	$NetBSD: cond.c,v 1.29 2005/08/08 16:42:54 christos Exp $	*/
+/*	$NetBSD: cond.c,v 1.35 2006/10/27 21:00:18 dsl Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -70,14 +70,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: cond.c,v 1.29 2005/08/08 16:42:54 christos Exp $";
+static char rcsid[] = "$NetBSD: cond.c,v 1.35 2006/10/27 21:00:18 dsl Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)cond.c	8.2 (Berkeley) 1/2/94";
 #else
-__RCSID("$NetBSD: cond.c,v 1.29 2005/08/08 16:42:54 christos Exp $");
+__RCSID("$NetBSD: cond.c,v 1.35 2006/10/27 21:00:18 dsl Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -251,7 +251,7 @@ CondGetArg(char **linePtr, char **argPtr, const char *func, Boolean parens)
 	 * than hitting the user with a warning message every time s/he uses
 	 * the word 'make' or 'defined' at the beginning of a symbol...
 	 */
-	*argPtr = cp;
+	*argPtr = NULL;
 	return (0);
     }
 
@@ -275,14 +275,12 @@ CondGetArg(char **linePtr, char **argPtr, const char *func, Boolean parens)
 	     */
 	    char  	*cp2;
 	    int		len;
-	    Boolean	doFree;
+	    void	*freeIt;
 
-	    cp2 = Var_Parse(cp, VAR_CMD, TRUE, &len, &doFree);
-
+	    cp2 = Var_Parse(cp, VAR_CMD, TRUE, &len, &freeIt);
 	    Buf_AddBytes(buf, strlen(cp2), (Byte *)cp2);
-	    if (doFree) {
-		free(cp2);
-	    }
+	    if (freeIt)
+		free(freeIt);
 	    cp += len;
 	} else {
 	    Buf_AddByte(buf, (Byte)*cp);
@@ -384,7 +382,7 @@ CondDoMake(int argLen, char *arg)
     Boolean result;
 
     arg[argLen] = '\0';
-    if (Lst_Find(create, (ClientData)arg, CondStrMatch) == NILLNODE) {
+    if (Lst_Find(create, arg, CondStrMatch) == NILLNODE) {
 	result = FALSE;
     } else {
 	result = TRUE;
@@ -422,6 +420,10 @@ CondDoExists(int argLen, char *arg)
 	result = FALSE;
     }
     arg[argLen] = savec;
+    if (DEBUG(COND)) {
+	fprintf(debug_file, "exists(%s) result is \"%s\"\n",
+	       arg, path ? path : "");
+    }    
     return (result);
 }
 
@@ -540,7 +542,7 @@ CondCvtArg(char *str, double *value)
  *	string.  This is called for the lhs and rhs of string compares.
  *
  * Results:
- *	Sets doFree if needed,
+ *	Sets freeIt if needed,
  *	Sets quoted if string was quoted,
  *	Returns NULL on error,
  *	else returns string - absent any quotes.
@@ -551,8 +553,9 @@ CondCvtArg(char *str, double *value)
  *
  *-----------------------------------------------------------------------
  */
+/* coverity:[+alloc : arg-*2] */
 static char *
-CondGetString(Boolean doEval, Boolean *quoted, Boolean *doFree)
+CondGetString(Boolean doEval, Boolean *quoted, void **freeIt)
 {
     Buffer buf;
     char *cp;
@@ -563,6 +566,7 @@ CondGetString(Boolean doEval, Boolean *quoted, Boolean *doFree)
 
     buf = Buf_Init(0);
     str = NULL;
+    *freeIt = NULL;
     *quoted = qt = *condExpr == '"' ? 1 : 0;
     if (qt)
 	condExpr++;
@@ -596,8 +600,12 @@ CondGetString(Boolean doEval, Boolean *quoted, Boolean *doFree)
 	case '$':
 	    /* if we are in quotes, then an undefined variable is ok */
 	    str = Var_Parse(condExpr, VAR_CMD, (qt ? 0 : doEval),
-			    &len, doFree);
+			    &len, freeIt);
 	    if (str == var_Error) {
+		if (*freeIt) {
+		    free(*freeIt);
+		    *freeIt = NULL;
+		}
 		/*
 		 * Even if !doEval, we still report syntax errors, which
 		 * is what getting var_Error back with !doEval means.
@@ -623,9 +631,10 @@ CondGetString(Boolean doEval, Boolean *quoted, Boolean *doFree)
 	    for (cp = str; *cp; cp++) {
 		Buf_AddByte(buf, (Byte)*cp);
 	    }
-	    if (*doFree)
-		free(str);
-	    *doFree = FALSE;
+	    if (*freeIt) {
+		free(*freeIt);
+		*freeIt = NULL;
+	    }
 	    str = NULL;			/* not finished yet */
 	    condExpr--;			/* don't skip over next char */
 	    break;
@@ -637,7 +646,7 @@ CondGetString(Boolean doEval, Boolean *quoted, Boolean *doFree)
  got_str:
     Buf_AddByte(buf, (Byte)'\0');
     str = (char *)Buf_GetAll(buf, NULL);
-    *doFree = TRUE;
+    *freeIt = str;
  cleanup:
     Buf_Destroy(buf, FALSE);
     return str;
@@ -702,8 +711,8 @@ CondToken(Boolean doEval)
 		char	*lhs;
 		char	*rhs;
 		char	*op;
-		Boolean	lhsFree;
-		Boolean	rhsFree;
+		void	*lhsFree;
+		void	*rhsFree;
 		Boolean lhsQuoted;
 		Boolean rhsQuoted;
 
@@ -717,8 +726,11 @@ CondToken(Boolean doEval)
 		 */
 		t = Err;
 		lhs = CondGetString(doEval, &lhsQuoted, &lhsFree);
-		if (!lhs)
+		if (!lhs) {
+		    if (lhsFree)
+			free(lhsFree);
 		    return Err;
+		}
 		/*
 		 * Skip whitespace to get to the operator
 		 */
@@ -760,8 +772,13 @@ CondToken(Boolean doEval)
 		    goto error;
 		}
 		rhs = CondGetString(doEval, &rhsQuoted, &rhsFree);
-		if (!rhs)
+		if (!rhs) {
+		    if (lhsFree)
+			free(lhsFree);
+		    if (rhsFree)
+			free(rhsFree);
 		    return Err;
+		}
 do_compare:
 		if (rhsQuoted || lhsQuoted) {
 do_string_compare:
@@ -772,7 +789,7 @@ do_string_compare:
 		    }
 
 		    if (DEBUG(COND)) {
-			printf("lhs = \"%s\", rhs = \"%s\", op = %.2s\n",
+			fprintf(debug_file, "lhs = \"%s\", rhs = \"%s\", op = %.2s\n",
 			       lhs, rhs, op);
 		    }
 		    /*
@@ -799,7 +816,7 @@ do_string_compare:
 			goto do_string_compare;
 
 		    if (DEBUG(COND)) {
-			printf("left = %f, right = %f, op = %.2s\n", left,
+			fprintf(debug_file, "left = %f, right = %f, op = %.2s\n", left,
 			       right, op);
 		    }
 		    switch(op[0]) {
@@ -837,16 +854,16 @@ do_string_compare:
 		}
 error:
 		if (lhsFree)
-		    free(lhs);
+		    free(lhsFree);
 		if (rhsFree)
-		    free(rhs);
+		    free(rhsFree);
 		break;
 	    }
 	    default: {
 		Boolean (*evalProc)(int, char *);
 		Boolean invert = FALSE;
-		char	*arg;
-		int	arglen;
+		char	*arg = NULL;
+		int	arglen = 0;
 
 		if (istoken(condExpr, "defined", 7)) {
 		    /*
@@ -893,7 +910,7 @@ error:
 		     * True if the resulting string is empty.
 		     */
 		    int	    length;
-		    Boolean doFree;
+		    void    *freeIt;
 		    char    *val;
 
 		    condExpr += 5;
@@ -905,7 +922,7 @@ error:
 
 		    if (condExpr[arglen] != '\0') {
 			val = Var_Parse(&condExpr[arglen - 1], VAR_CMD,
-					FALSE, &length, &doFree);
+					FALSE, &length, &freeIt);
 			if (val == var_Error) {
 			    t = Err;
 			} else {
@@ -918,8 +935,8 @@ error:
 				continue;
 			    t = (*p == '\0') ? True : False;
 			}
-			if (doFree) {
-			    free(val);
+			if (freeIt) {
+			    free(freeIt);
 			}
 			/*
 			 * Advance condExpr to beyond the closing ). Note that
@@ -979,7 +996,8 @@ error:
 		t = (!doEval || (* evalProc) (arglen, arg) ?
 		     (invert ? False : True) :
 		     (invert ? True : False));
-		free(arg);
+		if (arg)
+		    free(arg);
 		break;
 	    }
 	}
@@ -1342,6 +1360,14 @@ Cond_Eval(char *line)
     }
     if (!isElse) {
 	condTop -= 1;
+	if (condTop < 0) {
+	    /*
+	     * This is the one case where we can definitely proclaim a fatal
+	     * error. If we don't, we're hosed.
+	     */
+	    Parse_Error(PARSE_FATAL, "Too many nested if's. %d max.", MAXIF);
+	    return (COND_INVALID);
+	}
 	finalElse[condTop][skipIfLevel] = FALSE;
     } else if ((skipIfLevel != 0) || condStack[condTop]) {
 	/*
@@ -1355,18 +1381,9 @@ Cond_Eval(char *line)
 	return (COND_SKIP);
     }
 
-    if (condTop < 0) {
-	/*
-	 * This is the one case where we can definitely proclaim a fatal
-	 * error. If we don't, we're hosed.
-	 */
-	Parse_Error(PARSE_FATAL, "Too many nested if's. %d max.", MAXIF);
-	return (COND_INVALID);
-    } else {
-	condStack[condTop] = value;
-	skipLine = !value;
-	return (value ? COND_PARSE : COND_SKIP);
-    }
+    condStack[condTop] = value;
+    skipLine = !value;
+    return (value ? COND_PARSE : COND_SKIP);
 }
 
 
