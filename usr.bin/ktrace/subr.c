@@ -1,4 +1,4 @@
-/*	$NetBSD: subr.c,v 1.13 2005/12/11 19:29:27 christos Exp $	*/
+/*	$NetBSD: subr.c,v 1.15 2006/09/23 22:01:04 manu Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -34,15 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)subr.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: subr.c,v 1.13 2005/12/11 19:29:27 christos Exp $");
+__RCSID("$NetBSD: subr.c,v 1.15 2006/09/23 22:01:04 manu Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
-#include <sys/file.h>
-#include <sys/user.h>
-#include <sys/proc.h>
 #include <sys/time.h>
+#include <sys/uio.h>
 #include <sys/ktrace.h>
 
 #include <stdio.h>
@@ -95,6 +93,9 @@ getpoints(int facs, char *s)
 			break;
 		case 'U':
 			fac = KTRFAC_SAUPCALL;
+			break;
+		case 'S':
+			fac = KTRFAC_MIB;
 			break;
 		case 'v':
 			fac = KTRFAC_EXEC_ENV;

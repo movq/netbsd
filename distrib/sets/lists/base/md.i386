@@ -1,4 +1,4 @@
-# $NetBSD: md.i386,v 1.115 2005/11/12 09:41:28 dsl Exp $
+# $NetBSD: md.i386,v 1.117 2006/04/19 21:53:12 he Exp $
 ./dev/lms0					base-obsolete		obsolete
 ./dev/mms0					base-obsolete		obsolete
 ./dev/pms0					base-obsolete		obsolete
@@ -38,6 +38,7 @@
 ./usr/lkm/exec_linux_elf.o			base-sys-lkm
 ./usr/lkm/exec_pecoff.o				base-sys-lkm
 ./usr/lkm/exec_svr4_elf.o			base-sys-lkm
+./usr/lkm/powernow.o				base-sys-lkm
 ./usr/lkm/wi_pcmcia.o				base-sys-lkm
 ./usr/mdec/biosboot				base-obsolete		obsolete
 ./usr/mdec/biosboot.sym				base-obsolete		obsolete
@@ -84,6 +85,7 @@
 ./usr/sbin/bad144				base-sysutil-bin
 ./usr/sbin/ipwctl				base-sysutil-bin
 ./usr/sbin/zzz					base-sysutil-bin
+./usr/sbin/ndiscvt				base-sysutil-bin
 ./usr/share/pcvt				base-obsolete		obsolete
 ./usr/share/pcvt/fonts				base-obsolete		obsolete
 ./usr/share/pcvt/fonts/vt220h.808		base-obsolete		obsolete

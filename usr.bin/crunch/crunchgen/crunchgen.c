@@ -1,4 +1,4 @@
-/*	$NetBSD: crunchgen.c,v 1.67 2005/02/10 16:03:04 jmc Exp $	*/
+/*	$NetBSD: crunchgen.c,v 1.73 2006/10/18 21:20:44 freza Exp $	*/
 /*
  * Copyright (c) 1994 University of Maryland
  * All Rights Reserved.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: crunchgen.c,v 1.67 2005/02/10 16:03:04 jmc Exp $");
+__RCSID("$NetBSD: crunchgen.c,v 1.73 2006/10/18 21:20:44 freza Exp $");
 #endif
 
 #include <stdlib.h>
@@ -46,6 +46,9 @@ __RCSID("$NetBSD: crunchgen.c,v 1.67 2005/02/10 16:03:04 jmc Exp $");
 #include <stdio.h>
 #include <ctype.h>
 #include <string.h>
+#include <errno.h>
+#include <err.h>
+#include <util.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -135,7 +138,7 @@ main(int argc, char **argv)
 	makeflags = strdup("");
 
     if ((machine = getenv("MACHINE")) == NULL) {
-	struct utsname utsname;
+	static struct utsname utsname;
 
 	if (uname(&utsname) == -1) {
 	    perror("uname");
@@ -160,13 +163,13 @@ main(int argc, char **argv)
 	case 'O':	oneobj = 0; break;
 	case 'o':       useobjs = 1, oneobj = 0; break;
 
-	case 'm':	strcpy(outmkname, optarg); break;
-	case 'c':	strcpy(outcfname, optarg); break;
-	case 'e':	strcpy(execfname, optarg); break;
-	case 'd':       strcpy(dbg, optarg); break;
+	case 'm':	(void)estrlcpy(outmkname, optarg, sizeof(outmkname)); break;
+	case 'c':	(void)estrlcpy(outcfname, optarg, sizeof(outcfname)); break;
+	case 'e':	(void)estrlcpy(execfname, optarg, sizeof(execfname)); break;
+	case 'd':       (void)estrlcpy(dbg, optarg, sizeof(dbg)); break;
 
-	case 'D':	strcpy(topdir, optarg); break;
-	case 'L':	strcpy(libdir, optarg); break;
+	case 'D':	(void)estrlcpy(topdir, optarg, sizeof(topdir)); break;
+	case 'L':	(void)estrlcpy(libdir, optarg, sizeof(libdir)); break;
 	case 'v':	add_string(&vars, optarg); break;
 
 	case '?':
@@ -184,15 +187,15 @@ main(int argc, char **argv)
      * generate filenames
      */
 
-    strcpy(infilename, argv[0]);
+    (void)estrlcpy(infilename, argv[0], sizeof(infilename));
     getcwd(curdir, MAXPATHLEN);
 
     /* confname = `basename infilename .conf` */
 
     if ((p = strrchr(infilename, '/')) != NULL)
-	strcpy(confname, p + 1);
+	(void)estrlcpy(confname, p + 1, sizeof(confname));
     else
-	strcpy(confname, infilename);
+	(void)estrlcpy(confname, infilename, sizeof(confname));
     if ((p = strrchr(confname, '.')) != NULL && !strcmp(p, ".conf"))
 	*p = '\0';
 
@@ -269,7 +272,7 @@ parse_one_file(char *filename)
 
     (void)snprintf(line, sizeof(line), "reading %s", filename);
     status(line);
-    strcpy(curfilename, filename);
+    (void)estrlcpy(curfilename, filename, sizeof(curfilename));
 
     if ((cf = fopen(curfilename, "r")) == NULL) {
 	perror(curfilename);
@@ -346,14 +349,14 @@ add_srcdirs(int argc, char **argv)
 
     for (i = 1; i < argc; i++) {
 	if (argv[i][0] == '/')
-		strcpy(tmppath, argv[i]);
+		(void)estrlcpy(tmppath, argv[i], sizeof(tmppath));
 	else {
 		if (topdir[0] == '\0')
-		    strcpy(tmppath, curdir);
+		    (void)estrlcpy(tmppath, curdir, sizeof(tmppath));
 		else
-		    strcpy(tmppath, topdir);
-		strcat(tmppath, "/");
-		strcat(tmppath, argv[i]);
+		    (void)estrlcpy(tmppath, topdir, sizeof(tmppath));
+		(void)estrlcat(tmppath, "/", sizeof(tmppath));
+		(void)estrlcat(tmppath, argv[i], sizeof(tmppath));
 	}
 	if (is_dir(tmppath))
 	    add_string(&srcdirs, tmppath);
@@ -466,11 +469,11 @@ add_special(int argc, char **argv)
 	} else {
 	    char tmppath[MAXPATHLEN];
 	    if (topdir[0] == '\0')
-	        strcpy(tmppath, curdir);
+	        (void)estrlcpy(tmppath, curdir, sizeof(tmppath));
 	    else
-	        strcpy(tmppath, topdir);
-	    strcat(tmppath, "/");
-	    strcat(tmppath, argv[3]);
+	        (void)estrlcpy(tmppath, topdir, sizeof(tmppath));
+	    (void)estrlcat(tmppath, "/", sizeof(tmppath));
+	    (void)estrlcat(tmppath, argv[3], sizeof(tmppath));
 	    if ((p->srcdir = strdup(tmppath)) == NULL)
 		out_of_memory();
 	}
@@ -487,7 +490,6 @@ add_special(int argc, char **argv)
 
     if (!strcmp(argv[2], "objs")) {
 	oneobj = 0;
-	p->objs = NULL;
 	for (i = 3; i < argc; i++)
 	    add_string(&p->objs, argv[i]);
 	return;
@@ -495,14 +497,12 @@ add_special(int argc, char **argv)
 
     if (!strcmp(argv[2], "objpaths")) {
 	oneobj = 0;
-	p->objpaths = NULL;
 	for (i = 3; i < argc; i++)
 	    add_string(&p->objpaths, argv[i]);
 	return;
     }
 
     if (!strcmp(argv[2], "keepsymbols")) {
-	p->keepsymbols = NULL;
 	for (i = 3; i < argc; i++)
 	    add_string(&p->keepsymbols, argv[i]);
 	return;
@@ -599,11 +599,11 @@ fillin_program(prog_t *p)
 		} else {
 		    char tmppath[MAXPATHLEN];
 		    if (topdir[0] == '\0')
-			strcpy(tmppath, curdir);
+			(void)estrlcpy(tmppath, curdir, sizeof(tmppath));
 		    else
-			strcpy(tmppath, topdir);
-		    strcat(tmppath, "/");
-		    strcat(tmppath, path);
+			(void)estrlcpy(tmppath, topdir, sizeof(tmppath));
+		    (void)estrlcat(tmppath, "/", sizeof(tmppath));
+		    (void)estrlcat(tmppath, path, sizeof(tmppath));
 		    if ((p->srcdir = strdup(tmppath)) == NULL)
 			out_of_memory();
 		}
@@ -1033,7 +1033,7 @@ prog_makefile_rules(FILE *outmk, prog_t *p)
     for (lst = p->keepsymbols; lst != NULL; lst = lst->next)
 	fprintf(outmk, " / %s$$/ { next };", lst->str);
     fprintf(outmk, " / main$$/ { print \"main _crunched_%s_stub\"; next };",
-	    p->name);
+	    p->ident);
     /* gdb thinks these are C++ and ignores everthing after the first $$. */
     fprintf(outmk, " { print $$3 \" \" $$3 \"$$$$from$$$$%s\" }' "
 	    "> %s.cro.syms\n", p->name, p->name);

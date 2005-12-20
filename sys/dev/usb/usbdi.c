@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdi.c,v 1.109 2005/12/11 12:24:01 christos Exp $	*/
+/*	$NetBSD: usbdi.c,v 1.114 2006/11/16 01:33:27 christos Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usbdi.c,v 1.28 1999/11/17 22:33:49 n_hibma Exp $	*/
 
 /*
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usbdi.c,v 1.109 2005/12/11 12:24:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usbdi.c,v 1.114 2006/11/16 01:33:27 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -101,7 +101,7 @@ usbd_finish(void)
 	--usbd_nbuses;
 }
 
-static __inline int
+static inline int
 usbd_xfer_isread(usbd_xfer_handle xfer)
 {
 	if (xfer->rqflags & URQ_REQUEST)
@@ -762,8 +762,7 @@ usb_transfer_complete(usbd_xfer_handle xfer)
 	int sync = xfer->flags & USBD_SYNCHRONOUS;
 	int erred = xfer->status == USBD_CANCELLED ||
 	    xfer->status == USBD_TIMEOUT;
-	int repeat = pipe->repeat;
-	int polling;
+	int repeat, polling;
 
 	SPLUSBCHECK;
 
@@ -783,6 +782,7 @@ usb_transfer_complete(usbd_xfer_handle xfer)
 		return;
 	}
 #endif
+	repeat = pipe->repeat;
 	polling = pipe->device->bus->use_polling;
 	/* XXXX */
 	if (polling)
@@ -964,7 +964,7 @@ usbd_do_request_flags_pipe(usbd_device_handle dev, usbd_pipe_handle pipe,
 	xfer->pipe = pipe;
 	err = usbd_sync_transfer(xfer);
 #if defined(USB_DEBUG) || defined(DIAGNOSTIC)
-	if (xfer->actlen > xfer->length)
+	if (xfer->actlen > xfer->length) {
 		DPRINTF(("usbd_do_request: overrun addr=%d type=0x%02x req=0x"
 			 "%02x val=%d index=%d rlen=%d length=%d actlen=%d\n",
 			 dev->address, xfer->request.bmRequestType,
@@ -972,6 +972,7 @@ usbd_do_request_flags_pipe(usbd_device_handle dev, usbd_pipe_handle pipe,
 			 UGETW(xfer->request.wIndex),
 			 UGETW(xfer->request.wLength),
 			 xfer->length, xfer->actlen));
+	}
 #endif
 	if (actlen != NULL)
 		*actlen = xfer->actlen;
@@ -1019,11 +1020,11 @@ usbd_do_request_flags_pipe(usbd_device_handle dev, usbd_pipe_handle pipe,
 }
 
 void
-usbd_do_request_async_cb(usbd_xfer_handle xfer, usbd_private_handle priv,
-			 usbd_status status)
+usbd_do_request_async_cb(usbd_xfer_handle xfer,
+    usbd_private_handle priv, usbd_status status)
 {
 #if defined(USB_DEBUG) || defined(DIAGNOSTIC)
-	if (xfer->actlen > xfer->length)
+	if (xfer->actlen > xfer->length) {
 		DPRINTF(("usbd_do_request: overrun addr=%d type=0x%02x req=0x"
 			 "%02x val=%d index=%d rlen=%d length=%d actlen=%d\n",
 			 xfer->pipe->device->address,
@@ -1032,6 +1033,7 @@ usbd_do_request_async_cb(usbd_xfer_handle xfer, usbd_private_handle priv,
 			 UGETW(xfer->request.wIndex),
 			 UGETW(xfer->request.wLength),
 			 xfer->length, xfer->actlen));
+	}
 #endif
 	usbd_free_xfer(xfer);
 }

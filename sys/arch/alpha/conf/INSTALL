@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL,v 1.88 2005/12/07 12:40:46 tsutsui Exp $
+# $NetBSD: INSTALL,v 1.90 2006/10/02 03:28:29 chs Exp $
 #
 # Alpha INSTALL kernel.
 
@@ -76,7 +76,6 @@ options 	INSECURE		# disable `kernel security level'
 options 	USERCONF		# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
 #options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
-options 	MALLOC_NOINLINE		# Not inlining MALLOC saves memory
 options 	FONT_GALLANT12x22	# Console font for TC devices
 
 # The Alpha console firmware network boots using the BOOTP
@@ -335,9 +334,9 @@ wsmouse*	at	pms?
 
 pseudo-device	loop		1
 pseudo-device	md		1
-pseudo-device	ppp		1
+pseudo-device	ppp		
 pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
-pseudo-device	sl		1
+pseudo-device	sl		
 
 pseudo-device	rnd			# /dev/random and in-kernel generator
 #pseudo-device	fss		4	# file system snapshot device

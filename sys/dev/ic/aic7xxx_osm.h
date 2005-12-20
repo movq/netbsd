@@ -1,4 +1,4 @@
-/*	$NetBSD: aic7xxx_osm.h,v 1.10 2005/12/11 12:21:25 christos Exp $	*/
+/*	$NetBSD: aic7xxx_osm.h,v 1.17 2006/11/16 01:32:51 christos Exp $	*/
 
 /*
  * NetBSD platform specific driver option settings, data structures,
@@ -86,7 +86,7 @@
 	(((sim) == ahc->platform_data->sim_b) ? ahc->platform_data->path_b \
 					      : ahc->platform_data->path)
 #define BUILD_SCSIID(ahc, sim, target_id, our_id) \
-        ((((target_id) << TID_SHIFT) & TID) | (our_id))
+	((((target_id) << TID_SHIFT) & TID) | (our_id))
 
 #define SCB_GET_SIM(ahc, scb) \
 	(SCB_GET_CHANNEL(ahc, scb) == 'A' ? (ahc)->platform_data->sim \
@@ -218,7 +218,7 @@ ahc_timer_reset(ahc_timer_t *timer, u_int usec, ahc_callback_t *func, void *arg)
 static __inline void
 ahc_scb_timer_reset(struct scb *scb, u_int usec)
 {
-  	if (!(scb->xs->xs_control & XS_CTL_POLL)) {
+	if (!(scb->xs->xs_control & XS_CTL_POLL)) {
 		callout_reset(&scb->xs->xs_callout,
 			      (usec * hz)/1000000, ahc_timeout, scb);
 	}
@@ -243,7 +243,7 @@ static __inline void
 ahc_flush_device_writes(struct ahc_softc *ahc)
 {
 	/* XXX Is this sufficient for all architectures??? */
-	ahc_inb(ahc, INTSTAT);
+	(void)ahc_inb(ahc, INTSTAT);
 }
 
 /**************************** Locking Primitives ******************************/
@@ -383,7 +383,9 @@ void ahc_set_residual(struct scb *scb, u_long resid)
 static __inline
 void ahc_set_sense_residual(struct scb *scb, u_long resid)
 {
-  //scb->io_ctx->csio.sense_resid = resid;
+#ifdef notdef
+    scb->io_ctx->csio.sense_resid = resid;
+#endif
 }
 
 static __inline
@@ -422,8 +424,8 @@ ahc_platform_freeze_devq(struct ahc_softc *ahc, struct scb *scb)
 
 static __inline int
 ahc_platform_abort_scbs(struct ahc_softc *ahc, int target,
-			char channel, int lun, u_int tag,
-			role_t role, uint32_t status)
+    char channel, int lun, u_int tag,
+    role_t role, uint32_t status)
 {
 	return (0);
 }
@@ -431,7 +433,7 @@ ahc_platform_abort_scbs(struct ahc_softc *ahc, int target,
 static __inline void
 ahc_platform_scb_free(struct ahc_softc *ahc, struct scb *scb)
 {
-#ifdef _FreeBSD_
+#ifdef __FreeBSD__
 	/* What do we do to generically handle driver resource shortages??? */
 	if ((ahc->flags & AHC_RESOURCE_SHORTAGE) != 0
 	 && scb->io_ctx != NULL

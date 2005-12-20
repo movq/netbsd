@@ -1,4 +1,4 @@
-/*	$NetBSD: uscanner.c,v 1.50 2005/12/11 12:24:01 christos Exp $	*/
+/*	$NetBSD: uscanner.c,v 1.54 2006/11/16 01:33:27 christos Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uscanner.c,v 1.50 2005/12/11 12:24:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uscanner.c,v 1.54 2006/11/16 01:33:27 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -264,6 +264,7 @@ dev_type_kqfilter(uscannerkqfilter);
 const struct cdevsw uscanner_cdevsw = {
 	uscanneropen, uscannerclose, uscannerread, uscannerwrite,
 	uscannerioctl, nostop, notty, uscannerpoll, nommap, uscannerkqfilter,
+	D_OTHER,
 };
 #elif defined(__OpenBSD__)
 cdev_decl(uscanner);
@@ -394,7 +395,8 @@ USB_ATTACH(uscanner)
 }
 
 int
-uscanneropen(dev_t dev, int flag, int mode, struct lwp *l)
+uscanneropen(dev_t dev, int flag, int mode,
+    struct lwp *l)
 {
 	struct uscanner_softc *sc;
 	int unit = USCANNERUNIT(dev);
@@ -457,7 +459,8 @@ uscanneropen(dev_t dev, int flag, int mode, struct lwp *l)
 }
 
 int
-uscannerclose(dev_t dev, int flag, int mode, struct lwp *l)
+uscannerclose(dev_t dev, int flag, int mode,
+    struct lwp *l)
 {
 	struct uscanner_softc *sc;
 
@@ -681,7 +684,7 @@ USB_DETACH(uscanner)
 #endif
 
 	/* Nuke the vnodes for any open instances (calls close). */
-	mn = self->dv_unit * USB_MAX_ENDPOINTS;
+	mn = device_unit(self) * USB_MAX_ENDPOINTS;
 	vdevgone(maj, mn, mn + USB_MAX_ENDPOINTS - 1, VCHR);
 #elif defined(__FreeBSD__)
 	/* destroy the device for the control endpoint */
@@ -766,7 +769,8 @@ uscannerkqfilter(dev_t dev, struct knote *kn)
 }
 
 int
-uscannerioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
+uscannerioctl(dev_t dev, u_long cmd, caddr_t addr,
+    int flag, struct lwp *l)
 {
 	return (EINVAL);
 }

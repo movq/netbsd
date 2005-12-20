@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.31 2004/08/14 16:06:42 dsl Exp $	*/
+/*	$NetBSD: md.c,v 1.35 2006/09/04 00:11:00 hubertf Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -53,8 +53,6 @@
 /* Maximum */
 #define MAX(i,j) ((i)>(j)?(i):(j))
 
-const char *fdtype = "";
-   
 
 int
 md_get_info(void)
@@ -119,6 +117,12 @@ md_update(void)
 void
 md_cleanup_install(void)
 {
+  
+	enable_rc_conf();
+	
+	run_program(0, "rm -f %s", target_expand("/sysinst"));
+	run_program(0, "rm -f %s", target_expand("/.termcap"));
+	run_program(0, "rm -f %s", target_expand("/.profile"));
 }
 
 int
@@ -130,4 +134,10 @@ md_pre_update()
 void
 md_init()
 {
+}
+
+int
+md_post_extract(void)
+{
+	return 0;
 }

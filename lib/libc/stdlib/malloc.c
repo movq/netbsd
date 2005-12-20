@@ -1,4 +1,4 @@
-/*	$NetBSD: malloc.c,v 1.45 2005/11/29 03:12:00 christos Exp $	*/
+/*	$NetBSD: malloc.c,v 1.48 2006/11/24 19:37:02 christos Exp $	*/
 
 /*
  * ----------------------------------------------------------------------------
@@ -70,7 +70,7 @@ void utrace(struct ut *, int);
 #   define UTRACE_LABEL "malloc",
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: malloc.c,v 1.45 2005/11/29 03:12:00 christos Exp $");
+__RCSID("$NetBSD: malloc.c,v 1.48 2006/11/24 19:37:02 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 #include <sys/types.h>
 int utrace(const char *, void *, size_t);
@@ -380,7 +380,7 @@ extend_pgdir(size_t idx)
     /*
      * NOTE: we allocate new pages and copy the directory rather than tempt
      * fate by trying to "grow" the region.. There is nothing to prevent
-     * us from accidently re-mapping space that's been allocated by our caller
+     * us from accidentally re-mapping space that's been allocated by our caller
      * via dlopen() or other mmap().
      *
      * The copy problem is not too bad, as there is 4K of page index per
@@ -627,7 +627,7 @@ malloc_pages(size_t size)
  * Allocate a page of fragments
  */
 
-static __inline__ int
+static inline int
 malloc_make_chunks(int bits)
 {
     struct  pginfo *bp;
@@ -874,7 +874,7 @@ irealloc(void *ptr, size_t size)
  * Free a sequence of pages
  */
 
-static __inline__ void
+static inline void
 free_pages(void *ptr, size_t idx, struct pginfo *info)
 {
     size_t i;
@@ -990,10 +990,11 @@ free_pages(void *ptr, size_t idx, struct pginfo *info)
 	malloc_brk = pf->end;
 
 	idx = ptr2idx(pf->end);
-	last_idx = idx - 1;
 
 	for(i=idx;i <= last_idx;)
 	    page_dir[i++] = MALLOC_NOT_MINE;
+
+	last_idx = idx - 1;
 
 	/* XXX: We could realloc/shrink the pagedir here I guess. */
     }
@@ -1005,7 +1006,7 @@ free_pages(void *ptr, size_t idx, struct pginfo *info)
  * Free a chunk, and possibly the page it's on, if the page becomes empty.
  */
 
-static __inline__ void
+static inline void
 free_bytes(void *ptr, size_t idx, struct pginfo *info)
 {
     size_t i;

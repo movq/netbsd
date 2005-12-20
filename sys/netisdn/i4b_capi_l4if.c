@@ -1,4 +1,4 @@
-/*	$NetBSD: i4b_capi_l4if.c,v 1.5 2005/12/11 12:25:06 christos Exp $	*/
+/*	$NetBSD: i4b_capi_l4if.c,v 1.9 2006/11/16 01:33:49 christos Exp $	*/
 
 /*
  * Copyright (c) 2001-2003 Cubical Solutions Ltd. All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_capi_l4if.c,v 1.5 2005/12/11 12:25:06 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_capi_l4if.c,v 1.9 2006/11/16 01:33:49 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -421,6 +421,7 @@ int
 capi_ll_detach(capi_softc_t *sc)
 {
 
+	(void)sc;
 	/* TODO */
 	return(0);
 }

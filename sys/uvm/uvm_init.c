@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_init.c,v 1.24 2005/12/11 12:25:29 christos Exp $	*/
+/*	$NetBSD: uvm_init.c,v 1.26 2006/09/15 15:51:13 yamt Exp $	*/
 
 /*
  *
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_init.c,v 1.24 2005/12/11 12:25:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_init.c,v 1.26 2006/09/15 15:51:13 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,6 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_init.c,v 1.24 2005/12/11 12:25:29 christos Exp $
 #include <sys/vnode.h>
 
 #include <uvm/uvm.h>
+#include <uvm/uvm_pdpolicy.h>
 
 /*
  * struct uvm: we store all global vars in this structure to make them
@@ -151,12 +152,14 @@ uvm_init(void)
 	uao_create(VM_MAX_KERNEL_ADDRESS - VM_MIN_KERNEL_ADDRESS,
 	    UAO_FLAG_KERNSWAP);
 
+	uvmpdpol_reinit();
+
 	/*
 	 * Initialize pools.  This must be done before anyone manipulates
 	 * any vm_maps because we use a pool for some map entry structures.
 	 */
 
-	link_pool_init();
+	pool_subsystem_init();
 
 	/*
 	 * init anonymous memory systems

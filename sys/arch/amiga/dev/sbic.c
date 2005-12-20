@@ -1,4 +1,4 @@
-/*	$NetBSD: sbic.c,v 1.56 2005/12/11 12:16:28 christos Exp $ */
+/*	$NetBSD: sbic.c,v 1.58 2006/09/13 16:45:58 spz Exp $ */
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -78,7 +78,7 @@
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbic.c,v 1.56 2005/12/11 12:16:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbic.c,v 1.58 2006/09/13 16:45:58 spz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -182,13 +182,13 @@ void sbictimeout(struct sbic_softc *dev);
 #define CSR_TRACE_SIZE 32
 #if CSR_TRACE_SIZE
 #define CSR_TRACE(w,c,a,x) do { \
-	int s = splbio(); \
+	int s_csr_trace = splbio(); \
 	csr_trace[csr_traceptr].whr = (w); csr_trace[csr_traceptr].csr = (c); \
 	csr_trace[csr_traceptr].asr = (a); csr_trace[csr_traceptr].xtn = (x); \
 	dma_cachectl((caddr_t)&csr_trace[csr_traceptr], sizeof(csr_trace[0])); \
 	csr_traceptr = (csr_traceptr + 1) & (CSR_TRACE_SIZE - 1); \
 /*	dma_cachectl((caddr_t)&csr_traceptr, sizeof(csr_traceptr));*/ \
-	splx(s); \
+	splx(s_csr_trace); \
 } while (0)
 int csr_traceptr;
 int csr_tracesize = CSR_TRACE_SIZE;
@@ -2569,7 +2569,7 @@ sbictoscsiperiod(struct sbic_softc *dev, sbic_regmap_t regs, int a)
 	/*
 	 * cycle = DIV / (2*CLK)
 	 * DIV = FS+2
-	 * best we can do is 200ns at 20Mhz, 2 cycles
+	 * best we can do is 200ns at 20 MHz, 2 cycles
 	 */
 
 	GET_SBIC_myid(regs,fs);

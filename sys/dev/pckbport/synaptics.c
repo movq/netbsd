@@ -1,4 +1,4 @@
-/*	$NetBSD: synaptics.c,v 1.8 2005/12/11 12:23:22 christos Exp $	*/
+/*	$NetBSD: synaptics.c,v 1.13 2006/11/16 01:33:20 christos Exp $	*/
 
 /*
  * Copyright (c) 2005, Steve C. Woodford
@@ -650,16 +650,13 @@ pms_synaptics_input(void *vsc, int data)
 	struct synaptics_softc *sc = &psc->u.synaptics;
 	struct timeval diff;
 	struct synaptics_packet sp;
-	int s;
 
 	if (!psc->sc_enabled) {
 		/* Interrupts are not expected.	 Discard the byte. */
 		return;
 	}
 
-	s = splclock();
-	psc->current = mono_time;
-	splx(s);
+	getmicrouptime(&psc->current);
 
 	if (psc->inputstate > 0) {
 		timersub(&psc->current, &psc->last, &diff);
@@ -764,7 +761,7 @@ pms_synaptics_input(void *vsc, int data)
 	}
 }
 
-static __inline int
+static inline int
 synaptics_finger_detect(struct synaptics_softc *sc, struct synaptics_packet *sp,
     int *palmp)
 {
@@ -843,7 +840,7 @@ synaptics_finger_detect(struct synaptics_softc *sc, struct synaptics_packet *sp,
 	return (fingers);
 }
 
-static __inline void
+static inline void
 synaptics_gesture_detect(struct synaptics_softc *sc,
     struct synaptics_packet *sp, int fingers)
 {
@@ -985,7 +982,7 @@ synaptics_gesture_detect(struct synaptics_softc *sc,
 	sc->gesture_buttons = gesture_buttons;
 }
 
-static __inline int
+static inline int
 synaptics_filter_policy(struct synaptics_softc *sc, int *history, int value)
 {
 	int a, b, rv, count;
@@ -1034,7 +1031,7 @@ synaptics_filter_policy(struct synaptics_softc *sc, int *history, int value)
 #define	SYN_EDGE_LEFT		4
 #define	SYN_EDGE_RIGHT		8
 
-static __inline int
+static inline int
 synaptics_check_edge(int x, int y)
 {
 	int rv = 0;
@@ -1054,7 +1051,7 @@ synaptics_check_edge(int x, int y)
 	return (rv);
 }
 
-static __inline int
+static inline int
 synaptics_edge_motion(struct synaptics_softc *sc, int delta, int dir)
 {
 
@@ -1073,7 +1070,7 @@ synaptics_edge_motion(struct synaptics_softc *sc, int delta, int dir)
 	return (delta);
 }
 
-static __inline int
+static inline int
 synaptics_scale(int delta, int scale, int *remp)
 {
 	int rv;
@@ -1093,7 +1090,7 @@ synaptics_scale(int delta, int scale, int *remp)
 	return (rv);
 }
 
-static __inline void
+static inline void
 synaptics_movement(struct synaptics_softc *sc, struct synaptics_packet *sp,
     int *dxp, int *dyp)
 {
@@ -1230,8 +1227,10 @@ pms_synaptics_process_packet(struct pms_softc *psc, struct synaptics_packet *sp)
 	 */
 	if (dx || dy || dz || changed) {
 		s = spltty();
-		wsmouse_input(psc->sc_wsmousedev, buttons, dx, dy, dz,
-		    WSMOUSE_INPUT_DELTA);
+		wsmouse_input(psc->sc_wsmousedev,
+				buttons,
+				dx, dy, dz, 0,
+		    		WSMOUSE_INPUT_DELTA);
 		splx(s);
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.16 2005/12/11 12:19:00 christos Exp $	*/
+/*	$NetBSD: cpu.h,v 1.18 2006/02/16 20:17:15 perry Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -143,7 +143,7 @@ static __inline struct cpu_info *
 curcpu(void)
 {
 	struct cpu_info *ci;
-	__asm __volatile("getcon kcr0, %0" : "=r"(ci));
+	__asm volatile("getcon kcr0, %0" : "=r"(ci));
 	return (ci);
 }
 

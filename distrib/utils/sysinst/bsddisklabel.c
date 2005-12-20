@@ -1,4 +1,4 @@
-/*	$NetBSD: bsddisklabel.c,v 1.36 2005/11/05 09:55:34 dsl Exp $	*/
+/*	$NetBSD: bsddisklabel.c,v 1.42 2006/10/23 22:41:51 he Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -336,9 +336,9 @@ set_ptn_size(menudesc *m, void *arg)
 			 * but keep cylinder alignment
 			 */
 			if (f < 0)
-				f = -ROUNDUP(-f, dlcylsize);
+				f = -roundup(-f, dlcylsize);
 			else
-				f = ROUNDDOWN(f, dlcylsize);
+				f = rounddown(f, dlcylsize);
 			size += f;
 			if (size != 0) {
 				pi->free_space -= f;
@@ -364,20 +364,24 @@ get_ptn_sizes(int part_start, int sectors, int no_swap)
 	static struct ptn_info pi = { -1, {
 #define PI_ROOT 0
 		{ PART_ROOT,	{ '/', '\0' },
-		  DEFROOTSIZE,	DEFROOTSIZE },
+		  DEFROOTSIZE,	DEFROOTSIZE , 0, 0},
 #define PI_SWAP 1
 		{ PART_SWAP,	{ 's', 'w', 'a', 'p', '\0' },
-	 	  DEFSWAPSIZE,	DEFSWAPSIZE },
+	 	  DEFSWAPSIZE,	DEFSWAPSIZE, 0, 0 },
 		{ PART_TMP_MFS,	
-		  { 't', 'm', 'p', ' ', '(', 'm', 'f', 's', ')', '\0' }, 64 },
+		  { 't', 'm', 'p', ' ', '(', 'm', 'f', 's', ')', '\0' },
+		    64, 0, 0, 0 },
 #define PI_USR 3
-		{ PART_USR,	{ '/', 'u', 's', 'r', '\0' },	DEFUSRSIZE },
-		{ PART_ANY,	{ '/', 'v', 'a', 'r', '\0' },	DEFVARSIZE },
-		{ PART_ANY,	{ '/', 'h', 'o', 'm', 'e', '\0' },	0 },
+		{ PART_USR,	{ '/', 'u', 's', 'r', '\0' },	DEFUSRSIZE,
+		  0, 0, 0 },
+		{ PART_ANY,	{ '/', 'v', 'a', 'r', '\0' },	DEFVARSIZE,
+		  0, 0, 0 },
+		{ PART_ANY,	{ '/', 'h', 'o', 'm', 'e', '\0' },	0,
+		  0, 0, 0 },
 	}, {
 		{ NULL, OPT_NOMENU, 0, set_ptn_size },
 		{ MSG_askunits, MENU_sizechoice, OPT_SUB, NULL },
-	}, };
+	}, 0, 0, NULL, { 0 } };
 
 	if (maxpart > MAXPARTITIONS)
 		maxpart = MAXPARTITIONS;	/* sanity */
@@ -389,7 +393,7 @@ get_ptn_sizes(int part_start, int sectors, int no_swap)
 		/* If there is a swap partition elsewhere, don't add one here.*/		if (no_swap)
 			pi.ptn_sizes[PI_SWAP].size = 0;
 		/* If installing X increase default size of /usr */
-		if (sets_selected & SET_X11)
+		if (set_X11_selected())
 			pi.ptn_sizes[PI_USR].dflt_size += XNEEDMB;
 
 		/* Start of planning to give free space to / */
@@ -429,7 +433,7 @@ get_ptn_sizes(int part_start, int sectors, int no_swap)
 
 		/* Steal space from swap to make things fit.. */
 		if (pi.free_space < 0) {
-			i = ROUNDUP(-pi.free_space, dlcylsize);
+			i = roundup(-pi.free_space, dlcylsize);
 			if (i > pi.ptn_sizes[PI_SWAP].size)
 				i = pi.ptn_sizes[PI_SWAP].size;
 			pi.ptn_sizes[PI_SWAP].size -= i;
@@ -438,7 +442,7 @@ get_ptn_sizes(int part_start, int sectors, int no_swap)
 
 		/* Add space for 2 system dumps to / (traditional) */
 		i = get_ramsize() * sm;
-		i = ROUNDUP(i, dlcylsize);
+		i = roundup(i, dlcylsize);
 		if (pi.free_space > i * 2)
 			i *= 2;
 		if (pi.free_space > i) {
@@ -502,7 +506,7 @@ get_ptn_sizes(int part_start, int sectors, int no_swap)
 	for (p = pi.ptn_sizes; p->mount[0]; p++, part_start += size) {
 		size = p->size;
 		if (p == pi.pool_part) {
-			size += ROUNDDOWN(pi.free_space, dlcylsize);
+			size += rounddown(pi.free_space, dlcylsize);
 			if (p->limit != 0 && size > p->limit)
 				size = p->limit;
 		}
@@ -600,6 +604,22 @@ make_bsd_partitions(void)
 	bsdlabel[PART_BOOT].pi_offset = ptstart;
 	partstart += i;
 #endif
+#elif defined(PART_BOOT)
+	if (bootsize != 0) {
+		bsdlabel[PART_BOOT].pi_fstype = FS_BOOT;
+		bsdlabel[PART_BOOT].pi_size = bootsize;
+		bsdlabel[PART_BOOT].pi_offset = bootstart;
+	}
+#endif /* PART_BOOT w/o BOOT_SIZE */
+
+#if defined(PART_SYSVBFS) && defined(SYSVBFS_SIZE)
+	bsdlabel[PART_SYSVBFS].pi_offset = partstart;
+	bsdlabel[PART_SYSVBFS].pi_fstype = FS_SYSVBFS;
+	bsdlabel[PART_SYSVBFS].pi_size = SYSVBFS_SIZE;
+	bsdlabel[PART_SYSVBFS].pi_flags |= PIF_NEWFS | PIF_MOUNT;
+	strlcpy(bsdlabel[PART_SYSVBFS].pi_mount, "/stand",
+	    sizeof bsdlabel[PART_SYSVBFS].pi_mount);
+	partstart += SYSVBFS_SIZE;
 #endif
 
 #ifdef PART_REST

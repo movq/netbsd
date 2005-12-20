@@ -1,4 +1,4 @@
-/*	$NetBSD: parser.c,v 1.59 2005/03/21 20:10:29 dsl Exp $	*/
+/*	$NetBSD: parser.c,v 1.63 2006/10/16 00:36:19 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)parser.c	8.7 (Berkeley) 5/16/95";
 #else
-__RCSID("$NetBSD: parser.c,v 1.59 2005/03/21 20:10:29 dsl Exp $");
+__RCSID("$NetBSD: parser.c,v 1.63 2006/10/16 00:36:19 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -422,6 +422,8 @@ TRACE(("expecting DO got %s %s\n", tokname[got], got == TWORD ? wordtext : ""));
 		checkkwd = 2, readtoken();
 		do {
 			*cpp = cp = (union node *)stalloc(sizeof (struct nclist));
+			if (lasttoken == TLP)
+				readtoken();
 			cp->type = NCLIST;
 			app = &cp->nclist.pattern;
 			for (;;) {
@@ -905,35 +907,25 @@ breakloop:
 	dblquotep[(varnest / 32) - 1] &= ~(1 << (varnest % 32))
 
 STATIC int
-readtoken1(int firstc, char const *syntax, char *eofmark, int striptabs)
+readtoken1(int firstc, char const *syn, char *eofmark, int striptabs)
 {
+	char const * volatile syntax = syn;
 	int c = firstc;
-	char *out;
+	char * volatile out;
 	int len;
 	char line[EOFMARKLEN + 1];
 	struct nodelist *bqlist;
-	int quotef;
-	int *dblquotep = NULL;
-	size_t maxnest = 32;
-	int dblquote;
-	int varnest;	/* levels of variables expansion */
-	int arinest;	/* levels of arithmetic expansion */
-	int parenlevel;	/* levels of parens in arithmetic */
-	int oldstyle;
-	char const *prevsyntax;	/* syntax before arithmetic */
-#if __GNUC__
-	/* Avoid longjmp clobbering */
-	(void) &maxnest;
-	(void) &dblquotep;
-	(void) &out;
-	(void) &quotef;
-	(void) &dblquote;
-	(void) &varnest;
-	(void) &arinest;
-	(void) &parenlevel;
-	(void) &oldstyle;
-	(void) &prevsyntax;
-	(void) &syntax;
+	volatile int quotef;
+	int * volatile dblquotep = NULL;
+	volatile size_t maxnest = 32;
+	volatile int dblquote;
+	volatile int varnest;	/* levels of variables expansion */
+	volatile int arinest;	/* levels of arithmetic expansion */
+	volatile int parenlevel;	/* levels of parens in arithmetic */
+	volatile int oldstyle;
+	char const * volatile prevsyntax;	/* syntax before arithmetic */
+#ifdef __GNUC__
+	prevsyntax = NULL;	/* XXX gcc4 */
 #endif
 
 	startlinno = plinno;
@@ -1371,9 +1363,6 @@ parsebackq: {
 	struct jmploc *volatile savehandler;
 	int savelen;
 	int saveprompt;
-#ifdef __GNUC__
-	(void) &saveprompt;
-#endif
 
 	savepbq = parsebackquote;
 	if (setjmp(jmploc.loc)) {
@@ -1466,7 +1455,8 @@ done:
 	if (oldstyle) {
 		saveprompt = doprompt;
 		doprompt = 0;
-	}
+	} else
+		saveprompt = 0;
 
 	n = list(0);
 
@@ -1615,6 +1605,8 @@ synerror(const char *msg)
 {
 	if (commandname)
 		outfmt(&errout, "%s: %d: ", commandname, startlinno);
+	else
+		outfmt(&errout, "%s: ", getprogname());
 	outfmt(&errout, "Syntax error: %s\n", msg);
 	error((char *)NULL);
 	/* NOTREACHED */

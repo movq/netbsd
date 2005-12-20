@@ -1,4 +1,5 @@
-/*	$NetBSD: readpass.c,v 1.14 2005/04/23 16:53:28 christos Exp $	*/
+/*	$NetBSD: readpass.c,v 1.16 2006/09/28 21:22:14 christos Exp $	*/
+/* $OpenBSD: readpass.c,v 1.47 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  *
@@ -24,16 +25,26 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: readpass.c,v 1.31 2004/10/29 22:53:56 djm Exp $");
-__RCSID("$NetBSD: readpass.c,v 1.14 2005/04/23 16:53:28 christos Exp $");
+__RCSID("$NetBSD: readpass.c,v 1.16 2006/09/28 21:22:14 christos Exp $");
+#include <sys/types.h>
+#include <sys/wait.h>
 
+#include <errno.h>
+#include <fcntl.h>
+#include <paths.h>
 #include <readpassphrase.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "xmalloc.h"
 #include "misc.h"
 #include "pathnames.h"
 #include "log.h"
 #include "ssh.h"
+#include "uidswap.h"
 
 static char *
 ssh_askpass(char *askpass, const char *msg)
@@ -57,8 +68,7 @@ ssh_askpass(char *askpass, const char *msg)
 		return NULL;
 	}
 	if (pid == 0) {
-		seteuid(getuid());
-		setuid(getuid());
+		permanently_drop_suid(getuid());
 		close(p[0]);
 		if (dup2(p[1], STDOUT_FILENO) < 0)
 			fatal("ssh_askpass: dup2: %s", strerror(errno));
@@ -110,15 +120,20 @@ read_passphrase(const char *prompt, int flags)
 	if (flags & RP_USE_ASKPASS)
 		use_askpass = 1;
 	else if (flags & RP_ALLOW_STDIN) {
-		if (!isatty(STDIN_FILENO))
+		if (!isatty(STDIN_FILENO)) {
+			debug("read_passphrase: stdin is not a tty");
 			use_askpass = 1;
+		}
 	} else {
 		rppflags |= RPP_REQUIRE_TTY;
 		ttyfd = open(_PATH_TTY, O_RDWR);
 		if (ttyfd >= 0)
 			close(ttyfd);
-		else
+		else {
+			debug("read_passphrase: can't open %s: %s", _PATH_TTY,
+			    strerror(errno));
 			use_askpass = 1;
+		}
 	}
 
 	if ((flags & RP_USE_ASKPASS) && getenv("DISPLAY") == NULL)

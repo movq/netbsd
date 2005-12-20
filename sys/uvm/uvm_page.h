@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_page.h,v 1.41 2005/11/29 15:45:28 yamt Exp $	*/
+/*	$NetBSD: uvm_page.h,v 1.46 2006/09/15 15:51:13 yamt Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -169,18 +169,34 @@ struct vm_page {
 #define	PG_FAKE		0x0040		/* page is not yet initialized */
 #define	PG_RDONLY	0x0080		/* page must be mapped read-only */
 #define	PG_ZERO		0x0100		/* page is pre-zero'd */
-#define	PG_SPECULATIVE	0x0200		/* page has been read speculatively */
 
 #define PG_PAGER1	0x1000		/* pager-specific flag */
 
-#define PQ_FREE		0x01		/* page is on free list */
-#define PQ_INACTIVE	0x02		/* page is in inactive list */
-#define PQ_ACTIVE	0x04		/* page is in active list */
-#define PQ_ANON		0x10		/* page is part of an anon, rather
+#define	UVM_PGFLAGBITS \
+	"\20\1BUSY\2WANTED\3TABLED\4CLEAN\5PAGEOUT\6RELEASED\7FAKE\10RDONLY" \
+	"\11ZERO\15PAGER1"
+
+#define PQ_FREE		0x0001		/* page is on free list */
+#define PQ_ANON		0x0002		/* page is part of an anon, rather
 					   than an uvm_object */
-#define PQ_AOBJ		0x20		/* page is part of an anonymous
+#define PQ_AOBJ		0x0004		/* page is part of an anonymous
 					   uvm_object */
 #define PQ_SWAPBACKED	(PQ_ANON|PQ_AOBJ)
+#define PQ_READAHEAD	0x0008	/* read-ahead but has not been "hit" yet */
+
+#define PQ_PRIVATE1	0x0100
+#define PQ_PRIVATE2	0x0200
+#define PQ_PRIVATE3	0x0400
+#define PQ_PRIVATE4	0x0800
+#define PQ_PRIVATE5	0x1000
+#define PQ_PRIVATE6	0x2000
+#define PQ_PRIVATE7	0x4000
+#define PQ_PRIVATE8	0x8000
+
+#define	UVM_PQFLAGBITS \
+	"\20\1FREE\2ANON\3AOBJ\4READAHEAD" \
+	"\11PRIVATE1\12PRIVATE2\13PRIVATE3\14PRIVATE4" \
+	"\15PRIVATE5\16PRIVATE6\17PRIVATE7\20PRIVATE8"
 
 /*
  * physical memory layout structure
@@ -200,7 +216,7 @@ struct vm_page {
 #define VM_PSTRAT_BIGFIRST	3
 
 /*
- * vm_physmemseg: describes one segment of physical memory
+ * vm_physseg: describes one segment of physical memory
  */
 struct vm_physseg {
 	paddr_t	start;			/* PF# of first page in segment */
@@ -231,16 +247,6 @@ extern struct vm_physseg vm_physmem[VM_PHYSSEG_MAX];
 extern int vm_nphysseg;
 
 /*
- * handle inline options
- */
-
-#ifdef UVM_PAGE_INLINE
-#define PAGE_INLINE static __inline
-#else
-#define PAGE_INLINE /* nothing */
-#endif /* UVM_PAGE_INLINE */
-
-/*
  * prototypes: the following prototypes define the interface to pages
  */
 
@@ -255,24 +261,25 @@ void uvm_page_rehash(void);
 void uvm_page_recolor(int);
 void uvm_pageidlezero(void);
 
-PAGE_INLINE int uvm_lock_fpageq(void);
-PAGE_INLINE void uvm_unlock_fpageq(int);
+int uvm_lock_fpageq(void);
+void uvm_unlock_fpageq(int);
 
-PAGE_INLINE void uvm_pageactivate(struct vm_page *);
+void uvm_pageactivate(struct vm_page *);
 vaddr_t uvm_pageboot_alloc(vsize_t);
-PAGE_INLINE void uvm_pagecopy(struct vm_page *, struct vm_page *);
-PAGE_INLINE void uvm_pagedeactivate(struct vm_page *);
-PAGE_INLINE void uvm_pagedequeue(struct vm_page *);
+void uvm_pagecopy(struct vm_page *, struct vm_page *);
+void uvm_pagedeactivate(struct vm_page *);
+void uvm_pagedequeue(struct vm_page *);
+void uvm_pageenqueue(struct vm_page *);
 void uvm_pagefree(struct vm_page *);
 void uvm_page_unbusy(struct vm_page **, int);
-PAGE_INLINE struct vm_page *uvm_pagelookup(struct uvm_object *, voff_t);
-PAGE_INLINE void uvm_pageunwire(struct vm_page *);
-PAGE_INLINE void uvm_pagewait(struct vm_page *, int);
-PAGE_INLINE void uvm_pagewake(struct vm_page *);
-PAGE_INLINE void uvm_pagewire(struct vm_page *);
-PAGE_INLINE void uvm_pagezero(struct vm_page *);
+struct vm_page *uvm_pagelookup(struct uvm_object *, voff_t);
+void uvm_pageunwire(struct vm_page *);
+void uvm_pagewait(struct vm_page *, int);
+void uvm_pagewake(struct vm_page *);
+void uvm_pagewire(struct vm_page *);
+void uvm_pagezero(struct vm_page *);
 
-PAGE_INLINE int uvm_page_lookup_freelist(struct vm_page *);
+int uvm_page_lookup_freelist(struct vm_page *);
 
 static struct vm_page *PHYS_TO_VM_PAGE(paddr_t);
 static int vm_physseg_find(paddr_t, int *);

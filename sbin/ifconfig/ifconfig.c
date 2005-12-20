@@ -1,4 +1,4 @@
-/*	$NetBSD: ifconfig.c,v 1.169 2005/08/11 20:56:05 rpaulo Exp $	*/
+/*	$NetBSD: ifconfig.c,v 1.179 2006/11/23 19:43:52 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -76,7 +76,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
 #if 0
 static char sccsid[] = "@(#)ifconfig.c	8.2 (Berkeley) 2/16/94";
 #else
-__RCSID("$NetBSD: ifconfig.c,v 1.169 2005/08/11 20:56:05 rpaulo Exp $");
+__RCSID("$NetBSD: ifconfig.c,v 1.179 2006/11/23 19:43:52 yamt Exp $");
 #endif
 #endif /* not lint */
 
@@ -111,7 +111,6 @@ __RCSID("$NetBSD: ifconfig.c,v 1.169 2005/08/11 20:56:05 rpaulo Exp $");
 #ifndef INET_ONLY
 #include "af_atalk.h"
 #include "af_iso.h"
-#include "af_ns.h"
 #endif /* ! INET_ONLY */
 #include "af_inet.h"
 #ifdef INET6
@@ -119,6 +118,7 @@ __RCSID("$NetBSD: ifconfig.c,v 1.169 2005/08/11 20:56:05 rpaulo Exp $");
 #endif /* INET6 */
 
 #include "agr.h"
+#include "carp.h"
 #include "ieee80211.h"
 #include "tunnel.h"
 #include "vlan.h"
@@ -129,13 +129,15 @@ struct	ifaliasreq	addreq __attribute__((aligned(4)));
 char	name[30];
 u_short	flags;
 int	setaddr, doalias;
-u_long	metric, mtu;
+u_long	metric, mtu, preference;
 int	clearaddr, s;
 int	newaddr = -1;
 int	conflicting = 0;
+int	check_up_state = -1;
 int	af;
 int	aflag, bflag, Cflag, dflag, lflag, mflag, sflag, uflag, vflag, zflag;
 int	hflag;
+int	have_preference = 0;
 #ifdef INET6
 int	Lflag;
 #endif
@@ -149,10 +151,12 @@ void 	notrailers(const char *, int);
 void 	setifaddr(const char *, int);
 void 	setifdstaddr(const char *, int);
 void 	setifflags(const char *, int);
+void	check_ifflags_up(const char *);
 void	setifcaps(const char *, int);
 void 	setifbroadaddr(const char *, int);
 void 	setifipdst(const char *, int);
 void 	setifmetric(const char *, int);
+void	setifpreference(const char *, int);
 void 	setifmtu(const char *, int);
 void 	setifnetmask(const char *, int);
 void	setifprefixlen(const char *, int);
@@ -164,6 +168,7 @@ void	setmediainst(const char *, int);
 void	clone_create(const char *, int);
 void	clone_destroy(const char *, int);
 int	main(int, char *[]);
+void	do_setifpreference(void);
 
 /*
  * Media stuff.  Whenever a media command is first performed, the
@@ -193,7 +198,6 @@ const struct cmd {
 	int	c_parameter;	/* NEXTARG means next argv */
 	int	c_action;	/* defered action */
 	void	(*c_func)(const char *, int);
-	void	(*c_func2)(const char *, const char *);
 } cmds[] = {
 	{ "up",		IFF_UP,		0,		setifflags } ,
 	{ "down",	-IFF_UP,	0,		setifflags },
@@ -225,9 +229,24 @@ const struct cmd {
 	{ "powersave",	1,		0,		setifpowersave },
 	{ "-powersave",	0,		0,		setifpowersave },
 	{ "powersavesleep", NEXTARG,	0,		setifpowersavesleep },
+	{ "hidessid",	1,		0,		sethidessid },
+	{ "-hidessid",	0,		0,		sethidessid },
+	{ "apbridge",	1,		0,		setapbridge },
+	{ "-apbridge",	0,		0,		setapbridge },
 	{ "broadcast",	NEXTARG,	0,		setifbroadaddr },
 	{ "ipdst",	NEXTARG,	0,		setifipdst },
 	{ "prefixlen",	NEXTARG,	0,		setifprefixlen},
+	{ "preference",	NEXTARG,	0,		setifpreference},
+#ifndef INET_ONLY
+	/* CARP */
+	{ "advbase",	NEXTARG,	0,		setcarp_advbase },
+	{ "advskew",	NEXTARG,	0,		setcarp_advskew },
+	{ "pass",	NEXTARG,	0,		setcarp_passwd },
+	{ "vhid",	NEXTARG,	0,		setcarp_vhid },
+	{ "state",	NEXTARG,	0,		setcarp_state },
+	{ "carpdev",	NEXTARG,	0,		setcarpdev },
+	{ "-carpdev",	1,		0,		unsetcarpdev },
+#endif
 #ifdef INET6
 	{ "anycast",	IN6_IFF_ANYCAST,	0,	setia6flags },
 	{ "-anycast",	-IN6_IFF_ANYCAST,	0,	setia6flags },
@@ -245,7 +264,7 @@ const struct cmd {
 	{ "snpaoffset",	NEXTARG,	0,		setsnpaoffset },
 	{ "nsellength",	NEXTARG,	0,		setnsellength },
 #endif	/* INET_ONLY */
-	{ "tunnel",	NEXTARG2,	0,		NULL,
+	{ "tunnel",	NEXTARG2,	0,	(void (*)(const char *, int))
 							settunnel } ,
 	{ "deletetunnel", 0,		0,		deletetunnel },
 	{ "vlan",	NEXTARG,	0,		setvlan } ,
@@ -310,6 +329,8 @@ const struct cmd {
 					0,		setifcaps },
 	{ "tso4",	IFCAP_TSOv4,	0,		setifcaps },
 	{ "-tso4",	-IFCAP_TSOv4,	0,		setifcaps },
+	{ "tso6",	IFCAP_TSOv6,	0,		setifcaps },
+	{ "-tso6",	-IFCAP_TSOv6,	0,		setifcaps },
 	{ "agrport",	NEXTARG,	0,		agraddport } ,
 	{ "-agrport",	NEXTARG,	0,		agrremport } ,
 	{ 0,		0,		0,		setifaddr },
@@ -344,13 +365,11 @@ const struct afswtch afs[] = {
 #ifndef INET_ONLY	/* small version, for boot media */
 	{ "atalk", AF_APPLETALK, at_status, at_getaddr, NULL,
 	     SIOCDIFADDR, SIOCAIFADDR, SIOCGIFADDR, &addreq, &addreq },
-	{ "ns", AF_NS, xns_status, xns_getaddr, NULL,
-	     SIOCDIFADDR, SIOCAIFADDR, SIOCGIFADDR, &ridreq, &addreq },
 	{ "iso", AF_ISO, iso_status, iso_getaddr, NULL,
 	     SIOCDIFADDR_ISO, SIOCAIFADDR_ISO, SIOCGIFADDR_ISO,
 	     &iso_ridreq, &iso_addreq },
 #endif	/* INET_ONLY */
-	{ 0,	0,	    0,		0 }
+	{ 0,	0,	    0,		0, 0, 0, 0, 0, 0, 0 }
 };
 
 const struct afswtch *afp;	/*the address family being set or asked about*/
@@ -503,7 +522,7 @@ main(int argc, char *argv[])
 		af = afp->af_af;
 
 	/* Get information about the interface. */
-	(void) strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
+	estrlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
 	if (getinfo(&ifr) < 0)
 		exit(1);
 
@@ -544,7 +563,7 @@ main(int argc, char *argv[])
 			}
 			p++;	/* got src, do dst */
 		}
-		if (p->c_func != NULL || p->c_func2 != NULL) {
+		if (p->c_func != NULL) {
 			if (p->c_parameter == NEXTARG) {
 				if (argc < 2)
 					errx(EXIT_FAILURE,
@@ -557,7 +576,8 @@ main(int argc, char *argv[])
 					errx(EXIT_FAILURE,
 					    "'%s' requires 2 arguments",
 					    p->c_name);
-				(*p->c_func2)(argv[1], argv[2]);
+				((void (*)(const char *, const char *))
+				    *p->c_func)(argv[1], argv[2]);
 				argc -= 2, argv += 2;
 			} else
 				(*p->c_func)(argv[0], p->c_parameter);
@@ -594,28 +614,32 @@ main(int argc, char *argv[])
 
 	if (af == AF_APPLETALK)
 		checkatrange(&addreq.ifra_addr);
-
-	if (setipdst && af == AF_NS)
-		xns_set_nsip_route(&addreq.ifra_addr, &addreq.ifra_dstaddr);
 #endif	/* INET_ONLY */
 
 	if (clearaddr) {
-		(void) strncpy(afp->af_ridreq, name, sizeof ifr.ifr_name);
+		estrlcpy(afp->af_ridreq, name, sizeof ifr.ifr_name);
 		if (ioctl(s, afp->af_difaddr, afp->af_ridreq) == -1)
 			err(EXIT_FAILURE, "SIOCDIFADDR");
 	}
 	if (newaddr > 0) {
-		(void) strncpy(afp->af_addreq, name, sizeof ifr.ifr_name);
+		estrlcpy(afp->af_addreq, name, sizeof ifr.ifr_name);
 		if (ioctl(s, afp->af_aifaddr, afp->af_addreq) == -1)
 			warn("SIOCAIFADDR");
+		else if (check_up_state < 0)
+			check_up_state = 1;
 	}
 
+	if (have_preference)
+		do_setifpreference();
 	if (g_ifcr_updated) {
-		(void) strncpy(g_ifcr.ifcr_name, name,
+		strlcpy(g_ifcr.ifcr_name, name,
 		    sizeof(g_ifcr.ifcr_name));
 		if (ioctl(s, SIOCSIFCAP, &g_ifcr) == -1)
 			err(EXIT_FAILURE, "SIOCSIFCAP");
 	}
+
+	if (check_up_state == 1)
+		check_ifflags_up(name);
 
 	exit(0);
 }
@@ -681,7 +705,7 @@ getinfo(struct ifreq *giifr)
 		mtu = giifr->ifr_mtu;
 
 	memset(&g_ifcr, 0, sizeof(g_ifcr));
-	strcpy(g_ifcr.ifcr_name, giifr->ifr_name);
+	estrlcpy(g_ifcr.ifcr_name, giifr->ifr_name, sizeof(g_ifcr.ifcr_name));
 	(void) ioctl(s, SIOCGIFCAP, &g_ifcr);
 
 	return (0);
@@ -702,7 +726,7 @@ printall(const char *ifname)
 	idx = 0;
 	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
 		memset(&paifr, 0, sizeof(paifr));
-		strncpy(paifr.ifr_name, ifa->ifa_name, sizeof(paifr.ifr_name));
+		estrlcpy(paifr.ifr_name, ifa->ifa_name, sizeof(paifr.ifr_name));
 		if (sizeof(paifr.ifr_addr) >= ifa->ifa_addr->sa_len) {
 			memcpy(&paifr.ifr_addr, ifa->ifa_addr,
 			    ifa->ifa_addr->sa_len);
@@ -797,7 +821,7 @@ clone_create(const char *addr, int param)
 	/* We're called early... */
 	getsock(AF_INET);
 
-	(void) strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
+	estrlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
 	if (ioctl(s, SIOCIFCREATE, &ifr) == -1)
 		err(EXIT_FAILURE, "SIOCIFCREATE");
 }
@@ -807,7 +831,7 @@ void
 clone_destroy(const char *addr, int param)
 {
 
-	(void) strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
+	estrlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
 	if (ioctl(s, SIOCIFDESTROY, &ifr) == -1)
 		err(EXIT_FAILURE, "SIOCIFDESTROY");
 }
@@ -828,7 +852,7 @@ setifaddr(const char *addr, int param)
 		newaddr = 1;
 	if (doalias == 0 && afp->af_gifaddr != 0) {
 		siifr = (struct ifreq *)afp->af_ridreq;
-		(void) strncpy(siifr->ifr_name, name, sizeof(siifr->ifr_name));
+		estrlcpy(siifr->ifr_name, name, sizeof(siifr->ifr_name));
 		siifr->ifr_addr.sa_family = afp->af_af;
 		if (ioctl(s, afp->af_gifaddr, afp->af_ridreq) == 0)
 			clearaddr = 1;
@@ -888,17 +912,34 @@ setifdstaddr(const char *addr, int param)
 }
 
 void
+check_ifflags_up(const char *vname)
+{
+	struct ifreq ifreq;
+
+	estrlcpy(ifreq.ifr_name, name, sizeof(ifreq.ifr_name));
+ 	if (ioctl(s, SIOCGIFFLAGS, &ifreq) == -1)
+		err(EXIT_FAILURE, "SIOCGIFFLAGS");
+	if (ifreq.ifr_flags & IFF_UP)
+		return;
+	ifreq.ifr_flags |= IFF_UP;
+	if (ioctl(s, SIOCSIFFLAGS, &ifreq) == -1)
+		err(EXIT_FAILURE, "SIOCSIFFLAGS");
+}
+
+void
 setifflags(const char *vname, int value)
 {
 	struct ifreq ifreq;
 
-	(void) strncpy(ifreq.ifr_name, name, sizeof(ifreq.ifr_name));
+	estrlcpy(ifreq.ifr_name, name, sizeof(ifreq.ifr_name));
  	if (ioctl(s, SIOCGIFFLAGS, &ifreq) == -1)
 		err(EXIT_FAILURE, "SIOCGIFFLAGS");
  	flags = ifreq.ifr_flags;
 
 	if (value < 0) {
 		value = -value;
+		if (value == IFF_UP)
+			check_up_state = 0;
 		flags &= ~value;
 	} else
 		flags |= value;
@@ -925,7 +966,7 @@ setifmetric(const char *val, int d)
 {
 	char *ep = NULL;
 
-	(void) strncpy(ifr.ifr_name, name, sizeof (ifr.ifr_name));
+	estrlcpy(ifr.ifr_name, name, sizeof (ifr.ifr_name));
 	ifr.ifr_metric = strtoul(val, &ep, 10);
 	if (!ep || *ep)
 		errx(EXIT_FAILURE, "%s: invalid metric", val);
@@ -934,11 +975,37 @@ setifmetric(const char *val, int d)
 }
 
 void
+setifpreference(const char *val, int d)
+{
+	char *end = NULL;
+	if (setaddr <= 0) {
+		errx(EXIT_FAILURE,
+		    "set address preference: first specify an address");
+	}
+	preference = strtoul(val, &end, 10);
+	if (end == NULL || *end != '\0' || preference > UINT16_MAX)
+		errx(EXIT_FAILURE, "invalid preference %s", val);
+	have_preference = 1;
+}
+
+void
+do_setifpreference(void)
+{
+	struct if_addrprefreq ifap;
+	(void)strncpy(ifap.ifap_name, name, sizeof(ifap.ifap_name));
+	ifap.ifap_preference = (uint16_t)preference;
+	(void)memcpy(&ifap.ifap_addr, rqtosa(af_addreq),
+	    MIN(sizeof(ifap.ifap_addr), rqtosa(af_addreq)->sa_len));
+	if (ioctl(s, SIOCSIFADDRPREF, &ifap) == -1)
+		warn("SIOCSIFADDRPREF");
+}
+
+void
 setifmtu(const char *val, int d)
 {
 	char *ep = NULL;
 
-	(void)strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
+	estrlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
 	ifr.ifr_mtu = strtoul(val, &ep, 10);
 	if (!ep || *ep)
 		errx(EXIT_FAILURE, "%s: invalid mtu", val);
@@ -1041,7 +1108,7 @@ init_current_media(void)
 	 */
 	if ((actions & (A_MEDIA|A_MEDIAOPT|A_MEDIAMODE)) == 0) {
 		(void) memset(&ifmr, 0, sizeof(ifmr));
-		(void) strncpy(ifmr.ifm_name, name, sizeof(ifmr.ifm_name));
+		estrlcpy(ifmr.ifm_name, name, sizeof(ifmr.ifm_name));
 
 		if (ioctl(s, SIOCGIFMEDIA, &ifmr) == -1) {
 			/*
@@ -1076,7 +1143,7 @@ process_media_commands(void)
 	media_current |= mediaopt_set;
 	media_current &= ~mediaopt_clear;
 
-	strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
+	estrlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
 	ifr.ifr_media = media_current;
 
 	if (ioctl(s, SIOCSIFMEDIA, &ifr) == -1)
@@ -1255,7 +1322,7 @@ carrier(void)
 	struct ifmediareq ifmr;
 
 	(void) memset(&ifmr, 0, sizeof(ifmr));
-	(void) strncpy(ifmr.ifm_name, name, sizeof(ifmr.ifm_name));
+	estrlcpy(ifmr.ifm_name, name, sizeof(ifmr.ifm_name));
 
 	if (ioctl(s, SIOCGIFMEDIA, &ifmr) == -1) {
 		/*
@@ -1314,6 +1381,9 @@ status(const struct sockaddr_dl *sdl)
 
 	ieee80211_status();
 	vlan_status();
+#ifndef INET_ONLY
+	carp_status();
+#endif
 	tunnel_status();
 	agr_status();
 
@@ -1324,7 +1394,7 @@ status(const struct sockaddr_dl *sdl)
 		printf("\taddress: %s\n", hbuf);
 
 	(void) memset(&ifmr, 0, sizeof(ifmr));
-	(void) strncpy(ifmr.ifm_name, name, sizeof(ifmr.ifm_name));
+	estrlcpy(ifmr.ifm_name, name, sizeof(ifmr.ifm_name));
 
 	if (ioctl(s, SIOCGIFMEDIA, &ifmr) == -1) {
 		/*
@@ -1411,7 +1481,7 @@ status(const struct sockaddr_dl *sdl)
 	if (!vflag && !zflag)
 		goto proto_status;
 
-	(void) strncpy(ifdr.ifdr_name, name, sizeof(ifdr.ifdr_name));
+	estrlcpy(ifdr.ifdr_name, name, sizeof(ifdr.ifdr_name));
 
 	if (ioctl(s, zflag ? SIOCZIFDATA:SIOCGIFDATA, &ifdr) == -1) {
 		err(EXIT_FAILURE, zflag ? "SIOCZIFDATA" : "SIOCGIFDATA");
@@ -1514,10 +1584,12 @@ usage(void)
 		"\t[ up ] [ down ] [ metric n ] [ mtu n ]\n"
 		"\t[ nwid network_id ] [ nwkey network_key | -nwkey ]\n"
 		"\t[ powersave | -powersave ] [ powersavesleep duration ]\n"
+		"\t[ hidessid | -hidessid ] [ apbridge | -apbridge ]\n"
 		"\t[ [ af ] tunnel src_addr dest_addr ] [ deletetunnel ]\n"
 		"\t[ arp | -arp ]\n"
 		"\t[ media type ] [ mediaopt opts ] [ -mediaopt opts ] "
 		"[ instance minst ]\n"
+		"\t[ preference n ]\n"
 		"\t[ vlan n vlanif i ]\n"
 		"\t[ agrport i ] [ -agrport i ]\n"
 		"\t[ anycast | -anycast ] [ deprecated | -deprecated ]\n"

@@ -1,4 +1,4 @@
-/*      $NetBSD: if_xge.c,v 1.2 2005/12/11 12:22:50 christos Exp $ */
+/*      $NetBSD: if_xge.c,v 1.4 2006/11/16 01:33:09 christos Exp $ */
 
 /*
  * Copyright (c) 2004, SUNET, Swedish University Computer Network.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.2 2005/12/11 12:22:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.4 2006/11/16 01:33:09 christos Exp $");
 
 #include "bpfilter.h"
 #include "rnd.h"

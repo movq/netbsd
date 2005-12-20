@@ -39,7 +39,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  *
- * $Id: ahc_pci.c,v 1.52 2005/12/11 12:22:48 christos Exp $
+ * $Id: ahc_pci.c,v 1.58 2006/11/16 01:33:08 christos Exp $
  *
  * //depot/aic7xxx/aic7xxx/aic7xxx_pci.c#57 $
  *
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahc_pci.c,v 1.52 2005/12/11 12:22:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahc_pci.c,v 1.58 2006/11/16 01:33:08 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -81,7 +81,7 @@ __KERNEL_RCSID(0, "$NetBSD: ahc_pci.c,v 1.52 2005/12/11 12:22:48 christos Exp $"
 #include <dev/ic/smc93cx6var.h>
 
 
-static __inline uint64_t
+static inline uint64_t
 ahc_compose_id(u_int device, u_int vendor, u_int subdevice, u_int subvendor)
 {
 	uint64_t id;
@@ -741,7 +741,8 @@ ahc_find_pci_device(pcireg_t id, pcireg_t subid, u_int func)
 }
 
 static int
-ahc_pci_probe(struct device *parent, struct cfdata *match, void *aux)
+ahc_pci_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	const struct	   ahc_pci_identity *entry;
@@ -1039,9 +1040,27 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 		/* See if someone else set us up already */
 		if ((ahc->flags & AHC_NO_BIOS_INIT) == 0
 		 && scsiseq != 0) {
+			prop_bool_t usetd;
+
 			printf("%s: Using left over BIOS settings\n",
 				ahc_name(ahc));
 			ahc->flags &= ~AHC_USEDEFAULTS;
+			/*
+			 * Ignore target device settings and use default
+			 * if BIOS initializes chip's SRAM with some
+			 * conservative settings (async, no tagged
+			 * queuing etc.) and machine dependent device
+			 * property is set.
+			 */ 
+			usetd = prop_dictionary_get(
+					device_properties(&ahc->sc_dev),
+					"aic7xxx-use-target-defaults");
+			if (usetd != NULL) {
+				KASSERT(prop_object_type(usetd) ==
+					PROP_TYPE_BOOL);
+				if (prop_bool_true(usetd))
+					ahc->flags |= AHC_USETARGETDEFAULTS;
+			}
 			ahc->flags |= AHC_BIOS_ENABLED;
 		} else {
 			/*
@@ -1690,7 +1709,7 @@ ahc_aha29160C_setup(struct ahc_softc *ahc)
 static int
 ahc_raid_setup(struct ahc_softc *ahc)
 {
-	printf("RAID functionality unsupported\n");
+	printf("%s: RAID functionality unsupported\n", ahc->sc_dev.dv_xname);
 	return (ENXIO);
 }
 

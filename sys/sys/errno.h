@@ -1,4 +1,4 @@
-/*	$NetBSD: errno.h,v 1.37 2005/12/11 12:25:20 christos Exp $	*/
+/*	$NetBSD: errno.h,v 1.39 2006/10/31 00:38:07 cbiere Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -88,7 +88,7 @@
 #define	EDESTADDRREQ	39		/* Destination address required */
 #define	EMSGSIZE	40		/* Message too long */
 #define	EPROTOTYPE	41		/* Protocol wrong type for socket */
-#define	ENOPROTOOPT	42		/* Protocol not available */
+#define	ENOPROTOOPT	42		/* Protocol option not available */
 #define	EPROTONOSUPPORT	43		/* Protocol not supported */
 #define	ESOCKTNOSUPPORT	44		/* Socket type not supported */
 #define	EOPNOTSUPP	45		/* Operation not supported */
@@ -167,7 +167,12 @@
 /* File system extended attribute errors */
 #define	ENOATTR		93		/* Attribute not found */
 
-#define	ELAST		93		/* Must equal largest errno */
+/* Realtime, XSI STREAMS option errors */
+#define	EMULTIHOP	94		/* Multihop attempted */ 
+#define	ENOLINK		95		/* Link has been severed */
+#define	EPROTO		96		/* Protocol error */
+
+#define	ELAST		96		/* Must equal largest errno */
 
 #ifdef _KERNEL
 /* pseudo-errors returned inside kernel to modify return to process */

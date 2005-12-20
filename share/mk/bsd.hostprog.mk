@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.hostprog.mk,v 1.45 2005/09/02 03:57:10 jwise Exp $
+#	$NetBSD: bsd.hostprog.mk,v 1.50 2006/11/09 17:06:54 christos Exp $
 #	@(#)bsd.prog.mk	8.2 (Berkeley) 4/2/94
 
 .include <bsd.init.mk>
@@ -8,10 +8,10 @@
 clean:		cleanprog
 
 ##### Default values
+LIBBLUETOOTH?=	/usr/lib/libbluetooth.a
 LIBBZ2?=	/usr/lib/libbz2.a
 LIBC?=		/usr/lib/libc.a
 LIBC_PIC?=	/usr/lib/libc_pic.a
-LIBCDK?=	/usr/lib/libcdk.a
 LIBCOMPAT?=	/usr/lib/libcompat.a
 LIBCRYPT?=	/usr/lib/libcrypt.a
 LIBCURSES?=	/usr/lib/libcurses.a
@@ -24,8 +24,6 @@ LIBGCC?=	/usr/lib/libgcc.a
 LIBGNUMALLOC?=	/usr/lib/libgnumalloc.a
 LIBINTL?=	/usr/lib/libintl.a
 LIBIPSEC?=	/usr/lib/libipsec.a
-LIBKDB?=	/usr/lib/libkdb.a
-LIBKRB?=	/usr/lib/libkrb.a
 LIBKVM?=	/usr/lib/libkvm.a
 LIBL?=		/usr/lib/libl.a
 LIBM?=		/usr/lib/libm.a
@@ -39,10 +37,14 @@ LIBPCAP?=	/usr/lib/libpcap.a
 LIBPCI?=	/usr/lib/libpci.a
 LIBPLOT?=	/usr/lib/libplot.a
 LIBPOSIX?=	/usr/lib/libposix.a
+LIBPUFFS?=	/usr/lib/libpuffs.a
 LIBRESOLV?=	/usr/lib/libresolv.a
 LIBRPCSVC?=	/usr/lib/librpcsvc.a
+LIBSDP?=	/usr/lib/libsdp.a
 LIBSKEY?=	/usr/lib/libskey.a
-LIBSTDCPP?=	/usr/lib/libstdc++.a
+LIBSSP?=	/usr/lib/libssp.a
+LIBSTDCXX?=	/usr/lib/libstdc++.a
+LIBSUPCXX?=	/usr/lib/libsupc++.a
 LIBTERMCAP?=	/usr/lib/libtermcap.a
 LIBUTIL?=	/usr/lib/libutil.a
 LIBWRAP?=	/usr/lib/libwrap.a

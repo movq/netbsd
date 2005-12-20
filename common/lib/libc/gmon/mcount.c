@@ -1,4 +1,4 @@
-/*	$NetBSD: mcount.c,v 1.1 2005/12/20 19:28:51 christos Exp $	*/
+/*	$NetBSD: mcount.c,v 1.7 2006/10/27 22:14:13 uwe Exp $	*/
 
 /*
  * Copyright (c) 2003, 2004 Wasabi Systems, Inc.
@@ -65,7 +65,7 @@
  */
 
 /* If building a standalone libkern, don't include mcount. */
-#if defined(GPROF) && !defined(_STANDALONE)
+#if (!defined(_KERNEL) || defined(GPROF)) && !defined(_STANDALONE)
 
 #ifdef _KERNEL_OPT
 #include "opt_multiprocessor.h"
@@ -76,14 +76,16 @@
 #if 0
 static char sccsid[] = "@(#)mcount.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: mcount.c,v 1.1 2005/12/20 19:28:51 christos Exp $");
+__RCSID("$NetBSD: mcount.c,v 1.7 2006/10/27 22:14:13 uwe Exp $");
 #endif
 #endif
 
 #include <sys/param.h>
 #include <sys/gmon.h>
 
+#ifndef _KERNEL
 #include "reentrant.h"
+#endif
 
 #ifdef _REENTRANT
 extern thread_key_t _gmonkey;
@@ -93,14 +95,9 @@ struct gmonparam *_m_gmon_alloc(void);
 
 _MCOUNT_DECL __P((u_long, u_long))
 #ifdef _KERNEL
-	__attribute__((__unused__,__no_instrument_function__));	/* see below. */
-#else
-#ifdef __vax__
-_MCOUNT_DECL __P((u_long, u_long)) __attribute__((__unused__));	/* see below. */
-#else
-_MCOUNT_DECL __P((u_long, u_long)) __attribute__((__used__));	/* see below. */
+    __attribute__((__no_instrument_function__))
 #endif
-#endif
+    __used;
 
 /*
  * mcount is called on entry to each function compiled with the profiling
@@ -260,4 +257,4 @@ overflow:
 MCOUNT
 #endif
 
-#endif /* GPROF && !_STANDALONE */
+#endif /* (!_KERNEL || GPROF) && !_STANDALONE */

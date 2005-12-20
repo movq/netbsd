@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_subr.c,v 1.55 2005/12/11 12:25:26 christos Exp $	*/
+/*	$NetBSD: lfs_subr.c,v 1.65 2006/11/16 01:33:53 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_subr.c,v 1.55 2005/12/11 12:25:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_subr.c,v 1.65 2006/11/16 01:33:53 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,42 +77,13 @@ __KERNEL_RCSID(0, "$NetBSD: lfs_subr.c,v 1.55 2005/12/11 12:25:26 christos Exp $
 #include <sys/mount.h>
 #include <sys/malloc.h>
 #include <sys/proc.h>
+#include <sys/kauth.h>
 
 #include <ufs/ufs/inode.h>
 #include <ufs/lfs/lfs.h>
 #include <ufs/lfs/lfs_extern.h>
 
 #include <uvm/uvm.h>
-
-/*
- * Return buffer with the contents of block "offset" from the beginning of
- * directory "ip".  If "res" is non-zero, fill it in with a pointer to the
- * remaining space in the directory.
- */
-int
-lfs_blkatoff(struct vnode *vp, off_t offset, char **res, struct buf **bpp)
-{
-	struct lfs *fs;
-	struct inode *ip;
-	struct buf *bp;
-	daddr_t lbn;
-	int bsize, error;
-
-	ip = VTOI(vp);
-	fs = ip->i_lfs;
-	lbn = lblkno(fs, offset);
-	bsize = blksize(fs, ip, lbn);
-
-	*bpp = NULL;
-	if ((error = bread(vp, lbn, bsize, NOCRED, &bp)) != 0) {
-		brelse(bp);
-		return (error);
-	}
-	if (res)
-		*res = (char *)bp->b_data + blkoff(fs, offset);
-	*bpp = bp;
-	return (0);
-}
 
 #ifdef DEBUG
 const char *lfs_res_names[LFS_NB_COUNT] = {
@@ -327,7 +298,8 @@ lfs_seglock(struct lfs *fs, unsigned long flags)
 
 	simple_lock(&fs->lfs_interlock);
 	if (fs->lfs_seglock) {
-		if (fs->lfs_lockpid == curproc->p_pid) {
+		if (fs->lfs_lockpid == curproc->p_pid &&
+		    fs->lfs_locklwp == curlwp->l_lid) {
 			simple_unlock(&fs->lfs_interlock);
 			++fs->lfs_seglock;
 			fs->lfs_sp->seg_flags |= flags;
@@ -345,6 +317,7 @@ lfs_seglock(struct lfs *fs, unsigned long flags)
 
 	fs->lfs_seglock = 1;
 	fs->lfs_lockpid = curproc->p_pid;
+	fs->lfs_locklwp = curlwp->l_lid;
 	simple_unlock(&fs->lfs_interlock);
 	fs->lfs_cleanind = 0;
 
@@ -398,17 +371,17 @@ lfs_unmark_dirop(struct lfs *fs)
 		vp = ITOV(ip);
 
 		simple_lock(&vp->v_interlock);
-		if (VOP_ISLOCKED(vp) &&
-			   vp->v_lock.lk_lockholder != curproc->p_pid) {
+		if (VOP_ISLOCKED(vp) == LK_EXCLOTHER) {
 			simple_lock(&fs->lfs_interlock);
 			simple_unlock(&vp->v_interlock);
 			continue;
 		}
-		if ((VTOI(vp)->i_flag & IN_ADIROP) == 0) {
+		if ((VTOI(vp)->i_flag & (IN_ADIROP | IN_ALLMOD)) == 0) {
 			simple_lock(&fs->lfs_interlock);
 			simple_lock(&lfs_subsys_lock);
 			--lfs_dirvcount;
 			simple_unlock(&lfs_subsys_lock);
+			--fs->lfs_dirvcount;
 			vp->v_flag &= ~VDIROP;
 			TAILQ_REMOVE(&fs->lfs_dchainhd, ip, i_lfs_dchain);
 			simple_unlock(&fs->lfs_interlock);
@@ -488,18 +461,20 @@ lfs_segunlock(struct lfs *fs)
 	simple_lock(&fs->lfs_interlock);
 	LOCK_ASSERT(LFS_SEGLOCK_HELD(fs));
 	if (fs->lfs_seglock == 1) {
-		if ((sp->seg_flags & SEGM_PROT) == 0)
+		if ((sp->seg_flags & (SEGM_PROT | SEGM_CLEAN)) == 0 &&
+		    LFS_STARVED_FOR_SEGS(fs) == 0)
 			do_unmark_dirop = 1;
 		simple_unlock(&fs->lfs_interlock);
 		sync = sp->seg_flags & SEGM_SYNC;
 		ckp = sp->seg_flags & SEGM_CKP;
-		if (sp->bpp != sp->cbpp) {
-			/* Free allocated segment summary */
-			fs->lfs_offset -= btofsb(fs, fs->lfs_sumsize);
-			bp = *sp->bpp;
-			lfs_freebuf(fs, bp);
-		} else
-			DLOG((DLOG_SEG, "lfs_segunlock: unlock to 0 with no summary"));
+
+		/* We should have a segment summary, and nothing else */
+		KASSERT(sp->cbpp == sp->bpp + 1);
+
+		/* Free allocated segment summary */
+		fs->lfs_offset -= btofsb(fs, fs->lfs_sumsize);
+		bp = *sp->bpp;
+		lfs_freebuf(fs, bp);
 
 		pool_put(&fs->lfs_bpppool, sp->bpp);
 		sp->bpp = NULL;
@@ -520,8 +495,9 @@ lfs_segunlock(struct lfs *fs)
 		 * sleep.
 		 */
 		simple_lock(&fs->lfs_interlock);
-		if (--fs->lfs_iocount == 0)
+		if (--fs->lfs_iocount == 0) {
 			LFS_DEBUG_COUNTLOCKED("lfs_segunlock");
+		}
 		if (fs->lfs_iocount <= 1)
 			wakeup(&fs->lfs_iocount);
 		simple_unlock(&fs->lfs_interlock);
@@ -537,6 +513,7 @@ lfs_segunlock(struct lfs *fs)
 			simple_lock(&fs->lfs_interlock);
 			--fs->lfs_seglock;
 			fs->lfs_lockpid = 0;
+			fs->lfs_locklwp = 0;
 			simple_unlock(&fs->lfs_interlock);
 			wakeup(&fs->lfs_seglock);
 		}
@@ -580,6 +557,7 @@ lfs_segunlock(struct lfs *fs)
 			simple_lock(&fs->lfs_interlock);
 			--fs->lfs_seglock;
 			fs->lfs_lockpid = 0;
+			fs->lfs_locklwp = 0;
 			simple_unlock(&fs->lfs_interlock);
 			wakeup(&fs->lfs_seglock);
 		}
@@ -636,4 +614,68 @@ lfs_writer_leave(struct lfs *fs)
 	simple_unlock(&fs->lfs_interlock);
 	if (dowakeup)
 		wakeup(&fs->lfs_dirops);
+}
+
+/*
+ * Unlock, wait for the cleaner, then relock to where we were before.
+ * To be used only at a fairly high level, to address a paucity of free
+ * segments propagated back from lfs_gop_write().
+ */
+void
+lfs_segunlock_relock(struct lfs *fs)
+{
+	int n = fs->lfs_seglock;
+	u_int16_t seg_flags;
+	CLEANERINFO *cip;
+	struct buf *bp;
+
+	if (n == 0)
+		return;
+
+	/* Write anything we've already gathered to disk */
+	lfs_writeseg(fs, fs->lfs_sp);
+
+	/* Tell cleaner */
+	LFS_CLEANERINFO(cip, fs, bp);
+	cip->flags |= LFS_CLEANER_MUST_CLEAN;
+	LFS_SYNC_CLEANERINFO(cip, fs, bp, 1);
+
+	/* Save segment flags for later */
+	seg_flags = fs->lfs_sp->seg_flags;
+
+	fs->lfs_sp->seg_flags |= SEGM_PROT; /* Don't unmark dirop nodes */
+	while(fs->lfs_seglock)
+		lfs_segunlock(fs);
+
+	/* Wait for the cleaner */
+	lfs_wakeup_cleaner(fs);
+	simple_lock(&fs->lfs_interlock);
+	while (LFS_STARVED_FOR_SEGS(fs))
+		ltsleep(&fs->lfs_avail, PRIBIO, "relock", 0,
+			&fs->lfs_interlock);
+	simple_unlock(&fs->lfs_interlock);
+
+	/* Put the segment lock back the way it was. */
+	while(n--)
+		lfs_seglock(fs, seg_flags);
+
+	/* Cleaner can relax now */
+	LFS_CLEANERINFO(cip, fs, bp);
+	cip->flags &= ~LFS_CLEANER_MUST_CLEAN;
+	LFS_SYNC_CLEANERINFO(cip, fs, bp, 1);
+
+	return;
+}
+
+/*
+ * Wake up the cleaner, provided that nowrap is not set.
+ */
+void
+lfs_wakeup_cleaner(struct lfs *fs)
+{
+	if (fs->lfs_nowrap > 0)
+		return;
+
+	wakeup(&fs->lfs_nextseg);
+	wakeup(&lfs_allclean_wakeup);
 }

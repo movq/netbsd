@@ -1,4 +1,4 @@
-/*	$NetBSD: siop.c,v 1.79 2005/11/18 23:10:32 bouyer Exp $	*/
+/*	$NetBSD: siop.c,v 1.82 2006/11/02 15:08:30 garbled Exp $	*/
 
 /*
  * Copyright (c) 2000 Manuel Bouyer.
@@ -33,7 +33,7 @@
 /* SYM53c7/8xx PCI-SCSI I/O Processors driver */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: siop.c,v 1.79 2005/11/18 23:10:32 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: siop.c,v 1.82 2006/11/02 15:08:30 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,11 +64,13 @@ __KERNEL_RCSID(0, "$NetBSD: siop.c,v 1.79 2005/11/18 23:10:32 bouyer Exp $");
 #ifndef DEBUG
 #undef DEBUG
 #endif
-#undef SIOP_DEBUG
-#undef SIOP_DEBUG_DR
-#undef SIOP_DEBUG_INTR
-#undef SIOP_DEBUG_SCHED
-#undef DUMP_SCRIPT
+/*
+#define SIOP_DEBUG
+#define SIOP_DEBUG_DR
+#define SIOP_DEBUG_INTR
+#define SIOP_DEBUG_SCHED
+#define DUMP_SCRIPT
+*/
 
 #define SIOP_STATS
 
@@ -114,8 +116,8 @@ void siop_printstats(void);
 #define INCSTAT(x)
 #endif
 
-static __inline__ void siop_script_sync(struct siop_softc *, int);
-static __inline__ void
+static inline void siop_script_sync(struct siop_softc *, int);
+static inline void
 siop_script_sync(sc, ops)
 	struct siop_softc *sc;
 	int ops;
@@ -125,8 +127,8 @@ siop_script_sync(sc, ops)
 		    PAGE_SIZE, ops);
 }
 
-static __inline__ u_int32_t siop_script_read(struct siop_softc *, u_int);
-static __inline__ u_int32_t
+static inline u_int32_t siop_script_read(struct siop_softc *, u_int);
+static inline u_int32_t
 siop_script_read(sc, offset)
 	struct siop_softc *sc;
 	u_int offset;
@@ -139,9 +141,9 @@ siop_script_read(sc, offset)
 	}
 }
 
-static __inline__ void siop_script_write(struct siop_softc *, u_int,
+static inline void siop_script_write(struct siop_softc *, u_int,
 	u_int32_t);
-static __inline__ void
+static inline void
 siop_script_write(sc, offset, val)
 	struct siop_softc *sc;
 	u_int offset;
@@ -1740,12 +1742,10 @@ siop_morecbd(sc)
 		TAILQ_INSERT_TAIL(&sc->free_list, &newcbd->cmds[i], next);
 		splx(s);
 #ifdef SIOP_DEBUG
-		printf("tables[%d]: in=0x%x out=0x%x status=0x%x "
-		    "offset=0x%x\n", i,
+		printf("tables[%d]: in=0x%x out=0x%x status=0x%x\n", i
 		    le32toh(newcbd->cmds[i].cmd_tables->t_msgin.addr),
 		    le32toh(newcbd->cmds[i].cmd_tables->t_msgout.addr),
-		    le32toh(newcbd->cmds[i].cmd_tables->t_status.addr),
-		    le32toh(newcbd->cmds[i].cmd_tables->t_offset.addr));
+		    le32toh(newcbd->cmds[i].cmd_tables->t_status.addr));
 #endif
 	}
 	s = splbio();

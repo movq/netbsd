@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_node.c,v 1.26 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: smbfs_node.c,v 1.30 2006/11/02 17:34:21 jmmv Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_node.c,v 1.26 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_node.c,v 1.30 2006/11/02 17:34:21 jmmv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,6 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: smbfs_node.c,v 1.26 2005/12/11 12:24:29 christos Exp
 #include <sys/sysctl.h>
 #include <sys/time.h>
 #include <sys/vnode.h>
+#include <sys/kauth.h>
 
 #include <netsmb/smb.h>
 #include <netsmb/smb_conn.h>
@@ -112,7 +113,7 @@ smbfs_node_alloc(struct mount *mp, struct vnode *dvp,
 	if (nmlen == 2 && memcmp(name, "..", 2) == 0) {
 		if (dvp == NULL)
 			return EINVAL;
-		vp = VTOSMB(dvp)->n_parent->n_vnode;
+		vp = VTOSMB(VTOSMB(dvp)->n_parent)->n_vnode;
 		if ((error = vget(vp, LK_EXCLUSIVE | LK_RETRY)) == 0)
 			*vpp = vp;
 		return (error);
@@ -129,7 +130,7 @@ retry:
 loop:
 	nhpp = SMBFS_NOHASH(smp, hashval);
 	LIST_FOREACH(np, nhpp, n_hash) {
-		if (np->n_parent != dnp
+		if (np->n_parent != dvp
 		    || np->n_nmlen != nmlen
 		    || memcmp(name, np->n_name, nmlen) != 0)
 			continue;
@@ -170,7 +171,7 @@ loop:
 	KASSERT(vp->v_type != VREG || dvp != NULL);
 
 	if (dvp) {
-		np->n_parent = dnp;
+		np->n_parent = dvp;
 		if (/*vp->v_type == VDIR &&*/ (dvp->v_flag & VROOT) == 0) {
 			vref(dvp);
 			np->n_flag |= NREFPARENT;
@@ -185,7 +186,7 @@ loop:
 	 * malloc.
 	 */
 	LIST_FOREACH(np2, nhpp, n_hash) {
-		if (np2->n_parent != dnp
+		if (np2->n_parent != dvp
 		    || np2->n_nmlen != nmlen
 		    || memcmp(name, np2->n_name, nmlen) != 0)
 			continue;
@@ -245,7 +246,7 @@ smbfs_reclaim(v)
 	smbfs_hash_lock(smp);
 
 	dvp = (np->n_parent && (np->n_flag & NREFPARENT)) ?
-	    np->n_parent->n_vnode : NULL;
+	    np->n_parent : NULL;
 
 	LIST_REMOVE(np, n_hash);
 
@@ -259,8 +260,14 @@ smbfs_reclaim(v)
 	if (np->n_name)
 		smbfs_name_free(np->n_name);
 	pool_put(&smbfs_node_pool, np);
-	if (dvp)
+	if (dvp) {
 		vrele(dvp);
+		/*
+		 * Indicate that we released something; see comment
+		 * in smbfs_unmount().
+		 */
+		smp->sm_didrele = 1;
+	}
 	return 0;
 }
 
@@ -273,7 +280,7 @@ smbfs_inactive(v)
 		struct thread *a_td;
 	} */ *ap = v;
 	struct lwp *l = ap->a_l;
-	struct ucred *cred = l->l_proc->p_ucred;
+	kauth_cred_t cred = l->l_cred;
 	struct vnode *vp = ap->a_vp;
 	struct smbnode *np = VTOSMB(vp);
 	struct smb_cred scred;
@@ -311,7 +318,6 @@ void
 smbfs_attr_cacheenter(struct vnode *vp, struct smbfattr *fap)
 {
 	struct smbnode *np = VTOSMB(vp);
-	int s;
 
 	if (vp->v_type == VREG) {
 		if (np->n_size != fap->fa_size) {
@@ -326,9 +332,7 @@ smbfs_attr_cacheenter(struct vnode *vp, struct smbfattr *fap)
 	np->n_mtime = fap->fa_mtime;
 	np->n_dosattr = fap->fa_attr;
 
-	s = splclock();
-	np->n_attrage = mono_time.tv_sec;
-	splx(s);
+	np->n_attrage = time_uptime;
 }
 
 int
@@ -336,12 +340,9 @@ smbfs_attr_cachelookup(struct vnode *vp, struct vattr *va)
 {
 	struct smbnode *np = VTOSMB(vp);
 	struct smbmount *smp = VTOSMBFS(vp);
-	int s;
 	time_t diff;
 
-	s = splclock();
-	diff = mono_time.tv_sec - np->n_attrage;
-	splx(s);
+	diff = time_uptime - np->n_attrage;
 	if (diff > SMBFS_ATTRTIMO)	/* XXX should be configurable */
 		return ENOENT;
 

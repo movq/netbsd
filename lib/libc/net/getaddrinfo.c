@@ -1,4 +1,4 @@
-/*	$NetBSD: getaddrinfo.c,v 1.75 2005/12/02 11:22:09 yamt Exp $	*/
+/*	$NetBSD: getaddrinfo.c,v 1.87 2006/10/15 16:14:46 christos Exp $	*/
 /*	$KAME: getaddrinfo.c,v 1.29 2000/08/31 17:26:57 itojun Exp $	*/
 
 /*
@@ -32,7 +32,6 @@
 
 /*
  * Issues to be discussed:
- * - Thread safe-ness must be checked.
  * - Return values.  There are nonstandard return values defined and used
  *   in the source code.  This is because RFC2553 is silent about which error
  *   code must be returned for which situation.
@@ -44,9 +43,6 @@
  *   invalid.
  *   current code - SEGV on freeaddrinfo(NULL)
  * Note:
- * - We use getipnodebyname() just for thread-safeness.  There's no intent
- *   to let it do PF_UNSPEC (actually we never pass PF_UNSPEC to
- *   getipnodebyname().
  * - The code filters out AFs that are not supported by the kernel,
  *   when globbing NULL hostname (to loopback, or wildcard).  Is it the right
  *   thing to do?  What is the relationship with post-RFC2553 AI_ADDRCONFIG
@@ -55,31 +51,11 @@
  *   (1) what should we do against numeric hostname (2) what should we do
  *   against NULL hostname (3) what is AI_ADDRCONFIG itself.  AF not ready?
  *   non-loopback address configured?  global address configured?
- * - To avoid search order issue, we have a big amount of code duplicate
- *   from gethnamaddr.c and some other places.  The issues that there's no
- *   lower layer function to lookup "IPv4 or IPv6" record.  Calling
- *   gethostbyname2 from getaddrinfo will end up in wrong search order, as
- *   follows:
- *	- The code makes use of following calls when asked to resolver with
- *	  ai_family  = PF_UNSPEC:
- *		getipnodebyname(host, AF_INET6);
- *		getipnodebyname(host, AF_INET);
- *	  This will result in the following queries if the node is configure to
- *	  prefer /etc/hosts than DNS:
- *		lookup /etc/hosts for IPv6 address
- *		lookup DNS for IPv6 address
- *		lookup /etc/hosts for IPv4 address
- *		lookup DNS for IPv4 address
- *	  which may not meet people's requirement.
- *	  The right thing to happen is to have underlying layer which does
- *	  PF_UNSPEC lookup (lookup both) and return chain of addrinfos.
- *	  This would result in a bit of code duplicate with _dns_ghbyname() and
- *	  friends.
  */
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getaddrinfo.c,v 1.75 2005/12/02 11:22:09 yamt Exp $");
+__RCSID("$NetBSD: getaddrinfo.c,v 1.87 2006/10/15 16:14:46 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -110,6 +86,8 @@ __RCSID("$NetBSD: getaddrinfo.c,v 1.75 2005/12/02 11:22:09 yamt Exp $");
 #include <rpcsvc/yp_prot.h>
 #include <rpcsvc/ypclnt.h>
 #endif
+
+#include "servent.h"
 
 #ifdef __weak_alias
 __weak_alias(getaddrinfo,_getaddrinfo)
@@ -193,7 +171,7 @@ static const struct explore explore[] = {
 static const ns_src default_dns_files[] = {
 	{ NSSRC_FILES, 	NS_SUCCESS },
 	{ NSSRC_DNS, 	NS_SUCCESS },
-	{ 0 }
+	{ 0, 0 }
 };
 
 #define MAXPACKET	(64*1024)
@@ -266,48 +244,50 @@ static const char * const ai_errlist[] = {
 	"System error returned in errno", 		/* EAI_SYSTEM     */
 	"Invalid value for hints",			/* EAI_BADHINTS	  */
 	"Resolved protocol is unknown",			/* EAI_PROTOCOL   */
+	"Argument buffer overflow",			/* EAI_OVERFLOW   */
 	"Unknown error", 				/* EAI_MAX        */
 };
 
 /* XXX macros that make external reference is BAD. */
 
-#define GET_AI(ai, afd, addr) \
-do { \
-	/* external reference: pai, error, and label free */ \
-	(ai) = get_ai(pai, (afd), (addr)); \
-	if ((ai) == NULL) { \
-		error = EAI_MEMORY; \
-		goto free; \
-	} \
+#define GET_AI(ai, afd, addr) 					\
+do { 								\
+	/* external reference: pai, error, and label free */ 	\
+	(ai) = get_ai(pai, (afd), (addr)); 			\
+	if ((ai) == NULL) { 					\
+		error = EAI_MEMORY; 				\
+		goto free; 					\
+	} 							\
 } while (/*CONSTCOND*/0)
 
-#define GET_PORT(ai, serv) \
-do { \
-	/* external reference: error and label free */ \
-	error = get_port((ai), (serv), 0); \
-	if (error != 0) \
-		goto free; \
+#define GET_PORT(ai, serv) 					\
+do { 								\
+	/* external reference: error and label free */ 		\
+	error = get_port((ai), (serv), 0); 			\
+	if (error != 0) 					\
+		goto free; 					\
 } while (/*CONSTCOND*/0)
 
-#define GET_CANONNAME(ai, str) \
-do { \
-	/* external reference: pai, error and label free */ \
-	error = get_canonname(pai, (ai), (str)); \
-	if (error != 0) \
-		goto free; \
+#define GET_CANONNAME(ai, str) 					\
+do { 								\
+	/* external reference: pai, error and label free */ 	\
+	error = get_canonname(pai, (ai), (str)); 		\
+	if (error != 0) 					\
+		goto free; 					\
 } while (/*CONSTCOND*/0)
 
-#define ERR(err) \
-do { \
-	/* external reference: error, and label bad */ \
-	error = (err); \
-	goto bad; \
-	/*NOTREACHED*/ \
+#define ERR(err) 						\
+do { 								\
+	/* external reference: error, and label bad */ 		\
+	error = (err); 						\
+	goto bad; 						\
+	/*NOTREACHED*/ 						\
 } while (/*CONSTCOND*/0)
 
-#define MATCH_FAMILY(x, y, w) \
-	((x) == (y) || (/*CONSTCOND*/(w) && ((x) == PF_UNSPEC || (y) == PF_UNSPEC)))
-#define MATCH(x, y, w) \
+#define MATCH_FAMILY(x, y, w) 						\
+	((x) == (y) || (/*CONSTCOND*/(w) && ((x) == PF_UNSPEC || 	\
+	    (y) == PF_UNSPEC)))	
+#define MATCH(x, y, w) 							\
 	((x) == (y) || (/*CONSTCOND*/(w) && ((x) == ANY || (y) == ANY)))
 
 const char *
@@ -373,6 +353,7 @@ getaddrinfo(const char *hostname, const char *servname,
 
 	memset(&sentinel, 0, sizeof(sentinel));
 	cur = &sentinel;
+	memset(&ai, 0, sizeof(ai));
 	pai = &ai;
 	pai->ai_flags = 0;
 	pai->ai_family = PF_UNSPEC;
@@ -483,13 +464,13 @@ getaddrinfo(const char *hostname, const char *servname,
 		if (error)
 			goto free;
 
-		while (cur && cur->ai_next)
+		while (cur->ai_next)
 			cur = cur->ai_next;
 	}
 
 	/*
 	 * XXX
-	 * If numreic representation of AF1 can be interpreted as FQDN
+	 * If numeric representation of AF1 can be interpreted as FQDN
 	 * representation of AF2, we need to think again about the code below.
 	 */
 	if (sentinel.ai_next)
@@ -569,7 +550,7 @@ explore_fqdn(const struct addrinfo *pai, const char *hostname,
 		NS_FILES_CB(_files_getaddrinfo, NULL)
 		{ NSSRC_DNS, _dns_getaddrinfo, NULL },	/* force -DHESIOD */
 		NS_NIS_CB(_yp_getaddrinfo, NULL)
-		{ 0 }
+		NS_NULL_CB
 	};
 
 	_DIAGASSERT(pai != NULL);
@@ -752,7 +733,7 @@ explore_numeric(const struct addrinfo *pai, const char *hostname,
 					 */
 					GET_CANONNAME(cur->ai_next, canonname);
 				}
-				while (cur && cur->ai_next)
+				while (cur->ai_next)
 					cur = cur->ai_next;
 			} else
 				ERR(EAI_FAMILY);	/*xxx*/
@@ -877,9 +858,6 @@ get_ai(const struct addrinfo *pai, const struct afd *afd, const char *addr)
 	memset(ai->ai_addr, 0, (size_t)afd->a_socklen);
 	ai->ai_addr->sa_len = afd->a_socklen;
 	ai->ai_addrlen = afd->a_socklen;
-#if defined (__alpha__) || (defined(__i386__) && defined(_LP64)) || defined(__sparc64__)
-	ai->__ai_pad0 = 0;
-#endif
 	ai->ai_addr->sa_family = ai->ai_family = afd->a_af;
 	p = (char *)(void *)(ai->ai_addr);
 	memcpy(p + afd->a_off, addr, (size_t)afd->a_addrlen);
@@ -941,6 +919,8 @@ get_port(const struct addrinfo *ai, const char *servname, int matchonly)
 			return EAI_SERVICE;
 		port = htons(port);
 	} else {
+		struct servent_data svd;
+		struct servent sv;
 		if (ai->ai_flags & AI_NUMERICSERV)
 			return EAI_NONAME;
 
@@ -956,7 +936,10 @@ get_port(const struct addrinfo *ai, const char *servname, int matchonly)
 			break;
 		}
 
-		if ((sp = getservbyname(servname, proto)) == NULL)
+		(void)memset(&svd, 0, sizeof(svd));
+		sp = getservbyname_r(servname, proto, &sv, &svd);
+		endservent_r(&svd);
+		if (sp == NULL)
 			return EAI_SERVICE;
 		port = sp->s_port;
 	}
@@ -1286,7 +1269,7 @@ _dns_getaddrinfo(void *rv, void	*cb_data, va_list ap)
 	name = va_arg(ap, char *);
 	pai = va_arg(ap, const struct addrinfo *);
 
-	memset(&q, 0, sizeof(q2));
+	memset(&q, 0, sizeof(q));
 	memset(&q2, 0, sizeof(q2));
 	memset(&sentinel, 0, sizeof(sentinel));
 	cur = &sentinel;
@@ -1570,7 +1553,7 @@ nextline:
 		res0 = NULL;
 	if (res0) {
 		cur->ai_next = res0;
-		while (cur && cur->ai_next)
+		while (cur->ai_next)
 			cur = cur->ai_next;
 	}
 

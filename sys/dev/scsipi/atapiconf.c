@@ -1,4 +1,4 @@
-/*	$NetBSD: atapiconf.c,v 1.69 2005/12/11 12:23:50 christos Exp $	*/
+/*	$NetBSD: atapiconf.c,v 1.72 2006/11/16 01:33:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1996, 2001 Manuel Bouyer.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atapiconf.c,v 1.69 2005/12/11 12:23:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atapiconf.c,v 1.72 2006/11/16 01:33:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -115,7 +115,8 @@ atapiprint(void *aux, const char *pnp)
 }
 
 static int
-atapibusmatch(struct device *parent, struct cfdata *cf, void *aux)
+atapibusmatch(struct device *parent, struct cfdata *cf,
+    void *aux)
 {
 	struct scsipi_channel *chan = aux;
 
@@ -130,7 +131,7 @@ atapibusmatch(struct device *parent, struct cfdata *cf, void *aux)
 
 static int
 atapibussubmatch(struct device *parent, struct cfdata *cf,
-		 const int *ldesc, void *aux)
+    const int *ldesc, void *aux)
 {
 	struct scsipibus_attach_args *sa = aux;
 	struct scsipi_periph *periph = sa->sa_periph;
@@ -144,7 +145,7 @@ atapibussubmatch(struct device *parent, struct cfdata *cf,
 static void
 atapibusattach(struct device *parent, struct device *self, void *aux)
 {
-	struct atapibus_softc *sc = (void *) self;
+	struct atapibus_softc *sc = device_private(self);
 	struct scsipi_channel *chan = aux;
 
 	sc->sc_channel = chan;
@@ -167,7 +168,7 @@ atapibusattach(struct device *parent, struct device *self, void *aux)
 static int
 atapibusactivate(struct device *self, enum devact act)
 {
-	struct atapibus_softc *sc = (void *) self;
+	struct atapibus_softc *sc = device_private(self);
 	struct scsipi_channel *chan = sc->sc_channel;
 	struct scsipi_periph *periph;
 	int target, error = 0, s;
@@ -197,7 +198,7 @@ atapibusactivate(struct device *self, enum devact act)
 static int
 atapibusdetach(struct device *self, int flags)
 {
-	struct atapibus_softc *sc = (void *)self;
+	struct atapibus_softc *sc = device_private(self);
 	struct scsipi_channel *chan = sc->sc_channel;
 	struct scsipi_periph *periph;
 	int target, error;

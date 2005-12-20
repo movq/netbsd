@@ -1,4 +1,4 @@
-/*	$NetBSD: ym_isapnp.c,v 1.18 2005/12/11 12:22:16 christos Exp $ */
+/*	$NetBSD: ym_isapnp.c,v 1.21 2006/11/16 01:33:05 christos Exp $ */
 
 /*
  * Copyright (c) 1991-1993 Regents of the University of California.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ym_isapnp.c,v 1.18 2005/12/11 12:22:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ym_isapnp.c,v 1.21 2006/11/16 01:33:05 christos Exp $");
 
 #include "mpu_ym.h"
 
@@ -85,7 +85,8 @@ CFATTACH_DECL(ym_isapnp, sizeof(struct ym_softc),
  * Probe for the Yamaha hardware.
  */
 int
-ym_isapnp_match(struct device *parent, struct cfdata *match, void *aux)
+ym_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -106,7 +107,7 @@ ym_isapnp_attach(struct device *parent, struct device *self, void *aux)
 	struct ad1848_softc *ac;
 	struct isapnp_attach_args *ipa;
 
-	sc = (struct ym_softc *)self;
+	sc = device_private(self);
 	ac = &sc->sc_ad1848.sc_ad1848;
 	ipa = aux;
 	printf("\n");

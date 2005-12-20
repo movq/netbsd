@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.h,v 1.35 2005/12/11 12:16:46 christos Exp $	*/
+/*	$NetBSD: cpufunc.h,v 1.37 2005/12/28 19:09:29 perry Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -455,7 +455,7 @@ __set_cpsr_c(u_int bic, u_int eor)
 {
 	u_int32_t	tmp, ret;
 
-	__asm __volatile(
+	__asm volatile(
 		"mrs     %0, cpsr\n"	/* Get the CPSR */
 		"bic	 %1, %0, %2\n"	/* Clear bits */
 		"eor	 %1, %1, %3\n"	/* XOR bits */

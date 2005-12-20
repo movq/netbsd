@@ -1,4 +1,4 @@
-/*	$NetBSD: fmt.c,v 1.21 2005/12/16 04:20:09 christos Exp $	*/
+/*	$NetBSD: fmt.c,v 1.25 2006/01/15 14:41:45 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\n\
 #if 0
 static char sccsid[] = "@(#)fmt.c	8.1 (Berkeley) 7/20/93";
 #endif
-__RCSID("$NetBSD: fmt.c,v 1.21 2005/12/16 04:20:09 christos Exp $");
+__RCSID("$NetBSD: fmt.c,v 1.25 2006/01/15 14:41:45 christos Exp $");
 #endif /* not lint */
 
 #include <ctype.h>
@@ -64,8 +64,8 @@ __RCSID("$NetBSD: fmt.c,v 1.21 2005/12/16 04:20:09 christos Exp $");
 static size_t	goal_length;	/* Target or goal line length in output */
 static size_t	max_length;	/* Max line length in output */
 static size_t	pfx;		/* Current leading blank count */
-static size_t	lineno;		/* Current input line */
-static size_t	mark;		/* Last place we saw a head line */
+static int	lineno;		/* Current input line */
+static int	mark;		/* Last place we saw a head line */
 static int	center;
 static struct buffer outbuf;
 
@@ -100,10 +100,10 @@ main(int argc, char **argv)
 	max_length = MAX_LENGTH;
 	buf_init(&outbuf);
 	lineno = 1;
-	mark = ~0U;
+	mark = -10;
 
 	setprogname(*argv);
-	setlocale(LC_ALL, "");
+	(void)setlocale(LC_ALL, "");
 
 	/*
 	 * LIZ@UOM 6/18/85 -- Check for goal and max length arguments 
@@ -139,7 +139,7 @@ main(int argc, char **argv)
 			continue;
 		}
 		fmt(fi);
-		fclose(fi);
+		(void)fclose(fi);
 	}
 	oflush();
 	buf_end(&outbuf);
@@ -170,14 +170,14 @@ fmt(FILE *fi)
 			while (cp2 > cp && isspace((unsigned char)*cp2))
 				cp2--;
 			if (cp == cp2)
-				putchar('\n');
+				(void)putchar('\n');
 			col = cp2 - cp;
 			if (goal_length > col)
 				for (c = 0; c < (goal_length - col) / 2; c++)
-					putchar(' ');
+					(void)putchar(' ');
 			while (cp <= cp2)
-				putchar(*cp++);
-			putchar('\n');
+				(void)putchar(*cp++);
+			(void)putchar('\n');
 		}
 	}
 
@@ -193,7 +193,7 @@ fmt(FILE *fi)
 		buf_reset(&lbuf);
 		while (c != '\n' && c != EOF) {
 			if (c == '\b') {
-				buf_unputc(&lbuf);
+				(void)buf_unputc(&lbuf);
 				c = getc(fi);
 				continue;
 			}
@@ -205,7 +205,7 @@ fmt(FILE *fi)
 			c = getc(fi);
 		}
 		buf_putc(&lbuf, '\0');
-		buf_unputc(&lbuf);
+		(void)buf_unputc(&lbuf);
 		add_space = c != EOF;
 
 		/*
@@ -233,7 +233,7 @@ fmt(FILE *fi)
 			continue;
 		cbuf.ptr = cp2 + 1;
 		buf_putc(&cbuf, '\0');
-		buf_unputc(&cbuf);
+		(void)buf_unputc(&cbuf);
 		prefix(&cbuf, add_space);
 		if (c != EOF)
 			c = getc(fi);
@@ -259,7 +259,7 @@ prefix(const struct buffer *buf, int add_space)
 
 	if (buf->ptr == buf->bptr) {
 		oflush();
-		putchar('\n');
+		(void)putchar('\n');
 		return;
 	}
 	for (cp = buf->bptr; *cp == ' '; cp++)
@@ -276,7 +276,7 @@ prefix(const struct buffer *buf, int add_space)
 		oflush();
 		mark = lineno;
 	}
-	if (mark == ~0U || (lineno - mark < 3 && lineno - mark > 0))
+	if (lineno - mark < 3 && lineno - mark > 0)
 		for (hp = &headnames[0]; *hp != NULL; hp++)
 			if (ispref(*hp, cp)) {
 				h = 1;
@@ -337,7 +337,7 @@ split(const char line[], int add_space)
 			buf_putc(&word, *cp++);
 
 		buf_putc(&word, '\0');
-		buf_unputc(&word);
+		(void)buf_unputc(&word);
 
 		pack(word.bptr, wlen);
 	}
@@ -382,8 +382,8 @@ pack(const char *word, size_t wlen)
 	 */
 	s = outbuf.ptr - outbuf.bptr;
 	t = wlen + s;
-	if ((t <= goal_length) ||
-	    ((t <= max_length) && (t - goal_length <= goal_length - s))) {
+	if ((t <= goal_length) || ((t <= max_length) &&
+	    (s <= goal_length) && (t - goal_length <= goal_length - s))) {
 		/*
 		 * In like flint! 
 		 */
@@ -409,7 +409,7 @@ oflush(void)
 	if (outbuf.bptr == outbuf.ptr)
 		return;
 	buf_putc(&outbuf, '\0');
-	buf_unputc(&outbuf);
+	(void)buf_unputc(&outbuf);
 	tabulate(&outbuf);
 	buf_reset(&outbuf);
 }
@@ -427,9 +427,9 @@ tabulate(struct buffer *buf)
 	/*
 	 * Toss trailing blanks in the output line.
 	 */
-	for (cp = buf->ptr; cp >= buf->bptr && *cp == ' '; cp--)
+	for (cp = buf->ptr - 1; cp >= buf->bptr && *cp == ' '; cp--)
 		continue;
-	*cp = '\0';
+	*++cp = '\0';
 	
 	/*
 	 * Count the leading blank space and tabulate.
@@ -441,15 +441,15 @@ tabulate(struct buffer *buf)
 	b = b % 8;
 	if (t > 0)
 		do
-			putchar('\t');
+			(void)putchar('\t');
 		while (--t);
 	if (b > 0)
 		do
-			putchar(' ');
+			(void)putchar(' ');
 		while (--b);
 	while (*cp)
-		putchar(*cp++);
-	putchar('\n');
+		(void)putchar(*cp++);
+	(void)putchar('\n');
 }
 
 /*

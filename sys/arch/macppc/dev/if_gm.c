@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gm.c,v 1.25 2005/12/11 12:18:03 christos Exp $	*/
+/*	$NetBSD: if_gm.c,v 1.27 2006/09/07 02:40:31 dogcow Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -27,10 +27,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.25 2005/12/11 12:18:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.27 2006/09/07 02:40:31 dogcow Exp $");
 
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "rnd.h"
 #include "bpfilter.h"
 
@@ -100,13 +99,13 @@ struct gmac_softc {
 int gmac_match __P((struct device *, struct cfdata *, void *));
 void gmac_attach __P((struct device *, struct device *, void *));
 
-static __inline u_int gmac_read_reg __P((struct gmac_softc *, int));
-static __inline void gmac_write_reg __P((struct gmac_softc *, int, u_int));
+static inline u_int gmac_read_reg __P((struct gmac_softc *, int));
+static inline void gmac_write_reg __P((struct gmac_softc *, int, u_int));
 
-static __inline void gmac_start_txdma __P((struct gmac_softc *));
-static __inline void gmac_start_rxdma __P((struct gmac_softc *));
-static __inline void gmac_stop_txdma __P((struct gmac_softc *));
-static __inline void gmac_stop_rxdma __P((struct gmac_softc *));
+static inline void gmac_start_txdma __P((struct gmac_softc *));
+static inline void gmac_start_rxdma __P((struct gmac_softc *));
+static inline void gmac_stop_txdma __P((struct gmac_softc *));
+static inline void gmac_stop_rxdma __P((struct gmac_softc *));
 
 int gmac_intr __P((void *));
 void gmac_tint __P((struct gmac_softc *));
@@ -417,7 +416,7 @@ gmac_rint(sc)
 
 next:
 		dp->cmd_hi = 0;
-		__asm __volatile ("sync");
+		__asm volatile ("sync");
 		dp->cmd = htole32(GMAC_OWN);
 	}
 	sc->sc_rxlast = i;
@@ -517,7 +516,7 @@ gmac_start(ifp)
 		i++;
 		if (i == NTXBUF)
 			i = 0;
-		__asm __volatile ("sync");
+		__asm volatile ("sync");
 
 		gmac_write_reg(sc, GMAC_TXDMAKICK, i);
 		sc->sc_txnext = i;
@@ -588,7 +587,7 @@ gmac_reset(sc)
 	sc->sc_rxlast = 0;
 	for (i = 0; i < NRXBUF; i++)
 		sc->sc_rxlist[i].cmd = htole32(GMAC_OWN);
-	__asm __volatile ("sync");
+	__asm volatile ("sync");
 
 	gmac_write_reg(sc, GMAC_TXDMADESCBASEHI, 0);
 	gmac_write_reg(sc, GMAC_TXDMADESCBASELO,
@@ -816,24 +815,6 @@ gmac_ioctl(ifp, cmd, data)
 			gmac_init(sc);
 			arp_ifinit(ifp, ifa);
 			break;
-#endif
-#ifdef NS
-		case AF_NS:
-		    {
-			struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
-
-			if (ns_nullhost(*ina))
-				ina->x_host =
-				    *(union ns_host *)LLADDR(ifp->if_sadl);
-			else {
-				memcpy(LLADDR(ifp->if_sadl),
-				    ina->x_host.c_host,
-				    sizeof(sc->sc_enaddr));
-			}
-			/* Set new address. */
-			gmac_init(sc);
-			break;
-		    }
 #endif
 		default:
 			gmac_init(sc);

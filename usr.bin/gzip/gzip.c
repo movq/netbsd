@@ -1,7 +1,7 @@
-/*	$NetBSD: gzip.c,v 1.81 2005/12/13 10:02:04 wiz Exp $	*/
+/*	$NetBSD: gzip.c,v 1.89 2006/11/13 21:57:59 mrg Exp $	*/
 
 /*
- * Copyright (c) 1997, 1998, 2003, 2004 Matthew R. Green
+ * Copyright (c) 1997, 1998, 2003, 2004, 2006 Matthew R. Green
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,9 +30,9 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__COPYRIGHT("@(#) Copyright (c) 1997, 1998, 2003, 2004 Matthew R. Green\n\
+__COPYRIGHT("@(#) Copyright (c) 1997, 1998, 2003, 2004, 2006 Matthew R. Green\n\
      All rights reserved.\n");
-__RCSID("$NetBSD: gzip.c,v 1.81 2005/12/13 10:02:04 wiz Exp $");
+__RCSID("$NetBSD: gzip.c,v 1.89 2006/11/13 21:57:59 mrg Exp $");
 #endif /* not lint */
 
 /*
@@ -142,7 +142,7 @@ static suffixes_t suffixes[] = {
 };
 #define NUM_SUFFIXES (sizeof suffixes / sizeof suffixes[0])
 
-static	const char	gzip_version[] = "NetBSD gzip 20040830";
+static	const char	gzip_version[] = "NetBSD gzip 20060927";
 
 static	int	cflag;			/* stdout mode */
 static	int	dflag;			/* decompress mode */
@@ -561,7 +561,7 @@ gz_compress(int in, int out, off_t *gsizep, const char *origname, uint32_t mtime
 		if (z.avail_out == 0) {
 			if (write(out, outbufp, BUFLEN) != BUFLEN) {
 				maybe_warn("write");
-				in_tot = -1;
+				out_tot = -1;
 				goto out;
 			}
 
@@ -743,14 +743,21 @@ gz_uncompress(int in, int out, char *pre, size_t prelen, off_t *gsizep,
 			in_tot += in_size;
 		}
 		if (z.avail_in == 0) {
-			if (done_reading && state != GZSTATE_MAGIC0)
+			if (done_reading && state != GZSTATE_MAGIC0) {
 				maybe_warnx("%s: unexpected end of file",
 					    filename);
+				goto stop_and_fail;
+			}
 			goto stop;
 		}
 		switch (state) {
 		case GZSTATE_MAGIC0:
 			if (*z.next_in != GZIP_MAGIC0) {
+				if (in_tot > 0) {
+					maybe_warnx("%s: trailing garbage "
+						    "ignored", filename);
+					goto stop;
+				}
 				maybe_warnx("input not gziped (MAGIC0)");
 				goto stop_and_fail;
 			}
@@ -1256,7 +1263,7 @@ file_uncompress(char *file, char *outfile, size_t outsize)
 	ssize_t rbytes;
 	unsigned char header1[4];
 	enum filetype method;
-	int fd, ofd, zfd = -1;
+	int rv, fd, ofd, zfd = -1;
 #ifndef SMALL
 	time_t timestamp = 0;
 	unsigned char name[PATH_MAX + 1];
@@ -1286,7 +1293,7 @@ file_uncompress(char *file, char *outfile, size_t outsize)
 		if (rbytes == -1)
 			maybe_warn("can't read %s", file);
 		else
-			maybe_warnx("%s: unexpected end of file", file);
+			goto unexpected_EOF;
 		goto lose;
 	}
 
@@ -1304,7 +1311,10 @@ file_uncompress(char *file, char *outfile, size_t outsize)
 	if (method == FT_GZIP && Nflag) {
 		unsigned char ts[4];	/* timestamp */
 
-		if (pread(fd, ts, sizeof ts, GZIP_TIMESTAMP) != sizeof ts) {
+		rv = pread(fd, ts, sizeof ts, GZIP_TIMESTAMP);
+		if (rv >= 0 && rv < sizeof ts)
+			goto unexpected_EOF;
+		if (rv == -1) {
 			if (!fflag)
 				maybe_warn("can't read %s", file);
 			goto lose;
@@ -1487,6 +1497,8 @@ file_uncompress(char *file, char *outfile, size_t outsize)
 	close(ofd);
 	return size;
 
+    unexpected_EOF:
+	maybe_warnx("%s: unexpected end of file", file);
     lose:
 	if (fd != -1)
 		close(fd);
@@ -1568,7 +1580,7 @@ handle_stdin(void)
 		maybe_warn("can't read stdin");
 		return;
 	} else if (bytes_read != sizeof(header1)) {
-		maybe_warnx("unexpected EOF");
+		maybe_warnx("(stdin): unexpected end of file");
 		return;
 	}
 
@@ -1889,13 +1901,21 @@ print_list(int fd, off_t out, const char *outfile, time_t ts)
 			unsigned char buf[8];
 			uint32_t usize;
 
-			if (read(fd, (char *)buf, sizeof(buf)) != sizeof(buf))
+			rv = read(fd, (char *)buf, sizeof(buf));
+			if (rv == -1)
 				maybe_warn("read of uncompressed size");
-			usize = buf[4] | buf[5] << 8 | buf[6] << 16 | buf[7] << 24;
-			in = (off_t)usize;
+			else if (rv != sizeof(buf))
+				maybe_warnx("read of uncompressed size");
+
+			else {
+				usize = buf[4] | buf[5] << 8 |
+					buf[6] << 16 | buf[7] << 24;
+				in = (off_t)usize;
 #ifndef SMALL
-			crc = buf[0] | buf[1] << 8 | buf[2] << 16 | buf[3] << 24;
+				crc = buf[0] | buf[1] << 8 |
+				      buf[2] << 16 | buf[3] << 24;
 #endif
+			}
 		}
 	}
 

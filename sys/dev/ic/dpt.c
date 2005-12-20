@@ -1,4 +1,4 @@
-/*	$NetBSD: dpt.c,v 1.45 2005/12/11 12:21:26 christos Exp $	*/
+/*	$NetBSD: dpt.c,v 1.54 2006/11/16 01:32:51 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dpt.c,v 1.45 2005/12/11 12:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dpt.c,v 1.54 2006/11/16 01:32:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,6 +87,7 @@ __KERNEL_RCSID(0, "$NetBSD: dpt.c,v 1.45 2005/12/11 12:21:26 christos Exp $");
 #include <sys/buf.h>
 #include <sys/endian.h>
 #include <sys/conf.h>
+#include <sys/kauth.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -143,7 +144,7 @@ dev_type_ioctl(dptioctl);
 
 const struct cdevsw dpt_cdevsw = {
 	dptopen, nullclose, noread, nowrite, dptioctl,
-	nostop, notty, nopoll, nommap, nokqfilter,
+	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER,
 };
 
 extern struct cfdriver dpt_cd;
@@ -204,10 +205,10 @@ static void	dpt_shutdown(void *);
 static void	dpt_sysinfo(struct dpt_softc *, struct dpt_sysinfo *);
 static int	dpt_wait(struct dpt_softc *, u_int8_t, u_int8_t, int);
 
-static __inline__ struct dpt_ccb	*dpt_ccb_alloc(struct dpt_softc *);
-static __inline__ void	dpt_ccb_free(struct dpt_softc *, struct dpt_ccb *);
+static inline struct dpt_ccb	*dpt_ccb_alloc(struct dpt_softc *);
+static inline void	dpt_ccb_free(struct dpt_softc *, struct dpt_ccb *);
 
-static __inline__ struct dpt_ccb *
+static inline struct dpt_ccb *
 dpt_ccb_alloc(struct dpt_softc *sc)
 {
 	struct dpt_ccb *ccb;
@@ -221,7 +222,7 @@ dpt_ccb_alloc(struct dpt_softc *sc)
 	return (ccb);
 }
 
-static __inline__ void
+static inline void
 dpt_ccb_free(struct dpt_softc *sc, struct dpt_ccb *ccb)
 {
 	int s;
@@ -330,7 +331,8 @@ dpt_init(struct dpt_softc *sc, const char *intrstr)
 	bus_dma_segment_t seg;
 	struct eata_cfg *ec;
 	struct dpt_ccb *ccb;
-	char model[16];
+	char model[__arraycount(ei->ei_model) + __arraycount(ei->ei_suffix) + 1];
+	char vendor[__arraycount(ei->ei_vendor) + 1];
 
 	ec = &sc->sc_ec;
 	snprintf(dpt_sig.dsDescription, sizeof(dpt_sig.dsDescription),
@@ -424,14 +426,17 @@ dpt_init(struct dpt_softc *sc, const char *intrstr)
 	 * dpt0: interrupting at irq 10
 	 * dpt0: 64 queued commands, 1 channel(s), adapter on ID(s) 7
 	 */
-	for (i = 0; ei->ei_vendor[i] != ' ' && i < 8; i++)
-		;
-	ei->ei_vendor[i] = '\0';
+	for (i = 0; ei->ei_vendor[i] != ' ' && i < __arraycount(ei->ei_vendor);
+	    i++)
+		vendor[i] = ei->ei_vendor[i];
+	vendor[i] = '\0';
 
-	for (i = 0; ei->ei_model[i] != ' ' && i < 7; i++)
+	for (i = 0; ei->ei_model[i] != ' ' && i < __arraycount(ei->ei_model);
+	    i++)
 		model[i] = ei->ei_model[i];
-	for (j = 0; ei->ei_suffix[j] != ' ' && j < 7; i++, j++)
-		model[i] = ei->ei_model[i];
+	for (j = 0; ei->ei_suffix[j] != ' ' && j < __arraycount(ei->ei_suffix);
+	    i++, j++)
+		model[i] = ei->ei_suffix[j];
 	model[i] = '\0';
 
 	/* Find the marketing name for the board. */
@@ -439,7 +444,7 @@ dpt_init(struct dpt_softc *sc, const char *intrstr)
 		if (memcmp(ei->ei_model + 2, dpt_cname[i], 4) == 0)
 			break;
 
-	aprint_normal("%s %s (%s)\n", ei->ei_vendor, dpt_cname[i + 1], model);
+	aprint_normal("%s %s (%s)\n", vendor, dpt_cname[i + 1], model);
 
 	if (intrstr != NULL)
 		aprint_normal("%s: interrupting at %s\n", sc->sc_dv.dv_xname,
@@ -572,7 +577,7 @@ dpt_readcfg(struct dpt_softc *sc)
 	/* Flush until we have read 512 bytes. */
 	i = (512 - j + 1) >> 1;
 	while (i--)
-		bus_space_read_stream_2(sc->sc_iot, sc->sc_ioh, HA_DATA);
+		(void)bus_space_read_stream_2(sc->sc_iot, sc->sc_ioh, HA_DATA);
 
 	/* Defaults for older firmware... */
 	if (p <= (u_short *)&ec->ec_hba[DPT_MAX_CHANNELS - 1])
@@ -1113,8 +1118,6 @@ int
 dptopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 
-	if (securelevel > 1)
-		return (EPERM);
 	if (device_lookup(&dpt_cd, minor(dev)) == NULL)
 		return (ENXIO);
 
@@ -1152,6 +1155,10 @@ dptioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		break;
 
 	case DPT_EATAUSRCMD:
+		rv = kauth_authorize_device_passthru(l->l_cred, dev, data);
+		if (rv)
+			return (rv);
+
 		if (IOCPARM_LEN(cmd) < sizeof(struct eata_ucp)) {
 			DPRINTF(("%s: ucp %lu vs %lu bytes\n",
 			    sc->sc_dv.dv_xname, IOCPARM_LEN(cmd),
@@ -1366,16 +1373,18 @@ dpt_passthrough(struct dpt_softc *sc, struct eata_ucp *ucp, struct lwp *l)
 
 	if (ucp->ucp_stataddr != NULL) {
 		rv = copyout(&sp, ucp->ucp_stataddr, sizeof(sp));
-		if (rv != 0)
+		if (rv != 0) {
 			DPRINTF(("%s: sp copyout() failed\n",
 			    sc->sc_dv.dv_xname));
+		}
 	}
 	if (rv == 0 && ucp->ucp_senseaddr != NULL) {
 		i = min(uslen, sizeof(ccb->ccb_sense));
 		rv = copyout(&ccb->ccb_sense, ucp->ucp_senseaddr, i);
-		if (rv != 0)
+		if (rv != 0) {
 			DPRINTF(("%s: sense copyout() failed\n",
 			    sc->sc_dv.dv_xname));
+		}
 	}
 
 	ucp->ucp_hstatus = (u_int8_t)ccb->ccb_hba_status;

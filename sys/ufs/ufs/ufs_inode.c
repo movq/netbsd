@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_inode.c,v 1.55 2005/12/11 12:25:28 christos Exp $	*/
+/*	$NetBSD: ufs_inode.c,v 1.62 2006/11/16 01:33:53 christos Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_inode.c,v 1.55 2005/12/11 12:25:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_inode.c,v 1.62 2006/11/16 01:33:53 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -51,6 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_inode.c,v 1.55 2005/12/11 12:25:28 christos Exp 
 #include <sys/mount.h>
 #include <sys/kernel.h>
 #include <sys/namei.h>
+#include <sys/kauth.h>
 
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
@@ -102,7 +103,7 @@ ufs_inactive(void *v)
 			(void)chkiq(ip, -1, NOCRED, 0);
 #endif
 #ifdef UFS_EXTATTR
-		ufs_extattr_vnode_inactive(vp, p);
+		ufs_extattr_vnode_inactive(vp, l);
 #endif
 		if (ip->i_size != 0) {
 			error = UFS_TRUNCATE(vp, (off_t)0, 0, NOCRED, l);
@@ -118,6 +119,9 @@ ufs_inactive(void *v)
 		ip->i_mode = 0;
 		DIP_ASSIGN(ip, mode, 0);
 		ip->i_flag |= IN_CHANGE | IN_UPDATE;
+		simple_lock(&vp->v_interlock);
+		vp->v_flag |= VFREEING;
+		simple_unlock(&vp->v_interlock);
 		if (DOINGSOFTDEP(vp))
 			softdep_change_linkcnt(ip);
 		UFS_VFREE(vp, ip->i_number, mode);
@@ -195,13 +199,14 @@ ufs_reclaim(struct vnode *vp, struct lwp *l)
  */
 
 int
-ufs_balloc_range(struct vnode *vp, off_t off, off_t len, struct ucred *cred,
+ufs_balloc_range(struct vnode *vp, off_t off, off_t len, kauth_cred_t cred,
     int flags)
 {
-	off_t oldeof, neweof, oldeob, oldeop, neweob, pagestart;
-	off_t eob;
+	off_t neweof;	/* file size after the operation */
+	off_t neweob;	/* offset next to the last block after the operation */
+	off_t pagestart; /* starting offset of range covered by pgs */
+	off_t eob;	/* offset next to allocated blocks */
 	struct uvm_object *uobj;
-	struct genfs_node *gp = VTOG(vp);
 	int i, delta, error, npages;
 	int bshift = vp->v_mount->mnt_fs_bshift;
 	int bsize = 1 << bshift;
@@ -211,20 +216,8 @@ ufs_balloc_range(struct vnode *vp, off_t off, off_t len, struct ucred *cred,
 	UVMHIST_LOG(ubchist, "vp %p off 0x%x len 0x%x u_size 0x%x",
 		    vp, off, len, vp->v_size);
 
-	oldeof = vp->v_size;
-	GOP_SIZE(vp, oldeof, &oldeop, GOP_SIZE_WRITE);
-	GOP_SIZE(vp, oldeof, &oldeob, GOP_SIZE_READ);
-
-	/*
-	 * If we need to map pages in the former last block,
-	 * do so now.
-	 */
-	if (oldeob != oldeop) {
-		uvm_vnp_zerorange(vp, oldeop, oldeob - oldeop);
-	}
-
 	neweof = MAX(vp->v_size, off + len);
-	GOP_SIZE(vp, neweof, &neweob, GOP_SIZE_WRITE);
+	GOP_SIZE(vp, neweof, &neweob, 0);
 
 	error = 0;
 	uobj = &vp->v_uobj;
@@ -270,16 +263,16 @@ ufs_balloc_range(struct vnode *vp, off_t off, off_t len, struct ucred *cred,
 	 * now allocate the range.
 	 */
 
-	lockmgr(&gp->g_glock, LK_EXCLUSIVE, NULL);
+	genfs_node_wrlock(vp);
 	error = GOP_ALLOC(vp, off, len, flags, cred);
-	lockmgr(&gp->g_glock, LK_RELEASE, NULL);
+	genfs_node_unlock(vp);
 
 	/*
 	 * clear PG_RDONLY on any pages we are holding
 	 * (since they now have backing store) and unbusy them.
 	 */
 
-	GOP_SIZE(vp, off + len, &eob, GOP_SIZE_WRITE);
+	GOP_SIZE(vp, off + len, &eob, 0);
 	simple_lock(&uobj->vmobjlock);
 	for (i = 0; i < npages; i++) {
 		if (error) {

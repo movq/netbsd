@@ -1,4 +1,4 @@
-/*	$NetBSD: event.c,v 1.5 2005/04/17 07:20:00 provos Exp $	*/
+/*	$NetBSD: event.c,v 1.7 2006/03/19 19:57:22 christos Exp $	*/
 /*	$OpenBSD: event.c,v 1.2 2002/06/25 15:50:15 mickey Exp $	*/
 
 /*
@@ -220,7 +220,9 @@ event_process_active(struct event_base *base)
 		}
 	}
 
-	for (ev = TAILQ_FIRST(activeq); ev; ev = TAILQ_FIRST(activeq)) {
+	assert(activeq != NULL);
+
+	while ((ev = TAILQ_FIRST(activeq)) != NULL) {
 		event_queue_remove(base, ev, EVLIST_ACTIVE);
 		
 		/* Allows deletes to work */
@@ -409,6 +411,7 @@ event_once(int fd, short events,
 		event_set(&eonce->ev, fd, events, event_once_cb, eonce);
 	} else {
 		/* Bad event combination */
+		free(eonce);
 		return (-1);
 	}
 

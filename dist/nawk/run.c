@@ -465,9 +465,9 @@ Cell *array(Node **a, int n)	/* a[0] is symtab, a[1] is list of subscripts */
 		s = getsval(y);
 		if (!adjbuf(&buf, &bufsz, strlen(buf)+strlen(s)+nsub+1, recsize, 0, 0))
 			FATAL("out of memory for %s[%s...]", x->nval, buf);
-		strcat(buf, s);
+		strlcat(buf, s, bufsz);
 		if (np->nnext)
-			strcat(buf, *SUBSEP);
+			strlcat(buf, *SUBSEP, bufsz);
 		tempfree(y);
 	}
 	if (!isarr(x)) {
@@ -512,9 +512,9 @@ Cell *awkdelete(Node **a, int n)	/* a[0] is symtab, a[1] is list of subscripts *
 			s = getsval(y);
 			if (!adjbuf(&buf, &bufsz, strlen(buf)+strlen(s)+nsub+1, recsize, 0, 0))
 				FATAL("out of memory deleting %s[%s...]", x->nval, buf);
-			strcat(buf, s);	
+			strlcat(buf, s, bufsz);
 			if (np->nnext)
-				strcat(buf, *SUBSEP);
+				strlcat(buf, *SUBSEP, bufsz);
 			tempfree(y);
 		}
 		freeelem(x, buf);
@@ -1560,7 +1560,7 @@ Cell *bltin(Node **a, int n)	/* builtin functions. a[0] is type, a[1] is arg lis
 
 		if (isrec(x)) {
 			/* format argument not provided, use default */
-			fmt = "%a %b %d %H:%M:%S %Z %Y";
+			fmt = tostring("%a %b %d %H:%M:%S %Z %Y");
 		} else
 			fmt = tostring(getsval(x));
 
@@ -1572,6 +1572,7 @@ Cell *bltin(Node **a, int n)	/* builtin functions. a[0] is type, a[1] is arg lis
 
 		y = gettemp();
 		setsval(y, buf);
+		free(fmt);
 		free(buf);
 
 		return y;

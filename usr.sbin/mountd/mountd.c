@@ -1,4 +1,4 @@
-/* 	$NetBSD: mountd.c,v 1.100 2005/12/04 18:01:53 christos Exp $	 */
+/* 	$NetBSD: mountd.c,v 1.111 2006/09/02 11:10:24 yamt Exp $	 */
 
 /*
  * Copyright (c) 1989, 1993
@@ -47,7 +47,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
 #if 0
 static char     sccsid[] = "@(#)mountd.c  8.15 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: mountd.c,v 1.100 2005/12/04 18:01:53 christos Exp $");
+__RCSID("$NetBSD: mountd.c,v 1.111 2006/09/02 11:10:24 yamt Exp $");
 #endif
 #endif				/* not lint */
 
@@ -89,10 +89,6 @@ __RCSID("$NetBSD: mountd.c,v 1.100 2005/12/04 18:01:53 christos Exp $");
 #include <err.h>
 #include <util.h>
 #include "pathnames.h"
-#ifdef KERBEROS
-#include <kerberosIV/krb.h>
-#include "kuid.h"
-#endif
 
 #ifdef IPSEC
 #include <netinet6/ipsec.h>
@@ -173,7 +169,11 @@ struct hostlist {
 struct fhreturn {
 	int             fhr_flag;
 	int             fhr_vers;
-	nfsfh_t         fhr_fh;
+	size_t		fhr_fhsize;
+	union {
+		uint8_t v2[NFSX_V2FH];
+		uint8_t v3[NFSX_V3FHMAX];
+	} fhr_fh;
 };
 
 /* Global defs */
@@ -221,8 +221,6 @@ static int xdr_dir __P((XDR *, char *));
 static int xdr_explist __P((XDR *, caddr_t));
 static int xdr_fhs __P((XDR *, caddr_t));
 static int xdr_mlist __P((XDR *, caddr_t));
-static void *emalloc __P((size_t));
-static char *estrdup __P((const char *));
 static int bitcmp __P((void *, void *, int));
 static int netpartcmp __P((struct sockaddr *, struct sockaddr *, int));
 static int sacmp __P((struct sockaddr *, struct sockaddr *));
@@ -483,9 +481,6 @@ main(argc, argv)
 		exit(1);
 	}
 
-#ifdef KERBEROS
-	kuidinit();
-#endif
 	svc_run();
 	syslog(LOG_ERR, "Mountd died");
 	exit(1);
@@ -515,6 +510,7 @@ mntsrv(rqstp, transp)
 	sigset_t        sighup_mask;
 	struct sockaddr_in6 *sin6;
 	struct sockaddr_in *sin;
+	size_t fh_size;
 
 	(void)sigemptyset(&sighup_mask);
 	(void)sigaddset(&sighup_mask, SIGHUP);
@@ -538,9 +534,6 @@ mntsrv(rqstp, transp)
 	    sizeof numerichost, NULL, 0, ninumeric) != 0)
 		strlcpy(numerichost, "?", sizeof(numerichost));
 	ai = NULL;
-#ifdef KERBEROS
-	kuidreset();
-#endif
 	ret = 0;
 	switch (rqstp->rq_proc) {
 	case NULLPROC:
@@ -602,8 +595,9 @@ mntsrv(rqstp, transp)
 			fhr.fhr_flag = hostset;
 			fhr.fhr_vers = rqstp->rq_vers;
 			/* Get the file handle */
-			(void)memset(&fhr.fhr_fh, 0, sizeof(nfsfh_t));
-			if (getfh(dirpath, (fhandle_t *) &fhr.fhr_fh) < 0) {
+			memset(&fhr.fhr_fh, 0, sizeof(fhr.fhr_fh)); /* for v2 */
+			fh_size = sizeof(fhr.fhr_fh);
+			if (getfh(dirpath, &fhr.fhr_fh, &fh_size) < 0) {
 				bad = errno;
 				syslog(LOG_ERR, "Can't get fh for %s", dirpath);
 				if (!svc_sendreply(transp, xdr_long,
@@ -611,6 +605,15 @@ mntsrv(rqstp, transp)
 					syslog(LOG_ERR, "Can't send reply");
 				goto out;
 			}
+			if ((fhr.fhr_vers == 1 && fh_size > NFSX_V2FH) ||
+			    fh_size > NFSX_V3FHMAX) {
+				bad = EINVAL; /* XXX */
+				if (!svc_sendreply(transp, xdr_long,
+				    (char *)&bad))
+					syslog(LOG_ERR, "Can't send reply");
+				goto out;
+			}
+			fhr.fhr_fhsize = fh_size;
 			if (!svc_sendreply(transp, xdr_fhs, (char *) &fhr))
 				syslog(LOG_ERR, "Can't send reply");
 			if (!lookup_failed)
@@ -662,14 +665,6 @@ out:
 			syslog(LOG_ERR, "Can't send reply");
 		return;
 
-#ifdef KERBEROS
-	case MOUNTPROC_KUIDMAP:
-	case MOUNTPROC_KUIDUMAP:
-	case MOUNTPROC_KUIDPURGE:
-	case MOUNTPROC_KUIDUPURGE:
-		kuidops(rqstp, transp);
-		return;
-#endif
 
 	default:
 		svcerr_noproc(transp);
@@ -706,7 +701,7 @@ xdr_fhs(xdrsp, cp)
 	case 1:
 		return (xdr_opaque(xdrsp, (caddr_t)&fhrp->fhr_fh, NFSX_V2FH));
 	case 3:
-		len = NFSX_V3FH;
+		len = fhrp->fhr_fhsize;
 		if (!xdr_long(xdrsp, &len))
 			return (0);
 		if (!xdr_opaque(xdrsp, (caddr_t)&fhrp->fhr_fh, len))
@@ -1181,8 +1176,9 @@ get_exportlist(n)
 			grphead = tgrp;
 		} else {
 			hang_dirp(dirhead, NULL, ep, opt_flags);
-			free_grp(grp);
+			free_grp(tgrp);
 		}
+		tgrp = NULL;
 		dirhead = NULL;
 		if ((ep->ex_flag & EX_LINKED) == 0) {
 			ep2 = exphead;
@@ -1701,7 +1697,8 @@ do_opt(line, lineno, cpp, endcpp, ep, grp, has_hostp, exflagsp, cr)
 	struct uucred *cr;
 {
 	char *cpoptarg, *cpoptend;
-	char *cp, *endcp, *cpopt, savedc, savedc2;
+	char *cp, *cpopt, savedc, savedc2;
+	char *endcp = NULL;	/* XXX: GCC */
 	int allflag, usedarg;
 
 	cpopt = *cpp;
@@ -1958,35 +1955,6 @@ get_isoaddr(line, lineno, cp, grp)
 #endif				/* ISO */
 
 /*
- * error checked malloc and strdup
- */
-static void *
-emalloc(n)
-	size_t n;
-{
-	void *ptr = malloc(n);
-
-	if (ptr == NULL) {
-		syslog(LOG_ERR, "%m");
-		exit(2);
-	}
-	return ptr;
-}
-
-static char *
-estrdup(s)
-	const char *s;
-{
-	char *n = strdup(s);
-
-	if (n == NULL) {
-		syslog(LOG_ERR, "%m");
-		exit(2);
-	}
-	return n;
-}
-
-/*
  * Do the nfssvc syscall to push the export info into the kernel.
  */
 static int
@@ -2005,9 +1973,7 @@ do_nfssvc(line, lineno, ep, grp, exflags, anoncrp, dirp, dirplen, fsb)
 	struct sockaddr_storage ss;
 	struct addrinfo *ai;
 	int addrlen;
-	char *cp = NULL;
 	int done;
-	char savedc = '\0';
 	struct export_args export;
 
 	export.ex_flags = exflags;
@@ -2024,6 +1990,8 @@ do_nfssvc(line, lineno, ep, grp, exflags, anoncrp, dirp, dirplen, fsb)
 	}
 	done = FALSE;
 	while (!done) {
+		struct mountd_exports_list mel;
+
 		switch (grp->gr_type) {
 		case GT_HOST:
 			if (addrp != NULL && addrp->sa_family == AF_INET6 &&
@@ -2047,8 +2015,6 @@ do_nfssvc(line, lineno, ep, grp, exflags, anoncrp, dirp, dirplen, fsb)
 				syslog(LOG_ERR,
 				    "\"%s\", line %ld: Bad network flag",
 				    line, (unsigned long)lineno);
-				if (cp)
-					*cp = savedc;
 				return (1);
 			}
 			export.ex_mask = (struct sockaddr *)&ss;
@@ -2066,63 +2032,28 @@ do_nfssvc(line, lineno, ep, grp, exflags, anoncrp, dirp, dirplen, fsb)
 		default:
 			syslog(LOG_ERR, "\"%s\", line %ld: Bad netgroup type",
 			    line, (unsigned long)lineno);
-			if (cp)
-				*cp = savedc;
 			return (1);
 		};
 
 		/*
 		 * XXX:
-		 * Maybe I should just use the fsb->f_mntonname path instead
-		 * of looping back up the dirp to the mount point??
+		 * Maybe I should just use the fsb->f_mntonname path?
 		 */
-		for (;;) {
-			struct mountd_exports_list mel;
 
-			mel.mel_path = dirp;
-			mel.mel_nexports = 1;
-			mel.mel_exports = &export;
+		mel.mel_path = dirp;
+		mel.mel_nexports = 1;
+		mel.mel_exports = &export;
 
-			if (nfssvc(NFSSVC_SETEXPORTSLIST, &mel) != -1)
-				break;
-
-			if (cp)
-				*cp-- = savedc;
-			else
-				cp = dirp + dirplen - 1;
-			if (errno == EPERM) {
-				syslog(LOG_ERR,
-		    "\"%s\", line %ld: Can't change attributes for %s to %s: %m",
-				    line, (unsigned long)lineno,
-				    dirp, (grp->gr_type == GT_HOST) ?
-				    grp->gr_ptr.gt_addrinfo->ai_canonname :
-				    (grp->gr_type == GT_NET) ?
-				    grp->gr_ptr.gt_net.nt_name :
-				    "Unknown");
-				return (1);
-			}
-			if (opt_flags & OP_ALLDIRS) {
-				syslog(LOG_ERR,
-				"\"%s\", line %ld: Could not remount %s: %m",
-				    line, (unsigned long)lineno,
-				    dirp);
-				return (1);
-			}
-			/* back up over the last component */
-			while (*cp == '/' && cp > dirp)
-				cp--;
-			while (*(cp - 1) != '/' && cp > dirp)
-				cp--;
-			if (cp == dirp) {
-				if (debug)
-					(void)fprintf(stderr, "mnt unsucc\n");
-				syslog(LOG_ERR, 
-				    "\"%s\", line %ld: Can't export %s: %m",
-				    line, (unsigned long)lineno, dirp);
-				return (1);
-			}
-			savedc = *cp;
-			*cp = '\0';
+		if (nfssvc(NFSSVC_SETEXPORTSLIST, &mel) != 0) {
+			syslog(LOG_ERR,
+	    "\"%s\", line %ld: Can't change attributes for %s to %s: %m",
+			    line, (unsigned long)lineno,
+			    dirp, (grp->gr_type == GT_HOST) ?
+			    grp->gr_ptr.gt_addrinfo->ai_canonname :
+			    (grp->gr_type == GT_NET) ?
+			    grp->gr_ptr.gt_net.nt_name :
+			    "Unknown");
+			return (1);
 		}
 skip:
 		if (addrp) {
@@ -2136,8 +2067,6 @@ skip:
 		} else
 			done = TRUE;
 	}
-	if (cp)
-		*cp = savedc;
 	return (0);
 }
 
@@ -2299,7 +2228,8 @@ parsecred(namelist, cr)
 	char *names;
 	struct passwd *pw;
 	struct group *gr;
-	int ngroups, groups[NGROUPS + 1];
+	int ngroups;
+	gid_t groups[NGROUPS + 1];
 
 	/*
 	 * Set up the unprivileged user.

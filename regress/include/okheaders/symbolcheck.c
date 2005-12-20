@@ -99,7 +99,6 @@
 #include <sys/pool.h>
 #include <sys/power.h>
 #include <sys/proc.h>
-#include <sys/properties.h>
 #include <sys/protosw.h>
 #include <sys/ptrace.h>
 #include <sys/queue.h>
@@ -190,11 +189,8 @@
 #include <net/ppp_defs.h>	/* Moved */
 #include <net/if_ppp.h>
 #include <net/if_pppoe.h>
-#include <net/if_pppvar.h>
-#include <net/if_slvar.h>
 #include <net/if_sppp.h>
 #include <net/if_stf.h>
-#include <net/if_stripvar.h>
 #include <net/if_token.h>
 #include <net/if_tun.h>
 #include <net/if_types.h>
@@ -297,7 +293,7 @@
 #endif
 #include <regexp.h>
 #include <resolv.h>
-#include <crypto/rmd160.h>
+#include <rmd160.h>
 /* without this rmt.h re-defines ioctl which is also defined in soundcard.h */
 #define __RMTLIB_PRIVATE
 #include <rmt.h>
@@ -308,6 +304,7 @@
 #include <setjmp.h>
 #include <sgtty.h>
 #include <sha1.h>
+#include <sha2.h>
 #include <signal.h>
 #if HAVE_SKEY_H
 #include <skey.h>

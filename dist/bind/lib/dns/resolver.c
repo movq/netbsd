@@ -1,7 +1,7 @@
-/*	$NetBSD: resolver.c,v 1.1.1.2 2004/11/06 23:55:41 christos Exp $	*/
+/*	$NetBSD: resolver.c,v 1.2 2006/09/05 19:31:47 adrianp Exp $	*/
 
 /*
- * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: resolver.c,v 1.218.2.18.4.43 2004/08/28 06:25:19 marka Exp */
+/* Id: resolver.c,v 1.218.2.18.4.56 2005/10/14 01:38:48 marka Exp */
 
 #include <config.h>
 
@@ -246,6 +246,11 @@ struct fetchctx {
 #define TRIEDFIND(f)		(((f)->attributes & FCTX_ATTR_TRIEDFIND) != 0)
 #define TRIEDALT(f)		(((f)->attributes & FCTX_ATTR_TRIEDALT) != 0)
 
+typedef struct {
+	dns_adbaddrinfo_t *		addrinfo;
+	fetchctx_t *			fctx;
+} dns_valarg_t;
+
 struct dns_fetch {
 	unsigned int			magic;
 	fetchctx_t *			private;
@@ -344,6 +349,35 @@ static isc_result_t ncache_adderesult(dns_message_t *message,
 				      isc_stdtime_t now, dns_ttl_t maxttl,
 				      dns_rdataset_t *ardataset,
 				      isc_result_t *eresultp);
+static void validated(isc_task_t *task, isc_event_t *event); 
+
+static isc_result_t
+valcreate(fetchctx_t *fctx, dns_adbaddrinfo_t *addrinfo, dns_name_t *name,
+	  dns_rdatatype_t type, dns_rdataset_t *rdataset,
+	  dns_rdataset_t *sigrdataset, unsigned int valoptions,
+	  isc_task_t *task)
+{
+	dns_validator_t *validator = NULL;
+	dns_valarg_t *valarg;
+	isc_result_t result;
+
+	valarg = isc_mem_get(fctx->res->mctx, sizeof(*valarg));
+	if (valarg == NULL)
+		return (ISC_R_NOMEMORY);
+
+	valarg->fctx = fctx;
+	valarg->addrinfo = addrinfo;
+
+	result = dns_validator_create(fctx->res->view, name, type, rdataset,
+				      sigrdataset, fctx->rmessage,
+				      valoptions, task, validated, valarg,
+				      &validator);
+	if (result == ISC_R_SUCCESS)
+		ISC_LIST_APPEND(fctx->validators, validator, link);
+	else
+		isc_mem_put(fctx->res->mctx, valarg, sizeof(*valarg));
+	return (result);
+}
 
 static isc_boolean_t
 fix_mustbedelegationornxdomain(dns_message_t *message, fetchctx_t *fctx) {
@@ -526,7 +560,7 @@ fctx_cancelquery(resquery_t **queryp, dns_dispatchevent_t **deventp,
 			 */
 			INSIST(no_response);
 			rtt = query->addrinfo->srtt +
-				(100000 * fctx->restarts);
+				(200000 * fctx->restarts);
 			if (rtt > 10000000)
 				rtt = 10000000;
 			/*
@@ -730,7 +764,8 @@ fctx_sendevents(fetchctx_t *fctx, isc_result_t result) {
 		INSIST(result != ISC_R_SUCCESS ||
 		       dns_rdataset_isassociated(event->rdataset) ||
 		       fctx->type == dns_rdatatype_any ||
-		       fctx->type == dns_rdatatype_rrsig);
+		       fctx->type == dns_rdatatype_rrsig ||
+		       fctx->type == dns_rdatatype_sig);
 
 		isc_task_sendanddetach(&task, ISC_EVENT_PTR(&event));
 	}
@@ -764,6 +799,9 @@ static void
 resquery_senddone(isc_task_t *task, isc_event_t *event) {
 	isc_socketevent_t *sevent = (isc_socketevent_t *)event;
 	resquery_t *query = event->ev_arg;
+	isc_boolean_t retry = ISC_FALSE;
+	isc_result_t result;
+	fetchctx_t *fctx;
 
 	REQUIRE(event->ev_type == ISC_SOCKEVENT_SENDDONE);
 
@@ -782,6 +820,7 @@ resquery_senddone(isc_task_t *task, isc_event_t *event) {
 	INSIST(RESQUERY_SENDING(query));
 
 	query->sends--;
+	fctx = query->fctx;
 
 	if (RESQUERY_CANCELED(query)) {
 		if (query->sends == 0) {
@@ -793,10 +832,43 @@ resquery_senddone(isc_task_t *task, isc_event_t *event) {
 				isc_socket_detach(&query->tcpsocket);
 			resquery_destroy(&query);
 		}
-	} else if (sevent->result != ISC_R_SUCCESS)
-		fctx_cancelquery(&query, NULL, NULL, ISC_FALSE);
+	} else 
+		switch (sevent->result) {
+		case ISC_R_SUCCESS:
+			break;
+
+		case ISC_R_HOSTUNREACH:
+		case ISC_R_NETUNREACH:
+		case ISC_R_NOPERM:
+		case ISC_R_ADDRNOTAVAIL:
+		case ISC_R_CONNREFUSED:
+
+			/*
+			 * No route to remote.
+			 */
+			fctx_cancelquery(&query, NULL, NULL, ISC_TRUE);
+			retry = ISC_TRUE;
+			break;
+
+		default:
+			fctx_cancelquery(&query, NULL, NULL, ISC_FALSE);
+			break;
+		}
 
 	isc_event_free(&event);
+
+	if (retry) {
+		/*
+		 * Behave as if the idle timer has expired.  For TCP
+		 * this may not actually reflect the latest timer.
+		 */
+		fctx->attributes &= ~FCTX_ATTR_ADDRWAIT;
+		result = fctx_stopidletimer(fctx);
+		if (result != ISC_R_SUCCESS)
+			fctx_done(fctx, result);
+		else
+			fctx_try(fctx);
+	}
 }
 
 static inline isc_result_t
@@ -1313,7 +1385,10 @@ static void
 resquery_connected(isc_task_t *task, isc_event_t *event) {
 	isc_socketevent_t *sevent = (isc_socketevent_t *)event;
 	resquery_t *query = event->ev_arg;
+	isc_boolean_t retry = ISC_FALSE;
 	isc_result_t result;
+	unsigned int attrs;
+	fetchctx_t *fctx;
 
 	REQUIRE(event->ev_type == ISC_SOCKEVENT_CONNECT);
 	REQUIRE(VALID_QUERY(query));
@@ -1331,6 +1406,7 @@ resquery_connected(isc_task_t *task, isc_event_t *event) {
 	 */
 
 	query->connects--;
+	fctx = query->fctx;
 
 	if (RESQUERY_CANCELED(query)) {
 		/*
@@ -1340,9 +1416,8 @@ resquery_connected(isc_task_t *task, isc_event_t *event) {
 		isc_socket_detach(&query->tcpsocket);
 		resquery_destroy(&query);
 	} else {
-		if (sevent->result == ISC_R_SUCCESS) {
-			unsigned int attrs;
-
+		switch (sevent->result) {
+		case ISC_R_SUCCESS:
 			/*
 			 * We are connected.  Create a dispatcher and
 			 * send the query.
@@ -1375,21 +1450,48 @@ resquery_connected(isc_task_t *task, isc_event_t *event) {
 				result = resquery_send(query);
 
 			if (result != ISC_R_SUCCESS) {
-				fetchctx_t *fctx = query->fctx;
 				fctx_cancelquery(&query, NULL, NULL,
 						 ISC_FALSE);
 				fctx_done(fctx, result);
 			}
-		} else {
+			break;
+
+		case ISC_R_NETUNREACH:
+		case ISC_R_HOSTUNREACH:
+		case ISC_R_CONNREFUSED:
+		case ISC_R_NOPERM:
+		case ISC_R_ADDRNOTAVAIL:
+		case ISC_R_CONNECTIONRESET:
+			/*
+			 * No route to remote.
+			 */
+			isc_socket_detach(&query->tcpsocket);
+			fctx_cancelquery(&query, NULL, NULL, ISC_TRUE);
+			retry = ISC_TRUE;
+			break;
+
+		default:
 			isc_socket_detach(&query->tcpsocket);
 			fctx_cancelquery(&query, NULL, NULL, ISC_FALSE);
+			break;
 		}
 	}
 
 	isc_event_free(&event);
+	
+	if (retry) {
+		/*
+		 * Behave as if the idle timer has expired.  For TCP
+		 * connections this may not actually reflect the latest timer.
+		 */
+		fctx->attributes &= ~FCTX_ATTR_ADDRWAIT;
+		result = fctx_stopidletimer(fctx);
+		if (result != ISC_R_SUCCESS)
+			fctx_done(fctx, result);
+		else
+			fctx_try(fctx);
+	}
 }
-
-
 
 static void
 fctx_finddone(isc_task_t *task, isc_event_t *event) {
@@ -1791,7 +1893,6 @@ fctx_getaddresses(fetchctx_t *fctx) {
 	isc_boolean_t pruned, all_bad;
 	dns_rdata_ns_t ns;
 	isc_boolean_t need_alternate = ISC_FALSE;
-	isc_boolean_t unshared;
 
 	FCTXTRACE("getaddresses");
 
@@ -1807,7 +1908,6 @@ fctx_getaddresses(fetchctx_t *fctx) {
 	res = fctx->res;
 	pruned = ISC_FALSE;
 	stdoptions = 0;		/* Keep compiler happy. */
-	unshared = ISC_TF((fctx->options | DNS_FETCHOPT_UNSHARED) != 0);
 
 	/*
 	 * Forwarders.
@@ -2601,10 +2701,10 @@ fctx_create(dns_resolver_t *res, dns_name_t *name, dns_rdatatype_t type,
 	    unsigned int options, unsigned int bucketnum, fetchctx_t **fctxp)
 {
 	fetchctx_t *fctx;
-	isc_result_t result = ISC_R_SUCCESS;
+	isc_result_t result;
 	isc_result_t iresult;
 	isc_interval_t interval;
-	dns_fixedname_t qdomain;
+	dns_fixedname_t fixed;
 	unsigned int findoptions = 0;
 	char buf[DNS_NAME_FORMATSIZE + DNS_RDATATYPE_FORMATSIZE];
 	char typebuf[DNS_RDATATYPE_FORMATSIZE];
@@ -2623,8 +2723,10 @@ fctx_create(dns_resolver_t *res, dns_name_t *name, dns_rdatatype_t type,
 	strcat(buf, "/");	/* checked */
 	strcat(buf, typebuf);	/* checked */
 	fctx->info = isc_mem_strdup(res->mctx, buf);
-	if (fctx->info == NULL)
+	if (fctx->info == NULL) {
+		result = ISC_R_NOMEMORY;
 		goto cleanup_fetch;
+	}
 	FCTXTRACE("create");
 	dns_name_init(&fctx->name, NULL);
 	result = dns_name_dup(name, res->mctx, &fctx->name);
@@ -2681,8 +2783,10 @@ fctx_create(dns_resolver_t *res, dns_name_t *name, dns_rdatatype_t type,
 			dns_name_getlabelsequence(name, 1, labels - 1, &suffix);
 			name = &suffix;
 		}
-		result = dns_fwdtable_find(fctx->res->view->fwdtable, name,
-					   &forwarders);
+		dns_fixedname_init(&fixed);
+		domain = dns_fixedname_name(&fixed);
+		result = dns_fwdtable_find2(fctx->res->view->fwdtable, name,
+					    domain, &forwarders);
 		if (result == ISC_R_SUCCESS)
 			fctx->fwdpolicy = forwarders->fwdpolicy;
 
@@ -2694,27 +2798,22 @@ fctx_create(dns_resolver_t *res, dns_name_t *name, dns_rdatatype_t type,
 			 */
 			if (dns_rdatatype_atparent(type))
 				findoptions |= DNS_DBFIND_NOEXACT;
-			dns_fixedname_init(&qdomain);
-			result = dns_view_findzonecut(res->view, name,
-					      dns_fixedname_name(&qdomain), 0,
-						      findoptions, ISC_TRUE,
+			result = dns_view_findzonecut(res->view, name, domain,
+						      0, findoptions, ISC_TRUE,
 						      &fctx->nameservers,
 						      NULL);
 			if (result != ISC_R_SUCCESS)
 				goto cleanup_name;
-			result = dns_name_dup(dns_fixedname_name(&qdomain),
-					      res->mctx, &fctx->domain);
+			result = dns_name_dup(domain, res->mctx, &fctx->domain);
 			if (result != ISC_R_SUCCESS) {
 				dns_rdataset_disassociate(&fctx->nameservers);
 				goto cleanup_name;
 			}
 		} else {
 			/*
-			 * We're in forward-only mode.  Set the query domain
-			 * to ".".
+			 * We're in forward-only mode.  Set the query domain.
 			 */
-			result = dns_name_dup(dns_rootname, res->mctx,
-					      &fctx->domain);
+			result = dns_name_dup(domain, res->mctx, &fctx->domain);
 			if (result != ISC_R_SUCCESS)
 				goto cleanup_name;
 		}
@@ -3024,11 +3123,15 @@ validated(isc_task_t *task, isc_event_t *event) {
 	dns_name_t *name;
 	dns_rdataset_t *rdataset;
 	dns_rdataset_t *sigrdataset;
+	dns_valarg_t *valarg;
+	dns_adbaddrinfo_t *addrinfo;
 
 	UNUSED(task); /* for now */
 
 	REQUIRE(event->ev_type == DNS_EVENT_VALIDATORDONE);
-	fctx = event->ev_arg;
+	valarg = event->ev_arg;
+	fctx = valarg->fctx;
+	addrinfo = valarg->addrinfo;
 	REQUIRE(VALID_FCTX(fctx));
 	REQUIRE(!ISC_LIST_EMPTY(fctx->validators));
 
@@ -3043,6 +3146,7 @@ validated(isc_task_t *task, isc_event_t *event) {
 	 * destroy the fctx if necessary.
 	 */
 	dns_validator_destroy(&vevent->validator);
+	isc_mem_put(fctx->res->mctx, valarg, sizeof(*valarg));
 
 	negative = ISC_TF(vevent->rdataset == NULL);
 
@@ -3087,7 +3191,8 @@ validated(isc_task_t *task, isc_event_t *event) {
 	if (hevent != NULL) {
 		if (!negative && !chaining &&
 		    (fctx->type == dns_rdatatype_any ||
-		     fctx->type == dns_rdatatype_rrsig)) {
+		     fctx->type == dns_rdatatype_rrsig ||
+		     fctx->type == dns_rdatatype_sig)) {
 			/*
 			 * Don't bind rdatasets; the caller
 			 * will iterate the node.
@@ -3100,21 +3205,27 @@ validated(isc_task_t *task, isc_event_t *event) {
 
 	if (vevent->result != ISC_R_SUCCESS) {
 		FCTXTRACE("validation failed");
-		if (vevent->rdataset != NULL) {
+		result = ISC_R_NOTFOUND;
+		if (vevent->rdataset != NULL)
 			result = dns_db_findnode(fctx->cache, vevent->name,
 						 ISC_TRUE, &node);
-			if (result != ISC_R_SUCCESS)
-				goto noanswer_response;
+		if (result == ISC_R_SUCCESS)
 			(void)dns_db_deleterdataset(fctx->cache, node, NULL,
 						    vevent->type, 0);
-			if (vevent->sigrdataset != NULL)
-				(void)dns_db_deleterdataset(fctx->cache,
-							    node, NULL,
-							    dns_rdatatype_rrsig,
-							    vevent->type);
-		}
+		if (result == ISC_R_SUCCESS && vevent->sigrdataset != NULL)
+			(void)dns_db_deleterdataset(fctx->cache, node, NULL,
+						    dns_rdatatype_rrsig,
+						    vevent->type);
+		if (result == ISC_R_SUCCESS)
+			dns_db_detachnode(fctx->cache, &node);
 		result = vevent->result;
-		goto noanswer_response;
+		add_bad(fctx, &addrinfo->sockaddr, result);
+		isc_event_free(&event);
+		if (sentresponse)
+			fctx_done(fctx, result);
+		else
+			fctx_try(fctx);
+		return;
 	}
 
 	isc_stdtime_get(&now);
@@ -3199,7 +3310,8 @@ validated(isc_task_t *task, isc_event_t *event) {
 	if (!ISC_LIST_EMPTY(fctx->validators)) {
 		INSIST(!negative);
 		INSIST(fctx->type == dns_rdatatype_any ||
-		       fctx->type == dns_rdatatype_rrsig);
+		       fctx->type == dns_rdatatype_rrsig ||
+		       fctx->type == dns_rdatatype_sig);
 		/*
 		 * Don't send a response yet - we have
 		 * more rdatasets that still need to
@@ -3284,7 +3396,8 @@ validated(isc_task_t *task, isc_event_t *event) {
 }
 
 static inline isc_result_t
-cache_name(fetchctx_t *fctx, dns_name_t *name, isc_stdtime_t now) {
+cache_name(fetchctx_t *fctx, dns_name_t *name, dns_adbaddrinfo_t *addrinfo,
+	   isc_stdtime_t now) {
 	dns_rdataset_t *rdataset, *sigrdataset;
 	dns_rdataset_t *addedrdataset, *ardataset, *asigrdataset;
 	dns_rdataset_t *valrdataset = NULL, *valsigrdataset = NULL;
@@ -3297,8 +3410,8 @@ cache_name(fetchctx_t *fctx, dns_name_t *name, isc_stdtime_t now) {
 	dns_fetchevent_t *event;
 	unsigned int options;
 	isc_task_t *task;
-	dns_validator_t *validator;
 	isc_boolean_t fail;
+	unsigned int valoptions = 0;
 
 	/*
 	 * The appropriate bucket lock must be held.
@@ -3319,8 +3432,10 @@ cache_name(fetchctx_t *fctx, dns_name_t *name, isc_stdtime_t now) {
 	if (result != ISC_R_SUCCESS)
 		return (result);
 
-	if (res->view->dlv != NULL)
+	if (!secure_domain && res->view->dlv != NULL) {
+		valoptions = DNS_VALIDATOR_DLV;
 		secure_domain = ISC_TRUE;
+	}
 
 	if ((fctx->options & DNS_FETCHOPT_NOVALIDATE) != 0)
 		need_validation = ISC_FALSE;
@@ -3345,14 +3460,15 @@ cache_name(fetchctx_t *fctx, dns_name_t *name, isc_stdtime_t now) {
 				return (result);
 			anodep = &event->node;
 			/*
-			 * If this is an ANY or SIG query, we're not going
-			 * to return any rdatasets, unless we encountered
+			 * If this is an ANY, SIG or RRSIG query, we're not
+			 * going to return any rdatasets, unless we encountered
 			 * a CNAME or DNAME as "the answer".  In this case,
 			 * we're going to return DNS_R_CNAME or DNS_R_DNAME
 			 * and we must set up the rdatasets.
 			 */
 			if ((fctx->type != dns_rdatatype_any &&
-			    fctx->type != dns_rdatatype_rrsig) ||
+			     fctx->type != dns_rdatatype_rrsig &&
+			     fctx->type != dns_rdatatype_sig) ||
 			    (name->attributes & DNS_NAMEATTR_CHAINING) != 0) {
 				ardataset = event->rdataset;
 				asigrdataset = event->sigrdataset;
@@ -3371,7 +3487,7 @@ cache_name(fetchctx_t *fctx, dns_name_t *name, isc_stdtime_t now) {
 	/*
 	 * Cache or validate each cacheable rdataset.
 	 */
-	fail = (fctx->res->options & DNS_RESOLVER_CHECKNAMESFAIL) != 0;
+	fail = ISC_TF((fctx->res->options & DNS_RESOLVER_CHECKNAMESFAIL) != 0);
 	for (rdataset = ISC_LIST_HEAD(name->list);
 	     rdataset != NULL;
 	     rdataset = ISC_LIST_NEXT(rdataset, link)) {
@@ -3411,7 +3527,7 @@ cache_name(fetchctx_t *fctx, dns_name_t *name, isc_stdtime_t now) {
 		 */
 		if (secure_domain && rdataset->trust != dns_trust_glue) {
 			/*
-			 * SIGs are validated as part of validating the
+			 * RRSIGs are validated as part of validating the
 			 * type they cover.
 			 */
 			if (rdataset->type == dns_rdatatype_rrsig)
@@ -3481,7 +3597,8 @@ cache_name(fetchctx_t *fctx, dns_name_t *name, isc_stdtime_t now) {
 
 			if (ANSWER(rdataset) && need_validation) {
 				if (fctx->type != dns_rdatatype_any &&
-				    fctx->type != dns_rdatatype_rrsig) {
+				    fctx->type != dns_rdatatype_rrsig &&
+				    fctx->type != dns_rdatatype_sig) {
 					/*
 					 * This is The Answer.  We will
 					 * validate it, but first we cache
@@ -3503,23 +3620,19 @@ cache_name(fetchctx_t *fctx, dns_name_t *name, isc_stdtime_t now) {
 					 * having to remember which
 					 * rdatasets needed validation.
 					 */
-					validator = NULL;
-					result = dns_validator_create(
-						res->view,
-						name,
-						rdataset->type,
-						rdataset,
-						sigrdataset,
-						fctx->rmessage,
-						0,
-						task,
-						validated,
-						fctx,
-						&validator);
-					if (result == ISC_R_SUCCESS)
-						ISC_LIST_APPEND(
-							fctx->validators,
-							validator, link);
+					result = valcreate(fctx, addrinfo,
+							   name, rdataset->type,
+							   rdataset,
+							   sigrdataset,
+							   valoptions, task);
+				}
+			} else if (CHAINING(rdataset)) {
+				if (rdataset->type == dns_rdatatype_cname)
+					eresult = DNS_R_CNAME;
+				else {
+					INSIST(rdataset->type ==
+					       dns_rdatatype_dname);
+					eresult = DNS_R_DNAME;
 				}
 			}
 		} else if (!EXTERNAL(rdataset)) {
@@ -3586,22 +3699,10 @@ cache_name(fetchctx_t *fctx, dns_name_t *name, isc_stdtime_t now) {
 		}
 	}
 
-	if (valrdataset != NULL) {
-		validator = NULL;
-		result = dns_validator_create(res->view,
-					      name,
-					      fctx->type,
-					      valrdataset,
-					      valsigrdataset,
-					      fctx->rmessage,
-					      0,
-					      task,
-					      validated,
-					      fctx,
-					      &validator);
-		if (result == ISC_R_SUCCESS)
-			ISC_LIST_APPEND(fctx->validators, validator, link);
-	}
+	if (valrdataset != NULL)
+		result = valcreate(fctx, addrinfo, name, fctx->type,
+				   valrdataset, valsigrdataset, valoptions,
+				    task);
 
 	if (result == ISC_R_SUCCESS && have_answer) {
 		fctx->attributes |= FCTX_ATTR_HAVEANSWER;
@@ -3621,7 +3722,8 @@ cache_name(fetchctx_t *fctx, dns_name_t *name, isc_stdtime_t now) {
 }
 
 static inline isc_result_t
-cache_message(fetchctx_t *fctx, isc_stdtime_t now) {
+cache_message(fetchctx_t *fctx, dns_adbaddrinfo_t *addrinfo, isc_stdtime_t now)
+{
 	isc_result_t result;
 	dns_section_t section;
 	dns_name_t *name;
@@ -3641,7 +3743,7 @@ cache_message(fetchctx_t *fctx, isc_stdtime_t now) {
 			dns_message_currentname(fctx->rmessage, section,
 						&name);
 			if ((name->attributes & DNS_NAMEATTR_CACHE) != 0) {
-				result = cache_name(fctx, name, now);
+				result = cache_name(fctx, name, addrinfo, now);
 				if (result != ISC_R_SUCCESS)
 					break;
 			}
@@ -3668,23 +3770,28 @@ ncache_adderesult(dns_message_t *message, dns_db_t *cache, dns_dbnode_t *node,
 		  isc_result_t *eresultp)
 {
 	isc_result_t result;
+	dns_rdataset_t rdataset;
+
+	if (ardataset == NULL) {
+		dns_rdataset_init(&rdataset);
+		ardataset = &rdataset;
+	}
 	result = dns_ncache_add(message, cache, node, covers, now,
 				maxttl, ardataset);
-	if (result == DNS_R_UNCHANGED) {
+	if (result == DNS_R_UNCHANGED || result == ISC_R_SUCCESS) {
 		/*
-		 * The data in the cache are better than the negative cache
-		 * entry we're trying to add.
+		 * If the cache now contains a negative entry and we
+		 * care about whether it is DNS_R_NCACHENXDOMAIN or
+		 * DNS_R_NCACHENXRRSET then extract it.
 		 */
-		if (ardataset != NULL && ardataset->type == 0) {
+		if (ardataset->type == 0) {
 			/*
-			 * The cache data is also a negative cache
-			 * entry.
+			 * The cache data is a negative cache entry.
 			 */
 			if (NXDOMAIN(ardataset))
 				*eresultp = DNS_R_NCACHENXDOMAIN;
 			else
 				*eresultp = DNS_R_NCACHENXRRSET;
-			result = ISC_R_SUCCESS;
 		} else {
 			/*
 			 * Either we don't care about the nature of the
@@ -3696,20 +3803,19 @@ ncache_adderesult(dns_message_t *message, dns_db_t *cache, dns_dbnode_t *node,
 			 * XXXRTH  There's a CNAME/DNAME problem here.
 			 */
 			*eresultp = ISC_R_SUCCESS;
-			result = ISC_R_SUCCESS;
 		}
-	} else if (result == ISC_R_SUCCESS) {
-		if (NXDOMAIN(ardataset))
-			*eresultp = DNS_R_NCACHENXDOMAIN;
-		else
-			*eresultp = DNS_R_NCACHENXRRSET;
+		result = ISC_R_SUCCESS;
 	}
+	if (ardataset == &rdataset && dns_rdataset_isassociated(ardataset))
+		dns_rdataset_disassociate(ardataset);
 
 	return (result);
 }
 
 static inline isc_result_t
-ncache_message(fetchctx_t *fctx, dns_rdatatype_t covers, isc_stdtime_t now) {
+ncache_message(fetchctx_t *fctx, dns_adbaddrinfo_t *addrinfo,
+	       dns_rdatatype_t covers, isc_stdtime_t now)
+{
 	isc_result_t result, eresult;
 	dns_name_t *name;
 	dns_resolver_t *res;
@@ -3720,6 +3826,7 @@ ncache_message(fetchctx_t *fctx, dns_rdatatype_t covers, isc_stdtime_t now) {
 	dns_name_t *aname;
 	dns_fetchevent_t *event;
 	isc_uint32_t ttl;
+	unsigned int valoptions = 0;
 
 	FCTXTRACE("ncache_message");
 
@@ -3746,8 +3853,10 @@ ncache_message(fetchctx_t *fctx, dns_rdatatype_t covers, isc_stdtime_t now) {
 	if (result != ISC_R_SUCCESS)
 		return (result);
 
-	if (res->view->dlv != NULL)
+	if (!secure_domain && res->view->dlv != NULL) {
+		valoptions = DNS_VALIDATOR_DLV;
 		secure_domain = ISC_TRUE;
+	}
 
 	if ((fctx->options & DNS_FETCHOPT_NOVALIDATE) != 0)
 		need_validation = ISC_FALSE;
@@ -3784,23 +3893,15 @@ ncache_message(fetchctx_t *fctx, dns_rdatatype_t covers, isc_stdtime_t now) {
 		/*
 		 * Do negative response validation.
 		 */
-		dns_validator_t *validator = NULL;
-		isc_task_t *task = res->buckets[fctx->bucketnum].task;
-
-		result = dns_validator_create(res->view, name, fctx->type,
-					      NULL, NULL,
-					      fctx->rmessage, 0, task,
-					      validated, fctx,
-					      &validator);
-		if (result != ISC_R_SUCCESS)
-			return (result);
-		ISC_LIST_APPEND(fctx->validators, validator, link);
+		result = valcreate(fctx, addrinfo, name, fctx->type,
+				   NULL, NULL, valoptions,
+				   res->buckets[fctx->bucketnum].task);
 		/*
 		 * If validation is necessary, return now.  Otherwise continue
 		 * to process the message, letting the validation complete
 		 * in its own good time.
 		 */
-		return (ISC_R_SUCCESS);
+		return (result);
 	}
 
 	LOCK(&res->buckets[fctx->bucketnum].lock);
@@ -4129,7 +4230,7 @@ noanswer_response(fetchctx_t *fctx, dns_name_t *oqname,
 		dns_message_currentname(message, section, &name);
 		if (dns_name_issubdomain(name, &fctx->domain)) {
 			/*
-			 * Look for NS RRset first.
+			 * Look for NS/SOA RRsets first.
 			 */
 			for (rdataset = ISC_LIST_HEAD(name->list);
 			     rdataset != NULL;
@@ -4143,7 +4244,7 @@ noanswer_response(fetchctx_t *fctx, dns_name_t *oqname,
 					return (DNS_R_FORMERR);
 				if (type == dns_rdatatype_ns) {
 					/*
-					 * NS or SIG NS.
+					 * NS or RRSIG NS.
 					 *
 					 * Only one set of NS RRs is allowed.
 					 */
@@ -4161,17 +4262,9 @@ noanswer_response(fetchctx_t *fctx, dns_name_t *oqname,
 						DNS_RDATASETATTR_CACHE;
 					rdataset->trust = dns_trust_glue;
 				}
-			}
-			for (rdataset = ISC_LIST_HEAD(name->list);
-			     rdataset != NULL;
-			     rdataset = ISC_LIST_NEXT(rdataset, link)) {
-				type = rdataset->type;
-				if (type == dns_rdatatype_rrsig)
-					type = rdataset->covers;
-				if (type == dns_rdatatype_soa ||
-				    type == dns_rdatatype_nsec) {
+				if (type == dns_rdatatype_soa) {
 					/*
-					 * SOA, RRSIG SOA, NSEC, or RRSIG NSEC.
+					 * SOA, or RRSIG SOA.
 					 *
 					 * Only one SOA is allowed.
 					 */
@@ -4182,8 +4275,38 @@ noanswer_response(fetchctx_t *fctx, dns_name_t *oqname,
 							return (DNS_R_FORMERR);
 						soa_name = name;
 					}
-					if (ns_name == NULL) {
-						negative_response = ISC_TRUE;
+					name->attributes |=
+						DNS_NAMEATTR_NCACHE;
+					rdataset->attributes |=
+						DNS_RDATASETATTR_NCACHE;
+					if (aa)
+						rdataset->trust =
+						    dns_trust_authauthority;
+					else
+						rdataset->trust =
+							dns_trust_additional;
+				}
+			}
+			/*
+			 * A negative response has a SOA record (Type 2) 
+			 * and a optional NS RRset (Type 1) or it has neither
+			 * a SOA or a NS RRset (Type 3, handled above) or
+			 * rcode is NXDOMAIN (handled above) in which case
+			 * the NS RRset is allowed (Type 4).
+			 */
+			if (soa_name != NULL)
+				negative_response = ISC_TRUE;
+			for (rdataset = ISC_LIST_HEAD(name->list);
+			     rdataset != NULL;
+			     rdataset = ISC_LIST_NEXT(rdataset, link)) {
+				type = rdataset->type;
+				if (type == dns_rdatatype_rrsig)
+					type = rdataset->covers;
+				if (type == dns_rdatatype_nsec) {
+					/*
+					 * NSEC or RRSIG NSEC.
+					 */
+					if (negative_response) {
 						name->attributes |=
 							DNS_NAMEATTR_NCACHE;
 						rdataset->attributes |=
@@ -4212,7 +4335,7 @@ noanswer_response(fetchctx_t *fctx, dns_name_t *oqname,
 					 * this is a referral, and there
 					 * should only be one DS.
 					 */
-					if (negative_response)
+					if (ns_name == NULL)
 						return (DNS_R_FORMERR);
 					if (rdataset->type ==
 					    dns_rdatatype_ds) {
@@ -4896,6 +5019,43 @@ checknames(dns_message_t *message) {
 }
 
 static void
+log_packet(dns_message_t *message, int level, isc_mem_t *mctx) {
+	isc_buffer_t buffer;
+	char *buf = NULL;
+	int len = 1024;
+	isc_result_t result;
+
+	if (! isc_log_wouldlog(dns_lctx, level))
+		return;
+
+	/*
+	 * Note that these are multiline debug messages.  We want a newline
+	 * to appear in the log after each message.
+	 */
+
+	do {
+		buf = isc_mem_get(mctx, len);
+		if (buf == NULL)
+			break;
+		isc_buffer_init(&buffer, buf, len);
+		result = dns_message_totext(message, &dns_master_style_debug,
+					    0, &buffer);
+		if (result == ISC_R_NOSPACE) {
+			isc_mem_put(mctx, buf, len);
+			len += 1024;
+		} else if (result == ISC_R_SUCCESS)
+			isc_log_write(dns_lctx, DNS_LOGCATEGORY_RESOLVER,
+				      DNS_LOGMODULE_RESOLVER, level,
+				      "received packet:\n%.*s",
+				      (int)isc_buffer_usedlength(&buffer),
+				      buf);
+	} while (result == ISC_R_NOSPACE);
+
+	if (buf != NULL)
+		isc_mem_put(mctx, buf, len);
+}
+
+static void
 resquery_response(isc_task_t *task, isc_event_t *event) {
 	isc_result_t result = ISC_R_SUCCESS;
 	resquery_t *query = event->ev_arg;
@@ -5062,6 +5222,11 @@ resquery_response(isc_task_t *task, isc_event_t *event) {
 			goto done;
 		}
 	}
+
+	/*
+	 * Log the incoming packet.
+	 */
+	log_packet(message, ISC_LOG_DEBUG(10), fctx->res->mctx);
 
 	/*
 	 * If the message is signed, check the signature.  If not, this
@@ -5231,8 +5396,13 @@ resquery_response(isc_task_t *task, isc_event_t *event) {
 			     domainbuf, namebuf, typebuf, classbuf, addrbuf);
 	}
 
-	if ((fctx->res->options | DNS_RESOLVER_CHECKNAMES) != 0)
+	if ((fctx->res->options & DNS_RESOLVER_CHECKNAMES) != 0)
 		checknames(message);
+
+	/*
+	 * Clear cache bits.
+	 */
+	fctx->attributes &= ~(FCTX_ATTR_WANTNCACHE | FCTX_ATTR_WANTCACHE);
 
 	/*
 	 * Did we get any answers?
@@ -5326,7 +5496,7 @@ resquery_response(isc_task_t *task, isc_event_t *event) {
 	 * work to be queued to the DNSSEC validator.
 	 */
 	if (WANTCACHE(fctx)) {
-		result = cache_message(fctx, now);
+		result = cache_message(fctx, query->addrinfo, now);
 		if (result != ISC_R_SUCCESS)
 			goto done;
 	}
@@ -5345,7 +5515,7 @@ resquery_response(isc_task_t *task, isc_event_t *event) {
 		/*
 		 * Cache any negative cache entries in the message.
 		 */
-		result = ncache_message(fctx, covers, now);
+		result = ncache_message(fctx, query->addrinfo, covers, now);
 	}
 
  done:
@@ -5382,13 +5552,16 @@ resquery_response(isc_task_t *task, isc_event_t *event) {
 				return;
 			}
 			findoptions = 0;
+			if (dns_rdatatype_atparent(fctx->type))
+				findoptions |= DNS_DBFIND_NOEXACT;
 			if ((options & DNS_FETCHOPT_UNSHARED) == 0)
 				name = &fctx->name;
 			else
 				name = &fctx->domain;
 			result = dns_view_findzonecut(fctx->res->view,
 						      name, fname,
-						      now, 0, ISC_TRUE,
+						      now, findoptions,
+						      ISC_TRUE,
 						      &fctx->nameservers,
 						      NULL);
 			if (result != ISC_R_SUCCESS) {

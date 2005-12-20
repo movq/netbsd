@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_denode.c,v 1.12 2005/12/11 12:24:25 christos Exp $	*/
+/*	$NetBSD: msdosfs_denode.c,v 1.17 2006/11/25 12:17:30 scw Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_denode.c,v 1.12 2005/12/11 12:24:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_denode.c,v 1.17 2006/11/25 12:17:30 scw Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,6 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: msdosfs_denode.c,v 1.12 2005/12/11 12:24:25 christos
 #include <sys/kernel.h>		/* defines "time" */
 #include <sys/dirent.h>
 #include <sys/namei.h>
+#include <sys/kauth.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -385,17 +386,13 @@ deupdat(dep, waitfor)
  * Truncate the file described by dep to the length specified by length.
  */
 int
-detrunc(dep, length, flags, cred, l)
-	struct denode *dep;
-	u_long length;
-	int flags;
-	struct ucred *cred;
-	struct lwp *l;
+detrunc(struct denode *dep, u_long length, int flags, kauth_cred_t cred,
+    struct lwp *l)
 {
 	int error;
 	int allerror;
 	u_long eofentry;
-	u_long chaintofree;
+	u_long chaintofree = 0;
 	daddr_t bn, lastblock;
 	int boff;
 	int isadir = dep->de_Attributes & ATTR_DIRECTORY;
@@ -459,8 +456,8 @@ detrunc(dep, length, flags, cred, l)
 	if ((boff = length & pmp->pm_crbomask) != 0) {
 		if (isadir) {
 			bn = cntobn(pmp, eofentry);
-			error = bread(pmp->pm_devvp, bn, pmp->pm_bpcluster,
-			    NOCRED, &bp);
+			error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn),
+			    pmp->pm_bpcluster, NOCRED, &bp);
 			if (error) {
 				brelse(bp);
 #ifdef MSDOSFS_DEBUG
@@ -527,7 +524,7 @@ int
 deextend(dep, length, cred)
 	struct denode *dep;
 	u_long length;
-	struct ucred *cred;
+	kauth_cred_t cred;
 {
 	struct msdosfsmount *pmp = dep->de_pmp;
 	u_long count, osize;
@@ -690,8 +687,8 @@ out:
 }
 
 int
-msdosfs_gop_alloc(struct vnode *vp, off_t off, off_t len, int flags,
-    struct ucred *cred)
+msdosfs_gop_alloc(struct vnode *vp, off_t off,
+    off_t len, int flags, kauth_cred_t cred)
 {
 	return 0;
 }

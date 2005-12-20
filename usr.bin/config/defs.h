@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.9 2005/11/07 03:26:20 erh Exp $	*/
+/*	$NetBSD: defs.h,v 1.16 2006/09/27 19:05:46 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -98,7 +98,7 @@ extern const char *progname;
  * The next two lines define the current version of the config(1) binary,
  * and the minimum version of the configuration files it supports.
  */
-#define CONFIG_VERSION		20051003
+#define CONFIG_VERSION		20060904
 #define CONFIG_MINVERSION	0
 
 /*
@@ -106,18 +106,15 @@ extern const char *progname;
  * integers.  The names can be NULL, resulting in simple value lists.
  */
 struct nvlist {
-	struct	nvlist *nv_next;
-	const char *nv_name;
-	union {
-		const char *un_str;
-		void *un_ptr;
-	} nv_un;
-#define	nv_str	nv_un.un_str
-#define	nv_ptr	nv_un.un_ptr
-	int	nv_int;
-	int	nv_ifunit;		/* XXX XXX XXX */
-	int	nv_flags;
+	struct nvlist	*nv_next;
+	const char	*nv_name;
+	const char	*nv_str;
+	void		*nv_ptr;
+	int		nv_int;
+	int		nv_ifunit;		/* XXX XXX XXX */
+	int		nv_flags;
 #define	NV_DEPENDED	1
+#define	NV_OBSOLETE	2
 };
 
 /*
@@ -465,6 +462,7 @@ void	addobject(const char *, struct nvlist *, int);
 
 /* hash.c */
 struct	hashtab *ht_new(void);
+void	ht_free(struct hashtab *);
 int	ht_insrep(struct hashtab *, const char *, void *, int);
 #define	ht_insert(ht, nam, val) ht_insrep(ht, nam, val, 0)
 #define	ht_replace(ht, nam, val) ht_insrep(ht, nam, val, 1)
@@ -481,10 +479,10 @@ void	addfsoption(const char *);
 void	addmkoption(const char *, const char *);
 void	appendmkoption(const char *, const char *);
 void	appendcondmkoption(const char *, const char *, const char *);
-void	deffilesystem(const char *, struct nvlist *);
+void	deffilesystem(const char *, struct nvlist *, struct nvlist *);
 void	defoption(const char *, struct nvlist *, struct nvlist *);
-void	defflag(const char *, struct nvlist *, struct nvlist *);
-void	defparam(const char *, struct nvlist *, struct nvlist *);
+void	defflag(const char *, struct nvlist *, struct nvlist *, int);
+void	defparam(const char *, struct nvlist *, struct nvlist *, int);
 void	deloption(const char *);
 void	delfsoption(const char *);
 void	delmkoption(const char *);
@@ -498,6 +496,7 @@ void	setupdirs(void);
 #define OPT_DEFOPT(n)	(ht_lookup(defopttab, (n)) != NULL)
 #define OPT_DEFFLAG(n)	(ht_lookup(defflagtab, (n)) != NULL)
 #define OPT_DEFPARAM(n)	(ht_lookup(defparamtab, (n)) != NULL)
+#define OPT_OBSOLETE(n)	(ht_lookup(obsopttab, (n)) != NULL)
 #define DEFINED_OPTION(n) (find_declared_option((n)) != NULL)
 
 /* main.c */

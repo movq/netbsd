@@ -1,4 +1,4 @@
-/*	$NetBSD: pccons.c,v 1.174 2005/12/11 12:17:43 christos Exp $	*/
+/*	$NetBSD: pccons.c,v 1.182 2006/11/16 01:32:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.174 2005/12/11 12:17:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.182 2006/11/16 01:32:38 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_xserver.h"
@@ -99,6 +99,7 @@ __KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.174 2005/12/11 12:17:43 christos Exp $"
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/conf.h>
+#include <sys/kauth.h>
 
 #include <dev/cons.h>
 
@@ -297,9 +298,9 @@ void update_leds(void);
 #endif
 
 #if (NPCCONSKBD == 0)
-static __inline int kbd_wait_output(void);
-static __inline int kbd_wait_input(void);
-static __inline void kbd_flush_input(void);
+static inline int kbd_wait_output(void);
+static inline int kbd_wait_input(void);
+static inline void kbd_flush_input(void);
 static u_char kbc_get8042cmd(void);
 static int kbc_put8042cmd(u_char);
 #endif
@@ -320,7 +321,7 @@ void pccnpollc(dev_t, int);
 	{ u_char x = inb(0x84); (void) x; } \
 	{ u_char x = inb(0x84); (void) x; }
 
-static __inline int
+static inline int
 kbd_wait_output(void)
 {
 	u_int i;
@@ -333,7 +334,7 @@ kbd_wait_output(void)
 	return (0);
 }
 
-static __inline int
+static inline int
 kbd_wait_input(void)
 {
 	u_int i;
@@ -346,7 +347,7 @@ kbd_wait_input(void)
 	return (0);
 }
 
-static __inline void
+static inline void
 kbd_flush_input(void)
 {
 	u_int i;
@@ -567,7 +568,8 @@ void update_leds()
  * these are both bad jokes
  */
 int
-pcprobe(struct device *parent, struct cfdata *match, void *aux)
+pcprobe(struct device *parent, struct cfdata *match,
+	void *aux)
 {
 	struct isa_attach_args *ia = aux;
 #if (NPCCONSKBD == 0)
@@ -776,7 +778,7 @@ pcattach(struct device *parent, struct device *self, void *aux)
 		maj = cdevsw_lookup_major(&pc_cdevsw);
 
 		/* There can be only one, but it can have any unit number. */
-		cn_tab->cn_dev = makedev(maj, sc->sc_dev.dv_unit);
+		cn_tab->cn_dev = makedev(maj, device_unit(&sc->sc_dev));
 
 		printf("%s: console\n", sc->sc_dev.dv_xname);
 	}
@@ -837,6 +839,10 @@ pcopen(dev_t dev, int flag, int mode, struct lwp *l)
 	tp->t_oproc = pcstart;
 	tp->t_param = pcparam;
 	tp->t_dev = dev;
+
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
+		return (EBUSY);
+
 	if ((tp->t_state & TS_ISOPEN) == 0) {
 		ttychars(tp);
 		tp->t_iflag = TTYDEF_IFLAG;
@@ -846,9 +852,7 @@ pcopen(dev_t dev, int flag, int mode, struct lwp *l)
 		tp->t_ispeed = tp->t_ospeed = TTYDEF_SPEED;
 		pcparam(tp, &tp->t_termios);
 		ttsetwater(tp);
-	} else if (tp->t_state&TS_XCLUDE &&
-		   suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0)
-		return (EBUSY);
+	}
 	tp->t_state |= TS_CARR_ON;
 
 	return ((*tp->t_linesw->l_open)(dev, tp));

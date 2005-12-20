@@ -1,4 +1,4 @@
-.\"	$NetBSD: pf.conf.5,v 1.5 2005/08/07 00:53:13 peter Exp $
+.\"	$NetBSD: pf.conf.5,v 1.10 2006/09/17 13:53:33 wiz Exp $
 .\"	$OpenBSD: pf.conf.5,v 1.326 2005/03/01 18:10:44 jmc Exp $
 .\"
 .\" Copyright (c) 2002, Daniel Hartmeier
@@ -28,7 +28,7 @@
 .\" ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd November 19, 2002
+.Dd April 26, 2006
 .Dt PF.CONF 5
 .Os
 .Sh NAME
@@ -1378,9 +1378,11 @@ pass in proto tcp from route "DTAG"
 .It Ar all
 This is equivalent to "from any to any".
 .It Ar group <group>
-Similar to
-.Ar user ,
-this rule only applies to packets of sockets owned by the specified group.
+This functionality is not supported in this version of
+.Nx .
+.\" Similar to
+.\" .Ar user ,
+.\" this rule only applies to packets of sockets owned by the specified group.
 .It Ar user <user>
 This rule only applies to packets of sockets owned by the specified user.
 For outgoing connections initiated from the firewall, this is the user
@@ -1471,6 +1473,26 @@ or
 .Ar icmp6-type
 .Pc
 must match.
+.It Xo Ar tos Aq Ar string
+.No \*(Ba Aq Ar number
+.Xc
+This rule applies to packets with the specified
+.Em TOS
+bits set.
+.Em TOS
+may be
+given as one of
+.Ar lowdelay ,
+.Ar throughput ,
+.Ar reliability ,
+or as either hex or decimal.
+.Pp
+For example, the following rules are identical:
+.Bd -literal -offset indent
+pass all tos lowdelay
+pass all tos 0x10
+pass all tos 16
+.Ed
 .It Ar allow-opts
 By default, packets which contain IP options are blocked.
 When
@@ -1531,7 +1553,7 @@ directive occurs only at configuration file parse time, not during runtime.
 .It Ar queue <queue> | ( <queue> , <queue> )
 Packets matching this rule will be assigned to the specified queue.
 If two queues are given, packets which have a
-.Em tos
+.Em TOS
 of
 .Em lowdelay
 and TCP ACKs with no data payload will be assigned to the second one.
@@ -1933,10 +1955,10 @@ support the following options:
 Limits the number of concurrent states the rule may create.
 When this limit is reached, further packets matching the rule that would
 create state are dropped, until existing states time out.
-.It Ar no-sync
-Prevent state changes for states created by this rule from appearing on the
-.Xr pfsync 4
-interface.
+.\" .It Ar no-sync
+.\" Prevent state changes for states created by this rule from appearing on the
+.\" .Xr pfsync 4
+.\" interface.
 .It Ar <timeout> <seconds>
 Changes the timeout values used for states created by this rule.
 For a list of all valid timeout names, see
@@ -2631,7 +2653,7 @@ pf-rule        = action [ ( "in" | "out" ) ]
                  hosts [ filteropt-list ]
 
 filteropt-list = filteropt-list filteropt | filteropt
-filteropt      = user | group | flags | icmp-type | icmp6-type | tos |
+filteropt      = user | flags | icmp-type | icmp6-type | tos |
                  ( "keep" | "modulate" | "synproxy" ) "state"
                  [ "(" state-opts ")" ] |
                  "fragment" | "no-df" | "min-ttl" number |
@@ -2692,7 +2714,7 @@ bandwidth-spec = "number" ( "b" | "Kb" | "Mb" | "Gb" | "%" )
 
 action         = "pass" | "block" [ return ] | [ "no" ] "scrub"
 return         = "drop" | "return" | "return-rst" [ "( ttl" number ")" ] |
-                 "return-icmp" [ "(" icmpcode ["," icmp6code ] ")" ] |
+                 "return-icmp" [ "(" icmpcode [ [ "," ] icmp6code ] ")" ] |
                  "return-icmp6" [ "(" icmp6code ")" ]
 icmpcode       = ( icmp-code-name | icmp-code-number )
 icmp6code      = ( icmp6-code-name | icmp6-code-number )
@@ -2729,7 +2751,7 @@ port           = "port" ( unary-op | binary-op | "{" op-list "}" )
 portspec       = "port" ( number | name ) [ ":" ( "*" | number | name ) ]
 os             = "os"  ( os-name | "{" os-list "}" )
 user           = "user" ( unary-op | binary-op | "{" op-list "}" )
-group          = "group" ( unary-op | binary-op | "{" op-list "}" )
+.\" group          = "group" ( unary-op | binary-op | "{" op-list "}" )
 
 unary-op       = [ "=" | "!=" | "<" | "<=" | ">" | ">=" ]
                  ( name | number )
@@ -2753,7 +2775,7 @@ tos            = "tos" ( "lowdelay" | "throughput" | "reliability" |
                  [ "0x" ] number )
 
 state-opts     = state-opt [ [ "," ] state-opts ]
-state-opt      = ( "max" number | "no-sync" | timeout |
+state-opt      = ( "max" number | timeout |
                  "source-track" [ ( "rule" | "global" ) ] |
                  "max-src-nodes" number | "max-src-states" number |
                  "max-src-conn" number |
@@ -2816,7 +2838,7 @@ Example rulesets.
 .Xr ip 4 ,
 .Xr ip6 4 ,
 .Xr pf 4 ,
-.Xr pfsync 4 ,
+.\" .Xr pfsync 4 ,
 .Xr route 4 ,
 .Xr tcp 4 ,
 .Xr udp 4 ,

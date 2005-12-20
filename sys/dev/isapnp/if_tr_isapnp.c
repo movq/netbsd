@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tr_isapnp.c,v 1.12 2005/12/11 12:22:16 christos Exp $	*/
+/*	$NetBSD: if_tr_isapnp.c,v 1.15 2006/11/16 01:33:05 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tr_isapnp.c,v 1.12 2005/12/11 12:22:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tr_isapnp.c,v 1.15 2006/11/16 01:33:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,10 +75,8 @@ CFATTACH_DECL(tr_isapnp, sizeof(struct tr_softc),
     tr_isapnp_match, tr_isapnp_attach, NULL, NULL);
 
 int
-tr_isapnp_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+tr_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -90,11 +88,10 @@ tr_isapnp_match(parent, match, aux)
 
 
 void
-tr_isapnp_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+tr_isapnp_attach(struct device *parent, struct device *self,
+    void *aux)
 {
-	struct tr_softc *sc = (void *)self;
+	struct tr_softc *sc = device_private(self);
 	struct isapnp_attach_args *ipa = aux;
 	int mmioidx, sramidx;
 

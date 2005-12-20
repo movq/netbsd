@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.pl,v 1.48 2005/09/10 21:51:12 dsl Exp $	*/
+/*	$NetBSD: msg.mi.pl,v 1.57 2006/09/19 14:47:10 hubertf Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.mi.pl,v 1.36 2004/04/17 18:55:35 atatat Exp       */
 
@@ -38,7 +38,7 @@
  *
  */
 
-/* MI Message catalog -- english, machine independent */
+/* MI Message catalog -- polish, machine independent */
 
 message usage
 {uzycie: sysinst [-r wersja] [-f plik-definicji]
@@ -136,9 +136,6 @@ message ask_disk
 message Available_disks
 {Dostepne dyski}
 
-message cylinders
-{cylindry}
-
 message heads
 {glowice}
 
@@ -165,11 +162,11 @@ message layout
 partycji BSD.  Musisz teraz skonfigurowac BSD disklabel.
 Masz kilka mozliwosci. Sa one opisane ponizej. 
 -- Standard: partycje BSD disklabel sa ustawiane przez ten program. 
--- Uzyj istniejacych: Uzywa aktualnych partycji. Musisz je zamountowac.
+-- Uzyj istniejacych: Uzywa aktualnych partycji. Musisz je zamontowac.
 
 Dysk NetBSD to %d Megabajtow. 
 Standard wymaga przynajmniej %d Megabajtow.
-Standard z Xami wymaga przynajmniej %d Megabajtow.
+Standard z X Window System wymaga przynajmniej %d Megabajtow.
 }
 
 message Choose_your_size_specifier
@@ -183,16 +180,11 @@ wielokrotnoscia aktualnego rozmiaru cylindra.
 
 Wybierz specyfikator rozmiaru}
 
-message defaultunit
-{Jezeli nie wybrales 'M' (megabajty), 'G' (gigabajty), 'c' (cylindry)
-lub 's' sektory rozmiary i przesuniecia podawane sa w %s.
-}
-
 message ptnsizes
 {Mozesz teraz zmienic rozmiary partycji systemowych. Domyslne ustawienia
 alokuja cala przestrzen na glowny system plikow, aczkolwiek mozesz zdefiniowac
-osobne partycje /usr (dodatkowe pliki systemowe), /var (logi) lub
-/home (katalogi domowe uzytkownikow).
+osobne partycje /usr (dodatkowe pliki systemowe), /var (dane systemowe i logi) 
+lub /home (katalogi domowe uzytkownikow).
 
 Wolna przestrzen zostanie dodana do partycji oznaczonej '+'.
 }
@@ -203,7 +195,7 @@ message ptnheaders
 }
 
 message askfsmount
-{Punkt montazu?}
+{Punkt montowania?}
 
 message askfssize
 {Rozmiar dla %s w %s?}
@@ -244,12 +236,12 @@ message fspart
 }
 
 message fspart_header	/* XXX abbreviations (or change fspart_row below) */
-{    Rozm %3s  Prze %3s Koniec %3s Typ SP     Ochrona Mount Mountpoint 
+{    Rozm %3s  Prze %3s Koniec %3s Typ SP     Ochrona Montowana Jako
    --------- --------- ---------- ---------- ------- ----- ----------
 }
 
 message fspart_row
-{%9d %9d %10d %-10s %-7s %-5s %s}
+{%9d %9d %10d %-10s %-7s %-9s %s}
 
 message show_all_unused_partitions
 {Pokaz wszystkie nieuzywane partycje}
@@ -294,13 +286,13 @@ message newfs_fmt
 {              newfs: %9s}
 
 message mount_fmt
-{             montaz: %9s}
+{         montowanie: %9s}
 
 message mount_options_fmt
 {   opcje montowania: }
 
 message mountpt_fmt
-{      punkt montazu: %9s}
+{   punkt montowania: %9s}
 
 message toggle
 {Przelacz}
@@ -367,39 +359,6 @@ message openfail
 {Nie moglem otworzyc %s, blad: %s.
 }
 
-message statfail
-{Nie moglem pobrac wlasciwosci %s, blad: %s.
-}
-
-message unlink_fail
-{Nie moglem skasowac %s, blad: %s.
-}
-
-message rename_fail
-{Nie moglem zmienic nazwy %s na %s, blad: %s.
-}
-
-message deleting_files
-{Jako czesc procedury aktualizacji, ponizsze pliki musza zostac usuniete:
-}
-
-message deleting_dirs
-{Jako czesc procedury aktualizacji, ponizsze katalogi musza zostac usuniete:
-(Zmienie nazwy tych, ktore nie sa puste):
-}
-
-message renamed_dir
-{Katalog %s zostal przezwany na %s poniewaz nie byl pusty.
-}
-
-message cleanup_warn
-{Wyczyszczenie istniejacej instalacji nie powiodlo sie. Moze to spowodowac
-niepowodzenie przy rozpakowywaniu pakietow.
-}
-
-message nomount
-{Typ partycji %c to nie 4.2BSD lub msdos i dlatego nie ma ona swojego mountpoint.}
-
 message mountfail
 {zamountowanie urzadzenia /dev/%s%c na %s nie powiodlo sie.
 }
@@ -446,11 +405,10 @@ zatrzyma sie na trybie jednego-uzytkownika.
 message distmedium
 {Twoj dysk jest teraz gotowy na zainstalowanie jadra oraz pakietow
 dystrybucyjnych. Jak napisano w pliku INSTALL masz terz kilka opcji. Dla
-ftp lub nfs, musisz byc podlaczony do sieci z dostepem do odpowidnich
-maszyn. Jesli nie jestes gotowy aby zakonczyc instalacje teraz, mozesz
-wybrac "none" i zostaniesz przeniesiony do glownego menu. Kiedy bedziesz
-juz pozniej gotowy, mozesz wybrac "aktualizuj" z glownego menu, aby
-zakonczyc instalacje. 
+ftp lub nfs, musisz byc podlaczony do sieci z dostepem do odpowidnich maszyn.
+
+Pakietow wybranych %d, zainstalowanych %d. Nastepnym pakietem jest %s.
+
 }
 
 message distset
@@ -458,18 +416,12 @@ message distset
 Czesc z nich to pakiety podstawowe wymagane przez wszystkie instalacje,
 a czesc nie jest przez wszystkie wymagana. Mozesz zainstalowac je
 wszystkie (Pelna instalacja) lub wybrac z opcjonalnych pakietow.
-}
+} /* XXX add 'minimal installation' */
 
 message ftpsource
 {Ponizej masz site %s, katalog, uzytkownika, oraz haslo gotowe do uzycia.
 Jesli "uzytkownik" to "ftp", wtedy haslo nie jest wymagane.
 
-host:		%s 
-katalog:	%s 
-katalog:	%s 
-uzytkownik:	%s 
-haslo:		%s 
-proxy:		%s 
 }
 
 message email
@@ -479,25 +431,24 @@ message dev
 {urzadzenie}
 
 message nfssource
-{Wprowadz hosta nfs oraz katalog gdzie znajduje sie dystrybucja. 
-Pmietaj, ze katalog musi zawierac pliki .tgz oraz, ze musi byc
-dostepny via nfs.
+{Wprowadz hosta NFS oraz katalog gdzie znajduje sie dystrybucja. 
+Pamietaj, ze katalog musi zawierac pliki .tgz oraz, ze musi byc
+dostepny przez NFS.
 
-host:		%s 
-katalog:	%s 
-katalog:	%s
 }
 
-message nfsbadmount
-{Katalog %s:%s jest niedostepny dla nfs.}
+message floppysource
+{Podaj urzadzenie bedace stacja dyskietek oraz katalog pomocniczy
+w docelowym systemie plikow. Pliki z pakietami instalacyjnymi musza
+znajdowac sie w glownym katalogu dyskietki.
+
+}
 
 message cdromsource
 {Podaj urzadzenie CDROM oraz katalog na CDROMie, w ktorym znajduje sie
 dystrybucja. 
 Pamietaj, ze katalog musi zawierac pliki .tgz.
 
-urzadzenie:	%s 
-katalog:	%s
 }
 
 message localfssource
@@ -505,35 +456,16 @@ message localfssource
 znajduje sie dystrybucja. 
 Pamietaj, ze katalog musi zawierac pliki .tgz.
 
-urzadzenie:	%s 
-system plikow:	%s 
-katalog:	%s 
-katalog:	%s
 }
 
 message localdir
 {Podaj aktualnie zamountowany lokalny katalog, gdzie znajduje sie dystrybucja. 
 Pamietaj, ze katalog musi zawierac pliki .tgz.
 
-katalog:	%s
-katalog:	%s
 }
 
 message filesys
 {system plikow}
-
-message cdrombadmount
-{CDROM nie moze zostac zamountowany na %s.}
-
-message localfsbadmount
-{%s nie mogl byc zamountowany na lokalnym urzadzeniu %s.}
-
-message badlocalsetdir
-{%s nie jest katalogiem}
-
-message badsetdir
-{%s nie zawiera wymaganych pakietow instalacyjnych etc.tgz, 
-base.tgz.  Jestes pewien, ze podales dobry katalog ?}
 
 message nonet
 {Nie znalazlem zadnych interfejsow sieciowych do uzycia z NetBSD.
@@ -567,7 +499,7 @@ message net_host
 message net_ip
 {Twoj adres IPv4}
 
-message net_ip_2nd
+message net_srv_ip
 {Server IPv4 number}
 
 message net_mask
@@ -591,7 +523,7 @@ message netok
 Domena DNS:		%s 
 Nazwa hosta:		%s 
 Podstawowy interfejs:	%s 
-Adres IP:		%s 
+Twoj adres IP:		%s 
 Maska podsieci:		%s 
 Serwer nazw IPv4:	%s 
 Bramka IPv4:		%s 
@@ -599,18 +531,19 @@ Medium sieciowe:	%s
 }
 
 message netok_slip
-{The following are the values you entered.  Are they OK?
+{Ponizej sa wartosci, ktore wprowadziles. Czy sa poprawne?
 
-DNS Domain:		%s
-Host Name:		%s
-Primary Interface:	%s
-Host IP:		%s
-Server IP:		%s
-Netmask:		%s
-IPv4 Nameserver:	%s
-IPv4 Gateway:		%s
-Media type:		%s
+Domena DNS:		%s 
+Nazwa hosta:		%s 
+Podstawowy interfejs:	%s 
+Twoj adres IP:		%s 
+Adres IP serwera:	%s
+Maska podsieci:		%s 
+Serwer nazw IPv4:	%s 
+Bramka IPv4:		%s 
+Medium sieciowe:	%s
 }
+
 message netokv6
 {Autkonfiguracja IPv6:	%s 
 Serwer nazw IPv6:	%s 
@@ -620,7 +553,7 @@ message netok_ok
 {Czy sa poprawne?}
 
 message slattach {
-Enter slattach flags
+Podaja parametry dla polecenia 'slattach'
 }
 
 message netagain
@@ -642,16 +575,8 @@ message realdir
 {Nie moglem przejsc do katalogu %s: %s.  Instalacja przerwana.
 }
 
-message ftperror
-{Ftp nie moze sciagnac pliku.
-Czy chcesz sprobowac jeszcze raz?}
-
-message distdir
-{Jakiego katalogu powinienem uzyc dla %s? }
-
-message delete_dist_files
-{Czy chcesz usunac pakiety NetBSD z %s? 
-(Mozesz je zachowac aby zainstalowac/zaktualizowac kolejny system.)}
+message delete_xfer_file
+{Usun po zakonczeniu instalacji}
 
 message verboseextract
 {
@@ -663,9 +588,6 @@ wypakowywanego pliku ?
 
 message notarfile
 {Pakiet %s nie istnieje.}
-
-message notarfile_ok
-{Kontynuowac rozpakowywanie pakietow?}
 
 message endtarok
 {Wszystkie wybrane pakiety dystrybucji zostaly rozpakowane.}
@@ -747,9 +669,6 @@ message badfs
 jego sprawdzenie. Aktualizacja zostala przerwana. (Blad numer %d.)
 }
 
-message badmount
-{System plikow /dev/%s%c nie zostal pomyslnie zamountowany. Aktualizacja przerwana.}
-
 message rootmissing
 { docelowy / jest zagubiony %s.
 }
@@ -759,22 +678,23 @@ message badroot
  Jestes pewien, ze zainstalowales wszystkie wymagane pakiety? 
 }
 
-message fddev
-{Ktorego urzadzenia dyskietek chcesz uzyc ? }
-
-message fdmount
-{Wloz dyskietke zawierajaca plik "%s". }
+message fd_type
+{System plikow na dyskietce}
 
 message fdnotfound
-{Nie moglem znalezc pliku "%s" na dysku. Wloz dyskietke
-zawierajaca ten plik.}
+{Nie moglem znalezc pliku na dysku.
+}
 
 message fdremount
-{Dyskietka nie zostala pomyslnie zamountowana. Mozesz:
+{Dyskietka nie zostala pomyslnie zamountowana.
+}
 
-Sprobowac jeszcze raz i wlozyc dyskietke z plikiem "%s".
+message fdmount	
+{Wloz dyskietke zawierajaca plik "%s.%s".
 
-Nie wgrywac wiecej plikow z dyskietek i przerwac proces.
+Jezeli nie masz juz wiecej dyskietek, wybierz "Pakiet kompletny"
+aby rozpoczac proces jego instalacji. Wybierz "Przerwij pobieranie"
+zeby wybrac inne zrodlo oprogramowania.
 }
 
 message mntnetconfig
@@ -827,17 +747,11 @@ message set_X11_fonts
 message set_X11_servers
 {Serwery X11}
 
-message set_X_contrib
-{Klienci dodatkowi X}
-
 message set_X11_prog
 {Programowanie X11}
 
-message set_X11_misc
-{Inne X11}
-
 message cur_distsets_row
-{%-30s %3s\n}
+{%-30s %3s}
 
 message select_all
 {Wybierz wszystkie powyzsze pakiety}
@@ -869,27 +783,8 @@ i powrocic do glownego menu.
 
 Edytowac tablice partycji ponownie ?}
 
-message not_regular_file
-{Plik konfiguracyjny %s nie jest plikiem regularnym.\n}
-
-message out_of_memory
-{Za malo pamieci (alokacja pamieci nie powiodla sie).\n}
-
 message config_open_error
 {Nie moglem otworzyc pliku konfiguracyjnego %s\n}
-
-message config_read_error
-{Nie moglem odczytac pliku konfiguracyjnego %s\n}
-
-message cmdfail
-{Polecenie
-	%s
-nie powiodlo sie. Nie moge kontynuowac.}
-
-message upgradeparttype
-{Jedyna odpowienid partycja, ktora zostala znaleziona dla instalacji NetBSD
-jest starego typu NetBSD/386BSD/FreeBSD. Czy chcesz zmienic typ tej partycji
-na nowa partycje tylko dla NetBSD?}
 
 message choose_timezone
 {Wybierz strefe czasowa, ktora najlepiej ci odpowiada z ponizszej listy. 
@@ -939,12 +834,6 @@ message rootsh
 {Mozesz  teraz wybrac, ktorej powloki ma uzywac uzytkownik root. Domyslnie
 jest to /bin/sh, ale moze preferujesz inna.}
 
-message postuseexisting
-{
-Nie zapomnij zamountowac wszystkich systemow plikow, ktorych chcesz
-uzywac w systemie. Nacisnij <enter> aby kontynuowac.
-}
-
 message no_root_fs
 {
 Nie zdefiniowano glownego systemu plikow. Musisz zdefiniowac przynajmniej
@@ -954,7 +843,7 @@ Nacisnij <enter> aby kontynuowac.
 }
 
 message Pick_an_option {Wybierz opcje aby je wlaczyc lub wylaczyc.}
-message Scripting {Scripting}	/* XXX translate */
+message Scripting {Skrypty}
 message Logging {Logowanie}
 
 message Status  {   Status: }
@@ -996,13 +885,13 @@ message local_fs {Niezamontowany SP}
 message local_dir {Lokalny katalog}
 message Select_your_distribution {Wybierz swoja dystrybucje}
 message Full_installation {Pelna instalacja}
+message Minimal_installation {Minimalna instalacja}
 message Custom_installation {Inna instalacja}
-message Change {Zmien}
 message hidden {** ukryte **}
 message Host {Host}
 message Base_dir {Katalog}
 message Set_dir {Katalog}
-message Directory {Katalog}
+message Xfer_dir {Transfer Katalog} /* fix XLAT */
 message User {Uzytkownik}
 message Password {Haslo}
 message Proxy {Proxy}
@@ -1010,10 +899,11 @@ message Get_Distribution {Sciagnij Dystrybucje}
 message Continue {Kontynuuj}
 message What_do_you_want_to_do {Co chcesz zrobic?}
 message Try_again {Sprobowac jeszcze raz}
-message Give_up {Poddac sie}
-message Ignore_continue_anyway {Zignorowac, kontynuowac}
-message Set_finished {Ustawianie zakonczone}
-message Abort_install {Przerwac instalacje}
+message Set_finished {Pakiet kompletny}
+message Skip_set {Pomin pakiet}
+message Skip_group {Pomin grupe pakietow}
+message Abandon {Przerwij instalacje}
+message Abort_fetch {Przerwij pobieranie}
 message Password_cipher {Kodowanie hasel}
 message DES {DES}
 message MD5 {MD5}

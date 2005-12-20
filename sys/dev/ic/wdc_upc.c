@@ -1,4 +1,4 @@
-/* $NetBSD: wdc_upc.c,v 1.21 2005/12/11 12:21:29 christos Exp $ */
+/* $NetBSD: wdc_upc.c,v 1.23 2006/10/01 21:50:33 bjh21 Exp $ */
 /*-
  * Copyright (c) 2000 Ben Harris
  * All rights reserved.
@@ -28,7 +28,7 @@
 /* This file is part of NetBSD/arm26 -- a port of NetBSD to ARM2/3 machines. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_upc.c,v 1.21 2005/12/11 12:21:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_upc.c,v 1.23 2006/10/01 21:50:33 bjh21 Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -78,8 +78,6 @@ wdc_upc_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_wdc.sc_atac.atac_cap = ATAC_CAP_DATA16;
 	sc->sc_wdc.sc_atac.atac_pio_cap = 1; /* XXX ??? */
-	sc->sc_wdc.sc_atac.atac_dma_cap = 0;
-	sc->sc_wdc.sc_atac.atac_udma_cap = 0;
 	sc->sc_wdc.sc_atac.atac_nchannels = 1;
 	sc->sc_chanlist[0] = &sc->sc_channel;
 	sc->sc_wdc.sc_atac.atac_channels = sc->sc_chanlist;
@@ -90,6 +88,7 @@ wdc_upc_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_channel.ch_channel = 0;
 	sc->sc_channel.ch_atac = &sc->sc_wdc.sc_atac;
 	sc->sc_channel.ch_queue = &sc->sc_chqueue;
+	sc->sc_channel.ch_ndrive = 2;
 	for (i = 0; i < WDC_NREG; i++) {
 		if (bus_space_subregion(ua->ua_iot, ua->ua_ioh, i,
 		    i == 0 ? 4 : 1, &wdr->cmd_iohs[i]) != 0) {

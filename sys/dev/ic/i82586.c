@@ -1,4 +1,4 @@
-/*	$NetBSD: i82586.c,v 1.53 2005/12/11 12:21:26 christos Exp $	*/
+/*	$NetBSD: i82586.c,v 1.57 2006/11/16 01:32:51 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -144,7 +144,7 @@ Mode of operation:
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82586.c,v 1.53 2005/12/11 12:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82586.c,v 1.57 2006/11/16 01:32:51 christos Exp $");
 
 #include "bpfilter.h"
 
@@ -196,8 +196,8 @@ static void	i82586_release_rbd_list(struct ie_softc *,
 static int	i82586_drop_frames(struct ie_softc *);
 static int	i82586_chk_rx_ring(struct ie_softc *);
 
-static __inline__ void 	ie_ack(struct ie_softc *, u_int);
-static __inline__ void 	iexmit(struct ie_softc *);
+static inline void 	ie_ack(struct ie_softc *, u_int);
+static inline void 	iexmit(struct ie_softc *);
 static void 		i82586_start_transceiver(struct ie_softc *);
 
 static void	i82586_count_errors(struct ie_softc *);
@@ -406,7 +406,7 @@ i82586_start_cmd(sc, cmd, iecmdbuf, mask, async)
 /*
  * Interrupt Acknowledge.
  */
-static __inline__ void
+static inline void
 ie_ack(sc, mask)
 	struct ie_softc *sc;
 	u_int mask;	/* in native byte-order */
@@ -423,7 +423,7 @@ ie_ack(sc, mask)
 /*
  * Transfer accumulated chip error counters to IF.
  */
-static __inline void
+static inline void
 i82586_count_errors(sc)
 	struct ie_softc *sc;
 {
@@ -924,7 +924,7 @@ i82586_chk_rx_ring(sc)
  * chain of partially-full mbufs.  This should help to speed up the
  * operation considerably.  (Provided that it works, of course.)
  */
-static __inline struct mbuf *
+static inline struct mbuf *
 ieget(sc, head, totlen)
 	struct ie_softc *sc;
 	int head;
@@ -1045,9 +1045,9 @@ bad:
  * never ARP for trailers anyway.
  */
 static int
-ie_readframe(sc, num)
-	struct ie_softc *sc;
-	int num;		/* frame number to read */
+ie_readframe(
+    struct ie_softc *sc,
+    int num)		/* frame number to read */
 {
 	struct mbuf *m;
 	u_int16_t bstart, bend;
@@ -1098,7 +1098,7 @@ ie_readframe(sc, num)
  * Setup all necessary artifacts for an XMIT command, and then pass the XMIT
  * command to the chip to be executed.
  */
-static __inline__ void
+static inline void
 iexmit(sc)
 	struct ie_softc *sc;
 {
@@ -1780,9 +1780,9 @@ i82586_start_transceiver(sc)
 }
 
 void
-i82586_stop(ifp, disable)
-	struct ifnet *ifp;
-	int disable;
+i82586_stop(
+    struct ifnet *ifp,
+    int disable)
 {
 	struct ie_softc *sc = ifp->if_softc;
 

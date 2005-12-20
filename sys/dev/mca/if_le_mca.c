@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_mca.c,v 1.11 2005/12/11 12:22:18 christos Exp $	*/
+/*	$NetBSD: if_le_mca.c,v 1.15 2006/11/16 01:33:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le_mca.c,v 1.11 2005/12/11 12:22:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le_mca.c,v 1.15 2006/11/16 01:33:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -102,7 +102,7 @@ static void	le_mca_copytobuf(struct lance_softc *, void *, int, int);
 static void	le_mca_copyfrombuf(struct lance_softc *, void *, int, int);
 static void	le_mca_zerobuf(struct lance_softc *, int, int);
 
-static __inline void le_mca_wrreg(struct le_mca_softc *, int, int);
+static inline void le_mca_wrreg(struct le_mca_softc *, int, int);
 #define le_mca_set_RAP(sc, reg_number) \
 		le_mca_wrreg(sc, reg_number, RAP | REGWRITE)
 
@@ -121,7 +121,8 @@ static const u_int8_t sknet_mcp_media[] = {
 };
 
 int
-le_mca_match(struct device *parent, struct cfdata *cf, void *aux)
+le_mca_match(struct device *parent, struct cfdata *cf,
+    void *aux)
 {
 	struct mca_attach_args *ma = aux;
 
@@ -137,7 +138,7 @@ le_mca_match(struct device *parent, struct cfdata *cf, void *aux)
 void
 le_mca_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct le_mca_softc *lesc = (struct le_mca_softc *) self;
+	struct le_mca_softc *lesc = device_private(self);
 	struct lance_softc *sc = &lesc->sc_am7990.lsc;
 	struct mca_attach_args *ma = aux;
 	int i, pos2, pos3, pos4, irq, membase, supmedia=0;
@@ -298,7 +299,7 @@ le_mca_intredge(arg)
 /*
  * Push a value to LANCE controller.
  */
-static __inline void
+static inline void
 le_mca_wrreg(sc, val, type)
 	struct le_mca_softc *sc;
 	int val, type;

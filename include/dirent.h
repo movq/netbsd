@@ -1,4 +1,4 @@
-/*	$NetBSD: dirent.h,v 1.25 2005/09/14 20:20:15 christos Exp $	*/
+/*	$NetBSD: dirent.h,v 1.29 2006/05/17 20:32:19 christos Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -62,7 +62,7 @@ struct _dirdesc {
 	char	*dd_buf;	/* data buffer */
 	int	dd_len;		/* size of data buffer */
 	off_t	dd_seek;	/* magic cookie returned by getdents */
-	long	dd_rewind;	/* magic cookie for rewinding */
+	void	*dd_internal;	/* state for seekdir/telldir */
 	int	dd_flags;	/* flags for readdir */
 	void	*dd_lock;	/* lock for concurrent access */
 };
@@ -89,15 +89,14 @@ void rewinddir(DIR *);
 #ifndef __LIBC12_SOURCE__
 DIR *opendir(const char *) __RENAME(__opendir30);
 struct dirent *readdir(DIR *) __RENAME(__readdir30);
-int readdir_r(DIR *, struct dirent * __restrict,
+int readdir_r(DIR * __restrict, struct dirent * __restrict,
     struct dirent ** __restrict) __RENAME(__readdir_r30);
 #endif
 #if defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 void seekdir(DIR *, long);
-long telldir(const DIR *);
+long telldir(DIR *);
 #endif /* defined(_NETBSD_SOURCE) || defined(_XOPEN_SOURCE) */
 #if defined(_NETBSD_SOURCE)
-void __seekdir(DIR *, long);
 #ifndef __LIBC12_SOURCE__
 DIR *__opendir2(const char *, int) __RENAME(__opendir230);
 int scandir(const char *, struct dirent ***,

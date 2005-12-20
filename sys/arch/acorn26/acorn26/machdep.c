@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.16 2005/12/11 12:16:03 christos Exp $ */
+/* $NetBSD: machdep.c,v 1.18 2005/12/24 22:45:33 perry Exp $ */
 
 /*-
  * Copyright (c) 1998 Ben Harris
@@ -32,7 +32,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.16 2005/12/11 12:16:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.18 2005/12/24 22:45:33 perry Exp $");
 
 #include <sys/buf.h>
 #include <sys/kernel.h>
@@ -133,7 +133,7 @@ haltsys:
 		*(volatile u_int32_t *)0
 			= *(volatile u_int32_t *)MEMC_ROM_LOW_BASE;
 		/* reboot in SVC mode, IRQs and FIQs disabled */
-		__asm __volatile("movs pc, %0" : :
+		__asm volatile("movs pc, %0" : :
 		    "r" (R15_MODE_SVC | R15_FIQ_DISABLE | R15_IRQ_DISABLE));
 	}
 	panic("cpu_reboot failed");
@@ -185,8 +185,8 @@ cpu_startup()
 
 #if 0
 	/* Test exception handlers */
-	asm(".word 0x06000010"); /* undefined instruction */
-	asm("swi 0"); /* SWI */
+	__asm(".word 0x06000010"); /* undefined instruction */
+	__asm("swi 0"); /* SWI */
 	(*(void (*)(void))(0x00008000))(); /* prefetch abort */
 	*(volatile int *)(0x00008000) = 0; /* data abort */
 	*(volatile int *)(0x10000000) = 0; /* address exception */

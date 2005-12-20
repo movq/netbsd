@@ -1,4 +1,4 @@
-/* $NetBSD: segwrite.c,v 1.10 2005/09/13 04:14:17 christos Exp $ */
+/* $NetBSD: segwrite.c,v 1.15 2006/11/09 19:36:36 christos Exp $ */
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -90,6 +90,7 @@
 #include <string.h>
 #include <err.h>
 #include <errno.h>
+#include <util.h>
 
 #include "bufcache.h"
 #include "vnode.h"
@@ -317,6 +318,7 @@ lfs_writeinode(struct lfs * fs, struct segment * sp, struct inode * ip)
 		    (sp->ninodes % INOPB(fs));
 	if (gotblk) {
 		LFS_LOCK_BUF(bp);
+		assert(!(bp->b_flags & B_INVAL));
 		brelse(bp);
 	}
 	/* Increment inode count in segment summary block. */
@@ -334,6 +336,7 @@ lfs_writeinode(struct lfs * fs, struct segment * sp, struct inode * ip)
 	if (ino == LFS_IFILE_INUM) {
 		daddr = fs->lfs_idaddr;
 		fs->lfs_idaddr = dbtofsb(fs, bp->b_blkno);
+		sbdirty();
 	} else {
 		LFS_IENTRY(ifp, fs, ino, ibp);
 		daddr = ifp->if_daddr;
@@ -745,22 +748,30 @@ lfs_writeseg(struct lfs * fs, struct segment * sp)
 	 * and it is not a checkpoint, don't do anything.  On a checkpoint,
 	 * even if there aren't any buffers, you need to write the superblock.
 	 */
-	if ((nblocks = sp->cbpp - sp->bpp) == 1)
+	nblocks = sp->cbpp - sp->bpp;
+#if 0
+	printf("write %d blocks at 0x%x\n",
+		nblocks, (int)dbtofsb(fs, (*sp->bpp)->b_blkno));
+#endif
+	if (nblocks == 1)
 		return 0;
 
 	devvp = fs->lfs_devvp;
 
 	/* Update the segment usage information. */
 	LFS_SEGENTRY(sup, fs, sp->seg_number, bp);
+	sup->su_flags |= SEGUSE_DIRTY | SEGUSE_ACTIVE;
 
 	/* Loop through all blocks, except the segment summary. */
 	for (bpp = sp->bpp; ++bpp < sp->cbpp;) {
 		if ((*bpp)->b_vp != devvp) {
 			sup->su_nbytes += (*bpp)->b_bcount;
 		}
+		assert(dtosn(fs, dbtofsb(fs, (*bpp)->b_blkno)) == sp->seg_number);
 	}
 
 	ssp = (SEGSUM *) sp->segsum;
+	ssp->ss_flags |= SS_RFW;
 
 	ninos = (ssp->ss_ninos + INOPB(fs) - 1) / INOPB(fs);
 	sup->su_nbytes += ssp->ss_ninos * DINODE1_SIZE;
@@ -787,7 +798,7 @@ lfs_writeseg(struct lfs * fs, struct segment * sp)
 		el_size = sizeof(u_long);
 	else
 		el_size = sizeof(u_int32_t);
-	datap = dp = malloc(nblocks * el_size);
+	datap = dp = emalloc(nblocks * el_size);
 	for (bpp = sp->bpp, i = nblocks - 1; i--;) {
 		++bpp;
 		/* Loop through gop_write cluster blocks */
@@ -896,8 +907,8 @@ lfs_seglock(struct lfs * fs, unsigned long flags)
 	}
 	fs->lfs_seglock = 1;
 
-	sp = fs->lfs_sp = (struct segment *) malloc(sizeof(*sp));
-	sp->bpp = (struct ubuf **) malloc(fs->lfs_ssize * sizeof(struct ubuf *));
+	sp = fs->lfs_sp = emalloc(sizeof(*sp));
+	sp->bpp = emalloc(fs->lfs_ssize * sizeof(struct ubuf *));
 	if (!sp->bpp)
 		errx(!preen, "Could not allocate %zu bytes: %s",
 			(size_t)(fs->lfs_ssize * sizeof(struct ubuf *)),

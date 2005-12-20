@@ -1,4 +1,4 @@
-/*	$NetBSD: option.c,v 1.22 2005/11/09 00:47:16 reed Exp $	*/
+/*	$NetBSD: option.c,v 1.24 2006/10/11 19:51:10 apb Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "from: @(#)option.c	8.2 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: option.c,v 1.22 2005/11/09 00:47:16 reed Exp $");
+__RCSID("$NetBSD: option.c,v 1.24 2006/10/11 19:51:10 apb Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,8 +52,8 @@ __RCSID("$NetBSD: option.c,v 1.22 2005/11/09 00:47:16 reed Exp $");
 
 #include "find.h"
 
-int typecompare __P((const void *, const void *));
-static OPTION *option __P((char *));
+int typecompare(const void *, const void *);
+static OPTION *option(char *);
 
 /* NB: the following table must be sorted lexically. */
 static OPTION const options[] = {
@@ -72,6 +72,7 @@ static OPTION const options[] = {
 	{ "-empty",	N_EMPTY,	c_empty,	0 },
 	{ "-exec",	N_EXEC,		c_exec,		1 },
 	{ "-execdir",	N_EXECDIR,	c_execdir,	1 },
+	{ "-exit",	N_EXIT,		c_exit,		0 },
 	{ "-false",	N_FALSE,	c_false,	0 },
 	{ "-flags",	N_FLAGS,	c_flags,	1 },
 	{ "-follow",	N_FOLLOW,	c_follow,	0 },
@@ -116,8 +117,7 @@ static OPTION const options[] = {
  *	this switch stuff.
  */
 PLAN *
-find_create(argvp)
-	char ***argvp;
+find_create(char ***argvp)
 {
 	OPTION *p;
 	PLAN *new;
@@ -138,8 +138,7 @@ find_create(argvp)
 }
 
 static OPTION *
-option(name)
-	char *name;
+option(char *name)
 {
 	OPTION tmp;
 
@@ -149,9 +148,8 @@ option(name)
 }
 
 int
-typecompare(a, b)
-	const void *a, *b;
+typecompare(const void *a, const void *b)
 {
 
-	return (strcmp(((OPTION *)a)->name, ((OPTION *)b)->name));
+	return (strcmp(((const OPTION *)a)->name, ((const OPTION *)b)->name));
 }

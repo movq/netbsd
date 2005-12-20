@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.1 2005/05/14 14:54:00 chs Exp $	*/
+/*	$NetBSD: md.h,v 1.3 2006/02/26 10:25:53 dsl Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -62,7 +62,7 @@
  */
 #define SET_KERNEL_1_NAME	"kern-GENERIC"
 
-#define MD_SETS_VALID (SET_KERNEL | SET_SYSTEM | (SET_X11 & ~SET_X11_SERVERS))
+#define MD_SETS_VALID SET_KERNEL, SET_SYSTEM, SET_X11_NOSERVERS
 
 /*
  * Machine-specific command to write a new label to a disk.
@@ -70,8 +70,3 @@
  * the hand-edited disklabel will NOT be written by MI code.
  */
 #define	DISKLABEL_CMD	"disklabel -w -r"
-
-/*
- * Default file system type for floppies.
- */
-const char *fdtype;

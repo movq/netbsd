@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.c,v 1.10 2005/12/11 12:19:02 christos Exp $	*/
+/*	$NetBSD: mem.c,v 1.12 2006/07/23 22:06:07 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -74,7 +74,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.10 2005/12/11 12:19:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.12 2006/07/23 22:06:07 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -84,6 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.10 2005/12/11 12:19:02 christos Exp $");
 #include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/fcntl.h>
+#include <sys/kauth.h>
 
 #include <machine/cpu.h>
 
@@ -199,7 +200,7 @@ mmmmap(dev, off, prot)
 	off_t off;
 	int prot;
 {
-	struct proc *p = curlwp->l_proc;	/* XXX */
+	struct lwp *l = curlwp;	/* XXX */
 
 	/*
 	 * /dev/mem is the only one that makes sense through this
@@ -214,8 +215,8 @@ mmmmap(dev, off, prot)
 
 	/* minor device 0 is physical memory */
 
-	if (off >= ctob(physmem) &&
-	    suser(p->p_ucred, &p->p_acflag) != 0)
+	if (off >= ctob(physmem) && kauth_authorize_generic(l->l_cred,
+	    KAUTH_GENERIC_ISSUSER, &l->l_acflag) != 0)
 		return -1;
 	return sh5_btop(off);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: cacheops_machdep.h,v 1.5 2005/12/11 12:17:19 christos Exp $	*/
+/*	$NetBSD: cacheops_machdep.h,v 1.7 2006/02/16 20:17:13 perry Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -159,7 +159,7 @@ TBIS_md(vaddr_t va)
 	}
 
 	s = splhigh();
-	__asm __volatile (" movc   %0, %%dfc;"	/* select purge space */
+	__asm volatile (" movc   %0, %%dfc;"	/* select purge space */
 			  " movsl  %3, %1@;"	/* purge it */
 			  " movc   %2, %%dfc;"
 			  : : "r" (FC_PURGE), "a" (r_va), "r" (FC_USERD),

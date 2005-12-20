@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.45 2005/12/11 12:18:43 christos Exp $	*/
+/*	$NetBSD: cpu.h,v 1.52 2006/08/31 18:18:17 matt Exp $	*/
 
 /*
  * Copyright (C) 1999 Wolfgang Solfrank.
@@ -72,9 +72,9 @@ struct cpu_info {
 	int ci_want_resched;
 	volatile u_long ci_lasttb;
 	volatile int ci_tickspending;
-	int ci_cpl;
-	int ci_iactive;
-	int ci_ipending;
+	volatile int ci_cpl;
+	volatile int ci_iactive;
+	volatile int ci_ipending;
 	int ci_intrdepth;
 	char *ci_intstk;
 #define	CPUSAVE_LEN	8
@@ -96,6 +96,7 @@ struct cpu_info {
 	void (*ci_idlespin)(void);
 	uint32_t ci_khz;
 	struct evcnt ci_ev_clock;	/* clock intrs */
+	struct evcnt ci_ev_statclock; 	/* stat clock */
 	struct evcnt ci_ev_softclock;	/* softclock intrs */
 	struct evcnt ci_ev_softnet;	/* softnet intrs */
 	struct evcnt ci_ev_softserial;	/* softserial intrs */
@@ -152,7 +153,7 @@ curcpu(void)
 {
 	struct cpu_info *ci;
 
-	__asm __volatile ("mfsprg %0,0" : "=r"(ci));
+	__asm volatile ("mfsprg %0,0" : "=r"(ci));
 	return ci;
 }
 
@@ -165,7 +166,7 @@ mfmsr(void)
 {
 	register_t msr;
 
-	__asm __volatile ("mfmsr %0" : "=r"(msr));
+	__asm volatile ("mfmsr %0" : "=r"(msr));
 	return msr;
 }
 
@@ -173,7 +174,7 @@ static __inline void
 mtmsr(register_t msr)
 {
 
-	__asm __volatile ("mtmsr %0" : : "r"(msr));
+	__asm volatile ("mtmsr %0" : : "r"(msr));
 }
 
 static __inline uint32_t
@@ -181,7 +182,7 @@ mftbl(void)
 {
 	uint32_t tbl;
 
-	__asm __volatile (
+	__asm volatile (
 #ifdef PPC_IBM403
 "	mftblo %0	\n"
 #else
@@ -198,11 +199,11 @@ mftb(void)
 	uint64_t tb;
 
 #ifdef _LP64
-	__asm __volatile ("mftb %0" : "=r"(tb));
+	__asm volatile ("mftb %0" : "=r"(tb));
 #else
 	int tmp;
 
-	__asm __volatile (
+	__asm volatile (
 #ifdef PPC_IBM403
 "1:	mftbhi %0	\n"
 "	mftblo %0+1	\n"
@@ -225,7 +226,7 @@ mfrtcl(void)
 {
 	uint32_t rtcl;
 
-	__asm __volatile ("mfrtcl %0" : "=r"(rtcl));
+	__asm volatile ("mfrtcl %0" : "=r"(rtcl));
 	return rtcl;
 }
 
@@ -234,7 +235,7 @@ mfrtc(uint32_t *rtcp)
 {
 	uint32_t tmp;
 
-	__asm __volatile (
+	__asm volatile (
 "1:	mfrtcu	%0	\n"
 "	mfrtcl	%1	\n"
 "	mfrtcu	%2	\n"
@@ -248,9 +249,36 @@ mfpvr(void)
 {
 	uint32_t pvr;
 
-	__asm __volatile ("mfpvr %0" : "=r"(pvr));
+	__asm volatile ("mfpvr %0" : "=r"(pvr));
 	return (pvr);
 }
+
+static __inline int
+cntlzw(uint32_t val)
+{
+	int 			cnt;
+
+	__asm volatile ("cntlzw %0,%1" : "=r"(cnt) : "r"(val));
+	return (cnt);
+}
+
+#if defined(PPC_IBM4XX) || defined(PPC_IBM403)
+/*
+ * DCR (Device Control Register) access. These have to be
+ * macros because register address is encoded as immediate
+ * operand.
+ */
+#define mtdcr(reg, val) 					\
+	__asm volatile("mtdcr %0,%1" : : "K"(reg), "r"(val))
+
+#define mfdcr(reg)						\
+({								\
+	uint32_t __val;						\
+								\
+	__asm volatile("mfdcr %0,%1" : "=r"(__val) : "K"(reg)); \
+	__val;							\
+})
+#endif /* PPC_IBM4XX || PPC_IBM403 */
 
 /*
  * CLKF_BASEPRI is dependent on the underlying interrupt code
@@ -281,6 +309,7 @@ void icache_flush_page(vaddr_t);
 void dcache_flush(vaddr_t, vsize_t);
 void icache_flush(vaddr_t, vsize_t);
 void *mapiodev(paddr_t, psize_t);
+void unmapiodev(vaddr_t, vsize_t);
 
 #define	DELAY(n)		delay(n)
 
@@ -288,7 +317,7 @@ void *mapiodev(paddr_t, psize_t);
 #define	need_proftick(p)	((p)->p_flag |= P_OWEUPC, curcpu()->ci_astpending = 1)
 #define	signotify(p)		(curcpu()->ci_astpending = 1)
 
-#ifdef PPC_OEA
+#if defined(PPC_OEA) || defined(PPC_OEA64) || defined (PPC_OEA64_BRIDGE)
 void oea_init(void (*)(void));
 void oea_startup(const char *);
 void oea_dumpsys(void);
@@ -307,7 +336,11 @@ extern int cpu_altivec;
 #ifdef PPC_IBM403
 #define	CACHELINESIZE	16
 #else
+#if defined (PPC_OEA64_BRIDGE)
+#define	CACHELINESIZE	128
+#else
 #define	CACHELINESIZE	32
+#endif /* PPC_OEA64_BRIDGE */
 #endif
 #endif
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: udp6_usrreq.c,v 1.72 2005/12/11 12:25:02 christos Exp $	*/
+/*	$NetBSD: udp6_usrreq.c,v 1.75 2006/07/23 22:06:13 ad Exp $	*/
 /*	$KAME: udp6_usrreq.c,v 1.86 2001/05/27 17:33:00 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udp6_usrreq.c,v 1.72 2005/12/11 12:25:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udp6_usrreq.c,v 1.75 2006/07/23 22:06:13 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -103,7 +103,7 @@ __KERNEL_RCSID(0, "$NetBSD: udp6_usrreq.c,v 1.72 2005/12/11 12:25:02 christos Ex
 #endif
 
 /*
- * UDP protocol inplementation.
+ * UDP protocol implementation.
  * Per RFC 768, August, 1980.
  */
 
@@ -236,10 +236,11 @@ udp6_ctlinput(cmd, sa, d)
 			icmp6_mtudisc_update((struct ip6ctlparam *)d, valid);
 
 			/*
-			 * regardless of if we called icmp6_mtudisc_update(),
-			 * we need to call in6_pcbnotify(), to notify path
-			 * MTU change to the userland (2292bis-02), because
-			 * some unconnected sockets may share the same
+			 * regardless of if we called
+			 * icmp6_mtudisc_update(), we need to call
+			 * in6_pcbnotify(), to notify path MTU change
+			 * to the userland (RFC3542), because some
+			 * unconnected sockets may share the same
 			 * destination and want to know the path MTU.
 			 */
 		}
@@ -264,11 +265,9 @@ udp6_usrreq(so, req, m, addr6, control, l)
 	struct lwp *l;
 {
 	struct	in6pcb *in6p = sotoin6pcb(so);
-	struct	proc *p;
 	int	error = 0;
 	int	s;
 
-	p = l ? l->l_proc : NULL;
 	/*
 	 * MAPPED_ADDR implementation info:
 	 *  Mapped addr support for PRU_CONTROL is not necessary.
@@ -281,7 +280,7 @@ udp6_usrreq(so, req, m, addr6, control, l)
 	 */
 	if (req == PRU_CONTROL)
 		return (in6_control(so, (u_long)m, (caddr_t)addr6,
-				   (struct ifnet *)control, p));
+				   (struct ifnet *)control, l));
 
 	if (req == PRU_PURGEIF) {
 		in6_pcbpurgeif0(&udbtable, (struct ifnet *)control);
@@ -324,7 +323,7 @@ udp6_usrreq(so, req, m, addr6, control, l)
 
 	case PRU_BIND:
 		s = splsoftnet();
-		error = in6_pcbbind(in6p, addr6, p);
+		error = in6_pcbbind(in6p, addr6, l);
 		splx(s);
 		break;
 
@@ -338,7 +337,7 @@ udp6_usrreq(so, req, m, addr6, control, l)
 			break;
 		}
 		s = splsoftnet();
-		error = in6_pcbconnect(in6p, addr6, p);
+		error = in6_pcbconnect(in6p, addr6, l);
 		splx(s);
 		if (error == 0)
 			soisconnected(so);
@@ -370,7 +369,7 @@ udp6_usrreq(so, req, m, addr6, control, l)
 		break;
 
 	case PRU_SEND:
-		return (udp6_output(in6p, m, addr6, control, p));
+		return (udp6_output(in6p, m, addr6, control, l));
 
 	case PRU_ABORT:
 		soisdisconnected(so);

@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: postfix,v 1.9 2004/08/13 18:08:03 mycroft Exp $
+# $NetBSD: postfix,v 1.13 2006/09/07 15:26:08 christos Exp $
 #
 
 # PROVIDE: mail
@@ -20,7 +20,13 @@ stop_cmd="postfix_op"
 reload_cmd="postfix_op"
 extra_commands="reload"
 spooletcdir="/var/spool/${name}/etc"
+postconf="/usr/sbin/postconf"
 required_dirs=$spooletcdir
+
+_rebuild() {
+	echo "${name}: rebuilding ${1} ($2 ${1}.db)"
+	$($postconf -h newaliases_path)
+}
 
 postfix_precmd()
 {
@@ -35,6 +41,26 @@ postfix_precmd()
 			cmp -s /etc/$f ${spooletcdir}/$f || \
 			    cp -p /etc/$f ${spooletcdir}/$f
 		fi
+	done
+
+	for f in $($postconf -h alias_database); do
+		OIFS="${IFS}"
+		IFS="${IFS}:"
+		set -- $f
+		IFS="${OIFS}"
+		case "$1" in
+		hash)
+			if [ -f "$2.db" ]; then
+				if [ ! "$2" -ot "$2.db" ]; then
+					_rebuild "$2" "out of date"
+				fi
+			else
+				_rebuild "$2" "missing"
+			fi
+			;;
+		*)
+			;;
+		esac
 	done
 }
 

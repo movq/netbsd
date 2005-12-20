@@ -1,4 +1,4 @@
-/*	$NetBSD: uk.c,v 1.46 2005/12/11 12:23:51 christos Exp $	*/
+/*	$NetBSD: uk.c,v 1.51 2006/11/16 01:33:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uk.c,v 1.46 2005/12/11 12:23:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uk.c,v 1.51 2006/11/16 01:33:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,11 +82,12 @@ static dev_type_ioctl(ukioctl);
 
 const struct cdevsw uk_cdevsw = {
 	ukopen, ukclose, noread, nowrite, ukioctl,
-	nostop, notty, nopoll, nommap, nokqfilter,
+	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER,
 };
 
 static int
-ukmatch(struct device *parent, struct cfdata *match, void *aux)
+ukmatch(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 
 	return (1);
@@ -99,7 +100,7 @@ ukmatch(struct device *parent, struct cfdata *match, void *aux)
 static void
 ukattach(struct device *parent, struct device *self, void *aux)
 {
-	struct uk_softc *uk = (void *)self;
+	struct uk_softc *uk = device_private(self);
 	struct scsipibus_attach_args *sa = aux;
 	struct scsipi_periph *periph = sa->sa_periph;
 
@@ -136,14 +137,14 @@ ukactivate(struct device *self, enum devact act)
 static int
 ukdetach(struct device *self, int flags)
 {
-	/*struct uk_softc *uk = (struct uk_softc *) self;*/
+	/*struct uk_softc *uk = device_private(self);*/
 	int cmaj, mn;
 
 	/* locate the major number */
 	cmaj = cdevsw_lookup_major(&uk_cdevsw);
 
 	/* Nuke the vnodes for any open instances */
-	mn = self->dv_unit;
+	mn = device_unit(self);
 	vdevgone(cmaj, mn, mn, VCHR);
 
 	return (0);

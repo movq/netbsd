@@ -1,4 +1,4 @@
-.\"	$NetBSD: sysinst,v 1.74 2005/12/15 02:34:47 hubertf Exp $
+.\"	$NetBSD: sysinst,v 1.77 2006/11/25 22:53:35 mishka Exp $
 .\"
 .\" Copyright (c) 1999-2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -93,7 +93,7 @@ covers many details for the sake of completeness.
 Do not let this discourage you; the install program is not hard
 to use.
 .
-.if !\n[acorn26]:\n[atari]:\n[mac68k]:\n[macppc]:\n[mvme68k]:\n[news68k]:\n[newsmips]:\n[pmax]:\n[sgimips]:\n[sparc]:\n[sparc64]:\n[x68k] \{\
+.if !\n[acorn26]:\n[acorn32]\n[atari]:\n[mac68k]:\n[macppc]:\n[mvme68k]:\n[news68k]:\n[newsmips]:\n[pmax]:\n[sgimips]:\n[sparc]:\n[sparc64]:\n[x68k] \{\
 .It
 .To 2 "Possible PCMCIA issues"
 .Em Possible Tn PCMCIA Em issues
@@ -481,7 +481,7 @@ or other
 .Ul
 system, you would type something like:
 .Pp
-.Dl # Ic "dd if=.../boot1.fs bs=18k of=/dev/rfd0a"
+.Dl # Ic "dd if=.../boot1.fs of=/dev/rfd0a bs=18k"
 .Pp
 .\} \" \n[alpha]:\n[i386]:\n[news68k]:\n[newsmips]
 .if \n[mac68k] \{\
@@ -729,7 +729,7 @@ Further information can be found on
 .To 2 "Booting NetBSD"
 .Em Booting NetBSD
 .
-.if !\n[acorn26]:\n[atari]:\n[cats]:\n[mac68k]:\n[macppc]:\n[mvme68k]:\n[news68k]:\n[newsmips]:\n[pmax]:\n[sgimips]:\n[sparc]:\n[sparc64]:\n[x68k] \{\
+.if !\n[acorn26]:\n[acorn32]\n[atari]:\n[cats]:\n[mac68k]:\n[macppc]:\n[mvme68k]:\n[news68k]:\n[newsmips]:\n[pmax]:\n[sgimips]:\n[sparc]:\n[sparc64]:\n[x68k] \{\
 .(pcmcia
 Unplug your
 .Tn PCMCIA
@@ -830,7 +830,7 @@ or
 and the geometry will be
 printed on a line that begins with its name.
 As mentioned above, you may need your disk's geometry when creating
-.Nx 's
+.Nx Ns 's
 partitions.
 You will also need to know the name, to tell
 .Ic sysinst
@@ -840,7 +840,7 @@ The most important thing to know is that
 .if \n[acorn26]:\n[cats]:\n[evbppc]:\n[macppc]:\n[sparc64] \{\
 .Li wd0
 is
-.Nx 's
+.Nx Ns 's
 name for your first IDE disk,
 .Li wd1
 the second, etc.
@@ -900,7 +900,7 @@ or
 and the geometry will be
 printed on a line that begins with its name.
 As mentioned above, you may need your disk's geometry when creating
-.Nx 's
+.Nx Ns 's
 partitions.
 You will also need to know the name, to tell
 .Ic sysinst
@@ -910,7 +910,7 @@ to install.
 The most important thing to know is that
 .Li wd0
 is
-.Nx 's
+.Nx Ns 's
 name for your first IDE disk,
 .Li wd1
 the second, etc.
@@ -933,7 +933,7 @@ It will also include instructions for using the menus.
 .It
 .To 2 "Network configuration"
 .Em Network configuration
-.if !\n[acorn26]:\n[atari]:\n[cats]:\n[mac68k]:\n[macppc]:\n[mvme68k]:\n[news68k]:\n[newsmips]:\n[pmax]:\n[sgimips]:\n[sparc]:\n[sparc64]:\n[x68k] \{\
+.if !\n[acorn26]:\n[acorn32]:\n[atari]:\n[cats]:\n[mac68k]:\n[macppc]:\n[mvme68k]:\n[news68k]:\n[newsmips]:\n[pmax]:\n[sgimips]:\n[sparc]:\n[sparc64]:\n[x68k] \{\
 .(pcmcia
 You can skip this section, as you will only get data
 from floppy in the first part of the install.

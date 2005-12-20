@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs_vnops.c,v 1.27 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: ntfs_vnops.c,v 1.30 2006/10/12 01:32:13 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ntfs_vnops.c,v 1.27 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ntfs_vnops.c,v 1.30 2006/10/12 01:32:13 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,6 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: ntfs_vnops.c,v 1.27 2005/12/11 12:24:29 christos Exp
 #include <sys/malloc.h>
 #include <sys/buf.h>
 #include <sys/dirent.h>
+#include <sys/kauth.h>
 
 #if !defined(__NetBSD__)
 #include <vm/vm.h>
@@ -69,25 +70,25 @@ __KERNEL_RCSID(0, "$NetBSD: ntfs_vnops.c,v 1.27 2005/12/11 12:24:29 christos Exp
 
 #include <sys/unistd.h> /* for pathconf(2) constants */
 
-static int	ntfs_bypass(struct vop_generic_args *ap);
-static int	ntfs_read(struct vop_read_args *);
-static int	ntfs_write(struct vop_write_args *ap);
-static int	ntfs_getattr(struct vop_getattr_args *ap);
-static int	ntfs_inactive(struct vop_inactive_args *ap);
-static int	ntfs_print(struct vop_print_args *ap);
-static int	ntfs_reclaim(struct vop_reclaim_args *ap);
-static int	ntfs_strategy(struct vop_strategy_args *ap);
-static int	ntfs_access(struct vop_access_args *ap);
-static int	ntfs_open(struct vop_open_args *ap);
-static int	ntfs_close(struct vop_close_args *ap);
-static int	ntfs_readdir(struct vop_readdir_args *ap);
-static int	ntfs_lookup(struct vop_lookup_args *ap);
-static int	ntfs_bmap(struct vop_bmap_args *ap);
+static int	ntfs_bypass(void *);
+static int	ntfs_read(void *);
+static int	ntfs_write(void *);
+static int	ntfs_getattr(void *);
+static int	ntfs_inactive(void *);
+static int	ntfs_print(void *);
+static int	ntfs_reclaim(void *);
+static int	ntfs_strategy(void *);
+static int	ntfs_access(void *);
+static int	ntfs_open(void *);
+static int	ntfs_close(void *);
+static int	ntfs_readdir(void *);
+static int	ntfs_lookup(void *);
+static int	ntfs_bmap(void *);
 #if defined(__FreeBSD__)
-static int	ntfs_getpages(struct vop_getpages_args *ap);
+static int	ntfs_getpages(struct vop_getpages_args *);
 static int	ntfs_putpages(struct vop_putpages_args *);
 #endif
-static int	ntfs_fsync(struct vop_fsync_args *ap);
+static int	ntfs_fsync(void *);
 static int	ntfs_pathconf(void *);
 
 extern int prtactive;
@@ -114,7 +115,8 @@ ntfs_putpages(ap)
  * This is a noop, simply returning what one has been given.
  */
 int
-ntfs_bmap(ap)
+ntfs_bmap(void *v)
+{
 	struct vop_bmap_args /* {
 		struct vnode *a_vp;
 		daddr_t  a_bn;
@@ -122,8 +124,7 @@ ntfs_bmap(ap)
 		daddr_t *a_bnp;
 		int *a_runp;
 		int *a_runb;
-	} */ *ap;
-{
+	} */ *ap = v;
 	dprintf(("ntfs_bmap: vn: %p, blk: %d\n", ap->a_vp,(u_int32_t)ap->a_bn));
 	if (ap->a_vpp != NULL)
 		*ap->a_vpp = ap->a_vp;
@@ -139,14 +140,14 @@ ntfs_bmap(ap)
 }
 
 static int
-ntfs_read(ap)
+ntfs_read(void *v)
+{
 	struct vop_read_args /* {
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		int a_ioflag;
-		struct ucred *a_cred;
-	} */ *ap;
-{
+		kauth_cred_t a_cred;
+	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct fnode *fp = VTOF(vp);
 	struct ntnode *ip = FTONT(fp);
@@ -155,9 +156,9 @@ ntfs_read(ap)
 	u_int64_t toread;
 	int error;
 
-	dprintf(("ntfs_read: ino: %llu, off: %qd resid: %qd, segflg: %d\n",
+	dprintf(("ntfs_read: ino: %llu, off: %qd resid: %qd\n",
 	    (unsigned long long)ip->i_number, (long long)uio->uio_offset,
-	    (long long)uio->uio_resid, uio->uio_segflg));
+	    (long long)uio->uio_resid));
 
 	dprintf(("ntfs_read: filesize: %qu",(long long)fp->f_size));
 
@@ -183,12 +184,12 @@ ntfs_read(ap)
 }
 
 static int
-ntfs_bypass(ap)
+ntfs_bypass(void *v)
+{
 	struct vop_generic_args /* {
 		struct vnodeop_desc *a_desc;
 		<other random data follows, presumably>
-	} */ *ap;
-{
+	} */ *ap __unused = v;
 	int error = ENOTTY;
 	dprintf(("ntfs_bypass: %s\n", ap->a_desc->vdesc_name));
 	return (error);
@@ -196,14 +197,14 @@ ntfs_bypass(ap)
 
 
 static int
-ntfs_getattr(ap)
+ntfs_getattr(void *v)
+{
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
 		struct vattr *a_vap;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
-	} */ *ap;
-{
+	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct fnode *fp = VTOF(vp);
 	struct ntnode *ip = FTONT(fp);
@@ -241,11 +242,11 @@ ntfs_getattr(ap)
  * Last reference to an ntnode.  If necessary, write or delete it.
  */
 int
-ntfs_inactive(ap)
+ntfs_inactive(void *v)
+{
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
-	} */ *ap;
-{
+	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 #ifdef NTFS_DEBUG
 	struct ntnode *ip = VTONT(vp);
@@ -269,11 +270,11 @@ ntfs_inactive(ap)
  * Reclaim an fnode/ntnode so that it can be used for other purposes.
  */
 int
-ntfs_reclaim(ap)
+ntfs_reclaim(void *v)
+{
 	struct vop_reclaim_args /* {
 		struct vnode *a_vp;
-	} */ *ap;
-{
+	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct fnode *fp = VTOF(vp);
 	struct ntnode *ip = FTONT(fp);
@@ -303,11 +304,11 @@ ntfs_reclaim(ap)
 }
 
 static int
-ntfs_print(ap)
+ntfs_print(void *v)
+{
 	struct vop_print_args /* {
 		struct vnode *a_vp;
-	} */ *ap;
-{
+	} */ *ap = v;
 	struct ntnode *ip = VTONT(ap->a_vp);
 
 	printf("tag VT_NTFS, ino %llu, flag %#x, usecount %d, nlink %ld\n",
@@ -324,12 +325,12 @@ ntfs_print(ap)
  * then call the device strategy routine.
  */
 int
-ntfs_strategy(ap)
+ntfs_strategy(void *v)
+{
 	struct vop_strategy_args /* {
 		struct vnode *a_vp;
 		struct buf *a_bp;
-	} */ *ap;
-{
+	} */ *ap = v;
 	struct buf *bp = ap->a_bp;
 	struct vnode *vp = ap->a_vp;
 	struct fnode *fp = VTOF(vp);
@@ -404,14 +405,14 @@ ntfs_strategy(ap)
 }
 
 static int
-ntfs_write(ap)
+ntfs_write(void *v)
+{
 	struct vop_write_args /* {
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		int  a_ioflag;
-		struct ucred *a_cred;
-	} */ *ap;
-{
+		kauth_cred_t a_cred;
+	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct fnode *fp = VTOF(vp);
 	struct ntnode *ip = FTONT(fp);
@@ -421,9 +422,9 @@ ntfs_write(ap)
 	size_t written;
 	int error;
 
-	dprintf(("ntfs_write: ino: %llu, off: %qd resid: %qd, segflg: %d\n",
+	dprintf(("ntfs_write: ino: %llu, off: %qd resid: %qd\n",
 	    (unsigned long long)ip->i_number, (long long)uio->uio_offset,
-	    (long long)uio->uio_resid, uio->uio_segflg));
+	    (long long)uio->uio_resid));
 	dprintf(("ntfs_write: filesize: %qu",(long long)fp->f_size));
 
 	if (uio->uio_resid + uio->uio_offset > fp->f_size) {
@@ -446,20 +447,21 @@ ntfs_write(ap)
 }
 
 int
-ntfs_access(ap)
+ntfs_access(void *v)
+{
 	struct vop_access_args /* {
 		struct vnode *a_vp;
 		int  a_mode;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
-	} */ *ap;
-{
+	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct ntnode *ip = VTONT(vp);
-	struct ucred *cred = ap->a_cred;
+	kauth_cred_t cred = ap->a_cred;
 	mode_t mask, mode = ap->a_mode;
-	gid_t *gp;
+	gid_t grp;
 	int i;
+	uint16_t ngroups;
 
 	dprintf(("ntfs_access: %llu\n", (unsigned long long)ip->i_number));
 
@@ -480,13 +482,13 @@ ntfs_access(ap)
 	}
 
 	/* Otherwise, user id 0 always gets access. */
-	if (cred->cr_uid == 0)
+	if (kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL) == 0)
 		return (0);
 
 	mask = 0;
 
 	/* Otherwise, check the owner. */
-	if (cred->cr_uid == ip->i_mp->ntm_uid) {
+	if (kauth_cred_geteuid(cred) == ip->i_mp->ntm_uid) {
 		if (mode & VEXEC)
 			mask |= S_IXUSR;
 		if (mode & VREAD)
@@ -497,8 +499,10 @@ ntfs_access(ap)
 	}
 
 	/* Otherwise, check the groups. */
-	for (i = 0, gp = cred->cr_groups; i < cred->cr_ngroups; i++, gp++)
-		if (ip->i_mp->ntm_gid == *gp) {
+	ngroups = kauth_cred_ngroups(cred);
+	for (i = 0; i < ngroups; i++) {
+		grp = kauth_cred_group(cred, i);
+		if (ip->i_mp->ntm_gid == grp) {
 			if (mode & VEXEC)
 				mask |= S_IXGRP;
 			if (mode & VREAD)
@@ -507,6 +511,7 @@ ntfs_access(ap)
 				mask |= S_IWGRP;
 			return ((ip->i_mp->ntm_mode&mask) == mask ? 0 : EACCES);
 		}
+	}
 
 	/* Otherwise, check everyone else. */
 	if (mode & VEXEC)
@@ -525,14 +530,14 @@ ntfs_access(ap)
  */
 /* ARGSUSED */
 static int
-ntfs_open(ap)
+ntfs_open(void *v)
+{
 	struct vop_open_args /* {
 		struct vnode *a_vp;
 		int  a_mode;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
-	} */ *ap;
-{
+	} */ *ap __unused = v;
 #ifdef NTFS_DEBUG
 	struct vnode *vp = ap->a_vp;
 	struct ntnode *ip = VTONT(vp);
@@ -554,14 +559,14 @@ ntfs_open(ap)
  */
 /* ARGSUSED */
 static int
-ntfs_close(ap)
+ntfs_close(void *v)
+{
 	struct vop_close_args /* {
 		struct vnode *a_vp;
 		int  a_fflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
-	} */ *ap;
-{
+	} */ *ap __unused = v;
 #ifdef NTFS_DEBUG
 	struct vnode *vp = ap->a_vp;
 	struct ntnode *ip = VTONT(vp);
@@ -573,15 +578,15 @@ ntfs_close(ap)
 }
 
 int
-ntfs_readdir(ap)
+ntfs_readdir(void *v)
+{
 	struct vop_readdir_args /* {
 		struct vnode *a_vp;
 		struct uio *a_uio;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		int *a_ncookies;
 		u_int **cookies;
-	} */ *ap;
-{
+	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct fnode *fp = VTOF(vp);
 	struct ntnode *ip = FTONT(fp);
@@ -697,7 +702,8 @@ ntfs_readdir(ap)
 #endif
 
 		dprintf(("ntfs_readdir: %d cookies\n",ncookies));
-		if (uio->uio_segflg != UIO_SYSSPACE || uio->uio_iovcnt != 1)
+		if (!VMSPACE_IS_KERNEL_P(uio->uio_vmspace) ||
+		    uio->uio_iovcnt != 1)
 			panic("ntfs_readdir: unexpected uio from NFS server");
 		dpStart = (struct dirent *)
 		     ((caddr_t)uio->uio_iov->iov_base -
@@ -727,18 +733,18 @@ ntfs_readdir(ap)
 }
 
 int
-ntfs_lookup(ap)
+ntfs_lookup(void *v)
+{
 	struct vop_lookup_args /* {
 		struct vnode *a_dvp;
 		struct vnode **a_vpp;
 		struct componentname *a_cnp;
-	} */ *ap;
-{
+	} */ *ap = v;
 	struct vnode *dvp = ap->a_dvp;
 	struct ntnode *dip = VTONT(dvp);
 	struct ntfsmount *ntmp = dip->i_mp;
 	struct componentname *cnp = ap->a_cnp;
-	struct ucred *cred = cnp->cn_cred;
+	kauth_cred_t cred = cnp->cn_cred;
 	int error;
 	int lockparent = cnp->cn_flags & LOCKPARENT;
 #ifdef NTFS_DEBUG
@@ -838,17 +844,16 @@ ntfs_lookup(ap)
  * could just do a sync if they try an fsync on a directory file.
  */
 static int
-ntfs_fsync(ap)
+ntfs_fsync(void *v)
+{
 	struct vop_fsync_args /* {
 		struct vnode *a_vp;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		int a_flags;
 		off_t offlo;
 		off_t offhi;
 		struct lwp *a_l;
-	} */ *ap;
-{
-
+	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	int wait;
 
@@ -866,8 +871,7 @@ ntfs_fsync(ap)
  * Return POSIX pathconf information applicable to NTFS filesystem
  */
 static int
-ntfs_pathconf(v)
-	void *v;
+ntfs_pathconf(void *v)
 {
 	struct vop_pathconf_args /* {
 		struct vnode *a_vp;

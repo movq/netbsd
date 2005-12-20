@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.25 2005/12/11 12:18:43 christos Exp $	*/
+/*	$NetBSD: types.h,v 1.27 2006/08/05 21:26:49 sanjayl Exp $	*/
 
 /*-
  * Copyright (C) 1995 Wolfgang Solfrank.
@@ -51,7 +51,8 @@ typedef	unsigned long	psize_t, vsize_t;
 typedef unsigned long	register_t;
 typedef unsigned int	register32_t;
 #else
-typedef long	register_t;
+typedef unsigned long long	register64_t;
+typedef unsigned long	register_t;
 #endif
 
 #if defined(_KERNEL)
@@ -60,7 +61,7 @@ typedef struct label_t {
 } label_t;
 #endif
 
-typedef __volatile int __cpu_simple_lock_t;
+typedef volatile int __cpu_simple_lock_t;
 
 #define __SIMPLELOCK_LOCKED	1
 #define __SIMPLELOCK_UNLOCKED	0

@@ -1,4 +1,4 @@
-/*	$NetBSD: nonints.h,v 1.34 2005/05/08 00:38:47 christos Exp $	*/
+/*	$NetBSD: nonints.h,v 1.41 2006/11/17 22:07:39 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -115,10 +115,14 @@ void Punt(const char *, ...)
 void DieHorribly(void) __attribute__((__noreturn__));
 int PrintAddr(ClientData, ClientData);
 void Finish(int);
+#ifndef HAVE_EMALLOC
 char *estrdup(const char *);
 void *emalloc(size_t);
 void *erealloc(void *, size_t);
 void enomem(void);
+#else
+#include <util.h>
+#endif
 int eunlink(const char *);
 void execError(const char *, const char *);
 
@@ -172,10 +176,12 @@ Boolean Targ_Silent(GNode *);
 Boolean Targ_Precious(GNode *);
 void Targ_SetMain(GNode *);
 int Targ_PrintCmd(ClientData, ClientData);
+int Targ_PrintNode(ClientData, ClientData);
 char *Targ_FmtTime(time_t);
 void Targ_PrintType(int);
 void Targ_PrintGraph(int);
 void Targ_Propagate(void);
+void Targ_Propagate_Wait(void);
 
 /* var.c */
 void Var_Delete(const char *, GNode *);
@@ -183,7 +189,7 @@ void Var_Set(const char *, const char *, GNode *, int);
 void Var_Append(const char *, const char *, GNode *);
 Boolean Var_Exists(const char *, GNode *);
 char *Var_Value(const char *, GNode *, char **);
-char *Var_Parse(const char *, GNode *, Boolean, int *, Boolean *);
+char *Var_Parse(const char *, GNode *, Boolean, int *, void **);
 char *Var_Subst(const char *, const char *, GNode *, Boolean);
 char *Var_GetTail(const char *);
 char *Var_GetHead(const char *);

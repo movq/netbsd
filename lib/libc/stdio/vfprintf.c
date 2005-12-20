@@ -1,4 +1,4 @@
-/*	$NetBSD: vfprintf.c,v 1.49 2005/11/29 03:12:00 christos Exp $	*/
+/*	$NetBSD: vfprintf.c,v 1.54 2006/10/30 05:10:40 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -37,7 +37,7 @@
 #if 0
 static char *sccsid = "@(#)vfprintf.c	5.50 (Berkeley) 12/16/92";
 #else
-__RCSID("$NetBSD: vfprintf.c,v 1.49 2005/11/29 03:12:00 christos Exp $");
+__RCSID("$NetBSD: vfprintf.c,v 1.54 2006/10/30 05:10:40 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -73,6 +73,7 @@ static int __sbprintf __P((FILE *, const char *, va_list))
  * Flush out all the vectors defined by the given uio,
  * then reset it so that it can be reused.
  */
+/* NB: async-signal-safe when fp->_flags & __SAFE */
 static int
 __sprint(fp, uio)
 	FILE *fp;
@@ -135,7 +136,7 @@ __sbprintf(fp, fmt, ap)
 }
 
 
-#ifdef FLOATING_POINT
+#ifndef NO_FLOATING_POINT
 #include <locale.h>
 #include <math.h>
 #include "floatio.h"
@@ -146,11 +147,11 @@ __sbprintf(fp, fmt, ap)
 static char *cvt __P((double, int, int, char *, int *, int, int *));
 static int exponent __P((char *, int, int));
 
-#else /* no FLOATING_POINT */
+#else /* FLOATING_POINT */
 
 #define	BUF		40
 
-#endif /* FLOATING_POINT */
+#endif /* NO_FLOATING_POINT */
 
 /*
  * Macros for converting digits to letters and vice versa
@@ -192,6 +193,7 @@ vfprintf(fp, fmt0, ap)
 	
 	    
 
+/* NB: async-signal-safe when fp->_flags & __SAFE */
 int
 __vfprintf_unlocked(fp, fmt0, ap)
 	FILE *fp;
@@ -211,14 +213,15 @@ __vfprintf_unlocked(fp, fmt0, ap)
 	char sign;		/* sign prefix (' ', '+', '-', or \0) */
 	wchar_t wc;
 	mbstate_t ps;
-#ifdef FLOATING_POINT
-	char *decimal_point = localeconv()->decimal_point;
+#ifndef NO_FLOATING_POINT
+	char *decimal_point = NULL;
 	char softsign;		/* temporary negative sign for floats */
 	double _double;		/* double precision arguments %[eEfgG] */
 	int expt;		/* integer value of exponent */
 	int expsize = 0;	/* character count for expstr */
 	int ndig;		/* actual number of digits returned by cvt */
 	char expstr[7];		/* buffer for exponent string */
+	char *dtoaresult = NULL;
 #endif
 
 #ifdef __GNUC__			/* gcc has builtin quad type (long long) SOS */
@@ -334,11 +337,17 @@ __vfprintf_unlocked(fp, fmt0, ap)
 	 */
 	for (;;) {
 		cp = fmt;
-		while ((n = mbrtowc(&wc, fmt, MB_CUR_MAX, &ps)) > 0) {
-			fmt += n;
-			if (wc == '%') {
-				fmt--;
-				break;
+		if (fp->_flags & __SAFE) {
+			for (; *fmt && *fmt != '%'; fmt++)
+				continue;
+			n = *fmt == '%';
+		} else {
+			while ((n = mbrtowc(&wc, fmt, MB_CUR_MAX, &ps)) > 0) {
+				fmt += n;
+				if (wc == '%') {
+					fmt--;
+					break;
+				}
 			}
 		}
 		if ((m = fmt - cp) != 0) {
@@ -416,7 +425,7 @@ reswitch:	switch (ch) {
 			} while (is_digit(ch));
 			width = n;
 			goto reswitch;
-#ifdef FLOATING_POINT
+#ifndef NO_FLOATING_POINT
 		case 'L':
 			flags |= LONGDBL;
 			goto rflag;
@@ -462,7 +471,7 @@ reswitch:	switch (ch) {
 			}
 			base = DEC;
 			goto number;
-#ifdef FLOATING_POINT
+#ifndef NO_FLOATING_POINT
 		case 'e':
 		case 'E':
 		case 'f':
@@ -500,9 +509,19 @@ reswitch:	switch (ch) {
 				size = 3;
 				break;
 			}
+			if (fp->_flags & __SAFE) {
+				if (ch == 'E' || ch == 'F' || ch == 'G')
+					cp = "UNK";
+				else
+					cp = "unk";
+				size = 3;
+				break;
+			}
 
 			flags |= FPT;
-			cp = cvt(_double, prec, flags, &softsign,
+			if (dtoaresult)
+				__freedtoa(dtoaresult);
+			cp = dtoaresult = cvt(_double, prec, flags, &softsign,
 				&expt, ch, &ndig);
 			if (ch == 'g' || ch == 'G') {
 				if (expt <= -4 || expt > prec)
@@ -534,7 +553,7 @@ reswitch:	switch (ch) {
 			if (softsign)
 				sign = '-';
 			break;
-#endif /* FLOATING_POINT */
+#endif /* NO_FLOATING_POINT */
 		case 'n':
 			if (flags & MAXINT)
 				*va_arg(ap, intmax_t *) = ret;
@@ -724,11 +743,14 @@ number:			if ((dprec = prec) >= 0)
 		PAD(dprec - size, zeroes);
 
 		/* the string or number proper */
-#ifdef FLOATING_POINT
+#ifndef NO_FLOATING_POINT
 		if ((flags & FPT) == 0) {
 			PRINT(cp, size);
 		} else {	/* glue together f_p fragments */
 			if (ch >= 'f') {	/* 'f' or 'g' */
+				if (decimal_point == NULL)
+					decimal_point =
+					    localeconv()->decimal_point;
 				if (_double == 0) {
 					/* kludge for __dtoa irregularity */
 					PRINT("0", 1);
@@ -782,12 +804,16 @@ number:			if ((dprec = prec) >= 0)
 done:
 	FLUSH();
 error:
+#ifndef NO_FLOATING_POINT
+	if (dtoaresult)
+		__freedtoa(dtoaresult);
+#endif
 	if (__sferror(fp))
 		ret = -1;
 	return (ret);
 }
 
-#ifdef FLOATING_POINT
+#ifndef NO_FLOATING_POINT
 
 static char *
 cvt(value, ndigits, flags, sign, decpt, ch, length)
@@ -869,4 +895,4 @@ exponent(p0, expon, fmtch)
 	}
 	return (p - p0);
 }
-#endif /* FLOATING_POINT */
+#endif /* NO_FLOATING_POINT */

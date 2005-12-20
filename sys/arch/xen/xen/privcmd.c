@@ -1,4 +1,4 @@
-/* $NetBSD: privcmd.c,v 1.8 2005/12/12 20:06:22 christos Exp $ */
+/* $NetBSD: privcmd.c,v 1.15 2006/10/17 19:57:24 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2004 Christian Limpach.
@@ -32,7 +32,9 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: privcmd.c,v 1.8 2005/12/12 20:06:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: privcmd.c,v 1.15 2006/10/17 19:57:24 bouyer Exp $");
+
+#include "opt_compat_netbsd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,14 +61,14 @@ privcmd_ioctl(void *v)
 		u_long a_command;
 		void *a_data;
 		int a_fflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	int error = 0;
 
 	switch (ap->a_command) {
 	case IOCTL_PRIVCMD_HYPERCALL:
-		__asm__ __volatile__ (
+		__asm volatile (
 			"pushl %%ebx; pushl %%ecx; pushl %%edx;"
 			"pushl %%esi; pushl %%edi; "
 			"movl  4(%%eax),%%ebx ;"
@@ -75,20 +77,27 @@ privcmd_ioctl(void *v)
 			"movl 16(%%eax),%%esi ;"
 			"movl 20(%%eax),%%edi ;"
 			"movl   (%%eax),%%eax ;"
+#if defined(XEN3) && !defined(XEN_COMPAT_030001)
+			"shll $5,%%eax ;"
+			"addl $hypercall_page,%%eax ;"
+			"call *%%eax ;"
+#else
 			TRAP_INSTR "; "
+#endif
 			"popl %%edi; popl %%esi; popl %%edx;"
 			"popl %%ecx; popl %%ebx"
 			: "=a" (error) : "0" (ap->a_data) : "memory" );
 		error = -error;
 		break;
-#if 1 /* COMPAT_xxx */
+#ifndef XEN3
+#if defined(COMPAT_30)
 	case IOCTL_PRIVCMD_INITDOMAIN_EVTCHN_OLD:
 		{
 		extern int initdom_ctrlif_domcontroller_port;
 		error = initdom_ctrlif_domcontroller_port;
 		}
 		break;
-#endif
+#endif /* defined(COMPAT_30) */
 	case IOCTL_PRIVCMD_INITDOMAIN_EVTCHN:
 		{
 		extern int initdom_ctrlif_domcontroller_port;
@@ -96,6 +105,7 @@ privcmd_ioctl(void *v)
 		}
 		error = 0;
 		break;
+#endif /* XEN3 */
 	case IOCTL_PRIVCMD_MMAP:
 	{
 		int i, j;
@@ -142,10 +152,12 @@ privcmd_ioctl(void *v)
 
 			for (j = 0; j < mentry.npages; j++) {
 				//printf("remap va 0x%lx to 0x%lx\n", va, ma);
-				if ((error = pmap_remap_pages(pmap, va, ma, 1,
+				error = pmap_enter_ma(pmap, va, ma, 0,
 				    prot, PMAP_WIRED | PMAP_CANFAIL,
-				    mcmd->dom)))
+				    mcmd->dom);
+				if (error != 0) {
 					return error;
+				}
 				va += PAGE_SIZE;
 				ma += PAGE_SIZE;
 			}
@@ -202,7 +214,7 @@ privcmd_ioctl(void *v)
 			 * these into fewer hypercalls.
 			 */
 			//printf("mmapbatch: va=%lx ma=%lx dom=%d\n", va, ma, pmb->dom);
-			error = pmap_remap_pages(pmap, va, ma, 1, prot,
+			error = pmap_enter_ma(pmap, va, ma, 0, prot,
 			    PMAP_WIRED | PMAP_CANFAIL, pmb->dom);
 			if (error != 0) {
 				printf("mmapbatch: remap error %d!\n", error);
@@ -212,6 +224,7 @@ privcmd_ioctl(void *v)
 		}
 		break;
 	}
+#ifndef XEN3
 	case IOCTL_PRIVCMD_GET_MACH2PHYS_START_MFN:
 		{
 		unsigned long *mfn_start = ap->a_data;
@@ -219,6 +232,7 @@ privcmd_ioctl(void *v)
 		error = 0;
 		}
 		break;
+#endif /* !XEN3 */
 	default:
 		error = EINVAL;
 	}

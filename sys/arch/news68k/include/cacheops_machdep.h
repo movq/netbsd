@@ -1,4 +1,4 @@
-/*	$NetBSD: cacheops_machdep.h,v 1.4 2005/12/11 12:18:23 christos Exp $	*/
+/*	$NetBSD: cacheops_machdep.h,v 1.6 2006/02/16 20:17:14 perry Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2005/01/14 07:46:56 skrll Exp $
+#	$NetBSD: Makefile,v 1.11 2006/08/27 07:04:00 simonb Exp $
 
 .include <bsd.own.mk>
 
@@ -11,6 +11,10 @@ MAKE_ARGS=	MACHINE= MAKEINFO=${TOOL_MAKEINFO:Q}
 
 ALL_TARGET=	all-binutils all-gas all-ld
 INSTALL_TARGET=	install-binutils install-gas install-ld
+.if ${MKCROSSGPROF:Uno} != "no"
+ALL_TARGET+=	all-gprof
+INSTALL_TARGET+=install-gprof
+.endif
 
 .include "${.CURDIR}/../Makefile.gnuhost"
 
@@ -43,15 +47,8 @@ native-binutils: .native/.configure_done
 			--host=${MACHINE_GNU_PLATFORM} \
 			--target=${MACHINE_GNU_PLATFORM}) && \
 		(cd .native && ${MAKE} configure-host) && \
-		(cd .native/bfd && ${MAKE} bfd.h) && \
-		(cd .native/ld && ${MAKE} ldemul-list.h) && \
-		(cd .native && \
-			${MAKE} configure-target-libiberty \
-			CC_FOR_TARGET=${CC:Q}' '${CCADDFLAGS:Q} \
-			CXX_FOR_TARGET=${CXX:Q}' '${CCADDFLAGS:Q} \
-			CPP=${CPP:Q}' '-I${DESTDIR}/usr/include) && \
-		(cd .native/${MACHINE_GNU_PLATFORM}/libiberty && \
-			${MAKE} needed-list)
+		(cd .native/bfd && ${MAKE} bfd.h bfdver.h) && \
+		(cd .native/ld && ${MAKE} ldemul-list.h)
 	@touch $@
 
 clean: clean.native

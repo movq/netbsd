@@ -1,4 +1,4 @@
-/*	$NetBSD: atactl.c,v 1.41 2005/11/29 08:47:22 dbj Exp $	*/
+/*	$NetBSD: atactl.c,v 1.45 2006/10/16 00:45:19 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: atactl.c,v 1.41 2005/11/29 08:47:22 dbj Exp $");
+__RCSID("$NetBSD: atactl.c,v 1.45 2006/10/16 00:45:19 christos Exp $");
 #endif
 
 
@@ -240,51 +240,51 @@ static const struct {
 	const char	*name;
 	void (*special)(struct ata_smart_attr *, uint64_t);
 } smart_attrs[] = {
-	{   1,		"Raw read error rate" },
-	{   2,		"Throughput performance" },
-	{   3,		"Spin-up time" },
-	{   4,		"Start/stop count" },
-	{   5,		"Reallocated sector count" },
-	{   6,		"Read channel margin" },
-	{   7,		"Seek error rate" },
-	{   8,		"Seek time performance" },
-	{   9,		"Power-on hours count" },
-	{  10,		"Spin retry count" },
-	{  11,		"Calibration retry count" },
-	{  12,		"Device power cycle count" },
-	{ 191,		"Gsense error rate" },
-	{ 192,		"Power-off retract count" },
-	{ 193,		"Load cycle count" },
+	{   1,		"Raw read error rate", NULL },
+	{   2,		"Throughput performance", NULL },
+	{   3,		"Spin-up time", NULL },
+	{   4,		"Start/stop count", NULL },
+	{   5,		"Reallocated sector count", NULL },
+	{   6,		"Read channel margin", NULL },
+	{   7,		"Seek error rate", NULL },
+	{   8,		"Seek time performance", NULL },
+	{   9,		"Power-on hours count", NULL },
+	{  10,		"Spin retry count", NULL },
+	{  11,		"Calibration retry count", NULL },
+	{  12,		"Device power cycle count", NULL },
+	{ 191,		"Gsense error rate", NULL },
+	{ 192,		"Power-off retract count", NULL },
+	{ 193,		"Load cycle count", NULL },
 	{ 194,		"Temperature",			device_smart_temp},
-	{ 195,		"Hardware ECC Recovered" },
-	{ 196,		"Reallocated event count" },
-	{ 197,		"Current pending sector" },
-	{ 198,		"Offline uncorrectable" },
-	{ 199,		"Ultra DMA CRC error count" },
-	{ 200,		"Write error rate" },
-	{ 201,		"Soft read error rate" },
-	{ 202,		"Data address mark errors" },
-	{ 203,		"Run out cancel" },
-	{ 204,		"Soft ECC correction" },
-	{ 205,		"Thermal asperity check" },
-	{ 206,		"Flying height" },
-	{ 207,		"Spin high current" },
-	{ 208,		"Spin buzz" },
-	{ 209,		"Offline seek performance" },
-	{ 220,		"Disk shift" },
-	{ 221,		"G-Sense error rate" },
-	{ 222,		"Loaded hours" },
-	{ 223,		"Load/unload retry count" },
-	{ 224,		"Load friction" },
-	{ 225,		"Load/unload cycle count" },
-	{ 226,		"Load-in time" },
-	{ 227,		"Torque amplification count" },
-	{ 228,		"Power-off retract count" },
-	{ 230,		"GMR head amplitude" },
+	{ 195,		"Hardware ECC Recovered", NULL },
+	{ 196,		"Reallocated event count", NULL },
+	{ 197,		"Current pending sector", NULL },
+	{ 198,		"Offline uncorrectable", NULL },
+	{ 199,		"Ultra DMA CRC error count", NULL },
+	{ 200,		"Write error rate", NULL },
+	{ 201,		"Soft read error rate", NULL },
+	{ 202,		"Data address mark errors", NULL },
+	{ 203,		"Run out cancel", NULL },
+	{ 204,		"Soft ECC correction", NULL },
+	{ 205,		"Thermal asperity check", NULL },
+	{ 206,		"Flying height", NULL },
+	{ 207,		"Spin high current", NULL },
+	{ 208,		"Spin buzz", NULL },
+	{ 209,		"Offline seek performance", NULL },
+	{ 220,		"Disk shift", NULL },
+	{ 221,		"G-Sense error rate", NULL },
+	{ 222,		"Loaded hours", NULL },
+	{ 223,		"Load/unload retry count", NULL },
+	{ 224,		"Load friction", NULL },
+	{ 225,		"Load/unload cycle count", NULL },
+	{ 226,		"Load-in time", NULL },
+	{ 227,		"Torque amplification count", NULL },
+	{ 228,		"Power-off retract count", NULL },
+	{ 230,		"GMR head amplitude", NULL },
 	{ 231,		"Temperature",			device_smart_temp },
-	{ 240,		"Head flying hours" },
-	{ 250,		"Read error retry rate" },
-	{   0,		"Unknown" },
+	{ 240,		"Head flying hours", NULL },
+	{ 250,		"Read error retry rate", NULL },
+	{   0,		"Unknown", NULL },
 };
 
 struct bitinfo ata_sec_st[] = {
@@ -556,7 +556,7 @@ struct {
 const char *selftest_status[] = {
 	"No error",
 	"Aborted by the host",
-	"Interruped by the host by reset",
+	"Interrupted by the host by reset",
 	"Fatal error or unknown test error",
 	"Unknown test element failed",
 	"Electrical test element failed",
@@ -785,6 +785,7 @@ is_smart(void)
 					retval = 1;
 				} else {
 					status = "disabled";
+					retval = 3;
 				}
 			}
 			printf("SMART supported, SMART %s\n", status);
@@ -1077,57 +1078,62 @@ device_smart(int argc, char *argv[])
 
 		is_smart();
 	} else if (strcmp(argv[0], "status") == 0) {
-		if (!is_smart()) {
+		int rv;
+
+		rv = is_smart();
+
+		if (!rv) {
 			fprintf(stderr, "SMART not supported\n");
 			return;
+		} else if (rv == 3)
+			return;
+
+		memset(&inbuf, 0, sizeof(inbuf));
+		memset(&req, 0, sizeof(req));
+
+		req.features = WDSM_STATUS;
+		req.command = WDCC_SMART;
+		req.cylinder = WDSMART_CYL;
+		req.timeout = 1000;
+	
+		ata_command(&req);
+
+		if (req.cylinder != WDSMART_CYL) {
+			fprintf(stderr, "Threshold exceeds condition\n");
 		}
 
-			memset(&inbuf, 0, sizeof(inbuf));
-			memset(&req, 0, sizeof(req));
+		/* WDSM_RD_DATA and WDSM_RD_THRESHOLDS are optional
+		 * features, the following ata_command()'s may error
+		 * and exit().
+		 */
 
-			req.features = WDSM_STATUS;
-			req.command = WDCC_SMART;
-			req.cylinder = WDSMART_CYL;
-			req.timeout = 1000;
+		memset(&inbuf, 0, sizeof(inbuf));
+		memset(&req, 0, sizeof(req));
+
+		req.flags = ATACMD_READ;
+		req.features = WDSM_RD_DATA;
+		req.command = WDCC_SMART;
+		req.databuf = (caddr_t) inbuf;
+		req.datalen = sizeof(inbuf);
+		req.cylinder = WDSMART_CYL;
+		req.timeout = 1000;
 	
-			ata_command(&req);
+		ata_command(&req);
 
-			if (req.cylinder != WDSMART_CYL) {
-				fprintf(stderr, "Threshold exceeds condition\n");
-			}
+		memset(&inbuf2, 0, sizeof(inbuf2));
+		memset(&req, 0, sizeof(req));
 
-			/* WDSM_RD_DATA and WDSM_RD_THRESHOLDS are optional
-			 * features, the following ata_command()'s may error
-			 * and exit().
-			 */
+		req.flags = ATACMD_READ;
+		req.features = WDSM_RD_THRESHOLDS;
+		req.command = WDCC_SMART;
+		req.databuf = (caddr_t) inbuf2;
+		req.datalen = sizeof(inbuf2);
+		req.cylinder = WDSMART_CYL;
+		req.timeout = 1000;
 
-			memset(&inbuf, 0, sizeof(inbuf));
-			memset(&req, 0, sizeof(req));
+		ata_command(&req);
 
-			req.flags = ATACMD_READ;
-			req.features = WDSM_RD_DATA;
-			req.command = WDCC_SMART;
-			req.databuf = (caddr_t) inbuf;
-			req.datalen = sizeof(inbuf);
-			req.cylinder = WDSMART_CYL;
-			req.timeout = 1000;
-	
-			ata_command(&req);
-
-			memset(&inbuf2, 0, sizeof(inbuf2));
-			memset(&req, 0, sizeof(req));
-
-			req.flags = ATACMD_READ;
-			req.features = WDSM_RD_THRESHOLDS;
-			req.command = WDCC_SMART;
-			req.databuf = (caddr_t) inbuf2;
-			req.datalen = sizeof(inbuf2);
-			req.cylinder = WDSMART_CYL;
-			req.timeout = 1000;
-
-			ata_command(&req);
-
-			print_smart_status(inbuf, inbuf2);
+		print_smart_status(inbuf, inbuf2);
 
 	} else if (strcmp(argv[0], "offline") == 0) {
 		if (argc != 2)
@@ -1209,7 +1215,7 @@ device_security(int argc, char *argv[])
 
 	if (strcmp(argv[0], "freeze") == 0) {
 		memset(&req, 0, sizeof(req));
-		req.command = WCDD_SECURITY_FREEZE;
+		req.command = WDCC_SECURITY_FREEZE;
 		req.timeout = 1000;
 		ata_command(&req);
 	} else if (strcmp(argv[0], "status") == 0) {

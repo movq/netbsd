@@ -1,4 +1,4 @@
-/*	$NetBSD: vi.c,v 1.24 2005/08/10 12:46:24 christos Exp $	*/
+/*	$NetBSD: vi.c,v 1.27 2006/10/22 07:48:13 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -41,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)vi.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: vi.c,v 1.24 2005/08/10 12:46:24 christos Exp $");
+__RCSID("$NetBSD: vi.c,v 1.27 2006/10/22 07:48:13 mrg Exp $");
 #endif
 #endif /* not lint && not SCCSID */
 
@@ -600,13 +600,12 @@ vi_delete_prev_char(EditLine *el, int c __attribute__((__unused__)))
  */
 protected el_action_t
 /*ARGSUSED*/
-vi_list_or_eof(EditLine *el, int c __attribute__((__unused__)))
+vi_list_or_eof(EditLine *el, int c)
 {
 
 	if (el->el_line.cursor == el->el_line.lastchar) {
 		if (el->el_line.cursor == el->el_line.buffer) {
-			term_overwrite(el, STReof, 4);	/* then do a EOF */
-			term__flush();
+			term_writec(el, c);	/* then do a EOF */
 			return (CC_EOF);
 		} else {
 			/*
@@ -916,15 +915,16 @@ vi_comment_out(EditLine *el, int c)
  * NB: posix implies that we should enter insert mode, however
  * this is against historical precedent...
  */
+#ifdef __weak_reference
+extern char *get_alias_text(const char *) __weak_reference(get_alias_text);
+#endif
 protected el_action_t
 /*ARGSUSED*/
 vi_alias(EditLine *el, int c)
 {
-#ifdef __weak_extern
+#ifdef __weak_reference
 	char alias_name[3];
 	char *alias_text;
-	extern char *get_alias_text(const char *);
-	__weak_extern(get_alias_text);
 
 	if (get_alias_text == 0) {
 		return CC_ERROR;

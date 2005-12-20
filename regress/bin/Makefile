@@ -1,5 +1,5 @@
-#	$NetBSD: Makefile,v 1.6 2004/07/07 01:58:16 enami Exp $
+#	$NetBSD: Makefile,v 1.8 2006/10/02 17:59:45 apb Exp $
 
-SUBDIR+= dd df expr pax sh systrace
+SUBDIR+= cp dd df expr pax ps sh systrace
 
 .include <bsd.subdir.mk>

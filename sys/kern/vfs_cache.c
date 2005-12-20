@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_cache.c,v 1.62 2005/12/11 12:24:30 christos Exp $	*/
+/*	$NetBSD: vfs_cache.c,v 1.66 2006/10/25 18:56:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.62 2005/12/11 12:24:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.66 2006/10/25 18:56:38 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_revcache.h"
@@ -48,6 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.62 2005/12/11 12:24:30 christos Exp 
 #include <sys/pool.h>
 #include <sys/lock.h>
 
+#define NAMECACHE_ENTER_REVERSE
 /*
  * Name caching works as follows:
  *
@@ -97,7 +98,7 @@ static struct simplelock namecache_slock = SIMPLELOCK_INITIALIZER;
 
 static void cache_remove(struct namecache *);
 static void cache_free(struct namecache *);
-static __inline struct namecache *cache_lookup_entry(
+static inline struct namecache *cache_lookup_entry(
     const struct vnode *, const struct componentname *);
 
 static void
@@ -136,7 +137,7 @@ cache_free(struct namecache *ncp)
 	numcache--;
 }
 
-static __inline struct namecache *
+static inline struct namecache *
 cache_lookup_entry(const struct vnode *dvp, const struct componentname *cnp)
 {
 	struct nchashhead *ncpp;
@@ -277,7 +278,7 @@ cache_lookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 		error = vn_lock(vp, LK_EXCLUSIVE);
 		/*
 		 * If the above vn_lock() failed or either of LOCKPARENT or
-		 * ISLASTCN is set, unlock the directory vnode.
+		 * ISLASTCN is not set, unlock the directory vnode.
 		 */
 		if (error || (~cnp->cn_flags & (LOCKPARENT|ISLASTCN)) != 0) {
 			VOP_UNLOCK(dvp, 0);
@@ -297,12 +298,9 @@ cache_lookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 		 * The `.' case here should be extremely rare (if it can happen
 		 * at all), so we don't bother optimizing out the unlock/relock.
 		 */
-		if (vp == dvp ||
-		    error || (~cnp->cn_flags & (LOCKPARENT|ISLASTCN)) != 0) {
-			if ((error = vn_lock(dvp, LK_EXCLUSIVE)) != 0)
-				return (error);
-			cnp->cn_flags &= ~PDIRUNLOCK;
-		}
+		if ((error = vn_lock(dvp, LK_EXCLUSIVE)) != 0)
+			return (error);
+		cnp->cn_flags &= ~PDIRUNLOCK;
 		*vpp = NULL;
 		return (-1);
 	}
@@ -538,6 +536,7 @@ cache_enter(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 
 	/*
 	 * Create reverse-cache entries (used in getcwd) for directories.
+	 * (and in linux procfs exe node)
 	 */
 	if (vp != NULL &&
 	    vp != dvp &&

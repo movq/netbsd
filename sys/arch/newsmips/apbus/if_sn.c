@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sn.c,v 1.18 2005/12/11 12:18:24 christos Exp $	*/
+/*	$NetBSD: if_sn.c,v 1.21 2006/10/07 21:05:46 he Exp $	*/
 
 /*
  * National Semiconductor  DP8393X SONIC Driver
@@ -16,7 +16,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sn.c,v 1.18 2005/12/11 12:18:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sn.c,v 1.21 2006/10/07 21:05:46 he Exp $");
 
 #include "opt_inet.h"
 
@@ -83,10 +83,10 @@ static void	camdump(struct sn_softc *sc);
 static void	sonictxint(struct sn_softc *);
 static void	sonicrxint(struct sn_softc *);
 
-static __inline__ u_int	sonicput(struct sn_softc *sc, struct mbuf *m0,
+static inline u_int	sonicput(struct sn_softc *sc, struct mbuf *m0,
     int mtd_next);
-static __inline__ int	sonic_read(struct sn_softc *, caddr_t, int);
-static __inline__ struct mbuf *sonic_get(struct sn_softc *, caddr_t, int);
+static inline int	sonic_read(struct sn_softc *, caddr_t, int);
+static inline struct mbuf *sonic_get(struct sn_softc *, caddr_t, int);
 
 #undef assert
 #undef _assert
@@ -109,9 +109,8 @@ int sndebug = 0;
  * SONIC buffers need to be aligned 16 or 32 bit aligned.
  * These macros calculate and verify alignment.
  */
-#define	ROUNDUP(p, N)	(((int) p + N - 1) & ~(N - 1))
-
-#define SOALIGN(m, array)	(m ? (ROUNDUP(array, 4)) : (ROUNDUP(array, 2)))
+#define SOALIGN(m, array)	(m ? (roundup((int)array, 4)) : \
+				     (roundup((int)array, 2)))
 
 #define LOWER(x) ((unsigned)(x) & 0xffff)
 #define UPPER(x) ((unsigned)(x) >> 16)
@@ -154,7 +153,7 @@ snsetup(struct sn_softc	*sc, uint8_t *lladdr)
 	 * around problems near the end of 64k !!
 	 */
 	p = sc->space;
-	pp = (u_char *)ROUNDUP((int)p, PAGE_SIZE);
+	pp = (u_char *)roundup((int)p, PAGE_SIZE);
 	p = pp;
 
 	for (i = 0; i < NRRA; i++) {
@@ -529,7 +528,7 @@ snwatchdog(struct ifnet *ifp)
 /*
  * stuff packet into sonic (at splnet)
  */
-static __inline__ u_int
+static inline u_int
 sonicput(struct sn_softc *sc, struct mbuf *m0, int mtd_next)
 {
 	struct mtd *mtdp;
@@ -1055,7 +1054,7 @@ sonicrxint(struct sn_softc *sc)
  * sonic_read -- pull packet off interface and forward to
  * appropriate protocol handler
  */
-static __inline__ int 
+static inline int 
 sonic_read(struct sn_softc *sc, caddr_t pkt, int len)
 {
 	struct ifnet *ifp = &sc->sc_if;
@@ -1092,7 +1091,7 @@ sonic_read(struct sn_softc *sc, caddr_t pkt, int len)
 /*
  * munge the received packet into an mbuf chain
  */
-static __inline__ struct mbuf *
+static inline struct mbuf *
 sonic_get(struct sn_softc *sc, caddr_t pkt, int datalen)
 {
 	struct	mbuf *m, *top, **mp;

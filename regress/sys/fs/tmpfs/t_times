@@ -1,8 +1,8 @@
 #!/bin/sh
 #
-# $NetBSD: t_times,v 1.2 2005/09/23 15:36:15 jmmv Exp $
+# $NetBSD: t_times,v 1.6 2006/11/09 16:20:06 jmmv Exp $
 #
-# Copyright (c) 2005 The NetBSD Foundation, Inc.
+# Copyright (c) 2005, 2006 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # This code is derived from software contributed to The NetBSD Foundation
@@ -92,7 +92,21 @@ test_run() {
 	[ ${st_ctime} -gt ${ost_ctime} ] || die
 	[ ${st_mtime} -eq ${ost_mtime} ] || die
 
+	test_name "File renaming does not change times"
+	mkdir e || die
+	echo foo >e/a || die
+	eval $(stat -s e | sed -e 's|st_|dost_|g') || die
+	eval $(stat -s e/a | sed -e 's|st_|ost_|g') || die
+	sleep 1
+	mv e/a e/b || die
+	eval $(stat -s e | sed -e 's|st_|dst_|g') || die
+	eval $(stat -s e/b) || die
+	[ ${st_atime} -eq ${ost_atime} ] || die
+	[ ${st_ctime} -gt ${ost_ctime} ] || die
+	[ ${st_mtime} -eq ${ost_mtime} ] || die
+	[ ${dst_mtime} -gt ${dost_mtime} ] || die
+
 	test_unmount
 }
 
-. ./h_funcs.subr
+. ${SUBRDIR}/h_funcs.subr

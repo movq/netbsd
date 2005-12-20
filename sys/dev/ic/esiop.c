@@ -1,4 +1,4 @@
-/*	$NetBSD: esiop.c,v 1.34 2005/11/18 23:10:32 bouyer Exp $	*/
+/*	$NetBSD: esiop.c,v 1.38 2006/11/02 15:08:30 garbled Exp $	*/
 
 /*
  * Copyright (c) 2002 Manuel Bouyer.
@@ -33,7 +33,7 @@
 /* SYM53c7/8xx PCI-SCSI I/O Processors driver */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esiop.c,v 1.34 2005/11/18 23:10:32 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esiop.c,v 1.38 2006/11/02 15:08:30 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,11 +64,13 @@ __KERNEL_RCSID(0, "$NetBSD: esiop.c,v 1.34 2005/11/18 23:10:32 bouyer Exp $");
 #ifndef DEBUG
 #undef DEBUG
 #endif
-#undef SIOP_DEBUG
-#undef SIOP_DEBUG_DR
-#undef SIOP_DEBUG_INTR
-#undef SIOP_DEBUG_SCHED
-#undef DUMP_SCRIPT
+/*
+#define SIOP_DEBUG
+#define SIOP_DEBUG_DR
+#define SIOP_DEBUG_INTR
+#define SIOP_DEBUG_SCHED
+#define DUMP_SCRIPT
+*/
 
 #define SIOP_STATS
 
@@ -111,8 +113,8 @@ void esiop_printstats(void);
 #define INCSTAT(x)
 #endif
 
-static __inline__ void esiop_script_sync(struct esiop_softc *, int);
-static __inline__ void
+static inline void esiop_script_sync(struct esiop_softc *, int);
+static inline void
 esiop_script_sync(sc, ops)
 	struct esiop_softc *sc;
 	int ops;
@@ -122,8 +124,8 @@ esiop_script_sync(sc, ops)
 		    PAGE_SIZE, ops);
 }
 
-static __inline__ u_int32_t esiop_script_read(struct esiop_softc *, u_int);
-static __inline__ u_int32_t
+static inline u_int32_t esiop_script_read(struct esiop_softc *, u_int);
+static inline u_int32_t
 esiop_script_read(sc, offset)
 	struct esiop_softc *sc;
 	u_int offset;
@@ -136,9 +138,9 @@ esiop_script_read(sc, offset)
 	}
 }
 
-static __inline__ void esiop_script_write(struct esiop_softc *, u_int,
+static inline void esiop_script_write(struct esiop_softc *, u_int,
 	u_int32_t);
-static __inline__ void
+static inline void
 esiop_script_write(sc, offset, val)
 	struct esiop_softc *sc;
 	u_int offset;
@@ -1752,14 +1754,14 @@ esiop_start(sc, esiop_cmd)
 #ifdef DIAGNOSTIC
 	/* sanity check the tag if needed */
 	if (esiop_cmd->cmd_c.flags & CMDFL_TAG) {
-		if (esiop_lun->tactive[esiop_cmd->cmd_c.tag] != NULL)
-			panic("esiop_start: tag not free");
 		if (esiop_cmd->cmd_c.tag >= ESIOP_NTAG ||
 		    esiop_cmd->cmd_c.tag < 0) {
 			scsipi_printaddr(esiop_cmd->cmd_c.xs->xs_periph);
 			printf(": tag id %d\n", esiop_cmd->cmd_c.tag);
 			panic("esiop_start: invalid tag id");
 		}
+		if (esiop_lun->tactive[esiop_cmd->cmd_c.tag] != NULL)
+			panic("esiop_start: tag not free");
 	}
 #endif
 #ifdef SIOP_DEBUG_SCHED
@@ -1991,12 +1993,10 @@ esiop_morecbd(sc)
 		TAILQ_INSERT_TAIL(&sc->free_list, &newcbd->cmds[i], next);
 		splx(s);
 #ifdef SIOP_DEBUG
-		printf("tables[%d]: in=0x%x out=0x%x status=0x%x "
-		    "offset=0x%x\n", i,
+		printf("tables[%d]: in=0x%x out=0x%x status=0x%x\n", i
 		    le32toh(newcbd->cmds[i].cmd_tables->t_msgin.addr),
 		    le32toh(newcbd->cmds[i].cmd_tables->t_msgout.addr),
-		    le32toh(newcbd->cmds[i].cmd_tables->t_status.addr,
-		    le32toh(newcbd->cmds[i].cmd_tables->t_offset.addr));
+		    le32toh(newcbd->cmds[i].cmd_tables->t_status.addr));
 #endif
 	}
 	s = splbio();

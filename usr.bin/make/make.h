@@ -1,4 +1,4 @@
-/*	$NetBSd: make.h,v 1.53 2005/05/01 01:25:36 christos Exp $	*/
+/*	$NetBSD: make.h,v 1.64 2006/11/17 22:07:39 dsl Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -91,12 +91,6 @@
 
 #ifdef BSD4_4
 # include <sys/cdefs.h>
-#else
-# ifndef __GNUC__
-#  ifndef __inline
-#   define __inline
-#  endif
-# endif
 #endif
 
 #if !defined(__GNUC_PREREQ__)
@@ -135,20 +129,25 @@
  *	7) the number of its children that are, as yet, unmade
  *	8) its modification time
  *	9) the modification time of its youngest child (qv. make.c)
- *	10) a list of nodes for which this is a source
- *	11) a list of nodes on which this depends
+ *	10) a list of nodes for which this is a source (parents)
+ *	11) a list of nodes on which this depends (children)
  *	12) a list of nodes that depend on this, as gleaned from the
- *	    transformation rules.
- *	13) a list of nodes of the same name created by the :: operator
- *	14) a list of nodes that must be made (if they're made) before
- *	    this node can be, but that do no enter into the datedness of
+ *	    transformation rules (iParents)
+ *	13) a list of ancestor nodes, which includes parents, iParents,
+ *	    and recursive parents of parents
+ *	14) a list of nodes of the same name created by the :: operator
+ *	15) a list of nodes that must be made (if they're made) before
+ *	    this node can be, but that do not enter into the datedness of
  *	    this node.
- *	15) a list of nodes that must be made (if they're made) after
+ *	16) a list of nodes that must be made (if they're made) before
+ *	    this node or any child of this node can be, but that do not
+ *	    enter into the datedness of this node.
+ *	17) a list of nodes that must be made (if they're made) after
  *	    this node is, but that do not depend on this node, in the
  *	    normal sense.
- *	16) a Lst of ``local'' variables that are specific to this target
+ *	18) a Lst of ``local'' variables that are specific to this target
  *	   and this target only (qv. var.c [$@ $< $?, etc.])
- *	17) a Lst of strings that are commands to be given to a shell
+ *	19) a Lst of strings that are commands to be given to a shell
  *	   to create this target.
  */
 typedef struct GNode {
@@ -156,34 +155,33 @@ typedef struct GNode {
     char            *uname;    	/* The unexpanded name of a .USE node */
     char    	    *path;     	/* The full pathname of the file */
     int             type;      	/* Its type (see the OP flags, below) */
-    int		    order;	/* Its wait weight */
 
     int             flags;
-#define REMAKE		0x1    	/* this target needs to be remade */
+#define REMAKE		0x1    	/* this target needs to be (re)made */
 #define	CHILDMADE	0x2	/* children of this target were made */
 #define FORCE		0x4	/* children don't exist, and we pretend made */
-    enum {
-	UNMADE, BEINGMADE, MADE, UPTODATE, ERROR, ABORTED,
-	CYCLE, ENDCYCLE
+#define DONE_WAIT	0x8	/* Set by Make_ProcessWait() */
+#define DONE_ORDER	0x10	/* Build requested by .ORDER processing */
+#define CYCLE		0x1000  /* Used by MakePrintStatus */
+#define ENDCYCLE	0x2000  /* Used by MakePrintStatus */
+#define ONCYCLE		0x4000  /* Used by MakePrintStatus */
+#define DONECYCLE	0x8000  /* Used by MakePrintStatus */
+    enum enum_made {
+	UNMADE, DEFERRED, REQUESTED, BEINGMADE,
+	MADE, UPTODATE, ERROR, ABORTED
     }	    	    made;    	/* Set to reflect the state of processing
 				 * on this node:
 				 *  UNMADE - Not examined yet
+				 *  DEFERRED - Examined once (building child)
+				 *  REQUESTED - on toBeMade list
 				 *  BEINGMADE - Target is already being made.
-				 *  	Indicates a cycle in the graph. (compat
-				 *  	mode only)
+				 *  	Indicates a cycle in the graph.
 				 *  MADE - Was out-of-date and has been made
 				 *  UPTODATE - Was already up-to-date
 				 *  ERROR - An error occurred while it was being
 				 *  	made (used only in compat mode)
 				 *  ABORTED - The target was aborted due to
 				 *  	an error making an inferior (compat).
-				 *  CYCLE - Marked as potentially being part of
-				 *  	a graph cycle. If we come back to a
-				 *  	node marked this way, it is printed
-				 *  	and 'made' is changed to ENDCYCLE.
-				 *  ENDCYCLE - the cycle has been completely
-				 *  	printed. Go back and unmark all its
-				 *  	members.
 				 */
     int             unmade;    	/* The number of unmade children */
 
@@ -196,8 +194,10 @@ typedef struct GNode {
     Lst	    	    cohorts;  	/* Other nodes for the :: operator */
     Lst             parents;   	/* Nodes that depend on this one */
     Lst             children;  	/* Nodes on which this one depends */
-    Lst	    	    successors;	/* Nodes that must be made after this one */
-    Lst	    	    preds;  	/* Nodes that must be made before this one */
+    Lst             order_pred;	/* .ORDER nodes we need made */
+    Lst             order_succ;	/* .ORDER nodes who need us */
+
+    char	    cohort_num[8]; /* #n for this cohort */
     int		    unmade_cohorts;/* # of unmade instances on the
 				      cohorts list */
     struct GNode    *centurion;	/* Pointer to the first instance of a ::
@@ -262,6 +262,7 @@ typedef struct GNode {
 				     * target' processing in parse.c */
 #define OP_PHONY	0x00010000  /* Not a file target; run always */
 #define OP_NOPATH	0x00020000  /* Don't search for file in the path */
+#define OP_WAIT 	0x00040000  /* .WAIT phony node */
 /* Attributes applied by PMake */
 #define OP_TRANSFORM	0x80000000  /* The node is a transformation rule */
 #define OP_MEMBER 	0x40000000  /* Target is a member of an archive */
@@ -291,8 +292,9 @@ typedef struct GNode {
  * table of all targets and its address returned. If TARG_NOCREATE is given,
  * a NIL pointer will be returned.
  */
-#define TARG_CREATE	0x01	  /* create node if not found */
 #define TARG_NOCREATE	0x00	  /* don't create it */
+#define TARG_CREATE	0x01	  /* create node if not found */
+#define TARG_NOHASH	0x02	  /* don't look in/add to hash table */
 
 /*
  * There are several places where expandable buffers are used (parse.c and
@@ -370,10 +372,6 @@ extern Boolean  keepgoing;    	/* True if should continue on unaffected
 				 * in one portion */
 extern Boolean 	touchFlag;    	/* TRUE if targets should just be 'touched'
 				 * if out of date. Set by the -t flag */
-extern Boolean  usePipes;    	/* TRUE if should capture the output of
-				 * subshells by means of pipes. Otherwise it
-				 * is routed to temporary files from which it
-				 * is retrieved when the shell exits */
 extern Boolean 	queryFlag;    	/* TRUE if we aren't supposed to really make
 				 * anything, just see if the targets are out-
 				 * of-date */
@@ -417,6 +415,7 @@ extern char	*progname;	/* The program name */
  *	There is one bit per module.  It is up to the module what debug
  *	information to print.
  */
+FILE *debug_file;		/* Output written here - default stdout */
 extern int debug;
 #define	DEBUG_ARCH	0x0001
 #define	DEBUG_COND	0x0002
@@ -433,6 +432,7 @@ extern int debug;
 #define DEBUG_ERROR	0x1000
 #define	DEBUG_GRAPH3	0x10000
 #define DEBUG_SCRIPT	0x20000
+#define DEBUG_PARSE	0x40000
 
 #define CONCAT(a,b)	a##b
 
@@ -446,7 +446,7 @@ extern int debug;
 
 int Make_TimeStamp(GNode *, GNode *);
 Boolean Make_OODate(GNode *);
-Lst Make_ExpandUse(Lst);
+void Make_ExpandUse(Lst);
 time_t Make_Recheck(GNode *);
 void Make_HandleUse(GNode *, GNode *);
 void Make_Update(GNode *);

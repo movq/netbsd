@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_bufq.c,v 1.10 2005/12/11 12:24:30 christos Exp $	*/
+/*	$NetBSD: subr_bufq.c,v 1.12 2005/12/26 10:36:47 yamt Exp $	*/
 /*	NetBSD: subr_disk.c,v 1.70 2005/08/20 12:00:01 yamt Exp $	*/
 
 /*-
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_bufq.c,v 1.10 2005/12/11 12:24:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_bufq.c,v 1.12 2005/12/26 10:36:47 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -160,7 +160,7 @@ bufq_alloc(struct bufq_state **bufqp, const char *strategy, int flags)
 	(*bsp->bs_initfn)(bufq);
 
 out:
-	return 0;
+	return error;
 }
 
 void
@@ -214,7 +214,6 @@ bufq_free(struct bufq_state *bufq)
 	free(bufq, M_DEVBUF);
 }
 
-#if 0
 /*
  * get a strategy identifier of a buffer queue.
  */
@@ -237,7 +236,6 @@ bufq_move(struct bufq_state *dst, struct bufq_state *src)
 		BUFQ_PUT(dst, bp);
 	}
 }
-#endif
 
 static int
 docopy(char *buf, size_t *bufoffp, size_t buflen,

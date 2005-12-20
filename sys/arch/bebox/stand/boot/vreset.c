@@ -1,4 +1,4 @@
-/*	$NetBSD: vreset.c,v 1.7 2005/12/11 12:17:04 christos Exp $	*/
+/*	$NetBSD: vreset.c,v 1.9 2006/01/29 21:42:41 dsl Exp $	*/
 
 /*
  * Copyright (C) 1995-1997 Gary Thomas (gdt@linuxppc.org)
@@ -42,7 +42,7 @@
 
 #ifdef CONS_VGA
 #include <lib/libsa/stand.h>
-#include <machine/bswap.h>
+#include <sys/bswap.h>
 #include "boot.h"
 #include "iso_font.h"
 
@@ -623,7 +623,7 @@ loadFont(u_char *ISA_mem)
 
 	for (i = 0;  i < sizeof(font);  i += 16) {
 		for (j = 0;  j < 16;  j++) {
-			__asm__ volatile("eieio");
+			__asm volatile("eieio");
 			font_page[(2*i)+j] = font[i+j];
 		}
 	}
@@ -710,7 +710,7 @@ enablePCIvideo(int slot)
 
         ppci =  (u_char *)PCI_slots[slot].config_addr;
 	ppci[4] = 0x0003;         /* enable memory and I/O accesses */
-	__asm__ volatile("eieio");
+	__asm volatile("eieio");
 
 	outb(0x3d4, 0x11);
 	outb(0x3d5, 0x0e);   /* unlock CR0-CR7 */

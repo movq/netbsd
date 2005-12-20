@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.61 2005/09/25 20:08:01 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.65 2006/03/22 22:03:58 drochner Exp $
 #	from: @(#)Makefile.inc	8.3 (Berkeley) 2/4/95
 
 # stdlib sources
@@ -6,14 +6,14 @@
 
 SRCS+=	_rand48.c _strtoimax.c _strtoumax.c _strtoll.c _strtoull.c \
 	a64l.c abort.c atexit.c atof.c atoi.c atol.c atoll.c \
-	bsearch.c calloc.c drand48.c erand48.c exit.c _Exit.c \
+	bsearch.c calloc.c drand48.c exit.c \
 	getenv.c getopt.c getopt_long.c getsubopt.c \
 	hcreate.c heapsort.c insque.c jrand48.c \
 	l64a.c lldiv.c lcong48.c lrand48.c lsearch.c \
 	malloc.c merge.c mrand48.c \
 	nrand48.c putenv.c qabs.c qdiv.c qsort.c posix_openpt.c pty.c \
 	radixsort.c rand.c rand_r.c random.c remque.c \
-	seed48.c setenv.c srand48.c strsuftoll.c strtod.c \
+	seed48.c setenv.c srand48.c strsuftoll.c \
 	strtoimax.c strtol.c strtoll.c strtoq.c strtoul.c strtoull.c \
 	strtoumax.c strtouq.c system.c tdelete.c tfind.c tsearch.c twalk.c \
 	unsetenv.c strfmon.c
@@ -50,6 +50,7 @@ MLINKS+=rand48.3 srand48.3 rand48.3 seed48.3 rand48.3 lcong48.3
 MLINKS+=random.3 initstate.3 random.3 setstate.3 random.3 srandom.3
 MLINKS+=radixsort.3 sradixsort.3
 MLINKS+=strsuftoll.3 strsuftollx.3
+MLINKS+=strtod.3 strtof.3 strtod.3 strtold.3
 MLINKS+=strtol.3 strtoimax.3
 MLINKS+=strtol.3 strtoll.3
 MLINKS+=strtol.3 strtoq.3

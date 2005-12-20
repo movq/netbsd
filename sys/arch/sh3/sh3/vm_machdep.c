@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.49 2005/12/11 12:19:00 christos Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.53 2006/08/31 16:49:21 matt Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc. All rights reserved.
@@ -81,9 +81,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.49 2005/12/11 12:19:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.53 2006/08/31 16:49:21 matt Exp $");
 
 #include "opt_kstack_debug.h"
+#include "opt_coredump.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -139,6 +140,7 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack,
 	/* Copy flags */
 	l2->l_md.md_flags = l1->l_md.md_flags;
 
+	pcb = NULL;		/* XXXGCC: -Wuninitialized */
 #ifdef SH3
 	/*
 	 * Convert frame pointer top to P1. because SH3 can't make
@@ -169,7 +171,7 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack,
 	if (SH_HAS_VIRTUAL_ALIAS)
 		sh_dcache_wbinv_range((vaddr_t)l2->l_addr, USPACE);
 	spbase = P1ADDR(spbase);
-#else /* P1_STACK */
+#else /* !P1_STACK */
 	/* Prepare u-area PTEs */
 #ifdef SH3
 	if (CPU_IS_SH3)
@@ -179,7 +181,7 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack,
 	if (CPU_IS_SH4)
 		sh4_switch_setup(l2);
 #endif
-#endif /* P1_STACK */
+#endif /* !P1_STACK */
 
 #ifdef KSTACK_DEBUG
 	/* Fill magic number for tracking */
@@ -233,6 +235,7 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 	struct switchframe *sf;
 	vaddr_t fptop, spbase;
 
+	pcb = NULL;		/* XXXGCC: -Wuninitialized */
 #ifdef SH3
 	/*
 	 * Convert frame pointer top to P1. because SH3 can't make
@@ -263,7 +266,7 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 	if (SH_HAS_VIRTUAL_ALIAS)
 		sh_dcache_wbinv_range((vaddr_t)l->l_addr, USPACE);
 	spbase = P1ADDR(spbase);
-#else /* P1_STACK */
+#else /* !P1_STACK */
 	/* Prepare u-area PTEs */
 #ifdef SH3
 	if (CPU_IS_SH3)
@@ -273,7 +276,7 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 	if (CPU_IS_SH4)
 		sh4_switch_setup(l);
 #endif
-#endif /* P1_STACK */
+#endif /* !P1_STACK */
 
 #ifdef KSTACK_DEBUG
 	/* Fill magic number for tracking */
@@ -309,6 +312,7 @@ cpu_lwp_free(struct lwp *l, int proc)
 	/* Nothing to do */
 }
 
+#ifdef COREDUMP
 /*
  * Dump the machine specific segment at the start of a core dump.
  */
@@ -349,6 +353,7 @@ cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
 	return coredump_write(iocookie, UIO_SYSSPACE, &md_core,
 	    sizeof(md_core));
 }
+#endif /* COREDUMP */
 
 /*
  * Map an IO request into kernel virtual address space.  Requests fall into
@@ -378,7 +383,8 @@ vmapbuf(struct buf *bp, vsize_t len)
 
 	if ((bp->b_flags & B_PHYS) == 0)
 		panic("vmapbuf");
-	faddr = trunc_page((vaddr_t)bp->b_saveaddr = bp->b_data);
+	bp->b_saveaddr = bp->b_data;
+	faddr = trunc_page((vaddr_t)bp->b_data);
 	off = (vaddr_t)bp->b_data - faddr;
 	len = round_page(off + len);
 	taddr = uvm_km_alloc(phys_map, len, 0, UVM_KMF_VAONLY | UVM_KMF_WAITVA);

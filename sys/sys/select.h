@@ -1,4 +1,4 @@
-/*	$NetBSD: select.h,v 1.25 2005/12/11 12:25:21 christos Exp $	*/
+/*	$NetBSD: select.h,v 1.27 2006/02/16 20:17:20 perry Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993

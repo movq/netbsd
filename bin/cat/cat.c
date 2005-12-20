@@ -1,4 +1,4 @@
-/* $NetBSD: cat.c,v 1.43 2004/01/04 03:31:28 jschauma Exp $	*/
+/* $NetBSD: cat.c,v 1.45 2006/10/08 21:52:56 elad Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -44,7 +44,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)cat.c	8.2 (Berkeley) 4/27/95";
 #else
-__RCSID("$NetBSD: cat.c,v 1.43 2004/01/04 03:31:28 jschauma Exp $");
+__RCSID("$NetBSD: cat.c,v 1.45 2006/10/08 21:52:56 elad Exp $");
 #endif
 #endif /* not lint */
 
@@ -160,6 +160,8 @@ cook_args(char **argv)
 		cook_buf(fp);
 		if (fp != stdin)
 			(void)fclose(fp);
+		else
+			clearerr(fp);
 	} while (*argv);
 }
 
@@ -173,7 +175,10 @@ cook_buf(FILE *fp)
 		if (prev == '\n') {
 			if (ch == '\n') {
 				if (sflag) {
-					if (!gobble && putchar(ch) == EOF)
+					if (!gobble && nflag && !bflag)
+						(void)fprintf(stdout,
+							"%6d\t\n", ++line);
+					else if (!gobble && putchar(ch) == EOF)
 						break;
 					gobble = 1;
 					continue;

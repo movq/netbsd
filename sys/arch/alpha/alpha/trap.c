@@ -1,4 +1,4 @@
-/* $NetBSD: trap.c,v 1.102 2005/12/11 12:16:10 christos Exp $ */
+/* $NetBSD: trap.c,v 1.111 2006/07/23 22:06:04 ad Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -100,7 +100,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.102 2005/12/11 12:16:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.111 2006/07/23 22:06:04 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -110,6 +110,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.102 2005/12/11 12:16:10 christos Exp $");
 #include <sys/user.h>
 #include <sys/syscall.h>
 #include <sys/buf.h>
+#include <sys/kauth.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -252,6 +253,7 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 		l->l_md.md_tf = framep;
 		p = l->l_proc;
 		(void)memset(&ksi, 0, sizeof(ksi));
+		LWP_CACHE_CREDS(l, p);
 	} else {
 		p = NULL;
 	}
@@ -499,9 +501,7 @@ do_fault:
 			}
 
 			va = trunc_page((vaddr_t)a0);
-			rv = uvm_fault(map, va,
-			    (a1 == ALPHA_MMCSR_INVALTRANS) ?
-			    VM_FAULT_INVALID : VM_FAULT_PROTECT, ftype);
+			rv = uvm_fault(map, va, ftype);
 
 			/*
 			 * If this was a stack access we keep track of the
@@ -547,10 +547,10 @@ do_fault:
 			ksi.ksi_trap = a1; /* MMCSR VALUE */
 			if (rv == ENOMEM) {
 				printf("UVM: pid %d (%s), uid %d killed: "
-				       "out of swap\n", l->l_proc->p_pid,
-				       l->l_proc->p_comm,
-				       l->l_proc->p_cred && l->l_proc->p_ucred ?
-				       l->l_proc->p_ucred->cr_uid : -1);
+				    "out of swap\n", l->l_proc->p_pid,
+				    l->l_proc->p_comm,
+				    l->l_cred ?
+				    kauth_cred_geteuid(l->l_cred) : -1);
 				ksi.ksi_signo = SIGKILL;
 			} else
 				ksi.ksi_signo = SIGSEGV;
@@ -689,8 +689,8 @@ ast(struct trapframe *framep)
 	uvmexp.softs++;
 	l->l_md.md_tf = framep;
 
-	if (l->l_flag & P_OWEUPC) {
-		l->l_flag &= ~P_OWEUPC;
+	if (l->l_proc->p_flag & P_OWEUPC) {
+		l->l_proc->p_flag &= ~P_OWEUPC;
 		ADDUPROF(l->l_proc);
 	}
 
@@ -1242,8 +1242,7 @@ alpha_ucode_to_ksiginfo(u_long ucode)
  * Start a new LWP
  */
 void
-startlwp(arg)
-	void *arg;
+startlwp(void *arg)
 {
 	int err;
 	ucontext_t *uc = arg;
@@ -1257,6 +1256,7 @@ startlwp(arg)
 #endif
 	pool_put(&lwp_uc_pool, uc);
 
+	KERNEL_PROC_UNLOCK(l);
 	userret(l);
 }
 

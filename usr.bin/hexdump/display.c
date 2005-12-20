@@ -1,4 +1,4 @@
-/*	$NetBSD: display.c,v 1.18 2003/10/27 00:12:43 lukem Exp $	*/
+/*	$NetBSD: display.c,v 1.20 2006/08/26 18:17:42 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)display.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: display.c,v 1.18 2003/10/27 00:12:43 lukem Exp $");
+__RCSID("$NetBSD: display.c,v 1.20 2006/08/26 18:17:42 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,6 +53,7 @@ __RCSID("$NetBSD: display.c,v 1.18 2003/10/27 00:12:43 lukem Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <util.h>
 
 #include "hexdump.h"
 
@@ -61,10 +62,10 @@ enum _vflag vflag = FIRST;
 static off_t address;			/* address/offset in stream */
 static off_t eaddress;			/* end address */
 
-static inline void print __P((PR *, u_char *));
+static inline void print(PR *, u_char *);
 
 void
-display()
+display(void)
 {
 	FS *fs;
 	FU *fu;
@@ -119,9 +120,7 @@ display()
 }
 
 static inline void
-print(pr, bp)
-	PR *pr;
-	u_char *bp;
+print(PR *pr, u_char *bp)
 {
 	   double f8;
 	    float f4;
@@ -211,8 +210,7 @@ print(pr, bp)
 }
 
 void
-bpad(pr)
-	PR *pr;
+bpad(PR *pr)
 {
 	static const char *spec = " -0+#";
 	char *p1, *p2;
@@ -232,7 +230,7 @@ bpad(pr)
 static char **_argv;
 
 u_char *
-get()
+get(void)
 {
 	static int ateof = 1;
 	static u_char *curp, *savp;
@@ -241,8 +239,8 @@ get()
 	u_char *tmpp;
 
 	if (!curp) {
-		curp = emalloc(blocksize);
-		savp = emalloc(blocksize);
+		curp = ecalloc(blocksize, 1);
+		savp = ecalloc(blocksize, 1);
 	} else {
 		tmpp = curp;
 		curp = savp;
@@ -299,8 +297,7 @@ get()
 }
 
 int
-next(argv)
-	char **argv;
+next(char **argv)
 {
 	static int done;
 	int statok;
@@ -334,9 +331,7 @@ next(argv)
 }
 
 void
-doskip(fname, statok)
-	const char *fname;
-	int statok;
+doskip(const char *fname, int statok)
 {
 	int cnt;
 	struct stat sb;
@@ -362,22 +357,4 @@ doskip(fname, statok)
 		address += cnt;
 		skip -= cnt;
 	}
-}
-
-void *
-emalloc(allocsize)
-	int allocsize;
-{
-	void *p;
-
-	if ((p = malloc((u_int)allocsize)) == NULL)
-		nomem();
-	memset(p, 0, allocsize);
-	return(p);
-}
-
-void
-nomem()
-{
-	err(1, NULL);
 }

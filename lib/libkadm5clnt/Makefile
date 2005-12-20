@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.19 2005/01/10 03:11:17 lukem Exp $
+# $NetBSD: Makefile,v 1.22 2006/11/11 14:00:56 dsl Exp $
 
 NOLINT=		# defined
 
@@ -11,6 +11,10 @@ WARNS?=		1
 
 LIB=		kadm5clnt
 
+LIBDPLIBS=	krb5	${.CURDIR}/../libkrb5 \
+		hdb	${.CURDIR}/../libhdb \
+		roken	${.CURDIR}/../libroken
+
 .if ${USETOOLS} != "yes"
 COMPILEETOBJ!=		cd ${NETBSDSRCDIR}/lib/libcom_err/compile_et && ${PRINTOBJDIR}
 TOOL_COMPILE_ET=	${COMPILEETOBJ}/compile_et
@@ -19,7 +23,9 @@ TOOL_COMPILE_ET=	${COMPILEETOBJ}/compile_et
 kadm5_err.c kadm5_err.h: kadm5_err.et ${TOOL_COMPILE_ET}
 	${TOOL_COMPILE_ET} ${DIST}/heimdal/lib/kadm5/kadm5_err.et
 
-ERR_FILES = kadm5_err.c
+ERR_FILES=	kadm5_err.c
+DPSRCS+=	kadm5_err.h
+CLEANFILES+=	kadm5_err.h kadm5_err.c
 
 SRCS	 =		\
 	chpass_c.c	\
@@ -80,6 +86,10 @@ CLEANFILES=	kadm5_err.h kadm5_err.c
 		echo "Error: you must first remove the MIT headers from ${DESTDIR}${INCSDIR}" >&2; \
 		false; \
 	fi
+.endif
+
+.if ${HAVE_GCC} == 4
+COPTS.marshall.c+=	-Wno-pointer-sign
 .endif
 
 .include <bsd.lib.mk>

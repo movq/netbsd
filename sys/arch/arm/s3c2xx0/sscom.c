@@ -1,4 +1,4 @@
-/*	$NetBSD: sscom.c,v 1.14 2005/12/11 12:16:51 christos Exp $ */
+/*	$NetBSD: sscom.c,v 1.21 2006/10/01 20:31:49 elad Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Fujitsu Component Limited
@@ -105,7 +105,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.14 2005/12/11 12:16:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.21 2006/10/01 20:31:49 elad Exp $");
 
 #include "opt_sscom.h"
 #include "opt_ddb.h"
@@ -147,6 +147,7 @@ __KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.14 2005/12/11 12:16:51 christos Exp $");
 #include <sys/malloc.h>
 #include <sys/timepps.h>
 #include <sys/vnode.h>
+#include <sys/kauth.h>
 
 #include <machine/intr.h>
 #include <machine/bus.h>
@@ -241,9 +242,9 @@ void	sscom_kgdb_putc (void *, int);
 
 #if 0
 #define	SSCOM_ISALIVE(sc)	((sc)->enabled != 0 && \
-			 ISSET((sc)->sc_dev.dv_flags, DVF_ACTIVE))
+				 device_is_active(&(sc)->sc_dev))
 #else
-#define	SSCOM_ISALIVE(sc) ISSET((sc)->sc_dev.dv_flags, DVF_ACTIVE)
+#define	SSCOM_ISALIVE(sc)	device_is_active(&(sc)->sc_dev)
 #endif
 
 #define	BR	BUS_SPACE_BARRIER_READ
@@ -279,7 +280,7 @@ void	sscom_kgdb_putc (void *, int);
 #define UCON_DEBUGPORT	  (UCON_RXINT_ENABLE|UCON_TXINT_ENABLE)
 
 
-static __inline void
+static inline void
 __sscom_output_chunk(struct sscom_softc *sc, int ufstat)
 {
 	int n, space;
@@ -492,7 +493,7 @@ sscom_attach_subr(struct sscom_softc *sc)
 		/* locate the major number */
 		maj = cdevsw_lookup_major(&sscom_cdevsw);
 
-		cn_tab->cn_dev = makedev(maj, sc->sc_dev.dv_unit);
+		cn_tab->cn_dev = makedev(maj, device_unit(&sc->sc_dev));
 
 		printf("%s: console (major=%d)\n", sc->sc_dev.dv_xname, maj);
 	}
@@ -616,7 +617,7 @@ sscomopen(dev_t dev, int flag, int mode, struct lwp *l)
 		sc->sc_rbuf == NULL)
 		return ENXIO;
 
-	if (ISSET(sc->sc_dev.dv_flags, DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->sc_dev))
 		return ENXIO;
 
 #ifdef KGDB
@@ -629,10 +630,8 @@ sscomopen(dev_t dev, int flag, int mode, struct lwp *l)
 
 	tp = sc->sc_tty;
 
-	if (ISSET(tp->t_state, TS_ISOPEN) &&
-	    ISSET(tp->t_state, TS_XCLUDE) &&
-	    suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0)
-		return EBUSY;
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
+		return (EBUSY);
 
 	s = spltty();
 
@@ -858,7 +857,8 @@ sscomioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		break;
 
 	case TIOCSFLAGS:
-		error = suser(l->l_proc->p_ucred, &l->l_proc->p_acflag); 
+		error = kauth_authorize_device_tty(l->l_cred,
+		    KAUTH_DEVICE_TTY_PRIVSET, tp); 
 		if (error)
 			break;
 		sc->sc_swflags = *(int *)data;

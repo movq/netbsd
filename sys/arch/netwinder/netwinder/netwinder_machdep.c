@@ -1,4 +1,4 @@
-/*	$NetBSD: netwinder_machdep.c,v 1.60 2005/12/11 12:18:20 christos Exp $	*/
+/*	$NetBSD: netwinder_machdep.c,v 1.63 2006/11/24 22:04:23 wiz Exp $	*/
 
 /*
  * Copyright (c) 1997,1998 Mark Brinicombe.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netwinder_machdep.c,v 1.60 2005/12/11 12:18:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netwinder_machdep.c,v 1.63 2006/11/24 22:04:23 wiz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
@@ -154,7 +154,7 @@ pv_addr_t systempage;
 pv_addr_t irqstack;
 pv_addr_t undstack;
 pv_addr_t abtstack;
-pv_addr_t kernelstack;
+extern pv_addr_t kernelstack;	/* in arm32_machdep.c */
 
 vm_offset_t msgbufphys;
 
@@ -186,7 +186,7 @@ pv_addr_t kernel_pt_table[NUM_KERNEL_PTS];
 #define KERNEL_VM_SIZE		0x0C000000
 #endif
 
-struct user *proc0paddr;
+extern struct user *proc0paddr;	/* in arm32_machdep.c */
 
 /* Prototypes */
 
@@ -474,7 +474,7 @@ initarm(void *arg)
 	}
 
 	/* Fake bootconfig structure for the benefit of pmap.c */
-	/* XXX must make the memory description h/w independant */
+	/* XXX must make the memory description h/w independent */
 	bootconfig.dramblocks = 1;
 	bootconfig.dram[0].address = 0;
 	bootconfig.dram[0].pages = nwbootinfo.bi_nrpages;
@@ -536,7 +536,7 @@ initarm(void *arg)
 	memset((char *)(var), 0, ((np) * PAGE_SIZE));
 
 	loop1 = 0;
-	kernel_l1pt.pv_pa = 0;
+	kernel_l1pt.pv_pa = kernel_l1pt.pv_va = 0;
 	for (loop = 0; loop <= NUM_KERNEL_PTS; ++loop) {
 		/* Are we 16KB aligned for an L1 ? */
 		if ((physical_freestart & (L1_TABLE_SIZE - 1)) == 0

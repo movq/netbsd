@@ -1,4 +1,4 @@
-/*	$NetBSD: vm86.c,v 1.39 2005/12/11 12:17:41 christos Exp $	*/
+/*	$NetBSD: vm86.c,v 1.43 2006/11/16 01:32:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm86.c,v 1.39 2005/12/11 12:17:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm86.c,v 1.43 2006/11/16 01:32:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,7 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: vm86.c,v 1.39 2005/12/11 12:17:41 christos Exp $");
 #include <machine/vm86.h>
 
 static void fast_intxx(struct lwp *, int);
-static __inline int is_bitset(int, caddr_t);
+static inline int is_bitset(int, caddr_t);
 
 #define	CS(tf)		(*(u_short *)&tf->tf_cs)
 #define	IP(tf)		(*(u_short *)&tf->tf_eip)
@@ -110,7 +110,7 @@ static __inline int is_bitset(int, caddr_t);
 		dword = w1 | w2 << 16; \
 	} while (0)
 
-static __inline int
+static inline int
 is_bitset(nr, bitmap)
 	int nr;
 	caddr_t bitmap;
@@ -121,7 +121,7 @@ is_bitset(nr, bitmap)
 	nr = nr % NBBY;
 	byte = fubyte(bitmap);
 
-	__asm__ __volatile__("btl %2,%1\n\tsbbl %0,%0"
+	__asm volatile("btl %2,%1\n\tsbbl %0,%0"
 			     :"=r" (nr)
 			     :"r" (byte),"r" (nr));
 	return (nr);
@@ -259,9 +259,7 @@ vm86_return(l, retval)
  * handler code and then having it restart VM86 mode).
  */
 void
-vm86_gpfault(l, type)
-	struct lwp *l;
-	int type;
+vm86_gpfault(struct lwp *l, int type)
 {
 	struct trapframe *tf = l->l_md.md_regs;
 	struct proc *p = l->l_proc;
@@ -376,10 +374,7 @@ bad:
 }
 
 int
-i386_vm86(l, args, retval)
-	struct lwp *l;
-	char *args;
-	register_t *retval;
+i386_vm86(struct lwp *l, char *args, register_t *retval)
 {
 	struct trapframe *tf = l->l_md.md_regs;
 	struct pcb *pcb = &l->l_addr->u_pcb;

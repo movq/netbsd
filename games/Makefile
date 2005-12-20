@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.22 2005/06/30 15:35:17 perry Exp $
+#	$NetBSD: Makefile,v 1.24 2006/01/24 19:01:45 elad Exp $
 #	@(#)Makefile	8.3 (Berkeley) 7/24/94
 
 # Missing: dungeon warp

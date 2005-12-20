@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_synch.c,v 1.156 2005/12/20 19:26:15 rpaulo Exp $	*/
+/*	$NetBSD: kern_synch.c,v 1.173 2006/11/03 20:46:00 ad Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2004 The NetBSD Foundation, Inc.
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.156 2005/12/20 19:26:15 rpaulo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.173 2006/11/03 20:46:00 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ktrace.h"
@@ -99,6 +99,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.156 2005/12/20 19:26:15 rpaulo Exp 
 #include <sys/sched.h>
 #include <sys/sa.h>
 #include <sys/savar.h>
+#include <sys/kauth.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -110,6 +111,14 @@ __KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.156 2005/12/20 19:26:15 rpaulo Exp 
 
 int	lbolt;			/* once a second sleep address */
 int	rrticks;		/* number of hardclock ticks per roundrobin() */
+
+#if defined(MULTIPROCESSOR) || defined(LOCKDEBUG)
+#define	XXX_SCHED_LOCK		simple_lock(&sched_lock)
+#define	XXX_SCHED_UNLOCK	simple_unlock(&sched_lock)
+#else
+#define	XXX_SCHED_LOCK		/* nothing */
+#define	XXX_SCHED_UNLOCK	/* nothing */
+#endif
 
 /*
  * Sleep queues.
@@ -127,7 +136,7 @@ int	rrticks;		/* number of hardclock ticks per roundrobin() */
  * The global scheduler state.
  */
 struct prochd sched_qs[RUNQUE_NQS];	/* run queues */
-__volatile u_int32_t sched_whichqs;	/* bitmap of non-empty queues */
+volatile uint32_t sched_whichqs;	/* bitmap of non-empty queues */
 struct slpque sched_slpque[SLPQUE_TABLESIZE]; /* sleep queues */
 
 struct simplelock sched_lock = SIMPLELOCK_INITIALIZER;
@@ -136,11 +145,11 @@ void schedcpu(void *);
 void updatepri(struct lwp *);
 void endtsleep(void *);
 
-__inline void sa_awaken(struct lwp *);
-__inline void awaken(struct lwp *);
+inline void sa_awaken(struct lwp *);
+inline void awaken(struct lwp *);
 
 struct callout schedcpu_ch = CALLOUT_INITIALIZER_SETFUNC(schedcpu, NULL);
-
+static unsigned int schedcpu_ticks;
 
 
 /*
@@ -262,6 +271,29 @@ decay_cpu(fixpt_t loadfac, fixpt_t estcpu)
 	return (uint64_t)estcpu * loadfac / (loadfac + FSCALE);
 }
 
+/*
+ * For all load averages >= 1 and max p_estcpu of (255 << ESTCPU_SHIFT),
+ * sleeping for at least seven times the loadfactor will decay p_estcpu to
+ * less than (1 << ESTCPU_SHIFT).
+ *
+ * note that our ESTCPU_MAX is actually much smaller than (255 << ESTCPU_SHIFT).
+ */
+static fixpt_t
+decay_cpu_batch(fixpt_t loadfac, fixpt_t estcpu, unsigned int n)
+{
+
+	if ((n << FSHIFT) >= 7 * loadfac) {
+		return 0;
+	}
+
+	while (estcpu != 0 && n > 1) {
+		estcpu = decay_cpu(loadfac, estcpu);
+		n--;
+	}
+
+	return estcpu;
+}
+
 /* decay 95% of `p_pctcpu' in 60 seconds; see CCPU_SHIFT before changing */
 fixpt_t	ccpu = 0.95122942450071400909 * FSCALE;		/* exp(-1/20) */
 
@@ -291,6 +323,8 @@ schedcpu(void *arg)
 	struct proc *p;
 	int s, minslp;
 	int clkhz;
+
+	schedcpu_ticks++;
 
 	proclist_lock_read();
 	PROCLIST_FOREACH(p, &allproc) {
@@ -359,32 +393,21 @@ schedcpu(void *arg)
 
 /*
  * Recalculate the priority of a process after it has slept for a while.
- * For all load averages >= 1 and max p_estcpu of (255 << ESTCPU_SHIFT),
- * sleeping for at least eight times the loadfactor will decay p_estcpu to
- * less than (1 << ESTCPU_SHIFT).
- *
- * note that our ESTCPU_MAX is actually much smaller than (255 << ESTCPU_SHIFT).
  */
 void
 updatepri(struct lwp *l)
 {
 	struct proc *p = l->l_proc;
-	fixpt_t newcpu;
 	fixpt_t loadfac;
 
 	SCHED_ASSERT_LOCKED();
+	KASSERT(l->l_slptime > 1);
 
-	newcpu = p->p_estcpu;
 	loadfac = loadfactor(averunnable.ldavg[0]);
 
-	if ((l->l_slptime << FSHIFT) >= 8 * loadfac)
-		p->p_estcpu = 0; /* XXX NJWLWP */
-	else {
-		l->l_slptime--;	/* the first time was done in schedcpu */
-		while (newcpu && --l->l_slptime)
-			newcpu = decay_cpu(loadfac, newcpu);
-		p->p_estcpu = newcpu;
-	}
+	l->l_slptime--; /* the first time was done in schedcpu */
+	/* XXX NJWLWP */
+	p->p_estcpu = decay_cpu_batch(loadfac, p->p_estcpu, l->l_slptime);
 	resetpriority(l);
 }
 
@@ -416,8 +439,8 @@ int safepri;
  * interlock will always be unlocked upon return.
  */
 int
-ltsleep(__volatile const void *ident, int priority, const char *wmesg, int timo,
-    __volatile struct simplelock *interlock)
+ltsleep(volatile const void *ident, int priority, const char *wmesg, int timo,
+    volatile struct simplelock *interlock)
 {
 	struct lwp *l = curlwp;
 	struct proc *p = l ? l->l_proc : NULL;
@@ -520,18 +543,21 @@ ltsleep(__volatile const void *ident, int priority, const char *wmesg, int timo,
 	 * stopped, p->p_wchan will be 0 upon return from CURSIG.
 	 */
 	if (catch) {
+		XXX_SCHED_UNLOCK;
 		l->l_flag |= L_SINTR;
 		if (((sig = CURSIG(l)) != 0) ||
 		    ((p->p_flag & P_WEXIT) && p->p_nlwps > 1)) {
+			XXX_SCHED_LOCK;
 			if (l->l_wchan != NULL)
 				unsleep(l);
 			l->l_stat = LSONPROC;
 			SCHED_UNLOCK(s);
 			goto resume;
 		}
+		XXX_SCHED_LOCK;
 		if (l->l_wchan == NULL) {
-			catch = 0;
 			SCHED_UNLOCK(s);
+			catch = 0;
 			goto resume;
 		}
 	} else
@@ -545,7 +571,14 @@ ltsleep(__volatile const void *ident, int priority, const char *wmesg, int timo,
 	else
 		mi_switch(l, NULL);
 
-#if	defined(DDB) && !defined(GPROF)
+#ifdef KERN_SYNCH_BPENDTSLEEP_LABEL
+	/*
+	 * XXX
+	 * gcc4 optimizer will duplicate this asm statement on some arch
+	 * and it will cause a multiple symbol definition error in gas.
+	 * the kernel Makefile is setup to use -fno-reorder-blocks if
+	 * this option is set.
+	 */
 	/* handy breakpoint location after process "wakes" */
 	__asm(".globl bpendtsleep\nbpendtsleep:");
 #endif
@@ -661,7 +694,7 @@ unsleep(struct lwp *l)
 	}
 }
 
-__inline void
+inline void
 sa_awaken(struct lwp *l)
 {
 
@@ -674,7 +707,7 @@ sa_awaken(struct lwp *l)
 /*
  * Optimized-for-wakeup() version of setrunnable().
  */
-__inline void
+inline void
 awaken(struct lwp *l)
 {
 
@@ -724,7 +757,7 @@ sched_lock_idle(void)
  */
 
 void
-wakeup(__volatile const void *ident)
+wakeup(volatile const void *ident)
 {
 	int s;
 
@@ -736,7 +769,7 @@ wakeup(__volatile const void *ident)
 }
 
 void
-sched_wakeup(__volatile const void *ident)
+sched_wakeup(volatile const void *ident)
 {
 	struct slpque *qp;
 	struct lwp *l, **q;
@@ -770,7 +803,7 @@ sched_wakeup(__volatile const void *ident)
  * identifier runnable.
  */
 void
-wakeup_one(__volatile const void *ident)
+wakeup_one(volatile const void *ident)
 {
 	struct slpque *qp;
 	struct lwp *l, **q;
@@ -913,10 +946,8 @@ mi_switch(struct lwp *l, struct lwp *newl)
 
 	spc = &l->l_cpu->ci_schedstate;
 
-#if defined(LOCKDEBUG) || defined(DIAGNOSTIC)
-	spinlock_switchcheck();
-#endif
 #ifdef LOCKDEBUG
+	spinlock_switchcheck();
 	simple_lock_switchcheck();
 #endif
 
@@ -939,31 +970,6 @@ mi_switch(struct lwp *l, struct lwp *newl)
 	p->p_rtime.tv_sec = s;
 
 	/*
-	 * Check if the process exceeds its CPU resource allocation.
-	 * If over max, kill it.  In any case, if it has run for more
-	 * than 10 minutes, reduce priority to give others a chance.
-	 */
-	rlim = &p->p_rlimit[RLIMIT_CPU];
-	if (s >= rlim->rlim_cur) {
-		/*
-		 * XXXSMP: we're inside the scheduler lock perimeter;
-		 * use sched_psignal.
-		 */
-		if (s >= rlim->rlim_max)
-			sched_psignal(p, SIGKILL);
-		else {
-			sched_psignal(p, SIGXCPU);
-			if (rlim->rlim_cur < rlim->rlim_max)
-				rlim->rlim_cur += 5;
-		}
-	}
-	if (autonicetime && s > autonicetime && p->p_ucred->cr_uid &&
-	    p->p_nice == NZERO) {
-		p->p_nice = autoniceval + NZERO;
-		resetpriority(l);
-	}
-
-	/*
 	 * Process is about to yield the CPU; clear the appropriate
 	 * scheduling flags.
 	 */
@@ -977,8 +983,9 @@ mi_switch(struct lwp *l, struct lwp *newl)
 	 * If we are using h/w performance counters, save context.
 	 */
 #if PERFCTRS
-	if (PMC_ENABLED(p))
+	if (PMC_ENABLED(p)) {
 		pmc_save_context(p);
+	}
 #endif
 
 	/*
@@ -998,8 +1005,9 @@ mi_switch(struct lwp *l, struct lwp *newl)
 	 * If we are using h/w performance counters, restore context.
 	 */
 #if PERFCTRS
-	if (PMC_ENABLED(p))
+	if (PMC_ENABLED(p)) {
 		pmc_restore_context(p);
+	}
 #endif
 
 	/*
@@ -1024,6 +1032,29 @@ mi_switch(struct lwp *l, struct lwp *newl)
 	 */
 	KERNEL_LOCK_ACQUIRE_COUNT(hold_count);
 
+	/*
+	 * Check if the process exceeds its CPU resource allocation.
+	 * If over max, kill it.  In any case, if it has run for more
+	 * than 10 minutes, reduce priority to give others a chance.
+	 */
+	rlim = &p->p_rlimit[RLIMIT_CPU];
+	if (s >= rlim->rlim_cur) {
+		if (s >= rlim->rlim_max) {
+			psignal(p, SIGKILL);
+		} else {
+			psignal(p, SIGXCPU);
+			if (rlim->rlim_cur < rlim->rlim_max)
+				rlim->rlim_cur += 5;
+		}
+	}
+	if (autonicetime && s > autonicetime &&
+	    kauth_cred_geteuid(p->p_cred) && p->p_nice == NZERO) {
+		SCHED_LOCK(s);
+		p->p_nice = autoniceval + NZERO;
+		resetpriority(l);
+		SCHED_UNLOCK(s);
+	}
+
 	return retval;
 }
 
@@ -1041,7 +1072,7 @@ rqinit()
 		    (struct lwp *)&sched_qs[i];
 }
 
-static __inline void
+static inline void
 resched_proc(struct lwp *l, u_char pri)
 {
 	struct cpu_info *ci;
@@ -1240,7 +1271,8 @@ void
 scheduler_fork_hook(struct proc *parent, struct proc *child)
 {
 
-	child->p_estcpu = parent->p_estcpu;
+	child->p_estcpu = child->p_estcpu_inherited = parent->p_estcpu;
+	child->p_forktime = schedcpu_ticks;
 }
 
 /*
@@ -1251,9 +1283,17 @@ scheduler_fork_hook(struct proc *parent, struct proc *child)
 void
 scheduler_wait_hook(struct proc *parent, struct proc *child)
 {
+	fixpt_t loadfac = loadfactor(averunnable.ldavg[0]);
+	fixpt_t estcpu;
 
 	/* XXX Only if parent != init?? */
-	parent->p_estcpu = ESTCPULIM(parent->p_estcpu + child->p_estcpu);
+
+	estcpu = decay_cpu_batch(loadfac, child->p_estcpu_inherited,
+	    schedcpu_ticks - child->p_forktime);
+	if (child->p_estcpu > estcpu) {
+		parent->p_estcpu =
+		    ESTCPULIM(parent->p_estcpu + child->p_estcpu - estcpu);
+	}
 }
 
 /*
@@ -1291,7 +1331,7 @@ checkrunqueue(int whichq, struct lwp *l)
 	int found = 0;
 	int die = 0;
 	int empty = 1;
-	for (l2 = rq->ph_link; l2 != (void*) rq; l2 = l2->l_forw) {
+	for (l2 = rq->ph_link; l2 != (const void*) rq; l2 = l2->l_forw) {
 		if (l2->l_stat != LSRUN) {
 			printf("checkrunqueue[%d]: lwp %p state (%d) "
 			    " != LSRUN\n", whichq, l2, l2->l_stat);

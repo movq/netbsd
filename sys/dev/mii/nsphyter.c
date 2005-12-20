@@ -1,4 +1,4 @@
-/*	$NetBSD: nsphyter.c,v 1.22 2005/12/11 12:22:42 christos Exp $	*/
+/*	$NetBSD: nsphyter.c,v 1.26 2006/11/16 21:24:07 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nsphyter.c,v 1.22 2005/12/11 12:22:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nsphyter.c,v 1.26 2006/11/16 21:24:07 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -110,6 +110,9 @@ static const struct mii_phydesc nsphyters[] = {
 	{ MII_OUI_xxNATSEMI,		MII_MODEL_xxNATSEMI_DP83843,
 	  MII_STR_xxNATSEMI_DP83843 },
 
+	{ MII_OUI_xxNATSEMI,		MII_MODEL_xxNATSEMI_DP83847,
+	  MII_STR_xxNATSEMI_DP83847 },
+
 	{ MII_OUI_xxNATSEMI,		MII_MODEL_xxNATSEMI_DP83815,
 	  MII_STR_xxNATSEMI_DP83815 },
 
@@ -118,7 +121,8 @@ static const struct mii_phydesc nsphyters[] = {
 };
 
 static int
-nsphytermatch(struct device *parent, struct cfdata *match, void *aux)
+nsphytermatch(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct mii_attach_args *ma = aux;
 
@@ -145,7 +149,7 @@ nsphyterattach(struct device *parent, struct device *self, void *aux)
 	sc->mii_funcs = &nsphyter_funcs;
 	sc->mii_pdata = mii;
 	sc->mii_flags = ma->mii_flags;
-	sc->mii_anegticks = 5;
+	sc->mii_anegticks = MII_ANEGTICKS;
 
 	PHY_RESET(sc);
 

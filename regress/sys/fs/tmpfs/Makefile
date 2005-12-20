@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2005/09/10 19:20:51 jmmv Exp $
+#	$NetBSD: Makefile,v 1.4 2006/11/09 15:25:37 jmmv Exp $
 
 tests=	t_mount
 tests+=	t_statvfs
@@ -24,14 +24,16 @@ tests+=	t_devices
 tests+=	t_pipes
 tests+=	t_sockets
 tests+=	t_readdir
+tests+=	t_vnd
 
 regress: ${tests}
 .for t in	${tests}
-	@./${t} ${TEST_ARGS}
+	@SUBRDIR=${.CURDIR} ${.CURDIR}/${t} ${TEST_ARGS}
 .endfor
 
 PROG=	h_tools
 NOMAN=	# defined
+WARNS=	4
 
 t_sizes t_sockets t_statvfs: h_tools
 

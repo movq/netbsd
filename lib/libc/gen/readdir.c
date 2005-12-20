@@ -1,4 +1,4 @@
-/*	$NetBSD: readdir.c,v 1.20 2005/09/13 01:44:09 christos Exp $	*/
+/*	$NetBSD: readdir.c,v 1.23 2006/05/17 20:36:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,12 +34,13 @@
 #if 0
 static char sccsid[] = "@(#)readdir.c	8.3 (Berkeley) 9/29/94";
 #else
-__RCSID("$NetBSD: readdir.c,v 1.20 2005/09/13 01:44:09 christos Exp $");
+__RCSID("$NetBSD: readdir.c,v 1.23 2006/05/17 20:36:50 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 #include "reentrant.h"
+#include "extern.h"
 #include <sys/param.h>
 
 #include <dirent.h>
@@ -47,10 +48,12 @@ __RCSID("$NetBSD: readdir.c,v 1.20 2005/09/13 01:44:09 christos Exp $");
 #include <string.h>
 #include <unistd.h>
 
+#include "dirent_private.h"
+
 /*
  * get next entry in a directory.
  */
-static struct dirent *
+struct dirent *
 _readdir_unlocked(DIR *dirp)
 {
 	struct dirent *dp;

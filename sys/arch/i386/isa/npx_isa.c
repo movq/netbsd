@@ -1,4 +1,4 @@
-/*	$NetBSD: npx_isa.c,v 1.10 2005/12/11 12:17:43 christos Exp $	*/
+/*	$NetBSD: npx_isa.c,v 1.15 2006/11/16 01:32:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991 The Regents of the University of California.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npx_isa.c,v 1.10 2005/12/11 12:17:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npx_isa.c,v 1.15 2006/11/16 01:32:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -90,7 +90,8 @@ CFATTACH_DECL(npx_isa, sizeof(struct npx_softc),
     npx_isa_probe, npx_isa_attach, NULL, NULL);
 
 int
-npx_isa_probe(struct device *parent, struct cfdata *match, void *aux)
+npx_isa_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_handle_t ioh;
@@ -116,7 +117,7 @@ npx_isa_probe(struct device *parent, struct cfdata *match, void *aux)
 		 * Remember our result -- we don't want to have to npxprobe1()
 		 * again (especially if we've zapped the IRQ).
 		 */
-		ia->ia_aux = (void *)(u_long)result;
+		ia->ia_aux = (void *)(intptr_t)result;
 
 		ia->ia_nio = 1;
 		ia->ia_io[0].ir_addr = 0xf0;
@@ -143,8 +144,10 @@ npx_isa_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_iot = ia->ia_iot;
 
+	aprint_naive("\n");
+	aprint_normal("\n");
+
 	if (bus_space_map(sc->sc_iot, 0xf0, 16, 0, &sc->sc_ioh)) {
-		printf("\n");
 		panic("npxattach: unable to map I/O space");
 	}
 
@@ -152,16 +155,21 @@ npx_isa_attach(struct device *parent, struct device *self, void *aux)
 
 	switch (sc->sc_type) {
 	case NPX_INTERRUPT:
-		printf("\n");
 		lcr0(rcr0() & ~CR0_NE);
 		sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 		    IST_EDGE, IPL_NONE, (int (*)(void *))npxintr, 0);
 		break;
 	case NPX_EXCEPTION:
-		printf(": using exception 16\n");
+		/*FALLTHROUGH*/
+	case NPX_CPUID:
+		aprint_verbose("%s:%s using exception 16\n",
+		    sc->sc_dev.dv_xname,
+		    sc->sc_type == NPX_CPUID ? " reported by CPUID;" : "");
+		sc->sc_type = NPX_EXCEPTION;
 		break;
 	case NPX_BROKEN:
-		printf(": error reporting broken; not using\n");
+		aprint_error("%s: error reporting broken; not using\n",
+		    sc->sc_dev.dv_xname);
 		sc->sc_type = NPX_NONE;
 		return;
 	case NPX_NONE:

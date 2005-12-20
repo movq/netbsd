@@ -1,4 +1,4 @@
-/*	$NetBSD: shm.h,v 1.39 2005/11/10 18:35:15 christos Exp $	*/
+/*	$NetBSD: shm.h,v 1.42 2006/11/25 21:40:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -123,7 +123,6 @@ struct shmid_ds {
 #if defined(_NETBSD_SOURCE)
 /*
  * Some systems (e.g. HP-UX) take these as the second (cmd) arg to shmctl().
- * XXX Currently not implemented.
  */
 #define	SHM_LOCK	3	/* Lock segment in memory. */
 #define	SHM_UNLOCK	4	/* Unlock a segment locked by SHM_LOCK. */
@@ -152,13 +151,13 @@ struct shminfo {
 /* Warning: 64-bit structure padding is needed here */
 struct shmid_ds_sysctl {
 	struct		ipc_perm_sysctl shm_perm;
-	u_int64_t	shm_segsz;
+	uint64_t	shm_segsz;
 	pid_t		shm_lpid;
 	pid_t		shm_cpid;
 	time_t		shm_atime;
 	time_t		shm_dtime;
 	time_t		shm_ctime;
-	u_int32_t	shm_nattch;
+	uint32_t	shm_nattch;
 };
 struct shm_sysctl_info {
 	struct	shminfo shminfo;
@@ -177,13 +176,14 @@ extern int shm_nused;
 #define	SHMSEG_ALLOCATED	0x0800
 #define	SHMSEG_WANTED		0x1000
 #define	SHMSEG_RMLINGER		0x2000
+#define	SHMSEG_WIRED		0x4000
 
 struct vmspace;
 
 void	shminit(void);
 void	shmfork(struct vmspace *, struct vmspace *);
 void	shmexit(struct vmspace *);
-int	shmctl1(struct proc *, int, int, struct shmid_ds *);
+int	shmctl1(struct lwp *, int, int, struct shmid_ds *);
 #else /* !_KERNEL */
 
 __BEGIN_DECLS

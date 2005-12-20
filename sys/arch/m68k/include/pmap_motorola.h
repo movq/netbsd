@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_motorola.h,v 1.8 2005/12/11 12:17:53 christos Exp $	*/
+/*	$NetBSD: pmap_motorola.h,v 1.10 2006/02/16 20:17:13 perry Exp $	*/
 
 /* 
  * Copyright (c) 1991, 1993

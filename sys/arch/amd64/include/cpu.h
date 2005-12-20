@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.8 2005/12/11 12:16:25 christos Exp $	*/
+/*	$NetBSD: cpu.h,v 1.12 2006/08/06 15:37:21 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -143,7 +143,7 @@ extern struct cpu_info *cpu_info_list;
 #define CPU_START_CLEANUP(_ci)	((_ci)->ci_func->cleanup(_ci))
 
 #define curcpu()	({struct cpu_info *__ci;                  \
-			asm volatile("movq %%gs:8,%0" : "=r" (__ci)); \
+			__asm volatile("movq %%gs:8,%0" : "=r" (__ci)); \
 			__ci;})
 #define cpu_number()	(curcpu()->ci_cpuid)
 
@@ -235,12 +235,9 @@ struct clockframe {
  * We need a machine-independent name for this.
  */
 extern void (*delay_func) __P((int));
-struct timeval;
-extern void (*microtime_func) __P((struct timeval *));
 
 #define DELAY(x)		(*delay_func)(x)
 #define delay(x)		(*delay_func)(x)
-#define microtime(tv)		(*microtime_func)(tv)
 
 
 /*
@@ -261,7 +258,6 @@ void	identifycpu __P((struct cpu_info *));
 void cpu_probe_features __P((struct cpu_info *));
 
 /* machdep.c */
-void	delay __P((int));
 void	dumpconf __P((void));
 int	cpu_maxproc __P((void));
 void	cpu_reset __P((void));
@@ -280,7 +276,7 @@ void	proc_trampoline __P((void));
 void	child_trampoline __P((void));
 
 /* clock.c */
-void	initrtclock __P((void));
+void	initrtclock __P((u_long));
 void	startrtclock __P((void));
 void	i8254_delay __P((int));
 void	i8254_microtime __P((struct timeval *));
@@ -301,6 +297,9 @@ void kgdb_port_init __P((void));
 /* bus_machdep.c */
 void x86_bus_space_init __P((void));
 void x86_bus_space_mallocok __P((void));
+
+/* powernow_k8.c */
+void k8_powernow_init(void);
 
 #endif /* _KERNEL */
 

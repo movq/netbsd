@@ -1,4 +1,4 @@
-/*	$NetBSD: ucycom.c,v 1.6 2005/12/11 12:24:01 christos Exp $	*/
+/*	$NetBSD: ucycom.c,v 1.16 2006/11/16 01:33:26 christos Exp $	*/
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ucycom.c,v 1.6 2005/12/11 12:24:01 christos Exp $");
+__RCSID("$NetBSD: ucycom.c,v 1.16 2006/11/16 01:33:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,6 +57,7 @@ __RCSID("$NetBSD: ucycom.c,v 1.6 2005/12/11 12:24:01 christos Exp $");
 #include <sys/tty.h>
 #include <sys/file.h>
 #include <sys/vnode.h>
+#include <sys/kauth.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbhid.h>
@@ -86,11 +87,6 @@ int	ucycomdebug = 0;
 #define UCYCOMUNIT(x)		(minor(x) & UCYCOMUNIT_MASK)
 #define UCYCOMDIALOUT(x)	(minor(x) & UCYCOMDIALOUT_MASK)
 #define UCYCOMCALLUNIT(x)	(minor(x) & UCYCOMCALLUNIT_MASK)
-
-/* Macros to clear/set/test flags. */
-#define SET(t, f)	(t) |= (f)
-#define CLR(t, f)	(t) &= ~(f)
-#define ISSET(t, f)	((t) & (f))
 
 /* Configuration Byte */
 #define UCYCOM_RESET		0x80
@@ -185,7 +181,8 @@ Static const struct usb_devno ucycom_devs[] = {
 USB_DECLARE_DRIVER(ucycom);
 
 int
-ucycom_match(struct device *parent, struct cfdata *match, void *aux)
+ucycom_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct uhidev_attach_arg *uha = aux;
 
@@ -253,7 +250,7 @@ ucycom_detach(struct device *self, int flags)
 	maj = cdevsw_lookup_major(&ucycom_cdevsw);
 
 	/* Nuke the vnodes for any open instances. */
-	mn = self->dv_unit;
+	mn = device_unit(self);
 
 	DPRINTFN(2, ("ucycom_detach: maj=%d mn=%d\n", maj, mn));
 	vdevgone(maj, mn, mn, VCHR);
@@ -329,16 +326,14 @@ ucycomopen(dev_t dev, int flag, int mode, struct lwp *l)
 	if (sc->sc_dying)
 		return (EIO);
 
-	if (ISSET(sc->sc_hdev.sc_dev.dv_flags, DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->sc_hdev.sc_dev))
 		return (ENXIO);
 
 	tp = sc->sc_tty;
 
 	DPRINTF(("ucycomopen: tp=%p\n", tp));
 
-	if (ISSET(tp->t_state, TS_ISOPEN) &&
-	    ISSET(tp->t_state, TS_XCLUDE) &&
-	    suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0)
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
 		return (EBUSY);
 
 	s = spltty();
@@ -573,8 +568,9 @@ ucycomstart(struct tty *tp)
 #endif
 	err = uhidev_write(sc->sc_hdev.sc_parent, sc->sc_obuf, sc->sc_olen);
 
-	if (err)
+	if (err) {
 		DPRINTF(("ucycomstart: error doing uhidev_write = %d\n", err));
+	}
 
 #ifdef UCYCOM_DEBUG
 	ucycom_get_cfg(sc);
@@ -774,7 +770,8 @@ ucycomioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		break;
 
 	case TIOCSFLAGS:
-		err = suser(l->l_proc->p_ucred, &l->l_proc->p_acflag);
+		err = kauth_authorize_device_tty(l->l_cred,
+		    KAUTH_DEVICE_TTY_PRIVSET, tp);
 		if (err)
 			break;
 		sc->sc_swflags = *(int *)data;
@@ -1034,8 +1031,9 @@ ucycom_set_status(struct ucycom_softc *sc)
 	sc->sc_obuf[0] = sc->sc_mcr;
 
 	err = uhidev_write(sc->sc_hdev.sc_parent, sc->sc_obuf, sc->sc_olen);
-	if (err)
+	if (err) {
 		DPRINTF(("ucycom_set_status: err=%d\n", err));
+	}
 }
 
 #ifdef UCYCOM_DEBUG

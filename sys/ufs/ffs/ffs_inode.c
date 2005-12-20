@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_inode.c,v 1.79 2005/12/11 12:25:25 christos Exp $	*/
+/*	$NetBSD: ffs_inode.c,v 1.85 2006/10/17 11:39:18 yamt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_inode.c,v 1.79 2005/12/11 12:25:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_inode.c,v 1.85 2006/10/17 11:39:18 yamt Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -50,6 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_inode.c,v 1.79 2005/12/11 12:25:25 christos Exp 
 #include <sys/malloc.h>
 #include <sys/trace.h>
 #include <sys/resourcevar.h>
+#include <sys/kauth.h>
 
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
@@ -163,16 +164,15 @@ ffs_update(struct vnode *vp, const struct timespec *acc,
  * disk blocks.
  */
 int
-ffs_truncate(struct vnode *ovp, off_t length, int ioflag, struct ucred *cred,
+ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred,
     struct lwp *l)
 {
-	struct genfs_node *gp = VTOG(ovp);
 	daddr_t lastblock;
 	struct inode *oip = VTOI(ovp);
 	daddr_t bn, lastiblock[NIADDR], indir_lbn[NIADDR];
 	daddr_t blks[NDADDR + NIADDR];
 	struct fs *fs;
-	int offset, size, level;
+	int offset, pgoffset, level;
 	int64_t count, blocksreleased = 0;
 	int i, aflag, nblocks;
 	int error, allerror = 0;
@@ -267,16 +267,23 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, struct ucred *cred,
 	 */
 
 	offset = blkoff(fs, length);
-	if (ovp->v_type == VREG && offset != 0 && osize > length) {
+	pgoffset = length & PAGE_MASK;
+	if (ovp->v_type == VREG && (pgoffset != 0 || offset != 0) &&
+	    osize > length) {
 		daddr_t lbn;
 		voff_t eoz;
+		int size;
 
-		error = ufs_balloc_range(ovp, length - 1, 1, cred, aflag);
-		if (error)
-			return error;
+		if (offset != 0) {
+			error = ufs_balloc_range(ovp, length - 1, 1, cred,
+			    aflag);
+			if (error)
+				return error;
+		}
 		lbn = lblkno(fs, length);
 		size = blksize(fs, oip, lbn);
-		eoz = MIN(lblktosize(fs, lbn) + size, osize);
+		eoz = MIN(MAX(lblktosize(fs, lbn) + size, round_page(pgoffset)),
+		    osize);
 		uvm_vnp_zerorange(ovp, length, eoz - length);
 		if (round_page(eoz) > round_page(length)) {
 			simple_lock(&ovp->v_interlock);
@@ -289,7 +296,7 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, struct ucred *cred,
 		}
 	}
 
-	lockmgr(&gp->g_glock, LK_EXCLUSIVE, NULL);
+	genfs_node_wrlock(ovp);
 
 	if (DOINGSOFTDEP(ovp)) {
 		if (length > 0) {
@@ -304,7 +311,7 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, struct ucred *cred,
 			 */
 			if ((error = VOP_FSYNC(ovp, cred, FSYNC_WAIT,
 			    0, 0, l)) != 0) {
-				lockmgr(&gp->g_glock, LK_RELEASE, NULL);
+				genfs_node_unlock(ovp);
 				return (error);
 			}
 			if (oip->i_flag & IN_SPACECOUNTED)
@@ -316,7 +323,7 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, struct ucred *cred,
 #endif
 			softdep_setup_freeblocks(oip, length, 0);
 			(void) vinvalbuf(ovp, 0, cred, l, 0, 0);
-			lockmgr(&gp->g_glock, LK_RELEASE, NULL);
+			genfs_node_unlock(ovp);
 			oip->i_flag |= IN_CHANGE | IN_UPDATE;
 			return (ffs_update(ovp, NULL, NULL, 0));
 		}
@@ -487,7 +494,7 @@ done:
 	oip->i_size = length;
 	DIP_ASSIGN(oip, size, length);
 	DIP_ADD(oip, blocks, -blocksreleased);
-	lockmgr(&gp->g_glock, LK_RELEASE, NULL);
+	genfs_node_unlock(ovp);
 	oip->i_flag |= IN_CHANGE;
 #ifdef QUOTA
 	(void) chkdq(oip, -blocksreleased, NOCRED, 0);
@@ -643,22 +650,23 @@ void
 ffs_itimes(struct inode *ip, const struct timespec *acc,
     const struct timespec *mod, const struct timespec *cre)
 {
-	struct timespec *ts = NULL, tsb;
+	struct timespec now;
 
 	if (!(ip->i_flag & (IN_ACCESS | IN_CHANGE | IN_UPDATE | IN_MODIFY))) {
 		return;
 	}
 
+	vfs_timestamp(&now);
 	if (ip->i_flag & IN_ACCESS) {
 		if (acc == NULL)
-			acc = ts == NULL ? (ts = nanotime(&tsb)) : ts;
+			acc = &now;
 		DIP_ASSIGN(ip, atime, acc->tv_sec);
 		DIP_ASSIGN(ip, atimensec, acc->tv_nsec);
 	}
 	if (ip->i_flag & (IN_UPDATE | IN_MODIFY)) {
 		if ((ip->i_flags & SF_SNAPSHOT) == 0) {
 			if (mod == NULL)
-				mod = ts == NULL ? (ts = nanotime(&tsb)) : ts;
+				mod = &now;
 			DIP_ASSIGN(ip, mtime, mod->tv_sec);
 			DIP_ASSIGN(ip, mtimensec, mod->tv_nsec);
 		}
@@ -666,7 +674,7 @@ ffs_itimes(struct inode *ip, const struct timespec *acc,
 	}
 	if (ip->i_flag & (IN_CHANGE | IN_MODIFY)) {
 		if (cre == NULL)
-			cre = ts == NULL ? (ts = nanotime(&tsb)) : ts;
+			cre = &now;
 		DIP_ASSIGN(ip, ctime, cre->tv_sec);
 		DIP_ASSIGN(ip, ctimensec, cre->tv_nsec);
 	}

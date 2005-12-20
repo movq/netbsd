@@ -1,4 +1,4 @@
-/*	$NetBSD: common.c,v 1.28 2005/11/28 03:26:06 christos Exp $	*/
+/*	$NetBSD: common.c,v 1.37 2006/05/25 02:53:10 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)common.c	8.5 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: common.c,v 1.28 2005/11/28 03:26:06 christos Exp $");
+__RCSID("$NetBSD: common.c,v 1.37 2006/05/25 02:53:10 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -86,7 +86,7 @@ const char	*MS;		/* stty flags to set if lp is a tty */
 long		 MX;		/* maximum number of blocks to copy */
 const char	*NF;		/* name of ditroff filter (per job) */
 const char	*OF;		/* name of output filter (created once) */
-const char	*PF;		/* name of vrast filter (per job) */
+const char	*PF;		/* name of postscript filter (per job) */
 long		 PL;		/* page length */
 long		 PW;		/* page width */
 long		 PX;		/* page width in pixels */
@@ -105,7 +105,7 @@ long		 SH;		/* suppress header page */
 const char	*ST;		/* status file name */
 const char	*TF;		/* name of troff filter (per job) */
 const char	*TR;		/* trailer string to be output when Q empties */
-const char	*VF;		/* name of vplot filter (per job) */
+const char	*VF;		/* name of vplot/vrast filter (per job) */
 long		 XC;		/* flags to clear for local mode */
 long		 XS;		/* flags to set for local mode */
 
@@ -116,34 +116,47 @@ extern uid_t	uid, euid;
 
 static int compar(const void *, const void *);
 
+const char *
+gethost(const char *hname)
+{
+	const char *p = strchr(hname, '@');
+	return p ? ++p : hname;
+}
+
 /*
- * Create a TCP connection to host "rhost" at port "rport".
- * If rport == 0, then use the printer service port.
- * Most of this code comes from rcmd.c.
+ * Create a TCP connection to host "rhost". If "rhost" is of the
+ * form port@host, use the specified port. Otherwise use the
+ * default printer port. Most of this code comes from rcmd.c.
  */
 int
-getport(const char *rhost, int rport)
+getport(const char *rhost)
 {
 	struct addrinfo hints, *res, *r;
 	u_int timo = 1;
 	int s, lport = IPPORT_RESERVED - 1;
 	int error;
 	int refuse, trial;
-	char pbuf[NI_MAXSERV];
+	char hbuf[NI_MAXSERV], *ptr;
+	const char *port = "printer";
+	const char *hostname = rhost;
 
 	/*
 	 * Get the host address and port number to connect to.
 	 */
 	if (rhost == NULL)
 		fatal("no remote host to connect to");
-	memset(&hints, 0, sizeof(hints));
+	(void)strlcpy(hbuf, rhost, sizeof(hbuf));
+	for (ptr = hbuf; *ptr; ptr++) 
+		if (*ptr == '@') {
+			*ptr++ = '\0';
+			port = hbuf;
+			hostname = ptr;
+			break;
+		}
+	(void)memset(&hints, 0, sizeof(hints));
 	hints.ai_family = PF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
-	if (rport)
-		snprintf(pbuf, sizeof(pbuf), "%d", rport);
-	else
-		snprintf(pbuf, sizeof(pbuf), "printer");
-	error = getaddrinfo(rhost, pbuf, &hints, &res);
+	error = getaddrinfo(hostname, port, &hints, &res);
 	if (error)
 		fatal("printer/tcp: %s", gai_strerror(error));
 
@@ -222,10 +235,10 @@ int
 getq(struct queue **namelist[])
 {
 	struct dirent *d;
-	struct queue *q, **queue, **nqueue;
+	struct queue *q, **queue = NULL, **nqueue;
 	struct stat stbuf;
 	DIR *dirp;
-	u_int nitems, arraysz;
+	u_int nitems = 0, arraysz;
 
 	seteuid(euid);
 	dirp = opendir(SD);
@@ -240,11 +253,10 @@ getq(struct queue **namelist[])
 	 * and dividing it by a multiple of the minimum size entry. 
 	 */
 	arraysz = (int)(stbuf.st_size / 24);
-	queue = (struct queue **)malloc(arraysz * sizeof(struct queue *));
+	queue = calloc(arraysz, sizeof(struct queue *));
 	if (queue == NULL)
 		goto errdone;
 
-	nitems = 0;
 	while ((d = readdir(dirp)) != NULL) {
 		if (d->d_name[0] != 'c' || d->d_name[1] != 'f')
 			continue;	/* daemon control files only */
@@ -266,8 +278,12 @@ getq(struct queue **namelist[])
 		if (++nitems > arraysz) {
 			nqueue = (struct queue **)realloc(queue,
 				arraysz * 2 * sizeof(struct queue *));
-			if (nqueue == NULL)
+			if (nqueue == NULL) {
+				free(q);
 				goto errdone;
+			}
+			(void)memset(&nqueue[arraysz], 0,
+			    arraysz * sizeof(struct queueue *));
 			queue = nqueue;
 			arraysz *= 2;
 		}
@@ -280,8 +296,21 @@ getq(struct queue **namelist[])
 	return(nitems);
 
 errdone:
+	freeq(queue, nitems);
 	closedir(dirp);
 	return(-1);
+}
+
+void
+freeq(struct queue **namelist, u_int nitems)
+{
+	u_int i;
+	if (namelist == NULL)
+		return;
+	for (i = 0; i < nitems; i++)
+		if (namelist[i])
+			free(namelist[i]);
+	free(namelist);
 }
 
 /*
@@ -337,7 +366,7 @@ checkremote(void)
 	hints.ai_family = PF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	res = NULL;
-	error = getaddrinfo(RM, NULL, &hints, &res0);
+	error = getaddrinfo(gethost(RM), NULL, &hints, &res0);
 	if (error) {
 		(void)snprintf(errbuf, sizeof(errbuf),
 		    "unable to resolve remote machine %s: %s",
@@ -434,7 +463,7 @@ ckqueue(char *cap)
 	struct dirent *d;
 	DIR *dirp;
 	const char *spooldir;
-	char *sd;
+	char *sd = NULL;
 	int rv = 0;
 
 	spooldir = cgetstr(cap, "sd", &sd) == -1 ? _PATH_DEFSPOOL : sd;
@@ -453,5 +482,5 @@ out:
 		closedir(dirp);
 	if (spooldir != sd)
 		free(sd);
-	return (0);
+	return (rv);
 }

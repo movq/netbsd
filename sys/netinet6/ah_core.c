@@ -1,4 +1,4 @@
-/*	$NetBSD: ah_core.c,v 1.38 2005/12/11 12:25:02 christos Exp $	*/
+/*	$NetBSD: ah_core.c,v 1.42 2006/11/16 01:33:45 christos Exp $	*/
 /*	$KAME: ah_core.c,v 1.57 2003/07/25 09:33:36 itojun Exp $	*/
 
 /*
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ah_core.c,v 1.38 2005/12/11 12:25:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ah_core.c,v 1.42 2006/11/16 01:33:45 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -65,6 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: ah_core.c,v 1.38 2005/12/11 12:25:02 christos Exp $"
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
 #include <netinet/icmp6.h>
+#include <netinet6/scope6_var.h>
 #endif
 
 #include <netinet6/ipsec.h>
@@ -79,8 +80,8 @@ __KERNEL_RCSID(0, "$NetBSD: ah_core.c,v 1.38 2005/12/11 12:25:02 christos Exp $"
 #define MD5_RESULTLEN	16
 #include <sys/sha1.h>
 #define SHA1_RESULTLEN	20
-#include <crypto/sha2/sha2.h>
-#include <crypto/ripemd160/rmd160.h>
+#include <sys/sha2.h>
+#include <sys/rmd160.h>
 #define RIPEMD160_RESULTLEN	20
 
 #include <net/net_osdep.h>
@@ -278,33 +279,26 @@ ah_none_mature(sav)
 }
 
 static int
-ah_none_init(state, sav)
-	struct ah_algorithm_state *state;
-	struct secasvar *sav;
+ah_none_init(struct ah_algorithm_state *state, struct secasvar *sav)
 {
 	state->foo = NULL;
 	return 0;
 }
 
 static void
-ah_none_loop(state, addr, len)
-	struct ah_algorithm_state *state;
-	u_int8_t * addr;
-	size_t len;
+ah_none_loop(struct ah_algorithm_state *state,
+    u_int8_t *addr, size_t len)
 {
 }
 
 static void
-ah_none_result(state, addr, l)
-	struct ah_algorithm_state *state;
-	u_int8_t *addr;
-	size_t l;
+ah_none_result(struct ah_algorithm_state *state,
+    u_int8_t *addr, size_t l)
 {
 }
 
 static int
-ah_keyed_md5_mature(sav)
-	struct secasvar *sav;
+ah_keyed_md5_mature(struct secasvar *sav)
 {
 	/* anything is okay */
 	return 0;
@@ -1446,10 +1440,8 @@ ah6_calccksum(m, ahdat, len, algo, sav)
 			ip6copy.ip6_vfc &= ~IPV6_VERSION_MASK;
 			ip6copy.ip6_vfc |= IPV6_VERSION;
 			ip6copy.ip6_hlim = 0;
-			if (IN6_IS_ADDR_LINKLOCAL(&ip6copy.ip6_src))
-				ip6copy.ip6_src.s6_addr16[1] = 0x0000;
-			if (IN6_IS_ADDR_LINKLOCAL(&ip6copy.ip6_dst))
-				ip6copy.ip6_dst.s6_addr16[1] = 0x0000;
+			in6_clearscope(&ip6copy.ip6_src); /* XXX */
+			in6_clearscope(&ip6copy.ip6_dst); /* XXX */
 			(algo->update)(&algos, (u_int8_t *)&ip6copy,
 				       sizeof(struct ip6_hdr));
 		} else {

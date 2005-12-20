@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.c,v 1.21 2005/11/12 09:35:31 dsl Exp $	*/
+/*	$NetBSD: installboot.c,v 1.27 2006/10/22 21:06:19 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -42,9 +42,10 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: installboot.c,v 1.21 2005/11/12 09:35:31 dsl Exp $");
+__RCSID("$NetBSD: installboot.c,v 1.27 2006/10/22 21:06:19 christos Exp $");
 #endif	/* !__lint */
 
+#include <sys/ioctl.h>
 #include <sys/utsname.h>
 
 #include <assert.h>
@@ -82,18 +83,18 @@ const struct option {
 	}		type;
 	int		offset;		/* of field in ib_params */
 } options[] = {
-	{ "alphasum",	IB_ALPHASUM,	OPT_BOOL },
-	{ "append",	IB_APPEND,	OPT_BOOL },
+	{ "alphasum",	IB_ALPHASUM,	OPT_BOOL,	0 },
+	{ "append",	IB_APPEND,	OPT_BOOL,	0 },
 	{ "command",	IB_COMMAND,	OPT_STRING,	OFFSET(command) },
 	{ "console",	IB_CONSOLE,	OPT_WORD,	OFFSET(console) },
 	{ "ioaddr",	IB_CONSADDR,	OPT_INT,	OFFSET(consaddr) },
 	{ "keymap",	IB_KEYMAP,	OPT_WORD,	OFFSET(keymap) },
 	{ "password",	IB_PASSWORD,	OPT_WORD,	OFFSET(password) },
-	{ "resetvideo",	IB_RESETVIDEO,	OPT_BOOL },
+	{ "resetvideo",	IB_RESETVIDEO,	OPT_BOOL,	0 },
 	{ "speed",	IB_CONSPEED,	OPT_INT,	OFFSET(conspeed) },
-	{ "sunsum",	IB_SUNSUM,	OPT_BOOL },
+	{ "sunsum",	IB_SUNSUM,	OPT_BOOL,	0 },
 	{ "timeout",	IB_TIMEOUT,	OPT_INT,	OFFSET(timeout) },
-	{ NULL },
+	{ .name = NULL },
 };
 #undef OFFSET
 #define OPTION(params, type, opt) (*(type *)((char *)(params) + (opt)->offset))
@@ -251,15 +252,13 @@ main(int argc, char *argv[])
 	}
 
 	if (argc >= 2) {
-		params->stage1 = argv[1];
-		if ((params->s1fd = open(params->stage1, O_RDONLY, 0600)) == -1)
-			err(1, "Opening primary bootstrap `%s'",
-			    params->stage1);
+		if ((params->s1fd = open(argv[1], O_RDONLY, 0600)) == -1)
+			err(1, "Opening primary bootstrap `%s'", argv[1]);
 		if (fstat(params->s1fd, &params->s1stat) == -1)
-			err(1, "Examining primary bootstrap `%s'",
-			    params->stage1);
+			err(1, "Examining primary bootstrap `%s'", argv[1]);
 		if (!S_ISREG(params->s1stat.st_mode))
-			errx(1, "`%s' must be a regular file", params->stage1);
+			errx(1, "`%s' must be a regular file", argv[1]);
+		params->stage1 = argv[1];
 	}
 	assert(params->machine != NULL);
 
@@ -285,6 +284,9 @@ main(int argc, char *argv[])
 		op = "Clear";
 		rv = params->machine->clearboot(params);
 	} else {
+		if (argc < 2)
+			errx(EXIT_FAILURE, "Please specify the primary "
+			    "bootstrap file");
 		op = "Set";
 		rv = params->machine->setboot(params);
 	}
@@ -454,9 +456,11 @@ getmachine(ib_params *param, const char *mach, const char *provider)
 	assert(mach != NULL);
 	assert(provider != NULL);
 
-	for (i = 0; machines[i].name != NULL; i++) {
-		if (strcmp(machines[i].name, mach) == 0) {
-			param->machine = &machines[i];
+	for (i = 0; machines[i] != NULL; i++) {
+		if (machines[i]->name == NULL)
+			continue;
+		if (strcmp(machines[i]->name, mach) == 0) {
+			param->machine = machines[i];
 			return;
 		}
 	}
@@ -470,18 +474,30 @@ machine_usage(void)
 {
 	const char *prefix;
 	int	i;
+	int col, len;
+	const char *name;
+	int	wincol=80;
+#ifdef TIOCGWINSZ
+	struct winsize win;
+
+	if (ioctl(fileno(stderr), TIOCGWINSZ, &win) == 0)
+		wincol = win.ws_col;
+#endif
 
 	warnx("Supported machines are:");
-#define MACHS_PER_LINE	9
-	prefix="";
-	for (i = 0; machines[i].name != NULL; i++) {
-		if (i == 0)
-			prefix="\t";
-		else if (i % MACHS_PER_LINE)
-			prefix=", ";
-		else
+	prefix="\t";
+	col = 8 + 3;
+	for (i = 0; machines[i] != NULL; i++) {
+		name = machines[i]->name;
+		if (name == NULL)
+			continue;
+		len = strlen(name);
+		if (col + len > wincol) {
 			prefix=",\n\t";
-		fprintf(stderr, "%s%s", prefix, machines[i].name);
+			col = -2 + 8 + 3;
+		}
+		col += fprintf(stderr, "%s%s", prefix, name);
+		prefix=", ";
 	}
 	fputs("\n", stderr);
 }
@@ -514,15 +530,12 @@ fstype_usage(void)
 
 	warnx("Supported file system types are:");
 #define FSTYPES_PER_LINE	9
-	prefix="";
+	prefix="\t";
 	for (i = 0; fstypes[i].name != NULL; i++) {
-		if (i == 0)
-			prefix="\t";
-		else if (i % FSTYPES_PER_LINE)
-			prefix=", ";
-		else
+		if (i && (i % FSTYPES_PER_LINE) == 0)
 			prefix=",\n\t";
 		fprintf(stderr, "%s%s", prefix, fstypes[i].name);
+		prefix=", ";
 	}
 	fputs("\n", stderr);
 }

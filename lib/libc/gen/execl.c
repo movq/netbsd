@@ -1,4 +1,4 @@
-/*	$NetBSD: execl.c,v 1.13 2005/11/29 13:30:49 christos Exp $	*/
+/*	$NetBSD: execl.c,v 1.15 2006/03/20 09:27:30 he Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,11 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)exec.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: execl.c,v 1.13 2005/11/29 13:30:49 christos Exp $");
+__RCSID("$NetBSD: execl.c,v 1.15 2006/03/20 09:27:30 he Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
+#include <errno.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -68,7 +69,10 @@ execl(const char *name, const char *arg, ...)
 		continue;
 	va_end(ap);
 
-	argv = alloca(i * sizeof (char *));
+	if ((argv = alloca(i * sizeof (char *))) == NULL) {
+		errno = ENOMEM;
+		return -1;
+	}
 	
 	va_start(ap, arg);
 	argv[0] = __UNCONST(arg);

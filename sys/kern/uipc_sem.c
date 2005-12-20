@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_sem.c,v 1.11 2005/12/11 12:24:30 christos Exp $	*/
+/*	$NetBSD: uipc_sem.c,v 1.18 2006/11/01 10:17:59 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_sem.c,v 1.11 2005/12/11 12:24:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_sem.c,v 1.18 2006/11/01 10:17:59 yamt Exp $");
 
 #include "opt_posix.h"
 
@@ -78,6 +78,7 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_sem.c,v 1.11 2005/12/11 12:24:30 christos Exp $
 #include <sys/stat.h>
 #include <sys/malloc.h>
 #include <sys/fcntl.h>
+#include <sys/kauth.h>
 
 #include <sys/mount.h>
 
@@ -89,8 +90,10 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_sem.c,v 1.11 2005/12/11 12:24:30 christos Exp $
 
 #define SEM_MAX_NAMELEN	14
 #define SEM_VALUE_MAX (~0U)
+#define SEM_HASHTBL_SIZE 13
 
-#define SEM_TO_ID(x)	((intptr_t)(x))
+#define SEM_TO_ID(x)	(((x)->ks_id))
+#define SEM_HASH(id)	((id) % SEM_HASHTBL_SIZE)
 
 MALLOC_DEFINE(M_SEM, "p1003_1b_sem", "p1003_1b semaphores");
 
@@ -101,6 +104,7 @@ MALLOC_DEFINE(M_SEM, "p1003_1b_sem", "p1003_1b semaphores");
  */
 struct ksem {
 	LIST_ENTRY(ksem) ks_entry;	/* global list entry */
+	LIST_ENTRY(ksem) ks_hash;	/* hash list entry */
 	struct simplelock ks_interlock;	/* lock on this ksem */
 	char *ks_name;			/* if named, this is the name */
 	unsigned int ks_ref;		/* number of references */
@@ -109,6 +113,7 @@ struct ksem {
 	gid_t ks_gid;			/* creator gid */
 	unsigned int ks_value;		/* current value */
 	unsigned int ks_waiters;	/* number of waiters */
+	semid_t ks_id;			/* unique identifier */
 };
 
 struct ksem_ref {
@@ -121,13 +126,24 @@ struct ksem_proc {
 	LIST_HEAD(, ksem_ref) kp_ksems;
 };
 
+LIST_HEAD(ksem_list, ksem);
+
 /*
  * ksem_slock protects ksem_head and nsems.  Only named semaphores go
  * onto ksem_head.
  */
 static struct simplelock ksem_slock;
-static LIST_HEAD(, ksem) ksem_head = LIST_HEAD_INITIALIZER(&ksem_head);
+static struct ksem_list ksem_head = LIST_HEAD_INITIALIZER(&ksem_head);
+static struct ksem_list ksem_hash[SEM_HASHTBL_SIZE];
 static int nsems = 0;
+
+/*
+ * ksem_counter is the last assigned semid_t.  It needs to be COMPAT_NETBSD32
+ * friendly, even though semid_t itself is defined as uintptr_t.
+ */
+static uint32_t ksem_counter = 1;
+
+static specificdata_key_t ksem_specificdata_key;
 
 static void
 ksem_free(struct ksem *ks)
@@ -140,17 +156,19 @@ ksem_free(struct ksem *ks)
 	 */
 	if (ks->ks_name == NULL) {
 		simple_unlock(&ks->ks_interlock);
-		free(ks, M_SEM);
 
 		simple_lock(&ksem_slock);
 		nsems--;
+		LIST_REMOVE(ks, ks_hash);
 		simple_unlock(&ksem_slock);
+
+		free(ks, M_SEM);
 		return;
 	}
 	simple_unlock(&ks->ks_interlock);
 }
 
-static __inline void
+static inline void
 ksem_addref(struct ksem *ks)
 {
 
@@ -159,7 +177,7 @@ ksem_addref(struct ksem *ks)
 	KASSERT(ks->ks_ref != 0);	/* XXX KDASSERT */
 }
 
-static __inline void
+static inline void
 ksem_delref(struct ksem *ks)
 {
 
@@ -185,16 +203,34 @@ ksem_proc_alloc(void)
 }
 
 static void
+ksem_proc_dtor(void *arg)
+{
+	struct ksem_proc *kp = arg;
+	struct ksem_ref *ksr;
+
+	lockmgr(&kp->kp_lock, LK_DRAIN, NULL);
+
+	while ((ksr = LIST_FIRST(&kp->kp_ksems)) != NULL) {
+		LIST_REMOVE(ksr, ksr_list);
+		simple_lock(&ksr->ksr_ksem->ks_interlock);
+		ksem_delref(ksr->ksr_ksem);
+		free(ksr, M_SEM);
+	}
+
+	free(kp, M_SEM);
+}
+
+static void
 ksem_add_proc(struct proc *p, struct ksem *ks)
 {
 	struct ksem_proc *kp;
 	struct ksem_ref *ksr;
 
-	if (p->p_ksems == NULL) {
+	kp = proc_getspecific(p, ksem_specificdata_key);
+	if (kp == NULL) {
 		kp = ksem_proc_alloc();
-		p->p_ksems = kp;
-	} else
-		kp = p->p_ksems;
+		proc_setspecific(p, ksem_specificdata_key, kp);
+	}
 
 	ksr = malloc(sizeof(*ksr), M_SEM, M_WAITOK);
 	ksr->ksr_ksem = ks;
@@ -225,17 +261,31 @@ ksem_drop_proc(struct ksem_proc *kp, struct ksem *ks)
 }
 
 static int
-ksem_perm(struct proc *p, struct ksem *ks)
+ksem_perm(struct lwp *l, struct ksem *ks)
 {
-	struct ucred *uc;
+	kauth_cred_t uc;
 
 	LOCK_ASSERT(simple_lock_held(&ks->ks_interlock));
-	uc = p->p_ucred;
-	if ((uc->cr_uid == ks->ks_uid && (ks->ks_mode & S_IWUSR) != 0) ||
-	    (uc->cr_gid == ks->ks_gid && (ks->ks_mode & S_IWGRP) != 0) ||
-	    (ks->ks_mode & S_IWOTH) != 0 || suser(uc, &p->p_acflag) == 0)
+	uc = l->l_cred;
+	if ((kauth_cred_geteuid(uc) == ks->ks_uid && (ks->ks_mode & S_IWUSR) != 0) ||
+	    (kauth_cred_getegid(uc) == ks->ks_gid && (ks->ks_mode & S_IWGRP) != 0) ||
+	    (ks->ks_mode & S_IWOTH) != 0 ||
+	    kauth_authorize_generic(uc, KAUTH_GENERIC_ISSUSER, &l->l_acflag) == 0)
 		return (0);
 	return (EPERM);
+}
+
+static struct ksem *
+ksem_lookup_byid(semid_t id)
+{
+	struct ksem *ks;
+
+	LOCK_ASSERT(simple_lock_held(&ksem_slock));
+	LIST_FOREACH(ks, &ksem_hash[SEM_HASH(id)], ks_hash) {
+		if (ks->ks_id == id)
+			return ks;
+	}
+	return NULL;
 }
 
 static struct ksem *
@@ -254,14 +304,14 @@ ksem_lookup_byname(const char *name)
 }
 
 static int
-ksem_create(struct proc *p, const char *name, struct ksem **ksret,
+ksem_create(struct lwp *l, const char *name, struct ksem **ksret,
     mode_t mode, unsigned int value)
 {
 	struct ksem *ret;
-	struct ucred *uc;
+	kauth_cred_t uc;
 	size_t len;
 
-	uc = p->p_ucred;
+	uc = l->l_cred;
 	if (value > SEM_VALUE_MAX)
 		return (EINVAL);
 	ret = malloc(sizeof(*ret), M_SEM, M_WAITOK | M_ZERO);
@@ -284,8 +334,8 @@ ksem_create(struct proc *p, const char *name, struct ksem **ksret,
 	ret->ks_value = value;
 	ret->ks_ref = 1;
 	ret->ks_waiters = 0;
-	ret->ks_uid = uc->cr_uid;
-	ret->ks_gid = uc->cr_gid;
+	ret->ks_uid = kauth_cred_geteuid(uc);
+	ret->ks_gid = kauth_cred_getegid(uc);
 	simple_lock_init(&ret->ks_interlock);
 
 	simple_lock(&ksem_slock);
@@ -297,6 +347,14 @@ ksem_create(struct proc *p, const char *name, struct ksem **ksret,
 		return (ENFILE);
 	}
 	nsems++;
+	while (ksem_lookup_byid(ksem_counter) != NULL) {
+		ksem_counter++;
+		/* 0 is a special value for libpthread */
+		if (ksem_counter == 0)
+			ksem_counter++;
+	}
+	ret->ks_id = ksem_counter;
+	LIST_INSERT_HEAD(&ksem_hash[SEM_HASH(ret->ks_id)], ret, ks_hash);
 	simple_unlock(&ksem_slock);
 
 	*ksret = ret;
@@ -310,16 +368,24 @@ sys__ksem_init(struct lwp *l, void *v, register_t *retval)
 		unsigned int value;
 		semid_t *idp;
 	} */ *uap = v;
+
+	return do_ksem_init(l, SCARG(uap, value), SCARG(uap, idp), copyout);
+}
+
+int
+do_ksem_init(struct lwp *l, unsigned int value, semid_t *idp,
+    copyout_t docopyout)
+{
 	struct ksem *ks;
 	semid_t id;
 	int error;
 
 	/* Note the mode does not matter for anonymous semaphores. */
-	error = ksem_create(l->l_proc, NULL, &ks, 0, SCARG(uap, value));
+	error = ksem_create(l, NULL, &ks, 0, value);
 	if (error)
 		return (error);
 	id = SEM_TO_ID(ks);
-	error = copyout(&id, SCARG(uap, idp), sizeof(id));
+	error = (*docopyout)(&id, idp, sizeof(id));
 	if (error) {
 		simple_lock(&ks->ks_interlock);
 		ksem_delref(ks);
@@ -341,13 +407,22 @@ sys__ksem_open(struct lwp *l, void *v, register_t *retval)
 		unsigned int value;
 		semid_t *idp;
 	} */ *uap = v;
+
+	return do_ksem_open(l, SCARG(uap, name), SCARG(uap, oflag),
+	    SCARG(uap, mode), SCARG(uap, value), SCARG(uap, idp), copyout);
+}
+
+int
+do_ksem_open(struct lwp *l, const char *semname, int oflag, mode_t mode,
+     unsigned int value, semid_t *idp, copyout_t docopyout)
+{
 	char name[SEM_MAX_NAMELEN + 1];
 	size_t done;
 	int error;
 	struct ksem *ksnew, *ks;
 	semid_t id;
 
-	error = copyinstr(SCARG(uap, name), name, sizeof(name), &done);
+	error = copyinstr(semname, name, sizeof(name), &done);
 	if (error)
 		return (error);
 
@@ -358,7 +433,7 @@ sys__ksem_open(struct lwp *l, void *v, register_t *retval)
 	/* Found one? */
 	if (ks != NULL) {
 		/* Check for exclusive create. */
-		if (SCARG(uap, oflag) & O_EXCL) {
+		if (oflag & O_EXCL) {
 			simple_unlock(&ks->ks_interlock);
 			simple_unlock(&ksem_slock);
 			return (EEXIST);
@@ -369,7 +444,7 @@ sys__ksem_open(struct lwp *l, void *v, register_t *retval)
 		 * this process's reference.
 		 */
 		LOCK_ASSERT(simple_lock_held(&ks->ks_interlock));
-		error = ksem_perm(l->l_proc, ks);
+		error = ksem_perm(l, ks);
 		if (error == 0)
 			ksem_addref(ks);
 		simple_unlock(&ks->ks_interlock);
@@ -378,7 +453,7 @@ sys__ksem_open(struct lwp *l, void *v, register_t *retval)
 			return (error);
 
 		id = SEM_TO_ID(ks);
-		error = copyout(&id, SCARG(uap, idp), sizeof(id));
+		error = (*docopyout)(&id, idp, sizeof(id));
 		if (error) {
 			simple_lock(&ks->ks_interlock);
 			ksem_delref(ks);
@@ -393,7 +468,7 @@ sys__ksem_open(struct lwp *l, void *v, register_t *retval)
 	/*
 	 * didn't ask for creation? error.
 	 */
-	if ((SCARG(uap, oflag) & O_CREAT) == 0) {
+	if ((oflag & O_CREAT) == 0) {
 		simple_unlock(&ksem_slock);
 		return (ENOENT);
 	}
@@ -402,13 +477,12 @@ sys__ksem_open(struct lwp *l, void *v, register_t *retval)
 	 * We may block during creation, so drop the lock.
 	 */
 	simple_unlock(&ksem_slock);
-	error = ksem_create(l->l_proc, name, &ksnew, SCARG(uap, mode),
-	    SCARG(uap, value));
+	error = ksem_create(l, name, &ksnew, mode, value);
 	if (error != 0)
 		return (error);
 
 	id = SEM_TO_ID(ksnew);
-	error = copyout(&id, SCARG(uap, idp), sizeof(id));
+	error = (*docopyout)(&id, idp, sizeof(id));
 	if (error) {
 		free(ksnew->ks_name, M_SEM);
 		ksnew->ks_name = NULL;
@@ -424,7 +498,7 @@ sys__ksem_open(struct lwp *l, void *v, register_t *retval)
 	 */
 	simple_lock(&ksem_slock);
 	if ((ks = ksem_lookup_byname(name)) != NULL) {
-		if (SCARG(uap, oflag) & O_EXCL) {
+		if (oflag & O_EXCL) {
 			simple_unlock(&ks->ks_interlock);
 			simple_unlock(&ksem_slock);
 
@@ -453,7 +527,7 @@ ksem_lookup_proc(struct ksem_proc *kp, semid_t id)
 	struct ksem_ref *ksr;
 
 	LIST_FOREACH(ksr, &kp->kp_ksems, ksr_list) {
-		if (id == (semid_t) ksr->ksr_ksem) {
+		if (id == SEM_TO_ID(ksr->ksr_ksem)) {
 			simple_lock(&ksr->ksr_ksem->ks_interlock);
 			return (ksr->ksr_ksem);
 		}
@@ -512,7 +586,8 @@ sys__ksem_close(struct lwp *l, void *v, register_t *retval)
 	struct ksem_ref *ksr;
 	struct ksem *ks;
 
-	if ((kp = l->l_proc->p_ksems) == NULL)
+	kp = proc_getspecific(l->l_proc, ksem_specificdata_key);
+	if (kp == NULL)
 		return (EINVAL);
 
 	lockmgr(&kp->kp_lock, LK_EXCLUSIVE, NULL);
@@ -547,7 +622,8 @@ sys__ksem_post(struct lwp *l, void *v, register_t *retval)
 	struct ksem *ks;
 	int error;
 
-	if ((kp = l->l_proc->p_ksems) == NULL)
+	kp = proc_getspecific(l->l_proc, ksem_specificdata_key);
+	if (kp == NULL)
 		return (EINVAL);
 
 	lockmgr(&kp->kp_lock, LK_SHARED, NULL);
@@ -577,7 +653,8 @@ ksem_wait(struct lwp *l, semid_t id, int tryflag)
 	struct ksem *ks;
 	int error;
 
-	if ((kp = l->l_proc->p_ksems) == NULL)
+	kp = proc_getspecific(l->l_proc, ksem_specificdata_key);
+	if (kp == NULL)
 		return (EINVAL);
 
 	lockmgr(&kp->kp_lock, LK_SHARED, NULL);
@@ -634,7 +711,8 @@ sys__ksem_getvalue(struct lwp *l, void *v, register_t *retval)
 	struct ksem *ks;
 	unsigned int val;
 
-	if ((kp = l->l_proc->p_ksems) == NULL)
+	kp = proc_getspecific(l->l_proc, ksem_specificdata_key);
+	if (kp == NULL)
 		return (EINVAL);
 
 	lockmgr(&kp->kp_lock, LK_SHARED, NULL);
@@ -660,7 +738,8 @@ sys__ksem_destroy(struct lwp *l, void *v, register_t *retval)
 	struct ksem_ref *ksr;
 	struct ksem *ks;
 
-	if ((kp = l->l_proc->p_ksems) == NULL)
+	kp = proc_getspecific(l->l_proc, ksem_specificdata_key);
+	if (kp == NULL)
 		return (EINVAL);
 
 	lockmgr(&kp->kp_lock, LK_EXCLUSIVE, NULL);
@@ -703,12 +782,11 @@ ksem_forkhook(struct proc *p2, struct proc *p1)
 	struct ksem_proc *kp1, *kp2;
 	struct ksem_ref *ksr, *ksr1;
 
-	if ((kp1 = p1->p_ksems) == NULL) {
-		p2->p_ksems = NULL;
+	kp1 = proc_getspecific(p1, ksem_specificdata_key);
+	if (kp1 == NULL)
 		return;
-	}
 
-	p2->p_ksems = kp2 = ksem_proc_alloc();
+	kp2 = ksem_proc_alloc();
 
 	lockmgr(&kp1->kp_lock, LK_SHARED, NULL);
 
@@ -724,33 +802,35 @@ ksem_forkhook(struct proc *p2, struct proc *p1)
 	}
 
 	lockmgr(&kp1->kp_lock, LK_RELEASE, NULL);
+
+	proc_setspecific(p2, ksem_specificdata_key, kp2);
 }
 
 static void
-ksem_exithook(struct proc *p, void *arg)
+ksem_exechook(struct proc *p, void *arg)
 {
 	struct ksem_proc *kp;
-	struct ksem_ref *ksr;
 
-	if ((kp = p->p_ksems) == NULL)
-		return;
-
-	/* Don't bother locking; process is dying. */
-
-	while ((ksr = LIST_FIRST(&kp->kp_ksems)) != NULL) {
-		LIST_REMOVE(ksr, ksr_list);
-		simple_lock(&ksr->ksr_ksem->ks_interlock);
-		ksem_delref(ksr->ksr_ksem);
-		free(ksr, M_SEM);
+	kp = proc_getspecific(p, ksem_specificdata_key);
+	if (kp != NULL) {
+		proc_setspecific(p, ksem_specificdata_key, NULL);
+		ksem_proc_dtor(kp);
 	}
 }
 
 void
 ksem_init(void)
 {
+	int i, error;
 
 	simple_lock_init(&ksem_slock);
-	exithook_establish(ksem_exithook, NULL);
-	exechook_establish(ksem_exithook, NULL);
+	exechook_establish(ksem_exechook, NULL);
 	forkhook_establish(ksem_forkhook);
+
+	for (i = 0; i < SEM_HASHTBL_SIZE; i++)
+		LIST_INIT(&ksem_hash[i]);
+
+	error = proc_specific_key_create(&ksem_specificdata_key,
+					 ksem_proc_dtor);
+	KASSERT(error == 0);
 }

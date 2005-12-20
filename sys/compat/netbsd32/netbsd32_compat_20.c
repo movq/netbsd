@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_20.c,v 1.3 2005/12/11 12:20:22 christos Exp $	*/
+/*	$NetBSD: netbsd32_compat_20.c,v 1.6 2006/07/31 16:34:43 martin Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -29,11 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_20.c,v 1.3 2005/12/11 12:20:22 christos Exp $");
-
-#if defined(_KERNEL_OPT)
-#include "opt_ktrace.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_20.c,v 1.6 2006/07/31 16:34:43 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,10 +51,10 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_20.c,v 1.3 2005/12/11 12:20:22 chris
 #include <compat/netbsd32/netbsd32_syscallargs.h>
 #include <compat/netbsd32/netbsd32_conv.h>
 
-static __inline void compat_20_netbsd32_from_statvfs(struct statvfs *,
+static inline void compat_20_netbsd32_from_statvfs(struct statvfs *,
     struct netbsd32_statfs *);
 
-static __inline void
+static inline void
 compat_20_netbsd32_from_statvfs(sbp, sb32p)
 	struct statvfs *sbp;
 	struct netbsd32_statfs *sb32p;
@@ -227,12 +223,12 @@ compat_20_netbsd32_fhstatfs(l, v, retval)
 		syscallarg(const netbsd32_fhandlep_t) fhp;
 		syscallarg(struct statvfs *) buf;
 	} */ *uap = v;
-	struct sys_fhstatvfs1_args ua;
+	struct compat_30_sys_fhstatvfs1_args ua;
 
-	NETBSD32TOP_UAP(fhp, const fhandle_t);
+	NETBSD32TOP_UAP(fhp, const struct compat_30_fhandle);
 	NETBSD32TOP_UAP(buf, struct statvfs);
 #ifdef notyet
 	NETBSD32TOP_UAP(flags, int);
 #endif
-	return (sys_fhstatvfs1(l, &ua, retval));
+	return (compat_30_sys_fhstatvfs1(l, &ua, retval));
 }

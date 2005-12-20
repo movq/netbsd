@@ -1,4 +1,4 @@
-/*	$NetBSD: saio.c,v 1.7 2005/12/11 12:18:16 christos Exp $	*/
+/*	$NetBSD: saio.c,v 1.9 2006/09/20 13:03:49 he Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -112,6 +112,7 @@ saiostrategy(devdata, rw, bn, reqcnt, addr, cnt)
 	int s;
 	long offset;
 	struct sa_iob *iob;
+	char *adr;
 
 	offset = bn * DEV_BSIZE;
 	*cnt = 0;
@@ -132,14 +133,15 @@ saiostrategy(devdata, rw, bn, reqcnt, addr, cnt)
 		return (EIO);
 #endif
 
+	adr = (char *)addr;
 	while (*cnt < reqcnt) {
 		s = prom_read(sc->sc_fd, iob->i_buf, 512);
 		if (s < 0) {
 			return (EIO);
 		}
-		memcpy(addr, iob->i_buf, s);
+		memcpy(adr, iob->i_buf, s);
 		*cnt += s;
-		(char *)addr += s;
+		adr += s;
 	}
 	return (0);
 }
@@ -210,7 +212,7 @@ saioopen(struct open_file *f, ...)
 	}
 	if (part >= lp->d_npartitions || lp->d_partitions[part].p_size == 0) {
 	bad:
-		free(sc, sizeof(struct saio_softc));
+		dealloc(sc, sizeof(struct saio_softc));
 		return (ENXIO);
 	}
 	return (0);
@@ -223,7 +225,7 @@ saioclose(f)
 {
 
 	prom_close(((struct saio_softc *)f->f_devdata)->sc_fd);
-	free(f->f_devdata, sizeof(struct saio_softc));
+	dealloc(f->f_devdata, sizeof(struct saio_softc));
 	f->f_devdata = (void *)0;
 	return (0);
 }

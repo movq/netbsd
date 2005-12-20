@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_portal.c,v 1.27 2005/02/09 13:57:57 xtraeme Exp $	*/
+/*	$NetBSD: mount_portal.c,v 1.30 2006/10/16 03:37:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)mount_portal.c	8.6 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_portal.c,v 1.27 2005/02/09 13:57:57 xtraeme Exp $");
+__RCSID("$NetBSD: mount_portal.c,v 1.30 2006/10/16 03:37:43 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -70,7 +70,7 @@ __RCSID("$NetBSD: mount_portal.c,v 1.27 2005/02/09 13:57:57 xtraeme Exp $");
 static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
 	MOPT_GETARGS,
-	{ NULL }
+	MOPT_NULL,
 };
 
 static char mountpt[MAXPATHLEN];  /* made available to signal handler */
@@ -118,6 +118,7 @@ main(int argc, char *argv[])
 	int mntflags = 0;
 	char tag[32];
 	char tmpdir[PATH_MAX];
+	mntoptparse_t mp;
 
 	qelem q;
 	int rc;
@@ -132,7 +133,10 @@ main(int argc, char *argv[])
 	while ((ch = getopt(argc, argv, "o:")) != -1) {
 		switch (ch) {
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, &mntflags, 0);
+			if (mp == NULL)
+				err(1, "getmntopts");
+			freemntopts(mp);
 			break;
 		default:
 			error = 1;
@@ -232,7 +236,7 @@ main(int argc, char *argv[])
 	 */
 	for (;;) {
 		struct sockaddr_un un2;
-		int len2 = sizeof(un2);
+		socklen_t len2 = sizeof(un2);
 		int so2;
 		pid_t pid;
 		struct pollfd fdset[1];

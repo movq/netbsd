@@ -1,4 +1,5 @@
-/*	$NetBSD: hostfile.c,v 1.15 2005/06/01 12:07:00 lukem Exp $	*/
+/*	$NetBSD: hostfile.c,v 1.18 2006/09/28 21:22:14 christos Exp $	*/
+/* $OpenBSD: hostfile.c,v 1.45 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -37,19 +38,24 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: hostfile.c,v 1.33 2005/03/01 10:40:26 djm Exp $");
-__RCSID("$NetBSD: hostfile.c,v 1.15 2005/06/01 12:07:00 lukem Exp $");
+__RCSID("$NetBSD: hostfile.c,v 1.18 2006/09/28 21:22:14 christos Exp $");
+#include <sys/types.h>
 
-#include <resolv.h>
+#include <netinet/in.h>
+
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
 
-#include "packet.h"
+#include <resolv.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "xmalloc.h"
 #include "match.h"
 #include "key.h"
 #include "hostfile.h"
 #include "log.h"
-#include "xmalloc.h"
 
 static int
 extract_salt(const char *s, u_int l, char *salt, size_t salt_len)
@@ -90,11 +96,11 @@ extract_salt(const char *s, u_int l, char *salt, size_t salt_len)
 		return (-1);
 	}
 	if (ret != SHA_DIGEST_LENGTH) {
-		debug2("extract_salt: expected salt len %lu, got %u",
-		    (unsigned long)salt_len, ret);
+		debug2("extract_salt: expected salt len %d, got %d",
+		    SHA_DIGEST_LENGTH, ret);
 		return (-1);
 	}
-	
+
 	return (0);
 }
 
@@ -125,7 +131,7 @@ host_hash(const char *host, const char *name_from_hostfile, u_int src_len)
 	HMAC_Final(&mac_ctx, result, NULL);
 	HMAC_cleanup(&mac_ctx);
 
-	if (__b64_ntop(salt, len, uu_salt, sizeof(uu_salt)) == -1 || 
+	if (__b64_ntop(salt, len, uu_salt, sizeof(uu_salt)) == -1 ||
 	    __b64_ntop(result, len, uu_result, sizeof(uu_result)) == -1)
 		fatal("host_hash: __b64_ntop failed");
 
@@ -256,8 +262,10 @@ check_host_in_hostfile_by_key_or_type(const char *filename,
 
 		if (key == NULL) {
 			/* we found a key of the requested type */
-			if (found->type == keytype)
+			if (found->type == keytype) {
+				fclose(f);
 				return HOST_FOUND;
+			}
 			continue;
 		}
 
@@ -312,7 +320,7 @@ lookup_key_in_hostfile_by_type(const char *filename, const char *host,
  */
 
 int
-add_host_to_hostfile(const char *filename, const char *host, const Key *key, 
+add_host_to_hostfile(const char *filename, const char *host, const Key *key,
     int store_hash)
 {
 	FILE *f;

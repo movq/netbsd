@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.7 2005/12/11 12:19:48 christos Exp $	*/
+/*	$NetBSD: intr.h,v 1.12 2006/09/28 18:53:15 bouyer Exp $	*/
 /*	NetBSD intr.h,v 1.15 2004/10/31 10:39:34 yamt Exp	*/
 
 /*-
@@ -46,6 +46,8 @@
 #include <machine/cpu.h>
 #include <machine/pic.h>
 
+#include "opt_xen.h"
+
 /*
  * Struct describing an event channel. 
  */
@@ -72,6 +74,13 @@ struct intrstub {
 	void *ist_resume;
 };
 
+#ifdef XEN3
+/* for x86 compatibility */
+extern struct intrstub i8259_stubs[];
+extern struct intrstub ioapic_edge_stubs[];
+extern struct intrstub ioapic_level_stubs[];
+#endif
+
 struct iplsource {
 	struct intrhand *ipl_handlers;   /* handler chain */
 	void *ipl_recurse;               /* entry for spllower */
@@ -97,6 +106,10 @@ struct intrhand {
 	struct cpu_info *ih_cpu;
 };
 
+struct xen_intr_handle {
+	int pirq; /* also contains the  APIC_INT_* flags if NIOAPIC > 0 */
+	int evtch;
+};
 
 extern struct intrstub xenev_stubs[];
 
@@ -182,7 +195,7 @@ softintr(int sir)
 {
 	struct cpu_info *ci = curcpu();
 
-	__asm __volatile("lock ; orl %1, %0" :
+	__asm volatile("lock ; orl %1, %0" :
 	    "=m"(ci->ci_ipending) : "ir" (1 << sir));
 }
 
@@ -209,13 +222,18 @@ struct pcibus_attach_args;
 void intr_default_setup(void);
 int x86_nmi(void);
 void intr_calculatemasks(struct evtsource *);
+
 void *intr_establish(int, struct pic *, int, int, int, int (*)(void *), void *);
 void intr_disestablish(struct intrhand *);
 const char *intr_string(int);
 void cpu_intr_init(struct cpu_info *);
+int xen_intr_map(int *, int);
 #ifdef INTRDEBUG
 void intr_printconfig(void);
 #endif
+int intr_find_mpmapping(int, int, struct xen_intr_handle *);
+struct pic *intr_findpic(int);
+void intr_add_pcibus(struct pcibus_attach_args *);
 
 #endif /* !_LOCORE */
 

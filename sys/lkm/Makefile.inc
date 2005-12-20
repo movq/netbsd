@@ -1,11 +1,15 @@
-#	$NetBSD: Makefile.inc,v 1.7 2005/12/11 12:24:46 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.13 2006/11/11 22:38:38 christos Exp $
 
 .if !defined(__SYS_LKM_MAKEFILE_INC)
 __SYS_LKM_MAKEFILE_INC=	1
 
 NOMAN=	# defined
 
+
 .include <bsd.own.mk>
+
+CPPFLAGS+=-I${NETBSDSRCDIR}/common/include
+USE_SSP = no
 
 WARNS?=	1
 

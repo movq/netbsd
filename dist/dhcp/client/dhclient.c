@@ -32,7 +32,7 @@
 
 #ifndef lint
 static char ocopyright[] =
-"$Id: dhclient.c,v 1.16 2005/08/11 17:13:21 drochner Exp $ Copyright (c) 2004-2005 Internet Systems Consortium.  All rights reserved.\n";
+"$Id: dhclient.c,v 1.18 2006/10/07 14:14:06 tron Exp $ Copyright (c) 2004-2005 Internet Systems Consortium.  All rights reserved.\n";
 #endif /* not lint */
 
 #include "dhcpd.h"
@@ -77,6 +77,7 @@ int quiet=0;
 int nowait=0;
 
 static void usage PROTO ((void));
+static void limit_interval PROTO((struct client_state *));
 
 void do_release(struct client_state *);
 
@@ -117,6 +118,9 @@ int main (argc, argv, envp)
 	int no_dhclient_pid = 0;
 	int no_dhclient_script = 0;
 	char *s;
+	FILE *pidfd;
+	long pidfd_pid;
+	int e;
 
 	/* Make sure we have stdin, stdout and stderr. */
 	i = open ("/dev/null", O_RDWR);
@@ -259,25 +263,17 @@ int main (argc, argv, envp)
 		path_dhclient_script = s;
 	}
 
-	/* first kill of any currently running client */
-	if (release_mode) {
-		FILE *pidfd;
-		pid_t oldpid;
-		long temp;
-		int e;
+	if ((pidfd = fopen(path_dhclient_pid, "r")) != NULL) {
+		e = fscanf(pidfd, "%ld\n", &pidfd_pid);
+		fclose(pidfd);
 
-		oldpid = 0;
-		if ((pidfd = fopen(path_dhclient_pid, "r")) != NULL) {
-			e = fscanf(pidfd, "%ld\n", &temp);
-			oldpid = (pid_t)temp;
-
-			if (e != 0 && e != EOF) {
-				if (oldpid) {
-					if (kill(oldpid, SIGTERM) == 0)
-						unlink(path_dhclient_pid);
-				}
-			}
-			fclose(pidfd);
+		if (e != 0 && e != EOF && pidfd_pid) {
+			if (release_mode) {
+				if (kill((pid_t)pidfd_pid, SIGTERM) == 0)
+					unlink(path_dhclient_pid);
+			} else if (kill((pid_t)pidfd_pid, 0) == 0)
+				log_fatal("dhclient[%li] is already running",
+					 pidfd_pid);
 		}
 	}
 
@@ -1373,6 +1369,18 @@ void dhcpnak (packet)
 	state_init (client);
 }
 
+static void limit_interval (client)
+	struct client_state *client;
+{
+	if (client -> interval <= client -> config -> backoff_cutoff)
+		return;
+
+	client -> interval = client -> config -> backoff_cutoff / 2;
+	if (client -> config -> backoff_cutoff)
+		client -> interval += (random () >> 2) %
+		    client -> config -> backoff_cutoff;
+}
+
 /* Send out a DHCPDISCOVER packet, and set a timeout to send out another
    one after the right interval has expired.  If we don't get an offer by
    the time we reach the panic interval, call the panic function. */
@@ -1439,12 +1447,7 @@ void send_discover (cpp)
 					       (2 * client -> interval));
 
 		/* Don't backoff past cutoff. */
-		if (client -> interval >
-		    client -> config -> backoff_cutoff)
-			client -> interval =
-				((client -> config -> backoff_cutoff / 2)
-				 + ((random () >> 2) %
-				    client -> config -> backoff_cutoff));
+		limit_interval (client);
 	} else if (!client -> interval)
 		client -> interval = client -> config -> initial_interval;
 		
@@ -1669,12 +1672,7 @@ void send_request (cpp)
 	}
 	
 	/* Don't backoff past cutoff. */
-	if (client -> interval >
-	    client -> config -> backoff_cutoff)
-		client -> interval =
-			((client -> config -> backoff_cutoff / 2)
-			 + ((random () >> 2) %
-					client -> config -> backoff_cutoff));
+	limit_interval (client);
 
 	/* If the backoff would take us to the expiry time, just set the
 	   timeout to the expiry time. */

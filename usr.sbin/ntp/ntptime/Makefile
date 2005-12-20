@@ -1,8 +1,10 @@
-#	$NetBSD: Makefile,v 1.3 2000/06/12 13:57:43 simonb Exp $
+#	$NetBSD: Makefile,v 1.8 2006/07/29 08:18:36 kardel Exp $
 
 PROG=	ntptime
 MAN=	ntptime.8
 SRCS=	ntptime.c
+
+.include <bsd.own.mk>
 
 NTPSRCDIR=util
 

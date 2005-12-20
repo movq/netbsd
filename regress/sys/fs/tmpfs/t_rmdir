@@ -1,8 +1,8 @@
 #!/bin/sh
 #
-# $NetBSD: t_rmdir,v 1.2 2005/09/23 15:36:15 jmmv Exp $
+# $NetBSD: t_rmdir,v 1.6 2006/11/09 16:20:06 jmmv Exp $
 #
-# Copyright (c) 2005 The NetBSD Foundation, Inc.
+# Copyright (c) 2005, 2006 The NetBSD Foundation, Inc.
 # All rights reserved.
 #
 # This code is derived from software contributed to The NetBSD Foundation
@@ -85,7 +85,28 @@ test_run() {
 	eval $(stat -s ${Work_Dir})
 	[ ${st_nlink} = 2 ] || die
 
+	test_name "Removal of current directory"
+	mkdir a || die
+	# Catch a bug that would panic the system when accessing the
+	# current directory after being deleted: vop_open cannot assume
+	# that open files are still linked to a directory.
+	( cd a && rmdir ../a && ls >/dev/null 2>&1 ) && die
+	test -e a && die
+
+	mkdir dir || die
+	mkdir dir/a || die
+	echo 'rmdir dir/a' | kqueue_monitor 3 dir dir/a || die
+	test_name "Deleting a directory raises NOTE_DELETE on it"
+	kqueue_check dir/a NOTE_DELETE || die
+	test_name "Deleting a directory raises NOTE_LINK on the parent" \
+	    "directory"
+	kqueue_check dir NOTE_LINK || die
+	test_name "Deleting a directory raises NOTE_WRITE on the parent" \
+	    "directory"
+	kqueue_check dir NOTE_WRITE || die
+	rmdir dir || die
+
 	test_unmount
 }
 
-. ./h_funcs.subr
+. ${SUBRDIR}/h_funcs.subr

@@ -1,8 +1,8 @@
-/*	$NetBSD: altq_red.c,v 1.12 2005/12/11 12:16:03 christos Exp $	*/
-/*	$KAME: altq_red.c,v 1.9 2002/01/07 11:25:40 kjc Exp $	*/
+/*	$NetBSD: altq_red.c,v 1.24 2006/11/16 01:32:37 christos Exp $	*/
+/*	$KAME: altq_red.c,v 1.20 2005/04/13 03:44:25 suz Exp $	*/
 
 /*
- * Copyright (C) 1997-2000
+ * Copyright (C) 1997-2003
  *	Sony Computer Science Laboratories Inc.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -61,35 +61,35 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altq_red.c,v 1.12 2005/12/11 12:16:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altq_red.c,v 1.24 2006/11/16 01:32:37 christos Exp $");
 
-#if defined(__FreeBSD__) || defined(__NetBSD__)
+#ifdef _KERNEL_OPT
 #include "opt_altq.h"
-#if (__FreeBSD__ != 2)
 #include "opt_inet.h"
-#ifdef __FreeBSD__
-#include "opt_inet6.h"
+#include "pf.h"
 #endif
-#endif
-#endif /* __FreeBSD__ || __NetBSD__ */
+
 #ifdef ALTQ_RED	/* red is enabled by ALTQ_RED option in opt_altq.h */
 
 #include <sys/param.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/socket.h>
-#include <sys/sockio.h>
 #include <sys/systm.h>
-#include <sys/proc.h>
 #include <sys/errno.h>
+#include <sys/kauth.h>
+#if 1 /* ALTQ3_COMPAT */
+#include <sys/sockio.h>
+#include <sys/proc.h>
 #include <sys/kernel.h>
+#include <sys/kauth.h>
 #ifdef ALTQ_FLOWVALVE
 #include <sys/queue.h>
 #include <sys/time.h>
 #endif
+#endif /* ALTQ3_COMPAT */
 
 #include <net/if.h>
-#include <net/if_types.h>
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -98,11 +98,16 @@ __KERNEL_RCSID(0, "$NetBSD: altq_red.c,v 1.12 2005/12/11 12:16:03 christos Exp $
 #include <netinet/ip6.h>
 #endif
 
+#if NPF > 0
+#include <net/pfvar.h>
+#endif
 #include <altq/altq.h>
-#include <altq/altq_conf.h>
 #include <altq/altq_red.h>
+#ifdef ALTQ3_COMPAT
+#include <altq/altq_conf.h>
 #ifdef ALTQ_FLOWVALVE
 #include <altq/altq_flowvalve.h>
+#endif
 #endif
 
 /*
@@ -136,7 +141,7 @@ __KERNEL_RCSID(0, "$NetBSD: altq_red.c,v 1.12 2005/12/11 12:16:03 christos Exp $
  * for a slow link like dial-up, 500 packets takes more than 1 minute!
  * when q_weight is 0.008, N is about 127 packets.
  * when q_weight is 0.016, N is about 63 packets.
- * bursts of 50 packets are allowd for 0.002, bursts of 25 packets
+ * bursts of 50 packets are allowed for 0.002, bursts of 25 packets
  * are allowed for 0.016.
  * see Sally's paper for more details.
  */
@@ -160,7 +165,8 @@ __KERNEL_RCSID(0, "$NetBSD: altq_red.c,v 1.12 2005/12/11 12:16:03 christos Exp $
 #define	TH_MIN		5	/* min threshold */
 #define	TH_MAX		15	/* max threshold */
 
-#define	RED_LIMIT	60	/* default max queue length */
+#define	RED_LIMIT	60	/* default max queue lenght */
+#define	RED_STATS		/* collect statistics */
 
 /*
  * our default policy for forced-drop is drop-tail.
@@ -169,9 +175,10 @@ __KERNEL_RCSID(0, "$NetBSD: altq_red.c,v 1.12 2005/12/11 12:16:03 christos Exp $
  * to switch to the random-drop policy, define "RED_RANDOM_DROP".
  */
 
+#ifdef ALTQ3_COMPAT
 #ifdef ALTQ_FLOWVALVE
 /*
- * flow-valve is an extension to protect red from unresponsive flows
+ * flow-valve is an extention to protect red from unresponsive flows
  * and to promote end-to-end congestion control.
  * flow-valve observes the average drop rates of the flows that have
  * experienced packet drops in the recent past.
@@ -187,342 +194,50 @@ __KERNEL_RCSID(0, "$NetBSD: altq_red.c,v 1.12 2005/12/11 12:16:03 christos Exp $
 /* red_list keeps all red_queue_t's allocated. */
 static red_queue_t *red_list = NULL;
 
+#endif /* ALTQ3_COMPAT */
+
 /* default red parameter values */
 static int default_th_min = TH_MIN;
 static int default_th_max = TH_MAX;
 static int default_inv_pmax = INV_P_MAX;
 
+#ifdef ALTQ3_COMPAT
 /* internal function prototypes */
-static int red_enqueue __P((struct ifaltq *, struct mbuf *,
-			    struct altq_pktattr *));
-static struct mbuf *red_dequeue __P((struct ifaltq *, int));
-static int red_request __P((struct ifaltq *, int, void *));
-static void red_purgeq __P((red_queue_t *));
-static int red_detach __P((red_queue_t *));
+static int red_enqueue(struct ifaltq *, struct mbuf *, struct altq_pktattr *);
+static struct mbuf *red_dequeue(struct ifaltq *, int);
+static int red_request(struct ifaltq *, int, void *);
+static void red_purgeq(red_queue_t *);
+static int red_detach(red_queue_t *);
 #ifdef ALTQ_FLOWVALVE
-static __inline struct fve *flowlist_lookup __P((struct flowvalve *,
-			 struct altq_pktattr *, struct timeval *));
-static __inline struct fve *flowlist_reclaim __P((struct flowvalve *,
-						  struct altq_pktattr *));
-static __inline void flowlist_move_to_head __P((struct flowvalve *,
-						struct fve *));
-static __inline int fv_p2f __P((struct flowvalve *, int));
-static struct flowvalve *fv_alloc __P((struct red *));
-static void fv_destroy __P((struct flowvalve *));
-static int fv_checkflow __P((struct flowvalve *, struct altq_pktattr *,
-			     struct fve **));
-static void fv_dropbyred __P((struct flowvalve *fv, struct altq_pktattr *,
-			      struct fve *));
+static inline struct fve *flowlist_lookup(struct flowvalve *,
+			 struct altq_pktattr *, struct timeval *);
+static inline struct fve *flowlist_reclaim(struct flowvalve *,
+					     struct altq_pktattr *);
+static inline void flowlist_move_to_head(struct flowvalve *, struct fve *);
+static inline int fv_p2f(struct flowvalve *, int);
+static struct flowvalve *fv_alloc(struct red *);
+static void fv_destroy(struct flowvalve *);
+static int fv_checkflow(struct flowvalve *, struct altq_pktattr *,
+			struct fve **);
+static void fv_dropbyred(struct flowvalve *fv, struct altq_pktattr *,
+			 struct fve *);
 #endif
-
-/*
- * red device interface
- */
-altqdev_decl(red);
-
-int
-redopen(dev, flag, fmt, l)
-	dev_t dev;
-	int flag, fmt;
-	struct lwp *l;
-{
-	/* everything will be done when the queueing scheme is attached. */
-	return 0;
-}
-
-int
-redclose(dev, flag, fmt, l)
-	dev_t dev;
-	int flag, fmt;
-	struct lwp *l;
-{
-	red_queue_t *rqp;
-	int err, error = 0;
-
-	while ((rqp = red_list) != NULL) {
-		/* destroy all */
-		err = red_detach(rqp);
-		if (err != 0 && error == 0)
-			error = err;
-	}
-
-	return error;
-}
-
-int
-redioctl(dev, cmd, addr, flag, l)
-	dev_t dev;
-	ioctlcmd_t cmd;
-	caddr_t addr;
-	int flag;
-	struct lwp *l;
-{
-	red_queue_t *rqp;
-	struct red_interface *ifacep;
-	struct ifnet *ifp;
-	struct proc *p = l->l_proc;
-	int	error = 0;
-
-	/* check super-user privilege */
-	switch (cmd) {
-	case RED_GETSTATS:
-		break;
-	default:
-#if (__FreeBSD_version > 400000)
-		if ((error = suser(p)) != 0)
-#else
-		if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-#endif
-			return (error);
-		break;
-	}
-
-	switch (cmd) {
-
-	case RED_ENABLE:
-		ifacep = (struct red_interface *)addr;
-		if ((rqp = altq_lookup(ifacep->red_ifname, ALTQT_RED)) == NULL) {
-			error = EBADF;
-			break;
-		}
-		error = altq_enable(rqp->rq_ifq);
-		break;
-
-	case RED_DISABLE:
-		ifacep = (struct red_interface *)addr;
-		if ((rqp = altq_lookup(ifacep->red_ifname, ALTQT_RED)) == NULL) {
-			error = EBADF;
-			break;
-		}
-		error = altq_disable(rqp->rq_ifq);
-		break;
-
-	case RED_IF_ATTACH:
-		ifp = ifunit(((struct red_interface *)addr)->red_ifname);
-		if (ifp == NULL) {
-			error = ENXIO;
-			break;
-		}
-
-		/* allocate and initialize red_queue_t */
-		MALLOC(rqp, red_queue_t *, sizeof(red_queue_t), M_DEVBUF, M_WAITOK);
-		if (rqp == NULL) {
-			error = ENOMEM;
-			break;
-		}
-		(void)memset(rqp, 0, sizeof(red_queue_t));
-
-		MALLOC(rqp->rq_q, class_queue_t *, sizeof(class_queue_t),
-		       M_DEVBUF, M_WAITOK);
-		if (rqp->rq_q == NULL) {
-			FREE(rqp, M_DEVBUF);
-			error = ENOMEM;
-			break;
-		}
-		(void)memset(rqp->rq_q, 0, sizeof(class_queue_t));
-
-		rqp->rq_red = red_alloc(0, 0, 0, 0, 0, 0);
-		if (rqp->rq_red == NULL) {
-			FREE(rqp->rq_q, M_DEVBUF);
-			FREE(rqp, M_DEVBUF);
-			error = ENOMEM;
-			break;
-		}
-
-		rqp->rq_ifq = &ifp->if_snd;
-		qtail(rqp->rq_q) = NULL;
-		qlen(rqp->rq_q) = 0;
-		qlimit(rqp->rq_q) = RED_LIMIT;
-		qtype(rqp->rq_q) = Q_RED;
-
-		/*
-		 * set RED to this ifnet structure.
-		 */
-		error = altq_attach(rqp->rq_ifq, ALTQT_RED, rqp,
-				    red_enqueue, red_dequeue, red_request,
-				    NULL, NULL);
-		if (error) {
-			red_destroy(rqp->rq_red);
-			FREE(rqp->rq_q, M_DEVBUF);
-			FREE(rqp, M_DEVBUF);
-			break;
-		}
-
-		/* add this state to the red list */
-		rqp->rq_next = red_list;
-		red_list = rqp;
-		break;
-
-	case RED_IF_DETACH:
-		ifacep = (struct red_interface *)addr;
-		if ((rqp = altq_lookup(ifacep->red_ifname, ALTQT_RED)) == NULL) {
-			error = EBADF;
-			break;
-		}
-		error = red_detach(rqp);
-		break;
-
-	case RED_GETSTATS:
-		do {
-			struct red_stats *q_stats;
-			red_t *rp;
-
-			q_stats = (struct red_stats *)addr;
-			if ((rqp = altq_lookup(q_stats->iface.red_ifname,
-					     ALTQT_RED)) == NULL) {
-				error = EBADF;
-				break;
-			}
-
-			q_stats->q_len 	   = qlen(rqp->rq_q);
-			q_stats->q_limit   = qlimit(rqp->rq_q);
-
-			rp = rqp->rq_red;
-			q_stats->q_avg 	   = rp->red_avg >> rp->red_wshift;
-			q_stats->xmit_cnt  = rp->red_stats.xmit_cnt;
-			q_stats->drop_cnt  = rp->red_stats.drop_cnt;
-			q_stats->drop_forced   = rp->red_stats.drop_forced;
-			q_stats->drop_unforced = rp->red_stats.drop_unforced;
-			q_stats->marked_packets = rp->red_stats.marked_packets;
-
-			q_stats->weight		= rp->red_weight;
-			q_stats->inv_pmax	= rp->red_inv_pmax;
-			q_stats->th_min		= rp->red_thmin;
-			q_stats->th_max		= rp->red_thmax;
-
-#ifdef ALTQ_FLOWVALVE
-			if (rp->red_flowvalve != NULL) {
-				struct flowvalve *fv = rp->red_flowvalve;
-				q_stats->fv_flows    = fv->fv_flows;
-				q_stats->fv_pass     = fv->fv_stats.pass;
-				q_stats->fv_predrop  = fv->fv_stats.predrop;
-				q_stats->fv_alloc    = fv->fv_stats.alloc;
-				q_stats->fv_escape   = fv->fv_stats.escape;
-			} else {
-#endif /* ALTQ_FLOWVALVE */
-				q_stats->fv_flows    = 0;
-				q_stats->fv_pass     = 0;
-				q_stats->fv_predrop  = 0;
-				q_stats->fv_alloc    = 0;
-				q_stats->fv_escape   = 0;
-#ifdef ALTQ_FLOWVALVE
-			}
-#endif /* ALTQ_FLOWVALVE */
-		} while (0);
-		break;
-
-	case RED_CONFIG:
-		do {
-			struct red_conf *fc;
-			red_t *new;
-			int s, limit;
-
-			fc = (struct red_conf *)addr;
-			if ((rqp = altq_lookup(fc->iface.red_ifname,
-					       ALTQT_RED)) == NULL) {
-				error = EBADF;
-				break;
-			}
-			new = red_alloc(fc->red_weight,
-					fc->red_inv_pmax,
-					fc->red_thmin,
-					fc->red_thmax,
-					fc->red_flags,
-					fc->red_pkttime);
-			if (new == NULL) {
-				error = ENOMEM;
-				break;
-			}
-
-			s = splnet();
-			red_purgeq(rqp);
-			limit = fc->red_limit;
-			if (limit < fc->red_thmax)
-				limit = fc->red_thmax;
-			qlimit(rqp->rq_q) = limit;
-			fc->red_limit = limit;	/* write back the new value */
-
-			red_destroy(rqp->rq_red);
-			rqp->rq_red = new;
-
-			splx(s);
-
-			/* write back new values */
-			fc->red_limit = limit;
-			fc->red_inv_pmax = rqp->rq_red->red_inv_pmax;
-			fc->red_thmin = rqp->rq_red->red_thmin;
-			fc->red_thmax = rqp->rq_red->red_thmax;
-
-		} while (0);
-		break;
-
-	case RED_SETDEFAULTS:
-		do {
-			struct redparams *rp;
-
-			rp = (struct redparams *)addr;
-
-			default_th_min = rp->th_min;
-			default_th_max = rp->th_max;
-			default_inv_pmax = rp->inv_pmax;
-		} while (0);
-		break;
-
-	default:
-		error = EINVAL;
-		break;
-	}
-	return error;
-}
-
-static int
-red_detach(rqp)
-	red_queue_t *rqp;
-{
-	red_queue_t *tmp;
-	int error = 0;
-
-	if (ALTQ_IS_ENABLED(rqp->rq_ifq))
-		altq_disable(rqp->rq_ifq);
-
-	if ((error = altq_detach(rqp->rq_ifq)))
-		return (error);
-
-	if (red_list == rqp)
-		red_list = rqp->rq_next;
-	else {
-		for (tmp = red_list; tmp != NULL; tmp = tmp->rq_next)
-			if (tmp->rq_next == rqp) {
-				tmp->rq_next = rqp->rq_next;
-				break;
-			}
-		if (tmp == NULL)
-			printf("red_detach: no state found in red_list!\n");
-	}
-
-	red_destroy(rqp->rq_red);
-	FREE(rqp->rq_q, M_DEVBUF);
-	FREE(rqp, M_DEVBUF);
-	return (error);
-}
+#endif /* ALTQ3_COMPAT */
 
 /*
  * red support routines
  */
-
 red_t *
-red_alloc(weight, inv_pmax, th_min, th_max, flags, pkttime)
-	int	weight, inv_pmax, th_min, th_max;
-	int	flags, pkttime;
+red_alloc(int weight, int inv_pmax, int th_min, int th_max, int flags,
+   int pkttime)
 {
-	red_t 	*rp;
-	int	w, i;
-	int	npkts_per_sec;
+	red_t	*rp;
+	int	 w, i;
+	int	 npkts_per_sec;
 
-	MALLOC(rp, red_t *, sizeof(red_t), M_DEVBUF, M_WAITOK);
+	rp = malloc(sizeof(red_t), M_DEVBUF, M_WAITOK|M_ZERO);
 	if (rp == NULL)
 		return (NULL);
-	(void)memset(rp, 0, sizeof(red_t));
 
 	rp->red_avg = 0;
 	rp->red_idle = 1;
@@ -594,32 +309,33 @@ red_alloc(weight, inv_pmax, th_min, th_max, flags, pkttime)
 	rp->red_wtab = wtab_alloc(rp->red_weight);
 
 	microtime(&rp->red_last);
+#ifdef ALTQ3_COMPAT
 #ifdef ALTQ_FLOWVALVE
 	if (flags & REDF_FLOWVALVE)
 		rp->red_flowvalve = fv_alloc(rp);
 	/* if fv_alloc failes, flowvalve is just disabled */
 #endif
+#endif /* ALTQ3_COMPAT */
 	return (rp);
 }
 
 void
-red_destroy(rp)
-	red_t *rp;
+red_destroy(red_t *rp)
 {
+#ifdef ALTQ3_COMPAT
 #ifdef ALTQ_FLOWVALVE
 	if (rp->red_flowvalve != NULL)
 		fv_destroy(rp->red_flowvalve);
 #endif
+#endif /* ALTQ3_COMPAT */
 	wtab_destroy(rp->red_wtab);
-	FREE(rp, M_DEVBUF);
+	free(rp, M_DEVBUF);
 }
 
 void
-red_getstats(rp, sp)
-	red_t *rp;
-	struct redstats *sp;
+red_getstats(red_t *rp, struct redstats *sp)
 {
-	sp->q_avg 		= rp->red_avg >> rp->red_wshift;
+	sp->q_avg		= rp->red_avg >> rp->red_wshift;
 	sp->xmit_cnt		= rp->red_stats.xmit_cnt;
 	sp->drop_cnt		= rp->red_stats.drop_cnt;
 	sp->drop_forced		= rp->red_stats.drop_forced;
@@ -627,35 +343,13 @@ red_getstats(rp, sp)
 	sp->marked_packets	= rp->red_stats.marked_packets;
 }
 
-/*
- * enqueue routine:
- *
- *	returns: 0 when successfully queued.
- *		 ENOBUFS when drop occurs.
- */
-static int
-red_enqueue(ifq, m, pktattr)
-	struct ifaltq *ifq;
-	struct mbuf *m;
-	struct altq_pktattr *pktattr;
-{
-	red_queue_t *rqp = (red_queue_t *)ifq->altq_disc;
-
-	if (red_addq(rqp->rq_red, rqp->rq_q, m, pktattr) < 0)
-		return ENOBUFS;
-	ifq->ifq_len++;
-	return 0;
-}
-
 int
-red_addq(rp, q, m, pktattr)
-	red_t *rp;
-	class_queue_t *q;
-	struct mbuf *m;
-	struct altq_pktattr *pktattr;
+red_addq(red_t *rp, class_queue_t *q, struct mbuf *m,
+    struct altq_pktattr *pktattr)
 {
 	int avg, droptype;
 	int n;
+#ifdef ALTQ3_COMPAT
 #ifdef ALTQ_FLOWVALVE
 	struct fve *fve = NULL;
 
@@ -665,6 +359,7 @@ red_addq(rp, q, m, pktattr)
 			return (-1);
 		}
 #endif
+#endif /* ALTQ3_COMPAT */
 
 	avg = rp->red_avg;
 
@@ -770,10 +465,12 @@ red_addq(rp, q, m, pktattr)
 		PKTCNTR_ADD(&rp->red_stats.drop_cnt, m_pktlen(m));
 #endif
 		rp->red_count = 0;
+#ifdef ALTQ3_COMPAT
 #ifdef ALTQ_FLOWVALVE
 		if (rp->red_flowvalve != NULL)
 			fv_dropbyred(rp->red_flowvalve, pktattr, fve);
 #endif
+#endif /* ALTQ3_COMPAT */
 		m_freem(m);
 		return (-1);
 	}
@@ -794,12 +491,9 @@ red_addq(rp, q, m, pktattr)
  * becomes 1 when (count >= (2 / prob))).
  */
 int
-drop_early(fp_len, fp_probd, count)
-	int fp_len;	/* (avg - TH_MIN) in fixed-point */
-	int fp_probd;	/* (2 * (TH_MAX-TH_MIN) / pmax) in fixed-point */
-	int count;	/* how many successive undropped packets */
+drop_early(int fp_len, int fp_probd, int count)
 {
-	int d;		/* denominator of drop-probability */
+	int	d;		/* denominator of drop-probability */
 
 	d = fp_probd - count * fp_len;
 	if (d <= 0)
@@ -812,7 +506,7 @@ drop_early(fp_len, fp_probd, count)
 	 * drop probability = (avg - TH_MIN) / d
 	 */
 
-	if ((random() % d) < fp_len) {
+	if ((arc4random() % d) < fp_len) {
 		/* drop or mark */
 		return (1);
 	}
@@ -825,32 +519,46 @@ drop_early(fp_len, fp_probd, count)
  *    returns 1 if successfully marked, 0 otherwise.
  */
 int
-mark_ecn(m, pktattr, flags)
-	struct mbuf *m;
-	struct altq_pktattr *pktattr;
-	int flags;
+mark_ecn(struct mbuf *m, struct altq_pktattr *pktattr, int flags)
 {
-	struct mbuf *m0;
+	struct mbuf	*m0;
+	struct m_tag	*t;
+	struct altq_tag	*at;
+	void		*hdr;
+	int		 af;
 
-	if (pktattr == NULL ||
-	    (pktattr->pattr_af != AF_INET && pktattr->pattr_af != AF_INET6))
+	t = m_tag_find(m, PACKET_TAG_PF_QID, NULL);
+	if (t != NULL) {
+		at = (struct altq_tag *)(t + 1);
+		if (at == NULL)
+			return (0);
+		af = at->af;
+		hdr = at->hdr;
+#ifdef ALTQ3_COMPAT
+	} else if (pktattr != NULL) {
+		af = pktattr->pattr_af;
+		hdr = pktattr->pattr_hdr;
+#endif /* ALTQ3_COMPAT */
+	} else
+		return (0);
+
+	if (af != AF_INET && af != AF_INET6)
 		return (0);
 
 	/* verify that pattr_hdr is within the mbuf data */
 	for (m0 = m; m0 != NULL; m0 = m0->m_next)
-		if ((pktattr->pattr_hdr >= m0->m_data) &&
-		    (pktattr->pattr_hdr < m0->m_data + m0->m_len))
+		if (((caddr_t)hdr >= m0->m_data) &&
+		    ((caddr_t)hdr < m0->m_data + m0->m_len))
 			break;
 	if (m0 == NULL) {
-		/* ick, pattr_hdr is stale */
-		pktattr->pattr_af = AF_UNSPEC;
+		/* ick, tag info is stale */
 		return (0);
 	}
 
-	switch (pktattr->pattr_af) {
+	switch (af) {
 	case AF_INET:
 		if (flags & REDF_ECN4) {
-			struct ip *ip = (struct ip *)pktattr->pattr_hdr;
+			struct ip *ip = hdr;
 			u_int8_t otos;
 			int sum;
 
@@ -883,7 +591,7 @@ mark_ecn(m, pktattr, flags)
 #ifdef INET6
 	case AF_INET6:
 		if (flags & REDF_ECN6) {
-			struct ip6_hdr *ip6 = (struct ip6_hdr *)pktattr->pattr_hdr;
+			struct ip6_hdr *ip6 = hdr;
 			u_int32_t flowlabel;
 
 			flowlabel = ntohl(ip6->ip6_flow);
@@ -910,36 +618,8 @@ mark_ecn(m, pktattr, flags)
 	return (0);
 }
 
-/*
- * dequeue routine:
- *	must be called in splnet.
- *
- *	returns: mbuf dequeued.
- *		 NULL when no packet is available in the queue.
- */
-
-static struct mbuf *
-red_dequeue(ifq, op)
-	struct ifaltq *ifq;
-	int op;
-{
-	red_queue_t *rqp = (red_queue_t *)ifq->altq_disc;
-	struct mbuf *m;
-
-	if (op == ALTDQ_POLL)
-		return qhead(rqp->rq_q);
-
-	/* op == ALTDQ_REMOVE */
-	m =  red_getq(rqp->rq_red, rqp->rq_q);
-	if (m != NULL)
-		ifq->ifq_len--;
-	return (m);
-}
-
 struct mbuf *
-red_getq(rp, q)
-	red_t *rp;
-	class_queue_t *q;
+red_getq(red_t *rp, class_queue_t *q)
 {
 	struct mbuf *m;
 
@@ -955,32 +635,6 @@ red_getq(rp, q)
 	return (m);
 }
 
-static int
-red_request(ifq, req, arg)
-	struct ifaltq *ifq;
-	int req;
-	void *arg;
-{
-	red_queue_t *rqp = (red_queue_t *)ifq->altq_disc;
-
-	switch (req) {
-	case ALTRQ_PURGE:
-		red_purgeq(rqp);
-		break;
-	}
-	return (0);
-}
-
-static void
-red_purgeq(rqp)
-	red_queue_t *rqp;
-{
-	_flushq(rqp->rq_q);
-	if (ALTQ_IS_ENABLED(rqp->rq_ifq))
-		rqp->rq_ifq->ifq_len = 0;
-}
-
-
 /*
  * helper routine to calibrate avg during idle.
  * pow_w(wtab, n) returns (1 - Wq)^n in fixed-point
@@ -991,11 +645,10 @@ red_purgeq(rqp)
 static struct wtab *wtab_list = NULL;	/* pointer to wtab list */
 
 struct wtab *
-wtab_alloc(weight)
-	int weight;
+wtab_alloc(int weight)
 {
-	struct wtab *w;
-	int i;
+	struct wtab	*w;
+	int		 i;
 
 	for (w = wtab_list; w != NULL; w = w->w_next)
 		if (w->w_weight == weight) {
@@ -1003,10 +656,9 @@ wtab_alloc(weight)
 			return (w);
 		}
 
-	MALLOC(w, struct wtab *, sizeof(struct wtab), M_DEVBUF, M_WAITOK);
+	w = malloc(sizeof(struct wtab), M_DEVBUF, M_WAITOK|M_ZERO);
 	if (w == NULL)
 		panic("wtab_alloc: malloc failed!");
-	(void)memset(w, 0, sizeof(struct wtab));
 	w->w_weight = weight;
 	w->w_refcount = 1;
 	w->w_next = wtab_list;
@@ -1024,10 +676,9 @@ wtab_alloc(weight)
 }
 
 int
-wtab_destroy(w)
-	struct wtab *w;
+wtab_destroy(struct wtab *w)
 {
-	struct wtab *prev;
+	struct wtab	*prev;
 
 	if (--w->w_refcount > 0)
 		return (0);
@@ -1040,14 +691,12 @@ wtab_destroy(w)
 			break;
 		}
 
-	FREE(w, M_DEVBUF);
+	free(w, M_DEVBUF);
 	return (0);
 }
 
 int32_t
-pow_w(w, n)
-	struct wtab *w;
-	int n;
+pow_w(struct wtab *w, int n)
 {
 	int	i, bit;
 	int32_t	val;
@@ -1072,6 +721,351 @@ pow_w(w, n)
 	return (val);
 }
 
+#ifdef ALTQ3_COMPAT
+/*
+ * red device interface
+ */
+altqdev_decl(red);
+
+int
+redopen(dev_t dev, int flag, int fmt,
+    struct lwp *l)
+{
+	/* everything will be done when the queueing scheme is attached. */
+	return 0;
+}
+
+int
+redclose(dev_t dev, int flag, int fmt,
+    struct lwp *l)
+{
+	red_queue_t *rqp;
+	int err, error = 0;
+
+	while ((rqp = red_list) != NULL) {
+		/* destroy all */
+		err = red_detach(rqp);
+		if (err != 0 && error == 0)
+			error = err;
+	}
+
+	return error;
+}
+
+int
+redioctl(dev_t dev, ioctlcmd_t cmd, caddr_t addr, int flag,
+    struct lwp *l)
+{
+	red_queue_t *rqp;
+	struct red_interface *ifacep;
+	struct ifnet *ifp;
+	struct proc *p = l->l_proc;
+	int	error = 0;
+
+	/* check super-user privilege */
+	switch (cmd) {
+	case RED_GETSTATS:
+		break;
+	default:
+#if (__FreeBSD_version > 400000)
+		if ((error = suser(p)) != 0)
+#else
+		if ((error = kauth_authorize_network(p->p_cred,
+		    KAUTH_NETWORK_ALTQ, KAUTH_REQ_NETWORK_ALTQ_RED, NULL,
+		    NULL, NULL)) != 0)
+#endif
+			return (error);
+		break;
+	}
+
+	switch (cmd) {
+
+	case RED_ENABLE:
+		ifacep = (struct red_interface *)addr;
+		if ((rqp = altq_lookup(ifacep->red_ifname, ALTQT_RED)) == NULL) {
+			error = EBADF;
+			break;
+		}
+		error = altq_enable(rqp->rq_ifq);
+		break;
+
+	case RED_DISABLE:
+		ifacep = (struct red_interface *)addr;
+		if ((rqp = altq_lookup(ifacep->red_ifname, ALTQT_RED)) == NULL) {
+			error = EBADF;
+			break;
+		}
+		error = altq_disable(rqp->rq_ifq);
+		break;
+
+	case RED_IF_ATTACH:
+		ifp = ifunit(((struct red_interface *)addr)->red_ifname);
+		if (ifp == NULL) {
+			error = ENXIO;
+			break;
+		}
+
+		/* allocate and initialize red_queue_t */
+		rqp = malloc(sizeof(red_queue_t), M_DEVBUF, M_WAITOK|M_ZERO);
+		if (rqp == NULL) {
+			error = ENOMEM;
+			break;
+		}
+
+		rqp->rq_q = malloc(sizeof(class_queue_t), M_DEVBUF,
+		    M_WAITOK|M_ZERO);
+		if (rqp->rq_q == NULL) {
+			free(rqp, M_DEVBUF);
+			error = ENOMEM;
+			break;
+		}
+
+		rqp->rq_red = red_alloc(0, 0, 0, 0, 0, 0);
+		if (rqp->rq_red == NULL) {
+			free(rqp->rq_q, M_DEVBUF);
+			free(rqp, M_DEVBUF);
+			error = ENOMEM;
+			break;
+		}
+
+		rqp->rq_ifq = &ifp->if_snd;
+		qtail(rqp->rq_q) = NULL;
+		qlen(rqp->rq_q) = 0;
+		qlimit(rqp->rq_q) = RED_LIMIT;
+		qtype(rqp->rq_q) = Q_RED;
+
+		/*
+		 * set RED to this ifnet structure.
+		 */
+		error = altq_attach(rqp->rq_ifq, ALTQT_RED, rqp,
+				    red_enqueue, red_dequeue, red_request,
+				    NULL, NULL);
+		if (error) {
+			red_destroy(rqp->rq_red);
+			free(rqp->rq_q, M_DEVBUF);
+			free(rqp, M_DEVBUF);
+			break;
+		}
+
+		/* add this state to the red list */
+		rqp->rq_next = red_list;
+		red_list = rqp;
+		break;
+
+	case RED_IF_DETACH:
+		ifacep = (struct red_interface *)addr;
+		if ((rqp = altq_lookup(ifacep->red_ifname, ALTQT_RED)) == NULL) {
+			error = EBADF;
+			break;
+		}
+		error = red_detach(rqp);
+		break;
+
+	case RED_GETSTATS:
+		do {
+			struct red_stats *q_stats;
+			red_t *rp;
+
+			q_stats = (struct red_stats *)addr;
+			if ((rqp = altq_lookup(q_stats->iface.red_ifname,
+					     ALTQT_RED)) == NULL) {
+				error = EBADF;
+				break;
+			}
+
+			q_stats->q_len 	   = qlen(rqp->rq_q);
+			q_stats->q_limit   = qlimit(rqp->rq_q);
+
+			rp = rqp->rq_red;
+			q_stats->q_avg 	   = rp->red_avg >> rp->red_wshift;
+			q_stats->xmit_cnt  = rp->red_stats.xmit_cnt;
+			q_stats->drop_cnt  = rp->red_stats.drop_cnt;
+			q_stats->drop_forced   = rp->red_stats.drop_forced;
+			q_stats->drop_unforced = rp->red_stats.drop_unforced;
+			q_stats->marked_packets = rp->red_stats.marked_packets;
+
+			q_stats->weight		= rp->red_weight;
+			q_stats->inv_pmax	= rp->red_inv_pmax;
+			q_stats->th_min		= rp->red_thmin;
+			q_stats->th_max		= rp->red_thmax;
+
+#ifdef ALTQ_FLOWVALVE
+			if (rp->red_flowvalve != NULL) {
+				struct flowvalve *fv = rp->red_flowvalve;
+				q_stats->fv_flows    = fv->fv_flows;
+				q_stats->fv_pass     = fv->fv_stats.pass;
+				q_stats->fv_predrop  = fv->fv_stats.predrop;
+				q_stats->fv_alloc    = fv->fv_stats.alloc;
+				q_stats->fv_escape   = fv->fv_stats.escape;
+			} else {
+#endif /* ALTQ_FLOWVALVE */
+				q_stats->fv_flows    = 0;
+				q_stats->fv_pass     = 0;
+				q_stats->fv_predrop  = 0;
+				q_stats->fv_alloc    = 0;
+				q_stats->fv_escape   = 0;
+#ifdef ALTQ_FLOWVALVE
+			}
+#endif /* ALTQ_FLOWVALVE */
+		} while (/*CONSTCOND*/ 0);
+		break;
+
+	case RED_CONFIG:
+		do {
+			struct red_conf *fc;
+			red_t *new;
+			int s, limit;
+
+			fc = (struct red_conf *)addr;
+			if ((rqp = altq_lookup(fc->iface.red_ifname,
+					       ALTQT_RED)) == NULL) {
+				error = EBADF;
+				break;
+			}
+			new = red_alloc(fc->red_weight,
+					fc->red_inv_pmax,
+					fc->red_thmin,
+					fc->red_thmax,
+					fc->red_flags,
+					fc->red_pkttime);
+			if (new == NULL) {
+				error = ENOMEM;
+				break;
+			}
+
+			s = splnet();
+			red_purgeq(rqp);
+			limit = fc->red_limit;
+			if (limit < fc->red_thmax)
+				limit = fc->red_thmax;
+			qlimit(rqp->rq_q) = limit;
+			fc->red_limit = limit;	/* write back the new value */
+
+			red_destroy(rqp->rq_red);
+			rqp->rq_red = new;
+
+			splx(s);
+
+			/* write back new values */
+			fc->red_limit = limit;
+			fc->red_inv_pmax = rqp->rq_red->red_inv_pmax;
+			fc->red_thmin = rqp->rq_red->red_thmin;
+			fc->red_thmax = rqp->rq_red->red_thmax;
+
+		} while (/*CONSTCOND*/ 0);
+		break;
+
+	case RED_SETDEFAULTS:
+		do {
+			struct redparams *rp;
+
+			rp = (struct redparams *)addr;
+
+			default_th_min = rp->th_min;
+			default_th_max = rp->th_max;
+			default_inv_pmax = rp->inv_pmax;
+		} while (/*CONSTCOND*/ 0);
+		break;
+
+	default:
+		error = EINVAL;
+		break;
+	}
+	return error;
+}
+
+static int
+red_detach(red_queue_t *rqp)
+{
+	red_queue_t *tmp;
+	int error = 0;
+
+	if (ALTQ_IS_ENABLED(rqp->rq_ifq))
+		altq_disable(rqp->rq_ifq);
+
+	if ((error = altq_detach(rqp->rq_ifq)))
+		return (error);
+
+	if (red_list == rqp)
+		red_list = rqp->rq_next;
+	else {
+		for (tmp = red_list; tmp != NULL; tmp = tmp->rq_next)
+			if (tmp->rq_next == rqp) {
+				tmp->rq_next = rqp->rq_next;
+				break;
+			}
+		if (tmp == NULL)
+			printf("red_detach: no state found in red_list!\n");
+	}
+
+	red_destroy(rqp->rq_red);
+	free(rqp->rq_q, M_DEVBUF);
+	free(rqp, M_DEVBUF);
+	return (error);
+}
+
+/*
+ * enqueue routine:
+ *
+ *	returns: 0 when successfully queued.
+ *		 ENOBUFS when drop occurs.
+ */
+static int
+red_enqueue(struct ifaltq *ifq, struct mbuf *m, struct altq_pktattr *pktattr)
+{
+	red_queue_t *rqp = (red_queue_t *)ifq->altq_disc;
+
+	if (red_addq(rqp->rq_red, rqp->rq_q, m, pktattr) < 0)
+		return ENOBUFS;
+	ifq->ifq_len++;
+	return 0;
+}
+
+/*
+ * dequeue routine:
+ *	must be called in splnet.
+ *
+ *	returns: mbuf dequeued.
+ *		 NULL when no packet is available in the queue.
+ */
+
+static struct mbuf *
+red_dequeue(struct ifaltq *ifq, int op)
+{
+	red_queue_t *rqp = (red_queue_t *)ifq->altq_disc;
+	struct mbuf *m;
+
+	if (op == ALTDQ_POLL)
+		return qhead(rqp->rq_q);
+
+	/* op == ALTDQ_REMOVE */
+	m =  red_getq(rqp->rq_red, rqp->rq_q);
+	if (m != NULL)
+		ifq->ifq_len--;
+	return (m);
+}
+
+static int
+red_request(struct ifaltq *ifq, int req, void *arg)
+{
+	red_queue_t *rqp = (red_queue_t *)ifq->altq_disc;
+
+	switch (req) {
+	case ALTRQ_PURGE:
+		red_purgeq(rqp);
+		break;
+	}
+	return (0);
+}
+
+static void
+red_purgeq(red_queue_t *rqp)
+{
+	_flushq(rqp->rq_q);
+	if (ALTQ_IS_ENABLED(rqp->rq_ifq))
+		rqp->rq_ifq->ifq_len = 0;
+}
+
 #ifdef ALTQ_FLOWVALVE
 
 #define	FV_PSHIFT	7	/* weight of average drop rate -- 1/128 */
@@ -1090,7 +1084,9 @@ pow_w(w, n)
 #define	FV_TTHRESH		3  /* time threshold to delete fve */
 #define	FV_ALPHA		5  /* extra packet count */
 
-#if (__FreeBSD_version > 300000)
+#define	FV_STATS
+
+#if (__FreeBSD_version > 300000) || defined(__HAVE_TIMECOUNTER)
 #define	FV_TIMESTAMP(tp)	getmicrotime(tp)
 #else
 #define	FV_TIMESTAMP(tp)	{ (*(tp)) = time; }
@@ -1129,11 +1125,9 @@ const int brtt_tab[BRTT_SIZE] = {
 	4611, 4504, 4400, 4299, 4201, 4106, 4014, 3924
 };
 
-static __inline struct fve *
-flowlist_lookup(fv, pktattr, now)
-	struct flowvalve *fv;
-	struct altq_pktattr *pktattr;
-	struct timeval *now;
+static inline struct fve *
+flowlist_lookup(struct flowvalve *fv, struct altq_pktattr *pktattr,
+    struct timeval *now)
 {
 	struct fve *fve;
 	int flows;
@@ -1199,10 +1193,8 @@ flowlist_lookup(fv, pktattr, now)
 	return (NULL);
 }
 
-static __inline struct fve *
-flowlist_reclaim(fv, pktattr)
-	struct flowvalve *fv;
-	struct altq_pktattr *pktattr;
+static inline struct fve *
+flowlist_reclaim(struct flowvalve *fv, struct altq_pktattr *pktattr)
 {
 	struct fve *fve;
 	struct ip *ip;
@@ -1245,10 +1237,8 @@ flowlist_reclaim(fv, pktattr)
 	return (fve);
 }
 
-static __inline void
-flowlist_move_to_head(fv, fve)
-	struct flowvalve *fv;
-	struct fve *fve;
+static inline void
+flowlist_move_to_head(struct flowvalve *fv, struct fve *fve)
 {
 	if (TAILQ_FIRST(&fv->fv_flowlist) != fve) {
 		TAILQ_REMOVE(&fv->fv_flowlist, fve, fve_lru);
@@ -1260,27 +1250,23 @@ flowlist_move_to_head(fv, fve)
  * allocate flowvalve structure
  */
 static struct flowvalve *
-fv_alloc(rp)
-	struct red *rp;
+fv_alloc(struct red *rp)
 {
 	struct flowvalve *fv;
 	struct fve *fve;
 	int i, num;
 
 	num = FV_FLOWLISTSIZE;
-	MALLOC(fv, struct flowvalve *, sizeof(struct flowvalve),
-	       M_DEVBUF, M_WAITOK);
+	fv = malloc(sizeof(struct flowvalve), M_DEVBUF, M_WAITOK|M_ZERO);
 	if (fv == NULL)
 		return (NULL);
-	(void)memset(fv, 0, sizeof(struct flowvalve));
 
-	MALLOC(fv->fv_fves, struct fve *, sizeof(struct fve) * num,
-	       M_DEVBUF, M_WAITOK);
+	fv->fv_fves = malloc(sizeof(struct fve) * num, M_DEVBUF,
+	    M_WAITOK|M_ZERO);
 	if (fv->fv_fves == NULL) {
-		FREE(fv, M_DEVBUF);
+		free(fv, M_DEVBUF);
 		return (NULL);
 	}
-	(void)memset(fv->fv_fves, 0, sizeof(struct fve) * num);
 
 	fv->fv_flows = 0;
 	TAILQ_INIT(&fv->fv_flowlist);
@@ -1294,11 +1280,10 @@ fv_alloc(rp)
 	fv->fv_pthresh = (FV_PSCALE(1) << FP_SHIFT) / rp->red_inv_pmax;
 
 	/* initialize drop rate to fraction table */
-	MALLOC(fv->fv_p2ftab, int *, sizeof(int) * BRTT_SIZE,
-	       M_DEVBUF, M_WAITOK);
+	fv->fv_p2ftab = malloc(sizeof(int) * BRTT_SIZE, M_DEVBUF, M_WAITOK);
 	if (fv->fv_p2ftab == NULL) {
-		FREE(fv->fv_fves, M_DEVBUF);
-		FREE(fv, M_DEVBUF);
+		free(fv->fv_fves, M_DEVBUF);
+		free(fv, M_DEVBUF);
 		return (NULL);
 	}
 	/*
@@ -1315,18 +1300,16 @@ fv_alloc(rp)
 	return (fv);
 }
 
-static void fv_destroy(fv)
-	struct flowvalve *fv;
+static void
+fv_destroy(struct flowvalve *fv)
 {
-	FREE(fv->fv_p2ftab, M_DEVBUF);
-	FREE(fv->fv_fves, M_DEVBUF);
-	FREE(fv, M_DEVBUF);
+	free(fv->fv_p2ftab, M_DEVBUF);
+	free(fv->fv_fves, M_DEVBUF);
+	free(fv, M_DEVBUF);
 }
 
-static __inline int
-fv_p2f(fv, p)
-	struct flowvalve	*fv;
-	int	p;
+static inline int
+fv_p2f(struct flowvalve *fv, int p)
 {
 	int val, f;
 
@@ -1346,10 +1329,8 @@ fv_p2f(fv, p)
  * should be called in splnet.
  */
 static int
-fv_checkflow(fv, pktattr, fcache)
-	struct flowvalve *fv;
-	struct altq_pktattr *pktattr;
-	struct fve **fcache;
+fv_checkflow(struct flowvalve *fv, struct altq_pktattr *pktattr,
+    struct fve **fcache)
 {
 	struct fve *fve;
 	struct timeval now;
@@ -1425,10 +1406,9 @@ fv_checkflow(fv, pktattr, fcache)
  * called from red_addq when a packet is dropped by red.
  * should be called in splnet.
  */
-static void fv_dropbyred(fv, pktattr, fcache)
-	struct flowvalve *fv;
-	struct altq_pktattr *pktattr;
-	struct fve *fcache;
+static void
+fv_dropbyred(struct flowvalve *fv, struct altq_pktattr *pktattr,
+    struct fve *fcache)
 {
 	struct fve *fve;
 	struct timeval now;
@@ -1463,7 +1443,9 @@ static struct altqsw red_sw =
 	{"red", redopen, redclose, redioctl};
 
 ALTQ_MODULE(altq_red, ALTQT_RED, &red_sw);
+MODULE_VERSION(altq_red, 1);
 
 #endif /* KLD_MODULE */
+#endif /* ALTQ3_COMPAT */
 
 #endif /* ALTQ_RED */

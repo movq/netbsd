@@ -1,4 +1,4 @@
-/*	$NetBSD: fwdma.h,v 1.2 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: fwdma.h,v 1.4 2006/02/16 20:17:19 perry Exp $	*/
 /*-
  * Copyright (C) 2003
  * 	Hidetoshi Shimokawa. All rights reserved.

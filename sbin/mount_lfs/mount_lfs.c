@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_lfs.c,v 1.26 2005/09/23 12:10:35 jmmv Exp $	*/
+/*	$NetBSD: mount_lfs.c,v 1.28 2006/10/16 03:37:42 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)mount_lfs.c	8.4 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_lfs.c,v 1.26 2005/09/23 12:10:35 jmmv Exp $");
+__RCSID("$NetBSD: mount_lfs.c,v 1.28 2006/10/16 03:37:42 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -66,7 +66,7 @@ static const struct mntopt mopts[] = {
 	MOPT_UPDATE,
 	MOPT_GETARGS,
 	MOPT_NOATIME,
-	{ NULL }
+	MOPT_NULL,
 };
 
 int		mount_lfs(int, char *[]);
@@ -93,6 +93,7 @@ mount_lfs(int argc, char *argv[])
 	int ch, mntflags, noclean, mntsize, oldflags, i;
 	char fs_name[MAXPATHLEN], canon_dev[MAXPATHLEN];
 	char *options;
+	mntoptparse_t mp;
 
 	const char *errcause;
 	struct statvfs *mntbuf;
@@ -119,7 +120,10 @@ mount_lfs(int argc, char *argv[])
 			nsegs = optarg;
 			break;
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, &mntflags, 0);
+			if (mp == NULL)
+				err(1, "getmntopts");
+			freemntopts(mp);
 			break;
 		case 's':
 			short_rds = 1;

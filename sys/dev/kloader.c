@@ -1,4 +1,4 @@
-/*	$NetBSD: kloader.c,v 1.7 2005/12/11 12:20:53 christos Exp $	*/
+/*	$NetBSD: kloader.c,v 1.11 2006/07/21 16:48:47 ad Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2004 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kloader.c,v 1.7 2005/12/11 12:20:53 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kloader.c,v 1.11 2006/07/21 16:48:47 ad Exp $");
 
 #include "debug_kloader.h"
 
@@ -598,17 +598,20 @@ kloader_open(const char *filename)
 {
 	struct lwp *l = KLOADER_LWP;
 	struct nameidata nid;
+	int error;
 
 	NDINIT(&nid, LOOKUP, FOLLOW, UIO_SYSSPACE, filename, l);
 
-	if (namei(&nid) != 0) {
-		PRINTF("namei failed (%s)\n", filename);
-		return (0);
+	error = namei(&nid);
+	if (error != 0) {
+		PRINTF("%s: namei failed, errno=%d\n", filename, error);
+		return (NULL);
 	}
 
-	if (vn_open(&nid, FREAD, 0) != 0) {
-		PRINTF("%s open failed\n", filename);
-		return (0);
+	error = vn_open(&nid, FREAD, 0);
+	if (error != 0) {
+		PRINTF("%s: open failed, errno=%d\n", filename, error);
+		return (NULL);
 	}
 
 	return (nid.ni_vp);
@@ -621,7 +624,7 @@ kloader_close()
 	struct vnode *vp = kloader.vp;
 
 	VOP_UNLOCK(vp, 0);
-	vn_close(vp, FREAD, l->l_proc->p_ucred, l);
+	vn_close(vp, FREAD, l->l_cred, l);
 }
 
 int
@@ -633,7 +636,7 @@ kloader_read(size_t ofs, size_t size, void *buf)
 	int error;
 
 	error = vn_rdwr(UIO_READ, vp, buf, size, ofs, UIO_SYSSPACE,
-	    IO_NODELOCKED | IO_SYNC, l->l_proc->p_ucred, &resid, NULL);
+	    IO_NODELOCKED | IO_SYNC, l->l_cred, &resid, NULL);
 
 	if (error)
 		PRINTF("read error.\n");
@@ -696,7 +699,7 @@ kloader_pagetag_dump()
 		print = FALSE;
 		if (i < n)
 			print = TRUE;
-		if ((u_int32_t)p & 3) {
+		if ((uint32_t)p & 3) {
 			printf("tag alignment error\n");
 			break;
 		}

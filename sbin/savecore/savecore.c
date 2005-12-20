@@ -1,4 +1,4 @@
-/*	$NetBSD: savecore.c,v 1.65 2004/10/16 03:48:15 dsainty Exp $	*/
+/*	$NetBSD: savecore.c,v 1.69 2006/10/16 02:56:56 christos Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1992, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1986, 1992, 1993\n\
 #if 0
 static char sccsid[] = "@(#)savecore.c	8.5 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: savecore.c,v 1.65 2004/10/16 03:48:15 dsainty Exp $");
+__RCSID("$NetBSD: savecore.c,v 1.69 2006/10/16 02:56:56 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -72,42 +72,46 @@ extern FILE *zopen(const char *fname, const char *mode);
 
 struct nlist current_nl[] = {	/* Namelist for currently running system. */
 #define	X_DUMPDEV	0
-	{ "_dumpdev" },
+	{ .n_name = "_dumpdev" },
 #define	X_DUMPLO	1
-	{ "_dumplo" },
-#define	X_TIME		2
-	{ "_time" },
-#define	X_DUMPSIZE	3
-	{ "_dumpsize" },
-#define	X_VERSION	4
-	{ "_version" },
-#define	X_DUMPMAG	5
-	{ "_dumpmag" },
-#define	X_PANICSTR	6
-	{ "_panicstr" },
-#define	X_PANICSTART	7
-	{ "_panicstart" },
-#define	X_PANICEND	8
-	{ "_panicend" },
-#define	X_MSGBUF	9
-	{ "_msgbufp" },
-	{ NULL },
+	{ .n_name = "_dumplo" },
+#define	X_TIME_SECOND	2
+	{ .n_name = "_time_second" },
+#define X_TIME		3
+	{ .n_name = "_time" },
+#define	X_DUMPSIZE	4
+	{ .n_name = "_dumpsize" },
+#define	X_VERSION	5
+	{ .n_name = "_version" },
+#define	X_DUMPMAG	6
+	{ .n_name = "_dumpmag" },
+#define	X_PANICSTR	7
+	{ .n_name = "_panicstr" },
+#define	X_PANICSTART	8
+	{ .n_name = "_panicstart" },
+#define	X_PANICEND	9
+	{ .n_name = "_panicend" },
+#define	X_MSGBUF	10
+	{ .n_name = "_msgbufp" },
+	{ .n_name = NULL },
 };
 int cursyms[] = { X_DUMPDEV, X_DUMPLO, X_VERSION, X_DUMPMAG, -1 };
-int dumpsyms[] = { X_TIME, X_DUMPSIZE, X_VERSION, X_PANICSTR, X_DUMPMAG, -1 };
+int dumpsyms[] = { X_TIME_SECOND, X_TIME, X_DUMPSIZE, X_VERSION, X_PANICSTR, X_DUMPMAG,
+    -1 };
 
 struct nlist dump_nl[] = {	/* Name list for dumped system. */
-	{ "_dumpdev" },		/* Entries MUST be the same as */
-	{ "_dumplo" },		/*	those in current_nl[].  */
-	{ "_time" },
-	{ "_dumpsize" },
-	{ "_version" },
-	{ "_dumpmag" },
-	{ "_panicstr" },
-	{ "_panicstart" },
-	{ "_panicend" },
-	{ "_msgbufp" },
-	{ NULL },
+	{ .n_name = "_dumpdev" },	/* Entries MUST be the same as */
+	{ .n_name = "_dumplo" },	/*	those in current_nl[].  */
+	{ .n_name = "_time_second" },
+	{ .n_name = "_time" },
+	{ .n_name = "_dumpsize" },
+	{ .n_name = "_version" },
+	{ .n_name = "_dumpmag" },
+	{ .n_name = "_panicstr" },
+	{ .n_name = "_panicstart" },
+	{ .n_name = "_panicend" },
+	{ .n_name = "_msgbufp" },
+	{ .n_name = NULL },
 };
 
 /* Types match kernel declarations. */
@@ -263,7 +267,9 @@ kmem_setup(void)
 		    kvm_geterr(kd_kern));
 	
 	for (i = 0; cursyms[i] != -1; i++)
-		if (current_nl[cursyms[i]].n_value == 0) {
+		if (current_nl[cursyms[i]].n_value == 0 &&
+			cursyms[i] != X_TIME_SECOND &&
+		        cursyms[i] != X_TIME) {
 			syslog(LOG_ERR, "%s: %s not in namelist",
 			    kernel, current_nl[cursyms[i]].n_name);
 			exit(1);
@@ -320,7 +326,9 @@ kmem_setup(void)
 		    kvm_geterr(kd_dump));
 
 	for (i = 0; dumpsyms[i] != -1; i++)
-		if (dump_nl[dumpsyms[i]].n_value == 0) {
+		if (dump_nl[dumpsyms[i]].n_value == 0 &&
+			dumpsyms[i] != X_TIME_SECOND &&
+			dumpsyms[i] != X_TIME) {
 			syslog(LOG_ERR, "%s: %s not in namelist",
 			    kernel, dump_nl[dumpsyms[i]].n_name);
 			exit(1);
@@ -400,6 +408,7 @@ check_kmem(void)
 		    msgbuf.msg_bufs) != msgbuf.msg_bufs) {
 			if (verbose)
 				syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
+			free(bufdata);
 			goto nomsguf;
 		}
 		cp = panic_mesg;
@@ -414,6 +423,7 @@ check_kmem(void)
 		if (*cp == '\n')
 			*cp = '\0';
 		panic_mesg[sizeof(panic_mesg) - 1] = '\0';
+		free(bufdata);
 
 		panicstr = 1;	/* anything not zero */
 		return;
@@ -678,15 +688,17 @@ rawname(char *s)
 int
 get_crashtime(void)
 {
-	struct timeval dtime;
 	time_t dumptime;			/* Time the dump was taken. */
+	struct timeval dtime;
 
-	if (KREAD(kd_dump, dump_nl[X_TIME].n_value, &dtime) != 0) {
-		if (verbose)
-		    syslog(LOG_WARNING, "kvm_read: %s", kvm_geterr(kd_dump));
-		return (0);
+	if (KREAD(kd_dump, dump_nl[X_TIME_SECOND].n_value, &dumptime) != 0) {
+		if (KREAD(kd_dump, dump_nl[X_TIME].n_value, &dtime) != 0) {
+			if (verbose)
+				syslog(LOG_WARNING, "kvm_read: %s (and _time_seconf is not defined also)", kvm_geterr(kd_dump));
+			return (0);
+		}
+		dumptime = dtime.tv_sec;
 	}
-	dumptime = dtime.tv_sec;
 	if (dumptime == 0) {
 		if (verbose)
 			syslog(LOG_ERR, "dump time is zero");

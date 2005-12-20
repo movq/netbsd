@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_cc.c,v 1.23 2005/12/11 12:16:54 christos Exp $	*/
+/*	$NetBSD: ite_cc.c,v 1.26 2006/03/26 04:44:08 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1996 Leo Weppelman
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite_cc.c,v 1.23 2005/12/11 12:16:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite_cc.c,v 1.26 2006/03/26 04:44:08 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -235,7 +235,7 @@ void		*auxp;
 	}
 
 	gp = (struct grf_softc *)dp;
-	gp->g_unit = gp->g_device.dv_unit;
+	gp->g_unit = device_unit(&gp->g_device);
 	grfsp[gp->g_unit] = gp;
 
 	if((cfdata_grf != NULL) && (gp->g_unit == congrf.g_unit)) {
@@ -538,7 +538,7 @@ cursor32(struct ite_softc *ip, int flag)
 		cend = ip->font.height-1; 
 		pl   = cci->column_offset[ip->cursorx]
 				+ cci->row_ptr[ip->cursory];
-		__asm__ __volatile__
+		__asm volatile
 			("1: notb  %0@ ; addaw %4,%0\n\t"
 			 "dbra  %1,1b"
 			 : "=a" (pl), "=d" (cend)
@@ -563,7 +563,7 @@ cursor32(struct ite_softc *ip, int flag)
 	pl          = cci->column_offset[ip->cursorx]
 			+ cci->row_ptr[ip->cursory];
 
-	__asm__ __volatile__
+	__asm volatile
 		("1: notb  %0@ ; addaw %4,%0\n\t"
 		 "dbra  %1,1b"
 		 : "=a" (pl), "=d" (cend)
@@ -691,9 +691,9 @@ int				dir, sx, count;
 			int	t;
 			sofs2 -= ip->font.width;
 			dofs2 -= ip->font.width;
-			asm("bfextu %1@{%2:%3},%0" : "=d" (t)
+			__asm("bfextu %1@{%2:%3},%0" : "=d" (t)
 				: "a" (pl), "d" (sofs2), "d" (ip->font.width));
-			asm("bfins %3,%0@{%1:%2}" :
+			__asm("bfins %3,%0@{%1:%2}" :
 				: "a" (pl), "d" (dofs2), "d" (ip->font.width),
 				  "d" (t));
 		    }
@@ -711,9 +711,9 @@ int				dir, sx, count;
 		    for(i = (ip->cols - sx)-1; i >= 0; i--) {
 			int	t;
 
-			asm("bfextu %1@{%2:%3},%0" : "=d" (t)
+			__asm("bfextu %1@{%2:%3},%0" : "=d" (t)
 				: "a" (pl), "d" (sofs2), "d" (ip->font.width));
-			asm("bfins %3,%0@{%1:%2}"
+			__asm("bfins %3,%0@{%1:%2}"
 				: : "a" (pl), "d" (dofs2),"d" (ip->font.width),
 				    "d" (t));
 			sofs2 += ip->font.width;

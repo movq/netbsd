@@ -1,5 +1,5 @@
-/*	$NetBSD: gss-serv-krb5.c,v 1.2 2005/02/13 18:14:04 christos Exp $	*/
-/*	$OpenBSD: gss-serv-krb5.c,v 1.3 2004/07/21 10:36:23 djm Exp $	*/
+/*	$NetBSD: gss-serv-krb5.c,v 1.4 2006/09/28 21:22:14 christos Exp $	*/
+/* $OpenBSD: gss-serv-krb5.c,v 1.7 2006/08/03 03:34:42 deraadt Exp $ */
 
 /*
  * Copyright (c) 2001-2003 Simon Wilkinson. All rights reserved.
@@ -26,20 +26,37 @@
  */
 
 #include "includes.h"
+__RCSID("$NetBSD: gss-serv-krb5.c,v 1.4 2006/09/28 21:22:14 christos Exp $");
 
 #ifdef GSSAPI
 #ifdef KRB5
 
-#include "auth.h"
-#include "xmalloc.h"
-#include "log.h"
-#include "servconf.h"
+#include <sys/types.h>
 
+#include <stdarg.h>
+#include <string.h>
+
+#include "xmalloc.h"
+#include "key.h"
+#include "hostfile.h"
+#include "auth.h"
+#include "log.h"
+
+#include "buffer.h"
+#include "servconf.h"
 #include "ssh-gss.h"
 
 extern ServerOptions options;
 
-#include <krb5.h>
+#ifdef HEIMDAL
+# include <krb5.h>
+#else
+# ifdef HAVE_GSSAPI_KRB5_H
+#  include <gssapi_krb5.h>
+# elif HAVE_GSSAPI_GSSAPI_KRB5_H
+#  include <gssapi/gssapi_krb5.h>
+# endif
+#endif
 
 static krb5_context krb_context = NULL;
 
@@ -58,7 +75,6 @@ ssh_gssapi_krb5_init(void)
 		logit("Cannot initialize krb5 context");
 		return 0;
 	}
-	krb5_init_ets(krb_context);
 
 	return 1;
 }
@@ -105,6 +121,7 @@ ssh_gssapi_krb5_storecreds(ssh_gssapi_client *client)
 	krb5_error_code problem;
 	krb5_principal princ;
 	OM_uint32 maj_status, min_status;
+	int len;
 
 	if (client->creds == NULL) {
 		debug("No credentials stored");
@@ -114,11 +131,19 @@ ssh_gssapi_krb5_storecreds(ssh_gssapi_client *client)
 	if (ssh_gssapi_krb5_init() == 0)
 		return;
 
+#ifdef HEIMDAL
 	if ((problem = krb5_cc_gen_new(krb_context, &krb5_fcc_ops, &ccache))) {
 		logit("krb5_cc_gen_new(): %.100s",
 		    krb5_get_err_text(krb_context, problem));
 		return;
 	}
+#else
+	if ((problem = ssh_krb5_cc_gen(krb_context, &ccache))) {
+		logit("ssh_krb5_cc_gen(): %.100s",
+		    krb5_get_err_text(krb_context, problem));
+		return;
+	}
+#endif	/* #ifdef HEIMDAL */
 
 	if ((problem = krb5_parse_name(krb_context,
 	    client->exportedname.value, &princ))) {
@@ -147,7 +172,9 @@ ssh_gssapi_krb5_storecreds(ssh_gssapi_client *client)
 
 	client->store.filename = xstrdup(krb5_cc_get_name(krb_context, ccache));
 	client->store.envvar = "KRB5CCNAME";
-	client->store.envval = xstrdup(client->store.filename);
+	len = strlen(client->store.filename) + 6;
+	client->store.envval = xmalloc(len);
+	snprintf(client->store.envval, len, "FILE:%s", client->store.filename);
 
 #ifdef USE_PAM
 	if (options.use_pam)

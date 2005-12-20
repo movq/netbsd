@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.c,v 1.107 2005/09/06 03:22:58 rpaulo Exp $ */
+/*	$NetBSD: sysctl.c,v 1.120 2006/11/02 14:54:21 christos Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)sysctl.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: sysctl.c,v 1.107 2005/09/06 03:22:58 rpaulo Exp $");
+__RCSID("$NetBSD: sysctl.c,v 1.120 2006/11/02 14:54:21 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -166,11 +166,13 @@ static void kern_boottime(HANDLER_PROTO);
 static void kern_consdev(HANDLER_PROTO);
 static void kern_cp_time(HANDLER_PROTO);
 static void kern_cp_id(HANDLER_PROTO);
+static void kern_drivers(HANDLER_PROTO);
 static void vm_loadavg(HANDLER_PROTO);
 static void proc_limit(HANDLER_PROTO);
 #ifdef CPU_DISKINFO
 static void machdep_diskinfo(HANDLER_PROTO);
 #endif /* CPU_DISKINFO */
+static void mode_bits(HANDLER_PROTO);
 
 static const struct handlespec {
 	const char *ps_re;
@@ -178,22 +180,25 @@ static const struct handlespec {
 	void (*ps_w)(HANDLER_PROTO);
 	const void *ps_d;
 } handlers[] = {
-	{ "/kern/clockrate",			kern_clockrate },
+	{ "/kern/clockrate",			kern_clockrate, NULL, NULL },
 	{ "/kern/vnode",			printother, NULL, "pstat" },
 	{ "/kern/proc(2|_args)?",		printother, NULL, "ps" },
 	{ "/kern/file2?",			printother, NULL, "pstat" },
 	{ "/kern/ntptime",			printother, NULL,
 						"ntpdc -c kerninfo" },
 	{ "/kern/msgbuf",			printother, NULL, "dmesg" },
-	{ "/kern/boottime",			kern_boottime },
-	{ "/kern/consdev",			kern_consdev },
-	{ "/kern/cp_time(/[0-9]+)?",		kern_cp_time },
+	{ "/kern/boottime",			kern_boottime, NULL, NULL },
+	{ "/kern/consdev",			kern_consdev, NULL, NULL },
+	{ "/kern/cp_time(/[0-9]+)?",		kern_cp_time, NULL, NULL },
 	{ "/kern/sysvipc_info",			printother, NULL, "ipcs" },
-	{ "/kern/cp_id(/[0-9]+)?",		kern_cp_id },
+	{ "/kern/cp_id(/[0-9]+)?",		kern_cp_id, NULL, NULL },
+
+	{ "/kern/coredump/setid/mode",		mode_bits, mode_bits, NULL },
+	{ "/kern/drivers",			kern_drivers, NULL, NULL },
 
 	{ "/vm/vmmeter",			printother, NULL,
 						"vmstat' or 'systat" },
-	{ "/vm/loadavg",			vm_loadavg },
+	{ "/vm/loadavg",			vm_loadavg, NULL, NULL },
 	{ "/vm/uvmexp2?",			printother, NULL,
 						"vmstat' or 'systat" },
 
@@ -214,13 +219,13 @@ static const struct handlespec {
 	{ "/hw/diskstats",			printother, NULL, "iostat" },
 
 #ifdef CPU_CONSDEV
-	{ "/machdep/consdev",			kern_consdev },
+	{ "/machdep/consdev",			kern_consdev, NULL, NULL },
 #endif /* CPU_CONSDEV */
 #ifdef CPU_DISKINFO
-	{ "/machdep/diskinfo",			machdep_diskinfo },
+	{ "/machdep/diskinfo",			machdep_diskinfo, NULL, NULL },
 #endif /* CPU_CONSDEV */
 
-	{ "/proc/[^/]+/rlimit/[^/]+/[^/]+",	proc_limit, proc_limit },
+	{ "/proc/[^/]+/rlimit/[^/]+/[^/]+",	proc_limit, proc_limit, NULL },
 
 	/*
 	 * these will only be called when the given node has no children
@@ -230,18 +235,14 @@ static const struct handlespec {
 	{ "/ddb",				printother, NULL, NULL },
 	{ "/vendor",				printother, NULL, NULL },
 
-	{ NULL },
+	{ NULL,					NULL, NULL, NULL },
 };
 
 struct sysctlnode my_root = {
-#if defined(lint)
-	0
-#else /* defined(lint) */
 	.sysctl_flags = SYSCTL_VERSION|CTLFLAG_ROOT|CTLTYPE_NODE,
 	sysc_init_field(_sysctl_size, sizeof(struct sysctlnode)),
 	.sysctl_num = 0,
 	.sysctl_name = "(prog_root)",
-#endif /* defined(lint) */
 };
 
 int	Aflag, aflag, dflag, Mflag, nflag, qflag, rflag, wflag, xflag;
@@ -394,13 +395,16 @@ findhandler(const char *s, int w)
 		j = regexec(&re, s, 1, match, 0);
 		if (j == 0) {
 			if (match[0].rm_so == 0 && match[0].rm_eo == l &&
-			    (w ? p[i].ps_w : p[i].ps_p) != NULL)
+			    (w ? p[i].ps_w : p[i].ps_p) != NULL) {
+				regfree(&re);
 				return (&p[i]);
+			}
 		}
 		else if (j != REG_NOMATCH) {
 			regerror(j, &re, eb, sizeof(eb));
 			errx(1, "regexec: %s: %s", p[i].ps_re, eb);
 		}
+		regfree(&re);
 	}
 
 	return (NULL);
@@ -464,8 +468,6 @@ sf(u_int f)
 		(_f) &= ~(__CONCAT(CTLFLAG_,_x)); \
 	}
 	print_flag(f, s, c, READONLY,  READWRITE);
-	print_flag(f, s, c, READONLY1, READWRITE);
-	print_flag(f, s, c, READONLY2, READWRITE);
 	print_flag(f, s, c, READWRITE, READWRITE);
 	print_flag(f, s, c, ANYWRITE,  ANYWRITE);
 	print_flag(f, s, c, PRIVATE,   PRIVATE);
@@ -987,7 +989,7 @@ parse_create(char *l)
 			data = value;
 			break;
 		}
-		else {
+		else if (value) {
 			if ((c = strchr(value, ',')) != NULL)
 				*c++ = '\0';
 		}
@@ -1012,6 +1014,10 @@ parse_create(char *l)
 				    method == CTL_CREATE ? "addr" : "symbol");
 				EXIT(1);
 			}
+			if (value == NULL) {
+				sysctlperror("%s: missing value\n", nname);
+				EXIT(1);
+			}
 			errno = 0;
 			addr = (void*)strtoul(value, &t, 0);
 			if (t == value || *t != '\0' || errno != 0) {
@@ -1034,6 +1040,10 @@ parse_create(char *l)
 			method = CTL_CREATESYM;
 		}
 		else if (strcmp(key, "type") == 0) {
+			if (value == NULL) {
+				sysctlperror("%s: missing value\n", nname);
+				EXIT(1);
+			}
 			if (strcmp(value, "node") == 0)
 				type = CTLTYPE_NODE;
 			else if (strcmp(value, "int") == 0) {
@@ -1056,6 +1066,10 @@ parse_create(char *l)
 			}
 		}
 		else if (strcmp(key, "size") == 0) {
+			if (value == NULL) {
+				sysctlperror("%s: missing value\n", nname);
+				EXIT(1);
+			}
 			errno = 0;
 			/*
 			 * yes, i know size_t is not an unsigned long,
@@ -1071,8 +1085,12 @@ parse_create(char *l)
 			}
 		}
 		else if (strcmp(key, "n") == 0) {
+			if (value == NULL) {
+				sysctlperror("%s: missing value\n", nname);
+				EXIT(1);
+			}
 			errno = 0;
-			q = strtoq(value, &t, 0);
+			q = strtoll(value, &t, 0);
 			if (t == value || *t != '\0' || errno != 0 ||
 			    q < INT_MIN || q > UINT_MAX) {
 				sysctlperror(
@@ -1083,6 +1101,10 @@ parse_create(char *l)
 			node.sysctl_num = (int)q;
 		}
 		else if (strcmp(key, "flags") == 0) {
+			if (value == NULL) {
+				sysctlperror("%s: missing value\n", nname);
+				EXIT(1);
+			}
 			t = value;
 			while (*t != '\0') {
 				switch (*t) {
@@ -1107,12 +1129,6 @@ parse_create(char *l)
 
 				case 'r':
 					rw = CTLFLAG_READONLY;
-					break;
-				case '1':
-					rw = CTLFLAG_READONLY1;
-					break;
-				case '2':
-					rw = CTLFLAG_READONLY2;
 					break;
 				case 'w':
 					rw = CTLFLAG_READWRITE;
@@ -1155,7 +1171,7 @@ parse_create(char *l)
 		switch (type) {
 		case CTLTYPE_INT:
 			errno = 0;
-			q = strtoq(data, &t, 0);
+			q = strtoll(data, &t, 0);
 			if (t == data || *t != '\0' || errno != 0 ||
 				q < INT_MIN || q > UINT_MAX) {
 				sysctlperror(
@@ -1641,7 +1657,7 @@ sysctlperror(const char *fmt, ...)
 static void
 write_number(int *name, u_int namelen, struct sysctlnode *node, char *value)
 {
-	int ii, io;
+	u_int ii, io;
 	u_quad_t qi, qo;
 	size_t si, so;
 	int rc;
@@ -1655,8 +1671,8 @@ write_number(int *name, u_int namelen, struct sysctlnode *node, char *value)
 	i = o = NULL;
 	errno = 0;
 	qi = strtouq(value, &t, 0);
-	if (errno != 0) {
-		sysctlperror("%s: value too large\n", value);
+	if (qi == UQUAD_MAX && errno == ERANGE) {
+		sysctlperror("%s: %s\n", value, strerror(errno));
 		EXIT(1);
 	}
 	if (t == value || *t != '\0') {
@@ -1665,11 +1681,11 @@ write_number(int *name, u_int namelen, struct sysctlnode *node, char *value)
 	}
 
 	switch (SYSCTL_TYPE(node->sysctl_flags)) {
-	    case CTLTYPE_INT:
-		ii = (int)qi;
-		qo = ii;
-		if (qo != qi) {
-			sysctlperror("%s: value too large\n", value);
+	case CTLTYPE_INT:
+		ii = (u_int)qi;
+		io = (u_int)(qi >> 32);
+		if (io != (u_int)-1 && io != 0) {
+			sysctlperror("%s: %s\n", value, strerror(ERANGE));
 			EXIT(1);
 		}
 		o = &io;
@@ -2200,6 +2216,48 @@ kern_cp_time(HANDLER_ARGS)
 
 /*ARGSUSED*/
 static void
+kern_drivers(HANDLER_ARGS)
+{
+	struct kinfo_drivers *kd;
+	size_t sz, i;
+	int rc;
+	const char *comma;
+
+	rc = sysctl(name, namelen, NULL, &sz, NULL, 0);
+	if (rc == -1) {
+		sysctlerror(1);
+		return;
+	}
+
+	if (sz % sizeof(*kd))
+		err(1, "bad size %zu for kern.drivers", sz);
+
+	kd = malloc(sz);
+	if (kd == NULL) {
+		sysctlerror(1);
+		return;
+	}
+
+	rc = sysctl(name, namelen, kd, &sz, NULL, 0);
+	if (rc == -1) {
+		sysctlerror(1);
+		return;
+	}
+
+	comma = "";
+	if (!nflag)
+		printf("%s%s", sname, eq);
+	for (i = 0, sz /= sizeof(*kd); i < sz; i++) {
+		(void)printf("%s[%d %d %s]", comma, kd[i].d_cmajor,
+		    kd[i].d_bmajor, kd[i].d_name);
+		comma = ", ";
+	}
+	(void)printf("\n");
+	free(kd);
+}
+
+/*ARGSUSED*/
+static void
 kern_cp_id(HANDLER_ARGS)
 {
 	u_int64_t *cp_id;
@@ -2429,3 +2487,91 @@ machdep_diskinfo(HANDLER_ARGS)
 	printf("\n");
 }
 #endif /* CPU_DISKINFO */
+
+/*ARGSUSED*/
+static void
+mode_bits(HANDLER_ARGS)
+{
+	char buf[11], outbuf[100];
+	int o, m, *newp, rc;
+	size_t osz, nsz;
+	mode_t om, mm;
+
+	if (fn)
+		trim_whitespace(value, 3);
+
+	newp = NULL;
+	osz = sizeof(o);
+	if (value != NULL) {
+		void *foo;
+		int tt;
+		size_t ttsz = sizeof(tt);
+		mode_t old_umask;
+
+		nsz = sizeof(m);
+		newp = &m;
+		errno = 0;
+		rc = sysctl(name, namelen, &tt, &ttsz, NULL, 0);
+		if (rc == -1) {
+			sysctlperror("%s: failed query\n", sname);
+			return;
+		}
+
+		old_umask = umask(0);
+		foo = setmode(value);
+		umask(old_umask);
+		if (foo == NULL) {
+			sysctlperror("%s: '%s' is an invalid mode\n", sname,
+				     value);
+			EXIT(1);
+		}
+		old_umask = umask(0);
+		m = getmode(foo, (mode_t)tt);
+		umask(old_umask);
+		if (errno) {
+			sysctlperror("%s: '%s' is an invalid mode\n", sname,
+				     value);
+			EXIT(1);
+		}
+	}
+	else {
+		nsz = 0;
+		newp = NULL;
+	}
+
+	rc = sysctl(name, namelen, &o, &osz, newp, nsz);
+	if (rc == -1) {
+		sysctlerror(newp == NULL);
+		return;
+	}
+
+	if (newp && qflag)
+		return;
+
+	om = (mode_t)o;
+	mm = (mode_t)m;
+
+	if (rflag || xflag)
+		display_number(pnode, sname, &o, sizeof(o),
+			       newp ? DISPLAY_OLD : DISPLAY_VALUE);
+	else {
+		memset(buf, 0, sizeof(buf));
+		strmode(om, buf);
+		buf[10] = '\0';
+		rc = snprintf(outbuf, sizeof(outbuf), "%04o (%s)", om, buf + 1);
+		display_string(pnode, sname, outbuf, rc, newp ? DISPLAY_OLD : DISPLAY_VALUE);
+	}
+
+	if (newp) {
+		if (rflag || xflag)
+			display_number(pnode, sname, &m, sizeof(m),
+				       DISPLAY_NEW);
+		else {
+			memset(buf, 0, sizeof(buf));
+			strmode(mm, buf);
+			buf[10] = '\0';
+			rc = snprintf(outbuf, sizeof(outbuf), "%04o (%s)", mm, buf + 1);
+			display_string(pnode, sname, outbuf, rc, DISPLAY_NEW);
+		}
+	}
+}

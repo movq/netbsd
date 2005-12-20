@@ -1,4 +1,4 @@
-/*	$NetBSD: util.h,v 1.38 2005/09/14 15:59:10 elad Exp $	*/
+/*	$NetBSD: util.h,v 1.44 2006/11/20 20:33:33 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995
@@ -40,6 +40,12 @@
 #include <termios.h>
 #include <utmp.h>
 #include <utmpx.h>
+#include <machine/ansi.h>
+
+#ifdef  _BSD_TIME_T_
+typedef _BSD_TIME_T_    time_t;
+#undef  _BSD_TIME_T_
+#endif
 
 #define	PIDLOCK_NONBLOCK	1
 #define	PIDLOCK_USEHOSTNAME	2
@@ -65,6 +71,8 @@ struct utmp;
 struct winsize;
 struct sockaddr;
 
+typedef struct pw_policy *pw_policy_t; 
+
 pid_t		forkpty(int *, char *, struct termios *, struct winsize *);
 const char     *getbootfile(void);
 off_t		getlabeloffset(void);
@@ -83,6 +91,7 @@ void		logwtmpx(const char *, const char *, const char *, int, int);
 int		opendisk(const char *, int, char *, size_t, int);
 int		openpty(int *, int *, char *, struct termios *,
 		    struct winsize *);
+time_t		parsedate(const char *, const time_t *, const int *);
 int		pidfile(const char *);
 int		pidlock(const char *, int, pid_t *, const char *);
 int		pw_abort(void);
@@ -98,7 +107,9 @@ const char     *pw_getprefix(void);
 void		pw_init(void);
 int		pw_lock(int);
 int		pw_mkdb(const char *, int);
-int		pw_policy_test(char *, void *, int);
+pw_policy_t	pw_policy_load(void *, int);
+int		pw_policy_test(pw_policy_t, char *);
+void		pw_policy_free(pw_policy_t);
 void		pw_prompt(void);
 int		pw_setprefix(const char *);
 int		secure_path(const char *);
@@ -112,6 +123,23 @@ int		ttyunlock(const char *);
 
 uint16_t	disklabel_dkcksum(struct disklabel *);
 int		disklabel_scan(struct disklabel *, char *, size_t);
+
+/* Error checked functions */
+void		(*esetfunc(void (*)(int, const char *, ...)))
+    (int, const char *, ...);
+size_t 		estrlcpy(char *, const char *, size_t);
+size_t 		estrlcat(char *, const char *, size_t);
+char 		*estrdup(const char *);
+void 		*ecalloc(size_t, size_t);
+void 		*emalloc(size_t);
+void 		*erealloc(void *, size_t);
+struct __sFILE	*efopen(const char *, const char *);
+int	 	easprintf(char ** __restrict, const char * __restrict, ...)
+    __attribute__((__format__(__printf__, 2, 3)));
+int		evasprintf(char ** __restrict, const char * __restrict,
+    _BSD_VA_LIST_)
+    __attribute__((__format__(__printf__, 2, 0)));
+
 __END_DECLS
 
 #endif /* !_UTIL_H_ */

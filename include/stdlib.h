@@ -1,4 +1,4 @@
-/*	$NetBSD: stdlib.h,v 1.73 2005/09/26 12:51:34 kleink Exp $	*/
+/*	$NetBSD: stdlib.h,v 1.76 2006/03/15 17:35:17 kleink Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -214,6 +214,8 @@ long long int	strtoll(const char * __restrict, char ** __restrict, int);
 /* LONGLONG */
 unsigned long long int
 		strtoull(const char * __restrict, char ** __restrict, int);
+float		strtof(const char * __restrict, char ** __restrict);
+long double	strtold(const char * __restrict, char ** __restrict);
 #endif
 
 /*
@@ -239,7 +241,7 @@ void	*alloca(int);     /* built-in for gcc */
 void	*alloca(size_t); 
 #endif /* __GNUC__ */ 
 
-u_int32_t arc4random(void);
+uint32_t arc4random(void);
 void	 arc4random_stir(void);
 void	 arc4random_addrandom(u_char *, int);
 char	*getbsize(int *, long *);
@@ -273,7 +275,7 @@ int	 sradixsort(const unsigned char **, int, const unsigned char *,
 
 void	 setproctitle(const char *, ...)
 	    __attribute__((__format__(__printf__, 1, 2)));
-const char *getprogname(void) __attribute__((__const__));
+const char *getprogname(void) __attribute__((const));
 void	setprogname(const char *);
 
 quad_t	 qabs(quad_t);

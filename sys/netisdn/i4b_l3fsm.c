@@ -27,7 +27,7 @@
  *	i4b_l3fsm.c - layer 3 FSM
  *	-------------------------
  *
- *	$Id: i4b_l3fsm.c,v 1.12 2005/12/11 12:25:06 christos Exp $
+ *	$Id: i4b_l3fsm.c,v 1.14 2006/11/16 01:33:49 christos Exp $
  *
  * $FreeBSD$
  *
@@ -36,7 +36,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_l3fsm.c,v 1.12 2005/12/11 12:25:06 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_l3fsm.c,v 1.14 2006/11/16 01:33:49 christos Exp $");
 
 #ifdef __FreeBSD__
 #include "i4bq931.h"
@@ -930,6 +930,7 @@ static void F_SIGN(call_desc_t *cd)
 {
 	NDBGL3(L3_F_ERR, "FSM function F_SIGN executing");
 
+	(void)cd;
 /* XXX */ /* freecd_by_cd(cd); ?????????? XXX */
 }
 

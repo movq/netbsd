@@ -1,4 +1,4 @@
-/*	$NetBSD: miivar.h,v 1.44 2005/12/11 12:22:42 christos Exp $	*/
+/*	$NetBSD: miivar.h,v 1.47 2006/11/16 21:24:07 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -140,6 +140,10 @@ struct mii_softc {
 };
 typedef struct mii_softc mii_softc_t;
 
+/* Default mii_anegticks values. */
+#define	MII_ANEGTICKS		5
+#define	MII_ANEGTICKS_GIGE	10
+
 /* mii_flags */
 #define	MIIF_INITDONE	0x0001		/* has been initialized (mii_data) */
 #define	MIIF_NOISOLATE	0x0002		/* do not isolate the PHY */
@@ -209,11 +213,11 @@ struct mii_media {
 #ifdef _KERNEL
 
 #define	PHY_READ(p, r) \
-	(*(p)->mii_pdata->mii_readreg)((p)->mii_dev.dv_parent, \
+	(*(p)->mii_pdata->mii_readreg)(device_parent(&(p)->mii_dev), \
 	    (p)->mii_phy, (r))
 
 #define	PHY_WRITE(p, r, v) \
-	(*(p)->mii_pdata->mii_writereg)((p)->mii_dev.dv_parent, \
+	(*(p)->mii_pdata->mii_writereg)(device_parent(&(p)->mii_dev), \
 	    (p)->mii_phy, (r), (v))
 
 #define	PHY_SERVICE(p, d, o) \
@@ -252,7 +256,6 @@ int	mii_phy_tick(struct mii_softc *);
 
 void	mii_phy_status(struct mii_softc *);
 void	mii_phy_update(struct mii_softc *, int);
-int	mii_phy_statusmsg(struct mii_softc *);
 
 u_int	mii_phy_flowstatus(struct mii_softc *);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: sbp.c,v 1.3 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: sbp.c,v 1.13 2006/11/16 01:32:59 christos Exp $	*/
 /*-
  * Copyright (c) 2003 Hidetoshi Shimokawa
  * Copyright (c) 1998-2002 Katsushi Kobayashi and Hidetoshi Shimokawa
@@ -964,12 +964,12 @@ SBP_DEBUG(0)
 	if (!alive)
 		printf("not alive\n");
 END_DEBUG
+	microtime(&sbp->last_busreset);
+
 	if (!alive)
 		return;
 
 	SBP_BUS_FREEZE(sbp);
-
-	microtime(&sbp->last_busreset);
 }
 
 static void
@@ -1028,7 +1028,7 @@ END_DEBUG
 }
 #endif
 
-static __inline void
+static inline void
 sbp_xfer_free(struct fw_xfer *xfer)
 {
 	struct sbp_dev *sdev;
@@ -1185,7 +1185,7 @@ END_DEBUG
 	sdev->freeze = 1;
 }
 
-static __inline void
+static inline void
 sbp_scan_dev(struct sbp_dev *sdev)
 {
 	sdev->status = SBP_DEV_PROBE;
@@ -1200,7 +1200,8 @@ fw_kthread_create0(void *arg)
 
 	/* create thread */
 	if (kthread_create1(sbp_scsipi_scan_target,
-	    &sbp->target, &sbp->proc, "sbp%d_attach", sbp->fd.dev->dv_unit)) {
+	    &sbp->target, &sbp->proc, "sbp%d_attach",
+	    device_unit(sbp->fd.dev))) {
 
 		device_printf(sbp->fd.dev, "unable to create thread");
 		panic("fw_kthread_create");
@@ -1247,7 +1248,7 @@ sbp_scsipi_scan_target(void *arg)
 	kthread_exit(0);
 }
 
-static __inline void
+static inline void
 sbp_scan_dev(struct sbp_dev *sdev)
 {
 	sdev->status = SBP_DEV_PROBE;
@@ -1704,7 +1705,7 @@ END_DEBUG
 		if(sbp_cmd_status->ill_len)
 			sense->flags |= SSD_ILI;
 
-		bcopy(&sbp_cmd_status->info, &sense->infomation[0], 4);
+		bcopy(&sbp_cmd_status->info, &sense->information[0], 4);
 
 		if (sbp_status->len <= 1)
 			/* XXX not scsi status. shouldn't be happened */ 
@@ -2129,10 +2130,8 @@ END_DEBUG
 				/*maxsize*/0x100000, /*nsegments*/SBP_IND_MAX,
 				/*maxsegsz*/SBP_SEG_MAX,
 				/*flags*/BUS_DMA_ALLOCNOW,
-#if defined(__FreeBSD__) && __FreeBSD_version >= 501102
 				/*lockfunc*/busdma_lock_mutex,
 				/*lockarg*/&Giant,
-#endif
 				&sbp->dmat);
 	if (error != 0) {
 		printf("sbp_attach: Could not allocate DMA tag "
@@ -2331,10 +2330,18 @@ END_DEBUG
 static void
 sbp_scsipi_detach_sdev(struct sbp_dev *sdev)
 {
-	struct sbp_target *target = sdev->target;
-	struct sbp_softc *sbp = target->sbp;
+	struct sbp_target *target;
+	struct sbp_softc *sbp;
+
 	if (sdev == NULL)
 		return;
+
+	target = sdev->target;
+	if (target == NULL)
+		return;
+
+	sbp = target->sbp;
+
 	if (sdev->status == SBP_DEV_DEAD)
 		return;
 	if (sdev->status == SBP_DEV_RESET)
@@ -2505,7 +2512,7 @@ END_DEBUG
 SBP_DEBUG(1)
 			printf("%s:%d:%d:func_code 0x%04x: "
 				"Invalid target (target needed)\n",
-				device_get_nameunit(sbp->fd.dev),
+				sbp ? device_get_nameunit(sbp->fd.dev) : "???",
 				SCSI_XFER_TARGET(sxfer), SCSI_XFER_LUN(sxfer),
 				SCSI_XFER_FUNCCODE(sxfer));
 END_DEBUG

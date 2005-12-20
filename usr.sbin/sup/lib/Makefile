@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.10 2004/05/23 02:24:52 lukem Exp $
+#	$NetBSD: Makefile,v 1.12 2006/08/26 18:15:39 christos Exp $
 
 MKPRIVATELIB=	yes
 
@@ -6,7 +6,7 @@ LIB=	sup
 
 SRCS=	scm.c scmio.c stree.c log.c supmsg.c netcrypt.c
 SRCS+=	atoo.c errmsg.c expand.c ffilecopy.c filecopy.c \
-	nxtarg.c path.c quit.c run.c salloc.c skipto.c
+	nxtarg.c path.c quit.c run.c skipto.c
 
 .PATH: ${.CURDIR}/../source
 

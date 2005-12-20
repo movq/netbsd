@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.194 2005/12/11 12:16:26 christos Exp $	*/
+/*	$NetBSD: machdep.c,v 1.199 2006/10/23 15:15:52 yamt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -85,7 +85,7 @@
 #include "opt_panicbutton.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.194 2005/12/11 12:16:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.199 2006/10/23 15:15:52 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -430,7 +430,7 @@ identifycpu()
 	fpu = NULL;
 #ifdef M68060
 	if (machineid & AMIGA_68060) {
-		asm(".word 0x4e7a,0x0808; movl %%d0,%0" : "=d"(pcr) : : "d0");
+		__asm(".word 0x4e7a,0x0808; movl %%d0,%0" : "=d"(pcr) : : "d0");
 		sprintf(cpubuf, "68%s060 rev.%d",
 		    pcr & 0x10000 ? "LC/EC" : "", (pcr>>8)&0xff);
 		cpu_type = cpubuf;
@@ -620,8 +620,11 @@ cpu_dumpconf()
 		m->ram_segs[1].size  = memlist->m_seg[i].ms_size;
 		break;
 	}
-	if ((bdev = bdevsw_lookup(dumpdev)) != NULL &&
-	    bdev->d_psize != NULL) {
+	if ((bdev = bdevsw_lookup(dumpdev)) == NULL) {
+		dumpdev = NODEV;
+		return;
+	}
+	if (bdev->d_psize != NULL) {
 		nblks = (*bdev->d_psize)(dumpdev);
 		if (dumpsize > btoc(dbtob(nblks - dumplo)))
 			dumpsize = btoc(dbtob(nblks - dumplo));
@@ -854,7 +857,7 @@ initcpu()
 			/* ... and mark FPU as absent for identifyfpu() */
 			machineid &= ~(AMIGA_FPU40|AMIGA_68882|AMIGA_68881);
 		}
-		asm volatile ("movl %0,%%d0; .word 0x4e7b,0x0808" : :
+		__asm volatile ("movl %0,%%d0; .word 0x4e7b,0x0808" : :
 			"d"(m68060_pcr_init):"d0" );
 
 		/* bus/addrerr vectors */
@@ -1016,6 +1019,13 @@ struct si_callback {
 	void (*function)(void *rock1, void *rock2);
 	void *rock1, *rock2;
 };
+
+struct softintr {
+	int pending;
+	void (*function)(void *);
+	void *arg;
+};
+
 static struct si_callback *si_callbacks;
 static struct si_callback *si_free;
 #ifdef DIAGNOSTIC
@@ -1036,7 +1046,10 @@ static void
 _softintr_callit(rock1, rock2)
 	void *rock1, *rock2;
 {
-	(*(void (*)(void *))rock1)(rock2);
+	struct softintr *si = rock1;
+
+	si->pending = 0;
+	si->function(si->arg);
 }
 
 void *
@@ -1045,17 +1058,15 @@ softintr_establish(ipl, func, arg)
 	void func(void *);
 	void *arg;
 {
-	struct si_callback *si;
+	struct softintr *si;
 
-	(void)ipl;
-
-	si = (struct si_callback *)malloc(sizeof(*si), M_TEMP, M_NOWAIT);
+	si = malloc(sizeof *si, M_TEMP, M_NOWAIT);
 	if (si == NULL)
-		return (si);
+		return si;
 
-	si->function = (void *)0;
-	si->rock1 = (void *)func;
-	si->rock2 = arg;
+	si->pending = 0;
+	si->function = func;
+	si->arg = arg;
 
 	alloc_sicallback();
 	return ((void *)si);
@@ -1097,10 +1108,12 @@ void
 softintr_schedule(vsi)
 	void *vsi;
 {
-	struct si_callback *si;
-	si = vsi;
+	struct softintr *si = vsi;
 
-	add_sicallback(_softintr_callit, si->rock1, si->rock2);
+	if (si->pending == 0) {
+		si->pending = 1;
+		add_sicallback(_softintr_callit, si, NULL);
+	}
 }
 
 void

@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.53 2005/12/11 12:17:41 christos Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.60 2006/11/28 17:27:09 elad Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2001 The NetBSD Foundation, Inc.
@@ -59,9 +59,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.53 2005/12/11 12:17:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.60 2006/11/28 17:27:09 elad Exp $");
 
 #include "opt_vm86.h"
+#include "opt_ptrace.h"
 #include "npx.h"
 
 #include <sys/param.h>
@@ -83,19 +84,21 @@ __KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.53 2005/12/11 12:17:41 christo
 #include <machine/vm86.h>
 #endif
 
-static __inline struct trapframe *
+#ifdef PTRACE
+static inline struct trapframe *
 process_frame(struct lwp *l)
 {
 
 	return (l->l_md.md_regs);
 }
 
-static __inline union savefpu *
+static inline union savefpu *
 process_fpframe(struct lwp *l)
 {
 
 	return (&l->l_addr->u_pcb.pcb_savefpu);
 }
+#endif /* PTRACE */
 
 static int
 xmm_to_s87_tag(const uint8_t *fpac, int regno, uint8_t tw)
@@ -211,6 +214,7 @@ process_s87_to_xmm(const struct save87 *s87, struct savexmm *sxmm)
 #endif
 }
 
+#ifdef PTRACE
 int
 process_read_regs(struct lwp *l, struct reg *regs)
 {
@@ -456,12 +460,13 @@ process_machdep_write_xmmregs(struct lwp *l, struct xmmregs *regs)
 }
 
 int
-ptrace_machdep_dorequest(l, lt, req, addr, data)
-	struct lwp *l;
-	struct lwp *lt;
-	int req;
-	caddr_t addr;
-	int data;
+ptrace_machdep_dorequest(
+    struct lwp *l,
+    struct lwp *lt,
+    int req,
+    caddr_t addr,
+    int data
+)
 {
 	struct uio uio;
 	struct iovec iov;
@@ -476,16 +481,24 @@ ptrace_machdep_dorequest(l, lt, req, addr, data)
 		if (!process_machdep_validxmmregs(lt->l_proc))
 			return (EINVAL);
 		else {
+			struct vmspace *vm;
+			int error;
+
+			error = proc_vmspace_getref(l->l_proc, &vm);
+			if (error) {
+				return error;
+			}
 			iov.iov_base = addr;
 			iov.iov_len = sizeof(struct xmmregs);
 			uio.uio_iov = &iov;
 			uio.uio_iovcnt = 1;
 			uio.uio_offset = 0;
 			uio.uio_resid = sizeof(struct xmmregs);
-			uio.uio_segflg = UIO_USERSPACE;
 			uio.uio_rw = write ? UIO_WRITE : UIO_READ;
-			uio.uio_lwp = l;
-			return (process_machdep_doxmmregs(l, lt, &uio));
+			uio.uio_vmspace = vm;
+			error = process_machdep_doxmmregs(l, lt, &uio);
+			uvmspace_free(vm);
+			return error;
 		}
 	}
 
@@ -510,9 +523,6 @@ process_machdep_doxmmregs(curl, l, uio)
 	struct xmmregs r;
 	char *kv;
 	int kl;
-
-	if ((error = process_checkioperm(curl, l->l_proc)) != 0)
-		return (error);
 
 	kl = sizeof(r);
 	kv = (char *) &r;
@@ -554,3 +564,4 @@ process_machdep_validxmmregs(p)
 	return (i386_use_fxsave);
 }
 #endif /* __HAVE_PTRACE_MACHDEP */
+#endif /* PTRACE */

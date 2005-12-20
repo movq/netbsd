@@ -1,4 +1,4 @@
-/*	$NetBSD: opl_ym.c,v 1.9 2005/12/11 12:22:03 christos Exp $	*/
+/*	$NetBSD: opl_ym.c,v 1.13 2006/11/16 01:33:00 christos Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opl_ym.c,v 1.9 2005/12/11 12:22:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opl_ym.c,v 1.13 2006/11/16 01:33:00 christos Exp $");
 
 #include "mpu_ym.h"
 
@@ -74,28 +74,18 @@ CFATTACH_DECL(opl_ym, sizeof(struct opl_softc),
     opl_ym_match, opl_ym_attach, NULL, NULL);
 
 int
-opl_ym_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+opl_ym_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct audio_attach_args *aa = (struct audio_attach_args *)aux;
 	struct ym_softc *ssc = (struct ym_softc *)parent;
-	struct opl_softc sc;
 
 	if (aa->type != AUDIODEV_TYPE_OPL || ssc->sc_opl_ioh == 0)
 		return (0);
-	sc.ioh = ssc->sc_opl_ioh;
-	sc.iot = ssc->sc_iot;
-	sc.offs = 0;
-	return (opl_find(&sc));
+	return opl_match(ssc->sc_iot, ssc->sc_opl_ioh, 0);
 }
 
 void
-opl_ym_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+opl_ym_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ym_softc *ssc = (struct ym_softc *)parent;
 	struct opl_softc *sc = (struct opl_softc *)self;

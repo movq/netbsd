@@ -1,4 +1,4 @@
-/*	$NetBSD: amfs_generic.c,v 1.1.1.3 2005/09/20 17:14:39 rpaulo Exp $	*/
+/*	$NetBSD: amfs_generic.c,v 1.5 2006/04/05 14:59:29 christos Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Erez Zadok
@@ -365,7 +365,7 @@ amfs_lookup_mntfs(am_node *new_mp, int *error_return)
   if (mp->am_pref) {
     if (strlen(mp->am_pref) + strlen(new_mp->am_name) >= sizeof(path_name))
       ereturn(ENAMETOOLONG);
-    sprintf(path_name, "%s%s", mp->am_pref, new_mp->am_name);
+    xsnprintf(path_name, sizeof(path_name), "%s%s", mp->am_pref, new_mp->am_name);
     pfname = path_name;
   } else {
     pfname = new_mp->am_name;
@@ -416,7 +416,9 @@ amfs_lookup_mntfs(am_node *new_mp, int *error_return)
       /*
        * Pick up new defaults
        */
-      def_opts = str3cat((char *) 0, def_opts, ";", *cur_ivec + 1);
+      char *new_def_opts = str3cat(NULL, def_opts, ";", *cur_ivec + 1);
+      XFREE(def_opts);
+      def_opts = new_def_opts;
       dlog("Setting def_opts to \"%s\"", def_opts);
       continue;
     } else
@@ -770,7 +772,7 @@ amfs_bgmount(struct continuation *cp)
       goto already_mounted;
     }
 
-    if (mf->mf_fo->fs_mtab) {
+    if (mf->mf_fo && mf->mf_fo->fs_mtab) {
       plog(XLOG_MAP, "Trying mount of %s on %s fstype %s mount_type %s",
 	   mf->mf_fo->fs_mtab, mf->mf_mount, p->fs_type,
 	   mp->am_flags & AMF_AUTOFS ? "autofs" : "non-autofs");
@@ -784,7 +786,7 @@ amfs_bgmount(struct continuation *cp)
     if (this_error < 0)
       goto retry;
 
-    if (mf->mf_fo->opt_delay) {
+    if (mf->mf_fo && mf->mf_fo->opt_delay) {
       /*
        * If there is a delay timer on the mount
        * then don't try to mount if the timer
@@ -1045,8 +1047,9 @@ amfs_parse_defaults(am_node *mp, mntfs *mf, char *def_opts)
      * otherwise just use these defaults.
      */
     if (*def_opts && *dfl) {
-      char *nopts = (char *) xmalloc(strlen(def_opts) + strlen(dfl) + 2);
-      sprintf(nopts, "%s;%s", dfl, def_opts);
+      size_t l = strlen(def_opts) + strlen(dfl) + 2;
+      char *nopts = (char *) xmalloc(l);
+      xsnprintf(nopts, l, "%s;%s", dfl, def_opts);
       XFREE(def_opts);
       def_opts = nopts;
     } else if (*dfl) {

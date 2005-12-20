@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.31 2005/12/11 12:17:24 christos Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.36 2006/10/30 16:22:42 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.31 2005/12/11 12:17:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.36 2006/10/30 16:22:42 skrll Exp $");
 
 #include "locators.h"
 #include "opt_power_switch.h"
@@ -178,7 +178,7 @@ int mbus_dmamem_map(void *, bus_dma_segment_t *, int, size_t, caddr_t *, int);
 void mbus_dmamem_unmap(void *, caddr_t, size_t);
 paddr_t mbus_dmamem_mmap(void *, bus_dma_segment_t *, int, off_t, int, int);
 int _bus_dmamap_load_buffer(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
-    bus_size_t buflen, struct proc *p, int flags, paddr_t *lastaddrp, 
+    bus_size_t buflen, struct vmspace *vm, int flags, paddr_t *lastaddrp, 
     int *segp, int first);
 
 int
@@ -844,7 +844,6 @@ mbus_dmamap_create(void *v, bus_size_t size, int nsegments, bus_size_t maxsegsz,
     bus_size_t boundary, int flags, bus_dmamap_t *dmamp)
 {
 	struct hppa_bus_dmamap *map;
-	void *mapstore;
 	size_t mapsize;
 
 	/*
@@ -861,12 +860,12 @@ mbus_dmamap_create(void *v, bus_size_t size, int nsegments, bus_size_t maxsegsz,
 	 */
 	mapsize = sizeof(struct hppa_bus_dmamap) +
 	    (sizeof(bus_dma_segment_t) * (nsegments - 1));
-	if ((mapstore = malloc(mapsize, M_DMAMAP,
-	    (flags & BUS_DMA_NOWAIT) ? M_NOWAIT : M_WAITOK)) == NULL)
+	map = malloc(mapsize, M_DMAMAP,
+	    (flags & BUS_DMA_NOWAIT) ? M_NOWAIT : M_WAITOK);
+	if (!map)
 		return (ENOMEM);
 
-	memset(mapstore, 0, mapsize);
-	map = (struct hppa_bus_dmamap *)mapstore;
+	memset(map, 0, mapsize);
 	map->_dm_size = size;
 	map->_dm_segcnt = nsegments;
 	map->_dm_maxsegsz = maxsegsz;
@@ -905,6 +904,7 @@ mbus_dmamap_load(void *v, bus_dmamap_t map, void *buf, bus_size_t buflen,
 {
 	vaddr_t lastaddr;
 	int seg, error;
+	struct vmspace *vm;
 
 	/*
 	 * Make sure that on error condition we return "no valid mappings".
@@ -915,8 +915,14 @@ mbus_dmamap_load(void *v, bus_dmamap_t map, void *buf, bus_size_t buflen,
 	if (buflen > map->_dm_size)
 		return (EINVAL);
 
+	if (p != NULL) {
+		vm = p->p_vmspace;
+	} else {
+		vm = vmspace_kernel();
+	}
+
 	seg = 0;
-	error = _bus_dmamap_load_buffer(NULL, map, buf, buflen, p, flags,
+	error = _bus_dmamap_load_buffer(NULL, map, buf, buflen, vm, flags,
 	    &lastaddr, &seg, 1);
 	if (error == 0) {
 		map->dm_mapsize = buflen;
@@ -957,7 +963,7 @@ mbus_dmamap_load_mbuf(void *v, bus_dmamap_t map, struct mbuf *m0,
 		if (m->m_len == 0)
 			continue;
 		error = _bus_dmamap_load_buffer(NULL, map, m->m_data, m->m_len,
-		    NULL, flags, &lastaddr, &seg, first);
+		    vmspace_kernel(), flags, &lastaddr, &seg, first);
 		first = 0;
 	}
 	if (error == 0) {
@@ -977,7 +983,6 @@ mbus_dmamap_load_uio(void *v, bus_dmamap_t map, struct uio *uio,
 	vaddr_t lastaddr;
 	int seg, i, error, first;
 	bus_size_t minlen, resid;
-	struct proc *p = NULL;
 	struct iovec *iov;
 	caddr_t addr;
 
@@ -989,14 +994,6 @@ mbus_dmamap_load_uio(void *v, bus_dmamap_t map, struct uio *uio,
 
 	resid = uio->uio_resid;
 	iov = uio->uio_iov;
-
-	if (uio->uio_segflg == UIO_USERSPACE) {
-		p = uio->uio_lwp ? uio->uio_lwp->l_proc : NULL;
-#ifdef DIAGNOSTIC
-		if (p == NULL)
-			panic("_bus_dmamap_load_uio: USERSPACE but no lwp");
-#endif
-	}
 
 	first = 1;
 	seg = 0;
@@ -1010,7 +1007,7 @@ mbus_dmamap_load_uio(void *v, bus_dmamap_t map, struct uio *uio,
 		addr = (caddr_t)iov[i].iov_base;
 
 		error = _bus_dmamap_load_buffer(NULL, map, addr, minlen,
-		    p, flags, &lastaddr, &seg, first);
+		    uio->uio_vmspace, flags, &lastaddr, &seg, first);
 		first = 0;
 
 		resid -= minlen;
@@ -1132,23 +1129,25 @@ mbus_dmamap_sync(void *v, bus_dmamap_t map, bus_addr_t offset, bus_size_t len,
 	if (ops == 0)
 		return;
 
-	for (i = 0; i < map->dm_nsegs; i++) {
-		if (offset >= map->dm_segs[i].ds_len) {
+	for (i = 0; len != 0 && i < map->dm_nsegs; i++) {
+		if (offset >= map->dm_segs[i].ds_len)
 			offset -= map->dm_segs[i].ds_len;
-			continue;
+		else {
+			bus_size_t l = map->dm_segs[i].ds_len - offset;
+
+			if (l > len)
+				l = len;
+
+			fdcache(HPPA_SID_KERNEL, map->dm_segs[i]._ds_va +
+			    offset, l);
+			len -= l;
+			offset = 0;
 		}
-		if (len <= map->dm_segs[i].ds_len - offset) {
-			fdcache(HPPA_SID_KERNEL, map->dm_segs[i]._ds_va + 
-			    offset, len);
-			break;
-		} else
-			fdcache(HPPA_SID_KERNEL, map->dm_segs[i]._ds_va + 
-			    offset, map->dm_segs[i].ds_len - offset);
-		len -= map->dm_segs[i].ds_len - offset;
-		offset = 0;
 	}
-	sync_caches();
-	return;
+
+ 	/* for either operation sync the shit away */
+	__asm __volatile ("sync\n\tsyncdma\n\tsync\n\t"
+	    "nop\n\tnop\n\tnop\n\tnop\n\tnop\n\tnop\n\tnop" ::: "memory");
 }
 
 /*
@@ -1381,7 +1380,7 @@ mbus_dmamem_mmap(void *v, bus_dma_segment_t *segs, int nsegs,
 
 int
 _bus_dmamap_load_buffer(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
-    bus_size_t buflen, struct proc *p, int flags, paddr_t *lastaddrp, 
+    bus_size_t buflen, struct vmspace *vm, int flags, paddr_t *lastaddrp, 
     int *segp, int first)
 {
 	bus_size_t sgsize;
@@ -1390,19 +1389,18 @@ _bus_dmamap_load_buffer(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	int seg;
 	pmap_t pmap;
 
-	if (p != NULL)
-		pmap = p->p_vmspace->vm_map.pmap;
-	else
-		pmap = pmap_kernel();
+	pmap = vm_map_pmap(&vm->vm_map);
 
 	lastaddr = *lastaddrp;
 	bmask  = ~(map->_dm_boundary - 1);
 
 	for (seg = *segp; buflen > 0; ) {
+		boolean_t ok;
 		/*
 		 * Get the physical address for this segment.
 		 */
-		(void) pmap_extract(pmap, vaddr, &curaddr);
+		ok = pmap_extract(pmap, vaddr, &curaddr);
+		KASSERT(ok == TRUE);
 
 		/*
 		 * Compute the segment size, and adjust counts.
@@ -1460,16 +1458,6 @@ _bus_dmamap_load_buffer(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	if (buflen != 0)
 		return (EFBIG);		/* XXX better return value here? */
 	return (0);
-}
-
-int
-dma_cachectl(p, size)
-	caddr_t p;
-	int size;
-{
-	fdcache(HPPA_SID_KERNEL, (vaddr_t)p, size);
-	sync_caches();
-	return 0;
 }
 
 const struct hppa_bus_dma_tag hppa_dmatag = {

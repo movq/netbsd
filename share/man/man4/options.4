@@ -1,4 +1,4 @@
-.\"	$NetBSD: options.4,v 1.299 2005/12/20 18:15:30 elad Exp $
+.\"	$NetBSD: options.4,v 1.340 2006/11/22 02:02:51 elad Exp $
 .\"
 .\" Copyright (c) 1996
 .\" 	Perry E. Metzger.  All rights reserved.
@@ -30,7 +30,7 @@
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
 .\"
-.Dd December 20, 2005
+.Dd November 22, 2006
 .Os
 .Dt OPTIONS 4
 .Sh NAME
@@ -52,6 +52,8 @@ configuration options that may be specified in a kernel config
 file.
 See
 .Xr config 1
+and
+.Xr config 5
 for information on how to configure and build kernels.
 .Pp
 The
@@ -146,6 +148,8 @@ Specifies (or sets) the option, or comma-separated list of options,
 Some options expect to be assigned a value, which may be an integer,
 a double-quoted word, a bare word, or an empty string
 .Pq Qq .
+Note that those are eventually handled by the C compiler, so the rules
+of that language apply.
 .Pp
 .Em Note :
 Options that are not defined by device definition files are passed to
@@ -306,6 +310,14 @@ to be performed, and allows the
 mode of the
 .Xr nfssvc 2
 system call to be used for compatibility with the deprecated nfsiod program.
+.It Cd options COMPAT_15
+Enable binary compatibility with
+.Nx 1.5 .
+Since there were no API changes from
+.Nx 1.5
+and
+.Nx 1.6 ,
+this option does nothing.
 .It Cd options COMPAT_16
 Enable binary compatibility with
 .Nx 1.6 .
@@ -316,12 +328,26 @@ with the addition of
 Enable binary compatibility with
 .Nx 2.0 .
 This allows the use of old syscalls for
-.Fn statfs
-and
+.Fn statfs ,
 .Fn fstatfs ,
-which has been deprecated with the addition of the
-.Xr statvfs 2
-family of system calls.
+.Fn getfsstat
+and
+.Fn fhstatfs ,
+which have been deprecated with the addition of the
+.Xr statvfs 2 ,
+.Xr fstatvfs 2 ,
+.Xr getvfsstat 2
+and
+.Xr fhstatvfs 2
+system calls.
+.It Cd options COMPAT_30
+Enable binary compatibility with
+.Nx 3.0 .
+See
+.Xr compat_30 8
+for details about the changes made after the
+.Nx 3.0
+release.
 .It Cd options COMPAT_43
 Enables compatibility with
 .Bx 4.3 .
@@ -374,8 +400,12 @@ On those architectures that support it, this enables binary
 compatibility with Linux ELF and
 .Xr a.out 5
 applications built for the same architecture.
-This currently includes the alpha, arm, i386, m68k, mips, powerpc, and
+This currently includes the alpha, arm, i386, m68k, mips, powerpc and
 x86_64 ports.
+.It Cd options COMPAT_LINUX32
+On those 64 bit architectures that support it, this enables binary
+compatibility with 32 bit Linux binaries.
+For now this is limited to running i386 ELF Linux binaries on amd64.
 .It Cd options COMPAT_SUNOS
 On those architectures that support it, this enables binary
 compatibility with
@@ -525,14 +555,33 @@ for details.
 If this is non-zero, enable history editing in the kernel debugger
 and set the size of the history to this value.
 .It Cd options DDB_ONPANIC
-If set to non-zero, DDB will be entered upon kernel panic.
-The default if not specified is "1".
+The default if not specified is
+.Dq 1
+- just enter into DDB.
+If set to
+.Dq 2
+the kernel will
+attempt to print out a stack trace before entering into DDB.
+If set to
+.Dq 0
+the kernel will attempt to print out a stack trace
+and reboot the system.
+If set to
+.Dq -1
+then neither a stack trace is printed or DDB entered -
+it is as if DDB were not compiled into the kernel.
 Note that this sets the value of the
 .Em ddb.onpanic
 .Xr sysctl 3
 variable which may be changed at run time -- see
 .Xr sysctl 8
 for details.
+.It Cd options DDB_COMMANDONENTER=string
+This option specify commands which will be executed on each entry to DDB.
+This sets the default value of the
+.Em ddb.commandonenter
+.Xr sysctl 3
+variable which may be changed at run time.
 .It Cd options DDB_BREAK_CHAR=integer
 This option overrides using break to enter the kernel debugger
 on the serial console.
@@ -818,6 +867,16 @@ files in the procfs namespace.
 See
 .Xr mount_procfs 8
 for details.
+.It Cd file-system UDF
+.Bq Em EXPERIMENTAL
+Includes code for the UDF file system commonly found on CD and DVD
+media but also more and more on USB sticks.
+Useful primarily if you have a CD or a DVD drive, be it a read-only
+or a rewritable device.
+Currently only supports read-access.
+See
+.Xr mount_udf 8
+for details.
 .It Cd file-system UMAPFS
 Includes a loopback file system in which user and group IDs may be
 remapped -- this can be useful when mounting alien file systems with
@@ -881,20 +940,20 @@ for details.
 .El
 .Ss File System Options
 .Bl -ohang
-.It Cd options ROOTFS_MAGICLINKS
+.It Cd options MAGICLINKS
 Enables the expansion of special strings
 .Po
 beginning with
 .Dq @
 .Pc
-when traversing symbolic links on the root file system.
+when traversing symbolic links.
 See
 .Xr symlink 7
 for a list of supported strings.
-Note that this option only controls the enabling of this feature when
-the root file system is first mounted by the kernel at boot-up.
+Note that this option only controls the enabling of this feature
+by the kernel at boot-up.
 This feature can still be manipulated with the
-.Xr mount 8
+.Xr sysctl 8
 command regardless of the setting of this option.
 .It Cd options NFSSERVER
 Include the server side of the
@@ -1064,8 +1123,7 @@ Finally, the performance interaction of this option with ffs soft
 dependencies can be subtle, as that mechanism can drastically alter
 the workload for filesystem metadata writes.
 .It Cd options BUFQ_PRIOCSCAN
-Enable another experimental buffer queue strategy for disk I/O,
-Per-priority cyclical scan.
+Enable another buffer queue strategy for disk I/O, per-priority cyclical scan.
 .It Cd options NEW_BUFQ_STRATEGY
 Synonym of
 .Em BUFQ_READPRIO .
@@ -1080,7 +1138,7 @@ for details.
 .Em NOTE :
 not available on all architectures.
 .It Cd options MEMORY_DISK_DYNAMIC
-This options makes the
+This option makes the
 .Xr md 4
 .Tn RAM
 disk size dynamically sized.
@@ -1110,7 +1168,7 @@ disk, to be populated with
 .Xr mdsetimage 8 .
 .It Cd options MEMORY_DISK_SERVER=0
 Do not include the interface to a userland memory disk server process.
-Per default, this options is set to 1, including the support code.
+Per default, this option is set to 1, including the support code.
 Useful for install media kernels.
 .It Cd options VND_COMPRESSION
 Enables the
@@ -1406,6 +1464,13 @@ A supplement to XSERVER that adds support for entering
 .Xr ddb 4
 while in
 .Tn X11 .
+.It Cd options FILEASSOC
+Support for
+.Xr fileassoc 9 .
+.It Cd options FILEASSOC_NHOOKS=integer
+Number of storage slots per file for
+.Xr fileassoc 9 .
+Default is 4.
 .El
 .Ss Networking Options
 .Bl -ohang
@@ -1676,7 +1741,10 @@ Include support for IPsec in IPv4 ALTQ.
 This option assumes
 .Em ALTQ .
 .It Cd options ALTQ_JOBS
-Undocumented at this time.
+Include support for ALTQ-implemented JoBS (Joint Buffer Management
+and Scheduling).
+This option assumes
+.Em ALTQ .
 .It Cd options ALTQ_AFMAP
 Include support for an undocumented ALTQ feature that is used to map an IP
 flow to an ATM VC (Virtual Circuit).
@@ -1753,16 +1821,6 @@ Include support for tunneling
 protocols over
 .Tn IP .
 Known to be broken, or at least very fragile, and undocumented.
-.It Cd options CCITT,LLC,HDLC
-Include support for the
-.Tn CCITT
-(nee
-.Tn ITU-TSS )
-.Tn X.25
-protocol stack.
-The state of this code is currently unknown, and probably contains bugs.
-This option assumes
-.Em INET .
 .It Cd options NETATALK
 Include support for the
 .Tn AppleTalk
@@ -1777,6 +1835,12 @@ This stack is used by the
 package, which adds support for
 .Tn AppleTalk
 server services via user libraries and applications.
+.It Cd options BLUETOOTH
+Include support for the
+.Tn Bluetooth
+protocol stack. See
+.Xr bluetooth 4
+for details.
 .It Cd options IPNOPRIVPORTS
 Normally, only root can bind a socket descriptor to a so-called
 .Dq privileged
@@ -2109,13 +2173,15 @@ for port specific details including availability.
 .It Cd options VMSWAP
 Enable paging device/file support.
 This option is on by default.
+.It Cd options PDPOLICY_CLOCKPRO
+Use CLOCK-Pro, an alternative page replace policy.
 .El
 .Ss Security Options
 .Bl -ohang
 .It Cd options INSECURE
-Hardwires the kernel security level at -1.
+Hardwires the kernel security level at \-1.
 This means that the system
-always runs in secure level -1 mode, even when running multiuser.
+always runs in secure level \-1 mode, even when running multiuser.
 See the manual page for
 .Xr init 8
 for details on the implications of this.
@@ -2123,14 +2189,12 @@ The kernel secure level may manipulated by the superuser by altering the
 .Em kern.securelevel
 .Xr sysctl 3
 variable (the secure level may only be lowered by a call from process ID 1,
-i.e.
+i.e.,
 .Xr init 8 ) .
 See also
 .Xr sysctl 8
 and
 .Xr sysctl 3 .
-.It Cd options VERIFIED_EXEC
-Enables Veriexec, the in-kernel file integrity subsystem.
 .It Cd options VERIFIED_EXEC_FP_MD5
 Enables support for MD5 hashes in Veriexec.
 .It Cd options VERIFIED_EXEC_FP_SHA1
@@ -2143,6 +2207,46 @@ Enables support for SHA256 hashes in Veriexec.
 Enables support for SHA384 hashes in Veriexec.
 .It Cd options VERIFIED_EXEC_FP_SHA512
 Enables support for SHA512 hashes in Veriexec.
+.It Cd options PAX_MPROTECT=value
+Enables PaX MPROTECT,
+.Xr mprotect 2
+restrictions from the PaX project.
+.Pp
+The
+.Ar value
+is the default value for the
+.Em global
+knob, see
+.Xr sysctl 3 .
+If 0, PaX MPROTECT will be enabled only if explicitly set on programs
+using
+.Xr paxctl 1 .
+If 1, PaX MPROTECT will be enabled to all programs, and exemption can
+be done using
+.Xr paxctl 1 .
+.Pp
+See
+.Xr security 8
+for more details.
+.It Cd options PAX_SEGVGUARD=value
+Enables PaX Segvguard.
+.Pp
+The
+.Ar value
+is the default value for the
+.Em global
+knob, see
+.Xr sysctl 3 .
+If 0, PaX Segvguard will be enabled only if explicitly set on programs
+using
+.Xr paxctl 1 .
+If 1, PaX Segvguard will be enabled to all programs, and exemption can
+be done using
+.Xr paxctl 1 .
+.Pp
+See
+.Xr security 8
+for more details.
 .El
 .Ss amiga-specific Options
 .Bl -ohang
@@ -2233,6 +2337,13 @@ Include translation for French keyboards when using
 .Em pccons
 on a Shark.
 .El
+.Ss amd64-specific Options
+.Bl -ohang
+.It Cd options POWERNOW_K8
+Include support for AMD Athlon 64 PowerNow! and Cool`n'Quiet
+Technology, used to change the cpu and voltage frequency
+on the fly.
+.El
 .Ss atari-specific Options
 .Bl -ohang
 .It Cd options DISKLABEL_AHDI
@@ -2290,6 +2401,10 @@ Allow any user to change the frequency of an
 .Tn Enhanced SpeedStep Technology
 capable
 .Tn CPU .
+.It Cd options POWERNOW_K7
+Include support for the AMD
+.Tn PowerNow! Technology
+present in AMD Athlon Mobile processors.
 .It Cd options CPURESET_DELAY=value
 Specifies the time (in millisecond) to wait before doing a hardware reset
 in the last phase of a reboot.
@@ -2386,6 +2501,12 @@ The duration of each beep when
 .Cd options BEEP_ONHALT
 is enabled, in milliseconds.
 Defaults to 250.
+.It Cd options MULTIBOOT
+Makes the kernel Multiboot-compliant, allowing it to be booted through
+a Multiboot-compliant boot manager such as GRUB.
+See
+.Xr multiboot 8
+for more information.
 .El
 .Ss isa-specific Options
 Options specific to
@@ -2441,12 +2562,17 @@ This provides emulation of unimplemented
 integer instructions as well as emulation of unimplemented floating point
 instructions and data types and software support for floating point traps.
 .El
-.Ss powerpc-specific Options
+.Ss powerpc-specific Options (OEA Only)
 .Bl -ohang
 .It Cd options PMAP_MEMLIMIT=value
 Limit the amount of memory seen by the kernel to
 .Ar value
-bytes (OEA only).
+bytes.
+.It Cd options PTEGCOUNT=value
+Specify the size of the page table as
+.Ar value
+PTE groups.
+Normally, one PTEG is allocated per physical page frame.
 .El
 .Ss sparc-specific Options
 .Bl -ohang
@@ -2588,6 +2714,7 @@ bolded
 .Xr userconf 4 ,
 .Xr vnd 4 ,
 .Xr wscons 4 ,
+.Xr config 5 ,
 .Xr edquota 8 ,
 .Xr init 8 ,
 .Xr mdsetimage 8 ,
@@ -2602,6 +2729,7 @@ bolded
 .Xr mount_null 8 ,
 .Xr mount_portal 8 ,
 .Xr mount_procfs 8 ,
+.Xr mount_udf 8 ,
 .Xr mount_umap 8 ,
 .Xr mount_union 8 ,
 .Xr mrouted 8 ,

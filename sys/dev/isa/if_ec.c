@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ec.c,v 1.25 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: if_ec.c,v 1.29 2006/11/16 01:33:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.25 2005/12/11 12:22:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.29 2006/11/16 01:33:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -113,7 +113,7 @@ void	ec_read_hdr(struct dp8390_softc *, int, struct dp8390_ring *);
 int	ec_fake_test_mem(struct dp8390_softc *);
 int	ec_test_mem(struct dp8390_softc *);
 
-__inline void ec_readmem(struct ec_softc *, int, u_int8_t *, int);
+inline void ec_readmem(struct ec_softc *, int, u_int8_t *, int);
 
 static const int ec_iobase[] = {
 	0x2e0, 0x2a0, 0x280, 0x250, 0x350, 0x330, 0x310, 0x300,
@@ -127,10 +127,8 @@ static const int ec_membase[] = {
 #define	NEC_MEMBASE	(sizeof(ec_membase) / sizeof(ec_membase[0]))
 
 int
-ec_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ec_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t nict, asict, memt;
@@ -253,9 +251,7 @@ ec_probe(parent, match, aux)
 }
 
 void
-ec_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ec_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ec_softc *esc = (struct ec_softc *)self;
 	struct dp8390_softc *sc = &esc->sc_dp8390;
@@ -429,7 +425,8 @@ ec_attach(parent, self, aux)
 	 * we optimize for linear transfers of same-size packets.)
 	 */
 	if (esc->sc_16bitp) {
-		if (sc->sc_dev.dv_cfdata->cf_flags & DP8390_NO_MULTI_BUFFERING)
+		if (device_cfdata(&sc->sc_dev)->cf_flags &
+		    DP8390_NO_MULTI_BUFFERING)
 			sc->txb_cnt = 1;
 		else
 			sc->txb_cnt = 2;
@@ -512,8 +509,7 @@ ec_attach(parent, self, aux)
 }
 
 int
-ec_fake_test_mem(sc)
-	struct dp8390_softc *sc;
+ec_fake_test_mem(struct dp8390_softc *sc)
 {
 
 	/*
@@ -565,7 +561,7 @@ ec_test_mem(sc)
  * copy 'len' from NIC to host using shared memory.  The 'len' is rounded
  * up to a word - ok as long as mbufs are word-sized.
  */
-__inline void
+inline void
 ec_readmem(esc, from, to, len)
 	struct ec_softc *esc;
 	int from;

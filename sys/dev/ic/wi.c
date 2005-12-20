@@ -1,4 +1,4 @@
-/*	$NetBSD: wi.c,v 1.210 2005/11/18 16:53:56 skrll Exp $	*/
+/*	$NetBSD: wi.c,v 1.217 2006/11/16 01:32:52 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -106,7 +106,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wi.c,v 1.210 2005/11/18 16:53:56 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wi.c,v 1.217 2006/11/16 01:32:52 christos Exp $");
 
 #define WI_HERMES_AUTOINC_WAR	/* Work around data write autoinc bug. */
 #define WI_HERMES_STATS_WAR	/* Work around stats counter bug. */
@@ -126,6 +126,7 @@ __KERNEL_RCSID(0, "$NetBSD: wi.c,v 1.210 2005/11/18 16:53:56 skrll Exp $");
 #include <sys/ioctl.h>
 #include <sys/kernel.h>		/* for hz */
 #include <sys/proc.h>
+#include <sys/kauth.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -574,12 +575,12 @@ wi_attach(struct wi_softc *sc, const u_int8_t *macaddr)
 #endif
 
 	memset(&sc->sc_rxtapu, 0, sizeof(sc->sc_rxtapu));
-	sc->sc_rxtap.wr_ihdr.it_len = sizeof(sc->sc_rxtapu);
-	sc->sc_rxtap.wr_ihdr.it_present = WI_RX_RADIOTAP_PRESENT;
+	sc->sc_rxtap.wr_ihdr.it_len = htole16(sizeof(sc->sc_rxtapu));
+	sc->sc_rxtap.wr_ihdr.it_present = htole32(WI_RX_RADIOTAP_PRESENT);
 
 	memset(&sc->sc_txtapu, 0, sizeof(sc->sc_txtapu));
-	sc->sc_txtap.wt_ihdr.it_len = sizeof(sc->sc_txtapu);
-	sc->sc_txtap.wt_ihdr.it_present = WI_TX_RADIOTAP_PRESENT;
+	sc->sc_txtap.wt_ihdr.it_len = htole16(sizeof(sc->sc_txtapu));
+	sc->sc_txtap.wt_ihdr.it_present = htole32(WI_TX_RADIOTAP_PRESENT);
 
 	/* Attach is successful. */
 	sc->sc_attached = 1;
@@ -675,7 +676,7 @@ wi_intr(void *arg)
 	u_int16_t status;
 
 	if (sc->sc_enabled == 0 ||
-	    (sc->sc_dev.dv_flags & DVF_ACTIVE) == 0 ||
+	    !device_is_active(&sc->sc_dev) ||
 	    (ifp->if_flags & IFF_RUNNING) == 0)
 		return 0;
 
@@ -1360,7 +1361,7 @@ wi_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error = 0;
 
-	if ((sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->sc_dev))
 		return ENXIO;
 
 	s = splnet();
@@ -1405,7 +1406,8 @@ wi_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		error = wi_get_cfg(ifp, cmd, data);
 		break;
 	case SIOCSIFGENERIC:
-		error = suser(curproc->p_ucred, &curproc->p_acflag);
+		error = kauth_authorize_generic(curlwp->l_cred,
+		    KAUTH_GENERIC_ISSUSER, &curlwp->l_acflag);
 		if (error)
 			break;
 		error = wi_set_cfg(ifp, cmd, data);
@@ -1565,7 +1567,7 @@ wi_sync_bssid(struct wi_softc *sc, u_int8_t new_bssid[IEEE80211_ADDR_LEN])
         ieee80211_sta_join(ic, ieee80211_ref_node(ni));
 }
 
-static __inline void
+static inline void
 wi_rssadapt_input(struct ieee80211com *ic, struct ieee80211_node *ni,
     struct ieee80211_frame *wh, int rssi)
 {

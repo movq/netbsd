@@ -1,4 +1,4 @@
-/*	$NetBSD: com_multi.c,v 1.21 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: com_multi.c,v 1.24 2006/11/16 01:33:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_multi.c,v 1.21 2005/12/11 12:22:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_multi.c,v 1.24 2006/11/16 01:33:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -106,10 +106,7 @@ CFATTACH_DECL(com_multi, sizeof(struct com_softc),
     com_multi_probe, com_multi_attach, NULL, NULL);
 
 int
-com_multi_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+com_multi_probe(struct device *parent, struct cfdata *match, void *aux)
 {
 	int iobase;
 	struct cfdata *cf = match;
@@ -129,9 +126,7 @@ com_multi_probe(parent, match, aux)
 }
 
 void
-com_multi_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+com_multi_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct com_softc *sc = (void *)self;
 	struct commulti_attach_args *ca = aux;
@@ -139,9 +134,7 @@ com_multi_attach(parent, self, aux)
 	/*
 	 * We're living on a commulti.
 	 */
-	sc->sc_iot = ca->ca_iot;
-	sc->sc_ioh = ca->ca_ioh;
-	sc->sc_iobase = ca->ca_iobase;
+	COM_INIT_REGS(sc->sc_regs, ca->ca_iot, ca->ca_ioh, ca->ca_iobase);
 	sc->sc_frequency = 115200 * 16;
 
 	if (ca->ca_noien)

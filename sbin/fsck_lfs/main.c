@@ -1,4 +1,4 @@
-/* $NetBSD: main.c,v 1.27 2005/09/23 12:10:34 jmmv Exp $	 */
+/* $NetBSD: main.c,v 1.32 2006/12/01 06:38:39 tls Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -45,6 +45,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <err.h>
+#include <util.h>
 
 #include "fsck.h"
 #include "extern.h"
@@ -55,7 +56,17 @@ int returntosingle;
 static int argtoi(int, const char *, const char *, int);
 static int checkfilesys(const char *, char *, long, int);
 static void usage(void);
+static void efun(int, const char *, ...);
 extern void (*panic_func)(int, const char *, va_list);
+
+static void
+efun(int eval, const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	verr(EEXIT, fmt, ap);
+	va_end(ap);
+}
 
 int
 main(int argc, char **argv)
@@ -64,11 +75,11 @@ main(int argc, char **argv)
 	int ret = 0;
 	const char *optstring = "b:dfi:m:npPqy";
 
-	sync();
 	skipclean = 1;
 	exitonfail = 0;
 	idaddr = 0x0;
 	panic_func = vmsg;
+	esetfunc(efun);
 	while ((ch = getopt(argc, argv, optstring)) != -1) {
 		switch (ch) {
 		case 'b':
@@ -190,10 +201,12 @@ checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 		 */
 		printf("** Phase 0 - Check Inode Free List\n");
 	}
-	if (idaddr)
-		pwarn("-i given, skipping free list check\n");
-	else
-		pass0();
+
+	/*
+	 * Check inode free list - we do this even if idaddr is set,
+	 * since if we're writing we don't want to write a bad list.
+	 */
+	pass0();
 
 	if (preen == 0) {
 		/*
@@ -245,11 +258,18 @@ checkfilesys(const char *filesys, char *mntpt, long auxdata, int child)
 	}
 
 	if (!rerun) {
-		if (!preen)
-			printf("** Phase 6 - Roll Forward\n");
-		pass6();
+		if (!preen) {
+			if (reply("ROLL FILESYSTEM FORWARD") == 1) {
+				printf("** Phase 6 - Roll Forward\n");
+				pass6();
+			}
+		}
+		else {
+			pass6();
+		}
 	}
 	zlnhead = (struct zlncnt *) 0;
+	orphead = (struct zlncnt *) 0;
 	duplist = (struct dups *) 0;
 	muldup = (struct dups *) 0;
 	inocleanup();

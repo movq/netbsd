@@ -1,4 +1,4 @@
-/*	$NetBSD: ehcivar.h,v 1.21 2005/11/20 14:27:25 augustss Exp $ */
+/*	$NetBSD: ehcivar.h,v 1.23 2006/01/17 12:30:01 xtraeme Exp $ */
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -63,9 +63,7 @@ struct ehci_xfer {
 	LIST_ENTRY(ehci_xfer) inext; /* list of active xfers */
 	ehci_soft_qtd_t *sqtdstart;
 	ehci_soft_qtd_t *sqtdend;
-#ifdef DIAGNOSTIC
-	int isdone;
-#endif
+	int isdone;	/* used only when DIAGNOSTIC is defined */
 };
 #define EXFER(xfer) ((struct ehci_xfer *)(xfer))
 
@@ -92,6 +90,8 @@ typedef struct ehci_softc {
 	bus_space_handle_t ioh;
 	bus_size_t sc_size;
 	u_int sc_offs;			/* offset to operational regs */
+	int sc_flags;			/* misc flags */
+#define EHCIF_DROPPED_INTR_WORKAROUND	0x01
 
 	char sc_vendor[32];		/* vendor string for root hub */
 	int sc_id_vendor;		/* vendor ID for root hub */
@@ -134,6 +134,7 @@ typedef struct ehci_softc {
 	struct lock sc_doorbell_lock;
 
 	usb_callout_t sc_tmo_pcd;
+	usb_callout_t sc_tmo_intrlist;
 
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 	device_ptr_t sc_child;		/* /dev/usb# device */

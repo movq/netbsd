@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ep_isa.c,v 1.37 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: if_ep_isa.c,v 1.40 2006/11/16 01:33:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ep_isa.c,v 1.37 2005/12/11 12:22:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ep_isa.c,v 1.40 2006/11/16 01:33:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -156,10 +156,8 @@ epaddcard(bus, iobase, irq, model)
  * calls we look for matching cards.
  */
 int
-ep_isa_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ep_isa_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_tag_t iot = ia->ia_iot;
@@ -167,7 +165,7 @@ ep_isa_probe(parent, match, aux)
 	int slot, iobase, irq, i;
 	u_int16_t vendor, model, eeprom_addr_cfg;
 	struct ep_isa_done_probe *er;
-	int bus = parent->dv_unit;
+	int bus = device_unit(parent);
 
 	if (ISA_DIRECT_CONFIG(ia))
 		return (0);
@@ -182,7 +180,7 @@ ep_isa_probe(parent, match, aux)
 	 */
 	for (er = ep_isa_all_probes.lh_first; er != NULL;
 	    er = er->er_link.le_next)
-		if (er->er_bus == parent->dv_unit)
+		if (er->er_bus == device_unit(parent))
 			goto bus_probed;
 
 	/*
@@ -205,7 +203,7 @@ ep_isa_probe(parent, match, aux)
 	}
 
 	for (slot = 0; slot < MAXEPCARDS; slot++) {
-		elink_reset(iot, ioh, parent->dv_unit);
+		elink_reset(iot, ioh, device_unit(parent));
 		elink_idseq(iot, ioh, ELINK_509_POLY);
 
 		/* Untag all the adapters so they will talk to us. */
@@ -363,9 +361,7 @@ good:
 }
 
 void
-ep_isa_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ep_isa_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ep_softc *sc = (void *)self;
 	struct isa_attach_args *ia = aux;

@@ -1,4 +1,4 @@
-/*	$NetBSD: gus.c,v 1.90 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: gus.c,v 1.96 2006/11/16 01:33:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1999 The NetBSD Foundation, Inc.
@@ -95,7 +95,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gus.c,v 1.90 2005/12/11 12:22:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gus.c,v 1.96 2006/11/16 01:33:00 christos Exp $");
 
 #include "gus.h"
 #if NGUS > 0
@@ -612,6 +612,7 @@ const struct audio_hw_if gus_hw_if = {
 	NULL,
 	NULL,
 	NULL,
+	NULL,
 };
 
 static const struct audio_hw_if gusmax_hw_if = {
@@ -642,6 +643,7 @@ static const struct audio_hw_if gusmax_hw_if = {
 	NULL,
 	NULL,
 	NULL,
+	NULL,
 };
 
 /*
@@ -658,7 +660,8 @@ struct audio_device gus_device = {
 
 
 int
-gusprobe(struct device *parent, struct cfdata *match, void *aux)
+gusprobe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct isa_attach_args *ia;
 	int iobase, recdrq;
@@ -825,7 +828,8 @@ gusattach(struct device *parent, struct device *self, void *aux)
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh1, ioh2, ioh3, ioh4;
 	int		iobase, i;
-	unsigned char	c,d,m;
+	unsigned char	c, m;
+	int d = -1;
 	const struct audio_hw_if *hwif;
 
 	sc = (void *) self;
@@ -892,12 +896,17 @@ gusattach(struct device *parent, struct device *self, void *aux)
 	c = ((unsigned char) gus_irq_map[ia->ia_irq[0].ir_irq]) |
 	    GUSMASK_BOTH_RQ;
 
-	if (sc->sc_recdrq == sc->sc_playdrq)
-		d = (unsigned char) (gus_drq_map[sc->sc_playdrq] |
-				GUSMASK_BOTH_RQ);
-	else
-		d = (unsigned char) (gus_drq_map[sc->sc_playdrq] |
-				gus_drq_map[sc->sc_recdrq] << 3);
+	if (sc->sc_playdrq != -1) {
+		if (sc->sc_recdrq == sc->sc_playdrq)
+			d = (unsigned char) (gus_drq_map[sc->sc_playdrq] |
+			    GUSMASK_BOTH_RQ);
+		else if (sc->sc_recdrq != -1)
+			d = (unsigned char) (gus_drq_map[sc->sc_playdrq] |
+			    gus_drq_map[sc->sc_recdrq] << 3);
+	}
+	if (d == -1)
+		printf("%s: WARNING: Cannot initialize drq\n",
+		    sc->sc_dev.dv_xname);
 
 	/*
 	 * Program the IRQ and DMA channels on the GUS.  Note that we hardwire
@@ -1472,7 +1481,7 @@ gus_dmaout_timeout(void *arg)
 	bus_space_write_1(iot, ioh2, GUS_DATA_HIGH, 0);
 #if 0
 	/* XXX we will dmadone below? */
-	isa_dmaabort(sc->sc_dev.dv_parent, sc->sc_playdrq);
+	isa_dmaabort(device_parent(&sc->sc_dev), sc->sc_playdrq);
 #endif
 
 	gus_dmaout_dointr(sc);
@@ -2269,10 +2278,10 @@ gusmax_set_params(void *addr, int setmode, int usemode, audio_params_t *p,
 
 int
 gus_set_params(
-	void *addr,
-	int setmode, int usemode,
-	audio_params_t *p, audio_params_t *r,
-	stream_filter_list_t *pfil, stream_filter_list_t *rfil)
+    void *addr,
+    int setmode, int usemode,
+    audio_params_t *p, audio_params_t *r,
+    stream_filter_list_t *pfil, stream_filter_list_t *rfil)
 {
 	audio_params_t hw;
 	struct gus_softc *sc;
@@ -2367,7 +2376,7 @@ gusmax_round_blocksize(void * addr, int blocksize,
 
 int
 gus_round_blocksize(void * addr, int blocksize,
-		    int mode, const audio_params_t *param)
+    int mode, const audio_params_t *param)
 {
 	struct gus_softc *sc;
 
@@ -2390,7 +2399,7 @@ gus_round_blocksize(void * addr, int blocksize,
 		FREE(sc->sc_deintr_buf, M_DEVBUF);
 		sc->sc_deintr_buf = NULL;
 	}
-	MALLOC(sc->sc_deintr_buf, void *, blocksize>>1, M_DEVBUF, M_WAITOK);
+	sc->sc_deintr_buf = malloc(blocksize>>1, M_DEVBUF, M_WAITOK);
 
 	sc->sc_blocksize = blocksize;
 	/* multi-buffering not quite working yet. */
@@ -2988,7 +2997,7 @@ gus_init_cs4231(struct gus_softc *sc)
  * Return info about the audio device, for the AUDIO_GETINFO ioctl
  */
 int
-gus_getdev(void * addr, struct audio_device *dev)
+gus_getdev(void *addr, struct audio_device *dev)
 {
 
 	*dev = gus_device;
@@ -3000,7 +3009,8 @@ gus_getdev(void * addr, struct audio_device *dev)
  */
 
 int
-gus_set_in_gain(caddr_t addr, u_int gain, u_char balance)
+gus_set_in_gain(caddr_t addr, u_int gain,
+    u_char balance)
 {
 
 	DPRINTF(("gus_set_in_gain called\n"));

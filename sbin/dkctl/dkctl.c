@@ -1,4 +1,4 @@
-/*	$NetBSD: dkctl.c,v 1.11 2005/01/20 15:53:35 xtraeme Exp $	*/
+/*	$NetBSD: dkctl.c,v 1.16 2006/06/17 02:16:19 christos Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -41,7 +41,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: dkctl.c,v 1.11 2005/01/20 15:53:35 xtraeme Exp $");
+__RCSID("$NetBSD: dkctl.c,v 1.16 2006/06/17 02:16:19 christos Exp $");
 #endif
 
 
@@ -98,6 +98,7 @@ void	disk_addwedge(int, char *[]);
 void	disk_delwedge(int, char *[]);
 void	disk_getwedgeinfo(int, char *[]);
 void	disk_listwedges(int, char *[]);
+void	disk_strategy(int, char *[]);
 
 struct command commands[] = {
 	{ "getcache",
@@ -144,6 +145,11 @@ struct command commands[] = {
 	  "",
 	  disk_listwedges,
 	  O_RDONLY },
+
+	{ "strategy",
+	  "[name]",
+	  disk_strategy,
+	  O_RDWR },
 
 	{ NULL,
 	  NULL,
@@ -201,6 +207,37 @@ usage(void)
 		    commands[i].arg_names);
 
 	exit(1);
+}
+
+void
+disk_strategy(int argc, char *argv[])
+{
+	struct disk_strategy odks;
+	struct disk_strategy dks;
+
+	memset(&dks, 0, sizeof(dks));
+	if (ioctl(fd, DIOCGSTRATEGY, &odks) == -1) {
+		err(EXIT_FAILURE, "%s: DIOCGSTRATEGY", dvname);
+	}
+
+	memset(&dks, 0, sizeof(dks));
+	switch (argc) {
+	case 0:
+		/* show the buffer queue strategy used */
+		printf("%s: %s\n", dvname, odks.dks_name);
+		return;
+	case 1:
+		/* set the buffer queue strategy */
+		strlcpy(dks.dks_name, argv[0], sizeof(dks.dks_name));
+		if (ioctl(fd, DIOCSSTRATEGY, &dks) == -1) {
+			err(EXIT_FAILURE, "%s: DIOCSSTRATEGY", dvname);
+		}
+		printf("%s: %s -> %s\n", dvname, odks.dks_name, argv[0]);
+		break;
+	default:
+		usage();
+		/* NOTREACHED */
+	}
 }
 
 void
@@ -385,7 +422,9 @@ disk_badsectors(int argc, char *argv[])
 
 			dbs = (struct disk_badsectors *)dbsi.dbsi_buffer;
 			for (count = dbsi.dbsi_copied; count > 0; count--) {
-				dbs2 = malloc(sizeof(*dbs2));
+				dbs2 = malloc(sizeof *dbs2);
+				if (dbs2 == NULL)
+					err(1, NULL);
 				*dbs2 = *dbs;
 				SLIST_INSERT_HEAD(&dbstop, dbs2, dbs_next);
 				dbs++;
@@ -400,7 +439,8 @@ disk_badsectors(int argc, char *argv[])
 		 */
 		bad = 0;
 		totbad = 0;
-		block = calloc(1, DEV_BSIZE);
+		if ((block = calloc(1, DEV_BSIZE)) == NULL)
+			err(1, NULL);
 		SLIST_FOREACH(dbs, &dbstop, dbs_next) {
 			bad++;
 			totbad += dbs->dbs_max - dbs->dbs_min + 1;
@@ -461,15 +501,15 @@ disk_addwedge(int argc, char *argv[])
 		usage();
 
 	/* XXX Unicode. */
-	if (strlen(argv[0]) > sizeof(dkw.dkw_wname) - 1)
+	if (strlcpy(dkw.dkw_wname, argv[0], sizeof(dkw.dkw_wname)) >=
+	    sizeof(dkw.dkw_wname))
 		errx(1, "Wedge name too long; max %zd characters",
 		    sizeof(dkw.dkw_wname) - 1);
-	strcpy(dkw.dkw_wname, argv[0]);
 
-	if (strlen(argv[3]) > sizeof(dkw.dkw_ptype) - 1)
+	if (strlcpy(dkw.dkw_ptype, argv[3], sizeof(dkw.dkw_ptype)) >=
+	    sizeof(dkw.dkw_ptype))
 		errx(1, "Wedge partition type too long; max %zd characters",
 		    sizeof(dkw.dkw_ptype) - 1);
-	strcpy(dkw.dkw_ptype, argv[3]);
 
 	errno = 0;
 	start = strtoll(argv[1], &cp, 0);
@@ -503,10 +543,10 @@ disk_delwedge(int argc, char *argv[])
 	if (argc != 1)
 		usage();
 
-	if (strlen(argv[0]) > sizeof(dkw.dkw_devname) - 1)
+	if (strlcpy(dkw.dkw_devname, argv[0], sizeof(dkw.dkw_devname)) >=
+	    sizeof(dkw.dkw_devname))
 		errx(1, "Wedge dk name too long; max %zd characters",
 		    sizeof(dkw.dkw_devname) - 1);
-	strcpy(dkw.dkw_devname, argv[0]);
 
 	if (ioctl(fd, DIOCDWEDGE, &dkw) == -1)
 		err(1, "%s: delwedge", dvname);

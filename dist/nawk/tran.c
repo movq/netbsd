@@ -210,7 +210,10 @@ Cell *setsymtab(const char *n, const char *s, Awkfloat f, unsigned t, Array *tp)
 	int h;
 	Cell *p;
 
-	if (n != NULL && (p = lookup(n, tp)) != NULL) {
+	if (n == NULL)
+		n = "";
+
+	if ((p = lookup(n, tp)) != NULL) {
 		   dprintf( ("setsymtab found %p: n=%s s=\"%s\" f=%g t=%o\n",
 			p, NN(p->nval), NN(p->sval), p->fval, p->tval) );
 		return(p);
@@ -400,7 +403,7 @@ char *tostring(const char *s)	/* make a copy of string s */
 {
 	char *p;
 
-	p = (char *) malloc(strlen(s)+1);
+	p = strdup(s);
 	if (p == NULL)
 		FATAL("out of space in tostring on %s", s);
 	strcpy(p, s);

@@ -1,4 +1,5 @@
-/*	$NetBSD: ssh-add.c,v 1.22 2005/02/13 05:57:27 christos Exp $	*/
+/*	$NetBSD: ssh-add.c,v 1.24 2006/09/28 21:22:15 christos Exp $	*/
+/* $OpenBSD: ssh-add.c,v 1.89 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -36,16 +37,26 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: ssh-add.c,v 1.70 2004/05/08 00:21:31 djm Exp $");
-__RCSID("$NetBSD: ssh-add.c,v 1.22 2005/02/13 05:57:27 christos Exp $");
+__RCSID("$NetBSD: ssh-add.c,v 1.24 2006/09/28 21:22:15 christos Exp $");
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/param.h>
 
 #include <openssl/evp.h>
 
+#include <fcntl.h>
+#include <pwd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "xmalloc.h"
 #include "ssh.h"
 #include "rsa.h"
 #include "log.h"
-#include "xmalloc.h"
 #include "key.h"
+#include "buffer.h"
 #include "authfd.h"
 #include "authfile.h"
 #include "pathnames.h"
@@ -126,16 +137,25 @@ delete_all(AuthenticationConnection *ac)
 static int
 add_file(AuthenticationConnection *ac, const char *filename)
 {
-	struct stat st;
 	Key *private;
 	char *comment = NULL;
 	char msg[1024];
-	int ret = -1;
+	int fd, perms_ok, ret = -1;
 
-	if (stat(filename, &st) < 0) {
+	if ((fd = open(filename, O_RDONLY)) < 0) {
 		perror(filename);
 		return -1;
 	}
+
+	/*
+	 * Since we'll try to load a keyfile multiple times, permission errors
+	 * will occur multiple times, so check perms first and bail if wrong.
+	 */
+	perms_ok = key_perm_ok(fd, filename);
+	close(fd);
+	if (!perms_ok)
+		return -1;
+
 	/* At first, try empty passphrase */
 	private = key_load_private(filename, "", &comment);
 	if (comment == NULL)
@@ -147,7 +167,7 @@ add_file(AuthenticationConnection *ac, const char *filename)
 		/* clear passphrase since it did not work */
 		clear_pass();
 		snprintf(msg, sizeof msg, "Enter passphrase for %.200s: ",
-		   comment);
+		    comment);
 		for (;;) {
 			pass = read_passphrase(msg, RP_ALLOW_STDIN);
 			if (strcmp(pass, "") == 0) {
@@ -289,7 +309,7 @@ do_file(AuthenticationConnection *ac, int deleting, char *file)
 static void
 usage(void)
 {
-	fprintf(stderr, "Usage: %s [options]\n", __progname);
+	fprintf(stderr, "Usage: %s [options] [file ...]\n", __progname);
 	fprintf(stderr, "Options:\n");
 	fprintf(stderr, "  -l          List fingerprints of all identities.\n");
 	fprintf(stderr, "  -L          List public key parameters of all identities.\n");
@@ -314,12 +334,16 @@ main(int argc, char **argv)
 	char *sc_reader_id = NULL;
 	int i, ch, deleting = 0, ret = 0;
 
+	/* Ensure that fds 0, 1 and 2 are open or directed to /dev/null */
+	sanitise_stdfd();
+
 	SSLeay_add_all_algorithms();
 
 	/* At first, get a connection to the authentication agent. */
 	ac = ssh_get_authentication_connection();
 	if (ac == NULL) {
-		fprintf(stderr, "Could not open a connection to your authentication agent.\n");
+		fprintf(stderr,
+		    "Could not open a connection to your authentication agent.\n");
 		exit(2);
 	}
 	while ((ch = getopt(argc, argv, "lLcdDxXe:s:t:")) != -1) {
@@ -329,13 +353,11 @@ main(int argc, char **argv)
 			if (list_identities(ac, ch == 'l' ? 1 : 0) == -1)
 				ret = 1;
 			goto done;
-			break;
 		case 'x':
 		case 'X':
 			if (lock_agent(ac, ch == 'x' ? 1 : 0) == -1)
 				ret = 1;
 			goto done;
-			break;
 		case 'c':
 			confirm = 1;
 			break;
@@ -346,7 +368,6 @@ main(int argc, char **argv)
 			if (delete_all(ac) == -1)
 				ret = 1;
 			goto done;
-			break;
 		case 's':
 			sc_reader_id = optarg;
 			break;
@@ -387,7 +408,7 @@ main(int argc, char **argv)
 			goto done;
 		}
 
-		for(i = 0; default_files[i]; i++) {
+		for (i = 0; default_files[i]; i++) {
 			snprintf(buf, sizeof(buf), "%s/%s", pw->pw_dir,
 			    default_files[i]);
 			if (stat(buf, &st) < 0)
@@ -400,7 +421,7 @@ main(int argc, char **argv)
 		if (count == 0)
 			ret = 1;
 	} else {
-		for(i = 0; i < argc; i++) {
+		for (i = 0; i < argc; i++) {
 			if (do_file(ac, deleting, argv[i]) == -1)
 				ret = 1;
 		}

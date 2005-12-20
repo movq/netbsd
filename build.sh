@@ -1,5 +1,5 @@
 #! /usr/bin/env sh
-#	$NetBSD: build.sh,v 1.140 2005/12/12 04:51:55 jmc Exp $
+#	$NetBSD: build.sh,v 1.153 2006/09/29 19:53:54 apb Exp $
 #
 # Copyright (c) 2001-2005 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -38,12 +38,13 @@
 #
 # Top level build wrapper, for a system containing no tools.
 #
-# This script should run on any POSIX-compliant shell.  For systems
-# with a strange /bin/sh, "ksh" or "bash" may be an ample alternative.
-#
-# Note, however, that due to the way the interpreter is invoked above,
-# if a POSIX-compliant shell is the first in the PATH, you won't have
-# to take any further action.
+# This script should run on any POSIX-compliant shell.  If the
+# first "sh" found in the PATH is a POSIX-compliant shell, then
+# you should not need to take any special action.  Otherwise, you
+# should set the environment variable HOST_SH to a POSIX-compliant
+# shell, and invoke build.sh with that shell.  (Depending on your
+# system, one of /bin/ksh, /usr/local/bin/bash, or /usr/xpg4/bin/sh
+# might be a suitable shell.)
 #
 
 progname=${0##*/}
@@ -68,6 +69,83 @@ statusmsg()
 	${runcmd} echo "===> $@" | tee -a "${results}"
 }
 
+# Find a program in the PATH
+find_in_PATH()
+{
+	local prog="$1"
+	local oldIFS="${IFS}"
+	local dir
+	IFS=":"
+	for dir in ${PATH}; do
+		if [ -x "${dir}/${prog}" ]; then
+			prog="${dir}/${prog}"
+			break
+		fi
+	done
+	IFS="${oldIFS}"
+	echo "${prog}"
+}
+
+# Try to find a working POSIX shell, and set HOST_SH to refer to it.
+# Assumes that uname_s, uname_m, and PWD have been set.
+set_HOST_SH()
+{
+	# Even if ${HOST_SH} is already defined, we still do the
+	# sanity checks at the end.
+
+	# Solaris has /usr/xpg4/bin/sh.
+	#
+	[ -z "${HOST_SH}" ] && [ x"${uname_s}" = x"SunOS" ] && \
+		[ -x /usr/xpg4/bin/sh ] && HOST_SH="/usr/xpg4/bin/sh"
+
+	# Try to get the name of the shell that's running this script,
+	# by parsing the output from "ps".  We assume that, if the host
+	# system's ps command supports -o comm at all, it will do so
+	# in the usual way: a one-line header followed by a one-line
+	# result, possibly including trailing white space.  And if the
+	# host system's ps command doesn't support -o comm, we assume
+	# that we'll get an error message on stderr and nothing on
+	# stdout.  (We don't try to use ps -o 'comm=' to suppress the
+	# header line, because that is less widely supported.)
+	#
+	# If we get the wrong result here, the user can override it by
+	# specifying HOST_SH in the environment.
+	#
+	[ -z "${HOST_SH}" ] && HOST_SH="$(
+		(ps -p $$ -o comm | sed -ne '2s/[ \t]*$//p') 2>/dev/null )"
+
+	# If nothing above worked, use "sh".  We will later find the
+	# first directory in the PATH that has a "sh" program.
+	#
+	[ -z "${HOST_SH}" ] && HOST_SH="sh"
+
+	# If the result so far is not an absolute path, try to prepend
+	# PWD or search the PATH.
+	#
+	case "${HOST_SH}" in
+	/*)	:
+		;;
+	*/*)	HOST_SH="${PWD}/${HOST_SH}"
+		;;
+	*)	HOST_SH="$(find_in_PATH "${HOST_SH}")"
+		;;
+	esac
+
+	# If we don't have an absolute path by now, bomb.
+	#
+	case "${HOST_SH}" in
+	/*)	:
+		;;
+	*)	bomb "HOST_SH=\"${HOST_SH}\" is not an absolute path."
+		;;
+	esac
+
+	# If HOST_SH is not executable, bomb.
+	#
+	[ -x "${HOST_SH}" ] ||
+	    bomb "HOST_SH=\"${HOST_SH}\" is not executable."
+}
+
 initdefaults()
 {
 	cd "$(dirname $0)"
@@ -84,10 +162,19 @@ initdefaults()
 	# presence of symlinks.  Unsetting PWD is simpler than changing
 	# every occurrence of pwd to use -P.
 	#
-	# XXX Except that doesn't work on Solaris.
+	# XXX Except that doesn't work on Solaris. Or many Linuces.
 	#
 	unset PWD
-	TOP=$(/bin/pwd -P 2>/dev/null)
+	TOP=$(/bin/pwd -P 2>/dev/null || /bin/pwd 2>/dev/null)
+
+	# The user can set HOST_SH in the environment, or we try to
+	# guess an appropriate value.  Then we set several other
+	# variables from HOST_SH.
+	#
+	set_HOST_SH
+	setmakeenv HOST_SH "${HOST_SH}"
+	setmakeenv BSHELL "${HOST_SH}"
+	setmakeenv CONFIG_SHELL "${HOST_SH}"
 
 	# Set defaults.
 	#
@@ -127,6 +214,8 @@ initdefaults()
 	do_install=false
 	do_sets=false
 	do_sourcesets=false
+	do_syspkgs=false
+	do_iso_image=false
 	do_params=false
 
 	# Create scratch directory
@@ -176,10 +265,16 @@ getarch()
 		MACHINE=${MACHINE%-e[bl]}
 		;;
 
+	evbmips64-e[bl]|sbmips64-e[bl])
+		MACHINE_ARCH=mips64${MACHINE##*-}
+		makewrappermachine=${MACHINE}
+		MACHINE=${MACHINE%64-e[bl]}
+		;;
+
 	evbmips|sbmips)		# no default MACHINE_ARCH
 		;;
 
-	mipsco|newsmips|sgimips)
+	ews4800mips|mipsco|newsmips|sgimips)
 		MACHINE_ARCH=mipseb
 		;;
 
@@ -208,7 +303,7 @@ getarch()
 		MACHINE_ARCH=sh3eb
 		;;
 
-	dreamcast|hpcsh)
+	dreamcast|hpcsh|landisk)
 		MACHINE_ARCH=sh3el
 		;;
 
@@ -236,7 +331,7 @@ validatearch()
 	#
 	case "${MACHINE_ARCH}" in
 
-	alpha|arm|armeb|hppa|i386|m68000|m68k|mipse[bl]|ns32k|powerpc|sh[35]e[bl]|sparc|sparc64|vax|x86_64|ia64)
+	alpha|arm|armeb|hppa|i386|m68000|m68k|mipse[bl]|mips64e[bl]|ns32k|powerpc|powerpc64|sh[35]e[bl]|sparc|sparc64|vax|x86_64|ia64)
 		;;
 
 	"")
@@ -258,7 +353,11 @@ validatearch()
 		;;
 
 	evbmips|sbmips)
-		arches="mipseb mipsel"
+		arches="mipseb mipsel mips64eb mips64el"
+		;;
+
+	sgimips)
+		arches="mipseb mips64eb"
 		;;
 
 	evbsh3)
@@ -269,6 +368,9 @@ validatearch()
 		arches="sh5eb sh5el"
 		;;
 
+	macppc|evbppc)
+		arches="powerpc powerpc64"
+		;;
 	*)
 		oma="${MACHINE_ARCH}"
 		getarch
@@ -376,6 +478,8 @@ Usage: ${progname} [-EnorUux] [-a arch] [-B buildid] [-D dest] [-j njob]
     sets                Create binary sets in RELEASEDIR/MACHINE/binary/sets.
 			DESTDIR should be populated beforehand.
     sourcesets          Create source sets in RELEASEDIR/source/sets.
+    syspkgs             Create syspkgs in RELEASEDIR/MACHINE/binary/syspkgs.
+    iso-image           Create CD-ROM image in RELEASEDIR/MACHINE/installation.
     params              Display various make(1) parameters.
 
  Options:
@@ -615,7 +719,11 @@ parseoptions()
 			usage
 			;;
 
-		makewrapper|obj|tools|build|distribution|release|sets|sourcesets|params)
+		makewrapper|obj|tools|build|distribution|release|sets|sourcesets|syspkgs|params)
+			;;
+
+		iso-image)
+			op=iso_image	# used as part of a variable name
 			;;
 
 		kernel=*|releasekernel=*)
@@ -690,9 +798,9 @@ rebuildmake()
 		${runcmd} cd "${tmpdir}"
 		${runcmd} env CC="${HOST_CC-cc}" CPPFLAGS="${HOST_CPPFLAGS}" \
 			CFLAGS="${HOST_CFLAGS--O}" LDFLAGS="${HOST_LDFLAGS}" \
-			sh "${TOP}/tools/make/configure" ||
+			${HOST_SH} "${TOP}/tools/make/configure" ||
 		    bomb "Configure of ${toolprefix}make failed"
-		${runcmd} sh buildmake.sh ||
+		${runcmd} ${HOST_SH} buildmake.sh ||
 		    bomb "Build of ${toolprefix}make failed"
 		make="${tmpdir}/${toolprefix}make"
 		${runcmd} cd "${TOP}"
@@ -798,7 +906,7 @@ validatemakeparams()
 	fi
 	if ${do_build} || ${do_distribution} || ${do_release}; then
 		if ! ${do_expertmode} && \
-		    [ $(id -u 2>/dev/null) -ne 0 ] && \
+		    [ "$(id -u 2>/dev/null)" -ne 0 ] && \
 		    [ "${MKUNPRIVED}" = "no" ] ; then
 			bomb "-U or -E must be set for build as an unprivileged user."
 		fi
@@ -852,15 +960,15 @@ createmakewrapper()
 	fi
 
 	case "${KSH_VERSION:-${SH_VERSION}}" in
-	*PD\ KSH*)
+	*PD\ KSH*|*MIRBSD\ KSH*)
 		set +o braceexpand
 		;;
 	esac
 
 	eval cat <<EOF ${makewrapout}
-#! /bin/sh
+#! ${HOST_SH}
 # Set proper variables to allow easy "make" building of a NetBSD subtree.
-# Generated from:  \$NetBSD: build.sh,v 1.140 2005/12/12 04:51:55 jmc Exp $
+# Generated from:  \$NetBSD: build.sh,v 1.153 2006/09/29 19:53:54 apb Exp $
 # with these arguments: ${_args}
 #
 EOF
@@ -891,12 +999,13 @@ buildtools()
 	fi
 	${runcmd} cd tools
 	if [ "${MKUPDATE}" = "no" ]; then
-		cleandir=cleandir
-	else
-		cleandir=
+		${runcmd} "${makewrapper}" ${parallel} cleandir ||
+		    bomb "Failed to make cleandir tools"
 	fi
-	${runcmd} "${makewrapper}" ${cleandir} dependall install ||
-	    bomb "Failed to make tools"
+	${runcmd} "${makewrapper}" ${parallel} dependall ||
+	    bomb "Failed to make dependall tools"
+	${runcmd} "${makewrapper}" ${parallel} install ||
+	    bomb "Failed to make install tools"
 	statusmsg "Tools built to ${TOOLDIR}"
 	${runcmd} cd "${TOP}"
 }
@@ -912,7 +1021,7 @@ getkernelconf()
 		KERNSRCDIR="$(getmakevar KERNSRCDIR)"
 		KERNARCHDIR="$(getmakevar KERNARCHDIR)"
 		${runcmd} cd "${KERNSRCDIR}/${KERNARCHDIR}/compile"
-		${runcmd} "${makewrapper}" obj ||
+		${runcmd} "${makewrapper}" ${parallel} obj ||
 		    bomb "Failed to make obj in ${KERNSRCDIR}/${KERNARCHDIR}/compile"
 		${runcmd} cd "${TOP}"
 	fi
@@ -950,7 +1059,7 @@ buildkernel()
 	    bomb "Cannot mkdir: ${kernelbuildpath}"
 	if [ "${MKUPDATE}" = "no" ]; then
 		${runcmd} cd "${kernelbuildpath}"
-		${runcmd} "${makewrapper}" cleandir ||
+		${runcmd} "${makewrapper}" ${parallel} cleandir ||
 		    bomb "Failed to make cleandir in ${kernelbuildpath}"
 		${runcmd} cd "${TOP}"
 	fi
@@ -958,7 +1067,7 @@ buildkernel()
 		-s "${TOP}/sys" "${kernelconfpath}" ||
 	    bomb "${toolprefix}config failed for ${kernelconf}"
 	${runcmd} cd "${kernelbuildpath}"
-	${runcmd} "${makewrapper}" depend ||
+	${runcmd} "${makewrapper}" ${parallel} depend ||
 	    bomb "Failed to make depend in ${kernelbuildpath}"
 	${runcmd} "${makewrapper}" ${parallel} all ||
 	    bomb "Failed to make all in ${kernelbuildpath}"
@@ -1008,6 +1117,8 @@ main()
 	statusmsg "${progname} command: $0 $@"
 	statusmsg "${progname} started: ${build_start}"
 
+	statusmsg "HOST_SH:          ${HOST_SH}"
+
 	rebuildmake
 	validatemakeparams
 	createmakewrapper
@@ -1031,8 +1142,8 @@ main()
 			    bomb "Failed to make ${op}"
 			statusmsg "Successful make ${op}"
 			;;
-			
-		obj|build|distribution|release|sourcesets|params)
+
+		obj|build|distribution|iso-image|release|sourcesets|syspkgs|params)
 			${runcmd} "${makewrapper}" ${parallel} ${op} ||
 			    bomb "Failed to make ${op}"
 			statusmsg "Successful make ${op}"

@@ -1,4 +1,4 @@
-/*	$NetBSD: magma.c,v 1.31 2005/12/11 12:23:44 christos Exp $	*/
+/*	$NetBSD: magma.c,v 1.38 2006/10/01 20:31:51 elad Exp $	*/
 /*
  * magma.c
  *
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: magma.c,v 1.31 2005/12/11 12:23:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: magma.c,v 1.38 2006/10/01 20:31:51 elad Exp $");
 
 #if 0
 #define MAGMA_DEBUG
@@ -60,6 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: magma.c,v 1.31 2005/12/11 12:23:44 christos Exp $");
 #include <sys/syslog.h>
 #include <sys/conf.h>
 #include <sys/errno.h>
+#include <sys/kauth.h>
 
 #include <machine/bus.h>
 #include <machine/intr.h>
@@ -250,7 +251,7 @@ cd1400_compute_baud(speed, clock, cor, bpr)
 /*
  * Write a CD1400 channel command, should have a timeout?
  */
-__inline void
+inline void
 cd1400_write_ccr(cd, cmd)
 	struct cd1400 *cd;
 	u_char cmd;
@@ -264,7 +265,7 @@ cd1400_write_ccr(cd, cmd)
 /*
  * read a value from a cd1400 register
  */
-__inline u_char
+inline u_char
 cd1400_read_reg(cd, reg)
 	struct cd1400 *cd;
 	int reg;
@@ -275,7 +276,7 @@ cd1400_read_reg(cd, reg)
 /*
  * write a value to a cd1400 register
  */
-__inline void
+inline void
 cd1400_write_reg(cd, reg, value)
 	struct cd1400 *cd;
 	int reg;
@@ -504,7 +505,7 @@ magma_attach(parent, self, aux)
  *
  *  returns 1 if it handled it, otherwise 0
  *
- *  runs at interrupt priority
+ *  runs at IPL_SERIAL
  */
 int
 magma_hard(arg)
@@ -725,9 +726,7 @@ magma_hard(arg)
 /*
  * magma soft interrupt handler
  *
- *  returns 1 if it handled it, 0 otherwise
- *
- *  runs at spltty()
+ * runs at IPL_SOFTSERIAL
  */
 void
 magma_soft(arg)
@@ -776,7 +775,7 @@ magma_soft(arg)
 			(*tp->t_linesw->l_rint)(data, tp);
 		}
 
-		s = splhigh();	/* block out hard interrupt routine */
+		s = splserial();	/* block out hard interrupt routine */
 		flags = mp->mp_flags;
 		CLR(mp->mp_flags, MTTYF_DONE | MTTYF_CARRIER_CHANGED | MTTYF_RING_OVERFLOW);
 		splx(s);	/* ok */
@@ -813,7 +812,7 @@ chkbpp:
 		if( !ISSET(mp->mp_flags, MBPPF_OPEN) )
 			continue;
 
-		s = splhigh();
+		s = splserial();
 		flags = mp->mp_flags;
 		CLR(mp->mp_flags, MBPPF_WAKEUP);
 		splx(s);
@@ -924,9 +923,7 @@ mttyopen(dev, flags, mode, l)
 	tp = mp->mp_tty;
 	tp->t_dev = dev;
 
-	if (ISSET(tp->t_state, TS_ISOPEN) &&
-	    ISSET(tp->t_state, TS_XCLUDE) &&
-	    suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0)
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
 		return (EBUSY);
 
 	s = spltty();
@@ -1164,7 +1161,8 @@ mttyioctl(dev, cmd, data, flags, l)
 		break;
 
 	case TIOCSFLAGS:
-		if( suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) )
+		if (kauth_authorize_device_tty(l->l_cred, 
+		    KAUTH_DEVICE_TTY_PRIVSET, tp))
 			error = EPERM;
 		else
 			mp->mp_openflags = *((int *)data) &

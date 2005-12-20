@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_usrreq.c,v 1.10 2005/12/11 12:22:50 christos Exp $	*/
+/*	$NetBSD: pci_usrreq.c,v 1.13 2006/11/16 01:33:09 christos Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_usrreq.c,v 1.10 2005/12/11 12:22:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_usrreq.c,v 1.13 2006/11/16 01:33:09 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -56,7 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: pci_usrreq.c,v 1.10 2005/12/11 12:22:50 christos Exp
 #include <dev/pci/pciio.h>
 
 static int
-pciopen(dev_t dev, int flags, int mode, struct lwp *l)
+pciopen(dev_t dev, int flags, int mode,
+    struct lwp *l)
 {
 	struct pci_softc *sc;
 	int unit;
@@ -130,7 +131,7 @@ pcimmap(dev_t dev, off_t offset, int prot)
 
 const struct cdevsw pci_cdevsw = {
 	pciopen, nullclose, noread, nowrite, pciioctl,
-	    nostop, notty, nopoll, pcimmap, nokqfilter,
+	nostop, notty, nopoll, pcimmap, nokqfilter, D_OTHER,
 };
 
 /*

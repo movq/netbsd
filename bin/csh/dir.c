@@ -1,4 +1,4 @@
-/* $NetBSD: dir.c,v 1.24 2005/06/26 19:10:48 christos Exp $ */
+/* $NetBSD: dir.c,v 1.26 2006/04/05 23:10:16 christos Exp $ */
 
 /*-
  * Copyright (c) 1980, 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)dir.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: dir.c,v 1.24 2005/06/26 19:10:48 christos Exp $");
+__RCSID("$NetBSD: dir.c,v 1.26 2006/04/05 23:10:16 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -87,7 +87,7 @@ dinit(Char *hp)
 	    if (chdir(ecp) == -1)
 		cp = NULL;
 	    else
-		cp = hp;
+		cp = Strsave(hp);
 	    (void)fprintf(csherr, emsg, vis_str(hp));
 	}
 	else
@@ -110,7 +110,7 @@ dinit(Char *hp)
 	if (hp && *hp &&
 	    stat(ecp, &swd) != -1 && stat(short2str(hp), &shp) != -1 &&
 	    swd.st_dev == shp.st_dev && swd.st_ino == shp.st_ino)
-	    cp = hp;
+	    cp = Strsave(hp);
 	else {
 	    const char *cwd;
 
@@ -127,7 +127,7 @@ dinit(Char *hp)
     }
 
     dp = (struct directory *)xcalloc(1, sizeof(struct directory));
-    dp->di_name = Strsave(cp);
+    dp->di_name = cp;
     dp->di_count = 0;
     dhead.di_next = dhead.di_prev = dp;
     dp->di_next = dp->di_prev = &dhead;

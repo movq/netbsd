@@ -1,4 +1,4 @@
-/*	$NetBSD: ite.c,v 1.48 2005/12/11 12:16:54 christos Exp $	*/
+/*	$NetBSD: ite.c,v 1.53 2006/10/01 18:56:21 elad Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -81,7 +81,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.48 2005/12/11 12:16:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.53 2006/10/01 18:56:21 elad Exp $");
 
 #include "opt_ddb.h"
 
@@ -98,6 +98,7 @@ __KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.48 2005/12/11 12:16:54 christos Exp $");
 #include <sys/callout.h>
 #include <sys/proc.h>
 #include <dev/cons.h>
+#include <sys/kauth.h>
 
 #include <machine/cpu.h>
 
@@ -141,25 +142,25 @@ u_char	cons_tabs[MAX_TABS];
 struct ite_softc *kbd_ite;
 int kbd_init;
 
-static __inline__ int  atoi __P((const char *));
-static __inline__ int  ite_argnum __P((struct ite_softc *));
-static __inline__ int  ite_zargnum __P((struct ite_softc *));
-static __inline__ void ite_cr __P((struct ite_softc *));
-static __inline__ void ite_crlf __P((struct ite_softc *));
-static __inline__ void ite_clrline __P((struct ite_softc *));
-static __inline__ void ite_clrscreen __P((struct ite_softc *));
-static __inline__ void ite_clrtobos __P((struct ite_softc *));
-static __inline__ void ite_clrtobol __P((struct ite_softc *));
-static __inline__ void ite_clrtoeol __P((struct ite_softc *));
-static __inline__ void ite_clrtoeos __P((struct ite_softc *));
-static __inline__ void ite_dnchar __P((struct ite_softc *, int));
-static __inline__ void ite_inchar __P((struct ite_softc *, int));
-static __inline__ void ite_inline __P((struct ite_softc *, int));
-static __inline__ void ite_lf __P((struct ite_softc *));
-static __inline__ void ite_dnline __P((struct ite_softc *, int));
-static __inline__ void ite_rlf __P((struct ite_softc *));
-static __inline__ void ite_sendstr __P((const char *));
-static __inline__ void snap_cury __P((struct ite_softc *));
+static inline int  atoi __P((const char *));
+static inline int  ite_argnum __P((struct ite_softc *));
+static inline int  ite_zargnum __P((struct ite_softc *));
+static inline void ite_cr __P((struct ite_softc *));
+static inline void ite_crlf __P((struct ite_softc *));
+static inline void ite_clrline __P((struct ite_softc *));
+static inline void ite_clrscreen __P((struct ite_softc *));
+static inline void ite_clrtobos __P((struct ite_softc *));
+static inline void ite_clrtobol __P((struct ite_softc *));
+static inline void ite_clrtoeol __P((struct ite_softc *));
+static inline void ite_clrtoeos __P((struct ite_softc *));
+static inline void ite_dnchar __P((struct ite_softc *, int));
+static inline void ite_inchar __P((struct ite_softc *, int));
+static inline void ite_inline __P((struct ite_softc *, int));
+static inline void ite_lf __P((struct ite_softc *));
+static inline void ite_dnline __P((struct ite_softc *, int));
+static inline void ite_rlf __P((struct ite_softc *));
+static inline void ite_sendstr __P((const char *));
+static inline void snap_cury __P((struct ite_softc *));
 
 static void	alignment_display __P((struct ite_softc *));
 static struct ite_softc *getitesp __P((dev_t));
@@ -240,7 +241,7 @@ iteattach(pdp, dp, auxp)
 	ip = (struct ite_softc *)dp;
 
 	maj = cdevsw_lookup_major(&ite_cdevsw);
-	unit = (dp != NULL) ? ip->device.dv_unit : cons_ite;
+	unit = (dp != NULL) ? device_unit(&ip->device) : cons_ite;
 	gp->g_itedev = makedev(maj, unit);
 
 	if (dp) {
@@ -441,9 +442,9 @@ iteopen(dev, mode, devtype, l)
 	}
 	else tp = ip->tp;
 
-	if ((tp->t_state & (TS_ISOPEN | TS_XCLUDE)) == (TS_ISOPEN | TS_XCLUDE)
-	    && suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0)
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
 		return (EBUSY);
+
 	if ((ip->flags & ITE_ACTIVE) == 0) {
 		ite_on(dev, 0);
 		first = 1;
@@ -1142,7 +1143,7 @@ enum caller	caller;
 }
 
 /* helper functions, makes the code below more readable */
-static __inline__ void
+static inline void
 ite_sendstr(str)
 	const char *str;
 {
@@ -1167,7 +1168,7 @@ alignment_display(ip)
   SUBR_CURSOR(ip, DRAW_CURSOR);
 }
 
-static __inline__ void
+static inline void
 snap_cury(ip)
 	struct ite_softc *ip;
 {
@@ -1180,7 +1181,7 @@ snap_cury(ip)
     }
 }
 
-static __inline__ void
+static inline void
 ite_dnchar(ip, n)
      struct ite_softc *ip;
      int n;
@@ -1198,7 +1199,7 @@ ite_dnchar(ip, n)
   SUBR_CURSOR(ip, DRAW_CURSOR);
 }
 
-static __inline__ void
+static inline void
 ite_inchar(ip, n)
      struct ite_softc *ip;
      int n;
@@ -1216,7 +1217,7 @@ ite_inchar(ip, n)
   SUBR_CURSOR(ip, DRAW_CURSOR);
 }
 
-static __inline__ void
+static inline void
 ite_clrtoeol(ip)
      struct ite_softc *ip;
 {
@@ -1229,7 +1230,7 @@ ite_clrtoeol(ip)
     }
 }
 
-static __inline__ void
+static inline void
 ite_clrtobol(ip)
      struct ite_softc *ip;
 {
@@ -1239,7 +1240,7 @@ ite_clrtobol(ip)
   SUBR_CURSOR(ip, DRAW_CURSOR);
 }
 
-static __inline__ void
+static inline void
 ite_clrline(ip)
      struct ite_softc *ip;
 {
@@ -1251,7 +1252,7 @@ ite_clrline(ip)
 
 
 
-static __inline__ void
+static inline void
 ite_clrtoeos(ip)
      struct ite_softc *ip;
 {
@@ -1264,7 +1265,7 @@ ite_clrtoeos(ip)
     }
 }
 
-static __inline__ void
+static inline void
 ite_clrtobos(ip)
      struct ite_softc *ip;
 {
@@ -1277,7 +1278,7 @@ ite_clrtobos(ip)
     }
 }
 
-static __inline__ void
+static inline void
 ite_clrscreen(ip)
      struct ite_softc *ip;
 {
@@ -1288,7 +1289,7 @@ ite_clrscreen(ip)
 
 
 
-static __inline__ void
+static inline void
 ite_dnline(ip, n)
      struct ite_softc *ip;
      int n;
@@ -1310,7 +1311,7 @@ ite_dnline(ip, n)
   SUBR_CURSOR(ip, DRAW_CURSOR);
 }
 
-static __inline__ void
+static inline void
 ite_inline(ip, n)
      struct ite_softc *ip;
      int n;
@@ -1332,7 +1333,7 @@ ite_inline(ip, n)
   SUBR_CURSOR(ip, DRAW_CURSOR);
 }
 
-static __inline__ void
+static inline void
 ite_lf (ip)
      struct ite_softc *ip;
 {
@@ -1347,7 +1348,7 @@ ite_lf (ip)
   clr_attr(ip, ATTR_INV);
 }
 
-static __inline__ void
+static inline void
 ite_crlf (ip)
      struct ite_softc *ip;
 {
@@ -1355,7 +1356,7 @@ ite_crlf (ip)
   ite_lf (ip);
 }
 
-static __inline__ void
+static inline void
 ite_cr (ip)
      struct ite_softc *ip;
 {
@@ -1366,7 +1367,7 @@ ite_cr (ip)
     }
 }
 
-static __inline__ void
+static inline void
 ite_rlf (ip)
      struct ite_softc *ip;
 {
@@ -1381,7 +1382,7 @@ ite_rlf (ip)
   clr_attr(ip, ATTR_INV);
 }
 
-static __inline__ int
+static inline int
 atoi (cp)
     const char *cp;
 {
@@ -1393,7 +1394,7 @@ atoi (cp)
   return n;
 }
 
-static __inline__ int
+static inline int
 ite_argnum (ip)
     struct ite_softc *ip;
 {
@@ -1411,7 +1412,7 @@ ite_argnum (ip)
   return n;
 }
 
-static __inline__ int
+static inline int
 ite_zargnum (ip)
     struct ite_softc *ip;
 {

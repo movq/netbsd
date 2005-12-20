@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdivar.h,v 1.75 2005/12/11 12:24:01 christos Exp $	*/
+/*	$NetBSD: usbdivar.h,v 1.79 2006/12/01 20:48:50 drochner Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usbdivar.h,v 1.11 1999/11/17 22:33:51 n_hibma Exp $	*/
 
 /*
@@ -73,9 +73,11 @@ struct usbd_pipe_methods {
 	void		      (*done)(usbd_xfer_handle xfer);
 };
 
+#if 0 /* notyet */
 struct usbd_tt {
 	struct usbd_hub	       *hub;
 };
+#endif
 
 struct usbd_port {
 	usb_port_status_t	status;
@@ -86,7 +88,9 @@ struct usbd_port {
 	u_int8_t		reattach;
 	struct usbd_device     *device;	/* Connected device */
 	struct usbd_device     *parent;	/* The ports hub */
+#if 0
 	struct usbd_tt	       *tt; /* Transaction translator (if any) */
+#endif
 };
 
 struct usbd_hub {
@@ -198,13 +202,11 @@ struct usbd_xfer {
 	u_int32_t		timeout;
 	usbd_status		status;
 	usbd_callback		callback;
-	__volatile char		done;
-#ifdef DIAGNOSTIC
-	u_int32_t		busy_free;
-#define XFER_FREE 0x46524545
-#define XFER_BUSY 0x42555359
-#define XFER_ONQU 0x4f4e5155
-#endif
+	volatile u_int8_t	done;
+	u_int8_t		busy_free;	/* used for DIAGNOSTIC */
+#define XFER_FREE 0x46
+#define XFER_BUSY 0x55
+#define XFER_ONQU 0x9e
 
 	/* For control pipe */
 	usb_device_request_t	request;
@@ -308,16 +310,16 @@ void		usb_schedsoftintr(struct usbd_bus *);
 #define	UHUBCF_RELEASE		5
 #endif
 
-#define	uhubcf_port		cf_loc[UHUBCF_PORT]
-#define	uhubcf_configuration	cf_loc[UHUBCF_CONFIGURATION]
-#define	uhubcf_interface	cf_loc[UHUBCF_INTERFACE]
-#define	uhubcf_vendor		cf_loc[UHUBCF_VENDOR]
-#define	uhubcf_product		cf_loc[UHUBCF_PRODUCT]
-#define	uhubcf_release		cf_loc[UHUBCF_RELEASE]
-#define	UHUB_UNK_PORT		UHUBCF_PORT_DEFAULT /* wildcarded 'port' */
-#define	UHUB_UNK_CONFIGURATION	UHUBCF_CONFIGURATION_DEFAULT /* wildcarded 'configuration' */
-#define	UHUB_UNK_INTERFACE	UHUBCF_INTERFACE_DEFAULT /* wildcarded 'interface' */
-#define	UHUB_UNK_VENDOR		UHUBCF_VENDOR_DEFAULT /* wildcarded 'vendor' */
-#define	UHUB_UNK_PRODUCT	UHUBCF_PRODUCT_DEFAULT /* wildcarded 'product' */
-#define	UHUB_UNK_RELEASE	UHUBCF_RELEASE_DEFAULT /* wildcarded 'release' */
+#define	uhubcf_port		cf_loc[USBDEVIFCF_PORT]
+#define	uhubcf_configuration	cf_loc[USBDEVIFCF_CONFIGURATION]
+#define	uhubcf_interface	cf_loc[USBDEVIFCF_INTERFACE]
+#define	uhubcf_vendor		cf_loc[USBDEVIFCF_VENDOR]
+#define	uhubcf_product		cf_loc[USBDEVIFCF_PRODUCT]
+#define	uhubcf_release		cf_loc[USBDEVIFCF_RELEASE]
+#define	UHUB_UNK_PORT		USBDEVIFCF_PORT_DEFAULT /* wildcarded 'port' */
+#define	UHUB_UNK_CONFIGURATION	USBDEVIFCF_CONFIGURATION_DEFAULT /* wildcarded 'configuration' */
+#define	UHUB_UNK_INTERFACE	USBDEVIFCF_INTERFACE_DEFAULT /* wildcarded 'interface' */
+#define	UHUB_UNK_VENDOR		USBDEVIFCF_VENDOR_DEFAULT /* wildcarded 'vendor' */
+#define	UHUB_UNK_PRODUCT	USBDEVIFCF_PRODUCT_DEFAULT /* wildcarded 'product' */
+#define	UHUB_UNK_RELEASE	USBDEVIFCF_RELEASE_DEFAULT /* wildcarded 'release' */
 

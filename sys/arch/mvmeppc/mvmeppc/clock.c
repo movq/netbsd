@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.10 2005/11/23 13:00:51 nonaka Exp $	*/
+/*	$NetBSD: clock.c,v 1.12 2006/09/17 03:38:36 gdamore Exp $	*/
 /*      $OpenBSD: clock.c,v 1.3 1997/10/13 13:42:53 pefo Exp $  */
 
 /*
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.10 2005/11/23 13:00:51 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.12 2006/09/17 03:38:36 gdamore Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -50,8 +50,6 @@ u_long ticks_per_sec;
 u_long ns_per_tick;
 static long ticks_per_intr;
 static volatile u_long lasttb;
-
-static todr_chip_handle_t clock_handle;
 
 void decr_intr __P((struct clockframe *)); /* Called from trap_subr.S */
 
@@ -76,10 +74,10 @@ decr_intr(frame)
 	 * Based on the actual time delay since the last decrementer reload,
 	 * we arrange for earlier interrupt next time.
 	 */
-	asm ("mfdec %0" : "=r"(decrtick));
+	__asm ("mfdec %0" : "=r"(decrtick));
 	for (nticks = 0; decrtick < 0; nticks++)
 		decrtick += ticks_per_intr;
-	asm volatile ("mtdec %0" :: "r"(decrtick));
+	__asm volatile ("mtdec %0" :: "r"(decrtick));
 
 	intrcnt[CNT_CLOCK]++;
 
@@ -94,13 +92,13 @@ decr_intr(frame)
 		 * lasttb is used during microtime. Set it to the virtual
 		 * start of this tick interval.
 		 */
-		asm ("mftb %0" : "=r"(tb));
+		__asm ("mftb %0" : "=r"(tb));
 		lasttb = tb + decrtick - ticks_per_intr;
 
 		/*
 		 * Reenable interrupts
 		 */
-		asm volatile ("mfmsr %0; ori %0, %0, %1; mtmsr %0"
+		__asm volatile ("mfmsr %0; ori %0, %0, %1; mtmsr %0"
 			      : "=r"(msr) : "K"(PSL_EE));
 		
 		/*
@@ -121,8 +119,8 @@ cpu_initclocks()
 {
 	ticks_per_intr = ticks_per_sec / hz;
 	cpu_timebase = ticks_per_sec;
-	asm volatile ("mftb %0" : "=r"(lasttb));
-	asm volatile ("mtdec %0" :: "r"(ticks_per_intr));
+	__asm volatile ("mftb %0" : "=r"(lasttb));
+	__asm volatile ("mtdec %0" :: "r"(ticks_per_intr));
 }
 
 /*
@@ -136,12 +134,12 @@ microtime(tvp)
 	u_long ticks;
 	int msr, scratch;
 	
-	asm volatile ("mfmsr %0; andi. %1,%0,%2; mtmsr %1"
+	__asm volatile ("mfmsr %0; andi. %1,%0,%2; mtmsr %1"
 		      : "=r"(msr), "=r"(scratch) : "K"((u_short)~PSL_EE));
-	asm ("mftb %0" : "=r"(tb));
+	__asm ("mftb %0" : "=r"(tb));
 	ticks = (tb - lasttb) * ns_per_tick;
 	*tvp = time;
-	asm volatile ("mtmsr %0" :: "r"(msr));
+	__asm volatile ("mtmsr %0" :: "r"(msr));
 	ticks /= 1000;
 	tvp->tv_usec += ticks;
 	while (tvp->tv_usec >= 1000000) {
@@ -164,7 +162,7 @@ delay(n)
 	tb += (n * 1000 + ns_per_tick - 1) / ns_per_tick;
 	tbh = tb >> 32;
 	tbl = tb;
-	asm volatile ("1: mftbu %0; cmplw %0,%1; blt 1b; bgt 2f;"
+	__asm volatile ("1: mftbu %0; cmplw %0,%1; blt 1b; bgt 2f;"
 		      "mftb %0; cmplw %0,%2; blt 1b; 2:"
 		      : "=&r"(scratch) : "r"(tbh), "r"(tbl));
 }
@@ -177,79 +175,4 @@ setstatclockrate(arg)
 	int arg;
 {
 	/* Do nothing */
-}
-
-void
-todr_attach(todr)
-	todr_chip_handle_t todr;
-{
-	if (clock_handle)
-		panic("todr_attach: multiple clocks!");
-
-	clock_handle = todr;
-}
-
-/*
- * Set up the system's time, given a `reasonable' time value.
- */
-void
-inittodr(base)
-        time_t base;
-{
-        int badbase = 0, waszero = (base == 0);
-
-	if (clock_handle == NULL)
-		panic("todr not configured");
-
-        if (base < 5 * SECYR) {
-                /*
-                 * If base is 0, assume filesystem time is just unknown
-                 * in stead of preposterous. Don't bark.
-                 */
-                if (base != 0)
-                        printf("WARNING: preposterous time in file system\n");
-                /* not going to use it anyway, if the chip is readable */
-                base = 21*SECYR + 186*SECDAY + SECDAY/2;
-                badbase = 1;
-        }
-
-        if (todr_gettime(clock_handle, &time) != 0 ||
-            time.tv_sec == 0) {
-                printf("WARNING: bad date in battery clock");
-                /*
-                 * Believe the time in the file system for lack of
-                 * anything better, resetting the clock.
-                 */
-                time.tv_sec = base;
-                if (!badbase)
-                        resettodr();
-        } else {
-                int deltat = time.tv_sec - base;
-
-                if (deltat < 0)
-                        deltat = -deltat;
-                if (waszero || deltat < 2 * SECDAY)
-                        return;
-                printf("WARNING: clock %s %d days",
-                    time.tv_sec < base ? "lost" : "gained", deltat / SECDAY);
-        }
-        printf(" -- CHECK AND RESET THE DATE!\n");
-}
-
-
-/*
- * Reset the clock based on the current time.
- * Used when the current clock is preposterous, when the time is changed,
- * and when rebooting.  Do nothing if the time is not yet known, e.g.,
- * when crashing during autoconfig.
- */
-void
-resettodr()
-{
-
-        if (!time.tv_sec)
-                return;
-
-        if (todr_settime(clock_handle, &time) != 0)
-                printf("resettodr: failed to set time\n");
 }

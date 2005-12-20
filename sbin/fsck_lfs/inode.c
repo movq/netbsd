@@ -1,4 +1,4 @@
-/* $NetBSD: inode.c,v 1.31 2005/09/13 04:14:17 christos Exp $	 */
+/* $NetBSD: inode.c,v 1.36 2006/11/09 19:36:36 christos Exp $	 */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -84,6 +84,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <util.h>
 
 #include "bufcache.h"
 #include "vnode.h"
@@ -169,8 +170,8 @@ ckinode(struct ufs1_dinode *dp, struct inodesc *idesc)
 				/* An empty block in a directory XXX */
 				getpathname(pathbuf, sizeof(pathbuf),
 				    idesc->id_number, idesc->id_number);
-				pfatal("DIRECTORY %s: CONTAINS EMPTY BLOCKS",
-				    pathbuf);
+				pfatal("DIRECTORY %s INO %lld: CONTAINS EMPTY BLOCKS [1]",
+				    pathbuf, (long long)idesc->id_number);
 				if (reply("ADJUST LENGTH") == 1) {
 					vp = vget(fs, idesc->id_number);
 					dp = VTOD(vp);
@@ -180,7 +181,8 @@ ckinode(struct ufs1_dinode *dp, struct inodesc *idesc)
 					    "YOU MUST RERUN FSCK AFTERWARDS\n");
 					rerun = 1;
 					inodirty(VTOI(vp));
-				}
+				} else
+					break;
 			}
 			continue;
 		}
@@ -207,8 +209,8 @@ ckinode(struct ufs1_dinode *dp, struct inodesc *idesc)
 				/* An empty block in a directory XXX */
 				getpathname(pathbuf, sizeof(pathbuf),
 				    idesc->id_number, idesc->id_number);
-				pfatal("DIRECTORY %s: CONTAINS EMPTY BLOCKS",
-				    pathbuf);
+				pfatal("DIRECTORY %s INO %lld: CONTAINS EMPTY BLOCKS [2]",
+				    pathbuf, (long long)idesc->id_number);
 				if (reply("ADJUST LENGTH") == 1) {
 					vp = vget(fs, idesc->id_number);
 					dp = VTOD(vp);
@@ -219,7 +221,8 @@ ckinode(struct ufs1_dinode *dp, struct inodesc *idesc)
 					rerun = 1;
 					inodirty(VTOI(vp));
 					break;
-				}
+				} else
+					break;
 			}
 		}
 		sizepb *= NINDIR(fs);
@@ -296,8 +299,8 @@ iblock(struct inodesc *idesc, long ilevel, u_int64_t isize)
 				/* An empty block in a directory XXX */
 				getpathname(pathbuf, sizeof(pathbuf),
 				    idesc->id_number, idesc->id_number);
-				pfatal("DIRECTORY %s: CONTAINS EMPTY BLOCKS",
-				    pathbuf);
+				pfatal("DIRECTORY %s INO %lld: CONTAINS EMPTY BLOCKS [3]",
+				    pathbuf, (long long)idesc->id_number);
 				if (reply("ADJUST LENGTH") == 1) {
 					vp = vget(fs, idesc->id_number);
 					VTOI(vp)->i_ffs1_size -= isize;
@@ -362,10 +365,7 @@ cacheino(struct ufs1_dinode * dp, ino_t inumber)
 	blks = howmany(dp->di_size, fs->lfs_bsize);
 	if (blks > NDADDR)
 		blks = NDADDR + NIADDR;
-	inp = (struct inoinfo *)
-	    malloc(sizeof(*inp) + (blks - 1) * sizeof(ufs_daddr_t));
-	if (inp == NULL)
-		return;
+	inp = emalloc(sizeof(*inp) + (blks - 1) * sizeof(ufs_daddr_t));
 	inpp = &inphead[inumber % numdirs];
 	inp->i_nexthash = *inpp;
 	*inpp = inp;
@@ -381,10 +381,8 @@ cacheino(struct ufs1_dinode * dp, ino_t inumber)
 	inp->i_numblks = blks * sizeof(ufs_daddr_t);
 	memcpy(&inp->i_blks[0], &dp->di_db[0], (size_t) inp->i_numblks);
 	if (inplast == listmax) {
-		ninpsort = (struct inoinfo **) realloc((char *) inpsort,
-		    (unsigned) (listmax + 100) * sizeof(struct inoinfo *));
-		if (ninpsort == NULL)
-			err(8, "cannot increase directory list\n");
+		ninpsort = erealloc(inpsort,
+		    (listmax + 100) * sizeof(struct inoinfo *));
 		inpsort = ninpsort;
 		listmax += 100;
 	}
@@ -404,7 +402,7 @@ getinoinfo(ino_t inumber)
 			continue;
 		return (inp);
 	}
-	err(8, "cannot find inode %llu\n", (unsigned long long)inumber);
+	err(EEXIT, "cannot find inode %llu\n", (unsigned long long)inumber);
 	return ((struct inoinfo *) 0);
 }
 
@@ -437,12 +435,12 @@ clri(struct inodesc * idesc, const char *type, int flag)
 	struct uvnode *vp;
 
 	vp = vget(fs, idesc->id_number);
-	if (flag == 1) {
+	if (flag & 0x1) {
 		pwarn("%s %s", type,
 		      (VTOI(vp)->i_ffs1_mode & IFMT) == IFDIR ? "DIR" : "FILE");
 		pinode(idesc->id_number);
 	}
-	if (flag == 2 || preen || reply("CLEAR") == 1) {
+	if ((flag & 0x2) || preen || reply("CLEAR") == 1) {
 		if (preen && flag != 2)
 			printf(" (CLEARED)\n");
 		n_files--;
@@ -450,7 +448,9 @@ clri(struct inodesc * idesc, const char *type, int flag)
 		clearinode(idesc->id_number);
 		statemap[idesc->id_number] = USTATE;
 		vnode_destroy(vp);
+		return;
 	}
+	return;
 }
 
 void
@@ -464,6 +464,10 @@ clearinode(ino_t inumber)
 
 	LFS_IENTRY(ifp, fs, inumber, bp);
 	daddr = ifp->if_daddr;
+	if (daddr == LFS_UNUSED_DADDR) {
+		brelse(bp);
+		return;
+	}
 	ifp->if_daddr = LFS_UNUSED_DADDR;
 	ifp->if_nextfree = fs->lfs_freehd;
 	fs->lfs_freehd = inumber;
@@ -477,6 +481,7 @@ clearinode(ino_t inumber)
 		SEGUSE *sup;
 		u_int32_t oldsn = dtosn(fs, daddr);
 
+		seg_table[oldsn].su_nbytes -= DINODE1_SIZE;
 		LFS_SEGENTRY(sup, fs, oldsn, bp);
 		sup->su_nbytes -= DINODE1_SIZE;
 		LFS_WRITESEGENTRY(sup, fs, oldsn, bp);	/* Ifile */
@@ -571,7 +576,7 @@ blkerror(ino_t ino, const char *type, daddr_t blk)
 		return;
 
 	default:
-		err(8, "BAD STATE %d TO BLKERR\n", statemap[ino]);
+		err(EEXIT, "BAD STATE %d TO BLKERR\n", statemap[ino]);
 		/* NOTREACHED */
 	}
 }
@@ -596,7 +601,8 @@ allocino(ino_t request, int type)
 		if (statemap[ino] == USTATE)
 			break;
 	if (ino == maxino)
-		return (0);
+		extend_ifile(fs);
+
 	switch (type & IFMT) {
 	case IFDIR:
 		statemap[ino] = DSTATE;

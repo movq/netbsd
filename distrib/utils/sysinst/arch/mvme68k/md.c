@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.16 2004/10/16 13:20:11 dsl Exp $	*/
+/*	$NetBSD: md.c,v 1.19 2006/09/04 00:11:00 hubertf Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -50,8 +50,6 @@
 #include "md.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
-
-const char *fdtype = "ffs";
 
 int
 md_get_info(void)
@@ -228,6 +226,7 @@ md_update(void)
 void
 md_cleanup_install(void)
 {
+  
 #ifdef notyet			/* sed is too large for ramdisk */
 	enable_rc_conf();
 #endif
@@ -248,4 +247,10 @@ md_pre_update()
 void
 md_init()
 {
+}
+
+int
+md_post_extract(void)
+{
+	return 0;
 }

@@ -1,4 +1,4 @@
-/*      $NetBSD: xbdback.c,v 1.17 2005/12/11 12:19:50 christos Exp $      */
+/*      $NetBSD: xbdback.c,v 1.22 2006/11/14 22:14:56 bouyer Exp $      */
 
 /*
  * Copyright (c) 2005 Manuel Bouyer.
@@ -41,6 +41,7 @@
 #include <sys/disklabel.h>
 #include <sys/fcntl.h>
 #include <sys/vnode.h>
+#include <sys/kauth.h>
 
 #include <machine/pmap.h>
 #include <machine/hypervisor.h>
@@ -132,7 +133,7 @@ struct xbdback_instance {
 #define xbdi_get(xbdip) (++(xbdip)->refcnt)
 #define xbdi_put(xbdip)                                      \
 do {                                                         \
-	__asm __volatile("decl %0"                           \
+	__asm volatile("decl %0"                           \
 	    : "=m"((xbdip)->refcnt) : "m"((xbdip)->refcnt)); \
 	if (0 == (xbdip)->refcnt)                            \
                xbdback_finish_disconnect(xbdip);             \
@@ -211,7 +212,9 @@ static struct xbdback_iqueue xbdback_shmq;
 static int xbdback_shmcb; /* have we already registered a callback? */
 
 struct timeval xbdback_poolsleep_intvl = { 5, 0 };
+#ifdef DEBUG
 struct timeval xbdback_fragio_intvl = { 60, 0 };
+#endif
 
 static void xbdback_ctrlif_rx(ctrl_msg_t *, unsigned long);
 static int  xbdback_evthandler(void *);
@@ -391,8 +394,8 @@ xbdback_ctrlif_rx(ctrl_msg_t *msg, unsigned long id)
 		}
 
 		xbdi->ma_ring = req->shmem_frame << PAGE_SHIFT;
-		error = pmap_remap_pages(pmap_kernel(), ring_addr,
-		    xbdi->ma_ring, 1, VM_PROT_READ | VM_PROT_WRITE,
+		error = pmap_enter_ma(pmap_kernel(), ring_addr,
+		    xbdi->ma_ring, 0, VM_PROT_READ | VM_PROT_WRITE,
 		    PMAP_WIRED | PMAP_CANFAIL, req->domid);
 		if (error) {
 			uvm_km_free(kernel_map, ring_addr, PAGE_SIZE,
@@ -541,6 +544,15 @@ xbdback_ctrlif_rx(ctrl_msg_t *msg, unsigned long id)
 			printf("xbdback VBD grow domain %d: can't open "
 			    "device 0x%x (error %d)\n", xbdi->domid,
 			    req->extent.device, error);
+			req->status = BLKIF_BE_STATUS_EXTENT_NOT_FOUND;
+			goto end;
+		}
+		error = vn_lock(vbd->vp, LK_EXCLUSIVE | LK_RETRY);
+		if (error) {
+			printf("xbdback VBD grow domain %d: can't lock "
+			    "device 0x%x (error %d)\n", xbdi->domid,
+			    req->extent.device, error);
+			vrele(vbd->vp);
 			req->status = BLKIF_BE_STATUS_EXTENT_NOT_FOUND;
 			goto end;
 		}
@@ -865,12 +877,14 @@ xbdback_co_io_loop(struct xbdback_instance *xbdi, void *obj)
 				       == blkif_first_sect(this_fas)
 				   && (last_fas & ~PAGE_MASK)
 				       == (this_fas & ~PAGE_MASK)) {
+#ifdef DEBUG
 				static struct timeval gluetimer;
 				if (ratecheck(&gluetimer,
 					      &xbdback_fragio_intvl))
 					printf("xbdback: domain %d sending"
 					    " excessively fragmented I/O\n",
 					    xbdi->domid);
+#endif
 				XENPRINTF(("xbdback_io domain %d: glue same "
 				    "page", xbdi->domid));
 				xbdi->same_page = 1;

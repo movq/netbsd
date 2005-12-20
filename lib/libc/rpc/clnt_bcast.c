@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_bcast.c,v 1.15 2005/12/03 15:16:19 yamt Exp $	*/
+/*	$NetBSD: clnt_bcast.c,v 1.18 2006/11/03 20:24:41 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)clnt_bcast.c 1.15 89/04/21 Copyr 1988 Sun Micro";
 #else
-__RCSID("$NetBSD: clnt_bcast.c,v 1.15 2005/12/03 15:16:19 yamt Exp $");
+__RCSID("$NetBSD: clnt_bcast.c,v 1.18 2006/11/03 20:24:41 christos Exp $");
 #endif
 #endif
 
@@ -151,8 +151,10 @@ __rpc_getbroadifs(int af, int proto, int socktype, broadlist_t *list)
 	hints.ai_protocol = proto;
 	hints.ai_socktype = socktype;
 
-	if (getaddrinfo(NULL, "sunrpc", &hints, &res) != 0)
+	if (getaddrinfo(NULL, "sunrpc", &hints, &res) != 0) {
+		freeifaddrs(ifp);
 		return 0;
+	}
 
 	for (ifap = ifp; ifap != NULL; ifap = ifap->ifa_next) {
 		if (ifap->ifa_addr->sa_family != af ||
@@ -313,6 +315,7 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 	if (nettype == NULL)
 		nettype = "datagram_n";
 	if ((handle = __rpc_setconf(nettype)) == NULL) {
+		AUTH_DESTROY(sys_auth);
 		return (RPC_UNKNOWNPROTO);
 	}
 	while ((nconf = __rpc_getconf(handle)) != NULL) {
@@ -468,10 +471,7 @@ rpc_broadcast_exp(prog, vers, proc, xargs, argsp, xresults, resultsp,
 					    outlen, 0, (struct sockaddr*)addr,
 					    (size_t)fdlist[i].asize) !=
 					    outlen) {
-#ifdef RPC_DEBUG
-						perror("sendto");
-#endif
-						warnx("clnt_bcast: cannot send"
+						warn("clnt_bcast: cannot send"
 						      " broadcast packet");
 						stat = RPC_CANTSEND;
 						continue;

@@ -1,4 +1,4 @@
-/*	$NetBSD: str.c,v 1.4 1997/10/17 11:49:10 lukem Exp $	*/
+/*	$NetBSD: str.c,v 1.6 2006/08/26 18:15:37 christos Exp $	*/
 
 /*
  * Copyright (c) 1994 Christos Zoulas
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: str.c,v 1.4 1997/10/17 11:49:10 lukem Exp $");
+__RCSID("$NetBSD: str.c,v 1.6 2006/08/26 18:15:37 christos Exp $");
 #endif
 
 /*
@@ -41,16 +41,16 @@ __RCSID("$NetBSD: str.c,v 1.4 1997/10/17 11:49:10 lukem Exp $");
  */
 #include <stdlib.h>
 #include <string.h>
+#include <err.h>
+#include <util.h>
 
-#include "util.h"
 #include "str.h"
 
 /*
  * str_init(): Initialize string
  */
 void
-str_init(s)
-	struct string  *s;
+str_init(struct string  *s)
 {
 	s->s_str = NULL;
 	s->s_len = 0;
@@ -61,10 +61,7 @@ str_init(s)
  * str_append(): Append string allocating buffer as necessary
  */
 void
-str_append(buf, str, del)
-	struct string  *buf;
-	const char     *str;
-	int             del;
+str_append(struct string  *buf, const char *str, int del)
 {
 	size_t          len = strlen(str) + 1;
 
@@ -85,10 +82,7 @@ str_append(buf, str, del)
  * str_prepend(): Prepend string allocating buffer as necessary
  */
 void
-str_prepend(buf, str, del)
-	struct string  *buf;
-	const char     *str;
-	int             del;
+str_prepend(struct string *buf, const char *str, int del)
 {
 	char           *ptr, *sptr;
 	size_t          len = strlen(str) + 1;
@@ -113,8 +107,7 @@ str_prepend(buf, str, del)
  * str_free(): Free a string
  */
 void
-str_free(s)
-	struct string  *s;
+str_free(struct string *s)
 {
 	free(s->s_str);
 	s->s_str = NULL;

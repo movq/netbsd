@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.17 2005/06/26 19:10:49 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.19 2006/10/16 00:00:48 christos Exp $	*/
 
 /* main.c: This file contains the main control and user-interface routines
    for the ed line editor. */
@@ -39,7 +39,7 @@ __COPYRIGHT(
 #if 0
 static char *rcsid = "@(#)main.c,v 1.1 1994/02/01 00:34:42 alm Exp";
 #else
-__RCSID("$NetBSD: main.c,v 1.17 2005/06/26 19:10:49 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.19 2006/10/16 00:00:48 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -108,14 +108,12 @@ const char *usage = "usage: %s [-] [-sxE] [-p string] [name]\n";
 
 /* ed: line editor */
 int
-main(int argc, char *argv[])
+main(int ac, char *av[])
 {
 	int c, n;
 	long status = 0;
-#ifdef __GNUC__
-	(void) &argc;
-	(void) &argv;
-#endif
+	volatile int argc = ac;
+	char ** volatile argv = av;
 
 	red = (n = strlen(argv[0])) > 2 && argv[0][n - 3] == 'r';
 top:
@@ -177,7 +175,8 @@ top:
 			if (read_file(*argv, 0) < 0 && !isatty(0))
 				quit(2);
 			else if (**argv != '!')
-				strcpy(old_filename, *argv);
+				strlcpy(old_filename, *argv,
+				    sizeof(old_filename) - 2);
 		} else if (argc) {
 			fputs("?\n", stderr);
 			if (**argv == '\0')
@@ -510,7 +509,8 @@ exec_command(void)
 			return ERR;
 		else if (open_sbuf() < 0)
 			return FATAL;
-		if (*fnp && *fnp != '!') strcpy(old_filename, fnp);
+		if (*fnp && *fnp != '!') strlcpy(old_filename, fnp,
+			sizeof(old_filename) - 2);
 #ifdef BACKWARDS
 		if (*fnp == '\0' && *old_filename == '\0') {
 			sprintf(errmsg, "no current filename");
@@ -537,7 +537,7 @@ exec_command(void)
 			return ERR;
 		}
 		GET_COMMAND_SUFFIX();
-		if (*fnp) strcpy(old_filename, fnp);
+		if (*fnp) strlcpy(old_filename, fnp, sizeof(old_filename) - 2);
 		printf("%s\n", strip_escapes(old_filename));
 		break;
 	case 'g':
@@ -668,7 +668,7 @@ exec_command(void)
 		GET_COMMAND_SUFFIX();
 		if (!isglobal) clear_undo_stack();
 		if (*old_filename == '\0' && *fnp != '!')
-			strcpy(old_filename, fnp);
+			strlcpy(old_filename, fnp, sizeof(old_filename) - 2);
 #ifdef BACKWARDS
 		if (*fnp == '\0' && *old_filename == '\0') {
 			sprintf(errmsg, "no current filename");
@@ -802,7 +802,7 @@ exec_command(void)
 			return ERR;
 		GET_COMMAND_SUFFIX();
 		if (*old_filename == '\0' && *fnp != '!')
-			strcpy(old_filename, fnp);
+			strlcpy(old_filename, fnp, sizeof(old_filename) - 2);
 #ifdef BACKWARDS
 		if (*fnp == '\0' && *old_filename == '\0') {
 			sprintf(errmsg, "no current filename");

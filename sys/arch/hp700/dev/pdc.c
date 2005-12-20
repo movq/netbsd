@@ -1,4 +1,4 @@
-/*	$NetBSD: pdc.c,v 1.14 2005/12/11 12:17:24 christos Exp $	*/
+/*	$NetBSD: pdc.c,v 1.19 2006/10/01 20:31:50 elad Exp $	*/
 
 /*	$OpenBSD: pdc.c,v 1.14 2001/04/29 21:05:43 mickey Exp $	*/
 
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pdc.c,v 1.14 2005/12/11 12:17:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pdc.c,v 1.19 2006/10/01 20:31:50 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,8 +43,10 @@ __KERNEL_RCSID(0, "$NetBSD: pdc.c,v 1.14 2005/12/11 12:17:24 christos Exp $");
 #include <sys/user.h>
 #include <sys/callout.h>
 #include <sys/conf.h>
+#include <sys/kauth.h>
 
 #include <dev/cons.h>
+#include <dev/clock_subr.h>
 
 #include <machine/pdc.h>
 #include <machine/iomod.h>
@@ -97,9 +99,18 @@ int pdccnlookc(dev_t, int *);
 
 static struct cnm_state pdc_cnm_state;
 
+static int pdcgettod(todr_chip_handle_t, volatile struct timeval *);
+static int pdcsettod(todr_chip_handle_t, volatile struct timeval *);
+
+static struct pdc_tod tod PDC_ALIGNMENT;
+
 void
 pdc_init(void)
 {
+	static struct todr_chip_handle todr = {
+		.todr_settime = pdcsettod,
+		.todr_gettime = pdcgettod,
+	};
 	static int kbd_iodc[IODC_MAXSIZE/sizeof(int)];
 	static int cn_iodc[IODC_MAXSIZE/sizeof(int)];
 	int err;
@@ -133,6 +144,9 @@ pdc_init(void)
 	cn_set_magic("+++++");
 
 	hp700_pagezero_unmap(pagezero_cookie);
+
+	/* attach the TOD clock */
+	todr_attach(&todr);
 }
 
 int
@@ -184,6 +198,12 @@ pdcopen(dev_t dev, int flag, int mode, struct lwp *l)
 	tp->t_oproc = pdcstart;
 	tp->t_param = pdcparam;
 	tp->t_dev = dev;
+
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp)) {
+		splx(s);
+		return (EBUSY);
+	}
+
 	if ((tp->t_state & TS_ISOPEN) == 0) {
 		tp->t_state |= TS_CARR_ON;
 		ttychars(tp);
@@ -195,10 +215,6 @@ pdcopen(dev_t dev, int flag, int mode, struct lwp *l)
 		ttsetwater(tp);
 
 		setuptimeout = 1;
-	} else if ((tp->t_state&TS_XCLUDE) &&
-		    suser(l->l_proc->p_ucred, &l->l_proc->p_acflag)) {
-		splx(s);
-		return EBUSY;
 	} else
 		setuptimeout = 0;
 	tp->t_state |= TS_CARR_ON;
@@ -422,7 +438,7 @@ pdccnputc(dev_t dev, int c)
 
 	if (err < 0) {
 #if defined(DDB) || defined(KGDB)
-		__asm __volatile ("break        %0, %1"
+		__asm volatile ("break        %0, %1"
 			:: "i" (HPPA_BREAK_KERNEL), "i" (HPPA_BREAK_KGDB));
 #endif /* DDB || KGDB */
 		delay(250000);
@@ -439,4 +455,33 @@ pdccnputc(dev_t dev, int c)
 void
 pdccnpollc(dev_t dev, int on)
 {
+}
+
+static int
+pdcgettod(todr_chip_handle_t tch, volatile struct timeval *tvp)
+{
+	int pagezero_cookie;
+
+	pagezero_cookie = hp700_pagezero_map();
+	pdc_call((iodcio_t)PAGE0->mem_pdc, 1, PDC_TOD, PDC_TOD_READ,
+	    &tod, 0, 0, 0, 0, 0);
+	hp700_pagezero_unmap(pagezero_cookie);
+
+	tvp->tv_sec = tod.sec;
+	tvp->tv_usec = tod.usec;
+	return 0;
+}
+
+static int
+pdcsettod(todr_chip_handle_t tch, volatile struct timeval *tvp)
+{
+	int pagezero_cookie;
+
+	tod.sec = tvp->tv_sec;
+	tod.usec = tvp->tv_usec;
+
+	pagezero_cookie = hp700_pagezero_map();
+	pdc_call((iodcio_t)PAGE0->mem_pdc, 1, PDC_TOD, PDC_TOD_WRITE, &tod);
+	hp700_pagezero_unmap(pagezero_cookie);
+	return 0;
 }

@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC.MP,v 1.6 2005/12/11 12:17:40 christos Exp $
+#	$NetBSD: GENERIC.MP,v 1.8 2006/07/04 00:30:22 christos Exp $
 #
 #	GENERIC.MP -- Generic, plus enable Multiprocessor support.
 #
@@ -6,7 +6,6 @@
 include "arch/i386/conf/GENERIC"
 
 options 	MULTIPROCESSOR
-options 	COM_MPLOCK	# com MP locking; REQUIRED on MP i386
 
 options 	APM_NO_IDLE
 #options 	DIAGNOSTIC	# STRONGLY RECOMMENDED
@@ -15,7 +14,5 @@ options 	APM_NO_IDLE
 #options 	MPVERBOSE
 #options 	DEBUG
 options 	MPBIOS		# configure CPUs and APICs using MPBIOS
-#options 	MPACPI		# configure CPUs and APICs using ACPI
-				# (acpi at mainbus must also be enabled)
 
 ioapic*		at mainbus? apid ?

@@ -1,4 +1,4 @@
-/* $NetBSD: mount_ados.c,v 1.20 2005/09/23 12:10:34 jmmv Exp $ */
+/* $NetBSD: mount_ados.c,v 1.23 2006/10/16 03:37:42 christos Exp $ */
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mount_ados.c,v 1.20 2005/09/23 12:10:34 jmmv Exp $");
+__RCSID("$NetBSD: mount_ados.c,v 1.23 2006/10/16 03:37:42 christos Exp $");
 #endif /* not lint */
 
 #include <sys/cdefs.h>
@@ -61,7 +61,7 @@ __RCSID("$NetBSD: mount_ados.c,v 1.20 2005/09/23 12:10:34 jmmv Exp $");
 static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
 	MOPT_GETARGS,
-	{ NULL }
+	MOPT_NULL,
 };
 
 int	mount_ados(int argc, char **argv);
@@ -80,6 +80,7 @@ mount_ados(int argc, char **argv)
 {
 	struct adosfs_args args;
 	struct stat sb;
+	mntoptparse_t mp;
 	int c, mntflags, set_gid, set_uid, set_mask;
 	char *dev, *dir, canon_dir[MAXPATHLEN], canon_dev[MAXPATHLEN];
 
@@ -101,7 +102,10 @@ mount_ados(int argc, char **argv)
 			set_mask = 1;
 			break;
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, &mntflags, 0);
+			if (mp == NULL)
+				err(1, "getmntopts");
+			freemntopts(mp);
 			break;
 		case '?':
 		default:

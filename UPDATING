@@ -1,4 +1,4 @@
-$NetBSD: UPDATING,v 1.144 2005/10/03 04:45:52 yamt Exp $
+$NetBSD: UPDATING,v 1.152 2006/11/09 18:20:59 christos Exp $
 
 This file (UPDATING) is intended to be a brief reference to recent
 changes that might cause problems in the build process, and a guide for
@@ -15,6 +15,55 @@ See also: BUILDING, build.sh, Makefile.
 
 Recent changes:
 ^^^^^^^^^^^^^^^
+
+20061108:
+	The configure script used in the src/tools/gcc compiler has been
+	changed to indicate that our libc has ssp support built-in and
+	does not depend on -lssp and -lssp-nonshared. You'll need to
+	make clean in src/tools/gcc first to rebuild the compiler.
+
+20061009:
+	The sysctl variables net.inet{,6}.tcp{,6}.newreno are no longer
+	available. Use net.inet{,6}.tcp{,6}.congctl.selected instead.
+
+20060814:
+	The vt, vidcconsole, kbd, and rpckbd drivers on acorn32 have been
+	withdrawn.  Use vidcvideo and pckbd instead.  See the GENERIC
+	kernel configuration for an example.  X servers from the last
+	few years should cope.
+
+20060703:
+	MPACPI is no more. We always configure PCI interrupts using ACPI
+	if we have an ACPI kernel. The option MPACPI_SCANPCI has been renamed
+	to ACPI_SCANPCI. Thanks to work from fvdl.
+
+20060627:
+	socket(2) has changed, and its system call has been versioned.
+	For userlands with the old version of socket(2), make sure that
+	your kernel has 'options COMPAT_30' set, or else 'bad system call'
+	errors will result.
+
+20060526:
+	The kernel linker scripts for i386 and xen 
+	(sys/arch/i386/conf/kern.ldscript*) were changed to set the
+	load address correctly, for the benefit of MULTIBOOT boot loaders
+	(like Grub). If you use a linker (ld) older than from 2006/04/17, it
+	will be unable to link the kernel because of a bug and ld will fail
+	with an error like:
+	    ../../../../arch/i386/conf/kern.ldscript:45 \
+		non constant expression for load base
+	You need to update at least src/gnu/dist/binutils/ld and recompile
+	and install the linker. If using the build.sh script, the easiest
+	way is with a "build.sh tools" command, with any other options
+	that you use normally. When using build.sh, the linker binary is
+	installed as ${TOOLDIR}/bin/i386--netbsdelf-ld.
+
+20060131:
+	the protocol between the sparc64 bootloader (ofwboot) and
+	the kernel was changed. Before installing a new kernel,
+	you need to update ofwboot. After a full build, just copy
+	/usr/mdec/ofwboot to /, or do a rebuild of
+	src/sys/arch/sparc/stand/ofwboot and install the result to /.
 
 20050917:
 	arch/*/conf/std.* was changed to include conf/std, which

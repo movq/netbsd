@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_flow.c,v 1.31 2005/12/11 12:24:57 christos Exp $	*/
+/*	$NetBSD: ip_flow.c,v 1.36 2006/10/06 03:20:47 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_flow.c,v 1.31 2005/12/11 12:24:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_flow.c,v 1.36 2006/10/06 03:20:47 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -217,7 +217,7 @@ ipflow_fastforward(struct mbuf *m)
 	 *
 	 * This method of adding the checksum works on either endian CPU.
 	 * If htons() is inlined, all the arithmetic is folded; otherwise
-	 * the htons()s are combined by CSE due to the __const__ attribute.
+	 * the htons()s are combined by CSE due to the const attribute.
 	 *
 	 * Don't bother using HW checksumming here -- the incremental
 	 * update is pretty fast.
@@ -270,6 +270,7 @@ ipflow_addstats(struct ipflow *ipf)
 {
 	ipf->ipf_ro.ro_rt->rt_use += ipf->ipf_uses;
 	ipstat.ips_cantforward += ipf->ipf_errors + ipf->ipf_dropped;
+	ipstat.ips_total += ipf->ipf_uses;
 	ipstat.ips_forward += ipf->ipf_uses;
 	ipstat.ips_fastforward += ipf->ipf_uses;
 }
@@ -289,7 +290,9 @@ ipflow_free(struct ipflow *ipf)
 	ipflow_addstats(ipf);
 	RTFREE(ipf->ipf_ro.ro_rt);
 	ipflow_inuse--;
+	s = splnet();
 	pool_put(&ipflow_pool, ipf);
+	splx(s);
 }
 
 struct ipflow *
@@ -351,6 +354,7 @@ ipflow_slowtimo(void)
 		} else {
 			ipf->ipf_last_uses = ipf->ipf_uses;
 			ipf->ipf_ro.ro_rt->rt_use += ipf->ipf_uses;
+			ipstat.ips_total += ipf->ipf_uses;
 			ipstat.ips_forward += ipf->ipf_uses;
 			ipstat.ips_fastforward += ipf->ipf_uses;
 			ipf->ipf_uses = 0;
@@ -381,7 +385,9 @@ ipflow_create(const struct route *ro, struct mbuf *m)
 		if (ipflow_inuse >= ip_maxflows) {
 			ipf = ipflow_reap(1);
 		} else {
+			s = splnet();
 			ipf = pool_get(&ipflow_pool, PR_NOWAIT);
+			splx(s);
 			if (ipf == NULL)
 				return;
 			ipflow_inuse++;
@@ -406,7 +412,7 @@ ipflow_create(const struct route *ro, struct mbuf *m)
 	ipf->ipf_src = ip->ip_src;
 	ipf->ipf_tos = ip->ip_tos;
 	PRT_SLOW_ARM(ipf->ipf_timer, IPFLOW_TIMER);
-	ipf->ipf_start = time.tv_sec;
+	ipf->ipf_start = time_uptime;
 	/*
 	 * Insert into the approriate bucket of the flow table.
 	 */

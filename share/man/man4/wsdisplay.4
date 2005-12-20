@@ -1,4 +1,4 @@
-.\" $NetBSD: wsdisplay.4,v 1.27 2005/07/18 00:21:58 rpaulo Exp $
+.\" $NetBSD: wsdisplay.4,v 1.31 2006/08/23 20:38:25 wiz Exp $
 .\"
 .\" Copyright (c) 1999 Matthias Drochner.
 .\" Copyright (c) 2002 Ben Harris.
@@ -26,7 +26,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd July 15, 2005
+.Dd August 17, 2006
 .Os
 .Dt WSDISPLAY 4
 .Sh NAME
@@ -39,6 +39,8 @@
 (VGA display on ISA or PCI)
 .Cd "wsdisplay* at pcdisplay? console ?"
 (generic PC (ISA) display)
+.Cd "wsdisplay* at vesafb? console ?"
+(VESA frame buffer display, i386 only)
 .Cd "wsdisplay* at tga? console ?"
 (DEC TGA display, alpha only)
 .Cd "wsdisplay* at pfb? console ?"
@@ -50,8 +52,8 @@
 .Cd "wsdisplay0 at smg0"
 (VAXstation small monochrome display)
 .Cd "wsdisplay* at ... kbdmux N"
+.Pp
 .Cd options WSDISPLAY_BORDER_COLOR=WSCOL_XXX
-.Cd options WSDISPLAY_CHARFUNCS
 .Cd options WSDISPLAY_CUSTOM_BORDER
 .Cd options WSDISPLAY_CUSTOM_OUTPUT
 .Cd options WSDISPLAY_DEFAULTSCREENS=N
@@ -140,16 +142,6 @@ Possible values are defined in
 .Pa src/sys/dev/wscons/wsdisplayvar.h .
 Defaults to
 .Sq WSCOL_BLACK .
-.It Cd options WSDISPLAY_CHARFUNCS
-Enables the
-.Dv WSDISPLAYIO_GETWSCHAR
-and
-.Dv WSDISPLAYIO_PUTWSCHAR
-ioctls.
-These are mainly used by the
-.Sq selection
-mode of
-.Xr wsmoused 8 .
 .It Cd options WSDISPLAY_CUSTOM_BORDER
 Enables the
 .Dv WSDISPLAYIO_GBORDER
@@ -476,7 +468,7 @@ and
 .Va kernel_attrs
 variables are a combination of
 .Va WSATTR_*
-bits, and specify the attribues used to draw messages.
+bits, and specify the attributes used to draw messages.
 The
 .Va default_bg ,
 .Va default_fg ,
@@ -536,6 +528,19 @@ Puts a character on the screen.
 The structure has the same meaning as described in
 .Dv WSDISPLAY_GETWSCHAR ,
 although all of its fields are treated as input.
+.\" Splash screen control
+.It Dv WSDISPLAYIO_SSPLASH Pq Li u_int
+Toggle the splash screen.
+This call is only available with the
+.Dv SPLASHSCREEN
+kernel option.
+.It Dv WSDISPLAYIO_SPROGRESS Pq Li u_int
+Update the splash animation.
+This call is only available with the
+.Dv SPLASHSCREEN
+and
+.Dv SPLASHSCREEN_PROGRESS
+kernel options.
 .El
 .Sh FILES
 .Bl -item
@@ -553,9 +558,10 @@ Status device.
 .El
 .Sh SEE ALSO
 .Xr ioctl 2 ,
-.Xr ega 4 ,
+.\" .Xr ega 4 ,
 .Xr pcdisplay 4 ,
 .Xr tty 4 ,
+.Xr \&i386/vesafb 4 ,
 .Xr vga 4 ,
 .Xr wscons 4 ,
 .Xr wsconscfg 8 ,

@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_ffs.c,v 1.18 2005/09/23 12:10:35 jmmv Exp $	*/
+/*	$NetBSD: mount_ffs.c,v 1.20 2006/10/16 03:37:42 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)mount_ufs.c	8.4 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_ffs.c,v 1.18 2005/09/23 12:10:35 jmmv Exp $");
+__RCSID("$NetBSD: mount_ffs.c,v 1.20 2006/10/16 03:37:42 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -71,7 +71,7 @@ static const struct mntopt mopts[] = {
 	MOPT_FORCE,
 	MOPT_SOFTDEP,
 	MOPT_GETARGS,
-	{ NULL }
+	MOPT_NULL,
 };
 
 #ifndef MOUNT_NOMAIN
@@ -89,13 +89,17 @@ mount_ffs(int argc, char *argv[])
 	int ch, mntflags;
 	char fs_name[MAXPATHLEN], canon_dev[MAXPATHLEN];
 	const char *errcause;
+	mntoptparse_t mp;
 
 	mntflags = 0;
 	optind = optreset = 1;		/* Reset for parse of new argv. */
 	while ((ch = getopt(argc, argv, "o:")) != -1)
 		switch (ch) {
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, &mntflags, 0);
+			if (mp == NULL)
+				err(1, "getmntopts");
+			freemntopts(mp);
 			break;
 		case '?':
 		default:

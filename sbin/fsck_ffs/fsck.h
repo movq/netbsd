@@ -1,4 +1,4 @@
-/*	$NetBSD: fsck.h,v 1.43 2005/06/27 01:25:35 christos Exp $	*/
+/*	$NetBSD: fsck.h,v 1.45 2006/04/21 15:00:49 skrll Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -56,6 +56,13 @@ union dinode {
 };
 #define       DIP(dp, field) \
 	(is_ufs2 ? (dp)->dp2.di_##field : (dp)->dp1.di_##field)
+
+#define       DIP_SET(dp, field, val) do {	\
+	if (is_ufs2)				\
+		(dp)->dp2.di_##field = (val);	\
+	else					\
+		(dp)->dp1.di_##field = (val);	\
+} while (0)
 
 #ifndef BUFSIZ
 #define BUFSIZ 1024
@@ -120,6 +127,12 @@ struct bufarea {
 #define       IBLK(bp, i) \
 	(is_ufs2 ?  (bp)->b_un.b_indir2[i] : (bp)->b_un.b_indir1[i])
 
+#define       IBLK_SET(bp, i, val) do {		\
+	if (is_ufs2)				\
+		(bp)->b_un.b_indir2[i] = (val);	\
+	else					\
+		(bp)->b_un.b_indir1[i] = (val);	\
+} while (0)
 
 #define	B_INUSE 1
 
@@ -305,11 +318,11 @@ struct	ufs2_dinode ufs2_zino;
 #define	EEXIT	8		/* Standard error exit. */
 
 /* some inline functs to help the byte-swapping mess */
-static __inline u_int16_t iswap16 (u_int16_t);
-static __inline u_int32_t iswap32 (u_int32_t);
-static __inline u_int64_t iswap64 (u_int64_t);
+static inline u_int16_t iswap16 (u_int16_t);
+static inline u_int32_t iswap32 (u_int32_t);
+static inline u_int64_t iswap64 (u_int64_t);
 
-static __inline u_int16_t iswap16(x)
+static inline u_int16_t iswap16(x)
 	u_int16_t x;
 {
 	if (needswap)
@@ -317,7 +330,7 @@ static __inline u_int16_t iswap16(x)
 	else return x;
 }
 
-static __inline u_int32_t iswap32(x)
+static inline u_int32_t iswap32(x)
 	u_int32_t x;
 {
 	if (needswap)
@@ -325,7 +338,7 @@ static __inline u_int32_t iswap32(x)
 	else return x;
 }
 
-static __inline u_int64_t iswap64(x)
+static inline u_int64_t iswap64(x)
 	u_int64_t x;
 {
 	if (needswap)

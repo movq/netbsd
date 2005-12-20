@@ -1,4 +1,4 @@
-/*	$NetBSD: kgdb_machdep.c,v 1.5 2005/12/11 12:19:14 christos Exp $ */
+/*	$NetBSD: kgdb_machdep.c,v 1.9 2006/10/07 18:14:42 rjs Exp $ */
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -128,7 +128,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.5 2005/12/11 12:19:14 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.9 2006/10/07 18:14:42 rjs Exp $");
 
 #include "opt_kgdb.h"
 #include "opt_multiprocessor.h"
@@ -149,18 +149,16 @@ __KERNEL_RCSID(0, "$NetBSD: kgdb_machdep.c,v 1.5 2005/12/11 12:19:14 christos Ex
 
 #include <sparc/sparc/asm.h>
 
-extern int64_t pseg_get __P((struct pmap *, vaddr_t));
+extern int64_t pseg_get(struct pmap *, vaddr_t);
 
-static __inline void kgdb_copy __P((char *, char *, int));
-static __inline void kgdb_zero __P((char *, int));
+static inline void kgdb_copy(register char *, register char *, register int);
+static inline void kgdb_zero(register char *, register int);
 
 /*
  * This little routine exists simply so that bcopy() can be debugged.
  */
-static __inline void
-kgdb_copy(src, dst, len)
-	register char *src, *dst;
-	register int len;
+static inline void
+kgdb_copy(register char *src, register char *dst, register int len)
 {
 
 	while (--len >= 0)
@@ -168,10 +166,8 @@ kgdb_copy(src, dst, len)
 }
 
 /* ditto for bzero */
-static __inline void
-kgdb_zero(ptr, len)
-	register char *ptr;
-	register int len;
+static inline void
+kgdb_zero(register char *ptr, register int len)
 {
 	while (--len >= 0)
 		*ptr++ = (char) 0;
@@ -227,10 +223,9 @@ static void
 kgdb_suspend()
 {
 
-	while (cpuinfo.flags & CPUFLG_PAUSED)
-		cpuinfo.cache_flush((caddr_t)&cpuinfo.flags, sizeof(cpuinfo.flags));
+	sparc64_ipi_pause_thiscpu(NULL);
 }
-#endif
+#endif	/* MULTIPROCESSOR */
 
 /*
  * Trap into kgdb to wait for debugger to connect,
@@ -251,7 +246,7 @@ kgdb_connect(verbose)
 	if (!kgdb_suspend_others()) {
 		kgdb_suspend();
 	} else {
-#endif
+#endif	/* MULTIPROCESSOR */
 		if (verbose)
 			printf("kgdb waiting...");
 		__asm("ta %0" :: "n" (T_KGDB_EXEC));	/* trap into kgdb */
@@ -262,7 +257,7 @@ kgdb_connect(verbose)
 		/* Other CPUs can continue now */
 		kgdb_resume_others();
 	}
-#endif
+#endif	/* MULTIPROCESSOR */
 }
 
 /*
@@ -357,7 +352,7 @@ kgdb_getregs(regs, gdb_regs)
 	db_regs_t *regs;
 	kgdb_reg_t *gdb_regs;
 {
-	struct trapframe64 *tf = &regs->ddb_tf;
+	struct trapframe64 *tf = &regs->db_tf;
 
 	/* %g0..%g7 and %o0..%o7: from trapframe */
 	gdb_regs[0] = 0;
@@ -382,7 +377,7 @@ kgdb_setregs(regs, gdb_regs)
 	db_regs_t *regs;
 	kgdb_reg_t *gdb_regs;
 {
-	struct trapframe64 *tf = &regs->ddb_tf;
+	struct trapframe64 *tf = &regs->db_tf;
 
 	kgdb_copy((caddr_t)&gdb_regs[1], (caddr_t)&tf->tf_global[1], 15 * 8);
 	kgdb_copy((caddr_t)&gdb_regs[GDB_L0], (caddr_t)(long)tf->tf_out[6], 16 * 8);

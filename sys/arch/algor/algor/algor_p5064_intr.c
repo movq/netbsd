@@ -1,4 +1,4 @@
-/*	$NetBSD: algor_p5064_intr.c,v 1.12 2005/12/11 12:16:08 christos Exp $	*/
+/*	$NetBSD: algor_p5064_intr.c,v 1.15 2006/09/05 01:33:24 gdamore Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: algor_p5064_intr.c,v 1.12 2005/12/11 12:16:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: algor_p5064_intr.c,v 1.15 2006/09/05 01:33:24 gdamore Exp $");
 
 #include "opt_ddb.h"
 
@@ -67,8 +67,6 @@ __KERNEL_RCSID(0, "$NetBSD: algor_p5064_intr.c,v 1.12 2005/12/11 12:16:08 christ
 #include <algor/algor/algor_p5064reg.h>
 #include <algor/algor/algor_p5064var.h>
 
-#include <algor/algor/clockvar.h>
-
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pciidereg.h>
@@ -76,7 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: algor_p5064_intr.c,v 1.12 2005/12/11 12:16:08 christ
 
 #include <dev/isa/isavar.h>
 
-#define	REGVAL(x)	*((__volatile u_int32_t *)(MIPS_PHYS_TO_KSEG1((x))))
+#define	REGVAL(x)	*((volatile u_int32_t *)(MIPS_PHYS_TO_KSEG1((x))))
 
 struct p5064_irqreg {
 	bus_addr_t	addr;
@@ -275,6 +273,18 @@ struct p5064_intrhead {
 struct p5064_intrhead p5064_intrtab[NIRQMAPS];
 
 #define	NINTRS			3	/* MIPS INT0 - INT2 */
+
+/*
+ * This is a mask of bits to clear in the SR when we go to a
+ * given software interrupt priority level.
+ * Hardware ipls are port/board specific.
+ */
+const uint32_t mips_ipl_si_to_sr[_IPL_NSOFT] = {
+	MIPS_SOFT_INT_MASK_0,			/* IPL_SOFT */
+	MIPS_SOFT_INT_MASK_0,			/* IPL_SOFTCLOCK */
+	MIPS_SOFT_INT_MASK_1,			/* IPL_SOFTNET */
+	MIPS_SOFT_INT_MASK_1,			/* IPL_SOFTSERIAL */
+};
 
 struct p5064_cpuintr {
 	LIST_HEAD(, algor_intrhand) cintr_list;

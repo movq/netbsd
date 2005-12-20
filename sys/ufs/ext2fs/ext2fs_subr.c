@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_subr.c,v 1.19 2005/12/11 12:25:25 christos Exp $	*/
+/*	$NetBSD: ext2fs_subr.c,v 1.24 2006/06/23 14:13:02 yamt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -65,13 +65,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_subr.c,v 1.19 2005/12/11 12:25:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_subr.c,v 1.24 2006/06/23 14:13:02 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/vnode.h>
 #include <sys/buf.h>
 #include <sys/inttypes.h>
+#include <sys/kauth.h>
+
 #include <ufs/ufs/inode.h>
 #include <ufs/ext2fs/ext2fs.h>
 #include <ufs/ext2fs/ext2fs_extern.h>
@@ -109,26 +111,27 @@ void
 ext2fs_itimes(struct inode *ip, const struct timespec *acc,
     const struct timespec *mod, const struct timespec *cre)
 {
-	struct timespec *ts = NULL, tsb;
+	struct timespec now;
 
 	if (!(ip->i_flag & (IN_ACCESS | IN_CHANGE | IN_UPDATE | IN_MODIFY))) {
 		return;
 	}
 
+	vfs_timestamp(&now);
 	if (ip->i_flag & IN_ACCESS) {
 		if (acc == NULL)
-			acc = ts == NULL ? (ts = nanotime(&tsb)) : ts;
+			acc = &now;
 		ip->i_e2fs_atime = acc->tv_sec;
 	}
 	if (ip->i_flag & (IN_UPDATE | IN_MODIFY)) {
 		if (mod == NULL)
-			mod = ts == NULL ? (ts = nanotime(&tsb)) : ts;
+			mod = &now;
 		ip->i_e2fs_mtime = mod->tv_sec;
 		ip->i_modrev++;
 	}
 	if (ip->i_flag & (IN_CHANGE | IN_MODIFY)) {
 		if (cre == NULL)
-			cre = ts == NULL ? (ts = nanotime(&tsb)) : ts;
+			cre = &now;
 		ip->i_e2fs_ctime = cre->tv_sec;
 	}
 	if (ip->i_flag & (IN_ACCESS | IN_MODIFY))
@@ -137,40 +140,3 @@ ext2fs_itimes(struct inode *ip, const struct timespec *acc,
 		ip->i_flag |= IN_MODIFIED;
 	ip->i_flag &= ~(IN_ACCESS | IN_CHANGE | IN_UPDATE | IN_MODIFY);
 }
-
-#ifdef DIAGNOSTIC
-void
-ext2fs_checkoverlap(struct buf *bp, struct inode *ip)
-{
-#if 0
-	struct buf *ebp, *ep;
-	daddr_t start, last;
-	struct vnode *vp;
-
-	ebp = &buf[nbuf];
-	start = bp->b_blkno;
-	last = start + btodb(bp->b_bcount) - 1;
-	for (ep = buf; ep < ebp; ep++) {
-		if (ep == bp || (ep->b_flags & B_INVAL) ||
-			ep->b_vp == NULLVP)
-			continue;
-		if (VOP_BMAP(ep->b_vp, (daddr_t)0, &vp, (daddr_t)0, NULL))
-			continue;
-		if (vp != ip->i_devvp)
-			continue;
-		/* look for overlap */
-		if (ep->b_bcount == 0 || ep->b_blkno > last ||
-			ep->b_blkno + btodb(ep->b_bcount) <= start)
-			continue;
-		vprint("Disk overlap", vp);
-		printf("\tstart %" PRId64 ", end %" PRId64 " overlap start "
-			"%" PRId64 ", end %" PRId64 "\n",
-			start, last, ep->b_blkno,
-			ep->b_blkno + btodb(ep->b_bcount) - 1);
-		panic("Disk buffer overlap");
-	}
-#else
-	printf("ext2fs_checkoverlap disabled due to buffer cache implementation changes\n");
-#endif
-}
-#endif

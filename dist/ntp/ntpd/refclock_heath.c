@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_heath.c,v 1.2 2003/12/04 16:23:37 drochner Exp $	*/
+/*	$NetBSD: refclock_heath.c,v 1.4 2006/06/11 19:34:12 kardel Exp $	*/
 
 /*
  * refclock_heath - clock driver for Heath GC-1000 and and GC-1000 II
@@ -216,9 +216,10 @@ heath_start(
 	/*
 	 * Open serial port
 	 */
-	(void)sprintf(device, DEVICE, unit);
-	if (!(fd = refclock_open(device, speed[peer->ttl & 0x3], 0)))
-	    return (0);
+	sprintf(device, DEVICE, unit);
+	if (!(fd = refclock_open(device, speed[peer->ttl & 0x3],
+	    LDISC_REMOTE)))
+		return (0);
 	pp = peer->procptr;
 	pp->io.clock_recv = heath_receive;
 	pp->io.srcclock = (caddr_t)peer;
@@ -298,6 +299,39 @@ heath_receive(
 			refclock_report(peer, CEVNT_BADREPLY);
 			return;
 		}
+
+		/*
+		 * We determine the day of the year from the DIPswitches. This
+		 * should be fixed, since somebody might forget to set them.
+		 * Someday this hazard will be fixed by a fiendish scheme that
+		 * looks at the timecode and year the radio shows, then computes
+		 * the residue of the seconds mod the seconds in a leap cycle.
+		 * If in the third year of that cycle and the third and later
+		 * months of that year, add one to the day. Then, correct the
+		 * timecode accordingly. Icky pooh. This bit of nonsense could
+		 * be avoided if the engineers had been required to write a
+		 * device driver before finalizing the timecode format.
+		 */
+		if (month < 1 || month > 12 || day < 1) {
+			refclock_report(peer, CEVNT_BADTIME);
+			return;
+		}
+		if (pp->year % 4) {
+			if (day > day1tab[month - 1]) {
+				refclock_report(peer, CEVNT_BADTIME);
+				return;
+			}
+			for (i = 0; i < month - 1; i++)
+			    day += day1tab[i];
+		} else {
+			if (day > day2tab[month - 1]) {
+				refclock_report(peer, CEVNT_BADTIME);
+				return;
+			}
+			for (i = 0; i < month - 1; i++)
+			    day += day2tab[i];
+		}
+		pp->day = day;
 		break;
 
 	/*
@@ -316,38 +350,6 @@ heath_receive(
 		return;
 	}
 
-	/*
-	 * We determine the day of the year from the DIPswitches. This
-	 * should be fixed, since somebody might forget to set them.
-	 * Someday this hazard will be fixed by a fiendish scheme that
-	 * looks at the timecode and year the radio shows, then computes
-	 * the residue of the seconds mod the seconds in a leap cycle.
-	 * If in the third year of that cycle and the third and later
-	 * months of that year, add one to the day. Then, correct the
-	 * timecode accordingly. Icky pooh. This bit of nonsense could
-	 * be avoided if the engineers had been required to write a
-	 * device driver before finalizing the timecode format.
-	 */
-	if (month < 1 || month > 12 || day < 1) {
-		refclock_report(peer, CEVNT_BADTIME);
-		return;
-	}
-	if (pp->year % 4) {
-		if (day > day1tab[month - 1]) {
-			refclock_report(peer, CEVNT_BADTIME);
-			return;
-		}
-		for (i = 0; i < month - 1; i++)
-		    day += day1tab[i];
-	} else {
-		if (day > day2tab[month - 1]) {
-			refclock_report(peer, CEVNT_BADTIME);
-			return;
-		}
-		for (i = 0; i < month - 1; i++)
-		    day += day2tab[i];
-	}
-	pp->day = day;
 
 	/*
 	 * Determine synchronization and last update

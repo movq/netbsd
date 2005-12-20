@@ -1,4 +1,4 @@
-/*	$NetBSD: calendar.c,v 1.38 2005/07/15 09:45:04 wiz Exp $	*/
+/*	$NetBSD: calendar.c,v 1.41 2006/10/07 07:12:01 elad Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
 #if 0
 static char sccsid[] = "@(#)calendar.c	8.4 (Berkeley) 1/7/95";
 #endif
-__RCSID("$NetBSD: calendar.c,v 1.38 2005/07/15 09:45:04 wiz Exp $");
+__RCSID("$NetBSD: calendar.c,v 1.41 2006/10/07 07:12:01 elad Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -257,7 +257,8 @@ isnow(endp)
 	if (flags & F_ISDAY || v1 > 12) {
 		/* found a day */
 		day = v1;
-		month = tp->tm_mon + 1;
+		v2 = getfield(endp, &endp, &flags);
+		month = v2;
 	} else if (flags & F_ISMONTH) {
 		month = v1;
 		/* if no recognizable day, assume the first */
@@ -276,13 +277,13 @@ isnow(endp)
 		}
 	}
 
-	if (flags & (F_WILDMONTH|F_WILDDAY))
+	if ((flags & F_WILDMONTH) && (flags & F_WILDDAY))
 		return (1);
 
-	if ((flags & (F_WILDMONTH|F_ISDAY)) && (day == tp->tm_mday))
+	if ((flags & F_WILDMONTH) && (flags & F_ISDAY) && (day == tp->tm_mday))
 		return (1);
 
-	if ((flags & (F_ISMONTH|F_WILDDAY)) && (month == tp->tm_mon + 1))
+	if (((flags & F_ISMONTH) && (flags & F_WILDDAY)) && (month == tp->tm_mon + 1))
 		return (1);
 
 	if (flags & F_ISDAY)

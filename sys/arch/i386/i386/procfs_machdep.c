@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_machdep.c,v 1.22 2005/12/11 12:17:41 christos Exp $	*/
+/*	$NetBSD: procfs_machdep.c,v 1.25 2006/11/16 01:32:38 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_machdep.c,v 1.22 2005/12/11 12:17:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_machdep.c,v 1.25 2006/11/16 01:32:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -157,7 +157,7 @@ procfs_getonecpu(int xcpu, struct cpu_info *ci, char *bf, int *len)
 
 		
 	if (ci->ci_tsc_freq != 0) {
-		u_int64_t freq, fraq;
+		uint64_t freq, fraq;
 
 		freq = (ci->ci_tsc_freq + 4999) / 1000000;
 		fraq = ((ci->ci_tsc_freq + 4999) / 10000) % 100;
@@ -227,7 +227,8 @@ procfs_machdep_rw(struct lwp *curl, struct lwp *l, struct pfsnode *pfs,
 }
 
 int
-procfs_machdep_getattr(struct vnode *vp, struct vattr *vap, struct proc *procp)
+procfs_machdep_getattr(struct vnode *vp, struct vattr *vap,
+    struct proc *procp)
 {
 	struct pfsnode *pfs = VTOPFS(vp);
 
