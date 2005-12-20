@@ -1,4 +1,4 @@
-/*	$NetBSD: stat.h,v 1.52 2005/12/11 12:25:21 christos Exp $	*/
+/*	$NetBSD: stat.h,v 1.54 2006/02/24 22:01:30 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -90,9 +90,9 @@ struct stat {
 	off_t	  st_size;		/* file size, in bytes */
 	blkcnt_t  st_blocks;		/* blocks allocated for file */
 	blksize_t st_blksize;		/* optimal blocksize for I/O */
-	u_int32_t st_flags;		/* user defined flags for file */
-	u_int32_t st_gen;		/* file generation number */
-	u_int32_t st_spare[2];
+	uint32_t  st_flags;		/* user defined flags for file */
+	uint32_t  st_gen;		/* file generation number */
+	uint32_t  st_spare[2];
 };
 
 #undef __STATPAD
@@ -204,6 +204,7 @@ struct stat {
 #define	UF_IMMUTABLE	0x00000002	/* file may not be changed */
 #define	UF_APPEND	0x00000004	/* writes to file may only append */
 #define UF_OPAQUE	0x00000008	/* directory is opaque wrt. union */
+/*	UF_NOUNLINK	0x00000010	   [NOT IMPLEMENTED] */
 /*
  * Super-user changeable flags.
  */
@@ -211,6 +212,7 @@ struct stat {
 #define	SF_ARCHIVED	0x00010000	/* file is archived */
 #define	SF_IMMUTABLE	0x00020000	/* file may not be changed */
 #define	SF_APPEND	0x00040000	/* writes to file may only append */
+/*	SF_NOUNLINK	0x00100000	   [NOT IMPLEMENTED] */
 #define	SF_SNAPSHOT	0x00200000	/* snapshot inode */
 
 #ifdef _KERNEL

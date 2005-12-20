@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.16 2005/12/11 12:17:24 christos Exp $	*/
+/*	$NetBSD: cpu.h,v 1.19 2006/08/26 06:07:28 skrll Exp $	*/
 
 /*	$OpenBSD: cpu.h,v 1.20 2001/01/29 00:01:58 mickey Exp $	*/
 
@@ -232,7 +232,7 @@ kvtop(const caddr_t va)
 {
 	paddr_t pa;
 
-	__asm __volatile ("lpa %%r0(%1), %0" : "=r" (pa) : "r" (va));
+	__asm volatile ("lpa %%r0(%1), %0" : "=r" (pa) : "r" (va));
 	return pa;
 }
 
@@ -242,7 +242,6 @@ void	delay(u_int);
 void	hppa_init(paddr_t);
 void	trap(int, struct trapframe *);
 void	hppa_ras(struct lwp *);
-int	dma_cachectl(caddr_t, int);
 int	spcopy(pa_space_t, const void *, pa_space_t, void *, size_t);
 int	spstrcpy(pa_space_t, const void *, pa_space_t, void *, size_t,
 		 size_t *);

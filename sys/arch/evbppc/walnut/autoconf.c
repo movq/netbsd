@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.8 2005/12/11 12:17:13 christos Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.16 2006/10/07 14:59:53 tsutsui Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.8 2005/12/11 12:17:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.16 2006/10/07 14:59:53 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -68,15 +68,15 @@ cpu_configure(void)
 	if (config_rootfound("plb", &local_plb_devs) == NULL)
 		panic("configure: plb not configured");
 
-	printf("biomask %x netmask %x ttymask %x\n", (u_short)imask[IPL_BIO],
-	    (u_short)imask[IPL_NET], (u_short)imask[IPL_TTY]);
+	printf("biomask %x netmask %x ttymask %x\n",
+	    imask[IPL_BIO], imask[IPL_NET], imask[IPL_TTY]);
 	
 	(void)spl0();
 
 	/*
 	 * Now allow hardware interrupts.
 	 */
-	asm volatile ("wrteei 1");
+	__asm volatile ("wrteei 1");
 }
 
 /*
@@ -93,30 +93,21 @@ cpu_rootconf(void)
 void
 device_register(struct device *dev, void *aux)
 {
-	struct device *parent = dev->dv_parent;
+	struct device *parent = device_parent(dev);
 
-	if (strcmp(dev->dv_cfdata->cf_name, "com") == 0 &&
-	    strcmp(parent->dv_cfdata->cf_name, "opb") == 0) {
+	if (device_is_a(dev, "com") && device_is_a(parent, "opb")) {
 		/* Set the frequency of the on-chip UART. */
-		int freq = COM_FREQ * 6;
+		prop_number_t pn = prop_number_create_integer(COM_FREQ * 6);
+		KASSERT(pn != NULL);
 
-		if (prop_set(dev_propdb, dev, "frequency",
-			     &freq, sizeof(freq), PROP_INT, 0) != 0)
-			printf("WARNING: unable to set frequency "
+		if (prop_dictionary_set(device_properties(dev),
+					"clock-frequency", pn) == FALSE) {
+			printf("WARNING: unable to set clock-frequency "
 			    "property for %s\n", dev->dv_xname);
+		}
+		prop_object_release(pn);
 		return;
 	}
 
-	if (strcmp(dev->dv_cfdata->cf_name, "emac") == 0 &&
-	    strcmp(parent->dv_cfdata->cf_name, "opb") == 0) {
-		/* Set the mac-addr of the on-chip Ethernet. */
-		/* XXX 405GP only has one; what about CPUs with two? */
-		if (prop_set(dev_propdb, dev, "mac-addr",
-			     &board_data.mac_address_local,
-			     sizeof(board_data.mac_address_local),
-			     PROP_CONST, 0) != 0)
-			printf("WARNING: unable to set mac-addr "
-			    "property for %s\n", dev->dv_xname);
-		return;
-	}
+	ibm4xx_device_register(dev, aux);
 }

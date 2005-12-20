@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.18 2004/10/16 13:20:11 dsl Exp $	*/
+/*	$NetBSD: md.h,v 1.19.4.1 2007/04/12 19:12:31 bouyer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -73,6 +73,14 @@
 #define SET_KERNEL_GENERIC	SET_KERNEL_1
 
 /*
+ * Disk names accepted as valid targets for a from-scratch installation.
+ *
+ * On amd64, we allow "wd"  ST-506/IDE disks,  "sd" scsi disks, "ld" logical
+ * disks and "raid" raidframe disks.
+ */
+#define DISK_NAMES "wd", "sd", "ld", "raid:no_mbr", "xbd:no_mbr"
+
+/*
  * Machine-specific command to write a new label to a disk.
  * For example, i386  uses "/sbin/disklabel -w -r", just like i386
  * miniroot scripts, though this may leave a bogus incore label.
@@ -84,13 +92,6 @@
  * On amd64, do what the 1.2 install scripts did. 
  */
 #define DISKLABEL_CMD "disklabel -w -r"
-
-
-/*
- * Default fileystem type for floppy disks.
- * On x86_64, that is  msdos.
- */
-const char *fdtype;
 
 #define _PATH_MBR	DEFAULT_BOOTDIR "/" DEFAULT_BOOTCODE
 #define _PATH_BOOTSEL	DEFAULT_BOOTDIR "/" DEFAULT_BOOTSELCODE

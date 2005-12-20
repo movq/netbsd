@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_stdlib.h,v 1.2 2003/12/04 16:23:36 drochner Exp $	*/
+/*	$NetBSD: ntp_stdlib.h,v 1.4.4.1 2007/08/21 08:39:40 ghen Exp $	*/
 
 /*
  * ntp_stdlib.h - Prototypes for NTP lib.
@@ -49,7 +49,6 @@ extern	int	authreadkeys	P((const char *));
 extern	void	authtrust	P((keyid_t, u_long));
 extern	int	authusekey	P((keyid_t, int, const u_char *));
 
-extern	u_long	calleapwhen	P((u_long));
 extern	u_long	calyearstart	P((u_long));
 extern	const char *clockname	P((int));
 extern	int	clocktime	P((int, int, int, int, int, u_long, u_long *, u_int32 *));
@@ -62,7 +61,6 @@ extern	void *	emalloc		P((u_int));
 extern	int	ntp_getopt	P((int, char **, const char *));
 extern	void	init_auth	P((void));
 extern	void	init_lib	P((void));
-extern	void	init_random	P((void));
 extern	struct savekey *auth_findkey P((keyid_t));
 extern	int	auth_moremem	P((void));
 extern	int	ymd2yd		P((int, int, int));
@@ -104,7 +102,7 @@ extern	const char *	FindConfig	P((const char *));
 
 extern	void	signal_no_reset P((int, RETSIGTYPE (*func)(int)));
 
-extern	void	getauthkeys 	P((char *));
+extern	void	getauthkeys 	P((const char *));
 extern	void	auth_agekeys	P((void));
 extern	void	rereadkeys	P((void));
 
@@ -134,10 +132,6 @@ extern int	authnumfreekeys;
 extern keyid_t	cache_keyid;		/* key identifier */
 extern u_char *	cache_key;		/* key pointer */
 extern u_int	cache_keylen;		/* key length */
-
-/* clocktypes.c */
-struct clktype;
-extern struct clktype clktypes[];
 
 /* getopt.c */
 extern char *	ntp_optarg;		/* global argument pointer */

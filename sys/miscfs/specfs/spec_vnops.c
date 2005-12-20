@@ -1,4 +1,4 @@
-/*	$NetBSD: spec_vnops.c,v 1.85 2005/12/11 12:24:51 christos Exp $	*/
+/*	$NetBSD: spec_vnops.c,v 1.97 2006/11/26 20:27:27 elad Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.85 2005/12/11 12:24:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.97 2006/11/26 20:27:27 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -51,6 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.85 2005/12/11 12:24:51 christos Exp
 #include <sys/disklabel.h>
 #include <sys/lockf.h>
 #include <sys/tty.h>
+#include <sys/kauth.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/specfs/specdev.h>
@@ -145,7 +146,7 @@ spec_lookup(v)
 /*
  * Returns true if dev is /dev/mem or /dev/kmem.
  */
-static int
+int
 iskmemdev(dev_t dev)
 {
 	/* mem_no is emitted by config(8) to generated devsw.c */
@@ -166,17 +167,18 @@ spec_open(v)
 	struct vop_open_args /* {
 		struct vnode *a_vp;
 		int  a_mode;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	struct lwp *l = ap->a_l;
-	struct vnode *bvp, *vp = ap->a_vp;
+	struct vnode *vp = ap->a_vp;
 	const struct bdevsw *bdev;
 	const struct cdevsw *cdev;
-	dev_t blkdev, dev = (dev_t)vp->v_rdev;
+	dev_t dev = (dev_t)vp->v_rdev;
 	int error;
 	struct partinfo pi;
 	int (*d_ioctl)(dev_t, u_long, caddr_t, int, struct lwp *);
+	enum kauth_device_req req;
 
 	/*
 	 * Don't allow open if fs is mounted -nodev.
@@ -184,35 +186,24 @@ spec_open(v)
 	if (vp->v_mount && (vp->v_mount->mnt_flag & MNT_NODEV))
 		return (ENXIO);
 
+#define M2K(m)	(((m) & FREAD) && ((m) & FWRITE) ? \
+		 KAUTH_REQ_DEVICE_RAWIO_SPEC_RW : \
+		 (m) & FWRITE ? KAUTH_REQ_DEVICE_RAWIO_SPEC_WRITE : \
+		 KAUTH_REQ_DEVICE_RAWIO_SPEC_READ)
+
 	switch (vp->v_type) {
 
 	case VCHR:
 		cdev = cdevsw_lookup(dev);
 		if (cdev == NULL)
 			return (ENXIO);
-		if (ap->a_cred != FSCRED && (ap->a_mode & FWRITE)) {
-			/*
-			 * When running in very secure mode, do not allow
-			 * opens for writing of any disk character devices.
-			 */
-			if (securelevel >= 2 && cdev->d_type == D_DISK)
-				return (EPERM);
-			/*
-			 * When running in secure mode, do not allow opens
-			 * for writing of /dev/mem, /dev/kmem, or character
-			 * devices whose corresponding block devices are
-			 * currently mounted.
-			 */
-			if (securelevel >= 1) {
-				blkdev = devsw_chr2blk(dev);
-				if (blkdev != (dev_t)NODEV &&
-				    vfinddev(blkdev, VBLK, &bvp) &&
-				    (error = vfs_mountedon(bvp)))
-					return (error);
-				if (iskmemdev(dev))
-					return (EPERM);
-			}
-		}
+
+		req = M2K(ap->a_mode);
+
+		error = kauth_authorize_device_spec(ap->a_cred, req, vp);
+		if (error)
+			return (error);
+
 		if (cdev->d_type == D_TTY)
 			vp->v_flag |= VISTTY;
 		VOP_UNLOCK(vp, 0);
@@ -227,19 +218,13 @@ spec_open(v)
 		bdev = bdevsw_lookup(dev);
 		if (bdev == NULL)
 			return (ENXIO);
-		/*
-		 * When running in very secure mode, do not allow
-		 * opens for writing of any disk block devices.
-		 */
-		if (securelevel >= 2 && ap->a_cred != FSCRED &&
-		    (ap->a_mode & FWRITE) && bdev->d_type == D_DISK)
-			return (EPERM);
-		/*
-		 * Do not allow opens of block devices that are
-		 * currently mounted.
-		 */
-		if ((error = vfs_mountedon(vp)) != 0)
+
+		req = M2K(ap->a_mode);
+
+		error = kauth_authorize_device_spec(ap->a_cred, req, vp);
+		if (error)
 			return (error);
+
 		error = (*bdev->d_open)(dev, ap->a_mode, S_IFBLK, l);
 		d_ioctl = bdev->d_ioctl;
 		break;
@@ -254,6 +239,8 @@ spec_open(v)
 	default:
 		return 0;
 	}
+
+#undef M2K
 
 	if (error)
 		return error;
@@ -274,11 +261,11 @@ spec_read(v)
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		int  a_ioflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct uio *uio = ap->a_uio;
- 	struct lwp *l = uio->uio_lwp;
+ 	struct lwp *l = curlwp;
 	struct buf *bp;
 	const struct bdevsw *bdev;
 	const struct cdevsw *cdev;
@@ -291,7 +278,8 @@ spec_read(v)
 #ifdef DIAGNOSTIC
 	if (uio->uio_rw != UIO_READ)
 		panic("spec_read mode");
-	if (uio->uio_segflg == UIO_USERSPACE && uio->uio_lwp != curlwp)
+	if (&uio->uio_vmspace->vm_map != kernel_map &&
+	    uio->uio_vmspace != curproc->p_vmspace)
 		panic("spec_read proc");
 #endif
 	if (uio->uio_resid == 0)
@@ -356,11 +344,11 @@ spec_write(v)
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		int  a_ioflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct uio *uio = ap->a_uio;
-	struct lwp *l = uio->uio_lwp;
+	struct lwp *l = curlwp;
 	struct buf *bp;
 	const struct bdevsw *bdev;
 	const struct cdevsw *cdev;
@@ -373,7 +361,8 @@ spec_write(v)
 #ifdef DIAGNOSTIC
 	if (uio->uio_rw != UIO_WRITE)
 		panic("spec_write mode");
-	if (uio->uio_segflg == UIO_USERSPACE && uio->uio_lwp != curlwp)
+	if (&uio->uio_vmspace->vm_map != kernel_map &&
+	    uio->uio_vmspace != curproc->p_vmspace)
 		panic("spec_write proc");
 #endif
 
@@ -451,7 +440,7 @@ spec_ioctl(v)
 		u_long a_command;
 		void  *a_data;
 		int  a_fflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	const struct bdevsw *bdev;
@@ -514,12 +503,28 @@ spec_poll(v)
 		struct lwp *a_l;
 	} */ *ap = v;
 	const struct cdevsw *cdev;
+	struct vnode *vp;
 	dev_t dev;
 
-	switch (ap->a_vp->v_type) {
+	/*
+	 * Extract all the info we need from the vnode, taking care to
+	 * avoid a race with VOP_REVOKE().
+	 */
+
+	vp = ap->a_vp;
+	dev = NODEV;
+	simple_lock(&vp->v_interlock);
+	if ((vp->v_flag & VXLOCK) == 0 && vp->v_specinfo) {
+		dev = vp->v_rdev;
+	}
+	simple_unlock(&vp->v_interlock);
+	if (dev == NODEV) {
+		return POLLERR;
+	}
+
+	switch (vp->v_type) {
 
 	case VCHR:
-		dev = ap->a_vp->v_rdev;
 		cdev = cdevsw_lookup(dev);
 		if (cdev == NULL)
 			return (POLLERR);
@@ -569,7 +574,7 @@ spec_fsync(v)
 {
 	struct vop_fsync_args /* {
 		struct vnode *a_vp;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		int  a_flags;
 		off_t offlo;
 		off_t offhi;
@@ -684,7 +689,7 @@ spec_close(v)
 	struct vop_close_args /* {
 		struct vnode *a_vp;
 		int  a_fflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;

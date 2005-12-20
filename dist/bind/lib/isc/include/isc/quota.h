@@ -1,7 +1,7 @@
-/*	$NetBSD: quota.h,v 1.1.1.1 2004/05/17 23:45:04 christos Exp $	*/
+/*	$NetBSD: quota.h,v 1.1.1.3.4.1 2007/05/17 00:42:34 jdc Exp $	*/
 
 /*
- * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: quota.h,v 1.8.12.3 2004/03/08 09:04:52 marka Exp */
+/* Id: quota.h,v 1.10.18.4 2005/08/11 15:01:54 marka Exp */
 
 #ifndef ISC_QUOTA_H
 #define ISC_QUOTA_H 1
@@ -26,10 +26,9 @@
  ***** Module Info
  *****/
 
-/*
- * Quota
+/*! \file isc/quota.h
  *
- * The isc_quota_t object is a simple helper object for implementing
+ * \brief The isc_quota_t object is a simple helper object for implementing
  * quotas on things like the number of simultaneous connections to
  * a server.  It keeps track of the amount of quota in use, and
  * encapsulates the locking necessary to allow multiple tasks to
@@ -50,17 +49,17 @@
 
 ISC_LANG_BEGINDECLS
 
+/*% isc_quota structure */
 struct isc_quota {
-	isc_mutex_t	lock;
-	/* Locked by lock. */
+	isc_mutex_t	lock; /*%< Locked by lock. */
 	int 		max;
 	int 		used;
-	isc_boolean_t	soft;
+	int		soft;
 };
 
 isc_result_t
 isc_quota_init(isc_quota_t *quota, int max);
-/*
+/*%<
  * Initialize a quota object.
  *
  * Returns:
@@ -70,43 +69,49 @@ isc_quota_init(isc_quota_t *quota, int max);
 
 void
 isc_quota_destroy(isc_quota_t *quota);
-/*
+/*%<
  * Destroy a quota object.
  */
 
 void
-isc_quota_soft(isc_quota_t *quota, isc_boolean_t soft);
-/*
- * Turn on/off soft quotas.
+isc_quota_soft(isc_quota_t *quota, int soft);
+/*%<
+ * Set a soft quota.
+ */
+
+void
+isc_quota_max(isc_quota_t *quota, int max);
+/*%<
+ * Re-set a maximum quota.
  */
 
 isc_result_t
 isc_quota_reserve(isc_quota_t *quota);
-/*
+/*%<
  * Attempt to reserve one unit of 'quota'.
  *
  * Returns:
- * 	ISC_R_SUCCESS	Success
- *	ISC_R_SOFTQUOTA	Success soft quota reached
- *	ISC_R_QUOTA	Quota is full
+ * \li 	#ISC_R_SUCCESS		Success
+ * \li	#ISC_R_SOFTQUOTA	Success soft quota reached
+ * \li	#ISC_R_QUOTA		Quota is full
  */
 
 void
 isc_quota_release(isc_quota_t *quota);
-/*
+/*%<
  * Release one unit of quota.
  */
 
 isc_result_t
 isc_quota_attach(isc_quota_t *quota, isc_quota_t **p);
-/*
+/*%<
  * Like isc_quota_reserve, and also attaches '*p' to the
  * quota if successful (ISC_R_SUCCESS or ISC_R_SOFTQUOTA).
  */
 
 void
 isc_quota_detach(isc_quota_t **p);
-/*
+/*%<
  * Like isc_quota_release, and also detaches '*p' from the
  * quota.
  */

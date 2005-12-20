@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.2 2005/10/04 12:35:00 cube Exp $	*/
+/*	$NetBSD: util.c,v 1.4 2006/09/03 07:45:40 dsl Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -44,12 +44,13 @@
 #include "nbtool_config.h"
 #endif
 
+#include <sys/types.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#include <sys/types.h>
+#include <util.h>
 #include "defs.h"
 
 static void nomem(void);
@@ -196,28 +197,18 @@ sourcepath(const char *file)
 	return (cp);
 }
 
-static struct nvlist *nvfreelist;
-
 struct nvlist *
 newnv(const char *name, const char *str, void *ptr, int i, struct nvlist *next)
 {
 	struct nvlist *nv;
 
-	if ((nv = nvfreelist) == NULL)
-		nv = ecalloc(1, sizeof(*nv));
-	else
-		nvfreelist = nv->nv_next;
+	nv = ecalloc(1, sizeof(*nv));
 	nv->nv_next = next;
 	nv->nv_name = name;
-	if (ptr == NULL)
-		nv->nv_str = str;
-	else {
-		if (str != NULL)
-			panic("newnv");
-		nv->nv_ptr = ptr;
-	}
+	nv->nv_str = str;
+	nv->nv_ptr = ptr;
 	nv->nv_int = i;
-	return (nv);
+	return nv;
 }
 
 /*
@@ -227,9 +218,7 @@ void
 nvfree(struct nvlist *nv)
 {
 
-	memset(nv, 0, sizeof(*nv));
-	nv->nv_next = nvfreelist;
-	nvfreelist = nv;
+	free(nv);
 }
 
 /*
@@ -242,9 +231,7 @@ nvfreel(struct nvlist *nv)
 
 	for (; nv != NULL; nv = next) {
 		next = nv->nv_next;
-		memset(nv, 0, sizeof(*nv));
-		nv->nv_next = nvfreelist;
-		nvfreelist = nv;
+		free(nv);
 	}
 }
 

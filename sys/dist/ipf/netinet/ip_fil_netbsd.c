@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_fil_netbsd.c,v 1.16 2005/12/11 12:24:21 christos Exp $	*/
+/*	$NetBSD: ip_fil_netbsd.c,v 1.28.2.5 2007/09/27 13:58:20 xtraeme Exp $	*/
 
 /*
  * Copyright (C) 1993-2003 by Darren Reed.
@@ -7,7 +7,7 @@
  */
 #if !defined(lint)
 static const char sccsid[] = "@(#)ip_fil.c	2.41 6/5/96 (C) 1993-2000 Darren Reed";
-static const char rcsid[] = "@(#)Id: ip_fil_netbsd.c,v 2.55.2.27 2005/02/21 22:51:08 darrenr Exp";
+static const char rcsid[] = "@(#)Id: ip_fil_netbsd.c,v 2.55.2.51 2007/05/31 12:27:35 darrenr Exp";
 #endif
 
 #if defined(KERNEL) || defined(_KERNEL)
@@ -18,7 +18,11 @@ static const char rcsid[] = "@(#)Id: ip_fil_netbsd.c,v 2.55.2.27 2005/02/21 22:5
 #endif
 #include <sys/param.h>
 #if (NetBSD >= 199905) && !defined(IPFILTER_LKM) && defined(_KERNEL)
-# include "opt_ipfilter.h"
+# if (__NetBSD_Version__ < 399001400)
+#  include "opt_ipfilter_log.h"
+# else
+#  include "opt_ipfilter.h"
+# endif
 # include "opt_pfil_hooks.h"
 # include "opt_ipsec.h"
 #endif
@@ -36,6 +40,14 @@ static const char rcsid[] = "@(#)Id: ip_fil_netbsd.c,v 2.55.2.27 2005/02/21 22:5
 #include <sys/mbuf.h>
 #include <sys/protosw.h>
 #include <sys/socket.h>
+#include <sys/poll.h>
+#if (__NetBSD_Version__ >= 399002000)
+# include <sys/kauth.h>
+#endif
+
+#if (__NetBSD_Version__ >= 399002000)
+#include <sys/kauth.h>
+#endif
 
 #include <net/if.h>
 #include <net/route.h>
@@ -92,10 +104,6 @@ extern	struct	protosw	inetsw[];
 
 static	int	(*fr_savep) __P((ip_t *, int, void *, int, struct mbuf **));
 static	int	fr_send_ip __P((fr_info_t *, mb_t *, mb_t **));
-#ifdef KMUTEX_T
-extern  ipfmutex_t	ipf_rw;
-extern	ipfrwlock_t	ipf_mutex;
-#endif
 #ifdef USE_INET6
 static int ipfr_fastroute6 __P((struct mbuf *, struct mbuf **,
 				fr_info_t *, frdest_t *));
@@ -116,12 +124,27 @@ int (*fr_checkp) __P((ip_t *ip, int hlen, void *ifp, int out, mb_t **mp));
 #endif /* NETBSD_PF */
 
 #if (__NetBSD_Version__ >= 106080000) && defined(_KERNEL)
+# include <sys/select.h>
+
+# if  (__NetBSD_Version__ >= 399001400)
+int iplpoll __P((dev_t dev, int events, struct lwp *p));
+# else
+int iplpoll __P((dev_t dev, int events, struct proc *p));
+# endif
+
+struct selinfo ipfselwait[IPL_LOGSIZE];
+
 const struct cdevsw ipl_cdevsw = {
 	iplopen, iplclose, iplread, nowrite, iplioctl,
-	nostop, notty, nopoll, nommap,
+	nostop, notty, iplpoll, nommap,
+# if  (__NetBSD_Version__ >= 200000000)
+	nokqfilter,
+# endif
+# ifdef D_OTHER
+	D_OTHER,
+# endif
 };
 #endif
-
 
 
 #if defined(__NetBSD_Version__) && (__NetBSD_Version__ >= 105110000)
@@ -129,11 +152,9 @@ const struct cdevsw ipl_cdevsw = {
 
 static int fr_check_wrapper(void *, struct mbuf **, struct ifnet *, int );
 
-static int fr_check_wrapper(arg, mp, ifp, dir)
-void *arg;
-struct mbuf **mp;
-struct ifnet *ifp;
-int dir;
+static int
+fr_check_wrapper(void *arg, struct mbuf **mp, struct ifnet *ifp,
+    int dir)
 {
 	struct ip *ip;
 	int rv, hlen;
@@ -200,14 +221,12 @@ int dir;
 
 static int fr_check_wrapper6(void *, struct mbuf **, struct ifnet *, int );
 
-static int fr_check_wrapper6(arg, mp, ifp, dir)
-void *arg;
-struct mbuf **mp;
-struct ifnet *ifp;
-int dir;
+static int
+fr_check_wrapper6(void *arg, struct mbuf **mp, struct ifnet *ifp,
+    int dir)
 {
 #if defined(INET6)
-#if defined(M_CSUM_TCPv6)
+#  if defined(M_CSUM_TCPv6) && (__NetBSD_Version__ > 200000000)
 	/*
 	 * If the packet is out-bound, we can't delay checksums
 	 * here.  For in-bound, the checksum has already been
@@ -215,18 +234,40 @@ int dir;
 	 */
 	if (dir == PFIL_OUT) {
 		if ((*mp)->m_pkthdr.csum_flags & (M_CSUM_TCPv6|M_CSUM_UDPv6)) {
+#   if (__NetBSD_Version__ > 399000600)
 			in6_delayed_cksum(*mp);
-			(*mp)->m_pkthdr.csum_flags &=
-			    ~(M_CSUM_TCPv6|M_CSUM_UDPv6);
+#   endif
+			(*mp)->m_pkthdr.csum_flags &= ~(M_CSUM_TCPv6|
+							M_CSUM_UDPv6);
 		}
 	}
-#endif /* M_CSUM_TCPv6 */
+#  endif
 #endif /* INET6 */
 
 	return (fr_check(mtod(*mp, struct ip *), sizeof(struct ip6_hdr),
 	    ifp, (dir == PFIL_OUT), mp));
 }
 # endif
+
+
+# if defined(PFIL_TYPE_IFNET) && defined(PFIL_IFNET)
+static int ipf_pfilsync(void *, struct mbuf **, struct ifnet *, int);
+
+static int ipf_pfilsync(void *hdr, struct mbuf **mp,
+    struct ifnet *ifp, int dir)
+{
+	/*
+	 * The interface pointer is useless for create (we have nothing to
+	 * compare it to) and at detach, the interface name is still in the
+	 * list of active NICs (albeit, down, but that's not any real
+	 * indicator) and doing ifunit() on the name will still return the
+	 * pointer, so it's not much use then, either.
+	 */
+	frsync(NULL);
+	return 0;
+}
+# endif
+
 #endif /* __NetBSD_Version__ >= 105110000 */
 
 
@@ -246,18 +287,17 @@ char *s;
  */
 #if defined(PFIL_HOOKS)
 void
-ipfilterattach(count)
-int count;
+ipfilterattach(int count)
 {
 # if 0
-	if (iplattach() != 0)
+	if (ipfattach() != 0)
 		printf("IP Filter failed to attach\n");
 # endif
 }
 #endif
 
 
-int iplattach()
+int ipfattach()
 {
 	int s;
 #if defined(NETBSD_PF) && (__NetBSD_Version__ >= 104200000)
@@ -266,6 +306,9 @@ int iplattach()
         struct pfil_head *ph_inet;
 #  ifdef USE_INET6
         struct pfil_head *ph_inet6;
+#  endif
+#  if defined(PFIL_TYPE_IFNET) && defined(PFIL_IFNET)
+        struct pfil_head *ph_ifsync;
 #  endif
 # endif
 #endif
@@ -289,9 +332,16 @@ int iplattach()
 #   ifdef USE_INET6
 	ph_inet6 = pfil_head_get(PFIL_TYPE_AF, AF_INET6);
 #   endif
+#   if defined(PFIL_TYPE_IFNET) && defined(PFIL_IFNET)
+	ph_ifsync = pfil_head_get(PFIL_TYPE_IFNET, 0);
+#   endif
+
 	if (ph_inet == NULL
 #   ifdef USE_INET6
 	    && ph_inet6 == NULL
+#   endif
+#   if defined(PFIL_TYPE_IFNET) && defined(PFIL_IFNET)
+	    && ph_ifsync == NULL
 #   endif
 	   ) {
 		printf("pfil_head_get failed\n");
@@ -303,22 +353,16 @@ int iplattach()
 				      PFIL_IN|PFIL_OUT, ph_inet);
 	else
 		error = 0;
-# else
+#  else
 	error = pfil_add_hook((void *)fr_check, PFIL_IN|PFIL_OUT,
 			      &inetsw[ip_protox[IPPROTO_IP]].pr_pfh);
-# endif
-	if (error) {
-#  ifdef USE_INET6
-		goto pfil_error;
-#  else
-		fr_deinitialise();
-		SPL_X(s);
-		return error;
 #  endif
-	}
+	if (error)
+		goto pfil_error;
 # else
 	pfil_add_hook((void *)fr_check, PFIL_IN|PFIL_OUT);
 # endif
+
 # ifdef USE_INET6
 #  if __NetBSD_Version__ >= 105110000
 	if (ph_inet6 != NULL)
@@ -329,21 +373,27 @@ int iplattach()
 	if (error) {
 		pfil_remove_hook((void *)fr_check_wrapper6, NULL,
 				 PFIL_IN|PFIL_OUT, ph_inet6);
+		goto pfil_error;
+	}
 #  else
 	error = pfil_add_hook((void *)fr_check, PFIL_IN|PFIL_OUT,
 			      &inetsw[ip_protox[IPPROTO_IPV6]].pr_pfh);
 	if (error) {
 		pfil_remove_hook((void *)fr_check, PFIL_IN|PFIL_OUT,
 				 &inetsw[ip_protox[IPPROTO_IP]].pr_pfh);
-#  endif
-pfil_error:
-		fr_deinitialise();
-		SPL_X(s);
-		return error;
+		goto pfil_error;
 	}
+#  endif
+# endif
+
+# if defined(PFIL_TYPE_IFNET) && defined(PFIL_IFNET)
+	if (ph_ifsync != NULL)
+		(void) pfil_add_hook((void *)ipf_pfilsync, NULL,
+				     PFIL_IFNET, ph_ifsync);
 # endif
 #endif
 
+	bzero((char *)ipfselwait, sizeof(ipfselwait));
 	bzero((char *)frcache, sizeof(frcache));
 	fr_savep = fr_checkp;
 	fr_checkp = fr_check;
@@ -363,6 +413,13 @@ pfil_error:
 	timeout(fr_slowtimer, NULL, (hz / IPF_HZ_DIVIDE) * IPF_HZ_MULT);
 #endif
 	return 0;
+
+#if __NetBSD_Version__ >= 105110000
+pfil_error:
+	fr_deinitialise();
+	SPL_X(s);
+	return error;
+#endif
 }
 
 
@@ -370,7 +427,7 @@ pfil_error:
  * Disable the filter by removing the hooks from the IP input/output
  * stream.
  */
-int ipldetach()
+int ipfdetach()
 {
 	int s;
 #if defined(NETBSD_PF) && (__NetBSD_Version__ >= 104200000)
@@ -379,6 +436,9 @@ int ipldetach()
 	struct pfil_head *ph_inet = pfil_head_get(PFIL_TYPE_AF, AF_INET);
 #  ifdef USE_INET6
 	struct pfil_head *ph_inet6 = pfil_head_get(PFIL_TYPE_AF, AF_INET6);
+#  endif
+#  if defined(PFIL_TYPE_IFNET) && defined(PFIL_IFNET)
+	struct pfil_head *ph_ifsync = pfil_head_get(PFIL_TYPE_IFNET, 0);
 #  endif
 # endif
 #endif
@@ -403,6 +463,11 @@ int ipldetach()
 #ifdef NETBSD_PF
 # if (__NetBSD_Version__ >= 104200000)
 #  if __NetBSD_Version__ >= 105110000
+#   if defined(PFIL_TYPE_IFNET) && defined(PFIL_IFNET)
+	(void) pfil_remove_hook((void *)ipf_pfilsync, NULL,
+				PFIL_IFNET, ph_ifsync);
+#   endif
+
 	if (ph_inet != NULL)
 		error = pfil_remove_hook((void *)fr_check_wrapper, NULL,
 					 PFIL_IN|PFIL_OUT, ph_inet);
@@ -444,22 +509,45 @@ int ipldetach()
  */
 int iplioctl(dev, cmd, data, mode
 #if (NetBSD >= 199511)
-, l)
-struct lwp *l;
+, p)
+# if  (__NetBSD_Version__ >= 399001400)
+struct lwp *p;
+#   if (__NetBSD_Version__ >= 399002000)
+#     define	UID(l)	kauth_cred_getuid((l)->l_cred)
+#  else
+#     define	UID(l)	((l)->l_proc->p_cred->p_ruid)
+#  endif
+# else
+struct proc *p;
+#  define	UID(p)	((p)->p_cred->p_ruid)
+# endif
 #else
 )
 #endif
 dev_t dev;
 u_long cmd;
+#if  (__NetBSD_Version__ >= 499001000)
+void *data;
+#else
 caddr_t data;
+#endif
 int mode;
 {
-	int s;
-	int error = 0, unit = 0, tmp;
-	friostat_t fio;
+	int error = 0, unit = 0;
+	SPL_INT(s);
 
-	if ((securelevel >= 2) && (mode & FWRITE))
+#if (__NetBSD_Version__ >= 399002000)
+	if ((mode & FWRITE) &&
+	    kauth_authorize_network(p->l_cred, KAUTH_NETWORK_FIREWALL,
+				    KAUTH_REQ_NETWORK_FIREWALL_FW, NULL,
+				    NULL, NULL)) {
 		return EPERM;
+	}
+#else
+	if ((securelevel >= 2) && (mode & FWRITE)) {
+		return EPERM;
+	}
+#endif
 
 	unit = GET_MINOR(dev);
 	if ((IPL_LOGMAX < unit) || (unit < 0))
@@ -476,148 +564,8 @@ int mode;
 
 	SPL_NET(s);
 
-	error = fr_ioctlswitch(unit, data, cmd, mode);
-	if (error != -1) {
-		SPL_X(s);
-		return error;
-	}
-	error = 0;
+	error = fr_ioctlswitch(unit, data, cmd, mode, UID(p), p);
 
-	switch (cmd)
-	{
-	case FIONREAD :
-#ifdef IPFILTER_LOG
-		BCOPYOUT(&iplused[IPL_LOGIPF], (caddr_t)data,
-			 sizeof(iplused[IPL_LOGIPF]));
-#endif
-		break;
-	case SIOCFRENB :
-		if (!(mode & FWRITE))
-			error = EPERM;
-		else {
-			BCOPYIN(data, &tmp, sizeof(tmp));
-			if (tmp) {
-				if (fr_running > 0)
-					error = 0;
-				else
-					error = iplattach();
-				if (error == 0)
-					fr_running = 1;
-				else
-					(void) ipldetach();
-			} else {
-				error = ipldetach();
-				if (error == 0)
-					fr_running = -1;
-			}
-		}
-		break;
-	case SIOCIPFSET :
-		if (!(mode & FWRITE)) {
-			error = EPERM;
-			break;
-		}
-	case SIOCIPFGETNEXT :
-	case SIOCIPFGET :
-		error = fr_ipftune(cmd, data);
-		break;
-	case SIOCSETFF :
-		if (!(mode & FWRITE))
-			error = EPERM;
-		else
-			BCOPYIN(data, &fr_flags, sizeof(fr_flags));
-		break;
-	case SIOCGETFF :
-		BCOPYOUT(&fr_flags, data, sizeof(fr_flags));
-		break;
-	case SIOCFUNCL :
-		error = fr_resolvefunc(data);
-		break;
-	case SIOCINAFR :
-	case SIOCRMAFR :
-	case SIOCADAFR :
-	case SIOCZRLST :
-		if (!(mode & FWRITE))
-			error = EPERM;
-		else
-			error = frrequest(unit, cmd, data, fr_active, 1);
-		break;
-	case SIOCINIFR :
-	case SIOCRMIFR :
-	case SIOCADIFR :
-		if (!(mode & FWRITE))
-			error = EPERM;
-		else
-			error = frrequest(unit, cmd, data, 1 - fr_active, 1);
-		break;
-	case SIOCSWAPA :
-		if (!(mode & FWRITE))
-			error = EPERM;
-		else {
-			bzero((char *)frcache, sizeof(frcache[0]) * 2);
-			*(u_int *)data = fr_active;
-			fr_active = 1 - fr_active;
-		}
-		break;
-	case SIOCGETFS :
-		fr_getstat(&fio);
-		error = fr_outobj(data, &fio, IPFOBJ_IPFSTAT);
-		break;
-	case SIOCFRZST :
-		if (!(mode & FWRITE))
-			error = EPERM;
-		else
-			error = fr_zerostats(data);
-		break;
-	case SIOCIPFFL :
-		if (!(mode & FWRITE))
-			error = EPERM;
-		else {
-			BCOPYIN(data, &tmp, sizeof(tmp));
-			tmp = frflush(unit, 4, tmp);
-			BCOPYOUT(&tmp, data, sizeof(tmp));
-		}
-		break;
-#ifdef USE_INET6
-	case SIOCIPFL6 :
-		if (!(mode & FWRITE))
-			error = EPERM;
-		else {
-			BCOPYIN(data, &tmp, sizeof(tmp));
-			tmp = frflush(unit, 6, tmp);
-			BCOPYOUT(&tmp, data, sizeof(tmp));
-		}
-		break;
-#endif
-	case SIOCSTLCK :
-		BCOPYIN(data, &tmp, sizeof(tmp));
-		fr_state_lock = tmp;
-		fr_nat_lock = tmp;
-		fr_frag_lock = tmp;
-		fr_auth_lock = tmp;
-		break;
-#ifdef IPFILTER_LOG
-	case SIOCIPFFB :
-		if (!(mode & FWRITE))
-			error = EPERM;
-		else
-			*(int *)data = ipflog_clear(unit);
-		break;
-#endif /* IPFILTER_LOG */
-	case SIOCGFRST :
-		error = fr_outobj(data, fr_fragstats(), IPFOBJ_FRAGSTAT);
-		break;
-	case SIOCFRSYN :
-		if (!(mode & FWRITE))
-			error = EPERM;
-		else {
-			frsync(NULL);
-		}
-		break;
-	default :
-		error = EINVAL;
-		break;
-	}
 	SPL_X(s);
 	return error;
 }
@@ -665,16 +613,18 @@ void *ifp;
 /*
  * routines below for saving IP headers to buffer
  */
-int iplopen(dev, flags
+int iplopen(
+    dev_t dev,
+    int flags,
 #if (NetBSD >= 199511)
-, devtype, l)
-int devtype;
-struct lwp *l;
-#else
-)
+    int devtype,
 #endif
-dev_t dev;
-int flags;
+# if  (__NetBSD_Version__ >= 399001400)
+    struct lwp *p
+# else
+    struct proc *p
+# endif
+)
 {
 	u_int xmin = GET_MINOR(dev);
 
@@ -686,16 +636,18 @@ int flags;
 }
 
 
-int iplclose(dev, flags
+int iplclose(
+    dev_t dev,
+    int flags,
 #if (NetBSD >= 199511)
-, devtype, l)
-int devtype;
-struct lwp *l;
-#else
-)
+    int devtype,
 #endif
-dev_t dev;
-int flags;
+# if  (__NetBSD_Version__ >= 399001400)
+    struct lwp *p
+# else
+    struct proc *p
+# endif
+)
 {
 	u_int	xmin = GET_MINOR(dev);
 
@@ -712,15 +664,17 @@ int flags;
  * called during packet processing and cause an inconsistancy to appear in
  * the filter lists.
  */
+int iplread(
+    dev_t dev,
+    struct uio *uio,
 #if (BSD >= 199306)
-int iplread(dev, uio, ioflag)
-int ioflag;
-#else
-int iplread(dev, uio)
+    int ioflag
 #endif
-dev_t dev;
-register struct uio *uio;
+)
 {
+
+	if (fr_running < 1)
+		return EIO;
 
 # ifdef	IPFILTER_SYNC
 	if (GET_MINOR(dev) == IPL_LOGSYNC)
@@ -741,15 +695,17 @@ register struct uio *uio;
  * called during packet processing and cause an inconsistancy to appear in
  * the filter lists.
  */
+int iplwrite(
+    dev_t dev,
+    struct uio *uio,
 #if (BSD >= 199306)
-int iplwrite(dev, uio, ioflag)
-int ioflag;
-#else
-int iplwrite(dev, uio)
+    int ioflag
 #endif
-dev_t dev;
-register struct uio *uio;
+)
 {
+
+	if (fr_running < 1)
+		return EIO;
 
 #ifdef	IPFILTER_SYNC
 	if (GET_MINOR(dev) == IPL_LOGSYNC)
@@ -1116,15 +1072,26 @@ mb_t *m0, **mpp;
 fr_info_t *fin;
 frdest_t *fdp;
 {
-	register struct ip *ip, *mhip;
-	register struct mbuf *m = m0;
-	register struct route *ro;
-	int len, off, error = 0, hlen, code;
+	int error = 0;
+#ifdef INET
+	struct ip *ip, *mhip;
+	struct mbuf *m = m0;
+	struct route *ro;
+	int off, len, hlen, code;
 	struct ifnet *ifp, *sifp;
+#if __NetBSD_Version__ >= 499001100
+	const struct sockaddr *dst;
+	union {
+		struct sockaddr         dst;
+		struct sockaddr_in      dst4;
+	} u;
+#else
 	struct sockaddr_in *dst;
+#endif
 	struct route iproute;
 	u_short ip_off;
 	frentry_t *fr;
+#endif
 
 	if (fin->fin_v == 6) {
 #ifdef USE_INET6
@@ -1156,37 +1123,37 @@ frdest_t *fdp;
 	 * Route packet.
 	 */
 	ro = &iproute;
-	bzero((caddr_t)ro, sizeof (*ro));
-	dst = (struct sockaddr_in *)&ro->ro_dst;
-	dst->sin_family = AF_INET;
-	dst->sin_addr = ip->ip_dst;
+	memset(ro, 0, sizeof(*ro));
 
-	fr = fin->fin_fr;
 	if (fdp != NULL)
 		ifp = fdp->fd_ifp;
 	else
 		ifp = fin->fin_ifp;
+	fr = fin->fin_fr;
 
 	if ((ifp == NULL) && (!fr || !(fr->fr_flags & FR_FASTROUTE))) {
 		error = -2;
 		goto bad;
 	}
 
-	/*
-	 * In case we're here due to "to <if>" being used with "keep state",
-	 * check that we're going in the correct direction.
-	 */
-	if ((fr != NULL) && (fin->fin_rev != 0)) {
-		if ((ifp != NULL) && (fdp == &fr->fr_tif))
-			return -1;
-	}
-	if (fdp != NULL) {
-		if (fdp->fd_ip.s_addr != 0)
-			dst->sin_addr = fdp->fd_ip;
-	}
+# if __NetBSD_Version__ >= 499001100
+	if ((fdp != NULL) && (fdp->fd_ip.s_addr != 0))
+		sockaddr_in_init(&u.dst4, &fdp->fd_ip, 0);
+	else
+		sockaddr_in_init(&u.dst4, &ip->ip_dst, 0);
+	dst = &u.dst;
+	rtcache_setdst(ro, dst);
+	rtcache_init(ro);
+# else
+	dst = (struct sockaddr_in *)&ro->ro_dst;
+	dst->sin_family = AF_INET;
+	dst->sin_addr = ip->ip_dst;
 
+	if ((fdp != NULL) && (fdp->fd_ip.s_addr != 0))
+		dst->sin_addr = fdp->fd_ip;
 	dst->sin_len = sizeof(*dst);
 	rtalloc(ro);
+# endif
 
 	if ((ifp == NULL) && (ro->ro_rt != NULL))
 		ifp = ro->ro_rt->rt_ifp;
@@ -1200,17 +1167,26 @@ frdest_t *fdp;
 			error = ENETUNREACH;
 		goto bad;
 	}
+
+# if __NetBSD_Version__ >= 499001100
+	if (ro->ro_rt->rt_flags & RTF_GATEWAY)
+		dst = ro->ro_rt->rt_gateway;
+# else
 	if (ro->ro_rt->rt_flags & RTF_GATEWAY)
 		dst = (struct sockaddr_in *)ro->ro_rt->rt_gateway;
+#endif /* __NetBSD_Version__ < 499001100 */
+
 	if (ro->ro_rt)
 		ro->ro_rt->rt_use++;
 
 	/*
 	 * For input packets which are being "fastrouted", they won't
 	 * go back through output filtering and miss their chance to get
-	 * NAT'd and counted.
+	 * NAT'd and counted.  Duplicated packets aren't considered to be
+	 * part of the normal packet stream, so do not NAT them or pass
+	 * them through stateful checking, etc.
 	 */
-	if (fin->fin_out == 0) {
+	if ((fdp != &fr->fr_dif) && (fin->fin_out == 0)) {
 		sifp = fin->fin_ifp;
 		fin->fin_ifp = ifp;
 		fin->fin_out = 1;
@@ -1219,7 +1195,8 @@ frdest_t *fdp;
 		if (!fr || !(fr->fr_flags & FR_RETMASK)) {
 			u_32_t pass;
 
-			(void) fr_checkstate(fin, &pass);
+			if (fr_checkstate(fin, &pass) != NULL)
+				fr_statederef((ipstate_t **)&fin->fin_state);
 		}
 
 		switch (fr_checknatout(fin, NULL))
@@ -1227,6 +1204,7 @@ frdest_t *fdp;
 		case 0 :
 			break;
 		case 1 :
+			fr_natderef((nat_t **)&fin->fin_nat);
 			ip->ip_sum = 0;
 			break;
 		case -1 :
@@ -1264,8 +1242,12 @@ frdest_t *fdp;
 		if (!ip->ip_sum)
 			ip->ip_sum = in_cksum(m, hlen);
 # endif /* M_CSUM_IPv4 */
+# if __NetBSD_Version__ >= 499001100
+		error = (*ifp->if_output)(ifp, m, dst, ro->ro_rt);
+# else
 		error = (*ifp->if_output)(ifp, m, (struct sockaddr *)dst,
 					  ro->ro_rt);
+# endif
 		if (i) {
 			ip->ip_len = ntohs(ip->ip_len);
 			ip->ip_off = ntohs(ip->ip_off);
@@ -1355,11 +1337,18 @@ sendorfree:
 	for (m = m0; m; m = m0) {
 		m0 = m->m_act;
 		m->m_act = 0;
+# if __NetBSD_Version__ >= 499001100
+		if (error == 0)
+			error = (*ifp->if_output)(ifp, m, dst, ro->ro_rt);
+		else
+			FREE_MB_T(m);
+# else
 		if (error == 0)
 			error = (*ifp->if_output)(ifp, m,
 			    (struct sockaddr *)dst, ro->ro_rt);
 		else
 			FREE_MB_T(m);
+# endif
 	}
     }
 done:
@@ -1368,9 +1357,13 @@ done:
 	else
 		fr_frouteok[1]++;
 
+# if __NetBSD_Version__ >= 499001100
+	rtcache_free(ro);
+# else
 	if (ro->ro_rt) {
-		RTFREE(ro->ro_rt);
+		RTFREE(((struct route *)ro)->ro_rt);
 	}
+# endif
 	*mpp = NULL;
 	return error;
 bad:
@@ -1400,38 +1393,55 @@ struct mbuf *m0, **mpp;
 fr_info_t *fin;
 frdest_t *fdp;
 {
+# if __NetBSD_Version__ >= 499001100
+	struct route ip6route;
+	const struct sockaddr *dst;
+	union {
+		struct sockaddr         dst;
+		struct sockaddr_in6     dst6;
+	} u;
+	struct route *ro;
+# else
 	struct route_in6 ip6route;
 	struct sockaddr_in6 *dst6;
 	struct route_in6 *ro;
+# endif
 	struct rtentry *rt;
 	struct ifnet *ifp;
 	frentry_t *fr;
 	u_long mtu;
-	int error = 0;
+	int error;
 
+	error = 0;
 	ro = &ip6route;
 	fr = fin->fin_fr;
-	bzero((caddr_t)ro, sizeof(*ro));
-	dst6 = (struct sockaddr_in6 *)&ro->ro_dst;
-	dst6->sin6_family = AF_INET6;
-	dst6->sin6_len = sizeof(struct sockaddr_in6);
-	dst6->sin6_addr = fin->fin_fi.fi_dst.in6;
 
 	if (fdp != NULL)
 		ifp = fdp->fd_ifp;
 	else
 		ifp = fin->fin_ifp;
+	memset(ro, 0, sizeof(*ro));
+# if __NetBSD_Version__ >= 499001100
+	if (fdp != NULL && IP6_NOTZERO(&fdp->fd_ip6))
+		sockaddr_in6_init(&u.dst6, &fdp->fd_ip6.in6, 0, 0, 0);
+	else
+		sockaddr_in6_init(&u.dst6, &fin->fin_fi.fi_dst.in6, 0, 0, 0);
+	dst = &u.dst;
+	rtcache_setdst(ro, dst);
 
-	if ((fr != NULL) && (fin->fin_rev != 0)) {
-		if ((ifp != NULL) && (fdp == &fr->fr_tif))
-			return 0;
-	}
+	rtcache_init(ro);
+# else
+	dst6 = (struct sockaddr_in6 *)&ro->ro_dst;
+	dst6->sin6_family = AF_INET6;
+	dst6->sin6_len = sizeof(struct sockaddr_in6);
+	dst6->sin6_addr = fin->fin_fi.fi_dst.in6;
+
 	if (fdp != NULL) {
 		if (IP6_NOTZERO(&fdp->fd_ip6))
 			dst6->sin6_addr = fdp->fd_ip6.in6;
 	}
-
 	rtalloc((struct route *)ro);
+# endif
 
 	if ((ifp == NULL) && (ro->ro_rt != NULL))
 		ifp = ro->ro_rt->rt_ifp;
@@ -1444,41 +1454,91 @@ frdest_t *fdp;
 	rt = fdp ? NULL : ro->ro_rt;
 
 	/* KAME */
+# if __NetBSD_Version__ >= 499001100
+	if (IN6_IS_ADDR_LINKLOCAL(&u.dst6.sin6_addr))
+		u.dst6.sin6_addr.s6_addr16[1] = htons(ifp->if_index);
+# else
 	if (IN6_IS_ADDR_LINKLOCAL(&dst6->sin6_addr))
 		dst6->sin6_addr.s6_addr16[1] = htons(ifp->if_index);
+# endif
 
 	{
+# if (__NetBSD_Version__ >= 106010000)
+#  if (__NetBSD_Version__ >= 399001400)
 		struct in6_ifextra *ife;
-
+#  else
+		struct in6_addr finaldst = fin->fin_dst6;
+		int frag;
+#  endif
+# endif
+# if __NetBSD_Version__ >= 499001100
+		if (ro->ro_rt->rt_flags & RTF_GATEWAY)
+			dst = ro->ro_rt->rt_gateway;
+# else
 		if (ro->ro_rt->rt_flags & RTF_GATEWAY)
 			dst6 = (struct sockaddr_in6 *)ro->ro_rt->rt_gateway;
+# endif
 		ro->ro_rt->rt_use++;
 
+		/* Determine path MTU. */
+# if (__NetBSD_Version__ <= 106009999)
+		mtu = nd_ifinfo[ifp->if_index].linkmtu;
+# else
+#  if (__NetBSD_Version__ >= 399001400)
 		ife = (struct in6_ifextra *)(ifp)->if_afdata[AF_INET6];
 		mtu = ife->nd_ifinfo[ifp->if_index].linkmtu;
+#  else
+		error = ip6_getpmtu(ro, ro, ifp, &finaldst, &mtu, &frag);
+#  endif
+# endif
 		if ((error == 0) && (m0->m_pkthdr.len <= mtu)) {
 			*mpp = NULL;
+# if __NetBSD_Version__ >= 499001100
+			error = nd6_output(ifp, ifp, m0, satocsin6(dst), rt);
+# else
 			error = nd6_output(ifp, ifp, m0, dst6, rt);
+# endif
 		} else {
 			error = EMSGSIZE;
 		}
 	}
 bad:
+# if __NetBSD_Version__ >= 499001100
+	rtcache_free(ro);
+# else
 	if (ro->ro_rt != NULL) {
-		RTFREE(ro->ro_rt);
+		RTFREE(((struct route *)ro)->ro_rt);
 	}
+# endif
 	return error;
 }
-#endif
+#endif	/* INET6 */
 
 
 int fr_verifysrc(fin)
 fr_info_t *fin;
 {
+#if __NetBSD_Version__ >= 499001100
+	union {
+		struct sockaddr         dst;
+		struct sockaddr_in      dst4;
+	} u;
+#else
 	struct sockaddr_in *dst;
+#endif
 	struct route iproute;
+	int rc;
 
-	bzero((char *)&iproute, sizeof(iproute));
+#if __NetBSD_Version__ >= 499001100
+	sockaddr_in_init(&u.dst4, &fin->fin_src, 0);
+	rtcache_setdst(&iproute, &u.dst);
+	rtcache_init(&iproute);
+	if (iproute.ro_rt == NULL)
+		rc = 0;
+	else
+		rc = (fin->fin_ifp == iproute.ro_rt->rt_ifp);
+	rtcache_free(&iproute);
+#else
 	dst = (struct sockaddr_in *)&iproute.ro_dst;
 	dst->sin_len = sizeof(*dst);
 	dst->sin_family = AF_INET;
@@ -1486,7 +1546,10 @@ fr_info_t *fin;
 	rtalloc(&iproute);
 	if (iproute.ro_rt == NULL)
 		return 0;
-	return (fin->fin_ifp == iproute.ro_rt->rt_ifp);
+	rc = (fin->fin_ifp == iproute.ro_rt->rt_ifp);
+	RTFREE(iproute.ro_rt);
+#endif
+	return rc;
 }
 
 
@@ -1520,7 +1583,7 @@ struct in_addr *inp, *inpmask;
 #endif
 
 	ifa = ifp->if_addrlist.tqh_first;
-	sock = ifa->ifa_addr;
+	sock = ifa ? ifa->ifa_addr : NULL;
 	while (sock != NULL && ifa != NULL) {
 		sin = (struct sockaddr_in *)sock;
 		if ((v == 4) && (sin->sin_family == AF_INET))
@@ -1569,8 +1632,12 @@ fr_info_t *fin;
 		asz = sizeof(fin->fin_src);
 	else	/* XXX: no way to return error */
 		return 0;
+#ifdef INET
 	return tcp_new_iss1((void *)&fin->fin_src, (void *)&fin->fin_dst,
 			    fin->fin_sport, fin->fin_dport, asz, 0);
+#else
+	return ENOSYS;
+#endif
 #else
 	static int iss_seq_off = 0;
 	u_char hash[16];
@@ -1616,8 +1683,7 @@ fr_info_t *fin;
 /*                                                                          */
 /* Returns the next IPv4 ID to use for this packet.                         */
 /* ------------------------------------------------------------------------ */
-u_short fr_nextipid(fin)
-fr_info_t *fin;
+u_short fr_nextipid(fr_info_t *fin)
 {
 	static u_short ipid = 0;
 	u_short id;
@@ -1784,7 +1850,7 @@ struct mbuf *m0;
 /* not been called.  Both fin_ip and fin_dp are updated before exiting _IF_ */
 /* and ONLY if the pullup succeeds.                                         */
 /*                                                                          */
-/* We assume that 'min' is a pointer to a buffer that is part of the chain  */
+/* We assume that 'xmin' is a pointer to a buffer that is part of the chain */
 /* of buffers that starts at *fin->fin_mp.                                  */
 /* ------------------------------------------------------------------------ */
 void *fr_pullup(xmin, fin, len)
@@ -1833,11 +1899,16 @@ int len;
 			m = m_pullup(m, len);
 		}
 		*fin->fin_mp = m;
-		fin->fin_m = m;
 		if (m == NULL) {
+			fin->fin_m = NULL;
 			ATOMIC_INCL(frstats[out].fr_pull[1]);
 			return NULL;
 		}
+
+		while (M_LEN(m) == 0) {
+			m = m->m_next;
+		}
+		fin->fin_m = m;
 		ip = MTOD(m, char *) + ipoff;
 	}
 
@@ -1849,4 +1920,80 @@ int len;
 	if (len == fin->fin_plen)
 		fin->fin_flx |= FI_COALESCE;
 	return ip;
+}
+
+
+int iplpoll(dev, events, p)
+dev_t dev;
+int events;
+#if  (__NetBSD_Version__ >= 399001400)
+struct lwp *p;
+#else
+struct proc *p;
+#endif
+{
+	u_int xmin = GET_MINOR(dev);
+	int revents = 0;
+
+	if (IPL_LOGMAX < xmin)
+		return ENXIO;
+
+	switch (xmin)
+	{
+	case IPL_LOGIPF :
+	case IPL_LOGNAT :
+	case IPL_LOGSTATE :
+#ifdef IPFILTER_LOG
+		if ((events & (POLLIN | POLLRDNORM)) && ipflog_canread(xmin))
+			revents |= events & (POLLIN | POLLRDNORM);
+#endif
+		break;
+	case IPL_LOGAUTH :
+		if ((events & (POLLIN | POLLRDNORM)) && fr_auth_waiting())
+			revents |= events & (POLLIN | POLLRDNORM);
+		break;
+	case IPL_LOGSYNC :
+#ifdef IPFILTER_SYNC
+		if ((events & (POLLIN | POLLRDNORM)) && ipfsync_canread())
+			revents |= events & (POLLIN | POLLRDNORM);
+		if ((events & (POLLOUT | POLLWRNORM)) && ipfsync_canwrite())
+			revents |= events & (POLLOUT | POLLOUTNORM);
+#endif
+		break;
+	case IPL_LOGSCAN :
+	case IPL_LOGLOOKUP :
+	default :
+		break;
+	}
+
+	if ((revents == 0) && ((events & (POLLIN|POLLRDNORM)) != 0))
+		selrecord(p, &ipfselwait[xmin]);
+	return revents;
+}
+
+
+int ipf_inject(fin, m)
+fr_info_t *fin;
+mb_t *m;
+{
+	int error;
+
+	if (fin->fin_out == 0) {
+		struct ifqueue *ifq;
+
+		ifq = &ipintrq;
+
+		if (IF_QFULL(ifq)) {
+			IF_DROP(ifq);
+			FREE_MB_T(m);
+			error = ENOBUFS;
+		} else {
+			IF_ENQUEUE(ifq, m);
+			error = 0;
+		}
+	} else {
+		error = ip_output(m, NULL, NULL, IP_FORWARDING, NULL);
+	}
+
+	return error;
 }

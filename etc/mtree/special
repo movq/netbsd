@@ -1,4 +1,4 @@
-#	$NetBSD: special,v 1.89 2005/08/23 12:12:56 peter Exp $
+#	$NetBSD: special,v 1.107 2006/11/12 01:22:57 christos Exp $
 #	@(#)special	8.2 (Berkeley) 1/23/94
 #
 # Hand-crafted mtree specification for the dangerous files.
@@ -24,6 +24,10 @@
 ./etc/Distfile			type=file mode=0644 optional
 ./etc/amd			type=dir  mode=0755 optional
 ./etc/apm			type=dir  mode=0755 optional
+./etc/bluetooth			type=dir  mode=0755
+./etc/bluetooth/btdevctl.conf	type=file mode=0644
+./etc/bluetooth/hosts		type=file mode=0644
+./etc/bluetooth/protocols	type=file mode=0644
 ./etc/bootparams		type=file mode=0644 optional
 ./etc/bootptab			type=file mode=0644 optional
 ./etc/ccd.conf			type=file mode=0644 optional
@@ -74,7 +78,9 @@
 ./etc/ipf6.conf			type=file mode=0644 optional
 ./etc/ipnat.conf		type=file mode=0644 optional
 ./etc/ipsec.conf		type=file mode=0600 optional tags=nodiff
-./etc/kerberosIV		type=dir  mode=0755 ignore optional
+./etc/iscsi			type=dir  mode=0755
+./etc/iscsi/auths		type=file mode=0600
+./etc/iscsi/targets		type=file mode=0644
 ./etc/ld.so.conf		type=file mode=0644 optional
 ./etc/lkm.conf			type=file mode=0644 optional
 ./etc/localtime			type=link mode=0755
@@ -83,9 +89,6 @@
 ./etc/mail			type=dir  mode=0755
 ./etc/mail/aliases		type=file mode=0644
 ./etc/mail/aliases.db		type=file mode=0644 optional tags=exclude
-./etc/mail/helpfile		type=file mode=0444
-./etc/mail/local-host-names	type=file mode=0644 optional
-./etc/mail/sendmail.cf		type=file mode=0644
 ./etc/mail.rc			type=file mode=0644
 ./etc/mailer.conf		type=file mode=0644
 ./etc/man.conf			type=file mode=0644
@@ -100,6 +103,7 @@
 ./etc/mtree/special		type=file mode=0444
 ./etc/mtree/special.local	type=file mode=0644 optional
 ./etc/mygate			type=file mode=0644 optional
+./etc/mygate6			type=file mode=0644 optional
 ./etc/myname			type=file mode=0644 optional
 ./etc/named.conf		type=file mode=0644 optional
 ./etc/namedb			type=dir  mode=0755
@@ -140,8 +144,11 @@
 ./etc/postfix/postfix-script	type=file mode=0555 optional
 ./etc/powerd			type=dir  mode=0755 optional
 ./etc/powerd/scripts		type=dir  mode=0755 optional
+./etc/powerd/scripts/acadapter	type=file mode=0555 optional
+./etc/powerd/scripts/lid_switch type=file mode=0555 optional
 ./etc/powerd/scripts/power_button type=file mode=0555 optional
 ./etc/powerd/scripts/reset_button type=file mode=0555 optional
+./etc/powerd/scripts/sleep_button type=file mode=0555 optional
 ./etc/ppp			type=dir  mode=0755 optional
 ./etc/ppp/options		type=file mode=0644 optional
 ./etc/printcap			type=file mode=0644
@@ -161,7 +168,11 @@
 ./etc/rc.d/apmd			type=file mode=0555
 ./etc/rc.d/bootconf.sh		type=file mode=0555
 ./etc/rc.d/bootparams		type=file mode=0555
+./etc/rc.d/btconfig		type=file mode=0555
+./etc/rc.d/btdevctl		type=file mode=0555
+./etc/rc.d/bthcid		type=file mode=0555
 ./etc/rc.d/ccd			type=file mode=0555
+./etc/rc.d/cgd			type=file mode=0555
 ./etc/rc.d/cleartmp		type=file mode=0555
 ./etc/rc.d/cron			type=file mode=0555
 ./etc/rc.d/dhclient		type=file mode=0555
@@ -171,12 +182,18 @@
 ./etc/rc.d/downinterfaces	type=file mode=0555
 ./etc/rc.d/fixsb		type=file mode=0555
 ./etc/rc.d/fsck			type=file mode=0555
+./etc/rc.d/ftpd			type=file mode=0555
+./etc/rc.d/hostapd		type=file mode=0555
 ./etc/rc.d/identd		type=file mode=0555
+./etc/rc.d/ifwatchd		type=file mode=0555
 ./etc/rc.d/inetd		type=file mode=0555
 ./etc/rc.d/ipfilter		type=file mode=0555
+./etc/rc.d/ipfs			type=file mode=0555
 ./etc/rc.d/ipmon		type=file mode=0555
 ./etc/rc.d/ipnat		type=file mode=0555
 ./etc/rc.d/ipsec		type=file mode=0555
+./etc/rc.d/irdaattach		type=file mode=0555
+./etc/rc.d/iscsi_target		type=file mode=0555
 ./etc/rc.d/isdnd		type=file mode=0555
 ./etc/rc.d/kdc			type=file mode=0555
 ./etc/rc.d/ldconfig		type=file mode=0555
@@ -192,6 +209,7 @@
 ./etc/rc.d/mountcritlocal	type=file mode=0555
 ./etc/rc.d/mountcritremote	type=file mode=0555
 ./etc/rc.d/mountd		type=file mode=0555
+./etc/rc.d/moused		type=file mode=0555
 ./etc/rc.d/mrouted		type=file mode=0555
 ./etc/rc.d/named		type=file mode=0555
 ./etc/rc.d/ndbootd		type=file mode=0555
@@ -220,23 +238,27 @@
 ./etc/rc.d/routed		type=file mode=0555
 ./etc/rc.d/rpcbind		type=file mode=0555
 ./etc/rc.d/rtadvd		type=file mode=0555
+./etc/rc.d/rtclocaltime		type=file mode=0555
 ./etc/rc.d/rtsold		type=file mode=0555
 ./etc/rc.d/rwho			type=file mode=0555
 ./etc/rc.d/savecore		type=file mode=0555
 ./etc/rc.d/screenblank		type=file mode=0555
+./etc/rc.d/sdpd			type=file mode=0555
 ./etc/rc.d/securelevel		type=file mode=0555
-./etc/rc.d/sendmail		type=file mode=0555
 ./etc/rc.d/sshd			type=file mode=0555
+./etc/rc.d/staticroute		type=file mode=0555
 ./etc/rc.d/swap1		type=file mode=0555
 ./etc/rc.d/swap2		type=file mode=0555
 ./etc/rc.d/sysctl		type=file mode=0555
 ./etc/rc.d/sysdb		type=file mode=0555
 ./etc/rc.d/syslogd		type=file mode=0555
 ./etc/rc.d/timed		type=file mode=0555
+./etc/rc.d/tpctl		type=file mode=0555
 ./etc/rc.d/ttys			type=file mode=0555
 ./etc/rc.d/veriexec		type=file mode=0555
 ./etc/rc.d/virecover		type=file mode=0555
 ./etc/rc.d/wdogctl		type=file mode=0555
+./etc/rc.d/wpa_supplicant	type=file mode=0555
 ./etc/rc.d/wscons		type=file mode=0555
 ./etc/rc.d/wsmoused		type=file mode=0555
 ./etc/rc.d/xdm			type=file mode=0555
@@ -259,6 +281,7 @@
 ./etc/services			type=file mode=0644
 ./etc/shells			type=file mode=0644
 ./etc/shosts.equiv		type=file mode=0600 optional
+./etc/skel			type=dir  mode=0755 optional
 ./etc/spwd.db			type=file mode=0600 tags=exclude
 ./etc/ssh			type=dir  mode=0755 optional
 ./etc/ssh/ssh_config		type=file mode=0644 optional
@@ -358,7 +381,6 @@
 ./var/run/utmp			type=file mode=0664 gname=utmp tags=exclude
 ./var/run/utmpx			type=file mode=0664 gname=utmp tags=exclude
 ./var/spool			type=dir  mode=0755
-./var/spool/clientmqueue	type=dir  mode=0770 uname=smmsp gname=smmsp
 ./var/spool/ftp			type=dir  mode=0755 optional
 ./var/spool/ftp/bin		type=dir  mode=0755 optional
 ./var/spool/ftp/bin/ls		type=file mode=0555 optional
@@ -369,9 +391,6 @@
 ./var/spool/ftp/etc/passwd		type=file mode=0644 optional
 ./var/spool/ftp/hidden		type=dir  mode=0111 ignore optional
 ./var/spool/ftp/pub		type=dir  mode=0775 ignore optional
-./var/spool/mqueue		type=dir  mode=0755 ignore
 ./var/spool/output		type=dir  mode=0755 ignore
-./var/spool/uucp		type=dir  mode=0755 uname=uucp gname=daemon ignore optional
-./var/spool/uucppublic		type=dir  mode=1777 uname=uucp gname=daemon ignore optional
 ./var/yp			type=dir  mode=0755
 ./var/yp/Makefile		type=file mode=0644 optional

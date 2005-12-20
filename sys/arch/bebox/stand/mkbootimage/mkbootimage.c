@@ -1,4 +1,4 @@
-/*	$NetBSD: mkbootimage.c,v 1.5 2005/12/11 12:17:04 christos Exp $	*/
+/*	$NetBSD: mkbootimage.c,v 1.6.22.1 2007/01/12 23:26:38 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -32,6 +32,8 @@
 
 #if HAVE_NBTOOL_CONFIG_H
 #include "nbtool_config.h"
+#else
+#include <sys/endian.h>
 #endif
 
 #include <sys/param.h>				/* XXX for roundup */
@@ -43,8 +45,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/endian.h>
-#include <machine/bswap.h>
+#include <sys/bswap.h>
 #include "bootimage.h"
 
 #if BYTE_ORDER == LITTLE_ENDIAN

@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.288 2005/12/11 12:16:10 christos Exp $ */
+/* $NetBSD: machdep.c,v 1.290.2.1 2007/01/06 13:18:16 bouyer Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.288 2005/12/11 12:16:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.290.2.1 2007/01/06 13:18:16 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -104,6 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.288 2005/12/11 12:16:10 christos Exp $
 #include <sys/ucontext.h>
 #include <sys/conf.h>
 #include <sys/ksyms.h>
+#include <sys/kauth.h>
 #include <machine/kcore.h>
 #include <machine/fpu.h>
 
@@ -1177,8 +1178,10 @@ cpu_dumpconf()
 	if (dumpdev == NODEV)
 		goto bad;
 	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL)
-		panic("dumpconf: bad dumpdev=0x%x", dumpdev);
+	if (bdev == NULL) {
+		dumpdev = NODEV;
+		goto bad;
+	}
 	if (bdev->d_psize == NULL)
 		goto bad;
 	nblks = (*bdev->d_psize)(dumpdev);
@@ -1889,7 +1892,8 @@ alpha_pa_access(pa)
 	 * Address is not a memory address.  If we're secure, disallow
 	 * access.  Otherwise, grant read/write.
 	 */
-	if (securelevel > 0)
+	if (kauth_authorize_machdep(kauth_cred_get(),
+	    KAUTH_MACHDEP_UNMANAGEDMEM, NULL, NULL, NULL, NULL) != 0)
 		return (PROT_NONE);
 	else
 		return (PROT_READ | PROT_WRITE);

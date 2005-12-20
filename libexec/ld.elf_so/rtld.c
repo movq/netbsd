@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld.c,v 1.107 2004/10/22 05:39:57 skrll Exp $	 */
+/*	$NetBSD: rtld.c,v 1.111.2.1 2007/07/19 14:38:16 liamjfoy Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -40,7 +40,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rtld.c,v 1.107 2004/10/22 05:39:57 skrll Exp $");
+__RCSID("$NetBSD: rtld.c,v 1.111.2.1 2007/07/19 14:38:16 liamjfoy Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -100,7 +100,13 @@ Library_Xform  *_rtld_xforms;
 char           *__progname;
 char          **environ;
 
+#if defined(RTLD_DEBUG)
+#ifndef __sh__
 extern Elf_Addr _GLOBAL_OFFSET_TABLE_[];
+#else  /* 32-bit SuperH */
+register Elf_Addr *_GLOBAL_OFFSET_TABLE_ asm("r12");
+#endif
+#endif /* RTLD_DEBUG */
 extern Elf_Dyn  _DYNAMIC;
 
 static void _rtld_call_fini_functions(Obj_Entry *);
@@ -338,6 +344,9 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 			debug = 1;
 #endif
 		_rtld_add_paths(&_rtld_paths, getenv("LD_LIBRARY_PATH"));
+	} else {
+		unsetenv("LD_DEBUG");
+		unsetenv("LD_LIBRARY_PATH");
 	}
 	_rtld_process_hints(&_rtld_paths, &_rtld_xforms, _PATH_LD_HINTS);
 	dbg(("dynamic linker is initialized, mapbase=%p, relocbase=%p",
@@ -349,9 +358,9 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
          */
 	if (pAUX_execfd != NULL) {	/* Load the main program. */
 		int             fd = pAUX_execfd->a_v;
+		const char *obj_name = argv[0] ? argv[0] : "main program";
 		dbg(("loading main program"));
-		_rtld_objmain = _rtld_map_object(xstrdup(argv[0] ? argv[0] :
-		    "main program"), fd, NULL);
+		_rtld_objmain = _rtld_map_object(obj_name, fd, NULL);
 		close(fd);
 		if (_rtld_objmain == NULL)
 			_rtld_die();
@@ -405,13 +414,16 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	_rtld_sym_zero.st_info = ELF_ST_INFO(STB_GLOBAL, STT_NOTYPE);
 	_rtld_sym_zero.st_shndx = SHN_ABS;
 
-	/*
-	 * Pre-load user-specified objects after the main program but before
-	 * any shared object dependencies.
-	 */
-	dbg(("preloading objects"));
-	if (_rtld_trust && _rtld_preload(getenv("LD_PRELOAD")) == -1)
-		_rtld_die();
+	if (_rtld_trust) {
+		/*
+		 * Pre-load user-specified objects after the main program
+		 * but before any shared object dependencies.
+		 */
+		dbg(("preloading objects"));
+		if (_rtld_preload(getenv("LD_PRELOAD")) == -1)
+			_rtld_die();
+	} else
+		unsetenv("LD_PRELOAD");
 
 	dbg(("loading needed objects"));
 	if (_rtld_load_needed_objects(_rtld_objmain, RTLD_MAIN) == -1)
@@ -869,10 +881,20 @@ _rtld_linkmap_add(Obj_Entry *obj)
 		_rtld_debug.r_map = l;
 		return;
 	}
-	for (prev = _rtld_debug.r_map; prev->l_next != NULL; prev = prev->l_next);
+
+	/*
+	 * Scan to the end of the list, but not past the entry for the
+	 * dynamic linker, which we want to keep at the very end.
+	 */
+	for (prev = _rtld_debug.r_map;
+	    prev->l_next != NULL && prev->l_next != &_rtld_objself.linkmap;
+	    prev = prev->l_next);
+
 	l->l_prev = prev;
+	l->l_next = prev->l_next;
+	if (l->l_next != NULL)
+		l->l_next->l_prev = l;
 	prev->l_next = l;
-	l->l_next = NULL;
 }
 
 void

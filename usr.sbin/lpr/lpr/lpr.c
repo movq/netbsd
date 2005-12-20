@@ -1,4 +1,4 @@
-/*	$NetBSD: lpr.c,v 1.32 2005/11/28 03:26:07 christos Exp $	*/
+/*	$NetBSD: lpr.c,v 1.35 2006/01/29 18:55:46 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1989, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1989, 1993\n\
 #if 0
 static char sccsid[] = "@(#)lpr.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: lpr.c,v 1.32 2005/11/28 03:26:07 christos Exp $");
+__RCSID("$NetBSD: lpr.c,v 1.35 2006/01/29 18:55:46 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -150,7 +150,7 @@ main(int argc, char *argv[])
 
 	errs = 0;
 	while ((c = getopt(argc, argv,
-	    ":#:1:2:3:4:C:J:P:RT:U:cdfghi:lmnpqrstvw:")) != -1) {
+	    ":#:1:2:3:4:C:J:P:RT:U:cdfghi:lmnopqrstvw:")) != -1) {
 		switch (c) {
 
 		case '#':		/* n copies */
@@ -199,6 +199,7 @@ main(int argc, char *argv[])
 		case 'd':		/* print tex output (dvi files) */
 		case 'g':		/* print graph(1G) output */
 		case 'l':		/* literal output */
+		case 'o':		/* print postscript output */
 		case 'n':		/* print ditroff output */
 		case 'p':		/* print using ``pr'' */
 		case 't':		/* print troff output (cat files) */
@@ -427,7 +428,7 @@ static void
 copy(int f, const char *n)
 {
 	int fd, i, nr, nc;
-	char buf[MAXPATHLEN];
+	char buf[BUFSIZ];
 
 	if (format == 'p')
 		card('T', title ? title : n);
@@ -474,7 +475,7 @@ linked(const char *file)
 
 	if (*file != '/') {
 		/* XXX: 2 and file for "/file" */
-		if (getcwd(buf, BUFSIZ - 2 - strlen(file)) == NULL)
+		if (getcwd(buf, sizeof(buf) - 2 - strlen(file)) == NULL)
 			return(NULL);
 		while (file[0] == '.') {
 			switch (file[1]) {
@@ -509,7 +510,7 @@ card(int c, const char *p2)
 {
 	char buf[BUFSIZ];
 	char *p1 = buf;
-	int len = 2;
+	size_t len = 2;
 
 	if (strlen(p2) > BUFSIZ - 2)
 		errx(1, "Internal error:  String longer than %d", BUFSIZ);
@@ -520,7 +521,8 @@ card(int c, const char *p2)
 		len++;
 	}
 	*p1++ = '\n';
-	write(tfd, buf, len);
+	if (write(tfd, buf, len) != (ssize_t)len)
+		warn("Control file write error");
 }
 
 /*
@@ -689,9 +691,9 @@ mktemps(void)
 {
 	int len, fd, n;
 	char *cp;
-	char buf[BUFSIZ];
+	char buf[MAXPATHLEN];
 
-	(void)snprintf(buf, BUFSIZ, "%s/.seq", SD);
+	(void)snprintf(buf, sizeof(buf), "%s/.seq", SD);
 	seteuid(euid);
 	if ((fd = open(buf, O_RDWR|O_CREAT, 0661)) < 0)
 		err(1, "cannot create %s\n", buf);
@@ -714,7 +716,7 @@ mktemps(void)
 	inchar = strlen(SD) + 3;
 	n = (n + 1) % 1000;
 	(void)lseek(fd, (off_t)0, 0);
-	snprintf(buf, BUFSIZ, "%03d\n", n);
+	(void)snprintf(buf, sizeof(buf), "%03d\n", n);
 	(void)write(fd, buf, strlen(buf));
 	(void)close(fd);	/* unlocks as well */
 }
@@ -755,7 +757,7 @@ usage(void)
 	fprintf(stderr, 
 	    "Usage: %s [-Pprinter] [-#num] [-C class] [-J job] [-T title] "
 	    "[-U user]\n"
-	    "%s [-i[numcols]] [-1234 font] [-wnum] [-cdfghlmnpqRrstv] "
+	    "%s [-i[numcols]] [-1234 font] [-wnum] [-cdfghlmnopqRrstv] "
 	    "[name ...]\n", getprogname(), getprogname());
 	exit(1);
 }

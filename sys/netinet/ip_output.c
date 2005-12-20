@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_output.c,v 1.159 2005/12/11 12:24:57 christos Exp $	*/
+/*	$NetBSD: ip_output.c,v 1.167.2.2 2007/03/28 20:46:13 jdc Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_output.c,v 1.159 2005/12/11 12:24:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_output.c,v 1.167.2.2 2007/03/28 20:46:13 jdc Exp $");
 
 #include "opt_pfil_hooks.h"
 #include "opt_inet.h"
@@ -112,6 +112,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip_output.c,v 1.159 2005/12/11 12:24:57 christos Exp
 #include <sys/protosw.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
+#include <sys/kauth.h>
 #ifdef FAST_IPSEC
 #include <sys/domain.h>
 #endif
@@ -140,9 +141,6 @@ __KERNEL_RCSID(0, "$NetBSD: ip_output.c,v 1.159 2005/12/11 12:24:57 christos Exp
 #include <netinet6/ipsec.h>
 #include <netkey/key.h>
 #include <netkey/key_debug.h>
-#ifdef IPSEC_NAT_T
-#include <netinet/udp.h>
-#endif
 #endif /*IPSEC*/
 
 #ifdef FAST_IPSEC
@@ -150,6 +148,10 @@ __KERNEL_RCSID(0, "$NetBSD: ip_output.c,v 1.159 2005/12/11 12:24:57 christos Exp
 #include <netipsec/key.h>
 #include <netipsec/xform.h>
 #endif	/* FAST_IPSEC*/
+
+#ifdef IPSEC_NAT_T
+#include <netinet/udp.h>
+#endif
 
 static struct mbuf *ip_insertoptions(struct mbuf *, struct mbuf *, int *);
 static struct ifnet *ip_multicast_if(struct in_addr *, int *);
@@ -168,38 +170,6 @@ int	ip_do_loopback_cksum = 0;
 	(((csum_flags) & M_CSUM_TCPv4) != 0 && tcp_do_loopback_cksum) || \
 	(((csum_flags) & M_CSUM_IPv4) != 0 && ip_do_loopback_cksum)))
 
-struct ip_tso_output_args {
-	struct ifnet *ifp;
-	struct sockaddr *sa;
-	struct rtentry *rt;
-};
-
-static int ip_tso_output_callback(void *, struct mbuf *);
-static int ip_tso_output(struct ifnet *, struct mbuf *, struct sockaddr *,
-    struct rtentry *);
-
-static int
-ip_tso_output_callback(void *vp, struct mbuf *m)
-{
-	struct ip_tso_output_args *args = vp;
-	struct ifnet *ifp = args->ifp;
-
-	return (*ifp->if_output)(ifp, m, args->sa, args->rt);
-}
-
-static int
-ip_tso_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *sa,
-    struct rtentry *rt)
-{
-	struct ip_tso_output_args args;
-
-	args.ifp = ifp;
-	args.sa = sa;
-	args.rt = rt;
-
-	return tcp4_segment(m, ip_tso_output_callback, &args);
-}
-
 /*
  * IP output.  The packet in mbuf chain m contains a skeletal IP
  * header (with len, off, ttl, proto, tos, src, dst).
@@ -217,6 +187,7 @@ ip_output(struct mbuf *m0, ...)
 	struct route iproute;
 	struct sockaddr_in *dst;
 	struct in_ifaddr *ia;
+	struct ifaddr *xifa;
 	struct mbuf *opt;
 	struct route *ro;
 	int flags, sw_csum;
@@ -225,11 +196,11 @@ ip_output(struct mbuf *m0, ...)
 	struct ip_moptions *imo;
 	struct socket *so;
 	va_list ap;
-#ifdef IPSEC
-	struct secpolicy *sp = NULL;
 #ifdef IPSEC_NAT_T
 	int natt_frag = 0;
 #endif
+#ifdef IPSEC
+	struct secpolicy *sp = NULL;
 #endif /*IPSEC*/
 #ifdef FAST_IPSEC
 	struct inpcb *inp;
@@ -263,7 +234,18 @@ ip_output(struct mbuf *m0, ...)
 
 #ifdef	DIAGNOSTIC
 	if ((m->m_flags & M_PKTHDR) == 0)
-		panic("ip_output no HDR");
+		panic("ip_output: no HDR");
+
+	if ((m->m_pkthdr.csum_flags & (M_CSUM_TCPv6|M_CSUM_UDPv6)) != 0) {
+		panic("ip_output: IPv6 checksum offload flags: %d",
+		    m->m_pkthdr.csum_flags);
+	}
+
+	if ((m->m_pkthdr.csum_flags & (M_CSUM_TCPv4|M_CSUM_UDPv4)) ==
+	    (M_CSUM_TCPv4|M_CSUM_UDPv4)) {
+		panic("ip_output: conflicting checksum offload flags: %d",
+		    m->m_pkthdr.csum_flags);
+	}
 #endif
 	if (opt) {
 		m = ip_insertoptions(m, opt, &len);
@@ -305,10 +287,9 @@ ip_output(struct mbuf *m0, ...)
 	/*
 	 * Route packet.
 	 */
-	if (ro == 0) {
+	bzero(&iproute, sizeof(iproute));
+	if (ro == NULL)
 		ro = &iproute;
-		bzero((caddr_t)ro, sizeof (*ro));
-	}
 	dst = satosin(&ro->ro_dst);
 	/*
 	 * If there is a cached route,
@@ -418,6 +399,11 @@ ip_output(struct mbuf *m0, ...)
 				error = EADDRNOTAVAIL;
 				goto bad;
 			}
+			xifa = &xia->ia_ifa;
+			if (xifa->ifa_getifa != NULL) {
+				xia = ifatoia((*xifa->ifa_getifa)(xifa,
+				    &ro->ro_dst));
+			}
 			ip->ip_src = xia->ia_addr.sin_addr;
 		}
 
@@ -474,8 +460,12 @@ ip_output(struct mbuf *m0, ...)
 	 * If source address not specified yet, use address
 	 * of outgoing interface.
 	 */
-	if (in_nullhost(ip->ip_src))
+	if (in_nullhost(ip->ip_src)) {
+		xifa = &ia->ia_ifa;
+		if (xifa->ifa_getifa != NULL)
+			ia = ifatoia((*xifa->ifa_getifa)(xifa, &ro->ro_dst));
 		ip->ip_src = ia->ia_addr.sin_addr;
+	}
 
 	/*
 	 * packets with Class-D address as source are not valid per
@@ -707,6 +697,21 @@ skip_ipsec:
 	 *    sp == NULL, error != 0	    discard packet, report error
 	 */
 	if (sp != NULL) {
+#ifdef IPSEC_NAT_T
+		/*
+		 * NAT-T ESP fragmentation: don't do IPSec processing now,
+		 * we'll do it on each fragmented packet.
+		 */
+		if (sp->req->sav &&
+		    ((sp->req->sav->natt_type & UDP_ENCAP_ESPINUDP) ||
+		     (sp->req->sav->natt_type & UDP_ENCAP_ESPINUDP_NON_IKE))) {
+			if (ntohs(ip->ip_len) > sp->req->sav->esp_frag) {
+				natt_frag = 1;
+				mtu = sp->req->sav->esp_frag;
+				goto spd_done;
+			}
+		}
+#endif /* IPSEC_NAT_T */
 		/* Loop detection, check if ipsec processing already done */
 		IPSEC_ASSERT(sp->req != NULL, ("ip_output: no ipsec request"));
 		for (mtag = m_tag_first(m); mtag != NULL;
@@ -815,6 +820,7 @@ spd_done:
 
 	ip = mtod(m, struct ip *);
 	hlen = ip->ip_hl << 2;
+	ip_len = ntohs(ip->ip_len);
 #endif /* PFIL_HOOKS */
 
 	m->m_pkthdr.csum_data |= hlen << 16;
@@ -932,6 +938,7 @@ spd_done:
 #ifdef IPSEC
 			/* clean ipsec history once it goes out of the node */
 			ipsec_delaux(m);
+#endif /* IPSEC */
 
 #ifdef IPSEC_NAT_T
 			/*
@@ -945,7 +952,6 @@ spd_done:
 				    ro, flags, imo, so, mtu_p);
 			} else
 #endif /* IPSEC_NAT_T */
-#endif /* IPSEC */
 			{
 				KASSERT((m->m_pkthdr.csum_flags &
 				    (M_CSUM_UDPv4 | M_CSUM_TCPv4)) == 0);
@@ -959,10 +965,8 @@ spd_done:
 	if (error == 0)
 		ipstat.ips_fragmented++;
 done:
-	if (ro == &iproute && (flags & IP_ROUTETOIF) == 0 && ro->ro_rt) {
-		RTFREE(ro->ro_rt);
-		ro->ro_rt = 0;
-	}
+	if (iproute.ro_rt != NULL)
+		RTFREE(iproute.ro_rt);
 
 #ifdef IPSEC
 	if (sp != NULL) {
@@ -1252,7 +1256,7 @@ ip_ctloutput(int op, struct socket *so, int level, int optname,
 	int optval = 0;
 	int error = 0;
 #if defined(IPSEC) || defined(FAST_IPSEC)
-	struct proc *p = curproc;	/*XXX*/
+	struct lwp *l = curlwp;	/*XXX*/
 #endif
 
 	if (level != IPPROTO_IP) {
@@ -1356,7 +1360,8 @@ ip_ctloutput(int op, struct socket *so, int level, int optname,
 			int priv = 0;
 
 #ifdef __NetBSD__
-			if (p == 0 || suser(p->p_ucred, &p->p_acflag))
+			if (l == 0 || kauth_authorize_generic(l->l_cred,
+			    KAUTH_GENERIC_ISSUSER, &l->l_acflag))
 				priv = 0;
 			else
 				priv = 1;

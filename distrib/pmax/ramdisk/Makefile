@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.34 2004/10/15 15:06:37 he Exp $
+#	$NetBSD: Makefile,v 1.36 2006/07/29 19:10:56 ad Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
@@ -9,7 +9,7 @@ IMAGESIZE=	3300k
 MAKEFS_FLAGS=	-f 15
 
 WARNS=		1
-DBG=		-Os
+DBG=		-Os -mmemcpy
 
 CRUNCHBIN=	ramdiskbin
 CRUNCHGEN_FLAGS= -d "${DBG}"
@@ -19,7 +19,7 @@ IMAGEENDIAN=	le
 MAKEDEVTARGETS=	minimal pty0
 IMAGEDEPENDS=	${CRUNCHBIN} \
 		disktab.preinstall dot.hdprofile dot.profile \
-		${.CURDIR}/../miniroot/termcap.rcons \
+		${.CURDIR}/../miniroot/termcap.vt100 \
 		${DESTDIR}/usr/mdec/boot.pmax ${DESTDIR}/usr/mdec/bootxx_ffs \
 		${NETBSDSRCDIR}/etc/group ${NETBSDSRCDIR}/etc/master.passwd \
 		${NETBSDSRCDIR}/etc/netconfig ${NETBSDSRCDIR}/etc/protocols \

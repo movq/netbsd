@@ -1,6 +1,6 @@
-/*	$NetBSD: proposal.c,v 1.6 2005/11/21 14:20:29 manu Exp $	*/
+/*	$NetBSD: proposal.c,v 1.11.2.2 2007/08/28 11:14:47 liamjfoy Exp $	*/
 
-/* Id: proposal.c,v 1.13.8.5 2005/07/28 05:05:52 manubsd Exp */
+/* $Id: proposal.c,v 1.11.2.2 2007/08/28 11:14:47 liamjfoy Exp $ */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -39,11 +39,7 @@
 #include <sys/queue.h>
 
 #include <netinet/in.h>
-#ifdef HAVE_NETINET6_IPSEC
-#  include <netinet6/ipsec.h>
-#else
-#  include <netinet/ipsec.h>
-#endif
+#include PATH_IPSEC_H
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -74,6 +70,8 @@
 #ifdef ENABLE_NATT
 #include "nattraversal.h"
 #endif
+
+static uint g_nextreqid = 1;
 
 /* %%%
  * modules for ipsec sa spec
@@ -313,6 +311,57 @@ cmpsaprop_alloc(ph1, pp1, pp2, side)
 		goto err;
 	}
 
+#ifdef HAVE_SECCTX
+	/* check the security_context properties.
+	 * It is possible for one side to have a security context
+	 * and the other side doesn't. If so, this is an error.
+	 */
+
+	if (*pp1->sctx.ctx_str && !(*pp2->sctx.ctx_str)) {
+		plog(LLV_ERROR, LOCATION, NULL,
+		     "My proposal missing security context\n");
+		goto err;
+	}
+	if (!(*pp1->sctx.ctx_str) && *pp2->sctx.ctx_str) {
+		plog(LLV_ERROR, LOCATION, NULL, 
+		     "Peer is missing security context\n");
+		goto err;
+	}
+
+	if (*pp1->sctx.ctx_str && *pp2->sctx.ctx_str) {
+		if (pp1->sctx.ctx_doi == pp2->sctx.ctx_doi)
+			newpp->sctx.ctx_doi = pp1->sctx.ctx_doi;
+		else {
+			plog(LLV_ERROR, LOCATION, NULL, 
+			     "sec doi mismatched: my:%d peer:%d\n",
+			     pp2->sctx.ctx_doi, pp1->sctx.ctx_doi);
+			     goto err;
+		}
+
+		if (pp1->sctx.ctx_alg == pp2->sctx.ctx_alg)
+			newpp->sctx.ctx_alg = pp1->sctx.ctx_alg;
+		else {
+			plog(LLV_ERROR, LOCATION, NULL,
+			     "sec alg mismatched: my:%d peer:%d\n",
+			     pp2->sctx.ctx_alg, pp1->sctx.ctx_alg);
+			goto err;
+		}
+
+		if ((pp1->sctx.ctx_strlen != pp2->sctx.ctx_strlen) ||
+		     memcmp(pp1->sctx.ctx_str, pp2->sctx.ctx_str,
+		     pp1->sctx.ctx_strlen) != 0) {
+			plog(LLV_ERROR, LOCATION, NULL,
+			     "sec ctx string mismatched: my:%s peer:%s\n",
+			     pp2->sctx.ctx_str, pp1->sctx.ctx_str);
+				goto err;
+		} else {
+			newpp->sctx.ctx_strlen = pp1->sctx.ctx_strlen;
+			memcpy(newpp->sctx.ctx_str, pp1->sctx.ctx_str,
+				pp1->sctx.ctx_strlen);
+		}
+	}
+#endif /* HAVE_SECCTX */
+
 	npr1 = npr2 = 0;
 	for (pr1 = pp1->head; pr1; pr1 = pr1->next)
 		npr1++;
@@ -425,7 +474,7 @@ cmpsaprop_alloc(ph1, pp1, pp2, side)
 
 		for (tr1 = pr1->head; tr1; tr1 = tr1->next) {
 			for (tr2 = pr2->head; tr2; tr2 = tr2->next) {
-				if (cmpsatrns(pr1->proto_id, tr1, tr2) == 0)
+				if (cmpsatrns(pr1->proto_id, tr1, tr2, ph1->rmconf->pcheck_level) == 0)
 					goto found;
 			}
 		}
@@ -527,9 +576,10 @@ cmpsaprop(pp1, pp2)
  * tr2: my satrns
  */
 int
-cmpsatrns(proto_id, tr1, tr2)
+cmpsatrns(proto_id, tr1, tr2, check_level)
 	int proto_id;
 	const struct satrns *tr1, *tr2;
+	int check_level;
 {
 	if (tr1->trns_id != tr2->trns_id) {
 		plog(LLV_WARNING, LOCATION, NULL,
@@ -549,16 +599,34 @@ cmpsatrns(proto_id, tr1, tr2)
 		return 1;
 	}
 
-	/* XXX
-	 * At this moment for interoperability, the responder obey
-	 * the initiator.  It should be defined a notify message.
+	/* Check key length regarding checkmode
+	 * XXX Shall we send some kind of notify message when key length rejected ?
 	 */
-	if (tr1->encklen > tr2->encklen) {
+	switch(check_level){
+	case PROP_CHECK_OBEY:
+		return 0;
+		break;
+
+	case PROP_CHECK_STRICT:
+		/* FALLTHROUGH */
+	case PROP_CHECK_CLAIM:
+		if (tr1->encklen < tr2->encklen) {
 		plog(LLV_WARNING, LOCATION, NULL,
-			"less key length proposed, "
-			"mine:%d peer:%d.  Use initiaotr's one.\n",
+				 "low key length proposed, "
+				 "mine:%d peer:%d.\n",
 			tr2->encklen, tr1->encklen);
-		/* FALLTHRU */
+			return 1;
+		}
+		break;
+	case PROP_CHECK_EXACT:
+		if (tr1->encklen != tr2->encklen) {
+			plog(LLV_WARNING, LOCATION, NULL,
+				 "key length mismatched, "
+				 "mine:%d peer:%d.\n",
+				 tr2->encklen, tr1->encklen);
+			return 1;
+		}
+		break;
 	}
 
 	return 0;
@@ -745,8 +813,10 @@ aproppair2saprop(p0)
 				goto err;
 			}
 
-			if (ipsecdoi_t2satrns(t->trns, newpp, newpr, newtr) < 0) {
+			if (ipsecdoi_t2satrns(t->trns, 
+			    newpp, newpr, newtr) < 0) {
 				flushsaprop(newpp);
+				racoon_free(newtr);
 				return NULL;
 			}
 
@@ -961,7 +1031,7 @@ set_proposal_from_policy(iph2, sp_main, sp_sub)
 {
 	struct saprop *newpp;
 	struct ipsecrequest *req;
-	int encmodesv = IPSEC_MODE_TRANSPORT; /* use only when complex_bundle */
+	int encmodesv = IPSECDOI_ATTR_ENC_MODE_TRNS; /* use only when complex_bundle */
 
 	newpp = newsaprop();
 	if (newpp == NULL) {
@@ -983,7 +1053,6 @@ set_proposal_from_policy(iph2, sp_main, sp_sub)
 	 * of tunnel mode in the SPD.  otherwise the mode becomes
 	 * transport mode.
 	 */
-	encmodesv = IPSEC_MODE_TRANSPORT;
 	for (req = sp_main->req; req; req = req->next) {
 		if (req->saidx.mode == IPSEC_MODE_TUNNEL) {
 			encmodesv = pfkey2ipsecdoi_mode(req->saidx.mode);
@@ -1035,7 +1104,8 @@ set_proposal_from_policy(iph2, sp_main, sp_sub)
 			newpr->encmode = pfkey2ipsecdoi_mode(req->saidx.mode);
 #ifdef ENABLE_NATT
 			if (iph2->ph1 && (iph2->ph1->natt_flags & NAT_DETECTED))
-				newpr->encmode += iph2->ph1->natt_options->mode_udp_diff;
+				newpr->encmode += 
+				    iph2->ph1->natt_options->mode_udp_diff;
 #endif
 		}
 		else
@@ -1049,6 +1119,7 @@ set_proposal_from_policy(iph2, sp_main, sp_sub)
 		if (set_satrnsbysainfo(newpr, iph2->sainfo) < 0) {
 			plog(LLV_ERROR, LOCATION, NULL,
 				"failed to get algorithms.\n");
+			racoon_free(newpr);
 			goto err;
 		}
 
@@ -1113,6 +1184,10 @@ set_proposal_from_proposal(iph2)
         for (i = 0; i < MAXPROPPAIRLEN; i++) {
                 if (pair[i] == NULL)
                         continue;
+
+		if (pp_peer != NULL)
+			flushsaprop(pp_peer);
+
 		pp_peer = aproppair2saprop(pair[i]);
 		if (pp_peer == NULL)
 			goto end;
@@ -1128,38 +1203,70 @@ set_proposal_from_proposal(iph2)
 		pp0->lifebyte = iph2->sainfo->lifebyte;
 		pp0->pfs_group = iph2->sainfo->pfs_group;
 
+#ifdef HAVE_SECCTX
+		if (*pp_peer->sctx.ctx_str) {
+			pp0->sctx.ctx_doi = pp_peer->sctx.ctx_doi;
+			pp0->sctx.ctx_alg = pp_peer->sctx.ctx_alg;
+			pp0->sctx.ctx_strlen = pp_peer->sctx.ctx_strlen;
+			memcpy(pp0->sctx.ctx_str, pp_peer->sctx.ctx_str,
+			       pp_peer->sctx.ctx_strlen);
+		}
+#endif /* HAVE_SECCTX */
+
 		if (pp_peer->next != NULL) {
 			plog(LLV_ERROR, LOCATION, NULL,
 				"pp_peer is inconsistency, ignore it.\n");
 			/*FALLTHROUGH*/
 		}
 
-		for (pr = pp_peer->head; pr; pr = pr->next) { 
+		for (pr = pp_peer->head; pr; pr = pr->next)
+		{
+			struct remoteconf *conf;
 
 			newpr = newsaproto();
-			if (newpr == NULL) {
+			if (newpr == NULL)
+			{
 				plog(LLV_ERROR, LOCATION, NULL,
-				    "failed to allocate saproto.\n");
+					"failed to allocate saproto.\n");
 				goto end;
 			}
 			newpr->proto_id = pr->proto_id;
 			newpr->spisize = pr->spisize;
 			newpr->encmode = pr->encmode;
 			newpr->spi = 0;
-			newpr->spi_p = pr->spi;	/* copy peer's SPI */
+			newpr->spi_p = pr->spi;     /* copy peer's SPI */
 			newpr->reqid_in = 0;
 			newpr->reqid_out = 0;
+
+			conf = getrmconf(iph2->dst);
+			if (conf != NULL &&
+				conf->gen_policy == GENERATE_POLICY_UNIQUE){
+				newpr->reqid_in = g_nextreqid ;
+				newpr->reqid_out = g_nextreqid ++;
+				/* 
+				 * XXX there is a (very limited) 
+				 * risk of reusing the same reqid
+				 * as another SP entry for the same peer
+				 */
+				if(g_nextreqid >= IPSEC_MANUAL_REQID_MAX)
+					g_nextreqid = 1;
+			}else{
+				newpr->reqid_in = 0;
+				newpr->reqid_out = 0;
+			}
+ 
+			if (set_satrnsbysainfo(newpr, iph2->sainfo) < 0)
+			{
+				plog(LLV_ERROR, LOCATION, NULL,
+					"failed to get algorithms.\n");
+				racoon_free(newpr);
+				goto end;
+			}
+			inssaproto(pp0, newpr);
 		}
 
-		if (set_satrnsbysainfo(newpr, iph2->sainfo) < 0) {
-			plog(LLV_ERROR, LOCATION, NULL,
-				"failed to get algorithms.\n");
-			goto end;
-		}
-
-		inssaproto(pp0, newpr);
 		inssaprop(&newpp, pp0);
-	}
+        }
 
 	plog(LLV_DEBUG, LOCATION, NULL, "make a proposal from peer's:\n");
 	printsaprop0(LLV_DEBUG, newpp);  
@@ -1174,18 +1281,7 @@ end:
 
 	if (pp_peer)
 		flushsaprop(pp_peer);
-	free_proppair(pair);
+	if (pair)
+		free_proppair(pair);
 	return error;
-}
-
-int
-tunnel_mode_prop(p)
-	struct saprop *p;
-{
-	struct saproto *pr;
-
-	for (pr = p->head; pr; pr = pr->next)
-		if (pr->encmode == IPSECDOI_ATTR_ENC_MODE_TUNNEL)
-			return 1;
-	return 0;
 }

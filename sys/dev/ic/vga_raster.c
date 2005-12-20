@@ -1,4 +1,4 @@
-/*	$NetBSD: vga_raster.c,v 1.20 2005/12/12 01:14:22 christos Exp $	*/
+/*	$NetBSD: vga_raster.c,v 1.25.2.1 2007/07/30 12:40:49 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Bang Jun-Young
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga_raster.c,v 1.20 2005/12/12 01:14:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vga_raster.c,v 1.25.2.1 2007/07/30 12:40:49 liamjfoy Exp $");
 
 #include "opt_wsmsgattrs.h" /* for WSDISPLAY_CUSTOM_OUTPUT */
 
@@ -156,11 +156,11 @@ static struct vga_raster_font vga_console_fontset_ascii;
 static struct videomode vga_console_modes[2] = {
 	/* 640x400 for 80x25, 80x40 and 80x50 modes */
 	{
-		25175, 640, 664, 760, 800, 400, 409, 411, 450, 0
+		25175, 640, 664, 760, 800, 400, 409, 411, 450, 0, NULL,
 	},
 	/* 640x480 for 80x30 mode */
 	{
-		25175, 640, 664, 760, 800, 480, 491, 493, 525, 0
+		25175, 640, 664, 760, 800, 480, 491, 493, 525, 0, NULL,
 	}
 };
 
@@ -301,8 +301,9 @@ const struct wsscreen_list vga_screenlist = {
 	_vga_scrlist_mono
 };
 
-static int	vga_raster_ioctl(void *, u_long, caddr_t, int, struct lwp *);
-static paddr_t	vga_raster_mmap(void *, off_t, int);
+static int	vga_raster_ioctl(void *, void *, u_long, caddr_t, int,
+		    struct lwp *);
+static paddr_t	vga_raster_mmap(void *, void *, off_t, int);
 static int	vga_raster_alloc_screen(void *, const struct wsscreen_descr *,
 		    void **, int *, int *, long *);
 static void	vga_raster_free_screen(void *, void *);
@@ -321,6 +322,8 @@ const struct wsdisplay_accessops vga_raster_accessops = {
 	vga_raster_free_screen,
 	vga_raster_show_screen,
 	vga_raster_load_font,
+	NULL,	/* pollc */
+	NULL,	/* scroll */
 };
 
 int
@@ -329,7 +332,7 @@ vga_cnattach(bus_space_tag_t iot, bus_space_tag_t memt, int type, int check)
 	long defattr;
 	const struct wsscreen_descr *scr;
 #ifdef VGA_CONSOLE_SCREENTYPE
-	const char *typestr;
+	const char *typestr = NULL;
 #endif
 
 	if (check && !vga_common_probe(iot, memt))
@@ -522,7 +525,8 @@ vga_raster_init_screen(struct vga_config *vc, struct vgascreen *scr,
 
 void
 vga_common_attach(struct vga_softc *sc, bus_space_tag_t iot,
-    bus_space_tag_t memt, int type, int quirks, const struct vga_funcs *vf)
+    bus_space_tag_t memt, int type, int quirks,
+    const struct vga_funcs *vf)
 {
 	int console;
 	struct vga_config *vc;
@@ -595,7 +599,8 @@ vga_set_video(struct vga_config *vc, int state)
 }
 
 int
-vga_raster_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct lwp *l)
+vga_raster_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag,
+	struct lwp *l)
 {
 	struct vga_config *vc = v;
 	const struct vga_funcs *vf = vc->vc_funcs;
@@ -643,7 +648,7 @@ vga_raster_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct lwp *l)
 }
 
 static paddr_t
-vga_raster_mmap(void *v, off_t offset, int prot)
+vga_raster_mmap(void *v, void *vs, off_t offset, int prot)
 {
 	struct vga_config *vc = v;
 	const struct vga_funcs *vf = vc->vc_funcs;
@@ -793,7 +798,8 @@ vga_switch_screen(struct vga_config *vc)
 }
 
 static int
-vga_raster_load_font(void *v, void *id, struct wsdisplay_font *data)
+vga_raster_load_font(void *v, void *id,
+    struct wsdisplay_font *data)
 {
 	/* XXX */
 	printf("vga_raster_load_font: called\n");
@@ -1093,11 +1099,14 @@ void
 vga_raster_putchar(void *id, int row, int col, u_int c, long attr)
 {
 	struct vgascreen *scr = id;
-	int off;
+	size_t off;
 	struct vga_raster_font *fs;
 	u_int tmp_ch;
 
 	off = row * scr->type->ncols + col;
+
+	if (__predict_false(off >= (scr->type->ncols * scr->type->nrows)))
+		return;
 
 	LIST_FOREACH(fs, &scr->fontset, next) {
 		if ((scr->encoding == fs->font->encoding) &&
@@ -1368,6 +1377,10 @@ vga_raster_allocattr(void *id, int fg, int bg, int flags, long *attrp)
 {
 	struct vgascreen *scr = id;
 	struct vga_config *vc = scr->cfg;
+
+	if (__predict_false((unsigned int)fg >= sizeof(fgansitopc) || 
+	    (unsigned int)bg >= sizeof(bgansitopc)))
+	    	return (EINVAL);
 
 	if (vc->hdl.vh_mono) {
 		if (flags & WSATTR_WSCOLORS)

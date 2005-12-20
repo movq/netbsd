@@ -1,4 +1,4 @@
-/*	$NetBSD: if.c,v 1.59 2005/08/04 19:41:28 rpaulo Exp $	*/
+/*	$NetBSD: if.c,v 1.61 2006/08/26 15:33:20 matt Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)if.c	8.2 (Berkeley) 2/21/94";
 #else
-__RCSID("$NetBSD: if.c,v 1.59 2005/08/04 19:41:28 rpaulo Exp $");
+__RCSID("$NetBSD: if.c,v 1.61 2006/08/26 15:33:20 matt Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,8 +48,10 @@ __RCSID("$NetBSD: if.c,v 1.59 2005/08/04 19:41:28 rpaulo Exp $");
 #include <net/if_types.h>
 #include <netinet/in.h>
 #include <netinet/in_var.h>
+#ifdef NS
 #include <netns/ns.h>
 #include <netns/ns_if.h>
+#endif
 #include <netiso/iso.h>
 #include <netiso/iso_var.h>
 #include <arpa/inet.h>
@@ -88,7 +90,9 @@ intpr(interval, ifnetaddr, pfunc)
 #ifdef INET6
 		struct in6_ifaddr in6;
 #endif /* INET6 */
+#ifdef NS
 		struct ns_ifaddr ns;
+#endif /* NS */
 		struct iso_ifaddr iso;
 	} ifaddr;
 	u_long ifaddraddr;
@@ -199,10 +203,10 @@ intpr(interval, ifnetaddr, pfunc)
 				 */
 				in = inet_makeaddr(ifaddr.in.ia_subnet,
 					INADDR_ANY);
-				cp = netname(in.s_addr,
+				cp = netname4(in.s_addr,
 					ifaddr.in.ia_subnetmask);
 #else
-				cp = netname(ifaddr.in.ia_subnet,
+				cp = netname4(ifaddr.in.ia_subnet,
 					ifaddr.in.ia_subnetmask);
 #endif
 				if (vflag)
@@ -210,7 +214,7 @@ intpr(interval, ifnetaddr, pfunc)
 				else
 					n = 13;
 				printf("%-*.*s ", n, n, cp);
-				cp = routename(sin->sin_addr.s_addr);
+				cp = routename4(sin->sin_addr.s_addr);
 				if (vflag)
 					n = strlen(cp) < 17 ? 17 : strlen(cp);
 				else
@@ -226,7 +230,7 @@ intpr(interval, ifnetaddr, pfunc)
 						kread(multiaddr, (char *)&inm,
 						   sizeof inm);
 						printf("\n%25s %-17.17s ", "",
-						   routename(
+						   routename4(
 						      inm.inm_addr.s_addr));
 						multiaddr =
 						   (u_long)inm.inm_list.le_next;
@@ -249,7 +253,7 @@ intpr(interval, ifnetaddr, pfunc)
 				}
 #endif
 				cp = netname6(&ifaddr.in6.ia_addr,
-					&ifaddr.in6.ia_prefixmask.sin6_addr);
+					&ifaddr.in6.ia_prefixmask);
 				if (vflag)
 					n = strlen(cp) < 13 ? 13 : strlen(cp);
 				else
@@ -317,6 +321,7 @@ intpr(interval, ifnetaddr, pfunc)
 				       atalk_print(sa,0x10));
 				printf("%-17.17s ", atalk_print(sa,0x0b));
 				break;
+#ifdef NS
 			case AF_NS:
 				{
 				struct sockaddr_ns *sns =
@@ -333,6 +338,7 @@ intpr(interval, ifnetaddr, pfunc)
 				    ns_phost((struct sockaddr *)sns));
 				}
 				break;
+#endif
 #endif
 			case AF_LINK:
 				printf("%-13.13s ", "<Link>");

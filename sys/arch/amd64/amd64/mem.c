@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.c,v 1.5 2005/12/11 12:16:21 christos Exp $	*/
+/*	$NetBSD: mem.c,v 1.8 2006/10/30 00:41:26 elad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.5 2005/12/11 12:16:21 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.8 2006/10/30 00:41:26 elad Exp $");
 
 #include "opt_compat_netbsd.h"
 
@@ -92,6 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.5 2005/12/11 12:16:21 christos Exp $");
 #ifdef LKM
 #include <sys/lkm.h>
 #endif
+#include <sys/kauth.h>
 
 #include <machine/cpu.h>
 
@@ -113,6 +114,8 @@ const struct cdevsw mem_cdevsw = {
 	nullopen, nullclose, mmrw, mmrw, mmioctl,
 	nostop, notty, nopoll, mmmmap, nokqfilter
 };
+
+int check_pa_acc(paddr_t, vm_prot_t);
 
 /*ARGSUSED*/
 int
@@ -154,6 +157,9 @@ mmrw(dev, uio, flags)
 			v = uio->uio_offset;
 			prot = uio->uio_rw == UIO_READ ? VM_PROT_READ :
 			    VM_PROT_WRITE;
+			error = check_pa_acc(uio->uio_offset, prot);
+			if (error)
+				break;
 			pmap_enter(pmap_kernel(), (vaddr_t)vmmap,
 			    trunc_page(v), prot, PMAP_WIRED|prot);
 			o = uio->uio_offset & PGOFSET;
@@ -225,8 +231,6 @@ mmmmap(dev, off, prot)
 	off_t off;
 	int prot;
 {
-	struct proc *p = curproc;	/* XXX */
-
 	/*
 	 * /dev/mem is the only one that makes sense through this
 	 * interface.  For /dev/kmem any physaddr we return here
@@ -238,7 +242,8 @@ mmmmap(dev, off, prot)
 	if (minor(dev) != DEV_MEM)
 		return (-1);
 
-	if (off > ctob(physmem) && suser(p->p_ucred, &p->p_acflag) != 0)
+	if (check_pa_acc(off, prot) != 0)
 		return (-1);
+
 	return (x86_btop(off));
 }

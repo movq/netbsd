@@ -1,4 +1,4 @@
-/* $NetBSD: timekeeper.c,v 1.2 2002/10/02 05:31:47 thorpej Exp $ */
+/* $NetBSD: timekeeper.c,v 1.4 2006/09/14 15:04:07 gdamore Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: timekeeper.c,v 1.2 2002/10/02 05:31:47 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: timekeeper.c,v 1.4 2006/09/14 15:04:07 gdamore Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,7 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: timekeeper.c,v 1.2 2002/10/02 05:31:47 thorpej Exp $
 #include <machine/cpu.h>
 
 #include <dev/clock_subr.h>
-#include <luna68k/luna68k/clockvar.h>
 #include <luna68k/dev/timekeeper.h>
 #include <machine/autoconf.h>
 
@@ -59,13 +58,8 @@ struct timekeeper_softc {
 	void *sc_clock, *sc_nvram;
 	int sc_nvramsize;
 	u_int8_t sc_image[2040];
+	struct todr_chip_handle sc_todr;
 };
-
-/*
- * BCD to decimal and decimal to BCD.
- */
-#define FROMBCD(x)      (((x) >> 4) * 10 + ((x) & 0xf))
-#define TOBCD(x)        (((x) / 10 * 16) + ((x) % 10))
 
 static int  clock_match __P((struct device *, struct cfdata *, void *));
 static void clock_attach __P((struct device *, struct device *, void *));
@@ -74,18 +68,10 @@ CFATTACH_DECL(clock, sizeof (struct timekeeper_softc),
     clock_match, clock_attach, NULL, NULL);
 extern struct cfdriver clock_cd;
 
-static void mkclock_get __P((struct device *, time_t, struct clock_ymdhms *));
-static void mkclock_set __P((struct device *, struct clock_ymdhms *));
-static void dsclock_get __P((struct device *, time_t, struct clock_ymdhms *));
-static void dsclock_set __P((struct device *, struct clock_ymdhms *));
-
-static struct clockfns mkclock_clockfns = {
-	NULL /* never used */, mkclock_get, mkclock_set,
-};
-
-static struct clockfns dsclock_clockfns = {
-	NULL /* never used */, dsclock_get, dsclock_set,
-};
+static int mkclock_get __P((todr_chip_handle_t, struct clock_ymdhms *));
+static int mkclock_set __P((todr_chip_handle_t, struct clock_ymdhms *));
+static int dsclock_get __P((todr_chip_handle_t, struct clock_ymdhms *));
+static int dsclock_set __P((todr_chip_handle_t, struct clock_ymdhms *));
 
 static int
 clock_match(parent, match, aux)
@@ -107,7 +93,6 @@ clock_attach(parent, self, aux)
 {
 	struct timekeeper_softc *sc = (void *)self;
 	struct mainbus_attach_args *ma = aux;
-	struct clockfns *clockwork;
 
 	switch (machtype) {
 	default:
@@ -115,31 +100,32 @@ clock_attach(parent, self, aux)
 		sc->sc_clock = (void *)(ma->ma_addr + 2040);
 		sc->sc_nvram = (void *)ma->ma_addr;
 		sc->sc_nvramsize = 2040;
-		clockwork = &mkclock_clockfns;
+		sc->sc_todr.todr_gettime_ymdhms = mkclock_get;
+		sc->sc_todr.todr_settime_ymdhms = mkclock_set;
+		sc->sc_todr.cookie = sc; 
 		printf(": mk48t02\n");
 		break;
 	case LUNA_II: /* Dallas DS1287A */
 		sc->sc_clock = (void *)ma->ma_addr;
 		sc->sc_nvram = (void *)(ma->ma_addr + 50);
 		sc->sc_nvramsize = 50;
-		clockwork = &dsclock_clockfns;
+		sc->sc_todr.todr_gettime_ymdhms = dsclock_get;
+		sc->sc_todr.todr_settime_ymdhms = dsclock_set;
+		sc->sc_todr.cookie = sc; 
 		printf(": ds1287a\n");
 		break;
 	}
-	clockattach(&sc->sc_dev, clockwork);
+	todr_attach(&sc->sc_todr);
 	memcpy(sc->sc_image, sc->sc_nvram, sc->sc_nvramsize);
 }
 
 /*
  * Get the time of day, based on the clock's value and/or the base value.
  */
-static void
-mkclock_get(dev, base, dt)
-	struct device *dev;
-	time_t base;
-	struct clock_ymdhms *dt;
+static int
+mkclock_get(todr_chip_handle_t tch, struct clock_ymdhms *dt)
 {
-	struct timekeeper_softc *sc = (void *)dev;
+	struct timekeeper_softc *sc = (void *)tch->cookie;
 	volatile u_int8_t *chiptime = (void *)sc->sc_clock;
 	int s;
 
@@ -154,22 +140,16 @@ mkclock_get(dev, base, dt)
 	dt->dt_year = FROMBCD(chiptime[MK_YEAR]) + YEAR0;
 	chiptime[MK_CSR] &= ~MK_CSR_READ;	/* time wears on */
 	splx(s);
-#ifdef TIMEKEEPER_DEBUG
-	printf("get %d/%d/%d %d:%d:%d\n",
-	dt->dt_year, dt->dt_mon, dt->dt_day,
-	dt->dt_hour, dt->dt_min, dt->dt_sec);
-#endif
+	return 0;
 }
 
 /*
  * Reset the TODR based on the time value.
  */
-static void
-mkclock_set(dev, dt)
-	struct device *dev;
-	struct clock_ymdhms *dt;
+static int
+mkclock_set(todr_chip_handle_t tch, struct clock_ymdhms *dt)
 {
-	struct timekeeper_softc *sc = (void *)dev;
+	struct timekeeper_softc *sc = (void *)tch->cookie;
 	volatile u_int8_t *chiptime = (void *)sc->sc_clock;
 	volatile u_int8_t *stamp = (u_int8_t *)sc->sc_nvram + 0x10;
 	int s;
@@ -185,25 +165,18 @@ mkclock_set(dev, dt)
 	chiptime[MK_YEAR] = TOBCD(dt->dt_year - YEAR0);
 	chiptime[MK_CSR] &= ~MK_CSR_WRITE;	/* load them up */
 	splx(s);
-#ifdef TIMEKEEPER_DEBUG
-	printf("set %d/%d/%d %d:%d:%d\n",
-	dt->dt_year, dt->dt_mon, dt->dt_day,
-	dt->dt_hour, dt->dt_min, dt->dt_sec);
-#endif
 
 	stamp[0] = 'R'; stamp[1] = 'T'; stamp[2] = 'C'; stamp[3] = '\0';
+	return 0;
 }
 
 /*
  * Get the time of day, based on the clock's value and/or the base value.
  */
-static void
-dsclock_get(dev, base, dt)
-	struct device *dev;
-	time_t base;
-	struct clock_ymdhms *dt;
+static int
+dsclock_get(todr_chip_handle_t tch, struct clock_ymdhms *dt)
 {
-	struct timekeeper_softc *sc = (void *)dev;
+	struct timekeeper_softc *sc = (void *)tch->cookie;
 	volatile u_int8_t *chiptime = (void *)sc->sc_clock;
 	int s;
 
@@ -219,17 +192,16 @@ dsclock_get(dev, base, dt)
 	dt->dt_mon = chiptime[MC_MONTH];
 	dt->dt_year = chiptime[MC_YEAR] + YEAR0;
 	splx(s);
+	return 0;
 }
 
 /*
  * Reset the TODR based on the time value.
  */
-static void
-dsclock_set(dev, dt)
-	struct device *dev;
-	struct clock_ymdhms *dt;
+static int
+dsclock_set(todr_chip_handle_t tch, struct clock_ymdhms *dt)
 {
-	struct timekeeper_softc *sc = (void *)dev;
+	struct timekeeper_softc *sc = (void *)tch->cookie;
 	volatile u_int8_t *chiptime = (void *)sc->sc_clock;
 	int s;
 
@@ -244,4 +216,5 @@ dsclock_set(dev, dt)
 	chiptime[MC_YEAR] = dt->dt_year - YEAR0;
 	chiptime[MC_REGB] &= ~MC_REGB_SET;	/* load them up */
 	splx(s);
+	return 0;
 }

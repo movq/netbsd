@@ -1,4 +1,4 @@
-/* $NetBSD: pms.c,v 1.9 2005/12/11 12:23:22 christos Exp $ */
+/* $NetBSD: pms.c,v 1.16 2006/11/16 01:33:20 christos Exp $ */
 
 /*-
  * Copyright (c) 2004 Kentaro Kurahone.
@@ -28,7 +28,7 @@
 #include "opt_pms.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pms.c,v 1.9 2005/12/11 12:23:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pms.c,v 1.16 2006/11/16 01:33:20 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -130,7 +130,8 @@ pms_protocol(pckbport_tag_t tag, pckbport_slot_t slot)
 }
 
 int
-pmsprobe(struct device *parent, struct cfdata *match, void *aux)
+pmsprobe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pckbport_attach_args *pa = aux;
 	u_char cmd[1], resp[2];
@@ -170,7 +171,7 @@ pmsprobe(struct device *parent, struct cfdata *match, void *aux)
 void
 pmsattach(struct device *parent, struct device *self, void *aux)
 {
-	struct pms_softc *sc = (void *)self;
+	struct pms_softc *sc = device_private(self);
 	struct pckbport_attach_args *pa = aux;
 	struct wsmousedev_attach_args a;
 	u_char cmd[2], resp[2];
@@ -228,7 +229,7 @@ pmsattach(struct device *parent, struct device *self, void *aux)
 	kthread_create(pms_spawn_reset_thread, sc);
 
 #ifndef PMS_DISABLE_POWERHOOK
-	sc->sc_powerhook = powerhook_establish(pms_power, sc);
+	sc->sc_powerhook = powerhook_establish(self->dv_xname, pms_power, sc);
 	sc->sc_suspended = 0;
 #endif /* !PMS_DISABLE_POWERHOOK */
 }
@@ -371,7 +372,8 @@ pms_power(int why, void *v)
 #endif /* !PMS_DISABLE_POWERHOOK */
 
 int
-pms_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct lwp *l)
+pms_ioctl(void *v, u_long cmd, caddr_t data, int flag,
+    struct lwp *l)
 {
 	struct pms_softc *sc = v;
 	u_char kbcmd[2];
@@ -437,9 +439,10 @@ pms_reset_thread(void *arg)
 		cmd[0] = PMS_RESET;
 		res = pckbport_enqueue_cmd(sc->sc_kbctag, sc->sc_kbcslot, cmd,
 		    1, 2, 1, resp);
-		if (res)
+		if (res) {
 			DPRINTF(("%s: reset error %d\n", sc->sc_dev.dv_xname,
 			    res));
+		}
 
 #ifdef PMS_SYNAPTICS_TOUCHPAD
 		/* For the synaptics case, leave the protocol alone. */
@@ -457,16 +460,18 @@ pms_reset_thread(void *arg)
 			cmd[0] = PMS_RESET;
 			res = pckbport_enqueue_cmd(sc->sc_kbctag,
 			    sc->sc_kbcslot, cmd, 1, 2, 1, resp);
-			if (res)
+			if (res) {
 				DPRINTF(("%s: reset error %d\n",
 				    sc->sc_dev.dv_xname, res));
+			}
 			tsleep(pms_reset_thread, PWAIT, "pmsreset", hz);
 			cmd[0] = PMS_RESET;
 			res = pckbport_enqueue_cmd(sc->sc_kbctag,
 			    sc->sc_kbcslot, cmd, 1, 2, 1, resp);
-			if (res)
+			if (res) {
 				DPRINTF(("%s: reset error %d\n",
 				    sc->sc_dev.dv_xname, res));
+			}
 			sc->protocol = PMS_UNKNOWN;	/* reprobe protocol */
 			pms_enable(sc);
 #if defined(PMSDEBUG) || defined(DIAGNOSTIC)
@@ -493,16 +498,13 @@ pmsinput(void *vsc, int data)
 	u_int changed;
 	int dx, dy, dz = 0;
 	int newbuttons = 0;
-	int s;
 
 	if (!sc->sc_enabled) {
 		/* Interrupts are not expected.	 Discard the byte. */
 		return;
 	}
 
-	s = splclock();
-	sc->current = mono_time;
-	splx(s);
+	getmicrouptime(&sc->current);
 
 	if (sc->inputstate > 0) {
 		struct timeval diff;
@@ -638,7 +640,7 @@ pmsinput(void *vsc, int data)
 			    "buttons 0x%02x\n",	dx, dy, dz, sc->buttons));
 #endif
 			wsmouse_input(sc->sc_wsmousedev,
-			    sc->buttons, dx, dy, dz,
+			    sc->buttons, dx, dy, dz, 0,
 			    WSMOUSE_INPUT_DELTA);
 		}
 		memset(sc->packet, 0, 4);

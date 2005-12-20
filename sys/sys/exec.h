@@ -1,4 +1,4 @@
-/*	$NetBSD: exec.h,v 1.112 2005/12/11 12:25:20 christos Exp $	*/
+/*	$NetBSD: exec.h,v 1.114.6.2 2007/07/09 10:30:56 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -137,7 +137,6 @@ struct lwp;
 struct proc;
 struct exec_package;
 struct vnode;
-struct ucred;
 
 typedef int (*exec_makecmds_fcn)(struct lwp *, struct exec_package *);
 
@@ -201,6 +200,7 @@ struct exec_package {
 	void	*ep_emul_arg;		/* emulation argument */
 	const struct	execsw *ep_es;	/* appropriate execsw entry */
 	const struct	execsw *ep_esch;/* checked execsw entry */
+	uint32_t ep_pax_flags;		/* pax flags */
 };
 #define	EXEC_INDIR	0x0001		/* script handling already done */
 #define	EXEC_HASFD	0x0002		/* holding a shell script */
@@ -222,6 +222,7 @@ struct exec_vmcmd {
 #define	VMCMD_RELATIVE	0x0001	/* ev_addr is relative to base entry */
 #define	VMCMD_BASE	0x0002	/* marks a base entry */
 #define	VMCMD_FIXED	0x0004	/* entry must be mapped at ev_addr */
+#define	VMCMD_STACK	0x0008	/* entry is for a stack */
 };
 
 #ifdef _KERNEL
@@ -247,7 +248,7 @@ int	copyargs		(struct lwp *, struct exec_package *,
 void	setregs			(struct lwp *, struct exec_package *, u_long);
 int	check_veriexec		(struct lwp *, struct vnode *,
 				     struct exec_package *, int);
-int	check_exec		(struct lwp *, struct exec_package *, int);
+int	check_exec		(struct lwp *, struct exec_package *);
 int	exec_init		(int);
 int	exec_read_from		(struct lwp *, struct vnode *, u_long off,
 				    void *, size_t);

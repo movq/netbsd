@@ -1,4 +1,4 @@
-/*	$NetBSD: iq80321_machdep.c,v 1.34 2005/12/11 12:17:09 christos Exp $	*/
+/*	$NetBSD: iq80321_machdep.c,v 1.37 2006/11/24 22:04:22 wiz Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003 Wasabi Systems, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iq80321_machdep.c,v 1.34 2005/12/11 12:17:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iq80321_machdep.c,v 1.37 2006/11/24 22:04:22 wiz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -316,7 +316,7 @@ cpu_reboot(int howto, char *bootstr)
 	 * and poke the Internal Bus and Peripheral Bus reset lines.
 	 */
 	(void) disable_interrupts(I32_bit|F32_bit);
-	*(__volatile uint32_t *)(IQ80321_80321_VBASE + VERDE_ATU_BASE +
+	*(volatile uint32_t *)(IQ80321_80321_VBASE + VERDE_ATU_BASE +
 	    ATU_PCSR) = PCSR_RIB | PCSR_RPB;
 
 	/* ...and if that didn't work, just croak. */
@@ -446,7 +446,7 @@ initarm(void *arg)
 #endif
 
 	/* Fake bootconfig structure for the benefit of pmap.c */
-	/* XXX must make the memory description h/w independant */
+	/* XXX must make the memory description h/w independent */
 	bootconfig.dramblocks = 1;
 	bootconfig.dram[0].address = memstart;
 	bootconfig.dram[0].pages = memsize / PAGE_SIZE;
@@ -521,6 +521,7 @@ initarm(void *arg)
 
 	loop1 = 0;
 	kernel_l1pt.pv_pa = 0;
+	kernel_l1pt.pv_va = 0;
 	for (loop = 0; loop <= NUM_KERNEL_PTS; ++loop) {
 		/* Are we 16KB aligned for an L1 ? */
 		if (((physical_freeend - L1_TABLE_SIZE) & (L1_TABLE_SIZE - 1)) == 0

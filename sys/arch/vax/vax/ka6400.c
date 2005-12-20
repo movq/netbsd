@@ -1,4 +1,4 @@
-/*	$NetBSD: ka6400.c,v 1.7 2005/12/11 12:19:36 christos Exp $	*/
+/*	$NetBSD: ka6400.c,v 1.9 2006/09/05 19:32:57 matt Exp $	*/
 
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden. All rights reserved.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka6400.c,v 1.7 2005/12/11 12:19:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka6400.c,v 1.9 2006/09/05 19:32:57 matt Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -93,8 +93,8 @@ struct	cpu_dep ka6400_calls = {
 	ka6400_mchk,
 	ka6400_memerr,
 	ka6400_conf,
-	generic_clkread,
-	generic_clkwrite,
+	generic_gettime,
+	generic_settime,
 	6,	/* ~VUPS */
 	16,	/* SCB pages */
 	0,
@@ -387,9 +387,9 @@ ka6400_sendstr(int id, const char *buf)
 		 * Cannot check that flag in C...
 		 */
 #ifdef __GNUC__
-		asm("1:;mtpr %0,$92;bvs 1b" :: "g"(utchr));
+		__asm("1:;mtpr %0,$92;bvs 1b" :: "g"(utchr));
 #else
-		asm("1:;mtpr r11,$92;bvs 1b");
+		__asm("1:;mtpr r11,$92;bvs 1b");
 #endif
 		buf++;
 		i = 30000;

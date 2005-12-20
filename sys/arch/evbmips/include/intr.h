@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.6 2005/11/27 14:01:45 yamt Exp $	*/
+/*	$NetBSD: intr.h,v 1.9 2006/11/18 16:40:21 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #ifndef _EVBMIPS_INTR_H_
-#define _EVBMIPS_INTR_H_
+#define	_EVBMIPS_INTR_H_
 
 #include <sys/device.h>
 #include <sys/lock.h>
@@ -83,21 +83,21 @@
 #define	IST_PULSE	1	/* pulsed */
 #define	IST_EDGE	2	/* edge-triggered */
 #define	IST_LEVEL	3	/* level-triggered */
-#define IST_LEVEL_HIGH	4	/* level triggered, active high */
-#define IST_LEVEL_LOW	5       /* level triggered, active low */
+#define	IST_LEVEL_HIGH	4	/* level triggered, active high */
+#define	IST_LEVEL_LOW	5       /* level triggered, active low */
 
 #ifdef	_KERNEL
 
-extern const u_int32_t ipl_sr_bits[_IPL_N];
-extern const u_int32_t ipl_si_to_sr[_IPL_NSOFT];
+extern const uint32_t ipl_sr_bits[_IPL_N];
+extern const uint32_t ipl_si_to_sr[_IPL_NSOFT];
 
-extern int		_splraise(int);
-extern int		_spllower(int);
-extern int		_splset(int);
-extern int		_splget(int);
-extern int		_splnone(int);
-extern int		_setsoftintr(int);
-extern int		_clrsoftintr(int);
+int _splraise(int);
+int _spllower(int);
+int _splset(int);
+int _splget(void);
+void _splnone(void);
+void _setsoftintr(int);
+void _clrsoftintr(int);
 
 #define	spl0()		(void) _spllower(0)
 #define	splx(s)		(void) _splset(s)
@@ -121,7 +121,7 @@ struct evbmips_intrhand {
 
 void	evbmips_intr_init(void);
 void	intr_init(void);
-void	evbmips_iointr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+void	evbmips_iointr(uint32_t, uint32_t, uint32_t, uint32_t);
 void	*evbmips_intr_establish(int, int (*)(void *), void *);
 void	evbmips_intr_disestablish(void *);
 #endif /* _KERNEL */

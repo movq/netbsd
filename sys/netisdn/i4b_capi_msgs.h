@@ -1,4 +1,4 @@
-/*	$NetBSD: i4b_capi_msgs.h,v 1.2 2005/12/10 23:51:50 elad Exp $	*/
+/*	$NetBSD: i4b_capi_msgs.h,v 1.4 2006/02/16 20:17:20 perry Exp $	*/
 
 /*
  * Copyright (c) 2001-2003 Cubical Solutions Ltd. All rights reserved.

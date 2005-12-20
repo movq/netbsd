@@ -1,4 +1,4 @@
-/*	$NetBSD: interact.c,v 1.27 2005/10/19 21:22:21 dsl Exp $	*/
+/*	$NetBSD: interact.c,v 1.30 2006/11/26 16:16:31 jmmv Exp $	*/
 
 /*
  * Copyright (c) 1997 Christos Zoulas.  All rights reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: interact.c,v 1.27 2005/10/19 21:22:21 dsl Exp $");
+__RCSID("$NetBSD: interact.c,v 1.30 2006/11/26 16:16:31 jmmv Exp $");
 #endif /* lint */
 
 #include <sys/param.h>
@@ -66,6 +66,7 @@ static void	cmd_part(struct disklabel *, char *, int);
 static void	cmd_label(struct disklabel *, char *, int);
 static void	cmd_round(struct disklabel *, char *, int);
 static void	cmd_name(struct disklabel *, char *, int);
+static void	cmd_listfstypes(struct disklabel *, char *, int);
 static int	runcmd(struct disklabel *, char *, int);
 static int	getinput(const char *, const char *, const char *, char *);
 static int	alphacmp(const void *, const void *);
@@ -85,6 +86,7 @@ static struct cmds {
 	{ "C",	cmd_chain,	"make partitions contiguous" },
 	{ "E",	cmd_printall,	"print disk label and current partition table"},
 	{ "I",	cmd_info,	"change label information" },
+	{ "L",	cmd_listfstypes,"list all known file system types" },
 	{ "N",	cmd_name,	"name the label" },
 	{ "P",	cmd_print,	"print current partition table" },
 	{ "Q",	NULL,		"quit" },
@@ -579,6 +581,14 @@ cmd_label(struct disklabel *lp, char *s, int fd)
 }
 
 
+static void
+cmd_listfstypes(struct disklabel *lp, char *s, int fd)
+{
+
+	(void)list_fs_types();
+}
+
+
 static int
 runcmd(struct disklabel *lp, char *line, int fd)
 {
@@ -640,12 +650,14 @@ alphacmp(const void *a, const void *b)
 static void
 dumpnames(const char *prompt, const char * const *olist, size_t numentries)
 {
-	int	i, j, w;
+	int	i, w;
+	int	entry;
 	int	columns, width, lines;
 	const char *p;
 	const char **list;
 
-	list = (const char **)malloc(sizeof(char *) * numentries);
+	if ((list = (const char **)malloc(sizeof(char *) * numentries)) == NULL)
+		err(1, "malloc");
 	width = 0;
 	printf("%s:\n", prompt);
 	for (i = 0; i < numentries; i++) {
@@ -669,24 +681,23 @@ dumpnames(const char *prompt, const char * const *olist, size_t numentries)
 	if (columns == 0)
 		columns = 1;
 	lines = (numentries + columns - 1) / columns;
+	/* Output sorted by columns */
 	for (i = 0; i < lines; i++) {
-		for (j = 0; j < columns; j++) {
-			p = list[j * lines + i];
-			if (j == 0)
-				putc('\t', stdout);
-			if (p) {
-				fputs(p, stdout);
-			}
-			if (j * lines + i + lines >= numentries) {
-				putc('\n', stdout);
+		putc('\t', stdout);
+		entry = i;
+		for (;;) {
+			p = list[entry];
+			fputs(p, stdout);
+			entry += lines;
+			if (entry >= numentries)
 				break;
-			}
 			w = strlen(p);
 			while (w < width) {
-				w = (w + 8) &~ 7;
+				w = (w + 8) & ~7;
 				putc('\t', stdout);
 			}
 		}
+		putc('\n', stdout);
 	}
 	free(list);
 }

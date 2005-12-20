@@ -1,4 +1,4 @@
-/* $NetBSD: ieee80211_netbsd.c,v 1.11 2005/12/04 19:15:21 christos Exp $ */
+/* $NetBSD: ieee80211_netbsd.c,v 1.13 2006/03/02 03:38:48 dyoung Exp $ */
 /*-
  * Copyright (c) 2003-2005 Sam Leffler, Errno Consulting
  * All rights reserved.
@@ -30,7 +30,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_freebsd.c,v 1.8 2005/08/08 18:46:35 sam Exp $");
 #else
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.11 2005/12/04 19:15:21 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.13 2006/03/02 03:38:48 dyoung Exp $");
 #endif
 
 /*
@@ -76,7 +76,7 @@ typedef void (*ieee80211_setup_func)(void);
 
 __link_set_decl(ieee80211_funcs, ieee80211_setup_func);
 
-static void
+static int
 ieee80211_init0(void)
 {
 	ieee80211_setup_func * const *ieee80211_setup, f;
@@ -85,6 +85,8 @@ ieee80211_init0(void)
 		f = (void*)*ieee80211_setup;
 		(*f)();
 	}
+
+	return 0;
 }
 
 void
@@ -232,6 +234,11 @@ ieee80211_sysctl_attach(struct ieee80211com *ic)
 	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
 	    "driver_caps", SYSCTL_DESCR("driver capabilities"),
 	    NULL, 0, &ic->ic_caps, 0, CTL_CREATE, CTL_EOL)) != 0)
+		goto err;
+	if ((rc = sysctl_createv(&ic->ic_sysctllog, 0, &rnode, &cnode,
+	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
+	    "bmiss_max", SYSCTL_DESCR("consecutive beacon misses before scanning"),
+	    NULL, 0, &ic->ic_bmiss_max, 0, CTL_CREATE, CTL_EOL)) != 0)
 		goto err;
 
 	return;
@@ -505,6 +512,25 @@ if_printf(struct ifnet *ifp, const char *fmt, ...)
 
 	va_end(ap);
 	return;
+}
+
+/*
+ * Set the m_data pointer of a newly-allocated mbuf
+ * to place an object of the specified size at the
+ * end of the mbuf, longword aligned.
+ */
+void
+m_align(struct mbuf *m, int len)
+{
+       int adjust;
+
+       if (m->m_flags & M_EXT)
+	       adjust = m->m_ext.ext_size - len;
+       else if (m->m_flags & M_PKTHDR)
+	       adjust = MHLEN - len;
+       else
+	       adjust = MLEN - len;
+       m->m_data += adjust &~ (sizeof(long)-1);
 }
 
 /*

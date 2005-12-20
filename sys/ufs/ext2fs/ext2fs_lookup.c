@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_lookup.c,v 1.39 2005/12/11 12:25:25 christos Exp $	*/
+/*	$NetBSD: ext2fs_lookup.c,v 1.46.2.1 2007/02/17 23:27:52 tron Exp $	*/
 
 /*
  * Modified for NetBSD 1.2E
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_lookup.c,v 1.39 2005/12/11 12:25:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_lookup.c,v 1.46.2.1 2007/02/17 23:27:52 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,6 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: ext2fs_lookup.c,v 1.39 2005/12/11 12:25:25 christos 
 #include <sys/vnode.h>
 #include <sys/malloc.h>
 #include <sys/dirent.h>
+#include <sys/kauth.h>
 
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufsmount.h>
@@ -129,7 +130,7 @@ ext2fs_readdir(void *v)
 	struct vop_readdir_args /* {
 		struct vnode *a_vp;
 		struct uio *a_uio;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		int **a_eofflag;
 		off_t **a_cookies;
 		int ncookies;
@@ -162,10 +163,10 @@ ext2fs_readdir(void *v)
 	auio = *uio;
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
-	auio.uio_segflg = UIO_SYSSPACE;
 	aiov.iov_len = e2fs_count;
 	auio.uio_resid = e2fs_count;
-	MALLOC(dirbuf, caddr_t, e2fs_count, M_TEMP, M_WAITOK);
+	UIO_SETUP_SYSSPACE(&auio);
+	dirbuf = malloc(e2fs_count, M_TEMP, M_WAITOK);
 	if (ap->a_ncookies) {
 		nc = ncookies = e2fs_count / 16;
 		cookies = malloc(sizeof (off_t) * ncookies, M_TEMP, M_WAITOK);
@@ -275,26 +276,22 @@ ext2fs_lookup(void *v)
 	struct vnode *tdp;		/* returned by VFS_VGET */
 	doff_t enduseful;		/* pointer past last used dir slot */
 	u_long bmask;			/* block offset mask */
-	int lockparent;			/* 1 => lockparent flag is set */
-	int wantparent;			/* 1 => wantparent or lockparent flag */
 	int namlen, error;
 	struct vnode **vpp = ap->a_vpp;
 	struct componentname *cnp = ap->a_cnp;
-	struct ucred *cred = cnp->cn_cred;
+	kauth_cred_t cred = cnp->cn_cred;
 	int flags;
 	int nameiop = cnp->cn_nameiop;
 	struct ufsmount *ump = dp->i_ump;
 	int dirblksiz = ump->um_dirblksiz;
 	ino_t foundino;
 
-	cnp->cn_flags &= ~PDIRUNLOCK;
 	flags = cnp->cn_flags;
 
 	bp = NULL;
 	slotoffset = -1;
 	*vpp = NULL;
-	lockparent = flags & LOCKPARENT;
-	wantparent = flags & (LOCKPARENT|WANTPARENT);
+
 	/*
 	 * Check accessiblity of directory.
 	 */
@@ -390,6 +387,7 @@ searchloop:
 		 * directory. Complete checks can be run by patching
 		 * "dirchk" to be true.
 		 */
+		KASSERT(bp != NULL);
 		ep = (struct ext2fs_direct *)
 			((char *)bp->b_data + entryoffsetinblock);
 		if (ep->e2d_reclen == 0 ||
@@ -498,12 +496,6 @@ searchloop:
 			dp->i_offset = roundup(ext2fs_size(dp), dirblksiz);
 			dp->i_count = 0;
 			enduseful = dp->i_offset;
-		} else if (nameiop == DELETE) {
-			dp->i_offset = slotoffset;
-			if ((dp->i_offset & (dirblksiz - 1)) == 0)
-				dp->i_count = 0;
-			else
-				dp->i_count = dp->i_offset - prevoff;
 		} else {
 			dp->i_offset = slotoffset;
 			dp->i_count = slotsize;
@@ -528,10 +520,6 @@ searchloop:
 		 * information cannot be used.
 		 */
 		cnp->cn_flags |= SAVENAME;
-		if (!lockparent) {
-			VOP_UNLOCK(vdp, 0);
-			cnp->cn_flags |= PDIRUNLOCK;
-		}
 		return (EJUSTRETURN);
 	}
 	/*
@@ -572,9 +560,7 @@ found:
 	/*
 	 * If deleting, and at end of pathname, return
 	 * parameters which can be used to remove file.
-	 * If the wantparent flag isn't set, we return only
-	 * the directory (in ndp->ni_dvp), otherwise we go
-	 * on and lock the inode, being careful with ".".
+	 * Lock the inode, being careful with ".".
 	 */
 	if (nameiop == DELETE && (flags & ISLASTCN)) {
 		/*
@@ -611,17 +597,13 @@ found:
 		 * implements append-only directories.
 		 */
 		if ((dp->i_e2fs_mode & ISVTX) &&
-		    cred->cr_uid != 0 &&
-		    cred->cr_uid != dp->i_e2fs_uid &&
-		    VTOI(tdp)->i_e2fs_uid != cred->cr_uid) {
+		    kauth_cred_geteuid(cred) != 0 &&
+		    kauth_cred_geteuid(cred) != dp->i_e2fs_uid &&
+		    VTOI(tdp)->i_e2fs_uid != kauth_cred_geteuid(cred)) {
 			vput(tdp);
 			return (EPERM);
 		}
 		*vpp = tdp;
-		if (!lockparent) {
-			VOP_UNLOCK(vdp, 0);
-			cnp->cn_flags |= PDIRUNLOCK;
-		}
 		return (0);
 	}
 
@@ -631,7 +613,7 @@ found:
 	 * Must get inode of directory entry to verify it's a
 	 * regular file, or empty directory.
 	 */
-	if (nameiop == RENAME && wantparent && (flags & ISLASTCN)) {
+	if (nameiop == RENAME && (flags & ISLASTCN)) {
 		error = VOP_ACCESS(vdp, VWRITE, cred, cnp->cn_lwp);
 		if (error)
 			return (error);
@@ -650,10 +632,6 @@ found:
 			return (error);
 		*vpp = tdp;
 		cnp->cn_flags |= SAVENAME;
-		if (!lockparent) {
-			VOP_UNLOCK(vdp, 0);
-			cnp->cn_flags |= PDIRUNLOCK;
-		}
 		return (0);
 	}
 
@@ -679,19 +657,10 @@ found:
 	pdp = vdp;
 	if (flags & ISDOTDOT) {
 		VOP_UNLOCK(pdp, 0);	/* race to get the inode */
-		cnp->cn_flags |= PDIRUNLOCK;
 		error = VFS_VGET(vdp->v_mount, foundino, &tdp);
+		vn_lock(pdp, LK_EXCLUSIVE | LK_RETRY);
 		if (error) {
-			if (vn_lock(pdp, LK_EXCLUSIVE | LK_RETRY) == 0)
-				cnp->cn_flags &= ~PDIRUNLOCK;
 			return (error);
-		}
-		if (lockparent && (flags & ISLASTCN)) {
-			if ((error = vn_lock(pdp, LK_EXCLUSIVE))) {
-				vput(tdp);
-				return (error);
-			}
-			cnp->cn_flags &= ~PDIRUNLOCK;
 		}
 		*vpp = tdp;
 	} else if (dp->i_number == foundino) {
@@ -701,10 +670,6 @@ found:
 		error = VFS_VGET(vdp->v_mount, foundino, &tdp);
 		if (error)
 			return (error);
-		if (!lockparent || !(flags & ISLASTCN)) {
-			VOP_UNLOCK(pdp, 0);
-			cnp->cn_flags |= PDIRUNLOCK;
-		}
 		*vpp = tdp;
 	}
 
@@ -818,8 +783,7 @@ ext2fs_direnter(struct inode *ip, struct vnode *dvp, struct componentname *cnp)
 		auio.uio_iov = &aiov;
 		auio.uio_iovcnt = 1;
 		auio.uio_rw = UIO_WRITE;
-		auio.uio_segflg = UIO_SYSSPACE;
-		auio.uio_lwp = NULL;
+		UIO_SETUP_SYSSPACE(&auio);
 		error = VOP_WRITE(dvp, &auio, IO_SYNC, cnp->cn_cred);
 		if (dirblksiz > dvp->v_mount->mnt_stat.f_bsize)
 			/* XXX should grow with balloc() */
@@ -959,7 +923,7 @@ ext2fs_dirremove(struct vnode *dvp, struct componentname *cnp)
  */
 int
 ext2fs_dirrewrite(struct inode *dp, struct inode *ip,
-	struct componentname *cnp)
+    struct componentname *cnp)
 {
 	struct buf *bp;
 	struct ext2fs_direct *ep;
@@ -991,7 +955,7 @@ ext2fs_dirrewrite(struct inode *dp, struct inode *ip,
  * NB: does not handle corrupted directories.
  */
 int
-ext2fs_dirempty(struct inode *ip, ino_t parentino, struct ucred *cred)
+ext2fs_dirempty(struct inode *ip, ino_t parentino, kauth_cred_t cred)
 {
 	off_t off;
 	struct ext2fs_dirtemplate dbuf;
@@ -1043,7 +1007,7 @@ ext2fs_dirempty(struct inode *ip, ino_t parentino, struct ucred *cred)
  */
 int
 ext2fs_checkpath(struct inode *source, struct inode *target,
-	struct ucred *cred)
+	kauth_cred_t cred)
 {
 	struct vnode *vp;
 	int error, rootino, namlen;

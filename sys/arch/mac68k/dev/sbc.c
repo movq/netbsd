@@ -1,4 +1,4 @@
-/*	$NetBSD: sbc.c,v 1.47 2005/12/11 12:18:02 christos Exp $	*/
+/*	$NetBSD: sbc.c,v 1.51 2006/08/04 01:56:42 mhitch Exp $	*/
 
 /*
  * Copyright (C) 1996 Scott Reynolds.  All rights reserved.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbc.c,v 1.47 2005/12/11 12:18:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbc.c,v 1.51 2006/08/04 01:56:42 mhitch Exp $");
 
 #include "opt_ddb.h"
 
@@ -111,7 +111,7 @@ int sbc_ready_timo = 1000 * 5000;	/* X2 = 10 S. */
 int sbc_wait_dreq_timo = 1000 * 5000;	/* X2 = 10 S. */
 
 /* Return zero on success. */
-static __inline__ int
+static inline int
 sbc_wait_busy(struct ncr5380_softc *sc)
 {
 	int timo = sbc_wait_busy_timo;
@@ -127,7 +127,7 @@ sbc_wait_busy(struct ncr5380_softc *sc)
 	return (timo);
 }
 
-static __inline__ int
+static inline int
 sbc_ready(struct ncr5380_softc *sc)
 {
 	int timo = sbc_ready_timo;
@@ -150,7 +150,7 @@ sbc_ready(struct ncr5380_softc *sc)
 	return (timo);
 }
 
-static __inline__ int
+static inline int
 sbc_wait_dreq(struct ncr5380_softc *sc)
 {
 	int timo = sbc_wait_dreq_timo;
@@ -246,6 +246,7 @@ sbc_pdma_in(struct ncr5380_softc *ncr_sc, int phase, int datalen, u_char *data)
 	struct sbc_softc *sc = (struct sbc_softc *)ncr_sc;
 	volatile u_int32_t *long_data = (u_int32_t *)sc->sc_drq_addr;
 	volatile u_int8_t *byte_data = (u_int8_t *)sc->sc_nodrq_addr;
+	label_t faultbuf;
 	int resid, s;
 
 	if (datalen < ncr_sc->sc_min_dma_len ||
@@ -261,9 +262,21 @@ sbc_pdma_in(struct ncr5380_softc *ncr_sc, int phase, int datalen, u_char *data)
 	*ncr_sc->sci_mode |= SCI_MODE_DMA;
 	*ncr_sc->sci_irecv = 0;
 
-#define R4	*((u_int32_t *)data)++ = *long_data
-#define R1	*((u_int8_t *)data)++ = *byte_data
-	for (resid = datalen; resid >= 128; resid -= 128) {
+	resid = datalen;
+
+	/*
+	 * Setup for a possible bus error caused by SCSI controller
+	 * switching out of DATA OUT before we're done with the
+	 * current transfer.  (See comment before sbc_drq_intr().)
+	 */
+	nofault = &faultbuf;
+	if (setjmp(nofault)) {
+		goto interrupt;
+	}
+
+#define R4	*(u_int32_t *)data = *long_data, data += 4;
+#define R1	*(u_int8_t *)data = *byte_data, data += 1;
+	for (; resid >= 128; resid -= 128) {
 		if (sbc_ready(ncr_sc))
 			goto interrupt;
 		R4; R4; R4; R4; R4; R4; R4; R4;
@@ -281,6 +294,7 @@ sbc_pdma_in(struct ncr5380_softc *ncr_sc, int phase, int datalen, u_char *data)
 #undef R1
 
 interrupt:
+	nofault = NULL;
 	SCI_CLR_INTR(ncr_sc);
 	*ncr_sc->sci_mode &= ~SCI_MODE_DMA;
 	*ncr_sc->sci_icmd = 0;
@@ -331,8 +345,8 @@ sbc_pdma_out(struct ncr5380_softc *ncr_sc, int phase, int datalen, u_char *data)
 		panic("Unexpected bus error in sbc_pdma_out()");
 	}
 
-#define W1	*byte_data = *((u_int8_t *)data)++
-#define W4	*long_data = *((u_int32_t *)data)++
+#define W1	*byte_data = *(u_int8_t *)data, data += 1
+#define W4	*long_data = *(u_int32_t *)data, data += 4
 	for (resid = datalen; resid >= 64; resid -= 64) {
 		if (sbc_ready(ncr_sc))
 			goto interrupt;
@@ -412,13 +426,10 @@ sbc_drq_intr(void *p)
 	label_t faultbuf;
 	volatile u_int32_t *long_drq;
 	u_int32_t *long_data;
-	volatile u_int8_t *drq;
+	volatile u_int8_t *drq = 0;	/* XXX gcc4 -Wuninitialized */
 	u_int8_t *data;
 	int count, dcount, resid;
 	u_int8_t tmp;
-
-	/* Work around lame gcc initialization bug */
-	(void)&drq;
 
 	/*
 	 * If we're not ready to xfer data, or have no more, just return.

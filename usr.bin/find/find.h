@@ -1,4 +1,4 @@
-/*	$NetBSD: find.h,v 1.20 2005/11/09 00:47:16 reed Exp $	*/
+/*	$NetBSD: find.h,v 1.23 2006/10/11 19:51:10 apb Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -40,7 +40,7 @@
 enum ntype {
 	N_AND = 1, 				/* must start > 0 */
 	N_AMIN, N_ANEWER, N_ATIME, N_CLOSEPAREN, N_CMIN, N_CNEWER, N_CTIME,
-	N_DEPTH, N_EMPTY, N_EXEC, N_EXECDIR, N_EXPR, N_FALSE, N_FLAGS,
+	N_DEPTH, N_EMPTY, N_EXEC, N_EXECDIR, N_EXIT, N_EXPR, N_FALSE, N_FLAGS,
 	N_FOLLOW, N_FPRINT, N_FSTYPE, N_GROUP,
 	N_INAME, N_INUM, N_IREGEX, N_LINKS, N_LS, N_MINDEPTH, N_MAXDEPTH,
 	N_MMIN, N_MTIME, N_NAME, N_NEWER, N_NOGROUP, N_NOT, N_NOUSER, N_OK,
@@ -51,12 +51,13 @@ enum ntype {
 /* node definition */
 typedef struct _plandata {
 	struct _plandata *next;			/* next node */
-	int (*eval)				/* node evaluation function */
-	    __P((struct _plandata *, FTSENT *));
+	int (*eval)(struct _plandata *, FTSENT *);
+						/* node evaluation function */
 #define	F_EQUAL		1			/* [acm]time inum links size */
 #define	F_LESSTHAN	2
 #define	F_GREATER	3
 #define	F_NEEDOK	1			/* exec ok */
+#define	F_PLUSSET	2			/* -exec ... {} + */
 #define	F_MTFLAG	1			/* fstype */
 #define	F_MTTYPE	2
 #define	F_ATLEAST	1			/* perm */
@@ -77,9 +78,17 @@ typedef struct _plandata {
 			char **_e_argv;		/* argv array */
 			char **_e_orig;		/* original strings */
 			int *_e_len;		/* allocated length */
+			char **_ep_bxp;		/* ptr to 1st addt'l arg */
+			char *_ep_p;		/* current buffer pointer */
+			char *_ep_bbp;		/* begin buffer pointer */
+			char *_ep_ebp;		/* end buffer pointer */
+			int _ep_maxargs;	/* max #args */
+			int _ep_narg;		/* # addt'l args */
+			int _ep_rval;		/* return value */
 		} ex;
 		char *_a_data[2];		/* array of char pointers */
 		char *_c_data;			/* char pointer */
+		int _exit_val;			/* exit value */
 		int _max_data;			/* tree depth */
 		int _min_data;			/* tree depth */
 		regex_t _regexp_data;		/* compiled regexp */
@@ -101,16 +110,25 @@ typedef struct _plandata {
 #define	e_argv		p_un.ex._e_argv
 #define	e_orig		p_un.ex._e_orig
 #define	e_len		p_un.ex._e_len
+#define	ep_p		p_un.ex._ep_p
+#define	ep_bbp		p_un.ex._ep_bbp
+#define	ep_ebp		p_un.ex._ep_ebp
+#define	ep_bxp		p_un.ex._ep_bxp
+#define	ep_cnt		p_un.ex._ep_cnt
+#define	ep_maxargs	p_un.ex._ep_maxargs
+#define	ep_nline	p_un.ex._ep_nline
+#define	ep_narg		p_un.ex._ep_narg
+#define	ep_rval		p_un.ex._ep_rval
+#define	exit_val	p_un._exit_val
 #define	max_data	p_un._max_data
 #define	min_data	p_un._min_data
 #define	regexp_data	p_un._regexp_data
 #define	fprint_file	p_un._fprint_file
 
 typedef struct _option {
-	char *name;			/* option name */
+	const char *name;		/* option name */
 	enum ntype token;		/* token type */
-	PLAN *(*create)			/* create function */
-		__P((char ***, int));
+	PLAN *(*create)(char ***, int);	/* create function */
 	int arg;			/* function needs arg */
 } OPTION;
 

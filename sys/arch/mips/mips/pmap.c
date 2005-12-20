@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.165 2005/12/17 05:44:11 jmc Exp $	*/
+/*	$NetBSD: pmap.c,v 1.168.2.1 2006/12/20 22:49:41 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.165 2005/12/17 05:44:11 jmc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.168.2.1 2006/12/20 22:49:41 bouyer Exp $");
 
 /*
  *	Manages physical address maps.
@@ -132,6 +132,7 @@ __KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.165 2005/12/17 05:44:11 jmc Exp $");
 #ifdef SYSVSHM
 #include <sys/shm.h>
 #endif
+#include <sys/socketvar.h>	/* XXX: for sock_loan_thresh */
 
 #include <uvm/uvm.h>
 
@@ -518,6 +519,27 @@ pmap_init(void)
 	 * Now it is safe to enable pv entry recording.
 	 */
 	pmap_initialized = TRUE;
+
+#ifdef MIPS3
+	if (MIPS_HAS_R4K_MMU) {
+		/*
+		 * XXX
+		 * Disable sosend_loan() in src/sys/kern/uipc_socket.c
+		 * on MIPS3 CPUs to avoid possible virtual cache aliases
+		 * and uncached mappings in pmap_enter_pv().
+		 * 
+		 * Ideally, read only shared mapping won't cause aliases
+		 * so pmap_enter_pv() should handle any shared read only
+		 * mappings without uncached ops like ARM pmap.
+		 * 
+		 * On the other hand, R4000 and R4400 have the virtual
+		 * coherency exceptions which will happen even on read only
+		 * mappings, so we always have to disable sosend_loan()
+		 * on such CPUs.
+		 */
+		sock_loan_thresh = -1;
+	}
+#endif
 }
 
 /*
@@ -730,7 +752,8 @@ pmap_remove(pmap_t pmap, vaddr_t sva, vaddr_t eva)
 				pmap->pm_stats.wired_count--;
 			pmap->pm_stats.resident_count--;
 			pg = PHYS_TO_VM_PAGE(mips_tlbpfn_to_paddr(entry));
-			pmap_remove_pv(pmap, sva, pg);
+			if (pg)
+				pmap_remove_pv(pmap, sva, pg);
 			if (MIPS_HAS_R4K_MMU)
 				/* See above about G bit */
 				pte->pt_entry = MIPS3_PG_NV | MIPS3_PG_G;
@@ -755,7 +778,7 @@ pmap_remove(pmap_t pmap, vaddr_t sva, vaddr_t eva)
 	if (PMAP_IS_ACTIVE(pmap)) {
 		unsigned asid;
 
-		__asm __volatile("mfc0 %0,$10; nop" : "=r"(asid));
+		__asm volatile("mfc0 %0,$10; nop" : "=r"(asid));
 		asid = (MIPS_HAS_R4K_MMU) ? (asid & 0xff) : (asid & 0xfc0) >> 6;
 		if (asid != pmap->pm_asid) {
 			panic("inconsistency for active TLB flush: %d <-> %d",
@@ -789,7 +812,8 @@ pmap_remove(pmap_t pmap, vaddr_t sva, vaddr_t eva)
 				pmap->pm_stats.wired_count--;
 			pmap->pm_stats.resident_count--;
 			pg = PHYS_TO_VM_PAGE(mips_tlbpfn_to_paddr(entry));
-			pmap_remove_pv(pmap, sva, pg);
+			if (pg)
+				pmap_remove_pv(pmap, sva, pg);
 			pte->pt_entry = mips_pg_nv_bit();
 			/*
 			 * Flush the TLB for the given address.
@@ -913,7 +937,7 @@ pmap_protect(pmap_t pmap, vaddr_t sva, vaddr_t eva, vm_prot_t prot)
 	if (PMAP_IS_ACTIVE(pmap)) {
 		unsigned asid;
 
-		__asm __volatile("mfc0 %0,$10; nop" : "=r"(asid));
+		__asm volatile("mfc0 %0,$10; nop" : "=r"(asid));
 		asid = (MIPS_HAS_R4K_MMU) ? (asid & 0xff) : (asid & 0xfc0) >> 6;
 		if (asid != pmap->pm_asid) {
 			panic("inconsistency for active TLB update: %d <-> %d",
@@ -1283,7 +1307,7 @@ pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
 	if (PMAP_IS_ACTIVE(pmap)) {
 		unsigned asid;
 
-		__asm __volatile("mfc0 %0,$10; nop" : "=r"(asid));
+		__asm volatile("mfc0 %0,$10; nop" : "=r"(asid));
 		asid = (MIPS_HAS_R4K_MMU) ? (asid & 0xff) : (asid & 0xfc0) >> 6;
 		if (asid != pmap->pm_asid) {
 			panic("inconsistency for active TLB update: %d <-> %d",
@@ -1467,26 +1491,44 @@ pmap_extract(pmap_t pmap, vaddr_t va, paddr_t *pap)
 
 #ifdef DEBUG
 	if (pmapdebug & PDB_FOLLOW)
-		printf("pmap_extract(%p, %lx) -> ", pmap, va);
+		printf("pmap_extract(%p, 0x%lx) -> ", pmap, va);
 #endif
 	if (pmap == pmap_kernel()) {
-		pte = kvtopte(va);
+		if (va >= MIPS_KSEG0_START && va < MIPS_KSEG1_START) {
+			pa = MIPS_KSEG0_TO_PHYS(va);
+			goto done;
+		}
+#ifdef DIAGNOSTIC
+		else if (va >= MIPS_KSEG1_START && va < MIPS_KSEG2_START)
+			panic("pmap_extract: kseg1 address 0x%lx", va);
+#endif
+		else
+			pte = kvtopte(va);
 	} else {
 		if (!(pte = pmap_segmap(pmap, va))) {
+#ifdef DEBUG
+			if (pmapdebug & PDB_FOLLOW)
+				printf("not in segmap\n");
+#endif
 			return FALSE;
 		}
 		pte += (va >> PGSHIFT) & (NPTEPG - 1);
 	}
 	if (!mips_pg_v(pte->pt_entry)) {
+#ifdef DEBUG
+		if (pmapdebug & PDB_FOLLOW)
+			printf("PTE not valid\n");
+#endif
 		return FALSE;
 	}
 	pa = mips_tlbpfn_to_paddr(pte->pt_entry) | (va & PGOFSET);
+done:
 	if (pap != NULL) {
 		*pap = pa;
 	}
 #ifdef DEBUG
 	if (pmapdebug & PDB_FOLLOW)
-		printf("pmap_extract: pa %lx\n", (u_long)pa);
+		printf("pa 0x%lx\n", (u_long)pa);
 #endif
 	return TRUE;
 }

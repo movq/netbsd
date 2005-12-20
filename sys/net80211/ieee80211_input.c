@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_input.c,v 1.55 2005/12/16 11:27:33 dyoung Exp $	*/
+/*	$NetBSD: ieee80211_input.c,v 1.64 2006/11/16 01:33:40 christos Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -36,7 +36,7 @@
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_input.c,v 1.81 2005/08/10 16:22:29 sam Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_input.c,v 1.55 2005/12/16 11:27:33 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_input.c,v 1.64 2006/11/16 01:33:40 christos Exp $");
 #endif
 
 #include "opt_inet.h"
@@ -139,13 +139,16 @@ static struct mbuf *ieee80211_defrag(struct ieee80211com *,
 static struct mbuf *ieee80211_decap(struct ieee80211com *, struct mbuf *, int);
 static void ieee80211_send_error(struct ieee80211com *, struct ieee80211_node *,
 		const u_int8_t *mac, int subtype, int arg);
-#ifndef IEEE80211_NO_HOSTAP
 static void ieee80211_deliver_data(struct ieee80211com *,
 	struct ieee80211_node *, struct mbuf *);
+#ifndef IEEE80211_NO_HOSTAP
 static void ieee80211_node_pwrsave(struct ieee80211_node *, int enable);
 static void ieee80211_recv_pspoll(struct ieee80211com *,
 	struct ieee80211_node *, struct mbuf *);
 #endif /* !IEEE80211_NO_HOSTAP */
+static void ieee80211_update_adhoc_node(struct ieee80211com *,
+    struct ieee80211_node *, struct ieee80211_frame *,
+    struct ieee80211_scanparams *, int, u_int32_t);
 
 /*
  * Process a received frame.  The node associated with the sender
@@ -921,8 +924,8 @@ ieee80211_setup_rates(struct ieee80211_node *ni,
 
 static void
 ieee80211_auth_open(struct ieee80211com *ic, struct ieee80211_frame *wh,
-    struct ieee80211_node *ni, int rssi, u_int32_t rstamp, u_int16_t seq,
-    u_int16_t status)
+    struct ieee80211_node *ni, int rssi, u_int32_t rstamp,
+    u_int16_t seq, u_int16_t status)
 {
 
 	if (ni->ni_authmode == IEEE80211_AUTH_SHARED) {
@@ -1365,33 +1368,33 @@ ieee80211_ssid_mismatch(struct ieee80211com *ic, const char *tag,
 	  (((const u_int8_t *)(p))[2] << 16) |		\
 	  (((const u_int8_t *)(p))[3] << 24)))
 
-static int __inline
+static __inline int
 iswpaoui(const u_int8_t *frm)
 {
 	return frm[1] > 3 && LE_READ_4(frm+2) == ((WPA_OUI_TYPE<<24)|WPA_OUI);
 }
 
-static int __inline
+static __inline int
 iswmeoui(const u_int8_t *frm)
 {
 	return frm[1] > 3 && LE_READ_4(frm+2) == ((WME_OUI_TYPE<<24)|WME_OUI);
 }
 
-static int __inline
+static __inline int
 iswmeparam(const u_int8_t *frm)
 {
 	return frm[1] > 5 && LE_READ_4(frm+2) == ((WME_OUI_TYPE<<24)|WME_OUI) &&
 		frm[6] == WME_PARAM_OUI_SUBTYPE;
 }
 
-static int __inline
+static __inline int
 iswmeinfo(const u_int8_t *frm)
 {
 	return frm[1] > 5 && LE_READ_4(frm+2) == ((WME_OUI_TYPE<<24)|WME_OUI) &&
 		frm[6] == WME_INFO_OUI_SUBTYPE;
 }
 
-static int __inline
+static __inline int
 isatherosoui(const u_int8_t *frm)
 {
 	return frm[1] > 3 && LE_READ_4(frm+2) == ((ATH_OUI_TYPE<<24)|ATH_OUI);
@@ -1777,11 +1780,73 @@ ieee80211_saveie(u_int8_t **iep, const u_int8_t *ie)
 	if (*iep == NULL || (*iep)[1] != ie[1]) {
 		if (*iep != NULL)
 			FREE(*iep, M_DEVBUF);
-		MALLOC(*iep, void*, ielen, M_DEVBUF, M_NOWAIT);
+		*iep = malloc(ielen, M_DEVBUF, M_NOWAIT);
 	}
 	if (*iep != NULL)
 		memcpy(*iep, ie, ielen);
 	/* XXX note failure */
+}
+
+static void
+ieee80211_update_adhoc_node(struct ieee80211com *ic, struct ieee80211_node *ni,
+    struct ieee80211_frame *wh, struct ieee80211_scanparams *scan, int rssi,
+    u_int32_t rstamp)
+{
+	if (!IEEE80211_ADDR_EQ(wh->i_addr2, ni->ni_macaddr)) {
+		/*
+		 * Create a new entry in the neighbor table.
+		 * Records the TSF.
+		 */
+		if ((ni = ieee80211_add_neighbor(ic, wh, scan)) == NULL)
+			return;
+	} else if (ni->ni_capinfo == 0) {
+		/*
+		 * Initialize a node that was "faked up."  Records
+		 * the TSF.
+		 *
+		 * No need to check for a change of BSSID: ni could
+		 * not have been the IBSS (ic_bss)
+		 */
+		ieee80211_init_neighbor(ic, ni, wh, scan, 0);
+	} else {
+		/* Record TSF for potential resync. */
+		memcpy(ni->ni_tstamp.data, scan->tstamp, sizeof(ni->ni_tstamp));
+	}
+
+	ni->ni_rssi = rssi;
+	ni->ni_rstamp = rstamp;
+
+	/* Mark a neighbor's change of BSSID. */
+	if (IEEE80211_ADDR_EQ(wh->i_addr3, ni->ni_bssid))
+		return;
+
+	IEEE80211_ADDR_COPY(ni->ni_bssid, wh->i_addr3);
+
+	if (ni != ic->ic_bss)
+		return;
+	else if (ic->ic_flags & IEEE80211_F_DESBSSID) {
+		/*
+		 * Now, ni does not represent a network we
+		 * want to belong to, so start a scan.
+		 */
+		ieee80211_new_state(ic, IEEE80211_S_SCAN, 0);
+		return;
+	} else {
+		/*
+		 * A RUN->RUN transition lets the driver
+		 * reprogram its BSSID filter.
+		 *
+		 * No need to SCAN, we already belong to
+		 * an IBSS that meets our criteria: channel,
+		 * SSID, etc.  It could be harmful to scan,
+		 * too: if a scan does not detect nodes
+		 * belonging to my current IBSS, then we
+		 * will create a new IBSS at the end of
+		 * the scan, needlessly splitting the
+		 * network.
+		 */
+		ieee80211_new_state(ic, IEEE80211_S_RUN, 0);
+	}
 }
 
 void
@@ -2020,67 +2085,32 @@ ieee80211_recv_mgmt(struct ieee80211com *ic, struct mbuf *m0,
 			if (ic->ic_flags & IEEE80211_F_SCAN)
 				ieee80211_add_scan(ic, &scan, wh,
 					subtype, rssi, rstamp);
+			ic->ic_bmiss_count = 0;
 			return;
 		}
 		/*
 		 * If scanning, just pass information to the scan module.
 		 */
 		if (ic->ic_flags & IEEE80211_F_SCAN) {
+			if (ic->ic_flags_ext & IEEE80211_FEXT_PROBECHAN) {
+				/*
+				 * Actively scanning a channel marked passive;
+				 * send a probe request now that we know there
+				 * is 802.11 traffic present.
+				 *
+				 * XXX check if the beacon we recv'd gives
+				 * us what we need and suppress the probe req
+				 */
+				ieee80211_probe_curchan(ic, 1);
+				ic->ic_flags_ext &= ~IEEE80211_FEXT_PROBECHAN;
+			}
 			ieee80211_add_scan(ic, &scan, wh,
 				subtype, rssi, rstamp);
 			return;
 		}
-		if (scan.capinfo & IEEE80211_CAPINFO_IBSS) {
-			if (!IEEE80211_ADDR_EQ(wh->i_addr2, ni->ni_macaddr)) {
-				/*
-				 * Create a new entry in the neighbor table.
-				 */
-				ni = ieee80211_add_neighbor(ic, wh, &scan);
-			} else if (ni->ni_capinfo == 0) {
-				/*
-                                 * Initialize a node that was "faked
-                                 * up."  This updates the TSF, too.
-				 */
-				ieee80211_init_neighbor(ic, ni, wh, &scan, 0);
-			} else if (!IEEE80211_ADDR_EQ(wh->i_addr3,
-				                      ni->ni_bssid)) {
-                                /* Mark a neighbor's change of BSSID. */
-				IEEE80211_ADDR_COPY(ni->ni_bssid, wh->i_addr3);
-
-                                /* If ni is not the BSS node, then
-                                 * there is nothing more to do.
-				 *
-                                 * Otherwise, if ic_des_bssid is
-                                 * set, then ni does not now
-                                 * represent a network we want to
-                                 * belong to, so start a scan.
-                                 * Otherwise, make a RUN->RUN
-                                 * transition to give the driver
-                                 * an opportunity to reprogram its
-                                 * BSSID filter.
-				 */
-				if (ni != ic->ic_bss)
-					;
-				else if (ic->ic_flags & IEEE80211_F_DESBSSID) {
-					ieee80211_new_state(ic,
-					    IEEE80211_S_SCAN, 0);
-					return;
-				} else {
-					ieee80211_new_state(ic,
-					    IEEE80211_S_RUN, 0);
-				}
-			} else {
-				/*
-				 * Record tsf for potential resync.
-				 */
-				memcpy(ni->ni_tstamp.data, scan.tstamp,
-					sizeof(ni->ni_tstamp));
-			}
-			if (ni != NULL) {
-				ni->ni_rssi = rssi;
-				ni->ni_rstamp = rstamp;
-			}
-		}
+		if (scan.capinfo & IEEE80211_CAPINFO_IBSS)
+			ieee80211_update_adhoc_node(ic, ni, wh, &scan, rssi,
+			    rstamp);
 		break;
 	}
 
@@ -2583,6 +2613,11 @@ ieee80211_recv_mgmt(struct ieee80211com *ic, struct mbuf *m0,
 		ic->ic_stats.is_rx_deauth++;
 		IEEE80211_NODE_STAT(ni, rx_deauth);
 
+		if (!IEEE80211_ADDR_EQ(wh->i_addr1, ic->ic_myaddr)) {
+			/* Not intended for this station. */
+			ic->ic_stats.is_rx_mgtdiscard++;
+			break;
+		}
 		IEEE80211_DPRINTF(ic, IEEE80211_MSG_AUTH,
 		    "[%s] recv deauthenticate (reason %d)\n",
 		    ether_sprintf(ni->ni_macaddr), reason);
@@ -2622,6 +2657,11 @@ ieee80211_recv_mgmt(struct ieee80211com *ic, struct mbuf *m0,
 		ic->ic_stats.is_rx_disassoc++;
 		IEEE80211_NODE_STAT(ni, rx_disassoc);
 
+		if (!IEEE80211_ADDR_EQ(wh->i_addr1, ic->ic_myaddr)) {
+			/* Not intended for this station. */
+			ic->ic_stats.is_rx_mgtdiscard++;
+			break;
+		}
 		IEEE80211_DPRINTF(ic, IEEE80211_MSG_ASSOC,
 		    "[%s] recv disassociate (reason %d)\n",
 		    ether_sprintf(ni->ni_macaddr), reason);

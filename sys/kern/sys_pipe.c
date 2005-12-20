@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_pipe.c,v 1.69 2005/12/11 12:24:30 christos Exp $	*/
+/*	$NetBSD: sys_pipe.c,v 1.77 2006/11/01 10:17:59 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -83,7 +83,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_pipe.c,v 1.69 2005/12/11 12:24:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_pipe.c,v 1.77 2006/11/01 10:17:59 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -93,7 +93,6 @@ __KERNEL_RCSID(0, "$NetBSD: sys_pipe.c,v 1.69 2005/12/11 12:24:30 christos Exp $
 #include <sys/filedesc.h>
 #include <sys/filio.h>
 #include <sys/kernel.h>
-#include <sys/lock.h>
 #include <sys/ttycom.h>
 #include <sys/stat.h>
 #include <sys/malloc.h>
@@ -109,16 +108,9 @@ __KERNEL_RCSID(0, "$NetBSD: sys_pipe.c,v 1.69 2005/12/11 12:24:30 christos Exp $
 #include <uvm/uvm.h>
 #include <sys/sysctl.h>
 #include <sys/kernel.h>
+#include <sys/kauth.h>
 
 #include <sys/pipe.h>
-
-/*
- * Avoid microtime(9), it's slow. We don't guard the read from time(9)
- * with splclock(9) since we don't actually need to be THAT sure the access
- * is atomic.
- */
-#define PIPE_TIMESTAMP(tvp)	(*(tvp) = time)
-
 
 /*
  * Use this define if you want to disable *fancy* VM things.  Expect an
@@ -130,9 +122,9 @@ __KERNEL_RCSID(0, "$NetBSD: sys_pipe.c,v 1.69 2005/12/11 12:24:30 christos Exp $
  * interfaces to the outside world
  */
 static int pipe_read(struct file *fp, off_t *offset, struct uio *uio,
-		struct ucred *cred, int flags);
+		kauth_cred_t cred, int flags);
 static int pipe_write(struct file *fp, off_t *offset, struct uio *uio,
-		struct ucred *cred, int flags);
+		kauth_cred_t cred, int flags);
 static int pipe_close(struct file *fp, struct lwp *l);
 static int pipe_poll(struct file *fp, int events, struct lwp *l);
 static int pipe_kqfilter(struct file *fp, struct knote *kn);
@@ -186,7 +178,7 @@ static void pipeclose(struct file *fp, struct pipe *pipe);
 static void pipe_free_kmem(struct pipe *pipe);
 static int pipe_create(struct pipe **pipep, int allockva);
 static int pipelock(struct pipe *pipe, int catch);
-static __inline void pipeunlock(struct pipe *pipe);
+static inline void pipeunlock(struct pipe *pipe);
 static void pipeselwakeup(struct pipe *pipe, struct pipe *sigp, int code);
 #ifndef PIPE_NODIRECT
 static int pipe_direct_write(struct file *fp, struct pipe *wpipe,
@@ -213,9 +205,7 @@ sys_pipe(struct lwp *l, void *v, register_t *retval)
 	struct file *rf, *wf;
 	struct pipe *rpipe, *wpipe;
 	int fd, error;
-	struct proc *p;
 
-	p = l->l_proc;
 	rpipe = wpipe = NULL;
 	if (pipe_create(&rpipe, 1) || pipe_create(&wpipe, 0)) {
 		pipeclose(NULL, rpipe);
@@ -231,7 +221,7 @@ sys_pipe(struct lwp *l, void *v, register_t *retval)
 	 * file descriptor races if we block in the second falloc().
 	 */
 
-	error = falloc(p, &rf, &fd);
+	error = falloc(l, &rf, &fd);
 	if (error)
 		goto free2;
 	retval[0] = fd;
@@ -240,7 +230,7 @@ sys_pipe(struct lwp *l, void *v, register_t *retval)
 	rf->f_data = (caddr_t)rpipe;
 	rf->f_ops = &pipeops;
 
-	error = falloc(p, &wf, &fd);
+	error = falloc(l, &wf, &fd);
 	if (error)
 		goto free3;
 	retval[1] = fd;
@@ -260,7 +250,7 @@ sys_pipe(struct lwp *l, void *v, register_t *retval)
 free3:
 	FILE_UNUSE(rf, l);
 	ffree(rf);
-	fdremove(p->p_fd, retval[0]);
+	fdremove(l->l_proc->p_fd, retval[0]);
 free2:
 	pipeclose(NULL, wpipe);
 	pipeclose(NULL, rpipe);
@@ -313,7 +303,7 @@ pipe_create(struct pipe **pipep, int allockva)
 	memset(pipe, 0, sizeof(struct pipe));
 	pipe->pipe_state = PIPE_SIGNALR;
 
-	PIPE_TIMESTAMP(&pipe->pipe_ctime);
+	getmicrotime(&pipe->pipe_ctime);
 	pipe->pipe_atime = pipe->pipe_ctime;
 	pipe->pipe_mtime = pipe->pipe_ctime;
 	simple_lock_init(&pipe->pipe_slock);
@@ -356,7 +346,7 @@ pipelock(struct pipe *pipe, int catch)
 /*
  * unlock a pipe I/O lock
  */
-static __inline void
+static inline void
 pipeunlock(struct pipe *pipe)
 {
 
@@ -411,7 +401,7 @@ pipeselwakeup(struct pipe *selp, struct pipe *sigp, int code)
 
 /* ARGSUSED */
 static int
-pipe_read(struct file *fp, off_t *offset, struct uio *uio, struct ucred *cred,
+pipe_read(struct file *fp, off_t *offset, struct uio *uio, kauth_cred_t cred,
     int flags)
 {
 	struct pipe *rpipe = (struct pipe *) fp->f_data;
@@ -555,7 +545,7 @@ again:
 	}
 
 	if (error == 0)
-		PIPE_TIMESTAMP(&rpipe->pipe_atime);
+		getmicrotime(&rpipe->pipe_atime);
 
 	PIPE_LOCK(rpipe);
 	pipeunlock(rpipe);
@@ -688,7 +678,7 @@ pipe_direct_write(struct file *fp, struct pipe *wpipe, struct uio *uio)
 
 	/* Loan the write buffer memory from writer process */
 	pgs = wpipe->pipe_map.pgs;
-	error = uvm_loan(&uio->uio_lwp->l_proc->p_vmspace->vm_map, base, blen,
+	error = uvm_loan(&uio->uio_vmspace->vm_map, base, blen,
 			 pgs, UVM_LOAN_TOPAGE);
 	if (error) {
 		pipe_loan_free(wpipe);
@@ -790,7 +780,7 @@ pipe_direct_write(struct file *fp, struct pipe *wpipe, struct uio *uio)
 #endif /* !PIPE_NODIRECT */
 
 static int
-pipe_write(struct file *fp, off_t *offset, struct uio *uio, struct ucred *cred,
+pipe_write(struct file *fp, off_t *offset, struct uio *uio, kauth_cred_t cred,
     int flags)
 {
 	struct pipe *wpipe, *rpipe;
@@ -1042,7 +1032,7 @@ retry:
 		error = 0;
 
 	if (error == 0)
-		PIPE_TIMESTAMP(&wpipe->pipe_mtime);
+		getmicrotime(&wpipe->pipe_mtime);
 
 	/*
 	 * We have something to offer, wake up select/poll.
@@ -1213,8 +1203,8 @@ pipe_stat(struct file *fp, struct stat *ub, struct lwp *l)
 	TIMEVAL_TO_TIMESPEC(&pipe->pipe_atime, &ub->st_atimespec);
 	TIMEVAL_TO_TIMESPEC(&pipe->pipe_mtime, &ub->st_mtimespec);
 	TIMEVAL_TO_TIMESPEC(&pipe->pipe_ctime, &ub->st_ctimespec);
-	ub->st_uid = fp->f_cred->cr_uid;
-	ub->st_gid = fp->f_cred->cr_gid;
+	ub->st_uid = kauth_cred_geteuid(fp->f_cred);
+	ub->st_gid = kauth_cred_getegid(fp->f_cred);
 	/*
 	 * Left as 0: st_dev, st_ino, st_nlink, st_rdev, st_flags, st_gen.
 	 * XXX (st_dev, st_ino) should be unique.

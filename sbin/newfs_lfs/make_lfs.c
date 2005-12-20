@@ -1,4 +1,4 @@
-/*	$NetBSD: make_lfs.c,v 1.5 2005/09/13 04:40:25 christos Exp $	*/
+/*	$NetBSD: make_lfs.c,v 1.10 2006/10/16 03:15:46 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -69,13 +69,12 @@
 #if 0
 static char sccsid[] = "@(#)lfs.c	8.5 (Berkeley) 5/24/95";
 #else
-__RCSID("$NetBSD: make_lfs.c,v 1.5 2005/09/13 04:40:25 christos Exp $");
+__RCSID("$NetBSD: make_lfs.c,v 1.10 2006/10/16 03:15:46 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
-#define FSTYPENAMES
-#include <sys/disklabel.h>
+#include <sys/disk.h>
 #include <sys/time.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
@@ -120,7 +119,7 @@ ufs_daddr_t ifibc; /* How many indirect blocks */
 #endif
 
 static struct lfs lfs_default =  {
-	{ /* lfs_dlfs */
+	.lfs_dlfs = { /* lfs_dlfs */
 		/* dlfs_magic */	LFS_MAGIC,
 		/* dlfs_version */	LFS_VERSION,
 		/* dlfs_size */		0,
@@ -129,7 +128,7 @@ static struct lfs lfs_default =  {
 		/* dlfs_bsize */	DFL_LFSBLOCK,
 		/* dlfs_fsize */	DFL_LFSFRAG,
 		/* dlfs_frag */		DFL_LFSBLOCK/DFL_LFSFRAG,
-		/* dlfs_free */		HIGHEST_USED_INO + 1,
+		/* dlfs_freehd */	HIGHEST_USED_INO + 1,
 		/* dlfs_bfree */	0,
 		/* dlfs_nfiles */	0,
 		/* dlfs_avail */	0,
@@ -175,27 +174,16 @@ static struct lfs lfs_default =  {
 		/* dlfs_serial */	0,
 		/* dlfs_ibsize */	DFL_LFSFRAG,
 		/* dlfs_start */	0,
-		/* dlfs_inodefmt */     LFS_44INODEFMT,
 		/* dlfs_tstamp */       0,
+		/* dlfs_inodefmt */     LFS_44INODEFMT,
 		/* dlfs_interleave */   0,
 		/* dlfs_ident */        0,
 		/* dlfs_fsbtodb */      0,
+		/* dlfs_resvseg */      0,
 
 		/* dlfs_pad */ 		{ 0 },
 		/* dlfs_cksum */	0
 	},
-	/* lfs_sp */		NULL,
-	/* lfs_ivnode */	NULL,
-	/* lfs_seglock */	0,
-	/* lfs_lockpid */	0,
-	/* lfs_iocount */	0,
-	/* lfs_writer */	0,
-	/* lfs_dirops */	0,
-	/* lfs_doifile */	0,
-	/* lfs_nactive */	0,
-	/* lfs_fmod */		0,
-	/* lfs_ronly */		0,
-	/* lfs_flags */		0
 };
 
 #define	UMASK	0755
@@ -317,9 +305,9 @@ make_dir(void *bufp, struct direct *protodir, int entries)
 }
 
 int
-make_lfs(int devfd, uint secsize, struct partition *partp, int minfree,
+make_lfs(int devfd, uint secsize, struct dkwedge_info *dkw, int minfree,
 	 int block_size, int frag_size, int seg_size, int minfreeseg,
-	 int version, daddr_t start, int ibsize, int interleave,
+	 int resvseg, int version, daddr_t start, int ibsize, int interleave,
 	 u_int32_t roll_id)
 {
 	struct ufs1_dinode *dip;	/* Pointer to a disk inode */
@@ -350,7 +338,7 @@ make_lfs(int devfd, uint secsize, struct partition *partp, int minfree,
 	 * Initialize buffer cache.  Use a ballpark guess of the length of
 	 * the segment table for the number of hash chains.
 	 */
-	tnseg = partp->p_size / ((seg_size ? seg_size : DFL_LFSSEG) / secsize);
+	tnseg = dkw->dkw_size / ((seg_size ? seg_size : DFL_LFSSEG) / secsize);
 	tsepb = (block_size ? block_size : DFL_LFSBLOCK) / sizeof(SEGSUM);
 	if (tnseg == 0)
 		fatal("zero size partition");
@@ -369,24 +357,17 @@ make_lfs(int devfd, uint secsize, struct partition *partp, int minfree,
 	fs->lfs_version = version;
 
 	/* If partition is not an LFS partition, warn that that is the case */
-	if(partp->p_fstype != FS_BSDLFS) {
-		fatal("partition label indicated fs type \"%s\", expected \"%s\"",
-		      fstypenames[partp->p_fstype], fstypenames[FS_BSDLFS]);
+	if (strcmp(dkw->dkw_ptype, DKW_PTYPE_LFS) != 0) {
+		fatal("partition label indicated fs type \"%s\", "
+		    "expected \"%s\"", dkw->dkw_ptype, DKW_PTYPE_LFS);
 	}
 
 	if (!(bsize = block_size))
-		if (!(bsize = partp->p_fsize * partp->p_frag))
-			bsize = DFL_LFSBLOCK;
+		bsize = DFL_LFSBLOCK;
 	if (!(fsize = frag_size))
-		if (!(fsize = partp->p_fsize))
-			fsize = DFL_LFSFRAG;
+		fsize = DFL_LFSFRAG;
 	if (!(ssize = seg_size)) {
 		ssize = DFL_LFSSEG;
-		if (partp->p_sgs == 0 ||
-		    !(ssize = (partp->p_fsize * partp->p_frag) << partp->p_sgs))
-		{
-			ssize = DFL_LFSSEG;
-		}
 	}
 	if (version > 1) {
 		if (ibsize == 0)
@@ -411,7 +392,7 @@ make_lfs(int devfd, uint secsize, struct partition *partp, int minfree,
 		      progname, ssize, DFL_LFSSEG);
 		ssize = DFL_LFSSEG;
 	}
-	if (start < 0 || start >= partp->p_size)
+	if (start < 0 || start >= dkw->dkw_size)
 		fatal("filesystem offset %ld out of range", (long)start);
 	if (version == 1) {
 		if (start)
@@ -422,19 +403,19 @@ make_lfs(int devfd, uint secsize, struct partition *partp, int minfree,
     tryagain:
 	/* Modify parts of superblock overridden by command line arguments */
 	if (bsize != DFL_LFSBLOCK || fsize != DFL_LFSFRAG) {
-		fs->lfs_bshift = log2(bsize);
+		fs->lfs_bshift = lfs_log2(bsize);
 		if (1 << fs->lfs_bshift != bsize)
 			fatal("%d: block size not a power of 2", bsize);
 		fs->lfs_bsize = bsize;
 		fs->lfs_fsize = fsize;
 		fs->lfs_bmask = bsize - 1;
 		fs->lfs_ffmask = fsize - 1;
-		fs->lfs_ffshift = log2(fsize);
+		fs->lfs_ffshift = lfs_log2(fsize);
 		if (1 << fs->lfs_ffshift != fsize)
 			fatal("%d: frag size not a power of 2", fsize);
 		fs->lfs_frag = numfrags(fs, bsize);
 		fs->lfs_fbmask = fs->lfs_frag - 1;
-		fs->lfs_fbshift = log2(fs->lfs_frag);
+		fs->lfs_fbshift = lfs_log2(fs->lfs_frag);
 		fs->lfs_ifpb = bsize / sizeof(IFILE);
 		/* XXX ondisk32 */
 		fs->lfs_nindir = bsize / sizeof(int32_t);
@@ -442,7 +423,7 @@ make_lfs(int devfd, uint secsize, struct partition *partp, int minfree,
 
 	if (fs->lfs_version == 1) {
 		fs->lfs_sumsize = LFS_V1_SUMMARY_SIZE;
-		fs->lfs_segshift = log2(ssize);
+		fs->lfs_segshift = lfs_log2(ssize);
 		if (1 << fs->lfs_segshift != ssize)
 			fatal("%d: segment size not power of 2", ssize);
 		fs->lfs_segmask = ssize - 1;
@@ -482,29 +463,37 @@ make_lfs(int devfd, uint secsize, struct partition *partp, int minfree,
 	 * size, disk geometry and current time.
 	 */
 	db_per_blk = bsize/secsize;
-	fs->lfs_blktodb = log2(db_per_blk);
-	fs->lfs_fsbtodb = log2(fsize / secsize);
+	fs->lfs_blktodb = lfs_log2(db_per_blk);
+	fs->lfs_fsbtodb = lfs_log2(fsize / secsize);
 	if (version == 1) {
-		fs->lfs_sushift = log2(fs->lfs_sepb);
+		fs->lfs_sushift = lfs_log2(fs->lfs_sepb);
 		fs->lfs_fsbtodb = 0;
-		fs->lfs_size = partp->p_size >> fs->lfs_blktodb;
+		fs->lfs_size = dkw->dkw_size >> fs->lfs_blktodb;
 	}
 	label_fsb = btofsb(fs, roundup(LFS_LABELPAD, fsize));
 	sb_fsb = btofsb(fs, roundup(LFS_SBPAD, fsize));
 	fs->lfs_fsbpseg = dbtofsb(fs, ssize / secsize);
-	fs->lfs_size = partp->p_size >> fs->lfs_fsbtodb;
-	fs->lfs_dsize = dbtofsb(fs, partp->p_size) -
+	fs->lfs_size = dkw->dkw_size >> fs->lfs_fsbtodb;
+	fs->lfs_dsize = dbtofsb(fs, dkw->dkw_size) -
 		MAX(label_fsb, dbtofsb(fs, start));
 	fs->lfs_nseg = fs->lfs_dsize / segtod(fs, 1);
 
 	fs->lfs_nclean = fs->lfs_nseg - 1;
 	fs->lfs_maxfilesize = maxfilesize(fs->lfs_bshift);
+
 	if (minfreeseg == 0)
 		fs->lfs_minfreeseg = fs->lfs_nseg / DFL_MIN_FREE_SEGS;
 	else
 		fs->lfs_minfreeseg = minfreeseg;
 	if (fs->lfs_minfreeseg < MIN_FREE_SEGS)
 		fs->lfs_minfreeseg = MIN_FREE_SEGS;
+
+	if (resvseg == 0)
+		fs->lfs_resvseg = fs->lfs_minfreeseg / 2 + 1;
+	else
+		fs->lfs_resvseg = resvseg;
+	if (fs->lfs_resvseg < MIN_RESV_SEGS)
+		fs->lfs_resvseg = MIN_RESV_SEGS;
 
 	if(fs->lfs_nseg < fs->lfs_minfreeseg + 1
 	   || fs->lfs_nseg < LFS_MIN_SBINTERVAL + 1)
@@ -597,7 +586,7 @@ make_lfs(int devfd, uint secsize, struct partition *partp, int minfree,
 		if (fs->lfs_version > 1 && fs->lfs_start < label_fsb)
 			sb_addr -= label_fsb - start;
 		if (sb_addr + sizeof(struct dlfs)
-		    >= dbtofsb(fs, partp->p_size))
+		    >= dbtofsb(fs, dkw->dkw_size))
 			break;
 		fs->lfs_sboffs[i] = sb_addr;
 		fs->lfs_dsize -= sb_fsb;
@@ -620,6 +609,8 @@ make_lfs(int devfd, uint secsize, struct partition *partp, int minfree,
 	 */
 	dip = VTOI(fs->lfs_ivnode)->i_din.ffs1_din = (struct ufs1_dinode *)
 		malloc(sizeof(*dip));
+	if (dip == NULL)
+		err(1, NULL);
 	memset(dip, 0, sizeof(*dip));
 	dip->di_mode  = IFREG|IREAD|IWRITE;
 	dip->di_flags = SF_IMMUTABLE;
@@ -633,8 +624,14 @@ make_lfs(int devfd, uint secsize, struct partition *partp, int minfree,
 	 * Set up in-superblock segment usage cache
 	 */
  	fs->lfs_suflags = (u_int32_t **) malloc(2 * sizeof(u_int32_t *));       
+	if (fs->lfs_suflags == NULL)
+		err(1, NULL);
 	fs->lfs_suflags[0] = (u_int32_t *) malloc(fs->lfs_nseg * sizeof(u_int32_t));
+	if (fs->lfs_suflags[0] == NULL)
+		err(1, NULL);
 	fs->lfs_suflags[1] = (u_int32_t *) malloc(fs->lfs_nseg * sizeof(u_int32_t));
+	if (fs->lfs_suflags[1] == NULL)
+		err(1, NULL);
 
 	/*
 	 * Initialize the cleanerinfo block

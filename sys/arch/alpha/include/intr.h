@@ -1,4 +1,4 @@
-/* $NetBSD: intr.h,v 1.53 2005/12/11 12:16:16 christos Exp $ */
+/* $NetBSD: intr.h,v 1.55 2006/02/16 20:17:13 perry Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001, 2002 The NetBSD Foundation, Inc.
@@ -155,7 +155,7 @@ struct scbvec {
 #ifdef	_KERNEL
 
 /* Simulated software interrupt register. */
-extern __volatile unsigned long ssir;
+extern volatile unsigned long ssir;
 
 /* IPL-lowering/restoring macros */
 void	spl0(void);

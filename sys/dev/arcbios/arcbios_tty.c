@@ -1,4 +1,4 @@
-/*	$NetBSD: arcbios_tty.c,v 1.11 2005/12/11 12:21:14 christos Exp $	*/
+/*	$NetBSD: arcbios_tty.c,v 1.15 2006/10/01 19:28:43 elad Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arcbios_tty.c,v 1.11 2005/12/11 12:21:14 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arcbios_tty.c,v 1.15 2006/10/01 19:28:43 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/user.h>
@@ -40,6 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: arcbios_tty.c,v 1.11 2005/12/11 12:21:14 christos Ex
 #include <sys/proc.h>
 #include <sys/tty.h>
 #include <sys/termios.h>
+#include <sys/kauth.h>
 
 #include <dev/cons.h>
 
@@ -90,6 +91,12 @@ arcbios_ttyopen(dev_t dev, int flag, int mode, struct lwp *l)
 	tp->t_oproc = arcbios_tty_start;
 	tp->t_param = arcbios_tty_param;
 	tp->t_dev = dev;
+
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp)) {
+		splx(s);
+		return (EBUSY);
+	}
+
 	if ((tp->t_state & TS_ISOPEN) == 0) {
 		tp->t_state |= TS_CARR_ON;
 		ttychars(tp);
@@ -101,10 +108,6 @@ arcbios_ttyopen(dev_t dev, int flag, int mode, struct lwp *l)
 		ttsetwater(tp);
 
 		setuptimeout = 1;
-	} else if (tp->t_state & TS_XCLUDE &&
-	           suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0) {
-		splx(s);
-		return (EBUSY);
 	}
 
 	splx(s);

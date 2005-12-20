@@ -1,4 +1,4 @@
-/*	$NetBSD: tsarm_machdep.c,v 1.2 2005/12/11 12:17:11 christos Exp $	*/
+/*	$NetBSD: tsarm_machdep.c,v 1.5 2006/11/24 22:04:22 wiz Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003 Wasabi Systems, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tsarm_machdep.c,v 1.2 2005/12/11 12:17:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsarm_machdep.c,v 1.5 2006/11/24 22:04:22 wiz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -317,7 +317,7 @@ cpu_reboot(int howto, char *bootstr)
 		feed = TS7XXX_IO16_VBASE + TS7XXX_WDOGFEED;
 		ctrl = TS7XXX_IO16_VBASE + TS7XXX_WDOGCTRL;
 
-		asm volatile (
+		__asm volatile (
 			"mov r0, #0x5\n"
 			"mov r1, #0x1\n"
 			"strh r0, [%0]\n"
@@ -450,7 +450,7 @@ initarm(void *arg)
 #endif
 
 	/* Fake bootconfig structure for the benefit of pmap.c */
-	/* XXX must make the memory description h/w independant */
+	/* XXX must make the memory description h/w independent */
 	bootconfig.dramblocks = 4;
 	bootconfig.dram[0].address = 0x0UL;
 	bootconfig.dram[0].pages = 0x800000UL / PAGE_SIZE;
@@ -532,6 +532,7 @@ initarm(void *arg)
 
 	loop1 = 0;
 	kernel_l1pt.pv_pa = 0;
+	kernel_l1pt.pv_va = 0;
 	for (loop = 0; loop <= NUM_KERNEL_PTS; ++loop) {
 		/* Are we 16KB aligned for an L1 ? */
 		if (((physical_freeend - L1_TABLE_SIZE) & (L1_TABLE_SIZE - 1)) == 0

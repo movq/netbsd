@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_elf.h,v 1.85 2005/12/18 19:05:12 christos Exp $	*/
+/*	$NetBSD: exec_elf.h,v 1.89.2.1 2007/07/09 10:30:55 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -53,7 +53,19 @@
 #include <inttypes.h>
 #endif /* _KERNEL || _STANDALONE */
 
+#if defined(ELFSIZE)
+#define	CONCAT(x,y)	__CONCAT(x,y)
+#define	ELFNAME(x)	CONCAT(elf,CONCAT(ELFSIZE,CONCAT(_,x)))
+#define	ELFNAME2(x,y)	CONCAT(x,CONCAT(_elf,CONCAT(ELFSIZE,CONCAT(_,y))))
+#define	ELFNAMEEND(x)	CONCAT(x,CONCAT(_elf,ELFSIZE))
+#define	ELFDEFNNAME(x)	CONCAT(ELF,CONCAT(ELFSIZE,CONCAT(_,x)))
+#endif
+
+#if HAVE_NBTOOL_CONFIG_H
+#include <nbinclude/machine/elf_machdep.h>
+#else
 #include <machine/elf_machdep.h>
+#endif
 
 typedef	uint8_t  	Elf_Byte;
 
@@ -382,6 +394,9 @@ typedef struct {
 #define	SHT_NUM		12
 
 #define	SHT_LOOS	0x60000000	/* Operating system specific range */
+#define SHT_SUNW_VERDEF	0x6ffffffd	/* Versions defined by file */
+#define SHT_SUNW_VERNEED 0x6ffffffe	/* Versions needed by file */
+#define SHT_SUNW_VERSYM	0x6fffffff	/* Symbol versions */
 #define	SHT_HIOS	0x6fffffff
 #define	SHT_LOPROC	0x70000000	/* Processor-specific range */
 #define	SHT_HIPROC	0x7fffffff
@@ -566,6 +581,11 @@ typedef struct {
 #define	DT_NUM		29
 
 #define	DT_LOOS		0x60000000	/* Operating system specific range */
+#define DT_VERSYM	0x6ffffff0	/* Symbol versions */
+#define DT_VERDEF	0x6ffffffc	/* Versions defined by file */
+#define DT_VERDEFNUM	0x6ffffffd	/* Number of versions defined by file */
+#define DT_VERNEED	0x6ffffffe	/* Versions needed by file */
+#define DT_VERNEEDNUM	0x6fffffff	/* Number of versions needed by file */
 #define	DT_HIOS		0x6fffffff
 #define	DT_LOPROC	0x70000000	/* Processor-specific range */
 #define	DT_HIPROC	0x7fffffff
@@ -653,6 +673,12 @@ typedef struct {
 
 /* NetBSD-specific note type: Emulation name.  desc is emul name string. */
 #define	ELF_NOTE_TYPE_NETBSD_TAG	1
+/* NetBSD-specific note name and description sizes */
+#define	ELF_NOTE_NETBSD_NAMESZ		7
+#define	ELF_NOTE_NETBSD_DESCSZ		4
+/* NetBSD-specific note name */
+#define	ELF_NOTE_NETBSD_NAME		"NetBSD\0\0"
+
 /* NetBSD-specific note type: Checksum.  There should be 1 NOTE per PT_LOAD
    section.  desc is a tuple of <phnum>(16),<chk-type>(16),<chk-value>. */
 #define	ELF_NOTE_TYPE_CHECKSUM_TAG	2
@@ -661,11 +687,16 @@ typedef struct {
 #define	ELF_NOTE_CHECKSUM_SHA1		3
 #define	ELF_NOTE_CHECKSUM_SHA256	4
 
-/* NetBSD-specific note name and description sizes */
-#define	ELF_NOTE_NETBSD_NAMESZ		7
-#define	ELF_NOTE_NETBSD_DESCSZ		4
-/* NetBSD-specific note name */
-#define	ELF_NOTE_NETBSD_NAME		"NetBSD\0\0"
+/* NetBSD-specific note type: PaX.  There should be 1 NOTE per executable.
+   section.  desc is a 32 bit bitmask */
+#define ELF_NOTE_TYPE_PAX_TAG		3
+#define	ELF_NOTE_PAX_MPROTECT		0x1	/* Force enable Mprotect */
+#define	ELF_NOTE_PAX_NOMPROTECT		0x2	/* Force disable Mprotect */
+#define	ELF_NOTE_PAX_GUARD		0x4	/* Force enable Segvguard */
+#define	ELF_NOTE_PAX_NOGUARD		0x8	/* Force disable Servguard */
+#define ELF_NOTE_PAX_NAMESZ		4
+#define ELF_NOTE_PAX_NAME		"PaX\0"
+#define ELF_NOTE_PAX_DESCSZ		4
 
 /*
  * NetBSD-specific core file information.
@@ -721,14 +752,6 @@ struct netbsd_elfcore_procinfo {
 	/* Add version 2 fields below here. */
 	int32_t		cpi_siglwp;	/* LWP target of killing signal */
 };
-
-#if defined(ELFSIZE)
-#define	CONCAT(x,y)	__CONCAT(x,y)
-#define	ELFNAME(x)	CONCAT(elf,CONCAT(ELFSIZE,CONCAT(_,x)))
-#define	ELFNAME2(x,y)	CONCAT(x,CONCAT(_elf,CONCAT(ELFSIZE,CONCAT(_,y))))
-#define	ELFNAMEEND(x)	CONCAT(x,CONCAT(_elf,ELFSIZE))
-#define	ELFDEFNNAME(x)	CONCAT(ELF,CONCAT(ELFSIZE,CONCAT(_,x)))
-#endif
 
 #if defined(ELFSIZE) && (ELFSIZE == 32)
 #define	Elf_Ehdr	Elf32_Ehdr
@@ -819,6 +842,77 @@ struct elf_args {
         Elf_Addr  arg_phnum;      /* Number of program headers */
 };
 #endif
+
+/*
+ * These constants are used for Elf32_Verdef struct's version number.  
+ */
+#define VER_DEF_NONE		0
+#define	VER_DEF_CURRENT		1
+
+/*
+ * These constants are used for Elf32_Verdef struct's vd_flags.  
+ */
+#define VER_FLG_BASE		0x1
+#define	VER_FLG_WEAK		0x2
+
+/*
+ * These are used in an Elf32_Versym field.
+ */
+#define	VER_NDX_LOCAL		0
+#define	VER_NDX_GLOBAL		1
+
+/*
+ * These constants are used for Elf32_Verneed struct's version number.  
+ */
+#define	VER_NEED_NONE		0
+#define	VER_NEED_CURRENT	1
+
+/*
+ * GNU Extension hidding symb
+ */
+#define	VERSYM_HIDDEN		0x8000
+#define	VERSYM_VERSION		0x7fff
+
+#define	ELF_VER_CHR		'@'
+
+/*
+ * These are current size independent.
+ */
+
+typedef struct {
+	Elf32_Half	vd_version;	/* version number of structure */
+	Elf32_Half	vd_flags;	/* flags (VER_FLG_*) */
+	Elf32_Half	vd_ndx;		/* version index */
+	Elf32_Half	vd_cnt;		/* number of verdaux entries */
+	Elf32_Word	vd_hash;	/* hash of name */
+	Elf32_Word	vd_aux;		/* offset to verdaux entries */
+	Elf32_Word	vd_next;	/* offset to next verdef */
+} Elf32_Verdef;
+
+typedef struct {
+	Elf32_Word	vda_name;	/* string table offset of name */
+	Elf32_Word	vda_next;	/* offset to verdaux */
+} Elf32_Verdaux;
+
+typedef struct {
+	Elf32_Half	vn_version;	/* version number of structure */
+	Elf32_Half	vn_cnt;		/* number of vernaux entries */
+	Elf32_Word	vn_file;	/* string table offset of library name*/
+	Elf32_Word	vn_aux;		/* offset to vernaux entries */
+	Elf32_Word	vn_next;	/* offset to next verneed */
+} Elf32_Verneed;
+
+typedef struct {
+	Elf32_Word	vna_hash;	/* Hash of dependency name */
+	Elf32_Half	vna_flags;	/* flags (VER_FLG_*) */
+	Elf32_Half	vna_other;	/* unused */
+	Elf32_Word	vna_name;	/* string table offset to version name*/
+	Elf32_Word	vna_next;	/* offset to next vernaux */
+} Elf32_Vernaux;
+
+typedef struct {
+	Elf32_Half	vs_vers;
+} Elf32_Versym;
 
 #ifndef _LKM
 #include "opt_execfmt.h"

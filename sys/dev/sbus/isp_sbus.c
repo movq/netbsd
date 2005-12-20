@@ -1,4 +1,4 @@
-/* $NetBSD: isp_sbus.c,v 1.64 2005/12/11 12:23:44 christos Exp $ */
+/* $NetBSD: isp_sbus.c,v 1.66 2006/10/15 20:50:29 martin Exp $ */
 /*
  * This driver, which is contained in NetBSD in the files:
  *
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isp_sbus.c,v 1.64 2005/12/11 12:23:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isp_sbus.c,v 1.66 2006/10/15 20:50:29 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -99,7 +99,9 @@ static struct ispmdvec mdvec = {
 	NULL,
 	isp_sbus_reset1,
 	NULL,
-	ISP_1000_RISC_CODE
+	ISP_1000_RISC_CODE,
+	0,
+	0
 };
 
 struct isp_sbussoftc {
@@ -261,7 +263,7 @@ isp_sbus_attach(struct device *parent, struct device *self, void *aux)
 #endif
 #endif
 
-	isp->isp_confopts = self->dv_cfdata->cf_flags;
+	isp->isp_confopts = device_cfdata(self)->cf_flags;
 	isp->isp_role = ISP_DEFAULT_ROLES;
 
 	/*

@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.h,v 1.17 2005/11/11 17:11:40 christos Exp $	*/
+/*	$NetBSD: msg.h,v 1.20 2006/07/23 22:06:14 ad Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -121,9 +121,9 @@ struct msginfo {
 /* Warning: 64-bit structure padding is needed here */
 struct msgid_ds_sysctl {
 	struct		ipc_perm_sysctl msg_perm;
-	u_int64_t	msg_qnum;
-	u_int64_t	msg_qbytes;
-	u_int64_t	_msg_cbytes;
+	uint64_t	msg_qnum;
+	uint64_t	msg_qbytes;
+	uint64_t	_msg_cbytes;
 	pid_t		msg_lspid;
 	pid_t		msg_lrpid;
 	time_t		msg_stime;
@@ -190,10 +190,16 @@ int	msgsnd(int, const void *, size_t, int);
 ssize_t	msgrcv(int, void *, size_t, long, int);
 __END_DECLS
 #else
+#include <sys/systm.h>
+
 struct proc;
 
 void	msginit(void);
-int	msgctl1(struct proc *, int, int, struct msqid_ds *);
+int	msgctl1(struct lwp *, int, int, struct msqid_ds *);
+int	msgsnd1(struct lwp *, int, const char *, size_t, int, size_t,
+    copyin_t);
+int	msgrcv1(struct lwp *, int, char *, size_t, long, int, size_t,
+    copyout_t, register_t *);
 #endif /* !_KERNEL */
 
 #endif /* !_SYS_MSG_H_ */

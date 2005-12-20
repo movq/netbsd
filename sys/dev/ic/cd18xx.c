@@ -1,4 +1,6 @@
-/*	$NetBSD: cd18xx.c,v 1.12 2005/12/11 12:21:26 christos Exp $	*/
+/*	$NetBSD: cd18xx.c,v 1.18 2006/10/01 20:31:50 elad Exp $	*/
+
+/* XXXad does this even compile? */
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -101,7 +103,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd18xx.c,v 1.12 2005/12/11 12:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd18xx.c,v 1.18 2006/10/01 20:31:50 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -112,6 +114,7 @@ __KERNEL_RCSID(0, "$NetBSD: cd18xx.c,v 1.12 2005/12/11 12:21:26 christos Exp $")
 #include <sys/kernel.h>
 #include <sys/tty.h>
 #include <sys/fcntl.h>
+#include <sys/kauth.h>
 
 #include <machine/bus.h>
 
@@ -131,9 +134,9 @@ __KERNEL_RCSID(0, "$NetBSD: cd18xx.c,v 1.12 2005/12/11 12:21:26 christos Exp $")
 
 static void	cdtty_attach(struct cd18xx_softc *, int);
 
-static __inline void cd18xx_rint(struct cd18xx_softc *, int *);
-static __inline void cd18xx_tint(struct cd18xx_softc *, int *);
-static __inline void cd18xx_mint(struct cd18xx_softc *, int *);
+static inline void cd18xx_rint(struct cd18xx_softc *, int *);
+static inline void cd18xx_tint(struct cd18xx_softc *, int *);
+static inline void cd18xx_mint(struct cd18xx_softc *, int *);
 
 void cdtty_rxsoft(struct cd18xx_softc *, struct cdtty_port *, struct tty *);
 void cdtty_txsoft(struct cd18xx_softc *, struct cdtty_port *, struct tty *);
@@ -198,8 +201,8 @@ struct cd18xx_revs {
 };
 
 /* wait for the CCR to go to zero */
-static __inline int cd18xx_wait_ccr(struct cd18xx_softc *);
-static __inline int
+static inline int cd18xx_wait_ccr(struct cd18xx_softc *);
+static inline int
 cd18xx_wait_ccr(sc)
 	struct cd18xx_softc *sc;
 {
@@ -428,11 +431,7 @@ cdttyopen(dev, flag, mode, p)
 
 	tp = port->p_tty;
 
-	/* enforce exclude */
-	if (tp == NULL ||
-	    (ISSET(tp->t_state, TS_ISOPEN) &&
-	     ISSET(tp->t_state, TS_XCLUDE) &&
-	     suser(p->p_ucred, &p->p_acflag) != 0))
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
 		return (EBUSY);
 
 	s = spltty();
@@ -653,7 +652,8 @@ cdttyioctl(dev, cmd, data, flag, p)
 		break;
 
 	case TIOCSFLAGS:
-		error = suser(p->p_ucred, &p->p_acflag);
+		error = kauth_authorize_device_tty(l->l_cred,
+		    KAUTH_DEVICE_TTY_PRIVSET, tp);
 		if (error)
 			return (error);
 		port->p_swflags = *(int *)data;
@@ -909,8 +909,7 @@ cdttyparam(tp, t)
 	 *    overflows.
 	 *  * Otherwise set it a bit higher.
 	 */
-	p->p_cor3 = (t->c_ospeed <= 1200 ? 1 :
-			 t->c_ospeed <= 38400 ? 8 : 4);
+	p->p_cor3 = (t->c_ospeed <= 1200 ? 1 : t->c_ospeed <= 38400 ? 8 : 4);
 
 #define PORT_RATE(o, s)	\
 	(((((o) + (s)/2) / (s)) + CD18xx_xBRPR_TPC/2) / CD18xx_xBRPR_TPC)
@@ -1124,7 +1123,7 @@ do { \
 #endif
 
 /* receiver interrupt */
-static __inline void
+static inline void
 cd18xx_rint(sc, ns)
 	struct cd18xx_softc *sc;
 	int *ns;
@@ -1202,7 +1201,7 @@ cd18xx_rint(sc, ns)
  * note this relys on the fact that we allow the transmitter FIFO to
  * drain completely
  */
-static __inline void
+static inline void
 cd18xx_tint(sc, ns)
 	struct cd18xx_softc *sc;
 	int *ns;
@@ -1282,7 +1281,7 @@ cd18xx_tint(sc, ns)
 }
 
 /* modem signal change interrupt */
-static __inline void
+static inline void
 cd18xx_mint(sc, ns)
 	struct cd18xx_softc *sc;
 	int *ns;

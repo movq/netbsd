@@ -1,4 +1,4 @@
-/*	$NetBSD: hpcapm.c,v 1.4 2005/12/11 12:21:22 christos Exp $	*/
+/*	$NetBSD: hpcapm.c,v 1.12 2006/11/16 01:32:50 christos Exp $	*/
 
 /*
  * Copyright (c) 2000 Takemura Shin
@@ -29,7 +29,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpcapm.c,v 1.4 2005/12/11 12:21:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpcapm.c,v 1.12 2006/11/16 01:32:50 christos Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_hpcapm.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -39,12 +43,10 @@ __KERNEL_RCSID(0, "$NetBSD: hpcapm.c,v 1.4 2005/12/11 12:21:22 christos Exp $");
 #include <dev/hpc/apm/apmvar.h>
 
 #include <machine/bus.h>
-#include <machine/autoconf.h>
 #include <machine/config_hook.h>
 #include <machine/platid.h>
 #include <machine/platid_mask.h>
 
-#define HPCAPMDEBUG
 #ifdef HPCAPMDEBUG
 #ifndef HPCAPMDEBUG_CONF
 #define HPCAPMDEBUG_CONF 1
@@ -103,23 +105,21 @@ struct apm_accessops hpcapm_accessops = {
 extern struct cfdriver hpcapm_cd;
 
 static int
-hpcapm_match(struct device *parent, struct cfdata *cf, void *aux)
+hpcapm_match(struct device *parent,
+	     struct cfdata *cf, void *aux)
 {
-	struct mainbus_attach_args *ma = aux;
 
-	if (strcmp(ma->ma_name, hpcapm_cd.cd_name) != 0) {
-		return (0);
-	}
-	return (1);
+	return 1;
 }
 
 static void
-hpcapm_attach(struct device *parent, struct device *self, void *aux)
+hpcapm_attach(struct device *parent,
+	      struct device *self, void *aux)
 {
 	struct apmhpc_softc *sc;
 	struct apmdev_attach_args aaa;
 
-	sc = (struct apmhpc_softc *)self;
+	sc = device_private(self);
 	printf(": pseudo power management module\n");
 
 	sc->events = 0;
@@ -142,16 +142,16 @@ hpcapm_attach(struct device *parent, struct device *self, void *aux)
 					  CONFIG_HOOK_SHARE,
 					  hpcapm_hook, sc);
 
-	sc->sc_battery_hook = config_hook(CONFIG_HOOK_PMEVENT,
-					  CONFIG_HOOK_PMEVENT_AC,
-					  CONFIG_HOOK_SHARE,
-					  hpcapm_hook, sc);
+	sc->sc_ac_hook = config_hook(CONFIG_HOOK_PMEVENT,
+				     CONFIG_HOOK_PMEVENT_AC,
+				     CONFIG_HOOK_SHARE,
+				     hpcapm_hook, sc);
 
 	aaa.accessops = &hpcapm_accessops;
 	aaa.accesscookie = sc;
 	aaa.apm_detail = 0x0102;
 
-	sc->sc_apmdev = config_found(self, &aaa, apmprint);
+	sc->sc_apmdev = config_found_ia(self, "apmdevif", &aaa, apmprint);
 }
 
 static int
@@ -183,7 +183,7 @@ hpcapm_hook(void *ctx, int type, long id, void *msg)
 		break;
 	case CONFIG_HOOK_PMEVENT_SUSPENDREQ:
 		if (sc->power_state != APM_SYS_SUSPEND) {
-			DPRINTF(("hpcapm: suspend req\n"));
+			DPRINTF(("hpcapm: suspend request\n"));
 			sc->events |= (1 << APM_USER_SUSPEND_REQ);
 		} else {
 			sc->events |= (1 << APM_NORMAL_RESUME);
@@ -193,20 +193,20 @@ hpcapm_hook(void *ctx, int type, long id, void *msg)
 		switch (message) {
 		case CONFIG_HOOK_BATT_CRITICAL:
 			DPRINTF(("hpcapm: battery state critical\n"));
-			charge = sc->battery_state&APM_BATT_FLAG_CHARGING;
+			charge = sc->battery_state & APM_BATT_FLAG_CHARGING;
 			sc->battery_state = APM_BATT_FLAG_CRITICAL;
 			sc->battery_state |= charge;
 			sc->battery_life = 0;
 			break;
 		case CONFIG_HOOK_BATT_LOW:
 			DPRINTF(("hpcapm: battery state low\n"));
-			charge = sc->battery_state&APM_BATT_FLAG_CHARGING;
+			charge = sc->battery_state & APM_BATT_FLAG_CHARGING;
 			sc->battery_state = APM_BATT_FLAG_LOW;
 			sc->battery_state |= charge;
 			break;
 		case CONFIG_HOOK_BATT_HIGH:
 			DPRINTF(("hpcapm: battery state high\n"));
-			charge = sc->battery_state&APM_BATT_FLAG_CHARGING;
+			charge = sc->battery_state & APM_BATT_FLAG_CHARGING;
 			sc->battery_state = APM_BATT_FLAG_HIGH;
 			sc->battery_state |= charge;
 			break;
@@ -265,7 +265,7 @@ hpcapm_hook(void *ctx, int type, long id, void *msg)
 	case CONFIG_HOOK_PMEVENT_AC:
 		switch (message) {
 		case CONFIG_HOOK_AC_OFF:
-			DPRINTF(("hpcapm: ac not connect\n"));
+			DPRINTF(("hpcapm: ac not connected\n"));
 			sc->battery_state &= ~APM_BATT_FLAG_CHARGING;
 			sc->ac_state = APM_AC_OFF;
 			break;
@@ -275,7 +275,7 @@ hpcapm_hook(void *ctx, int type, long id, void *msg)
 			sc->ac_state = APM_AC_ON;
 			break;
 		case CONFIG_HOOK_AC_ON_NOCHARGE:
-			DPRINTF(("hpcapm: ac connect\n"));
+			DPRINTF(("hpcapm: ac connected\n"));
 			sc->battery_state &= ~APM_BATT_FLAG_CHARGING;
 			sc->ac_state = APM_AC_ON;
 			break;

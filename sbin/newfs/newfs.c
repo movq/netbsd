@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs.c,v 1.87 2005/11/28 22:35:06 dsl Exp $	*/
+/*	$NetBSD: newfs.c,v 1.96 2006/11/25 18:18:22 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1989, 1993, 1994
@@ -78,7 +78,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1989, 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)newfs.c	8.13 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: newfs.c,v 1.87 2005/11/28 22:35:06 dsl Exp $");
+__RCSID("$NetBSD: newfs.c,v 1.96 2006/11/25 18:18:22 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -88,6 +88,7 @@ __RCSID("$NetBSD: newfs.c,v 1.87 2005/11/28 22:35:06 dsl Exp $");
 #include <sys/param.h>
 #include <sys/ioctl.h>
 #include <sys/disklabel.h>
+#include <sys/disk.h>
 #include <sys/file.h>
 #include <sys/mount.h>
 #include <sys/sysctl.h>
@@ -114,10 +115,11 @@ __RCSID("$NetBSD: newfs.c,v 1.87 2005/11/28 22:35:06 dsl Exp $");
 #include <syslog.h>
 #include <unistd.h>
 #include <util.h>
+#include <mntopts.h>
 
-#include "mntopts.h"
 #include "dkcksum.h"
 #include "extern.h"
+#include "partutil.h"
 
 struct mntopt mopts[] = {
 	MOPT_STDOPTS,
@@ -125,18 +127,21 @@ struct mntopt mopts[] = {
 	MOPT_UPDATE,
 	MOPT_GETARGS,
 	MOPT_NOATIME,
-	{ NULL },
+	{ .m_option = NULL },
 };
 
-static struct disklabel *getdisklabel(char *, int);
-static void rewritelabel(char *, int, struct disklabel *);
 static gid_t mfs_group(const char *);
 static uid_t mfs_user(const char *);
 static int64_t strsuftoi64(const char *, const char *, int64_t, int64_t, int *);
-static void usage(void);
-int main(int, char *[]);
+static void usage(void) __attribute__((__noreturn__));
 
 #define	COMPAT			/* allow non-labeled disks */
+
+#ifdef COMPAT
+const char lmsg[] = "%s: can't read disk label; disk type must be specified";
+#else
+const char lmsg[] = "%s: can't read disk label";
+#endif
 
 /*
  * The following two constants set the default block and fragment sizes.
@@ -170,6 +175,11 @@ int main(int, char *[]);
 #define	DFL_SECSIZE	512
 
 /*
+ * Default file system size for "mount_mfs swap /dir" case.
+ */
+#define	DFL_FSSIZE	(8 * 1024 * 1024)
+
+/*
  * MAXBLKPG determines the maximum number of data blocks which are
  * placed in a single cylinder group. The default is one indirect
  * block worth of data blocks.
@@ -188,6 +198,8 @@ int main(int, char *[]);
 int	mfs;			/* run as the memory based filesystem */
 int	Nflag;			/* run without writing file system */
 int	Oflag = 1;		/* format as an 4.3BSD file system */
+int	verbosity;		/* amount of printf() output */
+#define DEFAULT_VERBOSITY 3	/* 4 is traditional behavior */
 int64_t	fssize;			/* file system size */
 int	sectorsize;		/* bytes/sector */
 int	fsize = 0;		/* fragment size */
@@ -201,14 +213,12 @@ int	maxcontig = 0;		/* max contiguous blocks to allocate */
 int	maxbpg;			/* maximum blocks per file in a cyl group */
 int	avgfilesize = AVFILESIZ;/* expected average file size */
 int	avgfpdir = AFPDIR;	/* expected number of files per directory */
-int	mntflags = MNT_ASYNC;	/* flags to be passed to mount */
+int	mntflags = 0;		/* flags to be passed to mount */
 u_long	memleft;		/* virtual memory available */
 caddr_t	membase;		/* start address of memory based filesystem */
 int	needswap;		/* Filesystem not in native byte order */
-#ifdef COMPAT
-char	*disktype;
+char	*disktype = NULL;
 int	unlabeled;
-#endif
 char *appleufs_volname = 0; /* Apple UFS volume name */
 int isappleufs = 0;
 
@@ -217,13 +227,11 @@ char	device[MAXPATHLEN];
 int
 main(int argc, char *argv[])
 {
-	struct partition *pp = NULL;
-	struct disklabel *lp = NULL;
-	struct partition oldpartition;
+	struct disk_geom geo;
+	struct dkwedge_info dkw;
 	struct statvfs *mp;
 	struct stat sb;
 	int ch, fsi, fso, len, n, Fflag, Iflag, Zflag;
-	uint ptn = 0;	/* gcc -Wuninitialised */
 	char *cp, *s1, *s2, *special;
 	const char *opstring;
 	int byte_sized = 0;
@@ -237,10 +245,12 @@ main(int argc, char *argv[])
 	mode_t mfsmode = 01777;	/* default mode for a /tmp-type directory */
 	uid_t mfsuid = 0;	/* user root */
 	gid_t mfsgid = 0;	/* group wheel */
+	mntoptparse_t mo;
 
 	cp = NULL;
 	fsi = fso = -1;
 	Fflag = Iflag = Zflag = 0;
+	verbosity = -1;
 	if (strstr(getprogname(), "mfs")) {
 		mfs = 1;
 	} else {
@@ -253,8 +263,8 @@ main(int argc, char *argv[])
 	}
 
 	opstring = mfs ?
-	    "NT:a:b:d:e:f:g:h:i:m:n:o:p:s:u:" :
-	    "B:FINO:S:T:Za:b:d:e:f:g:h:i:l:m:n:o:p:r:s:u:v:";
+	    "NT:V:a:b:d:e:f:g:h:i:m:n:o:p:s:u:" :
+	    "B:FINO:S:T:V:Za:b:d:e:f:g:h:i:l:m:n:o:r:s:v:";
 	while ((ch = getopt(argc, argv, opstring)) != -1)
 		switch (ch) {
 		case 'B':
@@ -277,19 +287,28 @@ main(int argc, char *argv[])
 			break;
 		case 'N':
 			Nflag = 1;
+			if (verbosity == -1)
+				verbosity = DEFAULT_VERBOSITY;
 			break;
 		case 'O':
 			Oflag = strsuftoi64("format", optarg, 0, 2, NULL);
 			break;
 		case 'S':
+			/* XXX: non-512 byte sectors almost certainly don't work. */
 			sectorsize = strsuftoi64("sector size",
-			    optarg, 1, INT_MAX, NULL);
+			    optarg, 512, 65536, NULL);
+			if (sectorsize & (sectorsize - 1))
+				errx(1, "sector size `%s' is not a power of 2.",
+				    optarg);
 			break;
 #ifdef COMPAT
 		case 'T':
 			disktype = optarg;
 			break;
 #endif
+		case 'V':
+			verbosity = strsuftoi64("verbose", optarg, 0, 4, NULL);
+			break;
 		case 'Z':
 			Zflag = 1;
 			break;
@@ -339,9 +358,12 @@ main(int argc, char *argv[])
 			    optarg, 1, INT_MAX, NULL);
 			break;
 		case 'o':
-			if (mfs)
-				getmntopts(optarg, mopts, &mntflags, 0);
-			else {
+			if (mfs) {
+				mo = getmntopts(optarg, mopts, &mntflags, 0);
+				if (mo == NULL)
+					err(1, "getmntopts");
+				freemntopts(mo);
+			} else {
 				if (strcmp(optarg, "space") == 0)
 					opt = FS_OPTSPACE;
 				else if (strcmp(optarg, "time") == 0)
@@ -353,21 +375,17 @@ main(int argc, char *argv[])
 			}
 			break;
 		case 'p':
-			if (mfs) {
-				if ((mfsmode = strtol(optarg, NULL, 8)) <= 0)
-					errx(1, "bad mode `%s'", optarg);
-			} else
-				errx(1, "unknown option 'p'");
+			/* mfs only */
+			if ((mfsmode = strtol(optarg, NULL, 8)) <= 0)
+				errx(1, "bad mode `%s'", optarg);
 			break;
 		case 's':
 			fssize = strsuftoi64("file system size",
 			    optarg, INT64_MIN, INT64_MAX, &byte_sized);
 			break;
 		case 'u':
-			if (mfs)
-				mfsuid = mfs_user(optarg);
-			else
-				errx(1, "deprecated option 'u'");
+			/* mfs only */
+			mfsuid = mfs_user(optarg);
 			break;
 		case 'v':
 			appleufs_volname = optarg;
@@ -384,11 +402,17 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
+	if (verbosity == -1)
+		/* Default to not showing CG info if mfs */
+		verbosity = mfs ? 0 : DEFAULT_VERBOSITY;
+
 #ifdef MFS
 	/* This is enough to get through the correct kernel code paths */
 	memset(&args, 0, sizeof args);
 	args.fspec = mountfromname;
 	if (mntflags & (MNT_GETARGS | MNT_UPDATE)) {
+		if ((mntflags & MNT_GETARGS) == 0)
+			mntflags |= MNT_ASYNC;
 		if (mount(MOUNT_MFS, argv[1], mntflags, &args) < 0)
 			err(1, "mount `%s' failed", argv[1]);
 		if (mntflags & MNT_GETARGS)
@@ -400,7 +424,6 @@ main(int argc, char *argv[])
 	if (argc != 2 && (mfs || argc != 1))
 		usage();
 
-	memset(&oldpartition, 0, sizeof oldpartition);
 	memset(&sb, 0, sizeof sb);
 	special = argv[0];
 	if (Fflag || mfs) {
@@ -412,9 +435,13 @@ main(int argc, char *argv[])
 			sectorsize = DFL_SECSIZE;
 
 		if (mfs) {
-			/* Default filesystem size to that of supplied device */
+			/*
+			 * Default filesystem size to that of supplied device,
+			 * and fall back to 8M
+			 */
 			if (fssize == 0)
-				stat(special, &sb);
+				if (stat(special, &sb) == -1)
+					fssize = DFL_FSSIZE / sectorsize;
 		} else {
 			/* creating image in a regular file */
 			int fl;
@@ -473,34 +500,39 @@ main(int argc, char *argv[])
 		if (disktype == NULL)
 			disktype = argv[1];
 #endif
-		lp = getdisklabel(special, fsi);
+		if (getdiskinfo(special, fsi, disktype, &geo, &dkw) == -1)
+			errx(1, lmsg, special);
+		unlabeled = disktype != NULL;
+
 		if (sectorsize == 0) {
-			sectorsize = lp->d_secsize;
+			sectorsize = geo.dg_secsize;
 			if (sectorsize <= 0)
 				errx(1, "no default sector size");
 		}
 
-		ptn = strchr(special, '\0')[-1] - 'a';
-		if (ptn < lp->d_npartitions && ptn == DISKPART(sb.st_rdev)) {
-			/* Assume partition really does match the label */
-			pp = &lp->d_partitions[ptn];
-			oldpartition = *pp;
-			if (pp->p_size == 0)
-				errx(1, "`%c' partition is unavailable",
-					'a' + ptn);
-			if (pp->p_fstype == FS_APPLEUFS)
+		if (dkw.dkw_parent[0]) {
+			if (dkw.dkw_size == 0)
+				errx(1, "%s partition is unavailable", special);
+
+			if (strcmp(dkw.dkw_ptype, DKW_PTYPE_APPLEUFS) == 0)
 				isappleufs = 1;
+				
 			if (!Iflag) {
+				static const char m[] =
+				    "%s partition type is not `%s'";
 				if (isappleufs) {
-					if (pp->p_fstype != FS_APPLEUFS)
-						errx(1, "`%c' partition type is not `Apple UFS'", 'a' + ptn);
+					if (strcmp(dkw.dkw_ptype,
+					    DKW_PTYPE_APPLEUFS))
+						errx(1, m,
+						    special, "Apple UFS");
 				} else {
-					if (pp->p_fstype != FS_BSDFFS)
-						errx(1, "`%c' partition type is not `4.2BSD'", 'a' + ptn);
+					if (strcmp(dkw.dkw_ptype,
+					    DKW_PTYPE_FFS))
+						errx(1, m, special, "4.2BSD");
 				}
 			}
-		}
-	}	/* !Fflag && !mfs */
+		}	/* !Fflag && !mfs */
+	}
 
 	if (byte_sized)
 		fssize /= sectorsize;
@@ -508,15 +540,15 @@ main(int argc, char *argv[])
 		if (sb.st_size != 0)
 			fssize += sb.st_size / sectorsize;
 		else
-			fssize += oldpartition.p_size;
+			fssize += dkw.dkw_size;
 		if (fssize <= 0)
 			errx(1, "Unable to determine file system size");
 	}
 
-	if (pp != NULL && fssize > pp->p_size)
+	if (dkw.dkw_parent[0] && fssize > dkw.dkw_size)
 		errx(1, "size %" PRIu64 " exceeds maximum file system size on "
-		    "`%s' of %u sectors",
-		    fssize, special, pp->p_size);
+		    "`%s' of %" PRIu64 " sectors",
+		    fssize, special, dkw.dkw_size);
 
 	/* XXXLUKEM: only ftruncate() regular files ? (dsl: or at all?) */
 	if (Fflag && fso != -1
@@ -539,9 +571,10 @@ main(int argc, char *argv[])
 			err(1, "can't malloc buffer of %d",
 			bufsize);
 		bufrem = fssize * sectorsize;
-		printf(
-    "Creating file system image in `%s', size %lld bytes, in %d byte chunks.\n",
-		    special, (long long)bufrem, bufsize);
+		if (verbosity > 0)
+			printf( "Creating file system image in `%s', "
+			    "size %lld bytes, in %d byte chunks.\n",
+			    special, (long long)bufrem, bufsize);
 		while (bufrem > 0) {
 			i = write(fso, buf, MIN(bufsize, bufrem));
 			if (i == -1)
@@ -554,8 +587,6 @@ main(int argc, char *argv[])
 	/* Sort out fragment and block sizes */
 	if (fsize == 0) {
 		fsize = bsize / DFL_FRAG_BLK;
-		if (fsize == 0)
-			fsize = oldpartition.p_fsize;
 		if (fsize <= 0) {
 			if (isappleufs) {
 				fsize = APPLEUFS_DFL_FRAGSIZE;
@@ -571,14 +602,11 @@ main(int argc, char *argv[])
 			}
 		}
 	}
-	if (bsize == 0) {
-		bsize = oldpartition.p_frag * oldpartition.p_fsize;
-		if (bsize <= 0) {
-			if (isappleufs)
-				bsize = APPLEUFS_DFL_BLKSIZE;
-			else
-				bsize = DFL_FRAG_BLK * fsize;
-		}
+	if (bsize <= 0) {
+		if (isappleufs)
+			bsize = APPLEUFS_DFL_BLKSIZE;
+		else
+			bsize = DFL_FRAG_BLK * fsize;
 	}
 
 	if (isappleufs && (fsize < APPLEUFS_DFL_FRAGSIZE)) {
@@ -611,10 +639,7 @@ main(int argc, char *argv[])
 		else
 			maxbpg = MAXBLKPG_UFS2(bsize);
 	}
-	mkfs(pp, special, fsi, fso, mfsmode, mfsuid, mfsgid);
-	if (!Nflag && pp != NULL
-	    && memcmp(pp, &oldpartition, sizeof(oldpartition)))
-		rewritelabel(special, fso, lp);
+	mkfs(special, fsi, fso, mfsmode, mfsuid, mfsgid);
 	if (fsi != -1 && fsi != fso)
 		close(fsi);
 	if (fso != -1)
@@ -677,95 +702,11 @@ main(int argc, char *argv[])
 
 		args.base = membase;
 		args.size = fssize * sectorsize;
-		if (mount(MOUNT_MFS, argv[1], mntflags, &args) < 0)
+		if (mount(MOUNT_MFS, argv[1], mntflags | MNT_ASYNC, &args) < 0)
 			exit(errno); /* parent prints message */
 	}
 #endif
 	exit(0);
-}
-
-#ifdef COMPAT
-const char lmsg[] = "%s: can't read disk label; disk type must be specified";
-#else
-const char lmsg[] = "%s: can't read disk label";
-#endif
-
-static struct disklabel *
-getdisklabel(char *s, int fd)
-{
-	static struct disklabel lab;
-
-#ifdef COMPAT
-	if (disktype) {
-		struct disklabel *lp;
-
-		unlabeled++;
-		lp = getdiskbyname(disktype);
-		if (lp == NULL)
-			errx(1, "%s: unknown disk type", disktype);
-		return (lp);
-	}
-#endif
-	if (ioctl(fd, DIOCGDINFO, &lab) < 0) {
-		warn("ioctl (GDINFO)");
-		errx(1, lmsg, s);
-	}
-	return (&lab);
-}
-
-static void
-rewritelabel(char *s, int fd, struct disklabel *lp)
-{
-#ifdef COMPAT
-	if (unlabeled)
-		return;
-#endif
-	lp->d_checksum = 0;
-	lp->d_checksum = dkcksum(lp);
-	if (ioctl(fd, DIOCWDINFO, (char *)lp) < 0) {
-		if (errno == ESRCH)
-			return;
-		warn("ioctl (WDINFO)");
-		errx(1, "%s: can't rewrite disk label", s);
-	}
-#if __vax__
-	if (lp->d_type == DTYPE_SMD && lp->d_flags & D_BADSECT) {
-		int i;
-		int cfd;
-		daddr_t alt;
-		off_t loff;
-		char specname[64];
-		char blk[1024];
-		char *cp;
-
-		/*
-		 * Make name for 'c' partition.
-		 */
-		strlcpy(specname, s, sizeof(specname));
-		cp = specname + strlen(specname) - 1;
-		if (!isdigit((unsigned char)*cp))
-			*cp = 'c';
-		cfd = open(specname, O_WRONLY);
-		if (cfd < 0)
-			err(1, "%s: open", specname);
-		if ((loff = getlabeloffset()) < 0)
-			err(1, "getlabeloffset()");
-		memset(blk, 0, sizeof(blk));
-		*(struct disklabel *)(blk + loff) = *lp;
-		alt = lp->d_ncylinders * lp->d_secpercyl - lp->d_nsectors;
-		for (i = 1; i < 11 && i < lp->d_nsectors; i += 2) {
-			off_t offset;
-
-			offset = alt + i;
-			offset *= lp->d_secsize;
-			if (lseek(cfd, offset, SEEK_SET) == -1)
-				err(1, "lseek to badsector area: ");
-			if (write(cfd, blk, lp->d_secsize) < lp->d_secsize)
-				warn("alternate label %d write", i/2);
-		}
-		close(cfd);
-	}
-#endif
 }
 
 static gid_t
@@ -851,6 +792,7 @@ struct help_strings {
 #ifdef COMPAT
 	{ NEWFS,	"-T disktype\tdisk type" },
 #endif
+	{ BOTH,		"-V verbose\toutput verbosity: 0 ==> none, 4 ==> max" },
 	{ NEWFS,	"-Z \t\tpre-zero the image file" },
 	{ BOTH,		"-a maxcontig\tmaximum contiguous blocks" },
 	{ BOTH,		"-b bsize\tblock size" },

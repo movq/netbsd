@@ -1,4 +1,4 @@
-/*	$NetBSD: key.c,v 1.26 2005/12/11 12:25:05 christos Exp $	*/
+/*	$NetBSD: key.c,v 1.30.2.2 2007/05/24 19:13:12 pavel Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/key.c,v 1.3.2.3 2004/02/14 22:23:23 bms Exp $	*/
 /*	$KAME: key.c,v 1.191 2001/06/27 10:46:49 sakane Exp $	*/
 
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: key.c,v 1.26 2005/12/11 12:25:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: key.c,v 1.30.2.2 2007/05/24 19:13:12 pavel Exp $");
 
 /*
  * This code is referd to RFC 2367
@@ -102,6 +102,8 @@ __KERNEL_RCSID(0, "$NetBSD: key.c,v 1.26 2005/12/11 12:25:05 christos Exp $");
 
 #include <netipsec/xform.h>
 #include <netipsec/ipsec_osdep.h>
+#include <netipsec/ipcomp.h>
+
 
 #include <machine/stdarg.h>
 
@@ -503,7 +505,7 @@ static const char *key_getfqdn __P((void));
 static const char *key_getuserfqdn __P((void));
 #endif
 static void key_sa_chgstate __P((struct secasvar *, u_int8_t));
-static  __inline void key_sp_dead __P((struct secpolicy *));
+static inline void key_sp_dead __P((struct secpolicy *));
 static void key_sp_unlink __P((struct secpolicy *sp));
 
 static struct mbuf *key_alloc_mbuf __P((int));
@@ -532,7 +534,7 @@ struct callout key_timehandler_ch;
 } while (0)
 
 
-static __inline void
+static inline void
 key_sp_dead(struct secpolicy *sp)
 {
 
@@ -1048,10 +1050,34 @@ key_allocsa(
 	u_int stateidx, state;
 	int s;
 
+	int must_check_spi = 1;
+	int must_check_alg = 0;
+	u_int16_t cpi = 0;
+	u_int8_t algo = 0;
+
 	IPSEC_ASSERT(dst != NULL, ("key_allocsa: null dst address"));
 
 	KEYDEBUG(KEYDEBUG_IPSEC_STAMP,
 		printf("DP key_allocsa from %s:%u\n", where, tag));
+
+	/*
+	 * XXX IPCOMP case 
+	 * We use cpi to define spi here. In the case where cpi <=
+	 * IPCOMP_CPI_NEGOTIATE_MIN, cpi just define the algorithm used, not
+	 * the real spi. In this case, don't check the spi but check the
+	 * algorithm
+	 */
+    
+	if (proto == IPPROTO_IPCOMP) {
+		u_int32_t tmp;
+		tmp = ntohl(spi);
+		cpi = (u_int16_t) tmp;
+		if (cpi < IPCOMP_CPI_NEGOTIATE_MIN) {
+			algo = (u_int8_t) cpi;
+			must_check_spi = 0;
+			must_check_alg = 1;
+		}
+	}
 
 	/*
 	 * searching SAD.
@@ -1075,8 +1101,12 @@ key_allocsa(
 					continue;
 				if (proto != sav->sah->saidx.proto)
 					continue;
-				if (spi != sav->spi)
+				if (must_check_spi && spi != sav->spi)
 					continue;
+				/* XXX only on the ipcomp case */
+				if (must_check_alg && algo != sav->alg_comp)
+					continue;
+
 #if 0	/* don't check src */
 				/* check src address */
 				if (key_sockaddrcmp(&src->sa, &sav->sah->saidx.src.sa, 0) != 0)
@@ -1767,32 +1797,6 @@ key_spdadd(so, m, mhp)
 	dst0 = (struct sadb_address *)mhp->ext[SADB_EXT_ADDRESS_DST];
 	xpl0 = (struct sadb_x_policy *)mhp->ext[SADB_X_EXT_POLICY];
 
-#if defined(__NetBSD__) && defined(INET6)
-	/*
-	 * On NetBSD, FAST_IPSEC and INET6 can be configured together,
-	 * but FAST_IPSEC does not protect IPv6 traffic.
-	 * Rather than silently leaking IPv6 traffic for which IPsec
-	 * is configured, forbid  specifying IPsec for IPv6 traffic.
-	 *
-	 * (On FreeBSD, both FAST_IPSEC and INET6 gives a compile-time error.)
-	 */
-	if (((const struct sockaddr *)(src0 + 1))->sa_family == AF_INET6 ||
-	    ((const struct sockaddr *)(dst0 + 1))->sa_family == AF_INET6) {
-		static int v6_warned = 0;
-
-		if (v6_warned == 0) {
-			printf("key_spdadd: FAST_IPSEC does not support IPv6.");
-			printf("Check syslog for more per-SPD warnings.\n");
-			v6_warned++;
-		}
-		log(LOG_WARNING,
-		    "FAST_IPSEC does not support PF_INET6 SPDs. "
-		    "Request refused.\n");
-
-		return EOPNOTSUPP;	/* EPROTOTYPE?  EAFNOSUPPORT? */
-	}
-#endif /* __NetBSD__ && INET6 */
-
 	/* make secindex */
 	/* XXX boundary check against sa_len */
 	KEY_SETSECSPIDX(xpl0->sadb_x_policy_dir,
@@ -2147,7 +2151,7 @@ key_spddelete2(so, m, mhp)
 	/* Is there SP in SPD ? */
 	if ((sp = key_getspbyid(id)) == NULL) {
 		ipseclog((LOG_DEBUG, "key_spddelete2: no SP found id:%u.\n", id));
-		key_senderror(so, m, EINVAL);
+		return key_senderror(so, m, EINVAL);
 	}
 
 	key_sp_dead(sp);
@@ -2255,7 +2259,9 @@ key_spdget(so, m, mhp)
 		return key_senderror(so, m, ENOENT);
 	}
 
-	n = key_setdumpsp(sp, SADB_X_SPDGET, 0, mhp->msg->sadb_msg_pid);
+	n = key_setdumpsp(sp, SADB_X_SPDGET, mhp->msg->sadb_msg_seq,
+                                         mhp->msg->sadb_msg_pid);
+    KEY_FREESP(&sp); /* ref gained by key_getspbyid */
 	if (n != NULL) {
 		m_freem(m);
 		return key_sendup_mbuf(so, n, KEY_SENDUP_ONE);
@@ -2404,7 +2410,10 @@ key_spdflush(so, m, mhp)
 	return key_sendup_mbuf(so, m, KEY_SENDUP_ALL);
 }
 
-static struct sockaddr key_src = { 2, PF_KEY, };
+static struct sockaddr key_src = { 
+	.sa_len = 2, 
+	.sa_family = PF_KEY,
+};
 
 static struct mbuf *
 key_setspddump_chain(int *errorp, int *lenp, pid_t pid)
@@ -3368,7 +3377,7 @@ key_mature(sav)
 	switch (sav->sah->saidx.proto) {
 	case IPPROTO_ESP:
 	case IPPROTO_AH:
-		if (ntohl(sav->spi) >= 0 && ntohl(sav->spi) <= 255) {
+		if (ntohl(sav->spi) <= 255) {
 			ipseclog((LOG_DEBUG,
 			    "key_mature: illegal range of SPI %u.\n",
 			    (u_int32_t)ntohl(sav->spi)));
@@ -4487,7 +4496,7 @@ key_timehandler(void* arg)
 }
 
 #ifdef __NetBSD__
-void srandom(int arg);
+void srandom(int);
 void srandom(int arg) {return;}
 #endif
 
@@ -4826,7 +4835,7 @@ key_do_getnewspi(spirange, saidx)
 	}
 
 	if (spmin == spmax) {
-		if (key_checkspidup(saidx, spmin) != NULL) {
+		if (key_checkspidup(saidx, htonl(spmin)) != NULL) {
 			ipseclog((LOG_DEBUG, "key_do_getnewspi: SPI %u exists already.\n", spmin));
 			return 0;
 		}
@@ -4844,7 +4853,7 @@ key_do_getnewspi(spirange, saidx)
 			/* generate pseudo-random SPI value ranged. */
 			newspi = spmin + (key_random() % (spmax - spmin + 1));
 
-			if (key_checkspidup(saidx, newspi) == NULL)
+			if (key_checkspidup(saidx, htonl(newspi)) == NULL)
 				break;
 		}
 
@@ -5976,8 +5985,8 @@ key_acquire(const struct secasindex *saidx, struct secpolicy *sp)
 		id->sadb_ident_exttype = idexttype;
 		id->sadb_ident_type = SADB_IDENTTYPE_USERFQDN;
 		/* XXX is it correct? */
-		if (curproc && curproc->p_cred)
-			id->sadb_ident_id = curproc->p_cred->p_ruid;
+		if (curlwp)
+			id->sadb_ident_id = kauth_cred_getuid(curlwp->l_cred);
 		if (userfqdn && userfqdnlen)
 			bcopy(userfqdn, id + 1, userfqdnlen);
 		p += sizeof(struct sadb_ident) + PFKEY_ALIGN8(userfqdnlen);
@@ -7381,6 +7390,11 @@ key_init()
 	ip4_def_policy.policy = IPSEC_POLICY_NONE;
 	ip4_def_policy.refcnt++;	/*never reclaim this*/
 
+#ifdef INET6
+	ip6_def_policy.policy = IPSEC_POLICY_NONE;
+	ip6_def_policy.refcnt++;	/*never reclaim this*/
+#endif
+
 
 #ifndef IPSEC_DEBUG2
 	callout_reset(&key_timehandler_ch, hz, key_timehandler, (void *)0);
@@ -7403,11 +7417,12 @@ key_init()
  * xxx more checks to be provided
  */
 int
-key_checktunnelsanity(sav, family, src, dst)
-	struct secasvar *sav;
-	u_int family;
-	caddr_t src;
-	caddr_t dst;
+key_checktunnelsanity(
+    struct secasvar *sav,
+    u_int family,
+    caddr_t src,
+    caddr_t dst
+)
 {
 	/* sanity check */
 	if (sav->sah == NULL)

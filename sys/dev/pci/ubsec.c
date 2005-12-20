@@ -1,4 +1,4 @@
-/*	$NetBSD: ubsec.c,v 1.8 2005/11/25 16:16:46 thorpej Exp $	*/
+/*	$NetBSD: ubsec.c,v 1.11 2006/11/16 01:33:10 christos Exp $	*/
 /* $FreeBSD: src/sys/dev/ubsec/ubsec.c,v 1.6.2.6 2003/01/23 21:06:43 sam Exp $ */
 /*	$OpenBSD: ubsec.c,v 1.127 2003/06/04 14:04:58 jason Exp $	*/
 
@@ -284,7 +284,8 @@ ubsec_lookup(const struct pci_attach_args *pa)
 }
 
 static int
-ubsec_probe(struct device *parent, struct cfdata *match, void *aux)
+ubsec_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 
@@ -883,7 +884,7 @@ ubsec_newsession(void *arg, u_int32_t *sidp, struct cryptoini *cri)
 			macini->cri_key[i] ^= HMAC_OPAD_VAL;
 	}
 
-	*sidp = UBSEC_SID(sc->sc_dv.dv_unit, sesn);
+	*sidp = UBSEC_SID(device_unit(&sc->sc_dv), sesn);
 	return (0);
 }
 

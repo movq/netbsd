@@ -1,7 +1,7 @@
-/*	$NetBSD: msgcat.c,v 1.1.1.1 2004/05/17 23:45:05 christos Exp $	*/
+/*	$NetBSD: msgcat.c,v 1.1.1.3.4.1 2007/05/17 00:42:40 jdc Exp $	*/
 
 /*
- * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -17,14 +17,16 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: msgcat.c,v 1.10.12.4 2004/03/08 09:04:54 marka Exp */
+/* Id: msgcat.c,v 1.13.18.3 2005/06/08 02:07:57 marka Exp */
 
-/*
- * Principal Author: Bob Halley
+/*! \file msgcat.c
+ *
+ * \author Principal Author: Bob Halley
  */
 
 #include <config.h>
 
+#include <stddef.h>
 #include <stdlib.h>
 
 #include <isc/magic.h>

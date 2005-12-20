@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_input.c,v 1.222 2005/12/11 12:24:57 christos Exp $	*/
+/*	$NetBSD: ip_input.c,v 1.236.2.1 2007/09/16 15:34:59 xtraeme Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.222 2005/12/11 12:24:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.236.2.1 2007/09/16 15:34:59 xtraeme Exp $");
 
 #include "opt_inet.h"
 #include "opt_gateway.h"
@@ -121,6 +121,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip_input.c,v 1.222 2005/12/11 12:24:57 christos Exp 
 #include <sys/kernel.h>
 #include <sys/pool.h>
 #include <sys/sysctl.h>
+#include <sys/kauth.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -279,10 +280,10 @@ static u_int	ip_reass_ttl_decr(u_int ticks);
 static void	ip_reass_drophalf(void);
 
 
-static __inline int ipq_lock_try(void);
-static __inline void ipq_unlock(void);
+static inline int ipq_lock_try(void);
+static inline void ipq_unlock(void);
 
-static __inline int
+static inline int
 ipq_lock_try(void)
 {
 	int s;
@@ -301,7 +302,7 @@ ipq_lock_try(void)
 	return (1);
 }
 
-static __inline void
+static inline void
 ipq_unlock(void)
 {
 	int s;
@@ -376,8 +377,8 @@ static	struct ip_srcrt {
 static void save_rte(u_char *, struct in_addr);
 
 #ifdef MBUFTRACE
-struct mowner ip_rx_mowner = { "internet", "rx" };
-struct mowner ip_tx_mowner = { "internet", "tx" };
+struct mowner ip_rx_mowner = MOWNER_INIT("internet", "rx");
+struct mowner ip_tx_mowner = MOWNER_INIT("internet", "tx");
 #endif
 
 /*
@@ -414,7 +415,7 @@ ip_init(void)
 	for (i = 0; i < IPREASS_NHASH; i++)
 	    	LIST_INIT(&ipq[i]);
 
-	ip_id = time.tv_sec & 0xfffff;
+	ip_id = time_second & 0xfffff;
 
 	ipintrq.ifq_maxlen = ipqmaxlen;
 	ip_nmbclusters_changed();
@@ -445,7 +446,10 @@ ip_init(void)
 #endif /* MBUFTRACE */
 }
 
-struct	sockaddr_in ipaddr = { sizeof(ipaddr), AF_INET };
+struct	sockaddr_in ipaddr = {
+	.sin_len = sizeof(ipaddr),
+	.sin_family = AF_INET,
+};
 struct	route ipforward_rt;
 
 /*
@@ -484,12 +488,13 @@ ip_input(struct mbuf *m)
 	int downmatch;
 	int checkif;
 	int srcrt = 0;
+	int s;
 	u_int hash;
 #ifdef FAST_IPSEC
 	struct m_tag *mtag;
 	struct tdb_ident *tdbi;
 	struct secpolicy *sp;
-	int s, error;
+	int error;
 #endif /* FAST_IPSEC */
 
 	MCLAIM(m, &ip_rx_mowner);
@@ -732,7 +737,7 @@ ip_input(struct mbuf *m)
 	}
 	if (ia != NULL)
 		goto ours;
-	if (m->m_pkthdr.rcvif->if_flags & IFF_BROADCAST) {
+	if (m->m_pkthdr.rcvif && m->m_pkthdr.rcvif->if_flags & IFF_BROADCAST) {
 		IFADDR_FOREACH(ifa, m->m_pkthdr.rcvif) {
 			if (ifa->ifa_addr->sa_family != AF_INET)
 				continue;
@@ -938,7 +943,9 @@ found:
 		 */
 		if (mff || ip->ip_off != htons(0)) {
 			ipstat.ips_fragments++;
+			s = splvm();
 			ipqe = pool_get(&ipqent_pool, PR_NOWAIT);
+			splx(s);
 			if (ipqe == NULL) {
 				ipstat.ips_rcvmemdrop++;
 				IPQ_UNLOCK();
@@ -974,7 +981,7 @@ found:
 		goto bad;
 	}
 #endif
-#if FAST_IPSEC
+#ifdef FAST_IPSEC
 	/*
 	 * enforce IPsec policy checking if we are seeing last header.
 	 * note that we do not visit this with protocols with pcb layer
@@ -1006,7 +1013,6 @@ found:
 			/* XXX error stat??? */
 			error = EINVAL;
 DPRINTF(("ip_input: no SP, packet discarded\n"));/*XXX*/
-			goto bad;
 		}
 		splx(s);
 		if (error)
@@ -1051,7 +1057,7 @@ ip_reass(struct ipqent *ipqe, struct ipq *fp, struct ipqhead *ipqhead)
 	struct ip *ip;
 	struct mbuf *t;
 	int hlen = ipqe->ipqe_ip->ip_hl << 2;
-	int i, next;
+	int i, next, s;
 
 	IPQ_LOCK_CHECK();
 
@@ -1156,7 +1162,9 @@ ip_reass(struct ipqent *ipqe, struct ipq *fp, struct ipqhead *ipqhead)
 		nq = TAILQ_NEXT(q, ipqe_q);
 		m_freem(q->ipqe_m);
 		TAILQ_REMOVE(&fp->ipq_fragq, q, ipqe_q);
+		s = splvm();
 		pool_put(&ipqent_pool, q);
+		splx(s);
 		fp->ipq_nfrags--;
 		ip_nfrags--;
 	}
@@ -1197,11 +1205,15 @@ insert:
 	m->m_next = 0;
 	m_cat(m, t);
 	nq = TAILQ_NEXT(q, ipqe_q);
+	s = splvm();
 	pool_put(&ipqent_pool, q);
+	splx(s);
 	for (q = nq; q != NULL; q = nq) {
 		t = q->ipqe_m;
 		nq = TAILQ_NEXT(q, ipqe_q);
+		s = splvm();
 		pool_put(&ipqent_pool, q);
+		splx(s);
 		m_cat(m, t);
 	}
 	ip_nfrags -= fp->ipq_nfrags;
@@ -1236,7 +1248,9 @@ dropfrag:
 	ip_nfrags--;
 	ipstat.ips_fragdropped++;
 	m_freem(m);
+	s = splvm();
 	pool_put(&ipqent_pool, ipqe);
+	splx(s);
 	return (0);
 }
 
@@ -1249,6 +1263,7 @@ ip_freef(struct ipq *fp)
 {
 	struct ipqent *q, *p;
 	u_int nfrags = 0;
+	int s;
 
 	IPQ_LOCK_CHECK();
 
@@ -1257,7 +1272,9 @@ ip_freef(struct ipq *fp)
 		m_freem(q->ipqe_m);
 		nfrags++;
 		TAILQ_REMOVE(&fp->ipq_fragq, q, ipqe_q);
+		s = splvm();
 		pool_put(&ipqent_pool, q);
+		splx(s);
 	}
 
 	if (nfrags != fp->ipq_nfrags)
@@ -1839,10 +1856,10 @@ ip_forward(struct mbuf *m, int srcrt)
 
 	dest = 0;
 #ifdef DIAGNOSTIC
-	if (ipprintfs)
-		printf("forward: src %2.2x dst %2.2x ttl %x\n",
-		    ntohl(ip->ip_src.s_addr),
-		    ntohl(ip->ip_dst.s_addr), ip->ip_ttl);
+	if (ipprintfs) {
+		printf("forward: src %s ", inet_ntoa(ip->ip_src));
+		printf("dst %s ttl %x\n", inet_ntoa(ip->ip_dst), ip->ip_ttl);
+	}
 #endif
 	if (m->m_flags & (M_BCAST|M_MCAST) || in_canforward(ip->ip_dst) == 0) {
 		ipstat.ips_cantforward++;
@@ -2093,6 +2110,31 @@ ip_savecontrol(struct inpcb *inp, struct mbuf **mp, struct ip *ip,
 }
 
 /*
+ * sysctl helper routine for net.inet.ip.forwsrcrt.
+ */
+static int
+sysctl_net_inet_ip_forwsrcrt(SYSCTLFN_ARGS)
+{
+	int error, tmp;
+	struct sysctlnode node;
+
+	node = *rnode;
+	tmp = ip_forwsrcrt;
+	node.sysctl_data = &tmp;
+	error = sysctl_lookup(SYSCTLFN_CALL(&node));
+	if (error || newp == NULL)
+		return (error);
+
+	if (kauth_authorize_network(l->l_cred, KAUTH_NETWORK_FORWSRCRT,
+	    0, NULL, NULL, NULL))
+		return (EPERM);
+
+	ip_forwsrcrt = tmp;
+
+	return (0);
+}
+
+/*
  * sysctl helper routine for net.inet.ip.mtudisctimeout.  checks the
  * range of the new value and tweaks timers if it changes.
  */
@@ -2193,11 +2235,11 @@ SYSCTL_SETUP(sysctl_net_inet_ip_setup, "sysctl net.inet.ip subtree setup")
 		       IPCTL_DEFMTU, CTL_EOL);
 #endif /* IPCTL_DEFMTU */
 	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READONLY1,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "forwsrcrt",
 		       SYSCTL_DESCR("Enable forwarding of source-routed "
 				    "datagrams"),
-		       NULL, 0, &ip_forwsrcrt, 0,
+		       sysctl_net_inet_ip_forwsrcrt, 0, &ip_forwsrcrt, 0,
 		       CTL_NET, PF_INET, IPPROTO_IP,
 		       IPCTL_FORWSRCRT, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,

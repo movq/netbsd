@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_timer.c,v 1.9 2005/12/11 12:16:51 christos Exp $ */
+/*	$NetBSD: ixp425_timer.c,v 1.12.4.1 2007/04/30 18:57:19 bouyer Exp $ */
 
 /*
  * Copyright (c) 2003
@@ -34,8 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ixp425_timer.c,v 1.9 2005/12/11 12:16:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_timer.c,v 1.12.4.1 2007/04/30 18:57:19 bouyer Exp $");
 
+#include "opt_ixp425.h"
 #include "opt_perfctrs.h"
 
 #include <sys/types.h>
@@ -67,13 +68,17 @@ static void *clock_ih;
 int	ixpclk_intr(void *);
 
 struct ixpclk_softc {
-        struct device           sc_dev;
-        bus_addr_t              sc_baseaddr;
-        bus_space_tag_t         sc_iot;
-        bus_space_handle_t      sc_ioh;
+	struct device		sc_dev;
+	bus_addr_t		sc_baseaddr;
+	bus_space_tag_t		sc_iot;
+	bus_space_handle_t      sc_ioh;
 };
 
+#ifndef IXP425_CLOCK_FREQ
 #define	COUNTS_PER_SEC		66666600	/* 66MHz */
+#else
+#define	COUNTS_PER_SEC		IXP425_CLOCK_FREQ
+#endif
 #define	COUNTS_PER_USEC		((COUNTS_PER_SEC / 1000000) + 1)
 
 static struct ixpclk_softc *ixpclk_sc;
@@ -91,7 +96,7 @@ CFATTACH_DECL(ixpclk, sizeof(struct ixpclk_softc),
 static int
 ixpclk_match(struct device *parent, struct cfdata *match, void *aux)
 {
-        return 2;
+	return 2;
 }
 
 static void
@@ -283,93 +288,6 @@ delay(u_int n)
 		usecs -= (int)(last - first);
 		first = last;
 	}
-}
-
-todr_chip_handle_t todr_handle;
-
-/*
- * todr_attach:
- *
- *	Set the specified time-of-day register as the system real-time clock.
- */
-void
-todr_attach(todr_chip_handle_t todr)
-{
-
-	if (todr_handle)
-		panic("todr_attach: rtc already configured");
-	todr_handle = todr;
-}
-
-/*
- * inittodr:
- *
- *	Initialize time from the time-of-day register.
- */
-#define	MINYEAR		2003	/* minimum plausible year */
-void
-inittodr(time_t base)
-{
-	time_t deltat;
-	int badbase;
-
-	if (base < (MINYEAR - 1970) * SECYR) {
-		printf("WARNING: preposterous time in file system");
-		/* read the system clock anyway */
-		base = (MINYEAR - 1970) * SECYR;
-		badbase = 1;
-	} else
-		badbase = 0;
-
-	if (todr_handle == NULL ||
-	    todr_gettime(todr_handle, &time) != 0 ||
-	    time.tv_sec == 0) {
-		/*
-		 * Believe the time in the file system for lack of
-		 * anything better, resetting the TODR.
-		 */
-		time.tv_sec = base;
-		time.tv_usec = 0;
-		if (todr_handle != NULL && !badbase) {
-			printf("WARNING: preposterous clock chip time\n");
-			resettodr();
-		}
-		goto bad;
-	}
-
-	if (!badbase) {
-		/*
-		 * See if we gained/lost two or more days; if
-		 * so, assume something is amiss.
-		 */
-		deltat = time.tv_sec - base;
-		if (deltat < 0)
-			deltat = -deltat;
-		if (deltat < 2 * SECDAY)
-			return;		/* all is well */
-		printf("WARNING: clock %s %ld days\n",
-		    time.tv_sec < base ? "lost" : "gained",
-		    (long)deltat / SECDAY);
-	}
- bad:
-	printf("WARNING: CHECK AND RESET THE DATE!\n");
-}
-
-/*
- * resettodr:
- *
- *	Reset the time-of-day register with the current time.
- */
-void
-resettodr(void)
-{
-
-	if (time.tv_sec == 0)
-		return;
-
-	if (todr_handle != NULL &&
-	    todr_settime(todr_handle, &time) != 0)
-		printf("resettodr: failed to set time\n");
 }
 
 /*

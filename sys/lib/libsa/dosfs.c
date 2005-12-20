@@ -1,4 +1,4 @@
-/*	$NetBSD: dosfs.c,v 1.9 2005/12/11 12:24:46 christos Exp $	*/
+/*	$NetBSD: dosfs.c,v 1.10.22.1 2006/12/02 15:22:05 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 Robert Nordier
@@ -193,8 +193,8 @@ static int
 dosunmount(DOS_FS * fs)
 {
 	if (fs->buf)
-		free(fs->buf, SECSIZ);
-	free(fs, sizeof(DOS_FS));
+		dealloc(fs->buf, SECSIZ);
+	dealloc(fs, sizeof(DOS_FS));
 	return (0);
 }
 
@@ -228,8 +228,18 @@ dosfs_open(const char *path, struct open_file *fd)
 		err = EINVAL;
 		goto out;
 	}
+
 	f = alloc(sizeof(DOS_FILE));
+#ifdef BOOTXX
+	/* due to __internal_memset_ causing all sorts of register spillage
+	   (and being completely unoptimized for zeroing small amounts of
+	   memory), if we hand-initialize the remaining members of f to zero,
+	   the code size drops 68 bytes. This makes no sense, admittedly. */
+	f->offset = 0;
+	f->c = 0;
+#else
 	bzero(f, sizeof(DOS_FILE));
+#endif
 	f->fs = fs;
 	fs->links++;
 	f->de = *de;
@@ -351,7 +361,7 @@ dosfs_close(struct open_file * fd)
 	DOS_FS *fs = f->fs;
 
 	f->fs->links--;
-	free(f, sizeof(DOS_FILE));
+	dealloc(f, sizeof(DOS_FILE));
 	dos_unmount(fs);
 	return 0;
 }
@@ -558,7 +568,7 @@ lookup(DOS_FS * fs, u_int clus, const char *name, const struct direntry ** dep)
 	}
 	err = ENOENT;
  out:
-	free(dir, sizeof(DOS_DIR) * DEPSEC);
+	dealloc(dir, sizeof(DOS_DIR) * DEPSEC);
 	dir = NULL;
  out2:
 	return (err);

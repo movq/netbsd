@@ -1,7 +1,7 @@
-/*	$NetBSD: veriexecctl.h,v 1.5 2005/12/12 21:47:58 elad Exp $	*/
+/*	$NetBSD: veriexecctl.h,v 1.9 2006/11/28 22:22:03 elad Exp $	*/
 
 /*-
- * Copyright 2005 Elad Efrat <elad@bsd.org.il>
+ * Copyright 2005 Elad Efrat <elad@NetBSD.org>
  * Copyright 2005 Brett Lymn <blymn@netbsd.org> 
  *
  * All rights reserved.
@@ -41,9 +41,21 @@
 					     "mismatch" :		\
 					     "<unknown>")
 
+#define dict_sets(d, k, v) \
+	prop_dictionary_set(d, k, prop_string_create_cstring(v))
+
+#define dict_gets(d, k) \
+	prop_string_cstring_nocopy(prop_dictionary_get(d, k))
+
+#define	dict_setd(d, k, v, n) \
+	prop_dictionary_set(d, k, prop_data_create_data(v, n))
+
+#define	dict_getd(d, k) \
+	prop_data_data_nocopy(prop_dictionary_get(d, k))
+
 CIRCLEQ_HEAD(veriexec_ups, veriexec_up) params_list;
 struct veriexec_up {
-        struct veriexec_sizing_params vu_param;
+	prop_dictionary_t vu_preload;
         CIRCLEQ_ENTRY(veriexec_up) vu_list;
 };
 
@@ -56,8 +68,8 @@ int yywrap(void);
 int yylex(void);
 int yyparse(void);
 void yyerror(const char *);
-struct veriexec_up *dev_lookup(dev_t);
-struct veriexec_up *dev_add(dev_t);
+struct veriexec_up *dev_lookup(char *);
+struct veriexec_up *dev_add(char *);
 void phase2_load(void);
 
 #endif /* _VERIEXECCTL_H_ */

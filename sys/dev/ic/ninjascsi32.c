@@ -1,7 +1,7 @@
-/*	$NetBSD: ninjascsi32.c,v 1.4 2005/12/11 12:21:28 christos Exp $	*/
+/*	$NetBSD: ninjascsi32.c,v 1.8.2.1 2007/11/25 08:48:28 xtraeme Exp $	*/
 
 /*-
- * Copyright (c) 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 2004, 2006, 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ninjascsi32.c,v 1.4 2005/12/11 12:21:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ninjascsi32.c,v 1.8.2.1 2007/11/25 08:48:28 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -121,10 +121,10 @@ static void	njsc32_start(struct njsc32_softc *);
 static void	njsc32_run_xfer(struct njsc32_softc *, struct scsipi_xfer *);
 static void	njsc32_end_cmd(struct njsc32_softc *, struct njsc32_cmd *,
 		    scsipi_xfer_result_t);
+static void	njsc32_wait_reset_release(void *);
 static void	njsc32_reset_bus(struct njsc32_softc *);
 static void	njsc32_clear_cmds(struct njsc32_softc *,
 		    scsipi_xfer_result_t);
-static void	njsc32_reset_detected(struct njsc32_softc *);
 static void	njsc32_set_ptr(struct njsc32_softc *, struct njsc32_cmd *,
 		    u_int32_t);
 static void	njsc32_assert_ack(struct njsc32_softc *);
@@ -149,49 +149,49 @@ static void	njsc32_msgout(struct njsc32_softc *);
 static void	njsc32_cmdtimeout(void *);
 static void	njsc32_reseltimeout(void *);
 
-static __inline unsigned
+static inline unsigned
 njsc32_read_1(struct njsc32_softc *sc, int no)
 {
 
 	return bus_space_read_1(sc->sc_regt, sc->sc_regh, no);
 }
 
-static __inline unsigned
+static inline unsigned
 njsc32_read_2(struct njsc32_softc *sc, int no)
 {
 
 	return bus_space_read_2(sc->sc_regt, sc->sc_regh, no);
 }
 
-static __inline u_int32_t
+static inline u_int32_t
 njsc32_read_4(struct njsc32_softc *sc, int no)
 {
 
 	return bus_space_read_4(sc->sc_regt, sc->sc_regh, no);
 }
 
-static __inline void
+static inline void
 njsc32_write_1(struct njsc32_softc *sc, int no, int val)
 {
 
 	bus_space_write_1(sc->sc_regt, sc->sc_regh, no, val);
 }
 
-static __inline void
+static inline void
 njsc32_write_2(struct njsc32_softc *sc, int no, int val)
 {
 
 	bus_space_write_2(sc->sc_regt, sc->sc_regh, no, val);
 }
 
-static __inline void
+static inline void
 njsc32_write_4(struct njsc32_softc *sc, int no, u_int32_t val)
 {
 
 	bus_space_write_4(sc->sc_regt, sc->sc_regh, no, val);
 }
 
-static __inline unsigned
+static inline unsigned
 njsc32_ireg_read_1(struct njsc32_softc *sc, int no)
 {
 
@@ -199,7 +199,7 @@ njsc32_ireg_read_1(struct njsc32_softc *sc, int no)
 	return bus_space_read_1(sc->sc_regt, sc->sc_regh, NJSC32_REG_DATA_LOW);
 }
 
-static __inline unsigned
+static inline unsigned
 njsc32_ireg_read_2(struct njsc32_softc *sc, int no)
 {
 
@@ -207,7 +207,7 @@ njsc32_ireg_read_2(struct njsc32_softc *sc, int no)
 	return bus_space_read_2(sc->sc_regt, sc->sc_regh, NJSC32_REG_DATA_LOW);
 }
 
-static __inline u_int32_t
+static inline u_int32_t
 njsc32_ireg_read_4(struct njsc32_softc *sc, int no)
 {
 	u_int32_t val;
@@ -219,7 +219,7 @@ njsc32_ireg_read_4(struct njsc32_softc *sc, int no)
 	    NJSC32_REG_DATA_HIGH) << 16);
 }
 
-static __inline void
+static inline void
 njsc32_ireg_write_1(struct njsc32_softc *sc, int no, int val)
 {
 
@@ -227,7 +227,7 @@ njsc32_ireg_write_1(struct njsc32_softc *sc, int no, int val)
 	bus_space_write_1(sc->sc_regt, sc->sc_regh, NJSC32_REG_DATA_LOW, val);
 }
 
-static __inline void
+static inline void
 njsc32_ireg_write_2(struct njsc32_softc *sc, int no, int val)
 {
 
@@ -235,7 +235,7 @@ njsc32_ireg_write_2(struct njsc32_softc *sc, int no, int val)
 	bus_space_write_2(sc->sc_regt, sc->sc_regh, NJSC32_REG_DATA_LOW, val);
 }
 
-static __inline void
+static inline void
 njsc32_ireg_write_4(struct njsc32_softc *sc, int no, u_int32_t val)
 {
 
@@ -330,6 +330,7 @@ static void
 njsc32_init(struct njsc32_softc *sc, int nosleep)
 {
 	u_int16_t intstat;
+	int i;
 
 	/* block all interrupts */
 	njsc32_write_2(sc, NJSC32_REG_IRQ, NJSC32_IRQ_MASK_ALL);
@@ -339,9 +340,8 @@ njsc32_init(struct njsc32_softc *sc, int nosleep)
 	njsc32_write_4(sc, NJSC32_REG_BM_CNT, 0);
 
 	/* make sure interrupts are cleared */
-	/* XXX loop forever? */
-	while ((intstat = njsc32_read_2(sc, NJSC32_REG_IRQ)) &
-	    NJSC32_IRQ_INTR_PENDING) {
+	for (i = 0; ((intstat = njsc32_read_2(sc, NJSC32_REG_IRQ))
+	    & NJSC32_IRQ_INTR_PENDING) && i < 5 /* just not forever */; i++) {
 		DPRINTF(("%s: njsc32_init: intr pending: %#x\n",
 		    sc->sc_dev.dv_xname, intstat));
 	}
@@ -373,7 +373,7 @@ njsc32_init(struct njsc32_softc *sc, int nosleep)
 	    NJSC32_MISC_BMSTOP_CHANGE2_NONDATA_PHASE);
 
 	/*
-	 * Check for termination power (32Bi only?).
+	 * Check for termination power (32Bi and some versions of 32UDE).
 	 */
 	if (!nosleep || cold) {
 		DPRINTF(("%s: njsc32_init: checking TERMPWR\n",
@@ -440,8 +440,7 @@ njsc32_init(struct njsc32_softc *sc, int nosleep)
 	*/
 	    NJSC32_IRQSEL_AUTO_SCSI_SEQ);
 
-	/* unblock interrupts */
-	njsc32_write_2(sc, NJSC32_REG_IRQ, 0);
+	/* interrupts will be unblocked later after bus reset */
 
 	/* turn LED off */
 	njsc32_ireg_write_1(sc, NJSC32_IREG_EXT_PORT_DDR,
@@ -526,6 +525,7 @@ njsc32_init_cmds(struct njsc32_softc *sc)
 	if (i > 0)
 		return i;
 
+	bus_dmamap_unload(sc->sc_dmat, sc->sc_dmamap_cmdpg);
 fail3:	bus_dmamap_destroy(sc->sc_dmat, sc->sc_dmamap_cmdpg);
 fail2:	bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->sc_cmdpg,
 	    sizeof(struct njsc32_dma_page));
@@ -587,6 +587,7 @@ njsc32_attach(struct njsc32_softc *sc)
 	/* init */
 	TAILQ_INIT(&sc->sc_freecmd);
 	TAILQ_INIT(&sc->sc_reqcmd);
+	callout_init(&sc->sc_callout);
 
 #if 1	/* test */
 	/*
@@ -674,14 +675,10 @@ njsc32_attach(struct njsc32_softc *sc)
 
 	sc->sc_curcmd = NULL;
 	sc->sc_nusedcmds = 0;
-	sc->sc_stat = NJSC32_STAT_IDLE;
 
 	sc->sc_sync_max = 1;	/* XXX look up EEPROM configuration? */
 
-	/* initialize target structure */
-	njsc32_init_targets(sc);
-
-	/* initialize hardware */
+	/* initialize hardware and target structure */
 	njsc32_init(sc, cold);
 
 	/* setup adapter */
@@ -711,6 +708,8 @@ njsc32_detach(struct njsc32_softc *sc, int flags)
 	int rv = 0;
 	int i, s;
 	struct njsc32_cmd *cmd;
+
+	callout_stop(&sc->sc_callout);
 
 	s = splbio();
 
@@ -751,7 +750,7 @@ njsc32_detach(struct njsc32_softc *sc, int flags)
 	return 0;
 }
 
-static __inline void
+static inline void
 njsc32_cmd_init(struct njsc32_cmd *cmd)
 {
 
@@ -766,7 +765,7 @@ njsc32_cmd_init(struct njsc32_cmd *cmd)
 	cmd->c_dp_cur = cmd->c_dp_saved = cmd->c_dp_max = 0;
 }
 
-static __inline void
+static inline void
 njsc32_init_msgout(struct njsc32_softc *sc)
 {
 
@@ -891,7 +890,7 @@ njsc32_negotiate_xfer(struct njsc32_softc *sc, struct njsc32_target *target)
 }
 
 /* turn LED on */
-static __inline void
+static inline void
 njsc32_led_on(struct njsc32_softc *sc)
 {
 
@@ -899,7 +898,7 @@ njsc32_led_on(struct njsc32_softc *sc)
 }
 
 /* turn LED off */
-static __inline void
+static inline void
 njsc32_led_off(struct njsc32_softc *sc)
 {
 
@@ -925,7 +924,7 @@ njsc32_arbitration_failed(struct njsc32_softc *sc)
 		njsc32_led_off(sc);
 }
 
-static __inline void
+static inline void
 njsc32_cmd_load(struct njsc32_softc *sc, struct njsc32_cmd *cmd)
 {
 	struct njsc32_target *target;
@@ -1333,6 +1332,53 @@ njsc32_scsipi_minphys(struct buf *bp)
 	minphys(bp);
 }
 
+/*
+ * On some versions of 32UDE (probably the earlier ones), the controller
+ * detects continuous bus reset when the termination power is absent.
+ * Make sure the system won't hang on such situation.
+ */
+static void
+njsc32_wait_reset_release(void *arg)
+{
+	struct njsc32_softc *sc = arg;
+	struct njsc32_cmd *cmd;
+
+	/* clear pending commands */
+	while ((cmd = TAILQ_FIRST(&sc->sc_reqcmd)) != NULL) {
+		TAILQ_REMOVE(&sc->sc_reqcmd, cmd, c_q);
+		njsc32_end_cmd(sc, cmd, XS_RESET);
+	}
+
+	/* If Bus Reset is not released yet, schedule recheck. */
+	if (njsc32_read_2(sc, NJSC32_REG_IRQ) & NJSC32_IRQ_SCSIRESET) {
+		switch (sc->sc_stat) {
+		case NJSC32_STAT_RESET:
+			sc->sc_stat = NJSC32_STAT_RESET1;
+			break;
+		case NJSC32_STAT_RESET1:
+			/* print message if Bus Reset is detected twice */
+			sc->sc_stat = NJSC32_STAT_RESET2;
+			printf("%s: detected excessive bus reset --- missing termination power?\n",
+			    sc->sc_dev.dv_xname);
+			break;
+		default:
+			break;
+		}
+		callout_reset(&sc->sc_callout,
+		    hz * 2	/* poll every 2s */,
+		    njsc32_wait_reset_release, sc);
+		return;
+	}
+
+	if (sc->sc_stat == NJSC32_STAT_RESET2)
+		printf("%s: bus reset is released\n", sc->sc_dev.dv_xname);
+
+	/* unblock interrupts */
+	njsc32_write_2(sc, NJSC32_REG_IRQ, 0);
+
+	sc->sc_stat = NJSC32_STAT_IDLE;
+}
+
 static void
 njsc32_reset_bus(struct njsc32_softc *sc)
 {
@@ -1340,15 +1386,29 @@ njsc32_reset_bus(struct njsc32_softc *sc)
 
 	DPRINTF(("%s: njsc32_reset_bus:\n", sc->sc_dev.dv_xname));
 
-	/* SCSI bus reset */
+	/* block interrupts */
+	njsc32_write_2(sc, NJSC32_REG_IRQ, NJSC32_IRQ_MASK_ALL);
+
+	sc->sc_stat = NJSC32_STAT_RESET;
+
+	/* hold SCSI bus reset */
 	njsc32_write_1(sc, NJSC32_REG_SCSI_BUS_CONTROL, NJSC32_SBCTL_RST);
 	delay(NJSC32_RESET_HOLD_TIME);
-	njsc32_write_1(sc, NJSC32_REG_SCSI_BUS_CONTROL, 0);
 
 	/* clear transfer */
+	njsc32_clear_cmds(sc, XS_RESET);
+
+	/* initialize target structure */
+	njsc32_init_targets(sc);
+
 	s = splbio();
-	njsc32_reset_detected(sc);
+	scsipi_async_event(&sc->sc_channel, ASYNC_EVENT_RESET, NULL);
 	splx(s);
+
+	/* release SCSI bus reset */
+	njsc32_write_1(sc, NJSC32_REG_SCSI_BUS_CONTROL, 0);
+
+	njsc32_wait_reset_release(sc);
 }
 
 /*
@@ -1386,20 +1446,9 @@ njsc32_clear_cmds(struct njsc32_softc *sc, scsipi_xfer_result_t cmdresult)
 	}
 }
 
-static void
-njsc32_reset_detected(struct njsc32_softc *sc)
-{
-
-	njsc32_clear_cmds(sc, XS_RESET);
-	njsc32_init_targets(sc);
-	sc->sc_stat = NJSC32_STAT_IDLE;
-	KASSERT(sc->sc_nusedcmds == 0);
-	scsipi_async_event(&sc->sc_channel, ASYNC_EVENT_RESET, NULL);
-}
-
 static int
-njsc32_scsipi_ioctl(struct scsipi_channel *chan, u_long cmd, caddr_t addr,
-    int flag, struct proc *p)
+njsc32_scsipi_ioctl(struct scsipi_channel *chan, u_long cmd,
+    caddr_t addr, int flag, struct proc *p)
 {
 	struct njsc32_softc *sc = (void *)chan->chan_adapter->adapt_dev;
 
@@ -1417,7 +1466,7 @@ njsc32_scsipi_ioctl(struct scsipi_channel *chan, u_long cmd, caddr_t addr,
 /*
  * set current data pointer
  */
-static __inline void
+static inline void
 njsc32_set_cur_ptr(struct njsc32_cmd *cmd, u_int32_t pos)
 {
 
@@ -1497,7 +1546,7 @@ njsc32_set_ptr(struct njsc32_softc *sc, struct njsc32_cmd *cmd, u_int32_t pos)
 /*
  * save data pointer
  */
-static __inline void
+static inline void
 njsc32_save_ptr(struct njsc32_cmd *cmd)
 {
 
@@ -2219,7 +2268,7 @@ njsc32_reseltimeout(void *arg)
 	splx(s);
 }
 
-static __inline void
+static inline void
 njsc32_end_auto(struct njsc32_softc *sc, struct njsc32_cmd *cmd, int auto_phase)
 {
 	struct scsipi_xfer *xs;
@@ -2330,8 +2379,8 @@ njsc32_intr(void *arg)
 
 	if (intr & NJSC32_IRQ_SCSIRESET) {
 		printf("%s: detected bus reset\n", sc->sc_dev.dv_xname);
-		/* clear current request */
-		njsc32_reset_detected(sc);
+		/* make sure all devices on the bus are certainly reset  */
+		njsc32_reset_bus(sc);
 		goto out;
 	}
 
@@ -2385,8 +2434,8 @@ njsc32_intr(void *arg)
 
 		idbit = njsc32_read_1(sc, NJSC32_REG_RESELECT_ID);
 		if ((idbit & (1 << NJSC32_INITIATOR_ID)) == 0 ||
-		    (sc->sc_reselid = ffs(idbit & ~NJSC32_INITIATOR_ID) -1)
-		    < 0) {
+		    (sc->sc_reselid =
+		     ffs(idbit & ~(1 << NJSC32_INITIATOR_ID)) - 1) < 0) {
 			printf("%s: invalid reselection (id: %#x)\n",
 			    sc->sc_dev.dv_xname, idbit);
 			sc->sc_stat = NJSC32_STAT_IDLE;	/* XXX ? */
@@ -2524,6 +2573,8 @@ njsc32_intr(void *arg)
 
 		if (auto_phase &
 		    (NJSC32_XPHASE_DATA_IN | NJSC32_XPHASE_DATA_OUT)) {
+			u_int32_t sackcnt, cntoffset;
+
 #ifdef NJSC32_TRACE
 			if (auto_phase & NJSC32_XPHASE_DATA_IN)
 				PRINTC(cmd, ("njsc32_intr: data in done\n"));
@@ -2593,8 +2644,22 @@ njsc32_intr(void *arg)
 			 * data has been transferred, and current pointer
 			 * is changed
 			 */
-			njsc32_set_cur_ptr(cmd, cmd->c_dp_cur +
-			    njsc32_read_4(sc, NJSC32_REG_SACK_CNT));
+			sackcnt = njsc32_read_4(sc, NJSC32_REG_SACK_CNT);
+
+			/*
+			 * The controller returns extra ACK count
+			 * if the DMA buffer is not 4byte aligned.
+			 */
+			cntoffset = le32toh(cmd->c_sgt[0].sg_addr) & 3;
+#ifdef NJSC32_DEBUG
+			if (cntoffset != 0) {
+				printf("sackcnt %u, cntoffset %u\n",
+				    sackcnt, cntoffset);
+			}
+#endif
+			/* advance SCSI pointer */
+			njsc32_set_cur_ptr(cmd,
+			    cmd->c_dp_cur + sackcnt - cntoffset);
 		}
 
 		if (auto_phase & NJSC32_XPHASE_MSGOUT) {

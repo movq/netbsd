@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.316 2005/10/22 05:46:06 hubertf Exp $
+#	$NetBSD: Makefile,v 1.337.2.2 2007/04/06 18:47:19 bouyer Exp $
 #	from: @(#)Makefile	8.7 (Berkeley) 5/25/95
 
 # Environment variables without default values:
@@ -17,7 +17,6 @@
 #	default is ${KERNSRCDIR}/arch/${MACHINE}/conf but can be overridden.
 #   MKCRYPTO; if not `no', install crypto-related configuration
 #   MKPOSTFIX; if not `no', install postfix configuration
-#   MKSENDMAIL; if not `no', install sendmail configuration
 #   MKUNPRIVED; if not `no', allow non-root installs.
 #   MKUPDATE; if not `no', don't do a 'make clean' before kernel compile
 #
@@ -41,26 +40,27 @@
 .include <bsd.kernobj.mk>	# For KERNSRCDIR, KERNOBJDIR, ...
 .include <bsd.endian.mk>	# For TARGET_ENDIANNESS
 
-
 .MAKEOVERRIDES+=	USETOOLS
 
 TZDIR=		/usr/share/zoneinfo
 LOCALTIME?=	UTC
 CKSUM?=		${TOOL_CKSUM}
-MAKESUMS=	CKSUM=${CKSUM:Q} ${HOST_SH} ${NETBSDSRCDIR}/distrib/sets/makesums
+MAKESUMS=	MAKE=${MAKE:Q} CKSUM=${CKSUM:Q} ${HOST_SH} ${NETBSDSRCDIR}/distrib/sets/makesums
 DISTRIBVER!=	${HOST_SH} ${NETBSDSRCDIR}/sys/conf/osrelease.sh
 
 # Flags for creating ISO CDROM image
-# mkisofs is expected to be in $PATH, install via pkgsrc/sysutils/cdrecord
+# mkisofs is expected to be in $PATH, install via pkgsrc/sysutils/cdrtools
 # Note: At least mkisofs 2.0 should be used.
 #
-MKISOFS?=	mkisofs
+.if !defined(MKISOFS)
+MKISOFS!=       (which mkisofs || echo true)
+.endif
 DISTRIBREV!=	${HOST_SH} ${KERNSRCDIR}/conf/osrelease.sh -s
 # ISO 9660 volume ID.  Note that this can only contain [A-Z0-9_].
 ISO_VOLID!=	echo NETBSD_${DISTRIBREV} | tr a-z A-Z
 MKISOFS_FLAGS+= -J -l -hide-joliet-trans-tbl -r -T \
 		-V ${ISO_VOLID} \
-		-P "The NetBSD Project" \
+		-publisher "The NetBSD Project" \
 		-m "${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/cdrom"
 .if ${MKISOFS_FLAGS:N-v}
 MKISOFS_FLAGS+=	-quiet
@@ -95,7 +95,7 @@ BIN1+=	bootptab changelist csh.cshrc csh.login csh.logout daily \
 	netconfig networks newsyslog.conf nsswitch.conf ntp.conf \
 	passwd.conf phones printcap profile protocols \
 	rbootd.conf rc rc.conf rc.lkm rc.local rc.subr rc.shutdown remote rpc \
-	security security.conf services shells sysctl.conf syslog.conf \
+	security security.conf services shells shrc sysctl.conf syslog.conf \
 	weekly weekly.conf wscons.conf
 
 # Use machine-specific disktab if it exists, or the MI one otherwise
@@ -114,7 +114,21 @@ BIN1+=	etc.${MACHINE}/ttyaction
 .endif
 
 # -rw-rw-r--
+.if !empty(DISTRIBVER:M*.99.*)
+BIN2+=	motd.current
+FILESNAME_motd.current=	motd
+.elif !empty(DISTRIBVER:M*BETA*)
+BIN2+=	motd.beta
+FILESNAME_motd.beta=	motd
+.elif !empty(DISTRIBVER:M*RC*)
+BIN2+=	motd.rc
+FILESNAME_motd.rc=	motd
+.elif !empty(DISTRIBVER:M*STABLE*)
+BIN2+=	motd.stable
+FILESNAME_motd.stable=	motd
+.else
 BIN2+=	motd
+.endif
 
 # -rw-------
 BIN3+=	hosts.equiv
@@ -137,7 +151,7 @@ PWD_MKDB_ENDIAN=
 # distribution --
 #	Build a distribution
 #
-distribution: .PHONY check_DESTDIR .WAIT distrib-dirs
+distribution: .PHONY .MAKE check_DESTDIR distrib-dirs
 .if !defined(DISTRIBUTION_DONE)
 .if !defined(INSTALL_DONE)
 	${MAKEDIRTARGET} ${NETBSDSRCDIR} include _DISTRIB=
@@ -159,19 +173,20 @@ MAKEDEV: .EXEC
 	    awk -f ${.CURDIR}/MAKEDEV.awk ${.CURDIR}/MAKEDEV.tmpl > ${.TARGET}
 
 RELEASEVARS=	BSDOBJDIR BSDSRCDIR BUILDID \
-		DESTDIR EXTERNAL_TOOLCHAIN \
+		DESTDIR EXTERNAL_TOOLCHAIN HAVE_GCC HAVE_GDB \
 		INSTALLWORLDDIR \
 		KERNARCHDIR KERNCONFDIR KERNOBJDIR KERNSRCDIR \
 		MACHINE MACHINE_ARCH MAKE MAKECONF MAKEFLAGS \
 		MAKEOBJDIR MAKEOBJDIRPREFIX MAKEVERBOSE \
 		MKBFD MKCATPAGES \
 		MKCRYPTO MKCRYPTO_IDEA MKCRYPTO_MDC2 MKCRYPTO_RC5 MKCVS \
-		MKDOC MKDYNAMICROOT MKGCC MKGCCCMDS MKGDB \
+		MKDEBUG MKDEBUGLIB MKDOC MKDYNAMICROOT \
+		MKGCC MKGCCCMDS MKGDB \
 		MKHESIOD MKHOSTOBJ MKHTML MKIEEEFP MKINET6 MKINFO MKIPFILTER \
-		MKKERBEROS4 MKKERBEROS MKLINKLIB MKLINT \
+		MKKERBEROS MKLINKLIB MKLINT \
 		MKMAN MKMANZ MKNLS MKOBJ MKOBJDIRS \
 		MKPAM MKPF MKPIC MKPICINSTALL MKPICLIB MKPOSTFIX MKPROFILE \
-		MKSENDMAIL MKSHARE MKSKEY MKSOFTFLOAT MKSTATICLIB \
+		MKSHARE MKSKEY MKSOFTFLOAT MKSTATICLIB \
 		MKUNPRIVED MKUPDATE MKUUCP MKX11 MKYP \
 		NBUILDJOBS NETBSDSRCDIR \
 		NOCLEANDIR NODISTRIBDIRS NOINCLUDES \
@@ -190,7 +205,7 @@ params: .PHONY
 .endfor
 
 CLEANFILES+=	etc-release
-etc-release: .EXEC
+etc-release: .EXEC .MAKE
 	${_MKTARGET_CREATE}
 	@(	echo "NetBSD ${DISTRIBVER}/${MACHINE}"; \
 		echo ; \
@@ -228,9 +243,11 @@ CONFIGFILES+=		${file}
 FILESMODE_${file:T}=	600
 .endfor
 
+.if (${MKPOSTFIX} != "no")
 CONFIGFILES+=		aliases
 FILESDIR_aliases=	/etc/mail
 FILESMODE_aliases=	644
+.endif
 
 CONFIGFILES+=		MAKEDEV.local
 FILESDIR_MAKEDEV.local=	/dev
@@ -252,7 +269,7 @@ CONFIGSYMLINKS+=	${TZDIR}/${LOCALTIME}	/etc/localtime \
 # install-etc-files --
 #	Install etc (config) files; not performed by "make build"
 #
-install-etc-files: .PHONY check_DESTDIR MAKEDEV
+install-etc-files: .PHONY .MAKE check_DESTDIR MAKEDEV
 	${_MKMSG_INSTALL} ${DESTDIR}/etc/master.passwd
 	${ETC_INSTALL_FILE} -o root -g wheel -m 600 \
 	    master.passwd ${DESTDIR}/etc
@@ -273,11 +290,9 @@ install-etc-files: .PHONY check_DESTDIR MAKEDEV
 	    MAKEDEV ${DESTDIR}/dev
 .for owner group mode file in \
 		${BINOWN} operator	664	/etc/dumpdates  \
-		${BINOWN} ${BINGRP}	644	/etc/mail/local-host-names \
 		${BINOWN} operator	600	/etc/skeykeys \
 		root wheel		600	/var/at/at.deny \
 		nobody ${BINGRP}	664	/var/db/locate.database \
-		uucp dialer		640	/var/log/aculog \
 		${BINOWN} ${BINGRP}	600	/var/log/authlog \
 		root wheel		600	/var/log/cron \
 		${BINOWN} ${UTMPGRP}	664	/var/log/lastlog \
@@ -286,7 +301,6 @@ install-etc-files: .PHONY check_DESTDIR MAKEDEV
 		${BINOWN} ${BINGRP}	600	/var/log/maillog \
 		${BINOWN} ${BINGRP}	644	/var/log/messages \
 		${BINOWN} ${BINGRP}	600	/var/log/secure \
-		${BINOWN} ${BINGRP}	644	/var/log/sendmail.st \
 		${BINOWN} ${UTMPGRP}	664	/var/log/wtmp \
 		${BINOWN} ${UTMPGRP}	664	/var/log/wtmpx \
 		${BINOWN} ${BINGRP}	600	/var/log/xferlog \
@@ -312,7 +326,7 @@ install-etc-files: .PHONY check_DESTDIR MAKEDEV
 	${ETC_INSTALL_FILE} -o ${owner} -g ${group} -m ${mode} \
 	    	/dev/null ${DESTDIR}${file}
 .endfor
-.for subdir in . defaults mtree namedb pam.d powerd rc.d root skel ssh
+.for subdir in . defaults bluetooth iscsi mtree namedb pam.d powerd rc.d root skel ssh
 	${MAKEDIRTARGET} ${subdir} configinstall
 .endfor
 	${MAKEDIRTARGET} ${NETBSDSRCDIR}/usr.bin/mail configinstall
@@ -325,9 +339,6 @@ install-etc-files: .PHONY check_DESTDIR MAKEDEV
 .if (${MKPOSTFIX} != "no")
 	${MAKEDIRTARGET} ${NETBSDSRCDIR}/gnu/usr.sbin/postfix configinstall
 .endif
-.if (${MKSENDMAIL} != "no")
-	${MAKEDIRTARGET} ${NETBSDSRCDIR}/gnu/usr.sbin/sendmail/cf/cf configinstall
-.endif
 
 
 # install-obsolete-lists --
@@ -339,7 +350,7 @@ OBSOLETE.files=		base comp etc games man misc text
 OBSOLETE.files+=	xbase xcomp xetc xfont xserver
 .endif
 
-install-obsolete-lists: .PHONY
+install-obsolete-lists: .PHONY .MAKE
 	mkdir -p ${OBSOLETE.dir}
 .if ${MKX11} != "no"
 	(cd ${NETBSDSRCDIR}/distrib/sets && \
@@ -365,20 +376,30 @@ TOOL_MTREE.unpriv=	-W
 .endif
 
 distrib-dirs: .PHONY check_DESTDIR
-.if !defined(DISTRIBUTION_DONE)
+.if !defined(DISTRIBUTION_DONE)						# {
+# XXX: If METALOG=${DESTDIR}/METALOG (as is normal), and if ${DESTDIR}
+# does not yet exist (as often happens), then the INSTALL_DIR command
+# immediately below will create ${DESTDIR} but will fail to register
+# an entry for "." in the metalog.  We ignore the problem, because the
+# TOOL_MTREE commands a little further below will soon register an entry
+# for "." in the metalog.
 	${INSTALL_DIR} -o root -g wheel -m 755 ${BASE_PKG} ${DESTDIR}
-.endif
+# XXX: It would be nice if a single mtree invocation could both
+# append to the metalog and do real work.  Instead, we have to
+# repeat the command twice in slightly different ways.
 	${TOOL_MTREE} -def ${.CURDIR}/mtree/NetBSD.dist -N ${.CURDIR} \
 	    -p ${DESTDIR}/ -U ${TOOL_MTREE.unpriv}
-
+.if ${MKUNPRIVED} != "no"						# {
+	${TOOL_MTREE} -def ${.CURDIR}/mtree/NetBSD.dist -N ${.CURDIR} \
+	    -p ${DESTDIR}/ -C -k all | \
+	    awk '/ optional/ {next} // {print}' | ${METALOG.add}
+.endif	# MKUNPRIVED							# }
+.endif	# DISTRIBUTION_DONE						# }
 
 # release, snapshot --
 #	Build a full distribution including kernels & install media.
 #
-release snapshot: .PHONY check_DESTDIR check_RELEASEDIR .WAIT \
-		    distribution .WAIT \
-		    snap_pre .WAIT snap_kern .WAIT \
-		    snap_post .WAIT snap_md_post
+release snapshot: .PHONY .MAKE check_DESTDIR check_RELEASEDIR snap_md_post
 	${MAKEDIRTARGET} ${NETBSDSRCDIR}/distrib/sets sets
 	${MAKESUMS} -A -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/sets \
 		${KERNEL_SETS:@.SETS.@kern-${.SETS.}.tgz@}
@@ -388,17 +409,25 @@ release snapshot: .PHONY check_DESTDIR check_RELEASEDIR .WAIT \
 # iso-image --
 #	Standalone target to create a CDROM image after the release
 #	was composed.  Should be run after "make release" in src and xsrc.
+#	The do-iso-image is to be called from etc.$MACHINE/Makefile.inc
 #
 #	Note: At least mkisofs 2.0 should be used.
 #
 CDROM_NAME_ADD?=
 CDROM.image=${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/cdrom/netbsd-${MACHINE}${CDROM_NAME_ADD}.iso
-CDROM.dir=	cdrom.dir
-CDROM.pathlist=	cdrom.pathlist
+CDROM.dir=	${.OBJDIR}/cdrom.dir
+CDROM.pathlist=	${.OBJDIR}/cdrom.pathlist
 
-iso-image: .PHONY check_DESTDIR check_RELEASEDIR .WAIT iso-image-md-post
+iso-image:
+
+.if ${MKISOFS} != true
+do-iso-image: .PHONY check_DESTDIR check_RELEASEDIR iso-image-md-post
 	${MAKESUMS} -t ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/cdrom '*.iso'
 	@echo "iso-image created as: ${CDROM.image}"
+.else
+do-iso-image:
+	@echo iso-image: mkisofs not found
+.endif
 
 iso-image-setup: .PHONY check_RELEASEDIR
 	rm -f ${CDROM.pathlist}
@@ -407,17 +436,16 @@ iso-image-setup: .PHONY check_RELEASEDIR
 	echo "${extra}=${RELEASEDIR}/${extra}" >> ${CDROM.pathlist}
 .endif
 .endfor
-	echo "${MACHINE}=${RELEASEDIR}/${RELEASEMACHINEDIR}" >> ${CDROM.pathlist}
+	echo "${MACHINE}/=${RELEASEDIR}/${RELEASEMACHINEDIR}/" >> ${CDROM.pathlist}
 	mkdir -p ${CDROM.dir}
 	mkdir -p ${RELEASEDIR}/${RELEASEMACHINEDIR}/installation/cdrom
 
 # iso-image-mi --
 #	Create the image after the MD operations have completed.
 #
-iso-image-mi: .PHONY check_DESTDIR check_RELEASEDIR .WAIT \
-		iso-image-setup .WAIT iso-image-md-pre
+iso-image-mi: .PHONY check_DESTDIR check_RELEASEDIR iso-image-md-pre
 	@if ! ${MKISOFS} --version; then \
-		echo "install pkgsrc/sysutils/cdrecord and run 'make iso-image'." ; \
+		echo "install pkgsrc/sysutils/cdrtools and run 'make iso-image'." ; \
 		false; \
 	fi
 	${MKISOFS} ${MKISOFS_FLAGS} -graft-points -path-list ${CDROM.pathlist} \
@@ -427,21 +455,21 @@ iso-image-mi: .PHONY check_DESTDIR check_RELEASEDIR .WAIT \
 #	Setup ${CDROM.dir} to produce a bootable CD image.
 #	Overridden by etc.$MACHINE/Makefile.inc
 #
-iso-image-md-pre: .PHONY check_DESTDIR check_RELEASEDIR
+iso-image-md-pre: .PHONY check_DESTDIR check_RELEASEDIR iso-image-setup
 #	(empty -- look in the machine-dependent Makefile.inc)
 
 # iso-image-md-post --
 #	Fixup the CD-image to be bootable.
 #	Overridden by etc.$MACHINE/Makefile.inc
 #
-iso-image-md-post: .PHONY check_DESTDIR check_RELEASEDIR .WAIT iso-image-mi
+iso-image-md-post: .PHONY check_DESTDIR check_RELEASEDIR iso-image-mi
 #	(empty -- look in the machine-dependent Makefile.inc)
 
 
 # snap_pre --
 #	Create ${RELEASEDIR} and necessary subdirectories.
 #
-snap_pre: .PHONY check_DESTDIR check_RELEASEDIR
+snap_pre: .PHONY check_DESTDIR check_RELEASEDIR distribution
 	${INSTALL} -d -m 755 ${RELEASEDIR}
 .if ${MKUPDATE} == "no"
 # Could be a mount point, ignore the errors
@@ -455,14 +483,14 @@ snap_pre: .PHONY check_DESTDIR check_RELEASEDIR
 # snap_post --
 #	Build the install media and notes from distrib
 #
-snap_post: .PHONY check_DESTDIR check_RELEASEDIR
+snap_post: .PHONY .MAKE build_kernelsets build_releasekernels
 .if ${MKUPDATE} == "no"
 	cd ${NETBSDSRCDIR}/distrib && ${MAKE} cleandir
 .endif
 	cd ${NETBSDSRCDIR}/distrib && ${MAKE} depend && ${MAKE} && \
 	    ${MAKE} release
 
-# snap_kern --
+# build kernels --
 #	This target builds the kernels specified by each port.
 #	A port may specify the following kernels:
 #
@@ -502,9 +530,7 @@ ALL_KERNELS?=	${KERNEL_SETS} ${EXTRA_KERNELS} ${BUILD_KERNELS}
 GETKERNELAWK=	awk '/^config/ {print $$2; found=1} \
 		END{ if (found == 0) print "netbsd"; }'
 
-.if !target(snap_kern)						# {
-
-# build_kernels --
+build_kernels: .PHONY
 #	Configure & compile kernels listed in ${ALL_KERNELS}
 #
 # The 'sync' is so that all writes during the build are pushed back
@@ -513,8 +539,8 @@ GETKERNELAWK=	awk '/^config/ {print $$2; found=1} \
 #
 .if !defined(KERNELS_DONE)						# {
 .for configfile in ${ALL_KERNELS}					# {
-_KERNELS_TO_BUILD+=kern-${configfile}
-kern-${configfile}: .PHONY
+build_kernels: kern-${configfile}
+kern-${configfile}: .PHONY .MAKE
 	cd ${KERNCONFDIR} && ${TOOL_CONFIG} -s ${KERNSRCDIR} \
 	    -b ${KERNOBJDIR}/${configfile:C/.*\///} ${configfile}
 .if ${MKUPDATE} == "no"
@@ -525,15 +551,13 @@ kern-${configfile}: .PHONY
 .endfor	# ALL_KERNELS							# }
 .endif	# KERNELS_DONE							# }
 
-build_kernels: .PHONY ${_KERNELS_TO_BUILD}
-
-# build_kernelsets --
+build_kernelsets: .PHONY
 #	Create kernel sets from ${KERNEL_SETS} into
 #	${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/sets
 #
 .for configfile in ${KERNEL_SETS}					# {
-_KERNELSETS_TO_BUILD+=kernset-${configfile}
-kernset-${configfile}: .PHONY
+build_kernelsets: kernset-${configfile}
+kernset-${configfile}: .PHONY build_kernels snap_pre
 	@ kernlist=`${GETKERNELAWK} ${KERNCONFDIR}/${configfile}`; \
 	kerndir=${KERNOBJDIR}/${configfile:C/.*\///}; \
 	kernsuffixes="${KERNEL_SUFFIXES:S/^/./}"; \
@@ -561,15 +585,13 @@ kernset-${configfile}: .PHONY
 	}
 .endfor	# KERNEL_SETS							# }
 
-build_kernelsets: ${_KERNELSETS_TO_BUILD}
-
-# build_releasekernels --
+build_releasekernels: .PHONY
 #	Build kernel.gz from ${KERNEL_SETS} ${EXTRA_KERNELS} into
 #	${RELEASEDIR}/${RELEASEMACHINEDIR}/binary/kernel
 #
 .for configfile in ${KERNEL_SETS} ${EXTRA_KERNELS}			# {
-_RELEASEKERNELS_TO_BUILD+=releasekern-${configfile}
-releasekern-${configfile}: .PHONY
+build_releasekernels: releasekern-${configfile}
+releasekern-${configfile}: .PHONY build_kernels snap_pre
 	@ kernlist=`${GETKERNELAWK} ${KERNCONFDIR}/${configfile:C/.*\///}`; \
 	kerndir=${KERNOBJDIR}/${configfile:C/.*\///}; \
 	kernsuffixes="${KERNEL_SUFFIXES:S/^/./}"; \
@@ -587,23 +609,11 @@ releasekern-${configfile}: .PHONY
 	}
 .endfor	# KERNEL_SETS EXTRA_KERNELS					# }
 
-build_releasekernels: ${_RELEASEKERNELS_TO_BUILD}
-
-# snap_kern --
-#	build the kernels, then the sets & release kernels
-#
-snap_kern: check_DESTDIR check_RELEASEDIR .WAIT \
-	    build_kernels .WAIT \
-	    build_kernelsets build_releasekernels
-
-.endif # !target(snap_kern)					# }
-
-
 # snap_md_post --
 #	Machine dependent distribution media operations.
 #	Overridden by etc.$MACHINE/Makefile.inc
 #
-snap_md_post: check_DESTDIR check_RELEASEDIR
+snap_md_post: .PHONY check_DESTDIR check_RELEASEDIR snap_post
 #	(empty -- look in the machine-dependent Makefile.inc)
 
 

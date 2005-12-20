@@ -1,7 +1,7 @@
-/* $NetBSD: esa.c,v 1.31 2005/12/11 12:22:49 christos Exp $ */
+/* $NetBSD: esa.c,v 1.40 2006/11/16 01:33:08 christos Exp $ */
 
 /*
- * Copyright (c) 2001, 2002 Jared D. McNeill <jmcneill@invisible.ca>
+ * Copyright (c) 2001, 2002, 2006 Jared D. McNeill <jmcneill@invisible.ca>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esa.c,v 1.31 2005/12/11 12:22:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esa.c,v 1.40 2006/11/16 01:33:08 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/errno.h>
@@ -136,7 +136,7 @@ static int		esa_freemem(struct esa_softc *, struct esa_dma *);
 static paddr_t		esa_mappage(void *, void *, off_t, int);
 
 /* Supporting subroutines */
-static uint16_t	esa_read_assp(struct esa_softc *, uint16_t, uint16_t);
+static uint16_t		esa_read_assp(struct esa_softc *, uint16_t, uint16_t);
 static void		esa_write_assp(struct esa_softc *, uint16_t, uint16_t,
 				       uint16_t);
 static int		esa_init_codec(struct esa_softc *);
@@ -152,7 +152,8 @@ static uint8_t		esa_assp_halt(struct esa_softc *);
 static void		esa_codec_reset(struct esa_softc *);
 static int		esa_amp_enable(struct esa_softc *);
 static void		esa_enable_interrupts(struct esa_softc *);
-static uint32_t	esa_get_pointer(struct esa_softc *, struct esa_channel *);
+static uint32_t		esa_get_pointer(struct esa_softc *,
+					struct esa_channel *);
 
 /* list management */
 static int		esa_add_list(struct esa_voice *, struct esa_list *,
@@ -161,7 +162,6 @@ static void		esa_remove_list(struct esa_voice *, struct esa_list *,
 					int);
 
 /* power management */
-static int		esa_power(struct esa_softc *, int);
 static void		esa_powerhook(int, void *);
 static int		esa_suspend(struct esa_softc *);
 static int		esa_resume(struct esa_softc *);
@@ -222,7 +222,9 @@ static const struct audio_hw_if esa_hw_if = {
 	esa_mappage,
 	esa_get_props,
 	esa_trigger_output,
-	esa_trigger_input
+	esa_trigger_input,
+	NULL,	/* dev_ioctl */
+	NULL,	/* powerstate */
 };
 
 CFATTACH_DECL(esa, sizeof(struct esa_softc), esa_match, esa_attach,
@@ -245,11 +247,10 @@ esa_query_encoding(void *hdl, struct audio_encoding *ae)
 
 static int
 esa_set_params(void *hdl, int setmode, int usemode,
-	       audio_params_t *play, audio_params_t *rec,
-	       stream_filter_list_t *pfil, stream_filter_list_t *rfil)
+    audio_params_t *play, audio_params_t *rec, stream_filter_list_t *pfil,
+    stream_filter_list_t *rfil)
 {
 	struct esa_voice *vc;
-	//struct esa_softc *sc = (struct esa_softc *)vc->parent;
 	struct esa_channel *ch;
 	struct audio_params *p;
 	stream_filter_list_t *fil;
@@ -362,7 +363,8 @@ esa_commit_settings(void *hdl)
 };
 
 static int
-esa_round_blocksize(void *hdl, int bs, int mode, const audio_params_t *param)
+esa_round_blocksize(void *hdl, int bs, int mode,
+    const audio_params_t *param)
 {
 
 	return bs & ~0x20;	/* Be conservative; align to 32 bytes */
@@ -454,8 +456,8 @@ esa_halt_input(void *hdl)
 }
 
 static void *
-esa_malloc(void *hdl, int direction, size_t size, struct malloc_type *type,
-    int flags)
+esa_malloc(void *hdl, int direction, size_t size,
+    struct malloc_type *type, int flags)
 {
 	struct esa_voice *vc;
 	struct esa_softc *sc;
@@ -556,8 +558,7 @@ esa_get_props(void *hdl)
 
 static int
 esa_trigger_output(void *hdl, void *start, void *end, int blksize,
-		   void (*intr)(void *), void *intrarg,
-		   const audio_params_t *param)
+    void (*intr)(void *), void *intrarg, const audio_params_t *param)
 {
 	struct esa_voice *vc;
 	struct esa_softc *sc;
@@ -668,9 +669,6 @@ esa_trigger_output(void *hdl, void *start, void *end, int blksize,
 #undef LO
 #undef HI
 
-	/* XXX */
-	//esa_commit_settings(vc);
-
 	sc->sc_ntimers++;
 
 	if (sc->sc_ntimers == 1) {
@@ -694,8 +692,7 @@ esa_trigger_output(void *hdl, void *start, void *end, int blksize,
 
 static int
 esa_trigger_input(void *hdl, void *start, void *end, int blksize,
-		  void (*intr)(void *), void *intrarg,
-		  const audio_params_t *param)
+    void (*intr)(void *), void *intrarg, const audio_params_t *param)
 {
 	struct esa_voice *vc;
 	struct esa_softc *sc;
@@ -805,9 +802,6 @@ esa_trigger_input(void *hdl, void *start, void *end, int blksize,
 		     vc->index + ESA_NUM_VOICES);
 #undef LO
 #undef HI
-
-	/* XXX */
-	//esa_commit_settings(vc);
 
 	sc->sc_ntimers++;
 	if (sc->sc_ntimers == 1) {
@@ -1009,6 +1003,7 @@ esa_attach(struct device *parent, struct device *self, void *aux)
 	char devinfo[256];
 	int revision, len;
 	int i;
+	int error;
 
 	sc = (struct esa_softc *)self;
 	pa = (struct pci_attach_args *)aux;
@@ -1063,8 +1058,13 @@ esa_attach(struct device *parent, struct device *self, void *aux)
 	}
 	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
 
-	/* Power up chip */
-	esa_power(sc, PCI_PMCSR_STATE_D0);
+	/* power up chip */
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, sc,
+	    pci_activate_null)) && error != EOPNOTSUPP) {
+		aprint_error("%s: cannot activate %d\n", sc->sc_dev.dv_xname,
+		    error);
+		return;
+	}
 
 	/* Init chip */
 	if (esa_init(sc) == -1) {
@@ -1091,8 +1091,15 @@ esa_attach(struct device *parent, struct device *self, void *aux)
 	 *
 	 * So, we will swap the left and right mixer channels to compensate
 	 * for this.
+	 *
+	 * XXX PR# 23620: The Dell C810 channels are not swapped. Match
+	 *     on revision ID for now; this is probably wrong.
 	 */
-	sc->codec_flags = AC97_HOST_SWAPPED_CHANNELS;
+	if (revision == 0x10 && sc->type == ESS_MAESTRO3)
+		sc->codec_flags = 0;
+	else
+		sc->codec_flags = AC97_HOST_SWAPPED_CHANNELS;
+
 
 	/* Attach AC97 host interface */
 	sc->host_if.arg = self;
@@ -1129,7 +1136,8 @@ esa_attach(struct device *parent, struct device *self, void *aux)
 		    audio_attach_mi(&esa_hw_if, &sc->voice[i], &sc->sc_dev);
 	}
 
-	sc->powerhook = powerhook_establish(esa_powerhook, sc);
+	sc->powerhook = powerhook_establish(sc->sc_dev.dv_xname,
+	    esa_powerhook, sc);
 	if (sc->powerhook == NULL)
 		aprint_error("%s: WARNING: unable to establish powerhook\n",
 		    sc->sc_dev.dv_xname);
@@ -1447,10 +1455,10 @@ esa_assp_halt(struct esa_softc *sc)
 	ioh = sc->sc_ioh;
 	data = bus_space_read_1(iot, ioh, ESA_DSP_PORT_CONTROL_REG_B);
 	reset_state = data & ~ESA_REGB_STOP_CLOCK;
-	delay(10000);		/* XXX use tsleep */
+	delay(10000);
 	bus_space_write_1(iot, ioh, ESA_DSP_PORT_CONTROL_REG_B,
 			reset_state & ~ESA_REGB_ENABLE_RESET);
-	delay(10000);		/* XXX use tsleep */
+	delay(10000);
 
 	return reset_state;
 }
@@ -1629,25 +1637,6 @@ esa_remove_list(struct esa_voice *vc, struct esa_list *el, int index)
 	return;
 }
 
-static int
-esa_power(struct esa_softc *sc, int state)
-{
-	pcitag_t tag;
-	pci_chipset_tag_t pc;
-	pcireg_t data;
-	int pmcapreg;
-
-	tag = sc->sc_tag;
-	 pc = sc->sc_pct;
-	if (pci_get_capability(pc, tag, PCI_CAP_PWRMGMT, &pmcapreg, 0)) {
-		data = pci_conf_read(pc, tag, pmcapreg + PCI_PMCSR);
-		if ((data & PCI_PMCSR_STATE_MASK) != state)
-			pci_conf_write(pc, tag, pmcapreg + PCI_PMCSR, state);
-	}
-
-	return 0;
-}
-
 static void
 esa_powerhook(int why, void *hdl)
 {
@@ -1692,8 +1681,6 @@ esa_suspend(struct esa_softc *sc)
 		sc->savemem[index++] = esa_read_assp(sc,
 		    ESA_MEMTYPE_INTERNAL_DATA, i);
 
-	esa_power(sc, PCI_PMCSR_STATE_D3);
-
 	return 0;
 }
 
@@ -1709,7 +1696,6 @@ esa_resume(struct esa_softc *sc)
 	ioh = sc->sc_ioh;
 	index = 0;
 
-	esa_power(sc, PCI_PMCSR_STATE_D0);
 	delay(10000);
 
 	esa_config(sc);

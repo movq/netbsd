@@ -1,7 +1,7 @@
-/*	$NetBSD: sym_test.c,v 1.1.1.1 2004/05/17 23:43:27 christos Exp $	*/
+/*	$NetBSD: sym_test.c,v 1.1.1.3.4.1 2007/05/17 00:35:42 jdc Exp $	*/
 
 /*
- * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -17,7 +17,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: sym_test.c,v 1.22.12.3 2004/03/08 04:04:27 marka Exp */
+/* Id: sym_test.c,v 1.24.18.2 2005/03/17 03:57:08 marka Exp */
 
 #include <config.h>
 
@@ -75,7 +75,7 @@ main(int argc, char *argv[]) {
 
 	while (fgets(s, sizeof(s), stdin) != NULL) {
 		len = strlen(s);
-		if (len > 0 && s[len - 1] == '\n') {
+		if (len > 0U && s[len - 1] == '\n') {
 			s[len - 1] = '\0';
 			len--;
 		}

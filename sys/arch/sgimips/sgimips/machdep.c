@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.95 2005/12/11 12:18:58 christos Exp $	*/
+/*	$NetBSD: machdep.c,v 1.98 2006/09/16 08:50:27 gdamore Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.95 2005/12/11 12:18:58 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.98 2006/09/16 08:50:27 gdamore Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -103,9 +103,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.95 2005/12/11 12:18:58 christos Exp $"
 #include <sys/exec_elf.h>
 #endif
 
-/* For sysctl_hw. */
-extern char cpu_model[];
-
 struct sgimips_intrhand intrtab[NINTR];
 
 const uint32_t mips_ipl_si_to_sr[_IPL_NSOFT] = {
@@ -145,12 +142,10 @@ extern void	ip22_sdcache_enable(void);
 
 #if defined(MIPS1)
 extern void mips1_clock_intr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
-extern unsigned long mips1_clkread(void);
 #endif
 
 #if defined(MIPS3)
 extern void mips3_clock_intr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
-extern unsigned long mips3_clkread(void);
 #endif
 
 void	mach_init(int, char **, int, struct btinfo_common *);
@@ -418,7 +413,6 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 		splmasks[IPL_TTY] = 0x1b00;
 		splmasks[IPL_CLOCK] = 0x7f00;
 		platform.intr3 = mips1_clock_intr;
-		platform.clkread = mips1_clkread;
 		break;
 #endif /* MIPS1 */
 
@@ -432,7 +426,6 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 		splmasks[IPL_TTY] = 0x0f00;
 		splmasks[IPL_CLOCK] = 0xbf00;
 		platform.intr5 = mips3_clock_intr;
-		platform.clkread = mips3_clkread;
 		break;
 	case MACH_SGI_IP22:
 		splmasks[IPL_BIO] = 0x0700;
@@ -440,7 +433,6 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 		splmasks[IPL_TTY] = 0x0f00;
 		splmasks[IPL_CLOCK] = 0xbf00;
 		platform.intr5 = mips3_clock_intr;
-		platform.clkread = mips3_clkread;
 		break;
 	case MACH_SGI_IP30:
 		splmasks[IPL_BIO] = 0x0700;
@@ -448,7 +440,6 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 		splmasks[IPL_TTY] = 0x0700;
 		splmasks[IPL_CLOCK] = 0x8700;
 		platform.intr5 = mips3_clock_intr;
-		platform.clkread = mips3_clkread;
 		break;
 	case MACH_SGI_IP32:
 		splmasks[IPL_BIO] = 0x0700;
@@ -456,7 +447,6 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 		splmasks[IPL_TTY] = 0x0700;
 		splmasks[IPL_CLOCK] = 0x8700;
 		platform.intr5 = mips3_clock_intr;
-		platform.clkread = mips3_clkread;
 		break;
 #endif /* MIPS3 */
 	default:
@@ -734,38 +724,13 @@ haltsys:
 	for (;;);
 }
 
-void
-microtime(struct timeval *tvp)
+void delay(unsigned long n)
 {
-	int s = splclock();
-	static struct timeval lasttime;
+	register int __N = curcpu()->ci_divisor_delay * n;
 
-	*tvp = time;
-	tvp->tv_usec += (*platform.clkread)();
-
-	/*
-	 * Make sure that the time returned is always greater
-	 * than that returned by the previous call.
-	 */
-	if (tvp->tv_sec == lasttime.tv_sec &&
-	    tvp->tv_usec <= lasttime.tv_usec &&
-	    (tvp->tv_usec = lasttime.tv_usec + 1) > 1000000) {
-		tvp->tv_sec++;
-		tvp->tv_usec -= 1000000;
-	}
-	lasttime = *tvp;
-	splx(s);
-}
-
-inline void
-delay(unsigned long n)
-{
-	u_long i;
-	long divisor = curcpu()->ci_divisor_delay;
-
-	while (n-- > 0)
-		for (i = divisor; i > 0; i--)
-			;
+	do {
+		__asm("addiu %0,%1,-1" : "=r" (__N) : "0" (__N));
+	} while (__N > 0);
 }
 
 /*

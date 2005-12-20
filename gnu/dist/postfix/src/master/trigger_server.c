@@ -1,4 +1,4 @@
-/*	$NetBSD: trigger_server.c,v 1.1.1.6 2005/08/18 21:07:47 rpaulo Exp $	*/
+/*	$NetBSD: trigger_server.c,v 1.1.1.7.4.1 2007/06/16 17:00:19 snj Exp $	*/
 
 /*++
 /* NAME
@@ -160,6 +160,7 @@
 
 #include <msg.h>
 #include <msg_syslog.h>
+#include <msg_vstream.h>
 #include <chroot_uid.h>
 #include <vstring.h>
 #include <vstream.h>
@@ -243,10 +244,12 @@ static void trigger_server_wakeup(int fd)
     int     len;
 
     /*
-     * Commit suicide when the master process disconnected from us.
+     * Commit suicide when the master process disconnected from us. Don't
+     * drop the already accepted client request after "postfix reload"; that
+     * would be rude.
      */
     if (master_notify(var_pid, trigger_server_generation, MASTER_STAT_TAKEN) < 0)
-	trigger_server_abort(EVENT_NULL_TYPE, EVENT_NULL_CONTEXT);
+	 /* void */ ;
     if (trigger_server_in_flow_delay && mail_flow_get(1) < 0)
 	doze(var_in_flow_delay * 1000000);
     if ((len = read(fd, buf, sizeof(buf))) >= 0)
@@ -263,7 +266,7 @@ static void trigger_server_wakeup(int fd)
 
 static void trigger_server_accept_fifo(int unused_event, char *context)
 {
-    char   *myname = "trigger_server_accept_fifo";
+    const char *myname = "trigger_server_accept_fifo";
     int     listen_fd = CAST_CHAR_PTR_TO_INT(context);
 
     if (trigger_server_lock != 0
@@ -287,7 +290,7 @@ static void trigger_server_accept_fifo(int unused_event, char *context)
 
 static void trigger_server_accept_local(int unused_event, char *context)
 {
-    char   *myname = "trigger_server_accept_local";
+    const char *myname = "trigger_server_accept_local";
     int     listen_fd = CAST_CHAR_PTR_TO_INT(context);
     int     time_left = 0;
     int     fd;
@@ -314,7 +317,7 @@ static void trigger_server_accept_local(int unused_event, char *context)
 	msg_fatal("select unlock: %m");
     if (fd < 0) {
 	if (errno != EAGAIN)
-	    msg_fatal("accept connection: %m");
+	    msg_error("accept connection: %m");
 	if (time_left >= 0)
 	    event_request_timer(trigger_server_timeout, (char *) 0, time_left);
 	return;
@@ -333,7 +336,7 @@ static void trigger_server_accept_local(int unused_event, char *context)
 
 static void trigger_server_accept_pass(int unused_event, char *context)
 {
-    char   *myname = "trigger_server_accept_pass";
+    const char *myname = "trigger_server_accept_pass";
     int     listen_fd = CAST_CHAR_PTR_TO_INT(context);
     int     time_left = 0;
     int     fd;
@@ -360,7 +363,7 @@ static void trigger_server_accept_pass(int unused_event, char *context)
 	msg_fatal("select unlock: %m");
     if (fd < 0) {
 	if (errno != EAGAIN)
-	    msg_fatal("accept connection: %m");
+	    msg_error("accept connection: %m");
 	if (time_left >= 0)
 	    event_request_timer(trigger_server_timeout, (char *) 0, time_left);
 	return;
@@ -379,10 +382,11 @@ static void trigger_server_accept_pass(int unused_event, char *context)
 
 NORETURN trigger_server_main(int argc, char **argv, TRIGGER_SERVER_FN service,...)
 {
-    char   *myname = "trigger_server_main";
+    const char *myname = "trigger_server_main";
     char   *root_dir = 0;
     char   *user_name = 0;
     int     debug_me = 0;
+    int     daemon_mode = 1;
     char   *service_name = basename(argv[0]);
     VSTREAM *stream = 0;
     int     delay;
@@ -404,6 +408,8 @@ NORETURN trigger_server_main(int argc, char **argv, TRIGGER_SERVER_FN service,..
     WATCHDOG *watchdog;
     char   *oval;
     char   *generation;
+    int     msg_vstream_needed = 0;
+    int     redo_syslog_init = 0;
 
     /*
      * Process environment options as early as we can.
@@ -455,10 +461,13 @@ NORETURN trigger_server_main(int argc, char **argv, TRIGGER_SERVER_FN service,..
      * stderr, because no-one is going to see them.
      */
     opterr = 0;
-    while ((c = GETOPT(argc, argv, "cDi:lm:n:o:s:St:uvz")) > 0) {
+    while ((c = GETOPT(argc, argv, "cdDi:lm:n:o:s:St:uvVz")) > 0) {
 	switch (c) {
 	case 'c':
 	    root_dir = "setme";
+	    break;
+	case 'd':
+	    daemon_mode = 0;
 	    break;
 	case 'D':
 	    debug_me = 1;
@@ -476,9 +485,12 @@ NORETURN trigger_server_main(int argc, char **argv, TRIGGER_SERVER_FN service,..
 	    service_name = optarg;
 	    break;
 	case 'o':
+	    /* XXX Use split_nameval() */
 	    if ((oval = split_at(optarg, '=')) == 0)
 		oval = "";
 	    mail_conf_update(optarg, oval);
+	    if (strcmp(optarg, VAR_SYSLOG_NAME) == 0)
+		redo_syslog_init = 1;
 	    break;
 	case 's':
 	    if ((socket_count = atoi(optarg)) <= 0)
@@ -496,6 +508,10 @@ NORETURN trigger_server_main(int argc, char **argv, TRIGGER_SERVER_FN service,..
 	case 'v':
 	    msg_verbose++;
 	    break;
+	case 'V':
+	    if (++msg_vstream_needed == 1)
+		msg_vstream_init(mail_task(var_procname), VSTREAM_ERR);
+	    break;
 	case 'z':
 	    zerolimit = 1;
 	    break;
@@ -509,6 +525,16 @@ NORETURN trigger_server_main(int argc, char **argv, TRIGGER_SERVER_FN service,..
      * Initialize generic parameters.
      */
     mail_params_init();
+    if (redo_syslog_init)
+	msg_syslog_init(mail_task(var_procname), LOG_PID, LOG_FACILITY);
+
+    /*
+     * If not connected to stdin, stdin must not be a terminal.
+     */
+    if (daemon_mode && stream == 0 && isatty(STDIN_FILENO)) {
+	msg_vstream_init(var_procname, VSTREAM_ERR);
+	msg_fatal("do not run this command by hand");
+    }
 
     /*
      * Application-specific initialization.
@@ -550,12 +576,12 @@ NORETURN trigger_server_main(int argc, char **argv, TRIGGER_SERVER_FN service,..
 	    trigger_server_in_flow_delay = 1;
 	    break;
 	case MAIL_SERVER_SOLITARY:
-	    if (!alone)
+	    if (stream == 0 && !alone)
 		msg_fatal("service %s requires a process limit of 1",
 			  service_name);
 	    break;
 	case MAIL_SERVER_UNLIMITED:
-	    if (!zerolimit)
+	    if (stream == 0 && !zerolimit)
 		msg_fatal("service %s requires a process limit of 0",
 			  service_name);
 	    break;
@@ -574,14 +600,6 @@ NORETURN trigger_server_main(int argc, char **argv, TRIGGER_SERVER_FN service,..
 	root_dir = var_queue_dir;
     if (user_name)
 	user_name = var_mail_owner;
-
-    /*
-     * If not connected to stdin, stdin must not be a terminal.
-     */
-    if (stream == 0 && isatty(STDIN_FILENO)) {
-	msg_vstream_init(var_procname, VSTREAM_ERR);
-	msg_fatal("do not run this command by hand");
-    }
 
     /*
      * Can options be required?
@@ -670,9 +688,7 @@ NORETURN trigger_server_main(int argc, char **argv, TRIGGER_SERVER_FN service,..
      * Optionally, restrict the damage that this process can do.
      */
     resolve_local_init();
-#ifdef SNAPSHOT
     tzset();
-#endif
     chroot_uid(root_dir, user_name);
 
     /*

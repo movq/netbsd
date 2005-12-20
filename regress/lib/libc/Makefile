@@ -1,12 +1,15 @@
-#	$NetBSD: Makefile,v 1.51 2005/03/27 18:48:10 christos Exp $
+#	$NetBSD: Makefile,v 1.52.4.1 2007/07/22 18:44:52 liamjfoy Exp $
 
 SUBDIR+= _setjmp atexit basename citrus clone context convfp db dirname \
 	div divrem gen getaddrinfo hsearch int_fmtio locale md5sha \
-	nsdispatch popen pty randomid regex rpc setjmp sigsetjmp stdio \
+	nsdispatch popen pty randomid regex rpc servent setjmp sigsetjmp stdio \
 	stdlib string strptime sys time
 
 .include <bsd.own.mk>
 
+.if defined(HAS_SSP) && (${HAS_SSP} == "yes")
+SUBDIR+= ssp
+.endif
 .if (${MACHINE_ARCH} != "vax" && ${MACHINE_ARCH} != "m68000")
 SUBDIR+= ieeefp
 .endif

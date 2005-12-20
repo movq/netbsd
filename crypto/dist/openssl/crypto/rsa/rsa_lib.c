@@ -67,7 +67,7 @@
 #include <openssl/engine.h>
 #endif
 
-const char *RSA_version="RSA" OPENSSL_VERSION_PTEXT;
+const char RSA_version[]="RSA" OPENSSL_VERSION_PTEXT;
 
 static const RSA_METHOD *default_RSA_meth=NULL;
 
@@ -412,6 +412,8 @@ err:
 	BN_CTX_end(ctx);
 	if (in_ctx == NULL)
 		BN_CTX_free(ctx);
+	if(rsa->e == NULL)
+		BN_free(e);
 
 	return ret;
 }

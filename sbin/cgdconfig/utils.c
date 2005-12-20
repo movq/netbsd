@@ -1,4 +1,4 @@
-/* $NetBSD: utils.c,v 1.9 2005/06/27 03:07:45 christos Exp $ */
+/* $NetBSD: utils.c,v 1.15 2006/08/26 18:14:28 christos Exp $ */
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: utils.c,v 1.9 2005/06/27 03:07:45 christos Exp $");
+__RCSID("$NetBSD: utils.c,v 1.15 2006/08/26 18:14:28 christos Exp $");
 #endif
 
 #include <sys/param.h>
@@ -46,6 +46,7 @@ __RCSID("$NetBSD: utils.c,v 1.9 2005/06/27 03:07:45 christos Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <err.h>
+#include <util.h>
 
 /* include the resolver gunk in order that we can use b64 routines */
 #include <netinet/in.h>
@@ -54,33 +55,6 @@ __RCSID("$NetBSD: utils.c,v 1.9 2005/06/27 03:07:45 christos Exp $");
 
 #include "utils.h"
 
-
-void *
-emalloc(size_t len)
-{
-	void *ptr = malloc(len);
-	if (ptr == NULL)
-		err(1, NULL);
-	return ptr;
-}
-
-void *
-ecalloc(size_t nel, size_t len)
-{
-	void *ptr = calloc(nel, len);
-	if (ptr == NULL)
-		err(1, NULL);
-	return ptr;
-}
-
-char *
-estrdup(const char *str)
-{
-	char *ptr = strdup(str);
-	if (ptr == NULL)
-		err(1, NULL);
-	return ptr;
-}
 
 /* just strsep(3), but skips empty fields. */
 
@@ -376,7 +350,7 @@ bits_decode(const string_t *in)
 	bits_t	*ret;
 	int	 len;
 	int	 nbits;
-	char	*tmp;
+	u_char	*tmp;
 
 	len = in->length;
 	tmp = emalloc(len);
@@ -386,6 +360,7 @@ bits_decode(const string_t *in)
 	if (len == -1) {
 		fprintf(stderr, "bits_decode: mangled base64 stream\n");
 		fprintf(stderr, "  %s\n", in->text);
+		free(tmp);
 		return NULL;
 	}
 
@@ -394,6 +369,7 @@ bits_decode(const string_t *in)
 		fprintf(stderr, "bits_decode: encoded bits claim to be "
 		    "longer than they are (nbits=%u, stream len=%u bytes)\n",
 		    (unsigned)nbits, (unsigned)len);
+		free(tmp);
 		return NULL;
 	}
 
@@ -418,7 +394,7 @@ bits_encode(const bits_t *in)
 	string_t *ret;
 	int	 len;
 	char	*out;
-	char	*tmp;
+	u_char	*tmp;
 
 	if (!in)
 		return NULL;
@@ -432,7 +408,11 @@ bits_encode(const bits_t *in)
 	*((u_int32_t *)tmp) = htonl(in->length);
 	memcpy(tmp + 4, in->text, len - 4);
 
-	len = __b64_ntop(tmp, len, out, len * 2);
+	if ((len = __b64_ntop(tmp, len, out, len * 2)) == -1) {
+		free(out);
+		free(tmp);
+		return NULL;
+	}
 	ret = string_new(out, len);
 	free(tmp);
 	free(out);

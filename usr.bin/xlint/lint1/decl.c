@@ -1,4 +1,4 @@
-/* $NetBSD: decl.c,v 1.34 2004/09/12 08:58:52 yamt Exp $ */
+/* $NetBSD: decl.c,v 1.38 2006/11/08 18:31:15 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: decl.c,v 1.34 2004/09/12 08:58:52 yamt Exp $");
+__RCSID("$NetBSD: decl.c,v 1.38 2006/11/08 18:31:15 christos Exp $");
 #endif
 
 #include <sys/param.h>
@@ -1060,7 +1060,7 @@ decl1str(sym_t *dsym)
 	if ((sz = length(dsym->s_type, dsym->s_name)) == 0) {
 		if (t == ARRAY && dsym->s_type->t_dim == 0) {
 			/* illegal zero sized structure member: %s */
-			warning(39, dsym->s_name);
+			c99ism(39, dsym->s_name);
 		}
 	}
 
@@ -1230,12 +1230,12 @@ addarray(sym_t *decl, int dim, int n)
 	tp->t_dim = n;
 
 	if (n < 0) {
-		/* zero or negative array dimension */
-		error(20);
+		/* negative array dimension */
+		error(20, n);
 		n = 0;
 	} else if (n == 0 && dim) {
-		/* zero or negative array dimension */
-		warning(20);
+		/* zero array dimension */
+		c99ism(322, dim);
 	} else if (n == 0 && !dim) {
 		/* is incomplete type */
 		setcompl(tp, 1);
@@ -1673,7 +1673,7 @@ compltag(type_t *tp, sym_t *fmem)
 		sp->memb = fmem;
 		if (sp->size == 0) {
 			/* zero sized %s */
-			(void)gnuism(47, ttab[t].tt_name);
+			(void)c99ism(47, ttab[t].tt_name);
 		} else {
 			n = 0;
 			for (mem = fmem; mem != NULL; mem = mem->s_nxt) {
@@ -2760,10 +2760,16 @@ chkusage(dinfo_t *di)
 	mknowarn = nowarn;
 	nowarn = 0;
 
+#ifdef DEBUG
+	printf("%s, %d: >temp nowarn = 0\n", curr_pos.p_file, curr_pos.p_line);
+#endif
 	for (sym = di->d_dlsyms; sym != NULL; sym = sym->s_dlnxt)
 		chkusg1(di->d_asm, sym);
-
 	nowarn = mknowarn;
+#ifdef DEBUG
+	printf("%s, %d: <temp nowarn = %d\n", curr_pos.p_file, curr_pos.p_line,
+	    nowarn);
+#endif
 }
 
 /*

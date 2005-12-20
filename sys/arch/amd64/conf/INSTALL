@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL,v 1.44 2005/12/20 05:35:27 thorpej Exp $
+# $NetBSD: INSTALL,v 1.60.2.9 2007/11/26 21:27:47 xtraeme Exp $
 #
 # GENERIC machine description file
 # 
@@ -20,7 +20,7 @@
 
 include	"arch/amd64/conf/std.amd64"
 
-#ident 		"INSTALL-$Revision: 1.44 $"
+#ident 		"INSTALL-$Revision: 1.60.2.9 $"
 
 maxusers	32		# estimated number of users
 
@@ -139,7 +139,7 @@ options 	WS_KERNEL_FG=WSCOL_GREEN
 #options 	WSDISPLAY_COMPAT_SYSCONS	# emulate some ioctls
 #options 	WSDISPLAY_COMPAT_USL		# VT handling
 #options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
-# see dev/pckbc/wskbdmap_mfii.c for implemented layouts
+# see dev/pckbport/wskbdmap_mfii.c for implemented layouts
 #options 	PCKBD_LAYOUT="(KB_DE | KB_NODEAD)"
 # allocate a number of virtual screens at autoconfiguration time
 #options 	WSDISPLAY_DEFAULTSCREENS=4
@@ -149,10 +149,6 @@ options 	PCDISPLAY_SOFTCURSOR
 #options 	VGA_CONSOLE_SCREENTYPE="\"80x24\""
 # work around a hardware bug that loaded fonts don't work; found on ATI cards
 #options 	VGA_CONSOLE_ATI_BROKEN_FONTSEL
-# the following enables some functions to get mouse console support.
-# if you want a really secure system, it may be better not to enable them,
-# see wsmoused(8), section SECURITY CONSIDERATIONS for more info.
-#options 	WSDISPLAY_CHARFUNCS		# mouse console support
 # enable VGA raster mode capable of displaying multilingual text on console
 #options 	VGA_RASTERCONSOLE
 
@@ -167,7 +163,10 @@ config		netbsd	root on ? type ?
 
 mainbus0 at root
 
-options MPBIOS
+# ACPI will be used if present. If not it will fall back to MPBIOS
+acpi0	at mainbus0
+options ACPI_SCANPCI
+options MPBIOS				
 options MPBIOS_SCANPCI
 cpu* 	at mainbus0
 ioapic* at mainbus0
@@ -221,13 +220,13 @@ isa0	at pcib?
 # wscons
 pckbc0		at isa?			# pc keyboard controller
 pckbd*		at pckbc?		# PC keyboard
-pms*		at pckbc?		# PS/2 mouse for wsmouse
+#pms*		at pckbc?		# PS/2 mouse for wsmouse
 #options 	PMS_DISABLE_POWERHOOK	# Disable PS/2 reset on resume
 #options 	PMS_SYNAPTICS_TOUCHPAD	# Enable support for Synaptics Touchpads
 vga*		at pci? dev ? function ?
 wsdisplay*	at vga? console ?
 wskbd*		at pckbd? console ?
-wsmouse*	at pms? mux 0
+#wsmouse*	at pms? mux 0
 
 attimer0	at isa?
 pcppi0		at isa?
@@ -287,6 +286,7 @@ bha*	at pci? dev ? function ?	# BusLogic 9xx SCSI
 dpt*	at pci? dev ? function ?	# DPT SmartCache/SmartRAID
 iha*	at pci? dev ? function ?	# Initio INIC-940/950 SCSI
 isp*	at pci? dev ? function ?	# Qlogic ISP [12]0x0 SCSI/FibreChannel
+mfi*	at pci? dev ? function ?	# LSI MegaRAID SAS
 mly*	at pci? dev ? function ?	# Mylex AcceleRAID and eXtremeRAID
 mpt*	at pci? dev ? function ?	# LSILogic 9x9 and 53c1030
 pcscp*	at pci? dev ? function ?	# AMD 53c974 PCscsi-PCI SCSI
@@ -316,16 +316,21 @@ cd*	at scsibus? target ? lun ?	# SCSI CD-ROM drives
 
 
 # RAID controllers and devices
+aac*	at pci? dev ? function ?	# Adaptec AAC family
 amr*	at pci? dev ? function ?	# AMI/LSI Logic MegaRAID
 cac*	at pci? dev ? function ?	# Compaq PCI array controllers
+ciss*	at pci? dev ? function ?	# HP Smart Array controllers
 icp*	at pci? dev ? function ?	# ICP-Vortex GDT & Intel RAID
 mlx*	at pci? dev ? function ?	# Mylex DAC960 & DEC SWXCR family
 twe*	at pci? dev ? function ?	# 3ware Escalade RAID controllers
+twa*	at pci? dev ? function ?	# 3ware Escalade 9xxx RAID controllers
 
+ld*	at aac? unit ?
 ld*	at amr? unit ?
 ld*	at cac? unit ?
 ld*	at icp? unit ?
 ld*	at twe? unit ?
+ld*	at twa? unit ?
 ld*	at mlx? unit ?
 
 icpsp*	at icp? unit ?			# SCSI pass-through
@@ -335,21 +340,29 @@ icpsp*	at icp? unit ?			# SCSI pass-through
 # The 0x0001 flag force the driver to use DMA, even if the driver doesn't know
 # how to set up DMA modes for this chip. This may work, or may cause
 # a machine hang with some controllers.
-pciide* at pci? dev ? function ? flags 0x0000	# GENERIC pciide driver
-acardide* at pci? dev ? function ?	# Acard IDE controllers
-aceride* at pci? dev ? function ?	# Acer Lab IDE controllers
-artsata* at pci? dev ? function ?	# Intel i31244 SATA controller
-cmdide* at pci? dev ? function ?	# CMD tech IDE controllers
-cypide* at pci? dev ? function ?	# Cypress IDE controllers
-hptide* at pci? dev ? function ?	# Triones/HighPoint IDE controllers
-optiide* at pci? dev ? function ?	# Opti IDE controllers
-piixide* at pci? dev ? function ?	# Intel IDE controllers
-pdcide* at pci? dev ? function ?	# Promise IDE controllers
-pdcsata* at pci? dev ? function ?	# Promise SATA150 controllers
-satalink* at pci? dev ? function ?	# SiI SATALink controllers
-siside* at pci? dev ? function ?	# SiS IDE controllers
-slide*  at pci? dev ? function ?	# Symphony Labs IDE controllers
-viaide* at pci? dev ? function ?	# VIA/AMD/Nvidia IDE controllers
+pciide* 	at pci? dev ? function ? flags 0x0000	# GENERIC pciide driver
+acardide* 	at pci? dev ? function ?	# Acard IDE controllers
+aceride* 	at pci? dev ? function ?	# Acer Lab IDE controllers
+ahcisata*	at pci? dev ? function ?	# AHCI SATA controllers
+artsata* 	at pci? dev ? function ?	# Intel i31244 SATA controller
+cmdide* 	at pci? dev ? function ?	# CMD tech IDE controllers
+cypide* 	at pci? dev ? function ?	# Cypress IDE controllers
+hptide* 	at pci? dev ? function ?	# Triones/HighPoint IDE controllers
+iteide* 	at pci? dev ? function ?	# IT Express IDE controllers
+ixpide* 	at pci? dev ? function ?	# ATI IXP IDE controllers
+jmide* 		at pci? dev ? function ? 	# JMicron PCI-e PATA/SATA controllers
+ahcisata* 	at jmide?
+optiide* 	at pci? dev ? function ?	# Opti IDE controllers
+piixide* 	at pci? dev ? function ?	# Intel IDE controllers
+pdcide* 	at pci? dev ? function ?	# Promise IDE controllers
+pdcsata* 	at pci? dev ? function ?	# Promise SATA150 controllers
+rccide* 	at pci? dev ? function ?	# ServerWorks IDE controllers
+satalink* 	at pci? dev ? function ?	# SiI SATALink controllers
+siside* 	at pci? dev ? function ?	# SiS IDE controllers
+slide*  	at pci? dev ? function ?	# Symphony Labs IDE controllers
+svwsata* 	at pci? dev ? function ?	# ServerWorks SATA controllers
+stpcide* 	at pci? dev ? function ?	# STMicro STPC IDE controllers
+viaide* 	at pci? dev ? function ?	# VIA/AMD/Nvidia IDE controllers
 
 # PCMCIA IDE controllers
 #wdc*	at pcmcia? function ?
@@ -408,6 +421,7 @@ an*	at pci? dev ? function ?	# Aironet PC4500/PC4800 (802.11)
 ath*	at pci? dev ? function ?	# Atheros 5210/5211/5212 802.11
 bce* 	at pci? dev ? function ?	# Broadcom 4401 10/100 Ethernet
 bge* 	at pci? dev ? function ?	# Broadcom 570x gigabit Ethernet
+bnx* 	at pci? dev ? function ?	# Broadcom NetXtremeII gigabit Ethernet
 en*	at pci? dev ? function ?	# ENI/Adaptec ATM
 ep*	at pci? dev ? function ?	# 3Com 3c59x
 epic*	at pci? dev ? function ?	# SMC EPIC/100 Ethernet
@@ -419,8 +433,11 @@ gsip*	at pci? dev ? function ?	# NS83820 Gigabit Ethernet
 #hme*	at pci? dev ? function ?	# Sun Microelectronics STP2002-STQ
 #le*	at pci? dev ? function ?	# PCnet-PCI Ethernet
 #lmc*	at pci? dev ? function ?	# Lan Media Corp SSI/HSSI/DS3
+mskc*	at pci? dev ? function ?	# Marvell Yukon 2 Gigabit Ethernet
+msk*	at mskc?			# Marvell Yukon 2 Gigabit Ethernet
 mtd*	at pci? dev ? function ?	# Myson MTD803 3-in-1 Ethernet
 ne*	at pci? dev ? function ?	# NE2000-compatible Ethernet
+nfe*	at pci?	dev ? function ?	# NVIDIA nForce Ethernet
 #ntwoc*	at pci? dev ? function ?	# Riscom/N2 PCI Sync Serial
 pcn*	at pci? dev ? function ?	# AMD PCnet-PCI Ethernet
 re*	at pci? dev ? function ?	# Realtek 8139C+/8169/8169S/8110S
@@ -450,7 +467,9 @@ wm*	at pci? dev ? function ?	# Intel 82543/82544 gigabit
 # tr at pcmcia has problems with Cardbus bridges
 #tr*	at pcmcia? function ?		# TROPIC based Token-Ring
 #wi*	at pcmcia? function ?		# Lucent/Intersil WaveLan IEEE (802.11)
-#xi*	at pcmcia? function ?		# Xircom CreditCard Ethernet
+#xirc*	at pcmcia? function ?		# Xircom CreditCard Ethernet
+#com*	at xirc?
+#xi*	at xirc?
 
 #mhzc*	at pcmcia? function ?		# Megahertz Ethernet/Modem combo cards
 #com*	at mhzc?
@@ -468,12 +487,15 @@ acphy*	at mii? phy ?			# DAltima AC101 and AMD Am79c874 PHYs
 amhphy*	at mii? phy ?			# AMD 79c901 Ethernet PHYs
 bmtphy*	at mii? phy ?			# Broadcom BCM5201 and BCM5202 PHYs
 brgphy*	at mii? phy ?			# Broadcom BCM5400-family PHYs
+ciphy*	at mii? phy ?			# Cicada CS8201 Gig-E PHYs
 dmphy*	at mii? phy ?			# Davicom DM9101 PHYs
 exphy*	at mii? phy ?			# 3Com internal PHYs
+gentbi* at mii? phy ?			# Generic Ten-Bit 1000BASE-[CLS]X PHYs
 glxtphy* at mii? phy ?			# Level One LXT-1000 PHYs
 gphyter* at mii? phy ?			# NS83861 Gig-E PHY
 icsphy*	at mii? phy ?			# Integrated Circuit Systems ICS189x
 igphy* 	at mii? phy ?			# Intel IGP01E1000
+ikphy*	at mii? phy ?			# Intel 82563 PHYs
 inphy*	at mii? phy ?			# Intel 82555 PHYs
 iophy*	at mii? phy ?			# Intel 82553 PHYs
 lxtphy*	at mii? phy ?			# Level One LXT-970 PHYs
@@ -482,6 +504,8 @@ nsphy*	at mii? phy ?			# NS83840 PHYs
 nsphyter* at mii? phy ?			# NS83843 PHYs
 pnaphy*	at mii? phy ?			# generic HomePNA PHYs
 qsphy*	at mii? phy ?			# Quality Semiconductor QS6612 PHYs
+rgephy*	at mii? phy ?			# Realtek 8169S/8110 internal PHYs
+rlphy*	at mii? phy ?			# Realtek 8139/8201L PHYs
 sqphy*	at mii? phy ?			# Seeq 80220/80221/80223 PHYs
 tlphy*	at mii? phy ?			# ThunderLAN PHYs
 tqphy*	at mii? phy ?			# TDK Semiconductor PHYs
@@ -518,14 +542,14 @@ uhub*	at uhub? port ? configuration ? interface ?
 uhidev*	at uhub? port ? configuration ? interface ?
 
 # USB Mice
-ums*	at uhidev? reportid ?
-wsmouse* at ums? mux 0
+#ums*	at uhidev? reportid ?
+#wsmouse* at ums? mux 0
 
 # USB Keyboards
 ukbd*	at uhidev? reportid ?
 wskbd*	at ukbd? console ? mux 1
 
-# USB serial adpater
+# USB serial adapter
 #ucycom*	at uhidev? reportid ?
 
 # USB Generic HID devices
@@ -615,8 +639,8 @@ include	"arch/amd64/conf/GENERIC.local"
 # disk/mass storage pseudo-devices
 #pseudo-device	ccd		4	# concatenated/striped disk devices
 #pseudo-device	cgd		4	# cryptographic disk devices
-#pseudo-device	raid		8	# RAIDframe disk driver
-#options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
+pseudo-device	raid		8	# RAIDframe disk driver
+options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 #Options to enable various other RAIDframe RAID types.
 #options 	RF_INCLUDE_EVENODD=1
 #options 	RF_INCLUDE_RAID5_RS=1
@@ -628,22 +652,22 @@ include	"arch/amd64/conf/GENERIC.local"
 #pseudo-device	fss		4	# file system snapshot device
 
 pseudo-device	md		1	# memory disk device (ramdisk)
-#pseudo-device	vnd		4	# disk-like interface to files
+#pseudo-device	vnd			# disk-like interface to files
 
 # network pseudo-devices
-pseudo-device	bpfilter	8	# Berkeley packet filter
+pseudo-device	bpfilter		# Berkeley packet filter
 pseudo-device	loop			# network loopback
-pseudo-device	ppp		2	# Point-to-Point Protocol
+#pseudo-device	ppp			# Point-to-Point Protocol
 #pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
-#pseudo-device	sl		2	# Serial Line IP
-#pseudo-device	strip		2	# Starmode Radio IP (Metricom)
+#pseudo-device	sl			# Serial Line IP
+#pseudo-device	strip			# Starmode Radio IP (Metricom)
 #pseudo-device	irframetty		# IrDA frame line discipline
-#pseudo-device	tun		2	# network tunneling over tty
+#pseudo-device	tun			# network tunneling over tty
 #pseudo-device	tap			# virtual Ethernet
-#pseudo-device	gre		2	# generic L3 over IP tunnel
-#pseudo-device	gif		4	# IPv[46] over IPv[46] tunnel (RFC1933)
-#pseudo-device	faith		1	# IPv[46] tcp relay translation i/f
-#pseudo-device	stf		1	# 6to4 IPv6 over IPv4 encapsulation
+#pseudo-device	gre			# generic L3 over IP tunnel
+#pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
+#pseudo-device	faith			# IPv[46] tcp relay translation i/f
+#pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
 #pseudo-device	vlan			# IEEE 802.1q encapsulation
 #pseudo-device	bridge			# simple inter-network bridging
 

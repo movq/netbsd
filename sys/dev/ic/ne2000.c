@@ -1,4 +1,4 @@
-/*	$NetBSD: ne2000.c,v 1.47 2005/12/11 12:21:28 christos Exp $	*/
+/*	$NetBSD: ne2000.c,v 1.52 2006/11/16 01:32:52 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.47 2005/12/11 12:21:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.52 2006/11/16 01:32:52 christos Exp $");
 
 #include "opt_ipkdb.h"
 
@@ -73,7 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.47 2005/12/11 12:21:28 christos Exp $")
 
 #include <net/if_ether.h>
 
-#include <machine/bswap.h>
+#include <sys/bswap.h>
 #include <machine/bus.h>
 
 #ifndef __BUS_SPACE_HAS_STREAM_METHODS
@@ -93,10 +93,6 @@ __KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.47 2005/12/11 12:21:28 christos Exp $")
 #include <dev/ic/ne2000var.h>
 
 #include <dev/ic/ax88190reg.h>
-
-#if BYTE_ORDER == BIG_ENDIAN
-#include <machine/bswap.h>
-#endif
 
 int	ne2000_write_mbuf(struct dp8390_softc *, struct mbuf *, int);
 int	ne2000_ring_copy(struct dp8390_softc *, int, caddr_t, u_short);
@@ -637,8 +633,8 @@ ne2000_write_mbuf(sc, m, buf)
 	 */
 	while (((bus_space_read_1(nict, nich, ED_P0_ISR) & ED_ISR_RDC) !=
 	    ED_ISR_RDC) && --maxwait) {
-		bus_space_read_1(nict, nich, ED_P0_CRDA1);
-		bus_space_read_1(nict, nich, ED_P0_CRDA0);
+		(void)bus_space_read_1(nict, nich, ED_P0_CRDA1);
+		(void)bus_space_read_1(nict, nich, ED_P0_CRDA0);
 		NIC_BARRIER(nict, nich);
 		DELAY(1);
 	}
@@ -709,8 +705,7 @@ ne2000_read_hdr(sc, buf, hdr)
 }
 
 int
-ne2000_test_mem(sc)
-	struct dp8390_softc *sc;
+ne2000_test_mem(struct dp8390_softc *sc)
 {
 
 	/* Noop. */
@@ -939,3 +934,32 @@ ne2000_ipkdb_attach(kip)
 	return 0;
 }
 #endif
+
+void
+ne2000_power(int why, void *arg)
+{
+	struct ne2000_softc *sc = arg;
+	struct dp8390_softc *dsc = &sc->sc_dp8390;
+	struct ifnet *ifp = &dsc->sc_ec.ec_if;
+	int s;
+
+	s = splnet();
+	switch (why) {
+	case PWR_SUSPEND:
+	case PWR_STANDBY:
+		dp8390_stop(dsc);
+		dp8390_disable(dsc);
+		break;
+	case PWR_RESUME:
+		if (ifp->if_flags & IFF_UP) {
+			if (dp8390_enable(dsc) == 0)
+				dp8390_init(dsc);
+		}
+		break;
+	case PWR_SOFTSUSPEND:
+	case PWR_SOFTSTANDBY:
+	case PWR_SOFTRESUME:
+		break;
+	}
+	splx(s);
+}

@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs.h,v 1.52 2005/12/11 12:25:16 christos Exp $	*/
+/*	$NetBSD: nfs.h,v 1.60 2006/09/04 08:27:49 yamt Exp $	*/
 /*
  * Copyright (c) 1989, 1993, 1995
  *	The Regents of the University of California.  All rights reserved.
@@ -160,9 +160,9 @@ extern int nfs_niothreads;              /* Number of async_daemons desired */
 #define	NFS_ATTRTIMEO(nmp, np) \
     ((nmp->nm_flag & NFSMNT_NOAC) ? 0 : \
 	((((np)->n_flag & NMODIFIED) || \
-	 (time.tv_sec - (np)->n_mtime.tv_sec) / 10 < NFS_MINATTRTIMO) ? NFS_MINATTRTIMO : \
-	 ((time.tv_sec - (np)->n_mtime.tv_sec) / 10 > NFS_MAXATTRTIMO ? NFS_MAXATTRTIMO : \
-	  (time.tv_sec - (np)->n_mtime.tv_sec) / 10)))
+	 (time_second - (np)->n_mtime.tv_sec) / 10 < NFS_MINATTRTIMO) ? NFS_MINATTRTIMO : \
+	 ((time_second - (np)->n_mtime.tv_sec) / 10 > NFS_MAXATTRTIMO ? NFS_MAXATTRTIMO : \
+	  (time_second - (np)->n_mtime.tv_sec) / 10)))
 
 /*
  * Export arguments for local filesystem mount calls.
@@ -358,8 +358,6 @@ extern TAILQ_HEAD(nfsreqhead, nfsreq) nfs_reqq;
 #ifndef NFS_WDELAYHASHSIZ
 #define	NFS_WDELAYHASHSIZ 16	/* and with this */
 #endif
-#define	NWDELAYHASH(sock, f) \
-	(&(sock)->ns_wdelayhashtbl[(*((u_int32_t *)(f))) % NFS_WDELAYHASHSIZ])
 #ifndef NFS_MUIDHASHSIZ
 #define NFS_MUIDHASHSIZ	63	/* Tune the size of nfsmount with this */
 #endif
@@ -405,7 +403,7 @@ struct nfsuid {
 	LIST_ENTRY(nfsuid) nu_hash;	/* Hash list */
 	int		nu_flag;	/* Flags */
 	union nethostaddr nu_haddr;	/* Host addr. for dgram sockets */
-	struct ucred	nu_cr;		/* Cred uid mapped to */
+	kauth_cred_t	nu_cr;		/* Cred uid mapped to */
 	int		nu_expire;	/* Expiry time (sec) */
 	struct timeval	nu_timestamp;	/* Kerb. timestamp */
 	u_int32_t	nu_nickname;	/* Nickname on server */
@@ -426,6 +424,7 @@ struct nfsuid {
 #endif
 
 struct nfssvc_sock {
+	struct simplelock ns_lock;
 	TAILQ_ENTRY(nfssvc_sock) ns_chain;	/* List of all nfssvc_sock's */
 	TAILQ_ENTRY(nfssvc_sock) ns_pending;	/* List of pending sockets */
 	TAILQ_HEAD(, nfsuid) ns_uidlruhead;
@@ -443,6 +442,7 @@ struct nfssvc_sock {
 	int		ns_reclen;
 	int		ns_numuids;
 	u_int32_t	ns_sref;
+	SIMPLEQ_HEAD(, nfsrv_descript) ns_sendq; /* send reply list */
 	LIST_HEAD(, nfsrv_descript) ns_tq;	/* Write gather lists */
 	LIST_HEAD(, nfsuid) ns_uidhashtbl[NFS_UIDHASHSIZ];
 	LIST_HEAD(nfsrvw_delayhash, nfsrv_descript) ns_wdelayhashtbl[NFS_WDELAYHASHSIZ];
@@ -450,12 +450,13 @@ struct nfssvc_sock {
 
 /* Bits for "ns_flag" */
 #define	SLP_VALID	0x01
-#define	SLP_DOREC	0x02
+#define	SLP_DOREC	0x02	/* on nfssvc_sockpending queue */
 #define	SLP_NEEDQ	0x04
 #define	SLP_DISCONN	0x08
-#define	SLP_GETSTREAM	0x10
-#define	SLP_LASTFRAG	0x20
-#define SLP_ALLFLAGS	0xff
+#define	SLP_BUSY	0x10
+#define	SLP_WANT	0x20
+#define	SLP_LASTFRAG	0x40
+#define	SLP_SENDING	0x80
 
 extern TAILQ_HEAD(nfssvc_sockhead, nfssvc_sock) nfssvc_sockhead;
 extern struct nfssvc_sockhead nfssvc_sockpending;
@@ -480,10 +481,20 @@ struct nfsd {
 };
 
 /* Bits for "nfsd_flag" */
-#define	NFSD_WAITING	0x01
-#define	NFSD_REQINPROG	0x02
 #define	NFSD_NEEDAUTH	0x04
 #define	NFSD_AUTHFAIL	0x08
+
+#define	NFSD_MAXFHSIZE	64
+typedef struct nfsrvfh {
+	size_t nsfh_size;
+	union {
+		fhandle_t u_fh;
+		uint8_t u_opaque[NFSD_MAXFHSIZE];
+	} nsfh_u;
+} nfsrvfh_t;
+#define	NFSRVFH_SIZE(nsfh)	((nsfh)->nsfh_size)
+#define	NFSRVFH_DATA(nsfh)	((nsfh)->nsfh_u.u_opaque)
+#define	NFSRVFH_FHANDLE(nsfh)	(&(nsfh)->nsfh_u.u_fh)
 
 /*
  * This structure is used by the server for describing each request.
@@ -496,6 +507,7 @@ struct nfsrv_descript {
 	LIST_ENTRY(nfsrv_descript) nd_hash;	/* Hash list */
 	LIST_ENTRY(nfsrv_descript) nd_tq;		/* and timer list */
 	LIST_HEAD(,nfsrv_descript) nd_coalesce;	/* coalesced writes */
+	SIMPLEQ_ENTRY(nfsrv_descript) nd_sendq;	/* send reply list */
 	struct mbuf		*nd_mrep;	/* Request mbuf list */
 	struct mbuf		*nd_md;		/* Current dissect mbuf */
 	struct mbuf		*nd_mreq;	/* Reply mbuf list */
@@ -510,8 +522,8 @@ struct nfsrv_descript {
 	u_int32_t		nd_retxid;	/* Reply xid */
 	u_int32_t		nd_duration;	/* Lease duration */
 	struct timeval		nd_starttime;	/* Time RPC initiated */
-	fhandle_t		nd_fh;		/* File handle */
-	struct ucred		nd_cr;		/* Credentials */
+	nfsrvfh_t		nd_fh;		/* File handle */
+	kauth_cred_t	 	nd_cr;		/* Credentials */
 };
 
 /* Bits for "nd_flag" */
@@ -541,11 +553,6 @@ extern int nfs_numasync;
 #define NFSW_CONTIG(o, n) \
 		((o)->nd_eoff >= (n)->nd_off && \
 		 !memcmp((caddr_t)&(o)->nd_fh, (caddr_t)&(n)->nd_fh, NFSX_V3FH))
-
-#define NFSW_SAMECRED(o, n) \
-	(((o)->nd_flag & ND_KERBAUTH) == ((n)->nd_flag & ND_KERBAUTH) && \
- 	 !memcmp((caddr_t)&(o)->nd_cr, (caddr_t)&(n)->nd_cr, \
-		sizeof (struct ucred)))
 
 /*
  * Defines for WebNFS
@@ -577,7 +584,7 @@ extern int nfs_numasync;
  */
 struct nfs_public {
 	int		np_valid;	/* Do we hold valid information */
-	fhandle_t	np_handle;	/* Filehandle for pub fs (internal) */
+	fhandle_t	*np_handle;	/* Filehandle for pub fs (internal) */
 	struct mount	*np_mount;	/* Mountpoint of exported fs */
 	char		*np_index;	/* Index file */
 };

@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs.h,v 1.19 2005/12/11 12:25:25 christos Exp $	*/
+/*	$NetBSD: ext2fs.h,v 1.22 2006/02/16 20:17:20 perry Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -67,7 +67,7 @@
 #ifndef _UFS_EXT2FS_EXT2FS_H_
 #define _UFS_EXT2FS_EXT2FS_H_
 
-#include <machine/bswap.h>
+#include <sys/bswap.h>
 
 /*
  * Each disk drive contains some number of file systems.
@@ -251,7 +251,7 @@ struct ext2_gd {
  * a power of 3, 5 or 7
  */
 
-static __inline__ int cg_has_sb(int) __attribute__((__unused__));
+static __inline int cg_has_sb(int) __attribute__((__unused__));
 static __inline int
 cg_has_sb(i)
 	int i;

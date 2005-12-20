@@ -78,7 +78,7 @@ $!
 $ ENCRYPT_TYPES = "Basic,"+ -
 		  "OBJECTS,"+ -
 		  "MD2,MD4,MD5,SHA,MDC2,HMAC,RIPEMD,"+ -
-		  "DES,RC2,RC4,RC5,IDEA,BF,CAST,"+ -
+		  "DES,RC2,RC4,RC5,IDEA,BF,CAST,CAMELLIA,"+ -
 		  "BN,EC,RSA,DSA,ECDSA,DH,ECDH,DSO,ENGINE,AES,"+ -
 		  "BUFFER,BIO,STACK,LHASH,RAND,ERR,"+ -
 		  "EVP,EVP_2,ASN1,ASN1_2,PEM,X509,X509V3,"+ -
@@ -182,6 +182,8 @@ $ LIB_RC5 = "rc5_skey,rc5_ecb,rc5_enc,rc5cfb64,rc5ofb64"
 $ LIB_IDEA = "i_cbc,i_cfb64,i_ofb64,i_ecb,i_skey"
 $ LIB_BF = "bf_skey,bf_ecb,bf_enc,bf_cfb64,bf_ofb64"
 $ LIB_CAST = "c_skey,c_ecb,c_enc,c_cfb64,c_ofb64"
+$ LIB_CAMELLIA = "camellia,cmll_misc,cmll_ecb,cmll_cbc,cmll_ofb,"+ -
+	"cmll_cfb,cmll_ctr"
 $ LIB_BN_ASM = "[.asm]vms.mar,vms-helper"
 $ IF F$TRNLNM("OPENSSL_NO_ASM").OR.ARCH.EQS."AXP" THEN LIB_BN_ASM = "bn_asm"
 $ LIB_BN = "bn_add,bn_div,bn_exp,bn_lib,bn_ctx,bn_mul,bn_mod,"+ -
@@ -207,7 +209,8 @@ $ LIB_ENGINE = "eng_err,eng_lib,eng_list,eng_init,eng_ctrl,"+ -
 	"tb_rsa,tb_dsa,tb_ecdsa,tb_dh,tb_ecdh,tb_rand,tb_store,"+ -
 	"tb_cipher,tb_digest,"+ -
 	"eng_openssl,eng_dyn,eng_cnf,eng_cryptodev,eng_padlock"
-$ LIB_AES = "aes_core,aes_misc,aes_ecb,aes_cbc,aes_cfb,aes_ofb,aes_ctr"
+$ LIB_AES = "aes_core,aes_misc,aes_ecb,aes_cbc,aes_cfb,aes_ofb,"+ -
+	"aes_ctr,aes_ige"
 $ LIB_BUFFER = "buffer,buf_err"
 $ LIB_BIO = "bio_lib,bio_cb,bio_err,"+ -
 	"bss_mem,bss_null,bss_fd,"+ -
@@ -223,7 +226,7 @@ $ LIB_RAND = "md_rand,randfile,rand_lib,rand_err,rand_egd,"+ -
 $ LIB_ERR = "err,err_all,err_prn"
 $ LIB_OBJECTS = "o_names,obj_dat,obj_lib,obj_err"
 $ LIB_EVP = "encode,digest,evp_enc,evp_key,evp_acnf,"+ -
-	"e_des,e_bf,e_idea,e_des3,"+ -
+	"e_des,e_bf,e_idea,e_des3,e_camellia,"+ -
 	"e_rc4,e_aes,names,"+ -
 	"e_xcbc_d,e_rc2,e_cast,e_rc5"
 $ LIB_EVP_2 = "m_null,m_md2,m_md4,m_md5,m_sha,m_sha1," + -
@@ -256,7 +259,8 @@ $ LIB_X509V3 = "v3_bcons,v3_bitst,v3_conf,v3_extku,v3_ia5,v3_lib,"+ -
 	"v3_prn,v3_utl,v3err,v3_genn,v3_alt,v3_skey,v3_akey,v3_pku,"+ -
 	"v3_int,v3_enum,v3_sxnet,v3_cpols,v3_crld,v3_purp,v3_info,"+ -
 	"v3_ocsp,v3_akeya,v3_pmaps,v3_pcons,v3_ncons,v3_pcia,v3_pci,"+ -
-	"pcy_cache,pcy_node,pcy_data,pcy_map,pcy_tree,pcy_lib"
+	"pcy_cache,pcy_node,pcy_data,pcy_map,pcy_tree,pcy_lib,"+ -
+	"v3_asid,v3_addr"
 $ LIB_CONF = "conf_err,conf_lib,conf_api,conf_def,conf_mod,conf_mall,conf_sap"
 $ LIB_TXT_DB = "txt_db"
 $ LIB_PKCS7 = "pk7_asn1,pk7_lib,pkcs7err,pk7_doit,pk7_smime,pk7_attr,"+ -
@@ -276,10 +280,15 @@ $ LIB_PQUEUE = "pqueue"
 $!
 $! Setup exceptional compilations
 $!
+$ ! Add definitions for no threads on OpenVMS 7.1 and higher
 $ COMPILEWITH_CC3 = ",bss_rtcp,"
+$ ! Disable the DOLLARID warning
 $ COMPILEWITH_CC4 = ",a_utctm,bss_log,o_time,o_dir"
+$ ! Disable disjoint optimization
 $ COMPILEWITH_CC5 = ",md2_dgst,md4_dgst,md5_dgst,mdc2dgst," + -
                     "sha_dgst,sha1dgst,rmd_dgst,bf_enc,"
+$ ! Disable the MIXLINKAGE warning
+$ COMPILEWITH_CC6 = ",enc_read,set_key,"
 $!
 $! Figure Out What Other Modules We Are To Build.
 $!
@@ -508,7 +517,12 @@ $       IF COMPILEWITH_CC5 - FILE_NAME0 .NES. COMPILEWITH_CC5
 $       THEN
 $         CC5/OBJECT='OBJECT_FILE' 'SOURCE_FILE'
 $       ELSE
-$         CC/OBJECT='OBJECT_FILE' 'SOURCE_FILE'
+$         IF COMPILEWITH_CC6 - FILE_NAME0 .NES. COMPILEWITH_CC6
+$         THEN
+$           CC6/OBJECT='OBJECT_FILE' 'SOURCE_FILE'
+$         ELSE
+$           CC/OBJECT='OBJECT_FILE' 'SOURCE_FILE'
+$         ENDIF
 $       ENDIF
 $     ENDIF
 $   ENDIF
@@ -1088,14 +1102,18 @@ $   THEN
 $     IF CCDISABLEWARNINGS .EQS. ""
 $     THEN
 $       CC4DISABLEWARNINGS = "DOLLARID"
+$       CC6DISABLEWARNINGS = "MIXLINKAGE"
 $     ELSE
 $       CC4DISABLEWARNINGS = CCDISABLEWARNINGS + ",DOLLARID"
+$       CC6DISABLEWARNINGS = CCDISABLEWARNINGS + ",MIXLINKAGE"
 $       CCDISABLEWARNINGS = "/WARNING=(DISABLE=(" + CCDISABLEWARNINGS + "))"
 $     ENDIF
 $     CC4DISABLEWARNINGS = "/WARNING=(DISABLE=(" + CC4DISABLEWARNINGS + "))"
+$     CC6DISABLEWARNINGS = "/WARNING=(DISABLE=(" + CC6DISABLEWARNINGS + "))"
 $   ELSE
 $     CCDISABLEWARNINGS = ""
 $     CC4DISABLEWARNINGS = ""
+$     CC6DISABLEWARNINGS = ""
 $   ENDIF
 $   CC3 = CC + "/DEFINE=(" + CCDEFS + ISSEVEN + ")" + CCDISABLEWARNINGS
 $   CC = CC + "/DEFINE=(" + CCDEFS + ")" + CCDISABLEWARNINGS
@@ -1106,6 +1124,7 @@ $   ELSE
 $     CC5 = CC + "/NOOPTIMIZE"
 $   ENDIF
 $   CC4 = CC - CCDISABLEWARNINGS + CC4DISABLEWARNINGS
+$   CC6 = CC - CCDISABLEWARNINGS + CC6DISABLEWARNINGS
 $!
 $!  Show user the result
 $!

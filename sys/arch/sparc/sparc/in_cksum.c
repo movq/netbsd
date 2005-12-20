@@ -1,4 +1,4 @@
-/*	$NetBSD: in_cksum.c,v 1.17 2005/11/16 03:00:23 uwe Exp $ */
+/*	$NetBSD: in_cksum.c,v 1.19 2005/12/24 23:24:02 perry Exp $ */
 
 /*
  * Copyright (c) 1995 Matthew R. Green.
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_cksum.c,v 1.17 2005/11/16 03:00:23 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_cksum.c,v 1.19 2005/12/24 23:24:02 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -119,7 +119,7 @@ __KERNEL_RCSID(0, "$NetBSD: in_cksum.c,v 1.17 2005/11/16 03:00:23 uwe Exp $");
  * Zubin Dittia (zubin@dworkin.wustl.edu)
  */
 
-#define Asm	__asm __volatile
+#define Asm	__asm volatile
 #define ADD64		Asm("	ld [%4+ 0],%1;   ld [%4+ 4],%2;		\
 				addcc  %0,%1,%0; addxcc %0,%2,%0;	\
 				ld [%4+ 8],%1;   ld [%4+12],%2;		\
@@ -175,7 +175,7 @@ __KERNEL_RCSID(0, "$NetBSD: in_cksum.c,v 1.17 2005/11/16 03:00:23 uwe Exp $");
 #define ADDSHORT	{sum += *(u_short *)w;}
 #define ADVANCE(n)	{w += n; mlen -= n;}
 
-static __inline__ int
+static inline int
 in_cksum_internal(struct mbuf *m, int off, int len, u_int sum)
 {
 	u_char *w;

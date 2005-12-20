@@ -1,4 +1,4 @@
-/*	$NetBSD: hpux_compat.c,v 1.73 2005/12/11 12:20:02 christos Exp $	*/
+/*	$NetBSD: hpux_compat.c,v 1.81 2006/11/14 13:34:29 elad Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -82,7 +82,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpux_compat.c,v 1.73 2005/12/11 12:20:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpux_compat.c,v 1.81 2006/11/14 13:34:29 elad Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_sysv.h"
@@ -115,6 +115,8 @@ __KERNEL_RCSID(0, "$NetBSD: hpux_compat.c,v 1.73 2005/12/11 12:20:02 christos Ex
 #include <sys/ipc.h>
 #include <sys/user.h>
 #include <sys/mman.h>
+#include <sys/kauth.h>
+#include <sys/timetc.h>
 
 #include <machine/cpu.h>
 #include <machine/reg.h>
@@ -545,7 +547,8 @@ hpux_sys_ulimit(l, v, retval)
 	case 2:
 		SCARG(uap, newlimit) *= 512;
 		if (SCARG(uap, newlimit) > limp->rlim_max &&
-		    (error = suser(p->p_ucred, &p->p_acflag)))
+		    (error = kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, &l->l_acflag)))
 			break;
 		limp->rlim_cur = limp->rlim_max = SCARG(uap, newlimit);
 		/* else fall into... */
@@ -608,7 +611,7 @@ hpux_sys_rtprio(lp, v, retval)
 		nice = (SCARG(uap, prio) >> 3) - 16;
 		break;
 	}
-	error = donice(lp->l_proc, p, nice);
+	error = donice(lp, p, nice);
 	if (error == EACCES)
 		error = EPERM;
 	return (error);
@@ -936,7 +939,8 @@ hpux_sys_getpgrp2(lp, v, retval)
 	p = pfind(SCARG(uap, pid));
 	if (p == 0)
 		return (ESRCH);
-	if (cp->p_ucred->cr_uid && p->p_ucred->cr_uid != cp->p_ucred->cr_uid &&
+	if (kauth_cred_geteuid(lp->l_cred) &&
+	    kauth_cred_geteuid(p->p_cred) != kauth_cred_geteuid(lp->l_cred) &&
 	    !inferior(p, cp))
 		return (EPERM);
 	*retval = p->p_pgid;
@@ -1046,23 +1050,23 @@ hpux_sys_getaccess(l, v, retval)
 	void *v;
 	register_t *retval;
 {
-	struct proc *p = l->l_proc;
 	struct hpux_sys_getaccess_args *uap = v;
 	int lgroups[NGROUPS];
 	int error = 0;
-	struct ucred *cred;
+	kauth_cred_t cred;
 	struct vnode *vp;
 	struct nameidata nd;
+	gid_t gid;
 
 	/*
 	 * Build an appropriate credential structure
 	 */
-	cred = crdup(p->p_ucred);
+	cred = kauth_cred_dup(l->l_cred);
 	switch (SCARG(uap, uid)) {
 	case 65502:	/* UID_EUID */
 		break;
 	case 65503:	/* UID_RUID */
-		cred->cr_uid = p->p_cred->p_ruid;
+		kauth_cred_seteuid(cred, kauth_cred_getuid(l->l_cred));
 		break;
 	case 65504:	/* UID_SUID */
 		error = EINVAL;
@@ -1070,47 +1074,43 @@ hpux_sys_getaccess(l, v, retval)
 	default:
 		if (SCARG(uap, uid) > 65504)
 			error = EINVAL;
-		cred->cr_uid = SCARG(uap, uid);
+		kauth_cred_seteuid(cred, SCARG(uap, uid));
 		break;
 	}
 	switch (SCARG(uap, ngroups)) {
 	case -1:	/* NGROUPS_EGID */
-		cred->cr_ngroups = 1;
+		gid = kauth_cred_getegid(cred);
+		kauth_cred_setgroups(cred, &gid, 1, -1);
 		break;
 	case -5:	/* NGROUPS_EGID_SUPP */
 		break;
 	case -2:	/* NGROUPS_RGID */
-		cred->cr_ngroups = 1;
-		cred->cr_gid = p->p_cred->p_rgid;
+		kauth_cred_setegid(cred, kauth_cred_getgid(l->l_cred));
+		gid = kauth_cred_geteuid(l->l_cred);
+		kauth_cred_setgroups(cred, &gid, 1, -1);
 		break;
 	case -6:	/* NGROUPS_RGID_SUPP */
-		cred->cr_gid = p->p_cred->p_rgid;
+		kauth_cred_setegid(cred, kauth_cred_getgid(l->l_cred));
 		break;
 	case -3:	/* NGROUPS_SGID */
 	case -7:	/* NGROUPS_SGID_SUPP */
 		error = EINVAL;
 		break;
 	case -4:	/* NGROUPS_SUPP */
-		if (cred->cr_ngroups > 1)
-			cred->cr_gid = cred->cr_groups[1];
+		if (kauth_cred_ngroups(cred) > 1)
+			kauth_cred_setegid(cred, kauth_cred_group(cred, 1));
 		else
 			error = EINVAL;
 		break;
 	default:
 		if (SCARG(uap, ngroups) > 0 && SCARG(uap, ngroups) <= NGROUPS)
-			error = copyin((caddr_t)SCARG(uap, gidset),
-				       (caddr_t)&lgroups[0],
-				       SCARG(uap, ngroups) *
-					   sizeof(lgroups[0]));
+			error = copyin(SCARG(uap, gidset), &lgroups[0],
+			    SCARG(uap, ngroups) * sizeof(lgroups[0]));
 		else
 			error = EINVAL;
-		if (error == 0) {
-			int gid;
-
-			for (gid = 0; gid < SCARG(uap, ngroups); gid++)
-				cred->cr_groups[gid] = lgroups[gid];
-			cred->cr_ngroups = SCARG(uap, ngroups);
-		}
+		if (error == 0)
+			kauth_cred_setgroups(cred, lgroups,
+			    SCARG(uap, ngroups), -1);
 		break;
 	}
 	/*
@@ -1122,7 +1122,7 @@ hpux_sys_getaccess(l, v, retval)
 		error = namei(&nd);
 	}
 	if (error) {
-		crfree(cred);
+		kauth_cred_free(cred);
 		return (error);
 	}
 	/*
@@ -1137,7 +1137,7 @@ hpux_sys_getaccess(l, v, retval)
 	if (VOP_ACCESS(vp, VEXEC, cred, l) == 0)
 		*retval |= X_OK;
 	vput(vp);
-	crfree(cred);
+	kauth_cred_free(cred);
 	return (error);
 }
 
@@ -1197,18 +1197,28 @@ hpux_sys_stime_6x(l, v, retval)
 	struct hpux_sys_stime_6x_args /* {
 		syscallarg(int) time;
 	} */ *uap = v;
-	struct proc *p = l->l_proc;
 	struct timeval tv;
+#ifdef __HAVE_TIMECOUNTER
+	struct timespec ts;
+#endif
 	int s, error;
 
 	tv.tv_sec = SCARG(uap, time);
 	tv.tv_usec = 0;
-	if ((error = suser(p->p_ucred, &p->p_acflag)))
+	if ((error = kauth_authorize_system(l->l_cred,
+	    KAUTH_SYSTEM_TIME, KAUTH_REQ_SYSTEM_TIME_SYSTEM, NULL, NULL, NULL)))
 		return (error);
 
 	/* WHAT DO WE DO ABOUT PENDING REAL-TIME TIMEOUTS??? */
-	boottime.tv_sec += tv.tv_sec - time.tv_sec;
-	s = splclock(); time = tv; splx(s);
+	boottime.tv_sec += tv.tv_sec - time_second;
+	s = splclock();
+#ifdef __HAVE_TIMECOUNTER
+	TIMEVAL_TO_TIMESPEC(&tv, &ts);
+	tc_setclock(&ts);
+#else
+	time = tv;
+#endif
+	splx(s);
 	resettodr();
 	return (0);
 }
@@ -1223,12 +1233,11 @@ hpux_sys_ftime_6x(l, v, retval)
 		syscallarg(struct hpux_timeb *) tp;
 	} */ *uap = v;
 	struct hpux_otimeb tb;
-	int s;
+	struct timeval tv;
 
-	s = splclock();
-	tb.time = time.tv_sec;
-	tb.millitm = time.tv_usec / 1000;
-	splx(s);
+	microtime(&tv);
+	tb.time = tv.tv_sec;
+	tb.millitm = tv.tv_usec / 1000;
 	/* NetBSD has no kernel notion of timezone -- fake it. */
 	tb.timezone = 0;
 	tb.dstflag = 0;
@@ -1248,6 +1257,7 @@ hpux_sys_alarm_6x(l, v, retval)
 	int s;
 	struct itimerval *itp, it;
 	struct ptimer *ptp;
+	struct timeval tv;
 
  	if (p->p_timers && p->p_timers->pts_timers[ITIMER_REAL]) {
 		ptp = p->p_timers->pts_timers[ITIMER_REAL];
@@ -1263,9 +1273,10 @@ hpux_sys_alarm_6x(l, v, retval)
 	if (itp) {
 		callout_stop(&p->p_timers->pts_timers[ITIMER_REAL]->pt_ch);
 		timerclear(&itp->it_interval);
+		microtime(&tv);
 		if (timerisset(&itp->it_value) &&
-		    timercmp(&itp->it_value, &time, >))
-			timersub(&itp->it_value, &time, &itp->it_value);
+		    timercmp(&itp->it_value, &tv, >))
+			timersub(&itp->it_value, &tv, &itp->it_value);
 		/*
 		 * Return how many seconds were left (rounded up)
 		 */
@@ -1316,7 +1327,8 @@ hpux_sys_alarm_6x(l, v, retval)
 		 * We don't need to check the hzto() return value, here.
 		 * callout_reset() does it for us.
 		 */
-		timeradd(&it.it_value, &time, &it.it_value);
+		microtime(&tv);
+		timeradd(&it.it_value, &tv, &it.it_value);
 		callout_reset(&ptp->pt_ch, hzto(&ptp->pt_time.it_value),
 		    realtimerexpire, ptp);
 	}
@@ -1338,7 +1350,7 @@ hpux_sys_nice_6x(l, v, retval)
 	struct proc *p = l->l_proc;
 	int error;
 
-	error = donice(p, p, (p->p_nice - NZERO) + SCARG(uap, nval));
+	error = donice(l, p, (p->p_nice - NZERO) + SCARG(uap, nval));
 	if (error == 0)
 		*retval = p->p_nice - NZERO;
 	return (error);
@@ -1366,7 +1378,7 @@ hpux_sys_times_6x(l, v, retval)
 	error = copyout((caddr_t)&atms, (caddr_t)SCARG(uap, tms),
 	    sizeof (atms));
 	if (error == 0) {
-		tv = time;
+		microtime(&tv);
 		*(time_t *)retval = hpux_scale(&tv) -
 		    hpux_scale(&boottime);
 	}
@@ -1411,7 +1423,7 @@ hpux_sys_utime_6x(l, v, retval)
 		if (error)
 			return (error);
 	} else
-		tv[0] = tv[1] = time.tv_sec;
+		tv[0] = tv[1] = time_second;
 	vattr_null(&vattr);
 	vattr.va_atime.tv_sec = tv[0];
 	vattr.va_atime.tv_nsec = 0;

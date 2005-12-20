@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.2 2005/06/05 18:55:30 chs Exp $	*/
+/*	$NetBSD: md.c,v 1.4 2006/04/05 16:55:05 garbled Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -53,8 +53,6 @@
 #include "md.h"
 #include "msg_defs.h"
 #include "menu_defs.h"
-
-const char *fdtype = "ffs";
 
 int
 md_get_info(void)
@@ -204,4 +202,10 @@ md_pre_update()
 void
 md_init()
 {
+}
+
+int
+md_post_extract(void)
+{
+	return 0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: dir.c,v 1.46 2005/08/19 02:07:19 christos Exp $	*/
+/*	$NetBSD: dir.c,v 1.49 2006/10/16 03:09:06 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)dir.c	8.8 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: dir.c,v 1.46 2005/08/19 02:07:19 christos Exp $");
+__RCSID("$NetBSD: dir.c,v 1.49 2006/10/16 03:09:06 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -57,14 +57,31 @@ __RCSID("$NetBSD: dir.c,v 1.46 2005/08/19 02:07:19 christos Exp $");
 const char	*lfname = "lost+found";
 int	lfmode = 01700;
 ino_t	lfdir;
-struct	dirtemplate emptydir = { 0, DIRBLKSIZ };
+struct	dirtemplate emptydir = {
+	.dot_ino = 0,
+	.dot_reclen = DIRBLKSIZ,
+};
 struct	dirtemplate dirhead = {
-	0, 12, DT_DIR, 1, ".",
-	0, DIRBLKSIZ - 12, DT_DIR, 2, ".."
+	.dot_ino = 0,
+	.dot_reclen = 12,
+	.dot_type = DT_DIR,
+	.dot_namlen = 1,
+	.dot_name = ".",
+	.dotdot_ino = 0,
+	.dotdot_reclen = DIRBLKSIZ - 12,
+	.dotdot_type = DT_DIR,
+	.dotdot_namlen = 2,
+	.dotdot_name = "..",
 };
 struct	odirtemplate odirhead = {
-	0, 12, 1, ".",
-	0, DIRBLKSIZ - 12, 2, ".."
+	.dot_ino = 0,
+	.dot_reclen = 12,
+	.dot_namlen = 1,
+	.dot_name = ".",
+	.dotdot_ino = 0,
+	.dotdot_reclen = DIRBLKSIZ - 12,
+	.dotdot_namlen = 2,
+	.dotdot_name = "..",
 };
 
 static int chgino(struct  inodesc *);
@@ -418,7 +435,7 @@ adjust(struct inodesc *idesc, int lcnt)
 				printf(" (ADJUSTED)\n");
 		}
 		if (preen || reply("ADJUST") == 1) {
-			DIP(dp, nlink) = iswap16(nlink - lcnt);
+			DIP_SET(dp, nlink, iswap16(nlink - lcnt));
 			inodirty();
 		} else 
 			markclean=  0;
@@ -540,7 +557,9 @@ linkup(ino_t orphan, ino_t parentdir, char *name)
 							printf("\n");
 					}
 				}
-				reparent(lfdir, ROOTINO);
+				if (lfdir != 0) {
+					reparent(lfdir, ROOTINO);
+				}
 			}
 		}
 		if (lfdir == 0) {
@@ -598,7 +617,7 @@ linkup(ino_t orphan, ino_t parentdir, char *name)
 			(void)makeentry(orphan, lfdir, "..");
 		dp = ginode(lfdir);
 		nlink = DIP(dp, nlink);
-		DIP(dp, nlink) = iswap16(iswap16(nlink) + 1);
+		DIP_SET(dp, nlink, iswap16(iswap16(nlink) + 1));
 		inodirty();
 		inoinfo(lfdir)->ino_linkcnt++;
 		reparent(orphan, lfdir);
@@ -652,8 +671,8 @@ makeentry(ino_t parent, ino_t ino, const char *name)
 	idesc.id_name = name;
 	dp = ginode(parent);
 	if (iswap64(DIP(dp, size)) % dirblksiz) {
-		DIP(dp, size) =
-		    iswap64(roundup(iswap64(DIP(dp, size)), dirblksiz));
+		DIP_SET(dp, size,
+		    iswap64(roundup(iswap64(DIP(dp, size)), dirblksiz)));
 		inodirty();
 	}
 	if ((ckinode(dp, &idesc) & ALTERED) != 0)
@@ -797,7 +816,7 @@ allocdir(ino_t parent, ino_t request, int mode)
 	     cp += dirblksiz)
 		memmove(cp, &emptydir, sizeof emptydir);
 	dirty(bp);
-	DIP(dp, nlink) = iswap16(2);
+	DIP_SET(dp, nlink, iswap16(2));
 	inodirty();
 	if (ino == ROOTINO) {
 		inoinfo(ino)->ino_linkcnt = iswap16(DIP(dp, nlink));
@@ -819,7 +838,7 @@ allocdir(ino_t parent, ino_t request, int mode)
 		inoinfo(parent)->ino_linkcnt++;
 	}
 	dp = ginode(parent);
-	DIP(dp, nlink) = iswap16(iswap16(DIP(dp, nlink)) + 1);
+	DIP_SET(dp, nlink, iswap16(iswap16(DIP(dp, nlink)) + 1));
 	inodirty();
 	return (ino);
 }
@@ -834,7 +853,7 @@ freedir(ino_t ino, ino_t parent)
 
 	if (ino != parent) {
 		dp = ginode(parent);
-		DIP(dp, nlink) = iswap16(iswap16(DIP(dp, nlink)) -1);
+		DIP_SET(dp, nlink, iswap16(iswap16(DIP(dp, nlink)) - 1));
 		inodirty();
 	}
 	freeino(ino);

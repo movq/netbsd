@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_disk.c,v 1.72 2005/12/11 12:24:30 christos Exp $	*/
+/*	$NetBSD: subr_disk.c,v 1.83 2006/11/25 11:59:58 scw Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999, 2000 The NetBSD Foundation, Inc.
@@ -74,9 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.72 2005/12/11 12:24:30 christos Exp $");
-
-#include "opt_compat_netbsd.h"
+__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.83 2006/11/25 11:59:58 scw Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -87,14 +85,6 @@ __KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.72 2005/12/11 12:24:30 christos Exp 
 #include <sys/disk.h>
 #include <sys/sysctl.h>
 #include <lib/libkern/libkern.h>
-
-/*
- * A global list of all disks attached to the system.  May grow or
- * shrink over time.
- */
-struct	disklist_head disklist = TAILQ_HEAD_INITIALIZER(disklist);
-int	disk_count;		/* number of drives in global disklist */
-struct simplelock disklist_slock = SIMPLELOCK_INITIALIZER;
 
 /*
  * Compute checksum for disk label.
@@ -172,25 +162,18 @@ diskerr(const struct buf *bp, const char *dname, const char *what, int pri,
 }
 
 /*
- * Searches the disklist for the disk corresponding to the
+ * Searches the iostatlist for the disk corresponding to the
  * name provided.
  */
 struct disk *
-disk_find(char *name)
+disk_find(const char *name)
 {
-	struct disk *diskp;
+	struct io_stats *stat;
 
-	if ((name == NULL) || (disk_count <= 0))
-		return (NULL);
+	stat = iostat_find(name);
 
-	simple_lock(&disklist_slock);
-	for (diskp = TAILQ_FIRST(&disklist); diskp != NULL;
-	    diskp = TAILQ_NEXT(diskp, dk_link))
-		if (strcmp(diskp->dk_name, name) == 0) {
-			simple_unlock(&disklist_slock);
-			return (diskp);
-		}
-	simple_unlock(&disklist_slock);
+	if ((stat != NULL) && (stat->io_type == IOSTAT_DISK))
+		return stat->io_parent;
 
 	return (NULL);
 }
@@ -206,12 +189,13 @@ disk_init0(struct disk *diskp)
 	lockinit(&diskp->dk_openlock, PRIBIO, "dkoplk", 0, 0);
 	LIST_INIT(&diskp->dk_wedges);
 	diskp->dk_nwedges = 0;
+	diskp->dk_labelsector = LABELSECTOR;
+	disk_blocksize(diskp, DEV_BSIZE);
 }
 
 static void
 disk_attach0(struct disk *diskp)
 {
-	int s;
 
 	/*
 	 * Allocate and initialize the disklabel structures.  Note that
@@ -228,19 +212,9 @@ disk_attach0(struct disk *diskp)
 	memset(diskp->dk_cpulabel, 0, sizeof(struct cpu_disklabel));
 
 	/*
-	 * Set the attached timestamp.
+	 * Set up the stats collection.
 	 */
-	s = splclock();
-	diskp->dk_attachtime = mono_time;
-	splx(s);
-
-	/*
-	 * Link into the disklist.
-	 */
-	simple_lock(&disklist_slock);
-	TAILQ_INSERT_TAIL(&disklist, diskp, dk_link);
-	disk_count++;
-	simple_unlock(&disklist_slock);
+	diskp->dk_stats = iostat_alloc(IOSTAT_DISK, diskp, diskp->dk_name);
 }
 
 static void
@@ -248,14 +222,17 @@ disk_detach0(struct disk *diskp)
 {
 
 	/*
-	 * Remove from the disklist.
+	 * Remove from the drivelist.
 	 */
-	if (disk_count == 0)
-		panic("disk_detach: disk_count == 0");
-	simple_lock(&disklist_slock);
-	TAILQ_REMOVE(&disklist, diskp, dk_link);
-	disk_count--;
-	simple_unlock(&disklist_slock);
+	iostat_free(diskp->dk_stats);
+
+	/*
+	 * Release the disk-info dictionary.
+	 */
+	if (diskp->dk_info) {
+		prop_object_release(diskp->dk_info);
+		diskp->dk_info = NULL;
+	}
 
 	/*
 	 * Free the space used by the disklabel structures.
@@ -316,205 +293,36 @@ pseudo_disk_detach(struct disk *diskp)
 	disk_detach0(diskp);
 }
 
-
 /*
- * Increment a disk's busy counter.  If the counter is going from
- * 0 to 1, set the timestamp.
+ * Mark the disk as busy for metrics collection.
  */
 void
 disk_busy(struct disk *diskp)
 {
-	int s;
 
-	/*
-	 * XXX We'd like to use something as accurate as microtime(),
-	 * but that doesn't depend on the system TOD clock.
-	 */
-	if (diskp->dk_busy++ == 0) {
-		s = splclock();
-		diskp->dk_timestamp = mono_time;
-		splx(s);
-	}
+	iostat_busy(diskp->dk_stats);
 }
 
 /*
- * Decrement a disk's busy counter, increment the byte count, total busy
- * time, and reset the timestamp.
+ * Finished disk operations, gather metrics.
  */
 void
 disk_unbusy(struct disk *diskp, long bcount, int read)
 {
-	int s;
-	struct timeval dv_time, diff_time;
 
-	if (diskp->dk_busy-- == 0) {
-		printf("%s: dk_busy < 0\n", diskp->dk_name);
-		panic("disk_unbusy");
-	}
-
-	s = splclock();
-	dv_time = mono_time;
-	splx(s);
-
-	timersub(&dv_time, &diskp->dk_timestamp, &diff_time);
-	timeradd(&diskp->dk_time, &diff_time, &diskp->dk_time);
-
-	diskp->dk_timestamp = dv_time;
-	if (bcount > 0) {
-		if (read) {
-			diskp->dk_rbytes += bcount;
-			diskp->dk_rxfer++;
-		} else {
-			diskp->dk_wbytes += bcount;
-			diskp->dk_wxfer++;
-		}
-	}
+	iostat_unbusy(diskp->dk_stats, bcount, read);
 }
 
 /*
- * Reset the metrics counters on the given disk.  Note that we cannot
- * reset the busy counter, as it may case a panic in disk_unbusy().
- * We also must avoid playing with the timestamp information, as it
- * may skew any pending transfer results.
+ * Set the physical blocksize of a disk, in bytes.
+ * Only necessary if blocksize != DEV_BSIZE.
  */
 void
-disk_resetstat(struct disk *diskp)
+disk_blocksize(struct disk *diskp, int blocksize)
 {
-	int s = splbio(), t;
 
-	diskp->dk_rxfer = 0;
-	diskp->dk_rbytes = 0;
-	diskp->dk_wxfer = 0;
-	diskp->dk_wbytes = 0;
-
-	t = splclock();
-	diskp->dk_attachtime = mono_time;
-	splx(t);
-
-	timerclear(&diskp->dk_time);
-
-	splx(s);
-}
-
-int
-sysctl_hw_disknames(SYSCTLFN_ARGS)
-{
-	char bf[DK_DISKNAMELEN + 1];
-	char *where = oldp;
-	struct disk *diskp;
-	size_t needed, left, slen;
-	int error, first;
-
-	if (newp != NULL)
-		return (EPERM);
-	if (namelen != 0)
-		return (EINVAL);
-
-	first = 1;
-	error = 0;
-	needed = 0;
-	left = *oldlenp;
-
-	simple_lock(&disklist_slock);
-	for (diskp = TAILQ_FIRST(&disklist); diskp != NULL;
-	    diskp = TAILQ_NEXT(diskp, dk_link)) {
-		if (where == NULL)
-			needed += strlen(diskp->dk_name) + 1;
-		else {
-			memset(bf, 0, sizeof(bf));
-			if (first) {
-				strncpy(bf, diskp->dk_name, sizeof(bf));
-				first = 0;
-			} else {
-				bf[0] = ' ';
-				strncpy(bf + 1, diskp->dk_name,
-				    sizeof(bf) - 1);
-			}
-			bf[DK_DISKNAMELEN] = '\0';
-			slen = strlen(bf);
-			if (left < slen + 1)
-				break;
-			/* +1 to copy out the trailing NUL byte */
-			error = copyout(bf, where, slen + 1);
-			if (error)
-				break;
-			where += slen;
-			needed += slen;
-			left -= slen;
-		}
-	}
-	simple_unlock(&disklist_slock);
-	*oldlenp = needed;
-	return (error);
-}
-
-int
-sysctl_hw_diskstats(SYSCTLFN_ARGS)
-{
-	struct disk_sysctl sdisk;
-	struct disk *diskp;
-	char *where = oldp;
-	size_t tocopy, left;
-	int error;
-
-	if (newp != NULL)
-		return (EPERM);
-
-	/*
-	 * The original hw.diskstats call was broken and did not require
-	 * the userland to pass in it's size of struct disk_sysctl.  This
-	 * was fixed after NetBSD 1.6 was released, and any applications
-	 * that do not pass in the size are given an error only, unless
-	 * we care about 1.6 compatibility.
-	 */
-	if (namelen == 0)
-#ifdef COMPAT_16
-		tocopy = offsetof(struct disk_sysctl, dk_rxfer);
-#else
-		return (EINVAL);
-#endif
-	else
-		tocopy = name[0];
-
-	if (where == NULL) {
-		*oldlenp = disk_count * tocopy;
-		return (0);
-	}
-
-	error = 0;
-	left = *oldlenp;
-	memset(&sdisk, 0, sizeof(sdisk));
-	*oldlenp = 0;
-
-	simple_lock(&disklist_slock);
-	TAILQ_FOREACH(diskp, &disklist, dk_link) {
-		if (left < tocopy)
-			break;
-		strncpy(sdisk.dk_name, diskp->dk_name, sizeof(sdisk.dk_name));
-		sdisk.dk_xfer = diskp->dk_rxfer + diskp->dk_wxfer;
-		sdisk.dk_rxfer = diskp->dk_rxfer;
-		sdisk.dk_wxfer = diskp->dk_wxfer;
-		sdisk.dk_seek = diskp->dk_seek;
-		sdisk.dk_bytes = diskp->dk_rbytes + diskp->dk_wbytes;
-		sdisk.dk_rbytes = diskp->dk_rbytes;
-		sdisk.dk_wbytes = diskp->dk_wbytes;
-		sdisk.dk_attachtime_sec = diskp->dk_attachtime.tv_sec;
-		sdisk.dk_attachtime_usec = diskp->dk_attachtime.tv_usec;
-		sdisk.dk_timestamp_sec = diskp->dk_timestamp.tv_sec;
-		sdisk.dk_timestamp_usec = diskp->dk_timestamp.tv_usec;
-		sdisk.dk_time_sec = diskp->dk_time.tv_sec;
-		sdisk.dk_time_usec = diskp->dk_time.tv_usec;
-		sdisk.dk_busy = diskp->dk_busy;
-
-		error = copyout(&sdisk, where, min(tocopy, sizeof(sdisk)));
-		if (error)
-			break;
-		where += tocopy;
-		*oldlenp += tocopy;
-		left -= tocopy;
-	}
-	simple_unlock(&disklist_slock);
-	return (error);
+	diskp->dk_blkshift = DK_BSIZE2BLKSHIFT(blocksize);
+	diskp->dk_byteshift = DK_BSIZE2BYTESHIFT(blocksize);
 }
 
 /*
@@ -523,7 +331,7 @@ sysctl_hw_diskstats(SYSCTLFN_ARGS)
  * and the media size the size of the device in DEV_BSIZE sectors.
  */
 int
-bounds_check_with_mediasize(struct buf *bp, int secsize, u_int64_t mediasize)
+bounds_check_with_mediasize(struct buf *bp, int secsize, uint64_t mediasize)
 {
 	int64_t sz;
 
@@ -551,4 +359,97 @@ bad:
 	bp->b_flags |= B_ERROR;
 done:
 	return 0;
+}
+
+/*
+ * Determine the size of the transfer, and make sure it is
+ * within the boundaries of the partition. Adjust transfer
+ * if needed, and signal errors or early completion.
+ */
+int
+bounds_check_with_label(struct disk *dk, struct buf *bp, int wlabel)
+{
+	struct disklabel *lp = dk->dk_label;
+	struct partition *p = lp->d_partitions + DISKPART(bp->b_dev);
+	uint64_t p_size, p_offset, labelsector;
+	int64_t sz;
+
+	/* Protect against division by zero. XXX: Should never happen?!?! */
+	if (lp->d_secpercyl == 0) {
+		bp->b_error = EINVAL;
+		goto bad;
+	}
+
+	p_size = p->p_size << dk->dk_blkshift;
+	p_offset = p->p_offset << dk->dk_blkshift;
+#if RAW_PART == 3
+	labelsector = lp->d_partitions[2].p_offset;
+#else
+	labelsector = lp->d_partitions[RAW_PART].p_offset;
+#endif
+	labelsector = (labelsector + dk->dk_labelsector) << dk->dk_blkshift;
+
+	sz = howmany(bp->b_bcount, DEV_BSIZE);
+	if ((bp->b_blkno + sz) > p_size) {
+		sz = p_size - bp->b_blkno;
+		if (sz == 0) {
+			/* If exactly at end of disk, return EOF. */
+			bp->b_resid = bp->b_bcount;
+			return (0);
+		}
+		if (sz < 0) {
+			/* If past end of disk, return EINVAL. */
+			bp->b_error = EINVAL;
+			goto bad;
+		}
+		/* Otherwise, truncate request. */
+		bp->b_bcount = sz << DEV_BSHIFT;
+	}
+
+	/* Overwriting disk label? */
+	if (bp->b_blkno + p_offset <= labelsector &&
+	    bp->b_blkno + p_offset + sz > labelsector &&
+	    (bp->b_flags & B_READ) == 0 && !wlabel) {
+		bp->b_error = EROFS;
+		goto bad;
+	}
+
+	/* calculate cylinder for disksort to order transfers with */
+	bp->b_cylinder = (bp->b_blkno + p->p_offset) /
+	    (lp->d_secsize / DEV_BSIZE) / lp->d_secpercyl;
+	return (1);
+
+bad:
+	bp->b_flags |= B_ERROR;
+	return (-1);
+}
+
+/*
+ * disk_ioctl --
+ *	Generic disk ioctl handling.
+ */
+int
+disk_ioctl(struct disk *diskp, u_long cmd, caddr_t data, int flag,
+	   struct lwp *l)
+{
+	int error;
+
+	switch (cmd) {
+	case DIOCGDISKINFO:
+	    {
+		struct plistref *pref = (struct plistref *) data;
+
+		if (diskp->dk_info == NULL)
+			error = ENOTSUP;
+		else
+			error = prop_dictionary_copyout_ioctl(pref, cmd,
+							diskp->dk_info);
+		break;
+	    }
+
+	default:
+		error = EPASSTHROUGH;
+	}
+
+	return (error);
 }

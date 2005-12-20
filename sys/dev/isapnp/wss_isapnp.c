@@ -1,4 +1,4 @@
-/*	$NetBSD: wss_isapnp.c,v 1.17 2005/12/11 12:22:16 christos Exp $	*/
+/*	$NetBSD: wss_isapnp.c,v 1.20 2006/11/16 01:33:05 christos Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wss_isapnp.c,v 1.17 2005/12/11 12:22:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wss_isapnp.c,v 1.20 2006/11/16 01:33:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -76,7 +76,8 @@ CFATTACH_DECL(wss_isapnp, sizeof(struct wss_softc),
  * Probe for the WSS hardware.
  */
 int
-wss_isapnp_match(struct device *parent, struct cfdata *match, void *aux)
+wss_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -91,14 +92,15 @@ wss_isapnp_match(struct device *parent, struct cfdata *match, void *aux)
  * pseudo-device driver.
  */
 void
-wss_isapnp_attach(struct device *parent, struct device *self, void *aux)
+wss_isapnp_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct wss_softc *sc;
 	struct ad1848_softc *ac;
 	struct isapnp_attach_args *ipa;
 	int variant;
 
-	sc = (struct wss_softc *)self;
+	sc = device_private(self);
 	ac = &sc->sc_ad1848.sc_ad1848;
 	ipa = aux;
 	printf("\n");

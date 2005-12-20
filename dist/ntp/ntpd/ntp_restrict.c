@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_restrict.c,v 1.2 2003/12/04 16:23:37 drochner Exp $	*/
+/*	$NetBSD: ntp_restrict.c,v 1.5.4.1 2007/08/21 08:40:04 ghen Exp $	*/
 
 /*
  * ntp_restrict.c - determine host restrictions
@@ -160,7 +160,8 @@ init_restrict(void)
  */
 int
 restrictions(
-	struct sockaddr_storage *srcadr
+	struct sockaddr_storage *srcadr,
+	int at_listhead
 	)
 {
 	struct restrictlist *rl;
@@ -262,7 +263,7 @@ restrictions(
 	 * packet is greater than res_min_interval and the average is
 	 * greater thatn res_avg_interval.
 	 */
-	if (mon_enabled == MON_OFF) {
+	if (!at_listhead || mon_enabled == MON_OFF) {
 		flags &= ~RES_LIMITED;
 	} else {
 		struct mon_data *md;
@@ -363,7 +364,7 @@ hack_restrict(
 		SET_IPV6_ADDR_MASK(&addr6,
 		    &GET_INADDR6(*resaddr), &mask6);
 		if (IN6_IS_ADDR_UNSPECIFIED(&addr6)) {
-			rlprev6 = 0;
+			rlprev6 = NULL;
 			rl6 = restrictlist6;
 		} else {
 			rlprev6 = restrictlist6;
@@ -442,8 +443,13 @@ hack_restrict(
 				rl->mask = mask;
 				rl->mflags = (u_short)mflags;
 
-				rl->next = rlprev->next;
-				rlprev->next = rl;
+				if (rlprev == NULL) {
+					rl->next = restrictlist;
+					restrictlist = rl;
+				} else {
+					rl->next = rlprev->next;
+					rlprev->next = rl;
+				}
 				restrictcount++;
 			}
 			if ((rl->flags ^ (u_short)flags) &
@@ -471,6 +477,7 @@ hack_restrict(
 			break;
 	
 		case RESTRICT_REMOVE:
+		case RESTRICT_REMOVEIF:
 			/*
 			 * Remove an entry from the table entirely if we
 			 * found one. Don't remove the default entry and
@@ -478,8 +485,12 @@ hack_restrict(
 			 */
 			if (rl != 0
 			    && rl->addr != htonl(INADDR_ANY)
-			    && !(rl->mflags & RESM_INTERFACE)) {
-				rlprev->next = rl->next;
+			    && !(rl->mflags & RESM_INTERFACE && op != RESTRICT_REMOVEIF)) {
+				if (rlprev != NULL) {
+					rlprev->next = rl->next;
+				} else {
+					restrictlist = rl->next;
+				}
 				restrictcount--;
 				if (rl->flags & RES_LIMITED) {
 					res_limited_refcnt--;
@@ -529,8 +540,13 @@ hack_restrict(
 				rl6->addr6 = addr6;
 				rl6->mask6 = mask6;
 				rl6->mflags = (u_short)mflags;
-				rl6->next = rlprev6->next;
-				rlprev6->next = rl6;
+				if (rlprev6 != NULL) {
+					rl6->next = rlprev6->next;
+					rlprev6->next = rl6;
+				} else {
+					rl6->next = restrictlist6;
+					restrictlist6 = rl6;
+				}
 				restrictcount6++;
 			}
 			if ((rl6->flags ^ (u_short)flags) &
@@ -558,6 +574,7 @@ hack_restrict(
 			break;
 
 		case RESTRICT_REMOVE:
+		case RESTRICT_REMOVEIF:
 			/*
 			 * Remove an entry from the table entirely if we
 			 * found one. Don't remove the default entry and
@@ -565,8 +582,12 @@ hack_restrict(
 			 */
 			if (rl6 != 0 &&
 			    !IN6_IS_ADDR_UNSPECIFIED(&rl6->addr6)
-			    && !(rl6->mflags & RESM_INTERFACE)) {
-				rlprev6->next = rl6->next;
+			    && !(rl6->mflags & RESM_INTERFACE && op != RESTRICT_REMOVEIF)) {
+				if (rlprev6 != NULL) {
+					rlprev6->next = rl6->next;
+				} else {
+					restrictlist6 = rl6->next;
+				}
 				restrictcount6--;
 				if (rl6->flags & RES_LIMITED) {
 					res_limited_refcnt6--;

@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.206 2005/12/11 12:17:41 christos Exp $	*/
+/*	$NetBSD: trap.c,v 1.214 2006/09/29 14:48:15 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2005 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.206 2005/12/11 12:17:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.214 2006/09/29 14:48:15 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -97,6 +97,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.206 2005/12/11 12:17:41 christos Exp $");
 #include <sys/ras.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
+#include <sys/kauth.h>
 
 #include <sys/ucontext.h>
 #include <sys/sa.h>
@@ -126,7 +127,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.206 2005/12/11 12:17:41 christos Exp $");
 
 #include "npx.h"
 
-static __inline int xmm_si_code(struct lwp *);
+static inline int xmm_si_code(struct lwp *);
 void trap(struct trapframe *);
 void trap_tss(struct i386tss *, int, int);
 #if defined(I386_CPU)
@@ -200,7 +201,7 @@ trap_tss(struct i386tss *tss, int trapno, int code)
 	trap(&tf);
 }
 
-static __inline int
+static inline int
 xmm_si_code(struct lwp *l)
 {
 	uint32_t mxcsr, mask;
@@ -283,8 +284,10 @@ trap(frame)
 
 	if (!KVM86MODE && !KERNELMODE(frame->tf_cs, frame->tf_eflags)) {
 		type |= T_USER;
+		KASSERT(l != NULL);
 		l->l_md.md_regs = frame;
-		pcb->pcb_cr2 = 0;		
+		pcb->pcb_cr2 = 0;
+		LWP_CACHE_CREDS(l, p);
 	}
 
 	switch (type) {
@@ -440,6 +443,7 @@ copyfault:
 			goto out;
 		}
 #endif
+		KASSERT(p != NULL);
 		/* If pmap_exec_fixup does something, let's retry the trap. */
 		if (pmap_exec_fixup(&p->p_vmspace->vm_map, frame,
 		    &l->l_addr->u_pcb)) {
@@ -497,6 +501,7 @@ copyfault:
 
 	case T_ASTFLT|T_USER:		/* Allow process switch */
 		uvmexp.softs++;
+		KASSERT(p != NULL);
 		if (p->p_flag & P_OWEUPC) {
 			p->p_flag &= ~P_OWEUPC;
 			KERNEL_PROC_LOCK(l);
@@ -586,6 +591,7 @@ copyfault:
 		extern struct vm_map *kernel_map;
 
 		cr2 = rcr2();
+		KASSERT(l != NULL);
 		KERNEL_PROC_LOCK(l);
 		if (l->l_flag & L_SA) {
 			l->l_savp->savp_faultaddr = (vaddr_t)cr2;
@@ -624,7 +630,7 @@ copyfault:
 		/* Fault the original page in. */
 		onfault = pcb->pcb_onfault;
 		pcb->pcb_onfault = NULL;
-		error = uvm_fault(map, va, 0, ftype);
+		error = uvm_fault(map, va, ftype);
 		pcb->pcb_onfault = onfault;
 		if (error == 0) {
 			if (map != kernel_map && (caddr_t)va >= vm->vm_maxsaddr)
@@ -665,7 +671,7 @@ copyfault:
 				KERNEL_UNLOCK();
 				goto copyfault;
 			}
-			printf("uvm_fault(%p, %#lx, 0, %d) -> %#x\n",
+			printf("uvm_fault(%p, %#lx, %d) -> %#x\n",
 			    map, va, ftype, error);
 			goto we_re_toast;
 		}
@@ -673,8 +679,8 @@ copyfault:
 			ksi.ksi_signo = SIGKILL;
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			       p->p_pid, p->p_comm,
-			       p->p_cred && p->p_ucred ?
-			       p->p_ucred->cr_uid : -1);
+			       l->l_cred ?
+			       kauth_cred_geteuid(l->l_cred) : -1);
 		} else {
 			ksi.ksi_signo = SIGSEGV;
 		}
@@ -790,7 +796,7 @@ trapwrite(addr)
 	p = curproc;
 	vm = p->p_vmspace;
 
-	if (uvm_fault(&vm->vm_map, va, 0, VM_PROT_WRITE) != 0)
+	if (uvm_fault(&vm->vm_map, va, VM_PROT_WRITE) != 0)
 		return 1;
 
 	if ((caddr_t)va >= vm->vm_maxsaddr)

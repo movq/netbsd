@@ -1,4 +1,4 @@
-/*	$NetBSD: udp6_output.c,v 1.22 2005/12/11 12:25:02 christos Exp $	*/
+/*	$NetBSD: udp6_output.c,v 1.26 2006/07/23 22:06:13 ad Exp $	*/
 /*	$KAME: udp6_output.c,v 1.43 2001/10/15 09:19:52 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udp6_output.c,v 1.22 2005/12/11 12:25:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udp6_output.c,v 1.26 2006/07/23 22:06:13 ad Exp $");
 
 #include "opt_inet.h"
 
@@ -77,6 +77,7 @@ __KERNEL_RCSID(0, "$NetBSD: udp6_output.c,v 1.22 2005/12/11 12:25:02 christos Ex
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/syslog.h>
+#include <sys/kauth.h>
 
 #include <net/if.h>
 #include <net/route.h>
@@ -96,6 +97,7 @@ __KERNEL_RCSID(0, "$NetBSD: udp6_output.c,v 1.22 2005/12/11 12:25:02 christos Ex
 #include <netinet6/udp6_var.h>
 #include <netinet/icmp6.h>
 #include <netinet6/ip6protosw.h>
+#include <netinet6/scope6_var.h>
 
 #include "faith.h"
 
@@ -107,11 +109,11 @@ __KERNEL_RCSID(0, "$NetBSD: udp6_output.c,v 1.22 2005/12/11 12:25:02 christos Ex
  */
 
 int
-udp6_output(in6p, m, addr6, control, p)
+udp6_output(in6p, m, addr6, control, l)
 	struct in6pcb *in6p;
 	struct mbuf *m;
 	struct mbuf *addr6, *control;
-	struct proc *p;
+	struct lwp *l;
 {
 	u_int32_t ulen = m->m_pkthdr.len;
 	u_int32_t plen = sizeof(struct udphdr) + ulen;
@@ -119,28 +121,67 @@ udp6_output(in6p, m, addr6, control, p)
 	struct udphdr *udp6;
 	struct in6_addr *laddr, *faddr;
 	struct in6_addr laddr_mapped; /* XXX ugly */
+	struct sockaddr_in6 *sin6 = NULL;
+	struct ifnet *oifp = NULL;
+	int scope_ambiguous = 0;
 	u_int16_t fport;
 	int error = 0;
-	struct ip6_pktopts opt, *stickyopt = in6p->in6p_outputopts;
+	struct ip6_pktopts *optp, opt;
 	int priv;
 	int af = AF_INET6, hlen = sizeof(struct ip6_hdr);
 #ifdef INET
 	struct ip *ip;
 	struct udpiphdr *ui;
-#endif
 	int flags = 0;
+#endif
 	struct sockaddr_in6 tmp;
 
 	priv = 0;
-	if (p && !suser(p->p_ucred, &p->p_acflag))
+	if (l && !kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    &l->l_acflag))
 		priv = 1;
-	if (control) {
-		if ((error = ip6_setpktoptions(control, &opt, priv)) != 0)
-			goto release;
-		in6p->in6p_outputopts = &opt;
-	}
 
 	if (addr6) {
+		if (addr6->m_len != sizeof(*sin6)) {
+			error = EINVAL;
+			goto release;
+		}
+		sin6 = mtod(addr6, struct sockaddr_in6 *);
+		if (sin6->sin6_family != AF_INET6) {
+			error = EAFNOSUPPORT;
+			goto release;
+		}
+
+		/* protect *sin6 from overwrites */
+		tmp = *sin6;
+		sin6 = &tmp;
+
+		/*
+		 * Application should provide a proper zone ID or the use of
+		 * default zone IDs should be enabled.  Unfortunately, some
+		 * applications do not behave as it should, so we need a
+		 * workaround.  Even if an appropriate ID is not determined,
+		 * we'll see if we can determine the outgoing interface.  If we
+		 * can, determine the zone ID based on the interface below.
+		 */
+		if (sin6->sin6_scope_id == 0 && !ip6_use_defzone)
+			scope_ambiguous = 1;
+		if ((error = sa6_embedscope(sin6, ip6_use_defzone)) != 0)
+			return (error);
+	}
+
+	if (control) {
+		if ((error = ip6_setpktopts(control, &opt,
+		    in6p->in6p_outputopts, priv, IPPROTO_UDP)) != 0)
+			goto release;
+		optp = &opt;
+	} else
+		optp = in6p->in6p_outputopts;
+
+
+	if (sin6) {
+		faddr = &sin6->sin6_addr;
+
 		/*
 		 * IPv4 version of udp_output calls in_pcbconnect in this case,
 		 * which needs splnet and affects performance.
@@ -149,16 +190,6 @@ udp6_output(in6p, m, addr6, control, p)
 		 * and in6_pcbsetport in order to fill in the local address
 		 * and the local port.
 		 */
-		struct sockaddr_in6 *sin6 = mtod(addr6, struct sockaddr_in6 *);
-
-		if (addr6->m_len != sizeof(*sin6)) {
-			error = EINVAL;
-			goto release;
-		}
-		if (sin6->sin6_family != AF_INET6) {
-			error = EAFNOSUPPORT;
-			goto release;
-		}
 		if (sin6->sin6_port == 0) {
 			error = EADDRNOTAVAIL;
 			goto release;
@@ -170,9 +201,6 @@ udp6_output(in6p, m, addr6, control, p)
 			goto release;
 		}
 
-		/* protect *sin6 from overwrites */
-		tmp = *sin6;
-		sin6 = &tmp;
 
 		faddr = &sin6->sin6_addr;
 		fport = sin6->sin6_port; /* allow 0 port */
@@ -208,17 +236,15 @@ udp6_output(in6p, m, addr6, control, p)
 			af = AF_INET;
 		}
 
-		/* KAME hack: embed scopeid */
-		if (in6_embedscope(&sin6->sin6_addr, sin6, in6p, NULL) != 0) {
-			error = EINVAL;
-			goto release;
-		}
-
 		if (!IN6_IS_ADDR_V4MAPPED(faddr)) {
-			laddr = in6_selectsrc(sin6, in6p->in6p_outputopts,
-					      in6p->in6p_moptions,
-					      &in6p->in6p_route,
-					      &in6p->in6p_laddr, &error);
+			laddr = in6_selectsrc(sin6, optp,
+			    in6p->in6p_moptions, &in6p->in6p_route,
+			    &in6p->in6p_laddr, &oifp, &error);
+			if (oifp && scope_ambiguous &&
+			    (error = in6_setscope(&sin6->sin6_addr,
+			    oifp, NULL))) {
+				goto release;
+			}
 		} else {
 			/*
 			 * XXX: freebsd[34] does not have in_selectsrc, but
@@ -260,7 +286,7 @@ udp6_output(in6p, m, addr6, control, p)
 			goto release;
 		}
 		if (in6p->in6p_lport == 0 &&
-		    (error = in6_pcbsetport(laddr, in6p, p)) != 0)
+		    (error = in6_pcbsetport(laddr, in6p, l)) != 0)
 			goto release;
 	} else {
 		if (IN6_IS_ADDR_UNSPECIFIED(&in6p->in6p_faddr)) {
@@ -335,12 +361,9 @@ udp6_output(in6p, m, addr6, control, p)
 		m->m_pkthdr.csum_flags = M_CSUM_UDPv6;
 		m->m_pkthdr.csum_data = offsetof(struct udphdr, uh_sum);
 
-		if (in6p->in6p_flags & IN6P_MINMTU)
-			flags |= IPV6_MINMTU;
-
 		udp6stat.udp6s_opackets++;
-		error = ip6_output(m, in6p->in6p_outputopts, &in6p->in6p_route,
-		    flags, in6p->in6p_moptions, in6p->in6p_socket, NULL);
+		error = ip6_output(m, optp, &in6p->in6p_route, 0,
+		    in6p->in6p_moptions, in6p->in6p_socket, NULL);
 		break;
 	case AF_INET:
 #ifdef INET
@@ -387,7 +410,7 @@ release:
 
 releaseopt:
 	if (control) {
-		in6p->in6p_outputopts = stickyopt;
+		ip6_clearpktopts(&opt, -1);
 		m_freem(control);
 	}
 	return (error);

@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.69 2005/11/17 16:12:21 tsutsui Exp $	*/
+/*	$NetBSD: types.h,v 1.71.12.1 2007/09/27 13:40:47 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993, 1994
@@ -194,6 +194,16 @@ typedef	__uid_t		uid_t;		/* user id */
 typedef	int32_t		dtime_t;	/* on-disk time_t */
 
 #if defined(_KERNEL) || defined(_STANDALONE)
+/*
+ * Boolean type definitions for the kernel environment.  User-space
+ * boolean definitions are found in <stdbool.h>.
+ */
+#define bool	_Bool
+#define true	1
+#define false	0
+/*
+ * Deprecated Mach-style boolean_t type.  Should not be used by new code.
+ */
 typedef int	boolean_t;
 #ifndef TRUE
 #define	TRUE	1
@@ -292,6 +302,9 @@ typedef	_BSD_USECONDS_T_	useconds_t;
 #ifdef _NETBSD_SOURCE
 #include <sys/fd_set.h>
 #define	NBBY	__NBBY
+
+typedef struct kauth_cred *kauth_cred_t;
+
 #endif
 
 #if defined(__STDC__) && defined(_KERNEL)
@@ -305,12 +318,17 @@ struct	user;
 struct	__ucontext;
 struct	proc;
 struct	pgrp;
-struct	ucred;
 struct	rusage;
 struct	file;
 struct	buf;
 struct	tty;
 struct	uio;
+#endif
+
+#ifdef _KERNEL
+#define SET(t, f)	((t) |= (f))
+#define	ISSET(t, f)	((t) & (f))
+#define	CLR(t, f)	((t) &= ~(f))
 #endif
 
 #if !defined(_KERNEL) && !defined(_STANDALONE)

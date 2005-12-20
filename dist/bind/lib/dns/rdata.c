@@ -1,7 +1,7 @@
-/*	$NetBSD: rdata.c,v 1.1.1.1 2004/05/17 23:44:53 christos Exp $	*/
+/*	$NetBSD: rdata.c,v 1.1.1.3.4.1 2007/05/17 00:40:43 jdc Exp $	*/
 
 /*
- * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2006  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1998-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -17,7 +17,9 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: rdata.c,v 1.147.2.11.2.15 2004/03/12 10:31:25 marka Exp */
+/* Id: rdata.c,v 1.184.18.9 2006/07/21 02:05:57 marka Exp */
+
+/*! \file */
 
 #include <config.h>
 #include <ctype.h>
@@ -102,16 +104,16 @@
 #define ARGS_CHECKNAMES dns_rdata_t *rdata, dns_name_t *owner, dns_name_t *bad
 
 
-/*
+/*%
  * Context structure for the totext_ functions.
  * Contains formatting options for rdata-to-text
  * conversion.
  */
 typedef struct dns_rdata_textctx {
-	dns_name_t *origin;	/* Current origin, or NULL. */
-	unsigned int flags;	/* DNS_STYLEFLAG_* */
-	unsigned int width;	/* Width of rdata column. */
-  	const char *linebreak;	/* Line break string. */
+	dns_name_t *origin;	/*%< Current origin, or NULL. */
+	unsigned int flags;	/*%< DNS_STYLEFLAG_*  */
+	unsigned int width;	/*%< Width of rdata column. */
+  	const char *linebreak;	/*%< Line break string. */
 } dns_rdata_textctx_t;
 
 static isc_result_t
@@ -196,6 +198,10 @@ rdata_totext(dns_rdata_t *rdata, dns_rdata_textctx_t *tctx,
 static void
 warn_badname(dns_name_t *name, isc_lex_t *lexer,
 	     dns_rdatacallbacks_t *callbacks);
+
+static void
+warn_badmx(isc_token_t *token, isc_lex_t *lexer,
+	   dns_rdatacallbacks_t *callbacks);
 
 static inline int
 getquad(const void *src, struct in_addr *dst,
@@ -988,11 +994,15 @@ txt_totext(isc_region_t *source, isc_buffer_t *target) {
 		if (*sp < 0x20 || *sp >= 0x7f) {
 			if (tl < 4)
 				return (ISC_R_NOSPACE);
-			snprintf(tp, 5, "\\%03u", *sp++);
-			tp += 4;
+			*tp++ = 0x5c;
+			*tp++ = 0x30 + ((*sp / 100) % 10);
+			*tp++ = 0x30 + ((*sp / 10) % 10);
+			*tp++ = 0x30 + (*sp % 10);
+			sp++;
 			tl -= 4;
 			continue;
 		}
+		/* double quote, semi-colon, backslash */
 		if (*sp == 0x22 || *sp == 0x3b || *sp == 0x5c) {
 			if (tl < 2)
 				return (ISC_R_NOSPACE);
@@ -1215,7 +1225,7 @@ name_tobuffer(dns_name_t *name, isc_buffer_t *target) {
 
 static isc_uint32_t
 uint32_fromregion(isc_region_t *region) {
-	unsigned long value;
+	isc_uint32_t value;
 
 	REQUIRE(region->length >= 4);
 	value = region->base[0] << 24;
@@ -1264,7 +1274,7 @@ hexvalue(char value) {
 		return (-1);
 	if (isupper(c))
 		c = tolower(c);
-	if ((s = strchr(hexdigits, value)) == NULL)
+	if ((s = strchr(hexdigits, c)) == NULL)
 		return (-1);
 	return (s - hexdigits);
 }
@@ -1579,6 +1589,22 @@ fromtext_warneof(isc_lex_t *lexer, dns_rdatacallbacks_t *callbacks) {
 }
 
 static void
+warn_badmx(isc_token_t *token, isc_lex_t *lexer,
+	   dns_rdatacallbacks_t *callbacks)
+{
+	const char *file;
+	unsigned long line;
+
+	if (lexer != NULL) {
+		file = isc_lex_getsourcename(lexer);
+		line = isc_lex_getsourceline(lexer);
+		(*callbacks->warn)(callbacks, "%s:%u: warning: '%s': %s", 
+				   file, line, DNS_AS_STR(*token),
+				   dns_result_totext(DNS_R_MXISADDRESS));
+	}
+}
+
+static void
 warn_badname(dns_name_t *name, isc_lex_t *lexer,
 	     dns_rdatacallbacks_t *callbacks)
 {
@@ -1590,7 +1616,7 @@ warn_badname(dns_name_t *name, isc_lex_t *lexer,
 		file = isc_lex_getsourcename(lexer);
 		line = isc_lex_getsourceline(lexer);
 		dns_name_format(name, namebuf, sizeof(namebuf));
-		(*callbacks->warn)(callbacks, "%s:%u: %s: %s", 
+		(*callbacks->warn)(callbacks, "%s:%u: warning: %s: %s", 
 				   file, line, namebuf,
 				   dns_result_totext(DNS_R_BADNAME));
 	}

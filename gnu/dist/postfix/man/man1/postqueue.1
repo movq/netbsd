@@ -1,4 +1,4 @@
-.\"	$NetBSD: postqueue.1,v 1.1.1.6 2005/08/18 21:03:49 rpaulo Exp $
+.\"	$NetBSD: postqueue.1,v 1.1.1.7.4.1 2007/06/16 16:57:43 snj Exp $
 .\"
 .TH POSTQUEUE 1 
 .ad
@@ -10,11 +10,13 @@ Postfix queue control
 .SH "SYNOPSIS"
 .na
 .nf
-\fBpostqueue\fR [\fB-c \fIconfig_dir\fR] \fB-f\fR
+\fBpostqueue\fR [\fB-v\fR] [\fB-c \fIconfig_dir\fR] \fB-f\fR
 .br
-\fBpostqueue\fR [\fB-c \fIconfig_dir\fR] \fB-p\fR
+\fBpostqueue\fR [\fB-v\fR] [\fB-c \fIconfig_dir\fR] \fB-i \fIqueue_id\fR
 .br
-\fBpostqueue\fR [\fB-c \fIconfig_dir\fR] \fB-s \fIsite\fR
+\fBpostqueue\fR [\fB-v\fR] [\fB-c \fIconfig_dir\fR] \fB-p\fR
+.br
+\fBpostqueue\fR [\fB-v\fR] [\fB-c \fIconfig_dir\fR] \fB-s \fIsite\fR
 .SH DESCRIPTION
 .ad
 .fi
@@ -38,6 +40,14 @@ by contacting the Postfix \fBqmgr\fR(8) daemon.
 
 Warning: flushing undeliverable mail frequently will result in
 poor delivery performance of all other mail.
+.IP "\fB-i \fIqueue_id\fR"
+Schedule immediate delivery of deferred mail with the
+specified queue ID.
+
+This option implements the traditional \fBsendmail -qI\fR
+command, by contacting the \fBflush\fR(8) server.
+
+This feature is available with Postfix version 2.4 and later.
 .IP \fB-p\fR
 Produce a traditional sendmail-style queue listing.
 This option implements the traditional \fBmailq\fR command,
@@ -69,7 +79,8 @@ This option implements the traditional "\fBsendmail -qR\fIsite\fR"
 command, by contacting the Postfix \fBflush\fR(8) daemon.
 .IP \fB-v\fR
 Enable verbose logging for debugging purposes. Multiple \fB-v\fR
-options make the software increasingly verbose.
+options make the software increasingly verbose. As of Postfix 2.3,
+this option is available for the super-user only.
 .SH "SECURITY"
 .na
 .nf

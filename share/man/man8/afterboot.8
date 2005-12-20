@@ -1,4 +1,4 @@
-.\"	$NetBSD: afterboot.8,v 1.22 2005/09/11 23:36:19 wiz Exp $
+.\"	$NetBSD: afterboot.8,v 1.29.2.1 2007/12/15 19:53:17 bouyer Exp $
 .\"	$OpenBSD: afterboot.8,v 1.72 2002/02/22 02:02:33 miod Exp $
 .\"
 .\" Originally created by Marshall M. Midden -- 1997-10-20, m4@umn.edu
@@ -66,7 +66,7 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd May 4, 2005
+.Dd August 22, 2006
 .Dt AFTERBOOT 8
 .Os
 .Sh NAME
@@ -99,7 +99,7 @@ if they get used to using the manual pages.
 By the time that you have installed your system, it is quite likely that
 bugs in the release have been found.
 All significant and easily fixed problems will be reported at
-.Pa http://www.NetBSD.org/Security/ .
+.Pa http://www.NetBSD.org/support/security/ .
 It is recommended that you check this page regularly.
 .Ss Login
 Login as
@@ -123,6 +123,9 @@ Upon successful login on the console, you may see the message
 .Dq We recommend creating a non-root account... .
 For security reasons, it is bad practice to login as root during
 regular use and maintenance of the system.
+In fact, the system will only let you login as root on a secure
+terminal.
+By default, only the console is considered to be a secure terminal.
 Instead, administrators are encouraged to add a
 .Dq regular
 user, add said user to the
@@ -521,8 +524,8 @@ to
 .Pa /etc/amd
 and customize them as needed.
 Alternatively, you can get your maps with YP.
-.Ss Clock synchronisation
-In order to make sure the system clock is synchronised
+.Ss Clock synchronization
+In order to make sure the system clock is synchronized
 to that of a publicly accessible NTP server,
 make sure that
 .Pa /etc/rc.conf
@@ -557,15 +560,6 @@ file is modified by
 whenever the system is booted.
 To keep any custom message intact, ensure that you leave two blank lines
 at the top, or your message will be overwritten.
-.Ss Sushi
-.Xr sushi 8
-is a tool for configuring the system.
-It will allow you to set up many
-aspects of the system from interactive menus.
-You can launch it typing:
-.Bd -literal -offset indent
-.Ic sushi
-.Ed
 .Ss Add new users
 To add new users and groups, there are
 .Xr useradd 8
@@ -573,7 +567,7 @@ and
 .Xr groupadd 8 ,
 see also
 .Xr user 8
-for forther programs for user and group manipulation.
+for further programs for user and group manipulation.
 You may use
 .Xr vipw 8
 to add users to the
@@ -672,8 +666,6 @@ and
 .Dq info heimdal
 for more information.
 If you already have a Kerberos master, change directory to
-.Pa /etc/kerberosIV
-or
 .Pa /etc/kerberosV
 and configure.
 Remember to get a
@@ -688,35 +680,6 @@ to non-local address or to different users.
 Run
 .Xr newaliases 1
 after changes.
-.Ss Sendmail
-.Nx
-ships with default
-.Pa /etc/mail/sendmail.cf
-and
-.Pa /etc/mail/submit.cf
-files that will work for simple installations; they were generated from
-.Pa netbsd-proto.mc
-and
-.Pa netbsd-msp.mc
-in
-.Pa /usr/share/sendmail/cf .
-Please see
-.Pa /usr/share/sendmail/README
-and
-.Pa /usr/share/doc/smm/08.sendmailop/op.me
-(run
-.Ic make
-there to produce a PostScript version)
-for information on generating your own sendmail configuration files.
-.Pa /etc/mailer.conf
-is configured to use Sendmail binaries by default and
-.Xr sendmail 8
-will start by default if no other changes to the mail system are made.
-See
-.Xr mailer.conf 5
-and
-.Xr rc.conf 5
-for more details.
 .Ss Postfix
 .Nx
 comes also with Postfix in the base system.
@@ -771,7 +734,7 @@ After this, you can start the server by issuing:
 .Ic /etc/rc.d/mountd start
 .Ic /etc/rc.d/nfsd start
 .Ed
-which will also start dependancies.
+which will also start dependencies.
 .Ss HP remote boot server
 Edit
 .Pa /etc/rbootd.conf
@@ -863,7 +826,7 @@ A lot of it is available as binary packages that you can download from
 or a mirror, and install using
 .Xr pkg_add 1 .
 See
-.Pa http://www.NetBSD.org/Documentation/pkgsrc/
+.Pa http://www.NetBSD.org/docs/pkgsrc/
 and
 .Xr packages 7
 for more details.
@@ -1004,7 +967,6 @@ $ ./build.sh kernel=SOMEFILE
 .Xr rc 8 ,
 .Xr rmt 8 ,
 .Xr route 8 ,
-.Xr sushi 8 ,
 .Xr umount 8 ,
 .Xr vipw 8 ,
 .Xr ypbind 8

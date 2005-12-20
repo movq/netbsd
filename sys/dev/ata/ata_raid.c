@@ -1,4 +1,4 @@
-/*	$NetBSD: ata_raid.c,v 1.17 2005/12/11 12:21:14 christos Exp $	*/
+/*	$NetBSD: ata_raid.c,v 1.20.2.1 2007/03/31 16:38:04 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ata_raid.c,v 1.17 2005/12/11 12:21:14 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ata_raid.c,v 1.20.2.1 2007/03/31 16:38:04 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -113,6 +113,7 @@ ata_raid_type_name(u_int type)
 	static const char *ata_raid_type_names[] = {
 		"Promise",
 		"Adaptec",
+		"VIA V-RAID",
 	};
 
 	if (type < sizeof(ata_raid_type_names) / sizeof(ata_raid_type_names[0]))
@@ -172,7 +173,8 @@ ata_raid_finalize(struct device *self)
  *	Autoconfiguration glue: match routine.
  */
 static int
-ataraid_match(struct device *parent, struct cfdata *cf, void *aux)
+ataraid_match(struct device *parent, struct cfdata *cf,
+    void *aux)
 {
 
 	/* pseudo-device; always present */
@@ -185,7 +187,8 @@ ataraid_match(struct device *parent, struct cfdata *cf, void *aux)
  *	Autoconfiguration glue: attach routine.  We attach the children.
  */
 static void
-ataraid_attach(struct device *parent, struct device *self, void *aux)
+ataraid_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct ataraid_array_info *aai;
 	int locs[ATARAIDCF_NLOCS];
@@ -238,6 +241,8 @@ ata_raid_check_component(struct device *self)
 		return;
 	if (ata_raid_read_config_promise(sc) == 0)
 		return;
+	if (ata_raid_read_config_via(sc) == 0)
+		return;
 }
 
 struct ataraid_array_info *
@@ -286,13 +291,9 @@ ata_raid_config_block_rw(struct vnode *vp, daddr_t blkno, void *tbuf,
     size_t size, int bflags)
 {
 	struct buf *bp;
-	int error, s;
+	int error;
 
-	s = splbio();
-	bp = pool_get(&bufpool, PR_WAITOK);
-	splx(s);
-	BUF_INIT(bp);
-
+	bp = getiobuf();
 	bp->b_vp = vp;
 	bp->b_blkno = blkno;
 	bp->b_bcount = bp->b_resid = size;
@@ -303,8 +304,6 @@ ata_raid_config_block_rw(struct vnode *vp, daddr_t blkno, void *tbuf,
 	VOP_STRATEGY(vp, bp);
 	error = biowait(bp);
 
-	s = splbio();
-	pool_put(&bufpool, bp);
-	splx(s);
+	putiobuf(bp);
 	return (error);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.c,v 1.60 2005/12/11 12:17:41 christos Exp $	*/
+/*	$NetBSD: mem.c,v 1.67 2006/11/16 01:32:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.60 2005/12/11 12:17:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.67 2006/11/16 01:32:38 christos Exp $");
 
 #include "opt_compat_netbsd.h"
 
@@ -106,16 +106,14 @@ dev_type_mmap(mmmmap);
 
 const struct cdevsw mem_cdevsw = {
 	mmopen, nullclose, mmrw, mmrw, mmioctl,
-	nostop, notty, nopoll, mmmmap, nokqfilter,
+	nostop, notty, nopoll, mmmmap, nokqfilter, D_OTHER,
 };
 
+int check_pa_acc(paddr_t, vm_prot_t);
 
 /*ARGSUSED*/
 int
-mmopen(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+mmopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 
 	switch (minor(dev)) {
@@ -128,6 +126,8 @@ mmopen(dev, flag, mode, l)
 			fp->tf_eflags |= PSL_IOPL;
 		}
 		break;
+#else
+	(void) flag;
 #endif
 
 	default:
@@ -138,10 +138,7 @@ mmopen(dev, flag, mode, l)
 
 /*ARGSUSED*/
 int
-mmrw(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+mmrw(dev_t dev, struct uio *uio, int flags)
 {
 	register vaddr_t o, v;
 	register int c;
@@ -175,6 +172,10 @@ mmrw(dev, uio, flags)
 			v = uio->uio_offset;
 			prot = uio->uio_rw == UIO_READ ? VM_PROT_READ :
 			    VM_PROT_WRITE;
+			error = check_pa_acc(uio->uio_offset, prot);
+			if (error) {
+				break;
+			}
 			pmap_enter(pmap_kernel(), (vaddr_t)vmmap,
 			    trunc_page(v), prot, PMAP_WIRED|prot);
 			pmap_update(pmap_kernel());
@@ -227,12 +228,8 @@ mmrw(dev, uio, flags)
 }
 
 paddr_t
-mmmmap(dev, off, prot)
-	dev_t dev;
-	off_t off;
-	int prot;
+mmmmap(dev_t dev, off_t off, int prot)
 {
-	struct proc *p = curproc;	/* XXX */
 
 	/*
 	 * /dev/mem is the only one that makes sense through this
@@ -243,9 +240,11 @@ mmmmap(dev, off, prot)
 	 * pager in mmap().
 	 */
 	if (minor(dev) != DEV_MEM)
-		return (-1);
+		return -1;
 
-	if ((u_int)off > ctob(physmem) && suser(p->p_ucred, &p->p_acflag) != 0)
-		return (-1);
-	return (x86_btop((u_int)off));
+	if (check_pa_acc(off, prot) != 0) {
+		return -1;
+	}
+
+	return x86_btop(off);
 }

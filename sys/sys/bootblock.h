@@ -1,4 +1,4 @@
-/*	$NetBSD: bootblock.h,v 1.38 2005/12/11 12:25:20 christos Exp $	*/
+/*	$NetBSD: bootblock.h,v 1.40 2006/09/01 21:41:46 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2002-2004 The NetBSD Foundation, Inc.
@@ -913,6 +913,16 @@ struct apple_blockzeroblock {
 #define	APPLE_BZB_USRFS		0x4000
 
 /* ------------------------------------------
+ * ews4800mips
+ *
+ */
+
+#define	EWS4800MIPS_BBINFO_MAGIC		"NetBSD/ews4800mips     20040611"
+#define	EWS4800MIPS_BOOT_BLOCK_OFFSET		0
+#define	EWS4800MIPS_BOOT_BLOCK_BLOCKSIZE	512
+#define	EWS4800MIPS_BOOT_BLOCK_MAX_SIZE		(512 * 8)
+
+/* ------------------------------------------
  * hp300
  *
  */
@@ -1074,6 +1084,28 @@ struct x86_boot_params {
 #define	X86_BP_CONSDEV_COM1KBD	6
 #define	X86_BP_CONSDEV_COM2KBD	7
 #define	X86_BP_CONSDEV_COM3KBD	8
+
+/* ------------------------------------------
+ * landisk
+ */
+
+#if !defined(__ASSEMBLER__)					/* { */
+
+/*
+ * Parameters for NetBSD /boot written to start of pbr code by installboot
+ */
+struct landisk_boot_params {
+	uint32_t	bp_length;	/* length of patchable data */
+	uint32_t	bp_flags;
+	uint32_t	bp_timeout;	/* boot timeout in seconds */
+	uint32_t	bp_consdev;
+	uint32_t	bp_conspeed;
+};
+
+#endif	/* !defined(__ASSEMBLER__) */				/* } */
+
+#define	LANDISK_BOOT_MAGIC_1	0x20031125
+#define	LANDISK_BOOT_MAGIC_2	0x20041110
 
 #if !defined(__ASSEMBLER__)					/* { */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: elf2pef.c,v 1.11 2005/12/11 12:17:04 christos Exp $	*/
+/*	$NetBSD: elf2pef.c,v 1.12.22.1 2007/01/12 23:26:38 bouyer Exp $	*/
 
 /*-
  * Copyright (C) 1997-1998 Kazuki Sakamoto (sakamoto@NetBSD.org)
@@ -35,6 +35,8 @@
 
 #if HAVE_NBTOOL_CONFIG_H
 #include "nbtool_config.h"
+#else
+#include <sys/endian.h>
 #endif
 
 #include <stdio.h>
@@ -47,8 +49,7 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/exec_elf.h>
-#include <sys/endian.h>
-#include <machine/bswap.h>
+#include <sys/bswap.h>
 #include "pef.h"
 #include "magic.h"
 

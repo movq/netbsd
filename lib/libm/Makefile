@@ -1,4 +1,4 @@
-#  $NetBSD: Makefile,v 1.69 2005/09/16 15:26:47 wiz Exp $
+#  $NetBSD: Makefile,v 1.77 2006/07/03 16:03:56 drochner Exp $
 #
 #  @(#)Makefile 5.1beta 93/09/24
 #
@@ -49,6 +49,12 @@ USE_SHLIBDIR=	yes
 # require this for the value of I387_LIBM from mk.conf, if set.
 .include <bsd.own.mk>
 
+# XXX our cabs() is different!
+.if ${HAVE_GCC} == 4
+COPTS.w_cabs.c=  -fno-builtin-cabs
+COPTS.w_cabsf.c= -fno-builtin-cabsf
+.endif
+
 .if (${MACHINE_ARCH} == "alpha")
 .PATH: ${.CURDIR}/arch/alpha
 ARCH_SRCS = s_copysign.S s_copysignf.S lrint.S
@@ -89,6 +95,7 @@ ARCH_SRCS = e_acos.S e_asin.S e_atanh.S e_cosh.S e_exp.S e_fmod.S e_log.S \
 # end of m68k
 .elif (${MACHINE_ARCH} == "vax")
 #.PATH:	${.CURDIR}/arch/vax
+
 #NOIEEE_ARCH= n_infnan.S n_argred.S n_sqrt.S
 #ARCH_SRCS = n_atan2.S n_cabs.S n_cbrt.S n_support.S n_sincos.S n_tan.S
 # XXX - ripped out due to lack of the insn polyd in the Mariah chip,
@@ -104,6 +111,8 @@ WARNS?=		1
 
 .if (${MACHINE_ARCH} != "vax")
 CPPFLAGS+= -D_MULTI_LIBM -D_POSIX_MODE
+# XXX noieee libm is gross
+COPTS+=	-fno-strict-aliasing
 .endif
 CPPFLAGS+=-DLIBM_SCCS
 
@@ -125,7 +134,7 @@ COMMON_SRCS = e_acos.c e_acosf.c e_acosh.c e_acoshf.c e_asin.c e_asinf.c \
 	s_log1pf.c s_logb.c s_logbf.c s_matherr.c s_modff.c s_nextafter.c \
 	s_nextafterf.c s_rint.c s_rintf.c s_round.c s_roundf.c s_scalbn.c \
 	s_scalbnf.c s_signgam.c s_significand.c s_significandf.c s_sin.c \
-	s_sinf.c s_tan.c s_tanf.c s_tanh.c s_tanhf.c \
+	s_sinf.c s_tan.c s_tanf.c s_tanh.c s_tanhf.c s_trunc.c s_truncf.c \
 	w_acos.c w_acosf.c w_acosh.c w_acoshf.c w_asin.c w_asinf.c w_atan2.c \
 	w_atan2f.c w_atanh.c w_atanhf.c w_cabs.c w_cabsf.c w_cosh.c w_coshf.c \
 	w_drem.c w_dremf.c w_exp.c w_expf.c w_fmod.c w_fmodf.c w_gamma.c \
@@ -136,14 +145,15 @@ COMMON_SRCS = e_acos.c e_acosf.c e_acosh.c e_acoshf.c e_asin.c e_asinf.c \
 	w_pow.c w_powf.c w_remainder.c w_remainderf.c w_scalb.c w_scalbf.c \
 	w_sinh.c w_sinhf.c w_sqrt.c w_sqrtf.c \
 	lrint.c lrintf.c llrint.c llrintf.c lround.c lroundf.c llround.c \
-	llroundf.c
+	llroundf.c s_frexp.c s_ldexp.c s_modf.c
 
 # math routines for non-IEEE architectures.
 NOIEEE_SRCS = n_asincos.c n_acosh.c n_asinh.c n_atan.c n_atanh.c n_cosh.c \
 	n_erf.c n_exp.c n_exp__E.c n_expm1.c n_floor.c n_fmod.c n_gamma.c \
 	n_lgamma.c n_j0.c n_j1.c n_jn.c n_log.c n_log10.c n_log1p.c \
 	n_log__L.c n_pow.c n_sinh.c n_tanh.c \
-	n_sincos.c n_tan.c
+	n_sincos.c n_tan.c \
+	n_round.c n_roundf.c
 #	n_sqrt.c n_argred.c n_infnan.c n_atan2.c n_cabs.c n_cbrt.c n_support.c
 
 
@@ -172,10 +182,10 @@ SRCS:=${SRCS} n_sqrt.S n_argred.S n_infnan.S n_atan2.S n_cabs.S n_cbrt.S \
 .endif
 
 MAN+=	acos.3 acosh.3 asin.3 asinh.3 atan.3 atan2.3 atanh.3 ceil.3 \
-	cos.3 cosh.3 erf.3 exp.3 fabs.3 floor.3 fmod.3 hypot.3 ieee.3 \
-	ieee_test.3 isinff.3 j0.3 lgamma.3 lrint.3 \
-	math.3 rint.3 round.3 sin.3 sinh.3 \
-	sqrt.3 tan.3 tanh.3
+	cos.3 cosh.3 erf.3 exp.3 fabs.3 floor.3 fmod.3 frexp.3 hypot.3 ieee.3 \
+	ieee_test.3 isinff.3 j0.3 ldexp.3 lgamma.3 lrint.3 \
+	math.3 modf.3 rint.3 round.3 sin.3 sinh.3 \
+	sqrt.3 tan.3 tanh.3 trunc.3
 
 MLINKS+=acos.3 acosf.3
 MLINKS+=acosh.3 acoshf.3
@@ -215,6 +225,8 @@ MLINKS+=sqrt.3 sqrtf.3 sqrt.3 cbrt.3 sqrt.3 cbrtf.3
 MLINKS+=tan.3 tanf.3
 MLINKS+=tanh.3 tanhf.3
 MLINKS+=round.3 roundf.3
+MLINKS+=trunc.3 truncf.3
 
+.include "${.CURDIR}/gen/Makefile.inc"
 .include <bsd.lib.mk>
 .include <bsd.subdir.mk>

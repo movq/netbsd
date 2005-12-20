@@ -87,6 +87,7 @@ static ERR_STRING_DATA SSL_str_functs[]=
 {ERR_FUNC(SSL_F_DTLS1_GET_MESSAGE_FRAGMENT),	"DTLS1_GET_MESSAGE_FRAGMENT"},
 {ERR_FUNC(SSL_F_DTLS1_GET_RECORD),	"DTLS1_GET_RECORD"},
 {ERR_FUNC(SSL_F_DTLS1_OUTPUT_CERT_CHAIN),	"DTLS1_OUTPUT_CERT_CHAIN"},
+{ERR_FUNC(SSL_F_DTLS1_PREPROCESS_FRAGMENT),	"DTLS1_PREPROCESS_FRAGMENT"},
 {ERR_FUNC(SSL_F_DTLS1_PROCESS_OUT_OF_SEQ_MESSAGE),	"DTLS1_PROCESS_OUT_OF_SEQ_MESSAGE"},
 {ERR_FUNC(SSL_F_DTLS1_PROCESS_RECORD),	"DTLS1_PROCESS_RECORD"},
 {ERR_FUNC(SSL_F_DTLS1_READ_BYTES),	"DTLS1_READ_BYTES"},
@@ -336,7 +337,6 @@ static ERR_STRING_DATA SSL_str_reasons[]=
 {ERR_REASON(SSL_R_LENGTH_TOO_SHORT)      ,"length too short"},
 {ERR_REASON(SSL_R_LIBRARY_BUG)           ,"library bug"},
 {ERR_REASON(SSL_R_LIBRARY_HAS_NO_CIPHERS),"library has no ciphers"},
-{ERR_REASON(SSL_R_MASTER_KEY_TOO_LONG)   ,"master key too long"},
 {ERR_REASON(SSL_R_MESSAGE_TOO_LONG)      ,"message too long"},
 {ERR_REASON(SSL_R_MISSING_DH_DSA_CERT)   ,"missing dh dsa cert"},
 {ERR_REASON(SSL_R_MISSING_DH_KEY)        ,"missing dh key"},
@@ -375,6 +375,7 @@ static ERR_STRING_DATA SSL_str_reasons[]=
 {ERR_REASON(SSL_R_NULL_SSL_CTX)          ,"null ssl ctx"},
 {ERR_REASON(SSL_R_NULL_SSL_METHOD_PASSED),"null ssl method passed"},
 {ERR_REASON(SSL_R_OLD_SESSION_CIPHER_NOT_RETURNED),"old session cipher not returned"},
+{ERR_REASON(SSL_R_ONLY_TLS_ALLOWED_IN_FIPS_MODE),"only tls allowed in fips mode"},
 {ERR_REASON(SSL_R_PACKET_LENGTH_TOO_LONG),"packet length too long"},
 {ERR_REASON(SSL_R_PATH_TOO_LONG)         ,"path too long"},
 {ERR_REASON(SSL_R_PEER_DID_NOT_RETURN_A_CERTIFICATE),"peer did not return a certificate"},
@@ -415,12 +416,7 @@ static ERR_STRING_DATA SSL_str_reasons[]=
 {ERR_REASON(SSL_R_SSLV3_ALERT_HANDSHAKE_FAILURE),"sslv3 alert handshake failure"},
 {ERR_REASON(SSL_R_SSLV3_ALERT_ILLEGAL_PARAMETER),"sslv3 alert illegal parameter"},
 {ERR_REASON(SSL_R_SSLV3_ALERT_NO_CERTIFICATE),"sslv3 alert no certificate"},
-{ERR_REASON(SSL_R_SSLV3_ALERT_PEER_ERROR_CERTIFICATE),"sslv3 alert peer error certificate"},
-{ERR_REASON(SSL_R_SSLV3_ALERT_PEER_ERROR_NO_CERTIFICATE),"sslv3 alert peer error no certificate"},
-{ERR_REASON(SSL_R_SSLV3_ALERT_PEER_ERROR_NO_CIPHER),"sslv3 alert peer error no cipher"},
-{ERR_REASON(SSL_R_SSLV3_ALERT_PEER_ERROR_UNSUPPORTED_CERTIFICATE_TYPE),"sslv3 alert peer error unsupported certificate type"},
 {ERR_REASON(SSL_R_SSLV3_ALERT_UNEXPECTED_MESSAGE),"sslv3 alert unexpected message"},
-{ERR_REASON(SSL_R_SSLV3_ALERT_UNKNOWN_REMOTE_ERROR_TYPE),"sslv3 alert unknown remote error type"},
 {ERR_REASON(SSL_R_SSLV3_ALERT_UNSUPPORTED_CERTIFICATE),"sslv3 alert unsupported certificate"},
 {ERR_REASON(SSL_R_SSL_CTX_HAS_NO_DEFAULT_SSL_VERSION),"ssl ctx has no default ssl version"},
 {ERR_REASON(SSL_R_SSL_HANDSHAKE_FAILURE) ,"ssl handshake failure"},
@@ -472,7 +468,6 @@ static ERR_STRING_DATA SSL_str_reasons[]=
 {ERR_REASON(SSL_R_UNSUPPORTED_CIPHER)    ,"unsupported cipher"},
 {ERR_REASON(SSL_R_UNSUPPORTED_COMPRESSION_ALGORITHM),"unsupported compression algorithm"},
 {ERR_REASON(SSL_R_UNSUPPORTED_ELLIPTIC_CURVE),"unsupported elliptic curve"},
-{ERR_REASON(SSL_R_UNSUPPORTED_OPTION)    ,"unsupported option"},
 {ERR_REASON(SSL_R_UNSUPPORTED_PROTOCOL)  ,"unsupported protocol"},
 {ERR_REASON(SSL_R_UNSUPPORTED_SSL_VERSION),"unsupported ssl version"},
 {ERR_REASON(SSL_R_WRITE_BIO_NOT_SET)     ,"write bio not set"},
@@ -492,15 +487,12 @@ static ERR_STRING_DATA SSL_str_reasons[]=
 
 void ERR_load_SSL_strings(void)
 	{
-	static int init=1;
-
-	if (init)
-		{
-		init=0;
 #ifndef OPENSSL_NO_ERR
+
+	if (ERR_func_error_string(SSL_str_functs[0].error) == NULL)
+		{
 		ERR_load_strings(0,SSL_str_functs);
 		ERR_load_strings(0,SSL_str_reasons);
-#endif
-
 		}
+#endif
 	}

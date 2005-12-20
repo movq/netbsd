@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_exec_elf32.c,v 1.23 2005/12/11 12:20:22 christos Exp $	*/
+/*	$NetBSD: netbsd32_exec_elf32.c,v 1.26 2006/07/23 22:06:09 ad Exp $	*/
 /*	from: NetBSD: exec_aout.c,v 1.15 1996/09/26 23:34:46 cgd Exp */
 
 /*
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_exec_elf32.c,v 1.23 2005/12/11 12:20:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_exec_elf32.c,v 1.26 2006/07/23 22:06:09 ad Exp $");
 
 #define	ELFSIZE		32
 
@@ -73,6 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_exec_elf32.c,v 1.23 2005/12/11 12:20:22 chr
 #include <sys/resourcevar.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
+#include <sys/kauth.h>
 
 #include <compat/netbsd32/netbsd32.h>
 #include <compat/netbsd32/netbsd32_exec.h>
@@ -84,7 +85,7 @@ int netbsd32_copyinargs(struct exec_package *, struct ps_strings *,
 			void *, size_t, const void *, const void *);
 int ELFNAME2(netbsd32,probe_noteless)(struct lwp *, struct exec_package *epp,
 				      void *eh, char *itp, vaddr_t *pos);
-extern int ELFNAME2(netbsd,signature)(struct proc *, struct exec_package *,
+extern int ELFNAME2(netbsd,signature)(struct lwp *, struct exec_package *,
 				      Elf_Ehdr *);
 
 int
@@ -93,7 +94,7 @@ ELFNAME2(netbsd32,probe)(struct lwp *l, struct exec_package *epp,
 {
 	int error;
 
-	if ((error = ELFNAME2(netbsd,signature)(l->l_proc, epp, eh)) != 0)
+	if ((error = ELFNAME2(netbsd,signature)(l, epp, eh)) != 0)
 		return error;
 
 	return ELFNAME2(netbsd32,probe_noteless)(l, epp, eh, itp, pos);
@@ -135,10 +136,7 @@ netbsd32_elf32_copyargs(struct lwp *l, struct exec_package *pack,
 	size_t len;
 	AuxInfo ai[ELF_AUX_ENTRIES], *a;
 	struct elf_args *ap;
-	struct proc *p;
 	int error;
-
-	p = l->l_proc;
 
 	if ((error = netbsd32_copyargs(l, pack, arginfo, stackp, argp)) != 0)
 		return error;
@@ -180,19 +178,19 @@ netbsd32_elf32_copyargs(struct lwp *l, struct exec_package *pack,
 		a++;
 
 		a->a_type = AT_EUID;
-		a->a_v = p->p_ucred->cr_uid;
+		a->a_v = kauth_cred_geteuid(l->l_cred);
 		a++;
 
 		a->a_type = AT_RUID;
-		a->a_v = p->p_cred->p_ruid;
+		a->a_v = kauth_cred_getuid(l->l_cred);
 		a++;
 
 		a->a_type = AT_EGID;
-		a->a_v = p->p_ucred->cr_gid;
+		a->a_v = kauth_cred_getegid(l->l_cred);
 		a++;
 
 		a->a_type = AT_RGID;
-		a->a_v = p->p_cred->p_rgid;
+		a->a_v = kauth_cred_getgid(l->l_cred);
 		a++;
 
 		free((char *)ap, M_TEMP);

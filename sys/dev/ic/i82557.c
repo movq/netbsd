@@ -1,4 +1,4 @@
-/*	$NetBSD: i82557.c,v 1.95 2005/12/11 12:21:26 christos Exp $	*/
+/*	$NetBSD: i82557.c,v 1.100 2006/11/16 01:32:51 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2001, 2002 The NetBSD Foundation, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82557.c,v 1.95 2005/12/11 12:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82557.c,v 1.100 2006/11/16 01:32:51 christos Exp $");
 
 #include "bpfilter.h"
 #include "rnd.h"
@@ -237,7 +237,7 @@ static int tx_threshold = 64;
  * Wait for the previous command to be accepted (but not necessarily
  * completed).
  */
-static __inline void
+static inline void
 fxp_scb_wait(struct fxp_softc *sc)
 {
 	int i = 10000;
@@ -252,7 +252,7 @@ fxp_scb_wait(struct fxp_softc *sc)
 /*
  * Submit a command to the i82557.
  */
-static __inline void
+static inline void
 fxp_scb_cmd(struct fxp_softc *sc, u_int8_t cmd)
 {
 
@@ -450,7 +450,8 @@ fxp_attach(struct fxp_softc *sc)
 	/*
   	 * Add suspend hook, for similar reasons..
 	 */
-	sc->sc_powerhook = powerhook_establish(fxp_power, sc);
+	sc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
+	    fxp_power, sc);
 	if (sc->sc_powerhook == NULL)
 		aprint_error("%s: WARNING: unable to establish power hook\n",
 		    sc->sc_dev.dv_xname);
@@ -1123,7 +1124,7 @@ fxp_intr(void *arg)
 	int claimed = 0;
 	u_int8_t statack;
 
-	if ((sc->sc_dev.dv_flags & DVF_ACTIVE) == 0 || sc->sc_enabled == 0)
+	if (!device_is_active(&sc->sc_dev) || sc->sc_enabled == 0)
 		return (0);
 	/*
 	 * If the interface isn't running, don't try to
@@ -1432,7 +1433,7 @@ fxp_tick(void *arg)
 	struct fxp_stats *sp = &sc->sc_control_data->fcd_stats;
 	int s;
 
-	if ((sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->sc_dev))
 		return;
 
 	s = splnet();

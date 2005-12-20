@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.6 2000/11/28 22:31:37 mrg Exp $	*/
+/*	$NetBSD: defs.h,v 1.9.2.1 2007/03/04 14:17:07 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -35,6 +35,14 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#ifdef USE_OPENFIRM
+#include <dev/ofw/openfirmio.h>
+#endif
+
+#ifdef USE_PREPNVRAM
+#include <machine/nvram.h>
+#endif
 
 #undef BUFSIZE
 #define BUFSIZE		1024
@@ -89,9 +97,24 @@ struct	extabent {
 };
 #endif /* __sparc__ */
 
-/* date parser */
-struct	timeb;
-time_t	get_date (char *, struct timeb *);
+#ifdef USE_OPENFIRM
+struct	extabent {
+	char	*ex_keyword;		/* keyword for this entry */
+	void	(*ex_handler) (struct extabent *,
+		    struct ofiocdesc *, char *);
+					/* handler function for this entry */
+};
+#endif
+
+#ifdef USE_PREPNVRAM
+struct	extabent {
+	char	*ex_keyword;		/* keyword for this entry */
+	void	(*ex_handler) (struct extabent *,
+		    struct pnviocdesc *, char *);
+					/* handler function for this entry */
+};
+#endif
+
 
 /* Sun 3/4 EEPROM handlers. */
 void	ee_action (char *, char *);
@@ -120,3 +143,13 @@ void	op_action (char *, char *);
 void	op_dump (void);
 int	check_for_openprom (void);
 #endif /* __sparc__ */
+
+/* OpenFirmware handlers. */
+char	*of_handler (char *, char *);
+void	of_action (char *, char *);
+void	of_dump (void);
+
+/* PReP nvram handlers. */
+char	*prep_handler (char *, char *);
+void	prep_action (char *, char *);
+void	prep_dump (void);

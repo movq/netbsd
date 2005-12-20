@@ -1,4 +1,4 @@
-/*	$NetBSD: bufcache.h,v 1.5 2005/05/20 18:59:36 perseant Exp $	*/
+/*	$NetBSD: bufcache.h,v 1.7 2006/05/03 15:04:51 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -111,6 +111,10 @@ struct ubuf {
 
 LIST_HEAD(bufhash_struct, ubuf);
 
+#if !defined(NOCRED)
+#define	NOCRED	((void *)-1)	/* dummy; not actually used */
+#endif /* !defined(NOCRED) */
+
 void bufinit(int);
 void bufrehash(int);
 void bufstats(void);
@@ -120,6 +124,6 @@ struct ubuf *incore(struct uvnode *, int);
 struct ubuf *getblk(struct uvnode *, daddr_t, int);
 void bwrite(struct ubuf *);
 void brelse(struct ubuf *);
-int bread(struct uvnode *, daddr_t, int, struct ucred *, struct ubuf **);
+int bread(struct uvnode *, daddr_t, int, void *, struct ubuf **);
 void reassignbuf(struct ubuf *, struct uvnode *);
 void dump_free_lists(void);

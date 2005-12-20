@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.3 2005/12/11 12:17:50 christos Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.5 2006/10/31 14:04:29 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -55,16 +55,18 @@
 #include <sys/reboot.h>
 #include <sys/device.h>
 
+#include <dev/pci/pcivar.h>
+
 #include <machine/pte.h>
 #include <machine/intr.h>
 
-static void findroot __P((void));
+static void findroot(void);
 
 /*
  * Determine i/o configuration for a machine.
  */
 void
-cpu_configure()
+cpu_configure(void)
 {
 	/* startrtclock(); */
 
@@ -80,7 +82,7 @@ cpu_configure()
 }
 
 void
-cpu_rootconf()
+cpu_rootconf(void)
 {
 	findroot();
 
@@ -120,11 +122,34 @@ findroot(void)
 	unit = (bootdev >> B_UNITSHIFT) & B_UNITMASK;
 
 	sprintf(buf, "%s%d", name, unit);
-	for (dv = alldevs.tqh_first; dv != NULL; dv = dv->dv_list.tqe_next) {
+	TAILQ_FOREACH(dv, &alldevs, dv_list) {
 		if (strcmp(buf, dv->dv_xname) == 0) {
 			booted_device = dv;
 			booted_partition = part;
 			return;
+		}
+	}
+}
+
+#define	BUILTIN_ETHERNET_P(pa)						\
+	((pa)->pa_bus == 0 && (pa)->pa_device == 2 && (pa)->pa_function == 0)
+
+void
+device_register(device_t dev, void *aux)
+{
+	device_t pdev;
+
+	if ((pdev = device_parent(dev)) != NULL && device_is_a(pdev, "pci")) {
+		struct pci_attach_args *pa = aux;
+
+		if (BUILTIN_ETHERNET_P(pa)) {
+			if (! prop_dictionary_set_bool(device_properties(dev),
+						       "am79c970-no-eeprom",
+						       TRUE)) {
+				printf("WARNING: unable to set "
+				       "am79c970-no-eeprom property for %s\n",
+				       dev->dv_xname);
+			}
 		}
 	}
 }

@@ -1,4 +1,4 @@
-#	$NetBSD: files.shark,v 1.10 2005/12/11 12:19:02 christos Exp $
+#	$NetBSD: files.shark,v 1.11.4.1 2007/01/12 23:44:04 bouyer Exp $
 #
 # First try for arm-specific configuration info
 #
@@ -43,7 +43,6 @@ include "dev/ofw/files.ofw"
 include "arch/arm/ofw/files.ofw"
 attach	ofbus at root with ofbus_root
 file	arch/shark/ofw/ofw.c
-file	arch/shark/ofw/oftodclock.c
 
 # console initialization
 file	arch/shark/shark/consinit.c
@@ -135,6 +134,10 @@ file	arch/shark/shark/pccons.c		pc needs-flag
 # ofbus VGA
 attach	vga at ofbus with vga_ofbus
 file	arch/shark/ofw/vga_ofbus.c		vga_ofbus	needs-flag
+
+# ofbus CyberPro
+attach	igsfb at ofbus with igsfb_ofbus
+file	arch/shark/ofw/igsfb_ofbus.c		igsfb_ofbus needs-flag
 
 # Smart Card Reader
 device	scr: tty

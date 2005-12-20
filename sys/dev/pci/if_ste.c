@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ste.c,v 1.22 2005/12/11 12:22:49 christos Exp $	*/
+/*	$NetBSD: if_ste.c,v 1.25.2.2 2007/10/22 20:33:46 pavel Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ste.c,v 1.22 2005/12/11 12:22:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ste.c,v 1.25.2.2 2007/10/22 20:33:46 pavel Exp $");
 
 #include "bpfilter.h"
 
@@ -266,6 +266,9 @@ static const struct ste_product {
 	pci_product_id_t	ste_product;
 	const char		*ste_name;
 } ste_products[] = {
+	{ PCI_VENDOR_SUNDANCETI, 	PCI_PRODUCT_SUNDANCETI_IP100A,
+	  "IC Plus Corp. IP00A 10/100 Fast Ethernet Adapter" },
+
 	{ PCI_VENDOR_SUNDANCETI,	PCI_PRODUCT_SUNDANCETI_ST201,
 	  "Sundance ST-201 10/100 Ethernet" },
 
@@ -315,10 +318,8 @@ ste_attach(struct device *parent, struct device *self, void *aux)
 	int ioh_valid, memh_valid;
 	int i, rseg, error;
 	const struct ste_product *sp;
-	pcireg_t pmode;
 	uint8_t enaddr[ETHER_ADDR_LEN];
 	uint16_t myea[ETHER_ADDR_LEN / 2];
-	int pmreg;
 
 	callout_init(&sc->sc_tick_ch);
 
@@ -359,25 +360,12 @@ ste_attach(struct device *parent, struct device *self, void *aux)
 	    pci_conf_read(pc, pa->pa_tag, PCI_COMMAND_STATUS_REG) |
 	    PCI_COMMAND_MASTER_ENABLE);
 
-	/* Get it out of power save mode if needed. */
-	if (pci_get_capability(pc, pa->pa_tag, PCI_CAP_PWRMGMT, &pmreg, 0)) {
-		pmode = pci_conf_read(pc, pa->pa_tag, pmreg + PCI_PMCSR) &
-		    PCI_PMCSR_STATE_MASK;
-		if (pmode == PCI_PMCSR_STATE_D3) {
-			/*
-			 * The card has lost all configuration data in
-			 * this state, so punt.
-			 */
-			printf("%s: unable to wake up from power state D3\n",
-			    sc->sc_dev.dv_xname);
-			return;
-		}
-		if (pmode != PCI_PMCSR_STATE_D0) {
-			printf("%s: waking up from power state D%d\n",
-			    sc->sc_dev.dv_xname, pmode);
-			pci_conf_write(pc, pa->pa_tag, pmreg + PCI_PMCSR,
-			    PCI_PMCSR_STATE_D0);
-		}
+	/* power up chip */
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, sc,
+	    NULL)) && error != EOPNOTSUPP) {
+		aprint_error("%s: cannot activate %d\n", sc->sc_dev.dv_xname,
+		    error);
+		return;
 	}
 
 	/*
@@ -799,6 +787,8 @@ ste_watchdog(struct ifnet *ifp)
 	printf("%s: device timeout\n", sc->sc_dev.dv_xname);
 	ifp->if_oerrors++;
 
+	ste_txintr(sc);
+	ste_rxintr(sc);
 	(void) ste_init(ifp);
 
 	/* Try to get more packets going. */

@@ -1,4 +1,4 @@
-.\"	$NetBSD: bounce.8,v 1.1.1.6 2005/08/18 21:04:16 rpaulo Exp $
+.\"	$NetBSD: bounce.8,v 1.1.1.7.4.1 2007/06/16 16:58:06 snj Exp $
 .\"
 .TH BOUNCE 8 
 .ad
@@ -6,7 +6,7 @@
 .SH NAME
 bounce
 \-
-Postfix message bounce or defer daemon
+Postfix delivery status reports
 .SH "SYNOPSIS"
 .na
 .nf
@@ -15,7 +15,7 @@ Postfix message bounce or defer daemon
 .ad
 .fi
 The \fBbounce\fR(8) daemon maintains per-message log files with
-non-delivery status information. Each log file is named after the
+delivery status information. Each log file is named after the
 queue file that it corresponds to, and is kept in a queue subdirectory
 named after the service name in the \fBmaster.cf\fR file (either
 \fBbounce\fR, \fBdefer\fR or \fBtrace\fR).
@@ -27,8 +27,9 @@ The \fBbounce\fR(8) daemon processes two types of service requests:
 Append a recipient (non-)delivery status record to a per-message
 log file.
 .IP \(bu
-Enqueue a bounce message, with a copy of a per-message log file
-and of the corresponding message. When the bounce message is
+Enqueue a delivery status notification message, with a copy
+of a per-message log file and of the corresponding message.
+When the delivery status notification message is
 enqueued successfully, the per-message log file is deleted.
 .PP
 The software does a best notification effort. A non-delivery
@@ -43,8 +44,11 @@ themselves, and that depend on retry logic in their own client.
 .na
 .nf
 RFC 822 (ARPA Internet Text Messages)
-RFC 1894 (Delivery Status Notifications)
 RFC 2045 (Format of Internet Message Bodies)
+RFC 2822 (ARPA Internet Text Messages)
+RFC 3462 (Delivery Status Notifications)
+RFC 3464 (Delivery Status Notifications)
+RFC 3834 (Auto-Submitted: message header)
 .SH DIAGNOSTICS
 .ad
 .fi
@@ -73,6 +77,8 @@ transcripts of mail that Postfix did not receive.
 .IP "\fBbounce_size_limit (50000)\fR"
 The maximal amount of original message text that is sent in a
 non-delivery notification.
+.IP "\fBbounce_template_file (empty)\fR"
+Pathname of a configuration file with bounce message templates.
 .IP "\fBconfig_directory (see 'postconf -d' output)\fR"
 The default location of the Postfix main.cf and master.cf
 configuration files.
@@ -92,15 +98,19 @@ file or \fBbounce\fR(8) logfile.
 .IP "\fBipc_timeout (3600s)\fR"
 The time limit for sending or receiving information over an internal
 communication channel.
+.IP "\fBinternal_mail_filter_classes (empty)\fR"
+What categories of Postfix-generated mail are subject to
+before-queue content inspection by non_smtpd_milters, header_checks
+and body_checks.
 .IP "\fBmail_name (Postfix)\fR"
 The mail system name that is displayed in Received: headers, in
 the SMTP greeting banner, and in bounced mail.
 .IP "\fBmax_idle (100s)\fR"
-The maximum amount of time that an idle Postfix daemon process
-waits for the next service request before exiting.
+The maximum amount of time that an idle Postfix daemon process waits
+for an incoming connection before terminating voluntarily.
 .IP "\fBmax_use (100)\fR"
-The maximal number of connection requests before a Postfix daemon
-process terminates.
+The maximal number of incoming connections that a Postfix daemon
+process will service before terminating voluntarily.
 .IP "\fBnotify_classes (resource, software)\fR"
 The list of error classes that are reported to the postmaster.
 .IP "\fBprocess_id (read-only)\fR"
@@ -123,6 +133,7 @@ records, so that "smtpd" becomes, for example, "postfix/smtpd".
 .SH "SEE ALSO"
 .na
 .nf
+bounce(5), bounce message template format
 qmgr(8), queue manager
 postconf(5), configuration parameters
 master(5), generic daemon options

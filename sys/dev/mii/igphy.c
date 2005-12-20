@@ -1,4 +1,4 @@
-/*	$NetBSD: igphy.c,v 1.6 2005/12/11 12:22:42 christos Exp $	*/
+/*	$NetBSD: igphy.c,v 1.10.2.2 2007/08/29 16:12:55 liamjfoy Exp $	*/
 
 /*
  * The Intel copyright applies to the analog register setup, and the
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: igphy.c,v 1.6 2005/12/11 12:22:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: igphy.c,v 1.10.2.2 2007/08/29 16:12:55 liamjfoy Exp $");
 
 #include "opt_mii.h"
 
@@ -123,12 +123,16 @@ static const struct mii_phydesc igphys[] = {
 	{ MII_OUI_yyINTEL,		MII_MODEL_yyINTEL_IGP01E1000,
 	  MII_STR_yyINTEL_IGP01E1000 },
 
+	{ MII_OUI_yyINTEL,		MII_MODEL_yyINTEL_I82566,
+	  MII_STR_yyINTEL_I82566 },
+
 	{0,				0,
 	 NULL },
 };
 
 static int
-igphymatch(struct device *parent, struct cfdata *match, void *aux)
+igphymatch(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct mii_attach_args *ma = aux;
 
@@ -141,7 +145,7 @@ igphymatch(struct device *parent, struct cfdata *match, void *aux)
 static void
 igphyattach(struct device *parent, struct device *self, void *aux)
 {
-	struct mii_softc *sc = (struct mii_softc *)self;
+	struct mii_softc *sc = device_private(self);
 	struct mii_attach_args *ma = aux;
 	struct mii_data *mii = ma->mii_data;
 	const struct mii_phydesc *mpd;
@@ -155,7 +159,7 @@ igphyattach(struct device *parent, struct device *self, void *aux)
 	sc->mii_funcs = &igphy_funcs;
 	sc->mii_pdata = mii;
 	sc->mii_flags = ma->mii_flags;
-	sc->mii_anegticks = 10;
+	sc->mii_anegticks = MII_ANEGTICKS_GIGE;
 
 	PHY_RESET(sc);
 
@@ -270,6 +274,16 @@ igphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 		 */
 		if ((mii->mii_ifp->if_flags & IFF_UP) == 0)
 			break;
+
+		reg = PHY_READ(sc, MII_IGPHY_PORT_CTRL);
+		if (IFM_SUBTYPE(ife->ifm_media) == IFM_AUTO) {
+			reg |= PSCR_AUTO_MDIX;
+			reg &= ~PSCR_FORCE_MDI_MDIX;
+			PHY_WRITE(sc, MII_IGPHY_PORT_CTRL, reg);
+		} else {
+			reg &= ~(PSCR_AUTO_MDIX | PSCR_FORCE_MDI_MDIX);
+			PHY_WRITE(sc, MII_IGPHY_PORT_CTRL, reg);
+		}
 
 		mii_phy_setmedia(sc);
 		break;

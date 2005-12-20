@@ -1,4 +1,4 @@
-# $NetBSD: files.sun,v 1.10 2005/12/11 12:23:56 christos Exp $
+# $NetBSD: files.sun,v 1.12 2006/10/16 22:27:16 macallan Exp $
 #
 # Configuration file for devices found on Sun machines.
 #
@@ -64,7 +64,7 @@ define	bt_dac
 file	dev/sun/bt_subr.c		bt_dac
 
 # Include /dev/fb driver only if a framebuffer card is included
-define	fb
+# The attribute "fb" is already defined in src/sys/conf/files
 file	dev/sun/fb.c			fb needs-flag
 
 # pfour `add-on'; used by several drivers
@@ -77,5 +77,5 @@ file	dev/sun/bwtwo.c			bwtwo needs-flag
 device cgthree: bt_dac, fb, rasops8
 file	dev/sun/cgthree.c		cgthree needs-flag
 
-device cgsix: bt_dac, fb, rasops8, pfour, wsemuldisplaydev
+device cgsix: bt_dac, fb, rasops8, pfour, wsemuldisplaydev, vcons
 file	dev/sun/cgsix.c			cgsix needs-flag

@@ -1,4 +1,4 @@
-/*	$NetBSD: script.c,v 1.10 2004/07/13 12:07:51 wiz Exp $	*/
+/*	$NetBSD: script.c,v 1.12 2006/06/14 16:05:38 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1980, 1992, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1992, 1993\n\
 #if 0
 static char sccsid[] = "@(#)script.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: script.c,v 1.10 2004/07/13 12:07:51 wiz Exp $");
+__RCSID("$NetBSD: script.c,v 1.12 2006/06/14 16:05:38 liamjfoy Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -47,6 +47,7 @@ __RCSID("$NetBSD: script.c,v 1.10 2004/07/13 12:07:51 wiz Exp $");
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
+#include <sys/param.h>
 #include <sys/uio.h>
 
 #include <err.h>
@@ -62,6 +63,8 @@ __RCSID("$NetBSD: script.c,v 1.10 2004/07/13 12:07:51 wiz Exp $");
 #include <tzfile.h>
 #include <unistd.h>
 #include <util.h>
+
+#define	DEF_BUF	65536
 
 struct stamp {
 	uint64_t scr_len;	/* amount of data */
@@ -79,20 +82,18 @@ char	*fname;
 
 struct	termios tt;
 
-void	done __P((void));
-void	dooutput __P((void));
-void	doshell __P((void));
-void	fail __P((void));
-void	finish __P((int));
-int	main __P((int, char **));
-void	scriptflush __P((int));
-void	record __P((FILE *, char *, size_t, int));
-void	playback __P((FILE *));
+void	done(void);
+void	dooutput(void);
+void	doshell(void);
+void	fail(void);
+void	finish(int);
+int	main(int, char **);
+void	scriptflush(int);
+void	record(FILE *, char *, size_t, int);
+void	playback(FILE *);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	int cc;
 	struct termios rtt;
@@ -180,8 +181,7 @@ main(argc, argv)
 }
 
 void
-finish(signo)
-	int signo;
+finish(int signo)
 {
 	int die, pid, status;
 
@@ -229,8 +229,7 @@ dooutput()
 }
 
 void
-scriptflush(signo)
-	int signo;
+scriptflush(int signo)
 {
 	if (outcc) {
 		(void)fflush(fscript);
@@ -285,11 +284,7 @@ done()
 }
 
 void
-record(fscript, buf, cc, direction)
-	FILE *fscript;
-	char *buf;
-	size_t cc;
-	int direction;
+record(FILE *fscript, char *buf, size_t cc, int direction)
 {
 	struct iovec iov[2];
 	struct stamp stamp;
@@ -318,21 +313,30 @@ record(fscript, buf, cc, direction)
 } while (0/*CONSTCOND*/)
 
 void
-playback(fscript)
-	FILE *fscript;
+playback(FILE *fscript)
 {
 	struct timespec tsi, tso;
 	struct stamp stamp;
-	char buf[BUFSIZ];
+	struct stat playback_stat;
+	char buf[DEF_BUF];
+	off_t nread, save_len;
 	size_t l;
 	time_t clock;
 
-	do {
+	if (fstat(fileno(fscript), &playback_stat) == -1)
+		err(1, "fstat failed");	
+
+	for (nread = 0; nread < playback_stat.st_size; nread += save_len) {
 		if (fread(&stamp, sizeof(stamp), 1, fscript) != 1)
 			err(1, "reading playback header");
-
 		swapstamp(stamp);
-		l = fread(buf, 1, stamp.scr_len, fscript);
+		save_len = sizeof(stamp);
+
+		if (stamp.scr_len >
+		    (uint64_t)(playback_stat.st_size - save_len) - nread)
+			err(1, "invalid stamp");
+
+		save_len += stamp.scr_len;
 		clock = stamp.scr_sec;
 		tso.tv_sec = stamp.scr_sec;
 		tso.tv_nsec = stamp.scr_usec * 1000;
@@ -341,12 +345,15 @@ playback(fscript)
 		case 's':
 			(void)printf("Script started on %s", ctime(&clock));
 			tsi = tso;
+			fseek(fscript, stamp.scr_len, SEEK_CUR);
 			break;
 		case 'e':
 			(void)printf("\nScript done on %s", ctime(&clock));
+			fseek(fscript, stamp.scr_len, SEEK_CUR);
 			break;
 		case 'i':
 			/* throw input away */
+			fseek(fscript, stamp.scr_len, SEEK_CUR);
 			break;
 		case 'o':
 			tsi.tv_sec = tso.tv_sec - tsi.tv_sec;
@@ -358,11 +365,19 @@ playback(fscript)
 			if (usesleep)
 				(void)nanosleep(&tsi, NULL);
 			tsi = tso;
-			(void)write(STDOUT_FILENO, buf, l);
-			break;
-		}
-	} while (stamp.scr_direction != 'e');
+			while (stamp.scr_len > 0) {
+				l = MIN(DEF_BUF, stamp.scr_len);
+				if (fread(buf, sizeof(char), l, fscript) != l)
+					err(1, "cannot read buffer");
 
+				(void)write(STDOUT_FILENO, buf, l);
+				stamp.scr_len -= l;
+			}
+			break;
+		default:
+			err(1, "invalid direction");
+		}
+	}
 	(void)fclose(fscript);
 	exit(0);
 }

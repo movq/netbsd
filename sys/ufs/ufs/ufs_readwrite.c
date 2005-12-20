@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_readwrite.c,v 1.66 2005/12/11 12:25:28 christos Exp $	*/
+/*	$NetBSD: ufs_readwrite.c,v 1.71 2006/10/14 09:17:26 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: ufs_readwrite.c,v 1.66 2005/12/11 12:25:28 christos Exp $");
+__KERNEL_RCSID(1, "$NetBSD: ufs_readwrite.c,v 1.71 2006/10/14 09:17:26 yamt Exp $");
 
 #ifdef LFS_READWRITE
 #define	BLKSIZE(a, b, c)	blksize(a, b, c)
@@ -65,7 +65,7 @@ READ(void *v)
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		int a_ioflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	struct vnode *vp;
 	struct inode *ip;
@@ -78,13 +78,14 @@ READ(void *v)
 	daddr_t lbn, nextlbn;
 	off_t bytesinfile;
 	long size, xfersize, blkoffset;
-	int error, flags;
+	int error, flags, ioflag;
 	boolean_t usepc = FALSE;
 
 	vp = ap->a_vp;
 	ip = VTOI(vp);
 	ump = ip->i_ump;
 	uio = ap->a_uio;
+	ioflag = ap->a_ioflag;
 	error = 0;
 
 #ifdef DIAGNOSTIC
@@ -115,6 +116,9 @@ READ(void *v)
 		const int advice = IO_ADV_DECODE(ap->a_ioflag);
 
 		while (uio->uio_resid > 0) {
+			if (ioflag & IO_DIRECT) {
+				genfs_directio(vp, uio, ioflag);
+			}
 			bytelen = MIN(ip->i_size - uio->uio_offset,
 			    uio->uio_resid);
 			if (bytelen == 0)
@@ -192,16 +196,15 @@ WRITE(void *v)
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		int a_ioflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	struct vnode *vp;
 	struct uio *uio;
 	struct inode *ip;
-	struct genfs_node *gp;
 	FS *fs;
 	struct buf *bp;
 	struct lwp *l;
-	struct ucred *cred;
+	kauth_cred_t cred;
 	daddr_t lbn;
 	off_t osize, origoff, oldoff, preallocoff, endallocoff, nsize;
 	int blkoffset, error, flags, ioflag, resid, size, xfersize;
@@ -222,7 +225,6 @@ WRITE(void *v)
 	uio = ap->a_uio;
 	vp = ap->a_vp;
 	ip = VTOI(vp);
-	gp = VTOG(vp);
 	ump = ip->i_ump;
 
 	KASSERT(vp->v_size == ip->i_size);
@@ -262,7 +264,7 @@ WRITE(void *v)
 	 * Maybe this should be above the vnode op call, but so long as
 	 * file servers have no limits, I don't think it matters.
 	 */
-	l = uio->uio_lwp;
+	l = curlwp;
 	if (vp->v_type == VREG && l &&
 	    uio->uio_offset + uio->uio_resid >
 	    l->l_proc->p_rlimit[RLIMIT_FSIZE].rlim_cur) {
@@ -319,9 +321,16 @@ WRITE(void *v)
 		boolean_t extending; /* if we're extending a whole block */
 		off_t newoff;
 
+		if (ioflag & IO_DIRECT) {
+			genfs_directio(vp, uio, ioflag);
+		}
+
 		oldoff = uio->uio_offset;
 		blkoffset = blkoff(fs, uio->uio_offset);
 		bytelen = MIN(fs->fs_bsize - blkoffset, uio->uio_resid);
+		if (bytelen == 0) {
+			break;
+		}
 
 		/*
 		 * if we're filling in a hole, allocate the blocks now and
@@ -340,10 +349,10 @@ WRITE(void *v)
 				break;
 			ubc_alloc_flags &= ~UBC_FAULTBUSY;
 		} else {
-			lockmgr(&gp->g_glock, LK_EXCLUSIVE, NULL);
+			genfs_node_wrlock(vp);
 			error = GOP_ALLOC(vp, uio->uio_offset, bytelen,
 			    aflag, cred);
-			lockmgr(&gp->g_glock, LK_RELEASE, NULL);
+			genfs_node_unlock(vp);
 			if (error)
 				break;
 			ubc_alloc_flags |= UBC_FAULTBUSY;
@@ -389,6 +398,7 @@ WRITE(void *v)
 		 * XXXUBC simplistic async flushing.
 		 */
 
+#ifndef LFS_READWRITE
 		if (!async && oldoff >> 16 != uio->uio_offset >> 16) {
 			simple_lock(&vp->v_interlock);
 			error = VOP_PUTPAGES(vp, (oldoff >> 16) << 16,
@@ -396,6 +406,7 @@ WRITE(void *v)
 			if (error)
 				break;
 		}
+#endif
 	}
 	if (error == 0 && ioflag & IO_SYNC) {
 		simple_lock(&vp->v_interlock);
@@ -482,7 +493,8 @@ WRITE(void *v)
 	 */
 out:
 	ip->i_flag |= IN_CHANGE | IN_UPDATE;
-	if (resid > uio->uio_resid && ap->a_cred && ap->a_cred->cr_uid != 0) {
+	if (resid > uio->uio_resid && ap->a_cred &&
+	    kauth_cred_geteuid(ap->a_cred) != 0) {
 		ip->i_mode &= ~(ISUID | ISGID);
 		DIP_ASSIGN(ip, mode, ip->i_mode);
 	}
@@ -490,7 +502,7 @@ out:
 		VN_KNOTE(vp, NOTE_WRITE | (extended ? NOTE_EXTEND : 0));
 	if (error) {
 		(void) UFS_TRUNCATE(vp, osize, ioflag & IO_SYNC, ap->a_cred,
-		    uio->uio_lwp);
+		    curlwp);
 		uio->uio_offset -= resid - uio->uio_resid;
 		uio->uio_resid = resid;
 	} else if (resid > uio->uio_resid && (ioflag & IO_SYNC) == IO_SYNC)

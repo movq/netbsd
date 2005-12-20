@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_obio.c,v 1.19 2005/12/11 12:18:03 christos Exp $ */
+/*	$NetBSD: wdc_obio.c,v 1.22 2006/10/05 09:34:52 tsutsui Exp $ */
 
 /*
  * Copyright (c) 2002 Takeshi Shibagaki  All rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_obio.c,v 1.19 2005/12/11 12:18:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_obio.c,v 1.22 2006/10/05 09:34:52 tsutsui Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -172,7 +172,6 @@ wdc_obio_attach(struct device *parent, struct device *self, void *aux)
 			return;
 		}
 	}
-	wdc_init_shadow_regs(&sc->sc_channel);
 
 	if (bus_space_subregion(wdr->cmd_iot,
 				wdr->cmd_baseioh,
@@ -218,7 +217,8 @@ wdc_obio_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	ch_sc = chp;
-	if (sc->sc_wdcdev.sc_atac.atac_dev.dv_cfdata->cf_flags & ATAC_CAP_NOIRQ)
+	if (device_cfdata(&sc->sc_wdcdev.sc_atac.atac_dev)->cf_flags &
+	    ATAC_CAP_NOIRQ)
 		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_NOIRQ;
 	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16;
 	sc->sc_wdcdev.sc_atac.atac_pio_cap = 0;
@@ -228,6 +228,8 @@ wdc_obio_attach(struct device *parent, struct device *self, void *aux)
 	chp->ch_channel = 0;
 	chp->ch_atac = &sc->sc_wdcdev.sc_atac;
 	chp->ch_queue = &sc->sc_chqueue;
+	chp->ch_ndrive = 2;
+	wdc_init_shadow_regs(chp);
 
 	printf("\n");
 

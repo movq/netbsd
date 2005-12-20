@@ -1,4 +1,4 @@
-#	$NetBSD: IPAQ,v 1.43 2005/12/20 05:35:28 thorpej Exp $
+#	$NetBSD: IPAQ,v 1.49.2.1 2007/05/12 20:28:47 pavel Exp $
 #
 #	iPAQ H3600 -- Windows-CE based PDA
 #
@@ -64,11 +64,8 @@ options 	INET6		# IPV6
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
-options 	NS		# XNS
-#options 	NSIP		# XNS tunneling over IP
 options 	ISO,TPIP	# OSI
 #options 	EON		# OSI tunneling over IP
-options 	CCITT,LLC,HDLC	# X.25
 options 	NETATALK	# AppleTalk networking
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
@@ -82,6 +79,7 @@ options 	COMPAT_43	# 4.3BSD compatibility.
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_20	# NetBSD 2.0 compatibility.
 options 	COMPAT_16	# NetBSD 1.6 compatibility.
+options 	COMPAT_15	# NetBSD 1.5 compatibility.
 options 	COMPAT_14	# NetBSD 1.4 compatibility.
 #options 	COMPAT_13	# NetBSD 1.3 compatibility.
 #options 	COMPAT_12	# NetBSD 1.2 compatibility.
@@ -138,7 +136,7 @@ saip0	at mainbus?
 
 # Serial
 options 	CONSPEED=19200
-sacom*	at saip? addr 0xd000d000 size 0x24	intr 17
+sacom*	at saip? addr 0x80050000 size 0x24	intr 17
 
 # OS Timer
 saost*	at saip? addr 0x90000000 size 0x20
@@ -172,7 +170,9 @@ ne*	at pcmcia? function ?		# NE2000-compatible Ethernet
 ray*	at pcmcia? function ?		# Raytheon Raylink (802.11)
 #sm*	at pcmcia? function ?		# Megahertz Ethernet
 wi*	at pcmcia? function ?		# Lucent WaveLan IEEE (802.11)
-#xi*	at pcmcia? function ?		# Xircom CreditCard Ethernet
+#xirc*	at pcmcia? function ?		# Xircom CreditCard Ethernet
+#com*	at xirc?
+#xi*	at xirc?
 #mhzc*	at pcmcia? function ?		# Megahertz Ethernet/Modem combo cards
 #com*	at mhzc?
 #sm*	at mhzc?
@@ -192,20 +192,20 @@ wi*	at pcmcia? function ?		# Lucent WaveLan IEEE (802.11)
 #wsdisplay*	at	hpcfb? console?
 
 pseudo-device	loop	1		# network loopback
-pseudo-device	bpfilter 8		# packet filter
-pseudo-device	sl	2		# CSLIP
-pseudo-device	ppp	2		# PPP
-pseudo-device	tun	2		# network tunneling over tty
-#pseudo-device	gre		2	# generic L3 over IP tunnel
+pseudo-device	bpfilter		# packet filter
+pseudo-device	sl			# CSLIP
+pseudo-device	ppp			# PPP
+pseudo-device	tun			# network tunneling over tty
+#pseudo-device	gre			# generic L3 over IP tunnel
 #pseudo-device	ipfilter 1		# ip filter
-pseudo-device	gif	4		# IPv[46] over IPv[46] tunnel (RFC1933)
-#pseudo-device	faith	1		# IPv[46] tcp relay translation i/f
-#pseudo-device	stf	1		# 6to4 IPv6 over IPv4 encapsulation
-#pseudo-device	strip	4		# STarmode Radio IP (Metricon Ricochet)
+pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
+#pseudo-device	faith			# IPv[46] tcp relay translation i/f
+pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
+#pseudo-device	strip			# STarmode Radio IP (Metricon Ricochet)
 pseudo-device	vlan			# IEEE 802.1q encapsulation
 
 pseudo-device	pty			# pseudo-terminals
-#pseudo-device	vnd	4		# disk-like interface to files
+#pseudo-device	vnd			# disk-like interface to files
 #pseudo-device	ccd	2		# concatenated disk devices
 #pseudo-device	cgd	2		# cryptographic disk devices
 #pseudo-device	raid	4		# RAIDframe disk driver

@@ -1,4 +1,4 @@
-/*	$NetBSD: deflate.c,v 1.4 2005/12/11 12:25:20 christos Exp $ */
+/*	$NetBSD: deflate.c,v 1.7.2.2 2007/09/25 00:49:39 xtraeme Exp $ */
 /*	$FreeBSD: src/sys/opencrypto/deflate.c,v 1.1.2.1 2002/11/21 23:34:23 sam Exp $	*/
 /* $OpenBSD: deflate.c,v 1.3 2001/08/20 02:45:22 hugh Exp $ */
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: deflate.c,v 1.4 2005/12/11 12:25:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: deflate.c,v 1.7.2.2 2007/09/25 00:49:39 xtraeme Exp $");
 
 #include <sys/types.h>
 #include <sys/malloc.h>
@@ -82,10 +82,16 @@ deflate_global(data, size, decomp, out)
 	u_int8_t *output;
 	u_int32_t count, result;
 	int error, i = 0, j;
-	struct deflate_buf buf[ZBUF];
+	struct deflate_buf *buf, *tmp;
+	size_t len, old_len;
 
-	bzero(&zbuf, sizeof(z_stream));
-	for (j = 0; j < ZBUF; j++)
+	len = ZBUF;
+	buf = malloc(len*sizeof(struct deflate_buf), M_CRYPTO_DATA, M_NOWAIT);
+	if (buf == NULL)
+		return 0;
+
+	memset(&zbuf, 0, sizeof(z_stream));
+	for (j = 0; j < len; j++)
 		buf[j].flag = 0;
 
 	zbuf.next_in = data;	/* data that is going to be processed */
@@ -95,8 +101,7 @@ deflate_global(data, size, decomp, out)
 	zbuf.avail_in = size;	/* Total length of data to be processed */
 
 	if (!decomp) {
-		MALLOC(buf[i].out, u_int8_t *, (u_long) size, M_CRYPTO_DATA,
-		    M_NOWAIT);
+		buf[i].out = malloc(size, M_CRYPTO_DATA, M_NOWAIT);
 		if (buf[i].out == NULL)
 			goto bad;
 		buf[i].size = size;
@@ -110,11 +115,10 @@ deflate_global(data, size, decomp, out)
 	 	 * updated while the decompression is going on
 	 	 */
 
-		MALLOC(buf[i].out, u_int8_t *, (u_long) (size * 4),
-		    M_CRYPTO_DATA, M_NOWAIT);
+		buf[i].size = size * 4;
+		buf[i].out = malloc(buf[i].size, M_CRYPTO_DATA, M_NOWAIT);
 		if (buf[i].out == NULL)
 			goto bad;
-		buf[i].size = size * 4;
 		buf[i].flag = 1;
 		i++;
 	}
@@ -135,10 +139,20 @@ deflate_global(data, size, decomp, out)
 			goto bad;
 		else if (zbuf.avail_in == 0 && zbuf.avail_out != 0)
 			goto end;
-		else if (zbuf.avail_out == 0 && i < (ZBUF - 1)) {
+		else if (zbuf.avail_out == 0) {
+			if (i == (len-1)) {
+				old_len = i;
+				len += ZBUF;
+				tmp = realloc(buf,len*sizeof(struct deflate_buf),
+							  M_CRYPTO_DATA, M_NOWAIT);
+				if (tmp == NULL)
+					goto bad;
+				buf = tmp;
+				for (j = old_len; j < len; j++)
+					buf[j].flag = 0;
+			}
 			/* we need more output space, allocate size */
-			MALLOC(buf[i].out, u_int8_t *, (u_long) size,
-			    M_CRYPTO_DATA, M_NOWAIT);
+			buf[i].out = malloc(size, M_CRYPTO_DATA, M_NOWAIT);
 			if (buf[i].out == NULL)
 				goto bad;
 			zbuf.next_out = buf[i].out;
@@ -153,7 +167,7 @@ deflate_global(data, size, decomp, out)
 end:
 	result = count = zbuf.total_out;
 
-	MALLOC(*out, u_int8_t *, (u_long) result, M_CRYPTO_DATA, M_NOWAIT);
+	*out = malloc(result, M_CRYPTO_DATA, M_NOWAIT);
 	if (*out == NULL)
 		goto bad;
 	if (decomp)
@@ -163,25 +177,27 @@ end:
 	output = *out;
 	for (j = 0; buf[j].flag != 0; j++) {
 		if (count > buf[j].size) {
-			bcopy(buf[j].out, *out, buf[j].size);
+			memcpy(*out, buf[j].out, buf[j].size);
 			*out += buf[j].size;
-			FREE(buf[j].out, M_CRYPTO_DATA);
+			free(buf[j].out, M_CRYPTO_DATA);
 			count -= buf[j].size;
 		} else {
 			/* it should be the last buffer */
-			bcopy(buf[j].out, *out, count);
+			memcpy(*out, buf[j].out, count);
 			*out += count;
-			FREE(buf[j].out, M_CRYPTO_DATA);
+			free(buf[j].out, M_CRYPTO_DATA);
 			count = 0;
 		}
 	}
+	free(buf, M_CRYPTO_DATA);
 	*out = output;
 	return result;
 
 bad:
 	*out = NULL;
 	for (j = 0; buf[j].flag != 0; j++)
-		FREE(buf[j].out, M_CRYPTO_DATA);
+		free(buf[j].out, M_CRYPTO_DATA);
+	free(buf, M_CRYPTO_DATA);
 	if (decomp)
 		inflateEnd(&zbuf);
 	else

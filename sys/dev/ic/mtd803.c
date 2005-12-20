@@ -1,4 +1,4 @@
-/* $NetBSD: mtd803.c,v 1.9 2005/12/11 12:21:28 christos Exp $ */
+/* $NetBSD: mtd803.c,v 1.12 2006/11/16 01:32:51 christos Exp $ */
 
 /*-
  *
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mtd803.c,v 1.9 2005/12/11 12:21:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mtd803.c,v 1.12 2006/11/16 01:32:51 christos Exp $");
 
 #include "bpfilter.h"
 
@@ -414,8 +414,7 @@ mtd_init_desc(sc)
 
 
 void
-mtd_mii_statchg(self)
-	struct device *self;
+mtd_mii_statchg(struct device *self)
 {
 	/*struct mtd_softc *sc = (void *)self;*/
 
@@ -424,9 +423,7 @@ mtd_mii_statchg(self)
 
 
 int
-mtd_mii_readreg(self, phy, reg)
-	struct device *self;
-	int phy, reg;
+mtd_mii_readreg(struct device *self, int phy, int reg)
 {
 	struct mtd_softc *sc = (void *)self;
 
@@ -435,9 +432,7 @@ mtd_mii_readreg(self, phy, reg)
 
 
 void
-mtd_mii_writereg(self, phy, reg, val)
-	struct device *self;
-	int phy, reg, val;
+mtd_mii_writereg(struct device *self, int phy, int reg, int val)
 {
 	struct mtd_softc *sc = (void *)self;
 
@@ -792,8 +787,7 @@ mtd_irq_h(args)
 	u_int32_t status;
 	int r = 0;
 
-	if (!(ifp->if_flags & IFF_RUNNING) ||
-		!(sc->dev.dv_flags & DVF_ACTIVE))
+	if (!(ifp->if_flags & IFF_RUNNING) || !device_is_active(&sc->dev))
 		return 0;
 
 	/* Disable interrupts */

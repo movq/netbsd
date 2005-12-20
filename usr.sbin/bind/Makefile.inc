@@ -1,13 +1,24 @@
-#	$NetBSD: Makefile.inc,v 1.20 2005/10/10 13:26:28 rpaulo Exp $
+#	$NetBSD: Makefile.inc,v 1.25.2.3 2007/11/04 09:53:09 pavel Exp $
 
 .if !defined(BIND9_MAKEFILE_INC)
 BIND9_MAKEFILE_INC=yes
 
 WARNS?=	1
-WFORMAT?=2
-NAMED_USE_PTHREADS?=yes
 
 .include <bsd.own.mk>
+
+.if ${MKCRYPTO} == "no"
+NAMED_USE_OPENSSL?=no
+.endif
+
+.if (${MACHINE_ARCH} == "sparc" || ${MACHINE_ARCH} == "sparc64" \
+	|| ${MACHINE_ARCH} == "mipsel" || ${MACHINE_ARCH} == "mipseb" )
+NAMED_USE_PTHREADS?=no
+.else
+NAMED_USE_PTHREADS?=yes
+.endif
+
+NAMED_USE_OPENSSL?=yes
 
 IDIST=		${NETBSDSRCDIR}/dist/bind
 BIND_SRCDIR=	${NETBSDSRCDIR}/usr.sbin/bind
@@ -20,6 +31,7 @@ SYSCONFDIR=/etc
 LOCALSTATEDIR=/var
 
 CPPFLAGS+=-I${BIND_SRCDIR}/include \
+	-I${IDIST} \
 	-I${IDIST}/lib/dns/include -I${IDIST}/lib/dns/unix/include \
 	-I${IDIST}/lib/isc/include -I${IDIST}/lib/isc/unix/include \
 	-I${IDIST}/lib/bind9/include \
@@ -33,6 +45,10 @@ CPPFLAGS+=-I${BIND_SRCDIR}/include \
 
 .if (${USE_INET6} != "no")
 CPPFLAGS+=	-DWANT_IPV6
+.endif
+
+.if ${HAVE_GCC} == 4
+COPTS+=	-Wno-pointer-sign
 .endif
 
 .if !defined(LIB) || empty(LIB)						# {
@@ -54,6 +70,12 @@ DPADD+= ${LIBPTHREAD}
 MKPRIVATELIB=yes
 CPPFLAGS+= -DLIBINTERFACE=${LIBINTERFACE} \
 	-DLIBREVISION=${LIBREVISION} -DLIBAGE=${LIBAGE}
+.endif
+
+.if ${NAMED_USE_OPENSSL} == "yes"
+CPPFLAGS+=-DOPENSSL
+LDADD+= -lcrypto
+DPADD+= ${LIBCRYPTO}
 .endif
 
 .if ${NAMED_USE_PTHREADS} == "yes"

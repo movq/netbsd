@@ -1,4 +1,5 @@
-/*	$NetBSD: authfd.c,v 1.17 2005/02/13 05:57:26 christos Exp $	*/
+/*	$NetBSD: authfd.c,v 1.19 2006/09/28 21:22:14 christos Exp $	*/
+/* $OpenBSD: authfd.c,v 1.80 2006/08/03 03:34:41 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -36,17 +37,25 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: authfd.c,v 1.64 2004/08/11 21:44:31 avsm Exp $");
-__RCSID("$NetBSD: authfd.c,v 1.17 2005/02/13 05:57:26 christos Exp $");
+__RCSID("$NetBSD: authfd.c,v 1.19 2006/09/28 21:22:14 christos Exp $");
+
+#include <sys/types.h>
+#include <sys/un.h>
+#include <sys/socket.h>
 
 #include <openssl/evp.h>
 
+#include <openssl/crypto.h>
+#include <fcntl.h>
+#include <stdlib.h>
+#include <signal.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "xmalloc.h"
 #include "ssh.h"
 #include "rsa.h"
 #include "buffer.h"
-#include "bufaux.h"
-#include "xmalloc.h"
-#include "getput.h"
 #include "key.h"
 #include "authfd.h"
 #include "cipher.h"
@@ -54,6 +63,7 @@ __RCSID("$NetBSD: authfd.c,v 1.17 2005/02/13 05:57:26 christos Exp $");
 #include "compat.h"
 #include "log.h"
 #include "atomicio.h"
+#include "misc.h"
 
 static int agent_present = 0;
 
@@ -105,7 +115,7 @@ ssh_get_authentication_socket(void)
 		close(sock);
 		return -1;
 	}
-	if (connect(sock, (struct sockaddr *) &sunaddr, sizeof sunaddr) < 0) {
+	if (connect(sock, (struct sockaddr *)&sunaddr, sizeof sunaddr) < 0) {
 		close(sock);
 		return -1;
 	}
@@ -116,13 +126,12 @@ ssh_get_authentication_socket(void)
 static int
 ssh_request_reply(AuthenticationConnection *auth, Buffer *request, Buffer *reply)
 {
-	int l;
-	u_int len;
+	u_int l, len;
 	char buf[1024];
 
 	/* Get the length of the message, and format it in the buffer. */
 	len = buffer_len(request);
-	PUT_32BIT(buf, len);
+	put_u32(buf, len);
 
 	/* Send the length and then the packet to the agent. */
 	if (atomicio(vwrite, auth->fd, buf, 4) != 4 ||
@@ -141,7 +150,7 @@ ssh_request_reply(AuthenticationConnection *auth, Buffer *request, Buffer *reply
 	}
 
 	/* Extract the length, and check it for sanity. */
-	len = GET_32BIT(buf);
+	len = get_u32(buf);
 	if (len > 256 * 1024)
 		fatal("Authentication response too long: %u", len);
 
@@ -151,8 +160,7 @@ ssh_request_reply(AuthenticationConnection *auth, Buffer *request, Buffer *reply
 		l = len;
 		if (l > sizeof(buf))
 			l = sizeof(buf);
-		l = atomicio(read, auth->fd, buf, l);
-		if (l <= 0) {
+		if (atomicio(read, auth->fd, buf, l) != l) {
 			error("Error reading response from authentication socket.");
 			return 0;
 		}
@@ -305,6 +313,7 @@ ssh_get_first_identity(AuthenticationConnection *auth, char **comment, int versi
 Key *
 ssh_get_next_identity(AuthenticationConnection *auth, char **comment, int version)
 {
+	int keybits;
 	u_int bits;
 	u_char *blob;
 	u_int blen;
@@ -325,7 +334,8 @@ ssh_get_next_identity(AuthenticationConnection *auth, char **comment, int versio
 		buffer_get_bignum(&auth->identities, key->rsa->e);
 		buffer_get_bignum(&auth->identities, key->rsa->n);
 		*comment = buffer_get_string(&auth->identities, NULL);
-		if (bits != BN_num_bits(key->rsa->n))
+		keybits = BN_num_bits(key->rsa->n);
+		if (keybits < 0 || bits != (u_int)keybits)
 			logit("Warning: identity keysize mismatch: actual %d, announced %u",
 			    BN_num_bits(key->rsa->n), bits);
 		break;
@@ -337,7 +347,6 @@ ssh_get_next_identity(AuthenticationConnection *auth, char **comment, int versio
 		break;
 	default:
 		return NULL;
-		break;
 	}
 	/* Decrement the number of remaining entries. */
 	auth->howmany--;
@@ -396,7 +405,7 @@ ssh_decrypt_challenge(AuthenticationConnection *auth,
 		 * fatal error if the packet is corrupt.
 		 */
 		for (i = 0; i < 16; i++)
-			response[i] = buffer_get_char(&buffer);
+			response[i] = (u_char)buffer_get_char(&buffer);
 	}
 	buffer_free(&buffer);
 	return success;
@@ -519,7 +528,6 @@ ssh_add_identity_constrained(AuthenticationConnection *auth, Key *key,
 	default:
 		buffer_free(&msg);
 		return 0;
-		break;
 	}
 	if (constrained) {
 		if (life != 0) {

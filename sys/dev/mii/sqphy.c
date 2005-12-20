@@ -1,4 +1,4 @@
-/*	$NetBSD: sqphy.c,v 1.37 2005/12/11 12:22:42 christos Exp $	*/
+/*	$NetBSD: sqphy.c,v 1.42 2006/11/16 21:24:07 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sqphy.c,v 1.37 2005/12/11 12:22:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sqphy.c,v 1.42 2006/11/16 21:24:07 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -123,7 +123,8 @@ static const struct mii_phydesc sqphys[] = {
 };
 
 static int
-sqphymatch(struct device *parent, struct cfdata *match, void *aux)
+sqphymatch(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct mii_attach_args *ma = aux;
 
@@ -136,7 +137,7 @@ sqphymatch(struct device *parent, struct cfdata *match, void *aux)
 static void
 sqphyattach(struct device *parent, struct device *self, void *aux)
 {
-	struct mii_softc *sc = (struct mii_softc *)self;
+	struct mii_softc *sc = device_private(self);
 	struct mii_attach_args *ma = aux;
 	struct mii_data *mii = ma->mii_data;
 	const struct mii_phydesc *mpd;
@@ -149,7 +150,7 @@ sqphyattach(struct device *parent, struct device *self, void *aux)
 	sc->mii_phy = ma->mii_phyno;
 	sc->mii_pdata = mii;
 	sc->mii_flags = ma->mii_flags;
-	sc->mii_anegticks = 5;
+	sc->mii_anegticks = MII_ANEGTICKS;
 
 	switch (MII_MODEL(ma->mii_id2)) {
 	case MII_MODEL_SEEQ_84220:
@@ -180,7 +181,7 @@ sqphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
 	int reg;
 
-	if ((sc->mii_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->mii_dev))
 		return (ENXIO);
 
 	switch (cmd) {

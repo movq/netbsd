@@ -1,4 +1,4 @@
-/*	$NetBSD: pathnames.h,v 1.5 2003/08/07 11:14:40 agc Exp $	*/
+/*	$NetBSD: pathnames.h,v 1.8 2006/11/28 18:45:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -29,8 +29,11 @@
  * SUCH DAMAGE.
  *
  *	@(#)pathnames.h	8.1 (Berkeley) 6/6/93
- *	$NetBSD: pathnames.h,v 1.5 2003/08/07 11:14:40 agc Exp $
+ *	$NetBSD: pathnames.h,v 1.8 2006/11/28 18:45:32 christos Exp $
  */
+
+#ifndef __PATHNAMES_H__
+#define __PATHNAMES_H__
 
 #include <paths.h>
 
@@ -39,3 +42,8 @@
 #define	_PATH_TILDE	"/usr/share/misc/mail.tildehelp"
 #define	_PATH_MASTER_RC	"/etc/mail.rc"
 #define	_PATH_MORE	"/usr/bin/more"
+#ifdef MIME_SUPPORT
+#define _PATH_FILE	"/usr/bin/file"	/* Used to get mime type/subtype */
+#endif
+
+#endif /* __PATHNAMES_H__ */

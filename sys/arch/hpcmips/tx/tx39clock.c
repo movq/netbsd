@@ -1,4 +1,4 @@
-/*	$NetBSD: tx39clock.c,v 1.18 2005/12/11 12:17:34 christos Exp $ */
+/*	$NetBSD: tx39clock.c,v 1.21 2006/09/16 02:14:57 gdamore Exp $ */
 
 /*-
  * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
@@ -37,12 +37,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tx39clock.c,v 1.18 2005/12/11 12:17:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tx39clock.c,v 1.21 2006/09/16 02:14:57 gdamore Exp $");
 
 #include "opt_tx39clock_debug.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/timetc.h>
 
 #include <dev/clock_subr.h>
 
@@ -65,12 +66,10 @@ __KERNEL_RCSID(0, "$NetBSD: tx39clock.c,v 1.18 2005/12/11 12:17:34 christos Exp 
 	dbg_bitmask_print(r, TX39_CLOCK_EN ## m ## CLK, #m)
 
 void	tx39clock_init(struct device *);
-void	tx39clock_get(struct device *, time_t, struct clock_ymdhms *);
-void	tx39clock_set(struct device *, struct clock_ymdhms *);
 
 struct platform_clock tx39_clock = {
 #define CLOCK_RATE	100
-	CLOCK_RATE, tx39clock_init, tx39clock_get, tx39clock_set,
+	CLOCK_RATE, tx39clock_init,
 };
 
 struct txtime {
@@ -86,6 +85,7 @@ struct tx39clock_softc {
 	int sc_enabled;
 	int sc_year;
 	struct clock_ymdhms sc_epoch;
+	struct timecounter sc_tcounter;
 };
 
 int	tx39clock_match(struct device *, struct cfdata *, void *);
@@ -98,8 +98,9 @@ void	tx39clock_cpuspeed(int *, int *);
 
 void	__tx39timer_rtcfreeze(tx_chipset_tag_t);
 void	__tx39timer_rtcreset(tx_chipset_tag_t);
-__inline__ void	__tx39timer_rtcget(struct txtime *);
-__inline__ time_t __tx39timer_rtc2sec(struct txtime *);
+inline void	__tx39timer_rtcget(struct txtime *);
+inline time_t __tx39timer_rtc2sec(struct txtime *);
+uint32_t tx39_timecount(struct timecounter *);
 
 CFATTACH_DECL(tx39clock, sizeof(struct tx39clock_softc),
     tx39clock_match, tx39clock_attach, NULL, NULL);
@@ -156,7 +157,7 @@ tx39clock_cpuspeed(int *cpuclock, int *cpu_speed)
 	int elapsed;
 	
 	__tx39timer_rtcget(&t0);
-	__asm__ __volatile__(
+	__asm volatile(
 		".set	noreorder;		\n\t"
 		"li	$8, 10000000;		\n"
 	"1:	nop;				\n\t"
@@ -195,14 +196,7 @@ __tx39timer_rtcfreeze(tx_chipset_tag_t tc)
 	tx_conf_write(tc, TX39_TIMERCONTROL_REG, reg);
 }
 
-__inline__ time_t
-__tx39timer_rtc2sec(struct txtime *t)
-{
-	/* This rely on RTC is 32.768kHz */
-	return ((t->t_lo >> 15) | (t->t_hi << 17));
-}
-
-__inline__ void
+inline void
 __tx39timer_rtcget(struct txtime *t)
 {
 	tx_chipset_tag_t tc;	
@@ -245,6 +239,20 @@ __tx39timer_rtcreset(tx_chipset_tag_t tc)
 	tx_conf_write(tc, TX39_TIMERCONTROL_REG, reg);
 }
 
+uint32_t
+tx39_timecount(struct timecounter *tch)
+{
+	tx_chipset_tag_t tc = tch->tc_priv;
+
+	/*
+	 * since we're only reading the low register, we don't care about
+	 * if the chip increments it.  we assume that the single read will
+	 * always be consistent.  This is much faster than the routine which
+	 * has to get both values, improving the quality.
+	 */
+	return (tx_conf_read(tc, TX39_TIMERRTCLO_REG));
+}
+
 void
 tx39clock_init(struct device *dev)
 {
@@ -268,61 +276,14 @@ tx39clock_init(struct device *dev)
 	reg = tx_conf_read(tc, TX39_INTRENABLE6_REG);
 	reg |= TX39_INTRPRI13_TIMER_PERIODIC_BIT; 	
 	tx_conf_write(tc, TX39_INTRENABLE6_REG, reg); 
-}
 
-void
-tx39clock_get(struct device *dev, time_t base, struct clock_ymdhms *t)
-{
-	struct tx39clock_softc *sc = (void *)dev;
-	struct clock_ymdhms dt;
-	struct txtime tt;
-	time_t sec;
-
-	__tx39timer_rtcget(&tt);		
-	sec = __tx39timer_rtc2sec(&tt);
-
-	if (!sc->sc_enabled) {
-		DPRINTF(("bootstrap: %d sec from previous reboot\n", 
-		    (int)sec));
-
-		sc->sc_enabled = 1;
-		clock_secs_to_ymdhms(base, &dt);
-		sc->sc_epoch = dt;
-		base += sec;
-	} else {
-		dt.dt_year = sc->sc_year;
-		dt.dt_mon = sc->sc_epoch.dt_mon;
-		dt.dt_day = sc->sc_epoch.dt_day;
-		dt.dt_hour = sc->sc_epoch.dt_hour;
-		dt.dt_min = sc->sc_epoch.dt_min;
-		dt.dt_sec = sc->sc_epoch.dt_sec;
-		dt.dt_wday = sc->sc_epoch.dt_wday;
-		base = sec + clock_ymdhms_to_secs(&dt);
-	}
-
-	clock_secs_to_ymdhms(base, &dt);
-
-	t->dt_year = dt.dt_year % 100;
-	t->dt_mon = dt.dt_mon;
-	t->dt_day = dt.dt_day;
-	t->dt_hour = dt.dt_hour;
-	t->dt_min = dt.dt_min;
-	t->dt_sec = dt.dt_sec;
-	t->dt_wday = dt.dt_wday;
-
-	sc->sc_year = dt.dt_year;
-}
-
-void
-tx39clock_set(struct device *dev, struct clock_ymdhms *dt)
-{
-	struct tx39clock_softc *sc = (void *)dev;
-
-	if (sc->sc_enabled) {
-		sc->sc_epoch = *dt;
-		__tx39timer_rtcreset(sc->sc_tc);
-		tx39clock_alarm_refill(sc->sc_tc);
-	}
+	sc->sc_tcounter.tc_name = "tx39rtc";
+	sc->sc_tcounter.tc_get_timecount = tx39_timecount;
+	sc->sc_tcounter.tc_priv = tc;
+	sc->sc_tcounter.tc_counter_mask = 0xffffffff;
+	sc->sc_tcounter.tc_frequency = TX39_RTCLOCK;
+	sc->sc_tcounter.tc_quality = 100;
+	tc_init(&sc->sc_tcounter);
 }
 
 int
@@ -341,15 +302,15 @@ tx39clock_alarm_refill(tx_chipset_tag_t tc)
 {
 	struct tx39clock_softc *sc = tc->tc_clockt;
 	struct txtime t;	
-	u_int64_t time;
+	u_int64_t mytime;
 	
 	__tx39timer_rtcget(&t);
 
-	time = ((u_int64_t)t.t_hi << 32) | (u_int64_t)t.t_lo;
-	time += (u_int64_t)sc->sc_alarm;
+	mytime = ((u_int64_t)t.t_hi << 32) | (u_int64_t)t.t_lo;
+	mytime += (u_int64_t)sc->sc_alarm;
 
-	t.t_hi = (u_int32_t)((time >> 32) & TX39_TIMERALARMHI_MASK);
-	t.t_lo = (u_int32_t)(time & 0xffffffff);
+	t.t_hi = (u_int32_t)((mytime >> 32) & TX39_TIMERALARMHI_MASK);
+	t.t_lo = (u_int32_t)(mytime & 0xffffffff);
 
 	tx_conf_write(tc, TX39_TIMERALARMHI_REG, t.t_hi);
 	tx_conf_write(tc, TX39_TIMERALARMLO_REG, t.t_lo);

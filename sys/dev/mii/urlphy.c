@@ -1,4 +1,4 @@
-/*	$NetBSD: urlphy.c,v 1.11 2005/12/11 12:22:42 christos Exp $	*/
+/*	$NetBSD: urlphy.c,v 1.18 2006/11/16 21:24:07 christos Exp $	*/
 /*
  * Copyright (c) 2001, 2002
  *     Shingo WATANABE <nabe@nabechan.org>.  All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: urlphy.c,v 1.11 2005/12/11 12:22:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: urlphy.c,v 1.18 2006/11/16 21:24:07 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,7 +87,7 @@ urlphy_match(struct device *parent, struct cfdata *match, void *aux)
 	/*
 	 * Make sure the parent is an 'url' device.
 	 */
-	if (strcmp(parent->dv_cfdata->cf_name, "url") != 0)
+	if (!device_is_a(parent, "url"))
 		return(0);
 
 	return (10);
@@ -96,7 +96,7 @@ urlphy_match(struct device *parent, struct cfdata *match, void *aux)
 static void
 urlphy_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct mii_softc *sc = (struct mii_softc *)self;
+	struct mii_softc *sc = device_private(self);
 	struct mii_attach_args *ma = aux;
 	struct mii_data *mii = ma->mii_data;
 
@@ -110,7 +110,7 @@ urlphy_attach(struct device *parent, struct device *self, void *aux)
 	sc->mii_funcs = &urlphy_funcs;
 	sc->mii_pdata = mii;
 	sc->mii_flags = mii->mii_flags;
-	sc->mii_anegticks = 10;
+	sc->mii_anegticks = MII_ANEGTICKS_GIGE;
 
 	/* Don't do loopback on this PHY. */
 	sc->mii_flags |= MIIF_NOLOOP;
@@ -141,7 +141,7 @@ urlphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 
 	DPRINTF(("%s: %s: enter\n", sc->mii_dev.dv_xname, __FUNCTION__));
 
-	if ((sc->mii_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->mii_dev))
 		return (ENXIO);
 
 	switch (cmd) {
@@ -196,7 +196,7 @@ urlphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 		 * Only retry autonegotiation every N seconds.
 		 */
 		KASSERT(sc->mii_anegticks != 0);
-		if (++sc->mii_ticks != sc->mii_anegticks)
+		if (++sc->mii_ticks <= sc->mii_anegticks)
 			return (0);
 
 		sc->mii_ticks = 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fxp_cardbus.c,v 1.21 2005/12/11 12:21:15 christos Exp $	*/
+/*	$NetBSD: if_fxp_cardbus.c,v 1.26 2006/11/16 01:32:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -41,10 +41,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_fxp_cardbus.c,v 1.21 2005/12/11 12:21:15 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_fxp_cardbus.c,v 1.26 2006/11/16 01:32:48 christos Exp $");
 
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 #include "rnd.h"
 
@@ -78,10 +77,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_fxp_cardbus.c,v 1.21 2005/12/11 12:21:15 christos
 #include <netinet/if_inarp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #include <machine/bus.h>
 #include <machine/intr.h>
@@ -123,10 +118,8 @@ CFATTACH_DECL(fxp_cardbus, sizeof(struct fxp_cardbus_softc),
 #endif
 
 static int
-fxp_cardbus_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void   *aux;
+fxp_cardbus_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct cardbus_attach_args *ca = aux;
 
@@ -138,14 +131,13 @@ fxp_cardbus_match(parent, match, aux)
 }
 
 static void
-fxp_cardbus_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+fxp_cardbus_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	static const char thisfunc[] = "fxp_cardbus_attach";
 
-	struct fxp_softc *sc = (struct fxp_softc *) self;
-	struct fxp_cardbus_softc *csc = (struct fxp_cardbus_softc *) self;
+	struct fxp_softc *sc = device_private(self);
+	struct fxp_cardbus_softc *csc = device_private(self);
 	struct cardbus_attach_args *ca = aux;
 	bus_space_tag_t iot, memt;
 	bus_space_handle_t ioh, memh;
@@ -196,7 +188,7 @@ fxp_cardbus_setup(struct fxp_softc * sc)
 {
 	struct fxp_cardbus_softc *csc = (struct fxp_cardbus_softc *) sc;
 	struct cardbus_softc *psc =
-	    (struct cardbus_softc *) sc->sc_dev.dv_parent;
+	    (struct cardbus_softc *) device_parent(&sc->sc_dev);
 	cardbus_chipset_tag_t cc = psc->sc_cc;
 	cardbus_function_tag_t cf = psc->sc_cf;
 	pcireg_t command;
@@ -230,7 +222,7 @@ fxp_cardbus_enable(struct fxp_softc * sc)
 {
 	struct fxp_cardbus_softc *csc = (struct fxp_cardbus_softc *) sc;
 	struct cardbus_softc *psc =
-	    (struct cardbus_softc *) sc->sc_dev.dv_parent;
+	    (struct cardbus_softc *) device_parent(&sc->sc_dev);
 	cardbus_chipset_tag_t cc = psc->sc_cc;
 	cardbus_function_tag_t cf = psc->sc_cf;
 
@@ -258,7 +250,7 @@ static void
 fxp_cardbus_disable(struct fxp_softc * sc)
 {
 	struct cardbus_softc *psc =
-	    (struct cardbus_softc *) sc->sc_dev.dv_parent;
+	    (struct cardbus_softc *) device_parent(&sc->sc_dev);
 	cardbus_chipset_tag_t cc = psc->sc_cc;
 	cardbus_function_tag_t cf = psc->sc_cf;
 
@@ -269,12 +261,10 @@ fxp_cardbus_disable(struct fxp_softc * sc)
 }
 
 static int
-fxp_cardbus_detach(self, flags)
-	struct device *self;
-	int flags;
+fxp_cardbus_detach(struct device *self, int flags)
 {
-	struct fxp_softc *sc = (struct fxp_softc *) self;
-	struct fxp_cardbus_softc *csc = (struct fxp_cardbus_softc *) self;
+	struct fxp_softc *sc = device_private(self);
+	struct fxp_cardbus_softc *csc = device_private(self);
 	struct cardbus_devfunc *ct = csc->ct;
 	int rv, reg;
 

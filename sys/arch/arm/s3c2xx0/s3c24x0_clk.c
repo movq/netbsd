@@ -1,4 +1,4 @@
-/*	$NetBSD: s3c24x0_clk.c,v 1.5 2005/12/11 12:16:51 christos Exp $ */
+/*	$NetBSD: s3c24x0_clk.c,v 1.6.24.1 2007/04/30 18:57:19 bouyer Exp $ */
 
 /*
  * Copyright (c) 2003  Genetec corporation.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: s3c24x0_clk.c,v 1.5 2005/12/11 12:16:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: s3c24x0_clk.c,v 1.6.24.1 2007/04/30 18:57:19 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -168,7 +168,7 @@ microtime(struct timeval *tvp)
 
 }
 
-static __inline int
+static inline int
 read_timer(struct s3c24x0_softc *sc)
 {
 	int count;
@@ -228,29 +228,6 @@ delay(u_int n)
 		}
 	}
 	/*NOTREACHED*/
-}
-
-/*
- * inittodr:
- *
- *	Initialize time from the time-of-day register.
- */
-void
-inittodr(time_t base)
-{
-
-	time.tv_sec = base;
-	time.tv_usec = 0;
-}
-
-/*
- * resettodr:
- *
- *	Reset the time-of-day register with the current time.
- */
-void
-resettodr(void)
-{
 }
 
 void

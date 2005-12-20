@@ -1,4 +1,4 @@
-/*	$NetBSD: pccbbvar.h,v 1.25 2005/12/11 12:22:50 christos Exp $	*/
+/*	$NetBSD: pccbbvar.h,v 1.26.8.1 2007/07/30 21:52:30 liamjfoy Exp $	*/
 /*
  * Copyright (c) 1999 HAYAKAWA Koichi.  All rights reserved.
  *
@@ -157,7 +157,7 @@ struct pccbb_softc {
 
 	struct proc *sc_event_thread;
 	SIMPLEQ_HEAD(, pcic_event) sc_events;
-	int sc_pwrcycle;
+	volatile int sc_pwrcycle;
 
 	/* interrupt handler list on the bridge */
 	LIST_HEAD(, pccbb_intrhand_list) sc_pil;
@@ -165,6 +165,7 @@ struct pccbb_softc {
 
 	int sc_pwrmgt_offs;	/* Offset for power management capability */
 	struct pci_conf_state sc_pciconf;
+	pcireg_t sc_ricoh_misc_ctrl;
 };
 
 /*

@@ -1,4 +1,4 @@
-$NetBSD: acronyms,v 1.148 2005/09/20 13:22:04 jschauma Exp $
+$NetBSD: acronyms,v 1.162 2006/11/12 11:29:51 bjh21 Exp $
 
 AFAIC	as far as I'm concerned
 AFAICR	as far as I can recall
@@ -47,6 +47,7 @@ COB	close of business [day]
 COTS	commercial off-the-shelf
 CYA	see you around
 D/L	download
+DGAS	don't give a shit
 DIY	do it yourself
 DKDC	don't know, don't care
 DSTM	don't shoot the messenger
@@ -58,6 +59,7 @@ EMSG	email message
 EOB	end of business [day]
 EOD	end of discussion
 EOL	end of life
+ETA	estimated time of arrival
 ETLA	extended three letter acronym
 EWAG	experienced wild-ass guess
 FAQ	frequently asked question
@@ -71,6 +73,8 @@ FOS	full of shit
 FSDO	for some definition of
 FSVO	for some value of
 FTFM	fuck the fuckin' manual!
+FTL	for the loss
+FTW	for the win
 FUBAR	fucked up beyond all recognition
 FUD	fear, uncertainty and doubt
 FWIW	for what it's worth
@@ -83,6 +87,7 @@ GIGO	garbage in, garbage out
 GMTA	great minds think alike
 GTFO	get the fuck out
 GTG	got to go
+GWS	get well soon
 HAND	have a nice day
 HHIS	hanging head in shame
 HICA	here it comes again
@@ -156,6 +161,7 @@ OTL	out to lunch
 OTOH	on the other hand
 OTT	over the top
 OTTOMH	off the top of my head
+PDQ	pretty darn quick
 PEBKAC	problem exists between keyboard and chair
 PFO	please fuck off
 PFY	pimply faced youth
@@ -201,6 +207,7 @@ SOB	son of [a] bitch
 SOL	shit out [of] luck
 SOP	standard operating procedure
 SSIA	subject says it all
+SSTO	single stage to orbit
 STFA	search the fucking archives
 STFU	shut the fuck up
 STFW	search the fucking web
@@ -211,15 +218,18 @@ SWMBO	she who must be obeyed
 TANSTAAFL	there ain't no such thing as a free lunch
 TBC	to be continued
 TBD	to be {decided,determined,done}
+TBH	to be honest
 TBOMK	the best of my knowledge
 THNX	thanks
 THX	thanks
 TIA	thanks in advance
 TINC	there is no cabal
 TLA	three letter acronym
-TLB	translation lookaside buffer
+TLC	tender loving care
+TLDR	too long, didn't read
 TMA	too many abbreviations
 TMI	too much information
+TMTOWTDI	there's more than one way to do it
 TNF	The NetBSD Foundation
 TOEFL	test of english as a foreign language
 TPTB	the powers that be
@@ -237,6 +247,7 @@ W/	with
 W/O	without
 WAG	wild-ass guess
 WB	welcome back
+WFH	working from home
 WFM	works for me
 WIBNI	wouldn't it be nice if
 WIP	work in progress

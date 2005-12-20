@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.28 2005/12/11 12:18:31 christos Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.30 2006/11/25 11:59:57 scw Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.28 2005/12/11 12:18:31 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.30 2006/11/25 11:59:57 scw Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,11 +58,8 @@ __KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.28 2005/12/11 12:18:31 christos Exp $
  * Returns null on success and an error string on failure.
  */
 const char *
-readdisklabel(dev, strat, lp, osdep)
-	dev_t dev;
-	void (*strat) __P((struct buf *));
-	struct disklabel *lp;
-	struct cpu_disklabel *osdep;
+readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
+    struct cpu_disklabel *osdep)
 {
 	struct buf *bp;
 	struct disklabel *dlp;
@@ -108,10 +105,8 @@ readdisklabel(dev, strat, lp, osdep)
  * before setting it.
  */
 int
-setdisklabel(olp, nlp, openmask, osdep)
-	struct disklabel *olp, *nlp;
-	u_long openmask;
-	struct cpu_disklabel *osdep;
+setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
+    struct cpu_disklabel *osdep)
 {
 	int i;
 	struct partition *opp, *npp;
@@ -139,8 +134,8 @@ setdisklabel(olp, nlp, openmask, osdep)
 			npp->p_cpg = opp->p_cpg;
 		}
 	}
- 	nlp->d_checksum = 0;
- 	nlp->d_checksum = dkcksum(nlp);
+	nlp->d_checksum = 0;
+	nlp->d_checksum = dkcksum(nlp);
 	*olp = *nlp;
 	return (0);
 }
@@ -149,11 +144,8 @@ setdisklabel(olp, nlp, openmask, osdep)
  * Write disk label back to device after modification.
  */
 int
-writedisklabel(dev, strat, lp, osdep)
-	dev_t dev;
-	void (*strat) __P((struct buf *));
-	struct disklabel *lp;
-	struct cpu_disklabel *osdep;
+writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
+    struct cpu_disklabel *osdep)
 {
 	struct buf *bp;
 	struct disklabel *dlp;
@@ -194,49 +186,4 @@ writedisklabel(dev, strat, lp, osdep)
 done:
 	brelse(bp);
 	return (error);
-}
-
-
-/*
- * Determine the size of the transfer, and make sure it is
- * within the boundaries of the partition. Adjust transfer
- * if needed, and signal errors or early completion.
- */
-int
-bounds_check_with_label(struct disk *dk, struct buf *bp, int wlabel)
-{
-	struct disklabel *lp = dk->dk_label;
-	struct partition *p = lp->d_partitions + DISKPART(bp->b_dev);
-	int maxsz = p->p_size,
-		sz = (bp->b_bcount + DEV_BSIZE - 1) >> DEV_BSHIFT;
-
-	/* Check to see if it is the label sector and it is write only. */
-	if (bp->b_blkno + p->p_offset <= LABELSECTOR &&
-	    (bp->b_flags & B_READ) == 0 && wlabel == 0) {
-		bp->b_error = EROFS;
-		goto bad;
-	}
-	/* beyond partition? */
-	if (bp->b_blkno < 0 || bp->b_blkno + sz > maxsz) {
-		/* if exactly at end of disk, return an EOF */
-		if (bp->b_blkno == maxsz) {
-			bp->b_resid = bp->b_bcount;
-			return(0);
-		}
-		/* or truncate if part of it fits */
-		sz = maxsz - bp->b_blkno;
-		if (sz <= 0) {
-			bp->b_error = EINVAL;
-			goto bad;
-		}
-		bp->b_bcount = sz << DEV_BSHIFT;
-	}
-
-	/* calculate cylinder for disksort to order transfers with */
-	bp->b_cylinder = (bp->b_blkno + p->p_offset) / lp->d_secpercyl;
-	return(1);
-
-bad:
-	bp->b_flags |= B_ERROR;
-	return(-1);
 }

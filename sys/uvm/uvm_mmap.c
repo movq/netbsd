@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_mmap.c,v 1.94 2005/12/11 12:25:29 christos Exp $	*/
+/*	$NetBSD: uvm_mmap.c,v 1.102.2.1 2007/03/10 12:17:58 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -51,9 +51,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_mmap.c,v 1.94 2005/12/11 12:25:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_mmap.c,v 1.102.2.1 2007/03/10 12:17:58 bouyer Exp $");
 
 #include "opt_compat_netbsd.h"
+#include "opt_pax.h"
+#include "veriexec.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,6 +69,14 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_mmap.c,v 1.94 2005/12/11 12:25:29 christos Exp $
 #include <sys/vnode.h>
 #include <sys/conf.h>
 #include <sys/stat.h>
+
+#if NVERIEXEC > 0
+#include <sys/verified_exec.h>
+#endif /* NVERIEXEC > 0 */
+ 
+#ifdef PAX_MPROTECT
+#include <sys/pax.h>
+#endif /* PAX_MPROTECT */
 
 #include <miscfs/specfs/specdev.h>
 
@@ -90,10 +100,7 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_mmap.c,v 1.94 2005/12/11 12:25:29 christos Exp $
 
 /* ARGSUSED */
 int
-sys_sbrk(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+sys_sbrk(struct lwp *l, void *v, register_t *retval)
 {
 #if 0
 	struct sys_sbrk_args /* {
@@ -110,10 +117,7 @@ sys_sbrk(l, v, retval)
 
 /* ARGSUSED */
 int
-sys_sstk(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+sys_sstk(struct lwp *l, void *v, register_t *retval)
 {
 #if 0
 	struct sys_sstk_args /* {
@@ -130,10 +134,7 @@ sys_sstk(l, v, retval)
 
 /* ARGSUSED */
 int
-sys_mincore(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+sys_mincore(struct lwp *l, void *v, register_t *retval)
 {
 	struct sys_mincore_args /* {
 		syscallarg(void *) addr;
@@ -171,7 +172,7 @@ sys_mincore(l, v, retval)
 	 */
 
 	npgs = len >> PAGE_SHIFT;
-	error = uvm_vslock(p, vec, npgs, VM_PROT_WRITE);
+	error = uvm_vslock(p->p_vmspace, vec, npgs, VM_PROT_WRITE);
 	if (error) {
 		return error;
 	}
@@ -262,7 +263,7 @@ sys_mincore(l, v, retval)
 
  out:
 	vm_map_unlock_read(map);
-	uvm_vsunlock(p, SCARG(uap, vec), npgs);
+	uvm_vsunlock(p->p_vmspace, SCARG(uap, vec), npgs);
 	return (error);
 }
 
@@ -439,6 +440,26 @@ sys_mmap(l, v, retval)
 
 		maxprot = VM_PROT_EXECUTE;
 
+#if NVERIEXEC > 0
+		/*
+		 * Check if the file can be executed indirectly.
+		 */
+		if (veriexec_verify(l, vp, "(mmap)", VERIEXEC_INDIRECT, NULL)) {
+			/*
+			 * Don't allow executable mappings if we can't
+			 * indirectly execute the file.
+			 */
+			if (prot & VM_PROT_EXECUTE)
+				return (EPERM);
+
+			/*
+			 * Strip the executable bit from 'maxprot' to make sure
+			 * it can't be made executable later.
+			 */
+			maxprot &= ~VM_PROT_EXECUTE;
+		}
+#endif /* NVERIEXEC > 0 */
+
 		/* check read access */
 		if (fp->f_flag & FREAD)
 			maxprot |= VM_PROT_READ;
@@ -455,7 +476,7 @@ sys_mmap(l, v, retval)
 			 */
 			if (fp->f_flag & FWRITE) {
 				if ((error =
-				    VOP_GETATTR(vp, &va, p->p_ucred, l)))
+				    VOP_GETATTR(vp, &va, l->l_cred, l)))
 					return (error);
 				if ((va.va_flags &
 				    (SF_SNAPSHOT|IMMUTABLE|APPEND)) == 0)
@@ -500,6 +521,10 @@ sys_mmap(l, v, retval)
 		}
 	}
 
+#ifdef PAX_MPROTECT
+	pax_mprotect(l, &prot, &maxprot);
+#endif /* PAX_MPROTECT */
+
 	/*
 	 * now let kernel internal function uvm_mmap do the work.
 	 */
@@ -519,10 +544,7 @@ sys_mmap(l, v, retval)
  */
 
 int
-sys___msync13(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+sys___msync13(struct lwp *l, void *v, register_t *retval)
 {
 	struct sys___msync13_args /* {
 		syscallarg(caddr_t) addr;
@@ -614,10 +636,7 @@ sys___msync13(l, v, retval)
  */
 
 int
-sys_munmap(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+sys_munmap(struct lwp *l, void *v, register_t *retval)
 {
 	struct sys_munmap_args /* {
 		syscallarg(caddr_t) addr;
@@ -687,10 +706,7 @@ sys_munmap(l, v, retval)
  */
 
 int
-sys_mprotect(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+sys_mprotect(struct lwp *l, void *v, register_t *retval)
 {
 	struct sys_mprotect_args /* {
 		syscallarg(caddr_t) addr;
@@ -730,10 +746,7 @@ sys_mprotect(l, v, retval)
  */
 
 int
-sys_minherit(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+sys_minherit(struct lwp *l, void *v, register_t *retval)
 {
 	struct sys_minherit_args /* {
 		syscallarg(caddr_t) addr;
@@ -772,10 +785,7 @@ sys_minherit(l, v, retval)
 
 /* ARGSUSED */
 int
-sys_madvise(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+sys_madvise(struct lwp *l, void *v, register_t *retval)
 {
 	struct sys_madvise_args /* {
 		syscallarg(caddr_t) addr;
@@ -876,10 +886,7 @@ sys_madvise(l, v, retval)
  */
 
 int
-sys_mlock(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+sys_mlock(struct lwp *l, void *v, register_t *retval)
 {
 	struct sys_mlock_args /* {
 		syscallarg(const void *) addr;
@@ -929,10 +936,7 @@ sys_mlock(l, v, retval)
  */
 
 int
-sys_munlock(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+sys_munlock(struct lwp *l, void *v, register_t *retval)
 {
 	struct sys_munlock_args /* {
 		syscallarg(const void *) addr;
@@ -975,10 +979,7 @@ sys_munlock(l, v, retval)
  */
 
 int
-sys_mlockall(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+sys_mlockall(struct lwp *l, void *v, register_t *retval)
 {
 	struct sys_mlockall_args /* {
 		syscallarg(int) flags;
@@ -1002,10 +1003,7 @@ sys_mlockall(l, v, retval)
  */
 
 int
-sys_munlockall(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+sys_munlockall(struct lwp *l, void *v, register_t *retval)
 {
 	struct proc *p = l->l_proc;
 
@@ -1038,6 +1036,7 @@ uvm_mmap(map, addr, size, prot, maxprot, flags, handle, foff, locklimit)
 	int error;
 	int advice = UVM_ADV_NORMAL;
 	uvm_flag_t uvmflag = 0;
+	boolean_t needwritemap;
 
 	/*
 	 * check params
@@ -1094,6 +1093,7 @@ uvm_mmap(map, addr, size, prot, maxprot, flags, handle, foff, locklimit)
 	 */
 
 	if (flags & MAP_ANON) {
+		KASSERT(handle == NULL);
 		foff = UVM_UNKNOWN_OFFSET;
 		uobj = NULL;
 		if ((flags & MAP_SHARED) == 0)
@@ -1104,6 +1104,7 @@ uvm_mmap(map, addr, size, prot, maxprot, flags, handle, foff, locklimit)
 			uvmflag |= UVM_FLAG_OVERLAY;
 
 	} else {
+		KASSERT(handle != NULL);
 		vp = (struct vnode *)handle;
 
 		/*
@@ -1115,7 +1116,7 @@ uvm_mmap(map, addr, size, prot, maxprot, flags, handle, foff, locklimit)
 			return (EACCES);
 
 		if (vp->v_type != VCHR) {
-			error = VOP_MMAP(vp, 0, curproc->p_ucred, curlwp);
+			error = VOP_MMAP(vp, 0, curlwp->l_cred, curlwp);
 			if (error) {
 				return error;
 			}
@@ -1152,10 +1153,26 @@ uvm_mmap(map, addr, size, prot, maxprot, flags, handle, foff, locklimit)
 			return((vp->v_type == VREG) ? ENOMEM : EINVAL);
 		if ((flags & MAP_SHARED) == 0) {
 			uvmflag |= UVM_FLAG_COPYONW;
-		} else if ((maxprot & VM_PROT_WRITE) != 0) {
+		}
+
+		/*
+		 * Set vnode flags to indicate the new kinds of mapping.
+		 * We take the vnode lock in exclusive mode here to serialize
+		 * with direct I/O.
+		 */
+
+		needwritemap = (vp->v_flag & VWRITEMAP) == 0 &&
+			(flags & MAP_SHARED) != 0 &&
+			(maxprot & VM_PROT_WRITE) != 0;
+		if ((vp->v_flag & VMAPPED) == 0 || needwritemap) {
+			vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 			simple_lock(&vp->v_interlock);
-			vp->v_flag |= VWRITEMAP;
+			vp->v_flag |= VMAPPED;
+			if (needwritemap) {
+				vp->v_flag |= VWRITEMAP;
+			}
 			simple_unlock(&vp->v_interlock);
+			VOP_UNLOCK(vp, 0);
 		}
 	}
 
@@ -1214,5 +1231,6 @@ uvm_mmap(map, addr, size, prot, maxprot, flags, handle, foff, locklimit)
 vaddr_t
 uvm_default_mapaddr(struct proc *p, vaddr_t base, vsize_t sz)
 {
+
 	return VM_DEFAULT_ADDRESS(base, sz);
 }

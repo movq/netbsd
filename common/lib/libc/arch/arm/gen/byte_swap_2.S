@@ -1,4 +1,4 @@
-/*	$NetBSD: byte_swap_2.S,v 1.1 2005/12/20 19:28:49 christos Exp $	*/
+/*	$NetBSD: byte_swap_2.S,v 1.3 2006/02/04 23:14:48 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -38,9 +38,15 @@
 
 #include <machine/asm.h>
 
+#if defined(_KERNEL) || defined(_STANDALONE)
+_ENTRY(_C_LABEL(bswap16))
+#else
 _ENTRY(_C_LABEL(__bswap16))
+#endif
+#if BYTE_ORDER == LITTLE_ENDIAN
 _ENTRY(_C_LABEL(ntohs))
 _ENTRY(_C_LABEL(htons))
+#endif
 _PROF_PROLOGUE
 	and		r1, r0, #0xff
 	mov		r0, r0, lsr #8

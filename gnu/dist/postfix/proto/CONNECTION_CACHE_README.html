@@ -92,28 +92,41 @@ by the mail delivering process that creates the connection.  To get
 the same performance improvement as with a shared connection cache,
 non-shared connections need to be kept open for a longer time. </p>
 
+<p> The scache(8) server, introduced with Postfix version 2.2,
+maintains the shared connection cache.  With Postfix version 2.2,
+only the smtp(8) client has support to access this cache.  </p>
+
 <blockquote>
 
 <table>
 
-<tr> <td> Internet &lt;-- </td> <td align="center" bgcolor="#f0f0ff">
-<br> smtp(8) <br> &nbsp; </td> <td> <tt> &lt;-&gt; </tt> </td> <td
-align="center" bgcolor="#f0f0ff"> <br> scache(8) <br> &nbsp; </td>
-<td> <tt> &lt;-&gt; </tt> </td> <td align="center" bgcolor="#f0f0ff">
-<br> smtp(8) <br> &nbsp; </td> <td> --&gt; Internet </td>
+<tr> <td> </td> <td> <tt> /-- </tt> </td> <td align="center"
+colspan="3" bgcolor="#f0f0ff"> smtp(8) </td> <td colspan="2"> <tt>
+--&gt; </tt> Internet </td> </tr>
+
+<tr> <td align="center" bgcolor="#f0f0ff"> qmgr(8) </td> <td> </td>
+<td align="center" rowspan="3"> &nbsp; </td> <td align="center"
+rowspan="3"><tt>|<br>|<br>|<br>|<br>v</tt></td> <td> &nbsp; </td>
+</tr>
+
+<tr> <td> </td> <td> <tt> \-- </tt> </td> <td align="center"
+colspan="2" bgcolor="#f0f0ff"> smtp(8) </td> <td align="left"> <tt>
+--&gt; </tt> Internet </td> </tr>
+
+<tr> <td colspan="3"> </td> <td align="center"><tt>^<br>|</tt></td>
+<td> &nbsp; </td> </tr>
+
+<tr> <td colspan="3"> </td> <td align="center" colspan="3"
+bgcolor="#f0f0ff"> scache(8) </td> </tr>
 
 </table>
 
 </blockquote>
 
-<p> The scache(8) server, introduced with Postfix version 2.2,
-maintains the shared connection cache.  With Postfix version 2.2,
-only the smtp(8) client has support to access this cache.  </p>
-
 <p> When SMTP connection caching is enabled (see next section), the
 smtp(8) client does not disconnect after a mail transaction, but
 gives the connection to the scache(8) server which keeps the
-connection open for a limited amount of time.  </p>
+connection open for a limited amount of time. </p>
 
 <p> After handing over the open connection to the scache(8) server,
 the smtp(8) client continues with some other mail delivery request.
@@ -211,9 +224,23 @@ configuration parameters. This prevents anti-social behavior. </p>
 
 <li> <p> The Postfix smtp(8) client reuses a session for only a
 limited number of times. This avoids triggering bugs in implementations
-that do not correctly handle multiple deliveries per session.  The
-use count is limited with the smtp_connection_cache_reuse_limit
-configuration parameter. </p>
+that do not correctly handle multiple deliveries per session. </p>
+
+<p> With Postfix 2.2 the use count is limited with the
+smtp_connection_cache_reuse_limit configuration parameter. With
+Postfix 2.3 this is replaced by a time limit which is specified
+with the smtp_connection_reuse_time_limit parameter. In addition,
+Postfix 2.3 logs the use count of multiply-used connections,
+as shown in the following example: </p>
+
+<blockquote>
+<pre>
+Nov  3 16:04:31 myname postfix/smtp[30840]: 19B6B2900FE:
+to=&lt;wietse@test.example.com&gt;, orig_to=&lt;wietse@test&gt;,
+relay=mail.example.com[1.2.3.4], <b>conn_use=2</b>, delay=0.22,
+delays=0.04/0.01/0.05/0.1, dsn=2.0.0, status=sent (250 2.0.0 Ok)
+</pre>
+</blockquote>
 
 <li> <p> The connection cache explicitly labels each cached connection
 with destination domain and IP address information.  A connection

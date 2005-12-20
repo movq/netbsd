@@ -1,4 +1,4 @@
-/*      $NetBSD: esm.c,v 1.31 2005/12/11 12:22:49 christos Exp $      */
+/*      $NetBSD: esm.c,v 1.41 2006/11/16 01:33:08 christos Exp $      */
 
 /*-
  * Copyright (c) 2002, 2003 Matt Fredette
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esm.c,v 1.31 2005/12/11 12:22:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esm.c,v 1.41 2006/11/16 01:33:08 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -120,7 +120,7 @@ int esm_debug = 0xfffc;
 #define RANGE(x,y,z)	/* nothing */
 #endif
 
-#define inline __inline
+#define inline inline
 
 static inline void	ringbus_setdest(struct esm_softc *, int, int);
 
@@ -179,6 +179,7 @@ const struct audio_hw_if esm_hw_if = {
 	esm_get_props,
 	esm_trigger_output,
 	esm_trigger_input,
+	NULL,
 	NULL,
 };
 
@@ -527,24 +528,6 @@ wc_wrchctl(struct esm_softc *ess, int ch, uint16_t data)
 
 	wc_wrreg(ess, ch << 3, data);
 }
-
-/* Power management */
-
-void
-esm_power(struct esm_softc *ess, int status)
-{
-	pcireg_t data;
-	int pmcapreg;
-
-	if (pci_get_capability(ess->pc, ess->tag, PCI_CAP_PWRMGMT,
-	    &pmcapreg, 0)) {
-		data = pci_conf_read(ess->pc, ess->tag, pmcapreg + PCI_PMCSR);
-		if ((data && PCI_PMCSR_STATE_MASK) != status)
-			pci_conf_write(ess->pc, ess->tag,
-			    pmcapreg + PCI_PMCSR, status);
-	}
-}
-
 
 /* -----------------------------
  * Controller.
@@ -938,7 +921,7 @@ esm_trigger_input(void *sc, void *start, void *end, int blksize,
 	if (speed < 4000) speed = 4000;
 	dv = (((speed % 48000) << 16) + 24000) / 48000
 	    + ((speed / 48000) << 16);
-	mixdv = 65536;	/* 48KHz */
+	mixdv = 65536;	/* 48 kHz */
 
 	for (i = 0; i < nch; i++) {
 
@@ -1220,7 +1203,8 @@ esm_getdev (void *sc, struct audio_device *adp)
 }
 
 int
-esm_round_blocksize(void *sc, int blk, int mode, const audio_params_t *param)
+esm_round_blocksize(void *sc, int blk, int mode,
+    const audio_params_t *param)
 {
 
 	DPRINTF(ESM_DEBUG_PARAM,
@@ -1289,10 +1273,10 @@ esm_set_params(void *sc, int setmode, int usemode,
 			hw_rec = p;
 	}
 
-	if (setmode & AUMODE_PLAY)
+	if (hw_play)
 		esmch_set_format(&ess->pch, hw_play);
 
-	if (setmode & AUMODE_RECORD)
+	if (hw_rec)
 		esmch_set_format(&ess->rch, hw_rec);
 
 	return 0;
@@ -1326,8 +1310,8 @@ esm_query_devinfo(void *sc, mixer_devinfo_t *dip)
 }
 
 void *
-esm_malloc(void *sc, int direction, size_t size, struct malloc_type *pool,
-    int flags)
+esm_malloc(void *sc, int direction, size_t size,
+    struct malloc_type *pool, int flags)
 {
 	struct esm_softc *ess;
 	int off;
@@ -1587,6 +1571,7 @@ esm_attach(struct device *parent, struct device *self, void *aux)
 	int revision;
 	uint16_t codec_data;
 	uint16_t pcmbar;
+	int error;
 
 	ess = (struct esm_softc *)self;
 	pa = (struct pci_attach_args *)aux;
@@ -1645,8 +1630,13 @@ esm_attach(struct device *parent, struct device *self, void *aux)
 	 * Setup PCI config registers
 	 */
 
-	/* set to power state D0 */
-	esm_power(ess, PCI_PMCSR_STATE_D0);
+	/* power up chip */
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, ess,
+	    pci_activate_null)) && error != EOPNOTSUPP) {
+		aprint_error("%s: cannot activate %d\n", ess->sc_dev.dv_xname,
+		    error);
+		return;
+	}
 	delay(100000);
 
 	/* Disable all legacy emulations. */
@@ -1711,7 +1701,8 @@ esm_attach(struct device *parent, struct device *self, void *aux)
 	audio_attach_mi(&esm_hw_if, self, &ess->sc_dev);
 
 	ess->esm_suspend = PWR_RESUME;
-	ess->esm_powerhook = powerhook_establish(esm_powerhook, ess);
+	ess->esm_powerhook = powerhook_establish(ess->sc_dev.dv_xname,
+	    esm_powerhook, ess);
 }
 
 /* Power Hook */
@@ -1757,7 +1748,6 @@ esm_suspend(struct esm_softc *ess)
 	delay(20);
 	bus_space_write_4(ess->st, ess->sh, PORT_RINGBUS_CTRL, 0);
 	delay(1);
-	esm_power(ess, PCI_PMCSR_STATE_D3);
 
 	return 0;
 }
@@ -1766,10 +1756,15 @@ int
 esm_resume(struct esm_softc *ess)
 {
 	int x;
+	uint16_t pcmbar;
 
-	esm_power(ess, PCI_PMCSR_STATE_D0);
 	delay(100000);
 	esm_init(ess);
+
+	/* set DMA base address */
+	for (pcmbar = WAVCACHE_PCMBAR; pcmbar < WAVCACHE_PCMBAR + 4; pcmbar++)
+		wc_wrreg(ess, pcmbar,
+		    DMAADDR(&ess->sc_dma) >> WAVCACHE_BASEADDR_SHIFT);
 
 	ess->codec_if->vtbl->restore_ports(ess->codec_if);
 #if 0

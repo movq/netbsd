@@ -1,4 +1,4 @@
-/*	$NetBSD: df.c,v 1.68 2005/06/26 19:10:49 christos Exp $	*/
+/*	$NetBSD: df.c,v 1.72 2006/09/04 16:32:57 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993, 1994
@@ -45,7 +45,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)df.c	8.7 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: df.c,v 1.68 2005/06/26 19:10:49 christos Exp $");
+__RCSID("$NetBSD: df.c,v 1.72 2006/09/04 16:32:57 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -77,7 +77,8 @@ void	 prthuman(struct statvfs *, int64_t, int64_t);
 const char *
 	strpct64(uint64_t, uint64_t, u_int);
 
-int	aflag, gflag, hflag, iflag, kflag, lflag, mflag, nflag, Pflag;
+int	aflag, hflag, iflag, lflag, nflag, Pflag;
+long 	usize = 0;
 char	**typelist = NULL;
 
 int
@@ -95,22 +96,26 @@ main(int argc, char *argv[])
 			aflag = 1;
 			break;
 		case 'g':
-			gflag = 1;
+			hflag = 0;
+			usize = 1024 * 1024 * 1024;
 			break;
 		case 'h':
 			hflag = 1;
+			usize = 0;
 			break;
 		case 'i':
 			iflag = 1;
 			break;
 		case 'k':
-			kflag = 1;
+			hflag = 0;
+			usize = 1024;
 			break;
 		case 'l':
 			lflag = 1;
 			break;
 		case 'm':
-			mflag = 1;
+			hflag = 0;
+			usize = 1024 * 1024;
 			break;
 		case 'n':
 			nflag = 1;
@@ -137,7 +142,8 @@ main(int argc, char *argv[])
 	if (*argv == NULL) {
 		mntsize = regetmntinfo(&mntbuf, mntsize);
 	} else {
-		mntbuf = malloc(argc * sizeof(*mntbuf));
+		if ((mntbuf = malloc(argc * sizeof(*mntbuf))) == NULL)
+			err(1, "can't allocate statvfs array");
 		mntsize = 0;
 		for (; *argv != NULL; argv++) {
 			if (stat(*argv, &stbuf) < 0) {
@@ -310,7 +316,7 @@ prthuman(struct statvfs *sfsp, int64_t used, int64_t bavail)
 {
 
 	prthumanval(sfsp->f_blocks * sfsp->f_frsize, "");
-	prthumanval(used * sfsp->f_frsize, "  ");
+	prthumanval(used * sfsp->f_frsize, "   ");
 	prthumanval(bavail * sfsp->f_frsize, "   ");
 }
 
@@ -340,23 +346,27 @@ prtstat(struct statvfs *sfsp, int maxwidth)
 	if (maxwidth < 11)
 		maxwidth = 11;
 	if (++timesthrough == 1) {
-		if (kflag) {
-			blocksize = 1024;
+		switch (blocksize = usize) {
+		case 1024:
 			header = Pflag ? "1024-blocks" : "1K-blocks";
 			headerlen = strlen(header);
-		} else if (mflag) {
-			blocksize = 1024 * 1024;
+			break;
+		case 1024 * 1024:
 			header = Pflag ? "1048576-blocks" : "1M-blocks";
 			headerlen = strlen(header);
-		} else if (gflag) {
-			blocksize = 1024 * 1024 * 1024;
+			break;
+		case 1024 * 1024 * 1024:
 			header = Pflag ? "1073741824-blocks" : "1G-blocks";
 			headerlen = strlen(header);
-		} else if (hflag) {
-			header = "  Size";
-			headerlen = strlen(header);
-		} else
-			header = getbsize(&headerlen, &blocksize);
+			break;
+		default:
+			if (hflag) {
+				header = "  Size";
+				headerlen = strlen(header);
+			} else
+				header = getbsize(&headerlen, &blocksize);
+			break;
+		}
 		(void)printf("%-*.*s %s      Used %9s Capacity",
 		    maxwidth, maxwidth, "Filesystem", header,
 		    Pflag ? "Available" : "Avail");

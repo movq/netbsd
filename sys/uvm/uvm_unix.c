@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_unix.c,v 1.32 2005/12/11 12:25:29 christos Exp $	*/
+/*	$NetBSD: uvm_unix.c,v 1.36.2.1 2007/01/04 19:41:46 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -50,17 +50,22 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_unix.c,v 1.32 2005/12/11 12:25:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_unix.c,v 1.36.2.1 2007/01/04 19:41:46 bouyer Exp $");
+
+#include "opt_pax.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/resourcevar.h>
-#include <sys/vnode.h>
 
 #include <sys/mount.h>
 #include <sys/sa.h>
 #include <sys/syscallargs.h>
+
+#ifdef PAX_MPROTECT
+#include <sys/pax.h>
+#endif /* PAX_MPROTECT */
 
 #include <uvm/uvm.h>
 
@@ -94,9 +99,16 @@ sys_obreak(struct lwp *l, void *v, register_t *retval)
 	 */
 
 	if (new > old) {
+		vm_prot_t prot = UVM_PROT_READ | UVM_PROT_WRITE;
+		vm_prot_t maxprot = UVM_PROT_ALL;
+
+#ifdef PAX_MPROTECT
+		pax_mprotect(l, &prot, &maxprot);
+#endif /* PAX_MPROTECT */
+
 		error = uvm_map(&vm->vm_map, &old, new - old, NULL,
 		    UVM_UNKNOWN_OFFSET, 0,
-		    UVM_MAPFLAG(UVM_PROT_READ | UVM_PROT_WRITE, UVM_PROT_ALL,
+		    UVM_MAPFLAG(prot, maxprot,
 				UVM_INH_COPY,
 				UVM_ADV_NORMAL, UVM_FLAG_AMAPPAD|UVM_FLAG_FIXED|
 				UVM_FLAG_OVERLAY|UVM_FLAG_COPYONW));
@@ -126,19 +138,31 @@ uvm_grow(struct proc *p, vaddr_t sp)
 	/*
 	 * For user defined stacks (from sendsig).
 	 */
+#ifdef __MACHINE_STACK_GROWS_UP
+	if (sp < (vaddr_t)vm->vm_minsaddr)
+#else
 	if (sp < (vaddr_t)vm->vm_maxsaddr)
+#endif
 		return (0);
 
 	/*
 	 * For common case of already allocated (from trap).
 	 */
+#ifdef __MACHINE_STACK_GROWS_UP
+	if (sp < USRSTACK + ctob(vm->vm_ssize))
+#else
 	if (sp >= USRSTACK - ctob(vm->vm_ssize))
+#endif
 		return (1);
 
 	/*
 	 * Really need to check vs limit and increment stack size if ok.
 	 */
+#ifdef __MACHINE_STACK_GROWS_UP
+	nss = btoc(sp - USRSTACK);
+#else
 	nss = btoc(USRSTACK - sp);
+#endif
 	if (nss > btoc(p->p_rlimit[RLIMIT_STACK].rlim_cur))
 		return (0);
 	vm->vm_ssize = nss;

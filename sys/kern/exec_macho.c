@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_macho.c,v 1.35 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: exec_macho.c,v 1.38 2006/07/23 22:06:10 ad Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exec_macho.c,v 1.35 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exec_macho.c,v 1.38 2006/07/23 22:06:10 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -290,7 +290,6 @@ static int
 exec_macho_load_file(struct lwp *l, struct exec_package *epp,
     const char *path, u_long *entry, int type, int recursive, int depth)
 {
-	struct proc *p;
 	int error;
 	struct nameidata nd;
 	struct vnode *vp;
@@ -303,7 +302,6 @@ exec_macho_load_file(struct lwp *l, struct exec_package *epp,
 	if (depth++ > 6)
 		return E2BIG;
 
-	p = l->l_proc;
 	/*
 	 * 1. open file
 	 * 2. read filehdr
@@ -327,11 +325,11 @@ exec_macho_load_file(struct lwp *l, struct exec_package *epp,
 	if (error)
 		return (error);
 
-	if ((error = VOP_ACCESS(vp, VEXEC, p->p_ucred, l)) != 0)
+	if ((error = VOP_ACCESS(vp, VEXEC, l->l_cred, l)) != 0)
 		goto badunlock;
 
 	/* get attributes */
-	if ((error = VOP_GETATTR(vp, &attr, p->p_ucred, l)) != 0)
+	if ((error = VOP_GETATTR(vp, &attr, l->l_cred, l)) != 0)
 		goto badunlock;
 
 #ifdef notyet /* XXX cgd 960926 */
@@ -381,7 +379,7 @@ exec_macho_load_vnode(struct lwp *l, struct exec_package *epp,
 	int error = ENOEXEC, i;
 	size_t size;
 	void *bf = &lc;
-	u_int32_t *sc = NULL;
+	uint32_t *sc = NULL;
 
 #ifdef DEBUG_MACHO
 	exec_macho_print_fat_header(fat);

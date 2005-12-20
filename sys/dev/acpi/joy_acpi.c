@@ -1,4 +1,4 @@
-/* $NetBSD: joy_acpi.c,v 1.2 2005/12/11 12:21:02 christos Exp $ */
+/* $NetBSD: joy_acpi.c,v 1.5 2006/11/16 01:32:47 christos Exp $ */
 
 /*
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: joy_acpi.c,v 1.2 2005/12/11 12:21:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: joy_acpi.c,v 1.5 2006/11/16 01:32:47 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -106,7 +106,8 @@ static const char * const joy_acpi_ids[] = {
  * joy_acpi_match: autoconf(9) match routine
  */
 static int
-joy_acpi_match(struct device *parent, struct cfdata *match, void *aux)
+joy_acpi_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -129,7 +130,8 @@ joy_acpi_attach(struct device *parent, struct device *self, void *aux)
 	struct acpi_io *io;
 	ACPI_STATUS rv;
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
 
 	/* parse resources */
 	rv = acpi_resource_parse(&sc->sc_dev, aa->aa_node->ad_handle, "_CRS",
@@ -140,7 +142,7 @@ joy_acpi_attach(struct device *parent, struct device *self, void *aux)
 	/* find our i/o registers */
 	io = acpi_res_io(&res, 0);
 	if (io == NULL) {
-		printf("%s: unable to find i/o register resource\n",
+		aprint_error("%s: unable to find i/o register resource\n",
 		    sc->sc_dev.dv_xname);
 		goto out;
 	}
@@ -148,7 +150,7 @@ joy_acpi_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_iot = aa->aa_iot;
 	if (bus_space_map(sc->sc_iot, io->ar_base, io->ar_length,
 		    0, &sc->sc_ioh)) {
-		printf("%s: can't map i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error("%s: can't map i/o space\n", sc->sc_dev.dv_xname);
 		goto out;
 	}
 

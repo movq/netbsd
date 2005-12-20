@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_var.h,v 1.75 2005/12/11 12:24:57 christos Exp $	*/
+/*	$NetBSD: ip_var.h,v 1.77 2006/02/16 20:17:20 perry Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993

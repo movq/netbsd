@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_isapnp.c,v 1.27 2005/12/11 12:22:16 christos Exp $	*/
+/*	$NetBSD: if_le_isapnp.c,v 1.30 2006/11/16 01:33:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le_isapnp.c,v 1.27 2005/12/11 12:22:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le_isapnp.c,v 1.30 2006/11/16 01:33:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -166,10 +166,8 @@ le_isapnp_rdcsr(sc, port)
 }
 
 int
-le_isapnp_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+le_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -180,11 +178,9 @@ le_isapnp_match(parent, match, aux)
 }
 
 void
-le_isapnp_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+le_isapnp_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct le_isapnp_softc *lesc = (struct le_isapnp_softc *)self;
+	struct le_isapnp_softc *lesc = device_private(self);
 	struct lance_softc *sc = &lesc->sc_am7990.lsc;
 	struct isapnp_attach_args *ipa = aux;
 	bus_space_tag_t iot;

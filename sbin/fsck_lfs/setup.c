@@ -1,4 +1,4 @@
-/* $NetBSD: setup.c,v 1.26 2005/09/13 04:14:17 christos Exp $ */
+/* $NetBSD: setup.c,v 1.32 2006/11/09 19:36:36 christos Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -89,6 +89,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <util.h>
 
 #include "bufcache.h"
 #include "vnode.h"
@@ -98,6 +100,7 @@
 #include "extern.h"
 #include "fsutil.h"
 
+extern u_int32_t cksum(void *, size_t);
 static struct disklabel *getdisklabel(const char *, int);
 static uint64_t calcmaxfilesize(int);
 
@@ -135,26 +138,34 @@ calcmaxfilesize(int bshift)
 void
 reset_maxino(ino_t len)
 {
-	din_table = (ufs_daddr_t *) realloc(din_table, len * sizeof(*din_table));
-	statemap = realloc(statemap, len * sizeof(char));
-	typemap = realloc(typemap, len * sizeof(char));
-	lncntp = (int16_t *) realloc(lncntp, len * sizeof(int16_t));
+	if (debug)
+		pwarn("maxino reset from %lld to %lld\n", (long long)maxino,
+			(long long)len);
 
-	if (din_table == NULL || statemap == NULL || typemap == NULL ||
-	    lncntp == NULL) {
-		errexit("expanding tables failed: out of memory");
-	}
+	din_table = erealloc(din_table, len * sizeof(*din_table));
+	statemap = erealloc(statemap, len * sizeof(char));
+	typemap = erealloc(typemap, len * sizeof(char));
+	lncntp = erealloc(lncntp, len * sizeof(int16_t));
 
 	memset(din_table + maxino, 0, (len - maxino) * sizeof(*din_table));
-	memset(statemap + maxino, 0, (len - maxino) * sizeof(char));
+	memset(statemap + maxino, USTATE, (len - maxino) * sizeof(char));
 	memset(typemap + maxino, 0, (len - maxino) * sizeof(char));
 	memset(lncntp + maxino, 0, (len - maxino) * sizeof(int16_t));
 
 	maxino = len;
 
+	/*
+	 * We can't roll forward after allocating new inodes in previous
+	 * phases, or thy would conflict (lost+found, for example, might
+	 * disappear to be replaced by a file found in roll-forward).
+	 */
+	no_roll_forward = 1;
+
 	return;
 }
  
+extern time_t write_time;
+
 int
 setup(const char *dev)
 {
@@ -166,16 +177,17 @@ setup(const char *dev)
 	int open_flags;
 	struct uvnode *ivp;
 	struct ubuf *bp;
-	int i;
+	int i, isdirty;
+	long sn, curseg;
 	SEGUSE *sup;
 
 	havesb = 0;
 	doskipclean = skipclean;
 	if (stat(dev, &statb) < 0) {
-		printf("Can't stat %s: %s\n", dev, strerror(errno));
+		pfatal("Can't stat %s: %s\n", dev, strerror(errno));
 		return (0);
 	}
-	if (!S_ISCHR(statb.st_mode)) {
+	if (!S_ISCHR(statb.st_mode) && skipclean) {
 		pfatal("%s is not a character device", dev);
 		if (reply("CONTINUE") == 0)
 			return (0);
@@ -186,7 +198,7 @@ setup(const char *dev)
 		open_flags = O_RDWR;
 
 	if ((fsreadfd = open(dev, open_flags)) < 0) {
-		printf("Can't open %s: %s\n", dev, strerror(errno));
+		pfatal("Can't open %s: %s\n", dev, strerror(errno));
 		return (0);
 	}
 	if (nflag) {
@@ -200,12 +212,15 @@ setup(const char *dev)
 	fsmodified = 0;
 	lfdir = 0;
 
+	/* Initialize time in case we have to write */
+	time(&write_time);
+
 	bufinit(0); /* XXX we could make a better guess */
 	fs = lfs_init(fsreadfd, bflag, idaddr, 0, debug);
 	if (fs == NULL) {
 		if (preen)
 			printf("%s: ", cdevname());
-		pfatal("BAD SUPER BLOCK\n");
+		errexit("BAD SUPER BLOCK OR IFILE INODE NOT FOUND\n");
 	}
 	if ((lp = getdisklabel((char *) NULL, fsreadfd)) != NULL)
 		dev_bsize = secsize = lp->d_secsize;
@@ -226,21 +241,114 @@ setup(const char *dev)
 			pwarn("** File system is already clean\n");
 	}
 
+	if (idaddr) {
+		daddr_t tdaddr;
+		SEGSUM *sp;
+		FINFO *fp;
+		int bc;
+
+		if (debug)
+			pwarn("adjusting offset, serial for -i 0x%lx\n",
+				(unsigned long)idaddr);
+		tdaddr = sntod(fs, dtosn(fs, idaddr));
+		if (sntod(fs, dtosn(fs, tdaddr)) == tdaddr) {
+			if (tdaddr == fs->lfs_start)
+				tdaddr += btofsb(fs, LFS_LABELPAD);
+			for (i = 0; i < LFS_MAXNUMSB; i++) {
+				if (fs->lfs_sboffs[i] == tdaddr)
+					tdaddr += btofsb(fs, LFS_SBPAD);
+				if (fs->lfs_sboffs[i] > tdaddr)
+					break;
+			}
+		}
+		fs->lfs_offset = tdaddr;
+		if (debug)
+			pwarn("begin with offset/serial 0x%x/%d\n",
+				(int)fs->lfs_offset, (int)fs->lfs_serial);
+		while (tdaddr < idaddr) {
+			bread(fs->lfs_devvp, fsbtodb(fs, tdaddr),
+			      fs->lfs_sumsize,
+			      NULL, &bp);
+			sp = (SEGSUM *)bp->b_data;
+			if (sp->ss_sumsum != cksum(&sp->ss_datasum,
+						   fs->lfs_sumsize -
+						   sizeof(sp->ss_sumsum))) {
+				brelse(bp);
+				if (debug)
+					printf("bad cksum at %x\n",
+					       (unsigned)tdaddr);
+				break;
+			}
+			fp = (FINFO *)(sp + 1);
+			bc = howmany(sp->ss_ninos, INOPB(fs)) <<
+				(fs->lfs_version > 1 ? fs->lfs_ffshift :
+						       fs->lfs_bshift);
+			for (i = 0; i < sp->ss_nfinfo; i++) {
+				bc += fp->fi_lastlength + ((fp->fi_nblocks - 1)
+					<< fs->lfs_bshift);
+				fp = (FINFO *)(fp->fi_blocks + fp->fi_nblocks);
+			}
+
+			tdaddr += btofsb(fs, bc) + 1;
+			fs->lfs_offset = tdaddr;
+			fs->lfs_serial = sp->ss_serial + 1;
+			brelse(bp);
+		}
+
+		/*
+		 * Set curseg, nextseg appropriately -- inlined from
+		 * lfs_newseg()
+		 */
+		curseg = dtosn(fs, fs->lfs_offset);
+		fs->lfs_curseg = sntod(fs, curseg);
+		for (sn = curseg + fs->lfs_interleave;;) {  
+			sn = (sn + 1) % fs->lfs_nseg;
+			if (sn == curseg)
+				errx(1, "init: no clean segments");
+			LFS_SEGENTRY(sup, fs, sn, bp);
+			isdirty = sup->su_flags & SEGUSE_DIRTY;
+			brelse(bp);
+
+			if (!isdirty)
+				break;
+		}
+
+		/* Skip superblock if necessary */
+		for (i = 0; i < LFS_MAXNUMSB; i++)
+			if (fs->lfs_offset == fs->lfs_sboffs[i])
+				fs->lfs_offset += btofsb(fs, LFS_SBPAD);
+
+		++fs->lfs_nactive;
+		fs->lfs_nextseg = sntod(fs, sn);
+		if (debug) {
+			pwarn("offset = 0x%" PRIx32 ", serial = %" PRId64 "\n",
+				fs->lfs_offset, fs->lfs_serial);
+			pwarn("curseg = %" PRIx32 ", nextseg = %" PRIx32 "\n",
+				fs->lfs_curseg, fs->lfs_nextseg);
+		}
+
+		if (!nflag && !skipclean) {
+			fs->lfs_idaddr = idaddr;
+			fsmodified = 1;
+			sbdirty();
+		}
+	}
+
 	if (debug) {
-		printf("idaddr    = 0x%lx\n", idaddr ? (unsigned long)idaddr :
+		pwarn("idaddr    = 0x%lx\n", idaddr ? (unsigned long)idaddr :
 			(unsigned long)fs->lfs_idaddr);
-		printf("dev_bsize = %lu\n", dev_bsize);
-		printf("lfs_bsize = %lu\n", (unsigned long) fs->lfs_bsize);
-		printf("lfs_fsize = %lu\n", (unsigned long) fs->lfs_fsize);
-		printf("lfs_frag  = %lu\n", (unsigned long) fs->lfs_frag);
-		printf("lfs_inopb = %lu\n", (unsigned long) fs->lfs_inopb);
+		pwarn("dev_bsize = %lu\n", dev_bsize);
+		pwarn("lfs_bsize = %lu\n", (unsigned long) fs->lfs_bsize);
+		pwarn("lfs_fsize = %lu\n", (unsigned long) fs->lfs_fsize);
+		pwarn("lfs_frag  = %lu\n", (unsigned long) fs->lfs_frag);
+		pwarn("lfs_inopb = %lu\n", (unsigned long) fs->lfs_inopb);
 	}
 	if (fs->lfs_version == 1)
 		maxfsblock = fs->lfs_size * (fs->lfs_bsize / dev_bsize);
 	else
 		maxfsblock = fs->lfs_size;
 	maxfilesize = calcmaxfilesize(fs->lfs_bshift);
-	if ((fs->lfs_minfree < 0 || fs->lfs_minfree > 99)) {
+	if (/* fs->lfs_minfree < 0 || */ fs->lfs_minfree > 99) {
 		pfatal("IMPOSSIBLE MINFREE=%d IN SUPERBLOCK",
 		    fs->lfs_minfree);
 		if (reply("SET TO DEFAULT") == 1) {
@@ -249,7 +357,7 @@ setup(const char *dev)
 		}
 	}
 	if (fs->lfs_bmask != fs->lfs_bsize - 1) {
-		pwarn("INCORRECT BMASK=%x IN SUPERBLOCK (should be %x)",
+		pwarn("INCORRECT BMASK=0x%x IN SUPERBLOCK (SHOULD BE 0x%x)",
 		    (unsigned int) fs->lfs_bmask,
 		    (unsigned int) fs->lfs_bsize - 1);
 		fs->lfs_bmask = fs->lfs_bsize - 1;
@@ -281,7 +389,7 @@ setup(const char *dev)
 	}
 	if (fs->lfs_maxfilesize != maxfilesize) {
 		pwarn(
-		    "INCORRECT MAXFILESIZE=%llu IN SUPERBLOCK (should be %llu with bshift %d)",
+		    "INCORRECT MAXFILESIZE=%llu IN SUPERBLOCK (SHOULD BE %llu WITH BSHIFT %d)",
 		    (unsigned long long) fs->lfs_maxfilesize,
 		    (unsigned long long) maxfilesize, (int)fs->lfs_bshift);
 		if (preen)
@@ -313,7 +421,7 @@ setup(const char *dev)
 	maxino = ((VTOI(ivp)->i_ffs1_size - (fs->lfs_cleansz + fs->lfs_segtabsz)
 		* fs->lfs_bsize) / fs->lfs_bsize) * fs->lfs_ifpb;
 	if (debug)
-		printf("maxino    = %llu\n", (unsigned long long)maxino);
+		pwarn("maxino    = %llu\n", (unsigned long long)maxino);
 	for (i = 0; i < VTOI(ivp)->i_ffs1_size; i += fs->lfs_bsize) {
 		bread(ivp, i >> fs->lfs_bshift, fs->lfs_bsize, NOCRED, &bp);
 		/* XXX check B_ERROR */
@@ -323,20 +431,8 @@ setup(const char *dev)
 	/*
 	 * allocate and initialize the necessary maps
 	 */
-	din_table = (ufs_daddr_t *) malloc(maxino * sizeof(*din_table));
-	if (din_table == NULL) {
-		printf("cannot alloc %lu bytes for din_table\n",
-		    (unsigned long) maxino * sizeof(*din_table));
-		goto badsblabel;
-	}
-	memset(din_table, 0, maxino * sizeof(*din_table));
-	seg_table = (SEGUSE *) malloc(fs->lfs_nseg * sizeof(SEGUSE));
-	if (seg_table == NULL) {
-		printf("cannot alloc %lu bytes for seg_table\n",
-		    (unsigned long) fs->lfs_nseg * sizeof(SEGUSE));
-		goto badsblabel;
-	}
-	memset(seg_table, 0, fs->lfs_nseg * sizeof(SEGUSE));
+	din_table = ecalloc(maxino, sizeof(*din_table));
+	seg_table = ecalloc(fs->lfs_nseg, sizeof(SEGUSE));
 	/* Get segment flags */
 	for (i = 0; i < fs->lfs_nseg; i++) {
 		LFS_SEGENTRY(sup, fs, i, bp);
@@ -352,34 +448,14 @@ setup(const char *dev)
 
 #ifndef VERBOSE_BLOCKMAP
 	bmapsize = roundup(howmany(maxfsblock, NBBY), sizeof(int16_t));
-	blockmap = calloc((unsigned) bmapsize, sizeof(char));
+	blockmap = ecalloc(bmapsize, sizeof(char));
 #else
 	bmapsize = maxfsblock * sizeof(ino_t);
-	blockmap = (ino_t *) calloc(maxfsblock, sizeof(ino_t));
+	blockmap = ecalloc(maxfsblock, sizeof(ino_t));
 #endif
-	if (blockmap == NULL) {
-		printf("cannot alloc %u bytes for blockmap\n",
-		    (unsigned) bmapsize);
-		goto badsblabel;
-	}
-	statemap = calloc((unsigned) maxino, sizeof(char));
-	if (statemap == NULL) {
-		printf("cannot alloc %u bytes for statemap\n",
-		    (unsigned) maxino);
-		goto badsblabel;
-	}
-	typemap = calloc((unsigned) maxino, sizeof(char));
-	if (typemap == NULL) {
-		printf("cannot alloc %u bytes for typemap\n",
-		    (unsigned) maxino);
-		goto badsblabel;
-	}
-	lncntp = (int16_t *) calloc((unsigned) maxino, sizeof(int16_t));
-	if (lncntp == NULL) {
-		printf("cannot alloc %lu bytes for lncntp\n",
-		    (unsigned long) maxino * sizeof(int16_t));
-		goto badsblabel;
-	}
+	statemap = ecalloc(maxino, sizeof(char));
+	typemap = ecalloc(maxino, sizeof(char));
+	lncntp = ecalloc(maxino, sizeof(int16_t));
 
 	if (preen) {
 		n_files = fs->lfs_nfiles;
@@ -387,20 +463,12 @@ setup(const char *dev)
 		numdirs = maxino;
 		inplast = 0; 
 		listmax = numdirs + 10;
-		inpsort = (struct inoinfo **) calloc((unsigned) listmax,
-			sizeof(struct inoinfo *));
-		inphead = (struct inoinfo **) calloc((unsigned) numdirs, 
-			sizeof(struct inoinfo *));
-		if (inpsort == NULL || inphead == NULL) { 
-			printf("cannot alloc %lu bytes for inphead\n",
-				(unsigned long) numdirs * sizeof(struct inoinfo *));  
-			exit(1);
-		}
+		inpsort = ecalloc(listmax, sizeof(struct inoinfo *));
+		inphead = ecalloc(numdirs, sizeof(struct inoinfo *));
 	}
 
 	return (1);
 
-badsblabel:
 	ckfini(0);
 	return (0);
 }

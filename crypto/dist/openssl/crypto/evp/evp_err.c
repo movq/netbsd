@@ -71,6 +71,7 @@
 static ERR_STRING_DATA EVP_str_functs[]=
 	{
 {ERR_FUNC(EVP_F_AES_INIT_KEY),	"AES_INIT_KEY"},
+{ERR_FUNC(EVP_F_CAMELLIA_INIT_KEY),	"CAMELLIA_INIT_KEY"},
 {ERR_FUNC(EVP_F_D2I_PKEY),	"D2I_PKEY"},
 {ERR_FUNC(EVP_F_DSAPKEY2PKCS8),	"DSAPKEY2PKCS8"},
 {ERR_FUNC(EVP_F_DSA_PKEY2PKCS8),	"DSA_PKEY2PKCS8"},
@@ -117,6 +118,7 @@ static ERR_STRING_DATA EVP_str_reasons[]=
 {ERR_REASON(EVP_R_BAD_KEY_LENGTH)        ,"bad key length"},
 {ERR_REASON(EVP_R_BN_DECODE_ERROR)       ,"bn decode error"},
 {ERR_REASON(EVP_R_BN_PUBKEY_ERROR)       ,"bn pubkey error"},
+{ERR_REASON(EVP_R_CAMELLIA_KEY_SETUP_FAILED),"camellia key setup failed"},
 {ERR_REASON(EVP_R_CIPHER_PARAMETER_ERROR),"cipher parameter error"},
 {ERR_REASON(EVP_R_CTRL_NOT_IMPLEMENTED)  ,"ctrl not implemented"},
 {ERR_REASON(EVP_R_CTRL_OPERATION_NOT_IMPLEMENTED),"ctrl operation not implemented"},
@@ -161,15 +163,12 @@ static ERR_STRING_DATA EVP_str_reasons[]=
 
 void ERR_load_EVP_strings(void)
 	{
-	static int init=1;
-
-	if (init)
-		{
-		init=0;
 #ifndef OPENSSL_NO_ERR
+
+	if (ERR_func_error_string(EVP_str_functs[0].error) == NULL)
+		{
 		ERR_load_strings(0,EVP_str_functs);
 		ERR_load_strings(0,EVP_str_reasons);
-#endif
-
 		}
+#endif
 	}

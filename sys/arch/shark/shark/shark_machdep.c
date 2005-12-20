@@ -1,4 +1,4 @@
-/*	$NetBSD: shark_machdep.c,v 1.21 2005/12/11 12:19:05 christos Exp $	*/
+/*	$NetBSD: shark_machdep.c,v 1.26 2006/10/26 22:49:36 bjh21 Exp $	*/
 
 /*
  * Copyright 1997
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.21 2005/12/11 12:19:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.26 2006/10/26 22:49:36 bjh21 Exp $");
 
 #include "opt_ddb.h"
 
@@ -67,6 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.21 2005/12/11 12:19:05 christos 
 #include <machine/cpu.h>
 #include <machine/intr.h>
 #include <machine/pio.h>
+#include <arm/arm32/machdep.h>
 #include <arm/undefined.h>
 
 #include "opt_ipkdb.h"
@@ -107,7 +108,6 @@ extern u_int undefined_handler_address;
 /*
  *  Imported routines
  */
-extern void parse_mi_bootargs		__P((char *args));
 extern void data_abort_handler		__P((trapframe_t *frame));
 extern void prefetch_abort_handler	__P((trapframe_t *frame));
 extern void undefinedinstruction_bounce	__P((trapframe_t *frame));
@@ -148,7 +148,6 @@ CFATTACH_DECL(ofbus_root, sizeof(struct device),
  */
 /* Move to header file? */
 extern void cpu_reboot		__P((int, char *));
-extern vaddr_t initarm		__P((ofw_handle_t));
 extern void ofrootfound		__P((void));
 
 /* Local routines */
@@ -181,7 +180,7 @@ cpu_reboot(howto, bootstr)
 }
 
 /*
- * vaddr_t initarm(ofw_handle_t handle)
+ * u_int initarm(void *handle)
  *
  * Initial entry point on startup for a GENERIC OFW
  * system.  Called with MMU on, running in the OFW
@@ -200,10 +199,10 @@ cpu_reboot(howto, bootstr)
 struct fiqhandler shark_fiqhandler;
 struct fiqregs shark_fiqregs;
 
-vaddr_t
-initarm(ofw_handle)
-	ofw_handle_t ofw_handle;
+u_int
+initarm(void *arg)
 {
+	ofw_handle_t ofw_handle = arg;
 	paddr_t  pclean;
 	paddr_t  isa_io_physaddr, isa_mem_physaddr;
 	vaddr_t  isa_io_virtaddr, isa_mem_virtaddr;
@@ -332,7 +331,7 @@ static void
 process_kernel_args(void)
 {
 #ifdef RB_QUIET
-	int bool;
+	int value;
 #endif
 	
 #if defined(RB_QUIET) && defined(BOOT_QUIETLY)
@@ -343,14 +342,14 @@ process_kernel_args(void)
 	parse_mi_bootargs(boot_args);
 
 #ifdef RB_QUIET
-	if (get_bootconf_option(args, "noquiet", BOOTOPT_TYPE_BOOLEAN, &bool)) {
-		if (!bool)
+	if (get_bootconf_option(args, "noquiet", BOOTOPT_TYPE_BOOLEAN, &value)) {
+		if (!value)
 			boothowto |= RB_QUIET;
 		else
 			boothowto &= ~RB_QUIET;
 	}
-	if (get_bootconf_option(args, "quiet", BOOTOPT_TYPE_BOOLEAN, &bool)) {
-		if (bool)
+	if (get_bootconf_option(args, "quiet", BOOTOPT_TYPE_BOOLEAN, &value)) {
+		if (value)
 			boothowto |= RB_QUIET;
 		else
 			boothowto &= ~RB_QUIET;
@@ -389,7 +388,6 @@ ofw_device_register(struct device *dev, void *aux)
 #endif
 	static char *boot_component;
 	struct ofbus_attach_args *oba;
-	const char *cd_name = dev->dv_cfdata->cf_name;
 	char name[64];
 	int i;
 
@@ -419,26 +417,26 @@ ofw_device_register(struct device *dev, void *aux)
 	    || boot_component[0] == '\0')
 		return;
 
-	if (!strcmp(cd_name, "ofbus") || !strcmp(cd_name, "ofisa")) {
+	if (device_is_a(dev, "ofbus") || device_is_a(dev, "ofisa")) {
 		oba = aux;
 	} else if (parent == NULL) {
 		return;
-	} else if (parent == dev->dv_parent
-		   && !strcmp(parent->dv_cfdata->cf_name, "ofisa")) {
+	} else if (parent == device_parent(dev)
+		   && device_is_a(parent, "ofisa")) {
 		struct ofisa_attach_args *aa = aux;
 		oba = &aa->oba;
 #if NWD > 0 || NSD > 0 || NCD > 0
-	} else if (dev->dv_parent->dv_parent != NULL
-		   && parent == dev->dv_parent->dv_parent
-		   && !strcmp(parent->dv_cfdata->cf_name, "wdc")) {
+	} else if (device_parent(device_parent(dev)) != NULL
+		   && parent == device_parent(device_parent(dev))
+		   && device_is_a(parent, "wdc")) {
 #if NSD > 0 || NCD > 0
-		if (!strcmp(cd_name, "atapibus")) {
+		if (device_is_a(dev, "atapibus")) {
 			scsipidev = dev;
 			return;
 		}
 #endif
 #if NWD > 0
-		if (!strcmp(cd_name, "wd")) {
+		if (device_is_a(dev, "wd")) {
 			struct ata_device *adev = aux;
 			char *cp = strchr(boot_component, '@');
 			if (cp != NULL
@@ -451,8 +449,8 @@ ofw_device_register(struct device *dev, void *aux)
 		return;
 #endif /* NWD > 0 */
 #if NSD > 0 || NCD > 0
-	} else if (scsipidev == dev->dv_parent
-	    && (!strcmp(cd_name, "sd") || !strcmp(cd_name, "cd"))) {
+	} else if (scsipidev == device_parent(dev)
+	    && (device_is_a(dev, "sd") || device_is_a(dev, "cd"))) {
 		struct scsipibus_attach_args *sa = aux;
 		char *cp = strchr(boot_component, '@');
 		if (cp != NULL

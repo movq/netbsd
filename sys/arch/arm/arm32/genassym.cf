@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.28 2005/12/11 12:16:41 christos Exp $
+#	$NetBSD: genassym.cf,v 1.29.2.2 2007/03/04 12:15:39 bouyer Exp $
 
 # Copyright (c) 1982, 1990 The Regents of the University of California.
 # All rights reserved.
@@ -65,10 +65,10 @@ ifdef __ARM_FIQ_INDIRECT
 define	__ARM_FIQ_INDIRECT	1
 endif
 
+define	KERNEL_BASE		KERNEL_BASE
 define	VM_MIN_ADDRESS		VM_MIN_ADDRESS
 define	VM_MAXUSER_ADDRESS	VM_MAXUSER_ADDRESS
 
-define	DOMAIN_CLIENT		DOMAIN_CLIENT
 define	PMAP_DOMAIN_KERNEL	PMAP_DOMAIN_KERNEL
 
 ifdef PMAP_INCLUDE_PTE_SYNC
@@ -157,7 +157,7 @@ ifdef MULTIPROCESSOR
 define	CI_CURLWP		offsetof(struct cpu_info, ci_curlwp)
 define	CI_CURPCB		offsetof(struct cpu_info, ci_curpcb)
 endif
-if defined(COMPAT_15) && defined(EXEC_AOUT)
+if defined(EXEC_AOUT)
 define	CI_CTRL			offsetof(struct cpu_info, ci_ctrl)
 endif
 

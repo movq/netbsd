@@ -1,4 +1,4 @@
-/*	$NetBSD: aic79xx_osm.h,v 1.8 2005/12/11 12:21:25 christos Exp $	*/
+/*	$NetBSD: aic79xx_osm.h,v 1.12 2006/11/16 01:32:50 christos Exp $	*/
 
 /*
  * NetBSD platform specific driver option settings, data structures,
@@ -32,9 +32,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $NetBSD: aic79xx_osm.h,v 1.8 2005/12/11 12:21:25 christos Exp $
+ * $NetBSD: aic79xx_osm.h,v 1.12 2006/11/16 01:32:50 christos Exp $
  *
- * //depot/aic7xxx/freebsd/dev/aic7xxx/aic79xx_osm.h#19 $$NetBSD: aic79xx_osm.h,v 1.8 2005/12/11 12:21:25 christos Exp $
+ * //depot/aic7xxx/freebsd/dev/aic7xxx/aic79xx_osm.h#19 $$NetBSD: aic79xx_osm.h,v 1.12 2006/11/16 01:32:50 christos Exp $
  *
  * $FreeBSD: src/sys/dev/aic7xxx/aic79xx_osm.h,v 1.9 2003/05/26 21:43:29 gibbs Exp $
  */
@@ -442,8 +442,8 @@ ahd_platform_freeze_devq(struct ahd_softc *ahd, struct scb *scb)
 
 static __inline int
 ahd_platform_abort_scbs(struct ahd_softc *ahd, int target,
-			char channel, int lun, u_int tag,
-			role_t role, uint32_t status)
+    char channel, int lun, u_int tag,
+    role_t role, uint32_t status)
 {
 	/* Nothing to do here for NetBSD */
 	return (0);
@@ -452,7 +452,7 @@ ahd_platform_abort_scbs(struct ahd_softc *ahd, int target,
 static __inline void
 ahd_platform_scb_free(struct ahd_softc *ahd, struct scb *scb)
 {
-#ifdef _FreeBSD_
+#ifdef __FreeBSD__
 	/* What do we do to generically handle driver resource shortages??? */
 	if ((ahd->flags & AHD_RESOURCE_SHORTAGE) != 0
 	 && scb->io_ctx != NULL

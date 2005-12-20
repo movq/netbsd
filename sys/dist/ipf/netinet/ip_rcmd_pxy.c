@@ -1,14 +1,14 @@
-/*	$NetBSD: ip_rcmd_pxy.c,v 1.7 2005/12/11 12:24:21 christos Exp $	*/
+/*	$NetBSD: ip_rcmd_pxy.c,v 1.8.12.2 2007/07/16 11:05:50 liamjfoy Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: ip_rcmd_pxy.c,v 1.7 2005/12/11 12:24:21 christos Exp $");
+__KERNEL_RCSID(1, "$NetBSD: ip_rcmd_pxy.c,v 1.8.12.2 2007/07/16 11:05:50 liamjfoy Exp $");
 
 /*
  * Copyright (C) 1998-2003 by Darren Reed
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: ip_rcmd_pxy.c,v 1.41.2.4 2005/02/04 10:22:55 darrenr Exp
+ * Id: ip_rcmd_pxy.c,v 1.41.2.7 2006/07/14 06:12:18 darrenr Exp
  *
  * Simple RCMD transparent proxy for in-kernel use.  For use with the NAT
  * code.
@@ -156,6 +156,8 @@ nat_t *nat;
 	 * other way.
 	 */
 	bcopy((char *)fin, (char *)&fi, sizeof(fi));
+	fi.fin_state = NULL;
+	fi.fin_nat = NULL;
 	fi.fin_flx |= FI_IGNORE;
 	fi.fin_data[0] = sp;
 	fi.fin_data[1] = 0;
@@ -205,9 +207,9 @@ nat_t *nat;
 				fi.fin_fi.fi_daddr = nat->nat_inip.s_addr;
 				ip->ip_dst = nat->nat_inip;
 			}
-			(void) fr_addstate(&fi, &nat2->nat_state, SI_W_DPORT);
+			(void) fr_addstate(&fi, NULL, SI_W_DPORT);
 			if (fi.fin_state != NULL)
-				fr_statederef(&fi, (ipstate_t **)&fi.fin_state);
+				fr_statederef((ipstate_t **)&fi.fin_state);
 		}
 		ip->ip_len = slen;
 		ip->ip_src = swip;

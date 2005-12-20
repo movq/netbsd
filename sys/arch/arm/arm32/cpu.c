@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.61 2005/12/11 12:16:41 christos Exp $	*/
+/*	$NetBSD: cpu.c,v 1.62.14.2 2007/02/21 18:36:03 snj Exp $	*/
 
 /*
  * Copyright (c) 1995 Mark Brinicombe.
@@ -46,7 +46,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.61 2005/12/11 12:16:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.62.14.2 2007/02/21 18:36:03 snj Exp $");
 
 #include <sys/systm.h>
 #include <sys/malloc.h>
@@ -169,6 +169,7 @@ enum cpu_class {
 	CPU_CLASS_ARM8,
 	CPU_CLASS_ARM9TDMI,
 	CPU_CLASS_ARM9ES,
+	CPU_CLASS_ARM9EJS,
 	CPU_CLASS_ARM10E,
 	CPU_CLASS_ARM10EJ,
 	CPU_CLASS_SA1,
@@ -316,6 +317,8 @@ const struct cpuidtab cpuids[] = {
 	  generic_steppings },
 	{ CPU_ID_ARM922T,	CPU_CLASS_ARM9TDMI,	"ARM922T",
 	  generic_steppings },
+	{ CPU_ID_ARM926EJS,	CPU_CLASS_ARM9EJS,	"ARM926EJ-S",
+	  generic_steppings },
 	{ CPU_ID_ARM940T,	CPU_CLASS_ARM9TDMI,	"ARM940T",
 	  generic_steppings },
 	{ CPU_ID_ARM946ES,	CPU_CLASS_ARM9ES,	"ARM946E-S",
@@ -406,7 +409,8 @@ const struct cpu_classtab cpu_classes[] = {
 	{ "ARM7TDMI",	"CPU_ARM7TDMI" },	/* CPU_CLASS_ARM7TDMI */
 	{ "ARM8",	"CPU_ARM8" },		/* CPU_CLASS_ARM8 */
 	{ "ARM9TDMI",	NULL },			/* CPU_CLASS_ARM9TDMI */
-	{ "ARM9E-S",	NULL },			/* CPU_CLASS_ARM9ES */
+	{ "ARM9E-S",	"CPU_ARM9E" },		/* CPU_CLASS_ARM9ES */
+	{ "ARM9EJ-S",	"CPU_ARM9E" },		/* CPU_CLASS_ARM9EJS */
 	{ "ARM10E",	"CPU_ARM10" },		/* CPU_CLASS_ARM10E */
 	{ "ARM10EJ",	"CPU_ARM10" },		/* CPU_CLASS_ARM10EJ */
 	{ "SA-1",	"CPU_SA110" },		/* CPU_CLASS_SA1 */
@@ -483,6 +487,8 @@ identify_arm_cpu(struct device *dv, struct cpu_info *ci)
 			aprint_normal(" IDC enabled");
 		break;
 	case CPU_CLASS_ARM9TDMI:
+	case CPU_CLASS_ARM9ES:
+	case CPU_CLASS_ARM9EJS:
 	case CPU_CLASS_ARM10E:
 	case CPU_CLASS_ARM10EJ:
 	case CPU_CLASS_SA1:
@@ -561,6 +567,10 @@ identify_arm_cpu(struct device *dv, struct cpu_info *ci)
 #ifdef CPU_ARM9
 	case CPU_CLASS_ARM9TDMI:
 #endif
+#ifdef CPU_ARM9E
+	case CPU_CLASS_ARM9ES:
+	case CPU_CLASS_ARM9EJS:
+#endif
 #ifdef CPU_ARM10
 	case CPU_CLASS_ARM10E:
 	case CPU_CLASS_ARM10EJ:
@@ -578,7 +588,7 @@ identify_arm_cpu(struct device *dv, struct cpu_info *ci)
 #endif
 		break;
 	default:
-		if (cpu_classes[cpu_class].class_option != NULL)
+		if (cpu_classes[cpu_class].class_option == NULL)
 			aprint_error("%s: %s does not fully support this CPU."
 			       "\n", dv->dv_xname, ostype);
 		else {
@@ -599,18 +609,14 @@ cpu_alloc_idlepcb(struct cpu_info *ci)
 	vaddr_t uaddr;
 	struct pcb *pcb;
 	struct trapframe *tf;
-	int error;
 
 	/*
 	 * Generate a kernel stack and PCB (in essence, a u-area) for the
 	 * new CPU.
 	 */
-	if (uvm_uarea_alloc(&uaddr)) {
-		error = uvm_fault_wire(kernel_map, uaddr, uaddr + USPACE,
-		    VM_FAULT_WIRE, VM_PROT_READ | VM_PROT_WRITE);
-		if (error)
-			return error;
-	}
+	uaddr = uvm_km_alloc(kernel_map, USPACE, 0, UVM_KMF_WIRED);
+	if (!uaddr)
+		return ENOMEM;
 	ci->ci_idlepcb = pcb = (struct pcb *)uaddr;
 
 	/*

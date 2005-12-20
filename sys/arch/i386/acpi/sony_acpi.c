@@ -1,4 +1,4 @@
-/*	$NetBSD: sony_acpi.c,v 1.2 2005/12/13 16:54:21 christos Exp $	*/
+/*	$NetBSD: sony_acpi.c,v 1.5 2006/11/16 01:32:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sony_acpi.c,v 1.2 2005/12/13 16:54:21 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sony_acpi.c,v 1.5 2006/11/16 01:32:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,7 +72,8 @@ CFATTACH_DECL(sony_acpi, sizeof(struct sony_acpi_softc),
     sony_acpi_match, sony_acpi_attach, NULL, NULL);
 
 static int
-sony_acpi_match(struct device *parent, struct cfdata *match, void *aux)
+sony_acpi_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -127,7 +128,8 @@ sony_sysctl_helper(SYSCTLFN_ARGS)
 }
 
 static ACPI_STATUS
-sony_walk_cb(ACPI_HANDLE hnd, UINT32 v, void *context, void **status)
+sony_walk_cb(ACPI_HANDLE hnd, UINT32 v, void *context,
+    void **status)
 {
 	struct sony_acpi_softc *sc = (void*)context;
 	const struct sysctlnode *node, *snode;
@@ -216,7 +218,8 @@ sony_acpi_attach(struct device *parent, struct device *self, void *aux)
 	struct acpi_attach_args *aa = aux;
 	ACPI_STATUS rv;
 
-	printf(": Sony Miscellaneous Controller\n");
+	aprint_naive(": Sony Miscellaneous Controller\n");
+	aprint_normal(": Sony Miscellaneous Controller\n");
 
 	sc->sc_node = aa->aa_node;
 
@@ -225,7 +228,7 @@ sony_acpi_attach(struct device *parent, struct device *self, void *aux)
 	    sc->sc_node->ad_handle, 1, sony_walk_cb, sc, NULL);
 #ifdef DIAGNOSTIC
 	if (ACPI_FAILURE(rv))
-		printf("%s: Cannot walk ACPI namespace (%d)\n",
+		aprint_error("%s: Cannot walk ACPI namespace (%d)\n",
 		    sc->sc_dev.dv_xname, rv);
 #endif
 }

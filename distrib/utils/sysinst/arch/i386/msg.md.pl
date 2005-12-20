@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.pl,v 1.22 2004/08/14 16:06:41 dsl Exp $	*/
+/*	$NetBSD: msg.md.pl,v 1.23.2.3 2007/05/23 23:08:56 riz Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.md.en,v 1.24 2001/01/27 07:34:39 jmc Exp 	*/
 
@@ -131,7 +131,7 @@ chcesz to zrobic?
 message missing_bootmenu_text	/* XXX translate */
 {You have more than one operating system on this disk, but have not
 specified a 'bootmenu' for either the active partition or the
-Netbsd partition that you are going to install into. 
+NetBSD partition that you are going to install into. 
 
 Do you want to re-edit the partition to add a bootmenu entry?}
 
@@ -160,8 +160,7 @@ the latest version of the NetBSD bootcode?}
 
 message set_kernel_1	{Kernel (GENERIC)}
 message set_kernel_2	{Kernel (GENERIC.MP)}
-message set_kernel_3	{Kernel (GENERIC.MPACPI)}
-message set_kernel_4	{Kernel (GENERIC_TINY)}
-message set_kernel_5	{Kernel (GENERIC_LAPTOP)}
-message set_kernel_6	{Kernel (GENERIC_DIAGNOSTIC)}
-message set_kernel_7	{Kernel (GENERIC_PS2TINY)}
+message set_kernel_3	{Kernel (GENERIC_LAPTOP)}
+message set_kernel_4	{Kernel (GENERIC_DIAGNOSTIC)}
+message set_kernel_5	{Kernel (GENERIC.NOACPI)}
+/* message set_kernel_6	{Kernel (GENERIC_PS2TINY)} */

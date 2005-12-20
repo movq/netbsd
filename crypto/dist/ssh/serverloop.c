@@ -1,4 +1,5 @@
-/*	$NetBSD: serverloop.c,v 1.23 2005/02/13 05:57:26 christos Exp $	*/
+/*	$NetBSD: serverloop.c,v 1.28 2006/09/28 21:22:15 christos Exp $	*/
+/* $OpenBSD: serverloop.c,v 1.144 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -36,8 +37,23 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: serverloop.c,v 1.117 2004/08/11 21:43:05 avsm Exp $");
-__RCSID("$NetBSD: serverloop.c,v 1.23 2005/02/13 05:57:26 christos Exp $");
+__RCSID("$NetBSD: serverloop.c,v 1.28 2006/09/28 21:22:15 christos Exp $");
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/param.h>
+
+#include <netinet/in.h>
+
+#include <errno.h>
+#include <fcntl.h>
+#include <pwd.h>
+#include <signal.h>
+#include <string.h>
+#include <termios.h>
+#include <unistd.h>
+#include <stdarg.h>
 
 #include "xmalloc.h"
 #include "packet.h"
@@ -50,19 +66,23 @@ __RCSID("$NetBSD: serverloop.c,v 1.23 2005/02/13 05:57:26 christos Exp $");
 #include "compat.h"
 #include "ssh1.h"
 #include "ssh2.h"
+#include "key.h"
+#include "cipher.h"
+#include "kex.h"
+#include "hostfile.h"
 #include "auth.h"
 #include "session.h"
 #include "dispatch.h"
 #include "auth-options.h"
 #include "serverloop.h"
 #include "misc.h"
-#include "kex.h"
 
 extern ServerOptions options;
 
 /* XXX */
 extern Kex *xxx_kex;
 extern Authctxt *the_authctxt;
+extern int use_privsep;
 
 static Buffer stdin_buffer;	/* Buffer for stdin data. */
 static Buffer stdout_buffer;	/* Buffer for stdout data. */
@@ -91,6 +111,9 @@ static int client_alive_timeouts = 0;
  */
 
 static volatile sig_atomic_t child_terminated = 0;	/* The child has terminated. */
+
+/* Cleanup on signals (!use_privsep case only) */
+static volatile sig_atomic_t received_sigterm = 0;
 
 /* prototypes */
 static void server_init_dispatch(void);
@@ -140,15 +163,22 @@ notify_done(fd_set *readset)
 			debug2("notify_done: reading");
 }
 
+/*ARGSUSED*/
 static void
 sigchld_handler(int sig)
 {
 	int save_errno = errno;
-	debug("Received SIGCHLD.");
 	child_terminated = 1;
 	signal(SIGCHLD, sigchld_handler);
 	notify_parent();
 	errno = save_errno;
+}
+
+/*ARGSUSED*/
+static void
+sigterm_handler(int sig)
+{
+	received_sigterm = sig;
 }
 
 /*
@@ -338,7 +368,7 @@ wait_until_can_do_something(fd_set **readsetp, fd_set **writesetp, int *maxfdp,
  * in buffers and processed later.
  */
 static void
-process_input(fd_set * readset)
+process_input(fd_set *readset)
 {
 	int len;
 	char buf[16384];
@@ -397,7 +427,7 @@ process_input(fd_set * readset)
  * Sends data from internal buffers to client program stdin.
  */
 static void
-process_output(fd_set * writeset)
+process_output(fd_set *writeset)
 {
 	struct termios tio;
 	u_char *data;
@@ -502,6 +532,12 @@ server_loop(pid_t pid, int fdin_arg, int fdout_arg, int fderr_arg)
 	child_terminated = 0;
 	signal(SIGCHLD, sigchld_handler);
 
+	if (!use_privsep) {
+		signal(SIGTERM, sigterm_handler);
+		signal(SIGINT, sigterm_handler);
+		signal(SIGQUIT, sigterm_handler);
+	}
+
 	/* Initialize our global variables. */
 	fdin = fdin_arg;
 	fdout = fdout_arg;
@@ -548,7 +584,7 @@ server_loop(pid_t pid, int fdin_arg, int fdout_arg, int fderr_arg)
 	 * If we have no separate fderr (which is the case when we have a pty
 	 * - there we cannot make difference between data sent to stdout and
 	 * stderr), indicate that we have seen an EOF from stderr.  This way
-	 * we don\'t need to check the descriptor everywhere.
+	 * we don't need to check the descriptor everywhere.
 	 */
 	if (fderr == -1)
 		fderr_eof = 1;
@@ -628,6 +664,12 @@ server_loop(pid_t pid, int fdin_arg, int fdout_arg, int fderr_arg)
 		/* Sleep in select() until we can do something. */
 		wait_until_can_do_something(&readset, &writeset, &max_fd,
 		    &nalloc, max_time_milliseconds);
+
+		if (received_sigterm) {
+			logit("Exiting on signal %d", (int)received_sigterm);
+			/* Clean up sessions, utmp, etc. */
+			cleanup_exit(255);
+		}
 
 		/* Process any channel events. */
 		channel_after_select(readset, writeset);
@@ -727,6 +769,7 @@ collect_children(void)
 	sigaddset(&nset, SIGCHLD);
 	sigprocmask(SIG_BLOCK, &nset, &oset);
 	if (child_terminated) {
+		debug("Received SIGCHLD.");
 		while ((pid = waitpid(-1, &status, WNOHANG)) > 0 ||
 		    (pid < 0 && errno == EINTR))
 			if (pid > 0)
@@ -740,7 +783,8 @@ void
 server_loop2(Authctxt *authctxt)
 {
 	fd_set *readset = NULL, *writeset = NULL;
-	int rekeying = 0, max_fd, nalloc = 0;
+	int rekeying = 0, max_fd;
+	u_int nalloc = 0;
 
 	debug("Entering interactive session for SSH2.");
 
@@ -748,6 +792,12 @@ server_loop2(Authctxt *authctxt)
 	child_terminated = 0;
 	connection_in = packet_get_connection_in();
 	connection_out = packet_get_connection_out();
+
+	if (!use_privsep) {
+		signal(SIGTERM, sigterm_handler);
+		signal(SIGINT, sigterm_handler);
+		signal(SIGQUIT, sigterm_handler);
+	}
 
 	notify_setup();
 
@@ -765,6 +815,12 @@ server_loop2(Authctxt *authctxt)
 			channel_output_poll();
 		wait_until_can_do_something(&readset, &writeset, &max_fd,
 		    &nalloc, 0);
+
+		if (received_sigterm) {
+			logit("Exiting on signal %d", (int)received_sigterm);
+			/* Clean up sessions, utmp, etc. */
+			cleanup_exit(255);
+		}
 
 		collect_children();
 		if (!rekeying) {
@@ -839,10 +895,10 @@ server_input_eof(int type, u_int32_t seq, void *ctxt)
 static void
 server_input_window_size(int type, u_int32_t seq, void *ctxt)
 {
-	int row = packet_get_int();
-	int col = packet_get_int();
-	int xpixel = packet_get_int();
-	int ypixel = packet_get_int();
+	u_int row = packet_get_int();
+	u_int col = packet_get_int();
+	u_int xpixel = packet_get_int();
+	u_int ypixel = packet_get_int();
 
 	debug("Window change received.");
 	packet_check_eom();
@@ -865,7 +921,7 @@ server_request_direct_tcpip(void)
 	packet_check_eom();
 
 	debug("server_request_direct_tcpip: originator %s port %d, target %s port %d",
-	   originator, originator_port, target, target_port);
+	    originator, originator_port, target, target_port);
 
 	/* XXX check permission */
 	sock = channel_connect_to(target, target_port);
@@ -876,6 +932,47 @@ server_request_direct_tcpip(void)
 	c = channel_new("direct-tcpip", SSH_CHANNEL_CONNECTING,
 	    sock, sock, -1, CHAN_TCP_WINDOW_DEFAULT,
 	    CHAN_TCP_PACKET_DEFAULT, 0, "direct-tcpip", 1);
+	return c;
+}
+
+static Channel *
+server_request_tun(void)
+{
+	Channel *c = NULL;
+	int mode, tun;
+	int sock;
+
+	mode = packet_get_int();
+	switch (mode) {
+	case SSH_TUNMODE_POINTOPOINT:
+	case SSH_TUNMODE_ETHERNET:
+		break;
+	default:
+		packet_send_debug("Unsupported tunnel device mode.");
+		return NULL;
+	}
+	if ((options.permit_tun & mode) == 0) {
+		packet_send_debug("Server has rejected tunnel device "
+		    "forwarding");
+		return NULL;
+	}
+
+	tun = packet_get_int();
+	if (forced_tun_device != -1) {
+		if (tun != SSH_TUNID_ANY && forced_tun_device != tun)
+			goto done;
+		tun = forced_tun_device;
+	}
+	sock = tun_open(tun, mode);
+	if (sock < 0)
+		goto done;
+	c = channel_new("tun", SSH_CHANNEL_OPEN, sock, sock, -1,
+	    CHAN_TCP_WINDOW_DEFAULT, CHAN_TCP_PACKET_DEFAULT, 0, "tun", 1);
+	c->datagram = 1;
+
+ done:
+	if (c == NULL)
+		packet_send_debug("Failed to open the tunnel device.");
 	return c;
 }
 
@@ -900,7 +997,7 @@ server_request_session(void)
 		channel_free(c);
 		return NULL;
 	}
-	channel_register_cleanup(c->self, session_close_by_channel);
+	channel_register_cleanup(c->self, session_close_by_channel, 0);
 	return c;
 }
 
@@ -924,6 +1021,8 @@ server_input_channel_open(int type, u_int32_t seq, void *ctxt)
 		c = server_request_session();
 	} else if (strcmp(ctype, "direct-tcpip") == 0) {
 		c = server_request_direct_tcpip();
+	} else if (strcmp(ctype, "tun@openssh.com") == 0) {
+		c = server_request_tun();
 	}
 	if (c != NULL) {
 		debug("server_input_channel_open: confirm %s", ctype);
@@ -1000,6 +1099,7 @@ server_input_global_request(int type, u_int32_t seq, void *ctxt)
 
 		success = channel_cancel_rport_listener(cancel_address,
 		    cancel_port);
+		xfree(cancel_address);
 	}
 	if (want_reply) {
 		packet_start(success ?
@@ -1009,6 +1109,7 @@ server_input_global_request(int type, u_int32_t seq, void *ctxt)
 	}
 	xfree(rtype);
 }
+
 static void
 server_input_channel_req(int type, u_int32_t seq, void *ctxt)
 {

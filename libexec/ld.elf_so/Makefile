@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.72 2005/06/04 16:17:17 lukem Exp $
+#	$NetBSD: Makefile,v 1.75.2.1 2007/07/19 14:38:16 liamjfoy Exp $
 
 .include <bsd.own.mk>			# for OBJECT_FMT definition
 .include <bsd.shlib.mk>			# for SHLINKINSTALLDIR definition
@@ -7,14 +7,13 @@ ARCHSUBDIR=	${MACHINE_CPU}
 M=		${.CURDIR}/arch/${ARCHSUBDIR}
 
 .if ((${MACHINE_ARCH} == "alpha") ||					\
-     (${MACHINE_ARCH} == "arm") || (${MACHINE_ARCH} == "armeb") ||	\
+     (${MACHINE_CPU} == "arm") ||					\
      (${MACHINE_ARCH} == "hppa") ||					\
      (${MACHINE_ARCH} == "i386") ||					\
      (${MACHINE_ARCH} == "m68k") ||					\
-     (${MACHINE_ARCH} == "mipsel") || (${MACHINE_ARCH} == "mipseb") ||	\
+     (${MACHINE_CPU} == "mips") ||					\
      (${MACHINE_ARCH} == "powerpc") ||					\
-     (${MACHINE_ARCH} == "sh3eb") || (${MACHINE_ARCH} == "sh3el") ||	\
-     (${MACHINE_ARCH} == "sh5eb") || (${MACHINE_ARCH} == "sh5el") ||	\
+     (${MACHINE_CPU} == "sh3") ||					\
      (${MACHINE_ARCH} == "sparc") ||					\
      (${MACHINE_ARCH} == "sparc64") ||					\
      (${MACHINE_ARCH} == "x86_64") ||					\
@@ -24,7 +23,7 @@ M=		${.CURDIR}/arch/${ARCHSUBDIR}
 PROG=		ld.elf_so
 
 LDFLAGS+=	-shared -symbolic -nostartfiles
-LDFLAGS+=	-Wl,-non_shared
+LDFLAGS+=	-Wl,-static
 
 # Adds SRCS, CPPFLAGS, LDFLAGS, etc.  Must go first so MD startup source
 # is first.

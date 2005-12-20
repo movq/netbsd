@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.61 2005/12/11 12:19:34 christos Exp $	   */
+/*	$NetBSD: pmap.h,v 1.68.8.1 2007/03/10 18:39:35 bouyer Exp $	   */
 
 /* 
  * Copyright (c) 1991 Regents of the University of California.
@@ -133,11 +133,11 @@ extern	struct  pv_entry *pv_table;
 
 /* Mapping macros used when allocating SPT */
 #define MAPVIRT(ptr, count)				\
-	(vaddr_t)ptr = virtual_avail;			\
+	ptr = virtual_avail;		\
 	virtual_avail += (count) * VAX_NBPG;
 
 #define MAPPHYS(ptr, count, perm)			\
-	(vaddr_t)ptr = avail_start + KERNBASE;		\
+	ptr = avail_start + KERNBASE;	\
 	avail_start += (count) * VAX_NBPG;
 
 #ifdef	_KERNEL
@@ -164,10 +164,11 @@ extern	struct pmap kernel_pmap_store;
 __inline static boolean_t
 pmap_extract(pmap_t pmap, vaddr_t va, paddr_t *pap)
 {
-	paddr_t pa = 0;
 	int	*pte, sva;
 
 	if (va & KERNBASE) {
+		paddr_t pa;
+
 		pa = kvtophys(va); /* Is 0 if not mapped */
 		if (pap)
 			*pap = pa;
@@ -179,18 +180,21 @@ pmap_extract(pmap_t pmap, vaddr_t va, paddr_t *pap)
 	sva = PG_PFNUM(va);
 	if (va < 0x40000000) {
 		if (sva > (pmap->pm_p0lr & ~AST_MASK))
-			return FALSE;
+			goto fail;
 		pte = (int *)pmap->pm_p0br;
 	} else {
 		if (sva < pmap->pm_p1lr)
-			return FALSE;
+			goto fail;
 		pte = (int *)pmap->pm_p1br;
 	}
-	if (kvtopte(&pte[sva])->pg_pfn) {
+	if (kvtopte(&pte[sva])->pg_pfn && pte[sva]) {
 		if (pap)
 			*pap = (pte[sva] & PG_FRAME) << VAX_PGSHIFT;
 		return (TRUE);
 	}
+  fail:
+	if (pap)
+		*pap = 0;
 	return (FALSE);
 }
 
@@ -199,6 +203,15 @@ boolean_t pmap_clear_reference_long(struct pv_entry *);
 boolean_t pmap_is_modified_long(struct pv_entry *);
 void pmap_page_protect_long(struct pv_entry *, vm_prot_t);
 void pmap_protect_long(pmap_t, vaddr_t, vaddr_t, vm_prot_t);
+
+__inline static boolean_t
+pmap_is_referenced(struct vm_page *pg)
+{
+	struct pv_entry *pv = pv_table + (VM_PAGE_TO_PHYS(pg) >> PGSHIFT);
+	boolean_t rv = (pv->pv_attr & PG_V) != 0;
+
+	return rv;
+}
 
 __inline static boolean_t
 pmap_clear_reference(struct vm_page *pg)
@@ -269,14 +282,14 @@ pmap_remove_all(struct pmap *pmap)
 
 /* These can be done as efficient inline macros */
 #define pmap_copy_page(src, dst)			\
-	__asm__("addl3 $0x80000000,%0,%%r0;"		\
+	__asm("addl3 $0x80000000,%0,%%r0;"		\
 		"addl3 $0x80000000,%1,%%r1;"		\
 		"movc3 $4096,(%%r0),(%%r1)"		\
 	    :: "r"(src), "r"(dst)			\
 	    : "r0","r1","r2","r3","r4","r5");
 
 #define pmap_zero_page(phys)				\
-	__asm__("addl3 $0x80000000,%0,%%r0;"		\
+	__asm("addl3 $0x80000000,%0,%%r0;"		\
 		"movc5 $0,(%%r0),$0,$4096,(%%r0)"	\
 	    :: "r"(phys)				\
 	    : "r0","r1","r2","r3","r4","r5");

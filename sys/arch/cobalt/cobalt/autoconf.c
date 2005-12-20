@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.14 2005/12/11 12:17:05 christos Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.24.2.1 2007/11/04 16:30:55 pavel Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.14 2005/12/11 12:17:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.24.2.1 2007/11/04 16:30:55 pavel Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -35,63 +35,82 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.14 2005/12/11 12:17:05 christos Exp $
 #include <sys/device.h>
 
 #include <machine/cpu.h>
+#include <machine/intr.h>
+
+#include <dev/pci/pcivar.h>
+#include <dev/ata/atavar.h>
 
 extern char	bootstring[];
 extern int	netboot;
 extern int	bootunit;
 extern int	bootpart;
 
-int		cpuspeed = 100;		/* Until we know more precisely. */
-
 void
-cpu_configure()
+cpu_configure(void)
 {
 
 	softintr_init();
 
 	(void)splhigh();
 
+	icu_init();
+
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("no mainbus found");
 
-	_splnone();
+	/*
+	 * Hardware interrupts will be enabled in
+	 * sys/arch/mips/mips/mips3_clockintr.c:mips3_initclocks()
+	 * to avoid hardclock(9) by CPU INT5 before softclockintr is
+	 * initialized in initclocks().
+	 */
 }
 
 void
-cpu_rootconf()
+cpu_rootconf(void)
 {
+
 	printf("boot device: %s\n",
-		booted_device ? booted_device->dv_xname : "<unknown>");
+	    booted_device ? booted_device->dv_xname : "<unknown>");
 
 	setroot(booted_device, booted_partition);
 }
 
-static int hd_iterate = -1;
-
 void
-device_register(dev, aux)
-	struct device *dev;
-	void *aux;
+device_register(struct device *dev, void *aux)
 {
-	if (booted_device)
+
+	if (booted_device != NULL)
 		return;
 
-	if ((booted_device == NULL) && (netboot == 1))
-		if (dev->dv_class == DV_IFNET)
-			booted_device = dev;
+	if (netboot == 1) {
+		/* check tlp0 on netboot */
+		if (device_class(dev) == DV_IFNET &&
+		    device_is_a(dev, "tlp")) {
+			struct pci_attach_args *pa = aux;
 
-	if ((booted_device == NULL) && (netboot == 0)) {
-		if (dev->dv_class == DV_DISK &&
-		    !strcmp(dev->dv_cfdata->cf_name, "wd")) {
-			hd_iterate++;
-			if (hd_iterate == bootunit) {
+			if (pa->pa_bus == 0 &&
+			    pa->pa_device == 7 &&
+			    pa->pa_function == 0)
+				booted_device = dev;
+		}
+	} else {
+		/* check wd channel and drive */
+		if (device_class(dev) == DV_DISK &&
+		    device_is_a(dev, "wd")) {
+			struct ata_device *adev = aux;
+			int unit;
+
+			unit = adev->adev_channel * 2 +
+			    adev->adev_drv_data->drive;
+			if (unit == bootunit) {
 				booted_device = dev;
 			}
 		}
 		/*
-		 * XXX Match up MBR boot specification with BSD disklabel for root?
+		 * XXX Match up MBR boot specification with BSD disklabel
+		 *     for root?
 		 */
 		booted_partition = 0;
 	}
 }
-

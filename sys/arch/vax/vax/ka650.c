@@ -1,4 +1,4 @@
-/*	$NetBSD: ka650.c,v 1.29 2005/12/11 12:19:36 christos Exp $	*/
+/*	$NetBSD: ka650.c,v 1.31 2006/09/05 19:32:57 matt Exp $	*/
 /*
  * Copyright (c) 1988 The Regents of the University of California.
  * All rights reserved.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka650.c,v 1.29 2005/12/11 12:19:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka650.c,v 1.31 2006/09/05 19:32:57 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/time.h>
@@ -76,8 +76,8 @@ struct	cpu_dep	ka650_calls = {
 	uvaxIII_mchk,
 	uvaxIII_memerr,
 	uvaxIII_conf,
-	generic_clkread,
-	generic_clkwrite,
+	generic_gettime,
+	generic_settime,
 	4,      /* ~VUPS */
 	2,	/* SCB pages */
 	ka650_halt,
@@ -283,7 +283,7 @@ static void
 ka650_halt()
 {
 	ka650ssc_ptr->ssc_cpmbx = CPMB650_DOTHIS | CPMB650_HALT;
-	asm("halt");
+	__asm("halt");
 }
 
 static void

@@ -1,4 +1,4 @@
-/*	$NetBSD: update.c,v 1.14 2005/08/10 17:53:28 rpaulo Exp $	*/
+/*	$NetBSD: update.c,v 1.18 2006/11/24 21:14:55 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -46,7 +46,7 @@
 #if 0
 static char sccsid[] = "@(#)update.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: update.c,v 1.14 2005/08/10 17:53:28 rpaulo Exp $");
+__RCSID("$NetBSD: update.c,v 1.18 2006/11/24 21:14:55 wiz Exp $");
 #endif
 #endif /* not lint */
 
@@ -153,7 +153,7 @@ update(int dummy __attribute__((__unused__)))
 		}
 		if (pp->altitude > 9)
 			/* "this is impossible" */
-			loser(pp, "exceded flight ceiling.");
+			loser(pp, "exceeded flight ceiling.");
 		if (pp->altitude <= 0) {
 			for (i = 0; i < sp->num_airports; i++)
 				if (pp->xpos == sp->airport[i].x &&
@@ -260,12 +260,12 @@ name(const PLANE *p)
 int
 number(int l)
 {
-	if (l < 'a' && l > 'z' && l < 'A' && l > 'Z')
-		return (-1);
-	else if (l >= 'a' && l <= 'z')
+	if (islower((unsigned char)l))
 		return (l - 'a');
-	else 
+	else if (isupper((unsigned char)l))
 		return (l - 'A');
+	else
+		return (-1);
 }
 
 int

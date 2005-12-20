@@ -1,4 +1,4 @@
-/* $NetBSD: types.h,v 1.33 2005/12/11 12:16:16 christos Exp $ */
+/* $NetBSD: types.h,v 1.35 2006/09/03 13:51:23 bjh21 Exp $ */
 
 /*-
  * Copyright (c) 1990, 1993
@@ -54,14 +54,13 @@ typedef unsigned long	vsize_t;
 
 typedef long int	register_t;
 
-typedef	__volatile int		__cpu_simple_lock_t;
+typedef	volatile int		__cpu_simple_lock_t;
 
 #define	__SIMPLELOCK_LOCKED	1
 #define	__SIMPLELOCK_UNLOCKED	0
 
 #define	__HAVE_DEVICE_REGISTER
 #define	__HAVE_GENERIC_SOFT_INTERRUPTS
-#define	__HAVE_NWSCONS
 #define	__HAVE_ATOMIC_OPERATIONS
 #define	__HAVE_CPU_COUNTER
 #define	__HAVE_SYSCALL_INTERN

@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_fat.c,v 1.6 2005/12/11 12:24:25 christos Exp $	*/
+/*	$NetBSD: msdosfs_fat.c,v 1.12 2006/11/25 12:17:30 scw Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_fat.c,v 1.6 2005/12/11 12:24:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_fat.c,v 1.12 2006/11/25 12:17:30 scw Exp $");
 
 /*
  * kernel include files.
@@ -62,6 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: msdosfs_fat.c,v 1.6 2005/12/11 12:24:25 christos Exp
 #include <sys/vnode.h>		/* to define vattr structure */
 #include <sys/errno.h>
 #include <sys/dirent.h>
+#include <sys/kauth.h>
 
 /*
  * msdosfs include files.
@@ -84,12 +85,40 @@ int fc_bmapcalls;		/* # of times pcbmap was called		 */
 int fc_lmdistance[LMMAX];	/* counters for how far off the last
 				 * cluster mapped entry was. */
 int fc_largedistance;		/* off by more than LMMAX		 */
+int fc_wherefrom, fc_whereto, fc_lastclust;
+int pm_fatblocksize;
+
+#ifdef MSDOSFS_DEBUG
+void print_fat_stats(void);
+
+void
+print_fat_stats(void)
+{
+	int i;
+
+	printf("fc_fileextends=%d fc_lfcempty=%d fc_bmapcalls=%d "
+	    "fc_largedistance=%d [%d->%d=%d] fc_lastclust=%d pm_fatblocksize=%d\n",
+	    fc_fileextends, fc_lfcempty, fc_bmapcalls, fc_largedistance,
+	    fc_wherefrom, fc_whereto, fc_whereto-fc_wherefrom,
+	    fc_lastclust, pm_fatblocksize);
+	
+	fc_fileextends = fc_lfcempty = fc_bmapcalls = 0;
+	fc_wherefrom = fc_whereto = fc_lastclust = 0;
+    
+	for (i = 0; i < LMMAX; i++) {
+		printf("%d:%d ", i, fc_lmdistance[i]);
+	fc_lmdistance[i] = 0;
+	}
+
+	printf("\n");
+}
+#endif
 
 static void fatblock(struct msdosfsmount *, u_long, u_long *, u_long *,
 			  u_long *);
 void updatefats(struct msdosfsmount *, struct buf *, u_long);
-static __inline void usemap_free(struct msdosfsmount *, u_long);
-static __inline void usemap_alloc(struct msdosfsmount *, u_long);
+static inline void usemap_free(struct msdosfsmount *, u_long);
+static inline void usemap_alloc(struct msdosfsmount *, u_long);
 static int fatchain(struct msdosfsmount *, u_long, u_long, u_long);
 int chainlength(struct msdosfsmount *, u_long, u_long);
 int chainalloc(struct msdosfsmount *, u_long, u_long, u_long, u_long *,
@@ -116,6 +145,8 @@ fatblock(pmp, ofs, bnp, sizep, bop)
 		*sizep = size;
 	if (bop)
 		*bop = ofs % pmp->pm_fatblocksize;
+
+	pm_fatblocksize =  pmp->pm_fatblocksize;
 }
 
 /*
@@ -140,7 +171,7 @@ int
 pcbmap(dep, findcn, bnp, cnp, sp)
 	struct denode *dep;
 	u_long findcn;		/* file relative cluster to get		 */
-	daddr_t *bnp;		/* returned filesys relative blk number	 */
+	daddr_t *bnp;		/* returned filesys rel sector number	 */
 	u_long *cnp;		/* returned cluster number		 */
 	int *sp;		/* returned block size			 */
 {
@@ -207,9 +238,12 @@ pcbmap(dep, findcn, bnp, cnp, sp)
 	 */
 	i = 0;
 	fc_lookup(dep, findcn, &i, &cn);
-	if ((bn = findcn - i) >= LMMAX)
+	if ((bn = findcn - i) >= LMMAX) {
 		fc_largedistance++;
-	else
+		fc_wherefrom = i;
+		fc_whereto = findcn;
+		fc_lastclust = dep->de_fc[FC_LASTFC].fc_frcn;
+	} else
 		fc_lmdistance[bn]++;
 
 	/*
@@ -226,7 +260,8 @@ pcbmap(dep, findcn, bnp, cnp, sp)
 		if (bn != bp_bn) {
 			if (bp)
 				brelse(bp);
-			error = bread(pmp->pm_devvp, bn, bsize, NOCRED, &bp);
+			error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), bsize,
+			    NOCRED, &bp);
 			if (error) {
 				brelse(bp);
 				return (error);
@@ -239,6 +274,7 @@ pcbmap(dep, findcn, bnp, cnp, sp)
 				brelse(bp);
 			return (EIO);
 		}
+		KASSERT(bp != NULL);
 		if (FAT32(pmp))
 			cn = getulong(&bp->b_data[bo]);
 		else
@@ -359,7 +395,13 @@ updatefats(pmp, bp, fatbn)
 				+ ffs(pmp->pm_inusemap[cn / N_INUSEBITS]
 				      ^ (u_int)-1) - 1;
 		}
-		if (bread(pmp->pm_devvp, pmp->pm_fsinfo, 1024, NOCRED, &bpn) != 0) {
+		/*
+		 * XXX  If the fsinfo block is stored on media with
+		 *      2KB or larger sectors, is the fsinfo structure
+		 *      padded at the end or in the middle?
+		 */
+		if (bread(pmp->pm_devvp, de_bn2kb(pmp, pmp->pm_fsinfo),
+		    pmp->pm_BytesPerSec, NOCRED, &bpn) != 0) {
 			/*
 			 * Ignore the error, but turn off FSInfo update for the future.
 			 */
@@ -391,7 +433,8 @@ updatefats(pmp, bp, fatbn)
 		for (i = 1; i < pmp->pm_FATs; i++) {
 			fatbn += pmp->pm_FATsecs;
 			/* getblk() never fails */
-			bpn = getblk(pmp->pm_devvp, fatbn, bp->b_bcount, 0, 0);
+			bpn = getblk(pmp->pm_devvp, de_bn2kb(pmp, fatbn),
+			    bp->b_bcount, 0, 0);
 			memcpy(bpn->b_data, bp->b_data, bp->b_bcount);
 			if (pmp->pm_flags & MSDOSFSMNT_WAITONFAT)
 				bwrite(bpn);
@@ -431,7 +474,7 @@ updatefats(pmp, bp, fatbn)
  * Where n is even. m = n + (n >> 2)
  *
  */
-static __inline void
+static inline void
 usemap_alloc(pmp, cn)
 	struct msdosfsmount *pmp;
 	u_long cn;
@@ -441,7 +484,7 @@ usemap_alloc(pmp, cn)
 	pmp->pm_freeclustercount--;
 }
 
-static __inline void
+static inline void
 usemap_free(pmp, cn)
 	struct msdosfsmount *pmp;
 	u_long cn;
@@ -540,7 +583,8 @@ fatentry(function, pmp, cn, oldcontents, newcontents)
 
 	byteoffset = FATOFS(pmp, cn);
 	fatblock(pmp, byteoffset, &bn, &bsize, &bo);
-	if ((error = bread(pmp->pm_devvp, bn, bsize, NOCRED, &bp)) != 0) {
+	if ((error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), bsize, NOCRED,
+	    &bp)) != 0) {
 		brelse(bp);
 		return (error);
 	}
@@ -623,7 +667,8 @@ fatchain(pmp, start, count, fillwith)
 	while (count > 0) {
 		byteoffset = FATOFS(pmp, start);
 		fatblock(pmp, byteoffset, &bn, &bsize, &bo);
-		error = bread(pmp->pm_devvp, bn, bsize, NOCRED, &bp);
+		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), bsize, NOCRED,
+		    &bp);
 		if (error) {
 			brelse(bp);
 			return (error);
@@ -864,7 +909,8 @@ freeclusterchain(pmp, cluster)
 		if (lbn != bn) {
 			if (bp)
 				updatefats(pmp, bp, lbn);
-			error = bread(pmp->pm_devvp, bn, bsize, NOCRED, &bp);
+			error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), bsize,
+			    NOCRED, &bp);
 			if (error) {
 				brelse(bp);
 				return (error);
@@ -872,6 +918,7 @@ freeclusterchain(pmp, cluster)
 			lbn = bn;
 		}
 		usemap_free(pmp, cluster);
+		KASSERT(bp != NULL);
 		switch (pmp->pm_fatmask) {
 		case FAT12_MASK:
 			readcn = getushort(&bp->b_data[bo]);
@@ -937,7 +984,8 @@ fillinusemap(pmp)
 			if (bp)
 				brelse(bp);
 			fatblock(pmp, byteoffset, &bn, &bsize, NULL);
-			error = bread(pmp->pm_devvp, bn, bsize, NOCRED, &bp);
+			error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), bsize,
+			    NOCRED, &bp);
 			if (error) {
 				brelse(bp);
 				return (error);
@@ -1010,6 +1058,8 @@ extendfile(dep, count, bpp, ncp, flags)
 			return (error);
 	}
 
+	fc_last_to_nexttolast(dep);
+
 	while (count > 0) {
 
 		/*
@@ -1064,8 +1114,9 @@ extendfile(dep, count, bpp, ncp, flags)
 		if ((flags & DE_CLEAR) &&
 		    (dep->de_Attributes & ATTR_DIRECTORY)) {
 			while (got-- > 0) {
-				bp = getblk(pmp->pm_devvp, cntobn(pmp, cn++),
-					    pmp->pm_bpcluster, 0, 0);
+				bp = getblk(pmp->pm_devvp,
+				    de_bn2kb(pmp, cntobn(pmp, cn++)),
+				    pmp->pm_bpcluster, 0, 0);
 				clrbuf(bp);
 				if (bpp) {
 					*bpp = bp;

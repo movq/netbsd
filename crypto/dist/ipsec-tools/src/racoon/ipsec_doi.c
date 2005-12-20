@@ -1,6 +1,6 @@
-/*	$NetBSD: ipsec_doi.c,v 1.12 2005/11/21 14:20:29 manu Exp $	*/
+/*	$NetBSD: ipsec_doi.c,v 1.22.2.2 2007/08/28 11:14:44 liamjfoy Exp $	*/
 
-/* Id: ipsec_doi.c,v 1.26.2.15 2005/10/17 16:23:50 monas Exp */
+/* Id: ipsec_doi.c,v 1.55 2006/08/17 09:20:41 vanhu Exp */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -39,11 +39,7 @@
 
 #include <netinet/in.h>
 
-#ifndef HAVE_NETINET6_IPSEC
-#include <netinet/ipsec.h>
-#else
-#include <netinet6/ipsec.h>
-#endif
+#include PATH_IPSEC_H
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -276,10 +272,12 @@ found:
 		plog(LLV_WARNING, LOCATION, NULL,
 			"invalid DH parameter found, use default.\n");
 		oakley_dhgrp_free(sa->dhgrp);
+		sa->dhgrp=NULL;
 	}
 
 	if (oakley_setdhgroup(sa->dh_group, &sa->dhgrp) == -1) {
 		sa->dhgrp = NULL;
+		racoon_free(sa);
 		return NULL;
 	}
 
@@ -287,7 +285,7 @@ saok:
 #ifdef HAVE_GSSAPI
 	if (sa->gssid != NULL)
 		plog(LLV_DEBUG, LOCATION, NULL, "gss id in new sa '%.*s'\n",
-		    sa->gssid->l, sa->gssid->v);
+		    (int)sa->gssid->l, sa->gssid->v);
 	if (iph1-> side == INITIATOR) {
 		if (iph1->rmconf->proposal->gssid != NULL)
 			iph1->gi_i = vdup(iph1->rmconf->proposal->gssid);
@@ -305,16 +303,20 @@ saok:
 	}
 	if (iph1->gi_i != NULL)
 		plog(LLV_DEBUG, LOCATION, NULL, "GIi is %.*s\n",
-		    iph1->gi_i->l, iph1->gi_i->v);
+		    (int)iph1->gi_i->l, iph1->gi_i->v);
 	if (iph1->gi_r != NULL)
 		plog(LLV_DEBUG, LOCATION, NULL, "GIr is %.*s\n",
-		    iph1->gi_r->l, iph1->gi_r->v);
+		    (int)iph1->gi_r->l, iph1->gi_r->v);
 #else
 	iph1->approval = sa;
 #endif
+	if(iph1->approval) {
+		plog(LLV_DEBUG, LOCATION, NULL, "agreed on %s auth.\n",
+		    s_oakley_attr_method(iph1->approval->authmethod));
+	}
 
 	newsa = get_sabyproppair(p, iph1);
-	if (newsa == NULL) {
+	if (newsa == NULL){
 		delisakmpsa(iph1->approval);
 		iph1->approval = NULL;
 	}
@@ -379,7 +381,7 @@ get_ph1approvalx(p, proposal, sap, check_level)
 					tsap->hashtype));
 		plog(LLV_DEBUG, LOCATION, NULL, "authmethod = %s:%s\n",
 			s_oakley_attr_v(OAKLEY_ATTR_AUTH_METHOD,
-					authmethod),
+					s->authmethod),
 			s_oakley_attr_v(OAKLEY_ATTR_AUTH_METHOD,
 					tsap->authmethod));
 		plog(LLV_DEBUG, LOCATION, NULL, "dh_group = %s:%s\n",
@@ -437,8 +439,10 @@ get_ph1approvalx(p, proposal, sap, check_level)
 	}
 
 found:
-	if (tsap->dhgrp != NULL)
+	if (tsap->dhgrp != NULL){
 		oakley_dhgrp_free(tsap->dhgrp);
+		tsap->dhgrp = NULL;
+	}
 
 	if ((s = dupisakmpsa(s)) != NULL) {
 		switch(check_level) {
@@ -463,7 +467,6 @@ found:
 			break;
 		}
 	}
-
 	return s;
 }
 
@@ -533,8 +536,10 @@ print_ph1mismatched(p, proposal)
 		}
 	}
 
-	if (sa.dhgrp != NULL)
+	if (sa.dhgrp != NULL){
 		oakley_dhgrp_free(sa.dhgrp);
+		sa.dhgrp=NULL;
+	}
 }
 
 /*
@@ -742,7 +747,8 @@ t2isakmpsa(trns, sa)
 #ifdef HAVE_GSSAPI
 		case OAKLEY_ATTR_GSS_ID:
 		{
-			iconv_t cd;
+			int error = -1;
+			iconv_t cd = (iconv_t) -1;
 			size_t srcleft, dstleft, rv;
 			__iconv_const char *src;
 			char *dst;
@@ -755,12 +761,19 @@ t2isakmpsa(trns, sa)
 			 * compatible with this behavior.
 			 */
 			if (lcconf->gss_id_enc == LC_GSSENC_LATIN1) {
-				sa->gssid = vmalloc(len);
+				if ((sa->gssid = vmalloc(len)) == NULL) {
+					plog(LLV_ERROR, LOCATION, NULL,
+					    "failed to allocate memory\n");
+					goto out;
+				}
 				memcpy(sa->gssid->v, d + 1, len);
 				plog(LLV_DEBUG, LOCATION, NULL,
-				  "received old-style gss id '%.*s' (len %d)\n",
-				  sa->gssid->l, sa->gssid->v, sa->gssid->l);
-				break;
+				    "received old-style gss "
+				    "id '%.*s' (len %zu)\n",
+				    (int)sa->gssid->l, sa->gssid->v, 
+				    sa->gssid->l);
+				error = 0;
+				goto out;
 			}
 
 			/*
@@ -777,10 +790,14 @@ t2isakmpsa(trns, sa)
 				    "unable to initialize utf-16le -> latin1 "
 				    "conversion descriptor: %s\n",
 				    strerror(errno));
-				break;
+				goto out;
 			}
 
-			sa->gssid = vmalloc(len / 2);
+			if ((sa->gssid = vmalloc(len / 2)) == NULL) {
+				plog(LLV_ERROR, LOCATION, NULL,
+				    "failed to allocate memory\n");
+				goto out;
+			}
 
 			src = (__iconv_const char *)(d + 1);
 			srcleft = len;
@@ -802,19 +819,25 @@ t2isakmpsa(trns, sa)
 					    "be represented in latin1\n",
 					    rv, rv == 1 ? "" : "s");
 				}
-				(void) iconv_close(cd);
-				vfree(sa->gssid);
-				sa->gssid = NULL;
-				break;
+				goto out;
 			}
-			(void) iconv_close(cd);
 
 			/* XXX dstleft should always be 0; assert it? */
 			sa->gssid->l = (len / 2) - dstleft;
 
 			plog(LLV_DEBUG, LOCATION, NULL,
-			    "received gss id '%.*s' (len %d)\n",
-			    sa->gssid->l, sa->gssid->v, sa->gssid->l);
+			    "received gss id '%.*s' (len %zu)\n",
+			    (int)sa->gssid->l, sa->gssid->v, sa->gssid->l);
+
+			error = 0;
+out:
+			if (cd != (iconv_t)-1)
+				(void)iconv_close(cd);
+
+			if ((error != 0) && (sa->gssid != NULL)) {
+				vfree(sa->gssid);
+				sa->gssid = NULL;
+			}
 			break;
 		}
 #endif /* HAVE_GSSAPI */
@@ -1166,7 +1189,8 @@ found:
 
     {
 	struct saproto *sp;
-	struct prop_pair *p, *n, *x;
+	struct prop_pair *p, *x;
+	struct prop_pair *n = NULL;
 
 	ret = NULL;
 
@@ -1191,7 +1215,7 @@ found:
 			goto err;	/* XXX */
 
 		n = racoon_calloc(1, sizeof(struct prop_pair));
-		if (!n) {
+		if (n == NULL) {
 			plog(LLV_ERROR, LOCATION, NULL,
 				"failed to get buffer.\n");
 			goto err;
@@ -1263,7 +1287,7 @@ get_proppair(sa, mode)
 	vchar_t *sa;
 	int mode;
 {
-	struct prop_pair **pair;
+	struct prop_pair **pair = NULL;
 	int num_p = 0;			/* number of proposal for use */
 	int tlen;
 	caddr_t bp;
@@ -1277,22 +1301,22 @@ get_proppair(sa, mode)
 	if (sa->l < sizeof(*sab)) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"Invalid SA length = %zu.\n", sa->l);
-		return NULL;
+		goto bad;
 	}
 
 	/* check DOI */
 	if (check_doi(ntohl(sab->doi)) < 0)
-		return NULL;
+		goto bad;
 
 	/* check SITUATION */
 	if (check_situation(ntohl(sab->sit)) < 0)
-		return NULL;
+		goto bad;
 
 	pair = racoon_calloc(1, MAXPROPPAIRLEN * sizeof(*pair));
 	if (pair == NULL) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"failed to get buffer.\n");
-		return NULL;
+		goto bad;
 	}
 	memset(pair, 0, sizeof(pair));
 
@@ -1307,7 +1331,7 @@ get_proppair(sa, mode)
 
 	pbuf = isakmp_parsewoh(ISAKMP_NPTYPE_P, (struct isakmp_gen *)bp, tlen);
 	if (pbuf == NULL)
-		return NULL;
+		goto bad;
 
 	for (pa = (struct isakmp_parse_t *)pbuf->v;
 	     pa->type != ISAKMP_NPTYPE_NONE;
@@ -1317,7 +1341,7 @@ get_proppair(sa, mode)
 			plog(LLV_ERROR, LOCATION, NULL,
 				"Invalid payload type=%u\n", pa->type);
 			vfree(pbuf);
-			return NULL;
+			goto bad;
 		}
 
 		prop = (struct isakmp_pl_p *)pa->ptr;
@@ -1330,7 +1354,7 @@ get_proppair(sa, mode)
 			plog(LLV_ERROR, LOCATION, NULL,
 				"invalid proposal with length %d\n", proplen);
 			vfree(pbuf);
-			return NULL;
+			goto bad;
 		}
 
 		/* check Protocol ID */
@@ -1350,7 +1374,7 @@ get_proppair(sa, mode)
 		/* get transform */
 		if (get_transform(prop, pair, &num_p) < 0) {
 			vfree(pbuf);
-			return NULL;
+			goto bad;
 		}
 	}
 	vfree(pbuf);
@@ -1412,10 +1436,14 @@ get_proppair(sa, mode)
 	if (num_p <= 0) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"no Proposal found.\n");
-		return NULL;
+		goto bad;
 	}
 
 	return pair;
+bad:
+	if (pair != NULL)
+		racoon_free(pair);
+	return NULL;
 }
 
 /*
@@ -1660,8 +1688,8 @@ get_sabysaprop(pp0, sa0)
 	struct saprop *pp0;
 	vchar_t *sa0;
 {
-	struct prop_pair **pair;
-	vchar_t *newsa;
+	struct prop_pair **pair = NULL;
+	vchar_t *newsa = NULL;
 	int newtlen;
 	u_int8_t *np_p = NULL;
 	struct prop_pair *p = NULL;
@@ -1670,17 +1698,18 @@ get_sabysaprop(pp0, sa0)
 	struct satrns *tr;
 	int prophlen, trnslen;
 	caddr_t bp;
+	int error = -1;
 
 	/* get proposal pair */
 	pair = get_proppair(sa0, IPSECDOI_TYPE_PH2);
 	if (pair == NULL)
-		return NULL;
+		goto out;
 
 	newtlen = sizeof(struct ipsecdoi_sa_b);
 	for (pp = pp0; pp; pp = pp->next) {
 
 		if (pair[pp->prop_no] == NULL)
-			return NULL;
+			goto out;
 
 		for (pr = pp->head; pr; pr = pr->next) {
 			newtlen += (sizeof(struct isakmp_pl_p)
@@ -1692,7 +1721,7 @@ get_sabysaprop(pp0, sa0)
 						break;
 				}
 				if (p == NULL)
-					return NULL;
+					goto out;
 
 				newtlen += ntohs(p->trns->h.len);
 			}
@@ -1702,7 +1731,7 @@ get_sabysaprop(pp0, sa0)
 	newsa = vmalloc(newtlen);
 	if (newsa == NULL) {
 		plog(LLV_ERROR, LOCATION, NULL, "failed to get newsa.\n");
-		return NULL;
+		goto out;
 	}
 	bp = newsa->v;
 
@@ -1723,7 +1752,7 @@ get_sabysaprop(pp0, sa0)
 						break;
 				}
 				if (p == NULL)
-					return NULL;
+					goto out;
 
 				trnslen = ntohs(p->trns->h.len);
 
@@ -1745,6 +1774,18 @@ get_sabysaprop(pp0, sa0)
 				((struct isakmp_pl_t *)bp)->h.len = htons(trnslen);
 				bp += trnslen;
 			}
+		}
+	}
+
+	error = 0;
+out:
+	if (pair != NULL)
+		racoon_free(pair);
+
+	if (error != 0) {
+		if (newsa != NULL) {
+			vfree(newsa);
+			newsa = NULL;
 		}
 	}
 
@@ -1969,6 +2010,7 @@ check_trns_esp(t_id)
 	case IPSECDOI_ESP_BLOWFISH:
 	case IPSECDOI_ESP_AES:
 	case IPSECDOI_ESP_TWOFISH:
+	case IPSECDOI_ESP_CAMELLIA:
 		return 0;
 	case IPSECDOI_ESP_DES_IV32:
 	case IPSECDOI_ESP_DES_IV64:
@@ -2087,20 +2129,32 @@ check_attr_isakmp(trns)
 			case OAKLEY_ATTR_AUTH_METHOD_RSASIG:
 #ifdef ENABLE_HYBRID
 			case OAKLEY_ATTR_AUTH_METHOD_HYBRID_RSA_I:
-#endif  
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSASIG_I:
+#if 0 /* Clashes with OAKLEY_ATTR_AUTH_METHOD_GSSAPI_KRB */
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_PSKEY_I:
+#endif
+#endif
 			case OAKLEY_ATTR_AUTH_METHOD_GSSAPI_KRB:
 				break;
 			case OAKLEY_ATTR_AUTH_METHOD_DSSSIG:
 #ifdef ENABLE_HYBRID
-			case OAKLEY_ATTR_AUTH_METHOD_HYBRID_DSS_I:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_PSKEY_R:
 			case OAKLEY_ATTR_AUTH_METHOD_HYBRID_RSA_R:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSASIG_R:
+			case OAKLEY_ATTR_AUTH_METHOD_HYBRID_DSS_I:
 			case OAKLEY_ATTR_AUTH_METHOD_HYBRID_DSS_R:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_DSSSIG_I:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_DSSSIG_R:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSAENC_I:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSAENC_R:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSAREV_I:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSAREV_R:
 #endif
 			case OAKLEY_ATTR_AUTH_METHOD_RSAENC:
 			case OAKLEY_ATTR_AUTH_METHOD_RSAREV:
 				plog(LLV_ERROR, LOCATION, NULL,
-					"auth method %d isn't supported.\n",
-					lorv);
+					"auth method %s isn't supported.\n",
+					s_oakley_attr_method(lorv));
 				return -1;
 			default:
 				plog(LLV_ERROR, LOCATION, NULL,
@@ -2380,6 +2434,16 @@ ahmismatch:
 				return -1;
 			}
 			break;
+
+#ifdef HAVE_SECCTX
+		case IPSECDOI_ATTR_SECCTX:
+			if (flag) {
+				plog(LLV_ERROR, LOCATION, NULL,
+					"SECCTX must be in TLV.\n");
+				return -1;
+			}
+		break;
+#endif
 
 		case IPSECDOI_ATTR_KEY_ROUNDS:
 		case IPSECDOI_ATTR_COMP_DICT_SIZE:
@@ -2806,8 +2870,8 @@ setph1attr(sa, buf)
 		else
 			attrlen += sa->gssid->l * 2;
 		if (buf) {
-			plog(LLV_DEBUG, LOCATION, NULL, "gss id attr: len %d, "
-			    "val '%.*s'\n", sa->gssid->l, sa->gssid->l,
+			plog(LLV_DEBUG, LOCATION, NULL, "gss id attr: len %zu, "
+			    "val '%.*s'\n", sa->gssid->l, (int)sa->gssid->l,
 			    sa->gssid->v);
 			if (lcconf->gss_id_enc == LC_GSSENC_LATIN1) {
 				p = isakmp_set_attr_v(p, OAKLEY_ATTR_GSS_ID,
@@ -2884,6 +2948,9 @@ setph2proposal0(iph2, pp, pr)
 	caddr_t x0, x;
 	u_int8_t *np_t; /* pointer next trns type in previous header */
 	const u_int8_t *spi;
+#ifdef HAVE_SECCTX
+	int truectxlen = 0;
+#endif
 
 	p = vmalloc(sizeof(*prop) + sizeof(pr->spi));
 	if (p == NULL)
@@ -2986,6 +3053,17 @@ setph2proposal0(iph2, pp, pr)
 		if (alg_oakley_dhdef_ok(iph2->sainfo->pfs_group))
 			attrlen += sizeof(struct isakmp_data);
 
+#ifdef HAVE_SECCTX
+		/* ctx_str is defined as char ctx_str[MAX_CTXSTR_SIZ].
+		 * The string may be smaller than MAX_CTXSTR_SIZ.
+		 */
+		if (*pp->sctx.ctx_str) {
+			truectxlen = sizeof(struct security_ctx) -
+				     (MAX_CTXSTR_SIZE - pp->sctx.ctx_strlen);
+			attrlen += sizeof(struct isakmp_data) + truectxlen;
+		}
+#endif /* HAVE_SECCTX */
+
 		p = vrealloc(p, p->l + sizeof(*trns) + attrlen);
 		if (p == NULL)
 			return NULL;
@@ -3040,6 +3118,15 @@ setph2proposal0(iph2, pp, pr)
 			x = isakmp_set_attr_l(x, IPSECDOI_ATTR_GRP_DESC,
 				iph2->sainfo->pfs_group);
 
+#ifdef HAVE_SECCTX
+		if (*pp->sctx.ctx_str) {
+			struct security_ctx secctx;
+			secctx = pp->sctx;
+			secctx.ctx_strlen = htons(pp->sctx.ctx_strlen);
+			x = isakmp_set_attr_v(x, IPSECDOI_ATTR_SECCTX,
+					     (caddr_t)&secctx, truectxlen);
+		}
+#endif
 		/* update length of this transform. */
 		trns = (struct isakmp_pl_t *)(p->v + trnsoff);
 		trns->h.len = htons(sizeof(*trns) + attrlen);
@@ -3243,6 +3330,259 @@ doi2ipproto(proto)
 }
 
 /*
+ * Check if a subnet id is valid for comparison
+ * with an address id ( address length mask )
+ * and compare them
+ * Return value
+ * =  0 for match
+ * =  1 for mismatch
+ */
+
+int
+ipsecdoi_subnetisaddr_v4( subnet, address )
+	const vchar_t *subnet;
+	const vchar_t *address;
+{
+	struct in_addr *mask;
+
+	if (address->l != sizeof(struct in_addr))
+		return 1;
+
+	if (subnet->l != (sizeof(struct in_addr)*2))
+		return 1;
+
+	mask = (struct in_addr*)(subnet->v + sizeof(struct in_addr));
+
+	if (mask->s_addr!=0xffffffff)
+		return 1;
+
+	return memcmp(subnet->v,address->v,address->l);
+}
+
+#ifdef INET6
+
+int
+ipsecdoi_subnetisaddr_v6( subnet, address )
+	const vchar_t *subnet;
+	const vchar_t *address;
+{
+	struct in6_addr *mask;
+	int i;
+
+	if (address->l != sizeof(struct in6_addr))
+		return 1;
+
+	if (subnet->l != (sizeof(struct in6_addr)*2))
+		return 1;
+
+	mask = (struct in6_addr*)(subnet->v + sizeof(struct in6_addr));
+
+	for (i=0; i<16; i++)
+		if(mask->s6_addr[i]!=0xff)
+			return 1;
+
+	return memcmp(subnet->v,address->v,address->l);
+}
+
+#endif
+
+/*
+ * Check and Compare two IDs
+ * - specify 0 for exact if wildcards are allowed
+ * Return value
+ * =  0 for match
+ * =  1 for misatch
+ * = -1 for integrity error
+ */
+
+int
+ipsecdoi_chkcmpids( idt, ids, exact )
+	const vchar_t *idt; /* id cmp target */
+	const vchar_t *ids; /* id cmp source */
+	int exact;
+{
+	struct ipsecdoi_id_b *id_bt;
+	struct ipsecdoi_id_b *id_bs;
+	vchar_t ident_t;
+	vchar_t ident_s;
+	int result;
+
+	/* handle wildcard IDs */
+
+	if (idt == NULL || ids == NULL)
+	{
+		if( !exact )
+		{
+			plog(LLV_DEBUG, LOCATION, NULL,
+				"check and compare ids : values matched (ANONYMOUS)\n" );
+			return 0;
+		}
+		else
+		{
+			plog(LLV_DEBUG, LOCATION, NULL,
+				"check and compare ids : value mismatch (ANONYMOUS)\n" );
+			return -1;
+		}
+	}
+
+	/* make sure the ids are of the same type */
+
+	id_bt = (struct ipsecdoi_id_b *) idt->v;
+	id_bs = (struct ipsecdoi_id_b *) ids->v;
+
+	ident_t.v = idt->v + sizeof(*id_bt);
+	ident_t.l = idt->l - sizeof(*id_bt);
+	ident_s.v = ids->v + sizeof(*id_bs);
+	ident_s.l = ids->l - sizeof(*id_bs);
+
+	if (id_bs->type != id_bt->type)
+	{
+		/*
+		 * special exception for comparing
+                 * address to subnet id types when
+                 * the netmask is address length
+                 */
+
+		if ((id_bs->type == IPSECDOI_ID_IPV4_ADDR)&&
+		    (id_bt->type == IPSECDOI_ID_IPV4_ADDR_SUBNET)) {
+			result = ipsecdoi_subnetisaddr_v4(&ident_t,&ident_s);
+			goto cmpid_result;
+		}
+
+		if ((id_bs->type == IPSECDOI_ID_IPV4_ADDR_SUBNET)&&
+		    (id_bt->type == IPSECDOI_ID_IPV4_ADDR)) {
+			result = ipsecdoi_subnetisaddr_v4(&ident_s,&ident_t);
+			goto cmpid_result;
+		}
+
+#ifdef INET6
+		if ((id_bs->type == IPSECDOI_ID_IPV6_ADDR)&&
+		    (id_bt->type == IPSECDOI_ID_IPV6_ADDR_SUBNET)) {
+			result = ipsecdoi_subnetisaddr_v6(&ident_t,&ident_s);
+			goto cmpid_result;
+		}
+
+		if ((id_bs->type == IPSECDOI_ID_IPV6_ADDR_SUBNET)&&
+		    (id_bt->type == IPSECDOI_ID_IPV6_ADDR)) {
+			result = ipsecdoi_subnetisaddr_v6(&ident_s,&ident_t);
+			goto cmpid_result;
+		}
+#endif
+		plog(LLV_DEBUG, LOCATION, NULL,
+			"check and compare ids : id type mismatch %s != %s\n",
+			s_ipsecdoi_ident(id_bs->type),
+			s_ipsecdoi_ident(id_bt->type));
+
+		return 1;
+	}
+
+	if(id_bs->proto_id != id_bt->proto_id){
+		plog(LLV_DEBUG, LOCATION, NULL,
+			"check and compare ids : proto_id mismatch %d != %d\n",
+			id_bs->proto_id, id_bt->proto_id);
+
+		return 1;
+	}
+
+	/* compare the ID data. */
+
+	switch (id_bt->type) {
+	        case IPSECDOI_ID_DER_ASN1_DN:
+        	case IPSECDOI_ID_DER_ASN1_GN:
+			/* compare asn1 ids */
+			result = eay_cmp_asn1dn(&ident_t, &ident_s);
+			goto cmpid_result;
+
+		case IPSECDOI_ID_IPV4_ADDR:
+			/* validate lengths */
+			if ((ident_t.l != sizeof(struct in_addr))||
+			    (ident_s.l != sizeof(struct in_addr)))
+				goto cmpid_invalid;
+			break;
+
+		case IPSECDOI_ID_IPV4_ADDR_SUBNET:
+		case IPSECDOI_ID_IPV4_ADDR_RANGE:
+			/* validate lengths */
+			if ((ident_t.l != (sizeof(struct in_addr)*2))||
+			    (ident_s.l != (sizeof(struct in_addr)*2)))
+				goto cmpid_invalid;
+			break;
+
+#ifdef INET6
+		case IPSECDOI_ID_IPV6_ADDR:
+			/* validate lengths */
+			if ((ident_t.l != sizeof(struct in6_addr))||
+			    (ident_s.l != sizeof(struct in6_addr)))
+				goto cmpid_invalid;
+			break;
+
+		case IPSECDOI_ID_IPV6_ADDR_SUBNET:
+		case IPSECDOI_ID_IPV6_ADDR_RANGE:
+			/* validate lengths */
+			if ((ident_t.l != (sizeof(struct in6_addr)*2))||
+			    (ident_s.l != (sizeof(struct in6_addr)*2)))
+				goto cmpid_invalid;
+			break;
+#endif
+		case IPSECDOI_ID_FQDN:
+		case IPSECDOI_ID_USER_FQDN:
+		case IPSECDOI_ID_KEY_ID:
+			break;
+
+		default:
+			plog(LLV_ERROR, LOCATION, NULL,
+				"Unhandled id type %i specified for comparison\n",
+				id_bt->type);
+			return -1;
+	}
+
+	/* validate matching data and length */
+	if (ident_t.l == ident_s.l)
+		result = memcmp(ident_t.v,ident_s.v,ident_t.l);
+	else
+		result = 1;
+
+cmpid_result:
+
+	/* debug level output */
+	if(loglevel >= LLV_DEBUG) {
+		char *idstrt = ipsecdoi_id2str(idt);
+		char *idstrs = ipsecdoi_id2str(ids);
+
+		if (!result)
+	 		plog(LLV_DEBUG, LOCATION, NULL,
+				"check and compare ids : values matched (%s)\n",
+				 s_ipsecdoi_ident(id_bs->type) );
+		else
+ 			plog(LLV_DEBUG, LOCATION, NULL,
+				"check and compare ids : value mismatch (%s)\n",
+				 s_ipsecdoi_ident(id_bs->type));
+
+		plog(LLV_DEBUG, LOCATION, NULL, "cmpid target: \'%s\'\n", idstrt );
+		plog(LLV_DEBUG, LOCATION, NULL, "cmpid source: \'%s\'\n", idstrs );
+
+		racoon_free(idstrs);
+		racoon_free(idstrt);
+	}
+
+	/* return result */
+	if( !result )
+		return 0;
+	else
+		return 1;
+
+cmpid_invalid:
+
+	/* id integrity error */
+	plog(LLV_DEBUG, LOCATION, NULL, "check and compare ids : %s integrity error\n",
+		s_ipsecdoi_ident(id_bs->type));
+	plog(LLV_DEBUG, LOCATION, NULL, "cmpid target: length = \'%zu\'\n", ident_t.l );
+	plog(LLV_DEBUG, LOCATION, NULL, "cmpid source: length = \'%zu\'\n", ident_s.l );
+
+	return -1;
+}
+
+/*
  * check the following:
  * - In main mode with pre-shared key, only address type can be used.
  * - if proper type for phase 1 ?
@@ -3299,7 +3639,7 @@ ipsecdoi_checkid1(iph1)
 	}
 
 	/* if phase 1 ID payload conformed RFC2407 4.6.2. */
-	if (id_b->type == IPSECDOI_ID_IPV4_ADDR &&
+	if (id_b->type == IPSECDOI_ID_IPV4_ADDR ||
 	    id_b->type == IPSECDOI_ID_IPV6_ADDR) {
 
 		if (id_b->proto_id == 0 && ntohs(id_b->port) != 0) {
@@ -3364,9 +3704,8 @@ ipsecdoi_checkid1(iph1)
 
 			switch (id->idtype) {
 			case IDTYPE_ASN1DN:
-				ident.v = (caddr_t)(id_b + 1);
-				ident.l = iph1->id_p->l - 1; /* had ident.l = ident0->l; but why?? */
-				      /* is the actual packet contents length sometimes wrong? */
+				ident.v = iph1->id_p->v + sizeof(*id_b);
+				ident.l = iph1->id_p->l - sizeof(*id_b);
 				if (eay_cmp_asn1dn(ident0, &ident) == 0)
 					goto matched;
 				break;
@@ -3560,6 +3899,15 @@ set_identifier(vpp, type, value)
 	vchar_t **vpp, *value;
 	int type;
 {
+	return set_identifier_qual(vpp, type, value, IDQUAL_UNSPEC);
+}
+
+int
+set_identifier_qual(vpp, type, value, qual)
+	vchar_t **vpp, *value;
+	int type;
+	int qual;
+{
 	vchar_t *new = NULL;
 
 	/* simply return if value is null. */
@@ -3580,9 +3928,6 @@ set_identifier(vpp, type, value)
 				 "Empty %s\n", type == IDTYPE_FQDN ? "fqdn":"user fqdn");
 			return -1;
 		}
-#ifdef ENABLE_HYBRID
-	case IDTYPE_LOGIN:
-#endif
 		/* length is adjusted since QUOTEDSTRING teminates NULL. */
 		new = vmalloc(value->l - 1);
 		if (new == NULL)
@@ -3590,31 +3935,54 @@ set_identifier(vpp, type, value)
 		memcpy(new->v, value->v, new->l);
 		break;
 	case IDTYPE_KEYID:
-	{
-		FILE *fp;
-		char b[512];
-		int tlen, len;
+		/* 
+		 * If no qualifier is specified: IDQUAL_UNSPEC. It means
+		 * to use a file for backward compatibility sake. 
+		 */
+		switch(qual) {
+		case IDQUAL_FILE:
+		case IDQUAL_UNSPEC: {
+			FILE *fp;
+			char b[512];
+			int tlen, len;
 
-		fp = fopen(value->v, "r");
-		if (fp == NULL) {
-			plog(LLV_ERROR, LOCATION, NULL,
-				"can not open %s\n", value->v);
-			return -1;
-		}
-		tlen = 0;
-		while ((len = fread(b, 1, sizeof(b), fp)) != 0) {
-			new = vrealloc(new, tlen + len);
-			if (!new) {
-				fclose(fp);
+			fp = fopen(value->v, "r");
+			if (fp == NULL) {
+				plog(LLV_ERROR, LOCATION, NULL,
+					"can not open %s\n", value->v);
 				return -1;
 			}
-			memcpy(new->v + tlen, b, len);
-			tlen += len;
+			tlen = 0;
+			while ((len = fread(b, 1, sizeof(b), fp)) != 0) {
+				new = vrealloc(new, tlen + len);
+				if (!new) {
+					fclose(fp);
+					return -1;
+				}
+				memcpy(new->v + tlen, b, len);
+				tlen += len;
+			}
+			break;
+		}
+
+		case IDQUAL_TAG:
+			new = vmalloc(value->l - 1);
+			if (new == NULL) {
+				plog(LLV_ERROR, LOCATION, NULL,
+					"can not allocate memory");
+				return -1;
+			}
+			memcpy(new->v, value->v, new->l);
+			break;
+
+		default:
+			plog(LLV_ERROR, LOCATION, NULL,
+				"unknown qualifier");
+			return -1;
 		}
 		break;
-	}
-	case IDTYPE_ADDRESS:
-	{
+	
+	case IDTYPE_ADDRESS: {
 		struct sockaddr *sa;
 
 		/* length is adjusted since QUOTEDSTRING teminates NULL. */
@@ -3629,9 +3997,12 @@ set_identifier(vpp, type, value)
 		}
 
 		new = vmalloc(sysdep_sa_len(sa));
-		if (new == NULL)
+		if (new == NULL) {
+			racoon_free(sa);
 			return -1;
+		}
 		memcpy(new->v, sa, new->l);
+		racoon_free(sa);
 		break;
 	}
 	case IDTYPE_ASN1DN:
@@ -3744,7 +4115,7 @@ ipsecdoi_sockaddr2id(saddr, prefixlen, ul_proto)
 	switch (saddr->sa_family) {
 	case AF_INET:
 		len1 = sizeof(struct in_addr);
-		if (prefixlen == ~0) {
+		if (prefixlen == (sizeof(struct in_addr) << 3)) {
 			type = IPSECDOI_ID_IPV4_ADDR;
 			len2 = 0;
 		} else {
@@ -3757,7 +4128,7 @@ ipsecdoi_sockaddr2id(saddr, prefixlen, ul_proto)
 #ifdef INET6
 	case AF_INET6:
 		len1 = sizeof(struct in6_addr);
-		if (prefixlen == ~0) {
+		if (prefixlen == (sizeof(struct in6_addr) << 3)) {
 			type = IPSECDOI_ID_IPV6_ADDR;
 			len2 = 0;
 		} else {
@@ -3817,6 +4188,71 @@ ipsecdoi_sockaddr2id(saddr, prefixlen, ul_proto)
 
 	return new;
 }
+
+vchar_t *
+ipsecdoi_sockrange2id(laddr, haddr, ul_proto)
+	struct sockaddr *laddr, *haddr;
+	u_int ul_proto;
+{
+	vchar_t *new;
+	int type, len1, len2;
+	u_short port;
+
+	if (laddr->sa_family != haddr->sa_family) {
+	    plog(LLV_ERROR, LOCATION, NULL, "Address family mismatch\n");
+	    return NULL;
+	}
+
+	switch (laddr->sa_family) {
+	case AF_INET:
+	    type = IPSECDOI_ID_IPV4_ADDR_RANGE;
+	    len1 = sizeof(struct in_addr);
+	    len2 = sizeof(struct in_addr);
+	    break;
+#ifdef INET6
+	case AF_INET6:
+		type = IPSECDOI_ID_IPV6_ADDR_RANGE;
+		len1 = sizeof(struct in6_addr);
+		len2 = sizeof(struct in6_addr);
+		break;
+#endif
+	default:
+		plog(LLV_ERROR, LOCATION, NULL,
+			"invalid family: %d.\n", laddr->sa_family);
+		return NULL;
+	}
+
+	/* get ID buffer */
+	new = vmalloc(sizeof(struct ipsecdoi_id_b) + len1 + len2);
+	if (new == NULL) {
+		plog(LLV_ERROR, LOCATION, NULL,
+			"failed to get ID buffer.\n");
+		return NULL;
+	}
+
+	memset(new->v, 0, new->l);
+	/* set the part of header. */
+	((struct ipsecdoi_id_b *)new->v)->type = type;
+
+	/* set ul_proto and port */
+	/*
+	 * NOTE: we use both IPSEC_ULPROTO_ANY and IPSEC_PORT_ANY as wild card
+	 * because 0 means port number of 0.  Instead of 0, we use IPSEC_*_ANY.
+	 */
+	((struct ipsecdoi_id_b *)new->v)->proto_id =
+		ul_proto == IPSEC_ULPROTO_ANY ? 0 : ul_proto;
+	port = ((struct sockaddr_in *)(laddr))->sin_port;
+	((struct ipsecdoi_id_b *)new->v)->port =
+		port == IPSEC_PORT_ANY ? 0 : port;
+	memcpy(new->v + sizeof(struct ipsecdoi_id_b), 
+	       (caddr_t)&((struct sockaddr_in *)(laddr))->sin_addr, 
+	       len1);
+	memcpy(new->v + sizeof(struct ipsecdoi_id_b) + len1, 
+	       (caddr_t)&((struct sockaddr_in *)haddr)->sin_addr,
+	       len2);
+	return new;
+}
+
 
 /*
  * create sockaddr structure from ID payload (buf).
@@ -3918,9 +4354,9 @@ ipsecdoi_id2sockaddr(buf, saddr, prefixlen, ul_proto)
 			+ alen;
 
 		for (; *p == 0xff; p++) {
+			plen += 8;
 			if (plen >= max)
 				break;
-			plen += 8;
 		}
 
 		if (plen < max) {
@@ -3950,16 +4386,204 @@ ipsecdoi_id2sockaddr(buf, saddr, prefixlen, ul_proto)
 /*
  * make printable string from ID payload except of general header.
  */
-const char *
+char *
 ipsecdoi_id2str(id)
 	const vchar_t *id;
 {
-	static char buf[256];
+#define BUFLEN 512
+	char * ret = NULL;
+	int len = 0;
+	char *dat;
+	static char buf[BUFLEN];
+	struct ipsecdoi_id_b *id_b = (struct ipsecdoi_id_b *)id->v;
+	struct sockaddr saddr;
+	u_int plen = 0;
 
-	/* XXX */
-	buf[0] = '\0';
+	switch (id_b->type) {
+	case IPSECDOI_ID_IPV4_ADDR:
+	case IPSECDOI_ID_IPV4_ADDR_SUBNET:
+	case IPSECDOI_ID_IPV4_ADDR_RANGE:
 
-	return buf;
+#ifndef __linux__
+		saddr.sa_len = sizeof(struct sockaddr_in);
+#endif
+		saddr.sa_family = AF_INET;
+		((struct sockaddr_in *)&saddr)->sin_port = IPSEC_PORT_ANY;
+		memcpy(&((struct sockaddr_in *)&saddr)->sin_addr,
+			id->v + sizeof(*id_b), sizeof(struct in_addr));
+		break;
+#ifdef INET6
+	case IPSECDOI_ID_IPV6_ADDR:
+	case IPSECDOI_ID_IPV6_ADDR_SUBNET:
+	case IPSECDOI_ID_IPV6_ADDR_RANGE:
+
+#ifndef __linux__
+		saddr.sa_len = sizeof(struct sockaddr_in6);
+#endif
+		saddr.sa_family = AF_INET6;
+		((struct sockaddr_in6 *)&saddr)->sin6_port = IPSEC_PORT_ANY;
+		memcpy(&((struct sockaddr_in6 *)&saddr)->sin6_addr,
+			id->v + sizeof(*id_b), sizeof(struct in6_addr));
+		break;
+#endif
+	}
+
+	switch (id_b->type) {
+	case IPSECDOI_ID_IPV4_ADDR:
+#ifdef INET6
+	case IPSECDOI_ID_IPV6_ADDR:
+#endif
+		len = snprintf( buf, BUFLEN, "%s", saddrwop2str(&saddr));
+		break;
+
+	case IPSECDOI_ID_IPV4_ADDR_SUBNET:
+#ifdef INET6
+	case IPSECDOI_ID_IPV6_ADDR_SUBNET:
+#endif
+	    {
+		u_char *p;
+		u_int max;
+		int alen = sizeof(struct in_addr);
+
+		switch (id_b->type) {
+		case IPSECDOI_ID_IPV4_ADDR_SUBNET:
+			alen = sizeof(struct in_addr);
+			break;
+#ifdef INET6
+		case IPSECDOI_ID_IPV6_ADDR_SUBNET:
+			alen = sizeof(struct in6_addr);
+			break;
+#endif
+		}
+
+		/* sanity check */
+		if (id->l < alen) {
+			len = 0;
+			break;
+		}
+
+		/* get subnet mask length */
+		plen = 0;
+		max = alen <<3;
+
+		p = (unsigned char *) id->v
+			+ sizeof(struct ipsecdoi_id_b)
+			+ alen;
+
+		for (; *p == 0xff; p++) {
+			plen += 8;
+			if (plen >= max)
+				break;
+		}
+
+		if (plen < max) {
+			u_int l = 0;
+			u_char b = ~(*p);
+
+			while (b) {
+				b >>= 1;
+				l++;
+			}
+
+			l = 8 - l;
+			plen += l;
+		}
+
+		len = snprintf( buf, BUFLEN, "%s/%i", saddrwop2str(&saddr), plen);
+	    }
+		break;
+
+	case IPSECDOI_ID_IPV4_ADDR_RANGE:
+
+		len = snprintf( buf, BUFLEN, "%s-", saddrwop2str(&saddr));
+
+#ifndef __linux__
+		saddr.sa_len = sizeof(struct sockaddr_in);
+#endif
+		saddr.sa_family = AF_INET;
+		((struct sockaddr_in *)&saddr)->sin_port = IPSEC_PORT_ANY;
+		memcpy(&((struct sockaddr_in *)&saddr)->sin_addr,
+			id->v + sizeof(*id_b) + sizeof(struct in_addr),
+			sizeof(struct in_addr));
+
+		len += snprintf( buf + len, BUFLEN - len, "%s", saddrwop2str(&saddr));
+
+		break;
+
+#ifdef INET6
+	case IPSECDOI_ID_IPV6_ADDR_RANGE:
+
+		len = snprintf( buf, BUFLEN, "%s-", saddrwop2str(&saddr));
+
+#ifndef __linux__
+		saddr.sa_len = sizeof(struct sockaddr_in6);
+#endif
+		saddr.sa_family = AF_INET6;
+		((struct sockaddr_in6 *)&saddr)->sin6_port = IPSEC_PORT_ANY;
+		memcpy(&((struct sockaddr_in6 *)&saddr)->sin6_addr,
+			id->v + sizeof(*id_b) + sizeof(struct in6_addr),
+			sizeof(struct in6_addr));
+
+		len += snprintf( buf + len, BUFLEN - len, "%s", saddrwop2str(&saddr));
+
+		break;
+#endif
+
+	case IPSECDOI_ID_FQDN:
+	case IPSECDOI_ID_USER_FQDN:
+		len = id->l - sizeof(*id_b);
+		if (len > BUFLEN)
+			len = BUFLEN;
+		memcpy(buf, id->v + sizeof(*id_b), len);
+		break;
+
+	case IPSECDOI_ID_DER_ASN1_DN:
+	case IPSECDOI_ID_DER_ASN1_GN:
+	{
+		X509_NAME *xn = NULL;
+
+		dat = id->v + sizeof(*id_b);
+		len = id->l - sizeof(*id_b);
+
+		if (d2i_X509_NAME(&xn, (void*) &dat, len) != NULL) {
+			BIO *bio = BIO_new(BIO_s_mem());
+			X509_NAME_print_ex(bio, xn, 0, 0);
+			len = BIO_get_mem_data(bio, &dat);
+			if (len > BUFLEN)
+				len = BUFLEN;
+			memcpy(buf,dat,len);
+			BIO_free(bio);
+			X509_NAME_free(xn);
+		} else {
+			plog(LLV_ERROR, LOCATION, NULL,
+				"unable to extract asn1dn from id\n");
+
+			len = sprintf(buf, "<ASN1-DN>");
+		}
+
+		break;
+	}
+
+	/* currently unhandled id types */
+	case IPSECDOI_ID_KEY_ID:
+		len = sprintf( buf, "<KEY-ID>");
+		break;
+
+	default:
+		plog(LLV_ERROR, LOCATION, NULL,
+			"unknown ID type %d\n", id_b->type);
+	}
+
+	if (!len)
+		len = sprintf( buf, "<?>");
+
+	ret = racoon_malloc(len+1);
+	if (ret != NULL) {
+		memcpy(ret,buf,len);
+		ret[len]=0;
+	}
+
+	return ret;
 }
 
 /*
@@ -4149,7 +4773,15 @@ ipsecdoi_t2satrns(t, pp, pr, tr)
 			}
 			tr->encklen = ntohs(d->lorv);
 			break;
-
+#ifdef HAVE_SECCTX
+		case IPSECDOI_ATTR_SECCTX:
+		{
+			int len = ntohs(d->lorv);
+			memcpy(&pp->sctx, d + 1, len);
+			pp->sctx.ctx_strlen = ntohs(pp->sctx.ctx_strlen);
+			break;
+		}
+#endif /* HAVE_SECCTX */
 		case IPSECDOI_ATTR_KEY_ROUNDS:
 		case IPSECDOI_ATTR_COMP_DICT_SIZE:
 		case IPSECDOI_ATTR_COMP_PRIVALG:
@@ -4218,9 +4850,6 @@ static int rm_idtype2doi[] = {
 	255,    /*			   IDTYPE_ADDRESS, 4 
 		 * it expands into 4 types by another function. */
 	IPSECDOI_ID_DER_ASN1_DN,	/* IDTYPE_ASN1DN, 5 */
-#ifdef ENABLE_HYBRID
-	255,				/* IDTYPE_LOGIN, 6 */
-#endif
 };
 
 /*
@@ -4276,15 +4905,15 @@ switch_authmethod(authmethod)
 	case OAKLEY_ATTR_AUTH_METHOD_HYBRID_DSS_R:
 		authmethod = OAKLEY_ATTR_AUTH_METHOD_HYBRID_DSS_I;
 		break;
-	/* Those are not implemented */
 	case OAKLEY_ATTR_AUTH_METHOD_XAUTH_PSKEY_R:
 		authmethod = OAKLEY_ATTR_AUTH_METHOD_XAUTH_PSKEY_I;
 		break;
-	case OAKLEY_ATTR_AUTH_METHOD_XAUTH_DSSSIG_R:
-		authmethod = OAKLEY_ATTR_AUTH_METHOD_XAUTH_DSSSIG_I;
-		break;
 	case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSASIG_R:
 		authmethod = OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSASIG_I;
+		break;
+	/* Those are not implemented */
+	case OAKLEY_ATTR_AUTH_METHOD_XAUTH_DSSSIG_R:
+		authmethod = OAKLEY_ATTR_AUTH_METHOD_XAUTH_DSSSIG_I;
 		break;
 	case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSAENC_R:
 		authmethod = OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSAENC_I;

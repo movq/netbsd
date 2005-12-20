@@ -1,4 +1,4 @@
-/*	$NetBSD: ahc_cardbus.c,v 1.18 2005/12/11 12:21:15 christos Exp $	*/
+/*	$NetBSD: ahc_cardbus.c,v 1.21 2006/11/16 01:32:48 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2005 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahc_cardbus.c,v 1.18 2005/12/11 12:21:15 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahc_cardbus.c,v 1.21 2006/11/16 01:32:48 christos Exp $");
 
 #include "opt_ahc_cardbus.h"
 
@@ -101,10 +101,8 @@ CFATTACH_DECL(ahc_cardbus, sizeof(struct ahc_cardbus_softc),
     ahc_cardbus_match, ahc_cardbus_attach, ahc_cardbus_detach, ahc_activate);
 
 int
-ahc_cardbus_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ahc_cardbus_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct cardbus_attach_args *ca = aux;
 
@@ -116,12 +114,11 @@ ahc_cardbus_match(parent, match, aux)
 }
 
 void
-ahc_cardbus_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+ahc_cardbus_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct cardbus_attach_args *ca = aux;
-	struct ahc_cardbus_softc *csc = (void *) self;
+	struct ahc_cardbus_softc *csc = device_private(self);
 	struct ahc_softc *ahc = &csc->sc_ahc;
 	cardbus_devfunc_t ct = ca->ca_ct;
 	cardbus_chipset_tag_t cc = ct->ct_cc;
@@ -272,7 +269,7 @@ ahc_cardbus_detach(self, flags)
 	struct device *self;
 	int flags;
 {
-	struct ahc_cardbus_softc *csc = (void*)self;
+	struct ahc_cardbus_softc *csc = device_private(self);
 	struct ahc_softc *ahc = &csc->sc_ahc;
 
 	int rv;

@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_lid.c,v 1.17 2005/12/11 12:21:01 christos Exp $	*/
+/*	$NetBSD: acpi_lid.c,v 1.21 2006/11/16 01:32:47 christos Exp $	*/
 
 /*
  * Copyright 2001, 2003 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_lid.c,v 1.17 2005/12/11 12:21:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_lid.c,v 1.21 2006/11/16 01:32:47 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,7 +70,7 @@ CFATTACH_DECL(acpilid, sizeof(struct acpilid_softc),
     acpilid_match, acpilid_attach, NULL, NULL);
 
 static void	acpilid_status_changed(void *);
-static void	acpilid_notify_handler(ACPI_HANDLE, UINT32, void *context);
+static void	acpilid_notify_handler(ACPI_HANDLE, UINT32, void *);
 
 /*
  * acpilid_match:
@@ -78,7 +78,8 @@ static void	acpilid_notify_handler(ACPI_HANDLE, UINT32, void *context);
  *	Autoconfiguration `match' routine.
  */
 static int
-acpilid_match(struct device *parent, struct cfdata *match, void *aux)
+acpilid_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -100,14 +101,15 @@ acpilid_attach(struct device *parent, struct device *self, void *aux)
 	struct acpi_attach_args *aa = aux;
 	ACPI_STATUS rv;
 
-	printf(": ACPI Lid Switch\n");
+	aprint_naive(": ACPI Lid Switch\n");
+	aprint_normal(": ACPI Lid Switch\n");
 
 	sc->sc_node = aa->aa_node;
 
 	sc->sc_smpsw.smpsw_name = sc->sc_dev.dv_xname;
 	sc->sc_smpsw.smpsw_type = PSWITCH_TYPE_LID;
 	if (sysmon_pswitch_register(&sc->sc_smpsw) != 0) {
-		printf("%s: unable to register with sysmon\n",
+		aprint_error("%s: unable to register with sysmon\n",
 		    sc->sc_dev.dv_xname);
 		return;
 	}
@@ -115,7 +117,7 @@ acpilid_attach(struct device *parent, struct device *self, void *aux)
 	rv = AcpiInstallNotifyHandler(sc->sc_node->ad_handle,
 	    ACPI_DEVICE_NOTIFY, acpilid_notify_handler, sc);
 	if (ACPI_FAILURE(rv)) {
-		printf("%s: unable to register DEVICE NOTIFY handler: %s\n",
+		aprint_error("%s: unable to register DEVICE NOTIFY handler: %s\n",
 		    sc->sc_dev.dv_xname, AcpiFormatException(rv));
 		return;
 	}
@@ -149,7 +151,8 @@ acpilid_status_changed(void *arg)
  *	Callback from ACPI interrupt handler to notify us of an event.
  */
 static void
-acpilid_notify_handler(ACPI_HANDLE handle, UINT32 notify, void *context)
+acpilid_notify_handler(ACPI_HANDLE handle, UINT32 notify,
+    void *context)
 {
 	struct acpilid_softc *sc = context;
 	int rv;

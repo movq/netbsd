@@ -1,10 +1,8 @@
-#	$NetBSD: Makefile,v 1.1 2003/04/26 18:55:40 fvdl Exp $
+#	$NetBSD: Makefile,v 1.2.4.1 2007/03/09 06:59:24 riz Exp $
 
-SUBDIR=		ramdisk \
-		.WAIT \
-		instkernel \
-		.WAIT \
-		bootfloppy bootfloppy-big bootfloppy-com
+SUBDIR=		
+SUBDIR+=	bootfloppy
+SUBDIR+=	bootfloppy-com
 
 TARGETS+=	release
 

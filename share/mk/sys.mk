@@ -1,4 +1,4 @@
-#	$NetBSD: sys.mk,v 1.84 2004/08/07 21:43:18 chs Exp $
+#	$NetBSD: sys.mk,v 1.88.2.2 2007/07/19 14:38:17 liamjfoy Exp $
 #	@(#)sys.mk	8.2 (Berkeley) 3/21/94
 
 unix?=		We run NetBSD.
@@ -27,22 +27,24 @@ CC?=		cc
     ${MACHINE_ARCH} == "i386" || \
     ${MACHINE_ARCH} == "m68k" || \
     ${MACHINE_ARCH} == "mipsel" || ${MACHINE_ARCH} == "mipseb" || \
+    ${MACHINE_ARCH} == "mips64el" || ${MACHINE_ARCH} == "mips64eb" || \
     ${MACHINE_ARCH} == "ns32k" || \
     ${MACHINE_ARCH} == "powerpc" || \
-    ${MACHINE_ARCH} == "sh5el" || ${MACHINE_ARCH} == "sh5eb" || \
     ${MACHINE_ARCH} == "sparc" || \
-    ${MACHINE_ARCH} == "sparc64" || \
-    ${MACHINE_ARCH} == "vax"
+    ${MACHINE_ARCH} == "sparc64"
 DBG?=	-O2
+.elif ${MACHINE_ARCH} == "vax"
+DBG?=   -O1 -fgcse -fstrength-reduce -fgcse-after-reload
 .else
 DBG?=	-O
 .endif
 CFLAGS?=	${DBG}
+LDFLAGS?=
 COMPILE.c?=	${CC} ${CFLAGS} ${CPPFLAGS} -c
 LINK.c?=	${CC} ${CFLAGS} ${CPPFLAGS} ${LDFLAGS}
 
 CXX?=		c++
-CXXFLAGS?=	${CFLAGS:S/-Wno-traditional//}
+CXXFLAGS?=	${CFLAGS:N-Wno-traditional:N-Wstrict-prototypes:N-Wmissing-prototypes}
 COMPILE.cc?=	${CXX} ${CXXFLAGS} ${CPPFLAGS} -c
 LINK.cc?=	${CXX} ${CXXFLAGS} ${CPPFLAGS} ${LDFLAGS}
 
@@ -67,14 +69,13 @@ LINK.r?=	${FC} ${FFLAGS} ${RFLAGS} ${LDFLAGS}
 INSTALL?=	install
 
 LD?=		ld
-LDFLAGS?=
 
 LEX?=		lex
 LFLAGS?=
 LEX.l?=		${LEX} ${LFLAGS}
 
 LINT?=		lint
-LINTFLAGS?=	-chapbxzF
+LINTFLAGS?=	-chapbxzFS
 
 LORDER?=	lorder
 

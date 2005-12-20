@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: scan.l,v 1.33 2004/09/12 08:58:52 yamt Exp $ */
+/* $NetBSD: scan.l,v 1.35.2.1 2007/05/07 19:49:08 pavel Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: scan.l,v 1.33 2004/09/12 08:58:52 yamt Exp $");
+__RCSID("$NetBSD: scan.l,v 1.35.2.1 2007/05/07 19:49:08 pavel Exp $");
 #endif
 
 #include <stdlib.h>
@@ -99,6 +99,7 @@ EX	([eE][+-]?[0-9]+)
 0[xX]{HD}+[lLuU]*		return (icon(16));
 {D}+\.{D}*{EX}?[fFlL]?		|
 {D}+{EX}[fFlL]?			|
+0[xX]{HD}+p{HD}+[fFlL]?		|
 \.{D}+{EX}?[fFlL]?		return (fcon());
 "="				return (operator(T_ASSIGN, ASSIGN));
 "*="				return (operator(T_OPASS, MULASS));
@@ -458,7 +459,6 @@ icon(int base)
 	const	char *cp;
 	char	c, *eptr;
 	tspec_t	typ;
-	u_long	ul = 0;
 	uint64_t uq = 0;
 	int	ansiu;
 	static	tspec_t contypes[2][3] = {
@@ -502,11 +502,8 @@ icon(int base)
 	typ = contypes[u_suffix][l_suffix];
 
 	errno = 0;
-	if (l_suffix < 2) {
-		ul = strtoul(cp, &eptr, base);
-	} else {
-		uq = strtouq(cp, &eptr, base);
-	}
+
+	uq = strtouq(cp, &eptr, base);
 	if (eptr != cp + len)
 		LERROR("icon()");
 	if (errno != 0)
@@ -514,20 +511,24 @@ icon(int base)
 		warning(252);
 
 	/*
-	 * If the value is to big for the current type, we must choose
+	 * If the value is too big for the current type, we must choose
 	 * another type.
 	 */
 	ansiu = 0;
 	switch (typ) {
 	case INT:
-		if (ul <= INT_MAX) {
+		if (uq <= TARG_INT_MAX) {
 			/* ok */
-		} else if (ul <= (unsigned)UINT_MAX && base != 10) {
+		} else if (uq <= TARG_UINT_MAX && base != 10) {
 			typ = UINT;
-		} else if (ul <= LONG_MAX) {
+		} else if (uq <= TARG_LONG_MAX) {
 			typ = LONG;
 		} else {
 			typ = ULONG;
+			if (uq > TARG_ULONG_MAX) {
+				/* integer constant out of range */
+				warning(252);
+			}
 		}
 		if (typ == UINT || typ == ULONG) {
 			if (tflag) {
@@ -542,18 +543,27 @@ icon(int base)
 		}
 		break;
 	case UINT:
-		if (ul > (u_int)UINT_MAX)
+		if (uq > TARG_UINT_MAX) {
 			typ = ULONG;
+			if (uq > TARG_ULONG_MAX) {
+				/* integer constant out of range */
+				warning(252);
+			}
+		}
 		break;
 	case LONG:
-		if (ul > LONG_MAX && !tflag) {
+		if (uq > TARG_LONG_MAX && !tflag) {
 			typ = ULONG;
 			if (!sflag)
 				ansiu = 1;
+			if (uq > TARG_ULONG_MAX) {
+				/* integer constant out of range */
+				warning(252);
+			}
 		}
 		break;
 	case QUAD:
-		if (uq > QUAD_MAX && !tflag) {
+		if (uq > TARG_QUAD_MAX && !tflag) {
 			typ = UQUAD;
 			if (!sflag)
 				ansiu = 1;
@@ -585,14 +595,6 @@ icon(int base)
 
 	case NTSPEC:	/* this value unused */
 		break;
-	}
-
-	if (typ != QUAD && typ != UQUAD) {
-		if (isutyp(typ)) {
-			uq = ul;
-		} else {
-			uq = (int64_t)(long)ul;
-		}
 	}
 
 	uq = (uint64_t)xsign((int64_t)uq, typ, -1);
@@ -683,8 +685,24 @@ fcon(void)
 
 	errno = 0;
 	d = strtod(cp, &eptr);
-	if (eptr != cp + len)
-		LERROR("fcon()");
+	if (eptr != cp + len) {
+		switch (*eptr) {
+		/*
+		 * XXX: non-native non-current strtod() may not handle hex
+		 * floats, ignore the rest if we find traces of hex float
+		 * syntax...
+		 */
+		case 'p':
+		case 'P':
+		case 'x':
+		case 'X':
+			d = 0;
+			errno = 0;
+			break;
+		default:
+			LERROR("fcon()");
+		}
+	}
 	if (errno != 0)
 		/* floating-point constant out of range */
 		warning(248);

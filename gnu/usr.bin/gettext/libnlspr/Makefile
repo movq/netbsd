@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2005/05/09 17:19:06 jmc Exp $
+#	$NetBSD: Makefile,v 1.7 2006/11/10 17:36:08 christos Exp $
 
 MKPRIVATELIB=	yes
 
@@ -74,16 +74,19 @@ CPPFLAGS+=-DLIBDIR=\"${DESTDIR}/usr/share\"
 CPPFLAGS+=-DGETTEXTJAR=\"${DESTDIR}/usr/share/gettext/gettext.jar\"
 CPPFLAGS+=-DGETTEXTDATADIR=\"${DESTDIR}/usr/share/gettext\"
 
-.if ${MACHINE_ARCH} == "vax"
-depend dependall realdepend realall: stdbool.h
-
-stdbool.h:
-	sed -e 's:@HAVE__BOOL@:0:g' \
-		${DIST}/gettext/gettext-tools/lib/stdbool_.h > stdbool.h
-
-CLEANFILES+=stdbool.h
-CPPFLAGS+=-I.
-.endif
+COPTS.format-java.c = -Wno-stack-protector
+COPTS.msgl-cat.c = -Wno-stack-protector
+COPTS.msgl-charset.c = -Wno-stack-protector
+COPTS.msgl-iconv.c = -Wno-stack-protector
+COPTS.plural.c = -Wno-stack-protector
+COPTS.po-charset.c = -Wno-stack-protector
+COPTS.po-gram-gen.c = -Wno-stack-protector
+COPTS.read-tcl.c = -Wno-stack-protector
+COPTS.write-csharp.c = -Wno-stack-protector
+COPTS.write-java.c = -Wno-stack-protector
+COPTS.write-mo.c = -Wno-stack-protector
+COPTS.write-po.c = -Wno-stack-protector
+COPTS.write-tcl.c = -Wno-stack-protector
 
 .include <bsd.lib.mk>
 

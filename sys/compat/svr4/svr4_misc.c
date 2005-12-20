@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_misc.c,v 1.114 2005/12/11 12:20:26 christos Exp $	 */
+/*	$NetBSD: svr4_misc.c,v 1.121 2006/11/16 01:32:44 christos Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_misc.c,v 1.114 2005/12/11 12:20:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_misc.c,v 1.121 2006/11/16 01:32:44 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -104,7 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_misc.c,v 1.114 2005/12/11 12:20:26 christos Exp
 
 static int svr4_to_bsd_mmap_flags __P((int));
 
-static __inline clock_t timeval_to_clock_t __P((struct timeval *));
+static inline clock_t timeval_to_clock_t __P((struct timeval *));
 static int svr4_setinfo	__P((struct proc *, int, svr4_siginfo_t *));
 
 struct svr4_hrtcntl_args;
@@ -114,6 +114,8 @@ static void bsd_statvfs_to_svr4_statvfs __P((const struct statvfs *,
     struct svr4_statvfs *));
 static void bsd_statvfs_to_svr4_statvfs64 __P((const struct statvfs *,
     struct svr4_statvfs64 *));
+static int svr4_copystatvfs64(struct svr4_statvfs64 *, const struct statvfs *);
+static int svr4_copystatvfs(struct svr4_statvfs *, const struct statvfs *);
 #define svr4_pfind(pid) p_find((pid), PFIND_UNLOCK | PFIND_ZOMBIE)
 
 static int svr4_mknod __P((struct lwp *, register_t *, const char *,
@@ -225,10 +227,7 @@ svr4_sys_execve(l, v, retval)
 
 
 int
-svr4_sys_time(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+svr4_sys_time(struct lwp *l, void *v, register_t *retval)
 {
 	struct svr4_sys_time_args *uap = v;
 	int error = 0;
@@ -299,10 +298,9 @@ again:
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
 	auio.uio_rw = UIO_READ;
-	auio.uio_segflg = UIO_SYSSPACE;
-	auio.uio_lwp = NULL;
 	auio.uio_resid = buflen;
 	auio.uio_offset = off;
+	UIO_SETUP_SYSSPACE(&auio);
 	/*
          * First we read into the malloc'ed buffer, then
          * we massage it into user space, one record at a time.
@@ -425,10 +423,9 @@ again:
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
 	auio.uio_rw = UIO_READ;
-	auio.uio_segflg = UIO_SYSSPACE;
-	auio.uio_lwp = NULL;
 	auio.uio_resid = buflen;
 	auio.uio_offset = off;
+	UIO_SETUP_SYSSPACE(&auio);
 	/*
          * First we read into the malloc'ed buffer, then
          * we massage it into user space, one record at a time.
@@ -636,23 +633,19 @@ svr4_sys_xmknod(l, v, retval)
 
 
 int
-svr4_sys_vhangup(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+svr4_sys_vhangup(struct lwp *l, void *v,
+    register_t *retval)
 {
 	return 0;
 }
 
 
 int
-svr4_sys_sysconfig(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+svr4_sys_sysconfig(struct lwp *l, void *v, register_t *retval)
 {
 	struct svr4_sys_sysconfig_args *uap = v;
 	extern int	maxfiles;
+	int active;
 
 	switch (SCARG(uap, name)) {
 	case SVR4_CONFIG_NGROUPS:
@@ -734,7 +727,8 @@ svr4_sys_sysconfig(l, v, retval)
 		*retval = uvmexp.free;	/* XXX: free instead of total */
 		break;
 	case SVR4_CONFIG_AVPHYS_PAGES:
-		*retval = uvmexp.active;	/* XXX: active instead of avg */
+		uvm_estimatepageable(&active, NULL);
+		*retval = active;	/* XXX: active instead of avg */
 		break;
 	case SVR4_CONFIG_COHERENCY:
 		*retval = 0;	/* XXX */
@@ -783,10 +777,7 @@ svr4_sys_sysconfig(l, v, retval)
 
 /* ARGSUSED */
 int
-svr4_sys_break(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+svr4_sys_break(struct lwp *l, void *v, register_t *retval)
 {
 	struct svr4_sys_break_args *uap = v;
 	struct proc *p = l->l_proc;
@@ -824,7 +815,7 @@ svr4_sys_break(l, v, retval)
 }
 
 
-static __inline clock_t
+static inline clock_t
 timeval_to_clock_t(tv)
 	struct timeval *tv;
 {
@@ -934,7 +925,7 @@ svr4_sys_ulimit(l, v, retval)
 			if (r == -1)
 				r = 0x7fffffff;
 			r += (long) vm->vm_daddr;
-			if (r < 0)
+			if (r > 0x7fffffff)
 				r = 0x7fffffff;
 			*retval = r;
 			return 0;
@@ -1024,10 +1015,8 @@ struct svr4_hrtcntl_args {
 
 
 static int
-svr4_hrtcntl(l, uap, retval)
-	struct lwp *l;
-	struct svr4_hrtcntl_args *uap;
-	register_t *retval;
+svr4_hrtcntl(struct lwp *l, struct svr4_hrtcntl_args *uap,
+    register_t *retval)
 {
 	switch (SCARG(uap, fun)) {
 	case SVR4_HRT_CNTL_RES:
@@ -1230,6 +1219,44 @@ svr4_sys_waitsys(l, v, retval)
 }
 
 
+static int
+svr4_copystatvfs64(struct svr4_statvfs64 *sufs, const struct statvfs *bufs)
+{
+	struct svr4_statvfs64 *skfs = malloc(sizeof(*skfs), M_TEMP, M_WAITOK);
+	struct statvfs *bkfs = malloc(sizeof(*bkfs), M_TEMP, M_WAITOK);
+	int error;
+
+	if ((error = copyin(bufs, bkfs, sizeof(*bkfs))) != 0)
+		goto out;
+
+	bsd_statvfs_to_svr4_statvfs64(bkfs, skfs);
+
+	error = copyout(skfs, sufs, sizeof(*sufs));
+out:
+	free(skfs, M_TEMP);
+	free(bkfs, M_TEMP);
+	return error;
+}
+
+static int
+svr4_copystatvfs(struct svr4_statvfs *sufs, const struct statvfs *bufs)
+{
+	struct svr4_statvfs *skfs = malloc(sizeof(*skfs), M_TEMP, M_WAITOK);
+	struct statvfs *bkfs = malloc(sizeof(*bkfs), M_TEMP, M_WAITOK);
+	int error;
+
+	if ((error = copyin(bufs, bkfs, sizeof(*bkfs))) != 0)
+		goto out;
+
+	bsd_statvfs_to_svr4_statvfs(bkfs, skfs);
+
+	error = copyout(skfs, sufs, sizeof(*skfs));
+out:
+	free(skfs, M_TEMP);
+	free(bkfs, M_TEMP);
+	return error;
+}
+
 static void
 bsd_statvfs_to_svr4_statvfs(const struct statvfs *bfs,
     struct svr4_statvfs *sfs)
@@ -1291,8 +1318,6 @@ svr4_sys_statvfs(l, v, retval)
 	struct proc *p = l->l_proc;
 	caddr_t sg = stackgap_init(p, 0);
 	struct statvfs *fs = stackgap_alloc(p, &sg, sizeof(struct statvfs));
-	struct statvfs bfs;
-	struct svr4_statvfs sfs;
 	int error;
 
 	CHECK_ALT_EXIST(l, &sg, SCARG(uap, path));
@@ -1303,12 +1328,7 @@ svr4_sys_statvfs(l, v, retval)
 	if ((error = sys_statvfs1(l, &fs_args, retval)) != 0)
 		return error;
 
-	if ((error = copyin(fs, &bfs, sizeof(bfs))) != 0)
-		return error;
-
-	bsd_statvfs_to_svr4_statvfs(&bfs, &sfs);
-
-	return copyout(&sfs, SCARG(uap, fs), sizeof(sfs));
+	return svr4_copystatvfs(SCARG(uap, fs), fs);
 }
 
 
@@ -1323,8 +1343,6 @@ svr4_sys_fstatvfs(l, v, retval)
 	struct sys_fstatvfs1_args	fs_args;
 	caddr_t sg = stackgap_init(p, 0);
 	struct statvfs *fs = stackgap_alloc(p, &sg, sizeof(struct statvfs));
-	struct statvfs bfs;
-	struct svr4_statvfs sfs;
 	int error;
 
 	SCARG(&fs_args, fd) = SCARG(uap, fd);
@@ -1334,12 +1352,7 @@ svr4_sys_fstatvfs(l, v, retval)
 	if ((error = sys_fstatvfs1(l, &fs_args, retval)) != 0)
 		return error;
 
-	if ((error = copyin(fs, &bfs, sizeof(bfs))) != 0)
-		return error;
-
-	bsd_statvfs_to_svr4_statvfs(&bfs, &sfs);
-
-	return copyout(&sfs, SCARG(uap, fs), sizeof(sfs));
+	return svr4_copystatvfs(SCARG(uap, fs), fs);
 }
 
 
@@ -1354,8 +1367,6 @@ svr4_sys_statvfs64(l, v, retval)
 	struct sys_statvfs1_args	fs_args;
 	caddr_t sg = stackgap_init(p, 0);
 	struct statvfs *fs = stackgap_alloc(p, &sg, sizeof(struct statvfs));
-	struct statvfs bfs;
-	struct svr4_statvfs64 sfs;
 	int error;
 
 	CHECK_ALT_EXIST(l, &sg, SCARG(uap, path));
@@ -1366,12 +1377,7 @@ svr4_sys_statvfs64(l, v, retval)
 	if ((error = sys_statvfs1(l, &fs_args, retval)) != 0)
 		return error;
 
-	if ((error = copyin(fs, &bfs, sizeof(bfs))) != 0)
-		return error;
-
-	bsd_statvfs_to_svr4_statvfs64(&bfs, &sfs);
-
-	return copyout(&sfs, SCARG(uap, fs), sizeof(sfs));
+	return svr4_copystatvfs64(SCARG(uap, fs), fs);
 }
 
 
@@ -1386,8 +1392,6 @@ svr4_sys_fstatvfs64(l, v, retval)
 	struct sys_fstatvfs1_args	fs_args;
 	caddr_t sg = stackgap_init(p, 0);
 	struct statvfs *fs = stackgap_alloc(p, &sg, sizeof(struct statvfs));
-	struct statvfs bfs;
-	struct svr4_statvfs64 sfs;
 	int error;
 
 	SCARG(&fs_args, fd) = SCARG(uap, fd);
@@ -1397,13 +1401,9 @@ svr4_sys_fstatvfs64(l, v, retval)
 	if ((error = sys_fstatvfs1(l, &fs_args, retval)) != 0)
 		return error;
 
-	if ((error = copyin(fs, &bfs, sizeof(bfs))) != 0)
-		return error;
-
-	bsd_statvfs_to_svr4_statvfs64(&bfs, &sfs);
-
-	return copyout(&sfs, SCARG(uap, fs), sizeof(sfs));
+	return svr4_copystatvfs64(SCARG(uap, fs), fs);
 }
+
 
 
 int
@@ -1449,10 +1449,8 @@ svr4_sys_alarm(l, v, retval)
 
 
 int
-svr4_sys_gettimeofday(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+svr4_sys_gettimeofday(struct lwp *l, void *v,
+    register_t *retval)
 {
 	struct svr4_sys_gettimeofday_args *uap = v;
 
@@ -1468,10 +1466,7 @@ svr4_sys_gettimeofday(l, v, retval)
 
 
 int
-svr4_sys_facl(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+svr4_sys_facl(struct lwp *l, void *v, register_t *retval)
 {
 	struct svr4_sys_facl_args *uap = v;
 
@@ -1506,10 +1501,8 @@ svr4_sys_acl(l, v, retval)
 
 
 int
-svr4_sys_auditsys(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+svr4_sys_auditsys(struct lwp *l, void *v,
+    register_t *retval)
 {
 	/*
 	 * XXX: Big brother is *not* watching.

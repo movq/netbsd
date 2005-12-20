@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.29 2005/12/11 12:17:37 christos Exp $	*/
+/*	$NetBSD: trap.c,v 1.38.2.2 2007/07/06 10:36:41 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -69,16 +69,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.29 2005/12/11 12:17:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.38.2.2 2007/07/06 10:36:41 liamjfoy Exp $");
 
 /* #define INTRDEBUG */
 /* #define TRAPDEBUG */
 /* #define USERTRACE */
 
 #include "opt_kgdb.h"
-#include "opt_syscall_debug.h"
 #include "opt_ktrace.h"
-#include "opt_systrace.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -88,9 +86,6 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.29 2005/12/11 12:17:37 christos Exp $");
 #include <sys/savar.h>
 #ifdef KTRACE
 #include <sys/ktrace.h>
-#endif
-#ifdef SYSTRACE
-#include <sys/systrace.h>
 #endif
 #include <sys/proc.h>
 #include <sys/signalvar.h>
@@ -198,7 +193,7 @@ void syscall(struct trapframe *, int *);
 u_int rctr_next_iioq;
 #endif
 
-static __inline void
+static inline void
 userret(struct lwp *l, register_t pc, u_quad_t oticks)
 {
 	struct proc *p = l->l_proc;
@@ -213,7 +208,7 @@ userret(struct lwp *l, register_t pc, u_quad_t oticks)
 	/*
 	 * If profiling, charge recent system time to the trapped pc.
 	 */
-	if (l->l_flag & P_PROFIL) {
+	if (p->p_flag & P_PROFIL) {
 		extern int psratio;
 
 		addupc_task(p, pc, (int)(p->p_sticks - oticks) * psratio);
@@ -420,7 +415,6 @@ frame_sanity_check(int where, int type, struct trapframe *tf, struct lwp *l)
 	extern register_t kpsw;
 	extern vaddr_t hpt_base;
 	extern vsize_t hpt_mask;
-	vsize_t uspace_size;
 #define SANITY(e)					\
 do {							\
 	if (sanity_frame == NULL && !(e)) {		\
@@ -434,33 +428,40 @@ do {							\
 	SANITY(tf->tf_hptm == hpt_mask && tf->tf_vtop == hpt_base);
 	SANITY((kpsw & PSW_I) == 0 || tf->tf_eiem != 0);
 	if (tf->tf_iisq_head == HPPA_SID_KERNEL) {
+ 		vaddr_t minsp, maxsp;
+
 		/*
 		 * If the trap happened in the gateway
 		 * page, we take the easy way out and 
 		 * assume that the trapframe is okay.
 		 */
-		if ((tf->tf_iioq_head & ~PAGE_MASK) != SYSCALLGATE) {
-			SANITY(!USERMODE(tf->tf_iioq_head));
-			SANITY(!USERMODE(tf->tf_iioq_tail));
-			SANITY(tf->tf_iioq_head >= (u_int) &kernel_text);
-			SANITY(tf->tf_iioq_head < (u_int) &etext);
-			SANITY(tf->tf_iioq_tail >= (u_int) &kernel_text);
-			SANITY(tf->tf_iioq_tail < (u_int) &etext);
+		if ((tf->tf_iioq_head & ~PAGE_MASK) != SYSCALLGATE)
+			goto out;
+
+		if ((type & ~T_USER) == T_INTERRUPT)
+			goto out;
+
+		SANITY(!USERMODE(tf->tf_iioq_head));
+		SANITY(!USERMODE(tf->tf_iioq_tail));
+		SANITY(tf->tf_iioq_head >= (u_int) &kernel_text);
+		SANITY(tf->tf_iioq_head < (u_int) &etext);
+		SANITY(tf->tf_iioq_tail >= (u_int) &kernel_text);
+		SANITY(tf->tf_iioq_tail < (u_int) &etext);
 #ifdef HPPA_REDZONE
-			uspace_size = HPPA_REDZONE;
+		maxsp = (u_int)(l->l_addr) + HPPA_REDZONE;
 #else
-			uspace_size = USPACE;
+		maxsp = (u_int)(l->l_addr) + USPACE;
 #endif
-			SANITY(l == NULL ||
-				((tf->tf_sp >= (u_int)(l->l_addr) + PAGE_SIZE &&
-				  tf->tf_sp < (u_int)(l->l_addr) + uspace_size)));
-		}
+		minsp = (u_int)(l->l_addr) + PAGE_SIZE;
+  
+		SANITY(l != NULL || (tf->tf_sp >= minsp && tf->tf_sp < maxsp));
 	} else {
 		SANITY(USERMODE(tf->tf_iioq_head));
 		SANITY(USERMODE(tf->tf_iioq_tail));
 		SANITY(l != NULL && tf->tf_cr30 == kvtop((caddr_t)l->l_addr));
 	}
 #undef SANITY
+out:
 	if (sanity_frame == tf) {
 		printf("insanity: where 0x%x type 0x%x tf %p lwp %p line %d "
 		       "sp 0x%x pc 0x%x\n",
@@ -508,6 +509,8 @@ trap(int type, struct trapframe *frame)
 
 	l = curlwp;
 	p = l ? l->l_proc : NULL;
+	if ((type & T_USER) != 0)
+		LWP_CACHE_CREDS(l, p);
 
 	tts = (type & ~T_USER) > trap_types ? "reserved" :
 		trap_type[type & ~T_USER];
@@ -813,7 +816,7 @@ do_onfault:
 
 		if (map->pmap->pmap_space != space) {
 #ifdef TRAPDEBUG
-			printf("trap: space missmatch %d != %d\n",
+			printf("trap: space mismatch %d != %d\n",
 			    space, map->pmap->pmap_space);
 #endif
 			/* actually dump the user, crap the kernel */
@@ -825,12 +828,12 @@ do_onfault:
 
 		onfault = l->l_addr->u_pcb.pcb_onfault;
 		l->l_addr->u_pcb.pcb_onfault = 0;
-		ret = uvm_fault(map, va, 0, vftype);
+		ret = uvm_fault(map, va, vftype);
 		l->l_addr->u_pcb.pcb_onfault = onfault;
 
 #ifdef TRAPDEBUG
-		printf("uvm_fault(%p, %x, %d, %d)=%d\n",
-		    map, (u_int)va, 0, vftype, ret);
+		printf("uvm_fault(%p, %x, %d)=%d\n",
+		    map, (u_int)va, vftype, ret);
 #endif
 
 		if (map != kernel_map)
@@ -843,12 +846,10 @@ do_onfault:
 		 * the current limit and we need to reflect that as an access
 		 * error.
 		 */
-		if (va >= (vaddr_t)vm->vm_maxsaddr + vm->vm_ssize) {
-			if (ret == 0) {
-				vsize_t nss = btoc(va - USRSTACK + PAGE_SIZE);
-				if (nss > vm->vm_ssize)
-					vm->vm_ssize = nss;
-			} else if (ret == EACCES)
+		if (map != kernel_map && va >= (vaddr_t)vm->vm_minsaddr) {
+			if (ret == 0)
+				uvm_grow(l->l_proc, va);
+			else if (ret == EACCES)
 				ret = EFAULT;
 		}
 
@@ -868,8 +869,8 @@ do_onfault:
 				if (l->l_addr->u_pcb.pcb_onfault) {
 					goto do_onfault;
 				}
-				panic("trap: uvm_fault(%p, %lx, %d, %d): %d",
-				    map, va, 0, vftype, ret);
+				panic("trap: uvm_fault(%p, %lx, %d): %d",
+				    map, va, vftype, ret);
 			}
 		}
 		break;
@@ -927,7 +928,9 @@ void
 child_return(void *arg)
 {
 	struct lwp *l = arg;
+#ifdef KTRACE
 	struct proc *p = l->l_proc;
+#endif
 
 	userret(l, l->l_md.md_regs->tf_iioq_head, 0);
 #ifdef KTRACE
@@ -971,6 +974,7 @@ syscall(struct trapframe *frame, int *args)
 	nsys = p->p_emul->e_nsysent;
 	callp = p->p_emul->e_sysent;
 	code = frame->tf_t1;
+	LWP_CACHE_CREDS(l, p);
 
 	/*
 	 * Restarting a system call is touchy on the HPPA, 
@@ -1145,7 +1149,7 @@ syscall(struct trapframe *frame, int *args)
 
 #ifdef USERTRACE
 	if (0) {
-		user_backtrace(frame, p, -1);
+		user_backtrace(frame, l, -1);
 		frame->tf_ipsw |= PSW_R;
 		frame->tf_rctr = 0;
 		printf("r %08x", frame->tf_iioq_head);

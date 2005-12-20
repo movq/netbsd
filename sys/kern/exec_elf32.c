@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_elf32.c,v 1.108 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: exec_elf32.c,v 1.120.2.1 2007/07/09 10:30:57 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 1994, 2000, 2005 The NetBSD Foundation, Inc.
@@ -64,12 +64,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: exec_elf32.c,v 1.108 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(1, "$NetBSD: exec_elf32.c,v 1.120.2.1 2007/07/09 10:30:57 liamjfoy Exp $");
 
 /* If not included by exec_elf64.c, ELFSIZE won't be defined. */
 #ifndef ELFSIZE
 #define	ELFSIZE		32
 #endif
+
+#ifdef _KERNEL_OPT
+#include "opt_pax.h"
+#endif /* _KERNEL_OPT */
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -82,9 +86,14 @@ __KERNEL_RCSID(1, "$NetBSD: exec_elf32.c,v 1.108 2005/12/11 12:24:29 christos Ex
 #include <sys/signalvar.h>
 #include <sys/mount.h>
 #include <sys/stat.h>
+#include <sys/kauth.h>
 
 #include <machine/cpu.h>
 #include <machine/reg.h>
+
+#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD)
+#include <sys/pax.h>
+#endif /* PAX_MPROTECT || PAX_SEGVGUARD */
 
 extern const struct emul emul_netbsd;
 
@@ -122,14 +131,12 @@ elf_copyargs(struct lwp *l, struct exec_package *pack,
 	size_t len;
 	AuxInfo ai[ELF_AUX_ENTRIES], *a;
 	struct elf_args *ap;
-	struct proc *p;
 	int error;
 
 	if ((error = copyargs(l, pack, arginfo, stackp, argp)) != 0)
 		return error;
 
 	a = ai;
-	p = l->l_proc;
 
 	/*
 	 * Push extra arguments on the stack needed by dynamically
@@ -170,22 +177,22 @@ elf_copyargs(struct lwp *l, struct exec_package *pack,
 		if (vap->va_mode & S_ISUID)
 			a->a_v = vap->va_uid;
 		else
-			a->a_v = p->p_ucred->cr_uid;
+			a->a_v = kauth_cred_geteuid(l->l_cred);
 		a++;
 
 		a->a_type = AT_RUID;
-		a->a_v = p->p_cred->p_ruid;
+		a->a_v = kauth_cred_getuid(l->l_cred);
 		a++;
 
 		a->a_type = AT_EGID;
 		if (vap->va_mode & S_ISGID)
 			a->a_v = vap->va_gid;
 		else
-			a->a_v = p->p_ucred->cr_gid;
+			a->a_v = kauth_cred_getegid(l->l_cred);
 		a++;
 
 		a->a_type = AT_RGID;
-		a->a_v = p->p_cred->p_rgid;
+		a->a_v = kauth_cred_getgid(l->l_cred);
 		a++;
 
 		free(ap, M_TEMP);
@@ -366,11 +373,11 @@ elf_load_file(struct lwp *l, struct exec_package *epp, char *path,
 		error = EACCES;
 		goto badunlock;
 	}
-	if ((error = VOP_ACCESS(vp, VEXEC, l->l_proc->p_ucred, l)) != 0)
+	if ((error = VOP_ACCESS(vp, VEXEC, l->l_cred, l)) != 0)
 		goto badunlock;
 
 	/* get attributes */
-	if ((error = VOP_GETATTR(vp, &attr, l->l_proc->p_ucred, l)) != 0)
+	if ((error = VOP_GETATTR(vp, &attr, l->l_cred, l)) != 0)
 		goto badunlock;
 
 	/*
@@ -442,6 +449,11 @@ elf_load_file(struct lwp *l, struct exec_package *epp, char *path,
 				if (psize > limit)
 					limit = psize;
 			}
+		}
+
+		if (base_ph == NULL) {
+			error = ENOEXEC;
+			goto bad;
 		}
 
 		/*
@@ -517,6 +529,8 @@ elf_load_file(struct lwp *l, struct exec_package *epp, char *path,
 
 		case PT_DYNAMIC:
 		case PT_PHDR:
+			break;
+
 		case PT_NOTE:
 			break;
 
@@ -604,7 +618,7 @@ exec_elf_makecmds(struct lwp *l, struct exec_package *epp)
 		if (pp->p_type == PT_INTERP) {
 			if (pp->p_filesz >= MAXPATHLEN)
 				goto bad;
-			MALLOC(interp, char *, MAXPATHLEN, M_TEMP, M_WAITOK);
+			interp = PNBUF_GET();
 			interp[0] = '\0';
 			if ((error = exec_read_from(l, epp->ep_vp,
 			    pp->p_offset, interp, pp->p_filesz)) != 0)
@@ -676,9 +690,9 @@ exec_elf_makecmds(struct lwp *l, struct exec_package *epp)
 		case PT_INTERP:
 			/* Already did this one. */
 		case PT_DYNAMIC:
+			break;
 		case PT_NOTE:
 			break;
-
 		case PT_PHDR:
 			/* Note address of program headers (in text segment) */
 			phdr = pp->p_vaddr;
@@ -691,6 +705,11 @@ exec_elf_makecmds(struct lwp *l, struct exec_package *epp)
 			break;
 		}
 	}
+
+#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD)
+	if (epp->ep_pax_flags)
+		pax_adjust(l, epp->ep_pax_flags);
+#endif /* PAX_MPROTECT || PAX_SEGVGUARD */
 
 	/*
 	 * Check if we found a dynamically linked binary and arrange to load
@@ -718,7 +737,7 @@ exec_elf_makecmds(struct lwp *l, struct exec_package *epp)
 
 		epp->ep_emul_arg = ap;
 
-		FREE(interp, M_TEMP);
+		PNBUF_PUT(interp);
 	} else
 		epp->ep_entry = eh->e_entry;
 
@@ -732,7 +751,7 @@ exec_elf_makecmds(struct lwp *l, struct exec_package *epp)
 
 bad:
 	if (interp)
-		FREE(interp, M_TEMP);
+		PNBUF_PUT(interp);
 	free(ph, M_TEMP);
 	kill_vmcmds(&epp->ep_vmcmds);
 	return ENOEXEC;
@@ -746,7 +765,10 @@ netbsd_elf_signature(struct lwp *l, struct exec_package *epp,
 	Elf_Phdr *ph;
 	size_t phsize;
 	int error;
+	int isnetbsd = 0;
+	char *ndata;
 
+	epp->ep_pax_flags = 0;
 	if (eh->e_phnum > MAXPHNUM)
 		return ENOEXEC;
 
@@ -771,31 +793,46 @@ netbsd_elf_signature(struct lwp *l, struct exec_package *epp,
 		if (error)
 			goto next;
 
-		if (np->n_type != ELF_NOTE_TYPE_NETBSD_TAG ||
-		    np->n_namesz != ELF_NOTE_NETBSD_NAMESZ ||
-		    np->n_descsz != ELF_NOTE_NETBSD_DESCSZ ||
-		    memcmp((caddr_t)(np + 1), ELF_NOTE_NETBSD_NAME,
-		    ELF_NOTE_NETBSD_NAMESZ))
-			goto next;
+		ndata = (char *)(np + 1);
+		switch (np->n_type) {
+		case ELF_NOTE_TYPE_NETBSD_TAG:
+			if (np->n_namesz != ELF_NOTE_NETBSD_NAMESZ ||
+			    np->n_descsz != ELF_NOTE_NETBSD_DESCSZ ||
+			    memcmp(ndata, ELF_NOTE_NETBSD_NAME,
+			    ELF_NOTE_NETBSD_NAMESZ))
+				goto next;
+			isnetbsd = 1;
+			break;
 
-		error = 0;
-		free(np, M_TEMP);
-		goto out;
+		case ELF_NOTE_TYPE_PAX_TAG:
+			if (np->n_namesz != ELF_NOTE_PAX_NAMESZ ||
+			    np->n_descsz != ELF_NOTE_PAX_DESCSZ ||
+			    memcmp(ndata, ELF_NOTE_PAX_NAME,
+			    ELF_NOTE_PAX_NAMESZ))
+				goto next;
+			(void)memcpy(&epp->ep_pax_flags,
+			    ndata + ELF_NOTE_PAX_NAMESZ,
+			    sizeof(epp->ep_pax_flags));
+			break;
 
-	next:
+		default:
+			break;
+		}
+
+next:
 		free(np, M_TEMP);
 		continue;
 	}
 
-	error = ENOEXEC;
+	error = isnetbsd ? 0 : ENOEXEC;
 out:
 	free(ph, M_TEMP);
 	return error;
 }
 
 int
-netbsd_elf_probe(struct lwp *l, struct exec_package *epp,
-    void *eh, char *itp, vaddr_t *pos)
+netbsd_elf_probe(struct lwp *l, struct exec_package *epp, void *eh, char *itp,
+    vaddr_t *pos)
 {
 	int error;
 

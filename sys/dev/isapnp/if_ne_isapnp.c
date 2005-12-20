@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_isapnp.c,v 1.20 2005/12/11 12:22:16 christos Exp $	*/
+/*	$NetBSD: if_ne_isapnp.c,v 1.23 2006/11/16 01:33:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ne_isapnp.c,v 1.20 2005/12/11 12:22:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ne_isapnp.c,v 1.23 2006/11/16 01:33:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,10 +87,8 @@ CFATTACH_DECL(ne_isapnp, sizeof(struct ne_isapnp_softc),
     ne_isapnp_match, ne_isapnp_attach, NULL, NULL);
 
 static int
-ne_isapnp_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+ne_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -106,7 +104,7 @@ ne_isapnp_attach(
 	struct device *self,
 	void *aux)
 {
-	struct ne_isapnp_softc * const isc = (struct ne_isapnp_softc *)self;
+	struct ne_isapnp_softc * const isc = device_private(self);
 	struct ne2000_softc * const nsc = &isc->sc_ne2000;
 	struct dp8390_softc * const dsc = &nsc->sc_dp8390;
 	struct isapnp_attach_args * const ipa = aux;

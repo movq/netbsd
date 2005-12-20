@@ -1,4 +1,4 @@
-/*	$NetBSD: armreg.h,v 1.34 2005/12/11 12:16:46 christos Exp $	*/
+/*	$NetBSD: armreg.h,v 1.36.2.1 2007/02/21 18:36:02 snj Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Ben Harris
@@ -118,6 +118,7 @@
 #define CPU_ID_DEC		0x44000000 /* 'D' */
 #define CPU_ID_INTEL		0x69000000 /* 'i' */
 #define	CPU_ID_TI		0x54000000 /* 'T' */
+#define	CPU_ID_FARADAY		0x66000000 /* 'f' */
 
 /* How to decide what format the CPUID is in. */
 #define CPU_ID_ISOLD(x)		(((x) & 0x0000f000) == 0x00000000)
@@ -173,7 +174,7 @@
 /* ARM7 CPUs -- [15:12] == 7 */
 #define CPU_ID_ARM700		0x41007000 /* XXX This is a guess. */
 #define CPU_ID_ARM710		0x41007100
-#define CPU_ID_ARM7500		0x41027100 /* XXX This is a guess. */
+#define CPU_ID_ARM7500		0x41027100
 #define CPU_ID_ARM710A		0x41047100 /* inc ARM7100 */
 #define CPU_ID_ARM7500FE	0x41077100
 #define CPU_ID_ARM710T		0x41807100
@@ -185,6 +186,7 @@
 #define CPU_ID_ARM810		0x41018100
 #define CPU_ID_ARM920T		0x41129200
 #define CPU_ID_ARM922T		0x41029220
+#define CPU_ID_ARM926EJS	0x41069260
 #define CPU_ID_ARM940T		0x41029400 /* XXX no MMU */
 #define CPU_ID_ARM946ES		0x41049460 /* XXX no MMU */
 #define	CPU_ID_ARM966ES		0x41049660 /* XXX no MMU */
@@ -197,6 +199,7 @@
 #define CPU_ID_SA110		0x4401a100
 #define CPU_ID_SA1100		0x4401a110
 #define	CPU_ID_TI925T		0x54029250
+#define	CPU_ID_FA526		0x66015260
 #define CPU_ID_SA1110		0x6901b110
 #define CPU_ID_IXP1200		0x6901c120
 #define CPU_ID_80200		0x69052000

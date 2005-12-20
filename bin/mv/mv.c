@@ -1,4 +1,4 @@
-/* $NetBSD: mv.c,v 1.35 2005/06/03 13:55:04 hubertf Exp $ */
+/* $NetBSD: mv.c,v 1.37 2006/09/23 16:54:13 elad Exp $ */
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)mv.c	8.2 (Berkeley) 4/2/94";
 #else
-__RCSID("$NetBSD: mv.c,v 1.35 2005/06/03 13:55:04 hubertf Exp $");
+__RCSID("$NetBSD: mv.c,v 1.37 2006/09/23 16:54:13 elad Exp $");
 #endif
 #endif /* not lint */
 
@@ -120,11 +120,14 @@ main(int argc, char *argv[])
 	}
 
 	/* It's a directory, move each file into it. */
-	(void)strlcpy(path, argv[argc - 1], sizeof(path));
-	baselen = strlen(path);
+	baselen = strlcpy(path, argv[argc - 1], sizeof(path));
+	if (baselen >= sizeof(path))
+		errx(1, "%s: destination pathname too long", argv[argc - 1]);
 	endp = &path[baselen];
-	*endp++ = '/';
-	++baselen;
+	if (!baselen || *(endp - 1) != '/') {
+		*endp++ = '/';
+		++baselen;
+	}
 	for (rval = 0; --argc; ++argv) {
 		p = *argv + strlen(*argv) - 1;
 		while (*p == '/' && p != *argv)
@@ -189,8 +192,11 @@ do_move(char *from, char *to)
 		} else
 			ask = 0;
 		if (ask) {
-			if ((ch = getchar()) != EOF && ch != '\n')
-				while (getchar() != '\n');
+			if ((ch = getchar()) != EOF && ch != '\n') {
+				int ch2;
+				while ((ch2 = getchar()) != EOF && ch2 != '\n')
+					continue;
+			}
 			if (ch != 'y' && ch != 'Y')
 				return (0);
 		}

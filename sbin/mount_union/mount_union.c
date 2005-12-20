@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_union.c,v 1.14 2005/02/05 15:14:25 xtraeme Exp $	*/
+/*	$NetBSD: mount_union.c,v 1.17 2006/10/16 03:37:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)mount_union.c	8.6 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_union.c,v 1.14 2005/02/05 15:14:25 xtraeme Exp $");
+__RCSID("$NetBSD: mount_union.c,v 1.17 2006/10/16 03:37:43 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -63,7 +63,7 @@ __RCSID("$NetBSD: mount_union.c,v 1.14 2005/02/05 15:14:25 xtraeme Exp $");
 static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
 	MOPT_GETARGS,
-	{ NULL }
+	MOPT_NULL,
 };
 
 int	mount_union(int argc, char **argv);
@@ -84,6 +84,7 @@ mount_union(int argc, char *argv[])
 	struct union_args args;
 	int ch, mntflags;
 	char target[MAXPATHLEN], canon_dir[MAXPATHLEN];
+	mntoptparse_t mp;
 
 
 	mntflags = 0;
@@ -95,7 +96,10 @@ mount_union(int argc, char *argv[])
 			args.mntflags |= UNMNT_BELOW;
 			break;
 		case 'o':
-			getmntopts(optarg, mopts, &mntflags, 0);
+			mp = getmntopts(optarg, mopts, &mntflags, 0);
+			if (mp == NULL)
+				err(1, "getmntopts");
+			freemntopts(mp);
 			break;
 		case 'r':
 			args.mntflags &= ~UNMNT_OPMASK;

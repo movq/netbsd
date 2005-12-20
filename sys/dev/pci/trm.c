@@ -1,4 +1,4 @@
-/*	$NetBSD: trm.c,v 1.21 2005/12/11 12:22:50 christos Exp $	*/
+/*	$NetBSD: trm.c,v 1.25 2006/11/16 01:33:10 christos Exp $	*/
 /*
  * Device Driver for Tekram DC395U/UW/F, DC315/U
  * PCI SCSI Bus Master Host Adapter
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trm.c,v 1.21 2005/12/11 12:22:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trm.c,v 1.25 2006/11/16 01:33:10 christos Exp $");
 
 /* #define TRM_DEBUG */
 #ifdef TRM_DEBUG
@@ -366,7 +366,8 @@ static const uint8_t trm_clock_period[] = {
 #define NPERIOD	(sizeof(trm_clock_period)/sizeof(trm_clock_period[0]))
 
 static int
-trm_probe(struct device *parent, struct cfdata *match, void *aux)
+trm_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -634,7 +635,7 @@ trm_init(struct trm_softc *sc)
 	    bus_space_read_2(iot, ioh, TRM_DMA_CONFIG) | DMA_ENHANCE);
 
 	/* Clear pending interrupt status */
-	bus_space_read_1(iot, ioh, TRM_SCSI_INTSTATUS);
+	(void)bus_space_read_1(iot, ioh, TRM_SCSI_INTSTATUS);
 
 	/* Enable SCSI interrupt */
 	bus_space_write_1(iot, ioh, TRM_SCSI_INTEN,
@@ -1065,18 +1066,25 @@ static void
 trm_timeout(void *arg)
 {
 	struct trm_srb *srb = (struct trm_srb *)arg;
-	struct scsipi_xfer *xs = srb->xs;
-	struct scsipi_periph *periph = xs->xs_periph;
+	struct scsipi_xfer *xs;
+	struct scsipi_periph *periph;
 	struct trm_softc *sc;
 	int s;
 
-	if (xs == NULL)
-		printf("trm_timeout called with xs == NULL\n");
-
-	else {
-		scsipi_printaddr(xs->xs_periph);
-		printf("SCSI OpCode 0x%02x timed out\n", xs->cmd->opcode);
+	if (srb == NULL) {
+		printf("trm_timeout called with srb == NULL\n");
+		return;
 	}
+
+	xs = srb->xs;
+	if (xs == NULL) {
+		printf("trm_timeout called with xs == NULL\n");
+		return;
+	}
+
+	periph = xs->xs_periph;
+	scsipi_printaddr(xs->xs_periph);
+	printf("SCSI OpCode 0x%02x timed out\n", xs->cmd->opcode);
 
 	sc = (void *)periph->periph_channel->chan_adapter->adapt_dev;
 
@@ -1569,7 +1577,7 @@ trm_dataio_xfer(struct trm_softc *sc, int iodir)
 			if (iodir == XFERDATAOUT)
 				bus_space_write_2(iot, ioh, TRM_SCSI_FIFO, 0);
 			else
-				bus_space_read_2(iot, ioh, TRM_SCSI_FIFO);
+				(void)bus_space_read_2(iot, ioh, TRM_SCSI_FIFO);
 
 			sc->sc_state = TRM_XFERPAD;
 			/* it's important for atn stop */
@@ -1722,7 +1730,7 @@ trm_msgin_phase0(struct trm_softc *sc)
 
 		case MSG_IGN_WIDE_RESIDUE:
 			bus_space_write_4(iot, ioh, TRM_SCSI_XCNT, 1);
-			bus_space_read_1(iot, ioh, TRM_SCSI_FIFO);
+			(void)bus_space_read_1(iot, ioh, TRM_SCSI_FIFO);
 			break;
 
 		default:

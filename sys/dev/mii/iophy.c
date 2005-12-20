@@ -1,4 +1,4 @@
-/*	$NetBSD: iophy.c,v 1.23 2005/12/11 12:22:42 christos Exp $	*/
+/*	$NetBSD: iophy.c,v 1.28 2006/11/16 21:24:07 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iophy.c,v 1.23 2005/12/11 12:22:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iophy.c,v 1.28 2006/11/16 21:24:07 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -113,7 +113,8 @@ static const struct mii_phydesc iophys[] = {
 };
 
 static int
-iophymatch(struct device *parent, struct cfdata *match, void *aux)
+iophymatch(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct mii_attach_args *ma = aux;
 
@@ -126,7 +127,7 @@ iophymatch(struct device *parent, struct cfdata *match, void *aux)
 static void
 iophyattach(struct device *parent, struct device *self, void *aux)
 {
-	struct mii_softc *sc = (struct mii_softc *)self;
+	struct mii_softc *sc = device_private(self);
 	struct mii_attach_args *ma = aux;
 	struct mii_data *mii = ma->mii_data;
 	const struct mii_phydesc *mpd;
@@ -140,7 +141,7 @@ iophyattach(struct device *parent, struct device *self, void *aux)
 	sc->mii_funcs = &iophy_funcs;
 	sc->mii_pdata = mii;
 	sc->mii_flags = ma->mii_flags;
-	sc->mii_anegticks = 5;
+	sc->mii_anegticks = MII_ANEGTICKS;
 
 	PHY_RESET(sc);
 
@@ -160,7 +161,7 @@ iophy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
 	int reg;
 
-	if ((sc->mii_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->mii_dev))
 		return (ENXIO);
 
 	switch (cmd) {

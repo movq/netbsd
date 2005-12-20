@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.31 2004/10/16 13:20:11 dsl Exp $ */
+/*	$NetBSD: md.c,v 1.34 2006/09/04 00:11:00 hubertf Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -66,9 +66,6 @@ int md_need_newdisk = 0;
 
 /* prototypes */
 static int md_newdisk (void);
-
-const char *fdtype = "msdos";
-
 
 int
 md_get_info(void)
@@ -320,6 +317,7 @@ md_update(void)
 void
 md_cleanup_install(void)
 {
+  
 #ifdef notyet			/* sed is too large for ramdisk */
 	enable_rc_conf();
 #endif
@@ -339,4 +337,10 @@ md_pre_update()
 void
 md_init()
 {
+}
+
+int
+md_post_extract(void)
+{
+	return 0;
 }

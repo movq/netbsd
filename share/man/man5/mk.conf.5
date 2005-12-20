@@ -1,4 +1,4 @@
-.\"	$NetBSD: mk.conf.5,v 1.27 2005/06/27 20:32:40 peter Exp $
+.\"	$NetBSD: mk.conf.5,v 1.33.2.1 2007/10/30 15:33:03 liamjfoy Exp $
 .\"
 .\"  Copyright (c) 1999-2003 The NetBSD Foundation, Inc.
 .\"  All rights reserved.
@@ -31,7 +31,7 @@
 .\"  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 .\"  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd April 21, 2005
+.Dd October 18, 2007
 .Dt MK.CONF 5
 .Os
 .\" turn off hyphenation
@@ -229,6 +229,21 @@ Indicates whether
 is built.
 .DFLTy
 .
+.It Sy MKDEBUG
+.YorN
+Indicates whether separate debugging symbols should be installed into
+.Sy DESTDIR Ns Pa /usr/libdata/debug .
+.DFLTn
+.
+.It Sy MKDEBUGLIB
+.YorN
+Indicates whether debug libraries
+.Sy ( lib*_g.a )
+will be built and installed during a build.
+Debug libraries are compiled with
+.Dq Li -g -DDEBUG .
+.DFLTn
+.
 .It Sy MKDOC
 .YorN
 Indicates whether system documentation destined for
@@ -318,12 +333,6 @@ build.
 Indicates whether the
 .Xr ipf 4
 programs, headers and LKM will be compiled and installed during a build.
-.DFLTy
-.
-.It Sy MKKERBEROS4
-.YorN
-Indicates whether the Kerberos v4 infrastructure
-(libraries and support programs) is built.
 .DFLTy
 .
 .It Sy MKKERBEROS
@@ -484,11 +493,6 @@ however, some platforms turn off
 .Sy MKPROFILE
 by default at times due to toolchain problems with profiled code.
 .
-.It Sy MKSENDMAIL
-.YorN
-Indicates whether Sendmail is built.
-.DFLTy
-.
 .It Sy MKSHARE
 .YorN
 Indicates whether files destined to reside in
@@ -537,13 +541,6 @@ will compare file timestamps before installing, and skip the install
 phase if the destination files are up-to-date.
 This also has implications on full builds (see next subsection).
 .DFLTn
-.
-.It Sy MKUUCP
-.YorN
-Indicates whether
-.Xr uucp 1
-and related programs are built.
-.DFLTy
 .
 .It Sy MKYP
 .YorN

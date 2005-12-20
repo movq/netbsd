@@ -1,4 +1,4 @@
-/*	$NetBSD: postmap.c,v 1.1.1.8 2005/08/18 21:08:18 rpaulo Exp $	*/
+/*	$NetBSD: postmap.c,v 1.1.1.9.4.1 2007/06/16 17:00:44 snj Exp $	*/
 
 /*++
 /* NAME
@@ -15,16 +15,17 @@
 /*	lookup tables, or updates an existing one. The input and output
 /*	file formats are expected to be compatible with:
 /*
-/* .ti +4
-/*	\fBmakemap \fIfile_type\fR \fIfile_name\fR < \fIfile_name\fR
+/* .nf
+/*	    \fBmakemap \fIfile_type\fR \fIfile_name\fR < \fIfile_name\fR
+/* .fi
 /*
 /*	If the result files do not exist they will be created with the
-/*	same group and other read permissions as the source file.
+/*	same group and other read permissions as their source file.
 /*
 /*	While the table update is in progress, signal delivery is
 /*	postponed, and an exclusive, advisory, lock is placed on the
 /*	entire table, in order to avoid surprises in spectator
-/*	programs.
+/*	processes.
 /* INPUT FILE FORMAT
 /* .ad
 /* .fi
@@ -32,8 +33,9 @@
 /* .IP \(bu
 /*	A table entry has the form
 /* .sp
-/* .ti +5
-/*	\fIkey\fR whitespace \fIvalue\fR
+/* .nf
+/*	     \fIkey\fR whitespace \fIvalue\fR
+/* .fi
 /* .IP \(bu
 /*	Empty lines and whitespace-only lines are ignored, as
 /*	are lines whose first non-whitespace character is a `#'.
@@ -44,8 +46,16 @@
 /*	The \fIkey\fR and \fIvalue\fR are processed as is, except that
 /*	surrounding white space is stripped off. Unlike with Postfix alias
 /*	databases, quotes cannot be used to protect lookup keys that contain
-/*	special characters such as `#' or whitespace. The \fIkey\fR is mapped
-/*	to lowercase to make mapping lookups case insensitive.
+/*	special characters such as `#' or whitespace.
+/*
+/*	By default the lookup key is mapped to lowercase to make
+/*	the lookups case insensitive; as of Postfix 2.3 this case
+/*	folding happens only with tables whose lookup keys are
+/*	fixed-case strings such as btree:, dbm: or hash:. With
+/*	earlier versions, the lookup key is folded even with tables
+/*	where a lookup field can match both upper and lower case
+/*	text, such as regexp: and pcre:. This resulted in loss of
+/*	information with $\fInumber\fR substitutions.
 /* COMMAND-LINE ARGUMENTS
 /* .ad
 /* .fi
@@ -61,7 +71,11 @@
 /*	when at least one of the requested keys was found.
 /* .IP \fB-f\fR
 /*	Do not fold the lookup key to lower case while creating or querying
-/*	a map.
+/*	a table.
+/*
+/*	With Postfix version 2.3 and later, this option has no
+/*	effect for regular expression tables. There, case folding
+/*	is controlled by appending a flag to a pattern.
 /* .IP \fB-i\fR
 /*	Incremental mode. Read entries from standard input and do not
 /*	truncate an existing database. By default, \fBpostmap\fR(1) creates
@@ -235,6 +249,7 @@
 #include <mail_conf.h>
 #include <mail_dict.h>
 #include <mail_params.h>
+#include <mail_version.h>
 #include <mkmap.h>
 #include <mail_task.h>
 
@@ -335,8 +350,6 @@ static void postmap(char *map_type, char *path_name, int postmap_flags,
 	/*
 	 * Store the value under a case-insensitive key.
 	 */
-	if (dict_flags & DICT_FLAG_FOLD_KEY)
-	    lowercase(key);
 	mkmap_append(mkmap, key, value);
     }
 
@@ -383,13 +396,11 @@ static int postmap_queries(VSTREAM *in, char **maps, const int map_count,
      * maps.
      */
     while (vstring_get_nonl(keybuf, in) != VSTREAM_EOF) {
-	if (dict_flags & DICT_FLAG_FOLD_KEY)
-	    lowercase(STR(keybuf));
 	for (n = 0; n < map_count; n++) {
 	    if (dicts[n] == 0)
 		dicts[n] = ((map_name = split_at(maps[n], ':')) != 0 ?
-		   dict_open3(maps[n], map_name, O_RDONLY, DICT_FLAG_LOCK) :
-		dict_open3(var_db_type, maps[n], O_RDONLY, DICT_FLAG_LOCK));
+		       dict_open3(maps[n], map_name, O_RDONLY, dict_flags) :
+		    dict_open3(var_db_type, maps[n], O_RDONLY, dict_flags));
 	    if ((value = dict_get(dicts[n], STR(keybuf))) != 0) {
 		if (*value == 0) {
 		    msg_warn("table %s:%s: key %s: empty string result is not allowed",
@@ -421,12 +432,12 @@ static int postmap_queries(VSTREAM *in, char **maps, const int map_count,
 /* postmap_query - query a map and print the result to stdout */
 
 static int postmap_query(const char *map_type, const char *map_name,
-			         const char *key)
+			         const char *key, int dict_flags)
 {
     DICT   *dict;
     const char *value;
 
-    dict = dict_open3(map_type, map_name, O_RDONLY, DICT_FLAG_LOCK);
+    dict = dict_open3(map_type, map_name, O_RDONLY, dict_flags);
     if ((value = dict_get(dict, key)) != 0) {
 	if (*value == 0) {
 	    msg_warn("table %s:%s: key %s: empty string result is not allowed",
@@ -443,7 +454,8 @@ static int postmap_query(const char *map_type, const char *map_name,
 
 /* postmap_deletes - apply multiple requests from stdin */
 
-static int postmap_deletes(VSTREAM *in, char **maps, const int map_count)
+static int postmap_deletes(VSTREAM *in, char **maps, const int map_count,
+			           int dict_flags)
 {
     int     found = 0;
     VSTRING *keybuf = vstring_alloc(100);
@@ -463,8 +475,8 @@ static int postmap_deletes(VSTREAM *in, char **maps, const int map_count)
     dicts = (DICT **) mymalloc(sizeof(*dicts) * map_count);
     for (n = 0; n < map_count; n++)
 	dicts[n] = ((map_name = split_at(maps[n], ':')) != 0 ?
-		    dict_open3(maps[n], map_name, O_RDWR, DICT_FLAG_LOCK) :
-		  dict_open3(var_db_type, maps[n], O_RDWR, DICT_FLAG_LOCK));
+		    dict_open3(maps[n], map_name, O_RDWR, dict_flags) :
+		    dict_open3(var_db_type, maps[n], O_RDWR, dict_flags));
 
     /*
      * Perform all requests.
@@ -488,12 +500,12 @@ static int postmap_deletes(VSTREAM *in, char **maps, const int map_count)
 /* postmap_delete - delete a (key, value) pair from a map */
 
 static int postmap_delete(const char *map_type, const char *map_name,
-			          const char *key)
+			          const char *key, int dict_flags)
 {
     DICT   *dict;
     int     status;
 
-    dict = dict_open3(map_type, map_name, O_RDWR, DICT_FLAG_LOCK);
+    dict = dict_open3(map_type, map_name, O_RDWR, dict_flags);
     status = dict_del(dict, key);
     dict_close(dict);
     return (status == 0);
@@ -501,14 +513,15 @@ static int postmap_delete(const char *map_type, const char *map_name,
 
 /* postmap_seq - print all map entries to stdout */
 
-static void postmap_seq(const char *map_type, const char *map_name)
+static void postmap_seq(const char *map_type, const char *map_name,
+			        int dict_flags)
 {
     DICT   *dict;
     const char *key;
     const char *value;
     int     func;
 
-    dict = dict_open3(map_type, map_name, O_RDONLY, DICT_FLAG_LOCK);
+    dict = dict_open3(map_type, map_name, O_RDONLY, dict_flags);
     for (func = DICT_SEQ_FUN_FIRST; /* void */ ; func = DICT_SEQ_FUN_NEXT) {
 	if (dict_seq(dict, func, &key, &value) != 0)
 	    break;
@@ -535,6 +548,8 @@ static NORETURN usage(char *myname)
 	      myname);
 }
 
+MAIL_VERSION_STAMP_DECLARE;
+
 int     main(int argc, char **argv)
 {
     char   *path_name;
@@ -544,11 +559,16 @@ int     main(int argc, char **argv)
     struct stat st;
     int     postmap_flags = POSTMAP_FLAG_AS_OWNER | POSTMAP_FLAG_SAVE_PERM;
     int     open_flags = O_RDWR | O_CREAT | O_TRUNC;
-    int     dict_flags = DICT_FLAG_DUP_WARN | DICT_FLAG_FOLD_KEY;
+    int     dict_flags = DICT_FLAG_DUP_WARN | DICT_FLAG_FOLD_FIX;
     char   *query = 0;
     char   *delkey = 0;
     int     sequence = 0;
     int     found;
+
+    /*
+     * Fingerprint executables and core dumps.
+     */
+    MAIL_VERSION_STAMP_ALLOCATE;
 
     /*
      * Be consistent with file permissions.
@@ -603,7 +623,7 @@ int     main(int argc, char **argv)
 	    delkey = optarg;
 	    break;
 	case 'f':
-	    dict_flags &= ~DICT_FLAG_FOLD_KEY;
+	    dict_flags &= ~DICT_FLAG_FOLD_FIX;
 	    break;
 	case 'i':
 	    open_flags &= ~O_TRUNC;
@@ -642,6 +662,8 @@ int     main(int argc, char **argv)
 	}
     }
     mail_conf_read();
+    if (strcmp(var_syslog_name, DEF_SYSLOG_NAME) != 0)
+	msg_syslog_init(mail_task(argv[0]), LOG_PID, LOG_FACILITY);
     mail_dict_init();
 
     /*
@@ -652,13 +674,16 @@ int     main(int argc, char **argv)
 	if (optind + 1 > argc)
 	    usage(argv[0]);
 	if (strcmp(delkey, "-") == 0)
-	    exit(postmap_deletes(VSTREAM_IN, argv + optind, argc - optind) == 0);
+	    exit(postmap_deletes(VSTREAM_IN, argv + optind, argc - optind,
+				 dict_flags | DICT_FLAG_LOCK) == 0);
 	found = 0;
 	while (optind < argc) {
 	    if ((path_name = split_at(argv[optind], ':')) != 0) {
-		found |= postmap_delete(argv[optind], path_name, delkey);
+		found |= postmap_delete(argv[optind], path_name, delkey,
+					dict_flags | DICT_FLAG_LOCK);
 	    } else {
-		found |= postmap_delete(var_db_type, argv[optind], delkey);
+		found |= postmap_delete(var_db_type, argv[optind], delkey,
+					dict_flags | DICT_FLAG_LOCK);
 	    }
 	    optind++;
 	}
@@ -668,14 +693,14 @@ int     main(int argc, char **argv)
 	    usage(argv[0]);
 	if (strcmp(query, "-") == 0)
 	    exit(postmap_queries(VSTREAM_IN, argv + optind, argc - optind,
-				 dict_flags) == 0);
-	if (dict_flags & DICT_FLAG_FOLD_KEY)
-	    lowercase(query);
+				 dict_flags | DICT_FLAG_LOCK) == 0);
 	while (optind < argc) {
 	    if ((path_name = split_at(argv[optind], ':')) != 0) {
-		found = postmap_query(argv[optind], path_name, query);
+		found = postmap_query(argv[optind], path_name, query,
+				      dict_flags | DICT_FLAG_LOCK);
 	    } else {
-		found = postmap_query(var_db_type, argv[optind], query);
+		found = postmap_query(var_db_type, argv[optind], query,
+				      dict_flags | DICT_FLAG_LOCK);
 	    }
 	    if (found)
 		exit(0);
@@ -685,9 +710,11 @@ int     main(int argc, char **argv)
     } else if (sequence) {
 	while (optind < argc) {
 	    if ((path_name = split_at(argv[optind], ':')) != 0) {
-		postmap_seq(argv[optind], path_name);
+		postmap_seq(argv[optind], path_name,
+			    dict_flags | DICT_FLAG_LOCK);
 	    } else {
-		postmap_seq(var_db_type, argv[optind]);
+		postmap_seq(var_db_type, argv[optind],
+			    dict_flags | DICT_FLAG_LOCK);
 	    }
 	    exit(0);
 	}

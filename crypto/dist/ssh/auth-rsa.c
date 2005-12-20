@@ -1,4 +1,5 @@
-/*	$NetBSD: auth-rsa.c,v 1.5 2005/04/23 16:53:28 christos Exp $	*/
+/*	$NetBSD: auth-rsa.c,v 1.7 2006/09/28 21:22:14 christos Exp $	*/
+/* $OpenBSD: auth-rsa.c,v 1.71 2006/08/03 03:34:41 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -15,24 +16,34 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: auth-rsa.c,v 1.62 2004/12/11 01:48:56 dtucker Exp $");
-__RCSID("$NetBSD: auth-rsa.c,v 1.5 2005/04/23 16:53:28 christos Exp $");
+__RCSID("$NetBSD: auth-rsa.c,v 1.7 2006/09/28 21:22:14 christos Exp $");
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include <openssl/rsa.h>
 #include <openssl/md5.h>
 
+#include <pwd.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "xmalloc.h"
 #include "rsa.h"
 #include "packet.h"
-#include "xmalloc.h"
 #include "ssh1.h"
 #include "uidswap.h"
 #include "match.h"
+#include "buffer.h"
 #include "auth-options.h"
 #include "pathnames.h"
 #include "log.h"
 #include "servconf.h"
-#include "auth.h"
+#include "key.h"
 #include "hostfile.h"
+#include "auth.h"
+#ifdef GSSAPI
+#include "ssh-gss.h"
+#endif
 #include "monitor_wrap.h"
 #include "ssh.h"
 #include "misc.h"
@@ -139,7 +150,7 @@ auth_rsa_challenge_dialog(Key *key)
 	/* Wait for a response. */
 	packet_read_expect(SSH_CMSG_AUTH_RSA_RESPONSE);
 	for (i = 0; i < 16; i++)
-		response[i] = packet_get_char();
+		response[i] = (u_char)packet_get_char();
 	packet_check_eom();
 
 	success = PRIVSEP(auth_rsa_verify_response(key, challenge, response));
@@ -207,6 +218,7 @@ auth_rsa_key_allowed(struct passwd *pw, BIGNUM *client_n, Key **rkey)
 	while (read_keyfile_line(f, file, line, sizeof(line), &linenum) != -1) {
 		char *cp;
 		char *key_options;
+		int keybits;
 
 		/* Skip leading whitespace, empty and comment lines. */
 		for (cp = line; *cp == ' ' || *cp == '\t'; cp++)
@@ -245,7 +257,8 @@ auth_rsa_key_allowed(struct passwd *pw, BIGNUM *client_n, Key **rkey)
 			continue;
 
 		/* check the real bits  */
-		if (bits != BN_num_bits(key->rsa->n))
+		keybits = BN_num_bits(key->rsa->n);
+		if (keybits < 0 || bits != (u_int)keybits)
 			logit("Warning: %s, line %lu: keysize mismatch: "
 			    "actual %d vs. announced %d.",
 			    file, linenum, BN_num_bits(key->rsa->n), bits);

@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.36 2005/12/07 12:40:47 tsutsui Exp $
+#	$NetBSD: INSTALL,v 1.39 2006/10/02 03:28:30 chs Exp $
 #
 # INSTALL
 
@@ -33,7 +33,6 @@ options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 options 	USERCONF	# userconf(4) support
 options		PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
 #options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
-options 	MALLOC_NOINLINE		# Not inlining MALLOC saves memory
 
 # Diagnostic/debugging support options - XXX remove these at some point
 options 	DIAGNOSTIC	# cheap kernel consistency checks
@@ -195,11 +194,11 @@ pseudo-device	md		1	# memory disk device (ramdisk)
 
 # network pseudo-devices
 pseudo-device	loop 		1 	# network loopback
-pseudo-device	ppp		1 	# Point-to-Point Protocol
-pseudo-device	sl		1 	# Serial Line IP
+pseudo-device	ppp		 	# Point-to-Point Protocol
+pseudo-device	sl		 	# Serial Line IP
 
 # miscellaneous pseudo-devices
-pseudo-device	bpfilter	8	# Berkeley packet filter
+pseudo-device	bpfilter		# Berkeley packet filter
 pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
 
 pseudo-device	rnd			# /dev/random and in-kernel generator

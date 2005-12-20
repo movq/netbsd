@@ -1,4 +1,4 @@
-/*	$NetBSD: sis85c503.c,v 1.6 2005/12/11 12:17:44 christos Exp $	*/
+/*	$NetBSD: sis85c503.c,v 1.8 2006/11/16 01:32:39 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sis85c503.c,v 1.6 2005/12/11 12:17:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sis85c503.c,v 1.8 2006/11/16 01:32:39 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

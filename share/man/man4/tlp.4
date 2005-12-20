@@ -1,6 +1,6 @@
-.\"	$NetBSD: tlp.4,v 1.18 2005/09/09 14:11:39 drochner Exp $
+.\"	$NetBSD: tlp.4,v 1.24 2006/06/17 04:58:14 reed Exp $
 .\"
-.\" Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1999-2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -35,7 +35,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd June 23, 2005
+.Dd March 26, 2006
 .Dt TLP 4
 .Os
 .Sh NAME
@@ -45,11 +45,6 @@
 .Cd "tlp* at eisa? slot ?"
 .Cd "tlp* at pci? dev ? function ?"
 .Cd "tlp* at cardbus? function ?"
-.Pp
-.Cd "options TLP_MATCH_21040"
-.Cd "options TLP_MATCH_21041"
-.Cd "options TLP_MATCH_21140"
-.Cd "options TLP_MATCH_21142"
 .Pp
 Configuration of PHYs may also be necessary.
 See
@@ -332,7 +327,7 @@ into an aligned buffer, since the Ethernet header is 14 bytes long.
 This chip also supports ACPI power management.
 .Pp
 This chip is found in Xircom RealPort(tm) 10/100 CardBus Ethernet/Modem
-cards, as well as some Intel OEM'd RealPort(tm) cards.
+cards, as well as some Intel OEM'd RealPort(tm) and IBM Etherjet cards.
 .It
 .Em Davicom DM9102 and DM9102A
 -- These chips are 21104A-like with a few minor exceptions.
@@ -361,6 +356,13 @@ This chip also supports ACPI power management.
 .Pp
 A list of boards which include the AX88140A or the AX88141 is not
 yet available.
+.It
+.Em Conexant RS7112 (LANfinity)
+-- These chips are 21143 clones with coupled modem function.
+Media is provided
+by an IEEE 802.3u-compliant PHY connected to an MII interface.
+.Pp
+A list of boards which include the RS7112 is not yet available.
 .El
 .Sh MEDIA SELECTION
 Media selection done using
@@ -401,14 +403,14 @@ Refer to those manual pages for more information.
 .Re
 .Rs
 .%T "DECchip 21140 PCI Fast Ethernet LAN Controller Hardware Reference Manual"
-.%N Supercedes EC-Q0CA-TE
+.%N Supersedes EC-Q0CA-TE
 .%D May 1995
 .%A Digital Equipment Corporation
 .%O Order Number EC-Q0CB-TE
 .Re
 .Rs
 .%T "DECchip 21140A PCI Fast Ethernet LAN Controller Hardware Reference Manual"
-.%N Supercedes EC-QN7NA-TE, EC-QN7NB-TE
+.%N Supersedes EC-QN7NA-TE, EC-QN7NB-TE
 .%D January 1996
 .%A Digital Equipment Corporation
 .%O Order Number EC-QN7NC-TE
@@ -536,6 +538,12 @@ Refer to those manual pages for more information.
 .%A ASIX Electronics Co.
 .%O Document Number AX140D2.DOC
 .Re
+.Rs
+.%T "LANfinity - Home Networking Physical Layer Device with Integrated Analog Front End Circuitry"
+.%A Conexant Systems, Inc.
+.%N Revision A
+.%D March 12, 1999
+.Re
 .Sh HISTORY
 The
 .Nm
@@ -555,21 +563,10 @@ The author may be contacted at
 ASIX AX88140A and AX881401 support was added by
 .An Rui Paulo
 .Aq rpaulo@NetBSD.org .
-.Sh BUGS
-The
-.Nm
-driver does not match the DECchip 21040, 21041, 21140, 21142, and 21143
-chips on the PCI bus by default.
-That is because another driver,
-.Nm de ,
-which is more functional in some circumstances, exists for them.
-In order for support for these chips to be activated in
-.Nm tlp ,
-either
-.Nm de
-must be left out of the kernel, or the appropriate
-.Pa TLP_MATCH_*
-options must be used.
 .Pp
+Conexant RS7112 support was contributed by
+.An Frank Wille
+.Aq frank@phoenix.owl.de .
+.Sh BUGS
 Media autosense is not yet supported for any serial or PCS function media.
 It is, however, supported for IEEE 802.3u-compliant PHY media.

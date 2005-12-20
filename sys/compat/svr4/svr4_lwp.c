@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_lwp.c,v 1.10 2005/12/11 12:20:26 christos Exp $	*/
+/*	$NetBSD: svr4_lwp.c,v 1.13 2006/11/16 01:32:44 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_lwp.c,v 1.10 2005/12/11 12:20:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_lwp.c,v 1.13 2006/11/16 01:32:44 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -102,7 +102,7 @@ svr4_sys__lwp_create(l, v, retval)
 	/* XXX At the moment, svr4_ucontext_t and ucontext_t are the same */
 	SCARG(&lc, ucp) = (ucontext_t *)SCARG(uap, uc);
 	SCARG(&lc, flags) = flags;
-	SCARG(&lc, new_lwp) = SCARG(uap, lwpid);
+	SCARG(&lc, new_lwp) = (lwpid_t *)SCARG(uap, lwpid);
 
 
 	return sys__lwp_create(l, &lc, retval);
@@ -124,10 +124,7 @@ svr4_sys__lwp_kill(l, v, retval)
 }
 
 int
-svr4_sys__lwp_info(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+svr4_sys__lwp_info(struct lwp *l, void *v, register_t *retval)
 {
 	struct svr4_sys__lwp_info_args *uap = v;
 	struct svr4_lwpinfo lwpinfo;
@@ -144,10 +141,7 @@ svr4_sys__lwp_info(l, v, retval)
 }
 
 int
-svr4_sys__lwp_exit(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+svr4_sys__lwp_exit(struct lwp *l, void *v, register_t *retval)
 {
 
 	return sys__lwp_exit(l, NULL, retval);
@@ -163,7 +157,7 @@ svr4_sys__lwp_wait(l, v, retval)
 	struct sys__lwp_wait_args ap;
 
 	SCARG(&ap, wait_for) = SCARG(uap, wait_for);
-	SCARG(&ap, departed) = SCARG(uap, departed_lwp);
+	SCARG(&ap, departed) = (lwpid_t *)SCARG(uap, departed_lwp);
 
 	return sys__lwp_wait(l, &ap, retval);
 }
@@ -198,10 +192,7 @@ svr4_sys__lwp_continue(l, v, retval)
 }
 
 int
-svr4_sys__lwp_getprivate(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+svr4_sys__lwp_getprivate(struct lwp *l, void *v, register_t *retval)
 {
 	/* XXX NJWLWP: Replace with call to native version if we ever
 	 * implement that. */
@@ -211,10 +202,7 @@ svr4_sys__lwp_getprivate(l, v, retval)
 }
 
 int
-svr4_sys__lwp_setprivate(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+svr4_sys__lwp_setprivate(struct lwp *l, void *v, register_t *retval)
 {
 	struct svr4_sys__lwp_setprivate_args *uap = v;
 

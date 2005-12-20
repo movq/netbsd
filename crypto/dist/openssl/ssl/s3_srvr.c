@@ -164,7 +164,7 @@ IMPLEMENT_ssl3_meth_func(SSLv3_server_method,
 int ssl3_accept(SSL *s)
 	{
 	BUF_MEM *buf;
-	unsigned long l,Time=time(NULL);
+	unsigned long l,Time=(unsigned long)time(NULL);
 	void (*cb)(const SSL *ssl,int type,int val)=NULL;
 	long num1;
 	int ret= -1;
@@ -300,8 +300,9 @@ int ssl3_accept(SSL *s)
 
 		case SSL3_ST_SW_CERT_A:
 		case SSL3_ST_SW_CERT_B:
-			/* Check if it is anon DH or anon ECDH */
-			if (!(s->s3->tmp.new_cipher->algorithms & SSL_aNULL))
+			/* Check if it is anon DH or anon ECDH or KRB5 */
+			if (!(s->s3->tmp.new_cipher->algorithms & SSL_aNULL)
+				&& !(s->s3->tmp.new_cipher->algorithms & SSL_aKRB5))
 				{
 				ret=ssl3_send_server_certificate(s);
 				if (ret <= 0) goto end;
@@ -679,9 +680,9 @@ int ssl3_get_client_hello(SSL *s)
 	 */
 	if (s->state == SSL3_ST_SR_CLNT_HELLO_A)
 		{
-		s->first_packet=1;
 		s->state=SSL3_ST_SR_CLNT_HELLO_B;
 		}
+	s->first_packet=1;
 	n=s->method->ssl_get_message(s,
 		SSL3_ST_SR_CLNT_HELLO_B,
 		SSL3_ST_SR_CLNT_HELLO_C,
@@ -690,6 +691,7 @@ int ssl3_get_client_hello(SSL *s)
 		&ok);
 
 	if (!ok) return((int)n);
+	s->first_packet=0;
 	d=p=(unsigned char *)s->init_msg;
 
 	/* use version from inside client hello, not from record header
@@ -1038,7 +1040,7 @@ int ssl3_send_server_hello(SSL *s)
 		{
 		buf=(unsigned char *)s->init_buf->data;
 		p=s->s3->server_random;
-		Time=time(NULL);			/* Time */
+		Time=(unsigned long)time(NULL);			/* Time */
 		l2n(Time,p);
 		if (RAND_pseudo_bytes(p,SSL3_RANDOM_SIZE-4) <= 0)
 			return -1;
@@ -1366,11 +1368,11 @@ int ssl3_send_server_key_exchange(SSL *s)
 
 			/* XXX: For now, we only support named (not 
 			 * generic) curves in ECDH ephemeral key exchanges.
-			 * In this situation, we need three additional bytes
+			 * In this situation, we need four additional bytes
 			 * to encode the entire ServerECDHParams
 			 * structure. 
 			 */
-			n = 3 + encodedlen;
+			n = 4 + encodedlen;
 
 			/* We'll generate the serverKeyExchange message
 			 * explicitly so we can set these to NULLs
@@ -1378,6 +1380,7 @@ int ssl3_send_server_key_exchange(SSL *s)
 			r[0]=NULL;
 			r[1]=NULL;
 			r[2]=NULL;
+			r[3]=NULL;
 			}
 		else 
 #endif /* !OPENSSL_NO_ECDH */
@@ -1428,11 +1431,13 @@ int ssl3_send_server_key_exchange(SSL *s)
 			{
 			/* XXX: For now, we only support named (not generic) curves.
 			 * In this situation, the serverKeyExchange message has:
-			 * [1 byte CurveType], [1 byte CurveName]
+			 * [1 byte CurveType], [2 byte CurveName]
 			 * [1 byte length of encoded point], followed by
 			 * the actual encoded point itself
 			 */
 			*p = NAMED_CURVE_TYPE;
+			p += 1;
+			*p = 0;
 			p += 1;
 			*p = curve_id;
 			p += 1;
@@ -1636,23 +1641,6 @@ int ssl3_send_certificate_request(SSL *s)
 err:
 	return(-1);
 	}
-
-
-#ifndef OPENSSL_NO_ECDH
-static const int KDF1_SHA1_len = 20;
-static void *KDF1_SHA1(const void *in, size_t inlen, void *out, size_t *outlen)
-	{
-#ifndef OPENSSL_NO_SHA
-	if (*outlen < SHA_DIGEST_LENGTH)
-		return NULL;
-	else
-		*outlen = SHA_DIGEST_LENGTH;
-	return SHA1(in, inlen, out);
-#else
-	return NULL;
-#endif	/* OPENSSL_NO_SHA */
-	}
-#endif	/* OPENSSL_NO_ECDH */
 
 int ssl3_get_client_key_exchange(SSL *s)
 	{
@@ -2009,6 +1997,25 @@ int ssl3_get_client_key_exchange(SSL *s)
 				SSL_R_DATA_LENGTH_TOO_LONG);
 			goto err;
 			}
+		if (!((p[0] == (s->client_version>>8)) && (p[1] == (s->client_version & 0xff))))
+		    {
+		    /* The premaster secret must contain the same version number as the
+		     * ClientHello to detect version rollback attacks (strangely, the
+		     * protocol does not offer such protection for DH ciphersuites).
+		     * However, buggy clients exist that send random bytes instead of
+		     * the protocol version.
+		     * If SSL_OP_TLS_ROLLBACK_BUG is set, tolerate such clients. 
+		     * (Perhaps we should have a separate BUG value for the Kerberos cipher)
+		     */
+		    if (!((s->options & SSL_OP_TLS_ROLLBACK_BUG) &&
+			   (p[0] == (s->version>>8)) && (p[1] == (s->version & 0xff))))
+		        {
+			SSLerr(SSL_F_SSL3_GET_CLIENT_KEY_EXCHANGE,
+			       SSL_AD_DECODE_ERROR);
+			goto err;
+			}
+		    }
+
 		EVP_CIPHER_CTX_cleanup(&ciph_ctx);
 
                 s->session->master_key_length=
@@ -2017,7 +2024,7 @@ int ssl3_get_client_key_exchange(SSL *s)
 
                 if (kssl_ctx->client_princ)
                         {
-                        int len = strlen(kssl_ctx->client_princ);
+                        size_t len = strlen(kssl_ctx->client_princ);
                         if ( len < SSL_MAX_KRB5_PRINCIPAL_LENGTH ) 
                                 {
                                 s->session->krb5_client_princ_len = len;
@@ -2056,7 +2063,7 @@ int ssl3_get_client_key_exchange(SSL *s)
 		if (l & SSL_kECDH) 
 			{ 
                         /* use the certificate */
-			tkey = s->cert->key->privatekey->pkey.ec;
+			tkey = s->cert->pkeys[SSL_PKEY_ECC].privatekey->pkey.ec;
 			}
 		else
 			{
@@ -2116,8 +2123,13 @@ int ssl3_get_client_key_exchange(SSL *s)
                            	goto f_err;
                            	}
 
-			EC_POINT_copy(clnt_ecpoint,
-			    EC_KEY_get0_public_key(clnt_pub_pkey->pkey.ec));
+			if (EC_POINT_copy(clnt_ecpoint,
+			    EC_KEY_get0_public_key(clnt_pub_pkey->pkey.ec)) == 0)
+				{
+				SSLerr(SSL_F_SSL3_GET_CLIENT_KEY_EXCHANGE,
+					ERR_R_EC_LIB);
+				goto err;
+				}
                         ret = 2; /* Skip certificate verify processing */
                         }
                 else
@@ -2156,14 +2168,7 @@ int ssl3_get_client_key_exchange(SSL *s)
 			       ERR_R_ECDH_LIB);
 			goto err;
 			}
-		/* If field size is not more than 24 octets, then use SHA-1 hash of result;
-		 * otherwise, use result (see section 4.8 of draft-ietf-tls-ecc-03.txt;
-		 * this is new with this version of the Internet Draft).
-		 */
-		if (field_size <= 24 * 8)
-		    i = ECDH_compute_key(p, KDF1_SHA1_len, clnt_ecpoint, srvr_ecdh, KDF1_SHA1);
-		else
-		    i = ECDH_compute_key(p, (field_size+7)/8, clnt_ecpoint, srvr_ecdh, NULL);
+		i = ECDH_compute_key(p, (field_size+7)/8, clnt_ecpoint, srvr_ecdh, NULL);
                 if (i <= 0)
                         {
                         SSLerr(SSL_F_SSL3_GET_CLIENT_KEY_EXCHANGE,

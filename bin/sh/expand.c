@@ -1,4 +1,4 @@
-/*	$NetBSD: expand.c,v 1.72 2005/12/13 17:44:18 dsl Exp $	*/
+/*	$NetBSD: expand.c,v 1.77.2.1 2007/04/16 19:33:51 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)expand.c	8.5 (Berkeley) 5/15/95";
 #else
-__RCSID("$NetBSD: expand.c,v 1.72 2005/12/13 17:44:18 dsl Exp $");
+__RCSID("$NetBSD: expand.c,v 1.77.2.1 2007/04/16 19:33:51 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -352,7 +352,8 @@ void
 expari(int flag)
 {
 	char *p, *start;
-	int result;
+	intmax_t result;
+	int adjustment;
 	int begoff;
 	int quotes = flag & (EXP_FULL | EXP_CASE);
 	int quoted;
@@ -369,10 +370,9 @@ expari(int flag)
 	 * have to rescan starting from the beginning since CTLESC
 	 * characters have to be processed left to right.
 	 */
-#if INT_MAX / 1000000000 >= 10 || INT_MIN / 1000000000 <= -10
-#error "integers with more than 10 digits are not supported"
-#endif
-	CHECKSTRSPACE(12 - 2, expdest);
+/* SPACE_NEEDED is enough for all digits, plus possible "-", plus 2 (why?) */
+#define SPACE_NEEDED ((sizeof(intmax_t) * CHAR_BIT + 2) / 3 + 1 + 2)
+	CHECKSTRSPACE(SPACE_NEEDED - 2, expdest);
 	USTPUTC('\0', expdest);
 	start = stackblock();
 	p = expdest - 1;
@@ -394,15 +394,15 @@ expari(int flag)
 	if (quotes)
 		rmescapes(p+2);
 	result = arith(p+2);
-	fmtstr(p, 12, "%d", result);
+	fmtstr(p, SPACE_NEEDED, "%"PRIdMAX, result);
 
 	while (*p++)
 		;
 
 	if (quoted == 0)
 		recordregion(begoff, p - 1 - start, 0);
-	result = expdest - p + 1;
-	STADJUST(-result, expdest);
+	adjustment = expdest - p + 1;
+	STADJUST(-adjustment, expdest);
 }
 
 
@@ -510,8 +510,6 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 		amount = startp - expdest;
 		STADJUST(amount, expdest);
 		varflags &= ~VSNUL;
-		if (c != 0)
-			*loc = c;
 		return 1;
 
 	case VSQUESTION:
@@ -703,7 +701,7 @@ again: /* jump here after setting a variable with ${var=text} */
 		        argstr(p, flag | (apply_ifs ? EXP_IFS_SPLIT : 0));
 			/*
 			 * ${x-a b c} doesn't get split, but removing the
-			 * 'apply_ifs = 0' apparantly breaks ${1+"$@"}..
+			 * 'apply_ifs = 0' apparently breaks ${1+"$@"}..
 			 * ${x-'a b' c} should generate 2 args.
 			 */
 			/* We should have marked stuff already */
@@ -875,6 +873,7 @@ numvar:
 			for (ap = shellparam.p ; (p = *ap++) != NULL ; ) {
 				STRTODEST(p);
 				if (*ap)
+					/* A NUL separates args inside "" */
 					STPUTC('\0', expdest);
 			}
 			break;
@@ -955,11 +954,9 @@ ifsbreakup(char *string, struct arglist *arglist)
 	char *q;
 	const char *ifs;
 	const char *ifsspc;
-	int inquotes;
+	int had_param_ch = 0;
 
 	start = string;
-	ifsspc = NULL;
-	inquotes = 0;
 
 	if (ifslastp == NULL) {
 		/* Return entire argument, IFS doesn't apply to any of it */
@@ -974,23 +971,24 @@ ifsbreakup(char *string, struct arglist *arglist)
 
 	for (ifsp = &ifsfirst; ifsp != NULL; ifsp = ifsp->next) {
 		p = string + ifsp->begoff;
-		inquotes = ifsp->inquotes;
-		ifsspc = NULL;
 		while (p < string + ifsp->endoff) {
+			had_param_ch = 1;
 			q = p;
 			if (*p == CTLESC)
 				p++;
-			if (inquotes) {
-				/* Only NULs (probably from "$@") end args */
+			if (ifsp->inquotes) {
+				/* Only NULs (should be from "$@") end args */
 				if (*p != 0) {
 					p++;
 					continue;
 				}
+				ifsspc = NULL;
 			} else {
 				if (!strchr(ifs, *p)) {
 					p++;
 					continue;
 				}
+				had_param_ch = 0;
 				ifsspc = strchr(" \t\n", *p);
 
 				/* Ignore IFS whitespace at start */
@@ -1036,7 +1034,7 @@ ifsbreakup(char *string, struct arglist *arglist)
 	 * Some recent clarification of the Posix spec say that it
 	 * should only generate one....
 	 */
-	if (*start /* || (!ifsspc && start > string) */) {
+	if (had_param_ch || *start != 0) {
 		sp = (struct strlist *)stalloc(sizeof *sp);
 		sp->text = start;
 		*arglist->lastp = sp;

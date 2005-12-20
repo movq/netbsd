@@ -1,4 +1,4 @@
-/*	$NetBSD: viper_machdep.c,v 1.2 2005/12/11 12:17:11 christos Exp $	*/
+/*	$NetBSD: viper_machdep.c,v 1.6 2006/11/24 22:04:22 wiz Exp $	*/
 
 /*
  * Startup routines for the Arcom Viper.  Below you can trace the
@@ -112,7 +112,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: viper_machdep.c,v 1.2 2005/12/11 12:17:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: viper_machdep.c,v 1.6 2006/11/24 22:04:22 wiz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -241,7 +241,6 @@ struct user *proc0paddr;
 
 #if 0
 void	process_kernel_args(char *);
-void	parse_mi_bootargs(char *args);
 #endif
 
 void	consinit(void);
@@ -413,7 +412,7 @@ initarm(void *arg)
 	/* Register devmap for devices we mapped in start */
 	pmap_devmap_register(viper_devmap);
 
-	/* start 32.768KHz OSC */
+	/* start 32.768 kHz OSC */
 	ioreg_write(VIPER_CLKMAN_VBASE + 0x08, 2);
 	/* Get ready for splfoo() */
 	pxa2x0_intr_bootstrap(VIPER_INTCTL_VBASE);
@@ -458,7 +457,7 @@ initarm(void *arg)
 	printf("initarm: Configuring system ...\n");
 
 	/* Fake bootconfig structure for the benefit of pmap.c */
-	/* XXX must make the memory description h/w independant */
+	/* XXX must make the memory description h/w independent */
 	bootconfig.dramblocks = 1;
 	bootconfig.dram[0].address = MEMSTART;
 	bootconfig.dram[0].pages = MEMSIZE / PAGE_SIZE;
@@ -534,6 +533,7 @@ initarm(void *arg)
 
 	loop1 = 0;
 	kernel_l1pt.pv_pa = 0;
+	kernel_l1pt.pv_va = 0;
 	for (loop = 0; loop <= NUM_KERNEL_PTS; ++loop) {
 		/* Are we 16KB aligned for an L1 ? */
 		if (((physical_freeend - L1_TABLE_SIZE) & (L1_TABLE_SIZE - 1)) == 0

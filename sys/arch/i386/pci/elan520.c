@@ -1,4 +1,4 @@
-/*	$NetBSD: elan520.c,v 1.12 2005/12/11 12:17:43 christos Exp $	*/
+/*	$NetBSD: elan520.c,v 1.16 2006/11/16 01:32:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -47,7 +47,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: elan520.c,v 1.12 2005/12/11 12:17:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: elan520.c,v 1.16 2006/11/16 01:32:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -210,7 +210,8 @@ elansc_wdog_tickle(struct sysmon_wdog *smw)
 }
 
 static int
-elansc_match(struct device *parent, struct cfdata *match, void *aux)
+elansc_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -242,19 +243,21 @@ elansc_attach(struct device *parent, struct device *self, void *aux)
 	uint16_t data;
 #endif
 
-	printf(": AMD Elan SC520 System Controller\n");
+	aprint_naive(": System Controller\n");
+	aprint_normal(": AMD Elan SC520 System Controller\n");
 
 	sc->sc_memt = pa->pa_memt;
 	if (bus_space_map(sc->sc_memt, MMCR_BASE_ADDR, PAGE_SIZE, 0,
 	    &sc->sc_memh) != 0) {
-		printf("%s: unable to map registers\n", sc->sc_dev.dv_xname);
+		aprint_error("%s: unable to map registers\n",
+		    sc->sc_dev.dv_xname);
 		return;
 	}
 
 	rev = bus_space_read_2(sc->sc_memt, sc->sc_memh, MMCR_REVID);
 	cpuctl = bus_space_read_1(sc->sc_memt, sc->sc_memh, MMCR_CPUCTL);
 
-	printf("%s: product %d stepping %d.%d, CPU clock %s\n",
+	aprint_normal("%s: product %d stepping %d.%d, CPU clock %s\n",
 	    sc->sc_dev.dv_xname,
 	    (rev & REVID_PRODID) >> REVID_PRODID_SHIFT,
 	    (rev & REVID_MAJSTEP) >> REVID_MAJSTEP_SHIFT,
@@ -284,7 +287,8 @@ elansc_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	ressta = bus_space_read_1(sc->sc_memt, sc->sc_memh, MMCR_RESSTA);
 	if (ressta & RESSTA_WDT_RST_DET)
-		printf("%s: WARNING: LAST RESET DUE TO WATCHDOG EXPIRATION!\n",
+		aprint_error(
+		    "%s: WARNING: LAST RESET DUE TO WATCHDOG EXPIRATION!\n",
 		    sc->sc_dev.dv_xname);
 	bus_space_write_1(sc->sc_memt, sc->sc_memh, MMCR_RESSTA, ressta);
 
@@ -297,7 +301,7 @@ elansc_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_smw.smw_tickle = elansc_wdog_tickle;
 	sc->sc_smw.smw_period = 32;	/* actually 32.54 */
 	if (sysmon_wdog_register(&sc->sc_smw) != 0)
-		printf("%s: unable to register watchdog with sysmon\n",
+		aprint_error("%s: unable to register watchdog with sysmon\n",
 		    sc->sc_dev.dv_xname);
 
 	/* Set up the watchdog registers with some defaults. */
@@ -351,7 +355,7 @@ elansc_gpio_pin_read(void *arg, int pin)
 {
 	struct elansc_softc *sc = arg;
 	int reg, shift;
-	u_int16_t data;
+	uint16_t data;
 
 	reg = (pin < 16 ? MMCR_PIODATA15_0 : MMCR_PIODATA31_16);
 	shift = pin % 16;
@@ -365,7 +369,7 @@ elansc_gpio_pin_write(void *arg, int pin, int value)
 {
 	struct elansc_softc *sc = arg;
 	int reg, shift;
-	u_int16_t data;
+	uint16_t data;
 
 	reg = (pin < 16 ? MMCR_PIODATA15_0 : MMCR_PIODATA31_16);
 	shift = pin % 16;
@@ -383,7 +387,7 @@ elansc_gpio_pin_ctl(void *arg, int pin, int flags)
 {
 	struct elansc_softc *sc = arg;
 	int reg, shift;
-	u_int16_t data;
+	uint16_t data;
 
 	reg = (pin < 16 ? MMCR_PIODIR15_0 : MMCR_PIODIR31_16);
 	shift = pin % 16;

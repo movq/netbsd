@@ -1,4 +1,4 @@
-/*	$NetBSD: pcib.c,v 1.14 2005/12/11 12:18:47 christos Exp $	*/
+/*	$NetBSD: pcib.c,v 1.18.6.1 2007/04/28 18:07:15 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.14 2005/12/11 12:18:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.18.6.1 2007/04/28 18:07:15 bouyer Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -45,6 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: pcib.c,v 1.14 2005/12/11 12:18:47 christos Exp $");
 #include <sys/device.h>
 
 #include <machine/bus.h>
+#include <machine/residual.h>
 
 #include <dev/isa/isavar.h>
 
@@ -61,8 +62,11 @@ void	pcibattach(struct device *, struct device *, void *);
 
 struct pcib_softc {
 	struct device sc_dev;
-	struct prep_isa_chipset sc_chipset;
+	struct prep_isa_chipset *sc_chipset;
 };
+
+extern struct prep_isa_chipset prep_isa_chipset;
+extern struct prep_pci_chipset *prep_pct;
 
 CFATTACH_DECL(pcib, sizeof(struct pcib_softc),
     pcibmatch, pcibattach, NULL, NULL);
@@ -70,10 +74,7 @@ CFATTACH_DECL(pcib, sizeof(struct pcib_softc),
 void	pcib_callback(struct device *);
 
 int
-pcibmatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+pcibmatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -105,9 +106,7 @@ pcibmatch(parent, cf, aux)
 }
 
 void
-pcibattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+pcibattach(struct device *parent, struct device *self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	char devinfo[256];
@@ -140,17 +139,66 @@ pcibattach(parent, self, aux)
 			printf("\n");
 		}
 	}
+
+	/*
+	 * If we have an 83C553F-G sitting on a RAVEN host bridge,
+	 * then we need to rewire some interrupts.
+	 * The IDE Interrupt Routing Control Register lives at 0x43,
+	 * and defaults to 0xEF, which means the primary controller
+	 * interrupts on ivr-14, and the secondary on ivr-15. We
+	 * reset it to 0xEE to fire them both at ivr-14.
+	 * We have to rewrite the interrupt map, because the bridge map told
+	 * us that the interrupt is MPIC 0, which is the bridge intr for
+	 * the 8259.
+	 * Additionally, sometimes the PCI Interrupt Routing Control Register
+	 * is improperly initialized, causing all sorts of wierd interrupt
+	 * issues on the machine.  The manual says it should default to
+	 * 0000h (index 45-44h) however it would appear that PPCBUG is
+	 * setting it up differently.  Reset it to 0000h.
+	 */
+
+	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_SYMPHONY &&
+	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_SYMPHONY_83C553 &&
+	    strcmp(res->VitalProductData.PrintableModel,
+		"000000000000000000000000000(e2)") == 0) {
+
+		prop_dictionary_t dict, devsub;
+		prop_number_t pinsub;
+		struct prep_pci_chipset_businfo *pbi;
+
+		v = pci_conf_read(pa->pa_pc, pa->pa_tag, 0x40) & 0x00ffffff;
+		v |= 0xee000000;
+		pci_conf_write(pa->pa_pc, pa->pa_tag, 0x40, v);
+
+		v = pci_conf_read(pa->pa_pc, pa->pa_tag, 0x44) & 0xffff0000;
+		pci_conf_write(pa->pa_pc, pa->pa_tag, 0x44, v);
+
+		pbi = SIMPLEQ_FIRST(&prep_pct->pc_pbi);
+		dict = prop_dictionary_get(pbi->pbi_properties,
+		    "prep-pci-intrmap");
+		devsub = prop_dictionary_get(dict, "devfunc-11");
+		pinsub = prop_number_create_integer(14);
+		prop_dictionary_set(devsub, "pin-A", pinsub);
+		prop_object_release(pinsub);
+		aprint_verbose("%s: setting pciide irq to 14\n",
+		    self->dv_xname);
+		/* irq 14 is level */
+		lvlmask = 0x0040;
+	}
+
 #if NISA > 0
-	/* Initialize interrupt controller */
-	init_icu(lvlmask);
+	/* if the lvlmask is different, reinitialize the icu, because we
+	 * set it to zero in mainbus_attach()
+	 */
+	if (lvlmask)
+		init_icu(lvlmask);
 #endif
 
 	config_defer(self, pcib_callback);
 }
 
 void
-pcib_callback(self)
-	struct device *self;
+pcib_callback(struct device *self)
 {
 	struct pcib_softc *sc = (struct pcib_softc *)self;
 #if NISA > 0
@@ -160,7 +208,8 @@ pcib_callback(self)
 	 * Attach the ISA bus behind this bridge.
 	 */
 	memset(&iba, 0, sizeof(iba));
-	iba.iba_ic = &sc->sc_chipset;
+	sc->sc_chipset = &prep_isa_chipset;
+	iba.iba_ic = sc->sc_chipset;
 	iba.iba_iot = &prep_isa_io_space_tag;
 	iba.iba_memt = &prep_isa_mem_space_tag;
 #if NISADMA > 0

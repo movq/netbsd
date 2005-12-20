@@ -1,4 +1,4 @@
-/*	$NetBSD: in_proto.c,v 1.71 2005/12/11 12:24:57 christos Exp $	*/
+/*	$NetBSD: in_proto.c,v 1.79 2006/11/23 04:07:07 rpaulo Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,12 +61,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.71 2005/12/11 12:24:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.79 2006/11/23 04:07:07 rpaulo Exp $");
 
 #include "opt_mrouting.h"
 #include "opt_eon.h"			/* ISO CLNL over IP */
 #include "opt_iso.h"			/* ISO TP tunneled over IP */
-#include "opt_ns.h"			/* NSIP: XNS tunneled over IP */
 #include "opt_inet.h"
 #include "opt_ipsec.h"
 #include "opt_pim.h"
@@ -86,6 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.71 2005/12/11 12:24:57 christos Exp $
 #include <netinet/ip.h>
 #include <netinet/ip_var.h>
 #include <netinet/ip_icmp.h>
+#include <netinet/in_ifattach.h>
 #include <netinet/in_pcb.h>
 #include <netinet/in_proto.h>
 
@@ -110,6 +110,7 @@ __KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.71 2005/12/11 12:24:57 christos Exp $
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
 #include <netinet/ip_encap.h>
+
 /*
  * TCP/IP protocol family: IP, ICMP, UDP, TCP.
  */
@@ -128,11 +129,6 @@ __KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.71 2005/12/11 12:24:57 christos Exp $
 #include <netipsec/key.h>
 #endif	/* FAST_IPSEC */
 
-#ifdef NSIP
-#include <netns/ns_var.h>
-#include <netns/idp_var.h>
-#endif /* NSIP */
-
 #ifdef TPIP
 #include <netiso/tp_param.h>
 #include <netiso/tp_var.h>
@@ -147,7 +143,15 @@ __KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.71 2005/12/11 12:24:57 christos Exp $
 #include <netinet/ip_gre.h>
 #endif
 
-#include "bridge.h"
+#include "carp.h"
+#if NCARP > 0
+#include <netinet/ip_carp.h>
+#endif
+
+#include "etherip.h"
+#if NETHERIP > 0
+#include <netinet/ip_etherip.h>
+#endif
 
 DOMAIN_DEFINE(inetdomain);	/* forward declare and add to link set */
 
@@ -155,17 +159,17 @@ const struct protosw inetsw[] = {
 { 0,		&inetdomain,	0,		0,
   0,		ip_output,	0,		0,
   0,
-  ip_init,	0,		ip_slowtimo,	ip_drain,	NULL
+  ip_init,	0,		ip_slowtimo,	ip_drain,
 },
 { SOCK_DGRAM,	&inetdomain,	IPPROTO_UDP,	PR_ATOMIC|PR_ADDR|PR_PURGEIF,
   udp_input,	0,		udp_ctlinput,	udp_ctloutput,
   udp_usrreq,
-  udp_init,	0,		0,		0,		NULL
+  udp_init,	0,		0,		0,
 },
 { SOCK_STREAM,	&inetdomain,	IPPROTO_TCP,	PR_CONNREQUIRED|PR_WANTRCVD|PR_LISTEN|PR_ABRTACPTDIS|PR_PURGEIF,
   tcp_input,	0,		tcp_ctlinput,	tcp_ctloutput,
   tcp_usrreq,
-  tcp_init,	0,		tcp_slowtimo,	tcp_drain,	NULL
+  tcp_init,	0,		tcp_slowtimo,	tcp_drain,
 },
 { SOCK_RAW,	&inetdomain,	IPPROTO_RAW,	PR_ATOMIC|PR_ADDR|PR_PURGEIF,
   rip_input,	rip_output,	rip_ctlinput,	rip_ctloutput,
@@ -175,44 +179,43 @@ const struct protosw inetsw[] = {
 { SOCK_RAW,	&inetdomain,	IPPROTO_ICMP,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
   icmp_input,	rip_output,	rip_ctlinput,	rip_ctloutput,
   rip_usrreq,
-  icmp_init,	0,		0,		0,		NULL
+  icmp_init,	0,		0,		0,
 },
 #ifdef IPSEC
 { SOCK_RAW,	&inetdomain,	IPPROTO_AH,	PR_ATOMIC|PR_ADDR,
   ah4_input,	0,	 	ah4_ctlinput,	0,
   0,
-  0,		0,		0,		0,		NULL
+  0,		0,		0,		0,
 },
 #ifdef IPSEC_ESP
 { SOCK_RAW,	&inetdomain,	IPPROTO_ESP,	PR_ATOMIC|PR_ADDR,
   esp4_input,
-	0,	 	esp4_ctlinput,	0,
+  0,	 	esp4_ctlinput,	0,
   0,
-  0,		0,		0,		0,		NULL
+  0,		0,		0,		0,
 },
 #endif
 { SOCK_RAW,	&inetdomain,	IPPROTO_IPCOMP,	PR_ATOMIC|PR_ADDR,
   ipcomp4_input,
- 0,	 	0,		0,
+  0,	 	0,		0,
   0,
-  0,		0,		0,		0,		NULL
+  0,		0,		0,		0,
 },
 #endif /* IPSEC */
 #ifdef FAST_IPSEC
 { SOCK_RAW,	&inetdomain,	IPPROTO_AH,	PR_ATOMIC|PR_ADDR,
   ipsec4_common_input,	0,	 	ah4_ctlinput,	0,
-  0,
-  0,		0,		0,		0,		NULL
+  0, 0,		0,		0,		0,
 },
 { SOCK_RAW,	&inetdomain,	IPPROTO_ESP,	PR_ATOMIC|PR_ADDR,
   ipsec4_common_input,    0,	 	esp4_ctlinput,	0,
   0,
-  0,		0,		0,		0,		NULL
+  0,		0,		0,		0,
 },
 { SOCK_RAW,	&inetdomain,	IPPROTO_IPCOMP,	PR_ATOMIC|PR_ADDR,
   ipsec4_common_input,    0,	 	0,		0,
   0,
-  0,		0,		0,		0,		NULL
+  0,		0,		0,		0,
 },
 #endif /* FAST_IPSEC */
 { SOCK_RAW,	&inetdomain,	IPPROTO_IPV4,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
@@ -227,11 +230,18 @@ const struct protosw inetsw[] = {
   encap_init,	0,		0,		0,
 },
 #endif /* INET6 */
-#if NBRIDGE > 0
+#if NETHERIP > 0
 { SOCK_RAW,	&inetdomain,	IPPROTO_ETHERIP,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
-  encap4_input,	rip_output,	rip_ctlinput,	rip_ctloutput,
+  ip_etherip_input,	rip_output,	rip_ctlinput,	rip_ctloutput,
   rip_usrreq,
-  encap_init,		0,		0,		0,
+  0,		0,		0,		0,
+},
+#endif
+#if NCARP > 0
+{ SOCK_RAW,	&inetdomain,	IPPROTO_CARP,	PR_ATOMIC|PR_ADDR,
+  carp_proto_input,	rip_output,	0,		rip_ctloutput,
+  rip_usrreq,
+  0,		0,		0,		0,
 },
 #endif
 #if NGRE > 0
@@ -281,13 +291,6 @@ const struct protosw inetsw[] = {
 },
 #endif /* EON */
 #endif /* ISO */
-#ifdef NSIP
-{ SOCK_RAW,	&inetdomain,	IPPROTO_IDP,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
-  idpip_input,	NULL,		nsip_ctlinput,	0,
-  rip_usrreq,
-  0,		0,		0,		0,
-},
-#endif /* NSIP */
 /* raw wildcard */
 { SOCK_RAW,	&inetdomain,	0,		PR_ATOMIC|PR_ADDR|PR_LASTHDR,
   rip_input,	rip_output,	rip_ctlinput,	rip_ctloutput,
@@ -296,10 +299,23 @@ const struct protosw inetsw[] = {
 },
 };
 
-struct domain inetdomain =
-    { PF_INET, "internet", 0, 0, 0,
-      inetsw, &inetsw[sizeof(inetsw)/sizeof(inetsw[0])],
-      rn_inithead, 32, sizeof(struct sockaddr_in) };
+extern struct ifqueue ipintrq;
+
+struct domain inetdomain = {
+    PF_INET, "internet", 0, 0, 0,
+    inetsw, &inetsw[sizeof(inetsw)/sizeof(inetsw[0])],
+    rn_inithead, 32, sizeof(struct sockaddr_in),
+#ifdef IPSELSRC
+      in_domifattach,
+      in_domifdetach,
+#else
+      NULL,
+      NULL,
+#endif
+    { &ipintrq, NULL },
+    { NULL },
+    MOWNER_INIT("",""),
+};
 
 u_char	ip_protox[IPPROTO_MAX];
 

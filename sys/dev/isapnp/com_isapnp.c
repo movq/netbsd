@@ -1,4 +1,4 @@
-/*	$NetBSD: com_isapnp.c,v 1.22 2005/12/11 12:22:16 christos Exp $	*/
+/*	$NetBSD: com_isapnp.c,v 1.26 2006/11/16 01:33:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_isapnp.c,v 1.22 2005/12/11 12:22:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_isapnp.c,v 1.26 2006/11/16 01:33:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,6 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: com_isapnp.c,v 1.22 2005/12/11 12:22:16 christos Exp
 #include <dev/isapnp/isapnpdevs.h>
 
 #include <dev/ic/comvar.h>
+#include <dev/ic/comreg.h>
 
 struct com_isapnp_softc {
 	struct	com_softc sc_com;	/* real "com" softc */
@@ -73,10 +74,8 @@ CFATTACH_DECL(com_isapnp, sizeof(struct com_isapnp_softc),
     com_isapnp_match, com_isapnp_attach, NULL, NULL);
 
 int
-com_isapnp_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+com_isapnp_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	int pri, variant;
 
@@ -87,11 +86,10 @@ com_isapnp_match(parent, match, aux)
 }
 
 void
-com_isapnp_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+com_isapnp_attach(struct device *parent, struct device *self,
+    void *aux)
 {
-	struct com_isapnp_softc *isc = (void *)self;
+	struct com_isapnp_softc *isc = device_private(self);
 	struct com_softc *sc = &isc->sc_com;
 	struct isapnp_attach_args *ipa = aux;
 
@@ -101,14 +99,13 @@ com_isapnp_attach(parent, self, aux)
 		return;
 	}
 
-	sc->sc_iot = ipa->ipa_iot;
-	sc->sc_iobase = ipa->ipa_io[0].base;
-	sc->sc_ioh = ipa->ipa_io[0].h;
+	COM_INIT_REGS(sc->sc_regs, ipa->ipa_iot, ipa->ipa_io[0].h,
+	    ipa->ipa_io[0].base);
 
 	/*
 	 * if the chip isn't something we recognise skip it.
 	 */
-	if (comprobe1(sc->sc_iot, sc->sc_ioh) == 0)
+	if (com_probe_subr(&sc->sc_regs) == 0)
 		return;
 
 	sc->sc_frequency = 115200 * 16; /* is that always right? */

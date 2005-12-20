@@ -1,4 +1,4 @@
-/*	$NetBSD: syn.c,v 1.6 2004/07/07 19:20:09 mycroft Exp $	*/
+/*	$NetBSD: syn.c,v 1.9 2006/10/16 00:07:32 christos Exp $	*/
 
 /*
  * shell parser (C version)
@@ -6,12 +6,13 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: syn.c,v 1.6 2004/07/07 19:20:09 mycroft Exp $");
+__RCSID("$NetBSD: syn.c,v 1.9 2006/10/16 00:07:32 christos Exp $");
 #endif
 
 
 #include "sh.h"
 #include "c_test.h"
+#include <assert.h>
 
 struct nesting_state {
 	int	start_token;	/* token than began nesting (eg, FOR) */
@@ -682,7 +683,7 @@ const	struct tokeninfo {
 #endif /* KSH */
 	/* and some special cases... */
 	{ "newline",	'\n',	FALSE },
-	{ 0 }
+	{ .name = NULL }
 };
 
 void
@@ -897,8 +898,12 @@ dbtestp_isa(te, meta)
 	if (ret) {
 		ACCEPT;
 		if (meta != TM_END) {
-			if (!save)
+			if (!save) {
+				assert(/* meta >= 0 && */
+				    meta < sizeof(dbtest_tokens) /
+				    sizeof(dbtest_tokens[0]));
 				save = wdcopy(dbtest_tokens[(int) meta], ATEMP);
+			}
 			XPput(*te->pos.av, save);
 		}
 	}

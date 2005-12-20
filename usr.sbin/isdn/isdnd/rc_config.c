@@ -27,7 +27,7 @@
  *	i4b daemon - config file processing
  *	-----------------------------------
  *
- *	$Id: rc_config.c,v 1.22 2004/05/06 21:13:28 martin Exp $ 
+ *	$Id: rc_config.c,v 1.24 2006/09/27 21:39:15 christos Exp $ 
  *
  * $FreeBSD$
  *
@@ -463,10 +463,12 @@ cfg_setval(int keyword)
 					DBGL(DL_RCCF, (logit(LL_DBG, "entry %d: initializing budget-callbacksfile %s", current_cfe->name, yylval.str)));
 					fclose(fp);
 					fp = fopen(yylval.str, "w");
-					if (fp != NULL)
+					if (fp != NULL) {
 						fprintf(fp, "%d %d %d", (int)time(NULL), (int)time(NULL), 0);
+						fclose(fp);
+					}
+				} else
 					fclose(fp);
-				}
 			}
 			else
 			{

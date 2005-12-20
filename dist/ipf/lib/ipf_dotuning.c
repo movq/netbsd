@@ -1,7 +1,15 @@
-/*	$NetBSD: ipf_dotuning.c,v 1.2 2005/06/11 12:31:40 darrenr Exp $	*/
+/*	$NetBSD: ipf_dotuning.c,v 1.3.4.2 2007/07/16 11:04:57 liamjfoy Exp $	*/
+
+/*
+ * Copyright (C) 2003-2005 by Darren Reed.
+ * 
+ * See the IPFILTER.LICENCE file for details on licencing.  
+ *   
+ * Id: ipf_dotuning.c,v 1.2.4.3 2006/06/16 17:21:02 darrenr Exp 
+ */     
 
 #include "ipf.h"
-#include "ipl.h"
+#include "netinet/ipl.h"
 #include <sys/ioctl.h>
 
 void ipf_dotuning(fd, tuneargs, iocfn)

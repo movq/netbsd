@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.43 2005/12/11 12:17:52 christos Exp $ */
+/* $NetBSD: machdep.c,v 1.47 2006/10/21 05:54:32 mrg Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.43 2005/12/11 12:17:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.47 2006/10/21 05:54:32 mrg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -226,7 +226,7 @@ consinit()
 
 #if NKSYMS || defined(DDB) || defined(LKM)
 	{
-		extern int end;
+		extern char end[];
 		extern int *esym;
 
 		ksyms_init(*(int *)&end, ((int *)&end) + 1, esym);
@@ -572,8 +572,10 @@ cpu_dumpconf()
 	if (dumpdev == NODEV)
 		return;
 	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL)
-		panic("dumpconf: bad dumpdev=0x%x", dumpdev);
+	if (bdev == NULL) {
+		dumpdev = NODEV;
+		return;
+	}
 	if (bdev->d_psize == NULL)
 		return;
 	nblks = (*bdev->d_psize)(dumpdev);
@@ -804,37 +806,6 @@ cpu_exec_aout_makecmds(l, epp)
 	return error;
 }
 
-/*
- * Return the best possible estimate of the time in the timeval
- * to which tvp points.	 Unfortunately, we can't read the hardware registers.
- * We guarantee that the time will be greater than the value obtained by a
- * previous call.
- */
-void
-microtime(tvp)
-	register struct timeval *tvp;
-{
-	int s = splclock();
-	static struct timeval lasttime;
-
-	*tvp = time;
-#ifdef notdef
-	tvp->tv_usec += clkread();
-	while (tvp->tv_usec >= 1000000) {
-		tvp->tv_sec++;
-		tvp->tv_usec -= 1000000;
-	}
-#endif
-	if (tvp->tv_sec == lasttime.tv_sec &&
-	    tvp->tv_usec <= lasttime.tv_usec &&
-	    (tvp->tv_usec = lasttime.tv_usec + 1) >= 1000000) {
-		tvp->tv_sec++;
-		tvp->tv_usec -= 1000000;
-	}
-	lasttime = *tvp;
-	splx(s);
-}
-
 #if 1
 
 struct consdev *cn_tab = &syscons;
@@ -865,14 +836,14 @@ struct consdev *cn_tab = &romcons;
 #define ROMPUTC(x) \
 ({					\
 	register _r;			\
-	asm volatile ("			\
+	__asm volatile ("			\
 		movc	%%vbr,%0	; \
 		movel	%0,%%sp@-	; \
 		clrl	%0		; \
 		movc	%0,%%vbr"	\
 		: "=r" (_r));		\
 	PUTC(x);			\
-	asm volatile ("			\
+	__asm volatile ("			\
 		movel	%%sp@+,%0	; \
 		movc	%0,%%vbr"	\
 		: "=r" (_r));		\
@@ -881,14 +852,14 @@ struct consdev *cn_tab = &romcons;
 #define ROMGETC() \
 ({					\
 	register _r, _c;		\
-	asm volatile ("			\
+	__asm volatile ("			\
 		movc	%%vbr,%0	; \
 		movel	%0,%%sp@-	; \
 		clrl	%0		; \
 		movc	%0,%%vbr"	\
 		: "=r" (_r));		\
 	_c = GETC();			\
-	asm volatile ("			\
+	__asm volatile ("			\
 		movel	%%sp@+,%0	; \
 		movc	%0,%%vbr"	\
 		: "=r" (_r));		\

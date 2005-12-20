@@ -1,4 +1,4 @@
-.\"     $NetBSD: buffercache.9,v 1.18 2005/11/30 16:01:26 yamt Exp $
+.\"     $NetBSD: buffercache.9,v 1.20 2006/10/04 11:35:47 pooka Exp $
 .\"
 .\" Copyright (c)2003 YAMAMOTO Takashi,
 .\" All rights reserved.
@@ -101,7 +101,7 @@
 .\"
 .\"
 .\" ------------------------------------------------------------
-.Dd December 1, 2005
+.Dd October 4, 2006
 .Dt BUFFERCACHE 9
 .Os
 .Sh NAME
@@ -125,15 +125,15 @@
 .In sys/buf.h
 .Ft int
 .Fn bread "struct vnode *vp" "daddr_t blkno" "int size" \
-"struct ucred *cred" "struct buf **bpp"
+"struct kauth_cred *cred" "struct buf **bpp"
 .Ft int
 .Fn breadn "struct vnode *vp" "daddr_t blkno" "int size" \
 "daddr_t rablks[]" "int rasizes[]" "int nrablks" \
-"struct ucred *cred" "struct buf **bpp"
+"struct kauth_cred *cred" "struct buf **bpp"
 .Ft int
 .Fn breada "struct vnode *vp" "daddr_t blkno" "int size" \
 "daddr_t rablkno" "int rabsize" \
-"struct ucred *cred" "struct buf **bpp"
+"struct kauth_cred *cred" "struct buf **bpp"
 .Ft int
 .Fn bwrite "struct buf *bp"
 .Ft void
@@ -372,3 +372,11 @@ In the current implementation,
 .Fn bread
 and its variants
 don't use a specified credential.
+.Pp
+Because
+.Fn biodone
+and
+.Fn biowait
+do not really belong to
+.Nm ,
+they shouldn't be documented here.

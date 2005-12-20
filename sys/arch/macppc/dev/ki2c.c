@@ -1,4 +1,4 @@
-/*	$NetBSD: ki2c.c,v 1.5 2005/12/11 12:18:03 christos Exp $	*/
+/*	$NetBSD: ki2c.c,v 1.8 2006/06/26 18:37:53 drochner Exp $	*/
 /*	Id: ki2c.c,v 1.7 2002/10/05 09:56:05 tsubai Exp	*/
 
 /*-
@@ -131,9 +131,8 @@ ki2c_attach(parent, self, aux)
 	sc->sc_i2c.ic_write_byte = NULL;
 	sc->sc_i2c.ic_exec = ki2c_i2c_exec;
 
-	iba.iba_name = "iic";
 	iba.iba_tag = &sc->sc_i2c;
-	(void) config_found(&sc->sc_dev, &iba, iicbus_print);
+	(void) config_found_ia(&sc->sc_dev, "i2cbus", &iba, iicbus_print);
 
 	/* 
 	 * newer OF puts I2C devices under 'i2c-bus' instead of attaching them 
@@ -164,7 +163,7 @@ ki2c_attach(parent, self, aux)
 		if (OF_getprop(child, "reg", reg, sizeof(reg))>0) {
 			ka.ka_addr = reg[0];
 			ka.ka_tag = &sc->sc_i2c;	
-			config_found(self, &ka, ki2c_print);
+			config_found_ia(self, "ki2c", &ka, ki2c_print);
 		}
 	}
 }
@@ -202,7 +201,7 @@ ki2c_writereg(sc, reg, val)
 	u_char *addr = sc->sc_reg + sc->sc_regstep * reg;
 
 	*addr = val;
-	asm volatile ("eieio");
+	__asm volatile ("eieio");
 	delay(10);
 }
 

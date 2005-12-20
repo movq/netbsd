@@ -1,4 +1,4 @@
-/*	$NetBSD: xform_ipip.c,v 1.12 2005/12/11 12:25:06 christos Exp $	*/
+/*	$NetBSD: xform_ipip.c,v 1.14.2.2 2007/10/31 12:39:29 liamjfoy Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/xform_ipip.c,v 1.3.2.1 2003/01/24 05:11:36 sam Exp $	*/
 /*	$OpenBSD: ip_ipip.c,v 1.25 2002/06/10 18:04:55 itojun Exp $ */
 
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xform_ipip.c,v 1.12 2005/12/11 12:25:06 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xform_ipip.c,v 1.14.2.2 2007/10/31 12:39:29 liamjfoy Exp $");
 
 /*
  * IP-inside-IP processing
@@ -422,11 +422,11 @@ _ipip_input(struct mbuf *m, int iphlen, struct ifnet *gifp)
 
 int
 ipip_output(
-	struct mbuf *m,
-	struct ipsecrequest *isr,
-	struct mbuf **mp,
-	int skip,
-	int protoff
+    struct mbuf *m,
+    struct ipsecrequest *isr,
+    struct mbuf **mp,
+    int skip,
+    int protoff
 )
 {
 	struct secasvar *sav;
@@ -510,9 +510,7 @@ ipip_output(
 			m_copydata(m, sizeof(struct ip) +
 			    offsetof(struct ip, ip_off),
 			    sizeof(u_int16_t), (caddr_t) &ipo->ip_off);
-			ipo->ip_off = ntohs(ipo->ip_off);
-			ipo->ip_off &= ~(IP_DF | IP_MF | IP_OFFMASK);
-			ipo->ip_off = htons(ipo->ip_off);
+			ipo->ip_off &= ~ IP_OFF_CONVERT(IP_DF | IP_MF | IP_OFFMASK);
 		}
 #ifdef INET6
 		else if (tp == (IPV6_VERSION >> 4)) {
@@ -666,7 +664,12 @@ ipe4_zeroize(struct secasvar *sav)
 }
 
 static int
-ipe4_input(struct mbuf *m, struct secasvar *sav, int skip, int protoff)
+ipe4_input(
+    struct mbuf *m,
+    struct secasvar *sav,
+    int skip,
+    int protoff
+)
 {
 	/* This is a rather serious mistake, so no conditional printing. */
 	printf("ipe4_input: should never be called\n");
@@ -678,29 +681,39 @@ ipe4_input(struct mbuf *m, struct secasvar *sav, int skip, int protoff)
 static struct xformsw ipe4_xformsw = {
 	XF_IP4,		0,		"IPv4 Simple Encapsulation",
 	ipe4_init,	ipe4_zeroize,	ipe4_input,	ipip_output,
+	NULL,
 };
 
+#ifdef INET
 extern struct domain inetdomain;
-static struct ipprotosw ipe4_protosw[] = {
-{ SOCK_RAW,	&inetdomain,	IPPROTO_IPV4,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
+static struct ipprotosw ipe4_protosw = {
+  SOCK_RAW,	&inetdomain,	IPPROTO_IPV4,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
   ip4_input,	0, 		0,		rip_ctloutput,
   rip_usrreq,
   0,		0,		0,		0,
-},
-#ifdef INET6
-{ SOCK_RAW,	&inetdomain,	IPPROTO_IPV6,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
-  ip4_input,	0,	 	0,		rip_ctloutput,
-  rip_usrreq,
-  0,		0,		0,		0,
-},
-#endif
 };
+#endif
+#ifdef INET6
+extern struct domain inet6domain;
+static struct ip6protosw ipe4_protosw6 = {
+ SOCK_RAW,     &inet6domain,   IPPROTO_IPV6,PR_ATOMIC|PR_ADDR|PR_LASTHDR,
+ ip4_input6,	0,	0, 	rip6_ctloutput,
+ rip6_usrreq,
+ 0,	0,	0,	0,
+};
+#endif
+
+#endif /* FAST_IPSEC */
 
 /*
  * Check the encapsulated packet to see if we want it
  */
 static int
-ipe4_encapcheck(struct mbuf *m, int off, int proto, void *arg)
+ipe4_encapcheck(struct mbuf *m,
+    int off,
+    int proto,
+    void *arg
+)
 {
 	/*
 	 * Only take packets coming from IPSEC tunnels; the rest
@@ -717,11 +730,13 @@ ipe4_attach(void)
 	xform_register(&ipe4_xformsw);
 	/* attach to encapsulation framework */
 	/* XXX save return cookie for detach on module remove */
+#ifdef INET
 	(void) encap_attach_func(AF_INET, -1,
-		ipe4_encapcheck, (struct protosw*) &ipe4_protosw[0], NULL);
+		ipe4_encapcheck, (struct protosw*) &ipe4_protosw, NULL);
+#endif
 #ifdef INET6
 	(void) encap_attach_func(AF_INET6, -1,
-		ipe4_encapcheck, (struct protosw*) &ipe4_protosw[1], NULL);
+		ipe4_encapcheck, (struct protosw*) &ipe4_protosw6, NULL);
 #endif
 }
 
@@ -729,4 +744,3 @@ ipe4_attach(void)
 SYSINIT(ipe4_xform_init, SI_SUB_PROTO_DOMAIN, SI_ORDER_MIDDLE, ipe4_attach, NULL);
 #endif
 
-#endif	/* FAST_IPSEC */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ld.c,v 1.39 2005/12/11 12:20:53 christos Exp $	*/
+/*	$NetBSD: ld.c,v 1.42.2.3 2007/04/30 19:01:15 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.39 2005/12/11 12:20:53 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.42.2.3 2007/04/30 19:01:15 bouyer Exp $");
 
 #include "rnd.h"
 
@@ -69,11 +69,15 @@ __KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.39 2005/12/11 12:20:53 christos Exp $");
 
 #include <dev/ldvar.h>
 
+#include <prop/proplib.h>
+
 static void	ldgetdefaultlabel(struct ld_softc *, struct disklabel *);
 static void	ldgetdisklabel(struct ld_softc *);
 static void	ldminphys(struct buf *bp);
 static void	ldshutdown(void *);
 static void	ldstart(struct ld_softc *);
+static void	ld_set_properties(struct ld_softc *);
+static void	ld_config_interrupts (struct device *);
 
 extern struct	cfdriver ld_cd;
 
@@ -146,6 +150,8 @@ ldattach(struct ld_softc *sc)
 	    sc->sc_dv.dv_xname, tbuf, sc->sc_ncylinders, sc->sc_nheads,
 	    sc->sc_nsectors, sc->sc_secsize, sc->sc_secperunit);
 
+	ld_set_properties(sc);
+
 #if NRND > 0
 	/* Attach the device into the rnd source list. */
 	rnd_attach_source(&sc->sc_rnd_source, sc->sc_dv.dv_xname,
@@ -158,7 +164,7 @@ ldattach(struct ld_softc *sc)
 	bufq_alloc(&sc->sc_bufq, BUFQ_DISK_DEFAULT_STRAT, BUFQ_SORT_RAWBLOCK);
 
 	/* Discover wedges on this disk. */
-	dkwedge_discover(&sc->sc_dk);
+	config_interrupts(&sc->sc_dv, ld_config_interrupts);
 }
 
 int
@@ -224,7 +230,7 @@ ldenddetach(struct ld_softc *sc)
 
 	/* Nuke the vnodes for any open instances. */
 	for (i = 0; i < MAXPARTITIONS; i++) {
-		mn = DISKMINOR(sc->sc_dv.dv_unit, i);
+		mn = DISKMINOR(device_unit(&sc->sc_dv), i);
 		vdevgone(bmaj, mn, mn, VBLK);
 		vdevgone(cmaj, mn, mn, VCHR);
 	}
@@ -387,8 +393,12 @@ ldioctl(dev_t dev, u_long cmd, caddr_t addr, int32_t flag, struct lwp *l)
 	unit = DISKUNIT(dev);
 	part = DISKPART(dev);
 	sc = device_lookup(&ld_cd, unit);
-	error = 0;
 
+	error = disk_ioctl(&sc->sc_dk, cmd, addr, flag, l);
+	if (error != EPASSTHROUGH)
+		return (error);
+
+	error = 0;
 	switch (cmd) {
 	case DIOCGDINFO:
 		memcpy(addr, sc->sc_dk.dk_label, sizeof(struct disklabel));
@@ -709,8 +719,8 @@ ldgetdisklabel(struct ld_softc *sc)
 	ldgetdefaultlabel(sc, sc->sc_dk.dk_label);
 
 	/* Call the generic disklabel extraction routine. */
-	errstring = readdisklabel(MAKEDISKDEV(0, sc->sc_dv.dv_unit, RAW_PART),
-	    ldstrategy, sc->sc_dk.dk_label, sc->sc_dk.dk_cpulabel);
+	errstring = readdisklabel(MAKEDISKDEV(0, device_unit(&sc->sc_dv),
+	    RAW_PART), ldstrategy, sc->sc_dk.dk_label, sc->sc_dk.dk_cpulabel);
 	if (errstring != NULL)
 		printf("%s: %s\n", sc->sc_dv.dv_xname, errstring);
 
@@ -823,4 +833,52 @@ ldminphys(struct buf *bp)
 	if (bp->b_bcount > sc->sc_maxxfer)
 		bp->b_bcount = sc->sc_maxxfer;
 	minphys(bp);
+}
+
+static void
+ld_set_properties(struct ld_softc *ld)
+{
+	prop_dictionary_t disk_info, odisk_info, geom;
+
+	disk_info = prop_dictionary_create();
+
+	geom = prop_dictionary_create();
+
+	prop_dictionary_set_uint64(geom, "sectors-per-unit",
+	    ld->sc_secperunit);
+
+	prop_dictionary_set_uint32(geom, "sector-size",
+	    ld->sc_secsize);
+
+	prop_dictionary_set_uint16(geom, "sectors-per-track",
+	    ld->sc_nsectors);
+
+	prop_dictionary_set_uint16(geom, "tracks-per-cylinder",
+	    ld->sc_nheads);
+
+	prop_dictionary_set_uint64(geom, "cylinders-per-unit",
+	    ld->sc_ncylinders);
+
+	prop_dictionary_set(disk_info, "geometry", geom);
+	prop_object_release(geom);
+
+	prop_dictionary_set(device_properties(&ld->sc_dv),
+	    "disk-info", disk_info);
+
+	/*
+	 * Don't release disk_info here; we keep a reference to it.
+	 * disk_detach() will release it when we go away.
+	 */
+
+	odisk_info = ld->sc_dk.dk_info;
+	ld->sc_dk.dk_info = disk_info;
+	if (odisk_info)
+		prop_object_release(odisk_info);
+}
+
+static void
+ld_config_interrupts (struct device *d)
+{
+	struct ld_softc *sc = (struct ld_softc *)d;
+	dkwedge_discover(&sc->sc_dk);
 }

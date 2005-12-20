@@ -1,4 +1,4 @@
-/*	$NetBSD: obs200_machdep.c,v 1.2 2005/12/11 12:17:12 christos Exp $	*/
+/*	$NetBSD: obs200_machdep.c,v 1.5 2006/11/29 19:56:47 freza Exp $	*/
 /*	Original: machdep.c,v 1.3 2005/01/17 17:24:09 shige Exp	*/
 
 /*
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obs200_machdep.c,v 1.2 2005/12/11 12:17:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obs200_machdep.c,v 1.5 2006/11/29 19:56:47 freza Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
@@ -90,9 +90,15 @@ __KERNEL_RCSID(0, "$NetBSD: obs200_machdep.c,v 1.2 2005/12/11 12:17:12 christos 
 #include <machine/century_bios.h>
 #include <powerpc/spr.h>
 
+#include <dev/pci/pcivar.h>
+#include <dev/pci/pciconf.h>
+
 #include <powerpc/ibm4xx/dcr405gp.h>
 
 #include "ksyms.h"
+
+
+#define	TLB_PG_SIZE 	(16*1024*1024)
 
 /*
  * Global variables used here and there
@@ -114,6 +120,7 @@ initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
 {
 	u_int32_t pllmode;
 	u_int32_t psr;
+	vaddr_t va;
 	u_int memsize;
 
 	/* Disable all external interrupts */
@@ -125,14 +132,17 @@ initppc(u_int startkernel, u_int endkernel, char *args, void *info_block)
 	bios_board_init(info_block, startkernel);
 	memsize = bios_board_memsize_get();
 
+	/* Linear map kernel memory. */
+	for (va = 0; va < endkernel; va += TLB_PG_SIZE)
+		ppc4xx_tlb_reserve(va, va, TLB_PG_SIZE, TLB_EX);
+
+	/* Map console after physmem (see pmap_tlbmiss()). */
+	ppc4xx_tlb_reserve(OBS405_CONADDR, roundup(memsize, TLB_PG_SIZE),
+	    TLB_PG_SIZE, TLB_I | TLB_G);
+
 	/* Initialize IBM405GPr CPU */
 	ibm40x_memsize_init(memsize, startkernel);
 	ibm4xx_init((void (*)(void))ext_intr);
-
-	/*
-	 * Initialize console.
-	 */
-	consinit();
 
 	/*
 	 * Set the page size.
@@ -287,4 +297,89 @@ cpu_reboot(int howto, char *what)
 	while (1)
 		/* nothing */;
 #endif
+}
+
+int
+pci_intr_map(struct pci_attach_args *pa, pci_intr_handle_t *ihp)
+{
+	/*
+	 * We need to map the interrupt pin to the interrupt bit
+	 * in the UIC associated with it.
+	 *
+	 * This platform has 4 PCI devices.
+	 *
+	 # External IRQ Mappings:
+	 *  dev 7 (Ext IRQ3):	Realtek 8139 Ethernet
+	 *  dev 8 (Ext IRQ0):	PCI Connector
+	 */
+	static const int irqmap[15/*device*/][4/*pin*/] = {
+		{ -1, -1, -1, -1 },	/*  1: none */
+		{ -1, -1, -1, -1 },	/*  2: none */
+		{ -1, -1, -1, -1 },	/*  3: none */
+		{ -1, -1, -1, -1 },	/*  4: none */
+		{ -1, -1, -1, -1 },	/*  5: none */
+		{ -1, -1, -1, -1 },	/*  6: none */
+		{  3, -1, -1, -1 },	/*  7: none */
+		{  0, -1, -1, -1 },	/*  8: none */
+		{ -1, -1, -1, -1 },	/*  9: none */
+		{ -1, -1, -1, -1 },	/* 10: none */
+		{ -1, -1, -1, -1 },	/* 11: none */
+		{ -1, -1, -1, -1 },	/* 12: none */
+		{ -1, -1, -1, -1 },	/* 13: none */
+		{ -1, -1, -1, -1 },	/* 14: none */
+		{ -1, -1, -1, -1 },	/* 15: none */
+	};
+
+	int pin, dev, irq;
+
+	pin = pa->pa_intrpin;
+	dev = pa->pa_device;
+        *ihp = -1;
+
+	/* if interrupt pin not used... */
+	if (pin == 0)
+		return 1;
+
+	if (pin > 4) {
+		printf("pci_intr_map: bad interrupt pin %d\n", pin);
+		return 1;
+	}
+
+	if ((dev < 1) || (dev > 15)) {
+		printf("pci_intr_map: bad device %d\n", dev);
+		return 1;
+	}
+
+
+	if ((irq = irqmap[dev - 1][pin - 1]) == -1) {
+		printf("pci_intr_map: no IRQ routing for device %d pin %d\n",
+			dev, pin);
+		return 1;
+	}
+
+	*ihp = irq + 25;
+	return 0;
+}
+
+void
+pci_conf_interrupt(pci_chipset_tag_t pc, int bus, int dev, int pin,
+			int swiz, int *iline)
+{
+	static const int ilinemap[15/*device*/] = {
+		-1, -1, -1, -1,		/* device  1 -  4 */
+		-1, -1, 28, 25,		/* device  5 -  8 */
+		-1, -1, -1, -1,		/* device  9 - 12 */
+		-1, -1, -1,		/* device 13 - 15 */
+	};
+
+	if (bus == 0) {
+		if ((dev < 1) || (dev > 15)) {
+			printf("pci_intr_map: bad device %d\n", dev);
+			*iline = 0;
+			return;
+		}
+		*iline = ilinemap[dev - 1];
+        } else {
+		*iline = 19 + ((swiz + dev + 1) & 3);
+        }
 }

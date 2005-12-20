@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld.h,v 1.71 2004/07/05 11:50:07 cube Exp $	 */
+/*	$NetBSD: rtld.h,v 1.73.4.1 2007/09/27 13:44:48 xtraeme Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -35,6 +35,7 @@
 #define RTLD_H
 
 #include <dlfcn.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <sys/param.h>
 #include <sys/types.h>
@@ -64,11 +65,6 @@ extern int _rtld_pagesz;
  * C++ has mandated the use of the following keywords for its new boolean
  * type.  We might as well follow their lead.
  */
-typedef enum {
-	false = 0,
-	true = 1
-} bool;
-
 struct Struct_Obj_Entry;
 
 typedef struct Struct_Objlist_Entry {
@@ -221,7 +217,7 @@ int dladdr(const void *, Dl_info *);
 
 void _rtld_error(const char *, ...)
      __attribute__((__format__(__printf__,1,2)));
-void _rtld_die(void);
+void _rtld_die(void) __attribute__((__noreturn__));
 void *_rtld_objmain_sym(const char *);
 void _rtld_debug_state(void);
 void _rtld_linkmap_add(Obj_Entry *);
@@ -234,7 +230,7 @@ void _rtld_digest_dynamic(Obj_Entry *);
 Obj_Entry *_rtld_digest_phdr(const Elf_Phdr *, int, caddr_t);
 
 /* load.c */
-Obj_Entry *_rtld_load_object(char *, int);
+Obj_Entry *_rtld_load_object(const char *, int);
 int _rtld_load_needed_objects(Obj_Entry *, int);
 int _rtld_preload(const char *);
 
@@ -266,7 +262,7 @@ const Elf_Sym *_rtld_symlook_default(const char *, unsigned long,
     const Obj_Entry *, const Obj_Entry **, bool);
 
 /* map_object.c */
-Obj_Entry *_rtld_map_object(char *, int, const struct stat *);
+Obj_Entry *_rtld_map_object(const char *, int, const struct stat *);
 void _rtld_obj_free(Obj_Entry *);
 Obj_Entry *_rtld_obj_new(void);
 

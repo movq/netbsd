@@ -1,4 +1,4 @@
-/*	$NetBSD: term.h,v 1.16 2005/03/15 00:10:40 christos Exp $	*/
+/*	$NetBSD: term.h,v 1.18 2006/11/24 00:01:17 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -100,8 +100,10 @@ protected void	term_end(EditLine *);
 protected void	term_get(EditLine *, const char **);
 protected int	term_set(EditLine *, const char *);
 protected int	term_settc(EditLine *, int, const char **);
+protected int	term_gettc(EditLine *, int, char **);
 protected int	term_telltc(EditLine *, int, const char **);
 protected int	term_echotc(EditLine *, int, const char **);
+protected void	term_writec(EditLine *, int);
 protected int	term__putc(int);
 protected void	term__flush(void);
 

@@ -1,7 +1,7 @@
-/*	$NetBSD: platform.h,v 1.2 2004/11/07 01:13:32 christos Exp $	*/
+/*	$NetBSD: platform.h,v 1.3.4.1 2007/05/17 00:43:56 jdc Exp $	*/
 
 /*
- * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 2000, 2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -17,7 +17,9 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: platform.h.in,v 1.12.2.1.10.2 2004/08/28 06:25:26 marka Exp */
+/* Id: platform.h.in,v 1.14.18.5 2005/06/08 02:07:59 marka Exp */
+
+/*! \file */
 
 #ifndef LWRES_PLATFORM_H
 #define LWRES_PLATFORM_H 1
@@ -90,6 +92,16 @@
  */
 #undef LWRES_PLATFORM_NEEDSPRINTF
 
+/*
+ * The printf format string modifier to use with lwres_uint64_t values.
+ */
+#define LWRES_PLATFORM_QUADFORMAT "ll"
+
+/*! \brief
+ * Define if this system needs strtoul.
+ */
+#undef LWRES_PLATFORM_NEEDSTRTOUL
+
 #ifndef LWRES_PLATFORM_USEDECLSPEC
 #define LIBLWRES_EXTERNAL_DATA
 #else
@@ -99,5 +111,12 @@
 #define LIBLWRES_EXTERNAL_DATA __declspec(dllimport)
 #endif
 #endif
+
+/*
+ * Tell Emacs to use C mode on this file.
+ * Local Variables:
+ * mode: c
+ * End:
+ */
 
 #endif /* LWRES_PLATFORM_H */

@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_vfsops.c,v 1.63 2005/12/11 12:24:51 christos Exp $	*/
+/*	$NetBSD: procfs_vfsops.c,v 1.67.2.1 2007/02/17 23:27:50 tron Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.63 2005/12/11 12:24:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.67.2.1 2007/02/17 23:27:50 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -95,6 +95,7 @@ __KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.63 2005/12/11 12:24:51 christos 
 #include <sys/signalvar.h>
 #include <sys/vnode.h>
 #include <sys/malloc.h>
+#include <sys/kauth.h>
 
 #include <miscfs/procfs/procfs.h>
 
@@ -110,7 +111,7 @@ int	procfs_unmount(struct mount *, int, struct lwp *);
 int	procfs_quotactl(struct mount *, int, uid_t, void *,
 			     struct lwp *);
 int	procfs_statvfs(struct mount *, struct statvfs *, struct lwp *);
-int	procfs_sync(struct mount *, int, struct ucred *, struct lwp *);
+int	procfs_sync(struct mount *, int, kauth_cred_t, struct lwp *);
 int	procfs_vget(struct mount *, ino_t, struct vnode **);
 
 /*
@@ -120,12 +121,13 @@ int	procfs_vget(struct mount *, ino_t, struct vnode **);
  */
 /* ARGSUSED */
 int
-procfs_mount(mp, path, data, ndp, l)
-	struct mount *mp;
-	const char *path;
-	void *data;
-	struct nameidata *ndp;
-	struct lwp *l;
+procfs_mount(
+    struct mount *mp,
+    const char *path,
+    void *data,
+    struct nameidata *ndp,
+    struct lwp *l
+)
 {
 	struct procfsmount *pmnt;
 	struct procfs_args args;
@@ -178,10 +180,7 @@ procfs_mount(mp, path, data, ndp, l)
  * unmount system call
  */
 int
-procfs_unmount(mp, mntflags, l)
-	struct mount *mp;
-	int mntflags;
-	struct lwp *l;
+procfs_unmount(struct mount *mp, int mntflags, struct lwp *l)
 {
 	int error;
 	int flags = 0;
@@ -211,10 +210,8 @@ procfs_root(mp, vpp)
 
 /* ARGSUSED */
 int
-procfs_start(mp, flags, l)
-	struct mount *mp;
-	int flags;
-	struct lwp *l;
+procfs_start(struct mount *mp, int flags,
+    struct lwp *l)
 {
 
 	return (0);
@@ -224,10 +221,7 @@ procfs_start(mp, flags, l)
  * Get file system statistics.
  */
 int
-procfs_statvfs(mp, sbp, l)
-	struct mount *mp;
-	struct statvfs *sbp;
-	struct lwp *l;
+procfs_statvfs(struct mount *mp, struct statvfs *sbp, struct lwp *l)
 {
 
 	sbp->f_bsize = PAGE_SIZE;
@@ -247,12 +241,13 @@ procfs_statvfs(mp, sbp, l)
 
 /*ARGSUSED*/
 int
-procfs_quotactl(mp, cmds, uid, arg, l)
-	struct mount *mp;
-	int cmds;
-	uid_t uid;
-	void *arg;
-	struct lwp *l;
+procfs_quotactl(
+    struct mount *mp,
+    int cmds,
+    uid_t uid,
+    void *arg,
+    struct lwp *l
+)
 {
 
 	return (EOPNOTSUPP);
@@ -260,11 +255,12 @@ procfs_quotactl(mp, cmds, uid, arg, l)
 
 /*ARGSUSED*/
 int
-procfs_sync(mp, waitfor, uc, l)
-	struct mount *mp;
-	int waitfor;
-	struct ucred *uc;
-	struct lwp *l;
+procfs_sync(
+    struct mount *mp,
+    int waitfor,
+    kauth_cred_t uc,
+    struct lwp *l
+)
 {
 
 	return (0);
@@ -272,10 +268,8 @@ procfs_sync(mp, waitfor, uc, l)
 
 /*ARGSUSED*/
 int
-procfs_vget(mp, ino, vpp)
-	struct mount *mp;
-	ino_t ino;
-	struct vnode **vpp;
+procfs_vget(struct mount *mp, ino_t ino,
+    struct vnode **vpp)
 {
 	return (EOPNOTSUPP);
 }
@@ -336,8 +330,8 @@ struct vfsops procfs_vfsops = {
 	procfs_statvfs,
 	procfs_sync,
 	procfs_vget,
-	NULL,				/* vfs_fhtovp */
-	NULL,				/* vfs_vptofh */
+	(void *)eopnotsupp,		/* vfs_fhtovp */
+	(void *)eopnotsupp,		/* vfs_vptofh */
 	procfs_init,
 	procfs_reinit,
 	procfs_done,
@@ -345,5 +339,7 @@ struct vfsops procfs_vfsops = {
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
 	procfs_vnodeopv_descs,
+	0,
+	{ NULL, NULL },
 };
 VFS_ATTACH(procfs_vfsops);

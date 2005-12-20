@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mcvar.h,v 1.10 2005/12/11 12:18:02 christos Exp $	*/
+/*	$NetBSD: if_mcvar.h,v 1.11.24.1 2006/12/15 13:24:30 tron Exp $	*/
 
 /*-
  * Copyright (c) 1997 David Huang <khym@azeotrope.org>
@@ -30,7 +30,7 @@
 #define	integrate
 #define hide
 #else
-#define	integrate	static __inline
+#define	integrate	static inline
 #define hide		static
 #endif
 
@@ -78,9 +78,12 @@ struct mc_softc {
 
 	bus_space_tag_t		sc_regt;
 	bus_space_handle_t	sc_regh;
+	bus_dma_tag_t	sc_dmat;
+	bus_dmamap_t	sc_dmam_tx, sc_dmam_rx;
+	bus_dma_segment_t	sc_dmasegs_tx, sc_dmasegs_rx;
 
-	u_char		*sc_txbuf, *sc_rxbuf;
-	int		sc_txbuf_phys, sc_rxbuf_phys;
+	caddr_t		sc_txbuf, sc_rxbuf;
+	bus_addr_t	sc_txbuf_phys, sc_rxbuf_phys;
 	int		sc_tail;
 	int		sc_rxset;
 	int		sc_txset, sc_txseti;

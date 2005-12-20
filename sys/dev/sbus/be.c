@@ -1,4 +1,4 @@
-/*	$NetBSD: be.c,v 1.47 2005/12/11 12:23:44 christos Exp $	*/
+/*	$NetBSD: be.c,v 1.50 2006/11/24 19:46:59 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -64,13 +64,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: be.c,v 1.47 2005/12/11 12:23:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: be.c,v 1.50 2006/11/24 19:46:59 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_inet.h"
-#include "opt_ccitt.h"
-#include "opt_llc.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 #include "rnd.h"
 
@@ -104,10 +101,6 @@ __KERNEL_RCSID(0, "$NetBSD: be.c,v 1.47 2005/12/11 12:23:44 christos Exp $");
 #include <netinet/ip.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -413,7 +406,7 @@ beattach(parent, self, aux)
 #endif
 			if (child->mii_phy != BE_PHY_EXTERNAL ||
 			    child->mii_inst > 0) {
-				printf("%s: cannot accomodate MII device %s"
+				printf("%s: cannot accommodate MII device %s"
 				       " at phy %d, instance %d\n",
 				       sc->sc_dev.dv_xname,
 				       child->mii_dev.dv_xname,
@@ -494,7 +487,7 @@ beattach(parent, self, aux)
  * Routine to copy from mbuf chain to transmit buffer in
  * network buffer memory.
  */
-static __inline__ int
+static inline int
 be_put(sc, idx, m)
 	struct be_softc *sc;
 	int idx;
@@ -526,7 +519,7 @@ be_put(sc, idx, m)
  * We copy the data into mbufs.  When full cluster sized units are present,
  * we copy into clusters.
  */
-static __inline__ struct mbuf *
+static inline struct mbuf *
 be_get(sc, idx, totlen)
 	struct be_softc *sc;
 	int idx, totlen;
@@ -579,7 +572,7 @@ be_get(sc, idx, totlen)
 /*
  * Pass a packet to the higher levels.
  */
-static __inline__ void
+static inline void
 be_read(sc, idx, len)
 	struct be_softc *sc;
 	int idx, len;
@@ -1009,22 +1002,6 @@ beioctl(ifp, cmd, data)
 			arp_ifinit(ifp, ifa);
 			break;
 #endif /* INET */
-#ifdef NS
-		case AF_NS:
-		    {
-			struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
-
-			if (ns_nullhost(*ina))
-				ina->x_host =
-					*(union ns_host *)LLADDR(ifp->if_sadl);
-			else
-				bcopy(ina->x_host.c_host, LLADDR(ifp->if_sadl),
-				      sizeof(sc->sc_enaddr));
-			/* Set new address. */
-			beinit(sc);
-			break;
-		    }
-#endif /* NS */
 		default:
 			beinit(sc);
 			break;

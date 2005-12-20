@@ -1,4 +1,4 @@
-# 	$NetBSD: INSTALL,v 1.35 2005/12/07 12:40:47 tsutsui Exp $
+# 	$NetBSD: INSTALL,v 1.39.2.1 2007/02/24 13:32:50 bouyer Exp $
 
 #	config for bootable floppy kernel
 #
@@ -30,7 +30,6 @@ options 	MEMORY_DISK_ROOT_SIZE=2880	# 1.44 Megabytes
 options 	USERCONF		# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
 #options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
-options 	MALLOC_NOINLINE		# Not inlining MALLOC saves memory
 
 # Debugging options
 #options 	DDB			# kernel dynamic debugger
@@ -67,7 +66,7 @@ file-system	MSDOSFS		# MS-DOS FAT file system
 # Filesystem options
 #options 	NFSSERVER	# nfs server support
 #options 	QUOTA		# ffs quotas
-#options 	FFS_EI		# ffs endian independant support
+#options 	FFS_EI		# ffs endian independent support
 options 	NFS_V2_ONLY	# Exclude NFS3 and NQNFS code to save space
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
@@ -76,6 +75,7 @@ options 	INET		# Internet protocols
 #options 	GATEWAY		# IP packet forwarding
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	IPFILTER_LOG	# ipmon(8) log support
+#options 	IPFILTER_LOOKUP	# ippool(8) support
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 #options 	NFS_BOOT_BOOTPARAM
 
@@ -136,7 +136,7 @@ zstty1	at zsc0 channel 1
 # For example: "flags 0x1000f" would disable DMA interrupts,
 # and disable disconnect/reselect for targets 0-3
 #
-si0	at hb0 addr 0xe0cc0000 ipl 4 flags 0xf
+si0	at hb0 addr 0xe0cc0000 ipl 4 flags 0x0
 scsibus* at si0
 
 sd*	at scsibus? target ? lun ?		# SCSI disks
@@ -148,6 +148,6 @@ pseudo-device	loop			# loopback interface; required
 pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
 pseudo-device	md		1	# memory disk device
 #pseudo-device	fss		4	# file system snapshot device
-pseudo-device	sl		1	# SLIP interfaces
+pseudo-device	sl			# SLIP interfaces
 
 pseudo-device	rnd			# /dev/random and in-kernel generator

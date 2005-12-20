@@ -1,4 +1,4 @@
-/* $NetBSD: wsfontload.c,v 1.10 2005/03/16 01:34:11 xtraeme Exp $ */
+/* $NetBSD: wsfontload.c,v 1.12 2006/08/17 23:42:37 uwe Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -88,7 +88,7 @@ usage(void)
 }
 
 /*
- * map given fontorder to it's string representation
+ * map given fontorder to its string representation
  */
 static const char *
 rgetfontorder(int fontorder)
@@ -103,7 +103,7 @@ rgetfontorder(int fontorder)
 }
 
 /* 
- * map given encoding to it's string representation
+ * map given encoding to its string representation
  */
 static const char *
 rgetencoding(int enc)
@@ -154,7 +154,7 @@ main(int argc, char **argv)
 	f.bitorder = DEFBITORDER;
 	f.byteorder = DEFBYTEORDER;
 
-	while ((c = getopt(argc, argv, "f:w:h:e:N:bB:v")) != -1) {
+	while ((c = getopt(argc, argv, "f:w:h:e:N:bBv")) != -1) {
 		switch (c) {
 		case 'f':
 			wsdev = optarg;

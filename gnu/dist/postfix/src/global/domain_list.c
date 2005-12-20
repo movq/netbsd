@@ -1,4 +1,4 @@
-/*	$NetBSD: domain_list.c,v 1.1.1.4 2004/05/31 00:24:29 heas Exp $	*/
+/*	$NetBSD: domain_list.c,v 1.1.1.5.4.1 2007/06/16 16:59:56 snj Exp $	*/
 
 /*++
 /* NAME
@@ -32,15 +32,15 @@
 /*	A host name matches a domain list when its name appears in the
 /*	list of domain patterns, or when any of its parent domains appears
 /*	in the list of domain patterns. The matching process is case
-/*	insensitive. In order to reverse the result, precede a non-file
-/*	name pattern with an exclamation point (!).
+/*	insensitive. In order to reverse the result, precede a
+/*	pattern with an exclamation point (!).
 /*
 /*	domain_list_init() performs initializations. The first argument
 /*	is the bit-wise OR of zero or more of the following:
 /* .RS
 /* .IP MATCH_FLAG_PARENT
 /*      The hostname pattern foo.com matches itself and any name below
-/*      the domain foo.com. If this flag is cleared, foo.com matches itself 
+/*      the domain foo.com. If this flag is cleared, foo.com matches itself
 /*	only, and .foo.com matches any name below the domain foo.com.
 /* .RE
 /*	Specify MATCH_FLAG_NONE to request none of the above.
@@ -118,6 +118,7 @@ int     main(int argc, char **argv)
 		   "YES" : "NO");
     vstream_fflush(VSTREAM_OUT);
     domain_list_free(list);
+    return (0);
 }
 
 #endif

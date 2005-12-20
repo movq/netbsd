@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.c,v 1.17 2005/12/18 23:43:15 cube Exp $	*/
+/*	$NetBSD: sem.c,v 1.25 2006/11/09 20:42:45 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -49,6 +49,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <util.h>
 #include "defs.h"
 #include "sem.h"
 
@@ -236,12 +237,10 @@ defattr(const char *name, struct nvlist *locs, struct nvlist *deps,
 		a->a_locs = NULL;
 	}
 	if (devclass) {
-		size_t l = strlen(name) + 4;
-		char *classenum = alloca(l), *cp;
+		char classenum[256], *cp;
 		int errored = 0;
 
-		strlcpy(classenum, "DV_", l);
-		strlcat(classenum, name, l);
+		(void)snprintf(classenum, sizeof(classenum), "DV_%s", name);
 		for (cp = classenum + 3; *cp; cp++) {
 			if (!errored &&
 			    (!isalnum((unsigned char)*cp) ||
@@ -852,6 +851,26 @@ setconf(struct nvlist **npp, const char *what, struct nvlist *v)
 }
 
 void
+delconf(const char *name)
+{
+	struct config *cf;
+
+	if (ht_lookup(cfhashtab, name) == NULL) {
+		error("configuration `%s' undefined", name);
+		return;
+	}
+	(void)ht_remove(cfhashtab, name);
+
+	TAILQ_FOREACH(cf, &allcf, cf_next)
+		if (!strcmp(cf->cf_name, name))
+			break;
+	if (cf == NULL)
+		panic("lost configuration `%s'", name);
+
+	TAILQ_REMOVE(&allcf, cf, cf_next);
+}
+
+void
 setfstype(const char **fstp, const char *v)
 {
 
@@ -1089,6 +1108,9 @@ remove_devi(struct devi *i)
 	struct deva *iba;
 
 	f = ht_lookup(devitab, i->i_name);
+	if (f == NULL)
+		panic("remove_devi(): instance %s disappeared from devitab",
+		    i->i_name);
 
 	/*
 	 * We have the device instance, i.
@@ -1176,13 +1198,14 @@ remove_devi(struct devi *i)
 		struct nvlist *nv, *onv;
 
 		/* Double-linked nvlist anyone? */
-		for (nv = p->p_devs; nv->nv_ptr != NULL; nv = nv->nv_next) {
+		for (nv = p->p_devs; nv->nv_next != NULL; nv = nv->nv_next) {
 			if (nv->nv_next && nv->nv_next->nv_ptr == i) {
 				onv = nv->nv_next;
 				nv->nv_next = onv->nv_next;
 				nvfree(onv);
 				break;
-			} if (nv->nv_ptr == i) {
+			}
+			if (nv->nv_ptr == i) {
 				/* nv is p->p_devs in that case */
 				p->p_devs = nv->nv_next;
 				nvfree(nv);
@@ -1219,7 +1242,7 @@ remove_devi(struct devi *i)
 		j->i_alias = i;
 	}
 	/*
-	 *   - reconstuct d->d_umax
+	 *   - reconstruct d->d_umax
 	 */
 	d->d_umax = 0;
 	for (i = d->d_ihead; i != NULL; i = i->i_bsame)
@@ -1318,6 +1341,7 @@ deldeva(const char *at)
 
 	for (nv = stack; nv != NULL; nv = nv->nv_next)
 		remove_devi(nv->nv_ptr);
+	nvfreel(stack);
 }
 
 void
@@ -1344,6 +1368,12 @@ deldev(const char *name)
 			error("unknown device %s", name);
 			return;
 		}
+		if (d->d_ispseudo) {
+			error("%s is a pseudo-device; "
+			    "use \"no pseudo-device %s\" instead", name,
+			    name);
+			return;
+		}
 
 		for (firsti = d->d_ihead; firsti != NULL;
 		    firsti = firsti->i_bsame)
@@ -1353,6 +1383,7 @@ deldev(const char *name)
 
 	for (nv = stack; nv != NULL; nv = nv->nv_next)
 		remove_devi(nv->nv_ptr);
+	nvfreel(stack);
 }
 
 void

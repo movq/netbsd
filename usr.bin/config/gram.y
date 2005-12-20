@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: gram.y,v 1.4 2005/10/12 01:17:43 cube Exp $	*/
+/*	$NetBSD: gram.y,v 1.10 2006/09/04 06:45:14 dsl Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -109,7 +109,7 @@ static	struct nvlist *mk_ns(const char *, struct nvlist *);
 %token	IDENT
 %token	XMACHINE MAJOR MAKEOPTIONS MAXUSERS MAXPARTITIONS MINOR
 %token	NEEDS_COUNT NEEDS_FLAG NO
-%token	XOBJECT ON OPTIONS
+%token	XOBJECT OBSOLETE ON OPTIONS
 %token	PACKAGE PLUSEQ PREFIX PSEUDO_DEVICE
 %token	ROOT
 %token	SOURCE
@@ -117,7 +117,7 @@ static	struct nvlist *mk_ns(const char *, struct nvlist *);
 %token	VERSION
 %token	WITH
 %token	<num> NUMBER
-%token	<str> PATHNAME QSTRING WORD EMPTY
+%token	<str> PATHNAME QSTRING WORD EMPTYSTRING
 %token	ENDDEFS
 
 %left '|'
@@ -147,7 +147,7 @@ static	struct nvlist *mk_ns(const char *, struct nvlist *);
 %type	<str>	deffs
 %type	<list>	deffses
 %type	<str>	fsoptfile_opt
-%type	<str>	defopt
+%type	<list>	defopt
 %type	<list>	defopts
 %type	<str>	optdep
 %type	<list>	optdeps
@@ -275,15 +275,20 @@ one_def:
 	device_major			{ do_devsw = 1; } |
 	prefix |
 	DEVCLASS WORD			{ (void)defattr($2, NULL, NULL, 1); } |
-	DEFFS fsoptfile_opt deffses	{ deffilesystem($2, $3); } |
+	DEFFS fsoptfile_opt deffses defoptdeps
+					{ deffilesystem($2, $3, $4); } |
 	DEFINE WORD interface_opt attrs_opt
 					{ (void)defattr($2, $3, $4, 0); } |
 	DEFOPT optfile_opt defopts defoptdeps
 					{ defoption($2, $3, $4); } |
 	DEFFLAG optfile_opt defopts defoptdeps
-					{ defflag($2, $3, $4); } |
+					{ defflag($2, $3, $4, 0); } |
+	OBSOLETE DEFFLAG optfile_opt defopts
+					{ defflag($3, $4, NULL, 1); } |
 	DEFPARAM optfile_opt defopts defoptdeps
-					{ defparam($2, $3, $4); } |
+					{ defparam($2, $3, $4, 0); } |
+	OBSOLETE DEFPARAM optfile_opt defopts
+					{ defparam($3, $4, NULL, 1); } |
 	DEVICE devbase interface_opt attrs_opt
 					{ defdev($2, $3, $4, 0); } |
 	ATTACH devbase AT atlist devattach_opt attrs_opt
@@ -323,11 +328,12 @@ optdep:
 	WORD				{ $$ = $1; };
 
 defopts:
-	defopts defopt			{ $$ = new_nx($2, $1); } |
-	defopt				{ $$ = new_n($1); };
+	defopts defopt			{ $2->nv_next = $1; $$ = $2; } |
+	defopt				{ $$ = $1; };
 
 defopt:
-	WORD				{ $$ = $1; };
+	WORD				{ $$ = new_n($1); } | ;
+	WORD '=' value			{ $$ = new_ns($1, $3); };
 
 devbase:
 	WORD				{ $$ = getdevbase($1); };
@@ -385,7 +391,7 @@ filename:
 value:
 	QSTRING				{ $$ = $1; } |
 	WORD				{ $$ = $1; } |
-	EMPTY				{ $$ = $1; } |
+	EMPTYSTRING			{ $$ = $1; } |
 	signed_number			{ char bf[40];
 					  (void)snprintf(bf, sizeof(bf),
 					      FORMAT($1), (long long)$1.val);
@@ -446,6 +452,7 @@ config_spec:
 	IDENT stringvalue		{ setident($2); } |
 	CONFIG conf root_spec sysparam_list
 					{ addconf(&conf); } |
+	NO CONFIG WORD			{ delconf($3); } |
 	NO PSEUDO_DEVICE WORD		{ delpseudo($3); } |
 	PSEUDO_DEVICE WORD npseudo	{ addpseudo($2, $3); } |
 	NO device_instance AT attachment

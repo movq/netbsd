@@ -1,4 +1,4 @@
-/* $NetBSD: vars.c,v 1.10 2005/06/27 02:48:28 christos Exp $	 */
+/* $NetBSD: vars.c,v 1.12 2006/09/01 19:52:48 perseant Exp $	 */
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -48,6 +48,7 @@ struct dups *duplist;		/* head of dup list */
 struct dups *muldup;		/* end of unique duplicate dup block numbers */
 
 struct zlncnt *zlnhead;		/* head of zero link count list */
+struct zlncnt *orphead = NULL;	/* head of "properly orphaned" list */
 
 struct lfs *fs;
 
@@ -88,3 +89,5 @@ daddr_t n_blks;			/* number of blocks in use */
 ino_t n_files;			/* number of files in use */
 
 struct ufs1_dinode zino;
+
+int no_roll_forward = 0;	/* don't roll forward */

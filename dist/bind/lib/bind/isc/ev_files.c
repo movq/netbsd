@@ -1,4 +1,4 @@
-/*	$NetBSD: ev_files.c,v 1.1.1.1 2004/05/17 23:44:45 christos Exp $	*/
+/*	$NetBSD: ev_files.c,v 1.1.1.3.4.1 2007/05/17 00:40:04 jdc Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -22,7 +22,7 @@
  */
 
 #if !defined(LINT) && !defined(CODECENTER)
-static const char rcsid[] = "Id: ev_files.c,v 1.3.2.1.4.1 2004/03/09 08:33:42 marka Exp";
+static const char rcsid[] = "Id: ev_files.c,v 1.5.18.3 2005/07/28 07:38:09 marka Exp";
 #endif
 
 #include "port_before.h"
@@ -60,16 +60,22 @@ evSelectFD(evContext opaqueCtx,
 		 ctx, fd, eventmask, func, uap);
 	if (eventmask == 0 || (eventmask & ~EV_MASK_ALL) != 0)
 		EV_ERR(EINVAL);
+#ifndef USE_POLL
 	if (fd > ctx->highestFD)
 		EV_ERR(EINVAL);
-	OK(mode = fcntl(fd, F_GETFL, NULL));	/* side effect: validate fd. */
-
+#endif
+	OK(mode = fcntl(fd, F_GETFL, NULL));	/*%< side effect: validate fd. */
 	/*
 	 * The first time we touch a file descriptor, we need to check to see
 	 * if the application already had it in O_NONBLOCK mode and if so, all
 	 * of our deselect()'s have to leave it in O_NONBLOCK.  If not, then
 	 * all but our last deselect() has to leave it in O_NONBLOCK.
 	 */
+#ifdef USE_POLL
+	/* Make sure both ctx->pollfds[] and ctx->fdTable[] are large enough */
+	if (fd >= ctx->maxnfds && evPollfdRealloc(ctx, 1, fd) != 0)
+		EV_ERR(ENOMEM);
+#endif /* USE_POLL */
 	id = FindFD(ctx, fd, EV_MASK_ALL);
 	if (id == NULL) {
 		if (mode & PORT_NONBLOCK)
@@ -145,13 +151,6 @@ evSelectFD(evContext opaqueCtx,
 	if (opaqueID)
 		opaqueID->opaque = id;
 
-	evPrintf(ctx, 5,
-		"evSelectFD(fd %d, mask 0x%x): new masks: 0x%lx 0x%lx 0x%lx\n",
-		 fd, eventmask,
-		 (u_long)ctx->rdNext.fds_bits[0],
-		 (u_long)ctx->wrNext.fds_bits[0],
-		 (u_long)ctx->exNext.fds_bits[0]);
-
 	return (0);
 }
 
@@ -206,7 +205,7 @@ evDeselectFD(evContext opaqueCtx, evFileID opaqueID) {
 		 * and (b) the caller didn't ask us anything about O_NONBLOCK.
 		 */
 #ifdef USE_FIONBIO_IOCTL
-		int off = 1;
+		int off = 0;
 		(void) ioctl(del->fd, FIONBIO, (char *)&off);
 #else
 		(void) fcntl(del->fd, F_SETFL, mode & ~PORT_NONBLOCK);
@@ -261,13 +260,6 @@ evDeselectFD(evContext opaqueCtx, evFileID opaqueID) {
 	if (del == ctx->fdNext)
 		ctx->fdNext = del->next;
 
-	evPrintf(ctx, 5,
-	      "evDeselectFD(fd %d, mask 0x%x): new masks: 0x%lx 0x%lx 0x%lx\n",
-		 del->fd, eventmask,
-		 (u_long)ctx->rdNext.fds_bits[0],
-		 (u_long)ctx->wrNext.fds_bits[0],
-		 (u_long)ctx->exNext.fds_bits[0]);
-
 	/* Couldn't free it before now since we were using fields out of it. */
 	FREE(del);
 
@@ -283,3 +275,5 @@ FindFD(const evContext_p *ctx, int fd, int eventmask) {
 			break;
 	return (id);
 }
+
+/*! \file */

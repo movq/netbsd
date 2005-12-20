@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_usr.c,v 1.11 2005/12/11 12:25:16 christos Exp $	*/
+/*	$NetBSD: smb_usr.c,v 1.13 2006/11/16 01:33:51 christos Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smb_usr.c,v 1.11 2005/12/11 12:25:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smb_usr.c,v 1.13 2006/11/16 01:33:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>

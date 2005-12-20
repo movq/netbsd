@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.42 2005/12/11 12:17:59 christos Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.45.6.1 2007/06/18 09:31:06 liamjfoy Exp $	*/
 
 /* 
  * Mach Operating System
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.42 2005/12/11 12:17:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.45.6.1 2007/06/18 09:31:06 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -71,16 +71,18 @@ const struct db_variable db_regs[] = {
 	{ "pc",	(long *)&ddb_regs.tf_pc, 	FCN_NULL },
 	{ "sr",	(long *)&ddb_regs.tf_sr,	db_var_short }
 };
-const struct db_variable * const db_eregs = db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
+const struct db_variable * const db_eregs =
+    db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
 
 static int
 db_var_short(const struct db_variable *varp, db_expr_t *valp, int op)
 {
+
     if (op == DB_VAR_GET)
-	*valp = (db_expr_t) *((short*)varp->valuep);
+	*valp = (db_expr_t)*((short*)varp->valuep);
     else
 	*((short*)varp->valuep) = (short) *valp;
-    return(0);
+    return 0;
 }
 
 #define	MAXINT	0x7fffffff
@@ -206,7 +208,7 @@ nextframe(struct stackpos *sp, struct pcb *pcb, int kerneltrace,
 	sp->k_pc = calladdr;
 	sp->k_fp = get(sp->k_fp + FR_SAVFP, DSP);
 
-	/* 
+	/*
 	 * Now that we have assumed the identity of our caller, find
 	 * how many longwords of argument WE were called with.
 	 */
@@ -224,13 +226,13 @@ nextframe(struct stackpos *sp, struct pcb *pcb, int kerneltrace,
 
 	if (sp->k_fp == 0 || oldfp == sp->k_fp)
 		return 0;
-	return (sp->k_fp);
+	return sp->k_fp;
 }
 
 static void
 findentry(struct stackpos *sp, void (*pr)(const char *, ...))
-{ 
-	/* 
+{
+	/*
 	 * Set the k_nargs and k_entry fields in the stackpos structure.  This
 	 * is called from stacktop() and from nextframe().  Our caller will do
 	 * an addq or addl or addw to sp just after we return to pop off our
@@ -428,7 +430,7 @@ db_stack_trace_print(db_expr_t addr, int have_addr, db_expr_t count,
 			struct user *u;
 			struct lwp *l;
 			(*pr)("trace: pid %d ", (int)addr);
-			p = pfind(addr);
+			p = p_find(addr, PFIND_LOCKED);
 			if (p == NULL) {
 				(*pr)("not found\n");
 				return;
@@ -483,9 +485,9 @@ db_stack_trace_print(db_expr_t addr, int have_addr, db_expr_t count,
 		/*
 		 * Since faultstkadj doesn't set up a valid stack frame,
 		 * we would assume it was the source of the fault. To
-		 * get around this we peek at the fourth argument of
+		 * get around this we peek just past the fourth argument of
 		 * "trap()" (the stack frame at the time of the fault)
-		 * to determine the _real_ value of PC when things wen
+		 * to determine the _real_ value of PC when things went
 		 * wrong.
 		 *
 		 * NOTE: If the argument list for 'trap()' ever changes,
@@ -494,8 +496,8 @@ db_stack_trace_print(db_expr_t addr, int have_addr, db_expr_t count,
 		if (strcmp(___STRING(_C_LABEL(trap)), name) == 0) {
 			int tfp;
 
-			/* Point to 'trap()'s 4th argument (frame structure) */
-			tfp = pos.k_fp + FR_SAVFP + 4 + (4 * 4);
+			/* Point to frame structure just past 'trap()'s 4th argument */
+			tfp = pos.k_fp + FR_SAVFP + 4 + (5 * 4);
 
 			/* Determine if fault was from kernel or user mode */
 			regp = tfp + offsetof(struct frame, f_sr);

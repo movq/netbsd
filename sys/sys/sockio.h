@@ -1,4 +1,4 @@
-/*	$NetBSD: sockio.h,v 1.23 2005/12/11 12:25:21 christos Exp $	*/
+/*	$NetBSD: sockio.h,v 1.25 2006/11/13 05:13:42 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993, 1994
@@ -81,6 +81,9 @@
 #define	SIOCALIFADDR	 _IOW('i', 28, struct if_laddrreq) /* add IF addr */
 #define	SIOCGLIFADDR	_IOWR('i', 29, struct if_laddrreq) /* get IF addr */
 #define	SIOCDLIFADDR	 _IOW('i', 30, struct if_laddrreq) /* delete IF addr */
+/* get/set IF addr preference */
+#define	SIOCSIFADDRPREF	 _IOW('i', 31, struct if_addrprefreq)
+#define	SIOCGIFADDRPREF	_IOWR('i', 32, struct if_addrprefreq)
 
 #define	SIOCADDMULTI	 _IOW('i', 49, struct ifreq)	/* add m'cast addr */
 #define	SIOCDELMULTI	 _IOW('i', 50, struct ifreq)	/* del m'cast addr */
@@ -123,5 +126,8 @@
 #define	SIOCGIFDLT	_IOWR('i', 119, struct ifreq)	/* get DLT */
 #define	SIOCGIFCAP	_IOWR('i', 118, struct ifcapreq)/* get capabilities */
 #define	SIOCSIFCAP	 _IOW('i', 117, struct ifcapreq)/* set capabilities */
+
+#define	SIOCSVH		_IOWR('i', 130, struct ifreq)	/* set carp param */
+#define	SIOCGVH		_IOWR('i', 131, struct ifreq)	/* get carp param */
 
 #endif /* !_SYS_SOCKIO_H_ */

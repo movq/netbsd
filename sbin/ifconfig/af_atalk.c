@@ -1,4 +1,4 @@
-/*	$NetBSD: af_atalk.c,v 1.1 2005/03/19 23:32:55 thorpej Exp $	*/
+/*	$NetBSD: af_atalk.c,v 1.4 2006/08/26 18:14:28 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: af_atalk.c,v 1.1 2005/03/19 23:32:55 thorpej Exp $");
+__RCSID("$NetBSD: af_atalk.c,v 1.4 2006/08/26 18:14:28 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h> 
@@ -49,6 +49,7 @@ __RCSID("$NetBSD: af_atalk.c,v 1.1 2005/03/19 23:32:55 thorpej Exp $");
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <util.h>
 
 #include "extern.h"
 #include "af_atalk.h"
@@ -126,12 +127,12 @@ at_status(int force)
 
 	getsock(AF_APPLETALK);
 	if (s < 0) {
-		if (errno == EPROTONOSUPPORT)
+		if (errno == EAFNOSUPPORT)
 			return;
 		err(EXIT_FAILURE, "socket");
 	}
 	(void) memset(&ifr, 0, sizeof(ifr));
-	(void) strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
+	estrlcpy(ifr.ifr_name, name, sizeof(ifr.ifr_name));
 	if (ioctl(s, SIOCGIFADDR, &ifr) == -1) {
 		if (errno == EADDRNOTAVAIL || errno == EAFNOSUPPORT) {
 			if (!force)
@@ -140,7 +141,7 @@ at_status(int force)
 		} else
 			warn("SIOCGIFADDR");
 	}
-	(void) strncpy(ifr.ifr_name, name, sizeof ifr.ifr_name);
+	estrlcpy(ifr.ifr_name, name, sizeof ifr.ifr_name);
 	sat = (struct sockaddr_at *)&ifr.ifr_addr;
 
 	(void) memset(&null_sat, 0, sizeof(null_sat));
@@ -157,7 +158,7 @@ at_status(int force)
 			else
 			    warn("SIOCGIFDSTADDR");
 		}
-		(void) strncpy(ifr.ifr_name, name, sizeof (ifr.ifr_name));
+		estrlcpy(ifr.ifr_name, name, sizeof (ifr.ifr_name));
 		sat = (struct sockaddr_at *)&ifr.ifr_dstaddr;
 		if (!sat)
 			sat = &null_sat;

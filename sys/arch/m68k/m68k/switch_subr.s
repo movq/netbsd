@@ -1,4 +1,4 @@
-/*	$NetBSD: switch_subr.s,v 1.13 2005/12/11 12:17:59 christos Exp $	*/
+/*	$NetBSD: switch_subr.s,v 1.14.12.1 2007/05/30 23:04:14 riz Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation.
@@ -114,8 +114,8 @@ ASBSS(nullpcb,SIZEOF_PCB)
 /*
  * void switch_lwp_exit(struct lwp *);
  *
- * At exit of a process, do a switch for the last time.
- * Switch to a safe stack and PCB, and select a new process to run.  The
+ * At exit of a lwp, do a switch for the last time.
+ * Switch to a safe stack and PCB, and select a new lwp to run.  The
  * old stack and u-area will be freed by the reaper.
  *
  * MUST BE CALLED AT SPLHIGH!
@@ -166,7 +166,7 @@ Lcpu_switch_badsw:
 	/*NOTREACHED*/
 
 /*
- * int cpu_switch(struct lwp *p)
+ * int cpu_switch(struct lwp *l)
  *
  * NOTE: With the new VM layout we now no longer know if an inactive
  * user's PTEs have been changed (formerly denoted by the SPTECHG p_flag
@@ -266,10 +266,6 @@ Lcpu_switch_common:
 	moveml	%d2-%d7/%a2-%a7,%a1@(PCB_REGS)	| save non-scratch registers
 	movl	%usp,%a2		| grab USP (a2 has been saved)
 	movl	%a2,%a1@(PCB_USP)	| and save it
-
-#ifdef PCB_CMAP2
-	movl	_C_LABEL(CMAP2),%a1@(PCB_CMAP2)	| XXX: For Amiga
-#endif
 
 #ifdef _M68K_CUSTOM_FPU_CTX
 	jbsr	_ASM_LABEL(m68k_fpuctx_save)
@@ -385,10 +381,6 @@ Lsame_mmuctx:
 
 	movl	%sp@(4),%d1		| cpu_switch(l) - d1 == l
 	lea     _ASM_LABEL(tmpstk),%sp	| now goto a tmp stack for NMI
-
-#ifdef PCB_CMAP2
-	movl	%a1@(PCB_CMAP2),_C_LABEL(CMAP2)	| XXX: For Amiga
-#endif
 
 	moveml	%a1@(PCB_REGS),%d2-%d7/%a2-%a7	| and registers
 	movl	%a1@(PCB_USP),%a0

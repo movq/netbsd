@@ -1,4 +1,4 @@
-/*	$NetBSD: strings.c,v 1.12 2005/07/19 23:07:10 christos Exp $	*/
+/*	$NetBSD: strings.c,v 1.15 2006/11/28 18:45:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)strings.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: strings.c,v 1.12 2005/07/19 23:07:10 christos Exp $");
+__RCSID("$NetBSD: strings.c,v 1.15 2006/11/28 18:45:32 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -49,6 +49,21 @@ __RCSID("$NetBSD: strings.c,v 1.12 2005/07/19 23:07:10 christos Exp $");
 #include "rcv.h"
 #include "extern.h"
 
+#define	STRINGSIZE	((unsigned) 128)/* Dynamic allocation units */
+
+/*
+ * The pointers for the string allocation routines,
+ * there are NSPACE independent areas.
+ * The first holds STRINGSIZE bytes, the next
+ * twice as much, and so on.
+ */
+#define	NSPACE	25			/* Total number of string spaces */
+static struct strings {
+	char	*s_topFree;		/* Beginning of this area */
+	char	*s_nextFree;		/* Next alloctable place here */
+	unsigned s_nleft;		/* Number of bytes left here */
+} stringdope[NSPACE];
+
 /*
  * Allocate size more bytes of space and return the address of the
  * first byte to the caller.  An even number of bytes are always
@@ -57,11 +72,11 @@ __RCSID("$NetBSD: strings.c,v 1.12 2005/07/19 23:07:10 christos Exp $");
  * the occasional user with enormous string size requests.
  */
 
-void *
+PUBLIC void *
 salloc(size_t size)
 {
 	char *t;
-	int s;
+	size_t s;
 	struct strings *sp;
 	int idx;
 
@@ -89,7 +104,19 @@ salloc(size_t size)
 	sp->s_nleft -= s;
 	t = sp->s_nextFree;
 	sp->s_nextFree += s;
-	return(t);
+	return t;
+}
+
+/*
+ * Allocate zeroed space for 'number' elments of size 'size'.
+ */
+PUBLIC void *
+csalloc(size_t number, size_t size)
+{
+	void *p;
+	p = salloc(number * size);
+	(void)memset(p, 0, number * size);
+	return p;
 }
 
 /*
@@ -97,7 +124,7 @@ salloc(size_t size)
  * Called to free all strings allocated
  * since last reset.
  */
-void
+PUBLIC void
 sreset(void)
 {
 	struct strings *sp;
@@ -119,7 +146,7 @@ sreset(void)
  * Make the string area permanent.
  * Meant to be called in main, after initialization.
  */
-void
+PUBLIC void
 spreserve(void)
 {
 	struct strings *sp;

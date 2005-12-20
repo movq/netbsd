@@ -1,4 +1,4 @@
-/*	$NetBSD: autri.c,v 1.27 2005/12/11 12:22:48 christos Exp $	*/
+/*	$NetBSD: autri.c,v 1.34 2006/11/16 01:33:08 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 SOMEYA Yoshihiko and KUROSAWA Takahiro.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autri.c,v 1.27 2005/12/11 12:22:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autri.c,v 1.34 2006/11/16 01:33:08 christos Exp $");
 
 #include "midi.h"
 
@@ -163,6 +163,7 @@ static const struct audio_hw_if autri_hw_if = {
 	autri_trigger_output,
 	autri_trigger_input,
 	NULL,			/* dev_ioctl */
+	NULL,			/* powerstate */
 };
 
 #if NMIDI > 0
@@ -204,28 +205,28 @@ static const struct audio_format autri_formats[AUTRI_NFORMATS] = {
 /*
  * register set/clear bit
  */
-static __inline void
+static inline void
 autri_reg_set_1(struct autri_softc *sc, int no, uint8_t mask)
 {
 	bus_space_write_1(sc->memt, sc->memh, no,
 	    (bus_space_read_1(sc->memt, sc->memh, no) | mask));
 }
 
-static __inline void
+static inline void
 autri_reg_clear_1(struct autri_softc *sc, int no, uint8_t mask)
 {
 	bus_space_write_1(sc->memt, sc->memh, no,
 	    (bus_space_read_1(sc->memt, sc->memh, no) & ~mask));
 }
 
-static __inline void
+static inline void
 autri_reg_set_4(struct autri_softc *sc, int no, uint32_t mask)
 {
 	bus_space_write_4(sc->memt, sc->memh, no,
 	    (bus_space_read_4(sc->memt, sc->memh, no) | mask));
 }
 
-static __inline void
+static inline void
 autri_reg_clear_4(struct autri_softc *sc, int no, uint32_t mask)
 {
 	bus_space_write_4(sc->memt, sc->memh, no,
@@ -462,7 +463,7 @@ autri_reset_codec(void *sc_)
 }
 
 static enum ac97_host_flags
-autri_flags_codec(void *sc_)
+autri_flags_codec(void *sc)
 {
 	return AC97_HOST_DONT_READ;
 }
@@ -472,7 +473,8 @@ autri_flags_codec(void *sc_)
  */
 
 static int
-autri_match(struct device *parent, struct cfdata *match, void *aux)
+autri_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -481,6 +483,13 @@ autri_match(struct device *parent, struct cfdata *match, void *aux)
 	case PCI_VENDOR_TRIDENT:
 		switch (PCI_PRODUCT(pa->pa_id)) {
 		case PCI_PRODUCT_TRIDENT_4DWAVE_DX:
+			/*
+			 * IBM makes a pcn network card and improperly
+			 * sets the vendor and product ID's.  Avoid matching.
+			 */
+			if (PCI_CLASS(pa->pa_class) == PCI_CLASS_NETWORK)
+				return 0;
+		/* FALLTHROUGH */
 		case PCI_PRODUCT_TRIDENT_4DWAVE_NX:
 			return 1;
 		}
@@ -590,7 +599,7 @@ autri_attach(struct device *parent, struct device *self, void *aux)
 #endif
 
 	sc->sc_old_power = PWR_RESUME;
-	powerhook_establish(autri_powerhook, sc);
+	powerhook_establish(sc->sc_dev.dv_xname, autri_powerhook, sc);
 }
 
 CFATTACH_DECL(autri, sizeof(struct autri_softc),
@@ -960,8 +969,8 @@ autri_query_encoding(void *addr, struct audio_encoding *fp)
 
 static int
 autri_set_params(void *addr, int setmode, int usemode,
-		 audio_params_t *play, audio_params_t *rec,
-		 stream_filter_list_t *pfil, stream_filter_list_t *rfil)
+    audio_params_t *play, audio_params_t *rec, stream_filter_list_t *pfil,
+    stream_filter_list_t *rfil)
 {
 	if (setmode & AUMODE_RECORD) {
 		if (auconv_set_converter(autri_formats, AUTRI_NFORMATS,
@@ -978,7 +987,7 @@ autri_set_params(void *addr, int setmode, int usemode,
 
 static int
 autri_round_blocksize(void *addr, int block,
-		      int mode, const audio_params_t *param)
+    int mode, const audio_params_t *param)
 {
 	return block & -4;
 }
@@ -1361,7 +1370,7 @@ autri_trigger_input(void *addr, void *start, void *end, int blksize,
 	}
 
 #if 0
-	/* 4DWAVE only allows capturing at a 48KHz rate */
+	/* 4DWAVE only allows capturing at a 48 kHz rate */
 	if (sc->sc_devid == AUTRI_DEVICE_ID_4DWAVE_DX ||
 	    sc->sc_devid == AUTRI_DEVICE_ID_4DWAVE_NX)
 		param->sample_rate = 48000;

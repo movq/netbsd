@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.own.mk,v 1.441 2005/08/17 07:13:32 skrll Exp $
+#	$NetBSD: bsd.own.mk,v 1.489.2.2 2007/08/23 11:21:44 liamjfoy Exp $
 
 .if !defined(_BSD_OWN_MK_)
 _BSD_OWN_MK_=1
@@ -9,7 +9,7 @@ MAKECONF?=	/etc/mk.conf
 #
 # CPU model, derived from MACHINE_ARCH
 #
-MACHINE_CPU=	${MACHINE_ARCH:C/mipse[bl]/mips/:C/sh3e[bl]/sh3/:C/sh5e[bl]/sh5/:S/m68000/m68k/:S/armeb/arm/}
+MACHINE_CPU=	${MACHINE_ARCH:C/mipse[bl]/mips/:C/mips64e[bl]/mips/:C/sh3e[bl]/sh3/:S/m68000/m68k/:S/armeb/arm/}
 
 #
 # Subdirectory used below ${RELEASEDIR} when building a release
@@ -38,35 +38,48 @@ NEED_OWN_INSTALL_TARGET?=	yes
 # If some future port is not supported by the in-tree toolchain, this
 # should be set to "yes" for that port only.
 #
-TOOLCHAIN_MISSING=	no
+TOOLCHAIN_MISSING?=	no
 
 #
-# Transitional for toolchain upgrade to GCC3.3
+# Transitional for toolchain upgrade to GCC4.1
 #
 # not working:
+#	ns32k
 #
-.if ${MACHINE_ARCH} == "vax"
-HAVE_GCC3?=	no
-.else
-HAVE_GCC3?=	yes
+.if \
+    ${MACHINE_ARCH} == "ns32k"
+HAVE_GCC?=	3
 .endif
 
-# Do we want to use tools/toolchain or not?
-.if ${HAVE_GCC3} != "no"
-USE_TOOLS_TOOLCHAIN=no
+# default to GCC4
+HAVE_GCC?=	4
+
+#
+# Transitional for toolchain upgrade to GDB6
+#
+.if \
+    ${MACHINE_CPU} == "arm" || \
+    ${MACHINE_ARCH} == "i386" || \
+    ${MACHINE_ARCH} == "powerpc" || \
+    ${MACHINE_ARCH} == "sparc64"
+HAVE_GDB?=	6
 .endif
-USE_TOOLS_TOOLCHAIN?=yes
+
+HAVE_GDB?=	5
 
 CPPFLAG_ISYSTEM=	-isystem
-# GCC2 did not have -isystem-cxx
-.if ${USE_TOOLS_TOOLCHAIN} != "no"
-CPPFLAG_ISYSTEMXX=	-isystem
-.else
+.if ${HAVE_GCC} == 3
 CPPFLAG_ISYSTEMXX=	-isystem-cxx
+.else	# GCC 4
+CPPFLAG_ISYSTEMXX=	-cxx-isystem
 .endif
 
 .if empty(.MAKEFLAGS:M-V*)
+.if defined(MAKEOBJDIRPREFIX) || defined(MAKEOBJDIR)
+PRINTOBJDIR=	${MAKE} -r -V .OBJDIR -f /dev/null xxx
+.else
 PRINTOBJDIR=	${MAKE} -V .OBJDIR
+.endif
 .else
 PRINTOBJDIR=	echo # prevent infinite recursion
 .endif
@@ -110,8 +123,8 @@ USETOOLS?=	yes
 USETOOLS?=	no
 
 
-.if ${MACHINE_ARCH} == "mips" || ${MACHINE_ARCH} == "sh3" || \
-    ${MACHINE_ARCH} == "sh5"
+.if ${MACHINE_ARCH} == "mips" || ${MACHINE_ARCH} == "mips64" || \
+    ${MACHINE_ARCH} == "sh3"
 .BEGIN:
 	@echo "Must set MACHINE_ARCH to one of ${MACHINE_ARCH}eb or ${MACHINE_ARCH}el"
 	@false
@@ -196,11 +209,12 @@ HOST_MKDEP=	${TOOLDIR}/bin/${_TOOL_PREFIX}host-mkdep
 
 DBSYM=		${TOOLDIR}/bin/${MACHINE_GNU_PLATFORM}-dbsym
 ELF2ECOFF=	${TOOLDIR}/bin/${_TOOL_PREFIX}mips-elf2ecoff
-INSTALL=	STRIP=${STRIP:Q} ${TOOLDIR}/bin/${_TOOL_PREFIX}install
+INSTALL=	${TOOLDIR}/bin/${MACHINE_GNU_PLATFORM}-install
 LEX=		${TOOLDIR}/bin/${_TOOL_PREFIX}lex
 LINT=		CC=${CC:Q} ${TOOLDIR}/bin/${MACHINE_GNU_PLATFORM}-lint
 LORDER=		NM=${NM:Q} MKTEMP=${TOOL_MKTEMP:Q} ${TOOLDIR}/bin/${_TOOL_PREFIX}lorder
 MKDEP=		CC=${CC:Q} ${TOOLDIR}/bin/${_TOOL_PREFIX}mkdep
+PAXCTL=		${TOOLDIR}/bin/${_TOOL_PREFIX}paxctl
 TSORT=		${TOOLDIR}/bin/${_TOOL_PREFIX}tsort -q
 YACC=		${TOOLDIR}/bin/${_TOOL_PREFIX}yacc
 
@@ -222,6 +236,7 @@ TOOL_EQN=		${TOOLDIR}/bin/${_TOOL_PREFIX}eqn
 TOOL_FGEN=		${TOOLDIR}/bin/${_TOOL_PREFIX}fgen
 TOOL_GENASSYM=		${TOOLDIR}/bin/${_TOOL_PREFIX}genassym
 TOOL_GENCAT=		${TOOLDIR}/bin/${_TOOL_PREFIX}gencat
+TOOL_GMAKE=		${TOOLDIR}/bin/${_TOOL_PREFIX}gmake
 TOOL_GROFF=		PATH=${TOOLDIR}/lib/groff:$${PATH} ${TOOLDIR}/bin/${_TOOL_PREFIX}groff
 TOOL_HEXDUMP=		${TOOLDIR}/bin/${_TOOL_PREFIX}hexdump
 TOOL_HP300MKBOOT=	${TOOLDIR}/bin/${_TOOL_PREFIX}hp300-mkboot
@@ -256,6 +271,7 @@ TOOL_ROFF_HTML=		${TOOL_GROFF} -Tlatin1 -mdoc2html
 TOOL_ROFF_PS=		${TOOL_GROFF} -Tps
 TOOL_ROFF_RAW=		${TOOL_GROFF} -Z
 TOOL_RPCGEN=		CPP=${CPP:Q} ${TOOLDIR}/bin/${_TOOL_PREFIX}rpcgen
+TOOL_SED=		${TOOLDIR}/bin/${_TOOL_PREFIX}sed
 TOOL_SOELIM=		${TOOLDIR}/bin/${_TOOL_PREFIX}soelim
 TOOL_STAT=		${TOOLDIR}/bin/${_TOOL_PREFIX}stat
 TOOL_SPARKCRC=		${TOOLDIR}/bin/${_TOOL_PREFIX}sparkcrc
@@ -363,6 +379,16 @@ LOCALEGRP?=	wheel
 LOCALEOWN?=	root
 LOCALEMODE?=	${NONBINMODE}
 
+FIRMWAREDIR?=	/libdata/firmware
+FIRMWAREGRP?=	wheel
+FIRMWAREOWN?=	root
+FIRMWAREMODE?=	${NONBINMODE}
+
+DEBUGDIR?=	/usr/libdata/debug
+DEBUGGRP?=	wheel
+DEBUGOWN?=	root
+DEBUGMODE?=	${NONBINMODE}
+
 #
 # Data-driven table using make variables to control how
 # toolchain-dependent targets and shared libraries are built
@@ -398,26 +424,16 @@ MKGCC:= no
 .endif
 
 #
-# GCC can produce PIC code for sh3 only starting with gcc3.
-#
-.if ${MACHINE_CPU} == "sh3" && ${HAVE_GCC3} == "no"
-NOPIC=		# defined
-.endif
-
-#
-# gcc3 and gdb on sh5 are not ready for prime-time.
-#
-.if ${MACHINE_CPU} == "sh5"
-NOPROFILE=	# defined
-NOPIC=		# defined
-MKGDB=no
-.endif
-
-#
 # The m68000 port is incomplete.
 #
 .if ${MACHINE_ARCH} == "m68000"
 NOPIC=		# defined
+MKISCSI=	no
+# XXX GCC 4 outputs mcount() calling sequences that try to load values
+# from over 64KB away and this fails to assemble.
+.if ${HAVE_GCC} == 4
+NOPROFILE=	# defined
+.endif
 .endif
 
 #
@@ -432,6 +448,7 @@ MKGDB=		no
 #
 .if ${MACHINE_ARCH} == "ia64"
 MKLINT=		no
+MKGDB=		no
 .endif
 
 #
@@ -456,7 +473,7 @@ MKGDB=		no
 # so don't build the _pic version.  Unless we are using GCC3 which
 # doesn't support PIC yet.
 #
-.if ${MACHINE_ARCH} == "vax" && ${HAVE_GCC3} != "no"
+.if ${MACHINE_ARCH} == "vax" && ${HAVE_GCC} >= 3
 NOPIC=		# defined
 .endif
 .if ${MACHINE_ARCH} == "vax" && ${OBJECT_FMT} == "ELF"
@@ -476,8 +493,7 @@ SHLIB_VERSION_FILE?= ${.CURDIR}/shlib_version
 GNU_ARCH.m68000=m68010
 GNU_ARCH.sh3eb=sh
 GNU_ARCH.sh3el=shle
-GNU_ARCH.sh5eb=sh5
-GNU_ARCH.sh5el=sh5le
+GNU_ARCH.mips64eb=mips64
 MACHINE_GNU_ARCH=${GNU_ARCH.${MACHINE_ARCH}:U${MACHINE_ARCH}}
 
 #
@@ -502,27 +518,29 @@ MACHINE_GNU_PLATFORM?=${MACHINE_GNU_ARCH}--netbsd
 
 TARGETS+=	all clean cleandir depend dependall includes \
 		install lint obj regress tags html installhtml cleanhtml
-.PHONY:		all clean cleandir depend dependall distclean includes \
+PHONY_NOTMAIN =	all clean cleandir depend dependall distclean includes \
 		install lint obj regress tags beforedepend afterdepend \
 		beforeinstall afterinstall realinstall realdepend realall \
 		html installhtml cleanhtml subdir-all subdir-install subdir-depend
+.PHONY:		${PHONY_NOTMAIN}
+.NOTMAIN:	${PHONY_NOTMAIN}
 
 .if ${NEED_OWN_INSTALL_TARGET} != "no"
 .if !target(install)
-install:	.NOTMAIN beforeinstall subdir-install realinstall afterinstall
-beforeinstall:	.NOTMAIN
-subdir-install:	.NOTMAIN beforeinstall
-realinstall:	.NOTMAIN beforeinstall
-afterinstall:	.NOTMAIN subdir-install realinstall
+install:	beforeinstall .WAIT subdir-install realinstall .WAIT afterinstall
+beforeinstall:
+subdir-install:
+realinstall:
+afterinstall:
 .endif
-all:		.NOTMAIN realall subdir-all
-subdir-all:	.NOTMAIN
-realall:	.NOTMAIN
-depend:		.NOTMAIN realdepend subdir-depend
-subdir-depend:	.NOTMAIN
-realdepend:	.NOTMAIN
-distclean:	.NOTMAIN cleandir
-cleandir:	.NOTMAIN clean
+all:		realall subdir-all
+subdir-all:
+realall:
+depend:		realdepend subdir-depend
+subdir-depend:
+realdepend:
+distclean:	cleandir
+cleandir:	clean
 
 dependall:	.NOTMAIN realdepend .MAKE
 	@cd ${.CURDIR}; ${MAKE} realall
@@ -533,6 +551,9 @@ dependall:	.NOTMAIN realdepend .MAKE
 # to set in /etc/mk.conf and override in the make environment.
 # These should be tested with `== "no"' or `!= "no"'.
 # The NOxxx variables should only be set by Makefiles.
+#
+# Please keep etc/Makefile and share/man/man5/mk.conf.5 in sync
+# with changes to the MK* variables here.
 #
 
 #
@@ -565,15 +586,14 @@ MK${var}:=	yes
 	DOC \
 	GCC GCCCMDS GDB \
 	HESIOD HTML \
-	IEEEFP INET6 INFO IPFILTER \
-	KERBEROS KERBEROS4 \
+	IEEEFP INET6 INFO IPFILTER ISCSI \
+	KERBEROS \
 	LINKLIB LINT \
 	MAN \
 	NLS \
 	OBJ \
 	PAM PF PIC PICINSTALL PICLIB POSTFIX PROFILE \
-	SENDMAIL SHARE SKEY STATICLIB \
-	UUCP \
+	SHARE SKEY STATICLIB \
 	YP
 MK${var}?=	yes
 .endfor
@@ -582,7 +602,7 @@ MK${var}?=	yes
 # MK* options which default to "no".
 #
 .for var in \
-	CRYPTO_IDEA CRYPTO_MDC2 CRYPTO_RC5 \
+	CRYPTO_IDEA CRYPTO_MDC2 CRYPTO_RC5 DEBUG DEBUGLIB \
 	MANZ OBJDIRS PRIVATELIB SOFTFLOAT UNPRIVED UPDATE X11
 MK${var}?=	no
 .endfor
@@ -591,12 +611,7 @@ MK${var}?=	no
 # Force some options off if their dependencies are off.
 #
 
-.if ${MKKERBEROS} == "no"
-MKKERBEROS4:=   no 
-.endif
-
 .if ${MKCRYPTO} == "no"
-MKKERBEROS4:=	no
 MKKERBEROS:=	no
 .endif
 
@@ -650,8 +665,6 @@ INSTPRIV.unpriv=
 .endif
 INSTPRIV?=	${INSTPRIV.unpriv} -N ${NETBSDSRCDIR}/etc
 .endif
-SYSPKGTAG?=	${SYSPKG:D-T ${SYSPKG}_pkg}
-SYSPKGDOCTAG?=	${SYSPKG:D-T ${SYSPKG}-doc_pkg}
 STRIPFLAG?=	
 
 .if ${NEED_OWN_INSTALL_TARGET} != "no"
@@ -678,7 +691,7 @@ HOST_INSTALL_SYMLINK?=	${INSTALL} ${SYMLINK} ${RENAME}
 # USE_* options which default to "yes" unless their corresponding MK*
 # variable is set to "no".
 #
-.for var in HESIOD INET6 KERBEROS KERBEROS4 PAM SKEY YP
+.for var in HESIOD INET6 KERBEROS PAM SKEY YP
 .if (${MK${var}} == "no")
 USE_${var}:= no
 .else
@@ -689,15 +702,16 @@ USE_${var}?= yes
 #
 # USE_* options which default to "yes".
 #
-.for var in LIBSTDCXX
-USE_${var}?= yes
-.endfor
+#.for var in 
+#USE_${var}?= yes
+#.endfor
 
 #
-# Because XFree86 3.3.6 was EOLed all ports use XFree86 4.x now.
-# We keep this definition for backwards compatiblity.
+# USE_* options which default to "no".
 #
-USE_XF86_4=	yes
+#.for var in
+#USE_${var}?= no
+#.endfor
 
 #
 # Where X11R6 sources are and where it is installed to.

@@ -1,4 +1,4 @@
-/*	$NetBSD: rtsold.c,v 1.31 2005/10/31 15:22:10 wiz Exp $	*/
+/*	$NetBSD: rtsold.c,v 1.33 2006/10/07 17:27:57 elad Exp $	*/
 /*	$KAME: rtsold.c,v 1.77 2004/01/03 01:35:13 itojun Exp $	*/
 
 /*
@@ -296,7 +296,7 @@ main(int argc, char **argv)
 		e = poll(set, 2, timeout ? (timeout->tv_sec * 1000 + timeout->tv_usec / 1000) : INFTIM);
 		if (e < 1) {
 			if (e < 0 && errno != EINTR) {
-				warnmsg(LOG_ERR, __func__, "select: %s",
+				warnmsg(LOG_ERR, __func__, "poll: %s",
 				    strerror(errno));
 			}
 			continue;
@@ -453,7 +453,7 @@ make_packet(struct ifinfo *ifinfo)
 {
 	size_t packlen = sizeof(struct nd_router_solicit), lladdroptlen = 0;
 	struct nd_router_solicit *rs;
-	char *buf;
+	u_char *buf;
 
 	if ((lladdroptlen = lladdropt_length(ifinfo->sdl)) == 0) {
 		warnmsg(LOG_INFO, __func__,

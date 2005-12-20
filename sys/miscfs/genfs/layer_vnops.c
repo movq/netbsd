@@ -1,4 +1,4 @@
-/*	$NetBSD: layer_vnops.c,v 1.26 2005/12/11 12:24:50 christos Exp $	*/
+/*	$NetBSD: layer_vnops.c,v 1.28.2.2 2007/04/16 20:01:13 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -67,8 +67,8 @@
  *
  * Ancestors:
  *	@(#)lofs_vnops.c	1.2 (Berkeley) 6/18/92
- *	$Id: layer_vnops.c,v 1.26 2005/12/11 12:24:50 christos Exp $
- *	$Id: layer_vnops.c,v 1.26 2005/12/11 12:24:50 christos Exp $
+ *	$Id: layer_vnops.c,v 1.28.2.2 2007/04/16 20:01:13 bouyer Exp $
+ *	$Id: layer_vnops.c,v 1.28.2.2 2007/04/16 20:01:13 bouyer Exp $
  *	...and...
  *	@(#)null_vnodeops.c 1.20 92/07/07 UCLA Ficus project
  */
@@ -233,7 +233,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: layer_vnops.c,v 1.26 2005/12/11 12:24:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: layer_vnops.c,v 1.28.2.2 2007/04/16 20:01:13 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -244,6 +244,8 @@ __KERNEL_RCSID(0, "$NetBSD: layer_vnops.c,v 1.26 2005/12/11 12:24:50 christos Ex
 #include <sys/namei.h>
 #include <sys/malloc.h>
 #include <sys/buf.h>
+#include <sys/kauth.h>
+
 #include <miscfs/genfs/layer.h>
 #include <miscfs/genfs/layer_extern.h>
 #include <miscfs/genfs/genfs.h>
@@ -428,8 +430,8 @@ layer_lookup(v)
 	} */ *ap = v;
 	struct componentname *cnp = ap->a_cnp;
 	int flags = cnp->cn_flags;
-	struct vnode *dvp, *vp, *ldvp;
-	int error, r;
+	struct vnode *dvp, *lvp, *ldvp;
+	int error;
 
 	dvp = ap->a_dvp;
 
@@ -440,43 +442,32 @@ layer_lookup(v)
 	ldvp = LAYERVPTOLOWERVP(dvp);
 	ap->a_dvp = ldvp;
 	error = VCALL(ldvp, ap->a_desc->vdesc_offset, ap);
-	vp = *ap->a_vpp;
+	lvp = *ap->a_vpp;
 	*ap->a_vpp = NULL;
 
 	if (error == EJUSTRETURN && (flags & ISLASTCN) &&
 	    (dvp->v_mount->mnt_flag & MNT_RDONLY) &&
 	    (cnp->cn_nameiop == CREATE || cnp->cn_nameiop == RENAME))
 		error = EROFS;
+
 	/*
 	 * We must do the same locking and unlocking at this layer as
-	 * is done in the layers below us. It used to be we would try
-	 * to guess based on what was set with the flags and error codes.
-	 *
-	 * But that doesn't work. So now we have the underlying VOP_LOOKUP
-	 * tell us if it released the parent vnode, and we adjust the
-	 * upper node accordingly. We can't just look at the lock states
-	 * of the lower nodes as someone else might have come along and
-	 * locked the parent node after our call to VOP_LOOKUP locked it.
+	 * is done in the layers below us.
 	 */
-	if ((cnp->cn_flags & PDIRUNLOCK)) {
-		LAYERFS_UPPERUNLOCK(dvp, 0, r);
-	}
-	if (ldvp == vp) {
+	if (ldvp == lvp) {
+
 		/*
 		 * Did lookup on "." or ".." in the root node of a mount point.
 		 * So we return dvp after a VREF.
 		 */
-		*ap->a_vpp = dvp;
 		VREF(dvp);
-		vrele(vp);
-	} else if (vp != NULL) {
-		error = layer_node_create(dvp->v_mount, vp, ap->a_vpp);
+		*ap->a_vpp = dvp;
+		vrele(lvp);
+	} else if (lvp != NULL) {
+		/* dvp, ldvp and vp are all locked */
+		error = layer_node_create(dvp->v_mount, lvp, ap->a_vpp);
 		if (error) {
-			vput(vp);
-			if (cnp->cn_flags & PDIRUNLOCK) {
-				if (vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY) == 0)
-					cnp->cn_flags &= ~PDIRUNLOCK;
-			}
+			vput(lvp);
 		}
 	}
 	return (error);
@@ -493,7 +484,7 @@ layer_setattr(v)
 		struct vnodeop_desc *a_desc;
 		struct vnode *a_vp;
 		struct vattr *a_vap;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
@@ -537,7 +528,7 @@ layer_getattr(v)
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
 		struct vattr *a_vap;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
@@ -557,7 +548,7 @@ layer_access(v)
 	struct vop_access_args /* {
 		struct vnode *a_vp;
 		int  a_mode;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
@@ -687,7 +678,7 @@ layer_unlock(v)
 			flags &= ~LK_INTERLOCK;
 		}
 		VOP_UNLOCK(LAYERVPTOLOWERVP(vp), flags);
-		return (lockmgr(&vp->v_lock, ap->a_flags | LK_RELEASE,
+		return (lockmgr(&vp->v_lock, flags | LK_RELEASE,
 			&vp->v_interlock));
 	}
 }
@@ -727,7 +718,7 @@ layer_fsync(v)
 {
 	struct vop_fsync_args /* {
 		struct vnode *a_vp;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		int  a_flags;
 		off_t offlo;
 		off_t offhi;
@@ -889,7 +880,7 @@ layer_reclaim(v)
 	simple_unlock(&lmp->layerm_hashlock);
 	FREE(vp->v_data, M_TEMP);
 	vp->v_data = NULL;
-	vrele (lowervp);
+	vrele(lowervp);
 	return (0);
 }
 
@@ -1004,6 +995,9 @@ layer_putpages(v)
 
 	ap->a_vp = LAYERVPTOLOWERVP(vp);
 	simple_unlock(&vp->v_interlock);
+	if (ap->a_flags & PGO_RECLAIM) {
+		return 0;
+	}
 	simple_lock(&ap->a_vp->v_interlock);
 	error = VCALL(ap->a_vp, VOFFSET(vop_putpages), ap);
 	return error;

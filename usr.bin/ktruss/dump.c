@@ -1,4 +1,4 @@
-/*	$NetBSD: dump.c,v 1.24 2005/12/11 11:30:06 christos Exp $	*/
+/*	$NetBSD: dump.c,v 1.27 2006/10/23 04:21:51 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
 #if 0
 static char sccsid[] = "@(#)kdump.c	8.4 (Berkeley) 4/28/95";
 #endif
-__RCSID("$NetBSD: dump.c,v 1.24 2005/12/11 11:30:06 christos Exp $");
+__RCSID("$NetBSD: dump.c,v 1.27 2006/10/23 04:21:51 mrg Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -183,9 +183,9 @@ getrecord(FILE *fp)
 		return (NULL);
 	}
 
+	if (kth->ktr_len < 0)
+		errx(EXIT_FAILURE, "bogus length 0x%x", kth->ktr_len);
 	len = kth->ktr_len;
-	if (len < 0)
-		errx(EXIT_FAILURE, "bogus length 0x%lx", (long)len);
 	if (len > 0) {
 		/* + 1 to ensure room for NUL terminate */
 		kte = xrealloc(kte, &siz, sizeof(struct ktr_entry) + len + 1);
@@ -500,7 +500,7 @@ syscallprint(struct ktr_header *kth)
 	case SYS_utimes:
 	case SYS_quotactl:
 	case SYS_statvfs1:
-	case SYS_getfh:
+	case SYS_compat_30_getfh:
 	case SYS_pathconf:
 	case SYS_truncate:
 	case SYS_undelete:
@@ -513,6 +513,7 @@ syscallprint(struct ktr_header *kth)
 	case SYS___posix_chown:
 	case SYS___posix_lchown:
 	case SYS_lchflags:
+	case SYS___getfh30:
 		nameiargprint("(", kth, &ap, &argsize);
 
 		/*
@@ -544,7 +545,7 @@ syscallprint(struct ktr_header *kth)
 		break;
 
 	case SYS_ptrace :
-		if (*ap >= 0 &&
+		if ((long)*ap >= 0 &&
 		    *ap < sizeof(ptrace_ops) / sizeof(ptrace_ops[0]))
 			wprintf("(%s", ptrace_ops[*ap]);
 		else

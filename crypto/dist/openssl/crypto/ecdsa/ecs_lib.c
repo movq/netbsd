@@ -61,7 +61,7 @@
 #include <openssl/err.h>
 #include <openssl/bn.h>
 
-const char *ECDSA_version="ECDSA" OPENSSL_VERSION_PTEXT;
+const char ECDSA_version[]="ECDSA" OPENSSL_VERSION_PTEXT;
 
 static const ECDSA_METHOD *default_ECDSA_method = NULL;
 
@@ -206,10 +206,14 @@ int ECDSA_size(const EC_KEY *r)
 	ASN1_INTEGER bs;
 	BIGNUM	*order=NULL;
 	unsigned char buf[4];
-	const EC_GROUP *group = EC_KEY_get0_group(r);
+	const EC_GROUP *group;
 
-	if (r == NULL || group == NULL)
+	if (r == NULL)
 		return 0;
+	group = EC_KEY_get0_group(r);
+	if (group == NULL)
+		return 0;
+
 	if ((order = BN_new()) == NULL) return 0;
 	if (!EC_GROUP_get_order(group,order,NULL))
 	{

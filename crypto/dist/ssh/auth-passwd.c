@@ -1,4 +1,5 @@
-/*	$NetBSD: auth-passwd.c,v 1.14 2005/05/08 21:15:04 christos Exp $	*/
+/*	$NetBSD: auth-passwd.c,v 1.16 2006/09/28 21:22:14 christos Exp $	*/
+/* $OpenBSD: auth-passwd.c,v 1.40 2006/08/03 03:34:41 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -37,13 +38,21 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: auth-passwd.c,v 1.33 2005/01/24 11:47:13 dtucker Exp $");
-__RCSID("$NetBSD: auth-passwd.c,v 1.14 2005/05/08 21:15:04 christos Exp $");
+__RCSID("$NetBSD: auth-passwd.c,v 1.16 2006/09/28 21:22:14 christos Exp $");
+#include <sys/types.h>
+
+#include <pwd.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdarg.h>
+#include <unistd.h>
 
 #include "packet.h"
 #include "buffer.h"
 #include "log.h"
 #include "servconf.h"
+#include "key.h"
+#include "hostfile.h"
 #include "auth.h"
 #include "auth-options.h"
 
@@ -85,7 +94,7 @@ auth_password(Authctxt *authctxt, const char *password)
 		return 0;
 #ifdef USE_PAM
 	if (options.use_pam)
-		return (sshpam_auth_passwd(authctxt, password));
+		return (sshpam_auth_passwd(authctxt, password) && ok);
 #endif
 #ifdef KRB5
 	if (options.kerberos_authentication == 1) {
@@ -142,6 +151,8 @@ sys_auth_passwd(Authctxt *authctxt, const char *password)
 
 	as = auth_usercheck(pw->pw_name, authctxt->style, "auth-ssh",
 	    (char *)password);
+	if (as == NULL)
+		return (0);
 	if (auth_getstate(as) & AUTH_PWEXPIRED) {
 		auth_close(as);
 		disable_forwarding();

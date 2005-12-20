@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.c,v 1.74 2005/12/11 12:16:41 christos Exp $	*/
+/*	$NetBSD: cpufunc.c,v 1.77.12.1 2007/02/21 18:36:03 snj Exp $	*/
 
 /*
  * arm7tdmi support code Copyright (c) 2001 John Fremlin
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpufunc.c,v 1.74 2005/12/11 12:16:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpufunc.c,v 1.77.12.1 2007/02/21 18:36:03 snj Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_cpuoptions.h"
@@ -457,6 +457,64 @@ struct cpu_functions arm9_cpufuncs = {
 };
 #endif /* CPU_ARM9 */
 
+#if defined(CPU_ARM9E) || defined(CPU_ARM10)
+struct cpu_functions armv5_ec_cpufuncs = {
+	/* CPU functions */
+
+	cpufunc_id,			/* id			*/
+	cpufunc_nullop,			/* cpwait		*/
+
+	/* MMU functions */
+
+	cpufunc_control,		/* control		*/
+	cpufunc_domains,		/* Domain		*/
+	armv5_ec_setttb,		/* Setttb		*/
+	cpufunc_faultstatus,		/* Faultstatus		*/
+	cpufunc_faultaddress,		/* Faultaddress		*/
+
+	/* TLB functions */
+
+	armv4_tlb_flushID,		/* tlb_flushID		*/
+	arm10_tlb_flushID_SE,		/* tlb_flushID_SE	*/
+	armv4_tlb_flushI,		/* tlb_flushI		*/
+	arm10_tlb_flushI_SE,		/* tlb_flushI_SE	*/
+	armv4_tlb_flushD,		/* tlb_flushD		*/
+	armv4_tlb_flushD_SE,		/* tlb_flushD_SE	*/
+
+	/* Cache operations */
+
+	armv5_ec_icache_sync_all,	/* icache_sync_all	*/
+	armv5_ec_icache_sync_range,	/* icache_sync_range	*/
+
+	armv5_ec_dcache_wbinv_all,	/* dcache_wbinv_all	*/
+	armv5_ec_dcache_wbinv_range,	/* dcache_wbinv_range	*/
+/*XXX*/	armv5_ec_dcache_wbinv_range,	/* dcache_inv_range	*/
+	armv5_ec_dcache_wb_range,	/* dcache_wb_range	*/
+
+	armv5_ec_idcache_wbinv_all,	/* idcache_wbinv_all	*/
+	armv5_ec_idcache_wbinv_range,	/* idcache_wbinv_range	*/
+
+	/* Other functions */
+
+	cpufunc_nullop,			/* flush_prefetchbuf	*/
+	armv4_drain_writebuf,		/* drain_writebuf	*/
+	cpufunc_nullop,			/* flush_brnchtgt_C	*/
+	(void *)cpufunc_nullop,		/* flush_brnchtgt_E	*/
+
+	(void *)cpufunc_nullop,		/* sleep		*/
+
+	/* Soft functions */
+
+	cpufunc_null_fixup,		/* dataabt_fixup	*/
+	cpufunc_null_fixup,		/* prefetchabt_fixup	*/
+
+	arm10_context_switch,		/* context_switch	*/
+
+	arm10_setup			/* cpu setup		*/
+
+};
+#endif /* CPU_ARM9E || CPU_ARM10 */
+
 #ifdef CPU_ARM10
 struct cpu_functions arm10_cpufuncs = {
 	/* CPU functions */
@@ -468,7 +526,7 @@ struct cpu_functions arm10_cpufuncs = {
 
 	cpufunc_control,		/* control		*/
 	cpufunc_domains,		/* Domain		*/
-	arm10_setttb,			/* Setttb		*/
+	armv5_setttb,			/* Setttb		*/
 	cpufunc_faultstatus,		/* Faultstatus		*/
 	cpufunc_faultaddress,		/* Faultaddress		*/
 
@@ -571,7 +629,7 @@ struct cpu_functions arm11_cpufuncs = {
 	arm11_setup			/* cpu setup		*/
 
 };
-#endif /* CPU_ARM10 || CPU_ARM11 */
+#endif /* CPU_ARM11 */
 
 #ifdef CPU_SA110
 struct cpu_functions sa110_cpufuncs = {
@@ -812,7 +870,7 @@ u_int cputype;
 u_int cpu_reset_needs_v4_MMU_disable;	/* flag used in locore.s */
 
 #if defined(CPU_ARM7TDMI) || defined(CPU_ARM8) || defined(CPU_ARM9) || \
-    defined (CPU_ARM10) || defined (CPU_ARM11) || \
+    defined (CPU_ARM9E) || defined (CPU_ARM10) || defined (CPU_ARM11) || \
     defined(CPU_XSCALE_80200) || defined(CPU_XSCALE_80321) || \
     defined(__CPU_XSCALE_PXA2XX) || defined(CPU_XSCALE_IXP425)
 static void get_cachetype_cp15 __P((void));
@@ -829,7 +887,7 @@ get_cachetype_cp15()
 	u_int ctype, isize, dsize;
 	u_int multiplier;
 
-	__asm __volatile("mrc p15, 0, %0, c0, c0, 1"
+	__asm volatile("mrc p15, 0, %0, c0, c0, 1"
 		: "=r" (ctype));
 
 	/*
@@ -1043,10 +1101,19 @@ set_cpufuncs()
 		return 0;
 	}
 #endif /* CPU_ARM9 */
+#if defined(CPU_ARM9E) || defined(CPU_ARM10)
+	if (cputype == CPU_ID_ARM926EJS ||
+	    cputype == CPU_ID_ARM1026EJS) {
+		cpufuncs = armv5_ec_cpufuncs;
+		cpu_reset_needs_v4_MMU_disable = 1;	/* V4 or higher */
+		get_cachetype_cp15();
+		pmap_pte_init_generic();
+		return 0;
+	}
+#endif /* CPU_ARM9E || CPU_ARM10 */
 #ifdef CPU_ARM10
 	if (/* cputype == CPU_ID_ARM1020T || */
-	    cputype == CPU_ID_ARM1020E ||
-	    cputype == CPU_ID_ARM1026EJS) {
+	    cputype == CPU_ID_ARM1020E) {
 		/*
 		 * Select write-through cacheing (this isn't really an
 		 * option on ARM1020T).
@@ -1137,7 +1204,7 @@ set_cpufuncs()
 		 *	- overflow indications cleared
 		 *	- all counters disabled
 		 */
-		__asm __volatile("mcr p14, 0, %0, c0, c0, 0"
+		__asm volatile("mcr p14, 0, %0, c0, c0, 0"
 			:
 			: "r" (PMNC_P|PMNC_C|PMNC_PMN0_IF|PMNC_PMN1_IF|
 			       PMNC_CC_IF));
@@ -1146,7 +1213,7 @@ set_cpufuncs()
 		/*
 		 * Crank CCLKCFG to maximum legal value.
 		 */
-		__asm __volatile ("mcr p14, 0, %0, c6, c0, 0"
+		__asm volatile ("mcr p14, 0, %0, c6, c0, 0"
 			:
 			: "r" (XSCALE_CCLKCFG));
 #endif
@@ -1156,7 +1223,7 @@ set_cpufuncs()
 		 * don't really support it, yet.  Clear any pending
 		 * error indications.
 		 */
-		__asm __volatile("mcr p13, 0, %0, c0, c1, 0"
+		__asm volatile("mcr p13, 0, %0, c0, c1, 0"
 			:
 			: "r" (BCUCTL_E0|BCUCTL_E1|BCUCTL_EV));
 
@@ -1194,7 +1261,7 @@ set_cpufuncs()
 		 *	- overflow indications cleared
 		 *	- all counters disabled
 		 */
-		__asm __volatile("mcr p14, 0, %0, c0, c0, 0"
+		__asm volatile("mcr p14, 0, %0, c0, c0, 0"
 			:
 			: "r" (PMNC_P|PMNC_C|PMNC_PMN0_IF|PMNC_PMN1_IF|
 			       PMNC_CC_IF));
@@ -1616,8 +1683,8 @@ late_abort_fixup(arg)
  */
 
 #if defined(CPU_ARM6) || defined(CPU_ARM7) || defined(CPU_ARM7TDMI) || \
-	defined(CPU_ARM8) || defined (CPU_ARM9) || defined(CPU_SA110) || \
-	defined(CPU_SA1100) || defined(CPU_SA1110) || \
+	defined(CPU_ARM8) || defined (CPU_ARM9) || defined (CPU_ARM9E) || \
+	defined(CPU_SA110) || defined(CPU_SA1100) || defined(CPU_SA1110) || \
 	defined(CPU_XSCALE_80200) || defined(CPU_XSCALE_80321) || \
 	defined(__CPU_XSCALE_PXA2XX) || defined(CPU_XSCALE_IXP425) || \
 	defined(CPU_ARM10) || defined(CPU_ARM11)
@@ -1961,7 +2028,7 @@ arm9_setup(args)
 }
 #endif	/* CPU_ARM9 */
 
-#ifdef CPU_ARM10
+#if defined(CPU_ARM9E) || defined(CPU_ARM10)
 struct cpu_option arm10_options[] = {
 	{ "cpu.cache",		BIC, OR,  (CPU_CONTROL_IC_ENABLE | CPU_CONTROL_DC_ENABLE) },
 	{ "cpu.nocache",	OR,  BIC, (CPU_CONTROL_IC_ENABLE | CPU_CONTROL_DC_ENABLE) },
@@ -2004,7 +2071,7 @@ arm10_setup(args)
 	cpu_idcache_wbinv_all();
 
 	/* Now really make sure they are clean.  */
-	asm volatile ("mcr\tp15, 0, r0, c7, c7, 0" : : );
+	__asm volatile ("mcr\tp15, 0, r0, c7, c7, 0" : : );
 
 	/* Set the control register */
 	curcpu()->ci_ctrl = cpuctrl;
@@ -2013,7 +2080,7 @@ arm10_setup(args)
 	/* And again. */
 	cpu_idcache_wbinv_all();
 }
-#endif	/* CPU_ARM10 */
+#endif	/* CPU_ARM9E || CPU_ARM10 */
 
 #ifdef CPU_ARM11
 struct cpu_option arm11_options[] = {
@@ -2054,7 +2121,7 @@ arm11_setup(args)
 	cpu_idcache_wbinv_all();
 
 	/* Now really make sure they are clean.  */
-	asm volatile ("mcr\tp15, 0, r0, c7, c7, 0" : : );
+	__asm volatile ("mcr\tp15, 0, r0, c7, c7, 0" : : );
 
 	/* Set the control register */
 	curcpu()->ci_ctrl = cpuctrl;
@@ -2178,6 +2245,7 @@ sa11x0_setup(args)
 	cpu_idcache_wbinv_all();
 
 	/* Set the control register */    
+	curcpu()->ci_ctrl = cpuctrl;
 	cpu_control(0xffffffff, cpuctrl);
 }
 #endif	/* CPU_SA1100 || CPU_SA1110 */
@@ -2303,14 +2371,14 @@ xscale_setup(args)
 	cpu_control(0xffffffff, cpuctrl);
 
 	/* Make sure write coalescing is turned on */
-	__asm __volatile("mrc p15, 0, %0, c1, c0, 1"
+	__asm volatile("mrc p15, 0, %0, c1, c0, 1"
 		: "=r" (auxctl));
 #ifdef XSCALE_NO_COALESCE_WRITES
 	auxctl |= XSCALE_AUXCTL_K;
 #else
 	auxctl &= ~XSCALE_AUXCTL_K;
 #endif
-	__asm __volatile("mcr p15, 0, %0, c1, c0, 1"
+	__asm volatile("mcr p15, 0, %0, c1, c0, 1"
 		: : "r" (auxctl));
 }
 #endif	/* CPU_XSCALE_80200 || CPU_XSCALE_80321 || __CPU_XSCALE_PXA2XX || CPU_XSCALE_IXP425 */

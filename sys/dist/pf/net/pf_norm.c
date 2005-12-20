@@ -1,4 +1,4 @@
-/*	$NetBSD: pf_norm.c,v 1.10 2005/12/11 12:24:25 christos Exp $	*/
+/*	$NetBSD: pf_norm.c,v 1.15 2006/11/16 01:33:35 christos Exp $	*/
 /*	$OpenBSD: pf_norm.c,v 1.97 2004/09/21 16:59:12 aaron Exp $ */
 
 /*
@@ -728,7 +728,7 @@ pf_fragcache(struct mbuf **m0, struct ip *h, struct pf_fragment **frag, int mff,
 			} else {
 				hosed++;
 			}
-		} else {
+		} else if (frp == NULL) {
 			/* There is a gap between fragments */
 			DPFPRINTF(("fragcache[%d]: gap %d %d-%d (%d-%d)\n",
 			    h->ip_id, -aftercut, off, max, fra->fr_off,
@@ -1226,8 +1226,8 @@ pf_normalize_ip6(struct mbuf **m0, int dir, struct pfi_kif *kif,
 #endif /* INET6 */
 
 int
-pf_normalize_tcp(int dir, struct pfi_kif *kif, struct mbuf *m, int ipoff,
-    int off, void *h, struct pf_pdesc *pd)
+pf_normalize_tcp(int dir, struct pfi_kif *kif, struct mbuf *m,
+    int ipoff, int off, void *h, struct pf_pdesc *pd)
 {
 	struct pf_rule	*r, *rm = NULL;
 	struct tcphdr	*th = pd->hdr.tcp;
@@ -1339,7 +1339,8 @@ pf_normalize_tcp(int dir, struct pfi_kif *kif, struct mbuf *m, int ipoff,
 
 int
 pf_normalize_tcp_init(struct mbuf *m, int off, struct pf_pdesc *pd,
-    struct tcphdr *th, struct pf_state_peer *src, struct pf_state_peer *dst)
+    struct tcphdr *th, struct pf_state_peer *src,
+    struct pf_state_peer *dst)
 {
 	u_int32_t tsval, tsecr;
 	u_int8_t hdr[60];
@@ -1666,7 +1667,7 @@ pf_normalize_tcp_stateful(struct mbuf *m, int off, struct pf_pdesc *pd,
 
 
 		/* Calculate max ticks since the last timestamp */
-#define TS_MAXFREQ	1100		/* RFC max TS freq of 1Khz + 10% skew */
+#define TS_MAXFREQ	1100		/* RFC max TS freq of 1 kHz + 10% skew */
 #define TS_MICROSECS	1000000		/* microseconds per second */
 		timersub(&uptime, &src->scrub->pfss_last, &delta_ts);
 		tsval_from_last = (delta_ts.tv_sec + ts_fudge) * TS_MAXFREQ;
@@ -1836,7 +1837,7 @@ pf_normalize_tcpopt(struct pf_rule *r, struct mbuf *m, struct tcphdr *th,
 
 	thoff = th->th_off << 2;
 	cnt = thoff - sizeof(struct tcphdr);
-	optp = mtod(m, caddr_t) + off + sizeof(struct tcphdr);
+	optp = mtod(m, u_char *) + off + sizeof(struct tcphdr);
 
 	for (; cnt > 0; cnt -= optlen, optp += optlen) {
 		opt = optp[0];

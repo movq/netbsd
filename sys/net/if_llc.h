@@ -1,4 +1,4 @@
-/*	$NetBSD: if_llc.h,v 1.15 2005/12/10 23:21:38 elad Exp $	*/
+/*	$NetBSD: if_llc.h,v 1.16.12.1 2006/12/18 14:41:29 tron Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -51,15 +51,15 @@ struct llc {
 		u_int8_t format_id;
 		u_int8_t class;
 		u_int8_t window_x2;
-	    } type_u __attribute__((__packed__));
+	    } type_u /* XXX __attribute__((__packed__)) ??? */;
 	    struct {
 		u_int8_t num_snd_x2;
 		u_int8_t num_rcv_x2;
-	    } type_i __attribute__((__packed__));
+	    } type_i /* XXX __attribute__((__packed__)) ??? */;
 	    struct {
 		u_int8_t control;
 		u_int8_t num_rcv_x2;
-	    } type_s __attribute__((__packed__));
+	    } type_s /* XXX __attribute__((__packed__)) ??? */;
 	    struct {
 	        u_int8_t control;
 		/*
@@ -71,7 +71,7 @@ struct llc {
 		u_int8_t frmr_control;
 		u_int8_t frmr_control_ext;
 		u_int8_t frmr_cause;
-	    } type_frmr __attribute__((__packed__));
+	    } type_frmr /* XXX __attribute__((__packed__)) ??? */;
 	    struct {
 		u_int8_t  control;
 		u_int8_t  org_code[3];
@@ -80,7 +80,7 @@ struct llc {
 	    struct {
 		u_int8_t control;
 		u_int8_t control_ext;
-	    } type_raw __attribute__((__packed__));
+	    } type_raw /* XXX __attribute__((__packed__)) ??? */;
 	} llc_un /* XXX __attribute__((__packed__)) ??? */;
 } __attribute__((__packed__));
 
@@ -152,5 +152,18 @@ struct frmrinfo {
 #define LLC_X25_LSAP	0x7e
 #define LLC_SNAP_LSAP	0xaa
 #define LLC_ISO_LSAP	0xfe
+
+/*
+ * LLC XID definitions from 802.2, as needed
+ */
+
+#define LLC_XID_FORMAT_BASIC	0x81
+#define LLC_XID_BASIC_MINLEN	(LLC_UFRAMELEN + 3)
+
+#define LLC_XID_CLASS_I 	0x1
+#define LLC_XID_CLASS_II	0x3
+#define LLC_XID_CLASS_III	0x5
+#define LLC_XID_CLASS_IV	0x7
+
 
 #endif /* !_NET_IF_LLC_H_ */

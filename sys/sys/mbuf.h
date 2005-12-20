@@ -1,4 +1,4 @@
-/*	$NetBSD: mbuf.h,v 1.116 2005/12/04 20:21:33 christos Exp $	*/
+/*	$NetBSD: mbuf.h,v 1.133 2006/11/23 19:41:58 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999, 2001 The NetBSD Foundation, Inc.
@@ -101,8 +101,8 @@
 /* Packet tags structure */
 struct m_tag {
 	SLIST_ENTRY(m_tag)	m_tag_link;	/* List of packet tags */
-	u_int16_t		m_tag_id;	/* Tag ID */
-	u_int16_t		m_tag_len;	/* Length of data */
+	uint16_t		m_tag_id;	/* Tag ID */
+	uint16_t		m_tag_len;	/* Length of data */
 };
 
 /* mbuf ownership structure */
@@ -117,6 +117,8 @@ struct mowner {
 	u_long mo_ext_claims;		/* # of M_EXT mbuf claimed */
 	u_long mo_ext_releases;		/* # of M_EXT mbuf released */
 };
+
+#define MOWNER_INIT(x, y) { x, y, { NULL, NULL }, 0, 0, 0, 0, 0, 0 }
 
 /*
  * Macros for type conversion
@@ -157,7 +159,7 @@ struct	pkthdr {
 	SLIST_HEAD(packet_tags, m_tag) tags; /* list of packet tags */
 	int	len;			/* total packet length */
 	int	csum_flags;		/* checksum flags */
-	u_int32_t csum_data;		/* checksum data */
+	uint32_t csum_data;		/* checksum data */
 	u_int	segsz;			/* segment size */
 };
 
@@ -174,12 +176,17 @@ struct	pkthdr {
 #define	M_CSUM_IPv4		0x00000040	/* IPv4 header */
 #define	M_CSUM_IPv4_BAD		0x00000080	/* IPv4 header checksum bad */
 #define	M_CSUM_TSOv4		0x00000100	/* TCPv4 segmentation offload */
+#define	M_CSUM_TSOv6		0x00000200	/* TCPv6 segmentation offload */
 
 /* Checksum-assist quirks: keep separate from jump-table bits. */
 #define	M_CSUM_NO_PSEUDOHDR	0x80000000	/* Rx csum_data does not include
 						 * the UDP/TCP pseudo-hdr, and
 						 * is not yet 1s-complemented.
 						 */
+
+#define M_CSUM_BITS \
+    "\20\1TCPv4\2UDPv4\3TCP_UDP_BAD\4DATA\5TCPv6\6UDPv6\7IPv4\10IPv4_BAD" \
+    "\11TSOv4\12TSOv6\40NO_PSEUDOHDR"
 
 /*
  * Macros for manipulating csum_data on outgoing packets.  These are
@@ -307,11 +314,14 @@ MBUF_DEFINE(mbuf, MHLEN, MLEN);
 #define	M_MCAST		0x0200	/* send/received as link-level multicast */
 #define	M_CANFASTFWD	0x0400	/* used by filters to indicate packet can
 				   be fast-forwarded */
-#define M_ANYCAST6	0x0800	/* received as IPv6 anycast */
-#define	M_LINK0		0x1000	/* link layer specific flag */
-#define	M_LINK1		0x2000	/* link layer specific flag */
-#define	M_LINK2		0x4000	/* link layer specific flag */
-#define	M_LINK3		0x8000	/* link layer specific flag */
+#define	M_ANYCAST6	0x00800	/* received as IPv6 anycast */
+#define	M_LINK0		0x01000	/* link layer specific flag */
+#define	M_LINK1		0x02000	/* link layer specific flag */
+#define	M_LINK2		0x04000	/* link layer specific flag */
+#define	M_LINK3		0x08000	/* link layer specific flag */
+#define	M_LINK4		0x10000	/* link layer specific flag */
+#define	M_LINK5		0x20000	/* link layer specific flag */
+#define	M_LINK6		0x40000	/* link layer specific flag */
 
 /* additional flags for M_EXT mbufs */
 #define	M_EXT_FLAGS	0xff000000
@@ -322,6 +332,11 @@ MBUF_DEFINE(mbuf, MHLEN, MLEN);
 
 /* for source-level compatibility */
 #define	M_CLUSTER	M_EXT_CLUSTER
+
+#define M_FLAGS_BITS \
+    "\20\1EXT\2PKTHDR\3EOR\4PROTO1\5AUTHIPHDR\6DECRYPTED\7LOOP\10AUTHIPDGM" \
+    "\11BCAST\12MCAST\13CANFASTFWD\14ANYCAST6\15LINK0\16LINK1\17LINK2\20LINK3" \
+    "\31EXT_CLUSTER\32EXT_PAGES\33EXT_ROMAP\34EXT_RW"
 
 /* flags copied when copying m_pkthdr */
 #define	M_COPYFLAGS	(M_PKTHDR|M_EOR|M_BCAST|M_MCAST|M_CANFASTFWD|M_ANYCAST6|M_LINK0|M_LINK1|M_LINK2|M_AUTHIPHDR|M_DECRYPTED|M_LOOP|M_AUTHIPDGM)
@@ -678,6 +693,8 @@ do {									\
 	  (((m)->m_flags & (M_EXT_ROMAP|M_EXT_RW)) != M_EXT_RW ||	\
 	  MCLISREFERENCED(m)))
 
+#define	M_UNWRITABLE(__m, __len)					\
+	((__m)->m_len < (__len) || M_READONLY((__m)))
 /*
  * Determine if an mbuf's data area is read-only at the MMU.
  */
@@ -756,10 +773,63 @@ do {									\
  * Allow drivers and/or protocols to use the rcvif member of
  * PKTHDR mbufs to store private context information.
  */
-#define	M_GETCTX(m, t)		((t) (m)->m_pkthdr.rcvif + 0)
-#define	M_SETCTX(m, c)		((void) ((m)->m_pkthdr.rcvif = (void *) (c)))
+#define	M_GETCTX(m, t)		((t)(m)->m_pkthdr.rcvif)
+#define	M_SETCTX(m, c)		((void)((m)->m_pkthdr.rcvif = (void *)(c)))
 
 #endif /* defined(_KERNEL) */
+
+/*
+ * Simple mbuf queueing system
+ *
+ * this is basically a SIMPLEQ adapted to mbuf use (ie using
+ * m_nextpkt instead of field.sqe_next).
+ *
+ * m_next is ignored, so queueing chains of mbufs is possible
+ */
+#define MBUFQ_HEAD(name)					\
+struct name {							\
+	struct mbuf *mq_first;					\
+	struct mbuf **mq_last;					\
+}
+
+#define MBUFQ_INIT(q)		do {				\
+	(q)->mq_first = NULL;					\
+	(q)->mq_last = &(q)->mq_first;				\
+} while (/*CONSTCOND*/0)
+
+#define MBUFQ_ENQUEUE(q, m)	do {				\
+	(m)->m_nextpkt = NULL;					\
+	*(q)->mq_last = (m);					\
+	(q)->mq_last = &(m)->m_nextpkt;				\
+} while (/*CONSTCOND*/0)
+
+#define MBUFQ_PREPEND(q, m)	do {				\
+	if (((m)->m_nextpkt = (q)->mq_first) == NULL)		\
+		(q)->mq_last = &(m)->m_nextpkt;			\
+	(q)->mq_first = (m);					\
+} while (/*CONSTCOND*/0)
+
+#define MBUFQ_DEQUEUE(q, m)	do {				\
+	if (((m) = (q)->mq_first) != NULL) { 			\
+		if (((q)->mq_first = (m)->m_nextpkt) == NULL)	\
+			(q)->mq_last = &(q)->mq_first;		\
+		else						\
+			(m)->m_nextpkt = NULL;			\
+	}							\
+} while (/*CONSTCOND*/0)
+
+#define MBUFQ_DRAIN(q)		do {				\
+	struct mbuf *__m0;					\
+	while ((__m0 = (q)->mq_first) != NULL) {		\
+		(q)->mq_first = __m0->m_nextpkt;		\
+		m_freem(__m0);					\
+	}							\
+	(q)->mq_last = &(q)->mq_first;				\
+} while (/*CONSTCOND*/0)
+
+#define MBUFQ_FIRST(q)		((q)->mq_first)
+#define MBUFQ_NEXT(m)		((m)->m_nextpkt)
+#define MBUFQ_LAST(q)		(*(q)->mq_last)
 
 /*
  * Mbuf statistics.
@@ -901,7 +971,11 @@ struct	m_tag *m_tag_next(struct mbuf *, struct m_tag *);
 #define	PACKET_TAG_IPSEC_HISTORY		23 /* IPSEC history */
 
 #define	PACKET_TAG_PF_TRANSLATE_LOCALHOST	24 /* translated to localhost */
-#define	PACKET_TAG_IPSEC_NAT_T_PORTS		25 /* two u_int16_t */
+#define	PACKET_TAG_IPSEC_NAT_T_PORTS		25 /* two uint16_t */
+
+#define	PACKET_TAG_INET6			26 /* IPv6 info */
+
+#define	PACKET_TAG_ECO_RETRYPARMS		27 /* Econet retry parameters */
 
 /*
  * Return the number of bytes in the mbuf chain, m.
@@ -934,7 +1008,7 @@ m_ext_free(struct mbuf *m, boolean_t dofree)
 	if (MCLISREFERENCED(m)) {
 		_MCLDEREFERENCE(m);
 	} else if (m->m_flags & M_CLUSTER) {
-		pool_cache_put_paddr(m->m_ext.ext_arg,
+		pool_cache_put_paddr((struct pool_cache *)m->m_ext.ext_arg,
 		    m->m_ext.ext_buf, m->m_ext.ext_paddr);
 	} else if (m->m_ext.ext_free) {
 		(*m->m_ext.ext_free)(dofree ? m : NULL, m->m_ext.ext_buf,
@@ -947,6 +1021,7 @@ m_ext_free(struct mbuf *m, boolean_t dofree)
 		pool_cache_put(&mbpool_cache, m);
 }
 
+void m_print(const struct mbuf *, const char *, void (*)(const char *, ...));
 
 #endif /* _KERNEL */
 #endif /* !_SYS_MBUF_H_ */

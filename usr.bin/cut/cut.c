@@ -1,4 +1,4 @@
-/*	$NetBSD: cut.c,v 1.18 2005/03/22 21:56:28 yamt Exp $	*/
+/*	$NetBSD: cut.c,v 1.21 2006/07/29 02:01:24 jnemeth Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\n\
 #if 0
 static char sccsid[] = "@(#)cut.c	8.3 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: cut.c,v 1.18 2005/03/22 21:56:28 yamt Exp $");
+__RCSID("$NetBSD: cut.c,v 1.21 2006/07/29 02:01:24 jnemeth Exp $");
 #endif /* not lint */
 
 #include <ctype.h>
@@ -117,10 +117,14 @@ main(int argc, char *argv[])
 
 	if (*argv)
 		for (; *argv; ++argv) {
-			if (!(fp = fopen(*argv, "r")))
-				err(1, "%s", *argv);
-			fcn(fp, *argv);
-			(void)fclose(fp);
+			if (strcmp(*argv, "-") == 0)
+				fcn(stdin, "stdin");
+			else {
+				if ((fp = fopen(*argv, "r")) == NULL)
+					err(1, "%s", *argv);
+				fcn(fp, *argv);
+				(void)fclose(fp);
+			}
 		}
 	else
 		fcn(stdin, "stdin");
@@ -232,7 +236,7 @@ f_cut(FILE *fp, const char *fname)
 			if ((tbuf = (char *)malloc(len + 1)) == NULL)
 				err(1, NULL);
 			memcpy(tbuf, lbuf, len);
-			tbuf[len] = '\n';
+			tbuf[len++] = '\n';
 			lbuf = tbuf;
 		}
 		for (isdelim = 0, p = lbuf;; ++p) {
@@ -273,6 +277,10 @@ f_cut(FILE *fp, const char *fname)
 				for (; (ch = *p) != '\n'; ++p);
 		}
 		(void)putchar('\n');
+		if (tbuf) {
+			free(tbuf);
+			tbuf = NULL;
+		}
 	}
 	if (tbuf)
 		free(tbuf);

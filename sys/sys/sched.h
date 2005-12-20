@@ -1,4 +1,4 @@
-/* $NetBSD: sched.h,v 1.24 2005/12/11 12:25:21 christos Exp $ */
+/* $NetBSD: sched.h,v 1.28 2006/05/14 21:38:18 elad Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002 The NetBSD Foundation, Inc.
@@ -139,9 +139,9 @@ struct prochd {
  */
 struct schedstate_percpu {
 	struct timeval spc_runtime;	/* time curproc started running */
-	__volatile int spc_flags;	/* flags; see below */
+	volatile int spc_flags;	/* flags; see below */
 	u_int spc_schedticks;		/* ticks for schedclock() */
-	u_int64_t spc_cp_time[CPUSTATES]; /* CPU state statistics */
+	uint64_t spc_cp_time[CPUSTATES]; /* CPU state statistics */
 	u_char spc_curpriority;		/* usrpri of curproc */
 	int spc_rrticks;		/* ticks until roundrobin() */
 	int spc_pscnt;			/* prof/stat counter */
@@ -184,13 +184,13 @@ extern int rrticks;			/* ticks per roundrobin() */
  * in kern/kern_synch.c.
  */
 extern struct prochd sched_qs[];
-extern __volatile u_int32_t sched_whichqs;
+extern volatile uint32_t sched_whichqs;
 
 struct proc;
 struct cpu_info;
 
 void schedclock(struct lwp *);
-void sched_wakeup(__volatile const void *);
+void sched_wakeup(volatile const void *);
 void roundrobin(struct cpu_info *);
 
 void scheduler_fork_hook(struct proc *, struct proc *);
@@ -201,8 +201,9 @@ void scheduler_wait_hook(struct proc *, struct proc *);
 
 extern struct simplelock sched_lock;
 
-#define	SCHED_ASSERT_LOCKED()	LOCK_ASSERT(simple_lock_held(&sched_lock))
-#define	SCHED_ASSERT_UNLOCKED()	LOCK_ASSERT(simple_lock_held(&sched_lock) == 0)
+#define	SCHED_ASSERT_LOCKED()	simple_lock_assert_locked(&sched_lock, "sched_lock")
+#define	SCHED_ASSERT_UNLOCKED()	simple_lock_assert_unlocked(&sched_lock, "sched_lock")
+
 
 #define	SCHED_LOCK(s)							\
 do {									\

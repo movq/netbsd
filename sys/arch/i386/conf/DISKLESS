@@ -1,4 +1,4 @@
-#	$NetBSD: DISKLESS,v 1.111 2005/12/20 05:35:28 thorpej Exp $
+#	$NetBSD: DISKLESS,v 1.118 2006/11/28 16:15:36 christos Exp $
 #
 # DISKLESS -- Generic machine setup for diskless boot.
 # This kernel can be loaded from a bootable floppy (i.e. kernel-copy)
@@ -9,13 +9,16 @@ include "arch/i386/conf/std.i386"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-options 	I386_CPU	# CPU classes; at least one is REQUIRED
+#options 	I386_CPU	# CPU classes; at least one is REQUIRED
 options 	I486_CPU
 options 	I586_CPU
 options 	I686_CPU
 options 	MATH_EMULATE	# floating point emulation
 #options 	VM86		# virtual 8086 emulation
 options 	USER_LDT	# user-settable LDT; used by WINE
+
+makeoptions	CPUFLAGS="-march=i486 -mtune=pentiumpro" # Assume at least 486,
+							# tune for more modern
 
 # The following options override the memory sizes passed in from the boot
 # block.  Use them *only* if the boot block is unable to determine the correct
@@ -87,7 +90,7 @@ file-system 	PROCFS		# /proc
 file-system 	UMAPFS		# NULLFS + uid and gid remapping
 file-system 	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
-#file-system	TMPFS		# experimental - Efficient memory file-system
+#file-system	TMPFS		# Efficient memory file-system
 
 #options 	QUOTA		# UFS quotas
 #options 	NFSSERVER	# Network File System server
@@ -98,11 +101,8 @@ file-system	PTYFS		# /dev/pts/N support
 options 	INET		# IP + ICMP + TCP + UDP
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
-options 	NS		# XNS
-#options 	NSIP		# XNS tunneling over IP
 options 	ISO,TPIP	# OSI
 #options 	EON		# OSI tunneling over IP
-options 	CCITT,LLC,HDLC	# X.25
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -254,14 +254,14 @@ ukphy*	at mii? phy ?				# generic unknown PHYs
 include	"arch/i386/conf/GENERIC.local"
 
 pseudo-device	loop	1		# network loopback
-pseudo-device	bpfilter 4		# packet filter
-pseudo-device	sl	2		# CSLIP
-pseudo-device	ppp	2		# PPP
-pseudo-device	tun	2		# network tunneling over tty
+pseudo-device	bpfilter		# packet filter
+pseudo-device	sl			# CSLIP
+pseudo-device	ppp			# PPP
+pseudo-device	tun			# network tunneling over tty
 #pseudo-device	ipfilter		# IP filter
 
 pseudo-device	pty			# pseudo-terminals
-#pseudo-device	vnd	4		# paging to files
+#pseudo-device	vnd			# paging to files
 #pseudo-device	ccd	4		# concatenated disk devices
 #pseudo-device	fss	4		# file system snapshot device
 pseudo-device	clockctl		# user control of clock subsystem

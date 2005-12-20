@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.43 2005/11/25 20:34:31 christos Exp $
+#	$NetBSD: Makefile,v 1.46.2.1 2007/08/25 17:53:07 liamjfoy Exp $
 
 # RCSid:
 #	Id: Makefile,v 1.33 1998/11/11 11:53:53 sjg Exp
@@ -16,6 +16,8 @@
 #	sjg@quick.com.au
 #
 
+LIB=	crypto
+USE_FORT?= yes	# cryptographic software
 USE_SHLIBDIR=	yes
 USE_FIPS=	no
 
@@ -26,7 +28,6 @@ USE_FIPS=	no
 # XXX There's a bit of work to do before we can enable warnings.
 WARNS=0
 
-LIB=	crypto
 CPPFLAGS+= -Dlib${LIB} -I. -I${OPENSSLSRC}/crypto -I${OPENSSLSRC}
 
 CRYPTODIST=	${NETBSDSRCDIR}/crypto/dist
@@ -40,7 +41,7 @@ CRYPTODIST=	${NETBSDSRCDIR}/crypto/dist
 # XXX
 .if ${OBJECT_FMT} == "ELF"
 AFLAGS+=-DELF
-LIBDPLIBS= crypt ${.CURDIR}/../libcrypt
+LIBDPLIBS+= crypt ${.CURDIR}/../libcrypt
 .else
 AFLAGS+=-DOUT
 # XXX: This is broken because we compile with the wrong des headers.
@@ -74,7 +75,7 @@ INCS+=	aes.h asn1.h asn1_mac.h asn1t.h bio.h blowfish.h bn.h \
 	obj_mac.h objects.h ocsp.h opensslconf.h opensslv.h ossl_typ.h \
 	pem.h pem2.h pkcs12.h pkcs7.h rand.h rc2.h rc4.h ripemd.h \
 	rsa.h safestack.h sha.h stack.h store.h symhacks.h tmdiff.h txt_db.h \
-	ui.h ui_compat.h x509.h x509_vfy.h x509v3.h
+	ui.h ui_compat.h x509.h x509_vfy.h x509v3.h pqueue.h pq_compat.h
 #	des_old.h 
 
 # IDEA - patented, but we install the header anyways
@@ -117,6 +118,8 @@ SRCS+=fips.c fips_err_wrapper.c
 
 SRCS+=rc5_skey.c i_skey.c mdc2dgst.c
 .endif
+
+COPTS.eng_padlock.c = -Wno-stack-protector
 
 INCSDIR=/usr/include/openssl
 

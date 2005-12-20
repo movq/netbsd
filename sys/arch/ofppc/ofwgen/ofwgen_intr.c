@@ -1,4 +1,4 @@
-/*	$NetBSD: ofwgen_intr.c,v 1.8 2005/11/23 13:00:51 nonaka Exp $	*/
+/*	$NetBSD: ofwgen_intr.c,v 1.10 2006/11/24 21:20:05 wiz Exp $	*/
 
 /*
  * Copyright (C) 1997 Wolfgang Solfrank.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofwgen_intr.c,v 1.8 2005/11/23 13:00:51 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofwgen_intr.c,v 1.10 2006/11/24 21:20:05 wiz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,13 +74,13 @@ void	ofwgen_intr_calculate_masks(void);
 int imask[NIPL];
 
 /* Current interrupt priority level. */
-static __volatile int cpl;
+static volatile int cpl;
 
 /* Number of clock interrupts pending. */
-static __volatile int clockpending;
+static volatile int clockpending;
 
 /* Other interrupts pending. */
-static __volatile int ipending;
+static volatile int ipending;
 
 void
 ofwgen_intr_init(void)
@@ -121,7 +121,7 @@ ofwgen_intr_calculate_masks(void)
 	imask[IPL_SOFTNET] |= imask[IPL_SOFTCLOCK];
 
 	/*
-	 * Enfore a heirarchy that gives "slow" devices (or devices with
+	 * Enfore a hierarchy that gives "slow" devices (or devices with
 	 * limited input buffer space/"real-time" requirements) a better
 	 * chance at not dropping data.
 	 */

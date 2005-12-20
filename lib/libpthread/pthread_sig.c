@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_sig.c,v 1.44 2005/10/16 00:37:52 chs Exp $	*/
+/*	$NetBSD: pthread_sig.c,v 1.47.2.1 2007/09/25 00:38:27 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_sig.c,v 1.44 2005/10/16 00:37:52 chs Exp $");
+__RCSID("$NetBSD: pthread_sig.c,v 1.47.2.1 2007/09/25 00:38:27 xtraeme Exp $");
 
 /* We're interposing a specific version of the signal interface. */
 #define	__LIBC12_SOURCE__
@@ -326,6 +326,7 @@ sigtimedwait(const sigset_t * __restrict set, siginfo_t * __restrict info,
 	sig = firstsig(&wset);
 	if (sig) {
 		info->si_signo = sig;
+		__sigdelset14(&self->pt_siglist, sig);  /* clear it */
 		pthread_spinunlock(self, &self->pt_siglock);
 		pthread__testcancel(self);
 		return 0;
@@ -353,7 +354,7 @@ sigtimedwait(const sigset_t * __restrict set, siginfo_t * __restrict info,
 
 	/*
 	 * If there is already a master thread running, arrange things
-	 * to accomodate for eventual extra signals to wait for
+	 * to accommodate for eventual extra signals to wait for
 	 * and join the sigwaiting list.
 	 */
 	if (pt_sigwmaster) {
@@ -429,7 +430,7 @@ sigtimedwait(const sigset_t * __restrict set, siginfo_t * __restrict info,
 				PTQ_REMOVE(&pt_sigwaiting, self, pt_sleep);
 
 				/*
-				 * Signal master. It will rebuild it's wait set.
+				 * Signal master. It will rebuild its wait set.
 				 */
 				_lwp_wakeup(pt_sigwmaster->pt_blockedlwp);
 
@@ -842,17 +843,17 @@ pthread__kill(pthread_t self, pthread_t target, siginfo_t *si)
 		 * Otherwise record the signal for later delivery.
 		 * XXX not MPsafe.
 		 */
-		pthread_spinlock(self, &self->pt_statelock);
+		pthread_spinlock(self, &target->pt_statelock);
 		if (target->pt_state == PT_STATE_BLOCKED_QUEUE &&
 		    target->pt_sleepq == &pt_sigwaiting &&
 		    __sigismember14(target->pt_sigwait, si->si_signo)) {
 			SDPRINTF(("(pthread__kill %p) stw\n", target));
 			target->pt_wsig->si_signo = si->si_signo;
-			pthread_spinunlock(self, &self->pt_statelock);
+			pthread_spinunlock(self, &target->pt_statelock);
 			deliver = 0;
 		} else {
 			SDPRINTF(("(pthread__kill %p) deferring\n", target));
-			pthread_spinunlock(self, &self->pt_statelock);
+			pthread_spinunlock(self, &target->pt_statelock);
 			__sigaddset14(&target->pt_siglist, si->si_signo);
 			return;
 		}

@@ -1,4 +1,5 @@
-/*	$NetBSD: auth-rh-rsa.c,v 1.4 2005/02/13 05:57:26 christos Exp $	*/
+/*	$NetBSD: auth-rh-rsa.c,v 1.6 2006/09/28 21:22:14 christos Exp $	*/
+/* $OpenBSD: auth-rh-rsa.c,v 1.42 2006/08/03 03:34:41 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -14,19 +15,25 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: auth-rh-rsa.c,v 1.37 2003/11/04 08:54:09 djm Exp $");
-__RCSID("$NetBSD: auth-rh-rsa.c,v 1.4 2005/02/13 05:57:26 christos Exp $");
+__RCSID("$NetBSD: auth-rh-rsa.c,v 1.6 2006/09/28 21:22:14 christos Exp $");
+#include <sys/types.h>
+
+#include <pwd.h>
+#include <stdarg.h>
 
 #include "packet.h"
 #include "uidswap.h"
 #include "log.h"
+#include "buffer.h"
 #include "servconf.h"
 #include "key.h"
 #include "hostfile.h"
 #include "pathnames.h"
 #include "auth.h"
 #include "canohost.h"
-
+#ifdef GSSAPI
+#include "ssh-gss.h"
+#endif
 #include "monitor_wrap.h"
 
 /* import */
@@ -88,7 +95,7 @@ auth_rhosts_rsa(Authctxt *authctxt, char *cuser, Key *client_host_key)
 	 */
 
 	verbose("Rhosts with RSA host authentication accepted for %.100s, %.100s on %.700s.",
-	   pw->pw_name, cuser, chost);
+	    pw->pw_name, cuser, chost);
 	packet_send_debug("Rhosts with RSA host authentication accepted.");
 	return 1;
 }

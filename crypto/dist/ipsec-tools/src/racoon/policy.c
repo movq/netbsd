@@ -1,4 +1,4 @@
-/*	$NetBSD: policy.c,v 1.4 2005/11/21 14:20:29 manu Exp $	*/
+/*	$NetBSD: policy.c,v 1.5.2.2 2007/08/28 11:14:47 liamjfoy Exp $	*/
 
 /*	$KAME: policy.c,v 1.46 2001/11/16 04:08:10 sakane Exp $	*/
 
@@ -39,11 +39,7 @@
 #include <sys/queue.h>
 
 #include <netinet/in.h>
-#ifdef HAVE_NETINET6_IPSEC
-#  include <netinet6/ipsec.h>
-#else
-#  include <netinet/ipsec.h>
-#endif
+#include PATH_IPSEC_H
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -205,6 +201,12 @@ cmpspidxstrict(a, b)
 			   (struct sockaddr *)&b->dst))
 		return 1;
 
+#ifdef HAVE_SECCTX
+	if (a->sec_ctx.ctx_alg != b->sec_ctx.ctx_alg
+	    || a->sec_ctx.ctx_doi != b->sec_ctx.ctx_doi
+	    || !within_range(a->sec_ctx.ctx_str, b->sec_ctx.ctx_str))
+		return 1;
+#endif
 	return 0;
 }
 
@@ -275,6 +277,12 @@ cmpspidxwild(a, b)
 	if (cmpsaddrwild((struct sockaddr *)&sa1, (struct sockaddr *)&sa2))
 		return 1;
 
+#ifdef HAVE_SECCTX
+	if (a->sec_ctx.ctx_alg != b->sec_ctx.ctx_alg
+	    || a->sec_ctx.ctx_doi != b->sec_ctx.ctx_doi
+	    || !within_range(a->sec_ctx.ctx_str, b->sec_ctx.ctx_str))
+		return 1;
+#endif
 	return 0;
 }
 
@@ -464,8 +472,17 @@ spidx2str(spidx)
 	p += i;
 	blen -= i;
 
-	snprintf(p, blen, "proto=%s dir=%s",
+	i = snprintf(p, blen, "proto=%s dir=%s",
 		s_proto(spidx->ul_proto), s_direction(spidx->dir));
 
+#ifdef HAVE_SECCTX
+	if (spidx->sec_ctx.ctx_strlen) {
+		p += i;
+		blen -= i;
+		snprintf(p, blen, " sec_ctx:doi=%d,alg=%d,len=%d,str=%s",
+			 spidx->sec_ctx.ctx_doi, spidx->sec_ctx.ctx_alg,
+			 spidx->sec_ctx.ctx_strlen, spidx->sec_ctx.ctx_str);
+	}
+#endif
 	return buf;
 }

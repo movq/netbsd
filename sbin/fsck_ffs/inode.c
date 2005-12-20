@@ -1,4 +1,4 @@
-/*	$NetBSD: inode.c,v 1.56 2005/08/19 02:07:19 christos Exp $	*/
+/*	$NetBSD: inode.c,v 1.57.4.1 2007/04/12 19:39:09 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)inode.c	8.8 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: inode.c,v 1.56 2005/08/19 02:07:19 christos Exp $");
+__RCSID("$NetBSD: inode.c,v 1.57.4.1 2007/04/12 19:39:09 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -109,8 +109,8 @@ ckinode(union dinode *dp, struct inodesc *idesc)
 				    pathbuf);
 				if (reply("ADJUST LENGTH") == 1) {
 					dp = ginode(idesc->id_number);
-					DIP(dp, size) = iswap64(i *
-					    sblock->fs_bsize);
+					DIP_SET(dp, size, iswap64(i *
+					    sblock->fs_bsize));
 					printf(
 					    "YOU MUST RERUN FSCK AFTERWARDS\n");
 					rerun = 1;
@@ -152,9 +152,9 @@ ckinode(union dinode *dp, struct inodesc *idesc)
 				    pathbuf);
 				if (reply("ADJUST LENGTH") == 1) {
 					dp = ginode(idesc->id_number);
-					DIP(dp, size) =
+					DIP_SET(dp, size,
 					    iswap64(iswap64(DIP(dp, size))
-						- remsize);
+						- remsize));
 					remsize = 0;
 					printf(
 					    "YOU MUST RERUN FSCK AFTERWARDS\n");
@@ -217,7 +217,7 @@ iblock(struct inodesc *idesc, long ilevel, u_int64_t isize)
 			    "PARTIALLY TRUNCATED INODE I=%llu",
 			    (unsigned long long)idesc->id_number);
 			if (dofix(idesc, buf)) {
-				IBLK(bp, i) = 0;
+				IBLK_SET(bp, i, 0);
 				dirty(bp);
 			} else
 				markclean=  0;
@@ -248,9 +248,9 @@ iblock(struct inodesc *idesc, long ilevel, u_int64_t isize)
 				    pathbuf);
 				if (reply("ADJUST LENGTH") == 1) {
 					dp = ginode(idesc->id_number);
-					DIP(dp, size) =
+					DIP_SET(dp, size, 
 					    iswap64(iswap64(DIP(dp, size))
-						- isize);
+						- isize));
 					isize = 0;
 					printf(
 					    "YOU MUST RERUN FSCK AFTERWARDS\n");
@@ -477,7 +477,7 @@ cacheino(union dinode *dp, ino_t inumber)
 {
 	struct inoinfo *inp;
 	struct inoinfo **inpp, **ninpsort;
-	unsigned int blks;
+	unsigned int blks, extra;
 	int i;
 	int64_t size;
 
@@ -485,9 +485,11 @@ cacheino(union dinode *dp, ino_t inumber)
 	blks = howmany(size, sblock->fs_bsize);
 	if (blks > NDADDR)
 		blks = NDADDR + NIADDR;
-
-	inp = (struct inoinfo *) malloc(sizeof(*inp) + (blks - 1)
-					    * sizeof (int64_t));
+	if (blks > 0)
+		extra = (blks - 1) * sizeof (int64_t);
+	else
+		extra = 0;
+	inp = malloc(sizeof(*inp) + extra);
 	if (inp == NULL)
 		return;
 	inpp = &inphead[inumber % dirhash];

@@ -1,7 +1,7 @@
-/*	$NetBSD: os.h,v 1.1.1.1 2004/05/17 23:43:25 christos Exp $	*/
+/*	$NetBSD: os.h,v 1.1.1.3.4.1 2007/05/17 00:35:22 jdc Exp $	*/
 
 /*
- * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -17,10 +17,12 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: os.h,v 1.14.2.2.8.8 2004/03/08 04:04:21 marka Exp */
+/* Id: os.h,v 1.22.18.3 2005/04/29 00:15:39 marka Exp */
 
 #ifndef NS_OS_H
 #define NS_OS_H 1
+
+/*! \file */
 
 #include <isc/types.h>
 
@@ -62,5 +64,8 @@ ns_os_shutdownmsg(char *command, isc_buffer_t *text);
 
 void
 ns_os_tzset(void);
+
+void
+ns_os_started(void);
 
 #endif /* NS_OS_H */

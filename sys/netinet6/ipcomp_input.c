@@ -1,4 +1,4 @@
-/*	$NetBSD: ipcomp_input.c,v 1.27 2005/12/11 12:25:02 christos Exp $	*/
+/*	$NetBSD: ipcomp_input.c,v 1.30 2006/11/16 01:33:45 christos Exp $	*/
 /*	$KAME: ipcomp_input.c,v 1.29 2001/09/04 08:43:19 itojun Exp $	*/
 
 /*
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipcomp_input.c,v 1.27 2005/12/11 12:25:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipcomp_input.c,v 1.30 2006/11/16 01:33:45 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -260,9 +260,7 @@ fail:
 
 #ifdef INET6
 int
-ipcomp6_input(mp, offp, proto)
-	struct mbuf **mp;
-	int *offp, proto;
+ipcomp6_input(struct mbuf **mp, int *offp, int proto)
 {
 	struct mbuf *m, *md;
 	int off;
@@ -280,7 +278,7 @@ ipcomp6_input(mp, offp, proto)
 	off = *offp;
 
 	md = m_pulldown(m, off, sizeof(*ipcomp), NULL);
-	if (!m) {
+	if (!md) {
 		m = NULL;	/* already freed */
 		ipseclog((LOG_DEBUG, "IPv6 IPComp input: assumption failed "
 		    "(pulldown failure)\n"));

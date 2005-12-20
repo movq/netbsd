@@ -1,4 +1,4 @@
-/*	$NetBSD: union_vnops.c,v 1.14 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: union_vnops.c,v 1.17.2.2 2007/04/16 20:01:13 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994, 1995
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_vnops.c,v 1.14 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_vnops.c,v 1.17.2.2 2007/04/16 20:01:13 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,6 +87,8 @@ __KERNEL_RCSID(0, "$NetBSD: union_vnops.c,v 1.14 2005/12/11 12:24:29 christos Ex
 #include <sys/buf.h>
 #include <sys/queue.h>
 #include <sys/lock.h>
+#include <sys/kauth.h>
+
 #include <fs/union/union.h>
 #include <miscfs/genfs/genfs.h>
 
@@ -235,8 +237,7 @@ union_lookup1(udvp, dvpp, vpp, cnp)
 			 */
 			tdvp = dvp;
 			*dvpp = dvp = dvp->v_mount->mnt_vnodecovered;
-			vput(tdvp);
-			VREF(dvp);
+			VOP_UNLOCK(tdvp, 0);
 			vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
 		}
 	}
@@ -244,14 +245,6 @@ union_lookup1(udvp, dvpp, vpp, cnp)
         error = VOP_LOOKUP(dvp, &tdvp, cnp);
 	if (error)
 		return (error);
-
-	/*
-	 * The parent directory will have been unlocked, unless lookup
-	 * found the last component.  In which case, re-lock the node
-	 * here to allow it to be unlocked again (phew) in union_lookup.
-	 */
-	if (dvp != tdvp && !(cnp->cn_flags & ISLASTCN))
-		vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
 
 	dvp = tdvp;
 
@@ -266,14 +259,12 @@ union_lookup1(udvp, dvpp, vpp, cnp)
 		if (vfs_busy(mp, 0, 0))
 			continue;
 
+		vput(dvp);
 		error = VFS_ROOT(mp, &tdvp);
 		vfs_unbusy(mp);
 		if (error) {
-			vput(dvp);
 			return (error);
 		}
-
-		vput(dvp);
 		dvp = tdvp;
 	}
 
@@ -298,9 +289,8 @@ union_lookup(v)
 	struct vnode *dvp = ap->a_dvp;
 	struct union_node *dun = VTOUNION(dvp);
 	struct componentname *cnp = ap->a_cnp;
-	int lockparent = cnp->cn_flags & LOCKPARENT;
 	struct union_mount *um = MOUNTTOUNIONMOUNT(dvp->v_mount);
-	struct ucred *saved_cred = NULL;
+	kauth_cred_t saved_cred = NULL;
 	int iswhiteout;
 	struct vattr va;
 
@@ -314,8 +304,6 @@ union_lookup(v)
 			return (ENOENT);
 		VREF(dvp);
 		vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
-		if (!lockparent || !(cnp->cn_flags & ISLASTCN))
-			VOP_UNLOCK(ap->a_dvp, 0);
 		return (0);
 	}
 #endif
@@ -324,8 +312,6 @@ union_lookup(v)
 	    (dvp->v_mount->mnt_flag & MNT_RDONLY) &&
 	    (cnp->cn_nameiop == DELETE || cnp->cn_nameiop == RENAME))
 		return (EROFS);
-
-	cnp->cn_flags |= LOCKPARENT;
 
 	upperdvp = dun->un_uppervp;
 	lowerdvp = dun->un_lowervp;
@@ -377,8 +363,6 @@ union_lookup(v)
 		}
 		if (cnp->cn_consume != 0) {
 			*ap->a_vpp = uppervp;
-			if (!lockparent)
-				cnp->cn_flags &= ~LOCKPARENT;
 			return (uerror);
 		}
 		if (uerror == ENOENT || uerror == EJUSTRETURN) {
@@ -417,6 +401,7 @@ union_lookup(v)
 			saved_cred = cnp->cn_cred;
 			cnp->cn_cred = um->um_cred;
 		}
+
 		/*
 		 * we shouldn't have to worry about locking interactions
 		 * between the lower layer and our union layer (w.r.t.
@@ -441,8 +426,6 @@ union_lookup(v)
 				uppervp = NULLVP;
 			}
 			*ap->a_vpp = lowervp;
-			if (!lockparent)
-				cnp->cn_flags &= ~LOCKPARENT;
 			return (lerror);
 		}
 	} else {
@@ -456,9 +439,6 @@ union_lookup(v)
 			}
 		}
 	}
-
-	if (!lockparent)
-		cnp->cn_flags &= ~LOCKPARENT;
 
 	/*
 	 * EJUSTRETURN is used by underlying filesystems to indicate that
@@ -513,12 +493,14 @@ union_lookup(v)
 			 * upper-level shadow directory.  Be careful with
 			 * locks/etc!
 			 */
-			dun->un_flags &= ~UN_ULOCK;
-			VOP_UNLOCK(upperdvp, 0);
-			uerror = union_mkshadow(um, upperdvp, cnp, &uppervp);
-			vn_lock(upperdvp, LK_EXCLUSIVE | LK_RETRY);
-			dun->un_flags |= UN_ULOCK;
-
+			if (upperdvp) {
+				dun->un_flags &= ~UN_ULOCK;
+				VOP_UNLOCK(upperdvp, 0);
+				uerror = union_mkshadow(um, upperdvp, cnp,
+				    &uppervp);
+				vn_lock(upperdvp, LK_EXCLUSIVE | LK_RETRY);
+				dun->un_flags |= UN_ULOCK;
+			}
 			if (uerror) {
 				if (lowervp != NULLVP) {
 					vput(lowervp);
@@ -540,16 +522,6 @@ union_lookup(v)
 			vput(uppervp);
 		if (lowervp != NULLVP)
 			vrele(lowervp);
-	} else {
-		if (*ap->a_vpp != dvp)
-			if (!lockparent || !(cnp->cn_flags & ISLASTCN))
-				VOP_UNLOCK(dvp, 0);
-		if (cnp->cn_namelen == 1 &&
-		    cnp->cn_nameptr[0] == '.' &&
-		    *ap->a_vpp != dvp) {
-			panic("union_lookup -> . (%p) != startdir (%p)",
-			    ap->a_vpp, dvp);
-		}
 	}
 
 	return (error);
@@ -662,13 +634,13 @@ union_open(v)
 		struct vnodeop_desc *a_desc;
 		struct vnode *a_vp;
 		int a_mode;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	struct union_node *un = VTOUNION(ap->a_vp);
 	struct vnode *tvp;
 	int mode = ap->a_mode;
-	struct ucred *cred = ap->a_cred;
+	kauth_cred_t cred = ap->a_cred;
 	struct lwp *l = ap->a_l;
 	int error;
 
@@ -724,7 +696,7 @@ union_close(v)
 	struct vop_close_args /* {
 		struct vnode *a_vp;
 		int  a_fflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	struct union_node *un = VTOUNION(ap->a_vp);
@@ -741,10 +713,8 @@ union_close(v)
 	}
 
 #ifdef DIAGNOSTIC
-	if (vp == NULLVP) {
-		vprint("empty union vnode", vp);
-		panic("union_close empty vnode");
-	}
+	if (vp == NULLVP)
+		panic("union_close empty union vnode");
 #endif
 
 	ap->a_vp = vp;
@@ -767,7 +737,7 @@ union_access(v)
 		struct vnodeop_desc *a_desc;
 		struct vnode *a_vp;
 		int a_mode;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
@@ -835,7 +805,7 @@ union_getattr(v)
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
 		struct vattr *a_vap;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	int error;
@@ -924,7 +894,7 @@ union_setattr(v)
 	struct vop_setattr_args /* {
 		struct vnode *a_vp;
 		struct vattr *a_vap;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	struct vattr *vap = ap->a_vap;
@@ -997,7 +967,7 @@ union_read(v)
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		int  a_ioflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	int error;
 	struct vnode *vp = OTHERVP(ap->a_vp);
@@ -1041,7 +1011,7 @@ union_write(v)
 		struct vnode *a_vp;
 		struct uio *a_uio;
 		int  a_ioflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	int error;
 	struct vnode *vp;
@@ -1075,7 +1045,7 @@ union_lease(v)
 	struct vop_lease_args /* {
 		struct vnode *a_vp;
 		struct lwp *a_l;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		int a_flag;
 	} */ *ap = v;
 	struct vnode *ovp = OTHERVP(ap->a_vp);
@@ -1093,7 +1063,7 @@ union_ioctl(v)
 		int  a_command;
 		void *a_data;
 		int  a_fflag;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *ovp = OTHERVP(ap->a_vp);
@@ -1143,7 +1113,7 @@ union_mmap(v)
 	struct vop_mmap_args /* {
 		struct vnode *a_vp;
 		int  a_fflags;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *ovp = OTHERVP(ap->a_vp);
@@ -1158,7 +1128,7 @@ union_fsync(v)
 {
 	struct vop_fsync_args /* {
 		struct vnode *a_vp;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		int  a_flags;
 		off_t offhi;
 		off_t offlo;
@@ -1205,7 +1175,7 @@ union_seek(v)
 		struct vnode *a_vp;
 		off_t  a_oldoff;
 		off_t  a_newoff;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	struct vnode *ovp = OTHERVP(ap->a_vp);
 
@@ -1314,15 +1284,8 @@ union_link(v)
 				vp  = NULLVP;
 				if (dun->un_uppervp == NULLVP)
 					 panic("union: null upperdvp?");
-				/*
-				 * relookup starts with an unlocked node,
-				 * and since LOCKPARENT is set returns
-				 * the starting directory locked.
-				 */
-				VOP_UNLOCK(ap->a_dvp, 0);
 				error = relookup(ap->a_dvp, &vp, ap->a_cnp);
 				if (error) {
-					vrele(ap->a_dvp);
 					VOP_UNLOCK(ap->a_vp, 0);
 					return EROFS;	/* ? */
 				}
@@ -1333,7 +1296,9 @@ union_link(v)
 					 */
 					error = EEXIST;
 					VOP_UNLOCK(ap->a_vp, 0);
-					goto croak;
+					vput(ap->a_dvp);
+					vput(vp);
+					return (error);
 				}
 			}
 			VOP_UNLOCK(ap->a_vp, 0);
@@ -1346,7 +1311,6 @@ union_link(v)
 		error = EROFS;
 
 	if (error) {
-croak:
 		vput(ap->a_dvp);
 		return (error);
 	}
@@ -1393,7 +1357,6 @@ union_rename(v)
 
 		fdvp = un->un_uppervp;
 		VREF(fdvp);
-		vrele(ap->a_fdvp);
 	}
 
 	if (fvp->v_op == union_vnodeop_p) {	/* always true */
@@ -1409,7 +1372,6 @@ union_rename(v)
 
 		fvp = un->un_uppervp;
 		VREF(fvp);
-		vrele(ap->a_fvp);
 	}
 
 	if (tdvp->v_op == union_vnodeop_p) {
@@ -1442,15 +1404,23 @@ union_rename(v)
 		vput(ap->a_tvp);
 	}
 
-	return (VOP_RENAME(fdvp, fvp, ap->a_fcnp, tdvp, tvp, ap->a_tcnp));
+	error = VOP_RENAME(fdvp, fvp, ap->a_fcnp, tdvp, tvp, ap->a_tcnp);
+	goto out;
 
 bad:
-	vrele(fdvp);
-	vrele(fvp);
 	vput(tdvp);
 	if (tvp != NULLVP)
 		vput(tvp);
+	vrele(fdvp);
+	vrele(fvp);
 
+out:
+	if (fdvp != ap->a_fdvp) {
+		vrele(ap->a_fdvp);
+	}
+	if (fvp != ap->a_fvp) {
+		vrele(ap->a_fvp);
+	}
 	return (error);
 }
 
@@ -1484,9 +1454,9 @@ union_mkdir(v)
 
 		error = union_allocvp(ap->a_vpp, ap->a_dvp->v_mount, ap->a_dvp,
 				NULLVP, cnp, vp, NULLVP, 1);
-		vrele(ap->a_dvp);
 		if (error)
 			vput(vp);
+		vrele(ap->a_dvp);
 		return (error);
 	}
 
@@ -1587,7 +1557,7 @@ union_readdir(v)
 		struct vnodeop_desc *a_desc;
 		struct vnode *a_vp;
 		struct uio *a_uio;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		int *a_eofflag;
 		u_long *a_cookies;
 		int a_ncookies;
@@ -1610,7 +1580,7 @@ union_readlink(v)
 	struct vop_readlink_args /* {
 		struct vnode *a_vp;
 		struct uio *a_uio;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 	} */ *ap = v;
 	int error;
 	struct vnode *vp = OTHERVP(ap->a_vp);
@@ -1725,6 +1695,11 @@ union_lock(v)
 #ifdef DIAGNOSTIC
 	int drain = 0;
 #endif
+
+	/* XXX unionfs can't handle shared locks yet */
+	if ((flags & LK_TYPE_MASK) == LK_SHARED) {
+		flags = LK_EXCLUSIVE | (flags & ~LK_TYPE_MASK);
+	}
 
 	genfs_nolock(ap);
 	/*
@@ -2049,6 +2024,9 @@ union_putpages(v)
 
 	ap->a_vp = OTHERVP(vp);
 	simple_unlock(&vp->v_interlock);
+	if (ap->a_flags & PGO_RECLAIM) {
+		return 0;
+	}
 	simple_lock(&ap->a_vp->v_interlock);
 	error = VCALL(ap->a_vp, VOFFSET(vop_putpages), ap);
 	return error;

@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_rh.c,v 1.44 2005/12/11 12:16:28 christos Exp $ */
+/*	$NetBSD: grf_rh.c,v 1.46 2006/11/24 22:04:21 wiz Exp $ */
 
 /*
  * Copyright (c) 1994 Markus Wild
@@ -34,7 +34,7 @@
 #include "opt_retina.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_rh.c,v 1.44 2005/12/11 12:16:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_rh.c,v 1.46 2006/11/24 22:04:21 wiz Exp $");
 
 #include "grfrh.h"
 #if NGRFRH > 0
@@ -122,12 +122,12 @@ extern unsigned char kernel_font_8x11[];
 /* Convert big-endian long into little-endian long. */
 
 #define M2I(val)                                                         \
-	__asm __volatile (" rorw #8,%0   ;                               \
+	__asm volatile (" rorw #8,%0   ;                               \
 			    swap %0      ;                               \
 			    rorw #8,%0   ; " : "=d" (val) : "0" (val));
 
 #define M2INS(val)                                                       \
-	__asm __volatile (" rorw #8,%0   ;                               \
+	__asm volatile (" rorw #8,%0   ;                               \
 			    swap %0      ;                               \
 			    rorw #8,%0   ;                               \
  			    swap %0	     ; " : "=d" (val) : "0" (val));
@@ -733,7 +733,7 @@ rh_load_mon(struct grf_softc *gp, struct MonDef *md)
 	ba = gp->g_regkva;
 	fb = gp->g_fbkva;
 
-	/* provide all needed information in grf device-independant
+	/* provide all needed information in grf device-independent
 	 * locations */
 	gp->g_data 		= (caddr_t) md;
 	gi->gd_regaddr	 	= (caddr_t) kvtop (ba);

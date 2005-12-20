@@ -1,4 +1,4 @@
-/*	$NetBSD: cardbus_map.c,v 1.18 2005/12/11 12:21:15 christos Exp $	*/
+/*	$NetBSD: cardbus_map.c,v 1.24 2006/11/16 01:32:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 and 2000
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cardbus_map.c,v 1.18 2005/12/11 12:21:15 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cardbus_map.c,v 1.24 2006/11/16 01:32:48 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,15 +73,15 @@ static int cardbus_mem_find(cardbus_chipset_tag_t, cardbus_function_tag_t,
  * This code is stolen from sys/dev/pci_map.c.
  */
 static int
-cardbus_io_find(cc, cf, tag, reg, type, basep, sizep, flagsp)
-	cardbus_chipset_tag_t cc;
-	cardbus_function_tag_t cf;
-	cardbustag_t tag;
-	int reg;
-	cardbusreg_t type;
-	bus_addr_t *basep;
-	bus_size_t *sizep;
-	int *flagsp;
+cardbus_io_find(
+    cardbus_chipset_tag_t cc,
+    cardbus_function_tag_t cf,
+    cardbustag_t tag,
+    int reg,
+    cardbusreg_t type,
+    bus_addr_t *basep,
+    bus_size_t *sizep,
+    int *flagsp)
 {
 	cardbusreg_t address, mask;
 	int s;
@@ -260,8 +260,12 @@ cardbus_mapreg_map(sc, func, reg, type, busflags, tagp, handlep, basep, sizep)
 	bus_size_t size;
 	int flags;
 	int status = 0;
+	cardbustag_t tag;
 
-	cardbustag_t tag = cardbus_make_tag(cc, cf, sc->sc_bus, func);
+	size = 0;	/* XXX gcc */
+	flags = 0;	/* XXX gcc */
+
+	tag = cardbus_make_tag(cc, cf, sc->sc_bus, func);
 
 	DPRINTF(("cardbus_mapreg_map called: %s %x\n", sc->sc_dev.dv_xname,
 	   type));

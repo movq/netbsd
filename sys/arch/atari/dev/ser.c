@@ -1,4 +1,4 @@
-/*	$NetBSD: ser.c,v 1.27 2005/12/11 12:16:54 christos Exp $	*/
+/*	$NetBSD: ser.c,v 1.32 2006/10/01 20:31:50 elad Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -100,7 +100,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ser.c,v 1.27 2005/12/11 12:16:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ser.c,v 1.32 2006/10/01 20:31:50 elad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_mbtype.h"
@@ -120,6 +120,7 @@ __KERNEL_RCSID(0, "$NetBSD: ser.c,v 1.27 2005/12/11 12:16:54 christos Exp $");
 #include <sys/syslog.h>
 #include <sys/types.h>
 #include <sys/device.h>
+#include <sys/kauth.h>
 
 #include <m68k/asm_single.h>
 
@@ -154,11 +155,6 @@ __KERNEL_RCSID(0, "$NetBSD: ser.c,v 1.27 2005/12/11 12:16:54 christos Exp $");
 #define	CONSBAUD	9600
 #define	CONSCFLAG	TTYDEF_CFLAG
 /* end XXX */
-
-/* Macros to clear/set/test flags. */
-#define SET(t, f)	(t) |= (f)
-#define CLR(t, f)	(t) &= ~(f)
-#define ISSET(t, f)	((t) & (f))
 
 #define	splserial()	spl6()
 
@@ -395,9 +391,7 @@ seropen(dev, flag, mode, l)
 	} else
 		tp = sc->sc_tty;
 
-	if (ISSET(tp->t_state, TS_ISOPEN) &&
-	    ISSET(tp->t_state, TS_XCLUDE) &&
-	    suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0)
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
 		return (EBUSY);
 
 	s = spltty();
@@ -615,7 +609,8 @@ serioctl(dev, cmd, data, flag, l)
 		break;
 
 	case TIOCSFLAGS:
-		error = suser(l->l_proc->p_ucred, &l->l_proc->p_acflag); 
+		error = kauth_authorize_device_tty(l->l_cred,
+		    KAUTH_DEVICE_TTY_PRIVSET, tp); 
 		if (error)
 			return (error); 
 		sc->sc_swflags = *(int *)data;

@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.45 2005/12/11 12:19:20 christos Exp $	*/
+/*	$NetBSD: fd.c,v 1.52 2006/10/14 08:11:16 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.45 2005/12/11 12:19:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.52 2006/10/14 08:11:16 tsutsui Exp $");
 
 #include "opt_ddb.h"
 
@@ -179,6 +179,7 @@ struct fdc_softc {
 #define sc_nstat	sc_io.fdcio_nstat
 #define sc_status	sc_io.fdcio_status
 #define sc_intrcnt	sc_io.fdcio_intrcnt
+	void		*sc_si;			/* softintr cookie */
 };
 
 /* controller driver configuration */
@@ -190,7 +191,7 @@ CFATTACH_DECL(fdc, sizeof(struct fdc_softc),
 
 extern struct cfdriver fdc_cd;
 
-__inline struct fd_type *fd_dev_to_type(struct fd_softc *, dev_t);
+inline struct fd_type *fd_dev_to_type(struct fd_softc *, dev_t);
 
 /*
  * Floppies come in various flavors, e.g., 1.2MB vs 1.44MB; here is how
@@ -302,7 +303,7 @@ void	fdc_reset(struct fdc_softc *);
 void	fdctimeout(void *);
 void	fdcpseudointr(void *);
 int	fdchwintr(void *);
-int	fdcswintr(void *);
+void	fdcswintr(void *);
 int	fdcstate(struct fdc_softc *);
 void	fdcretry(struct fdc_softc *);
 void	fdfinish(struct fd_softc *, struct buf *);
@@ -311,11 +312,9 @@ void	fd_do_eject(struct fdc_softc *, int);
 void	fd_mountroot_hook(struct device *);
 static void fdconf(struct fdc_softc *);
 
-static int fdc_softpend = 0;
-#ifndef	FDC_SOFTPRI
+#define IPL_SOFTFD	IPL_BIO
 #define	FDC_SOFTPRI	2
-#endif
-#define FD_SET_SWINTR()	{ fdc_softpend = 1; isr_soft_request(FDC_SOFTPRI); }
+#define FD_SET_SWINTR()	softintr_schedule(fdc->sc_si);
 
 /*
  * The Floppy Control Register on the sun3x, not to be confused with the
@@ -430,7 +429,6 @@ fdcattach(struct device *parent, struct device *self, void *aux)
 			+ FDC_FVR_OFFSET;
 	}
 
-	isr_add_autovect(fdcswintr, fdc, FDC_SOFTPRI);
 	pri = ca->ca_intpri;
 	vec = ca->ca_intvec;
 	if (vec == -1) {
@@ -443,6 +441,7 @@ fdcattach(struct device *parent, struct device *self, void *aux)
 	}
 	*fdc->sc_reg_fvr = vec;	/* Program controller w/ interrupt vector */
 
+	fdc->sc_si = softintr_establish(IPL_SOFTFD, fdcswintr, fdc);
 	printf(": (softpri %d) chip 8207%c\n", FDC_SOFTPRI, code);
 
 #ifdef FD_DEBUG
@@ -604,7 +603,7 @@ fdattach(struct device *parent, struct device *self, void *aux)
 	fd->sc_sdhook = shutdownhook_establish(fd_motor_off, fd);
 }
 
-__inline struct fd_type *
+inline struct fd_type *
 fd_dev_to_type(struct fd_softc *fd, dev_t dev)
 {
 	int type = FDTYPE(dev);
@@ -659,8 +658,8 @@ fdstrategy(struct buf *bp			/* IO operation to perform */)
 
 #ifdef FD_DEBUG
 	if (fdc_debug > 1)
-	    printf("fdstrategy: b_blkno %d b_bcount %ld blkno %d cylin %ld\n",
-		    bp->b_blkno, bp->b_bcount, fd->sc_blkno, bp->b_cylinder);
+	    printf("fdstrategy: b_blkno %d b_bcount %d blkno %d cylin %d\n",
+		    (int)bp->b_blkno, bp->b_bcount, (int)fd->sc_blkno, bp->b_cylinder);
 #endif
 
 	/* Queue transfer on drive, activate drive and controller if idle. */
@@ -671,7 +670,7 @@ fdstrategy(struct buf *bp			/* IO operation to perform */)
 		fdstart(fd);
 #ifdef DIAGNOSTIC
 	else {
-		struct fdc_softc *fdc = (void *)fd->sc_dv.dv_parent;
+		struct fdc_softc *fdc = (void *)device_parent(&fd->sc_dv);
 		if (fdc->sc_state == DEVIDLE) {
 			printf("fdstrategy: controller inactive\n");
 			fdcstart(fdc);
@@ -691,7 +690,7 @@ done:
 void 
 fdstart(struct fd_softc *fd)
 {
-	struct fdc_softc *fdc = (void *)fd->sc_dv.dv_parent;
+	struct fdc_softc *fdc = (void *)device_parent(&fd->sc_dv);
 	int active = fdc->sc_drives.tqh_first != 0;
 
 	/* Link into controller queue. */
@@ -706,7 +705,7 @@ fdstart(struct fd_softc *fd)
 void 
 fdfinish(struct fd_softc *fd, struct buf *bp)
 {
-	struct fdc_softc *fdc = (void *)fd->sc_dv.dv_parent;
+	struct fdc_softc *fdc = (void *)device_parent(&fd->sc_dv);
 
 	/*
 	 * Move this drive to the end of the queue to give others a `fair'
@@ -775,7 +774,7 @@ fd_motor_off(void *arg)
 
 	s = splbio();
 	fd->sc_flags &= ~(FD_MOTOR | FD_MOTOR_WAIT);
-	fd_set_motor((struct fdc_softc *)fd->sc_dv.dv_parent);
+	fd_set_motor((struct fdc_softc *)device_parent(&fd->sc_dv));
 	splx(s);
 }
 
@@ -783,7 +782,7 @@ void
 fd_motor_on(void *arg)
 {
 	struct fd_softc *fd = arg;
-	struct fdc_softc *fdc = (void *)fd->sc_dv.dv_parent;
+	struct fdc_softc *fdc = (void *)device_parent(&fd->sc_dv);
 	int s;
 
 	s = splbio();
@@ -935,7 +934,7 @@ fdcstart(struct fdc_softc *fdc)
 void 
 fdcstatus(struct device *dv, int n, const char *s)
 {
-	struct fdc_softc *fdc = (void *)dv->dv_parent;
+	struct fdc_softc *fdc = (void *)device_parent(dv);
 	char bits[64];
 #if 0
 	/*
@@ -1080,26 +1079,20 @@ fdchwintr(void *arg)
 	return (1);
 }
 
-int 
+void 
 fdcswintr(void *arg)
 {
 	struct fdc_softc *fdc = arg;
 	int s;
 
-	if (fdc_softpend == 0)
-		return (0);
-
-	isr_soft_clear(FDC_SOFTPRI);
-	fdc_softpend = 0;
-
 	if (fdc->sc_istate != ISTATE_DONE)
-		return (0);
+		return;
 
 	fdc->sc_istate = ISTATE_IDLE;
 	s = splbio();
 	fdcstate(fdc);
 	splx(s);
-	return (1);
+	return;
 }
 
 int 
@@ -1212,7 +1205,7 @@ loop:
 		fdc->sc_state = SEEKWAIT;
 		fdc->sc_nstat = 0;
 
-		fd->sc_dk.dk_seek++;
+		iostat_seek(fd->sc_dk.dk_stats);
 		disk_busy(&fd->sc_dk);
 
 		callout_reset(&fdc->sc_timo_ch, 4 * hz, fdctimeout, fdc);
@@ -1353,7 +1346,7 @@ loop:
 					bp->b_flags & B_READ
 					? "read failed" : "write failed");
 				printf("blkno %d nblks %d tc %d\n",
-				       fd->sc_blkno, fd->sc_nblks, fdc->sc_tc);
+				       (int)fd->sc_blkno, fd->sc_nblks, fdc->sc_tc);
 			}
 #endif
 			if (fdc->sc_nstat == 7 &&
@@ -1594,7 +1587,7 @@ fdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 		}
 		/* FALLTHROUGH */
 	case ODIOCEJECT:
-		fd_do_eject((void *)fd->sc_dv.dv_parent, fd->sc_drive);
+		fd_do_eject((void *)device_parent(&fd->sc_dv), fd->sc_drive);
 		return (0);
 
 	case FDIOCGETFORMAT:
@@ -1726,36 +1719,36 @@ fdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 #ifdef DEBUG
 	case _IO('f', 100):
 		{
-		int i;
+		int k;
 		struct fdc_softc *fdc = (struct fdc_softc *)
-					fd->sc_dv.dv_parent;
+					device_parent(&fd->sc_dv);
 
 		out_fdc(fdc, NE7CMD_DUMPREG);
 		fdcresult(fdc);
 		printf("dumpreg(%d regs): <", fdc->sc_nstat);
-		for (i = 0; i < fdc->sc_nstat; i++)
-			printf(" %x", fdc->sc_status[i]);
+		for (k = 0; k < fdc->sc_nstat; k++)
+			printf(" %x", fdc->sc_status[k]);
 		printf(">\n");
 		}
 
 		return (0);
 	case _IOW('f', 101, int):
-		((struct fdc_softc *)fd->sc_dv.dv_parent)->sc_cfg &=
+		((struct fdc_softc *)device_parent(&fd->sc_dv))->sc_cfg &=
 			~CFG_THRHLD_MASK;
-		((struct fdc_softc *)fd->sc_dv.dv_parent)->sc_cfg |=
+		((struct fdc_softc *)device_parent(&fd->sc_dv))->sc_cfg |=
 			(*(int *)addr & CFG_THRHLD_MASK);
-		fdconf((struct fdc_softc *) fd->sc_dv.dv_parent);
+		fdconf((struct fdc_softc *)device_parent(&fd->sc_dv));
 		return (0);
 	case _IO('f', 102):
 		{
-		int i;
+		int k;
 		struct fdc_softc *fdc = (struct fdc_softc *)
-					fd->sc_dv.dv_parent;
+					device_parent(&fd->sc_dv);
 		out_fdc(fdc, NE7CMD_SENSEI);
 		fdcresult(fdc);
 		printf("sensei(%d regs): <", fdc->sc_nstat);
-		for (i=0; i< fdc->sc_nstat; i++)
-			printf(" 0x%x", fdc->sc_status[i]);
+		for (k=0; k < fdc->sc_nstat; k++)
+			printf(" 0x%x", fdc->sc_status[k]);
 		}
 		printf(">\n");
 		return (0);
@@ -1799,8 +1792,8 @@ fdformat(dev_t dev, struct ne7_fd_formb *finfo, struct proc *p)
 
 #ifdef FD_DEBUG
 	if (fdc_debug)
-		printf("fdformat: blkno %x count %ld\n",
-			bp->b_blkno, bp->b_bcount);
+		printf("fdformat: blkno %x count %d\n",
+			(int)bp->b_blkno, bp->b_bcount);
 #endif
 
 	/* now do the format */

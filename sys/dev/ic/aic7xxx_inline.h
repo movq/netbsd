@@ -1,4 +1,4 @@
-/*	$NetBSD: aic7xxx_inline.h,v 1.7 2005/11/28 21:03:20 bouyer Exp $	*/
+/*	$NetBSD: aic7xxx_inline.h,v 1.12 2006/11/16 01:32:51 christos Exp $	*/
 
 /*
  * Inline routines shareable across OS platforms.
@@ -296,8 +296,10 @@ ahc_fetch_transinfo(struct ahc_softc *ahc, char channel, u_int our_id,
 	 * in the initiator role to a given target are the same as
 	 * when the roles are reversed, we pretend we are the target.
 	 */
-	/*if (channel == 'B')
-	  our_id += 8;*/
+#ifdef notdef
+	if (channel == 'B')
+		our_id += 8;
+#endif
 	*tstate = ahc->enabled_targets[our_id];
 	return (&(*tstate)->transinfo[remote_id]);
 }
@@ -505,7 +507,7 @@ static __inline void	ahc_minphys(struct buf *bp);
 
 static __inline void
 ahc_minphys(bp)
-     struct buf *bp;
+	struct buf *bp;
 {
 /*
  * Even though the card can transfer up to 16megs per command
@@ -514,10 +516,10 @@ ahc_minphys(bp)
  * discontinuous physically, hence the "page per segment" limit
  * enforced here.
  */
-        if (bp->b_bcount > AHC_MAXTRANSFER_SIZE) {
-                bp->b_bcount = AHC_MAXTRANSFER_SIZE;
-        }
-        minphys(bp);
+	if (bp->b_bcount > AHC_MAXTRANSFER_SIZE) {
+		bp->b_bcount = AHC_MAXTRANSFER_SIZE;
+	}
+	minphys(bp);
 }
 
 static __inline void
@@ -599,12 +601,12 @@ ahc_intr(void *arg)
 	 */
 	if ((ahc->flags & (AHC_ALL_INTERRUPTS|AHC_EDGE_INTERRUPT)) == 0
 	    && (ahc_check_cmdcmpltqueues(ahc) != 0))
-                intstat = CMDCMPLT;
-        else {
-                intstat = ahc_inb(ahc, INTSTAT);
-        }
+		intstat = CMDCMPLT;
+	else {
+		intstat = ahc_inb(ahc, INTSTAT);
+	}
 
-        if (intstat & CMDCMPLT) {
+	if (intstat & CMDCMPLT) {
 		ahc_outb(ahc, CLRINT, CLRCMDINT);
 		/*
 		 * Ensure that the chip sees that we've cleared

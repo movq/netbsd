@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs.c,v 1.18 2005/08/22 09:19:19 yamt Exp $	*/
+/*	$NetBSD: newfs.c,v 1.23 2006/09/05 19:44:44 riz Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1992, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1992, 1993\n\
 #if 0
 static char sccsid[] = "@(#)newfs.c	8.5 (Berkeley) 5/24/95";
 #else
-__RCSID("$NetBSD: newfs.c,v 1.18 2005/08/22 09:19:19 yamt Exp $");
+__RCSID("$NetBSD: newfs.c,v 1.23 2006/09/05 19:44:44 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,17 +50,16 @@ __RCSID("$NetBSD: newfs.c,v 1.18 2005/08/22 09:19:19 yamt Exp $");
 #include <sys/ucred.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
-#include <sys/disklabel.h>
 #include <sys/file.h>
 #include <sys/mount.h>
 #include <sys/sysctl.h>
 #include <sys/time.h>
+#include <sys/disk.h>
 
 #include <ufs/ufs/dir.h>
 #include <ufs/ufs/dinode.h>
 #include <ufs/lfs/lfs.h>
 
-#include <disktab.h>
 #include <err.h>
 #include <errno.h>
 #include <unistd.h>
@@ -73,8 +72,15 @@ __RCSID("$NetBSD: newfs.c,v 1.18 2005/08/22 09:19:19 yamt Exp $");
 #include "config.h"
 #include "extern.h"
 #include "bufcache.h"
+#include "partutil.h"
 
 #define	COMPAT			/* allow non-labeled disks */
+
+#ifdef COMPAT
+const char lmsg[] = "%s: can't read disk label; disk type must be specified";
+#else
+const char lmsg[] = "%s: can't read disk label";
+#endif
 
 int	Nflag = 0;		/* run without writing file system */
 int	fssize;			/* file system size */
@@ -84,24 +90,19 @@ int	bsize = 0;		/* block size */
 int	ibsize = 0;		/* inode block size */
 int	interleave = 0;		/* segment interleave */
 int	minfree = MINFREE;	/* free space threshold */
-int     minfreeseg = 0;         /* free segments reserved for the cleaner */
+int     minfreeseg = 0;         /* segments not counted in bfree total */
+int     resvseg = 0;            /* free segments reserved for the cleaner */
 u_int32_t roll_id = 0;		/* roll-forward id */
 u_long	memleft;		/* virtual memory available */
 caddr_t	membase;		/* start address of memory based filesystem */
 #ifdef COMPAT
 char	*disktype;
-int	unlabeled;
 #endif
 int	preen = 0;		/* Coexistence with fsck_lfs */
 
 char	device[MAXPATHLEN];
 char	*progname, *special;
 
-static struct disklabel *getdisklabel(char *, int);
-static struct disklabel *debug_readlabel(int);
-#ifdef notdef
-static void rewritelabel(char *, int, struct disklabel *);
-#endif
 static int64_t strsuftoi64(const char *, const char *, int64_t, int64_t, int *);
 static void usage(void);
 
@@ -134,9 +135,9 @@ auto_segsize(int fd, off_t len, int version)
 	time(&start);
 	finish = start; /* structure copy */
 	for (seeks = 0; finish - start < 10; ) {
-		off = (((double)rand()) * len) / (off_t)RAND_MAX;
-		if (pread(fd, buf, dbtob(1), off) < 0)
-			break;
+		off = (((double)rand()) * (btodb(len))) / ((off_t)RAND_MAX + 1);
+		if (pread(fd, buf, dbtob(1), dbtob(off)) < 0)
+			err(1, "pread");
 		time(&finish);
 		++seeks;
 	}
@@ -162,13 +163,12 @@ int
 main(int argc, char **argv)
 {
 	int version, ch;
-	struct partition *pp;
-	struct disklabel *lp;
+	struct disk_geom geo;
+	struct dkwedge_info dkw;
 	struct stat st;
 	int debug, force, fsi, fso, segsize, maxpartitions;
 	uint secsize = 0;
 	daddr_t start;
-	char *cp;
 	const char *opstring;
 	int byte_sized = 0;
 	int r;
@@ -184,7 +184,7 @@ main(int argc, char **argv)
 	if (maxpartitions > 26)
 		fatal("insane maxpartitions value %d", maxpartitions);
 
-	opstring = "AB:b:DFf:I:i:LM:m:NO:r:S:s:v:";
+	opstring = "AB:b:DFf:I:i:LM:m:NO:R:r:S:s:v:";
 
 	debug = force = segsize = start = 0;
 	while ((ch = getopt(argc, argv, opstring)) != -1)
@@ -214,6 +214,9 @@ main(int argc, char **argv)
 			break;
 		case 'O':
 		  	start = strsuftoi64("start", optarg, 0, INT64_MAX, NULL);
+			break;
+		case 'R':
+		  	resvseg = strsuftoi64("resvseg", optarg, 0, INT64_MAX, NULL);
 			break;
 		case 'S':
 		  	secsize = strsuftoi64("sector size", optarg, 1, INT64_MAX, NULL);
@@ -286,41 +289,31 @@ main(int argc, char **argv)
 
 
 	if (!S_ISCHR(st.st_mode)) {
-		if (debug) {
-			lp = debug_readlabel(fsi);
-			pp = &lp->d_partitions[0];
-		} else {
-			static struct partition dummy_pp;
-			lp = NULL;
-			pp = &dummy_pp;
-			pp->p_fstype = FS_BSDLFS;
-			if (secsize == 0)
-				secsize = 512;
-			pp->p_size = st.st_size / secsize;
+		if (!S_ISREG(st.st_mode)) {
+			fatal("%s: neither a character special device "
+			      "nor a regular file", special);
 		}
+		(void)strcpy(dkw.dkw_ptype, DKW_PTYPE_LFS); 
+		if (secsize == 0)
+			secsize = 512;
+		dkw.dkw_size = st.st_size / secsize;
 	} else {
-		cp = strchr(argv[0], '\0') - 1;
-		if (!debug
-		    && ((*cp < 'a' || *cp > ('a' + maxpartitions - 1))
-		    && !isdigit((unsigned char)*cp)))
-			fatal("%s: can't figure out file system partition", argv[0]);
-
 #ifdef COMPAT
 		if (disktype == NULL)
 			disktype = argv[1];
 #endif
-		lp = getdisklabel(special, fsi);
+		if (getdiskinfo(special, fsi, disktype, &geo, &dkw) == -1)
+			errx(1, lmsg, special);
 
-		if (isdigit((unsigned char)*cp))
-			pp = &lp->d_partitions[0];
-		else
-			pp = &lp->d_partitions[*cp - 'a'];
-		if (pp->p_size == 0)
-			fatal("%s: `%c' partition is unavailable", argv[0], *cp);
+		if (dkw.dkw_size == 0)
+			fatal("%s: is zero sized", argv[0]);
+		if (!force && strcmp(dkw.dkw_ptype, DKW_PTYPE_LFS) != 0)
+			fatal("%s: is not `%s', but `%s'", argv[0],
+			    DKW_PTYPE_LFS, dkw.dkw_ptype);
 	}
 
 	if (secsize == 0)
-		secsize = lp->d_secsize;
+		secsize = geo.dg_secsize;
 
 	/* From here on out fssize is in sectors */
 	if (byte_sized) {
@@ -329,17 +322,13 @@ main(int argc, char **argv)
 
 	/* If force, make the partition look like an LFS */
 	if (force) {
-		pp->p_fstype = FS_BSDLFS;
+		(void)strcpy(dkw.dkw_ptype, DKW_PTYPE_LFS); 
 		if (fssize) {
-			pp->p_size = fssize;
+			dkw.dkw_size = fssize;
 		}
-		/* 0 means to use defaults */
-		pp->p_fsize  = 0;
-		pp->p_frag   = 0;
-		pp->p_sgs    = 0;
 	} else
-		if (fssize != 0 && fssize < pp->p_size)
-			pp->p_size = fssize;
+		if (fssize != 0 && fssize < dkw.dkw_size)
+			dkw.dkw_size = fssize;
 
 	/* Try autoconfiguring segment size, if asked to */
 	if (segsize == -1) {
@@ -347,118 +336,17 @@ main(int argc, char **argv)
 			warnx("%s is not a character special device, ignoring -A", special);
 			segsize = 0;
 		} else
-			segsize = auto_segsize(fsi, dbtob(pp->p_size), version);
+			segsize = auto_segsize(fsi, dbtob(dkw.dkw_size),
+			    version);
 	}
 
 	/* If we're making a LFS, we break out here */
-	r = make_lfs(fso, secsize, pp, minfree, bsize, fsize, segsize,
-		      minfreeseg, version, start, ibsize, interleave,
-                      roll_id);
+	r = make_lfs(fso, secsize, &dkw, minfree, bsize, fsize, segsize,
+	    minfreeseg, resvseg, version, start, ibsize, interleave, roll_id);
 	if (debug)
 		bufstats();
 	exit(r);
 }
-
-#ifdef COMPAT
-char lmsg[] = "%s: can't read disk label; disk type must be specified";
-#else
-char lmsg[] = "%s: can't read disk label";
-#endif
-
-static struct disklabel *
-getdisklabel(char *s, int fd)
-{
-	static struct disklabel lab;
-
-	if (ioctl(fd, DIOCGDINFO, (char *)&lab) < 0) {
-#ifdef COMPAT
-		if (disktype) {
-			struct disklabel *lp;
-
-			unlabeled++;
-			lp = getdiskbyname(disktype);
-			if (lp == NULL)
-				fatal("%s: unknown disk type", disktype);
-			return (lp);
-		}
-#endif
-		(void)fprintf(stderr,
-		    "%s: ioctl (GDINFO): %s\n", progname, strerror(errno));
-		fatal(lmsg, s);
-	}
-	return (&lab);
-}
-
-
-static struct disklabel *
-debug_readlabel(int fd)
-{
-	static struct disklabel lab;
-	int n;
-
-	if ((n = read(fd, &lab, sizeof(struct disklabel))) < 0)
-		fatal("unable to read disk label: %s", strerror(errno));
-	else if (n < sizeof(struct disklabel))
-		fatal("short read of disklabel: %d of %ld bytes", n,
-			(u_long) sizeof(struct disklabel));
-	return(&lab);
-}
-
-#ifdef notdef
-static void
-rewritelabel(char *s, int fd, struct disklabel *lp)
-{
-#ifdef COMPAT
-	if (unlabeled)
-		return;
-#endif
-	lp->d_checksum = 0;
-	lp->d_checksum = dkcksum(lp);
-	if (ioctl(fd, DIOCWDINFO, (char *)lp) < 0) {
-		(void)fprintf(stderr,
-		    "%s: ioctl (WDINFO): %s\n", progname, strerror(errno));
-		fatal("%s: can't rewrite disk label", s);
-	}
-#if __vax__
-	if (lp->d_type == DTYPE_SMD && lp->d_flags & D_BADSECT) {
-		int i;
-		int cfd;
-		daddr_t alt;
-		off_t loff;
-		char specname[64];
-		char blk[1024];
-		char *cp;
-
-		/*
-		 * Make name for 'c' partition.
-		 */
-		strlcpy(specname, s, sizeof(specname));
-		cp = specname + strlen(specname) - 1;
-		if (!isdigit(*cp))
-			*cp = 'c';
-		cfd = open(specname, O_WRONLY);
-		if (cfd < 0)
-			fatal("%s: %s", specname, strerror(errno));
-		if ((loff = getlabeloffset()) < 0)
-			fatal("getlabeloffset: %s", strerror(errno));
-		memset(blk, 0, sizeof(blk));
-		*(struct disklabel *)(blk + loff) = *lp;
-		alt = lp->d_ncylinders * lp->d_secpercyl - lp->d_nsectors;
-		for (i = 1; i < 11 && i < lp->d_nsectors; i += 2) {
-			if (lseek(cfd, (off_t)((alt + i) * lp->d_secsize),
-			    SEEK_SET) == -1)
-				fatal("lseek to badsector area: %s",
-				    strerror(errno));
-			if (write(cfd, blk, lp->d_secsize) < lp->d_secsize)
-				fprintf(stderr,
-				    "%s: alternate label %d write: %s\n",
-				    progname, i/2, strerror(errno));
-		}
-		close(cfd);
-	}
-#endif /* vax */
-}
-#endif /* notdef */
 
 static int64_t
 strsuftoi64(const char *desc, const char *arg, int64_t min, int64_t max, int *num_suffix)
@@ -513,9 +401,11 @@ usage()
 	fprintf(stderr, "\t-A (autoconfigure segment size)\n");
 	fprintf(stderr, "\t-B segment size in bytes\n");
 	fprintf(stderr, "\t-D (debug)\n");
+	fprintf(stderr, "\t-M count of segments not counted in bfree\n");
 	fprintf(stderr,
 	    "\t-N (do not create file system, just print out parameters)\n");
 	fprintf(stderr, "\t-O first segment offset in sectors\n");
+	fprintf(stderr, "\t-R count of segments reserved for the cleaner\n");
 	fprintf(stderr, "\t-b block size in bytes\n");
 	fprintf(stderr, "\t-f frag size in bytes\n");
 	fprintf(stderr, "\t-m minimum free space %%\n");

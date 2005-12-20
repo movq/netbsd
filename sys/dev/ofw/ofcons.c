@@ -1,4 +1,4 @@
-/*	$NetBSD: ofcons.c,v 1.24 2005/12/11 12:22:48 christos Exp $	*/
+/*	$NetBSD: ofcons.c,v 1.29 2006/10/01 19:28:44 elad Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofcons.c,v 1.24 2005/12/11 12:22:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofcons.c,v 1.29 2006/10/01 19:28:44 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: ofcons.c,v 1.24 2005/12/11 12:22:48 christos Exp $")
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/tty.h>
+#include <sys/kauth.h>
 
 #include <dev/cons.h>
 
@@ -105,7 +106,7 @@ ofcons_attach(parent, self, aux)
 	struct device *parent, *self;
 	void *aux;
 {
-	struct ofcons_softc *sc = (struct ofcons_softc *) self;
+	struct ofcons_softc *sc = device_private(self);
 
 	printf("\n");
 
@@ -136,6 +137,8 @@ ofcons_open(dev, flag, mode, l)
 	tp->t_oproc = ofcons_start;
 	tp->t_param = ofcons_param;
 	tp->t_dev = dev;
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
+		return (EBUSY);
 	if (!(tp->t_state & TS_ISOPEN)) {
 		ttychars(tp);
 		tp->t_iflag = TTYDEF_IFLAG;
@@ -145,9 +148,7 @@ ofcons_open(dev, flag, mode, l)
 		tp->t_ispeed = tp->t_ospeed = TTYDEF_SPEED;
 		ofcons_param(tp, &tp->t_termios);
 		ttsetwater(tp);
-	} else if ((tp->t_state&TS_XCLUDE) &&
-	    suser(l->l_proc->p_ucred, &l->l_proc->p_acflag))
-		return EBUSY;
+	}
 	tp->t_state |= TS_CARR_ON;
 
 	if (!(sc->of_flags & OFPOLL)) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.120 2005/12/11 12:19:27 christos Exp $	*/
+/*	$NetBSD: trap.c,v 1.126.8.2 2007/09/11 08:01:38 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.120 2005/12/11 12:19:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.126.8.2 2007/09/11 08:01:38 msaitoh Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
@@ -100,6 +100,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.120 2005/12/11 12:19:27 christos Exp $");
 #include <sys/syslog.h>
 #include <sys/user.h>
 #include <sys/userret.h>
+#include <sys/kauth.h>
 #ifdef	KGDB
 #include <sys/kgdb.h>
 #endif
@@ -136,14 +137,14 @@ extern struct emul emul_netbsd_aoutm68k;
  */
 #ifdef	_SUN3X_
 # define _pmap_fault(map, va, ftype) \
-	uvm_fault(map, va, 0, ftype)
+	uvm_fault(map, va, ftype)
 #endif	/* SUN3X */
 
 /* Special labels in m68k/copy.s */
 extern char fubail[], subail[];
 
 /* These are called from locore.s */
-void trap(int type, u_int code, u_int v, struct trapframe);
+void trap(struct trapframe *, int type, u_int code, u_int v);
 void trap_kdebug(int type, struct trapframe tf);
 int _nodb_trap(int type, struct trapframe *);
 void straytrap(struct trapframe);
@@ -194,7 +195,8 @@ short	exframesize[] = {
 };
 
 #define KDFAULT(c)	(((c) & (SSW_DF|SSW_FCMASK)) == (SSW_DF|FC_SUPERD))
-#define WRFAULT(c)	(((c) & (SSW_DF|SSW_RW)) == SSW_DF)
+#define WRFAULT(c)	(((c) & SSW_DF) != 0 && \
+			  ((((c) & SSW_RW) == 0) || (((c) & SSW_RM) != 0)))
 
 /* #define	DEBUG XXX */
 
@@ -252,7 +254,7 @@ machine_userret(struct lwp *l, struct frame *f, u_quad_t t)
  */
 /*ARGSUSED*/
 void 
-trap(int type, u_int code, u_int v, struct trapframe tf)
+trap(struct trapframe *tf, int type, u_int code, u_int v)
 {
 	struct lwp *l;
 	struct proc *p;
@@ -276,10 +278,11 @@ trap(int type, u_int code, u_int v, struct trapframe tf)
 		panic("trap: no pcb");
 #endif
 
-	if (USERMODE(tf.tf_sr)) {
+	if (USERMODE(tf->tf_sr)) {
 		type |= T_USER;
 		sticks = p->p_sticks;
-		l->l_md.md_regs = tf.tf_regs;
+		l->l_md.md_regs = tf->tf_regs;
+		LWP_CACHE_CREDS(l, p);
 	} else {
 		sticks = 0;
 		/* XXX: Detect trap recursion? */
@@ -297,11 +300,11 @@ trap(int type, u_int code, u_int v, struct trapframe tf)
 		tmp = splhigh();
 #ifdef KGDB
 		/* If connected, step or cont returns 1 */
-		if (kgdb_trap(type, &tf))
+		if (kgdb_trap(type, tf))
 			goto kgdb_cont;
 #endif
 #ifdef	DDB
-		(void) kdb_trap(type, (db_regs_t *) &tf);
+		(void) kdb_trap(type, (db_regs_t *) tf);
 #endif
 #ifdef KGDB
 	kgdb_cont:
@@ -315,7 +318,7 @@ trap(int type, u_int code, u_int v, struct trapframe tf)
 			 */
 			panic("trap during panic!");
 		}
-		regdump(&tf, 128);
+		regdump(tf, 128);
 		type &= ~T_USER;
 		if ((u_int)type < trap_types)
 			panic(trap_type[type]);
@@ -333,9 +336,9 @@ trap(int type, u_int code, u_int v, struct trapframe tf)
 		 * indicated location and set flag informing buserror code
 		 * that it may need to clean up stack frame.
 		 */
-		tf.tf_stackadj = exframesize[tf.tf_format];
-		tf.tf_format = tf.tf_vector = 0;
-		tf.tf_pc = (int) l->l_addr->u_pcb.pcb_onfault;
+		tf->tf_stackadj = exframesize[tf->tf_format];
+		tf->tf_format = tf->tf_vector = 0;
+		tf->tf_pc = (int) l->l_addr->u_pcb.pcb_onfault;
 		goto done;
 
 	case T_BUSERR|T_USER:	/* bus error */
@@ -361,7 +364,7 @@ trap(int type, u_int code, u_int v, struct trapframe tf)
 		sigdelset(&p->p_sigctx.ps_sigcatch, SIGILL);
 		sigdelset(&p->p_sigctx.ps_sigmask, SIGILL);
 		ksi.ksi_signo = SIGILL;
-		ksi.ksi_addr = (void *)(int)tf.tf_format;
+		ksi.ksi_addr = (void *)(int)tf->tf_format;
 		ksi.ksi_code = (type == T_COPERR) ?
 			ILL_COPROC : ILL_ILLOPC;
 		break;
@@ -392,11 +395,11 @@ trap(int type, u_int code, u_int v, struct trapframe tf)
 			longjmp(nofault);
 		goto dopanic;
 
-	case T_FPEMULI|T_USER:	/* unimplemented FP instuction */
+	case T_FPEMULI|T_USER:	/* unimplemented FP instruction */
 	case T_FPEMULD|T_USER:	/* unimplemented FP data type */
 #ifdef	FPU_EMULATE
-		if (fpu_emulate(&tf, &l->l_addr->u_pcb.pcb_fpregs, &ksi) == 0)
-			; /* XXX - Deal with tracing? (tf.tf_sr & PSL_T) */
+		if (fpu_emulate(tf, &l->l_addr->u_pcb.pcb_fpregs, &ksi) == 0)
+			; /* XXX - Deal with tracing? (tf->tf_sr & PSL_T) */
 #else
 		uprintf("pid %d killed: no floating point support\n", p->p_pid);
 		ksi.ksi_signo = SIGILL;
@@ -406,7 +409,7 @@ trap(int type, u_int code, u_int v, struct trapframe tf)
 
 	case T_ILLINST|T_USER:	/* illegal instruction fault */
 	case T_PRIVINST|T_USER:	/* privileged instruction fault */
-		ksi.ksi_addr = (void *)(int)tf.tf_format;
+		ksi.ksi_addr = (void *)(int)tf->tf_format;
 		ksi.ksi_signo = SIGILL;
 		ksi.ksi_code = (type == (T_PRIVINST|T_USER)) ?
 			ILL_PRVOPC : ILL_ILLOPC;
@@ -416,7 +419,7 @@ trap(int type, u_int code, u_int v, struct trapframe tf)
 		ksi.ksi_code = FPE_FLTDIV;
 	case T_CHKINST|T_USER:	/* CHK instruction trap */
 	case T_TRAPVINST|T_USER:	/* TRAPV instruction trap */
-		ksi.ksi_addr = (void *)(int)tf.tf_format;
+		ksi.ksi_addr = (void *)(int)tf->tf_format;
 		ksi.ksi_signo = SIGFPE;
 		break;
 
@@ -437,7 +440,7 @@ trap(int type, u_int code, u_int v, struct trapframe tf)
 	 * XXX: because locore.s now gives them special treatment.
 	 */
 	case T_TRAP15:		/* kernel breakpoint */
-		tf.tf_sr &= ~PSL_T;
+		tf->tf_sr &= ~PSL_T;
 		goto done;
 
 	case T_TRACE|T_USER:	/* user trace trap */
@@ -457,7 +460,7 @@ trap(int type, u_int code, u_int v, struct trapframe tf)
 		/* FALLTHROUGH */
 	case T_TRACE:		/* tracing a trap instruction */
 	case T_TRAP15|T_USER:	/* SUN user trace trap */
-		tf.tf_sr &= ~PSL_T;
+		tf->tf_sr &= ~PSL_T;
 		ksi.ksi_signo = SIGTRAP;
 		break;
 
@@ -513,7 +516,7 @@ trap(int type, u_int code, u_int v, struct trapframe tf)
 #ifdef DEBUG
 		if ((mmudebug & MDB_WBFOLLOW) || MDB_ISPID(p->p_pid))
 		printf("trap: T_MMUFLT pid=%d, code=0x%x, v=0x%x, pc=0x%x, sr=0x%x\n",
-		       p->p_pid, code, v, tf.tf_pc, tf.tf_sr);
+		       p->p_pid, code, v, tf->tf_pc, tf->tf_sr);
 #endif
 
 		/*
@@ -558,7 +561,7 @@ trap(int type, u_int code, u_int v, struct trapframe tf)
 
 #ifdef	DEBUG
 		if (rv && MDB_ISPID(p->p_pid)) {
-			printf("vm_fault(%p, 0x%lx, 0x%x, 0) -> 0x%x\n",
+			printf("vm_fault(%p, 0x%lx, 0x%x) -> 0x%x\n",
 			       map, va, ftype, rv);
 			if (mmudebug & MDB_WBFAILED)
 				Debugger();
@@ -596,7 +599,7 @@ trap(int type, u_int code, u_int v, struct trapframe tf)
 #endif
 				goto copyfault;
 			}
-			printf("vm_fault(%p, 0x%lx, 0x%x, 0) -> 0x%x\n",
+			printf("vm_fault(%p, 0x%lx, 0x%x) -> 0x%x\n",
 			       map, va, ftype, rv);
 			goto dopanic;
 		}
@@ -605,8 +608,8 @@ trap(int type, u_int code, u_int v, struct trapframe tf)
 		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			       p->p_pid, p->p_comm,
-			       p->p_cred && p->p_ucred ?
-			       p->p_ucred->cr_uid : -1);
+			       l->l_cred ?
+			       kauth_cred_geteuid(l->l_cred) : -1);
 			ksi.ksi_signo = SIGKILL;
 		} else {
 			ksi.ksi_signo = SIGSEGV;
@@ -623,7 +626,7 @@ finish:
 	if (ksi.ksi_signo)
 		trapsignal(l, &ksi);
 douret:
-	userret(l, &tf, sticks);
+	userret(l, tf, sticks);
 
 done:;
 	/* XXX: Detect trap recursion? */

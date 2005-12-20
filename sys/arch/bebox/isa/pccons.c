@@ -1,4 +1,4 @@
-/*	$NetBSD: pccons.c,v 1.36 2005/12/11 12:17:04 christos Exp $	*/
+/*	$NetBSD: pccons.c,v 1.41 2006/10/01 18:56:21 elad Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.36 2005/12/11 12:17:04 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.41 2006/10/01 18:56:21 elad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_xserver.h"
@@ -99,6 +99,7 @@ __KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.36 2005/12/11 12:17:04 christos Exp $")
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/conf.h>
+#include <sys/kauth.h>
 
 #include <dev/cons.h>
 
@@ -301,9 +302,9 @@ void update_leds __P((void));
 #endif
 
 #if (NPCCONSKBD == 0)
-static __inline int kbd_wait_output __P((void));
-static __inline int kbd_wait_input __P((void));
-static __inline void kbd_flush_input __P((void));
+static inline int kbd_wait_output __P((void));
+static inline int kbd_wait_input __P((void));
+static inline void kbd_flush_input __P((void));
 static u_char kbc_get8042cmd __P((void));
 static int kbc_put8042cmd __P((u_char));
 #endif
@@ -324,7 +325,7 @@ void pccnpollc __P((dev_t, int));
 	{ u_char x = isa_inb(0x84); (void) x; } \
 	{ u_char x = isa_inb(0x84); (void) x; }
 
-static __inline int
+static inline int
 kbd_wait_output()
 {
 	u_int i;
@@ -337,7 +338,7 @@ kbd_wait_output()
 	return (0);
 }
 
-static __inline int
+static inline int
 kbd_wait_input()
 {
 	u_int i;
@@ -350,7 +351,7 @@ kbd_wait_input()
 	return (0);
 }
 
-static __inline void
+static inline void
 kbd_flush_input()
 {
 	u_int i;
@@ -789,7 +790,7 @@ pcattach(parent, self, aux)
 		maj = cdevsw_lookup_major(&pc_cdevsw);
 
 		/* There can be only one, but it can have any unit number. */
-		cn_tab->cn_dev = makedev(maj, sc->sc_dev.dv_unit);
+		cn_tab->cn_dev = makedev(maj, device_unit(&sc->sc_dev));
 
 		printf("%s: console\n", sc->sc_dev.dv_xname);
 	}
@@ -860,6 +861,10 @@ pcopen(dev, flag, mode, l)
 	tp->t_oproc = pcstart;
 	tp->t_param = pcparam;
 	tp->t_dev = dev;
+
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
+		return (EBUSY);
+
 	if ((tp->t_state & TS_ISOPEN) == 0) {
 		ttychars(tp);
 		tp->t_iflag = TTYDEF_IFLAG;
@@ -869,9 +874,7 @@ pcopen(dev, flag, mode, l)
 		tp->t_ispeed = tp->t_ospeed = TTYDEF_SPEED;
 		pcparam(tp, &tp->t_termios);
 		ttsetwater(tp);
-	} else if (tp->t_state&TS_XCLUDE &&
-		   suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0)
-		return (EBUSY);
+	}
 	tp->t_state |= TS_CARR_ON;
 
 	return ((*tp->t_linesw->l_open)(dev, tp));

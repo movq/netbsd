@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: scan.l,v 1.3 2005/10/12 01:17:43 cube Exp $	*/
+/*	$NetBSD: scan.l,v 1.5 2006/08/26 18:17:13 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -50,6 +50,8 @@
 #include <unistd.h>
 #include <stddef.h>
 #include <ctype.h>
+#include <util.h>
+#undef ECHO
 #include "defs.h"
 #include "gram.h"
 
@@ -118,6 +120,7 @@ needs-count	return NEEDS_COUNT;
 needs-flag	return NEEDS_FLAG;
 no		return NO;
 object		return XOBJECT;
+obsolete	return OBSOLETE;
 on		return ON;
 options		return OPTIONS;
 prefix		return PREFIX;
@@ -168,7 +171,7 @@ package[ \t]+{FILENAME}	{
 
 \"\" {
 		yylval.str = intern("");
-		return EMPTY;
+		return EMPTYSTRING;
 	}
 
 \"{QCHARS}	{

@@ -32,9 +32,9 @@
 #include <openssl/bn.h>
 
 #if (defined(__unix__) || defined(unix)) && !defined(USG) && \
-	(defined(OpenBSD) || defined(__FreeBSD_version))
+	(defined(OpenBSD) || defined(__FreeBSD_version)) || defined(__NetBSD__)
 #include <sys/param.h>
-# if (OpenBSD >= 200112) || ((__FreeBSD_version >= 470101 && __FreeBSD_version < 500000) || __FreeBSD_version >= 500041)
+# if (OpenBSD >= 200112) || ((__FreeBSD_version >= 470101 && __FreeBSD_version < 500000) || __FreeBSD_version >= 500041) || defined(__NetBSD__)
 #  define HAVE_CRYPTODEV
 # endif
 # if (OpenBSD >= 200110)
@@ -100,7 +100,7 @@ static int cryptodev_asym(struct crypt_kop *kop, int rlen, BIGNUM *r,
 static int cryptodev_bn_mod_exp(BIGNUM *r, const BIGNUM *a,
     const BIGNUM *p, const BIGNUM *m, BN_CTX *ctx, BN_MONT_CTX *m_ctx);
 static int cryptodev_rsa_nocrt_mod_exp(BIGNUM *r0, const BIGNUM *I,
-    RSA *rsa);
+    RSA *rsa, BN_CTX *);
 static int cryptodev_rsa_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *ctx);
 static int cryptodev_dsa_bn_mod_exp(DSA *dsa, BIGNUM *r, BIGNUM *a,
     const BIGNUM *p, const BIGNUM *m, BN_CTX *ctx, BN_MONT_CTX *m_ctx);
@@ -264,7 +264,7 @@ get_cryptodev_ciphers(const int **cnids)
 		return (0);
 	}
 	memset(&sess, 0, sizeof(sess));
-	sess.key = (caddr_t)"123456781234567812345678";
+	sess.key = (void *)"123456781234567812345678";
 
 	for (i = 0; ciphers[i].id && count < CRYPTO_ALGORITHM_MAX; i++) {
 		if (ciphers[i].nid == NID_undef)
@@ -389,16 +389,16 @@ cryptodev_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
 	cryp.ses = sess->ses;
 	cryp.flags = 0;
 	cryp.len = inl;
-	cryp.src = (caddr_t) in;
-	cryp.dst = (caddr_t) out;
+	cryp.src = (void *) in;
+	cryp.dst = (void *) out;
 	cryp.mac = 0;
 
 	cryp.op = ctx->encrypt ? COP_ENCRYPT : COP_DECRYPT;
 
 	if (ctx->cipher->iv_len) {
-		cryp.iv = (caddr_t) ctx->iv;
+		cryp.iv = (void *) ctx->iv;
 		if (!ctx->encrypt) {
-			iiv = (void *) in + inl - ctx->cipher->iv_len;
+			iiv = (char *) in + inl - ctx->cipher->iv_len;
 			memcpy(save_iv, iiv, ctx->cipher->iv_len);
 		}
 	} else
@@ -413,7 +413,7 @@ cryptodev_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
 
 	if (ctx->cipher->iv_len) {
 		if (ctx->encrypt)
-			iiv = (void *) out + inl - ctx->cipher->iv_len;
+			iiv = (char *) out + inl - ctx->cipher->iv_len;
 		else
 			iiv = save_iv;
 		memcpy(ctx->iv, iiv, ctx->cipher->iv_len);
@@ -668,7 +668,7 @@ crparam2bn(struct crparam *crp, BIGNUM *a)
 		return (-1);
 
 	for (i = 0; i < bytes; i++)
-		pd[i] = crp->crp_p[bytes - i - 1];
+		pd[i] = ((char *)crp->crp_p)[bytes - i - 1];
 
 	BN_bin2bn(pd, bytes, a);
 	free(pd);
@@ -756,7 +756,7 @@ err:
 }
 
 static int
-cryptodev_rsa_nocrt_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa)
+cryptodev_rsa_nocrt_mod_exp(BIGNUM *r0, const BIGNUM *I, RSA *rsa, BN_CTX *dummy)
 {
 	int r;
 	BN_CTX *ctx;
@@ -877,7 +877,7 @@ cryptodev_dsa_do_sign(const unsigned char *dgst, int dlen, DSA *dsa)
 	kop.crk_op = CRK_DSA_SIGN;
 
 	/* inputs: dgst dsa->p dsa->q dsa->g dsa->priv_key */
-	kop.crk_param[0].crp_p = (caddr_t)dgst;
+	kop.crk_param[0].crp_p = (void *)dgst;
 	kop.crk_param[0].crp_nbits = dlen * 8;
 	if (bn2crparam(dsa->p, &kop.crk_param[1]))
 		goto err;
@@ -917,7 +917,7 @@ cryptodev_dsa_verify(const unsigned char *dgst, int dlen,
 	kop.crk_op = CRK_DSA_VERIFY;
 
 	/* inputs: dgst dsa->p dsa->q dsa->g dsa->pub_key sig->r sig->s */
-	kop.crk_param[0].crp_p = (caddr_t)dgst;
+	kop.crk_param[0].crp_p = (void *)dgst;
 	kop.crk_param[0].crp_nbits = dlen * 8;
 	if (bn2crparam(dsa->p, &kop.crk_param[1]))
 		goto err;

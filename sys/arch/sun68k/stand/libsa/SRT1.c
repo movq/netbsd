@@ -1,4 +1,4 @@
-/*	$NetBSD: SRT1.c,v 1.4 2005/12/11 12:19:29 christos Exp $	*/
+/*	$NetBSD: SRT1.c,v 1.6 2006/09/17 06:15:40 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
 /* SRT1.c - Stand-alone Run-time startup code, part 1 */
 
 #include <sys/types.h>
-#include <machine/mon.h>
+#include <sun68k/mon.h>
 
 #include "libsa.h"
 #include "dvma.h"
@@ -109,7 +109,7 @@ _start(void)
 void 
 breakpoint(void)
 {
-	__asm __volatile ("trap #14");
+	__asm volatile ("trap #14");
 }
 
 void 

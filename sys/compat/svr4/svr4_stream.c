@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_stream.c,v 1.55 2005/12/11 12:20:26 christos Exp $	 */
+/*	$NetBSD: svr4_stream.c,v 1.60 2006/11/16 01:32:44 christos Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_stream.c,v 1.55 2005/12/11 12:20:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_stream.c,v 1.60 2006/11/16 01:32:44 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -163,7 +163,7 @@ show_ioc(str, ioc)
 	struct svr4_strioctl	*ioc;
 {
 	u_char *ptr;
-	int error;
+	int error, len;
 
 	len = ioc->len;
 	if (len > 1024)
@@ -440,15 +440,13 @@ getparm(fp, pa)
 
 
 static int
-si_ogetudata(fp, fd, ioc, l)
-	struct file		*fp;
-	int 			 fd;
-	struct svr4_strioctl	*ioc;
-	struct lwp		*l;
+si_ogetudata(struct file *fp, int fd, struct svr4_strioctl *ioc,
+    struct lwp *l)
 {
 	int error;
 	struct svr4_si_oudata ud;
 	struct svr4_si_sockparms pa;
+	(void)memset(&pa, 0, sizeof(pa));	/* XXX: GCC */
 
 	if (ioc->len != sizeof(ud) && ioc->len != sizeof(ud) - sizeof(int)) {
 		DPRINTF(("SI_OGETUDATA: Wrong size %ld != %d\n",
@@ -497,11 +495,8 @@ si_ogetudata(fp, fd, ioc, l)
 
 
 static int
-si_sockparams(fp, fd, ioc, l)
-	struct file		*fp;
-	int 			 fd;
-	struct svr4_strioctl	*ioc;
-	struct lwp		*l;
+si_sockparams(struct file *fp, int fd, struct svr4_strioctl *ioc,
+    struct lwp *l)
 {
 	struct svr4_si_sockparms pa;
 
@@ -579,11 +574,8 @@ si_listen(fp, fd, ioc, l)
 
 
 static int
-si_getudata(fp, fd, ioc, l)
-	struct file		*fp;
-	int 			 fd;
-	struct svr4_strioctl	*ioc;
-	struct lwp		*l;
+si_getudata(struct file *fp, int fd, struct svr4_strioctl *ioc,
+    struct lwp *l)
 {
 	int error;
 	struct svr4_si_udata ud;
@@ -636,11 +628,8 @@ si_getudata(fp, fd, ioc, l)
 
 
 static int
-si_shutdown(fp, fd, ioc, l)
-	struct file		*fp;
-	int 			 fd;
-	struct svr4_strioctl	*ioc;
-	struct lwp		*l;
+si_shutdown(struct file *fp, int fd, struct svr4_strioctl *ioc,
+    struct lwp *l)
 {
 	int error;
 	struct sys_shutdown_args ap;
@@ -718,11 +707,8 @@ sockmod(fp, fd, ioc, l)
 
 
 static int
-ti_getinfo(fp, fd, ioc, l)
-	struct file		*fp;
-	int 			 fd;
-	struct svr4_strioctl	*ioc;
-	struct lwp		*l;
+ti_getinfo(struct file *fp, int fd, struct svr4_strioctl *ioc,
+    struct lwp *l)
 {
 	int error;
 	struct svr4_infocmd info;
@@ -961,7 +947,7 @@ svr4_stream_ti_ioctl(fp, l, retval, fd, cmd, dat)
 			struct sys_getsockname_args ap;
 			SCARG(&ap, fdes) = fd;
 			SCARG(&ap, asa) = sup;
-			SCARG(&ap, alen) = lenp;
+			SCARG(&ap, alen) = (socklen_t *)lenp;
 
 			if ((error = sys_getsockname(l, &ap, retval)) != 0) {
 				DPRINTF(("ti_ioctl: getsockname error\n"));
@@ -976,7 +962,7 @@ svr4_stream_ti_ioctl(fp, l, retval, fd, cmd, dat)
 			struct sys_getpeername_args ap;
 			SCARG(&ap, fdes) = fd;
 			SCARG(&ap, asa) = sup;
-			SCARG(&ap, alen) = lenp;
+			SCARG(&ap, alen) = (socklen_t *)lenp;
 
 			if ((error = sys_getpeername(l, &ap, retval)) != 0) {
 				DPRINTF(("ti_ioctl: getpeername error\n"));
@@ -1041,13 +1027,8 @@ svr4_stream_ti_ioctl(fp, l, retval, fd, cmd, dat)
 
 
 static int
-i_nread(fp, l, retval, fd, cmd, dat)
-	struct file *fp;
-	struct lwp *l;
-	register_t *retval;
-	int fd;
-	u_long cmd;
-	caddr_t dat;
+i_nread(struct file *fp, struct lwp *l, register_t *retval, int fd,
+    u_long cmd, caddr_t dat)
 {
 	int error;
 	int nread = 0;
@@ -1072,13 +1053,8 @@ i_nread(fp, l, retval, fd, cmd, dat)
 }
 
 static int
-i_fdinsert(fp, l, retval, fd, cmd, dat)
-	struct file *fp;
-	struct lwp *l;
-	register_t *retval;
-	int fd;
-	u_long cmd;
-	caddr_t dat;
+i_fdinsert(struct file *fp, struct lwp *l, register_t *retval, int fd,
+    u_long cmd, caddr_t dat)
 {
 	/*
 	 * Major hack again here. We assume that we are using this to
@@ -1134,13 +1110,8 @@ i_fdinsert(fp, l, retval, fd, cmd, dat)
 
 
 static int
-_i_bind_rsvd(fp, l, retval, fd, cmd, dat)
-	struct file *fp;
-	struct lwp *l;
-	register_t *retval;
-	int fd;
-	u_long cmd;
-	caddr_t dat;
+_i_bind_rsvd(struct file *fp, struct lwp *l, register_t *retval,
+    int fd, u_long cmd, caddr_t dat)
 {
 	struct sys_mknod_args ap;
 
@@ -1158,13 +1129,8 @@ _i_bind_rsvd(fp, l, retval, fd, cmd, dat)
 }
 
 static int
-_i_rele_rsvd(fp, l, retval, fd, cmd, dat)
-	struct file *fp;
-	struct lwp *l;
-	register_t *retval;
-	int fd;
-	u_long cmd;
-	caddr_t dat;
+_i_rele_rsvd(struct file *fp, struct lwp *l, register_t *retval,
+    int fd, u_long cmd, caddr_t dat)
 {
 	struct sys_unlink_args ap;
 
@@ -1178,13 +1144,8 @@ _i_rele_rsvd(fp, l, retval, fd, cmd, dat)
 }
 
 static int
-i_str(fp, l, retval, fd, cmd, dat)
-	struct file *fp;
-	struct lwp *l;
-	register_t *retval;
-	int fd;
-	u_long cmd;
-	caddr_t dat;
+i_str(struct file *fp, struct lwp *l, register_t *retval, int fd,
+    u_long cmd, caddr_t dat)
 {
 	int			 error;
 	struct svr4_strioctl	 ioc;
@@ -1228,13 +1189,8 @@ i_str(fp, l, retval, fd, cmd, dat)
 }
 
 static int
-i_setsig(fp, l, retval, fd, cmd, dat)
-	struct file *fp;
-	struct lwp *l;
-	register_t *retval;
-	int fd;
-	u_long cmd;
-	caddr_t dat;
+i_setsig(struct file *fp, struct lwp *l, register_t *retval, int fd,
+    u_long cmd, caddr_t dat)
 {
 	/*
 	 * This is the best we can do for now; we cannot generate
@@ -1295,13 +1251,8 @@ i_setsig(fp, l, retval, fd, cmd, dat)
 }
 
 static int
-i_getsig(fp, l, retval, fd, cmd, dat)
-	struct file *fp;
-	struct lwp *l;
-	register_t *retval;
-	int fd;
-	u_long cmd;
-	caddr_t dat;
+i_getsig(struct file *fp, struct lwp *l, register_t *retval,
+    int fd, u_long cmd, caddr_t dat)
 {
 	int error;
 
@@ -1781,7 +1732,7 @@ svr4_sys_getmsg(l, v, retval)
 
 		SCARG(&ga, fdes) = SCARG(uap, fd);
 		SCARG(&ga, asa) = (void *) sup;
-		SCARG(&ga, alen) = flen;
+		SCARG(&ga, alen) = (socklen_t *)flen;
 
 		if ((error = sys_getpeername(l, &ga, retval)) != 0) {
 			DPRINTF(("getmsg: getpeername failed %d\n", error));
@@ -1840,7 +1791,7 @@ svr4_sys_getmsg(l, v, retval)
 		 */
 		SCARG(&aa, s) = SCARG(uap, fd);
 		SCARG(&aa, name) = (void *) sup;
-		SCARG(&aa, anamelen) = flen;
+		SCARG(&aa, anamelen) = (socklen_t *)flen;
 
 		if ((error = sys_accept(l, &aa, retval)) != 0) {
 			DPRINTF(("getmsg: accept failed %d\n", error));

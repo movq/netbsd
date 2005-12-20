@@ -1,4 +1,4 @@
-/*	 $NetBSD: nfsnode.h,v 1.55 2005/12/11 12:25:17 christos Exp $	*/
+/*	 $NetBSD: nfsnode.h,v 1.58 2006/10/17 14:55:13 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -49,7 +49,7 @@
  * can be removed by nfs_inactive()
  */
 struct sillyrename {
-	struct	ucred *s_cred;
+	kauth_cred_t	s_cred;
 	struct	vnode *s_dvp;
 	long	s_namlen;
 	char	s_name[20];
@@ -70,7 +70,6 @@ struct sillyrename {
  * the cookies are stored.
  */
 
-extern u_long nfsdirhashmask;
 
 LIST_HEAD(nfsdirhashhead, nfsdircache);
 TAILQ_HEAD(nfsdirchainhead, nfsdircache);
@@ -176,8 +175,8 @@ struct nfsnode {
 	uid_t			n_accuid;	/* Last access requester */
 	int			n_accmode;	/* Mode last requested */
 	int			n_accerror;	/* Error last returned */
-	struct ucred		*n_rcred;
-	struct ucred		*n_wcred;
+	kauth_cred_t		n_rcred;
+	kauth_cred_t		n_wcred;
 
 	/* members below are only used by NQNFS */
 	CIRCLEQ_ENTRY(nfsnode)	n_timer;	/* Nqnfs timer chain */
@@ -229,9 +228,12 @@ struct nfs_iod {
 	struct proc *nid_want;
 	struct nfsmount *nid_mount;
 };
-extern struct nfs_iod nfs_asyncdaemon[NFS_MAXASYNCDAEMON];
 
 #ifdef _KERNEL
+
+extern struct nfs_iod nfs_asyncdaemon[NFS_MAXASYNCDAEMON];
+extern u_long nfsdirhashmask;
+
 /*
  * Prototypes for NFS vnode operations
  */

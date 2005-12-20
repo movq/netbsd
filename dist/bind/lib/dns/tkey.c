@@ -1,7 +1,7 @@
-/*	$NetBSD: tkey.c,v 1.1.1.2 2004/11/06 23:55:42 christos Exp $	*/
+/*	$NetBSD: tkey.c,v 1.1.1.4.4.1 2007/05/17 00:40:48 jdc Exp $	*/
 
 /*
- * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -18,9 +18,9 @@
  */
 
 /*
- * Id: tkey.c,v 1.71.2.1.10.5 2004/06/11 00:30:54 marka Exp
+ * Id: tkey.c,v 1.76.18.5 2005/11/30 03:44:39 marka Exp
  */
-
+/*! \file */
 #include <config.h>
 
 #include <isc/buffer.h>
@@ -358,7 +358,7 @@ process_dhtkey(dns_message_t *msg, dns_name_t *signer, dns_name_t *name,
 
 	isc_buffer_init(&secret, secretdata, sizeof(secretdata));
 
-	randomdata = isc_mem_get(tctx->mctx, TKEY_RANDOM_AMOUNT);
+	randomdata = isc_mem_get(tkeyout->mctx, TKEY_RANDOM_AMOUNT);
 	if (randomdata == NULL)
 		goto failure;
 
@@ -399,8 +399,8 @@ process_dhtkey(dns_message_t *msg, dns_name_t *signer, dns_name_t *name,
 		isc_buffer_free(&shared);
 	if (pubkey != NULL)
 		dst_key_free(&pubkey);
-	if (randomdata == NULL)
-		isc_mem_put(tctx->mctx, randomdata, TKEY_RANDOM_AMOUNT);
+	if (randomdata != NULL)
+		isc_mem_put(tkeyout->mctx, randomdata, TKEY_RANDOM_AMOUNT);
 	return (result);
 }
 
@@ -443,15 +443,17 @@ process_gsstkey(dns_message_t *msg, dns_name_t *signer, dns_name_t *name,
 					   dstkey, ISC_TRUE, signer,
 					   tkeyin->inception, tkeyin->expire,
 					   msg->mctx, ring, NULL);
+#if 1
 	if (result != ISC_R_SUCCESS)
 		goto failure;
-
+#else
 	if (result == ISC_R_NOTFOUND) {
 		tkeyout->error = dns_tsigerror_badalg;
 		return (ISC_R_SUCCESS);
 	}
 	if (result != ISC_R_SUCCESS)
 		goto failure;
+#endif
 
 	/* This key is good for a long time */
 	isc_stdtime_get(&now);

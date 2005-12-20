@@ -1,4 +1,4 @@
-/*	$NetBSD: pcivar.h,v 1.70 2005/12/11 12:22:50 christos Exp $	*/
+/*	$NetBSD: pcivar.h,v 1.73 2006/09/25 23:09:42 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -169,6 +169,7 @@ struct pci_softc {
 	/* accounting of child devices */
 	struct device *sc_devices[32*8];
 #define PCI_SC_DEVICESC(d, f) sc_devices[(d) * 8 + (f)]
+	void *sc_powerhook;
 };
 
 struct pci_conf_state {
@@ -190,6 +191,9 @@ int	pci_mapreg_info(pci_chipset_tag_t, pcitag_t, int, pcireg_t,
 int	pci_mapreg_map(struct pci_attach_args *, int, pcireg_t, int,
 	    bus_space_tag_t *, bus_space_handle_t *, bus_addr_t *,
 	    bus_size_t *);
+
+int pci_find_rom(struct pci_attach_args *, bus_space_tag_t, bus_space_handle_t,
+	    int, bus_space_handle_t *, bus_size_t *);
 
 int pci_get_capability(pci_chipset_tag_t, pcitag_t, int, int *, pcireg_t *);
 
@@ -237,6 +241,11 @@ int	pci_find_device(struct pci_attach_args *pa,
 int	pci_dma64_available(struct pci_attach_args *);
 void	pci_conf_capture(pci_chipset_tag_t, pcitag_t, struct pci_conf_state *);
 void	pci_conf_restore(pci_chipset_tag_t, pcitag_t, struct pci_conf_state *);
+int	pci_get_powerstate(pci_chipset_tag_t, pcitag_t, pcireg_t *);
+int	pci_set_powerstate(pci_chipset_tag_t, pcitag_t, pcireg_t);
+int	pci_activate(pci_chipset_tag_t, pcitag_t, void *,
+    int (*)(pci_chipset_tag_t, pcitag_t, void *, pcireg_t));
+int	pci_activate_null(pci_chipset_tag_t, pcitag_t, void *, pcireg_t);
 
 #endif /* _KERNEL */
 

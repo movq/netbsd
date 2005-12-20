@@ -1,4 +1,4 @@
-/* $NetBSD: trap.c,v 1.33 2005/12/11 12:17:52 christos Exp $ */
+/* $NetBSD: trap.c,v 1.39.8.2 2007/09/11 08:01:36 msaitoh Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -78,7 +78,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.33 2005/12/11 12:17:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.39.8.2 2007/09/11 08:01:36 msaitoh Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -98,6 +98,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.33 2005/12/11 12:17:52 christos Exp $");
 #include <sys/syslog.h>
 #include <sys/user.h>
 #include <sys/userret.h>
+#include <sys/kauth.h>
 
 #include <machine/psl.h>
 #include <machine/trap.h>
@@ -110,7 +111,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.33 2005/12/11 12:17:52 christos Exp $");
 #include <dev/cons.h>
 
 int   writeback __P((struct frame *fp, int docachepush));
-void  trap __P((int type, u_int code, u_int v, struct frame frame));
+void  trap __P((struct frame *fp, int type, u_int code, u_int v));
 
 #if defined(M68040)
 #ifdef DEBUG
@@ -164,11 +165,13 @@ short	exframesize[] = {
 			    ((c) & SSW4_TMMASK) == SSW4_TMKD : \
 			    ((c) & (SSW_DF|FC_SUPERD)) == (SSW_DF|FC_SUPERD))
 #define WRFAULT(c)    (mmutype == MMU_68040 ? \
-			    ((c) & SSW4_RW) == 0 : \
-			    ((c) & (SSW_DF|SSW_RW)) == SSW_DF)
+			    ((c) & (SSW4_LK|SSW4_RW)) != SSW4_RW : \
+			 (((c) & SSW_DF) != 0 && \
+			 ((((c) & SSW_RW) == 0) || (((c) & SSW_RM) != 0))))
 #else
 #define KDFAULT(c)	(((c) & (SSW_DF|SSW_FCMASK)) == (SSW_DF|FC_SUPERD))
-#define WRFAULT(c)	(((c) & (SSW_DF|SSW_RW)) == SSW_DF)
+#define WRFAULT(c)	(((c) & SSW_DF) != 0 && \
+			    ((((c) & SSW_RW) == 0) || (((c) & SSW_RM) != 0)))
 #endif
 
 #ifdef DEBUG
@@ -268,11 +271,11 @@ machine_userret(l, f, t)
  */
 /*ARGSUSED*/
 void
-trap(type, code, v, frame)
+trap(fp, type, code, v)
+	struct frame *fp;
 	int type;
 	unsigned code;
 	unsigned v;
-	struct frame frame;
 {
 	extern char fubail[], subail[];
 	struct lwp *l;
@@ -296,10 +299,11 @@ trap(type, code, v, frame)
 		panic("trap: no pcb");
 #endif
 
-	if (USERMODE(frame.f_sr)) {
+	if (USERMODE(fp->f_sr)) {
 		type |= T_USER;
 		sticks = p->p_sticks;
-		l->l_md.md_regs = frame.f_regs;
+		l->l_md.md_regs = fp->f_regs;
+		LWP_CACHE_CREDS(l, p);
 	}
 	switch (type) {
 
@@ -307,7 +311,7 @@ trap(type, code, v, frame)
 	dopanic:
 		printf("trap type %d, code = 0x%x, v = 0x%x\n", type, code, v);
 		printf("%s program counter = 0x%x\n",
-		    (type & T_USER) ? "user" : "kernel", frame.f_pc);
+		    (type & T_USER) ? "user" : "kernel", fp->f_pc);
 		/*
 		 * Let the kernel debugger see the trap frame that
 		 * caused us to panic.  This is a convenience so
@@ -316,11 +320,11 @@ trap(type, code, v, frame)
 		s = splhigh();
 #ifdef KGDB
 		/* If connected, step or cont returns 1 */
-		if (kgdb_trap(type, &frame))
+		if (kgdb_trap(type, fp))
 			goto kgdb_cont;
 #endif
 #ifdef DDB
-		(void)kdb_trap(type, (db_regs_t *)&frame);
+		(void)kdb_trap(type, (db_regs_t *)fp);
 #endif
 #ifdef KGDB
 	kgdb_cont:
@@ -333,7 +337,7 @@ trap(type, code, v, frame)
 			printf("(press a key)\n"); (void)cngetc();
 #endif
 		}
-		regdump((struct trapframe *)&frame, 128);
+		regdump((struct trapframe *)fp, 128);
 		type &= ~T_USER;
 		if ((u_int)type < trap_types)
 			panic(trap_type[type]);
@@ -351,9 +355,9 @@ trap(type, code, v, frame)
 		 * indicated location and set flag informing buserror code
 		 * that it may need to clean up stack frame.
 		 */
-		frame.f_stackadj = exframesize[frame.f_format];
-		frame.f_format = frame.f_vector = 0;
-		frame.f_pc = (int) l->l_addr->u_pcb.pcb_onfault;
+		fp->f_stackadj = exframesize[fp->f_format];
+		fp->f_format = fp->f_vector = 0;
+		fp->f_pc = (int) l->l_addr->u_pcb.pcb_onfault;
 		return;
 
 	case T_BUSERR|T_USER:	/* bus error */
@@ -379,7 +383,7 @@ trap(type, code, v, frame)
 		sigdelset(&p->p_sigctx.ps_sigcatch, SIGILL);
 		sigdelset(&p->p_sigctx.ps_sigmask, SIGILL);
 		ksi.ksi_signo = SIGILL;
-		ksi.ksi_addr = (void *)(int)frame.f_format;
+		ksi.ksi_addr = (void *)(int)fp->f_format;
 				/* XXX was ILL_RESAD_FAULT */
 		ksi.ksi_code = (type == T_COPERR) ?
 			ILL_COPROC : ILL_ILLOPC;
@@ -406,13 +410,13 @@ trap(type, code, v, frame)
 		break;
 
 #ifdef M68040
-	case T_FPEMULI|T_USER:	/* unimplemented FP instuction */
+	case T_FPEMULI|T_USER:	/* unimplemented FP instruction */
 	case T_FPEMULD|T_USER:	/* unimplemented FP data type */
 		/* XXX need to FSAVE */
 		printf("pid %d(%s): unimplemented FP %s at %x (EA %x)\n",
 		       p->p_pid, p->p_comm,
-		       frame.f_format == 2 ? "instruction" : "data type",
-		       frame.f_pc, frame.f_fmt2.f_iaddr);
+		       fp->f_format == 2 ? "instruction" : "data type",
+		       fp->f_pc, fp->f_fmt2.f_iaddr);
 		/* XXX need to FRESTORE */
 		ksi.ksi_signo = SIGFPE;
 		ksi.ksi_code = FPE_FLTINV;
@@ -434,7 +438,7 @@ trap(type, code, v, frame)
 			ksi.ksi_addr = (void *)HPUX_ILL_PRIV_TRAP;
 		else
 #endif
-		ksi.ksi_addr = (void *)(int)frame.f_format;
+		ksi.ksi_addr = (void *)(int)fp->f_format;
 				/* XXX was ILL_PRIVIN_FAULT */
 		ksi.ksi_signo = SIGILL;
 		ksi.ksi_code = (type == (T_PRIVINST|T_USER)) ?
@@ -442,20 +446,20 @@ trap(type, code, v, frame)
 		break;
 
 	case T_ZERODIV|T_USER:	/* Divide by zero */
-		ksi.ksi_addr = (void *)(int)frame.f_format;
+		ksi.ksi_addr = (void *)(int)fp->f_format;
 				/* XXX was FPE_INTDIV_TRAP */
 		ksi.ksi_signo = SIGFPE;
 		ksi.ksi_code = FPE_FLTDIV;
 		break;
 
 	case T_CHKINST|T_USER:	/* CHK instruction trap */
-		ksi.ksi_addr = (void *)(int)frame.f_format;
+		ksi.ksi_addr = (void *)(int)fp->f_format;
 				/* XXX was FPE_SUBRNG_TRAP */
 		ksi.ksi_signo = SIGFPE;
 		break;
 
 	case T_TRAPVINST|T_USER:	/* TRAPV instruction trap */
-		ksi.ksi_addr = (void *)(int)frame.f_format;
+		ksi.ksi_addr = (void *)(int)fp->f_format;
 				/* XXX was FPE_INTOVF_TRAP */
 		ksi.ksi_signo = SIGFPE;
 		break;
@@ -479,16 +483,16 @@ trap(type, code, v, frame)
 	case T_TRAP15:		/* kernel breakpoint */
 #ifdef DEBUG
 		printf("unexpected kernel trace trap, type = %d\n", type);
-		printf("program counter = 0x%x\n", frame.f_pc);
+		printf("program counter = 0x%x\n", fp->f_pc);
 #endif
-		frame.f_sr &= ~PSL_T;
+		fp->f_sr &= ~PSL_T;
 		return;
 
 	case T_TRACE|T_USER:	/* user trace trap */
 		/* FALLTHROUGH */
 	case T_TRACE:
 	case T_TRAP15|T_USER:
-		frame.f_sr &= ~PSL_T;
+		fp->f_sr &= ~PSL_T;
 		ksi.ksi_signo = SIGTRAP;
 		break;
 
@@ -559,7 +563,7 @@ trap(type, code, v, frame)
 #ifdef DEBUG
 		if ((mmudebug & MDB_WBFOLLOW) || MDB_ISPID(p->p_pid))
 		printf("trap: T_MMUFLT pid=%d, code=%x, v=%x, pc=%x, sr=%x\n",
-		       p->p_pid, code, v, frame.f_pc, frame.f_sr);
+		       p->p_pid, code, v, fp->f_pc, fp->f_sr);
 #endif
 		/*
 		 * It is only a kernel address space fault iff:
@@ -594,10 +598,10 @@ trap(type, code, v, frame)
 			goto dopanic;
 		}
 
-		rv = uvm_fault(map, va, 0, ftype);
+		rv = uvm_fault(map, va, ftype);
 #ifdef DEBUG
 		if (rv && MDB_ISPID(p->p_pid))
-			printf("uvm_fault(%p, 0x%lx, 0, 0x%x) -> 0x%x\n",
+			printf("uvm_fault(%p, 0x%lx, 0x%x) -> 0x%x\n",
 			    map, va, ftype, rv);
 #endif
 		/*
@@ -614,7 +618,7 @@ trap(type, code, v, frame)
 			if (type == T_MMUFLT) {
 #ifdef M68040
 				if (cputype == CPU_68040)
-					(void) writeback(&frame, 1);
+					(void) writeback(fp, 1);
 #endif
 				return;
 			}
@@ -629,7 +633,7 @@ trap(type, code, v, frame)
 		if (type == T_MMUFLT) {
 			if (l->l_addr->u_pcb.pcb_onfault)
 				goto copyfault;
-			printf("uvm_fault(%p, 0x%lx, 0, 0x%x) -> 0x%x\n",
+			printf("uvm_fault(%p, 0x%lx, 0x%x) -> 0x%x\n",
 			    map, va, ftype, rv);
 			printf("  type %x, code [mmu,,ssw]: %x\n",
 			       type, code);
@@ -640,8 +644,8 @@ trap(type, code, v, frame)
 		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			    p->p_pid, p->p_comm,
-			    p->p_cred && p->p_ucred ?
-			    p->p_ucred->cr_uid : -1);
+			    l->l_cred ?
+			    kauth_cred_geteuid(l->l_cred) : -1);
 			ksi.ksi_signo = SIGKILL;
 		} else {
 			ksi.ksi_signo = SIGSEGV;
@@ -653,7 +657,7 @@ trap(type, code, v, frame)
 	if ((type & T_USER) == 0)
 		return;
 out:
-	userret(l, &frame, sticks, v, 1);
+	userret(l, fp, sticks, v, 1);
 }
 
 #ifdef M68040
@@ -736,7 +740,7 @@ writeback(fp, docachepush)
 			pmap_update(pmap_kernel());
 		} else
 			printf("WARNING: pid %d(%s) uid %d: CPUSH not done\n",
-			       p->p_pid, p->p_comm, p->p_ucred->cr_uid);
+			       p->p_pid, p->p_comm, kauth_cred_geteuid(l->l_cred));
 	} else if ((f->f_ssw & (SSW4_RW|SSW4_TTMASK)) == SSW4_TTM16) {
 		/*
 		 * MOVE16 fault.

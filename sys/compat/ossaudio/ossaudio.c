@@ -1,4 +1,4 @@
-/*	$NetBSD: ossaudio.c,v 1.49 2005/12/11 12:20:23 christos Exp $	*/
+/*	$NetBSD: ossaudio.c,v 1.53.6.1 2007/06/12 10:11:07 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ossaudio.c,v 1.49 2005/12/11 12:20:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ossaudio.c,v 1.53.6.1 2007/06/12 10:11:07 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -128,7 +128,7 @@ oss_ioctl_audio(l, uap, retval)
 		/* This call is merely advisory, and may be a nop. */
 		break;
 	case OSS_SNDCTL_DSP_SPEED:
-		(void) ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		AUDIO_INITINFO(&tmpinfo);
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
 		if (error)
 			goto out;
@@ -141,7 +141,7 @@ oss_ioctl_audio(l, uap, retval)
 			goto out;
 		/* fall into ... */
 	case OSS_SOUND_PCM_READ_RATE:
-		error = ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		error = ioctlf(fp, AUDIO_GETBUFINFO, (caddr_t)&tmpinfo, l);
 		if (error)
 			goto out;
 		idat = tmpinfo.play.sample_rate;
@@ -150,14 +150,14 @@ oss_ioctl_audio(l, uap, retval)
 			goto out;
 		break;
 	case OSS_SNDCTL_DSP_STEREO:
-		(void) ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		AUDIO_INITINFO(&tmpinfo);
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
 		if (error)
 			goto out;
 		tmpinfo.play.channels =
 		tmpinfo.record.channels = idat ? 2 : 1;
 		(void) ioctlf(fp, AUDIO_SETINFO, (caddr_t)&tmpinfo, l);
-		error = ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		error = ioctlf(fp, AUDIO_GETBUFINFO, (caddr_t)&tmpinfo, l);
 		if (error)
 			goto out;
 		idat = tmpinfo.play.channels - 1;
@@ -166,7 +166,7 @@ oss_ioctl_audio(l, uap, retval)
 			goto out;
 		break;
 	case OSS_SNDCTL_DSP_GETBLKSIZE:
-		error = ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		error = ioctlf(fp, AUDIO_GETBUFINFO, (caddr_t)&tmpinfo, l);
 		if (error)
 			goto out;
 		setblocksize(fp, &tmpinfo, l);
@@ -176,7 +176,7 @@ oss_ioctl_audio(l, uap, retval)
 			goto out;
 		break;
 	case OSS_SNDCTL_DSP_SETFMT:
-		(void) ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		AUDIO_INITINFO(&tmpinfo);
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
 		if (error)
 			goto out;
@@ -236,7 +236,7 @@ oss_ioctl_audio(l, uap, retval)
 		(void) ioctlf(fp, AUDIO_SETINFO, (caddr_t)&tmpinfo, l);
 		/* fall into ... */
 	case OSS_SOUND_PCM_READ_BITS:
-		error = ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		error = ioctlf(fp, AUDIO_GETBUFINFO, (caddr_t)&tmpinfo, l);
 		if (error)
 			goto out;
 		switch (tmpinfo.play.encoding) {
@@ -279,7 +279,7 @@ oss_ioctl_audio(l, uap, retval)
 			goto out;
 		break;
 	case OSS_SNDCTL_DSP_CHANNELS:
-		(void) ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		AUDIO_INITINFO(&tmpinfo);
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
 		if (error)
 			goto out;
@@ -288,7 +288,7 @@ oss_ioctl_audio(l, uap, retval)
 		(void) ioctlf(fp, AUDIO_SETINFO, (caddr_t)&tmpinfo, l);
 		/* fall into ... */
 	case OSS_SOUND_PCM_READ_CHANNELS:
-		error = ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		error = ioctlf(fp, AUDIO_GETBUFINFO, (caddr_t)&tmpinfo, l);
 		if (error)
 			goto out;
 		idat = tmpinfo.play.channels;
@@ -304,14 +304,14 @@ oss_ioctl_audio(l, uap, retval)
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
 		if (error)
 			goto out;
-		error = ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		error = ioctlf(fp, AUDIO_GETBUFINFO, (caddr_t)&tmpinfo, l);
 		setblocksize(fp, &tmpinfo, l);
 		if (error)
 			goto out;
 		if (idat == 0)
 			idat = tmpinfo.play.buffer_size / tmpinfo.blocksize;
 		idat = (tmpinfo.play.buffer_size / idat) & -4;
-		(void) ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		AUDIO_INITINFO(&tmpinfo);
 		tmpinfo.blocksize = idat;
 		error = ioctlf(fp, AUDIO_SETINFO, (caddr_t)&tmpinfo, l);
 		if (error)
@@ -322,7 +322,7 @@ oss_ioctl_audio(l, uap, retval)
 			goto out;
 		break;
 	case OSS_SNDCTL_DSP_SETFRAGMENT:
-		(void) ioctlf(fp, AUDIO_SETINFO, (caddr_t)&tmpinfo, l);
+		AUDIO_INITINFO(&tmpinfo);
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
 		if (error)
 			goto out;
@@ -337,7 +337,7 @@ oss_ioctl_audio(l, uap, retval)
 		if (tmpinfo.hiwat == 0)	/* 0 means set to max */
 			tmpinfo.hiwat = 65536;
 		(void) ioctlf(fp, AUDIO_SETINFO, (caddr_t)&tmpinfo, l);
-		error = ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		error = ioctlf(fp, AUDIO_GETBUFINFO, (caddr_t)&tmpinfo, l);
 		if (error)
 			goto out;
 		u = tmpinfo.blocksize;
@@ -402,7 +402,7 @@ oss_ioctl_audio(l, uap, retval)
 			goto out;
 		break;
 	case OSS_SNDCTL_DSP_GETOSPACE:
-		error = ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		error = ioctlf(fp, AUDIO_GETBUFINFO, (caddr_t)&tmpinfo, l);
 		if (error)
 			goto out;
 		setblocksize(fp, &tmpinfo, l);
@@ -418,7 +418,7 @@ oss_ioctl_audio(l, uap, retval)
 			goto out;
 		break;
 	case OSS_SNDCTL_DSP_GETISPACE:
-		error = ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		error = ioctlf(fp, AUDIO_GETBUFINFO, (caddr_t)&tmpinfo, l);
 		if (error)
 			goto out;
 		setblocksize(fp, &tmpinfo, l);
@@ -458,7 +458,7 @@ oss_ioctl_audio(l, uap, retval)
 		break;
 #if 0
 	case OSS_SNDCTL_DSP_GETTRIGGER:
-		error = ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, l);
+		error = ioctlf(fp, AUDIO_GETBUFINFO, (caddr_t)&tmpinfo, l);
 		if (error)
 			goto out;
 		idat = (tmpinfo.play.pause ? 0 : OSS_PCM_ENABLE_OUTPUT) |
@@ -468,7 +468,7 @@ oss_ioctl_audio(l, uap, retval)
 			goto out;
 		break;
 	case OSS_SNDCTL_DSP_SETTRIGGER:
-		(void) ioctlf(fp, AUDIO_GETINFO, (caddr_t)&tmpinfo, p);
+		(void) ioctlf(fp, AUDIO_GETBUFINFO, (caddr_t)&tmpinfo, p);
 		error = copyin(SCARG(uap, data), &idat, sizeof idat);
 		if (error)
 			goto out;
@@ -599,7 +599,6 @@ getdevinfo(fp, l)
 	struct file *fp;
 	struct lwp *l;
 {
-	struct proc *p = l->l_proc;
 	mixer_devinfo_t mi;
 	int i, j, e;
 	static const struct {
@@ -632,7 +631,7 @@ getdevinfo(fp, l)
 	    fp->f_ops->fo_ioctl;
 	struct vnode *vp;
 	struct vattr va;
-	static struct audiodevinfo devcache = { 0 };
+	static struct audiodevinfo devcache;
 	struct audiodevinfo *di = &devcache;
 	int mlen, dlen;
 
@@ -643,7 +642,7 @@ getdevinfo(fp, l)
 	vp = (struct vnode *)fp->f_data;
 	if (vp->v_type != VCHR)
 		return 0;
-	if (VOP_GETATTR(vp, &va, p->p_ucred, l))
+	if (VOP_GETATTR(vp, &va, l->l_cred, l))
 		return 0;
 	if (di->done && di->dev == va.va_rdev)
 		return di;
@@ -1163,9 +1162,9 @@ setblocksize(fp, info, l)
 	 if (info->blocksize & (info->blocksize-1)) {
 		for(s = 32; s < info->blocksize; s <<= 1)
 			;
-		(void) fp->f_ops->fo_ioctl(fp, AUDIO_GETINFO, (caddr_t)&set, l);
+		AUDIO_INITINFO(&set);
 		set.blocksize = s;
 		fp->f_ops->fo_ioctl(fp, AUDIO_SETINFO, (caddr_t)&set, l);
-		fp->f_ops->fo_ioctl(fp, AUDIO_GETINFO, (caddr_t)info, l);
+		fp->f_ops->fo_ioctl(fp, AUDIO_GETBUFINFO, (caddr_t)info, l);
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_en_pci.c,v 1.23 2005/12/11 12:22:49 christos Exp $	*/
+/*	$NetBSD: if_en_pci.c,v 1.26 2006/11/16 01:33:08 christos Exp $	*/
 
 /*
  *
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_en_pci.c,v 1.23 2005/12/11 12:22:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_en_pci.c,v 1.26 2006/11/16 01:33:08 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -164,12 +164,9 @@ void *v;
  * autoconfig stuff
  */
 
-static int en_pci_match(parent, match, aux)
-
-struct device *parent;
-struct cfdata *match;
-void *aux;
-
+static int
+en_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
   struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -191,11 +188,8 @@ void *aux;
 }
 
 
-static void en_pci_attach(parent, self, aux)
-
-struct device *parent, *self;
-void *aux;
-
+static void
+en_pci_attach(struct device *parent, struct device *self, void *aux)
 {
   struct en_softc *sc = (void *)self;
   struct en_pci_softc *scp = (void *)self;
@@ -293,15 +287,13 @@ en_pci_shutdown(
 
 #if !defined(MIDWAY_ENIONLY)
 
-#if defined(sparc) || defined(__FreeBSD__)
+#if defined(__FreeBSD__)
 #define bus_space_read_1(t, h, o) \
   		((void)t, (*(volatile u_int8_t *)((h) + (o))))
 #endif
 
 static void
-adp_get_macaddr(scp, pa)
-     struct en_pci_softc *scp;
-     struct pci_attach_args *pa;
+adp_get_macaddr(struct en_pci_softc *scp, struct pci_attach_args *pa)
 {
   struct en_softc * sc = (struct en_softc *)scp;
   int lcv;

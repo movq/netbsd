@@ -1,4 +1,4 @@
-/*	$NetBSD: iq80310_timer.c,v 1.18 2005/12/11 12:17:09 christos Exp $	*/
+/*	$NetBSD: iq80310_timer.c,v 1.19.24.1 2007/03/04 12:15:38 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iq80310_timer.c,v 1.18 2005/12/11 12:17:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iq80310_timer.c,v 1.19.24.1 2007/03/04 12:15:38 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,7 +82,7 @@ static uint32_t counts_per_hz;
 
 int	clockhandler(void *);
 
-static __inline void
+static inline void
 timer_enable(uint8_t bit)
 {
 
@@ -90,7 +90,7 @@ timer_enable(uint8_t bit)
 	    CPLD_READ(IQ80310_TIMER_ENABLE) | bit);
 }
 
-static __inline void
+static inline void
 timer_disable(uint8_t bit)
 {
 
@@ -98,7 +98,7 @@ timer_disable(uint8_t bit)
 	    CPLD_READ(IQ80310_TIMER_ENABLE) & ~bit);
 }
 
-static __inline uint32_t
+static inline uint32_t
 timer_read(void)
 {
 	uint32_t rv;
@@ -125,7 +125,7 @@ timer_read(void)
 	return (rv);
 }
 
-static __inline void
+static inline void
 timer_write(uint32_t x)
 {
 
@@ -317,93 +317,6 @@ delay(u_int n)
 			delta %= COUNTS_PER_USEC;
 		}
 	}
-}
-
-todr_chip_handle_t todr_handle;
-
-/*
- * todr_attach:
- *
- *	Set the specified time-of-day register as the system real-time clock.
- */
-void
-todr_attach(todr_chip_handle_t todr)
-{
-
-	if (todr_handle)
-		panic("todr_attach: rtc already configured");
-	todr_handle = todr;
-}
-
-/*
- * inittodr:
- *
- *	Initialize time from the time-of-day register.
- */
-#define	MINYEAR		2003	/* minimum plausible year */
-void
-inittodr(time_t base)
-{
-	time_t deltat;
-	int badbase;
-
-	if (base < (MINYEAR - 1970) * SECYR) {
-		printf("WARNING: preposterous time in file system");
-		/* read the system clock anyway */
-		base = (MINYEAR - 1970) * SECYR;
-		badbase = 1;
-	} else
-		badbase = 0;
-
-	if (todr_handle == NULL ||
-	    todr_gettime(todr_handle, &time) != 0 ||
-	    time.tv_sec == 0) {
-		/*
-		 * Believe the time in the file system for lack of
-		 * anything better, resetting the TODR.
-		 */
-		time.tv_sec = base;
-		time.tv_usec = 0;
-		if (todr_handle != NULL && !badbase) {
-			printf("WARNING: preposterous clock chip time\n");
-			resettodr();
-		}
-		goto bad;
-	}
-
-	if (!badbase) {
-		/*
-		 * See if we gained/lost two or more days; if
-		 * so, assume something is amiss.
-		 */
-		deltat = time.tv_sec - base;
-		if (deltat < 0)
-			deltat = -deltat;
-		if (deltat < 2 * SECDAY)
-			return;		/* all is well */
-		printf("WARNING: clock %s %ld days\n",
-		    time.tv_sec < base ? "lost" : "gained",
-		    (long)deltat / SECDAY);
-	}
- bad:
-	printf("WARNING: CHECK AND RESET THE DATE!\n");
-}
-
-/*
- * resettodr:
- *
- *	Reset the time-of-day register with the current time.
- */
-void
-resettodr(void)
-{
-
-	if (time.tv_sec == 0)
-		return;
-
-	if (todr_handle != NULL &&
-	    todr_settime(todr_handle, &time) != 0)
-		printf("resettodr: failed to set time\n");
 }
 
 /*
