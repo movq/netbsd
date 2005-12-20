@@ -1,4 +1,4 @@
-/*	$NetBSD: watchdog.c,v 1.1.1.4 2005/08/18 21:10:52 rpaulo Exp $	*/
+/*	$NetBSD: watchdog.c,v 1.1.1.5.4.1 2007/06/16 17:02:14 snj Exp $	*/
 
 /*++
 /* NAME
@@ -89,6 +89,7 @@
 
 #include <msg.h>
 #include <mymalloc.h>
+#include <killme_after.h>
 #include <watchdog.h>
 
 /* Application-specific. */
@@ -124,13 +125,14 @@ static WATCHDOG *watchdog_curr;
 
 static void watchdog_event(int unused_sig)
 {
-    char   *myname = "watchdog_event";
+    const char *myname = "watchdog_event";
     WATCHDOG *wp;
 
     /*
      * This routine runs as a signal handler. We should not do anything that
      * could involve memory allocation/deallocation, but exiting without
-     * proper explanation would be unacceptable.
+     * proper explanation would be unacceptable. For this reason, msg(3) was
+     * made safe for usage by signal handlers that terminate the process.
      */
     if ((wp = watchdog_curr) == 0)
 	msg_panic("%s: no instance", myname);
@@ -141,8 +143,13 @@ static void watchdog_event(int unused_sig)
     } else {
 	if (wp->action)
 	    wp->action(wp, wp->context);
-	else
+	else {
+	    killme_after(5);
+#ifdef TEST
+	    pause();
+#endif
 	    msg_fatal("watchdog timeout");
+	}
     }
 }
 
@@ -150,7 +157,7 @@ static void watchdog_event(int unused_sig)
 
 WATCHDOG *watchdog_create(unsigned timeout, WATCHDOG_FN action, char *context)
 {
-    char   *myname = "watchdog_create";
+    const char *myname = "watchdog_create";
     struct sigaction sig_action;
     WATCHDOG *wp;
 
@@ -179,7 +186,7 @@ WATCHDOG *watchdog_create(unsigned timeout, WATCHDOG_FN action, char *context)
 
 void    watchdog_destroy(WATCHDOG *wp)
 {
-    char   *myname = "watchdog_destroy";
+    const char *myname = "watchdog_destroy";
 
     watchdog_stop(wp);
     watchdog_curr = wp->saved_watchdog;
@@ -196,7 +203,7 @@ void    watchdog_destroy(WATCHDOG *wp)
 
 void    watchdog_start(WATCHDOG *wp)
 {
-    char   *myname = "watchdog_start";
+    const char *myname = "watchdog_start";
 
     if (wp != watchdog_curr)
 	msg_panic("%s: wrong watchdog instance", myname);
@@ -210,7 +217,7 @@ void    watchdog_start(WATCHDOG *wp)
 
 void    watchdog_stop(WATCHDOG *wp)
 {
-    char   *myname = "watchdog_stop";
+    const char *myname = "watchdog_stop";
 
     if (wp != watchdog_curr)
 	msg_panic("%s: wrong watchdog instance", myname);
@@ -223,7 +230,7 @@ void    watchdog_stop(WATCHDOG *wp)
 
 void    watchdog_pat(void)
 {
-    char   *myname = "watchdog_pat";
+    const char *myname = "watchdog_pat";
 
     if (watchdog_curr)
 	watchdog_curr->trip_run = 0;
@@ -247,6 +254,7 @@ int     main(int unused_argc, char **unused_argv)
 	watchdog_pat();
     } while (VSTREAM_GETCHAR() != VSTREAM_EOF);
     watchdog_destroy(wp);
+    return (0);
 }
 
 #endif

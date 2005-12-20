@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.39 2005/09/24 20:52:22 elad Exp $
+#	$NetBSD: Makefile,v 1.47.2.1 2007/08/30 22:37:36 pavel Exp $
 
 HOSTLIB=	nbcompat
 
@@ -12,7 +12,7 @@ SRCS=		atoll.c basename.c dirname.c fgetln.c flock.c fparseln.c \
 		sha256hl.c sha384hl.c sha512hl.c snprintf.c \
 		strlcat.c strlcpy.c strmode.c strsep.c strsuftoll.c \
 		strtoll.c unvis.c vis.c err.c errx.c verr.c verrx.c \
-		vwarn.c vwarnx.c warn.c warnx.c fts.c glob.c
+		vwarn.c vwarnx.c warn.c warnx.c fts.c glob.c efun.c
 
 BUILD_OSTYPE!=  uname -s
 
@@ -24,8 +24,8 @@ CPPFLAGS+=	-no-cpp-precomp
 # -D_FILE_OFFSET_BITS=64 produces a much more amenable `struct stat', and
 # other file ops, on many systems, without changing function names.
 
-CPPFLAGS+=	-I. -I./include -I${.CURDIR} -DHAVE_NBTOOL_CONFIG_H=1 \
-		-D_FILE_OFFSET_BITS=64
+CPPFLAGS+=	-I. -I./include -I${.CURDIR} -I${.CURDIR}/sys \
+		-DHAVE_NBTOOL_CONFIG_H=1 -D_FILE_OFFSET_BITS=64
 
 .PATH:		${.CURDIR}/../../lib/libc/gen \
 		${.CURDIR}/../../lib/libc/hash \
@@ -38,11 +38,17 @@ CPPFLAGS+=	-I. -I./include -I${.CURDIR} -DHAVE_NBTOOL_CONFIG_H=1 \
 		${.CURDIR}/../../lib/libc/stdio \
 		${.CURDIR}/../../lib/libc/stdlib \
 		${.CURDIR}/../../lib/libc/string \
+		${.CURDIR}/../../lib/libutil \
+		${.CURDIR}/../../common/lib/libc/string \
+		${.CURDIR}/../../common/lib/libc/hash/rmd160 \
+		${.CURDIR}/../../common/lib/libc/hash/sha1 \
+		${.CURDIR}/../../common/lib/libc/hash/sha2 \
+		${.CURDIR}/../../common/lib/libc/md \
+		${.CURDIR}/../../common/lib/libc/stdlib \
 		${.CURDIR}/../../usr.bin/lex
 
 DPSRCS+=	defs.mk
-CLEANFILES+=	defs.mk
-CLEANFILES+=	config.log config.status configure.lineno confdefs.h *.stamp
+CLEANFILES+=	config.log config.status configure.lineno *.stamp
 
 # Get components of Berkeley DB.
 _CURDIR:=	${.CURDIR}
@@ -60,18 +66,20 @@ config.cache: include/.stamp configure nbtool_config.h.in defs.mk.in
 defs.mk: config.cache
 	@touch ${.TARGET}
 
-# Run by hand, then "configure" script committed:
+# Run "${TOOLDIR}/bin/nbmake-${MACHINE} regen" by hand after editing
+# configure.ac.  See more detailed instructions in configure.ac.
 regen:
 	cd ${.CURDIR} && ${TOOLDIR}/bin/${_TOOL_PREFIX}autoconf
+	cd ${.CURDIR} && ${TOOLDIR}/bin/${_TOOL_PREFIX}autoheader
 
 include/.stamp:
 	mkdir -p include/sys include/machine include/rpc
 	@touch ${.TARGET}
 
-cleandir: compat.clean
-compat.clean:
+cleandir:
+	-rm -f nbtool_config.h confdefs.h defs.mk
 	-rm -r -f include
-	-rm -f config.cache nbtool_config.h
+	-rm -f config.cache
 
 HOST_CPPFLAGS:=	${CPPFLAGS}
 CPPFLAGS:=	# empty

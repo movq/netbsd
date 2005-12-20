@@ -1,4 +1,4 @@
-/*	$NetBSD: pckbc_acpi.c,v 1.16 2005/12/11 12:21:02 christos Exp $	*/
+/*	$NetBSD: pckbc_acpi.c,v 1.19.2.1 2007/10/07 14:26:25 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pckbc_acpi.c,v 1.16 2005/12/11 12:21:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pckbc_acpi.c,v 1.19.2.1 2007/10/07 14:26:25 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -117,7 +117,8 @@ static const char * const pckbc_acpi_ids_ms[] = {
  * pckbc_acpi_match: autoconf(9) match routine
  */
 static int
-pckbc_acpi_match(struct device *parent, struct cfdata *match, void *aux)
+pckbc_acpi_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 	int rv;
@@ -135,8 +136,7 @@ pckbc_acpi_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-pckbc_acpi_attach(struct device *parent,
-    struct device *self,
+pckbc_acpi_attach(struct device *parent, struct device *self,
     void *aux)
 {
 	struct pckbc_acpi_softc *psc = (void *) self;
@@ -146,7 +146,7 @@ pckbc_acpi_attach(struct device *parent,
 	bus_space_handle_t ioh_d, ioh_c;
 	pckbc_slot_t peer;
 	struct acpi_resources res;
-	struct acpi_io *io0, *io1;
+	struct acpi_io *io0, *io1, *ioswap;
 	struct acpi_irq *irq;
 	ACPI_STATUS rv;
 
@@ -163,7 +163,8 @@ pckbc_acpi_attach(struct device *parent,
 		panic("pckbc_acpi_attach: impossible");
 	}
 
-	printf(": %s port\n", pckbc_slot_names[psc->sc_slot]);
+	aprint_naive("\n");
+	aprint_normal(": %s port\n", pckbc_slot_names[psc->sc_slot]);
 
 	/* parse resources */
 	rv = acpi_resource_parse(&sc->sc_dv, aa->aa_node->ad_handle, "_CRS",
@@ -174,7 +175,7 @@ pckbc_acpi_attach(struct device *parent,
 	/* find our IRQ */
 	irq = acpi_res_irq(&res, 0);
 	if (irq == NULL) {
-		printf("%s: unable to find irq resource\n", sc->sc_dv.dv_xname);
+		aprint_error("%s: unable to find irq resource\n", sc->sc_dv.dv_xname);
 		goto out;
 	}
 	psc->sc_irq = irq->ar_irq;
@@ -187,10 +188,21 @@ pckbc_acpi_attach(struct device *parent,
 	    (psc->sc_slot == PCKBC_KBD_SLOT)) {
 
 		io0 = acpi_res_io(&res, 0);
-		if (io0 == NULL) {
-			printf("%s: unable to find i/o resources\n",
+		io1 = acpi_res_io(&res, 1);
+		if (io0 == NULL || io1 == NULL) {
+			aprint_error("%s: unable to find i/o resources\n",
 			    sc->sc_dv.dv_xname);
 			goto out;
+		}
+
+		/*
+		 * JDM: Some firmware doesn't report resources in the order we
+		 * expect; sort IO resources here (lowest first)
+		 */
+		if (io0->ar_base > io1->ar_base) {
+			ioswap = io0;
+			io0 = io1;
+			io1 = ioswap;
 		}
 
 		if (pckbc_is_console(aa->aa_iot, io0->ar_base)) {
@@ -200,12 +212,6 @@ pckbc_acpi_attach(struct device *parent,
 			pckbc_console_attached = 1;
 			/* t->t_cmdbyte was initialized by cnattach */
 		} else {
-			io1 = acpi_res_io(&res, 1);
-			if (io1 == NULL) {
-				printf("%s: unable to find i/o resources\n",
-				    sc->sc_dv.dv_xname);
-				goto out;
-			}
 			if (bus_space_map(aa->aa_iot, io0->ar_base,
 					  io0->ar_length, 0, &ioh_d) ||
 			    bus_space_map(aa->aa_iot, io1->ar_base,
@@ -259,10 +265,10 @@ pckbc_acpi_intr_establish(struct pckbc_softc *sc,
 	if (i < pckbc_cd.cd_ndevs)
 		rv = isa_intr_establish(ic, irq, ist, IPL_TTY, pckbcintr, sc);
 	if (rv == NULL) {
-		printf("%s: unable to establish interrupt for %s slot\n",
+		aprint_error("%s: unable to establish interrupt for %s slot\n",
 		    sc->sc_dv.dv_xname, pckbc_slot_names[slot]);
 	} else {
-		printf("%s: using irq %d for %s slot\n", sc->sc_dv.dv_xname,
+		aprint_normal("%s: using irq %d for %s slot\n", sc->sc_dv.dv_xname,
 		    irq, pckbc_slot_names[slot]);
 	}
 }

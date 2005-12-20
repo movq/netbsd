@@ -1,4 +1,4 @@
-.\"	$NetBSD: ddb.4,v 1.85 2005/12/01 18:07:18 wiz Exp $
+.\"	$NetBSD: ddb.4,v 1.97 2006/11/18 08:48:32 jld Exp $
 .\"
 .\" Copyright (c) 1997 - 2003 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -63,7 +63,7 @@
 .\" any improvements or extensions that they make and grant Carnegie Mellon
 .\" the rights to redistribute these changes.
 .\"
-.Dd December 1, 2005
+.Dd November 17, 2006
 .Dt DDB 4
 .Os
 .Sh NAME
@@ -164,6 +164,9 @@ keyboard.
 \*[Lt]Esc\*[Gt]-\*[Lt]Shift\*[Gt]-D on serial console.
 .It x68k
 Interrupt switch on the body.
+.It xen
++++++
+(five plus signs)
 .El
 .Pp
 The key sequence to activate
@@ -532,6 +535,7 @@ ecx = yyyyyy
 .Op Cm /a
 .Op Cm /n
 .Op Cm /w
+.Op Cm /l
 .Sm on
 .Xc
 A synonym for
@@ -542,7 +546,7 @@ Reboot, using the optionally supplied boot
 which is a bitmask supporting the same values as for
 .Xr reboot 2 .
 Some of the more useful flags:
-.Bl -column "Value" "RB_AUTOBOOT" "Description"
+.Bl -column "Value" "RB_POWERDOWN" "Description"
 .It Sy "Value" Ta Sy "Name" Ta Sy "Description"
 .It 0x1 Ta RB_ASKNAME Ta Ask for file name to reboot from
 .It 0x2 Ta RB_SINGLE Ta Reboot to single user mode
@@ -595,9 +599,13 @@ Set the named variable or register to the value of
 .Ar expression .
 Valid variable names are described in
 .Sx VARIABLES .
+.It Ic show all pages
+Display basic information about all physical pages managed by the VM system.
+For more detailed information about a single page, use
+.Ic show page .
 .It Ic show all pools Ns Op Cm /clp
 Display all pool information.
-Modifiers are the same as 
+Modifiers are the same as
 .Ic show pool .
 .It Xo
 .Sm off
@@ -605,6 +613,7 @@ Modifiers are the same as
 .Op Cm /a
 .Op Cm /n
 .Op Cm /w
+.Op Cm /l
 .Sm on
 .Xc
 Display all process information.
@@ -627,6 +636,9 @@ command.
 .It Cm /w
 show each process' PID, command, system call emulation, wait channel
 address, and wait channel message.
+.It Cm /l
+show each process' associated LWP information, including each LWP's
+LID, flags, kernel LWP structure address, u-area, and wait channel.
 .El
 .It Ic show breaks
 Display all breakpoints.
@@ -666,6 +678,15 @@ Print the mount structure at
 If
 .Cm /f
 is specified, the complete vnode list is printed.
+.It Xo
+.Ic show mbuf Ns Op Cm /c
+.Ar address
+.Xc
+Print the mbuf structure at
+.Ar address .
+If
+.Cm /c
+is specified, the mbufs in the chain are followed.
 .It Ic show ncache Ar address
 Dump the namecache list associated with vnode at
 .Ar address .
@@ -1135,7 +1156,7 @@ Input and output radix.
 .It Va tabstops
 Tab stop width.
 .It Va tee_msgbuf
-If explictly set to non zero (zero is the default) all
+If explicitly set to non zero (zero is the default) all
 .Nm
 output will not only be displayed on screen but
 also be fed to the msgbuf.
@@ -1182,13 +1203,17 @@ If supported by an object format dependent routine,
 .Xo
 .Oo Ar filename : Oc
 .Ar function
-.Oo : Ar "line number" Oc ,
+.Oo : Ar line\ number Oc ,
 .Xc
+.Sm on
+.Sm off
 .Xo
 .Oo Ar filename : Oc
 .Ar variable ,
 .Xc
+.Sm on
 and
+.Sm off
 .Xo
 .Ar filename
 .Oo : Ar "line number" Oc ,
@@ -1196,7 +1221,7 @@ and
 .Sm on
 can be accepted as a symbol.
 The symbol may be prefixed with
-.Ar symbol_table_name : :
+.Ar symbol_table_name\^ : :
 (e.g.,
 .Li emulator::mach_msg_trap )
 to specify other than kernel symbols.
@@ -1225,7 +1250,7 @@ this is only changed by the
 or
 .Ic write
 commands.
-.It Cm \&"
+.It Cm \&" \"" XXX: emacs highlighting
 last address explicitly specified.
 .It Cm $ Ns Ar name
 register name or variable.
@@ -1233,8 +1258,9 @@ It is translated to the value of it.
 It may be followed by a
 .Sq \&:
 and modifiers as described above.
-.It Cm a
-multiple of right-hand side.
+.It Cm #
+a binary operator which rounds up the left hand side to the next
+multiple of right hand side.
 .It Cm * Ns Ar expr
 expression indirection.
 It may be followed by a

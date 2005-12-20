@@ -1,4 +1,4 @@
-/*	$NetBSD: af_inet6.c,v 1.2 2005/03/20 02:44:50 thorpej Exp $	*/
+/*	$NetBSD: af_inet6.c,v 1.5 2006/08/26 18:14:28 christos Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: af_inet6.c,v 1.2 2005/03/20 02:44:50 thorpej Exp $");
+__RCSID("$NetBSD: af_inet6.c,v 1.5 2006/08/26 18:14:28 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h> 
@@ -50,6 +50,7 @@ __RCSID("$NetBSD: af_inet6.c,v 1.2 2005/03/20 02:44:50 thorpej Exp $");
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <util.h>
 
 #include "extern.h"
 #include "af_inet6.h"
@@ -230,7 +231,7 @@ in6_alias(struct in6_ifreq *creq)
 	/* Get the non-alias address for this interface. */
 	getsock(AF_INET6);
 	if (s < 0) {
-		if (errno == EPROTONOSUPPORT)
+		if (errno == EAFNOSUPPORT)
 			return;
 		err(EXIT_FAILURE, "socket");
 	}
@@ -246,7 +247,7 @@ in6_alias(struct in6_ifreq *creq)
 
 	if (flags & IFF_POINTOPOINT) {
 		(void) memset(&ifr6, 0, sizeof(ifr6));
-		(void) strncpy(ifr6.ifr_name, name, sizeof(ifr6.ifr_name));
+		estrlcpy(ifr6.ifr_name, name, sizeof(ifr6.ifr_name));
 		ifr6.ifr_addr = creq->ifr_addr;
 		if (ioctl(s, SIOCGIFDSTADDR_IN6, &ifr6) == -1) {
 			if (errno != EADDRNOTAVAIL)
@@ -265,7 +266,7 @@ in6_alias(struct in6_ifreq *creq)
 	}
 
 	(void) memset(&ifr6, 0, sizeof(ifr6));
-	(void) strncpy(ifr6.ifr_name, name, sizeof(ifr6.ifr_name));
+	estrlcpy(ifr6.ifr_name, name, sizeof(ifr6.ifr_name));
 	ifr6.ifr_addr = creq->ifr_addr;
 	if (ioctl(s, SIOCGIFNETMASK_IN6, &ifr6) == -1) {
 		if (errno != EADDRNOTAVAIL)
@@ -277,7 +278,7 @@ in6_alias(struct in6_ifreq *creq)
 	}
 
 	(void) memset(&ifr6, 0, sizeof(ifr6));
-	(void) strncpy(ifr6.ifr_name, name, sizeof(ifr6.ifr_name));
+	estrlcpy(ifr6.ifr_name, name, sizeof(ifr6.ifr_name));
 	ifr6.ifr_addr = creq->ifr_addr;
 	if (ioctl(s, SIOCGIFAFLAG_IN6, &ifr6) == -1) {
 		if (errno != EADDRNOTAVAIL)
@@ -301,7 +302,7 @@ in6_alias(struct in6_ifreq *creq)
 	if (Lflag) {
 		struct in6_addrlifetime *lifetime;
 		(void) memset(&ifr6, 0, sizeof(ifr6));
-		(void) strncpy(ifr6.ifr_name, name, sizeof(ifr6.ifr_name));
+		estrlcpy(ifr6.ifr_name, name, sizeof(ifr6.ifr_name));
 		ifr6.ifr_addr = creq->ifr_addr;
 		lifetime = &ifr6.ifr_ifru.ifru_lifetime;
 		if (ioctl(s, SIOCGIFALIFETIME_IN6, &ifr6) == -1) {
@@ -347,7 +348,7 @@ in6_status(int force)
 			continue;
 
 		memset(&isifr, 0, sizeof(isifr));
-		strncpy(isifr.ifr_name, ifa->ifa_name, sizeof(isifr.ifr_name));
+		estrlcpy(isifr.ifr_name, ifa->ifa_name, sizeof(isifr.ifr_name));
 		memcpy(&isifr.ifr_addr, ifa->ifa_addr, ifa->ifa_addr->sa_len);
 		in6_alias(&isifr);
 	}

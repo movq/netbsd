@@ -1,4 +1,4 @@
-/*	$NetBSD: if_emac.c,v 1.23 2005/12/11 12:18:42 christos Exp $	*/
+/*	$NetBSD: if_emac.c,v 1.27 2006/10/16 18:14:35 kiyohara Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_emac.c,v 1.23 2005/12/11 12:18:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_emac.c,v 1.27 2006/10/16 18:14:35 kiyohara Exp $");
 
 #include "bpfilter.h"
 
@@ -304,10 +304,11 @@ emac_attach(struct device *parent, struct device *self, void *aux)
 	struct mii_data *mii = &sc->sc_mii;
 	bus_dma_segment_t seg;
 	int error, i, nseg;
-	uint8_t enaddr[ETHER_ADDR_LEN];
+	const uint8_t *enaddr;
+	prop_data_t ea;
 
+	bus_space_map(oaa->opb_bt, oaa->opb_addr, EMAC_NREG, 0, &sc->sc_sh);
 	sc->sc_st = oaa->opb_bt;
-	sc->sc_sh = oaa->opb_addr;
 	sc->sc_dmat = oaa->opb_dmat;
 
 	printf(": 405GP EMAC\n");
@@ -397,12 +398,15 @@ emac_attach(struct device *parent, struct device *self, void *aux)
 	emac_reset(sc);
 
 	/* Fetch the Ethernet address. */
-	if (prop_get(dev_propdb, &sc->sc_dev, "mac-addr", enaddr,
-		     sizeof(enaddr), NULL) != sizeof(enaddr)) {
+	ea = prop_dictionary_get(device_properties(&sc->sc_dev), "mac-addr");
+	if (ea == NULL) {
 		printf("%s: unable to get mac-addr property\n",
 		    sc->sc_dev.dv_xname);
 		return;
 	}
+	KASSERT(prop_object_type(ea) == PROP_TYPE_DATA);
+	KASSERT(prop_data_size(ea) == ETHER_ADDR_LEN);
+	enaddr = prop_data_data_nocopy(ea);
 
 	printf("%s: Ethernet address %s\n", sc->sc_dev.dv_xname,
 	    ether_sprintf(enaddr));
@@ -807,6 +811,11 @@ emac_init(struct ifnet *ifp)
 	EMAC_WRITE(sc, EMAC_RMR, RMR_IAE | RMR_RRP | RMR_SP |
 	    (ifp->if_flags & IFF_PROMISC ? RMR_PME : 0) |
 	    (ifp->if_flags & IFF_BROADCAST ? RMR_BAE : 0));
+
+	/*
+	 * Set multicast filter.
+	 */
+	emac_set_filter(sc);
 
 	/*
 	 * Set low- and urgent-priority request thresholds.
@@ -1546,7 +1555,7 @@ emac_mii_tick(void *arg)
 	struct emac_softc *sc = arg;
 	int s;
 
-	if ((sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->sc_dev))
 		return;
 
 	s = splnet();

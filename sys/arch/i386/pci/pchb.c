@@ -1,4 +1,4 @@
-/*	$NetBSD: pchb.c,v 1.56 2005/12/11 12:17:43 christos Exp $	*/
+/*	$NetBSD: pchb.c,v 1.62.2.2 2007/01/29 15:54:17 tron Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998, 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.56 2005/12/11 12:17:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.62.2.2 2007/01/29 15:54:17 tron Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -54,7 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: pchb.c,v 1.56 2005/12/11 12:17:43 christos Exp $");
 #include <dev/pci/agpreg.h>
 #include <dev/pci/agpvar.h>
 
-#include <arch/i386/pci/pchbvar.h>
+#include <arch/x86/pci/pchbvar.h>
 
 #include "rnd.h"
 
@@ -85,7 +85,8 @@ CFATTACH_DECL(pchb, sizeof(struct pchb_softc),
     pchbmatch, pchbattach, NULL, NULL);
 
 int
-pchbmatch(struct device *parent, struct cfdata *match, void *aux)
+pchbmatch(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -112,7 +113,9 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 	pcitag_t tag;
 	int doattach, attachflags, has_agp;
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
+
 	doattach = 0;
 	has_agp = 0;
 	attachflags = pa->pa_flags;
@@ -123,7 +126,7 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 	 */
 
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	printf("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
+	aprint_normal("%s: %s (rev. 0x%02x)\n", self->dv_xname, devinfo,
 	    PCI_REVISION(pa->pa_class));
 	switch (PCI_VENDOR(pa->pa_id)) {
 	case PCI_VENDOR_SERVERWORKS:
@@ -152,7 +155,7 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 			   buses. */
 			break;
 		default:
-			printf("%s: unknown ServerWorks chip ID 0x%04x; trying to attach PCI buses behind it\n", self->dv_xname, PCI_PRODUCT(pa->pa_id));
+			aprint_error("%s: unknown ServerWorks chip ID 0x%04x; trying to attach PCI buses behind it\n", self->dv_xname, PCI_PRODUCT(pa->pa_id));
 			/* FALLTHROUGH */
 		case PCI_PRODUCT_SERVERWORKS_CNB20_LE_AGP:
 		case PCI_PRODUCT_SERVERWORKS_CNB30_LE_PCI:
@@ -191,23 +194,31 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 			break;
 		case PCI_PRODUCT_INTEL_82443BX_AGP:
 		case PCI_PRODUCT_INTEL_82443BX_NOAGP:
-			/*
-			 * BIOS BUG WORKAROUND!  The 82443BX
-			 * datasheet indicates that the only
-			 * legal setting for the "Idle/Pipeline
-			 * DRAM Leadoff Timing (IPLDT)" parameter
-			 * (bits 9:8) is 01.  Unfortunately, some
-			 * BIOSs do not set these bits properly.
-			 */
-			bcreg = pci_conf_read(pa->pa_pc, pa->pa_tag,
-			    I82443BX_SDRAMC_REG);
-			if ((bcreg & 0x0300) != 0x0100) {
-				printf("%s: fixing Idle/Pipeline DRAM "
-				    "Leadoff Timing\n", self->dv_xname);
-				bcreg &= ~0x0300;
-				bcreg |=  0x0100;
-				pci_conf_write(pa->pa_pc, pa->pa_tag,
-				    I82443BX_SDRAMC_REG, bcreg);
+		/*
+		 * http://www.intel.com/design/chipsets/specupdt/290639.htm
+		 * says this bug is fixed in steppings >= C0 (erratum 11),
+		 * so don't tweak the bits in that case.
+		 */
+			if (!(PCI_REVISION(pa->pa_class) >= 0x03)) {
+				/*
+				 * BIOS BUG WORKAROUND!  The 82443BX
+				 * datasheet indicates that the only
+				 * legal setting for the "Idle/Pipeline
+				 * DRAM Leadoff Timing (IPLDT)" parameter
+				 * (bits 9:8) is 01.  Unfortunately, some
+				 * BIOSs do not set these bits properly.
+				 */
+				bcreg = pci_conf_read(pa->pa_pc, pa->pa_tag,
+				    I82443BX_SDRAMC_REG);
+				if ((bcreg & 0x0300) != 0x0100) {
+					aprint_verbose("%s: fixing "
+					    "Idle/Pipeline DRAM "
+					    "Leadoff Timing\n", self->dv_xname);
+					bcreg &= ~0x0300;
+					bcreg |=  0x0100;
+					pci_conf_write(pa->pa_pc, pa->pa_tag,
+					    I82443BX_SDRAMC_REG, bcreg);
+				}
 			}
 			break;
 
@@ -218,15 +229,16 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 			pbnum = PCISET_PCI_BUS_NUMBER(bcreg);
 			switch (bdnum & PCISET_BRIDGETYPE_MASK) {
 			default:
-				printf("%s: bdnum=%x (reserved)\n",
+				aprint_error("%s: bdnum=%x (reserved)\n",
 				       self->dv_xname, bdnum);
 				break;
 			case PCISET_TYPE_COMPAT:
-				printf("%s: Compatibility PB (bus %d)\n",
-				       self->dv_xname, pbnum);
+				aprint_verbose(
+				    "%s: Compatibility PB (bus %d)\n",
+				    self->dv_xname, pbnum);
 				break;
 			case PCISET_TYPE_AUX:
-				printf("%s: Auxiliary PB (bus %d)\n",
+				aprint_verbose("%s: Auxiliary PB (bus %d)\n",
 				       self->dv_xname, pbnum);
 				/*
 				 * This host bridge has a second PCI bus.
@@ -243,8 +255,9 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 				bcreg &= ~I82424_BCTL_CPUPCI_POSTEN;
 				pci_conf_write(pa->pa_pc, pa->pa_tag,
 					       I82424_CPU_BCTL_REG, bcreg);
-				printf("%s: disabled CPU-PCI write posting\n",
-					self->dv_xname);
+				aprint_verbose(
+				    "%s: disabled CPU-PCI write posting\n",
+				    self->dv_xname);
 			}
 			break;
 		case PCI_PRODUCT_INTEL_82451NX_PXB:
@@ -299,6 +312,10 @@ pchbattach(struct device *parent, struct device *self, void *aux)
 		case PCI_PRODUCT_INTEL_82845G_DRAM:
 		case PCI_PRODUCT_INTEL_82855GM_MCH:
 		case PCI_PRODUCT_INTEL_82865_HB:
+		case PCI_PRODUCT_INTEL_82915G_HB:
+		case PCI_PRODUCT_INTEL_82915GM_HB:
+		case PCI_PRODUCT_INTEL_82945P_MCH:
+		case PCI_PRODUCT_INTEL_82945GM_HB:
 			/*
 			 * The host bridge is either in GFX mode (internal
 			 * graphics) or in AGP mode. In GFX mode, we pretend

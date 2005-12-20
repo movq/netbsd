@@ -88,7 +88,7 @@ static int def_dump(const CONF *conf, BIO *bp);
 static int def_is_number(const CONF *conf, char c);
 static int def_to_int(const CONF *conf, char c);
 
-const char *CONF_def_version="CONF_def" OPENSSL_VERSION_PTEXT;
+const char CONF_def_version[]="CONF_def" OPENSSL_VERSION_PTEXT;
 
 static CONF_METHOD default_method = {
 	"OpenSSL default",
@@ -629,7 +629,8 @@ static int str_copy(CONF *conf, char *section, char **pto, char *from)
 				CONFerr(CONF_F_STR_COPY,CONF_R_VARIABLE_HAS_NO_VALUE);
 				goto err;
 				}
-			BUF_MEM_grow_clean(buf,(strlen(p)+buf->length-(e-from)));
+			len = strlen(p)+len-(e-from);
+			BUF_MEM_grow_clean(buf, len);
 			while (*p)
 				buf->data[to++]= *(p++);
 

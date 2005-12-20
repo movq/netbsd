@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_misc.c,v 1.33 2005/12/11 12:20:26 christos Exp $	 */
+/*	$NetBSD: svr4_32_misc.c,v 1.39 2006/10/16 20:18:55 martin Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_misc.c,v 1.33 2005/12/11 12:20:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_misc.c,v 1.39 2006/10/16 20:18:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -104,7 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_32_misc.c,v 1.33 2005/12/11 12:20:26 christos E
 
 static int svr4_to_bsd_mmap_flags __P((int));
 
-static __inline clock_t timeval_to_clock_t __P((struct timeval *));
+static inline clock_t timeval_to_clock_t __P((struct timeval *));
 static int svr4_32_setinfo	__P((struct proc *, int, svr4_32_siginfo_tp));
 
 struct svr4_32_hrtcntl_args;
@@ -114,6 +114,8 @@ static void bsd_statvfs_to_svr4_32_statvfs __P((const struct statvfs *,
     struct svr4_32_statvfs *));
 static void bsd_statvfs_to_svr4_32_statvfs64 __P((const struct statvfs *,
     struct svr4_32_statvfs64 *));
+static int svr4_copystatvfs64(struct svr4_32_statvfs64 *, const struct statvfs *);
+static int svr4_copystatvfs(struct svr4_32_statvfs *, const struct statvfs *);
 #define svr4_32_pfind(pid) p_find((pid), PFIND_UNLOCK | PFIND_ZOMBIE)
 
 static int svr4_32_mknod __P((struct lwp *, register_t *, const char *,
@@ -303,10 +305,9 @@ again:
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
 	auio.uio_rw = UIO_READ;
-	auio.uio_segflg = UIO_SYSSPACE;
-	auio.uio_lwp = NULL;
 	auio.uio_resid = buflen;
 	auio.uio_offset = off;
+	UIO_SETUP_SYSSPACE(&auio);
 	/*
          * First we read into the malloc'ed buffer, then
          * we massage it into user space, one record at a time.
@@ -429,10 +430,9 @@ again:
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
 	auio.uio_rw = UIO_READ;
-	auio.uio_segflg = UIO_SYSSPACE;
-	auio.uio_lwp = NULL;
 	auio.uio_resid = buflen;
 	auio.uio_offset = off;
+	UIO_SETUP_SYSSPACE(&auio);
 	/*
          * First we read into the malloc'ed buffer, then
          * we massage it into user space, one record at a time.
@@ -671,6 +671,7 @@ svr4_32_sys_sysconfig(l, v, retval)
 {
 	struct svr4_32_sys_sysconfig_args *uap = v;
 	extern int	maxfiles;
+	int active;
 
 	switch (SCARG(uap, name)) {
 	case SVR4_CONFIG_NGROUPS:
@@ -752,7 +753,8 @@ svr4_32_sys_sysconfig(l, v, retval)
 		*retval = uvmexp.free;	/* XXX: free instead of total */
 		break;
 	case SVR4_CONFIG_AVPHYS_PAGES:
-		*retval = uvmexp.active;	/* XXX: active instead of avg */
+		uvm_estimatepageable(&active, NULL);
+		*retval = active;	/* XXX: active instead of avg */
 		break;
 	case SVR4_CONFIG_COHERENCY:
 		*retval = 0;	/* XXX */
@@ -843,7 +845,7 @@ svr4_32_sys_break(l, v, retval)
 }
 
 
-static __inline clock_t
+static inline clock_t
 timeval_to_clock_t(tv)
 	struct timeval *tv;
 {
@@ -953,7 +955,7 @@ svr4_32_sys_ulimit(l, v, retval)
 			if (r == -1)
 				r = 0x7fffffff;
 			r += (long) vm->vm_daddr;
-			if (r < 0)
+			if (r > 0x7fffffff)
 				r = 0x7fffffff;
 			*retval = r;
 			return 0;
@@ -1247,6 +1249,44 @@ svr4_32_sys_waitsys(l, v, retval)
 					       SCARG(uap, info));
 }
 
+static int
+svr4_copystatvfs64(struct svr4_32_statvfs64 *sufs, const struct statvfs *bufs)
+{
+	struct svr4_32_statvfs64 *skfs = 
+	    malloc(sizeof(*skfs), M_TEMP, M_WAITOK);
+	struct statvfs *bkfs = malloc(sizeof(*bkfs), M_TEMP, M_WAITOK);
+	int error;
+
+	if ((error = copyin(sufs, bkfs, sizeof(*bkfs))) != 0)
+		goto out;
+
+	bsd_statvfs_to_svr4_32_statvfs64(bkfs, skfs);
+
+	error = copyout(skfs, sufs, sizeof(*skfs));
+out:
+	free(skfs, M_TEMP);
+	free(bkfs, M_TEMP);
+	return error;
+}
+
+static int
+svr4_copystatvfs(struct svr4_32_statvfs *sufs, const struct statvfs *bufs)
+{
+	struct svr4_32_statvfs *skfs = malloc(sizeof(*skfs), M_TEMP, M_WAITOK);
+	struct statvfs *bkfs = malloc(sizeof(*bkfs), M_TEMP, M_WAITOK);
+	int error;
+
+	if ((error = copyin(bufs, bkfs, sizeof(*bkfs))) != 0)
+		goto out;
+
+	bsd_statvfs_to_svr4_32_statvfs(bkfs, skfs);
+
+	error = copyout(skfs, sufs, sizeof(*skfs));
+out:
+	free(skfs, M_TEMP);
+	free(bkfs, M_TEMP);
+	return error;
+}
 
 static void
 bsd_statvfs_to_svr4_32_statvfs(bfs, sfs)
@@ -1311,8 +1351,6 @@ svr4_32_sys_statvfs(l, v, retval)
 	struct sys_statvfs1_args	fs_args;
 	caddr_t sg = stackgap_init(p, 0);
 	struct statvfs *fs = stackgap_alloc(p, &sg, sizeof(struct statvfs));
-	struct statvfs bfs;
-	struct svr4_32_statvfs sfs;
 	int error;
 
 	SCARG(&fs_args, path) = (caddr_t)(u_long)SCARG(uap, path);
@@ -1323,12 +1361,8 @@ svr4_32_sys_statvfs(l, v, retval)
 	if ((error = sys_statvfs1(l, &fs_args, retval)) != 0)
 		return error;
 
-	if ((error = copyin(fs, &bfs, sizeof(bfs))) != 0)
-		return error;
-
-	bsd_statvfs_to_svr4_32_statvfs(&bfs, &sfs);
-
-	return copyout(&sfs, (caddr_t)(u_long)SCARG(uap, fs), sizeof(sfs));
+	return svr4_copystatvfs((struct svr4_32_statvfs *)
+		((intptr_t)SCARG(uap, fs)), fs);
 }
 
 
@@ -1343,8 +1377,6 @@ svr4_32_sys_fstatvfs(l, v, retval)
 	struct sys_fstatvfs1_args	fs_args;
 	caddr_t sg = stackgap_init(p, 0);
 	struct statvfs *fs = stackgap_alloc(p, &sg, sizeof(struct statvfs));
-	struct statvfs bfs;
-	struct svr4_32_statvfs sfs;
 	int error;
 
 	SCARG(&fs_args, fd) = SCARG(uap, fd);
@@ -1354,12 +1386,8 @@ svr4_32_sys_fstatvfs(l, v, retval)
 	if ((error = sys_fstatvfs1(l, &fs_args, retval)) != 0)
 		return error;
 
-	if ((error = copyin(fs, &bfs, sizeof(bfs))) != 0)
-		return error;
-
-	bsd_statvfs_to_svr4_32_statvfs(&bfs, &sfs);
-
-	return copyout(&sfs, (caddr_t)(u_long)SCARG(uap, fs), sizeof(sfs));
+	return svr4_copystatvfs((struct svr4_32_statvfs *)
+		((intptr_t)SCARG(uap, fs)), fs);
 }
 
 
@@ -1374,8 +1402,6 @@ svr4_32_sys_statvfs64(l, v, retval)
 	struct proc *p = l->l_proc;
 	caddr_t sg = stackgap_init(p, 0);
 	struct statvfs *fs = stackgap_alloc(p, &sg, sizeof(struct statvfs));
-	struct statvfs bfs;
-	struct svr4_32_statvfs64 sfs;
 	int error;
 
 	SCARG(&fs_args, path) = (caddr_t)(u_long)SCARG(uap, path);
@@ -1386,12 +1412,8 @@ svr4_32_sys_statvfs64(l, v, retval)
 	if ((error = sys_statvfs1(l, &fs_args, retval)) != 0)
 		return error;
 
-	if ((error = copyin(fs, &bfs, sizeof(bfs))) != 0)
-		return error;
-
-	bsd_statvfs_to_svr4_32_statvfs64(&bfs, &sfs);
-
-	return copyout(&sfs, (caddr_t)(u_long)SCARG(uap, fs), sizeof(sfs));
+	return svr4_copystatvfs64((struct svr4_32_statvfs64 *)
+		((intptr_t)SCARG(uap, fs)), fs);
 }
 
 
@@ -1406,8 +1428,6 @@ svr4_32_sys_fstatvfs64(l, v, retval)
 	struct sys_fstatvfs1_args	fs_args;
 	caddr_t sg = stackgap_init(p, 0);
 	struct statvfs *fs = stackgap_alloc(p, &sg, sizeof(struct statvfs));
-	struct statvfs bfs;
-	struct svr4_32_statvfs64 sfs;
 	int error;
 
 	SCARG(&fs_args, fd) = SCARG(uap, fd);
@@ -1417,12 +1437,8 @@ svr4_32_sys_fstatvfs64(l, v, retval)
 	if ((error = sys_fstatvfs1(l, &fs_args, retval)) != 0)
 		return error;
 
-	if ((error = copyin(fs, &bfs, sizeof(bfs))) != 0)
-		return error;
-
-	bsd_statvfs_to_svr4_32_statvfs64(&bfs, &sfs);
-
-	return copyout(&sfs, (caddr_t)(u_long)SCARG(uap, fs), sizeof(sfs));
+	return svr4_copystatvfs64((struct svr4_32_statvfs64 *)
+		((intptr_t)SCARG(uap, fs)), fs);
 }
 
 

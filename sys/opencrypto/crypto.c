@@ -1,4 +1,4 @@
-/*	$NetBSD: crypto.c,v 1.11 2005/11/25 16:16:46 thorpej Exp $ */
+/*	$NetBSD: crypto.c,v 1.17.2.1 2007/01/20 17:13:00 bouyer Exp $ */
 /*	$FreeBSD: src/sys/opencrypto/crypto.c,v 1.4.2.5 2003/02/26 00:14:05 sam Exp $	*/
 /*	$OpenBSD: crypto.c,v 1.41 2002/07/17 23:52:38 art Exp $	*/
 
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: crypto.c,v 1.11 2005/11/25 16:16:46 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: crypto.c,v 1.17.2.1 2007/01/20 17:13:00 bouyer Exp $");
 
 /* XXX FIXME: should be defopt'ed */
 #define CRYPTO_TIMING			/* enable cryptop timing stuff */
@@ -38,6 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: crypto.c,v 1.11 2005/11/25 16:16:46 thorpej Exp $");
 #include <opencrypto/cryptodev.h>
 #include <sys/kthread.h>
 #include <sys/once.h>
+#include <sys/sysctl.h>
 
 #include <opencrypto/xform.h>			/* XXX for M_XDATA */
 
@@ -49,16 +50,6 @@ __KERNEL_RCSID(0, "$NetBSD: crypto.c,v 1.11 2005/11/25 16:16:46 thorpej Exp $");
   softintr_establish(IPL_SOFTNET, (void (*)(void*))fn, NULL)
   #define unregister_swi(lvl, fn)  softintr_disestablish(softintr_cookie)
   #define setsoftcrypto(x) softintr_schedule(x)
-
-static void nanouptime(struct timespec *);
-static void
-nanouptime(struct timespec *tp)
-{
-	struct timeval tv;
-	microtime(&tv);
-	TIMEVAL_TO_TIMESPEC(&tv, tp);
-}
-
 #endif
 
 #define	SESID2HID(sid)	(((sid) >> 32) & 0xffffffff)
@@ -132,6 +123,37 @@ SYSCTL_INT(_kern, OID_AUTO, cryptodevallowsoft, CTLFLAG_RW,
 	   &crypto_devallowsoft, 0,
 	   "Enable/disable use of software asym crypto support");
 #endif
+#ifdef __NetBSD__
+SYSCTL_SETUP(sysctl_opencrypto_setup, "sysctl opencrypto subtree setup")
+{
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "kern", NULL,
+		       NULL, 0, NULL, 0,
+		       CTL_KERN, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "usercrypto",
+		       SYSCTL_DESCR("Enable/disable user-mode access to "
+			   "crypto support"),
+		       NULL, 0, &crypto_usercrypto, 0,
+		       CTL_KERN, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "userasymcrypto",
+		       SYSCTL_DESCR("Enable/disable user-mode access to "
+			   "asymmetric crypto support"),
+		       NULL, 0, &crypto_userasymcrypto, 0,
+		       CTL_KERN, CTL_CREATE, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "cryptodevallowsoft",
+		       SYSCTL_DESCR("Enable/disable use of software "
+			   "asymmetric crypto support"),
+		       NULL, 0, &crypto_devallowsoft, 0,
+		       CTL_KERN, CTL_CREATE, CTL_EOL);
+}
+#endif
 
 MALLOC_DEFINE(M_CRYPTO_DATA, "crypto", "crypto session records");
 
@@ -178,7 +200,7 @@ SYSCTL_STRUCT(_kern, OID_AUTO, crypto_stats, CTLFLAG_RW, &cryptostats,
 	    cryptostats, "Crypto system statistics");
 #endif /* __FreeBSD__ */
 
-static void
+static int
 crypto_init0(void)
 {
 #ifdef __FreeBSD__
@@ -197,7 +219,7 @@ crypto_init0(void)
 	    sizeof(struct cryptocap), M_CRYPTO_DATA, M_NOWAIT | M_ZERO);
 	if (crypto_drivers == NULL) {
 		printf("crypto_init: cannot malloc driver table\n");
-		return;
+		return 0;
 	}
 	crypto_drivers_num = CRYPTO_DRIVERS_INITIAL;
 
@@ -214,12 +236,13 @@ crypto_init0(void)
 	/* defer thread creation until after boot */
 	kthread_create( deferred_crypto_thread, NULL);
 #endif
+	return 0;
 }
 
 void
 crypto_init(void)
 {
-	ONCE_DECL(crypto_init_once);
+	static ONCE_DECL(crypto_init_once);
 
 	RUN_ONCE(&crypto_init_once, crypto_init0);
 }
@@ -844,7 +867,7 @@ crypto_invoke(struct cryptop *crp, int hint)
 
 	if (process == NULL) {
 		struct cryptodesc *crd;
-		u_int64_t nid;
+		u_int64_t nid = 0;
 
 		/*
 		 * Driver has unregistered; migrate the session and return

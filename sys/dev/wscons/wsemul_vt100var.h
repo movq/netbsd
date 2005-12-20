@@ -1,4 +1,4 @@
-/* $NetBSD: wsemul_vt100var.h,v 1.11 2005/12/11 12:24:12 christos Exp $ */
+/* $NetBSD: wsemul_vt100var.h,v 1.13 2006/10/09 11:03:43 peter Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -38,9 +38,7 @@ struct wsemul_vt100_emuldata {
 
 	long kernattr;			/* attribute for kernel output */
 	void *cbcookie;
-#ifdef DIAGNOSTIC
-	int console;
-#endif
+	int console;			/* used for DIAGNOSTIC */
 
 	u_int state;			/* processing state */
 	int flags;
@@ -135,7 +133,7 @@ void wsemul_vt100_el(struct wsemul_vt100_emuldata *, int);
 void wsemul_vt100_handle_csi(struct wsemul_vt100_emuldata *, u_char);
 void wsemul_vt100_handle_dcs(struct wsemul_vt100_emuldata *);
 
-int wsemul_vt100_translate(void *cookie, keysym_t, const char **);
+int wsemul_vt100_translate(void *, keysym_t, const char **);
 
 void vt100_initchartables(struct wsemul_vt100_emuldata *);
 void vt100_setnrc(struct wsemul_vt100_emuldata *, int);

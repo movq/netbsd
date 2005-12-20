@@ -1,4 +1,4 @@
-/*	$NetBSD: systm.h,v 1.182 2005/12/11 12:25:21 christos Exp $	*/
+/*	$NetBSD: systm.h,v 1.190 2006/09/30 11:59:37 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1988, 1991, 1993
@@ -75,6 +75,10 @@
 
 #include <machine/endian.h>
 
+#ifdef _KERNEL
+#include <sys/types.h>
+#endif
+
 struct clockframe;
 struct device;
 struct lwp;
@@ -83,6 +87,7 @@ struct timeval;
 struct tty;
 struct uio;
 struct vnode;
+struct vmspace;
 
 extern int securelevel;		/* system security level */
 extern const char *panicstr;	/* panic message */
@@ -208,7 +213,7 @@ int	snprintf(char *, size_t, const char *, ...)
 void	vprintf(const char *, _BSD_VA_LIST_);
 int	vsprintf(char *, const char *, _BSD_VA_LIST_);
 int	vsnprintf(char *, size_t, const char *, _BSD_VA_LIST_);
-int	humanize_number(char *, size_t, u_int64_t, const char *, int);
+int	humanize_number(char *, size_t, uint64_t, const char *, int);
 
 void	twiddle(void);
 #endif /* _KERNEL */
@@ -222,7 +227,7 @@ void	ttyprintf(struct tty *, const char *, ...)
 
 char	*bitmask_snprintf(u_quad_t, const char *, char *, size_t);
 
-int	format_bytes(char *, size_t, u_int64_t);
+int	format_bytes(char *, size_t, uint64_t);
 
 void	tablefull(const char *, const char *);
 
@@ -247,6 +252,8 @@ typedef int	(*copyout_t)(const void *, void *, size_t);
 
 int	copyin_proc(struct proc *, const void *, void *, size_t);
 int	copyout_proc(struct proc *, const void *, void *, size_t);
+int	copyin_vmspace(struct vmspace *, const void *, void *, size_t);
+int	copyout_vmspace(struct vmspace *, const void *, void *, size_t);
 
 int	ioctl_copyin(int ioctlflags, const void *src, void *dst, size_t len);
 int	ioctl_copyout(int ioctlflags, const void *src, void *dst, size_t len);
@@ -267,19 +274,29 @@ int	fuswintr(const void *);
 long	fuword(const void *);
 long	fuiword(const void *);
 
-int	hzto(struct timeval *);
-
 void	hardclock(struct clockframe *);
 void	softclock(void *);
 void	statclock(struct clockframe *);
+
 #ifdef NTP
+void	ntp_init(void);
+#ifndef __HAVE_TIMECOUNTER
 void	hardupdate(long offset);
+#endif /* !__HAVE_TIMECOUNTER */
 #ifdef PPS_SYNC
+#ifdef __HAVE_TIMECOUNTER
+void	hardpps(struct timespec *, long);
+#else /* !__HAVE_TIMECOUNTER */
 void	hardpps(struct timeval *, long);
-extern	void *pps_kc_hardpps_source;
-extern	int pps_kc_hardpps_mode;
-#endif
-#endif
+extern void *pps_kc_hardpps_source;
+extern int pps_kc_hardpps_mode;
+#endif /* !__HAVE_TIMECOUNTER */
+#endif /* PPS_SYNC */
+#else
+#ifdef __HAVE_TIMECOUNTER
+void	ntp_init(void);	/* also provides adjtime() functionality */
+#endif /* __HAVE_TIMECOUNTER */
+#endif /* NTP */
 
 void	initclocks(void);
 void	inittodr(time_t);
@@ -303,7 +320,7 @@ void	doshutdownhooks(void);
 /*
  * Power management hooks.
  */
-void	*powerhook_establish(void (*)(int, void *), void *);
+void	*powerhook_establish(const char *, void (*)(int, void *), void *);
 void	powerhook_disestablish(void *);
 void	dopowerhooks(int);
 #define PWR_RESUME	0
@@ -350,16 +367,19 @@ void	doforkhooks(struct proc *, struct proc *);
 /*
  * kernel syscall tracing/debugging hooks.
  */
+#ifdef _KERNEL
+boolean_t trace_is_enabled(struct proc *);
 int	trace_enter(struct lwp *, register_t, register_t,
 	    const struct sysent *, void *);
 void	trace_exit(struct lwp *, register_t, void *, register_t [], int);
+#endif
 
 int	uiomove(void *, size_t, struct uio *);
 int	uiomove_frombuf(void *, size_t, struct uio *);
 
 #ifdef _KERNEL
 int	setjmp(label_t *);
-void	longjmp(label_t *);
+void	longjmp(label_t *) __attribute__((__noreturn__));
 #endif
 
 void	consinit(void);
@@ -478,9 +498,12 @@ void	_kernel_lock_acquire_count(int);
 
 #if defined(MULTIPROCESSOR) && defined(DEBUG)
 #define	KERNEL_LOCK_ASSERT_LOCKED()	_kernel_lock_assert_locked()
+#define	KERNEL_LOCK_ASSERT_UNLOCKED()	_kernel_lock_assert_unlocked()
 void _kernel_lock_assert_locked(void);
+void _kernel_lock_assert_unlocked(void);
 #else
 #define	KERNEL_LOCK_ASSERT_LOCKED()	/* nothing */
+#define	KERNEL_LOCK_ASSERT_UNLOCKED()	/* nothing */
 #endif
 
 #endif	/* !_SYS_SYSTM_H_ */

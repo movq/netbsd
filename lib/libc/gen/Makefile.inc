@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.147 2005/10/03 14:56:32 wiz Exp $
+#	$NetBSD: Makefile.inc,v 1.157 2006/11/22 17:23:25 christos Exp $
 #	from: @(#)Makefile.inc	8.6 (Berkeley) 5/4/95
 
 # gen sources
@@ -9,14 +9,15 @@ SRCS+= 	_errno.c alarm.c alphasort.c arc4random.c assert.c basename.c clock.c \
 	devname.c dirname.c disklabel.c err.c errx.c errlist.c \
 	errno.c execl.c execle.c execlp.c execv.c execvp.c extattr.c \
 	fmtcheck.c fmtmsg.c fnmatch.c fstab.c ftok.c \
-	fts.c getbsize.c getcap.c getcwd.c \
+	fts.c ftw.c getbsize.c getcap.c getcwd.c \
 	getdevmajor.c getdomainname.c getgrent.c \
 	getgrouplist.c getgroupmembership.c gethostname.c \
 	getloadavg.c getlogin.c getmntinfo.c \
 	getnetgrent.c getpagesize.c \
 	getpass.c getprogname.c getpwent.c getttyent.c \
 	getusershell.c glob.c humanize_number.c initgroups.c \
-	isascii.c isatty.c isctype.c lockf.c nice.c nlist.c nlist_aout.c \
+	isascii.c isatty.c isctype.c lockf.c nftw.c \
+	nice.c nlist.c nlist_aout.c \
 	nlist_coff.c nlist_ecoff.c nlist_elf32.c nlist_elf64.c opendir.c \
 	pause.c popen.c psignal.c pthread_atfork.c pwcache.c \
 	pw_scan.c raise.c randomid.c readdir.c rewinddir.c \
@@ -36,18 +37,24 @@ SRCS+= 	_errno.c alarm.c alphasort.c arc4random.c assert.c basename.c clock.c \
 SRCS+=	_err.c _errx.c \
 	_sysconf.c _verr.c _verrx.c _vwarn.c _vwarnx.c _warn.c _warnx.c
 
+# uses alloca
+COPTS.execvp.c = -Wno-stack-protector
+COPTS.execl.c = -Wno-stack-protector
+COPTS.execle.c = -Wno-stack-protector
+COPTS.execlp.c = -Wno-stack-protector
+
 # machine-dependent gen sources
 # m-d Makefile.inc must include sources for:
-#	_setjmp() bswap16() bswap32() bswap64() fabs() frexp() infinity
-#	isinf() ldexp() modf() setjmp() sigsetjmp()
+#	_setjmp() bswap16() bswap32() bswap64() fabs() infinity
+#	isinf() setjmp() sigsetjmp()
 
 .include "${ARCHDIR}/gen/Makefile.inc"
 
 MAN+=	alarm.3 arc4random.3 basename.3 bswap.3 clock.3 closefrom.3 confstr.3 \
 	ctermid.3 ctype.3 daemon.3 devname.3 directory.3 dirname.3 \
 	endutxent.3 err.3 exec.3 extattr.3 \
-	fmtcheck.3 fmtmsg.3 fnmatch.3 fpclassify.3 fpgetmask.3 frexp.3 \
-	ftok.3 fts.3 \
+	fmtcheck.3 fmtmsg.3 fnmatch.3 fpclassify.3 fpgetmask.3 \
+	ftok.3 fts.3 ftw.3 \
 	getbsize.3 cgetcap.3 getcwd.3 getdevmajor.3 \
 	getdomainname.3 getdiskbyname.3 getfsent.3 \
 	getgrent.3 getgrouplist.3 gethostname.3 getlastlogx.3 getloadavg.3 \
@@ -56,9 +63,9 @@ MAN+=	alarm.3 arc4random.3 basename.3 bswap.3 clock.3 closefrom.3 confstr.3 \
 	humanize_number.3 \
 	initgroups.3 isalnum.3 isalpha.3 isascii.3 isblank.3 iscntrl.3 \
 	isdigit.3 isfinite.3 isgraph.3 isinf.3 islower.3 isnan.3 isnormal.3 \
-	isprint.3 ispunct.3 isspace.3 isupper.3 isxdigit.3 ldexp.3 lockf.3 \
+	isprint.3 ispunct.3 isspace.3 isupper.3 isxdigit.3 lockf.3 \
 	_lwp_makecontext.3 makecontext.3 \
-	modf.3 nice.3 nlist.3 \
+	nice.3 nlist.3 \
 	pause.3 popen.3 psignal.3 pwcache.3 pthread_atfork.3 \
 	raise.3 randomid.3 realpath.3 scandir.3 setjmp.3 setmode.3 \
 	setproctitle.3 shquote.3 sighold.3 sigignore.3 siginterrupt.3 \
@@ -86,6 +93,7 @@ MLINKS+=fpgetmask.3 fpgetround.3 fpgetmask.3 fpgetsticky.3 \
 	fpgetmask.3 fpsetsticky.3
 MLINKS+=fts.3 fts_open.3 fts.3 fts_read.3 fts.3 fts_children.3 \
 	fts.3 fts_set.3 fts.3 fts_close.3
+MLINKS+=ftw.3 nftw.3
 MLINKS+=cgetcap.3 cgetclose.3 cgetcap.3 cgetent.3 \
 	cgetcap.3 cgetfirst.3 cgetcap.3 cgetmatch.3 cgetcap.3 cgetnext.3 \
 	cgetcap.3 cgetnum.3 cgetcap.3 cgetset.3 cgetcap.3 cgetstr.3 \
@@ -110,7 +118,8 @@ MLINKS+=getpwent.3 endpwent.3 getpwent.3 setpassent.3 getpwent.3 getpwnam.3 \
 	getpwent.3 getpwuid.3 getpwent.3 setpwent.3
 MLINKS+=getpwent.3 getpwnam_r.3 getpwent.3 getpwuid_r.3 getpwent.3 getpwent_r.3
 # getpwent.3 setpwfile.3 - deprecated
-MLINKS+=getttyent.3 endttyent.3 getttyent.3 getttynam.3 getttyent.3 setttyent.3
+MLINKS+=getttyent.3 endttyent.3 getttyent.3 getttynam.3 \
+	getttyent.3 setttyent.3 getttyent.3 setttyentpath.3
 MLINKS+=getusershell.3 endusershell.3 getusershell.3 setusershell.3
 MLINKS+=glob.3 globfree.3
 MLINKS+=makecontext.3 swapcontext.3
@@ -134,6 +143,8 @@ MLINKS+=sysctl.3 sysctlbyname.3 sysctl.3 sysctlgetmibinfo.3 \
 	sysctl.3 sysctlnametomib.3
 MLINKS+=syslog.3 closelog.3 syslog.3 openlog.3 syslog.3 setlogmask.3 \
 	syslog.3 vsyslog.3
+MLINKS+=syslog.3 closelog_r.3 syslog.3 openlog_r.3 syslog.3 setlogmask_r.3 \
+	syslog.3 syslog_r.3 syslog.3 vsyslog_r.3
 MLINKS+=ttyname.3 isatty.3 ttyname.3 ttyslot.3 ttyname.3 ttyname_r.3
 MLINKS+=unvis.3 strunvis.3
 MLINKS+=vis.3 svis.3 vis.3 strvis.3 vis.3 strvisx.3 vis.3 strsvis.3 \

@@ -1,4 +1,4 @@
-/*	$NetBSD: gen.c,v 1.1.1.1 2004/05/17 23:44:42 christos Exp $	*/
+/*	$NetBSD: gen.c,v 1.1.1.3.4.1 2007/05/17 00:39:46 jdc Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -18,10 +18,11 @@
  */
 
 #if !defined(LINT) && !defined(CODECENTER)
-static const char rcsid[] = "Id: gen.c,v 1.3.206.2 2004/03/17 00:29:48 marka Exp";
+static const char rcsid[] = "Id: gen.c,v 1.5.18.2 2005/04/27 05:00:56 sra Exp";
 #endif
 
-/*
+/*! \file
+ * \brief
  * this is the top level dispatcher
  *
  * The dispatcher is implemented as an accessor class; it is an
@@ -393,8 +394,10 @@ init_map_rules(struct gen_p *irs, const char *conf_file) {
 		default_map_rules(irs);
 		return;
 	}
-	(void) sprintf(pattern, "%%%ds %%%ds %%%ds\n",
-		       sizeof mapname, sizeof accname, sizeof options);
+	(void) sprintf(pattern, "%%%lus %%%lus %%%lus\n",
+		       (unsigned long)sizeof mapname,
+		       (unsigned long)sizeof accname,
+		       (unsigned long)sizeof options);
 	while (fgets(line, sizeof line, conf)) {
 		enum irs_map_id map;
 		enum irs_acc_id acc;

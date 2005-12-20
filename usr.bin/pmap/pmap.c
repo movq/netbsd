@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.29 2005/12/15 01:53:30 reinoud Exp $ */
+/*	$NetBSD: pmap.c,v 1.32 2006/10/22 22:56:26 pooka Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: pmap.c,v 1.29 2005/12/15 01:53:30 reinoud Exp $");
+__RCSID("$NetBSD: pmap.c,v 1.32 2006/10/22 22:56:26 pooka Exp $");
 #endif
 
 #include <string.h>
@@ -152,10 +152,8 @@ PMAPFUNC(dump_vm_map,VERSION)(kvm_t *kd, struct kinfo_proc2 *proc,
 		printf("%*s    size = %lx,", indent(2), "",
 		       D(vm_map, vm_map)->size);
 		printf(" ref_count = %d,", D(vm_map, vm_map)->ref_count);
-		printf(" ref_lock = <struct simplelock>,\n");
 		printf("%*s    hint = %p,", indent(2), "",
 		       D(vm_map, vm_map)->hint);
-		printf(" hint_lock = <struct simplelock>,\n");
 		printf("%*s    first_free = %p,", indent(2), "",
 		       D(vm_map, vm_map)->first_free);
 		printf(" flags = %x <%s%s%s%s%s%s%s >,\n", D(vm_map, vm_map)->flags,
@@ -172,8 +170,8 @@ PMAPFUNC(dump_vm_map,VERSION)(kvm_t *kd, struct kinfo_proc2 *proc,
 		       D(vm_map, vm_map)->flags & VM_MAP_TOPDOWN ? " TOPDOWN" :
 #endif
 		       "");
-		printf("%*s    flags_lock = <struct simplelock>,", indent(2), "");
-		printf(" timestamp = %u }\n", D(vm_map, vm_map)->timestamp);
+		printf("%*s    timestamp = %u }\n", indent(2), "",
+		     D(vm_map, vm_map)->timestamp);
 	}
 	if (print_ddb) {
 		const char *name = mapname(P(vm_map));
@@ -418,6 +416,8 @@ PMAPFUNC(dump_vm_map_entry,VERSION)(kvm_t *kd,
 		case VT_PTYFS:
 		case VT_TMPFS:
 		case VT_UDF:
+		case VT_SYSVBFS:
+		case VT_PUFFS:
 			break;
 		}
 	}
@@ -575,7 +575,7 @@ PMAPFUNC(dump_amap,VERSION)(kvm_t *kd, struct kbit *amap)
 		KDEREF(kd, amap);
 	}
 
-	printf("%*s  amap %p = { am_l = <struct simplelock>, am_ref = %d, "
+	printf("%*s  amap %p = { am_ref = %d, "
 	       "am_flags = %x,\n"
 	       "%*s      am_maxslot = %d, am_nslot = %d, am_nused = %d, "
 	       "am_slots = %p,\n"
@@ -692,8 +692,9 @@ dump_vm_anon(kvm_t *kd, struct vm_anon **alist, int i)
 		else
 			KDEREF(kd, anon);
 
-		printf(" = { an_ref = %d, an_lock = <struct simplelock>, an_page = %p, an_swslot = %d }",
-		       D(anon, anon)->an_ref, D(anon, anon)->an_page, D(anon, anon)->an_swslot);
+		printf(" = { an_ref = %d, an_page = %p, an_swslot = %d }",
+		    D(anon, anon)->an_ref, D(anon, anon)->an_page,
+		    D(anon, anon)->an_swslot);
 	}
 
 	printf("\n");

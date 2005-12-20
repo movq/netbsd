@@ -1,4 +1,4 @@
-/*	$NetBSD: cltp_usrreq.c,v 1.27 2005/12/11 12:25:12 christos Exp $	*/
+/*	$NetBSD: cltp_usrreq.c,v 1.30 2006/11/16 01:33:51 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cltp_usrreq.c,v 1.27 2005/12/11 12:25:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cltp_usrreq.c,v 1.30 2006/11/16 01:33:51 christos Exp $");
 
 #ifndef CLTPOVAL_SRC		/* XXX -- till files gets changed */
 #include <sys/param.h>
@@ -183,10 +183,10 @@ cltp_notify(isop)
 }
 
 void
-cltp_ctlinput(cmd, sa, dummy)
-	int             cmd;
-	struct sockaddr *sa;
-	void *dummy;
+cltp_ctlinput(
+    int cmd,
+    struct sockaddr *sa,
+    void *dummy)
 {
 	struct sockaddr_iso *siso;
 
@@ -289,11 +289,9 @@ cltp_usrreq(so, req, m, nam, control, l)
 	struct lwp *l;
 {
 	struct isopcb *isop;
-	struct proc *p;
 	int s;
 	int error = 0;
 
-	p = l ? l->l_proc : NULL;
 	if (req == PRU_CONTROL)
 		return (iso_control(so, (long)m, (caddr_t)nam,
 		    (struct ifnet *)control, l));
@@ -336,7 +334,7 @@ cltp_usrreq(so, req, m, nam, control, l)
 		break;
 
 	case PRU_BIND:
-		error = iso_pcbbind(isop, nam, p);
+		error = iso_pcbbind(isop, nam, l);
 		break;
 
 	case PRU_LISTEN:
@@ -344,7 +342,7 @@ cltp_usrreq(so, req, m, nam, control, l)
 		break;
 
 	case PRU_CONNECT:
-		error = iso_pcbconnect(isop, nam, p);
+		error = iso_pcbconnect(isop, nam, l);
 		if (error)
 			break;
 		soisconnected(so);
@@ -379,7 +377,7 @@ cltp_usrreq(so, req, m, nam, control, l)
 				error = EISCONN;
 				goto die;
 			}
-			error = iso_pcbconnect(isop, nam, p);
+			error = iso_pcbconnect(isop, nam, l);
 			if (error) {
 			die:
 				m_freem(m);

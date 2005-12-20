@@ -1,4 +1,4 @@
-/*	$NetBSD: ping.c,v 1.77 2004/05/13 20:27:38 kleink Exp $	*/
+/*	$NetBSD: ping.c,v 1.85 2006/09/28 16:01:16 elad Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -58,15 +58,15 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ping.c,v 1.77 2004/05/13 20:27:38 kleink Exp $");
+__RCSID("$NetBSD: ping.c,v 1.85 2006/09/28 16:01:16 elad Exp $");
 #endif
 
 #include <stdio.h>
 #include <stddef.h>
 #include <errno.h>
+#include <signal.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <sys/signal.h>
 #include <sys/param.h>
 #include <sys/socket.h>
 #include <sys/file.h>
@@ -205,10 +205,6 @@ double tsum = 0.0;			/* sum of all times */
 double tsumsq = 0.0;
 double maxwait = 0.0;
 
-#ifdef SIGINFO
-int reset_kerninfo;
-#endif
-
 int bufspace = IP_MAXPACKET;
 
 struct timeval now, clear_cache, last_tx, next_tx, first_tx;
@@ -242,7 +238,6 @@ static void gethost(const char *, const char *,
 		    struct sockaddr_in *, char *, int);
 static void usage(void);
 
-
 int
 main(int argc, char *argv[])
 {
@@ -251,16 +246,23 @@ main(int argc, char *argv[])
 	u_char ttl = 0;
 	u_long tos = 0;
 	char *p;
-#ifdef SIGINFO
-	struct termios ts;
-#endif
 #ifdef IPSEC
 #ifdef IPSEC_POLICY_IPSEC
 	char *policy_in = NULL;
 	char *policy_out = NULL;
 #endif
 #endif
-  
+#ifdef SIGINFO
+	struct sigaction sa;
+#endif
+
+	if ((s = cap_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
+		err(1, "Cannot create socket");
+	if ((sloop = cap_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
+		err(1, "Cannot create socket");
+
+	if (setuid(getuid()) == -1)
+		err(1, "setuid");
 
 	setprogname(argv[0]);
 
@@ -461,8 +463,6 @@ main(int argc, char *argv[])
 
 	ident = arc4random() & 0xFFFF;
 
-	if ((s = cap_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
-		err(1, "Cannot create socket");
 	if (options & SO_DEBUG) {
 		if (setsockopt(s, SOL_SOCKET, SO_DEBUG,
 			       (char *)&on, sizeof(on)) == -1)
@@ -474,8 +474,6 @@ main(int argc, char *argv[])
 			warn("SO_DONTROUTE");
 	}
 
-	if ((sloop = cap_socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0)
-		err(1, "Cannot create socket");
 	if (options & SO_DEBUG) {
 		if (setsockopt(sloop, SOL_SOCKET, SO_DEBUG,
 			       (char *)&on, sizeof(on)) == -1)
@@ -637,16 +635,11 @@ main(int argc, char *argv[])
 
 	(void)signal(SIGINT, prefinish);
 
-#if defined(SIGINFO) && defined(NOKERNINFO)
-	if (tcgetattr (0, &ts) != -1) {
-		reset_kerninfo = !(ts.c_lflag & NOKERNINFO);
-		ts.c_lflag |= NOKERNINFO;
-		tcsetattr (STDIN_FILENO, TCSANOW, &ts);
-	}
-#endif
-
 #ifdef SIGINFO
-	(void)signal(SIGINFO, prtsig);
+	sa.sa_handler = prtsig;
+	sa.sa_flags = SA_NOKERNINFO;
+	sigemptyset(&sa.sa_mask);
+	(void)sigaction(SIGINFO, &sa, NULL);
 #else
 	(void)signal(SIGQUIT, prtsig);
 #endif
@@ -668,7 +661,7 @@ doit(void)
 {
 	int cc;
 	struct sockaddr_in from;
-	int fromlen;
+	socklen_t fromlen;
 	double sec, last, d_last;
 	struct pollfd fdmaskp[1];
 
@@ -1315,10 +1308,9 @@ summary(int header)
 static void
 prtsig(int dummy)
 {
+
 	summary(0);
-#ifdef SIGINFO
-	(void)signal(SIGINFO, prtsig);
-#else
+#ifndef SIGINFO
 	(void)signal(SIGQUIT, prtsig);
 #endif
 }
@@ -1340,7 +1332,6 @@ prefinish(int dummy)
 		npackets = ntransmitted;
 }
 
-
 /*
  * Print statistics and give up.
  */
@@ -1348,14 +1339,8 @@ prefinish(int dummy)
 static void
 finish(int dummy)
 {
-#if defined(SIGINFO) && defined(NOKERNINFO)
-	struct termios ts;
-
-	if (reset_kerninfo && tcgetattr (0, &ts) != -1) {
-		ts.c_lflag &= ~NOKERNINFO;
-		tcsetattr (STDIN_FILENO, TCSANOW, &ts);
-	}
-	(void)signal(SIGINFO, SIG_IGN);
+#ifdef SIGINFO
+	(void)signal(SIGINFO, SIG_DFL);
 #else
 	(void)signal(SIGQUIT, SIG_DFL);
 #endif

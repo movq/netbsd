@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_chaindecluster.c,v 1.13 2005/12/11 12:23:37 christos Exp $	*/
+/*	$NetBSD: rf_chaindecluster.c,v 1.15 2006/11/16 01:33:23 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -33,7 +33,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_chaindecluster.c,v 1.13 2005/12/11 12:23:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_chaindecluster.c,v 1.15 2006/11/16 01:33:23 christos Exp $");
 
 #include "rf_archs.h"
 
@@ -61,8 +61,8 @@ typedef struct RF_ChaindeclusterConfigInfo_s {
 }       RF_ChaindeclusterConfigInfo_t;
 
 int
-rf_ConfigureChainDecluster(RF_ShutdownList_t **listp, RF_Raid_t *raidPtr,
-			   RF_Config_t *cfgPtr)
+rf_ConfigureChainDecluster(RF_ShutdownList_t **listp,
+    RF_Raid_t *raidPtr, RF_Config_t *cfgPtr)
 {
 	RF_RaidLayout_t *layoutPtr = &raidPtr->Layout;
 	RF_StripeCount_t num_used_stripeUnitsPerDisk;

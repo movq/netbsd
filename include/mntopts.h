@@ -1,4 +1,4 @@
-/*	$NetBSD: mntopts.h,v 1.6 2005/06/23 00:30:29 thorpej Exp $	*/
+/*	$NetBSD: mntopts.h,v 1.10 2006/10/31 08:12:46 mjf Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -56,7 +56,6 @@ struct mntopt {
 #define MOPT_SYMPERM		{ "symperm",	0, MNT_SYMPERM, 0 }
 #define MOPT_SOFTDEP		{ "softdep",	0, MNT_SOFTDEP, 0 }
 #define MOPT_IGNORE		{ "hidden",	0, MNT_IGNORE, 0 }
-#define	MOPT_MAGICLINKS		{ "magiclinks",	0, MNT_MAGICLINKS, 0 }
 
 /* Control flags. */
 #define MOPT_FORCE		{ "force",	0, MNT_FORCE, 0 }
@@ -70,6 +69,7 @@ struct mntopt {
 
 /* This is parsed by mount(8), but is ignored by specific mount_*(8)s. */
 #define MOPT_AUTO		{ "auto",	0, 0, 0 }
+#define MOPT_NULL		{ NULL,		0, 0, 0 }
 
 #define MOPT_FSTAB_COMPAT						\
 	MOPT_RO,							\
@@ -88,8 +88,7 @@ struct mntopt {
 	MOPT_RDONLY,							\
 	MOPT_UNION,							\
 	MOPT_IGNORE,							\
-	MOPT_SYMPERM,							\
-	MOPT_MAGICLINKS
+	MOPT_SYMPERM
 
 __BEGIN_DECLS
 typedef struct mntoptparse *mntoptparse_t;

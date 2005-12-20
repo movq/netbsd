@@ -1,4 +1,4 @@
-/*	$NetBSD: tcic2.c,v 1.23 2005/12/11 12:21:28 christos Exp $	*/
+/*	$NetBSD: tcic2.c,v 1.26 2006/11/16 01:32:52 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 1999 Christoph Badura.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcic2.c,v 1.23 2005/12/11 12:21:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcic2.c,v 1.26 2006/11/16 01:32:52 christos Exp $");
 
 #undef	TCICDEBUG
 
@@ -743,7 +743,7 @@ tcic_chip_mem_alloc(pch, size, pcmhp)
 	bus_space_handle_t memh;
 	bus_addr_t addr;
 	bus_size_t sizepg;
-	int i, mask, mhandle;
+	int i, mask, mhandle, got = 0;
 
 	/* out of sc->memh, allocate as many pages as necessary */
 
@@ -777,11 +777,12 @@ tcic_chip_mem_alloc(pch, size, pcmhp)
 			mhandle = mask << i;
 			addr = h->sc->membase + (i * TCIC_MEM_PAGESIZE);
 			h->sc->subregionmask &= ~(mhandle);
+			got = 1;
 			break;
 		}
 	}
 
-	if (i == (TCIC_MEM_PAGES + 1 - sizepg))
+	if (got == 0)
 		return (1);
 
 	DPRINTF(("tcic_chip_mem_alloc bus addr 0x%lx+0x%lx\n", (u_long) addr,
@@ -1046,9 +1047,8 @@ tcic_chip_io_alloc(pch, start, size, align, pcihp)
 }
 
 void
-tcic_chip_io_free(pch, pcihp)
-	pcmcia_chipset_handle_t pch;
-	struct pcmcia_io_handle *pcihp;
+tcic_chip_io_free(pcmcia_chipset_handle_t pch,
+    struct pcmcia_io_handle *pcihp)
 {
 	bus_space_tag_t iot = pcihp->iot;
 	bus_space_handle_t ioh = pcihp->ioh;

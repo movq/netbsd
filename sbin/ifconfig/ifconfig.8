@@ -1,4 +1,4 @@
-.\"	$NetBSD: ifconfig.8,v 1.80 2005/09/11 23:37:14 wiz Exp $
+.\"	$NetBSD: ifconfig.8,v 1.87 2006/11/23 19:43:52 yamt Exp $
 .\"
 .\" Copyright (c) 1983, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     @(#)ifconfig.8	8.4 (Berkeley) 6/1/94
 .\"
-.Dd August 11, 2005
+.Dd November 24, 2006
 .Dt IFCONFIG 8
 .Os
 .Sh NAME
@@ -133,6 +133,31 @@ for example,
 The following parameters may be set with
 .Nm :
 .Bl -tag -width dest_addressxx
+.It Cm advbase Ar n
+If the driver is a
+.Xr carp 4
+pseudo-device, set the base advertisement interval to
+.Ar n
+seconds.
+This ia an 8-bit number; the default value is 1 second.
+.It Cm advskew Ar n
+If the driver is a
+.Xr carp 4
+pseudo-device, skew the advertisement interval by
+.Ar n .
+This is an 8-bit number; the default value is 0.
+.Pp
+Taken together the
+.Cm advbase
+indicate how frequently, in seconds, the host will advertise the fact that it
+considers itself the master of the virtual host.
+The formula is
+.Cm advbase
++
+.Pf ( Cm advskew
+/ 256).
+If the master does not advertise within three times this interval, this host
+will begin advertising as master.
 .It Cm alias
 Establish an additional network address for this interface.
 This is sometimes useful when changing network numbers, and
@@ -160,6 +185,13 @@ Clear the IPv6 anycast address bit.
 Specify the address to use to represent broadcasts to the
 network.
 The default broadcast address is the address with a host part of all 1's.
+.It Cm carpdev Ar iface
+If the driver is a
+.Xr carp 4
+pseudo-device, attach it to
+.Ar iface.
+If not specified, the kernel will attempt to select an interface with
+a subnet matching that of the carp interface.
 .It Cm debug
 Enable driver dependent debugging code; usually, this turns on
 extra console error logging.
@@ -306,6 +338,15 @@ There is some evidence that a number different from 1 may be useful
 for
 .Tn AFI
 37 type addresses.
+.It Cm state Ar state
+Explicitly force the
+.Xr carp 4
+pseudo-device to enter this state.
+Valid states are
+.Ar init ,
+.Ar backup ,
+and
+.Ar master .
 .It Cm ssid Ar id
 .Pq IEEE 802.11 devices only
 Configure the Service Set Identifier (a.k.a. the network name)
@@ -322,6 +363,18 @@ access point.
 .It Cm nwid Ar id
 Synonym for
 .Dq ssid .
+.It Cm hidessid
+.Pq IEEE 802.11 devices only
+When operating as an access point, do not broadcast the SSID
+in beacon frames or respond to probe request frames unless
+they are directed to the ap (i.e., they include the ap's SSID).
+By default, the SSID is included in beacon frames and
+undirected probe request frames are answered.
+.It Fl hidessid
+.Pq IEEE 802.11 devices only
+When operating as an access point, broadcast the SSID
+in beacon frames and answer and respond to undirected probe
+request frames (default).
 .It Cm nwkey Ar key
 .Pq IEEE 802.11 devices only
 Enable WEP encryption for IEEE 802.11-based wireless network interfaces
@@ -363,6 +416,22 @@ with the
 .It Fl nwkey
 .Pq IEEE 802.11 devices only
 Disable WEP encryption for IEEE 802.11-based wireless network interfaces.
+.It Cm apbridge
+.Pq IEEE 802.11 devices only
+When operating as an access point, pass packets between
+wireless clients directly (default).
+.It Fl apbridge
+.Pq IEEE 802.11 devices only
+When operating as an access point, pass packets through
+the system so that they can be forwared using some other mechanism.
+Disabling the internal bridging is useful when traffic
+is to be processed with packet filtering.
+.It Cm pass Ar passphrase
+If the driver is a
+.Xr carp 4
+pseudo-device, set the authentication key to
+.Ar passphrase .
+There is no passphrase by default
 .It Cm powersave
 .Pq IEEE 802.11 devices only
 Enable 802.11 power saving mode.
@@ -389,8 +458,11 @@ to be used for IEEE 802.11-based wireless network interfaces.
 .Pq IEEE 802.11 devices only
 Unset the desired channel to be used
 for IEEE 802.11-based wireless network interfaces.
-It doesn't effect the channel to be created for IBSS or hostap mode.
-.It Cm tunnel Ar src_addr Ar dest_addr
+It doesn't affect the channel to be created for IBSS or hostap mode.
+.It Bk -words
+.Cm tunnel Ar src_addr Ns Op Ar ,src_port
+.Ar dest_addr Ns Op Ar ,dest_port
+.Ek
 .Pq IP tunnel devices only
 Configure the physical source and destination address for IP tunnel
 interfaces, including
@@ -401,6 +473,15 @@ and
 .Ar dest_addr
 are interpreted as the outer source/destination for the encapsulating
 IPv4/IPv6 header.
+.Pp
+On a
+.Xr gre 4
+interface in UDP mode, the arguments
+.Ar src_port
+and
+.Ar dest_port
+are interpreted as the outer source/destination port for the encapsulating
+UDP header.
 .It Cm deletetunnel
 Unconfigure the physical source and destination address for IP tunnel
 interfaces previously configured with
@@ -452,6 +533,12 @@ This may be used to enable an interface after an ``ifconfig down.''
 It happens automatically when setting the first address on an interface.
 If the interface was reset when previously marked down,
 the hardware will be re-initialized.
+.It Cm vhid Ar n
+If the driver is a
+.Xr carp 4
+pseudo-device, set the virtual host ID to
+.Ar n .
+Acceptable values are 1 to 255.
 .It Cm vlan Ar tag
 If the interface is a
 .Xr vlan 4
@@ -588,6 +675,12 @@ support it.
 .It Cm -tso4
 Disable hardware-assisted TCP/IPv4 segmentation on interfaces that
 support it.
+.It Cm tso6
+Enable hardware-assisted TCP/IPv6 segmentation on interfaces that
+support it.
+.It Cm -tso6
+Disable hardware-assisted TCP/IPv6 segmentation on interfaces that
+support it.
 .El
 .Pp
 .Nm
@@ -689,6 +782,7 @@ tried to alter an interface's configuration.
 .Xr agr 4 ,
 .Xr ifmedia 4 ,
 .Xr netintro 4 ,
+.Xr carp 4 ,
 .Xr vlan 4 ,
 .Xr ifconfig.if 5 ,
 .\" .Xr eon 5 ,

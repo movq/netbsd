@@ -1,4 +1,4 @@
-/*	$NetBSD: dumplfs.c,v 1.29 2005/08/19 02:09:50 christos Exp $	*/
+/*	$NetBSD: dumplfs.c,v 1.34 2006/09/01 19:57:41 perseant Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -41,7 +41,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)dumplfs.c	8.5 (Berkeley) 5/24/95";
 #else
-__RCSID("$NetBSD: dumplfs.c,v 1.29 2005/08/19 02:09:50 christos Exp $");
+__RCSID("$NetBSD: dumplfs.c,v 1.34 2006/09/01 19:57:41 perseant Exp $");
 #endif
 #endif /* not lint */
 
@@ -89,26 +89,44 @@ char *special;
 #define print_suheader \
 	(void)printf("segnum\tflags\tnbytes\tninos\tnsums\tlastmod\n")
 
-#define print_suentry(i, sp, fs) 					\
-	(void)printf("%d\t%c%c%c\t%d\t%d\t%d\t%s", i, 			\
-	    (((sp)->su_flags & SEGUSE_ACTIVE) ? 'A' : ' '), 		\
-	    (((sp)->su_flags & SEGUSE_DIRTY) ? 'D' : 'C'), 		\
-	    (((sp)->su_flags & SEGUSE_SUPERBLOCK) ? 'S' : ' '), 	\
-	    (sp)->su_nbytes, (sp)->su_ninos, (sp)->su_nsums, 		\
-	    ((fs)->lfs_version == 1 ? ctime((time_t *)&(sp)->su_olastmod) : \
-	     ctime((time_t *)&(sp)->su_lastmod)))
+static inline void
+print_suentry(int i, SEGUSE *sp, struct lfs *fs)
+{
+	time_t t;
+	char flags[4] = "   ";
+
+	if (sp->su_flags & SEGUSE_ACTIVE)
+		flags[0] = 'A';
+	if (sp->su_flags & SEGUSE_DIRTY)
+		flags[1] = 'D';
+	else
+		flags[1] = 'C';
+	if (sp->su_flags & SEGUSE_SUPERBLOCK)
+		flags[2] = 'S';
+
+	t = (fs->lfs_version == 1 ? sp->su_olastmod : sp->su_lastmod);
+
+	printf("%d\t%s\t%d\t%d\t%d\t%s", i, flags,
+		sp->su_nbytes, sp->su_ninos, sp->su_nsums,
+		ctime(&t));
+}
 
 /* Ifile formats */
 #define print_iheader \
 	(void)printf("inum\tstatus\tversion\tdaddr\t\tfreeptr\n")
-#define print_ientry(i, ip) \
-	if ((ip)->if_daddr == LFS_UNUSED_DADDR) \
-		(void)printf("%d\tFREE\t%d\t \t\t%llu\n", \
-		    i, (ip)->if_version, \
-		    (unsigned long long)(ip)->if_nextfree); \
-	else \
-		(void)printf("%d\tINUSE\t%d\t%8X    \n", \
-		    i, (ip)->if_version, (ip)->if_daddr)
+
+static inline void
+print_ientry(int i, IFILE *ip)
+{
+	if (ip->if_daddr == LFS_UNUSED_DADDR)
+		printf("%d\tFREE\t%d\t \t\t%llu\n", i, ip->if_version,
+		    (unsigned long long)ip->if_nextfree);
+	else
+		printf("%d\tINUSE\t%d\t%8X\t%s\n",
+		    i, ip->if_version, ip->if_daddr,
+		    (ip->if_nextfree == LFS_ORPHAN_NEXTFREE ? "FFFFFFFF" : "-"));
+}
+
 #define fsbtobyte(fs, b)	fsbtob((fs), (off_t)((b)))
 
 int datasum_check = 0;
@@ -466,6 +484,7 @@ dump_sum(int fd, struct lfs *lfsp, SEGSUM *sp, int segnum, daddr_t addr)
 	struct ufs1_dinode *inop;
 	size_t el_size;
 	u_int32_t datasum;
+	time_t t;
 	char *buf;
 
 	if (sp->ss_magic != SS_MAGIC || 
@@ -477,28 +496,32 @@ dump_sum(int fd, struct lfs *lfsp, SEGSUM *sp, int segnum, daddr_t addr)
 			(void)printf("dumplfs: %s %d address 0x%llx\n",
 		                     "corrupt summary block; segment", segnum,
 				     (long long)addr);
-		return (0);
+		return -1;
 	}
 	if (lfsp->lfs_version > 1 && sp->ss_ident != lfsp->lfs_ident) {
 		(void)printf("dumplfs: %s %d address 0x%llx\n",
 	                     "summary from a former life; segment", segnum,
 			     (long long)addr);
-		return (0);
+		return -1;
 	}
 
 	(void)printf("Segment Summary Info at 0x%llx\n", (long long)addr);
-	(void)printf("    %s0x%x\t%s%d\t%s%d\t%s%c%c\n    %s0x%x\t%s0x%x",
+	(void)printf("    %s0x%x\t%s%d\t%s%d\t%s%c%c%c%c\n    %s0x%x\t%s0x%x",
 		"next     ", sp->ss_next,
 		"nfinfo   ", sp->ss_nfinfo,
 		"ninos    ", sp->ss_ninos,
 		"flags    ", (sp->ss_flags & SS_DIROP) ? 'D' : '-',
 			     (sp->ss_flags & SS_CONT)  ? 'C' : '-',
+			     (sp->ss_flags & SS_CLEAN)  ? 'L' : '-',
+			     (sp->ss_flags & SS_RFW)  ? 'R' : '-',
 		"sumsum   ", sp->ss_sumsum,
 		"datasum  ", sp->ss_datasum );
-	if (lfsp->lfs_version == 1)
-		(void)printf("\tcreate   %s\n", ctime((time_t *)&sp->ss_ident));
-	else {
-		(void)printf("\tcreate   %s", ctime((time_t *)&sp->ss_create));
+	if (lfsp->lfs_version == 1) {
+		t = sp->ss_ocreate;
+		(void)printf("\tcreate   %s\n", ctime(&t));
+	} else {
+		t = sp->ss_create;
+		(void)printf("\tcreate   %s", ctime(&t));
 		(void)printf("    roll_id  %-8x", sp->ss_ident);
 		(void)printf("   serial   %lld\n", (long long)sp->ss_serial);
 	}
@@ -671,7 +694,7 @@ dump_segment(int fd, int segnum, daddr_t addr, struct lfs *lfsp, int dump_sb)
 		} else {
 			nbytes = dump_sum(fd, lfsp, sump, segnum, 
 				btofsb(lfsp, sum_offset));
-			if (nbytes)
+			if (nbytes >= 0)
 				sum_offset += lfsp->lfs_sumsize + nbytes;
 			else
 				sum_offset = 0;
@@ -684,7 +707,7 @@ dump_segment(int fd, int segnum, daddr_t addr, struct lfs *lfsp, int dump_sb)
 			break;
 	} while (sum_offset);
 
-	return;
+	free(sumblock);
 }
 
 static void

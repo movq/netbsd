@@ -1,4 +1,4 @@
-/*	$NetBSD: ofdev.c,v 1.9 2005/12/11 12:19:08 christos Exp $	*/
+/*	$NetBSD: ofdev.c,v 1.12 2006/07/13 20:03:34 uwe Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -50,6 +50,8 @@
 #include <dev/sun/disklabel.h>
 #include <dev/raidframe/raidframevar.h>
 
+#include <machine/promlib.h>
+
 #include "ofdev.h"
 
 extern char bootdev[];
@@ -62,9 +64,7 @@ extern char bootdev[];
  */
 
 static char *
-filename(str, ppart)
-	char *str;
-	char *ppart;
+filename(char *str, char *ppart)
 {
 	char *cp, *lp;
 	char savec;
@@ -80,9 +80,9 @@ filename(str, ppart)
 		savec = *cp;
 		*cp = 0;
 		/* ...look whether there is a device with this name */
-		dhandle = OF_finddevice(str);
+		dhandle = prom_finddevice(str);
 #ifdef NOTDEF_DEBUG
-		printf("filename: OF_finddevice(%s) returned %x\n",
+		printf("filename: prom_finddevice(%s) returned %x\n",
 		       str, dhandle);
 #endif
 		*cp = savec;
@@ -117,7 +117,7 @@ filename(str, ppart)
 			printf("filename: found %s\n",lp);
 #endif
 			return lp;
-		} else if (OF_getprop(dhandle, "device_type", devtype, sizeof devtype) < 0)
+		} else if (_prom_getprop(dhandle, "device_type", devtype, sizeof devtype) < 0)
 			devtype[0] = 0;
 	}
 #ifdef NOTDEF_DEBUG
@@ -156,12 +156,12 @@ strategy(devdata, rw, blk, size, buf, rsize)
 #ifdef NON_DEBUG
 		printf("strategy: seeking to %lx\n", (long)pos);
 #endif
-		if (OF_seek(dev->handle, pos) < 0)
+		if (prom_seek(dev->handle, pos) < 0)
 			break;
 #ifdef NON_DEBUG
 		printf("strategy: reading %lx at %p\n", (long)size, buf);
 #endif
-		n = OF_read(dev->handle, buf, size);
+		n = prom_read(dev->handle, buf, size);
 		if (n == -2)
 			continue;
 		if (n < 0)
@@ -173,8 +173,7 @@ strategy(devdata, rw, blk, size, buf, rsize)
 }
 
 static int
-devclose(of)
-	struct open_file *of;
+devclose(struct open_file *of)
 {
 	struct of_dev *op = of->f_devdata;
 
@@ -182,18 +181,18 @@ devclose(of)
 	if (op->type == OFDEV_NET)
 		net_close(op);
 #endif
-	OF_close(op->handle);
+	prom_close(op->handle);
 	op->handle = -1;
 }
 
-static struct devsw devsw[1] = {
+static struct devsw ofdevsw[1] = {
 	"OpenFirmware",
 	strategy,
-	(int (*)__P((struct open_file *, ...)))nodev,
+	(int (*)(struct open_file *, ...))nodev,
 	devclose,
 	noioctl
 };
-int ndevs = sizeof devsw / sizeof devsw[0];
+int ndevs = sizeof ofdevsw / sizeof ofdevsw[0];
 
 #ifdef SPARC_BOOT_UFS
 static struct fs_ops file_system_ufs = FS_OPS(ufs);
@@ -216,8 +215,7 @@ char opened_name[256];
 int floppyboot;
 
 static u_long
-get_long(p)
-	const void *p;
+get_long(const void *p)
 {
 	const unsigned char *cp = p;
 
@@ -250,9 +248,7 @@ sun_fstypes[8] = {
  * The BSD label is cleared out before this is called.
  */
 static char *
-disklabel_sun_to_bsd(cp, lp)
-	char *cp;
-	struct disklabel *lp;
+disklabel_sun_to_bsd(char *cp, struct disklabel *lp)
 {
 	struct sun_disklabel *sl;
 	struct partition *npp;
@@ -331,12 +327,8 @@ disklabel_sun_to_bsd(cp, lp)
  * Find a valid disklabel.
  */
 static char *
-search_label(devp, off, buf, lp, off0)
-	struct of_dev *devp;
-	u_long off;
-	char *buf;
-	struct disklabel *lp;
-	u_long off0;
+search_label(struct of_dev *devp, u_long off, char *buf,
+	     struct disklabel *lp, u_long off0)
 {
 	size_t read;
 	struct mbr_partition *p;
@@ -382,10 +374,7 @@ search_label(devp, off, buf, lp, off0)
 }
 
 int
-devopen(of, name, file)
-	struct open_file *of;
-	const char *name;
-	char **file;
+devopen(struct open_file *of, const char *name, char **file)
 {
 	char *cp;
 	char partition;
@@ -428,18 +417,18 @@ devopen(of, name, file)
 #ifdef NOTDEF_DEBUG
 	printf("devopen: trying %s\n", fname);
 #endif
-	if ((handle = OF_finddevice(fname)) == -1)
+	if ((handle = prom_finddevice(fname)) == -1)
 		return ENOENT;
 #ifdef NOTDEF_DEBUG
 	printf("devopen: found %s\n", fname);
 #endif
-	if (OF_getprop(handle, "name", buf, sizeof buf) < 0)
+	if (_prom_getprop(handle, "name", buf, sizeof buf) < 0)
 		return ENXIO;
 #ifdef NOTDEF_DEBUG
 	printf("devopen: %s is called %s\n", fname, buf);
 #endif
 	floppyboot = !strcmp(buf, "floppy");
-	if (OF_getprop(handle, "device_type", buf, sizeof buf) < 0)
+	if (_prom_getprop(handle, "device_type", buf, sizeof buf) < 0)
 		return ENXIO;
 #ifdef NOTDEF_DEBUG
 	printf("devopen: %s is a %s device\n", fname, buf);
@@ -447,7 +436,7 @@ devopen(of, name, file)
 #ifdef NOTDEF_DEBUG
 	printf("devopen: opening %s\n", fname);
 #endif
-	if ((handle = OF_open(fname)) == -1) {
+	if ((handle = prom_open(fname)) == -1) {
 #ifdef NOTDEF_DEBUG
 		printf("devopen: open of %s failed\n", fname);
 #endif
@@ -502,7 +491,7 @@ devopen(of, name, file)
 			}
 		}
 
-		of->f_dev = devsw;
+		of->f_dev = ofdevsw;
 		of->f_devdata = &ofdev;
 #ifdef SPARC_BOOT_UFS
 		bcopy(&file_system_ufs, &file_system[nfsys++], sizeof file_system[0]);
@@ -519,7 +508,7 @@ devopen(of, name, file)
 #ifdef NETBOOT
 	if (!strcmp(buf, "network")) {
 		ofdev.type = OFDEV_NET;
-		of->f_dev = devsw;
+		of->f_dev = ofdevsw;
 		of->f_devdata = &ofdev;
 		bcopy(&file_system_nfs, file_system, sizeof file_system[0]);
 		nfsys = 1;
@@ -533,7 +522,7 @@ bad:
 #ifdef NOTDEF_DEBUG
 	printf("devopen: error %d, cannot open device\n", error);
 #endif
-	OF_close(handle);
+	prom_close(handle);
 	ofdev.handle = -1;
 	return error;
 }

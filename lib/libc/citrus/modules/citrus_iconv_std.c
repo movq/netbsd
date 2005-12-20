@@ -1,4 +1,4 @@
-/*	$NetBSD: citrus_iconv_std.c,v 1.11 2005/10/29 18:02:04 tshiozak Exp $	*/
+/*	$NetBSD: citrus_iconv_std.c,v 1.15 2006/11/13 19:08:19 tnozaki Exp $	*/
 
 /*-
  * Copyright (c)2003 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: citrus_iconv_std.c,v 1.11 2005/10/29 18:02:04 tshiozak Exp $");
+__RCSID("$NetBSD: citrus_iconv_std.c,v 1.15 2006/11/13 19:08:19 tnozaki Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -37,7 +37,7 @@ __RCSID("$NetBSD: citrus_iconv_std.c,v 1.11 2005/10/29 18:02:04 tshiozak Exp $")
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/endian.h>
+#include <machine/endian.h>
 #include <sys/queue.h>
 
 #include "citrus_namespace.h"
@@ -155,7 +155,7 @@ static int
 init_encoding(struct _citrus_iconv_std_encoding *se, struct _stdenc *cs,
 	      void *ps1, void *ps2)
 {
-	int ret;
+	int ret = -1;
 
 	se->se_handle = cs;
 	se->se_ps = ps1;
@@ -505,8 +505,12 @@ _citrus_iconv_std_iconv_convert(struct _citrus_iconv * __restrict cv,
 
 	/* normal case */
 	for (;;) {
-		if (*inbytes==0)
-			break;
+		if (*inbytes==0) {
+			ret = get_state_desc_gen(&sc->sc_src_encoding, &state);
+			if (state == _STDENC_SDGEN_INITIAL ||
+			    state == _STDENC_SDGEN_STABLE)
+				break;
+		}
 
 		/* save the encoding states for the error recovery */
 		save_encoding_state(&sc->sc_src_encoding);

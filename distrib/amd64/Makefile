@@ -1,6 +1,15 @@
-#	$NetBSD: Makefile,v 1.1 2003/04/26 18:55:39 fvdl Exp $
+#	$NetBSD: Makefile,v 1.3.4.1 2007/03/09 06:59:50 riz Exp $
 
-SUBDIR=		floppies
-TARGETS+=	release
+SUBDIR=
+SUBDIR+=	ramdisks
+SUBDIR+=	.WAIT
+SUBDIR+=	instkernel
+SUBDIR+=	.WAIT
+SUBDIR+=	cdroms
+SUBDIR+=	floppies
+TARGETS+=	release 
+
+iso_image:
+	${MAKEDIRTARGET} cdroms iso_image
 
 .include <bsd.subdir.mk>

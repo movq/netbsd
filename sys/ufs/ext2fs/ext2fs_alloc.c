@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_alloc.c,v 1.28 2005/12/11 12:25:25 christos Exp $	*/
+/*	$NetBSD: ext2fs_alloc.c,v 1.32.2.1 2007/01/12 23:24:34 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_alloc.c,v 1.28 2005/12/11 12:25:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_alloc.c,v 1.32.2.1 2007/01/12 23:24:34 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,6 +75,7 @@ __KERNEL_RCSID(0, "$NetBSD: ext2fs_alloc.c,v 1.28 2005/12/11 12:25:25 christos E
 #include <sys/mount.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
+#include <sys/kauth.h>
 
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufs_extern.h>
@@ -112,8 +113,8 @@ static daddr_t	ext2fs_mapsearch(struct m_ext2fs *, char *, daddr_t);
  *	  available block is located.
  */
 int
-ext2fs_alloc(struct inode *ip, daddr_t lbn, daddr_t bpref, struct ucred *cred,
-		daddr_t *bnp)
+ext2fs_alloc(struct inode *ip, daddr_t lbn, daddr_t bpref,
+    kauth_cred_t cred, daddr_t *bnp)
 {
 	struct m_ext2fs *fs;
 	daddr_t bno;
@@ -127,7 +128,7 @@ ext2fs_alloc(struct inode *ip, daddr_t lbn, daddr_t bpref, struct ucred *cred,
 #endif /* DIAGNOSTIC */
 	if (fs->e2fs.e2fs_fbcount == 0)
 		goto nospace;
-	if (cred->cr_uid != 0 && freespace(fs) <= 0)
+	if (kauth_cred_geteuid(cred) != 0 && freespace(fs) <= 0)
 		goto nospace;
 	if (bpref >= fs->e2fs.e2fs_bcount)
 		bpref = 0;
@@ -144,7 +145,7 @@ ext2fs_alloc(struct inode *ip, daddr_t lbn, daddr_t bpref, struct ucred *cred,
 		return (0);
 	}
 nospace:
-	ext2fs_fserr(fs, cred->cr_uid, "file system full");
+	ext2fs_fserr(fs, kauth_cred_geteuid(cred), "file system full");
 	uprintf("\n%s: write failed, file system is full\n", fs->e2fs_fsmnt);
 	return (ENOSPC);
 }
@@ -165,7 +166,7 @@ nospace:
  *	  available inode is located.
  */
 int
-ext2fs_valloc(struct vnode *pvp, int mode, struct ucred *cred,
+ext2fs_valloc(struct vnode *pvp, int mode, kauth_cred_t cred,
     struct vnode **vpp)
 {
 	struct inode *pip;
@@ -206,12 +207,12 @@ ext2fs_valloc(struct vnode *pvp, int mode, struct ucred *cred,
 	/*
 	 * Set up a new generation number for this inode.
 	 */
-	if (++ext2gennumber < (u_long)time.tv_sec)
-		ext2gennumber = time.tv_sec;
+	if (++ext2gennumber < time_second)
+		ext2gennumber = time_second;
 	ip->i_e2fs_gen = ext2gennumber;
 	return (0);
 noinodes:
-	ext2fs_fserr(fs, cred->cr_uid, "out of inodes");
+	ext2fs_fserr(fs, kauth_cred_geteuid(cred), "out of inodes");
 	uprintf("\n%s: create/symlink failed, no inodes free\n", fs->e2fs_fsmnt);
 	return (ENOSPC);
 }
@@ -440,6 +441,8 @@ ext2fs_nodealloccg(struct inode *ip, int cg, daddr_t ipref, int mode)
 	int error, start, len, loc, map, i;
 
 	ipref--; /* to avoid a lot of (ipref -1) */
+	if (ipref == -1)
+		ipref = 0;
 	fs = ip->i_e2fs;
 	if (fs->e2fs_gd[cg].ext2bgd_nifree == 0)
 		return (0);
@@ -553,7 +556,7 @@ ext2fs_vfree(struct vnode *pvp, ino_t ino, int mode)
 
 	pip = VTOI(pvp);
 	fs = pip->i_e2fs;
-	if ((u_int)ino >= fs->e2fs.e2fs_icount || (u_int)ino < EXT2_FIRSTINO)
+	if ((u_int)ino > fs->e2fs.e2fs_icount || (u_int)ino < EXT2_FIRSTINO)
 		panic("ifree: range: dev = 0x%x, ino = %llu, fs = %s",
 			pip->i_dev, (unsigned long long)ino, fs->e2fs_fsmnt);
 	cg = ino_to_cg(fs, ino);

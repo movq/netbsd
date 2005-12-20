@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_physio.c,v 1.70 2005/12/17 05:26:41 yamt Exp $	*/
+/*	$NetBSD: kern_physio.c,v 1.76 2006/11/01 10:17:58 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_physio.c,v 1.70 2005/12/17 05:26:41 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_physio.c,v 1.76 2006/11/01 10:17:58 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -117,12 +117,8 @@ static struct buf *
 getphysbuf(void)
 {
 	struct buf *bp;
-	int s;
 
-	s = splbio();
-	bp = pool_get(&bufpool, PR_WAITOK);
-	splx(s);
-	BUF_INIT(bp);
+	bp = getiobuf();
 	bp->b_error = 0;
 	bp->b_flags = B_BUSY;
 	return(bp);
@@ -134,7 +130,6 @@ getphysbuf(void)
 static void
 putphysbuf(struct buf *bp)
 {
-	int s;
 
 	if ((bp->b_flags & B_DONTFREE) != 0) {
 		return;
@@ -142,9 +137,7 @@ putphysbuf(struct buf *bp)
 
 	if (__predict_false(bp->b_flags & B_WANTED))
 		panic("putphysbuf: private buf B_WANTED");
-	s = splbio();
-	pool_put(&bufpool, bp);
-	splx(s);
+	putiobuf(bp);
 }
 
 static void
@@ -162,7 +155,7 @@ physio_done(struct work *wk, void *dummy)
 	KASSERT(dummy == NULL);
 
 	vunmapbuf(bp, todo);
-	uvm_vsunlock(bp->b_proc, bp->b_data, todo);
+	uvm_vsunlock(bp->b_proc->p_vmspace, bp->b_data, todo);
 
 	simple_lock(&mbp->b_interlock);
 	if (__predict_false(done != todo)) {
@@ -251,16 +244,17 @@ physio_wait(struct buf *bp, int n, const char *wchan)
 	return error;
 }
 
-static void
+static int
 physio_init(void)
 {
+	int error;
 
 	KASSERT(physio_workqueue == NULL);
 
-	if (workqueue_create(&physio_workqueue, "physiod",
-	    physio_done, NULL, PRIBIO, 0/* IPL_BIO notyet */, 0)) {
-		panic("physiod create");
-	}
+	error = workqueue_create(&physio_workqueue, "physiod",
+	    physio_done, NULL, PRIBIO, 0/* IPL_BIO notyet */, 0);
+
+	return error;
 }
 
 #define	PHYSIO_CONCURRENCY	16	/* XXX tune */
@@ -279,13 +273,16 @@ physio(void (*strategy)(struct buf *), struct buf *obp, dev_t dev, int flags,
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
 	int i, s;
-	int error = 0;
+	int error;
 	int error2;
 	struct buf *bp = NULL;
 	struct buf *mbp;
 	int concurrency = PHYSIO_CONCURRENCY - 1;
 
-	RUN_ONCE(&physio_initialized, physio_init);
+	error = RUN_ONCE(&physio_initialized, physio_init);
+	if (__predict_false(error != 0)) {
+		return error;
+	}
 
 	DPRINTF(("%s: called: off=%" PRIu64 ", resid=%zu\n",
 	    __func__, uio->uio_offset, uio->uio_resid));
@@ -303,7 +300,7 @@ physio(void (*strategy)(struct buf *), struct buf *obp, dev_t dev, int flags,
 			/* [mark the buffer wanted] */
 			obp->b_flags |= B_WANTED;
 			/* [wait until the buffer is available] */
-			ltsleep(obp, PRIBIO+1, "physbuf", 0, &bp->b_interlock);
+			ltsleep(obp, PRIBIO+1, "physbuf", 0, &obp->b_interlock);
 		}
 
 		/* Mark it busy, so nobody else will use it. */
@@ -404,7 +401,7 @@ physio(void (*strategy)(struct buf *), struct buf *obp, dev_t dev, int flags,
 			 * saves it in b_saveaddr.  However, vunmapbuf()
 			 * restores it.
 			 */
-			error = uvm_vslock(p, bp->b_data, todo,
+			error = uvm_vslock(p->p_vmspace, bp->b_data, todo,
 			    (flags & B_READ) ?  VM_PROT_WRITE : VM_PROT_READ);
 			if (error) {
 				goto done;

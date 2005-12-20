@@ -1,4 +1,4 @@
-/*	$NetBSD: kdump.c,v 1.83 2005/12/11 11:31:34 christos Exp $	*/
+/*	$NetBSD: kdump.c,v 1.87.2.1 2007/02/16 20:21:13 riz Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\n\
 #if 0
 static char sccsid[] = "@(#)kdump.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: kdump.c,v 1.83 2005/12/11 11:31:34 christos Exp $");
+__RCSID("$NetBSD: kdump.c,v 1.87.2.1 2007/02/16 20:21:13 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -83,7 +83,7 @@ static const char * const ptrace_ops[] = {
 	"PT_TRACE_ME",	"PT_READ_I",	"PT_READ_D",	"PT_READ_U",
 	"PT_WRITE_I",	"PT_WRITE_D",	"PT_WRITE_U",	"PT_CONTINUE",
 	"PT_KILL",	"PT_ATTACH",	"PT_DETACH",	"PT_IO",
-	"PT_DUMPCORE",	"PT_LWPINFO"
+	"PT_DUMPCORE",	"PT_LWPINFO", 	"PT_SYSCALL",
 };
 
 #ifdef PT_MACHDEP_STRINGS
@@ -117,6 +117,7 @@ static void	ktruser(struct ktr_user *, int);
 static void	ktrmmsg(struct ktr_mmsg *, int);
 static void	ktrmool(struct ktr_mool *, int);
 static void	ktrsaupcall(const struct ktr_saupcall *, int);
+static void	ktrmib(int *, int);
 static void	usage(void) __attribute__((__noreturn__));
 static void	eprint(int);
 static void	rprint(register_t);
@@ -279,6 +280,9 @@ main(int argc, char **argv)
 		case KTR_SAUPCALL:
 			ktrsaupcall(m, ktrlen);
 			break;
+		case KTR_MIB:
+			ktrmib(m, ktrlen);
+			break;
 		default:
 			putchar('\n');
 			hexdump_buf(m, ktrlen, word_size ? word_size : 1);
@@ -354,6 +358,9 @@ dumpheader(struct ktr_header *kth)
 	case KTR_SAUPCALL:
 		type = "SAU";
 		break;
+	case KTR_MIB:
+		type = "MIB";
+		break;
 	default:
 		(void)snprintf(unknown, sizeof(unknown), "UNKNOWN(%d)",
 		    kth->ktr_type);
@@ -422,7 +429,7 @@ ioctldecode(u_long cmd)
 	output_long(cmd & 0xff, decimal == 0);
 	if ((cmd & IOC_VOID) == 0) {
 		putchar(',');
-		output_long((cmd >> 16) & 0xff, decimal == 0);
+		output_long(IOCPARM_LEN(cmd), decimal == 0);
 	}
 	putchar(')');
 }
@@ -501,7 +508,7 @@ ktrsyscall(struct ktr_syscall *ktr)
 		} else if (strcmp(sys_name, "ptrace") == 0 && argcount >= 1) {
 			putchar('(');
 			if (strcmp(emul->name, "linux") == 0) {
-				if (*ap >= 0 && *ap <
+				if ((long)*ap >= 0 && *ap <
 				    sizeof(linux_ptrace_ops) /
 				    sizeof(linux_ptrace_ops[0]))
 					(void)printf("%s",
@@ -509,7 +516,7 @@ ktrsyscall(struct ktr_syscall *ktr)
 				else
 					output_long((long)*ap, 1);
 			} else {
-				if (*ap >= 0 && *ap <
+				if ((long)*ap >= 0 && *ap <
 				    sizeof(ptrace_ops) / sizeof(ptrace_ops[0]))
 					(void)printf("%s", ptrace_ops[*ap]);
 #ifdef PT_MACHDEP_STRINGS
@@ -804,7 +811,9 @@ ktrgenio(struct ktr_genio *ktr, int len)
 	int datalen = len - sizeof (struct ktr_genio);
 	char *dp = (char *)ktr + sizeof (struct ktr_genio);
 
-	printf("fd %d %s %d bytes\n", ktr->ktr_fd,
+	if (ktr->ktr_fd != -1)
+		printf("fd %d ", ktr->ktr_fd);
+	printf("%s %d bytes\n", 
 	    ktr->ktr_rw == UIO_READ ? "read" : "wrote", datalen);
 	if (maxdata == 0)
 		return;
@@ -992,12 +1001,12 @@ ktrsaupcall(const struct ktr_saupcall *sau, int len)
 	printf("%s", type);
 	if (sau->ktr_nevent) {
 		printf(", event=[");
-		ktr_saprint(sau, 0, sau->ktr_nevent);
+		ktr_saprint(sau, 1, sau->ktr_nevent);
 		printf("]");
 	}
 	if (sau->ktr_nint) {
 		printf(", intr=[");
-		ktr_saprint(sau, sau->ktr_nevent, sau->ktr_nint);
+		ktr_saprint(sau, 1 + sau->ktr_nevent, sau->ktr_nint);
 		printf("]");
 	}
 	printf("\n");
@@ -1012,6 +1021,16 @@ ktrmool(struct ktr_mool *mool, int len)
 	    (u_long)size, (u_long)size, mool->uaddr);
 	mool++;
 	hexdump_buf(mool, size, word_size ? word_size : 4);
+}
+
+static void
+ktrmib(int *namep, int len)
+{
+	int i;
+
+	for (i = 0; i < (len / sizeof(*namep)); i++)
+		printf("%s%d", (i == 0) ? "" : ".", namep[i]);
+	printf("\n");
 }
 
 static const char *

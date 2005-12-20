@@ -1,4 +1,4 @@
-/*	$NetBSD: vga_pci.c,v 1.28 2005/12/11 12:22:51 christos Exp $	*/
+/*	$NetBSD: vga_pci.c,v 1.30.2.1 2007/08/28 19:42:06 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga_pci.c,v 1.28 2005/12/11 12:22:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vga_pci.c,v 1.30.2.1 2007/08/28 19:42:06 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -120,7 +120,8 @@ vga_pci_lookup_quirks(struct pci_attach_args *pa)
 }
 
 static int
-vga_pci_match(struct device *parent, struct cfdata *match, void *aux)
+vga_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	int potential;
@@ -192,6 +193,7 @@ vga_pci_attach(struct device *parent, struct device *self, void *aux)
 			/* Don't bother fetching I/O BARs. */
 			continue;
 		}
+#ifndef __LP64__
 		if (PCI_MAPREG_MEM_TYPE(psc->sc_bars[bar].vb_type) ==
 		    PCI_MAPREG_MEM_TYPE_64BIT) {
 			/* XXX */
@@ -200,6 +202,7 @@ vga_pci_attach(struct device *parent, struct device *self, void *aux)
 			bar++;
 			continue;
 		}
+#endif
 		if (pci_mapreg_info(psc->sc_pc, psc->sc_pcitag, reg,
 		     psc->sc_bars[bar].vb_type,
 		     &psc->sc_bars[bar].vb_base,
@@ -217,7 +220,8 @@ vga_pci_attach(struct device *parent, struct device *self, void *aux)
 
 int
 vga_pci_cnattach(bus_space_tag_t iot, bus_space_tag_t memt,
-    pci_chipset_tag_t pc, int bus, int device, int function)
+    pci_chipset_tag_t pc, int bus, int device,
+    int function)
 {
 
 	return (vga_cnattach(iot, memt, WSDISPLAY_TYPE_PCIVGA, 0));

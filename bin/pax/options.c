@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.92 2005/09/16 16:48:18 christos Exp $	*/
+/*	$NetBSD: options.c,v 1.98 2006/10/16 00:11:22 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)options.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: options.c,v 1.92 2005/09/16 16:48:18 christos Exp $");
+__RCSID("$NetBSD: options.c,v 1.98 2006/10/16 00:11:22 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -199,6 +199,11 @@ int ford[] = {F_USTAR, F_TAR,
 int sep = '\n';
 
 /*
+ * Do we have -C anywhere?
+ */
+int havechd = 0;
+
+/*
  * options()
  *	figure out if we are pax, tar or cpio. Call the appropriate options
  *	parser
@@ -235,7 +240,8 @@ struct option pax_longopts[] = {
 						OPT_INSECURE },
 	{ "force-local",	no_argument,		0,
 						OPT_FORCE_LOCAL },
-	{ 0,			0,			0 },
+	{ 0,			0,			0,
+						0 },
 };
 
 /*
@@ -998,6 +1004,7 @@ tar_options(int argc, char **argv)
 			 */
 			break;
 		case 'C':
+			havechd++;
 			chdname = optarg;
 			break;
 		case 'H':
@@ -1142,7 +1149,7 @@ tar_options(int argc, char **argv)
 		{
 			int sawpat = 0;
 			int dirisnext = 0;
-			char *file, *dir;
+			char *file, *dir = NULL;
 
 			while (nincfiles || *argv != NULL) {
 				/*
@@ -1178,16 +1185,24 @@ tar_options(int argc, char **argv)
 					}
 					while ((str = getline(fp)) != NULL) {
 						if (dirisnext) {
+							if (dir)
+								free(dir);
 							dir = str;
 							dirisnext = 0;
 							continue;
 						}
 						if (strcmp(str, "-C") == 0) {
+							havechd++;
 							dirisnext = 1;
+							free(str);
 							continue;
 						}
 						if (strncmp(str, "-C ", 3) == 0) {
-							dir = str + 3;
+							havechd++;
+							if (dir)
+								free(dir);
+							dir = strdup(str + 3);
+							free(str);
 							continue;
 						}
 						if (pat_add(str, dir) < 0)
@@ -1197,6 +1212,8 @@ tar_options(int argc, char **argv)
 					/* Bomb if given -C w/out a dir. */
 					if (dirisnext)
 						tar_usage();
+					if (dir)
+						free(dir);
 					if (strcmp(file, "-") != 0)
 						fclose(fp);
 					if (getline_error) {
@@ -1207,6 +1224,7 @@ tar_options(int argc, char **argv)
 					if (*++argv == NULL)
  						break;
 					chdname = *argv++;
+					havechd++;
 				} else if (pat_add(*argv++, chdname) < 0)
 					tar_usage();
 				else
@@ -1778,7 +1796,7 @@ printflg(unsigned int flg)
 static int
 c_frmt(const void *a, const void *b)
 {
-	return(strcmp(((const FSUB *)a)->name, ((const FSUB *)b)->name));
+	return strcmp(((const FSUB *)a)->name, ((const FSUB *)b)->name);
 }
 
 /*
@@ -1796,7 +1814,7 @@ opt_next(void)
 
 	if ((opt = ophead) != NULL)
 		ophead = ophead->fow;
-	return(opt);
+	return opt;
 }
 
 /*
@@ -1811,7 +1829,7 @@ bad_opt(void)
 	OPLIST *opt;
 
 	if (ophead == NULL)
-		return(0);
+		return 0;
 	/*
 	 * print all we were given
 	 */
@@ -1827,7 +1845,7 @@ bad_opt(void)
 #endif
 	else
 		pax_usage();
-	return(0);
+	return 0;
 }
 
 /*
@@ -1850,11 +1868,11 @@ opt_add(const char *str)
 
 	if ((str == NULL) || (*str == '\0')) {
 		tty_warn(0, "Invalid option name");
-		return(-1);
+		return -1;
 	}
 	if ((dstr = strdup(str)) == NULL) {
 		tty_warn(0, "Unable to allocate space for option list");
-		return(-1);
+		return -1;
 	}
 	frpt = endpt = dstr;
 
@@ -1869,12 +1887,12 @@ opt_add(const char *str)
 		if ((pt = strchr(frpt, '=')) == NULL) {
 			tty_warn(0, "Invalid options format");
 			free(dstr);
-			return(-1);
+			return -1;
 		}
 		if ((opt = (OPLIST *)malloc(sizeof(OPLIST))) == NULL) {
 			tty_warn(0, "Unable to allocate space for option list");
 			free(dstr);
-			return(-1);
+			return -1;
 		}
 		*pt++ = '\0';
 		opt->name = frpt;
@@ -1891,7 +1909,7 @@ opt_add(const char *str)
 		optail->fow = opt;
 		optail = opt;
 	}
-	return(0);
+	return 0;
 }
 
 /*
@@ -1917,35 +1935,35 @@ str_offt(char *val)
 
 	num = STRTOOFFT(val, &expr, 0);
 	if ((num == OFFT_MAX) || (num <= 0) || (expr == val))
-		return(0);
+		return 0;
 
 	switch(*expr) {
 	case 'b':
 		t = num;
 		num *= 512;
 		if (t > num)
-			return(0);
+			return 0;
 		++expr;
 		break;
 	case 'k':
 		t = num;
 		num *= 1024;
 		if (t > num)
-			return(0);
+			return 0;
 		++expr;
 		break;
 	case 'm':
 		t = num;
 		num *= 1048576;
 		if (t > num)
-			return(0);
+			return 0;
 		++expr;
 		break;
 	case 'w':
 		t = num;
 		num *= sizeof(int);
 		if (t > num)
-			return(0);
+			return 0;
 		++expr;
 		break;
 	}
@@ -1958,12 +1976,12 @@ str_offt(char *val)
 			t = num;
 			num *= str_offt(expr + 1);
 			if (t > num)
-				return(0);
+				return 0;
 			break;
 		default:
-			return(0);
+			return 0;
 	}
-	return(num);
+	return num;
 }
 
 char *
@@ -1975,18 +1993,18 @@ getline(FILE *f)
 	name = fgetln(f, &len);
 	if (!name) {
 		getline_error = ferror(f) ? GETLINE_FILE_CORRUPT : 0;
-		return(0);
+		return 0;
 	}
 	if (name[len-1] != '\n')
 		len++;
 	temp = malloc(len);
 	if (!temp) {
 		getline_error = GETLINE_OUT_OF_MEM;
-		return(0);
+		return 0;
 	}
 	memcpy(temp, name, len-1);
 	temp[len-1] = 0;
-	return(temp);
+	return temp;
 }
 
 /*
@@ -1999,7 +2017,7 @@ getline(FILE *f)
 static int
 no_op(void)
 {
-	return(0);
+	return 0;
 }
 
 /*

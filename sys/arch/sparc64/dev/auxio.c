@@ -1,4 +1,4 @@
-/*	$NetBSD: auxio.c,v 1.14 2005/12/11 12:19:09 christos Exp $	*/
+/*	$NetBSD: auxio.c,v 1.16 2006/10/06 08:44:59 jnemeth Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001 Matthew R. Green
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auxio.c,v 1.14 2005/12/11 12:19:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auxio.c,v 1.16 2006/10/06 08:44:59 jnemeth Exp $");
 
 #include "opt_auxio.h"
 
@@ -53,6 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: auxio.c,v 1.14 2005/12/11 12:19:09 christos Exp $");
 #include <dev/ebus/ebusvar.h>
 #include <sparc64/dev/sbusvar.h>
 #include <sparc64/dev/auxioreg.h>
+#include <sparc64/dev/auxiovar.h>
 
 /*
  * on sun4u, auxio exists with one register (LED) on the sbus, and 5
@@ -93,6 +94,8 @@ CFATTACH_DECL(auxio_ebus, sizeof(struct auxio_softc),
 CFATTACH_DECL(auxio_sbus, sizeof(struct auxio_softc),
     auxio_sbus_match, auxio_sbus_attach, NULL, NULL);
 
+extern struct cfdriver auxio_cd;
+
 #ifdef BLINK
 static struct callout blink_ch = CALLOUT_INITIALIZER;
 
@@ -102,12 +105,11 @@ static void auxio_blink(void *);
 int do_blink = 1;
 
 static void
-auxio_blink(x)
-	void *x;
+auxio_blink(void *x)
 {
 	struct auxio_softc *sc = x;
 	int s;
-	u_int32_t led;
+	uint32_t led;
 
 	if (do_blink == 0)
 		return;
@@ -138,8 +140,7 @@ auxio_blink(x)
 #endif
 
 void
-auxio_attach_common(sc)
-	struct auxio_softc *sc;
+auxio_attach_common(struct auxio_softc *sc)
 {
 #ifdef BLINK
 	static int do_once = 1;
@@ -154,10 +155,7 @@ auxio_attach_common(sc)
 }
 
 int
-auxio_ebus_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+auxio_ebus_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct ebus_attach_args *ea = aux;
 
@@ -165,9 +163,7 @@ auxio_ebus_match(parent, cf, aux)
 }
 
 void
-auxio_ebus_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+auxio_ebus_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct auxio_softc *sc = (struct auxio_softc *)self;
 	struct ebus_attach_args *ea = aux;
@@ -218,10 +214,7 @@ auxio_ebus_attach(parent, self, aux)
 }
 
 int
-auxio_sbus_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+auxio_sbus_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct sbus_attach_args *sa = aux;
 
@@ -229,9 +222,7 @@ auxio_sbus_match(parent, cf, aux)
 }
 
 void
-auxio_sbus_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+auxio_sbus_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct auxio_softc *sc = (struct auxio_softc *)self;
 	struct sbus_attach_args *sa = aux;
@@ -260,4 +251,34 @@ auxio_sbus_attach(parent, self, aux)
 	}
 
 	auxio_attach_common(sc);
+}
+
+int
+auxio_fd_control(u_int32_t bits)
+{
+	struct auxio_softc *sc;
+	u_int32_t led;
+
+	if (auxio_cd.cd_ndevs == 0) {
+		return ENXIO;
+	}
+
+	/*
+	 * XXX This does not handle > 1 auxio correctly.
+	 * We'll assume the floppy drive is tied to first auxio found.
+	 */
+	sc = (struct auxio_softc *)auxio_cd.cd_devs[0];
+	if (sc->sc_flags & AUXIO_EBUS)
+		led = le32toh(bus_space_read_4(sc->sc_tag, sc->sc_led, 0));
+	else
+		led = bus_space_read_1(sc->sc_tag, sc->sc_led, 0);
+
+	led = (led & ~AUXIO_LED_FLOPPY_MASK) | bits;
+
+	if (sc->sc_flags & AUXIO_EBUS)
+		bus_space_write_4(sc->sc_tag, sc->sc_led, 0, htole32(led));
+	else
+		bus_space_write_1(sc->sc_tag, sc->sc_led, 0, led);
+
+	return 0;
 }

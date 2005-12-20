@@ -1,4 +1,4 @@
-/*	$NetBSD: dir.c,v 1.16 2005/08/19 02:07:18 christos Exp $	*/
+/*	$NetBSD: dir.c,v 1.20 2006/10/16 03:02:01 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -63,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)dir.c	8.5 (Berkeley) 12/8/94";
 #else
-__RCSID("$NetBSD: dir.c,v 1.16 2005/08/19 02:07:18 christos Exp $");
+__RCSID("$NetBSD: dir.c,v 1.20 2006/10/16 03:02:01 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -79,6 +79,7 @@ __RCSID("$NetBSD: dir.c,v 1.16 2005/08/19 02:07:18 christos Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <err.h>
 
 #include "fsck.h"
 #include "fsutil.h"
@@ -86,10 +87,21 @@ __RCSID("$NetBSD: dir.c,v 1.16 2005/08/19 02:07:18 christos Exp $");
 
 const char	*lfname = "lost+found";
 int	lfmode = 01777;
-struct	ext2fs_dirtemplate emptydir = { 0, DIRBLKSIZ }; 
+struct	ext2fs_dirtemplate emptydir = {
+	.dot_ino = 0,
+	.dot_reclen = DIRBLKSIZ,
+}; 
 struct	ext2fs_dirtemplate dirhead = {
-	0, 12, 1, EXT2_FT_DIR, ".",
-	0, DIRBLKSIZ - 12, 2, EXT2_FT_DIR, ".."
+	.dot_ino = 0,
+	.dot_reclen = 12,
+	.dot_namlen = 1,
+	.dot_type = EXT2_FT_DIR,
+	.dot_name = ".",
+	.dotdot_ino = 0,
+	.dotdot_reclen = DIRBLKSIZ - 12,
+	.dotdot_namlen = 2,
+	.dotdot_type = EXT2_FT_DIR,
+	.dotdot_name = "..",
 };
 #undef DIRBLKSIZ
 
@@ -149,10 +161,8 @@ dirscan(struct inodesc *idesc)
 	long blksiz;
 	char *dbuf = NULL;
 
-	if ((dbuf = malloc(sblock.e2fs_bsize)) == NULL) {
-		fprintf(stderr, "out of memory");
-		exit(8);
-	}
+	if ((dbuf = malloc(sblock.e2fs_bsize)) == NULL)
+		err(8, "Can't allocate directory block");
 
 	if (idesc->id_type != DATA)
 		errexit("wrong type to dirscan %d\n", idesc->id_type);
@@ -162,6 +172,7 @@ dirscan(struct inodesc *idesc)
 	blksiz = idesc->id_numfrags * sblock.e2fs_bsize;
 	if (chkrange(idesc->id_blkno, idesc->id_numfrags)) {
 		idesc->id_filesize -= blksiz;
+		free(dbuf);
 		return (SKIP);
 	}
 	idesc->id_loc = 0;
@@ -345,6 +356,7 @@ mkentry(struct inodesc *idesc)
 	struct ext2fs_direct newent;
 	int newlen, oldlen;
 
+	newent.e2d_type = 0;	/* XXX gcc */
 	newent.e2d_namlen = strlen(idesc->id_name);
 	if (sblock.e2fs.e2fs_rev > E2FS_REV0 &&
 	    (sblock.e2fs.e2fs_features_incompat & EXT2F_INCOMPAT_FTYPE))
@@ -551,17 +563,14 @@ expanddir(struct ext2fs_dinode *dp, char *name)
 	struct bufarea *bp;
 	char *firstblk;
 
-	if ((firstblk = malloc(sblock.e2fs_bsize)) == NULL) {
-		fprintf(stderr, "out of memory");
-		exit(8);
-	}
-
 	lastbn = lblkno(&sblock, inosize(dp));
 	if (lastbn >= NDADDR - 1 || fs2h32(dp->e2di_blocks[lastbn]) == 0 ||
-		inosize(dp) == 0)
+		inosize(dp) == 0) {
 		return (0);
-	if ((newblk = allocblk()) == 0)
+	}
+	if ((newblk = allocblk()) == 0) {
 		return (0);
+	}
 	dp->e2di_blocks[lastbn + 1] = dp->e2di_blocks[lastbn];
 	dp->e2di_blocks[lastbn] = h2fs32(newblk);
 	inossize(dp, inosize(dp) + sblock.e2fs_bsize);
@@ -570,11 +579,16 @@ expanddir(struct ext2fs_dinode *dp, char *name)
 		sblock.e2fs_bsize);
 	if (bp->b_errs)
 		goto bad;
+	if ((firstblk = malloc(sblock.e2fs_bsize)) == NULL)
+		err(8, "cannot allocate first block");
 	memcpy(firstblk, bp->b_un.b_buf, sblock.e2fs_bsize);
 	bp = getdirblk(newblk, sblock.e2fs_bsize);
-	if (bp->b_errs)
+	if (bp->b_errs) {
+		free(firstblk);
 		goto bad;
+	}
 	memcpy(bp->b_un.b_buf, firstblk, sblock.e2fs_bsize);
+	free(firstblk);
 	dirty(bp);
 	bp = getdirblk(fs2h32(dp->e2di_blocks[lastbn + 1]),
 		sblock.e2fs_bsize);

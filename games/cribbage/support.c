@@ -1,4 +1,4 @@
-/*	$NetBSD: support.c,v 1.8 2005/07/02 08:32:32 jmc Exp $	*/
+/*	$NetBSD: support.c,v 1.12 2006/03/20 12:32:21 rtr Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -34,11 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)support.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: support.c,v 1.8 2005/07/02 08:32:32 jmc Exp $");
+__RCSID("$NetBSD: support.c,v 1.12 2006/03/20 12:32:21 rtr Exp $");
 #endif
 #endif /* not lint */
 
 #include <curses.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "deck.h"
@@ -113,6 +114,10 @@ cchose(const CARD h[], int n, int s)
 			j = i;
 			break;
 		}
+	}
+	if (j < 0) {
+		printf("\ncchose: internal error %d %d\n", j, n);
+		exit(93);
 	}
 	return (j);
 }

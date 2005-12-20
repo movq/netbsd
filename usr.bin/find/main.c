@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.24 2005/10/19 12:25:51 elad Exp $	*/
+/*	$NetBSD: main.c,v 1.26 2006/11/09 20:50:53 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -39,7 +39,7 @@ static char sccsid[] = "@(#)main.c	8.4 (Berkeley) 5/4/95";
 #else
 __COPYRIGHT("@(#) Copyright (c) 1990, 1993, 1994\n\
 	The Regents of the University of California.  All rights reserved.\n");
-__RCSID("$NetBSD: main.c,v 1.24 2005/10/19 12:25:51 elad Exp $");
+__RCSID("$NetBSD: main.c,v 1.26 2006/11/09 20:50:53 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -69,13 +69,11 @@ int isoutput;			/* user specified output operator */
 int issort;			/* sort directory entries */
 int isxargs;			/* don't permit xargs delimiting chars */
 
-int main __P((int, char **));
-static void usage __P((void));
+int main(int, char **);
+static void usage(void);
 
 int
-main(argc, argv)
-	int argc;
-	char *argv[];
+main(int argc, char *argv[])
 {
 	struct sigaction sa;
 	char **p, **start;
@@ -90,7 +88,9 @@ main(argc, argv)
 	sigaction(SIGINFO, &sa, NULL);
 
 	/* array to hold dir list.  at most (argc - 1) elements. */
-	p = start = alloca(argc * sizeof (char *));
+	p = start = malloc(argc * sizeof (char *));
+	if (p == NULL)
+		err(1, NULL);
 
 	ftsoptions = FTS_NOSTAT | FTS_PHYSICAL;
 	while ((ch = getopt(argc, argv, "HLPXdf:hsx")) != -1)
@@ -160,7 +160,7 @@ main(argc, argv)
 }
 
 static void
-usage()
+usage(void)
 {
 
 	(void)fprintf(stderr,

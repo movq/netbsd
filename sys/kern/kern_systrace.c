@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_systrace.c,v 1.48 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: kern_systrace.c,v 1.63 2006/11/28 17:58:10 elad Exp $	*/
 
 /*
  * Copyright 2002, 2003 Niels Provos <provos@citi.umich.edu>
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_systrace.c,v 1.48 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_systrace.c,v 1.63 2006/11/28 17:58:10 elad Exp $");
 
 #include "opt_systrace.h"
 
@@ -58,6 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_systrace.c,v 1.48 2005/12/11 12:24:29 christos 
 #include <sys/systrace.h>
 #include <sys/sa.h>
 #include <sys/savar.h>
+#include <sys/kauth.h>
 
 #include <compat/common/compat_util.h>
 
@@ -80,16 +81,16 @@ cdev_decl(systrace);
 #endif
 
 #ifdef __NetBSD__
-int	systracef_read(struct file *, off_t *, struct uio *, struct ucred *,
+int	systracef_read(struct file *, off_t *, struct uio *, kauth_cred_t,
 		int);
-int	systracef_write(struct file *, off_t *, struct uio *, struct ucred *,
+int	systracef_write(struct file *, off_t *, struct uio *, kauth_cred_t,
 		int);
 int	systracef_poll(struct file *, int, struct lwp *);
 int	systracef_ioctl(struct file *, u_long, void *, struct lwp *);
 int	systracef_close(struct file *, struct lwp *);
 #else
-int	systracef_read(struct file *, off_t *, struct uio *, struct ucred *);
-int	systracef_write(struct file *, off_t *, struct uio *, struct ucred *);
+int	systracef_read(struct file *, off_t *, struct uio *, kauth_cred_t);
+int	systracef_write(struct file *, off_t *, struct uio *, kauth_cred_t);
 int	systracef_select(struct file *, int, struct proc *);
 int	systracef_ioctl(struct file *, u_long, caddr_t, struct proc *);
 int	systracef_stat(struct file *, struct stat *, struct proc *);
@@ -138,7 +139,7 @@ struct str_process {
 	int flags;
 	short answer;
 	short error;
-	u_int16_t seqnr;	/* expected reply sequence number */
+	uint16_t seqnr;		/* expected reply sequence number */
 
 	uid_t seteuid;
 	uid_t saveuid;
@@ -149,8 +150,8 @@ struct str_process {
 	char scriptname[MAXPATHLEN];
 };
 
-uid_t	systrace_seteuid(struct proc *,  uid_t);
-gid_t	systrace_setegid(struct proc *,  gid_t);
+uid_t	systrace_seteuid(struct lwp *, uid_t);
+gid_t	systrace_setegid(struct lwp *, gid_t);
 void systrace_lock(void);
 void systrace_unlock(void);
 
@@ -220,7 +221,7 @@ int systrace_debug = 0;
 #ifdef __NetBSD__
 const struct cdevsw systrace_cdevsw = {
 	systraceopen, noclose, noread, nowrite, noioctl,
-	nostop, notty, nopoll, nommap, nokqfilter,
+	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER,
 };
 #endif
 
@@ -228,12 +229,8 @@ const struct cdevsw systrace_cdevsw = {
 
 /* ARGSUSED */
 int
-systracef_read(struct file *fp, off_t *poff, struct uio *uio,
-    struct ucred *cred
-#ifdef __NetBSD__
-    , int flags
-#endif
-)
+systracef_read(struct file *fp, off_t *poff, struct uio *uio, kauth_cred_t cred,
+    int flags)
 {
 	struct fsystrace *fst = (struct fsystrace *)fp->f_data;
 	struct str_msgcontainer *cont;
@@ -280,12 +277,9 @@ systracef_read(struct file *fp, off_t *poff, struct uio *uio,
 /* ARGSUSED */
 int
 systracef_write(struct file *fp, off_t *poff, struct uio *uio,
-    struct ucred *cred
-#ifdef __NetBSD__
-    , int flags
-#endif
-)
+    kauth_cred_t cred, int flags)
 {
+
 	return (EIO);
 }
 
@@ -572,13 +566,12 @@ systrace_init(void)
 int
 systraceopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct proc *p = l->l_proc;
 	struct fsystrace *fst;
 	struct file *fp;
 	int error, fd;
 
 	/* falloc() will use the descriptor for us. */
-	if ((error = falloc(l->l_proc, &fp, &fd)) != 0)
+	if ((error = falloc(l, &fp, &fd)) != 0)
 		return (error);
 
 	MALLOC(fst, struct fsystrace *, sizeof(*fst), M_XDATA, M_WAITOK);
@@ -590,10 +583,11 @@ systraceopen(dev_t dev, int flag, int mode, struct lwp *l)
 	TAILQ_INIT(&fst->messages);
 	TAILQ_INIT(&fst->policies);
 
-	if (suser(p->p_ucred, &p->p_acflag) == 0)
+	if (kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    &l->l_acflag) == 0)
 		fst->issuser = 1;
-	fst->p_ruid = p->p_cred->p_ruid;
-	fst->p_rgid = p->p_cred->p_rgid;
+	fst->p_ruid = kauth_cred_getuid(l->l_cred);
+	fst->p_rgid = kauth_cred_getgid(l->l_cred);
 
 	return fdclone(l, fp, fd, flag, &systracefops, fst);
 }
@@ -679,13 +673,14 @@ systrace_sys_fork(struct proc *oldproc, struct proc *p)
 }
 
 int
-systrace_enter(struct proc *p, register_t code, void *v)
+systrace_enter(struct lwp *l, register_t code, void *v)
 {
 	const struct sysent *callp;
 	struct str_process *strp;
 	struct str_policy *strpolicy;
 	struct fsystrace *fst;
-	struct pcred *pc;
+	struct proc *p = l->l_proc;
+	kauth_cred_t pc;
 	int policy, error = 0, maycontrol = 0, issuser = 0;
 	size_t argsize;
 
@@ -714,8 +709,8 @@ systrace_enter(struct proc *p, register_t code, void *v)
 		maycontrol = 1;
 		issuser = 1;
 	} else if (!(p->p_flag & P_SUGID)) {
-		maycontrol = fst->p_ruid == p->p_cred->p_ruid &&
-		    fst->p_rgid == p->p_cred->p_rgid;
+		maycontrol = fst->p_ruid == kauth_cred_getuid(p->p_cred) &&
+		    fst->p_rgid == kauth_cred_getgid(p->p_cred);
 	}
 
 	if (!maycontrol) {
@@ -790,17 +785,17 @@ systrace_enter(struct proc *p, register_t code, void *v)
 
 	pc = p->p_cred;
 	strp->oldemul = p->p_emul;
-	strp->olduid = pc->p_ruid;
-	strp->oldgid = pc->p_rgid;
+	strp->olduid = kauth_cred_getuid(pc);
+	strp->oldgid = kauth_cred_getgid(pc);
 
 	/* Elevate privileges as desired */
 	if (issuser) {
 		if (ISSET(strp->flags, STR_PROC_SETEUID)) {
-			strp->saveuid = systrace_seteuid(p, strp->seteuid);
+			strp->saveuid = systrace_seteuid(l, strp->seteuid);
 			SET(strp->flags, STR_PROC_DIDSETUGID);
 		}
 		if (ISSET(strp->flags, STR_PROC_SETEGID)) {
-			strp->savegid = systrace_setegid(p, strp->setegid);
+			strp->savegid = systrace_setegid(l, strp->setegid);
 			SET(strp->flags, STR_PROC_DIDSETUGID);
 		}
 	} else
@@ -813,13 +808,14 @@ systrace_enter(struct proc *p, register_t code, void *v)
 }
 
 void
-systrace_exit(struct proc *p, register_t code, void *v, register_t retval[],
+systrace_exit(struct lwp *l, register_t code, void *v, register_t retval[],
     int error)
 {
 	const struct sysent *callp;
 	struct str_process *strp;
 	struct fsystrace *fst;
-	struct pcred *pc;
+	struct proc *p = l->l_proc;
+	kauth_cred_t pc;
 
 	/* Report change in emulation */
 	systrace_lock();
@@ -834,12 +830,12 @@ systrace_exit(struct proc *p, register_t code, void *v, register_t retval[],
 	pc = p->p_cred;
 	if (ISSET(strp->flags, STR_PROC_DIDSETUGID)) {
 		if (ISSET(strp->flags, STR_PROC_SETEUID)) {
-			if (pc->pc_ucred->cr_uid == strp->seteuid)
-				systrace_seteuid(p, strp->saveuid);
+			if (kauth_cred_geteuid(pc) == strp->seteuid)
+				systrace_seteuid(l, strp->saveuid);
 		}
 		if (ISSET(strp->flags, STR_PROC_SETEGID)) {
-			if (pc->pc_ucred->cr_gid == strp->setegid)
-				systrace_setegid(p, strp->savegid);
+			if (kauth_cred_getegid(pc) == strp->setegid)
+				systrace_setegid(l, strp->savegid);
 		}
 	}
 	CLR(strp->flags,
@@ -877,8 +873,8 @@ systrace_exit(struct proc *p, register_t code, void *v, register_t retval[],
 	/* Report if effective uid or gid changed */
 	systrace_lock();
 	strp = p->p_systrace;
-	if (strp != NULL && (strp->olduid != p->p_cred->p_ruid ||
-	    strp->oldgid != p->p_cred->p_rgid)) {
+	if (strp != NULL && (strp->olduid != kauth_cred_getuid(p->p_cred) ||
+	    strp->oldgid != kauth_cred_getgid(p->p_cred))) {
 
 		fst = strp->parent;
 		SYSTRACE_LOCK(fst, p);
@@ -916,39 +912,65 @@ systrace_exit(struct proc *p, register_t code, void *v, register_t retval[],
 }
 
 uid_t
-systrace_seteuid(struct proc *p,  uid_t euid)
+systrace_seteuid(struct lwp *l, uid_t euid)
 {
-	struct pcred *pc = p->p_cred;
-	uid_t oeuid = pc->pc_ucred->cr_uid;
+	struct proc *p = l->l_proc;
+	kauth_cred_t cred;
+	uid_t oeuid;
 
-	if (pc->pc_ucred->cr_uid == euid)
+	proc_crmod_enter(p);
+	cred = p->p_cred;
+
+	oeuid = kauth_cred_geteuid(cred);
+	if (oeuid == euid) {
+		proc_crmod_leave(p, cred, NULL);
 		return (oeuid);
+	}
 
-	/*
-	 * Copy credentials so other references do not see our changes.
-	 */
-	pc->pc_ucred = crcopy(pc->pc_ucred);
-	pc->pc_ucred->cr_uid = euid;
+	/* Copy credentials so other references do not see our changes. */
+	cred = kauth_cred_dup(cred);
+	kauth_cred_seteuid(cred, euid);
+
+	/* Mark process as having changed credentials, stops tracing etc */
 	p_sugid(p);
+
+	/* Broadcast our credentials to the process and other LWPs. */
+	proc_crmod_leave(p, cred, p->p_cred);
+
+	/* Update our copy of the credentials. */
+ 	lwp_update_creds(l);
 
 	return (oeuid);
 }
 
 gid_t
-systrace_setegid(struct proc *p,  gid_t egid)
+systrace_setegid(struct lwp *l, gid_t egid)
 {
-	struct pcred *pc = p->p_cred;
-	gid_t oegid = pc->pc_ucred->cr_gid;
+	struct proc *p = l->l_proc;
+	kauth_cred_t cred;
+	gid_t oegid;
 
-	if (pc->pc_ucred->cr_gid == egid)
+	proc_crmod_enter(p);
+	cred = p->p_cred;
+
+	oegid = kauth_cred_getegid(cred);
+	if (oegid == egid) {
+		proc_crmod_leave(p, cred, NULL);
 		return (oegid);
+	}
 
-	/*
-	 * Copy credentials so other references do not see our changes.
-	 */
-	pc->pc_ucred = crcopy(pc->pc_ucred);
-	pc->pc_ucred->cr_gid = egid;
+	/* Copy credentials so other references do not see our changes. */
+	cred = kauth_cred_dup(cred);
+	kauth_cred_setegid(cred, egid);
+
+	/* Mark process as having changed credentials, stops tracing etc */
 	p_sugid(p);
+
+	/* Broadcast our credentials to the process and other LWPs. */
+	proc_crmod_leave(p, cred, p->p_cred);
+
+	/* Update our copy of the credentials. */
+ 	lwp_update_creds(l);
 
 	return (oegid);
 }
@@ -1005,7 +1027,7 @@ systrace_answer(struct str_process *strp, struct systrace_answer *ans)
 
 int
 systrace_setscriptname(struct str_process *strp,
-		       struct systrace_scriptname *ans)
+    struct systrace_scriptname *ans)
 {
 	strlcpy(strp->scriptname, ans->sn_scriptname,
 		sizeof(strp->scriptname));
@@ -1180,8 +1202,12 @@ systrace_io(struct str_process *strp, struct systrace_io *io)
 	uio.uio_iovcnt = 1;
 	uio.uio_offset = (off_t)(unsigned long)io->strio_offs;
 	uio.uio_resid = io->strio_len;
-	uio.uio_segflg = UIO_USERSPACE;
-	uio.uio_lwp = l;
+	uio.uio_vmspace = l->l_proc->p_vmspace;
+
+	error = kauth_authorize_process(l->l_cred, KAUTH_PROCESS_CANSYSTRACE,
+	    t, NULL, NULL, NULL);
+	if (error)
+		return (error);
 
 #ifdef __NetBSD__
 	error = process_domem(l, proc_representative_lwp(t), &uio);
@@ -1236,31 +1262,12 @@ systrace_attach(struct fsystrace *fst, pid_t pid)
 	}
 
 	/*
-	 *	(4) it's not owned by you, or the last exec
-	 *	    gave us setuid/setgid privs (unless
-	 *	    you're root), or...
-	 *
-	 *      [Note: once P_SUGID gets set in execve(), it stays
-	 *	set until the process does another execve(). Hence
-	 *	this prevents a setuid process which revokes its
-	 *	special privileges using setuid() from being
-	 *	traced. This is good security.]
+	 *	(4) the security model prevents it it.
 	 */
-	if ((proc->p_cred->p_ruid != p->p_cred->p_ruid ||
-		ISSET(proc->p_flag, P_SUGID)) &&
-	    (error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	error = kauth_authorize_process(kauth_cred_get(),
+	    KAUTH_PROCESS_CANSYSTRACE, proc, NULL, NULL, NULL);
+	if (error)
 		goto out;
-
-	/*
-	 *	(5) ...it's init, which controls the security level
-	 *	    of the entire system, and the system was not
-	 *          compiled with permanently insecure mode turned
-	 *	    on.
-	 */
-	if ((proc->p_pid == 1) && (securelevel > -1)) {
-		error = EPERM;
-		goto out;
-	}
 
 	error = systrace_insert_process(fst, proc, NULL);
 
@@ -1313,8 +1320,8 @@ systrace_execve1(char *path, struct proc *p)
 		 * we're not allowed to control the process, escape.
 		 */
 		if (fst->issuser ||
-		    fst->p_ruid != p->p_cred->p_ruid ||
-		    fst->p_rgid != p->p_cred->p_rgid) {
+		    fst->p_ruid != kauth_cred_getuid(p->p_cred) ||
+		    fst->p_rgid != kauth_cred_getgid(p->p_cred)) {
 			SYSTRACE_UNLOCK(fst, curlwp);
 			return;
 		}
@@ -1341,9 +1348,16 @@ systrace_preprepl(struct str_process *strp, struct systrace_replace *repl)
 		return (EINVAL);
 
 	for (i = 0, len = 0; i < repl->strr_nrepl; i++) {
-		len += repl->strr_offlen[i];
+		if (repl->strr_argind[i] < 0 ||
+		    repl->strr_argind[i] >= SYSTR_MAXARGS)
+			return (EINVAL);
 		if (repl->strr_offlen[i] == 0)
 			continue;
+		len += repl->strr_offlen[i];
+		if (repl->strr_offlen[i] > SYSTR_MAXREPLEN ||
+		    repl->strr_off[i] > SYSTR_MAXREPLEN ||
+		    len > SYSTR_MAXREPLEN)
+			return (EINVAL);
 		if (repl->strr_offlen[i] + repl->strr_off[i] > len)
 			return (EINVAL);
 	}
@@ -1353,7 +1367,7 @@ systrace_preprepl(struct str_process *strp, struct systrace_replace *repl)
 		return (EINVAL);
 
 	/* Check against a maximum length */
-	if (repl->strr_len > 2048)
+	if (repl->strr_len > SYSTR_MAXREPLEN)
 		return (EINVAL);
 
 	strp->replace = (struct systrace_replace *)
@@ -1394,6 +1408,10 @@ systrace_replace(struct str_process *strp, size_t argsize, register_t args[])
 	sg = stackgap_init(p->p_emul);
 	ubase = stackgap_alloc(&sg, repl->strr_len);
 #endif
+	if (ubase == NULL) {
+		ret = EINVAL;
+		goto out;
+	}
 
 	kbase = repl->strr_base;
 	for (i = 0; i < maxarg && i < repl->strr_nrepl; i++) {
@@ -1462,27 +1480,30 @@ systrace_scriptname(struct proc *p, char *dst)
 
 	systrace_lock();
 	strp = p->p_systrace;
+	if (strp == NULL) {
+		systrace_unlock();
+		return (EINVAL);
+	}
+
 	fst = strp->parent;
 
 	SYSTRACE_LOCK(fst, curlwp);
 	systrace_unlock();
 
 	if (!fst->issuser && (ISSET(p->p_flag, P_SUGID) ||
-			      fst->p_ruid != p->p_cred->p_ruid ||
-			      fst->p_rgid != p->p_cred->p_rgid)) {
+			      fst->p_ruid != kauth_cred_getuid(p->p_cred) ||
+			      fst->p_rgid != kauth_cred_getgid(p->p_cred))) {
 		error = EPERM;
 		goto out;
 	}
 
-	if (strp != NULL) {
-		if (strp->scriptname[0] == '\0') {
-			error = ENOENT;
-			goto out;
-		}
-
-		strlcpy(dst, strp->scriptname, MAXPATHLEN);
-		strp->isscript = 1;
+	if (strp->scriptname[0] == '\0') {
+		error = ENOENT;
+		goto out;
 	}
+
+	strlcpy(dst, strp->scriptname, MAXPATHLEN);
+	strp->isscript = 1;
 
  out:
 	strp->scriptname[0] = '\0';
@@ -1676,8 +1697,8 @@ systrace_newpolicy(struct fsystrace *fst, int maxents)
 }
 
 int
-systrace_msg_ask(struct fsystrace *fst, struct str_process *strp,
-    int code, size_t argsize, register_t args[])
+systrace_msg_ask(struct fsystrace *fst, struct str_process *strp, int code,
+    size_t argsize, register_t args[])
 {
 	struct str_message msg;
 	struct str_msg_ask *msg_ask = &msg.msg_data.msg_ask;
@@ -1692,8 +1713,8 @@ systrace_msg_ask(struct fsystrace *fst, struct str_process *strp,
 }
 
 int
-systrace_msg_result(struct fsystrace *fst, struct str_process *strp,
-    int error, int code, size_t argsize, register_t args[], register_t rval[])
+systrace_msg_result(struct fsystrace *fst, struct str_process *strp, int error,
+    int code, size_t argsize, register_t args[], register_t rval[])
 {
 	struct str_message msg;
 	struct str_msg_ask *msg_ask = &msg.msg_data.msg_ask;
@@ -1730,8 +1751,8 @@ systrace_msg_ugid(struct fsystrace *fst, struct str_process *strp)
 	struct str_msg_ugid *msg_ugid = &msg.msg_data.msg_ugid;
 	struct proc *p = strp->proc;
 
-	msg_ugid->uid = p->p_cred->p_ruid;
-	msg_ugid->gid = p->p_cred->p_rgid;
+	msg_ugid->uid = kauth_cred_getuid(p->p_cred);
+	msg_ugid->gid = kauth_cred_getgid(p->p_cred);
 
 	return (systrace_make_msg(strp, SYSTR_MSG_UGID, &msg));
 }
@@ -1742,11 +1763,7 @@ systrace_make_msg(struct str_process *strp, int type, struct str_message *tmsg)
 	struct str_msgcontainer *cont;
 	struct str_message *msg;
 	struct fsystrace *fst = strp->parent;
-	int st, pri;
-
-	pri = PWAIT|PCATCH;
-	if (type == SYSTR_MSG_EXECVE)
-		pri &= ~PCATCH;
+	int st;
 
 	cont = pool_get(&systr_msgcontainer_pl, PR_WAITOK);
 	memset(cont, 0, sizeof(struct str_msgcontainer));
@@ -1783,7 +1800,7 @@ systrace_make_msg(struct str_process *strp, int type, struct str_message *tmsg)
 		int f;
 		f = curlwp->l_flag & L_SA;
 		curlwp->l_flag &= ~L_SA;
-		st = tsleep(strp, pri, "systrmsg", 0);
+		st = tsleep(strp, PWAIT, "systrmsg", 0);
 		curlwp->l_flag |= f;
 		if (st != 0)
 			return (ERESTART);

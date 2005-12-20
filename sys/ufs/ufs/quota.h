@@ -1,4 +1,4 @@
-/*	$NetBSD: quota.h,v 1.20 2005/12/11 12:25:28 christos Exp $	*/
+/*	$NetBSD: quota.h,v 1.22.12.1 2007/06/28 12:36:01 ghen Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -118,9 +118,8 @@ struct dquot {
 	LIST_ENTRY(dquot) dq_hash;	/* hash list */
 	TAILQ_ENTRY(dquot) dq_freelist;	/* free list */
 	u_int16_t dq_flags;		/* flags, see below */
-	u_int16_t dq_cnt;		/* count of active references */
-	u_int16_t dq_spare;		/* unused spare padding */
 	u_int16_t dq_type;		/* quota type of this dquot */
+	u_int32_t dq_cnt;		/* count of active references */
 	u_int32_t dq_id;		/* identifier this applies to */
 	struct	ufsmount *dq_ump;	/* filesystem that this is taken from */
 	struct	dqblk dq_dqb;		/* actual usage & quotas */
@@ -159,29 +158,19 @@ struct dquot {
 #define	FORCE	0x01	/* force usage changes independent of limits */
 #define	CHOWN	0x02	/* (advisory) change initiated by chown */
 
-/*
- * Macros to avoid subroutine calls to trivial functions.
- */
-#ifdef DIAGNOSTIC
-#define	DQREF(dq)	dqref(dq)
-#else
-#define	DQREF(dq)	(dq)->dq_cnt++
-#endif
-
 #include <sys/cdefs.h>
 
 struct dquot;
 struct inode;
 struct mount;
 struct proc;
-struct ucred;
 struct ufsmount;
 struct vnode;
 __BEGIN_DECLS
-int	chkdq(struct inode *, int64_t, struct ucred *, int);
-int	chkdqchg(struct inode *, int64_t, struct ucred *, int);
-int	chkiq(struct inode *, int32_t, struct ucred *, int);
-int	chkiqchg(struct inode *, int32_t, struct ucred *, int);
+int	chkdq(struct inode *, int64_t, kauth_cred_t, int);
+int	chkdqchg(struct inode *, int64_t, kauth_cred_t, int);
+int	chkiq(struct inode *, int32_t, kauth_cred_t, int);
+int	chkiqchg(struct inode *, int32_t, kauth_cred_t, int);
 void	dqflush(struct vnode *);
 int	dqget(struct vnode *,
 	    u_long, struct ufsmount *, int, struct dquot **);

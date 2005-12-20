@@ -1,4 +1,4 @@
-/*	$NetBSD: getnameinfo.c,v 1.42 2005/11/29 03:11:59 christos Exp $	*/
+/*	$NetBSD: getnameinfo.c,v 1.45 2006/10/15 16:14:46 christos Exp $	*/
 /*	$KAME: getnameinfo.c,v 1.45 2000/09/25 22:43:56 itojun Exp $	*/
 
 /*
@@ -47,7 +47,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getnameinfo.c,v 1.42 2005/11/29 03:11:59 christos Exp $");
+__RCSID("$NetBSD: getnameinfo.c,v 1.45 2006/10/15 16:14:46 christos Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -67,6 +67,8 @@ __RCSID("$NetBSD: getnameinfo.c,v 1.42 2005/11/29 03:11:59 christos Exp $");
 #include <stddef.h>
 #include <string.h>
 
+#include "servent.h"
+
 #ifdef __weak_alias
 __weak_alias(getnameinfo,_getnameinfo)
 #endif
@@ -83,7 +85,7 @@ static const struct afd {
 #endif
 	{PF_INET, sizeof(struct in_addr), sizeof(struct sockaddr_in),
 		offsetof(struct sockaddr_in, sin_addr)},
-	{0, 0, 0},
+	{0, 0, 0, 0},
 };
 
 struct sockinet {
@@ -194,8 +196,13 @@ getnameinfo_inet(sa, salen, host, hostlen, serv, servlen, flags)
 		if (flags & NI_NUMERICSERV)
 			sp = NULL;
 		else {
-			sp = getservbyport(port,
-				(flags & NI_DGRAM) ? "udp" : "tcp");
+			struct servent_data svd;
+			struct servent sv;
+
+			(void)memset(&svd, 0, sizeof(svd));
+			sp = getservbyport_r(port,
+				(flags & NI_DGRAM) ? "udp" : "tcp", &sv, &svd);
+			endservent_r(&svd);
 		}
 		if (sp) {
 			if (strlen(sp->s_name) + 1 > servlen)
@@ -350,7 +357,7 @@ ip6_parsenumeric(sa, addr, host, hostlen, flags)
 
 	numaddrlen = strlen(numaddr);
 	if (numaddrlen + 1 > hostlen) /* don't forget terminator */
-		return EAI_MEMORY;
+		return EAI_OVERFLOW;
 	strlcpy(host, numaddr, hostlen);
 
 	if (((const struct sockaddr_in6 *)(const void *)sa)->sin6_scope_id) {
@@ -361,9 +368,9 @@ ip6_parsenumeric(sa, addr, host, hostlen, flags)
 		    (const struct sockaddr_in6 *)(const void *)sa,
 		    zonebuf, sizeof(zonebuf), flags);
 		if (zonelen < 0)
-			return EAI_MEMORY;
+			return EAI_OVERFLOW;
 		if ((size_t) zonelen + 1 + numaddrlen + 1 > hostlen)
-			return EAI_MEMORY;
+			return EAI_OVERFLOW;
 		/* construct <numeric-addr><delim><zoneid> */
 		memcpy(host + numaddrlen + 1, zonebuf,
 		    (size_t)zonelen);

@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_dagutils.c,v 1.47 2005/12/11 12:23:37 christos Exp $	*/
+/*	$NetBSD: rf_dagutils.c,v 1.50 2006/11/16 01:33:23 christos Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -33,7 +33,7 @@
  *****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_dagutils.c,v 1.47 2005/12/11 12:23:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_dagutils.c,v 1.50 2006/11/16 01:33:23 christos Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -346,7 +346,8 @@ rf_FreeFuncList(RF_FuncList_t *funcList)
 */
 
 void *
-rf_AllocStripeBuffer(RF_Raid_t *raidPtr, RF_DagHeader_t *dag_h, int size)
+rf_AllocStripeBuffer(RF_Raid_t *raidPtr, RF_DagHeader_t *dag_h,
+    int size)
 {
 	RF_VoidPointerListElem_t *vple;
 	void *p;
@@ -523,15 +524,6 @@ rf_PrintNodeInfoString(RF_DagNode_t *node)
 		printf("c %d offs %ld nsect %d buf 0x%lx %s\n", pda->col,
 		    (long) pda->startSector, (int) pda->numSector, (long) bufPtr,
 		    (lk) ? "LOCK" : ((unlk) ? "UNLK" : " "));
-		return;
-	}
-	if (df == rf_DiskUnlockFunc) {
-		pda = (RF_PhysDiskAddr_t *) node->params[0].p;
-		lk = 0;
-		unlk = 0;
-		RF_ASSERT(!(lk && unlk));
-		printf("c %d %s\n", pda->col,
-		    (lk) ? "LOCK" : ((unlk) ? "UNLK" : "nop"));
 		return;
 	}
 	if ((df == rf_SimpleXorFunc) || (df == rf_RegularXorFunc)

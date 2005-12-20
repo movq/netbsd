@@ -1,4 +1,4 @@
-/*	$NetBSD: dump.h,v 1.40 2005/06/27 01:37:32 christos Exp $	*/
+/*	$NetBSD: dump.h,v 1.44 2006/10/26 20:02:30 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -39,6 +39,13 @@ union dinode {
 };
 #define DIP(dp, field) \
 	(is_ufs2 ? (dp)->dp2.di_##field : (dp)->dp1.di_##field)
+
+#define DIP_SET(dp, field, val) do {		\
+	if (is_ufs2)				\
+		(dp)->dp2.di_##field = (val);	\
+	else					\
+		(dp)->dp1.di_##field = (val);	\
+} while (0)
 
 /*
  * Filestore-independent UFS data, so code can be more easily shared
@@ -91,6 +98,7 @@ char	*dumpinomap;	/* map of files to be dumped */
  *	All calculations done in 0.1" units!
  */
 char	*disk;		/* name of the disk file */
+char	*disk_dev;	/* name of the raw device we are dumping */
 const char *tape;	/* name of the tape file */
 const char *dumpdates;	/* name of the file containing dump date information*/
 const char *temp;	/* name of the file for doing rewrite of dumpdates */
@@ -129,11 +137,11 @@ int needswap;	/* file system in swapped byte order */
 
 
 /* some inline functions to help the byte-swapping mess */
-static __inline u_int16_t iswap16(u_int16_t);
-static __inline u_int32_t iswap32(u_int32_t);
-static __inline u_int64_t iswap64(u_int64_t);
+static inline u_int16_t iswap16(u_int16_t);
+static inline u_int32_t iswap32(u_int32_t);
+static inline u_int64_t iswap64(u_int64_t);
 
-static __inline u_int16_t iswap16(u_int16_t x)
+static inline u_int16_t iswap16(u_int16_t x)
 {
 	if (needswap)
 		return bswap16(x);
@@ -141,7 +149,7 @@ static __inline u_int16_t iswap16(u_int16_t x)
 		return x;
 }
 
-static __inline u_int32_t iswap32(u_int32_t x)
+static inline u_int32_t iswap32(u_int32_t x)
 {
 	if (needswap)
 		return bswap32(x);
@@ -149,7 +157,7 @@ static __inline u_int32_t iswap32(u_int32_t x)
 		return x;
 }
 
-static __inline u_int64_t iswap64(u_int64_t x)
+static inline u_int64_t iswap64(u_int64_t x)
 {
 	if (needswap)
 		return bswap64(x);
@@ -213,6 +221,12 @@ union	dinode *getino(ino_t);
 void	*xcalloc(size_t, size_t);
 void	*xmalloc(size_t);
 char	*xstrdup(const char *);
+
+/* LFS snapshot hooks */
+#ifdef DUMP_LFS
+int	lfs_wrap_stop(char *);
+void	lfs_wrap_go(void);
+#endif
 
 /* rdump routines */
 #if defined(RDUMP) || defined(RRESTORE)

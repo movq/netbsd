@@ -1,4 +1,4 @@
-/*	$NetBSD: udp_usrreq.c,v 1.145 2005/12/11 12:24:58 christos Exp $	*/
+/*	$NetBSD: udp_usrreq.c,v 1.156 2006/11/14 12:05:55 rpaulo Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.145 2005/12/11 12:24:58 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.156 2006/11/14 12:05:55 rpaulo Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -95,17 +95,13 @@ __KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.145 2005/12/11 12:24:58 christos Ex
 #include <netinet/udp.h>
 #include <netinet/udp_var.h>
 
-#ifdef IPSEC_NAT_T
-#include <netinet6/ipsec.h>
-#include <netinet6/esp.h>
-#endif
-
 #ifdef INET6
 #include <netinet/ip6.h>
 #include <netinet/icmp6.h>
 #include <netinet6/ip6_var.h>
 #include <netinet6/in6_pcb.h>
 #include <netinet6/udp6_var.h>
+#include <netinet6/scope6_var.h>
 #endif
 
 #ifndef INET6
@@ -123,6 +119,7 @@ __KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.145 2005/12/11 12:24:58 christos Ex
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
 #include <netipsec/ipsec_var.h>			/* XXX ipsecstat namespace */
+#include <netipsec/esp.h>
 #ifdef INET6
 #include <netipsec/ipsec6.h>
 #endif
@@ -130,6 +127,7 @@ __KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.145 2005/12/11 12:24:58 christos Ex
 
 #ifdef IPSEC
 #include <netinet6/ipsec.h>
+#include <netinet6/esp.h>
 #include <netkey/key.h>
 #endif /*IPSEC*/
 
@@ -141,11 +139,7 @@ __KERNEL_RCSID(0, "$NetBSD: udp_usrreq.c,v 1.145 2005/12/11 12:24:58 christos Ex
  * UDP protocol implementation.
  * Per RFC 768, August, 1980.
  */
-#ifndef	COMPAT_42
 int	udpcksum = 1;
-#else
-int	udpcksum = 0;		/* XXX */
-#endif
 int	udp_do_loopback_cksum = 0;
 
 struct	inpcbtable udbtable;
@@ -179,9 +173,9 @@ static	void udp_notify (struct inpcb *, int);
 int	udbhashsize = UDBHASHSIZE;
 
 #ifdef MBUFTRACE
-struct mowner udp_mowner = { "udp" };
-struct mowner udp_rx_mowner = { "udp", "rx" };
-struct mowner udp_tx_mowner = { "udp", "tx" };
+struct mowner udp_mowner = MOWNER_INIT("udp", "");
+struct mowner udp_rx_mowner = MOWNER_INIT("udp", "rx");
+struct mowner udp_tx_mowner = MOWNER_INIT("udp", "tx");
 #endif
 
 #ifdef UDP_CSUM_COUNTERS
@@ -575,19 +569,16 @@ udp6_input(struct mbuf **mp, int *offp, int proto)
 
 	/*
 	 * Construct source and dst sockaddrs.
-	 * Note that ifindex (s6_addr16[1]) is already filled.
 	 */
 	bzero(&src, sizeof(src));
 	src.sin6_family = AF_INET6;
 	src.sin6_len = sizeof(struct sockaddr_in6);
-	/* KAME hack: recover scopeid */
-	(void)in6_recoverscope(&src, &ip6->ip6_src, m->m_pkthdr.rcvif);
+	src.sin6_addr = ip6->ip6_src;
 	src.sin6_port = uh->uh_sport;
 	bzero(&dst, sizeof(dst));
 	dst.sin6_family = AF_INET6;
 	dst.sin6_len = sizeof(struct sockaddr_in6);
-	/* KAME hack: recover scopeid */
-	(void)in6_recoverscope(&dst, &ip6->ip6_dst, m->m_pkthdr.rcvif);
+	dst.sin6_addr = ip6->ip6_dst;
 	dst.sin6_port = uh->uh_dport;
 
 	if (udp6_realinput(AF_INET6, &src, &dst, m, off) == 0) {
@@ -845,7 +836,7 @@ udp6_realinput(int af, struct sockaddr_in6 *src, struct sockaddr_in6 *dst,
 {
 	u_int16_t sport, dport;
 	int rcvcnt;
-	struct in6_addr src6, dst6;
+	struct in6_addr src6, *dst6;
 	const struct in_addr *dst4;
 	struct inpcb_hdr *inph;
 	struct in6pcb *in6p;
@@ -858,13 +849,18 @@ udp6_realinput(int af, struct sockaddr_in6 *src, struct sockaddr_in6 *dst,
 	if (src->sin6_family != AF_INET6 || dst->sin6_family != AF_INET6)
 		goto bad;
 
-	in6_embedscope(&src6, src, NULL, NULL);
+	src6 = src->sin6_addr;
+	if (sa6_recoverscope(src) != 0) {
+		/* XXX: should be impossible. */
+		goto bad;
+	}
 	sport = src->sin6_port;
-	in6_embedscope(&dst6, dst, NULL, NULL);
+
 	dport = dst->sin6_port;
 	dst4 = (struct in_addr *)&dst->sin6_addr.s6_addr[12];
+	dst6 = &dst->sin6_addr;
 
-	if (IN6_IS_ADDR_MULTICAST(&dst6) ||
+	if (IN6_IS_ADDR_MULTICAST(dst6) ||
 	    (af == AF_INET && IN_MULTICAST(dst4->s_addr))) {
 		/*
 		 * Deliver a multicast or broadcast datagram to *all* sockets
@@ -897,10 +893,11 @@ udp6_realinput(int af, struct sockaddr_in6 *src, struct sockaddr_in6 *dst,
 			if (in6p->in6p_lport != dport)
 				continue;
 			if (!IN6_IS_ADDR_UNSPECIFIED(&in6p->in6p_laddr)) {
-				if (!IN6_ARE_ADDR_EQUAL(&in6p->in6p_laddr, &dst6))
+				if (!IN6_ARE_ADDR_EQUAL(&in6p->in6p_laddr,
+				    dst6))
 					continue;
 			} else {
-				if (IN6_IS_ADDR_V4MAPPED(&dst6) &&
+				if (IN6_IS_ADDR_V4MAPPED(dst6) &&
 				    (in6p->in6p_flags & IN6P_IPV6_V6ONLY))
 					continue;
 			}
@@ -934,11 +931,11 @@ udp6_realinput(int af, struct sockaddr_in6 *src, struct sockaddr_in6 *dst,
 		/*
 		 * Locate pcb for datagram.
 		 */
-		in6p = in6_pcblookup_connect(&udbtable, &src6, sport,
-		    &dst6, dport, 0);
+		in6p = in6_pcblookup_connect(&udbtable, &src6, sport, dst6,
+		    dport, 0);
 		if (in6p == 0) {
 			++udpstat.udps_pcbhashmiss;
-			in6p = in6_pcblookup_bind(&udbtable, &dst6, dport, 0);
+			in6p = in6_pcblookup_bind(&udbtable, dst6, dport, 0);
 			if (in6p == 0)
 				return rcvcnt;
 		}
@@ -998,11 +995,8 @@ udp_ctlinput(int cmd, struct sockaddr *sa, void *v)
 }
 
 int
-udp_ctloutput(op, so, level, optname, mp)
-	int op;
-	struct socket *so;
-	int level, optname;
-	struct mbuf **mp;
+udp_ctloutput(int op, struct socket *so, int level, int optname,
+    struct mbuf **mp)
 {
 	int s;
 	int error = 0;
@@ -1033,7 +1027,6 @@ udp_ctloutput(op, so, level, optname, mp)
 	default:
 		error = EAFNOSUPPORT;
 		goto end;
-		break;
 	}
 
 
@@ -1046,7 +1039,7 @@ udp_ctloutput(op, so, level, optname, mp)
 		case UDP_ENCAP:
 			if (m == NULL || m->m_len < sizeof (int)) {
 				error = EINVAL;
-				goto end;
+				break;
 			}
 
 			switch(*mtod(m, int *)) {
@@ -1067,21 +1060,21 @@ udp_ctloutput(op, so, level, optname, mp)
 #endif
 			default:
 				error = EINVAL;
-				goto end;
 				break;
 			}
 			break;
 
 		default:
 			error = ENOPROTOOPT;
-			goto end;
 			break;
+		}
+		if (m != NULL) {
+			m_free(m);
 		}
 		break;
 
 	default:
 		error = EINVAL;
-		goto end;
 		break;
 	}
 
@@ -1178,23 +1171,23 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	struct mbuf *control, struct lwp *l)
 {
 	struct inpcb *inp;
-	struct proc *p;
 	int s;
 	int error = 0;
 
-	p = l ? l->l_proc : NULL;
 	if (req == PRU_CONTROL)
 		return (in_control(so, (long)m, (caddr_t)nam,
-		    (struct ifnet *)control, p));
+		    (struct ifnet *)control, l));
+
+	s = splsoftnet();
 
 	if (req == PRU_PURGEIF) {
 		in_pcbpurgeif0(&udbtable, (struct ifnet *)control);
 		in_purgeif((struct ifnet *)control);
 		in_pcbpurgeif(&udbtable, (struct ifnet *)control);
+		splx(s);
 		return (0);
 	}
 
-	s = splsoftnet();
 	inp = sotoinpcb(so);
 #ifdef DIAGNOSTIC
 	if (req != PRU_SEND && req != PRU_SENDOOB && control)
@@ -1238,7 +1231,7 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		break;
 
 	case PRU_BIND:
-		error = in_pcbbind(inp, nam, p);
+		error = in_pcbbind(inp, nam, l);
 		break;
 
 	case PRU_LISTEN:
@@ -1246,7 +1239,7 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		break;
 
 	case PRU_CONNECT:
-		error = in_pcbconnect(inp, nam, p);
+		error = in_pcbconnect(inp, nam, l);
 		if (error)
 			break;
 		soisconnected(so);
@@ -1288,7 +1281,7 @@ udp_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 				error = EISCONN;
 				goto die;
 			}
-			error = in_pcbconnect(inp, nam, p);
+			error = in_pcbconnect(inp, nam, l);
 			if (error)
 				goto die;
 		} else {
@@ -1420,11 +1413,8 @@ SYSCTL_SETUP(sysctl_net_inet_udp_setup, "sysctl net.inet.udp subtree setup")
  * -1 if an error occurent and m was freed
  */
 static int
-udp4_espinudp(mp, off, src, so)
-	struct mbuf **mp;
-	int off;
-	struct sockaddr *src;
-	struct socket *so;
+udp4_espinudp(struct mbuf **mp, int off, struct sockaddr *src,
+    struct socket *so)
 {
 	size_t len;
 	caddr_t data;
@@ -1545,7 +1535,11 @@ udp4_espinudp(mp, off, src, so)
 	((u_int16_t *)(tag + 1))[1] = dport;
 	m_tag_prepend(n, tag);
 
+#ifdef FAST_IPSEC
+	ipsec4_common_input(n, iphdrlen);
+#else
 	esp4_input(n, iphdrlen);
+#endif
 
 	/* We handled it, it shoudln't be handled by UDP */
 	return 1;

@@ -1,4 +1,4 @@
-/*      $NetBSD: sd.c,v 1.8 2005/12/11 12:18:29 christos Exp $        */
+/*      $NetBSD: sd.c,v 1.10 2006/08/04 02:09:19 mhitch Exp $        */
 /*
  * Copyright (c) 1994 Rolf Grossmann
  * All rights reserved.
@@ -138,7 +138,7 @@ sdgetinfo(struct sd_softc *ss)
 
     ss->sc_pinfo.offset[ss->sc_part] = 0; /* read absolute sector */
     error = sdstrategy(ss, F_READ, NEXT68K_LABEL_SECTOR,
-		       NEXT68K_LABEL_SIZE+NEXT68K_LABEL_OFFSET, io_buf, &i);
+		       NEXT68K_LABEL_SIZE+NEXT68K_LABEL_OFFSET, io_buf, (unsigned int *)&i);
     if (error != 0) {
 	DPRINTF(("sdgetinfo: sdstrategy error %d\n", error));
         return(ERDLAB);
@@ -232,7 +232,7 @@ sdclose(struct open_file *f)
 {
     register struct sd_softc *ss = f->f_devdata;
 
-    free(ss, sizeof(struct sd_softc));
+    dealloc(ss, sizeof(struct sd_softc));
     return 0;
 }
 
@@ -277,7 +277,7 @@ sdstrategy(struct sd_softc *ss, int rw, daddr_t dblk, size_t size,
 	    cdb.length[1] = nblks & 0xff;
 
 	    error = scsiicmd(ss->sc_unit, ss->sc_lun,
-			     (u_char *)&cdb, sizeof(cdb), (unsigned char *)buf + *rsize, &tsize);
+			     (u_char *)&cdb, sizeof(cdb), (char *)buf + *rsize, &tsize);
 	    if (error != 0)
 	    {
 		    DPRINTF(("sdstrategy: scsiicmd failed: %d = %s.\n", error, strerror(error)));

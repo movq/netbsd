@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_cmdargs.h,v 1.2 2003/12/04 16:23:36 drochner Exp $	*/
+/*	$NetBSD: ntp_cmdargs.h,v 1.3.4.1 2007/08/21 08:39:39 ghen Exp $	*/
 
 #include "ntp_types.h"
 

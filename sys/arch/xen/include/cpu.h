@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.10 2005/12/11 12:19:48 christos Exp $	*/
+/*	$NetBSD: cpu.h,v 1.12.18.1 2007/06/10 20:48:43 bouyer Exp $	*/
 /*	NetBSD: cpu.h,v 1.113 2004/02/20 17:35:01 yamt Exp 	*/
 
 /*-
@@ -58,7 +58,6 @@
 #include <sys/device.h>
 #include <sys/lock.h>			/* will also get LOCKDEBUG */
 #include <sys/cpu_data.h>
-#include <sys/cc_microtime.h>
 
 #include <lib/libkern/libkern.h>	/* offsetof */
 
@@ -84,7 +83,6 @@ struct cpu_info {
 	cpuid_t ci_cpuid;		/* our CPU ID */
 	u_int ci_apicid;		/* our APIC ID */
 	struct cpu_data ci_data;	/* MI per-cpu data */
-	struct cc_microtime_state ci_cc;/* cc_microtime state */
 
 	/*
 	 * Private members.
@@ -198,7 +196,7 @@ curcpu()
 {
 	struct cpu_info *ci;
 
-	__asm __volatile("movl %%fs:%1, %0" :
+	__asm volatile("movl %%fs:%1, %0" :
 	    "=r" (ci) :
 	    "m"
 	    (*(struct cpuinfo * const *)offsetof(struct cpu_info, ci_self)));
@@ -296,12 +294,9 @@ struct clockframe {
  * We need a machine-independent name for this.
  */
 extern void (*delay_func)(int);
-struct timeval;
-extern void (*microtime_func)(struct timeval *);
 
 #define	DELAY(x)		(*delay_func)(x)
 #define delay(x)		(*delay_func)(x)
-#define microtime(tv)		(*microtime_func)(tv)
 
 /*
  * pull in #defines for kinds of processors
@@ -386,7 +381,6 @@ void	i8254_initclocks(void);
 #else
 void	startrtclock(void);
 void	xen_delay(int);
-void	xen_microtime(struct timeval *);
 void	xen_initclocks(void);
 #endif
 

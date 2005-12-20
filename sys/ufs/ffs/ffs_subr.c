@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_subr.c,v 1.39 2005/12/11 12:25:25 christos Exp $	*/
+/*	$NetBSD: ffs_subr.c,v 1.43 2006/11/16 01:33:53 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -36,7 +36,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_subr.c,v 1.39 2005/12/11 12:25:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_subr.c,v 1.43 2006/11/16 01:33:53 christos Exp $");
 
 #include <sys/param.h>
 
@@ -65,37 +65,6 @@ void    panic(const char *, ...)
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
 #include <ufs/ufs/ufs_bswap.h>
-
-/*
- * Return buffer with the contents of block "offset" from the beginning of
- * directory "ip".  If "res" is non-zero, fill it in with a pointer to the
- * remaining space in the directory.
- */
-int
-ffs_blkatoff(struct vnode *vp, off_t offset, char **res, struct buf **bpp)
-{
-	struct inode *ip;
-	struct fs *fs;
-	struct buf *bp;
-	daddr_t lbn;
-	int bsize, error;
-
-	ip = VTOI(vp);
-	fs = ip->i_fs;
-	lbn = lblkno(fs, offset);
-	bsize = blksize(fs, ip, lbn);
-
-	*bpp = NULL;
-	if ((error = bread(vp, lbn, bsize, NOCRED, &bp)) != 0) {
-		brelse(bp);
-		return (error);
-	}
-	if (res)
-		*res = (char *)bp->b_data + blkoff(fs, offset);
-	*bpp = bp;
-	return (0);
-}
-
 
 /*
  * Load up the contents of an inode and copy the appropriate pieces
@@ -177,43 +146,6 @@ ffs_fragacct(struct fs *fs, int fragmap, int32_t fraglist[], int cnt,
 		}
 	}
 }
-
-#if defined(_KERNEL) && defined(DIAGNOSTIC)
-void
-ffs_checkoverlap(struct buf *bp, struct inode *ip)
-{
-#if 0
-	struct buf *ebp, *ep;
-	daddr_t start, last;
-	struct vnode *vp;
-
-	ebp = &buf[nbuf];
-	start = bp->b_blkno;
-	last = start + btodb(bp->b_bcount) - 1;
-	for (ep = buf; ep < ebp; ep++) {
-		if (ep == bp || (ep->b_flags & B_INVAL) ||
-		    ep->b_vp == NULLVP)
-			continue;
-		if (VOP_BMAP(ep->b_vp, (daddr_t)0, &vp, (daddr_t)0, NULL))
-			continue;
-		if (vp != ip->i_devvp)
-			continue;
-		/* look for overlap */
-		if (ep->b_bcount == 0 || ep->b_blkno > last ||
-		    ep->b_blkno + btodb(ep->b_bcount) <= start)
-			continue;
-		vprint("Disk overlap", vp);
-		printf("\tstart %" PRId64 ", end %" PRId64 " overlap start "
-		    "%" PRId64 ", end %" PRId64 "\n",
-		    start, last, ep->b_blkno,
-		    ep->b_blkno + btodb(ep->b_bcount) - 1);
-		panic("Disk buffer overlap");
-	}
-#else
-	printf("ffs_checkoverlap disabled due to buffer cache implementation changes\n");
-#endif
-}
-#endif /* _KERNEL && DIAGNOSTIC */
 
 /*
  * block operations

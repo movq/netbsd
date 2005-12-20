@@ -1,4 +1,4 @@
-/* $NetBSD: isp_inline.h,v 1.27 2005/12/11 12:21:27 christos Exp $ */
+/* $NetBSD: isp_inline.h,v 1.29 2006/11/16 01:32:51 christos Exp $ */
 /*
  * This driver, which is contained in NetBSD in the files:
  *
@@ -749,7 +749,8 @@ isp_get_ct_hdr(struct ispsoftc *isp, ct_hdr_t *src, ct_hdr_t *dst)
  * isn't always 16 bit words.
  */
 static INLINE void
-isp_put_sns_request(struct ispsoftc *isp, sns_screq_t *src, sns_screq_t *dst)
+isp_put_sns_request(struct ispsoftc *isp, sns_screq_t *src,
+    sns_screq_t *dst)
 {
 	int i, nw = (int) src->snscb_sblen;
 	ISP_IOXPUT_16(isp, src->snscb_rblen, &dst->snscb_rblen);

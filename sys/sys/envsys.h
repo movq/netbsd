@@ -1,4 +1,4 @@
-/* $NetBSD: envsys.h,v 1.7 2003/02/20 20:57:56 christos Exp $ */
+/* $NetBSD: envsys.h,v 1.10.14.1 2007/05/08 10:45:06 pavel Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -61,13 +61,13 @@ typedef struct envsys_range envsys_range_t;
 struct envsys_tre_data {
 	u_int sensor;
 	union {				/* all data is given */
-		u_int32_t data_us;	/* in microKelvins, */
+		uint32_t data_us;	/* in microKelvins, */
 		int32_t data_s;		/* rpms, volts, amps, */
 	} cur, min, max, avg;		/* ohms, watts, etc */
 					/* see units below */
 
-	u_int32_t	warnflags;	/* warning flags */
-	u_int32_t	validflags;	/* sensor valid flags */
+	uint32_t	warnflags;	/* warning flags */
+	uint32_t	validflags;	/* sensor valid flags */
 	u_int		units;		/* type of sensor */
 };
 typedef struct envsys_tre_data envsys_temp_data_t;
@@ -95,15 +95,33 @@ enum envsys_units {
 	ENVSYS_SAMPHOUR,
 	ENVSYS_INDICATOR,	/* boolean indicator */
 	ENVSYS_INTEGER,		/* generic integer return */
+	ENVSYS_DRIVE,		/* disk status */
 	ENVSYS_NSENSORS
 };
 
+/* drive status */
+#define ENVSYS_DRIVE_EMPTY      1
+#define ENVSYS_DRIVE_READY      2
+#define ENVSYS_DRIVE_POWERUP    3
+#define ENVSYS_DRIVE_ONLINE     4
+#define ENVSYS_DRIVE_IDLE       5
+#define ENVSYS_DRIVE_ACTIVE     6
+#define ENVSYS_DRIVE_REBUILD    7
+#define ENVSYS_DRIVE_POWERDOWN  8
+#define ENVSYS_DRIVE_FAIL       9
+#define ENVSYS_DRIVE_PFAIL      10
+
 #ifdef ENVSYSUNITNAMES
-static const char *envsysunitnames[] = {
+static const char * const envsysunitnames[] = {
     "degC", "RPM", "VAC", "V", "Ohms", "W",
-    "A", "Wh", "Ah", "bool", "integer", "Unk"
+    "A", "Wh", "Ah", "bool", "integer", "drive", "Unk"
+};
+static const char * const envsysdrivestatus[] = {
+    "unknown", "empty", "ready", "powering up", "online", "idle", "active",
+    "rebuilding", "powering down", "failed", "degraded"
 };
 #endif
+
 
 /* flags for validflags */
 #define ENVSYS_FVALID		0x00000001  /* sensor is valid */
@@ -113,7 +131,7 @@ static const char *envsysunitnames[] = {
 #define ENVSYS_FAVGVALID	0x00000010  /* avg for this sens is valid */
 #define ENVSYS_FFRACVALID	0x00000020  /* display fraction of max */
 
-#define ENVSYS_GTREDATA _IOWR('E', 2, envsys_temp_data_t)
+#define ENVSYS_GTREDATA _IOWR('E', 2, envsys_tre_data_t)
 
 /* set and check sensor info */
 
@@ -123,14 +141,14 @@ struct envsys_basic_info {
 	char	desc[33];	/* sensor description */
 	u_int	rfact;		/* for volts, (int)(factor x 10^4) */
 	u_int	rpms;		/* for fans, set nominal RPMs */
-	u_int32_t validflags;	/* sensor valid flags */
+	uint32_t validflags;	/* sensor valid flags */
 };
 typedef struct envsys_basic_info envsys_temp_info_t;
 typedef struct envsys_basic_info envsys_rpm_info_t;
 typedef struct envsys_basic_info envsys_electrical_info_t;
 typedef struct envsys_basic_info envsys_basic_info_t;
 
-#define ENVSYS_STREINFO _IOWR('E', 3, envsys_temp_info_t)
-#define ENVSYS_GTREINFO _IOWR('E', 4, envsys_temp_info_t)
+#define ENVSYS_STREINFO _IOWR('E', 3, envsys_basic_info_t)
+#define ENVSYS_GTREINFO _IOWR('E', 4, envsys_basic_info_t)
 
 #endif /* _SYS_ENVSYS_H_ */

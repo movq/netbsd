@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.75 2005/12/11 12:19:14 christos Exp $ */
+/*	$NetBSD: clock.c,v 1.84 2006/11/09 15:08:04 tsutsui Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.75 2005/12/11 12:19:14 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.84 2006/11/09 15:08:04 tsutsui Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -74,6 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.75 2005/12/11 12:19:14 christos Exp $");
 #include <sys/resourcevar.h>
 #include <sys/malloc.h>
 #include <sys/systm.h>
+#include <sys/timetc.h>
 #ifdef GPROF
 #include <sys/gmon.h>
 #endif
@@ -84,12 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.75 2005/12/11 12:19:14 christos Exp $");
 #include <machine/autoconf.h>
 #include <machine/eeprom.h>
 #include <machine/cpu.h>
-
-#include <dev/clock_subr.h>
-#include <dev/ic/mk48txxreg.h>
-#include <dev/ic/mk48txxvar.h>
-#include <dev/ic/mc146818reg.h>
-#include <dev/ic/mc146818var.h>
+#include <machine/cpu_counter.h>
 
 #include <sparc64/sparc64/intreg.h>
 #include <sparc64/sparc64/timerreg.h>
@@ -114,325 +110,50 @@ int statmin;			/* statclock interval - 1/2*variance */
 int timerok;
 
 static long tick_increment;
-int schedintr __P((void *));
+int schedintr(void *);
 
-static struct intrhand level10 = { clockintr };
-static struct intrhand level0 = { tickintr };
-static struct intrhand level14 = { statintr };
-static struct intrhand schedint = { schedintr };
+static struct intrhand level10 = { .ih_fun = clockintr };
+static struct intrhand level0 = { .ih_fun = tickintr };
+static struct intrhand level14 = { .ih_fun = statintr };
+static struct intrhand schedint = { .ih_fun = schedintr };
 
-/*
- * clock (eeprom) attaches at the sbus or the ebus (PCI)
- */
-static int	clockmatch_sbus __P((struct device *, struct cfdata *, void *));
-static void	clockattach_sbus __P((struct device *, struct device *, void *));
-static int	clockmatch_ebus __P((struct device *, struct cfdata *, void *));
-static void	clockattach_ebus __P((struct device *, struct device *, void *));
-static int	clockmatch_rtc __P((struct device *, struct cfdata *, void *));
-static void	clockattach_rtc __P((struct device *, struct device *, void *));
-static void	clockattach __P((struct mk48txx_softc *, int));
-
-
-CFATTACH_DECL(clock_sbus, sizeof(struct mk48txx_softc),
-    clockmatch_sbus, clockattach_sbus, NULL, NULL);
-
-CFATTACH_DECL(clock_ebus, sizeof(struct mk48txx_softc),
-    clockmatch_ebus, clockattach_ebus, NULL, NULL);
-
-CFATTACH_DECL(rtc_ebus, sizeof(struct mc146818_softc),
-    clockmatch_rtc, clockattach_rtc, NULL, NULL);
-
-extern struct cfdriver clock_cd;
-
-/* Global TOD clock handle */
-static todr_chip_handle_t todr_handle = NULL;
-
-static int	timermatch __P((struct device *, struct cfdata *, void *));
-static void	timerattach __P((struct device *, struct device *, void *));
+static int	timermatch(struct device *, struct cfdata *, void *);
+static void	timerattach(struct device *, struct device *, void *);
 
 struct timerreg_4u	timerreg_4u;	/* XXX - need more cleanup */
 
 CFATTACH_DECL(timer, sizeof(struct device),
     timermatch, timerattach, NULL, NULL);
 
-int clock_wenable __P((struct todr_chip_handle *, int));
 struct chiptime;
-int chiptotime __P((int, int, int, int, int, int));
-void timetochip __P((struct chiptime *));
-void stopcounter __P((struct timer_4u *));
+void stopcounter(struct timer_4u *);
 
 int timerblurb = 10; /* Guess a value; used before clock is attached */
 
-u_int rtc_read_reg(struct mc146818_softc *, u_int);
-void rtc_write_reg(struct mc146818_softc *, u_int, u_int);
-u_int rtc_getcent(struct mc146818_softc *);
-void rtc_setcent(struct mc146818_softc *, u_int);
+static u_int timer_get_timecount(struct timecounter *);
 
 /*
- * The OPENPROM calls the clock the "eeprom", so we have to have our
- * own special match function to call it the "clock".
+ * define timecounter
  */
-static int
-clockmatch_sbus(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
-{
-	struct sbus_attach_args *sa = aux;
 
-	return (strcmp("eeprom", sa->sa_name) == 0);
-}
-
-static int
-clockmatch_ebus(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
-{
-	struct ebus_attach_args *ea = aux;
-
-	return (strcmp("eeprom", ea->ea_name) == 0);
-}
-
-static int
-clockmatch_rtc(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
-{
-	struct ebus_attach_args *ea = aux;
-
-	return (strcmp("rtc", ea->ea_name) == 0);
-}
+static struct timecounter counter_timecounter = {
+	timer_get_timecount,	/* get_timecount */
+	0,			/* no poll_pps */
+	~0u,			/* counter_mask */
+	0,                      /* frequency - set at initialisation */
+	"tick-counter",		/* name */
+	100,			/* quality */
+	0,			/* private reference - UNUSED */
+	NULL			/* next timecounter */
+};
 
 /*
- * Attach a clock (really `eeprom') to the sbus or ebus.
- *
- * We ignore any existing virtual address as we need to map
- * this read-only and make it read-write only temporarily,
- * whenever we read or write the clock chip.  The clock also
- * contains the ID ``PROM'', and I have already had the pleasure
- * of reloading the CPU type, Ethernet address, etc, by hand from
- * the console FORTH interpreter.  I intend not to enjoy it again.
- *
- * the MK48T02 is 2K.  the MK48T08 is 8K, and the MK48T59 is
- * supposed to be identical to it.
- *
- * This is *UGLY*!  We probably have multiple mappings.  But I do
- * know that this all fits inside an 8K page, so I'll just map in
- * once.
- *
- * What we really need is some way to record the bus attach args
- * so we can call *_bus_map() later with BUS_SPACE_MAP_READONLY
- * or not to write enable/disable the device registers.  This is
- * a non-trivial operation.  
+ * timer_get_timecount provide current counter value
  */
-
-/* ARGSUSED */
-static void
-clockattach_sbus(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+static u_int
+timer_get_timecount(struct timecounter *tc)
 {
-	struct mk48txx_softc *sc = (void *)self;
-	struct sbus_attach_args *sa = aux;
-	int sz;
-
-	sc->sc_bst = sa->sa_bustag;
-
-	/* use sa->sa_regs[0].size? */
-	sz = 8192;
-
-	if (sbus_bus_map(sc->sc_bst,
-			 sa->sa_slot,
-			 (sa->sa_offset & ~(PAGE_SIZE - 1)),
-			 sz,
-			 BUS_SPACE_MAP_LINEAR | BUS_SPACE_MAP_READONLY,
-			 &sc->sc_bsh) != 0) {
-		printf("%s: can't map register\n", self->dv_xname);
-		return;
-	}
-	clockattach(sc, sa->sa_node);
-
-	/* Save info for the clock wenable call. */
-	todr_handle->todr_setwen = clock_wenable;
-}
-
-/*
- * Write en/dis-able clock registers.  We coordinate so that several
- * writers can run simultaneously.
- */
-int
-clock_wenable(handle, onoff)
-	struct todr_chip_handle *handle;
-	int onoff;
-{
-	struct mk48txx_softc *sc;
-	vm_prot_t prot;
-	vaddr_t va;
-	int s, err = 0;
-	static int writers;
-
-	s = splhigh();
-	if (onoff)
-		prot = writers++ == 0 ? VM_PROT_READ|VM_PROT_WRITE : 0;
-	else
-		prot = --writers == 0 ? VM_PROT_READ : 0;
-	splx(s);
-	if (prot == VM_PROT_NONE) {
-		return 0;
-	}
-	sc = handle->cookie;
-	va = (vaddr_t)bus_space_vaddr(sc->sc_bst, sc->sc_bsh);
-	if (va == 0UL) {
-		printf("clock_wenable: WARNING -- cannot get va\n");
-		return EIO;
-	}
-	pmap_kprotect(va, prot);
-	return (err);
-}
-
-
-/* ARGSUSED */
-static void
-clockattach_ebus(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
-{
-	struct mk48txx_softc *sc = (void *)self;
-	struct ebus_attach_args *ea = aux;
-	int sz;
-
-	sc->sc_bst = ea->ea_bustag;
-
-	/* hard code to 8K? */
-	sz = ea->ea_reg[0].size;
-
-	if (bus_space_map(sc->sc_bst,
-			 EBUS_ADDR_FROM_REG(&ea->ea_reg[0]),
-			 sz,
-			 BUS_SPACE_MAP_LINEAR,
-			 &sc->sc_bsh) != 0) {
-		printf("%s: can't map register\n", self->dv_xname);
-		return;
-	}
-	clockattach(sc, ea->ea_node);
-
-	/* Save info for the clock wenable call. */
-	todr_handle->todr_setwen = clock_wenable;
-}
-
-
-static void
-clockattach(sc, node)
-	struct mk48txx_softc *sc;
-	int node;
-{
-
-	sc->sc_model = prom_getpropstring(node, "model");
-
-#ifdef DIAGNOSTIC
-	if (sc->sc_model == NULL)
-		panic("clockattach: no model property");
-#endif
-
-	/* Our TOD clock year 0 is 1968 */
-	sc->sc_year0 = 1968;
-	mk48txx_attach(sc);
-
-	printf("\n");
-
-	/* XXX should be done by todr_attach() */
-	todr_handle = &sc->sc_handle;
-}
-
-/*
- * `rtc' is a ds1287 on an ebus (actually an isa bus, but we use the
- * ebus driver for isa.)  So we can use ebus_wenable() but need to do
- * different attach work and use different todr routines.  It does not
- * incorporate an IDPROM.
- */
-
-/*
- * XXX the stupid ds1287 is not mapped directly but uses an address
- * and a data reg so we cannot access the stuuupid thing w/o having
- * write access to the registers.
- *
- * XXXX We really need to mutex register access!
- */
-#define	RTC_ADDR	0
-#define	RTC_DATA	1
-u_int
-rtc_read_reg(struct mc146818_softc *sc, u_int reg)
-{
-
-	bus_space_write_1(sc->sc_bst, sc->sc_bsh, RTC_ADDR, reg);
-	return (bus_space_read_1(sc->sc_bst, sc->sc_bsh, RTC_DATA));
-}
-void 
-rtc_write_reg(struct mc146818_softc *sc, u_int reg, u_int val)
-{
-
-	bus_space_write_1(sc->sc_bst, sc->sc_bsh, RTC_ADDR, reg);
-	bus_space_write_1(sc->sc_bst, sc->sc_bsh, RTC_DATA, val);
-}
-
-/* ARGSUSED */
-static void
-clockattach_rtc(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
-{
-	struct mc146818_softc *sc = (void *)self;
-	struct ebus_attach_args *ea = aux;
-	char *model;
-	int sz;
-
-	sc->sc_bst = ea->ea_bustag;
-
-	/* hard code to 8K? */
-	sz = ea->ea_reg[0].size;
-
-	if (bus_space_map(sc->sc_bst,
-			 EBUS_ADDR_FROM_REG(&ea->ea_reg[0]),
-			 sz,
-			 BUS_SPACE_MAP_LINEAR,
-			 &sc->sc_bsh) != 0) {
-		printf("%s: can't map register\n", self->dv_xname);
-		return;
-	}
-
-	model = prom_getpropstring(ea->ea_node, "model");
-#ifdef DIAGNOSTIC
-	if (model == NULL)
-		panic("clockattach_rtc: no model property");
-#endif
-
-	/* Our TOD clock year 0 is 0 */
-	sc->sc_year0 = 0;
-	sc->sc_flag = MC146818_NO_CENT_ADJUST;
-	sc->sc_mcread = rtc_read_reg;
-	sc->sc_mcwrite = rtc_write_reg;
-	sc->sc_getcent = rtc_getcent;
-	sc->sc_setcent = rtc_setcent;
-	mc146818_attach(sc);
-
-	printf(": %s\n", model);
-
-	/*
-	 * Turn interrupts off, just in case. (Although they shouldn't
-	 * be wired to an interrupt controller on sparcs).
-	 */
-	rtc_write_reg(sc, MC_REGB, MC_REGB_BINARY | MC_REGB_24HR);
-
-	/*
-	 * Apparently on some machines the TOD registers are on the same
-	 * physical page as the COM registers.  So we won't protect them.
-	 */
-	/*sc->sc_handle.todr_setwen = NULL;*/
-
-	/* XXX should be done by todr_attach() */
-	todr_handle = &sc->sc_handle;
+	return cpu_counter();
 }
 
 /*
@@ -440,10 +161,7 @@ clockattach_rtc(parent, self, aux)
  * the lame UltraSPARC IIi PCI machines that don't have them.
  */
 static int
-timermatch(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+timermatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -451,9 +169,7 @@ timermatch(parent, cf, aux)
 }
 
 static void
-timerattach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+timerattach(struct device *parent, struct device *self, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 	u_int *va = ma->ma_address;
@@ -527,8 +243,7 @@ timerattach(parent, self, aux)
 }
 
 void
-stopcounter(creg)
-	struct timer_4u *creg;
+stopcounter(struct timer_4u *creg)
 {
 	/* Stop the clock */
 	volatile int discard;
@@ -546,7 +261,7 @@ void
 cpu_initclocks()
 {
 	int statint, minint;
-	static u_int64_t start_time;
+	uint64_t start_time = 0;
 #ifdef DEBUG
 	extern int intrdebug;
 #endif
@@ -573,28 +288,20 @@ cpu_initclocks()
 		cpu_clockrate[1] = 200000000 / 1000000;
 	}
 	
-	/*
-	 * Calculate the starting %tick value.  We set that to the same
-	 * as time, scaled for the CPU clockrate.  This gets nasty, but
-	 * we can handle it.  time.tv_usec is in microseconds.  
-	 * cpu_clockrate is in MHz.  
-	 */
-	start_time = time.tv_sec * cpu_clockrate[0];
-	/* Now fine tune the usecs */
-	start_time += time.tv_usec * cpu_clockrate[1];
-	
 	/* Initialize the %tick register */
 #ifdef __arch64__
-	__asm __volatile("wrpr %0, 0, %%tick" : : "r" (start_time));
+	__asm volatile("wrpr %0, 0, %%tick" : : "r" (start_time));
 #else
 	{
 		int start_hi = (start_time>>32), start_lo = start_time;
-		__asm __volatile("sllx %1,32,%0; or %0,%2,%0; wrpr %0, 0, %%tick" 
+		__asm volatile("sllx %1,32,%0; or %0,%2,%0; wrpr %0, 0, %%tick" 
 				 : "=&r" (start_hi) /* scratch register */
 				 : "r" ((int)(start_hi)), "r" ((int)(start_lo)));
 	}
 #endif
 
+	counter_timecounter.tc_frequency = cpu_clockrate[0];
+	tc_init(&counter_timecounter);
 
 	/*
 	 * Now handle machines w/o counter-timers.
@@ -676,7 +383,6 @@ cpu_initclocks()
 	     timerreg_4u.t_mapintr[1]|INTMAP_V|(CPU_UPAID << INTMAP_TID_SHIFT));
 
 	statmin = statint - (statvar >> 1);
-	
 }
 
 /*
@@ -699,22 +405,21 @@ setstatclockrate(newhz)
 static int clockcheck = 0;
 #endif
 int
-clockintr(cap)
-	void *cap;
+clockintr(void *cap)
 {
-	static int microset_iter;	/* call cc_microset once/sec */
-	struct cpu_info *ci = curcpu();
 #ifdef DEBUG
 	static int64_t tick_base = 0;
-	int64_t t = (u_int64_t)tick();
+	struct timeval ctime;
+	int64_t t = (uint64_t)tick();
 
+	microtime(&ctime);
 	if (!tick_base) {
-		tick_base = (time.tv_sec * 1000000LL + time.tv_usec) 
+		tick_base = (ctime.tv_sec * 1000000LL + ctime.tv_usec) 
 			/ cpu_clockrate[1];
 		tick_base -= t;
 	} else if (clockcheck) {
 		int64_t tk = t;
-		int64_t clk = (time.tv_sec * 1000000LL + time.tv_usec);
+		int64_t clk = (ctime.tv_sec * 1000000LL + ctime.tv_usec);
 		t -= tick_base;
 		t = t / cpu_clockrate[1];
 		if (t - clk > hz) {
@@ -725,19 +430,6 @@ clockintr(cap)
 		}
 	}	
 #endif
-	if (
-#ifdef MULTIPROCESSOR
-	    CPU_IS_PRIMARY(ci) &&
-#endif
-	    (microset_iter--) == 0) {
-		microset_iter = hz - 1;
-		cc_microset_time = time;
-#ifdef MULTIPROCESSOR
-		/* XXX broadcast IPI_MICROSET code here */
-#endif
-		cc_microset(ci);
-	}
-
 	/* Let locore.s clear the interrupt for us. */
 	hardclock((struct clockframe *)cap);
 	return (1);
@@ -754,30 +446,14 @@ int poll_console = 0;
  * locore.s to a level 10.
  */
 int
-tickintr(cap)
-	void *cap;
+tickintr(void *cap)
 {
-	static int microset_iter;	/* call cc_microset once/sec */
-	struct cpu_info *ci = curcpu();
 	int s;
 
 #if	NKBD	> 0
-	extern int cnrom __P((void));
+	extern int cnrom(void);
 	extern int rom_console_input;
 #endif
-
-	if (
-#ifdef MULTIPROCESSOR
-	    CPU_IS_PRIMARY(ci) &&
-#endif
-	    (microset_iter--) == 0) {
-		microset_iter = hz - 1;
-		cc_microset_time = time;
-#ifdef MULTIPROCESSOR
-		/* XXX broadcast IPI_MICROSET code here */
-#endif
-		cc_microset(ci);
-	}
 
 	hardclock((struct clockframe *)cap);
 	if (poll_console)
@@ -833,146 +509,9 @@ statintr(cap)
 }
 
 int
-schedintr(arg)
-	void *arg;
+schedintr(void *arg)
 {
 	if (curlwp)
 		schedclock(curlwp);
 	return (1);
-}
-
-
-/*
- * `sparc_clock_time_is_ok' is used in cpu_reboot() to determine
- * whether it is appropriate to call resettodr() to consolidate
- * pending time adjustments.
- */
-int sparc_clock_time_is_ok;
-
-/*
- * Set up the system's time, given a `reasonable' time value.
- */
-void
-inittodr(base)
-	time_t base;
-{
-	struct timeval tv;
-	int badbase = 0, waszero = base == 0;
-	int no_valid_todr = 1;
-
-	if (base < 5 * SECYR) {
-		/*
-		 * If base is 0, assume filesystem time is just unknown
-		 * in stead of preposterous. Don't bark.
-		 */
-		if (base != 0)
-			printf("WARNING: preposterous time in file system\n");
-		/* not going to use it anyway, if the chip is readable */
-		base = 33*SECYR + 186*SECDAY + SECDAY/2;
-		badbase = 1;
-	}
-
-	if (todr_handle) {
-		if (todr_gettime(todr_handle, &tv) == 0) {
-			if (tv.tv_sec != 0) {
-				time = tv;
-				no_valid_todr = 0;
-			}
-		}
-	}
-	if (no_valid_todr) {
-		printf("WARNING: bad date in battery clock");
-		/*
-		 * Believe the time in the file system for lack of
-		 * anything better, resetting the clock.
-		 */
-		time.tv_sec = base;
-		cc_microset_time = time;
-		cc_microset(curcpu());
-		if (!badbase)
-			resettodr();
-	} else {
-		int deltat;
-		deltat = time.tv_sec - base;
-
-		cc_microset_time = time;
-		cc_microset(curcpu());
-		sparc_clock_time_is_ok = 1;
-
-		if (waszero)
-			return;
-		if (deltat < 0) {
-			deltat = -deltat;
-			if (deltat < 2 * SECDAY)
-				return;
-		} else if (deltat < 2 * SECYR) {
-			return;
-		}
-		printf("WARNING: clock %s %d days",
-		    time.tv_sec < base ? "lost" : "gained", deltat / SECDAY);
-	}
-	printf(" -- CHECK AND RESET THE DATE!\n");
-}
-
-/*
- * Reset the clock based on the current time.
- * Used when the current clock is preposterous, when the time is changed,
- * and when rebooting.  Do nothing if the time is not yet known, e.g.,
- * when crashing during autoconfig.
- */
-void
-resettodr()
-{
-	struct timeval tv;
-	if (time.tv_sec == 0)
-		return;
-
-	tv = time;
-	cc_microset_time = time;
-#ifdef MULTIPROCESSOR
-	/* XXX broadcast IPI_MICROSET code here */
-#endif
-	cc_microset(curcpu());
-	sparc_clock_time_is_ok = 1;
-	if (todr_handle == 0 || todr_settime(todr_handle, &tv) != 0)
-		printf("Cannot set time in time-of-day clock\n");
-	else
-		time = tv;
-}
-
-/*
- * XXX: these may actually belong somewhere else, but since the
- * EEPROM is so closely tied to the clock on some models, perhaps
- * it needs to stay here...
- */
-int
-eeprom_uio(uio)
-	struct uio *uio;
-{
-	return (ENODEV);
-}
-
-
-/*
- * MD mc146818 RTC todr routines.
- */
-
-/* Loooks like Sun stores the century info somewhere in CMOS RAM */
-#define MC_CENT 0x32
-
-u_int
-rtc_getcent(sc)
-	struct mc146818_softc *sc;
-{
-
-	return rtc_read_reg(sc, MC_CENT);
-}
-
-void 
-rtc_setcent(sc, cent)
-	struct mc146818_softc *sc;
-	u_int cent;
-{
-
-	rtc_write_reg(sc, MC_CENT, cent);
 }

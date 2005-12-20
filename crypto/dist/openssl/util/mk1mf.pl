@@ -10,6 +10,12 @@ $OPTIONS="";
 $ssl_version="";
 $banner="\t\@echo Building OpenSSL";
 
+my $no_static_engine = 0;
+my $engines = "";
+local $zlib_opt = 0;	# 0 = no zlib, 1 = static, 2 = dynamic
+local $zlib_lib = "";
+
+
 open(IN,"<Makefile") || die "unable to open Makefile!\n";
 while(<IN>) {
     $ssl_version=$1 if (/^VERSION=(.*)$/);
@@ -57,7 +63,7 @@ and [options] can be one of
 	no-md2 no-md4 no-md5 no-sha no-mdc2	- Skip this digest
 	no-ripemd
 	no-rc2 no-rc4 no-rc5 no-idea no-des     - Skip this symetric cipher
-	no-bf no-cast no-aes
+	no-bf no-cast no-aes no-camellia
 	no-rsa no-dsa no-dh			- Skip this public key cipher
 	no-ssl2 no-ssl3				- Skip this version of SSL
 	just-ssl				- remove all non-ssl keys/digest
@@ -95,6 +101,8 @@ foreach (grep(!/^$/, split(/ /, $OPTIONS)))
 	print STDERR "unknown option - $_\n" if !&read_options;
 	}
 
+$no_static_engine = 0 if (!$shlib);
+
 $no_mdc2=1 if ($no_des);
 
 $no_ssl3=1 if ($no_md5 || $no_sha);
@@ -107,7 +115,8 @@ $out_def="out";
 $inc_def="outinc";
 $tmp_def="tmp";
 
-$mkdir="-mkdir";
+$perl="perl" unless defined $perl;
+$mkdir="-mkdir" unless defined $mkdir;
 
 ($ssl,$crypto)=("ssl","crypto");
 $ranlib="echo ranlib";
@@ -188,6 +197,7 @@ $cflags= "$xcflags$cflags" if $xcflags ne "";
 
 $cflags.=" -DOPENSSL_NO_IDEA" if $no_idea;
 $cflags.=" -DOPENSSL_NO_AES"  if $no_aes;
+$cflags.=" -DOPENSSL_NO_CAMELLIA"  if $no_camellia;
 $cflags.=" -DOPENSSL_NO_RC2"  if $no_rc2;
 $cflags.=" -DOPENSSL_NO_RC4"  if $no_rc4;
 $cflags.=" -DOPENSSL_NO_RC5"  if $no_rc5;
@@ -214,6 +224,19 @@ $cflags.=" -DOPENSSL_NO_ECDSA" if $no_ecdsa;
 $cflags.=" -DOPENSSL_NO_ECDH" if $no_ecdh;
 $cflags.=" -DOPENSSL_NO_ENGINE"   if $no_engine;
 $cflags.=" -DOPENSSL_NO_HW"   if $no_hw;
+
+$cflags.= " -DZLIB" if $zlib_opt;
+$cflags.= " -DZLIB_SHARED" if $zlib_opt == 2;
+
+if ($no_static_engine)
+	{
+	$cflags .= " -DOPENSSL_NO_STATIC_ENGINE";
+	}
+else
+	{
+	$cflags .= " -DOPENSSL_NO_DYNAMIC_ENGINE";
+	}
+
 #$cflags.=" -DRSAref"  if $rsaref ne "";
 
 ## if ($unix)
@@ -222,6 +245,7 @@ $cflags.=" -DOPENSSL_NO_HW"   if $no_hw;
 	{ $cflags="$c_flags$cflags" if ($c_flags ne ""); }
 
 $ex_libs="$l_flags$ex_libs" if ($l_flags ne "");
+
 
 %shlib_ex_cflags=("SSL" => " -DOPENSSL_BUILD_SHLIBSSL",
 		  "CRYPTO" => " -DOPENSSL_BUILD_SHLIBCRYPTO");
@@ -267,8 +291,14 @@ for (;;)
 	if ($key eq "KRB5_INCLUDES")
 		{ $cflags .= " $val";}
 
+	if ($key eq "ZLIB_INCLUDE")
+		{ $cflags .= " $val" if $val ne "";}
+
+	if ($key eq "LIBZLIB")
+		{ $zlib_lib = "$val" if $val ne "";}
+
 	if ($key eq "LIBKRB5")
-		{ $ex_libs .= " $val";}
+		{ $ex_libs .= " $val" if $val ne "";}
 
 	if ($key eq "TEST")
 		{ $test.=&var_add($dir,$val, 0); }
@@ -288,13 +318,40 @@ for (;;)
 	if ($key eq "HEADER")
 		{ $header.=&var_add($dir,$val, 1); }
 
-	if ($key eq "LIBOBJ")
+	if ($key eq "LIBOBJ" && ($dir ne "engines" || !$no_static_engine))
 		{ $libobj=&var_add($dir,$val, 0); }
+	if ($key eq "LIBNAMES" && $dir eq "engines" && $no_static_engine)
+ 		{ $engines.=$val }
 
 	if (!($_=<IN>))
 		{ $_="RELATIVE_DIRECTORY=FINISHED\n"; }
 	}
 close(IN);
+
+if ($shlib)
+	{
+	$extra_install= <<"EOF";
+	\$(CP) \$(O_SSL) \$(INSTALLTOP)${o}bin
+	\$(CP) \$(O_CRYPTO) \$(INSTALLTOP)${o}bin
+	\$(CP) \$(L_SSL) \$(INSTALLTOP)${o}lib
+	\$(CP) \$(L_CRYPTO) \$(INSTALLTOP)${o}lib
+EOF
+	if ($no_static_engine)
+		{
+		$extra_install .= <<"EOF"
+	\$(MKDIR) \$(INSTALLTOP)${o}lib${o}engines
+	\$(CP) \$(E_SHLIB) \$(INSTALLTOP)${o}lib${o}engines
+EOF
+		}
+	}
+else
+	{
+	$extra_install= <<"EOF";
+	\$(CP) \$(O_SSL) \$(INSTALLTOP)${o}lib
+	\$(CP) \$(O_CRYPTO) \$(INSTALLTOP)${o}lib
+EOF
+	$ex_libs .= " $zlib_lib" if $zlib_opt == 1;
+	}
 
 $defs= <<"EOF";
 # This makefile has been automatically generated from the OpenSSL distribution.
@@ -357,6 +414,8 @@ SHA1_ASM_OBJ=$sha1_asm_obj
 SHA1_ASM_SRC=$sha1_asm_src
 RMD160_ASM_OBJ=$rmd160_asm_obj
 RMD160_ASM_SRC=$rmd160_asm_src
+CPUID_ASM_OBJ=$cpuid_asm_obj
+CPUID_ASM_SRC=$cpuid_asm_src
 
 # The output directory for everything intersting
 OUT_D=$out_dir
@@ -366,6 +425,7 @@ TMP_D=$tmp_dir
 INC_D=$inc_dir
 INCO_D=$inc_dir${o}openssl
 
+PERL=$perl
 CP=$cp
 RM=$rm
 RANLIB=$ranlib
@@ -385,12 +445,14 @@ CRYPTO=$crypto
 # BIN_D  - Binary output directory
 # TEST_D - Binary test file output directory
 # LIB_D  - library output directory
+# ENG_D  - dynamic engine output directory
 # Note: if you change these point to different directories then uncomment out
 # the lines around the 'NB' comment below.
 # 
 BIN_D=\$(OUT_D)
 TEST_D=\$(OUT_D)
 LIB_D=\$(OUT_D)
+ENG_D=\$(OUT_D)
 
 # INCL_D - local library directory
 # OBJ_D  - temp object file directory
@@ -446,11 +508,11 @@ $banner
 headers: \$(HEADER) \$(EXHEADER)
 	@
 
-lib: \$(LIBS_DEP)
+lib: \$(LIBS_DEP) \$(E_SHLIB)
 
 exe: \$(T_EXE) \$(BIN_D)$o\$(E_EXE)$exep
 
-install:
+install: all
 	\$(MKDIR) \$(INSTALLTOP)
 	\$(MKDIR) \$(INSTALLTOP)${o}bin
 	\$(MKDIR) \$(INSTALLTOP)${o}include
@@ -458,8 +520,13 @@ install:
 	\$(MKDIR) \$(INSTALLTOP)${o}lib
 	\$(CP) \$(INCO_D)${o}*.\[ch\] \$(INSTALLTOP)${o}include${o}openssl
 	\$(CP) \$(BIN_D)$o\$(E_EXE)$exep \$(INSTALLTOP)${o}bin
-	\$(CP) \$(O_SSL) \$(INSTALLTOP)${o}lib
-	\$(CP) \$(O_CRYPTO) \$(INSTALLTOP)${o}lib
+	\$(CP) apps${o}openssl.cnf \$(INSTALLTOP)
+$extra_install
+
+
+test: \$(T_EXE)
+	cd \$(BIN_D)
+	..${o}ms${o}test
 
 clean:
 	\$(RM) \$(TMP_D)$o*.*
@@ -592,6 +659,11 @@ foreach (values %lib_nam)
 		$lib_obj =~ s/\s(\S*\/rmd_dgst\S*)/ $1 \$(RMD160_ASM_OBJ)/;
 		$rules.=&do_asm_rule($rmd160_asm_obj,$rmd160_asm_src);
 		}
+	if (($cpuid_asm_obj ne "") && ($_ eq "CRYPTO"))
+		{
+		$lib_obj =~ s/\s(\S*\/cversion\S*)/ $1 \$(CPUID_ASM_OBJ)/;
+		$rules.=&do_asm_rule($cpuid_asm_obj,$cpuid_asm_src);
+		}
 	$defs.=&do_defs(${_}."OBJ",$lib_obj,"\$(OBJ_D)",$obj);
 	$lib=($slib)?" \$(SHLIB_CFLAGS)".$shlib_ex_cflags{$_}:" \$(LIB_CFLAGS)";
 	$rules.=&do_compile_rule("\$(OBJ_D)",$lib_obj{$_},$lib);
@@ -616,6 +688,16 @@ foreach (split(/\s+/,$test))
 	$tt="\$(OBJ_D)${o}$t${obj}";
 	$rules.=&do_link_rule("\$(TEST_D)$o$t$exep",$tt,"\$(LIBS_DEP)","\$(L_LIBS) \$(EX_LIBS)");
 	}
+
+$defs.=&do_defs("E_SHLIB",$engines,"\$(ENG_D)",$shlibp);
+
+foreach (split(/\s+/,$engines))
+	{
+	$rules.=&do_compile_rule("\$(OBJ_D)","engines${o}e_$_",$lib);
+	$rules.= &do_lib_rule("\$(OBJ_D)${o}e_${_}.obj","\$(ENG_D)$o$_$shlibp","",$shlib,"");
+	}
+
+
 
 $rules.= &do_lib_rule("\$(SSLOBJ)","\$(O_SSL)",$ssl,$shlib,"\$(SO_SSL)");
 $rules.= &do_lib_rule("\$(CRYPTOOBJ)","\$(O_CRYPTO)",$crypto,$shlib,"\$(SO_CRYPTO)");
@@ -647,6 +729,7 @@ sub var_add
 	return("") if $no_hw   && $dir =~ /\/hw/;
 	return("") if $no_idea && $dir =~ /\/idea/;
 	return("") if $no_aes  && $dir =~ /\/aes/;
+	return("") if $no_camellia  && $dir =~ /\/camellia/;
 	return("") if $no_rc2  && $dir =~ /\/rc2/;
 	return("") if $no_rc4  && $dir =~ /\/rc4/;
 	return("") if $no_rc5  && $dir =~ /\/rc5/;
@@ -680,6 +763,7 @@ sub var_add
 	@a=grep(!/^e_.*_bf$/,@a) if $no_bf;
 	@a=grep(!/^e_.*_c$/,@a) if $no_cast;
 	@a=grep(!/^e_rc4$/,@a) if $no_rc4;
+	@a=grep(!/^e_camellia$/,@a) if $no_camellia;
 
 	@a=grep(!/(^s2_)|(^s23_)/,@a) if $no_ssl2;
 	@a=grep(!/(^s3_)|(^s23_)/,@a) if $no_ssl3;
@@ -764,20 +848,21 @@ sub do_defs
 		elsif ($_ =~ /MD5_ASM/)	{ $t="$_ "; }
 		elsif ($_ =~ /SHA1_ASM/){ $t="$_ "; }
 		elsif ($_ =~ /RMD160_ASM/){ $t="$_ "; }
+		elsif ($_ =~ /CPUID_ASM/){ $t="$_ "; }
 		else	{ $t="$location${o}$_$pf "; }
 
 		$Vars{$var}.="$t ";
 		$ret.=$t;
 		}
 	# hack to add version info on MSVC
-	if ($shlib && ($platform eq "VC-WIN32") || ($platform eq "VC-NT"))
+	if ($shlib && (($platform eq "VC-WIN32") || ($platform eq "VC-NT")))
 		{
 		if ($var eq "CRYPTOOBJ")
 			{ $ret.="\$(OBJ_D)\\\$(CRYPTO).res "; }
 		elsif ($var eq "SSLOBJ")
 			{ $ret.="\$(OBJ_D)\\\$(SSL).res "; }
 		}
-	chop($ret);
+	chomp($ret);
 	$ret.="\n\n";
 	return($ret);
 	}
@@ -890,6 +975,7 @@ sub read_options
 		"no-rc5" => \$no_rc5,
 		"no-idea" => \$no_idea,
 		"no-aes" => \$no_aes,
+		"no-camellia" => \$no_camellia,
 		"no-des" => \$no_des,
 		"no-bf" => \$no_bf,
 		"no-cast" => \$no_cast,
@@ -907,6 +993,7 @@ sub read_options
 		"no-dh" => \$no_dh,
 		"no-hmac" => \$no_hmac,
 		"no-aes" => \$no_aes,
+		"no-camellia" => \$no_camellia,
 		"no-asm" => \$no_asm,
 		"nasm" => \$nasm,
 		"nw-nasm" => \$nw_nasm,
@@ -926,7 +1013,7 @@ sub read_options
 			[\$no_rc2, \$no_idea, \$no_des, \$no_bf, \$no_cast,
 			  \$no_md2, \$no_sha, \$no_mdc2, \$no_dsa, \$no_dh,
 			  \$no_ssl2, \$no_err, \$no_ripemd, \$no_rc5,
-			  \$no_aes],
+			  \$no_aes, \$no_camellia],
 		"rsaref" => 0,
 		"gcc" => \$gcc,
 		"debug" => \$debug,
@@ -935,6 +1022,7 @@ sub read_options
 		"dll" => \$shlib,
 		"shared" => 0,
 		"no-gmp" => 0,
+		"no-rfc3779" => 0,
 		"no-shared" => 0,
 		"no-zlib" => 0,
 		"no-zlib-dynamic" => 0,
@@ -955,10 +1043,18 @@ sub read_options
 			}
 		}
 	elsif (/^no-comp$/) { $xcflags = "-DOPENSSL_NO_COMP $xcflags"; }
-	elsif (/^enable-zlib$/) { $xcflags = "-DZLIB $xcflags"; }
+	elsif (/^enable-zlib$/) { $zlib_opt = 1 if $zlib_opt == 0 }
 	elsif (/^enable-zlib-dynamic$/)
 		{
-		$xcflags = "-DZLIB_SHARED -DZLIB $xcflags";
+		$zlib_opt = 2;
+		}
+	elsif (/^no-static-engine/)
+		{
+		$no_static_engine = 1;
+		}
+	elsif (/^enable-static-engine/)
+		{
+		$no_static_engine = 0;
 		}
 	# There are also enable-xxx options which correspond to
 	# the no-xxx. Since the scalars are enabled by default

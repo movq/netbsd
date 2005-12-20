@@ -1,4 +1,4 @@
-/*	$NetBSD: cache.h,v 1.6 2005/12/11 12:18:58 christos Exp $	*/
+/*	$NetBSD: cache.h,v 1.8 2006/09/24 00:43:44 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -156,6 +156,10 @@ extern int sh_cache_ram_mode;
 extern int sh_cache_index_mode_icache;
 extern int sh_cache_index_mode_dcache;
 
+extern int sh_cache_alias_mask;
+#define	sh_cache_indexof(x)	(sh_cache_alias_mask & (x))
+extern int sh_cache_prefer_mask;
+
 extern struct sh_cache_ops sh_cache_ops;
 
 #define	sh_icache_sync_all()						\
@@ -185,19 +189,9 @@ extern struct sh_cache_ops sh_cache_ops;
 void sh_cache_init(void);
 void sh_cache_information(void);
 
-#if defined(SH3) && defined(SH4)
-#define	SH_HAS_VIRTUAL_ALIAS	CPU_IS_SH4
 #define	SH_HAS_UNIFIED_CACHE	CPU_IS_SH3
+#define	SH_HAS_VIRTUAL_ALIAS	CPU_IS_SH4
 #define	SH_HAS_WRITEBACK_CACHE	(!sh_cache_write_through)
-#elif defined(SH3)
-#define	SH_HAS_VIRTUAL_ALIAS	0
-#define	SH_HAS_UNIFIED_CACHE	1
-#define	SH_HAS_WRITEBACK_CACHE	(!sh_cache_write_through)
-#elif defined(SH4)
-#define	SH_HAS_VIRTUAL_ALIAS	1
-#define	SH_HAS_UNIFIED_CACHE	0
-#define	SH_HAS_WRITEBACK_CACHE	(!sh_cache_write_through)
-#endif
 
 #endif /* _KERNEL */
 #endif /* _SH3_CACHE_H_ */

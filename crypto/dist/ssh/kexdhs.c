@@ -1,4 +1,5 @@
-/*	$NetBSD: kexdhs.c,v 1.4 2005/06/02 04:56:14 lukem Exp $	*/
+/*	$NetBSD: kexdhs.c,v 1.6 2006/09/28 21:22:14 christos Exp $	*/
+/* $OpenBSD: kexdhs.c,v 1.7 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  *
@@ -24,16 +25,24 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: kexdhs.c,v 1.2 2004/06/13 12:53:24 djm Exp $");
-__RCSID("$NetBSD: kexdhs.c,v 1.4 2005/06/02 04:56:14 lukem Exp $");
+__RCSID("$NetBSD: kexdhs.c,v 1.6 2006/09/28 21:22:14 christos Exp $");
+
+#include <sys/types.h>
+#include <string.h>
+#include <signal.h>
 
 #include "xmalloc.h"
+#include "buffer.h"
 #include "key.h"
+#include "cipher.h"
 #include "kex.h"
 #include "log.h"
 #include "packet.h"
 #include "dh.h"
 #include "ssh2.h"
+#ifdef GSSAPI
+#include "ssh-gss.h"
+#endif
 #include "monitor_wrap.h"
 
 void
@@ -43,7 +52,7 @@ kexdh_server(Kex *kex)
 	DH *dh = NULL;
 	Key *server_host_key;
 	u_char *kbuf, *hash, *signature = NULL, *server_host_key_blob = NULL;
-	u_int sbloblen, klen, kout;
+	u_int sbloblen, klen, kout, hashlen;
 	u_int slen;
 
 	/* generate server DH public key */
@@ -105,7 +114,7 @@ kexdh_server(Kex *kex)
 	key_to_blob(server_host_key, &server_host_key_blob, &sbloblen);
 
 	/* calc H */
-	hash = kex_dh_hash(
+	kex_dh_hash(
 	    kex->client_version_string,
 	    kex->server_version_string,
 	    buffer_ptr(&kex->peer), buffer_len(&kex->peer),
@@ -113,21 +122,20 @@ kexdh_server(Kex *kex)
 	    server_host_key_blob, sbloblen,
 	    dh_client_pub,
 	    dh->pub_key,
-	    shared_secret
+	    shared_secret,
+	    &hash, &hashlen
 	);
 	BN_clear_free(dh_client_pub);
 
 	/* save session id := H */
-	/* XXX hashlen depends on KEX */
 	if (kex->session_id == NULL) {
-		kex->session_id_len = 20;
+		kex->session_id_len = hashlen;
 		kex->session_id = xmalloc(kex->session_id_len);
 		memcpy(kex->session_id, hash, kex->session_id_len);
 	}
 
 	/* sign H */
-	/* XXX hashlen depends on KEX */
-	PRIVSEP(key_sign(server_host_key, &signature, &slen, hash, 20));
+	PRIVSEP(key_sign(server_host_key, &signature, &slen, hash, hashlen));
 
 	/* destroy_sensitive_data(); */
 
@@ -143,7 +151,7 @@ kexdh_server(Kex *kex)
 	/* have keys, free DH */
 	DH_free(dh);
 
-	kex_derive_keys(kex, hash, shared_secret);
+	kex_derive_keys(kex, hash, hashlen, shared_secret);
 	BN_clear_free(shared_secret);
 	kex_finish(kex);
 }

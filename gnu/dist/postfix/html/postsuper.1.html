@@ -30,7 +30,7 @@ POSTSUPER(1)                                                      POSTSUPER(1)
        Options:
 
        <b>-c</b> <i>config</i><b>_</b><i>dir</i>
-              The  <b>main.cf</b>  configuration  file  is  in the named
+              The  <a href="postconf.5.html"><b>main.cf</b></a>  configuration  file  is  in the named
               directory  instead  of  the  default  configuration
               directory.  See  also  the  MAIL_CONFIG environment
               setting below.
@@ -45,16 +45,16 @@ POSTSUPER(1)                                                      POSTSUPER(1)
               delete  all  mail  with   exactly   one   recipient
               <b>user@example.com</b>:
 
-              mailq | tail +2 | awk  'BEGIN { RS = "" }
+              mailq | tail +2 | grep -v '^ *(' | awk  'BEGIN { RS = "" }
                   # $7=sender, $8=recipient1, $9=recipient2
                   { if ($8 == "user@example.com" &amp;&amp; $9 == "")
                         print $1 }
               ' | tr -d '*!' | postsuper -d -
 
-              Specify <b>-d ALL</b> to remove all messages; for example,
-              specify <b>-d ALL  deferred</b>  to  delete  mail  in  the
-              <b>deferred</b>  queue.  As a safety measure, the word <b>ALL</b>
-              must be specified in upper case.
+              Specify  "<b>-d ALL</b>" to remove all messages; for exam-
+              ple, specify "<b>-d ALL deferred</b>" to delete  all  mail
+              in  the  <b>deferred</b>  queue.  As a safety measure, the
+              word <b>ALL</b> must be specified in upper case.
 
               Warning: Postfix queue IDs are reused.  There is  a
               very  small  possibility that postsuper deletes the
@@ -90,8 +90,8 @@ POSTSUPER(1)                                                      POSTSUPER(1)
               If a <i>queue</i><b>_</b><i>id</i> of <b>-</b> is specified, the program  reads
               queue IDs from standard input.
 
-              Specify  <b>-h  ALL</b> to hold all messages; for example,
-              specify  <b>-h  ALL  deferred</b>  to  hold  mail  in  the
+              Specify "<b>-h ALL</b>" to hold all messages; for example,
+              specify "<b>-h ALL deferred</b>" to hold all mail  in  the
               <b>deferred</b>  queue.  As a safety measure, the word <b>ALL</b>
               must be specified in upper case.
 
@@ -109,12 +109,12 @@ POSTSUPER(1)                                                      POSTSUPER(1)
               If a <i>queue</i><b>_</b><i>id</i> of <b>-</b> is specified, the program  reads
               queue IDs from standard input.
 
-              Note:  use  "<b>postsuper -r</b>" to release mail that was
-              kept on hold for a significant fraction  of  <b>$<a href="postconf.5.html#maximal_queue_lifetime">maxi</a>-</b>
-              <b><a href="postconf.5.html#maximal_queue_lifetime">mal_queue_lifetime</a></b>  or  <b>$<a href="postconf.5.html#bounce_queue_lifetime">bounce_queue_lifetime</a></b>,  or
-              longer.
+              Note:  specify  "<b>postsuper -r</b>" to release mail that
+              was kept on hold  for  a  significant  fraction  of
+              <b>$<a href="postconf.5.html#maximal_queue_lifetime">maximal_queue_lifetime</a></b>  or <b>$<a href="postconf.5.html#bounce_queue_lifetime">bounce_queue_lifetime</a></b>,
+              or longer.
 
-              Specify <b>-H ALL</b> to release  all  mail  that  is  "on
+              Specify "<b>-H ALL</b>" to release all mail  that  is  "on
               hold".   As  a safety measure, the word <b>ALL</b> must be
               specified in upper case.
 
@@ -130,17 +130,37 @@ POSTSUPER(1)                                                      POSTSUPER(1)
               Alternatively, if a <i>queue</i><b>_</b><i>id</i> of <b>-</b> is specified, the
               program reads queue IDs from standard input.
 
-              Specify <b>-r ALL</b> to requeue all messages. As a safety
-              measure, the word <b>ALL</b> must be  specified  in  upper
-              case.
+              Specify  "<b>-r  ALL</b>"  to  requeue  all messages. As a
+              safety measure, the word <b>ALL</b> must be  specified  in
+              upper case.
 
               A  requeued message is moved to the <b>maildrop</b> queue,
-              from where it is copied by the pickup daemon  to  a
-              new  file whose name is guaranteed to match the new
-              queue file inode number. The new queue file is sub-
-              jected  again to mail address rewriting and substi-
-              tution. This is useful when rewriting rules or vir-
-              tual mappings have changed.
+              from where  it  is  copied  by  the  <a href="pickup.8.html"><b>pickup</b>(8)</a>  and
+              <a href="cleanup.8.html"><b>cleanup</b>(8)</a>  daemons  to  a  new queue file. In many
+              respects its handling differs from that  of  a  new
+              local submission.
+
+              <b>o</b>      The   message   is   not  subjected  to  the
+                     <a href="postconf.5.html#smtpd_milters">smtpd_milters</a> or <a href="postconf.5.html#non_smtpd_milters">non_smtpd_milters</a> settings.
+                     When  mail  has  passed  through an external
+                     content filter, this would produce incorrect
+                     results with Milter applications that depend
+                     on original SMTP connection  state  informa-
+                     tion.
+
+              <b>o</b>      The  message  is  subjected  again  to  mail
+                     address rewriting and substitution.  This is
+                     useful  when rewriting rules or virtual map-
+                     pings have changed.
+
+                     The  address  rewriting  context  (local  or
+                     remote)  is the same as when the message was
+                     received.
+
+              <b>o</b>      The message is subjected to  the  same  <a href="postconf.5.html#content_filter">con</a>-
+                     <a href="postconf.5.html#content_filter">tent_filter</a>  settings  (if  any) as used for
+                     new local mail submissions.  This is  useful
+                     when <a href="postconf.5.html#content_filter">content_filter</a> settings have changed.
 
               Warning:  Postfix queue IDs are reused.  There is a
               very small possibility that  <a href="postsuper.1.html"><b>postsuper</b>(1)</a>  requeues
@@ -179,21 +199,21 @@ POSTSUPER(1)                                                      POSTSUPER(1)
 
 <b>ENVIRONMENT</b>
        MAIL_CONFIG
-              Directory with the <b>main.cf</b> file.
+              Directory with the <a href="postconf.5.html"><b>main.cf</b></a> file.
 
 <b>BUGS</b>
        Mail  that  is  not sanitized by Postfix (i.e. mail in the
        <b>maildrop</b> queue) cannot be placed "on hold".
 
 <b>CONFIGURATION PARAMETERS</b>
-       The following <b>main.cf</b> parameters are  especially  relevant
+       The following <a href="postconf.5.html"><b>main.cf</b></a> parameters are  especially  relevant
        to this program.  The text below provides only a parameter
        summary. See <a href="postconf.5.html"><b>postconf</b>(5)</a> for more details including  exam-
        ples.
 
        <b><a href="postconf.5.html#config_directory">config_directory</a> (see 'postconf -d' output)</b>
-              The  default  location  of  the Postfix main.cf and
-              master.cf configuration files.
+              The  default  location  of  the Postfix <a href="postconf.5.html">main.cf</a> and
+              <a href="master.5.html">master.cf</a> configuration files.
 
        <b><a href="postconf.5.html#hash_queue_depth">hash_queue_depth</a> (1)</b>
               The number of subdirectory levels for queue  direc-

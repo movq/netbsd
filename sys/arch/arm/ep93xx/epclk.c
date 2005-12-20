@@ -1,4 +1,4 @@
-/*	$NetBSD: epclk.c,v 1.7 2005/11/12 05:33:23 hamajima Exp $	*/
+/*	$NetBSD: epclk.c,v 1.9.4.1 2007/04/30 18:57:18 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2004 Jesse Off
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: epclk.c,v 1.7 2005/11/12 05:33:23 hamajima Exp $");
+__KERNEL_RCSID(0, "$NetBSD: epclk.c,v 1.9.4.1 2007/04/30 18:57:18 bouyer Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -95,7 +95,7 @@ static u_int32_t tmark;
 /* This is a quick ARM way to multiply by 983040/1000000 */
 #define US_TO_TIMER4VAL(x) { \
 	u_int32_t hi, lo, scalar = 4222124650UL; \
-	asm volatile ( \
+	__asm volatile ( \
 		"umull %0, %1, %2, %3;" \
 		: "=&r"(lo), "=&r"(hi) \
 		: "r"((x)), "r"(scalar) \
@@ -106,7 +106,7 @@ static u_int32_t tmark;
 /* This is a quick ARM way to multiply by 1000000/983040 */
 #define TIMER4VAL_TO_US(x) { \
 	u_int32_t hi, lo, scalar = 2184533333UL; \
-	asm volatile ( \
+	__asm volatile ( \
 		"umull %0, %1, %2, %3;" \
 		"mov %1, %1, lsl #1;" \
 		"mov %0, %0, lsr #31;" \
@@ -323,91 +323,4 @@ delay(unsigned int len)
 	while (ticks <= end) {
 		ticks = TIMER4VAL();
 	}
-}
-
-todr_chip_handle_t todr_handle;
-
-/*
- * todr_attach:
- *
- *	Set the specified time-of-day register as the system real-time clock.
- */
-void
-todr_attach(todr_chip_handle_t todr)
-{
-
-	if (todr_handle)
-		panic("todr_attach: rtc already configured");
-	todr_handle = todr;
-}
-
-/*
- * inittodr:
- *
- *	Initialize time from the time-of-day register.
- */
-#define	MINYEAR		2003	/* minimum plausible year */
-void
-inittodr(time_t base)
-{
-	time_t deltat;
-	int badbase;
-
-	if (base < (MINYEAR - 1970) * SECYR) {
-		printf("WARNING: preposterous time in file system\n");
-		/* read the system clock anyway */
-		base = (MINYEAR - 1970) * SECYR;
-		badbase = 1;
-	} else
-		badbase = 0;
-
-	if (todr_handle == NULL ||
-	    todr_gettime(todr_handle, &time) != 0 ||
-	    time.tv_sec == 0) {
-		/*
-		 * Believe the time in the file system for lack of
-		 * anything better, resetting the TODR.
-		 */
-		time.tv_sec = base;
-		time.tv_usec = 0;
-		if (todr_handle != NULL && !badbase) {
-			printf("WARNING: preposterous clock chip time\n");
-			resettodr();
-		}
-		goto bad;
-	}
-
-	if (!badbase) {
-		/*
-		 * See if we gained/lost two or more days; if
-		 * so, assume something is amiss.
-		 */
-		deltat = time.tv_sec - base;
-		if (deltat < 0)
-			deltat = -deltat;
-		if (deltat < 2 * SECDAY)
-			return;		/* all is well */
-		printf("WARNING: clock %s %ld days\n",
-		    time.tv_sec < base ? "lost" : "gained",
-		    (long)deltat / SECDAY);
-	}
- bad:
-	printf("WARNING: CHECK AND RESET THE DATE!\n");
-}
-
-/*
- * resettodr:
- *
- *	Reset the time-of-day register with the current time.
- */
-void
-resettodr(void)
-{
-
-	if (time.tv_sec == 0)
-		return;
-
-	if (todr_handle != NULL &&
-	    todr_settime(todr_handle, &time) != 0)
-		printf("resettodr: failed to set time\n");
 }

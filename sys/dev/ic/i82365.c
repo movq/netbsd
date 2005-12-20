@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365.c,v 1.93 2005/12/11 12:21:26 christos Exp $	*/
+/*	$NetBSD: i82365.c,v 1.97 2006/11/16 01:32:51 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 Charles M. Hannum.  All rights reserved.
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82365.c,v 1.93 2005/12/11 12:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82365.c,v 1.97 2006/11/16 01:32:51 christos Exp $");
 
 #define	PCICDEBUG
 
@@ -241,7 +241,7 @@ pcic_attach(sc)
 	lockinit(&sc->sc_pcic_lock, PWAIT, "pciclk", 0, 0);
 
 	/* find and configure for the available sockets */
-	for (i = 0; i < PCIC_NSLOTS; i++) {
+	for (i = 0; i < __arraycount(sc->handle); i++) {
 		h = &sc->handle[i];
 		chip = i / 2;
 		socket = i % 2;
@@ -259,8 +259,11 @@ pcic_attach(sc)
 		h->flags = 0;
 
 		/* need to read vendor -- for cirrus to report no xtra chip */
-		if (socket == 0)
-			h->vendor = (h+1)->vendor = pcic_vendor(h);
+		if (socket == 0) {
+			h->vendor = pcic_vendor(h);
+			if (i < __arraycount(sc->handle) - 1)
+				(h+1)->vendor = h->vendor;
+		}
 
 		switch (h->vendor) {
 		case PCIC_VENDOR_NONE:
@@ -289,7 +292,7 @@ pcic_attach(sc)
 		}
 	}
 
-	for (i = 0; i < PCIC_NSLOTS; i++) {
+	for (i = 0; i < __arraycount(sc->handle); i++) {
 		h = &sc->handle[i];
 
 		if (h->flags & PCIC_FLAG_SOCKETP) {
@@ -310,7 +313,7 @@ pcic_attach(sc)
 	}
 
 	/* print detected info */
-	for (i = 0; i < PCIC_NSLOTS; i += 2) {
+	for (i = 0; i < __arraycount(sc->handle) - 1; i += 2) {
 		h = &sc->handle[i];
 		chip = i / 2;
 
@@ -341,7 +344,7 @@ pcic_attach_sockets(sc)
 {
 	int i;
 
-	for (i = 0; i < PCIC_NSLOTS; i++)
+	for (i = 0; i < __arraycount(sc->handle); i++)
 		if (sc->handle[i].flags & PCIC_FLAG_SOCKETP)
 			pcic_attach_socket(&sc->handle[i]);
 }
@@ -442,7 +445,7 @@ pcic_attach_sockets_finish(sc)
 {
 	int i;
 
-	for (i = 0; i < PCIC_NSLOTS; i++)
+	for (i = 0; i < __arraycount(sc->handle); i++)
 		if (sc->handle[i].flags & PCIC_FLAG_SOCKETP)
 			pcic_attach_socket_finish(&sc->handle[i]);
 }
@@ -467,7 +470,7 @@ pcic_attach_socket_finish(h)
 	 * (this works around a bug seen in suspend-to-disk on the
 	 * Sony VAIO Z505; on resume, the CSC_INTR state is not preserved).
 	 */
-	powerhook_establish(pcic_power, h);
+	powerhook_establish(h->ph_parent->dv_xname, pcic_power, h);
 
 	/* enable interrupts on card detect, poll for them if no irq avail */
 	reg = PCIC_CSC_INTR_CD_ENABLE;
@@ -663,7 +666,7 @@ pcic_poll_intr(arg)
 
 	s = spltty();
 	sc = arg;
-	for (i = 0; i < PCIC_NSLOTS; i++)
+	for (i = 0; i < __arraycount(sc->handle); i++)
 		if (sc->handle[i].flags & PCIC_FLAG_SOCKETP)
 			(void)pcic_intr_socket(&sc->handle[i]);
 	callout_reset(&sc->poll_ch, hz / 2, pcic_poll_intr, sc);
@@ -679,7 +682,7 @@ pcic_intr(arg)
 
 	DPRINTF(("%s: intr\n", sc->dev.dv_xname));
 
-	for (i = 0; i < PCIC_NSLOTS; i++)
+	for (i = 0; i < __arraycount(sc->handle); i++)
 		if (sc->handle[i].flags & PCIC_FLAG_SOCKETP)
 			ret += pcic_intr_socket(&sc->handle[i]);
 
@@ -1126,9 +1129,8 @@ pcic_chip_io_alloc(pch, start, size, align, pcihp)
 }
 
 void
-pcic_chip_io_free(pch, pcihp)
-	pcmcia_chipset_handle_t pch;
-	struct pcmcia_io_handle *pcihp;
+pcic_chip_io_free(pcmcia_chipset_handle_t pch,
+    struct pcmcia_io_handle *pcihp)
 {
 	bus_space_tag_t iot = pcihp->iot;
 	bus_space_handle_t ioh = pcihp->ioh;

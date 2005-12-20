@@ -1,4 +1,4 @@
-/*	$NetBSD: printjob.c,v 1.43 2005/11/28 03:26:06 christos Exp $	*/
+/*	$NetBSD: printjob.c,v 1.50 2006/05/11 00:22:53 mrg Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -41,7 +41,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\n\
 #if 0
 static char sccsid[] = "@(#)printjob.c	8.7 (Berkeley) 5/10/95";
 #else
-__RCSID("$NetBSD: printjob.c,v 1.43 2005/11/28 03:26:06 christos Exp $");
+__RCSID("$NetBSD: printjob.c,v 1.50 2006/05/11 00:22:53 mrg Exp $");
 #endif
 #endif /* not lint */
 
@@ -125,7 +125,7 @@ static void	init(void);
 static void	setup_ofilter(int);
 static void	close_ofilter(void);
 static void	openpr(void);
-static void	opennet(char *);
+static void	opennet(void);
 static void	opentty(void);
 static void	openrem(void);
 static int	print(int, char *);
@@ -284,7 +284,8 @@ again:
 			}
 		}
 	}
-	free((char *) queue);
+	free(queue);
+	queue = NULL;
 	/*
 	 * search the spool directory for more work.
 	 */
@@ -369,6 +370,7 @@ printit(char *file)
 	 *		g -- "file name" plot(1G) file to print
 	 *		v -- "file name" plain raster file to print
 	 *		c -- "file name" cifplot file to print
+	 *		o -- "file name" postscript file to print
 	 *		1 -- "R font file" for troff
 	 *		2 -- "I font file" for troff
 	 *		3 -- "B font file" for troff
@@ -579,7 +581,7 @@ print(int format, char *file)
 			for (n = 3; n < nofile; n++)
 				(void)close(n);
 			execl(_PATH_PR, "pr", width, length,
-			    "-h", *title ? title : " ", 0);
+			    "-h", *title ? title : " ", NULL);
 			syslog(LOG_ERR, "cannot execl %s", _PATH_PR);
 			exit(2);
 		}
@@ -598,6 +600,23 @@ print(int format, char *file)
 		av[3] = indent;
 		n = 4;
 		break;
+	case 'o':	/* print a postscript file */
+		if (PF == NULL) {
+			/* if PF is not set, handle it like an 'l' */
+			prog = IF;
+			av[1] = "-c";
+			av[2] = width;
+			av[3] = length;
+			av[4] = indent;
+			n = 5;
+			break;
+		} else {
+			prog = PF;
+			av[1] = pxwidth;
+			av[2] = pxlength;
+			n = 3;
+			break;
+		}
 	case 'l':	/* like 'f' but pass control characters */
 		prog = IF;
 		av[1] = "-c";
@@ -852,7 +871,9 @@ sendfile(int type, char *file)
 	char buf[BUFSIZ];
 	int sizerr, resp;
 	extern int rflag;
+	char *save_file;
 
+	save_file = file;
 	if (type == '\3' && rflag && (OF || IF)) {
 		int	save_pfd = pfd;
 
@@ -887,7 +908,7 @@ sendfile(int type, char *file)
 		return(ACCESS);
 
 	amt = snprintf(buf, sizeof(buf), "%c%lld %s\n", type,
-	    (long long)stb.st_size, file);
+	    (long long)stb.st_size, save_file);
 	for (i = 0; ; i++) {
 		if (write(pfd, buf, amt) != amt ||
 		    (resp = response()) < 0 || resp == '\1') {
@@ -1102,7 +1123,7 @@ sendmail(char *user, int bombed)
 			cp++;
 		else
 			cp = _PATH_SENDMAIL;
-		execl(_PATH_SENDMAIL, cp, "-t", 0);
+		execl(_PATH_SENDMAIL, cp, "-t", NULL);
 		_exit(0);
 	} else if (s > 0) {				/* parent */
 		dup2(p[1], 1);
@@ -1253,6 +1274,7 @@ init(void)
 	GF = cgetstr(bp, "gf", &s) == -1 ? NULL : s;
 	VF = cgetstr(bp, "vf", &s) == -1 ? NULL : s;
 	CF = cgetstr(bp, "cf", &s) == -1 ? NULL : s;
+	PF = cgetstr(bp, "pf", &s) == -1 ? NULL : s;
 	TR = cgetstr(bp, "tr", &s) == -1 ? NULL : s;
 
 	RS = (cgetcap(bp, "rs", ':') != NULL);
@@ -1302,7 +1324,7 @@ setup_ofilter(int check_rflag)
 				cp = OF;
 			else
 				cp++;
-			execl(OF, cp, width, length, 0);
+			execl(OF, cp, width, length, NULL);
 			syslog(LOG_ERR, "%s: %s: %m", printer, OF);
 			exit(1);
 		}
@@ -1338,11 +1360,9 @@ close_ofilter(void)
 static void
 openpr(void)
 {
-	char *cp;
-
 	if (!remote && *LP) {
-		if ((cp = strchr(LP, '@')))
-			opennet(cp);
+		if (strchr(LP, '@') != NULL)
+			opennet();
 		else
 			opentty();
 	} else if (remote) {
@@ -1364,24 +1384,14 @@ openpr(void)
  * or to a terminal server on the net
  */
 static void
-opennet(char *cp)
+opennet(void)
 {
 	int i;
-	int resp, port;
-	char save_ch;
-
-	save_ch = *cp;
-	*cp = '\0';
-	port = atoi(LP);
-	if (port <= 0) {
-		syslog(LOG_ERR, "%s: bad port number: %s", printer, LP);
-		exit(1);
-	}
-	*cp++ = save_ch;
+	int resp;
 
 	for (i = 1; ; i = i < 256 ? i << 1 : i) {
 		resp = -1;
-		pfd = getport(cp, port);
+		pfd = getport(LP);
 		if (pfd < 0 && errno == ECONNREFUSED)
 			resp = 1;
 		else if (pfd >= 0) {
@@ -1401,7 +1411,7 @@ opennet(char *cp)
 		}
 		sleep(i);
 	}
-	pstatus("sending to %s port %d", cp, port);
+	pstatus("sending to %s", LP);
 }
 
 /*
@@ -1443,7 +1453,7 @@ openrem(void)
 
 	for (i = 1; ; i = i < 256 ? i << 1 : i) {
 		resp = -1;
-		pfd = getport(RM, 0);
+		pfd = getport(RM);
 		if (pfd >= 0) {
 			n = snprintf(line, sizeof(line), "\2%s\n", RP);
 			if (write(pfd, line, n) == n &&

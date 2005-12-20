@@ -1,4 +1,4 @@
-/*	$NetBSD: hme.c,v 1.52 2005/12/11 12:21:26 christos Exp $	*/
+/*	$NetBSD: hme.c,v 1.55 2006/11/24 19:46:59 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -41,12 +41,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.52 2005/12/11 12:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.55 2006/11/24 19:46:59 christos Exp $");
 
 /* #define HMEDEBUG */
 
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 #include "rnd.h"
 
@@ -79,10 +78,6 @@ __KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.52 2005/12/11 12:21:26 christos Exp $");
 #include <netinet/udp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -295,7 +290,7 @@ hme_config(sc)
 			 * connector.
 			 */
 			if (child->mii_phy > 1 || child->mii_inst > 1) {
-				printf("%s: cannot accomodate MII device %s"
+				printf("%s: cannot accommodate MII device %s"
 				       " at phy %d, instance %d\n",
 				       sc->sc_dev.dv_xname,
 				       child->mii_dev.dv_xname,
@@ -654,7 +649,7 @@ hme_init(sc)
  * Compare two Ether/802 addresses for equality, inlined and unrolled for
  * speed.
  */
-static __inline__ int
+static inline int
 ether_cmp(a, b)
 	u_char *a, *b;
 {
@@ -1449,28 +1444,6 @@ hme_ioctl(ifp, cmd, data)
 			}
 			arp_ifinit(ifp, ifa);
 			break;
-#endif
-#ifdef NS
-		case AF_NS:
-		    {
-			struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
-
-			if (ns_nullhost(*ina))
-				ina->x_host =
-				    *(union ns_host *)LLADDR(ifp->if_sadl);
-			else {
-				memcpy(LLADDR(ifp->if_sadl),
-				    ina->x_host.c_host, sizeof(sc->sc_enaddr));
-			}
-			/* Set new address. */
-			if (ifp->if_flags & IFF_UP)
-				hme_setladrf(sc);
-			else {
-				ifp->if_flags |= IFF_UP;
-				hme_init(sc);
-			}
-			break;
-		    }
 #endif
 		default:
 			ifp->if_flags |= IFF_UP;

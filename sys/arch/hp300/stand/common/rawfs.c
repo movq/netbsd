@@ -1,4 +1,4 @@
-/*	$NetBSD: rawfs.c,v 1.5 2005/12/11 12:17:19 christos Exp $	*/
+/*	$NetBSD: rawfs.c,v 1.7 2006/06/25 17:36:07 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
@@ -95,7 +95,7 @@ rawfs_close(struct open_file *f)
 #endif
 
 	if (fs != (struct rawfs_file *)0)
-		free(fs, sizeof(*fs));
+		dealloc(fs, sizeof(*fs));
 
 	return 0;
 }
@@ -182,7 +182,8 @@ static int
 rawfs_get_block(struct open_file *f)
 {
 	struct rawfs_file *fs;
-	int error, len;
+	int error;
+	size_t len;
 
 	fs = (struct rawfs_file *)f->f_fsdata;
 	fs->fs_ptr = fs->fs_buf;

@@ -1,6 +1,6 @@
-/*	$NetBSD: crypto_openssl.c,v 1.7 2005/11/26 02:32:58 christos Exp $	*/
+/*	$NetBSD: crypto_openssl.c,v 1.11.2.1 2007/05/13 10:14:04 jdc Exp $	*/
 
-/* Id: crypto_openssl.c,v 1.40.4.5 2005/07/12 11:50:15 manubsd Exp */
+/* Id: crypto_openssl.c,v 1.47 2006/05/06 20:42:09 manubsd Exp */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -79,18 +79,14 @@
 #else
 #include "crypto/rijndael/rijndael-api-fst.h"
 #endif
+#if defined(HAVE_OPENSSL_CAMELLIA_H)
+#include <openssl/camellia.h>
+#endif
 #ifdef WITH_SHA2
-#ifdef notdef
 #ifdef HAVE_OPENSSL_SHA2_H
 #include <openssl/sha2.h>
 #else
 #include "crypto/sha2/sha2.h"
-#endif
-#else
-#define SHA384_CTX SHA512_CTX
-#define EVP_sha2_256 EVP_sha256
-#define EVP_sha2_384 EVP_sha384
-#define EVP_sha2_512 EVP_sha512
 #endif
 #endif
 
@@ -136,7 +132,7 @@ eay_str2asn1dn(str, len)
 	char *buf;
 	char *field, *value;
 	int i, j;
-	vchar_t *ret;
+	vchar_t *ret = NULL;
 	caddr_t p;
 
 	if (len == -1)
@@ -144,7 +140,7 @@ eay_str2asn1dn(str, len)
 
 	buf = racoon_malloc(len + 1);
 	if (!buf) {
-		printf("failed to allocate buffer\n");
+		plog(LLV_WARNING, LOCATION, NULL,"failed to allocate buffer\n");
 		return NULL;
 	}
 	memcpy(buf, str, len);
@@ -221,6 +217,8 @@ eay_str2asn1dn(str, len)
 		racoon_free(buf);
 	if (name)
 		X509_NAME_free(name);
+	if (ret)
+		vfree(ret);
 	return NULL;
 }
 
@@ -248,7 +246,7 @@ eay_hex2asn1dn(const char *hex, int len)
 	binlen = BN_num_bytes(bn);
 	ret = vmalloc(binlen);
 	if (!ret) {
-		printf("failed to allocate buffer\n");
+		plog(LLV_WARNING, LOCATION, NULL,"failed to allocate buffer\n");
 		return NULL;
 	}
 	binbuf = ret->v;
@@ -497,7 +495,7 @@ eay_check_x509cert(cert, CApath, CAfile, local)
 
 end:
 	if (error)
-		printf("%s\n", eay_strerror());
+		plog(LLV_WARNING, LOCATION, NULL,"%s\n", eay_strerror());
 	if (cert_ctx != NULL)
 		X509_STORE_free(cert_ctx);
 	if (x509 != NULL)
@@ -601,37 +599,36 @@ eay_get_x509asn1subjectname(cert)
 	u_char *bp;
 	vchar_t *name = NULL;
 	int len;
-	int error = -1;
 
 	bp = (unsigned char *) cert->v;
 
 	x509 = mem2x509(cert);
 	if (x509 == NULL)
-		goto end;
+		goto error;
 
 	/* get the length of the name */
 	len = i2d_X509_NAME(x509->cert_info->subject, NULL);
 	name = vmalloc(len);
 	if (!name)
-		goto end;
+		goto error;
 	/* get the name */
 	bp = (unsigned char *) name->v;
 	len = i2d_X509_NAME(x509->cert_info->subject, &bp);
 
-	error = 0;
-
-   end:
-	if (error) {
-		plog(LLV_ERROR, LOCATION, NULL, "%s\n", eay_strerror());
-		if (name) {
-			vfree(name);
-			name = NULL;
-		}
-	}
-	if (x509)
-		X509_free(x509);
+	X509_free(x509);
 
 	return name;
+
+error:
+	plog(LLV_ERROR, LOCATION, NULL, "%s\n", eay_strerror());
+
+	if (name != NULL) 
+		vfree(name);
+
+	if (x509 != NULL)
+		X509_free(x509);
+
+	return NULL;
 }
 
 /*
@@ -1642,6 +1639,62 @@ eay_aes_keylen(len)
 	return len;
 }
 
+#if defined(HAVE_OPENSSL_CAMELLIA_H)
+/*
+ * CAMELLIA-CBC
+ */
+static inline const EVP_CIPHER *
+camellia_evp_by_keylen(int keylen)
+{
+	switch(keylen) {
+		case 16:
+		case 128:
+			return EVP_camellia_128_cbc();
+		case 24:
+		case 192:
+			return EVP_camellia_192_cbc();
+		case 32:
+		case 256:
+			return EVP_camellia_256_cbc();
+		default:
+			return NULL;
+	}
+}
+
+vchar_t *
+eay_camellia_encrypt(data, key, iv)
+       vchar_t *data, *key, *iv;
+{
+	return evp_crypt(data, key, iv, camellia_evp_by_keylen(key->l), 1);
+}
+
+vchar_t *
+eay_camellia_decrypt(data, key, iv)
+       vchar_t *data, *key, *iv;
+{
+	return evp_crypt(data, key, iv, camellia_evp_by_keylen(key->l), 0);
+}
+
+int
+eay_camellia_weakkey(key)
+	vchar_t *key;
+{
+	return 0;
+}
+
+int
+eay_camellia_keylen(len)
+	int len;
+{
+	if (len == 0)
+		return 128;
+	if (len != 128 && len != 192 && len != 256)
+		return -1;
+	return len;
+}
+
+#endif
+
 /* for ipsec part */
 int
 eay_null_hashlen()
@@ -2446,15 +2499,18 @@ base64_decode(char *in, long inlen)
 {
 	BIO *bio=NULL, *b64=NULL;
 	vchar_t *res = NULL;
-	char out[inlen*2];
+	char *outb;
 	long outlen;
 
+	outb = malloc(inlen * 2);
+	if (outb == NULL)
+		goto out;
 	bio = BIO_new_mem_buf(in, inlen);
 	b64 = BIO_new(BIO_f_base64());
 	BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
 	bio = BIO_push(b64, bio);
 
-	outlen = BIO_read(bio, out, inlen * 2);
+	outlen = BIO_read(bio, outb, inlen * 2);
 	if (outlen <= 0) {
 		plog(LLV_ERROR, LOCATION, NULL, "%s\n", eay_strerror());
 		goto out;
@@ -2464,9 +2520,11 @@ base64_decode(char *in, long inlen)
 	if (!res)
 		goto out;
 
-	memcpy(res->v, out, outlen);
+	memcpy(res->v, outb, outlen);
 
 out:
+	if (outb)
+		free(outb);
 	if (bio)
 		BIO_free_all(bio);
 

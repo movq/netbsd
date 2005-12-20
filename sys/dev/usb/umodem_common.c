@@ -1,4 +1,4 @@
-/*	$NetBSD: umodem_common.c,v 1.6 2005/12/11 12:24:01 christos Exp $	*/
+/*	$NetBSD: umodem_common.c,v 1.9 2006/11/16 01:33:27 christos Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umodem_common.c,v 1.6 2005/12/11 12:24:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umodem_common.c,v 1.9 2006/11/16 01:33:27 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -90,9 +90,13 @@ int	umodemdebug = 0;
  * These are the maximum number of bytes transferred per frame.
  * If some really high speed devices should use this driver they
  * may need to be increased, but this is good enough for normal modems.
+ *
+ * Note: increased from 64/256, to better support EVDO wireless PPP.
+ * The sizes should not be increased further, or there
+ * will be problems with contiguous storage allocation.
  */
-#define UMODEMIBUFSIZE 64
-#define UMODEMOBUFSIZE 256
+#define UMODEMIBUFSIZE 4096
+#define UMODEMOBUFSIZE 4096
 
 Static usbd_status umodem_set_comm_feature(struct umodem_softc *sc,
 					   int feature, int state);
@@ -306,7 +310,8 @@ umodem_close(void *addr, int portno)
 }
 
 Static void
-umodem_intr(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
+umodem_intr(usbd_xfer_handle xfer, usbd_private_handle priv,
+    usbd_status status)
 {
 	struct umodem_softc *sc = priv;
 	u_char mstatus;
@@ -463,8 +468,8 @@ umodem_param(void *addr, int portno, struct termios *t)
 }
 
 int
-umodem_ioctl(void *addr, int portno, u_long cmd, caddr_t data, int flag,
-	     usb_proc_ptr p)
+umodem_ioctl(void *addr, int portno, u_long cmd, caddr_t data,
+    int flag, usb_proc_ptr p)
 {
 	struct umodem_softc *sc = addr;
 	int error = 0;

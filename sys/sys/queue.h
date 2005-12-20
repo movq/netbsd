@@ -1,4 +1,4 @@
-/*	$NetBSD: queue.h,v 1.44 2005/11/11 15:04:04 yamt Exp $	*/
+/*	$NetBSD: queue.h,v 1.45.14.1 2007/07/18 20:13:24 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -33,6 +33,8 @@
 
 #ifndef	_SYS_QUEUE_H_
 #define	_SYS_QUEUE_H_
+
+#include <sys/null.h>
 
 /*
  * This file defines five types of data structures: singly-linked lists,
@@ -657,5 +659,14 @@ struct {								\
 #define	CIRCLEQ_LAST(head)		((head)->cqh_last)
 #define	CIRCLEQ_NEXT(elm, field)	((elm)->field.cqe_next)
 #define	CIRCLEQ_PREV(elm, field)	((elm)->field.cqe_prev)
+
+#define CIRCLEQ_LOOP_NEXT(head, elm, field)				\
+	(((elm)->field.cqe_next == (void *)(head))			\
+	    ? ((head)->cqh_first)					\
+	    : (elm->field.cqe_next))
+#define CIRCLEQ_LOOP_PREV(head, elm, field)				\
+	(((elm)->field.cqe_prev == (void *)(head))			\
+	    ? ((head)->cqh_last)					\
+	    : (elm->field.cqe_prev))
 
 #endif	/* !_SYS_QUEUE_H_ */

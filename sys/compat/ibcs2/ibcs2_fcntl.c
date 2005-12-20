@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_fcntl.c,v 1.20 2005/12/11 12:20:02 christos Exp $	*/
+/*	$NetBSD: ibcs2_fcntl.c,v 1.24 2006/11/16 01:32:42 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Scott Bartram
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_fcntl.c,v 1.20 2005/12/11 12:20:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_fcntl.c,v 1.24 2006/11/16 01:32:42 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,6 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: ibcs2_fcntl.c,v 1.20 2005/12/11 12:20:02 christos Ex
 #include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/vnode.h>
+#include <sys/kauth.h>
 
 #include <compat/ibcs2/ibcs2_types.h>
 #include <compat/ibcs2/ibcs2_fcntl.h>
@@ -240,21 +241,16 @@ ibcs2_sys_access(l, v, retval)
 }
 
 int
-ibcs2_sys_eaccess(l, v, retval)
-        struct lwp *l;
-	void *v;
-        register_t *retval;
+ibcs2_sys_eaccess(struct lwp *l, void *v, register_t *retval)
 {
 	struct ibcs2_sys_eaccess_args /* {
 		syscallarg(char *) path;
 		syscallarg(int) flags;
 	} */ *uap = v;
-	struct proc *p = l->l_proc;
-	struct ucred *cred = p->p_ucred;
 	struct vnode *vp;
         int error, flags;
         struct nameidata nd;
-        caddr_t sg = stackgap_init(p, 0);
+        caddr_t sg = stackgap_init(l->l_proc, 0);
 
         CHECK_ALT_EXIST(l, &sg, SCARG(uap, path));
 
@@ -274,7 +270,7 @@ ibcs2_sys_eaccess(l, v, retval)
                 if (SCARG(uap, flags) & IBCS2_X_OK)
 			flags |= VEXEC;
                 if ((flags & VWRITE) == 0 || (error = vn_writechk(vp)) == 0)
-                        error = VOP_ACCESS(vp, flags, cred, l);
+                        error = VOP_ACCESS(vp, flags, l->l_cred, l);
         }
         vput(vp);
         return error;

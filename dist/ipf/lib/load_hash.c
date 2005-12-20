@@ -1,11 +1,11 @@
-/*	$NetBSD: load_hash.c,v 1.1.1.2 2005/02/19 21:26:47 martti Exp $	*/
+/*	$NetBSD: load_hash.c,v 1.1.1.3.4.2 2007/07/16 11:05:03 liamjfoy Exp $	*/
 
 /*
- * Copyright (C) 2002 by Darren Reed.
+ * Copyright (C) 2002-2005 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: load_hash.c,v 1.11.2.2 2005/02/01 02:44:05 darrenr Exp
+ * Id: load_hash.c,v 1.11.2.5 2006/07/14 06:12:25 darrenr Exp
  */
 
 #include <fcntl.h>
@@ -62,6 +62,7 @@ ioctlfunc_t iocfunc;
 	iph.iph_size = size;
 	iph.iph_seed = iphp->iph_seed;
 	iph.iph_table = NULL;
+	iph.iph_list = NULL;
 	iph.iph_ref = 0;
 
 	if ((opts & OPT_REMOVE) == 0) {
@@ -72,8 +73,8 @@ ioctlfunc_t iocfunc;
 			}
 	}
 
-	strncpy(op.iplo_name, iph.iph_name, sizeof(op.iplo_name));
-	strncpy(iphp->iph_name, iph.iph_name, sizeof(op.iplo_name));
+	strncpy(iph.iph_name, op.iplo_name, sizeof(op.iplo_name));
+	strncpy(iphp->iph_name, op.iplo_name, sizeof(op.iplo_name));
 
 	if (opts & OPT_VERBOSE) {
 		for (a = list; a != NULL; a = a->ipe_next) {
@@ -85,9 +86,10 @@ ioctlfunc_t iocfunc;
 			perror("calloc(size, sizeof(*iph.iph_table))");
 			return -1;
 		}
-		iph.iph_table[0] = list;
+		iph.iph_list = list;
 		printhash(&iph, bcopywrap, iph.iph_name, opts);
 		free(iph.iph_table);
+		iph.iph_list = NULL;
 
 		for (a = list; a != NULL; a = a->ipe_next) {
 			a->ipe_addr.in4_addr = htonl(a->ipe_addr.in4_addr);

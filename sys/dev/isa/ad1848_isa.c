@@ -1,4 +1,4 @@
-/*	$NetBSD: ad1848_isa.c,v 1.30 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: ad1848_isa.c,v 1.32 2006/11/16 01:33:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -102,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ad1848_isa.c,v 1.30 2005/12/11 12:22:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ad1848_isa.c,v 1.32 2006/11/16 01:33:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: openfirm.c,v 1.12 2005/11/14 19:11:24 uwe Exp $	*/
+/*	$NetBSD: openfirm.c,v 1.14 2006/05/10 06:24:03 skrll Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: openfirm.c,v 1.12 2005/11/14 19:11:24 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: openfirm.c,v 1.14 2006/05/10 06:24:03 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -474,7 +474,7 @@ OF_read(int handle, void *addr, int len)
 	args.nreturns = 1;
 	args.ihandle = HDL2CELL(handle);
 	args.addr = ADR2CELL(addr);
-	for (; len > 0; len -= l, (u_long)addr += l) {
+	for (; len > 0; len -= l) {
 		l = MIN(NBPG, len);
 		args.len = l;
 		if (openfirmware(&args) == -1)
@@ -514,7 +514,7 @@ OF_write(int handle, const void *addr, int len)
 	args.nreturns = 1;
 	args.ihandle = HDL2CELL(handle);
 	args.addr = ADR2CELL(addr);
-	for (; len > 0; len -= l, (u_long)addr += l) {
+	for (; len > 0; len -= l) {
 		l = MIN(NBPG, len);
 		args.len = l;
 		if (openfirmware(&args) == -1)
@@ -757,7 +757,7 @@ OF_sym2val(void *cells)
 	db_expr_t value;
 
 	/* Set data segment pointer */
-	__asm __volatile("clr %%g4" : :);
+	__asm volatile("clr %%g4" : :);
 
 	/* No args?  Nothing to do. */
 	if (args->nargs == 0 || args->nreturns == 0)
@@ -795,7 +795,7 @@ OF_val2sym(void *cells)
 	db_expr_t offset;
 
 	/* Set data segment pointer */
-	__asm __volatile("clr %%g4" : :);
+	__asm volatile("clr %%g4" : :);
 
 	if (obp_symbol_debug)
 		prom_printf("OF_val2sym: nargs %lx nreturns %lx\n",

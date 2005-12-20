@@ -1,4 +1,4 @@
-$NetBSD: acronyms.comp,v 1.61 2005/03/28 15:07:16 jschauma Exp $
+$NetBSD: acronyms.comp,v 1.71 2006/10/12 20:47:55 salo Exp $
 
 3WHS	three-way handshake
 ABI	application binary interface
@@ -17,11 +17,12 @@ APIC	advanced programmable interrupt controller
 ARP	address resolution protocol
 ARQ	automatic repeat request
 AS	autonomous system
-ASN	autonomous system number
 ASCII	american standard code for information interchange
+ASN	autonomous system number
 AT	advanced technology
 ATA	advanced technology attachment
 ATAPI	advanced technology attachment packet interface
+ATC	address translation cache
 ATM	asynchronous transfer mode
 ATX	advanced technology extended
 BEDO	burst extended data output
@@ -31,6 +32,7 @@ BGP	border gateway protocol
 BIOS	basic input/output system
 BLOB	binary large object
 BPS	bits per second
+BQS	berkeley quality software
 BSD	berkeley software distribution
 CAD	computer-aided design
 CAV	constant angular velocity (as opposed to CLV)
@@ -75,6 +77,7 @@ DMA	direct memory access
 DNS	domain name system
 DOS	denial of service
 DPCM	differential pulse code modulation
+DPD	dead peer detection
 DPI	dots per inch
 DRAM	dynamic random access memory
 DSL	digital subscriber line
@@ -84,6 +87,8 @@ DTE	data terminal equipment
 DTE	dumb terminal emulator
 DVD	digital versatile disc
 DVI	digital visual interface
+E-XER	extended XML encoding rules
+EAP	extensible authentication protocol
 ECP	enhanced capability port
 EDID	extended display identification data
 EDO	extended data out
@@ -93,11 +98,12 @@ EGA	enhanced graphics array
 EGP	exterior gateway protocol
 EISA	extended industry standard architecture
 ELF	executable and linking format
+EOF	end of file
+EOT	end of transmission
 EPP	enhanced parallel port
 EPRML	extended partial response, maximum likelihood
 EPROM	erasable programmable read only memory
 ESDRAM	enhanced synchronous dynamic random access memory
-E-XER	extended XML encoding rules
 FAT	file allocation table
 FBRAM	frame buffer random access memory
 FCS	frame check sequence
@@ -136,10 +142,10 @@ IGP	interior gateway protocol
 IKE	internet key exchange
 IMAP	internet mail access protocol
 INCITS	international committee on information technology standards
-IPC	interprocess communication
 IO	input/output
 IOCTL	input/output control
 IP	internet protocol
+IPC	interprocess communication
 IPNG	internet protocol, next generation
 IPSEC	internet protocol security
 IRC	internet relay chat
@@ -154,6 +160,7 @@ ISO	international standards organization
 ISOC	internet society
 ISP	internet service provider
 JPEG	joint photographic experts group
+KPI	kernel programming interface
 KVA	kernel virtual address
 LAN	local area network
 LBA	logical block addressing
@@ -206,10 +213,11 @@ PC	personal computer
 PCI	peripheral component interconnect
 PCM	pulse code modulation
 PCMCIA	personal computer memory card international association
-PDU	protocol data unit
 PDP	page descriptor page
+PDU	protocol data unit
 PER	packed encoding rules
 PERL	practical extraction [and] report language
+PFS	perfect forward secrecy
 PGP	pretty good privacy
 PIC	programmable interrupt controller
 PID	process id
@@ -227,16 +235,16 @@ PPPOA	point-to-point protocol over ATM
 PPPOE	point-to-point protocol over ethernet
 PRML	partial response, maximum likelihood
 PROM	programmable read only memory
+PSK	pre-shared key
+PSTN	public switched telephone network
 PTE	page table entry
 PTLA	pseudo top level aggregator
 PTP	page table page
-PSTN	public switched telephone network
 PWM	pulse width modulation
 QOS	quality of service
 RAID	redundant array of inexpensive disks
 RAM	random access memory
 RCS	revision control system
-RFC	request for comments
 RGB	red green blue
 RIFF	Resource Interchange File Format
 RIP	routing information protocol
@@ -251,9 +259,12 @@ RTS	request to send
 RTT	round time trip
 S/PDIF	sony/phillips digital interface
 SACD	super audio compact disc
+SAD	security association database
 SAM	serial access memory
 SASI	shugart associates system interface (predecessor to SCSI)
 SATA	serial advanced technology attachment
+SCM	software configuration management
+SCM	source code management
 SCSI	small computer system interface
 SDRAM	synchronous dynamic random access memory
 SGRAM	synchronous graphics random access memory
@@ -265,6 +276,7 @@ SMART	self-monitoring analysis and reporting technology
 SMP	symmetric multiprocessing
 SMTP	simple mail transfer protocol
 SNMP	simple network management protocol
+SPD	security policy database
 SPD	serial presence detect
 SRAM	static random access memory
 SSFDC	solid state floppy disc card
@@ -311,7 +323,9 @@ VPN	virtual private network
 VRAM	video random access memory
 WAN	wide area network
 WAP	wireless application protocol
+WEP	wired equivalent privacy
 WLAN	wireless local area network
+WPA	wi-fi protected access
 WRAM	window random access memory
 WWW	world wide web
 XER	XML encoding rules

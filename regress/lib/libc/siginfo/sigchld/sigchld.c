@@ -1,11 +1,13 @@
-/* $NetBSD: sigchld.c,v 1.5 2003/11/27 01:03:13 simonb Exp $ */
+/* $NetBSD: sigchld.c,v 1.7 2006/11/04 00:08:34 oster Exp $ */
+
+#include <sys/ucontext.h>
+#include <sys/wait.h>
+#include <sys/resource.h>
 
 #include <assert.h>
 #include <signal.h>
 #include <stdio.h>
-#include <sys/ucontext.h>
-#include <sys/wait.h>
-#include <sys/resource.h>
+#include <stdlib.h>
 
 pid_t child;
 int code;
@@ -113,11 +115,15 @@ runkill()
 int
 main(void)
 {
+	sigset_t set;
 	struct rlimit rlim;
 	(void)getrlimit(RLIMIT_CORE, &rlim);
 	rlim.rlim_cur = rlim.rlim_max;
 	(void)setrlimit(RLIMIT_CORE, &rlim);
 	sethandler(handler);
+	sigemptyset(&set);
+	sigaddset(&set, SIGCHLD);
+	sigprocmask(SIG_BLOCK, &set, NULL);
 	runnormal();
 	rundump();
 	runkill();

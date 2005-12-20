@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.h,v 1.34 2005/12/11 12:19:27 christos Exp $	*/
+/*	$NetBSD: machdep.h,v 1.36 2006/10/03 13:02:32 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -132,7 +132,6 @@ void	m68881_restore(struct fpframe *);
 
 void	netintr(void);
 
-caddr_t	obio_find_mapping(paddr_t, psize_t);
 void	obio_init(void);
 
 void	setvbr(void **);
@@ -157,8 +156,6 @@ void	cache_enable(void);
 extern vaddr_t virtual_avail, virtual_end;
 /* Physical address space available: */
 extern paddr_t avail_start, avail_end;
-/* The "hole" (used to skip the Sun3/50 video RAM) */
-extern paddr_t hole_start, hole_size;
 
 /* cache.c */
 void	cache_enable(void);

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ppp.c,v 1.103 2005/12/11 23:05:25 thorpej Exp $	*/
+/*	$NetBSD: if_ppp.c,v 1.111 2006/11/16 01:33:40 christos Exp $	*/
 /*	Id: if_ppp.c,v 1.6 1997/03/04 03:33:00 paulus Exp 	*/
 
 /*
@@ -102,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ppp.c,v 1.103 2005/12/11 23:05:25 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ppp.c,v 1.111 2006/11/16 01:33:40 christos Exp $");
 
 #include "ppp.h"
 
@@ -125,6 +125,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ppp.c,v 1.103 2005/12/11 23:05:25 thorpej Exp $")
 #include <sys/time.h>
 #include <sys/malloc.h>
 #include <sys/conf.h>
+#include <sys/kauth.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -145,7 +146,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_ppp.c,v 1.103 2005/12/11 23:05:25 thorpej Exp $")
 
 #include "bpfilter.h"
 #if NBPFILTER > 0
-#include <sys/time.h>
 #include <net/bpf.h>
 #endif
 
@@ -314,6 +314,8 @@ ppp_create(const char *name, int unit)
     sc->sc_inq.ifq_maxlen = IFQ_MAXLEN;
     sc->sc_fastq.ifq_maxlen = IFQ_MAXLEN;
     sc->sc_rawq.ifq_maxlen = IFQ_MAXLEN;
+    /* Ratio of 1:2 packets between the regular and the fast queue */
+    sc->sc_maxfastq = 2;	
     IFQ_SET_READY(&sc->sc_if.if_snd);
     if_attach(&sc->sc_if);
     if_alloc_sadl(&sc->sc_if);
@@ -400,7 +402,7 @@ pppalloc(pid_t pid)
 	sc->sc_npmode[i] = NPMODE_ERROR;
     sc->sc_npqueue = NULL;
     sc->sc_npqtail = &sc->sc_npqueue;
-    sc->sc_last_sent = sc->sc_last_recv = time.tv_sec;
+    sc->sc_last_sent = sc->sc_last_recv = time_second;
 
     return sc;
 }
@@ -487,7 +489,7 @@ pppdealloc(struct ppp_softc *sc)
  */
 int
 pppioctl(struct ppp_softc *sc, u_long cmd, caddr_t data, int flag,
-         struct proc *p)
+    struct lwp *l)
 {
     int s, error, flags, mru, npx;
     u_int nb;
@@ -503,6 +505,28 @@ pppioctl(struct ppp_softc *sc, u_long cmd, caddr_t data, int flag,
 #ifdef	PPP_COMPRESS
     u_char ccp_option[CCP_MAX_OPTION_LENGTH];
 #endif
+
+    switch (cmd) {
+    case PPPIOCSFLAGS:
+    case PPPIOCSMRU:
+    case PPPIOCSMAXCID:
+    case PPPIOCSCOMPRESS:
+    case PPPIOCSNPMODE:
+	if (kauth_authorize_network(l->l_cred, KAUTH_NETWORK_INTERFACE,
+	    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, &sc->sc_if, (void *)cmd,
+	    NULL) != 0)
+		return (EPERM);
+	break;
+    case PPPIOCXFERUNIT:
+	/* XXX: Why is this privileged?! */
+	if (kauth_authorize_network(l->l_cred, KAUTH_NETWORK_INTERFACE,
+	    KAUTH_REQ_NETWORK_INTERFACE_GETPRIV, &sc->sc_if, (void *)cmd,
+	    NULL) != 0)
+		return (EPERM);
+	break;
+    default:
+	break;
+    }
 
     switch (cmd) {
     case FIONREAD:
@@ -533,8 +557,6 @@ pppioctl(struct ppp_softc *sc, u_long cmd, caddr_t data, int flag,
 	break;
 
     case PPPIOCSFLAGS:
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-	    return (error);
 	flags = *(int *)data & SC_MASK;
 	s = splsoftnet();
 #ifdef PPP_COMPRESS
@@ -547,8 +569,6 @@ pppioctl(struct ppp_softc *sc, u_long cmd, caddr_t data, int flag,
 	break;
 
     case PPPIOCSMRU:
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-	    return (error);
 	mru = *(int *)data;
 	if (mru >= PPP_MINMRU && mru <= PPP_MAXMRU)
 	    sc->sc_mru = mru;
@@ -560,8 +580,6 @@ pppioctl(struct ppp_softc *sc, u_long cmd, caddr_t data, int flag,
 
 #ifdef VJC
     case PPPIOCSMAXCID:
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-	    return (error);
 	if (sc->sc_comp) {
 	    s = splsoftnet();
 	    sl_compress_setup(sc->sc_comp, *(int *)data);
@@ -571,15 +589,11 @@ pppioctl(struct ppp_softc *sc, u_long cmd, caddr_t data, int flag,
 #endif
 
     case PPPIOCXFERUNIT:
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-	    return (error);
-	sc->sc_xfer = p->p_pid;
+	sc->sc_xfer = l->l_proc->p_pid;
 	break;
 
 #ifdef PPP_COMPRESS
     case PPPIOCSCOMPRESS:
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-	    return (error);
 	odp = (struct ppp_option_data *) data;
 	nb = odp->length;
 	if (nb > sizeof(ccp_option))
@@ -651,8 +665,6 @@ pppioctl(struct ppp_softc *sc, u_long cmd, caddr_t data, int flag,
 	if (cmd == PPPIOCGNPMODE) {
 	    npi->mode = sc->sc_npmode[npx];
 	} else {
-	    if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
-		return (error);
 	    if (npi->mode != sc->sc_npmode[npx]) {
 		s = splnet();
 		sc->sc_npmode[npx] = npi->mode;
@@ -667,7 +679,7 @@ pppioctl(struct ppp_softc *sc, u_long cmd, caddr_t data, int flag,
 
     case PPPIOCGIDLE:
 	s = splsoftnet();
-	t = time.tv_sec;
+	t = time_second;
 	((struct ppp_idle *)data)->xmit_idle = t - sc->sc_last_sent;
 	((struct ppp_idle *)data)->recv_idle = t - sc->sc_last_recv;
 	splx(s);
@@ -743,7 +755,7 @@ pppioctl(struct ppp_softc *sc, u_long cmd, caddr_t data, int flag,
 static int
 pppsioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
-    struct proc *p = curproc;	/* XXX */
+    struct lwp *l = curlwp;	/* XXX */
     struct ppp_softc *sc = ifp->if_softc;
     struct ifaddr *ifa = (struct ifaddr *)data;
     struct ifreq *ifr = (struct ifreq *)data;
@@ -792,7 +804,9 @@ pppsioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	break;
 
     case SIOCSIFMTU:
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if ((error = kauth_authorize_network(l->l_cred,
+	    KAUTH_NETWORK_INTERFACE, KAUTH_REQ_NETWORK_INTERFACE_SETPRIV,
+	    ifp, (void *)cmd, NULL) != 0))
 	    break;
 	sc->sc_if.if_mtu = ifr->ifr_mtu;
 	break;
@@ -864,7 +878,7 @@ pppsioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
  */
 int
 pppoutput(struct ifnet *ifp, struct mbuf *m0, struct sockaddr *dst,
-          struct rtentry *rtp)
+    struct rtentry *rtp)
 {
     struct ppp_softc *sc = ifp->if_softc;
     int protocol, address, control;
@@ -990,12 +1004,12 @@ pppoutput(struct ifnet *ifp, struct mbuf *m0, struct sockaddr *dst,
 	if (sc->sc_active_filt_out.bf_insns == 0
 	    || bpf_filter(sc->sc_active_filt_out.bf_insns, (u_char *) m0,
 	    		  len, 0))
-	    sc->sc_last_sent = time.tv_sec;
+	    sc->sc_last_sent = time_second;
 #else
 	/*
 	 * Update the time we sent the most recent packet.
 	 */
-	sc->sc_last_sent = time.tv_sec;
+	sc->sc_last_sent = time_second;
 #endif /* PPP_FILTER */
     }
 
@@ -1129,9 +1143,21 @@ ppp_dequeue(struct ppp_softc *sc)
      * normal queue.
      */
     s = splnet();
-    IF_DEQUEUE(&sc->sc_fastq, m);
-    if (m == NULL)
+    if (sc->sc_nfastq < sc->sc_maxfastq) {
+	IF_DEQUEUE(&sc->sc_fastq, m);
+	if (m != NULL)
+	    sc->sc_nfastq++;
+	else
+	    IFQ_DEQUEUE(&sc->sc_if.if_snd, m);
+    } else {
+	sc->sc_nfastq = 0;
 	IFQ_DEQUEUE(&sc->sc_if.if_snd, m);
+	if (m == NULL) {
+	    IF_DEQUEUE(&sc->sc_fastq, m);
+	    if (m != NULL)
+		sc->sc_nfastq++;
+	}
+    }
     splx(s);
 
     if (m == NULL)
@@ -1632,12 +1658,12 @@ ppp_inproc(struct ppp_softc *sc, struct mbuf *m)
 	if (sc->sc_active_filt_in.bf_insns == 0
 	    || bpf_filter(sc->sc_active_filt_in.bf_insns, (u_char *) m,
 	    		  ilen, 0))
-	    sc->sc_last_recv = time.tv_sec;
+	    sc->sc_last_recv = time_second;
 #else
 	/*
 	 * Record the time that we received this packet.
 	 */
-	sc->sc_last_recv = time.tv_sec;
+	sc->sc_last_recv = time_second;
 #endif /* PPP_FILTER */
     }
 

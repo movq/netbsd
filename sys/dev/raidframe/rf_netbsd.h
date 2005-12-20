@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_netbsd.h,v 1.25 2005/12/11 12:23:37 christos Exp $	*/
+/*	$NetBSD: rf_netbsd.h,v 1.27 2006/08/27 05:07:13 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -44,7 +44,9 @@
 #include <sys/namei.h>
 #include <sys/vnode.h>
 #include <sys/pool.h>
+#include <sys/disk.h>
 
+#include <dev/dkvar.h>
 #include <dev/raidframe/raidframevar.h>
 
 struct raidcinfo {
@@ -68,7 +70,6 @@ struct RF_Pools_s {
 	struct pool asmap;       /* Access Stripe Map */
 	struct pool asmhle;      /* Access Stripe Map Header List Elements */
 	struct pool callback;    /* Callback descriptors */
-	struct pool cbuf;        /* Component buffers */
 	struct pool dagh;        /* DAG headers */
 	struct pool dagnode;     /* DAG nodes */
 	struct pool daglist;     /* DAG lists */

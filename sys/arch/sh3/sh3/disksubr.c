@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.19 2005/12/11 12:19:00 christos Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.22 2006/11/25 11:59:56 scw Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.19 2005/12/11 12:19:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.22 2006/11/25 11:59:56 scw Exp $");
 
 #include "opt_mbr.h"
 
@@ -43,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.19 2005/12/11 12:19:00 christos Exp $
 #include <sys/disk.h>
 #include <sys/syslog.h>
 
-#include <machine/bswap.h>
+#include <sys/bswap.h>
 
 int fat_types[] = { MBR_PTYPE_FAT12, MBR_PTYPE_FAT16S,
 		    MBR_PTYPE_FAT16B, MBR_PTYPE_FAT32,
@@ -54,11 +54,11 @@ int fat_types[] = { MBR_PTYPE_FAT12, MBR_PTYPE_FAT16S,
 
 #ifdef BSDDISKLABEL_EI
 void swap_endian_disklabel(struct disklabel *, struct disklabel *);
-u_int16_t dkcksum_re(struct disklabel *);
+uint16_t dkcksum_re(struct disklabel *);
 #endif
 #ifdef COMPAT_MMEYE_OLDLABEL
 void swap_mmeye_disklabel(struct disklabel *, struct disklabel *);
-u_int16_t dkcksum_mmeye(struct disklabel *);
+uint16_t dkcksum_mmeye(struct disklabel *);
 #endif
 
 static struct mbr_partition *mbr_findslice(struct mbr_partition *,
@@ -129,14 +129,14 @@ swap_endian_disklabel(struct disklabel *nlp, struct disklabel *olp)
 #undef SW16
 }
 
-u_int16_t
+uint16_t
 dkcksum_re(struct disklabel *lp)
 {
-	u_int16_t *start, *end;
-	u_int16_t sum = 0;
+	uint16_t *start, *end;
+	uint16_t sum = 0;
 
-	start = (u_int16_t *)lp;
-	end = (u_int16_t *)&lp->d_partitions[bswap16(lp->d_npartitions)];
+	start = (uint16_t *)lp;
+	end = (uint16_t *)&lp->d_partitions[bswap16(lp->d_npartitions)];
 	while (start < end)
 		sum ^= *start++;
 	return (sum);
@@ -148,7 +148,7 @@ void
 swap_mmeye_disklabel(struct disklabel *nlp, struct disklabel *olp)
 {
 	int i;
-	u_int16_t *np, *op;
+	uint16_t *np, *op;
 
 #if BYTE_ORDER == BIG_ENDIAN
 #define	SW16(X) nlp->X = bswap16(olp->X)
@@ -162,14 +162,14 @@ swap_mmeye_disklabel(struct disklabel *nlp, struct disklabel *olp)
 	SW16(d_type);
 	SW16(d_subtype);
 
-	op = (u_int16_t *)&olp->d_typename[0];
-	np = (u_int16_t *)&nlp->d_typename[0];
-	for (i = 0; i < sizeof(olp->d_typename) / sizeof(u_int16_t); i++)
+	op = (uint16_t *)&olp->d_typename[0];
+	np = (uint16_t *)&nlp->d_typename[0];
+	for (i = 0; i < sizeof(olp->d_typename) / sizeof(uint16_t); i++)
 		*np++ = bswap16(*op++);
 
-	op = (u_int16_t *)&olp->d_un.un_d_packname[0];
-	np = (u_int16_t *)&nlp->d_un.un_d_packname[0];
-	for (i = 0; i < sizeof(olp->d_un) / sizeof(u_int16_t); i++)
+	op = (uint16_t *)&olp->d_un.un_d_packname[0];
+	np = (uint16_t *)&nlp->d_un.un_d_packname[0];
+	for (i = 0; i < sizeof(olp->d_un) / sizeof(uint16_t); i++)
 		*np++ = bswap16(*op++);
 
 	SW32(d_secsize);
@@ -218,24 +218,24 @@ swap_mmeye_disklabel(struct disklabel *nlp, struct disklabel *olp)
 #undef SW16
 }
 
-u_int16_t
+uint16_t
 dkcksum_mmeye(struct disklabel *lp)
 {
 	struct disklabel tdl;
 	int i, offset;
-	u_int16_t *start, *end, *fstype;
-	u_int16_t sum = 0;
+	uint16_t *start, *end, *fstype;
+	uint16_t sum = 0;
 
 	tdl = *lp;
 
 	for (i = 0; i < MAXPARTITIONS; i++) {
-		fstype = (u_int16_t *)&tdl.d_partitions[i].p_fstype;
+		fstype = (uint16_t *)&tdl.d_partitions[i].p_fstype;
 		*fstype = bswap16(*fstype);
 	}
 
 	offset = offsetof(struct disklabel,
 	    d_partitions[le16toh(lp->d_npartitions)]);
-	start = (u_int16_t *)&tdl;
+	start = (uint16_t *)&tdl;
 	end = start + offset;
 
 	while (start < end)
@@ -253,11 +253,11 @@ static struct mbr_partition *
 mbr_findslice(struct mbr_partition *dp, struct buf *bp)
 {
 	struct mbr_partition *ourdp = NULL;
-	u_int16_t *mbrmagicp;
+	uint16_t *mbrmagicp;
 	int i;
 
 	/* Note: Magic number is little-endian. */
-	mbrmagicp = (u_int16_t *)(bp->b_data + MBR_MAGIC_OFFSET);
+	mbrmagicp = (uint16_t *)(bp->b_data + MBR_MAGIC_OFFSET);
 	if (le16toh(*mbrmagicp) != MBR_MAGIC)
 		return (NO_MBR_SIGNATURE);
 
@@ -686,55 +686,4 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
  done:
 	brelse(bp);
 	return (error);
-}
-
-/*
- * Determine the size of the transfer, and make sure it is
- * within the boundaries of the partition. Adjust transfer
- * if needed, and signal errors or early completion.
- */
-int
-bounds_check_with_label(struct disk *dk, struct buf *bp, int wlabel)
-{
-	struct disklabel *lp = dk->dk_label;
-	struct partition *p = lp->d_partitions + DISKPART(bp->b_dev);
-	int labelsector = lp->d_partitions[2].p_offset + LABELSECTOR;
-	int sz;
-
-	sz = howmany(bp->b_bcount, lp->d_secsize);
-
-	if (bp->b_blkno + sz > p->p_size) {
-		sz = p->p_size - bp->b_blkno;
-		if (sz == 0) {
-			/* If exactly at end of disk, return EOF. */
-			bp->b_resid = bp->b_bcount;
-			return (0);
-		}
-		if (sz < 0) {
-			/* If past end of disk, return EINVAL. */
-			bp->b_error = EINVAL;
-			goto bad;
-		}
-		/* Otherwise, truncate request. */
-		bp->b_bcount = sz << DEV_BSHIFT;
-	}
-
-	/* Overwriting disk label? */
-	if (bp->b_blkno + p->p_offset <= labelsector &&
-#if LABELSECTOR != 0
-	    bp->b_blkno + p->p_offset + sz > labelsector &&
-#endif
-	    (bp->b_flags & B_READ) == 0 && !wlabel) {
-		bp->b_error = EROFS;
-		goto bad;
-	}
-
-	/* calculate cylinder for disksort to order transfers with */
-	bp->b_cylinder = (bp->b_blkno + p->p_offset) /
-	    (lp->d_secsize / DEV_BSIZE) / lp->d_secpercyl;
-	return (1);
-
- bad:
-	bp->b_flags |= B_ERROR;
-	return (-1);
 }

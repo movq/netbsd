@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplay_compat_usl.c,v 1.30 2005/12/11 12:24:12 christos Exp $ */
+/* $NetBSD: wsdisplay_compat_usl.c,v 1.37.2.1 2007/01/06 13:20:26 bouyer Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsdisplay_compat_usl.c,v 1.30 2005/12/11 12:24:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsdisplay_compat_usl.c,v 1.37.2.1 2007/01/06 13:20:26 bouyer Exp $");
 
 #include "opt_compat_freebsd.h"
 #include "opt_compat_netbsd.h"
@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: wsdisplay_compat_usl.c,v 1.30 2005/12/11 12:24:12 ch
 #include <sys/signalvar.h>
 #include <sys/malloc.h>
 #include <sys/errno.h>
+#include <sys/kauth.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
@@ -155,8 +156,8 @@ usl_sync_get(struct wsscreen *scr)
 }
 
 static int
-usl_detachproc(void *cookie, int waitok, void (*callback)(void *, int, int),
-	       void *cbarg)
+usl_detachproc(void *cookie, int waitok,
+    void (*callback)(void *, int, int), void *cbarg)
 {
 	struct usl_syncdata *sd = cookie;
 
@@ -220,8 +221,8 @@ usl_detachtimeout(void *arg)
 }
 
 static int
-usl_attachproc(void *cookie, int waitok, void (*callback)(void *, int, int),
-	       void *cbarg)
+usl_attachproc(void *cookie, int waitok,
+    void (*callback)(void *, int, int), void *cbarg)
 {
 	struct usl_syncdata *sd = cookie;
 
@@ -281,7 +282,7 @@ usl_attachtimeout(void *arg)
 
 int
 wsdisplay_usl_ioctl1(struct wsdisplay_softc *sc, u_long cmd, caddr_t data,
-		     int flag, struct lwp *l)
+    int flag, struct lwp *l)
 {
 	int idx, maxidx;
 
@@ -354,7 +355,7 @@ wsdisplay_usl_ioctl2(struct wsdisplay_softc *sc, struct wsscreen *scr,
 		     u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct proc *p = l->l_proc;
-	int intarg, res;
+	int intarg = 0, res;
 	u_long req;
 	void *arg;
 	struct usl_syncdata *sd;
@@ -404,12 +405,14 @@ wsdisplay_usl_ioctl2(struct wsdisplay_softc *sc, struct wsscreen *scr,
 #undef d
 
 	    case KDENABIO:
-		if (suser(p->p_ucred, &p->p_acflag) || securelevel > 1)
+#if defined(__i386__) && (defined(COMPAT_11) || defined(COMPAT_FREEBSD))
+		if (kauth_authorize_machdep(l->l_cred, KAUTH_MACHDEP_IOPL,
+		    NULL, NULL, NULL, NULL) != 0)
 			return (EPERM);
+#endif
 		/* FALLTHRU */
 	    case KDDISABIO:
-#if defined(__i386__)
-#if defined(COMPAT_10) || defined(COMPAT_11) || defined(COMPAT_FREEBSD)
+#if defined(__i386__) && (defined(COMPAT_11) || defined(COMPAT_FREEBSD))
 		{
 			/* XXX NJWLWP */
 		struct trapframe *fp = (struct trapframe *)curlwp->l_md.md_regs;
@@ -418,7 +421,6 @@ wsdisplay_usl_ioctl2(struct wsdisplay_softc *sc, struct wsscreen *scr,
 		else
 			fp->tf_eflags &= ~PSL_IOPL;
 		}
-#endif
 #endif
 		return (0);
 	    case KDSETRAD:

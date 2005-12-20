@@ -1,4 +1,4 @@
-/*	$NetBSD: proxymap.c,v 1.1.1.6 2005/08/18 21:08:26 rpaulo Exp $	*/
+/*	$NetBSD: proxymap.c,v 1.1.1.7.4.1 2007/06/16 17:00:50 snj Exp $	*/
 
 /*++
 /* NAME
@@ -18,18 +18,20 @@
 /*	practical to maintain a copy of the passwd file in the chroot
 /*	jail.  The solution:
 /* .sp
+/* .nf
 /*	local_recipient_maps =
-/* .ti +4
-/*	proxy:unix:passwd.byname $alias_maps
+/*	    proxy:unix:passwd.byname $alias_maps
+/* .fi
 /* .IP \(bu
 /*	To consolidate the number of open lookup tables by sharing
 /*	one open table among multiple processes. For example, making
 /*	mysql connections from every Postfix daemon process results
 /*	in "too many connections" errors. The solution:
 /* .sp
+/* .nf
 /*	virtual_alias_maps =
-/* .ti +4
-/*	proxy:mysql:/etc/postfix/virtual_alias.cf
+/*	    proxy:mysql:/etc/postfix/virtual_alias.cf
+/* .fi
 /* .sp
 /*	The total number of connections is limited by the number of
 /*	proxymap server processes.
@@ -104,11 +106,11 @@
 /*	The time limit for sending or receiving information over an internal
 /*	communication channel.
 /* .IP "\fBmax_idle (100s)\fR"
-/*	The maximum amount of time that an idle Postfix daemon process
-/*	waits for the next service request before exiting.
+/*	The maximum amount of time that an idle Postfix daemon process waits
+/*	for an incoming connection before terminating voluntarily.
 /* .IP "\fBmax_use (100)\fR"
-/*	The maximal number of connection requests before a Postfix daemon
-/*	process terminates.
+/*	The maximal number of incoming connections that a Postfix daemon
+/*	process will service before terminating voluntarily.
 /* .IP "\fBprocess_id (read-only)\fR"
 /*	The process ID of a Postfix command or daemon process.
 /* .IP "\fBprocess_name (read-only)\fR"
@@ -161,6 +163,7 @@
 
 #include <mail_conf.h>
 #include <mail_params.h>
+#include <mail_version.h>
 #include <mail_proto.h>
 #include <dict_proxy.h>
 
@@ -239,9 +242,12 @@ static DICT *proxy_map_find(const char *map_type_name, int request_flags,
 
     /*
      * Open one instance of a map for each combination of name+flags.
+     * 
+     * Assume that a map instance can be shared among clients with different
+     * paranoia flag settings and with different map lookup flag settings.
      */
-    vstring_sprintf(map_type_name_flags, "%s:%o",
-		    map_type_name, request_flags);
+    vstring_sprintf(map_type_name_flags, "%s:%s", map_type_name,
+		    dict_flags_str(request_flags & DICT_FLAG_NP_INST_MASK));
     if ((dict = dict_handle(STR(map_type_name_flags))) == 0)
 	dict = dict_open(map_type_name, READ_OPEN_FLAGS, request_flags);
     if (dict == 0)
@@ -264,7 +270,7 @@ static void proxymap_lookup_service(VSTREAM *client_stream)
      */
     if (attr_scan(client_stream, ATTR_FLAG_STRICT,
 		  ATTR_TYPE_STR, MAIL_ATTR_TABLE, request_map,
-		  ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, &request_flags,
+		  ATTR_TYPE_INT, MAIL_ATTR_FLAGS, &request_flags,
 		  ATTR_TYPE_STR, MAIL_ATTR_KEY, request_key,
 		  ATTR_TYPE_END) != 3) {
 	reply_status = PROXY_STAT_BAD;
@@ -272,7 +278,9 @@ static void proxymap_lookup_service(VSTREAM *client_stream)
     } else if ((dict = proxy_map_find(STR(request_map), request_flags,
 				      &reply_status)) == 0) {
 	reply_value = "";
-    } else if ((reply_value = dict_get(dict, STR(request_key))) != 0) {
+    } else if (dict->flags = ((dict->flags & ~DICT_FLAG_RQST_MASK)
+			      | (request_flags & DICT_FLAG_RQST_MASK)),
+	       (reply_value = dict_get(dict, STR(request_key))) != 0) {
 	reply_status = PROXY_STAT_OK;
     } else if (dict_errno == 0) {
 	reply_status = PROXY_STAT_NOKEY;
@@ -286,7 +294,7 @@ static void proxymap_lookup_service(VSTREAM *client_stream)
      * Respond to the client.
      */
     attr_print(client_stream, ATTR_FLAG_NONE,
-	       ATTR_TYPE_NUM, MAIL_ATTR_STATUS, reply_status,
+	       ATTR_TYPE_INT, MAIL_ATTR_STATUS, reply_status,
 	       ATTR_TYPE_STR, MAIL_ATTR_VALUE, reply_value,
 	       ATTR_TYPE_END);
 }
@@ -305,7 +313,7 @@ static void proxymap_open_service(VSTREAM *client_stream)
      */
     if (attr_scan(client_stream, ATTR_FLAG_STRICT,
 		  ATTR_TYPE_STR, MAIL_ATTR_TABLE, request_map,
-		  ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, &request_flags,
+		  ATTR_TYPE_INT, MAIL_ATTR_FLAGS, &request_flags,
 		  ATTR_TYPE_END) != 2) {
 	reply_status = PROXY_STAT_BAD;
 	reply_flags = 0;
@@ -321,8 +329,8 @@ static void proxymap_open_service(VSTREAM *client_stream)
      * Respond to the client.
      */
     attr_print(client_stream, ATTR_FLAG_NONE,
-	       ATTR_TYPE_NUM, MAIL_ATTR_STATUS, reply_status,
-	       ATTR_TYPE_NUM, MAIL_ATTR_FLAGS, reply_flags,
+	       ATTR_TYPE_INT, MAIL_ATTR_STATUS, reply_status,
+	       ATTR_TYPE_INT, MAIL_ATTR_FLAGS, reply_flags,
 	       ATTR_TYPE_END);
 }
 
@@ -354,7 +362,7 @@ static void proxymap_service(VSTREAM *client_stream, char *unused_service,
 	} else {
 	    msg_warn("unrecognized request: \"%s\", ignored", STR(request));
 	    attr_print(client_stream, ATTR_FLAG_NONE,
-		       ATTR_TYPE_NUM, MAIL_ATTR_STATUS, PROXY_STAT_BAD,
+		       ATTR_TYPE_INT, MAIL_ATTR_STATUS, PROXY_STAT_BAD,
 		       ATTR_TYPE_END);
 	}
     }
@@ -406,6 +414,12 @@ static void post_jail_init(char *unused_name, char **unused_argv)
 	    (void) htable_enter(proxy_read_maps, type_name, (char *) 0);
     }
     myfree(saved_filter);
+
+    /*
+     * This process is called by clients that already enforce the max_idle
+     * time, so we don't have to do it another time.
+     */
+    var_idle_limit = 1;
 }
 
 /* pre_accept - see if tables have changed */
@@ -419,6 +433,8 @@ static void pre_accept(char *unused_name, char **unused_argv)
 	exit(0);
     }
 }
+
+MAIL_VERSION_STAMP_DECLARE;
 
 /* main - pass control to the multi-threaded skeleton */
 
@@ -440,6 +456,11 @@ int     main(int argc, char **argv)
 	VAR_PROXY_READ_MAPS, DEF_PROXY_READ_MAPS, &var_proxy_read_maps, 0, 0,
 	0,
     };
+
+    /*
+     * Fingerprint executables and core dumps.
+     */
+    MAIL_VERSION_STAMP_ALLOCATE;
 
     multi_server_main(argc, argv, proxymap_service,
 		      MAIL_SERVER_STR_TABLE, str_table,

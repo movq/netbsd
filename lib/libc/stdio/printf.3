@@ -1,4 +1,4 @@
-.\"	$NetBSD: printf.3,v 1.40 2005/07/20 13:31:15 christos Exp $
+.\"	$NetBSD: printf.3,v 1.43 2006/09/25 08:55:33 martin Exp $
 .\"
 .\" Copyright (c) 1990, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -33,7 +33,7 @@
 .\"
 .\"     @(#)printf.3	8.1 (Berkeley) 6/4/93
 .\"
-.Dd July 20, 2005
+.Dd September 25, 2006
 .Dt PRINTF 3
 .Os
 .Sh NAME
@@ -129,9 +129,18 @@ This pointer should be passed to
 .Xr free 3
 to release the allocated storage when it is no longer needed.
 If sufficient space cannot be allocated, these functions
-will return -1 and set
+will return \-1 and set
 .Fa ret
-to be a NULL pointer.
+to be a
+.Dv NULL
+pointer.
+Please note that these functions are not standardized, and not all
+implementations can be assumed to set the
+.Fa ret
+argument to
+.Dv NULL
+on error.
+It is more portable to check for a return value of \-1 instead.
 .Pp
 .Fn snprintf
 and
@@ -151,7 +160,9 @@ If
 .Fa size
 is zero, nothing is written and
 .Fa str
-may be a NULL pointer.
+may be a
+.Dv NULL
+pointer.
 .Pp
 .Fn sprintf
 and
@@ -667,7 +678,7 @@ Upon successful completion
 and
 .Fn vfprintf
 return the number of characters printed.
-Otherwise \-1 is returned and
+Otherwise a negative value is returned and
 .Dv errno
 is set to indicate the error.
 .Pp
@@ -680,7 +691,7 @@ return the number of characters written to
 excluding the terminating
 .Dv NUL
 character.
-Otherwise \-1 is returned and
+Otherwise a negative value is returned and
 .Dv errno
 is set to indicate the error.
 .Pp
@@ -694,6 +705,9 @@ to a sufficiently sized
 excluding the terminating
 .Dv NUL
 character.
+Otherwise a negative value is returned and
+.Dv errno
+is set to indicate the error.
 .Pp
 Upon successful completion
 .Fn asprintf

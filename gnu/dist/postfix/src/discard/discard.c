@@ -1,4 +1,4 @@
-/*	$NetBSD: discard.c,v 1.1.1.1 2005/08/18 21:11:02 rpaulo Exp $	*/
+/*	$NetBSD: discard.c,v 1.1.1.2.4.2 2007/08/06 11:06:23 ghen Exp $	*/
 
 /*++
 /* NAME
@@ -13,6 +13,7 @@
 /*	the queue manager. Each request specifies a queue file, a sender
 /*	address, a domain or host name that is treated as the reason for
 /*	discarding the mail, and recipient information.
+/*	The reason may be prefixed with an RFC 3463-compatible detail code.
 /*	This program expects to be run from the \fBmaster\fR(8) process
 /*	manager.
 /*
@@ -51,6 +52,9 @@
 /* .IP "\fBdaemon_timeout (18000s)\fR"
 /*	How much time a Postfix daemon process may take to handle a
 /*	request before it is terminated by a built-in watchdog timer.
+/* .IP "\fBdelay_logging_resolution_limit (2)\fR"
+/*	The maximal number of digits after the decimal point when logging
+/*	sub-second delay values.
 /* .IP "\fBdouble_bounce_sender (double-bounce)\fR"
 /*	The sender address of postmaster notifications that are generated
 /*	by the mail system.
@@ -58,11 +62,11 @@
 /*	The time limit for sending or receiving information over an internal
 /*	communication channel.
 /* .IP "\fBmax_idle (100s)\fR"
-/*	The maximum amount of time that an idle Postfix daemon process
-/*	waits for the next service request before exiting.
+/*	The maximum amount of time that an idle Postfix daemon process waits
+/*	for an incoming connection before terminating voluntarily.
 /* .IP "\fBmax_use (100)\fR"
-/*	The maximal number of connection requests before a Postfix daemon
-/*	process terminates.
+/*	The maximal number of incoming connections that a Postfix daemon
+/*	process will service before terminating voluntarily.
 /* .IP "\fBprocess_id (read-only)\fR"
 /*	The process ID of a Postfix command or daemon process.
 /* .IP "\fBprocess_name (read-only)\fR"
@@ -118,6 +122,8 @@
 #include <deliver_completed.h>
 #include <flush_clnt.h>
 #include <sent.h>
+#include <dsn_util.h>
+#include <mail_version.h>
 
 /* Single server skeleton. */
 
@@ -127,12 +133,14 @@
 
 static int deliver_message(DELIVER_REQUEST *request)
 {
-    char   *myname = "deliver_message";
+    const char *myname = "deliver_message";
     VSTREAM *src;
     int     result = 0;
     int     status;
     RECIPIENT *rcpt;
     int     nrcpt;
+    DSN_SPLIT dp;
+    DSN     dsn;
 
     if (msg_verbose)
 	msg_info("deliver_message: from %s", request->sender);
@@ -164,16 +172,15 @@ static int deliver_message(DELIVER_REQUEST *request)
      */
 #define BOUNCE_FLAGS(request) DEL_REQ_TRACE_FLAGS(request->flags)
 
+    dsn_split(&dp, "2.0.0", request->nexthop);
+    (void) DSN_SIMPLE(&dsn, DSN_STATUS(dp.dsn), dp.text);
     for (nrcpt = 0; nrcpt < request->rcpt_list.len; nrcpt++) {
 	rcpt = request->rcpt_list.info + nrcpt;
-	if (rcpt->offset >= 0) {
-	    status = sent(BOUNCE_FLAGS(request), request->queue_id,
-		       rcpt->orig_addr, rcpt->address, rcpt->offset, "none",
-			  request->arrival_time, "%s", request->nexthop);
-	    if (status == 0 && (request->flags & DEL_REQ_FLAG_SUCCESS))
-		deliver_completed(src, rcpt->offset);
-	    result |= status;
-	}
+	status = sent(BOUNCE_FLAGS(request), request->queue_id,
+		      &request->msg_stats, rcpt, "none", &dsn);
+	if (status == 0 && (request->flags & DEL_REQ_FLAG_SUCCESS))
+	    deliver_completed(src, rcpt->offset);
+	result |= status;
     }
 
     /*
@@ -219,10 +226,18 @@ static void pre_init(char *unused_name, char **unused_argv)
     flush_init();
 }
 
+MAIL_VERSION_STAMP_DECLARE;
+
 /* main - pass control to the single-threaded skeleton */
 
 int     main(int argc, char **argv)
 {
+
+    /*
+     * Fingerprint executables and core dumps.
+     */
+    MAIL_VERSION_STAMP_ALLOCATE;
+
     single_server_main(argc, argv, discard_service,
 		       MAIL_SERVER_PRE_INIT, pre_init,
 		       0);

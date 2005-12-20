@@ -1,4 +1,4 @@
-/*	$NetBSD: if_elmc_mca.c,v 1.19 2005/12/11 12:22:18 christos Exp $	*/
+/*	$NetBSD: if_elmc_mca.c,v 1.22 2006/11/16 01:33:05 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_elmc_mca.c,v 1.19 2005/12/11 12:22:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_elmc_mca.c,v 1.22 2006/11/16 01:33:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,7 +92,8 @@ static void	elmc_mca_hwreset(struct ie_softc *, int);
 static int	elmc_mca_intrhook(struct ie_softc *, int);
 
 int
-elmc_mca_match(struct device *parent, struct cfdata *cf, void *aux)
+elmc_mca_match(struct device *parent, struct cfdata *cf,
+    void *aux)
 {
 	struct mca_attach_args *ma = aux;
 
@@ -107,7 +108,7 @@ elmc_mca_match(struct device *parent, struct cfdata *cf, void *aux)
 void
 elmc_mca_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct elmc_mca_softc *asc = (void *) self;
+	struct elmc_mca_softc *asc = device_private(self);
 	struct ie_softc *sc = &asc->sc_ie;
 	struct mca_attach_args *ma = aux;
 	int pos2, pos3, i, revision;

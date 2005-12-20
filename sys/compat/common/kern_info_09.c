@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_info_09.c,v 1.15 2005/12/11 12:19:56 christos Exp $	*/
+/*	$NetBSD: kern_info_09.c,v 1.17 2006/11/16 01:32:41 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1991, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_info_09.c,v 1.15 2005/12/11 12:19:56 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_info_09.c,v 1.17 2006/11/16 01:32:41 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,7 +92,8 @@ struct outsname {
 
 /* ARGSUSED */
 int
-compat_09_sys_uname(struct lwp *l, void *v, register_t *retval)
+compat_09_sys_uname(struct lwp *l, void *v,
+    register_t *retval)
 {
 	struct compat_09_sys_uname_args /* {
 		syscallarg(struct outsname *) name;

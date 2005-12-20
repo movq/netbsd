@@ -1,4 +1,4 @@
-/*	$NetBSD: pwctl.c,v 1.13 2005/12/11 12:21:22 christos Exp $	*/
+/*	$NetBSD: pwctl.c,v 1.16 2006/10/09 10:33:42 peter Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001
@@ -37,7 +37,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pwctl.c,v 1.13 2005/12/11 12:21:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pwctl.c,v 1.16 2006/10/09 10:33:42 peter Exp $");
+
+#ifdef _KERNEL_OPT
+#include "opt_pwctl.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,11 +57,10 @@ __KERNEL_RCSID(0, "$NetBSD: pwctl.c,v 1.13 2005/12/11 12:21:22 christos Exp $");
 
 #include "locators.h"
 
-#define PWCTLDEBUG
+#ifdef PWCTLDEBUG
 #ifndef PWCTLDEBUG_CONF
 #define PWCTLDEBUG_CONF	0
 #endif
-#ifdef PWCTLDEBUG
 int	pwctl_debug = PWCTLDEBUG_CONF;
 #define	DPRINTF(arg) if (pwctl_debug) printf arg;
 #define	VPRINTF(arg) if (bootverbose) printf arg;
@@ -109,9 +112,9 @@ pwctl_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct hpcio_attach_args *haa = aux;
 	int *loc;
-	struct pwctl_softc *sc = (void*)self;
+	struct pwctl_softc *sc = device_private(self);
 
-	loc = sc->sc_dev.dv_cfdata->cf_loc;
+	loc = device_cfdata(&sc->sc_dev)->cf_loc;
 	sc->sc_hc = (*haa->haa_getchip)(haa->haa_sc, loc[HPCIOIFCF_IOCHIP]);
 	sc->sc_port = loc[HPCIOIFCF_PORT];
 	sc->sc_id = loc[HPCIOIFCF_ID];

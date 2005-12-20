@@ -1,4 +1,4 @@
-/*	$NetBSD: namei.h,v 1.41 2005/12/11 12:25:20 christos Exp $	*/
+/*	$NetBSD: namei.h,v 1.45.8.2 2007/02/17 23:27:51 tron Exp $	*/
 
 /*
  * Copyright (c) 1985, 1989, 1991, 1993
@@ -36,6 +36,7 @@
 
 #include <sys/queue.h>
 
+#ifdef _KERNEL
 /*
  * Encapsulation of namei parameters.
  */
@@ -51,7 +52,7 @@ struct nameidata {
 	/*
 	 * Arguments to lookup.
 	 */
-     /* struct	ucred *ni_cred;		   credentials */
+     /* kauth_cred_t ni_cred;		   credentials */
 	struct	vnode *ni_startdir;	/* starting directory */
 	struct	vnode *ni_rootdir;	/* logical root directory */
 	/*
@@ -77,7 +78,7 @@ struct nameidata {
 		u_long	cn_nameiop;	/* namei operation */
 		u_long	cn_flags;	/* flags to namei */
 		struct	lwp *cn_lwp;	/* lwp requesting lookup */
-		struct	ucred *cn_cred;	/* credentials */
+		kauth_cred_t cn_cred;	/* credentials */
 		/*
 		 * Shared between lookup and commit routines.
 		 */
@@ -89,7 +90,6 @@ struct nameidata {
 	} ni_cnd;
 };
 
-#ifdef _KERNEL
 /*
  * namei operations
  */
@@ -103,7 +103,6 @@ struct nameidata {
  */
 #define	LOCKLEAF	0x0004	/* lock inode on return */
 #define	LOCKPARENT	0x0008	/* want parent vnode returned locked */
-#define	WANTPARENT	0x0010	/* want parent vnode returned unlocked */
 #define	NOCACHE		0x0020	/* name must not be left in cache */
 #define	FOLLOW		0x0040	/* follow symbolic links */
 #define	NOFOLLOW	0x0000	/* do not follow symbolic links (pseudo) */
@@ -134,8 +133,7 @@ struct nameidata {
 #define	ISWHITEOUT	0x0020000	/* found whiteout */
 #define	DOWHITEOUT	0x0040000	/* do whiteouts */
 #define	REQUIREDIR	0x0080000	/* must be a directory */
-#define	PDIRUNLOCK	0x0100000	/* vfs_lookup() unlocked parent dir */
-#define	CREATEDIR	0x0200000	/* creating entry is a directory */
+#define	CREATEDIR	0x0200000	/* trailing slashes are ok */
 #define	PARAMASK	0x03fff00	/* mask of parameter descriptors */
 /*
  * Initialization of an nameidata structure.
@@ -146,7 +144,7 @@ struct nameidata {
 	(ndp)->ni_segflg = segflg; \
 	(ndp)->ni_dirp = namep; \
 	(ndp)->ni_cnd.cn_lwp = l; \
-	(ndp)->ni_cnd.cn_cred = l->l_proc->p_ucred; \
+	(ndp)->ni_cnd.cn_cred = l->l_cred; \
 }
 #endif
 
@@ -184,6 +182,8 @@ extern struct pool_cache pnbuf_cache;	/* pathname buffer cache */
 #define	PNBUF_GET()	pool_cache_get(&pnbuf_cache, PR_WAITOK)
 #define	PNBUF_PUT(pnb)	pool_cache_put(&pnbuf_cache, (pnb))
 
+typedef struct pathname_internal *pathname_t;
+
 int	namei(struct nameidata *);
 uint32_t namei_hash(const char *, const char **);
 int	lookup(struct nameidata *);
@@ -201,10 +201,15 @@ void	nchinit(void);
 void	nchreinit(void);
 void	cache_purgevfs(struct mount *);
 void	namecache_print(struct vnode *, void (*)(const char *, ...));
+
+int pathname_get(const char *, enum uio_seg, pathname_t *);
+const char *pathname_path(pathname_t);
+void pathname_put(pathname_t);
 #endif
 
 /*
  * Stats on usefulness of namei caches.
+ * XXX: should be 64-bit counters.
  */
 struct	nchstats {
 	long	ncs_goodhits;		/* hits that we can really use */

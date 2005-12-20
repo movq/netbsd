@@ -1,4 +1,4 @@
-/*	$NetBSD: magic.c,v 1.14 2005/10/17 18:00:00 pooka Exp $	*/
+/*	$NetBSD: magic.c,v 1.15.2.2 2007/06/15 16:14:50 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) Christos Zoulas 2003.
@@ -40,6 +40,7 @@
 #ifdef QUICK
 #include <sys/mman.h>
 #endif
+#include <limits.h>	/* for PIPE_BUF */
 
 #if defined(HAVE_UTIMES)
 # include <sys/time.h>
@@ -65,9 +66,9 @@
 
 #ifndef	lint
 #if 0
-FILE_RCSID("@(#)Id: magic.c,v 1.32 2005/10/17 15:31:10 christos Exp")
+FILE_RCSID("@(#)$File: magic.c,v 1.41 2007/03/26 17:59:50 christos Exp $")
 #else
-__RCSID("$NetBSD: magic.c,v 1.14 2005/10/17 18:00:00 pooka Exp $");
+__RCSID("$NetBSD: magic.c,v 1.15.2.2 2007/06/15 16:14:50 liamjfoy Exp $");
 #endif
 #endif	/* lint */
 
@@ -80,6 +81,7 @@ protected int file_os2_apptype(struct magic_set *ms, const char *fn,
 private void free_mlist(struct mlist *);
 private void close_and_restore(const struct magic_set *, const char *, int,
     const struct stat *);
+private int info_from_stat(struct magic_set *, mode_t);
 
 #ifndef	STDIN_FILENO
 #define	STDIN_FILENO	0
@@ -90,7 +92,7 @@ magic_open(int flags)
 {
 	struct magic_set *ms;
 
-	if ((ms = malloc(sizeof(struct magic_set))) == NULL)
+	if ((ms = calloc((size_t)1, sizeof(struct magic_set))) == NULL)
 		return NULL;
 
 	if (magic_setflags(ms, flags) == -1) {
@@ -98,7 +100,7 @@ magic_open(int flags)
 		goto free1;
 	}
 
-	ms->o.ptr = ms->o.buf = malloc(ms->o.size = 1024);
+	ms->o.ptr = ms->o.buf = malloc(ms->o.left = ms->o.size = 1024);
 	if (ms->o.buf == NULL)
 		goto free1;
 
@@ -106,14 +108,15 @@ magic_open(int flags)
 	if (ms->o.pbuf == NULL)
 		goto free2;
 
-	ms->c.off = malloc((ms->c.len = 10) * sizeof(*ms->c.off));
-	if (ms->c.off == NULL)
+	ms->c.li = malloc((ms->c.len = 10) * sizeof(*ms->c.li));
+	if (ms->c.li == NULL)
 		goto free3;
 	
-	ms->o.len = 0;
 	ms->haderr = 0;
 	ms->error = -1;
 	ms->mlist = NULL;
+	ms->file = "unknown";
+	ms->line = 0;
 	return ms;
 free3:
 	free(ms->o.pbuf);
@@ -142,14 +145,31 @@ free_mlist(struct mlist *mlist)
 	free(ml);
 }
 
+private int
+info_from_stat(struct magic_set *ms, mode_t md)
+{
+	/* We cannot open it, but we were able to stat it. */
+	if (md & 0222)
+		if (file_printf(ms, "writable, ") == -1)
+			return -1;
+	if (md & 0111)
+		if (file_printf(ms, "executable, ") == -1)
+			return -1;
+	if (S_ISREG(md))
+		if (file_printf(ms, "regular file, ") == -1)
+			return -1;
+	if (file_printf(ms, "no read permission") == -1)
+		return -1;
+	return 0;
+}
+
 public void
-magic_close(ms)
-    struct magic_set *ms;
+magic_close(struct magic_set *ms)
 {
 	free_mlist(ms->mlist);
 	free(ms->o.pbuf);
 	free(ms->o.buf);
-	free(ms->c.off);
+	free(ms->c.li);
 	free(ms);
 }
 
@@ -227,6 +247,7 @@ magic_file(struct magic_set *ms, const char *inname)
 	unsigned char *buf;
 	struct stat	sb;
 	ssize_t nbytes = 0;	/* number of bytes read from a datafile */
+	int	ispipe = 0;
 
 	/*
 	 * one extra for terminating '\0', and
@@ -240,48 +261,75 @@ magic_file(struct magic_set *ms, const char *inname)
 		goto done;
 
 	switch (file_fsmagic(ms, inname, &sb)) {
-	case -1:
+	case -1:		/* error */
 		goto done;
-	case 0:
+	case 0:			/* nothing found */
 		break;
-	default:
+	default:		/* matched it and printed type */
 		rv = 0;
 		goto done;
 	}
 
-	if (inname == NULL)
+	if (inname == NULL) {
 		fd = STDIN_FILENO;
-	else if ((fd = open(inname, O_RDONLY|O_BINARY)) < 0) {
+		if (fstat(fd, &sb) == 0 && S_ISFIFO(sb.st_mode))
+			ispipe = 1;
+	} else {
+		int flags = O_RDONLY|O_BINARY;
+
+		if (stat(inname, &sb) == 0 && S_ISFIFO(sb.st_mode)) {
+			flags |= O_NONBLOCK;
+			ispipe = 1;
+		}
+
+		errno = 0;
+		if ((fd = open(inname, flags)) < 0) {
 #ifdef __CYGWIN__
-	    char *tmp = alloca(strlen(inname) + 5);
-	    (void)strcat(strcpy(tmp, inname), ".exe");
-	    if ((fd = open(tmp, O_RDONLY|O_BINARY)) < 0) {
+		    char *tmp = alloca(strlen(inname) + 5);
+		    (void)strcat(strcpy(tmp, inname), ".exe");
+		    if ((fd = open(tmp, flags)) < 0) {
 #endif
-		/* We cannot open it, but we were able to stat it. */
-		if (sb.st_mode & 0222)
-			if (file_printf(ms, "writable, ") == -1)
-				goto done;
-		if (sb.st_mode & 0111)
-			if (file_printf(ms, "executable, ") == -1)
-				goto done;
-		if (S_ISREG(sb.st_mode))
-			if (file_printf(ms, "regular file, ") == -1)
-				goto done;
-		if (file_printf(ms, "no read permission") == -1)
+			if (info_from_stat(ms, sb.st_mode) == -1)
+			    goto done;
+			rv = 0;
 			goto done;
-		rv = 0;
-		goto done;
 #ifdef __CYGWIN__
-	    }
+		    }
+#endif
+		}
+#ifdef O_NONBLOCK
+		if ((flags = fcntl(fd, F_GETFL)) != -1) {
+			flags &= ~O_NONBLOCK;
+			(void)fcntl(fd, F_SETFL, flags);
+		}
 #endif
 	}
 
 	/*
 	 * try looking at the first HOWMANY bytes
 	 */
-	if ((nbytes = read(fd, (char *)buf, HOWMANY)) == -1) {
-		file_error(ms, errno, "cannot read `%s'", inname);
-		goto done;
+	if (ispipe) {
+		ssize_t r = 0;
+
+		while ((r = sread(fd, (void *)&buf[nbytes],
+		    (size_t)(HOWMANY - nbytes), 1)) > 0) {
+			nbytes += r;
+			if (r < PIPE_BUF) break;
+		}
+
+		if (nbytes == 0) {
+			/* We can not read it, but we were able to stat it. */
+			if (info_from_stat(ms, sb.st_mode) == -1)
+				goto done;
+			rv = 0;
+			goto done;
+		}
+
+	} else {
+		if ((nbytes = read(fd, (char *)buf, HOWMANY)) == -1) {
+			file_error(ms, errno, "cannot read `%s'", inname);
+			goto done;
+		}
 	}
 
 	if (nbytes == 0) {
@@ -293,32 +341,8 @@ magic_file(struct magic_set *ms, const char *inname)
 			goto done;
 	} else {
 		(void)memset(buf + nbytes, 0, SLOP); /* NUL terminate */
-#ifdef __EMX__
-		switch (file_os2_apptype(ms, inname, buf, nbytes)) {
-		case -1:
+		if (file_buffer(ms, fd, inname, buf, (size_t)nbytes) == -1)
 			goto done;
-		case 0:
-			break;
-		default:
-			rv = 0;
-			goto done;
-		}
-#endif
-		if (file_buffer(ms, fd, buf, (size_t)nbytes) == -1)
-			goto done;
-#ifdef BUILTIN_ELF
-		if (nbytes > 5) {
-			/*
-			 * We matched something in the file, so this *might*
-			 * be an ELF file, and the file is at least 5 bytes
-			 * long, so if it's an ELF file it has at least one
-			 * byte past the ELF magic number - try extracting
-			 * information from the ELF headers that cannot easily
-			 * be extracted with rules in the magic file.
-			 */
-			file_tryelf(ms, fd, buf, (size_t)nbytes);
-		}
-#endif
 	}
 	rv = 0;
 done:
@@ -337,7 +361,7 @@ magic_buffer(struct magic_set *ms, const void *buf, size_t nb)
 	 * The main work is done here!
 	 * We have the file name and/or the data buffer to be identified. 
 	 */
-	if (file_buffer(ms, -1, buf, nb) == -1) {
+	if (file_buffer(ms, -1, NULL, buf, nb) == -1) {
 		return NULL;
 	}
 	return file_getbuffer(ms);

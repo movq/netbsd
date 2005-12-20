@@ -1,11 +1,11 @@
-/*	$NetBSD: portname.c,v 1.1.1.1 2004/03/28 08:56:20 martti Exp $	*/
+/*	$NetBSD: portname.c,v 1.1.1.1.18.2 2007/07/16 11:05:09 liamjfoy Exp $	*/
 
 /*
- * Copyright (C) 1993-2001 by Darren Reed.
+ * Copyright (C) 2000-2003 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: portname.c,v 1.7 2003/08/14 14:27:43 darrenr Exp
+ * Id: portname.c,v 1.7.2.1 2006/06/16 17:21:09 darrenr Exp
  */
 #include "ipf.h"
 

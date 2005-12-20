@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.c,v 1.17 2003/10/27 00:12:43 lukem Exp $	*/
+/*	$NetBSD: parse.c,v 1.24 2006/10/09 14:27:06 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)parse.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: parse.c,v 1.17 2003/10/27 00:12:43 lukem Exp $");
+__RCSID("$NetBSD: parse.c,v 1.24 2006/10/09 14:27:06 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,14 +52,14 @@ __RCSID("$NetBSD: parse.c,v 1.17 2003/10/27 00:12:43 lukem Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <util.h>
 
 #include "hexdump.h"
 
 FU *endfu;					/* format at end-of-data */
 
 void
-addfile(name)
-	char *name;
+addfile(char *name)
 {
 	char *p;
 	FILE *fp;
@@ -84,8 +84,7 @@ addfile(name)
 }
 
 void
-add(fmt)
-	const char *fmt;
+add(const char *fmt)
 {
 	const char *p;
 	static FS **nextfs;
@@ -94,7 +93,7 @@ add(fmt)
 	const char *savep;
 
 	/* start new linked list of format units */
-	tfs = emalloc(sizeof(FS));
+	tfs = ecalloc(1, sizeof(FS));
 	if (!fshead)
 		fshead = tfs;
 	else
@@ -110,7 +109,7 @@ add(fmt)
 			break;
 
 		/* allocate a new format unit and link it in */
-		tfu = emalloc(sizeof(FU));
+		tfu = ecalloc(1, sizeof(FU));
 		*nextfu = tfu;
 		nextfu = &tfu->nextfu;
 		tfu->reps = 1;
@@ -147,8 +146,7 @@ add(fmt)
 		for (savep = ++p; *p != '"';)
 			if (*p++ == 0)
 				badfmt(fmt);
-		if (!(tfu->fmt = malloc(p - savep + 1)))
-			nomem();
+		tfu->fmt = emalloc(p - savep + 1);
 		(void) strncpy(tfu->fmt, savep, p - savep);
 		tfu->fmt[p - savep] = '\0';
 		escape(tfu->fmt);
@@ -159,8 +157,7 @@ add(fmt)
 static const char *spec = ".#-+ 0123456789";
 
 int
-size(fs)
-	FS *fs;
+size(FS *fs)
 {
 	FU *fu;
 	int bcnt, cursize;
@@ -213,8 +210,7 @@ size(fs)
 }
 
 void
-rewrite(fs)
-	FS *fs;
+rewrite(FS *fs)
 {
 	enum { NOTOKAY, USEBCNT, USEPREC } sokay;
 	PR *pr, **nextpr;
@@ -223,19 +219,16 @@ rewrite(fs)
 	char savech, *fmtp, cs[3];
 	int nconv, prec;
 
-	nextpr = NULL;
 	prec = 0;
 	for (fu = fs->nextfu; fu; fu = fu->nextfu) {
 		/*
 		 * Break each format unit into print units; each conversion
 		 * character gets its own.
 		 */
+		nextpr = &fu->nextpr;
 		for (nconv = 0, fmtp = fu->fmt; *fmtp; nextpr = &pr->nextpr) {
-			pr = emalloc(sizeof(PR));
-			if (!fu->nextpr)
-				fu->nextpr = pr;
-			else
-				*nextpr = pr;
+			pr = ecalloc(1, sizeof(*pr));
+			*nextpr = pr;
 
 			/* Skip preceding text and up to the next % sign. */
 			for (p1 = fmtp; *p1 && *p1 != '%'; ++p1);
@@ -254,10 +247,10 @@ rewrite(fs)
 			if (fu->bcnt) {
 				sokay = USEBCNT;
 				/* Skip to conversion character. */
-				for (++p1; strchr(spec, *p1); ++p1);
+				for (++p1; *p1 && strchr(spec, *p1); ++p1);
 			} else {
 				/* Skip any special chars, field width. */
-				while (strchr(spec + 1, *++p1));
+				while (*++p1 && strchr(spec + 1, *p1));
 				if (*p1 == '.' &&
 				    isdigit((unsigned char)*++p1)) {
 					sokay = USEPREC;
@@ -268,7 +261,7 @@ rewrite(fs)
 					sokay = NOTOKAY;
 			}
 
-			p2 = p1 + 1;		/* Set end pointer. */
+			p2 = *p1 ? p1 + 1 : p1;	/* Set end pointer. */
 			cs[0] = *p1;		/* Set conversion string. */
 			cs[1] = '\0';
 
@@ -433,6 +426,8 @@ isint2:					switch(fu->bcnt) {
 		    !(fu->flags&F_SETREP) && fu->bcnt)
 			fu->reps += (blocksize - fs->bcnt) / fu->bcnt;
 		if (fu->reps > 1) {
+			if (!fu->nextpr)
+				break;
 			for (pr = fu->nextpr;; pr = pr->nextpr)
 				if (!pr->nextpr)
 					break;
@@ -453,8 +448,7 @@ isint2:					switch(fu->bcnt) {
 }
 
 void
-escape(p1)
-	char *p1;
+escape(char *p1)
 {
 	char *p2;
 
@@ -466,6 +460,10 @@ escape(p1)
 		}
 		if (*p1 == '\\')
 			switch(*++p1) {
+			case '\0':
+				*p2 = '\\';
+				*++p2 = '\0';
+				return;	/* incomplete escape sequence */
 			case 'a':
 			     /* *p2 = '\a'; */
 				*p2 = '\007';
@@ -492,32 +490,31 @@ escape(p1)
 				*p2 = *p1;
 				break;
 			}
+		else
+			*p2 = *p1;
 	}
 }
 
 void
-badcnt(s)
-	char *s;
+badcnt(char *s)
 {
 	errx(1, "%s: bad byte count", s);
 }
 
 void
-badsfmt()
+badsfmt(void)
 {
 	errx(1, "%%s: requires a precision or a byte count");
 }
 
 void
-badfmt(fmt)
-	const char *fmt;
+badfmt(const char *fmt)
 {
 	errx(1, "\"%s\": bad format", fmt);
 }
 
 void
-badconv(ch)
-	char *ch;
+badconv(char *ch)
 {
 	errx(1, "%%%s: bad conversion character", ch);
 }

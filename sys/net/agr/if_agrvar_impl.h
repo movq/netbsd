@@ -1,4 +1,4 @@
-/*	$NetBSD: if_agrvar_impl.h,v 1.2 2005/12/10 23:21:39 elad Exp $	*/
+/*	$NetBSD: if_agrvar_impl.h,v 1.4 2006/10/29 22:14:14 yamt Exp $	*/
 
 /*-
  * Copyright (c)2005 YAMAMOTO Takashi,
@@ -26,12 +26,15 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _NET_AGR_IF_AGRVAR_INT_H_
-#define	_NET_AGR_IF_AGRVAR_INT_H_
+#ifndef _NET_AGR_IF_AGRVAR_IMPL_H_
+#define	_NET_AGR_IF_AGRVAR_IMPL_H_
 
 /*
  * implementaion details for agr(4) driver.  (contrast to if_agrvar.h)
  */
+
+#include <sys/lock.h>
+#include <sys/queue.h>
 
 struct agr_port;
 struct agr_softc;
@@ -139,4 +142,4 @@ void agrtimer_stop(struct agr_softc *);
 
 void agrport_monitor(struct agr_port *);
 
-#endif /* !_NET_AGR_IF_AGRVAR_INT_H_ */
+#endif /* !_NET_AGR_IF_AGRVAR_IMPL_H_ */

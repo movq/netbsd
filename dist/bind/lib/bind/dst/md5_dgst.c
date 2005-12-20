@@ -1,4 +1,4 @@
-/*	$NetBSD: md5_dgst.c,v 1.1.1.1 2004/05/17 23:44:40 christos Exp $	*/
+/*	$NetBSD: md5_dgst.c,v 1.1.1.3.4.1 2007/05/17 00:39:20 jdc Exp $	*/
 
 /* crypto/md/md5_dgst.c */
 /* Copyright (C) 1995-1997 Eric Young (eay@cryptsoft.com)
@@ -58,15 +58,18 @@
  * [including the GNU Public Licence.]
  */
 
-#ifdef USE_MD5 /* Added by ogud@tis.com 1998/1/26 */
+#ifdef USE_MD5 /*%< Added by ogud@tis.com 1998/1/26 */
 #include <port_before.h>
+#ifndef HAVE_MD5
 #include <stdio.h>
 #include "md5_locl.h"
 #include <port_after.h>
 
 const char *MD5_version="MD5 part of SSLeay 0.8.1 19-Jul-1997";
 
-/* Implemented from RFC1321 The MD5 Message-Digest Algorithm
+/*! \file
+ * \brief
+ *  Implemented from RFC1321 The MD5 Message-Digest Algorithm
  */
 
 #define INIT_DATA_A (unsigned long)0x67452301L
@@ -106,7 +109,7 @@ unsigned long len;
 	l=(c->Nl+(len<<3))&0xffffffffL;
 	/* 95-05-24 eay Fixed a bug with the overflow handling, thanks to
 	 * Wei Dai <weidai@eskimo.com> for pointing it out. */
-	if (l < c->Nl) /* overflow */
+	if (l < c->Nl) /*%< overflow */
 		c->Nh++;
 	c->Nh+=(len>>29);
 	c->Nl=l;
@@ -138,7 +141,7 @@ unsigned long len;
 			int ew,ec;
 
 			c->num+=(int)len;
-			if ((sc+len) < 4U) /* ugly, add char's to a word */
+			if ((sc+len) < 4U) /*%< ugly, add char's to a word */
 				{
 				l= p[sw];
 				p_c2l_p(data,l,sc,len);
@@ -197,7 +200,7 @@ unsigned long len;
 	c->num=sc;
 	if (sc)
 		{
-		sw=sc>>2;	/* words to copy */
+		sw=sc>>2;	/*%< words to copy */
 #ifdef L_ENDIAN
 		p[sw]=0;
 		memcpy(p,data,sc);
@@ -369,4 +372,5 @@ unsigned long *l;
 		}
 	}
 #endif
+#endif /* HAVE_MD5 */
 #endif /* USE_MD5 */

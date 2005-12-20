@@ -1,4 +1,4 @@
-/*      $NetBSD: pccons.c,v 1.23 2005/12/11 12:19:05 christos Exp $       */
+/*      $NetBSD: pccons.c,v 1.27.2.1 2007/07/30 12:33:01 liamjfoy Exp $       */
 
 /*
  * Copyright 1997
@@ -135,7 +135,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.23 2005/12/11 12:19:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.27.2.1 2007/07/30 12:33:01 liamjfoy Exp $");
 
 #include "opt_ddb.h"
 #include "opt_xserver.h"
@@ -154,6 +154,7 @@ __KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.23 2005/12/11 12:19:05 christos Exp $")
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/conf.h>
+#include <sys/kauth.h>
 #include <machine/kerndebug.h>
 
 #include <uvm/uvm_extern.h>
@@ -603,7 +604,7 @@ kbd_init(bus_space_tag_t     iot,
 **
 **  IMPLICIT INPUTS:
 **
-**     addr_6845    -  Base adddress of the video registers 
+**     addr_6845    -  Base address of the video registers 
 **
 **  IMPLICIT OUTPUTS:
 **
@@ -651,7 +652,7 @@ set_cursor_shape(struct pc_softc *sc)
 **
 **  IMPLICIT INPUTS:
 **
-**     addr_6845    -  Base adddress of the video registers 
+**     addr_6845    -  Base address of the video registers 
 **
 **  IMPLICIT OUTPUTS:
 **
@@ -1191,6 +1192,9 @@ pcopen(dev_t       dev,
     tp->t_oproc = pcstart;
     tp->t_param = pcparam;
     tp->t_dev   = dev;
+
+    if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
+	return (EBUSY);
     
     if ((tp->t_state & TS_ISOPEN) == 0) 
     {
@@ -1207,15 +1211,6 @@ pcopen(dev_t       dev,
         pcparam(tp, &tp->t_termios);
         ttsetwater(tp);
     } 
-    else if ( tp->t_state & TS_XCLUDE && suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0 )
-    {
-        /*
-        ** Don't allow the open if the tty has been set up 
-        ** for exclusive use and this isn't root trying to 
-        ** open the device 
-        */
-        return EBUSY;
-    }
     tp->t_state |= TS_CARR_ON;
     /* 
     ** Invoke the line discipline open routine 
@@ -2767,9 +2762,8 @@ sput(struct pc_softc   *sc,
                     else if (cx > nrow)
                         cx = nrow;
                     if (cx < nrow)
-                        bcopy(crtAt + sc->vs.ncol * cx,
-                              crtAt, sc->vs.ncol * (nrow -
-                                                cx) * CHR);
+                        memmove(crtAt, crtAt + sc->vs.ncol * cx,
+                                sc->vs.ncol * (nrow - cx) * CHR);
                     fillw((sc->vs.at << 8) | ' ',
                           crtAt + sc->vs.ncol * (nrow - cx),
                           sc->vs.ncol * cx);
@@ -2783,9 +2777,8 @@ sput(struct pc_softc   *sc,
                     else if (cx > sc->vs.nrow)
                         cx = sc->vs.nrow;
                     if (cx < sc->vs.nrow)
-                        bcopy(Crtat + sc->vs.ncol * cx,
-                              Crtat, sc->vs.ncol * (sc->vs.nrow -
-                                                cx) * CHR);
+                        memmove(Crtat, Crtat + sc->vs.ncol * cx,
+                                sc->vs.ncol * (sc->vs.nrow - cx) * CHR);
                     fillw((sc->vs.at << 8) | ' ',
                           Crtat + sc->vs.ncol * (sc->vs.nrow - cx),
                           sc->vs.ncol * cx);
@@ -2805,10 +2798,8 @@ sput(struct pc_softc   *sc,
                     else if (cx > nrow)
                         cx = nrow;
                     if (cx < nrow)
-                        bcopy(crtAt,
-                              crtAt + sc->vs.ncol * cx,
-                              sc->vs.ncol * (nrow - cx) *
-                              CHR);
+                        memmove(crtAt + sc->vs.ncol * cx, crtAt,
+                                sc->vs.ncol * (nrow - cx) * CHR);
                     fillw((sc->vs.at << 8) | ' ', 
                           crtAt, sc->vs.ncol * cx);
                     sc->vs.state = 0;
@@ -2821,10 +2812,8 @@ sput(struct pc_softc   *sc,
                     else if (cx > sc->vs.nrow)
                         cx = sc->vs.nrow;
                     if (cx < sc->vs.nrow)
-                        bcopy(Crtat,
-                              Crtat + sc->vs.ncol * cx,
-                              sc->vs.ncol * (sc->vs.nrow - cx) *
-                              CHR);
+                        memmove(Crtat + sc->vs.ncol * cx, Crtat,
+                                sc->vs.ncol * (sc->vs.nrow - cx) * CHR);
                     fillw((sc->vs.at << 8) | ' ', 
                           Crtat, sc->vs.ncol * cx);
 #if 0
@@ -2896,8 +2885,8 @@ sput(struct pc_softc   *sc,
                                PUSER, "pcputc", 0);
                     splx(s);
                 }
-                bcopy(Crtat + sc->vs.ncol, Crtat,
-                      (sc->vs.nchr - sc->vs.ncol) * CHR);
+                memmove(Crtat, Crtat + sc->vs.ncol,
+                        (sc->vs.nchr - sc->vs.ncol) * CHR);
                 fillw((sc->vs.at << 8) | ' ',
                       Crtat + sc->vs.nchr - sc->vs.ncol,
                       sc->vs.ncol);
@@ -4325,7 +4314,7 @@ cga_save_restore(int mode)
 	     * Copy text from screen.
 	     */
 	    textInfo = (char *)malloc(16384, M_DEVBUF, M_NOWAIT);
-	    bcopy(Crtat, textInfo, TEXT_LENGTH);			
+	    memcpy(textInfo, Crtat, TEXT_LENGTH);
 	    
 	    /*
 	     ** Save the registers before we change them
@@ -4375,7 +4364,7 @@ cga_save_restore(int mode)
 	    /*
 	     * Copy font information
 	     */
-	    bcopy(Crtat, fontInfo, FONT_LENGTH);			
+	    memcpy(fontInfo, Crtat, FONT_LENGTH);
 	    /*
              * Restore registers in case the X Server wants to save
 	     * the text too.
@@ -4417,7 +4406,7 @@ cga_save_restore(int mode)
 	    /*
 	     ** Restore font information 
 	     */
-	    bcopy(fontInfo, Crtat, FONT_LENGTH);
+	    memcpy(Crtat, fontInfo, FONT_LENGTH);
 	    
 	    /*
 	     ** Put registers back the way they were for text.
@@ -4438,7 +4427,7 @@ cga_save_restore(int mode)
 	    /*
 	     ** Restore text information
 	     */
-	    bcopy(textInfo, Crtat, TEXT_LENGTH);
+	    memcpy(Crtat, textInfo, TEXT_LENGTH);
 	   
 	    break;
 	

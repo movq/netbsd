@@ -1,4 +1,4 @@
-/*	$NetBSD: ipifuncs.c,v 1.4 2005/12/11 12:16:21 christos Exp $ */
+/*	$NetBSD: ipifuncs.c,v 1.6.10.1 2007/04/20 20:31:25 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
 
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.4 2005/12/11 12:16:21 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.6.10.1 2007/04/20 20:31:25 bouyer Exp $");
 
 /*
  * Interprocessor interrupt handlers.
@@ -65,6 +65,8 @@ __KERNEL_RCSID(0, "$NetBSD: ipifuncs.c,v 1.4 2005/12/11 12:16:21 christos Exp $"
 #include <machine/gdt.h>
 #include <machine/fpu.h>
 
+#include <x86/cpu_msr.h>
+
 #include <ddb/db_output.h>
 
 void x86_64_ipi_halt(struct cpu_info *);
@@ -81,12 +83,13 @@ void x86_64_reload_mtrr(struct cpu_info *);
 void (*ipifunc[X86_NIPI])(struct cpu_info *) =
 {
 	x86_64_ipi_halt,
-	cc_microset,
+	tsc_calibrate_cpu,
 	x86_64_ipi_flush_fpu,
 	x86_64_ipi_synch_fpu,
 	pmap_do_tlb_shootdown,
 	x86_64_reload_mtrr,
 	gdt_reload_cpu,
+	msr_write_ipi
 };
 
 void
@@ -94,9 +97,8 @@ x86_64_ipi_halt(struct cpu_info *ci)
 {
 	disable_intr();
 
-	printf("%s: shutting down\n", ci->ci_dev->dv_xname);
 	for(;;) {
-		__asm __volatile("hlt");
+		__asm volatile("hlt");
 	}
 }
 

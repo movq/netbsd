@@ -1,6 +1,6 @@
-/*	$NetBSD: policy_token.l,v 1.5 2005/11/21 14:20:28 manu Exp $	*/
+/*	$NetBSD: policy_token.l,v 1.6.2.1 2007/08/28 11:14:42 liamjfoy Exp $	*/
 
-/* Id: policy_token.l,v 1.10.4.1 2005/05/07 14:30:38 manubsd Exp */
+/* Id: policy_token.l,v 1.12 2005/05/05 12:32:18 manubsd Exp */
 
 /*
  * Copyright (C) 1995, 1996, 1997, 1998, and 1999 WIDE Project.
@@ -41,11 +41,7 @@
 #include <sys/socket.h>
 #include <net/pfkeyv2.h>
 #include <netinet/in.h>
-#ifdef HAVE_NETINET6_IPSEC
-#  include <netinet6/ipsec.h>
-#else
-#  include <netinet/ipsec.h>
-#endif
+#include PATH_IPSEC_H
 
 #include <stdlib.h>
 #include <limits.h>
@@ -55,7 +51,8 @@
 
 #include "libpfkey.h"
 
-#if !defined(__NetBSD__) && !defined(__FreeBSD__) && !defined(__linux__)
+#if !defined(__NetBSD__) && !defined(__FreeBSD__) && !defined(__linux__)  && \
+!defined(__APPLE__) && !defined(__MACH__)
 #include "y.tab.h"
 #else
 #include "policy_parse.h"

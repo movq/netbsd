@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tl.c,v 1.71 2005/12/11 12:22:50 christos Exp $	*/
+/*	$NetBSD: if_tl.c,v 1.77.2.1 2007/03/04 13:58:23 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.  All rights reserved.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.71 2005/12/11 12:22:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.77.2.1 2007/03/04 13:58:23 bouyer Exp $");
 
 #undef TLDEBUG
 #define TL_PRIV_STATS
@@ -45,7 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.71 2005/12/11 12:22:50 christos Exp $");
 #undef TLDEBUG_ADDR
 
 #include "opt_inet.h"
-#include "opt_ns.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -86,10 +85,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.71 2005/12/11 12:22:50 christos Exp $");
 #include <netinet/ip.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #if defined(__NetBSD__)
 #include <net/if_ether.h>
@@ -187,24 +182,24 @@ static const struct i2c_bitbang_ops tl_i2cbb_ops = {
 	}
 };
 
-static __inline void netsio_clr(tl_softc_t*, u_int8_t);
-static __inline void netsio_set(tl_softc_t*, u_int8_t);
-static __inline u_int8_t netsio_read(tl_softc_t*, u_int8_t);
-static __inline void netsio_clr(sc, bits)
+static inline void netsio_clr(tl_softc_t*, u_int8_t);
+static inline void netsio_set(tl_softc_t*, u_int8_t);
+static inline u_int8_t netsio_read(tl_softc_t*, u_int8_t);
+static inline void netsio_clr(sc, bits)
 	tl_softc_t* sc;
 	u_int8_t bits;
 {
 	tl_intreg_write_byte(sc, TL_INT_NET + TL_INT_NetSio,
 	    tl_intreg_read_byte(sc, TL_INT_NET + TL_INT_NetSio) & (~bits));
 }
-static __inline void netsio_set(sc, bits)
+static inline void netsio_set(sc, bits)
 	tl_softc_t* sc;
 	u_int8_t bits;
 {
 	tl_intreg_write_byte(sc, TL_INT_NET + TL_INT_NetSio,
 	    tl_intreg_read_byte(sc, TL_INT_NET + TL_INT_NetSio) | bits);
 }
-static __inline u_int8_t netsio_read(sc, bits)
+static inline u_int8_t netsio_read(sc, bits)
 	tl_softc_t* sc;
 	u_int8_t bits;
 {
@@ -286,10 +281,8 @@ tl_lookup_product(id)
 }
 
 static int
-tl_pci_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+tl_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -300,10 +293,7 @@ tl_pci_match(parent, match, aux)
 }
 
 static void
-tl_pci_attach(parent, self, aux)
-	struct device * parent;
-	struct device * self;
-	void * aux;
+tl_pci_attach(struct device *parent, struct device *self, void *aux)
 {
 	tl_softc_t *sc = (tl_softc_t *)self;
 	struct pci_attach_args * const pa = (struct pci_attach_args *) aux;
@@ -543,9 +533,7 @@ static void tl_shutdown(v)
 	tl_stop(v, 1);
 }
 
-static void tl_stop(ifp, disable)
-	struct ifnet *ifp;
-	int disable;
+static void tl_stop(struct ifnet *ifp, int disable)
 {
 	tl_softc_t *sc = ifp->if_softc;
 	struct Tx_list *Tx;
@@ -617,6 +605,8 @@ static int tl_init(ifp)
 {
 	tl_softc_t *sc = ifp->if_softc;
 	int i, s, error;
+	bus_size_t boundary;
+	prop_number_t prop_boundary;
 	const char *errstring;
 	char *nullbuf;
 
@@ -659,6 +649,20 @@ static int tl_init(ifp)
 		error = ENOMEM;
 		goto bad;
 	}
+
+	/*
+	 * Some boards (Set Engineering GFE) do not permit DMA transfers
+	 * across page boundaries.
+	 */
+	prop_boundary = prop_dictionary_get(device_properties(&sc->sc_dev),
+	    "tl-dma-page-boundary");
+	if (prop_boundary != NULL) {
+		KASSERT(prop_object_type(prop_boundary) == PROP_TYPE_NUMBER);
+		boundary = (bus_size_t)prop_number_integer_value(prop_boundary);
+	} else {
+		boundary = 0;
+	}
+
 	error = bus_dmamap_create(sc->tl_dmatag,
 	    sizeof(struct tl_Rx_list) * TL_NBUF, 1,
 	    sizeof(struct tl_Rx_list) * TL_NBUF, 0, BUS_DMA_WAITOK,
@@ -666,11 +670,11 @@ static int tl_init(ifp)
 	if (error == 0)
 		error = bus_dmamap_create(sc->tl_dmatag,
 		    sizeof(struct tl_Tx_list) * TL_NBUF, 1,
-		    sizeof(struct tl_Tx_list) * TL_NBUF, 0, BUS_DMA_WAITOK,
-		    &sc->Tx_dmamap);
+		    sizeof(struct tl_Tx_list) * TL_NBUF, boundary,
+		    BUS_DMA_WAITOK, &sc->Tx_dmamap);
 	if (error == 0)
 		error = bus_dmamap_create(sc->tl_dmatag, ETHER_MIN_TX, 1,
-		    ETHER_MIN_TX, 0, BUS_DMA_WAITOK,
+		    ETHER_MIN_TX, boundary, BUS_DMA_WAITOK,
 		    &sc->null_dmamap);
 	if (error) {
 		errstring = "can't allocate DMA maps for lists";
@@ -698,11 +702,11 @@ static int tl_init(ifp)
 	}
 	for (i=0; i< TL_NBUF; i++) {
 		error = bus_dmamap_create(sc->tl_dmatag, MCLBYTES,
-		    1, MCLBYTES, 0, BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW,
+		    1, MCLBYTES, boundary, BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW,
 		    &sc->Rx_list[i].m_dmamap);
 		if (error == 0) {
 			error = bus_dmamap_create(sc->tl_dmatag, MCLBYTES,
-			    TL_NSEG, MCLBYTES, 0,
+			    TL_NSEG, MCLBYTES, boundary,
 			    BUS_DMA_WAITOK | BUS_DMA_ALLOCNOW,
 			    &sc->Tx_list[i].m_dmamap);
 		}
@@ -910,7 +914,7 @@ tl_statchg(self)
 	u_int32_t reg;
 
 #ifdef TLDEBUG
-	printf("tl_statchg, media %x\n", sc->tl_ifmedia.ifm_media);
+	printf("tl_statchg, media %x\n", sc->tl_mii.mii_media.ifm_media);
 #endif
 
 	/*
@@ -1106,7 +1110,7 @@ tl_intr(v)
 			    sc->sc_dev.dv_xname);
 			tl_reset(sc);
 			/* shedule reinit of the board */
-			callout_reset(&sc->tl_restart_ch, 1, tl_restart, sc);
+			callout_reset(&sc->tl_restart_ch, 1, tl_restart, ifp);
 			return(1);
 		}
 #endif
@@ -1211,7 +1215,7 @@ tl_intr(v)
 			    TL_HR_READ(sc, TL_HOST_CH_PARM));
 			tl_reset(sc);
 			/* shedule reinit of the board */
-			callout_reset(&sc->tl_restart_ch, 1, tl_restart, sc);
+			callout_reset(&sc->tl_restart_ch, 1, tl_restart, ifp);
 			return(1);
 		} else {
 			u_int8_t netstat;

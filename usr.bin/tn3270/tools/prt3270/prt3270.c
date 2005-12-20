@@ -1,4 +1,4 @@
-/*	$NetBSD: prt3270.c,v 1.8 2003/08/07 11:16:44 agc Exp $	*/
+/*	$NetBSD: prt3270.c,v 1.10 2006/11/09 20:59:23 christos Exp $	*/
 
 /*-
  * Copyright (c) 1988 The Regents of the University of California.
@@ -29,23 +29,26 @@
  * SUCH DAMAGE.
  */
 
+#ifndef HOST_TOOL
 #include <sys/cdefs.h>
 #if defined(__COPYRIGHT) && !defined(lint)
 __COPYRIGHT(
 "@(#) Copyright (c) 1988 The Regents of the University of California.\n\
  All rights reserved.\n");
 #endif /* not lint */
+#endif
 
 #if defined(__RCSID) && !defined(lint)
 #if 0
 static char sccsid[] = "@(#)prt3270.c	4.2 (Berkeley) 4/26/91";
 #else
-__RCSID("$NetBSD: prt3270.c,v 1.8 2003/08/07 11:16:44 agc Exp $");
+__RCSID("$NetBSD: prt3270.c,v 1.10 2006/11/09 20:59:23 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdio.h>
 #include <ctype.h>
+#include <stdlib.h>
 
 #define DEFINING_INSTANCES
 #include "../general/general.h"

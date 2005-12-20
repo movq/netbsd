@@ -1,4 +1,4 @@
-/*	$NetBSD: usb.c,v 1.84 2005/12/11 12:24:01 christos Exp $	*/
+/*	$NetBSD: usb.c,v 1.91.2.1 2007/04/06 18:43:51 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -44,7 +44,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usb.c,v 1.84 2005/12/11 12:24:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usb.c,v 1.91.2.1 2007/04/06 18:43:51 bouyer Exp $");
+
+#include "opt_compat_netbsd.h"
 
 #include "ohci.h"
 #include "uhci.h"
@@ -105,7 +107,14 @@ struct usb_softc {
 	char		sc_dying;
 };
 
-TAILQ_HEAD(, usb_task) usb_all_tasks;
+struct usb_taskq {
+	TAILQ_HEAD(, usb_task) tasks;
+	struct proc *task_thread_proc;
+	const char *name;
+	int taskcreated;	/* task thread exists. */
+};
+
+static struct usb_taskq usb_taskq[USB_NUM_TASKQS];
 
 dev_type_open(usbopen);
 dev_type_close(usbclose);
@@ -116,14 +125,13 @@ dev_type_kqfilter(usbkqfilter);
 
 const struct cdevsw usb_cdevsw = {
 	usbopen, usbclose, usbread, nowrite, usbioctl,
-	nostop, notty, usbpoll, nommap, usbkqfilter,
+	nostop, notty, usbpoll, nommap, usbkqfilter, D_OTHER,
 };
 
 Static void	usb_discover(void *);
 Static void	usb_create_event_thread(void *);
 Static void	usb_event_thread(void *);
 Static void	usb_task_thread(void *);
-Static struct proc *usb_task_thread_proc = NULL;
 
 #define USB_MAX_EVENTS 100
 struct usb_event_q {
@@ -136,9 +144,15 @@ Static int usb_nevents = 0;
 Static struct selinfo usb_selevent;
 Static usb_proc_ptr usb_async_proc;  /* process that wants USB SIGIO */
 Static int usb_dev_open = 0;
+Static struct usb_event *usb_alloc_event(void);
+Static void usb_free_event(struct usb_event *);
 Static void usb_add_event(int, struct usb_event *);
 
 Static int usb_get_next_event(struct usb_event *);
+
+#ifdef COMPAT_30
+Static void usb_copy_old_devinfo(struct usb_device_info_old *, const struct usb_device_info *);
+#endif
 
 Static const char *usbrev_str[] = USBREV_STR;
 
@@ -157,7 +171,7 @@ USB_ATTACH(usb)
 	usbd_status err;
 	int usbrev;
 	int speed;
-	struct usb_event ue;
+	struct usb_event *ue;
 
 	DPRINTF(("usbd_attach\n"));
 
@@ -187,8 +201,9 @@ USB_ATTACH(usb)
 	if (cold)
 		sc->sc_bus->use_polling++;
 
-	ue.u.ue_ctrlr.ue_bus = USBDEVUNIT(sc->sc_dev);
-	usb_add_event(USB_EVENT_CTRLR_ATTACH, &ue);
+	ue = usb_alloc_event();
+	ue->u.ue_ctrlr.ue_bus = USBDEVUNIT(sc->sc_dev);
+	usb_add_event(USB_EVENT_CTRLR_ATTACH, ue);
 
 #ifdef USB_USE_SOFTINTR
 #ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
@@ -222,7 +237,7 @@ USB_ATTACH(usb)
 		 * until the USB event thread is running, which means that
 		 * the keyboard will not work until after cold boot.
 		 */
-		if (cold && (sc->sc_dev.dv_cfdata->cf_flags & 1))
+		if (cold && (device_cfdata(&sc->sc_dev)->cf_flags & 1))
 			dev->hub->explore(sc->sc_bus->root_hub);
 #endif
 	} else {
@@ -239,12 +254,15 @@ USB_ATTACH(usb)
 	USB_ATTACH_SUCCESS_RETURN;
 }
 
+static const char *taskq_names[] = USB_TASKQ_NAMES;
+
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 void
 usb_create_event_thread(void *arg)
 {
 	struct usb_softc *sc = arg;
-	static int created = 0;
+	struct usb_taskq *taskq;
+	int i;
 
 	if (usb_kthread_create1(usb_event_thread, sc, &sc->sc_event_thread,
 			   "%s", sc->sc_dev.dv_xname)) {
@@ -252,12 +270,18 @@ usb_create_event_thread(void *arg)
 		       sc->sc_dev.dv_xname);
 		panic("usb_create_event_thread");
 	}
-	if (!created) {
-		created = 1;
-		TAILQ_INIT(&usb_all_tasks);
-		if (usb_kthread_create1(usb_task_thread, NULL,
-					&usb_task_thread_proc, "usbtask")) {
-			printf("unable to create task thread\n");
+	for (i = 0; i < USB_NUM_TASKQS; i++) {
+		taskq = &usb_taskq[i];
+
+		if (taskq->taskcreated)
+			continue;
+
+		TAILQ_INIT(&taskq->tasks);
+		taskq->taskcreated = 1;
+		taskq->name = taskq_names[i];
+		if (usb_kthread_create1(usb_task_thread, taskq,
+					&taskq->task_thread_proc, taskq->name)) {
+			printf("unable to create task thread: %s\n", taskq->name);
 			panic("usb_create_event_thread task");
 		}
 	}
@@ -269,31 +293,35 @@ usb_create_event_thread(void *arg)
  * context ASAP.
  */
 void
-usb_add_task(usbd_device_handle dev, struct usb_task *task)
+usb_add_task(usbd_device_handle dev, struct usb_task *task, int queue)
 {
+	struct usb_taskq *taskq;
 	int s;
 
+	taskq = &usb_taskq[queue];
 	s = splusb();
-	if (!task->onqueue) {
+	if (task->queue == -1) {
 		DPRINTFN(2,("usb_add_task: task=%p\n", task));
-		TAILQ_INSERT_TAIL(&usb_all_tasks, task, next);
-		task->onqueue = 1;
+		TAILQ_INSERT_TAIL(&taskq->tasks, task, next);
+		task->queue = queue;
 	} else {
 		DPRINTFN(3,("usb_add_task: task=%p on q\n", task));
 	}
-	wakeup(&usb_all_tasks);
+	wakeup(&taskq->tasks);
 	splx(s);
 }
 
 void
 usb_rem_task(usbd_device_handle dev, struct usb_task *task)
 {
+	struct usb_taskq *taskq;
 	int s;
 
+	taskq = &usb_taskq[task->queue];
 	s = splusb();
-	if (task->onqueue) {
-		TAILQ_REMOVE(&usb_all_tasks, task, next);
-		task->onqueue = 0;
+	if (task->queue != -1) {
+		TAILQ_REMOVE(&taskq->tasks, task, next);
+		task->queue = -1;
 	}
 	splx(s);
 }
@@ -347,21 +375,23 @@ void
 usb_task_thread(void *arg)
 {
 	struct usb_task *task;
+	struct usb_taskq *taskq;
 	int s;
 
-	DPRINTF(("usb_task_thread: start\n"));
+	taskq = arg;
+	DPRINTF(("usb_task_thread: start taskq %s\n", taskq->name));
 
 	s = splusb();
 	for (;;) {
-		task = TAILQ_FIRST(&usb_all_tasks);
+		task = TAILQ_FIRST(&taskq->tasks);
 		if (task == NULL) {
-			tsleep(&usb_all_tasks, PWAIT, "usbtsk", 0);
-			task = TAILQ_FIRST(&usb_all_tasks);
+			tsleep(&taskq->tasks, PWAIT, "usbtsk", 0);
+			task = TAILQ_FIRST(&taskq->tasks);
 		}
 		DPRINTFN(2,("usb_task_thread: woke up task=%p\n", task));
 		if (task != NULL) {
-			TAILQ_REMOVE(&usb_all_tasks, task, next);
-			task->onqueue = 0;
+			TAILQ_REMOVE(&taskq->tasks, task, next);
+			task->queue = -1;
 			splx(s);
 			task->fun(task->arg);
 			s = splusb();
@@ -405,19 +435,35 @@ usbopen(dev_t dev, int flag, int mode, struct lwp *l)
 int
 usbread(dev_t dev, struct uio *uio, int flag)
 {
-	struct usb_event ue;
-	int s, error, n;
+	struct usb_event *ue;
+#ifdef COMPAT_30
+	struct usb_event_old *ueo = NULL;	/* XXXGCC */
+#endif
+	int s, error, n, useold;
 
 	if (minor(dev) != USB_DEV_MINOR)
 		return (ENXIO);
 
-	if (uio->uio_resid != sizeof(struct usb_event))
+	useold = 0;
+	switch (uio->uio_resid) {
+#ifdef COMPAT_30
+	case sizeof(struct usb_event_old):
+		ueo = malloc(sizeof(struct usb_event_old), M_USBDEV,
+			     M_WAITOK|M_ZERO);
+		useold = 1;
+		/* FALLTHRU */
+#endif
+	case sizeof(struct usb_event):
+		ue = usb_alloc_event();
+		break;
+	default:
 		return (EINVAL);
+	}
 
 	error = 0;
 	s = splusb();
 	for (;;) {
-		n = usb_get_next_event(&ue);
+		n = usb_get_next_event(ue);
 		if (n != 0)
 			break;
 		if (flag & IO_NDELAY) {
@@ -429,14 +475,51 @@ usbread(dev_t dev, struct uio *uio, int flag)
 			break;
 	}
 	splx(s);
-	if (!error)
-		error = uiomove((void *)&ue, uio->uio_resid, uio);
+	if (!error) {
+#ifdef COMPAT_30
+		if (useold) { /* copy fields to old struct */
+			ueo->ue_type = ue->ue_type;
+			memcpy(&ueo->ue_time, &ue->ue_time,
+			      sizeof(struct timespec));
+			switch (ue->ue_type) {
+				case USB_EVENT_DEVICE_ATTACH:
+				case USB_EVENT_DEVICE_DETACH:
+					usb_copy_old_devinfo(&ueo->u.ue_device, &ue->u.ue_device);
+					break;
+
+				case USB_EVENT_CTRLR_ATTACH:
+				case USB_EVENT_CTRLR_DETACH:
+					ueo->u.ue_ctrlr.ue_bus=ue->u.ue_ctrlr.ue_bus;
+					break;
+
+				case USB_EVENT_DRIVER_ATTACH:
+				case USB_EVENT_DRIVER_DETACH:
+					ueo->u.ue_driver.ue_cookie=ue->u.ue_driver.ue_cookie;
+					memcpy(ueo->u.ue_driver.ue_devname,
+					       ue->u.ue_driver.ue_devname,  
+					       sizeof(ue->u.ue_driver.ue_devname));
+					break;
+				default:
+					;
+			}
+
+			error = uiomove((void *)ueo, uio->uio_resid, uio);
+		} else
+#endif
+			error = uiomove((void *)ue, uio->uio_resid, uio);
+	}
+	usb_free_event(ue);
+#ifdef COMPAT_30
+	if (useold)
+		free(ueo, M_USBDEV);
+#endif
 
 	return (error);
 }
 
 int
-usbclose(dev_t dev, int flag, int mode, struct lwp *l)
+usbclose(dev_t dev, int flag, int mode,
+    struct lwp *l)
 {
 	int unit = minor(dev);
 
@@ -518,11 +601,10 @@ usbioctl(dev_t devt, u_long cmd, caddr_t data, int flag, struct lwp *l)
 			uio.uio_iovcnt = 1;
 			uio.uio_resid = len;
 			uio.uio_offset = 0;
-			uio.uio_segflg = UIO_USERSPACE;
 			uio.uio_rw =
 				ur->ucr_request.bmRequestType & UT_READ ?
 				UIO_READ : UIO_WRITE;
-			uio.uio_lwp = l;
+			uio.uio_vmspace = l->l_proc->p_vmspace;
 			ptr = malloc(len, M_TEMP, M_WAITOK);
 			if (uio.uio_rw == UIO_WRITE) {
 				error = uiomove(ptr, len, &uio);
@@ -552,18 +634,33 @@ usbioctl(dev_t devt, u_long cmd, caddr_t data, int flag, struct lwp *l)
 
 	case USB_DEVICEINFO:
 	{
+		usbd_device_handle dev;
 		struct usb_device_info *di = (void *)data;
 		int addr = di->udi_addr;
-		usbd_device_handle dev;
 
 		if (addr < 1 || addr >= USB_MAX_DEVICES)
-			return (EINVAL);
-		dev = sc->sc_bus->devices[addr];
-		if (dev == NULL)
-			return (ENXIO);
+			return EINVAL;
+		if ((dev = sc->sc_bus->devices[addr]) == NULL)
+			return ENXIO;
 		usbd_fill_deviceinfo(dev, di, 1);
 		break;
 	}
+
+#ifdef COMPAT_30
+	case USB_DEVICEINFO_OLD:
+	{
+		usbd_device_handle dev;
+		struct usb_device_info_old *di = (void *)data;
+		int addr = di->udi_addr;
+
+		if (addr < 1 || addr >= USB_MAX_DEVICES)
+			return EINVAL;
+		if ((dev = sc->sc_bus->devices[addr]) == NULL)
+			return ENXIO;
+		usbd_fill_deviceinfo_old(dev, di, 1);
+		break;
+	}
+#endif
 
 	case USB_DEVICESTATS:
 		*(struct usb_device_stats *)data = sc->sc_bus->stats;
@@ -706,7 +803,7 @@ usb_get_next_event(struct usb_event *ue)
 	if (ue)
 		*ue = ueq->ue;
 	SIMPLEQ_REMOVE_HEAD(&usb_events, next);
-	free(ueq, M_USBDEV);
+	usb_free_event((struct usb_event *)(void *)ueq);
 	usb_nevents--;
 	return (1);
 }
@@ -714,21 +811,34 @@ usb_get_next_event(struct usb_event *ue)
 void
 usbd_add_dev_event(int type, usbd_device_handle udev)
 {
-	struct usb_event ue;
+	struct usb_event *ue = usb_alloc_event();
 
-	usbd_fill_deviceinfo(udev, &ue.u.ue_device, USB_EVENT_IS_ATTACH(type));
-	usb_add_event(type, &ue);
+	usbd_fill_deviceinfo(udev, &ue->u.ue_device, USB_EVENT_IS_ATTACH(type));
+	usb_add_event(type, ue);
 }
 
 void
 usbd_add_drv_event(int type, usbd_device_handle udev, device_ptr_t dev)
 {
-	struct usb_event ue;
+	struct usb_event *ue = usb_alloc_event();
 
-	ue.u.ue_driver.ue_cookie = udev->cookie;
-	strncpy(ue.u.ue_driver.ue_devname, USBDEVPTRNAME(dev),
-	    sizeof ue.u.ue_driver.ue_devname);
-	usb_add_event(type, &ue);
+	ue->u.ue_driver.ue_cookie = udev->cookie;
+	strncpy(ue->u.ue_driver.ue_devname, USBDEVPTRNAME(dev),
+	    sizeof ue->u.ue_driver.ue_devname);
+	usb_add_event(type, ue);
+}
+
+Static struct usb_event *
+usb_alloc_event(void)
+{
+	/* Yes, this is right; we allocate enough so that we can use it later */
+	return malloc(sizeof(struct usb_event_q), M_USBDEV, M_WAITOK|M_ZERO);
+}
+
+Static void
+usb_free_event(struct usb_event *uep)
+{
+	free(uep, M_USBDEV);
 }
 
 Static void
@@ -740,7 +850,7 @@ usb_add_event(int type, struct usb_event *uep)
 
 	microtime(&thetime);
 	/* Don't want to wait here inside splusb() */
-	ueq = malloc(sizeof *ueq, M_USBDEV, M_WAITOK);
+	ueq = (struct usb_event_q *)(void *)uep;
 	ueq->ue = *uep;
 	ueq->ue.ue_type = type;
 	TIMEVAL_TO_TIMESPEC(&thetime, &ueq->ue.ue_time);
@@ -806,7 +916,7 @@ int
 usb_detach(device_ptr_t self, int flags)
 {
 	struct usb_softc *sc = (struct usb_softc *)self;
-	struct usb_event ue;
+	struct usb_event *ue;
 
 	DPRINTF(("usb_detach: start\n"));
 
@@ -838,8 +948,68 @@ usb_detach(device_ptr_t self, int flags)
 #endif
 #endif
 
-	ue.u.ue_ctrlr.ue_bus = USBDEVUNIT(sc->sc_dev);
-	usb_add_event(USB_EVENT_CTRLR_DETACH, &ue);
+	ue = usb_alloc_event();
+	ue->u.ue_ctrlr.ue_bus = USBDEVUNIT(sc->sc_dev);
+	usb_add_event(USB_EVENT_CTRLR_DETACH, ue);
 
 	return (0);
 }
+
+#ifdef COMPAT_30
+Static void
+usb_copy_old_devinfo(struct usb_device_info_old *uo,
+		     const struct usb_device_info *ue)
+{
+	const unsigned char *p;
+	unsigned char *q;
+	int i, n;
+
+	uo->udi_bus = ue->udi_bus;
+	uo->udi_addr = ue->udi_addr;       
+	uo->udi_cookie = ue->udi_cookie;
+	for (i = 0, p = (const unsigned char *)ue->udi_product,
+	     q = (unsigned char *)uo->udi_product;
+	     *p && i < USB_MAX_STRING_LEN - 1; p++) {
+		if (*p < 0x80)
+			q[i++] = *p;
+		else {
+			q[i++] = '?';
+			if ((*p & 0xe0) == 0xe0)
+				p++;
+			p++;
+		}
+	}
+	q[i] = 0;
+
+	for (i = 0, p = ue->udi_vendor, q = uo->udi_vendor;
+	     *p && i < USB_MAX_STRING_LEN - 1; p++) {
+		if (* p < 0x80)
+			q[i++] = *p;
+		else {
+			q[i++] = '?';
+			p++;
+			if ((*p & 0xe0) == 0xe0)
+				p++;
+		}
+	}
+	q[i] = 0;
+
+	memcpy(uo->udi_release, ue->udi_release, sizeof(uo->udi_release));
+
+	uo->udi_productNo = ue->udi_productNo;
+	uo->udi_vendorNo = ue->udi_vendorNo;
+	uo->udi_releaseNo = ue->udi_releaseNo;
+	uo->udi_class = ue->udi_class;
+	uo->udi_subclass = ue->udi_subclass;
+	uo->udi_protocol = ue->udi_protocol;
+	uo->udi_config = ue->udi_config;
+	uo->udi_speed = ue->udi_speed;
+	uo->udi_power = ue->udi_power;    
+	uo->udi_nports = ue->udi_nports;
+
+	for (n=0; n<USB_MAX_DEVNAMES; n++)
+		memcpy(uo->udi_devnames[n],
+		       ue->udi_devnames[n], USB_MAX_DEVNAMELEN);
+	memcpy(uo->udi_ports, ue->udi_ports, sizeof(uo->udi_ports));
+}
+#endif

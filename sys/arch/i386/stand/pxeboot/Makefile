@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2005/11/11 21:42:13 dsl Exp $
+#	$NetBSD: Makefile,v 1.13.2.1 2007/03/04 12:10:41 bouyer Exp $
 
 S=	${.CURDIR}/../../../../
 
@@ -19,15 +19,13 @@ SRCS= main.c dev_net.c devopen.c conf.c exec.c pxe.c pxe_call.S
 .PATH: ${.CURDIR}/../libsa
 SRCS+= nfs.c
 
+.include <bsd.own.mk>
+
 .if ${MACHINE} == "amd64"
-LD+=  -m elf_i386
-AFLAGS+=   -m32
-CPUFLAGS=  -m32
-LIBKERN_ARCH=i386
+LDFLAGS+=	-Wl,-m,elf_i386
+AFLAGS+=	-m32
+LIBKERN_ARCH=	i386
 KERNMISCMAKEFLAGS="LIBKERN_ARCH=i386"
-CPPFLAGS+= -DBOOT_ELF64
-.else
-CPUFLAGS=  -mcpu=i386
 .endif
 
 CPPFLAGS+= -DSLOW	# for libz
@@ -59,6 +57,7 @@ CPPFLAGS+= -DSUPPORT_NFS
 #CPPFLAGS+= -DNFS_NOSYMLINK
 
 CPPFLAGS+= -DPASS_MEMMAP
+CPPFLAGS+= -DEPIA_HACK
 
 #CFLAGS= -O2 -fomit-frame-pointer -fno-defer-pop
 CFLAGS+= -Wall -Wmissing-prototypes -Wstrict-prototypes -Wno-main
@@ -77,3 +76,7 @@ VERSIONFILE= ${.CURDIR}/../pxeboot/version
 .endif
 
 .include "../Makefile.booters"
+
+release: check_RELEASEDIR
+	${HOST_INSTALL_FILE} -m ${BINMODE} ${PROG} \
+		${RELEASEDIR}/${MACHINE}/installation/misc

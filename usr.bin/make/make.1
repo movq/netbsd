@@ -1,4 +1,4 @@
-.\"	$NetBSD: make.1,v 1.118 2005/06/27 09:51:09 wiz Exp $
+.\"	$NetBSD: make.1,v 1.128.2.1 2007/06/05 20:53:29 bouyer Exp $
 .\"
 .\" Copyright (c) 1990, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	from: @(#)make.1	8.4 (Berkeley) 3/19/94
 .\"
-.Dd June 27, 2005
+.Dd November 19, 2006
 .Dt MAKE 1
 .Os
 .Sh NAME
@@ -74,12 +74,15 @@
 is a program designed to simplify the maintenance of other programs.
 Its input is a list of specifications as to the files upon which programs
 and other files depend.
-If the file
+If no
+.Fl f Ar makefile
+makefile option is given,
+.Nm
+will try to open
 .Ql Pa makefile
-exists, it is read for this list of specifications.
-If it does not exist, the file
+then
 .Ql Pa Makefile
-is read.
+in order to find the specifications.
 If the file
 .Ql Pa .depend
 exists, it is read (see
@@ -91,6 +94,11 @@ For a more thorough description of
 and makefiles, please refer to
 .%T "Make \- A Tutorial" .
 .Pp
+.Nm
+will prepend the contents of the
+.Va MAKEFLAGS
+environment variable to the command line arguments before parsing them.
+.Pp
 The options are as follows:
 .Bl -tag -width Ds
 .It Fl B
@@ -100,10 +108,15 @@ by executing the commands to make the sources of a dependency line in sequence.
 Define
 .Ar variable
 to be 1, in the global context.
-.It Fl d Ar flags
+.It Fl d Ar [-]flags
 Turn on debugging, and specify which portions of
 .Nm
 are to print debugging information.
+Unless the flags are preceded by
+.Ql -
+they are added to the
+.Va MAKEFLAGS
+environment variable and will be processed by any child make processes.
 .Ar Flags
 is one or more of the following:
 .Bl -tag -width Ds
@@ -118,6 +131,15 @@ Print debugging information about conditional evaluation.
 Print debugging information about directory searching and caching.
 .It Ar e
 Print debugging information about failed commands and targets.
+.It Ar F
+Use the rest of
+.Ql flags
+as the name of the file to which the debug output is written.
+If the filename ends
+.Ql .%d
+then the
+.Ql %d
+is replaced by the pid.
 .It Ar f
 Print debugging information about loop evaluation.
 .It Ar "g1"
@@ -140,8 +162,12 @@ These are created via
 .Xr mkstemp 3
 and have names of the form
 .Pa /tmp/makeXXXXX .
-.Em NOTE:
-This can create many file in /tmp so use with care.
+.Em NOTE :
+This can create many file in
+.Pa /tmp
+so use with care.
+.It Ar p
+Print debugging information about makefile parsing.
 .It Ar s
 Print debugging information about suffix-transformation rules.
 .It Ar t
@@ -413,6 +439,11 @@ Assign the value to the variable if it is not already defined.
 Assign with expansion, i.e. expand the value before assigning it
 to the variable.
 Normally, expansion is not done until the variable is referenced.
+.Em NOTE :
+References to undefined variables are
+.Em not
+expanded.
+This can cause problems when variable modifiers are used.
 .It Ic \&!=
 Expand the value and pass it to the shell for execution and assign
 the result to the variable.
@@ -539,7 +570,7 @@ The name that
 .Nm
 was executed with
 .Pq Va argv[0] .
-For compatibily
+For compatibility
 .Nm
 also sets
 .Va .MAKE
@@ -692,11 +723,24 @@ Variable expansion may be modified to select or modify each word of the
 variable (where a ``word'' is white-space delimited sequence of characters).
 The general format of a variable expansion is as follows:
 .Pp
-.Dl {variable[:modifier[:...]]}
+.Dl ${variable[:modifier[:...]]}
 .Pp
 Each modifier begins with a colon,
 which may be escaped with a backslash
 .Pq Ql \e .
+.Pp
+A set of modifiers can be specified via a variable, as follows:
+.Pp
+.Dl modifier_variable=modifier[:...]
+.Dl ${variable:${modifier_variable}[:...]}
+.Pp
+In this case the first modifier in the modifier_variable does not
+start with a colon, since that must appear in the referencing
+variable.
+If any of the modifiers in the modifier_variable contain a dollar sign
+.Pq Ql $ ,
+these must be doubled to avoid early expansion.
+.Pp
 The supported modifiers are:
 .Bl -tag -width EEE
 .It Cm \&:E
@@ -1413,8 +1457,30 @@ If
 .Ic .WAIT
 appears in a dependency line, the sources that precede it are
 made before the sources that succeed it in the line.
-Loops are not
-detected and targets that form loops will be silently ignored.
+Since the dependents of files are not made until the file itself
+could be made, this also stops the dependents being built unless they
+are needed for another branch of the dependency tree.
+So given:
+.Bd -literal
+x: a .WAIT b
+	echo x
+a:
+	echo a
+b: b1
+	echo b
+b1:
+	echo b1
+
+.Ed
+the output is always
+.Ql b1 ,
+.Ql b ,
+.Ql a ,
+.Ql x .
+.br
+The ordering imposed by
+.Ic .WAIT
+is only relevant for parallel makes.
 .El
 .Sh SPECIAL TARGETS
 Special targets may not be included with other targets, i.e. they must be
@@ -1480,6 +1546,20 @@ Synonym for
 for compatibility with other pmake variants.
 .It Ic .ORDER
 The named targets are made in sequence.
+This ordering does not add targets to the list of targets to be made.
+Since the dependents of a target do not get built until the target itself
+could be built, unless
+.Ql a
+is built by another part of the dependency graph,
+the following is a dependency loop:
+.Bd -literal
+\&.ORDER a b
+b: a
+.Ed
+.Pp
+The ordering imposed by
+.Ic .ORDER
+is only relevant for parallel makes.
 .\" XXX: NOT YET!!!!
 .\" .It Ic .PARALLEL
 .\" The named targets are executed in parallel mode.
@@ -1543,13 +1623,16 @@ It is typically identical to
 The flag to pass the shell to enable error checking.
 .It Ar echoFlag
 The flag to pass the shell to enable command echoing.
+.It Ar newline
+The string literal to pass the shell that results in a single newline
+character when used outside of any quoting characters.
 .El
 Example:
 .Bd -literal
 \&.SHELL: name=ksh path=/bin/ksh hasErrCtl=true \\
 	check="set -e" ignore="set +e" \\
 	echo="set -v" quiet="set +v" filter="set +v" \\
-	echoFlag=v errFlag=e
+	echoFlag=v errFlag=e newline="'\\n'"
 .Ed
 .It Ic .SILENT
 Apply the
@@ -1599,6 +1682,14 @@ system makefile
 .It /usr/share/mk
 system makefile directory
 .El
+.Sh COMPATIBILITY
+The basic make syntax is compatible between different versions of make,
+however the special variables, variable modifiers and conditionals are not.
+.Pp
+The way that parallel makes are scheduled changed in
+.Nx 4.0
+so that .ORDER and .WAIT apply recursively to the dependant nodes.
+The algorithms used may change again in the future.
 .Sh SEE ALSO
 .Xr mkdep 1
 .Sh HISTORY

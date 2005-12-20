@@ -1,7 +1,7 @@
-/*	$NetBSD: ifiter_ioctl.c,v 1.1.1.2 2004/11/06 23:55:52 christos Exp $	*/
+/*	$NetBSD: ifiter_ioctl.c,v 1.1.1.4.4.1 2007/05/17 00:42:48 jdc Exp $	*/
 
 /*
- * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2006  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -17,9 +17,10 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: ifiter_ioctl.c,v 1.19.2.5.2.14 2004/06/22 04:40:23 marka Exp */
+/* Id: ifiter_ioctl.c,v 1.44.18.11 2006/02/03 23:51:38 marka Exp */
 
-/*
+/*! \file
+ * \brief
  * Obtain the list of network interfaces using the SIOCGLIFCONF ioctl.
  * See netintro(4).
  */
@@ -95,7 +96,7 @@ struct isc_interfaceiter {
 #endif
 
 
-/*
+/*%
  * Size of buffer for SIOCGLIFCONF, in bytes.  We assume no sane system
  * will have more than a megabyte of interface configuration data.
  */
@@ -341,9 +342,8 @@ isc_interfaceiter_create(isc_mem_t *mctx, isc_interfaceiter_t **iterp) {
 			result = ISC_R_UNEXPECTED;
 			goto socket6_failure;
 		}
-		iter->result6 = getbuf6(iter);
-		if (iter->result6 != ISC_R_NOTIMPLEMENTED &&
-		    iter->result6 != ISC_R_SUCCESS)
+		result = iter->result6 = getbuf6(iter);
+		if (result != ISC_R_NOTIMPLEMENTED && result != ISC_R_SUCCESS)
 			goto ioctl6_failure;
 	}
 #endif
@@ -532,7 +532,8 @@ internal_current4(isc_interfaceiter_t *iter) {
 #endif
 
 	REQUIRE(VALID_IFITER(iter));
-	REQUIRE (iter->pos < (unsigned int) iter->ifc.ifc_len);
+	REQUIRE(iter->ifc.ifc_len == 0 ||
+		iter->pos < (unsigned int) iter->ifc.ifc_len);
 
 #ifdef __linux
 	result = linux_if_inet6_current(iter);
@@ -540,6 +541,9 @@ internal_current4(isc_interfaceiter_t *iter) {
 		return (result);
 	iter->first = ISC_TRUE;
 #endif
+
+	if (iter->ifc.ifc_len == 0)
+		return (ISC_R_NOMORE);
 
 	ifrp = (struct ifreq *)((char *) iter->ifc.ifc_req + iter->pos);
 
@@ -899,7 +903,9 @@ internal_current(isc_interfaceiter_t *iter) {
  */
 static isc_result_t
 internal_next4(isc_interfaceiter_t *iter) {
+#ifdef ISC_PLATFORM_HAVESALEN
 	struct ifreq *ifrp;
+#endif
 
 	REQUIRE (iter->pos < (unsigned int) iter->ifc.ifc_len);
 
@@ -909,14 +915,14 @@ internal_next4(isc_interfaceiter_t *iter) {
 	if (!iter->first)
 		return (ISC_R_SUCCESS);
 #endif
+#ifdef ISC_PLATFORM_HAVESALEN
 	ifrp = (struct ifreq *)((char *) iter->ifc.ifc_req + iter->pos);
 
-#ifdef ISC_PLATFORM_HAVESALEN
 	if (ifrp->ifr_addr.sa_len > sizeof(struct sockaddr))
 		iter->pos += sizeof(ifrp->ifr_name) + ifrp->ifr_addr.sa_len;
 	else
 #endif
-		iter->pos += sizeof(*ifrp);
+		iter->pos += sizeof(struct ifreq);
 
 	if (iter->pos >= (unsigned int) iter->ifc.ifc_len)
 		return (ISC_R_NOMORE);
@@ -927,21 +933,23 @@ internal_next4(isc_interfaceiter_t *iter) {
 #if defined(SIOCGLIFCONF) && defined(SIOCGLIFADDR)
 static isc_result_t
 internal_next6(isc_interfaceiter_t *iter) {
+#ifdef ISC_PLATFORM_HAVESALEN
 	struct LIFREQ *ifrp;
+#endif
 	
 	if (iter->result6 != ISC_R_SUCCESS && iter->result6 != ISC_R_IGNORE)
 		return (iter->result6);
 
 	REQUIRE(iter->pos6 < (unsigned int) iter->lifc.lifc_len);
 
+#ifdef ISC_PLATFORM_HAVESALEN
 	ifrp = (struct LIFREQ *)((char *) iter->lifc.lifc_req + iter->pos6);
 
-#ifdef ISC_PLATFORM_HAVESALEN
 	if (ifrp->lifr_addr.sa_len > sizeof(struct sockaddr))
 		iter->pos6 += sizeof(ifrp->lifr_name) + ifrp->lifr_addr.sa_len;
 	else
 #endif
-		iter->pos6 += sizeof(*ifrp);
+		iter->pos6 += sizeof(struct LIFREQ);
 
 	if (iter->pos6 >= (unsigned int) iter->lifc.lifc_len)
 		return (ISC_R_NOMORE);

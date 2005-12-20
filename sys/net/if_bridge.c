@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bridge.c,v 1.33 2005/12/11 23:05:24 thorpej Exp $	*/
+/*	$NetBSD: if_bridge.c,v 1.46 2006/11/23 04:07:07 rpaulo Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -80,13 +80,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.33 2005/12/11 23:05:24 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.46 2006/11/23 04:07:07 rpaulo Exp $");
 
 #include "opt_bridge_ipf.h"
 #include "opt_inet.h"
 #include "opt_pfil_hooks.h"
 #include "bpfilter.h"
-#include "gif.h"
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -97,6 +96,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.33 2005/12/11 23:05:24 thorpej Exp $
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/pool.h>
+#include <sys/kauth.h>
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -129,6 +129,13 @@ __KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.33 2005/12/11 23:05:24 thorpej Exp $
 #endif
 
 #define	BRIDGE_RTHASH_MASK		(BRIDGE_RTHASH_SIZE - 1)
+
+#include "carp.h"
+#if NCARP > 0
+#include <netinet/in.h>
+#include <netinet/in_var.h>
+#include <netinet/ip_carp.h>
+#endif
 
 /*
  * Maximum number of addresses to cache.
@@ -443,7 +450,7 @@ static int
 bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct bridge_softc *sc = ifp->if_softc;
-	struct proc *p = curproc;	/* XXX */
+	struct lwp *l = curlwp;	/* XXX */
 	union {
 		struct ifbreq ifbreq;
 		struct ifbifconf ifbifconf;
@@ -478,7 +485,8 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		}
 
 		if (bc->bc_flags & BC_F_SUSER) {
-			error = suser(p->p_ucred, &p->p_acflag);
+			error = kauth_authorize_generic(l->l_cred,
+			    KAUTH_GENERIC_ISSUSER, &l->l_acflag);
 			if (error)
 				break;
 		}
@@ -489,6 +497,7 @@ bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			break;
 		}
 
+		memset(&args, 0, sizeof(args));
 		if (bc->bc_flags & BC_F_COPYIN) {
 			error = copyin(ifd->ifd_data, &args, ifd->ifd_len);
 			if (error)
@@ -585,10 +594,6 @@ bridge_delete_member(struct bridge_softc *sc, struct bridge_iflist *bif)
 		 */
 		(void) ifpromisc(ifs, 0);
 		break;
-#if NGIF > 0
-	case IFT_GIF:
-		break;
-#endif
 	default:
 #ifdef DIAGNOSTIC
 		panic("bridge_delete_member: impossible");
@@ -641,10 +646,6 @@ bridge_ioctl_add(struct bridge_softc *sc, void *arg)
 		if (error)
 			goto out;
 		break;
-#if NGIF > 0
-	case IFT_GIF:
-		break;
-#endif
 	default:
 		error = EINVAL;
 		goto out;
@@ -775,6 +776,7 @@ bridge_ioctl_gifs(struct bridge_softc *sc, void *arg)
 
 	count = 0;
 	len = bifc->ifbic_len;
+	memset(&breq, 0, sizeof breq);
 	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if (len < sizeof(breq))
 			break;
@@ -812,12 +814,13 @@ bridge_ioctl_rts(struct bridge_softc *sc, void *arg)
 	LIST_FOREACH(brt, &sc->sc_rtlist, brt_list) {
 		if (len < sizeof(bareq))
 			goto out;
+		memset(&bareq, 0, sizeof(bareq));
 		strlcpy(bareq.ifba_ifsname, brt->brt_ifp->if_xname,
 		    sizeof(bareq.ifba_ifsname));
 		memcpy(bareq.ifba_dst, brt->brt_addr, sizeof(brt->brt_addr));
-		if ((brt->brt_flags & IFBAF_TYPEMASK) == IFBAF_DYNAMIC)
-			bareq.ifba_expire = brt->brt_expire - mono_time.tv_sec;
-		else
+		if ((brt->brt_flags & IFBAF_TYPEMASK) == IFBAF_DYNAMIC) {
+			bareq.ifba_expire = brt->brt_expire - time_uptime;
+		} else
 			bareq.ifba_expire = 0;
 		bareq.ifba_flags = brt->brt_flags;
 
@@ -1492,20 +1495,6 @@ bridge_input(struct ifnet *ifp, struct mbuf *m)
 			return (m);
 
 		/* Perform the bridge forwarding function with the copy. */
-#if NGIF > 0
-		if (ifp->if_type == IFT_GIF) {
-			LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
-				if (bif->bif_ifp->if_type == IFT_ETHER)
-				break;
-			}
-			if (bif != NULL) {
-				m->m_flags |= M_PROTO1;
-				m->m_pkthdr.rcvif = bif->bif_ifp;
-				(*bif->bif_ifp->if_input)(bif->bif_ifp, m);
-				m = NULL;
-			}
-		}
-#endif
 		bridge_forward(sc, mc);
 
 		/* Return the original packet for local processing. */
@@ -1525,29 +1514,29 @@ bridge_input(struct ifnet *ifp, struct mbuf *m)
 	 * Unicast.  Make sure it's not for us.
 	 */
 	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
-		if(bif->bif_ifp->if_type != IFT_ETHER)
-			continue;
 		/* It is destined for us. */
 		if (memcmp(LLADDR(bif->bif_ifp->if_sadl), eh->ether_dhost,
-		    ETHER_ADDR_LEN) == 0) {
+		    ETHER_ADDR_LEN) == 0
+#if NCARP > 0
+		    || (bif->bif_ifp->if_carp && carp_ourether(bif->bif_ifp->if_carp,
+			eh, IFT_ETHER, 0) != NULL)
+#endif /* NCARP > 0 */
+		    ) {
 			if (bif->bif_flags & IFBIF_LEARNING)
 				(void) bridge_rtupdate(sc,
 				    eh->ether_shost, ifp, 0, IFBAF_DYNAMIC);
 			m->m_pkthdr.rcvif = bif->bif_ifp;
-#if NGIF > 0
-			if (ifp->if_type == IFT_GIF) {
-				m->m_flags |= M_PROTO1;
-				m->m_pkthdr.rcvif = bif->bif_ifp;
-				(*bif->bif_ifp->if_input)(bif->bif_ifp, m);
-				m = NULL;
-			}
-#endif
 			return (m);
 		}
 
 		/* We just received a packet that we sent out. */
 		if (memcmp(LLADDR(bif->bif_ifp->if_sadl), eh->ether_shost,
-		    ETHER_ADDR_LEN) == 0) {
+		    ETHER_ADDR_LEN) == 0
+#if NCARP > 0
+		    || (bif->bif_ifp->if_carp && carp_ourether(bif->bif_ifp->if_carp,
+			eh, IFT_ETHER, 1) != NULL)
+#endif /* NCARP > 0 */
+		    ) {
 			m_freem(m);
 			return (NULL);
 		}
@@ -1622,7 +1611,7 @@ bridge_rtupdate(struct bridge_softc *sc, const uint8_t *dst,
     struct ifnet *dst_if, int setflags, uint8_t flags)
 {
 	struct bridge_rtnode *brt;
-	int error;
+	int error, s;
 
 	/*
 	 * A route for this destination might already exist.  If so,
@@ -1637,17 +1626,21 @@ bridge_rtupdate(struct bridge_softc *sc, const uint8_t *dst,
 		 * initialize the expiration time and Ethernet
 		 * address.
 		 */
+		s = splnet();
 		brt = pool_get(&bridge_rtnode_pool, PR_NOWAIT);
+		splx(s);
 		if (brt == NULL)
 			return (ENOMEM);
 
 		memset(brt, 0, sizeof(*brt));
-		brt->brt_expire = mono_time.tv_sec + sc->sc_brttimeout;
+		brt->brt_expire = time_uptime + sc->sc_brttimeout;
 		brt->brt_flags = IFBAF_DYNAMIC;
 		memcpy(brt->brt_addr, dst, ETHER_ADDR_LEN);
 
 		if ((error = bridge_rtnode_insert(sc, brt)) != 0) {
+			s = splnet();
 			pool_put(&bridge_rtnode_pool, brt);
+			splx(s);
 			return (error);
 		}
 	}
@@ -1655,8 +1648,10 @@ bridge_rtupdate(struct bridge_softc *sc, const uint8_t *dst,
 	brt->brt_ifp = dst_if;
 	if (setflags) {
 		brt->brt_flags = flags;
-		brt->brt_expire = (flags & IFBAF_STATIC) ? 0 :
-		    mono_time.tv_sec + sc->sc_brttimeout;
+		if (flags & IFBAF_STATIC)
+			brt->brt_expire = 0;
+		else
+			brt->brt_expire = time_uptime + sc->sc_brttimeout;
 	}
 
 	return (0);
@@ -1742,7 +1737,7 @@ bridge_rtage(struct bridge_softc *sc)
 	for (brt = LIST_FIRST(&sc->sc_rtlist); brt != NULL; brt = nbrt) {
 		nbrt = LIST_NEXT(brt, brt_list);
 		if ((brt->brt_flags & IFBAF_TYPEMASK) == IFBAF_DYNAMIC) {
-			if (mono_time.tv_sec >= brt->brt_expire)
+			if (time_uptime >= brt->brt_expire)
 				bridge_rtnode_destroy(sc, brt);
 		}
 	}
@@ -1853,7 +1848,7 @@ do {									\
 	c -= a; c -= b; c ^= (b >> 15);					\
 } while (/*CONSTCOND*/0)
 
-static __inline uint32_t
+static inline uint32_t
 bridge_rthash(struct bridge_softc *sc, const uint8_t *addr)
 {
 	uint32_t a = 0x9e3779b9, b = 0x9e3779b9, c = sc->sc_rthash_key;
@@ -1951,12 +1946,15 @@ bridge_rtnode_insert(struct bridge_softc *sc, struct bridge_rtnode *brt)
 static void
 bridge_rtnode_destroy(struct bridge_softc *sc, struct bridge_rtnode *brt)
 {
+	int s = splnet();
 
 	LIST_REMOVE(brt, brt_hash);
 
 	LIST_REMOVE(brt, brt_list);
 	sc->sc_brtcnt--;
 	pool_put(&bridge_rtnode_pool, brt);
+
+	splx(s);
 }
 
 #if defined(BRIDGE_IPF) && defined(PFIL_HOOKS)

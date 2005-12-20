@@ -1,4 +1,4 @@
-/*	$NetBSD: ms.c,v 1.21 2005/12/11 12:19:37 christos Exp $ */
+/*	$NetBSD: ms.c,v 1.23 2006/09/18 22:10:49 gdamore Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ms.c,v 1.21 2005/12/11 12:19:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ms.c,v 1.23 2006/09/18 22:10:49 gdamore Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -187,7 +187,7 @@ ms_attach(struct device *parent, struct device *self, void *aux)
 
 	callout_init(&ms->ms_modem_ch);
 
-	cf = ms->ms_dev.dv_cfdata;
+	cf = device_cfdata(&ms->ms_dev);
 	cs = zsc->zsc_cs[1];
 	cs->cs_private = ms;
 	cs->cs_ops = &zsops_ms;
@@ -423,7 +423,7 @@ ms_input(struct ms_softc *ms, int c)
 		d = to_one[d - 1];		/* from 1..7 to {1,2,4} */
 		fe->id = to_id[d - 1];		/* from {1,2,4} to ID */
 		fe->value = mb & d ? VKEY_DOWN : VKEY_UP;
-		fe->time = time;
+		getmicrotime(&fe->time);
 		ADVANCE;
 		ub ^= d;
 		any++;
@@ -432,7 +432,7 @@ ms_input(struct ms_softc *ms, int c)
 		NEXT;
 		fe->id = LOC_X_DELTA;
 		fe->value = ms->ms_dx;
-		fe->time = time;
+		getmicrotime(&fe->time);
 		ADVANCE;
 		ms->ms_dx = 0;
 		any++;
@@ -441,7 +441,7 @@ ms_input(struct ms_softc *ms, int c)
 		NEXT;
 		fe->id = LOC_Y_DELTA;
 		fe->value = -ms->ms_dy;	/* XXX? */
-		fe->time = time;
+		getmicrotime(&fe->time);
 		ADVANCE;
 		ms->ms_dy = 0;
 		any++;

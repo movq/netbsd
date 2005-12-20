@@ -1,4 +1,4 @@
-/*	$NetBSD: pstat.c,v 1.92 2005/09/11 16:09:51 rpaulo Exp $	*/
+/*	$NetBSD: pstat.c,v 1.96 2006/10/20 18:58:13 reinoud Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)pstat.c	8.16 (Berkeley) 5/9/95";
 #else
-__RCSID("$NetBSD: pstat.c,v 1.92 2005/09/11 16:09:51 rpaulo Exp $");
+__RCSID("$NetBSD: pstat.c,v 1.96 2006/10/20 18:58:13 reinoud Exp $");
 #endif
 #endif /* not lint */
 
@@ -651,13 +651,15 @@ getmnt(struct mount *maddr)
 		struct mount mount;
 	} *mhead = NULL;
 	struct mtab *mt;
+	struct mount mb;
 
 	for (mt = mhead; mt != NULL; mt = mt->next)
 		if (maddr == mt->maddr)
 			return (&mt->mount);
+	KGETRET(maddr, &mb, sizeof(struct mount), "mount table");
 	if ((mt = malloc(sizeof(struct mtab))) == NULL)
 		err(1, "malloc");
-	KGETRET(maddr, &mt->mount, sizeof(struct mount), "mount table");
+	mt->mount = mb;
 	mt->maddr = maddr;
 	mt->next = mhead;
 	mhead = mt;
@@ -675,7 +677,7 @@ mount_print(struct mount *mp)
 		int i;
 		const char *sep = " (";
 
-		for (i = 0; i <= sizeof mnt_flags / sizeof mnt_flags[0]; i++) {
+		for (i = 0; i < sizeof mnt_flags / sizeof mnt_flags[0]; i++) {
 			if (flags & mnt_flags[i].m_flag) {
 				(void)printf("%s%s", sep, mnt_flags[i].m_name);
 				flags &= ~mnt_flags[i].m_flag;
@@ -738,8 +740,7 @@ kinfo_vnodes(int *avnodes)
 	for (mp = mountlist.cqh_first;;
 	    mp = mount.mnt_list.cqe_next) {
 		KGET2(mp, &mount, sizeof(mount), "mount entry");
-		for (vp = mount.mnt_vnodelist.lh_first;
-		    vp != NULL; vp = vnode.v_mntvnodes.le_next) {
+		TAILQ_FOREACH(vp, &mount.mnt_vnodelist, v_mntvnodes) {
 			KGET2(vp, &vnode, sizeof(vnode), "vnode");
 			if (bp + VPTRSZ + VNODESZ > ep)
 				/* XXX - should realloc */
@@ -887,7 +888,7 @@ filemode(void)
 	    (PTRSTRWIDTH - 4) / 2, "", " LOC", (PTRSTRWIDTH - 4) / 2, "",
 	    (PTRSTRWIDTH - 4) / 2, "", "DATA", (PTRSTRWIDTH - 4) / 2, "");
 	for (; (char *)fp < offset + len; addr = fp->f_list.le_next, fp++) {
-		if ((unsigned)fp->f_type > sizeof(dtypes) / sizeof(dtypes[0]))
+		if ((unsigned)fp->f_type >= sizeof(dtypes) / sizeof(dtypes[0]))
 			continue;
 		ovflw = 0;
 		(void)getflags(filemode_flags, flags, fp->f_flag);

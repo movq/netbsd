@@ -34,7 +34,7 @@
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_crypto_ccmp.c,v 1.7 2005/07/11 03:06:23 sam Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_ccmp.c,v 1.4 2005/11/18 16:57:22 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_ccmp.c,v 1.7 2006/11/16 01:33:40 christos Exp $");
 #endif
 
 /*
@@ -53,6 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_ccmp.c,v 1.4 2005/11/18 16:57:22 sk
 #include <sys/socket.h>
 
 #include <net/if.h>
+#include <net/if_ether.h>
 #include <net/if_media.h>
 
 #include <net80211/ieee80211_var.h>
@@ -182,7 +183,8 @@ ccmp_encap(struct ieee80211_key *k, struct mbuf *m, u_int8_t keyid)
  * Add MIC to the frame as needed.
  */
 static int
-ccmp_enmic(struct ieee80211_key *k, struct mbuf *m, int force)
+ccmp_enmic(struct ieee80211_key *k, struct mbuf *m,
+    int force)
 {
 
 	return 1;
@@ -265,7 +267,8 @@ ccmp_decap(struct ieee80211_key *k, struct mbuf *m, int hdrlen)
  * Verify and strip MIC from the frame.
  */
 static int
-ccmp_demic(struct ieee80211_key *k, struct mbuf *m, int force)
+ccmp_demic(struct ieee80211_key *k, struct mbuf *m,
+    int force)
 {
 	return 1;
 }

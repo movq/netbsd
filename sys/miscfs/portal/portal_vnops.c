@@ -1,4 +1,4 @@
-/*	$NetBSD: portal_vnops.c,v 1.62 2005/12/11 12:24:51 christos Exp $	*/
+/*	$NetBSD: portal_vnops.c,v 1.68.2.2 2007/07/03 12:35:13 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: portal_vnops.c,v 1.62 2005/12/11 12:24:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: portal_vnops.c,v 1.68.2.2 2007/07/03 12:35:13 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,6 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: portal_vnops.c,v 1.62 2005/12/11 12:24:51 christos E
 #include <sys/unpcb.h>
 #include <sys/sa.h>
 #include <sys/syscallargs.h>
+#include <sys/kauth.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/portal/portal.h>
@@ -217,6 +218,7 @@ portal_lookup(v)
 	    M_WAITOK);
 
 	pt = VTOPORTAL(fvp);
+
 	/*
 	 * Save all of the remaining pathname and
 	 * advance the namei next pointer to the end
@@ -232,16 +234,8 @@ portal_lookup(v)
 	memcpy(pt->pt_arg, pname, pt->pt_size);
 	pt->pt_fileid = portal_fileid++;
 
+	vn_lock(fvp, LK_EXCLUSIVE | LK_RETRY);
 	*vpp = fvp;
-	VOP_LOCK(fvp, LK_EXCLUSIVE);
-	/*
-	 * As we are the last component of the path name, fix up
-	 * the locking on the directory node.
-	 */
-	if ((cnp->cn_flags & LOCKPARENT) == 0) {
-		VOP_UNLOCK(dvp, 0);
-		cnp->cn_flags |= PDIRUNLOCK;
-	}
 	return (0);
 
 bad:;
@@ -293,7 +287,7 @@ portal_open(v)
 	struct vop_open_args /* {
 		struct vnode *a_vp;
 		int  a_mode;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	struct socket *so = 0;
@@ -393,10 +387,10 @@ portal_open(v)
 
 
 	pcred.pcr_flag = ap->a_mode;
-	pcred.pcr_uid = ap->a_cred->cr_uid;
-	pcred.pcr_gid = ap->a_cred->cr_gid;
-	pcred.pcr_ngroups = ap->a_cred->cr_ngroups;
-	memcpy(pcred.pcr_groups, ap->a_cred->cr_groups, NGROUPS * sizeof(gid_t));
+	pcred.pcr_uid = kauth_cred_geteuid(ap->a_cred);
+	pcred.pcr_gid = kauth_cred_getegid(ap->a_cred);
+	pcred.pcr_ngroups = kauth_cred_ngroups(ap->a_cred);
+	kauth_cred_getgroups(ap->a_cred, pcred.pcr_groups, pcred.pcr_ngroups);
 	aiov[0].iov_base = &pcred;
 	aiov[0].iov_len = sizeof(pcred);
 	aiov[1].iov_base = pt->pt_arg;
@@ -404,10 +398,9 @@ portal_open(v)
 	auio.uio_iov = aiov;
 	auio.uio_iovcnt = 2;
 	auio.uio_rw = UIO_WRITE;
-	auio.uio_segflg = UIO_SYSSPACE;
-	auio.uio_lwp = l;
 	auio.uio_offset = 0;
 	auio.uio_resid = aiov[0].iov_len + aiov[1].iov_len;
+	UIO_SETUP_SYSSPACE(&auio);
 
 	error = (*so->so_send)(so, (struct mbuf *) 0, &auio,
 			(struct mbuf *) 0, (struct mbuf *) 0, 0, l);
@@ -528,7 +521,7 @@ portal_getattr(v)
 	struct vop_getattr_args /* {
 		struct vnode *a_vp;
 		struct vattr *a_vap;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
@@ -541,12 +534,8 @@ portal_getattr(v)
 	vap->va_fsid = vp->v_mount->mnt_stat.f_fsidx.__fsid_val[0];
 	vap->va_size = DEV_BSIZE;
 	vap->va_blocksize = DEV_BSIZE;
-	/*
-	 * Make all times be current TOD.  Avoid microtime(9), it's slow.
-	 * We don't guard the read from time(9) with splclock(9) since we
-	 * don't actually need to be THAT sure the access is atomic.
-	 */
-	TIMEVAL_TO_TIMESPEC(&time, &vap->va_ctime);
+	/* Make all times be current TOD. */
+	getnanotime(&vap->va_ctime);
 	vap->va_atime = vap->va_mtime = vap->va_ctime;
 	vap->va_atime = vap->va_mtime = vap->va_ctime;
 	vap->va_gen = 0;
@@ -580,7 +569,7 @@ portal_setattr(v)
 	struct vop_setattr_args /* {
 		struct vnode *a_vp;
 		struct vattr *a_vap;
-		struct ucred *a_cred;
+		kauth_cred_t a_cred;
 		struct lwp *a_l;
 	} */ *ap = v;
 
@@ -599,8 +588,7 @@ portal_setattr(v)
  */
 /*ARGSUSED*/
 int
-portal_readdir(v)
-	void *v;
+portal_readdir(void *v)
 {
 
 	return (0);
@@ -685,8 +673,7 @@ portal_pathconf(v)
  */
 /* ARGSUSED */
 int
-portal_print(v)
-	void *v;
+portal_print(void *v)
 {
 	printf("tag VT_PORTAL, portal vnode\n");
 	return (0);

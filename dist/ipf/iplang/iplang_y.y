@@ -1,4 +1,4 @@
-/*	$NetBSD: iplang_y.y,v 1.8 2005/09/27 12:22:27 martti Exp $	*/
+/*	$NetBSD: iplang_y.y,v 1.9.4.2 2007/07/16 11:04:34 liamjfoy Exp $	*/
 
 %{
 /*
@@ -6,16 +6,16 @@
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: iplang_y.y,v 2.9.2.2 2004/12/09 19:41:10 darrenr Exp
+ * Id: iplang_y.y,v 2.9.2.5 2007/02/17 12:41:48 darrenr Exp
  */
 
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
 #if !defined(__SVR4) && !defined(__svr4__)
-#include <strings.h>
+# include <strings.h>
 #else
-#include <sys/byteorder.h>
+# include <sys/byteorder.h>
 #endif
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -29,11 +29,14 @@
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #ifndef	linux
-#include <netinet/ip_var.h>
+# include <netinet/ip_var.h>
+#endif
+#ifdef __osf__
+# include "radix_ipf_local.h"
 #endif
 #include <net/if.h>
 #ifndef	linux
-#include <netinet/if_ether.h>
+# include <netinet/if_ether.h>
 #endif
 #include <netdb.h>
 #include <arpa/nameser.h>
@@ -1291,8 +1294,9 @@ void prep_packet()
 		ifp->if_fd = initdevice(ifp->if_name, 5);
 	gwip = sending.snd_gw;
 	if (!gwip.s_addr) {
-		if (!aniphead) {
-			fprintf(stderr, "no destination address defined for sending!\n");
+		if (aniphead == NULL) {
+			fprintf(stderr,
+				"no destination address defined for sending\n");
 			return;
 		}
 		gwip = aniphead->ah_ip->ip_dst;
@@ -1647,7 +1651,7 @@ void *ptr;
 	for (sto = toipopts; sto->sto_st; sto++)
 		if (sto->sto_st == state)
 			break;
-	if (!sto || !sto->sto_st) {
+	if (!sto->sto_st) {
 		fprintf(stderr, "No mapping for state %d to IP option\n",
 			state);
 		return;

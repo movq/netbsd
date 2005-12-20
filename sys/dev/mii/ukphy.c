@@ -1,4 +1,4 @@
-/*	$NetBSD: ukphy.c,v 1.25 2005/12/11 12:22:42 christos Exp $	*/
+/*	$NetBSD: ukphy.c,v 1.30 2006/11/16 21:24:07 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ukphy.c,v 1.25 2005/12/11 12:22:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ukphy.c,v 1.30 2006/11/16 21:24:07 christos Exp $");
 
 #include "opt_mii.h"
 
@@ -111,7 +111,8 @@ static const struct mii_phy_funcs ukphy_funcs = {
 };
 
 static int
-ukphymatch(struct device *parent, struct cfdata *match, void *aux)
+ukphymatch(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 
 	/*
@@ -123,7 +124,7 @@ ukphymatch(struct device *parent, struct cfdata *match, void *aux)
 static void
 ukphyattach(struct device *parent, struct device *self, void *aux)
 {
-	struct mii_softc *sc = (struct mii_softc *)self;
+	struct mii_softc *sc = device_private(self);
 	struct mii_attach_args *ma = aux;
 	struct mii_data *mii = ma->mii_data;
 	int oui = MII_OUI(ma->mii_id1, ma->mii_id2);
@@ -154,7 +155,7 @@ ukphyattach(struct device *parent, struct device *self, void *aux)
 	sc->mii_funcs = &ukphy_funcs;
 	sc->mii_pdata = mii;
 	sc->mii_flags = ma->mii_flags;
-	sc->mii_anegticks = 5;
+	sc->mii_anegticks = MII_ANEGTICKS;
 
 	/*
 	 * Don't do loopback on unknown PHYs.  It might confuse some of them.
@@ -182,7 +183,7 @@ ukphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
 	int reg;
 
-	if ((sc->mii_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->mii_dev))
 		return (ENXIO);
 
 	switch (cmd) {

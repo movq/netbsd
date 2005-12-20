@@ -1,6 +1,6 @@
-.\" 	$NetBSD: ftp.1,v 1.112 2005/07/06 11:21:26 wiz Exp $
+.\" 	$NetBSD: ftp.1,v 1.114 2006/10/27 01:29:17 lukem Exp $
 .\"
-.\" Copyright (c) 1996-2005 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1996-2006 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This code is derived from software contributed to The NetBSD Foundation
@@ -64,7 +64,7 @@
 .\"
 .\"	@(#)ftp.1	8.3 (Berkeley) 10/9/94
 .\"
-.Dd July 5, 2005
+.Dd October 27, 2006
 .Dt FTP 1
 .Os
 .Sh NAME
@@ -455,10 +455,10 @@ when an ascii type transfer is made, these linefeeds may be
 distinguished from a record delimiter only when
 .Ic \&cr
 is off.
-.It Ic debug Op Ar debug-value
+.It Ic ftp_debug Op Ar ftp_debug-value
 Toggle debugging mode.
 If an optional
-.Ar debug-value
+.Ar ftp_debug-value
 is specified it is used to set the debugging level.
 When debugging is on,
 .Nm
@@ -1925,7 +1925,7 @@ Failing the above checks, if
 is enabled, local file names are expanded according to the rules
 used in the
 .Xr csh  1  ;
-c.f. the
+see the
 .Ic glob
 command.
 If the

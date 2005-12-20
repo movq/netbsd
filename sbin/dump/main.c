@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.59 2005/06/27 01:37:32 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.63 2006/10/26 20:02:30 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)main.c	8.6 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: main.c,v 1.59 2005/06/27 01:37:32 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.63 2006/10/26 20:02:30 hannken Exp $");
 #endif
 #endif /* not lint */
 
@@ -272,6 +272,7 @@ main(int argc, char *argv[])
 	 */
 	getfstab();		/* /etc/fstab snarfed */
 	disk = NULL;
+	disk_dev = NULL;
 	mountpoint = NULL;
 	dirc = 0;
 	for (i = 0; i < argc; i++) {
@@ -428,8 +429,24 @@ main(int argc, char *argv[])
 		snap_backup = NULL;
 		snap_internal = 0;
 	}
+
+#ifdef DUMP_LFS
+	sync();
 	if (snap_backup != NULL || snap_internal) {
-		diskfd = snap_open(mntinfo->f_mntonname, snap_backup, &tnow);
+		if (lfs_wrap_stop(mountpoint) < 0) {
+			msg("Cannot stop writing on %s\n", mountpoint);
+			exit(X_STARTUP);
+		}
+	}
+	if ((diskfd = open(disk, O_RDONLY)) < 0) {
+		msg("Cannot open %s\n", disk);
+		exit(X_STARTUP);
+	}
+	disk_dev = disk;
+#else /* ! DUMP_LFS */
+	if (snap_backup != NULL || snap_internal) {
+		diskfd = snap_open(mntinfo->f_mntonname, snap_backup,
+		    &tnow, &disk_dev);
 		if (diskfd < 0) {
 			msg("Cannot open snapshot of %s\n",
 				mntinfo->f_mntonname);
@@ -441,8 +458,10 @@ main(int argc, char *argv[])
 			msg("Cannot open %s\n", disk);
 			exit(X_STARTUP);
 		}
+		disk_dev = disk;
 	}
 	sync();
+#endif /* ! DUMP_LFS */
 
 	needswap = fs_read_sblock(sblock_buf);
 
@@ -460,7 +479,7 @@ main(int argc, char *argv[])
  	msg("Date of last level %c dump: %s", lastlevel,
 		spcl.c_ddate == 0 ? "the epoch\n" : ctime(&date));
 	msg("Dumping ");
-	if (snap_backup != NULL)
+	if (snap_backup != NULL || snap_internal)
 		msgtail("a snapshot of ");
 	if (dirc != 0)
 		msgtail("a subset of ");
@@ -621,6 +640,9 @@ main(int argc, char *argv[])
 	putdumptime();
 	trewind(0);
 	broadcast("DUMP IS DONE!\a\a\n");
+#ifdef DUMP_LFS
+	lfs_wrap_go();
+#endif /* DUMP_LFS */
 	msg("DUMP IS DONE\n");
 	Exit(X_FINOK);
 	/* NOTREACHED */
@@ -763,7 +785,8 @@ obsolete(int *argcp, char **argvp[])
 	if (flags) {
 		*p = '\0';
 		*nargv++ = flagsp;
-	}
+	} else
+		free(flagsp);
 
 	/* Copy remaining arguments. */
 	while ((*nargv++ = *argv++) != NULL)

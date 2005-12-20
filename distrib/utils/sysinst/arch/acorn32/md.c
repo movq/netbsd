@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.18 2004/08/14 16:06:40 dsl Exp $	*/
+/*	$NetBSD: md.c,v 1.21 2006/06/25 21:32:39 christos Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -57,8 +57,6 @@ void backtowin(void);
 
 static int
 filecore_checksum(u_char *bootblock);
-
-const char *fdtype = "msdos";
 
 /*
  * static int filecore_checksum(u_char *bootblock)
@@ -135,7 +133,7 @@ md_get_info(void)
 	struct disklabel disklabel;
 	int fd;
 	char dev_name[100];
-	static char bb[DEV_BSIZE];
+	static unsigned char bb[DEV_BSIZE];
 	struct filecore_bootblock *fcbb = (struct filecore_bootblock *)bb;
 	int offset = 0;
 
@@ -203,9 +201,9 @@ md_get_info(void)
 			/* Break out as soon as we find a suitable partition */
 			for (loop = 0; loop < NRISCIX_PARTITIONS; ++loop) {
 				part = &riscix_part->partitions[loop];
-				if (strcmp(part->rp_name, "RiscBSD") == 0
-				    || strcmp(part->rp_name, "NetBSD") == 0
-				    || strcmp(part->rp_name, "Empty:") == 0) {
+				if (strcmp((char *)part->rp_name, "RiscBSD") == 0
+				    || strcmp((char *)part->rp_name, "NetBSD") == 0
+				    || strcmp((char *)part->rp_name, "Empty:") == 0) {
 					offset = part->rp_start;
 					break;
 				}
@@ -348,4 +346,10 @@ md_pre_update(void)
 void
 md_init(void)
 {
+}
+
+int
+md_post_extract(void)
+{
+	return 0;
 }

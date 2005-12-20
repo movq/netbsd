@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_lookup.c,v 1.9 2005/12/11 12:24:25 christos Exp $	*/
+/*	$NetBSD: cd9660_lookup.c,v 1.11.12.1 2007/02/17 23:27:43 tron Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993, 1994
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_lookup.c,v 1.9 2005/12/11 12:24:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_lookup.c,v 1.11.12.1 2007/02/17 23:27:43 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/namei.h>
@@ -48,6 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: cd9660_lookup.c,v 1.9 2005/12/11 12:24:25 christos E
 #include <sys/vnode.h>
 #include <sys/mount.h>
 #include <sys/systm.h>
+#include <sys/kauth.h>
 
 #include <fs/cd9660/iso.h>
 #include <fs/cd9660/cd9660_extern.h>
@@ -68,12 +69,11 @@ struct	nchstats iso_nchstats;
  * whether the name is to be looked up, created, renamed, or deleted.
  * When CREATE, RENAME, or DELETE is specified, information usable in
  * creating, renaming, or deleting a directory entry may be calculated.
- * If flag has LOCKPARENT or'ed into it and the target of the pathname
- * exists, lookup returns both the target and its parent directory locked.
- * When creating or renaming and LOCKPARENT is specified, the target may
- * not be ".".  When deleting and LOCKPARENT is specified, the target may
- * be "."., but the caller must check to ensure it does an vrele and iput
- * instead of two iputs.
+ * If the target of the pathname exists, lookup returns both the target
+ * and its parent directory locked.
+ * When creating or renaming, the target may * not be ".".
+ * When deleting , the target may be "."., but the caller must check
+ * to ensure it does an vrele and vput instead of two vputs.
  *
  * Overall outline of ufs_lookup:
  *
@@ -86,12 +86,10 @@ struct	nchstats iso_nchstats;
  *	else return error
  * found:
  *	if at end of path and deleting, return information to allow delete
- *	if at end of path and rewriting (RENAME and LOCKPARENT), lock target
+ *	if at end of path and rewriting (RENAME), lock target
  *	  inode and return info to allow rewrite
  *	if not at end, add name to cache; if at end and neither creating
  *	  nor deleting, add name to cache
- *
- * NOTE: (LOOKUP | LOCKPARENT) currently returns the parent inode unlocked.
  */
 int
 cd9660_lookup(v)
@@ -115,7 +113,6 @@ cd9660_lookup(v)
 	struct vnode *pdp;		/* saved dp during symlink work */
 	struct vnode *tdp;		/* returned by cd9660_vget_internal */
 	u_long bmask;			/* block offset mask */
-	int lockparent;			/* 1 => lockparent flag is set */
 	int error;
 	ino_t ino = 0;
 	int reclen;
@@ -126,11 +123,10 @@ cd9660_lookup(v)
 	const char *name;
 	struct vnode **vpp = ap->a_vpp;
 	struct componentname *cnp = ap->a_cnp;
-	struct ucred *cred = cnp->cn_cred;
+	kauth_cred_t cred = cnp->cn_cred;
 	int flags;
 	int nameiop = cnp->cn_nameiop;
 
-	cnp->cn_flags &= ~PDIRUNLOCK;
 	flags = cnp->cn_flags;
 
 	bp = NULL;
@@ -138,7 +134,6 @@ cd9660_lookup(v)
 	vdp = ap->a_dvp;
 	dp = VTOI(vdp);
 	imp = dp->i_mnt;
-	lockparent = flags & LOCKPARENT;
 
 	/*
 	 * Check accessiblity of directory.
@@ -218,6 +213,7 @@ searchloop:
 		/*
 		 * Get pointer to next entry.
 		 */
+		KASSERT(bp != NULL);
 		ep = (struct iso_directory_record *)
 			((char *)bp->b_data + entryoffsetinblock);
 
@@ -379,43 +375,28 @@ found:
 	 * that point backwards in the directory structure.
 	 */
 	pdp = vdp;
+
 	/*
 	 * If ino is different from dp->i_ino,
 	 * it's a relocated directory.
 	 */
+	brelse(bp);
 	if (flags & ISDOTDOT) {
 		VOP_UNLOCK(pdp, 0);	/* race to get the inode */
-		cnp->cn_flags |= PDIRUNLOCK;
 		error = cd9660_vget_internal(vdp->v_mount, dp->i_ino, &tdp,
 					     dp->i_ino != ino, ep);
-		brelse(bp);
-		if (error) {
-			if (vn_lock(pdp, LK_EXCLUSIVE | LK_RETRY) == 0)
-				cnp->cn_flags &= ~PDIRUNLOCK;
-			return (error);
-		}
-		if (lockparent && (flags & ISLASTCN)) {
-			if ((error = vn_lock(pdp, LK_EXCLUSIVE))) {
-				vput(tdp);
-				return (error);
-			}
-			cnp->cn_flags &= ~PDIRUNLOCK;
-		}
+		vn_lock(pdp, LK_EXCLUSIVE | LK_RETRY);
+		if (error)
+			return error;
 		*vpp = tdp;
 	} else if (dp->i_number == dp->i_ino) {
-		brelse(bp);
 		VREF(vdp);	/* we want ourself, ie "." */
 		*vpp = vdp;
 	} else {
 		error = cd9660_vget_internal(vdp->v_mount, dp->i_ino, &tdp,
 					     dp->i_ino != ino, ep);
-		brelse(bp);
 		if (error)
 			return (error);
-		if (!lockparent || !(flags & ISLASTCN)) {
-			VOP_UNLOCK(pdp, 0);
-			cnp->cn_flags |= PDIRUNLOCK;
-		}
 		*vpp = tdp;
 	}
 

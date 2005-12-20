@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.sys.mk,v 1.125 2005/12/02 21:34:50 christos Exp $
+#	$NetBSD: bsd.sys.mk,v 1.140.2.2 2007/08/31 14:57:36 liamjfoy Exp $
 #
 # Build definitions used for NetBSD source tree builds.
 
@@ -16,39 +16,48 @@ CFLAGS+=	-Wall -Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 # differently in traditional and ansi environments' which is the warning
 # we wanted, and now we don't get anymore.
 CFLAGS+=	-Wno-sign-compare -Wno-traditional
-.if !defined(HAVE_GCC3) || (${HAVE_GCC3} == "no")
-CFLAGS+=	-Wno-uninitialized
-.endif
 .endif
 .if ${WARNS} > 1
 CFLAGS+=	-Wreturn-type -Wswitch -Wshadow
 .endif
 .if ${WARNS} > 2
 CFLAGS+=	-Wcast-qual -Wwrite-strings
-.if defined(HAVE_GCC3) && (${HAVE_GCC3} != "no")
+CFLAGS+=	-Wextra -Wno-unused-parameter
 CXXFLAGS+=	-Wabi
-.if (${MACHINE_CPU} != "sh3")
 CXXFLAGS+=	-Wold-style-cast
-.endif
-.endif
 CXXFLAGS+=	-Wctor-dtor-privacy -Wnon-virtual-dtor -Wreorder \
 		-Wno-deprecated -Wno-non-template-friend \
 		-Woverloaded-virtual -Wno-pmf-conversions -Wsign-promo -Wsynth
 .endif
-.if ${WARNS} > 3 && ${MACHINE_ARCH} != "vax"
+.if ${WARNS} > 3 && ${HAVE_GCC} >= 3
 CFLAGS+=	-std=gnu99
-.endif
-.endif
-
-.if defined(WFORMAT) && defined(FORMAT_AUDIT)
-.if ${WFORMAT} > 1
-CFLAGS+=	-Wnetbsd-format-audit -Wno-format-extra-args
 .endif
 .endif
 
 CPPFLAGS+=	${AUDIT:D-D__AUDIT__}
 CFLAGS+=	${CWARNFLAGS} ${NOGCCERROR:D:U-Werror}
 LINTFLAGS+=	${DESTDIR:D-d ${DESTDIR}/usr/include}
+
+.if (${MACHINE_ARCH} == "alpha") || (${MACHINE_ARCH} == "hppa") || \
+	(${MACHINE_ARCH} == "mipsel") || (${MACHINE_ARCH} == "mipseb") || \
+	(${MACHINE_ARCH} == "sh3el") || (${MACHINE_ARCH} == "sh3eb")
+HAS_SSP=	no
+.else
+HAS_SSP=	yes
+.endif
+
+.if defined(USE_FORT) && (${USE_FORT} != "no")
+USE_SSP?=	yes
+.if !defined(KERNSRCDIR) && !defined(KERN) # not for kernels nor kern modules
+CPPFLAGS+=	-D_FORTIFY_SOURCE=2
+.endif
+.endif
+
+.if defined(USE_SSP) && (${USE_SSP} != "no") && (${BINDIR:Ux} != "/usr/mdec")
+.if ${HAS_SSP} == "yes"
+COPTS+=		-fstack-protector -Wstack-protector --param ssp-buffer-size=1
+.endif
+.endif
 
 .if defined(MKSOFTFLOAT) && (${MKSOFTFLOAT} != "no")
 COPTS+=		-msoft-float
@@ -64,6 +73,10 @@ FFLAGS+=	-mieee
 
 .if ${MACHINE} == "sparc64" && ${MACHINE_ARCH} == "sparc"
 CFLAGS+=	-Wa,-Av8plus
+.endif
+
+.if ${MACHINE_ARCH} == "ns32k"
+CFLAGS+=	-Wno-uninitialized
 .endif
 
 CFLAGS+=	${CPUFLAGS}
@@ -104,6 +117,7 @@ ELF2ECOFF?=	elf2ecoff
 MKDEP?=		mkdep
 OBJCOPY?=	objcopy
 OBJDUMP?=	objdump
+PAXCTL?=	paxctl
 STRIP?=		strip
 
 AWK?=		awk
@@ -126,6 +140,7 @@ TOOL_HEXDUMP?=		hexdump
 TOOL_INDXBIB?=		indxbib
 TOOL_INSTALLBOOT?=	installboot
 TOOL_INSTALL_INFO?=	install-info
+TOOL_JOIN?=		join
 TOOL_M4?=		m4
 TOOL_MAKEFS?=		makefs
 TOOL_MAKEINFO?=		makeinfo
@@ -150,6 +165,7 @@ TOOL_ROFF_HTML?=	${TOOL_GROFF} -Tlatin1 -mdoc2html
 TOOL_ROFF_PS?=		${TOOL_GROFF} -Tps
 TOOL_ROFF_RAW?=		${TOOL_GROFF} -Z
 TOOL_RPCGEN?=		rpcgen
+TOOL_SED?=		sed
 TOOL_SOELIM?=		soelim
 TOOL_STAT?=		stat
 TOOL_SPARKCRC?=		sparkcrc
@@ -183,7 +199,7 @@ TOOL_ZIC?=		zic
 #  used for Objective C source)
 .m.o:
 	${_MKTARGET_COMPILE}
-	${COMPILE.m} ${.IMPSRC}
+	${COMPILE.m} ${OBJCOPTS} ${OBJCOPTS.${.IMPSRC:T}} ${.IMPSRC}
 
 # Host-compiled C objects
 # The intermediate step is necessary for Sun CC, which objects to calling

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.57 2005/12/11 12:24:46 christos Exp $
+#	$NetBSD: Makefile,v 1.59 2006/05/12 03:29:11 mrg Exp $
 
 LIB=	sa
 NOPIC=	# defined
@@ -37,7 +37,7 @@ SRCS+=	loadfile.c loadfile_aout.c loadfile_ecoff.c loadfile_elf32.c \
 
 .if (${SA_INCLUDE_NET} == "yes")
 # network routines
-SRCS+=	arp.c ether.c ether_sprintf.c in_cksum.c net.c netif.c rpc.c udp.c
+SRCS+=	arp.c ether.c ether_sprintf.c ip_cksum.c net.c netif.c rpc.c udp.c
 
 # network info services:
 SRCS+=	bootp.c rarp.c bootparam.c
@@ -60,3 +60,7 @@ lib${LIB}.o:: ${OBJS}
 	@echo building standard ${LIB} library
 	@rm -f lib${LIB}.o
 	@${LD} -r -o lib${LIB}.o `lorder ${OBJS} | tsort`
+
+.if ${HAVE_GCC} == 4
+CPPFLAGS+=	-Wno-pointer-sign
+.endif

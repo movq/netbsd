@@ -1,4 +1,4 @@
-/*	$NetBSD: union_vfsops.c,v 1.31 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: union_vfsops.c,v 1.40.2.1 2007/02/17 23:27:46 tron Exp $	*/
 
 /*
  * Copyright (c) 1994 The Regents of the University of California.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.31 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.40.2.1 2007/02/17 23:27:46 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,6 +91,7 @@ __KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.31 2005/12/11 12:24:29 christos E
 #include <sys/filedesc.h>
 #include <sys/queue.h>
 #include <sys/stat.h>
+#include <sys/kauth.h>
 
 #include <fs/union/union.h>
 
@@ -101,7 +102,7 @@ int union_unmount(struct mount *, int, struct lwp *);
 int union_root(struct mount *, struct vnode **);
 int union_quotactl(struct mount *, int, uid_t, void *, struct lwp *);
 int union_statvfs(struct mount *, struct statvfs *, struct lwp *);
-int union_sync(struct mount *, int, struct ucred *, struct lwp *);
+int union_sync(struct mount *, int, kauth_cred_t, struct lwp *);
 int union_vget(struct mount *, ino_t, struct vnode **);
 
 /*
@@ -120,7 +121,6 @@ union_mount(mp, path, data, ndp, l)
 	struct vnode *lowerrootvp = NULLVP;
 	struct vnode *upperrootvp = NULLVP;
 	struct union_mount *um = 0;
-	struct ucred *cred = 0;
 	const char *cp;
 	char *xp;
 	int len;
@@ -223,8 +223,8 @@ union_mount(mp, path, data, ndp, l)
 			goto bad;
 	}
 
-	um->um_cred = l->l_proc->p_ucred;
-	crhold(um->um_cred);
+	um->um_cred = l->l_cred;
+	kauth_cred_hold(um->um_cred);
 	um->um_cmode = UN_DIRMODE &~ l->l_proc->p_cwdi->cwdi_cmask;
 
 	/*
@@ -301,8 +301,6 @@ union_mount(mp, path, data, ndp, l)
 bad:
 	if (um)
 		free(um, M_UFSMNT);
-	if (cred)
-		crfree(cred);
 	if (upperrootvp)
 		vrele(upperrootvp);
 	if (lowerrootvp)
@@ -317,10 +315,8 @@ bad:
  */
  /*ARGSUSED*/
 int
-union_start(mp, flags, l)
-	struct mount *mp;
-	int flags;
-	struct lwp *l;
+union_start(struct mount *mp, int flags,
+    struct lwp *l)
 {
 
 	return (0);
@@ -330,22 +326,15 @@ union_start(mp, flags, l)
  * Free reference to union layer
  */
 int
-union_unmount(mp, mntflags, l)
-	struct mount *mp;
-	int mntflags;
-	struct lwp *l;
+union_unmount(struct mount *mp, int mntflags, struct lwp *l)
 {
 	struct union_mount *um = MOUNTTOUNIONMOUNT(mp);
-	struct vnode *um_rootvp;
-	int error;
 	int freeing;
+	int error;
 
 #ifdef UNION_DIAGNOSTIC
 	printf("union_unmount(mp = %p)\n", mp);
 #endif
-
-	if ((error = union_root(mp, &um_rootvp)) != 0)
-		return (error);
 
 	/*
 	 * Keep flushing vnodes from the mount list.
@@ -356,14 +345,13 @@ union_unmount(mp, mntflags, l)
 	 * (d) times, where (d) is the maximum tree depth
 	 * in the filesystem.
 	 */
-	for (freeing = 0; vflush(mp, um_rootvp, 0) != 0;) {
+	for (freeing = 0; (error = vflush(mp, NULL, 0)) != 0;) {
 		struct vnode *vp;
 		int n;
 
 		/* count #vnodes held on mount list */
-		for (n = 0, vp = mp->mnt_vnodelist.lh_first;
-				vp != NULLVP;
-				vp = vp->v_mntvnodes.le_next)
+		n = 0;
+		TAILQ_FOREACH(vp, &mp->mnt_vnodelist, v_mntvnodes)
 			n++;
 
 		/* if this is unchanged then stop */
@@ -379,33 +367,18 @@ union_unmount(mp, mntflags, l)
 	 */
 
 	if (mntflags & MNT_FORCE)
-		vflush(mp, um_rootvp, FORCECLOSE);
+		error = vflush(mp, NULL, FORCECLOSE);
 
+	if (error)
+		return error;
 
-	/* At this point the root vnode should have a single reference */
-	if (um_rootvp->v_usecount > 1) {
-		vput(um_rootvp);
-		return (EBUSY);
-	}
-
-#ifdef UNION_DIAGNOSTIC
-	vprint("union root", um_rootvp);
-#endif
 	/*
 	 * Discard references to upper and lower target vnodes.
 	 */
 	if (um->um_lowervp)
 		vrele(um->um_lowervp);
 	vrele(um->um_uppervp);
-	crfree(um->um_cred);
-	/*
-	 * Release reference on underlying root vnode
-	 */
-	vput(um_rootvp);
-	/*
-	 * And blow it away for future re-use
-	 */
-	vgone(um_rootvp);
+	kauth_cred_free(um->um_cred);
 	/*
 	 * Finally, throw away the union_mount structure
 	 */
@@ -421,38 +394,21 @@ union_root(mp, vpp)
 {
 	struct union_mount *um = MOUNTTOUNIONMOUNT(mp);
 	int error;
-	int loselock;
 
 	/*
 	 * Return locked reference to root.
 	 */
 	VREF(um->um_uppervp);
-	if ((um->um_op == UNMNT_BELOW) &&
-	     VOP_ISLOCKED(um->um_uppervp)) {
-		loselock = 1;
-	} else {
-		vn_lock(um->um_uppervp, LK_EXCLUSIVE | LK_RETRY);
-		loselock = 0;
-	}
+	vn_lock(um->um_uppervp, LK_EXCLUSIVE | LK_RETRY);
 	if (um->um_lowervp)
 		VREF(um->um_lowervp);
-	error = union_allocvp(vpp, mp,
-			      (struct vnode *) 0,
-			      (struct vnode *) 0,
-			      (struct componentname *) 0,
-			      um->um_uppervp,
-			      um->um_lowervp,
-			      1);
+	error = union_allocvp(vpp, mp, NULL, NULL, NULL,
+			      um->um_uppervp, um->um_lowervp, 1);
 
 	if (error) {
-		if (!loselock)
-			VOP_UNLOCK(um->um_uppervp, 0);
-		vrele(um->um_uppervp);
+		vput(um->um_uppervp);
 		if (um->um_lowervp)
 			vrele(um->um_lowervp);
-	} else {
-		if (loselock)
-			VTOUNION(*vpp)->un_flags &= ~UN_ULOCK;
 	}
 
 	return (error);
@@ -460,12 +416,8 @@ union_root(mp, vpp)
 
 /*ARGSUSED*/
 int
-union_quotactl(mp, cmd, uid, arg, l)
-	struct mount *mp;
-	int cmd;
-	uid_t uid;
-	void *arg;
-	struct lwp *l;
+union_quotactl(struct mount *mp, int cmd, uid_t uid,
+    void *arg, struct lwp *l)
 {
 
 	return (EOPNOTSUPP);
@@ -533,11 +485,8 @@ done:
 
 /*ARGSUSED*/
 int
-union_sync(mp, waitfor, cred, l)
-	struct mount *mp;
-	int waitfor;
-	struct ucred *cred;
-	struct lwp *l;
+union_sync(struct mount *mp, int waitfor,
+    kauth_cred_t cred, struct lwp *l)
 {
 
 	/*
@@ -548,10 +497,8 @@ union_sync(mp, waitfor, cred, l)
 
 /*ARGSUSED*/
 int
-union_vget(mp, ino, vpp)
-	struct mount *mp;
-	ino_t ino;
-	struct vnode **vpp;
+union_vget(struct mount *mp, ino_t ino,
+    struct vnode **vpp)
 {
 
 	return (EOPNOTSUPP);
@@ -595,8 +542,8 @@ struct vfsops union_vfsops = {
 	union_statvfs,
 	union_sync,
 	union_vget,
-	NULL,				/* vfs_fhtovp */
-	NULL,				/* vfs_vptofh */
+	(void *)eopnotsupp,		/* vfs_fhtovp */
+	(void *)eopnotsupp,		/* vfs_vptofh */
 	union_init,
 	NULL,				/* vfs_reinit */
 	union_done,
@@ -604,5 +551,7 @@ struct vfsops union_vfsops = {
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
 	union_vnodeopv_descs,
+	0,				/* vfs_refcount */
+	{ NULL, NULL },
 };
 VFS_ATTACH(union_vfsops);

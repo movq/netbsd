@@ -83,8 +83,10 @@ static ERR_STRING_DATA DH_str_functs[]=
 static ERR_STRING_DATA DH_str_reasons[]=
 	{
 {ERR_REASON(DH_R_BAD_GENERATOR)          ,"bad generator"},
-{ERR_REASON(DH_R_NO_PRIVATE_VALUE)       ,"no private value"},
+{ERR_REASON(DH_R_MODULUS_TOO_LARGE)      ,"modulus too large"},
 {ERR_REASON(DH_R_INVALID_PUBKEY)         ,"invalid public key"},
+{ERR_REASON(DH_R_MODULUS_TOO_LARGE)      ,"modulus too large"},
+{ERR_REASON(DH_R_NO_PRIVATE_VALUE)       ,"no private value"},
 {0,NULL}
 	};
 
@@ -92,15 +94,12 @@ static ERR_STRING_DATA DH_str_reasons[]=
 
 void ERR_load_DH_strings(void)
 	{
-	static int init=1;
-
-	if (init)
-		{
-		init=0;
 #ifndef OPENSSL_NO_ERR
+
+	if (ERR_func_error_string(DH_str_functs[0].error) == NULL)
+		{
 		ERR_load_strings(0,DH_str_functs);
 		ERR_load_strings(0,DH_str_reasons);
-#endif
-
 		}
+#endif
 	}

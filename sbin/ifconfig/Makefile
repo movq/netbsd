@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.29 2005/06/27 01:00:05 christos Exp $
+#	$NetBSD: Makefile,v 1.31 2006/08/26 16:20:20 matt Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/5/93
 
 # when making a change to this file, please check if the change is
@@ -29,7 +29,7 @@ SRCS+= af_inet.c
 SRCS+= af_inet6.c
 .endif
 SRCS+= af_iso.c
-SRCS+= af_ns.c
+SRCS+= carp.c
 
 SRCS+= agr.c
 SRCS+= ieee80211.c

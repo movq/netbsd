@@ -1,4 +1,4 @@
-/*	$NetBSD: iha_pci.c,v 1.11 2005/12/11 12:22:50 christos Exp $ */
+/*	$NetBSD: iha_pci.c,v 1.13 2006/11/16 01:33:09 christos Exp $ */
 
 /*-
  * Device driver for the INI-9XXXU/UW or INIC-940/950  PCI SCSI Controller.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iha_pci.c,v 1.11 2005/12/11 12:22:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iha_pci.c,v 1.13 2006/11/16 01:33:09 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,7 +63,8 @@ CFATTACH_DECL(iha_pci, sizeof(struct iha_softc),
     iha_pci_match, iha_pci_attach, NULL, NULL);
 
 static int
-iha_pci_match(struct device *parent, struct cfdata *match, void *aux)
+iha_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 

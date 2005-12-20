@@ -1,4 +1,4 @@
-/*	$NetBSD: ahd_pci.c,v 1.20 2005/12/11 12:22:48 christos Exp $	*/
+/*	$NetBSD: ahd_pci.c,v 1.25 2006/11/16 01:33:08 christos Exp $	*/
 
 /*
  * Product specific probe and attach routines for:
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahd_pci.c,v 1.20 2005/12/11 12:22:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahd_pci.c,v 1.25 2006/11/16 01:33:08 christos Exp $");
 
 #define AHD_PCI_IOADDR	PCI_MAPREG_START	/* I/O Address */
 #define AHD_PCI_MEMADDR	(PCI_MAPREG_START + 4)	/* Mem I/O Address */
@@ -57,7 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: ahd_pci.c,v 1.20 2005/12/11 12:22:48 christos Exp $"
 #include <dev/ic/aic79xx_osm.h>
 #include <dev/ic/aic79xx_inline.h>
 
-static __inline uint64_t
+static inline uint64_t
 ahd_compose_id(u_int device, u_int vendor, u_int subdevice, u_int subvendor)
 {
 	uint64_t id;
@@ -236,10 +236,10 @@ static const char *pci_bus_modes[] =
 	"PCI bus mode unknown",
 	"PCI bus mode unknown",
 	"PCI bus mode unknown",
-	"PCI-X 101-133Mhz",
-	"PCI-X 67-100Mhz",
-	"PCI-X 50-66Mhz",
-	"PCI 33 or 66Mhz"
+	"PCI-X 101-133 MHz",
+	"PCI-X 67-100 MHz",
+	"PCI-X 50-66 MHz",
+	"PCI 33 or 66 MHz"
 };
 
 #define		TESTMODE	0x00000800ul
@@ -286,7 +286,8 @@ ahd_find_pci_device(pcireg_t id, pcireg_t subid)
 }
 
 static int
-ahd_pci_probe(struct device *parent, struct cfdata *match, void *aux)
+ahd_pci_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	const struct	   ahd_pci_identity *entry;
@@ -310,8 +311,6 @@ ahd_pci_attach(struct device *parent, struct device *self, void *aux)
 	int		   	error;
 	pcireg_t	   	subid;
 	uint16_t	   	subvendor;
-	int                	pci_pwrmgmt_cap_reg;
-	int                	pci_pwrmgmt_csr_reg;
 	pcireg_t           	reg;
 	int		   	ioh_valid, ioh2_valid, memh_valid;
 	pcireg_t           	memtype;
@@ -480,22 +479,13 @@ ahd_pci_attach(struct device *parent, struct device *self, void *aux)
 	aprint_normal("\n");
 	aprint_naive("\n");
 
-	/*
-         * Set Power State D0.
-         */
-	if (pci_get_capability(pa->pa_pc, pa->pa_tag, PCI_CAP_PWRMGMT,
-			       &pci_pwrmgmt_cap_reg, 0)) {
-
-	  	pci_pwrmgmt_csr_reg = pci_pwrmgmt_cap_reg + 4;
-		reg = pci_conf_read(pa->pa_pc, pa->pa_tag,
-                                    pci_pwrmgmt_csr_reg);
-		if ((reg & PCI_PMCSR_STATE_MASK) != PCI_PMCSR_STATE_D0) {
-                        pci_conf_write(pa->pa_pc, pa->pa_tag, pci_pwrmgmt_csr_reg,
-                                       (reg & ~PCI_PMCSR_STATE_MASK) |
-                                       PCI_PMCSR_STATE_D0);
-                }
-        }
-
+	/* power up chip */
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, ahd, 
+	    pci_activate_null)) && error != EOPNOTSUPP) {
+		aprint_error("%s: cannot activate %d\n", ahd->sc_dev.dv_xname,
+		    error);
+		return;
+	}
 	/*
          * Should we bother disabling 39Bit addressing
          * based on installed memory?

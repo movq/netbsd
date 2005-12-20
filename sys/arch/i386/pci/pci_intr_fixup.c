@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_intr_fixup.c,v 1.33 2005/12/11 12:17:44 christos Exp $	*/
+/*	$NetBSD: pci_intr_fixup.c,v 1.45 2006/11/16 01:32:39 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_intr_fixup.c,v 1.33 2005/12/11 12:17:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_intr_fixup.c,v 1.45 2006/11/16 01:32:39 christos Exp $");
 
 #include "opt_pcibios.h"
 #include "opt_pcifixup.h"
@@ -93,7 +93,7 @@ struct pciintr_link_map {
 	int link;
 	int clink;
 	int irq;
-	u_int16_t bitmap;
+	uint16_t bitmap;
 	int fixup_stage;
 	SIMPLEQ_ENTRY(pciintr_link_map) list;
 };
@@ -116,8 +116,8 @@ int	pciintr_link_init (void);
 int	pciintr_guess_irq(void);
 #endif
 int	pciintr_link_fixup(void);
-int	pciintr_link_route(u_int16_t *);
-int	pciintr_irq_release(u_int16_t *);
+int	pciintr_link_route(uint16_t *);
+int	pciintr_irq_release(uint16_t *);
 int	pciintr_header_fixup(pci_chipset_tag_t);
 void	pciintr_do_header_fixup(pci_chipset_tag_t, pcitag_t, void*);
 
@@ -129,57 +129,92 @@ const struct pciintr_icu_table {
 	int (*piit_init)(pci_chipset_tag_t,
 	    bus_space_tag_t, pcitag_t, pciintr_icu_tag_t *,
 	    pciintr_icu_handle_t *);
+	void (*piit_uninit)(pciintr_icu_handle_t);
 } pciintr_icu_table[] = {
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82371MX,
-	  piix_init },
+	  piix_init, piix_uninit },
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82371AB_ISA,
-	  piix_init },
+	  piix_init, piix_uninit },
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82371FB_ISA,
-	  piix_init },
+	  piix_init, piix_uninit },
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82371SB_ISA,
-	  piix_init },
+	  piix_init, piix_uninit },
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82440MX_ISA,
+	  piix_init, piix_uninit },
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801AA_LPC,
-	  piix_init },			/* ICH */
+	  piix_init, piix_uninit },	/* ICH */
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801AB_LPC,
-	  piix_init },			/* ICH0 */
+	  piix_init, piix_uninit },	/* ICH0 */
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801BA_LPC,
-	  ich_init },			/* ICH2 */
+	  ich_init, NULL },			/* ICH2 */
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801BAM_LPC,
-	  ich_init },			/* ICH2M */
+	  ich_init, NULL },			/* ICH2M */
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801CA_LPC,
-	  ich_init },			/* ICH3S */
+	  ich_init, NULL },			/* ICH3S */
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801CAM_LPC,
-	  ich_init },			/* ICH3M */
+	  ich_init, NULL },			/* ICH3M */
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801DB_LPC,
-	  ich_init },			/* ICH4 */
+	  ich_init, NULL },			/* ICH4 */
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801DB_ISA,
-	  ich_init },			/* ICH4M */
+	  ich_init, NULL },			/* ICH4M */
 	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801EB_LPC,
-	  ich_init },			/* ICH5 */
+	  ich_init, NULL },			/* ICH5 */
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801FB_LPC,
+	  ich_init, NULL },			/* ICH6/ICH6R */
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801FBM_LPC,
+	  ich_init, NULL },			/* ICH6M */
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801G_LPC,
+	  ich_init, NULL },			/* ICH7/ICH7R */
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801GBM_LPC,
+	  ich_init, NULL },			/* ICH7-M */
+	{ PCI_VENDOR_INTEL,	PCI_PRODUCT_INTEL_82801GHM_LPC,
+	  ich_init, NULL },			/* ICH7DH/ICH7-M DH */
 
 	{ PCI_VENDOR_OPTI,	PCI_PRODUCT_OPTI_82C558,
-	  opti82c558_init },
+	  opti82c558_init, NULL },
 	{ PCI_VENDOR_OPTI,	PCI_PRODUCT_OPTI_82C700,
-	  opti82c700_init },
+	  opti82c700_init, NULL },
 
 	{ PCI_VENDOR_VIATECH,	PCI_PRODUCT_VIATECH_VT82C586_ISA,
-	  via82c586_init },
+	  via82c586_init, NULL },
 	{ PCI_VENDOR_VIATECH,   PCI_PRODUCT_VIATECH_VT82C596A,
-	  via82c586_init },
+	  via82c586_init, NULL },
 	{ PCI_VENDOR_VIATECH,	PCI_PRODUCT_VIATECH_VT82C686A_ISA,
-	  via82c586_init },
+	  via82c586_init, NULL },
+
+	{ PCI_VENDOR_VIATECH,	PCI_PRODUCT_VIATECH_VT8231,
+	  via8231_init, NULL },
+	{ PCI_VENDOR_VIATECH,   PCI_PRODUCT_VIATECH_VT8233,
+	  via82c586_init, NULL },
+	{ PCI_VENDOR_VIATECH,	PCI_PRODUCT_VIATECH_VT8233A,
+	  via8231_init, NULL },
+	{ PCI_VENDOR_VIATECH,	PCI_PRODUCT_VIATECH_VT8235,
+	  via8231_init, NULL },
+	{ PCI_VENDOR_VIATECH,	PCI_PRODUCT_VIATECH_VT8237,
+	  via8231_init, NULL },
+
 
 	{ PCI_VENDOR_SIS,	PCI_PRODUCT_SIS_85C503,
-	  sis85c503_init },
+	  sis85c503_init, NULL },
+	{ PCI_VENDOR_SIS,	PCI_PRODUCT_SIS_962,
+	  sis85c503_init, NULL },
+	{ PCI_VENDOR_SIS,	PCI_PRODUCT_SIS_963,
+	  sis85c503_init, NULL },
 
 	{ PCI_VENDOR_AMD,	PCI_PRODUCT_AMD_PBC756_PMC,
-	  amd756_init },
+	  amd756_init, NULL },
+	{ PCI_VENDOR_AMD,	PCI_PRODUCT_AMD_PBC766_PMC,
+	  amd756_init, NULL },
+	{ PCI_VENDOR_AMD,	PCI_PRODUCT_AMD_PBC768_PMC,
+	  amd756_init, NULL },
 
+	{ PCI_VENDOR_ALI,	PCI_PRODUCT_ALI_M1533,
+	  ali1543_init, NULL },
 	{ PCI_VENDOR_ALI,	PCI_PRODUCT_ALI_M1543,
-	  ali1543_init },
+	  ali1543_init, NULL },
 
 	{ 0,			0,
-	  NULL },
+	  NULL, NULL },
 };
 
 const struct pciintr_icu_table *pciintr_icu_lookup(pcireg_t);
@@ -428,7 +463,7 @@ pciintr_link_fixup(void)
 {
 	struct pciintr_link_map *l;
 	int irq;
-	u_int16_t pciirq = 0;
+	uint16_t pciirq = 0;
 
 	/*
 	 * First stage: Attempt to connect PIRQs which aren't
@@ -519,7 +554,7 @@ pciintr_link_fixup(void)
 }
 
 int
-pciintr_link_route(u_int16_t *pciirq)
+pciintr_link_route(uint16_t *pciirq)
 {
 	struct pciintr_link_map *l;
 	int rv = 0;
@@ -573,10 +608,10 @@ pciintr_link_route(u_int16_t *pciirq)
 }
 
 int
-pciintr_irq_release(u_int16_t *pciirq)
+pciintr_irq_release(uint16_t *pciirq)
 {
 	int i, bit;
-	u_int16_t bios_pciirq;
+	uint16_t bios_pciirq;
 	int reg;
 
 #ifdef PCIINTR_DEBUG
@@ -631,7 +666,8 @@ pciintr_header_fixup(pci_chipset_tag_t pc)
 }
 
 void
-pciintr_do_header_fixup(pci_chipset_tag_t pc, pcitag_t tag, void *context)
+pciintr_do_header_fixup(pci_chipset_tag_t pc, pcitag_t tag,
+    void *context)
 {
 	struct pcibios_intr_routing *pir;
 	struct pciintr_link_map *l;
@@ -743,11 +779,12 @@ pciintr_do_header_fixup(pci_chipset_tag_t pc, pcitag_t tag, void *context)
 }
 
 int
-pci_intr_fixup(pci_chipset_tag_t pc, bus_space_tag_t iot, u_int16_t *pciirq)
+pci_intr_fixup(pci_chipset_tag_t pc, bus_space_tag_t iot, uint16_t *pciirq)
 {
 	const struct pciintr_icu_table *piit = NULL;
 	pcitag_t icutag;
 	pcireg_t icuid;
+	int error = 0;
 
 	/*
 	 * Attempt to initialize our PCI interrupt router.  If
@@ -872,37 +909,50 @@ found:;
 	/*
 	 * Initialize the PCI interrupt link map.
 	 */
-	if (pciintr_link_init())
-		return (-1);		/* non-fatal */
+	if (pciintr_link_init()) {
+		error = -1;		/* non-fatal */
+		goto cleanup;
+	}
 
 	/*
 	 * Fix up the link->IRQ mappings.
 	 */
-	if (pciintr_link_fixup() != 0)
-		return (-1);		/* non-fatal */
+	if (pciintr_link_fixup() != 0) {
+		error = -1;		/* non-fatal */
+		goto cleanup;
+	}
 
 	/*
 	 * Now actually program the PCI ICU with the new
 	 * routing information.
 	 */
-	if (pciintr_link_route(pciirq) != 0)
-		return (1);		/* fatal */
+	if (pciintr_link_route(pciirq) != 0) {
+		error = 1;		/* fatal */
+		goto cleanup;
+	}
 
 	/*
 	 * Now that we've routed all of the PIRQs, rewrite the PCI
 	 * configuration headers to reflect the new mapping.
 	 */
-	if (pciintr_header_fixup(pc) != 0)
-		return (1);		/* fatal */
+	if (pciintr_header_fixup(pc) != 0) {
+		error = 1;		/* fatal */
+		goto cleanup;
+	}
 
 	/*
 	 * Free any unused PCI IRQs for ISA devices.
 	 */
-	if (pciintr_irq_release(pciirq) != 0)
-		return (-1);		/* non-fatal */
+	if (pciintr_irq_release(pciirq) != 0) {
+		error = -1;		/* non-fatal */
+		goto cleanup;
+	}
 
 	/*
 	 * All done!
 	 */
-	return (0);			/* success! */
+cleanup:
+	if (piit->piit_uninit != NULL)
+		(*piit->piit_uninit)(pciintr_icu_handle);
+	return (error);
 }

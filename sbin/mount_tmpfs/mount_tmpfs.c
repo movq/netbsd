@@ -1,7 +1,7 @@
-/*	$NetBSD: mount_tmpfs.c,v 1.10 2005/09/30 14:25:07 jmmv Exp $	*/
+/*	$NetBSD: mount_tmpfs.c,v 1.15 2006/10/16 03:37:43 christos Exp $	*/
 
 /*
- * Copyright (c) 2005 The NetBSD Foundation, Inc.
+ * Copyright (c) 2005, 2006 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -39,7 +39,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mount_tmpfs.c,v 1.10 2005/09/30 14:25:07 jmmv Exp $");
+__RCSID("$NetBSD: mount_tmpfs.c,v 1.15 2006/10/16 03:37:43 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -64,7 +64,7 @@ __RCSID("$NetBSD: mount_tmpfs.c,v 1.10 2005/09/30 14:25:07 jmmv Exp $");
 static const struct mntopt mopts[] = {
 	MOPT_STDOPTS,
 	MOPT_GETARGS,
-	{ NULL }
+	MOPT_NULL,
 };
 
 /* --------------------------------------------------------------------- */
@@ -88,7 +88,7 @@ mount_tmpfs(int argc, char *argv[])
 	uid_t uid;
 	mode_t mode;
 	off_t offtmp;
-	mntoptparse_t mo;
+	mntoptparse_t mp;
 	struct tmpfs_args args;
 	struct stat sb;
 
@@ -135,8 +135,10 @@ mount_tmpfs(int argc, char *argv[])
 			break;
 
 		case 'o':
-			mo = getmntopts(optarg, mopts, &mntflags, 0);
-			freemntopts(mo);
+			mp = getmntopts(optarg, mopts, &mntflags, 0);
+			if (mp == NULL)
+				err(1, "getmntopts");
+			freemntopts(mp);
 			break;
 
 		case 's':
@@ -261,8 +263,7 @@ dehumanize_group(const char *str, gid_t *gid)
 		tmp = strtoul(str, &ep, 0);
 		if (str[0] == '\0' || *ep != '\0')
 			error = 0; /* Not a number. */
-		else if (errno == ERANGE &&
-		    (tmp == LONG_MAX || tmp == LONG_MIN))
+		else if (errno == ERANGE)
 			error = 0; /* Out of range. */
 		else {
 			*gid = (gid_t)tmp;
@@ -291,8 +292,7 @@ dehumanize_mode(const char *str, mode_t *mode)
 	tmp = strtol(str, &ep, 8);
 	if (str[0] == '\0' || *ep != '\0')
 		error = 0; /* Not a number. */
-	else if (errno == ERANGE &&
-	    (tmp == LONG_MAX || tmp == LONG_MIN))
+	else if (errno == ERANGE)
 		error = 0; /* Out of range. */
 	else {
 		*mode = (mode_t)tmp;
@@ -357,7 +357,7 @@ dehumanize_off(const char *str, off_t *size)
 	tmp = strtoll(str, &ep, 10);
 	if (str[0] == '\0' || (ep != delimit && *ep != '\0'))
 		return 0; /* Not a number. */
-	else if (errno == ERANGE && (tmp == LONG_MAX || tmp == LONG_MIN))
+	else if (errno == ERANGE)
 		return 0; /* Out of range. */
 
 	tmp2 = tmp * multiplier;
@@ -396,8 +396,7 @@ dehumanize_user(const char *str, uid_t *uid)
 		tmp = strtoul(str, &ep, 0);
 		if (str[0] == '\0' || *ep != '\0')
 			error = 0; /* Not a number. */
-		else if (errno == ERANGE &&
-		    (tmp == LONG_MAX || tmp == LONG_MIN))
+		else if (errno == ERANGE)
 			error = 0; /* Out of range. */
 		else {
 			*uid = (uid_t)tmp;

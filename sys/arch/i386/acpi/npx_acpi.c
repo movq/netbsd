@@ -1,4 +1,4 @@
-/* $NetBSD: npx_acpi.c,v 1.10 2005/12/11 12:17:40 christos Exp $ */
+/* $NetBSD: npx_acpi.c,v 1.16 2006/11/16 01:32:38 christos Exp $ */
 
 /*
  * Copyright (c) 2002 Jared D. McNeill <jmcneill@invisible.ca>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npx_acpi.c,v 1.10 2005/12/11 12:17:40 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npx_acpi.c,v 1.16 2006/11/16 01:32:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,7 +65,8 @@ static const char * const npx_acpi_ids[] = {
  * npx_acpi_match: autoconf(9) match routine
  */
 static int
-npx_acpi_match(struct device *parent, struct cfdata *match, void *aux)
+npx_acpi_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -88,7 +89,8 @@ npx_acpi_attach(struct device *parent, struct device *self, void *aux)
 	struct acpi_irq *irq;
 	ACPI_STATUS rv;
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
 
 	/* parse resources */
 	rv = acpi_resource_parse(&sc->sc_dev, aa->aa_node->ad_handle, "_CRS",
@@ -99,7 +101,7 @@ npx_acpi_attach(struct device *parent, struct device *self, void *aux)
 	/* find our i/o registers */
 	io = acpi_res_io(&res, 0);
 	if (io == NULL) {
-		printf("%s: unable to find i/o register resource\n",
+		aprint_error("%s: unable to find i/o register resource\n",
 		    sc->sc_dev.dv_xname);
 		goto out;
 	}
@@ -107,7 +109,7 @@ npx_acpi_attach(struct device *parent, struct device *self, void *aux)
 	/* find our IRQ */
 	irq = acpi_res_irq(&res, 0);
 	if (irq == NULL) {
-		printf("%s: unable to find irq resource\n",
+		aprint_error("%s: unable to find irq resource\n",
 		    sc->sc_dev.dv_xname);
 		goto out;
 	}
@@ -115,7 +117,7 @@ npx_acpi_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_iot = aa->aa_iot;
 	if (bus_space_map(sc->sc_iot, io->ar_base, io->ar_length,
 		    0, &sc->sc_ioh)) {
-		printf("%s: can't map i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error("%s: can't map i/o space\n", sc->sc_dev.dv_xname);
 		goto out;
 	}
 
@@ -129,10 +131,15 @@ npx_acpi_attach(struct device *parent, struct device *self, void *aux)
 		    IPL_NONE, (int (*)(void *))npxintr, NULL);
 		break;
 	case NPX_EXCEPTION:
-		printf("%s: using exception 16\n", sc->sc_dev.dv_xname);
+		/*FALLTHROUGH*/
+	case NPX_CPUID:
+		aprint_verbose("%s:%s using exception 16\n",
+		    sc->sc_dev.dv_xname,
+		    sc->sc_type == NPX_CPUID ? " reported by CPUID;" : "");
+		sc->sc_type = NPX_EXCEPTION;
 		break;
 	case NPX_BROKEN:
-		printf("%s: error reporting broken; not using\n",
+		aprint_error("%s: error reporting broken; not using\n",
 		    sc->sc_dev.dv_xname);
 		sc->sc_type = NPX_NONE;
 		goto out;

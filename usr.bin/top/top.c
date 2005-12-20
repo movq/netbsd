@@ -1,4 +1,4 @@
-/*	$NetBSD: top.c,v 1.23 2005/10/03 05:34:51 christos Exp $	*/
+/*	$NetBSD: top.c,v 1.25 2006/11/24 19:47:00 christos Exp $	*/
 
 const char copyright[] = "Copyright (c) 1984 through 1996, William LeFebvre";
 
@@ -49,7 +49,7 @@ const char copyright[] = "Copyright (c) 1984 through 1996, William LeFebvre";
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: top.c,v 1.23 2005/10/03 05:34:51 christos Exp $");
+__RCSID("$NetBSD: top.c,v 1.25 2006/11/24 19:47:00 christos Exp $");
 #endif
 
 #include "os.h"
@@ -554,7 +554,7 @@ Usage: %s [-bIinqSuv] [-d count] [-o field] [-s time] [-U username] [number]\n",
 	{
 	    /* determine number of processes to actually display */
 	    /* this number will be the smallest of:  active processes,
-	       number user requested, number current screen accomodates */
+	       number user requested, number current screen accommodates */
 	    active_procs = system_info.P_ACTIVE;
 	    if (active_procs > topn)
 	    {
@@ -626,7 +626,7 @@ Usage: %s [-bIinqSuv] [-d count] [-o field] [-s time] [-U username] [number]\n",
 		/* assume valid command unless told otherwise */
 		no_command = No;
 
-		/* set up arguments for select with timeout */
+		/* set up arguments for poll with timeout */
 		set[0].fd = 0;
 		set[0].events = POLLIN;
 

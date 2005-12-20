@@ -1,4 +1,4 @@
-/*	$NetBSD: postfix.c,v 1.1.1.6 2005/08/18 21:08:15 rpaulo Exp $	*/
+/*	$NetBSD: postfix.c,v 1.1.1.8.4.1 2007/06/16 17:00:40 snj Exp $	*/
 
 /*++
 /* NAME
@@ -48,7 +48,7 @@
 /*	Re-read configuration files. Running processes terminate at their
 /*	earliest convenience.
 /* .IP "\fBset-permissions\fR \fB[\fIname\fR=\fIvalue ...\fB]\fR
-/*	Set the ownership and permissions of Postfix related files and 
+/*	Set the ownership and permissions of Postfix related files and
 /*	directories, as specified in the \fBpostfix-files\fR file.
 /* .sp
 /*	Specify \fIname\fR=\fIvalue\fR to override and update specific
@@ -167,6 +167,7 @@
 /*	sendmail(1), Sendmail compatibility interface
 /*
 /*	Postfix configuration:
+/*	bounce(5), Postfix bounce message templates
 /*	master(5), Postfix master.cf file syntax
 /*	postconf(5), Postfix main.cf file syntax
 /*
@@ -188,6 +189,7 @@
 /*	pcre_table(5), Associate PCRE pattern with value
 /*	pgsql_table(5), Postfix PostgreSQL client
 /*	regexp_table(5), Associate POSIX regexp pattern with value
+/*	tcp_table(5), Postfix client-server table lookup
 /*
 /*	Daemon processes:
 /*	anvil(8), Postfix connection/rate limiting
@@ -196,7 +198,6 @@
 /*	discard(8), Postfix discard delivery agent
 /*	error(8), Postfix error delivery agent
 /*	flush(8), Postfix fast ETRN service
-/*	lmtp(8), Postfix LMTP client
 /*	local(8), Postfix local delivery agent
 /*	master(8), Postfix master daemon
 /*	oqmgr(8), old Postfix queue manager
@@ -207,7 +208,7 @@
 /*	qmqpd(8), Postfix QMQP server
 /*	scache(8), Postfix connection cache manager
 /*	showq(8), list Postfix mail queue
-/*	smtp(8), Postfix SMTP client
+/*	smtp(8), lmtp(8), Postfix SMTP+LMTP client
 /*	smtpd(8), Postfix SMTP server
 /*	spawn(8), run non-Postfix server
 /*	tlsmgr(8), Postfix TLS cache and randomness manager
@@ -239,6 +240,35 @@
 /*	IBM T.J. Watson Research
 /*	P.O. Box 704
 /*	Yorktown Heights, NY 10598, USA
+/*
+/*	TLS support by:
+/*	Lutz Jaenicke
+/*	Brandenburg University of Technology
+/*	Cottbus, Germany
+/*
+/*	Victor Duchovni
+/*	Morgan Stanley
+/*
+/*	SASL support originally by:
+/*	Till Franke
+/*	SuSE Rhein/Main AG
+/*	65760 Eschborn, Germany
+/*
+/*	LMTP support originally by:
+/*	Philip A. Prindeville
+/*	Mirapoint, Inc.
+/*	USA.
+/*
+/*	Amos Gouaux
+/*	University of Texas at Dallas
+/*	P.O. Box 830688, MC34
+/*	Richardson, TX 75083, USA
+/*
+/*	IPv6 support originally by:
+/*	Mark Huizer, Eindhoven University, The Netherlands
+/*	Jun-ichiro 'itojun' Hagino, KAME project, Japan
+/*	The Linux PLD project
+/*	Dean Strik, Eindhoven University, The Netherlands
 /*--*/
 
 /* System library. */
@@ -269,6 +299,7 @@
 
 #include <mail_conf.h>
 #include <mail_params.h>
+#include <mail_version.h>
 
 /* Additional installation parameters. */
 
@@ -288,6 +319,8 @@ static void check_setenv(char *name, char *value)
     if (setenv(name, value, CLOBBER) < 0)
 	msg_fatal("setenv: %m");
 }
+
+MAIL_VERSION_STAMP_DECLARE;
 
 /* main - run administrative script from controlled environment */
 
@@ -309,6 +342,11 @@ int     main(int argc, char **argv)
 	VAR_HTML_DIR, DEF_HTML_DIR, &var_html_dir, 1, 0,
 	0,
     };
+
+    /*
+     * Fingerprint executables and core dumps.
+     */
+    MAIL_VERSION_STAMP_ALLOCATE;
 
     /*
      * Be consistent with file permissions.

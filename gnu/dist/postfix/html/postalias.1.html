@@ -21,35 +21,49 @@ POSTALIAS(1)                                                      POSTALIAS(1)
        able for the use as NIS alias maps.
 
        If the result files do not exist they will be created with
-       the same group and other read permissions  as  the  source
+       the same group and other read permissions as their  source
        file.
 
        While a database update is in progress, signal delivery is
        postponed, and an exclusive, advisory, lock is  placed  on
        the  entire database, in order to avoid surprises in spec-
-       tator programs.
+       tator processes.
 
        The format of Postfix alias input files  is  described  in
        <a href="aliases.5.html"><b>aliases</b>(5)</a>.
 
+       By  default  the lookup key is mapped to lowercase to make
+       the lookups case insensitive; as of Postfix 2.3 this  case
+       folding  happens  only  with  tables whose lookup keys are
+       fixed-case strings such as btree:,  dbm:  or  hash:.  With
+       earlier  versions,  the  lookup  key  is  folded even with
+       tables where a lookup field can match both upper and lower
+       case  text,  such  as  <a href="regexp_table.5.html">regexp</a>: and <a href="pcre_table.5.html">pcre</a>:. This resulted in
+       loss of information with $<i>number</i> substitutions.
+
        Options:
 
        <b>-c</b> <i>config</i><b>_</b><i>dir</i>
-              Read  the  <b>main.cf</b>  configuration file in the named
+              Read the <a href="postconf.5.html"><b>main.cf</b></a> configuration file  in  the  named
               directory  instead  of  the  default  configuration
               directory.
 
-       <b>-d</b> <i>key</i> Search  the  specified  maps for <i>key</i> and remove one
-              entry per map.  The exit status is  zero  when  the
+       <b>-d</b> <i>key</i> Search the specified maps for <i>key</i>  and  remove  one
+              entry  per  map.   The exit status is zero when the
               requested information was found.
 
               If a key value of <b>-</b> is specified, the program reads
               key values from the standard input stream. The exit
-              status  is  zero when at least one of the requested
+              status is zero when at least one of  the  requested
               keys was found.
 
        <b>-f</b>     Do not fold the lookup key to lower case while cre-
-              ating or querying a map.
+              ating or querying a table.
+
+              With Postfix version 2.3 and later, this option has
+              no  effect  for  regular  expression tables. There,
+              case folding is controlled by appending a flag to a
+              pattern.
 
        <b>-i</b>     Incremental  mode. Read entries from standard input
               and  do  not  truncate  an  existing  database.  By
@@ -166,7 +180,7 @@ POSTALIAS(1)                                                      POSTALIAS(1)
               Enable verbose logging for debugging purposes.
 
 <b>CONFIGURATION PARAMETERS</b>
-       The following <b>main.cf</b> parameters are  especially  relevant
+       The following <a href="postconf.5.html"><b>main.cf</b></a> parameters are  especially  relevant
        to this program.
 
        The  text  below  provides  only  a parameter summary. See
@@ -177,8 +191,8 @@ POSTALIAS(1)                                                      POSTALIAS(1)
               updated with "<b>newaliases</b>" or with "<b>sendmail -bi</b>".
 
        <b><a href="postconf.5.html#config_directory">config_directory</a> (see 'postconf -d' output)</b>
-              The  default  location  of  the Postfix main.cf and
-              master.cf configuration files.
+              The  default  location  of  the Postfix <a href="postconf.5.html">main.cf</a> and
+              <a href="master.5.html">master.cf</a> configuration files.
 
        <b><a href="postconf.5.html#berkeley_db_create_buffer_size">berkeley_db_create_buffer_size</a> (16777216)</b>
               The per-table I/O buffer  size  for  programs  that

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.c,v 1.112 2005/12/11 12:20:14 christos Exp $	*/
+/*	$NetBSD: linux_machdep.c,v 1.119.2.1 2007/01/06 13:20:26 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1995, 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.112 2005/12/11 12:20:14 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.119.2.1 2007/01/06 13:20:26 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_vm86.h"
@@ -69,6 +69,8 @@ __KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.112 2005/12/11 12:20:14 christos
 #include <sys/disklabel.h>
 #include <sys/ioctl.h>
 #include <sys/wait.h>
+#include <sys/kauth.h>
+
 #include <miscfs/specfs/specdev.h>
 
 #include <compat/linux/common/linux_types.h>
@@ -492,10 +494,8 @@ linux_sys_sigreturn(l, v, retval)
 }
 
 static int
-linux_restore_sigcontext(l, scp, retval)
-	struct lwp *l;
-	struct linux_sigcontext *scp;
-	register_t *retval;
+linux_restore_sigcontext(struct lwp *l, struct linux_sigcontext *scp,
+    register_t *retval)
 {
 	struct proc *p = l->l_proc;
 	struct sigaltstack *sas = &p->p_sigctx.ps_sigstk;
@@ -700,10 +700,8 @@ linux_write_ldt(l, uap, retval)
 #endif /* USER_LDT */
 
 int
-linux_sys_modify_ldt(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+linux_sys_modify_ldt(struct lwp *l, void *v,
+    register_t *retval)
 {
 	struct linux_sys_modify_ldt_args /* {
 		syscallarg(int) func;
@@ -845,9 +843,7 @@ const u_short * const linux_keytabs[] = {
 #endif
 
 static struct biosdisk_info *
-fd2biosinfo(p, fp)
-	struct proc *p;
-	struct file *fp;
+fd2biosinfo(struct proc *p, struct file *fp)
 {
 	struct vnode *vp;
 	const char *blkname;
@@ -1107,9 +1103,10 @@ linux_machdepioctl(l, v, retval)
 			error = 0;
 		}
 
-		if (error == ENOTTY)
+		if (error == ENOTTY) {
 			DPRINTF(("linux_machdepioctl: invalid ioctl %08lx\n",
 			    com));
+		}
 		goto out;
 	}
 	SCARG(&bia, com) = com;
@@ -1126,20 +1123,17 @@ out:
  * to rely on I/O permission maps, which are not implemented.
  */
 int
-linux_sys_iopl(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+linux_sys_iopl(struct lwp *l, void *v, register_t *retval)
 {
 #if 0
 	struct linux_sys_iopl_args /* {
 		syscallarg(int) level;
 	} */ *uap = v;
 #endif
-	struct proc *p = l->l_proc;
 	struct trapframe *fp = l->l_md.md_regs;
 
-	if (suser(p->p_ucred, &p->p_acflag) != 0)
+	if (kauth_authorize_machdep(l->l_cred, KAUTH_MACHDEP_IOPL,
+	    NULL, NULL, NULL, NULL) != 0)
 		return EPERM;
 	fp->tf_eflags |= PSL_IOPL;
 	*retval = 0;
@@ -1161,10 +1155,11 @@ linux_sys_ioperm(l, v, retval)
 		syscallarg(unsigned int) hi;
 		syscallarg(int) val;
 	} */ *uap = v;
-	struct proc *p = l->l_proc;
 	struct trapframe *fp = l->l_md.md_regs;
 
-	if (suser(p->p_ucred, &p->p_acflag) != 0)
+	if (kauth_authorize_machdep(l->l_cred, SCARG(uap, val) ?
+	    KAUTH_MACHDEP_IOPERM_SET : KAUTH_MACHDEP_IOPERM_GET, NULL, NULL,
+	    NULL, NULL) != 0)
 		return EPERM;
 	if (SCARG(uap, val))
 		fp->tf_eflags |= PSL_IOPL;
@@ -1173,7 +1168,8 @@ linux_sys_ioperm(l, v, retval)
 }
 
 int
-linux_usertrap(struct lwp *l, vaddr_t trapaddr, void *arg)
+linux_usertrap(struct lwp *l, vaddr_t trapaddr,
+    void *arg)
 {
 	return 0;
 }

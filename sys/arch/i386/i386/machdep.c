@@ -1,12 +1,12 @@
-/*	$NetBSD: machdep.c,v 1.566 2005/12/11 12:17:41 christos Exp $	*/
+/*	$NetBSD: machdep.c,v 1.586.2.5 2007/08/28 11:46:26 liamjfoy Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 1998, 2000, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 1998, 2000, 2004, 2006 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Charles M. Hannum and by Jason R. Thorpe of the Numerical Aerospace
- * Simulation Facility, NASA Ames Research Center.
+ * by Charles M. Hannum, by Jason R. Thorpe of the Numerical Aerospace
+ * Simulation Facility, NASA Ames Research Center and by Julio M. Merino Vidal.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.566 2005/12/11 12:17:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.586.2.5 2007/08/28 11:46:26 liamjfoy Exp $");
 
 #include "opt_beep.h"
 #include "opt_compat_ibcs2.h"
@@ -112,7 +112,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.566 2005/12/11 12:17:41 christos Exp $
 #include <sys/core.h>
 #include <sys/kcore.h>
 #include <sys/ucontext.h>
-#include <machine/kcore.h>
 #include <sys/ras.h>
 #include <sys/sa.h>
 #include <sys/savar.h>
@@ -133,16 +132,22 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.566 2005/12/11 12:17:41 christos Exp $
 
 #include <sys/sysctl.h>
 
+#include <x86/cpu_msr.h>
+
 #include <machine/cpu.h>
 #include <machine/cpufunc.h>
 #include <machine/cpuvar.h>
 #include <machine/gdt.h>
+#include <machine/kcore.h>
 #include <machine/pio.h>
 #include <machine/psl.h>
 #include <machine/reg.h>
 #include <machine/specialreg.h>
 #include <machine/bootinfo.h>
 #include <machine/mtrr.h>
+#include <x86/x86/tsc.h>
+
+#include <machine/multiboot.h>
 
 #include <dev/isa/isareg.h>
 #include <machine/isa_machdep.h>
@@ -158,7 +163,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.566 2005/12/11 12:17:41 christos Exp $
 #endif
 
 #include "acpi.h"
-#include "apm.h"
+#include "apmbios.h"
 #include "bioscall.h"
 
 #if NBIOSCALL > 0
@@ -171,7 +176,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.566 2005/12/11 12:17:41 christos Exp $
 #include <machine/acpi_machdep.h>
 #endif
 
-#if NAPM > 0
+#if NAPMBIOS > 0
 #include <machine/apmvar.h>
 #endif
 
@@ -179,6 +184,14 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.566 2005/12/11 12:17:41 christos Exp $
 #include "isadma.h"
 #include "npx.h"
 #include "ksyms.h"
+
+#include "cardbus.h"
+#if NCARDBUS > 0
+/* For rbus_min_start hint. */
+#include <machine/bus.h>
+#include <dev/cardbus/rbus.h>
+#include <machine/rbus_machdep.h>
+#endif
 
 #include "mca.h"
 #if NMCA > 0
@@ -202,8 +215,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.566 2005/12/11 12:17:41 christos Exp $
 /* the following is used externally (sysctl_hw) */
 char machine[] = "i386";		/* CPU "architecture" */
 char machine_arch[] = "i386";		/* machine == machine_arch */
-
-char bootinfo[BOOTINFO_MAXSIZE];
 
 extern struct bi_devmatch *x86_alldisks;
 extern int x86_ndisks;
@@ -239,7 +250,11 @@ int	i386_has_sse2;
 int	tmx86_has_longrun;
 
 vaddr_t	msgbuf_vaddr;
-paddr_t msgbuf_paddr;
+struct {
+	paddr_t paddr;
+	psize_t sz;
+} msgbuf_p_seg[VM_PHYSSEG_MAX];
+unsigned int msgbuf_p_cnt = 0;
 
 vaddr_t	idt_vaddr;
 paddr_t	idt_paddr;
@@ -255,7 +270,6 @@ struct vm_map *phys_map = NULL;
 extern	paddr_t avail_start, avail_end;
 
 void (*delay_func)(int) = i8254_delay;
-void (*microtime_func)(struct timeval *) = i8254_microtime;
 void (*initclock_func)(void) = i8254_initclocks;
 
 /*
@@ -271,11 +285,124 @@ void	dumpsys(void);
 void	init386(paddr_t);
 void	initgdt(union descriptor *);
 
-#if !defined(REALBASEMEM) && !defined(REALEXTMEM)
-void	add_mem_cluster(u_int64_t, u_int64_t, u_int32_t);
-#endif /* !defnied(REALBASEMEM) && !defined(REALEXTMEM) */
+void	add_mem_cluster(uint64_t, uint64_t, uint32_t);
 
 extern int time_adjusted;
+
+struct bootinfo	bootinfo;
+int *esym;
+extern int boothowto;
+
+/* Base memory reported by BIOS. */
+#ifndef REALBASEMEM
+int	biosbasemem = 0;
+#else
+int	biosbasemem = REALBASEMEM;
+#endif
+
+/* Extended memory reported by BIOS. */
+#ifndef REALEXTMEM
+int	biosextmem = 0;
+#else
+int	biosextmem = REALEXTMEM;
+#endif
+
+/* Set if any boot-loader set biosbasemem/biosextmem. */
+int	biosmem_implicit;
+
+/* Representation of the bootinfo structure constructed by a NetBSD native
+ * boot loader.  Only be used by native_loader(). */
+struct bootinfo_source {
+	uint32_t bs_naddrs;
+	paddr_t bs_addrs[1]; /* Actually longer. */
+};
+
+/* Only called by locore.h; no need to be in a header file. */
+void	native_loader(int, int, struct bootinfo_source *, paddr_t, int, int);
+
+/*
+ * Called as one of the very first things during system startup (just after
+ * the boot loader gave control to the kernel image), this routine is in
+ * charge of retrieving the parameters passed in by the boot loader and
+ * storing them in the appropriate kernel variables.
+ *
+ * WARNING: Because the kernel has not yet relocated itself to KERNBASE,
+ * special care has to be taken when accessing memory because absolute
+ * addresses (referring to kernel symbols) do not work.  So:
+ *
+ *     1) Avoid jumps to absolute addresses (such as gotos and switches).
+ *     2) To access global variables use their physical address, which
+ *        can be obtained using the RELOC macro.
+ */
+void
+native_loader(int bl_boothowto, int bl_bootdev,
+    struct bootinfo_source *bl_bootinfo, paddr_t bl_esym,
+    int bl_biosextmem, int bl_biosbasemem)
+{
+#define RELOC(type, x) ((type)((vaddr_t)(x) - KERNBASE))
+
+	*RELOC(int *, &boothowto) = bl_boothowto;
+
+#ifdef COMPAT_OLDBOOT
+	/*
+	 * Pre-1.3 boot loaders gave the boot device as a parameter
+	 * (instead of a bootinfo entry).
+	 */
+	*RELOC(int *, &bootdev) = bl_bootdev;
+#endif
+
+	/*
+	 * The boot loader provides a physical, non-relocated address
+	 * for the symbols table's end.  We need to convert it to a
+	 * virtual address.
+	 */
+	if (bl_esym != 0)
+		*RELOC(int **, &esym) = (int *)((vaddr_t)bl_esym + KERNBASE);
+	else
+		*RELOC(int **, &esym) = 0;
+
+	/*
+	 * Copy bootinfo entries (if any) from the boot loader's
+	 * representation to the kernel's bootinfo space.
+	 */
+	if (bl_bootinfo != NULL) {
+		size_t i;
+		uint8_t *data;
+		struct bootinfo *bidest;
+
+		bidest = RELOC(struct bootinfo *, &bootinfo);
+
+		data = &bidest->bi_data[0];
+
+		for (i = 0; i < bl_bootinfo->bs_naddrs; i++) {
+			struct btinfo_common *bc;
+
+			bc = (struct btinfo_common *)(bl_bootinfo->bs_addrs[i]);
+
+			if ((paddr_t)(data + bc->len) >
+			    (paddr_t)(&bidest->bi_data[0] + BOOTINFO_MAXSIZE))
+				break;
+
+			memcpy(data, bc, bc->len);
+			data += bc->len;
+		}
+		bidest->bi_nentries = i;
+	}
+
+	/*
+	 * Configure biosbasemem and biosextmem only if they were not
+	 * explicitly given during the kernel's build.
+	 */
+	if (*RELOC(int *, &biosbasemem) == 0) {
+		*RELOC(int *, &biosbasemem) = bl_biosbasemem;
+		*RELOC(int *, &biosmem_implicit) = 1;
+	}
+	if (*RELOC(int *, &biosextmem) == 0) {
+		*RELOC(int *, &biosextmem) = bl_biosextmem;
+		*RELOC(int *, &biosmem_implicit) = 1;
+	}
+#undef RELOC
+}
 
 /*
  * Machine-dependent startup code
@@ -283,27 +410,37 @@ extern int time_adjusted;
 void
 cpu_startup()
 {
-	int x;
+	int x, y;
 	vaddr_t minaddr, maxaddr;
+	psize_t sz;
 	char pbuf[9];
 
 	/*
 	 * Initialize error message buffer (et end of core).
 	 */
-	msgbuf_vaddr = uvm_km_alloc(kernel_map, x86_round_page(MSGBUFSIZE), 0,
-	    UVM_KMF_VAONLY);
+	if (msgbuf_p_cnt == 0)
+		panic("msgbuf paddr map has not been set up");
+	for (x = 0, sz = 0; x < msgbuf_p_cnt; sz += msgbuf_p_seg[x++].sz)
+		continue;
+	msgbuf_vaddr = uvm_km_alloc(kernel_map, sz, 0, UVM_KMF_VAONLY);
 	if (msgbuf_vaddr == 0)
 		panic("failed to valloc msgbuf_vaddr");
 
 	/* msgbuf_paddr was init'd in pmap */
-	for (x = 0; x < btoc(MSGBUFSIZE); x++)
-		pmap_kenter_pa((vaddr_t)msgbuf_vaddr + x * PAGE_SIZE,
-		    msgbuf_paddr + x * PAGE_SIZE, VM_PROT_READ|VM_PROT_WRITE);
+	for (y = 0, sz = 0; y < msgbuf_p_cnt; y++) {
+		for (x = 0; x < btoc(msgbuf_p_seg[y].sz); x++, sz += PAGE_SIZE)
+			pmap_kenter_pa((vaddr_t)msgbuf_vaddr + sz,
+			    msgbuf_p_seg[y].paddr + x * PAGE_SIZE, VM_PROT_READ|VM_PROT_WRITE);
+	}
 	pmap_update(pmap_kernel());
 
-	initmsgbuf((caddr_t)msgbuf_vaddr, round_page(MSGBUFSIZE));
+	initmsgbuf((caddr_t)msgbuf_vaddr, sz);
 
 	printf("%s%s", copyright, version);
+
+#ifdef MULTIBOOT
+	multiboot_print_info();
+#endif
 
 #ifdef TRAPLOG
 	/*
@@ -314,6 +451,11 @@ cpu_startup()
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(physmem));
 	printf("total memory = %s\n", pbuf);
+
+#if NCARDBUS > 0
+	/* Tell RBUS how much RAM we have, so it can use heuristics. */
+	rbus_min_start_hint(ptoa(physmem));
+#endif
 
 	minaddr = 0;
 
@@ -341,6 +483,8 @@ cpu_startup()
 
 	/* Safe for i/o port / memory space allocation to use malloc now. */
 	x86_bus_space_mallocok();
+
+	x86_init();
 }
 
 /*
@@ -365,7 +509,7 @@ i386_proc0_tss_ldt_init()
 	pcb->pcb_ldt_sel = pmap_kernel()->pm_ldt_sel = GSEL(GLDT_SEL, SEL_KPL);
 	pcb->pcb_cr0 = rcr0();
 	pcb->pcb_tss.tss_ss0 = GSEL(GDATA_SEL, SEL_KPL);
-	pcb->pcb_tss.tss_esp0 = (int)lwp0.l_addr + USPACE - 16;
+	pcb->pcb_tss.tss_esp0 = USER_TO_UAREA(lwp0.l_addr) + KSTACK_SIZE - 16;
 	lwp0.l_md.md_regs = (struct trapframe *)pcb->pcb_tss.tss_esp0 - 1;
 	lwp0.l_md.md_tss_sel = tss_alloc(pcb);
 
@@ -766,15 +910,15 @@ haltsys:
 			printf("WARNING: ACPI powerdown failed!\n");
 		}
 #endif
-#if NAPM > 0 && !defined(APM_NO_POWEROFF)
+#if NAPMBIOS > 0 && !defined(APM_NO_POWEROFF)
 		/* turn off, if we can.  But try to turn disk off and
 		 * wait a bit first--some disk drives are slow to clean up
 		 * and users have reported disk corruption.
 		 */
 		delay(500000);
-		apm_set_powstate(APM_DEV_DISK(0xff), APM_SYS_OFF);
+		apm_set_powstate(NULL, APM_DEV_DISK(APM_DEV_ALLUNITS), APM_SYS_OFF);
 		delay(500000);
-		apm_set_powstate(APM_DEV_ALLDEVS, APM_SYS_OFF);
+		apm_set_powstate(NULL, APM_DEV_ALLDEVS, APM_SYS_OFF);
 		printf("WARNING: APM powerdown failed!\n");
 		/*
 		 * RB_POWERDOWN implies RB_HALT... fall into it...
@@ -804,7 +948,7 @@ haltsys:
 		if (cngetc() == 0) {
 			/* no console attached, so just hlt */
 			for(;;) {
-				__asm __volatile("hlt");
+				__asm volatile("hlt");
 			}
 		}
 		cnpollc(0);
@@ -821,7 +965,7 @@ haltsys:
 /*
  * These variables are needed by /sbin/savecore
  */
-u_int32_t dumpmag = 0x8fca0101;	/* magic number */
+uint32_t dumpmag = 0x8fca0101;	/* magic number */
 int 	dumpsize = 0;		/* pages */
 long	dumplo = 0; 		/* blocks */
 
@@ -919,8 +1063,10 @@ cpu_dumpconf()
 	if (dumpdev == NODEV)
 		goto bad;
 	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL)
-		panic("dumpconf: bad dumpdev=0x%x", dumpdev);
+	if (bdev == NULL) {
+		dumpdev = NODEV;
+		goto bad;
+	}
 	if (bdev->d_psize == NULL)
 		goto bad;
 	nblks = (*bdev->d_psize)(dumpdev);
@@ -1145,7 +1291,8 @@ struct simplelock idt_lock = SIMPLELOCK_INITIALIZER;
 #ifdef I586_CPU
 union	descriptor *pentium_idt;
 #endif
-extern  struct user *proc0paddr;
+struct user *proc0paddr;
+extern vaddr_t proc0uarea;
 
 void
 setgate(struct gate_descriptor *gd, void *func, int args, int type, int dpl,
@@ -1226,9 +1373,8 @@ void cpu_init_idt()
 	lidt(&region);
 }
 
-#if !defined(REALBASEMEM) && !defined(REALEXTMEM)
 void
-add_mem_cluster(u_int64_t seg_start, u_int64_t seg_end, u_int32_t type)
+add_mem_cluster(uint64_t seg_start, uint64_t seg_end, uint32_t type)
 {
 	extern struct extent *iomem_ex;
 	int i;
@@ -1289,7 +1435,8 @@ add_mem_cluster(u_int64_t seg_start, u_int64_t seg_end, u_int32_t type)
 
 	/* XXX XXX XXX */
 	if (mem_cluster_cnt >= VM_PHYSSEG_MAX)
-		panic("init386: too many memory segments");
+		panic("init386: too many memory segments "
+		    "(increase VM_PHYSSEG_MAX)");
 
 	seg_start = round_page(seg_start);
 	seg_end = trunc_page(seg_end);
@@ -1306,7 +1453,6 @@ add_mem_cluster(u_int64_t seg_start, u_int64_t seg_end, u_int32_t type)
 	physmem += atop(mem_clusters[mem_cluster_cnt].size);
 	mem_cluster_cnt++;
 }
-#endif /* !defined(REALBASEMEM) && !defined(REALEXTMEM) */
 
 void
 initgdt(union descriptor *tgdt)
@@ -1347,13 +1493,11 @@ init386(paddr_t first_avail)
 	union descriptor *tgdt;
 	extern void consinit(void);
 	extern struct extent *iomem_ex;
-#if !defined(REALBASEMEM) && !defined(REALEXTMEM)
 	struct btinfo_memmap *bim;
-#endif
 	struct region_descriptor region;
 	int x, first16q;
-	u_int64_t seg_start, seg_end;
-	u_int64_t seg_start1, seg_end1;
+	uint64_t seg_start, seg_end;
+	uint64_t seg_start1, seg_end1;
 	paddr_t realmode_reserved_start;
 	psize_t realmode_reserved_size;
 	int needs_earlier_install_pte0;
@@ -1366,6 +1510,7 @@ init386(paddr_t first_avail)
 	cpu_feature = cpu_info_primary.ci_feature_flags;
 	cpu_feature2 = cpu_info_primary.ci_feature2_flags;
 
+	proc0paddr = UAREA_TO_USER(proc0uarea);
 	lwp0.l_addr = proc0paddr;
 	cpu_info_primary.ci_curpcb = &lwp0.l_addr->u_pcb;
 
@@ -1441,13 +1586,12 @@ init386(paddr_t first_avail)
 	 */
 	pmap_bootstrap((vaddr_t)atdevbase + IOM_SIZE);
 
-#if !defined(REALBASEMEM) && !defined(REALEXTMEM)
 	/*
 	 * Check to see if we have a memory map from the BIOS (passed
 	 * to us by the boot program.
 	 */
-	bim = lookup_bootinfo(BTINFO_MEMMAP);
-	if (bim != NULL && bim->num > 0) {
+	if ((biosmem_implicit || (biosbasemem == 0 && biosextmem == 0)) &&
+	    (bim = lookup_bootinfo(BTINFO_MEMMAP)) != NULL && bim->num > 0) {
 #ifdef DEBUG_MEMLOAD
 		printf("BIOS MEMORY MAP (%d ENTRIES):\n", bim->num);
 #endif
@@ -1468,6 +1612,13 @@ init386(paddr_t first_avail)
 			case BIM_NVS:
 				break;
 			default:
+				continue;
+			}
+
+			/*
+			 * If the segment is smaller than a page, skip it.
+			 */
+			if (bim->entry[x].size < NBPG) {
 				continue;
 			}
 
@@ -1505,7 +1656,7 @@ init386(paddr_t first_avail)
 				    bim->entry[x].type);
 		}
 	}
-#endif /* ! REALBASEMEM && ! REALEXTMEM */
+
 	/*
 	 * If the loop above didn't find any valid segment, fall back to
 	 * former code.
@@ -1617,7 +1768,7 @@ init386(paddr_t first_avail)
 		if (seg_start != seg_end) {
 			if (seg_start < (16 * 1024 * 1024) &&
 			    first16q != VM_FREELIST_DEFAULT) {
-				u_int64_t tmp;
+				uint64_t tmp;
 
 				if (seg_end > (16 * 1024 * 1024))
 					tmp = (16 * 1024 * 1024);
@@ -1654,7 +1805,7 @@ init386(paddr_t first_avail)
 		if (seg_start1 != seg_end1) {
 			if (seg_start1 < (16 * 1024 * 1024) &&
 			    first16q != VM_FREELIST_DEFAULT) {
-				u_int64_t tmp;
+				uint64_t tmp;
 
 				if (seg_end1 > (16 * 1024 * 1024))
 					tmp = (16 * 1024 * 1024);
@@ -1696,6 +1847,7 @@ init386(paddr_t first_avail)
 		psize_t sz = round_page(MSGBUFSIZE);
 		psize_t reqsz = sz;
 
+	search_again:
 		for (x = 0; x < vm_nphysseg; x++) {
 			vps = &vm_physmem[x];
 			if (ptoa(vps->avail_end) == avail_end)
@@ -1710,7 +1862,8 @@ init386(paddr_t first_avail)
 
 		vps->avail_end -= atop(sz);
 		vps->end -= atop(sz);
-		msgbuf_paddr = ptoa(vps->avail_end);
+		msgbuf_p_seg[msgbuf_p_cnt].sz = sz;
+		msgbuf_p_seg[msgbuf_p_cnt++].paddr = ptoa(vps->avail_end);
 
 		/* Remove the last segment if it now has no pages. */
 		if (vps->start == vps->end) {
@@ -1724,10 +1877,17 @@ init386(paddr_t first_avail)
 				avail_end = vm_physmem[x].avail_end;
 		avail_end = ptoa(avail_end);
 
+		if (sz != reqsz) {
+			reqsz -= sz;
+			if (msgbuf_p_cnt != VM_PHYSSEG_MAX) {
+		/* if still segments available, get memory from next one ... */
+				sz = reqsz;
+				goto search_again;
+			}
 		/* Warn if the message buffer had to be shrunk. */
-		if (sz != reqsz)
 			printf("WARNING: %ld bytes not available for msgbuf "
-			    "in last cluster (%ld used)\n", reqsz, sz);
+			       "in last cluster (%ld used)\n", (long)MSGBUFSIZE, MSGBUFSIZE - reqsz);
+		}
 	}
 
 	/*
@@ -1866,23 +2026,28 @@ init386(paddr_t first_avail)
 #if NKSYMS || defined(DDB) || defined(LKM)
 	{
 		extern int end;
-		extern int *esym;
+		boolean_t loaded;
 		struct btinfo_symtab *symtab;
 
 #ifdef DDB
 		db_machine_init();
 #endif
 
-		symtab = lookup_bootinfo(BTINFO_SYMTAB);
-
-		if (symtab) {
-			symtab->ssym += KERNBASE;
-			symtab->esym += KERNBASE;
-			ksyms_init(symtab->nsym, (int *)symtab->ssym,
-			    (int *)symtab->esym);
+#if defined(MULTIBOOT)
+		loaded = multiboot_ksyms_init();
+#else
+		loaded = FALSE;
+#endif
+		if (!loaded) {
+		    symtab = lookup_bootinfo(BTINFO_SYMTAB);
+		    if (symtab) {
+			    symtab->ssym += KERNBASE;
+			    symtab->esym += KERNBASE;
+			    ksyms_init(symtab->nsym, (int *)symtab->ssym,
+				(int *)symtab->esym);
+		    } else
+			    ksyms_init(*(int *)&end, ((int *)&end) + 1, esym);
 		}
-		else
-			ksyms_init(*(int *)&end, ((int *)&end) + 1, esym);
 	}
 #endif
 #ifdef DDB
@@ -2015,23 +2180,12 @@ cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 #ifdef COMPAT_NOMID
 	if ((error = exec_nomid(l, epp)) == 0)
 		return error;
+#else
+	(void) l;
+	(void) epp;
 #endif /* ! COMPAT_NOMID */
 
 	return error;
-}
-
-void *
-lookup_bootinfo(int type)
-{
-	struct btinfo_common *help;
-	int n = *(int*)bootinfo;
-	help = (struct btinfo_common *)(bootinfo + sizeof(int));
-	while(n--) {
-		if(help->type == type)
-			return(help);
-		help = (struct btinfo_common *)((char*)help + help->len);
-	}
-	return(0);
 }
 
 #include <dev/ic/mc146818reg.h>		/* for NVRAM POST */
@@ -2088,7 +2242,7 @@ cpu_reset()
 	memset((caddr_t)idt, 0, NIDT * sizeof(idt[0]));
 	setregion(&region, idt, NIDT * sizeof(idt[0]) - 1);
 	lidt(&region);
-	__asm __volatile("divl %0,%1" : : "q" (0), "a" (0));
+	__asm volatile("divl %0,%1" : : "q" (0), "a" (0));
 
 #if 0
 	/*
@@ -2182,7 +2336,7 @@ int
 cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 {
 	struct trapframe *tf = l->l_md.md_regs;
-	__greg_t *gr = mcp->__gregs;
+	const __greg_t *gr = mcp->__gregs;
 
 	/* Restore register context, if any. */
 	if ((flags & _UC_CPU) != 0) {
@@ -2284,6 +2438,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 void
 cpu_initclocks()
 {
+
 	(*initclock_func)();
 }
 

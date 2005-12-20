@@ -1,4 +1,4 @@
-/*	$NetBSD: rtsol.c,v 1.11 2004/01/03 01:40:32 itojun Exp $	*/
+/*	$NetBSD: rtsol.c,v 1.13.2.1 2007/09/10 19:17:23 msaitoh Exp $	*/
 /*	$KAME: rtsol.c,v 1.15 2002/05/31 10:10:03 itojun Exp $	*/
 
 /*
@@ -67,7 +67,10 @@ static struct sockaddr_in6 from;
 
 int rssock;
 
-static struct sockaddr_in6 sin6_allrouters = {sizeof(sin6_allrouters), AF_INET6};
+static struct sockaddr_in6 sin6_allrouters = {
+	.sin6_len = sizeof(sin6_allrouters),
+	.sin6_family = AF_INET6
+};
 
 int
 sockopen(void)
@@ -225,7 +228,7 @@ sendpacket(struct ifinfo *ifinfo)
 void
 rtsol_input(int s)
 {
-	u_char ntopbuf[INET6_ADDRSTRLEN], ifnamebuf[IFNAMSIZ];
+	char ntopbuf[INET6_ADDRSTRLEN], ifnamebuf[IFNAMSIZ];
 	int ifindex = 0, i, *hlimp = NULL;
 	struct in6_pktinfo *pi = NULL;
 	struct ifinfo *ifi = NULL;
@@ -313,7 +316,7 @@ rtsol_input(int s)
 
 	if ((ifi = find_ifinfo(pi->ipi6_ifindex)) == NULL) {
 		warnmsg(LOG_NOTICE, __func__,
-		    "received RA from %s on an unexpeced IF(%s)",
+		    "received RA from %s on an unexpected IF(%s)",
 		    inet_ntop(AF_INET6, &from.sin6_addr, ntopbuf,
 		    INET6_ADDRSTRLEN),
 		    if_indextoname(pi->ipi6_ifindex, ifnamebuf));

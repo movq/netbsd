@@ -1,4 +1,12 @@
-/*	$NetBSD: rwlock_emul.c,v 1.1.1.1 2004/03/28 08:56:21 martti Exp $	*/
+/*	$NetBSD: rwlock_emul.c,v 1.1.1.1.18.2 2007/07/16 11:05:23 liamjfoy Exp $	*/
+
+/*
+ * Copyright (C) 2003 by Darren Reed.
+ * 
+ * See the IPFILTER.LICENCE file for details on licencing.  
+ *   
+ * Id: rwlock_emul.c,v 1.1.4.1 2006/06/16 17:21:17 darrenr Exp 
+ */     
 
 #include "ipf.h"
 

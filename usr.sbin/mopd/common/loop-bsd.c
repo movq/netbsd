@@ -1,4 +1,4 @@
-/*	$NetBSD: loop-bsd.c,v 1.7 2003/04/20 00:17:22 christos Exp $	*/
+/*	$NetBSD: loop-bsd.c,v 1.9 2006/10/07 17:27:57 elad Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: loop-bsd.c,v 1.7 2003/04/20 00:17:22 christos Exp $");
+__RCSID("$NetBSD: loop-bsd.c,v 1.9 2006/10/07 17:27:57 elad Exp $");
 #endif
 
 #include <errno.h>
@@ -94,7 +94,7 @@ mopReadDL()
 
 /*
  * The list of all interfaces that are being listened to.  loop()
- * "selects" on the descriptors in this list.
+ * "polls" on the descriptors in this list.
  */
 struct if_info *iflist;
 
@@ -118,12 +118,13 @@ Loop()
 	if (iflist->fd != -1) {
 		if (ioctl(iflist->fd, BIOCGBLEN, (caddr_t) & bufsize) < 0)
 			mopLogErr("BIOCGBLEN");
-	}
+	} else
+		mopLogErrX("cannot get buffer size");
 	buf = (u_char *) malloc((unsigned) bufsize);
 	if (buf == 0)
 		mopLogErr("malloc");
 	/*
-         * Find the highest numbered file descriptor for select().
+         * Find the highest numbered file descriptor for poll().
          * Initialize the set of descriptors to listen to.
          */
 	for (ii = iflist, n = 0; ii; ii = ii->next, n++)

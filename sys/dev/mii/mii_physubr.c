@@ -1,4 +1,4 @@
-/*	$NetBSD: mii_physubr.c,v 1.45 2005/12/11 12:22:42 christos Exp $	*/
+/*	$NetBSD: mii_physubr.c,v 1.53 2006/11/16 21:24:07 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.45 2005/12/11 12:22:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.53 2006/11/16 21:24:07 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -58,6 +58,8 @@ __KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.45 2005/12/11 12:22:42 christos Ex
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
+
+static void mii_phy_statusmsg(struct mii_softc *);
 
 /*
  * Media to register setting conversion table.  Order matters.
@@ -132,7 +134,7 @@ mii_phy_setmedia(struct mii_softc *sc)
 	 */
 
 #ifdef DIAGNOSTIC
-	if (ife->ifm_data < 0 || ife->ifm_data >= MII_NMEDIA)
+	if (/* ife->ifm_data < 0 || */ ife->ifm_data >= MII_NMEDIA)
 		panic("mii_phy_setmedia");
 #endif
 
@@ -264,7 +266,7 @@ mii_phy_auto_timeout(void *arg)
 	struct mii_softc *sc = arg;
 	int s;
 
-	if ((sc->mii_dev.dv_flags & DVF_ACTIVE) == 0)
+	if (!device_is_active(&sc->mii_dev))
 		return;
 
 	s = splnet();
@@ -308,7 +310,7 @@ mii_phy_tick(struct mii_softc *sc)
 	 * Only retry autonegotiation every N seconds.
 	 */
 	KASSERT(sc->mii_anegticks != 0);
-	if (++sc->mii_ticks != sc->mii_anegticks)
+	if (++sc->mii_ticks <= sc->mii_anegticks)
 		return (EJUSTRETURN);
 
 	sc->mii_ticks = 0;
@@ -378,58 +380,35 @@ void
 mii_phy_update(struct mii_softc *sc, int cmd)
 {
 	struct mii_data *mii = sc->mii_pdata;
-	int announce, s;
 
 	if (sc->mii_media_active != mii->mii_media_active ||
 	    sc->mii_media_status != mii->mii_media_status ||
 	    cmd == MII_MEDIACHG) {
-		announce = mii_phy_statusmsg(sc);
-		(*mii->mii_statchg)(sc->mii_dev.dv_parent);
+		mii_phy_statusmsg(sc);
+		(*mii->mii_statchg)(device_parent(&sc->mii_dev));
 		sc->mii_media_active = mii->mii_media_active;
 		sc->mii_media_status = mii->mii_media_status;
-
-		if (announce) {
-			s = splnet();
-			rt_ifmsg(mii->mii_ifp);
-			splx(s);
-		}
 	}
 }
 
-int
+static void
 mii_phy_statusmsg(struct mii_softc *sc)
 {
 	struct mii_data *mii = sc->mii_pdata;
 	struct ifnet *ifp = mii->mii_ifp;
-	int link_state, announce = 0;
-	u_int baudrate;
+	int s;
 
+	s = splnet();
 	if (mii->mii_media_status & IFM_AVALID) {
 		if (mii->mii_media_status & IFM_ACTIVE)
-			link_state = LINK_STATE_UP;
+			if_link_state_change(ifp, LINK_STATE_UP);
 		else
-			link_state = LINK_STATE_DOWN;
+			if_link_state_change(ifp, LINK_STATE_DOWN);
 	} else
-		link_state = LINK_STATE_UNKNOWN;
+		if_link_state_change(ifp, LINK_STATE_UNKNOWN);
+	splx(s);
 
-	baudrate = ifmedia_baudrate(mii->mii_media_active);
-
-	if (link_state != ifp->if_link_state) {
-		ifp->if_link_state = link_state;
-		/*
-		 * XXX Right here we'd like to notify protocols
-		 * XXX that the link status has changed, so that
-		 * XXX e.g. Duplicate Address Detection can restart.
-		 */
-		announce = 1;
-	}
-
-	if (baudrate != ifp->if_baudrate) {
-		ifp->if_baudrate = baudrate;
-		announce = 1;
-	}
-
-	return (announce);
+	ifp->if_baudrate = ifmedia_baudrate(mii->mii_media_active);
 }
 
 /*
@@ -504,14 +483,14 @@ mii_phy_add_media(struct mii_softc *sc)
 		 * all the gigabit media types.
 		 */
 		if (sc->mii_extcapabilities & EXTSR_1000XHDX) {
-			sc->mii_anegticks = 10;
+			sc->mii_anegticks = MII_ANEGTICKS_GIGE;
 			sc->mii_flags |= MIIF_IS_1000X;
 			ADD(IFM_MAKEWORD(IFM_ETHER, IFM_1000_SX, 0,
 			    sc->mii_inst), MII_MEDIA_1000_X);
 			PRINT("1000baseSX");
 		}
 		if (sc->mii_extcapabilities & EXTSR_1000XFDX) {
-			sc->mii_anegticks = 10;
+			sc->mii_anegticks = MII_ANEGTICKS_GIGE;
 			sc->mii_flags |= MIIF_IS_1000X;
 			ADD(IFM_MAKEWORD(IFM_ETHER, IFM_1000_SX, IFM_FDX,
 			    sc->mii_inst), MII_MEDIA_1000_X_FDX);
@@ -528,7 +507,7 @@ mii_phy_add_media(struct mii_softc *sc)
 		 * All 1000baseT PHYs have a 1000baseT control register.
 		 */
 		if (sc->mii_extcapabilities & EXTSR_1000THDX) {
-			sc->mii_anegticks = 10;
+			sc->mii_anegticks = MII_ANEGTICKS_GIGE;
 			sc->mii_flags |= MIIF_HAVE_GTCR;
 			mii->mii_media.ifm_mask |= IFM_ETH_MASTER;
 			ADD(IFM_MAKEWORD(IFM_ETHER, IFM_1000_T, 0,
@@ -536,7 +515,7 @@ mii_phy_add_media(struct mii_softc *sc)
 			PRINT("1000baseT");
 		}
 		if (sc->mii_extcapabilities & EXTSR_1000TFDX) {
-			sc->mii_anegticks = 10;
+			sc->mii_anegticks = MII_ANEGTICKS_GIGE;
 			sc->mii_flags |= MIIF_HAVE_GTCR;
 			mii->mii_media.ifm_mask |= IFM_ETH_MASTER;
 			ADD(IFM_MAKEWORD(IFM_ETHER, IFM_1000_T, IFM_FDX,
@@ -587,7 +566,7 @@ mii_phy_activate(struct device *self, enum devact act)
 int
 mii_phy_detach(struct device *self, int flags)
 {
-	struct mii_softc *sc = (void *) self;
+	struct mii_softc *sc = device_private(self);
 
 	if (sc->mii_flags & MIIF_DOINGAUTO)
 		callout_stop(&sc->mii_nway_ch);

@@ -1,4 +1,4 @@
-/* $NetBSD: hd44780_subr.c,v 1.8 2005/12/11 12:21:26 christos Exp $ */
+/* $NetBSD: hd44780_subr.c,v 1.9.12.1 2007/11/04 17:03:13 pavel Exp $ */
 
 /*
  * Copyright (c) 2002 Dennis I. Chernoivanov
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd44780_subr.c,v 1.8 2005/12/11 12:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd44780_subr.c,v 1.9.12.1 2007/11/04 17:03:13 pavel Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -88,8 +88,8 @@ const struct wsdisplay_emulops hlcd_emulops = {
 	hlcd_allocattr
 };
 
-static int	hlcd_ioctl(void *, u_long, caddr_t, int, struct lwp *);
-static paddr_t	hlcd_mmap(void *, off_t, int);
+static int	hlcd_ioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
+static paddr_t	hlcd_mmap(void *, void *, off_t, int);
 static int	hlcd_alloc_screen(void *, const struct wsscreen_descr *,
 		    void **, int *, int *, long *);
 static void	hlcd_free_screen(void *, void *);
@@ -161,10 +161,11 @@ hlcd_copycols(id, row, srccol, dstcol, ncols)
 		ncols = hdscr->hlcd_sc->sc_cols - srccol;
 
 	if (row > 0 && (hdscr->hlcd_sc->sc_flags & (HD_MULTILINE|HD_MULTICHIP)))
-		bcopy(&hdscr->image[hdscr->hlcd_sc->sc_cols * row + srccol],
-		    &hdscr->image[hdscr->hlcd_sc->sc_cols * row + dstcol], ncols);
+		memmove(&hdscr->image[hdscr->hlcd_sc->sc_cols * row + dstcol],
+		    &hdscr->image[hdscr->hlcd_sc->sc_cols * row + srccol],
+		    ncols);
 	else
-		bcopy(&hdscr->image[srccol], &hdscr->image[dstcol], ncols);
+		memmove(&hdscr->image[dstcol], &hdscr->image[srccol], ncols);
 }
 
 
@@ -200,7 +201,7 @@ hlcd_copyrows(id, srcrow, dstrow, nrows)
 
 	if (!(hdscr->hlcd_sc->sc_flags & (HD_MULTILINE|HD_MULTICHIP)))
 		return;
-	bcopy(&hdscr->image[srcrow * ncols], &hdscr->image[dstrow * ncols],
+	memmove(&hdscr->image[dstrow * ncols], &hdscr->image[srcrow * ncols],
 	    nrows * ncols);
 }
 
@@ -228,8 +229,9 @@ hlcd_allocattr(id, fg, bg, flags, attrp)
 }
 
 static int
-hlcd_ioctl(v, cmd, data, flag, l)
+hlcd_ioctl(v, vs, cmd, data, flag, l)
 	void *v;
+	void *vs;
 	u_long cmd;
 	caddr_t data;
 	int flag;
@@ -255,8 +257,9 @@ hlcd_ioctl(v, cmd, data, flag, l)
 }
 
 static paddr_t
-hlcd_mmap(v, offset, prot)
+hlcd_mmap(v, vs, offset, prot)
 	void *v;
+	void *vs;
 	off_t offset;
 	int prot;
 {
@@ -701,6 +704,7 @@ hd44780_ddram_redraw(sc, en, io)
 
 	hd44780_ir_write(sc, en, cmd_clear());
 	hd44780_ir_write(sc, en, cmd_rethome());
+	hd44780_ir_write(sc, en, cmd_ddramset(HD_ROW1_ADDR));
 	for (i = 0; (i < io->len) && (i < sc->sc_cols); i++) {
 		hd44780_dr_write(sc, en, io->buf[i]);
 	}

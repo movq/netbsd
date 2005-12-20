@@ -1,4 +1,4 @@
-/*	$NetBSD: temp.c,v 1.18 2005/07/19 23:07:10 christos Exp $	*/
+/*	$NetBSD: temp.c,v 1.21 2006/11/28 18:45:32 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,11 +34,12 @@
 #if 0
 static char sccsid[] = "@(#)temp.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: temp.c,v 1.18 2005/07/19 23:07:10 christos Exp $");
+__RCSID("$NetBSD: temp.c,v 1.21 2006/11/28 18:45:32 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include "rcv.h"
+#include <util.h>
 #include "extern.h"
 
 /*
@@ -47,19 +48,21 @@ __RCSID("$NetBSD: temp.c,v 1.18 2005/07/19 23:07:10 christos Exp $");
  * Give names to all the temporary files that we will need.
  */
 
-char	*tmpdir;
-
-void
+PUBLIC void
 tinit(void)
 {
+	char pathbuf[MAXPATHLEN];
 	const char *cp;
 	char *p;
 
+	/*
+	 * It's okay to call savestr in here because main will
+	 * do a spreserve() after us.
+	 */
 	if ((cp = getenv("TMPDIR")) == NULL || *cp == '\0')
 		cp = _PATH_TMP;
 
-	if ((tmpdir = strdup(cp)) == NULL)
-		errx(1, "Out of memory");
+	tmpdir = savestr(cp);
 
 	/* Remove trailing slashes. */
 	p = tmpdir + strlen(tmpdir) - 1;
@@ -68,24 +71,30 @@ tinit(void)
 		p--;
 	}
 
-	/*
-	 * It's okay to call savestr in here because main will
-	 * do a spreserve() after us.
-	 */
 	if (myname != NULL) {
 		if (getuserid(myname) < 0)
 			errx(1, "\"%s\" is not a user of this system", myname);
-	} else {
+	}
+	else {
 		if ((cp = username()) == NULL) {
 			myname = savestr("nobody");
-			if (rcvmode)
-				exit(1);
+			if (mailmode == mm_receiving)
+				errx(EXIT_FAILURE, "who am I receiving for?");
 		} else
 			myname = savestr(cp);
 	}
 	if ((cp = getenv("HOME")) == NULL)
 		cp = ".";
 	homedir = savestr(cp);
+
+	if (getcwd(pathbuf, sizeof(pathbuf)) != NULL)
+		origdir = savestr(pathbuf);
+	else {
+		warn("getcwd");
+		origdir = savestr(".");
+	}
+
 	if (debug)
-		(void)printf("user = %s, homedir = %s\n", myname, homedir);
+		(void)printf("user = %s, homedir = %s, origdir = %s\n",
+		    myname, homedir, origdir);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: aic_pcmcia.c,v 1.33 2005/12/11 12:23:22 christos Exp $	*/
+/*	$NetBSD: aic_pcmcia.c,v 1.35.2.1 2007/05/16 20:24:12 jdc Exp $	*/
 
 /*
  * Copyright (c) 1997 Marc Horowitz.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic_pcmcia.c,v 1.33 2005/12/11 12:23:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic_pcmcia.c,v 1.35.2.1 2007/05/16 20:24:12 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,10 +85,8 @@ const size_t aic_pcmcia_nproducts =
     sizeof(aic_pcmcia_products) / sizeof(aic_pcmcia_products[0]);
 
 int
-aic_pcmcia_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+aic_pcmcia_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 
@@ -106,13 +104,15 @@ aic_pcmcia_validate_config(cfe)
 	    cfe->num_memspace != 0 ||
 	    cfe->num_iospace != 1)
 		return (EINVAL);
+/* XXX  Below line is a hack to get around an rbus resource allocation */
+/* XXX  problem.  It should be removed when the problem is fixed.      */
+	cfe->iomask = 0;
 	return (0);
 }
 
 void
-aic_pcmcia_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+aic_pcmcia_attach(struct device *parent, struct device *self,
+    void *aux)
 {
 	struct aic_pcmcia_softc *psc = (void *)self;
 	struct aic_softc *sc = &psc->sc_aic;

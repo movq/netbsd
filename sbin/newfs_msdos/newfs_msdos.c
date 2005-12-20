@@ -1,4 +1,4 @@
-/*	$NetBSD: newfs_msdos.c,v 1.19 2005/04/16 14:40:36 tsutsui Exp $	*/
+/*	$NetBSD: newfs_msdos.c,v 1.24 2006/11/25 12:29:33 scw Exp $	*/
 
 /*
  * Copyright (c) 1998 Robert Nordier
@@ -33,7 +33,7 @@
 static const char rcsid[] =
   "$FreeBSD: src/sbin/newfs_msdos/newfs_msdos.c,v 1.15 2000/10/10 01:49:37 wollman Exp $";
 #else
-__RCSID("$NetBSD: newfs_msdos.c,v 1.19 2005/04/16 14:40:36 tsutsui Exp $");
+__RCSID("$NetBSD: newfs_msdos.c,v 1.24 2006/11/25 12:29:33 scw Exp $");
 #endif
 #endif /* not lint */
 
@@ -68,7 +68,7 @@ __RCSID("$NetBSD: newfs_msdos.c,v 1.19 2005/04/16 14:40:36 tsutsui Exp $");
 #define NPB	  2		/* nibbles per byte */
 
 #define DOSMAGIC  0xaa55	/* DOS magic number */
-#define MINBPS	  128		/* minimum bytes per sector */
+#define MINBPS	  512		/* minimum bytes per sector */
 #define MAXSPC	  128		/* maximum sectors per cluster */
 #define MAXNFT	  16		/* maximum number of FATs */
 #define DEFBLK	  4096		/* default block size */
@@ -176,20 +176,23 @@ struct bpb {
     u_int bkbs; 		/* backup boot sector */
 };
 
+#define INIT(a, b, c, d, e, f, g, h, i, j) \
+    { .bps = a, .spc = b, .res = c, .nft = d, .rde = e, \
+      .sec = f, .mid = g, .spf = h, .spt = i, .hds = j, }
 static struct {
     const char *name;
     struct bpb bpb;
 } stdfmt[] = {
-    {"160",  {512, 1, 1, 2,  64,  320, 0xfe, 1,  8, 1}},
-    {"180",  {512, 1, 1, 2,  64,  360, 0xfc, 2,  9, 1}},
-    {"320",  {512, 2, 1, 2, 112,  640, 0xff, 1,  8, 2}},
-    {"360",  {512, 2, 1, 2, 112,  720, 0xfd, 2,  9, 2}},
-    {"640",  {512, 2, 1, 2, 112, 1280, 0xfb, 2,  8, 2}},    
-    {"720",  {512, 2, 1, 2, 112, 1440, 0xf9, 3,  9, 2}},
-    {"1200", {512, 1, 1, 2, 224, 2400, 0xf9, 7, 15, 2}},
-    {"1232", {1024,1, 1, 2, 192, 1232, 0xfe, 2,  8, 2}},    
-    {"1440", {512, 1, 1, 2, 224, 2880, 0xf0, 9, 18, 2}},
-    {"2880", {512, 2, 1, 2, 240, 5760, 0xf0, 9, 36, 2}}
+    {"160",  INIT(512, 1, 1, 2,  64,  320, 0xfe, 1,  8, 1)},
+    {"180",  INIT(512, 1, 1, 2,  64,  360, 0xfc, 2,  9, 1)},
+    {"320",  INIT(512, 2, 1, 2, 112,  640, 0xff, 1,  8, 2)},
+    {"360",  INIT(512, 2, 1, 2, 112,  720, 0xfd, 2,  9, 2)},
+    {"640",  INIT(512, 2, 1, 2, 112, 1280, 0xfb, 2,  8, 2)},    
+    {"720",  INIT(512, 2, 1, 2, 112, 1440, 0xf9, 3,  9, 2)},
+    {"1200", INIT(512, 1, 1, 2, 224, 2400, 0xf9, 7, 15, 2)},
+    {"1232", INIT(1024,1, 1, 2, 192, 1232, 0xfe, 2,  8, 2)},    
+    {"1440", INIT(512, 1, 1, 2, 224, 2880, 0xf0, 9, 18, 2)},
+    {"2880", INIT(512, 2, 1, 2, 240, 5760, 0xf0, 9, 36, 2)}
 };
 
 static u_int8_t bootcode[] = {
@@ -668,17 +671,17 @@ main(int argc, char *argv[])
 		    setstr(bs->oem, opt_O ? opt_O : "NetBSD",
 			   sizeof(bs->oem));
 		    memcpy(img + x1, bootcode, sizeof(bootcode));
-		    mk2(img + bpb.bps - 2, DOSMAGIC);
+		    mk2(img + MINBPS - 2, DOSMAGIC);
 		}
 	    } else if (fat == 32 && bpb.infs != MAXU16 &&
 		       (lsn == bpb.infs ||
 			(bpb.bkbs != MAXU16 &&
 			 lsn == bpb.bkbs + bpb.infs))) {
 		mk4(img, 0x41615252);
-		mk4(img + bpb.bps - 28, 0x61417272);
-		mk4(img + bpb.bps - 24, 0xffffffff);
-		mk4(img + bpb.bps - 20, bpb.rdcl);
-		mk2(img + bpb.bps - 2, DOSMAGIC);
+		mk4(img + MINBPS - 28, 0x61417272);
+		mk4(img + MINBPS - 24, 0xffffffff);
+		mk4(img + MINBPS - 20, bpb.rdcl);
+		mk2(img + MINBPS - 2, DOSMAGIC);
 	    } else if (lsn >= bpb.res && lsn < dir &&
 		       !((lsn - bpb.res) %
 			 (bpb.spf ? bpb.spf : bpb.bspf))) {
@@ -759,15 +762,19 @@ getdiskinfo(int fd, const char *fname, const char *dtype, int oflag,
 {
 #ifdef __FreeBSD__
     struct diskslices ds;
+    int slice = -1;
+#define NO_SLICE (slice == -1)
+#else
+#define NO_SLICE 0
 #endif
     struct disklabel dl, *lp;
     const char *s1, *s2;
     char *s;
-    int slice, part, fd1, i, e;
+    int part, fd1, i, e;
     int maxpartitions;
     u_int nsectors, ntracks;
 
-    slice = part = -1;
+    part = -1;
     s1 = fname;
     if ((s2 = strrchr(s1, '/')))
 	s1 = s2 + 1;
@@ -818,12 +825,12 @@ getdiskinfo(int fd, const char *fname, const char *dtype, int oflag,
 	    bpb->bsec = ds.dss_slices[slice].ds_size;
     }
 #endif
-    if (((slice == -1 || part != -1) &&
+    if (((NO_SLICE || part != -1) &&
 	 ((!oflag && part != -1) || !bpb->bsec)) ||
 	!bpb->bps || !bpb->spt || !bpb->hds) {
 	lp = &dl;
 	i = ioctl(fd, DIOCGDINFO, lp);
-	if (i == -1 && slice != -1 && part == -1) {
+	if (i == -1 && !NO_SLICE && part == -1) {
 	    e = errno;
 	    if (!(s = strdup(fname)))
 		err(1, NULL);
@@ -843,9 +850,11 @@ getdiskinfo(int fd, const char *fname, const char *dtype, int oflag,
 	    } else if (!(lp = getdiskbyname(dtype)))
 		errx(1, "%s: unknown disk type", dtype);
 	}
-	if (slice == -1 || part != -1) {
+	if (NO_SLICE || part != -1) {
+#ifdef __FreeBSD__
 	    if (part == -1)
 		part = RAW_PART;
+#endif
 	    if (part >= lp->d_npartitions ||
 		!lp->d_partitions[part].p_size)
 		errx(1, "%s: partition is unavailable", fname);

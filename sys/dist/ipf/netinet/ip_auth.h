@@ -1,11 +1,11 @@
-/*	$NetBSD: ip_auth.h,v 1.2 2005/12/11 12:24:21 christos Exp $	*/
+/*	$NetBSD: ip_auth.h,v 1.3.12.2 2007/07/16 11:05:40 liamjfoy Exp $	*/
 
 /*
  * Copyright (C) 1997-2001 by Darren Reed & Guido Van Rooij.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: ip_auth.h,v 2.16 2003/07/25 12:29:56 darrenr Exp
+ * Id: ip_auth.h,v 2.16.2.3 2006/07/14 06:12:05 darrenr Exp
  *
  */
 #ifndef _NETINET_IP_AUTH_H_
@@ -22,13 +22,16 @@ typedef struct  frauth {
 	char	*fra_buf;
 #ifdef	MENTAT
 	queue_t	*fra_q;
+	mb_t	*fra_m;
 #endif
 } frauth_t;
 
 typedef	struct	frauthent  {
 	struct	frentry	fae_fr;
 	struct	frauthent	*fae_next;
+	struct	frauthent	**fae_pnext;
 	u_long	fae_age;
+	int	fae_ref;
 } frauthent_t;
 
 typedef struct  fr_authstat {
@@ -61,6 +64,7 @@ extern	int	fr_authflush __P((void));
 extern	mb_t	**fr_authpkts;
 extern	int	fr_newauth __P((mb_t *, fr_info_t *));
 extern	int	fr_preauthcmd __P((ioctlcmd_t, frentry_t *, frentry_t **));
-extern	int	fr_auth_ioctl __P((caddr_t, ioctlcmd_t, int));
+extern	int	fr_auth_ioctl __P((void *, ioctlcmd_t, int, int, void *));
+extern	int	fr_auth_waiting __P((void));
 
 #endif	/* __IP_AUTH_H__ */

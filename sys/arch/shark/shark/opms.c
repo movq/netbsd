@@ -1,4 +1,4 @@
-/*      $NetBSD: opms.c,v 1.15 2005/12/11 12:19:05 christos Exp $        */
+/*      $NetBSD: opms.c,v 1.17 2006/03/29 04:16:47 thorpej Exp $        */
 
 /*
  * Copyright 1997
@@ -91,7 +91,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.15 2005/12/11 12:19:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.17 2006/03/29 04:16:47 thorpej Exp $");
 
 #include "opms.h"
 #if NOPMS > 1
@@ -270,9 +270,9 @@ opmsprobe(parent, match, aux)
     ** the console drivers. (We really wish we could be the
     ** child of a real keyboard controller driver.)
     */
-    if ((parent != NULL) &&
-        (!strcmp(parent->dv_cfdata->cf_name, "pc") ||
-         (!strcmp(parent->dv_cfdata->cf_name, "vt"))))
+    if (parent != NULL &&
+        (device_is_a(parent, "pc") ||
+         device_is_a(parent, "vt")))
     {
         /* 
         ** The mouse shares registers with the parent, so
@@ -362,7 +362,7 @@ opmsattach(parent, self, aux)
     void          *aux;
 {
     struct opms_softc          *sc = (void *)self;
-    int                       irq = self->dv_cfdata->cf_loc[SPCKBDCF_IRQ];
+    int                       irq = device_cfdata(self)->cf_loc[SPCKBDCF_IRQ];
     struct isa_attach_args    *ia = aux;                   
 
     printf(" irq %d\n", irq);

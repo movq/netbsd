@@ -1,4 +1,4 @@
-/*	$NetBSD: column.c,v 1.13 2005/12/17 18:10:55 christos Exp $	*/
+/*	$NetBSD: column.c,v 1.15.2.1 2006/12/18 14:46:35 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)column.c	8.4 (Berkeley) 5/4/95";
 #endif
-__RCSID("$NetBSD: column.c,v 1.13 2005/12/17 18:10:55 christos Exp $");
+__RCSID("$NetBSD: column.c,v 1.15.2.1 2006/12/18 14:46:35 tron Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -53,13 +53,12 @@ __RCSID("$NetBSD: column.c,v 1.13 2005/12/17 18:10:55 christos Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <util.h>
 
 #define	TAB	8
+#define TABROUND(l) 	(((l) + TAB) & ~(TAB - 1))
 
 static void  c_columnate(void);
-static void *emalloc(size_t);
-static void *erealloc(void *, size_t);
-static char *estrdup(const char *);
 static void  input(FILE *);
 static void  maketbl(void);
 static void  print(void);
@@ -126,7 +125,7 @@ main(int argc, char **argv)
 	if (!entries)
 		return eval;
 
-	maxlength = (maxlength + TAB) & ~(TAB - 1);
+	maxlength = TABROUND(maxlength);
 	if (tflag)
 		maketbl();
 	else if (maxlength >= termwidth)
@@ -155,7 +154,7 @@ c_columnate(void)
 			endcol = maxlength;
 			(void)putchar('\n');
 		} else {
-			while ((cnt = ((chcnt + TAB) & ~(TAB - 1))) <= endcol) {
+			while ((cnt = TABROUND(chcnt)) <= endcol) {
 				(void)putchar('\t');
 				chcnt = cnt;
 			}
@@ -182,7 +181,7 @@ r_columnate(void)
 			chcnt += printf("%s", list[base]);
 			if ((base += numrows) >= entries)
 				break;
-			while ((cnt = ((chcnt + TAB) & ~(TAB - 1))) <= endcol) {
+			while ((cnt = TABROUND(chcnt)) <= endcol) {
 				(void)putchar('\t');
 				chcnt = cnt;
 			}
@@ -218,9 +217,9 @@ maketbl(void)
 	TBL *tbl;
 	char **cols, **ncols;
 
-	t = tbl = emalloc(entries * sizeof(TBL));
-	cols = emalloc((maxcols = DEFCOLS) * sizeof(char *));
-	lens = emalloc(maxcols * sizeof(int));
+	t = tbl = ecalloc(entries, sizeof(TBL));
+	cols = ecalloc((maxcols = DEFCOLS), sizeof(char *));
+	lens = ecalloc(maxcols, sizeof(int));
 	for (cnt = 0, lp = list; cnt < entries; ++cnt, ++lp, ++t) {
 		for (coloff = 0, p = *lp;
 		    (cols[coloff] = strtok(p, separator)) != NULL;
@@ -232,12 +231,12 @@ maketbl(void)
 				    DEFCOLS * sizeof(int));
 				cols = ncols;
 				lens = nlens;
-				(void)memset((char *)(void *)lens + maxcols *
-				    sizeof(int), 0, DEFCOLS * sizeof(int));
+				(void)memset(lens + maxcols, 0,
+				    DEFCOLS * sizeof(int));
 				maxcols += DEFCOLS;
 			}
-		t->list = emalloc(coloff * sizeof(char *));
-		t->len = emalloc(coloff * sizeof(int));
+		t->list = ecalloc(coloff, sizeof(char *));
+		t->len = ecalloc(coloff, sizeof(int));
 		for (t->cols = coloff; --coloff >= 0;) {
 			t->list[coloff] = cols[coloff];
 			t->len[coloff] = strlen(cols[coloff]);
@@ -251,6 +250,9 @@ maketbl(void)
 			    lens[coloff] - t->len[coloff] + 2, " ");
 		(void)printf("%s\n", t->list[coloff]);
 	}
+	free(tbl);
+	free(cols);
+	free(lens);
 }
 
 #define	DEFNUM		1000
@@ -265,7 +267,7 @@ input(FILE *fp)
 	char **n;
 
 	if (!list)
-		list = emalloc((maxentry = DEFNUM) * sizeof(char *));
+		list = ecalloc((maxentry = DEFNUM), sizeof(char *));
 	while (fgets(buf, MAXLINELEN, fp)) {
 		for (p = buf; *p && isspace((unsigned char)*p); ++p);
 		if (!*p)
@@ -286,37 +288,6 @@ input(FILE *fp)
 		}
 		list[entries++] = estrdup(buf);
 	}
-}
-
-static void *
-emalloc(size_t size)
-{
-	void *p;
-
-	if ((p = malloc(size)) == NULL)
-		err(1, "malloc");
-	(void)memset(p, 0, size);
-	return (p);
-}
-
-static void *
-erealloc(void *op, size_t size)
-{
-	void *p;
-
-	if ((p = realloc(op, size)) == NULL)
-		err(1, "realloc");
-	return p;
-}
-
-static char *
-estrdup(const char *str)
-{
-	char *p;
-
-	if ((p = strdup(str)) == NULL)
-		err(1, "strdup");
-	return p;
 }
 
 static void

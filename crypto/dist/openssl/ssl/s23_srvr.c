@@ -140,7 +140,7 @@ IMPLEMENT_ssl23_meth_func(SSLv23_server_method,
 int ssl23_accept(SSL *s)
 	{
 	BUF_MEM *buf;
-	unsigned long Time=time(NULL);
+	unsigned long Time=(unsigned long)time(NULL);
 	void (*cb)(const SSL *ssl,int type,int val)=NULL;
 	int ret= -1;
 	int new_state,state;
@@ -565,7 +565,6 @@ int ssl23_get_client_hello(SSL *s)
 	s->init_num=0;
 
 	if (buf != buf_space) OPENSSL_free(buf);
-	s->first_packet=1;
 	return(SSL_accept(s));
 err:
 	if (buf != buf_space) OPENSSL_free(buf);

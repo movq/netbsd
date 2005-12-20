@@ -1,4 +1,4 @@
-/*	$NetBSD: joy.c,v 1.9 2005/12/11 12:21:27 christos Exp $	*/
+/*	$NetBSD: joy.c,v 1.13 2006/11/16 01:32:51 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995 Jean-Marc Zucconi
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: joy.c,v 1.9 2005/12/11 12:21:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: joy.c,v 1.13 2006/11/16 01:32:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,7 +74,7 @@ dev_type_ioctl(joyioctl);
 
 const struct cdevsw joy_cdevsw = {
 	joyopen, joyclose, joyread, nowrite, joyioctl,
-	nostop, notty, nopoll, nommap, nokqfilter,
+	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER,
 };
 
 void
@@ -91,14 +91,12 @@ joyattach(sc)
 }
 
 int
-joydetach(sc, flags)
-	struct joy_softc *sc;
-	int flags;
+joydetach(struct joy_softc *sc, int flags)
 {
 	int maj, mn;
 
 	maj = cdevsw_lookup_major(&joy_cdevsw);
-	mn = sc->sc_dev.dv_unit << 1;
+	mn = device_unit(&sc->sc_dev) << 1;
 	vdevgone(maj, mn, mn, VCHR);
 	vdevgone(maj, mn + 1, mn + 1, VCHR);
 
@@ -106,10 +104,7 @@ joydetach(sc, flags)
 }
 
 int
-joyopen(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+joyopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	int unit = JOYUNIT(dev);
 	int i = JOYPART(dev);
@@ -130,10 +125,8 @@ joyopen(dev, flag, mode, l)
 }
 
 int
-joyclose(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+joyclose(dev_t dev, int flag, int mode,
+    struct lwp *l)
 {
 	int unit = JOYUNIT(dev);
 	int i = JOYPART(dev);
@@ -144,10 +137,7 @@ joyclose(dev, flag, mode, l)
 }
 
 int
-joyread(dev, uio, flag)
-	dev_t dev;
-	struct uio *uio;
-	int flag;
+joyread(dev_t dev, struct uio *uio, int flag)
 {
 	int unit = JOYUNIT(dev);
 	struct joy_softc *sc = joy_cd.cd_devs[unit];
@@ -189,12 +179,8 @@ joyread(dev, uio, flag)
 }
 
 int
-joyioctl(dev, cmd, data, flag, l)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct lwp *l;
+joyioctl(dev_t dev, u_long cmd, caddr_t data, int flag,
+    struct lwp *l)
 {
 	int unit = JOYUNIT(dev);
 	struct joy_softc *sc = joy_cd.cd_devs[unit];

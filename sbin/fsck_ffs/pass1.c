@@ -1,4 +1,4 @@
-/*	$NetBSD: pass1.c,v 1.40 2005/12/05 23:59:43 christos Exp $	*/
+/*	$NetBSD: pass1.c,v 1.43 2006/11/14 21:01:46 apb Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)pass1.c	8.6 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: pass1.c,v 1.40 2005/12/05 23:59:43 christos Exp $");
+__RCSID("$NetBSD: pass1.c,v 1.43 2006/11/14 21:01:46 apb Exp $");
 #endif
 #endif /* not lint */
 
@@ -137,8 +137,10 @@ pass1(void)
 				}
 				break;
 			}
+#ifdef notdef
 			if (inosused < 0)
 				inosused = 0;
+#endif
 		}
 		/*
 		 * Allocate inoinfo structures for the allocated inodes.
@@ -195,9 +197,7 @@ pass1(void)
 		inostathead[c].il_stat = info;
 	}
 #ifdef PROGRESS
-	if (preen)
-		progress_add(sblock->fs_ncg);
-	else
+	if (!preen)
 		progress_done();
 #endif /* PROGRESS */
 	freeinodebuf();
@@ -260,9 +260,9 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 	}
 	if (!preen && mode == IFMT && reply("HOLD BAD BLOCK") == 1) {
 		dp = ginode(inumber);
-		DIP(dp, size) = iswap64(sblock->fs_fsize);
+		DIP_SET(dp, size, iswap64(sblock->fs_fsize));
 		size = sblock->fs_fsize;
-		DIP(dp, mode) = iswap16(IFREG|0600);
+		DIP_SET(dp, mode, iswap16(IFREG|0600));
 		inodirty();
 	}
 	ndb = howmany(size, sblock->fs_bsize);
@@ -298,7 +298,7 @@ checkinode(ino_t inumber, struct inodesc *idesc)
 			}
 			dp = ginode(inumber);
 			memmove(dp->dp1.di_db, symbuf, (long)size);
-			DIP(dp, blocks) = 0;
+			DIP_SET(dp, blocks, 0);
 			inodirty();
 		}
 		/*

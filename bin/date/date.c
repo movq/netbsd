@@ -1,4 +1,4 @@
-/* $NetBSD: date.c,v 1.42 2005/07/22 14:27:08 peter Exp $ */
+/* $NetBSD: date.c,v 1.49 2006/11/20 20:35:14 christos Exp $ */
 
 /*
  * Copyright (c) 1985, 1987, 1988, 1993
@@ -40,7 +40,7 @@ __COPYRIGHT(
 #if 0
 static char sccsid[] = "@(#)date.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: date.c,v 1.42 2005/07/22 14:27:08 peter Exp $");
+__RCSID("$NetBSD: date.c,v 1.49 2006/11/20 20:35:14 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -63,29 +63,40 @@ __RCSID("$NetBSD: date.c,v 1.42 2005/07/22 14:27:08 peter Exp $");
 #include "extern.h"
 
 static time_t tval;
-static int aflag, rflag, nflag;
+static int aflag, jflag, rflag, nflag;
 int retval;
 
 static void badformat(void);
 static void badtime(void);
+static void badvalue(const char *);
 static void setthetime(const char *);
 static void usage(void);
 
 int
 main(int argc, char *argv[])
 {
-	char buf[1024];
+	char *buf;
+	size_t bufsiz;
 	const char *format;
 	int ch;
 
 	setprogname(argv[0]);
 	(void)setlocale(LC_ALL, "");
 
-	while ((ch = getopt(argc, argv, "anr:u")) != -1) {
+	while ((ch = getopt(argc, argv, "ad:jnr:u")) != -1) {
 		switch (ch) {
 		case 'a':		/* adjust time slowly */
 			aflag = 1;
 			nflag = 1;
+			break;
+		case 'd':
+			rflag = 1;
+			tval = parsedate(optarg, NULL, NULL);
+			if (tval == -1)
+				errx(1, "Cannot parse `%s'", optarg);
+			break;
+		case 'j':		/* don't set time */
+			jflag = 1;
 			break;
 		case 'n':		/* don't set network */
 			nflag = 1;
@@ -123,10 +134,16 @@ main(int argc, char *argv[])
 	if (*argv && **argv == '+')
 		format = *argv + 1;
 
-	(void)strftime(buf, sizeof(buf), format, localtime(&tval));
+	if ((buf = malloc(bufsiz = 1024)) == NULL)
+		goto bad;
+	while (strftime(buf, bufsiz, format, localtime(&tval)) == 0)
+		if ((buf = realloc(buf, bufsiz <<= 1)) == NULL)
+			goto bad;
 	(void)printf("%s\n", buf);
-	exit(retval);
-	/* NOTREACHED */
+	free(buf);
+	return 0;
+bad:
+	err(1, "Cannot allocate format buffer");
 }
 
 static void
@@ -141,6 +158,13 @@ badtime(void)
 {
 	errx(EXIT_FAILURE, "illegal time");
 	/* NOTREACHED */
+}
+
+static void
+badvalue(const char *param)
+{
+	warnx("invalid %s supplied", param);
+	usage();
 }
 
 #define ATOI2(s) ((s) += 2, ((s)[-2] - '0') * 10 + ((s)[-1] - '0'))
@@ -174,6 +198,8 @@ setthetime(const char *p)
 			badformat();
 		++dot;
 		lt->tm_sec = ATOI2(dot);
+		if (lt->tm_sec > 61)
+			badvalue("seconds");
 	} else {
 		len = 0;
 		lt->tm_sec = 0;
@@ -183,6 +209,8 @@ setthetime(const char *p)
 	switch (strlen(p) - len) {
 	case 12:				/* cc */
 		lt->tm_year = ATOI2(p) * 100 - TM_YEAR_BASE;
+		if (lt->tm_year < 0)
+			badtime();
 		yearset = 1;
 		/* FALLTHROUGH */
 	case 10:				/* yy */
@@ -198,16 +226,50 @@ setthetime(const char *p)
 		/* FALLTHROUGH */
 	case 8:					/* mm */
 		lt->tm_mon = ATOI2(p);
+		if (lt->tm_mon > 12 || lt->tm_mon == 0)
+			badvalue("month");
 		--lt->tm_mon;			/* time struct is 0 - 11 */
 		/* FALLTHROUGH */
 	case 6:					/* dd */
 		lt->tm_mday = ATOI2(p);
+		switch (lt->tm_mon) {
+		case 0:
+		case 2:
+		case 4:
+		case 6:
+		case 7:
+		case 9:
+		case 11:
+			if (lt->tm_mday > 31 || lt->tm_mday == 0)
+				badvalue("day of month");
+			break;
+		case 3:
+		case 5:
+		case 8:
+		case 10:
+			if (lt->tm_mday > 30 || lt->tm_mday == 0)
+				badvalue("day of month");
+			break;
+		case 1:
+			if (lt->tm_mday > 29 || lt->tm_mday == 0 ||
+			    (lt->tm_mday == 29 &&
+			     !isleap(lt->tm_year + TM_YEAR_BASE)))
+				badvalue("day of month");
+			break;
+		default:
+			badvalue("month");
+			break;
+		}
 		/* FALLTHROUGH */
 	case 4:					/* hh */
 		lt->tm_hour = ATOI2(p);
+		if (lt->tm_hour > 23)
+			badvalue("hour");
 		/* FALLTHROUGH */
 	case 2:					/* mm */
 		lt->tm_min = ATOI2(p);
+		if (lt->tm_min > 59)
+			badvalue("minute");
 		break;
 	case 0:					/* was just .sss */
 		if (len != 0)
@@ -221,6 +283,12 @@ setthetime(const char *p)
 	if ((new_time = mktime(lt)) == -1)
 		badtime();
 
+	/* if jflag is set, don't actually change the time, just return */
+	if (jflag) {
+		tval = new_time;
+		return;
+	}
+
 	/* set the time */
 	if (nflag || netsettime(new_time)) {
 		logwtmp("|", "date", "");
@@ -228,13 +296,13 @@ setthetime(const char *p)
 			tv.tv_sec = new_time - tval;
 			tv.tv_usec = 0;
 			if (adjtime(&tv, NULL))
-				err(EXIT_FAILURE, "date: adjtime");
+				err(EXIT_FAILURE, "adjtime");
 		} else {
 			tval = new_time;
 			tv.tv_sec = tval;
 			tv.tv_usec = 0;
 			if (settimeofday(&tv, NULL))
-				err(EXIT_FAILURE, "date: settimeofday");
+				err(EXIT_FAILURE, "settimeofday");
 		}
 		logwtmp("{", "date", "");
 	}
@@ -248,9 +316,8 @@ static void
 usage(void)
 {
 	(void)fprintf(stderr,
-	    "usage: %s [-u] [-r seconds] [+format]\n", getprogname());
-	(void)fprintf(stderr, "       %s [-anu] [[[[[cc]yy]mm]dd]hh]mm[.ss]\n",
-	    getprogname());
+	    "usage: %s [-ajnu] [-d date] [-r seconds] [+format]", getprogname());
+	(void)fprintf(stderr, " [[[[[[CC]yy]mm]dd]HH]MM[.SS]]\n");
 	exit(EXIT_FAILURE);
 	/* NOTREACHED */
 }

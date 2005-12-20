@@ -1,4 +1,4 @@
-/*	$NetBSD: edit.c,v 1.17 2005/09/11 22:23:42 christos Exp $	*/
+/*	$NetBSD: edit.c,v 1.20 2006/05/14 01:09:03 christos Exp $	*/
 
 /*
  * Command line editing - common code
@@ -7,7 +7,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: edit.c,v 1.17 2005/09/11 22:23:42 christos Exp $");
+__RCSID("$NetBSD: edit.c,v 1.20 2006/05/14 01:09:03 christos Exp $");
 #endif
 
 
@@ -503,6 +503,8 @@ x_print_expansions(nwords, words, is_command)
 	int prefix_len;
 	XPtrV l;
 
+	l.beg = NULL;
+
 	/* Check if all matches are in the same directory (in this
 	 * case, we want to omit the directory name)
 	 */
@@ -617,13 +619,18 @@ x_file_glob(flags, str, slen, wordsp)
 		    || words[0][0] == '\0')
 		{
 			x_free_words(nwords, words);
+			words = NULL;
 			nwords = 0;
 		}
 	}
 	afree(toglob, ATEMP);
 
-	*wordsp = nwords ? words : (char **) 0;
-
+	if (nwords) {
+		*wordsp = words;
+	} else if (words) {
+		x_free_words(nwords, words);
+		*wordsp = NULL;
+	}
 	return nwords;
 }
 

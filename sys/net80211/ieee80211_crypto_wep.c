@@ -34,7 +34,7 @@
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_crypto_wep.c,v 1.7 2005/06/10 16:11:24 sam Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_wep.c,v 1.4 2005/11/18 16:57:22 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_wep.c,v 1.7 2006/11/16 01:33:40 christos Exp $");
 #endif
 
 /*
@@ -50,6 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: ieee80211_crypto_wep.c,v 1.4 2005/11/18 16:57:22 skr
 #include <sys/socket.h>
 
 #include <net/if.h>
+#include <net/if_ether.h>
 #include <net/if_media.h>
 
 #include <net80211/ieee80211_var.h>
@@ -198,7 +199,8 @@ wep_encap(struct ieee80211_key *k, struct mbuf *m, u_int8_t keyid)
  * Add MIC to the frame as needed.
  */
 static int
-wep_enmic(struct ieee80211_key *k, struct mbuf *m, int force)
+wep_enmic(struct ieee80211_key *k, struct mbuf *m,
+    int force)
 {
 
 	return 1;
@@ -245,7 +247,8 @@ wep_decap(struct ieee80211_key *k, struct mbuf *m, int hdrlen)
  * Verify and strip MIC from the frame.
  */
 static int
-wep_demic(struct ieee80211_key *k, struct mbuf *skb, int force)
+wep_demic(struct ieee80211_key *k, struct mbuf *skb,
+    int force)
 {
 	return 1;
 }

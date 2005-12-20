@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_defs.h,v 1.48 2005/09/14 14:06:11 tron Exp $	*/
+/*	$NetBSD: compat_defs.h,v 1.57.2.1 2007/08/30 22:37:36 pavel Exp $	*/
 
 #ifndef	__NETBSD_COMPAT_DEFS_H__
 #define	__NETBSD_COMPAT_DEFS_H__
@@ -111,6 +111,8 @@ struct passwd;
 #define __dead
 #undef __restrict
 #define __restrict
+#undef __unused
+#define __unused
 
 /* Dirent support. */
 
@@ -122,6 +124,9 @@ struct passwd;
 #  undef d_fileno
 # else
 #  include <dirent.h>
+#  if defined(__DARWIN_UNIX03)
+#   undef d_fileno
+#  endif
 # endif
 # define NAMLEN(dirent) (strlen((dirent)->d_name))
 #else
@@ -195,6 +200,8 @@ char *dirname(char *);
 #if !HAVE_DIRFD
 #if HAVE_DIR_DD_FD
 #define dirfd(dirp) ((dirp)->dd_fd)
+#elif HAVE_DIR___DD_FD
+#define dirfd(dirp) ((dirp)->__dd_fd)
 #else
 /*XXX: Very hacky but no other way to bring this into scope w/o defining
   _NETBSD_SOURCE which we're avoiding. */
@@ -222,6 +229,19 @@ void err(int, const char *, ...);
 void errx(int, const char *, ...);
 void warn(const char *, ...);
 void warnx(const char *, ...);
+#endif
+
+#if !HAVE_ESETFUNC
+void (*esetfunc(void (*)(int, const char *, ...)))(int, const char *, ...);
+size_t estrlcpy(char *, const char *, size_t);
+size_t estrlcat(char *, const char *, size_t);
+char *estrdup(const char *);
+void *ecalloc(size_t, size_t);
+void *emalloc(size_t);
+void *erealloc(void *, size_t);
+FILE *efopen(const char *, const char *);
+int easprintf(char **, const char *, ...);
+int evasprintf(char **, const char *, va_list);
 #endif
 
 #if !HAVE_FGETLN || defined(__NetBSD__)
@@ -275,19 +295,19 @@ int lchown(const char *, uid_t, gid_t);
 #define __nbcompat_bswap64(x)	(((u_int64_t)bswap32((x)) << 32) | \
 				 ((u_int64_t)bswap32((x) >> 32)))
 
-#if !HAVE_BSWAP16
+#if ! HAVE_DECL_BSWAP16
 #ifdef bswap16
 #undef bswap16
 #endif
 #define bswap16(x)	__nbcompat_bswap16(x)
 #endif
-#if !HAVE_BSWAP32
+#if ! HAVE_DECL_BSWAP32
 #ifdef bswap32
 #undef bswap32
 #endif
 #define bswap32(x)	__nbcompat_bswap32(x)
 #endif
-#if !HAVE_BSWAP64
+#if ! HAVE_DECL_BSWAP64
 #ifdef bswap64
 #undef bswap64
 #endif
@@ -363,11 +383,15 @@ size_t strlcat(char *, const char *, size_t);
 size_t strlcpy(char *, const char *, size_t);
 #endif
 
+#if !HAVE_STRMODE
+void strmode(mode_t, char *);
+#endif
+
 #if !HAVE_STRSEP || defined(__NetBSD__)
 char *strsep(char **, const char *);
 #endif
 
-#if !HAVE_STRSUFTOLL
+#if !HAVE_DECL_STRSUFTOLL
 long long strsuftoll(const char *, const char *, long long, long long);
 long long strsuftollx(const char *, const char *,
 			long long, long long, char *, size_t);
@@ -477,9 +501,9 @@ void *setmode(const char *);
 
 /* <paths.h> */
 
-#ifndef _PATH_BSHELL
+/* The host's _PATH_BSHELL might be broken, so override it. */
+#undef _PATH_BSHELL
 #define _PATH_BSHELL PATH_BSHELL
-#endif
 #ifndef _PATH_DEFPATH
 #define _PATH_DEFPATH "/usr/bin:/bin:/usr/local/bin"
 #endif
@@ -561,62 +585,117 @@ int	 cgetustr(char *, const char *, char **);
 /* <sys/endian.h> */
 
 #if WORDS_BIGENDIAN
-#if !HAVE_HTOBE16
+#if !HAVE_DECL_HTOBE16
 #define htobe16(x)	(x)
 #endif
-#if !HAVE_HTOBE32
+#if !HAVE_DECL_HTOBE32
 #define htobe32(x)	(x)
 #endif
-#if !HAVE_HTOBE64
+#if !HAVE_DECL_HTOBE64
 #define htobe64(x)	(x)
 #endif
-#if !HAVE_HTOLE16
+#if !HAVE_DECL_HTOLE16
 #define htole16(x)	bswap16((u_int16_t)(x))
 #endif
-#if !HAVE_HTOLE32
+#if !HAVE_DECL_HTOLE32
 #define htole32(x)	bswap32((u_int32_t)(x))
 #endif
-#if !HAVE_HTOLE64
+#if !HAVE_DECL_HTOLE64
 #define htole64(x)	bswap64((u_int64_t)(x))
 #endif
 #else
-#if !HAVE_HTOBE16
+#if !HAVE_DECL_HTOBE16
 #define htobe16(x)	bswap16((u_int16_t)(x))
 #endif
-#if !HAVE_HTOBE32
+#if !HAVE_DECL_HTOBE32
 #define htobe32(x)	bswap32((u_int32_t)(x))
 #endif
-#if !HAVE_HTOBE64
+#if !HAVE_DECL_HTOBE64
 #define htobe64(x)	bswap64((u_int64_t)(x))
 #endif
-#if !HAVE_HTOLE16
+#if !HAVE_DECL_HTOLE16
 #define htole16(x)	(x)
 #endif
-#if !HAVE_HTOLE32
+#if !HAVE_DECL_HTOLE32
 #define htole32(x)	(x)
 #endif
-#if !HAVE_HTOLE64
+#if !HAVE_DECL_HTOLE64
 #define htole64(x)	(x)
 #endif
 #endif
-#if !HAVE_BE16TOH
+#if !HAVE_DECL_BE16TOH
 #define be16toh(x)	htobe16(x)
 #endif
-#if !HAVE_BE32TOH
+#if !HAVE_DECL_BE32TOH
 #define be32toh(x)	htobe32(x)
 #endif
-#if !HAVE_BE64TOH
+#if !HAVE_DECL_BE64TOH
 #define be64toh(x)	htobe64(x)
 #endif
-#if !HAVE_LE16TOH
+#if !HAVE_DECL_LE16TOH
 #define le16toh(x)	htole16(x)
 #endif
-#if !HAVE_LE32TOH
+#if !HAVE_DECL_LE32TOH
 #define le32toh(x)	htole32(x)
 #endif
-#if !HAVE_LE64TOH
+#if !HAVE_DECL_LE64TOH
 #define le64toh(x)	htole64(x)
 #endif
+
+#define __GEN_ENDIAN_ENC(bits, endian) \
+static void \
+endian ## bits ## enc(void *dst, uint ## bits ## _t u) \
+{ \
+	u = hto ## endian ## bits (u); \
+	memcpy(dst, &u, sizeof(u)); \
+}
+#if !HAVE_DECL_BE16ENC
+__GEN_ENDIAN_ENC(16, be)
+#endif
+#if !HAVE_DECL_BE32ENC
+__GEN_ENDIAN_ENC(32, be)
+#endif
+#if !HAVE_DECL_BE64ENC
+__GEN_ENDIAN_ENC(64, be)
+#endif
+#if !HAVE_DECL_LE16ENC
+__GEN_ENDIAN_ENC(16, le)
+#endif
+#if !HAVE_DECL_LE32ENC
+__GEN_ENDIAN_ENC(32, le)
+#endif
+#if !HAVE_DECL_LE64ENC
+__GEN_ENDIAN_ENC(64, le)
+#endif
+#undef __GEN_ENDIAN_ENC
+
+#define __GEN_ENDIAN_DEC(bits, endian) \
+static uint ## bits ## _t \
+endian ## bits ## dec(const void *buf) \
+{ \
+	uint ## bits ## _t u; \
+	memcpy(&u, buf, sizeof(u)); \
+	return endian ## bits ## toh (u); \
+}
+#if !HAVE_DECL_BE16DEC
+__GEN_ENDIAN_DEC(16, be)
+#endif
+#if !HAVE_DECL_BE32DEC
+__GEN_ENDIAN_DEC(32, be)
+#endif
+#if !HAVE_DECL_BE64DEC
+__GEN_ENDIAN_DEC(64, be)
+#endif
+#if !HAVE_DECL_LE16DEC
+__GEN_ENDIAN_DEC(16, le)
+#endif
+#if !HAVE_DECL_LE32DEC
+__GEN_ENDIAN_DEC(32, le)
+#endif
+#if !HAVE_DECL_LE64DEC
+__GEN_ENDIAN_DEC(64, le)
+#endif
+#undef __GEN_ENDIAN_DEC
 
 /* <sys/mman.h> */
 

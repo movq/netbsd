@@ -1,7 +1,7 @@
-/*	$NetBSD: gen-unix.h,v 1.1.1.1 2004/05/17 23:44:50 christos Exp $	*/
+/*	$NetBSD: gen-unix.h,v 1.1.1.3.4.1 2007/05/17 00:40:36 jdc Exp $	*/
 
 /*
- * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004, 2005  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -17,9 +17,10 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: gen-unix.h,v 1.12.12.3 2004/03/08 09:04:29 marka Exp */
+/* Id: gen-unix.h,v 1.14.18.3 2005/06/08 02:07:54 marka Exp */
 
-/*
+/*! \file
+ * \brief
  * This file is responsible for defining two operations that are not
  * directly portable between Unix-like systems and Windows NT, option
  * parsing and directory scanning.  It is here because it was decided
@@ -41,6 +42,10 @@
 
 #include <isc/boolean.h>
 #include <isc/lang.h>
+
+#ifdef NEED_OPTARG
+extern char *optarg;
+#endif
 
 #define isc_commandline_parse		getopt
 #define isc_commandline_argument 	optarg

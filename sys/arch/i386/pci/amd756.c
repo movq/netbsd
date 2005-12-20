@@ -1,4 +1,4 @@
-/*	$NetBSD: amd756.c,v 1.5 2005/12/11 12:17:43 christos Exp $	*/
+/*	$NetBSD: amd756.c,v 1.7 2006/11/16 01:32:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2001 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amd756.c,v 1.5 2005/12/11 12:17:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amd756.c,v 1.7 2006/11/16 01:32:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

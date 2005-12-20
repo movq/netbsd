@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_chu.c,v 1.3 2003/12/04 16:23:37 drochner Exp $	*/
+/*	$NetBSD: refclock_chu.c,v 1.6.4.1 2007/08/21 08:40:10 ghen Exp $	*/
 
 /*
  * refclock_chu - clock driver for Canadian CHU time/frequency station
@@ -210,12 +210,12 @@
 #define BAUD		300	/* modulation rate (bps) */
 #define OFFSET		128	/* companded sample offset */
 #define SIZE		256	/* decompanding table size */
-#define	MAXSIG		6000.	/* maximum signal level */
+#define	MAXAMP		6000.	/* maximum signal level */
 #define	MAXCLP		100	/* max clips above reference per s */
 #define LIMIT		1000.	/* soft limiter threshold */
 #define AGAIN		6.	/* baseband gain */
 #define LAG		10	/* discriminator lag */
-#define	DEVICE_AUDIO	"/dev/chu_audio" /* device name */
+#define	DEVICE_AUDIO	"/dev/audio" /* device name */
 #define	DESCRIPTION	"CHU Audio/Modem Receiver" /* WRU */
 #define	AUDIO_BUFSIZ	240	/* audio buffer size (30 ms) */
 #else
@@ -657,15 +657,15 @@ chu_audio_receive(
 		sample = up->comp[~*dpt++ & 0xff];
 
 		/*
-		 * Clip noise spikes greater than MAXSIG. If no clips,
+		 * Clip noise spikes greater than MAXAMP. If no clips,
 		 * increase the gain a tad; if the clips are too high, 
 		 * decrease a tad.
 		 */
-		if (sample > MAXSIG) {
-			sample = MAXSIG;
+		if (sample > MAXAMP) {
+			sample = MAXAMP;
 			up->clipcnt++;
-		} else if (sample < -MAXSIG) {
-			sample = -MAXSIG;
+		} else if (sample < -MAXAMP) {
+			sample = -MAXAMP;
 			up->clipcnt++;
 		}
 		chu_rf(peer, sample);
@@ -1114,7 +1114,7 @@ chu_b(
 		up->tstamp[up->ntstamp] = up->cstamp[i];
 		L_SUB(&up->tstamp[up->ntstamp], &offset);
 		L_ADD(&offset, &up->charstamp);
-		if (up->ntstamp < MAXSTAGE) 
+		if (up->ntstamp < MAXSTAGE - 1) 
 			up->ntstamp++;
 	}
 }
@@ -1218,7 +1218,7 @@ chu_a(
 			up->tstamp[up->ntstamp] = up->cstamp[i];
 			L_SUB(&up->tstamp[up->ntstamp], &offset);
 			L_ADD(&offset, &up->charstamp);
-			if (up->ntstamp < MAXSTAGE) 
+			if (up->ntstamp < MAXSTAGE - 1) 
 				up->ntstamp++;
 		}
 		while (temp > up->prevsec) {
@@ -1233,7 +1233,7 @@ chu_a(
 	}
 	i = -(2 * k);
 	for (j = 0; j < nchar; j++) {
-		if (i < 0 || i > 19) {
+		if (i < 0 || i > 18) {
 			i += 2;
 			continue;
 		}

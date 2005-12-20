@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.10 2005/12/11 12:19:15 christos Exp $ */
+/*	$NetBSD: syscall.c,v 1.18 2006/10/16 20:23:24 martin Exp $ */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -86,13 +86,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.10 2005/12/11 12:19:15 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.18 2006/10/16 20:23:24 martin Exp $");
 
 #define NEW_FPSTATE
 
-#include "opt_syscall_debug.h"
 #include "opt_ktrace.h"
-#include "opt_systrace.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -103,9 +101,6 @@ __KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.10 2005/12/11 12:19:15 christos Exp $"
 #include <sys/signal.h>
 #ifdef KTRACE
 #include <sys/ktrace.h>
-#endif
-#ifdef SYSTRACE
-#include <sys/systrace.h>
 #endif
 #include <sys/syscall.h>
 
@@ -133,8 +128,8 @@ union args {
 	register_t   r[MAXARGS];
 };
 
-static __inline int handle_old(struct trapframe64 *, register_t *);
-static __inline int getargs(struct proc *, struct trapframe64 *,
+static inline int handle_old(struct trapframe64 *, register_t *);
+static inline int getargs(struct proc *, struct trapframe64 *,
     register_t *, const struct sysent **, union args *, int *);
 void syscall_plain(struct trapframe64 *, register_t, register_t);
 void syscall_fancy(struct trapframe64 *, register_t, register_t);
@@ -142,7 +137,7 @@ void syscall_fancy(struct trapframe64 *, register_t, register_t);
 /*
  * Handle old style system calls.
  */
-static __inline int
+static inline int
 handle_old(struct trapframe64 *tf, register_t *code)
 {
 	int new = *code & (SYSCALL_G7RFLAG | SYSCALL_G2RFLAG);
@@ -166,7 +161,7 @@ handle_old(struct trapframe64 *tf, register_t *code)
  * of ``easy'' arguments as appropriate; we will copy the hard
  * ones later as needed.
  */
-static __inline int
+static inline int
 getargs(struct proc *p, struct trapframe64 *tf, register_t *code,
     const struct sysent **callp, union args *args, int *s64)
 {
@@ -194,7 +189,7 @@ getargs(struct proc *p, struct trapframe64 *tf, register_t *code,
 		break;
 	}
 
-	if (*code < 0 || *code >= p->p_emul->e_nsysent)
+	if (*code >= p->p_emul->e_nsysent)
 		return ENOSYS;
 
 	*callp += *code;
@@ -206,11 +201,15 @@ getargs(struct proc *p, struct trapframe64 *tf, register_t *code,
 #ifdef __arch64__
 		if ((p->p_flag & P_32) != 0) {
 			printf("syscall(): 64-bit stack but P_32 set\n");
+#ifdef DDB
 			Debugger();
+#endif
 		}
 #else
 		printf("syscall(): 64-bit stack on a 32-bit kernel????\n");
+#ifdef DDB
 		Debugger();
+#endif
 #endif
 #endif
 		i = (*callp)->sy_narg;
@@ -256,19 +255,11 @@ getargs(struct proc *p, struct trapframe64 *tf, register_t *code,
 void
 syscall_intern(struct proc *p)
 {
-#ifdef KTRACE
-	if (p->p_traceflag & (KTRFAC_SYSCALL | KTRFAC_SYSRET)) {
+
+	if (trace_is_enabled(p))
 		p->p_md.md_syscall = syscall_fancy;
-		return;
-	}
-#endif
-#ifdef SYSTRACE
-	if (ISSET(p->p_flag, P_SYSTRACE)) {
-		p->p_md.md_syscall = syscall_fancy;
-		return;
-	} 
-#endif
-	p->p_md.md_syscall = syscall_plain;
+	else
+		p->p_md.md_syscall = syscall_plain;
 }
 
 /*
@@ -306,13 +297,6 @@ syscall_plain(struct trapframe64 *tf, register_t code, register_t pc)
 	const struct sysent *callp;
 	struct lwp *l = curlwp;
 	union args args;
-#ifdef SYSCALL_DEBUG
-	union args *ap = NULL;
-#ifdef __arch64__
-	union args args64;
-	int i;
-#endif
-#endif
 	struct proc *p = l->l_proc;
 	int error, new;
 	register_t rval[2];
@@ -320,6 +304,7 @@ syscall_plain(struct trapframe64 *tf, register_t code, register_t pc)
 	vaddr_t opc, onpc;
 	int s64;
 
+	LWP_CACHE_CREDS(l, p);
 	uvmexp.syscalls++;
 	sticks = p->p_sticks;
 	l->l_md.md_tf = tf;
@@ -337,21 +322,6 @@ syscall_plain(struct trapframe64 *tf, register_t code, register_t pc)
 
 	if ((error = getargs(p, tf, &code, &callp, &args, &s64)) != 0)
 		goto bad;
-
-#ifdef SYSCALL_DEBUG
-#ifdef __arch64__
-	if (s64)
-		ap = &args;
-	else {
-		for (i = 0; i < callp->sy_narg; i++)
-			args64.l[i] = args.i[i];
-		ap = &args64;
-	}
-#else
-	ap = &args;
-#endif
-	scdebug_call(l, code, ap->r);
-#endif /* SYSCALL_DEBUG */
 
 	rval[0] = 0;
 	rval[1] = tf->tf_out[1];
@@ -397,11 +367,6 @@ syscall_plain(struct trapframe64 *tf, register_t code, register_t pc)
 		break;
 	}
 
-#ifdef SYSCALL_DEBUG
-	if (ap)
-		scdebug_ret(l, code, error, rval);
-#endif /* SYSCALL_DEBUG */
-
 	userret(l, pc, sticks);
 	share_fpu(l, tf);
 }
@@ -423,6 +388,7 @@ syscall_fancy(struct trapframe64 *tf, register_t code, register_t pc)
 	vaddr_t opc, onpc;
 	int s64;
 
+	LWP_CACHE_CREDS(l, p);
 	uvmexp.syscalls++;
 	sticks = p->p_sticks;
 	l->l_md.md_tf = tf;

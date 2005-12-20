@@ -1,11 +1,11 @@
-/*	$NetBSD: strftime.c,v 1.16 2004/05/12 23:03:11 kleink Exp $	*/
+/*	$NetBSD: strftime.c,v 1.17.4.1 2007/08/21 20:08:21 liamjfoy Exp $	*/
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
 #if 0
 static char	elsieid[] = "@(#)strftime.c	7.64";
 #else
-__RCSID("$NetBSD: strftime.c,v 1.16 2004/05/12 23:03:11 kleink Exp $");
+__RCSID("$NetBSD: strftime.c,v 1.17.4.1 2007/08/21 20:08:21 liamjfoy Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -181,7 +181,7 @@ label:
 				{
 				int warn2 = IN_SOME;
 
-				pt = _fmt(Locale->d_t_fmt, t, pt, ptlim, warnp);
+				pt = _fmt(Locale->d_t_fmt, t, pt, ptlim, &warn2);
 				if (warn2 == IN_ALL)
 					warn2 = IN_THIS;
 				if (warn2 > *warnp)
@@ -277,7 +277,8 @@ label:
 				pt = _fmt("%H:%M", t, pt, ptlim, warnp);
 				continue;
 			case 'r':
-				pt = _fmt("%I:%M:%S %p", t, pt, ptlim, warnp);
+				pt = _fmt(Locale->t_fmt_ampm, t, pt, ptlim,
+				       	warnp);
 				continue;
 			case 'S':
 				pt = _conv(t->tm_sec, "%02d", pt, ptlim);

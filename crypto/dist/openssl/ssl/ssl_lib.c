@@ -1201,7 +1201,6 @@ int SSL_set_cipher_list(SSL *s,const char *str)
 char *SSL_get_shared_ciphers(const SSL *s,char *buf,int len)
 	{
 	char *p;
-	const char *cp;
 	STACK_OF(SSL_CIPHER) *sk;
 	SSL_CIPHER *c;
 	int i;
@@ -1214,20 +1213,21 @@ char *SSL_get_shared_ciphers(const SSL *s,char *buf,int len)
 	sk=s->session->ciphers;
 	for (i=0; i<sk_SSL_CIPHER_num(sk); i++)
 		{
-		/* Decrement for either the ':' or a '\0' */
-		len--;
+		int n;
+
 		c=sk_SSL_CIPHER_value(sk,i);
-		for (cp=c->name; *cp; )
+		n=strlen(c->name);
+		if (n+1 > len)
 			{
-			if (len-- == 0)
-				{
-				*p='\0';
-				return(buf);
-				}
-			else
-				*(p++)= *(cp++);
+			if (p != buf)
+				--p;
+			*p='\0';
+			return buf;
 			}
+		strcpy(p,c->name);
+		p+=n;
 		*(p++)=':';
+		len-=n+1;
 		}
 	p[-1]='\0';
 	return(buf);
@@ -1901,7 +1901,7 @@ void ssl_update_cache(SSL *s,int mode)
 			?s->ctx->stats.sess_connect_good
 			:s->ctx->stats.sess_accept_good) & 0xff) == 0xff)
 			{
-			SSL_CTX_flush_sessions(s->ctx,time(NULL));
+			SSL_CTX_flush_sessions(s->ctx,(unsigned long)time(NULL));
 			}
 		}
 	}
@@ -2416,14 +2416,14 @@ int SSL_CTX_load_verify_locations(SSL_CTX *ctx, const char *CAfile,
 #endif
 
 void SSL_set_info_callback(SSL *ssl,
-			   void (*cb)(const SSL *ssl,int type,int val))
+	void (*cb)(const SSL *ssl,int type,int val))
 	{
 	ssl->info_callback=cb;
 	}
 
 /* One compiler (Diab DCC) doesn't like argument names in returned
    function pointer.  */
-void (*SSL_get_info_callback(const SSL *ssl))(const SSL * /*ssl*/,int /*type*/,int /*val*/)
+void (*SSL_get_info_callback(const SSL *ssl))(const SSL * /*ssl*/,int /*type*/,int /*val*/) 
 	{
 	return ssl->info_callback;
 	}

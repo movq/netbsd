@@ -1,4 +1,4 @@
-/*	$NetBSD: uhid.c,v 1.68 2005/12/11 12:24:01 christos Exp $	*/
+/*	$NetBSD: uhid.c,v 1.72.2.1 2007/04/06 18:43:52 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -42,7 +42,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhid.c,v 1.68 2005/12/11 12:24:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhid.c,v 1.72.2.1 2007/04/06 18:43:52 bouyer Exp $");
+
+#include "opt_compat_netbsd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -113,7 +115,7 @@ dev_type_kqfilter(uhidkqfilter);
 
 const struct cdevsw uhid_cdevsw = {
 	uhidopen, uhidclose, uhidread, uhidwrite, uhidioctl,
-	nostop, notty, uhidpoll, nommap, uhidkqfilter,
+	nostop, notty, uhidpoll, nommap, uhidkqfilter, D_OTHER,
 };
 
 Static void uhid_intr(struct uhidev *, void *, u_int len);
@@ -125,7 +127,8 @@ Static int uhid_do_ioctl(struct uhid_softc*, u_long, caddr_t, int, struct lwp *)
 USB_DECLARE_DRIVER(uhid);
 
 int
-uhid_match(struct device *parent, struct cfdata *match, void *aux)
+uhid_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 #ifdef UHID_DEBUG
 	struct uhidev_attach_arg *uha = aux;
@@ -211,7 +214,7 @@ uhid_detach(struct device *self, int flags)
 #endif
 
 	/* Nuke the vnodes for any open instances (calls close). */
-	mn = self->dv_unit;
+	mn = device_unit(self);
 	vdevgone(maj, mn, mn, VCHR);
 
 #if 0
@@ -254,7 +257,8 @@ uhid_intr(struct uhidev *addr, void *data, u_int len)
 }
 
 int
-uhidopen(dev_t dev, int flag, int mode, struct lwp *l)
+uhidopen(dev_t dev, int flag, int mode,
+    struct lwp *l)
 {
 	struct uhid_softc *sc;
 	int error;
@@ -282,7 +286,8 @@ uhidopen(dev_t dev, int flag, int mode, struct lwp *l)
 }
 
 int
-uhidclose(dev_t dev, int flag, int mode, struct lwp *l)
+uhidclose(dev_t dev, int flag, int mode,
+    struct lwp *l)
 {
 	struct uhid_softc *sc;
 
@@ -415,7 +420,7 @@ uhidwrite(dev_t dev, struct uio *uio, int flag)
 
 int
 uhid_do_ioctl(struct uhid_softc *sc, u_long cmd, caddr_t addr,
-	      int flag, struct lwp *l)
+    int flag, struct lwp *l)
 {
 	struct usb_ctl_report_desc *rd;
 	struct usb_ctl_report *re;
@@ -456,7 +461,7 @@ uhid_do_ioctl(struct uhid_softc *sc, u_long cmd, caddr_t addr,
 		if (sc->sc_async == NULL)
 			return (EINVAL);
 		if (-*(int *)addr != sc->sc_async->p_pgid
-		    && *(int *)addr != sc->sc_async->p_pid);
+		    && *(int *)addr != sc->sc_async->p_pid)
 			return (EPERM);
 		break;
 
@@ -532,9 +537,15 @@ uhid_do_ioctl(struct uhid_softc *sc, u_long cmd, caddr_t addr,
 
 	case USB_GET_DEVICEINFO:
 		usbd_fill_deviceinfo(sc->sc_hdev.sc_parent->sc_udev,
-				     (struct usb_device_info *)addr, 1);
+			             (struct usb_device_info *)addr, 1);
 		break;
+#ifdef COMPAT_30
+	case USB_GET_DEVICEINFO_OLD:
+		usbd_fill_deviceinfo_old(sc->sc_hdev.sc_parent->sc_udev,
+					 (struct usb_device_info_old *)addr, 1);
 
+		break;
+#endif
         case USB_GET_STRING_DESC:
 	    {
                 struct usb_string_desc *si = (struct usb_string_desc *)addr;

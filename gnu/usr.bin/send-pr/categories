@@ -23,7 +23,6 @@ port-evbarm
 port-evbmips
 port-evbppc
 port-evbsh3
-port-evbsh5
 port-hp300
 port-hp700
 port-hpcarm
@@ -31,6 +30,8 @@ port-hpcmips
 port-hpcsh
 port-hppa
 port-i386
+port-ia64
+port-ibmnws
 port-iyonix
 port-luna68k
 port-m68k
@@ -56,7 +57,6 @@ port-sandpoint
 port-sbmips
 port-sgimips
 port-sh3
-port-sh5
 port-shark
 port-sparc
 port-sparc64

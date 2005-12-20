@@ -1,4 +1,4 @@
-/*	$NetBSD: eso.c,v 1.41 2005/12/11 12:22:49 christos Exp $	*/
+/*	$NetBSD: eso.c,v 1.45.2.1 2006/12/17 22:25:53 riz Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2004 Klaus J. Klein
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: eso.c,v 1.41 2005/12/11 12:22:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eso.c,v 1.45.2.1 2006/12/17 22:25:53 riz Exp $");
 
 #include "mpu.h"
 
@@ -154,6 +154,7 @@ static const struct audio_hw_if eso_hw_if = {
 	eso_trigger_output,
 	eso_trigger_input,
 	NULL,			/* dev_ioctl */
+	NULL,			/* powerstate */
 };
 
 static const char * const eso_rev2model[] = {
@@ -207,7 +208,8 @@ static void	eso_freemem(struct eso_dma *);
 
 
 static int
-eso_match(struct device *parent, struct cfdata *match, void *aux)
+eso_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -715,13 +717,14 @@ eso_query_encoding(void *hdl, struct audio_encoding *fp)
 }
 
 static int
-eso_set_params(void *hdl, int setmode, int usemode, audio_params_t *play,
-    audio_params_t *rec, stream_filter_list_t *pfil, stream_filter_list_t *rfil)
+eso_set_params(void *hdl, int setmode, int usemode,
+    audio_params_t *play, audio_params_t *rec, stream_filter_list_t *pfil,
+    stream_filter_list_t *rfil)
 {
 	struct eso_softc *sc;
 	struct audio_params *p;
 	stream_filter_list_t *fil;
-	int mode, r[2], rd[2], clk;
+	int mode, r[2], rd[2], ar[2], clk;
 	unsigned int srg, fltdiv;
 	int i;
 
@@ -749,7 +752,9 @@ eso_set_params(void *hdl, int setmode, int usemode, audio_params_t *play,
 		r[1] = ESO_CLK1 /
 		    (128 - (rd[1] = 128 - ESO_CLK1 / p->sample_rate));
 
-		clk = ABS(p->sample_rate - r[0]) > ABS(p->sample_rate - r[1]);
+		ar[0] = p->sample_rate - r[0];
+		ar[1] = p->sample_rate - r[1];
+		clk = ABS(ar[0]) > ABS(ar[1]) ? 1 : 0;
 		srg = rd[clk] | (clk == 1 ? ESO_CLK1_SELECT : 0x00);
 
 		/* Roll-off frequency of 87%, as in the ES1888 driver. */
@@ -782,7 +787,8 @@ eso_set_params(void *hdl, int setmode, int usemode, audio_params_t *play,
 }
 
 static int
-eso_round_blocksize(void *hdl, int blk, int mode, const audio_params_t *param)
+eso_round_blocksize(void *hdl, int blk, int mode,
+    const audio_params_t *param)
 {
 
 	return blk & -32;	/* keep good alignment; at least 16 req'd */
@@ -1151,8 +1157,7 @@ eso_get_port(void *hdl, mixer_ctrl_t *cp)
 
 	case ESO_MASTER_MUTE:
 		/* Reload from mixer after hardware volume control use. */
-		if (sc->sc_gain[cp->dev][ESO_LEFT] == (uint8_t)~0)
-			eso_reload_master_vol(sc);
+		eso_reload_master_vol(sc);
 		cp->un.ord = sc->sc_mvmute;
 		break;
 
@@ -1452,8 +1457,8 @@ eso_query_devinfo(void *hdl, mixer_devinfo_t *dip)
 }
 
 static int
-eso_allocmem(struct eso_softc *sc, size_t size, size_t align, size_t boundary,
-    int flags, int direction, struct eso_dma *ed)
+eso_allocmem(struct eso_softc *sc, size_t size, size_t align,
+    size_t boundary, int flags, int direction, struct eso_dma *ed)
 {
 	int error, wait;
 

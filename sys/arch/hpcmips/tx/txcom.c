@@ -1,4 +1,4 @@
-/*	$NetBSD: txcom.c,v 1.26 2005/12/11 12:17:34 christos Exp $ */
+/*	$NetBSD: txcom.c,v 1.34 2006/10/01 20:31:50 elad Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000, 2004 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: txcom.c,v 1.26 2005/12/11 12:17:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: txcom.c,v 1.34 2006/10/01 20:31:50 elad Exp $");
 
 #include "opt_tx39uart_debug.h"
 
@@ -46,6 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: txcom.c,v 1.26 2005/12/11 12:17:34 christos Exp $");
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
+#include <sys/kauth.h>
 
 #include <sys/proc.h> /* tsleep/wakeup */
 
@@ -69,9 +70,6 @@ __KERNEL_RCSID(0, "$NetBSD: txcom.c,v 1.26 2005/12/11 12:17:34 christos Exp $");
 
 #include <hpcmips/tx/tx39clockreg.h> /* XXX */
 
-#define SET(t, f)	(t) |= (f)
-#define CLR(t, f)	(t) &= ~(f)
-#define ISSET(t, f)	((t) & (f))
 /* 
  * UARTA channel has DTR, DSR, RTS, CTS lines. and they  wired to MFIO/IO port.
  */
@@ -159,7 +157,7 @@ int	txcom_dcd_hook(void *, int, long, void *);
 int	txcom_cts_hook(void *, int, long, void *);
 
 
-__inline__ int	__txcom_txbufready(struct txcom_chip *, int);
+inline int	__txcom_txbufready(struct txcom_chip *, int);
 const char *__txcom_slotname(int);
 
 #ifdef TX39UARTDEBUG
@@ -254,7 +252,7 @@ txcom_attach(struct device *parent, struct device *self, void *aux)
 		/* locate the major number */
 		maj = cdevsw_lookup_major(&txcom_cdevsw);
 
-		cn_tab->cn_dev = makedev(maj, sc->sc_dev.dv_unit);
+		cn_tab->cn_dev = makedev(maj, device_unit(&sc->sc_dev));
 
 		printf(": console");
 	}
@@ -407,7 +405,7 @@ txcom_disable(struct txcom_chip *chip)
 	
 }
 
-__inline__ int
+inline int
 __txcom_txbufready(struct txcom_chip *chip, int retry)
 {
 	tx_chipset_tag_t tc = chip->sc_tc;
@@ -789,7 +787,6 @@ txcomopen(dev_t dev, int flag, int mode, struct lwp *l)
 	struct txcom_chip *chip;
 	struct tty *tp;
 	int s, err = ENXIO;
-;
 
 	if (!sc)
 		return err;
@@ -797,9 +794,7 @@ txcomopen(dev_t dev, int flag, int mode, struct lwp *l)
 	chip = sc->sc_chip;
 	tp = sc->sc_tty;
 
-	if (ISSET(tp->t_state, TS_ISOPEN) &&
-	    ISSET(tp->t_state, TS_XCLUDE) &&
-	    suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0)
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
 		return (EBUSY);
 
 	s = spltty();
@@ -989,7 +984,8 @@ txcomioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		break;
 
 	case TIOCSFLAGS:
-		err = suser(l->l_proc->p_ucred, &l->l_proc->p_acflag); 
+		err = kauth_authorize_device_tty(l->l_cred,
+		    KAUTH_DEVICE_TTY_PRIVSET, tp);
 		if (err) {
 			break;
 		}

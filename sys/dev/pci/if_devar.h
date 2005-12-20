@@ -1,4 +1,4 @@
-/*	$NetBSD: if_devar.h,v 1.41 2005/12/11 12:22:49 christos Exp $	*/
+/*	$NetBSD: if_devar.h,v 1.46 2006/11/22 01:54:09 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 1994-1997 Matt Thomas (matt@3am-software.com)
@@ -578,7 +578,7 @@ struct _tulip_softc_t {
     u_int32_t tulip_intrmask;	/* our copy of csr_intr */
     u_int32_t tulip_cmdmode;	/* our copy of csr_cmdmode */
     u_int32_t tulip_last_system_error : 3;	/* last system error (only value is TULIP_SYSTEMERROR is also set) */
-    u_int32_t tulip_txtimer : 2;	/* transmission timer */
+    u_int32_t tulip_txtimer;	/* transmission timer */
     u_int32_t tulip_system_errors;	/* number of system errors encountered */
     u_int32_t tulip_statusbits;	/* status bits from CSR5 that may need to be printed */
 
@@ -790,37 +790,57 @@ static const struct {
     tulip_media_t sc_media;
     u_int32_t sc_attrs;
 } tulip_srom_conninfo[] = {
-    { TULIP_SROM_CONNTYPE_10BASET,		TULIP_MEDIA_10BASET },
-    { TULIP_SROM_CONNTYPE_BNC,			TULIP_MEDIA_BNC },
-    { TULIP_SROM_CONNTYPE_AUI,			TULIP_MEDIA_AUI },
-    { TULIP_SROM_CONNTYPE_100BASETX,		TULIP_MEDIA_100BASETX },
-    { TULIP_SROM_CONNTYPE_100BASET4,		TULIP_MEDIA_100BASET4 },
-    { TULIP_SROM_CONNTYPE_100BASEFX,		TULIP_MEDIA_100BASEFX },
-    { TULIP_SROM_CONNTYPE_MII_10BASET,		TULIP_MEDIA_10BASET,
-		TULIP_SROM_ATTR_MII },
-    { TULIP_SROM_CONNTYPE_MII_100BASETX,	TULIP_MEDIA_100BASETX,
-		TULIP_SROM_ATTR_MII },
-    { TULIP_SROM_CONNTYPE_MII_100BASET4,	TULIP_MEDIA_100BASET4,
-		TULIP_SROM_ATTR_MII },
-    { TULIP_SROM_CONNTYPE_MII_100BASEFX,	TULIP_MEDIA_100BASEFX,
-		TULIP_SROM_ATTR_MII },
-    { TULIP_SROM_CONNTYPE_10BASET_NWAY,		TULIP_MEDIA_10BASET,
-		TULIP_SROM_ATTR_NWAY },
-    { TULIP_SROM_CONNTYPE_10BASET_FD,		TULIP_MEDIA_10BASET_FD },
-    { TULIP_SROM_CONNTYPE_MII_10BASET_FD,	TULIP_MEDIA_10BASET_FD,
-		TULIP_SROM_ATTR_MII },
-    { TULIP_SROM_CONNTYPE_100BASETX_FD,		TULIP_MEDIA_100BASETX_FD },
-    { TULIP_SROM_CONNTYPE_MII_100BASETX_FD,	TULIP_MEDIA_100BASETX_FD,
-		TULIP_SROM_ATTR_MII },
-    { TULIP_SROM_CONNTYPE_10BASET_NOLINKPASS,	TULIP_MEDIA_10BASET,
-		TULIP_SROM_ATTR_NOLINKPASS },
-    { TULIP_SROM_CONNTYPE_AUTOSENSE,		TULIP_MEDIA_UNKNOWN,
-		TULIP_SROM_ATTR_AUTOSENSE },
-    { TULIP_SROM_CONNTYPE_AUTOSENSE_POWERUP,	TULIP_MEDIA_UNKNOWN,
-		TULIP_SROM_ATTR_AUTOSENSE|TULIP_SROM_ATTR_POWERUP },
-    { TULIP_SROM_CONNTYPE_AUTOSENSE_NWAY,	TULIP_MEDIA_UNKNOWN,
-		TULIP_SROM_ATTR_AUTOSENSE|TULIP_SROM_ATTR_NWAY },
-    { TULIP_SROM_CONNTYPE_NOT_USED,		TULIP_MEDIA_UNKNOWN }
+    { .sc_type = TULIP_SROM_CONNTYPE_10BASET,
+      .sc_media = TULIP_MEDIA_10BASET },
+    { .sc_type = TULIP_SROM_CONNTYPE_BNC,
+      .sc_media = TULIP_MEDIA_BNC },
+    { .sc_type = TULIP_SROM_CONNTYPE_AUI,
+      .sc_media = TULIP_MEDIA_AUI },
+    { .sc_type = TULIP_SROM_CONNTYPE_100BASETX,
+      .sc_media = TULIP_MEDIA_100BASETX },
+    { .sc_type = TULIP_SROM_CONNTYPE_100BASET4,
+      .sc_media = TULIP_MEDIA_100BASET4 },
+    { .sc_type = TULIP_SROM_CONNTYPE_100BASEFX,
+      .sc_media = TULIP_MEDIA_100BASEFX },
+    { .sc_type = TULIP_SROM_CONNTYPE_MII_10BASET,
+      .sc_media = TULIP_MEDIA_10BASET,
+      .sc_attrs = TULIP_SROM_ATTR_MII },
+    { .sc_type = TULIP_SROM_CONNTYPE_MII_100BASETX,
+      .sc_media = TULIP_MEDIA_100BASETX,
+      .sc_attrs = TULIP_SROM_ATTR_MII },
+    { .sc_type = TULIP_SROM_CONNTYPE_MII_100BASET4,
+      .sc_media = TULIP_MEDIA_100BASET4,
+      .sc_attrs = TULIP_SROM_ATTR_MII },
+    { .sc_type = TULIP_SROM_CONNTYPE_MII_100BASEFX,
+      .sc_media = TULIP_MEDIA_100BASEFX,
+      .sc_attrs = TULIP_SROM_ATTR_MII },
+    { .sc_type = TULIP_SROM_CONNTYPE_10BASET_NWAY,
+      .sc_media = TULIP_MEDIA_10BASET,
+      .sc_attrs = TULIP_SROM_ATTR_NWAY },
+    { .sc_type = TULIP_SROM_CONNTYPE_10BASET_FD,
+      .sc_media = TULIP_MEDIA_10BASET_FD },
+    { .sc_type = TULIP_SROM_CONNTYPE_MII_10BASET_FD,
+      .sc_media = TULIP_MEDIA_10BASET_FD,
+      .sc_attrs = TULIP_SROM_ATTR_MII },
+    { .sc_type = TULIP_SROM_CONNTYPE_100BASETX_FD,
+      .sc_media = TULIP_MEDIA_100BASETX_FD },
+    { .sc_type = TULIP_SROM_CONNTYPE_MII_100BASETX_FD,
+      .sc_media = TULIP_MEDIA_100BASETX_FD,
+      .sc_attrs = TULIP_SROM_ATTR_MII },
+    { .sc_type = TULIP_SROM_CONNTYPE_10BASET_NOLINKPASS,
+      .sc_media = TULIP_MEDIA_10BASET,
+      .sc_attrs = TULIP_SROM_ATTR_NOLINKPASS },
+    { .sc_type = TULIP_SROM_CONNTYPE_AUTOSENSE,
+      .sc_media = TULIP_MEDIA_UNKNOWN,
+      .sc_attrs = TULIP_SROM_ATTR_AUTOSENSE },
+    { .sc_type = TULIP_SROM_CONNTYPE_AUTOSENSE_POWERUP,
+      .sc_media = TULIP_MEDIA_UNKNOWN,
+      .sc_attrs = TULIP_SROM_ATTR_AUTOSENSE|TULIP_SROM_ATTR_POWERUP },
+    { .sc_type = TULIP_SROM_CONNTYPE_AUTOSENSE_NWAY,
+      .sc_media = TULIP_MEDIA_UNKNOWN,
+      .sc_attrs = TULIP_SROM_ATTR_AUTOSENSE|TULIP_SROM_ATTR_NWAY },
+    { .sc_type = TULIP_SROM_CONNTYPE_NOT_USED,
+      .sc_media = TULIP_MEDIA_UNKNOWN }
 };
 #define	TULIP_SROM_LASTCONNIDX	\
 		(sizeof(tulip_srom_conninfo)/sizeof(tulip_srom_conninfo[0]) - 1)
@@ -838,7 +858,7 @@ static const struct {
     {	TULIP_MEDIA_AUI,		TULIP_SROM_MEDIA_AUI		},
     {	TULIP_MEDIA_BNC,		TULIP_SROM_MEDIA_BNC		},
     {	TULIP_MEDIA_10BASET,		TULIP_SROM_MEDIA_10BASET	},
-    {	TULIP_MEDIA_UNKNOWN						}
+    {	.sm_type = TULIP_MEDIA_UNKNOWN						}
 };
 #endif /* TULIP_HDR_DATA */
 
@@ -1089,23 +1109,23 @@ extern struct cfdriver de_cd;
 	} while (0)
 #if defined(__i386__)
 typedef u_quad_t tulip_cycle_t;
-static __inline__ tulip_cycle_t
+static __inline tulip_cycle_t
 TULIP_PERFREAD(
     void)
 {
     tulip_cycle_t x;
-    __asm__ volatile (".byte 0x0f, 0x31" : "=A" (x));
+    __asm volatile (".byte 0x0f, 0x31" : "=A" (x));
     return x;
 }
 #define	TULIP_PERFDIFF(s, f)	((f) - (s))
 #elif defined(__alpha__)
 typedef unsigned long tulip_cycle_t;
-static __inline__ tulip_cycle_t
+static __inline tulip_cycle_t
 TULIP_PERFREAD(
     void)
 {
     tulip_cycle_t x;
-    __asm__ volatile ("rpcc %0" : "=r" (x));
+    __asm volatile ("rpcc %0" : "=r" (x));
     return x;
 }
 #define	TULIP_PERFDIFF(s, f)	((unsigned int) ((f) - (s)))

@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_machdep.c,v 1.24 2005/12/11 12:18:46 christos Exp $	*/
+/*	$NetBSD: sig_machdep.c,v 1.26 2006/10/24 16:53:01 he Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.24 2005/12/11 12:18:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.26 2006/10/24 16:53:01 he Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ppcarch.h"
@@ -216,16 +216,13 @@ int
 cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 {
 	struct trapframe *tf = trapframe(l);
-	__greg_t *gr = mcp->__gregs;
+	const __greg_t *gr = mcp->__gregs;
 #ifdef PPC_HAVE_FPU
 	struct pcb *pcb = &l->l_addr->u_pcb;
 #endif
 
 	/* Restore GPR context, if any. */
 	if (flags & _UC_CPU) {
-		if (!PSL_USEROK_P(gr[_REG_MSR]))
-			return (EINVAL);
-
 #ifdef PPC_HAVE_FPU
 		/*
 		 * Always save the FP exception mode in the PCB.
@@ -238,7 +235,12 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->cr   = gr[_REG_CR];
 		tf->lr   = gr[_REG_LR];
 		tf->srr0 = gr[_REG_PC];
-		tf->srr1 = gr[_REG_MSR];
+		/*
+		 * Accept all user-settable bits without complaint;
+		 * userland should not need to know the machine-specific
+		 * MSR value.
+		 */
+		tf->srr1 = (gr[_REG_MSR] & PSL_USERMOD) | PSL_USERSET;
 		tf->ctr  = gr[_REG_CTR];
 		tf->xer  = gr[_REG_XER];
 #ifdef PPC_OEA

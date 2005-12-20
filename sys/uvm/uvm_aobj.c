@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_aobj.c,v 1.77 2005/12/05 01:24:07 yamt Exp $	*/
+/*	$NetBSD: uvm_aobj.c,v 1.82.2.1 2007/08/24 16:52:25 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1998 Chuck Silvers, Charles D. Cranor and
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_aobj.c,v 1.77 2005/12/05 01:24:07 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_aobj.c,v 1.82.2.1 2007/08/24 16:52:25 liamjfoy Exp $");
 
 #include "opt_uvmhist.h"
 
@@ -155,7 +155,7 @@ POOL_INIT(uao_swhash_elt_pool, sizeof(struct uao_swhash_elt), 0, 0, 0,
 
 struct uvm_aobj {
 	struct uvm_object u_obj; /* has: lock, pgops, memq, #pages, #refs */
-	int u_pages;		 /* number of pages in entire object */
+	pgoff_t u_pages;	 /* number of pages in entire object */
 	int u_flags;		 /* the flags (see uvm_aobj.h) */
 	int *u_swslots;		 /* array of offset->swapslot mappings */
 				 /*
@@ -401,11 +401,13 @@ uao_free(struct uvm_aobj *aobj)
 {
 	int swpgonlydelta = 0;
 
+#if defined(VMSWAP)
+	uao_dropswap_range1(aobj, 0, 0);
+#endif /* defined(VMSWAP) */
+
 	simple_unlock(&aobj->u_obj.vmobjlock);
 
 #if defined(VMSWAP)
-	uao_dropswap_range1(aobj, 0, 0);
-
 	if (UAO_USES_SWHASH(aobj)) {
 
 		/*
@@ -460,7 +462,7 @@ uao_create(vsize_t size, int flags)
 {
 	static struct uvm_aobj kernel_object_store;
 	static int kobj_alloced = 0;
-	int pages = round_page(size) >> PAGE_SHIFT;
+	pgoff_t pages = round_page(size) >> PAGE_SHIFT;
 	struct uvm_aobj *aobj;
 	int refs;
 
@@ -1183,6 +1185,11 @@ gotpage:
 #endif /* defined(VMSWAP) */
 		}
 
+		if ((access_type & VM_PROT_WRITE) == 0) {
+			ptmp->flags |= PG_CLEAN;
+			pmap_clear_modify(ptmp);
+		}
+
 		/*
  		 * we got the page!   clear the fake flag (indicates valid
 		 * data now in page) and plug into our result array.   note
@@ -1432,11 +1439,11 @@ uao_pagein_page(struct uvm_aobj *aobj, int pageidx)
 	uao_dropswap(&aobj->u_obj, pageidx);
 
 	/*
-	 * deactivate the page (to make sure it's on a page queue).
+	 * make sure it's on a page queue.
 	 */
 	uvm_lock_pageq();
 	if (pg->wire_count == 0)
-		uvm_pagedeactivate(pg);
+		uvm_pageenqueue(pg);
 	uvm_unlock_pageq();
 
 	if (pg->flags & PG_WANTED) {

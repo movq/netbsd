@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.47 2005/11/05 13:11:02 wiz Exp $	*/
+/*	$NetBSD: main.c,v 1.49 2006/06/27 23:33:21 hubertf Exp $	*/
 
 #if HAVE_CONFIG_H
 #include "config.h"
@@ -11,7 +11,7 @@
 #if 0
 static char *rcsid = "from FreeBSD Id: main.c,v 1.14 1997/10/08 07:47:26 charnier Exp";
 #else
-__RCSID("$NetBSD: main.c,v 1.47 2005/11/05 13:11:02 wiz Exp $");
+__RCSID("$NetBSD: main.c,v 1.49 2006/06/27 23:33:21 hubertf Exp $");
 #endif
 #endif
 
@@ -50,7 +50,7 @@ __RCSID("$NetBSD: main.c,v 1.47 2005/11/05 13:11:02 wiz Exp $");
 #include "lib.h"
 #include "info.h"
 
-static const char Options[] = ".aBbcDde:fFhIiK:kLl:mNnpQ:qRrsSuvV";
+static const char Options[] = ".aBbcDde:fFhIiK:kLl:mNnpQ:qRrsSuvVX";
 
 int     Flags = 0;
 enum which Which = WHICH_LIST;
@@ -68,10 +68,10 @@ static void
 usage(void)
 {
 	fprintf(stderr, "%s\n%s\n%s\n%s\n",
-	    "usage: pkg_info [-BbcDdFfhIikLmNnpqRrSsVv] [-e package] [-K pkg_dbdir] [-l prefix]",
-	    "                pkg-name [...]",
+	    "usage: pkg_info [-BbcDdFfhIikLmNnpqRrSsVvX] [-e package] [-K pkg_dbdir]",
+	    "                [-l prefix] pkg-name ...",
 	    "       pkg_info [-a | -u] [flags]",
-	    "       pkg_info -Q variable pkg-name [pkg-name ...]");
+	    "       pkg_info [-Q variable] pkg-name ...");
 	exit(1);
 }
 
@@ -204,6 +204,10 @@ main(int argc, char **argv)
 		case 'V':
 			show_version();
 			/* NOTREACHED */
+
+		case 'X':
+			Flags |= SHOW_SUMMARY;
+			break;
 
 		case 'h':
 		case '?':

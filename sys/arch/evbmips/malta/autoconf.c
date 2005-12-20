@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.7 2005/12/11 12:17:11 christos Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.10 2006/11/17 21:01:03 tsutsui Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.7 2005/12/11 12:17:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.10 2006/11/17 21:01:03 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,7 +58,13 @@ cpu_configure()
 	(void)splhigh();
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("no mainbus found");
-	(void)spl0();
+
+	/*
+	 * Hardware interrupts will be enabled in
+	 * sys/arch/mips/mips/mips3_clockintr.c:mips3_initclocks()
+	 * to avoid hardclock(9) by CPU INT5 before softclockintr is
+	 * initialized in initclocks().
+	 */
 }
 
 void
@@ -86,8 +92,8 @@ findroot(void)
 	if ((booted_device == NULL) && netboot == 0)
 		for (dv = alldevs.tqh_first; dv != NULL;
 		     dv = dv->dv_list.tqe_next)
-			if (dv->dv_class == DV_DISK &&
-			    !strcmp(dv->dv_cfdata->cf_name, "wd"))
+			if (device_class(dv) == DV_DISK &&
+			    device_is_a(dv, "wd"))
 				    booted_device = dv;
 
 	/*
@@ -104,6 +110,6 @@ device_register(dev, aux)
 	void *aux;
 {
 	if ((booted_device == NULL) && (netboot == 1))
-		if (dev->dv_class == DV_IFNET)
+		if (device_class(dev) == DV_IFNET)
 			booted_device = dev;
 }

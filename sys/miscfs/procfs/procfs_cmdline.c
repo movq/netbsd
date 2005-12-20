@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_cmdline.c,v 1.20 2005/12/11 12:24:51 christos Exp $	*/
+/*	$NetBSD: procfs_cmdline.c,v 1.23 2006/11/16 01:33:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 Jaromir Dolecek <dolecek@ics.muni.cz>
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_cmdline.c,v 1.20 2005/12/11 12:24:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_cmdline.c,v 1.23 2006/11/16 01:33:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,11 +55,12 @@ __KERNEL_RCSID(0, "$NetBSD: procfs_cmdline.c,v 1.20 2005/12/11 12:24:51 christos
  * code for returning process's command line arguments
  */
 int
-procfs_docmdline(curl, p, pfs, uio)
-	struct lwp *curl;
-	struct proc *p;
-	struct pfsnode *pfs;
-	struct uio *uio;
+procfs_docmdline(
+    struct lwp *curl,
+    struct proc *p,
+    struct pfsnode *pfs,
+    struct uio *uio
+)
 {
 	struct ps_strings pss;
 	int count, error;
@@ -116,9 +117,8 @@ procfs_docmdline(curl, p, pfs, uio)
 	auio.uio_iovcnt = 1;
 	auio.uio_offset = (vaddr_t)p->p_psstr;
 	auio.uio_resid = sizeof(pss);
-	auio.uio_segflg = UIO_SYSSPACE;
 	auio.uio_rw = UIO_READ;
-	auio.uio_lwp = NULL;
+	UIO_SETUP_SYSSPACE(&auio);
 	error = uvm_io(&p->p_vmspace->vm_map, &auio);
 	if (error)
 		goto bad;
@@ -132,9 +132,8 @@ procfs_docmdline(curl, p, pfs, uio)
 	auio.uio_iovcnt = 1;
 	auio.uio_offset = (vaddr_t)pss.ps_argvstr;
 	auio.uio_resid = sizeof(argv);
-	auio.uio_segflg = UIO_SYSSPACE;
 	auio.uio_rw = UIO_READ;
-	auio.uio_lwp = NULL;
+	UIO_SETUP_SYSSPACE(&auio);
 	error = uvm_io(&p->p_vmspace->vm_map, &auio);
 	if (error)
 		goto bad;
@@ -155,9 +154,8 @@ procfs_docmdline(curl, p, pfs, uio)
 		auio.uio_offset = argv + len;
 		xlen = PAGE_SIZE - ((argv + len) & PAGE_MASK);
 		auio.uio_resid = xlen;
-		auio.uio_segflg = UIO_SYSSPACE;
 		auio.uio_rw = UIO_READ;
-		auio.uio_lwp = NULL;
+		UIO_SETUP_SYSSPACE(&auio);
 		error = uvm_io(&p->p_vmspace->vm_map, &auio);
 		if (error)
 			goto bad;

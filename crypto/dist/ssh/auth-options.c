@@ -1,4 +1,5 @@
-/*	$NetBSD: auth-options.c,v 1.5 2005/04/23 16:53:28 christos Exp $	*/
+/*	$NetBSD: auth-options.c,v 1.7 2006/09/28 21:22:14 christos Exp $	*/
+/* $OpenBSD: auth-options.c,v 1.40 2006/08/03 03:34:41 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -11,19 +12,31 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: auth-options.c,v 1.29 2005/03/01 10:09:52 djm Exp $");
-__RCSID("$NetBSD: auth-options.c,v 1.5 2005/04/23 16:53:28 christos Exp $");
+__RCSID("$NetBSD: auth-options.c,v 1.7 2006/09/28 21:22:14 christos Exp $");
+#include <sys/types.h>
+
+#include <netdb.h>
+#include <pwd.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdarg.h>
 
 #include "xmalloc.h"
 #include "match.h"
 #include "log.h"
 #include "canohost.h"
+#include "buffer.h"
 #include "channels.h"
 #include "auth-options.h"
 #include "servconf.h"
 #include "misc.h"
-#include "monitor_wrap.h"
+#include "key.h"
+#include "hostfile.h"
 #include "auth.h"
+#ifdef GSSAPI
+#include "ssh-gss.h"
+#endif
+#include "monitor_wrap.h"
 
 /* Flags set authorized_keys flags */
 int no_port_forwarding_flag = 0;
@@ -36,6 +49,9 @@ char *forced_command = NULL;
 
 /* "environment=" options. */
 struct envstring *custom_environment = NULL;
+
+/* "tunnel=" option. */
+int forced_tun_device = -1;
 
 extern ServerOptions options;
 
@@ -56,6 +72,7 @@ auth_clear_options(void)
 		xfree(forced_command);
 		forced_command = NULL;
 	}
+	forced_tun_device = -1;
 	channel_clear_permitted_opens();
 	auth_debug_reset();
 }
@@ -129,7 +146,7 @@ auth_parse_options(struct passwd *pw, char *opts, char *file, u_long linenum)
 				forced_command = NULL;
 				goto bad_option;
 			}
-			forced_command[i] = 0;
+			forced_command[i] = '\0';
 			auth_debug_add("Forced command: %.900s", forced_command);
 			opts++;
 			goto next_option;
@@ -161,7 +178,7 @@ auth_parse_options(struct passwd *pw, char *opts, char *file, u_long linenum)
 				xfree(s);
 				goto bad_option;
 			}
-			s[i] = 0;
+			s[i] = '\0';
 			auth_debug_add("Adding to environment: %.900s", s);
 			debug("Adding to environment: %.900s", s);
 			opts++;
@@ -198,7 +215,7 @@ auth_parse_options(struct passwd *pw, char *opts, char *file, u_long linenum)
 				xfree(patterns);
 				goto bad_option;
 			}
-			patterns[i] = 0;
+			patterns[i] = '\0';
 			opts++;
 			if (match_host_and_ip(remote_host, remote_ip,
 			    patterns) != 1) {
@@ -243,13 +260,13 @@ auth_parse_options(struct passwd *pw, char *opts, char *file, u_long linenum)
 				xfree(patterns);
 				goto bad_option;
 			}
-			patterns[i] = 0;
+			patterns[i] = '\0';
 			opts++;
 			p = patterns;
 			host = hpdelim(&p);
 			if (host == NULL || strlen(host) >= NI_MAXHOST) {
 				debug("%.100s, line %lu: Bad permitopen "
-				    "specification <%.100s>", file, linenum, 
+				    "specification <%.100s>", file, linenum,
 				    patterns);
 				auth_debug_add("%.100s, line %lu: "
 				    "Bad permitopen specification", file,
@@ -257,8 +274,8 @@ auth_parse_options(struct passwd *pw, char *opts, char *file, u_long linenum)
 				xfree(patterns);
 				goto bad_option;
 			}
- 			host = cleanhostname(host);
- 			if (p == NULL || (port = a2port(p)) == 0) {
+			host = cleanhostname(host);
+			if (p == NULL || (port = a2port(p)) == 0) {
 				debug("%.100s, line %lu: Bad permitopen port "
 				    "<%.100s>", file, linenum, p ? p : "");
 				auth_debug_add("%.100s, line %lu: "
@@ -269,6 +286,41 @@ auth_parse_options(struct passwd *pw, char *opts, char *file, u_long linenum)
 			if (options.allow_tcp_forwarding)
 				channel_add_permitted_opens(host, port);
 			xfree(patterns);
+			goto next_option;
+		}
+		cp = "tunnel=\"";
+		if (strncasecmp(opts, cp, strlen(cp)) == 0) {
+			char *tun = NULL;
+			opts += strlen(cp);
+			tun = xmalloc(strlen(opts) + 1);
+			i = 0;
+			while (*opts) {
+				if (*opts == '"')
+					break;
+				tun[i++] = *opts++;
+			}
+			if (!*opts) {
+				debug("%.100s, line %lu: missing end quote",
+				    file, linenum);
+				auth_debug_add("%.100s, line %lu: missing end quote",
+				    file, linenum);
+				xfree(tun);
+				forced_tun_device = -1;
+				goto bad_option;
+			}
+			tun[i] = '\0';
+			forced_tun_device = a2tun(tun, NULL);
+			xfree(tun);
+			if (forced_tun_device == SSH_TUNID_ERR) {
+				debug("%.100s, line %lu: invalid tun device",
+				    file, linenum);
+				auth_debug_add("%.100s, line %lu: invalid tun device",
+				    file, linenum);
+				forced_tun_device = -1;
+				goto bad_option;
+			}
+			auth_debug_add("Forced tun device: %d", forced_tun_device);
+			opts++;
 			goto next_option;
 		}
 next_option:

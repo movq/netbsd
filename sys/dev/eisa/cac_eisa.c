@@ -1,4 +1,4 @@
-/*	$NetBSD: cac_eisa.c,v 1.11 2005/12/11 12:21:20 christos Exp $	*/
+/*	$NetBSD: cac_eisa.c,v 1.16 2006/11/28 20:29:14 ad Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cac_eisa.c,v 1.11 2005/12/11 12:21:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cac_eisa.c,v 1.16 2006/11/28 20:29:14 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -107,11 +107,11 @@ static const struct cac_linkage cac_eisa_l0 = {
 	cac_eisa_l0_submit
 };
 
-struct cac_eisa_type {
+static struct cac_eisa_type {
 	const char	*ct_prodstr;
 	const char	*ct_typestr;
 	const struct	cac_linkage *ct_linkage;
-} static cac_eisa_type[] = {
+} cac_eisa_type[] = {
 	{ "CPQ4001",	"IDA",		&cac_eisa_l0 },
 	{ "CPQ4002",	"IDA-2",	&cac_eisa_l0 },
 	{ "CPQ4010",	"IEAS",		&cac_eisa_l0 },
@@ -120,7 +120,8 @@ struct cac_eisa_type {
 };
 
 static int
-cac_eisa_match(struct device *parent, struct cfdata *match, void *aux)
+cac_eisa_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct eisa_attach_args *ea;
 	int i;
@@ -147,7 +148,7 @@ cac_eisa_attach(struct device *parent, struct device *self, void *aux)
 	int irq, i;
 
 	ea = aux;
-	sc = (struct cac_softc *)self;
+	sc = device_private(self);
 	iot = ea->ea_iot;
 	ec = ea->ea_ec;
 
@@ -268,6 +269,10 @@ cac_eisa_l0_completed(struct cac_softc *sc)
 	    BUS_DMASYNC_POSTWRITE | BUS_DMASYNC_POSTREAD);
 
 	ccb->ccb_req.error = status;
+
+	if ((off & 3) != 0 && ccb->ccb_req.error == 0)
+		ccb->ccb_req.error = CAC_RET_CMD_REJECTED;
+
 	return (ccb);
 }
 

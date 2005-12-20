@@ -1,4 +1,5 @@
-/*	$NetBSD: session.c,v 1.41 2005/05/08 21:15:04 christos Exp $	*/
+/*	$NetBSD: session.c,v 1.43 2006/09/28 21:22:15 christos Exp $	*/
+/* $OpenBSD: session.c,v 1.219 2006/08/29 10:40:19 djm Exp $ */
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
  *                    All rights reserved
@@ -34,13 +35,28 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: session.c,v 1.181 2004/12/23 17:35:48 markus Exp $");
-__RCSID("$NetBSD: session.c,v 1.41 2005/05/08 21:15:04 christos Exp $");
+__RCSID("$NetBSD: session.c,v 1.43 2006/09/28 21:22:15 christos Exp $");
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/un.h>
+#include <sys/stat.h>
+#include <sys/socket.h>
+#include <sys/param.h>
 
+#include <errno.h>
+#include <grp.h>
+#include <paths.h>
+#include <pwd.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "xmalloc.h"
 #include "ssh.h"
 #include "ssh1.h"
 #include "ssh2.h"
-#include "xmalloc.h"
 #include "sshpty.h"
 #include "packet.h"
 #include "buffer.h"
@@ -48,7 +64,10 @@ __RCSID("$NetBSD: session.c,v 1.41 2005/05/08 21:15:04 christos Exp $");
 #include "uidswap.h"
 #include "compat.h"
 #include "channels.h"
-#include "bufaux.h"
+#include "key.h"
+#include "cipher.h"
+#include "kex.h"
+#include "hostfile.h"
 #include "auth.h"
 #include "auth-options.h"
 #include "pathnames.h"
@@ -58,14 +77,13 @@ __RCSID("$NetBSD: session.c,v 1.41 2005/05/08 21:15:04 christos Exp $");
 #include "serverloop.h"
 #include "canohost.h"
 #include "session.h"
+#ifdef GSSAPI
+#include "ssh-gss.h"
+#endif
 #include "monitor_wrap.h"
 
 #ifdef KRB5
 #include <kafs.h>
-#endif
-
-#ifdef GSSAPI
-#include "ssh-gss.h"
 #endif
 
 /* func */
@@ -173,7 +191,7 @@ auth_input_request_forwarding(struct passwd * pw)
 	sunaddr.sun_family = AF_UNIX;
 	strlcpy(sunaddr.sun_path, auth_sock_name, sizeof(sunaddr.sun_path));
 
-	if (bind(sock, (struct sockaddr *) & sunaddr, sizeof(sunaddr)) < 0)
+	if (bind(sock, (struct sockaddr *)&sunaddr, sizeof(sunaddr)) < 0)
 		packet_disconnect("bind: %.100s", strerror(errno));
 
 	/* Restore the privileged uid. */
@@ -195,11 +213,11 @@ auth_input_request_forwarding(struct passwd * pw)
 static void
 display_loginmsg(void)
 {
-        if (buffer_len(&loginmsg) > 0) {
-                buffer_append(&loginmsg, "\0", 1);
-                printf("%s", (char *)buffer_ptr(&loginmsg));
-                buffer_clear(&loginmsg);
-        }
+	if (buffer_len(&loginmsg) > 0) {
+		buffer_append(&loginmsg, "\0", 1);
+		printf("%s", (char *)buffer_ptr(&loginmsg));
+		buffer_clear(&loginmsg);
+	}
 }
 
 void
@@ -207,15 +225,6 @@ do_authenticated(Authctxt *authctxt)
 {
 	setproctitle("%s", authctxt->pw->pw_name);
 
-	/*
-	 * Cancel the alarm we set to limit the time taken for
-	 * authentication.
-	 */
-	alarm(0);
-	if (startup_pipe != -1) {
-		close(startup_pipe);
-		startup_pipe = -1;
-	}
 	/* setup the channel layer */
 	if (!no_port_forwarding_flag && options.allow_tcp_forwarding)
 		channel_permit_all_opens();
@@ -271,7 +280,7 @@ do_authenticated1(Authctxt *authctxt)
 				    compression_level);
 				break;
 			}
-			if (!options.compression) {
+			if (options.compression == COMP_NONE) {
 				debug2("compression disabled");
 				break;
 			}
@@ -329,7 +338,11 @@ do_authenticated1(Authctxt *authctxt)
 				break;
 			}
 			debug("Received TCP/IP port forwarding request.");
-			channel_input_port_forward_request(s->pw->pw_uid == 0, options.gateway_ports);
+			if (channel_input_port_forward_request(s->pw->pw_uid == 0,
+			    options.gateway_ports) < 0) {
+				debug("Port forwarding failed.");
+				break;
+			}
 			success = 1;
 			break;
 
@@ -433,20 +446,12 @@ do_exec_no_pty(Session *s, const char *command)
 {
 	pid_t pid;
 
-#ifdef USE_PIPES
-	int pin[2], pout[2], perr[2];
-	/* Allocate pipes for communicating with the program. */
-	if (pipe(pin) < 0 || pipe(pout) < 0 || pipe(perr) < 0)
-		packet_disconnect("Could not create pipes: %.100s",
-				  strerror(errno));
-#else /* USE_PIPES */
 	int inout[2], err[2];
 	/* Uses socket pairs to communicate with the program. */
 	if (socketpair(AF_UNIX, SOCK_STREAM, 0, inout) < 0 ||
 	    socketpair(AF_UNIX, SOCK_STREAM, 0, err) < 0)
 		packet_disconnect("Could not create socket pairs: %.100s",
 				  strerror(errno));
-#endif /* USE_PIPES */
 	if (s == NULL)
 		fatal("do_exec_no_pty: no session");
 
@@ -472,28 +477,6 @@ do_exec_no_pty(Session *s, const char *command)
 		if (setsid() < 0)
 			error("setsid failed: %.100s", strerror(errno));
 
-#ifdef USE_PIPES
-		/*
-		 * Redirect stdin.  We close the parent side of the socket
-		 * pair, and make the child side the standard input.
-		 */
-		close(pin[1]);
-		if (dup2(pin[0], 0) < 0)
-			perror("dup2 stdin");
-		close(pin[0]);
-
-		/* Redirect stdout. */
-		close(pout[0]);
-		if (dup2(pout[1], 1) < 0)
-			perror("dup2 stdout");
-		close(pout[1]);
-
-		/* Redirect stderr. */
-		close(perr[0]);
-		if (dup2(perr[1], 2) < 0)
-			perror("dup2 stderr");
-		close(perr[1]);
-#else /* USE_PIPES */
 		/*
 		 * Redirect stdin, stdout, and stderr.  Stdin and stdout will
 		 * use the same socket, as some programs (particularly rdist)
@@ -507,7 +490,6 @@ do_exec_no_pty(Session *s, const char *command)
 			perror("dup2 stdout");
 		if (dup2(err[0], 2) < 0)	/* stderr */
 			perror("dup2 stderr");
-#endif /* USE_PIPES */
 
 		/* Do processing for the child (exec command etc). */
 		do_child(s, command);
@@ -518,24 +500,7 @@ do_exec_no_pty(Session *s, const char *command)
 	s->pid = pid;
 	/* Set interactive/non-interactive mode. */
 	packet_set_interactive(s->display != NULL);
-#ifdef USE_PIPES
-	/* We are the parent.  Close the child sides of the pipes. */
-	close(pin[0]);
-	close(pout[1]);
-	close(perr[1]);
 
-	if (compat20) {
-		if (s->is_subsystem) {
-			close(perr[0]);
-			perr[0] = -1;
-		}
-		session_set_fds(s, pin[1], pout[0], perr[0]);
-	} else {
-		/* Enter the interactive session. */
-		server_loop(pid, pin[1], pout[0], perr[0]);
-		/* server_loop has closed pin[1], pout[0], and perr[0]. */
-	}
-#else /* USE_PIPES */
 	/* We are the parent.  Close the child sides of the socket pairs. */
 	close(inout[0]);
 	close(err[0]);
@@ -550,7 +515,6 @@ do_exec_no_pty(Session *s, const char *command)
 		server_loop(pid, inout[1], inout[1], err[1]);
 		/* server_loop has closed inout[1] and err[1]. */
 	}
-#endif /* USE_PIPES */
 }
 
 /*
@@ -648,10 +612,14 @@ do_exec_pty(Session *s, const char *command)
 void
 do_exec(Session *s, const char *command)
 {
-	if (forced_command) {
+	if (options.adm_forced_command) {
+		original_command = command;
+		command = options.adm_forced_command;
+		debug("Forced command (config) '%.900s'", command);
+	} else if (forced_command) {
 		original_command = command;
 		command = forced_command;
-		debug("Forced command '%.900s'", command);
+		debug("Forced command (key option) '%.900s'", command);
 	}
 
 #ifdef GSSAPI
@@ -695,7 +663,7 @@ do_login(Session *s, const char *command)
 	fromlen = sizeof(from);
 	if (packet_connection_is_on_socket()) {
 		if (getpeername(packet_get_connection_in(),
-		    (struct sockaddr *) & from, &fromlen) < 0) {
+		    (struct sockaddr *)&from, &fromlen) < 0) {
 			debug("getpeername: %.100s", strerror(errno));
 			cleanup_exit(255);
 		}
@@ -810,7 +778,7 @@ child_set_env(char ***envp, u_int *envsizep, const char *name,
 			if (envsize >= 1000)
 				fatal("child_set_env: too many env vars");
 			envsize += 50;
-			env = (*envp) = xrealloc(env, envsize * sizeof(char *));
+			env = (*envp) = xrealloc(env, envsize, sizeof(char *));
 			*envsizep = envsize;
 		}
 		/* Need to set the NULL pointer at end of array beyond the new slot. */
@@ -1292,7 +1260,7 @@ child_close_fds(void)
 	endpwent();
 
 	/*
-	 * Close any extra open file descriptors so that we don\'t have them
+	 * Close any extra open file descriptors so that we don't have them
 	 * hanging around in clients.  Note that we want to do this after
 	 * initgroups, because at least on Solaris 2.3 it leaves file
 	 * descriptors open.
@@ -1397,7 +1365,7 @@ do_child(Session *s, const char *command)
 	 */
 
 	if (options.kerberos_get_afs_token && k_hasafs() &&
-	     (s->authctxt->krb5_ctx != NULL)) {
+	    (s->authctxt->krb5_ctx != NULL)) {
 		char cell[64];
 
 		debug("Getting AFS token");
@@ -1413,7 +1381,7 @@ do_child(Session *s, const char *command)
 	}
 #endif
 
-	/* Change current directory to the user\'s home directory. */
+	/* Change current directory to the user's home directory. */
 	if (chdir(pw->pw_dir) < 0) {
 		fprintf(stderr, "Could not chdir to home directory %s: %s\n",
 		    pw->pw_dir, strerror(errno));
@@ -1427,7 +1395,7 @@ do_child(Session *s, const char *command)
 		do_rc_files(s, shell);
 
 	/* restore SIGPIPE for child */
-	signal(SIGPIPE,  SIG_DFL);
+	signal(SIGPIPE, SIG_DFL);
 
 	if (options.use_login) {
 		launch_login(pw, hostname);
@@ -1501,6 +1469,7 @@ session_new(void)
 			s->ttyfd = -1;
 			s->used = 1;
 			s->self = i;
+			s->x11_chanids = NULL;
 			debug("session_new: session %d", i);
 			return s;
 		}
@@ -1569,6 +1538,29 @@ session_by_channel(int id)
 		}
 	}
 	debug("session_by_channel: unknown channel %d", id);
+	session_dump();
+	return NULL;
+}
+
+static Session *
+session_by_x11_channel(int id)
+{
+	int i, j;
+
+	for (i = 0; i < MAX_SESSIONS; i++) {
+		Session *s = &sessions[i];
+
+		if (s->x11_chanids == NULL || !s->used)
+			continue;
+		for (j = 0; s->x11_chanids[j] != -1; j++) {
+			if (s->x11_chanids[j] == id) {
+				debug("session_by_x11_channel: session %d "
+				    "channel %d", s->self, id);
+				return s;
+			}
+		}
+	}
+	debug("session_by_x11_channel: unknown channel %d", id);
 	session_dump();
 	return NULL;
 }
@@ -1667,17 +1659,18 @@ session_subsystem_req(Session *s)
 	struct stat st;
 	u_int len;
 	int success = 0;
-	char *cmd, *subsys = packet_get_string(&len);
-	int i;
+	char *prog, *cmd, *subsys = packet_get_string(&len);
+	u_int i;
 
 	packet_check_eom();
 	logit("subsystem request for %.100s", subsys);
 
 	for (i = 0; i < options.num_subsystems; i++) {
 		if (strcmp(subsys, options.subsystem_name[i]) == 0) {
-			cmd = options.subsystem_command[i];
-			if (stat(cmd, &st) < 0) {
-				error("subsystem: cannot stat %s: %s", cmd,
+			prog = options.subsystem_command[i];
+			cmd = options.subsystem_args[i];
+			if (stat(prog, &st) < 0) {
+				error("subsystem: cannot stat %s: %s", prog,
 				    strerror(errno));
 				break;
 			}
@@ -1702,6 +1695,11 @@ session_x11_req(Session *s)
 {
 	int success;
 
+	if (s->auth_proto != NULL || s->auth_data != NULL) {
+		error("session_x11_req: session %d: "
+		    "x11 forwarding already active", s->self);
+		return 0;
+	}
 	s->single_connection = packet_get_char();
 	s->auth_proto = packet_get_string(NULL);
 	s->auth_data = packet_get_string(NULL);
@@ -1769,8 +1767,8 @@ session_env_req(Session *s)
 	for (i = 0; i < options.num_accept_env; i++) {
 		if (match_pattern(name, options.accept_env[i])) {
 			debug2("Setting env %d: %s=%s", s->num_env, name, val);
-			s->env = xrealloc(s->env, sizeof(*s->env) *
-			    (s->num_env + 1));
+			s->env = xrealloc(s->env, s->num_env + 1,
+			    sizeof(*s->env));
 			s->env[s->num_env].name = name;
 			s->env[s->num_env].val = val;
 			s->num_env++;
@@ -1927,6 +1925,62 @@ sig2name(int sig)
 }
 
 static void
+session_close_x11(int id)
+{
+	Channel *c;
+
+	if ((c = channel_by_id(id)) == NULL) {
+		debug("session_close_x11: x11 channel %d missing", id);
+	} else {
+		/* Detach X11 listener */
+		debug("session_close_x11: detach x11 channel %d", id);
+		channel_cancel_cleanup(id);
+		if (c->ostate != CHAN_OUTPUT_CLOSED)
+			chan_mark_dead(c);
+	}
+}
+
+static void
+session_close_single_x11(int id, void *arg)
+{
+	Session *s;
+	u_int i;
+
+	debug3("session_close_single_x11: channel %d", id);
+	channel_cancel_cleanup(id);
+	if ((s  = session_by_x11_channel(id)) == NULL)
+		fatal("session_close_single_x11: no x11 channel %d", id);
+	for (i = 0; s->x11_chanids[i] != -1; i++) {
+		debug("session_close_single_x11: session %d: "
+		    "closing channel %d", s->self, s->x11_chanids[i]);
+		/*
+		 * The channel "id" is already closing, but make sure we
+		 * close all of its siblings.
+		 */
+		if (s->x11_chanids[i] != id)
+			session_close_x11(s->x11_chanids[i]);
+	}
+	xfree(s->x11_chanids);
+	s->x11_chanids = NULL;
+	if (s->display) {
+		xfree(s->display);
+		s->display = NULL;
+	}
+	if (s->auth_proto) {
+		xfree(s->auth_proto);
+		s->auth_proto = NULL;
+	}
+	if (s->auth_data) {
+		xfree(s->auth_data);
+		s->auth_data = NULL;
+	}
+	if (s->auth_display) {
+		xfree(s->auth_display);
+		s->auth_display = NULL;
+	}
+}
+
+static void
 session_exit_message(Session *s, int status)
 {
 	Channel *c;
@@ -1955,7 +2009,14 @@ session_exit_message(Session *s, int status)
 
 	/* disconnect channel */
 	debug("session_exit_message: release channel %d", s->chanid);
-	channel_cancel_cleanup(s->chanid);
+
+	/*
+	 * Adjust cleanup callback attachment to send close messages when
+	 * the channel gets EOF. The session will be then be closed
+	 * by session_close_by_channel when the childs close their fds.
+	 */
+	channel_register_cleanup(c->self, session_close_by_channel, 1);
+
 	/*
 	 * emulate a write failure with 'chan_write_failed', nobody will be
 	 * interested in data we write.
@@ -1964,13 +2025,12 @@ session_exit_message(Session *s, int status)
 	 */
 	if (c->ostate != CHAN_OUTPUT_CLOSED)
 		chan_write_failed(c);
-	s->chanid = -1;
 }
 
 void
 session_close(Session *s)
 {
-	int i;
+	u_int i;
 
 	debug("session_close: session %d pid %ld", s->self, (long)s->pid);
 	if (s->ttyfd != -1)
@@ -1979,6 +2039,8 @@ session_close(Session *s)
 		xfree(s->term);
 	if (s->display)
 		xfree(s->display);
+	if (s->x11_chanids)
+		xfree(s->x11_chanids);
 	if (s->auth_display)
 		xfree(s->auth_display);
 	if (s->auth_data)
@@ -1986,12 +2048,13 @@ session_close(Session *s)
 	if (s->auth_proto)
 		xfree(s->auth_proto);
 	s->used = 0;
-	for (i = 0; i < s->num_env; i++) {
-		xfree(s->env[i].name);
-		xfree(s->env[i].val);
-	}
-	if (s->env != NULL)
+	if (s->env != NULL) {
+		for (i = 0; i < s->num_env; i++) {
+			xfree(s->env[i].name);
+			xfree(s->env[i].val);
+		}
 		xfree(s->env);
+	}
 	session_proctitle(s);
 }
 
@@ -2006,7 +2069,9 @@ session_close_by_pid(pid_t pid, int status)
 	}
 	if (s->chanid != -1)
 		session_exit_message(s, status);
-	session_close(s);
+	if (s->ttyfd != -1)
+		session_pty_cleanup(s);
+	s->pid = 0;
 }
 
 /*
@@ -2017,6 +2082,8 @@ void
 session_close_by_channel(int id, void *arg)
 {
 	Session *s = session_by_channel(id);
+	u_int i;
+
 	if (s == NULL) {
 		debug("session_close_by_channel: no session for id %d", id);
 		return;
@@ -2035,6 +2102,15 @@ session_close_by_channel(int id, void *arg)
 	}
 	/* detach by removing callback */
 	channel_cancel_cleanup(s->chanid);
+
+	/* Close any X11 listeners associated with this session */
+	if (s->x11_chanids != NULL) {
+		for (i = 0; s->x11_chanids[i] != -1; i++) {
+			session_close_x11(s->x11_chanids[i]);
+			s->x11_chanids[i] = -1;
+		}
+	}
+
 	s->chanid = -1;
 	session_close(s);
 }
@@ -2097,6 +2173,7 @@ session_setup_x11fwd(Session *s)
 	struct stat st;
 	char display[512], auth_display[512];
 	char hostname[MAXHOSTNAMELEN];
+	u_int i;
 
 	if (no_x11_forwarding_flag) {
 		packet_send_debug("X11 forwarding disabled in user configuration file.");
@@ -2122,9 +2199,13 @@ session_setup_x11fwd(Session *s)
 	}
 	if (x11_create_display_inet(options.x11_display_offset,
 	    options.x11_use_localhost, s->single_connection,
-	    &s->display_number) == -1) {
+	    &s->display_number, &s->x11_chanids) == -1) {
 		debug("x11_create_display_inet failed.");
 		return 0;
+	}
+	for (i = 0; s->x11_chanids[i] != -1; i++) {
+		channel_register_cleanup(s->x11_chanids[i],
+		    session_close_single_x11, 0);
 	}
 
 	/* Set up a suitable value for the DISPLAY variable. */
@@ -2174,7 +2255,7 @@ do_cleanup(Authctxt *authctxt)
 		return;
 	called = 1;
 
-	if (authctxt == NULL)
+	if (authctxt == NULL || !authctxt->authenticated)
 		return;
 #ifdef KRB4
 	if (options.kerberos_ticket_cleanup)

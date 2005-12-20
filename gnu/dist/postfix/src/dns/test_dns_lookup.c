@@ -1,4 +1,4 @@
-/*	$NetBSD: test_dns_lookup.c,v 1.1.1.3 2005/08/18 21:05:59 rpaulo Exp $	*/
+/*	$NetBSD: test_dns_lookup.c,v 1.1.1.5 2006/07/19 01:17:20 rpaulo Exp $	*/
 
 /*++
 /* NAME
@@ -47,7 +47,7 @@ static void print_rr(DNS_RR *rr)
     MAI_HOSTADDR_STR host;
 
     while (rr) {
-	printf("%s: ttl: %9d ", rr->name, rr->ttl);
+	printf("%s: ttl: %9d ", rr->rname, rr->ttl);
 	switch (rr->type) {
 	case T_A:
 #ifdef T_AAAA
@@ -102,7 +102,7 @@ int     main(int argc, char **argv)
     name = argv[2];
     msg_verbose = 1;
     switch (dns_lookup_v(name, RES_DEFNAMES | RES_DEBUG, &rr, fqdn, why,
-			 DNS_REQ_FLAG_ALL, types)) {
+			 DNS_REQ_FLAG_NONE, types)) {
     default:
 	msg_fatal("%s", vstring_str(why));
     case DNS_OK:

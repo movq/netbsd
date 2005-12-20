@@ -1,4 +1,4 @@
-.\"	$NetBSD: RUN_ONCE.9,v 1.2 2005/11/24 19:36:43 wiz Exp $
+.\"	$NetBSD: RUN_ONCE.9,v 1.5 2006/01/17 00:14:16 wiz Exp $
 .\"
 .\" Copyright (c)2005 YAMAMOTO Takashi,
 .\" All rights reserved.
@@ -25,7 +25,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\" ------------------------------------------------------------
-.Dd November 24, 2005
+.Dd January 17, 2006
 .Dt RUN_ONCE 9
 .Os
 .\" ------------------------------------------------------------
@@ -38,19 +38,35 @@
 .\" - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 .Vt ONCE_DECL(control);
 .\" - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-.Ft void
+.Ft int
 .Fn RUN_ONCE \
-"once_t *control" "void (*init_func)(void)"
+"once_t *control" "int (*init_func)(void)"
 .\" ------------------------------------------------------------
 .Sh DESCRIPTION
 .Fn RUN_ONCE
 provides a functionality similar to
 .Fn pthread_once 3 .
-It ensures that
+It ensures that, for a given
+.Fa control ,
 .Fn init_func
-is called exactly once for given
-.Fa control .
-It can sleep if it's called concurrently.
+is executed (successfully) exactly once.
+It is considered as a successful execution if and only if
+.Fn init_func
+returned 0.
+As long as there was no successful execution,
+.Fn RUN_ONCE
+will try again each time it is called.
+.Pp
+.Fn RUN_ONCE
+can sleep if it's called concurrently.
+.\" ------------------------------------------------------------
+.Sh RETURN VALUES
+On failure,
+.Fn RUN_ONCE
+returns what
+.Fn init_func
+returned.
+Otherwise, it returns 0.
 .\" ------------------------------------------------------------
 .Sh EXAMPLES
 The following example shows how
@@ -62,13 +78,15 @@ is executed,
 .Fn init_func
 will be executed exactly once.
 .Bd -literal
-static void
+static int
 init_func(void)
 {
 
 	/*
 	 * do some initialization.
 	 */
+
+	return 0; /* success */
 }
 
 int

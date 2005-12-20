@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.en,v 1.48 2004/08/14 16:06:41 dsl Exp $	*/
+/*	$NetBSD: msg.md.en,v 1.50.2.3 2007/05/23 23:08:56 riz Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -70,7 +70,7 @@ message Use_serial_com0		{Use serial port com0}
 message Use_serial_com1		{Use serial port com1}
 message Use_serial_com2		{Use serial port com2}
 message Use_serial_com3		{Use serial port com3}
-message serial_baud_rate	{Serial baud rate}
+message serial_baud_rate	{Set serial baud rate}
 message Use_existing_bootblocks	{Use existing bootblocks}
 
 message No_Bootcode		{No bootcode for root partition}
@@ -136,7 +136,7 @@ Are you sure you that you want to do this?
 message missing_bootmenu_text
 {You have more than one operating system on this disk, but have not
 specified a 'bootmenu' for either the active partition, or the
-Netbsd partition that you are going to install into. 
+NetBSD partition that you are going to install into. 
 
 Do you want to re-edit the partition to add a bootmenu entry?}
 
@@ -165,8 +165,7 @@ the latest version of the NetBSD bootcode?}
 
 message set_kernel_1	{Kernel (GENERIC)}
 message set_kernel_2	{Kernel (GENERIC.MP)}
-message set_kernel_3	{Kernel (GENERIC.MPACPI)}
-message set_kernel_4	{Kernel (GENERIC_TINY)}
-message set_kernel_5	{Kernel (GENERIC_LAPTOP)}
-message set_kernel_6	{Kernel (GENERIC_DIAGNOSTIC)}
-message set_kernel_7	{Kernel (GENERIC_PS2TINY)}
+message set_kernel_3	{Kernel (GENERIC_LAPTOP)}
+message set_kernel_4	{Kernel (GENERIC_DIAGNOSTIC)}
+message set_kernel_5	{Kernel (GENERIC.NOACPI)}
+/* message set_kernel_6	{Kernel (GENERIC_PS2TINY)} */

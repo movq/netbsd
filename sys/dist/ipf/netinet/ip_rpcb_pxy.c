@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_rpcb_pxy.c,v 1.7 2005/12/11 12:24:21 christos Exp $	*/
+/*	$NetBSD: ip_rpcb_pxy.c,v 1.9.6.2 2007/07/16 11:05:51 liamjfoy Exp $	*/
 
 /*
  * Copyright (C) 2002-2003 by Ryan Beasley <ryanb@goddamnbastard.org>
@@ -39,7 +39,7 @@
  *   o The enclosed hack of STREAMS support is pretty sick and most likely
  *     broken.
  *
- *	Id: ip_rpcb_pxy.c,v 2.25.2.3 2005/02/04 10:22:56 darrenr Exp
+ *	Id: ip_rpcb_pxy.c,v 2.25.2.6 2007/01/17 11:34:54 darrenr Exp
  */
 
 #define	IPF_RPCB_PROXY
@@ -233,7 +233,7 @@ ippr_rpcb_in(fin, aps, nat)
 	/* Copy packet over to convenience buffer. */
 	rm = &rpcmsg;
 	bzero((char *)rm, sizeof(*rm));
-	COPYDATA(m, off, dlen, (caddr_t)&rm->rm_msgbuf);
+	COPYDATA(m, off, dlen, (void *)&rm->rm_msgbuf);
 	rm->rm_buflen = dlen;
 
 	/* Send off to decode request. */
@@ -286,6 +286,8 @@ ippr_rpcb_out(fin, aps, nat)
 	int rv, diff;
 	mb_t *m;
 
+	rx = NULL;	/* XXX gcc */
+
 	/* Disallow fragmented or illegally short packets. */
 	if ((fin->fin_flx & (FI_FRAG|FI_SHORT)) != 0)
 		return(APR_ERR(1));
@@ -306,8 +308,10 @@ ippr_rpcb_out(fin, aps, nat)
 	/* Copy packet over to convenience buffer. */
 	rm = &rpcmsg;
 	bzero((char *)rm, sizeof(*rm));
-	COPYDATA(m, off, dlen, (caddr_t)&rm->rm_msgbuf);
+	COPYDATA(m, off, dlen, (void *)&rm->rm_msgbuf);
 	rm->rm_buflen = dlen;
+
+	rx = NULL;		/* XXX gcc */
 
 	/* Send off to decode reply. */
 	rv = ippr_rpcb_decoderep(fin, nat, rs, rm, &rx);
@@ -799,7 +803,7 @@ ippr_rpcb_modreq(fin, nat, rm, m, off)
 
 	/* Write new string length. */
 	bogo = htonl(len);
-	COPYBACK(m, off, 4, (caddr_t)&bogo);
+	COPYBACK(m, off, 4, (void *)&bogo);
 	off += 4;
 
 	/* Write new string. */
@@ -808,7 +812,7 @@ ippr_rpcb_modreq(fin, nat, rm, m, off)
 
 	/* Write in zero r_owner. */
 	bogo = 0;
-	COPYBACK(m, off, 4, (caddr_t)&bogo);
+	COPYBACK(m, off, 4, (void *)&bogo);
 
 	/* Determine difference in data lengths. */
 	diff = xlen - XDRALIGN(B(ra->ra_maddr.xu_xslen));
@@ -1158,6 +1162,8 @@ ippr_rpcb_getnat(fin, nat, proto, port)
 
 	/* Generate dummy fr_info */
 	bcopy((char *)fin, (char *)&fi, sizeof(fi));
+	fi.fin_state = NULL;
+	fi.fin_nat = NULL;
 	fi.fin_out = 0;
 	fi.fin_src = fin->fin_dst;
 	fi.fin_dst = nat->nat_outip;
@@ -1193,8 +1199,9 @@ ippr_rpcb_getnat(fin, nat, proto, port)
 	 * no use for this lock, so simply unlock it if necessary.
 	 */
 	is = fr_stlookup(&fi, &tcp, NULL);
-	if (is != NULL)
+	if (is != NULL) {
 		RWLOCK_EXIT(&ipf_state);
+	}
 
 	RWLOCK_EXIT(&ipf_nat);
 
@@ -1273,7 +1280,7 @@ ippr_rpcb_getnat(fin, nat, proto, port)
 			return(-1);
 		}
 		if (fi.fin_state != NULL)
-			fr_statederef(&fi, (ipstate_t **)&fi.fin_state);
+			fr_statederef((ipstate_t **)&fi.fin_state);
 	}
 
 	return(0);
@@ -1327,7 +1334,7 @@ ippr_rpcb_modv3(fin, nat, rm, m, off)
 
 	/* Write new string length. */
 	bogo = htonl(len);
-	COPYBACK(m, off, 4, (caddr_t)&bogo);
+	COPYBACK(m, off, 4, (void *)&bogo);
 	off += 4;
 
 	/* Write new string. */
@@ -1404,7 +1411,7 @@ ippr_rpcb_modv4(fin, nat, rm, m, off)
 
 		/* Write new string length. */
 		bogo = htonl(len);
-		COPYBACK(m, off, 4, (caddr_t)&bogo);
+		COPYBACK(m, off, 4, (void *)&bogo);
 		off += 4;
 
 		/* Write new string. */
@@ -1418,7 +1425,7 @@ ippr_rpcb_modv4(fin, nat, rm, m, off)
 		len = ((char *)re->re_more + 4) -
 		       (char *)re->re_netid.xp_xslen;
 		if (diff != 0) {
-			COPYBACK(m, off, len, (caddr_t)re->re_netid.xp_xslen);
+			COPYBACK(m, off, len, (void *)re->re_netid.xp_xslen);
 		}
 		off += len;
 	}

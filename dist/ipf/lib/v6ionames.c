@@ -1,11 +1,11 @@
-/*	$NetBSD: v6ionames.c,v 1.4 2005/02/08 07:01:54 martti Exp $	*/
+/*	$NetBSD: v6ionames.c,v 1.5.4.2 2007/07/16 11:05:24 liamjfoy Exp $	*/
 
 /*
- * Copyright (C) 1993-2001 by Darren Reed.
+ * Copyright (C) 2003-2005 by Darren Reed.
  *
  * See the IPFILTER.LICENCE file for details on licencing.
  *
- * Id: v6ionames.c,v 1.1.4.1 2005/01/02 13:08:49 darrenr Exp
+ * Id: v6ionames.c,v 1.1.4.3 2006/06/16 17:21:18 darrenr Exp
  */
 #include "ipf.h"
 
@@ -21,6 +21,7 @@ struct	ipopt_names	v6ionames[] ={
 	{ IPPROTO_AH,		0x000020,	0,	"ah" },
 	{ IPPROTO_NONE,		0x000040,	0,	"none" },	
 	{ IPPROTO_DSTOPTS,	0x000080,	0,	"dstopts" },
+	{ IPPROTO_MOBILITY,	0x000100,	0,	"mobility" },
 	{ 0, 			0,		0,	(char *)NULL }
 };
 

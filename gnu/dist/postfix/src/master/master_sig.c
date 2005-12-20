@@ -1,4 +1,4 @@
-/*	$NetBSD: master_sig.c,v 1.1.1.5 2004/05/31 00:24:38 heas Exp $	*/
+/*	$NetBSD: master_sig.c,v 1.1.1.6.4.1 2007/06/16 17:00:17 snj Exp $	*/
 
 /*++
 /* NAME
@@ -47,6 +47,7 @@
 
 #include <msg.h>
 #include <posix_signals.h>
+#include <killme_after.h>
 
 /* Application-specific. */
 
@@ -170,16 +171,14 @@ static void master_sigchld(int sig)
 
 static void master_sigdeath(int sig)
 {
-    char   *myname = "master_sigdeath";
+    const char *myname = "master_sigdeath";
     struct sigaction action;
     pid_t   pid = getpid();
 
     /*
-     * XXX We're running from a signal handler, and really should not call
-     * any msg() routines at all, but it would be even worse to silently
-     * terminate without informing the sysadmin.
+     * Set alarm clock here for suicide after 5s.
      */
-    msg_info("terminating on signal %d", sig);
+    killme_after(5);
 
     /*
      * Terminate all processes in our process group, except ourselves.
@@ -191,6 +190,14 @@ static void master_sigdeath(int sig)
 	msg_fatal("%s: sigaction: %m", myname);
     if (kill(-pid, SIGTERM) < 0)
 	msg_fatal("%s: kill process group: %m", myname);
+
+    /*
+     * XXX We're running from a signal handler, and should not call complex
+     * routines at all, but it would be even worse to silently terminate
+     * without informing the sysadmin. For this reason, msg(3) was made safe
+     * for usage by signal handlers that terminate the process.
+     */
+    msg_info("terminating on signal %d", sig);
 
     /*
      * Deliver the signal to ourselves and clean up. XXX We're running as a
@@ -209,7 +216,7 @@ static void master_sigdeath(int sig)
 
 void    master_sigsetup(void)
 {
-    char   *myname = "master_sigsetup";
+    const char *myname = "master_sigsetup";
     struct sigaction action;
     static int sigs[] = {
 	SIGINT, SIGQUIT, SIGILL, SIGBUS, SIGSEGV, SIGTERM,

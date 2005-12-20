@@ -1,4 +1,4 @@
-/*	$NetBSD: gsp_inst.c,v 1.4 2002/08/08 13:24:15 soren Exp $	*/
+/*	$NetBSD: gsp_inst.c,v 1.9 2006/09/27 21:33:07 christos Exp $	*/
 /*
  * TMS34010 GSP assembler - Instruction encoding
  *
@@ -33,10 +33,11 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: gsp_inst.c,v 1.4 2002/08/08 13:24:15 soren Exp $");
+__RCSID("$NetBSD: gsp_inst.c,v 1.9 2006/09/27 21:33:07 christos Exp $");
 #endif
 
 #include <string.h>
+#include <assert.h>
 #include "gsp_ass.h"
 #include "gsp_code.h"
 
@@ -302,9 +303,14 @@ do_statement(char *opcode, operand operands)
 			perr("Inappropriate type for operand %d", nop+1);
 			return;
 		}
-		if( (req & ~OPTOPRN) == SPEC )
+		if( (req & ~OPTOPRN) == SPEC ) {
+			if (nop >= sizeof(spec) / sizeof(spec[0])) {
+				perr("Spec out of bounds");
+				return;
+			}
 			/* operand is a field/type/length specifier */
 			spec[nop] = specifier(op);
+		}
 		++nop;
 	}
 	if( nop < 4 && ip->optypes[nop] != 0
@@ -455,12 +461,12 @@ encode_instr(struct inst *ip, operand ops, int *spec, u_int16_t *iwords)
 		op1 = NULL;
 	class = ip->class & CLASS;
 	flags = ip->class & ~CLASS;
-	if( class == MOVE && op1->type == REG ){
-		if (op0->type == REG ){
+	if (class == MOVE && op0 && op1 && op1->type == REG) {
+		if (op0->type == REG) {
 			class = DYADIC;
-			if( (op0->reg_no & op1->reg_no & REGFILE) == 0 ){
+			if ((op0->reg_no & op1->reg_no & GSPA_REGFILE) == 0) {
 				opc += 0x0200;
-				op1->reg_no ^= A0^B0;
+				op1->reg_no ^= GSPA_A0 ^ GSPA_B0;
 			}
 		} else if ( op0->type == EXPR )
 			class = DYADIC;
@@ -486,7 +492,7 @@ encode_instr(struct inst *ip, operand ops, int *spec, u_int16_t *iwords)
 		   && spec[2] != 0 && op1->next->next == NULL )
 			perr("Extra operands ignored");
 	} else if( class == KREG ){
-		if( op0->type == REG ){
+		if( op0 && op0->type == REG ){
 			class = TWOREG;
 			if( opc < 0x2000 )
 				opc = 0x4A00;	/* BTST */
@@ -500,12 +506,12 @@ encode_instr(struct inst *ip, operand ops, int *spec, u_int16_t *iwords)
 	if( op1 != NULL ){
 		rd = op1->reg_no;
 		if( USES_REG(op0) && USES_REG(op1) ){
-			if( (rs & rd & REGFILE) == 0 )
+			if ((rs & rd & GSPA_REGFILE) == 0)
 				perr("Registers must be in the same register file");
 			/* force SP to the file of the other operand */
-			if( rs == SP )
+			if (rs == GSPA_SP)
 				rs |= rd;
-			if( rd == SP )
+			if (rd == GSPA_SP)
 				rd |= rs;
 		}
 	}
@@ -552,7 +558,7 @@ encode_instr(struct inst *ip, operand ops, int *spec, u_int16_t *iwords)
 		opc |= (rs & 0x1F) << 5;
 		break;
 	case CALL:			/* reg or address */
-		if( op0->type == REG ){
+		if( op0 && op0->type == REG ){
 			opc |= rs & 0x1F;
 			break;
 		}
@@ -575,7 +581,7 @@ encode_instr(struct inst *ip, operand ops, int *spec, u_int16_t *iwords)
 		}
 		break;
 	case JUMP:
-		if( op0->type == REG ){
+		if( op0 && op0->type == REG ){
 			opc |= rs & 0x1F;
 			break;
 		}
@@ -663,7 +669,7 @@ encode_instr(struct inst *ip, operand ops, int *spec, u_int16_t *iwords)
 		break;
 	case MMFM:
 		opc |= rs & 0xF;
-		file = rs & REGFILE;
+		file = rs & GSPA_REGFILE;
 		if( op1 == NULL )
 			mask = 0xFFFF;
 		else if( op1->type == REG ){
@@ -685,9 +691,9 @@ encode_instr(struct inst *ip, operand ops, int *spec, u_int16_t *iwords)
 			if( op1->next != NULL )
 				perr("Extra operands ignored");
 		}
-		if( (file & A0 & REGFILE) == 0 )
+		if ((file & GSPA_A0 & GSPA_REGFILE) == 0)
 			opc |= 0x10;
-		if( (opc & 0x20) != 0 ){
+		if ((opc & 0x20) != 0) {
 			/* mask reversed for MMFM */
 			rs = 0;
 			for( bit = 16; bit != 0; --bit ){
@@ -703,7 +709,8 @@ encode_instr(struct inst *ip, operand ops, int *spec, u_int16_t *iwords)
 	case PIXT:
 	case MOVB:
 	case MOVE:
-		ms = op0->type == REG? M_REG: op0->mode;
+		ms = op0 && op0->type == REG? M_REG: op0->mode;
+		assert(op1 != NULL);
 		md = op1->type == REG? M_REG: op1->mode;
 		opc = class == MOVE? move_opc[md][ms]:
 		      class == MOVB? movb_opc[md][ms]: pixt_opc[md][ms];

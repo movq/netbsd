@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.29 2005/12/11 12:18:06 christos Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.32.2.1 2007/03/04 12:21:28 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.29 2005/12/11 12:18:06 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.32.2.1 2007/03/04 12:21:28 bouyer Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -57,18 +57,21 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.29 2005/12/11 12:18:06 christos Ex
 #define _MACPPC_BUS_DMA_PRIVATE
 #include <machine/bus.h>
 
-#include <machine/bus.h>
+#include <machine/autoconf.h>
 #include <machine/pio.h>
 #include <machine/intr.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
+#include <dev/pci/ppbreg.h>
+#include <dev/pci/pcidevs.h>
 
 #include <dev/ofw/openfirm.h>
 #include <dev/ofw/ofw_pci.h>
 
 static void fixpci __P((int, pci_chipset_tag_t));
 static int find_node_intr __P((int, u_int32_t *, u_int32_t *));
+static void fix_cardbus_bridge(int, pci_chipset_tag_t, pcitag_t);
 
 /*
  * PCI doesn't have any special needs; just use the generic versions
@@ -189,9 +192,14 @@ pci_intr_map(pa, ihp)
 {
 	int pin = pa->pa_intrpin;
 	int line = pa->pa_intrline;
+	
+#if DEBUG
+	printf("%s: pin: %d, line: %d\n", __FUNCTION__, pin, line);
+#endif
 
 	if (pin == 0) {
 		/* No IRQ used. */
+		printf("pci_intr_map: interrupt pin %d\n", pin);
 		goto bad;
 	}
 
@@ -294,7 +302,7 @@ fixpci(parent, pc)
 {
 	int node;
 	pcitag_t tag;
-	pcireg_t csr, intr;
+	pcireg_t csr, intr, id, cr;
 	int len, i, ilen;
 	int32_t irqs[4];
 	struct {
@@ -376,10 +384,76 @@ fixpci(parent, pc)
 			if (len <= 0)
 				continue;
 		}
+
+		/* 
+		 * For PowerBook 2400, 3400 and original G3:
+		 * check if we have a 2nd ohare PIC - if so frob the built-in 
+		 * tlp's IRQ to 60
+		 * first see if we have something on bus 0 device 13 and if 
+		 * it's a DEC 21041
+		 */
+		id = pci_conf_read(pc, tag, PCI_ID_REG);
+		if ((tag == pci_make_tag(pc, 0, 13, 0)) &&
+		    (PCI_VENDOR(id) == PCI_VENDOR_DEC) && 
+		    (PCI_PRODUCT(id) == PCI_PRODUCT_DEC_21041)) {
+
+			/* now look for the 2nd ohare */
+			if (OF_finddevice("/bandit/pci106b,7") != -1) {
+
+				irqs[0] = 60;
+				printf("\nohare: frobbing tlp IRQ to 60");
+			}
+		}
+
 		intr = pci_conf_read(pc, tag, PCI_INTERRUPT_REG);
 		intr &= ~PCI_INTERRUPT_LINE_MASK;
 		intr |= irqs[0] & PCI_INTERRUPT_LINE_MASK;
 		pci_conf_write(pc, tag, PCI_INTERRUPT_REG, intr);
+
+		/* fix secondary bus numbers on CardBus bridges */
+		cr = pci_conf_read(pc, tag, PCI_CLASS_REG);
+		if ((PCI_CLASS(cr) == PCI_CLASS_BRIDGE) &&
+		    (PCI_SUBCLASS(cr) == PCI_SUBCLASS_BRIDGE_CARDBUS)) {
+			uint32_t bi, busid;
+
+			/*
+			 * we found a CardBus bridge. Check if the bus number
+			 * is sane
+			 */
+			bi = pci_conf_read(pc, tag, PPB_REG_BUSINFO);
+			busid = bi & 0xff;
+			if (busid == 0) {
+				fix_cardbus_bridge(node, pc, tag);
+			}
+		}
+	}
+}
+
+static void
+fix_cardbus_bridge(int node, pci_chipset_tag_t pc, pcitag_t tag)
+{
+	uint32_t bus_number;
+	pcireg_t bi;
+	int bus, dev, fn, ih, len;
+	char path[256];
+
+	len = OF_package_to_path(node, path, sizeof(path));
+	path[len] = 0;
+
+	ih = OF_open(path);
+	OF_call_method("load-ata", ih, 0, 0);
+	OF_close(ih);
+	
+	if (OF_getprop(node, "AAPL,bus-id", &bus_number, sizeof(bus_number))
+	    > 0) {
+
+		printf("\n%s: fixing bus number to %d", path, bus_number);
+		pci_decompose_tag(pc, tag, &bus, &dev, &fn);
+		bi = pci_conf_read(pc, tag, PPB_REG_BUSINFO);
+		bi &= 0xff000000;
+		/* XXX subordinate is always 32 here */
+		bi |= (bus & 0xff) | (bus_number << 8) | 0x200000;
+		pci_conf_write(pc, tag, PPB_REG_BUSINFO, bi);
 	}
 }
 
@@ -398,6 +472,20 @@ find_node_intr(node, addr, intr)
 	u_int32_t imapmask[8], maskedaddr[8];
 	u_int32_t acells, icells;
 	char name[32];
+
+	/* XXXSL: 1st check for a  interrupt-parent property */
+        if (OF_getprop(node, "interrupt-parent", &iparent, sizeof(iparent)) == sizeof(iparent))
+	{
+		/* How many cells to specify an interrupt ?? */
+		if (OF_getprop(iparent, "#interrupt-cells", &icells, 4) != 4)
+			return -1;
+
+		if (OF_getprop(node, "interrupts", &map, sizeof(map)) != (icells * 4))
+			return -1;
+
+		memcpy(intr, map, icells * 4);
+		return (icells * 4);
+	}
 
 	parent = OF_parent(node);
 	len = OF_getprop(parent, "interrupt-map", map, sizeof(map));

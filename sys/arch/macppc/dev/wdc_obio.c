@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_obio.c,v 1.42 2005/12/11 12:18:03 christos Exp $	*/
+/*	$NetBSD: wdc_obio.c,v 1.46 2006/11/07 02:23:27 macallan Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_obio.c,v 1.42 2005/12/11 12:18:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_obio.c,v 1.46 2006/11/07 02:23:27 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -130,9 +130,12 @@ wdc_obio_attach(parent, self, aux)
 	struct ata_channel *chp = &sc->sc_channel;
 	int intr, i;
 	int use_dma = 0;
-	char path[80];
+	char path[80], compat[32];
 
-	if (sc->sc_wdcdev.sc_atac.atac_dev.dv_cfdata->cf_flags & WDC_OPTIONS_DMA) {
+	OF_getprop(ca->ca_node, "compatible", compat, sizeof(compat));
+
+	if (device_cfdata(&sc->sc_wdcdev.sc_atac.atac_dev)->cf_flags &
+	    WDC_OPTIONS_DMA) {
 		if (ca->ca_nreg >= 16 || ca->ca_nintr == -1)
 			use_dma = 1;	/* XXX Don't work yet. */
 	}
@@ -192,7 +195,8 @@ wdc_obio_attach(parent, self, aux)
 		if (strcmp(ca->ca_name, "ata-4") == 0) {
 			sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_UDMA;
 			sc->sc_wdcdev.sc_atac.atac_udma_cap = 4;
-			sc->sc_wdcdev.sc_atac.atac_set_modes = ata4_adjust_timing;
+			sc->sc_wdcdev.sc_atac.atac_set_modes = 
+			    ata4_adjust_timing;
 		} else {
 			sc->sc_wdcdev.sc_atac.atac_set_modes = adjust_timing;
 		}
@@ -220,6 +224,7 @@ wdc_obio_attach(parent, self, aux)
 	chp->ch_channel = 0;
 	chp->ch_atac = &sc->sc_wdcdev.sc_atac;
 	chp->ch_queue = &sc->sc_chqueue;
+	chp->ch_ndrive = 2;
 
 	wdc_init_shadow_regs(chp);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ka410.c,v 1.27 2005/12/11 12:19:36 christos Exp $ */
+/*	$NetBSD: ka410.c,v 1.29 2006/09/05 19:32:57 matt Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka410.c,v 1.27 2005/12/11 12:19:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka410.c,v 1.29 2006/09/05 19:32:57 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -74,8 +74,8 @@ struct	cpu_dep ka410_calls = {
 	ka410_mchk,
 	ka410_memerr, 
 	ka410_conf,
-	chip_clkread,
-	chip_clkwrite,
+	chip_gettime,
+	chip_settime,
 	1,      /* ~VUPS */
 	2,	/* SCB pages */
 	ka410_halt,
@@ -149,16 +149,16 @@ ka410_mchk(addr)
 static void
 ka410_halt()
 {
-	asm("movl $0xc, (%0)"::"r"((int)clk_page + 0x38)); /* Don't ask */
-	asm("halt");
+	__asm("movl $0xc, (%0)"::"r"((int)clk_page + 0x38)); /* Don't ask */
+	__asm("halt");
 }
 
 static void
 ka410_reboot(arg)
 	int arg;
 {
-	asm("movl $0xc, (%0)"::"r"((int)clk_page + 0x38)); /* Don't ask */
-	asm("halt");
+	__asm("movl $0xc, (%0)"::"r"((int)clk_page + 0x38)); /* Don't ask */
+	__asm("halt");
 }
 
 static void

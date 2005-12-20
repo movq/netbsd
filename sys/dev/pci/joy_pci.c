@@ -1,4 +1,4 @@
-/*	$NetBSD: joy_pci.c,v 1.12 2005/12/11 12:22:50 christos Exp $	*/
+/*	$NetBSD: joy_pci.c,v 1.14 2006/11/16 01:33:09 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: joy_pci.c,v 1.12 2005/12/11 12:22:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: joy_pci.c,v 1.14 2006/11/16 01:33:09 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,7 +55,8 @@ __KERNEL_RCSID(0, "$NetBSD: joy_pci.c,v 1.12 2005/12/11 12:22:50 christos Exp $"
 static int bar_is_io(pci_chipset_tag_t pc, pcitag_t tag, int reg);
 
 static int
-joy_pci_match(struct device *parent, struct cfdata *match, void *aux)
+joy_pci_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 

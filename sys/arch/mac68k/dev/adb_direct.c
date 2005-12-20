@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_direct.c,v 1.52 2005/12/11 12:18:02 christos Exp $	*/
+/*	$NetBSD: adb_direct.c,v 1.55 2006/11/24 22:04:23 wiz Exp $	*/
 
 /* From: adb_direct.c 2.02 4/18/97 jpw */
 
@@ -62,7 +62,7 @@
 #ifdef __NetBSD__
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb_direct.c,v 1.52 2005/12/11 12:18:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb_direct.c,v 1.55 2006/11/24 22:04:23 wiz Exp $");
 
 #include "opt_adb.h"
 
@@ -1788,7 +1788,7 @@ adb_soft_intr(void)
 		/* call default completion routine if it's valid */
 		if (comprout) {
 #ifdef __NetBSD__
-			__asm __volatile (
+			__asm volatile (
 			"	movml #0xffff,%%sp@- \n" /* save all regs */
 			"	movl %0,%%a2	\n" 	/* compdata */
 			"	movl %1,%%a1	\n" 	/* comprout */
@@ -2362,7 +2362,7 @@ adb_comp_exec(void)
 {
 	if ((long)0 != adbCompRout) /* don't call if empty return location */
 #ifdef __NetBSD__
-		__asm __volatile(
+		__asm volatile(
 		"	movml #0xffff,%%sp@- \n" /* save all registers */
 		"	movl %0,%%a2 \n"	/* adbCompData */
 		"	movl %1,%%a1 \n"	/* adbCompRout */
@@ -2703,10 +2703,10 @@ mrg_pmintr(void)
 	return 1;	/* mimic mrg_pmintr in macrom.h just in case */
 }
 
-/* caller should really use machine-independant version: getPramTime */
+/* caller should really use machine-independent version: getPramTime */
 /* this version does pseudo-adb access only */
 int 
-adb_read_date_time(unsigned long *time)
+adb_read_date_time(unsigned long *curtime)
 {
 	u_char output[ADB_MAX_MSG_LENGTH];
 	int result;
@@ -2731,7 +2731,7 @@ adb_read_date_time(unsigned long *time)
 		while (0 == flag)	/* wait for result */
 			;
 
-		*time = (long)(*(long *)(output + 1));
+		*curtime = (long)(*(long *)(output + 1));
 		return 0;
 
 	case ADB_HW_PB:
@@ -2749,7 +2749,7 @@ adb_read_date_time(unsigned long *time)
 		while (0 == flag)	/* wait for result */
 			;
 
-		*time = (long)(*(long *)(output + 1));
+		*curtime = (long)(*(long *)(output + 1));
 		return 0;
 
 	case ADB_HW_UNKNOWN:
@@ -2758,10 +2758,10 @@ adb_read_date_time(unsigned long *time)
 	}
 }
 
-/* caller should really use machine-independant version: setPramTime */
+/* caller should really use machine-independent version: setPramTime */
 /* this version does pseudo-adb access only */
 int 
-adb_set_date_time(unsigned long time)
+adb_set_date_time(unsigned long curtime)
 {
 	u_char output[ADB_MAX_MSG_LENGTH];
 	int result;
@@ -2778,10 +2778,10 @@ adb_set_date_time(unsigned long time)
 		output[0] = 0x06;	/* 6 byte message */
 		output[1] = 0x01;	/* to pram/rtc device */
 		output[2] = 0x09;	/* set date/time */
-		output[3] = (u_char)(time >> 24);
-		output[4] = (u_char)(time >> 16);
-		output[5] = (u_char)(time >> 8);
-		output[6] = (u_char)(time);
+		output[3] = (u_char)(curtime >> 24);
+		output[4] = (u_char)(curtime >> 16);
+		output[5] = (u_char)(curtime >> 8);
+		output[6] = (u_char)(curtime);
 		result = send_adb_IIsi((u_char *)output, (u_char *)0,
 		    (void *)adb_op_comprout, __UNVOLATILE(&flag), (int)0);
 		if (result != 0)	/* exit if not sent */
@@ -2799,10 +2799,10 @@ adb_set_date_time(unsigned long time)
 		output[0] = 0x06;	/* 6 byte message */
 		output[1] = 0x01;	/* to pram/rtc device */
 		output[2] = 0x09;	/* set date/time */
-		output[3] = (u_char)(time >> 24);
-		output[4] = (u_char)(time >> 16);
-		output[5] = (u_char)(time >> 8);
-		output[6] = (u_char)(time);
+		output[3] = (u_char)(curtime >> 24);
+		output[4] = (u_char)(curtime >> 16);
+		output[5] = (u_char)(curtime >> 8);
+		output[6] = (u_char)(curtime);
 		result = send_adb_cuda((u_char *)output, (u_char *)0,
 		    (void *)adb_op_comprout, __UNVOLATILE(&flag), (int)0);
 		if (result != 0)	/* exit if not sent */

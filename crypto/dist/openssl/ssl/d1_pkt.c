@@ -197,7 +197,13 @@ dtls1_buffer_record(SSL *s, record_pqueue *queue, PQ_64BIT priority)
 	memset(&(s->s3->rbuf), 0, sizeof(SSL3_BUFFER));
 	memset(&(s->s3->rrec), 0, sizeof(SSL3_RECORD));
 	
-	ssl3_setup_buffers(s);
+	if (!ssl3_setup_buffers(s))
+		{
+		SSLerr(SSL_F_DTLS1_BUFFER_RECORD, ERR_R_INTERNAL_ERROR);
+		OPENSSL_free(rdata);
+		pitem_free(item);
+		return(0);
+		}
 	
 	return(1);
     }
@@ -527,11 +533,7 @@ again:
 		n2s(p,rr->length);
 
 		/* Lets check version */
-		if (s->first_packet)
-			{
-			s->first_packet=0;
-			}
-		else
+		if (!s->first_packet)
 			{
 			if (version != s->version)
 				{
@@ -790,8 +792,14 @@ start:
 			dest = s->d1->alert_fragment;
 			dest_len = &s->d1->alert_fragment_len;
 			}
-		else	/* else it's a CCS message */
-			OPENSSL_assert(rr->type == SSL3_RT_CHANGE_CIPHER_SPEC);
+                /* else it's a CCS message, or it's wrong */
+                else if (rr->type != SSL3_RT_CHANGE_CIPHER_SPEC)
+                        {
+                          /* Not certain if this is the right error handling */
+                          al=SSL_AD_UNEXPECTED_MESSAGE;
+                          SSLerr(SSL_F_DTLS1_READ_BYTES,SSL_R_UNEXPECTED_RECORD);
+                          goto f_err;
+                        }
 
 
 		if (dest_maxlen > 0)

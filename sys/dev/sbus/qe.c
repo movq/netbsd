@@ -1,4 +1,4 @@
-/*	$NetBSD: qe.c,v 1.37 2005/12/11 12:23:44 christos Exp $	*/
+/*	$NetBSD: qe.c,v 1.39 2006/09/07 02:40:33 dogcow Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -73,15 +73,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: qe.c,v 1.37 2005/12/11 12:23:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: qe.c,v 1.39 2006/09/07 02:40:33 dogcow Exp $");
 
 #define QEDEBUG
 
 #include "opt_ddb.h"
 #include "opt_inet.h"
-#include "opt_ccitt.h"
-#include "opt_llc.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 #include "rnd.h"
 
@@ -114,10 +111,6 @@ __KERNEL_RCSID(0, "$NetBSD: qe.c,v 1.37 2005/12/11 12:23:44 christos Exp $");
 #include <netinet/ip.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -344,7 +337,7 @@ qeattach(parent, self, aux)
  * We copy the data into mbufs.  When full cluster sized units are present,
  * we copy into clusters.
  */
-static __inline__ struct mbuf *
+static inline struct mbuf *
 qe_get(sc, idx, totlen)
 	struct qe_softc *sc;
 	int idx, totlen;
@@ -397,7 +390,7 @@ qe_get(sc, idx, totlen)
  * Routine to copy from mbuf chain to transmit buffer in
  * network buffer memory.
  */
-__inline__ int
+inline int
 qe_put(sc, idx, m)
 	struct qe_softc *sc;
 	int idx;
@@ -426,7 +419,7 @@ qe_put(sc, idx, m)
 /*
  * Pass a packet to the higher levels.
  */
-__inline__ void
+inline void
 qe_read(sc, idx, len)
 	struct qe_softc *sc;
 	int idx, len;
@@ -945,22 +938,6 @@ qeioctl(ifp, cmd, data)
 			arp_ifinit(ifp, ifa);
 			break;
 #endif /* INET */
-#ifdef NS
-		case AF_NS:
-		    {
-			struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
-
-			if (ns_nullhost(*ina))
-				ina->x_host =
-					*(union ns_host *)LLADDR(ifp->if_sadl);
-			else
-				bcopy(ina->x_host.c_host, LLADDR(ifp->if_sadl),
-				      sizeof(sc->sc_enaddr));
-			/* Set new address. */
-			qeinit(sc);
-			break;
-		    }
-#endif /* NS */
 		default:
 			qeinit(sc);
 			break;

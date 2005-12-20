@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_ctl.c,v 1.30 2005/12/11 12:24:51 christos Exp $	*/
+/*	$NetBSD: procfs_ctl.c,v 1.37.2.1 2007/01/04 18:38:14 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_ctl.c,v 1.30 2005/12/11 12:24:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_ctl.c,v 1.37.2.1 2007/01/04 18:38:14 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,6 +85,8 @@ __KERNEL_RCSID(0, "$NetBSD: procfs_ctl.c,v 1.30 2005/12/11 12:24:51 christos Exp
 #include <sys/resource.h>
 #include <sys/resourcevar.h>
 #include <sys/signalvar.h>
+#include <sys/kauth.h>
+
 #include <miscfs/procfs/procfs.h>
 
 #define PROCFS_CTL_ATTACH	1
@@ -100,7 +102,7 @@ static const vfs_namemap_t ctlnames[] = {
 	{ "step",	PROCFS_CTL_STEP },
 	{ "run",	PROCFS_CTL_RUN },
 	{ "wait",	PROCFS_CTL_WAIT },
-	{ 0 },
+	{ NULL,		0 },
 };
 
 static const vfs_namemap_t signames[] = {
@@ -121,21 +123,18 @@ static const vfs_namemap_t signames[] = {
 	{ "vtalrm",	SIGVTALRM },	{ "prof",	SIGPROF },
 	{ "winch",	SIGWINCH },	{ "info",	SIGINFO },
 	{ "usr1",	SIGUSR1 },	{ "usr2",	SIGUSR2 },
-	{ 0 },
+	{ NULL,		0 },
 };
 
-int procfs_control(struct lwp *, struct lwp *, int, int);
-
-/* Macros to clear/set/test flags. */
-#define	SET(t, f)	(t) |= (f)
-#define	CLR(t, f)	(t) &= ~(f)
-#define	ISSET(t, f)	((t) & (f))
+static int procfs_control(struct lwp *, struct lwp *, int, int,
+    struct pfsnode *);
 
 int
-procfs_control(curl, l, op, sig)
+procfs_control(curl, l, op, sig, pfs)
 	struct lwp *curl;
 	struct lwp *l;
 	int op, sig;
+	struct pfsnode *pfs;
 {
 	struct proc *curp = curl->l_proc;
 	struct proc *p = l->l_proc;
@@ -167,22 +166,13 @@ procfs_control(curl, l, op, sig)
 			return (EBUSY);
 
 		/*
-		 *      (3) it's not owned by you, or is set-id on exec
-		 *          (unless you're root), or...
+		 *      (3) the security model prevents it.
 		 */
-		if ((p->p_cred->p_ruid != curp->p_cred->p_ruid ||
-			ISSET(p->p_flag, P_SUGID)) &&
-		    (error = suser(curp->p_ucred, &curp->p_acflag)) != 0)
+		if ((error = kauth_authorize_process(curl->l_cred,
+		    KAUTH_PROCESS_CANPROCFS, p, pfs,
+		    KAUTH_ARG(KAUTH_REQ_PROCESS_CANPROCFS_CTL), NULL)) != 0)
 			return (error);
 
-		/*
-		 *      (4) ...it's init, which controls the security level
-		 *          of the entire system, and the system was not
-		 *          compiled with permanently insecure mode turned
-		 *          on.
-		 */
-		if (p == initproc && securelevel > -1)
-			return (EPERM);
 		break;
 
 	/*
@@ -325,11 +315,12 @@ procfs_control(curl, l, op, sig)
 }
 
 int
-procfs_doctl(curl, l, pfs, uio)
-	struct lwp *curl;
-	struct lwp *l;
-	struct pfsnode *pfs;
-	struct uio *uio;
+procfs_doctl(
+    struct lwp *curl,
+    struct lwp *l,
+    struct pfsnode *pfs,
+    struct uio *uio
+)
 {
 	struct proc *p = l->l_proc;
 	char msg[PROCFS_CTLLEN+1];
@@ -358,14 +349,14 @@ procfs_doctl(curl, l, pfs, uio)
 
 	nm = vfs_findname(ctlnames, msg, xlen);
 	if (nm) {
-		error = procfs_control(curl, l, nm->nm_val, 0);
+		error = procfs_control(curl, l, nm->nm_val, 0, pfs);
 	} else {
 		nm = vfs_findname(signames, msg, xlen);
 		if (nm) {
 			if (ISSET(p->p_flag, P_TRACED) &&
 			    p->p_pptr == p)
 				error = procfs_control(curl, l, PROCFS_CTL_RUN,
-				    nm->nm_val);
+				    nm->nm_val, pfs);
 			else {
 				psignal(p, nm->nm_val);
 				error = 0;

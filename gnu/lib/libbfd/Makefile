@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.40 2004/12/08 15:13:33 mrg Exp $
+#	$NetBSD: Makefile,v 1.41.4.1 2007/07/19 14:38:24 liamjfoy Exp $
 
 NOLINKLIB=	# defined
 NOLINT=		# defined
@@ -22,7 +22,7 @@ LIB=		bfd
 
 DIST=		${NETBSDSRCDIR}/gnu/dist/binutils
 
-SHLIB_MAJOR=	7
+SHLIB_MAJOR=	8
 SHLIB_MINOR=	0
 
 GCPPFLAGS=	${G_archdefs} ${G_DEFS} ${G_INCLUDES} ${G_TDEFAULTS}
@@ -45,12 +45,6 @@ INFOFLAGS=	-I${DIST}/bfd/doc
 
 .include <bsd.lib.mk>
 .include <bsd.info.mk>
-
-# XXX
-.if ${MACHINE_CPU} == "sh5"
-COPTS.elf32.c=                -O1
-COPTS.elf64.c=                -O1
-.endif
 
 ${OBJS} ${SOBJS}: elf32-target.h elf64-target.h
 targets.o targets.so: targmatch.h Makefile

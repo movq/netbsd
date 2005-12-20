@@ -1,4 +1,4 @@
-/*	$NetBSD: dp8390.c,v 1.56 2005/12/11 12:21:26 christos Exp $	*/
+/*	$NetBSD: dp8390.c,v 1.61 2006/11/16 01:32:51 christos Exp $	*/
 
 /*
  * Device driver for National Semiconductor DS8390/WD83C690 based ethernet
@@ -14,11 +14,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dp8390.c,v 1.56 2005/12/11 12:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dp8390.c,v 1.61 2006/11/16 01:32:51 christos Exp $");
 
 #include "opt_ipkdb.h"
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 #include "rnd.h"
 
@@ -49,10 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: dp8390.c,v 1.56 2005/12/11 12:21:26 christos Exp $")
 #include <netinet/if_inarp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -69,17 +64,17 @@ __KERNEL_RCSID(0, "$NetBSD: dp8390.c,v 1.56 2005/12/11 12:21:26 christos Exp $")
 #include <dev/ic/dp8390var.h>
 
 #ifdef DEBUG
-#define __inline__	/* XXX for debugging porpoises */
+#define inline	/* XXX for debugging porpoises */
 int	dp8390_debug = 0;
 #endif
 
-static __inline__ void	dp8390_xmit(struct dp8390_softc *);
+static inline void	dp8390_xmit(struct dp8390_softc *);
 
-static __inline__ void	dp8390_read_hdr(struct dp8390_softc *,
+static inline void	dp8390_read_hdr(struct dp8390_softc *,
 			    int, struct dp8390_ring *);
-static __inline__ int	dp8390_ring_copy(struct dp8390_softc *,
+static inline int	dp8390_ring_copy(struct dp8390_softc *,
 			    int, caddr_t, u_short);
-static __inline__ int	dp8390_write_mbuf(struct dp8390_softc *,
+static inline int	dp8390_write_mbuf(struct dp8390_softc *,
 			    struct mbuf *, int);
 
 static int		dp8390_test_mem(struct dp8390_softc *);
@@ -409,7 +404,7 @@ dp8390_init(sc)
 /*
  * This routine actually starts the transmission on the interface.
  */
-static __inline__ void
+static inline void
 dp8390_xmit(sc)
 	struct dp8390_softc *sc;
 {
@@ -658,7 +653,7 @@ dp8390_intr(arg)
 #endif
 
 	if (sc->sc_enabled == 0 ||
-	    (sc->sc_dev.dv_flags & DVF_ACTIVE) == 0)
+	    !device_is_active(&sc->sc_dev))
 		return (0);
 
 	/* Set NIC to page 0 registers. */
@@ -889,23 +884,6 @@ dp8390_ioctl(ifp, cmd, data)
 			dp8390_init(sc);
 			arp_ifinit(ifp, ifa);
 			break;
-#endif
-#ifdef NS
-			/* XXX - This code is probably wrong. */
-		case AF_NS:
-		    {
-			struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
-
-			if (ns_nullhost(*ina))
-				ina->x_host =
-				    *(union ns_host *)LLADDR(ifp->if_sadl);
-			else
-				memcpy(LLADDR(ifp->if_sadl),
-				    ina->x_host.c_host, ETHER_ADDR_LEN);
-			/* Set new address. */
-			dp8390_init(sc);
-			break;
-		    }
 #endif
 		default:
 			dp8390_init(sc);
@@ -1182,7 +1160,7 @@ dp8390_test_mem(sc)
 /*
  * Read a packet header from the ring, given the source offset.
  */
-static __inline__ void
+static inline void
 dp8390_read_hdr(sc, src, hdrp)
 	struct dp8390_softc *sc;
 	int src;
@@ -1206,7 +1184,7 @@ dp8390_read_hdr(sc, src, hdrp)
  * destination buffer, given a source offset and destination address.
  * Takes into account ring-wrap.
  */
-static __inline__ int
+static inline int
 dp8390_ring_copy(sc, src, dst, amount)
 	struct dp8390_softc *sc;
 	int src;
@@ -1239,7 +1217,7 @@ dp8390_ring_copy(sc, src, dst, amount)
  * Currently uses an extra buffer/extra memory copy, unless the whole
  * packet fits in one mbuf.
  */
-static __inline__ int
+static inline int
 dp8390_write_mbuf(sc, m, buf)
 	struct dp8390_softc *sc;
 	struct mbuf *m;
@@ -1324,9 +1302,7 @@ dp8390_activate(self, act)
 }
 
 int
-dp8390_detach(sc, flags)
-	struct dp8390_softc *sc;
-	int flags;
+dp8390_detach(struct dp8390_softc *sc, int flags)
 {
 	struct ifnet *ifp = &sc->sc_ec.ec_if;
 

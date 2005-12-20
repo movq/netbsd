@@ -1,4 +1,4 @@
-/* $NetBSD: if_txp.c,v 1.13 2005/12/11 12:22:50 christos Exp $ */
+/* $NetBSD: if_txp.c,v 1.18 2006/11/16 01:33:09 christos Exp $ */
 
 /*
  * Copyright (c) 2001
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_txp.c,v 1.13 2005/12/11 12:22:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_txp.c,v 1.18 2006/11/16 01:33:09 christos Exp $");
 
 #include "bpfilter.h"
 #include "opt_inet.h"
@@ -67,7 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_txp.c,v 1.13 2005/12/11 12:22:50 christos Exp $")
 #include <net/bpf.h>
 #endif
 
-#include <uvm/uvm_extern.h>              /* for vtophys */
+#include <uvm/uvm_extern.h>              /* for PAGE_SIZE */
 #include <machine/bus.h>
 
 #include <dev/mii/mii.h>
@@ -176,10 +176,8 @@ txp_pcilookup(id)
 }
 
 int
-txp_probe(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+txp_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -189,9 +187,7 @@ txp_probe(parent, match, aux)
 }
 
 void
-txp_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+txp_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct txp_softc *sc = (struct txp_softc *)self;
 	struct pci_attach_args *pa = aux;
@@ -540,7 +536,9 @@ txp_download_fw_section(sc, sect, sectnum)
 	struct txp_dma_alloc dma;
 	int rseg, err = 0;
 	struct mbuf m;
+#ifdef INET
 	u_int16_t csum;
+#endif
 
 	/* Skip zero length sections */
 	if (sect->nbytes == 0)
@@ -577,13 +575,15 @@ txp_download_fw_section(sc, sect, sectnum)
 	m.m_len = le32toh(sect->nbytes);
 	m.m_data = dma.dma_vaddr;
 	m.m_flags = 0;
+#ifdef INET
 	csum = in_cksum(&m, le32toh(sect->nbytes));
 	if (csum != sect->cksum) {
 		printf(": fw section %d, bad cksum (expected 0x%x got 0x%x)\n",
 		    sectnum, sect->cksum, csum);
-		err = -1;
-		goto bail;
+		txp_dma_free(sc, &dma);
+		return -1;
 	}
+#endif
 
 	bus_dmamap_sync(sc->sc_dmat, dma.dma_map, 0,
 	    dma.dma_map->dm_mapsize, BUS_DMASYNC_PREWRITE);
@@ -604,9 +604,7 @@ txp_download_fw_section(sc, sect, sectnum)
 	bus_dmamap_sync(sc->sc_dmat, dma.dma_map, 0,
 	    dma.dma_map->dm_mapsize, BUS_DMASYNC_POSTWRITE);
 
-bail:
 	txp_dma_free(sc, &dma);
-
 	return (err);
 }
 
@@ -951,7 +949,7 @@ txp_alloc_rings(sc)
 	struct txp_boot_record *boot;
 	struct txp_swdesc *sd;
 	u_int32_t r;
-	int i, j;
+	int i, j, nb;
 
 	/* boot record */
 	if (txp_dma_malloc(sc, sizeof(struct txp_boot_record), &sc->sc_boot_dma,
@@ -1089,9 +1087,11 @@ txp_alloc_rings(sc)
 	boot->br_rxbuf_hi = htole32(sc->sc_rxbufring_dma.dma_paddr >> 32);
 	boot->br_rxbuf_siz = htole32(RXBUF_ENTRIES * sizeof(struct txp_rxbuf_desc));
 	sc->sc_rxbufs = (struct txp_rxbuf_desc *)sc->sc_rxbufring_dma.dma_vaddr;
-	for (i = 0; i < RXBUF_ENTRIES; i++) {
+	for (nb = 0; nb < RXBUF_ENTRIES; nb++) {
 		sd = (struct txp_swdesc *)malloc(sizeof(struct txp_swdesc),
 		    M_DEVBUF, M_NOWAIT);
+		/* stash away pointer */
+		bcopy(&sd, __UNVOLATILE(&sc->sc_rxbufs[nb].rb_vaddrlo), sizeof(sd));
 		if (sd == NULL)
 			break;
 
@@ -1118,12 +1118,10 @@ txp_alloc_rings(sc)
 		bus_dmamap_sync(sc->sc_dmat, sd->sd_map, 0,
 		    sd->sd_map->dm_mapsize, BUS_DMASYNC_PREREAD);
 
-		/* stash away pointer */
-		bcopy(&sd, __UNVOLATILE(&sc->sc_rxbufs[i].rb_vaddrlo), sizeof(sd));
 
-		sc->sc_rxbufs[i].rb_paddrlo =
+		sc->sc_rxbufs[nb].rb_paddrlo =
 		    ((u_int64_t)sd->sd_map->dm_segs[0].ds_addr) & 0xffffffff;
-		sc->sc_rxbufs[i].rb_paddrhi =
+		sc->sc_rxbufs[nb].rb_paddrhi =
 		    ((u_int64_t)sd->sd_map->dm_segs[0].ds_addr) >> 32;
 	}
 	bus_dmamap_sync(sc->sc_dmat, sc->sc_rxbufring_dma.dma_map,
@@ -1180,6 +1178,14 @@ txp_alloc_rings(sc)
 bail:
 	txp_dma_free(sc, &sc->sc_zero_dma);
 bail_rxbufring:
+	if (nb == RXBUF_ENTRIES)
+		nb--;
+	for (i = 0; i <= nb; i++) {
+		bcopy(__UNVOLATILE(&sc->sc_rxbufs[i].rb_vaddrlo), &sd,
+		    sizeof(sd));
+		if (sd)
+			free(sd, M_DEVBUF);
+	}
 	txp_dma_free(sc, &sc->sc_rxbufring_dma);
 bail_rspring:
 	txp_dma_free(sc, &sc->sc_rspring_dma);
@@ -1796,8 +1802,7 @@ txp_stop(sc)
 }
 
 void
-txp_watchdog(ifp)
-	struct ifnet *ifp;
+txp_watchdog(struct ifnet *ifp)
 {
 }
 

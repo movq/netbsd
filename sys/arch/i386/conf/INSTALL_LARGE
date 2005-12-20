@@ -1,0 +1,30 @@
+#	$NetBSD: INSTALL_LARGE,v 1.1.2.6 2007/08/31 20:09:27 pavel Exp $
+#
+#	INSTALL_LARGE -- INSTALL suitable for modern machines
+#
+
+include "arch/i386/conf/INSTALL"
+
+acpi0 		at mainbus0
+
+#options 	ACPI_ACTIVATE_DEV	# If set, activate inactive devices
+#options 	ACPICA_PEDANTIC		# force strict conformance to the Spec.
+options		ACPIVERBOSE
+options		ACPI_SCANPCI
+
+ioapic* 	at mainbus?
+bnx* 	at pci? dev ? function ?	# Broadcom NetXtremeII gigabit Ethernet
+ral*	at pci? dev ? function ?	# Ralink Technology RT25x0 802.11a/b/g
+txp*	at pci? dev ? function ?	# 3com 3cr990
+vge*	at pci? dev ? function ?	# VIATech VT612X Gigabit Ethernet
+jmide* 	at pci? dev ? function ? 	# JMicron PCI-e PATA/SATA controllers
+ahcisata* at jmide?
+gcscide*	at pci? dev ? function ? 	# AMD CS5535 Companion IDE controllers
+
+# CardBus bridge support
+cbb* 		at pci? dev ? function ?
+cardslot* 	at cbb?
+
+# CardBus bus support
+cardbus* 	at cardslot?
+pcmcia* 	at cardslot?

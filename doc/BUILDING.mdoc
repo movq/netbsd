@@ -1,4 +1,4 @@
-.\"	$NetBSD: BUILDING.mdoc,v 1.39 2005/06/20 13:25:23 peter Exp $
+.\"	$NetBSD: BUILDING.mdoc,v 1.46.2.3 2007/09/29 11:10:56 xtraeme Exp $
 .\"
 .\" Copyright (c) 2001-2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -40,7 +40,7 @@
 .\" Toolchain prefix for commands
 .ds toolprefix nb
 .
-.Dd February 6, 2003
+.Dd September 1, 2007
 .Dt BUILDING 8
 .Os NetBSD
 .
@@ -190,6 +190,27 @@ builds.
 .Bl -tag -width "MAKEOBJDIRPREFIX"
 .
 .
+.It Sy HOST_SH
+Path name to a POSIX-compliant shell.
+If this is not set explicitly, then the default is set
+using heuristics dependent on the host platform,
+or from the shell under which
+.Nm build.sh
+is executed (if that can be determined),
+or using the first copy of
+.Pa sh
+found in
+.Sy PATH .
+If the host system's
+.Pa /bin/sh
+is not POSIX-compliant, we suggest that you build using
+commands like
+.Bd -unfilled -offset indent
+.Li HOST_SH= Ns Va /path/to/working/shell
+.Li export HOST_SH
+.Li ${HOST_SH} build.sh Op Ar options
+.Ed
+.
 .It Sy HOST_CC
 Path name to C compiler used to create the toolchain.
 .
@@ -216,6 +237,8 @@ with.
 Directory to use as the
 .Sy .OBJDIR
 for the current directory.
+The value is subjected to variable expansion by
+.Xr make 1 .
 Used only if
 .Sy MAKEOBJDIRPREFIX
 is not defined.
@@ -227,6 +250,7 @@ flag of
 .
 .It Sy MAKEOBJDIRPREFIX
 Top level directory of the object directory tree.
+If specified, must be an absolute path.
 If this is defined,
 ${MAKEOBJDIRPREFIX}/${.CURDIR}
 is used as the
@@ -292,13 +316,15 @@ If set, special options are passed to the compilation tools to
 prevent their default use of the host system's
 .Sy /usr/include , /usr/lib ,
 and so forth.
-This pathname should
+This pathname must be an absolute path, and should
 .Em not
 end with a slash
 .Pq /
-character (for installation into the system's root directory, set
+character.
+(For installation into the system's root directory, set
 .Sy DESTDIR
-to an empty string).
+to an empty string, not to
+.Dq / ) .
 The directory must reside on a file system which supports long file
 names and hard links.
 .DFLT
@@ -508,6 +534,7 @@ Indicates whether X11R6 is built from
 .
 .It Sy TOOLDIR
 Directory to hold the host tools, once built.
+If specified, must be an absolute path.
 This directory should be unique to a given host system and
 .Nx
 source tree.
@@ -565,6 +592,7 @@ include files).
 .
 .It Sy X11SRCDIR
 Directory containing the X11R6 source.
+If specified, must be an absolute path.
 The main X11R6 source is found in
 .Sy X11SRCDIR Ns Pa /xfree/xc .
 .DFLT
@@ -585,6 +613,7 @@ source code.
 Location for the
 .Dq make installworld
 target to install to.
+If specified, must be an absolute path.
 .DFLT
 .Dq /
 .
@@ -657,6 +686,7 @@ If set, specifies the directory to which a
 .Xr release 7
 layout will be written at the end of a
 .Dq make release .
+If specified, must be an absolute path.
 .DFLTu
 .Pp
 .Em Note :
@@ -858,10 +888,30 @@ Ensures that
 .Sy INSTALLWORLDDIR
 is not the root directory if cross compiling.
 .Pp
+The
+.Sy INSTALLSETS
+environment variable may be set to a list of
+distribution sets to be installed.
+By default, all sets except
+.Dq etc
+and
+.Dq xetc
+are installed (so most files in
+.Sy INSTALLWORLDDIR Ns Pa /etc
+will not be installed or modified).
+.Pp
 .Em Note :
-It is highly recommended that you upgrade your kernel and reboot
-before performing this operation.
-.
+Before performing this operation with
+.Sy INSTALLWORLDDIR Ns = Ns Pa / ,
+it is highly recommended that you upgrade your kernel and reboot.
+After performing this operation,
+it is recommended that you use
+.Xr etcupdate 8
+to update files in
+.Sy INSTALLWORLDDIR Ns Pa /etc
+and that you use
+.Xr postinstall 8
+to check for inconsistencies (and possibly to fix them).
 .It Sy sets
 Create distribution sets from
 .Sy DESTDIR
@@ -877,6 +927,17 @@ does not install all of the required files).
 Create source sets of the source tree into
 .Sy RELEASEDIR Ns Pa /source/sets .
 .
+.It Sy syspkgs
+Create syspkgs from
+.Sy DESTDIR
+into
+.Sy RELEASEDIR/MACHINE Ns Pa /binary/syspkgs .
+Should be run after
+.Dq make distribution
+(as
+.Dq make build
+does not install all of the required files).
+.
 .It Sy release
 Do a
 .Dq make distribution ,
@@ -889,6 +950,93 @@ then package the system into a standard release layout as described by
 This requires that
 .Sy RELEASEDIR
 be set (see above).
+.
+.It iso-image
+Create a
+.Nx
+installation CD-ROM image in the
+.Sy RELEASEDIR Ns Pa /iso
+directory.
+The CD-ROM file system will have a layout as described in
+.Xr release 7 .
+.Pp
+For most machine types, the CD-ROM will be bootable, and will automatically
+run the
+.Xr sysinst 8
+menu-based installation program, which can be used to install or upgrade a
+.Nx
+system.
+Bootable CD-ROMs also contain tools that may be useful in
+repairing a damaged
+.Nx
+installation.
+.Pp
+Before
+.Dq make iso-image
+is attempted, RELEASEDIR must be populated by
+.Dq make release
+or equivalent.
+.Pp
+Note that other, smaller, CD-ROM images may be created in the
+.Sy RELEASEDIR/MACHINE Ns Pa /installation/cdrom
+directory by
+.Dq "make release" .
+These smaller images usually contain the same tools as the larger images in
+.Sy RELEASEDIR Ns Pa /iso ,
+but do not contain additional content such as the distribution sets.
+.Pp
+Note that the mac68k port still uses an older method of creating
+CD-ROM images.
+This requires the
+.Xr mkisofs 1
+utility, which is not part of
+.Nx ,
+but which can be installed from
+.Pa pkgsrc/sysutils/cdrtools .
+.
+.It iso-image-source
+Create a
+.Nx
+installation CD-ROM image in the
+.Sy RELEASEDIR Ns Pa /iso
+directory.
+The CD-ROM file system will have a layout as described in
+.Xr release 7 .
+It will have top level directories for the machine type and source.
+.Pp
+For most machine types, the CD-ROM will be bootable, and will automatically
+run the
+.Xr sysinst 8
+menu-based installation program, which can be used to install or upgrade a
+.Nx
+system.
+Bootable CD-ROMs also contain tools that may be useful in
+repairing a damaged
+.Nx
+installation.
+.Pp
+Before
+.Dq make iso-image-source
+is attempted, RELEASEDIR must be populated by
+.Dq make sourcesets release
+or equivalent.
+.Pp
+Note that other, smaller, CD-ROM images may be created in the
+.Sy RELEASEDIR/MACHINE Ns Pa /installation/cdrom
+directory by
+.Dq make release .
+These smaller images usually contain the same tools as the larger images in
+.Sy RELEASEDIR Ns Pa /iso ,
+but do not contain additional content such as the distribution sets.
+.Pp
+Note that the mac68k port still uses an older method of creating
+CD-ROM images.
+This requires the
+.Xr mkisofs 1
+utility, which is not part of
+.Nx ,
+but which can be installed from
+.Pa pkgsrc/sysutils/cdrtools .
 .
 .It Sy regression-tests
 Can only be run after building the regression tests in the directory
@@ -984,6 +1132,11 @@ to
 .Ar idir ,
 using
 .Dq make installworld .
+Note that files that are part of the
+.Dq etc
+or
+.Dq xetc
+sets will not be installed.
 .
 .It Sy kernel Ns = Ns Ar kconf
 Build a new kernel.
@@ -1034,6 +1187,18 @@ Perform
 Perform
 .Dq make sourcesets .
 .
+.It Sy syspkgs
+Perform
+.Dq make syspkgs .
+.
+.It Sy iso-image
+Perform
+.Dq make iso-image .
+.
+.It Sy iso-image-source
+Perform
+.Dq make iso-image-source .
+.
 .El
 .
 .Pp
@@ -1059,11 +1224,28 @@ This will also append the build idenfitier to the name of the
 wrapper script so that the resulting name is of the form
 .Dq Sy \*[toolprefix]make-MACHINE-BUILDID .
 .
+.It Fl C Ar cddir
+Set the value of
+.Sy CDEXTRA
+to
+.Ar cddir .
+If a relative path is specified, it will be converted to an
+absolute path before being used.
+When combined with
+.Dq iso-image
+or
+.Dq iso-image-source ,
+it will cause the contents of
+.Ar cddir
+to be added to the CD-ROM image.
+.
 .It Fl D Ar dest
 Set the value of
 .Sy DESTDIR
 to
 .Ar dest .
+If a relative path is specified, it will be converted to an
+absolute path before being used.
 .
 .It Fl E
 Set
@@ -1096,6 +1278,8 @@ Set
 .Sy MAKEOBJDIRPREFIX
 to
 .Ar obj .
+If a relative path is specified, it will be converted to an
+absolute path before being used.
 Unsets
 .Sy MAKEOBJDIR .
 .
@@ -1160,6 +1344,8 @@ Create an appropriate transform macro for
 .Sy MAKEOBJDIR
 that will place the built object files under
 .Ar obj .
+If a relative path is specified, it will be converted to an
+absolute path before being used.
 For instance, a setting of
 .Sy /usr/obj
 will place build-time files under
@@ -1184,6 +1370,8 @@ Set the value of
 .Sy RELEASEDIR
 to
 .Ar rel .
+If a relative path is specified, it will be converted to an
+absolute path before being used.
 .
 .It Fl r
 Remove the contents of
@@ -1200,6 +1388,8 @@ Set the value of
 .Sy TOOLDIR
 to
 .Ar tools .
+If a relative path is specified, it will be converted to an
+absolute path before being used.
 If set, the bootstrap
 .Dq make
 will only be rebuilt as needed (when the source files for
@@ -1242,12 +1432,16 @@ automatically.
 Note that
 .Ar wrapper
 is the full name of the file, not just a directory name.
+If a relative path is specified, it will be converted to an
+absolute path before being used.
 .
 .It Fl X Ar x11src
 Set the value of
 .Sy X11SRCDIR
 to
 .Ar x11src .
+If a relative path is specified, it will be converted to an
+absolute path before being used.
 .
 .It Fl x
 Set
@@ -1368,7 +1562,11 @@ To disable, use
 .Sh SEE ALSO
 .Xr make 1 ,
 .Xr hier 7 ,
-.Xr release 7
+.Xr release 7 ,
+.Xr etcupdate 8 ,
+.Xr postinstall 8 ,
+.Xr sysinst 8 ,
+.Pa pkgsrc/sysutils/cdrtools
 .
 .Sh HISTORY
 .

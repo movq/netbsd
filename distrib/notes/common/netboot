@@ -1,4 +1,4 @@
-.\"	$NetBSD: netboot,v 1.24 2004/09/10 12:59:03 wiz Exp $
+.\"	$NetBSD: netboot,v 1.27.4.4 2007/12/15 20:44:04 bouyer Exp $
 .\"
 .\" Copyright (c) 1999-2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -37,7 +37,7 @@ Introduction
 .Pp
 To netboot a \*M, you must configure one or more servers to provide
 information and files to your \*M (the
-.Sq client ).
+.Sq client ) .
 If you are using
 .Nx
 (any architecture) on your netboot server(s), the information
@@ -48,7 +48,7 @@ manual page and the manual pages for each daemon you'll be configuring.
 If the server(s) are another operating system, you should consult the
 NetBSD Diskless HOW-TO, which will walk you through the steps necessary to
 configure the netboot services on a variety of platforms.
-.Lk http://www.NetBSD.org/Documentation/network/netboot/
+.Lk http://www.NetBSD.org/docs/network/netboot/
 .if !\n[hp700]:\n[next68k] \{\
 .Pp
 You may either netboot the installer so you can install onto a locally
@@ -233,6 +233,18 @@ you can achieve this with:
 .(disp
 .No # Ic "/etc/rc.d/rbootd restart"
 .disp)
+.Pp
+If your netboot server is not running
+.Nx 
+but other OSs (like Linux, Solaris etc.), you have to use
+YAMAMORI Takenori's
+.Li sun-rbootd
+package instead of native
+.Xr rbootd 8 .
+Please refer the "Setting up the rbootd server" section
+in the NetBSD Diskless HOW-TO
+.Lk http://www.NetBSD.org/docs/network/netboot/rbootd/
+for details.
 .Pp
 .It
 .\} \" ! \n[hp300]:\n[hp700]
@@ -762,7 +774,7 @@ need to extract and set up the client's installation of
 .Nx .
 The Diskless HOW-TO describes how to provide better security and save
 space on the NFS server over the procedure listed here.
-.Lk http://www.NetBSD.org/Documentation/network/netboot/nfs.html
+.Lk http://www.NetBSD.org/docs/network/netboot/nfs.html
 .(bullet -compact
 Extracting distribution sets
 .Pp
@@ -780,7 +792,7 @@ Set up swap
 .(disp
 .No # Ic "mkdir /export/client/root/swap"
 .No # Ic "dd if=/dev/zero of=/export/client/swap bs=4k count=4k"
-.No # Ic "echo '/export/client/swap -maproot=root:wheel client.test.net' | cat \*>\*> /etc/exports"
+.No # Ic "echo '/export/client/swap -maproot=root:wheel client.test.net' | cat \*[Gt]\*[Gt] /etc/exports"
 .No # Ic "/etc/rc.d/mountd restart"
 .disp)
 This creates a 16 MB swap file and exports it to the client.

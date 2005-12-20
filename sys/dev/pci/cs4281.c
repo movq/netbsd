@@ -1,4 +1,4 @@
-/*	$NetBSD: cs4281.c,v 1.27 2005/12/11 12:22:48 christos Exp $	*/
+/*	$NetBSD: cs4281.c,v 1.33.2.1 2007/06/18 11:45:33 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 2000 Tatoku Ogaito.  All rights reserved.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs4281.c,v 1.27 2005/12/11 12:22:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs4281.c,v 1.33.2.1 2007/06/18 11:45:33 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -136,6 +136,7 @@ static const struct audio_hw_if cs4281_hw_if = {
 	cs4281_trigger_output,
 	cs4281_trigger_input,
 	NULL,
+	NULL,
 };
 
 #if NMIDI > 0 && 0
@@ -166,7 +167,8 @@ static struct audio_device cs4281_device = {
 
 
 static int
-cs4281_match(struct device *parent, struct cfdata *match, void *aux)
+cs4281_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -185,10 +187,9 @@ cs4281_attach(struct device *parent, struct device *self, void *aux)
 	struct pci_attach_args *pa;
 	pci_chipset_tag_t pc;
 	char const *intrstr;
-	pci_intr_handle_t ih;
 	pcireg_t reg;
 	char devinfo[256];
-	int pci_pwrmgmt_cap_reg, pci_pwrmgmt_csr_reg;
+	int error;
 
 	sc = (struct cs428x_softc *)self;
 	pa = (struct pci_attach_args *)aux;
@@ -198,6 +199,9 @@ cs4281_attach(struct device *parent, struct device *self, void *aux)
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
 	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(pa->pa_class));
+
+	sc->sc_pc = pa->pa_pc;
+	sc->sc_pt = pa->pa_tag;
 
 	/* Map I/O register */
 	if (pci_mapreg_map(pa, PCI_BA0,
@@ -215,23 +219,12 @@ cs4281_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_dmatag = pa->pa_dmat;
 
-	/*
-	 * Set Power State D0.
-	 * Without do this, 0xffffffff is read from all registers after
-	 * using Windows.
-	 * On my IBM Thinkpad X20, it is set to D3 after using Windows2000.
-	 */
-	if (pci_get_capability(pa->pa_pc, pa->pa_tag, PCI_CAP_PWRMGMT,
-			       &pci_pwrmgmt_cap_reg, 0)) {
-
-		pci_pwrmgmt_csr_reg = pci_pwrmgmt_cap_reg + PCI_PMCSR;
-		reg = pci_conf_read(pa->pa_pc, pa->pa_tag,
-				    pci_pwrmgmt_csr_reg);
-		if ((reg & PCI_PMCSR_STATE_MASK) != PCI_PMCSR_STATE_D0) {
-			pci_conf_write(pc, pa->pa_tag, pci_pwrmgmt_csr_reg,
-				       (reg & ~PCI_PMCSR_STATE_MASK) |
-				       PCI_PMCSR_STATE_D0);
-		}
+	/* power up chip */
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, sc,
+	    pci_activate_null)) && error != EOPNOTSUPP) {
+		aprint_error("%s: cannot activate %d\n", sc->sc_dev.dv_xname,
+		    error);
+		return;
 	}
 
 	/* Enable the device (set bus master flag) */
@@ -250,14 +243,15 @@ cs4281_attach(struct device *parent, struct device *self, void *aux)
 #endif
 
 	/* Map and establish the interrupt. */
-	if (pci_intr_map(pa, &ih)) {
+	if (pci_intr_map(pa, &sc->intrh)) {
 		aprint_error("%s: couldn't map interrupt\n",
 		    sc->sc_dev.dv_xname);
 		return;
 	}
-	intrstr = pci_intr_string(pc, ih);
+	intrstr = pci_intr_string(pc, sc->intrh);
 
-	sc->sc_ih = pci_intr_establish(pc, ih, IPL_AUDIO, cs4281_intr, sc);
+	sc->sc_ih = pci_intr_establish(sc->sc_pc, sc->intrh, IPL_AUDIO,
+	    cs4281_intr, sc);
 	if (sc->sc_ih == NULL) {
 		aprint_error("%s: couldn't establish interrupt",
 		    sc->sc_dev.dv_xname);
@@ -299,7 +293,8 @@ cs4281_attach(struct device *parent, struct device *self, void *aux)
 #endif
 
 	sc->sc_suspend = PWR_RESUME;
-	sc->sc_powerhook = powerhook_establish(cs4281_power, sc);
+	sc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
+	    cs4281_power, sc);
 }
 
 static int
@@ -339,42 +334,45 @@ cs4281_intr(void *p)
 	/* Playback Interrupt */
 	if (intr & HISR_DMA0) {
 		handled = 1;
-		DPRINTF((" PB DMA 0x%x(%d)", (int)BA0READ4(sc, CS4281_DCA0),
-			 (int)BA0READ4(sc, CS4281_DCC0)));
 		if (sc->sc_prun) {
+			DPRINTF((" PB DMA 0x%x(%d)",
+				(int)BA0READ4(sc, CS4281_DCA0),
+				(int)BA0READ4(sc, CS4281_DCC0)));
 			if ((sc->sc_pi%sc->sc_pcount) == 0)
 				sc->sc_pintr(sc->sc_parg);
+			/* copy buffer */
+			++sc->sc_pi;
+			empty_dma = sc->sc_pdma->addr;
+			if (sc->sc_pi&1)
+				empty_dma += sc->hw_blocksize;
+			memcpy(empty_dma, sc->sc_pn, sc->hw_blocksize);
+			sc->sc_pn += sc->hw_blocksize;
+			if (sc->sc_pn >= sc->sc_pe)
+				sc->sc_pn = sc->sc_ps;
 		} else {
-			printf("unexpected play intr\n");
+			printf("%s: unexpected play intr\n",
+			       sc->sc_dev.dv_xname);
 		}
-		/* copy buffer */
-		++sc->sc_pi;
-		empty_dma = sc->sc_pdma->addr;
-		if (sc->sc_pi&1)
-			empty_dma += sc->hw_blocksize;
-		memcpy(empty_dma, sc->sc_pn, sc->hw_blocksize);
-		sc->sc_pn += sc->hw_blocksize;
-		if (sc->sc_pn >= sc->sc_pe)
-			sc->sc_pn = sc->sc_ps;
 	}
 	if (intr & HISR_DMA1) {
 		handled = 1;
-		/* copy from DMA */
-		DPRINTF((" CP DMA 0x%x(%d)", (int)BA0READ4(sc, CS4281_DCA1),
-			 (int)BA0READ4(sc, CS4281_DCC1)));
-		++sc->sc_ri;
-		empty_dma = sc->sc_rdma->addr;
-		if ((sc->sc_ri & 1) == 0)
-			empty_dma += sc->hw_blocksize;
-		memcpy(sc->sc_rn, empty_dma, sc->hw_blocksize);
-		sc->sc_rn += sc->hw_blocksize;
-		if (sc->sc_rn >= sc->sc_re)
-			sc->sc_rn = sc->sc_rs;
 		if (sc->sc_rrun) {
+			/* copy from DMA */
+			DPRINTF((" CP DMA 0x%x(%d)", (int)BA0READ4(sc, CS4281_DCA1),
+				(int)BA0READ4(sc, CS4281_DCC1)));
+			++sc->sc_ri;
+			empty_dma = sc->sc_rdma->addr;
+			if ((sc->sc_ri & 1) == 0)
+				empty_dma += sc->hw_blocksize;
+			memcpy(sc->sc_rn, empty_dma, sc->hw_blocksize);
+			sc->sc_rn += sc->hw_blocksize;
+			if (sc->sc_rn >= sc->sc_re)
+				sc->sc_rn = sc->sc_rs;
 			if ((sc->sc_ri % sc->sc_rcount) == 0)
 				sc->sc_rintr(sc->sc_rarg);
 		} else {
-			printf("unexpected record intr\n");
+			printf("%s: unexpected record intr\n",
+			       sc->sc_dev.dv_xname);
 		}
 	}
 	DPRINTF(("\n"));
@@ -443,8 +441,8 @@ cs4281_query_encoding(void *addr, struct audio_encoding *fp)
 
 static int
 cs4281_set_params(void *addr, int setmode, int usemode,
-		  audio_params_t *play, audio_params_t *rec,
-		  stream_filter_list_t *pfil, stream_filter_list_t *rfil)
+    audio_params_t *play, audio_params_t *rec, stream_filter_list_t *pfil,
+    stream_filter_list_t *rfil)
 {
 	audio_params_t hw;
 	struct cs428x_softc *sc;
@@ -756,6 +754,11 @@ cs4281_power(int why, void *v)
 		/* Stop DMA */
 		BA0WRITE4(sc, CS4281_DCR0, BA0READ4(sc, CS4281_DCR0) | DCRn_MSK);
 		BA0WRITE4(sc, CS4281_DCR1, BA0READ4(sc, CS4281_DCR1) | DCRn_MSK);
+
+		pci_conf_capture(sc->sc_pc, sc->sc_pt, &sc->sc_pciconf);
+		if (sc->sc_ih != NULL)
+			pci_intr_disestablish(sc->sc_pc, sc->sc_ih);
+
 		break;
 	case PWR_RESUME:
 		if (sc->sc_suspend == PWR_RESUME) {
@@ -763,6 +766,17 @@ cs4281_power(int why, void *v)
 			sc->sc_suspend = why;
 			return;
 		}
+
+		sc->sc_ih = pci_intr_establish(sc->sc_pc, sc->intrh,
+		    IPL_AUDIO, cs4281_intr, sc);
+		if (sc->sc_ih == NULL) {
+			aprint_error("%s: can't establish interrupt",
+			    sc->sc_dev.dv_xname);
+			/* XXX jmcneill what should we do here? */
+			return;
+		}
+		pci_conf_restore(sc->sc_pc, sc->sc_pt, &sc->sc_pciconf);
+
 		sc->sc_suspend = why;
 		cs4281_init(sc, 0);
 		cs4281_reset_codec(sc);

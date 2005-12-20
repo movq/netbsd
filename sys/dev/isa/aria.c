@@ -1,4 +1,4 @@
-/*	$NetBSD: aria.c,v 1.24 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: aria.c,v 1.27 2006/11/16 01:33:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996, 1998 Roland C. Dowdeswell.  All rights reserved.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aria.c,v 1.24 2005/12/11 12:22:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aria.c,v 1.27 2006/11/16 01:33:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -224,6 +224,7 @@ const struct audio_hw_if aria_hw_if = {
 	NULL,
 	NULL,
 	aria_get_props,
+	NULL,
 	NULL,
 	NULL,
 	NULL,
@@ -575,7 +576,8 @@ aria_query_encoding(void *addr, struct audio_encoding *fp)
  */
 
 int
-aria_round_blocksize(void *addr, int blk, int mode, const audio_params_t *param)
+aria_round_blocksize(void *addr, int blk, int mode,
+    const audio_params_t *param)
 {
 	int i;
 
@@ -598,10 +600,14 @@ aria_get_props(void *addr)
 
 int
 aria_set_params(
-	void *addr,
-	int setmode, int usemode,
-	audio_params_t *p, audio_params_t *r,
-	stream_filter_list_t *pfil, stream_filter_list_t *rfil)
+    void *addr,
+    int setmode,
+    int usemode,
+    audio_params_t *p,
+    audio_params_t *r,
+    stream_filter_list_t *pfil,
+    stream_filter_list_t *rfil
+)
 {
 	audio_params_t hw;
 	struct aria_softc *sc;

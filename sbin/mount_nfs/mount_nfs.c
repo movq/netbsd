@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_nfs.c,v 1.48 2005/05/15 21:18:34 dsl Exp $	*/
+/*	$NetBSD: mount_nfs.c,v 1.53 2006/11/09 10:07:00 yamt Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993, 1994\n\
 #if 0
 static char sccsid[] = "@(#)mount_nfs.c	8.11 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: mount_nfs.c,v 1.48 2005/05/15 21:18:34 dsl Exp $");
+__RCSID("$NetBSD: mount_nfs.c,v 1.53 2006/11/09 10:07:00 yamt Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,11 +54,6 @@ __RCSID("$NetBSD: mount_nfs.c,v 1.48 2005/05/15 21:18:34 dsl Exp $");
 
 #ifdef ISO
 #include <netiso/iso.h>
-#endif
-
-#ifdef NFSKERB
-#include <des.h>
-#include <kerberosIV/krb.h>
 #endif
 
 #include <nfs/rpcv2.h>
@@ -119,9 +114,6 @@ static const struct mntopt mopts[] = {
 	{ "conn", 0, ALTF_CONN, 1 },
 	{ "dumbtimer", 0, ALTF_DUMBTIMR, 1 },
 	{ "intr", 0, ALTF_INTR, 1 },
-#ifdef NFSKERB
-	{ "kerb", 0, ALTF_KERB, 1 },
-#endif
 	{ "nfsv3", 0, ALTF_NFSV3, 1 },
 	{ "rdirplus", 0, ALTF_RDIRPLUS, 1 },
 	{ "mntudp", 0, ALTF_MNTUDP, 1 },
@@ -142,7 +134,7 @@ static const struct mntopt mopts[] = {
 	{ "readahead", 0, ALTF_READAHEAD, 1 },
 	{ "deadthresh", 0, ALTF_DEADTHRESH, 1 },
 	{ "timeo", 0, ALTF_TIMEO, 1 },
-	{ NULL }
+	MOPT_NULL,
 
 };
 
@@ -175,21 +167,6 @@ int force3 = 0;
 int mnttcp_ok = 1;
 int port = 0;
 
-#ifdef NFSKERB
-static char inst[INST_SZ];
-static char realm[REALM_SZ];
-static struct {
-	u_long		kind;
-	KTEXT_ST	kt;
-} ktick;
-static struct nfsrpc_nickverf kverf;
-static struct nfsrpc_fullblock kin, kout;
-static NFSKERBKEY_T kivec;
-static CREDENTIALS kcr;
-static struct timeval ktv;
-static NFSKERBKEYSCHED_T kerb_keysched;
-#endif
-
 static void	shownfsargs(const struct nfs_args *);
 #ifdef ISO
 static struct	iso_addr *iso_addr(const char *);
@@ -215,20 +192,8 @@ mount_nfs(int argc, char *argv[])
 	struct nfsd_cargs ncd;
 	struct sockaddr_storage sa;
 	int mntflags, altflags, i, nfssvc_flag, num;
-	char name[MAXPATHLEN], *p, *spec, *ospec;
+	char name[MAXPATHLEN], *p, *spec;
 	mntoptparse_t mp;
-#ifdef NFSKERB
-	uid_t last_ruid;
-
-	last_ruid = -1;
-	if (krb_get_lrealm(realm, 0) != KSUCCESS)
-	    (void)strlcpy(realm, KRB_REALM, sizeof(realm));
-	if (sizeof (struct nfsrpc_nickverf) != RPCX_NICKVERF ||
-	    sizeof (struct nfsrpc_fullblock) != RPCX_FULLBLOCK ||
-	    ((char *)&ktick.kt) - ((char *)&ktick) != NFSX_UNSIGNED ||
-	    ((char *)ktick.kt.dat) - ((char *)&ktick) != 2 * NFSX_UNSIGNED)
-		warnx("Yikes! NFSKERB structs not packed!!\n");
-#endif
 	retrycnt = DEF_RETRY;
 
 	mntflags = 0;
@@ -239,13 +204,14 @@ mount_nfs(int argc, char *argv[])
 	    "23a:bcCdD:g:I:iKL:lm:o:PpqR:r:sTt:w:x:UX")) != -1)
 		switch (c) {
 		case '3':
+		case 'q':
 			if (force2)
-				errx(1, "-2 and -3 are mutually exclusive");
+				errx(1, "conflicting version options");
 			force3 = 1;
 			break;
 		case '2':
 			if (force3)
-				errx(1, "-2 and -3 are mutually exclusive");
+				errx(1, "conflicting version options");
 			force2 = 1;
 			nfsargsp->flags &= ~NFSMNT_NFSV3;
 			break;
@@ -266,11 +232,7 @@ mount_nfs(int argc, char *argv[])
 			nfsargsp->flags &= ~NFSMNT_NOCONN;
 			break;
 		case 'D':
-			num = strtol(optarg, &p, 10);
-			if (*p || num <= 0)
-				errx(1, "illegal -D value -- %s", optarg);
-			nfsargsp->deadthresh = num;
-			nfsargsp->flags |= NFSMNT_DEADTHRESH;
+			/* ignore */
 			break;
 		case 'd':
 			nfsargsp->flags |= NFSMNT_DUMBTIMR;
@@ -295,30 +257,16 @@ mount_nfs(int argc, char *argv[])
 		case 'i':
 			nfsargsp->flags |= NFSMNT_INT;
 			break;
-#ifdef NFSKERB
-		case 'K':
-			nfsargsp->flags |= NFSMNT_KERB;
-			break;
-#endif
 		case 'L':
-			num = strtol(optarg, &p, 10);
-			if (*p || num < 2)
-				errx(1, "illegal -L value -- %s", optarg);
-			nfsargsp->leaseterm = num;
-			nfsargsp->flags |= NFSMNT_LEASETERM;
+			/* ignore */
 			break;
 		case 'l':
 			nfsargsp->flags |= NFSMNT_RDIRPLUS;
 			break;
-#ifdef NFSKERB
-		case 'm':
-			(void)strlcpy(realm, optarg, sizeof(realm));
-			break;
-#endif
 		case 'o':
 			mp = getmntopts(optarg, mopts, &mntflags, &altflags);
 			if (mp == NULL)
-				err(1, NULL);
+				err(1, "getmntopts");
 			if (altflags & ALTF_BG)
 				opflags |= BGRND;
 			if (altflags & ALTF_CONN)
@@ -327,11 +275,7 @@ mount_nfs(int argc, char *argv[])
 				nfsargsp->flags |= NFSMNT_DUMBTIMR;
 			if (altflags & ALTF_INTR)
 				nfsargsp->flags |= NFSMNT_INT;
-#ifdef NFSKERB
-			if (altflags & ALTF_KERB)
-				nfsargsp->flags |= NFSMNT_KERB;
-#endif
-			if (altflags & ALTF_NFSV3) {
+			if (altflags & (ALTF_NFSV3|ALTF_NQNFS)) {
 				if (force2)
 					errx(1, "conflicting version options");
 				force3 = 1;
@@ -352,12 +296,6 @@ mount_nfs(int argc, char *argv[])
 			if (altflags & ALTF_SEQPACKET)
 				nfsargsp->sotype = SOCK_SEQPACKET;
 #endif
-			if (altflags & ALTF_NQNFS) {
-				if (force2)
-					errx(1, "nqnfs only available with v3");
-				force3 = 1;
-				nfsargsp->flags |= NFSMNT_NQNFS;
-			}
 			if (altflags & ALTF_SOFT)
 				nfsargsp->flags |= NFSMNT_SOFT;
 			if (altflags & ALTF_TCP) {
@@ -423,12 +361,6 @@ mount_nfs(int argc, char *argv[])
 			break;
 		case 'p':
 			nfsargsp->flags &= ~NFSMNT_RESVPORT;
-			break;
-		case 'q':
-			if (force2)
-				errx(1, "nqnfs only available with v3");
-			force3 = 1;
-			nfsargsp->flags |= NFSMNT_NQNFS;
 			break;
 		case 'R':
 			num = strtol(optarg, &p, 10);
@@ -500,34 +432,42 @@ mount_nfs(int argc, char *argv[])
 		warnx("using \"%s\" instead.", name);
 	}
 
-	if ((ospec = strdup(spec)) == NULL) {
-		err(1, "strdup");
-	}
-
+retry:
 	if ((mntflags & MNT_GETARGS) != 0) {
 		memset(&sa, 0, sizeof(sa));
 		nfsargsp->addr = (struct sockaddr *)&sa;
 		nfsargsp->addrlen = sizeof(sa);
 	} else {
-		if (!getnfsargs(spec, nfsargsp))
+		char *tspec;
+
+		if ((tspec = strdup(spec)) == NULL) {
+			err(1, "strdup");
+		}
+		if (!getnfsargs(tspec, nfsargsp)) {
 			exit(1);
+		}
+		free(tspec);
 	}
 	if ((retval = mount(MOUNT_NFS, name, mntflags, nfsargsp))) {
 		/* Did we just default to v3 on a v2-only kernel?
 		 * If so, default to v2 & try again */
-		if ((errno == EPROGMISMATCH) && !force3) {
+		if (errno == EPROGMISMATCH &&
+		    (nfsargsp->flags & NFSMNT_NFSV3) != 0 && !force3) {
+			/*
+			 * fall back to v2.  XXX lack of V3 umount.
+			 */
 			nfsargsp->flags &= ~NFSMNT_NFSV3;
-			retval = mount(MOUNT_NFS, name, mntflags, nfsargsp);
+			goto retry;
 		}
 	}
 	if (retval)
-		err(1, "%s on %s", ospec, name);
+		err(1, "%s on %s", spec, name);
 	if (mntflags & MNT_GETARGS) {
 		shownfsargs(nfsargsp);
 		return (0);
 	}
 		
-	if (nfsargsp->flags & (NFSMNT_NQNFS | NFSMNT_KERB)) {
+	if (nfsargsp->flags & NFSMNT_KERB) {
 		if ((opflags & ISBGRND) == 0) {
 			if ((i = fork()) != 0) {
 				if (i == -1)
@@ -550,79 +490,6 @@ mount_nfs(int argc, char *argv[])
 			}
 			nfssvc_flag =
 			    NFSSVC_MNTD | NFSSVC_GOTAUTH | NFSSVC_AUTHINFAIL;
-#ifdef NFSKERB
-			/*
-			 * Set up as ncd_authuid for the kerberos call.
-			 * Must set ruid to ncd_authuid and reset the
-			 * ticket name iff ncd_authuid is not the same
-			 * as last time, so that the right ticket file
-			 * is found.
-			 * Get the Kerberos credential structure so that
-			 * we have the seesion key and get a ticket for
-			 * this uid.
-			 * For more info see the IETF Draft "Authentication
-			 * in ONC RPC".
-			 */
-			if (ncd.ncd_authuid != last_ruid) {
-				krb_set_tkt_string("");
-				last_ruid = ncd.ncd_authuid;
-			}
-			setreuid(ncd.ncd_authuid, 0);
-			kret = krb_get_cred(NFS_KERBSRV, inst, realm, &kcr);
-			if (kret == RET_NOTKT) {
-		            kret = get_ad_tkt(NFS_KERBSRV, inst, realm,
-				DEFAULT_TKT_LIFE);
-			    if (kret == KSUCCESS)
-				kret = krb_get_cred(NFS_KERBSRV, inst, realm,
-				    &kcr);
-			}
-			if (kret == KSUCCESS)
-			    kret = krb_mk_req(&ktick.kt, NFS_KERBSRV, inst,
-				realm, 0);
-
-			/*
-			 * Fill in the AKN_FULLNAME authenticator and verfier.
-			 * Along with the Kerberos ticket, we need to build
-			 * the timestamp verifier and encrypt it in CBC mode.
-			 */
-			if (kret == KSUCCESS &&
-			    ktick.kt.length <= (RPCAUTH_MAXSIZ-3*NFSX_UNSIGNED)
-			    && gettimeofday(&ktv, (struct timezone *)0) == 0) {
-			    ncd.ncd_authtype = RPCAUTH_KERB4;
-			    ncd.ncd_authstr = (u_char *)&ktick;
-			    ncd.ncd_authlen = nfsm_rndup(ktick.kt.length) +
-				3 * NFSX_UNSIGNED;
-			    ncd.ncd_verfstr = (u_char *)&kverf;
-			    ncd.ncd_verflen = sizeof (kverf);
-			    memmove(ncd.ncd_key, kcr.session,
-				sizeof (kcr.session));
-			    kin.t1 = htonl(ktv.tv_sec);
-			    kin.t2 = htonl(ktv.tv_usec);
-			    kin.w1 = htonl(NFS_KERBTTL);
-			    kin.w2 = htonl(NFS_KERBTTL - 1);
-			    memset((caddr_t)kivec, 0, sizeof (kivec));
-
-			    /*
-			     * Encrypt kin in CBC mode using the session
-			     * key in kcr.
-			     */
-			    XXX
-
-			    /*
-			     * Finally, fill the timestamp verifier into the
-			     * authenticator and verifier.
-			     */
-			    ktick.kind = htonl(RPCAKN_FULLNAME);
-			    kverf.kind = htonl(RPCAKN_FULLNAME);
-			    NFS_KERBW1(ktick.kt) = kout.w1;
-			    ktick.kt.length = htonl(ktick.kt.length);
-			    kverf.verf.t1 = kout.t1;
-			    kverf.verf.t2 = kout.t2;
-			    kverf.verf.w2 = kout.w2;
-			    nfssvc_flag = NFSSVC_MNTD | NFSSVC_GOTAUTH;
-			}
-			setreuid(0, 0);
-#endif /* NFSKERB */
 		}
 	}
 	exit(0);
@@ -671,8 +538,8 @@ static void
 usage(void)
 {
 	(void)fprintf(stderr, "usage: mount_nfs %s\n%s\n%s\n%s\n%s\n",
-"[-23bcCdiKlpPqsTUX] [-a maxreadahead] [-D deadthresh]",
-"\t[-g maxgroups] [-I readdirsize] [-L leaseterm] [-m realm]",
+"[-23bcCdilpPqsTUX] [-a maxreadahead] [-D deadthresh]",
+"\t[-g maxgroups] [-I readdirsize] [-L leaseterm]",
 "\t[-o options] [-R retrycnt] [-r readsize] [-t timeout]",
 "\t[-w writesize] [-x retrans]",
 "\trhost:path node");

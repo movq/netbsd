@@ -1,4 +1,4 @@
-/*	$NetBSD: in.h,v 1.72 2005/12/11 12:24:57 christos Exp $	*/
+/*	$NetBSD: in.h,v 1.77 2006/11/13 05:13:41 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -102,7 +102,7 @@ typedef __sa_family_t	sa_family_t;
 #define	IPPROTO_PIM		103		/* Protocol indep. multicast */
 #define	IPPROTO_IPCOMP		108		/* IP Payload Comp. Protocol */
 #define	IPPROTO_VRRP		112		/* VRRP RFC 2338 */
-
+#define	IPPROTO_CARP		112		/* Common Address Resolution Protocol */
 #define	IPPROTO_RAW		255		/* raw IP packet */
 #define	IPPROTO_MAX		256
 
@@ -202,19 +202,30 @@ struct in_addr {
 #define	IN_BADCLASS(i)		(((uint32_t)(i) & __IPADDR(0xf0000000)) == \
 				 __IPADDR(0xf0000000))
 
+#define IN_LINKLOCAL(i)	(((uint32_t)(i) & __IPADDR(0xffff0000)) == \
+			 __IPADDR(0xa9fe0000))
+
+#define	IN_PRIVATE(i)	((((uint32_t)(i) & __IPADDR(0xff000000)) ==	\
+			  __IPADDR(0x0a000000))	||			\
+			 (((uint32_t)(i) & __IPADDR(0xfff00000)) ==	\
+			  __IPADDR(0xac100000))	||			\
+			 (((uint32_t)(i) & __IPADDR(0xffff0000)) ==	\
+			  __IPADDR(0xc0a80000)))
+
 #define	IN_LOCAL_GROUP(i)	(((uint32_t)(i) & __IPADDR(0xffffff00)) == \
 				 __IPADDR(0xe0000000))
+
+#define	IN_ANY_LOCAL(i)		(IN_LINKLOCAL(i) || IN_LOCAL_GROUP(i))
 
 #define	INADDR_ANY		__IPADDR(0x00000000)
 #define	INADDR_LOOPBACK		__IPADDR(0x7f000001)
 #define	INADDR_BROADCAST	__IPADDR(0xffffffff)	/* must be masked */
-#ifndef _KERNEL
 #define	INADDR_NONE		__IPADDR(0xffffffff)	/* -1 return */
-#endif
 
 #define	INADDR_UNSPEC_GROUP	__IPADDR(0xe0000000)	/* 224.0.0.0 */
 #define	INADDR_ALLHOSTS_GROUP	__IPADDR(0xe0000001)	/* 224.0.0.1 */
 #define	INADDR_ALLRTRS_GROUP	__IPADDR(0xe0000002)	/* 224.0.0.2 */
+#define	INADDR_CARP_GROUP	__IPADDR(0xe0000012)	/* 224.0.0.18 */
 #define	INADDR_MAX_LOCAL_GROUP	__IPADDR(0xe00000ff)	/* 224.0.0.255 */
 
 #define	IN_LOOPBACKNET		127			/* official! */

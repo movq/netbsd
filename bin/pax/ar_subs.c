@@ -1,4 +1,4 @@
-/*	$NetBSD: ar_subs.c,v 1.46 2005/12/06 19:11:15 christos Exp $	*/
+/*	$NetBSD: ar_subs.c,v 1.50 2006/10/07 09:53:20 elad Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)ar_subs.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: ar_subs.c,v 1.46 2005/12/06 19:11:15 christos Exp $");
+__RCSID("$NetBSD: ar_subs.c,v 1.50 2006/10/07 09:53:20 elad Exp $");
 #endif
 #endif /* not lint */
 
@@ -63,7 +63,7 @@ __RCSID("$NetBSD: ar_subs.c,v 1.46 2005/12/06 19:11:15 christos Exp $");
 #include "extern.h"
 
 static int path_check(ARCHD *, int);
-static void wr_archive(ARCHD *, int is_app);
+static int wr_archive(ARCHD *, int is_app);
 static int get_arc(void);
 static int next_head(ARCHD *);
 #if !HAVE_NBTOOL_CONFIG_H
@@ -142,6 +142,7 @@ domkdir(const char *fname, mode_t mode)
 		return 0;
 	case EEXIST:
 	case EACCES:
+	case ENOSYS:	/* Grr Solaris */
 		error = errno;
 		if (stat(fname, &sb) != -1 && S_ISDIR(sb.st_mode))
 			return 0;
@@ -189,7 +190,7 @@ path_check(ARCHD *arcn, int level)
  *	(if no pattern is supplied, list entire contents).
  */
 
-void
+int
 list(void)
 {
 	ARCHD *arcn;
@@ -206,7 +207,7 @@ list(void)
 	 */
 	if ((get_arc() < 0) || ((*frmt->options)() < 0) ||
 	    ((*frmt->st_rd)() < 0))
-		return;
+		return 1;
 
 	now = time((time_t *)NULL);
 
@@ -277,6 +278,8 @@ list(void)
 	(void)sigprocmask(SIG_BLOCK, &s_mask, (sigset_t *)NULL);
 	ar_close();
 	pat_chk();
+
+	return 0;
 }
 
 /*
@@ -285,7 +288,7 @@ list(void)
  *	pattern(s) (no patterns extracts all members)
  */
 
-void
+int
 extract(void)
 {
 	ARCHD *arcn;
@@ -303,7 +306,7 @@ extract(void)
 	 */
 	if ((get_arc() < 0) || ((*frmt->options)() < 0) ||
 	    ((*frmt->st_rd)() < 0) || (dir_start() < 0))
-		return;
+		return 1;
 
 	now = time((time_t *)NULL);
 #if !HAVE_NBTOOL_CONFIG_H
@@ -316,7 +319,7 @@ extract(void)
 	 * so we can fix up hard links files later in the archive.
 	 */
 	if (iflag && (name_start() < 0))
-		return;
+		return 1;
 
 	/*
 	 * step through each entry on the archive until the format read routine
@@ -518,6 +521,8 @@ extract(void)
 	ar_close();
 	proc_dir();
 	pat_chk();
+
+	return 0;
 }
 
 /*
@@ -526,7 +531,7 @@ extract(void)
  *	previously written archive.
  */
 
-static void
+static int
 wr_archive(ARCHD *arcn, int is_app)
 {
 	int res;
@@ -542,13 +547,13 @@ wr_archive(ARCHD *arcn, int is_app)
 	 * that detects them.
 	 */
 	if (((hlk = frmt->hlk) == 1) && (lnk_start() < 0))
-		return;
+		return 1;
 
 	/*
 	 * start up the file traversal code and format specific write
 	 */
 	if ((ftree_start() < 0) || ((*frmt->st_wr)() < 0))
-		return;
+		return 1;
 	wrf = frmt->wr;
 
 	now = time((time_t *)NULL);
@@ -558,7 +563,7 @@ wr_archive(ARCHD *arcn, int is_app)
 	 * so we can fix up hard links files later in the archive.
 	 */
 	if (iflag && (name_start() < 0))
-		return;
+		return 1;
 
 	/*
 	 * if this is not append, and there are no files, we do no write a trailer
@@ -709,6 +714,8 @@ wr_archive(ARCHD *arcn, int is_app)
 	if (tflag)
 		proc_dir();
 	ftree_chk();
+
+	return 0;
 }
 
 /*
@@ -733,7 +740,7 @@ wr_archive(ARCHD *arcn, int is_app)
  *	over write existing files that it creates.
  */
 
-void
+int
 append(void)
 {
 	ARCHD *arcn;
@@ -750,25 +757,25 @@ append(void)
 	 * different format than the user specified format.
 	 */
 	if (get_arc() < 0)
-		return;
+		return 1;
 	if ((orgfrmt != NULL) && (orgfrmt != frmt)) {
 		tty_warn(1, "Cannot mix current archive format %s with %s",
 		    frmt->name, orgfrmt->name);
-		return;
+		return 1;
 	}
 
 	/*
 	 * pass the format any options and start up format
 	 */
 	if (((*frmt->options)() < 0) || ((*frmt->st_rd)() < 0))
-		return;
+		return 1;
 
 	/*
 	 * if we only are adding members that are newer, we need to save the
 	 * mod times for all files we see.
 	 */
 	if (uflag && (ftime_start() < 0))
-		return;
+		return 1;
 
 	/*
 	 * some archive formats encode hard links by recording the device and
@@ -785,7 +792,7 @@ append(void)
 	 * header. See the remap routines for more details.
 	 */
 	if ((udev = frmt->udev) && (dev_start() < 0))
-		return;
+		return 1;
 
 	/*
 	 * reading the archive may take a long time. If verbose tell the user
@@ -847,7 +854,7 @@ append(void)
 	 * we will refuse to write
 	 */
 	if (appnd_start(tlen) < 0)
-		return;
+		return 1;
 
 	/*
 	 * tell the user we are done reading.
@@ -860,7 +867,18 @@ append(void)
 	/*
 	 * go to the writing phase to add the new members
 	 */
-	wr_archive(arcn, 1);
+	res = wr_archive(arcn, 1);
+	if (res == 1) {
+		/*
+		 * wr_archive failed in some way, but before any files were
+		 * added. These are the only steps needed to cleanup (and
+		 * not truncate the archive).
+		 */
+		wr_fin();
+		(void)sigprocmask(SIG_BLOCK, &s_mask, (sigset_t *)NULL);
+		ar_close();
+	}
+	return res;
 }
 
 /*
@@ -868,7 +886,7 @@ append(void)
  *	write a new archive
  */
 
-void
+int
 archive(void)
 {
 
@@ -878,11 +896,11 @@ archive(void)
 	 * options write the archive
 	 */
 	if ((uflag && (ftime_start() < 0)) || (wr_start() < 0))
-		return;
+		return 1;
 	if ((*frmt->options)() < 0)
-		return;
+		return 1;
 
-	wr_archive(&archd, 0);
+	return wr_archive(&archd, 0);
 }
 
 /*
@@ -893,7 +911,7 @@ archive(void)
  *	(except the files are forced to be under the destination directory).
  */
 
-void
+int
 copy(void)
 {
 	ARCHD *arcn;
@@ -915,7 +933,7 @@ copy(void)
 	if (dlen >= sizeof(dirbuf) ||
 	    (dlen == sizeof(dirbuf) - 1 && dirbuf[dlen - 1] != '/')) {
 		tty_warn(1, "directory name is too long %s", dirptr);
-		return;
+		return 1;
 	}
 	dest_pt = dirbuf + dlen;
 	if (*(dest_pt-1) != '/') {
@@ -928,11 +946,11 @@ copy(void)
 	if (stat(dirptr, &sb) < 0) {
 		syswarn(1, errno, "Cannot access destination directory %s",
 			dirptr);
-		return;
+		return 1;
 	}
 	if (!S_ISDIR(sb.st_mode)) {
 		tty_warn(1, "Destination is not a directory %s", dirptr);
-		return;
+		return 1;
 	}
 
 	/*
@@ -940,14 +958,14 @@ copy(void)
 	 * modification time and access mode database
 	 */
 	if ((lnk_start() < 0) || (ftree_start() < 0) || (dir_start() < 0))
-		return;
+		return 1;
 
 	/*
 	 * When we are doing interactive rename, we store the mapping of names
 	 * so we can fix up hard links files later in the archive.
 	 */
 	if (iflag && (name_start() < 0))
-		return;
+		return 1;
 
 	/*
 	 * set up to cp file trees
@@ -1122,6 +1140,8 @@ copy(void)
 	ar_close();
 	proc_dir();
 	ftree_chk();
+
+	return 0;
 }
 
 /*
@@ -1179,7 +1199,7 @@ next_head(ARCHD *arcn)
 			 * them, so exit gracefully.
 			 */
 			if (first && ret == 0)
-				return(-1);
+				return -1;
 			first = 0;
 
 			/*
@@ -1189,13 +1209,13 @@ next_head(ARCHD *arcn)
 			if ((ret == 0) || (rd_sync() < 0)) {
 				tty_warn(1,
 				    "Premature end of file on archive read");
-				return(-1);
+				return -1;
 			}
 			if (!in_resync) {
 				if (act == APPND) {
 					tty_warn(1,
 					  "Archive I/O error, cannot continue");
-					return(-1);
+					return -1;
 				}
 				tty_warn(1,
 				    "Archive I/O error. Trying to recover.");
@@ -1233,7 +1253,7 @@ next_head(ARCHD *arcn)
 				 * valid trailer found, drain input as required
 				 */
 				ar_drain();
-				return(-1);
+				return -1;
 			}
 
 			if (ret == 1) {
@@ -1261,7 +1281,7 @@ next_head(ARCHD *arcn)
 			if (act == APPND) {
 				tty_warn(1,
 				    "Unable to append, archive header flaw");
-				return(-1);
+				return -1;
 			}
 			tty_warn(1,
 			    "Invalid header, starting valid header search.");
@@ -1282,11 +1302,11 @@ next_head(ARCHD *arcn)
 		 * valid trailer found, drain input as required
 		 */
 		ar_drain();
-		return(-1);
+		return -1;
 	}
 
 	++flcnt;
-	return(0);
+	return 0;
 }
 
 /*
@@ -1318,7 +1338,7 @@ get_arc(void)
 			minhd = fsub[ford[i]].hsz;
 	}
 	if (rd_start() < 0)
-		return(-1);
+		return -1;
 	res = BLKMULT;
 	hdsz = 0;
 	hdend = hdbuf;
@@ -1350,7 +1370,7 @@ get_arc(void)
 			hdend = hdbuf;
 			if (!notice) {
 				if (act == APPND)
-					return(-1);
+					return -1;
 				tty_warn(1,
 				    "Cannot identify format. Searching...");
 				++notice;
@@ -1377,7 +1397,7 @@ get_arc(void)
 			 * adding all the special case code is far worse.
 			 */
 			pback(hdbuf, hdsz);
-			return(0);
+			return 0;
 		}
 
 		/*
@@ -1386,7 +1406,7 @@ get_arc(void)
 		 */
 		if (!notice) {
 			if (act == APPND)
-				return(-1);
+				return -1;
 			tty_warn(1, "Cannot identify format. Searching...");
 			++notice;
 		}
@@ -1413,5 +1433,5 @@ get_arc(void)
 	 * we cannot find a header, bow, apologize and quit
 	 */
 	tty_warn(1, "Sorry, unable to determine archive format.");
-	return(-1);
+	return -1;
 }

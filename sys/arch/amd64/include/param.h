@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.1 2003/04/26 18:39:45 fvdl Exp $	*/
+/*	$NetBSD: param.h,v 1.3 2006/08/28 13:43:35 yamt Exp $	*/
 
 #ifdef _KERNEL
 #ifdef _LOCORE
@@ -107,27 +107,7 @@
  * logical pages.
  */
 #define	NKMEMPAGES_MIN_DEFAULT	((8 * 1024 * 1024) >> PAGE_SHIFT)
-#define	NKMEMPAGES_MAX_DEFAULT	((128 * 1024 * 1024) >> PAGE_SHIFT)
-
-/* pages ("clicks") to disk blocks */
-#define	ctod(x)		((x) << (PGSHIFT - DEV_BSHIFT))
-#define	dtoc(x)		((x) >> (PGSHIFT - DEV_BSHIFT))
-
-/* bytes to pages */
-#define	ctob(x)		((x) << PGSHIFT)
-#define	btoc(x)		(((x) + PGOFSET) >> PGSHIFT)
-
-/* bytes to disk blocks */
-#define	dbtob(x)	((x) << DEV_BSHIFT)
-#define	btodb(x)	((x) >> DEV_BSHIFT)
-
-/*
- * Map a ``block device block'' to a file system block.
- * This should be device dependent, and should use the bsize
- * field from the disk label.
- * For now though just use DEV_BSIZE.
- */
-#define	bdbtofsb(bn)	((bn) / (BLKDEV_IOSIZE / DEV_BSIZE))
+#define	NKMEMPAGES_MAX_DEFAULT	((1 *1024 * 1024 * 1024) >> PAGE_SHIFT)
 
 /*
  * XXXfvdl the PD* stuff is different from i386.

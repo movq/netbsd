@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.es,v 1.8 2005/12/13 14:23:06 xtraeme Exp $	*/
+/*	$NetBSD: msg.mi.es,v 1.17.2.2 2007/10/26 23:25:08 xtraeme Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -140,9 +140,6 @@ message ask_disk
 message Available_disks
 {Discos disponibles}
 
-message cylinders
-{cilindros}
-
 message heads
 {cabezas}
 
@@ -191,15 +188,9 @@ cilindro.
 
 Escoja su especificador de tamaño}
 
-message defaultunit
-{A no ser que haya especificado con «M» (megabytes), «G» (gigabytes), «c»
-(cilindros) o «s» sectores al final de la entrada, los tamaños y
-desplazamientos están en %s.
-}
-
 message ptnsizes
 {Ahora puede cambiar los tamaños de las particiones del sistema.  Por
-omisión se asigna todo el espacio al sistema de ficheros raíz, sin embargo
+omisión se asigna todo el espacio al sistema de archivos raíz, sin embargo
 usted podría querer separar /usr (ficheros de sistema adicionales), /var
 (ficheros de registro, etc) o /home (directorios de usuario).
 
@@ -208,7 +199,7 @@ El espacio libre sobrante será añadido a la partición marcada con «+».
 
 message ptnheaders
 {
-       MB         Cilindros	Sectores  Sistema de ficheros
+       MB         Cilindros	Sectores  Sistema de archivos
 }
 
 message askfsmount
@@ -345,10 +336,10 @@ message invalid_sector_number
 }
 
 message Select_file_system_block_size
-{Seleccione el tamaño de bloque del sistema de ficheros}
+{Seleccione el tamaño de bloque del sistema de archivos}
 
 message Select_file_system_fragment_size
-{Seleccione el tamaño de fragmento del sistema de ficheros}
+{Seleccione el tamaño de fragmento del sistema de archivos}
 
 message packname
 {Por favor entroduzca un nombre para el disco NetBSD}
@@ -377,40 +368,6 @@ comprobdo las nuevas particiones que ha indicado para el disco objetivo.
 message openfail
 {No se ha podido abrir %s, el mensaje de error ha sido: %s.
 }
-
-message statfail
-{No se pueden obtener las propiedades de %s, el mensaje de error ha sido: %s.
-}
-
-message unlink_fail
-{No se ha podido borrar %s, el mensaje de error ha sido: %s.
-}
-
-message rename_fail
-{No he podido renombrar %s a %s, el mensaje de error ha sido: %s.
-}
-
-message deleting_files
-{Como parte del proceso de actualización, se tiene que borrar lo siguiente:
-}
-
-message deleting_dirs
-{Como parte del proceso de actualización, se tienen que borrar los siguientes
-directorios (se renombrarán los que no estén vacíos):
-}
-
-message renamed_dir
-{El directorio %s ha sido renombrado a %s porque no estaba vacío.
-}
-
-message cleanup_warn
-{La limpieza de la instalación existente ha fallado.  Esto puede hacer que
-la extracción del conjunto falle.
-}
-
-message nomount
-{El tipo de partición de %c no es 4.2BSD o msdos, y por lo tanto no tiene
-un punto de montaje.}
 
 message mountfail
 {el montaje del dispositivo /dev/%s%c en %s ha fallado.
@@ -465,30 +422,25 @@ message distmedium
 {Su disco está ahora preparado para la instalación el nucleo y los conjuntos
 de la distribución.  Como se apunta en las notas INSTALL, tiene diversas
 opciones.  Para ftp o nfs, tiene que estar conectado a una red con acceso
-a las maquinas apropiadas.  Si no está preparado para completar la
-instalación en este momento, puede seleccionar «ninguno» y será retornado
-al menú principal.  Cuando más adelante esté preparado, deberá seleccionar
-«actualizar» desde el menú principal para completar la instalación.
+a las maquinas apropiadas.
+
+Conjuntos seleccionados: %d, procesados: %d. Siguiente conjunto: %s.
+
 }
 
 message distset
 {La distribución NetBSD está dividida en una colección de conjuntos de
 distribución.  Hay algunos conjuntos básicos que son necesarios para todas
 las instalaciones, y otros conjuntos que no son necesarios para todas las
-instalaciones.  Puede escoger para instalar todos ellos (Instalación
-completa) o seleccionar de entre los conjuntos de distribución opcionales.
+instalaciones.  Puede escoger para instalar sólo los conjuntos esenciales
+(instalación mínima); instalar todos ellos (Instalación completa) o
+seleccionar de entre los conjuntos de distribución opcionales.
 }
 
 message ftpsource
 {Lo siguiente son el sitio %s, directorio, usuario y contraseña que se
 usarán.  Si «usuario» es «ftp», no se necesita contraseña..
 
-servidor:		%s 
-directorio base:	%s 
-dir. de conjuntos:	%s 
-usuario:		%s 
-contraseña:		%s 
-proxy:			%s 
 }
 
 message email
@@ -502,21 +454,20 @@ message nfssource
 la distribución.  Recuerde: el directorio debe contener los archivos .tgz y
 debe ser montable por nfs.
 
-servidor:		%s 
-directorio base:	%s 
-dir de conjuntos:	%s 
 }
 
-message nfsbadmount
-{El directorio %s:%s no pudo ser montado por nfs.}
+message floppysource
+{Introduzca el dispositivo de disquete a usar y el directorio destino de la
+transferencia en el sistema de archivos. Los archivos del conjunto han de estar
+en el directorio raíz de los disquetes.
+
+}
 
 message cdromsource
 {Introduzca el dispositivo de CDROM a usar y el directorio del CDROM
 donde se encuentre la distribución.
 Recuerde, el directorio debe contener los archivos .tgz.
 
-dispositivo:		%s 
-dir de conjuntos:	%s
 }
 
 message localfssource
@@ -524,36 +475,16 @@ message localfssource
 dispositivo donde se encuentre la distribución. 
 Recuerde, el directorio debe contener los archivos .tgz.
 
-dispositivo:		%s 
-sist de ficheros:	%s 
-directorio base:	%s 
-dir de conjuntos:	%s
 }
 
 message localdir
 {Introduzca el directorio local ya montado donde se encuentre la distribución.
 Recuerde, el directorio debe contener los archivos .tgz.
 
-directorio base:	%s 
-dir de conjuntos:	%s
 }
 
 message filesys
-{sistema de ficheros}
-
-message cdrombadmount
-{No se ha podido montar el CDROM /dev/%s.}
-
-message localfsbadmount
-{No se ha podido montar %s en el dispositivo local %s.}
-
-message badlocalsetdir
-{%s no es un directorio}
-
-message badsetdir
-{%s no contiene los conjuntos de instalación obligatorios etc.tgz 
-y base.tgz.  ¿Está seguro de que ha introducido el directorio
-correcto?}
+{sistema de archivos}
 
 message nonet
 {No se ha podido encontrar ninguna interfaz de red para ser usada por NetBSD.
@@ -588,7 +519,7 @@ message net_host
 message net_ip
 {Su número IPv4}
 
-message net_ip_2nd
+message net_srv_ip
 {Número servidor IPv4}
 
 message net_mask
@@ -661,16 +592,8 @@ message realdir
 interrumpida.
 }
 
-message ftperror
-{Ftp no ha podido descargar un fichero.
-¿Desea intentarlo de nuevo?}
-
-message distdir
-{¿Qué directorio debería usar para %s? }
-
-message delete_dist_files
-{¿Quiere borrar los conjuntos de NetBSD de %s? 
-(Puede dejarlos para instalar/actualizar un segundo sistema.)}
+message delete_xfer_file
+{A eliminar después de la instalación}
 
 message verboseextract
 {
@@ -683,9 +606,6 @@ extrayendo cada uno de los ficheros?
 
 message notarfile
 {El conjunto %s no existe.}
-
-message notarfile_ok
-{¿Continuar extrayendo conjuntos?}
 
 message endtarok
 {Todos los conjuntos de distribución han sido desempaquetados
@@ -771,46 +691,37 @@ message makedev
 }
 
 message badfs
-{Parece que /dev/%s%c no es un sistema de ficheros BSD o el fsck no ha sido
+{Parece que /dev/%s%c no es un sistema de archivos BSD o el fsck no ha sido
 correcto.  La actualización ha sido interrumpida.  (Error número %d.)
 }
-
-message badmount
-{Su sistema de ficheros /dev/%s%c no ha sido montado correctamente.
-Actualización interrumpida.}
 
 message rootmissing
 { el directorio raíz objetivo no existe %s.
 }
 
 message badroot
-{El nuevo sistema de ficheros raíz no ha pasado la comprobación básica.
+{El nuevo sistema de archivos raíz no ha pasado la comprobación básica.
  ¿Está seguro de que ha instalado todos los conjuntos requeridos? 
 
 }
 
-message fddev
-{¿Qué dispositivo de disquete quiere usar? }
-
-message fdmount
-{Por favor, inserte el disquete que contiene el fichero «%s». }
+message fd_type
+{Tipo de sistema de archivos del disquete}
 
 message fdnotfound
-{No se ha encontrado el fichero «%s» en el disco.  Por favor, inserte
-el disquete que lo contenga.
-
-Si éste era el último disco del conjunto, pulse «Conjunto acabado» para
-continuar con el siguiente conjunto, si lo hay.}
+{No se ha encontrado el fichero en el disco.
+}
 
 message fdremount
-{El disquete no ha sido montado correctamente.  Puede:
+{El disquete no ha sido montado correctamente.
+}
 
-Intentarlo de nuevo e insertar el disquete que contenga el fichero «%s».
+message fdmount
+{Por favor, inserte el disquete que contiene el fichero «%s.%s».
 
-No cargar ningún otro fichero de este conjunto y continuar con el siguiente,
-si lo hay.
-
-No cargar ningún otro fichero desde el disquete e interrumpir el proceso.
+Si el conjunto no está en más discos, seleccione "Conjunto finalizado"
+para instalarlo. Seleccione "Abortar lectura" para regresar al menú
+de selección de medios de instalación.
 }
 
 message mntnetconfig
@@ -863,17 +774,11 @@ message set_X11_fonts
 message set_X11_servers
 {Servidores X11}
 
-message set_X_contrib
-{Clientes de X contrib}
-
 message set_X11_prog
 {Programación de X11}
 
-message set_X11_misc
-{X11 Misc.}
-
 message cur_distsets_row
-{%-27s %3s\n}
+{%-27s %3s}
 
 message select_all
 {Seleccionar todos los conjuntos anteriores}
@@ -905,28 +810,8 @@ menú principal.
 
 ¿Editar la tabla de particiones de nuevo?}
 
-message not_regular_file
-{El fichero de configuración %s no es un fichero normal.\n}
-
-message out_of_memory
-{Sin memoria (malloc fallido).\n}
-
 message config_open_error
 {No se ha podido abrir el fichero de configuración %s\n}
-
-message config_read_error
-{No se ha podido leer el fichero de configuración %s\n}
-
-message cmdfail
-{La orden
-	%s
-ha fallado.  No se puede continuar.}
-
-message upgradeparttype
-{La unica partición adecuada que se ha encontrado para la instalación de
-NetBSD es del tipo antiguo (NetBSD/386BSD/FreeBSD).  ¿Quiere
-cambiar el tipo de esta partición al nuevo tipo de partición de
-sólo-NetBSD?}
 
 message choose_timezone
 {Por favor, escoja de la siguiente lista la zona horaria que le convenga.  
@@ -979,15 +864,9 @@ message rootsh
 {Ahora puede seleccionar que shell quiere usar para el usuario root.  Por
 omisión es /bin/sh, pero podría preferir otra.}
 
-message postuseexisting
-{
-No olvide comprobar los puntos de montaje para cada sistema de ficheros
-que vaya a ser montado.  Presione <return> para continuar.
-}
-
 message no_root_fs
 {
-No hay un sistema de ficheros raíz definido.  Necesitará al menos un punto
+No hay un sistema de archivos raíz definido.  Necesitará al menos un punto
 de montaje con «/».
 
 Presione <return> para continuar.
@@ -1036,17 +915,17 @@ message http {HTTP}
 message nfs {NFS}
 message cdrom {CD-ROM / DVD}
 message floppy {Disquete}
-message local_fs {Sistema de ficheros desmontado}
+message local_fs {Sistema de archivos desmontado}
 message local_dir {Directorio Local}
 message Select_your_distribution {Seleccione su distribución}
 message Full_installation {Instalación completa}
+message Minimal_installation {Instalación mínima}
 message Custom_installation {Instalación personalizada}
-message Change {Cambiar}
 message hidden {** oculto **}
 message Host {Máquina}
 message Base_dir {Directorio base}
 message Set_dir {Directorio de conjuntos}
-message Directory {Directorio}
+message Xfer_dir {Directorio a transferir a}
 message User {Usuario}
 message Password {Contraseña}
 message Proxy {Proxy}
@@ -1054,17 +933,18 @@ message Get_Distribution {Obtener la distribución}
 message Continue {Continuar}
 message What_do_you_want_to_do {¿Qué desea hacer?}
 message Try_again {Reintentar}
-message Give_up {Abandonar}
-message Ignore_continue_anyway {Ignorar, continuar de todos modos}
 message Set_finished {Conjunto finalizado}
-message Abort_install {Interrumpir la instalación}
+message Skip_set {Omitir conjunto}
+message Skip_group {Omitir grupo de conjuntos}
+message Abandon {Abandonar instalación}
+message Abort_fetch {Abortar lectura}
 message Password_cipher {Cifrado de las contraseñas}
 message DES {DES}
 message MD5 {MD5}
 message Blowfish_2_7_round {Blowfish 2^7 round}
 message do_not_change {no cambiar}
 message Device {Dispositivo}
-message File_system {Sistema de ficheros}
+message File_system {Sistema de archivos}
 message Select_IPv6_DNS_server {  Seleccione servidor DNS de IPv6}
 message other {otro }
 message Perform_IPv6_autoconfiguration {¿Realizar autoconfiguración IPv6?}
@@ -1083,8 +963,29 @@ de nuevo y asegúrese de que ha montado todos los sistemas de ficheros.}
 
 message emulbackup
 {El directorio /emul/aout o /emul de su sistema era un enlace simbólico que
-apuntaba a un sistema de ficheros desmontado.  Se le ha dado la extension
+apuntaba a un sistema de archivos desmontado.  Se le ha dado la extension
 '.old'.  Cuando vuelva a arrancar su sistema actualizado, puede que necesite
 preocuparse de fundir el directorio /emul/aout nuevamente creado con el viejo.
 }
 .endif
+
+.if xxxx
+Si no está preparado para completar la
+instalación en este momento, puede seleccionar «ninguno» y será retornado
+al menú principal.  Cuando más adelante esté preparado, deberá seleccionar
+«actualizar» desde el menú principal para completar la instalación.
+
+message cdrombadmount
+{No se ha podido montar el CDROM /dev/%s.}
+
+message localfsbadmount
+{No se ha podido montar %s en el dispositivo local %s.}
+.endif
+
+message oldsendmail
+{Sendmail ya no está disponible en esta versión de NetBSD; el MTA por defecto
+es ahora postfix.  El fichero /etc/mailer.conf aún está configurado para usar
+el sendmail eliminado.  ¿Desea actualizar el fichero /etc/mailer.conf
+automáticamente para que apunte a postfix?  Si escoge "No" tendrá que
+actualizar /etc/mailer.conf usted mismo para asegurarse de que los mensajes
+de correo electrónico se envíen correctamente.}

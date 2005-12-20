@@ -1,4 +1,4 @@
-.\"	$NetBSD: sysinst,v 1.74 2005/12/15 02:34:47 hubertf Exp $
+.\"	$NetBSD: sysinst,v 1.77.2.4 2007/12/15 19:34:03 bouyer Exp $
 .\"
 .\" Copyright (c) 1999-2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -33,14 +33,6 @@
 .\"
 .
 .
-.de (pcmcia
-.	Bl -tag -width x[PCMCIA]x
-.It [ Tn PCMCIA ]
-..
-.de pcmcia)
-.	El
-..
-.
 .
 .\" Define strings for partition references:
 .\"	\*[part_raw]	`raw' partition (usually `c' or `d')
@@ -67,8 +59,8 @@
 \n[sandpoint]:\n[sbmips]:\n[sgimips]:\n[x86_64] \{\
 .  ds part_max p
 .\}
-.if \n[acorn26]:\n[acorn32]:\n[cats]:\n[evbarm]:\n[evbppc]:\n[pc532]:\
-\n[sandpoint]:\n[shark] \{\
+.if \n[acorn26]:\n[acorn32]:\n[cats]:\n[evbarm]:\n[evbppc]:\n[ews4800mips]:\
+\n[pc532]:\n[sandpoint]:\n[shark] \{\
 .  ds part_usr e
 .\}
 .if \n[macppc]:\n[news68k]:\n[newsmips]:\n[sparc]:\n[sparc64] \{\
@@ -93,200 +85,21 @@ covers many details for the sake of completeness.
 Do not let this discourage you; the install program is not hard
 to use.
 .
-.if !\n[acorn26]:\n[atari]:\n[mac68k]:\n[macppc]:\n[mvme68k]:\n[news68k]:\n[newsmips]:\n[pmax]:\n[sgimips]:\n[sparc]:\n[sparc64]:\n[x68k] \{\
+.if !\n[acorn26]:\n[acorn32]\n[atari]:\n[ews4800mips]:\n[mac68k]:\n[macppc]:\n[mvme68k]:\n[news68k]:\n[newsmips]:\n[pmax]:\n[sgimips]:\n[sparc]:\n[sparc64]:\n[x68k] \{\
 .It
-.To 2 "Possible PCMCIA issues"
-.Em Possible Tn PCMCIA Em issues
+.To 2 "Possible hardware problems"
+.Em Possible hardware problems
 .Pp
-Machines with
-.Tn PCMCIA
-slots may have problems during installation.
-If you do not have
-.Tn PCMCIA
-on your machine
-.Tn ( PCMCIA
-is only really used on laptop machines),
-you can skip this section, and ignore the
-.Dq Bq Tn PCMCIA
-notes.
-If you do have
-.Tn PCMCIA
-in your machine, you can safely ignore this section and the
-.Dq Bq Tn PCMCIA
-the first time, as you are likely to not have problems.
-Should troubles
-occur during floppy boot, they may be
-.Tn PCMCIA
-specific.
-You should then re-read this section and try again,
-following the instructions in the
-.Dq Bq Tn PCMCIA
-notes.
-.Pp
-This section explains how to work around the installation problem.
-.Pp
-The kernel keeps careful track of what interrupts
-and I/O ports are in use during autoconfiguration.
-It then allows the
-.Tn PCMCIA
-devices to pick unused interrupts and I/O ports.
-Unfortunately, the
-.Tn Li INSTALL
-kernel may not detect all devices in your system.
-This may be because the
-.Tn Li INSTALL
-kernel only supports the minimum set of devices to install
-.Nx
-on your system, or it may be that
-.Nx
-does not have support for the device causing the conflict.
-.Pp
-For example, suppose your laptop has a
-soundblaster device built in; the
-.Tn Li INSTALL
-kernel has no sound support.
-The
-.Tn PCMCIA
-code might allocate your soundblaster's
-.Tn IRQ
-and I/O ports to
-.Tn PCMCIA
-devices, causing them not to work, or to lock up the system.
-This is especially bad if one of the devices in question is your ethernet card.
-.Pp
-The kernel attempts to probe for available interrupts that are
-usable by the
-.Tn PCIC
-.Tn ( PCMCIA
-interrupt controller), which 
-should alleviate interrupt conflicts;
-however, I/O port conflicts are still possible.
-.Pp
-This problem will impact some, but not all, users of
-.Tn PCMCIA .
-If this problem is affecting you, watch the
-.Dq Bq Tn PCMCIA
-notes that will appear in this document.
-.if \n[i386] \{\
-.Pp
-It can be difficult to distinguish an interrupt conflict from
-an I/O space conflict.
-There are no hard-and-fast rules, but
-interrupt conflicts are more likely to lock up the machine,
-and I/O space conflicts are more likely to result in misbehavior
-(e.g. a network card that cannot send or receive packets).
-.Pp
-The kernel selects a free interrupt according to a mask of allowable
-interrupts, stored in the kernel global variable
-.Va pcic_isa_intr_alloc_mask .
-This mask is a logical-or of power-of-2s of allowable interrupts:
-.(disp
-IRQ  Val     IRQ  Val     IRQ  Val      IRQ  Val
-  0  0x0001    4  0x0010    8  0x0100    12  0x1000
-  1  0x0002    5  0x0020    9  0x0200    13  0x2000
-  2  0x0004    6  0x0040   10  0x0400    14  0x4000
-  3  0x0008    7  0x0080   11  0x0800    15  0x8000
-.disp)
-.Pp
-For example, 0x0a00 allows both IRQ 9 and IRQ 11.
-By default, the
-.Tn Li INSTALL
-kernel permits all IRQs other than IRQs 5 and 7, so the corresponding
-mask is 0xff5f.
-The
-.Tn Li GENERIC
-kernel, however, allows all IRQs.
-(The presumption here is that IRQ 10 may be assigned to a device that the
-.Tn Li GENERIC
-kernel
-supports, but that the
-.Tn Li INSTALL
-does not.)
-Because of support for interrupt probing, it is no
-longer necessary to exclude IRQs 3 and 5 explicitly; if they are
-in use, they should not be assigned to
-.Tn PCMCIA .
-.Pp
-The kernel selects IO space by assigning cards IO space within a
-predefined range.
-The range is specified as a base and size,
-specified by the kernel global variables
-.Va pcic_isa_alloc_iobase
-and
-.Va pcic_isa_alloc_iosize .
-For systems with 12-bit addressing (most systems), the kernel defaults to a
-base of 0x400 and a size of 0xbff (a range of 0x400-0xfff).
-For systems with 10-bit addressing, the kernel defaults to a
-base of 0x300 and a size of 0xff (range of 0x300-0x3ff).
-.Pp
-Unfortunately, these ranges may conflict with some devices.
-In the event of a conflict, try a base of 0x330 with a size of 0x0bf (range
-of 0x330-0x3ff).
-.Pp
-In order to work around this at installation time, you may
-interrupt the 5 second countdown when booting the
-.Tn Li INSTALL
-kernel, and use
-.Ic boot Fl d ,
-in order to enter
-.Xr ddb 4
-(the in-kernel debugger), and then use the
-.Ic write
-command to alter the variable values:
-.Pp
-.Dl db\*> Ic "write pcic_isa_intr_alloc_mask 0x0a00"
-.Dl "pcic_isa_intr_alloc_mask            0xff5f = 0xa00"
-.Dl db\*> Ic "write pcic_isa_alloc_iobase 0x330"
-.Dl "pcic_isa_alloc_iobase               0x400 = 0x330"
-.Dl db\*> Ic "write pcic_isa_alloc_iosize 0x0bf"
-.Dl "pcic_isa_alloc_iosize               0xbff = 0xbf"
-.Dl db\*> Ic "continue"
-.Pp
-Note that, since some floppy images may not have symbol information in
-the kernel, you may have to consult the matching
-.Pa .symbols
-file in the
-.Pa binary/kernel
-directory in the installation tree.
-Find the pcic_ symbols used above,
-look at the hexadecimal value in the first column, and write, for
-example (if
-.Va pcic_isa_intr_alloc_mask
-is equal to c0513e3c):
-.Pp
-.Dl db\*> Ic "write 0xc0513e3c 0x0a00"
-.Pp
-.
-After installation, this value can be permanently written to the kernel image
-directly with:
-.Pp
-.Dl # Ic "cp /netbsd /netbsd.bak"
-.Dl # Ic "gdb --write /netbsd"
-.Dl (gdb) Ic "set pcic_isa_intr_alloc_mask=0x0a00"
-.Dl (gdb) Ic "set pcic_isa_alloc_iobase=0x330"
-.Dl (gdb) Ic "set pcic_isa_alloc_iosize=0x0bf"
-.Dl (gdb) Ic "quit"
-.Dl #
-.Pp
-or you could specify these value when configuring your kernel, e.g.:
-.(disp
-options PCIC_ISA_INTR_ALLOC_MASK=0x0a00
-options PCIC_ISA_ALLOC_IOBASE=0x330
-options PCIC_ISA_ALLOC_IOSIZE=0x0bf
-.disp)
-.Pp
-If you can
-get your
-.Tn PCMCIA
-card to work using this hack, you may also ignore the
-.Bq Tn PCMCIA
-notes later in this document.
-.Pp
-We hope to provide a more elegant solution to this problem in a future
-.Nx
-release.
-.\} \" \n[i386]
-.\} \" !\n[acorn26]:\n[atari]:\n[macppc]:\n[mvme68k]:\n[news68k]:\n[newsmips]:\n[pmax]:\n[sgimips]:\n[sparc]:\n[sparc64]:\n[x68k]
+Should you encounter hardware problems during installation, try
+rebooting after unplugging removable devices you don't need for
+installation.
+Non-removable devices can be disabled with
+.Ic userconf
+(use
+.Ic boot
+.Fl c
+to enter it).
+.\} \" !\n[acorn26]:\n[atari]:\n:[ews4800mips]:\n[macppc]:\n[mvme68k]:\n[news68k]:\n[newsmips]:\n[pmax]:\n[sgimips]:\n[sparc]:\n[sparc64]:\n[x68k]
 .if \n[mac68k] \{\
 .It
 .To 2 "Possible hardware-specific issues"
@@ -369,7 +182,9 @@ What you need.
 The distribution sets (in this example, they are on CD).
 .if !\n[pmax]:\n[sgimips]:\n[sparc64] \{\
 .It
-.ie \n[alpha] Two floppy disks.
+.ie \n[alpha] Three floppy disks.
+.el \{\
+.ie \n[ews4800mips] Two floppy disks.
 .el \{\
 .ie \n[i386] Two 1.44 MB 3.5" floppy disks if the CD is not bootable or if you cannot boot from CD.
 .el \{\
@@ -385,7 +200,7 @@ sysinst.fs image.
 See the "prepare" section about obtaining those.
 .\}
 .el One 1.44 MB 3.5" floppy.
-.\}\}\}\}
+.\}\}\}\}\}
 .\} \" !\n[pmax]:\n[sgimips]:\n[sparc64]
 .if \n[i386] \{\
 .It
@@ -406,6 +221,7 @@ a hard disk and a minimum of
 .if \n[alpha] 32 MB
 .if \n[atari] 4 MB (TT030/Falcon) or 16 MB (Hades/Milan)
 .if \n[cats] 8 MB
+.if \n[ews4800mips] 16 MB
 .if \n[i386] 4 MB
 .if \n[mac68k] 8 MB
 .if \n[macppc] 16 MB
@@ -423,6 +239,7 @@ The hard disk should have at least
 .if \n[alpha] 200
 .if \n[atari] 120
 .if \n[cats] 200
+.if \n[ews4800mips] 200
 .if \n[i386] 200
 .if \n[mac68k] 120
 .if \n[macppc] 200
@@ -443,7 +260,7 @@ main memory in your system.
 If you wish to install the X Window System as well, you will need at least
 120 MB more.
 .bullet)
-.if \n[alpha]:\n[i386]:\n[news68k]:\n[newsmips] \{\
+.if \n[alpha]:\n[ews4800mips]:\n[i386]:\n[news68k]:\n[newsmips] \{\
 .It
 Creating the boot floppies.
 You can create the floppies needed for installation
@@ -462,15 +279,14 @@ command prompt:
 .Dl Ic "rawrite"
 .Pp
 When asked for a source filename, answer
-.if \n[i386] \{\
+.if \n[ews4800mips]:\n[i386]:\n[newsmips] \{\
 .Dl Pa \&..\efloppy\eboot1.fs
 for the first diskette and
 .Dl Pa \&..\efloppy\eboot2.fs
 for the second diskette.
 .\}
-.if \n[alpha] .Dl Em \&(...alpha installation root) Ns Pa \efloppy\edisk1of2
+.if \n[alpha] .Dl Em \&(...alpha installation root) Ns Pa \efloppy\edisk1of3
 .if \n[news68k] .Dl Pa \eNetBSD-\*V\e\*M\einstallation\efloppy\eboot.fs
-.if \n[newsmips] .Dl Pa \eNetBSD-\*V\e\*M\einstallation\efloppy\eboot.fs
 .Pp
 When asked for a destination drive answer
 .Sq Ic a .
@@ -481,9 +297,9 @@ or other
 .Ul
 system, you would type something like:
 .Pp
-.Dl # Ic "dd if=.../boot1.fs bs=18k of=/dev/rfd0a"
+.Dl # Ic "dd if=.../boot1.fs of=/dev/rfd0a bs=18k"
 .Pp
-.\} \" \n[alpha]:\n[i386]:\n[news68k]:\n[newsmips]
+.\} \" \n[alpha]:\n[ews4800mips]:\n[i386]:\n[news68k]:\n[newsmips]
 .if \n[mac68k] \{\
 .It
 The NetBSD Boot Tools folder.
@@ -581,6 +397,10 @@ Type
 .Dl \&\*>\*>\*> Ic "B DVA0"
 .Pp
 .\}
+.if \n[ews4800mips] \{\
+Change boot device to floppy on the PROM menu which is invoked by
+pressing ESC key right after hardware checks, and boot the computer again.
+.\}
 .if \n[i386] When prompted, insert the second boot floppy.
 .if \n[news68k] \{\
 Type
@@ -607,7 +427,7 @@ After language selection, the main menu will be displayed.
   .***********************************************.
   * NetBSD-\*V Install System                     *
   *                                               *
-  *\*>a: Install NetBSD to hard disk                *
+  *\*[Gt]a: Install NetBSD to hard disk                *
   * b: Upgrade NetBSD on a hard disk              *
   * c: Re-install sets or install additional sets *
   * d: Reboot the computer                        *
@@ -721,7 +541,7 @@ Further information can be found on
 .\}
 .if \n[macppc] \{\
 Further information can be found on
-.Lk http://www.NetBSD.org/Ports/macppc/x11.html
+.Lk http://www.NetBSD.org/ports/macppc/x11.html
 .\}
 .bullet)
 .bullet)
@@ -729,14 +549,6 @@ Further information can be found on
 .To 2 "Booting NetBSD"
 .Em Booting NetBSD
 .
-.if !\n[acorn26]:\n[atari]:\n[cats]:\n[mac68k]:\n[macppc]:\n[mvme68k]:\n[news68k]:\n[newsmips]:\n[pmax]:\n[sgimips]:\n[sparc]:\n[sparc64]:\n[x68k] \{\
-.(pcmcia
-Unplug your
-.Tn PCMCIA
-devices, so that they won't be found by
-.Nx .
-.pcmcia)
-.\} \" !\n[acorn26]:\n[atari]:\n[cats]:\n[macppc]:\n[mvme68k]:\n[news68k]:\n[pmax]:\n[sgimips]:\n[sparc]:\n[sparc64]:\n[x68k]
 .ie \n[mac68k] \{\
 .Pp
 Prior to attempting to boot
@@ -779,7 +591,7 @@ ROM issues which prevent you from enabling 32-bit addressing.
 Please see the
 .Nx*M
 FAQ at
-.Lk http://www.NetBSD.org/Ports/mac68k/faq/
+.Lk http://www.NetBSD.org/ports/mac68k/faq/
 for more information.
 .tag)
 .Pp
@@ -830,7 +642,7 @@ or
 and the geometry will be
 printed on a line that begins with its name.
 As mentioned above, you may need your disk's geometry when creating
-.Nx 's
+.Nx Ns 's
 partitions.
 You will also need to know the name, to tell
 .Ic sysinst
@@ -840,7 +652,7 @@ The most important thing to know is that
 .if \n[acorn26]:\n[cats]:\n[evbppc]:\n[macppc]:\n[sparc64] \{\
 .Li wd0
 is
-.Nx 's
+.Nx Ns 's
 name for your first IDE disk,
 .Li wd1
 the second, etc.
@@ -900,7 +712,7 @@ or
 and the geometry will be
 printed on a line that begins with its name.
 As mentioned above, you may need your disk's geometry when creating
-.Nx 's
+.Nx Ns 's
 partitions.
 You will also need to know the name, to tell
 .Ic sysinst
@@ -910,7 +722,7 @@ to install.
 The most important thing to know is that
 .Li wd0
 is
-.Nx 's
+.Nx Ns 's
 name for your first IDE disk,
 .Li wd1
 the second, etc.
@@ -933,12 +745,6 @@ It will also include instructions for using the menus.
 .It
 .To 2 "Network configuration"
 .Em Network configuration
-.if !\n[acorn26]:\n[atari]:\n[cats]:\n[mac68k]:\n[macppc]:\n[mvme68k]:\n[news68k]:\n[newsmips]:\n[pmax]:\n[sgimips]:\n[sparc]:\n[sparc64]:\n[x68k] \{\
-.(pcmcia
-You can skip this section, as you will only get data
-from floppy in the first part of the install.
-.pcmcia)
-.\} \" !\n[acorn26]:\n[atari]:\n[cats]:\n[mac68k]:\n[macppc]:\n[mvme68k]:\n[news68k]:\n[newsmips]:\n[pmax]:\n[sgimips]:\n[sparc]:\n[sparc64]:\n[x68k]
 .Pp
 If you will not use network operation during the installation,
 but you do want your machine to be configured for networking once
@@ -1223,7 +1029,7 @@ reports
 .Dl "I can not find any hard disk for use by NetBSD"
 or the drive you wish to install onto is missing, then you should look at
 the FAQ entry
-.Lk http://www.NetBSD.org/Ports/macppc/faq.html#nodisk
+.Lk http://www.NetBSD.org/ports/macppc/faq.html#nodisk
 .\}
 .\}
 .It
@@ -1685,46 +1491,6 @@ on an HFS or HFS+ partition.
 .It
 .To 2 "Getting the distribution sets"
 .Em Getting the distribution sets
-.if \n[i386] \{\
-.(pcmcia
-.
-Load a kernel tar file (i.e. the
-.Pa kern-GENERIC.tgz
-set file)
-on to your hard disk, for example by mounting the
-hard disk first, copying the
-.Pa kern-GENERIC.tgz
-file from floppy and unpacking it.
-Example:
-.Pp
-.Dl # Ic "mount /dev/wd0a /mnt"
-.Dl # Ic "cd /mnt"
-.Pp
-.D1 Em "repeat the following 3 steps until all kern.* files are there"
-.Dl # Ic "mount -t msdos /dev/fd0a /mnt2"
-.Dl # Ic "cp /mnt2/kern.* ."
-.Dl # Ic "umount /mnt2"
-.Dl # Ic "cat kern.* \&| tar zxpvf -"
-.Pp
-Then halt the machine using the
-.Ic halt
-command.
-Power the machine down, and re-insert all the
-.Tn PCMCIA
-devices.
-Remove any floppy from the floppy drive.
-Start the machine up.
-After booting
-.Nx ,
-you will
-be presented with the main
-.Ic sysinst
-menu.
-Choose the option to re-install sets.
-Wait for the file system checks that it will do to finish, and then proceed
-as described below.
-.pcmcia)
-.\}
 .Pp
 The
 .Nx
@@ -1887,15 +1653,19 @@ you have selected.
 In the latter case, you will be shown the currently selected sets,
 and given the opportunity to select the sets you want.
 Some sets always need to be installed
-.Pq Sy kern, base
+.Po Sy kern, base,
 and
 .Sy etc
+.Pc
 they will not be shown in this selection menu.
 .Pp
 Before extraction begins, you can elect to watch the files being
 extracted; the name of each file that is extracted will be shown.
 This can slow down the installation process considerably, especially
 on machines with slow graphics consoles or serial consoles.
+Alternatively, you will be asked if you wish to have a progress bar.
+This is the preferred option as it shows progress without significantly
+slowing down the installation process.
 .Pp
 .ie \n[macppc] \{\
 If you are installing using the
@@ -1912,7 +1682,7 @@ If so, these values will be installed in the network configuration files.
 The next menu will allow you to select the time zone that you're in,
 to make sure your clock has the right offset from UTC.
 Finally you will be asked to select a password encryption algorithm
-and can than set a password for the "root" account, to prevent
+and can then set a password for the "root" account, to prevent
 the machine coming up without access restrictions.
 .if \n[macppc] \{\
 .It
@@ -1988,7 +1758,8 @@ Now you ned to mount the location of your distribution sets:
 .Em Finalizing your installation
 .Pp
 Congratulations, you have successfully installed
-.Nx \*V .
+.Nx
+\*V.
 .if \n[cats] \{\
 .Pp
 To finalize the installation of

@@ -1,4 +1,4 @@
-/*	$NetBSD: resend.c,v 1.6 2004/03/28 09:00:56 martti Exp $	*/
+/*	$NetBSD: resend.c,v 1.7.4.2 2007/07/16 11:04:40 liamjfoy Exp $	*/
 
 /*
  * resend.c (C) 1995-1998 Darren Reed
@@ -8,12 +8,15 @@
  */
 #if !defined(lint)
 static const char sccsid[] = "@(#)resend.c	1.3 1/11/96 (C)1995 Darren Reed";
-static const char rcsid[] = "@(#)Id: resend.c,v 2.8 2004/01/08 13:34:31 darrenr Exp";
+static const char rcsid[] = "@(#)Id: resend.c,v 2.8.2.3 2007/02/17 12:41:51 darrenr Exp";
 #endif
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/socket.h>
+#ifdef __osf__
+# include "radix_ipf_local.h"
+#endif
 #include <net/if.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -81,6 +84,9 @@ char	*datain;
 	ip_t	*ip;
 	int	fd, wfd = initdevice(dev, 5), len, i;
 
+	if (wfd == -1)
+		return -1;
+
 	if (datain)
 		fd = (*r->r_open)(datain);
 	else
@@ -101,6 +107,7 @@ char	*datain;
 	if (gwip.s_addr && (arp((char *)&gwip, dhost) == -1))
 	    {
 		perror("arp");
+		free(eh);
 		return -2;
 	    }
 
@@ -137,5 +144,6 @@ char	*datain;
 		    }
 	    }
 	(*r->r_close)();
+	free(eh);
 	return 0;
 }

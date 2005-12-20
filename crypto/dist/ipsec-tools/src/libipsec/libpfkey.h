@@ -1,6 +1,6 @@
-/*	$NetBSD: libpfkey.h,v 1.9 2005/12/04 20:46:40 manu Exp $	*/
+/*	$NetBSD: libpfkey.h,v 1.10.2.2 2007/08/28 11:14:41 liamjfoy Exp $	*/
 
-/* Id: libpfkey.h,v 1.8.2.3 2005/06/29 13:01:28 manubsd Exp */
+/* Id: libpfkey.h,v 1.13 2005/12/04 20:26:43 manubsd Exp */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -55,11 +55,7 @@ struct sadb_alg;
 
 /* Accomodate different prototypes in <netinet6/ipsec.h> */
 #include <sys/types.h>
-#ifdef HAVE_NETINET6_IPSEC
-#  include <netinet6/ipsec.h>
-#else 
-#  include <netinet/ipsec.h>
-#endif
+#include PATH_IPSEC_H
 
 #ifndef HAVE_IPSEC_POLICY_T
 typedef caddr_t ipsec_policy_t;
@@ -67,6 +63,40 @@ typedef caddr_t ipsec_policy_t;
 #else
 #define __ipsec_const const
 #endif
+
+struct pfkey_send_sa_args {
+	int 		so;			/* socket */
+	u_int		type;			
+	u_int 		satype;
+	u_int		mode;
+	struct sockaddr *src;			/* IP src address for SA */
+	struct sockaddr *dst;			/* IP dst address for SA */
+	u_int32_t 	spi;			/* SA's spi */
+	u_int32_t 	reqid;
+	u_int		wsize;
+	caddr_t		keymat;
+	u_int		e_type, e_keylen;	/* Encryption alg and keylen */
+	u_int		a_type, a_keylen;	/* Authentication alg and key */
+	u_int		flags;
+	u_int32_t	l_alloc;
+	u_int32_t	l_bytes;
+	u_int32_t	l_addtime;
+	u_int32_t	l_usetime;
+	u_int32_t	seq;
+	u_int8_t	l_natt_type;
+	u_int16_t	l_natt_sport, l_natt_dport;
+	struct sockaddr *l_natt_oa;
+	u_int16_t	l_natt_frag;
+	u_int8_t ctxdoi, ctxalg;	/* Security context DOI and algorithm */
+	caddr_t ctxstr;			/* Security context string */
+	u_int16_t ctxstrlen;		/* length of security context string */
+};
+
+/* The options built into libipsec */
+extern int libipsec_opt;
+#define LIBIPSEC_OPT_NATT		0x01
+#define LIBIPSEC_OPT_FRAG		0x02
+#define LIBIPSEC_OPT_SEC_CTX		0x04
 
 /* IPsec Library Routines */
 
@@ -87,24 +117,8 @@ u_int pfkey_set_softrate __P((u_int, u_int));
 u_int pfkey_get_softrate __P((u_int));
 int pfkey_send_getspi __P((int, u_int, u_int, struct sockaddr *,
 	struct sockaddr *, u_int32_t, u_int32_t, u_int32_t, u_int32_t));
-int pfkey_send_update __P((int, u_int, u_int, struct sockaddr *,
-	struct sockaddr *, u_int32_t, u_int32_t, u_int,
-	caddr_t, u_int, u_int, u_int, u_int, u_int, u_int32_t, u_int64_t,
-	u_int64_t, u_int64_t, u_int32_t));
-int pfkey_send_update_nat __P((int, u_int, u_int, struct sockaddr *,
-	struct sockaddr *, u_int32_t, u_int32_t, u_int,
-	caddr_t, u_int, u_int, u_int, u_int, u_int, u_int32_t, u_int64_t,
-	u_int64_t, u_int64_t, u_int32_t,
-	u_int8_t, u_int16_t, u_int16_t, struct sockaddr *, u_int16_t));
-int pfkey_send_add __P((int, u_int, u_int, struct sockaddr *,
-	struct sockaddr *, u_int32_t, u_int32_t, u_int,
-	caddr_t, u_int, u_int, u_int, u_int, u_int, u_int32_t, u_int64_t,
-	u_int64_t, u_int64_t, u_int32_t));
-int pfkey_send_add_nat __P((int, u_int, u_int, struct sockaddr *,
-	struct sockaddr *, u_int32_t, u_int32_t, u_int,
-	caddr_t, u_int, u_int, u_int, u_int, u_int, u_int32_t, u_int64_t,
-	u_int64_t, u_int64_t, u_int32_t,
-	u_int8_t, u_int16_t, u_int16_t, struct sockaddr *, u_int16_t));
+int pfkey_send_update2 __P((struct pfkey_send_sa_args *));
+int pfkey_send_add2 __P((struct pfkey_send_sa_args *)); 
 int pfkey_send_delete __P((int, u_int, u_int,
 	struct sockaddr *, struct sockaddr *, u_int32_t));
 int pfkey_send_delete_all __P((int, u_int, u_int,
@@ -135,6 +149,10 @@ int pfkey_send_spdsetidx __P((int, struct sockaddr *, u_int,
 	struct sockaddr *, u_int, u_int, caddr_t, int, u_int32_t));
 int pfkey_send_spdflush __P((int));
 int pfkey_send_spddump __P((int));
+#ifdef SADB_X_MIGRATE
+int pfkey_send_migrate __P((int, struct sockaddr *, u_int,
+	struct sockaddr *, u_int, u_int, caddr_t, int, u_int32_t));
+#endif
 
 int pfkey_open __P((void));
 void pfkey_close __P((int));
@@ -142,6 +160,29 @@ struct sadb_msg *pfkey_recv __P((int));
 int pfkey_send __P((int, struct sadb_msg *, int));
 int pfkey_align __P((struct sadb_msg *, caddr_t *));
 int pfkey_check __P((caddr_t *));
+
+/* 
+ * Deprecated, available for backward compatibility with third party 
+ * libipsec users. Please use pfkey_send_update2 and pfkey_send_add2 instead
+ */
+int pfkey_send_update __P((int, u_int, u_int, struct sockaddr *,
+	struct sockaddr *, u_int32_t, u_int32_t, u_int,
+	caddr_t, u_int, u_int, u_int, u_int, u_int, u_int32_t, u_int64_t,
+	u_int64_t, u_int64_t, u_int32_t));
+int pfkey_send_update_nat __P((int, u_int, u_int, struct sockaddr *,
+	struct sockaddr *, u_int32_t, u_int32_t, u_int,
+	caddr_t, u_int, u_int, u_int, u_int, u_int, u_int32_t, u_int64_t,
+	u_int64_t, u_int64_t, u_int32_t,
+	u_int8_t, u_int16_t, u_int16_t, struct sockaddr *, u_int16_t));
+int pfkey_send_add __P((int, u_int, u_int, struct sockaddr *,
+	struct sockaddr *, u_int32_t, u_int32_t, u_int,
+	caddr_t, u_int, u_int, u_int, u_int, u_int, u_int32_t, u_int64_t,
+	u_int64_t, u_int64_t, u_int32_t));
+int pfkey_send_add_nat __P((int, u_int, u_int, struct sockaddr *,
+	struct sockaddr *, u_int32_t, u_int32_t, u_int,
+	caddr_t, u_int, u_int, u_int, u_int, u_int, u_int32_t, u_int64_t,
+	u_int64_t, u_int64_t, u_int32_t,
+	u_int8_t, u_int16_t, u_int16_t, struct sockaddr *, u_int16_t));
 
 #ifndef __SYSDEP_SA_LEN__
 #define __SYSDEP_SA_LEN__

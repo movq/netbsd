@@ -1,4 +1,4 @@
-/*	$NetBSD: virtual.c,v 1.1.1.7 2005/08/18 21:11:01 rpaulo Exp $	*/
+/*	$NetBSD: virtual.c,v 1.1.1.8.4.1 2007/06/16 17:02:17 snj Exp $	*/
 
 /*++
 /* NAME
@@ -28,8 +28,9 @@
 /*
 /*	The mailbox pathname is constructed as follows:
 /*
-/* .ti +2
-/*	\fB$virtual_mailbox_base/$virtual_mailbox_maps(\fIrecipient\fB)\fR
+/* .nf
+/*	  \fB$virtual_mailbox_base/$virtual_mailbox_maps(\fIrecipient\fB)\fR
+/* .fi
 /*
 /*	where \fIrecipient\fR is the full recipient address.
 /* UNIX MAILBOX FORMAT
@@ -77,6 +78,12 @@
 /*	The \fBvirtual_minimum_uid\fR parameter imposes a lower bound on
 /*	numerical user ID values that may be specified in any
 /*	\fBvirtual_uid_maps\fR.
+/* CASE FOLDING
+/* .ad
+/* .fi
+/*	All delivery decisions are made using the full recipient
+/*	address, folded to lower case. See also the next section
+/*	for a few exceptions with optional address extensions.
 /* TABLE SEARCH ORDER
 /* .ad
 /* .fi
@@ -176,8 +183,8 @@
 /*	Postfix is final destination for the specified list of domains;
 /*	mail is delivered via the $virtual_transport mail delivery transport.
 /* .IP "\fBvirtual_transport (virtual)\fR"
-/*	The default mail delivery transport for domains that match the
-/*	$virtual_mailbox_domains parameter value.
+/*	The default mail delivery transport and next-hop destination for
+/*	final delivery to domains listed with $virtual_mailbox_domains.
 /* LOCKING CONTROLS
 /* .ad
 /* .fi
@@ -213,15 +220,18 @@
 /* .IP "\fBdaemon_timeout (18000s)\fR"
 /*	How much time a Postfix daemon process may take to handle a
 /*	request before it is terminated by a built-in watchdog timer.
+/* .IP "\fBdelay_logging_resolution_limit (2)\fR"
+/*	The maximal number of digits after the decimal point when logging
+/*	sub-second delay values.
 /* .IP "\fBipc_timeout (3600s)\fR"
 /*	The time limit for sending or receiving information over an internal
 /*	communication channel.
 /* .IP "\fBmax_idle (100s)\fR"
-/*	The maximum amount of time that an idle Postfix daemon process
-/*	waits for the next service request before exiting.
+/*	The maximum amount of time that an idle Postfix daemon process waits
+/*	for an incoming connection before terminating voluntarily.
 /* .IP "\fBmax_use (100)\fR"
-/*	The maximal number of connection requests before a Postfix daemon
-/*	process terminates.
+/*	The maximal number of incoming connections that a Postfix daemon
+/*	process will service before terminating voluntarily.
 /* .IP "\fBprocess_id (read-only)\fR"
 /*	The process ID of a Postfix command or daemon process.
 /* .IP "\fBprocess_name (read-only)\fR"
@@ -296,6 +306,7 @@
 #include <deliver_request.h>
 #include <deliver_completed.h>
 #include <mail_params.h>
+#include <mail_version.h>
 #include <mail_conf.h>
 #include <mail_params.h>
 #include <mail_addr_find.h>
@@ -337,7 +348,7 @@ int     virtual_mbox_lock_mask;
 
 static int local_deliver(DELIVER_REQUEST *rqst, char *service)
 {
-    char   *myname = "local_deliver";
+    const char *myname = "local_deliver";
     RECIPIENT *rcpt_end = rqst->rcpt_list.info + rqst->rcpt_list.len;
     RECIPIENT *rcpt;
     int     rcpt_stat;
@@ -358,8 +369,10 @@ static int local_deliver(DELIVER_REQUEST *rqst, char *service)
     state.msg_attr.fp = rqst->fp;
     state.msg_attr.offset = rqst->data_offset;
     state.msg_attr.sender = rqst->sender;
+    state.msg_attr.dsn_envid = rqst->dsn_envid;
+    state.msg_attr.dsn_ret = rqst->dsn_ret;
     state.msg_attr.relay = service;
-    state.msg_attr.arrival_time = rqst->arrival_time;
+    state.msg_attr.msg_stats = rqst->msg_stats;
     RESET_USER_ATTR(usr_attr, state.level);
     state.request = rqst;
 
@@ -370,15 +383,14 @@ static int local_deliver(DELIVER_REQUEST *rqst, char *service)
      * recipient. Update the per-message delivery status.
      */
     for (msg_stat = 0, rcpt = rqst->rcpt_list.info; rcpt < rcpt_end; rcpt++) {
-	state.msg_attr.orig_rcpt = rcpt->orig_addr;
-	state.msg_attr.recipient = rcpt->address;
-	state.msg_attr.rcpt_offset = rcpt->offset;
+	state.msg_attr.rcpt = *rcpt;
 	rcpt_stat = deliver_recipient(state, usr_attr);
 	if (rcpt_stat == 0 && (rqst->flags & DEL_REQ_FLAG_SUCCESS))
 	    deliver_completed(state.msg_attr.fp, rcpt->offset);
 	msg_stat |= rcpt_stat;
     }
 
+    deliver_attr_free(&state.msg_attr);
     return (msg_stat);
 }
 
@@ -430,6 +442,9 @@ static void post_init(char *unused_name, char **unused_argv)
      */
     set_eugid(var_owner_uid, var_owner_gid);
 
+    /*
+     * No case folding needed: the recipient address is case folded.
+     */
     virtual_mailbox_maps =
 	maps_create(VAR_VIRT_MAILBOX_MAPS, var_virt_mailbox_maps,
 		    DICT_FLAG_LOCK | DICT_FLAG_PARANOID);
@@ -471,6 +486,8 @@ static void pre_init(char *unused_name, char **unused_argv)
     flush_init();
 }
 
+MAIL_VERSION_STAMP_DECLARE;
+
 /* main - pass control to the single-threaded skeleton */
 
 int     main(int argc, char **argv)
@@ -490,11 +507,17 @@ int     main(int argc, char **argv)
 	0,
     };
 
+    /*
+     * Fingerprint executables and core dumps.
+     */
+    MAIL_VERSION_STAMP_ALLOCATE;
+
     single_server_main(argc, argv, local_service,
 		       MAIL_SERVER_INT_TABLE, int_table,
 		       MAIL_SERVER_STR_TABLE, str_table,
 		       MAIL_SERVER_PRE_INIT, pre_init,
 		       MAIL_SERVER_POST_INIT, post_init,
 		       MAIL_SERVER_PRE_ACCEPT, pre_accept,
+		       MAIL_SERVER_PRIVILEGED,
 		       0);
 }

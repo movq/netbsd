@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ex_cardbus.c,v 1.36 2005/12/11 12:21:15 christos Exp $	*/
+/*	$NetBSD: if_ex_cardbus.c,v 1.39 2006/11/16 01:32:48 christos Exp $	*/
 
 /*
  * CardBus specific routines for 3Com 3C575-family CardBus ethernet adapter
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ex_cardbus.c,v 1.36 2005/12/11 12:21:15 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ex_cardbus.c,v 1.39 2006/11/16 01:32:48 christos Exp $");
 
 /* #define EX_DEBUG 4 */	/* define to report information for debugging */
 
@@ -206,10 +206,8 @@ ex_cardbus_lookup(ca)
 }
 
 int
-ex_cardbus_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ex_cardbus_match(struct device *parent, struct cfdata *cf,
+    void *aux)
 {
 	struct cardbus_attach_args *ca = aux;
 
@@ -220,12 +218,10 @@ ex_cardbus_match(parent, cf, aux)
 }
 
 void
-ex_cardbus_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void *aux;
+ex_cardbus_attach(struct device *parent, struct device *self,
+    void *aux)
 {
-	struct ex_cardbus_softc *csc = (void *)self;
+	struct ex_cardbus_softc *csc = device_private(self);
 	struct ex_softc *sc = &csc->sc_softc;
 	struct cardbus_attach_args *ca = aux;
 	cardbus_devfunc_t ct = ca->ca_ct;
@@ -322,11 +318,9 @@ ex_cardbus_intr_ack(sc)
 }
 
 int
-ex_cardbus_detach(self, arg)
-	struct device *self;
-	int arg;
+ex_cardbus_detach(struct device *self, int arg)
 {
-	struct ex_cardbus_softc *csc = (void *)self;
+	struct ex_cardbus_softc *csc = device_private(self);
 	struct ex_softc *sc = &csc->sc_softc;
 	struct cardbus_devfunc *ct = csc->sc_ct;
 	int rv;

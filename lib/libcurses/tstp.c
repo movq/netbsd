@@ -1,4 +1,4 @@
-/*	$NetBSD: tstp.c,v 1.32 2004/03/25 07:35:40 jdc Exp $	*/
+/*	$NetBSD: tstp.c,v 1.34.2.1 2007/08/28 11:54:49 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)tstp.c	8.3 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: tstp.c,v 1.32 2004/03/25 07:35:40 jdc Exp $");
+__RCSID("$NetBSD: tstp.c,v 1.34.2.1 2007/08/28 11:54:49 liamjfoy Exp $");
 #endif
 #endif				/* not lint */
 
@@ -168,6 +168,10 @@ __set_winchhandler(void)
 		sigemptyset(&sa.sa_mask);
 		sigaction(SIGWINCH, &sa, &owsa);
 		winch_set = 1;
+#ifdef DEBUG
+		__CTRACE("__set_winchhandler: owsa.sa_handler=%p\n",
+		    owsa.sa_handler);
+#endif
 	}
 }
 
@@ -180,9 +184,23 @@ __restore_winchhandler(void)
 #ifdef DEBUG
 	__CTRACE("__restore_winchhandler: %d\n", winch_set);
 #endif
-	if (winch_set) {
-		sigaction(SIGWINCH, &owsa, NULL);
-		winch_set = 0;
+	if (winch_set > 0) {
+		struct sigaction cwsa;
+
+		sigaction(SIGWINCH, NULL, &cwsa);
+		if (cwsa.sa_handler == owsa.sa_handler) {
+			sigaction(SIGWINCH, &owsa, NULL);
+			winch_set = 0;
+		} else {
+			/*
+			 * We're now using the programs WINCH handler,
+			 * so don't restore the previous one.
+			 */
+			winch_set = -1;
+#ifdef DEBUG
+			__CTRACE("cwsa.sa_handler = %p\n", cwsa.sa_handler);
+#endif
+		}
 	}
 }
 
@@ -192,6 +210,9 @@ __restore_winchhandler(void)
 int
 __stopwin(void)
 {
+#ifdef DEBUG
+	__CTRACE("__stopwin\n");
+#endif
 	if (_cursesi_screen->endwin)
 		return OK;
 
@@ -204,7 +225,8 @@ __stopwin(void)
 
 	if (curscr != NULL) {
 		__unsetattr(0);
-		__mvcur((int) curscr->cury, (int) curscr->curx, (int) curscr->maxy - 1, 0, 0);
+		__mvcur((int) curscr->cury, (int) curscr->curx,
+		    (int) curscr->maxy - 1, 0, 0);
 	}
 
 	if (__tc_mo != NULL)
@@ -229,7 +251,11 @@ void
 __restartwin(void)
 {
 	struct winsize win;
+	int lines, cols;
 
+#ifdef DEBUG
+	__CTRACE("__restartwin\n");
+#endif
 	if (!_cursesi_screen->endwin)
 		return;
 
@@ -237,7 +263,13 @@ __restartwin(void)
 	__set_stophandler();
 	__set_winchhandler();
 
-	/* Check to see if the window size has changed */
+	/*
+	 * Check to see if the window size has changed.
+	 * If the application didn't update LINES and COLS,
+	 * set the * resized flag to tell getch() to push KEY_RESIZE.
+	 * Update curscr (which also updates __virtscr) and stdscr
+	 * to match the new size.
+	 */
 	if (ioctl(fileno(_cursesi_screen->outfd), TIOCGWINSZ, &win) != -1 &&
 	    win.ws_row != 0 && win.ws_col != 0) {
 		if (win.ws_row != LINES) {
@@ -249,6 +281,16 @@ __restartwin(void)
 			_cursesi_screen->resized = 1;
 		}
 	}
+	/*
+	 * We need to make local copies of LINES and COLS, otherwise we
+	 * could lose if they are changed between wresize() calls.
+	 */
+	lines = LINES;
+	cols = COLS;
+	if (curscr->maxy != lines || curscr->maxx != cols)
+		wresize(curscr, lines, cols);
+	if (stdscr->maxy != lines || stdscr->maxx != cols)
+		wresize(stdscr, lines, cols);
 
 	/* save the new "default" terminal state */
 	(void) tcgetattr(fileno(_cursesi_screen->infd),

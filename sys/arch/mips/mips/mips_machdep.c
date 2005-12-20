@@ -1,4 +1,4 @@
-/*	$NetBSD: mips_machdep.c,v 1.182 2005/12/11 12:18:09 christos Exp $	*/
+/*	$NetBSD: mips_machdep.c,v 1.190.2.1 2007/10/24 22:10:44 xtraeme Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -119,7 +119,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.182 2005/12/11 12:18:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.190.2.1 2007/10/24 22:10:44 xtraeme Exp $");
 
 #include "opt_cputype.h"
 
@@ -252,6 +252,8 @@ static const struct pridtab *mycpu;
 static const struct pridtab cputab[] = {
 	{ 0, MIPS_R2000, -1, -1,		CPU_ARCH_MIPS1, 64,
 	  CPU_MIPS_NO_LLSC,			"MIPS R2000 CPU"	},
+	{ 0, MIPS_R3000, MIPS_REV_R2000A, -1,	CPU_ARCH_MIPS1, 64,
+	  CPU_MIPS_NO_LLSC,			"MIPS R2000A CPU"	},
 	{ 0, MIPS_R3000, MIPS_REV_R3000, -1,	CPU_ARCH_MIPS1, 64,
 	  CPU_MIPS_NO_LLSC,			"MIPS R3000 CPU"	},
 	{ 0, MIPS_R3000, MIPS_REV_R3000A, -1,	CPU_ARCH_MIPS1, 64,
@@ -381,6 +383,8 @@ static const struct pridtab cputab[] = {
 	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT,	"4Kc"			},
 	{ MIPS_PRID_CID_MTI, MIPS_4KEc, -1, -1,	-1, 0,
 	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT,	"4KEc"			},
+	{ MIPS_PRID_CID_MTI, MIPS_4KEc_R2, -1, -1, -1, 0,
+	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT,	"4KEc (Rev 2)"		},
 	{ MIPS_PRID_CID_MTI, MIPS_4KSc, -1, -1,	-1, 0,
 	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT,	"4KSc"			},
 	{ MIPS_PRID_CID_MTI, MIPS_5Kc, -1, -1,	-1, 0,
@@ -395,6 +399,13 @@ static const struct pridtab cputab[] = {
 	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT,
 						"Au1000 (Rev 2 core)" 	},
 
+	{ MIPS_PRID_CID_ALCHEMY, MIPS_AU_REV1, -1, MIPS_AU1100, -1, 0,
+	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT,
+						"Au1100 (Rev 1 core)"	},
+	{ MIPS_PRID_CID_ALCHEMY, MIPS_AU_REV2, -1, MIPS_AU1100, -1, 0,
+	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT,
+						"Au1100 (Rev 2 core)" 	},
+
 	{ MIPS_PRID_CID_ALCHEMY, MIPS_AU_REV1, -1, MIPS_AU1500, -1, 0,
 	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT,
 						"Au1500 (Rev 1 core)"	},
@@ -402,12 +413,9 @@ static const struct pridtab cputab[] = {
 	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT,
 						"Au1500 (Rev 2 core)" 	},
 
-	{ MIPS_PRID_CID_ALCHEMY, MIPS_AU_REV1, -1, MIPS_AU1100, -1, 0,
+	{ MIPS_PRID_CID_ALCHEMY, MIPS_AU_REV2, -1, MIPS_AU1550, -1, 0,
 	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT,
-						"Au1100 (Rev 1 core)"	},
-	{ MIPS_PRID_CID_ALCHEMY, MIPS_AU_REV2, -1, MIPS_AU1100, -1, 0,
-	  MIPS32_FLAGS | CPU_MIPS_NO_WAIT | CPU_MIPS_I_D_CACHE_COHERENT,
-						"Au1100 (Rev 2 core)" 	},
+						"Au1550 (Rev 2 core)" 	},
 
 	/* The SB-1 CPU uses a CCA of 5 - "Cacheable Coherent Shareable" */
 	{ MIPS_PRID_CID_SIBYTE, MIPS_SB1, -1,	-1, -1, 0,
@@ -819,8 +827,15 @@ mips_vector_init(void)
 			    MIPSNN_GET(CFG_AT, cfg));
 		}
 
-		if (MIPSNN_GET(CFG_AR, cfg) != MIPSNN_CFG_AR_REV1)
-			printf("WARNING: MIPS32/64 arch revision != revision 1!\n");
+		switch (MIPSNN_GET(CFG_AR, cfg)) {
+		case MIPSNN_CFG_AR_REV1:
+		case MIPSNN_CFG_AR_REV2:
+			break;
+		default:
+			printf("WARNING: MIPS32/64 arch revision %d "
+			    "unknown!\n", MIPSNN_GET(CFG_AR, cfg));
+			break;
+		}
 
 		/* figure out MMU type (and number of TLB entries) */
 		switch (MIPSNN_GET(CFG_MT, cfg)) {
@@ -1115,10 +1130,10 @@ setregs(l, pack, stack)
 	 *	  vectors.  They are fixed up by ld.elf_so.
 	 *	- ps_strings is a NetBSD extension.
 	 */
-	f->f_regs[_R_A0] = (int)stack;
+	f->f_regs[_R_A0] = (uintptr_t)stack;
 	f->f_regs[_R_A1] = 0;
 	f->f_regs[_R_A2] = 0;
-	f->f_regs[_R_A3] = (int)l->l_proc->p_psstr;
+	f->f_regs[_R_A3] = (intptr_t)l->l_proc->p_psstr;
 
 	if ((l->l_md.md_flags & MDP_FPUSED) && l == fpcurlwp)
 		fpcurlwp = NULL;
@@ -1304,8 +1319,10 @@ cpu_dumpconf(void)
 	if (dumpdev == NODEV)
 		goto bad;
 	bdev = bdevsw_lookup(dumpdev);
-	if (bdev == NULL)
-		panic("dumpconf: bad dumpdev=0x%x", dumpdev);
+	if (bdev == NULL) {
+		dumpdev = NODEV;
+		goto bad;
+	}
 	if (bdev->d_psize == NULL)
 		goto bad;
 	nblks = (*bdev->d_psize)(dumpdev);
@@ -1489,7 +1506,7 @@ savefpregs(l)
 	/*
 	 * turnoff interrupts enabling CP1 to read FPCSR register.
 	 */
-	__asm __volatile (
+	__asm volatile (
 		".set noreorder					\n\t"
 		".set noat					\n\t"
 		"mfc0	%0, $" ___STRING(MIPS_COP_0_STATUS) "	\n\t"
@@ -1512,7 +1529,7 @@ savefpregs(l)
 	 */
 	fp = (int *)l->l_addr->u_pcb.pcb_fpregs.r_regs;
 	fp[32] = fpcsr;
-	__asm __volatile (
+	__asm volatile (
 		".set noreorder		;"
 		"swc1	$f0, 0(%0)	;"
 		"swc1	$f1, 4(%0)	;"
@@ -1550,7 +1567,7 @@ savefpregs(l)
 	/*
 	 * stop CP1, enable interrupts.
 	 */
-	__asm __volatile ("mtc0 %0, $" ___STRING(MIPS_COP_0_STATUS)
+	__asm volatile ("mtc0 %0, $" ___STRING(MIPS_COP_0_STATUS)
 	    :: "r"(status));
 #endif
 }
@@ -1569,7 +1586,7 @@ loadfpregs(l)
 	/*
 	 * turnoff interrupts enabling CP1 to load FP registers.
 	 */
-	__asm __volatile(
+	__asm volatile(
 		".set noreorder					\n\t"
 		".set noat					\n\t"
 		"mfc0	%0, $" ___STRING(MIPS_COP_0_STATUS) "	\n\t"
@@ -1584,7 +1601,7 @@ loadfpregs(l)
 	/*
 	 * load 32bit FP registers and establish processes' FP context.
 	 */
-	__asm __volatile(
+	__asm volatile(
 		".set noreorder		;"
 		"lwc1	$f0, 0(%0)	;"
 		"lwc1	$f1, 4(%0)	;"
@@ -1622,7 +1639,7 @@ loadfpregs(l)
 	/*
 	 * load FPCSR and stop CP1 again while enabling interrupts.
 	 */
-	__asm __volatile(
+	__asm volatile(
 		".set noreorder					\n\t"
 		".set noat					\n\t"
 		"ctc1	%0, $31					\n\t"
@@ -1689,15 +1706,15 @@ cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
 		/* NOTREACHED */
 	}
 
-	f->f_regs[_R_PC] = (u_int32_t)upcall;
-	f->f_regs[_R_SP] = (u_int32_t)sf;
+	f->f_regs[_R_PC] = (uintptr_t)upcall;
+	f->f_regs[_R_SP] = (uintptr_t)sf;
 	f->f_regs[_R_A0] = type;
-	f->f_regs[_R_A1] = (u_int32_t)sas;
+	f->f_regs[_R_A1] = (uintptr_t)sas;
 	f->f_regs[_R_A2] = nevents;
 	f->f_regs[_R_A3] = ninterrupted;
 	f->f_regs[_R_S8] = 0;
 	f->f_regs[_R_RA] = 0;
-	f->f_regs[_R_T9] = (u_int32_t)upcall;  /* t9=Upcall function*/
+	f->f_regs[_R_T9] = (uintptr_t)upcall;  /* t9=Upcall function*/
 }
 
 
@@ -1754,7 +1771,7 @@ cpu_setmcontext(l, mcp, flags)
 	unsigned int flags;
 {
 	struct frame *f = (struct frame *)l->l_md.md_regs;
-	__greg_t *gr = mcp->__gregs;
+	const __greg_t *gr = mcp->__gregs;
 
 	/* Restore register context, if any. */
 	if (flags & _UC_CPU) {

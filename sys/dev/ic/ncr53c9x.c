@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr53c9x.c,v 1.117 2005/12/11 12:21:28 christos Exp $	*/
+/*	$NetBSD: ncr53c9x.c,v 1.123 2006/11/16 01:32:52 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ncr53c9x.c,v 1.117 2005/12/11 12:21:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ncr53c9x.c,v 1.123 2006/11/16 01:32:52 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -301,7 +301,7 @@ ncr53c9x_attach(sc)
 	}
 
 	/* Reset state & bus */
-	sc->sc_cfflags = sc->sc_dev.dv_cfdata->cf_flags;
+	sc->sc_cfflags = device_cfdata(&sc->sc_dev)->cf_flags;
 	sc->sc_state = 0;
 	ncr53c9x_init(sc, 1);
 
@@ -543,7 +543,7 @@ ncr53c9x_init(sc, doreset)
  * only make sense when he DMA CSR has an interrupt showing. Call only
  * if an interrupt is pending.
  */
-__inline__ void
+inline void
 ncr53c9x_readregs(sc)
 	struct ncr53c9x_softc *sc;
 {
@@ -792,9 +792,8 @@ ncr53c9x_select(sc, ecb)
 }
 
 void
-ncr53c9x_free_ecb(sc, ecb)
-	struct ncr53c9x_softc *sc;
-	struct ncr53c9x_ecb *ecb;
+ncr53c9x_free_ecb(struct ncr53c9x_softc *sc,
+    struct ncr53c9x_ecb *ecb)
 {
 	int s;
 
@@ -806,9 +805,7 @@ ncr53c9x_free_ecb(sc, ecb)
 }
 
 struct ncr53c9x_ecb *
-ncr53c9x_get_ecb(sc, flags)
-	struct ncr53c9x_softc *sc;
-	int flags;
+ncr53c9x_get_ecb(struct ncr53c9x_softc *sc, int flags)
 {
 	struct ncr53c9x_ecb *ecb;
 	int s;
@@ -1021,12 +1018,8 @@ ncr53c9x_poll(sc, xs, count)
 }
 
 int
-ncr53c9x_ioctl(chan, cmd, arg, flag, p)
-	struct scsipi_channel *chan;
-	u_long cmd;
-	caddr_t arg;
-	int flag;
-	struct proc *p;
+ncr53c9x_ioctl(struct scsipi_channel *chan, u_long cmd, caddr_t arg,
+    int flag, struct proc *p)
 {
 	struct ncr53c9x_softc *sc = (void *)chan->chan_adapter->adapt_dev;
 	int s, error = 0;
@@ -1110,7 +1103,7 @@ ncr53c9x_sched(sc)
 			if (lun < NCR_NLUN)
 				ti->lun[lun] = li;
 		}
-		li->last_used = time.tv_sec;
+		li->last_used = time_second;
 		if (tag == 0) {
 			/* Try to issue this as an un-tagged command */
 			if (li->untagged == NULL)
@@ -1147,10 +1140,11 @@ ncr53c9x_sched(sc)
 			sc->sc_nexus = ecb;
 			ncr53c9x_select(sc, ecb);
 			break;
-		} else
+		} else {
 			NCR_TRACE(("%d:%d busy\n",
 			    periph->periph_target,
 			    periph->periph_lun));
+		}
 	}
 }
 
@@ -2948,7 +2942,7 @@ ncr53c9x_watch(arg)
 	struct ncr53c9x_linfo *li;
 	int t, s;
 	/* Delete any structures that have not been used in 10min. */
-	time_t old = time.tv_sec - (10 * 60);
+	time_t old = time_second - (10 * 60);
 
 	s = splbio();
 	simple_lock(&sc->sc_lock);

@@ -1,7 +1,7 @@
-/*	$NetBSD: log.c,v 1.1.1.1 2004/05/17 23:43:22 christos Exp $	*/
+/*	$NetBSD: log.c,v 1.1.1.3.4.1 2007/05/17 00:35:08 jdc Exp $	*/
 
 /*
- * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2006  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2002  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -17,7 +17,9 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: log.c,v 1.33.2.1.10.4 2004/03/08 09:04:14 marka Exp */
+/* Id: log.c,v 1.37.18.6 2006/06/09 00:54:08 marka Exp */
+
+/*! \file */
 
 #include <config.h>
 
@@ -31,9 +33,10 @@
 #define ISC_FACILITY LOG_DAEMON
 #endif
 
-/*
+/*%
  * When adding a new category, be sure to add the appropriate
- * #define to <named/log.h>.
+ * #define to <named/log.h> and to update the list in
+ * bin/check/check-tool.c.
  */
 static isc_logcategory_t categories[] = {
 	{ "",		 		0 },
@@ -46,7 +49,7 @@ static isc_logcategory_t categories[] = {
 	{ NULL, 			0 }
 };
 
-/*
+/*%
  * When adding a new module, be sure to add the appropriate
  * #define to <dns/log.h>.
  */
@@ -80,6 +83,9 @@ ns_log_init(isc_boolean_t safe) {
 	if (result != ISC_R_SUCCESS)
 		return (result);
 
+	/*
+	 * named-checktool.c:setup_logging() needs to be kept in sync.
+	 */
 	isc_log_registercategories(ns_g_lctx, ns_g_categories);
 	isc_log_registermodules(ns_g_lctx, ns_g_modules);
 	isc_log_setcontext(ns_g_lctx);
@@ -156,6 +162,9 @@ ns_log_setdefaultchannels(isc_logconfig_t *lcfg) {
 isc_result_t
 ns_log_setsafechannels(isc_logconfig_t *lcfg) {
 	isc_result_t result;
+#if ISC_FACILITY != LOG_DAEMON
+	isc_logdestination_t destination;
+#endif
 
 	if (! ns_g_logstderr) {
 		result = isc_log_createchannel(lcfg, "default_debug",
@@ -173,6 +182,15 @@ ns_log_setsafechannels(isc_logconfig_t *lcfg) {
 	} else {
 		isc_log_setdebuglevel(ns_g_lctx, ns_g_debuglevel);
 	}
+
+#if ISC_FACILITY != LOG_DAEMON
+	destination.facility = ISC_FACILITY;
+	result = isc_log_createchannel(lcfg, "default_syslog",
+				       ISC_LOG_TOSYSLOG, ISC_LOG_INFO,
+				       &destination, 0);
+	if (result != ISC_R_SUCCESS)
+		goto cleanup;
+#endif
 
 	result = ISC_R_SUCCESS;
 

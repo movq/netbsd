@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.135 2005/12/11 12:19:36 christos Exp $	   */
+/*	$NetBSD: pmap.c,v 1.139.2.1 2007/04/12 19:46:12 bouyer Exp $	   */
 /*
  * Copyright (c) 1994, 1998, 1999, 2003 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.135 2005/12/11 12:19:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.139.2.1 2007/04/12 19:46:12 bouyer Exp $");
 
 #include "opt_ddb.h"
 #include "opt_cputype.h"
@@ -201,6 +201,11 @@ calc_kvmsize(vsize_t usrptsize)
 {
 	vsize_t kvmsize, bufsz;
 
+	/*
+	 * Compute the number of pages kmem_map will have.
+	 */
+	kmeminit_nkmempages();
+
 	/* All physical memory */
 	kvmsize = avail_end;
 	/* User Page table area. This may be large */
@@ -208,8 +213,7 @@ calc_kvmsize(vsize_t usrptsize)
 	/* Kernel stacks per process */
 	kvmsize += (USPACE * maxproc);
 	/* kernel malloc arena */
-	kvmsize += (NKMEMPAGES_MAX_DEFAULT * PAGE_SIZE +
-	    NKMEMPAGES_MAX_DEFAULT * sizeof(struct kmemusage));
+	kvmsize += nkmempages * PAGE_SIZE;
 	/* IO device register space */
 	kvmsize += (IOSPSZ * VAX_NBPG);
 	/* Pager allocations */
@@ -345,7 +349,7 @@ pmap_bootstrap()
 
 	/* Init SCB and set up stray vectors. */
 	avail_start = scb_init(avail_start);
-	bcopy((caddr_t)proc0paddr + REDZONEADDR, 0, sizeof(struct rpb));
+	*(struct rpb *) 0 = *(struct rpb *) ((caddr_t)proc0paddr + REDZONEADDR);
 
 	if (dep_call->cpu_steal_pages)
 		(*dep_call->cpu_steal_pages)();
@@ -1201,7 +1205,7 @@ pmap_map(virtuell, pstart, pend, prot)
 	pstart=(uint)pstart &0x7fffffff;
 	pend=(uint)pend &0x7fffffff;
 	virtuell=(uint)virtuell &0x7fffffff;
-	(uint)pentry= (((uint)(virtuell)>>VAX_PGSHIFT)*4)+(uint)Sysmap;
+	pentry = (int *)((((uint)(virtuell)>>VAX_PGSHIFT)*4)+(uint)Sysmap);
 	for(count=pstart;count<pend;count+=VAX_NBPG){
 		*pentry++ = (count>>VAX_PGSHIFT)|PG_V|
 		    (prot & VM_PROT_WRITE ? PG_KW : PG_KR);
@@ -1426,19 +1430,20 @@ pmap_clear_reference_long(struct pv_entry *pv)
 	if (pv->pv_pmap != NULL) {
 		pte = vaddrtopte(pv);
 		if (pte->pg_w == 0) {
-			pte[0].pg_v = pte[1].pg_v = pte[2].pg_v = 
-			pte[3].pg_v = pte[4].pg_v = pte[5].pg_v =
-			pte[6].pg_v = pte[7].pg_v = 0;
+			pte[0].pg_v = 0; pte[1].pg_v = 0;
+			pte[2].pg_v = 0; pte[3].pg_v = 0;
+			pte[4].pg_v = 0; pte[5].pg_v = 0;
+			pte[6].pg_v = 0; pte[7].pg_v = 0;
 		}
 	}
 
 	while ((pv = pv->pv_next)) {
 		pte = vaddrtopte(pv);
 		if (pte[0].pg_w == 0) {
-			pte[0].pg_v = pte[1].pg_v =
-			    pte[2].pg_v = pte[3].pg_v = 
-			    pte[4].pg_v = pte[5].pg_v = 
-			    pte[6].pg_v = pte[7].pg_v = 0;
+			pte[0].pg_v = 0; pte[1].pg_v = 0;
+			pte[2].pg_v = 0; pte[3].pg_v = 0;
+			pte[4].pg_v = 0; pte[5].pg_v = 0;
+			pte[6].pg_v = 0; pte[7].pg_v = 0;
 		}
 	}
 	PVTABLE_UNLOCK;
@@ -1587,14 +1592,15 @@ pmap_page_protect_long(struct pv_entry *pv, vm_prot_t prot)
 		splx(s);
 	} else { /* read-only */
 		do {
+			int pr;
 			pt = vaddrtopte(pv);
 			if (pt == 0)
 				continue;
-			pt[0].pg_prot = pt[1].pg_prot = 
-			    pt[2].pg_prot = pt[3].pg_prot = 
-			    pt[4].pg_prot = pt[5].pg_prot = 
-			    pt[6].pg_prot = pt[7].pg_prot = 
-			    ((vaddr_t)pt < ptemapstart ? PROT_KR : PROT_RO);
+			pr = ((vaddr_t)pt < ptemapstart ? PROT_KR : PROT_RO);
+			pt[0].pg_prot = pr; pt[1].pg_prot = pr;
+			pt[2].pg_prot = pr; pt[3].pg_prot = pr;
+			pt[4].pg_prot = pr; pt[5].pg_prot = pr;
+			pt[6].pg_prot = pr; pt[7].pg_prot = pr;
 		} while ((pv = pv->pv_next));
 	}
 	PVTABLE_UNLOCK;

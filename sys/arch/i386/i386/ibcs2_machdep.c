@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_machdep.c,v 1.28 2005/12/11 12:17:41 christos Exp $	*/
+/*	$NetBSD: ibcs2_machdep.c,v 1.30 2006/11/16 01:32:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.28 2005/12/11 12:17:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.30 2006/11/16 01:32:38 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_vm86.h"
@@ -175,10 +175,7 @@ ibcs2_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 }
 
 int
-ibcs2_sys_sysmachine(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+ibcs2_sys_sysmachine(struct lwp *l, void *v, register_t *retval)
 {
 	struct ibcs2_sys_sysmachine_args /* {
 		syscallarg(int) cmd;

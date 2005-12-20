@@ -1,4 +1,4 @@
-/*	$NetBSD: at_control.c,v 1.11 2005/12/11 12:24:54 christos Exp $	 */
+/*	$NetBSD: at_control.c,v 1.16 2006/10/25 23:30:35 elad Exp $	 */
 
 /*
  * Copyright (c) 1990,1994 Regents of The University of Michigan.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at_control.c,v 1.11 2005/12/11 12:24:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at_control.c,v 1.16 2006/10/25 23:30:35 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,6 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: at_control.c,v 1.11 2005/12/11 12:24:54 christos Exp
 #include <sys/kernel.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
+#include <sys/kauth.h>
 #include <net/if.h>
 #include <net/route.h>
 #include <net/if_ether.h>
@@ -71,11 +72,11 @@ static void aa_clean __P((void));
 			 (a)->sat_addr.s_node == (b)->sat_addr.s_node )
 
 int
-at_control(cmd, data, ifp, p)
+at_control(cmd, data, ifp, l)
 	u_long          cmd;
 	caddr_t         data;
 	struct ifnet   *ifp;
-	struct proc    *p;
+	struct lwp     *l;
 {
 	struct ifreq   *ifr = (struct ifreq *) data;
 	struct sockaddr_at *sat;
@@ -127,7 +128,10 @@ at_control(cmd, data, ifp, p)
 		 * If we are not superuser, then we don't get to do these
 		 * ops.
 		 */
-		if (suser(p->p_ucred, &p->p_acflag))
+		if (l && kauth_authorize_network(l->l_cred,
+		    KAUTH_NETWORK_INTERFACE,
+		    KAUTH_REQ_NETWORK_INTERFACE_SETPRIV, ifp, (void *)cmd,
+		    NULL) != 0)
 			return (EPERM);
 
 		sat = satosat(&ifr->ifr_addr);
@@ -468,7 +472,7 @@ at_ifinit(ifp, aa, sat)
 				 */
 				if (nnets != 1) {
 					net = ntohs(nr.nr_firstnet) +
-					    time.tv_sec % (nnets - 1);
+					    time_second % (nnets - 1);
 				} else {
 					net = ntohs(nr.nr_firstnet);
 				}
@@ -507,7 +511,7 @@ at_ifinit(ifp, aa, sat)
 		 * not specified, be random about it... XXX use /dev/random?
 		 */
 		if (sat->sat_addr.s_node == ATADDR_ANYNODE) {
-			AA_SAT(aa)->sat_addr.s_node = time.tv_sec;
+			AA_SAT(aa)->sat_addr.s_node = time_second;
 		} else {
 			AA_SAT(aa)->sat_addr.s_node = sat->sat_addr.s_node;
 		}
@@ -526,7 +530,7 @@ at_ifinit(ifp, aa, sat)
 		         * Once again, starting at the (possibly random)
 		         * initial node address.
 		         */
-			for (j = 0, nodeinc = time.tv_sec | 1; j < 256;
+			for (j = 0, nodeinc = time_second | 1; j < 256;
 			     j++, AA_SAT(aa)->sat_addr.s_node += nodeinc) {
 				if (AA_SAT(aa)->sat_addr.s_node > 253 ||
 				    AA_SAT(aa)->sat_addr.s_node < 1) {
@@ -570,7 +574,7 @@ at_ifinit(ifp, aa, sat)
 				break;
 
 			/* reset node for next network */
-			AA_SAT(aa)->sat_addr.s_node = time.tv_sec;
+			AA_SAT(aa)->sat_addr.s_node = time_second;
 		}
 
 		/*

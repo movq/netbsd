@@ -1,5 +1,5 @@
 #!/bin/sh -
-#	$NetBSD: MAKEDEV.tmpl,v 1.48 2005/09/27 02:44:12 jmcneill Exp $
+#	$NetBSD: MAKEDEV.tmpl,v 1.67.2.3 2007/05/23 21:56:03 pavel Exp $
 #
 # Copyright (c) 2003 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -223,11 +223,13 @@
 #	ad*	UNIBUS interface to Data Translation A/D converter
 #	agp*	AGP GART devices
 #	altq	ALTQ control interface
+#	amr*	AMI MegaRaid control device
 #	apm	power management device
 #	audio*	audio devices
 #	bell*	OPM bell device (x68k)
 #	bktr	Brooktree 848/849/878/879 based TV cards
 #	bpf	packet filter
+#	bthub	Bluetooth Device Hub control interface
 #	cfs*	Coda file system device
 #	ch*	SCSI media changer
 #	cir*	Consumer IR
@@ -249,6 +251,7 @@
 #	joy*	joystick device
 #	kttcp	kernel ttcp helper device
 #	lkm	loadable kernel modules interface
+#	lockstat kernel locking statistics
 #	magma*	Magma multiport serial/parallel cards
 #	midi*	MIDI
 #	mlx*	Mylex DAC960 control interface
@@ -259,6 +262,7 @@
 #	pci*	PCI bus access devices
 #	pf	PF packet filter
 #	pow*	power management device (x68k)
+#	puffs	Pass-to-Userspace Framework File System
 #	px*	PixelStamp Xserver access
 #	radio*	radio devices
 #	random	Random number generator
@@ -275,6 +279,7 @@
 #	systrace syscall tracer
 #	tap*	virtual Ethernet device
 #	tun*	network tunnel driver
+#	twa	3ware Apache control interface
 #	twe	3ware Escalade control interface
 #	uk*	unknown SCSI device
 #	veriexec verified executable fingerprint loader
@@ -370,7 +375,7 @@ umask 077
 
 # Check if we have fdesc mounted
 if [ -d fd ]; then
-        case "`df fd`" in
+        case "$(df fd)" in
         *fdesc*)	nofdesc=false;;
         *)		nofdesc=true;;
         esac
@@ -462,11 +467,12 @@ all)
 	makedev bpf
 	makedev tun0 tun1 tun2 tun3
 	makedev ipl pf crypto random systrace
-	makedev lkm clockctl
+	makedev lkm lockstat clockctl
 	makedev local
 	makedev atabus0 atabus1 atabus2 atabus3
 	makedev tap tap0 tap1 tap2 tap3
-	makedev gpio gpio0 gpio1 gpio2 gpio3
+	makedev gpio gpio0 gpio1 gpio2 gpio3 gpio4 gpio5 gpio6 gpio7
+	makedev bthub
 	;;
 
 init)
@@ -484,7 +490,7 @@ audio)
 	;;
 
 gpio)
-	makedev gpio0 gpio1 gpio2 gpio3
+	makedev gpio0 gpio1 gpio2 gpio3 gpio4 gpio5 gpio6 gpio7
 	lndev gpio0 gpio
 	;;
 
@@ -505,6 +511,7 @@ usbs)
 	makedev ttyY0 ttyY1
 	makedev urio0
 	makedev uscanner0 uscanner1
+	makedev utoppy0 utoppy1
 	makedev ugen0
 	;;
 
@@ -561,6 +568,11 @@ uscanner*)
 	mkdev uscanner$unit c %uscanner_chr% $unit
 	;;
 
+utoppy*)
+	unit=${i#utoppy}
+	mkdev utoppy$unit c %utoppy_chr% $unit
+	;;
+
 ttyY*)
 	unit=${i#ttyY}
 	mkdev ttyY$unit c %ucycom_chr% $(($unit + $dialin  )) "" "" $u_uucp
@@ -609,6 +621,10 @@ wsmux*)
 
 xenevt)
 	mkdev xenevt c %xenevt_chr% 0
+	;;
+
+xsd_kva)
+	mkdev xsd_kva c %xenevt_chr% 1
 	;;
 
 xencons)
@@ -714,6 +730,10 @@ ld*)
 	%MKDISK% $name $unit $blk $chr
 	;;
 
+bio)
+	mkdev bio c %bio_chr% 0
+	;;
+
 ed*)
 	name=ed; unit=${i#ed}; blk=%ed_blk%; chr=%ed_chr%
 	%MKDISK% $name $unit $blk $chr
@@ -729,6 +749,17 @@ xbd*)
 	%MKDISK% $name $unit $blk $chr
 	;;
 
+dk*)
+	name=dk; unit=${i#dk}; blk=%dk_blk%; chr=%dk_chr%
+	minor=0 
+	while [ $minor -le ${i#dk} ]
+	do
+		mkdev r$name$minor c $chr $minor 0640 $g_operator
+		mkdev $name$minor b $blk  $minor 0640 $g_operator
+		minor=$(($minor + 1))
+	done
+	;;
+	
 ttyCY*)
 	name=tyCY; chr=%cy_chr%; off=32
 	unit=${i#t${name}}
@@ -736,7 +767,9 @@ ttyCY*)
 	eminor=$(($minor + $off))
 	while [ $minor -lt $eminor ]
 	do
-		nminor=$(zeropad 3 $minor)
+		# nminor=$(zeropad 3 $minor)
+		nminor=000$minor
+		nminor=${nminor#${nminor%???}}
 		mkdev t$name$nminor c $chr $(($minor + $dialin )) "" "" $u_uucp
 		mkdev d$name$nminor c $chr $(($minor + $dialout)) "" "" $u_uucp
 		minor=$(($minor + 1))
@@ -750,7 +783,9 @@ ttyCZ*)
 	eminor=$(($minor + $off))
 	while [ $minor -lt $eminor ]
 	do
-		nminor=$(zeropad 4 $minor)
+		# nminor=$(zeropad 4 $minor)
+		nminor=0000$minor
+		nminor=${nminor#${nminor%????}}
 		mkdev t$name$nminor c $chr $(($minor + $dialin )) "" "" $u_uucp
 		mkdev d$name$nminor c $chr $(($minor + $dialout)) "" "" $u_uucp
 		minor=$(($minor + 1))
@@ -771,7 +806,9 @@ tty[0-9]|tty0[0-9])
 
 tty0*|tty1*|tty[0-9])
 	unit=${i#tty}
-	ounit=$(zeropad 2 $unit)
+	# ounit=$(zeropad 2 $unit)
+	ounit=00$unit
+	ounit=${ounit#${ounit%??}}
 	mkdev tty$ounit c %com_chr% $(($unit + $dialin )) "" "" $u_uucp
 	mkdev dty$ounit c %com_chr% $(($unit + $dialout)) "" "" $u_uucp
 	;;
@@ -847,7 +884,7 @@ pty*)
 		warn "$i: pty unit conflicts with console ttyv0 device"
 		continue
 	fi
-	s2=$(($start % $nt - $s1 * $mult))
+	s2=$(($start % ($nt - $s1 * $mult)))
 	set -- $d2
 	shift $s2
 	t2=$1
@@ -921,6 +958,10 @@ bpf)
 	lndev bpf bpf0
 	;;
 
+bthub)
+	mkdev bthub c %bthub_chr% 0
+	;;
+
 tun*)
 	unit=${i#tun}
 	mkdev tun$unit c %tun_chr% $unit
@@ -936,6 +977,9 @@ ipl)
 	mkdev ipnat	c %ipl_chr% 1
 	mkdev ipstate	c %ipl_chr% 2
 	mkdev ipauth	c %ipl_chr% 3
+	mkdev ipsync	c %ipl_chr% 4
+	mkdev ipscan	c %ipl_chr% 5
+	mkdev iplookup	c %ipl_chr% 6
 	;;
 
 pf)
@@ -952,6 +996,10 @@ speaker)
 
 lkm)
 	mkdev lkm c %lkm_chr% 0 640 $g_kmem
+	;;
+
+lockstat)
+	mkdev lockstat c %lockstat_chr% 0
 	;;
 
 audio*)
@@ -988,6 +1036,11 @@ radio*)
 	unit=${i#radio}
 	: ${unit:-0}
 	mkdev radio$unit c %radio_chr% $unit 666
+	;;
+
+amr*)
+	unit=${i#amr}
+	mkdev amr$unit c %amr_chr% $unit
 	;;
 
 apm)
@@ -1054,6 +1107,11 @@ mlx*)
 mly*)
 	unit=${i#mly}
 	mkdev mly$unit c %mly_chr% $unit
+	;;
+
+twa*)
+	unit=${i#twa}
+	mkdev twa$unit c %twa_chr% $unit
 	;;
 
 twe*)
@@ -1553,6 +1611,10 @@ fw*)
 		mkdev fw${unit}.${j} c %fw_chr% $((${unit} * 256 + ${j})) 660 ${g_operator}
 		mkdev fwmem${unit}.${j} c %fw_chr% $((65536 + ${unit} * 256 + ${j})) 660 ${g_operator}
 	done
+	;;
+
+puffs)
+	mkdev puffs c %puffs_chr% 0x7ffff 600
 	;;
 
 midevend)

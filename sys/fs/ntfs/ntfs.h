@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs.h,v 1.13 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: ntfs.h,v 1.14.12.1 2007/02/17 23:27:44 tron Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 Semen Ustimenko
@@ -291,6 +291,7 @@ struct ntfsmount {
 
 #define	ntfs_bpbl	(daddr_t)((ntmp)->ntm_bps)
 
+#ifdef _KERNEL
 #if __FreeBSD_version >= 300000 || defined(__NetBSD__)
 MALLOC_DECLARE(M_NTFSMNT);
 MALLOC_DECLARE(M_NTFSNTNODE);
@@ -302,25 +303,17 @@ MALLOC_DECLARE(M_NTFSRDATA);
 MALLOC_DECLARE(M_NTFSDECOMP);
 MALLOC_DECLARE(M_NTFSRUN);
 #endif
+#endif /* _KERNEL */
 
 #ifdef __NetBSD__
 typedef int (vop_t)(void *);
 #define HASHINIT(a, b, c, d)	hashinit((a), HASH_LIST, (b), (c), (d))
 #define bqrelse(bp)		brelse(bp)
-#if 0
-#define VOP__UNLOCK(a, b, c)	VOP_UNLOCK((a), (b))
-#define VGET(a, b)		vget((a), (b))
-#define VN_LOCK(a, b, c)	vn_lock((a), (b))
-#endif
 #else /* !NetBSD */
 #define HASHINIT(a, b, c, d)	hashinit((a), (b), (d))
 #define VOP__UNLOCK(a, b, c)	VOP_UNLOCK((a), (b), (c))
 #define VGET(a, b)		vget((a), (b))
 #define VN_LOCK(a, b, c)	vn_lock((a), (b), (c))
-
-/* PDIRUNLOCK is used by NetBSD to mark if vfs_lookup() unlocked parent dir;
- * on FreeBSD, it's not defined and nothing similar exists */
-#define PDIRUNLOCK		0
 #endif /* NetBSD */
 
 #ifdef NTFS_DEBUG

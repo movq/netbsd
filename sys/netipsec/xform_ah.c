@@ -1,4 +1,4 @@
-/*	$NetBSD: xform_ah.c,v 1.9 2005/12/11 12:25:06 christos Exp $	*/
+/*	$NetBSD: xform_ah.c,v 1.12.2.1 2007/10/31 12:39:29 liamjfoy Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/xform_ah.c,v 1.1.4.1 2003/01/24 05:11:36 sam Exp $	*/
 /*	$OpenBSD: ip_ah.c,v 1.63 2001/06/26 06:18:58 angelos Exp $ */
 /*
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xform_ah.c,v 1.9 2005/12/11 12:25:06 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xform_ah.c,v 1.12.2.1 2007/10/31 12:39:29 liamjfoy Exp $");
 
 #include "opt_inet.h"
 #ifdef __FreeBSD__
@@ -326,12 +326,12 @@ ah_massage_headers(struct mbuf **m0, int proto, int skip, int alg, int out)
 
 
 			if (alg == CRYPTO_MD5_KPDK || alg == CRYPTO_SHA1_KPDK)
-				ip->ip_off = htons(TOHOST(ip->ip_off) & IP_DF);
+				ip->ip_off  &= IP_OFF_CONVERT(IP_DF);
 			else
 				ip->ip_off = 0;
 		} else {
 			if (alg == CRYPTO_MD5_KPDK || alg == CRYPTO_SHA1_KPDK)
-				ip->ip_off = htons(ntohs(ip->ip_off) & IP_DF);
+				ip->ip_off &= IP_OFF_CONVERT(IP_DF);
 			else
 				ip->ip_off = 0;
 		}
@@ -955,11 +955,12 @@ bad:
  */
 static int
 ah_output(
-	struct mbuf *m,
-	struct ipsecrequest *isr,
-	struct mbuf **mp,
-	int skip,
-	int protoff)
+    struct mbuf *m,
+    struct ipsecrequest *isr,
+    struct mbuf **mp,
+    int skip,
+    int protoff
+)
 {
 	struct secasvar *sav;
 	struct auth_hash *ahx;
@@ -1071,7 +1072,11 @@ ah_output(
 			error = EINVAL;
 			goto bad;
 		}
-		sav->replay->count++;
+#ifdef IPSEC_DEBUG
+		/* Emulate replay attack when ipsec_replay is TRUE. */
+		if (!ipsec_replay)
+#endif
+			sav->replay->count++;
 		ah->ah_seq = htonl(sav->replay->count);
 	}
 
@@ -1247,6 +1252,20 @@ ah_output_cb(struct cryptop *crp)
 	free(tc, M_XDATA);
 	crypto_freereq(crp);
 
+#ifdef IPSEC_DEBUG
+	/* Emulate man-in-the-middle attack when ipsec_integrity is TRUE. */
+	if (ipsec_integrity) {
+		int alen;
+
+		/*
+		 * Corrupt HMAC if we want to test integrity verification of
+		 * the other side.
+		 */
+		alen = AUTHSIZE(sav);
+		m_copyback(m, m->m_pkthdr.len - alen, alen, ipseczeroes);
+	}
+#endif
+
 	/* NB: m is reclaimed by ipsec_process_done. */
 	err = ipsec_process_done(m, isr);
 	KEY_FREESAV(&sav);
@@ -1266,6 +1285,7 @@ bad:
 static struct xformsw ah_xformsw = {
 	XF_AH,		XFT_AUTH,	"IPsec AH",
 	ah_init,	ah_zeroize,	ah_input,	ah_output,
+	NULL,
 };
 
 INITFN void

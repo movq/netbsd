@@ -1,4 +1,4 @@
-/*	$NetBSD: res_sendsigned.c,v 1.1.1.1 2004/05/17 23:44:48 christos Exp $	*/
+/*	$NetBSD: res_sendsigned.c,v 1.1.1.3.4.1 2007/05/17 00:40:26 jdc Exp $	*/
 
 #include "port_before.h"
 #include "fd_setsize.h"
@@ -26,7 +26,7 @@
 #include "res_debug.h"
 
 
-/* res_nsendsigned */
+/*% res_nsendsigned */
 int
 res_nsendsigned(res_state statp, const u_char *msg, int msglen,
 		ns_tsig_key *key, u_char *answer, int anslen)
@@ -54,6 +54,7 @@ res_nsendsigned(res_state statp, const u_char *msg, int msglen,
 	bufsize = msglen + 1024;
 	newmsg = (u_char *) malloc(bufsize);
 	if (newmsg == NULL) {
+		free(nstatp);
 		errno = ENOMEM;
 		return (-1);
 	}
@@ -104,11 +105,11 @@ res_nsendsigned(res_state statp, const u_char *msg, int msglen,
 retry:
 
 	len = res_nsend(nstatp, newmsg, newmsglen, answer, anslen);
-	if (ret < 0) {
+	if (len < 0) {
 		free (nstatp);
 		free (newmsg);
 		dst_free_key(dstkey);
-		return (ret);
+		return (len);
 	}
 
 	ret = ns_verify(answer, &len, dstkey, sig, siglen,
@@ -124,8 +125,16 @@ retry:
 			(stdout, "%s", ""),
 			answer, (anslen > len) ? len : anslen);
 
-		Dprint(statp->pfcode & RES_PRF_REPLY,
-		       (stdout, ";; TSIG invalid (%s)\n", p_rcode(ret)));
+		if (ret > 0) {
+			Dprint(statp->pfcode & RES_PRF_REPLY,
+			       (stdout, ";; server rejected TSIG (%s)\n",
+				p_rcode(ret)));
+		} else {
+			Dprint(statp->pfcode & RES_PRF_REPLY,
+			       (stdout, ";; TSIG invalid (%s)\n",
+				p_rcode(-ret)));
+		}
+
 		free (nstatp);
 		free (newmsg);
 		dst_free_key(dstkey);
@@ -159,3 +168,5 @@ retry:
 	dst_free_key(dstkey);
 	return (len);
 }
+
+/*! \file */

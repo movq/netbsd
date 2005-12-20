@@ -1,4 +1,4 @@
-/*	$NetBSD: dpti.c,v 1.21 2005/12/11 12:21:23 christos Exp $	*/
+/*	$NetBSD: dpti.c,v 1.30.2.1 2006/12/04 18:34:16 tron Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dpti.c,v 1.21 2005/12/11 12:21:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dpti.c,v 1.30.2.1 2006/12/04 18:34:16 tron Exp $");
 
 #include "opt_i2o.h"
 
@@ -78,6 +78,7 @@ __KERNEL_RCSID(0, "$NetBSD: dpti.c,v 1.21 2005/12/11 12:21:23 christos Exp $");
 #include <sys/malloc.h>
 #include <sys/conf.h>
 #include <sys/ioctl.h>
+#include <sys/kauth.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -147,7 +148,7 @@ dev_type_ioctl(dptiioctl);
 
 const struct cdevsw dpti_cdevsw = {
 	dptiopen, nullclose, noread, nowrite, dptiioctl,
-	nostop, notty, nopoll, nommap, nokqfilter,
+	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER,
 };
 
 extern struct cfdriver dpti_cd;
@@ -185,8 +186,8 @@ dpti_attach(struct device *parent, struct device *self, void *aux)
 	} __attribute__ ((__packed__)) param;
 	int rv;
 
-	sc = (struct dpti_softc *)self;
-	iop = (struct iop_softc *)parent;
+	sc = device_private(self);
+	iop = device_private(parent);
 
 	/*
 	 * Tell the world what we are.  The description in the signature
@@ -206,11 +207,10 @@ dpti_attach(struct device *parent, struct device *self, void *aux)
 }
 
 int
-dptiopen(dev_t dev, int flag, int mode, struct lwp *l)
+dptiopen(dev_t dev, int flag, int mode,
+    struct lwp *l)
 {
 
-	if (securelevel > 1)
-		return (EPERM);
 	if (device_lookup(&dpti_cd, minor(dev)) == NULL)
 		return (ENXIO);
 
@@ -226,7 +226,7 @@ dptiioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 	int i, size, rv, linux;
 
 	sc = device_lookup(&dpti_cd, minor(dev));
-	iop = (struct iop_softc *)sc->sc_dv.dv_parent;
+	iop = (struct iop_softc *)device_parent(&sc->sc_dv);
 	rv = 0;
 
 	if (cmd == PTIOCLINUX) {
@@ -277,6 +277,11 @@ dptiioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		break;
 
 	case DPT_I2OUSRCMD:
+		rv = kauth_authorize_device_passthru(l->l_cred, dev,
+		    KAUTH_REQ_DEVICE_RAWIO_PASSTHRU_ALL, data);
+		if (rv)
+			break;
+
 		if (sc->sc_nactive++ >= 2)
 			tsleep(&sc->sc_nactive, PRIBIO, "dptislp", 0);
 
@@ -316,7 +321,7 @@ dpti_blinkled(struct dpti_softc *sc)
 	struct iop_softc *iop;
 	u_int v;
 
-	iop = (struct iop_softc *)sc->sc_dv.dv_parent;
+	iop = (struct iop_softc *)device_parent(&sc->sc_dv);
 
 	v = bus_space_read_1(iop->sc_iot, iop->sc_ioh, sc->sc_blinkled + 0);
 	if (v == 0xbc) {
@@ -335,12 +340,12 @@ dpti_ctlrinfo(struct dpti_softc *sc, int size, caddr_t data)
 	struct iop_softc *iop;
 	int rv, i;
 
-	iop = (struct iop_softc *)sc->sc_dv.dv_parent;
+	iop = (struct iop_softc *)device_parent(&sc->sc_dv);
 
 	memset(&info, 0, sizeof(info));
 
 	info.length = sizeof(info) - sizeof(u_int16_t);
-	info.drvrHBAnum = sc->sc_dv.dv_unit;
+	info.drvrHBAnum = device_unit(&sc->sc_dv);
 	info.baseAddr = iop->sc_memaddr;
 	if ((i = dpti_blinkled(sc)) == -1)
 		i = 0;
@@ -457,7 +462,7 @@ dpti_passthrough(struct dpti_softc *sc, caddr_t data, struct proc *proc)
 	int rv, msgsize, repsize, sgoff, i, mapped, nbuf, nfrag, j, sz;
 	u_int32_t *p, *pmax;
 
-	iop = (struct iop_softc *)sc->sc_dv.dv_parent;
+	iop = (struct iop_softc *)device_parent(&sc->sc_dv);
 	im = NULL;
 
 	if ((rv = dpti_blinkled(sc)) != -1) {
@@ -710,9 +715,10 @@ dpti_passthrough(struct dpti_softc *sc, caddr_t data, struct proc *proc)
 	/*
 	 * Copy out the reply frame.
 	 */
-	if ((rv = copyout(rbtmp, data + msgsize, repsize)) != 0)
+	if ((rv = copyout(rbtmp, data + msgsize, repsize)) != 0) {
 		DPRINTF(("%s: reply copyout() failed\n",
 		    sc->sc_dv.dv_xname));
+	}
 
  bad:
 	/*

@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.16 2005/07/01 00:03:36 jmc Exp $	*/
+/*	$NetBSD: io.c,v 1.20 2006/05/18 18:42:59 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)io.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: io.c,v 1.16 2005/07/01 00:03:36 jmc Exp $");
+__RCSID("$NetBSD: io.c,v 1.20 2006/05/18 18:42:59 mrg Exp $");
 #endif
 #endif /* not lint */
 
@@ -60,16 +60,17 @@ getin(char **wrd1, char **wrd2)
 {
 	char   *s;
 	static char wd1buf[MAXSTR], wd2buf[MAXSTR];
-	int     first, numch;
+	int     first, numch, c;
 
 	*wrd1 = wd1buf;				/* return ptr to internal str */
 	*wrd2 = wd2buf;
 	wd2buf[0] = 0;				/* in case it isn't set here */
 	for (s = wd1buf, first = 1, numch = 0;;) {
-		if ((*s = getchar()) >= 'A' && *s <= 'Z')
+		c = getchar();
+		if ((*s = (char)c) >= 'A' && *s <= 'Z')
 			*s = *s - ('A' - 'a');
 		/* convert to upper case */
-		switch (*s) {			/* start reading from user */
+		switch (c) {			/* start reading from user */
 		case '\n':
 			*s = 0;
 			return;
@@ -353,7 +354,7 @@ rtrav(void)
 
 	for (oldloc = -1;;) {	/* get another line             */
 		/* end of entry */		
-		if ((locc = rnum()) != oldloc && oldloc >= 0) {
+		if ((locc = rnum()) != oldloc && oldloc >= 0 && t) {
 			t->next = 0;	/* terminate the old entry      */
 			/* printf("%d:%d entries\n",oldloc,entries);       */
 			/* twrite(oldloc);                                 */
@@ -361,9 +362,8 @@ rtrav(void)
 		if (locc == -1)
 			return;
 		if (locc != oldloc) {	/* getting a new entry         */
-			t = travel[locc] = (struct travlist *) 
-				malloc(sizeof(struct travlist));
-			if ( t == NULL)
+			t = travel[locc] = calloc(1, sizeof(*t));
+			if (t == NULL)
 				err(1, NULL);
 			/* printf("New travel list for %d\n",locc);        */
 			entries = 0;
@@ -384,11 +384,13 @@ rtrav(void)
 			m = atoi(buf);
 		}
 		while (breakch != LF) {	/* only do one line at a time   */
+			if (t == NULL)
+				abort();
 			if (entries++) {
-				t = t->next = (struct travlist *) 
-					malloc(sizeof(struct travlist));
-				if (t == NULL)
+				t->next = calloc(1, sizeof(*t));
+				if (t->next == NULL)
 					err(1, NULL);
+				t = t->next;
 			}
 			t->tverb = rnum();	/* get verb from the file */
 			t->tloc = n;	/* table entry mod 1000         */
@@ -481,7 +483,10 @@ rliq(void)
 		if ((bitnum = rnum()) < 0)
 			break;
 		for (;;) {	/* read locs for bits           */
-			cond[rnum()] |= setbit[bitnum];
+			int n = rnum();
+			if (n < 0)
+				break;
+			cond[n] |= setbit[bitnum];
 			if (breakch == LF)
 				break;
 		}

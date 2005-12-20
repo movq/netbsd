@@ -1,4 +1,4 @@
-/*	$NetBSD: traceroute.c,v 1.61 2004/04/22 01:41:22 itojun Exp $	*/
+/*	$NetBSD: traceroute.c,v 1.68.2.1 2007/07/19 14:38:19 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1991, 1994, 1995, 1996, 1997
@@ -29,7 +29,7 @@ static const char rcsid[] =
 #else
 __COPYRIGHT("@(#) Copyright (c) 1988, 1989, 1991, 1994, 1995, 1996, 1997\n\
 The Regents of the University of California.  All rights reserved.\n");
-__RCSID("$NetBSD: traceroute.c,v 1.61 2004/04/22 01:41:22 itojun Exp $");
+__RCSID("$NetBSD: traceroute.c,v 1.68.2.1 2007/07/19 14:38:19 liamjfoy Exp $");
 #endif
 #endif
 
@@ -270,6 +270,54 @@ struct outdata {
 	struct timeval tv;	/* time packet left */
 };
 
+/*
+ * Support for ICMP extensions
+ *
+ * http://www.ietf.org/proceedings/01aug/I-D/draft-ietf-mpls-icmp-02.txt
+ */
+#define ICMP_EXT_OFFSET    8 /* ICMP type, code, checksum, unused */ + \
+                         128 /* original datagram */
+#define ICMP_EXT_VERSION 2
+/*
+ * ICMP extensions, common header
+ */
+struct icmp_ext_cmn_hdr {
+#if BYTE_ORDER == BIG_ENDIAN
+	unsigned char   version:4;
+	unsigned char   reserved1:4;
+#else
+	unsigned char   reserved1:4;
+	unsigned char   version:4;
+#endif
+	unsigned char   reserved2;
+	unsigned short  checksum;
+};
+
+/*
+ * ICMP extensions, object header
+ */
+struct icmp_ext_obj_hdr {
+    u_short length;
+    u_char  class_num;
+#define MPLS_STACK_ENTRY_CLASS 1
+    u_char  c_type;
+#define MPLS_STACK_ENTRY_C_TYPE 1
+};
+
+struct mpls_header {
+#if BYTE_ORDER == BIG_ENDIAN
+	 uint32_t	label:20;
+	 unsigned char  exp:3;
+	 unsigned char  s:1;
+	 unsigned char  ttl:8;
+#else
+	 unsigned char  ttl:8;
+	 unsigned char  s:1;
+	 unsigned char  exp:3;
+	 uint32_t	label:20;
+#endif
+};
+
 u_char	packet[512];		/* last inbound (icmp) packet */
 
 struct ip *outip;		/* last output (udp) packet */
@@ -308,10 +356,11 @@ int verbose;
 int waittime = 5;		/* time to wait for response (in seconds) */
 int nflag;			/* print addresses numerically */
 int dump;
+int Mflag;			/* show MPLS labels if any */
 int as_path;			/* print as numbers for each hop */
 char *as_server = NULL;
 void *asn;
-int useicmp;			/* use icmp echo instead of udp packets */
+int useicmp = 0;		/* use icmp echo instead of udp packets */
 #ifdef CANT_HACK_CKSUM
 int docksum = 0;		/* don't calculate checksums */
 #else
@@ -369,6 +418,7 @@ int	str2val(const char *, const char *, int, int);
 void	tvsub(struct timeval *, struct timeval *);
 __dead	void usage(void);
 int	wait_for_reply(int, struct sockaddr_in *, struct timeval *);
+void	decode_extensions(unsigned char *buf, int ip_len);
 void	frag_err(void);
 int	find_local_ip(struct sockaddr_in *, struct sockaddr_in *);
 #ifdef IPSEC
@@ -398,6 +448,29 @@ main(int argc, char **argv)
 	int mib[4] = { CTL_NET, PF_INET, IPPROTO_IP, IPCTL_DEFTTL };
 	size_t size = sizeof(max_ttl);
 
+	if ((s = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0) {
+		Fprintf(stderr, "%s: icmp socket: %s\n", prog, strerror(errno));
+		exit(1);
+	}
+
+	/*
+	 * XXX 'useicmp' will always be zero here. I think the HP-UX users
+	 * running our traceroute code will forgive us.
+	 */
+#ifndef __hpux
+	sndsock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
+#else
+	sndsock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW
+	    useicmp ? IPPROTO_ICMP : IPPROTO_UDP);
+#endif
+	if (sndsock < 0) {
+		Fprintf(stderr, "%s: raw socket: %s\n", prog, strerror(errno));
+		exit(1);
+	}
+
+	/* Revert to non-privileged user after opening sockets */
+	setuid(getuid());
+
 	(void) sysctl(mib, sizeof(mib)/sizeof(mib[0]), &max_ttl, &size,
 	    NULL, 0);
 
@@ -407,7 +480,7 @@ main(int argc, char **argv)
 		prog = argv[0];
 
 	opterr = 0;
-	while ((op = getopt(argc, argv, "aA:dDFPInlrvxf:g:i:m:p:q:s:t:w:")) != -1)
+	while ((op = getopt(argc, argv, "aA:dDFPIMnlrvxf:g:i:m:p:q:s:t:w:")) != -1)
 		switch (op) {
 
 		case 'a':
@@ -460,6 +533,10 @@ main(int argc, char **argv)
 
 		case 'm':
 			max_ttl = str2val(optarg, "max ttl", 1, 255);
+			break;
+
+		case 'M':
+			Mflag = 1;
 			break;
 
 		case 'n':
@@ -633,10 +710,6 @@ main(int argc, char **argv)
 		outmark = outudp + 1;
 	}
 
-	if ((s = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)) < 0) {
-		Fprintf(stderr, "%s: icmp socket: %s\n", prog, strerror(errno));
-		exit(1);
-	}
 	if (options & SO_DEBUG)
 		(void)setsockopt(s, SOL_SOCKET, SO_DEBUG, (char *)&on,
 		    sizeof(on));
@@ -673,17 +746,6 @@ main(int argc, char **argv)
 #endif /*IPSEC_POLICY_IPSEC*/
 #endif /*IPSEC*/
 
-#ifndef __hpux
-	sndsock = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
-#else
-	sndsock = socket(AF_INET, SOCK_RAW,
-	    useicmp ? IPPROTO_ICMP : IPPROTO_UDP);
-#endif
-	if (sndsock < 0) {
-		Fprintf(stderr, "%s: raw socket: %s\n", prog, strerror(errno));
-		exit(1);
-	}
-
 #ifdef IPSEC
 #ifdef IPSEC_POLICY_IPSEC
 	/*
@@ -716,9 +778,6 @@ main(int argc, char **argv)
     }
 #endif /*IPSEC_POLICY_IPSEC*/
 #endif /*IPSEC*/
-
-	/* Revert to non-privileged user after opening sockets */
-	setuid(getuid());
 
 #if defined(IP_OPTIONS) && !defined(HAVE_RAW_OPTIONS)
 	if (lsrr > 0) {
@@ -905,6 +964,8 @@ again:
 			struct timeval t1, t2;
 			struct ip *ip;
 			(void)gettimeofday(&t1, NULL);
+			if (!useicmp && htons(port + seq + 1) == 0)
+				seq++;
 			send_probe(++seq, ttl, &t1);
 			while ((cc = wait_for_reply(s, from, &t1)) != 0) {
 				(void)gettimeofday(&t2, NULL);
@@ -1001,6 +1062,8 @@ again:
 			}
 			if (cc == 0)
 				Printf(" *");
+			else if (cc && probe == nprobes - 1 && Mflag)
+				decode_extensions(packet, cc);
 			(void)fflush(stdout);
 		}
 		putchar('\n');
@@ -1021,7 +1084,7 @@ wait_for_reply(int sock, struct sockaddr_in *fromp, struct timeval *tp)
 	struct pollfd set[1];
 	struct timeval now, wait;
 	int cc = 0;
-	int fromlen = sizeof(*fromp);
+	socklen_t fromlen = sizeof(*fromp);
 	int retval;
 
 	set[0].fd = sock;
@@ -1040,7 +1103,7 @@ wait_for_reply(int sock, struct sockaddr_in *fromp, struct timeval *tp)
 	retval = poll(set, 1, wait.tv_sec * 1000 + wait.tv_usec / 1000);
 	if (retval < 0)  {
 		/* If we continue, we probably just flood the remote host. */
-		Fprintf(stderr, "%s: select: %s\n", prog, strerror(errno));
+		Fprintf(stderr, "%s: poll: %s\n", prog, strerror(errno));
 		exit(1);
 	}
 	if (retval > 0)  {
@@ -1049,6 +1112,120 @@ wait_for_reply(int sock, struct sockaddr_in *fromp, struct timeval *tp)
 	}
 
 	return(cc);
+}
+
+void
+decode_extensions(unsigned char *buf, int ip_len)
+{
+        struct icmp_ext_cmn_hdr *cmn_hdr;
+        struct icmp_ext_obj_hdr *obj_hdr;
+        union {
+                struct mpls_header mpls;
+                uint32_t mpls_h;
+        } mpls;
+        int datalen, obj_len;
+        struct ip *ip;
+
+        ip = (struct ip *)buf;
+
+        if (ip_len <= sizeof(struct ip) + ICMP_EXT_OFFSET) {
+		/*
+		 * No support for ICMP extensions on this host
+		 */
+		return;
+        }
+
+        /*
+         * Move forward to the start of the ICMP extensions, if present
+         */
+        buf += (ip->ip_hl << 2) + ICMP_EXT_OFFSET;
+        cmn_hdr = (struct icmp_ext_cmn_hdr *)buf;
+
+        if (cmn_hdr->version != ICMP_EXT_VERSION) {
+		/*
+		 * Unknown version
+		 */
+		return;
+        }
+
+        datalen = ip_len - ((u_char *)cmn_hdr - (u_char *)ip);
+
+        /*
+         * Check the checksum, cmn_hdr->checksum == 0 means no checksum'ing
+         * done by sender.
+         *
+        * If the checksum is ok, we'll get 0, as the checksum is calculated
+         * with the checksum field being 0'd.
+         */
+        if (ntohs(cmn_hdr->checksum) &&
+            in_cksum((u_short *)cmn_hdr, datalen)) {
+ 
+            return;
+        }
+ 
+        buf += sizeof(*cmn_hdr);
+        datalen -= sizeof(*cmn_hdr);
+ 
+        while (datalen > 0) {
+		obj_hdr = (struct icmp_ext_obj_hdr *)buf;
+		obj_len = ntohs(obj_hdr->length);
+
+		/*
+		 * Sanity check the length field
+		 */
+		if (obj_len > datalen) {
+			return;
+		}
+
+		datalen -= obj_len;
+ 
+		/*
+		 * Move past the object header
+		 */
+		buf += sizeof(struct icmp_ext_obj_hdr);
+		obj_len -= sizeof(struct icmp_ext_obj_hdr);
+ 
+		switch (obj_hdr->class_num) {
+		case MPLS_STACK_ENTRY_CLASS:
+			switch (obj_hdr->c_type) {
+			case MPLS_STACK_ENTRY_C_TYPE:
+				while (obj_len >= sizeof(uint32_t)) {
+					mpls.mpls_h = ntohl(*(uint32_t *)buf);
+ 
+					buf += sizeof(uint32_t);
+					obj_len -= sizeof(uint32_t);
+ 
+					printf(" [MPLS: Label %d Exp %d]",
+					    mpls.mpls.label, mpls.mpls.exp);
+				}
+				if (obj_len > 0) {
+					/*
+					 * Something went wrong, and we're at
+					 * a unknown offset into the packet,
+					 * ditch the rest of it.
+					 */
+					return;
+				}
+				break;
+			default:
+				/*
+				 * Unknown object, skip past it
+				 */
+				buf += ntohs(obj_hdr->length) -
+				    sizeof(struct icmp_ext_obj_hdr);
+				break;
+			}
+			break;
+ 
+		default:
+			/*
+			 * Unknown object, skip past it
+			 */
+			buf += ntohs(obj_hdr->length) -
+			    sizeof(struct icmp_ext_obj_hdr);
+			break;
+		}
+	}
 }
 
 void
@@ -1142,8 +1319,7 @@ again:
 			outudp->uh_sum = 0;
 			sum = in_cksum2(0, (u_int16_t *)&phdr, sizeof(phdr));
 			sum = in_cksum2(sum, (u_int16_t *)outudp, ntohs(outudp->uh_ulen));
-			sum = ~sum;	/** XXXSCW: Quell SuperH Compiler Bug */
-			outudp->uh_sum = sum;
+			outudp->uh_sum = ~sum;
 			if (outudp->uh_sum == 0)
 				outudp->uh_sum = 0xffff;
 		}
@@ -1602,7 +1778,7 @@ usage(void)
 	extern char version[];
 
 	Fprintf(stderr, "Version %s\n", version);
-	Fprintf(stderr, "usage: %s [-adDFPIlnrvx] [-g gateway] [-i iface] \
+	Fprintf(stderr, "usage: %s [-adDFPIlMnrvx] [-g gateway] [-i iface] \
 [-f first_ttl]\n\t[-m max_ttl] [-p port] [-q nqueries] [-s src_addr] [-t tos]\n\t\
 [-w waittime] [-A as_server] host [packetlen]\n",
 	    prog);
@@ -1649,7 +1825,7 @@ find_local_ip(struct sockaddr_in *from, struct sockaddr_in *to)
 {
 	int sock;
 	struct sockaddr_in help;
-	int help_len;
+	socklen_t help_len;
 
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0) return (0);

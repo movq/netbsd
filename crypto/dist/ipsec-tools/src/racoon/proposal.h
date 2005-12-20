@@ -1,6 +1,6 @@
-/*	$NetBSD: proposal.h,v 1.3 2005/11/21 14:20:29 manu Exp $	*/
+/*	$NetBSD: proposal.h,v 1.4.2.1 2007/05/13 10:14:06 jdc Exp $	*/
 
-/* Id: proposal.h,v 1.5.10.1 2005/05/12 19:34:10 manubsd Exp */
+/* Id: proposal.h,v 1.5 2004/06/11 16:00:17 ludvigm Exp */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -62,7 +62,9 @@ struct saprop {
 	int pfs_group;			/* pfs group */
 	int claim;			/* flag to send RESPONDER-LIFETIME. */
 					/* XXX assumed DOI values are 1 or 2. */
-
+#ifdef HAVE_SECCTX
+	struct security_ctx sctx;       /* security context structure */
+#endif
 	struct saproto *head;
 	struct saprop *next;
 };
@@ -192,7 +194,7 @@ extern void inssatrns __P((struct saproto *, struct satrns *));
 extern struct saprop *cmpsaprop_alloc __P((struct ph1handle *,
 	const struct saprop *, const struct saprop *, int));
 extern int cmpsaprop __P((const struct saprop *, const struct saprop *));
-extern int cmpsatrns __P((int, const struct satrns *, const struct satrns *));
+extern int cmpsatrns __P((int, const struct satrns *, const struct satrns *, int));
 extern int set_satrnsbysainfo __P((struct saproto *, struct sainfo *));
 extern struct saprop *aproppair2saprop __P((struct prop_pair *));
 extern void free_proppair __P((struct prop_pair **));
@@ -208,6 +210,5 @@ extern void print_proppair __P((int, struct prop_pair *));
 extern int set_proposal_from_policy __P((struct ph2handle *,
 	struct secpolicy *, struct secpolicy *));
 extern int set_proposal_from_proposal __P((struct ph2handle *));
-extern int tunnel_mode_prop __P((struct saprop *p));
 
 #endif /* _PROPOSAL_H */

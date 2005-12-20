@@ -1,4 +1,4 @@
-/*	$NetBSD: transp_sockets.c,v 1.9 2005/09/20 17:57:45 rpaulo Exp $	*/
+/*	$NetBSD: transp_sockets.c,v 1.11 2006/03/18 21:15:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1997-2005 Erez Zadok
@@ -115,7 +115,7 @@ amu_get_myaddress(struct in_addr *iap, const char *preferred_localhost)
   }
   memmove((voidp) &iap->s_addr, (voidp) hp->h_addr_list[0], sizeof(iap->s_addr));
   plog(XLOG_INFO, "localhost_address \"%s\" requested, using %s",
-       preferred_localhost, inet_dquad(dq, iap->s_addr));
+       preferred_localhost, inet_dquad(dq, sizeof(dq), iap->s_addr));
   return;
 
  out:
@@ -341,7 +341,7 @@ create_amq_service(int *udp_soAMQp,
 # ifndef RPC_MAXDATASIZE
 #  define RPC_MAXDATASIZE 9000
 # endif /* not RPC_MAXDATASIZE */
-    {
+    if (tcp_amqpp) {
       int maxrec = RPC_MAXDATASIZE;
       SVC_CONTROL(*tcp_amqpp, SVCSET_CONNMAXREC, &maxrec);
     }

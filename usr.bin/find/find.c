@@ -1,4 +1,4 @@
-/*	$NetBSD: find.c,v 1.20 2005/10/12 20:03:59 reed Exp $	*/
+/*	$NetBSD: find.c,v 1.23 2006/10/11 19:51:10 apb Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "from: @(#)find.c	8.5 (Berkeley) 8/5/94";
 #else
-__RCSID("$NetBSD: find.c,v 1.20 2005/10/12 20:03:59 reed Exp $");
+__RCSID("$NetBSD: find.c,v 1.23 2006/10/11 19:51:10 apb Exp $");
 #endif
 #endif /* not lint */
 
@@ -54,10 +54,10 @@ __RCSID("$NetBSD: find.c,v 1.20 2005/10/12 20:03:59 reed Exp $");
 
 #include "find.h"
 
-static int ftscompare __P((const FTSENT **, const FTSENT **));
+static int ftscompare(const FTSENT **, const FTSENT **);
 
-static void sig_lock __P((sigset_t *));
-static void sig_unlock __P((const sigset_t *));
+static void sig_lock(sigset_t *);
+static void sig_unlock(const sigset_t *);
 
 /*
  * find_formplan --
@@ -65,8 +65,7 @@ static void sig_unlock __P((const sigset_t *));
  *	command arguments.
  */
 PLAN *
-find_formplan(argv)
-	char **argv;
+find_formplan(char **argv)
 {
 	PLAN *plan, *tail, *new;
 
@@ -98,9 +97,9 @@ find_formplan(argv)
 	}
 
 	/*
-	 * if the user didn't specify one of -print, -ok, -fprint, or -exec,
-	 * then -print is assumed so we bracket the current expression with
-	 * parens, if necessary, and add a -print node on the end.
+	 * if the user didn't specify one of -print, -ok, -fprint, -exec, or
+	 * -exit, then -print is assumed so we bracket the current expression
+	 * with parens, if necessary, and add a -print node on the end.
 	 */
 	if (!isoutput) {
 		if (plan == NULL) {
@@ -149,16 +148,14 @@ find_formplan(argv)
 }
 
 static int
-ftscompare(e1, e2)
-	const FTSENT **e1, **e2;
+ftscompare(const FTSENT **e1, const FTSENT **e2)
 {
 
 	return (strcoll((*e1)->fts_name, (*e2)->fts_name));
 }
 
 static void
-sig_lock(s)
-	sigset_t *s;
+sig_lock(sigset_t *s)
 {
 	sigset_t new;
 
@@ -168,8 +165,7 @@ sig_lock(s)
 }
 
 static void
-sig_unlock(s)
-	const sigset_t *s;
+sig_unlock(const sigset_t *s)
 {
 
 	sigprocmask(SIG_SETMASK, s, NULL);
@@ -184,19 +180,19 @@ FTSENT *g_entry;		/* shared with SIGINFO handler */
  *	over all FTSENT's returned for the given search paths.
  */
 int
-find_execute(plan, paths)
-	PLAN *plan;		/* search plan */
-	char **paths;		/* array of pathnames to traverse */
+find_execute(PLAN *plan, char **paths)
 {
 	PLAN *p;
-	int rval;
+	int r, rval, cval;
 	sigset_t s;
+
+	cval = 1;
 
 	if (!(tree = fts_open(paths, ftsoptions, issort ? ftscompare : NULL)))
 		err(1, "ftsopen");
 
 	sig_lock(&s);
-	for (rval = 0; (g_entry = fts_read(tree)) != NULL; sig_lock(&s)) {
+	for (rval = 0; cval && (g_entry = fts_read(tree)) != NULL; sig_lock(&s)) {
 		sig_unlock(&s);
 		switch (g_entry->fts_info) {
 		case FTS_D:
@@ -230,11 +226,59 @@ find_execute(plan, paths)
 		 * the work specified by the user on the command line.
 		 */
 		for (p = plan; p && (p->eval)(p, g_entry); p = p->next)
-			;
+			if (p->type == N_EXIT) {
+				rval = p->exit_val;
+				cval = 0;
+			}
 	}
+
 	sig_unlock(&s);
 	if (errno)
 		err(1, "fts_read");
 	(void)fts_close(tree);
+
+	/*
+	 * Cleanup any plans with leftover state.
+	 * Keep the last non-zero return value.
+	 */
+	if ((r = find_traverse(plan, plan_cleanup, NULL)) != 0)
+		rval = r;
+
 	return (rval);
+}
+
+/*
+ * find_traverse --
+ *	traverse the plan tree and execute func() on all plans.  This
+ *	does not evaluate each plan's eval() function; it is intended
+ *	for operations that must run on all plans, such as state
+ *	cleanup.
+ *
+ *	If any func() returns non-zero, then so will find_traverse().
+ */
+int
+find_traverse(plan, func, arg)
+	PLAN *plan;
+	int (*func)(PLAN *, void *);
+	void *arg;
+{
+	PLAN *p;
+	int r, rval;
+
+	rval = 0;
+	for (p = plan; p; p = p->next) {
+		if ((r = func(p, arg)) != 0)
+			rval = r;
+		if (p->type == N_EXPR || p->type == N_OR) {
+			if (p->p_data[0])
+				if ((r = find_traverse(p->p_data[0],
+					    func, arg)) != 0)
+					rval = r;
+			if (p->p_data[1])
+				if ((r = find_traverse(p->p_data[1],
+					    func, arg)) != 0)
+					rval = r;
+		}
+	}
+	return rval;
 }

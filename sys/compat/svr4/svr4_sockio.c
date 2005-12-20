@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_sockio.c,v 1.21 2005/12/11 12:20:26 christos Exp $	 */
+/*	$NetBSD: svr4_sockio.c,v 1.26 2006/11/16 01:32:44 christos Exp $	 */
 
 /*-
  * Copyright (c) 1995 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_sockio.c,v 1.21 2005/12/11 12:20:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_sockio.c,v 1.26 2006/11/16 01:32:44 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -93,13 +93,8 @@ bsd_to_svr4_flags(bf)
 }
 
 int
-svr4_sock_ioctl(fp, l, retval, fd, cmd, data)
-	struct file *fp;
-	struct lwp *l;
-	register_t *retval;
-	int fd;
-	u_long cmd;
-	caddr_t data;
+svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
+    int fd, u_long cmd, caddr_t data)
 {
 	int error;
 	int (*ctl)(struct file *, u_long,  void *, struct lwp *) =
@@ -108,6 +103,33 @@ svr4_sock_ioctl(fp, l, retval, fd, cmd, data)
 	*retval = 0;
 
 	switch (cmd) {
+	case SVR4_SIOCGLIFNUM:
+		{
+			struct ifnet *ifp;
+			struct ifaddr *ifa;
+			struct svr4_lifnum lifnum;
+
+			error = copyin(data, &lifnum, sizeof(lifnum));
+			if (error)
+				return error;
+
+			lifnum.lifn_count = 0;
+			/* XXX: We don't pay attention to family or flags */
+			for (ifp = ifnet.tqh_first;
+			     ifp != 0; ifp = ifp->if_list.tqe_next)
+				if ((ifa = ifp->if_addrlist.tqh_first) == NULL)
+					lifnum.lifn_count++;
+				else
+					for (;ifa != NULL;
+					    ifa = ifa->ifa_list.tqe_next)
+						lifnum.lifn_count++;
+
+			DPRINTF(("SIOCGLIFNUM [family=%d,flags=%d,count=%d]\n",
+			    lifnum.lifn_family, lifnum.lifn_flags,
+			    lifnum.lifn_count));
+			return copyout(&lifnum, data, sizeof(lifnum));
+		}
+
 	case SVR4_SIOCGIFNUM:
 		{
 			struct ifnet *ifp;

@@ -1,4 +1,4 @@
-/*	$NetBSD: stdio.h,v 1.61 2005/05/25 20:45:38 kleink Exp $	*/
+/*	$NetBSD: stdio.h,v 1.66.2.3 2007/08/24 20:07:38 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -106,7 +106,7 @@ typedef	struct __sFILE {
 	unsigned char *_p;	/* current position in (some) buffer */
 	int	_r;		/* read space left for getc() */
 	int	_w;		/* write space left for putc() */
-	short	_flags;		/* flags, below; this FILE is free if 0 */
+	unsigned short _flags;	/* flags, below; this FILE is free if 0 */
 	short	_file;		/* fileno, if Unix descriptor, else -1 */
 	struct	__sbuf _bf;	/* the buffer (at least 1 byte, if !NULL) */
 	int	_lbfsize;	/* 0 or -_bf._size, for inline putc */
@@ -315,18 +315,18 @@ __END_DECLS
 /*
  * Functions defined in ISO XPG4.2, ISO C99, POSIX 1003.1-2001 or later.
  */
-#if !defined(_ANSI_SOURCE) && !defined(_POSIX_C_SOURCE) && \
-    !defined(_XOPEN_SOURCE) || \
-    ((__STDC_VERSION__ - 0) >= 199901L) || \
+#if ((__STDC_VERSION__ - 0) >= 199901L) || \
     ((_POSIX_C_SOURCE - 0) >= 200112L) || \
     (defined(_XOPEN_SOURCE) && defined(_XOPEN_SOURCE_EXTENDED)) || \
     ((_XOPEN_SOURCE - 0) >= 500) || \
     defined(_ISOC99_SOURCE) || defined(_NETBSD_SOURCE)
+__BEGIN_DECLS
 int	 snprintf(char * __restrict, size_t, const char * __restrict, ...)
 	    __attribute__((__format__(__printf__, 3, 4)));
 int	 vsnprintf(char * __restrict, size_t, const char * __restrict,
 	    _BSD_VA_LIST_)
 	    __attribute__((__format__(__printf__, 3, 0)));
+__END_DECLS
 #endif
 
 /*
@@ -389,7 +389,7 @@ int	 vfscanf(FILE * __restrict, const char * __restrict,
 int	 vsscanf(const char * __restrict, const char * __restrict,
 	    _BSD_VA_LIST_)
 	    __attribute__((__format__(__scanf__, 2, 0)));
-__const char *fmtcheck(const char *, const char *)
+const char *fmtcheck(const char *, const char *)
 	    __attribute__((__format_arg__(2)));
 __END_DECLS
 
@@ -475,5 +475,9 @@ static __inline int __sputc(int _c, FILE *_p) {
 #define getchar_unlocked()	getc_unlocked(stdin)
 #define putchar_unlocked(x)	putc_unlocked(x, stdout)
 #endif /* _POSIX_C_SOURCE >= 199506 || _XOPEN_SOURCE >= 500 || _REENTRANT... */
+
+#if _FORTIFY_SOURCE > 0
+#include <ssp/stdio.h>
+#endif
 
 #endif /* _STDIO_H_ */

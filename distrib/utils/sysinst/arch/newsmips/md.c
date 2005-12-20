@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.12 2004/08/14 16:06:42 dsl Exp $	*/
+/*	$NetBSD: md.c,v 1.15 2006/09/04 00:11:00 hubertf Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -54,7 +54,6 @@
 #include "msg_defs.h"
 #include "menu_defs.h"
 
-const char *fdtype = "msdos";
 /*
  * temporary hack
  */
@@ -198,6 +197,7 @@ md_cleanup_install()
 	enable_rc_conf();
 
 	run_program(0, "rm -f %s", target_expand("/sysinst"));
+	run_program(0, "rm -f %s", target_expand("/.termcap"));
 	run_program(0, "rm -f %s", target_expand("/.profile"));
 }
 
@@ -210,4 +210,10 @@ md_pre_update()
 void
 md_init()
 {
+}
+
+int
+md_post_extract(void)
+{
+	return 0;
 }

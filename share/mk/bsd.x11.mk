@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.x11.mk,v 1.51 2005/11/12 22:57:46 spz Exp $
+#	$NetBSD: bsd.x11.mk,v 1.53.4.2 2007/06/07 15:54:51 liamjfoy Exp $
 
 .include <bsd.init.mk>
 
@@ -7,6 +7,10 @@ LIBDIR=			${X11USRLIBDIR}
 MANDIR=			${X11MANDIR}
 
 COPTS+=			-fno-strict-aliasing
+
+.if defined(USE_SSP) && (${USE_SSP} != "no")
+CPPFLAGS+=		-DNO_ALLOCA
+.endif
 
 X11FLAGS.VERSION=	-DOSMAJORVERSION=1 -DOSMINORVERSION=6		# XXX
 
@@ -72,9 +76,11 @@ X11FLAGS.EXTENSION+=	-D__GLX_ALIGN64
     ${MACHINE} == "cats"	|| \
     ${MACHINE} == "i386"	|| \
     ${MACHINE} == "macppc"	|| \
+    ${MACHINE} == "netwinder"	|| \
     ${MACHINE} == "sgimips"	|| \
     ${MACHINE} == "sparc64"	|| \
-    ${MACHINE} == "sparc"
+    ${MACHINE} == "sparc"	|| \
+    ${MACHINE} == "shark"
 #	LOADABLE
 X11FLAGS.LOADABLE=	-DXFree86LOADER -DIN_MODULE -DXFree86Module \
 			-fno-merge-constants
@@ -144,7 +150,7 @@ appdefsinstall:: .PHONY ${APPDEFS:@S@${DESTDIR}${X11LIBDIR}/app-defaults/${S:T:R
 
 __appdefinstall: .USE
 	${INSTALL_FILE} -o ${BINOWN} -g ${BINGRP} -m ${NONBINMODE} \
-	    ${SYSPKGTAG} ${.ALLSRC} ${.TARGET}
+	    ${.ALLSRC} ${.TARGET}
 
 .for S in ${APPDEFS:O:u}
 ${DESTDIR}${X11LIBDIR}/app-defaults/${S:T:R}: ${S} __appdefinstall

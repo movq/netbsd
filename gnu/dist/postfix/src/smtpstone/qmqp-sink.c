@@ -1,4 +1,4 @@
-/*	$NetBSD: qmqp-sink.c,v 1.1.1.4 2005/08/18 21:09:34 rpaulo Exp $	*/
+/*	$NetBSD: qmqp-sink.c,v 1.1.1.5.4.1 2007/06/16 17:01:25 snj Exp $	*/
 
 /*++
 /* NAME
@@ -21,6 +21,11 @@
 /*	UNIX-domain sockets.
 /*	IPv4 and IPv6 are the default.
 /*	This program is the complement of the \fBqmqp-source\fR(1) program.
+/*
+/*	Note: this is an unsupported test program. No attempt is made
+/*	to maintain compatibility between successive versions.
+/*
+/*	Arguments:
 /* .IP \fB-4\fR
 /*	Support IPv4 only. This option has no effect when
 /*	Postfix is built without IPv6 support.
@@ -58,10 +63,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <fcntl.h>
-
-#ifdef STRCASECMP_IN_STRINGS_H
-#include <strings.h>
-#endif
+#include <signal.h>
 
 /* Utility library. */
 
@@ -79,6 +81,7 @@
 /* Global library. */
 
 #include <qmqp_proto.h>
+#include <mail_version.h>
 
 /* Application-specific. */
 
@@ -90,7 +93,7 @@ typedef struct {
 static int var_tmout;
 static VSTRING *buffer;
 static void disconnect(SINK_STATE *);
-static int count;
+static int count_deliveries;
 static int counter;
 
 /* send_reply - finish conversation */
@@ -100,7 +103,7 @@ static void send_reply(SINK_STATE *state)
     vstring_sprintf(buffer, "%cOk", QMQP_STAT_OK);
     NETSTRING_PUT_BUF(state->stream, buffer);
     netstring_fflush(state->stream);
-    if (count) {
+    if (count_deliveries) {
 	counter++;
 	vstream_printf("%d\r", counter);
 	vstream_fflush(VSTREAM_OUT);
@@ -239,6 +242,8 @@ static void usage(char *myname)
     msg_fatal("usage: %s [-cv] [-x time] [host]:port backlog", myname);
 }
 
+MAIL_VERSION_STAMP_DECLARE;
+
 int     main(int argc, char **argv)
 {
     int     sock;
@@ -247,6 +252,16 @@ int     main(int argc, char **argv)
     int     ttl;
     const char *protocols = INET_PROTO_NAME_ALL;
     INET_PROTO_INFO *proto_info;
+
+    /*
+     * Fingerprint executables and core dumps.
+     */
+    MAIL_VERSION_STAMP_ALLOCATE;
+
+    /*
+     * Fix 20051207.
+     */
+    signal(SIGPIPE, SIG_IGN);
 
     /*
      * Initialize diagnostics.
@@ -265,7 +280,7 @@ int     main(int argc, char **argv)
 	    protocols = INET_PROTO_NAME_IPV6;
 	    break;
 	case 'c':
-	    count++;
+	    count_deliveries++;
 	    break;
 	case 'v':
 	    msg_verbose++;

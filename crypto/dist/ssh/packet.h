@@ -1,5 +1,5 @@
-/*	$NetBSD: packet.h,v 1.4 2005/02/13 05:57:26 christos Exp $	*/
-/*	$OpenBSD: packet.h,v 1.41 2004/05/11 19:01:43 deraadt Exp $	*/
+/*	$NetBSD: packet.h,v 1.6 2006/09/28 21:22:14 christos Exp $	*/
+/* $OpenBSD: packet.h,v 1.45 2006/03/25 22:22:43 djm Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -17,6 +17,8 @@
 #ifndef PACKET_H
 #define PACKET_H
 
+#include <termios.h>
+
 #include <openssl/bn.h>
 
 void     packet_set_connection(int, int);
@@ -31,6 +33,8 @@ u_int	 packet_get_protocol_flags(void);
 void     packet_start_compression(int);
 void     packet_set_interactive(int);
 int      packet_is_interactive(void);
+void     packet_set_server(void);
+void     packet_set_authenticated(void);
 
 void     packet_start(u_char);
 void     packet_put_char(int ch);
@@ -53,7 +57,7 @@ u_int	 packet_get_char(void);
 u_int	 packet_get_int(void);
 void     packet_get_bignum(BIGNUM * value);
 void     packet_get_bignum2(BIGNUM * value);
-void	*packet_get_raw(int *length_ptr);
+void	*packet_get_raw(u_int *length_ptr);
 void	*packet_get_string(u_int *length_ptr);
 void     packet_disconnect(const char *fmt,...) __attribute__((format(printf, 1, 2)));
 void     packet_send_debug(const char *fmt,...) __attribute__((format(printf, 1, 2)));

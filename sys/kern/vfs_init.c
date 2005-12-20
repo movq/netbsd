@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_init.c,v 1.29 2005/12/11 12:24:30 christos Exp $	*/
+/*	$NetBSD: vfs_init.c,v 1.32 2006/11/01 10:17:59 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_init.c,v 1.29 2005/12/11 12:24:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_init.c,v 1.32 2006/11/01 10:17:59 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/mount.h>
@@ -298,11 +298,6 @@ vfs_op_check(void)
 #endif /* DEBUG */
 
 /*
- * Routines having to do with the management of the vnode table.
- */
-struct vattr va_null;
-
-/*
  * Initialize the vnode structures and initialize each file system type.
  */
 void
@@ -344,7 +339,6 @@ vfsinit(void)
 	 * Establish each file system which was statically
 	 * included in the kernel.
 	 */
-	vattr_null(&va_null);
 	__link_set_foreach(vfsp, vfsops) {
 		if (vfs_attach(*vfsp)) {
 			printf("multiple `%s' file systems",

@@ -1,4 +1,5 @@
-/*	$NetBSD: match.c,v 1.3 2004/11/03 21:01:45 dsl Exp $	*/
+/*	$NetBSD: match.c,v 1.5 2006/09/28 21:22:14 christos Exp $	*/
+/* $OpenBSD: match.c,v 1.26 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -36,11 +37,14 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: match.c,v 1.19 2002/03/01 13:12:10 markus Exp $");
-__RCSID("$NetBSD: match.c,v 1.3 2004/11/03 21:01:45 dsl Exp $");
+__RCSID("$NetBSD: match.c,v 1.5 2006/09/28 21:22:14 christos Exp $");
+#include <sys/types.h>
 
-#include "match.h"
+#include <ctype.h>
+#include <string.h>
+
 #include "xmalloc.h"
+#include "match.h"
 
 /*
  * Returns true if the given string matches the pattern (which may contain ?
@@ -138,7 +142,7 @@ match_pattern_list(const char *string, const char *pattern, u_int len,
 		    i < len && subi < sizeof(sub) - 1 && pattern[i] != ',';
 		    subi++, i++)
 			sub[subi] = dolower && isupper((unsigned char)pattern[i]) ?
-			    tolower((unsigned char)pattern[i]) : pattern[i];
+			    (char)tolower((unsigned char)pattern[i]) : pattern[i];
 		/* If subpattern too long, return failure (no match). */
 		if (subi >= sizeof(sub) - 1)
 			return 0;
@@ -256,7 +260,7 @@ match_list(const char *client, const char *server, u_int *next)
 				ret = xstrdup(p);
 				if (next != NULL)
 					*next = (cp == NULL) ?
-					    strlen(c) : cp - c;
+					    strlen(c) : (u_int)(cp - c);
 				xfree(c);
 				xfree(s);
 				return ret;

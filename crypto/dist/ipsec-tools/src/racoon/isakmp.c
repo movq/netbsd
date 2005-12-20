@@ -1,6 +1,6 @@
-/*	$NetBSD: isakmp.c,v 1.11 2005/11/21 14:20:29 manu Exp $	*/
+/*	$NetBSD: isakmp.c,v 1.20.2.2 2007/08/28 11:14:44 liamjfoy Exp $	*/
 
-/* Id: isakmp.c,v 1.34.2.20 2005/09/26 16:12:20 manubsd Exp */
+/* Id: isakmp.c,v 1.74 2006/05/07 21:32:59 manubsd Exp */
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -41,11 +41,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#ifndef HAVE_NETINET6_IPSEC
-#include <netinet/ipsec.h>
-#else 
-#include <netinet6/ipsec.h>
-#endif
+#include PATH_IPSEC_H
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -66,7 +62,9 @@
 #include <unistd.h>
 #endif
 #include <ctype.h>
-#include <fcntl.h>
+#ifdef ENABLE_HYBRID
+#include <resolv.h>
+#endif
 
 #include "var.h"
 #include "misc.h"
@@ -86,7 +84,6 @@
 #include "oakley.h"
 #include "evt.h"
 #include "handler.h"
-#include "proposal.h"
 #include "ipsec_doi.h"
 #include "pfkey.h"
 #include "crypto_openssl.h"
@@ -98,7 +95,9 @@
 #include "isakmp_inf.h"
 #include "isakmp_newg.h"
 #ifdef ENABLE_HYBRID
+#include "vendorid.h"
 #include "isakmp_xauth.h"
+#include "isakmp_unity.h"
 #include "isakmp_cfg.h"
 #endif
 #ifdef ENABLE_FRAG
@@ -106,22 +105,26 @@
 #endif
 #include "strnames.h"
 
-#ifdef ENABLE_NATT
-# include "nattraversal.h"
-# ifdef __linux__
-#  include <linux/udp.h>
 #include <fcntl.h>
 
+#ifdef ENABLE_NATT
+# include "nattraversal.h"
+#endif
+# ifdef __linux__
+#  include <linux/udp.h>
+#  include <linux/ip.h>
 #  ifndef SOL_UDP
 #   define SOL_UDP 17
 #  endif
 # endif /* __linux__ */
-# if defined(__NetBSD__) || defined(__FreeBSD__)
+# if defined(__NetBSD__) || defined(__FreeBSD__) ||	\
+  (defined(__APPLE__) && defined(__MACH__))
 #  include <netinet/in.h>
 #  include <netinet/udp.h>
+#  include <netinet/in_systm.h>
+#  include <netinet/ip.h>
 #  define SOL_UDP IPPROTO_UDP
 # endif /* __NetBSD__ / __FreeBSD__ */
-#endif
 
 static int nostate1 __P((struct ph1handle *, vchar_t *));
 static int nostate2 __P((struct ph2handle *, vchar_t *));
@@ -159,7 +162,7 @@ static int (*ph2exchange[][2][PHASE2ST_MAX])
 	__P((struct ph2handle *, vchar_t *)) = {
  /* error */
  { {}, {}, },
- /* Quick mode for IKE*/
+ /* Quick mode for IKE */
  {
   { nostate2, nostate2, quick_i1prep, nostate2, quick_i1send,
     quick_i2recv, quick_i2send, quick_i3recv, nostate2, nostate2, },
@@ -195,6 +198,13 @@ isakmp_handler(so_isakmp)
 	union {
 		char		buf[sizeof (isakmp) + 4];
 		u_int32_t	non_esp[2];
+		char		lbuf[sizeof(struct udphdr) + 
+#ifdef __linux
+				     sizeof(struct iphdr) + 
+#else
+				     sizeof(struct ip) + 
+#endif
+				     sizeof(isakmp) + 4];
 	} x;
 	struct sockaddr_storage remote;
 	struct sockaddr_storage local;
@@ -228,6 +238,28 @@ isakmp_handler(so_isakmp)
 		}
 		goto end;
 	}
+
+	/* Lucent IKE in UDP encapsulation */
+	{
+		struct udphdr *udp;
+#ifdef __linux__
+		struct iphdr *ip;
+
+		udp = (struct udphdr *)&x.lbuf[0];
+		if (ntohs(udp->dest) == 501) {
+			ip = (struct iphdr *)(x.lbuf + sizeof(*udp));
+			extralen += sizeof(*udp) + ip->ihl;
+		}
+#else
+		struct ip *ip;
+
+		udp = (struct udphdr *)&x.lbuf[0];
+		if (ntohs(udp->uh_dport) == 501) {
+			ip = (struct ip *)(x.lbuf + sizeof(*udp));
+			extralen += sizeof(*udp) + ip->ip_hl;
+		}
+#endif
+	}	
 
 #ifdef ENABLE_NATT
 	/* we don't know about portchange yet, 
@@ -303,8 +335,6 @@ isakmp_handler(so_isakmp)
 	
 	memcpy (buf->v, tmpbuf->v + extralen, buf->l);
 
-	vfree (tmpbuf);
-
 	len -= extralen;
 	
 	if (len != buf->l) {
@@ -364,6 +394,8 @@ isakmp_handler(so_isakmp)
 	error = 0;
 
 end:
+	if (tmpbuf != NULL)
+		vfree(tmpbuf);
 	if (buf != NULL)
 		vfree(buf);
 
@@ -457,10 +489,26 @@ isakmp_main(msg, remote, local)
 			/* prevent memory leak */
 			racoon_free(iph1->remote);
 			racoon_free(iph1->local);
+			iph1->remote = NULL;
+			iph1->local = NULL;
 
 			/* copy-in new addresses */
 			iph1->remote = dupsaddr(remote);
+			if (iph1->remote == NULL) {
+           			plog(LLV_ERROR, LOCATION, iph1->remote,
+				   "phase1 failed: dupsaddr failed.\n");
+				remph1(iph1);
+				delph1(iph1);
+				return -1;
+			}
 			iph1->local = dupsaddr(local);
+			if (iph1->local == NULL) {
+           			plog(LLV_ERROR, LOCATION, iph1->remote,
+				   "phase1 failed: dupsaddr failed.\n");
+				remph1(iph1);
+				delph1(iph1);
+				return -1;
+			}
 
 			/* set the flag to prevent further port floating
 			   (FIXME: should we allow it? E.g. when the NAT gw 
@@ -480,8 +528,10 @@ isakmp_main(msg, remote, local)
 		if (cmpsaddrstrict(iph1->remote, remote) != 0) {
 			char *saddr_db, *saddr_act;
 
-			saddr_db = strdup(saddr2str(iph1->remote));
-			saddr_act = strdup(saddr2str(remote));
+			saddr_db = racoon_strdup(saddr2str(iph1->remote));
+			saddr_act = racoon_strdup(saddr2str(remote));
+			STRDUP_FATAL(saddr_db);
+			STRDUP_FATAL(saddr_act);
 
 			plog(LLV_WARNING, LOCATION, remote,
 				"remote address mismatched. db=%s, act=%s\n",
@@ -632,7 +682,13 @@ isakmp_main(msg, remote, local)
 					isakmp->msgid));
 			return -1;
 		}
-
+#ifdef ENABLE_HYBRID
+		/* Reinit the IVM if it's still there */		
+		if (iph1->mode_cfg && iph1->mode_cfg->ivm) {
+			oakley_delivm(iph1->mode_cfg->ivm);
+			iph1->mode_cfg->ivm = NULL;
+		}
+#endif
 #ifdef ENABLE_FRAG
 		if (isakmp->np == ISAKMP_NPTYPE_FRAG)
 			return frag_handler(iph1, msg, remote, local);
@@ -773,17 +829,19 @@ ph1_main(iph1, msg)
 #endif
 	}
 
+#ifndef ENABLE_FRAG
 	/* free resend buffer */
 	if (iph1->sendbuf == NULL) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"no buffer found as sendbuf\n"); 
 		return -1;
 	}
+#endif
+
 	VPTRINIT(iph1->sendbuf);
 
 	/* turn off schedule */
-	if (iph1->scr)
-		SCHED_KILL(iph1->scr);
+	SCHED_KILL(iph1->scr);
 
 	/* send */
 	plog(LLV_DEBUG, LOCATION, NULL, "===\n");
@@ -818,9 +876,14 @@ ph1_main(iph1, msg)
 		    isakmp_ph1expire_stub, iph1);
 #ifdef ENABLE_HYBRID
 		if (iph1->mode_cfg->flags & ISAKMP_CFG_VENDORID_XAUTH) {
-			switch(iph1->approval->authmethod) {
-			case OAKLEY_ATTR_AUTH_METHOD_HYBRID_RSA_I:
-			case OAKLEY_ATTR_AUTH_METHOD_HYBRID_DSS_I:
+			switch(AUTHMETHOD(iph1)) {
+			case OAKLEY_ATTR_AUTH_METHOD_HYBRID_RSA_R:
+			case OAKLEY_ATTR_AUTH_METHOD_HYBRID_DSS_R:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_PSKEY_R:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSASIG_R:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_DSSSIG_R:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSAENC_R:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSAREV_R:
 				xauth_sendreq(iph1);
 				/* XXX Don't process INITIAL_CONTACT */
 				iph1->rmconf->ini_contact = 0;
@@ -860,8 +923,24 @@ ph1_main(iph1, msg)
 		 * case it is done when we receive the configuration.
 		 */
 		if ((iph1->status == PHASE1ST_ESTABLISHED) &&
-		    !iph1->rmconf->mode_cfg)
-			script_hook(iph1, SCRIPT_PHASE1_UP);	
+		    !iph1->rmconf->mode_cfg) { 
+			switch (AUTHMETHOD(iph1)) {
+#ifdef ENABLE_HYBRID
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_PSKEY_R:
+			case OAKLEY_ATTR_AUTH_METHOD_HYBRID_RSA_R:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSASIG_R:
+			/* Unimplemeted... */
+			case OAKLEY_ATTR_AUTH_METHOD_HYBRID_DSS_R:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_DSSSIG_R:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSAENC_R:
+			case OAKLEY_ATTR_AUTH_METHOD_XAUTH_RSAREV_R:
+				break;
+#endif
+			default:
+				script_hook(iph1, SCRIPT_PHASE1_UP);
+				break;
+			}
+		}
 	}
 
 	return 0;
@@ -923,8 +1002,7 @@ quick_main(iph2, msg)
 	VPTRINIT(iph2->sendbuf);
 
 	/* turn off schedule */
-	if (iph2->scr)
-		SCHED_KILL(iph2->scr);
+	SCHED_KILL(iph2->scr);
 
 	/* send */
 	plog(LLV_DEBUG, LOCATION, NULL, "===\n");
@@ -974,18 +1052,28 @@ isakmp_ph1begin_i(rmconf, remote, local)
 	iph1->gssapi_state = NULL;
 #endif
 #ifdef ENABLE_HYBRID
-	if ((iph1->mode_cfg = isakmp_cfg_mkstate()) == NULL)
+	if ((iph1->mode_cfg = isakmp_cfg_mkstate()) == NULL) {
+		remph1(iph1);
+		delph1(iph1);
 		return -1;
+	}
 #endif
 #ifdef ENABLE_FRAG
-	iph1->frag = 0;
+
+	if(rmconf->ike_frag == ISAKMP_FRAG_FORCE)
+		iph1->frag = 1;
+	else
+		iph1->frag = 0;
 	iph1->frag_chain = NULL;
 #endif
 	iph1->approval = NULL;
 
 	/* XXX copy remote address */
-	if (copy_ph1addresses(iph1, rmconf, remote, local) < 0)
+	if (copy_ph1addresses(iph1, rmconf, remote, local) < 0) {
+		remph1(iph1);
+		delph1(iph1);
 		return -1;
+	}
 
 	(void)insph1(iph1);
 
@@ -996,7 +1084,9 @@ isakmp_ph1begin_i(rmconf, remote, local)
     {
 	char *a;
 
-	a = strdup(saddr2str(iph1->local));
+	a = racoon_strdup(saddr2str(iph1->local));
+	STRDUP_FATAL(a);
+
 	plog(LLV_INFO, LOCATION, NULL,
 		"initiate new phase 1 negotiation: %s<=>%s\n",
 		a, saddr2str(iph1->remote));
@@ -1081,8 +1171,11 @@ isakmp_ph1begin_r(msg, remote, local, etype)
 	iph1->gssapi_state = NULL;
 #endif
 #ifdef ENABLE_HYBRID
-	if ((iph1->mode_cfg = isakmp_cfg_mkstate()) == NULL)
+	if ((iph1->mode_cfg = isakmp_cfg_mkstate()) == NULL) {
+		remph1(iph1);
+		delph1(iph1);
 		return -1;
+	}
 #endif
 #ifdef ENABLE_FRAG
 	iph1->frag = 0;
@@ -1100,16 +1193,20 @@ isakmp_ph1begin_r(msg, remote, local, etype)
 #endif
 
 	/* copy remote address */
-	if (copy_ph1addresses(iph1, rmconf, remote, local) < 0)
+	if (copy_ph1addresses(iph1, rmconf, remote, local) < 0) {
+		remph1(iph1);
+		delph1(iph1);
 		return -1;
-
+	}
 	(void)insph1(iph1);
 
 	plog(LLV_DEBUG, LOCATION, NULL, "===\n");
     {
 	char *a;
 
-	a = strdup(saddr2str(iph1->local));
+	a = racoon_strdup(saddr2str(iph1->local));
+	STRDUP_FATAL(a);
+
 	plog(LLV_INFO, LOCATION, NULL,
 		"respond new phase 1 negotiation: %s<=>%s\n",
 		a, saddr2str(iph1->remote));
@@ -1122,6 +1219,9 @@ isakmp_ph1begin_r(msg, remote, local, etype)
 	gettimeofday(&iph1->start, NULL);
 	gettimeofday(&start, NULL);
 #endif
+
+#ifndef ENABLE_FRAG
+
 	/* start exchange */
 	if ((ph1exchange[etypesw1(iph1->etype)]
 	                [iph1->side]
@@ -1135,6 +1235,7 @@ isakmp_ph1begin_r(msg, remote, local, etype)
 		delph1(iph1);
 		return -1;
 	}
+
 #ifdef ENABLE_STATS
 	gettimeofday(&end, NULL);
 	syslog(LOG_NOTICE, "%s(%s): %8.6f",
@@ -1144,6 +1245,17 @@ isakmp_ph1begin_r(msg, remote, local, etype)
 #endif
 
 	return 0;
+
+#else /* ENABLE_FRAG */
+
+	/* now that we have a phase1 handle, feed back into our
+	 * main receive function to catch fragmented packets
+	 */
+
+	return isakmp_main(msg, remote, local);
+
+#endif /* ENABLE_FRAG */
+
 }
 
 /* new negotiation of phase 2 for initiator */
@@ -1165,7 +1277,9 @@ isakmp_ph2begin_i(iph1, iph2)
 	plog(LLV_DEBUG, LOCATION, NULL, "begin QUICK mode.\n");
     {
 	char *a;
-	a = strdup(saddr2str(iph2->src));
+	a = racoon_strdup(saddr2str(iph2->src));
+	STRDUP_FATAL(a);
+
 	plog(LLV_INFO, LOCATION, NULL,
 		"initiate new phase 2 negotiation: %s<=>%s\n",
 		a, saddr2str(iph2->dst));
@@ -1235,13 +1349,13 @@ isakmp_ph2begin_r(iph1, msg)
 	}
 	switch (iph2->dst->sa_family) {
 	case AF_INET:
-#ifndef ENABLE_NATT
+#if (!defined(ENABLE_NATT)) || (defined(BROKEN_NATT))
 		((struct sockaddr_in *)iph2->dst)->sin_port = 0;
 #endif
 		break;
 #ifdef INET6
 	case AF_INET6:
-#ifndef ENABLE_NATT
+#if (!defined(ENABLE_NATT)) || (defined(BROKEN_NATT))
 		((struct sockaddr_in6 *)iph2->dst)->sin6_port = 0;
 #endif
 		break;
@@ -1260,13 +1374,13 @@ isakmp_ph2begin_r(iph1, msg)
 	}
 	switch (iph2->src->sa_family) {
 	case AF_INET:
-#ifndef ENABLE_NATT
+#if (!defined(ENABLE_NATT)) || (defined(BROKEN_NATT))
 		((struct sockaddr_in *)iph2->src)->sin_port = 0;
 #endif
 		break;
 #ifdef INET6
 	case AF_INET6:
-#ifndef ENABLE_NATT
+#if (!defined(ENABLE_NATT)) || (defined(BROKEN_NATT))
 		((struct sockaddr_in6 *)iph2->src)->sin6_port = 0;
 #endif
 		break;
@@ -1286,7 +1400,9 @@ isakmp_ph2begin_r(iph1, msg)
     {
 	char *a;
 
-	a = strdup(saddr2str(iph2->src));
+	a = racoon_strdup(saddr2str(iph2->src));
+	STRDUP_FATAL(a);
+
 	plog(LLV_INFO, LOCATION, NULL,
 		"respond new phase 2 negotiation: %s<=>%s\n",
 		a, saddr2str(iph2->dst));
@@ -1554,6 +1670,10 @@ isakmp_open()
 			goto err_and_next;
 		}
 
+		if (fcntl(p->sock, F_SETFL, O_NONBLOCK) == -1)
+			plog(LLV_WARNING, LOCATION, NULL,
+				"failed to put socket in non-blocking mode\n");
+
 		/* receive my interface address on inbound packets. */
 		switch (p->addr->sa_family) {
 		case AF_INET:
@@ -1565,7 +1685,8 @@ isakmp_open()
 #endif
 					(const void *)&yes, sizeof(yes)) < 0) {
 				plog(LLV_ERROR, LOCATION, NULL,
-					"setsockopt (%s)\n", strerror(errno));
+					"setsockopt IP_RECVDSTADDR (%s)\n", 
+					strerror(errno));
 				goto err_and_next;
 			}
 			break;
@@ -1584,12 +1705,8 @@ isakmp_open()
 					(const void *)&yes, sizeof(yes)) < 0)
 			{
 				plog(LLV_ERROR, LOCATION, NULL,
-					"setsockopt(%d): %s\n",
+					"setsockopt IPV6_RECVDSTADDR (%d):%s\n",
 					pktinfo, strerror(errno));
-		if (fcntl(p->sock, F_SETFL, O_NONBLOCK) == -1)
-			plog(LLV_WARNING, LOCATION, NULL,
-				"failed to put socket in non-blocking mode\n");
-
 				goto err_and_next;
 			}
 			break;
@@ -1601,7 +1718,8 @@ isakmp_open()
 		    setsockopt(p->sock, IPPROTO_IPV6, IPV6_USE_MIN_MTU,
 		    (void *)&yes, sizeof(yes)) < 0) {
 			plog(LLV_ERROR, LOCATION, NULL,
-			    "setsockopt (%s)\n", strerror(errno));
+			    "setsockopt IPV6_USE_MIN_MTU (%s)\n", 
+			    strerror(errno));
 			return -1;
 		}
 #endif
@@ -1635,11 +1753,11 @@ isakmp_open()
 				option = UDP_ENCAP_ESPINUDP_NON_IKE;
 #endif
 			if(option != -1){
-				if (setsockopt (p->sock, SOL_UDP, UDP_ENCAP,
-								&option, sizeof (option)) < 0) {
+				if (setsockopt (p->sock, SOL_UDP, 
+				    UDP_ENCAP, &option, sizeof (option)) < 0) {
 					plog(LLV_WARNING, LOCATION, NULL,
-						 "setsockopt(%s): %s\n",
-						 option == UDP_ENCAP_ESPINUDP ? "UDP_ENCAP_ESPINUDP" : "UDP_ENCAP_ESPINUDP_NON_IKE",
+					    "setsockopt(%s): UDP_ENCAP %s\n",
+					    option == UDP_ENCAP_ESPINUDP ? "UDP_ENCAP_ESPINUDP" : "UDP_ENCAP_ESPINUDP_NON_IKE",
 						 strerror(errno));
 					goto skip_encap;
 				}
@@ -1729,7 +1847,11 @@ isakmp_send(iph1, sbuf)
 	   must added just before the packet itself. For this we must 
 	   allocate a new buffer and release it at the end. */
 	if (extralen) {
-		vbuf = vmalloc (sbuf->l + extralen);
+		if ((vbuf = vmalloc (sbuf->l + extralen)) == NULL) {
+			plog(LLV_ERROR, LOCATION, NULL, 
+			    "vbuf allocation failed\n");
+			return -1;
+		}
 		*(u_int32_t *)vbuf->v = 0;
 		memcpy (vbuf->v + extralen, sbuf->v, sbuf->l);
 		sbuf = vbuf;
@@ -1761,6 +1883,7 @@ isakmp_send(iph1, sbuf)
 	{
 		len = sendfromto(s, sbuf->v, sbuf->l,
 		    iph1->local, iph1->remote, lcconf->count_persend);
+
 		if (len == -1) {
 			plog(LLV_ERROR, LOCATION, NULL, "sendfromto failed\n");
 			if ( vbuf != NULL )
@@ -1780,27 +1903,46 @@ void
 isakmp_ph1resend_stub(p)
 	void *p;
 {
-	(void)isakmp_ph1resend((struct ph1handle *)p);
+	struct ph1handle *iph1;
+
+	iph1=(struct ph1handle *)p;
+	if(isakmp_ph1resend(iph1) < 0){
+		if(iph1->scr != NULL){
+			/* Should not happen...
+			 */
+			sched_kill(iph1->scr);
+			iph1->scr=NULL;
+		}
+
+		remph1(iph1);
+		delph1(iph1);
+	}
 }
 
 int
 isakmp_ph1resend(iph1)
 	struct ph1handle *iph1;
 {
-	if (iph1->retry_counter < 0) {
+	/* Note: NEVER do the rem/del here, it will be done by the caller or by the _stub function
+	 */
+	if (iph1->retry_counter <= 0) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"phase1 negotiation failed due to time up. %s\n",
 			isakmp_pindex(&iph1->index, iph1->msgid));
 		EVT_PUSH(iph1->local, iph1->remote, 
 		    EVTT_PEER_NO_RESPONSE, NULL);
 
-		remph1(iph1);
-		delph1(iph1);
 		return -1;
 	}
 
-	if (isakmp_send(iph1, iph1->sendbuf) < 0)
+	if (isakmp_send(iph1, iph1->sendbuf) < 0){
+		plog(LLV_ERROR, LOCATION, NULL,
+			 "phase1 negotiation failed due to send error. %s\n",
+			 isakmp_pindex(&iph1->index, iph1->msgid));
+		EVT_PUSH(iph1->local, iph1->remote, 
+				 EVTT_PEER_NO_RESPONSE, NULL);
 		return -1;
+	}
 
 	plog(LLV_DEBUG, LOCATION, NULL,
 		"resend phase1 packet %s\n",
@@ -1819,27 +1961,47 @@ void
 isakmp_ph2resend_stub(p)
 	void *p;
 {
+	struct ph2handle *iph2;
 
-	(void)isakmp_ph2resend((struct ph2handle *)p);
+	iph2=(struct ph2handle *)p;
+
+	if(isakmp_ph2resend(iph2) < 0){
+		unbindph12(iph2);
+		remph2(iph2);
+		delph2(iph2);
+	}
 }
 
 int
 isakmp_ph2resend(iph2)
 	struct ph2handle *iph2;
 {
-	if (iph2->retry_counter < 0) {
+	/* Note: NEVER do the unbind/rem/del here, it will be done by the caller or by the _stub function
+	 */
+	if (iph2->ph1->status == PHASE1ST_EXPIRED){
+		plog(LLV_ERROR, LOCATION, NULL,
+			"phase2 negotiation failed due to phase1 expired. %s\n",
+				isakmp_pindex(&iph2->ph1->index, iph2->msgid));
+		return -1;
+	}
+
+	if (iph2->retry_counter <= 0) {
 		plog(LLV_ERROR, LOCATION, NULL,
 			"phase2 negotiation failed due to time up. %s\n",
 				isakmp_pindex(&iph2->ph1->index, iph2->msgid));
 		EVT_PUSH(iph2->src, iph2->dst, EVTT_PEER_NO_RESPONSE, NULL);
 		unbindph12(iph2);
-		remph2(iph2);
-		delph2(iph2);
 		return -1;
 	}
 
-	if (isakmp_send(iph2->ph1, iph2->sendbuf) < 0)
+	if (isakmp_send(iph2->ph1, iph2->sendbuf) < 0){
+		plog(LLV_ERROR, LOCATION, NULL,
+			"phase2 negotiation failed due to send error. %s\n",
+				isakmp_pindex(&iph2->ph1->index, iph2->msgid));
+		EVT_PUSH(iph2->src, iph2->dst, EVTT_PEER_NO_RESPONSE, NULL);
+
 		return -1;
+	}
 
 	plog(LLV_DEBUG, LOCATION, NULL,
 		"resend phase2 packet %s\n",
@@ -1871,8 +2033,11 @@ isakmp_ph1expire(iph1)
 	SCHED_KILL(iph1->sce);
 
 	if(iph1->status != PHASE1ST_EXPIRED){
-		src = strdup(saddr2str(iph1->local));
-		dst = strdup(saddr2str(iph1->remote));
+		src = racoon_strdup(saddr2str(iph1->local));
+		dst = racoon_strdup(saddr2str(iph1->remote));
+		STRDUP_FATAL(src);
+		STRDUP_FATAL(dst);
+
 		plog(LLV_INFO, LOCATION, NULL,
 			 "ISAKMP-SA expired %s-%s spi:%s\n",
 			 src, dst,
@@ -1917,8 +2082,11 @@ isakmp_ph1delete(iph1)
 
 	/* don't re-negosiation when the phase 1 SA expires. */
 
-	src = strdup(saddr2str(iph1->local));
-	dst = strdup(saddr2str(iph1->remote));
+	src = racoon_strdup(saddr2str(iph1->local));
+	dst = racoon_strdup(saddr2str(iph1->remote));
+	STRDUP_FATAL(src);
+	STRDUP_FATAL(dst);
+
 	plog(LLV_INFO, LOCATION, NULL,
 		"ISAKMP-SA deleted %s-%s spi:%s\n",
 		src, dst, isakmp_pindex(&iph1->index, 0));
@@ -1954,8 +2122,11 @@ isakmp_ph2expire(iph2)
 
 	SCHED_KILL(iph2->sce);
 
-	src = strdup(saddrwop2str(iph2->src));
-	dst = strdup(saddrwop2str(iph2->dst));
+	src = racoon_strdup(saddrwop2str(iph2->src));
+	dst = racoon_strdup(saddrwop2str(iph2->dst));
+	STRDUP_FATAL(src);
+	STRDUP_FATAL(dst);
+
 	plog(LLV_INFO, LOCATION, NULL,
 		"phase2 sa expired %s-%s\n", src, dst);
 	racoon_free(src);
@@ -1985,8 +2156,11 @@ isakmp_ph2delete(iph2)
 
 	SCHED_KILL(iph2->sce);
 
-	src = strdup(saddrwop2str(iph2->src));
-	dst = strdup(saddrwop2str(iph2->dst));
+	src = racoon_strdup(saddrwop2str(iph2->src));
+	dst = racoon_strdup(saddrwop2str(iph2->dst));
+	STRDUP_FATAL(src);
+	STRDUP_FATAL(dst);
+
 	plog(LLV_INFO, LOCATION, NULL,
 		"phase2 sa deleted %s-%s\n", src, dst);
 	racoon_free(src);
@@ -2012,6 +2186,8 @@ isakmp_post_acquire(iph2)
 {
 	struct remoteconf *rmconf;
 	struct ph1handle *iph1 = NULL;
+	
+	plog(LLV_DEBUG, LOCATION, NULL, "in post_acquire\n");
 
 	/* search appropreate configuration with masking port. */
 	rmconf = getrmconf(iph2->dst);
@@ -2172,12 +2348,15 @@ isakmp_chkph1there(iph2)
 	 */
 #ifdef ENABLE_NATT
 	if (!extract_port(iph2->src) && !extract_port(iph2->dst)) {
-		if ((iph1 = getph1byaddrwop(iph2->src, iph2->dst)) != NULL) {
-			set_port(iph2->src, extract_port(iph1->local));
-			set_port(iph2->dst, extract_port(iph1->remote));
+		plog(LLV_DEBUG2, LOCATION, NULL, "CHKPH1THERE: extract_port.\n");
+		if( (iph1 = getph1byaddrwop(iph2->src, iph2->dst)) != NULL){
+			plog(LLV_DEBUG2, LOCATION, NULL, "CHKPH1THERE: found a ph1 wop.\n");
 		}
 	} else {
+		plog(LLV_DEBUG2, LOCATION, NULL, "CHKPH1THERE: searching byaddr.\n");
 		iph1 = getph1byaddr(iph2->src, iph2->dst);
+		if(iph1 != NULL)
+			plog(LLV_DEBUG2, LOCATION, NULL, "CHKPH1THERE: found byaddr.\n");
 	}
 #else
 	iph1 = getph1byaddr(iph2->src, iph2->dst);
@@ -2188,10 +2367,25 @@ isakmp_chkph1there(iph2)
 	if (iph1 != NULL
 	 && iph1->status == PHASE1ST_ESTABLISHED) {
 		/* found isakmp-sa */
+
+		plog(LLV_DEBUG2, LOCATION, NULL, "CHKPH1THERE: got a ph1 handler, setting ports.\n");
+		plog(LLV_DEBUG2, LOCATION, NULL, "iph1->local: %s\n", saddr2str(iph1->local));
+		plog(LLV_DEBUG2, LOCATION, NULL, "iph1->remote: %s\n", saddr2str(iph1->remote));
+		plog(LLV_DEBUG2, LOCATION, NULL, "before:\n");
+		plog(LLV_DEBUG2, LOCATION, NULL, "src: %s\n", saddr2str(iph2->src));
+		plog(LLV_DEBUG2, LOCATION, NULL, "dst: %s\n", saddr2str(iph2->dst));
+		set_port(iph2->src, extract_port(iph1->local));
+		set_port(iph2->dst, extract_port(iph1->remote));
+		plog(LLV_DEBUG2, LOCATION, NULL, "After:\n");
+		plog(LLV_DEBUG2, LOCATION, NULL, "src: %s\n", saddr2str(iph2->src));
+		plog(LLV_DEBUG2, LOCATION, NULL, "dst: %s\n", saddr2str(iph2->dst));
+
 		/* begin quick mode */
 		(void)isakmp_ph2begin_i(iph1, iph2);
 		return;
 	}
+
+	plog(LLV_DEBUG2, LOCATION, NULL, "CHKPH1THERE: no established ph1 handler found\n");
 
 	/* no isakmp-sa found */
 	sched_new(1, isakmp_chkph1there_stub, iph2);
@@ -2759,7 +2953,7 @@ copy_ph1addresses(iph1, rmconf, remote, local)
 		port = &((struct sockaddr_in *)iph1->local)->sin_port;
 		if (*port)
 			break;
-		*port = ((struct sockaddr_in *)local)->sin_port;
+		*port = ((struct sockaddr_in *)iph1->local)->sin_port;
 		if (*port)
 			break;
 		*port = getmyaddrsport(iph1->local);
@@ -2769,7 +2963,7 @@ copy_ph1addresses(iph1, rmconf, remote, local)
 		port = &((struct sockaddr_in6 *)iph1->local)->sin6_port;
 		if (*port)
 			break;
-		*port = ((struct sockaddr_in6 *)local)->sin6_port;
+		*port = ((struct sockaddr_in6 *)iph1->local)->sin6_port;
 		if (*port)
 			break;
 		*port = getmyaddrsport(iph1->local);
@@ -2817,13 +3011,20 @@ log_ph1established(iph1)
 {
 	char *src, *dst;
 
-	src = strdup(saddr2str(iph1->local));
-	dst = strdup(saddr2str(iph1->remote));
+	src = racoon_strdup(saddr2str(iph1->local));
+	dst = racoon_strdup(saddr2str(iph1->remote));
+	STRDUP_FATAL(src);
+	STRDUP_FATAL(dst);
+
 	plog(LLV_INFO, LOCATION, NULL,
 		"ISAKMP-SA established %s-%s spi:%s\n",
 		src, dst,
 		isakmp_pindex(&iph1->index, 0));
+	
 	EVT_PUSH(iph1->local, iph1->remote, EVTT_PHASE1_UP, NULL);
+	if(!iph1->rmconf->mode_cfg)
+		EVT_PUSH(iph1->local, iph1->remote, EVTT_NO_ISAKMP_CFG, NULL);
+
 	racoon_free(src);
 	racoon_free(dst);
 
@@ -2853,21 +3054,13 @@ isakmp_plist_append (struct payload_list *plist, vchar_t *payload, int payload_t
 vchar_t * 
 isakmp_plist_set_all (struct payload_list **plist, struct ph1handle *iph1)
 {
-	struct payload_list *ptr, *first;
+	struct payload_list *ptr = *plist, *first;
 	size_t tlen = sizeof (struct isakmp), n = 0;
-	vchar_t *buf;
+	vchar_t *buf = NULL;
 	char *p;
 
-	if (plist == NULL) {
-		plog(LLV_ERROR, LOCATION, NULL, 
-		    "in isakmp_plist_set_all: plist == NULL\n");
-		return NULL;
-	}
-
 	/* Seek to the first item.  */
-	ptr = *plist;
-	while (ptr->prev)
-		ptr = ptr->prev;
+	while (ptr->prev) ptr = ptr->prev;
 	first = ptr;
 	
 	/* Compute the whole length.  */
@@ -2903,6 +3096,8 @@ isakmp_plist_set_all (struct payload_list **plist, struct ph1handle *iph1)
 
 	return buf;
 end:
+	if (buf != NULL)
+		vfree(buf);
 	return NULL;
 }
 
@@ -2943,7 +3138,9 @@ script_hook(iph1, script)
 	struct sockaddr_in *sin;
 	char **c;
 
-	if (iph1->rmconf->script[script] == -1)
+	if (iph1 == NULL ||
+		iph1->rmconf == NULL ||
+		iph1->rmconf->script[script] == NULL)
 		return;
 
 #ifdef ENABLE_HYBRID
@@ -2966,21 +3163,27 @@ script_hook(iph1, script)
 	}
 
 	/* Peer address */
-	sin = (struct sockaddr_in *)iph1->remote;
-	inet_ntop(sin->sin_family, &sin->sin_addr, addrstr, IP_MAX);
-	snprintf(portstr, PORT_MAX, "%d", ntohs(sin->sin_port));
+	if (iph1->remote != NULL) {
+		sin = (struct sockaddr_in *)iph1->remote;
+		inet_ntop(sin->sin_family, &sin->sin_addr, addrstr, IP_MAX);
+		snprintf(portstr, PORT_MAX, "%d", ntohs(sin->sin_port));
 
-	if (script_env_append(&envp, &envc, "REMOTE_ADDR", addrstr) != 0) {
-		plog(LLV_ERROR, LOCATION, NULL, "Cannot set REMOTE_ADDR\n");
-		goto out;
+		if (script_env_append(&envp, &envc, 
+		    "REMOTE_ADDR", addrstr) != 0) {
+			plog(LLV_ERROR, LOCATION, NULL, 
+			    "Cannot set REMOTE_ADDR\n");
+			goto out;
+		}
+
+		if (script_env_append(&envp, &envc, 
+		    "REMOTE_PORT", portstr) != 0) {
+			plog(LLV_ERROR, LOCATION, NULL, 
+			    "Cannot set REMOTEL_PORT\n");
+			goto out;
+		}
 	}
 
-	if (script_env_append(&envp, &envc, "REMOTE_PORT", portstr) != 0) {
-		plog(LLV_ERROR, LOCATION, NULL, "Cannot set REMOTEL_PORT\n");
-		goto out;
-	}
-
-	if (privsep_script_exec(iph1->rmconf->script[script], 
+	if (privsep_script_exec(iph1->rmconf->script[script]->v, 
 	    script, envp) != 0) 
 		plog(LLV_ERROR, LOCATION, NULL, 
 		    "Script %s execution failed\n", script_names[script]);
@@ -3018,6 +3221,7 @@ script_env_append(envp, envc, name, value)
 	if (newenvp == NULL) {
 		plog(LLV_ERROR, LOCATION, NULL,
 		    "Cannot allocate memory: %s\n", strerror(errno));
+		racoon_free(envitem);
 		return -1;
 	}
 
@@ -3031,22 +3235,13 @@ script_env_append(envp, envc, name, value)
 
 int
 script_exec(script, name, envp)
-	int script;
+	char *script;
 	int name;
 	char *const envp[];
 {
 	char *argv[] = { NULL, NULL, NULL };
-	vchar_t **sp;
 
-	if (script_paths == NULL) {
-		plog(LLV_ERROR, LOCATION, NULL,
-		    "privsep_script_exec: script_paths was not initialized\n");
-		return -1;
-	}
-
-	sp = (vchar_t **)(script_paths->v);
-
-	argv[0] = sp[script]->v;
+	argv[0] = script;
 	argv[1] = script_names[name];
 	argv[2] = NULL;
 
@@ -3066,8 +3261,8 @@ script_exec(script, name, envp)
 	default:
 		break;
 	}	
-
 	return 0;
+
 }
 
 void
@@ -3140,7 +3335,11 @@ purge_remote(iph1)
 			continue;
 		}
 
-		/* check in/outbound SAs */
+		/*
+		 * check in/outbound SAs.
+		 * Select only SAs where src == local and dst == remote (outgoing)
+		 * or src == remote and dst == local (incoming).
+		 */
 		if ((CMPSADDR(iph1->local, src) || CMPSADDR(iph1->remote, dst)) &&
 			(CMPSADDR(iph1->local, dst) || CMPSADDR(iph1->remote, src))) {
 			msg = next;
@@ -3191,7 +3390,7 @@ purge_remote(iph1)
 
 		/* delete a relative phase 2 handle. */
 		if (iph2 != NULL) {
-			delete_spd(iph2);
+			delete_spd(iph2, 0);
 			unbindph12(iph2);
 			remph2(iph2);
 			delph2(iph2);
@@ -3212,245 +3411,277 @@ purge_remote(iph1)
 		 "purged ISAKMP-SA spi=%s.\n",
 		 isakmp_pindex(&(iph1->index), iph1->msgid));
 
-	if (iph1->sce)
-		SCHED_KILL(iph1->sce);
+	SCHED_KILL(iph1->sce);
 
 	iph1->sce = sched_new(1, isakmp_ph1delete_stub, iph1);
 }
 
 void 
-delete_spd(iph2)
+delete_spd(iph2, created)
 	struct ph2handle *iph2;
+ 	u_int64_t created;
 {
+	struct policyindex spidx;
+	struct sockaddr_storage addr;
+	u_int8_t pref;
+	struct sockaddr *src;
+	struct sockaddr *dst;
+	int error;
+	int idi2type = 0;/* switch whether copy IDs into id[src,dst]. */
+
 	if (iph2 == NULL)
 		return;
 
 	/* Delete the SPD entry if we generated it
 	 */
-	if (iph2->generated_spidx) {
-		struct policyindex spidx;
-		struct sockaddr_storage addr;
-		u_int8_t pref;
-		struct sockaddr *src = iph2->src;
-		struct sockaddr *dst = iph2->dst;
-		int error;
-		int idi2type = 0;/* switch whether copy IDs into id[src,dst]. */
+	if (! iph2->generated_spidx )
+		return;
 
-		plog(LLV_INFO, LOCATION, NULL,
-			 "generated policy, deleting it.\n");
+	src = iph2->src;
+	dst = iph2->dst;
+
+	plog(LLV_INFO, LOCATION, NULL,
+		 "generated policy, deleting it.\n");
 		
-		memset(&spidx, 0, sizeof(spidx));
-		iph2->spidx_gen = (caddr_t )&spidx;
+	memset(&spidx, 0, sizeof(spidx));
+	iph2->spidx_gen = (caddr_t )&spidx;
 		
-		/* make inbound policy */
-		iph2->src = dst;
-		iph2->dst = src;
-		spidx.dir = IPSEC_DIR_INBOUND;
-		spidx.ul_proto = 0;
+	/* make inbound policy */
+	iph2->src = dst;
+	iph2->dst = src;
+	spidx.dir = IPSEC_DIR_INBOUND;
+	spidx.ul_proto = 0;
 		
-		/* 
-		 * Note: code from get_proposal_r
-		 */
+	/* 
+	 * Note: code from get_proposal_r
+	 */
 		
 #define _XIDT(d) ((struct ipsecdoi_id_b *)(d)->v)->type
 		
-		/*
-		 * make destination address in spidx from either ID payload
-		 * or phase 1 address into a address in spidx.
-		 */
-		if (iph2->id != NULL
-			&& (_XIDT(iph2->id) == IPSECDOI_ID_IPV4_ADDR
+	/*
+	 * make destination address in spidx from either ID payload
+	 * or phase 1 address into a address in spidx.
+	 */
+	if (iph2->id != NULL
+		&& (_XIDT(iph2->id) == IPSECDOI_ID_IPV4_ADDR
 			|| _XIDT(iph2->id) == IPSECDOI_ID_IPV6_ADDR
 			|| _XIDT(iph2->id) == IPSECDOI_ID_IPV4_ADDR_SUBNET
 			|| _XIDT(iph2->id) == IPSECDOI_ID_IPV6_ADDR_SUBNET)) {
-			/* get a destination address of a policy */
-			error = ipsecdoi_id2sockaddr(iph2->id,
-			    (struct sockaddr *)&spidx.dst,
-			    &spidx.prefd, &spidx.ul_proto);
-			if (error)
+		/* get a destination address of a policy */
+		error = ipsecdoi_id2sockaddr(iph2->id,
+									 (struct sockaddr *)&spidx.dst,
+									 &spidx.prefd, &spidx.ul_proto);
+		if (error)
+			goto purge;
+			
+#ifdef INET6
+		/*
+		 * get scopeid from the SA address.
+		 * note that the phase 1 source address is used as
+		 * a destination address to search for a inbound 
+		 * policy entry because rcoon is responder.
+		 */
+		if (_XIDT(iph2->id) == IPSECDOI_ID_IPV6_ADDR) {
+			if ((error = 
+				 setscopeid((struct sockaddr *)&spidx.dst,
+							iph2->src)) != 0)
 				goto purge;
-			
-#ifdef INET6
-			/*
-			 * get scopeid from the SA address.
-			 * note that the phase 1 source address is used as
-			 * a destination address to search for a inbound 
-			 * policy entry because rcoon is responder.
-			 */
-			if (_XIDT(iph2->id) == IPSECDOI_ID_IPV6_ADDR) {
-				if ((error = 
-				    setscopeid((struct sockaddr *)&spidx.dst,
-				   iph2->src)) != 0)
-					goto purge;
-			}
-#endif
-			
-			if (_XIDT(iph2->id) == IPSECDOI_ID_IPV4_ADDR
-				|| _XIDT(iph2->id) == IPSECDOI_ID_IPV6_ADDR)
-				idi2type = _XIDT(iph2->id);
-			
-		} else {
-			
-			plog(LLV_DEBUG, LOCATION, NULL,
-				 "get a destination address of SP index "
-				 "from phase1 address "
-				 "due to no ID payloads found "
-				 "OR because ID type is not address.\n");
-			
-			/*
-			 * copy the SOURCE address of IKE into the 
-			 * DESTINATION address of the key to search the 
-			 * SPD because the direction of policy is inbound.
-			 */
-			memcpy(&spidx.dst, iph2->src, sysdep_sa_len(iph2->src));
-			switch (spidx.dst.ss_family) {
-				case AF_INET:
-					spidx.prefd = 
-					    sizeof(struct in_addr) << 3;
-					break;
-#ifdef INET6
-				case AF_INET6:
-					spidx.prefd = 
-					    sizeof(struct in6_addr) << 3;
-					break;
-#endif
-				default:
-					spidx.prefd = 0;
-					break;
-			}
 		}
+#endif
+			
+		if (_XIDT(iph2->id) == IPSECDOI_ID_IPV4_ADDR
+			|| _XIDT(iph2->id) == IPSECDOI_ID_IPV6_ADDR)
+			idi2type = _XIDT(iph2->id);
+			
+	} else {
+			
+		plog(LLV_DEBUG, LOCATION, NULL,
+			 "get a destination address of SP index "
+			 "from phase1 address "
+			 "due to no ID payloads found "
+			 "OR because ID type is not address.\n");
+			
+		/*
+		 * copy the SOURCE address of IKE into the 
+		 * DESTINATION address of the key to search the 
+		 * SPD because the direction of policy is inbound.
+		 */
+		memcpy(&spidx.dst, iph2->src, sysdep_sa_len(iph2->src));
+		switch (spidx.dst.ss_family) {
+		case AF_INET:
+			spidx.prefd = 
+				sizeof(struct in_addr) << 3;
+			break;
+#ifdef INET6
+		case AF_INET6:
+			spidx.prefd = 
+				sizeof(struct in6_addr) << 3;
+			break;
+#endif
+		default:
+			spidx.prefd = 0;
+			break;
+		}
+	}
 					
-		/* make source address in spidx */
-		if (iph2->id_p != NULL
-			&& (_XIDT(iph2->id_p) == IPSECDOI_ID_IPV4_ADDR
+	/* make source address in spidx */
+	if (iph2->id_p != NULL
+		&& (_XIDT(iph2->id_p) == IPSECDOI_ID_IPV4_ADDR
 			|| _XIDT(iph2->id_p) == IPSECDOI_ID_IPV6_ADDR
 			|| _XIDT(iph2->id_p) == IPSECDOI_ID_IPV4_ADDR_SUBNET
 			|| _XIDT(iph2->id_p) == IPSECDOI_ID_IPV6_ADDR_SUBNET)) {
-			/* get a source address of inbound SA */
-			error = ipsecdoi_id2sockaddr(iph2->id_p,
-			    (struct sockaddr *)&spidx.src,
-			    &spidx.prefs, &spidx.ul_proto);
+		/* get a source address of inbound SA */
+		error = ipsecdoi_id2sockaddr(iph2->id_p,
+									 (struct sockaddr *)&spidx.src,
+									 &spidx.prefs, &spidx.ul_proto);
+		if (error)
+			goto purge;
+
+#ifdef INET6
+		/*
+		 * get scopeid from the SA address.
+		 * for more detail, see above of this function.
+		 */
+		if (_XIDT(iph2->id_p) == IPSECDOI_ID_IPV6_ADDR) {
+			error = 
+				setscopeid((struct sockaddr *)&spidx.src,
+						   iph2->dst);
 			if (error)
 				goto purge;
+		}
+#endif
 
+		/* make id[src,dst] if both ID types are IP address and same */
+		if (_XIDT(iph2->id_p) == idi2type
+			&& spidx.dst.ss_family == spidx.src.ss_family) {
+			iph2->src_id = 
+				dupsaddr((struct sockaddr *)&spidx.dst);
+			if (iph2->src_id == NULL) {
+				plog(LLV_ERROR, LOCATION, NULL,
+					 "allocation failed\n");
+				goto purge;
+			}
+			iph2->dst_id = 
+				dupsaddr((struct sockaddr *)&spidx.src);
+			if (iph2->dst_id == NULL) {
+				plog(LLV_ERROR, LOCATION, NULL,
+					 "allocation failed\n");
+				goto purge;
+			}
+		}
+
+	} else {
+		plog(LLV_DEBUG, LOCATION, NULL,
+			 "get a source address of SP index "
+			 "from phase1 address "
+			 "due to no ID payloads found "
+			 "OR because ID type is not address.\n");
+
+		/* see above comment. */
+		memcpy(&spidx.src, iph2->dst, sysdep_sa_len(iph2->dst));
+		switch (spidx.src.ss_family) {
+		case AF_INET:
+			spidx.prefs = 
+				sizeof(struct in_addr) << 3;
+			break;
 #ifdef INET6
-			/*
-			 * get scopeid from the SA address.
-			 * for more detail, see above of this function.
+		case AF_INET6:
+			spidx.prefs = 
+				sizeof(struct in6_addr) << 3;
+			break;
+#endif
+		default:
+			spidx.prefs = 0;
+			break;
+		}
+	}
+
+#undef _XIDT
+
+	plog(LLV_DEBUG, LOCATION, NULL,
+		 "get a src address from ID payload "
+		 "%s prefixlen=%u ul_proto=%u\n",
+		 saddr2str((struct sockaddr *)&spidx.src),
+		 spidx.prefs, spidx.ul_proto);
+	plog(LLV_DEBUG, LOCATION, NULL,
+		 "get dst address from ID payload "
+		 "%s prefixlen=%u ul_proto=%u\n",
+		 saddr2str((struct sockaddr *)&spidx.dst),
+		 spidx.prefd, spidx.ul_proto);
+
+	/*
+	 * convert the ul_proto if it is 0
+	 * because 0 in ID payload means a wild card.
+	 */
+	if (spidx.ul_proto == 0)
+		spidx.ul_proto = IPSEC_ULPROTO_ANY;
+
+#undef _XIDT
+
+	/* Check if the generated SPD has the same timestamp as the SA.
+	 * If timestamps are different, this means that the SPD entry has been
+	 * refreshed by another SA, and should NOT be deleted with the current SA.
+	 */
+	if( created ){
+		struct secpolicy *p;
+		
+		p = getsp(&spidx);
+		if(p != NULL){
+			/* just do no test if p is NULL, because this probably just means
+			 * that the policy has already be deleted for some reason.
 			 */
-			if (_XIDT(iph2->id_p) == IPSECDOI_ID_IPV6_ADDR) {
-				error = 
-				    setscopeid((struct sockaddr *)&spidx.src,
-				    iph2->dst);
-				if (error)
-					goto purge;
-			}
-#endif
-
-			/* make id[src,dst] if both ID types are IP address and same */
-			if (_XIDT(iph2->id_p) == idi2type
-				&& spidx.dst.ss_family == spidx.src.ss_family) {
-				iph2->src_id = 
-				    dupsaddr((struct sockaddr *)&spidx.dst);
-				iph2->dst_id = 
-				    dupsaddr((struct sockaddr *)&spidx.src);
-			}
-
-		} else {
-			plog(LLV_DEBUG, LOCATION, NULL,
-				 "get a source address of SP index "
-				 "from phase1 address "
-				 "due to no ID payloads found "
-				 "OR because ID type is not address.\n");
-
-			/* see above comment. */
-			memcpy(&spidx.src, iph2->dst, sysdep_sa_len(iph2->dst));
-			switch (spidx.src.ss_family) {
-				case AF_INET:
-					spidx.prefs = 
-					    sizeof(struct in_addr) << 3;
-					break;
-#ifdef INET6
-				case AF_INET6:
-					spidx.prefs = 
-					    sizeof(struct in6_addr) << 3;
-					break;
-#endif
-				default:
-					spidx.prefs = 0;
-					break;
-			}
+			if(p->spidx.created != created)
+				goto purge;
 		}
+	}
 
-#undef _XIDT
+	/* End of code from get_proposal_r
+	 */
 
+	if (pk_sendspddelete(iph2) < 0) {
+		plog(LLV_ERROR, LOCATION, NULL,
+			 "pfkey spddelete(inbound) failed.\n");
+	}else{
 		plog(LLV_DEBUG, LOCATION, NULL,
-			 "get a src address from ID payload "
-			 "%s prefixlen=%u ul_proto=%u\n",
-			 saddr2str((struct sockaddr *)&spidx.src),
-			 spidx.prefs, spidx.ul_proto);
-		plog(LLV_DEBUG, LOCATION, NULL,
-			 "get dst address from ID payload "
-			 "%s prefixlen=%u ul_proto=%u\n",
-			 saddr2str((struct sockaddr *)&spidx.dst),
-			 spidx.prefd, spidx.ul_proto);
-
-		/*
-		 * convert the ul_proto if it is 0
-		 * because 0 in ID payload means a wild card.
-		 */
-		if (spidx.ul_proto == 0)
-			spidx.ul_proto = IPSEC_ULPROTO_ANY;
-
-#undef _XIDT
-
-		/* End of code from get_proposal_r
-		 */
-
-		if (pk_sendspddelete(iph2) < 0) {
-			plog(LLV_ERROR, LOCATION, NULL,
-				 "pfkey spddelete(inbound) failed.\n");
-		}else{
-			plog(LLV_DEBUG, LOCATION, NULL,
-				 "pfkey spddelete(inbound) sent.\n");
-		}
+			 "pfkey spddelete(inbound) sent.\n");
+	}
 
 #ifdef HAVE_POLICY_FWD
-		/* make forward policy if required */
-		if (tunnel_mode_prop(iph2->approval)) {
-			spidx.dir = IPSEC_DIR_FWD;
-			if (pk_sendspddelete(iph2) < 0) {
-				plog(LLV_ERROR, LOCATION, NULL,
-					 "pfkey spddelete(forward) failed.\n");
-			}else{
-				plog(LLV_DEBUG, LOCATION, NULL,
-					 "pfkey spddelete(forward) sent.\n");
-			}
-		}
-#endif
-
-		/* make outbound policy */
-		iph2->src = src;
-		iph2->dst = dst;
-		spidx.dir = IPSEC_DIR_OUTBOUND;
-		addr = spidx.src;
-		spidx.src = spidx.dst;
-		spidx.dst = addr;
-		pref = spidx.prefs;
-		spidx.prefs = spidx.prefd;
-		spidx.prefd = pref;
-
+	/* make forward policy if required */
+	if (tunnel_mode_prop(iph2->approval)) {
+		spidx.dir = IPSEC_DIR_FWD;
 		if (pk_sendspddelete(iph2) < 0) {
 			plog(LLV_ERROR, LOCATION, NULL,
-				 "pfkey spddelete(outbound) failed.\n");
+				 "pfkey spddelete(forward) failed.\n");
 		}else{
 			plog(LLV_DEBUG, LOCATION, NULL,
-				 "pfkey spddelete(outbound) sent.\n");
+				 "pfkey spddelete(forward) sent.\n");
 		}
-purge:
-		iph2->spidx_gen=NULL;
 	}
+#endif
+
+	/* make outbound policy */
+	iph2->src = src;
+	iph2->dst = dst;
+	spidx.dir = IPSEC_DIR_OUTBOUND;
+	addr = spidx.src;
+	spidx.src = spidx.dst;
+	spidx.dst = addr;
+	pref = spidx.prefs;
+	spidx.prefs = spidx.prefd;
+	spidx.prefd = pref;
+
+	if (pk_sendspddelete(iph2) < 0) {
+		plog(LLV_ERROR, LOCATION, NULL,
+			 "pfkey spddelete(outbound) failed.\n");
+	}else{
+		plog(LLV_DEBUG, LOCATION, NULL,
+			 "pfkey spddelete(outbound) sent.\n");
+	}
+purge:
+	iph2->spidx_gen=NULL;
 }
+
 
 #ifdef INET6
 u_int32_t

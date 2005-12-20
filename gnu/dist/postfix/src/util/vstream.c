@@ -1,4 +1,4 @@
-/*	$NetBSD: vstream.c,v 1.1.1.6 2005/08/18 21:10:49 rpaulo Exp $	*/
+/*	$NetBSD: vstream.c,v 1.1.1.8.2.1 2007/06/16 17:02:13 snj Exp $	*/
 
 /*++
 /* NAME
@@ -9,9 +9,9 @@
 /*	#include <vstream.h>
 /*
 /*	VSTREAM	*vstream_fopen(path, flags, mode)
-/*	char	*path;
+/*	const char *path;
 /*	int	flags;
-/*	int	mode;
+/*	mode_t	mode;
 /*
 /*	VSTREAM	*vstream_fdopen(fd, flags)
 /*	int	fd;
@@ -24,11 +24,11 @@
 /*	VSTREAM	*stream;
 /*
 /*	VSTREAM	*vstream_printf(format, ...)
-/*	char	*format;
+/*	const char *format;
 /*
 /*	VSTREAM	*vstream_fprintf(stream, format, ...)
 /*	VSTREAM	*stream;
-/*	char	*format;
+/*	const char *format;
 /*
 /*	int	VSTREAM_GETC(stream)
 /*	VSTREAM	*stream;
@@ -46,7 +46,7 @@
 /*	int	ch;
 /*
 /*	int	vstream_fputs(str, stream)
-/*	char	*str;
+/*	const char *str;
 /*	VSTREAM	*stream;
 /*
 /*	off_t	vstream_ftell(stream)
@@ -60,15 +60,19 @@
 /*	int	vstream_fflush(stream)
 /*	VSTREAM	*stream;
 /*
-/*	int	vstream_fread(stream, buf, len)
+/*	int	vstream_fpurge(stream, direction)
 /*	VSTREAM	*stream;
-/*	char	*buf;
-/*	int	len;
+/*	int     direction;
 /*
-/*	int	vstream_fwrite(stream, buf, len)
+/*	ssize_t	vstream_fread(stream, buf, len)
 /*	VSTREAM	*stream;
 /*	char	*buf;
-/*	int	len;
+/*	ssize_t	len;
+/*
+/*	ssize_t	vstream_fwrite(stream, buf, len)
+/*	VSTREAM	*stream;
+/*	const char *buf;
+/*	ssize_t	len;
 /*
 /*	void	vstream_control(stream, name, ...)
 /*	VSTREAM	*stream;
@@ -92,14 +96,14 @@
 /*	int	vstream_clearerr(stream)
 /*	VSTREAM	*stream;
 /*
-/*	char	*VSTREAM_PATH(stream)
+/*	const char *VSTREAM_PATH(stream)
 /*	VSTREAM	*stream;
 /*
 /*	char	*vstream_vfprintf(vp, format, ap)
-/*	char	*format;
+/*	const char *format;
 /*	va_list	*ap;
 /*
-/*	int	vstream_peek(stream)
+/*	ssize_t	vstream_peek(stream)
 /*	VSTREAM	*stream;
 /*
 /*	int	vstream_setjmp(stream)
@@ -110,6 +114,9 @@
 /*	int	val;
 /*
 /*	time_t	vstream_ftime(stream)
+/*	VSTREAM	*stream;
+/*
+/*	struct timeval vstream_ftimeval(stream)
 /*	VSTREAM	*stream;
 /* DESCRIPTION
 /*	The \fIvstream\fR module implements light-weight buffered I/O
@@ -156,6 +163,7 @@
 /*
 /*	vstream_fclose() closes the named buffered stream. The result
 /*	is 0 in case of success, VSTREAM_EOF in case of problems.
+/*	vstream_fclose() reports the same errors as vstream_ferror().
 /*
 /*	vstream_fdclose() leaves the file(s) open but is otherwise
 /*	identical to vstream_fclose().
@@ -211,6 +219,15 @@
 /*	opened in read-write or write-only mode.
 /*	vstream_fflush() returns 0 in case of success, VSTREAM_EOF in
 /*	case of problems. It is an error to flush a read-only stream.
+/*	vstream_fflush() reports the same errors as vstream_ferror().
+/*
+/*	vstream_fpurge() discards the contents of the stream buffer.
+/*	If direction is VSTREAM_PURGE_READ, it discards unread data,
+/*	else if direction is VSTREAM_PURGE_WRITE, it discards unwritten
+/*	data. In the case of a double-buffered stream, if direction is
+/*	VSTREAM_PURGE_BOTH, it discards the content of both the read
+/*	and write buffers. vstream_fpurge() returns 0 in case of success,
+/*	VSTREAM_EOF in case of problems.
 /*
 /*	vstream_fread() and vstream_fwrite() perform unformatted I/O
 /*	on the named stream. The result value is the number of bytes
@@ -222,10 +239,10 @@
 /*	value) pairs, terminated with VSTREAM_CTL_END.
 /*	The following lists the names and the types of the corresponding
 /*	value arguments.
-/* .IP "VSTREAM_CTL_READ_FN (int (*)(int, void *, unsigned, int, void *))"
+/* .IP "VSTREAM_CTL_READ_FN (ssize_t (*)(int, void *, size_t, int, void *))"
 /*	The argument specifies an alternative for the timed_read(3) function,
 /*	for example, a read function that performs decryption.
-/* .IP "VSTREAM_CTL_WRITE_FN (int (*)(int, void *, unsigned, int, void *))"
+/* .IP "VSTREAM_CTL_WRITE_FN (ssize_t (*)(int, void *, size_t, int, void *))"
 /*	The argument specifies an alternative for the timed_write(3) function,
 /*	for example, a write function that performs encryption.
 /* .IP "VSTREAM_CTL_CONTEXT (char *)"
@@ -245,6 +262,12 @@
 /*	The argument specifies the file descriptor to be used for writing.
 /*	This feature is limited to double-buffered streams, and makes the
 /*	stream non-seekable.
+/* .IP "VSTREAM_CTL_DUPFD (int)"
+/*	The argument specifies a minimum file descriptor value. If
+/*	the actual stream's file descriptors are below the minimum,
+/*	reallocate the descriptors to the first free value greater
+/*	than or equal to the minimum. The VSTREAM_CTL_DUPFD macro
+/*	is defined only on systems with fcntl() F_DUPFD support.
 /* .IP "VSTREAM_CTL_WAITPID_FN (int (*)(pid_t, WAIT_STATUS_T *, int))"
 /*	A pointer to function that behaves like waitpid(). This information
 /*	is used by the vstream_pclose() routine.
@@ -270,12 +293,18 @@
 /*
 /*	vstream_feof() returns non-zero when a previous operation on the
 /*	specified stream caused an end-of-file condition.
+/*	Although further read requests after EOF may complete
+/*	succesfully, vstream_feof() will keep returning non-zero
+/*	until vstream_clearerr() is called for that stream.
 /*
 /*	vstream_ferror() returns non-zero when a previous operation on the
 /*	specified stream caused a non-EOF error condition, including timeout.
+/*	After a non-EOF error on a stream, no I/O request will
+/*	complete until after vstream_clearerr() is called for that stream.
 /*
 /*	vstream_ftimeout() returns non-zero when a previous operation on the
-/*	specified stream caused a timeout error condition.
+/*	specified stream caused a timeout error condition. See
+/*	vstream_ferror() for error persistence details.
 /*
 /*	vstream_clearerr() resets the timeout, error and end-of-file indication
 /*	of the specified stream, and returns no useful result.
@@ -293,12 +322,16 @@
 /*	given to vstream_longjmp().
 /*
 /*	NB: non-local jumps such as vstream_longjmp() are not safe
-/*	for jumping out of any vstream routine.
+/*	for jumping out of any routine that manipulates VSTREAM data.
+/*	longjmp() like calls are best avoided in signal handlers.
 /*
 /*	vstream_ftime() returns the time of initialization, the last buffer
 /*	fill operation, or the last buffer flush operation for the specified
 /*	stream. This information is maintained only when stream timeouts are
 /*	enabled.
+/*
+/*	vstream_ftimeval() is like vstream_ftime() but returns more
+/*	detail.
 /* DIAGNOSTICS
 /*	Panics: interface violations. Fatal errors: out of memory.
 /* SEE ALSO
@@ -347,7 +380,7 @@
   */
 static int vstream_buf_get_ready(VBUF *);
 static int vstream_buf_put_ready(VBUF *);
-static int vstream_buf_space(VBUF *, int);
+static int vstream_buf_space(VBUF *, ssize_t);
 
  /*
   * Initialization of the three pre-defined streams. Pre-allocate a static
@@ -461,10 +494,10 @@ static void vstream_buf_init(VBUF *bp, int flags)
 
 /* vstream_buf_alloc - allocate buffer memory */
 
-static void vstream_buf_alloc(VBUF *bp, int len)
+static void vstream_buf_alloc(VBUF *bp, ssize_t len)
 {
-    int     used = bp->ptr - bp->data;
-    char   *myname = "vstream_buf_alloc";
+    ssize_t used = bp->ptr - bp->data;
+    const char *myname = "vstream_buf_alloc";
 
     if (len < bp->len)
 	msg_panic("%s: attempt to shrink buffer", myname);
@@ -496,15 +529,15 @@ static void vstream_buf_wipe(VBUF *bp)
 
 /* vstream_fflush_some - flush some buffered data */
 
-static int vstream_fflush_some(VSTREAM *stream, int to_flush)
+static int vstream_fflush_some(VSTREAM *stream, ssize_t to_flush)
 {
-    char   *myname = "vstream_fflush_some";
+    const char *myname = "vstream_fflush_some";
     VBUF   *bp = &stream->buf;
-    int     used;
-    int     left_over;
+    ssize_t used;
+    ssize_t left_over;
     char   *data;
-    int     len;
-    int     n;
+    ssize_t len;
+    ssize_t n;
 
     /*
      * Sanity checks. It is illegal to flush a read-only stream. Otherwise,
@@ -529,9 +562,9 @@ static int vstream_fflush_some(VSTREAM *stream, int to_flush)
     left_over = used - to_flush;
 
     if (msg_verbose > 2 && stream != VSTREAM_ERR)
-	msg_info("%s: fd %d flush %d", myname, stream->fd, to_flush);
+	msg_info("%s: fd %d flush %ld", myname, stream->fd, (long) to_flush);
     if (to_flush < 0 || left_over < 0)
-	msg_panic("%s: bad to_flush %d", myname, to_flush);
+	msg_panic("%s: bad to_flush %ld", myname, (long) to_flush);
     if (to_flush < left_over)
 	msg_panic("%s: to_flush < left_over", myname);
     if (to_flush == 0)
@@ -552,9 +585,10 @@ static int vstream_fflush_some(VSTREAM *stream, int to_flush)
 	    return (VSTREAM_EOF);
 	}
 	if (stream->timeout)
-	    stream->iotime = time((time_t *) 0);
+	    GETTIMEOFDAY(&stream->iotime);
 	if (msg_verbose > 2 && stream != VSTREAM_ERR && n != to_flush)
-	    msg_info("%s: %d flushed %d/%d", myname, stream->fd, n, to_flush);
+	    msg_info("%s: %d flushed %ld/%ld", myname, stream->fd,
+		     (long) n, (long) to_flush);
     }
     if (bp->flags & VSTREAM_FLAG_SEEK)
 	stream->offset += to_flush;
@@ -610,8 +644,8 @@ static int vstream_fflush_delayed(VSTREAM *stream)
 static int vstream_buf_get_ready(VBUF *bp)
 {
     VSTREAM *stream = VBUF_TO_APPL(bp, VSTREAM, buf);
-    char   *myname = "vstream_buf_get_ready";
-    int     n;
+    const char *myname = "vstream_buf_get_ready";
+    ssize_t n;
 
     /*
      * Detect a change of I/O direction or position. If so, flush any
@@ -687,9 +721,9 @@ static int vstream_buf_get_ready(VBUF *bp)
 	return (VSTREAM_EOF);
     default:
 	if (stream->timeout)
-	    stream->iotime = time((time_t *) 0);
+	    GETTIMEOFDAY(&stream->iotime);
 	if (msg_verbose > 2)
-	    msg_info("%s: fd %d got %d", myname, stream->fd, n);
+	    msg_info("%s: fd %d got %ld", myname, stream->fd, (long) n);
 	bp->cnt = -n;
 	bp->ptr = bp->data;
 	if (bp->flags & VSTREAM_FLAG_SEEK)
@@ -703,7 +737,7 @@ static int vstream_buf_get_ready(VBUF *bp)
 static int vstream_buf_put_ready(VBUF *bp)
 {
     VSTREAM *stream = VBUF_TO_APPL(bp, VSTREAM, buf);
-    char   *myname = "vstream_buf_put_ready";
+    const char *myname = "vstream_buf_put_ready";
 
     /*
      * Sanity checks. Detect a change of I/O direction or position. If so,
@@ -746,13 +780,13 @@ static int vstream_buf_put_ready(VBUF *bp)
 
 /* vstream_buf_space - reserve space ahead of time */
 
-static int vstream_buf_space(VBUF *bp, int want)
+static int vstream_buf_space(VBUF *bp, ssize_t want)
 {
     VSTREAM *stream = VBUF_TO_APPL(bp, VSTREAM, buf);
-    int     used;
-    int     incr;
-    int     shortage;
-    char   *myname = "vstream_buf_space";
+    ssize_t used;
+    ssize_t incr;
+    ssize_t shortage;
+    const char *myname = "vstream_buf_space";
 
     /*
      * Sanity checks. Reserving space implies writing. It is illegal to write
@@ -801,11 +835,63 @@ static int vstream_buf_space(VBUF *bp, int want)
     return (vstream_ferror(stream) ? VSTREAM_EOF : 0);	/* mmap() may fail */
 }
 
+/* vstream_fpurge - discard unread or unwritten content */
+
+int     vstream_fpurge(VSTREAM *stream, int direction)
+{
+    const char *myname = "vstream_fpurge";
+    VBUF   *bp = &stream->buf;
+
+#define VSTREAM_MAYBE_PURGE_WRITE(d, b) if ((d) & VSTREAM_PURGE_WRITE) \
+	VSTREAM_BUF_AT_START((b))
+#define VSTREAM_MAYBE_PURGE_READ(d, b) if ((d) & VSTREAM_PURGE_READ) \
+	VSTREAM_BUF_AT_END((b))
+
+    /*
+     * To discard all unread contents, position the read buffer at its end,
+     * so that we skip over any unread data, and so that the next read
+     * operation will refill the buffer.
+     * 
+     * To discard all unwritten content, position the write buffer at its
+     * beginning, so that the next write operation clobbers any unwritten
+     * data.
+     */
+    switch (bp->flags & (VSTREAM_FLAG_READ_DOUBLE | VSTREAM_FLAG_WRITE)) {
+    case VSTREAM_FLAG_READ_DOUBLE:
+	VSTREAM_MAYBE_PURGE_WRITE(direction, &stream->write_buf);
+	/* FALLTHROUGH */
+    case VSTREAM_FLAG_READ:
+	VSTREAM_MAYBE_PURGE_READ(direction, bp);
+	break;
+    case VSTREAM_FLAG_DOUBLE:
+	VSTREAM_MAYBE_PURGE_WRITE(direction, &stream->write_buf);
+	VSTREAM_MAYBE_PURGE_READ(direction, &stream->read_buf);
+	break;
+    case VSTREAM_FLAG_WRITE_DOUBLE:
+	VSTREAM_MAYBE_PURGE_READ(direction, &stream->read_buf);
+	/* FALLTHROUGH */
+    case VSTREAM_FLAG_WRITE:
+	VSTREAM_MAYBE_PURGE_WRITE(direction, bp);
+	break;
+    case VSTREAM_FLAG_READ_DOUBLE | VSTREAM_FLAG_WRITE:
+    case VSTREAM_FLAG_READ | VSTREAM_FLAG_WRITE:
+	msg_panic("%s: read/write stream", myname);
+    }
+
+    /*
+     * Invalidate the cached file seek position.
+     */
+    bp->flags &= ~VSTREAM_FLAG_SEEK;
+    stream->offset = 0;
+
+    return (0);
+}
+
 /* vstream_fseek - change I/O position */
 
 off_t   vstream_fseek(VSTREAM *stream, off_t offset, int whence)
 {
-    char   *myname = "vstream_fseek";
+    const char *myname = "vstream_fseek";
     VBUF   *bp = &stream->buf;
 
     /*
@@ -830,6 +916,7 @@ off_t   vstream_fseek(VSTREAM *stream, off_t offset, int whence)
 	    offset += bp->cnt;			/* subtract unread data */
 	else if (whence == SEEK_END)
 	    bp->flags &= ~VSTREAM_FLAG_SEEK;
+	/* FALLTHROUGH */
     case 0:
 	VSTREAM_BUF_AT_END(bp);
 	break;
@@ -941,13 +1028,13 @@ VSTREAM *vstream_fdopen(int fd, int flags)
     stream->timeout = 0;
     stream->context = 0;
     stream->jbuf = 0;
-    stream->iotime = 0;
+    stream->iotime.tv_sec = stream->iotime.tv_usec = 0;
     return (stream);
 }
 
 /* vstream_fopen - open buffered file stream */
 
-VSTREAM *vstream_fopen(const char *path, int flags, int mode)
+VSTREAM *vstream_fopen(const char *path, int flags, mode_t mode)
 {
     VSTREAM *stream;
     int     fd;
@@ -986,8 +1073,9 @@ int     vstream_fclose(VSTREAM *stream)
      */
     if (stream->pid != 0)
 	msg_panic("vstream_fclose: stream has process");
-    if ((stream->buf.flags & VSTREAM_FLAG_WRITE_DOUBLE) != 0)
+    if ((stream->buf.flags & VSTREAM_FLAG_WRITE_DOUBLE) != 0 && stream->fd >= 0)
 	vstream_fflush(stream);
+    /* Do not remove: vstream_fdclose() depends on this error test. */
     err = vstream_ferror(stream);
     if (stream->buf.flags & VSTREAM_FLAG_DOUBLE) {
 	if (stream->read_fd >= 0)
@@ -1016,8 +1104,22 @@ int     vstream_fclose(VSTREAM *stream)
 
 int     vstream_fdclose(VSTREAM *stream)
 {
+
+    /*
+     * Flush unwritten output, just like vstream_fclose(). Errors are
+     * reported by vstream_fclose().
+     */
+    if ((stream->buf.flags & VSTREAM_FLAG_WRITE_DOUBLE) != 0)
+	(void) vstream_fflush(stream);
+
+    /*
+     * NOTE: Negative file descriptors are not part of the external
+     * interface. They are for internal use only, in order to support
+     * vstream_fdclose() without a lot of code duplication. Applications that
+     * rely on negative VSTREAM file descriptors will break without warning.
+     */
     if (stream->buf.flags & VSTREAM_FLAG_DOUBLE) {
-	stream->read_fd = stream->write_fd = -1;
+	stream->fd = stream->read_fd = stream->write_fd = -1;
     } else {
 	stream->fd = -1;
     }
@@ -1065,8 +1167,10 @@ int     vstream_fputs(const char *str, VSTREAM *stream)
 
 void    vstream_control(VSTREAM *stream, int name,...)
 {
-    char   *myname = "vstream_control";
+    const char *myname = "vstream_control";
     va_list ap;
+    int     floor;
+    int     old_fd;
 
     for (va_start(ap, name); name != VSTREAM_CTL_END; name = va_arg(ap, int)) {
 	switch (name) {
@@ -1113,13 +1217,39 @@ void    vstream_control(VSTREAM *stream, int name,...)
 	    break;
 	case VSTREAM_CTL_TIMEOUT:
 	    if (stream->timeout == 0)
-		stream->iotime = time((time_t *) 0);
+		GETTIMEOFDAY(&stream->iotime);
 	    stream->timeout = va_arg(ap, int);
 	    break;
 	case VSTREAM_CTL_EXCEPT:
 	    if (stream->jbuf == 0)
 		stream->jbuf = (jmp_buf *) mymalloc(sizeof(jmp_buf));
 	    break;
+
+#ifdef VSTREAM_CTL_DUPFD
+
+#define VSTREAM_TRY_DUPFD(backup, fd, floor) do { \
+	if (((backup) = (fd)) < floor) { \
+	    if (((fd) = fcntl((backup), F_DUPFD, (floor))) < 0) \
+		msg_fatal("fcntl F_DUPFD %d: %m", (floor)); \
+	    (void) close(backup); \
+	} \
+    } while (0)
+
+	case VSTREAM_CTL_DUPFD:
+	    floor = va_arg(ap, int);
+	    if (stream->buf.flags & VSTREAM_FLAG_DOUBLE) {
+		VSTREAM_TRY_DUPFD(old_fd, stream->read_fd, floor);
+		if (stream->write_fd == old_fd)
+		    stream->write_fd = stream->read_fd;
+		else
+		    VSTREAM_TRY_DUPFD(old_fd, stream->write_fd, floor);
+		stream->fd = (stream->buf.flags & VSTREAM_FLAG_READ) ?
+		    stream->read_fd : stream->write_fd;
+	    } else {
+		VSTREAM_TRY_DUPFD(old_fd, stream->fd, floor);
+	    }
+	    break;
+#endif
 	default:
 	    msg_panic("%s: bad name %d", myname, name);
 	}
@@ -1137,7 +1267,7 @@ VSTREAM *vstream_vfprintf(VSTREAM *vp, const char *format, va_list ap)
 
 /* vstream_peek - peek at a stream */
 
-int     vstream_peek(VSTREAM *vp)
+ssize_t vstream_peek(VSTREAM *vp)
 {
     if (vp->buf.flags & VSTREAM_FLAG_READ) {
 	return (-vp->buf.cnt);

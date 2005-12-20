@@ -1,4 +1,4 @@
-/*	$NetBSD: mhzc.c,v 1.34 2005/12/11 12:23:23 christos Exp $	*/
+/*	$NetBSD: mhzc.c,v 1.39 2006/11/16 01:33:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2004 The NetBSD Foundation, Inc.
@@ -46,10 +46,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mhzc.c,v 1.34 2005/12/11 12:23:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mhzc.c,v 1.39 2006/11/16 01:33:20 christos Exp $");
 
 #include "opt_inet.h"
-#include "opt_ns.h"
 #include "bpfilter.h"
 
 #include <sys/param.h>
@@ -78,10 +77,6 @@ __KERNEL_RCSID(0, "$NetBSD: mhzc.c,v 1.34 2005/12/11 12:23:23 christos Exp $");
 #include <netinet/if_inarp.h>
 #endif
 
-#ifdef NS
-#include <netns/ns.h>
-#include <netns/ns_if.h>
-#endif
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -177,10 +172,8 @@ void	mhzc_disable(struct mhzc_softc *, int);
 int	mhzc_intr(void *);
 
 int
-mhzc_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+mhzc_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 
@@ -191,9 +184,7 @@ mhzc_match(parent, match, aux)
 }
 
 void
-mhzc_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+mhzc_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct mhzc_softc *sc = (void *)self;
 	struct pcmcia_attach_args *pa = aux;
@@ -530,7 +521,7 @@ mhzc_em3336_enaddr(sc, myla)
 {
 
 	/* Get the station address from CIS tuple 0x81. */
-	if (pcmcia_scan_cis(sc->sc_dev.dv_parent,
+	if (pcmcia_scan_cis(device_parent(&sc->sc_dev),
 	    mhzc_em3336_lannid_ciscallback, myla) != 1) {
 		printf("%s: unable to get Ethernet address from CIS\n",
 		    sc->sc_dev.dv_xname);
@@ -672,10 +663,8 @@ int	com_mhzc_enable(struct com_softc *);
 void	com_mhzc_disable(struct com_softc *);
 
 int
-com_mhzc_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+com_mhzc_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	extern struct cfdriver com_cd;
 	const char *name = aux;
@@ -688,21 +677,20 @@ com_mhzc_match(parent, match, aux)
 }
 
 void
-com_mhzc_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+com_mhzc_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct com_softc *sc = (void *)self;
 	struct mhzc_softc *msc = (void *)parent;
 
 	aprint_normal("\n");
 
-	sc->sc_iot = msc->sc_modem_pcioh.iot;
-	sc->sc_ioh = msc->sc_modem_pcioh.ioh;
+	COM_INIT_REGS(sc->sc_regs, 
+	    msc->sc_modem_pcioh.iot,
+	    msc->sc_modem_pcioh.ioh,
+	    -1);
 
 	sc->enabled = 1;
 
-	sc->sc_iobase = -1;
 	sc->sc_frequency = COM_FREQ;
 
 	sc->enable = com_mhzc_enable;
@@ -720,7 +708,7 @@ com_mhzc_enable(sc)
 	struct com_softc *sc;
 {
 
-	return (mhzc_enable((struct mhzc_softc *)sc->sc_dev.dv_parent,
+	return (mhzc_enable((struct mhzc_softc *)device_parent(&sc->sc_dev),
 	    MHZC_MODEM_ENABLED));
 }
 
@@ -729,7 +717,7 @@ com_mhzc_disable(sc)
 	struct com_softc *sc;
 {
 
-	mhzc_disable((struct mhzc_softc *)sc->sc_dev.dv_parent,
+	mhzc_disable((struct mhzc_softc *)device_parent(&sc->sc_dev),
 	    MHZC_MODEM_ENABLED);
 }
 
@@ -749,10 +737,8 @@ int	sm_mhzc_enable(struct smc91cxx_softc *);
 void	sm_mhzc_disable(struct smc91cxx_softc *);
 
 int
-sm_mhzc_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
-	void *aux;
+sm_mhzc_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	extern struct cfdriver sm_cd;
 	const char *name = aux;
@@ -765,9 +751,7 @@ sm_mhzc_match(parent, match, aux)
 }
 
 void
-sm_mhzc_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+sm_mhzc_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct smc91cxx_softc *sc = (void *)self;
 	struct mhzc_softc *msc = (void *)parent;
@@ -793,7 +777,7 @@ sm_mhzc_enable(sc)
 	struct smc91cxx_softc *sc;
 {
 
-	return (mhzc_enable((struct mhzc_softc *)sc->sc_dev.dv_parent,
+	return (mhzc_enable((struct mhzc_softc *)device_parent(&sc->sc_dev),
 	    MHZC_ETHERNET_ENABLED));
 }
 
@@ -802,7 +786,7 @@ sm_mhzc_disable(sc)
 	struct smc91cxx_softc *sc;
 {
 
-	mhzc_disable((struct mhzc_softc *)sc->sc_dev.dv_parent,
+	mhzc_disable((struct mhzc_softc *)device_parent(&sc->sc_dev),
 	    MHZC_ETHERNET_ENABLED);
 }
 

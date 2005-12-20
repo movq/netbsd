@@ -1,4 +1,4 @@
-/*	$NetBSD: do_command.c,v 1.17 2005/08/17 22:35:20 heas Exp $	*/
+/*	$NetBSD: do_command.c,v 1.24 2006/10/22 21:00:21 christos Exp $	*/
 
 /* Copyright 1988,1990,1993,1994 by Paul Vixie
  * All rights reserved
@@ -22,13 +22,14 @@
 #if 0
 static char rcsid[] = "Id: do_command.c,v 2.12 1994/01/15 20:43:43 vixie Exp ";
 #else
-__RCSID("$NetBSD: do_command.c,v 1.17 2005/08/17 22:35:20 heas Exp $");
+__RCSID("$NetBSD: do_command.c,v 1.24 2006/10/22 21:00:21 christos Exp $");
 #endif
 #endif
 
 
 #include "cron.h"
 #include <sys/signal.h>
+#include <err.h>
 #if defined(sequent)
 # include <sys/universe.h>
 #endif
@@ -81,14 +82,10 @@ static void
 child_process(entry *e, user *u)
 {
 	int		stdin_pipe[2], stdout_pipe[2];
-	char	*input_data;
-	char		*usernm, *mailto;
+	char	* volatile input_data;
+	char		*usernm, * volatile mailto;
 	int		children = 0;
-#ifdef __GNUC__
-	(void) &input_data;	/* Avoid vfork clobbering */
-	(void) &mailto;
-	(void) &children;
-#endif
+
 	Debug(DPROC, ("[%d] child_process('%s')\n", getpid(), e->cmd))
 
 	/* note we handle a job */
@@ -102,7 +99,7 @@ child_process(entry *e, user *u)
 #ifdef USE_SIGCHLD
 	/* our parent is watching for our death by catching SIGCHLD.  we
 	 * do not care to watch for our children's deaths this way -- we
-	 * use wait() explictly.  so we have to disable the signal (which
+	 * use wait() explicitly.  so we have to disable the signal (which
 	 * was inherited from the parent).
 	 */
 	(void) signal(SIGCHLD, SIG_DFL);
@@ -193,7 +190,8 @@ child_process(entry *e, user *u)
 #endif
 		/* get new pgrp, void tty, etc.
 		 */
-		(void) setsid();
+		if (setsid() == -1)
+			syslog(LOG_ERR, "setsid() failure: %m");
 
 		if (setlogin(usernm) < 0)
 			syslog(LOG_ERR, "setlogin() failure: %m");
@@ -236,11 +234,21 @@ child_process(entry *e, user *u)
 		/* set our directory, uid and gid.  Set gid first, since once
 		 * we set uid, we've lost root privledges.
 		 */
-		setgid(e->gid);
+		if (setgid(e->gid) != 0) {
+		   syslog(LOG_ERR, "setgid failed");
+		   _exit(ERROR_EXIT);
+		}
 # if defined(BSD)
-		initgroups(usernm, e->gid);
+		if (initgroups(usernm, e->gid) != 0) {
+		   syslog(LOG_ERR, "initgroups failed");
+		   _exit(ERROR_EXIT);
+		}
 # endif
-		setuid(e->uid);		/* we aren't root after this... */
+		if (setuid(e->uid) != 0) {
+		   syslog(LOG_ERR, "setuid failed");
+		   _exit(ERROR_EXIT);
+		}
+		/* we aren't root after this... */
 		chdir(env_get("HOME", e->envp));
 
 #ifdef USE_SIGCHLD
@@ -267,8 +275,7 @@ child_process(entry *e, user *u)
 			}
 # endif /*DEBUGGING*/
 			execle(shell, shell, "-c", e->cmd, (char *)0, e->envp);
-			fprintf(stderr, "execl: couldn't exec `%s'\n", shell);
-			perror("execl");
+			warn("execl: couldn't exec `%s'", shell);
 			_exit(ERROR_EXIT);
 		}
 		break;
@@ -374,7 +381,7 @@ child_process(entry *e, user *u)
 			int		status = 0;
 
 #ifdef __GNUC__
-			(void) &mail;	/* Avoid vfork clobbering */
+			mail = NULL;	/* XXX gcc */
 #endif
 			Debug(DPROC|DEXT,
 				("[%d] got data (%x:%c) from grandchild\n",
@@ -412,7 +419,7 @@ child_process(entry *e, user *u)
 				(void)snprintf(mailcmd, sizeof(mailcmd),
 				    MAILARGS, MAILCMD);
 				if (!(mail = cron_popen(mailcmd, "w"))) {
-					perror(MAILCMD);
+					warn("cannot run %s", MAILCMD);
 					(void) _exit(ERROR_EXIT);
 				}
 				fprintf(mail, "From: root (Cron Daemon)\n");
@@ -420,6 +427,7 @@ child_process(entry *e, user *u)
 				fprintf(mail, "Subject: Cron <%s@%s> %s\n",
 					usernm, first_word(hostname, "."),
 					e->cmd);
+				fprintf(mail, "Auto-Submitted: auto-generated\n");
 # if defined(MAIL_DATE)
 				fprintf(mail, "Date: %s\n",
 					arpadate(&TargetTime));

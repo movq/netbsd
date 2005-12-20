@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ix.c,v 1.23 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: if_ix.c,v 1.26 2006/11/16 01:33:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ix.c,v 1.23 2005/12/11 12:22:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ix.c,v 1.26 2006/11/16 01:33:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -137,9 +137,7 @@ ix_reset(sc, why)
 }
 
 static void
-ix_atten(sc, why)
-	struct ie_softc *sc;
-	int why;
+ix_atten(struct ie_softc *sc, int why)
 {
 	struct ix_softc* isc = (struct ix_softc *) sc;
 	bus_space_write_1(isc->sc_regt, isc->sc_regh, IX_ATTN, 0);
@@ -513,10 +511,7 @@ ix_mediastatus(sc, ifmr)
 }
 
 int
-ix_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+ix_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	int i;
 	int rv = 0;
@@ -720,10 +715,7 @@ out:
 }
 
 void
-ix_attach(parent, self, aux)
-	struct device *parent;
-	struct device *self;
-	void   *aux;
+ix_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct ix_softc *isc = (void *)self;
 	struct ie_softc *sc = &isc->sc_ie;
@@ -1012,9 +1004,10 @@ ix_attach(parent, self, aux)
 
 	isc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 	    IST_EDGE, IPL_NET, i82586_intr, sc);
-	if (isc->sc_ih == NULL)
+	if (isc->sc_ih == NULL) {
 		DPRINTF(("\n%s: can't establish interrupt\n",
 			sc->sc_dev.dv_xname));
+	}
 }
 
 CFATTACH_DECL(ix, sizeof(struct ix_softc),

@@ -1,4 +1,4 @@
-/*	$NetBSD: opms.c,v 1.13 2005/12/11 12:16:38 christos Exp $	*/
+/*	$NetBSD: opms.c,v 1.15 2006/04/15 08:49:47 tsutsui Exp $	*/
 /*	$OpenBSD: pccons.c,v 1.22 1999/01/30 22:39:37 imp Exp $	*/
 /*	NetBSD: pms.c,v 1.21 1995/04/18 02:25:18 mycroft Exp	*/
 
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.13 2005/12/11 12:16:38 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.15 2006/04/15 08:49:47 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -97,6 +97,8 @@ __KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.13 2005/12/11 12:16:38 christos Exp $");
 
 #include <arc/dev/pcconsvar.h>
 #include <arc/dev/opmsvar.h>
+
+#include "ioconf.h"
 
 #define	PMSUNIT(dev)	(minor(dev))
 
@@ -129,8 +131,6 @@ __KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.13 2005/12/11 12:16:38 christos Exp $");
 
 #define	FLUSHQ(q) { if((q)->c_cc) ndflush(q, (q)->c_cc); }
 
-extern struct cfdriver opms_cd;
-
 dev_type_open(opmsopen);
 dev_type_close(opmsclose);
 dev_type_read(opmsread);
@@ -143,11 +143,11 @@ const struct cdevsw opms_cdevsw = {
 	nostop, notty, opmspoll, nommap, opmskqfilter,
 };
 
-static __inline void pms_dev_cmd(uint8_t);
-static __inline void pms_aux_cmd(uint8_t);
-static __inline void pms_pit_cmd(uint8_t);
+static inline void pms_dev_cmd(uint8_t);
+static inline void pms_aux_cmd(uint8_t);
+static inline void pms_pit_cmd(uint8_t);
 
-static __inline void
+static inline void
 pms_dev_cmd(uint8_t value)
 {
 
@@ -157,7 +157,7 @@ pms_dev_cmd(uint8_t value)
 	kbd_data_write_1(value);
 }
 
-static __inline void
+static inline void
 pms_aux_cmd(uint8_t value)
 {
 
@@ -165,7 +165,7 @@ pms_aux_cmd(uint8_t value)
 	kbd_cmd_write_1(value);
 }
 
-static __inline void
+static inline void
 pms_pit_cmd(uint8_t value)
 {
 

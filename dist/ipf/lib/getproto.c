@@ -1,4 +1,12 @@
-/*	$NetBSD: getproto.c,v 1.2 2004/11/13 19:16:10 he Exp $	*/
+/*	$NetBSD: getproto.c,v 1.3.4.2 2007/07/16 11:04:54 liamjfoy Exp $	*/
+
+/*
+ * Copyright (C) 2002-2005 by Darren Reed.
+ * 
+ * See the IPFILTER.LICENCE file for details on licencing.  
+ *   
+ * Id: getproto.c,v 1.2.2.3 2006/06/16 17:21:00 darrenr Exp 
+ */     
 
 #include "ipf.h"
 
@@ -13,6 +21,14 @@ char *name;
 			break;
 	if (*s == '\0')
 		return atoi(name);
+
+#ifdef _AIX51
+	/*
+	 * For some bogus reason, "ip" is 252 in /etc/protocols on AIX 5
+	 */
+	if (!strcasecmp(name, "ip"))
+		return 0;
+#endif
 
 	p = getprotobyname(name);
 	if (p != NULL)

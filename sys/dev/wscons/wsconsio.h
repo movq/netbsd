@@ -1,4 +1,4 @@
-/* $NetBSD: wsconsio.h,v 1.76 2005/11/23 09:38:02 augustss Exp $ */
+/* $NetBSD: wsconsio.h,v 1.80 2006/06/19 15:44:45 gdamore Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -101,6 +101,8 @@ struct wscons_event {
 #define	WSKBD_TYPE_SUN5		17	/* Sun Type5 */
 #define	WSKBD_TYPE_SGI		18	/* SGI keyboard */
 #define	WSKBD_TYPE_MATRIXKP	19	/* Matrix keypads/buttons */
+#define	WSKBD_TYPE_EWS4800	20	/* NEC EWS4800 */
+#define	WSKBD_TYPE_BLUETOOTH	21	/* Bluetooth keyboard */
 
 /* Manipulate the keyboard bell. */
 struct wskbd_bell_data {
@@ -199,6 +201,7 @@ struct wskbd_scroll_data {
 #define	WSMOUSE_TYPE_MAXINE	11	/* DEC maxine mouse */
 #define	WSMOUSE_TYPE_MAPLE	12	/* Dreamcast Maple mouse */
 #define	WSMOUSE_TYPE_SGI	13	/* SGI mouse */
+#define	WSMOUSE_TYPE_BLUETOOTH	14	/* Bluetooth mouse */
 
 /* Set resolution.  Not applicable to all mouse types. */
 #define	WSMOUSEIO_SRES		_IOW('W', 33, u_int)
@@ -240,6 +243,16 @@ struct wsmouse_id {
 	u_char data[WSMOUSE_ID_MAXLEN];
 };
 #define	WSMOUSEIO_GETID		_IOWR('W', 38, struct wsmouse_id)
+
+/* Get/set button repeating. */
+struct wsmouse_repeat {
+	unsigned long	wr_buttons;
+	unsigned int	wr_delay_first;
+	unsigned int	wr_delay_decrement;
+	unsigned int	wr_delay_minimum;
+};
+#define WSMOUSEIO_GETREPEAT	_IOR('W', 39, struct wsmouse_repeat)
+#define WSMOUSEIO_SETREPEAT	_IOW('W', 40, struct wsmouse_repeat)
 
 /*
  * Display ioctls (64 - 95)
@@ -287,8 +300,9 @@ struct wsmouse_id {
 #define	WSDISPLAY_TYPE_SUNCG14	37	/* Sun cgfourteen */
 #define	WSDISPLAY_TYPE_SUNTCX	38	/* Sun TCX */
 #define	WSDISPLAY_TYPE_SUNFFB	39	/* Sun creator FFB */
-#define	WSDISPLAY_TYPE_STI	40	/* HP STI frambuffers */
+#define	WSDISPLAY_TYPE_STI	40	/* HP STI framebuffers */
 #define	WSDISPLAY_TYPE_HDLCD	41	/* Hitachi HD44780 based LCDs */
+#define	WSDISPLAY_TYPE_VESA	42	/* VESA BIOS framebuffer */
 
 /* Basic display information.  Not applicable to all display types. */
 struct wsdisplay_fbinfo {
@@ -459,6 +473,10 @@ struct wsdisplay_msgattrs {
 
 #define	WSDISPLAYIO_GBORDER	_IOR('W', 91, int)
 #define	WSDISPLAYIO_SBORDER	_IOW('W', 92, int)
+
+/* Splash screen control */
+#define	WSDISPLAYIO_SSPLASH	_IOW('W', 93, int)
+#define	WSDISPLAYIO_SPROGRESS	_IOW('W', 94, int)
 
 /* XXX NOT YET DEFINED */
 /* Mapping information retrieval. */

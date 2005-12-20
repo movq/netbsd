@@ -1,4 +1,4 @@
-/*	$NetBSD: ipkdb_ipkdb.c,v 1.14 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: ipkdb_ipkdb.c,v 1.17 2006/09/13 10:07:42 elad Exp $	*/
 
 /*
  * Copyright (C) 1993-2000 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipkdb_ipkdb.c,v 1.14 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipkdb_ipkdb.c,v 1.17 2006/09/13 10:07:42 elad Exp $");
 
 #include "opt_ipkdb.h"
 
@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: ipkdb_ipkdb.c,v 1.14 2005/12/11 12:24:29 christos Ex
 #include <sys/mbuf.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>
+#include <sys/kauth.h>
 
 #include <net/if.h>
 #include <net/if_arp.h>
@@ -292,7 +293,7 @@ pokemem(ifp, cp, addr, len)
 	putpkt(ifp, "ok", 2);
 }
 
-__inline static u_int32_t
+inline static u_int32_t
 getnl(vs)
 	void *vs;
 {
@@ -301,7 +302,7 @@ getnl(vs)
 	return (*s << 24)|(s[1] << 16)|(s[2] << 8)|s[3];
 }
 
-__inline static u_int
+inline static u_int
 getns(vs)
 	void *vs;
 {
@@ -310,7 +311,7 @@ getns(vs)
 	return (*s << 8)|s[1];
 }
 
-__inline static void
+inline static void
 setnl(vs, l)
 	void *vs;
 	u_int32_t l;
@@ -323,7 +324,7 @@ setnl(vs, l)
 	*s = l;
 }
 
-__inline static void
+inline static void
 setns(vs, l)
 	void *vs;
 	int l;
@@ -728,7 +729,7 @@ static void ipkdb_MD5Init __P((struct ipkdb_MD5Context *));
 static void ipkdb_MD5Update __P((struct ipkdb_MD5Context *, u_char *, u_int));
 static u_char *ipkdb_MD5Final __P((struct ipkdb_MD5Context *));
 
-__inline static u_int32_t
+inline static u_int32_t
 getNl(vs)
 	void *vs;
 {
@@ -737,7 +738,7 @@ getNl(vs)
 	return *s | (s[1] << 8) | (s[2] << 16) | (s[3] << 24);
 }
 
-__inline static void
+inline static void
 setNl(vs, l)
 	void *vs;
 	u_int32_t l;
@@ -1138,7 +1139,8 @@ check_ipkdb(ifp, shost, p, l)
 	char save;
 
 #ifndef	IPKDBSECURE
-	if (securelevel > 0)
+	if (kauth_authorize_system(curlwp->l_cred, KAUTH_SYSTEM_IPKDB,
+	    NULL, NULL, NULL, NULL))
 		return 0;
 #endif
 	if (ipkdbcmp(chksum(p, l), p + l, LENCHK))

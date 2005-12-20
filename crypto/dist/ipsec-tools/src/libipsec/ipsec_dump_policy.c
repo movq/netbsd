@@ -1,6 +1,6 @@
-/*	$NetBSD: ipsec_dump_policy.c,v 1.6 2005/11/21 14:20:28 manu Exp $	*/
+/*	$NetBSD: ipsec_dump_policy.c,v 1.7.2.1 2007/08/28 11:14:41 liamjfoy Exp $	*/
 
-/* Id: ipsec_dump_policy.c,v 1.7.4.2 2005/06/29 13:01:27 manubsd Exp */
+/* Id: ipsec_dump_policy.c,v 1.10 2005/06/29 09:12:37 manubsd Exp */
 
 /*
  * Copyright (C) 1995, 1996, 1997, 1998, and 1999 WIDE Project.
@@ -40,11 +40,7 @@
 #include <sys/socket.h>
 
 #include <netinet/in.h>
-#ifdef HAVE_NETINET6_IPSEC
-#  include <netinet6/ipsec.h>
-#else
-#  include <netinet/ipsec.h>
-#endif
+#include PATH_IPSEC_H
 
 #include <arpa/inet.h>
 

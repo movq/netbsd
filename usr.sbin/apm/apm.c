@@ -1,4 +1,4 @@
-/*	$NetBSD: apm.c,v 1.16 2005/01/23 20:55:57 cube Exp $ */
+/*	$NetBSD: apm.c,v 1.17.2.1 2007/10/29 19:47:12 pavel Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -283,6 +283,10 @@ printval:
 				if (dobstate)
 					printf("Battery charge state: %s\n",
 					    battstate(api->battery_state));
+
+				if (dopct && domin && api->minutes_left == 0)
+					domin = FALSE;
+
 				if (dopct || domin) {
 					printf("Battery remaining: ");
 					if (dopct)

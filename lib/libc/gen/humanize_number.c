@@ -1,4 +1,4 @@
-/*	$NetBSD: humanize_number.c,v 1.10 2005/09/13 01:44:09 christos Exp $	*/
+/*	$NetBSD: humanize_number.c,v 1.11.4.1 2007/11/25 09:38:17 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999, 2002 The NetBSD Foundation, Inc.
@@ -39,11 +39,12 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: humanize_number.c,v 1.10 2005/09/13 01:44:09 christos Exp $");
+__RCSID("$NetBSD: humanize_number.c,v 1.11.4.1 2007/11/25 09:38:17 xtraeme Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 #include <assert.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -120,7 +121,12 @@ humanize_number(char *buf, size_t len, int64_t bytes,
 		for (max = 100, i = len - baselen; i-- > 0;)
 			max *= 10;
 
-		for (i = 0; bytes >= max && i < maxscale; i++)
+		/*
+		 * Divide the number until it fits the given column.
+		 * If there will be an overflow by the rounding below,
+		 * divide once more.
+		 */
+		for (i = 0; bytes >= max - 50 && i < maxscale; i++)
 			bytes /= divisor;
 
 		if (scale & HN_GETSCALE)
@@ -141,9 +147,8 @@ humanize_number(char *buf, size_t len, int64_t bytes,
 		    sign * s1, localeconv()->decimal_point, s2,
 		    sep, SCALE2PREFIX(i), suffix);
 	} else
-		r = snprintf(buf, len, "%lld%s%s%s",
-		    /* LONGLONG */
-		    (long long)(sign * ((bytes + 50) / 100)),
+		r = snprintf(buf, len, "%" PRId64 "%s%s%s",
+		    sign * ((bytes + 50) / 100),
 		    sep, SCALE2PREFIX(i), suffix);
 
 	return (r);

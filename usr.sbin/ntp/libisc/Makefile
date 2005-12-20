@@ -1,13 +1,11 @@
-# $NetBSD: Makefile,v 1.1 2003/12/04 16:41:56 drochner Exp $
+# $NetBSD: Makefile,v 1.4 2006/06/11 19:34:22 kardel Exp $
 
-NOLINKLIB=# defined
-NOMAN=	# defined
-NOPIC=	# defined
-NOLINT=	# defined
+MKPRIVATELIB=	yes
 
 LIB=	isc
 SRCS=	assertions.c error.c interfaceiter.c isc_strerror.c lib.c mem.c \
-	msgcat.c net.c strerror.c
+	msgcat.c net.c strerror.c netaddr.c netscope.c sockaddr.c
+
 NTPSRCDIR=lib${LIB}
 
 .include <bsd.lib.mk>

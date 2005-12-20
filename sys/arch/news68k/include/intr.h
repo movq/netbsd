@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.10 2005/12/11 12:18:23 christos Exp $	*/
+/*	$NetBSD: intr.h,v 1.12 2006/02/16 20:17:14 perry Exp $	*/
 
 /*
  *
@@ -67,7 +67,7 @@ static __inline void
 splx(int sr)
 {
 
-	__asm __volatile("movw %0,%%sr" : : "di" (sr));
+	__asm volatile("movw %0,%%sr" : : "di" (sr));
 }
 
 /*

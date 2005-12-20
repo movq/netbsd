@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.51 2005/09/14 15:35:26 drochner Exp $	*/
+/*	$NetBSD: main.c,v 1.63.2.1 2007/05/07 02:45:37 snj Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\n\
 #if 0
 static char sccsid[] = "from: @(#)main.c	8.4 (Berkeley) 3/1/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.51 2005/09/14 15:35:26 drochner Exp $");
+__RCSID("$NetBSD: main.c,v 1.63.2.1 2007/05/07 02:45:37 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -204,6 +204,8 @@ struct nlist nl[] = {
 	{ "_hardclock_ticks" },
 #define N_PIMSTAT	68
 	{ "_pimstat" },
+#define N_CARPSTAT	69
+	{ "_carpstats" },
 	{ "" },
 };
 
@@ -231,6 +233,8 @@ struct protox {
 	  icmp_stats,	NULL,		0,	"icmp" },
 	{ -1,		N_IGMPSTAT,	1,	0,
 	  igmp_stats,	NULL,		0,	"igmp" },
+	{ -1,		N_CARPSTAT,	1,	0,
+	  carp_stats,	NULL,		0,	"carp" },
 #ifdef IPSEC
 	{ -1,		N_IPSECSTAT,	1,	0,
 	  ipsec_switch,	NULL,		0,	"ipsec" },
@@ -293,6 +297,7 @@ struct protox atalkprotox[] = {
 	  0,		NULL,		0 }
 };
 
+#ifdef NS
 struct protox nsprotox[] = {
 	{ N_IDP,	N_IDPSTAT,	1,	nsprotopr,
 	  idp_stats,	NULL,		0,	"idp" },
@@ -303,6 +308,7 @@ struct protox nsprotox[] = {
 	{ -1,		-1,		0,	0,
 	  0,		NULL,		0 }
 };
+#endif
 
 struct protox isoprotox[] = {
 	{ ISO_TP,	N_TPSTAT,	1,	iso_protopr,
@@ -327,7 +333,11 @@ struct protox *protoprotox[] = { protox,
 				 pfkeyprotox,
 #endif
 #ifndef SMALL
-				 atalkprotox, nsprotox, isoprotox,
+				 atalkprotox,
+#ifdef NS
+				 nsprotox,
+#endif
+				 isoprotox,
 #endif
 				 NULL };
 
@@ -340,7 +350,9 @@ const struct softintrq {
 	{ "ip6intrq", N_IP6INTRQ },
 	{ "atintrq1", N_ATINTRQ1 },
 	{ "atintrq2", N_ATINTRQ2 },
+#ifdef NS
 	{ "nsintrq", N_NSINTRQ },
+#endif
 	{ "clnlintrq", N_CLNLINTRQ },
 	{ "llcintrq", N_LLCINTRQ },
 	{ "hdintrq", N_HDINTRQ },
@@ -357,8 +369,72 @@ static void print_softintrq __P((void));
 static void usage __P((void));
 static struct protox *name2protox __P((char *));
 static struct protox *knownname __P((char *));
+static void prepare(char *, char *, struct protox *tp);
 
 kvm_t *kvmd;
+gid_t egid;
+
+void
+prepare(char *nlistf, char *memf, struct protox *tp)
+{
+	char buf[_POSIX2_LINE_MAX];
+
+	/*
+	 * Try to figure out if we can use sysctl or not.
+	 */
+	if (nlistf != NULL && memf != NULL) {
+		/* If we have -M and -N, we're not dealing with live memory. */
+		use_sysctl = 0;
+	} else if (qflag ||
+		   rflag ||
+		   iflag ||
+#ifndef SMALL
+		   gflag ||
+		   (pflag && tp->pr_sindex == N_DDPSTAT) ||
+#ifdef NS
+		   (pflag && tp->pr_sindex == N_IDPSTAT) ||
+		   (pflag && tp->pr_sindex == N_SPPSTAT) ||
+		   (pflag && tp->pr_sindex == N_NSERR) ||
+#endif
+		   (pflag && tp->pr_sindex == N_TPSTAT) ||
+		   (pflag && tp->pr_sindex == N_CLTPSTAT) ||
+		   (pflag && tp->pr_sindex == N_CLNPSTAT) ||
+		   (pflag && tp->pr_sindex == N_ESISSTAT) ||
+#endif
+		   (pflag && tp->pr_sindex == N_ARPSTAT) ||
+		   (pflag && tp->pr_sindex == N_IGMPSTAT) ||
+		   (pflag && tp->pr_sindex == N_PIMSTAT) ||
+#ifdef IPSEC
+		   (pflag && tp->pr_sindex == N_IPSECSTAT) ||
+		   (pflag && tp->pr_sindex == N_PFKEYSTAT) ||
+#ifdef INET6
+		   (pflag && tp->pr_sindex == N_IPSEC6STAT) ||
+#endif
+#endif
+		   Pflag) {
+		/* These flags are not yet supported via sysctl(3). */
+		use_sysctl = 0;
+	} else {
+		/* We can use sysctl(3). */
+		use_sysctl = 1;
+	}
+
+	if (!use_sysctl) {
+		(void)setegid(egid);
+		kvmd = kvm_openfiles(nlistf, memf, NULL, O_RDONLY, buf);
+		(void)setgid(getgid());
+		if (kvmd == NULL)
+			err(1, "kvm error: %s", buf);
+	
+		if (kvm_nlist(kvmd, nl) < 0 || nl[0].n_type == 0) {
+			if (nlistf)
+				errx(1, "%s: no namelist", nlistf);
+			else
+				errx(1, "no namelist");
+		}
+	} else
+		(void)setgid(getgid());
+}
 
 int
 main(argc, argv)
@@ -369,10 +445,10 @@ main(argc, argv)
 	struct protox *tp;	/* for printing cblocks & stats */
 	int ch;
 	char *nlistf = NULL, *memf = NULL;
-	char buf[_POSIX2_LINE_MAX], *cp;
+	char *cp;
 	u_long pcbaddr;
-	gid_t egid = getegid();
 
+	egid = getegid();
 	(void)setegid(getgid());
 	tp = NULL;
 	af = AF_UNSPEC;
@@ -397,9 +473,13 @@ main(argc, argv)
 			dflag = 1;
 			break;
 		case 'f':
-			if (strcmp(optarg, "ns") == 0)
+#ifdef NS
+			if (strcmp(optarg, "ns") == 0) {
 				af = AF_NS;
-			else if (strcmp(optarg, "inet") == 0)
+				break;
+			}
+#endif
+			if (strcmp(optarg, "inet") == 0)
 				af = AF_INET;
 			else if (strcmp(optarg, "inet6") == 0)
 				af = AF_INET6;
@@ -446,7 +526,7 @@ main(argc, argv)
 			nlistf = optarg;
 			break;
 		case 'n':
-			numeric_addr = numeric_port = 1;
+			numeric_addr = numeric_port = nflag = 1;
 			break;
 		case 'P':
 			errno = 0;
@@ -512,26 +592,7 @@ main(argc, argv)
 	}
 #endif
 
-	/*
-	 * Discard setgid privileges.  If not the running kernel, we toss
-	 * them away totally so that bad guys can't print interesting stuff
-	 * from kernel memory, otherwise switch back to kmem for the
-	 * duration of the kvm_openfiles() call.
-	 */
-	if (nlistf != NULL || memf != NULL || Pflag)
-		(void)setgid(getgid());
-	else
-		(void)setegid(egid);
-
-	use_sysctl = (nlistf == NULL && memf == NULL);
-
-	if ((kvmd = kvm_openfiles(nlistf, memf, NULL, O_RDONLY,
-	    buf)) == NULL)
-		errx(1, "%s", buf);
-
-	/* do this now anyway */
-	if (nlistf == NULL && memf == NULL)
-		(void)setgid(getgid());
+	prepare(nlistf, memf, tp);
 
 #ifndef SMALL
 	if (Bflag) {
@@ -543,12 +604,6 @@ main(argc, argv)
 	}
 #endif
 
-	if (kvm_nlist(kvmd, nl) < 0 || nl[0].n_type == 0) {
-		if (nlistf)
-			errx(1, "%s: no namelist", nlistf);
-		else
-			errx(1, "no namelist");
-	}
 	if (mflag) {
 		mbpr(nl[N_MBSTAT].n_value,  nl[N_MSIZE].n_value,
 		    nl[N_MCLBYTES].n_value, nl[N_MBPOOL].n_value,
@@ -595,9 +650,13 @@ main(argc, argv)
 	}
 	if (rflag) {
 		if (sflag)
-			rt_stats(nl[N_RTSTAT].n_value);
-		else
-			routepr(nl[N_RTREE].n_value);
+			rt_stats(use_sysctl ? 0 : nl[N_RTSTAT].n_value);
+		else {
+			if (use_sysctl)
+				p_rttables(af);
+			else
+				routepr(nl[N_RTREE].n_value);
+		}
 		exit(0);
 	}
 #ifndef SMALL
@@ -664,9 +723,11 @@ main(argc, argv)
 	if (af == AF_APPLETALK || af == AF_UNSPEC)
 		for (tp = atalkprotox; tp->pr_name; tp++)
 			printproto(tp, tp->pr_name);
+#ifdef NS
 	if (af == AF_NS || af == AF_UNSPEC)
 		for (tp = nsprotox; tp->pr_name; tp++)
 			printproto(tp, tp->pr_name);
+#endif
 	if (af == AF_ISO || af == AF_UNSPEC)
 		for (tp = isoprotox; tp->pr_name; tp++)
 			printproto(tp, tp->pr_name);
@@ -704,8 +765,9 @@ printproto(tp, name)
 		pr = tp->pr_cblocks;
 		off = nl[tp->pr_index].n_value;
 	}
-	if (pr != NULL && (off || af != AF_UNSPEC))
+	if (pr != NULL && ((off || af != AF_UNSPEC) || use_sysctl)) {
 		(*pr)(off, name);
+	}
 }
 
 /*

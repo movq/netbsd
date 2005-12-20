@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee80211_output.c,v 1.40 2005/12/11 00:55:42 dyoung Exp $	*/
+/*	$NetBSD: ieee80211_output.c,v 1.45 2006/11/16 01:33:41 christos Exp $	*/
 /*-
  * Copyright (c) 2001 Atsushi Onoe
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -36,7 +36,7 @@
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_output.c,v 1.34 2005/08/10 16:22:29 sam Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_output.c,v 1.40 2005/12/11 00:55:42 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_output.c,v 1.45 2006/11/16 01:33:41 christos Exp $");
 #endif
 
 #include "opt_inet.h"
@@ -160,7 +160,7 @@ ieee80211_send_setup(struct ieee80211com *ic,
  */
 static int
 ieee80211_mgmt_output(struct ieee80211com *ic, struct ieee80211_node *ni,
-    struct mbuf *m, int type)
+    struct mbuf *m, int type, int timer)
 {
 	struct ifnet *ifp = ic->ic_ifp;
 	struct ieee80211_frame *wh;
@@ -212,7 +212,13 @@ ieee80211_mgmt_output(struct ieee80211com *ic, struct ieee80211_node *ni,
 #endif
 	IEEE80211_NODE_STAT(ni, tx_mgmt);
 	IF_ENQUEUE(&ic->ic_mgtq, m);
-	ifp->if_timer = 1;
+	if (timer) {
+		/*
+		 * Set the mgt frame timeout.
+		 */
+		ic->ic_mgt_timer = timer;
+		ifp->if_timer = 1;
+	}
 	(*ifp->if_start)(ifp);
 	return 0;
 }
@@ -493,7 +499,8 @@ ieee80211_crypto_getucastkey(struct ieee80211com *ic, struct ieee80211_node *ni)
  * the default tx key.
  */ 
 static __inline struct ieee80211_key *
-ieee80211_crypto_getmcastkey(struct ieee80211com *ic, struct ieee80211_node *ni)
+ieee80211_crypto_getmcastkey(struct ieee80211com *ic,
+    struct ieee80211_node *ni)
 {
 	if (ic->ic_def_txkey == IEEE80211_KEYIX_NONE ||
 	    IEEE80211_KEY_UNDEFINED(ic->ic_nw_keys[ic->ic_def_txkey]))
@@ -693,7 +700,7 @@ bad:
  *          residual octets at end of data slot
  */
 static int
-ieee80211_compute_duration1(int len, int use_ack, uint32_t flags, int rate,
+ieee80211_compute_duration1(int len, int use_ack, uint32_t icflags, int rate,
     struct ieee80211_duration *d)
 {
 	int pre, ctsrate;
@@ -708,7 +715,7 @@ ieee80211_compute_duration1(int len, int use_ack, uint32_t flags, int rate,
 	bitlen = len * 8;
 
 	pre = IEEE80211_DUR_DS_SIFS;
-	if ((flags & IEEE80211_F_SHPREAMBLE) != 0)
+	if ((icflags & IEEE80211_F_SHPREAMBLE) != 0)
 		pre += IEEE80211_DUR_DS_SHORT_PREAMBLE + IEEE80211_DUR_DS_FAST_PLCPHDR;
 	else
 		pre += IEEE80211_DUR_DS_LONG_PREAMBLE + IEEE80211_DUR_DS_SLOW_PLCPHDR;
@@ -775,28 +782,42 @@ ieee80211_compute_duration1(int len, int use_ack, uint32_t flags, int rate,
  *
  * dn: 802.11 Duration fields (RTS/Data), PLCP Length, Service fields
  *     of last fragment
+ *
+ * ieee80211_compute_duration assumes crypto-encapsulation, if any,
+ * has already taken place.
  */
 int
-ieee80211_compute_duration(struct ieee80211_frame_min *wh, int len,
-    uint32_t flags, int fraglen, int rate, struct ieee80211_duration *d0,
+ieee80211_compute_duration(const struct ieee80211_frame_min *wh,
+    const struct ieee80211_key *wk, int len,
+    uint32_t icflags, int fraglen, int rate, struct ieee80211_duration *d0,
     struct ieee80211_duration *dn, int *npktp, int debug)
 {
 	int ack, rc;
-	int firstlen, hdrlen, lastlen, lastlen0, npkt, overlen, paylen;
+	int cryptolen,	/* crypto overhead: header+trailer */
+	    firstlen,	/* first fragment's payload + overhead length */
+	    hdrlen,	/* header length w/o driver padding */
+	    lastlen,	/* last fragment's payload length w/ overhead */
+	    lastlen0,	/* last fragment's payload length w/o overhead */
+	    npkt,	/* number of fragments */
+	    overlen,	/* non-802.11 header overhead per fragment */
+	    paylen;	/* payload length w/o overhead */
 
-	if ((wh->i_fc[1] & IEEE80211_FC1_DIR_MASK) == IEEE80211_FC1_DIR_DSTODS)
-		hdrlen = sizeof(struct ieee80211_frame_addr4);
+	hdrlen = ieee80211_anyhdrsize((const void *)wh);
+
+        /* Account for padding required by the driver. */
+	if (icflags & IEEE80211_F_DATAPAD)
+		paylen = len - roundup(hdrlen, sizeof(u_int32_t));
 	else
-		hdrlen = sizeof(struct ieee80211_frame);
+		paylen = len - hdrlen;
 
-	paylen = len - hdrlen;
+	overlen = IEEE80211_CRC_LEN;
 
-	if ((wh->i_fc[1] & IEEE80211_FC1_WEP) != 0) {
-		/* XXX assumes the packet is already WEP encapsulated */
-		paylen -= IEEE80211_WEP_TOTLEN;
-		overlen = IEEE80211_WEP_TOTLEN + IEEE80211_CRC_LEN;
-	} else
-		overlen = IEEE80211_CRC_LEN;
+	if (wk != NULL) {
+		cryptolen = wk->wk_cipher->ic_header +
+		            wk->wk_cipher->ic_trailer;
+		paylen -= cryptolen;
+		overlen += cryptolen;
+	}
 
 	npkt = paylen / fraglen;
 	lastlen0 = paylen % fraglen;
@@ -819,16 +840,16 @@ ieee80211_compute_duration(struct ieee80211_frame_min *wh, int len,
 
 	if (debug) {
 		printf("%s: npkt %d firstlen %d lastlen0 %d lastlen %d "
-		    "fraglen %d overlen %d len %d rate %d flags %08x\n",
+		    "fraglen %d overlen %d len %d rate %d icflags %08x\n",
 		    __func__, npkt, firstlen, lastlen0, lastlen, fraglen,
-		    overlen, len, rate, flags);
+		    overlen, len, rate, icflags);
 	}
 
 	ack = !IEEE80211_IS_MULTICAST(wh->i_addr1) &&
 	    (wh->i_fc[1] & IEEE80211_FC0_TYPE_MASK) != IEEE80211_FC0_TYPE_CTL;
 
 	rc = ieee80211_compute_duration1(firstlen + hdrlen,
-	    ack, flags, rate, d0);
+	    ack, icflags, rate, d0);
 	if (rc == -1)
 		return rc;
 
@@ -836,7 +857,7 @@ ieee80211_compute_duration(struct ieee80211_frame_min *wh, int len,
 		*dn = *d0;
 		return 0;
 	}
-	return ieee80211_compute_duration1(lastlen + hdrlen, ack, flags, rate,
+	return ieee80211_compute_duration1(lastlen + hdrlen, ack, icflags, rate,
 	    dn);
 }
 
@@ -1575,12 +1596,8 @@ ieee80211_send_mgmt(struct ieee80211com *ic, struct ieee80211_node *ni,
 		senderr(EINVAL, is_tx_unknownmgt);
 		/* NOTREACHED */
 	}
-
-	ret = ieee80211_mgmt_output(ic, ni, m, type);
-	if (ret == 0) {
-		if (timer)
-			ic->ic_mgt_timer = timer;
-	} else {
+	ret = ieee80211_mgmt_output(ic, ni, m, type, timer);
+	if (ret != 0) {
 bad:
 		ieee80211_free_node(ni);
 	}
@@ -1725,7 +1742,7 @@ ieee80211_beacon_alloc(struct ieee80211com *ic, struct ieee80211_node *ni,
  */
 int
 ieee80211_beacon_update(struct ieee80211com *ic, struct ieee80211_node *ni,
-	struct ieee80211_beacon_offsets *bo, struct mbuf *m, int mcast)
+    struct ieee80211_beacon_offsets *bo, struct mbuf *m, int mcast)
 {
 	int len_changed = 0;
 	u_int16_t capinfo;

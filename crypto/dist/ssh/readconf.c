@@ -1,4 +1,5 @@
-/*	$NetBSD: readconf.c,v 1.26 2005/06/02 04:43:45 lukem Exp $	*/
+/*	$NetBSD: readconf.c,v 1.30 2006/09/28 21:22:14 christos Exp $	*/
+/* $OpenBSD: readconf.c,v 1.159 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -13,18 +14,33 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: readconf.c,v 1.137 2005/03/04 08:48:06 djm Exp $");
-__RCSID("$NetBSD: readconf.c,v 1.26 2005/06/02 04:43:45 lukem Exp $");
+__RCSID("$NetBSD: readconf.c,v 1.30 2006/09/28 21:22:14 christos Exp $");
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/socket.h>
 
-#include "ssh.h"
+#include <netinet/in.h>
+
+#include <ctype.h>
+#include <errno.h>
+#include <netdb.h>
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <limits.h>
+
 #include "xmalloc.h"
+#include "ssh.h"
 #include "compat.h"
 #include "cipher.h"
 #include "pathnames.h"
 #include "log.h"
+#include "key.h"
 #include "readconf.h"
 #include "match.h"
 #include "misc.h"
+#include "buffer.h"
 #include "kex.h"
 #include "mac.h"
 
@@ -72,6 +88,10 @@ __RCSID("$NetBSD: readconf.c,v 1.26 2005/06/02 04:43:45 lukem Exp $");
      Cipher none
      PasswordAuthentication no
 
+   Host vpn.fake.com
+     Tunnel yes
+     TunnelDevice 3
+
    # Defaults for various options
    Host *
      ForwardAgent no
@@ -92,6 +112,7 @@ __RCSID("$NetBSD: readconf.c,v 1.26 2005/06/02 04:43:45 lukem Exp $");
 typedef enum {
 	oBadOption,
 	oForwardAgent, oForwardX11, oForwardX11Trusted, oGatewayPorts,
+	oExitOnForwardFailure,
 	oPasswordAuthentication, oRSAAuthentication,
 	oChallengeResponseAuthentication, oXAuthLocation,
 #if defined(KRB4) || defined(KRB5)
@@ -118,6 +139,7 @@ typedef enum {
 	oAddressFamily, oGssAuthentication, oGssDelegateCreds,
 	oServerAliveInterval, oServerAliveCountMax, oIdentitiesOnly,
 	oSendEnv, oControlPath, oControlMaster, oHashKnownHosts,
+	oTunnel, oTunnelDevice, oLocalCommand, oPermitLocalCommand,
 	oDeprecated, oUnsupported
 } OpCodes;
 
@@ -130,6 +152,7 @@ static struct {
 	{ "forwardagent", oForwardAgent },
 	{ "forwardx11", oForwardX11 },
 	{ "forwardx11trusted", oForwardX11Trusted },
+	{ "exitonforwardfailure", oExitOnForwardFailure },
 	{ "xauthlocation", oXAuthLocation },
 	{ "gatewayports", oGatewayPorts },
 	{ "useprivilegedport", oUsePrivilegedPort },
@@ -217,6 +240,10 @@ static struct {
 	{ "controlpath", oControlPath },
 	{ "controlmaster", oControlMaster },
 	{ "hashknownhosts", oHashKnownHosts },
+	{ "tunnel", oTunnel },
+	{ "tunneldevice", oTunnelDevice },
+	{ "localcommand", oLocalCommand },
+	{ "permitlocalcommand", oPermitLocalCommand },
 	{ NULL, oBadOption }
 };
 
@@ -270,17 +297,18 @@ clear_forwardings(Options *options)
 	int i;
 
 	for (i = 0; i < options->num_local_forwards; i++) {
-		if (options->local_forwards[i].listen_host)
+		if (options->local_forwards[i].listen_host != NULL)
 			xfree(options->local_forwards[i].listen_host);
 		xfree(options->local_forwards[i].connect_host);
 	}
 	options->num_local_forwards = 0;
 	for (i = 0; i < options->num_remote_forwards; i++) {
-		if (options->local_forwards[i].listen_host)
+		if (options->remote_forwards[i].listen_host != NULL)
 			xfree(options->remote_forwards[i].listen_host);
 		xfree(options->remote_forwards[i].connect_host);
 	}
 	options->num_remote_forwards = 0;
+	options->tun_open = SSH_TUNMODE_NO;
 }
 
 /*
@@ -313,12 +341,13 @@ process_config_line(Options *options, const char *host,
 		    int *activep)
 {
 	char *s, **charptr, *endofnumber, *keyword, *arg, *arg2, fwdarg[256];
-	int opcode, *intptr, value;
+	int opcode, *intptr, value, value2, scale;
+	long long orig, val64;
 	size_t len;
 	Forward fwd;
 
 	/* Strip trailing whitespace */
-	for(len = strlen(line) - 1; len > 0; len--) {
+	for (len = strlen(line) - 1; len > 0; len--) {
 		if (strchr(WHITESPACE, line[len]) == NULL)
 			break;
 		line[len] = '\0';
@@ -326,7 +355,8 @@ process_config_line(Options *options, const char *host,
 
 	s = line;
 	/* Get the keyword. (Each line is supposed to begin with a keyword). */
-	keyword = strdelim(&s);
+	if ((keyword = strdelim(&s)) == NULL)
+		return 0;
 	/* Ignore leading whitespace. */
 	if (*keyword == '\0')
 		keyword = strdelim(&s);
@@ -381,6 +411,10 @@ parse_flag:
 
 	case oGatewayPorts:
 		intptr = &options->gateway_ports;
+		goto parse_flag;
+
+	case oExitOnForwardFailure:
+		intptr = &options->exit_on_forward_failure;
 		goto parse_flag;
 
 	case oUsePrivilegedPort:
@@ -503,22 +537,37 @@ parse_yesnoask:
 			fatal("%.200s line %d: Missing argument.", filename, linenum);
 		if (arg[0] < '0' || arg[0] > '9')
 			fatal("%.200s line %d: Bad number.", filename, linenum);
-		value = strtol(arg, &endofnumber, 10);
+		orig = val64 = strtoll(arg, &endofnumber, 10);
 		if (arg == endofnumber)
 			fatal("%.200s line %d: Bad number.", filename, linenum);
 		switch (toupper((unsigned char)*endofnumber)) {
+		case '\0':
+			scale = 1;
+			break;
 		case 'K':
-			value *= 1<<10;
+			scale = 1<<10;
 			break;
 		case 'M':
-			value *= 1<<20;
+			scale = 1<<20;
 			break;
 		case 'G':
-			value *= 1<<30;
+			scale = 1<<30;
 			break;
+		default:
+			scale = 0;
+			fatal("%.200s line %d: Invalid RekeyLimit suffix",
+			    filename, linenum);
 		}
+		val64 *= scale;
+		/* detect integer wrap and too-large limits */
+		if ((val64 / scale) != orig || val64 > INT_MAX)
+			fatal("%.200s line %d: RekeyLimit too large",
+			    filename, linenum);
+		if (val64 < 16)
+			fatal("%.200s line %d: RekeyLimit too small",
+			    filename, linenum);
 		if (*activep && *intptr == -1)
-			*intptr = value;
+			*intptr = (int)val64;
 		break;
 
 	case oIdentityFile:
@@ -587,9 +636,10 @@ parse_string:
 		goto parse_string;
 
 	case oProxyCommand:
+		charptr = &options->proxy_command;
+parse_command:
 		if (s == NULL)
 			fatal("%.200s line %d: Missing argument.", filename, linenum);
-		charptr = &options->proxy_command;
 		len = strspn(s, WHITESPACE "=");
 		if (*activep && *charptr == NULL)
 			*charptr = xstrdup(s + len);
@@ -676,7 +726,7 @@ parse_int:
 		break;
 
 	case oLogLevel:
-		intptr = (int *) &options->log_level;
+		intptr = (int *)(void *)&options->log_level;
 		arg = strdelim(&s);
 		value = log_level_number(arg);
 		if (value == SYSLOG_LEVEL_NOT_SET)
@@ -729,7 +779,7 @@ parse_int:
 			fwd.listen_host = cleanhostname(fwd.listen_host);
 		} else {
 			fwd.listen_port = a2port(fwd.listen_host);
-			fwd.listen_host = "";
+			fwd.listen_host = NULL;
 		}
 		if (fwd.listen_port == 0)
 			fatal("%.200s line %d: Badly formatted port number.",
@@ -778,6 +828,9 @@ parse_int:
 
 	case oAddressFamily:
 		arg = strdelim(&s);
+		if (!arg || *arg == '\0')
+			fatal("%s line %d: missing address family.",
+			    filename, linenum);
 		intptr = &options->address_family;
 		value = 0;	/* To avoid compiler warning... */
 		if (strcasecmp(arg, "inet") == 0)
@@ -829,10 +882,73 @@ parse_int:
 
 	case oControlMaster:
 		intptr = &options->control_master;
-		goto parse_yesnoask;
+		arg = strdelim(&s);
+		if (!arg || *arg == '\0')
+			fatal("%.200s line %d: Missing ControlMaster argument.",
+			    filename, linenum);
+		value = 0;	/* To avoid compiler warning... */
+		if (strcmp(arg, "yes") == 0 || strcmp(arg, "true") == 0)
+			value = SSHCTL_MASTER_YES;
+		else if (strcmp(arg, "no") == 0 || strcmp(arg, "false") == 0)
+			value = SSHCTL_MASTER_NO;
+		else if (strcmp(arg, "auto") == 0)
+			value = SSHCTL_MASTER_AUTO;
+		else if (strcmp(arg, "ask") == 0)
+			value = SSHCTL_MASTER_ASK;
+		else if (strcmp(arg, "autoask") == 0)
+			value = SSHCTL_MASTER_AUTO_ASK;
+		else
+			fatal("%.200s line %d: Bad ControlMaster argument.",
+			    filename, linenum);
+		if (*activep && *intptr == -1)
+			*intptr = value;
+		break;
 
 	case oHashKnownHosts:
 		intptr = &options->hash_known_hosts;
+		goto parse_flag;
+
+	case oTunnel:
+		intptr = &options->tun_open;
+		arg = strdelim(&s);
+		if (!arg || *arg == '\0')
+			fatal("%s line %d: Missing yes/point-to-point/"
+			    "ethernet/no argument.", filename, linenum);
+		value = 0;	/* silence compiler */
+		if (strcasecmp(arg, "ethernet") == 0)
+			value = SSH_TUNMODE_ETHERNET;
+		else if (strcasecmp(arg, "point-to-point") == 0)
+			value = SSH_TUNMODE_POINTOPOINT;
+		else if (strcasecmp(arg, "yes") == 0)
+			value = SSH_TUNMODE_DEFAULT;
+		else if (strcasecmp(arg, "no") == 0)
+			value = SSH_TUNMODE_NO;
+		else
+			fatal("%s line %d: Bad yes/point-to-point/ethernet/"
+			    "no argument: %s", filename, linenum, arg);
+		if (*activep)
+			*intptr = value;
+		break;
+
+	case oTunnelDevice:
+		arg = strdelim(&s);
+		if (!arg || *arg == '\0')
+			fatal("%.200s line %d: Missing argument.", filename, linenum);
+		value = a2tun(arg, &value2);
+		if (value == SSH_TUNID_ERR)
+			fatal("%.200s line %d: Bad tun device.", filename, linenum);
+		if (*activep) {
+			options->tun_local = value;
+			options->tun_remote = value2;
+		}
+		break;
+
+	case oLocalCommand:
+		charptr = &options->local_command;
+		goto parse_command;
+
+	case oPermitLocalCommand:
+		intptr = &options->permit_local_command;
 		goto parse_flag;
 
 	case oDeprecated:
@@ -852,7 +968,7 @@ parse_int:
 	/* Check that there is no garbage at end of line. */
 	if ((arg = strdelim(&s)) != NULL && *arg != '\0') {
 		fatal("%.200s line %d: garbage at end of line; \"%.200s\".",
-		     filename, linenum, arg);
+		    filename, linenum, arg);
 	}
 	return 0;
 }
@@ -922,6 +1038,7 @@ initialize_options(Options * options)
 	options->forward_agent = -1;
 	options->forward_x11 = -1;
 	options->forward_x11_trusted = -1;
+	options->exit_on_forward_failure = -1;
 	options->xauth_location = NULL;
 	options->gateway_ports = -1;
 	options->use_privileged_port = -1;
@@ -988,6 +1105,11 @@ initialize_options(Options * options)
 	options->control_path = NULL;
 	options->control_master = -1;
 	options->hash_known_hosts = -1;
+	options->tun_open = -1;
+	options->tun_local = -1;
+	options->tun_remote = -1;
+	options->local_command = NULL;
+	options->permit_local_command = -1;
 }
 
 /*
@@ -1006,6 +1128,8 @@ fill_default_options(Options * options)
 		options->forward_x11 = 0;
 	if (options->forward_x11_trusted == -1)
 		options->forward_x11_trusted = 0;
+	if (options->exit_on_forward_failure == -1)
+		options->exit_on_forward_failure = 0;
 	if (options->xauth_location == NULL)
 		options->xauth_location = _PATH_XAUTH;
 	if (options->gateway_ports == -1)
@@ -1124,6 +1248,15 @@ fill_default_options(Options * options)
 		options->control_master = 0;
 	if (options->hash_known_hosts == -1)
 		options->hash_known_hosts = 0;
+	if (options->tun_open == -1)
+		options->tun_open = SSH_TUNMODE_NO;
+	if (options->tun_local == -1)
+		options->tun_local = SSH_TUNID_ANY;
+	if (options->tun_remote == -1)
+		options->tun_remote = SSH_TUNID_ANY;
+	if (options->permit_local_command == -1)
+		options->permit_local_command = 0;
+	/* options->local_command should not be set by default */
 	/* options->proxy_command should not be set by default */
 	/* options->user will be set in the main program if appropriate */
 	/* options->hostname will be set in the main program if appropriate */

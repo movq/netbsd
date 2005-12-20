@@ -1,4 +1,4 @@
-/*	$NetBSD: cy.c,v 1.39 2005/12/11 12:21:26 christos Exp $	*/
+/*	$NetBSD: cy.c,v 1.48 2006/11/16 01:32:51 christos Exp $	*/
 
 /*
  * cy.c
@@ -16,7 +16,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cy.c,v 1.39 2005/12/11 12:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cy.c,v 1.48 2006/11/16 01:32:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/ioctl.h>
@@ -32,17 +32,13 @@ __KERNEL_RCSID(0, "$NetBSD: cy.c,v 1.39 2005/12/11 12:21:26 christos Exp $");
 #include <sys/malloc.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
+#include <sys/kauth.h>
 
 #include <machine/bus.h>
 
 #include <dev/ic/cd1400reg.h>
 #include <dev/ic/cyreg.h>
 #include <dev/ic/cyvar.h>
-
-/* Macros to clear/set/test flags. */
-#define	SET(t, f)	(t) |= (f)
-#define	CLR(t, f)	(t) &= ~(f)
-#define	ISSET(t, f)	((t) & (f))
 
 int	cyparam(struct tty *, struct termios *);
 void	cystart(struct tty *);
@@ -298,6 +294,9 @@ cyopen(dev_t dev, int flag, int mode, struct lwp *l)
 	tp->t_param = cyparam;
 	tp->t_dev = dev;
 
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
+		return (EBUSY);
+
 	if (!ISSET(tp->t_state, TS_ISOPEN) && tp->t_wopen == 0) {
 		ttychars(tp);
 		tp->t_iflag = TTYDEF_IFLAG;
@@ -369,9 +368,6 @@ cyopen(dev_t dev, int flag, int mode, struct lwp *l)
 			SET(tp->t_state, TS_CARR_ON);
 		else
 			CLR(tp->t_state, TS_CARR_ON);
-	} else if (ISSET(tp->t_state, TS_XCLUDE) &&
-		   suser(l->l_proc->p_ucred, &l->l_proc->p_acflag) != 0) {
-		return EBUSY;
 	} else {
 		s = spltty();
 	}
@@ -499,11 +495,9 @@ cyioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct cy_softc *sc;
 	struct cy_port *cy;
-	struct proc *p;
 	struct tty *tp;
 	int error;
 
-	p = l ? l->l_proc : NULL;
 	cy = CY_PORT(dev);
 	sc = CY_BOARD(cy);
 	tp = cy->cy_tty;
@@ -559,7 +553,8 @@ cyioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		break;
 
 	case TIOCSFLAGS:
-		error = suser(p->p_ucred, &p->p_acflag);
+		error = kauth_authorize_device_tty(l->l_cred,
+		    KAUTH_DEVICE_TTY_PRIVSET, tp);
 		if (error != 0)
 			return EPERM;
 
@@ -647,7 +642,8 @@ cyparam(struct tty *tp, struct termios *t)
 {
 	struct cy_softc *sc;
 	struct cy_port *cy;
-	int ibpr, obpr, i_clk_opt, o_clk_opt, s, opt;
+	int ibpr = 0, obpr = 0, i_clk_opt = 0, o_clk_opt = 0;	/* XXX: GCC */
+	int s, opt;
 
 	cy = CY_PORT(tp->t_dev);
 	sc = CY_BOARD(cy);
@@ -1135,8 +1131,8 @@ cy_intr(void *arg)
 				if (cy->cy_tty == NULL ||
 				    !ISSET(cy->cy_tty->t_state, TS_ISOPEN)) {
 					while (n_chars--)
-						cd_read_reg(sc, cy->cy_chip,
-							    CD1400_RDSR);
+						(void)cd_read_reg(sc,
+						    cy->cy_chip, CD1400_RDSR);
 					goto end_rx_serv;
 				}
 

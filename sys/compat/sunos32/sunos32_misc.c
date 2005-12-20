@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos32_misc.c,v 1.33 2005/12/11 12:20:23 christos Exp $	*/
+/*	$NetBSD: sunos32_misc.c,v 1.42 2006/11/14 13:34:30 elad Exp $	*/
 /* from :NetBSD: sunos_misc.c,v 1.107 2000/12/01 19:25:10 jdolecek Exp	*/
 
 /*
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos32_misc.c,v 1.33 2005/12/11 12:20:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos32_misc.c,v 1.42 2006/11/14 13:34:30 elad Exp $");
 
 #define COMPAT_SUNOS 1
 
@@ -87,6 +87,7 @@ __KERNEL_RCSID(0, "$NetBSD: sunos32_misc.c,v 1.33 2005/12/11 12:20:23 christos E
 #include "opt_nfsserver.h"
 #include "opt_compat_43.h"
 #include "opt_compat_netbsd.h"
+#include "opt_ptrace.h"
 #include "fs_nfs.h"
 #endif
 
@@ -118,11 +119,13 @@ __KERNEL_RCSID(0, "$NetBSD: sunos32_misc.c,v 1.33 2005/12/11 12:20:23 christos E
 #include <sys/utsname.h>
 #include <sys/unistd.h>
 #include <sys/sa.h>
+#include <sys/syscall.h>
 #include <sys/syscallargs.h>
 #include <sys/conf.h>
 #include <sys/socketvar.h>
 #include <sys/exec.h>
 #include <sys/swap.h>
+#include <sys/kauth.h>
 
 #include <compat/netbsd32/netbsd32.h>
 #include <compat/netbsd32/netbsd32_syscallargs.h>
@@ -263,9 +266,9 @@ sunos32_sys_access(l, v, retval)
 	return (sys_access(l, &ua, retval));
 }
 
-static __inline void sunos32_from___stat13 __P((struct stat *, struct netbsd32_stat43 *));
+static inline void sunos32_from___stat13 __P((struct stat *, struct netbsd32_stat43 *));
 
-static __inline void
+static inline void
 sunos32_from___stat13(sbp, sb32p)
 	struct stat *sbp;
 	struct netbsd32_stat43 *sb32p;
@@ -636,7 +639,7 @@ async_daemon(l, v, retval)
 void	native_to_sunos_sigset __P((const sigset_t *, int *));
 void	sunos_to_native_sigset __P((const int, sigset_t *));
 
-__inline__ void
+inline void
 native_to_sunos_sigset(ss, mask)
 	const sigset_t *ss;
 	int *mask;
@@ -644,7 +647,7 @@ native_to_sunos_sigset(ss, mask)
 	*mask = ss->__bits[0];
 }
 
-__inline__ void
+inline void
 sunos_to_native_sigset(mask, ss)
 	const int mask;
 	sigset_t *ss;
@@ -752,10 +755,9 @@ again:
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
 	auio.uio_rw = UIO_READ;
-	auio.uio_segflg = UIO_SYSSPACE;
-	auio.uio_lwp = NULL;
 	auio.uio_resid = buflen;
 	auio.uio_offset = off;
+	UIO_SETUP_SYSSPACE(&auio);
 	/*
 	 * First we read into the malloc'ed buffer, then
 	 * we massage it into user space, one record at a time.
@@ -979,9 +981,9 @@ sunos32_sys_setsockopt(l, v, retval)
 	return (error);
 }
 
-static __inline__ int sunos32_sys_socket_common(struct lwp *, register_t *,
+static inline int sunos32_sys_socket_common(struct lwp *, register_t *,
 					      int type);
-static __inline__ int
+static inline int
 sunos32_sys_socket_common(l, retval, type)
 	struct lwp *l;
 	register_t *retval;
@@ -1016,7 +1018,7 @@ sunos32_sys_socket(l, v, retval)
 	} */ *uap = v;
 	int error;
 
-	error = netbsd32_socket(l, v, retval);
+	error = netbsd32_sys___socket30(l, v, retval);
 	if (error)
 		return (error);
 	return sunos32_sys_socket_common(l, retval, SCARG(uap, type));
@@ -1472,6 +1474,7 @@ sunos32_sys_setrlimit(l, v, retval)
 	return compat_43_netbsd32_osetrlimit(l, uap, retval);
 }
 
+#if defined(PTRACE) || defined(_LKM)
 /* for the m68k machines */
 #ifndef PT_GETFPREGS
 #define PT_GETFPREGS -1
@@ -1487,6 +1490,7 @@ static const int sreq2breq[] = {
 	PT_GETREGS,     PT_SETREGS,     PT_GETFPREGS,   PT_SETFPREGS
 };
 static const int nreqs = sizeof(sreq2breq) / sizeof(sreq2breq[0]);
+#endif
 
 int
 sunos32_sys_ptrace(l, v, retval)
@@ -1494,6 +1498,7 @@ sunos32_sys_ptrace(l, v, retval)
 	void *v;
 	register_t *retval;
 {
+#if defined(PTRACE) || defined(_LKM)
 	struct sunos32_sys_ptrace_args /* {
 		syscallarg(int) req;
 		syscallarg(pid_t) pid;
@@ -1504,9 +1509,14 @@ sunos32_sys_ptrace(l, v, retval)
 	struct netbsd32_ptrace_args pa;
 	int req;
 
-	req = SCARG(uap, req);
+#ifdef _LKM
+#define sys_ptrace sysent[SYS_ptrace].sy_call
+	if (sys_ptrace == sys_nosys)
+		return ENOSYS;
+#endif
 
-	if (req < 0 || req >= nreqs)
+	req = SCARG(uap, req);
+	if ((unsigned int)req >= nreqs)
 		return (EINVAL);
 
 	req = sreq2breq[req];
@@ -1519,6 +1529,9 @@ sunos32_sys_ptrace(l, v, retval)
 	SCARG(&pa, data) = SCARG(uap, data);
 
 	return netbsd32_ptrace(l, &pa, retval);
+#else
+	return (ENOSYS);
+#endif /* PTRACE || _LKM */
 }
 
 /*
@@ -1557,13 +1570,13 @@ sunos32_sys_reboot(l, v, retval)
 		syscallarg(int) howto;
 		syscallarg(netbsd32_charp) bootstr;
 	} */ *uap = v;
-	struct proc *p = l->l_proc;
 	struct sys_reboot_args ua;
 	struct sunos_howto_conv *convp;
 	int error, bsd_howto, sun_howto;
 	char *bootstr;
 
-	if ((error = suser(p->p_ucred, &p->p_acflag)) != 0)
+	if ((error = kauth_authorize_system(l->l_cred,
+	    KAUTH_SYSTEM_REBOOT, 0, NULL, NULL, NULL)) != 0)
 		return (error);
 
 	/*

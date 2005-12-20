@@ -1,4 +1,4 @@
-/*	$NetBSD: inet.c,v 1.5 2003/10/21 09:42:07 itojun Exp $	*/
+/*	$NetBSD: inet.c,v 1.7 2006/09/29 14:18:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -160,7 +160,8 @@ main(int argc, char **argv)
 	struct timeval		then, now, diff;
 	struct kevent		event[5];
 	struct sockaddr_in	sa;
-	int			sock, fd, kq, n, i, match;
+	socklen_t		salen;
+	int			sock, fd, kq, i, n, match;
 	char			buffer[128];
 	pid_t child;
 	int status;
@@ -186,8 +187,8 @@ main(int argc, char **argv)
 
 	if (listen(sock, 5) == -1)
 		err(1, "ir: listen");
-	n = sizeof(sa);
-	if (getsockname(sock, (struct sockaddr *)&sa, &n) == -1)
+	salen = sizeof(sa);
+	if (getsockname(sock, (struct sockaddr *)&sa, &salen) == -1)
 		err(1, "ir: getsockname");
 	port = sa.sin_port;
 	printf("ir: pid %d bound to port %d\n", getpid(), ntohs(sa.sin_port));
@@ -232,8 +233,8 @@ printf("ir: registered sock %d\n", sock);
 		/*
 		 * accept connection, start reading
 		 */
-	n = sizeof(sa);
-	fd = accept(sock, (struct sockaddr *)&sa, &n);
+	salen = sizeof(sa);
+	fd = accept(sock, (struct sockaddr *)&sa, &salen);
 	if (fd == -1)
 		err(1, "ir: accept");
 	printf("ir: got connection from 0x%x port %d\n",
@@ -272,6 +273,8 @@ printf("ir: match is %d\n", match); /* sleep(1); */
 			continue;
 
 		n = read(fd, buffer, 128);
+		if (n < 0)
+			err(1, "read");
 		buffer[n] = '\0';
 buffer[0] = '\0';
 		printf("[%d] %s", n, buffer);

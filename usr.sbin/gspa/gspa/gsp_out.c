@@ -1,4 +1,4 @@
-/*	$NetBSD: gsp_out.c,v 1.7 2002/05/27 21:11:56 wiz Exp $	*/
+/*	$NetBSD: gsp_out.c,v 1.9 2006/08/26 18:15:37 christos Exp $	*/
 /*
  * GSP assembler - binary & listing output
  *
@@ -33,12 +33,13 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: gsp_out.c,v 1.7 2002/05/27 21:11:56 wiz Exp $");
+__RCSID("$NetBSD: gsp_out.c,v 1.9 2006/08/26 18:15:37 christos Exp $");
 #endif
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <util.h>
 #include "gsp_ass.h"
 
 u_int16_t codes[5];
@@ -185,7 +186,7 @@ list_error(char *string)
 	if( listfile == NULL )
 		return;
 	l = strlen(string);
-	p = (struct error *) alloc(sizeof(struct error) + l);
+	p = emalloc(sizeof(struct error) + l);
 	strcpy(p->string, string);
 	p->next = NULL;
 	if( error_list == NULL )

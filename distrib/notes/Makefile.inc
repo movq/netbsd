@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.35 2004/02/02 18:43:39 he Exp $
+#	$NetBSD: Makefile.inc,v 1.36.4.3 2007/12/15 19:33:59 bouyer Exp $
 #
 
 # Ross Harvey <ross@NetBSD.org>
@@ -20,10 +20,13 @@ TOCS=	${TARG}.PostScript.toc ${TARG}.ASCII.toc ${TARG}.HTML.toc \
 	${TARG}.more.toc
 SRCS=	${MAIN} whatis ${COMMON}/contents hardware xfer prep \
 	${.CURDIR}/install ${COMMON}/postinstall upgrade \
-	${COMMON}/donations ${COMMON}/legal.common legal \
+	${COMMON}/legal.common legal ${COMMON}/netboot \
+	${COMMON}/sysinst \
 	${.CURDIR}/../Makefile.inc ${MERGED_SRCS}
 
-PRESET=	${GFLAGS} -dM=${M} -dV=${DISTRIBVER} -d.CURDIR=${.CURDIR} -r${M}=1
+whatis: .OPTIONAL
+
+PRESET=	${GFLAGS} -U -dM=${M} -dV=${DISTRIBVER} -d.CURDIR=${.CURDIR} -r${M}=1
 
 POST_PLAIN= -P-b -P-u -P-o
 
@@ -99,7 +102,8 @@ ${TARG}.more.toc: ${SRCS}
 
 
 release: check_RELEASEDIR .WAIT ${TARGS}
-	${RELEASE_INSTALL} ${TARGS} ${RELEASEDIR}/${MACHINE}
+	${INSTALL} -d -m 755 ${RELEASEDIR}/${RELEASEMACHINEDIR}
+	${RELEASE_INSTALL} ${TARGS} ${RELEASEDIR}/${RELEASEMACHINEDIR}
 
 cleannotes:
 	rm -f [Ee]rrs mklog core *.core ${TARGS} ${TOCS} \

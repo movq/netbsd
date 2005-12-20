@@ -1,4 +1,4 @@
-/*	$NetBSD: systrace.h,v 1.17 2005/12/03 17:10:46 christos Exp $	*/
+/*	$NetBSD: systrace.h,v 1.21 2006/10/06 16:17:11 christos Exp $	*/
 
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
@@ -55,6 +55,7 @@ struct str_msg_execve {
 #define SYSTR_MAX_POLICIES	64
 #define SYSTR_MAXARGS		64
 #define SYSTR_MAXFNAME		8
+#define SYSTR_MAXREPLEN		2048
 
 struct str_msg_ask {
 	int32_t code;
@@ -86,7 +87,7 @@ struct str_msg_child {
 struct str_message {
 	int32_t msg_type;
 	pid_t msg_pid;
-	u_int16_t msg_seqnr;	/* answer has to match seqnr */
+	uint16_t msg_seqnr;	/* answer has to match seqnr */
 	int16_t msg_policy;
 	union {
 		struct str_msg_emul msg_emul;
@@ -108,7 +109,7 @@ struct str_msgcontainer {
 
 struct systrace_answer {
 	pid_t stra_pid;
-	u_int16_t stra_seqnr;
+	uint16_t stra_seqnr;
 	int16_t reserved;
  	uid_t stra_seteuid;	/* elevated privileges for system call */
  	gid_t stra_setegid;
@@ -159,7 +160,7 @@ struct systrace_policy {
 
 struct systrace_replace {
 	pid_t strr_pid;
-	u_int16_t strr_seqnr;
+	uint16_t strr_seqnr;
 	int16_t reserved;
 	int32_t strr_nrepl;
 	caddr_t	strr_base;	/* Base memory */
@@ -192,11 +193,6 @@ struct systrace_replace {
 #ifdef _KERNEL
 #include <sys/namei.h>
 
-/* XXX: these shouldn't be here. */
-#define SET(t, f)	((t) |= (f))
-#define	ISSET(t, f)	((t) & (f))
-#define	CLR(t, f)	((t) &= ~(f))
-
 struct fsystrace {
 	struct lock lock;
 	struct selinfo si;
@@ -223,9 +219,9 @@ struct fsystrace {
 
 /* Internal prototypes */
 
-int systrace_enter(struct proc *, register_t, void *);
+int systrace_enter(struct lwp *, register_t, void *);
 void systrace_namei(struct nameidata *);
-void systrace_exit(struct proc *, register_t, void *, register_t [], int);
+void systrace_exit(struct lwp *, register_t, void *, register_t [], int);
 void systrace_sys_exit(struct proc *);
 void systrace_sys_fork(struct proc *, struct proc *);
 #ifndef __NetBSD__

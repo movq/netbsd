@@ -1,4 +1,4 @@
-/*	$NetBSD: file_subs.c,v 1.57 2005/09/18 12:15:41 christos Exp $	*/
+/*	$NetBSD: file_subs.c,v 1.59 2006/02/11 10:43:18 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)file_subs.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: file_subs.c,v 1.57 2005/09/18 12:15:41 christos Exp $");
+__RCSID("$NetBSD: file_subs.c,v 1.59 2006/02/11 10:43:18 dsl Exp $");
 #endif
 #endif /* not lint */
 
@@ -83,6 +83,21 @@ static int warn_broken;
  */
 #define FILEBITS(dir)		((dir) ? (FILE_BITS | S_ISVTX) : FILE_BITS)
 #define SETBITS(dir)		((dir) ? SET_BITS : (SET_BITS | S_ISVTX))
+
+static mode_t
+apply_umask(mode_t mode)
+{
+	static mode_t cached_umask;
+	static int cached_umask_valid;
+
+	if (!cached_umask_valid) {
+		cached_umask = umask(0);
+		umask(cached_umask);
+		cached_umask_valid = 1;
+	}
+
+	return mode & ~cached_umask;
+}
 
 /*
  * file_creat()
@@ -132,7 +147,7 @@ file_creat(ARCHD *arcn, int write_to_hardlink)
 	arcn->tmp_name = malloc(arcn->nlen + 8);
 	if (arcn->tmp_name == NULL) {
 		syswarn(1, errno, "Cannot malloc %d bytes", arcn->nlen + 8);
-		return(-1);
+		return -1;
 	}
 	if (xtmp_name != NULL)
 		abort();
@@ -157,10 +172,10 @@ file_creat(ARCHD *arcn, int write_to_hardlink)
 			xtmp_name = NULL;
 			free(arcn->tmp_name);
 			arcn->tmp_name = NULL;
-			return(-1);
+			return -1;
 		}
 	}
-	return(fd);
+	return fd;
 }
 
 /*
@@ -206,7 +221,8 @@ file_close(ARCHD *arcn, int fd)
 	if (pmode)
 		set_pmode(tmp_name, arcn->sb.st_mode);
 	else
-		set_pmode(tmp_name, arcn->sb.st_mode & FILEBITS(0));
+		set_pmode(tmp_name,
+		    apply_umask((arcn->sb.st_mode & FILEBITS(0))));
 	if (patime || pmtime)
 		set_ftime(tmp_name, arcn->sb.st_mtime, arcn->sb.st_atime, 0);
 
@@ -263,16 +279,16 @@ lnk_creat(ARCHD *arcn, int *payload)
 	if (lstat(arcn->ln_name, &sb) < 0) {
 		syswarn(1, errno, "Cannot link to %s from %s", arcn->ln_name,
 		    arcn->name);
-		return(-1);
+		return -1;
 	}
 
 	if (S_ISDIR(sb.st_mode)) {
 		tty_warn(1, "A hard link to the directory %s is not allowed",
 		    arcn->ln_name);
-		return(-1);
+		return -1;
 	}
 
-	return(mk_link(arcn->ln_name, &sb, arcn->name, 0));
+	return mk_link(arcn->ln_name, &sb, arcn->name, 0);
 }
 
 /*
@@ -294,8 +310,8 @@ cross_lnk(ARCHD *arcn)
 	 * root (and it might succeed).
 	 */
 	if (arcn->type == PAX_DIR)
-		return(1);
-	return(mk_link(arcn->org_name, &(arcn->sb), arcn->name, 1));
+		return 1;
+	return mk_link(arcn->org_name, &(arcn->sb), arcn->name, 1);
 }
 
 /*
@@ -319,9 +335,9 @@ chk_same(ARCHD *arcn)
 	 * quietly
 	 */
 	if (lstat(arcn->name, &sb) < 0)
-		return(1);
+		return 1;
 	if (kflag)
-		return(0);
+		return 0;
 
 	/*
 	 * better make sure the user does not have src == dest by mistake
@@ -329,9 +345,9 @@ chk_same(ARCHD *arcn)
 	if ((arcn->sb.st_dev == sb.st_dev) && (arcn->sb.st_ino == sb.st_ino)) {
 		tty_warn(1, "Unable to copy %s, file would overwrite itself",
 		    arcn->name);
-		return(0);
+		return 0;
 	}
-	return(1);
+	return 1;
 }
 
 /*
@@ -358,14 +374,14 @@ mk_link(char *to, struct stat *to_sb, char *from, int ign)
 	 */
 	if (lstat(from, &sb) == 0) {
 		if (kflag)
-			return(0);
+			return 0;
 
 		/*
 		 * make sure it is not the same file, protect the user
 		 */
 		if ((to_sb->st_dev==sb.st_dev)&&(to_sb->st_ino == sb.st_ino)) {
 			tty_warn(1, "Cannot link file %s to itself", to);
-			return(-1);
+			return -1;
 		}
 
 		/*
@@ -374,14 +390,14 @@ mk_link(char *to, struct stat *to_sb, char *from, int ign)
 		if (S_ISDIR(sb.st_mode) && strcmp(from, ".") != 0) {
 			if (rmdir(from) < 0) {
 				syswarn(1, errno, "Cannot remove %s", from);
-				return(-1);
+				return -1;
 			}
 		} else if (unlink(from) < 0) {
 			if (!ign) {
 				syswarn(1, errno, "Cannot remove %s", from);
-				return(-1);
+				return -1;
 			}
-			return(1);
+			return 1;
 		}
 	}
 
@@ -399,15 +415,15 @@ mk_link(char *to, struct stat *to_sb, char *from, int ign)
 		if (!ign) {
 			syswarn(1, oerrno, "Cannot link to %s from %s", to,
 			    from);
-			return(-1);
+			return -1;
 		}
-		return(1);
+		return 1;
 	}
 
 	/*
 	 * all right the link was made
 	 */
-	return(0);
+	return 0;
 }
 
 /*
@@ -606,7 +622,7 @@ badlink:
 	if (pfflags && arcn->type != PAX_SLK)
 		set_chflags(arcn->name, arcn->sb.st_flags);
 #endif
-	return(0);
+	return 0;
 }
 
 /*
@@ -630,9 +646,9 @@ unlnk_exist(char *name, int type)
 	 * the file does not exist, or -k we are done
 	 */
 	if (lstat(name, &sb) < 0)
-		return(0);
+		return 0;
 	if (kflag)
-		return(-1);
+		return -1;
 
 	if (S_ISDIR(sb.st_mode)) {
 		/*
@@ -643,14 +659,14 @@ unlnk_exist(char *name, int type)
 		 * otherwise later file/directory creation fails.
 		 */
 		if (strcmp(name, ".") == 0)
-			return(1);
+			return 1;
 		if (rmdir(name) < 0) {
 			if (type == PAX_DIR)
-				return(1);
+				return 1;
 			syswarn(1, errno, "Cannot remove directory %s", name);
-			return(-1);
+			return -1;
 		}
-		return(0);
+		return 0;
 	}
 
 	/*
@@ -659,9 +675,9 @@ unlnk_exist(char *name, int type)
 	if (unlink(name) < 0) {
 		(void)fflush(listf);
 		syswarn(1, errno, "Cannot unlink %s", name);
-		return(-1);
+		return -1;
 	}
-	return(0);
+	return 0;
 }
 
 /*
@@ -830,9 +846,9 @@ set_ids(char *fnm, uid_t uid, gid_t gid)
 			(void)fflush(listf);
 			syswarn(1, errno, "Cannot set file uid/gid of %s",
 			    fnm);
-			return(-1);
+			return -1;
 		}
-	return(0);
+	return 0;
 }
 
 /*
@@ -968,7 +984,7 @@ file_write(int fd, char *str, int cnt, int *rem, int *isempt, int sz,
 				    lseek(fd, (off_t)wcnt, SEEK_CUR) < 0) {
 					syswarn(1, errno, "File seek on %s",
 					    name);
-					return(-1);
+					return -1;
 				}
 				st = pt;
 				continue;
@@ -1001,18 +1017,18 @@ file_write(int fd, char *str, int cnt, int *rem, int *isempt, int sz,
 				malloc(wcnt + 1);
 			if (nstr == NULL) {
 				tty_warn(1, "Out of memory");
-				return(-1);
+				return -1;
 			}
 			(void)strlcpy(&nstr[*lenp], st, wcnt + 1);
 			*strp = nstr;
 			*lenp += wcnt;
 		} else if (xwrite(fd, st, wcnt) != wcnt) {
 			syswarn(1, errno, "Failed write to file %s", name);
-			return(-1);
+			return -1;
 		}
 		st += wcnt;
 	}
-	return(st - str);
+	return st - str;
 }
 
 /*
@@ -1099,7 +1115,7 @@ set_crc(ARCHD *arcn, int fd)
 		 * hmm, no fd, should never happen. well no crc then.
 		 */
 		arcn->crc = 0L;
-		return(0);
+		return 0;
 	}
 
 	if ((size = (u_long)arcn->sb.st_blksize) > (u_long)sizeof(tbuf))
@@ -1131,7 +1147,7 @@ set_crc(ARCHD *arcn, int fd)
 		syswarn(1, errno, "File rewind failed on: %s", arcn->org_name);
 	else {
 		arcn->crc = crc;
-		return(0);
+		return 0;
 	}
-	return(-1);
+	return -1;
 }

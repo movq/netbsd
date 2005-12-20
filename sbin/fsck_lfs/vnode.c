@@ -1,4 +1,4 @@
-/* $NetBSD: vnode.c,v 1.3 2005/04/11 23:19:24 perseant Exp $ */
+/* $NetBSD: vnode.c,v 1.6 2006/11/09 19:36:36 christos Exp $ */
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -56,6 +56,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <util.h>
 
 #include "bufcache.h"
 #include "vnode.h"
@@ -109,7 +110,7 @@ register_vget(void *fs, struct uvnode *func(void *, ino_t))
 {
 	struct vget_reg *vgr;
 
-	vgr = (struct vget_reg *)malloc(sizeof(*vgr));
+	vgr = emalloc(sizeof(*vgr));
 	vgr->vgr_fs = fs;
 	vgr->vgr_func = func;
 	LIST_INSERT_HEAD(&vgrlist, vgr, vgr_list);
@@ -135,11 +136,13 @@ vnode_destroy(struct uvnode *tossvp)
 	--nvnodes;
 	LIST_REMOVE(tossvp, v_getvnodes);
 	LIST_REMOVE(tossvp, v_mntvnodes);
-	LIST_FOREACH(bp, &tossvp->v_dirtyblkhd, b_vnbufs) {
+	while ((bp = LIST_FIRST(&tossvp->v_dirtyblkhd)) != NULL) {
+		LIST_REMOVE(bp, b_vnbufs);
 		bremfree(bp);
 		buf_destroy(bp);
 	}
-	LIST_FOREACH(bp, &tossvp->v_cleanblkhd, b_vnbufs) {
+	while ((bp = LIST_FIRST(&tossvp->v_cleanblkhd)) != NULL) {
+		LIST_REMOVE(bp, b_vnbufs);
 		bremfree(bp);
 		buf_destroy(bp);
 	}

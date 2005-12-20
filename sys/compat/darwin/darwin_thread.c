@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_thread.c,v 1.9 2005/12/11 12:19:56 christos Exp $ */
+/*	$NetBSD: darwin_thread.c,v 1.12 2006/11/16 01:32:42 christos Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_thread.c,v 1.9 2005/12/11 12:19:56 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_thread.c,v 1.12 2006/11/16 01:32:42 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -67,30 +67,24 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_thread.c,v 1.9 2005/12/11 12:19:56 christos E
  * the parent as well as the child.
  */
 int
-darwin_sys_fork(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+darwin_sys_fork(struct lwp *l, void *v, register_t *retval)
 {
 	int error;
 
 	if ((error = fork1(l, 0, SIGCHLD, NULL, 0,
-	    darwin_fork_child_return, NULL, retval, NULL)) != 0);
+	    darwin_fork_child_return, NULL, retval, NULL)) != 0)
 		return error;
 
 	return 0;
 }
 
 int
-darwin_sys_vfork(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+darwin_sys_vfork(struct lwp *l, void *v, register_t *retval)
 {
 	int error;
 
 	if ((error = fork1(l, FORK_PPWAIT, SIGCHLD, NULL, 0,
-	    darwin_fork_child_return, NULL, retval, NULL)) != 0);
+	    darwin_fork_child_return, NULL, retval, NULL)) != 0)
 		return error;
 
 	return 0;

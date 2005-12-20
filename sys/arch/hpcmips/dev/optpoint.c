@@ -1,4 +1,4 @@
-/*	$NetBSD: optpoint.c,v 1.3 2005/12/11 12:17:33 christos Exp $ */
+/*	$NetBSD: optpoint.c,v 1.5 2006/11/12 19:00:42 plunky Exp $ */
 
 /*-
  * Copyright (c) 2005 HAMAJIMA Katsuomi. All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: optpoint.c,v 1.3 2005/12/11 12:17:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: optpoint.c,v 1.5 2006/11/12 19:00:42 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,7 +71,7 @@ static void optpoint_attach(struct device *, struct device *, void *);
 static int optpoint_intr(void *);
 static int optpoint_enable(void *);
 static void optpoint_disable(void *);
-static int optpoint_ioctl(void *, u_long, caddr_t, int, struct proc *);
+static int optpoint_ioctl(void *, u_long, caddr_t, int, struct lwp *);
 static int optpoint_initialize(void *);
 static void optpoint_send(struct optpoint_softc *, int);
 static int optpoint_recv(struct optpoint_softc *);
@@ -176,8 +176,10 @@ optpoint_intr(void *self)
 		if (dx || dy || changed){
 			DPRINTF(("%s: buttons=0x%x, dx=%d, dy=%d\n",
 				 sc->sc_dev.dv_xname, newbuttons, dx, dy));
-			wsmouse_input(sc->sc_wsmousedev, newbuttons, dx, dy, 0,
-				      WSMOUSE_INPUT_DELTA);
+			wsmouse_input(sc->sc_wsmousedev,
+					newbuttons,
+					dx, dy, 0, 0,
+					WSMOUSE_INPUT_DELTA);
 		}
 		sc->buttons = newbuttons;
 		sc->index = 0;
@@ -242,7 +244,7 @@ optpoint_disable(void *self)
 }
 
 int
-optpoint_ioctl(void *self, u_long cmd, caddr_t data, int flag, struct proc *p)
+optpoint_ioctl(void *self, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	switch (cmd) {
 	case WSMOUSEIO_GTYPE:

@@ -1,4 +1,5 @@
-/*	$NetBSD: auth.c,v 1.22 2005/04/23 16:53:28 christos Exp $	*/
+/*	$NetBSD: auth.c,v 1.24.2.2 2007/07/16 10:32:49 liamjfoy Exp $	*/
+/* $OpenBSD: auth.c,v 1.75 2006/08/03 03:34:41 deraadt Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
  *
@@ -24,25 +25,37 @@
  */
 
 #include "includes.h"
-RCSID("$OpenBSD: auth.c,v 1.57 2005/01/22 08:17:59 dtucker Exp $");
-__RCSID("$NetBSD: auth.c,v 1.22 2005/04/23 16:53:28 christos Exp $");
+__RCSID("$NetBSD: auth.c,v 1.24.2.2 2007/07/16 10:32:49 liamjfoy Exp $");
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/param.h>
 
+#include <errno.h>
 #include <libgen.h>
+#include <paths.h>
+#include <pwd.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
 
 #include "xmalloc.h"
 #include "match.h"
 #include "groupaccess.h"
 #include "log.h"
+#include "buffer.h"
 #include "servconf.h"
+#include "key.h"
+#include "hostfile.h"
 #include "auth.h"
 #include "auth-options.h"
 #include "canohost.h"
-#include "buffer.h"
-#include "bufaux.h"
 #include "uidswap.h"
 #include "misc.h"
-#include "bufaux.h"
 #include "packet.h"
+#ifdef GSSAPI
+#include "ssh-gss.h"
+#endif
+#include "monitor_wrap.h"
 
 #ifdef HAVE_LOGIN_CAP
 #include <login_cap.h>
@@ -50,6 +63,7 @@ __RCSID("$NetBSD: auth.c,v 1.22 2005/04/23 16:53:28 christos Exp $");
 
 /* import */
 extern ServerOptions options;
+extern int use_privsep;
 
 /* Debugging messages */
 Buffer auth_debug;
@@ -67,15 +81,15 @@ int auth_debug_init;
 int
 allowed_user(struct passwd * pw)
 {
+#ifdef HAVE_LOGIN_CAP
+	extern login_cap_t *lc;
+	int match_name, match_ip;
+	char *cap_hlist, *hp;
+#endif
 	struct stat st;
 	const char *hostname = NULL, *ipaddr = NULL;
 	char *shell;
-	int i;
-#ifdef HAVE_LOGIN_CAP
-	int match_name, match_ip;
-	login_cap_t *lc;
-	char *cap_hlist, *hp;
-#endif
+	u_int i;
 
 	/* Shouldn't be called if pw is NULL, but better safe than sorry... */
 	if (!pw || !pw->pw_name)
@@ -153,6 +167,9 @@ allowed_user(struct passwd * pw)
 	login_close(lc);
 #endif
 
+#ifdef USE_PAM
+	if (!options.use_pam) {
+#endif
 	/*
 	 * password/account expiration.
 	 */
@@ -183,6 +200,9 @@ allowed_user(struct passwd * pw)
 			}
 		}
 	}
+#ifdef USE_PAM
+	}
+#endif
 
 	/*
 	 * Get the shell from the password data.  An empty shell field is
@@ -212,7 +232,8 @@ allowed_user(struct passwd * pw)
 	 * XXX logins, too.
 	 */
 
-	if (options.num_deny_users > 0 || options.num_allow_users > 0) {
+	if (options.num_deny_users > 0 || options.num_allow_users > 0 ||
+	    options.num_deny_groups > 0 || options.num_allow_groups > 0) {
 		hostname = get_canonical_hostname(options.use_dns);
 		ipaddr = get_remote_ipaddr();
 	}
@@ -284,6 +305,9 @@ auth_log(Authctxt *authctxt, int authenticated, char *method, char *info)
 	void (*authlog) (const char *fmt,...) = verbose;
 	char *authmsg;
 
+	if (use_privsep && !mm_is_monitor() && !authctxt->postponed)
+		return;
+
 	/* Raise logging level */
 	if (authenticated == 1 ||
 	    !authctxt->valid ||
@@ -315,7 +339,6 @@ auth_root_allowed(char *method)
 	switch (options.permit_root_login) {
 	case PERMIT_YES:
 		return 1;
-		break;
 	case PERMIT_NO_PASSWD:
 		if (strcmp(method, "password") != 0)
 			return 1;
@@ -339,64 +362,39 @@ auth_root_allowed(char *method)
  *
  * This returns a buffer allocated by xmalloc.
  */
-char *
-expand_filename(const char *filename, struct passwd *pw)
+static char *
+expand_authorized_keys(const char *filename, struct passwd *pw)
 {
-	Buffer buffer;
-	char *file;
-	const char *cp;
+	char *file, ret[MAXPATHLEN];
+	int i;
 
-	/*
-	 * Build the filename string in the buffer by making the appropriate
-	 * substitutions to the given file name.
-	 */
-	buffer_init(&buffer);
-	for (cp = filename; *cp; cp++) {
-		if (cp[0] == '%' && cp[1] == '%') {
-			buffer_append(&buffer, "%", 1);
-			cp++;
-			continue;
-		}
-		if (cp[0] == '%' && cp[1] == 'h') {
-			buffer_append(&buffer, pw->pw_dir, strlen(pw->pw_dir));
-			cp++;
-			continue;
-		}
-		if (cp[0] == '%' && cp[1] == 'u') {
-			buffer_append(&buffer, pw->pw_name,
-			    strlen(pw->pw_name));
-			cp++;
-			continue;
-		}
-		buffer_append(&buffer, cp, 1);
-	}
-	buffer_append(&buffer, "\0", 1);
+	file = percent_expand(filename, "h", pw->pw_dir,
+	    "u", pw->pw_name, (char *)NULL);
 
 	/*
 	 * Ensure that filename starts anchored. If not, be backward
 	 * compatible and prepend the '%h/'
 	 */
-	file = xmalloc(MAXPATHLEN);
-	cp = buffer_ptr(&buffer);
-	if (*cp != '/')
-		snprintf(file, MAXPATHLEN, "%s/%s", pw->pw_dir, cp);
-	else
-		strlcpy(file, cp, MAXPATHLEN);
+	if (*file == '/')
+		return (file);
 
-	buffer_free(&buffer);
-	return file;
+	i = snprintf(ret, sizeof(ret), "%s/%s", pw->pw_dir, file);
+	if (i < 0 || (size_t)i >= sizeof(ret))
+		fatal("expand_authorized_keys: path too long");
+	xfree(file);
+	return (xstrdup(ret));
 }
 
 char *
 authorized_keys_file(struct passwd *pw)
 {
-	return expand_filename(options.authorized_keys_file, pw);
+	return expand_authorized_keys(options.authorized_keys_file, pw);
 }
 
 char *
 authorized_keys_file2(struct passwd *pw)
 {
-	return expand_filename(options.authorized_keys_file2, pw);
+	return expand_authorized_keys(options.authorized_keys_file2, pw);
 }
 
 /* return ok if key exists in sysfile or userfile */
@@ -465,11 +463,6 @@ secure_filename(FILE *f, const char *file, struct passwd *pw,
 		    strerror(errno));
 		return -1;
 	}
-	if (realpath(pw->pw_dir, homedir) == NULL) {
-		snprintf(err, errlen, "realpath %s failed: %s", pw->pw_dir,
-		    strerror(errno));
-		return -1;
-	}
 	if (realpath(pw->pw_dir, homedir) != NULL)
 		comparehome = 1;
 
@@ -525,6 +518,9 @@ getpwnamallow(const char *user)
 #endif
 #endif
 	struct passwd *pw;
+
+	parse_server_match_config(&options, user,
+	    get_canonical_hostname(options.use_dns), get_remote_ipaddr());
 
 	pw = getpwnam(user);
 	if (pw == NULL) {

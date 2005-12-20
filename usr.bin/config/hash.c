@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.c,v 1.1 2005/06/05 18:19:53 thorpej Exp $	*/
+/*	$NetBSD: hash.c,v 1.4 2006/09/27 19:05:46 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -45,8 +45,10 @@
 #endif
 
 #include <sys/param.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <util.h>
 #include "defs.h"
 
 /*
@@ -69,8 +71,6 @@ struct hashtab {
 };
 
 static struct hashtab strings;
-
-static struct hashenthead hefreelist = TAILQ_HEAD_INITIALIZER(hefreelist);
 
 /*
  * HASHFRACTION controls ht_lim, which in turn controls the average chain
@@ -141,12 +141,7 @@ newhashent(const char *name, u_int h)
 {
 	struct hashent *hp;
 
-	if (TAILQ_EMPTY(&hefreelist))
-		hp = ecalloc(1, sizeof(*hp));
-	else {
-		hp = TAILQ_FIRST(&hefreelist);
-		TAILQ_REMOVE(&hefreelist, hp, h_next);
-	}
+	hp = ecalloc(1, sizeof(*hp));
 
 	hp->h_name = name;
 	hp->h_hash = h;
@@ -211,6 +206,27 @@ ht_new(void)
 	return (ht);
 }
 
+void
+ht_free(struct hashtab *ht)
+{
+	int i;
+	struct hashent *hp;
+	struct hashenthead *hpp;
+
+	for (i = 0; i < ht->ht_mask; i++) {
+		hpp = &ht->ht_tab[i];
+		while ((hp = TAILQ_FIRST(hpp)) != NULL) {
+			TAILQ_REMOVE(hpp, hp, h_next);
+			free(hp);
+			ht->ht_used--;
+		}
+	}
+
+	assert(ht->ht_used == 0);
+	free(ht->ht_tab);
+	free(ht);
+}
+
 /*
  * Insert and/or replace.
  */
@@ -256,8 +272,7 @@ ht_remove(struct hashtab *ht, const char *name)
 			continue;
 		TAILQ_REMOVE(hpp, hp, h_next);
 
-		memset(hp, 0, sizeof(*hp));
-		TAILQ_INSERT_TAIL(&hefreelist, hp, h_next);
+		free(hp);
 		ht->ht_used--;
 		return (0);
 	}

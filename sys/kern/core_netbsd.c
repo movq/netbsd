@@ -1,4 +1,4 @@
-/*	$NetBSD: core_netbsd.c,v 1.12 2005/12/08 03:05:40 thorpej Exp $	*/
+/*	$NetBSD: core_netbsd.c,v 1.14 2006/11/01 10:17:58 yamt Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: core_netbsd.c,v 1.12 2005/12/08 03:05:40 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: core_netbsd.c,v 1.14 2006/11/01 10:17:58 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

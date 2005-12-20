@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_msg.h,v 1.13 2005/12/03 15:16:19 yamt Exp $	*/
+/*	$NetBSD: rpc_msg.h,v 1.15 2006/02/25 00:58:34 wiz Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -42,12 +42,12 @@
 #ifndef _RPC_RPC_MSG_H_
 #define _RPC_RPC_MSG_H_
 
-#define RPC_MSG_VERSION		((u_int32_t) 2)
+#define RPC_MSG_VERSION		((uint32_t) 2)
 #define RPC_SERVICE_PORT	((u_short) 2048)
 
 /*
  * Bottom up definition of an rpc message.
- * NOTE: call and reply use the same overall stuct but
+ * NOTE: call and reply use the same overall struct but
  * different parts of unions within it.
  */
 
@@ -147,7 +147,7 @@ struct call_body {
  * The rpc message
  */
 struct rpc_msg {
-	u_int32_t		rm_xid;
+	uint32_t		rm_xid;
 	enum msg_type		rm_direction;
 	union {
 		struct call_body RM_cmb;
