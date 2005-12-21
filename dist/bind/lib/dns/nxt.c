@@ -1,4 +1,4 @@
-/*	$NetBSD: nxt.c,v 1.1 2005/12/21 19:57:53 christos Exp $	*/
+/*	$NetBSD: nxt.c,v 1.1.1.1 2005/12/21 19:57:53 christos Exp $	*/
 
 /*
  * Copyright (C) 1999-2001, 2003  Internet Software Consortium.

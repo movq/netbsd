@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfile.c,v 1.1 2005/12/21 19:59:13 christos Exp $	*/
+/*	$NetBSD: ntfile.c,v 1.1.1.1 2005/12/21 19:59:13 christos Exp $	*/
 
 /*
  * Copyright (C) 2001  Internet Software Consortium.

@@ -1,4 +1,4 @@
-/*	$NetBSD: nxtify.c,v 1.1 2005/12/21 19:51:37 christos Exp $	*/
+/*	$NetBSD: nxtify.c,v 1.1.1.1 2005/12/21 19:51:37 christos Exp $	*/
 
 /*
  * Copyright (C) 1999-2001  Internet Software Consortium.
