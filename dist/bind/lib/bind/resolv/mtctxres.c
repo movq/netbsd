@@ -1,4 +1,4 @@
-/*	$NetBSD: mtctxres.c,v 1.1 2005/12/21 23:15:56 christos Exp $	*/
+/*	$NetBSD: mtctxres.c,v 1.1.1.1 2005/12/21 23:15:56 christos Exp $	*/
 
 #include <port_before.h>
 #ifdef DO_PTHREADS
