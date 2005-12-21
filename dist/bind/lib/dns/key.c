@@ -1,4 +1,4 @@
-/*	$NetBSD: key.c,v 1.1 2005/12/21 23:16:13 christos Exp $	*/
+/*	$NetBSD: key.c,v 1.1.1.1 2005/12/21 23:16:13 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005  Internet Systems Consortium, Inc. ("ISC")

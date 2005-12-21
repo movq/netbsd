@@ -1,4 +1,4 @@
-/*	$NetBSD: dst_lib.c,v 1.1 2005/12/21 23:16:09 christos Exp $	*/
+/*	$NetBSD: dst_lib.c,v 1.1.1.1 2005/12/21 23:16:09 christos Exp $	*/
 
 /*
  * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
