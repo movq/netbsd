@@ -1,4 +1,4 @@
-/*	$NetBSD: check.c,v 1.1 2005/12/21 19:59:21 christos Exp $	*/
+/*	$NetBSD: check.c,v 1.1.1.1 2005/12/21 19:59:21 christos Exp $	*/
 
 /*
  * Copyright (C) 2001-2003  Internet Software Consortium.
