@@ -1,4 +1,4 @@
-/*	$NetBSD: zfstream.h,v 1.1 2006/01/14 20:10:53 christos Exp $	*/
+/*	$NetBSD: zfstream.h,v 1.1.1.1 2006/01/14 20:10:53 christos Exp $	*/
 
 
 #ifndef zfstream_h

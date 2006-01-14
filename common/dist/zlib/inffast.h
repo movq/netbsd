@@ -1,4 +1,4 @@
-/*	$NetBSD: inffast.h,v 1.1 2006/01/14 20:10:29 christos Exp $	*/
+/*	$NetBSD: inffast.h,v 1.1.1.1 2006/01/14 20:10:29 christos Exp $	*/
 
 /* inffast.h -- header to use inffast.c
  * Copyright (C) 1995-2003 Mark Adler

@@ -1,4 +1,4 @@
-/*	$NetBSD: mztools.h,v 1.1 2006/01/14 20:10:58 christos Exp $	*/
+/*	$NetBSD: mztools.h,v 1.1.1.1 2006/01/14 20:10:58 christos Exp $	*/
 
 /*
   Additional tools for Minizip

@@ -1,4 +1,4 @@
-/*	$NetBSD: minizip.c,v 1.1 2006/01/14 20:10:58 christos Exp $	*/
+/*	$NetBSD: minizip.c,v 1.1.1.1 2006/01/14 20:10:58 christos Exp $	*/
 
 /*
    minizip.c

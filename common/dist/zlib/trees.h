@@ -1,4 +1,4 @@
-/*	$NetBSD: trees.h,v 1.1 2006/01/14 20:10:33 christos Exp $	*/
+/*	$NetBSD: trees.h,v 1.1.1.1 2006/01/14 20:10:33 christos Exp $	*/
 
 /* header created automatically with -DGEN_TREES_H */
 

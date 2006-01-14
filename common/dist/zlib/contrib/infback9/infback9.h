@@ -1,4 +1,4 @@
-/*	$NetBSD: infback9.h,v 1.1 2006/01/14 20:10:50 christos Exp $	*/
+/*	$NetBSD: infback9.h,v 1.1.1.1 2006/01/14 20:10:50 christos Exp $	*/
 
 /* infback9.h -- header for using inflateBack9 functions
  * Copyright (C) 2003 Mark Adler

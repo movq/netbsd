@@ -1,4 +1,4 @@
-/*	$NetBSD: minigzip.c,v 1.1 2006/01/14 20:10:31 christos Exp $	*/
+/*	$NetBSD: minigzip.c,v 1.1.1.1 2006/01/14 20:10:31 christos Exp $	*/
 
 /* minigzip.c -- simulate gzip using the zlib compression library
  * Copyright (C) 1995-2005 Jean-loup Gailly.

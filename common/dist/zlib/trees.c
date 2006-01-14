@@ -1,4 +1,4 @@
-/*	$NetBSD: trees.c,v 1.1 2006/01/14 20:10:33 christos Exp $	*/
+/*	$NetBSD: trees.c,v 1.1.1.1 2006/01/14 20:10:33 christos Exp $	*/
 
 /* trees.c -- output deflated data using Huffman coding
  * Copyright (C) 1995-2005 Jean-loup Gailly

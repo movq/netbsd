@@ -1,4 +1,4 @@
-/*	$NetBSD: gzlog.h,v 1.1 2006/01/14 20:11:09 christos Exp $	*/
+/*	$NetBSD: gzlog.h,v 1.1.1.1 2006/01/14 20:11:09 christos Exp $	*/
 
 /* gzlog.h
   Copyright (C) 2004 Mark Adler, all rights reserved

@@ -1,4 +1,4 @@
-/*	$NetBSD: unzip.c,v 1.1 2006/01/14 20:10:59 christos Exp $	*/
+/*	$NetBSD: unzip.c,v 1.1.1.1 2006/01/14 20:10:59 christos Exp $	*/
 
 /* unzip.c -- IO for uncompress .zip files using zlib
    Version 1.01e, February 12th, 2005

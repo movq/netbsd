@@ -1,4 +1,4 @@
-/*	$NetBSD: inffix9.h,v 1.1 2006/01/14 20:10:51 christos Exp $	*/
+/*	$NetBSD: inffix9.h,v 1.1.1.1 2006/01/14 20:10:51 christos Exp $	*/
 
     /* inffix9.h -- table for decoding deflate64 fixed codes
      * Generated automatically by makefixed9().

@@ -1,4 +1,4 @@
-/*	$NetBSD: inffixed.h,v 1.1 2006/01/14 20:10:26 christos Exp $	*/
+/*	$NetBSD: inffixed.h,v 1.1.1.1 2006/01/14 20:10:26 christos Exp $	*/
 
     /* inffixed.h -- table for decoding fixed codes
      * Generated automatically by makefixed().

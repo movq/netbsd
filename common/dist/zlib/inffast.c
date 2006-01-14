@@ -1,4 +1,4 @@
-/*	$NetBSD: inffast.c,v 1.1 2006/01/14 20:10:29 christos Exp $	*/
+/*	$NetBSD: inffast.c,v 1.1.1.1 2006/01/14 20:10:29 christos Exp $	*/
 
 /* inffast.c -- fast decoding
  * Copyright (C) 1995-2004 Mark Adler

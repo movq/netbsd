@@ -1,4 +1,4 @@
-/*	$NetBSD: testzlib.c,v 1.1 2006/01/14 20:11:02 christos Exp $	*/
+/*	$NetBSD: testzlib.c,v 1.1.1.1 2006/01/14 20:11:02 christos Exp $	*/
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: zip.h,v 1.1 2006/01/14 20:11:01 christos Exp $	*/
+/*	$NetBSD: zip.h,v 1.1.1.1 2006/01/14 20:11:01 christos Exp $	*/
 
 /* zip.h -- IO for compress .zip files using zlib
    Version 1.01e, February 12th, 2005

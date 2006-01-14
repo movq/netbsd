@@ -1,4 +1,4 @@
-/*	$NetBSD: compress.c,v 1.1 2006/01/14 20:10:24 christos Exp $	*/
+/*	$NetBSD: compress.c,v 1.1.1.1 2006/01/14 20:10:24 christos Exp $	*/
 
 /* compress.c -- compress a memory buffer
  * Copyright (C) 1995-2003 Jean-loup Gailly.

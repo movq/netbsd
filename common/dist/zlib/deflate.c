@@ -1,4 +1,4 @@
-/*	$NetBSD: deflate.c,v 1.1 2006/01/14 20:10:26 christos Exp $	*/
+/*	$NetBSD: deflate.c,v 1.1.1.1 2006/01/14 20:10:26 christos Exp $	*/
 
 /* deflate.c -- compress data using the deflation algorithm
  * Copyright (C) 1995-2005 Jean-loup Gailly.

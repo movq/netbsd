@@ -1,4 +1,4 @@
-/*	$NetBSD: fitblk.c,v 1.1 2006/01/14 20:11:08 christos Exp $	*/
+/*	$NetBSD: fitblk.c,v 1.1.1.1 2006/01/14 20:11:08 christos Exp $	*/
 
 /* fitblk.c: example of fitting compressed output to a specified size
    Not copyrighted -- provided to the public domain

@@ -1,4 +1,4 @@
-/*	$NetBSD: deflate.h,v 1.1 2006/01/14 20:10:28 christos Exp $	*/
+/*	$NetBSD: deflate.h,v 1.1.1.1 2006/01/14 20:10:28 christos Exp $	*/
 
 /* deflate.h -- internal compression state
  * Copyright (C) 1995-2004 Jean-loup Gailly

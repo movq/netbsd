@@ -1,4 +1,4 @@
-/*	$NetBSD: zutil.h,v 1.1 2006/01/14 20:10:42 christos Exp $	*/
+/*	$NetBSD: zutil.h,v 1.1.1.1 2006/01/14 20:10:42 christos Exp $	*/
 
 /* zutil.h -- internal interface and configuration of the compression library
  * Copyright (C) 1995-2005 Jean-loup Gailly.

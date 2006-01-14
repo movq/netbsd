@@ -1,4 +1,4 @@
-/*	$NetBSD: infback.c,v 1.1 2006/01/14 20:10:29 christos Exp $	*/
+/*	$NetBSD: infback.c,v 1.1.1.1 2006/01/14 20:10:29 christos Exp $	*/
 
 /* infback.c -- inflate using a call-back interface
  * Copyright (C) 1995-2005 Mark Adler

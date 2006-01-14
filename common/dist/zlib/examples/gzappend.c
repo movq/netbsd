@@ -1,4 +1,4 @@
-/*	$NetBSD: gzappend.c,v 1.1 2006/01/14 20:11:08 christos Exp $	*/
+/*	$NetBSD: gzappend.c,v 1.1.1.1 2006/01/14 20:11:08 christos Exp $	*/
 
 /* gzappend -- command to append to a gzip file
 

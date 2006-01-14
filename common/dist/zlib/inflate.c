@@ -1,4 +1,4 @@
-/*	$NetBSD: inflate.c,v 1.1 2006/01/14 20:10:31 christos Exp $	*/
+/*	$NetBSD: inflate.c,v 1.1.1.1 2006/01/14 20:10:31 christos Exp $	*/
 
 /* inflate.c -- zlib decompression
  * Copyright (C) 1995-2005 Mark Adler

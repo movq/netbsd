@@ -1,4 +1,4 @@
-/*	$NetBSD: crc32.c,v 1.1 2006/01/14 20:10:27 christos Exp $	*/
+/*	$NetBSD: crc32.c,v 1.1.1.1 2006/01/14 20:10:27 christos Exp $	*/
 
 /* crc32.c -- compute the CRC-32 of a data stream
  * Copyright (C) 1995-2005 Mark Adler

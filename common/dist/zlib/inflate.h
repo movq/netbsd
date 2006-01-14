@@ -1,4 +1,4 @@
-/*	$NetBSD: inflate.h,v 1.1 2006/01/14 20:10:31 christos Exp $	*/
+/*	$NetBSD: inflate.h,v 1.1.1.1 2006/01/14 20:10:31 christos Exp $	*/
 
 /* inflate.h -- internal inflate state definition
  * Copyright (C) 1995-2004 Mark Adler

@@ -1,4 +1,4 @@
-/*	$NetBSD: inffas86.c,v 1.1 2006/01/14 20:10:53 christos Exp $	*/
+/*	$NetBSD: inffas86.c,v 1.1.1.1 2006/01/14 20:10:53 christos Exp $	*/
 
 /* inffas86.c is a hand tuned assembler version of
  *

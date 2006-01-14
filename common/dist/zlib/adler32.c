@@ -1,4 +1,4 @@
-/*	$NetBSD: adler32.c,v 1.1 2006/01/14 20:10:24 christos Exp $	*/
+/*	$NetBSD: adler32.c,v 1.1.1.1 2006/01/14 20:10:24 christos Exp $	*/
 
 /* adler32.c -- compute the Adler-32 checksum of a data stream
  * Copyright (C) 1995-2004 Mark Adler

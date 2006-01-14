@@ -1,4 +1,4 @@
-/*	$NetBSD: zstream.h,v 1.1 2006/01/14 20:10:54 christos Exp $	*/
+/*	$NetBSD: zstream.h,v 1.1.1.1 2006/01/14 20:10:54 christos Exp $	*/
 
 /*
  *

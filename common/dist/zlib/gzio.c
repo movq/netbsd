@@ -1,4 +1,4 @@
-/*	$NetBSD: gzio.c,v 1.1 2006/01/14 20:10:29 christos Exp $	*/
+/*	$NetBSD: gzio.c,v 1.1.1.1 2006/01/14 20:10:29 christos Exp $	*/
 
 /* gzio.c -- IO on .gz files
  * Copyright (C) 1995-2005 Jean-loup Gailly.

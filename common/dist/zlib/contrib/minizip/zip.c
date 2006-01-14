@@ -1,4 +1,4 @@
-/*	$NetBSD: zip.c,v 1.1 2006/01/14 20:11:00 christos Exp $	*/
+/*	$NetBSD: zip.c,v 1.1.1.1 2006/01/14 20:11:00 christos Exp $	*/
 
 /* zip.c -- IO on .zip files using zlib
    Version 1.01e, February 12th, 2005

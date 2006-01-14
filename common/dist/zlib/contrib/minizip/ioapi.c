@@ -1,4 +1,4 @@
-/*	$NetBSD: ioapi.c,v 1.1 2006/01/14 20:10:57 christos Exp $	*/
+/*	$NetBSD: ioapi.c,v 1.1.1.1 2006/01/14 20:10:57 christos Exp $	*/
 
 /* ioapi.c -- IO base function header for compress/uncompress .zip
    files using zlib + zip or unzip API

@@ -1,4 +1,4 @@
-/*	$NetBSD: puff.h,v 1.1 2006/01/14 20:11:02 christos Exp $	*/
+/*	$NetBSD: puff.h,v 1.1.1.1 2006/01/14 20:11:02 christos Exp $	*/
 
 /* puff.h
   Copyright (C) 2002, 2003 Mark Adler, all rights reserved

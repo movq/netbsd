@@ -1,4 +1,4 @@
-/*	$NetBSD: iowin32.h,v 1.1 2006/01/14 20:10:57 christos Exp $	*/
+/*	$NetBSD: iowin32.h,v 1.1.1.1 2006/01/14 20:10:57 christos Exp $	*/
 
 /* iowin32.h -- IO base function header for compress/uncompress .zip
    files using zlib + zip or unzip API

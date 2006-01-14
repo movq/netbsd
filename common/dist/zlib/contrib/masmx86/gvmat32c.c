@@ -1,4 +1,4 @@
-/*	$NetBSD: gvmat32c.c,v 1.1 2006/01/14 20:10:56 christos Exp $	*/
+/*	$NetBSD: gvmat32c.c,v 1.1.1.1 2006/01/14 20:10:56 christos Exp $	*/
 
 /* gvmat32.c -- C portion of the optimized longest_match for 32 bits x86
  * Copyright (C) 1995-1996 Jean-loup Gailly and Gilles Vollant.

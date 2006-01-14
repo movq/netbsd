@@ -1,4 +1,4 @@
-/*	$NetBSD: inffas8664.c,v 1.1 2006/01/14 20:10:55 christos Exp $	*/
+/*	$NetBSD: inffas8664.c,v 1.1.1.1 2006/01/14 20:10:55 christos Exp $	*/
 
 /* inffas8664.c is a hand tuned assembler version of inffast.c - fast decoding
  * version for AMD64 on Windows using Microsoft C compiler

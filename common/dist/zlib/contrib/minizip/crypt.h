@@ -1,4 +1,4 @@
-/*	$NetBSD: crypt.h,v 1.1 2006/01/14 20:10:57 christos Exp $	*/
+/*	$NetBSD: crypt.h,v 1.1.1.1 2006/01/14 20:10:57 christos Exp $	*/
 
 /* crypt.h -- base code for crypt/uncrypt ZIPfile
 

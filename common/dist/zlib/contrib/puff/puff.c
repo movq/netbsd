@@ -1,4 +1,4 @@
-/*	$NetBSD: puff.c,v 1.1 2006/01/14 20:11:02 christos Exp $	*/
+/*	$NetBSD: puff.c,v 1.1.1.1 2006/01/14 20:11:02 christos Exp $	*/
 
 /*
  * puff.c
