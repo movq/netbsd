@@ -1,4 +1,4 @@
-/* $NetBSD: makefile,v 1.1 2006/01/25 15:18:48 kleink Exp $ */
+/* $NetBSD: makefile,v 1.1.1.1 2006/01/25 15:18:48 kleink Exp $ */
 
 # /****************************************************************
 # Copyright (C) 1998 by Lucent Technologies

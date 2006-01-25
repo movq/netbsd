@@ -1,4 +1,4 @@
-$NetBSD: README,v 1.1 2006/01/25 15:18:40 kleink Exp $
+$NetBSD: README,v 1.1.1.1 2006/01/25 15:18:40 kleink Exp $
 
 This directory contains source for a library of binary -> decimal
 and decimal -> binary conversion routines, for single-, double-,
