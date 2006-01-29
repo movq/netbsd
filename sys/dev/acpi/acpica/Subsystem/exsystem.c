@@ -2,7 +2,7 @@
 /******************************************************************************
  *
  * Module Name: exsystem - Interface to OS services
- *              $Revision: 1.1.1.9 $
+ *              $Revision: 1.1.1.10 $
  *
  *****************************************************************************/
 
@@ -10,7 +10,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2005, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2006, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -220,7 +220,7 @@ AcpiExSystemDoStall (
          * (ACPI specifies 100 usec as max, but this gives some slack in
          * order to support existing BIOSs)
          */
-        ACPI_REPORT_ERROR (("Stall: Time parameter is too large (%d)\n",
+        ACPI_REPORT_ERROR (("Time parameter is too large (%d)\n",
             HowLong));
         Status = AE_AML_OPERAND_VALUE;
     }
