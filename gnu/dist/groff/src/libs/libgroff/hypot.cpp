@@ -1,4 +1,4 @@
-/*	$NetBSD: hypot.cpp,v 1.1 2006/02/06 18:13:54 wiz Exp $	*/
+/*	$NetBSD: hypot.cpp,v 1.1.1.1 2006/02/06 18:13:54 wiz Exp $	*/
 
 /* Copyright (C) 2005 Free Software Foundation, Inc.
 This file is part of the GNU C Library.

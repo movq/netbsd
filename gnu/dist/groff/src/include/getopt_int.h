@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt_int.h,v 1.1 2006/02/06 18:13:50 wiz Exp $	*/
+/*	$NetBSD: getopt_int.h,v 1.1.1.1 2006/02/06 18:13:50 wiz Exp $	*/
 
 /* Internal declarations for getopt.
    Copyright (C) 1989-1994,1996-1999,2001,2003,2004

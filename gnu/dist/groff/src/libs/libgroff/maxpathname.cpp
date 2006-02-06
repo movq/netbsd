@@ -1,4 +1,4 @@
-/*	$NetBSD: maxpathname.cpp,v 1.1 2006/02/06 18:13:55 wiz Exp $	*/
+/*	$NetBSD: maxpathname.cpp,v 1.1.1.1 2006/02/06 18:13:55 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 2005 Free Software Foundation, Inc.

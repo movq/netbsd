@@ -1,4 +1,4 @@
-/*	$NetBSD: XFontName.c,v 1.1 2006/02/06 18:14:00 wiz Exp $	*/
+/*	$NetBSD: XFontName.c,v 1.1.1.1 2006/02/06 18:14:00 wiz Exp $	*/
 
 /*
  * XFontName.c

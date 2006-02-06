@@ -1,4 +1,4 @@
-/*	$NetBSD: Dvi.h,v 1.1 2006/02/06 18:14:53 wiz Exp $	*/
+/*	$NetBSD: Dvi.h,v 1.1.1.1 2006/02/06 18:14:53 wiz Exp $	*/
 
 /*
 * $XConsortium: Dvi.h,v 1.4 89/07/21 14:22:06 jim Exp $

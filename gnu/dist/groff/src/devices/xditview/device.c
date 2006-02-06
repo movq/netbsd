@@ -1,4 +1,4 @@
-/*	$NetBSD: device.c,v 1.1 2006/02/06 18:14:52 wiz Exp $	*/
+/*	$NetBSD: device.c,v 1.1.1.1 2006/02/06 18:14:52 wiz Exp $	*/
 
 /* device.c */
 

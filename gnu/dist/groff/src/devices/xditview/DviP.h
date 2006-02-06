@@ -1,4 +1,4 @@
-/*	$NetBSD: DviP.h,v 1.1 2006/02/06 18:14:53 wiz Exp $	*/
+/*	$NetBSD: DviP.h,v 1.1.1.1 2006/02/06 18:14:53 wiz Exp $	*/
 
 /*
  * $XConsortium: DviP.h,v 1.5 89/07/22 19:44:08 keith Exp $

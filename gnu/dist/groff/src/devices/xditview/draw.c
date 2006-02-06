@@ -1,4 +1,4 @@
-/*	$NetBSD: draw.c,v 1.1 2006/02/06 18:14:53 wiz Exp $	*/
+/*	$NetBSD: draw.c,v 1.1.1.1 2006/02/06 18:14:53 wiz Exp $	*/
 
 /*
  * draw.c
