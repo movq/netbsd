@@ -1,4 +1,4 @@
-/*	$NetBSD: DviChar.h,v 1.1 2006/02/06 18:13:50 wiz Exp $	*/
+/*	$NetBSD: DviChar.h,v 1.1.1.1 2006/02/06 18:13:50 wiz Exp $	*/
 
 /*
  * DviChar.h

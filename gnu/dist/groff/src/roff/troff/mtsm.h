@@ -1,4 +1,4 @@
-/*	$NetBSD: mtsm.h,v 1.1 2006/02/06 18:14:11 wiz Exp $	*/
+/*	$NetBSD: mtsm.h,v 1.1.1.1 2006/02/06 18:14:11 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 2003, 2004 Free Software Foundation, Inc.

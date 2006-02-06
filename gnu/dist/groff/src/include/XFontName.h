@@ -1,4 +1,4 @@
-/*	$NetBSD: XFontName.h,v 1.1 2006/02/06 18:13:52 wiz Exp $	*/
+/*	$NetBSD: XFontName.h,v 1.1.1.1 2006/02/06 18:13:52 wiz Exp $	*/
 
 typedef struct _xFontName {
 	char		Registry[256];

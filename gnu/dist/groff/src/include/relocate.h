@@ -1,4 +1,4 @@
-/*	$NetBSD: relocate.h,v 1.1 2006/02/06 18:13:52 wiz Exp $	*/
+/*	$NetBSD: relocate.h,v 1.1.1.1 2006/02/06 18:13:52 wiz Exp $	*/
 
 // -*- C++ -*-
 /* Provide relocation for macro and font files.
