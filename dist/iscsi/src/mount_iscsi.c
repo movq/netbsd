@@ -1,4 +1,4 @@
-/* $NetBSD: mount_iscsi.c,v 1.1 2006/02/08 18:56:18 agc Exp $ */
+/* $NetBSD: mount_iscsi.c,v 1.1.1.1 2006/02/08 18:56:18 agc Exp $ */
 
 /*
  * Copyright © 2005 Alistair Crooks.  All rights reserved.
@@ -32,7 +32,7 @@
 #ifndef lint
 __COPYRIGHT("@(#) Copyright © 2005 \
 	        The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: mount_iscsi.c,v 1.1 2006/02/08 18:56:18 agc Exp $");
+__RCSID("$NetBSD: mount_iscsi.c,v 1.1.1.1 2006/02/08 18:56:18 agc Exp $");
 #endif
 
 #include <sys/types.h>

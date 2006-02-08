@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: iscsi_target,v 1.1 2006/02/08 18:56:20 agc Exp $
+# $NetBSD: iscsi_target,v 1.1.1.1 2006/02/08 18:56:20 agc Exp $
 #
 
 # PROVIDE: iscsi_target
