@@ -1,4 +1,4 @@
-/* $NetBSD: conffile.c,v 1.1 2006/02/08 18:56:19 agc Exp $ */
+/* $NetBSD: conffile.c,v 1.1.1.1 2006/02/08 18:56:19 agc Exp $ */
 
 /*
  * Copyright © 2006 Alistair Crooks.  All rights reserved.
@@ -32,7 +32,7 @@
 #ifndef lint
 __COPYRIGHT("@(#) Copyright © 2006 \
 	        The NetBSD Foundation, Inc.  All rights reserved.");
-__RCSID("$NetBSD: conffile.c,v 1.1 2006/02/08 18:56:19 agc Exp $");
+__RCSID("$NetBSD: conffile.c,v 1.1.1.1 2006/02/08 18:56:19 agc Exp $");
 #endif
 
 #include <sys/types.h>
