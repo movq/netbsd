@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_ioctl.c,v 1.1 2006/02/09 19:18:57 manu Exp $ */
+/*	$NetBSD: linux32_ioctl.c,v 1.2 2006/02/15 09:31:17 manu Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_ioctl.c,v 1.1 2006/02/09 19:18:57 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_ioctl.c,v 1.2 2006/02/15 09:31:17 manu Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -43,15 +43,14 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_ioctl.c,v 1.1 2006/02/09 19:18:57 manu Exp $
 #include <compat/netbsd32/netbsd32_syscallargs.h>
 
 #include <compat/linux/common/linux_types.h>
-#include <compat/linux/common/linux_ioctl.h>
 #include <compat/linux/common/linux_signal.h>
 #include <compat/linux/linux_syscallargs.h>
 
 #include <compat/linux32/common/linux32_types.h>
 #include <compat/linux32/common/linux32_signal.h>
-#include <compat/linux32/common/linux32_machdep.h>
+#include <compat/linux32/common/linux32_ioctl.h>
+#include <compat/linux32/common/linux32_termios.h>
 #include <compat/linux32/common/linux32_sysctl.h>
-#include <compat/linux32/common/linux32_socketcall.h>
 #include <compat/linux32/linux32_syscallargs.h>
 
 int
@@ -65,10 +64,26 @@ linux32_sys_ioctl(l, v, retval)
 		syscallarg(netbsd32_u_long) com;
 		syscallarg(netbsd32_charp) data;
 	} */ *uap = v;
+	int group;
+	int error;
+
+	group = LINUX32_IOCGROUP((int)SCARG(uap, com));
 
 	printf("linux32_sys_ioctl(%d, 0x%x/\'%c\', %p)\n", SCARG(uap, fd),
-	    SCARG(uap, com), (char)LINUX_IOCGROUP(SCARG(uap, com)), 
-	    NETBSD32PTR64(SCARG(uap, data)));
+	    SCARG(uap, com), (char)group, NETBSD32PTR64(SCARG(uap, data)));
 
-	return 0;
+	switch(group) {
+	case 'T':
+		error = linux32_ioctl_termios(l, uap, retval);
+		break;
+	default:
+		printf("Not yet implemented ioctl group \'%c\'\n", group);
+		error = EINVAL;
+		break;
+	}
+
+	if (error == EPASSTHROUGH)
+		error = EINVAL;
+
+	return error;
 }
