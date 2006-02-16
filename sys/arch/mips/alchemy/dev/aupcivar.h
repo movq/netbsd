@@ -1,4 +1,4 @@
-/* $NetBSD: aupcivar.h,v 1.1 2006/02/09 00:26:40 gdamore Exp $ */
+/* $NetBSD: aupcivar.h,v 1.2 2006/02/16 01:55:17 gdamore Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -35,6 +35,23 @@
 #define	_MIPS_ALCHEMY_DEV_AUPCIVAR_H
 
 #include <dev/pci/pcivar.h>
+
+/*
+ * PCI configuration space encompasses all 32-bits.
+ *
+ * PCI memory space encompasses all 32-bits, excepting that portion of
+ * the address space that is decoded by the Alchemy core for accesses
+ * to host memory.  (That range is determined dynamically.) 
+ *
+ * PCI I/O address range.  We want to start offset from zero to avoid
+ * potential problems with devices.  These addresses do not
+ * participate on the Alchemy system bus, hence we can choose any
+ * range we like.  16 MB is plenty.
+ */
+
+#define	AUPCI_IO_START	0x1000000
+#define	AUPCI_IO_END	0x1FFFFFF
+
 
 /*
  * Machdep code must implement this.  Stores an IRQ number in
