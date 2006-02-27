@@ -1,4 +1,4 @@
-@(#) $Header: /home/mike/src/cvs/netbsd/src/dist/libpcap/Attic/INSTALL.txt,v 1.1 2006/02/27 15:45:39 drochner Exp $ (LBL)
+@(#) $Header: /home/mike/src/cvs/netbsd/src/dist/libpcap/Attic/INSTALL.txt,v 1.1.1.1 2006/02/27 15:45:39 drochner Exp $ (LBL)
 
 To build libpcap, run "./configure" (a shell script). The configure
 script will determine your system attributes and generate an

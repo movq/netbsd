@@ -1,4 +1,4 @@
-dnl @(#) $Header: /home/mike/src/cvs/netbsd/src/dist/libpcap/Attic/aclocal.m4,v 1.1 2006/02/27 15:45:40 drochner Exp $ (LBL)
+dnl @(#) $Header: /home/mike/src/cvs/netbsd/src/dist/libpcap/Attic/aclocal.m4,v 1.1.1.1 2006/02/27 15:45:40 drochner Exp $ (LBL)
 dnl
 dnl Copyright (c) 1995, 1996, 1997, 1998
 dnl	The Regents of the University of California.  All rights reserved.

@@ -8,7 +8,7 @@
  * Authors: Gilbert HOYEK (gil_hoyek@hotmail.com), Elias M. KHOURY
  * (+961 3 485343);
  *
- * @(#) $Header: /home/mike/src/cvs/netbsd/src/dist/libpcap/Attic/pcap-septel.h,v 1.1 2006/02/27 15:45:49 drochner Exp $
+ * @(#) $Header: /home/mike/src/cvs/netbsd/src/dist/libpcap/Attic/pcap-septel.h,v 1.1.1.1 2006/02/27 15:45:49 drochner Exp $
  */
 
 pcap_t *septel_open_live(const char *device, int snaplen, int promisc, int to_ms, char *ebuf);

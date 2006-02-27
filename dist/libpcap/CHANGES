@@ -1,4 +1,4 @@
-@(#) $Header: /home/mike/src/cvs/netbsd/src/dist/libpcap/Attic/CHANGES,v 1.1 2006/02/27 15:45:38 drochner Exp $ (LBL)
+@(#) $Header: /home/mike/src/cvs/netbsd/src/dist/libpcap/Attic/CHANGES,v 1.1.1.1 2006/02/27 15:45:38 drochner Exp $ (LBL)
 
 Mon. 	September 5, 2005.  ken@xelerance.com. Summary for 0.9.4 libpcap release
 

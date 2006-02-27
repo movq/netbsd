@@ -7,7 +7,7 @@
  *
  * Author: Richard Littin, Sean Irvine ({richard,sean}@reeltwo.com)
  *
- * @(#) $Header: /home/mike/src/cvs/netbsd/src/dist/libpcap/Attic/pcap-dag.h,v 1.1 2006/02/27 15:45:47 drochner Exp $ (LBL)
+ * @(#) $Header: /home/mike/src/cvs/netbsd/src/dist/libpcap/Attic/pcap-dag.h,v 1.1.1.1 2006/02/27 15:45:47 drochner Exp $ (LBL)
  */
 
 pcap_t *dag_open_live(const char *device, int snaplen, int promisc, int to_ms, char *ebuf);

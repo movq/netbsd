@@ -15,7 +15,7 @@
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  *
- * @(#) $Header: /home/mike/src/cvs/netbsd/src/dist/libpcap/Attic/nlpid.h,v 1.1 2006/02/27 15:45:46 drochner Exp $ (Juniper)
+ * @(#) $Header: /home/mike/src/cvs/netbsd/src/dist/libpcap/Attic/nlpid.h,v 1.1.1.1 2006/02/27 15:45:46 drochner Exp $ (Juniper)
  */
 
 /* Types missing from some systems */
