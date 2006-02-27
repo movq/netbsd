@@ -1,4 +1,4 @@
-@(#) $Header: /cvsroot/src/dist/libpcap/Attic/README,v 1.1 2006/02/27 15:45:39 drochner Exp $ (LBL)
+@(#) $Header: /cvsroot/src/dist/libpcap/Attic/README,v 1.1.1.1 2006/02/27 15:45:39 drochner Exp $ (LBL)
 
 LIBPCAP 0.9
 Now maintained by "The Tcpdump Group"

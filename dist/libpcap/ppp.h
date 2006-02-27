@@ -1,4 +1,4 @@
-/* @(#) $Header: /cvsroot/src/dist/libpcap/Attic/ppp.h,v 1.1 2006/02/27 15:45:49 drochner Exp $ (LBL) */
+/* @(#) $Header: /cvsroot/src/dist/libpcap/Attic/ppp.h,v 1.1.1.1 2006/02/27 15:45:49 drochner Exp $ (LBL) */
 /*
  * Point to Point Protocol (PPP) RFC1331
  *

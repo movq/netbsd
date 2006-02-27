@@ -32,7 +32,7 @@
 
 #ifndef lint
 static const char rcsid[] _U_ =
-    "@(#) $Header: /cvsroot/src/dist/libpcap/Attic/pcap-win32.c,v 1.1 2006/02/27 15:45:49 drochner Exp $ (LBL)";
+    "@(#) $Header: /cvsroot/src/dist/libpcap/Attic/pcap-win32.c,v 1.1.1.1 2006/02/27 15:45:49 drochner Exp $ (LBL)";
 #endif
 
 #include <pcap-int.h>

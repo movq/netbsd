@@ -27,7 +27,7 @@
 
 #ifndef lint
 static const char rcsid[] _U_ =
-    "@(#) $Header: /cvsroot/src/dist/libpcap/Attic/pcap-linux.c,v 1.1 2006/02/27 15:45:48 drochner Exp $ (LBL)";
+    "@(#) $Header: /cvsroot/src/dist/libpcap/Attic/pcap-linux.c,v 1.1.1.1 2006/02/27 15:45:48 drochner Exp $ (LBL)";
 #endif
 
 /*
