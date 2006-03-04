@@ -1,5 +1,0 @@
-#	$NetBSD: files.videomode,v 1.2 2006/03/04 03:01:29 gdamore Exp $
-
-define videomode
-
-file	dev/videomode/videomode.c	videomode
