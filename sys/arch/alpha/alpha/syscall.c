@@ -1,4 +1,4 @@
-/* $NetBSD: syscall.c,v 1.20 2006/03/05 19:08:38 christos Exp $ */
+/* $NetBSD: syscall.c,v 1.22 2006/03/07 07:21:50 thorpej Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -94,13 +94,11 @@
  * rights to redistribute these changes.
  */
 
-#include "opt_syscall_debug.h"
 #include "opt_ktrace.h"
-#include "opt_systrace.h"
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.20 2006/03/05 19:08:38 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.22 2006/03/07 07:21:50 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -109,13 +107,10 @@ __KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.20 2006/03/05 19:08:38 christos Exp $"
 #include <sys/savar.h>
 #include <sys/user.h>
 #include <sys/signal.h>
+#include <sys/syscall.h>
 #ifdef KTRACE
 #include <sys/ktrace.h>
 #endif
-#ifdef SYSTRACE
-#include <sys/systrace.h>
-#endif
-#include <sys/syscall.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -130,7 +125,8 @@ void	syscall_fancy(struct lwp *, u_int64_t, struct trapframe *);
 void
 syscall_intern(struct proc *p)
 {
-	if (proc_is_traced_p(p))
+
+	if (trace_is_enabled(p))
 		p->p_md.md_syscall = syscall_fancy;
 	else
 		p->p_md.md_syscall = syscall_plain;
@@ -210,10 +206,6 @@ syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	}
 	args += hidden;
 
-#ifdef SYSCALL_DEBUG
-	scdebug_call(l, code, args);
-#endif
-
 	rval[0] = 0;
 	rval[1] = 0;
 
@@ -244,9 +236,6 @@ syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 		break;
 	}
 
-#ifdef SYSCALL_DEBUG
-	scdebug_ret(l, code, error, rval);
-#endif
 	userret(l);
 }
 

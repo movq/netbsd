@@ -1,4 +1,4 @@
-#	$NetBSD: mi,v 1.856 2006/02/25 01:44:15 christos Exp $
+#	$NetBSD: mi,v 1.872 2006/04/17 23:31:24 salo Exp $
 ./etc/mtree/set.comp				comp-sys-root
 ./usr/bin/addr2line				comp-debug-bin		bfd
 ./usr/bin/ar					comp-util-bin		bfd
@@ -99,36 +99,36 @@
 ./usr/include/bitstring.h			comp-c-include
 ./usr/include/bm.h				comp-c-include
 ./usr/include/bzlib.h				comp-c-include
-./usr/include/cdk/alphalist.h			comp-c-include
-./usr/include/cdk/binding.h			comp-c-include
-./usr/include/cdk/buttonbox.h			comp-c-include
-./usr/include/cdk/calendar.h			comp-c-include
-./usr/include/cdk/cdk.h				comp-c-include
-./usr/include/cdk/cdk_config.h			comp-c-include
-./usr/include/cdk/cdk_objs.h			comp-c-include
-./usr/include/cdk/cdk_util.h			comp-c-include
-./usr/include/cdk/cdkscreen.h			comp-c-include
-./usr/include/cdk/curdefs.h			comp-c-include
-./usr/include/cdk/dialog.h			comp-c-include
-./usr/include/cdk/draw.h			comp-c-include
-./usr/include/cdk/entry.h			comp-c-include
-./usr/include/cdk/fselect.h			comp-c-include
-./usr/include/cdk/graph.h			comp-c-include
-./usr/include/cdk/histogram.h			comp-c-include
-./usr/include/cdk/itemlist.h			comp-c-include
-./usr/include/cdk/label.h			comp-c-include
-./usr/include/cdk/marquee.h			comp-c-include
-./usr/include/cdk/matrix.h			comp-c-include
-./usr/include/cdk/mentry.h			comp-c-include
-./usr/include/cdk/menu.h			comp-c-include
-./usr/include/cdk/radio.h			comp-c-include
-./usr/include/cdk/scale.h			comp-c-include
-./usr/include/cdk/scroll.h			comp-c-include
-./usr/include/cdk/selection.h			comp-c-include
-./usr/include/cdk/slider.h			comp-c-include
-./usr/include/cdk/swindow.h			comp-c-include
-./usr/include/cdk/template.h			comp-c-include
-./usr/include/cdk/viewer.h			comp-c-include
+./usr/include/cdk/alphalist.h			comp-obsolete		obsolete
+./usr/include/cdk/binding.h			comp-obsolete		obsolete
+./usr/include/cdk/buttonbox.h			comp-obsolete		obsolete
+./usr/include/cdk/calendar.h			comp-obsolete		obsolete
+./usr/include/cdk/cdk.h				comp-obsolete		obsolete
+./usr/include/cdk/cdk_config.h			comp-obsolete		obsolete
+./usr/include/cdk/cdk_objs.h			comp-obsolete		obsolete
+./usr/include/cdk/cdk_util.h			comp-obsolete		obsolete
+./usr/include/cdk/cdkscreen.h			comp-obsolete		obsolete
+./usr/include/cdk/curdefs.h			comp-obsolete		obsolete
+./usr/include/cdk/dialog.h			comp-obsolete		obsolete
+./usr/include/cdk/draw.h			comp-obsolete		obsolete
+./usr/include/cdk/entry.h			comp-obsolete		obsolete
+./usr/include/cdk/fselect.h			comp-obsolete		obsolete
+./usr/include/cdk/graph.h			comp-obsolete		obsolete
+./usr/include/cdk/histogram.h			comp-obsolete		obsolete
+./usr/include/cdk/itemlist.h			comp-obsolete		obsolete
+./usr/include/cdk/label.h			comp-obsolete		obsolete
+./usr/include/cdk/marquee.h			comp-obsolete		obsolete
+./usr/include/cdk/matrix.h			comp-obsolete		obsolete
+./usr/include/cdk/mentry.h			comp-obsolete		obsolete
+./usr/include/cdk/menu.h			comp-obsolete		obsolete
+./usr/include/cdk/radio.h			comp-obsolete		obsolete
+./usr/include/cdk/scale.h			comp-obsolete		obsolete
+./usr/include/cdk/scroll.h			comp-obsolete		obsolete
+./usr/include/cdk/selection.h			comp-obsolete		obsolete
+./usr/include/cdk/slider.h			comp-obsolete		obsolete
+./usr/include/cdk/swindow.h			comp-obsolete		obsolete
+./usr/include/cdk/template.h			comp-obsolete		obsolete
+./usr/include/cdk/viewer.h			comp-obsolete		obsolete
 ./usr/include/cpio.h				comp-c-include
 ./usr/include/crypto/cryptodev.h		comp-c-include
 ./usr/include/crypto/rmd160.h			comp-c-include
@@ -469,6 +469,7 @@
 ./usr/include/dev/usb/usbcdc.h			comp-obsolete		obsolete
 ./usr/include/dev/usb/usbdevs.h			comp-obsolete		obsolete
 ./usr/include/dev/usb/usbhid.h			comp-c-include
+./usr/include/dev/usb/utoppy.h			comp-c-include
 ./usr/include/dev/vinum/request.h		comp-obsolete		obsolete
 ./usr/include/dev/vinum/statetexts.h		comp-obsolete		obsolete
 ./usr/include/dev/vinum/vinumext.h		comp-obsolete		obsolete
@@ -784,19 +785,19 @@
 ./usr/include/kadm5/kadm5-protos.h		comp-krb5-include	kerberos
 ./usr/include/kadm5/kadm5_err.h			comp-krb5-include	kerberos
 ./usr/include/kadm5/private.h			comp-krb5-include	kerberos
-./usr/include/kerberosIV/des.h			comp-krb4-include	crypto
-./usr/include/kerberosIV/kadm.h			comp-krb4-include	kerberos4
-./usr/include/kerberosIV/kadm_err.h		comp-krb4-include	kerberos4
+./usr/include/kerberosIV/des.h			comp-obsolete		obsolete
+./usr/include/kerberosIV/kadm.h			comp-obsolete		obsolete
+./usr/include/kerberosIV/kadm_err.h		comp-obsolete		obsolete
 ./usr/include/kerberosIV/kafs.h			comp-obsolete		obsolete
-./usr/include/kerberosIV/klog.h			comp-krb4-include	kerberos4
-./usr/include/kerberosIV/krb-archaeology.h	comp-krb4-include	kerberos4
-./usr/include/kerberosIV/krb-protos.h		comp-krb4-include	kerberos4
-./usr/include/kerberosIV/krb.h			comp-krb4-include	kerberos4
-./usr/include/kerberosIV/krb_db.h		comp-krb4-include	kerberos4
-./usr/include/kerberosIV/krb_err.h		comp-krb4-include	kerberos4
-./usr/include/kerberosIV/kstream.h		comp-krb4-include	kerberos4
+./usr/include/kerberosIV/klog.h			comp-obsolete		obsolete
+./usr/include/kerberosIV/krb-archaeology.h	comp-obsolete		obsolete
+./usr/include/kerberosIV/krb-protos.h		comp-obsolete		obsolete
+./usr/include/kerberosIV/krb.h			comp-obsolete		obsolete
+./usr/include/kerberosIV/krb_db.h		comp-obsolete		obsolete
+./usr/include/kerberosIV/krb_err.h		comp-obsolete		obsolete
+./usr/include/kerberosIV/kstream.h		comp-obsolete		obsolete
 ./usr/include/kerberosIV/ktypes.h		comp-obsolete		obsolete
-./usr/include/kerberosIV/prot.h			comp-krb4-include	kerberos4
+./usr/include/kerberosIV/prot.h			comp-obsolete		obsolete
 ./usr/include/krb5/asn1.h			comp-obsolete		obsolete
 ./usr/include/krb5/asn1_err.h			comp-krb5-include	kerberos
 ./usr/include/krb5/base64.h			comp-krb5-include	kerberos
@@ -966,26 +967,26 @@
 ./usr/include/netinet/in_var.h			comp-c-include
 ./usr/include/netinet/ip.h			comp-c-include
 ./usr/include/netinet/ip6.h			comp-c-include
-./usr/include/netinet/ip_auth.h			comp-c-include		ipfilter
+./usr/include/netinet/ip_auth.h			comp-ipf-include	ipfilter
 ./usr/include/netinet/ip_compat.h		comp-c-include
 ./usr/include/netinet/ip_ecn.h			comp-c-include
 ./usr/include/netinet/ip_encap.h		comp-c-include
-./usr/include/netinet/ip_fil.h			comp-c-include		ipfilter
-./usr/include/netinet/ip_frag.h			comp-c-include		ipfilter
+./usr/include/netinet/ip_fil.h			comp-ipf-include	ipfilter
+./usr/include/netinet/ip_frag.h			comp-ipf-include	ipfilter
 ./usr/include/netinet/ip_gre.h			comp-c-include
-./usr/include/netinet/ip_htable.h		comp-c-include		ipfilter
+./usr/include/netinet/ip_htable.h		comp-ipf-include	ipfilter
 ./usr/include/netinet/ip_icmp.h			comp-c-include
-./usr/include/netinet/ip_lookup.h		comp-c-include		ipfilter
+./usr/include/netinet/ip_lookup.h		comp-ipf-include	ipfilter
 ./usr/include/netinet/ip_mroute.h		comp-c-include
-./usr/include/netinet/ip_nat.h			comp-c-include		ipfilter
-./usr/include/netinet/ip_pool.h			comp-c-include		ipfilter
-./usr/include/netinet/ip_proxy.h		comp-c-include		ipfilter
+./usr/include/netinet/ip_nat.h			comp-ipf-include	ipfilter
+./usr/include/netinet/ip_pool.h			comp-ipf-include	ipfilter
+./usr/include/netinet/ip_proxy.h		comp-ipf-include	ipfilter
 ./usr/include/netinet/ip_rules.h		comp-obsolete		obsolete
-./usr/include/netinet/ip_scan.h			comp-c-include		ipfilter
-./usr/include/netinet/ip_state.h		comp-c-include		ipfilter
-./usr/include/netinet/ip_sync.h			comp-c-include		ipfilter
+./usr/include/netinet/ip_scan.h			comp-ipf-include	ipfilter
+./usr/include/netinet/ip_state.h		comp-ipf-include	ipfilter
+./usr/include/netinet/ip_sync.h			comp-ipf-include	ipfilter
 ./usr/include/netinet/ip_var.h			comp-c-include
-./usr/include/netinet/ipl.h			comp-c-include		ipfilter
+./usr/include/netinet/ipl.h			comp-ipf-include	ipfilter
 ./usr/include/netinet/pim.h			comp-c-include
 ./usr/include/netinet/pim_var.h			comp-c-include
 ./usr/include/netinet/tcp.h			comp-c-include
@@ -1368,6 +1369,7 @@
 ./usr/include/sys/ioccom.h			comp-c-include
 ./usr/include/sys/ioctl.h			comp-c-include
 ./usr/include/sys/ioctl_compat.h		comp-c-include
+./usr/include/sys/iostat.h			comp-c-include
 ./usr/include/sys/ipc.h				comp-c-include
 ./usr/include/sys/joystick.h			comp-c-include
 ./usr/include/sys/kcore.h			comp-c-include
@@ -1602,8 +1604,8 @@
 ./usr/lib/libbz2_p.a				comp-c-proflib		profile
 ./usr/lib/libc.a				comp-c-lib
 ./usr/lib/libc_p.a				comp-c-proflib		profile
-./usr/lib/libcdk.a				comp-c-lib
-./usr/lib/libcdk_p.a				comp-c-proflib		profile
+./usr/lib/libcdk.a				comp-obsolete		obsolete
+./usr/lib/libcdk_p.a				comp-obsolete		obsolete
 ./usr/lib/libcom_err.a				comp-krb5-lib		kerberos
 ./usr/lib/libcom_err_p.a			comp-krb5-proflib	kerberos,profile
 ./usr/lib/libcompat.a				comp-c-lib
@@ -1649,22 +1651,22 @@
 ./usr/lib/libipsec_p.a				comp-c-proflib		profile
 ./usr/lib/libiscsi.a				comp-iscsi-lib
 ./usr/lib/libiscsi_p.a				comp-iscsi-proflib	profile
-./usr/lib/libkadm.a				comp-krb4-lib		kerberos4
+./usr/lib/libkadm.a				comp-obsolete		obsolete
 ./usr/lib/libkadm5clnt.a			comp-krb5-lib		kerberos
 ./usr/lib/libkadm5clnt_p.a			comp-krb5-proflib	kerberos,profile
 ./usr/lib/libkadm5srv.a				comp-krb5-lib		kerberos
 ./usr/lib/libkadm5srv_p.a			comp-krb5-proflib	kerberos,profile
-./usr/lib/libkadm_p.a				comp-krb4-lib		kerberos4,profile
+./usr/lib/libkadm_p.a				comp-obsolete		obsolete
 ./usr/lib/libkafs.a				comp-krb5-lib		kerberos
 ./usr/lib/libkafs_p.a				comp-krb5-proflib	kerberos,profile
-./usr/lib/libkdb.a				comp-krb4-lib		kerberos4
-./usr/lib/libkdb_p.a				comp-krb4-proflib	kerberos4,profile
-./usr/lib/libkrb.a				comp-krb4-lib		kerberos4
+./usr/lib/libkdb.a				comp-obsolete		obsolete
+./usr/lib/libkdb_p.a				comp-obsolete		obsolete
+./usr/lib/libkrb.a				comp-obsolete		obsolete
 ./usr/lib/libkrb5.a				comp-krb5-lib		kerberos
 ./usr/lib/libkrb5_p.a				comp-krb5-proflib	kerberos,profile
-./usr/lib/libkrb_p.a				comp-krb4-proflib	kerberos4,profile
-./usr/lib/libkstream.a				comp-krb4-lib		kerberos4
-./usr/lib/libkstream_p.a			comp-krb4-proflib	kerberos4,profile
+./usr/lib/libkrb_p.a				comp-obsolete		obsolete
+./usr/lib/libkstream.a				comp-obsolete		obsolete
+./usr/lib/libkstream_p.a			comp-obsolete		obsolete
 ./usr/lib/libkvm.a				comp-c-lib
 ./usr/lib/libkvm_p.a				comp-c-proflib		profile
 ./usr/lib/libl.a				comp-c-lib
@@ -1756,7 +1758,7 @@
 ./usr/libdata/lint/llib-lintl.ln		comp-c-lintlib		lint
 ./usr/libdata/lint/llib-lipsec.ln		comp-c-lintlib		lint
 ./usr/libdata/lint/llib-liscsi.ln		comp-c-lintlib		lint
-./usr/libdata/lint/llib-lkstream.ln		comp-c-lintlib		lint,kerberos4
+./usr/libdata/lint/llib-lkstream.ln		comp-c-lintlib		obsolete
 ./usr/libdata/lint/llib-lkvm.ln			comp-c-lintlib		lint
 ./usr/libdata/lint/llib-ll.ln			comp-c-lintlib		lint
 ./usr/libdata/lint/llib-lmagic.ln		comp-c-lintlib		lint
@@ -2105,14 +2107,14 @@
 ./usr/share/man/cat2/gettimeofday.0		comp-c-catman		.cat
 ./usr/share/man/cat2/getuid.0			comp-c-catman		.cat
 ./usr/share/man/cat2/getvfsstat.0		comp-c-catman		.cat
-./usr/share/man/cat2/i386_get_ioperm.0		comp-c-catman		.cat
+./usr/share/man/cat2/i386_get_ioperm.0		comp-obsolete		obsolete
 ./usr/share/man/cat2/i386_get_ldt.0		comp-c-catman		.cat
 ./usr/share/man/cat2/i386_get_mtrr.0		comp-c-catman		.cat
 ./usr/share/man/cat2/i386_iopl.0		comp-c-catman		.cat
 ./usr/share/man/cat2/i386_pmc_info.0		comp-c-catman		.cat
 ./usr/share/man/cat2/i386_pmc_read.0		comp-c-catman		.cat
 ./usr/share/man/cat2/i386_pmc_startstop.0	comp-c-catman		.cat
-./usr/share/man/cat2/i386_set_ioperm.0		comp-c-catman		.cat
+./usr/share/man/cat2/i386_set_ioperm.0		comp-obsolete		obsolete
 ./usr/share/man/cat2/i386_set_ldt.0		comp-c-catman		.cat
 ./usr/share/man/cat2/i386_set_mtrr.0		comp-c-catman		.cat
 ./usr/share/man/cat2/i386_vm86.0		comp-c-catman		.cat
@@ -2327,6 +2329,8 @@
 ./usr/share/man/cat3/CIRCLEQ_INSERT_HEAD.0	comp-c-catman		.cat
 ./usr/share/man/cat3/CIRCLEQ_INSERT_TAIL.0	comp-c-catman		.cat
 ./usr/share/man/cat3/CIRCLEQ_LAST.0		comp-c-catman		.cat
+./usr/share/man/cat3/CIRCLEQ_LOOP_NEXT.0	comp-c-catman		.cat
+./usr/share/man/cat3/CIRCLEQ_LOOP_PREV.0	comp-c-catman		.cat
 ./usr/share/man/cat3/CIRCLEQ_NEXT.0		comp-c-catman		.cat
 ./usr/share/man/cat3/CIRCLEQ_PREV.0		comp-c-catman		.cat
 ./usr/share/man/cat3/CIRCLEQ_REMOVE.0		comp-c-catman		.cat
@@ -2744,34 +2748,34 @@
 ./usr/share/man/cat3/cbreak.0			comp-c-catman		.cat
 ./usr/share/man/cat3/cbrt.0			comp-c-catman		.cat
 ./usr/share/man/cat3/cbrtf.0			comp-c-catman		.cat
-./usr/share/man/cat3/cdk.0			comp-c-catman		.cat
-./usr/share/man/cat3/cdk_alphalist.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_binding.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_buttonbox.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_calendar.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_cdk.0			comp-c-catman		.cat
-./usr/share/man/cat3/cdk_dialog.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_display.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_entry.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_fselect.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_graph.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_histogram.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_itemlist.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_label.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_marquee.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_matrix.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_mentry.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_menu.0			comp-c-catman		.cat
-./usr/share/man/cat3/cdk_misc.0			comp-c-catman		.cat
-./usr/share/man/cat3/cdk_radio.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_scale.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_screen.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_scroll.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_selection.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_slider.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_swindow.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_template.0		comp-c-catman		.cat
-./usr/share/man/cat3/cdk_viewer.0		comp-c-catman		.cat
+./usr/share/man/cat3/cdk.0			comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_alphalist.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_binding.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_buttonbox.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_calendar.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_cdk.0			comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_dialog.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_display.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_entry.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_fselect.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_graph.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_histogram.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_itemlist.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_label.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_marquee.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_matrix.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_mentry.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_menu.0			comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_misc.0			comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_radio.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_scale.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_screen.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_scroll.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_selection.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_slider.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_swindow.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_template.0		comp-obsolete		obsolete
+./usr/share/man/cat3/cdk_viewer.0		comp-obsolete		obsolete
 ./usr/share/man/cat3/ceil.0			comp-c-catman		.cat
 ./usr/share/man/cat3/ceilf.0			comp-c-catman		.cat
 ./usr/share/man/cat3/cfgetispeed.0		comp-c-catman		.cat
@@ -3508,7 +3512,7 @@
 ./usr/share/man/cat3/jnf.0			comp-c-catman		.cat
 ./usr/share/man/cat3/jrand48.0			comp-c-catman		.cat
 ./usr/share/man/cat3/kafs.0			comp-krb5-catman	kerberos,.cat
-./usr/share/man/cat3/kerberos.0			comp-krb4-catman	kerberos4,.cat
+./usr/share/man/cat3/kerberos.0			comp-obsolete		obsolete
 ./usr/share/man/cat3/keyname.0			comp-c-catman		.cat
 ./usr/share/man/cat3/keypad.0			comp-c-catman		.cat
 ./usr/share/man/cat3/killchar.0			comp-c-catman		.cat
@@ -3710,24 +3714,24 @@
 ./usr/share/man/cat3/krb5_vwarnx.0		comp-krb5c-catman	kerberos,.cat
 ./usr/share/man/cat3/krb5_warn.0		comp-krb5c-catman	kerberos,.cat
 ./usr/share/man/cat3/krb5_warnx.0		comp-krb5c-catman	kerberos,.cat
-./usr/share/man/cat3/krb_ck_repl.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_get_cred.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_get_krbhst.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_get_lrealm.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_get_phost.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_kntoln.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_mk_err.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_mk_priv.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_mk_req.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_mk_safe.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_rd_err.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_rd_priv.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_rd_req.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_rd_safe.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_realmofhost.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_sendauth.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_set_key.0		comp-krb4-catman	kerberos4,.cat
-./usr/share/man/cat3/krb_set_tkt_string.0	comp-krb4-catman	kerberos4,.cat
+./usr/share/man/cat3/krb_ck_repl.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_get_cred.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_get_krbhst.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_get_lrealm.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_get_phost.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_kntoln.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_mk_err.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_mk_priv.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_mk_req.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_mk_safe.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_rd_err.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_rd_priv.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_rd_req.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_rd_safe.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_realmofhost.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_sendauth.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_set_key.0		comp-obsolete		obsolete
+./usr/share/man/cat3/krb_set_tkt_string.0	comp-obsolete		obsolete
 ./usr/share/man/cat3/kvm.0			comp-c-catman		.cat
 ./usr/share/man/cat3/kvm_close.0		comp-c-catman		.cat
 ./usr/share/man/cat3/kvm_dump.0			comp-c-catman		.cat
@@ -3929,6 +3933,9 @@
 ./usr/share/man/cat3/mvwinstr.0			comp-c-catman		.cat
 ./usr/share/man/cat3/mvwprintw.0		comp-c-catman		.cat
 ./usr/share/man/cat3/mvwvline.0			comp-c-catman		.cat
+./usr/share/man/cat3/nan.0			comp-c-catman		.cat
+./usr/share/man/cat3/nanf.0			comp-c-catman		.cat
+./usr/share/man/cat3/nanl.0			comp-c-catman		.cat
 ./usr/share/man/cat3/napms.0			comp-c-catman		.cat
 ./usr/share/man/cat3/nc_perror.0		comp-c-catman		.cat
 ./usr/share/man/cat3/nc_sperror.0		comp-c-catman		.cat
@@ -4363,6 +4370,7 @@
 ./usr/share/man/cat3/setstate.0			comp-c-catman		.cat
 ./usr/share/man/cat3/setterm.0			comp-c-catman		.cat
 ./usr/share/man/cat3/setttyent.0		comp-c-catman		.cat
+./usr/share/man/cat3/setttyentpath.0		comp-c-catman		.cat
 ./usr/share/man/cat3/setusercontext.0		comp-c-catman		.cat
 ./usr/share/man/cat3/setusershell.0		comp-c-catman		.cat
 ./usr/share/man/cat3/setutxent.0		comp-c-catman		.cat
@@ -4483,10 +4491,12 @@
 ./usr/share/man/cat3/strsvis.0			comp-c-catman		.cat
 ./usr/share/man/cat3/strsvisx.0			comp-c-catman		.cat
 ./usr/share/man/cat3/strtod.0			comp-c-catman		.cat
+./usr/share/man/cat3/strtof.0			comp-c-catman		.cat
 ./usr/share/man/cat3/strtoimax.0		comp-c-catman		.cat
 ./usr/share/man/cat3/strtok.0			comp-c-catman		.cat
 ./usr/share/man/cat3/strtok_r.0			comp-c-catman		.cat
 ./usr/share/man/cat3/strtol.0			comp-c-catman		.cat
+./usr/share/man/cat3/strtold.0			comp-c-catman		.cat
 ./usr/share/man/cat3/strtoll.0			comp-c-catman		.cat
 ./usr/share/man/cat3/strtoq.0			comp-c-catman		.cat
 ./usr/share/man/cat3/strtoul.0			comp-c-catman		.cat
@@ -4631,6 +4641,8 @@
 ./usr/share/man/cat3/towupper.0			comp-c-catman		.cat
 ./usr/share/man/cat3/tputs.0			comp-c-catman		.cat
 ./usr/share/man/cat3/tree.0			comp-c-catman		.cat
+./usr/share/man/cat3/trunc.0			comp-c-catman		.cat
+./usr/share/man/cat3/truncf.0			comp-c-catman		.cat
 ./usr/share/man/cat3/tsearch.0			comp-c-catman		.cat
 ./usr/share/man/cat3/ttyaction.0		comp-c-catman		.cat
 ./usr/share/man/cat3/ttylock.0			comp-c-catman		.cat
@@ -4748,7 +4760,10 @@
 ./usr/share/man/cat3/wcsrtombs.0		comp-c-catman		.cat
 ./usr/share/man/cat3/wcsspn.0			comp-c-catman		.cat
 ./usr/share/man/cat3/wcsstr.0			comp-c-catman		.cat
+./usr/share/man/cat3/wcstod.0			comp-c-catman		.cat
+./usr/share/man/cat3/wcstof.0			comp-c-catman		.cat
 ./usr/share/man/cat3/wcstok.0			comp-c-catman		.cat
+./usr/share/man/cat3/wcstold.0			comp-c-catman		.cat
 ./usr/share/man/cat3/wcstombs.0			comp-c-catman		.cat
 ./usr/share/man/cat3/wctob.0			comp-c-catman		.cat
 ./usr/share/man/cat3/wctomb.0			comp-c-catman		.cat
@@ -5002,10 +5017,12 @@
 ./usr/share/man/cat9/audio.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/autoconf.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/bawrite.0			comp-sys-catman		.cat
+./usr/share/man/cat9/bcdtobin.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/bcmp.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/bcopy.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/bdevvp.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/bdwrite.0			comp-sys-catman		.cat
+./usr/share/man/cat9/bintobcd.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/biodone.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/biowait.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/bitmask_snprintf.0		comp-sys-catman		.cat
@@ -5234,7 +5251,7 @@
 ./usr/share/man/cat9/falloc.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/fd_getfile.0		comp-sys-catman		.cat
 ./usr/share/man/cat9/fdalloc.0			comp-sys-catman		.cat
-./usr/share/man/cat9/fdavail.0			comp-sys-catman		.cat
+./usr/share/man/cat9/fdavail.0			comp-obsolete		obsolete
 ./usr/share/man/cat9/fdcheckstd.0		comp-sys-catman		.cat
 ./usr/share/man/cat9/fdclear.0			comp-sys-catman		.cat
 ./usr/share/man/cat9/fdclone.0			comp-sys-catman		.cat
@@ -6061,14 +6078,14 @@
 ./usr/share/man/man2/gettimeofday.2		comp-c-man		.man
 ./usr/share/man/man2/getuid.2			comp-c-man		.man
 ./usr/share/man/man2/getvfsstat.2		comp-c-man		.man
-./usr/share/man/man2/i386_get_ioperm.2		comp-c-man		.man
+./usr/share/man/man2/i386_get_ioperm.2		comp-obsolete		obsolete
 ./usr/share/man/man2/i386_get_ldt.2		comp-c-man		.man
 ./usr/share/man/man2/i386_get_mtrr.2		comp-c-man		.man
 ./usr/share/man/man2/i386_iopl.2		comp-c-man		.man
 ./usr/share/man/man2/i386_pmc_info.2		comp-c-man		.man
 ./usr/share/man/man2/i386_pmc_read.2		comp-c-man		.man
 ./usr/share/man/man2/i386_pmc_startstop.2	comp-c-man		.man
-./usr/share/man/man2/i386_set_ioperm.2		comp-c-man		.man
+./usr/share/man/man2/i386_set_ioperm.2		comp-obsolete		obsolete
 ./usr/share/man/man2/i386_set_ldt.2		comp-c-man		.man
 ./usr/share/man/man2/i386_set_mtrr.2		comp-c-man		.man
 ./usr/share/man/man2/i386_vm86.2		comp-c-man		.man
@@ -6282,6 +6299,8 @@
 ./usr/share/man/man3/CIRCLEQ_INSERT_HEAD.3	comp-c-man		.man
 ./usr/share/man/man3/CIRCLEQ_INSERT_TAIL.3	comp-c-man		.man
 ./usr/share/man/man3/CIRCLEQ_LAST.3		comp-c-man		.man
+./usr/share/man/man3/CIRCLEQ_LOOP_NEXT.3	comp-c-man		.man
+./usr/share/man/man3/CIRCLEQ_LOOP_PREV.3	comp-c-man		.man
 ./usr/share/man/man3/CIRCLEQ_NEXT.3		comp-c-man		.man
 ./usr/share/man/man3/CIRCLEQ_PREV.3		comp-c-man		.man
 ./usr/share/man/man3/CIRCLEQ_REMOVE.3		comp-c-man		.man
@@ -6699,34 +6718,34 @@
 ./usr/share/man/man3/cbreak.3			comp-c-man		.man
 ./usr/share/man/man3/cbrt.3			comp-c-man		.man
 ./usr/share/man/man3/cbrtf.3			comp-c-man		.man
-./usr/share/man/man3/cdk.3			comp-c-man		.man
-./usr/share/man/man3/cdk_alphalist.3		comp-c-man		.man
-./usr/share/man/man3/cdk_binding.3		comp-c-man		.man
-./usr/share/man/man3/cdk_buttonbox.3		comp-c-man		.man
-./usr/share/man/man3/cdk_calendar.3		comp-c-man		.man
-./usr/share/man/man3/cdk_cdk.3			comp-c-man		.man
-./usr/share/man/man3/cdk_dialog.3		comp-c-man		.man
-./usr/share/man/man3/cdk_display.3		comp-c-man		.man
-./usr/share/man/man3/cdk_entry.3		comp-c-man		.man
-./usr/share/man/man3/cdk_fselect.3		comp-c-man		.man
-./usr/share/man/man3/cdk_graph.3		comp-c-man		.man
-./usr/share/man/man3/cdk_histogram.3		comp-c-man		.man
-./usr/share/man/man3/cdk_itemlist.3		comp-c-man		.man
-./usr/share/man/man3/cdk_label.3		comp-c-man		.man
-./usr/share/man/man3/cdk_marquee.3		comp-c-man		.man
-./usr/share/man/man3/cdk_matrix.3		comp-c-man		.man
-./usr/share/man/man3/cdk_mentry.3		comp-c-man		.man
-./usr/share/man/man3/cdk_menu.3			comp-c-man		.man
-./usr/share/man/man3/cdk_misc.3			comp-c-man		.man
-./usr/share/man/man3/cdk_radio.3		comp-c-man		.man
-./usr/share/man/man3/cdk_scale.3		comp-c-man		.man
-./usr/share/man/man3/cdk_screen.3		comp-c-man		.man
-./usr/share/man/man3/cdk_scroll.3		comp-c-man		.man
-./usr/share/man/man3/cdk_selection.3		comp-c-man		.man
-./usr/share/man/man3/cdk_slider.3		comp-c-man		.man
-./usr/share/man/man3/cdk_swindow.3		comp-c-man		.man
-./usr/share/man/man3/cdk_template.3		comp-c-man		.man
-./usr/share/man/man3/cdk_viewer.3		comp-c-man		.man
+./usr/share/man/man3/cdk.3			comp-obsolete		obsolete
+./usr/share/man/man3/cdk_alphalist.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_binding.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_buttonbox.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_calendar.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_cdk.3			comp-obsolete		obsolete
+./usr/share/man/man3/cdk_dialog.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_display.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_entry.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_fselect.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_graph.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_histogram.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_itemlist.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_label.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_marquee.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_matrix.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_mentry.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_menu.3			comp-obsolete		obsolete
+./usr/share/man/man3/cdk_misc.3			comp-obsolete		obsolete
+./usr/share/man/man3/cdk_radio.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_scale.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_screen.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_scroll.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_selection.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_slider.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_swindow.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_template.3		comp-obsolete		obsolete
+./usr/share/man/man3/cdk_viewer.3		comp-obsolete		obsolete
 ./usr/share/man/man3/ceil.3			comp-c-man		.man
 ./usr/share/man/man3/ceilf.3			comp-c-man		.man
 ./usr/share/man/man3/cfgetispeed.3		comp-c-man		.man
@@ -7463,7 +7482,7 @@
 ./usr/share/man/man3/jnf.3			comp-c-man		.man
 ./usr/share/man/man3/jrand48.3			comp-c-man		.man
 ./usr/share/man/man3/kafs.3			comp-krb5-man		kerberos,.man
-./usr/share/man/man3/kerberos.3			comp-krb4-man		kerberos4,.man
+./usr/share/man/man3/kerberos.3			comp-obsolete		obsolete
 ./usr/share/man/man3/keyname.3			comp-c-man		.man
 ./usr/share/man/man3/keypad.3			comp-c-man		.man
 ./usr/share/man/man3/killchar.3			comp-c-man		.man
@@ -7665,24 +7684,24 @@
 ./usr/share/man/man3/krb5_vwarnx.3		comp-krb5-man		kerberos,.man
 ./usr/share/man/man3/krb5_warn.3		comp-krb5-man		kerberos,.man
 ./usr/share/man/man3/krb5_warnx.3		comp-krb5-man		kerberos,.man
-./usr/share/man/man3/krb_ck_repl.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_get_cred.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_get_krbhst.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_get_lrealm.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_get_phost.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_kntoln.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_mk_err.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_mk_priv.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_mk_req.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_mk_safe.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_rd_err.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_rd_priv.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_rd_req.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_rd_safe.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_realmofhost.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_sendauth.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_set_key.3		comp-krb4-man		kerberos4,.man
-./usr/share/man/man3/krb_set_tkt_string.3	comp-krb4-man		kerberos4,.man
+./usr/share/man/man3/krb_ck_repl.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_get_cred.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_get_krbhst.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_get_lrealm.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_get_phost.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_kntoln.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_mk_err.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_mk_priv.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_mk_req.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_mk_safe.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_rd_err.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_rd_priv.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_rd_req.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_rd_safe.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_realmofhost.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_sendauth.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_set_key.3		comp-obsolete		obsolete
+./usr/share/man/man3/krb_set_tkt_string.3	comp-obsolete		obsolete
 ./usr/share/man/man3/kvm.3			comp-c-man		.man
 ./usr/share/man/man3/kvm_close.3		comp-c-man		.man
 ./usr/share/man/man3/kvm_dump.3			comp-c-man		.man
@@ -7884,6 +7903,9 @@
 ./usr/share/man/man3/mvwinstr.3			comp-c-man		.man
 ./usr/share/man/man3/mvwprintw.3		comp-c-man		.man
 ./usr/share/man/man3/mvwvline.3			comp-c-man		.man
+./usr/share/man/man3/nan.3			comp-c-man		.man
+./usr/share/man/man3/nanf.3			comp-c-man		.man
+./usr/share/man/man3/nanl.3			comp-c-man		.man
 ./usr/share/man/man3/napms.3			comp-c-man		.man
 ./usr/share/man/man3/nc_perror.3		comp-c-man		.man
 ./usr/share/man/man3/nc_sperror.3		comp-c-man		.man
@@ -8313,6 +8335,7 @@
 ./usr/share/man/man3/setstate.3			comp-c-man		.man
 ./usr/share/man/man3/setterm.3			comp-c-man		.man
 ./usr/share/man/man3/setttyent.3		comp-c-man		.man
+./usr/share/man/man3/setttyentpath.3		comp-c-man		.man
 ./usr/share/man/man3/setusercontext.3		comp-c-man		.man
 ./usr/share/man/man3/setusershell.3		comp-c-man		.man
 ./usr/share/man/man3/setutxent.3		comp-c-man		.man
@@ -8433,10 +8456,12 @@
 ./usr/share/man/man3/strsvis.3			comp-c-man		.man
 ./usr/share/man/man3/strsvisx.3			comp-c-man		.man
 ./usr/share/man/man3/strtod.3			comp-c-man		.man
+./usr/share/man/man3/strtof.3			comp-c-man		.man
 ./usr/share/man/man3/strtoimax.3		comp-c-man		.man
 ./usr/share/man/man3/strtok.3			comp-c-man		.man
 ./usr/share/man/man3/strtok_r.3			comp-c-man		.man
 ./usr/share/man/man3/strtol.3			comp-c-man		.man
+./usr/share/man/man3/strtold.3			comp-c-man		.man
 ./usr/share/man/man3/strtoll.3			comp-c-man		.man
 ./usr/share/man/man3/strtoq.3			comp-c-man		.man
 ./usr/share/man/man3/strtoul.3			comp-c-man		.man
@@ -8581,6 +8606,8 @@
 ./usr/share/man/man3/towupper.3			comp-c-man		.man
 ./usr/share/man/man3/tputs.3			comp-c-man		.man
 ./usr/share/man/man3/tree.3			comp-c-man		.man
+./usr/share/man/man3/trunc.3			comp-c-man		.man
+./usr/share/man/man3/truncf.3			comp-c-man		.man
 ./usr/share/man/man3/tsearch.3			comp-c-man		.man
 ./usr/share/man/man3/ttyaction.3		comp-c-man		.man
 ./usr/share/man/man3/ttylock.3			comp-c-man		.man
@@ -8698,7 +8725,10 @@
 ./usr/share/man/man3/wcsrtombs.3		comp-c-man		.man
 ./usr/share/man/man3/wcsspn.3			comp-c-man		.man
 ./usr/share/man/man3/wcsstr.3			comp-c-man		.man
+./usr/share/man/man3/wcstod.3			comp-c-man		.man
+./usr/share/man/man3/wcstof.3			comp-c-man		.man
 ./usr/share/man/man3/wcstok.3			comp-c-man		.man
+./usr/share/man/man3/wcstold.3			comp-c-man		.man
 ./usr/share/man/man3/wcstombs.3			comp-c-man		.man
 ./usr/share/man/man3/wctob.3			comp-c-man		.man
 ./usr/share/man/man3/wctomb.3			comp-c-man		.man
@@ -8951,10 +8981,12 @@
 ./usr/share/man/man9/audio.9			comp-sys-man		.man
 ./usr/share/man/man9/autoconf.9			comp-sys-man		.man
 ./usr/share/man/man9/bawrite.9			comp-sys-man		.man
+./usr/share/man/man9/bcdtobin.9			comp-sys-man		.man
 ./usr/share/man/man9/bcmp.9			comp-sys-man		.man
 ./usr/share/man/man9/bcopy.9			comp-sys-man		.man
 ./usr/share/man/man9/bdevvp.9			comp-sys-man		.man
 ./usr/share/man/man9/bdwrite.9			comp-sys-man		.man
+./usr/share/man/man9/bintobcd.9			comp-sys-man		.man
 ./usr/share/man/man9/biodone.9			comp-sys-man		.man
 ./usr/share/man/man9/biowait.9			comp-sys-man		.man
 ./usr/share/man/man9/bitmask_snprintf.9		comp-sys-man		.man
@@ -9183,7 +9215,7 @@
 ./usr/share/man/man9/falloc.9			comp-sys-man		.man
 ./usr/share/man/man9/fd_getfile.9		comp-sys-man		.man
 ./usr/share/man/man9/fdalloc.9			comp-sys-man		.man
-./usr/share/man/man9/fdavail.9			comp-sys-man		.man
+./usr/share/man/man9/fdavail.9			comp-obsolete		obsolete
 ./usr/share/man/man9/fdcheckstd.9		comp-sys-man		.man
 ./usr/share/man/man9/fdclear.9			comp-sys-man		.man
 ./usr/share/man/man9/fdclone.9			comp-sys-man		.man
