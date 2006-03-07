@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_syscall.c,v 1.6 2006/03/05 19:08:38 christos Exp $ */
+/*	$NetBSD: linux_syscall.c,v 1.8 2006/03/07 07:21:50 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -37,11 +37,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.6 2006/03/05 19:08:38 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.8 2006/03/07 07:21:50 thorpej Exp $");
 
-#include "opt_syscall_debug.h"
-#include "opt_ktrace.h"
-#include "opt_systrace.h"
 #include "opt_compat_linux.h"
 
 #include <sys/param.h>
@@ -51,12 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.6 2006/03/05 19:08:38 christos E
 #include <sys/signal.h>
 #include <sys/sa.h>
 #include <sys/savar.h>
-#ifdef KTRACE
-#include <sys/ktrace.h>
-#endif
-#ifdef SYSTRACE
-#include <sys/systrace.h>
-#endif
 #include <sys/syscall.h>
 
 #include <uvm/uvm_extern.h>
@@ -77,14 +68,13 @@ __KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.6 2006/03/05 19:08:38 christos E
 
 void linux_syscall_intern(struct proc *);
 static void linux_syscall_plain(struct trapframe *);
-#if defined(KTRACE) || defined(SYSTRACE)
 static void linux_syscall_fancy(struct trapframe *);
-#endif
 
 void
 linux_syscall_intern(struct proc *p)
 {
-	if (proc_is_traced_p(p))
+
+	if (trace_is_enabled(p))
 		p->p_md.md_syscall = linux_syscall_fancy;
 	else
 		p->p_md.md_syscall = linux_syscall_plain;
@@ -147,10 +137,6 @@ linux_syscall_plain(struct trapframe *frame)
 		}
 	}
 
-#ifdef SYSCALL_DEBUG
-	scdebug_call(l, code, argp);
-#endif /* SYSCALL_DEBUG */
-
 	rval[0] = 0;
 	rval[1] = 0;
 	KERNEL_PROC_LOCK(l);
@@ -180,13 +166,9 @@ linux_syscall_plain(struct trapframe *frame)
 		break;
 	}
 
-#ifdef SYSCALL_DEBUG
-	scdebug_ret(l, code, error, rval);
-#endif /* SYSCALL_DEBUG */
 	userret(l);
 }
 
-#if defined(KTRACE) || defined(SYSTRACE)
 static void
 linux_syscall_fancy(struct trapframe *frame)
 {
@@ -275,4 +257,3 @@ out:
 
 	userret(l);
 }
-#endif

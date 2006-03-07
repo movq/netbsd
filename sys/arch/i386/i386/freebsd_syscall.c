@@ -1,4 +1,4 @@
-/*	$NetBSD: freebsd_syscall.c,v 1.22 2006/03/05 19:08:38 christos Exp $	*/
+/*	$NetBSD: freebsd_syscall.c,v 1.24 2006/03/07 07:21:50 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -37,13 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: freebsd_syscall.c,v 1.22 2006/03/05 19:08:38 christos Exp $");
-
-#if defined(_KERNEL_OPT)
-#include "opt_syscall_debug.h"
-#include "opt_ktrace.h"
-#include "opt_systrace.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: freebsd_syscall.c,v 1.24 2006/03/07 07:21:50 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,12 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: freebsd_syscall.c,v 1.22 2006/03/05 19:08:38 christo
 #include <sys/savar.h>
 #include <sys/user.h>
 #include <sys/signal.h>
-#ifdef KTRACE
-#include <sys/ktrace.h>
-#endif
-#ifdef SYSTRACE
-#include <sys/systrace.h>
-#endif
 #include <sys/syscall.h>
 
 #include <uvm/uvm_extern.h>
@@ -76,7 +64,8 @@ void freebsd_syscall_fancy(struct trapframe *);
 void
 freebsd_syscall_intern(struct proc *p)
 {
-	if (proc_is_traced_p(p))
+
+	if (trace_is_enabled(p))
 		p->p_md.md_syscall = freebsd_syscall_fancy;
 	else
 		p->p_md.md_syscall = freebsd_syscall_plain;
@@ -136,10 +125,6 @@ freebsd_syscall_plain(frame)
 			goto bad;
 	}
 
-#ifdef SYSCALL_DEBUG
-	scdebug_call(l, code, args);
-#endif /* SYSCALL_DEBUG */
-
 	rval[0] = 0;
 	rval[1] = frame->tf_edx; /* need to keep edx for shared FreeBSD bins */
 
@@ -171,9 +156,6 @@ freebsd_syscall_plain(frame)
 		break;
 	}
 
-#ifdef SYSCALL_DEBUG
-	scdebug_ret(l, code, error, rval);
-#endif /* SYSCALL_DEBUG */
 	userret(l);
 }
 

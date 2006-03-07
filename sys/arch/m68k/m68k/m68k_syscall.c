@@ -1,4 +1,4 @@
-/*	$NetBSD: m68k_syscall.c,v 1.21 2006/03/06 08:05:06 he Exp $	*/
+/*	$NetBSD: m68k_syscall.c,v 1.23 2006/03/07 07:21:50 thorpej Exp $	*/
 
 /*-
  * Portions Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -110,12 +110,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: m68k_syscall.c,v 1.21 2006/03/06 08:05:06 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: m68k_syscall.c,v 1.23 2006/03/07 07:21:50 thorpej Exp $");
 
-#include "opt_syscall_debug.h"
 #include "opt_execfmt.h"
 #include "opt_ktrace.h"
-#include "opt_systrace.h"
 #include "opt_compat_netbsd.h"
 #include "opt_compat_aout_m68k.h"
 
@@ -130,9 +128,6 @@ __KERNEL_RCSID(0, "$NetBSD: m68k_syscall.c,v 1.21 2006/03/06 08:05:06 he Exp $")
 #include <sys/user.h>
 #ifdef KTRACE
 #include <sys/ktrace.h>
-#endif
-#ifdef SYSTRACE
-#include <sys/systrace.h>
 #endif
 
 #include <machine/psl.h>
@@ -183,11 +178,10 @@ syscall(register_t code, struct frame frame)
 void
 syscall_intern(struct proc *p)
 {
-#if defined(KTRACE) || defined(SYSTRACE)
-	if (proc_is_traced_p(p))
+
+	if (trace_is_enabled(p))
 		p->p_md.md_syscall = syscall_fancy;
 	else
-#endif
 		p->p_md.md_syscall = syscall_plain;
 }
 
@@ -199,16 +193,9 @@ void
 aoutm68k_syscall_intern(struct proc *p)
 {
 
-#ifdef KTRACE
-	if (p->p_traceflag & (KTRFAC_SYSCALL | KTRFAC_SYSRET))
+	if (trace_is_enabled(p))
 		p->p_md.md_syscall = syscall_fancy;
 	else
-#endif
-#ifdef SYSTRACE
-	if (ISSET(p->p_flag, P_SYSTRACE))
-		p->p_md.md_syscall = syscall_fancy;
-	else
-#endif
 		p->p_md.md_syscall = syscall_plain;
 }
 #endif
@@ -277,10 +264,6 @@ syscall_plain(register_t code, struct lwp *l, struct frame *frame)
 			goto bad;
 	}
 
-#ifdef SYSCALL_DEBUG
-	scdebug_call(l, code, args);
-#endif
-
 	rval[0] = 0;
 	rval[1] = frame->f_regs[D1];
 	error = (*callp->sy_call)(l, args, rval);
@@ -331,10 +314,6 @@ syscall_plain(register_t code, struct lwp *l, struct frame *frame)
 		frame->f_sr |= PSL_C;	/* carry bit */
 		break;
 	}
-
-#ifdef SYSCALL_DEBUG
-        scdebug_ret(p, code, error, rval)
-#endif
 }
 
 static void
