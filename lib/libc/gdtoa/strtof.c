@@ -1,4 +1,4 @@
-/* $NetBSD: strtof.c,v 1.1.1.1 2006/01/25 15:18:53 kleink Exp $ */
+/* $NetBSD: strtof.c,v 1.2 2006/03/15 17:35:18 kleink Exp $ */
 
 /****************************************************************
 
@@ -31,7 +31,12 @@ THIS SOFTWARE.
 /* Please send bug reports to David M. Gay (dmg at acm dot org,
  * with " at " changed at "@" and " dot " changed to ".").	*/
 
+#include "namespace.h"
 #include "gdtoaimp.h"
+
+#ifdef __weak_alias
+__weak_alias(strtof, _strtof)
+#endif
 
  float
 #ifdef KR_headers
@@ -40,13 +45,13 @@ strtof(s, sp) CONST char *s; char **sp;
 strtof(CONST char *s, char **sp)
 #endif
 {
-	static FPI fpi = { 24, 1-127-24+1,  254-127-24+1, 1, SI };
+	static CONST FPI fpi = { 24, 1-127-24+1,  254-127-24+1, 1, SI };
 	ULong bits[1];
-	Long exp;
+	Long expt;
 	int k;
 	union { ULong L[1]; float f; } u;
 
-	k = strtodg(s, sp, &fpi, &exp, bits);
+	k = strtodg(s, sp, &fpi, &expt, bits);
 	switch(k & STRTOG_Retmask) {
 	  case STRTOG_NoNumber:
 	  case STRTOG_Zero:
@@ -55,7 +60,7 @@ strtof(CONST char *s, char **sp)
 
 	  case STRTOG_Normal:
 	  case STRTOG_NaNbits:
-		u.L[0] = bits[0] & 0x7fffff | exp + 0x7f + 23 << 23;
+		u.L[0] = (bits[0] & 0x7fffff) | ((expt + 0x7f + 23) << 23);
 		break;
 
 	  case STRTOG_Denormal:
