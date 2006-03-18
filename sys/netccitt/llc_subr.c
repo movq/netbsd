@@ -1,4 +1,4 @@
-/*	$NetBSD: llc_subr.c,v 1.23 2006/03/17 23:29:10 christos Exp $	*/
+/*	$NetBSD: llc_subr.c,v 1.22 2005/12/11 12:24:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: llc_subr.c,v 1.23 2006/03/17 23:29:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: llc_subr.c,v 1.22 2005/12/11 12:24:54 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -2331,7 +2331,7 @@ llc_newlink(dst, ifp, nlrt, nlnext, llrt)
 		llcwindow = LLC_MAX_WINDOW;
 
 	/* allocate memory for window buffer */
-	nlinkp->llcl_output_buffers = malloc(
+	MALLOC(nlinkp->llcl_output_buffers, struct mbuf **,
 	       llcwindow * sizeof(struct mbuf *), M_PCB, M_NOWAIT|M_ZERO);
 	if (nlinkp->llcl_output_buffers == 0) {
 		FREE(nlinkp, M_PCB);
