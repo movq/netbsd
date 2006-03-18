@@ -1,4 +1,4 @@
-/*	$NetBSD: deflate.c,v 1.5 2006/03/17 23:29:11 christos Exp $ */
+/*	$NetBSD: deflate.c,v 1.4 2005/12/11 12:25:20 christos Exp $ */
 /*	$FreeBSD: src/sys/opencrypto/deflate.c,v 1.1.2.1 2002/11/21 23:34:23 sam Exp $	*/
 /* $OpenBSD: deflate.c,v 1.3 2001/08/20 02:45:22 hugh Exp $ */
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: deflate.c,v 1.5 2006/03/17 23:29:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: deflate.c,v 1.4 2005/12/11 12:25:20 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/malloc.h>
@@ -95,7 +95,8 @@ deflate_global(data, size, decomp, out)
 	zbuf.avail_in = size;	/* Total length of data to be processed */
 
 	if (!decomp) {
-		buf[i].out = malloc(size, M_CRYPTO_DATA, M_NOWAIT);
+		MALLOC(buf[i].out, u_int8_t *, (u_long) size, M_CRYPTO_DATA,
+		    M_NOWAIT);
 		if (buf[i].out == NULL)
 			goto bad;
 		buf[i].size = size;
@@ -109,10 +110,11 @@ deflate_global(data, size, decomp, out)
 	 	 * updated while the decompression is going on
 	 	 */
 
-		buf[i].size = size * 4;
-		buf[i].out = malloc(buf[i].size, M_CRYPTO_DATA, M_NOWAIT);
+		MALLOC(buf[i].out, u_int8_t *, (u_long) (size * 4),
+		    M_CRYPTO_DATA, M_NOWAIT);
 		if (buf[i].out == NULL)
 			goto bad;
+		buf[i].size = size * 4;
 		buf[i].flag = 1;
 		i++;
 	}
@@ -135,7 +137,8 @@ deflate_global(data, size, decomp, out)
 			goto end;
 		else if (zbuf.avail_out == 0 && i < (ZBUF - 1)) {
 			/* we need more output space, allocate size */
-			buf[i].out = malloc(size, M_CRYPTO_DATA, M_NOWAIT);
+			MALLOC(buf[i].out, u_int8_t *, (u_long) size,
+			    M_CRYPTO_DATA, M_NOWAIT);
 			if (buf[i].out == NULL)
 				goto bad;
 			zbuf.next_out = buf[i].out;
@@ -150,7 +153,7 @@ deflate_global(data, size, decomp, out)
 end:
 	result = count = zbuf.total_out;
 
-	*out = malloc(result, M_CRYPTO_DATA, M_NOWAIT);
+	MALLOC(*out, u_int8_t *, (u_long) result, M_CRYPTO_DATA, M_NOWAIT);
 	if (*out == NULL)
 		goto bad;
 	if (decomp)
