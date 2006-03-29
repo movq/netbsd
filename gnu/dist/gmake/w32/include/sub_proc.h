@@ -8,10 +8,10 @@
  *
  * $Source: /home/mike/src/cvs/netbsd/src/gnu/dist/gmake/w32/include/Attic/sub_proc.h,v $
  *
- * $Revision: 1.1 $
+ * $Revision: 1.1.1.1 $
  */
 
-/* $Id: sub_proc.h,v 1.1 2006/03/29 21:09:36 jmc Exp $ */
+/* $Id: sub_proc.h,v 1.1.1.1 2006/03/29 21:09:36 jmc Exp $ */
 
 #ifdef WINDOWS32
 
