@@ -1,4 +1,4 @@
-/*	$NetBSD: aix_cfg_ipf.c,v 1.1 2006/04/04 16:08:50 martti Exp $	*/
+/*	$NetBSD: aix_cfg_ipf.c,v 1.1.1.1 2006/04/04 16:08:50 martti Exp $	*/
 
 /*
  * Copyright (C) 2005 by Darren Reed.
