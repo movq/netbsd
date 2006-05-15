@@ -10,7 +10,7 @@
  * ardi.h
  * ADP RDI interfaces
  *
- * $Revision: 1.1 $
+ * $Revision: 1.1.1.1 $
  *     $Date: 2006/05/15 14:12:58 $
  */
 
