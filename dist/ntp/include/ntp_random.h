@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_random.h,v 1.1 2006/06/11 14:59:27 kardel Exp $	*/
+/*	$NetBSD: ntp_random.h,v 1.1.1.1 2006/06/11 14:59:27 kardel Exp $	*/
 
 
 #include <ntp_types.h>
