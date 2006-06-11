@@ -1,4 +1,4 @@
-/*	$NetBSD: buffer.h,v 1.1 2006/06/11 14:59:34 kardel Exp $	*/
+/*	$NetBSD: buffer.h,v 1.1.1.1 2006/06/11 14:59:34 kardel Exp $	*/
 
 /*
  * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
