@@ -1,4 +1,4 @@
-/*	$NetBSD: xsasl_dovecot.h,v 1.1 2006/07/19 01:17:58 rpaulo Exp $	*/
+/*	$NetBSD: xsasl_dovecot.h,v 1.1.1.1 2006/07/19 01:17:58 rpaulo Exp $	*/
 
 #ifndef _XSASL_DOVECOT_H_INCLUDED_
 #define _XSASL_DOVECOT_H_INCLUDED_

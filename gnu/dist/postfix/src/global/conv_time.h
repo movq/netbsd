@@ -1,4 +1,4 @@
-/*	$NetBSD: conv_time.h,v 1.1 2006/07/19 01:17:22 rpaulo Exp $	*/
+/*	$NetBSD: conv_time.h,v 1.1.1.1 2006/07/19 01:17:22 rpaulo Exp $	*/
 
 #ifndef _CONV_TIME_INCLUDED_
 #define _CONV_TIME_INCLUDED_

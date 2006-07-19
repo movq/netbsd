@@ -1,4 +1,4 @@
-/*	$NetBSD: legacy.c,v 1.1 2006/07/19 01:17:41 rpaulo Exp $	*/
+/*	$NetBSD: legacy.c,v 1.1.1.1 2006/07/19 01:17:41 rpaulo Exp $	*/
 
  /*
   * The old legacy TLS per-site policy engine, implemented with multiple

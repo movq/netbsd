@@ -1,4 +1,4 @@
-/*	$NetBSD: sane_basename.c,v 1.1 2006/07/19 01:17:55 rpaulo Exp $	*/
+/*	$NetBSD: sane_basename.c,v 1.1.1.1 2006/07/19 01:17:55 rpaulo Exp $	*/
 
 /*++
 /* NAME

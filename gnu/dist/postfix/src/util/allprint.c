@@ -1,4 +1,4 @@
-/*	$NetBSD: allprint.c,v 1.1 2006/07/19 01:17:50 rpaulo Exp $	*/
+/*	$NetBSD: allprint.c,v 1.1.1.1 2006/07/19 01:17:50 rpaulo Exp $	*/
 
 /*++
 /* NAME

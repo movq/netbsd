@@ -1,4 +1,4 @@
-/*	$NetBSD: dsn_print.h,v 1.1 2006/07/19 01:17:23 rpaulo Exp $	*/
+/*	$NetBSD: dsn_print.h,v 1.1.1.1 2006/07/19 01:17:23 rpaulo Exp $	*/
 
 #ifndef _DSN_PRINT_H_INCLUDED_
 #define _DSN_PRINT_H_INCLUDED_
