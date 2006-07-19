@@ -1,4 +1,4 @@
-/*	$NetBSD: mail_conf_long.c,v 1.1 2006/07/19 01:17:24 rpaulo Exp $	*/
+/*	$NetBSD: mail_conf_long.c,v 1.1.1.1 2006/07/19 01:17:24 rpaulo Exp $	*/
 
 /*++
 /* NAME

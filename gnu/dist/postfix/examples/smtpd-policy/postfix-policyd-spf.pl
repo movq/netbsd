@@ -3,7 +3,7 @@
 # postfix-policyd-spf
 # http://www.openspf.org
 # version 1.07
-# $Id: postfix-policyd-spf.pl,v 1.1 2006/07/19 01:16:44 rpaulo Exp $
+# $Id: postfix-policyd-spf.pl,v 1.1.1.1 2006/07/19 01:16:44 rpaulo Exp $
 
 use Fcntl;
 use Sys::Syslog qw(:DEFAULT setlogsock);

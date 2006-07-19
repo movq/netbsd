@@ -1,4 +1,4 @@
-/*	$NetBSD: rec_attr_map.h,v 1.1 2006/07/19 01:17:28 rpaulo Exp $	*/
+/*	$NetBSD: rec_attr_map.h,v 1.1.1.1 2006/07/19 01:17:28 rpaulo Exp $	*/
 
 #ifndef _REC_ATTR_MAP_H_INCLUDED_
 #define _REC_ATTR_MAP_H_INCLUDED_

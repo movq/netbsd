@@ -1,4 +1,4 @@
-/*	$NetBSD: rec_attr_map.c,v 1.1 2006/07/19 01:17:28 rpaulo Exp $	*/
+/*	$NetBSD: rec_attr_map.c,v 1.1.1.1 2006/07/19 01:17:28 rpaulo Exp $	*/
 
 /*++
 /* NAME

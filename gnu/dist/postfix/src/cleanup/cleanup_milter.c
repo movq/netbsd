@@ -1,4 +1,4 @@
-/*	$NetBSD: cleanup_milter.c,v 1.1 2006/07/19 01:17:20 rpaulo Exp $	*/
+/*	$NetBSD: cleanup_milter.c,v 1.1.1.1 2006/07/19 01:17:20 rpaulo Exp $	*/
 
 /*++
 /* NAME

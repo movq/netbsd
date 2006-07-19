@@ -1,4 +1,4 @@
-/*	$NetBSD: bounce_templates.c,v 1.1 2006/07/19 01:17:18 rpaulo Exp $	*/
+/*	$NetBSD: bounce_templates.c,v 1.1.1.1 2006/07/19 01:17:18 rpaulo Exp $	*/
 
 /*++
 /* NAME

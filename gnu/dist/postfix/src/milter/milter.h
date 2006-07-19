@@ -1,4 +1,4 @@
-/*	$NetBSD: milter.h,v 1.1 2006/07/19 01:17:32 rpaulo Exp $	*/
+/*	$NetBSD: milter.h,v 1.1.1.1 2006/07/19 01:17:32 rpaulo Exp $	*/
 
 #ifndef _MILTER_H_INCLUDED_
 #define _MILTER_H_INCLUDED_
