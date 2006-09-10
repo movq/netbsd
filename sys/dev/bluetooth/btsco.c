@@ -1,4 +1,4 @@
-/*	$NetBSD: btsco.c,v 1.3 2006/09/10 15:45:56 plunky Exp $	*/
+/*	$NetBSD: btsco.c,v 1.2 2006/08/27 11:41:58 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btsco.c,v 1.3 2006/09/10 15:45:56 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btsco.c,v 1.2 2006/08/27 11:41:58 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/audioio.h>
@@ -85,7 +85,7 @@ int btsco_debug = BTSCO_DEBUG;
 
 /* btsco softc */
 struct btsco_softc {
-	struct btdev		 sc_btdev;
+	struct device		 sc_dev;
 	uint16_t		 sc_flags;
 
 	struct device		*sc_audio;	/* MI audio device */
@@ -137,9 +137,6 @@ static int  btsco_detach(struct device *, int);
 
 CFATTACH_DECL(btsco, sizeof(struct btsco_softc),
     btsco_match, btsco_attach, btsco_detach, NULL);
-
-/* btdev identity matching */
-static int btsco_identify(struct btdev *, prop_dictionary_t);
 
 /* audio(9) glue */
 static int btsco_open(void *, int);
@@ -249,7 +246,7 @@ btsco_match(struct device *self, struct cfdata *cfdata, void *aux)
 	prop_dictionary_t dict = aux;
 	prop_object_t obj;
 
-	obj = prop_dictionary_get(dict, BTDEVtype);
+	obj = prop_dictionary_get(dict, "device-type");
 	return prop_string_equals_cstring(obj, "btsco");
 }
 
@@ -267,28 +264,28 @@ btsco_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_vgm = 200;
 	sc->sc_state = BTSCO_CLOSED;
 
-	sc->sc_btdev.sc_identify = btsco_identify;
-
 	/*
 	 * copy in our configuration info
 	 */
-	obj = prop_dictionary_get(dict, BTDEVladdr);
+	obj = prop_dictionary_get(dict, "local-bdaddr");
 	bdaddr_copy(&sc->sc_laddr, prop_data_data_nocopy(obj));
 
-	obj = prop_dictionary_get(dict, BTDEVraddr);
+	obj = prop_dictionary_get(dict, "remote-bdaddr");
 	bdaddr_copy(&sc->sc_raddr, prop_data_data_nocopy(obj));
 
-	obj = prop_dictionary_get(dict, BTSCOlisten);
-	if (prop_bool_true(obj)) {
+	obj = prop_dictionary_get(dict, "listen");
+	if (obj && prop_object_type(obj) == PROP_TYPE_BOOL
+	    && prop_bool_true(obj)) {
 		sc->sc_flags |= BTSCO_LISTEN;
 		aprint_verbose(" listen mode");
 	}
 
-	obj = prop_dictionary_get(dict, BTSCOchannel);
-	if (prop_object_type(obj) != PROP_TYPE_NUMBER
+	obj = prop_dictionary_get(dict, "rfcomm-channel");
+	if (obj == NULL
+	    || prop_object_type(obj) != PROP_TYPE_NUMBER
 	    || prop_number_integer_value(obj) < RFCOMM_CHANNEL_MIN
 	    || prop_number_integer_value(obj) > RFCOMM_CHANNEL_MAX) {
-		aprint_error(" invalid %s", BTSCOchannel);
+		aprint_error(" invalid rfcomm-channel");
 		return;
 	}
 	sc->sc_channel = prop_number_integer_value(obj);
@@ -303,18 +300,16 @@ btsco_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	sc->sc_intr = softintr_establish(IPL_SOFTNET, btsco_intr, sc);
 	if (sc->sc_intr == NULL) {
-		aprint_error("%s: softintr_establish failed\n",
-				device_xname((struct device *)sc));
+		aprint_error("%s: softintr_establish failed\n", sc->sc_dev.dv_xname);
 		return;
 	}
 
 	/*
 	 * attach audio device
 	 */
-	sc->sc_audio = audio_attach_mi(&btsco_if, sc, (struct device *)sc);
+	sc->sc_audio = audio_attach_mi(&btsco_if, sc, &sc->sc_dev);
 	if (sc->sc_audio == NULL) {
-		aprint_error("%s: audio_attach_mi failed\n",
-				device_xname((struct device *)sc));
+		aprint_error("%s: audio_attach_mi failed\n", sc->sc_dev.dv_xname);
 		return;
 	}
 }
@@ -362,7 +357,7 @@ btsco_detach(struct device *self, int flags)
 
 	if (sc->sc_tx_refcnt > 0) {
 		printf("%s: tx_refcnt=%d!\n",
-			device_xname((struct device *)sc), sc->sc_tx_refcnt);
+			sc->sc_dev.dv_xname, sc->sc_tx_refcnt);
 
 		if ((flags & DETACH_FORCE) == 0)
 			return EAGAIN;
@@ -371,29 +366,6 @@ btsco_detach(struct device *self, int flags)
 	return 0;
 }
 
-/*
- * btdev identity matching
- */
-static int
-btsco_identify(struct btdev *dev, prop_dictionary_t dict)
-{
-	struct btsco_softc *sc = (struct btsco_softc *)dev;
-	prop_object_t obj;
-
-	obj = prop_dictionary_get(dict, BTDEVtype);
-	if (!prop_string_equals_cstring(obj, "btsco"))
-		return 0;
-
-	obj = prop_dictionary_get(dict, BTDEVladdr);
-	if (!prop_data_equals_data(obj, &sc->sc_laddr, sizeof(bdaddr_t)))
-		return 0;
-
-	obj = prop_dictionary_get(dict, BTDEVraddr);
-	if (!prop_data_equals_data(obj, &sc->sc_raddr, sizeof(bdaddr_t)))
-		return 0;
-
-	return 1;
-}
 
 /*****************************************************************************
  *
@@ -416,7 +388,7 @@ btsco_sco_connected(void *arg)
 {
 	struct btsco_softc *sc = arg;
 
-	DPRINTF("%s\n", device_xname((struct device *)sc));
+	DPRINTF("%s\n", sc->sc_dev.dv_xname);
 
 	KASSERT(sc->sc_sco != NULL);
 	KASSERT(sc->sc_state == BTSCO_WAIT_CONNECT);
@@ -437,8 +409,7 @@ btsco_sco_disconnected(void *arg, int err)
 	struct btsco_softc *sc = arg;
 	int s;
 
-	DPRINTF("%s sc_state %d\n",
-		device_xname((struct device *)sc), sc->sc_state);
+	DPRINTF("%s sc_state %d\n", sc->sc_dev.dv_xname, sc->sc_state);
 
 	KASSERT(sc->sc_sco != NULL);
 
@@ -483,7 +454,7 @@ btsco_sco_newconn(void *arg, struct sockaddr_bt *laddr, struct sockaddr_bt *radd
 {
 	struct btsco_softc *sc = arg;
 
-	DPRINTF("%s\n", device_xname((struct device *)sc));
+	DPRINTF("%s\n", sc->sc_dev.dv_xname);
 	if (bdaddr_same(&raddr->bt_bdaddr, &sc->sc_raddr) == 0
 	    || sc->sc_state != BTSCO_WAIT_CONNECT
 	    || sc->sc_sco != NULL)
@@ -499,8 +470,7 @@ btsco_sco_complete(void *arg, int count)
 	struct btsco_softc *sc = arg;
 	int s;
 
-	DPRINTFN(10, "%s count %d\n",
-		device_xname((struct device *)sc), count);
+	DPRINTFN(10, "%s count %d\n", sc->sc_dev.dv_xname, count);
 
 	s = splaudio();
 	if (sc->sc_tx_pending > 0) {
@@ -517,8 +487,7 @@ btsco_sco_input(void *arg, struct mbuf *m)
 	struct btsco_softc *sc = arg;
 	int len, s;
 
-	DPRINTFN(10, "%s len=%d\n",
-		device_xname((struct device *)sc), m->m_pkthdr.len);
+	DPRINTFN(10, "%s len=%d\n", sc->sc_dev.dv_xname, m->m_pkthdr.len);
 
 	s = splaudio();
 	if (sc->sc_rx_want == 0) {
@@ -563,8 +532,7 @@ btsco_open(void *hdl, int flags)
 	struct btsco_softc *sc = hdl;
 	int err, s, timo;
 
-	DPRINTF("%s flags 0x%x\n",
-		device_xname((struct device *)sc), flags);
+	DPRINTF("%s flags 0x%x\n", sc->sc_dev.dv_xname, flags);
 	/* flags FREAD & FWRITE? */
 
 	if (sc->sc_sco != NULL || sc->sc_sco_l != NULL)
@@ -657,7 +625,7 @@ btsco_close(void *hdl)
 	struct btsco_softc *sc = hdl;
 	int s;
 
-	DPRINTF("%s\n", device_xname((struct device *)sc));
+	DPRINTF("%s\n", sc->sc_dev.dv_xname);
 
 	if (sc->sc_sco != NULL) {
 		s = splsoftnet();
@@ -774,7 +742,7 @@ btsco_round_blocksize(void *hdl, int bs, int mode, const audio_params_t *param)
 		bs = (bs / sc->sc_mtu) * sc->sc_mtu;
 	
 	DPRINTF("%s mode=0x%x, bs=%d, sc_mtu=%d\n",
-			device_xname((struct device *)sc), mode, bs, sc->sc_mtu);
+			sc->sc_dev.dv_xname, mode, bs, sc->sc_mtu);
 
 	return bs;
 }
@@ -792,8 +760,7 @@ btsco_start_output(void *hdl, void *block, int blksize,
 {
 	struct btsco_softc *sc = hdl;
 
-	DPRINTFN(5, "%s blksize %d\n",
-		device_xname((struct device *)sc), blksize);
+	DPRINTFN(5, "%s blksize %d\n", sc->sc_dev.dv_xname, blksize);
 
 	if (sc->sc_sco == NULL)
 		return ENOTCONN;	/* connection lost */
@@ -825,8 +792,7 @@ btsco_start_input(void *hdl, void *block, int blksize,
 	struct btsco_softc *sc = hdl;
 	struct mbuf *m;
 
-	DPRINTFN(5, "%s blksize %d\n",
-		device_xname((struct device *)sc), blksize);
+	DPRINTFN(5, "%s blksize %d\n", sc->sc_dev.dv_xname, blksize);
 
 	if (sc->sc_sco == NULL)
 		return EINVAL;
@@ -857,7 +823,7 @@ btsco_halt_output(void *hdl)
 {
 	struct btsco_softc *sc = hdl;
 
-	DPRINTFN(5, "%s\n", device_xname((struct device *)sc));
+	DPRINTFN(5, "%s\n", sc->sc_dev.dv_xname);
 
 	sc->sc_tx_size = 0;
 	sc->sc_tx_block = NULL;
@@ -880,7 +846,7 @@ btsco_halt_input(void *hdl)
 {
 	struct btsco_softc *sc = hdl;
 
-	DPRINTFN(5, "%s\n", device_xname((struct device *)sc));
+	DPRINTFN(5, "%s\n", sc->sc_dev.dv_xname);
 
 	sc->sc_rx_want = 0;
 	sc->sc_rx_block = NULL;
@@ -919,8 +885,7 @@ btsco_set_port(void *hdl, mixer_ctrl_t *mc)
 	struct btsco_softc *sc = hdl;
 	int err = 0;
 
-	DPRINTF("%s dev %d type %d\n",
-		device_xname((struct device *)sc), mc->dev, mc->type);
+	DPRINTF("%s dev %d type %d\n", sc->sc_dev.dv_xname, mc->dev, mc->type);
 
 	switch (mc->dev) {
 	case BTSCO_VGS:
@@ -957,8 +922,7 @@ btsco_get_port(void *hdl, mixer_ctrl_t *mc)
 	struct btsco_softc *sc = hdl;
 	int err = 0;
 
-	DPRINTF("%s dev %d\n",
-		device_xname((struct device *)sc), mc->dev);
+	DPRINTF("%s dev %d\n", sc->sc_dev.dv_xname, mc->dev);
 
 	switch (mc->dev) {
 	case BTSCO_VGS:
@@ -1034,7 +998,7 @@ btsco_allocm(void *hdl, int direction, size_t size,
 	void *addr;
 
 	DPRINTF("%s: size %d direction %d\n",
-			device_xname((struct device *)sc), size, direction);
+			sc->sc_dev.dv_xname, size, direction);
 
 	addr = malloc(size, type, flags);
 
@@ -1063,7 +1027,7 @@ btsco_freem(void *hdl, void *addr, struct malloc_type *type)
 
 	if (addr == sc->sc_tx_buf) {
 		DPRINTF("%s: tx_refcnt=%d\n",
-			device_xname((struct device *)sc), sc->sc_tx_refcnt);
+			sc->sc_dev.dv_xname, sc->sc_tx_refcnt);
 
 		sc->sc_tx_buf = NULL;
 
@@ -1071,8 +1035,7 @@ btsco_freem(void *hdl, void *addr, struct malloc_type *type)
 			tsleep(sc, PWAIT, "drain", 1);
 
 		if (sc->sc_tx_refcnt > 0) {
-			printf("%s: ring buffer unreleased!\n",
-				device_xname((struct device *)sc));
+			printf("%s: ring buffer unreleased!\n", sc->sc_dev.dv_xname);
 			return;
 		}
 	}
@@ -1098,8 +1061,7 @@ btsco_dev_ioctl(void *hdl, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 	struct btsco_info *bi = (struct btsco_info *)addr;
 	int err = 0;
 
-	DPRINTF("%s cmd 0x%lx flag %d\n",
-		device_xname((struct device *)sc), cmd, flag);
+	DPRINTF("%s cmd 0x%lx flag %d\n", sc->sc_dev.dv_xname, cmd, flag);
 
 	switch (cmd) {
 	case BTSCO_GETINFO:
@@ -1140,7 +1102,7 @@ btsco_intr(void *arg)
 	int mlen, size;
 
 	DPRINTFN(10, "%s block %p size %d\n",
-		device_xname((struct device *)sc), sc->sc_tx_block, sc->sc_tx_size);
+		sc->sc_dev.dv_xname, sc->sc_tx_block, sc->sc_tx_size);
 
 	if (sc->sc_sco == NULL)
 		return;		/* connection is lost */

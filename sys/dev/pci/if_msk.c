@@ -1,4 +1,4 @@
-/* $NetBSD: if_msk.c,v 1.1 2006/09/09 16:17:50 riz Exp $ */
+/* $NetBSD: if_msk.c,v 1.3 2006/11/16 01:33:09 christos Exp $ */
 /*	$OpenBSD: if_msk.c,v 1.11 2006/08/17 22:07:40 brad Exp $	*/
 
 /*
@@ -763,7 +763,8 @@ msk_lookup(const struct pci_attach_args *pa)
  * IDs against our list and return a device name if we find a match.
  */
 int
-mskc_probe(struct device *parent, struct cfdata *match, void *aux)
+mskc_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 
@@ -872,7 +873,8 @@ void msk_reset(struct sk_softc *sc)
 }
 
 int
-msk_probe(struct device *parent, struct cfdata *match, void *aux)
+msk_probe(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct skc_attach_args *sa = aux;
 

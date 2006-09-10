@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_object.c,v 1.5 2006/08/27 22:31:55 christos Exp $	*/
+/*	$NetBSD: prop_object.c,v 1.12 2006/10/19 10:10:35 he Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -96,7 +96,7 @@ _prop_object_init(struct _prop_object *po, const struct _prop_object_type *pot)
  */
 /*ARGSUSED*/
 void
-_prop_object_fini(struct _prop_object *po)
+_prop_object_fini(struct _prop_object *po _PROP_ARG_UNUSED)
 {
 	/* Nothing to do, currently. */
 }
@@ -828,7 +828,7 @@ _prop_object_internalize_map_file(const char *fname)
 {
 	struct stat sb;
 	struct _prop_object_internalize_mapped_file *mf;
-	size_t pgsize = sysconf(_SC_PAGESIZE);
+	size_t pgsize = (size_t)sysconf(_SC_PAGESIZE);
 	size_t pgmask = pgsize - 1;
 	boolean_t need_guard = FALSE;
 	int fd;
@@ -917,7 +917,7 @@ _prop_object_internalize_unmap_file(
  * could be contention, but it probably won't cost that much unless the program
  * makes heavy use of property lists.
  */
-_PROP_MUTEX_DECL(_prop_refcnt_mutex)
+_PROP_MUTEX_DECL_STATIC(_prop_refcnt_mutex)
 #define	_PROP_REFCNT_LOCK()	_PROP_MUTEX_LOCK(_prop_refcnt_mutex)
 #define	_PROP_REFCNT_UNLOCK()	_PROP_MUTEX_UNLOCK(_prop_refcnt_mutex)
 
