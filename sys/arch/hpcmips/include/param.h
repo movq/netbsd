@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.11 2006/09/10 11:12:20 tsutsui Exp $	*/
+/*	$NetBSD: param.h,v 1.10 2005/12/11 12:17:33 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -134,17 +134,9 @@
 #ifdef _KERNEL
 #ifndef _LOCORE
 
-void delay(int);
+extern void delay(int);
 extern int cpuspeed;
-static __inline void __attribute__((__unused__))
-DELAY(int n)
-{
-	register int __N = cpuspeed * n;
-
-	do {
-		__asm("addiu %0,%1,-1" : "=r" (__N) : "0" (__N));
-	} while (__N > 0);
-}
+#define	DELAY(n)	{ register int N = cpuspeed * (n); while (--N > 0); }
 
 #include <machine/intr.h>
 

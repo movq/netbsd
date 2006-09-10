@@ -1,4 +1,4 @@
-# $NetBSD: ALL,v 1.62 2006/09/10 15:45:56 plunky Exp $
+# $NetBSD: ALL,v 1.60 2006/09/07 14:23:44 itohy Exp $
 # From: NetBSD: GENERIC,v 1.776 2006/08/14 09:34:43 itohy Exp
 #
 # ALL machine description file
@@ -17,7 +17,7 @@ include 	"arch/i386/conf/std.i386"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"ALL-$Revision: 1.62 $"
+#ident 		"ALL-$Revision: 1.60 $"
 
 maxusers	32		# estimated number of users
 
@@ -822,8 +822,6 @@ ipw*	at pci? dev ? function ?	# Intel PRO/Wireless 2100
 iwi*	at pci? dev ? function ?	# Intel PRO/Wireless 2200BG
 le*	at pci? dev ? function ?	# PCnet-PCI Ethernet
 lmc*	at pci? dev ? function ?	# Lan Media Corp SSI/HSSI/DS3
-mskc*	at pci? dev ? function ?	# Marvell Yukon 2 Gigabit Ethernet
-msk*	at mskc?			# Marvell Yukon 2 Gigabit Ethernet
 mtd*	at pci? dev ? function ?	# Myson MTD803 3-in-1 Ethernet
 #ndis* 	at pci? dev ? function ?	# Experimental - NDIS Network Driver
 ne*	at pci? dev ? function ?	# NE2000-compatible Ethernet
@@ -1235,12 +1233,11 @@ bt3c* at pcmcia? function ?		# 3Com 3CRWB6096-A
 # Bluetooth USB Controllers
 ubt* at uhub? port ? configuration ? interface ?
 
-# Bluetooth Device Hub
-bthub* at bt3c?
-bthub* at ubt?
+# Bluetooth Devices
+pseudo-device btdev
 
 # Bluetooth HID support
-bthidev* at bthub?
+bthidev* at btdev?
 
 # Bluetooth Mouse
 btms* at bthidev? reportid ?
@@ -1251,7 +1248,7 @@ btkbd* at bthidev? reportid ?
 wskbd* at btkbd? console ? mux 1
 
 # Bluetooth Audio support
-btsco* at bthub?
+btsco* at btdev?
 
 
 # Mice

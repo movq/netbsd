@@ -1,4 +1,4 @@
-/*	$NetBSD: gt.c,v 1.20 2006/09/10 06:41:09 tsutsui Exp $	*/
+/*	$NetBSD: gt.c,v 1.19 2006/05/28 12:52:07 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang.  All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.20 2006/09/10 06:41:09 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.19 2006/05/28 12:52:07 tsutsui Exp $");
 
 #include "opt_pci.h"
 #include "pci.h"
@@ -59,6 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: gt.c,v 1.20 2006/09/10 06:41:09 tsutsui Exp $");
 #include <dev/pci/pciconf.h>
 #endif
 
+#include <cobalt/cobalt/clockvar.h>
 #include <cobalt/dev/gtreg.h>
 
 struct gt_softc {
@@ -74,10 +75,8 @@ static void	gt_attach(struct device *, struct device *, void *);
 static int	gt_print(void *aux, const char *pnp);
 
 static void	gt_timer_init(struct gt_softc *sc);
-#if 0 /* unused */
 static void	gt_timer0_init(void *);
 static long	gt_timer0_read(void *);
-#endif
 
 CFATTACH_DECL(gt, sizeof(struct gt_softc),
     gt_match, gt_attach, NULL, NULL);
@@ -163,9 +162,12 @@ gt_timer_init(struct gt_softc *sc)
 	/* mask timer0 interrupt */
 	bus_space_write_4(sc->sc_bst, sc->sc_bsh, GT_MASTER_MASK,
 	    bus_space_read_4(sc->sc_bst, sc->sc_bsh, GT_MASTER_MASK) & ~T0EXP);
+
+	timer_start = gt_timer0_init;
+	timer_read  = gt_timer0_read;
+	timer_cookie = sc;
 }
 
-#if 0	/* unused; now NetBSD/cobalt uses CPU INT5 for hardclock(9) */
 #define TIMER0_INIT_VALUE 500000
 
 static void
@@ -202,4 +204,3 @@ gt_timer0_read(void *cookie)
 #endif
 	return counter0;
 }
-#endif
