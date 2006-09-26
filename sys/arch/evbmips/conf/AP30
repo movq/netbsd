@@ -1,10 +1,10 @@
-#	$NetBSD: AP30,v 1.5 2006/09/04 05:17:26 gdamore Exp $
+#	$NetBSD: AP30,v 1.6 2006/09/26 06:37:31 gdamore Exp $
 
 include 	"arch/evbmips/conf/std.atheros"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"AP30-$Revision: 1.5 $"
+#ident 		"AP30-$Revision: 1.6 $"
 
 maxusers	32
 
@@ -60,7 +60,7 @@ options 	SYMTAB_SPACE=150000	# size for embedded symbol table
 #options 	COMPAT_14	# NetBSD 1.4 binary compatibility
 #options 	COMPAT_16	# NetBSD 1.6 binary compatibility
 #options 	COMPAT_20	# NetBSD 2.0 binary compatibility
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
+#options 	COMPAT_30	# NetBSD 3.0 compatibility.
 #options 	EXEC_ECOFF	# exec ECOFF binaries
 #options 	COMPAT_ULTRIX	# binary compatibility with Ultrix
 #options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
