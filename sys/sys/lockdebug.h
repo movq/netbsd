@@ -1,4 +1,4 @@
-/*	$NetBSD: lockdebug.h,v 1.1.2.2 2006/10/24 19:07:49 ad Exp $	*/
+/*	$NetBSD: lockdebug.h,v 1.1.2.3 2006/11/17 16:34:40 ad Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -47,23 +47,25 @@
 
 typedef	struct lockops {
 	const char	*lo_name;
-	int		(*lo_dump)(void *, char *, size_t);
+	int		lo_sleeplock;
+	int		(*lo_dump)(volatile void *, char *, size_t);
 } lockops_t;
 
 #define	LOCKDEBUG_ABORT(id, l, o, f, m)	lockdebug_abort(id, l, o, f, m)
 
-void	lockdebug_abort(int, void *, lockops_t *, const char *, const char *);
+void	lockdebug_abort(int, volatile void *, lockops_t *,
+			const char *, const char *);
 
 #ifdef LOCKDEBUG
 
 void	lockdebug_init(void);
-u_int	lockdebug_alloc(void *, lockops_t *, int);
-void	lockdebug_free(void *, u_int);
+u_int	lockdebug_alloc(volatile void *, lockops_t *);
+void	lockdebug_free(volatile void *, u_int);
 void	lockdebug_locked(u_int, uintptr_t, int);
 void	lockdebug_unlocked(u_int, uintptr_t, int);
-void	lockdebug_barrier(void *, int);
+void	lockdebug_barrier(volatile void *, int);
 
-#define	LOCKDEBUG_ALLOC(lock, ops, slp)		lockdebug_alloc(lock, ops, slp)
+#define	LOCKDEBUG_ALLOC(lock, ops)		lockdebug_alloc(lock, ops)
 #define	LOCKDEBUG_FREE(lock, id)		lockdebug_free(lock, id)
 #define	LOCKDEBUG_LOCKED(id, where, s)		lockdebug_locked(id, where, s)
 #define	LOCKDEBUG_UNLOCKED(id, where, s)	lockdebug_unlocked(id, where, s)
@@ -71,7 +73,7 @@ void	lockdebug_barrier(void *, int);
 
 #else	/* LOCKDEBUG */
 
-#define	LOCKDEBUG_ALLOC(lock, ops, s)		0
+#define	LOCKDEBUG_ALLOC(lock, ops)		0
 #define	LOCKDEBUG_FREE(lock, id)		/* nothing */
 #define	LOCKDEBUG_LOCKED(id, where, s)		/* nothing */
 #define	LOCKDEBUG_UNLOCKED(id, where, s)	/* nothing */

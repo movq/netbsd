@@ -1,4 +1,4 @@
-/*	$NetBSD: mutex.h,v 1.1.2.2 2006/10/20 19:28:11 ad Exp $	*/
+/*	$NetBSD: mutex.h,v 1.1.2.3 2006/11/17 16:34:34 ad Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006 The NetBSD Foundation, Inc.
@@ -42,56 +42,60 @@
 /*
  * Spin mutexes take this format:
  *
- *	32     24       16      8          0
- *	+-----------------------------------+
- *	| oldspl | minspl | lock | 11111111 |
- *	+-----------------------------------+
+ *	N        16       8           2         1   0
+ *	+--------------------------------------------+
+ *	|  unused  | minspl |  unused   | locked | 1 | 
+ *	+--------------------------------------------+
  *
  * Adaptive mutexes take this format:
  *
- *	N             4     2          1   0
- *	+-----------------------------------+
- *	|        owner | resv | waiters | 0 |
- *	+-----------------------------------+
+ *	N                   4         2         1   0
+ *	+--------------------------------------------+
+ *	|        owner       | unused  | waiters | 0 |
+ *	+--------------------------------------------+
  */
 struct kmutex {
 	union {
 		volatile uintptr_t	mtxa_owner;
 
 		struct {
-			uint8_t			mtxs_allone;
-			volatile uint8_t	mtxs_lock;
-			uint8_t			mtxs_minspl;
-			uint8_t			mtxs_oldspl;
+			volatile uint8_t	mtxs_flags;
+			volatile uint8_t	mtxs_minspl;
+			volatile uint16_t	mtxs_unused;
 		} s;
 	} u;
-	uint32_t	mtx_id;
+	volatile uint32_t	mtx_id;
 };
 
 #ifdef __MUTEX_PRIVATE
 
 #define	MUTEX_INITIALIZE_ADAPTIVE(mtx)	/* will be zeroed */
 
-#define	MUTEX_INITIALIZE_SPIN(mtx, ipl)	\
-do {					\
-	(mtx)->mtx_allone = 0xff;	\
-	(mtx)->mtx_minspl = (ipl);	\
+#define	MUTEX_INITIALIZE_SPIN(mtx, ipl)					\
+do {									\
+	(mtx)->mtx_flags = MUTEX_BIT_SPIN;				\
+	(mtx)->mtx_minspl = (ipl);					\
 } while (/* CONSTCOND */ 0)
 
-#define	mtx_owner 	u.mtxa_owner
-#define	mtx_allone 	u.s.mtxs_allone
-#define	mtx_lock 	u.s.mtxs_lock
-#define	mtx_minspl 	u.s.mtxs_minspl
-#define	mtx_oldspl 	u.s.mtxs_oldspl
+#define	mtx_owner 			u.mtxa_owner
+#define	mtx_flags 			u.s.mtxs_flags
+#define	mtx_minspl 			u.s.mtxs_minspl
 
 #define __HAVE_MUTEX_ENTER		1
 #define __HAVE_MUTEX_EXIT		1
+#define	__NEED_MUTEX_CALLSITE		1
 
-#define	MUTEX_BIT_WAITERS		0x01
-#define	MUTEX_BIT_SPIN			0x02
+#define	MUTEX_BIT_SPIN			0x01
+#define	MUTEX_BIT_WAITERS		0x02
+#define	MUTEX_BIT_SPIN_LOCKED		0x02
 
-#define	MUTEX_ADAPTIVE_P(mtx)		((mtx)->mtx_allone != 0xff)
-#define	MUTEX_SPIN_P(mtx)		((mtx)->mtx_allone == 0xff)
+#define	MUTEX_SPIN_UNLOCKED		0x01
+#define	MUTEX_SPIN_LOCKED		0x03
+
+#define	MUTEX_SPIN_P(mtx)		\
+    (((mtx)->mtx_flags & MUTEX_BIT_SPIN) != 0)
+#define	MUTEX_ADAPTIVE_P(mtx)		\
+    (((mtx)->mtx_flags & MUTEX_BIT_SPIN) == 0)
 
 #define	MUTEX_SETID(mtx, id)		((mtx)->mtx_id = id)
 #define	MUTEX_GETID(mtx)		((mtx)->mtx_id)
@@ -99,27 +103,44 @@ do {					\
 /*
  * Spin mutex methods.
  */
-static inline uint8_t
-MUTEX_SPIN_HELD(kmutex_t *mtx)
-{
-	return mtx->mtx_lock;
-}
+
+#define	MUTEX_SPIN_HELD(mtx)		\
+    ((mtx)->mtx_flags == MUTEX_SPIN_LOCKED)
 
 static inline uint8_t
 MUTEX_SPIN_ACQUIRE(kmutex_t *mtx)
 {
 	uint8_t rv;
-	__asm volatile ("movb $1,%0; xchgb %0,%1; decb %0" :
-			"=a" (rv) : "m" (mtx->mtx_lock) : "memory");
-	return rv;
+	__asm volatile ("movb $3,%0; xchgb %0,%1" :
+			"=a" (rv) : "m" (mtx->mtx_flags) : "memory");
+	return rv == MUTEX_SPIN_UNLOCKED;
 }
 
 static inline void
 MUTEX_SPIN_RELEASE(kmutex_t *mtx)
 {
 	__insn_barrier();
-	mtx->mtx_lock = 0;
+	mtx->mtx_flags = MUTEX_SPIN_UNLOCKED;
 }
+
+#define	MUTEX_SPIN_SPLSAVE(mtx, s)					\
+do {									\
+	struct cpu_info *x__ci = curcpu();				\
+	if ((x__ci->ci_mtx_count)-- == 0)				\
+		x__ci->ci_mtx_oldspl = (s);				\
+} while (/* CONSTCOND */ 0)
+
+#define	MUTEX_SPIN_SPLRESTORE(mtx)					\
+do {									\
+	struct cpu_info *x__ci = curcpu();				\
+	int s = x__ci->ci_mtx_oldspl;					\
+	__insn_barrier();						\
+	if (++(x__ci->ci_mtx_count) == 0)				\
+		splx(s);						\
+} while (/* CONSTCOND */ 0)
+
+#define	MUTEX_SPIN_MINSPL(mtx)		((mtx)->mtx_minspl)
+#define	MUTEX_SPIN_OLDSPL(ci)		((ci)->ci_mtx_oldspl)
 
 /*
  * Adaptive mutex methods.
