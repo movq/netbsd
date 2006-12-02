@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL_LAPTOP,v 1.111 2006/11/30 21:01:16 bouyer Exp $
+#	$NetBSD: INSTALL_LAPTOP,v 1.111.2.3 2007/01/28 20:05:41 tron Exp $
 #
 #	INSTALL - Installation kernel.
 #
@@ -94,7 +94,7 @@ options 	COMPAT_16	# NetBSD 1.6
 options 	COMPAT_20	# NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 #options 	COMPAT_43	# 4.3BSD, 386BSD, and BSDI
-options 	COMPAT_386BSD_MBRPART # recognize old partition ID
+#options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
 #options 	COMPAT_SVR4	# binary compatibility with SVR4
@@ -432,6 +432,7 @@ fd*	at fdc? drive ?			# the drives themselves
 ath*	at pci? dev ? function ?	# Atheros 5210/5211/5212 802.11
 bce* 	at pci? dev ? function ?	# Broadcom 4401 10/100 Ethernet
 bge* 	at pci? dev ? function ?	# Broadcom 570x gigabit Ethernet
+bnx* 	at pci? dev ? function ?	# Broadcom NetXtremeII gigabit Ethernet
 ex*	at pci? dev ? function ?	# 3Com 90x[BC]
 fxp*	at pci? dev ? function ?	# Intel EtherExpress PRO 10+/100B
 ipw*	at pci? dev ? function ?	# Intel PRO/Wireless 2100
@@ -558,7 +559,7 @@ pseudo-device	md		1	# memory disk device (ramdisk)
 pseudo-device	bpfilter		# Berkeley packet filter
 #pseudo-device	ipfilter		# IP filter (firewall) and NAT
 pseudo-device	loop			# network loopback
-pseudo-device	ppp			# Point-to-Point Protocol
+#pseudo-device	ppp			# Point-to-Point Protocol
 pseudo-device	sl			# Serial Line IP
 #pseudo-device	strip			# Starmode Radio IP (Metricom)
 #pseudo-device	tun			# network tunneling over tty

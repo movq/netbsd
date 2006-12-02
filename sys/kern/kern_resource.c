@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_resource.c,v 1.108 2006/11/01 10:17:58 yamt Exp $	*/
+/*	$NetBSD: kern_resource.c,v 1.108.2.2 2007/01/21 19:12:10 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_resource.c,v 1.108 2006/11/01 10:17:58 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_resource.c,v 1.108.2.2 2007/01/21 19:12:10 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -207,8 +207,7 @@ donice(struct lwp *l, struct proc *chgp, int n)
 		n = PRIO_MIN;
 	n += NZERO;
 	if (n < chgp->p_nice && kauth_authorize_process(cred,
-	    KAUTH_PROCESS_RESOURCE, chgp, (void *)KAUTH_REQ_PROCESS_RESOURCE_NICE,
-	    (void *)(u_long)n, NULL))
+	    KAUTH_PROCESS_NICE, chgp, KAUTH_ARG(n), NULL, NULL))
 		return (EACCES);
 	chgp->p_nice = n;
 	SCHED_LOCK(s);
@@ -262,9 +261,8 @@ dosetrlimit(struct lwp *l, struct proc *p, int which, struct rlimit *limp)
 		return (EINVAL);
 	}
 	if (limp->rlim_max > alimp->rlim_max && (error =
-	    kauth_authorize_process(l->l_cred, KAUTH_PROCESS_RESOURCE,
-	    p, (void *)KAUTH_REQ_PROCESS_RESOURCE_RLIMIT, limp,
-	    (void *)(u_long)which)))
+	    kauth_authorize_process(l->l_cred, KAUTH_PROCESS_RLIMIT,
+	    p, limp, KAUTH_ARG(which), NULL)))
 			return (error);
 
 	if (p->p_limit->p_refcnt > 1 &&
@@ -575,7 +573,7 @@ sysctl_proc_findproc(struct lwp *l, struct proc **p2, pid_t pid)
 		error = ESRCH;
 	else {
 		boolean_t isroot = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL);
+		    KAUTH_GENERIC_ISSUSER, NULL) == 0;
 		/*
 		 * suid proc of ours or proc not ours
 		 */

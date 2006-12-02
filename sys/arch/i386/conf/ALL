@@ -1,4 +1,4 @@
-# $NetBSD: ALL,v 1.73 2006/11/29 13:41:28 xtraeme Exp $
+# $NetBSD: ALL,v 1.73.2.5 2007/05/13 06:52:51 pavel Exp $
 # From NetBSD: GENERIC,v 1.787 2006/10/01 18:37:54 bouyer Exp
 #
 # ALL machine description file
@@ -17,7 +17,7 @@ include 	"arch/i386/conf/std.i386"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"ALL-$Revision: 1.73 $"
+#ident 		"ALL-$Revision: 1.73.2.5 $"
 
 maxusers	32		# estimated number of users
 
@@ -204,6 +204,19 @@ options 	IPFILTER_LOOKUP	# ippool(8) support
 options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
+options 	ALTQ		# Manipulate network interfaces' output queues
+options 	ALTQ_BLUE	# Stochastic Fair Blue
+options 	ALTQ_CBQ	# Class-Based Queueing
+options 	ALTQ_CDNR	# Diffserv Traffic Conditioner
+options 	ALTQ_FIFOQ	# First-In First-Out Queue
+options 	ALTQ_FLOWVALVE	# RED/flow-valve (red-penalty-box)
+options 	ALTQ_HFSC	# Hierarchical Fair Service Curve
+options 	ALTQ_LOCALQ	# Local queueing discipline
+options 	ALTQ_PRIQ	# Priority Queueing
+options 	ALTQ_RED	# Random Early Detection
+options 	ALTQ_RIO	# RED with IN/OUT
+options 	ALTQ_WFQ	# Weighted Fair Queueing
+
 # These options enable verbose messages for several subsystems.
 # Warning, these may compile large string tables into the kernel!
 options 	ACPIVERBOSE	# verbose ACPI device autoconfig messages
@@ -332,6 +345,7 @@ mpu*		at acpi?		# Roland MPU-401 MIDI UART
 npx*		at acpi?		# Math coprocessor
 pckbc*  	at acpi?		# PC keyboard controller
 pcppi*		at acpi?                # AT-style speaker sound
+ug*		at acpi?		# Abit uGuru Hardware Monitor
 wss* 		at acpi?		# NeoMagic 256AV in wss mode
 ym* 		at acpi?		# Yamaha OPL3-SA[23] audio
 
@@ -620,6 +634,7 @@ bha*	at pci? dev ? function ?	# BusLogic 9xx SCSI
 dpt*	at pci? dev ? function ?	# DPT SmartCache/SmartRAID
 iha*	at pci? dev ? function ?	# Initio INIC-940/950 SCSI
 isp*	at pci? dev ? function ?	# Qlogic ISP [12]0x0 SCSI/FibreChannel
+mfi*	at pci? dev ? function ?	# LSI MegaRAID SAS
 mly*	at pci? dev ? function ?	# Mylex AcceleRAID and eXtremeRAID
 mpt*	at pci? dev ? function ?	# LSI Fusion SCSI/FC
 njs*	at pci? dev ? function ?	# Workbit NinjaSCSI-32
@@ -714,6 +729,7 @@ icpsp*	at icp? unit ?			# SCSI pass-through
 pciide* 	at pci? dev ? function ? flags 0x0000	# GENERIC pciide driver
 acardide*	at pci? dev ? function ?	# Acard IDE controllers
 aceride* 	at pci? dev ? function ?	# Acer Lab IDE controllers
+ahcisata* 	at pci? dev ? function ?	# AHCI SATA controllers
 artsata* 	at pci? dev ? function ?	# Intel i31244 SATA controller
 cmdide* 	at pci? dev ? function ?	# CMD tech IDE controllers
 cypide* 	at pci? dev ? function ?	# Cypress IDE controllers
@@ -811,6 +827,7 @@ ath*	at pci? dev ? function ?	# Atheros 5210/5211/5212 802.11
 atw*	at pci? dev ? function ?	# ADMtek ADM8211 (802.11)
 bce* 	at pci? dev ? function ?	# Broadcom 4401 10/100 Ethernet
 bge* 	at pci? dev ? function ?	# Broadcom 570x gigabit Ethernet
+bnx* 	at pci? dev ? function ?	# Broadcom NetXtremeII gigabit Ethernet
 dge*	at pci? dev ? function ?	# Intel 82597 10GbE LR
 en*	at pci? dev ? function ?	# ENI/Adaptec ATM
 ep*	at pci? dev ? function ?	# 3Com 3c59x
@@ -836,6 +853,7 @@ pcn*	at pci? dev ? function ?	# AMD PCnet-PCI Ethernet
 ral*	at pci? dev ? function ?	# Ralink Technology RT25x0 802.11a/b/g
 re*	at pci? dev ? function ?	# Realtek 8139C+/8169/8169S/8110S
 rtk*	at pci? dev ? function ?	# Realtek 8129/8139
+rtw*	at pci? dev ? function ?	# Realtek 8180L (802.11)
 sf*	at pci? dev ? function ?	# Adaptec AIC-6915 Ethernet
 sip*	at pci? dev ? function ?	# SiS 900/DP83815 Ethernet
 skc*	at pci? dev ? function ?	# SysKonnect SK9821 Gigabit Ethernet

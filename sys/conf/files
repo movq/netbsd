@@ -1,4 +1,4 @@
-#	$NetBSD: files,v 1.819 2006/11/24 22:04:25 wiz Exp $
+#	$NetBSD: files,v 1.819.2.4 2007/05/13 10:28:08 jdc Exp $
 
 #	@(#)files.newconf	7.5 (Berkeley) 5/10/93
 
@@ -232,6 +232,8 @@ defflag	opt_md.h		MEMORY_DISK_HOOKS MEMORY_DISK_IS_ROOT
 				MEMORY_DISK_DYNAMIC
 defparam opt_md.h		MEMORY_DISK_SERVER MEMORY_DISK_ROOT_SIZE
 				MEMORY_RBFLAGS
+
+defflag opt_tftproot.h		TFTPROOT TFTPROOT_DEBUG
 
 # Support for hardware performance monitoring counters
 #
@@ -478,6 +480,11 @@ device	isp: scsi
 file	dev/ic/isp.c			isp
 file	dev/ic/isp_netbsd.c		isp
 file	dev/ic/isp_target.c		isp & isp_target_mode
+
+# LSILogic MegaRAID SAS
+#
+device	mfi: scsi
+file	dev/ic/mfi.c			mfi
 
 # LSILogic Fusion-MPT I/O Processor SCSI/FC Controllers
 #
@@ -775,6 +782,11 @@ file	dev/ic/clmpcc.c			clmpcc			needs-flag
 #
 device	lm: sysmon_envsys
 file	dev/ic/nslm7x.c			lm			needs-flag
+
+# Abit uGuru
+#
+device	ug: sysmon_envsys
+file	dev/ic/ug.c			ug			needs-flag
 
 # Essential Communications Corp. HIPPI Interface
 #
@@ -1131,6 +1143,7 @@ defpseudo rnd
 defpseudo ksyms
 defpseudo nullcons
 defpseudo lockstat
+defpseudo bio:		sysmon_envsys
 
 defpseudo loop:		ifnet
 defpseudo sl:		ifnet
@@ -1227,6 +1240,7 @@ file	dev/auconv.c			auconv | mulaw
 file	dev/audio.c			audio | midi | midibus	needs-flag
 file	dev/audiobell.c			audiobell
 file	dev/aurateconv.c		aurateconv		needs-flag
+file	dev/bio.c			bio			needs-flag
 file	dev/ccd.c			ccd			needs-flag
 file	dev/cgd.c			cgd			needs-flag
 file	dev/cgd_crypto.c		cgd
@@ -1327,6 +1341,7 @@ file	kern/subr_prof.c
 file	kern/subr_once.c
 file	kern/subr_optstr.c
 file	kern/subr_specificdata.c
+file	kern/subr_tftproot.c		tftproot
 file	kern/subr_userconf.c		userconf
 file	kern/subr_vmem.c
 file	kern/subr_workqueue.c

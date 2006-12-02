@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls.c,v 1.279 2006/11/30 01:09:48 elad Exp $	*/
+/*	$NetBSD: vfs_syscalls.c,v 1.279.2.5 2007/02/28 22:47:44 pavel Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls.c,v 1.279 2006/11/30 01:09:48 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls.c,v 1.279.2.5 2007/02/28 22:47:44 pavel Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_compat_43.h"
@@ -364,6 +364,7 @@ sys_mount(struct lwp *l, void *v, register_t *retval)
 	 */
 	error = VFS_MOUNT(mp, SCARG(uap, path), SCARG(uap, data), &nd, l);
 	if (mp->mnt_flag & (MNT_UPDATE | MNT_GETARGS)) {
+		VOP_UNLOCK(vp, 0);
 #if defined(COMPAT_30) && defined(NFSSERVER)
 		if (mp->mnt_flag & MNT_UPDATE && error != 0) {
 			int error2;
@@ -395,7 +396,6 @@ sys_mount(struct lwp *l, void *v, register_t *retval)
 				vfs_deallocate_syncvnode(mp);
 		}
 		vfs_unbusy(mp);
-		VOP_UNLOCK(vp, 0);
 		vrele(vp);
 		return (error);
 	}
@@ -411,8 +411,8 @@ sys_mount(struct lwp *l, void *v, register_t *retval)
 		simple_lock(&mountlist_slock);
 		CIRCLEQ_INSERT_TAIL(&mountlist, mp, mnt_list);
 		simple_unlock(&mountlist_slock);
-		checkdirs(vp);
 		VOP_UNLOCK(vp, 0);
+		checkdirs(vp);
 		if ((mp->mnt_flag & (MNT_RDONLY | MNT_ASYNC)) == 0)
 			error = vfs_allocate_syncvnode(mp);
 		vfs_unbusy(mp);
@@ -955,19 +955,20 @@ sys_fchdir(struct lwp *l, void *v, register_t *retval)
 		error = ENOTDIR;
 	else
 		error = VOP_ACCESS(vp, VEXEC, l->l_cred, l);
-	while (!error && (mp = vp->v_mountedhere) != NULL) {
-		if (vfs_busy(mp, 0, 0))
-			continue;
-		error = VFS_ROOT(mp, &tdp);
-		vfs_unbusy(mp);
-		if (error)
-			break;
-		vput(vp);
-		vp = tdp;
-	}
 	if (error) {
 		vput(vp);
 		goto out;
+	}
+	while (!error && (mp = vp->v_mountedhere) != NULL) {
+		if (vfs_busy(mp, 0, 0))
+			continue;
+
+		vput(vp);
+		error = VFS_ROOT(mp, &tdp);
+		vfs_unbusy(mp);
+		if (error)
+			goto out;
+		vp = tdp;
 	}
 	VOP_UNLOCK(vp, 0);
 
@@ -1246,9 +1247,6 @@ vfs_composefh(struct vnode *vp, fhandle_t *fhp, size_t *fh_size)
 	size_t fidsize;
 
 	mp = vp->v_mount;
-	if (mp->mnt_op->vfs_vptofh == NULL) {
-		return EOPNOTSUPP;
-	}
 	fidp = NULL;
 	if (*fh_size < FHANDLE_SIZE_MIN) {
 		fidsize = 0;
@@ -1280,10 +1278,6 @@ vfs_composefh_alloc(struct vnode *vp, fhandle_t **fhpp)
 
 	*fhpp = NULL;
 	mp = vp->v_mount;
-	if (mp->mnt_op->vfs_vptofh == NULL) {
-		error = EOPNOTSUPP;
-		goto out;
-	}
 	fidsize = 0;
 	error = VFS_VPTOFH(vp, NULL, &fidsize);
 	KASSERT(error != 0);
@@ -2026,6 +2020,9 @@ sys_unlink(struct lwp *l, void *v, register_t *retval)
 	struct vnode *vp;
 	int error;
 	struct nameidata nd;
+#if NVERIEXEC > 0
+	pathname_t pathbuf = NULL;
+#endif /* NVERIEXEC > 0 */
 
 restart:
 	NDINIT(&nd, DELETE, LOCKPARENT | LOCKLEAF, UIO_USERSPACE,
@@ -2049,8 +2046,15 @@ restart:
 	}
 
 #if NVERIEXEC > 0
+	error = pathname_get(nd.ni_dirp, nd.ni_segflg, &pathbuf);
+
 	/* Handle remove requests for veriexec entries. */
-	if ((error = veriexec_removechk(vp, nd.ni_dirp, l)) != 0) {
+	if (!error) {
+		error = veriexec_removechk(vp, pathname_path(pathbuf), l);
+		pathname_put(pathbuf);
+	}
+
+	if (error) {
 		VOP_ABORTOP(nd.ni_dvp, &nd.ni_cnd);
 		if (nd.ni_dvp == vp)
 			vrele(nd.ni_dvp);
@@ -3197,14 +3201,15 @@ sys_fsync_range(struct lwp *l, void *v, register_t *retval)
 		return (error);
 
 	if ((fp->f_flag & FWRITE) == 0) {
-		FILE_UNUSE(fp, l);
-		return (EBADF);
+		error = EBADF;
+		goto out;
 	}
 
 	flags = SCARG(uap, flags);
 	if (((flags & (FDATASYNC | FFILESYNC)) == 0) ||
 	    ((~flags & (FDATASYNC | FFILESYNC)) == 0)) {
-		return (EINVAL);
+		error = EINVAL;
+		goto out;
 	}
 	/* Now set up the flags for value(s) to pass to VOP_FSYNC() */
 	if (flags & FDATASYNC)
@@ -3220,8 +3225,8 @@ sys_fsync_range(struct lwp *l, void *v, register_t *retval)
 		s = SCARG(uap, start);
 		e = s + len;
 		if (e < s) {
-			FILE_UNUSE(fp, l);
-			return (EINVAL);
+			error = EINVAL;
+			goto out;
 		}
 	} else {
 		e = 0;
@@ -3237,6 +3242,7 @@ sys_fsync_range(struct lwp *l, void *v, register_t *retval)
 		(*bioops.io_fsync)(vp, nflags);
 
 	VOP_UNLOCK(vp, 0);
+out:
 	FILE_UNUSE(fp, l);
 	return (error);
 }
@@ -3320,10 +3326,12 @@ rename_files(const char *from, const char *to, struct lwp *l, int retain)
 	struct proc *p;
 	int error;
 
-	NDINIT(&fromnd, DELETE, WANTPARENT | SAVESTART, UIO_USERSPACE,
+	NDINIT(&fromnd, DELETE, LOCKPARENT | SAVESTART, UIO_USERSPACE,
 	    from, l);
 	if ((error = namei(&fromnd)) != 0)
 		return (error);
+	if (fromnd.ni_dvp != fromnd.ni_vp)
+		VOP_UNLOCK(fromnd.ni_dvp, 0);
 	fvp = fromnd.ni_vp;
 	error = vn_start_write(fvp, &mp, V_WAIT | V_PCATCH);
 	if (error != 0) {
@@ -3374,9 +3382,21 @@ rename_files(const char *from, const char *to, struct lwp *l, int retain)
 	}
 
 #if NVERIEXEC > 0
-	if (!error)
-		error = veriexec_renamechk(fvp, fromnd.ni_dirp, tvp,
-		    tond.ni_dirp, l);
+	if (!error) {
+		pathname_t frompath = NULL, topath = NULL;
+
+		error = pathname_get(fromnd.ni_dirp, fromnd.ni_segflg,
+		    &frompath);
+		if (!error)
+			error = pathname_get(tond.ni_dirp, tond.ni_segflg,
+			    &topath);
+		if (!error)
+			error = veriexec_renamechk(fvp, pathname_path(frompath),
+			    tvp, pathname_path(topath), l);
+
+		pathname_put(frompath);
+		pathname_put(topath);
+	}
 #endif /* NVERIEXEC > 0 */
 
 out:

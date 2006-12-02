@@ -1,4 +1,4 @@
-/*	$NetBSD: viaide.c,v 1.37 2006/11/16 01:33:10 christos Exp $	*/
+/*	$NetBSD: viaide.c,v 1.37.2.2 2007/03/31 16:27:56 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: viaide.c,v 1.37 2006/11/16 01:33:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: viaide.c,v 1.37.2.2 2007/03/31 16:27:56 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -271,7 +271,7 @@ static const struct pciide_product_desc pciide_via_products[] =  {
 	{ PCI_PRODUCT_VIATECH_VT8237A_SATA,
 	  0,
 	  "VIA Technologies VT8237A SATA Controller",
-	  via_sata_chip_map_0,
+	  via_sata_chip_map_7,
 	},
 	{ PCI_PRODUCT_VIATECH_VT8237R_SATA,
 	  0,
@@ -413,6 +413,10 @@ via_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			aprint_normal("VT8237 ATA133 controller\n");
 			sc->sc_wdcdev.sc_atac.atac_udma_cap = 6;
 			break;
+		case PCI_PRODUCT_VIATECH_VT8237A_ISA:
+			aprint_normal("VT8237A ATA133 controller\n");
+			sc->sc_wdcdev.sc_atac.atac_udma_cap = 6;
+			break;
 		default:
 unknown:
 			aprint_normal("unknown VIA ATA controller\n");
@@ -474,6 +478,10 @@ unknown:
 	sc->sc_wdcdev.sc_atac.atac_set_modes = via_setup_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
+
+	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_MASS_STORAGE &&
+	    PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_MASS_STORAGE_RAID)
+		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_RAID;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -673,6 +681,10 @@ via_sata_chip_map_common(struct pciide_softc *sc, struct pci_attach_args *pa)
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
 	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
 	sc->sc_wdcdev.sc_atac.atac_set_modes = sata_setup_channel;
+
+	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_MASS_STORAGE &&
+	    PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_MASS_STORAGE_RAID)
+		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_RAID;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 	maptype = pci_mapreg_type(pa->pa_pc, pa->pa_tag,

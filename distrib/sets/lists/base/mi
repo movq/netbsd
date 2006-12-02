@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.678 2006/11/29 15:45:26 tnozaki Exp $
+# $NetBSD: mi,v 1.678.2.4 2007/05/08 10:45:07 pavel Exp $
 .						base-sys-root
 ./altroot					base-sys-root
 ./bin						base-sys-root
@@ -122,6 +122,7 @@
 ./sbin						base-sys-root
 ./sbin/amrctl					base-sysutil-root
 ./sbin/atactl					base-sysutil-root
+./sbin/bioctl					base-sysutil-root
 ./sbin/badsect					base-sysutil-root
 ./sbin/brconfig					base-netutil-root
 ./sbin/ccdconfig				base-sysutil-root
@@ -574,7 +575,7 @@
 ./usr/bin/patch					base-util-bin
 ./usr/bin/pathchk				base-util-bin
 ./usr/bin/pawd					base-amd-bin
-./usr/bin/paxctl				base-util-bin
+./usr/bin/paxctl				base-obsolete		obsolete
 ./usr/bin/pgrep					base-util-bin
 ./usr/bin/pkill					base-util-bin
 ./usr/bin/pmap					base-util-bin
@@ -1153,6 +1154,7 @@
 ./usr/sbin/ntptrace				base-ntp-bin
 ./usr/sbin/omshell				base-dhcpd-bin
 ./usr/sbin/pac					base-sysutil-bin
+./usr/sbin/paxctl				base-sysutil-bin
 ./usr/sbin/pcictl				base-sysutil-bin
 ./usr/sbin/pfspamdb				base-obsolete		obsolete
 ./usr/sbin/pim6dd				base-obsolete		obsolete
@@ -2492,6 +2494,7 @@
 ./usr/share/man/cat4/pc532			base-man-share
 ./usr/share/man/cat4/pmax			base-man-share
 ./usr/share/man/cat4/pmppc			base-man-share
+./usr/share/man/cat4/prep			base-man-share
 ./usr/share/man/cat4/sgimips			base-man-share
 ./usr/share/man/cat4/sparc			base-man-share
 ./usr/share/man/cat4/sparc64			base-man-share
@@ -2609,6 +2612,7 @@
 ./usr/share/man/html4/pc532			base-man-share
 ./usr/share/man/html4/pmax			base-man-share
 ./usr/share/man/html4/pmppc			base-man-share
+./usr/share/man/html4/prep			base-man-share
 ./usr/share/man/html4/sgimips			base-man-share
 ./usr/share/man/html4/sparc			base-man-share
 ./usr/share/man/html4/sparc64			base-man-share
@@ -2727,6 +2731,7 @@
 ./usr/share/man/man4/pc532			base-man-share
 ./usr/share/man/man4/pmax			base-man-share
 ./usr/share/man/man4/pmppc			base-man-share
+./usr/share/man/man4/prep			base-man-share
 ./usr/share/man/man4/sgimips			base-man-share
 ./usr/share/man/man4/sparc			base-man-share
 ./usr/share/man/man4/sparc64			base-man-share
@@ -3257,6 +3262,7 @@
 ./usr/share/zoneinfo/Africa/Accra		base-sys-share		share
 ./usr/share/zoneinfo/Africa/Addis_Ababa		base-sys-share		share
 ./usr/share/zoneinfo/Africa/Algiers		base-sys-share		share
+./usr/share/zoneinfo/Africa/Asmara		base-sys-share		share
 ./usr/share/zoneinfo/Africa/Asmera		base-sys-share		share
 ./usr/share/zoneinfo/Africa/Bamako		base-sys-share		share
 ./usr/share/zoneinfo/Africa/Bangui		base-sys-share		share
@@ -3567,6 +3573,7 @@
 ./usr/share/zoneinfo/Atlantic/Bermuda		base-sys-share		share
 ./usr/share/zoneinfo/Atlantic/Canary		base-sys-share		share
 ./usr/share/zoneinfo/Atlantic/Cape_Verde	base-sys-share		share
+./usr/share/zoneinfo/Atlantic/Faroe		base-sys-share		share
 ./usr/share/zoneinfo/Atlantic/Faeroe		base-sys-share		share
 ./usr/share/zoneinfo/Atlantic/Jan_Mayen		base-sys-share		share
 ./usr/share/zoneinfo/Atlantic/Madeira		base-sys-share		share
@@ -3582,6 +3589,7 @@
 ./usr/share/zoneinfo/Australia/Canberra		base-sys-share		share
 ./usr/share/zoneinfo/Australia/Currie		base-sys-share		share
 ./usr/share/zoneinfo/Australia/Darwin		base-sys-share		share
+./usr/share/zoneinfo/Australia/Eucla		base-sys-share		share
 ./usr/share/zoneinfo/Australia/Hobart		base-sys-share		share
 ./usr/share/zoneinfo/Australia/LHI		base-sys-share		share
 ./usr/share/zoneinfo/Australia/Lindeman		base-sys-share		share

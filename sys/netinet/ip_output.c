@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_output.c,v 1.167 2006/11/25 18:41:36 yamt Exp $	*/
+/*	$NetBSD: ip_output.c,v 1.167.2.2 2007/03/28 20:46:13 jdc Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_output.c,v 1.167 2006/11/25 18:41:36 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_output.c,v 1.167.2.2 2007/03/28 20:46:13 jdc Exp $");
 
 #include "opt_pfil_hooks.h"
 #include "opt_inet.h"
@@ -287,10 +287,9 @@ ip_output(struct mbuf *m0, ...)
 	/*
 	 * Route packet.
 	 */
-	if (ro == 0) {
+	bzero(&iproute, sizeof(iproute));
+	if (ro == NULL)
 		ro = &iproute;
-		bzero((caddr_t)ro, sizeof (*ro));
-	}
 	dst = satosin(&ro->ro_dst);
 	/*
 	 * If there is a cached route,
@@ -821,6 +820,7 @@ spd_done:
 
 	ip = mtod(m, struct ip *);
 	hlen = ip->ip_hl << 2;
+	ip_len = ntohs(ip->ip_len);
 #endif /* PFIL_HOOKS */
 
 	m->m_pkthdr.csum_data |= hlen << 16;
@@ -965,10 +965,8 @@ spd_done:
 	if (error == 0)
 		ipstat.ips_fragmented++;
 done:
-	if (ro == &iproute && (flags & IP_ROUTETOIF) == 0 && ro->ro_rt) {
-		RTFREE(ro->ro_rt);
-		ro->ro_rt = 0;
-	}
+	if (iproute.ro_rt != NULL)
+		RTFREE(iproute.ro_rt);
 
 #ifdef IPSEC
 	if (sp != NULL) {

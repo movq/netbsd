@@ -1,4 +1,4 @@
-# $NetBSD: XEN2_DOM0,v 1.18 2006/11/30 21:01:16 bouyer Exp $
+# $NetBSD: XEN2_DOM0,v 1.18.2.4 2007/05/08 10:45:07 pavel Exp $
 
 include 	"arch/xen/conf/std.xen"
 
@@ -264,6 +264,7 @@ ath*	at pci? dev ? function ?	# Atheros 5210/5211/5212 802.11
 atw*	at pci? dev ? function ?	# ADMtek ADM8211 (802.11)
 bce* 	at pci? dev ? function ?	# Broadcom 4401 10/100 Ethernet
 bge* 	at pci? dev ? function ?	# Broadcom 570x gigabit Ethernet
+bnx* 	at pci? dev ? function ?	# Broadcom NetXtremeII gigabit Ethernet
 dge*	at pci? dev ? function ?	# Intel 82597 10GbE LR
 en*	at pci? dev ? function ?	# ENI/Adaptec ATM
 ep*	at pci? dev ? function ?	# 3Com 3c59x
@@ -309,6 +310,7 @@ acphy*	at mii? phy ?			# Altima AC101 and AMD Am79c874 PHYs
 amhphy* at mii? phy ?			# AMD 79c901 Ethernet PHYs
 bmtphy* at mii? phy ?			# Broadcom BCM5201 and BCM5202 PHYs
 brgphy* at mii? phy ?			# Broadcom BCM5400-family PHYs
+ciphy*	at mii? phy ?			# Cicada CS8201 Gig-E PHYs
 dmphy*	at mii? phy ?			# Davicom DM9101 PHYs
 exphy*	at mii? phy ?			# 3Com internal PHYs
 gentbi* at mii? phy ?			# Generic Ten-Bit 1000BASE-[CLS]X PHYs
@@ -325,6 +327,7 @@ nsphy*	at mii? phy ?			# NS83840 PHYs
 nsphyter* at mii? phy ? 		# NS83843 PHYs
 pnaphy* at mii? phy ?			# generic HomePNA PHYs
 qsphy*	at mii? phy ?			# Quality Semiconductor QS6612 PHYs
+rgephy* at mii? phy ?			# Realtek 8169S/8110S internal PHYs
 rlphy*	at mii? phy ?			# Realtek 8139/8201L PHYs
 sqphy*	at mii? phy ?			# Seeq 80220/80221/80223 PHYs
 tlphy*	at mii? phy ?			# ThunderLAN PHYs
@@ -407,6 +410,7 @@ bha*	at pci? dev ? function ?	# BusLogic 9xx SCSI
 dpt*	at pci? dev ? function ?	# DPT SmartCache/SmartRAID
 iha*	at pci? dev ? function ?	# Initio INIC-940/950 SCSI
 isp*	at pci? dev ? function ?	# Qlogic ISP [12]0x0 SCSI/FibreChannel
+mfi*	at pci? dev ? function ?	# LSI MegaRAID SAS
 mly*	at pci? dev ? function ?	# Mylex AcceleRAID and eXtremeRAID
 mpt*	at pci? dev ? function ?	# LSI Fusion SCSI/FC
 njs*	at pci? dev ? function ?	# Workbit NinjaSCSI-32
@@ -680,6 +684,7 @@ pseudo-device 	crypto		# /dev/crypto device
 pseudo-device	swcrypto	# software crypto implementation
 
 # disk/mass storage pseudo-devices
+pseudo-device	bio			# RAID control device driver
 pseudo-device	ccd		4	# concatenated/striped disk devices
 #pseudo-device	cgd		4	# cryptographic disk devices
 pseudo-device	raid		8	# RAIDframe disk driver
