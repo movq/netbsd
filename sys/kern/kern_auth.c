@@ -1,4 +1,4 @@
-/* $NetBSD: kern_auth.c,v 1.32 2006/11/19 00:11:29 elad Exp $ */
+/* $NetBSD: kern_auth.c,v 1.32.2.4 2007/01/07 10:51:15 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2005, 2006 Elad Efrat <elad@NetBSD.org>
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_auth.c,v 1.32 2006/11/19 00:11:29 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_auth.c,v 1.32.2.4 2007/01/07 10:51:15 bouyer Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -43,6 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_auth.c,v 1.32 2006/11/19 00:11:29 elad Exp $");
 #include <sys/kauth.h>
 #include <sys/acct.h>
 #include <sys/sysctl.h>
+#include <sys/kmem.h>
 
 /* 
  * Credentials.
@@ -81,12 +82,8 @@ struct kauth_scope {
 	SIMPLEQ_ENTRY(kauth_scope)	next_scope;	/* scope list */
 };
 
-static POOL_INIT(kauth_scope_pool, sizeof(struct kauth_scope), 0, 0, 0,
-	  "kauth_scopepl", &pool_allocator_nointr);
-static POOL_INIT(kauth_listener_pool, sizeof(struct kauth_listener), 0, 0, 0,
-	  "kauth_listenerpl", &pool_allocator_nointr);
 static POOL_INIT(kauth_cred_pool, sizeof(struct kauth_cred), 0, 0, 0,
-	  "kauth_credpl", &pool_allocator_nointr);
+    "kauthcredpl", &pool_allocator_nointr);
 
 /* List of scopes and its lock. */
 static SIMPLEQ_HEAD(, kauth_scope) scope_list;
@@ -557,22 +554,31 @@ kauth_register_scope(const char *id, kauth_scope_callback_t callback,
 		return (NULL);
 
 	/* Allocate space for a new scope and listener. */
-	scope = pool_get(&kauth_scope_pool, PR_WAITOK);
+	scope = kmem_alloc(sizeof(*scope), KM_SLEEP);
+	if (scope == NULL)
+		return NULL;
 	if (callback != NULL) {
-		listener = pool_get(&kauth_listener_pool, PR_WAITOK);
+		listener = kmem_alloc(sizeof(*listener), KM_SLEEP);
+		if (listener == NULL) {
+			kmem_free(scope, sizeof(*scope));
+			return (NULL);
+		}
 	}
 
-	/* Acquire scope list lock. */
+	/*
+	 * Acquire scope list lock.
+	 *
+	 * XXXSMP insufficient locking.
+	 */
 	simple_lock(&scopes_lock);
 
 	/* Check we don't already have a scope with the same id */
 	if (kauth_ifindscope(id) != NULL) {
 		simple_unlock(&scopes_lock);
 
-		pool_put(&kauth_scope_pool, scope);
-		if (callback != NULL) {
-			pool_put(&kauth_listener_pool, listener);
-		}
+		kmem_free(scope, sizeof(*scope));
+		if (callback != NULL)
+			kmem_free(listener, sizeof(*listener));
 
 		return (NULL);
 	}
@@ -649,6 +655,7 @@ kauth_deregister_scope(kauth_scope_t scope)
 	if (scope != NULL) {
 		/* Remove scope from list */
 		SIMPLEQ_REMOVE(&scope_list, scope, kauth_scope, next_scope);
+		kmem_free(scope, sizeof(*scope));
 	}
 }
 
@@ -666,7 +673,11 @@ kauth_listen_scope(const char *id, kauth_scope_callback_t callback,
 	kauth_scope_t scope;
 	kauth_listener_t listener;
 
-	/* Find scope struct */
+	/*
+	 * Find scope struct.
+	 *
+	 * XXXSMP insufficient locking.
+	 */
 	simple_lock(&scopes_lock);
 	scope = kauth_ifindscope(id);
 	simple_unlock(&scopes_lock);
@@ -674,7 +685,9 @@ kauth_listen_scope(const char *id, kauth_scope_callback_t callback,
 		return (NULL);
 
 	/* Allocate listener */
-	listener = pool_get(&kauth_listener_pool, PR_WAITOK);
+	listener = kmem_alloc(sizeof(*listener), KM_SLEEP);
+	if (listener == NULL)
+		return (NULL);
 
 	/* Initialize listener with parameters */
 	listener->func = callback;
@@ -704,6 +717,7 @@ kauth_unlisten_scope(kauth_listener_t listener)
 		SIMPLEQ_REMOVE(&listener->scope->listenq, listener,
 		    kauth_listener, listener_next);
 		listener->scope->nlisteners--;
+		kmem_free(listener, sizeof(*listener));
 	}
 }
 
@@ -804,10 +818,10 @@ kauth_authorize_network(kauth_cred_t cred, kauth_action_t action,
 
 int
 kauth_authorize_machdep(kauth_cred_t cred, kauth_action_t action,
-    enum kauth_machdep_req req, void *arg1, void *arg2, void *arg3)
+    void *arg0, void *arg1, void *arg2, void *arg3)
 {
 	return (kauth_authorize_action(kauth_builtin_scope_machdep, cred,
-	    action, (void *)req, arg1, arg2, arg3));
+	    action, arg0, arg1, arg2, arg3));
 }
 
 int
@@ -835,9 +849,10 @@ kauth_authorize_device_spec(kauth_cred_t cred, enum kauth_device_req req,
 }
 
 int
-kauth_authorize_device_passthru(kauth_cred_t cred, dev_t dev, void *data)
+kauth_authorize_device_passthru(kauth_cred_t cred, dev_t dev, u_long bits,
+    void *data)
 {
 	return (kauth_authorize_action(kauth_builtin_scope_device, cred,
-	    KAUTH_DEVICE_RAWIO_PASSTHRU, 0, (void *)(u_long)dev, data,
-	    NULL));
+	    KAUTH_DEVICE_RAWIO_PASSTHRU, (void *)bits, (void *)(u_long)dev,
+	    data, NULL));
 }

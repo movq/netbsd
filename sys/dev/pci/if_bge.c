@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bge.c,v 1.122 2006/11/26 06:09:09 tsutsui Exp $	*/
+/*	$NetBSD: if_bge.c,v 1.122.2.3 2007/04/28 18:17:27 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2001 Wind River Systems
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bge.c,v 1.122 2006/11/26 06:09:09 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bge.c,v 1.122.2.3 2007/04/28 18:17:27 bouyer Exp $");
 
 #include "bpfilter.h"
 #include "vlan.h"
@@ -859,19 +859,19 @@ bge_newbuf_std(struct bge_softc *sc, int i, struct mbuf *m, bus_dmamap_t dmamap)
 			return(ENOBUFS);
 		}
 		m_new->m_len = m_new->m_pkthdr.len = MCLBYTES;
-		if (!sc->bge_rx_alignment_bug)
-		    m_adj(m_new, ETHER_ALIGN);
 
-		if (bus_dmamap_load_mbuf(sc->bge_dmatag, dmamap, m_new,
-		    BUS_DMA_READ|BUS_DMA_NOWAIT))
-			return(ENOBUFS);
 	} else {
 		m_new = m;
 		m_new->m_len = m_new->m_pkthdr.len = MCLBYTES;
 		m_new->m_data = m_new->m_ext.ext_buf;
-		if (!sc->bge_rx_alignment_bug)
-		    m_adj(m_new, ETHER_ALIGN);
 	}
+	if (!sc->bge_rx_alignment_bug)
+	    m_adj(m_new, ETHER_ALIGN);
+	if (bus_dmamap_load_mbuf(sc->bge_dmatag, dmamap, m_new,
+	    BUS_DMA_READ|BUS_DMA_NOWAIT))
+		return(ENOBUFS);
+	bus_dmamap_sync(sc->bge_dmatag, dmamap, 0, dmamap->dm_mapsize, 
+	    BUS_DMASYNC_PREREAD);
 
 	sc->bge_cdata.bge_rx_std_chain[i] = m_new;
 	r = &sc->bge_rdata->bge_rx_std_ring[i];
@@ -899,9 +899,9 @@ bge_newbuf_jumbo(struct bge_softc *sc, int i, struct mbuf *m)
 {
 	struct mbuf *m_new = NULL;
 	struct bge_rx_bd *r;
+	caddr_t buf = NULL;
 
 	if (m == NULL) {
-		caddr_t			buf = NULL;
 
 		/* Allocate the mbuf. */
 		MGETHDR(m_new, M_DONTWAIT, MT_DATA);
@@ -925,12 +925,14 @@ bge_newbuf_jumbo(struct bge_softc *sc, int i, struct mbuf *m)
 		m_new->m_flags |= M_EXT_RW;
 	} else {
 		m_new = m;
-		m_new->m_data = m_new->m_ext.ext_buf;
+		buf = m_new->m_data = m_new->m_ext.ext_buf;
 		m_new->m_ext.ext_size = BGE_JUMBO_FRAMELEN;
 	}
-
 	if (!sc->bge_rx_alignment_bug)
 	    m_adj(m_new, ETHER_ALIGN);
+	bus_dmamap_sync(sc->bge_dmatag, sc->bge_cdata.bge_rx_jumbo_map,
+	    mtod(m_new, caddr_t) - sc->bge_cdata.bge_jumbo_buf, BGE_JLEN,
+	    BUS_DMASYNC_PREREAD);
 	/* Set up the descriptor. */
 	r = &sc->bge_rdata->bge_rx_jumbo_ring[i];
 	sc->bge_cdata.bge_rx_jumbo_chain[i] = m_new;
@@ -2191,6 +2193,16 @@ static const struct bge_product {
 	  "Broadcom BCM5752M Gigabit Ethernet",
 	  },
 
+	{ PCI_VENDOR_BROADCOM,
+	  PCI_PRODUCT_BROADCOM_BCM5753,
+	  "Broadcom BCM5753 Gigabit Ethernet",
+	  },
+
+	{ PCI_VENDOR_BROADCOM,
+	  PCI_PRODUCT_BROADCOM_BCM5753M,
+	  "Broadcom BCM5753M Gigabit Ethernet",
+	  },
+
    	{ PCI_VENDOR_BROADCOM,
 	  PCI_PRODUCT_BROADCOM_BCM5780,
 	  "Broadcom BCM5780 Gigabit Ethernet",
@@ -2920,6 +2932,10 @@ bge_rxeof(struct bge_softc *sc)
 			m = sc->bge_cdata.bge_rx_jumbo_chain[rxidx];
 			sc->bge_cdata.bge_rx_jumbo_chain[rxidx] = NULL;
 			jumbocnt++;
+			bus_dmamap_sync(sc->bge_dmatag,
+			    sc->bge_cdata.bge_rx_jumbo_map,
+			    mtod(m, caddr_t) - sc->bge_cdata.bge_jumbo_buf,
+			    BGE_JLEN, BUS_DMASYNC_POSTREAD);
 			if (cur_rx->bge_flags & BGE_RXBDFLAG_ERROR) {
 				ifp->if_ierrors++;
 				bge_newbuf_jumbo(sc, sc->bge_jumbo, m);
@@ -2934,10 +2950,14 @@ bge_rxeof(struct bge_softc *sc)
 		} else {
 			BGE_INC(sc->bge_std, BGE_STD_RX_RING_CNT);
 			m = sc->bge_cdata.bge_rx_std_chain[rxidx];
+
 			sc->bge_cdata.bge_rx_std_chain[rxidx] = NULL;
 			stdcnt++;
 			dmamap = sc->bge_cdata.bge_rx_std_map[rxidx];
 			sc->bge_cdata.bge_rx_std_map[rxidx] = 0;
+			bus_dmamap_sync(sc->bge_dmatag, dmamap, 0,
+			    dmamap->dm_mapsize, BUS_DMASYNC_POSTREAD);
+			bus_dmamap_unload(sc->bge_dmatag, dmamap);
 			if (cur_rx->bge_flags & BGE_RXBDFLAG_ERROR) {
 				ifp->if_ierrors++;
 				bge_newbuf_std(sc, sc->bge_std, m, dmamap);
@@ -3323,6 +3343,8 @@ bge_cksum_pad(struct mbuf *pkt)
 			/* Allocate new empty mbuf, pad it. Compact later. */
 			struct mbuf *n;
 			MGET(n, M_DONTWAIT, MT_DATA);
+			if (n == NULL)
+				return ENOBUFS;
 			n->m_len = 0;
 			last->m_next = n;
 			last = n;
@@ -3759,7 +3781,7 @@ bge_start(struct ifnet *ifp)
 
 	sc = ifp->if_softc;
 
-	if (!sc->bge_link && ifp->if_snd.ifq_len < 10)
+	if ((ifp->if_flags & (IFF_RUNNING|IFF_OACTIVE)) != IFF_RUNNING || sc->bge_link == 0)
 		return;
 
 	prodidx = sc->bge_tx_prodidx;
@@ -3794,7 +3816,6 @@ bge_start(struct ifnet *ifp)
 		 * for the NIC to drain the ring.
 		 */
 		if (bge_encap(sc, m_head, &prodidx)) {
-			printf("bge: failed on len %d?\n", m_head->m_pkthdr.len);
 			ifp->if_flags |= IFF_OACTIVE;
 			break;
 		}

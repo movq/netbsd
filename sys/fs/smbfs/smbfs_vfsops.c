@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_vfsops.c,v 1.60 2006/11/16 01:33:37 christos Exp $	*/
+/*	$NetBSD: smbfs_vfsops.c,v 1.60.2.2 2007/04/12 19:34:24 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_vfsops.c,v 1.60 2006/11/16 01:33:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_vfsops.c,v 1.60.2.2 2007/04/12 19:34:24 bouyer Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_quota.h"
@@ -130,8 +130,8 @@ struct vfsops smbfs_vfsops = {
 	smbfs_statvfs,
 	smbfs_sync,
 	smbfs_vget,
-	NULL,			/* vfs_fhtovp */
-	NULL,			/* vfs_vptofh */
+	(void *)eopnotsupp,	/* vfs_fhtovp */
+	(void *)eopnotsupp,	/* vfs_vptofh */
 	smbfs_init,
 	smbfs_reinit,
 	smbfs_done,
@@ -455,7 +455,13 @@ loop:
 			goto loop;
 		simple_lock(&vp->v_interlock);
 		nvp = TAILQ_NEXT(vp, v_mntvnodes);
+
 		np = VTOSMB(vp);
+		if (np == NULL) {
+			simple_unlock(&vp->v_interlock);
+			continue;
+		}
+			
 		if ((vp->v_type == VNON || (np->n_flag & NMODIFIED) == 0) &&
 		    LIST_EMPTY(&vp->v_dirtyblkhd) &&
 		     vp->v_uobj.uo_npages == 0) {

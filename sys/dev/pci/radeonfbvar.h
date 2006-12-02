@@ -1,4 +1,4 @@
-/* $NetBSD: radeonfbvar.h,v 1.2 2006/08/29 17:09:33 macallan Exp $ */
+/* $NetBSD: radeonfbvar.h,v 1.2.10.2 2007/03/04 12:35:35 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -29,7 +29,7 @@
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- */ 
+ */
 
 /*
  * ATI Technologies Inc. ("ATI") has not assisted in the creation of, and
@@ -46,6 +46,7 @@
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/device.h>
+#include <sys/callout.h>
 #include <dev/pci/pcivar.h>
 #include <dev/wscons/wsdisplayvar.h>
 #include <dev/wscons/wsconsio.h>
@@ -172,6 +173,9 @@ struct radeonfb_display {
 	int			rd_bg;		/* background */
 	int			rd_console;
 
+	struct callout          rd_bl_lvds_co;  /* delayed lvds operation */
+	uint32_t                rd_bl_lvds_val; /* value of delayed lvds */
+
 	int			rd_wsmode;
 
 	int			rd_ncrtcs;
@@ -269,7 +273,7 @@ struct radeonfb_softc {
 	uint8_t			*sc_bios;
 	bus_size_t		sc_biossz;
 
-	char			*sc_modebuf;
+	char			sc_modebuf[64];
 	const char		*sc_defaultmode;
 };
 
@@ -299,6 +303,7 @@ struct radeonfb_softc {
 #define	RFB_R300	(1 << 5)	/* R300 variants -- newer parts */
 #define	RFB_RV100	(1 << 6)	/* RV100 variants -- previous gen */
 #define	RFB_ATOM	(1 << 7)	/* ATOM bios */
+#define RFB_INV_BLIGHT	(1 << 8)	/* backlight level inverted */
 
 #define	IS_MOBILITY(sc)	((sc)->sc_flags & RFB_MOB)
 #define	HAS_CRTC2(sc)	(((sc)->sc_flags & RFB_NCRTC2) == 0)

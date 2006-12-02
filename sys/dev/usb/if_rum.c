@@ -1,5 +1,5 @@
 /*	$OpenBSD: if_rum.c,v 1.40 2006/09/18 16:20:20 damien Exp $	*/
-/*	$NetBSD: if_rum.c,v 1.3 2006/11/25 21:35:08 christos Exp $	*/
+/*	$NetBSD: if_rum.c,v 1.3.2.3 2007/05/12 17:08:13 snj Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 Damien Bergamini <damien.bergamini@free.fr>
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.3 2006/11/25 21:35:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.3.2.3 2007/05/12 17:08:13 snj Exp $");
 
 #include "bpfilter.h"
 
@@ -89,6 +89,7 @@ int rum_debug = 0;
 /* various supported device vendors/products */
 static const struct usb_devno rum_devs[] = {
 	{ USB_VENDOR_ABOCOM,		USB_PRODUCT_ABOCOM_RT2573 },
+	{ USB_VENDOR_ASUSTEK,		USB_PRODUCT_ASUSTEK_WL167G_2 },
 	{ USB_VENDOR_BELKIN,		USB_PRODUCT_BELKIN_F5D7050A },
 	{ USB_VENDOR_BELKIN,		USB_PRODUCT_BELKIN_F5D9050V3 },
 	{ USB_VENDOR_CISCOLINKSYS,	USB_PRODUCT_CISCOLINKSYS_WUSB54GC },
@@ -1126,8 +1127,8 @@ rum_tx_mgt(struct rum_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 	if ((xferlen % 64) == 0)
 		xferlen += 4;
 
-	DPRINTFN(10, ("sending msg frame len=%u rate=%u xfer len=%u\n",
-	    m0->m_pkthdr.len + RT2573_TX_DESC_SIZE, rate, xferlen));
+	DPRINTFN(10, ("sending msg frame len=%zu rate=%u xfer len=%u\n",
+	    (size_t)m0->m_pkthdr.len + RT2573_TX_DESC_SIZE, rate, xferlen));
 
 	usbd_setup_xfer(data->xfer, sc->sc_tx_pipeh, data, data->buf, xferlen,
 	    USBD_FORCE_SHORT_XFER | USBD_NO_COPY, RUM_TX_TIMEOUT, rum_txeof);
@@ -1216,8 +1217,8 @@ rum_tx_data(struct rum_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 	if ((xferlen % 64) == 0)
 		xferlen += 4;
 
-	DPRINTFN(10, ("sending data frame len=%u rate=%u xfer len=%u\n",
-	    m0->m_pkthdr.len + RT2573_TX_DESC_SIZE, rate, xferlen));
+	DPRINTFN(10, ("sending data frame len=%zu rate=%u xfer len=%u\n",
+	    (size_t)m0->m_pkthdr.len + RT2573_TX_DESC_SIZE, rate, xferlen));
 
 	usbd_setup_xfer(data->xfer, sc->sc_tx_pipeh, data, data->buf, xferlen,
 	    USBD_FORCE_SHORT_XFER | USBD_NO_COPY, RUM_TX_TIMEOUT, rum_txeof);

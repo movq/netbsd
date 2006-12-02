@@ -1,4 +1,4 @@
-/* $NetBSD: secmodel_bsd44_securelevel.c,v 1.18 2006/11/28 17:27:10 elad Exp $ */
+/* $NetBSD: secmodel_bsd44_securelevel.c,v 1.18.2.3 2007/01/06 13:27:54 bouyer Exp $ */
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
  * All rights reserved.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: secmodel_bsd44_securelevel.c,v 1.18 2006/11/28 17:27:10 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: secmodel_bsd44_securelevel.c,v 1.18.2.3 2007/01/06 13:27:54 bouyer Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_insecure.h"
@@ -97,8 +97,8 @@ secmodel_bsd44_securelevel_init(void)
 #endif /* INSECURE */
 }
 
-SYSCTL_SETUP(sysctl_secmodel_bsd44_securelevel_setup,
-    "sysctl secmodel bsd44 securelevel setup")
+SYSCTL_SETUP(sysctl_security_bsd44_securelevel_setup,
+    "sysctl security bsd44 securelevel setup")
 {
 	/*
 	 * For compatibility, we create a kern.securelevel variable.
@@ -342,39 +342,19 @@ secmodel_bsd44_securelevel_machdep_cb(kauth_cred_t cred,
     void *arg1, void *arg2, void *arg3)
 {
         int result;
-	enum kauth_machdep_req req;
 
         result = KAUTH_RESULT_DENY;
-	req = (enum kauth_machdep_req)arg0;
 
         switch (action) {
-	case KAUTH_MACHDEP_ALPHA:
-		switch (req) {
-		case KAUTH_REQ_MACHDEP_ALPHA_UNMANAGEDMEM:
-			if (securelevel < 0)
-				result = KAUTH_RESULT_ALLOW;
-			break;
-		default:
-			result = KAUTH_RESULT_DEFER;
-			break;
-		}
+	case KAUTH_MACHDEP_IOPERM_SET:
+	case KAUTH_MACHDEP_IOPL:
+		if (securelevel < 1)
+			result = KAUTH_RESULT_ALLOW;
 		break;
-	case KAUTH_MACHDEP_X86:
-		switch (req) {
-		case KAUTH_REQ_MACHDEP_X86_IOPL:
-		case KAUTH_REQ_MACHDEP_X86_IOPERM:
-			if (securelevel < 1)
-				result = KAUTH_RESULT_ALLOW;
-			break;
-		case KAUTH_REQ_MACHDEP_X86_UNMANAGEDMEM:
-			if (securelevel < 0)
-				result = KAUTH_RESULT_ALLOW;
-			break;
-		default:
-			result = KAUTH_RESULT_DEFER;
-			break;
-		}
 
+	case KAUTH_MACHDEP_UNMANAGEDMEM:
+		if (securelevel <= 0)
+			result = KAUTH_RESULT_ALLOW;
 		break;
 
 	default:
@@ -398,17 +378,17 @@ secmodel_bsd44_securelevel_device_cb(kauth_cred_t cred,
     void *arg1, void *arg2, void *arg3)
 {
 	int result;
-	enum kauth_device_req req;
 
 	result = KAUTH_RESULT_DENY;
-	req = (enum kauth_device_req)arg0;
 
 	switch (action) {
 	case KAUTH_DEVICE_RAWIO_SPEC: {
 		struct vnode *vp, *bvp;
+		enum kauth_device_req req;
 		dev_t dev;
 		int d_type;
 
+		req = (enum kauth_device_req)arg0;
 		vp = arg1;
 
 		KASSERT(vp != NULL);
@@ -505,11 +485,24 @@ secmodel_bsd44_securelevel_device_cb(kauth_cred_t cred,
 		break;
 		}
 
-	case KAUTH_DEVICE_RAWIO_PASSTHRU:
-		if (securelevel < 1)
+	case KAUTH_DEVICE_RAWIO_PASSTHRU: {
+		if (securelevel > 0) {
+			u_long bits;
+
+			bits = (u_long)arg0;
+
+			KASSERT(bits != 0);
+			KASSERT((bits & ~KAUTH_REQ_DEVICE_RAWIO_PASSTHRU_ALL) == 0);
+
+			if (bits & ~KAUTH_REQ_DEVICE_RAWIO_PASSTHRU_READCONF)
+				result = KAUTH_RESULT_DENY;
+			else
+				result = KAUTH_RESULT_ALLOW;
+		} else
 			result = KAUTH_RESULT_ALLOW;
 
 		break;
+		}
 
 	default:
 		result = KAUTH_RESULT_DEFER;

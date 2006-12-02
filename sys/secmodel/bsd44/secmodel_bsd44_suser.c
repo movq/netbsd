@@ -1,4 +1,4 @@
-/* $NetBSD: secmodel_bsd44_suser.c,v 1.17 2006/11/28 17:27:10 elad Exp $ */
+/* $NetBSD: secmodel_bsd44_suser.c,v 1.17.2.4 2007/02/09 22:26:07 tron Exp $ */
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
  * All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: secmodel_bsd44_suser.c,v 1.17 2006/11/28 17:27:10 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: secmodel_bsd44_suser.c,v 1.17.2.4 2007/02/09 22:26:07 tron Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -54,6 +54,8 @@ __KERNEL_RCSID(0, "$NetBSD: secmodel_bsd44_suser.c,v 1.17 2006/11/28 17:27:10 el
 #include <sys/sysctl.h>
 #include <sys/tty.h>
 #include <net/route.h>
+
+#include <miscfs/procfs/procfs.h>
 
 #include <secmodel/bsd44/suser.h>
 
@@ -233,7 +235,39 @@ secmodel_bsd44_suser_process_cb(kauth_cred_t cred, kauth_action_t action,
 		result = KAUTH_RESULT_DENY;
 		break;
 
-	case KAUTH_PROCESS_CANPROCFS:
+	case KAUTH_PROCESS_CANPROCFS: {
+		enum kauth_process_req req = (enum kauth_process_req)arg2;
+		struct pfsnode *pfs = arg1;
+
+		if (isroot) {
+			result = KAUTH_RESULT_ALLOW;
+			break;
+		}
+
+		if (req == KAUTH_REQ_PROCESS_CANPROCFS_CTL) {
+			result = KAUTH_RESULT_DENY;
+			break;
+		}
+
+		switch (pfs->pfs_type) {
+		case PFSregs:
+		case PFSfpregs:
+		case PFSmem:
+			if (kauth_cred_getuid(cred) !=
+			    kauth_cred_getuid(p->p_cred) ||
+			    ISSET(p->p_flag, P_SUGID)) {
+				result = KAUTH_RESULT_DENY;
+				break;
+			}
+			/*FALLTHROUGH*/
+		default:
+			result = KAUTH_RESULT_ALLOW;
+			break;
+		}
+
+		break;
+		}
+
 	case KAUTH_PROCESS_CANPTRACE:
 	case KAUTH_PROCESS_CANSYSTRACE:
 		if (isroot) {
@@ -250,34 +284,26 @@ secmodel_bsd44_suser_process_cb(kauth_cred_t cred, kauth_action_t action,
 		result = KAUTH_RESULT_ALLOW;
 		break;
 
-	case KAUTH_PROCESS_RESOURCE:
-		switch ((u_long)arg1) {
-		case KAUTH_REQ_PROCESS_RESOURCE_NICE:
-			if (isroot)
+	case KAUTH_PROCESS_NICE:
+		if (isroot)
+			result = KAUTH_RESULT_ALLOW;
+		else if ((u_long)arg1 >= p->p_nice)
+			result = KAUTH_RESULT_ALLOW; 
+		break;
+
+	case KAUTH_PROCESS_RLIMIT:
+		if (isroot)
+			result = KAUTH_RESULT_ALLOW;
+		else {
+			struct rlimit *new_rlimit;
+			u_long which;
+
+			new_rlimit = arg1;
+			which = (u_long)arg2;
+
+			if (new_rlimit->rlim_max <=
+			    p->p_rlimit[which].rlim_max)
 				result = KAUTH_RESULT_ALLOW;
-			else if ((u_long)arg2 >= p->p_nice)
-				result = KAUTH_RESULT_ALLOW; 
-			break;
-
-		case KAUTH_REQ_PROCESS_RESOURCE_RLIMIT:
-			if (isroot)
-				result = KAUTH_RESULT_ALLOW;
-			else {
-				struct rlimit *new_rlimit;
-				u_long which;
-
-				new_rlimit = arg2;
-				which = (u_long)arg3;
-
-				if (new_rlimit->rlim_max <=
-				    p->p_rlimit[which].rlim_max)
-					result = KAUTH_RESULT_ALLOW;
-			}
-			break;
-
-		default:
-			result = KAUTH_RESULT_DEFER;
-			break;
 		}
 		break;
 
@@ -387,7 +413,7 @@ secmodel_bsd44_suser_network_cb(kauth_cred_t cred, kauth_action_t action,
 	case KAUTH_NETWORK_SOCKET:
 		switch (req) {
 		case KAUTH_REQ_NETWORK_SOCKET_OPEN:
-			if ((u_long)arg1 == PF_ROUTE)
+			if ((u_long)arg1 == PF_ROUTE || (u_long)arg1 == PF_BLUETOOTH)
 				result = KAUTH_RESULT_ALLOW;
 			else if ((u_long)arg2 == SOCK_RAW) {
 				if (isroot)
@@ -443,39 +469,28 @@ secmodel_bsd44_suser_machdep_cb(kauth_cred_t cred, kauth_action_t action,
 {
         boolean_t isroot;
         int result;
-	enum kauth_machdep_req req;
 
         isroot = (kauth_cred_geteuid(cred) == 0);
         result = KAUTH_RESULT_DENY;
-	req = (enum kauth_machdep_req)arg0;
 
         switch (action) {
-	case KAUTH_MACHDEP_X86:
-		switch (req) {
-		case KAUTH_REQ_MACHDEP_X86_IOPL:
-		case KAUTH_REQ_MACHDEP_X86_IOPERM:
-		case KAUTH_REQ_MACHDEP_X86_MTRR_SET:
-			if (isroot)
-				result = KAUTH_RESULT_ALLOW;
-			break;
-
-		default:
-			result = KAUTH_RESULT_DEFER;
-			break;
-		}
+	case KAUTH_MACHDEP_IOPERM_GET:
+	case KAUTH_MACHDEP_LDT_GET:
+	case KAUTH_MACHDEP_LDT_SET:
+	case KAUTH_MACHDEP_MTRR_GET:
+		result = KAUTH_RESULT_ALLOW;
 		break;
 
-	case KAUTH_MACHDEP_X86_64:
-		switch (req) {
-		case KAUTH_REQ_MACHDEP_X86_64_MTRR_GET:
-			if (isroot)
-				result = KAUTH_RESULT_ALLOW;
-			break;
+	case KAUTH_MACHDEP_IOPERM_SET:
+	case KAUTH_MACHDEP_IOPL:
+	case KAUTH_MACHDEP_MTRR_SET:
+		if (isroot)
+			result = KAUTH_RESULT_ALLOW;
+		break;
 
-		default:
-			result = KAUTH_RESULT_DEFER;
-			break;
-		}
+	case KAUTH_MACHDEP_UNMANAGEDMEM:
+		if (isroot)
+			result = KAUTH_RESULT_ALLOW;
 		break;
 
 	default:

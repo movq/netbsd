@@ -1,4 +1,4 @@
-/* $NetBSD: kauth.h,v 1.24 2006/11/28 17:27:10 elad Exp $ */
+/* $NetBSD: kauth.h,v 1.24.2.4 2007/01/21 19:12:10 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2005, 2006 Elad Efrat <elad@NetBSD.org>  
@@ -123,7 +123,8 @@ enum {
 	KAUTH_PROCESS_CANSIGNAL,
 	KAUTH_PROCESS_CANSYSTRACE,
 	KAUTH_PROCESS_CORENAME,
-	KAUTH_PROCESS_RESOURCE,
+	KAUTH_PROCESS_NICE,
+	KAUTH_PROCESS_RLIMIT,
 	KAUTH_PROCESS_SETID
 };
 
@@ -131,11 +132,10 @@ enum {
  * Process scope - sub-actions.
  */
 enum kauth_process_req {
-	KAUTH_REQ_PROCESS_CANPROCFS_READ=1,
+	KAUTH_REQ_PROCESS_CANPROCFS_CTL=1,
+	KAUTH_REQ_PROCESS_CANPROCFS_READ,
 	KAUTH_REQ_PROCESS_CANPROCFS_RW,
-	KAUTH_REQ_PROCESS_CANPROCFS_WRITE,
-	KAUTH_REQ_PROCESS_RESOURCE_NICE,
-	KAUTH_REQ_PROCESS_RESOURCE_RLIMIT
+	KAUTH_REQ_PROCESS_CANPROCFS_WRITE
 };
 
 /*
@@ -184,21 +184,14 @@ enum kauth_network_req {
  * Machdep scope - actions.
  */
 enum {
-	KAUTH_MACHDEP_ALPHA=1,
-	KAUTH_MACHDEP_X86,
-	KAUTH_MACHDEP_X86_64
-};
-
-/*
- * Machdep scope - sub-actions.
- */
-enum kauth_machdep_req {
-	KAUTH_REQ_MACHDEP_ALPHA_UNMANAGEDMEM=1,
-	KAUTH_REQ_MACHDEP_X86_64_MTRR_GET, /* ridiculous. */
-	KAUTH_REQ_MACHDEP_X86_IOPERM,
-	KAUTH_REQ_MACHDEP_X86_IOPL,
-	KAUTH_REQ_MACHDEP_X86_MTRR_SET,
-	KAUTH_REQ_MACHDEP_X86_UNMANAGEDMEM
+	KAUTH_MACHDEP_IOPERM_GET=1,
+	KAUTH_MACHDEP_IOPERM_SET,
+	KAUTH_MACHDEP_IOPL,
+	KAUTH_MACHDEP_LDT_GET,
+	KAUTH_MACHDEP_LDT_SET,
+	KAUTH_MACHDEP_MTRR_GET,
+	KAUTH_MACHDEP_MTRR_SET,
+	KAUTH_MACHDEP_UNMANAGEDMEM
 };
 
 /*
@@ -219,6 +212,15 @@ enum kauth_device_req {
 	KAUTH_REQ_DEVICE_RAWIO_SPEC_WRITE,
 	KAUTH_REQ_DEVICE_RAWIO_SPEC_RW,
 };
+
+/*
+ * Device scope, passthru request - identifiers.
+ */
+#define	KAUTH_REQ_DEVICE_RAWIO_PASSTHRU_READ		0x00000001
+#define	KAUTH_REQ_DEVICE_RAWIO_PASSTHRU_WRITE		0x00000002
+#define	KAUTH_REQ_DEVICE_RAWIO_PASSTHRU_READCONF	0x00000004
+#define	KAUTH_REQ_DEVICE_RAWIO_PASSTHRU_WRITECONF	0x00000008
+#define	KAUTH_REQ_DEVICE_RAWIO_PASSTHRU_ALL		0x0000000F
 
 #define NOCRED ((kauth_cred_t)-1)	/* no credential available */
 #define FSCRED ((kauth_cred_t)-2)	/* filesystem credential */
@@ -246,13 +248,13 @@ int kauth_authorize_process(kauth_cred_t, kauth_action_t, struct proc *,
 int kauth_authorize_network(kauth_cred_t, kauth_action_t,
     enum kauth_network_req, void *, void *, void *);
 int kauth_authorize_machdep(kauth_cred_t, kauth_action_t,
-    enum kauth_machdep_req, void *, void *, void *);
+    void *, void *, void *, void *);
 int kauth_authorize_device(kauth_cred_t, kauth_action_t,
     void *, void *, void *, void *);
 int kauth_authorize_device_tty(kauth_cred_t, kauth_action_t, struct tty *);
 int kauth_authorize_device_spec(kauth_cred_t, enum kauth_device_req,
     struct vnode *);
-int kauth_authorize_device_passthru(kauth_cred_t, dev_t, void *);
+int kauth_authorize_device_passthru(kauth_cred_t, dev_t, u_long, void *);
 
 /* Kauth credentials management routines. */
 kauth_cred_t kauth_cred_alloc(void);

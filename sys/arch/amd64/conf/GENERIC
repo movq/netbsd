@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.120 2006/11/30 21:01:16 bouyer Exp $
+# $NetBSD: GENERIC,v 1.120.2.8 2007/05/13 06:52:51 pavel Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include	"arch/amd64/conf/std.amd64"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.120 $"
+#ident 		"GENERIC-$Revision: 1.120.2.8 $"
 
 maxusers	32		# estimated number of users
 
@@ -100,7 +100,7 @@ options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
-options 	COMPAT_386BSD_MBRPART # recognize old partition ID
+#options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 
 options 	COMPAT_NETBSD32
 #options 	COMPAT_LINUX
@@ -230,8 +230,9 @@ config		netbsd	root on ? type ?
 
 mainbus0 at root
 
-#acpi0 		at mainbus0
-#options 	ACPI_SCANPCI		# find PCI roots using ACPI
+# ACPI will be used if present. If not it will fall back to MPBIOS
+acpi0 		at mainbus0
+options 	ACPI_SCANPCI		# find PCI roots using ACPI
 options 	MPBIOS			# configure CPUs and APICs using MPBIOS 
 options 	MPBIOS_SCANPCI		# MPBIOS configures PCI roots
 #options 	PCI_INTR_FIXUP		# PCI interrupt routing via ACPI
@@ -255,6 +256,7 @@ options 	MPBIOS_SCANPCI		# MPBIOS configures PCI roots
 #pckbc*  	at acpi?		# PC keyboard controller
 #attimer*	at acpi?		# AT Timer
 #pcppi*  	at acpi?                # AT-style speaker sound
+#ug*		at acpi?		# Abit uGuru Hardware Monitor
 #wss* 		at acpi?		# NeoMagic 256AV in wss mode
 
 cpu* 		at mainbus?
@@ -372,6 +374,9 @@ amdpm*	at pci? dev ? function ?	# RNG and SMBus 1.0 interface
 # iTE IT87xxF and compatible hardware monitors
 #it0 	at isa? port 0x290 		# other ports: 0xc00, 0xd00.
 
+# Abit uGuru Hardware system monitor
+#ug0	at isa? port 0xe0
+
 # I2O devices
 iop*	at pci? dev ? function ?	# I/O processor
 iopsp*	at iop? tid ?			# SCSI/FC-AL ports
@@ -391,6 +396,7 @@ bha*	at pci? dev ? function ?	# BusLogic 9xx SCSI
 dpt*	at pci? dev ? function ?	# DPT SmartCache/SmartRAID
 iha*	at pci? dev ? function ?	# Initio INIC-940/950 SCSI
 isp*	at pci? dev ? function ?	# Qlogic ISP [12]0x0 SCSI/FibreChannel
+mfi*	at pci? dev ? function ?	# LSI MegaRAID SAS
 mly*	at pci? dev ? function ?	# Mylex AcceleRAID and eXtremeRAID
 mpt*	at pci? dev ? function ?	# LSILogic 9x9 and 53c1030
 pcscp*	at pci? dev ? function ?	# AMD 53c974 PCscsi-PCI SCSI
@@ -522,6 +528,7 @@ an*	at pci? dev ? function ?	# Aironet PC4500/PC4800 (802.11)
 ath*	at pci? dev ? function ?	# Atheros 5210/5211/5212 802.11
 bce* 	at pci? dev ? function ?	# Broadcom 440x 10/100 Ethernet
 bge* 	at pci? dev ? function ?	# Broadcom 570x gigabit Ethernet
+bnx* 	at pci? dev ? function ?	# Broadcom NetXtremeII gigabit Ethernet
 dge*	at pci? dev ? function ?	# Intel 82597 10GbE LR
 en*	at pci? dev ? function ?	# ENI/Adaptec ATM
 ep*	at pci? dev ? function ?	# 3Com 3c59x
@@ -571,7 +578,9 @@ xge*	at pci? dev ? function ?	# Neterion (S2io) Xframe-I 10GbE
 # tr at pcmcia has problems with Cardbus bridges
 #tr*	at pcmcia? function ?		# TROPIC based Token-Ring
 #wi*	at pcmcia? function ?		# Lucent/Intersil WaveLan IEEE (802.11)
-#xi*	at pcmcia? function ?		# Xircom CreditCard Ethernet
+#xirc*	at pcmcia? function ?		# Xircom CreditCard Ethernet
+#com*	at xirc?
+#xi*	at xirc?
 
 #mhzc*	at pcmcia? function ?		# Megahertz Ethernet/Modem combo cards
 #com*	at mhzc?
@@ -865,6 +874,7 @@ pseudo-device 	crypto			# /dev/crypto device
 pseudo-device	swcrypto		# software crypto implementation
 
 # disk/mass storage pseudo-devices
+pseudo-device	bio			# RAID control device driver
 pseudo-device	ccd		4	# concatenated/striped disk devices
 #pseudo-device	cgd		4	# cryptographic disk devices
 pseudo-device	raid		8	# RAIDframe disk driver

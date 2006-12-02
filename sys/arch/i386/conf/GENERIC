@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.799 2006/11/30 21:01:16 bouyer Exp $
+# $NetBSD: GENERIC,v 1.799.2.7 2007/05/13 06:52:51 pavel Exp $
 #
 # GENERIC machine description file
 #
@@ -22,7 +22,7 @@ include 	"arch/i386/conf/std.i386"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.799 $"
+#ident 		"GENERIC-$Revision: 1.799.2.7 $"
 
 maxusers	32		# estimated number of users
 
@@ -140,7 +140,7 @@ options 	COMPAT_16	# NetBSD 1.6
 options 	COMPAT_20	# NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0
 options 	COMPAT_43	# 4.3BSD, 386BSD, and BSDI
-options 	COMPAT_386BSD_MBRPART # recognize old partition ID
+#options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
 options 	COMPAT_OSSAUDIO	# OSS (Voxware) audio driver compatibility
@@ -227,7 +227,7 @@ options 	IPFILTER_LOOKUP	# ippool(8) support
 
 # These options enable verbose messages for several subsystems.
 # Warning, these may compile large string tables into the kernel!
-#options 	ACPIVERBOSE	# verbose ACPI device autoconfig messages
+options 	ACPIVERBOSE	# verbose ACPI device autoconfig messages
 options 	EISAVERBOSE	# verbose EISA device autoconfig messages
 options 	MIIVERBOSE	# verbose PHY autoconfig messages
 options 	PCIVERBOSE	# verbose PCI device autoconfig messages
@@ -301,7 +301,7 @@ config		netbsd	root on ? type ?
 mainbus0 at root
 
 cpu* at mainbus?
-#ioapic* at mainbus?
+ioapic* at mainbus?
 
 # Doesn't do anything yet.
 #p64h2apic* at pci? dev? function?	# P64H2 IOxAPIC
@@ -328,43 +328,44 @@ cpu* at mainbus?
 # To use the I/O APIC(s), enable the ioapic line above.
 #options 	MPBIOS		# configure CPUs and APICs using MPBIOS
 #options 	MPBIOS_SCANPCI	# find PCI roots using MPBIOS
-#options 	ACPI_SCANPCI	# find PCI roots using ACPI
+options 	ACPI_SCANPCI	# find PCI roots using ACPI
 
-#acpi0 		at mainbus0
+acpi0 		at mainbus0
 
 #options 	ACPI_ACTIVATE_DEV	# If set, activate inactive devices
 #options 	ACPICA_PEDANTIC		# force strict conformance to the Spec.
 
 # ACPI devices
-#acpiacad* 	at acpi?		# ACPI AC Adapter
-#acpibat* 	at acpi?		# ACPI Battery
-#acpibut* 	at acpi?		# ACPI Button
-#acpiec* 	at acpi?		# ACPI Embedded Controller
-#acpilid* 	at acpi?		# ACPI Lid Switch
-#acpitz* 	at acpi?		# ACPI Thermal Zone
+acpiacad* 	at acpi?		# ACPI AC Adapter
+acpibat* 	at acpi?		# ACPI Battery
+acpibut* 	at acpi?		# ACPI Button
+acpiec* 	at acpi?		# ACPI Embedded Controller
+acpilid* 	at acpi?		# ACPI Lid Switch
+acpitz* 	at acpi?		# ACPI Thermal Zone
 
 # Mainboard devices
-#attimer*	at acpi?		# AT Timer
-#com* 		at acpi?		# Serial communications interface
+attimer*	at acpi?		# AT Timer
+com* 		at acpi?		# Serial communications interface
 #fdc* 		at acpi?		# Floppy disk controller
-#joy*		at acpi?		# Joystick/Game port
-#lpt* 		at acpi?		# Parallel port
-#mpu*		at acpi?		# Roland MPU-401 MIDI UART
-#npx*		at acpi?		# Math coprocessor
-#pckbc*  	at acpi?		# PC keyboard controller
-#pcppi*		at acpi?                # AT-style speaker sound
-#wss* 		at acpi?		# NeoMagic 256AV in wss mode
-#ym* 		at acpi?		# Yamaha OPL3-SA[23] audio
+joy*		at acpi?		# Joystick/Game port
+lpt* 		at acpi?		# Parallel port
+mpu*		at acpi?		# Roland MPU-401 MIDI UART
+npx*		at acpi?		# Math coprocessor
+pckbc*  	at acpi?		# PC keyboard controller
+pcppi*		at acpi?                # AT-style speaker sound
+#ug*		at acpi?		# Abit uGuru Hardware Monitor
+wss* 		at acpi?		# NeoMagic 256AV in wss mode
+ym* 		at acpi?		# Yamaha OPL3-SA[23] audio
 
 # Sony Vaio jog dial
-#spic* 		at acpi?		# Sony Programmable I/O Controller
-#wsmouse* 	at spic?
+spic* 		at acpi?		# Sony Programmable I/O Controller
+wsmouse* 	at spic?
 
 # Sony LCD brightness etc.
-#sony* 		at acpi?		# Sony Miscellaneous Controller
+sony* 		at acpi?		# Sony Miscellaneous Controller
 
 # Toshiba Libretto devices
-#vald* at acpi?
+vald* at acpi?
 
 # Plug-and-Play BIOS and attached devices
 
@@ -641,6 +642,7 @@ bha*	at pci? dev ? function ?	# BusLogic 9xx SCSI
 dpt*	at pci? dev ? function ?	# DPT SmartCache/SmartRAID
 iha*	at pci? dev ? function ?	# Initio INIC-940/950 SCSI
 isp*	at pci? dev ? function ?	# Qlogic ISP [12]0x0 SCSI/FibreChannel
+mfi*	at pci? dev ? function ?	# LSI MegaRAID SAS
 mly*	at pci? dev ? function ?	# Mylex AcceleRAID and eXtremeRAID
 mpt*	at pci? dev ? function ?	# LSI Fusion SCSI/FC
 njs*	at pci? dev ? function ?	# Workbit NinjaSCSI-32
@@ -833,6 +835,7 @@ ath*	at pci? dev ? function ?	# Atheros 5210/5211/5212 802.11
 atw*	at pci? dev ? function ?	# ADMtek ADM8211 (802.11)
 bce* 	at pci? dev ? function ?	# Broadcom 4401 10/100 Ethernet
 bge* 	at pci? dev ? function ?	# Broadcom 570x gigabit Ethernet
+bnx* 	at pci? dev ? function ?	# Broadcom NetXtremeII gigabit Ethernet
 dge*	at pci? dev ? function ?	# Intel 82597 10GbE LR
 en*	at pci? dev ? function ?	# ENI/Adaptec ATM
 ep*	at pci? dev ? function ?	# 3Com 3c59x
@@ -1337,6 +1340,7 @@ pseudo-device 	crypto		# /dev/crypto device
 pseudo-device	swcrypto	# software crypto implementation
 
 # disk/mass storage pseudo-devices
+pseudo-device	bio			# RAID control device driver
 pseudo-device	ccd		4	# concatenated/striped disk devices
 #pseudo-device	cgd		4	# cryptographic disk devices
 pseudo-device	raid		8	# RAIDframe disk driver

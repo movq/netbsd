@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.955 2006/11/30 21:01:15 bouyer Exp $
+# $NetBSD: mi,v 1.955.2.8 2007/05/08 10:45:01 pavel Exp $
 ./etc/mtree/set.man				man-sys-root
 ./usr/share/info/am-utils.info			man-amd-info		info
 ./usr/share/info/as.info			man-computil-info	bfd,info
@@ -327,7 +327,7 @@
 ./usr/share/man/cat1/pathchk.0			man-util-catman		.cat
 ./usr/share/man/cat1/pawd.0			man-amd-catman		.cat
 ./usr/share/man/cat1/pax.0			man-util-catman		.cat
-./usr/share/man/cat1/paxctl.0			man-util-catman		.cat
+./usr/share/man/cat1/paxctl.0			man-obsolete		obsolete
 ./usr/share/man/cat1/pgrep.0			man-util-catman		.cat
 ./usr/share/man/cat1/pim6stat.0			man-obsolete		obsolete
 ./usr/share/man/cat1/pkg_add.0			man-pkgutil-catman	.cat
@@ -718,9 +718,11 @@
 ./usr/share/man/cat4/bge.0			man-sys-catman		.cat
 ./usr/share/man/cat4/bha.0			man-sys-catman		.cat
 ./usr/share/man/cat4/bicc.0			man-sys-catman		.cat
+./usr/share/man/cat4/bio.0			man-sys-catman		.cat
 ./usr/share/man/cat4/bktr.0			man-sys-catman		.cat
 ./usr/share/man/cat4/bluetooth.0		man-sys-catman		.cat
 ./usr/share/man/cat4/bmtphy.0			man-sys-catman		.cat
+./usr/share/man/cat4/bnx.0			man-sys-catman		.cat
 ./usr/share/man/cat4/boca.0			man-sys-catman		.cat
 ./usr/share/man/cat4/bpf.0			man-sys-catman		.cat
 ./usr/share/man/cat4/brgphy.0			man-sys-catman		.cat
@@ -1070,6 +1072,7 @@
 ./usr/share/man/cat4/mcd.0			man-sys-catman		.cat
 ./usr/share/man/cat4/md.0			man-sys-catman		.cat
 ./usr/share/man/cat4/mfb.0			man-sys-catman		.cat
+./usr/share/man/cat4/mfi.0			man-sys-catman		.cat
 ./usr/share/man/cat4/mhzc.0			man-sys-catman		.cat
 ./usr/share/man/cat4/midi.0			man-sys-catman		.cat
 ./usr/share/man/cat4/mii.0			man-sys-catman		.cat
@@ -1191,6 +1194,8 @@
 ./usr/share/man/cat4/ppi.0			man-obsolete		obsolete
 ./usr/share/man/cat4/ppp.0			man-sys-catman		.cat
 ./usr/share/man/cat4/pppoe.0			man-sys-catman		.cat
+./usr/share/man/cat4/prep/intro.0		man-sys-catman		.cat
+./usr/share/man/cat4/prep/nvram.0		man-sys-catman		.cat
 ./usr/share/man/cat4/pss.0			man-obsolete		obsolete
 ./usr/share/man/cat4/ptm.0			man-sys-catman		.cat
 ./usr/share/man/cat4/pty.0			man-sys-catman		.cat
@@ -1390,6 +1395,7 @@
 ./usr/share/man/cat4/udsbr.0			man-sys-catman		.cat
 ./usr/share/man/cat4/uep.0			man-sys-catman		.cat
 ./usr/share/man/cat4/uftdi.0			man-sys-catman		.cat
+./usr/share/man/cat4/ug.0			man-sys-catman		.cat
 ./usr/share/man/cat4/ugen.0			man-sys-catman		.cat
 ./usr/share/man/cat4/ugensa.0			man-sys-catman		.cat
 ./usr/share/man/cat4/uha.0			man-sys-catman		.cat
@@ -1775,6 +1781,7 @@
 ./usr/share/man/cat8/badsect.0			man-sysutil-catman	.cat
 ./usr/share/man/cat8/bebox/MAKEDEV.0		man-obsolete		obsolete
 ./usr/share/man/cat8/bebox/makedev.0		man-obsolete		obsolete
+./usr/share/man/cat8/bioctl.0			man-sysutil-catman	.cat
 ./usr/share/man/cat8/boot.0			man-sysutil-catman	.cat
 ./usr/share/man/cat8/bootparamd.0		man-bootserver-catman	.cat
 ./usr/share/man/cat8/bootpd.0			man-bootserver-catman	.cat
@@ -2152,6 +2159,7 @@
 ./usr/share/man/cat8/pam_skey.0			man-sysutil-catman	skey,pam,.cat
 ./usr/share/man/cat8/pam_ssh.0			man-sysutil-catman	crypto,pam,.cat
 ./usr/share/man/cat8/pam_unix.0			man-sysutil-catman	pam,.cat
+./usr/share/man/cat8/paxctl.0			man-sysutil-catman	.cat
 ./usr/share/man/cat8/pc532/MAKEDEV.0		man-obsolete		obsolete
 ./usr/share/man/cat8/pc532/bim.0		man-sysutil-catman	.cat
 ./usr/share/man/cat8/pc532/makedev.0		man-obsolete		obsolete
@@ -2340,6 +2348,7 @@
 ./usr/share/man/cat8/sync.0			man-sysutil-catman	.cat
 ./usr/share/man/cat8/sysconfd.0			man-obsolete		obsolete
 ./usr/share/man/cat8/sysctl.0			man-sysutil-catman	.cat
+./usr/share/man/cat8/sysinst.0			man-sysutil-man		.cat
 ./usr/share/man/cat8/syslogd.0			man-sysutil-catman	.cat
 ./usr/share/man/cat8/talkd.0			man-netutil-catman	.cat
 ./usr/share/man/cat8/tbrconfig.0		man-router-catman	.cat
@@ -2725,7 +2734,7 @@
 ./usr/share/man/man1/pathchk.1			man-util-man		.man
 ./usr/share/man/man1/pawd.1			man-amd-man		.man
 ./usr/share/man/man1/pax.1			man-util-man		.man
-./usr/share/man/man1/paxctl.1			man-util-man		.man
+./usr/share/man/man1/paxctl.1			man-obsolete		obsolete
 ./usr/share/man/man1/pgrep.1			man-util-man		.man
 ./usr/share/man/man1/pim6stat.1			man-obsolete		obsolete
 ./usr/share/man/man1/pkg_add.1			man-pkgutil-man		.man
@@ -3116,9 +3125,11 @@
 ./usr/share/man/man4/bge.4			man-sys-man		.man
 ./usr/share/man/man4/bha.4			man-sys-man		.man
 ./usr/share/man/man4/bicc.4			man-sys-man		.man
+./usr/share/man/man4/bio.4			man-sys-man		.man
 ./usr/share/man/man4/bktr.4			man-sys-man		.man
 ./usr/share/man/man4/bluetooth.4		man-sys-man		.man
 ./usr/share/man/man4/bmtphy.4			man-sys-man		.man
+./usr/share/man/man4/bnx.4			man-sys-man		.man
 ./usr/share/man/man4/boca.4			man-sys-man		.man
 ./usr/share/man/man4/bpf.4			man-sys-man		.man
 ./usr/share/man/man4/brgphy.4			man-sys-man		.man
@@ -3468,6 +3479,7 @@
 ./usr/share/man/man4/mcd.4			man-sys-man		.man
 ./usr/share/man/man4/md.4			man-sys-man		.man
 ./usr/share/man/man4/mfb.4			man-sys-man		.man
+./usr/share/man/man4/mfi.4			man-sys-man		.man
 ./usr/share/man/man4/mhzc.4			man-sys-man		.man
 ./usr/share/man/man4/midi.4			man-sys-man		.man
 ./usr/share/man/man4/mii.4			man-sys-man		.man
@@ -3589,6 +3601,8 @@
 ./usr/share/man/man4/ppi.4			man-obsolete		obsolete
 ./usr/share/man/man4/ppp.4			man-sys-man		.man
 ./usr/share/man/man4/pppoe.4			man-sys-man		.man
+./usr/share/man/man4/prep/intro.4		man-sys-man		.man
+./usr/share/man/man4/prep/nvram.4		man-sys-man		.man
 ./usr/share/man/man4/pss.4			man-obsolete		obsolete
 ./usr/share/man/man4/ptm.4			man-sys-man		.man
 ./usr/share/man/man4/pty.4			man-sys-man		.man
@@ -3788,6 +3802,7 @@
 ./usr/share/man/man4/udsbr.4			man-sys-man		.man
 ./usr/share/man/man4/uep.4			man-sys-man		.man
 ./usr/share/man/man4/uftdi.4			man-sys-man		.man
+./usr/share/man/man4/ug.4			man-sys-man		.man
 ./usr/share/man/man4/ugen.4			man-sys-man		.man
 ./usr/share/man/man4/ugensa.4			man-sys-man		.man
 ./usr/share/man/man4/uha.4			man-sys-man		.man
@@ -4172,6 +4187,7 @@
 ./usr/share/man/man8/badsect.8			man-sysutil-man		.man
 ./usr/share/man/man8/bebox/MAKEDEV.8		man-obsolete		obsolete
 ./usr/share/man/man8/bebox/makedev.8		man-obsolete		obsolete
+./usr/share/man/man8/bioctl.8			man-sysutil-man		.man
 ./usr/share/man/man8/boot.8			man-sysutil-man		.man
 ./usr/share/man/man8/bootparamd.8		man-bootserver-man	.man
 ./usr/share/man/man8/bootpd.8			man-bootserver-man	.man
@@ -4550,6 +4566,7 @@
 ./usr/share/man/man8/pam_skey.8			man-sysutil-man		skey,.man,pam
 ./usr/share/man/man8/pam_ssh.8			man-sysutil-man		crypto,.man,pam
 ./usr/share/man/man8/pam_unix.8			man-sysutil-man		.man,pam
+./usr/share/man/man8/paxctl.8			man-sysutil-man		.man
 ./usr/share/man/man8/pc532/MAKEDEV.8		man-obsolete		obsolete
 ./usr/share/man/man8/pc532/bim.8		man-sysutil-man		.man
 ./usr/share/man/man8/pc532/makedev.8		man-obsolete		obsolete
@@ -4738,6 +4755,7 @@
 ./usr/share/man/man8/sync.8			man-sysutil-man		.man
 ./usr/share/man/man8/sysconfd.8			man-obsolete		obsolete
 ./usr/share/man/man8/sysctl.8			man-sysutil-man		.man
+./usr/share/man/man8/sysinst.8			man-sysutil-man		.man
 ./usr/share/man/man8/syslogd.8			man-sysutil-man		.man
 ./usr/share/man/man8/talkd.8			man-netutil-man		.man
 ./usr/share/man/man8/tbrconfig.8		man-router-man		.man

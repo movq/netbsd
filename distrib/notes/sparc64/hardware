@@ -1,4 +1,4 @@
-.\"	$NetBSD: hardware,v 1.17 2004/06/12 07:35:15 mbw Exp $
+.\"	$NetBSD: hardware,v 1.17.10.2 2007/05/12 17:39:36 snj Exp $
 .
 .Ss2 Supported machines
 The minimal configuration requires 32 MB of RAM and ~60 MB of disk space.
@@ -27,6 +27,7 @@ i386 class CPU.  These systems might be supported by the i386 port of
 See the following site for more info on what system boards are in which 
 models.
 .Lk http://sunsolve.sun.com/handbook_pub/Devices/System_Board/SYSBD_TOC.html
+(requires a SunSolve login with a valid Sun Service Plan)
 .(bullet -offset indent
 Sbus-based UltraSPARC I or II systems 
 .(bullet -compact
@@ -233,13 +234,4 @@ present)
 Floppy drives
 .It
 smart card reader
-.It
-X Server on ffb framebuffers, including on-board ATI mach64 and Creator series
-.(bullet -compact
-Creator3D framebuffers
-.Pq Em ffb
-.It
-General PCI VGA support (currently experimental
-.Em machfb )
-.bullet)
 .bullet)

@@ -1,4 +1,4 @@
-/*	$NetBSD: ofb_cons.c,v 1.1 2006/11/08 01:25:10 macallan Exp $	*/
+/*	$NetBSD: ofb_cons.c,v 1.1.4.3 2007/03/04 12:31:01 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofb_cons.c,v 1.1 2006/11/08 01:25:10 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofb_cons.c,v 1.1.4.3 2007/03/04 12:31:01 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -53,12 +53,16 @@ __KERNEL_RCSID(0, "$NetBSD: ofb_cons.c,v 1.1 2006/11/08 01:25:10 macallan Exp $"
 #include <dev/wscons/wsdisplay_vconsvar.h>
 
 #include <macppc/dev/ofbvar.h>
+#include "wsdisplay.h"
+
+/* we need a wsdisplay to do anything halfway useful */
+#if NWSDISPLAY > 0
 
 #if defined(PPC_OEA64) || defined (PPC_OEA64_BRIDGE)
 int ofb_enable_cache = 0;
 #else
 #ifdef OFB_ENABLE_CACHE
-int ofb_enable_cache = 0;
+int ofb_enable_cache = 1;
 #else
 int ofb_enable_cache = 0;
 #endif
@@ -66,7 +70,6 @@ int ofb_enable_cache = 0;
 
 static int copy_rom_font(void);
 static struct wsdisplay_font openfirm6x11;
-int    console_node, console_instance;
 static vaddr_t fbaddr;
 static int romfont_loaded = 0;
 
@@ -86,14 +89,7 @@ ofb_cnattach()
 	struct rasops_info *ri = &ofb_console_screen.scr_ri;
 	long defattr;
 	int crow = 0;
-	int chosen, stdout, node;
 	char type[16];
-
-	chosen = OF_finddevice("/chosen");
-	OF_getprop(chosen, "stdout", &stdout, sizeof(stdout));
-	node = OF_instance_to_package(stdout);
-	console_node = node;
-	console_instance = stdout;
 
 	OF_getprop(console_node, "device_type", type, sizeof(type));
 	if (strcmp(type, "display") != 0)
@@ -133,19 +129,11 @@ ofb_cnattach()
 	ofb_stdscreen.capabilities = ri->ri_caps;
 
 	ri->ri_ops.allocattr(ri, 0, 0, 0, &defattr);
-	wsdisplay_preattach(&ofb_stdscreen, ri, 0, crow, defattr);
+	wsdisplay_preattach(&ofb_stdscreen, ri, 0, max(0,
+	    min(crow, ri->ri_rows - 1)), defattr);
 	
-	//ofb_init_cmap(NULL);
-	
-#ifdef SPLASHSCREEN
-	si.si_depth = ri->ri_depth;
-	si.si_bits = (char *)fbaddr;
-	si.si_hwbits = (char *)fbaddr;
-	si.si_width = ri->ri_width;
-	si.si_height = ri->ri_height;
-	si.si_stride = ri->ri_stride;
-	si.si_fillrect = NULL;
-	splash_render(&si, SPLASH_F_CENTER|SPLASH_F_FILL);
+#if notyet
+	ofb_init_cmap(NULL);
 #endif
 
 	return 0;
@@ -271,3 +259,10 @@ ofb_init_rasops(int node, struct rasops_info *ri)
 
 	return TRUE;
 }
+#else	/* NWSDISPLAY > 0 */
+int
+ofb_cnattach()
+{
+	return -1;
+}
+#endif
