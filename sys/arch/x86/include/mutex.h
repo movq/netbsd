@@ -1,4 +1,4 @@
-/*	$NetBSD: mutex.h,v 1.1.2.3 2006/11/17 16:34:34 ad Exp $	*/
+/*	$NetBSD: mutex.h,v 1.1.2.4 2006/12/29 20:27:42 ad Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006 The NetBSD Foundation, Inc.
@@ -39,29 +39,14 @@
 #ifndef _X86_MUTEX_H_
 #define	_X86_MUTEX_H_
 
-/*
- * Spin mutexes take this format:
- *
- *	N        16       8           2         1   0
- *	+--------------------------------------------+
- *	|  unused  | minspl |  unused   | locked | 1 | 
- *	+--------------------------------------------+
- *
- * Adaptive mutexes take this format:
- *
- *	N                   4         2         1   0
- *	+--------------------------------------------+
- *	|        owner       | unused  | waiters | 0 |
- *	+--------------------------------------------+
- */
 struct kmutex {
 	union {
 		volatile uintptr_t	mtxa_owner;
-
 		struct {
-			volatile uint8_t	mtxs_flags;
+			volatile uint8_t	mtxs_dummy;
 			volatile uint8_t	mtxs_minspl;
-			volatile uint16_t	mtxs_unused;
+                        __cpu_simple_lock_t	mtxs_lock;
+			volatile uint8_t	mtxs_unused;
 		} s;
 	} u;
 	volatile uint32_t	mtx_id;
@@ -69,103 +54,27 @@ struct kmutex {
 
 #ifdef __MUTEX_PRIVATE
 
-#define	MUTEX_INITIALIZE_ADAPTIVE(mtx)	/* will be zeroed */
-
-#define	MUTEX_INITIALIZE_SPIN(mtx, ipl)					\
-do {									\
-	(mtx)->mtx_flags = MUTEX_BIT_SPIN;				\
-	(mtx)->mtx_minspl = (ipl);					\
-} while (/* CONSTCOND */ 0)
-
 #define	mtx_owner 			u.mtxa_owner
-#define	mtx_flags 			u.s.mtxs_flags
 #define	mtx_minspl 			u.s.mtxs_minspl
+#define	mtx_lock			u.s.mtxs_lock
 
-#define __HAVE_MUTEX_ENTER		1
-#define __HAVE_MUTEX_EXIT		1
-#define	__NEED_MUTEX_CALLSITE		1
-
-#define	MUTEX_BIT_SPIN			0x01
-#define	MUTEX_BIT_WAITERS		0x02
-#define	MUTEX_BIT_SPIN_LOCKED		0x02
-
-#define	MUTEX_SPIN_UNLOCKED		0x01
-#define	MUTEX_SPIN_LOCKED		0x03
-
-#define	MUTEX_SPIN_P(mtx)		\
-    (((mtx)->mtx_flags & MUTEX_BIT_SPIN) != 0)
-#define	MUTEX_ADAPTIVE_P(mtx)		\
-    (((mtx)->mtx_flags & MUTEX_BIT_SPIN) == 0)
-
-#define	MUTEX_SETID(mtx, id)		((mtx)->mtx_id = id)
-#define	MUTEX_GETID(mtx)		((mtx)->mtx_id)
+#define __HAVE_MUTEX_STUBS		1
+#define __HAVE_SMUTEX_STUBS		1
+#define	__HAVE_SIMPLE_MUTEXES		1
 
 /*
- * Spin mutex methods.
+ * MUTEX_RECEIVE: no memory barrier required, as 'ret' implies a load fence.
  */
-
-#define	MUTEX_SPIN_HELD(mtx)		\
-    ((mtx)->mtx_flags == MUTEX_SPIN_LOCKED)
-
-static inline uint8_t
-MUTEX_SPIN_ACQUIRE(kmutex_t *mtx)
-{
-	uint8_t rv;
-	__asm volatile ("movb $3,%0; xchgb %0,%1" :
-			"=a" (rv) : "m" (mtx->mtx_flags) : "memory");
-	return rv == MUTEX_SPIN_UNLOCKED;
-}
-
-static inline void
-MUTEX_SPIN_RELEASE(kmutex_t *mtx)
-{
-	__insn_barrier();
-	mtx->mtx_flags = MUTEX_SPIN_UNLOCKED;
-}
-
-#define	MUTEX_SPIN_SPLSAVE(mtx, s)					\
-do {									\
-	struct cpu_info *x__ci = curcpu();				\
-	if ((x__ci->ci_mtx_count)-- == 0)				\
-		x__ci->ci_mtx_oldspl = (s);				\
-} while (/* CONSTCOND */ 0)
-
-#define	MUTEX_SPIN_SPLRESTORE(mtx)					\
-do {									\
-	struct cpu_info *x__ci = curcpu();				\
-	int s = x__ci->ci_mtx_oldspl;					\
-	__insn_barrier();						\
-	if (++(x__ci->ci_mtx_count) == 0)				\
-		splx(s);						\
-} while (/* CONSTCOND */ 0)
-
-#define	MUTEX_SPIN_MINSPL(mtx)		((mtx)->mtx_minspl)
-#define	MUTEX_SPIN_OLDSPL(ci)		((ci)->ci_mtx_oldspl)
+#define	MUTEX_RECEIVE(mtx)		/* nothing */
 
 /*
- * Adaptive mutex methods.
- */        
-#define	MUTEX_OWNER(mtx)						\
-	((uintptr_t)((mtx)->mtx_owner & MUTEX_THREAD))
-#define	MUTEX_HAS_WAITERS(mtx)						\
-	(((int)(mtx)->mtx_owner & MUTEX_BIT_WAITERS) != 0)
-#define	MUTEX_SET_WAITERS(mtx)						\
-	_lock_set_waiters(&(mtx)->mtx_owner,				\
-	     MUTEX_THREAD | MUTEX_BIT_SPIN, MUTEX_BIT_WAITERS)
-#define	MUTEX_ACQUIRE(mtx, ct)						\
-	_lock_cas(&(mtx)->mtx_owner, 0UL, (ct))
+ * MUTEX_GIVE: no memory barrier required, as _lock_cas() will take care of it.
+ */
+#define	MUTEX_GIVE(mtx)			/* nothing */
 
-static inline void
-MUTEX_RELEASE(kmutex_t *mtx)
-{
-	__insn_barrier();
-	mtx->mtx_owner = 0;
-}
+#define	MUTEX_CAS(p, o, n)		_lock_cas((p), (o), (n))
 
-#ifdef _KERNEL
 int	_lock_cas(volatile uintptr_t *, uintptr_t, uintptr_t);
-int	_lock_set_waiters(volatile uintptr_t *, uintptr_t, uintptr_t);
-#endif /* _KERNEL */
 
 #endif	/* __MUTEX_PRIVATE */
 
