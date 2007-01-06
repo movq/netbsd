@@ -1,4 +1,4 @@
-/*	$NetBSD: numeric.c,v 1.1 2007/01/06 16:08:07 kardel Exp $	*/
+/*	$NetBSD: numeric.c,v 1.1.1.1 2007/01/06 16:08:07 kardel Exp $	*/
 
 
 /*

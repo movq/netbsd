@@ -1,4 +1,4 @@
-/*	$NetBSD: nested.c,v 1.1 2007/01/06 16:06:10 kardel Exp $	*/
+/*	$NetBSD: nested.c,v 1.1.1.1 2007/01/06 16:06:10 kardel Exp $	*/
 
 
 /*

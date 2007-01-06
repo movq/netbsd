@@ -1,4 +1,4 @@
-/*	$NetBSD: enumeration.c,v 1.1 2007/01/06 16:08:03 kardel Exp $	*/
+/*	$NetBSD: enumeration.c,v 1.1.1.1 2007/01/06 16:08:03 kardel Exp $	*/
 
 
 /*

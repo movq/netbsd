@@ -1,4 +1,4 @@
-/*	$NetBSD: configfile.c,v 1.1 2007/01/06 16:08:05 kardel Exp $	*/
+/*	$NetBSD: configfile.c,v 1.1.1.1 2007/01/06 16:08:05 kardel Exp $	*/
 
 /*
  *  Id: configfile.c,v 1.15 2006/09/28 01:26:33 bkorb Exp

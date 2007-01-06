@@ -1,4 +1,4 @@
-/*	$NetBSD: genshell.h,v 1.1 2007/01/06 16:08:06 kardel Exp $	*/
+/*	$NetBSD: genshell.h,v 1.1.1.1 2007/01/06 16:08:06 kardel Exp $	*/
 
 /*   -*- buffer-read-only: t -*- vi: set ro:
  *  

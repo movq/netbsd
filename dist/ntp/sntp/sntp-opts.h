@@ -1,4 +1,4 @@
-/*	$NetBSD: sntp-opts.h,v 1.1 2007/01/06 16:08:02 kardel Exp $	*/
+/*	$NetBSD: sntp-opts.h,v 1.1.1.1 2007/01/06 16:08:02 kardel Exp $	*/
 
 /*   -*- buffer-read-only: t -*- vi: set ro:
  *  

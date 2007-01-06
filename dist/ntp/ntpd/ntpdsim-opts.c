@@ -1,4 +1,4 @@
-/*	$NetBSD: ntpdsim-opts.c,v 1.1 2007/01/06 16:07:09 kardel Exp $	*/
+/*	$NetBSD: ntpdsim-opts.c,v 1.1.1.1 2007/01/06 16:07:09 kardel Exp $	*/
 
 /*   -*- buffer-read-only: t -*- vi: set ro:
  *  
