@@ -1,4 +1,4 @@
-/*	$NetBSD: boolean.c,v 1.1 2007/01/06 16:06:08 kardel Exp $	*/
+/*	$NetBSD: boolean.c,v 1.1.1.1 2007/01/06 16:06:08 kardel Exp $	*/
 
 
 /*

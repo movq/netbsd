@@ -1,4 +1,4 @@
-/*	$NetBSD: version.c,v 1.1 2007/01/06 16:08:10 kardel Exp $	*/
+/*	$NetBSD: version.c,v 1.1.1.1 2007/01/06 16:08:10 kardel Exp $	*/
 
 
 /*  Id: version.c,v 4.9 2006/09/24 02:11:16 bkorb Exp

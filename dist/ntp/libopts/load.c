@@ -1,4 +1,4 @@
-/*	$NetBSD: load.c,v 1.1 2007/01/06 16:06:09 kardel Exp $	*/
+/*	$NetBSD: load.c,v 1.1.1.1 2007/01/06 16:06:09 kardel Exp $	*/
 
 
 /*

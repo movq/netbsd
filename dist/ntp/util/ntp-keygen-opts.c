@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp-keygen-opts.c,v 1.1 2007/01/06 16:08:17 kardel Exp $	*/
+/*	$NetBSD: ntp-keygen-opts.c,v 1.1.1.1 2007/01/06 16:08:17 kardel Exp $	*/
 
 /*   -*- buffer-read-only: t -*- vi: set ro:
  *  

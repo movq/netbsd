@@ -1,4 +1,4 @@
-/*	$NetBSD: libopts.c,v 1.1 2007/01/06 16:06:06 kardel Exp $	*/
+/*	$NetBSD: libopts.c,v 1.1.1.1 2007/01/06 16:06:06 kardel Exp $	*/
 
 #define AUTOOPTS_INTERNAL
 #include "compat/compat.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: restore.c,v 1.1 2007/01/06 16:08:08 kardel Exp $	*/
+/*	$NetBSD: restore.c,v 1.1.1.1 2007/01/06 16:08:08 kardel Exp $	*/
 
 
 /*
