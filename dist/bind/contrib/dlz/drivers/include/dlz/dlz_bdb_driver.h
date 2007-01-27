@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_bdb_driver.h,v 1.1 2007/01/27 21:05:14 christos Exp $	*/
+/*	$NetBSD: dlz_bdb_driver.h,v 1.1.1.1 2007/01/27 21:05:14 christos Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.

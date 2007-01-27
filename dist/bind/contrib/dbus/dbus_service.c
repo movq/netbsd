@@ -1,4 +1,4 @@
-/*	$NetBSD: dbus_service.c,v 1.1 2007/01/27 21:06:19 christos Exp $	*/
+/*	$NetBSD: dbus_service.c,v 1.1.1.1 2007/01/27 21:06:19 christos Exp $	*/
 
 /*  dbus_service.c
  *

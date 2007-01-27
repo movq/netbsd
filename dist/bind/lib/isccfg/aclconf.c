@@ -1,4 +1,4 @@
-/*	$NetBSD: aclconf.c,v 1.1 2007/01/27 21:09:14 christos Exp $	*/
+/*	$NetBSD: aclconf.c,v 1.1.1.1 2007/01/27 21:09:14 christos Exp $	*/
 
 /*
  * Copyright (C) 2004-2006  Internet Systems Consortium, Inc. ("ISC")

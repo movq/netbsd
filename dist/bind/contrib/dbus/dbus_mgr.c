@@ -1,4 +1,4 @@
-/*	$NetBSD: dbus_mgr.c,v 1.1 2007/01/27 21:06:15 christos Exp $	*/
+/*	$NetBSD: dbus_mgr.c,v 1.1.1.1 2007/01/27 21:06:15 christos Exp $	*/
 
 /* dbus_mgr.c
  *

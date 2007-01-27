@@ -1,4 +1,4 @@
-/*	$NetBSD: sha2.h,v 1.1 2007/01/27 21:07:56 christos Exp $	*/
+/*	$NetBSD: sha2.h,v 1.1.1.1 2007/01/27 21:07:56 christos Exp $	*/
 
 /*
  * Copyright (C) 2005, 2006  Internet Systems Consortium, Inc. ("ISC")

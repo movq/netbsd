@@ -1,4 +1,4 @@
-/*	$NetBSD: dlzbdb.c,v 1.1 2007/01/27 21:05:09 christos Exp $	*/
+/*	$NetBSD: dlzbdb.c,v 1.1.1.1 2007/01/27 21:05:09 christos Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.

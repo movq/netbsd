@@ -1,4 +1,4 @@
-/*	$NetBSD: acache.c,v 1.1 2007/01/27 21:06:38 christos Exp $	*/
+/*	$NetBSD: acache.c,v 1.1.1.1 2007/01/27 21:06:38 christos Exp $	*/
 
 /*
  * Copyright (C) 2004-2006  Internet Systems Consortium, Inc. ("ISC")
