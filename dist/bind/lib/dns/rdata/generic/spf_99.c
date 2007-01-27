@@ -1,4 +1,4 @@
-/*	$NetBSD: spf_99.c,v 1.1 2007/01/27 21:07:27 christos Exp $	*/
+/*	$NetBSD: spf_99.c,v 1.1.1.1 2007/01/27 21:07:27 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: dlv_32769.c,v 1.1 2007/01/27 21:07:23 christos Exp $	*/
+/*	$NetBSD: dlv_32769.c,v 1.1.1.1 2007/01/27 21:07:23 christos Exp $	*/
 
 /*
  * Copyright (C) 2004, 2006  Internet Systems Consortium, Inc. ("ISC")
