@@ -1,4 +1,4 @@
-/* 	$NetBSD: lock.h,v 1.9.20.1 2006/11/18 21:29:17 ad Exp $	*/
+/* 	$NetBSD: lock.h,v 1.9.20.2 2007/01/29 14:34:10 ad Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -102,6 +102,24 @@ __cpu_simple_unlock(__cpu_simple_lock_t *alp)
 {
 	__sync();
 	*alp = __SIMPLELOCK_UNLOCKED;
+}
+
+static __inline void
+mb_read(void)
+{
+	__sync();
+}
+
+static __inline void
+mb_write(void)
+{
+	__sync();
+}
+
+static __inline void
+mb_memory(void)
+{
+	__sync();
 }
 
 #endif /* _HPPA_LOCK_H_ */
