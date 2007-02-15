@@ -1,4 +1,4 @@
-/*	$NetBSD: mutex.h,v 1.2 2007/02/09 21:55:05 ad Exp $	*/
+/*	$NetBSD: mutex.h,v 1.3 2007/02/15 02:48:48 mhitch Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2007 The NetBSD Foundation, Inc.
@@ -58,6 +58,7 @@ struct kmutex {
 };
 
 #define	__HAVE_SIMPLE_MUTEXES		1
+#define	__HAVE_MUTEX_STUBS		1
 
 #define	MUTEX_RECEIVE(mtx)		mb_read()
 #define	MUTEX_GIVE(mtx)			mb_memory()
