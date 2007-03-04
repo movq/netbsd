@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_vnops.c,v 1.152 2007/03/03 01:18:32 salo Exp $	*/
+/*	$NetBSD: procfs_vnops.c,v 1.154 2007/03/09 14:11:23 ad Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
@@ -112,7 +112,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_vnops.c,v 1.152 2007/03/03 01:18:32 salo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_vnops.c,v 1.154 2007/03/09 14:11:23 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -588,8 +588,14 @@ procfs_dir(pfstype t, struct lwp *caller, struct proc *target,
 	    len / 2, 0, caller) != 0) {
 		vp = NULL;
 		if (bpp) {
-			bp = *bpp;
-			*--bp = '/';
+/* 
+			if (t == PFSexe) {
+				snprintf(path, len, "%s/%d/file"
+				    mp->mnt_stat.f_mntonname, pfs->pfs_pid);
+			} else */ {
+				bp = *bpp;
+				*--bp = '/';
+			}
 		}
 	}
 	mutex_enter(&target->p_mutex);	/* XXXSMP */
@@ -1208,9 +1214,9 @@ procfs_root_readdir_callback(struct proc *p, void *arg)
 	    UIO_MX - offsetof(struct dirent, d_name), "%ld", (long)p->p_pid);
 	d.d_type = DT_DIR;
 
-	rw_exit(&proclist_lock);
+	mutex_exit(&proclist_lock);
 	error = uiomove(&d, UIO_MX, uiop);
-	rw_enter(&proclist_lock, RW_READER);
+	mutex_enter(&proclist_lock);
 	if (error) {
 		ctxp->error = error;
 		return -1;

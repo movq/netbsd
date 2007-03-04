@@ -1,4 +1,4 @@
-$NetBSD: pcidevs,v 1.870 2007/03/03 23:49:49 jmcneill Exp $
+$NetBSD: pcidevs,v 1.872 2007/03/10 21:08:16 christos Exp $
 
 /*
  * Copyright (c) 1995, 1996 Christopher G. Demetriou
@@ -819,6 +819,7 @@ product ADP2 ASR5400S		0x0365	ASR-5400S
 product ADP2 PERC_2QC		0x1364	Dell PERC 2/QC
 /* XXX guess */
 product ADP2 PERC_3QC		0x1365	Dell PERC 3/QC
+product ADP2 HP_M110_G2		0x3227	HP M110 G2 / ASR-2610SA
 
 /* Addtron Products */
 product ADDTRON 8139	0x1360	8139 Ethernet
@@ -1202,6 +1203,8 @@ product ATI RADEON_R423_5D57	0x5d57	Radeon X800XT (R423) 5D57
 product ATI RADEON_X850XT_S	0x5d72	Radeon X850 XT Secondary
 product ATI RADEON_X700		0x5e4b	Radeon X700 Pro
 product ATI RADEON_X700_S	0x5e6b	Radeon X700 Pro Secondary
+product ATI RADEON_X1300	0x7146	Radeon X1300 Series (RV515)
+product ATI RADEON_X1300_S	0x7166	Radeon X1300 Series (RV515) Secondary
 product ATI RADEON_RS300_7834	0x7834	Radeon 9100 PRO IGP
 product ATI RADEON_RS300_7835	0x7835	Radeon 9200 IGP
 
