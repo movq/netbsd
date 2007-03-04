@@ -1,4 +1,4 @@
-/*	$NetBSD: stand.h,v 1.61 2006/01/25 22:44:37 uwe Exp $	*/
+/*	$NetBSD: stand.h,v 1.64 2008/03/25 21:23:51 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -82,13 +82,6 @@
 #define sprintf		libsa_sprintf
 #define vprintf		libsa_vprintf
 #define vsprintf	libsa_vsprintf
-#endif
-#define bcmp(s1, s2, l)	memcmp(s1, s2, l)
-#ifdef LIBSA_USE_MEMSET
-#define	bzero(s, l)	memset(s, 0, l)
-#endif
-#ifdef LIBSA_USE_MEMCPY
-#define	bcopy(s, d, l)	memcpy(d, s, l)	/* For non-overlapping copies only */
 #endif
 
 struct open_file;
@@ -241,10 +234,9 @@ void	twiddle(void);
 void	gets(char *);
 int	getfile(char *prompt, int mode);
 char	*strerror(int);
-__dead void	exit(int) __attribute__((__noreturn__));
-__dead void	panic(const char *, ...) __attribute__((__noreturn__));
-__dead void	_rtt(void) __attribute__((__noreturn__));
-void	(bcopy)(const void *, void *, size_t);
+__dead void	exit(int);
+__dead void	panic(const char *, ...);
+__dead void	_rtt(void);
 void	*memcpy(void *, const void *, size_t);
 void	*memmove(void *, const void *, size_t);
 int	memcmp(const void *, const void *, size_t);
@@ -261,7 +253,7 @@ int	stat(const char *, struct stat *);
 int	fstat(int, struct stat *);
 
 typedef int cmp_t __P((const void *, const void *));
-void	qsort(void *, size_t, size_t, cmp_t * cmp);
+void	qsort(void *, size_t, size_t, cmp_t *);
 
 extern int opterr, optind, optopt, optreset;
 extern char *optarg;

@@ -1,4 +1,4 @@
-/*	$NetBSD: disk.c,v 1.4 2007/02/22 05:31:53 thorpej Exp $	*/
+/*	$NetBSD: disk.c,v 1.6 2008/04/28 20:23:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -140,7 +133,7 @@ dkstrategy(void *devdata, int rw, daddr_t blk, size_t size, void *buf,
 
 	if ((int)size < 0) {
 		printf("%s: invalid request block %d size %d base %d\n",
-		    __FUNCTION__, blk, size, __disk.offset);
+		    __func__, blk, size, __disk.offset);
 		return -1;
 	}
 
@@ -210,7 +203,7 @@ __sector_rw(uint8_t *buf, int block, int flag, int count)
 
 	if ((err = __disk.rw(buf, block, flag, count)) != 0)
 		printf("%s: type=%d unit=%d offset=%d block=%d err=%d\n",
-		    __FUNCTION__, __disk.type, __disk.unit, __disk.offset,
+		    __func__, __disk.type, __disk.unit, __disk.offset,
 		    block, err);
 
 	return err == 0;
@@ -230,7 +223,7 @@ __fd_2d_rw(uint8_t *buf, int block, int flag, int count)
 	uint32_t pos;
 
 	if (!blk_to_2d_position(block, &pos, &cnt)) {
-		printf("%s: invalid block #%d.\n", __FUNCTION__, block);
+		printf("%s: invalid block #%d.\n", __func__, block);
 		return -1;
 	}
 	__fd_progress_msg(pos);
@@ -250,7 +243,7 @@ __fd_2hd_rw(uint8_t *buf, int block, int flag, int count)
 	uint32_t pos;
 
 	if (!blk_to_2hd_position(block, &pos, &cnt)) {
-		printf("%s: invalid block #%d.\n", __FUNCTION__, block);
+		printf("%s: invalid block #%d.\n", __func__, block);
 		return -1;
 	}
 	__fd_progress_msg(pos);

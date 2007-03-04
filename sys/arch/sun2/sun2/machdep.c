@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.46 2007/02/22 16:46:47 thorpej Exp $	*/
+/*	$NetBSD: machdep.c,v 1.53 2008/07/02 17:28:56 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -94,13 +94,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -160,7 +153,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.46 2007/02/22 16:46:47 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.53 2008/07/02 17:28:56 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -240,13 +233,12 @@ extern u_int bufpages;
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
-struct vm_map *exec_map = NULL;  
 struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 int	physmem;
 int	fputype;
-caddr_t	msgbufaddr;
+void *	msgbufaddr;
 
 /* Virtual page frame for /dev/mem (see mem.c) */
 vaddr_t vmmap;
@@ -287,7 +279,7 @@ static void initcpu(void);
 void 
 cpu_startup(void)
 {
-	caddr_t v;
+	void *v;
 	vaddr_t minaddr, maxaddr;
 	char pbuf[9];
 
@@ -300,16 +292,16 @@ cpu_startup(void)
 	 * Its mapping was prepared in pmap_bootstrap().
 	 * Also, offset some to avoid PROM scribbles.
 	 */
-	v = (caddr_t) (PAGE_SIZE * 4);
-	msgbufaddr = (caddr_t)(v + MSGBUFOFF);
+	v = (void *) (PAGE_SIZE * 4);
+	msgbufaddr = (void *)((char *)v + MSGBUFOFF);
 	initmsgbuf(msgbufaddr, MSGBUFSIZE);
 
 #if NKSYMS || defined(DDB) || defined(LKM)
 	{
-		extern int end[];
-		extern char *esym;
+		extern int nsym;
+		extern char *ssym, *esym;
 
-		ksyms_init(end[0], end + 1, (int*)esym);
+		ksyms_init(nsym, ssym, esym);
 	}
 #endif /* DDB */
 
@@ -345,12 +337,6 @@ cpu_startup(void)
 
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   NCARGS, VM_MAP_PAGEABLE, false, NULL);
 
 	/*
 	 * Allocate a submap for physio
@@ -832,6 +818,7 @@ cpu_exec_aout_makecmds(struct lwp *l, struct exec_package *epp)
 	return ENOEXEC;
 }
 
+#if 0
 /*
  * Soft interrupt support.
  */
@@ -858,6 +845,7 @@ isr_soft_clear(int level)
 	bit = 1 << level;
 	enable_reg_and(~bit);
 }
+#endif
 
 /*
  * Like _bus_dmamap_load(), but for raw memory allocated with
@@ -916,7 +904,7 @@ _bus_dmamap_load_raw(bus_dma_tag_t t, bus_dmamap_t map, bus_dma_segment_t *segs,
 
 	/* Map physical pages into MMU */
 	mlist = segs[0]._ds_mlist;
-	for (m = TAILQ_FIRST(mlist); m != NULL; m = TAILQ_NEXT(m,pageq)) {
+	for (m = TAILQ_FIRST(mlist); m != NULL; m = TAILQ_NEXT(m,pageq.queue)) {
 		if (sgsize == 0)
 			panic("_bus_dmamap_load_raw: size botch");
 		pa = VM_PAGE_TO_PHYS(m);

@@ -1,4 +1,33 @@
-/*	$NetBSD: ffs_inode.c,v 1.85 2006/10/17 11:39:18 yamt Exp $	*/
+/*	$NetBSD: ffs_inode.c,v 1.99 2008/08/30 08:25:53 hannken Exp $	*/
+
+/*-
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Wasabi Systems, Inc.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -32,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_inode.c,v 1.85 2006/10/17 11:39:18 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_inode.c,v 1.99 2008/08/30 08:25:53 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -41,22 +70,25 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_inode.c,v 1.85 2006/10/17 11:39:18 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/mount.h>
-#include <sys/proc.h>
-#include <sys/file.h>
 #include <sys/buf.h>
-#include <sys/vnode.h>
+#include <sys/file.h>
+#include <sys/fstrans.h>
+#include <sys/kauth.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
-#include <sys/trace.h>
+#include <sys/mount.h>
+#include <sys/proc.h>
 #include <sys/resourcevar.h>
-#include <sys/kauth.h>
+#include <sys/trace.h>
+#include <sys/vnode.h>
+#include <sys/wapbl.h>
 
 #include <ufs/ufs/quota.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufsmount.h>
 #include <ufs/ufs/ufs_extern.h>
 #include <ufs/ufs/ufs_bswap.h>
+#include <ufs/ufs/ufs_wapbl.h>
 
 #include <ufs/ffs/fs.h>
 #include <ufs/ffs/ffs_extern.h>
@@ -83,7 +115,7 @@ ffs_update(struct vnode *vp, const struct timespec *acc,
 	struct buf *bp;
 	struct inode *ip;
 	int error;
-	caddr_t cp;
+	void *cp;
 	int waitfor, flags;
 
 	if (vp->v_mount->mnt_flag & MNT_RDONLY)
@@ -117,18 +149,29 @@ ffs_update(struct vnode *vp, const struct timespec *acc,
 	}							/* XXX */
 	error = bread(ip->i_devvp,
 		      fsbtodb(fs, ino_to_fsba(fs, ip->i_number)),
-		      (int)fs->fs_bsize, NOCRED, &bp);
+		      (int)fs->fs_bsize, NOCRED, B_MODIFY, &bp);
 	if (error) {
-		brelse(bp);
+		brelse(bp, 0);
 		return (error);
 	}
 	ip->i_flag &= ~(IN_MODIFIED | IN_ACCESSED);
-	if (DOINGSOFTDEP(vp))
+	if (DOINGSOFTDEP(vp)) {
 		softdep_update_inodeblock(ip, bp, waitfor);
-	else if (ip->i_ffs_effnlink != ip->i_nlink)
+	} else if (ip->i_ffs_effnlink != ip->i_nlink)
 		panic("ffs_update: bad link cnt");
+	/* Keep unlinked inode list up to date */
+	KDASSERT(DIP(ip, nlink) == ip->i_nlink);
+	if (ip->i_mode) {
+		if (ip->i_nlink > 0) {
+			UFS_WAPBL_UNREGISTER_INODE(ip->i_ump->um_mountp,
+			    ip->i_number, ip->i_mode);
+		} else {
+			UFS_WAPBL_REGISTER_INODE(ip->i_ump->um_mountp,
+			    ip->i_number, ip->i_mode);
+		}
+	}
 	if (fs->fs_magic == FS_UFS1_MAGIC) {
-		cp = (caddr_t)bp->b_data +
+		cp = (char *)bp->b_data +
 		    (ino_to_fsbo(fs, ip->i_number) * DINODE1_SIZE);
 #ifdef FFS_EI
 		if (UFS_FSNEEDSWAP(fs))
@@ -138,7 +181,7 @@ ffs_update(struct vnode *vp, const struct timespec *acc,
 #endif
 			memcpy(cp, ip->i_din.ffs1_din, DINODE1_SIZE);
 	} else {
-		cp = (caddr_t)bp->b_data +
+		cp = (char *)bp->b_data +
 		    (ino_to_fsbo(fs, ip->i_number) * DINODE2_SIZE);
 #ifdef FFS_EI
 		if (UFS_FSNEEDSWAP(fs))
@@ -164,8 +207,7 @@ ffs_update(struct vnode *vp, const struct timespec *acc,
  * disk blocks.
  */
 int
-ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred,
-    struct lwp *l)
+ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred)
 {
 	daddr_t lastblock;
 	struct inode *oip = VTOI(ovp);
@@ -203,10 +245,6 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred,
 		oip->i_flag |= IN_CHANGE | IN_UPDATE;
 		return (ffs_update(ovp, NULL, NULL, 0));
 	}
-#ifdef QUOTA
-	if ((error = getinoquota(oip)) != 0)
-		return (error);
-#endif
 	fs = oip->i_fs;
 	if (length > ump->um_maxfilesize)
 		return (EFBIG);
@@ -230,22 +268,23 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred,
 			off_t eob;
 
 			eob = blkroundup(fs, osize);
+			uvm_vnp_setwritesize(ovp, eob);
 			error = ufs_balloc_range(ovp, osize, eob - osize,
 			    cred, aflag);
 			if (error)
 				return error;
 			if (ioflag & IO_SYNC) {
-				ovp->v_size = eob;
-				simple_lock(&ovp->v_interlock);
+				mutex_enter(&ovp->v_interlock);
 				VOP_PUTPAGES(ovp,
 				    trunc_page(osize & fs->fs_bmask),
-				    round_page(eob), PGO_CLEANIT | PGO_SYNCIO);
+				    round_page(eob), PGO_CLEANIT | PGO_SYNCIO |
+				    PGO_JOURNALLOCKED);
 			}
 		}
+		uvm_vnp_setwritesize(ovp, length);
 		error = ufs_balloc_range(ovp, length - 1, 1, cred, aflag);
 		if (error) {
-			(void) ffs_truncate(ovp, osize, ioflag & IO_SYNC,
-			    cred, l);
+			(void) ffs_truncate(ovp, osize, ioflag & IO_SYNC, cred);
 			return (error);
 		}
 		uvm_vnp_setsize(ovp, length);
@@ -286,10 +325,10 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred,
 		    osize);
 		uvm_vnp_zerorange(ovp, length, eoz - length);
 		if (round_page(eoz) > round_page(length)) {
-			simple_lock(&ovp->v_interlock);
+			mutex_enter(&ovp->v_interlock);
 			error = VOP_PUTPAGES(ovp, round_page(length),
 			    round_page(eoz),
-			    PGO_CLEANIT | PGO_DEACTIVATE |
+			    PGO_CLEANIT | PGO_DEACTIVATE | PGO_JOURNALLOCKED |
 			    ((ioflag & IO_SYNC) ? PGO_SYNCIO : 0));
 			if (error)
 				return error;
@@ -310,19 +349,21 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred,
 			 * so that it will have no data structures left.
 			 */
 			if ((error = VOP_FSYNC(ovp, cred, FSYNC_WAIT,
-			    0, 0, l)) != 0) {
+			    0, 0)) != 0) {
 				genfs_node_unlock(ovp);
 				return (error);
 			}
+			mutex_enter(&ump->um_lock);
 			if (oip->i_flag & IN_SPACECOUNTED)
 				fs->fs_pendingblocks -= DIP(oip, blocks);
+			mutex_exit(&ump->um_lock);
 		} else {
 			uvm_vnp_setsize(ovp, length);
 #ifdef QUOTA
  			(void) chkdq(oip, -DIP(oip, blocks), NOCRED, 0);
 #endif
 			softdep_setup_freeblocks(oip, length, 0);
-			(void) vinvalbuf(ovp, 0, cred, l, 0, 0);
+			(void) vinvalbuf(ovp, 0, cred, curlwp, 0, 0);
 			genfs_node_unlock(ovp);
 			oip->i_flag |= IN_CHANGE | IN_UPDATE;
 			return (ffs_update(ovp, NULL, NULL, 0));
@@ -413,8 +454,13 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred,
 			blocksreleased += count;
 			if (lastiblock[level] < 0) {
 				DIP_ASSIGN(oip, ib[level], 0);
-				ffs_blkfree(fs, oip->i_devvp, bn, fs->fs_bsize,
-				    oip->i_number);
+				if (oip->i_ump->um_mountp->mnt_wapbl) {
+					UFS_WAPBL_REGISTER_DEALLOCATION(
+					    oip->i_ump->um_mountp,
+					    fsbtodb(fs, bn), fs->fs_bsize);
+				} else
+					ffs_blkfree(fs, oip->i_devvp, bn,
+					    fs->fs_bsize, oip->i_number);
 				blocksreleased += nblocks;
 			}
 		}
@@ -436,7 +482,12 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred,
 			continue;
 		DIP_ASSIGN(oip, db[i], 0);
 		bsize = blksize(fs, oip, i);
-		ffs_blkfree(fs, oip->i_devvp, bn, bsize, oip->i_number);
+		if ((oip->i_ump->um_mountp->mnt_wapbl) &&
+		    (ovp->v_type != VREG)) {
+			UFS_WAPBL_REGISTER_DEALLOCATION(oip->i_ump->um_mountp,
+			    fsbtodb(fs, bn), bsize);
+		} else
+			ffs_blkfree(fs, oip->i_devvp, bn, bsize, oip->i_number);
 		blocksreleased += btodb(bsize);
 	}
 	if (lastblock < 0)
@@ -470,8 +521,14 @@ ffs_truncate(struct vnode *ovp, off_t length, int ioflag, kauth_cred_t cred,
 			 * required for the storage we're keeping.
 			 */
 			bn += numfrags(fs, newspace);
-			ffs_blkfree(fs, oip->i_devvp, bn, oldspace - newspace,
-			    oip->i_number);
+			if ((oip->i_ump->um_mountp->mnt_wapbl) &&
+			    (ovp->v_type != VREG)) {
+				UFS_WAPBL_REGISTER_DEALLOCATION(
+				    oip->i_ump->um_mountp, fsbtodb(fs, bn),
+				    oldspace - newspace);
+			} else
+				ffs_blkfree(fs, oip->i_devvp, bn,
+				    oldspace - newspace, oip->i_number);
 			blocksreleased += btodb(oldspace - newspace);
 		}
 	}
@@ -496,6 +553,7 @@ done:
 	DIP_ADD(oip, blocks, -blocksreleased);
 	genfs_node_unlock(ovp);
 	oip->i_flag |= IN_CHANGE;
+	UFS_WAPBL_UPDATE(ovp, NULL, NULL, 0);
 #ifdef QUOTA
 	(void) chkdq(oip, -blocksreleased, NOCRED, 0);
 #endif
@@ -561,23 +619,30 @@ ffs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn, daddr_t lastbn,
 	 * explicitly instead of letting bread do everything for us.
 	 */
 	vp = ITOV(ip);
-	bp = getblk(vp, lbn, (int)fs->fs_bsize, 0, 0);
-	if (bp->b_flags & (B_DONE | B_DELWRI)) {
+	error = ffs_getblk(vp, lbn, FFS_NOBLK, fs->fs_bsize, false, &bp);
+	if (error) {
+		*countp = 0;
+		return error;
+	}
+	if (bp->b_oflags & (BO_DONE | BO_DELWRI)) {
 		/* Braces must be here in case trace evaluates to nothing. */
 		trace(TR_BREADHIT, pack(vp, fs->fs_bsize), lbn);
 	} else {
 		trace(TR_BREADMISS, pack(vp, fs->fs_bsize), lbn);
-		curproc->p_stats->p_ru.ru_inblock++;	/* pay for read */
+		curlwp->l_ru.ru_inblock++;	/* pay for read */
 		bp->b_flags |= B_READ;
+		bp->b_flags &= ~B_COWDONE;	/* we change blkno below */
 		if (bp->b_bcount > bp->b_bufsize)
 			panic("ffs_indirtrunc: bad buffer size");
 		bp->b_blkno = dbn;
 		BIO_SETPRIO(bp, BPRIO_TIMECRITICAL);
 		VOP_STRATEGY(vp, bp);
 		error = biowait(bp);
+		if (error == 0)
+			error = fscow_run(bp, true);
 	}
 	if (error) {
-		brelse(bp);
+		brelse(bp, 0);
 		*countp = 0;
 		return (error);
 	}
@@ -588,7 +653,7 @@ ffs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn, daddr_t lastbn,
 		bap2 = (int64_t *)bp->b_data;
 	if (lastbn >= 0) {
 		copy = malloc(fs->fs_bsize, M_TEMP, M_WAITOK);
-		memcpy((caddr_t)copy, bp->b_data, (u_int)fs->fs_bsize);
+		memcpy((void *)copy, bp->b_data, (u_int)fs->fs_bsize);
 		for (i = last + 1; i < NINDIR(fs); i++)
 			BAP_ASSIGN(ip, i, 0);
 		error = bwrite(bp);
@@ -616,7 +681,13 @@ ffs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn, daddr_t lastbn,
 				allerror = error;
 			blocksreleased += blkcount;
 		}
-		ffs_blkfree(fs, ip->i_devvp, nb, fs->fs_bsize, ip->i_number);
+		if ((ip->i_ump->um_mountp->mnt_wapbl) &&
+		    ((level > SINGLE) || (ITOV(ip)->v_type != VREG))) {
+			UFS_WAPBL_REGISTER_DEALLOCATION(ip->i_ump->um_mountp,
+			    fsbtodb(fs, nb), fs->fs_bsize);
+		} else
+			ffs_blkfree(fs, ip->i_devvp, nb, fs->fs_bsize,
+			    ip->i_number);
 		blocksreleased += nblocks;
 	}
 
@@ -638,8 +709,7 @@ ffs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn, daddr_t lastbn,
 	if (copy != NULL) {
 		FREE(copy, M_TEMP);
 	} else {
-		bp->b_flags |= B_INVAL;
-		brelse(bp);
+		brelse(bp, BC_INVAL);
 	}
 
 	*countp = blocksreleased;

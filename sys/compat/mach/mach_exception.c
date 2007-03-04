@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_exception.c,v 1.9 2007/02/09 21:55:21 ad Exp $ */
+/*	$NetBSD: mach_exception.c,v 1.13 2008/04/28 20:23:44 martin Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_exception.c,v 1.9 2007/02/09 21:55:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_exception.c,v 1.13 2008/04/28 20:23:44 martin Exp $");
 
 #include "opt_compat_darwin.h"
 
@@ -166,7 +159,7 @@ mach_exception(exc_l, exc, code)
 		exc_l->l_stat = LSSTOP;
 		p->p_nrlwps--;
 		KERNEL_UNLOCK_ALL(exc_l, &exc_l->l_biglocks);
-		mi_switch(exc_l, NULL);
+		mi_switch(exc_l);
 		KERNEL_LOCK(exc_l->l_biglocks, exc_l);
 	}
 
@@ -364,7 +357,7 @@ mach_exception(exc_l, exc, code)
 	 * no new exception will be taken until the catcher
 	 * acknowledge the first one.
 	 */
-	lockmgr(&catcher_med->med_exclock, LK_EXCLUSIVE, NULL);
+	rw_enter(&catcher_med->med_exclock, RW_WRITER);
 
 	/*
 	 * If the catcher died, we are done.
@@ -396,7 +389,7 @@ mach_exception(exc_l, exc, code)
 	/*
 	 * Unlock the catcher's exception handler
 	 */
-	lockmgr(&catcher_med->med_exclock, LK_RELEASE, NULL);
+	rw_exit(&catcher_med->med_exclock);
 
 out:
 	MACH_PORT_UNREF(exc_port);
@@ -404,9 +397,7 @@ out:
 }
 
 static void
-mach_siginfo_to_exception(ksi, code)
-	const struct ksiginfo *ksi;
-	int *code;
+mach_siginfo_to_exception(const struct ksiginfo *ksi, int *code)
 {
 	code[1] = (long)ksi->ksi_addr;
 	switch (ksi->ksi_signo) {
@@ -479,8 +470,7 @@ mach_siginfo_to_exception(ksi, code)
 }
 
 int
-mach_exception_raise(args)
-	struct mach_trap_args *args;
+mach_exception_raise(struct mach_trap_args *args)
 {
 	struct lwp *l = args->l;
 	mach_exception_raise_reply_t *rep;
@@ -511,7 +501,7 @@ mach_exception_raise(args)
 	 * Check for unexpected exception acknowledge, whereas
 	 * the kernel sent no exception message.
 	 */
-	if (lockstatus(&med->med_exclock) == 0) {
+	if (!rw_lock_held(&med->med_exclock)) {
 #ifdef DEBUG_MACH
 		printf("spurious mach_exception_raise\n");
 #endif
@@ -530,15 +520,13 @@ mach_exception_raise(args)
 }
 
 int
-mach_exception_raise_state(args)
-	struct mach_trap_args *args;
+mach_exception_raise_state(struct mach_trap_args *args)
 {
 	return mach_exception_raise(args);
 }
 
 int
-mach_exception_raise_state_identity(args)
-	struct mach_trap_args *args;
+mach_exception_raise_state_identity(struct mach_trap_args *args)
 {
 	return mach_exception_raise(args);
 }

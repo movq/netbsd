@@ -1,4 +1,4 @@
-/*	$NetBSD: vndvar.h,v 1.20 2006/05/14 21:42:26 elad Exp $	*/
+/*	$NetBSD: vndvar.h,v 1.23 2008/04/28 20:23:47 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -148,7 +141,7 @@ struct vnode;
  * A vnode disk's state information.
  */
 struct vnd_softc {
-	struct device    sc_dev;
+	device_t         sc_dev;
 	int		 sc_flags;	/* flags */
 	size_t		 sc_size;	/* size of vnd */
 	struct vnode	*sc_vp;		/* vnode */
@@ -160,7 +153,7 @@ struct vnd_softc {
 	struct vndgeom	 sc_geom;	/* virtual geometry */
 	struct pool	 sc_vxpool;	/* vndxfer pool */
 	struct pool	 sc_vbpool;	/* vndbuf pool */
-	struct proc 	*sc_kthread;	/* kernel thread */
+	struct lwp 	*sc_kthread;	/* kernel thread */
 	u_int32_t	 sc_comp_blksz;	/* precompressed block size */
 	u_int32_t	 sc_comp_numoffs;/* count of compressed block offsets */
 	u_int64_t	*sc_comp_offsets;/* file idx's to compressed blocks */

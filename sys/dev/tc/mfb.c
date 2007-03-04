@@ -1,7 +1,11 @@
-/* $NetBSD: mfb.c,v 1.47 2006/04/12 19:38:24 jmmv Exp $ */
+/* $NetBSD: mfb.c,v 1.52 2008/07/09 13:19:33 joerg Exp $ */
 
-/*
- * Copyright (c) 1998, 1999 Tohru Nishimura.  All rights reserved.
+/*-
+ * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Tohru Nishimura.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,27 +15,22 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Tohru Nishimura
- *	for the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mfb.c,v 1.47 2006/04/12 19:38:24 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mfb.c,v 1.52 2008/07/09 13:19:33 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,8 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: mfb.c,v 1.47 2006/04/12 19:38:24 jmmv Exp $");
 #include <sys/buf.h>
 #include <sys/ioctl.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
@@ -105,7 +104,6 @@ struct hwcursor64 {
 };
 
 struct mfb_softc {
-	struct device sc_dev;
 	vaddr_t sc_vaddr;
 	size_t sc_size;
 	struct rasops_info *sc_ri;
@@ -125,10 +123,10 @@ struct mfb_softc {
 #define	MX_BT431_OFFSET	0x180000
 #define	MX_IREQ_OFFSET	0x080000	/* Interrupt req. control */
 
-static int  mfbmatch(struct device *, struct cfdata *, void *);
-static void mfbattach(struct device *, struct device *, void *);
+static int  mfbmatch(device_t, cfdata_t, void *);
+static void mfbattach(device_t, device_t, void *);
 
-CFATTACH_DECL(mfb, sizeof(struct mfb_softc),
+CFATTACH_DECL_NEW(mfb, sizeof(struct mfb_softc),
     mfbmatch, mfbattach, NULL, NULL);
 
 static void mfb_common_init(struct rasops_info *);
@@ -150,7 +148,7 @@ static const struct wsscreen_list mfb_screenlist = {
 	sizeof(_mfb_scrlist) / sizeof(struct wsscreen_descr *), _mfb_scrlist
 };
 
-static int	mfbioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
+static int	mfbioctl(void *, void *, u_long, void *, int, struct lwp *);
 static paddr_t	mfbmmap(void *, void *, off_t, int);
 
 static int	mfb_alloc_screen(void *, const struct wsscreen_descr *,
@@ -170,7 +168,7 @@ static const struct wsdisplay_accessops mfb_accessops = {
 
 int  mfb_cnattach(tc_addr_t);
 static int  mfbintr(void *);
-static void mfbhwinit(caddr_t);
+static void mfbhwinit(void *);
 
 static int  set_cursor(struct mfb_softc *, struct wsdisplay_cursor *);
 static int  get_cursor(struct mfb_softc *, struct wsdisplay_cursor *);
@@ -213,7 +211,7 @@ static const u_int8_t flip[256] = {
 };
 
 static int
-mfbmatch(struct device *parent, struct cfdata *match, void *aux)
+mfbmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct tc_attach_args *ta = aux;
 
@@ -224,7 +222,7 @@ mfbmatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-mfbattach(struct device *parent, struct device *self, void *aux)
+mfbattach(device_t parent, device_t self, void *aux)
 {
 	struct mfb_softc *sc = device_private(self);
 	struct tc_attach_args *ta = aux;
@@ -261,9 +259,9 @@ mfbattach(struct device *parent, struct device *self, void *aux)
 	tc_intr_establish(parent, ta->ta_cookie, IPL_TTY, mfbintr, sc);
 
 	/* clear any pending interrupts */
-	*(u_int8_t *)((caddr_t)ri->ri_hw + MX_IREQ_OFFSET) = 0;
-	junk = *(u_int8_t *)((caddr_t)ri->ri_hw + MX_IREQ_OFFSET);
-	*(u_int8_t *)((caddr_t)ri->ri_hw + MX_IREQ_OFFSET) = 1;
+	*(u_int8_t *)((char *)ri->ri_hw + MX_IREQ_OFFSET) = 0;
+	junk = *(u_int8_t *)((char *)ri->ri_hw + MX_IREQ_OFFSET);
+	*(u_int8_t *)((char *)ri->ri_hw + MX_IREQ_OFFSET) = 1;
 
 	waa.console = console;
 	waa.scrdata = &mfb_screenlist;
@@ -276,10 +274,10 @@ mfbattach(struct device *parent, struct device *self, void *aux)
 static void
 mfb_common_init(struct rasops_info *ri)
 {
-	caddr_t base;
+	char *base;
 	int cookie;
 
-	base = (caddr_t)ri->ri_hw;
+	base = (void *)ri->ri_hw;
 
 	/* initialize colormap and cursor hardware */
 	mfbhwinit(base);
@@ -322,7 +320,7 @@ mfb_common_init(struct rasops_info *ri)
 }
 
 static int
-mfbioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag, struct lwp *l)
+mfbioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct mfb_softc *sc = v;
 	struct rasops_info *ri = sc->sc_ri;
@@ -466,11 +464,11 @@ static int
 mfbintr(void *arg)
 {
 	struct mfb_softc *sc = arg;
-	caddr_t base, vdac, curs;
+	char *base, *vdac, *curs;
 	int v;
 	volatile register int junk;
 
-	base = (caddr_t)sc->sc_ri->ri_hw;
+	base = (void *)sc->sc_ri->ri_hw;
 	junk = *(u_int8_t *)(base + MX_IREQ_OFFSET);
 #if 0
 	*(u_int8_t *)(base + MX_IREQ_OFFSET) = 0;
@@ -557,13 +555,13 @@ mfbintr(void *arg)
 }
 
 static void
-mfbhwinit(caddr_t mfbbase)
+mfbhwinit(void *mfbbase)
 {
-	caddr_t vdac, curs;
+	char *vdac, *curs;
 	int i;
 
-	vdac = mfbbase + MX_BT455_OFFSET;
-	curs = mfbbase + MX_BT431_OFFSET;
+	vdac = (char *)mfbbase + MX_BT455_OFFSET;
+	curs = (char *)mfbbase + MX_BT431_OFFSET;
 	SELECT431(curs, BT431_REG_COMMAND);
 	REGWRITE32(curs, bt_ctl, 0x0404);
 	REGWRITE32(curs, bt_ctl, 0); /* XLO */

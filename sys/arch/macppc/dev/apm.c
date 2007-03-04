@@ -1,4 +1,4 @@
-/*	$NetBSD: apm.c,v 1.15 2005/12/11 12:18:03 christos Exp $	*/
+/*	$NetBSD: apm.c,v 1.20 2008/06/13 11:54:31 cegger Exp $	*/
 /*	$OpenBSD: apm.c,v 1.5 2002/06/07 07:13:59 miod Exp $	*/
 
 /*-
@@ -14,18 +14,14 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the University of
- *	California, Berkeley and its contributors.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the names of the authors nor the names of contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHORS AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHORS OR CONTRIBUTORS BE LIABLE
  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
  * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
  * OR SERVICES; LOSS OF MIND, USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
@@ -37,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.15 2005/12/11 12:18:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.20 2008/06/13 11:54:31 cegger Exp $");
 
 #include "apm.h"
 
@@ -52,6 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: apm.c,v 1.15 2005/12/11 12:18:03 christos Exp $");
 #include <sys/device.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
+#include <sys/mutex.h>
 #ifdef __OpenBSD__
 #include <sys/event.h>
 #endif
@@ -87,7 +84,7 @@ struct apm_softc {
 	int    sc_flags;
 	int	event_count;
 	int	event_ptr;
-	struct lock sc_lock;
+	kmutex_t sc_lock;
 	struct	apm_event_info event_list[APM_NEVENTS];
 };
 
@@ -98,10 +95,8 @@ struct apm_softc {
  * user context.
  */
 #ifdef __NetBSD__
-#define	APM_LOCK(apmsc)							\
-	(void) lockmgr(&(apmsc)->sc_lock, LK_EXCLUSIVE, NULL)
-#define	APM_UNLOCK(apmsc)						\
-	(void) lockmgr(&(apmsc)->sc_lock, LK_RELEASE, NULL)
+#define	APM_LOCK(apmsc)		mutex_enter(&(apmsc)->sc_lock)
+#define	APM_UNLOCK(apmsc)	mutex_exit(&(apmsc)->sc_lock)
 #else
 #define APM_LOCK(apmsc)
 #define APM_UNLOCK(apmsc)
@@ -198,21 +193,19 @@ apmattach(parent, self, aux)
 	sc->sc_flags = 0;
 	sc->event_ptr = 0;
 	sc->event_count = 0;
-	lockinit(&sc->sc_lock, PWAIT, "apmlk", 0, 0);
+	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
+	selinit(&sc->sc_rsel);
 }
 
 int
-apmopen(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+apmopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct apm_softc *sc;
 	int error = 0;
 
 	/* apm0 only */
-	if (!apm_cd.cd_ndevs || APMUNIT(dev) != 0 ||
-	    !(sc = apm_cd.cd_devs[APMUNIT(dev)]))
+	sc = device_lookup_private(&apm_cd, APMUNIT(dev));
+	if (sc == NULL)
 		return ENXIO;
 
 	DPRINTF(("apmopen: dev %d pid %d flag %x mode %x\n",
@@ -247,16 +240,13 @@ apmopen(dev, flag, mode, l)
 }
 
 int
-apmclose(dev, flag, mode, l)
-	dev_t dev;
-	int flag, mode;
-	struct lwp *l;
+apmclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct apm_softc *sc;
 
 	/* apm0 only */
-	if (!apm_cd.cd_ndevs || APMUNIT(dev) != 0 ||
-	    !(sc = apm_cd.cd_devs[APMUNIT(dev)]))
+	sc = device_lookup_private(&apm_cd, APMUNIT(dev));
+	if (sc == NULL)
 		return ENXIO;
 
 	DPRINTF(("apmclose: pid %d flag %x mode %x\n", l->l_proc->p_pid, flag, mode));
@@ -275,12 +265,7 @@ apmclose(dev, flag, mode, l)
 }
 
 int
-apmioctl(dev, cmd, data, flag, l)
-	dev_t dev;
-	u_long cmd;
-	caddr_t data;
-	int flag;
-	struct lwp *l;
+apmioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct apm_softc *sc;
 	struct pmu_battery_info batt;
@@ -288,8 +273,8 @@ apmioctl(dev, cmd, data, flag, l)
 	int error = 0;
 
 	/* apm0 only */
-	if (!apm_cd.cd_ndevs || APMUNIT(dev) != 0 ||
-	    !(sc = apm_cd.cd_devs[APMUNIT(dev)]))
+	sc = device_lookup_private(&apm_cd, APMUNIT(dev));
+	if (sc == NULL)
 		return ENXIO;
 
 	APM_LOCK(sc);
@@ -383,9 +368,7 @@ apmioctl(dev, cmd, data, flag, l)
  * return 1 if the kernel driver should do so.
  */
 static int
-apm_record_event(sc, event_type)
-	struct apm_softc *sc;
-	u_int event_type;
+apm_record_event(struct apm_softc *sc, u_int event_type)
 {
 	struct apm_event_info *evp;
 
@@ -401,18 +384,15 @@ apm_record_event(sc, event_type)
 	sc->event_ptr %= APM_NEVENTS;
 	evp->type = event_type;
 	evp->index = ++apm_evindex;
-	selwakeup(&sc->sc_rsel);
+	selnotify(&sc->sc_rsel, 0, 0);
 	return (sc->sc_flags & SCFLAG_OWRITE) ? 0 : 1; /* user may handle */
 }
 #endif
 
 int
-apmpoll(dev, events, l)
-	dev_t dev;
-	int events;
-	struct lwp *l;
+apmpoll(dev_t dev, int events, struct lwp *l)
 {
-	struct apm_softc *sc = apm_cd.cd_devs[APMUNIT(dev)];
+	struct apm_softc *sc = device_lookup_private(&apm_cd,APMUNIT(dev));
 	int revents = 0;
 
 	APM_LOCK(sc);
@@ -451,11 +431,9 @@ static struct filterops apmread_filtops =
 	{ 1, NULL, filt_apmrdetach, filt_apmread};
 
 int
-apmkqfilter(dev, kn)
-	dev_t dev;
-	struct knote *kn;
+apmkqfilter(dev_t dev, struct knote *kn)
 {
-	struct apm_softc *sc = apm_cd.cd_devs[APMUNIT(dev)];
+	struct apm_softc *sc = device_lookup_private(&apm_cd,APMUNIT(dev));
 	struct klist *klist;
 
 	switch (kn->kn_filter) {

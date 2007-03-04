@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pmap.h,v 1.20 2007/02/21 23:00:15 thorpej Exp $	*/
+/*	$NetBSD: uvm_pmap.h,v 1.23 2008/07/16 14:33:09 matt Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -93,6 +93,13 @@ typedef struct pmap_statistics	*pmap_statistics_t;
  */
 #define	PMAP_WIRED	0x00000010	/* wired mapping */
 #define	PMAP_CANFAIL	0x00000020	/* can fail if resource shortage */
+/*
+ * Flags passed to pmap_kenter_pa().  Note the bottom 3 bits are VM_PROT_*
+ * bits, used to indicate the access type.
+ */
+#ifndef PMAP_KMPAGE
+#define	PMAP_KMPAGE	0x00000000	/* this is from the kmem allocator */
+#endif
 
 #ifndef PMAP_EXCLUDE_DECLS	/* Used in Sparc port to virtualize pmap mod */
 #ifdef _KERNEL
@@ -143,7 +150,7 @@ bool		pmap_is_referenced(struct vm_page *);
 void		pmap_page_protect(struct vm_page *, vm_prot_t);
 
 #if !defined(pmap_phys_address)
-paddr_t		pmap_phys_address(int);
+paddr_t		pmap_phys_address(paddr_t);
 #endif
 void		pmap_protect(pmap_t, vaddr_t, vaddr_t, vm_prot_t);
 #if !defined(pmap_reference)

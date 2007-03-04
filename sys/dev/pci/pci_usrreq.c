@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_usrreq.c,v 1.13 2006/11/16 01:33:09 christos Exp $	*/
+/*	$NetBSD: pci_usrreq.c,v 1.16 2008/06/11 19:27:03 cegger Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_usrreq.c,v 1.13 2006/11/16 01:33:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_usrreq.c,v 1.16 2008/06/11 19:27:03 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -56,24 +56,22 @@ __KERNEL_RCSID(0, "$NetBSD: pci_usrreq.c,v 1.13 2006/11/16 01:33:09 christos Exp
 #include <dev/pci/pciio.h>
 
 static int
-pciopen(dev_t dev, int flags, int mode,
-    struct lwp *l)
+pciopen(dev_t dev, int flags, int mode, struct lwp *l)
 {
-	struct pci_softc *sc;
-	int unit;
+	device_t dv;
 
-	unit = minor(dev);
-	sc = device_lookup(&pci_cd, unit);
-	if (sc == NULL)
+	dv = device_lookup(&pci_cd, minor(dev));
+	if (dv == NULL)
 		return (ENXIO);
 
 	return (0);
 }
 
 static int
-pciioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
+pciioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct pci_softc *sc = device_lookup(&pci_cd, minor(dev));
+	struct pci_softc *sc =
+	    device_lookup_private(&pci_cd, minor(dev));
 	struct pciio_bdf_cfgreg *bdfr = (void *) data;
 	struct pciio_businfo *binfo = (void *) data;
 	pcitag_t tag;
@@ -113,7 +111,7 @@ static paddr_t
 pcimmap(dev_t dev, off_t offset, int prot)
 {
 #if 0
-	struct pci_softc *sc = device_lookup(&pci_cd, minor(dev));
+	struct pci_softc *sc = device_lookup_private(&pci_cd, minor(dev));
 
 	/*
 	 * Since we allow mapping of the entire bus, we
@@ -140,7 +138,7 @@ const struct cdevsw pci_cdevsw = {
  *	PCI ioctls that can be performed on devices directly.
  */
 int
-pci_devioctl(pci_chipset_tag_t pc, pcitag_t tag, u_long cmd, caddr_t data,
+pci_devioctl(pci_chipset_tag_t pc, pcitag_t tag, u_long cmd, void *data,
     int flag, struct lwp *l)
 {
 	struct pciio_cfgreg *r = (void *) data;

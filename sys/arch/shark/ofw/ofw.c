@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw.c,v 1.37 2007/02/23 05:53:36 mrg Exp $	*/
+/*	$NetBSD: ofw.c,v 1.43 2008/04/27 18:58:47 matt Exp $	*/
 
 /*
  * Copyright 1997
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw.c,v 1.37 2007/02/23 05:53:36 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw.c,v 1.43 2008/04/27 18:58:47 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,6 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: ofw.c,v 1.37 2007/02/23 05:53:36 mrg Exp $");
 #include <machine/bootconfig.h>
 #include <machine/cpu.h>
 #include <machine/intr.h>
+#include <machine/irqhandler.h>
 
 #include <dev/ofw/openfirm.h>
 #include <machine/ofw.h>
@@ -74,7 +75,6 @@ __KERNEL_RCSID(0, "$NetBSD: ofw.c,v 1.37 2007/02/23 05:53:36 mrg Exp $");
 #include "machine/isa_machdep.h"
 #endif
 
-#include "pc.h"
 #include "isadma.h"
 #include "igsfb_ofbus.h"
 #include "vga_ofbus.h"
@@ -101,7 +101,6 @@ extern BootConfig bootconfig;	/* temporary, I hope */
 
 #ifdef	DIAGNOSTIC
 /* NOTE: These variables will be removed, well some of them */
-extern u_int spl_mask;
 extern u_int current_mask;
 #endif
 
@@ -114,9 +113,6 @@ extern int ofw_handleticks;
 extern void dump_spl_masks  __P((void));
 extern void dumpsys	    __P((void));
 extern void dotickgrovelling __P((vaddr_t));
-#if defined(SHARK) && (NPC > 0)
-extern void shark_screen_cleanup __P((int));
-#endif
 
 #define WriteWord(a, b) \
 *((volatile unsigned int *)(a)) = (b)
@@ -135,7 +131,6 @@ paddr_t physical_freeend;
 paddr_t physical_end;
 u_int free_pages;
 int physmem;
-pv_addr_t systempage;
 #ifndef	OFWGENCFG
 pv_addr_t irqstack;
 #endif
@@ -226,7 +221,7 @@ static ofw_handle_t ofw_client_services_handle;
 
 
 static void ofw_callbackhandler __P((void *));
-static void ofw_construct_proc0_addrspace __P((pv_addr_t *));
+static void ofw_construct_proc0_addrspace __P((void));
 static void ofw_getphysmeminfo __P((void));
 static void ofw_getvirttranslations __P((void));
 static void *ofw_malloc(vsize_t size);
@@ -335,7 +330,7 @@ ofw_boot(howto, bootstr)
 
 #ifdef DIAGNOSTIC
 	printf("boot: howto=%08x curlwp=%p\n", howto, curlwp);
-	printf("current_mask=%08x spl_mask=%08x\n", current_mask, spl_mask);
+	printf("current_mask=%08x\n", current_mask);
 
 	printf("ipl_bio=%08x ipl_net=%08x ipl_tty=%08x ipl_vm=%08x\n",
 	    irqmasks[IPL_BIO], irqmasks[IPL_NET], irqmasks[IPL_TTY],
@@ -410,9 +405,7 @@ ofw_boot(howto, bootstr)
 		*ap++ = 0;
 		if (ap[-2] == '-')
 			*ap1 = 0;
-#if defined(SHARK) && (NPC > 0)
-		shark_screen_cleanup(0);
-#elif (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
+#if (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
 		reset_screen();
 #endif
 		OF_boot(str);
@@ -421,9 +414,7 @@ ofw_boot(howto, bootstr)
 
 ofw_exit:
 	printf("Calling OF_exit...\n");
-#if defined(SHARK) && (NPC > 0)
-	shark_screen_cleanup(1);
-#elif (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
+#if (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
 	reset_screen();
 #endif
 	OF_exit();
@@ -776,11 +767,10 @@ ofw_configisadma(pdma)
 void
 ofw_configmem(void)
 {
-	pv_addr_t proc0_ttbbase;
 	int i;
 
 	/* Set-up proc0 address space. */
-	ofw_construct_proc0_addrspace(&proc0_ttbbase);
+	ofw_construct_proc0_addrspace();
 
 	/*
 	 * Get a dump of OFW's picture of physical memory.
@@ -802,7 +792,7 @@ ofw_configmem(void)
 
 	/* Switch to the proc0 pagetables. */
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	setttb(proc0_ttbbase.pv_pa);
+	setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
@@ -978,8 +968,7 @@ ofw_configmem(void)
 	}
 
 	/* Initialize pmap module. */
-	pmap_bootstrap((pd_entry_t *)proc0_ttbbase.pv_va, KERNEL_VM_BASE,
-	    KERNEL_VM_BASE + KERNEL_VM_SIZE);
+	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
 }
 
 
@@ -1302,10 +1291,9 @@ ofw_callbackhandler(v)
 }
 
 static void
-ofw_construct_proc0_addrspace(pv_addr_t *proc0_ttbbase)
+ofw_construct_proc0_addrspace(void)
 {
 	int i, oft;
-	static pv_addr_t proc0_pagedir;
 	static pv_addr_t proc0_pt_sys;
 	static pv_addr_t proc0_pt_kernel[KERNEL_IMG_PTS];
 	static pv_addr_t proc0_pt_vmdata[KERNEL_VMDATA_PTS];
@@ -1342,7 +1330,7 @@ ofw_construct_proc0_addrspace(pv_addr_t *proc0_ttbbase)
 
 	/* Allocate/initialize space for the proc0, NetBSD-managed */
 	/* page tables that we will be switching to soon. */
-	ofw_claimpages(&virt_freeptr, &proc0_pagedir, L1_TABLE_SIZE);
+	ofw_claimpages(&virt_freeptr, &kernel_l1pt, L1_TABLE_SIZE);
 	ofw_claimpages(&virt_freeptr, &proc0_pt_sys, L2_TABLE_SIZE);
 	for (i = 0; i < KERNEL_IMG_PTS; i++)
 		ofw_claimpages(&virt_freeptr, &proc0_pt_kernel[i], L2_TABLE_SIZE);
@@ -1366,7 +1354,7 @@ ofw_construct_proc0_addrspace(pv_addr_t *proc0_ttbbase)
 	msgbufphys = msgbuf.pv_pa;
 
 	/* Construct the proc0 L1 pagetable. */
-	L1pagetable = proc0_pagedir.pv_va;
+	L1pagetable = kernel_l1pt.pv_va;
 
 	pmap_link_l2pt(L1pagetable, 0x0, &proc0_pt_sys);
 	for (i = 0; i < KERNEL_IMG_PTS; i++)
@@ -1485,9 +1473,6 @@ ofw_construct_proc0_addrspace(pv_addr_t *proc0_ttbbase)
 			}
 		}
 	}
-
-	/* OUT parameters are the new ttbbase and the pt which maps pts. */
-	*proc0_ttbbase = proc0_pagedir;
 }
 
 

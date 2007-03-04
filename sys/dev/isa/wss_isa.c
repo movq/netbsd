@@ -1,4 +1,4 @@
-/*	$NetBSD: wss_isa.c,v 1.23 2006/11/16 01:33:00 christos Exp $	*/
+/*	$NetBSD: wss_isa.c,v 1.25 2008/04/08 20:08:50 cegger Exp $	*/
 
 /*
  * Copyright (c) 1994 John Brezak
@@ -41,16 +41,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wss_isa.c,v 1.23 2006/11/16 01:33:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wss_isa.c,v 1.25 2008/04/08 20:08:50 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/errno.h>
 
-#include <machine/cpu.h>
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
+#include <sys/bus.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -242,7 +242,7 @@ wss_isa_attach(struct device *parent, struct device *self, void *aux)
 	ac = (struct ad1848_softc *)&sc->sc_ad1848;
 	ia = (struct isa_attach_args *)aux;
 	if (!wssfind(parent, sc, 0, ia)) {
-		printf("%s: wssfind failed\n", ac->sc_dev.dv_xname);
+		aprint_error_dev(&ac->sc_dev, "wssfind failed\n");
 		return;
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_kbd.c,v 1.4 2007/02/20 01:32:33 macallan Exp $	*/
+/*	$NetBSD: adb_kbd.c,v 1.12 2008/03/26 18:04:15 matt Exp $	*/
 
 /*
  * Copyright (C) 1998	Colin Wood
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb_kbd.c,v 1.4 2007/02/20 01:32:33 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb_kbd.c,v 1.12 2008/03/26 18:04:15 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -60,14 +60,18 @@ __KERNEL_RCSID(0, "$NetBSD: adb_kbd.c,v 1.4 2007/02/20 01:32:33 macallan Exp $")
 #include <dev/adb/adbvar.h>
 #include <dev/adb/adb_keymap.h>
 
+#include "opt_wsdisplay_compat.h"
 #include "adbdebug.h"
+#include "wsmouse.h"
 
 struct adbkbd_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct adb_device *sc_adbdev;
 	struct adb_bus_accessops *sc_ops;
-	struct device *sc_wskbddev;
-	struct device *sc_wsmousedev;
+	device_t sc_wskbddev;
+#if NWSMOUSE > 0
+	device_t sc_wsmousedev;
+#endif
 	struct sysmon_pswitch sc_sm_pbutton;
 	int sc_leds;
 	int sc_have_led_control;
@@ -77,19 +81,21 @@ struct adbkbd_softc {
 	int sc_polled_chars;
 	int sc_trans[3];
 	int sc_capslock;
+	uint32_t sc_timestamp;
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	int sc_rawkbd;
 #endif
 	uint8_t sc_buffer[16];
 	uint8_t sc_pollbuf[16];
 	uint8_t sc_us;
+	uint8_t sc_power, sc_pe;
 };	
 
 /*
  * Function declarations.
  */
-static int	adbkbd_match(struct device *, struct cfdata *, void *);
-static void	adbkbd_attach(struct device *, struct device *, void *);
+static int	adbkbd_match(device_t, cfdata_t, void *);
+static void	adbkbd_attach(device_t, device_t, void *);
 
 static void	adbkbd_initleds(struct adbkbd_softc *);
 static void	adbkbd_keys(struct adbkbd_softc *, uint8_t, uint8_t);
@@ -97,15 +103,16 @@ static inline void adbkbd_key(struct adbkbd_softc *, uint8_t);
 static int	adbkbd_wait(struct adbkbd_softc *, int);
 
 /* Driver definition. */
-CFATTACH_DECL(adbkbd, sizeof(struct adbkbd_softc),
+CFATTACH_DECL_NEW(adbkbd, sizeof(struct adbkbd_softc),
     adbkbd_match, adbkbd_attach, NULL, NULL);
 
-extern struct cfdriver akbd_cd;
+extern struct cfdriver adbkbd_cd;
 
 static int adbkbd_enable(void *, int);
-static int adbkbd_ioctl(void *, u_long, caddr_t, int, struct lwp *);
+static int adbkbd_ioctl(void *, u_long, void *, int, struct lwp *);
 static void adbkbd_set_leds(void *, int);
 static void adbkbd_handler(void *, int, uint8_t *);
+static void adbkbd_powerbutton(void *);
 
 struct wskbd_accessops adbkbd_accessops = {
 	adbkbd_enable,
@@ -130,8 +137,9 @@ struct wskbd_mapdata adbkbd_keymapdata = {
 #endif
 };
 
+#if NWSMOUSE > 0
 static int adbkms_enable(void *);
-static int adbkms_ioctl(void *, u_long, caddr_t, int, struct lwp *);
+static int adbkms_ioctl(void *, u_long, void *, int, struct lwp *);
 static void adbkms_disable(void *);
 
 const struct wsmouse_accessops adbkms_accessops = {
@@ -143,6 +151,8 @@ const struct wsmouse_accessops adbkms_accessops = {
 static int  adbkbd_sysctl_button(SYSCTLFN_ARGS);
 static void adbkbd_setup_sysctl(struct adbkbd_softc *);
 
+#endif /* NWSMOUSE > 0 */
+
 #ifdef ADBKBD_DEBUG
 #define DPRINTF printf
 #else
@@ -153,10 +163,7 @@ static int adbkbd_is_console = 0;
 static int adbkbd_console_attached = 0;
 
 static int
-adbkbd_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void   *aux;
+adbkbd_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct adb_attach_args *aaa = aux;
 
@@ -167,14 +174,17 @@ adbkbd_match(parent, cf, aux)
 }
 
 static void
-adbkbd_attach(struct device *parent, struct device *self, void *aux)
+adbkbd_attach(device_t parent, device_t self, void *aux)
 {
-	struct adbkbd_softc *sc = (struct adbkbd_softc *)self;
+	struct adbkbd_softc *sc = device_private(self);
 	struct adb_attach_args *aaa = aux;
 	short cmd;
 	struct wskbddev_attach_args a;
+#if NWSMOUSE > 0
 	struct wsmousedev_attach_args am;
+#endif
 
+	sc->sc_dev = self;
 	sc->sc_ops = aaa->ops;
 	sc->sc_adbdev = aaa->dev;
 	sc->sc_adbdev->cookie = sc;
@@ -188,8 +198,10 @@ adbkbd_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_capslock = 0;
 	sc->sc_trans[1] = 103;	/* F11 */
 	sc->sc_trans[2] = 111;	/* F12 */
+	sc->sc_power = 0x7f;
+	sc->sc_timestamp = 0;
 
-	printf(" addr %d ", sc->sc_adbdev->current_addr);
+	printf(" addr %d: ", sc->sc_adbdev->current_addr);
 
 	switch (sc->sc_adbdev->handler_id) {
 	case ADB_STDKBD:
@@ -230,9 +242,11 @@ adbkbd_attach(struct device *parent, struct device *self, void *aux)
 		break;
 	case ADB_PBKBD:
 		printf("PowerBook keyboard\n");
+		sc->sc_power = 0x7e;
 		break;
 	case ADB_PBISOKBD:
 		printf("PowerBook keyboard (ISO layout)\n");
+		sc->sc_power = 0x7e;
 		break;
 	case ADB_ADJKPD:
 		printf("adjustable keypad\n");
@@ -248,15 +262,18 @@ adbkbd_attach(struct device *parent, struct device *self, void *aux)
 		break;
 	case ADB_PBEXTISOKBD:
 		printf("PowerBook extended keyboard (ISO layout)\n");
+		sc->sc_power = 0x7e;
 		break;
 	case ADB_PBEXTJAPKBD:
 		printf("PowerBook extended keyboard (Japanese layout)\n");
+		sc->sc_power = 0x7e;
 		break;
 	case ADB_JPKBDII:
 		printf("keyboard II (Japanese layout)\n");
 		break;
 	case ADB_PBEXTKBD:
 		printf("PowerBook extended keyboard\n");
+		sc->sc_power = 0x7e;
 		break;
 	case ADB_DESIGNKBD:
 		printf("extended keyboard\n");
@@ -264,12 +281,15 @@ adbkbd_attach(struct device *parent, struct device *self, void *aux)
 		break;
 	case ADB_PBJPKBD:
 		printf("PowerBook keyboard (Japanese layout)\n");
+		sc->sc_power = 0x7e;
 		break;
 	case ADB_PBG3KBD:
 		printf("PowerBook G3 keyboard\n");
+		sc->sc_power = 0x7e;
 		break;
 	case ADB_PBG3JPKBD:
 		printf("PowerBook G3 keyboard (Japanese layout)\n");
+		sc->sc_power = 0x7e;
 		break;
 	case ADB_IBOOKKBD:
 		printf("iBook keyboard\n");
@@ -292,22 +312,25 @@ adbkbd_attach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_wskbddev = config_found_ia(self, "wskbddev", &a, wskbddevprint);
 
+#if NWSMOUSE > 0
 	/* attach the mouse device */
 	am.accessops = &adbkms_accessops;
 	am.accesscookie = sc;
-	sc->sc_wsmousedev = config_found_ia(self, "wsmousedev", &am, wsmousedevprint);
+	sc->sc_wsmousedev = config_found_ia(self, "wsmousedev", &am, 
+	    wsmousedevprint);
 
 	if (sc->sc_wsmousedev != NULL)
 		adbkbd_setup_sysctl(sc);
+#endif
 
 	/* finally register the power button */
 	sysmon_task_queue_init();
 	memset(&sc->sc_sm_pbutton, 0, sizeof(struct sysmon_pswitch));
-	sc->sc_sm_pbutton.smpsw_name = sc->sc_dev.dv_xname;
+	sc->sc_sm_pbutton.smpsw_name = device_xname(sc->sc_dev);
 	sc->sc_sm_pbutton.smpsw_type = PSWITCH_TYPE_POWER;
 	if (sysmon_pswitch_register(&sc->sc_sm_pbutton) != 0)
-		printf("%s: unable to register power button with sysmon\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "unable to register power button with sysmon\n");
 }
 
 static void
@@ -317,7 +340,7 @@ adbkbd_handler(void *cookie, int len, uint8_t *data)
 
 #ifdef ADBKBD_DEBUG
 	int i;
-	printf("%s: %02x - ", sc->sc_dev.dv_xname, sc->sc_us);
+	printf("%s: %02x - ", device_xname(sc->sc_dev), sc->sc_us);
 	for (i = 0; i < len; i++) {
 		printf(" %02x", data[i]);
 	}
@@ -363,12 +386,18 @@ adbkbd_keys(struct adbkbd_softc *sc, uint8_t k1, uint8_t k2)
 
 	DPRINTF("[%02x %02x]", k1, k2);
 
-	if (((k1 == k2) && (k1 == 0x7f)) || (k1 == 0x7e)) {
+	if (((k1 == k2) && (k1 == 0x7f)) || (k1 == sc->sc_power)) {
+		uint32_t now = time_second;
+		uint32_t diff = now - sc->sc_timestamp;
 
-		/* power button, report to sysmon */
-		sysmon_pswitch_event(&sc->sc_sm_pbutton, 
-		    ADBK_PRESS(k1) ? PSWITCH_EVENT_PRESSED :
-		    PSWITCH_EVENT_RELEASED);
+		sc->sc_timestamp = now;
+		if ((diff > 1) && (diff < 5)) {
+
+			/* power button, report to sysmon */
+			sc->sc_pe = k1;
+		
+			sysmon_task_queue_sched(0, adbkbd_powerbutton, sc);
+		}
 	} else {
 
 		adbkbd_key(sc, k1);
@@ -377,20 +406,30 @@ adbkbd_keys(struct adbkbd_softc *sc, uint8_t k1, uint8_t k2)
 	}
 }
 
+static void
+adbkbd_powerbutton(void *cookie)
+{
+	struct adbkbd_softc *sc = cookie;
+
+	sysmon_pswitch_event(&sc->sc_sm_pbutton, 
+	    ADBK_PRESS(sc->sc_pe) ? PSWITCH_EVENT_PRESSED :
+	    PSWITCH_EVENT_RELEASED);
+}
+
 static inline void
 adbkbd_key(struct adbkbd_softc *sc, uint8_t k)
 {
 
 	if (sc->sc_poll) {
 		if (sc->sc_polled_chars >= 16) {
-			printf("%s: polling buffer is full\n", 
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev,"polling buffer is full\n");
 		}
 		sc->sc_pollbuf[sc->sc_polled_chars] = k;
 		sc->sc_polled_chars++;
 		return;
 	}
 
+#if NWSMOUSE > 0
 	/* translate some keys to mouse events */
 	if (sc->sc_wsmousedev != NULL) {
 		if (ADBK_KEYVAL(k) == sc->sc_trans[1]) {
@@ -406,20 +445,17 @@ adbkbd_key(struct adbkbd_softc *sc, uint8_t k)
 			return;
 		}			
 	}
+#endif
+
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	if (sc->sc_rawkbd) {
 		char cbuf[2];
 		int s;
-		int j = 0;
-		int c = keyboard[ADBK_KEYVAL(k)][3]
 
-		if (k & 0x80)
-			cbuf[j++] = 0xe0;
-
-		cbuf[j++] = (c & 0x7f) | (ADBK_PRESS(k)? 0 : 0x80);
+		cbuf[0] = k;
 
 		s = spltty();
-		wskbd_rawinput(sc->sc_wskbddev, cbuf, j);
+		wskbd_rawinput(sc->sc_wskbddev, cbuf, 1);
 		splx(s);
 	} else {
 #endif
@@ -476,7 +512,8 @@ adbkbd_set_leds(void *cookie, int leds)
 		buffer[1] = aleds | 0xf8;
 	
 		cmd = ADBLISTEN(sc->sc_adbdev->current_addr, 2);
-		sc->sc_ops->send(sc->sc_ops->cookie, sc->sc_poll, cmd, 2, buffer);
+		sc->sc_ops->send(sc->sc_ops->cookie, sc->sc_poll, cmd, 2, 
+		    buffer);
 	}
 
 	sc->sc_leds = leds & 7;
@@ -507,7 +544,7 @@ adbkbd_enable(void *v, int on)
 }
 
 static int
-adbkbd_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct lwp *l)
+adbkbd_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct adbkbd_softc *sc = (struct adbkbd_softc *) v;
 
@@ -587,6 +624,7 @@ adbkbd_cnpollc(void *v, int on)
 	}
 }
 
+#if NWSMOUSE > 0
 /* stuff for the pseudo mouse */
 static int
 adbkms_enable(void *v)
@@ -595,7 +633,7 @@ adbkms_enable(void *v)
 }
 
 static int
-adbkms_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct lwp *l)
+adbkms_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 {
 
 	switch (cmd) {
@@ -620,10 +658,10 @@ adbkbd_setup_sysctl(struct adbkbd_softc *sc)
 	struct sysctlnode *node, *me;
 	int ret;
 
-	DPRINTF("%s: sysctl setup\n", sc->sc_dev.dv_xname);
+	DPRINTF("%s: sysctl setup\n", device_xname(sc->sc_dev));
 	ret = sysctl_createv(NULL, 0, NULL, (const struct sysctlnode **)&me,
 	       CTLFLAG_READWRITE,
-	       CTLTYPE_NODE, sc->sc_dev.dv_xname, NULL,
+	       CTLTYPE_NODE, device_xname(sc->sc_dev), NULL,
 	       NULL, 0, NULL, 0,
 	       CTL_MACHDEP, CTL_CREATE, CTL_EOL);
 
@@ -631,14 +669,16 @@ adbkbd_setup_sysctl(struct adbkbd_softc *sc)
 	    (const struct sysctlnode **)&node, 
 	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC | CTLFLAG_IMMEDIATE,
 	    CTLTYPE_INT, "middle", "middle mouse button", adbkbd_sysctl_button, 
-		    1, NULL, 0, CTL_MACHDEP, me->sysctl_num, CTL_CREATE, CTL_EOL);
+		    1, NULL, 0, CTL_MACHDEP, me->sysctl_num, CTL_CREATE, 
+		    CTL_EOL);
 	node->sysctl_data = sc;
 
 	ret = sysctl_createv(NULL, 0, NULL, 
 	    (const struct sysctlnode **)&node, 
 	    CTLFLAG_READWRITE | CTLFLAG_OWNDESC | CTLFLAG_IMMEDIATE,
 	    CTLTYPE_INT, "right", "right mouse button", adbkbd_sysctl_button, 
-		    2, NULL, 0, CTL_MACHDEP, me->sysctl_num, CTL_CREATE, CTL_EOL);
+		    2, NULL, 0, CTL_MACHDEP, me->sysctl_num, CTL_CREATE, 
+		    CTL_EOL);
 	node->sysctl_data = sc;
 }
 
@@ -677,3 +717,4 @@ SYSCTL_SETUP(sysctl_adbkbdtrans_setup, "adbkbd translator setup")
 		       NULL, 0, NULL, 0,
 		       CTL_MACHDEP, CTL_EOL);
 }
+#endif /* NWSMOUSE > 0 */

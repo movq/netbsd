@@ -1,4 +1,4 @@
-/* $NetBSD: lkminit_vfs.c,v 1.6 2005/12/11 12:24:50 christos Exp $ */
+/* $NetBSD: lkminit_vfs.c,v 1.9 2008/06/28 15:50:21 rumble Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lkminit_vfs.c,v 1.6 2005/12/11 12:24:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lkminit_vfs.c,v 1.9 2008/06/28 15:50:21 rumble Exp $");
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
@@ -52,7 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: lkminit_vfs.c,v 1.6 2005/12/11 12:24:50 christos Exp
 
 #include <ufs/ext2fs/ext2fs_extern.h>
 
-int ext2fs_lkmentry __P((struct lkm_table *, int, int));
+int ext2fs_lkmentry(struct lkm_table *, int, int);
 
 /*
  * This is the vfsops table for the file system in question
@@ -67,8 +60,8 @@ MOD_VFS("ext2fs", -1, &ext2fs_vfsops);
 /*
  * take care of fs specific sysctl nodes
  */
-static int load __P((struct lkm_table *, int));
-static int unload __P((struct lkm_table *, int));
+static int load(struct lkm_table *, int);
+static int unload(struct lkm_table *, int);
 static struct sysctllog *_ext2fs_log;
 
 /*
@@ -90,7 +83,22 @@ load(lkmtp, cmd)
 	int cmd;
 {
 
-	sysctl_vfs_ext2fs_setup(&_ext2fs_log);
+	sysctl_createv(&_ext2fs_log, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "vfs", NULL,
+		       NULL, 0, NULL, 0,
+		       CTL_VFS, CTL_EOL);
+	sysctl_createv(&_ext2fs_log, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT,
+		       CTLTYPE_NODE, "ext2fs",
+		       SYSCTL_DESCR("Linux EXT2FS file system"),
+		       NULL, 0, NULL, 0,
+		       CTL_VFS, 17, CTL_EOL);
+	/*
+	 * XXX the "17" above could be dynamic, thereby eliminating
+	 * one more instance of the "number to vfs" mapping problem,
+	 * but "17" is the order as taken from sys/mount.h
+	 */
 	return (0);
 }
 

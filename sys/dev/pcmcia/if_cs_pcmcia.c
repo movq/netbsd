@@ -1,4 +1,4 @@
-/* $NetBSD: if_cs_pcmcia.c,v 1.14 2006/11/16 01:33:20 christos Exp $ */
+/* $NetBSD: if_cs_pcmcia.c,v 1.16 2008/04/05 21:31:23 cegger Exp $ */
 
 /*-
  * Copyright (c)2001 YAMAMOTO Takashi,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cs_pcmcia.c,v 1.14 2006/11/16 01:33:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cs_pcmcia.c,v 1.16 2008/04/05 21:31:23 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,8 +44,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_pcmcia.c,v 1.14 2006/11/16 01:33:20 christos E
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/pcmcia/pcmciareg.h>
 #include <dev/pcmcia/pcmciavar.h>
@@ -53,8 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_pcmcia.c,v 1.14 2006/11/16 01:33:20 christos E
 
 #include <dev/ic/cs89x0reg.h>
 #include <dev/ic/cs89x0var.h>
-
-#define DEVNAME(sc) ((sc)->sc_dev.dv_xname)
 
 struct cs_pcmcia_softc;
 
@@ -114,7 +112,7 @@ cs_pcmcia_attach(struct device *parent, struct device *self, void *aux)
 
 	error = pcmcia_function_configure(pa->pf, cs_pcmcia_validate_config);
 	if (error) {
-		aprint_error("%s: configure failed, error=%d\n", self->dv_xname,
+		aprint_error_dev(self, "configure failed, error=%d\n",
 		    error);
 		return;
 	}

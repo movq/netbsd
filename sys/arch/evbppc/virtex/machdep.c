@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.3 2007/02/22 05:27:47 thorpej Exp $ */
+/*	$NetBSD: machdep.c,v 1.6 2008/07/02 17:28:55 ad Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -34,12 +34,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.3 2007/02/22 05:27:47 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.6 2008/07/02 17:28:55 ad Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
 #include "opt_virtex.h"
+#include "opt_kgdb.h"
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -80,11 +81,13 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.3 2007/02/22 05:27:47 thorpej Exp $");
 #include <ddb/db_extern.h>
 #endif
 
+#if defined(KGDB)
+#include <sys/kgdb.h>
+#endif
 
 /*
  * Global variables used here and there
  */
-struct vm_map *exec_map = NULL;
 struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
@@ -257,6 +260,12 @@ initppc(u_int startkernel, u_int endkernel)
 	if (boothowto & RB_KDB)
 		ipkdb_connect(0);
 #endif
+#ifdef KGDB
+	/*
+	 * Now trap to KGDB
+	 */
+	kgdb_connect(1);
+#endif /* KGDB */
 }
 
 /*
@@ -315,7 +324,7 @@ cpu_startup(void)
 	curcpu()->ci_khz = cpuspeed / 1000;
 
 	/* Initialize error message buffer. */
-	initmsgbuf((caddr_t)msgbuf, round_page(MSGBUFSIZE));
+	initmsgbuf((void *)msgbuf, round_page(MSGBUFSIZE));
 
 	printf("%s%s", copyright, version);
 
@@ -323,13 +332,6 @@ cpu_startup(void)
 	printf("total memory = %s\n", pbuf);
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
-
 	/*
 	 * Allocate a submap for physio
 	 */
@@ -423,6 +425,11 @@ cpu_reboot(int howto, char *what)
 		while(1)
 			Debugger();
 #endif
+#ifdef KGDB
+		printf("dropping to kgdb\n");
+		while(1)
+			kgdb_connect(1);
+#endif
 	}
 
 	printf("rebooting\n\n");
@@ -454,6 +461,10 @@ cpu_reboot(int howto, char *what)
 #ifdef DDB
 	while(1)
 		Debugger();
+#endif
+#ifdef KGDB
+	while(1)
+		kgdb_connect(1);
 #else
 	while (1)
 		/* nothing */;

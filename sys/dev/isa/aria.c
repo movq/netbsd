@@ -1,4 +1,4 @@
-/*	$NetBSD: aria.c,v 1.27 2006/11/16 01:33:00 christos Exp $	*/
+/*	$NetBSD: aria.c,v 1.29 2008/04/08 20:08:49 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996, 1998 Roland C. Dowdeswell.  All rights reserved.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aria.c,v 1.27 2006/11/16 01:33:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aria.c,v 1.29 2008/04/08 20:08:49 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,8 +62,8 @@ __KERNEL_RCSID(0, "$NetBSD: aria.c,v 1.27 2006/11/16 01:33:00 christos Exp $");
 #include <sys/buf.h>
 #include <sys/fcntl.h>
 
-#include <machine/cpu.h>
-#include <machine/bus.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -406,7 +406,7 @@ ariaattach(struct device *parent, struct device *self, void *aux)
 	ia = aux;
 	if (bus_space_map(ia->ia_iot, ia->ia_io[0].ir_addr, ARIADSP_NPORT,
 	    0, &ioh))
-		panic("%s: can map io port range", self->dv_xname);
+		panic("%s: can map io port range", device_xname(self));
 
 	sc->sc_iot = ia->ia_iot;
 	sc->sc_ioh = ioh;

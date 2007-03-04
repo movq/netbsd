@@ -1,4 +1,4 @@
-/*	$NetBSD: iopvar.h,v 1.17 2007/02/15 15:40:52 ad Exp $	*/
+/*	$NetBSD: iopvar.h,v 1.22 2008/09/08 23:36:54 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001, 2002, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -62,6 +55,7 @@ struct iop_msg {
 	u_int			im_tctx;	/* Transaction context */
 	void			*im_dvcontext;	/* Un*x device context */
 	struct i2o_reply	*im_rb;		/* Reply buffer */
+	kcondvar_t		im_cv;		/* Notifier */
 	u_int			im_reqstatus;	/* Status from reply */
 	u_int			im_detstatus;	/* Detailed status code */
 	struct iop_xfer		im_xfer[IOP_MAX_MSG_XFERS];
@@ -87,6 +81,7 @@ struct iop_initiator {
 	void	(*ii_adjqparam)(struct device *, int);
 
 	struct	device *ii_dv;
+	kcondvar_t ii_cv;
 	int	ii_flags;
 	int	ii_ictx;		/* Initiator context */
 	int	ii_tid;
@@ -104,7 +99,7 @@ struct iop_initiator {
 struct iop_pgop {
 	struct	i2o_param_op_list_header olh;
 	struct	i2o_param_op_all_template oat;
-} __attribute__ ((__packed__));
+} __packed;
 
 /*
  * Per-IOP context.
@@ -120,11 +115,12 @@ struct iop_softc {
 
 	struct iop_msg	*sc_ims;	/* Message wrappers */
 	SLIST_HEAD(, iop_msg) sc_im_freelist; /* Free wrapper list */
+	kmutex_t	sc_intrlock;	/* Interrupt level lock */
 
 	bus_dmamap_t	sc_rep_dmamap;	/* Reply frames DMA map */
 	int		sc_rep_size;	/* Reply frames size */
 	bus_addr_t	sc_rep_phys;	/* Reply frames PA */
-	caddr_t		sc_rep;		/* Reply frames VA */
+	void *		sc_rep;		/* Reply frames VA */
 
 	int		sc_maxib;	/* Max inbound (-> IOP) queue depth */
 	int		sc_maxob;	/* Max outbound (<- IOP) queue depth */
@@ -139,7 +135,7 @@ struct iop_softc {
 	u_int32_t	sc_chgind;	/* Configuration change indicator */
 	kmutex_t	sc_conflock;	/* Configuration lock */
 	kcondvar_t	sc_confcv;	/* Configuration CV */
-	struct proc	*sc_reconf_proc;/* Auto reconfiguration process */
+	lwp_t		*sc_reconf_thread;/* Auto reconfiguration process */
 	LIST_HEAD(, iop_initiator) sc_iilist;/* Initiator list */
 	int		sc_nii;		/* Total number of initiators */
 	int		sc_nuii;	/* Number of utility initiators */
@@ -147,7 +143,7 @@ struct iop_softc {
 	struct iop_initiator sc_eventii;/* IOP event handler */
 	bus_dmamap_t	sc_scr_dmamap;  /* Scratch DMA map */
 	bus_dma_segment_t sc_scr_seg[1];/* Scratch DMA segment */
-	caddr_t		sc_scr;		/* Scratch memory VA */
+	void *		sc_scr;		/* Scratch memory VA */
 
 	bus_space_tag_t	sc_bus_memt;	/* Parent bus memory tag */
 	bus_space_tag_t	sc_bus_iot;	/* Parent but I/O tag */

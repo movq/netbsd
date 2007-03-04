@@ -1,4 +1,4 @@
-#	$NetBSD: files.news68k,v 1.29 2007/02/10 02:03:51 tsutsui Exp $
+#	$NetBSD: files.news68k,v 1.31 2008/02/20 21:43:34 drochner Exp $
 
 #	NEWS68K-specific configuration info
 
@@ -20,7 +20,6 @@ file	arch/news68k/news68k/machdep.c
 file	arch/news68k/news68k/mainbus.c
 file	arch/news68k/news68k/mem.c
 file	arch/news68k/news68k/pmap_bootstrap.c	compile-with "${NOPROF_C}"
-file	arch/news68k/news68k/softintr.c
 file	arch/news68k/news68k/trap.c
 file	arch/m68k/m68k/cacheops.c
 file	arch/m68k/m68k/db_memrw.c		ddb | kgdb
@@ -65,8 +64,6 @@ device kbc {}
 attach kbc at hb
 file arch/news68k/dev/kbc.c			kbc
 
-include "dev/wscons/files.wscons"
-
 device kb: wskbddev
 file arch/news68k/dev/kb.c			kb needs-flag
 file dev/news/newskeymap.c			kb
@@ -91,10 +88,6 @@ file dev/ic/z8530sc.c				zsc
 device zstty: tty
 attach zstty at zsc
 file dev/ic/z8530tty.c				zstty needs-count
-
-# framebuffers
-include "dev/wsfont/files.wsfont"
-include "dev/rasops/files.rasops"
 
 #device cfb: wsemuldisplaydev, rasops8
 #attach cfb at hb

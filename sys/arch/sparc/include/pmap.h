@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.77 2007/02/21 22:59:52 thorpej Exp $ */
+/*	$NetBSD: pmap.h,v 1.83 2008/10/25 09:23:11 mrg Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -50,7 +50,7 @@
 #include "opt_sparc_arch.h"
 #endif
 
-#include <machine/pte.h>
+#include <sparc/pte.h>
 
 /*
  * Pmap structure.
@@ -143,7 +143,6 @@ struct pmap {
 	union	ctxinfo *pm_ctx;	/* current context, if any */
 	int	pm_ctxnum;		/* current context's number */
 	u_int	pm_cpuset;		/* CPU's this pmap has context on */
-	struct simplelock pm_lock;	/* spinlock */
 	int	pm_refcount;		/* just what it says */
 
 	struct mmuhd	pm_reglist;	/* MMU regions on this pmap (4/4c) */
@@ -240,7 +239,7 @@ extern psize_t		vm_num_phys;
 				       : PMAP_IOENC_4(io))
 
 int	pmap_dumpsize(void);
-int	pmap_dumpmmu(int (*)(dev_t, daddr_t, caddr_t, size_t), daddr_t);
+int	pmap_dumpmmu(int (*)(dev_t, daddr_t, void *, size_t), daddr_t);
 
 #define	pmap_kernel()	(&kernel_pmap_store)
 #define	pmap_resident_count(pm)	((pm)->pm_stats.resident_count)
@@ -264,7 +263,7 @@ pmap_t		pmap_create(void);
 void		pmap_destroy(pmap_t);
 void		pmap_init(void);
 vaddr_t		pmap_map(vaddr_t, paddr_t, paddr_t, int);
-paddr_t		pmap_phys_address(int);
+#define		pmap_phys_address(x) (x)
 void		pmap_reference(pmap_t);
 void		pmap_remove(pmap_t, vaddr_t, vaddr_t);
 #define		pmap_update(pmap)		/* nothing (yet) */
@@ -273,7 +272,7 @@ void		pmap_virtual_space(vaddr_t *, vaddr_t *);
 vaddr_t		pmap_growkernel(vaddr_t);
 #endif
 void		pmap_redzone(void);
-void		kvm_uncache(caddr_t, int);
+void		kvm_uncache(char *, int);
 struct user;
 int		mmu_pagein(struct pmap *pm, vaddr_t, int);
 void		pmap_writetext(unsigned char *, int);

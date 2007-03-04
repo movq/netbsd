@@ -1,7 +1,7 @@
-/*	$NetBSD: svr4_termios.c,v 1.22 2007/02/09 21:55:24 ad Exp $	 */
+/*	$NetBSD: svr4_termios.c,v 1.27 2008/04/28 20:23:45 martin Exp $	 */
 
 /*-
- * Copyright (c) 1994 The NetBSD Foundation, Inc.
+ * Copyright (c) 1994, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_termios.c,v 1.22 2007/02/09 21:55:24 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_termios.c,v 1.27 2008/04/28 20:23:45 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -73,19 +66,19 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_termios.c,v 1.22 2007/02/09 21:55:24 ad Exp $")
 # endif
 #endif
 
-static u_long bsd_to_svr4_speed __P((u_long, u_long));
-static u_long svr4_to_bsd_speed __P((u_long, u_long));
-static void svr4_to_bsd_termios __P((const struct svr4_termios *,
-				     struct termios *, int));
-static void bsd_to_svr4_termios __P((const struct termios *,
-				     struct svr4_termios *));
-static void svr4_termio_to_termios __P((const struct svr4_termio *,
-					struct svr4_termios *));
-static void svr4_termios_to_termio __P((const struct svr4_termios *,
-					struct svr4_termio *));
+static u_long bsd_to_svr4_speed(u_long, u_long);
+static u_long svr4_to_bsd_speed(u_long, u_long);
+static void svr4_to_bsd_termios(const struct svr4_termios *,
+				     struct termios *, int);
+static void bsd_to_svr4_termios(const struct termios *,
+				     struct svr4_termios *);
+static void svr4_termio_to_termios(const struct svr4_termio *,
+					struct svr4_termios *);
+static void svr4_termios_to_termio(const struct svr4_termios *,
+					struct svr4_termio *);
 #ifdef DEBUG_SVR4
-static void print_svr4_termios __P((const struct svr4_termios *));
-static void print_bsd_termios __P((const struct termios *));
+static void print_svr4_termios(const struct svr4_termios *);
+static void print_bsd_termios(const struct termios *);
 #endif /* DEBUG_SVR4 */
 
 #define undefined_char(a,b)				/**/
@@ -160,8 +153,7 @@ static void print_bsd_termios __P((const struct termios *));
 
 #ifdef DEBUG_SVR4
 static void
-print_svr4_termios(st)
-	const struct svr4_termios *st;
+print_svr4_termios(const struct svr4_termios *st)
 {
 	int i;
 	uprintf("SVR4\niflag=%lo oflag=%lo cflag=%lo lflag=%lo\n",
@@ -174,8 +166,7 @@ print_svr4_termios(st)
 
 
 static void
-print_bsd_termios(bt)
-	const struct termios *bt;
+print_bsd_termios(const struct termios *bt)
 {
 	int i;
 	uprintf("BSD\niflag=%o oflag=%o cflag=%o lflag=%o\n",
@@ -188,9 +179,7 @@ print_bsd_termios(bt)
 #endif /* DEBUG_SVR4 */
 
 static u_long
-bsd_to_svr4_speed(sp, mask)
-	u_long sp;
-	u_long mask;
+bsd_to_svr4_speed(u_long sp, u_long mask)
 {
 	switch (sp) {
 #undef getval
@@ -226,9 +215,7 @@ bsd_to_svr4_speed(sp, mask)
 
 
 static u_long
-svr4_to_bsd_speed(sp, mask)
-	u_long sp;
-	u_long mask;
+svr4_to_bsd_speed(u_long sp, u_long mask)
 {
 	while ((mask & 1) == 0) {
 		mask >>= 1;
@@ -262,10 +249,7 @@ svr4_to_bsd_speed(sp, mask)
 
 
 static void
-svr4_to_bsd_termios(st, bt, new)
-	const struct svr4_termios	*st;
-	struct termios	 		*bt;
-	int				 new;
+svr4_to_bsd_termios(const struct svr4_termios *st, struct termios *bt, int new)
 {
 	/* control characters */
 	/*
@@ -364,9 +348,7 @@ svr4_to_bsd_termios(st, bt, new)
 
 
 static void
-bsd_to_svr4_termios(bt, st)
-	const struct termios 	*bt;
-	struct svr4_termios	*st;
+bsd_to_svr4_termios(const struct termios *bt, struct svr4_termios *st)
 {
 	/* control characters */
 	/*
@@ -467,9 +449,7 @@ bsd_to_svr4_termios(bt, st)
 
 
 static void
-svr4_termio_to_termios(t, ts)
-	const struct svr4_termio	*t;
-	struct svr4_termios		*ts;
+svr4_termio_to_termios(const struct svr4_termio *t, struct svr4_termios *ts)
 {
 	int i;
 
@@ -484,9 +464,7 @@ svr4_termio_to_termios(t, ts)
 
 
 static void
-svr4_termios_to_termio(ts, t)
-	const struct svr4_termios	*ts;
-	struct svr4_termio		*t;
+svr4_termios_to_termio(const struct svr4_termios *ts, struct svr4_termio *t)
 {
 	int i;
 
@@ -501,27 +479,20 @@ svr4_termios_to_termio(ts, t)
 }
 
 int
-svr4_term_ioctl(fp, l, retval, fd, cmd, data)
-	struct file *fp;
-	struct lwp *l;
-	register_t *retval;
-	int fd;
-	u_long cmd;
-	caddr_t data;
+svr4_term_ioctl(file_t *fp, struct lwp *l, register_t *retval, int fd, u_long cmd, void *data)
 {
 	struct termios 		bt;
 	struct svr4_termios	st;
 	struct svr4_termio	t;
 	int			error, new;
-	int (*ctl)(struct file *, u_long,  void *, struct lwp *) =
-			fp->f_ops->fo_ioctl;
+	int (*ctl)(file_t *, u_long,  void *) = fp->f_ops->fo_ioctl;
 
 	*retval = 0;
 
 	switch (cmd) {
 	case SVR4_TCGETA:
 	case SVR4_TCGETS:
-		if ((error = (*ctl)(fp, TIOCGETA, (caddr_t) &bt, l)) != 0)
+		if ((error = (*ctl)(fp, TIOCGETA, &bt)) != 0)
 			return error;
 
 		memset(&st, 0, sizeof(st));
@@ -548,7 +519,7 @@ svr4_term_ioctl(fp, l, retval, fd, cmd, data)
 	case SVR4_TCSETAF:
 	case SVR4_TCSETSF:
 		/* get full BSD termios so we don't lose information */
-		if ((error = (*ctl)(fp, TIOCGETA, (caddr_t) &bt, l)) != 0)
+		if ((error = (*ctl)(fp, TIOCGETA, &bt)) != 0)
 			return error;
 
 		switch (cmd) {
@@ -599,13 +570,13 @@ svr4_term_ioctl(fp, l, retval, fd, cmd, data)
 		print_svr4_termios(&st);
 #endif /* DEBUG_SVR4 */
 
-		return (*ctl)(fp, cmd, (caddr_t) &bt, l);
+		return (*ctl)(fp, cmd, &bt);
 
 	case SVR4_TIOCGWINSZ:
 		{
 			struct svr4_winsize ws;
 
-			error = (*ctl)(fp, TIOCGWINSZ, (caddr_t) &ws, l);
+			error = (*ctl)(fp, TIOCGWINSZ, &ws);
 			if (error)
 				return error;
 			return copyout(&ws, data, sizeof(ws));
@@ -617,7 +588,7 @@ svr4_term_ioctl(fp, l, retval, fd, cmd, data)
 
 			if ((error = copyin(data, &ws, sizeof(ws))) != 0)
 				return error;
-			return (*ctl)(fp, TIOCSWINSZ, (caddr_t) &ws, l);
+			return (*ctl)(fp, TIOCSWINSZ, &ws);
 		}
 
 	default:

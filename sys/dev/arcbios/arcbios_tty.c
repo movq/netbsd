@@ -1,4 +1,4 @@
-/*	$NetBSD: arcbios_tty.c,v 1.15 2006/10/01 19:28:43 elad Exp $	*/
+/*	$NetBSD: arcbios_tty.c,v 1.19 2007/11/19 18:51:45 ad Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arcbios_tty.c,v 1.15 2006/10/01 19:28:43 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arcbios_tty.c,v 1.19 2007/11/19 18:51:45 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/user.h>
@@ -47,8 +47,8 @@ __KERNEL_RCSID(0, "$NetBSD: arcbios_tty.c,v 1.15 2006/10/01 19:28:43 elad Exp $"
 #include <dev/arcbios/arcbios.h>
 #include <dev/arcbios/arcbiosvar.h>
 
-struct callout arcbios_tty_ch = CALLOUT_INITIALIZER;
-
+callout_t  arcbios_tty_ch;
+bool arcbios_ch_init;
 static struct tty *arcbios_tty[1];
 
 void	arcbios_tty_start(struct tty *);
@@ -76,6 +76,11 @@ arcbios_ttyopen(dev_t dev, int flag, int mode, struct lwp *l)
 	int unit = minor(dev);
 	struct tty *tp;
 	int s, error = 0, setuptimeout = 0;
+
+	if (!arcbios_ch_init) {
+		arcbios_ch_init = true;
+		callout_init(&arcbios_tty_ch, 0);
+	}
 
 	if (unit != 0)
 		return (ENODEV);
@@ -156,7 +161,7 @@ arcbios_ttypoll(dev_t dev, int events, struct lwp *l)
 }
 
 int
-arcbios_ttyioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
+arcbios_ttyioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	int unit = minor(dev);
 	struct tty *tp = arcbios_tty[unit];
@@ -184,13 +189,7 @@ arcbios_tty_start(struct tty *tp)
 	s = spltty();
 	if (tp->t_state & (TS_TTSTOP | TS_BUSY))
 		goto out;
-	if (tp->t_outq.c_cc <= tp->t_lowat) {
-		if (tp->t_state & TS_ASLEEP) {
-			tp->t_state &= ~TS_ASLEEP;
-			wakeup((caddr_t)&tp->t_outq);
-		}
-		selwakeup(&tp->t_wsel);
-	}
+	ttypull(tp);
 	tp->t_state |= TS_BUSY;
 	while (tp->t_outq.c_cc != 0) {
 		(*ARCBIOS->Write)(ARCBIOS_STDOUT, tp->t_outq.c_cf,

@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.10 2007/02/10 02:03:51 tsutsui Exp $	*/
+/*	$NetBSD: param.h,v 1.12 2007/12/31 13:38:52 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -79,13 +79,6 @@
 #ifndef	_NEWS68K_PARAM_H_
 #define	_NEWS68K_PARAM_H_
 
-#if defined(_KERNEL)
-/*
- * Interrupt glue.
- */
-#include <machine/intr.h>
-#endif
-
 /*
  * Machine dependent constants for m68k NEWS.
  */
@@ -121,28 +114,12 @@
 #define	NKMEMPAGES_MAX_DEFAULT	((4 * 1024 * 1024) >> PAGE_SHIFT)
 
 #if defined(_KERNEL) && !defined(_LOCORE)
+#include <machine/intr.h>
+
 #define	delay(us)	_delay((us) << 8)
 #define DELAY(us)	delay(us)
 
 void	_delay(u_int);
 #endif /* _KERNEL && !_LOCORE */
-
-#if defined(_KERNEL_OPT)
-#include "opt_compat_hpux.h"
-#endif
-
-#ifdef COMPAT_HPUX
-/*
- * Constants/macros for HPUX multiple mapping of user address space.
- * Pages in the first 256Mb are mapped in at every 256Mb segment.
- */
-#define HPMMMASK	0xF0000000
-#define ISHPMMADDR(v) \
-	((curproc->p_md.md_flags & MDP_HPUXMMAP) && \
-	 ((unsigned)(v) & HPMMMASK) && \
-	 ((unsigned)(v) & HPMMMASK) != HPMMMASK)
-#define HPMMBASEADDR(v) \
-	((unsigned)(v) & ~HPMMMASK)
-#endif
 
 #endif	/* !_NEWS68K_PARAM_H_ */

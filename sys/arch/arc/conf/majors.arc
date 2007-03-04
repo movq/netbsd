@@ -1,4 +1,4 @@
-#	$NetBSD: majors.arc,v 1.19 2006/11/24 22:04:21 wiz Exp $
+#	$NetBSD: majors.arc,v 1.21 2007/12/31 15:31:49 ad Exp $
 #
 # Device majors for arc
 #
@@ -47,10 +47,13 @@ device-major	isdntel		char 41			isdntel
 
 device-major	lkm		char 51			lkm
 device-major	clockctl	char 52			clockctl
-device-major	systrace	char 53			systrace
 device-major	cgd		char 54  block 10	cgd
 device-major	ksyms		char 55			ksyms
 device-major	wsfont		char 56			wsfont
+device-major	ld		char 57  block 11	ld
+device-major	icp		char 58			icp
+device-major	mlx		char 59			mlx
+device-major	twe		char 60			twe
 
 device-major	nsmb		char 98			nsmb
 

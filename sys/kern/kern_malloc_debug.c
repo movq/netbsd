@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_malloc_debug.c,v 1.16 2005/12/11 12:24:29 christos Exp $	*/
+/*	$NetBSD: kern_malloc_debug.c,v 1.20 2008/08/07 01:40:21 matt Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Artur Grabowski <art@openbsd.org>
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_malloc_debug.c,v 1.16 2005/12/11 12:24:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_malloc_debug.c,v 1.20 2008/08/07 01:40:21 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -101,8 +101,10 @@ struct debug_malloc_entry {
 	struct malloc_type *md_type;
 };
 
-TAILQ_HEAD(,debug_malloc_entry) debug_malloc_freelist;
-TAILQ_HEAD(,debug_malloc_entry) debug_malloc_usedlist;
+TAILQ_HEAD(,debug_malloc_entry) debug_malloc_freelist =
+	TAILQ_HEAD_INITIALIZER(debug_malloc_freelist);
+TAILQ_HEAD(,debug_malloc_entry) debug_malloc_usedlist =
+	TAILQ_HEAD_INITIALIZER(debug_malloc_usedlist);
 
 int debug_malloc_allocs;
 int debug_malloc_frees;
@@ -110,7 +112,7 @@ int debug_malloc_pages;
 int debug_malloc_chunks_on_freelist;
 
 POOL_INIT(debug_malloc_pool, sizeof(struct debug_malloc_entry), 0, 0, 0,
-    "mdbepl", NULL);
+    "mdbepl", NULL, IPL_VM);
 
 int
 debug_malloc(unsigned long size, struct malloc_type *type, int flags,
@@ -146,7 +148,9 @@ debug_malloc(unsigned long size, struct malloc_type *type, int flags,
 	debug_malloc_allocs++;
 	splx(s);
 
-	pmap_kenter_pa(md->md_va, md->md_pa, VM_PROT_READ|VM_PROT_WRITE);
+	pmap_kenter_pa(md->md_va, md->md_pa,
+	    VM_PROT_READ|VM_PROT_WRITE|PMAP_KMPAGE);
+	pmap_update(pmap_kernel());
 
 	md->md_size = size;
 	md->md_type = type;
@@ -205,22 +209,10 @@ debug_free(void *addr, struct malloc_type *type)
 	 * unmap the page.
 	 */
 	pmap_kremove(md->md_va, PAGE_SIZE);
+	pmap_update(pmap_kernel());
 	splx(s);
 
 	return (1);
-}
-
-void
-debug_malloc_init(void)
-{
-
-	TAILQ_INIT(&debug_malloc_freelist);
-	TAILQ_INIT(&debug_malloc_usedlist);
-
-	debug_malloc_allocs = 0;
-	debug_malloc_frees = 0;
-	debug_malloc_pages = 0;
-	debug_malloc_chunks_on_freelist = 0;
 }
 
 /*

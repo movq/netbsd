@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ethersubr.c,v 1.146 2007/02/20 08:55:54 dyoung Exp $	*/
+/*	$NetBSD: if_ethersubr.c,v 1.169 2008/07/23 06:34:31 dyoung Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ethersubr.c,v 1.146 2007/02/20 08:55:54 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ethersubr.c,v 1.169 2008/07/23 06:34:31 dyoung Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
@@ -90,8 +90,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_ethersubr.c,v 1.146 2007/02/20 08:55:54 dyoung Ex
 #include <sys/errno.h>
 #include <sys/syslog.h>
 #include <sys/kauth.h>
-
-#include <machine/cpu.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
+#include <sys/device.h>
 
 #include <net/if.h>
 #include <net/netisr.h>
@@ -99,6 +100,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_ethersubr.c,v 1.146 2007/02/20 08:55:54 dyoung Ex
 #include <net/if_llc.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
+
+#include <net/if_media.h>
+#include <dev/mii/mii.h>
+#include <dev/mii/miivar.h>
 
 #if NARP == 0
 /*
@@ -199,12 +204,12 @@ static int
 ether_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 	struct rtentry *rt0)
 {
-	u_int16_t etype = 0;
+	uint16_t etype = 0;
 	int error = 0, hdrcmplt = 0;
  	uint8_t esrc[6], edst[6];
 	struct mbuf *m = m0;
 	struct rtentry *rt;
-	struct mbuf *mcopy = (struct mbuf *)0;
+	struct mbuf *mcopy = NULL;
 	struct ether_header *eh;
 	struct ifnet *ifp = ifp0;
 	ALTQ_DECL(struct altq_pktattr pktattr;)
@@ -251,18 +256,18 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 				senderr(EHOSTUNREACH);
 		}
 		if ((rt->rt_flags & RTF_GATEWAY) && dst->sa_family != AF_NS) {
-			if (rt->rt_gwroute == 0)
+			if (rt->rt_gwroute == NULL)
 				goto lookup;
 			if (((rt = rt->rt_gwroute)->rt_flags & RTF_UP) == 0) {
 				rtfree(rt); rt = rt0;
 			lookup: rt->rt_gwroute = rtalloc1(rt->rt_gateway, 1);
-				if ((rt = rt->rt_gwroute) == 0)
+				if ((rt = rt->rt_gwroute) == NULL)
 					senderr(EHOSTUNREACH);
 				/* the "G" test below also prevents rt == rt0 */
 				if ((rt->rt_flags & RTF_GATEWAY) ||
 				    (rt->rt_ifp != ifp)) {
 					rt->rt_refcnt--;
-					rt0->rt_gwroute = 0;
+					rt0->rt_gwroute = NULL;
 					senderr(EHOSTUNREACH);
 				}
 			}
@@ -294,7 +299,7 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 		if (m->m_flags & M_BCAST)
                 	(void)memcpy(edst, etherbroadcastaddr, sizeof(edst));
 		else {
-			caddr_t tha = ar_tha(ah);
+			void *tha = ar_tha(ah);
 
 			KASSERT(tha);
 			memcpy(edst, tha, sizeof(edst));
@@ -318,7 +323,7 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 #endif
 #ifdef INET6
 	case AF_INET6:
-		if (!nd6_storelladdr(ifp, rt, m, dst, (u_char *)edst, sizeof(edst))){
+		if (!nd6_storelladdr(ifp, rt, m, dst, edst, sizeof(edst))){
 			/* something bad happened */
 			return (0);
 		}
@@ -356,7 +361,7 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 			memcpy(llc.llc_snap_org_code, at_org_code,
 			    sizeof(llc.llc_snap_org_code));
 			llc.llc_snap_ether_type = htons(ETHERTYPE_ATALK);
-			memcpy(mtod(m, caddr_t), &llc, sizeof(struct llc));
+			memcpy(mtod(m, void *), &llc, sizeof(struct llc));
 		} else {
 			etype = htons(ETHERTYPE_ATALK);
 		}
@@ -377,11 +382,11 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 	case AF_ISO: {
 		int	snpalen;
 		struct	llc *l;
-		struct sockaddr_dl *sdl;
+		const struct sockaddr_dl *sdl;
 
-		if (rt && (sdl = (struct sockaddr_dl *)rt->rt_gateway) &&
+		if (rt && (sdl = satocsdl(rt->rt_gateway)) &&
 		    sdl->sdl_family == AF_LINK && sdl->sdl_alen > 0) {
-			memcpy(edst, LLADDR(sdl), sizeof(edst));
+			memcpy(edst, CLLADDR(sdl), sizeof(edst));
 		} else {
 			error = iso_snparesolve(ifp,
 			    (const struct sockaddr_iso *)dst,
@@ -398,7 +403,7 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 			if (mcopy) {
 				eh = mtod(mcopy, struct ether_header *);
 				memcpy(eh->ether_dhost, edst, sizeof(edst));
-				memcpy(eh->ether_shost, LLADDR(ifp->if_sadl),
+				memcpy(eh->ether_shost, CLLADDR(ifp->if_sadl),
 				    sizeof(edst));
 			}
 		}
@@ -462,12 +467,12 @@ ether_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 	if (hdrcmplt)
 		memcpy(eh->ether_shost, esrc, sizeof(eh->ether_shost));
 	else
-	 	memcpy(eh->ether_shost, LLADDR(ifp->if_sadl),
+	 	memcpy(eh->ether_shost, CLLADDR(ifp->if_sadl),
 		    sizeof(eh->ether_shost));
 
 #if NCARP > 0
 	if (ifp0 != ifp && ifp0->if_type == IFT_CARP) {
-	 	memcpy(eh->ether_shost, LLADDR(ifp0->if_sadl),
+	 	memcpy(eh->ether_shost, CLLADDR(ifp0->if_sadl),
 		    sizeof(eh->ether_shost));
 	}
 #endif /* NCARP > 0 */
@@ -522,9 +527,9 @@ altq_etherclassify(struct ifaltq *ifq, struct mbuf *m,
     struct altq_pktattr *pktattr)
 {
 	struct ether_header *eh;
-	u_int16_t ether_type;
+	uint16_t ether_type;
 	int hlen, af, hdrsize;
-	caddr_t hdr;
+	void *hdr;
 
 	hlen = ETHER_HDR_LEN;
 	eh = mtod(m, struct ether_header *);
@@ -584,7 +589,7 @@ altq_etherclassify(struct ifaltq *ifq, struct mbuf *m,
 	m->m_data += hlen;
 	m->m_len -= hlen;
 
-	hdr = mtod(m, caddr_t);
+	hdr = mtod(m, void *);
 
 	if (ALTQ_NEEDS_CLASSIFY(ifq))
 		pktattr->pattr_class =
@@ -614,7 +619,7 @@ ether_input(struct ifnet *ifp, struct mbuf *m)
 {
 	struct ethercom *ec = (struct ethercom *) ifp;
 	struct ifqueue *inq;
-	u_int16_t etype;
+	uint16_t etype;
 	struct ether_header *eh;
 #if defined (ISO) || defined (LLC) || defined(NETATALK)
 	struct llc *l;
@@ -651,7 +656,7 @@ ether_input(struct ifnet *ifp, struct mbuf *m)
 		 * if it came from us.
 		 */
 		if ((ifp->if_flags & IFF_SIMPLEX) == 0 &&
-		    memcmp(LLADDR(ifp->if_sadl), eh->ether_shost,
+		    memcmp(CLLADDR(ifp->if_sadl), eh->ether_shost,
 		    ETHER_ADDR_LEN) == 0) {
 			m_freem(m);
 			return;
@@ -699,20 +704,20 @@ ether_input(struct ifnet *ifp, struct mbuf *m)
 	{
 
 #if NCARP > 0
-		if (ifp->if_carp && ifp->if_type != IFT_CARP) {
+		if (__predict_false(ifp->if_carp && ifp->if_type != IFT_CARP)) {
 			/*
 			 * clear M_PROMISC, in case the packets comes from a
 			 * vlan
 			 */
 			m->m_flags &= ~M_PROMISC;
-			if (carp_input(m, (u_int8_t *)&eh->ether_shost,
-			    (u_int8_t *)&eh->ether_dhost, eh->ether_type) == 0)
+			if (carp_input(m, (uint8_t *)&eh->ether_shost,
+			    (uint8_t *)&eh->ether_dhost, eh->ether_type) == 0)
 				return;
 		}
 #endif /* NCARP > 0 */
-		if ((m->m_flags & (M_BCAST|M_MCAST)) == 0 &&
+		if ((m->m_flags & (M_BCAST|M_MCAST|M_PROMISC)) == 0 &&
 		    (ifp->if_flags & IFF_PROMISC) != 0 &&
-		    memcmp(LLADDR(ifp->if_sadl), eh->ether_dhost,
+		    memcmp(CLLADDR(ifp->if_sadl), eh->ether_dhost,
 			   ETHER_ADDR_LEN) != 0) {
 			m->m_flags |= M_PROMISC;
 		}
@@ -797,12 +802,7 @@ ether_input(struct ifnet *ifp, struct mbuf *m)
 			m_freem(m);
 		} else
 			IF_ENQUEUE(inq, m);
-#ifndef __HAVE_GENERIC_SOFT_INTERRUPTS
-		if (!callout_pending(&pppoe_softintr))
-			callout_reset(&pppoe_softintr, 1, pppoe_softintr_handler, NULL);
-#else
-		softintr_schedule(pppoe_softintr);
-#endif
+		softint_schedule(pppoe_softintr);
 		return;
 #endif /* NPPPOE > 0 */
 	case ETHERTYPE_SLOWPROTOCOLS: {
@@ -880,6 +880,10 @@ ether_input(struct ifnet *ifp, struct mbuf *m)
 #endif
 #ifdef INET6
 		case ETHERTYPE_IPV6:
+#ifdef GATEWAY  
+			if (ip6flow_fastforward(m))
+				return;
+#endif
 			schednetisr(NETISR_IPV6);
 			inq = &ip6intrq;
 			break;
@@ -916,7 +920,7 @@ ether_input(struct ifnet *ifp, struct mbuf *m)
 					goto dropanyway;
 				}
 
-				if (Bcmp(&(l->llc_snap_org_code)[0],
+				if (memcmp(&(l->llc_snap_org_code)[0],
 				    at_org_code, sizeof(at_org_code)) == 0 &&
 				    ntohs(l->llc_snap_ether_type) ==
 				    ETHERTYPE_ATALK) {
@@ -927,7 +931,7 @@ ether_input(struct ifnet *ifp, struct mbuf *m)
 					break;
 				}
 
-				if (Bcmp(&(l->llc_snap_org_code)[0],
+				if (memcmp(&(l->llc_snap_org_code)[0],
 				    aarp_org_code,
 				    sizeof(aarp_org_code)) == 0 &&
 				    ntohs(l->llc_snap_ether_type) ==
@@ -989,7 +993,7 @@ ether_input(struct ifnet *ifp, struct mbuf *m)
 				/* XXX we can optimize here? */
 				if (m->m_flags & (M_BCAST | M_MCAST))
 					memcpy(eh->ether_dhost,
-					    LLADDR(ifp->if_sadl),
+					    CLLADDR(ifp->if_sadl),
 					    ETHER_ADDR_LEN);
 				sa.sa_family = AF_UNSPEC;
 				sa.sa_len = sizeof(sa);
@@ -1039,7 +1043,6 @@ ether_sprintf(const u_char *ap)
 {
 	static char etherbuf[3 * ETHER_ADDR_LEN];
 	return ether_snprintf(etherbuf, sizeof(etherbuf), ap);
-	return etherbuf;
 }
 
 char *
@@ -1061,12 +1064,11 @@ ether_snprintf(char *buf, size_t len, const u_char *ap)
  * Perform common duties while attaching to interface list
  */
 void
-ether_ifattach(struct ifnet *ifp, const u_int8_t *lla)
+ether_ifattach(struct ifnet *ifp, const uint8_t *lla)
 {
 	struct ethercom *ec = (struct ethercom *)ifp;
 
 	ifp->if_type = IFT_ETHER;
-	ifp->if_addrlen = ETHER_ADDR_LEN;
 	ifp->if_hdrlen = ETHER_HDR_LEN;
 	ifp->if_dlt = DLT_EN10MB;
 	ifp->if_mtu = ETHERMTU;
@@ -1075,8 +1077,7 @@ ether_ifattach(struct ifnet *ifp, const u_int8_t *lla)
 	if (ifp->if_baudrate == 0)
 		ifp->if_baudrate = IF_Mbps(10);		/* just a default */
 
-	if_alloc_sadl(ifp);
-	memcpy(LLADDR(ifp->if_sadl), lla, ifp->if_addrlen);
+	if_set_sadl(ifp, lla, ETHER_ADDR_LEN);
 
 	LIST_INIT(&ec->ec_multiaddrs);
 	ifp->if_broadcastaddr = etherbroadcastaddr;
@@ -1141,10 +1142,10 @@ ether_ifdetach(struct ifnet *ifp)
  * of the little-endian crc32 generator, which is faster
  * than the double-loop.
  */
-u_int32_t
-ether_crc32_le(const u_int8_t *buf, size_t len)
+uint32_t
+ether_crc32_le(const uint8_t *buf, size_t len)
 {
-	u_int32_t c, crc, carry;
+	uint32_t c, crc, carry;
 	size_t i, j;
 
 	crc = 0xffffffffU;	/* initial value */
@@ -1163,16 +1164,16 @@ ether_crc32_le(const u_int8_t *buf, size_t len)
 	return (crc);
 }
 #else
-u_int32_t
-ether_crc32_le(const u_int8_t *buf, size_t len)
+uint32_t
+ether_crc32_le(const uint8_t *buf, size_t len)
 {
-	static const u_int32_t crctab[] = {
+	static const uint32_t crctab[] = {
 		0x00000000, 0x1db71064, 0x3b6e20c8, 0x26d930ac,
 		0x76dc4190, 0x6b6b51f4, 0x4db26158, 0x5005713c,
 		0xedb88320, 0xf00f9344, 0xd6d6a3e8, 0xcb61b38c,
 		0x9b64c2b0, 0x86d3d2d4, 0xa00ae278, 0xbdbdf21c
 	};
-	u_int32_t crc;
+	uint32_t crc;
 	size_t i;
 
 	crc = 0xffffffffU;	/* initial value */
@@ -1187,10 +1188,10 @@ ether_crc32_le(const u_int8_t *buf, size_t len)
 }
 #endif
 
-u_int32_t
-ether_crc32_be(const u_int8_t *buf, size_t len)
+uint32_t
+ether_crc32_be(const uint8_t *buf, size_t len)
 {
-	u_int32_t c, crc, carry;
+	uint32_t c, crc, carry;
 	size_t i, j;
 
 	crc = 0xffffffffU;	/* initial value */
@@ -1266,14 +1267,14 @@ ether_nonstatic_aton(u_char *dest, char *str)
  * addresses.
  */
 int
-ether_multiaddr(struct sockaddr *sa, u_int8_t addrlo[ETHER_ADDR_LEN],
-    u_int8_t addrhi[ETHER_ADDR_LEN])
+ether_multiaddr(const struct sockaddr *sa, uint8_t addrlo[ETHER_ADDR_LEN],
+    uint8_t addrhi[ETHER_ADDR_LEN])
 {
 #ifdef INET
-	struct sockaddr_in *sin;
+	const struct sockaddr_in *sin;
 #endif /* INET */
 #ifdef INET6
-	struct sockaddr_in6 *sin6;
+	const struct sockaddr_in6 *sin6;
 #endif /* INET6 */
 
 	switch (sa->sa_family) {
@@ -1285,7 +1286,7 @@ ether_multiaddr(struct sockaddr *sa, u_int8_t addrlo[ETHER_ADDR_LEN],
 
 #ifdef INET
 	case AF_INET:
-		sin = satosin(sa);
+		sin = satocsin(sa);
 		if (sin->sin_addr.s_addr == INADDR_ANY) {
 			/*
 			 * An IP address of INADDR_ANY means listen to
@@ -1304,7 +1305,7 @@ ether_multiaddr(struct sockaddr *sa, u_int8_t addrlo[ETHER_ADDR_LEN],
 #endif
 #ifdef INET6
 	case AF_INET6:
-		sin6 = satosin6(sa);
+		sin6 = satocsin6(sa);
 		if (IN6_IS_ADDR_UNSPECIFIED(&sin6->sin6_addr)) {
 			/*
 			 * An IP6 address of 0 means listen to or stop
@@ -1332,14 +1333,14 @@ ether_multiaddr(struct sockaddr *sa, u_int8_t addrlo[ETHER_ADDR_LEN],
  * given interface.
  */
 int
-ether_addmulti(struct ifreq *ifr, struct ethercom *ec)
+ether_addmulti(const struct sockaddr *sa, struct ethercom *ec)
 {
 	struct ether_multi *enm;
 	u_char addrlo[ETHER_ADDR_LEN];
 	u_char addrhi[ETHER_ADDR_LEN];
 	int s = splnet(), error;
 
-	error = ether_multiaddr(&ifr->ifr_addr, addrlo, addrhi);
+	error = ether_multiaddr(sa, addrlo, addrhi);
 	if (error != 0) {
 		splx(s);
 		return error;
@@ -1390,14 +1391,14 @@ ether_addmulti(struct ifreq *ifr, struct ethercom *ec)
  * Delete a multicast address record.
  */
 int
-ether_delmulti(struct ifreq *ifr, struct ethercom *ec)
+ether_delmulti(const struct sockaddr *sa, struct ethercom *ec)
 {
 	struct ether_multi *enm;
 	u_char addrlo[ETHER_ADDR_LEN];
 	u_char addrhi[ETHER_ADDR_LEN];
 	int s = splnet(), error;
 
-	error = ether_multiaddr(&ifr->ifr_addr, addrlo, addrhi);
+	error = ether_multiaddr(sa, addrlo, addrhi);
 	if (error != 0) {
 		splx(s);
 		return (error);
@@ -1437,54 +1438,36 @@ ether_delmulti(struct ifreq *ifr, struct ethercom *ec)
  * called at splnet().
  */
 int
-ether_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+ether_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ethercom *ec = (void *) ifp;
 	struct ifreq *ifr = (struct ifreq *)data;
 	struct ifaddr *ifa = (struct ifaddr *)data;
-	int error = 0;
+	int error;
 
 	switch (cmd) {
 	case SIOCSIFADDR:
 		ifp->if_flags |= IFF_UP;
 		switch (ifa->ifa_addr->sa_family) {
-		case AF_LINK:
-		    {
-			struct sockaddr_dl *sdl =
-			    (struct sockaddr_dl *) ifa->ifa_addr;
-
-			if (sdl->sdl_type != IFT_ETHER ||
-			    sdl->sdl_alen != ifp->if_addrlen) {
-				error = EINVAL;
-				break;
-			}
-
-			memcpy(LLADDR(ifp->if_sadl), LLADDR(sdl),
-			    ifp->if_addrlen);
-
-			/* Set new address. */
-			error = (*ifp->if_init)(ifp);
-			break;
-		    }
 #ifdef INET
 		case AF_INET:
 			if ((ifp->if_flags & IFF_RUNNING) == 0 &&
 			    (error = (*ifp->if_init)(ifp)) != 0)
-				break;
+				return error;
 			arp_ifinit(ifp, ifa);
 			break;
 #endif /* INET */
 		default:
 			if ((ifp->if_flags & IFF_RUNNING) == 0)
-				error = (*ifp->if_init)(ifp);
+				return (*ifp->if_init)(ifp);
 			break;
 		}
-		break;
+		return 0;
 
 	case SIOCGIFADDR:
 		memcpy(((struct sockaddr *)&ifr->ifr_data)->sa_data,
-		    LLADDR(ifp->if_sadl), ETHER_ADDR_LEN);
-		break;
+		    CLLADDR(ifp->if_sadl), ETHER_ADDR_LEN);
+		return 0;
 
 	case SIOCSIFMTU:
 	    {
@@ -1496,50 +1479,54 @@ ether_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			maxmtu = ETHERMTU;
 
 		if (ifr->ifr_mtu < ETHERMIN || ifr->ifr_mtu > maxmtu)
-			error = EINVAL;
-		else {
-			ifp->if_mtu = ifr->ifr_mtu;
-
+			return EINVAL;
+		else if ((error = ifioctl_common(ifp, cmd, data)) != ENETRESET)
+			return error;
+		else if (ifp->if_flags & IFF_UP) {
 			/* Make sure the device notices the MTU change. */
-			if (ifp->if_flags & IFF_UP)
-				error = (*ifp->if_init)(ifp);
-		}
-		break;
+			return (*ifp->if_init)(ifp);
+		} else
+			return 0;
 	    }
 
 	case SIOCSIFFLAGS:
-		if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) == IFF_RUNNING) {
+		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
+		case IFF_RUNNING:
 			/*
 			 * If interface is marked down and it is running,
 			 * then stop and disable it.
 			 */
 			(*ifp->if_stop)(ifp, 1);
-		} else if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) == IFF_UP) {
+			break;
+		case IFF_UP:
 			/*
 			 * If interface is marked up and it is stopped, then
 			 * start it.
 			 */
-			error = (*ifp->if_init)(ifp);
-		} else if ((ifp->if_flags & IFF_UP) != 0) {
+			return (*ifp->if_init)(ifp);
+		case IFF_UP|IFF_RUNNING:
 			/*
 			 * Reset the interface to pick up changes in any other
 			 * flags that affect the hardware state.
 			 */
-			error = (*ifp->if_init)(ifp);
+			return (*ifp->if_init)(ifp);
+		case 0:
+			break;
 		}
-		break;
-
+		return 0;
 	case SIOCADDMULTI:
-		error = ether_addmulti(ifr, ec);
-		break;
-
+		return ether_addmulti(ifreq_getaddr(cmd, ifr), ec);
 	case SIOCDELMULTI:
-		error = ether_delmulti(ifr, ec);
-		break;
-
+		return ether_delmulti(ifreq_getaddr(cmd, ifr), ec);
+	case SIOCSIFMEDIA:
+	case SIOCGIFMEDIA:
+		if (ec->ec_mii == NULL)
+			return ENOTTY;
+		return ifmedia_ioctl(ifp, ifr, &ec->ec_mii->mii_media, cmd);
+	case SIOCSIFCAP:
+		return ifioctl_common(ifp, cmd, data);
 	default:
-		error = ENOTTY;
+		return ENOTTY;
 	}
-
-	return (error);
+	return 0;
 }

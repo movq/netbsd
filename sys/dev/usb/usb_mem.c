@@ -1,4 +1,4 @@
-/*	$NetBSD: usb_mem.c,v 1.31 2006/11/16 01:33:27 christos Exp $	*/
+/*	$NetBSD: usb_mem.c,v 1.37 2008/06/28 17:42:53 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usb_mem.c,v 1.31 2006/11/16 01:33:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usb_mem.c,v 1.37 2008/06/28 17:42:53 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: usb_mem.c,v 1.31 2006/11/16 01:33:27 christos Exp $"
 #include <sys/malloc.h>
 #include <sys/queue.h>
 #include <sys/device.h>		/* for usbdivar.h */
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #ifdef __NetBSD__
 #include <sys/extent.h>
@@ -258,7 +251,7 @@ usb_allocmem(usbd_bus_handle bus, size_t size, size_t align, usb_dma_t *p)
 		}
 		b->flags = 0;
 		for (i = 0; i < USB_MEM_BLOCK; i += USB_MEM_SMALL) {
-			f = (struct usb_frag_dma *)(b->kaddr + i);
+			f = (struct usb_frag_dma *)((char *)b->kaddr + i);
 			f->block = b;
 			f->offs = i;
 			LIST_INSERT_HEAD(&usb_frag_freelist, f, next);
@@ -294,6 +287,13 @@ usb_freemem(usbd_bus_handle bus, usb_dma_t *p)
 	DPRINTFN(5, ("usb_freemem: frag=%p\n", f));
 }
 
+void
+usb_syncmem(usb_dma_t *p, bus_addr_t offset, bus_size_t len, int ops)
+{
+	bus_dmamap_sync(p->block->tag, p->block->map, p->offs + offset,
+	    len, ops);
+}
+
 
 #ifdef __NetBSD__
 usbd_status
@@ -314,8 +314,9 @@ usb_reserve_allocm(struct usb_dma_reserve *rs, usb_dma_t *dma, u_int32_t size)
 	    EX_NOWAIT, &start);
 
 	if (error != 0) {
-		printf("%s: usb_reserve_allocm of size %u failed (error %d)\n",
-		    ((struct device *)rs->softc)->dv_xname, size, error);
+		aprint_error_dev(rs->dv,
+		    "usb_reserve_allocm of size %u failed (error %d)\n",
+		    size, error);
 		return USBD_NOMEM;
 	}
 
@@ -345,16 +346,15 @@ usb_reserve_freem(struct usb_dma_reserve *rs, usb_dma_t *dma)
 }
 
 int
-usb_setup_reserve(void *softc, struct usb_dma_reserve *rs, bus_dma_tag_t dtag,
+usb_setup_reserve(device_t dv, struct usb_dma_reserve *rs, bus_dma_tag_t dtag,
 		  size_t size)
 {
 	int error, nseg;
 	bus_dma_segment_t seg;
-	struct device *dv = softc;
 
 	rs->dtag = dtag;
 	rs->size = size;
-	rs->softc = softc;
+	rs->dv = dv;
 
 	error = bus_dmamem_alloc(dtag, USB_MEM_RESERVE, PAGE_SIZE, 0,
 	    &seg, 1, &nseg, BUS_DMA_NOWAIT);
@@ -377,7 +377,7 @@ usb_setup_reserve(void *softc, struct usb_dma_reserve *rs, bus_dma_tag_t dtag,
 		goto destroy;
 
 	rs->paddr = rs->map->dm_segs[0].ds_addr;
-	rs->extent = extent_create(dv->dv_xname, (u_long)rs->paddr,
+	rs->extent = extent_create(device_xname(dv), (u_long)rs->paddr,
 	    (u_long)(rs->paddr + USB_MEM_RESERVE),
 	    M_USB, 0, 0, 0);
 	if (rs->extent == NULL) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: frame.h,v 1.6 2007/02/09 21:55:06 ad Exp $	*/
+/*	$NetBSD: frame.h,v 1.8 2008/10/15 06:51:18 wrstuden Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -47,6 +40,22 @@
 #endif
 
 #include <sys/signal.h>
+#include <sys/sa.h>
+
+/*
+ * Scheduler activations upcall frame.  Pushed onto user stack before
+ * calling an SA upcall.
+ */
+
+struct saframe {
+	/* first 4 arguments passed in registers on entry to upcallcode */
+	int		sa_type;	/* A0 */
+	struct sa_t **	sa_sas;		/* A1 */
+	int		sa_events;	/* A2 */
+	int		sa_interrupted;	/* A3 */
+	void *		sa_arg;
+	sa_upcall_t	sa_upcall;
+};
 
 void *getframe(struct lwp *, int, int *);
 #if defined(COMPAT_16) || defined(COMPAT_ULTRIX)

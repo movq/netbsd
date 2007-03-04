@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_forward.c,v 1.55 2007/02/17 22:34:13 dyoung Exp $	*/
+/*	$NetBSD: ip6_forward.c,v 1.65 2008/04/23 06:09:05 thorpej Exp $	*/
 /*	$KAME: ip6_forward.c,v 1.109 2002/09/11 08:10:17 sakane Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip6_forward.c,v 1.55 2007/02/17 22:34:13 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip6_forward.c,v 1.65 2008/04/23 06:09:05 thorpej Exp $");
 
 #include "opt_ipsec.h"
 #include "opt_pfil_hooks.h"
@@ -56,12 +56,14 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_forward.c,v 1.55 2007/02/17 22:34:13 dyoung Exp 
 #include <netinet/ip_var.h>
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
+#include <netinet6/ip6_private.h>
 #include <netinet6/scope6_var.h>
 #include <netinet/icmp6.h>
 #include <netinet6/nd6.h>
 
 #ifdef IPSEC
 #include <netinet6/ipsec.h>
+#include <netinet6/ipsec_private.h>
 #include <netkey/key.h>
 #endif /* IPSEC */
 
@@ -78,7 +80,7 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_forward.c,v 1.55 2007/02/17 22:34:13 dyoung Exp 
 
 #include <net/net_osdep.h>
 
-struct	route_in6 ip6_forward_rt;
+struct	route ip6_forward_rt;
 
 #ifdef PFIL_HOOKS
 extern struct pfil_head inet6_pfil_hook;	/* XXX */
@@ -98,12 +100,10 @@ extern struct pfil_head inet6_pfil_hook;	/* XXX */
  */
 
 void
-ip6_forward(m, srcrt)
-	struct mbuf *m;
-	int srcrt;
+ip6_forward(struct mbuf *m, int srcrt)
 {
 	struct ip6_hdr *ip6 = mtod(m, struct ip6_hdr *);
-	struct sockaddr_in6 *dst;
+	const struct sockaddr_in6 *dst;
 	struct rtentry *rt;
 	int error = 0, type = 0, code = 0;
 	struct mbuf *mcopy = NULL;
@@ -130,7 +130,7 @@ ip6_forward(m, srcrt)
 	 * before forwarding packet actually.
 	 */
 	if (ipsec6_in_reject(m, NULL)) {
-		ipsec6stat.in_polvio++;
+		IPSEC6_STATINC(IPSEC_STAT_IN_POLVIO);
 		m_freem(m);
 		return;
 	}
@@ -145,7 +145,7 @@ ip6_forward(m, srcrt)
 	if ((m->m_flags & (M_BCAST|M_MCAST)) != 0 ||
 	    IN6_IS_ADDR_MULTICAST(&ip6->ip6_dst) ||
 	    IN6_IS_ADDR_UNSPECIFIED(&ip6->ip6_src)) {
-		ip6stat.ip6s_cantforward++;
+		IP6_STATINC(IP6_STAT_CANTFORWARD);
 		/* XXX in6_ifstat_inc(rt->rt_ifp, ifs6_in_discard) */
 		if (ip6_log_time + ip6_log_interval < time_second) {
 			ip6_log_time = time_second;
@@ -185,8 +185,8 @@ ip6_forward(m, srcrt)
 	sp = ipsec6_getpolicybyaddr(m, IPSEC_DIR_OUTBOUND,
 	    IP_FORWARDING, &error);
 	if (sp == NULL) {
-		ipsec6stat.out_inval++;
-		ip6stat.ip6s_cantforward++;
+		IPSEC6_STATINC(IPSEC_STAT_OUT_INVAL);
+		IP6_STATINC(IP6_STAT_CANTFORWARD);
 		if (mcopy) {
 #if 0
 			/* XXX: what icmp ? */
@@ -206,8 +206,8 @@ ip6_forward(m, srcrt)
 		/*
 		 * This packet is just discarded.
 		 */
-		ipsec6stat.out_polvio++;
-		ip6stat.ip6s_cantforward++;
+		IPSEC6_STATINC(IPSEC_STAT_OUT_POLVIO);
+		IP6_STATINC(IP6_STAT_CANTFORWARD);
 		key_freesp(sp);
 		if (mcopy) {
 #if 0
@@ -229,7 +229,7 @@ ip6_forward(m, srcrt)
 		if (sp->req == NULL) {
 			/* XXX should be panic ? */
 			printf("ip6_forward: No IPsec request specified.\n");
-			ip6stat.ip6s_cantforward++;
+			IP6_STATINC(IP6_STAT_CANTFORWARD);
 			key_freesp(sp);
 			if (mcopy) {
 #if 0
@@ -313,7 +313,7 @@ ip6_forward(m, srcrt)
 			/* don't show these error codes to the user */
 			break;
 		}
-		ip6stat.ip6s_cantforward++;
+		IP6_STATINC(IP6_STAT_CANTFORWARD);
 		if (mcopy) {
 #if 0
 			/* XXX: what icmp ? */
@@ -336,8 +336,8 @@ ip6_forward(m, srcrt)
 	}
 
 	/* adjust pointer */
-	rt = state.ro ? state.ro->ro_rt : NULL;
-	dst = (struct sockaddr_in6 *)state.dst;
+	rt = state.ro ? rtcache_validate(state.ro) : NULL;
+	dst = (const struct sockaddr_in6 *)state.dst;
 	if (dst != NULL && rt != NULL) {
 		ipsecrt = 1;
 		goto skip_routing;
@@ -362,42 +362,15 @@ ip6_forward(m, srcrt)
 	}
 #endif /* FAST_IPSEC */
 
+	if (srcrt) {
+		union {
+			struct sockaddr		dst;
+			struct sockaddr_in6	dst6;
+		} u;
 
-
-	dst = &ip6_forward_rt.ro_dst;
-	if (!srcrt) {
-		/*
-		 * ip6_forward_rt.ro_dst.sin6_addr is equal to ip6->ip6_dst
-		 */
-		rtcache_check((struct route *)&ip6_forward_rt);
-		if (ip6_forward_rt.ro_rt == NULL) {
-			rtcache_init((struct route *)&ip6_forward_rt);
-
-			if (ip6_forward_rt.ro_rt == NULL) {
-				ip6stat.ip6s_noroute++;
-				/* XXX in6_ifstat_inc(rt->rt_ifp, ifs6_in_noroute) */
-				if (mcopy) {
-					icmp6_error(mcopy, ICMP6_DST_UNREACH,
-					    ICMP6_DST_UNREACH_NOROUTE, 0);
-				}
-				m_freem(m);
-				return;
-			}
-		}
-	} else {
-		if (!IN6_ARE_ADDR_EQUAL(&ip6->ip6_dst, &dst->sin6_addr))
-			rtcache_free((struct route *)&ip6_forward_rt);
-		else
-			rtcache_check((struct route *)&ip6_forward_rt);
-		if (ip6_forward_rt.ro_rt == NULL) {
-			memset(dst, 0, sizeof(*dst));
-			dst->sin6_len = sizeof(struct sockaddr_in6);
-			dst->sin6_family = AF_INET6;
-			dst->sin6_addr = ip6->ip6_dst;
-			rtcache_init((struct route *)&ip6_forward_rt);
-		}
-		if (ip6_forward_rt.ro_rt == NULL) {
-			ip6stat.ip6s_noroute++;
+		sockaddr_in6_init(&u.dst6, &ip6->ip6_dst, 0, 0, 0);
+		if ((rt = rtcache_lookup(&ip6_forward_rt, &u.dst)) == NULL) {
+			IP6_STATINC(IP6_STAT_NOROUTE);
 			/* XXX in6_ifstat_inc(rt->rt_ifp, ifs6_in_noroute) */
 			if (mcopy) {
 				icmp6_error(mcopy, ICMP6_DST_UNREACH,
@@ -406,8 +379,22 @@ ip6_forward(m, srcrt)
 			m_freem(m);
 			return;
 		}
+	} else if ((rt = rtcache_validate(&ip6_forward_rt)) == NULL &&
+	           (rt = rtcache_update(&ip6_forward_rt, 1)) == NULL) {
+		/*
+		 * rtcache_getdst(ip6_forward_rt)->sin6_addr was equal to
+		 * ip6->ip6_dst
+		 */
+		IP6_STATINC(IP6_STAT_NOROUTE);
+		/* XXX in6_ifstat_inc(rt->rt_ifp, ifs6_in_noroute) */
+		if (mcopy) {
+			icmp6_error(mcopy, ICMP6_DST_UNREACH,
+			    ICMP6_DST_UNREACH_NOROUTE, 0);
+		}
+		m_freem(m);
+		return;
 	}
-	rt = ip6_forward_rt.ro_rt;
+	dst = satocsin6(rtcache_getdst(&ip6_forward_rt));
 #ifdef IPSEC
     skip_routing:;
 #endif /* IPSEC */
@@ -424,14 +411,18 @@ ip6_forward(m, srcrt)
 	src_in6 = ip6->ip6_src;
 	if (in6_setscope(&src_in6, rt->rt_ifp, &outzone)) {
 		/* XXX: this should not happen */
-		ip6stat.ip6s_cantforward++;
-		ip6stat.ip6s_badscope++;
+		uint64_t *ip6s = IP6_STAT_GETREF();
+		ip6s[IP6_STAT_CANTFORWARD]++;
+		ip6s[IP6_STAT_BADSCOPE]++;
+		IP6_STAT_PUTREF();
 		m_freem(m);
 		return;
 	}
 	if (in6_setscope(&src_in6, m->m_pkthdr.rcvif, &inzone)) {
-		ip6stat.ip6s_cantforward++;
-		ip6stat.ip6s_badscope++;
+		uint64_t *ip6s = IP6_STAT_GETREF();
+		ip6s[IP6_STAT_CANTFORWARD]++;
+		ip6s[IP6_STAT_BADSCOPE]++;
+		IP6_STAT_PUTREF();
 		m_freem(m);
 		return;
 	}
@@ -440,8 +431,10 @@ ip6_forward(m, srcrt)
 	    && !ipsecrt
 #endif
 	    ) {
-		ip6stat.ip6s_cantforward++;
-		ip6stat.ip6s_badscope++;
+		uint64_t *ip6s = IP6_STAT_GETREF();
+		ip6s[IP6_STAT_CANTFORWARD]++;
+		ip6s[IP6_STAT_BADSCOPE]++;
+		IP6_STAT_PUTREF();
 		in6_ifstat_inc(rt->rt_ifp, ifs6_in_discard);
 
 		if (ip6_log_time + ip6_log_interval < time_second) {
@@ -487,8 +480,10 @@ ip6_forward(m, srcrt)
 	if (in6_setscope(&dst_in6, m->m_pkthdr.rcvif, &inzone) != 0 ||
 	    in6_setscope(&dst_in6, rt->rt_ifp, &outzone) != 0 ||
 	    inzone != outzone) {
-		ip6stat.ip6s_cantforward++;
-		ip6stat.ip6s_badscope++;
+		uint64_t *ip6s = IP6_STAT_GETREF();
+		ip6s[IP6_STAT_CANTFORWARD]++;
+		ip6s[IP6_STAT_BADSCOPE]++;
+		IP6_STAT_PUTREF();
 		m_freem(m);
 		return;
 	}
@@ -553,7 +548,7 @@ ip6_forward(m, srcrt)
 	    (rt->rt_flags & (RTF_DYNAMIC|RTF_MODIFIED)) == 0) {
 		if ((rt->rt_ifp->if_flags & IFF_POINTOPOINT) &&
 		    nd6_is_addr_neighbor(
-		        satocsin6(rtcache_getdst((struct route *)&ip6_forward_rt)),
+		        satocsin6(rtcache_getdst(&ip6_forward_rt)),
 			rt->rt_ifp)) {
 			/*
 			 * If the incoming interface is equal to the outgoing
@@ -637,13 +632,17 @@ ip6_forward(m, srcrt)
 	error = nd6_output(rt->rt_ifp, origifp, m, dst, rt);
 	if (error) {
 		in6_ifstat_inc(rt->rt_ifp, ifs6_out_discard);
-		ip6stat.ip6s_cantforward++;
+		IP6_STATINC(IP6_STAT_CANTFORWARD);
 	} else {
-		ip6stat.ip6s_forward++;
+		IP6_STATINC(IP6_STAT_FORWARD);
 		in6_ifstat_inc(rt->rt_ifp, ifs6_out_forward);
 		if (type)
-			ip6stat.ip6s_redirectsent++;
+			IP6_STATINC(IP6_STAT_REDIRECTSENT);
 		else {
+#ifdef GATEWAY
+			if (m->m_flags & M_CANFASTFWD)
+				ip6flow_create(&ip6_forward_rt, m);
+#endif
 			if (mcopy)
 				goto freecopy;
 		}

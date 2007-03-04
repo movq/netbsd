@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ural.c,v 1.18 2006/11/16 01:33:26 christos Exp $ */
+/*	$NetBSD: if_ural.c,v 1.30 2008/05/24 16:40:58 cube Exp $ */
 /*	$FreeBSD: /repoman/r/ncvs/src/sys/dev/usb/if_ural.c,v 1.40 2006/06/02 23:14:40 sam Exp $	*/
 
 /*-
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ural.c,v 1.18 2006/11/16 01:33:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ural.c,v 1.30 2008/05/24 16:40:58 cube Exp $");
 
 #include "bpfilter.h"
 
@@ -39,9 +39,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_ural.c,v 1.18 2006/11/16 01:33:26 christos Exp $"
 #include <sys/conf.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/endian.h>
-#include <machine/intr.h>
+#include <sys/intr.h>
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -91,6 +91,7 @@ static const struct usb_devno ural_devs[] = {
 	{ USB_VENDOR_BELKIN,		USB_PRODUCT_BELKIN_F5D7050 },
 	{ USB_VENDOR_CISCOLINKSYS,	USB_PRODUCT_CISCOLINKSYS_WUSB54G },
 	{ USB_VENDOR_CISCOLINKSYS,	USB_PRODUCT_CISCOLINKSYS_WUSB54GP },
+	{ USB_VENDOR_CISCOLINKSYS,	USB_PRODUCT_CISCOLINKSYS_HU200TS },
 	{ USB_VENDOR_CONCEPTRONIC,	USB_PRODUCT_CONCEPTRONIC_C54RU },
 	{ USB_VENDOR_DLINK,		USB_PRODUCT_DLINK_DWLG122 },
 	{ USB_VENDOR_GIGABYTE,		USB_PRODUCT_GIGABYTE_GNWBKG },
@@ -98,14 +99,17 @@ static const struct usb_devno ural_devs[] = {
 	{ USB_VENDOR_MELCO,		USB_PRODUCT_MELCO_KG54 },
 	{ USB_VENDOR_MELCO,		USB_PRODUCT_MELCO_KG54AI },
 	{ USB_VENDOR_MELCO,		USB_PRODUCT_MELCO_KG54YB },
+	{ USB_VENDOR_MELCO,		USB_PRODUCT_MELCO_NINWIFI },
 	{ USB_VENDOR_MSI,		USB_PRODUCT_MSI_MS6861 },
 	{ USB_VENDOR_MSI,		USB_PRODUCT_MSI_MS6865 },
 	{ USB_VENDOR_MSI,		USB_PRODUCT_MSI_MS6869 },
+	{ USB_VENDOR_NOVATECH,		USB_PRODUCT_NOVATECH_NV902W },
 	{ USB_VENDOR_RALINK,		USB_PRODUCT_RALINK_RT2570 },
 	{ USB_VENDOR_RALINK,		USB_PRODUCT_RALINK_RT2570_2 },
 	{ USB_VENDOR_RALINK,		USB_PRODUCT_RALINK_RT2570_3 },
 	{ USB_VENDOR_RALINK_2,		USB_PRODUCT_RALINK_2_RT2570 },
 	{ USB_VENDOR_SMC,		USB_PRODUCT_SMC_2862WG },
+	{ USB_VENDOR_SPHAIRON,		USB_PRODUCT_SPHAIRON_UB801R },
 	{ USB_VENDOR_SURECOM,		USB_PRODUCT_SURECOM_EP9001G },
 	{ USB_VENDOR_VTECH,		USB_PRODUCT_VTECH_RT2570 },
 	{ USB_VENDOR_ZINWELL,		USB_PRODUCT_ZINWELL_ZWXG261 },
@@ -139,7 +143,7 @@ Static int		ural_tx_data(struct ural_softc *, struct mbuf *,
 Static void		ural_start(struct ifnet *);
 Static void		ural_watchdog(struct ifnet *);
 Static int		ural_reset(struct ifnet *);
-Static int		ural_ioctl(struct ifnet *, u_long, caddr_t);
+Static int		ural_ioctl(struct ifnet *, u_long, void *);
 Static void		ural_set_testmode(struct ural_softc *);
 Static void		ural_eeprom_read(struct ural_softc *, uint16_t, void *,
 			    int);
@@ -355,9 +359,6 @@ USB_MATCH(ural)
 {
 	USB_MATCH_START(ural, uaa);
 
-	if (uaa->iface != NULL)
-		return UMATCH_NONE;
-
 	return (usb_lookup(ural_devs, uaa->vendor, uaa->product) != NULL) ?
 	    UMATCH_VENDOR_PRODUCT : UMATCH_NONE;
 }
@@ -373,16 +374,16 @@ USB_ATTACH(ural)
 	char *devinfop;
 	int i;
 
+	sc->sc_dev = self;
 	sc->sc_udev = uaa->device;
 
 	devinfop = usbd_devinfo_alloc(sc->sc_udev, 0);
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
 	if (usbd_set_config_no(sc->sc_udev, RAL_CONFIG_NO, 0) != 0) {
-		printf("%s: could not set configuration no\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "could not set configuration no\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
@@ -390,8 +391,7 @@ USB_ATTACH(ural)
 	error = usbd_device2interface_handle(sc->sc_udev, RAL_IFACE_INDEX,
 	    &sc->sc_iface);
 	if (error != 0) {
-		printf("%s: could not get interface handle\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "could not get interface handle\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
@@ -404,8 +404,8 @@ USB_ATTACH(ural)
 	for (i = 0; i < id->bNumEndpoints; i++) {
 		ed = usbd_interface2endpoint_descriptor(sc->sc_iface, i);
 		if (ed == NULL) {
-			printf("%s: no endpoint descriptor for %d\n",
-			    USBDEVNAME(sc->sc_dev), i);
+			aprint_error_dev(self,
+			    "no endpoint descriptor for %d\n", i);
 			USB_ATTACH_ERROR_RETURN;
 		}
 
@@ -417,15 +417,15 @@ USB_ATTACH(ural)
 			sc->sc_tx_no = ed->bEndpointAddress;
 	}
 	if (sc->sc_rx_no == -1 || sc->sc_tx_no == -1) {
-		printf("%s: missing endpoint\n", USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "missing endpoint\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
 	usb_init_task(&sc->sc_task, ural_task, sc);
-	callout_init(&sc->scan_ch);
+	usb_callout_init(sc->sc_scan_ch);
 	sc->amrr.amrr_min_success_threshold = 1;
-	sc->amrr.amrr_min_success_threshold = 15;
-	callout_init(&sc->amrr_ch);
+	sc->amrr.amrr_max_success_threshold = 15;
+	usb_callout_init(sc->sc_amrr_ch);
 
 	/* retrieve RT2570 rev. no */
 	sc->asic_rev = ural_read(sc, RAL_MAC_CSR0);
@@ -433,8 +433,8 @@ USB_ATTACH(ural)
 	/* retrieve MAC address and various other things from EEPROM */
 	ural_read_eeprom(sc);
 
-	printf("%s: MAC/BBP RT2570 (rev 0x%02x), RF %s\n",
-	    USBDEVNAME(sc->sc_dev), sc->asic_rev, ural_get_rf(sc->rf_rev));
+	aprint_normal_dev(self, "MAC/BBP RT2570 (rev 0x%02x), RF %s\n",
+	    sc->asic_rev, ural_get_rf(sc->rf_rev));
 
 	ifp->if_softc = sc;
 	memcpy(ifp->if_xname, USBDEVNAME(sc->sc_dev), IFNAMSIZ);
@@ -537,8 +537,8 @@ USB_DETACH(ural)
 
 	ural_stop(ifp, 1);
 	usb_rem_task(sc->sc_udev, &sc->sc_task);
-	callout_stop(&sc->scan_ch);
-	callout_stop(&sc->amrr_ch);
+	usb_uncallout(sc->sc_scan_ch, ural_next_scan, sc);
+	usb_uncallout(sc->sc_amrr_ch, ural_amrr_timeout, sc);
 
 	if (sc->amrr_xfer != NULL) {
 		usbd_free_xfer(sc->amrr_xfer);
@@ -554,9 +554,6 @@ USB_DETACH(ural)
 		usbd_abort_pipe(sc->sc_tx_pipeh);
 		usbd_close_pipe(sc->sc_tx_pipeh);
 	}
-
-	ural_free_rx_list(sc);
-	ural_free_tx_list(sc);
 
 #if NBPFILTER > 0
 	bpfdetach(ifp);
@@ -755,7 +752,7 @@ ural_task(void *arg)
 
 	case IEEE80211_S_SCAN:
 		ural_set_chan(sc, ic->ic_curchan);
-		callout_reset(&sc->scan_ch, hz / 5, ural_next_scan, sc);
+		usb_callout(sc->sc_scan_ch, hz / 5, ural_next_scan, sc);
 		break;
 
 	case IEEE80211_S_AUTH:
@@ -822,8 +819,8 @@ ural_newstate(struct ieee80211com *ic, enum ieee80211_state nstate,
 	struct ural_softc *sc = ic->ic_ifp->if_softc;
 
 	usb_rem_task(sc->sc_udev, &sc->sc_task);
-	callout_stop(&sc->scan_ch);
-	callout_stop(&sc->amrr_ch);
+	usb_uncallout(sc->sc_scan_ch, ural_next_scan, sc);
+	usb_uncallout(sc->sc_amrr_ch, ural_amrr_timeout, sc);
 
 	/* do it in a process context */
 	sc->sc_state = nstate;
@@ -1207,6 +1204,7 @@ ural_tx_mgt(struct ural_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 	struct ural_tx_desc *desc;
 	struct ural_tx_data *data;
 	struct ieee80211_frame *wh;
+	struct ieee80211_key *k;
 	uint32_t flags = 0;
 	uint16_t dur;
 	usbd_status error;
@@ -1216,6 +1214,16 @@ ural_tx_mgt(struct ural_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 	desc = (struct ural_tx_desc *)data->buf;
 
 	rate = IEEE80211_IS_CHAN_5GHZ(ic->ic_curchan) ? 12 : 2;
+
+	wh = mtod(m0, struct ieee80211_frame *);
+
+	if (wh->i_fc[1] & IEEE80211_FC1_WEP) {
+		k = ieee80211_crypto_encap(ic, ni, m0);
+		if (k == NULL) {
+			m_freem(m0);
+			return ENOBUFS;
+		}
+	}
 
 	data->m = m0;
 	data->ni = ni;
@@ -1487,7 +1495,7 @@ ural_reset(struct ifnet *ifp)
 }
 
 Static int
-ural_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+ural_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ural_softc *sc = ifp->if_softc;
 	struct ieee80211com *ic = &sc->sc_ic;
@@ -2147,7 +2155,7 @@ ural_init(struct ifnet *ifp)
 	ural_set_txantenna(sc, sc->tx_ant);
 	ural_set_rxantenna(sc, sc->rx_ant);
 
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
+	IEEE80211_ADDR_COPY(ic->ic_myaddr, CLLADDR(ifp->if_sadl));
 	ural_set_macaddr(sc, ic->ic_myaddr);
 
 	/*
@@ -2286,7 +2294,7 @@ ural_stop(struct ifnet *ifp, int disable)
 int
 ural_activate(device_ptr_t self, enum devact act)
 {
-	struct ural_softc *sc = (struct ural_softc *)self;
+	struct ural_softc *sc = device_private(self);
 
 	switch (act) {
 	case DVACT_ACTIVATE:
@@ -2317,7 +2325,7 @@ ural_amrr_start(struct ural_softc *sc, struct ieee80211_node *ni)
 	     i--);
 	ni->ni_txrate = i;
 
-	callout_reset(&sc->amrr_ch, hz, ural_amrr_timeout, sc);
+	usb_callout(sc->sc_amrr_ch, hz, ural_amrr_timeout, sc);
 }
 
 Static void
@@ -2374,5 +2382,5 @@ ural_amrr_update(usbd_xfer_handle xfer, usbd_private_handle priv,
 
 	ieee80211_amrr_choose(&sc->amrr, sc->sc_ic.ic_bss, &sc->amn);
 
-	callout_reset(&sc->amrr_ch, hz, ural_amrr_timeout, sc);
+	usb_callout(sc->sc_amrr_ch, hz, ural_amrr_timeout, sc);
 }

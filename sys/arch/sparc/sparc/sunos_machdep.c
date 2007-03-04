@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos_machdep.c,v 1.17 2007/02/09 21:55:12 ad Exp $	*/
+/*	$NetBSD: sunos_machdep.c,v 1.22 2008/05/29 14:51:26 mrg Exp $	*/
 
 /*
  * Copyright (c) 1995 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos_machdep.c,v 1.17 2007/02/09 21:55:12 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos_machdep.c,v 1.22 2008/05/29 14:51:26 mrg Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -95,7 +93,7 @@ void sunos_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	if (onstack)
 		fp = (struct sunos_sigframe *)
-		     ((caddr_t)l->l_sigstk.ss_sp + l->l_sigstk.ss_size);
+		     ((char *)l->l_sigstk.ss_sp + l->l_sigstk.ss_size);
 	else
 		fp = (struct sunos_sigframe *)oldsp;
 
@@ -138,12 +136,12 @@ void sunos_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	 * so that the debugger and _longjmp code can back up through it.
 	 */
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	newsp = (int)fp - sizeof(struct rwindow);
 	write_user_windows();
-	error = (rwindow_save(l) || copyout((caddr_t)&sf, (caddr_t)fp, sizeof sf) ||
+	error = (rwindow_save(l) || copyout((void *)&sf, (void *)fp, sizeof sf) ||
 	    suword(&((struct rwindow *)newsp)->rw_in[6], oldsp));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error) {
 		/*
@@ -182,10 +180,9 @@ void sunos_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 }
 
 int
-sunos_sys_sigreturn(register struct lwp *l, void *v, register_t *retval)
+sunos_sys_sigreturn(struct lwp *l, const struct sunos_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct sunos_sys_sigreturn_args *uap = v;
 
 	return (compat_13_sys_sigreturn(l,
-			(struct compat_13_sys_sigreturn_args *)uap, retval));
+			(const struct compat_13_sys_sigreturn_args *)uap, retval));
 }

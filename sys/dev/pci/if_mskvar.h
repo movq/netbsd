@@ -1,5 +1,5 @@
 /*	$OpenBSD: if_mskvar.h,v 1.3 2006/12/28 16:34:42 kettenis Exp $	*/
-/*	$NetBSD: if_mskvar.h,v 1.3 2007/01/30 11:58:10 msaitoh Exp $	*/
+/*	$NetBSD: if_mskvar.h,v 1.7 2008/06/20 16:45:13 cube Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -132,7 +125,7 @@ struct msk_chain_data {
 	int			sk_rx_cons;
 	int			sk_rx_cnt;
 	/* Stick the jumbo mem management stuff here too. */
-	caddr_t			sk_jslots[MSK_JSLOTS];
+	void *			sk_jslots[MSK_JSLOTS];
 	void			*sk_jumbo_buf;
 };
 
@@ -215,6 +208,7 @@ struct sk_softc {
 	struct msk_status_desc	*sk_status_ring;
 	bus_dmamap_t		sk_status_map;
 	int			sk_status_idx;
+	int			sk_status_own_idx;
 #if NRND > 0
 	rndsource_element_t     rnd_source;
 #endif
@@ -240,6 +234,7 @@ struct sk_if_softc {
 	int			sk_status_idx;
 	struct sk_softc		*sk_softc;	/* parent controller */
 	int			sk_if_flags;
+	kmutex_t		sk_jpool_mtx;
 	LIST_HEAD(__sk_jfreehead, sk_jpool_entry)	sk_jfree_listhead;
 	LIST_HEAD(__sk_jinusehead, sk_jpool_entry)	sk_jinuse_listhead;
 	SIMPLEQ_HEAD(__sk_txmaphead, sk_txmap_entry)	sk_txmap_head;

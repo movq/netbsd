@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_13_machdep.c,v 1.12 2007/02/09 21:55:11 ad Exp $	*/
+/*	$NetBSD: compat_13_machdep.c,v 1.14 2008/04/24 18:39:21 ad Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.12 2007/02/09 21:55:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.14 2008/04/24 18:39:21 ad Exp $");
 
 #include "opt_ppcarch.h"
 
@@ -49,11 +49,11 @@ __KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.12 2007/02/09 21:55:11 ad Ex
 #include <compat/sys/signalvar.h>
 
 int
-compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
+compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct compat_13_sys_sigreturn_args /* {
+	/* {
 		syscallarg(struct sigcontext13 *) sigcntxp;
-	} */ *uap = v;
+	} */
 	struct proc *p = l->l_proc;
 	struct sigcontext13 sc;
 	struct trapframe *tf;
@@ -86,7 +86,7 @@ compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 	tf->tf_xtra[TF_MQ] = sc.sc_frame.mq;
 #endif
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	/* Restore signal stack. */
 	if (sc.sc_onstack & SS_ONSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
@@ -96,7 +96,7 @@ compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 	/* Restore signal mask. */
 	native_sigset13_to_sigset(&sc.sc_mask, &mask);
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: autri.c,v 1.34 2006/11/16 01:33:08 christos Exp $	*/
+/*	$NetBSD: autri.c,v 1.40 2008/07/03 12:26:41 gson Exp $	*/
 
 /*
  * Copyright (c) 2001 SOMEYA Yoshihiko and KUROSAWA Takahiro.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autri.c,v 1.34 2006/11/16 01:33:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autri.c,v 1.40 2008/07/03 12:26:41 gson Exp $");
 
 #include "midi.h"
 
@@ -60,8 +60,8 @@ __KERNEL_RCSID(0, "$NetBSD: autri.c,v 1.34 2006/11/16 01:33:08 christos Exp $");
 #include <dev/ic/ac97var.h>
 #include <dev/ic/mpuvar.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/pci/autrireg.h>
 #include <dev/pci/autrivar.h>
@@ -97,7 +97,7 @@ static int	autri_write_codec(void *, uint8_t, uint16_t);
 static int	autri_reset_codec(void *);
 static enum ac97_host_flags	autri_flags_codec(void *);
 
-static void autri_powerhook(int, void *);
+static bool autri_resume(device_t PMF_FN_PROTO);
 static int  autri_init(void *);
 static struct autri_dma *autri_find_dma(struct autri_softc *, void *);
 static void autri_setup_channel(struct autri_softc *, int,
@@ -285,7 +285,7 @@ autri_read_codec(void *sc_, uint8_t index, uint16_t *data)
 		break;
 	default:
 		printf("%s: autri_read_codec : unknown device\n",
-		       sc->sc_dev.dv_xname);
+		       device_xname(&sc->sc_dev));
 		return -1;
 	}
 
@@ -297,7 +297,7 @@ autri_read_codec(void *sc_, uint8_t index, uint16_t *data)
 
 	if (count == 0xffff) {
 		printf("%s: Codec timeout. Busy reading AC'97 codec.\n",
-		       sc->sc_dev.dv_xname);
+		       device_xname(&sc->sc_dev));
 		return -1;
 	}
 
@@ -313,7 +313,7 @@ autri_read_codec(void *sc_, uint8_t index, uint16_t *data)
 
 	if (count == 0xffff) {
 		printf("%s: Codec timeout. Busy reading AC'97 codec.\n",
-		       sc->sc_dev.dv_xname);
+		       device_xname(&sc->sc_dev));
 		return -1;
 	}
 
@@ -359,7 +359,7 @@ autri_write_codec(void *sc_, uint8_t index, uint16_t data)
 		break;
 	default:
 		printf("%s: autri_write_codec : unknown device.\n",
-		       sc->sc_dev.dv_xname);
+		       device_xname(&sc->sc_dev));
 		return -1;
 	}
 
@@ -371,7 +371,7 @@ autri_write_codec(void *sc_, uint8_t index, uint16_t data)
 
 	if (count == 0xffff) {
 		printf("%s: Codec timeout. Busy writing AC'97 codec\n",
-		       sc->sc_dev.dv_xname);
+		       device_xname(&sc->sc_dev));
 		return -1;
 	}
 
@@ -442,7 +442,7 @@ autri_reset_codec(void *sc_)
 		break;
 	default:
 		printf("%s: autri_reset_codec : unknown device\n",
-		       sc->sc_dev.dv_xname);
+		       device_xname(&sc->sc_dev));
 		return EOPNOTSUPP;
 	}
 
@@ -456,7 +456,7 @@ autri_reset_codec(void *sc_)
 
 	if (count == 0) {
 		printf("%s: Codec timeout. AC'97 is not ready for operation.\n",
-		       sc->sc_dev.dv_xname);
+		       device_xname(&sc->sc_dev));
 		return ETIMEDOUT;
 	}
 	return 0;
@@ -539,28 +539,25 @@ autri_attach(struct device *parent, struct device *self, void *aux)
 	/* map register to memory */
 	if (pci_mapreg_map(pa, AUTRI_PCI_MEMORY_BASE,
 	    PCI_MAPREG_TYPE_MEM, 0, &sc->memt, &sc->memh, NULL, NULL)) {
-		aprint_error("%s: can't map memory space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't map memory space\n");
 		return;
 	}
 
 	/* map and establish the interrupt */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: couldn't map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_AUDIO, autri_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
 			aprint_normal(" at %s", intrstr);
 		aprint_normal("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	sc->sc_dmatag = pa->pa_dmat;
 	sc->sc_pc = pc;
@@ -587,37 +584,32 @@ autri_attach(struct device *parent, struct device *self, void *aux)
 	codec->host_if.flags = autri_flags_codec;
 
 	if ((r = ac97_attach(&codec->host_if, self)) != 0) {
-		aprint_error("%s: can't attach codec (error 0x%X)\n",
-		    sc->sc_dev.dv_xname, r);
+		aprint_error_dev(&sc->sc_dev, "can't attach codec (error 0x%X)\n", r);
 		return;
 	}
+
+	if (!pmf_device_register(self, NULL, autri_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	audio_attach_mi(&autri_hw_if, sc, &sc->sc_dev);
 
 #if NMIDI > 0
 	midi_attach_mi(&autri_midi_hw_if, sc, &sc->sc_dev);
 #endif
-
-	sc->sc_old_power = PWR_RESUME;
-	powerhook_establish(sc->sc_dev.dv_xname, autri_powerhook, sc);
 }
 
 CFATTACH_DECL(autri, sizeof(struct autri_softc),
     autri_match, autri_attach, NULL, NULL);
 
-static void
-autri_powerhook(int why, void *addr)
+static bool
+autri_resume(device_t dv PMF_FN_ARGS)
 {
-	struct autri_softc *sc;
+	struct autri_softc *sc = device_private(dv);
 
-	sc = addr;
-	if (why == PWR_RESUME && sc->sc_old_power == PWR_SUSPEND) {
-		DPRINTF(("PWR_RESUME\n"));
-		autri_init(sc);
-		/*autri_reset_codec(&sc->sc_codec);*/
-		(sc->sc_codec.codec_if->vtbl->restore_ports)(sc->sc_codec.codec_if);
-	}
-	sc->sc_old_power = why;
+	autri_init(sc);
+	(sc->sc_codec.codec_if->vtbl->restore_ports)(sc->sc_codec.codec_if);
+
+	return true;
 }
 
 static int

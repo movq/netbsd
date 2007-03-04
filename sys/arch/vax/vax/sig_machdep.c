@@ -1,4 +1,4 @@
-/* $NetBSD: sig_machdep.c,v 1.9 2007/02/21 23:48:12 thorpej Exp $	 */
+/* $NetBSD: sig_machdep.c,v 1.15 2008/04/24 18:39:22 ad Exp $	 */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -83,7 +83,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.9 2007/02/21 23:48:12 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.15 2008/04/24 18:39:22 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
@@ -170,11 +170,11 @@ const static sig_setupstack_t sig_setupstacks[] = {
 
 #if defined(COMPAT_13) || defined(COMPAT_ULTRIX) || defined(COMPAT_IBCS2)
 int
-compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
+compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct compat_13_sys_sigreturn_args /* {
+	/* {
 		syscallarg(struct sigcontext13 *) sigcntxp;
-	} */ *uap = v;
+	} */
 	struct proc *p = l->l_proc;
 	struct trapframe *scf;
 	struct sigcontext13 *ucntx;
@@ -183,7 +183,7 @@ compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 
 	scf = l->l_addr->u_pcb.framep;
 	ucntx = SCARG(uap, sigcntxp);
-	if (copyin((caddr_t)ucntx, (caddr_t)&ksc, sizeof(struct sigcontext)))
+	if (copyin((void *)ucntx, (void *)&ksc, sizeof(struct sigcontext)))
 		return EINVAL;
 
 	/* Compatibility mode? */
@@ -193,7 +193,7 @@ compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 		return (EINVAL);
 	}
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	if (ksc.sc_onstack & SS_ONSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
 	else
@@ -201,7 +201,7 @@ compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 
 	native_sigset13_to_sigset(&ksc.sc_mask, &mask);
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	scf->fp = ksc.sc_fp;
 	scf->ap = ksc.sc_ap;
@@ -253,15 +253,15 @@ setupstack_oldsigcontext(const ksiginfo_t *ksi, const sigset_t *mask, int vers,
 	tramp.pc = (register_t)handler;
 	tramp.arg = sp;
 	sendsig_reset(l, ksi->ksi_signo);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	/* Point stack pointer at pc in trampoline.  */
 	sp =- 8;
 
-	error = (copyout(&tramp, (caddr_t)tramp.scp - sizeof(tramp), sizeof(tramp)) != 0 ||
-	    copyout(&sigctx, (caddr_t)tramp.scp, sizeof(sigctx)) != 0);
+	error = copyout(&tramp, (char *)tramp.scp - sizeof(tramp), sizeof(tramp)) != 0 ||
+	    copyout(&sigctx, (void *)tramp.scp, sizeof(sigctx)) != 0;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	if (error)
 		return 0;
 
@@ -271,11 +271,11 @@ setupstack_oldsigcontext(const ksiginfo_t *ksi, const sigset_t *mask, int vers,
 
 #if defined(COMPAT_16) || defined(COMPAT_ULTRIX)
 int
-compat_16_sys___sigreturn14(struct lwp *l, void *v, register_t *retval)
+compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigreturn14_args *uap, register_t *retval)
 {
-	struct compat_16_sys___sigreturn14_args /* {
+	/* {
 		syscallarg(struct sigcontext *) sigcntxp;
-	} */ *uap = v;
+	} */
 	struct proc *p = l->l_proc;
 	struct trapframe *scf;
 	struct sigcontext *ucntx;
@@ -284,7 +284,7 @@ compat_16_sys___sigreturn14(struct lwp *l, void *v, register_t *retval)
 	scf = l->l_addr->u_pcb.framep;
 	ucntx = SCARG(uap, sigcntxp);
 
-	if (copyin((caddr_t)ucntx, (caddr_t)&ksc, sizeof(struct sigcontext)))
+	if (copyin((void *)ucntx, (void *)&ksc, sizeof(struct sigcontext)))
 		return EINVAL;
 	/* Compatibility mode? */
 	if ((ksc.sc_ps & (PSL_IPL | PSL_IS)) ||
@@ -293,14 +293,14 @@ compat_16_sys___sigreturn14(struct lwp *l, void *v, register_t *retval)
 		return (EINVAL);
 	}
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	if (ksc.sc_onstack & SS_ONSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
 	else
 		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
 	/* Restore signal mask. */
 	(void) sigprocmask1(l, SIG_SETMASK, &ksc.sc_mask, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	scf->fp = ksc.sc_fp;
 	scf->ap = ksc.sc_ap;
@@ -360,7 +360,7 @@ setupstack_sigcontext2(const ksiginfo_t *ksi, const sigset_t *mask, int vers,
 	tramp.scp = sp;
 	sp -= sizeof(tramp);
 	sendsig_reset(l, ksi->ksi_signo);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	/* Store the handler in the trapframe.  */
 	tf->fp = handler;
@@ -369,7 +369,7 @@ setupstack_sigcontext2(const ksiginfo_t *ksi, const sigset_t *mask, int vers,
 	error = (copyout(&sigctx, (char *)tramp.scp, sizeof(sigctx)) != 0 ||
 	    copyout(&tramp, (char *)sp, sizeof(tramp)) != 0);
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	if (error)
 		return 0;
 
@@ -422,10 +422,10 @@ setupstack_siginfo3(const ksiginfo_t *ksi, const sigset_t *mask, int vers,
 	/* Save register context.  */
 	uc.uc_flags = _UC_SIGMASK;
 	uc.uc_sigmask = *mask;
-	uc.uc_link = NULL;
+	uc.uc_link = l->l_ctxlink;
 	memset(&uc.uc_stack, 0, sizeof(uc.uc_stack));
 	sendsig_reset(l, ksi->ksi_signo);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	cpu_getmcontext(l, &uc.uc_mcontext, &uc.uc_flags);
 
 	tf->fp = handler;
@@ -435,7 +435,7 @@ setupstack_siginfo3(const ksiginfo_t *ksi, const sigset_t *mask, int vers,
 	    copyout(&ksi->ksi_info, (char *)tramp.sip, sizeof(ksi->ksi_info)) != 0 ||
 	    copyout(&tramp, (char *)sp, sizeof(tramp)) != 0);
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	if (error)
 		sigexit(l, SIGILL);
 

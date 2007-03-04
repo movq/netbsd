@@ -1,4 +1,4 @@
-/*	$NetBSD: synaptics.c,v 1.13 2006/11/16 01:33:20 christos Exp $	*/
+/*	$NetBSD: synaptics.c,v 1.21 2008/04/30 14:07:14 ad Exp $	*/
 
 /*
  * Copyright (c) 2005, Steve C. Woodford
@@ -43,12 +43,12 @@
  *	- Support the serial protocol (we only support PS/2 for now)
  *	- Support auto-repeat for up/down button Z-axis emulation.
  *	- Maybe add some more gestures (can we use Palm support somehow?)
- *	- Support pass-through mode (whatever that is; my docs are too old).
  */
 
 #include "opt_pms.h"
 
 #include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: synaptics.c,v 1.21 2008/04/30 14:07:14 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,7 +57,7 @@
 #include <sys/sysctl.h>
 #include <sys/kernel.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pckbport/pckbportvar.h>
 
@@ -147,8 +147,8 @@ pms_synaptics_probe_init(void *vsc)
 	    resp, 0);
 	if (res) {
 #ifdef SYNAPTICSDEBUG
-		aprint_error("%s: synaptics_probe: Identify Touchpad error.\n",
-		    psc->sc_dev.dv_xname);
+		aprint_normal_dev(psc->sc_dev,
+		    "synaptics_probe: Identify Touchpad error.\n");
 #endif
 		/*
 		 * Reset device in case the probe confused it.
@@ -162,8 +162,8 @@ pms_synaptics_probe_init(void *vsc)
 
 	if (resp[1] != SYNAPTICS_MAGIC_BYTE) {
 #ifdef SYNAPTICSDEBUG
-		printf("%s: synaptics_probe: Not synaptics.\n",
-		    psc->sc_dev.dv_xname);
+		aprint_normal_dev(psc->sc_dev,
+		    "synaptics_probe: Not synaptics.\n");
 #endif
 		res = 1;
 		goto doreset;
@@ -174,8 +174,8 @@ pms_synaptics_probe_init(void *vsc)
 	/* Check for minimum version and print a nice message. */
 	ver_major = resp[2] & 0x0f;
 	ver_minor = resp[0];
-	aprint_normal("%s: Synaptics touchpad version %d.%d\n",
-	    psc->sc_dev.dv_xname, ver_major, ver_minor);
+	aprint_normal_dev(psc->sc_dev, "Synaptics touchpad version %d.%d\n",
+	    ver_major, ver_minor);
 	if (ver_major * 10 + ver_minor < SYNAPTICS_MIN_VERSION) {
 		/* No capability query support. */
 		sc->caps = 0;
@@ -190,8 +190,8 @@ pms_synaptics_probe_init(void *vsc)
 	    resp, 0);
 	if (res) {
 		/* Hmm, failed to get capabilites. */
-		aprint_error("%s: synaptics_probe: Failed to query "
-		    "capabilities.\n", psc->sc_dev.dv_xname);
+		aprint_error_dev(psc->sc_dev,
+		    "synaptics_probe: Failed to query capabilities.\n");
 		goto doreset;
 	}
 
@@ -205,10 +205,10 @@ pms_synaptics_probe_init(void *vsc)
 
 	if (sc->caps & SYNAPTICS_CAP_EXTENDED) {
 #ifdef SYNAPTICSDEBUG
-		aprint_normal("%s: synaptics_probe: Capabilities 0x%04x.\n",
-		    psc->sc_dev.dv_xname, sc->caps);
+		aprint_normal_dev(psc->sc_dev,
+		    "synaptics_probe: Capabilities 0x%04x.\n", sc->caps);
 #endif
-		if (sc->caps & SYNAPTICS_CAP_PASSTHROUGH) /*XXX: Not supported*/
+		if (sc->caps & SYNAPTICS_CAP_PASSTHROUGH)
 			sc->flags |= SYN_FLAG_HAS_PASSTHROUGH;
 
 		if (sc->caps & SYNAPTICS_CAP_PALMDETECT)
@@ -226,9 +226,9 @@ pms_synaptics_probe_init(void *vsc)
 			    psc->sc_kbcslot, cmd, 1, 3, resp, 0);
 #ifdef SYNAPTICSDEBUG
 			if (res == 0)
-				aprint_normal("%s: synaptics_probe: Extended "
-				    "Capabilities 0x%02x.\n",
-				    psc->sc_dev.dv_xname, resp[1]);
+				aprint_normal_dev(psc->sc_dev,
+				    "synaptics_probe: Extended "
+				    "Capabilities 0x%02x.\n", resp[1]);
 #endif
 			if (!res && (resp[1] >> 4) >= 2) {
 				/* Yes. */
@@ -240,7 +240,7 @@ pms_synaptics_probe_init(void *vsc)
 	if (sc->flags) {
 		const char comma[] = ", ";
 		const char *sep = "";
-		aprint_normal("%s: ", psc->sc_dev.dv_xname);
+		aprint_normal_dev(psc->sc_dev, "");
 		if (sc->flags & SYN_FLAG_HAS_MIDDLE_BUTTON) {
 			aprint_normal("%sMiddle button", sep);
 			sep = comma;
@@ -266,7 +266,7 @@ pms_synaptics_probe_init(void *vsc)
 done:
 	pms_sysctl_synaptics(&clog);
 	pckbport_set_inputhandler(psc->sc_kbctag, psc->sc_kbcslot,
-	    pms_synaptics_input, psc, psc->sc_dev.dv_xname);
+	    pms_synaptics_input, psc, device_xname(psc->sc_dev));
 
 	return (0);
 }
@@ -299,8 +299,8 @@ pms_synaptics_enable(void *vsc)
 	sc->rem_x = sc->rem_y = 0;
 	sc->movement_history = 0;
 	if (res) {
-		printf("%s: synaptics_enable: Error enabling device.\n",
-		    psc->sc_dev.dv_xname);
+		aprint_error_dev(psc->sc_dev,
+		    "synaptics_enable: Error enabling device.\n");
 	}
 }
 
@@ -314,8 +314,9 @@ pms_synaptics_resume(void *vsc)
 	cmd[0] = PMS_RESET;
 	res = pckbport_poll_cmd(psc->sc_kbctag, psc->sc_kbcslot, cmd, 1, 2,
 	    resp, 1);
-	printf("%s: pms_synaptics_resume: reset on resume %d 0x%02x 0x%02x\n",
-	    psc->sc_dev.dv_xname, res, resp[0], resp[1]);
+	aprint_debug_dev(psc->sc_dev,
+	    "pms_synaptics_resume: reset on resume %d 0x%02x 0x%02x\n",
+	    res, resp[0], resp[1]);
 }
 
 static void
@@ -644,12 +645,107 @@ pms_synaptics_send_command(pckbport_tag_t tag, pckbport_slot_t slot,
 #define PMS_MBUTMASK 0x04
 
 static void
+pms_synaptics_parse(struct pms_softc *psc)
+{
+	struct synaptics_softc *sc = &psc->u.synaptics;
+	struct synaptics_packet sp;
+
+	/* Absolute X/Y coordinates of finger */
+	sp.sp_x = psc->packet[4] + ((psc->packet[1] & 0x0f) << 8) +
+	   ((psc->packet[3] & 0x10) << 8);
+	sp.sp_y = psc->packet[5] + ((psc->packet[1] & 0xf0) << 4) +
+	   ((psc->packet[3] & 0x20) << 7);
+
+	/* Pressure */
+	sp.sp_z = psc->packet[2];
+
+	/* Width of finger */
+	sp.sp_w = ((psc->packet[0] & 0x30) >> 2) +
+	   ((psc->packet[0] & 0x04) >> 1) +
+	   ((psc->packet[3] & 0x04) >> 2);
+
+	/* Left/Right button handling. */
+	sp.sp_left = psc->packet[0] & PMS_LBUTMASK;
+	sp.sp_right = psc->packet[0] & PMS_RBUTMASK;
+
+	/* Up/Down buttons. */
+	if (sc->flags & SYN_FLAG_HAS_BUTTONS_4_5) {
+		/* Old up/down buttons. */
+		sp.sp_up = sp.sp_left ^
+		    (psc->packet[3] & PMS_LBUTMASK);
+		sp.sp_down = sp.sp_right ^
+		    (psc->packet[3] & PMS_RBUTMASK);
+	} else
+	if (sc->flags & SYN_FLAG_HAS_UP_DOWN_BUTTONS &&
+	   ((psc->packet[0] & PMS_RBUTMASK) ^
+	   (psc->packet[3] & PMS_RBUTMASK))) {
+		/* New up/down button. */
+		sp.sp_up = psc->packet[4] & SYN_1BUTMASK;
+		sp.sp_down = psc->packet[5] & SYN_2BUTMASK;
+	} else {
+		sp.sp_up = 0;
+		sp.sp_down = 0;
+	}
+
+	/* Middle button. */
+	if (sc->flags & SYN_FLAG_HAS_MIDDLE_BUTTON) {
+		/* Old style Middle Button. */
+		sp.sp_middle = (psc->packet[0] & PMS_LBUTMASK) ^
+		    (psc->packet[3] & PMS_LBUTMASK);
+	} else
+	if (synaptics_up_down_emul == 1) {
+		/* Do middle button emulation using up/down buttons */
+		sp.sp_middle = sp.sp_up | sp.sp_down;
+		sp.sp_up = sp.sp_down = 0;
+	} else
+		sp.sp_middle = 0;
+
+	pms_synaptics_process_packet(psc, &sp);
+}
+
+static void
+pms_synaptics_passthrough(struct pms_softc *psc)
+{
+	int dx, dy, dz;
+	int buttons, changed;
+	int s;
+
+	buttons = ((psc->packet[1] & PMS_LBUTMASK) ? 0x20 : 0) |
+		((psc->packet[1] & PMS_MBUTMASK) ? 0x40 : 0) |
+		((psc->packet[1] & PMS_RBUTMASK) ? 0x80 : 0);
+
+	dx = psc->packet[4];
+	if (dx >= 128)
+		dx -= 256;
+	if (dx == -128)
+		dx = -127;
+
+	dy = psc->packet[5];
+	if (dy >= 128)
+		dy -= 256;
+	if (dy == -128)
+		dy = -127;
+
+	dz = 0;
+
+	changed = buttons ^ (psc->buttons & 0xe0);
+	psc->buttons ^= changed;
+
+	if (dx || dy || dz || changed) {
+		buttons = (psc->buttons & 0x1f) | ((psc->buttons >> 5) & 0x7);
+		s = spltty();
+		wsmouse_input(psc->sc_wsmousedev,
+			buttons, dx, dy, dz, 0,
+			WSMOUSE_INPUT_DELTA);
+		splx(s);
+	}
+}
+
+static void
 pms_synaptics_input(void *vsc, int data)
 {
 	struct pms_softc *psc = vsc;
-	struct synaptics_softc *sc = &psc->u.synaptics;
 	struct timeval diff;
-	struct synaptics_packet sp;
 
 	if (!psc->sc_enabled) {
 		/* Interrupts are not expected.	 Discard the byte. */
@@ -661,8 +757,9 @@ pms_synaptics_input(void *vsc, int data)
 	if (psc->inputstate > 0) {
 		timersub(&psc->current, &psc->last, &diff);
 		if (diff.tv_sec > 0 || diff.tv_usec >= 40000) {
-			printf("%s: pms_input: unusual delay (%ld.%06ld s), "
-			    "scheduling reset\n", psc->sc_dev.dv_xname,
+			aprint_debug_dev(psc->sc_dev,
+			    "pms_input: unusual delay (%ld.%06ld s), "
+			    "scheduling reset\n",
 			    (long)diff.tv_sec, (long)diff.tv_usec);
 			psc->inputstate = 0;
 			psc->sc_enabled = 0;
@@ -676,8 +773,8 @@ pms_synaptics_input(void *vsc, int data)
 	case 0:
 		if ((data & 0xc8) != 0x80) {
 #ifdef SYNAPTICSDEBUG
-			printf("%s: pms_input: 0x%02x out of sync\n",
-			    psc->sc_dev.dv_xname, data);
+			aprint_normal_dev(psc->sc_dev,
+			    "pms_input: 0x%02x out of sync\n", data);
 #endif
 			return;	/* not in sync yet, discard input */
 		}
@@ -686,8 +783,8 @@ pms_synaptics_input(void *vsc, int data)
 	case 3:
 		if ((data & 8) == 8) {
 #ifdef SYNAPTICSDEBUG
-			printf("%s: pms_input: dropped in relative mode, "
-			    "reset\n", psc->sc_dev.dv_xname);
+			aprint_normal_dev(psc->sc_dev,
+			    "pms_input: dropped in relative mode, reset\n");
 #endif
 			psc->inputstate = 0;
 			psc->sc_enabled = 0;
@@ -704,60 +801,13 @@ pms_synaptics_input(void *vsc, int data)
 		 */
 		psc->inputstate = 0;
 
-		/* Absolute X/Y coordinates of finger */
-		sp.sp_x = psc->packet[4] + ((psc->packet[1] & 0x0f) << 8) +
-		    ((psc->packet[3] & 0x10) << 8);
-		sp.sp_y = psc->packet[5] + ((psc->packet[1] & 0xf0) << 4) +
-		    ((psc->packet[3] & 0x20) << 7);
-
-		/* Pressure */
-		sp.sp_z = psc->packet[2];
-
-		/* Width of finger */
-		sp.sp_w = ((psc->packet[0] & 0x30) >> 2) +
-		    ((psc->packet[0] & 0x04) >> 1) +
-		    ((psc->packet[3] & 0x04) >> 2);
-
-		/* Left/Right button handling. */
-		sp.sp_left = psc->packet[0] & PMS_LBUTMASK;
-		sp.sp_right = psc->packet[0] & PMS_RBUTMASK;
-
-		/* Up/Down buttons. */
-		if (sc->flags & SYN_FLAG_HAS_BUTTONS_4_5) {
-			/* Old up/down buttons. */
-			sp.sp_up = sp.sp_left ^
-			    (psc->packet[3] & PMS_LBUTMASK);
-			sp.sp_down = sp.sp_right ^
-			    (psc->packet[3] & PMS_RBUTMASK);
-		} else
-		if (sc->flags & SYN_FLAG_HAS_UP_DOWN_BUTTONS &&
-		    ((psc->packet[0] & PMS_RBUTMASK) ^
-		    (psc->packet[3] & PMS_RBUTMASK))) {
-			/* New up/down button. */
-			sp.sp_up = psc->packet[4] & SYN_1BUTMASK;
-			sp.sp_down = psc->packet[5] & SYN_2BUTMASK;
+		if ((psc->packet[0] & 0xfc) == 0x84 &&
+		    (psc->packet[3] & 0xcc) == 0xc4) {
+			/* PS/2 passthrough */
+			pms_synaptics_passthrough(psc);
 		} else {
-			sp.sp_up = 0;
-			sp.sp_down = 0;
+			pms_synaptics_parse(psc);
 		}
-
-		/* Middle button. */
-		if (sc->flags & SYN_FLAG_HAS_MIDDLE_BUTTON) {
-			/* Old style Middle Button. */
-			sp.sp_middle = (psc->packet[0] & PMS_LBUTMASK) ^
-			    (psc->packet[3] & PMS_LBUTMASK);
-		} else
-		if (synaptics_up_down_emul == 1) {
-			/* Do middle button emulation using up/down buttons */
-			sp.sp_middle = sp.sp_up | sp.sp_down;
-			sp.sp_up = sp.sp_down = 0;
-		} else
-			sp.sp_middle = 0;
-
-		/*
-		 * Go process the new packet
-		 */
-		pms_synaptics_process_packet(psc, &sp);
 	}
 }
 
@@ -1202,8 +1252,8 @@ pms_synaptics_process_packet(struct pms_softc *psc, struct synaptics_packet *sp)
 	    (sp->sp_right ? 0x4 : 0) |
 	    (sp->sp_up ? 0x8 : 0) |
 	    (sp->sp_down ? 0x10 : 0);
-	changed = buttons ^ psc->buttons;
-	psc->buttons = buttons;
+	changed = buttons ^ (psc->buttons & 0x1f);
+	psc->buttons ^= changed;
 
 	sc->prev_fingers = fingers;
 	sc->total_packets++;
@@ -1226,6 +1276,7 @@ pms_synaptics_process_packet(struct pms_softc *psc, struct synaptics_packet *sp)
 	 * Pass the final results up to wsmouse_input() if necessary.
 	 */
 	if (dx || dy || dz || changed) {
+		buttons = (psc->buttons & 0x1f) | ((psc->buttons >> 5) & 0x7);
 		s = spltty();
 		wsmouse_input(psc->sc_wsmousedev,
 				buttons,

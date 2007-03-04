@@ -1,11 +1,12 @@
-/* $NetBSD: sched.h,v 1.33 2007/02/27 15:07:28 yamt Exp $ */
+/*	$NetBSD: sched.h,v 1.65 2008/10/07 09:48:27 rmind Exp $	*/
 
 /*-
- * Copyright (c) 1999, 2000, 2001, 2002, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2000, 2001, 2002, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Ross Harvey, Jason R. Thorpe, Nathan J. Williams, and Andrew Doran.
+ * by Ross Harvey, Jason R. Thorpe, Nathan J. Williams, Andrew Doran and
+ * Daniel Sieger.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,6 +70,7 @@
 #define	_SYS_SCHED_H_
 
 #include <sys/featuretest.h>
+#include <sys/types.h>
 
 #if defined(_KERNEL_OPT)
 #include "opt_multiprocessor.h"
@@ -89,13 +84,60 @@ struct sched_param {
 /*
  * Scheduling policies required by IEEE Std 1003.1-2001
  */
-#define	SCHED_OTHER	0	/* Behavior can be FIFO or RR, or not */
+#define	SCHED_NONE	-1
+#define	SCHED_OTHER	0
 #define	SCHED_FIFO	1
 #define	SCHED_RR	2
 
-/* Other nonstandard policies: */
-
 #if defined(_NETBSD_SOURCE)
+__BEGIN_DECLS
+
+/*
+ * Interface of CPU-sets.
+ */
+typedef struct _cpuset cpuset_t;
+typedef struct _kcpuset kcpuset_t;	/* XXX: lwp.h included from userland */
+
+#ifdef _KERNEL
+
+kcpuset_t *kcpuset_create(void);
+void	kcpuset_destroy(kcpuset_t *);
+void	kcpuset_copy(kcpuset_t *, const kcpuset_t *);
+void	kcpuset_use(kcpuset_t *);
+void	kcpuset_unuse(kcpuset_t *, kcpuset_t **);
+int	kcpuset_copyin(const cpuset_t *, kcpuset_t *, size_t);
+int	kcpuset_copyout(const kcpuset_t *, cpuset_t *, size_t);
+void	kcpuset_zero(kcpuset_t *);
+int	kcpuset_isset(cpuid_t, const kcpuset_t *);
+
+#else
+
+#define	cpuset_create()		_cpuset_create()
+#define	cpuset_destroy(c)	_cpuset_destroy(c)
+#define	cpuset_size(c)		_cpuset_size(c)
+#define	cpuset_zero(c)		_cpuset_zero(c)
+#define	cpuset_isset(i, c)	_cpuset_isset(i, c)
+#define	cpuset_set(i, c)	_cpuset_set(i, c)
+#define	cpuset_clr(i, c)	_cpuset_clr(i, c)
+
+cpuset_t *_cpuset_create(void);
+void	_cpuset_destroy(cpuset_t *);
+void	_cpuset_zero(cpuset_t *);
+int	_cpuset_set(cpuid_t, cpuset_t *);
+int	_cpuset_clr(cpuid_t, cpuset_t *);
+int	_cpuset_isset(cpuid_t, const cpuset_t *);
+size_t	_cpuset_size(const cpuset_t *);
+
+#endif
+
+/*
+ * Internal affinity and scheduling calls.
+ */
+int	_sched_getaffinity(pid_t, lwpid_t, size_t, cpuset_t *);
+int	_sched_setaffinity(pid_t, lwpid_t, size_t, const cpuset_t *);
+int	_sched_getparam(pid_t, lwpid_t, int *, struct sched_param *);
+int	_sched_setparam(pid_t, lwpid_t, int, const struct sched_param *);
+__END_DECLS
 
 /*
  * CPU states.
@@ -111,40 +153,42 @@ struct sched_param {
 
 #if defined(_KERNEL)
 
+#include <sys/mutex.h>
 #include <sys/time.h>
 
 /*
- * Run queues.
+ * Per-CPU scheduler state.  Field markings and the corresponding locks: 
  *
- * We have 32 run queues in descending priority of 0..31.  We maintain
- * a bitmask of non-empty queues in order speed up finding the first
- * runnable process.  The bitmask is maintained only by machine-dependent
- * code, allowing the most efficient instructions to be used to find the
- * first non-empty queue.
- */
-#define	RUNQUE_NQS		32
-struct prochd {
-	struct lwp *ph_link;
-	struct lwp *ph_rlink;
-};
-
-/*
- * Per-CPU scheduler state.
+ * s:	splsched, may only be safely accessed by the CPU itself
+ * m:	spc_mutex
+ * (:	unlocked, stable
+ * c:	cpu_lock
  */
 struct schedstate_percpu {
-	struct timeval spc_runtime;	/* time curproc started running */
-	volatile int spc_flags;	/* flags; see below */
-	u_int spc_schedticks;		/* ticks for schedclock() */
-	uint64_t spc_cp_time[CPUSTATES]; /* CPU state statistics */
-	pri_t spc_curpriority;		/* usrpri of curproc */
-	int spc_rrticks;		/* ticks until roundrobin() */
-	int spc_pscnt;			/* prof/stat counter */
-	int spc_psdiv;			/* prof/stat divisor */
+	/* First set of data is likely to be accessed by other CPUs. */
+	kmutex_t	*spc_mutex;	/* (: lock on below, runnable LWPs */
+	kmutex_t	*spc_lwplock;	/* (: general purpose lock for LWPs */
+	struct lwp	*spc_migrating;	/* (: migrating LWP */
+	pri_t		spc_curpriority;/* m: usrpri of curlwp */
+	pri_t		spc_maxpriority;/* m: highest priority queued */
+	psetid_t	spc_psid;	/* c: processor-set ID */
+	time_t		spc_lastmod;	/* c: time of last cpu state change */
+
+	/* For the most part, this set of data is CPU-private. */
+	void		*spc_sched_info;/* (: scheduler-specific structure */
+	volatile int	spc_flags;	/* s: flags; see below */
+	u_int		spc_schedticks;	/* s: ticks for schedclock() */
+	uint64_t	spc_cp_time[CPUSTATES];/* s: CPU state statistics */
+	int		spc_ticks;	/* s: ticks until sched_tick() */
+	int		spc_pscnt;	/* s: prof/stat counter */
+	int		spc_psdiv;	/* s: prof/stat divisor */
 };
 
 /* spc_flags */
 #define	SPCF_SEENRR		0x0001	/* process has seen roundrobin() */
 #define	SPCF_SHOULDYIELD	0x0002	/* process should yield the CPU */
+#define	SPCF_OFFLINE		0x0004	/* CPU marked offline */
+#define	SPCF_RUNNING		0x0008	/* CPU is running */
 
 #define	SPCF_SWITCHCLEAR	(SPCF_SEENRR|SPCF_SHOULDYIELD)
 
@@ -164,33 +208,68 @@ struct schedstate_percpu {
 #define	CLONE_VFORK		0x00004000	/* parent blocks until child
 						   exits */
 
-#endif /* !_POSIX_SOURCE && !_XOPEN_SOURCE && !_ANSI_SOURCE */
+#endif /* _NETBSD_SOURCE */
 
 #ifdef _KERNEL
 
 extern int schedhz;			/* ideally: 16 */
-extern int rrticks;			/* ticks per roundrobin() */
-
-/*
- * Global scheduler state.  We would like to group these all together
- * in a single structure to make them easier to find, but leaving
- * whichqs and qs as independent globals makes for more efficient
- * assembly language in the low-level context switch code.  So we
- * simply give them meaningful names; the globals are actually declared
- * in kern/kern_synch.c.
- */
-extern struct prochd sched_qs[];
-extern volatile uint32_t sched_whichqs;
 
 struct proc;
 struct cpu_info;
 
-void schedclock(struct lwp *);
-void roundrobin(struct cpu_info *);
-pri_t sched_kpri(struct lwp *);
+/*
+ * Common Scheduler Interface.
+ */
 
-void scheduler_fork_hook(struct proc *, struct proc *);
-void scheduler_wait_hook(struct proc *, struct proc *);
+/* Scheduler initialization */
+void		runq_init(void);
+void		sched_init(void);
+void		sched_rqinit(void);
+void		sched_cpuattach(struct cpu_info *);
+
+/* Time-driven events */
+void		sched_tick(struct cpu_info *);
+void		schedclock(struct lwp *);
+void		sched_schedclock(struct lwp *);
+void		sched_pstats(void *);
+void		sched_lwp_stats(struct lwp *);
+void		sched_pstats_hook(struct lwp *, int);
+
+/* Runqueue-related functions */
+bool		sched_curcpu_runnable_p(void);
+void		sched_dequeue(struct lwp *);
+void		sched_enqueue(struct lwp *, bool);
+struct lwp *	sched_nextlwp(void);
+void		sched_oncpu(struct lwp *);
+void		sched_newts(struct lwp *);
+
+/* Priority adjustment */
+void		sched_nice(struct proc *, int);
+
+/* Handlers of fork and exit */
+void		sched_proc_fork(struct proc *, struct proc *);
+void		sched_proc_exit(struct proc *, struct proc *);
+void		sched_lwp_fork(struct lwp *, struct lwp *);
+void		sched_lwp_collect(struct lwp *);
+
+void		sched_slept(struct lwp *);
+void		sched_wakeup(struct lwp *);
+
+void		setrunnable(struct lwp *);
+void		sched_setrunnable(struct lwp *);
+
+struct cpu_info *sched_takecpu(struct lwp *);
+void		sched_print_runqueue(void (*pr)(const char *, ...));
+
+/* Dispatching */
+bool		kpreempt(uintptr_t);
+void		preempt(void);
+int		mi_switch(struct lwp *);
+void		updatertime(lwp_t *, const struct bintime *);
+void		sched_idle(void);
+
+int		do_sched_setparam(pid_t, lwpid_t, int, const struct sched_param *);
+int		do_sched_getparam(pid_t, lwpid_t, int *, struct sched_param *);
 
 #endif	/* _KERNEL */
 #endif	/* _SYS_SCHED_H_ */

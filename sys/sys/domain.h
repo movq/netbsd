@@ -1,4 +1,4 @@
-/*	$NetBSD: domain.h,v 1.24 2006/12/09 05:33:09 dyoung Exp $	*/
+/*	$NetBSD: domain.h,v 1.27 2007/09/19 04:33:45 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -38,6 +38,7 @@
  * Structure per communications domain.
  */
 #include <sys/mbuf.h>
+#include <sys/socket.h>
 
 /*
  * Forward structure declarations for function prototypes [sic].
@@ -46,7 +47,10 @@ struct	lwp;
 struct	mbuf;
 struct	ifnet;
 struct	ifqueue;
-struct	route;
+struct  route;
+struct  sockaddr;
+
+LIST_HEAD(dom_rtlist, route);
 
 struct	domain {
 	int	dom_family;		/* AF_xxx */
@@ -66,12 +70,18 @@ struct	domain {
 			(struct ifnet *);
 	void	(*dom_ifdetach)		/* detach af-dependent data on ifnet */
 			(struct ifnet *, void *);
+	const void *(*dom_sockaddr_const_addr)(const struct sockaddr *,
+					       socklen_t *);
+	void	*(*dom_sockaddr_addr)(struct sockaddr *, socklen_t *);
+	int	(*dom_sockaddr_cmp)(const struct sockaddr *,
+	                            const struct sockaddr *);
+	const struct sockaddr *dom_sa_any;
 	struct ifqueue *dom_ifqueues[2]; /* ifqueue for domain */
 	STAILQ_ENTRY(domain) dom_link;
 	struct	mowner dom_mowner;
-	void	(*dom_rtcache)(struct route *);
-	void	(*dom_rtflush)(struct route *);
-	void	(*dom_rtflushall)(void);
+	uint_fast8_t	dom_sa_cmpofs;
+	uint_fast8_t	dom_sa_cmplen;
+	struct dom_rtlist dom_rtcache;
 };
 
 STAILQ_HEAD(domainhead,domain);

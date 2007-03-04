@@ -1,4 +1,4 @@
-/*	$NetBSD: pcivar.h,v 1.73 2006/09/25 23:09:42 jmcneill Exp $	*/
+/*	$NetBSD: pcivar.h,v 1.83 2008/07/22 04:52:19 bjs Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -42,7 +42,8 @@
  */
 
 #include <sys/device.h>
-#include <machine/bus.h>
+#include <sys/pmf.h>
+#include <sys/bus.h>
 #include <dev/pci/pcireg.h>
 
 /*
@@ -155,8 +156,19 @@ struct pci_quirkdata {
 #define	PCI_QUIRK_SKIP_FUNC6		PCI_QUIRK_SKIP_FUNC(6)
 #define	PCI_QUIRK_SKIP_FUNC7		PCI_QUIRK_SKIP_FUNC(7)
 
+struct pci_conf_state {
+	pcireg_t reg[16];
+};
+
+struct pci_child {
+	device_t		c_dev;
+	bool			c_psok;
+	pcireg_t		c_powerstate;
+	struct pci_conf_state	c_conf;
+};
+
 struct pci_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	bus_space_tag_t sc_iot, sc_memt;
 	bus_dma_tag_t sc_dmat;
 	bus_dma_tag_t sc_dmat64;
@@ -167,13 +179,8 @@ struct pci_softc {
 	pcitag_t sc_intrtag;
 	int sc_flags;
 	/* accounting of child devices */
-	struct device *sc_devices[32*8];
+	struct pci_child sc_devices[32*8];
 #define PCI_SC_DEVICESC(d, f) sc_devices[(d) * 8 + (f)]
-	void *sc_powerhook;
-};
-
-struct pci_conf_state {
-	pcireg_t reg[16];
 };
 
 extern struct cfdriver pci_cd;
@@ -191,6 +198,9 @@ int	pci_mapreg_info(pci_chipset_tag_t, pcitag_t, int, pcireg_t,
 int	pci_mapreg_map(struct pci_attach_args *, int, pcireg_t, int,
 	    bus_space_tag_t *, bus_space_handle_t *, bus_addr_t *,
 	    bus_size_t *);
+int	pci_mapreg_submap(struct pci_attach_args *, int, pcireg_t, int,
+	    bus_size_t, bus_size_t, bus_space_tag_t *, bus_space_handle_t *, 
+	    bus_addr_t *, bus_size_t *);
 
 int pci_find_rom(struct pci_attach_args *, bus_space_tag_t, bus_space_handle_t,
 	    int, bus_space_handle_t *, bus_size_t *);
@@ -212,7 +222,7 @@ const struct pci_quirkdata *
  * Helper functions for user access to the PCI bus.
  */
 struct proc;
-int	pci_devioctl(pci_chipset_tag_t, pcitag_t, u_long, caddr_t,
+int	pci_devioctl(pci_chipset_tag_t, pcitag_t, u_long, void *,
 	    int flag, struct lwp *);
 
 /*
@@ -243,9 +253,26 @@ void	pci_conf_capture(pci_chipset_tag_t, pcitag_t, struct pci_conf_state *);
 void	pci_conf_restore(pci_chipset_tag_t, pcitag_t, struct pci_conf_state *);
 int	pci_get_powerstate(pci_chipset_tag_t, pcitag_t, pcireg_t *);
 int	pci_set_powerstate(pci_chipset_tag_t, pcitag_t, pcireg_t);
-int	pci_activate(pci_chipset_tag_t, pcitag_t, void *,
-    int (*)(pci_chipset_tag_t, pcitag_t, void *, pcireg_t));
-int	pci_activate_null(pci_chipset_tag_t, pcitag_t, void *, pcireg_t);
+int	pci_activate(pci_chipset_tag_t, pcitag_t, device_t,
+    int (*)(pci_chipset_tag_t, pcitag_t, device_t, pcireg_t));
+int	pci_activate_null(pci_chipset_tag_t, pcitag_t, device_t, pcireg_t);
+void	pci_disable_retry(pci_chipset_tag_t, pcitag_t);
+
+/*
+ * Device abstraction for inheritance by elanpci(4), for example.
+ */
+int pcimatch(device_t, cfdata_t, void *);
+void pciattach(device_t, device_t, void *);
+int pcidetach(device_t, int);
+void pcidevdetached(device_t, device_t);
+int pcirescan(device_t, const char *, const int *);
+
+/*
+ * Interrupts.
+ */
+#define	PCI_INTR_MPSAFE		1
+
+int	pci_intr_setattr(pci_chipset_tag_t, pci_intr_handle_t *, int, uint64_t);
 
 #endif /* _KERNEL */
 

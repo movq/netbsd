@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.82 2007/03/01 14:57:38 kiyohara Exp $
+# $NetBSD: GENERIC,v 1.103 2008/10/22 07:23:42 jnemeth Exp $
 #
 # GENERIC machine description file
 #
@@ -22,7 +22,7 @@ include	"arch/sparc64/conf/std.sparc64"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.82 $"
+#ident 		"GENERIC-$Revision: 1.103 $"
 
 maxusers	64
 
@@ -50,7 +50,6 @@ config		netbsd	root on ? type ?
 
 ## System call tracing (see ktrace(1)).
 options 	KTRACE
-#options 	SYSTRACE		# system call vetting via systrace(1)
 
 ## Collect statistics on kernel malloc's and free's.  This does have a
 ## significant performance hit on slower machines, so it is intended for
@@ -90,6 +89,7 @@ options 	NFS_BOOT_DHCP
 # we enable DDB in GENERIC for now.
 options 	DDB			# kernel dynamic debugger
 options 	DDB_HISTORY_SIZE=100	# enable history editing in DDB
+options 	DDB_VERBOSE_HELP	# enable verbose online help
 #options 	DDB_ONPANIC=1		# see also sysctl(8): `ddb.onpanic'
 
 ## You may also use gdb, on another computer connected to this machine over
@@ -152,6 +152,7 @@ options 	COMPAT_15	# NetBSD 1.5 binary compatibility
 options 	COMPAT_16	# NetBSD 1.6 binary compatibility
 options 	COMPAT_20	# NetBSD 2.0 binary compatibility
 options 	COMPAT_30	# NetBSD 3.0 binary compatibility
+options 	COMPAT_40	# NetBSD 4.0 binary compatibility
 options 	COMPAT_SUNOS	# SunOS 4.x binary compatibility
 options 	COMPAT_SVR4	# SunOS 5.x binary compatibility
 options 	COMPAT_SVR4_32	# SunOS 5.x 32-bit binary compatibility -- 64-bit only
@@ -187,6 +188,7 @@ options 	NFSSERVER	# Sun NFS-compatible filesystem server
 options 	QUOTA		# FFS quotas
 #options 	FFS_EI		# FFS Endian Independent support
 options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 ## Network protocol support.  In most environments, INET is required.
@@ -200,8 +202,8 @@ options 	INET6		# IPV6
 options 	MROUTING	# packet forwarding of multicast packets
 options 	PIM		# Protocol Independent Multicast
 #options 	DIRECTED_BROADCAST	# allow broadcasts through routers
-options 	ISO,TPIP	# OSI networking
-options 	EON		# OSI tunneling over IP
+#options 	ISO,TPIP	# OSI networking
+#options 	EON		# OSI tunneling over IP
 options 	NETATALK	# AppleTalk (over Ethernet) protocol
 options 	NTP		# Network Time Protocol in-kernel support
 #options 	PPS_SYNC	# Add serial line synchronization for NTP
@@ -414,6 +416,11 @@ fdc0	at sbus? slot ? offset ?		# SUNW,fdtwo
 #fdc0	at ebus?				# fdthree, EXPERIMENTAL
 fd*	at fdc0 	 			# the drive itself
 
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
+
 ## A disk-like interface to files.  Can be used to create floppy, CD,
 ## miniroot images, etc.
 
@@ -492,6 +499,8 @@ gem*	at pci? dev ? function ?	# Apple GMAC and Sun ERI gigabit enet
 #le*	at pci? dev ? function ?	# PCnet-PCI Ethernet
 # XXX uses vtophys()
 #lmc*	at pci? dev ? function ?	# Lan Media Corp SSI/HSSI/DS3
+mskc*	at pci? dev ? function ?	# Marvell Yukon 2 Gigabit Ethernet
+msk*	at mskc?			# Marvell Yukon 2 Gigabit Ethernet
 ne*	at pci? dev ? function ?	# NE2000-compatible Ethernet UT
 ntwoc*	at pci? dev ? function ?	# Riscom/N2 PCI Sync Serial UT
 # XXX cause uncorrectable DMA error
@@ -499,6 +508,8 @@ ntwoc*	at pci? dev ? function ?	# Riscom/N2 PCI Sync Serial UT
 ral*	at pci? dev ? function ?	# ralink wifi UT
 re*	at pci? dev ? function ?	# Realtek 8139C+/8169/8169S/8110S
 rtk*	at pci? dev ? function ?	# Realtek 8129/8139
+skc*	at pci? dev ? function ?	# SysKonnect SK9821 Gigabit Ethernet
+sk*	at skc?				# SysKonnect SK9821 Gigabit Ethernet
 sip*	at pci? dev ? function ?	# SiS 900 Ethernet
 ti*	at pci? dev ? function ?	# Alteon ACEnic gigabit Ethernet UT
 tl*	at pci? dev ? function ?	# ThunderLAN-based Ethernet
@@ -510,6 +521,8 @@ wm*	at pci? dev ? function ?	# Intel 8254x gigabit
 
 # MII/PHY support
 acphy*	at mii? phy ?			# Altima AC101 and AMD Am79c874 PHYs
+bmtphy* at mii? phy ?			# Broadcom BCM5201 and BCM5202 PHYs
+brgphy* at mii? phy ?			# Broadcom BCM5400-family PHYs
 ciphy*	at mii? phy ?			# Cicada CS8201 Gig-E PHYs
 dmphy*	at mii? phy ?			# Davicom DM9101 PHYs
 exphy*	at mii? phy ?			# 3Com internal PHYs
@@ -535,6 +548,9 @@ ehci*	at pci? dev ? function ?	# Enhanced Host Controller
 ohci*	at pci? dev ? function ?	# Open Host Controller
 uhci*	at pci?	dev ? function ?	# Universal Host Controller (Intel)
 
+# PCMCIA USB controllers
+#slhci*	at pcmcia? function ?		# ScanLogic SL811HS
+
 # USB bus support
 usb*	at ehci?
 usb*	at ohci?
@@ -543,7 +559,7 @@ usb*	at uhci?
 
 # USB Hubs
 uhub*	at usb?
-uhub*	at uhub? port ? configuration ? interface ?
+uhub*	at uhub? port ?
 
 # USB HID device
 uhidev*	at uhub? port ? configuration ? interface ?
@@ -604,6 +620,7 @@ url*	at uhub? port ?		# Realtek RTL8150L based adapters
 # USB 802.11 adapters
 atu*	at uhub? port ?		# Atmel AT76C50XX based adapters
 ral*	at uhub? port ?		# Ralink Technology RT25x0 802.11a/b/g
+#zyd*	at uhub? port ?		# Zydas ZD1211
 
 # Prolific PL2301/PL2302 host-to-host adapter
 upl*	at uhub? port ?
@@ -687,6 +704,7 @@ pseudo-device	vlan
 ## Simple inter-network traffic bridging
 pseudo-device	bridge
 #options 	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
+pseudo-device	agr			# IEEE 802.3ad link aggregation
 
 ## IP Filter, used in firewall and NAT applications.  See ipnat(8) for
 ## one example of the use of the IP Filter.
@@ -781,12 +799,15 @@ pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
 
 ## Bluetooth PCMCIA Controllers
 #bt3c* at pcmcia? function ?		# 3Com 3CRWB6096-A
+#btbc* at pcmcia? function ?		# AnyCom BlueCard LSE041/039/139
 
 ## Bluetooth USB Controllers
-ubt* at uhub? port ? configuration ? interface ?
+ubt* at uhub? port ?
 
 ## Bluetooth Device Hub
+#bthub* at bcsp?
 #bthub* at bt3c?
+#bthub* at btbc?
 #bthub* at btuart?
 bthub* at ubt?
 
@@ -838,6 +859,9 @@ ffb*		at mainbus0
 # On board vga on U5/U10 etc.
 machfb*		at pci?
 
+# generic PCI framebuffers
+genfb*		at pci?
+
 # make sure the console display is always wsdisplay0
 wsdisplay0	at wsemuldisplaydev? console 1
 wsdisplay*	at wsemuldisplaydev?
@@ -861,6 +885,7 @@ options 	FONT_GALLANT12x22		# PROM font look-alike
 #### Other device configuration
 
 psm*		at ebus?		# Ultrabook IIi microcontroller
+envctrl*	at ebus?		# Ultra E450 environmental monitoring
 
 ### Other pseudo-devices
 
@@ -883,7 +908,9 @@ pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
 pseudo-device	fss		4	# file system snapshot device
+#pseudo-device	bcsp			# BlueCore Serial Protocol
 #pseudo-device	btuart			# Bluetooth HCI UART (H4)
+pseudo-device	lockstat		# lock profiling
 
 options		FILEASSOC		# fileassoc(9) - required for Veriexec 
 
@@ -905,6 +932,9 @@ options VERIFIED_EXEC_FP_MD5
 
 # a pseudo device needed for SMBFS
 pseudo-device   nsmb		# experimental - SMB requester
+
+# drvctl - needed to show device dictionary via drvctl(8)
+pseudo-device	drvctl
 
 #options PAX_MPROTECT=0			# PaX mprotect(2) restrictions
 					# (for static binaries only for now)

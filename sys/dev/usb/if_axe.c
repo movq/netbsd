@@ -1,4 +1,4 @@
-/*	$NetBSD: if_axe.c,v 1.17 2006/11/16 01:33:26 christos Exp $	*/
+/*	$NetBSD: if_axe.c,v 1.25 2008/05/24 16:40:58 cube Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999, 2000-2003
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_axe.c,v 1.17 2006/11/16 01:33:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_axe.c,v 1.25 2008/05/24 16:40:58 cube Exp $");
 
 #if defined(__NetBSD__)
 #include "opt_inet.h"
@@ -85,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_axe.c,v 1.17 2006/11/16 01:33:26 christos Exp $")
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/sockio.h>
-#include <sys/lock.h>
+#include <sys/mutex.h>
 #include <sys/mbuf.h>
 #include <sys/kernel.h>
 #if defined(__OpenBSD__)
@@ -178,7 +178,7 @@ Static void axe_tick_task(void *);
 Static void axe_rxstart(struct ifnet *);
 #endif
 Static void axe_start(struct ifnet *);
-Static int axe_ioctl(struct ifnet *, u_long, caddr_t);
+Static int axe_ioctl(struct ifnet *, u_long, void *);
 Static void axe_init(void *);
 Static void axe_stop(struct axe_softc *);
 Static void axe_watchdog(struct ifnet *);
@@ -186,8 +186,6 @@ Static int axe_miibus_readreg(device_ptr_t, int, int);
 Static void axe_miibus_writereg(device_ptr_t, int, int, int);
 Static void axe_miibus_statchg(device_ptr_t);
 Static int axe_cmd(struct axe_softc *, int, int, int, void *);
-Static int axe_ifmedia_upd(struct ifnet *);
-Static void axe_ifmedia_sts(struct ifnet *, struct ifmediareq *);
 Static void axe_reset(struct axe_softc *sc);
 
 Static void axe_setmulti(struct axe_softc *);
@@ -199,13 +197,13 @@ Static void
 axe_lock_mii(struct axe_softc *sc)
 {
 	sc->axe_refcnt++;
-	usb_lockmgr(&sc->axe_mii_lock, LK_EXCLUSIVE, NULL);
+	mutex_enter(&sc->axe_mii_lock);
 }
 
 Static void
 axe_unlock_mii(struct axe_softc *sc)
 {
-	usb_lockmgr(&sc->axe_mii_lock, LK_RELEASE, NULL);
+	mutex_exit(&sc->axe_mii_lock);
 	if (--sc->axe_refcnt < 0)
 		usb_detach_wakeup(USBDEV(sc->axe_dev));
 }
@@ -216,10 +214,11 @@ axe_cmd(struct axe_softc *sc, int cmd, int index, int val, void *buf)
 	usb_device_request_t	req;
 	usbd_status		err;
 
+	KASSERT(mutex_owned(&sc->axe_mii_lock));
+
 	if (sc->axe_dying)
 		return(0);
 
-	axe_lock_mii(sc);
 	if (AXE_CMD_DIR(cmd))
 		req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
 	else
@@ -230,7 +229,6 @@ axe_cmd(struct axe_softc *sc, int cmd, int index, int val, void *buf)
 	USETW(req.wLength, AXE_CMD_LEN(cmd));
 
 	err = usbd_do_request(sc->axe_udev, &req, buf);
-	axe_unlock_mii(sc);
 
 	if (err)
 		return(-1);
@@ -274,7 +272,7 @@ axe_miibus_readreg(device_ptr_t dev, int phy, int reg)
 	axe_unlock_mii(sc);
 
 	if (err) {
-		printf("%s: read PHY failed\n", USBDEVNAME(sc->axe_dev));
+		aprint_error_dev(sc->axe_dev, "read PHY failed\n");
 		return(-1);
 	}
 
@@ -302,7 +300,7 @@ axe_miibus_writereg(device_ptr_t dev, int phy, int reg, int aval)
 	axe_unlock_mii(sc);
 
 	if (err) {
-		printf("%s: write PHY failed\n", USBDEVNAME(sc->axe_dev));
+		aprint_error_dev(sc->axe_dev, "write PHY failed\n");
 		return;
 	}
 }
@@ -319,45 +317,13 @@ axe_miibus_statchg(device_ptr_t dev)
 	else
 		val = 0;
 	DPRINTF(("axe_miibus_statchg: val=0x%x\n", val));
+	axe_lock_mii(sc);
 	err = axe_cmd(sc, AXE_CMD_WRITE_MEDIA, 0, val, NULL);
+	axe_unlock_mii(sc);
 	if (err) {
-		printf("%s: media change failed\n", USBDEVNAME(sc->axe_dev));
+		aprint_error_dev(sc->axe_dev, "media change failed\n");
 		return;
 	}
-}
-
-/*
- * Set media options.
- */
-Static int
-axe_ifmedia_upd(struct ifnet *ifp)
-{
-        struct axe_softc        *sc = ifp->if_softc;
-        struct mii_data         *mii = GET_MII(sc);
-
-        sc->axe_link = 0;
-        if (mii->mii_instance) {
-                struct mii_softc        *miisc;
-                LIST_FOREACH(miisc, &mii->mii_phys, mii_list)
-                         mii_phy_reset(miisc);
-        }
-        mii_mediachg(mii);
-
-        return (0);
-}
-
-/*
- * Report current media status.
- */
-Static void
-axe_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
-{
-        struct axe_softc        *sc = ifp->if_softc;
-        struct mii_data         *mii = GET_MII(sc);
-
-        mii_pollstat(mii);
-        ifmr->ifm_active = mii->mii_media_active;
-        ifmr->ifm_status = mii->mii_media_status;
 }
 
 Static void
@@ -375,6 +341,7 @@ axe_setmulti(struct axe_softc *sc)
 
 	ifp = GET_IFP(sc);
 
+	axe_lock_mii(sc);
 	axe_cmd(sc, AXE_CMD_RXCTL_READ, 0, 0, (void *)&rxmode);
 	rxmode = le16toh(rxmode);
 
@@ -405,6 +372,7 @@ axe_setmulti(struct axe_softc *sc)
 	ifp->if_flags &= ~IFF_ALLMULTI;
 	axe_cmd(sc, AXE_CMD_WRITE_MCAST, 0, 0, (void *)&hashtbl);
 	axe_cmd(sc, AXE_CMD_RXCTL_WRITE, 0, rxmode, NULL);
+	axe_unlock_mii(sc);
 	return;
 }
 
@@ -427,10 +395,6 @@ USB_MATCH(axe)
 {
 	USB_MATCH_START(axe, uaa);
 
-	if (!uaa->iface) {
-		return(UMATCH_NONE);
-	}
-
 	return (axe_lookup(uaa->vendor, uaa->product) != NULL ?
 		UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
 }
@@ -449,29 +413,28 @@ USB_ATTACH(axe)
 	struct mii_data	*mii;
 	u_char eaddr[ETHER_ADDR_LEN];
 	char *devinfop;
-	char *devname = USBDEVNAME(sc->axe_dev);
+	const char *devname = device_xname(self);
 	struct ifnet *ifp;
 	int i, s;
 
 	devinfop = usbd_devinfo_alloc(dev, 0);
 	USB_ATTACH_SETUP;
+	sc->axe_dev = self;
 
 	err = usbd_set_config_no(dev, AXE_CONFIG_NO, 1);
 	if (err) {
-		printf("%s: getting interface handle failed\n",
-		    USBDEVNAME(sc->axe_dev));
+		aprint_error_dev(self, "getting interface handle failed\n");
                 usbd_devinfo_free(devinfop);
 		USB_ATTACH_ERROR_RETURN;
 	}
 
 	usb_init_task(&sc->axe_tick_task, axe_tick_task, sc);
-	lockinit(&sc->axe_mii_lock, PZERO, "axemii", 0, LK_CANRECURSE);
+	mutex_init(&sc->axe_mii_lock, MUTEX_DEFAULT, IPL_NONE);
 	usb_init_task(&sc->axe_stop_task, (void (*)(void *))axe_stop, sc);
 
 	err = usbd_device2interface_handle(dev, AXE_IFACE_IDX, &sc->axe_iface);
 	if (err) {
-		printf("%s: getting interface handle failed\n",
-		    USBDEVNAME(sc->axe_dev));
+		aprint_error_dev(self, "getting interface handle failed\n");
                 usbd_devinfo_free(devinfop);
 		USB_ATTACH_ERROR_RETURN;
 	}
@@ -482,15 +445,14 @@ USB_ATTACH(axe)
 
 	id = usbd_get_interface_descriptor(sc->axe_iface);
 
-	printf("%s: %s\n", USBDEVNAME(sc->axe_dev), devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
 	/* Find endpoints. */
 	for (i = 0; i < id->bNumEndpoints; i++) {
 		ed = usbd_interface2endpoint_descriptor(sc->axe_iface, i);
 		if (!ed) {
-			printf("%s: couldn't get ep %d\n",
-			    USBDEVNAME(sc->axe_dev), i);
+			aprint_error_dev(self, "couldn't get ep %d\n", i);
 			USB_ATTACH_ERROR_RETURN;
 		}
 		if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_IN &&
@@ -510,6 +472,7 @@ USB_ATTACH(axe)
 	/*
 	 * Get station address.
 	 */
+	axe_lock_mii(sc);
 	axe_cmd(sc, AXE_CMD_READ_NODEID, 0, 0, &eaddr);
 
 	/*
@@ -517,6 +480,7 @@ USB_ATTACH(axe)
 	 */
 	axe_cmd(sc, AXE_CMD_READ_IPG012, 0, 0, (void *)&sc->axe_ipgs);
 	axe_cmd(sc, AXE_CMD_READ_PHYID, 0, 0, (void *)&sc->axe_phyaddrs);
+	axe_unlock_mii(sc);
 
 	/*
 	 * Work around broken adapters that appear to lie about
@@ -527,7 +491,7 @@ USB_ATTACH(axe)
 	/*
 	 * An ASIX chip was detected. Inform the world.
 	 */
-	printf("%s: Ethernet address %s\n", USBDEVNAME(sc->axe_dev),
+	aprint_normal_dev(self, "Ethernet address %s\n",
 	    ether_sprintf(eaddr));
 
 	/* Initialize interface info.*/
@@ -553,10 +517,11 @@ USB_ATTACH(axe)
 	mii->mii_statchg = axe_miibus_statchg;
 	mii->mii_flags = MIIF_AUTOTSLEEP;
 
-	ifmedia_init(&mii->mii_media, 0, axe_ifmedia_upd, axe_ifmedia_sts);
+	sc->axe_ec.ec_mii = mii;
+	ifmedia_init(&mii->mii_media, 0, ether_mediachange, ether_mediastatus);
 	mii_attach(self, mii, 0xffffffff, MII_PHY_ANY, MII_OFFSET_ANY, 0);
 
-	if (LIST_FIRST(&mii->mii_phys) == NULL) {
+	if (LIST_EMPTY(&mii->mii_phys)) {
 		ifmedia_add(&mii->mii_media, IFM_ETHER | IFM_NONE, 0, NULL);
 		ifmedia_set(&mii->mii_media, IFM_ETHER | IFM_NONE);
 	} else
@@ -637,8 +602,7 @@ USB_DETACH(axe)
 	if (sc->axe_ep[AXE_ENDPT_TX] != NULL ||
 	    sc->axe_ep[AXE_ENDPT_RX] != NULL ||
 	    sc->axe_ep[AXE_ENDPT_INTR] != NULL)
-		printf("%s: detach has active endpoints\n",
-		       USBDEVNAME(sc->axe_dev));
+		aprint_debug_dev(self, "detach has active endpoints\n");
 #endif
 
 	sc->axe_attached = 0;
@@ -658,7 +622,7 @@ USB_DETACH(axe)
 int
 axe_activate(device_ptr_t self, enum devact act)
 {
-	struct axe_softc *sc = (struct axe_softc *)self;
+	struct axe_softc *sc = device_private(self);
 
 	DPRINTFN(2,("%s: %s: enter\n", USBDEVNAME(sc->axe_dev), __func__));
 
@@ -688,15 +652,15 @@ axe_newbuf(struct axe_softc *sc, struct axe_chain *c, struct mbuf *m)
 	if (m == NULL) {
 		MGETHDR(m_new, M_DONTWAIT, MT_DATA);
 		if (m_new == NULL) {
-			printf("%s: no memory for rx list "
-			    "-- packet dropped!\n", USBDEVNAME(sc->axe_dev));
+			aprint_error_dev(sc->axe_dev, "no memory for rx list "
+			    "-- packet dropped!\n");
 			return (ENOBUFS);
 		}
 
 		MCLGET(m_new, M_DONTWAIT);
 		if (!(m_new->m_flags & M_EXT)) {
-			printf("%s: no memory for rx list "
-			    "-- packet dropped!\n", USBDEVNAME(sc->axe_dev));
+			aprint_error_dev(sc->axe_dev, "no memory for rx list "
+			    "-- packet dropped!\n");
 			m_freem(m_new);
 			return (ENOBUFS);
 		}
@@ -986,17 +950,6 @@ axe_tick_task(void *xsc)
 	s = splnet();
 
 	mii_tick(mii);
-	if (!sc->axe_link) {
-		mii_pollstat(mii);
-		if (mii->mii_media_status & IFM_ACTIVE &&
-		    IFM_SUBTYPE(mii->mii_media_active) != IFM_NONE) {
-			DPRINTF(("%s: %s: got link\n",
-				 USBDEVNAME(sc->axe_dev), __func__));
-			sc->axe_link++;
-			if (IFQ_IS_EMPTY(&ifp->if_snd) == 0)
-				   axe_start(ifp);
-		}
-	}
 
 	usb_callout(sc->axe_stat_ch, hz, axe_tick, sc);
 
@@ -1042,13 +995,8 @@ axe_start(struct ifnet *ifp)
 
 	sc = ifp->if_softc;
 
-	if (!sc->axe_link) {
+	if ((ifp->if_flags & (IFF_OACTIVE|IFF_RUNNING)) != IFF_RUNNING)
 		return;
-	}
-
-	if (ifp->if_flags & IFF_OACTIVE) {
-		return;
-	}
 
 	IF_DEQUEUE(&ifp->if_snd, m_head);
 	if (m_head == NULL) {
@@ -1117,6 +1065,7 @@ axe_init(void *xsc)
 	}
 
 	/* Set transmitter IPG values */
+	axe_lock_mii(sc);
 	axe_cmd(sc, AXE_CMD_WRITE_IPG0, 0, sc->axe_ipgs[0], NULL);
 	axe_cmd(sc, AXE_CMD_WRITE_IPG1, 0, sc->axe_ipgs[1], NULL);
 	axe_cmd(sc, AXE_CMD_WRITE_IPG2, 0, sc->axe_ipgs[2], NULL);
@@ -1132,6 +1081,7 @@ axe_init(void *xsc)
 		rxmode |= AXE_RXCMD_BROADCAST;
 
 	axe_cmd(sc, AXE_CMD_RXCTL_WRITE, 0, rxmode, NULL);
+	axe_unlock_mii(sc);
 
 	/* Load the multicast filter. */
 	axe_setmulti(sc);
@@ -1175,12 +1125,11 @@ axe_init(void *xsc)
 }
 
 Static int
-axe_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+axe_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct axe_softc	*sc = ifp->if_softc;
 	struct ifreq		*ifr = (struct ifreq *)data;
 	struct ifaddr		*ifa = (struct ifaddr *)data;
-	struct mii_data		*mii;
 	u_int16_t		rxmode;
 	int			error = 0;
 
@@ -1203,10 +1152,10 @@ axe_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 
 	case SIOCSIFMTU:
-		if (ifr->ifr_mtu > ETHERMTU)
+		if (ifr->ifr_mtu < ETHERMIN || ifr->ifr_mtu > ETHERMTU)
 			error = EINVAL;
-		else
-			ifp->if_mtu = ifr->ifr_mtu;
+		else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
+			error = 0;
 		break;
 
 	case SIOCSIFFLAGS:
@@ -1215,21 +1164,25 @@ axe_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			    ifp->if_flags & IFF_PROMISC &&
 			    !(sc->axe_if_flags & IFF_PROMISC)) {
 
+				axe_lock_mii(sc);
 				axe_cmd(sc, AXE_CMD_RXCTL_READ,
 					0, 0, (void *)&rxmode);
 				rxmode = le16toh(rxmode) | AXE_RXCMD_PROMISC;
 				axe_cmd(sc, AXE_CMD_RXCTL_WRITE,
 					0, rxmode, NULL);
+				axe_unlock_mii(sc);
 
 				axe_setmulti(sc);
 			} else if (ifp->if_flags & IFF_RUNNING &&
 			    !(ifp->if_flags & IFF_PROMISC) &&
 			    sc->axe_if_flags & IFF_PROMISC) {
+				axe_lock_mii(sc);
 				axe_cmd(sc, AXE_CMD_RXCTL_READ,
 					0, 0, (void *)&rxmode);
 				rxmode = le16toh(rxmode) & ~AXE_RXCMD_PROMISC;
 				axe_cmd(sc, AXE_CMD_RXCTL_WRITE,
 					0, rxmode, NULL);
+				axe_unlock_mii(sc);
 				axe_setmulti(sc);
 			} else if (!(ifp->if_flags & IFF_RUNNING))
 				axe_init(sc);
@@ -1242,15 +1195,9 @@ axe_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-#ifdef __NetBSD__
-		error = (cmd == SIOCADDMULTI) ?
-			ether_addmulti(ifr, &sc->axe_ec) :
-			ether_delmulti(ifr, &sc->axe_ec);
-#else
-		error = (cmd == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->arpcom) :
-		    ether_delmulti(ifr, &sc->arpcom);
-#endif /* __NetBSD__ */
+	case SIOCGIFMEDIA:
+	case SIOCSIFMEDIA:
+		error = ether_ioctl(ifp, cmd, data);
 		if (error == ENETRESET) {
 			/*
 			 * Multicast list has changed; set the hardware
@@ -1261,12 +1208,6 @@ axe_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			error = 0;
 		}
 		break;
-	case SIOCGIFMEDIA:
-	case SIOCSIFMEDIA:
-		mii = GET_MII(sc);
-		error = ifmedia_ioctl(ifp, ifr, &mii->mii_media, cmd);
-		break;
-
 	default:
 		error = EINVAL;
 		break;
@@ -1388,7 +1329,6 @@ axe_stop(struct axe_softc *sc)
 		}
 	}
 
-	sc->axe_link = 0;
 	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 }
 

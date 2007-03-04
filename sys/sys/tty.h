@@ -1,4 +1,30 @@
-/*	$NetBSD: tty.h,v 1.72 2007/02/09 21:55:37 ad Exp $	*/
+/*	$NetBSD: tty.h,v 1.82 2008/05/25 19:22:21 ad Exp $	*/
+
+/*-
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -42,7 +68,8 @@
 #include <sys/termios.h>
 #include <sys/select.h>
 #include <sys/selinfo.h>	/* For struct selinfo. */
-#include <sys/lock.h>
+#include <sys/mutex.h>
+#include <sys/condvar.h>
 #include <sys/queue.h>
 #include <sys/callout.h>
 
@@ -55,13 +82,21 @@
  * *DON'T* play with c_cs, c_ce, c_cq, or c_cl outside tty_subr.c!!!
  */
 struct clist {
-	int	c_cc;		/* count of characters in queue */
-	int	c_cn;		/* total ring buffer length */
 	u_char	*c_cf;		/* points to first character */
 	u_char	*c_cl;		/* points to next open character */
 	u_char	*c_cs;		/* start of ring buffer */
 	u_char	*c_ce;		/* c_ce + c_len */
 	u_char	*c_cq;		/* N bits/bytes long, see tty_subr.c */
+	int	c_cc;		/* count of characters in queue */
+	int	c_cn;		/* total ring buffer length */
+};
+
+/* tty signal types */
+enum ttysigtype {
+	TTYSIG_PG1,
+	TTYSIG_PG2,
+	TTYSIG_LEADER,
+	TTYSIG_COUNT
 };
 
 /*
@@ -73,14 +108,19 @@ struct clist {
  */
 struct tty {
 	TAILQ_ENTRY(tty) tty_link;	/* Link in global tty list. */
-	struct	simplelock t_slock;	/* mutex for all access to this tty */
 	struct	clist t_rawq;		/* Device raw input queue. */
 	long	t_rawcc;		/* Raw input queue statistics. */
+	kcondvar_t t_rawcv;		/* notifier */
+	kcondvar_t t_rawcvf;		/* notifier */
 	struct	clist t_canq;		/* Device canonical queue. */
 	long	t_cancc;		/* Canonical queue statistics. */
+	kcondvar_t t_cancv;		/* notifier */
+	kcondvar_t t_cancvf;		/* notifier */
 	struct	clist t_outq;		/* Device output queue. */
-	struct	callout t_rstrt_ch;	/* for delayed output start */
 	long	t_outcc;		/* Output queue statistics. */
+	kcondvar_t t_outcv;		/* notifier */
+	kcondvar_t t_outcvf;		/* notifier */
+	callout_t t_rstrt_ch;		/* for delayed output start */
 	struct	linesw *t_linesw;	/* Interface to device drivers. */
 	dev_t	t_dev;			/* Device. */
 	int	t_state;		/* Device and driver (TS*) state. */
@@ -104,16 +144,10 @@ struct tty {
 	short	t_hiwat;		/* High water mark. */
 	short	t_lowat;		/* Low water mark. */
 	short	t_gen;			/* Generation number. */
+	sigset_t t_sigs[TTYSIG_COUNT];	/* Pending signals */
+	int	t_sigcount;		/* # pending signals */
+	TAILQ_ENTRY(tty) t_sigqueue;	/* entry on pending signal list */
 };
-
-#define __TTY_ENABLE_SLOCK
-#ifdef __TTY_ENABLE_SLOCK
-#define TTY_LOCK(tp) simple_lock(&(tp)->t_slock)
-#define TTY_UNLOCK(tp) simple_unlock(&(tp)->t_slock)
-#else /* __TTY_ENABLE_SLOCK */
-#define TTY_LOCK(tp)	/**/
-#define TTY_UNLOCK(tp)	/**/
-#endif /* __TTY_ENABLE_SLOCK */
 
 #define	t_cc		t_termios.c_cc
 #define	t_cflag		t_termios.c_cflag
@@ -138,7 +172,7 @@ struct tty {
 #endif /* _KERNEL */
 
 /* These flags are kept in t_state. */
-#define	TS_ASLEEP	0x00001		/* Process waiting for tty. */
+#define	TS_SIGINFO	0x00001		/* Ignore mask on dispatch SIGINFO */
 #define	TS_ASYNC	0x00002		/* Tty in async I/O mode. */
 #define	TS_BUSY		0x00004		/* Draining output. */
 #define	TS_CARR_ON	0x00008		/* Carrier is present. */
@@ -201,13 +235,15 @@ TAILQ_HEAD(ttylist_head, tty);		/* the ttylist is a TAILQ */
 #ifdef _KERNEL
 #include <sys/mallocvar.h>
 
+extern kmutex_t	tty_lock;
+
 MALLOC_DECLARE(M_TTYS);
 
 extern	int tty_count;			/* number of ttys in global ttylist */
 extern	struct ttychars ttydefaults;
 
 /* Symbolic sleep message strings. */
-extern	 const char ttyin[], ttyout[], ttopen[], ttclos[], ttybg[], ttybuf[];
+extern	 const char ttclos[];
 
 int	 b_to_q(const u_char *, int, struct clist *);
 void	 catq(struct clist *, struct clist *);
@@ -222,7 +258,7 @@ int	 unputc(struct clist *);
 
 int	 nullmodem(struct tty *, int);
 int	 tputchar(int, int, struct tty *);
-int	 ttioctl(struct tty *, u_long, caddr_t, int, struct lwp *);
+int	 ttioctl(struct tty *, u_long, void *, int, struct lwp *);
 int	 ttread(struct tty *, struct uio *, int);
 void	 ttrstrt(void *);
 int	 ttpoll(struct tty *, int, struct lwp *);
@@ -235,7 +271,8 @@ void	 ttychars(struct tty *);
 int	 ttycheckoutq(struct tty *, int);
 int	 ttyclose(struct tty *);
 void	 ttyflush(struct tty *, int);
-void	 ttyinfo(struct tty *, int);
+void	 ttygetinfo(struct tty *, int, char *, size_t);
+void	 ttyputinfo(struct tty *, char *);
 int	 ttyinput(int, struct tty *);
 int	 ttylclose(struct tty *, int);
 int	 ttylopen(dev_t, struct tty *);
@@ -246,16 +283,18 @@ int	 ttyoutput(int, struct tty *);
 void	 ttypend(struct tty *);
 void	 ttyretype(struct tty *);
 void	 ttyrub(int, struct tty *);
-int	 ttysleep(struct tty *, void *, int, const char *, int);
+int	 ttysleep(struct tty *, kcondvar_t *, bool, int);
 int	 ttywait(struct tty *);
 int	 ttywflush(struct tty *);
-
+void	 ttysig(struct tty *, enum ttysigtype, int);
 void	 tty_attach(struct tty *);
 void	 tty_detach(struct tty *);
+void	 tty_init(void);
 struct tty
 	*ttymalloc(void);
 void	 ttyfree(struct tty *);
 u_char	*firstc(struct clist *, int *);
+bool	 ttypull(struct tty *);
 
 int	clalloc(struct clist *, int, int);
 void	clfree(struct clist *);
@@ -271,7 +310,7 @@ void	clfree(struct clist *);
 #if defined(COMPAT_43) || defined(COMPAT_SUNOS) || defined(COMPAT_SVR4) || \
     defined(COMPAT_FREEBSD) || defined(COMPAT_OSF1) || defined(LKM)
 # define COMPAT_OLDTTY
-int 	ttcompat(struct tty *, u_long, caddr_t, int, struct lwp *);
+int 	ttcompat(struct tty *, u_long, void *, int, struct lwp *);
 #endif
 
 #endif /* _KERNEL */

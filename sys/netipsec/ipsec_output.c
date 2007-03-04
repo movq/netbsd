@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec_output.c,v 1.21 2007/02/10 09:43:05 degroote Exp $	*/
+/*	$NetBSD: ipsec_output.c,v 1.28 2008/04/28 17:40:11 degroote Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 Sam Leffler, Errno Consulting
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipsec_output.c,v 1.21 2007/02/10 09:43:05 degroote Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipsec_output.c,v 1.28 2008/04/28 17:40:11 degroote Exp $");
 
 /*
  * IPsec output processing.
@@ -72,9 +72,13 @@ __KERNEL_RCSID(0, "$NetBSD: ipsec_output.c,v 1.21 2007/02/10 09:43:05 degroote E
 #ifdef INET6
 #include <netinet/icmp6.h>
 #endif
+#ifdef IPSEC_NAT_T
+#include <netinet/udp.h>
+#endif
 
 #include <netipsec/ipsec.h>
 #include <netipsec/ipsec_var.h>
+#include <netipsec/ipsec_private.h>
 #ifdef INET6
 #include <netipsec/ipsec6.h>
 #endif
@@ -91,106 +95,37 @@ __KERNEL_RCSID(0, "$NetBSD: ipsec_output.c,v 1.21 2007/02/10 09:43:05 degroote E
 
 #include <net/net_osdep.h>		/* ovbcopy() in ipsec6_encapsulate() */
 
-int
-ipsec_process_done(struct mbuf *m, struct ipsecrequest *isr)
+
+/*
+ * Add a IPSEC_OUT_DONE tag to mark that we have finished the ipsec processing
+ * It will be used by ip{,6}_output to check if we have already or not 
+ * processed this packet.
+ */
+static int
+ipsec_register_done(struct mbuf *m, int * error)
 {
-	struct tdb_ident *tdbi;
 	struct m_tag *mtag;
-	struct secasvar *sav;
-	struct secasindex *saidx;
-	int error;
 
-	IPSEC_SPLASSERT_SOFTNET("ipsec_process_done");
-
-	IPSEC_ASSERT(m != NULL, ("ipsec_process_done: null mbuf"));
-	IPSEC_ASSERT(isr != NULL, ("ipsec_process_done: null ISR"));
-	sav = isr->sav;
-	IPSEC_ASSERT(sav != NULL, ("ipsec_process_done: null SA"));
-	IPSEC_ASSERT(sav->sah != NULL, ("ipsec_process_done: null SAH"));
-
-	saidx = &sav->sah->saidx;
-	switch (saidx->dst.sa.sa_family) {
-#ifdef INET
-	case AF_INET:
-		/* Fix the header length, for AH processing. */
-		mtod(m, struct ip *)->ip_len = htons(m->m_pkthdr.len);
-		break;
-#endif /* INET */
-#ifdef INET6
-	case AF_INET6:
-		/* Fix the header length, for AH processing. */
-		if (m->m_pkthdr.len < sizeof (struct ip6_hdr)) {
-			error = ENXIO;
-			goto bad;
-		}
-		if (m->m_pkthdr.len - sizeof (struct ip6_hdr) > IPV6_MAXPACKET) {
-			/* No jumbogram support. */
-			error = ENXIO;	/*?*/
-			goto bad;
-		}
-		mtod(m, struct ip6_hdr *)->ip6_plen =
-			htons(m->m_pkthdr.len - sizeof(struct ip6_hdr));
-		break;
-#endif /* INET6 */
-	default:
-		DPRINTF(("ipsec_process_done: unknown protocol family %u\n",
-		    saidx->dst.sa.sa_family));
-		error = ENXIO;
-		goto bad;
-	}
-
-	/*
-	 * Add a record of what we've done or what needs to be done to the
-	 * packet.
-	 */
-	mtag = m_tag_get(PACKET_TAG_IPSEC_OUT_DONE,
-			sizeof(struct tdb_ident), M_NOWAIT);
+	mtag = m_tag_get(PACKET_TAG_IPSEC_OUT_DONE, 0, M_NOWAIT);
 	if (mtag == NULL) {
-		DPRINTF(("ipsec_process_done: could not get packet tag\n"));
-		error = ENOMEM;
-		goto bad;
+		DPRINTF(("ipsec_register_done: could not get packet tag\n"));
+		*error = ENOMEM;
+		return -1;
 	}
 
-	tdbi = (struct tdb_ident *)(mtag + 1);
-	tdbi->dst = saidx->dst;
-	tdbi->proto = saidx->proto;
-	tdbi->spi = sav->spi;
 	m_tag_prepend(m, mtag);
+	return 0;
+}
 
-	/*
-	 * If there's another (bundled) SA to apply, do so.
-	 * Note that this puts a burden on the kernel stack size.
-	 * If this is a problem we'll need to introduce a queue
-	 * to set the packet on so we can unwind the stack before
-	 * doing further processing.
-	 */
-	if (isr->next) {
-		newipsecstat.ips_out_bundlesa++;
-        switch ( saidx->dst.sa.sa_family ) {
+static int
+ipsec_reinject_ipstack(struct mbuf *m, int af)
+{
 #ifdef INET
-        case AF_INET:
-			return ipsec4_process_packet(m, isr->next, 0,0);
+	struct ip * ip;
 #endif /* INET */
-#ifdef INET6
-		case AF_INET6:
-        	return ipsec6_process_packet(m,isr->next);
-#endif /* INET6 */
-		default :
-			DPRINTF(("ipsec_process_done: unknown protocol family %u\n",
-                               saidx->dst.sa.sa_family));
-			error = ENXIO;
-			goto bad;
-        }
-	}
 
-	/*
-	 * We're done with IPsec processing, transmit the packet using the
-	 * appropriate network protocol (IP or IPv6). SPD lookup will be
-	 * performed again there.
-	 */
-	switch (saidx->dst.sa.sa_family) {
+	switch (af) {
 #ifdef INET
-	struct ip *ip;
 	case AF_INET:
 		ip = mtod(m, struct ip *);
 #ifdef __FreeBSD__
@@ -211,13 +146,164 @@ ipsec_process_done(struct mbuf *m, struct ipsecrequest *isr)
 		return ip6_output(m, NULL, NULL, 0, NULL, NULL, NULL);
 #endif /* INET6 */
 	}
-	panic("ipsec_process_done");
+
+	panic("ipsec_reinject_ipstack : iunknown protocol family %u\n", af);
+	return -1; /* NOTREACHED */
+}
+
+int
+ipsec_process_done(struct mbuf *m, struct ipsecrequest *isr)
+{
+	struct secasvar *sav;
+	struct secasindex *saidx;
+	int error;
+#ifdef INET
+	struct ip * ip;
+#endif /* INET */
+#ifdef INET6
+	struct ip6_hdr * ip6;
+#endif /* INET6 */
+#ifdef IPSEC_NAT_T
+	struct mbuf * mo;
+	struct udphdr *udp = NULL;
+	uint64_t * data = NULL;
+	int hlen, roff;
+#endif /* IPSEC_NAT_T */
+
+	IPSEC_SPLASSERT_SOFTNET("ipsec_process_done");
+
+	IPSEC_ASSERT(m != NULL, ("ipsec_process_done: null mbuf"));
+	IPSEC_ASSERT(isr != NULL, ("ipsec_process_done: null ISR"));
+	sav = isr->sav;
+	IPSEC_ASSERT(sav != NULL, ("ipsec_process_done: null SA"));
+	IPSEC_ASSERT(sav->sah != NULL, ("ipsec_process_done: null SAH"));
+
+	saidx = &sav->sah->saidx;
+
+#ifdef IPSEC_NAT_T
+	if(sav->natt_type != 0) {
+		ip = mtod(m, struct ip *);
+
+		hlen = sizeof(struct udphdr);
+		if (sav->natt_type == UDP_ENCAP_ESPINUDP_NON_IKE) 
+			hlen += sizeof(uint64_t);
+
+		mo = m_makespace(m, sizeof(struct ip), hlen, &roff);
+		if (mo == NULL) {
+			DPRINTF(("ipsec_process_done : failed to inject" 
+				 "%u byte UDP for SA %s/%08lx\n",
+					 hlen, ipsec_address(&saidx->dst),
+					 (u_long) ntohl(sav->spi)));
+			error = ENOBUFS;
+			goto bad;
+		}
+		
+		udp = (struct udphdr*) (mtod(mo, char*) + roff);
+		data = (uint64_t*) (udp + 1);
+
+		if (sav->natt_type == UDP_ENCAP_ESPINUDP_NON_IKE)
+			*data = 0; /* NON-IKE Marker */
+
+		if (sav->natt_type == UDP_ENCAP_ESPINUDP_NON_IKE)
+			udp->uh_sport = htons(UDP_ENCAP_ESPINUDP_PORT);
+		else
+			udp->uh_sport = key_portfromsaddr(&saidx->src);
+		
+		udp->uh_dport = key_portfromsaddr(&saidx->dst);
+		udp->uh_sum = 0;
+       	udp->uh_ulen = htons(m->m_pkthdr.len - (ip->ip_hl << 2));
+	}
+#endif /* IPSEC_NAT_T */
+	
+	switch (saidx->dst.sa.sa_family) {
+#ifdef INET
+	case AF_INET:
+		/* Fix the header length, for AH processing. */
+		ip = mtod(m, struct ip *);
+		ip->ip_len = htons(m->m_pkthdr.len);
+#ifdef IPSEC_NAT_T
+		if (sav->natt_type != 0)
+			ip->ip_p = IPPROTO_UDP;
+#endif /* IPSEC_NAT_T */
+		break;
+#endif /* INET */
+#ifdef INET6
+	case AF_INET6:
+		/* Fix the header length, for AH processing. */
+		if (m->m_pkthdr.len < sizeof (struct ip6_hdr)) {
+			error = ENXIO;
+			goto bad;
+		}
+		if (m->m_pkthdr.len - sizeof (struct ip6_hdr) > IPV6_MAXPACKET) {
+			/* No jumbogram support. */
+			error = ENXIO;	/*?*/
+			goto bad;
+		}
+		ip6 = mtod(m, struct ip6_hdr *);
+		ip6->ip6_plen = htons(m->m_pkthdr.len - sizeof(struct ip6_hdr));
+#ifdef IPSEC_NAT_T
+		if (sav->natt_type != 0)
+			ip6->ip6_nxt = IPPROTO_UDP;
+#endif /* IPSEC_NAT_T */
+		break;
+#endif /* INET6 */
+	default:
+		DPRINTF(("ipsec_process_done: unknown protocol family %u\n",
+		    saidx->dst.sa.sa_family));
+		error = ENXIO;
+		goto bad;
+	}
+
+	/*
+	 * If there's another (bundled) SA to apply, do so.
+	 * Note that this puts a burden on the kernel stack size.
+	 * If this is a problem we'll need to introduce a queue
+	 * to set the packet on so we can unwind the stack before
+	 * doing further processing.
+	 */
+	if (isr->next) {
+		IPSEC_STATINC(IPSEC_STAT_OUT_BUNDLESA);
+        switch ( saidx->dst.sa.sa_family ) {
+#ifdef INET
+        case AF_INET:
+			return ipsec4_process_packet(m, isr->next, 0,0);
+#endif /* INET */
+#ifdef INET6
+		case AF_INET6:
+        	return ipsec6_process_packet(m,isr->next);
+#endif /* INET6 */
+		default :
+			DPRINTF(("ipsec_process_done: unknown protocol family %u\n",
+                               saidx->dst.sa.sa_family));
+			error = ENXIO;
+			goto bad;
+        }
+	}
+
+	/*
+	 * We're done with IPsec processing, 
+	 * mark that we have already processed the packet
+	 * transmit it packet using the appropriate network protocol (IP or IPv6). 
+	 */
+
+	if (ipsec_register_done(m, &error) < 0)
+		goto bad;
+
+	return ipsec_reinject_ipstack(m, saidx->dst.sa.sa_family);
 bad:
 	m_freem(m);
 	KEY_FREESAV(&sav);
 	return (error);
 }
 
+/*
+ * ipsec_nextisr can return :
+ * - isr == NULL and error != 0 => something is bad : the packet must be
+ *   discarded
+ * - isr == NULL and error == 0 => no more rules to apply, ipsec processing 
+ *   is done, reinject it in ip stack
+ * - isr != NULL (error == 0) => we need to apply one rule to the packet
+ */
 static struct ipsecrequest *
 ipsec_nextisr(
 	struct mbuf *m,
@@ -227,8 +313,21 @@ ipsec_nextisr(
 	int *error
 )
 {
-#define IPSEC_OSTAT(x,y,z) (isr->saidx.proto == IPPROTO_ESP ? (x)++ : \
-			    isr->saidx.proto == IPPROTO_AH ? (y)++ : (z)++)
+#define	IPSEC_OSTAT(x, y, z)						\
+do {									\
+	switch (isr->saidx.proto) {					\
+	case IPPROTO_ESP:						\
+		ESP_STATINC(x);						\
+		break;							\
+	case IPPROTO_AH:						\
+		AH_STATINC(y);						\
+		break;							\
+	default:							\
+		IPCOMP_STATINC(z);					\
+		break;							\
+	}								\
+} while (/*CONSTCOND*/0)
+
 	struct secasvar *sav;
 
 	IPSEC_SPLASSERT_SOFTNET("ipsec_nextisr");
@@ -306,18 +405,22 @@ again:
 		 * this packet because it is responsibility for
 		 * upper layer to retransmit the packet.
 		 */
-		newipsecstat.ips_out_nosa++;
+		IPSEC_STATINC(IPSEC_STAT_OUT_NOSA);
 		goto bad;
 	}
 	sav = isr->sav;
-	if (sav == NULL) {		/* XXX valid return */
+	/* sav may be NULL here if we have an USE rule */
+	if (sav == NULL) {		
 		IPSEC_ASSERT(ipsec_get_reqlevel(isr) == IPSEC_LEVEL_USE,
 			("ipsec_nextisr: no SA found, but required; level %u",
 			ipsec_get_reqlevel(isr)));
 		isr = isr->next;
+		/* 
+		 * No more rules to apply, return NULL isr and no error 
+		 * It can happen when the last rules are USE rules
+		 * */
 		if (isr == NULL) {
-			/*XXXstatistic??*/
-			*error = EINVAL;		/*XXX*/
+			*error = 0;		
 			return isr;
 		}
 		goto again;
@@ -331,8 +434,8 @@ again:
 	    (isr->saidx.proto == IPPROTO_IPCOMP && !ipcomp_enable)) {
 		DPRINTF(("ipsec_nextisr: IPsec outbound packet dropped due"
 			" to policy (check your sysctls)\n"));
-		IPSEC_OSTAT(espstat.esps_pdrops, ahstat.ahs_pdrops,
-		    ipcompstat.ipcomps_pdrops);
+		IPSEC_OSTAT(ESP_STAT_PDROPS, AH_STAT_PDROPS,
+		    IPCOMP_STAT_PDROPS);
 		*error = EHOSTUNREACH;
 		goto bad;
 	}
@@ -343,8 +446,8 @@ again:
 	 */
 	if (sav->tdb_xform == NULL) {
 		DPRINTF(("ipsec_nextisr: no transform for SA\n"));
-		IPSEC_OSTAT(espstat.esps_noxform, ahstat.ahs_noxform,
-		    ipcompstat.ipcomps_noxform);
+		IPSEC_OSTAT(ESP_STAT_NOXFORM, AH_STAT_NOXFORM,
+		    IPCOMP_STAT_NOXFORM);
 		*error = EHOSTUNREACH;
 		goto bad;
 	}
@@ -378,8 +481,17 @@ ipsec4_process_packet(
 	s = splsoftnet();			/* insure SA contents don't change */
 
 	isr = ipsec_nextisr(m, isr, AF_INET, &saidx, &error);
-	if (isr == NULL)
-		goto bad;
+	if (isr == NULL) {
+		if (error != 0) {
+			goto bad;
+		} else {
+			if (ipsec_register_done(m, &error) < 0)
+				goto bad;
+
+			splx(s);
+			return ipsec_reinject_ipstack(m, AF_INET);
+		}
+	}
 
 	sav = isr->sav;
 	if (!tunalready) {
@@ -436,15 +548,7 @@ ipsec4_process_packet(
 			ip = mtod(m, struct ip *);
 			ip->ip_len = htons(m->m_pkthdr.len);
 			ip->ip_sum = 0;
-#ifdef _IP_VHL
-			if (ip->ip_vhl == IP_VHL_BORING)
-				ip->ip_sum = in_cksum_hdr(ip);
-			else
-				ip->ip_sum = in_cksum(m,
-					_IP_VHL_HL(ip->ip_vhl) << 2);
-#else
 			ip->ip_sum = in_cksum(m, ip->ip_hl << 2);
-#endif
 
 			/* Encapsulate the packet */
 			error = ipip_output(m, isr, &mp, 0, 0);
@@ -477,9 +581,7 @@ ipsec4_process_packet(
 					goto bad;
 				}
 				ip = mtod(m, struct ip *);
-				ip->ip_off = ntohs(ip->ip_off);
-				ip->ip_off |= IP_DF;
-				ip->ip_off = htons(ip->ip_off);
+				ip->ip_off |= IP_OFF_CONVERT(IP_DF);
 			}
 		}
 	}
@@ -530,8 +632,16 @@ ipsec6_process_packet(
 	s = splsoftnet();   /* insure SA contents don't change */
 	isr = ipsec_nextisr(m, isr, AF_INET6, &saidx, &error);
 	if (isr == NULL) {
-		// XXX Should we send a notification ?
-		goto bad;
+		if (error != 0) {
+			// XXX Should we send a notification ?
+			goto bad;
+		} else {
+			if (ipsec_register_done(m, &error) < 0)
+				goto bad;
+
+			splx(s);
+			return ipsec_reinject_ipstack(m, AF_INET6);
+		}
 	}
 
 	sav = isr->sav;

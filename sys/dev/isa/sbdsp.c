@@ -1,4 +1,4 @@
-/*	$NetBSD: sbdsp.c,v 1.126 2006/11/16 01:33:00 christos Exp $	*/
+/*	$NetBSD: sbdsp.c,v 1.131 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *	  Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -81,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbdsp.c,v 1.126 2006/11/16 01:33:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbdsp.c,v 1.131 2008/04/28 20:23:52 martin Exp $");
 
 #include "midi.h"
 #include "mpu.h"
@@ -96,9 +89,9 @@ __KERNEL_RCSID(0, "$NetBSD: sbdsp.c,v 1.126 2006/11/16 01:33:00 christos Exp $")
 #include <sys/proc.h>
 #include <sys/buf.h>
 
-#include <machine/cpu.h>
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
+#include <sys/bus.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -231,7 +224,7 @@ static	int sbdsp_adjust(int, int);
 
 int	sbdsp_midi_intr(void *);
 
-static void	sbdsp_powerhook(int, void*);
+static bool	sbdsp_resume(device_t PMF_FN_PROTO);
 
 #ifdef AUDIO_DEBUG
 void	sb_printsc(struct sbdsp_softc *);
@@ -267,7 +260,7 @@ sb_printsc(struct sbdsp_softc *sc)
  * Probe for the soundblaster hardware.
  */
 int
-sbdsp_probe(struct sbdsp_softc *sc)
+sbdsp_probe(struct sbdsp_softc *sc, cfdata_t match)
 {
 
 	if (sbdsp_reset(sc) < 0) {
@@ -275,7 +268,7 @@ sbdsp_probe(struct sbdsp_softc *sc)
 		return 0;
 	}
 	/* if flags set, go and probe the jazz16 stuff */
-	if (device_cfdata(&sc->sc_dev)->cf_flags & 1)
+	if (match->cf_flags & 1)
 		sbdsp_jazz16_probe(sc);
 	else
 		sbversion(sc);
@@ -422,8 +415,8 @@ sbdsp_attach(struct sbdsp_softc *sc)
 		error = isa_dmamap_create(sc->sc_ic, sc->sc_drq8,
 		    sc->sc_drq8_maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW);
 		if (error) {
-			printf("%s: can't create map for drq %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_drq8);
+			aprint_error_dev(sc->sc_dev,
+			    "can't create map for drq %d\n", sc->sc_drq8);
 			return;
 		}
 	}
@@ -434,30 +427,26 @@ sbdsp_attach(struct sbdsp_softc *sc)
 		error = isa_dmamap_create(sc->sc_ic, sc->sc_drq16,
 		    sc->sc_drq16_maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW);
 		if (error) {
-			printf("%s: can't create map for drq %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_drq16);
+			aprint_error_dev(sc->sc_dev,
+			    "can't create map for drq %d\n", sc->sc_drq16);
 			isa_dmamap_destroy(sc->sc_ic, sc->sc_drq8);
 			return;
 		}
 	}
 
-	powerhook_establish(sc->sc_dev.dv_xname, sbdsp_powerhook, sc);
+	if (!pmf_device_register(sc->sc_dev, NULL, sbdsp_resume))
+		aprint_error_dev(sc->sc_dev, "couldn't establish power handler\n");
 }
 
-static void
-sbdsp_powerhook(int why, void *arg)
+static bool
+sbdsp_resume(device_t dv PMF_FN_ARGS)
 {
-	struct sbdsp_softc *sc;
-	int i;
-
-	sc = arg;
-	if (!sc || why != PWR_RESUME)
-		return;
+	struct sbdsp_softc *sc = device_private(dv);
 
 	/* Reset the mixer. */
 	sbdsp_mix_write(sc, SBP_MIX_RESET, SBP_MIX_RESET);
-	for (i = 0; i < SB_NDEVS; i++)
-		sbdsp_set_mixer_gain (sc, i);
+
+	return true;
 }
 
 void
@@ -1541,10 +1530,12 @@ sbdsp_halt_input(void *addr)
 int
 sbdsp_intr(void *arg)
 {
-	struct sbdsp_softc *sc;
+	struct sbdsp_softc *sc = arg;
+#if NMPU > 0
+	struct mpu_softc *sc_mpu = device_private(sc->sc_mpudev);
+#endif
 	u_char irq;
 
-	sc = arg;
 	DPRINTFN(2, ("sbdsp_intr: intr8=%p, intr16=%p\n",
 		   sc->sc_intr8, sc->sc_intr16));
 	if (ISSB16CLASS(sc)) {
@@ -1573,8 +1564,8 @@ sbdsp_intr(void *arg)
 			sc->sc_intr16(arg);
 	}
 #if NMPU > 0
-	if ((irq & SBP_IRQ_MPU401) && sc->sc_mpudev) {
-		mpu_intr(sc->sc_mpudev);
+	if ((irq & SBP_IRQ_MPU401) && sc_mpu) {
+		mpu_intr(sc_mpu);
 	}
 #endif
 	return 1;

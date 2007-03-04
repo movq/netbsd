@@ -1,4 +1,4 @@
-/*	$NetBSD: i2c.c,v 1.13 2007/02/06 12:39:15 jmcneill Exp $	*/
+/*	$NetBSD: i2c.c,v 1.22 2008/09/29 22:55:08 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -35,6 +35,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: i2c.c,v 1.22 2008/09/29 22:55:08 pgoyette Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
@@ -48,15 +51,14 @@
 #include <dev/i2c/i2cvar.h>
 
 #include "locators.h"
+#include <opt_i2cbus.h>
 
 struct iic_softc {
-	struct device sc_dev;
 	i2c_tag_t sc_tag;
 	int sc_type;
 };
 
 static void	iic_smbus_intr_thread(void *);
-static void	iic_smbus_intr_thread1(void *);
 
 int
 iicbus_print(void *aux, const char *pnp)
@@ -80,10 +82,9 @@ iic_print(void *aux, const char *pnp)
 }
 
 static int
-iic_search(struct device *parent, struct cfdata *cf,
-    const int *ldesc, void *aux)
+iic_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
-	struct iic_softc *sc = (void *) parent;
+	struct iic_softc *sc = device_private(parent);
 	struct i2c_attach_args ia;
 
 	ia.ia_tag = sc->sc_tag;
@@ -98,29 +99,65 @@ iic_search(struct device *parent, struct cfdata *cf,
 }
 
 static int
-iic_match(struct device *parent, struct cfdata *cf,
-    void *aux)
+iic_match(device_t parent, cfdata_t cf, void *aux)
 {
 
 	return (1);
 }
 
 static void
-iic_attach(struct device *parent, struct device *self, void *aux)
+iic_attach(device_t parent, device_t self, void *aux)
 {
 	struct iic_softc *sc = device_private(self);
 	struct i2cbus_attach_args *iba = aux;
+	i2c_tag_t ic;
+	int rv;
 
 	aprint_naive(": I2C bus\n");
 	aprint_normal(": I2C bus\n");
 
 	sc->sc_tag = iba->iba_tag;
 	sc->sc_type = iba->iba_type;
-	sc->sc_tag->ic_devname = self->dv_xname;
+	ic = sc->sc_tag;
+	ic->ic_devname = device_xname(self);
 
 	LIST_INIT(&(sc->sc_tag->ic_list));
 	LIST_INIT(&(sc->sc_tag->ic_proc_list));
-	kthread_create(iic_smbus_intr_thread, sc->sc_tag);
+
+	rv = kthread_create(PRI_NONE, 0, NULL, iic_smbus_intr_thread,
+	    ic, &ic->ic_intr_thread, "%s", ic->ic_devname);
+	if (rv)
+		aprint_error_dev(self, "unable to create intr thread\n");
+
+#if I2C_SCAN
+	if (sc->sc_type == I2C_TYPE_SMBUS) {
+		int found = 0;
+		i2c_addr_t addr;
+		uint8_t cmd = 0, val;
+
+		for (addr = 0x0; addr < 0x80; addr++) {
+			/* Skip i2c Alert Response Address */
+			if (addr == 0x0c)
+				continue;
+			iic_acquire_bus(ic, 0);
+			if (iic_exec(ic, I2C_OP_READ_WITH_STOP, addr,
+			    &cmd, 1, &val, 1, 0) == 0) {
+				if (found == 0)
+					aprint_normal("%s: devices at",
+							ic->ic_devname);
+				found++;
+				aprint_normal(" 0x%02x", addr);
+			}
+			iic_release_bus(ic, 0);
+		}
+		if (found == 0)
+			aprint_normal("%s: no devices found", ic->ic_devname);
+		aprint_normal("\n");
+	}
+#endif
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	/*
 	 * Attach all i2c devices described in the kernel
@@ -130,7 +167,7 @@ iic_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static void
-iic_smbus_intr_thread1(void *aux)
+iic_smbus_intr_thread(void *aux)
 {
 	i2c_tag_t ic;
 	struct ic_intr_list *il;
@@ -152,20 +189,6 @@ iic_smbus_intr_thread1(void *aux)
 	}
 
 	kthread_exit(0);
-}
-
-static void
-iic_smbus_intr_thread(void *aux)
-{
-	i2c_tag_t ic;
-	int rv;
-
-	ic = (i2c_tag_t)aux;
-
-	rv = kthread_create1(iic_smbus_intr_thread1, ic, &ic->ic_intr_thread,
-	    "%s", ic->ic_devname);
-	if (rv)
-		printf("%s: unable to create intr thread\n", ic->ic_devname);
 }
 
 void *
@@ -243,5 +266,5 @@ iic_smbus_intr(i2c_tag_t ic)
 	return 1;
 }
 
-CFATTACH_DECL(iic, sizeof(struct iic_softc),
+CFATTACH_DECL_NEW(iic, sizeof(struct iic_softc),
     iic_match, iic_attach, NULL, NULL);

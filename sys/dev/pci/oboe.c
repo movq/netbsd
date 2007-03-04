@@ -1,4 +1,4 @@
-/*	$NetBSD: oboe.c,v 1.24 2006/11/16 01:33:09 christos Exp $	*/
+/*	$NetBSD: oboe.c,v 1.32 2008/04/28 20:23:55 martin Exp $	*/
 
 /*	XXXXFVDL THIS DRIVER IS BROKEN FOR NON-i386 -- vtophys() usage	*/
 
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -45,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: oboe.c,v 1.24 2006/11/16 01:33:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: oboe.c,v 1.32 2008/04/28 20:23:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,6 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: oboe.c,v 1.24 2006/11/16 01:33:09 christos Exp $");
 #include <sys/tty.h>
 #include <sys/vnode.h>
 #include <sys/poll.h>
+#include <sys/proc.h>
 
 #include <dev/ir/ir.h>
 #include <dev/ir/irdaio.h>
@@ -64,8 +58,8 @@ __KERNEL_RCSID(0, "$NetBSD: oboe.c,v 1.24 2006/11/16 01:33:09 christos Exp $");
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcivar.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 #include <uvm/uvm_extern.h>
 
 #include <dev/pci/oboereg.h>
@@ -142,7 +136,7 @@ static int oboe_reset(struct oboe_softc *);
 
 struct oboe_dma {
 	bus_dmamap_t map;
-	caddr_t addr;
+	void *addr;
 	bus_dma_segment_t segs[1];
 	int nsegs;
 	size_t size;
@@ -195,7 +189,7 @@ oboe_attach(struct device *parent, struct device *self, void *aux)
 	/* Map I/O registers. */
 	if (pci_mapreg_map(pa, IO_BAR, PCI_MAPREG_TYPE_IO, 0,
 	    &sc->sc_iot, &sc->sc_ioh, NULL, NULL)) {
-		printf("%s: can't map I/O space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't map I/O space\n");
 		return;
 	}
 
@@ -215,25 +209,27 @@ oboe_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Reset the device; bail out upon failure. */
 	if (oboe_reset(sc) != 0) {
-		printf("%s: can't reset\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't reset\n");
 		return;
 	}
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't map interrupt\n");
 		return;
 	}
 	intrstring = pci_intr_string(pa->pa_pc, ih);
 	sc->sc_ih  = pci_intr_establish(pa->pa_pc, ih, IPL_IR, oboe_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 		if (intrstring != NULL)
 			printf(" at %s", intrstring);
 		printf("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstring);
+	printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev), intrstring);
+
+	selinit(&sc->sc_rsel);
+	selinit(&sc->sc_wsel);
 
 	sc->sc_txs = 0;
 	sc->sc_rxs = 0;
@@ -254,7 +250,7 @@ oboe_activate(struct device *self, enum devact act)
 	struct oboe_softc *sc = (struct oboe_softc *)self;
 	int error = 0;
 
-	DPRINTF(("%s: sc=%p\n", __FUNCTION__, sc));
+	DPRINTF(("%s: sc=%p\n", __func__, sc));
 
 	switch (act) {
 	case DVACT_ACTIVATE:
@@ -272,12 +268,14 @@ oboe_activate(struct device *self, enum devact act)
 static int
 oboe_detach(struct device *self, int flags)
 {
-#ifdef OBOE_DEBUG
 	struct oboe_softc *sc = (struct oboe_softc *)self;
 
+#ifdef OBOE_DEBUG
 	/* XXX needs reference counting for proper detach. */
-	DPRINTF(("%s: sc=%p\n", __FUNCTION__, sc));
+	DPRINTF(("%s: sc=%p\n", __func__, sc));
 #endif
+	seldestroy(&sc->sc_rsel);
+	seldestroy(&sc->sc_wsel);
 	return (0);
 }
 
@@ -286,7 +284,7 @@ oboe_open(void *h, int flag, int mode, struct lwp *l)
 {
 	struct oboe_softc *sc = h;
 
-	DPRINTF(("%s: sc=%p\n", __FUNCTION__, sc));
+	DPRINTF(("%s: sc=%p\n", __func__, sc));
 
 	sc->sc_state = 0;
 	sc->sc_saved = 0;
@@ -304,7 +302,7 @@ oboe_close(void *h, int flag, int mode,
 	int error = 0;
 	int s = splir();
 
-	DPRINTF(("%s: sc=%p\n", __FUNCTION__, sc));
+	DPRINTF(("%s: sc=%p\n", __func__, sc));
 	/* Wait for output to drain */
 
 	if (sc->sc_txpending > 0) {
@@ -326,7 +324,7 @@ oboe_read(void *h, struct uio *uio, int flag)
 	int slot;
 
 	DPRINTF(("%s: resid=%d, iovcnt=%d, offset=%ld\n",
-		 __FUNCTION__, uio->uio_resid, uio->uio_iovcnt,
+		 __func__, uio->uio_resid, uio->uio_iovcnt,
 		 (long)uio->uio_offset));
 
 	s = splir();
@@ -375,7 +373,7 @@ oboe_write(void *h, struct uio *uio, int flag)
 	int n;
 	int s = splir();
 
-	DPRINTF(("%s: sc=%p\n", __FUNCTION__, sc));
+	DPRINTF(("%s: sc=%p\n", __func__, sc));
 	while (sc->sc_txpending == TX_SLOTS) {
 		if (flag & IO_NDELAY) {
 			splx(s);
@@ -453,7 +451,7 @@ oboe_get_turnarounds(void *h, int *turnarounds)
 {
 #ifdef OBOE_DEBUG
 	struct oboe_softc *sc = h;
-	DPRINTF(("%s: sc=%p\n", __FUNCTION__, sc));
+	DPRINTF(("%s: sc=%p\n", __func__, sc));
 #endif
 
 	/* XXX Linux driver sets all bits */
@@ -469,17 +467,17 @@ oboe_poll(void *h, int events, struct lwp *l)
 	int revents = 0;
 	int s;
 
-	DPRINTF(("%s: sc=%p\n", __FUNCTION__, sc));
+	DPRINTF(("%s: sc=%p\n", __func__, sc));
 
 	s = splir();
 	if (events & (POLLOUT | POLLWRNORM))
 		revents |= events & (POLLOUT | POLLWRNORM);
 	if (events & (POLLIN | POLLRDNORM)) {
 		if (sc->sc_saved > 0) {
-			DPRINTF(("%s: have data\n", __FUNCTION__));
+			DPRINTF(("%s: have data\n", __func__));
 			revents |= events & (POLLIN | POLLRDNORM);
 		} else {
-			DPRINTF(("%s: recording select\n", __FUNCTION__));
+			DPRINTF(("%s: recording select\n", __func__));
 			selrecord(l, &sc->sc_rsel);
 		}
 	}
@@ -541,7 +539,7 @@ oboe_kqfilter(void *h, struct knote *kn)
 		kn->kn_fop = &oboewrite_filtops;
 		break;
 	default:
-		return (1);
+		return (EINVAL);
 	}
 
 	kn->kn_hook = sc;
@@ -610,7 +608,7 @@ oboe_intr(void *p)
 			DPRINTF(("oboe_intr: waking up reader\n"));
 			wakeup(&sc->sc_rxs);
 		}
-		selnotify(&sc->sc_rsel, 0);
+		selnotify(&sc->sc_rsel, 0, 0);
 		DPRINTF(("oboe_intr returning\n"));
 	}
 	if (irqstat & OBOE_ISR_TXDONE) {
@@ -629,7 +627,7 @@ oboe_intr(void *p)
 			DPRINTF(("oboe_intr: waking up writer\n"));
 			wakeup(&sc->sc_txs);
 		}
-		selnotify(&sc->sc_wsel, 0);
+		selnotify(&sc->sc_wsel, 0, 0);
 	}
 	return (1);
 }

@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: matrixkp_subr.c,v 1.4 2005/12/12 01:20:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: matrixkp_subr.c,v 1.7 2007/10/19 11:59:55 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,8 +57,8 @@ __KERNEL_RCSID(0, "$NetBSD: matrixkp_subr.c,v 1.4 2005/12/12 01:20:26 christos E
 #include <sys/types.h>
 
 #include <machine/autoconf.h>
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/intr.h>
+#include <sys/bus.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wskbdvar.h>
@@ -81,7 +81,7 @@ mxkp_attach(struct matrixkp_softc *sc)
 {
 	u_int32_t i;
 
-	callout_init(&sc->sc_callout);
+	callout_init(&sc->sc_callout, 0);
 	callout_setfunc(&sc->sc_callout, mxkp_poll, sc);
 	if (sc->poll_freq > hz || sc->poll_freq == 0)
 		sc->poll_freq = hz;
@@ -194,7 +194,7 @@ mxkp_set_leds(void *v, int leds)
 }
 
 int
-mxkp_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct lwp *l)
+mxkp_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	switch (cmd) {
 	case WSKBDIO_GTYPE:

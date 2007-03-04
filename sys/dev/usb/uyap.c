@@ -1,4 +1,4 @@
-/*	$NetBSD: uyap.c,v 1.11 2006/11/16 01:33:27 christos Exp $	*/
+/*	$NetBSD: uyap.c,v 1.14 2008/05/24 16:40:58 cube Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uyap.c,v 1.11 2006/11/16 01:33:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uyap.c,v 1.14 2008/05/24 16:40:58 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,9 +60,6 @@ USB_MATCH(uyap)
 {
 	USB_MATCH_START(uyap, uaa);
 
-	if (uaa->iface != NULL)
-		return (UMATCH_NONE);
-
 	/* Match the boot device. */
 	if (uaa->vendor == USB_VENDOR_SILICONPORTALS &&
 	    uaa->product == USB_PRODUCT_SILICONPORTALS_YAPPH_NF)
@@ -85,22 +75,24 @@ USB_ATTACH(uyap)
 	usbd_status err;
 	char *devinfop;
 
+	sc->sc_dev = self;
+
 	devinfop = usbd_devinfo_alloc(dev, 0);
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
-	printf("%s: downloading firmware\n", USBDEVNAME(sc->sc_dev));
+	aprint_verbose_dev(self, "downloading firmware\n");
 
 	err = ezload_downloads_and_reset(dev, uyap_firmwares);
 	if (err) {
-		printf("%s: download ezdata error: %s\n",
-		       USBDEVNAME(sc->sc_dev), usbd_errstr(err));
+		aprint_error_dev(self, "download ezdata error: %s\n",
+		    usbd_errstr(err));
 		USB_ATTACH_ERROR_RETURN;
 	}
 
-	printf("%s: firmware download complete, disconnecting.\n",
-	       USBDEVNAME(sc->sc_dev));
+	aprint_verbose_dev(self,
+	    "firmware download complete, disconnecting.\n");
 	USB_ATTACH_SUCCESS_RETURN;
 }
 

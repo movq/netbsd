@@ -1,4 +1,4 @@
-/*	$NetBSD: wsdisplay_vconsvar.h,v 1.5 2006/09/22 15:16:03 elad Exp $ */
+/*	$NetBSD: wsdisplay_vconsvar.h,v 1.9 2008/04/28 20:24:01 martin Exp $ */
 
 /*-
  * Copyright (c) 2005, 2006 Michael Lorenz
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,6 +28,9 @@
 
 #ifndef _WSDISPLAY_VCONS_H_
 #define _WSDISPLAY_VCONS_H_
+
+#include "opt_wsdisplay_compat.h"
+#include "opt_vcons.h"
 
 struct vcons_data;
 
@@ -62,6 +58,13 @@ struct vcons_screen {
 #define VCONS_IS_VISIBLE	1	/* this screen is currently visible */
 	/* non zero when some rasops operation is in progress */
 	int scr_busy;
+#ifdef WSDISPLAY_SCROLLSUPPORT
+	int scr_lines_in_buffer;
+	int scr_current_line;
+	int scr_line_wanted;
+	int scr_offset_to_zero;
+	int scr_current_offset;
+#endif
 };
 
 #define SCREEN_IS_VISIBLE(scr) (((scr)->scr_status & VCONS_IS_VISIBLE) != 0)
@@ -73,6 +76,7 @@ struct vcons_screen {
 #define SCREEN_INVISIBLE(scr) ((scr)->scr_status &= ~VCONS_IS_VISIBLE)
 #define SCREEN_DISABLE_DRAWING(scr) ((scr)->scr_flags |= VCONS_DONT_DRAW)
 #define SCREEN_ENABLE_DRAWING(scr) ((scr)->scr_flags &= ~VCONS_DONT_DRAW)
+
 struct vcons_data {
 	/* usually the drivers softc */
 	void *cookie;
@@ -86,7 +90,7 @@ struct vcons_data {
 	    long *);
 
 	/* accessops */
-	int (*ioctl)(void *, void *, u_long, caddr_t, int, struct lwp *);
+	int (*ioctl)(void *, void *, u_long, void *, int, struct lwp *);
 
 	/* rasops */
 	void (*copycols)(void *, int, int, int, int);
@@ -95,11 +99,15 @@ struct vcons_data {
 	void (*eraserows)(void *, int, int, long);
 	void (*putchar)(void *, int, int, u_int, long);
 	void (*cursor)(void *, int, int, int);
-	/* called before cvons_redraw_screen */
+	/* called before vcons_redraw_screen */
 	void (*show_screen_cb)(struct vcons_screen *);
 	/* virtual screen management stuff */
 	void (*switch_cb)(void *, int, int);
 	void *switch_cb_arg;
+#ifdef VCONS_SWITCH_ASYNC
+	lwp_t *redraw_thread;
+	int start_drawing, done_drawing;	/* for the drawing thread */
+#endif
 	struct callout switch_callout;
 	uint32_t switch_pending;
 	LIST_HEAD(, vcons_screen) screens;

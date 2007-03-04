@@ -1,4 +1,4 @@
-/*	$NetBSD: auacer.c,v 1.15 2006/11/16 01:33:08 christos Exp $	*/
+/*	$NetBSD: auacer.c,v 1.21 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,7 +44,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auacer.c,v 1.15 2006/11/16 01:33:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auacer.c,v 1.21 2008/04/28 20:23:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,14 +65,14 @@ __KERNEL_RCSID(0, "$NetBSD: auacer.c,v 1.15 2006/11/16 01:33:08 christos Exp $")
 #include <dev/mulaw.h>
 #include <dev/auconv.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/ic/ac97reg.h>
 #include <dev/ic/ac97var.h>
 
 struct auacer_dma {
 	bus_dmamap_t map;
-	caddr_t addr;
+	void *addr;
 	bus_dma_segment_t segs[1];
 	int nsegs;
 	size_t size;
@@ -132,10 +125,6 @@ struct auacer_softc {
 	pcitag_t sc_pt;
 
 	int  sc_dmamap_flags;
-
-	/* Power Management */
-	void *sc_powerhook;
-	int sc_suspend;
 
 #define AUACER_NFORMATS	3
 	struct audio_format sc_formats[AUACER_NFORMATS];
@@ -194,7 +183,7 @@ static int	auacer_allocmem(struct auacer_softc *, size_t, size_t,
 				struct auacer_dma *);
 static int	auacer_freemem(struct auacer_softc *, struct auacer_dma *);
 
-static void	auacer_powerhook(int, void *);
+static bool	auacer_resume(device_t PMF_FN_PROTO);
 static int	auacer_set_rate(struct auacer_softc *, int, u_int);
 
 static void auacer_reset(struct auacer_softc *sc);
@@ -293,26 +282,25 @@ auacer_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: can't map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pa->pa_pc, ih);
 	sc->sc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_AUDIO,
 	    auacer_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error("%s: can't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't establish interrupt");
 		if (intrstr != NULL)
 			aprint_normal(" at %s", intrstr);
 		aprint_normal("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	strlcpy(sc->sc_audev.name, "M5455 AC97", MAX_AUDIO_DEV_LEN);
 	snprintf(sc->sc_audev.version, MAX_AUDIO_DEV_LEN,
 		 "0x%02x", PCI_REVISION(pa->pa_class));
-	strlcpy(sc->sc_audev.config, sc->sc_dev.dv_xname, MAX_AUDIO_DEV_LEN);
+	strlcpy(sc->sc_audev.config, device_xname(&sc->sc_dev), MAX_AUDIO_DEV_LEN);
 
 	/* Set up DMA lists. */
 	auacer_alloc_cdata(sc);
@@ -350,14 +338,12 @@ auacer_attach(struct device *parent, struct device *self, void *aux)
 		return;
 	}
 
-	/* Watch for power change */
-	sc->sc_suspend = PWR_RESUME;
-	sc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
-	    auacer_powerhook, sc);
-
 	audio_attach_mi(&auacer_hw_if, sc, &sc->sc_dev);
 
 	auacer_reset(sc);
+
+	if (!pmf_device_register(self, NULL, auacer_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 CFATTACH_DECL(auacer, sizeof(struct auacer_softc),
@@ -812,7 +798,7 @@ auacer_upd_chan(struct auacer_softc *sc, struct auacer_chan *chan)
 
 	if (sts & ALI_SR_DMA_INT_FIFO) {
 		printf("%s: fifo underrun # %u\n",
-		       sc->sc_dev.dv_xname, ++chan->fifoe);
+		       device_xname(&sc->sc_dev), ++chan->fifoe);
 	}
 
 	civ = READ1(sc, chan->port + ALI_OFF_CIV);
@@ -987,33 +973,33 @@ auacer_alloc_cdata(struct auacer_softc *sc)
 	if ((error = bus_dmamem_alloc(sc->dmat,
 				      sizeof(struct auacer_cdata),
 				      PAGE_SIZE, 0, &seg, 1, &rseg, 0)) != 0) {
-		printf("%s: unable to allocate control data, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to allocate control data, error = %d\n",
+		    error);
 		goto fail_0;
 	}
 
 	if ((error = bus_dmamem_map(sc->dmat, &seg, rseg,
 				    sizeof(struct auacer_cdata),
-				    (caddr_t *) &sc->sc_cdata,
+				    (void **) &sc->sc_cdata,
 				    sc->sc_dmamap_flags)) != 0) {
-		printf("%s: unable to map control data, error = %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to map control data, error = %d\n",
+		    error);
 		goto fail_1;
 	}
 
 	if ((error = bus_dmamap_create(sc->dmat, sizeof(struct auacer_cdata), 1,
 				       sizeof(struct auacer_cdata), 0, 0,
 				       &sc->sc_cddmamap)) != 0) {
-		printf("%s: unable to create control data DMA map, "
-		    "error = %d\n", sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to create control data DMA map, "
+		    "error = %d\n", error);
 		goto fail_2;
 	}
 
 	if ((error = bus_dmamap_load(sc->dmat, sc->sc_cddmamap,
 				     sc->sc_cdata, sizeof(struct auacer_cdata),
 				     NULL, 0)) != 0) {
-		printf("%s: unable to load control data DMA map, "
-		    "error = %d\n", sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "unable to load control data DMA map, "
+		    "error = %d\n", error);
 		goto fail_3;
 	}
 
@@ -1022,7 +1008,7 @@ auacer_alloc_cdata(struct auacer_softc *sc)
  fail_3:
 	bus_dmamap_destroy(sc->dmat, sc->sc_cddmamap);
  fail_2:
-	bus_dmamem_unmap(sc->dmat, (caddr_t) sc->sc_cdata,
+	bus_dmamem_unmap(sc->dmat, (void *) sc->sc_cdata,
 	    sizeof(struct auacer_cdata));
  fail_1:
 	bus_dmamem_free(sc->dmat, &seg, rseg);
@@ -1030,38 +1016,14 @@ auacer_alloc_cdata(struct auacer_softc *sc)
 	return error;
 }
 
-static void
-auacer_powerhook(int why, void *addr)
+static bool
+auacer_resume(device_t dv PMF_FN_ARGS)
 {
-	struct auacer_softc *sc;
+	struct auacer_softc *sc = device_private(dv);
 
-	sc = (struct auacer_softc *)addr;
-	switch (why) {
-	case PWR_SUSPEND:
-	case PWR_STANDBY:
-		/* Power down */
-		DPRINTF(1, ("%s: power down\n", sc->sc_dev.dv_xname));
-		sc->sc_suspend = why;
-		break;
+	auacer_reset_codec(sc);
+	delay(1000);
+	sc->codec_if->vtbl->restore_ports(sc->codec_if);
 
-	case PWR_RESUME:
-		/* Wake up */
-		DPRINTF(1, ("%s: power resume\n", sc->sc_dev.dv_xname));
-		if (sc->sc_suspend == PWR_RESUME) {
-			printf("%s: resume without suspend.\n",
-			    sc->sc_dev.dv_xname);
-			sc->sc_suspend = why;
-			return;
-		}
-		sc->sc_suspend = why;
-		auacer_reset_codec(sc);
-		delay(1000);
-		sc->codec_if->vtbl->restore_ports(sc->codec_if);
-		break;
-
-	case PWR_SOFTSUSPEND:
-	case PWR_SOFTSTANDBY:
-	case PWR_SOFTRESUME:
-		break;
-	}
+	return true;
 }

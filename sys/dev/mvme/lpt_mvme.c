@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt_mvme.c,v 1.7 2005/12/11 12:22:48 christos Exp $	*/
+/*	$NetBSD: lpt_mvme.c,v 1.14 2008/06/12 22:45:46 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -91,7 +84,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lpt_mvme.c,v 1.7 2005/12/11 12:22:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lpt_mvme.c,v 1.14 2008/06/12 22:45:46 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,8 +98,8 @@ __KERNEL_RCSID(0, "$NetBSD: lpt_mvme.c,v 1.7 2005/12/11 12:22:48 christos Exp $"
 #include <sys/conf.h>
 #include <sys/syslog.h>
 
-#include <machine/cpu.h>
-#include <machine/bus.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
 
 #include <dev/mvme/lptvar.h>
 
@@ -120,7 +113,7 @@ __KERNEL_RCSID(0, "$NetBSD: lpt_mvme.c,v 1.7 2005/12/11 12:22:48 christos Exp $"
 #if !defined(DEBUG) || !defined(notdef)
 #define LPRINTF(a)
 #else
-#define LPRINTF		if (lptdebug) printf a
+#define LPRINTF		if (lptdebug) aprint_verbose_dev a
 int lptdebug = 1;
 #endif
 
@@ -148,37 +141,29 @@ lpt_attach_subr(sc)
 {
 
 	sc->sc_state = 0;
-	callout_init(&sc->sc_wakeup_ch);
+	callout_init(&sc->sc_wakeup_ch, 0);
 }
 
 /*
  * Reset the printer, then wait until it's selected and not busy.
  */
 int
-lptopen(dev, flag, mode, l)
-	dev_t dev;
-	int flag;
-	int mode;
-	struct lwp *l;
+lptopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	int unit;
 	u_char flags;
 	struct lpt_softc *sc;
 	int error;
 	int spin;
 
-	unit = LPTUNIT(dev);
 	flags = LPTFLAGS(dev);
 
-	if (unit >= lpt_cd.cd_ndevs)
-		return (ENXIO);
-	sc = lpt_cd.cd_devs[unit];
+	sc = device_lookup_private(&lpt_cd, LPTUNIT(dev));
 	if (!sc)
 		return (ENXIO);
 
 #ifdef DIAGNOSTIC
 	if (sc->sc_state)
-		printf("%s: stat=0x%x not zero\n", sc->sc_dev.dv_xname,
+		aprint_verbose_dev(sc->sc_dev, "stat=0x%x not zero\n",
 		    sc->sc_state);
 #endif
 
@@ -187,7 +172,7 @@ lptopen(dev, flag, mode, l)
 
 	sc->sc_state = LPT_INIT;
 	sc->sc_flags = flags;
-	LPRINTF(("%s: open: flags=0x%x\n", sc->sc_dev.dv_xname, flags));
+	LPRINTF((sc->sc_dev, "open: flags=0x%x\n", flags));
 
 	if ((flags & LPT_NOPRIME) == 0) {
 		/* assert Input Prime for 100 usec to start up printer */
@@ -207,7 +192,7 @@ lptopen(dev, flag, mode, l)
 			return (EBUSY);
 		}
 		/* wait 1/4 second, give up if we get a signal */
-		error = tsleep((caddr_t) sc, LPTPRI | PCATCH, "lptopen", STEP);
+		error = tsleep((void *) sc, LPTPRI | PCATCH, "lptopen", STEP);
 		if (error != EWOULDBLOCK) {
 			sc->sc_state = 0;
 			return (error);
@@ -223,7 +208,7 @@ lptopen(dev, flag, mode, l)
 
 	(sc->sc_funcs->lf_open) (sc, sc->sc_flags & LPT_NOINTR);
 
-	LPRINTF(("%s: opened\n", sc->sc_dev.dv_xname));
+	LPRINTF((sc->sc_dev, "opened\n"));
 	return (0);
 }
 
@@ -247,17 +232,11 @@ lpt_wakeup(arg)
  * Close the device, and free the local line buffer.
  */
 int
-lptclose(dev, flag, mode, l)
-	dev_t dev;
-	int flag;
-	int mode;
-	struct lwp *l;
+lptclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct lpt_softc *sc;
-	int unit;
 
-	unit = LPTUNIT(dev);
-	sc = lpt_cd.cd_devs[unit];
+	sc = device_lookup_private(&lpt_cd, LPTUNIT(dev));
 
 	if (sc->sc_count)
 		(void) pushbytes(sc);
@@ -268,9 +247,9 @@ lptclose(dev, flag, mode, l)
 	(sc->sc_funcs->lf_close) (sc);
 
 	sc->sc_state = 0;
-	brelse(sc->sc_inbuf);
+	brelse(sc->sc_inbuf, 0);
 
-	LPRINTF(("%s: closed\n", sc->sc_dev.dv_xname));
+	LPRINTF((sc->sc_dev, "%s: closed\n"));
 	return (0);
 }
 
@@ -294,7 +273,7 @@ pushbytes(sc)
 					tic = tic + tic + 1;
 					if (tic > TIMEOUT)
 						tic = TIMEOUT;
-					error = tsleep((caddr_t) sc,
+					error = tsleep((void *) sc,
 					    LPTPRI | PCATCH, "lptpsh", tic);
 					if (error != EWOULDBLOCK)
 						return (error);
@@ -313,13 +292,13 @@ pushbytes(sc)
 		while (sc->sc_count > 0) {
 			/* if the printer is ready for a char, give it one */
 			if ((sc->sc_state & LPT_OBUSY) == 0) {
-				LPRINTF(("%s: write %d\n", sc->sc_dev.dv_xname,
+				LPRINTF((sc->sc_dev, "write %d\n",
 					sc->sc_count));
 				s = spltty();
 				(void) lpt_intr(sc);
 				splx(s);
 			}
-			error = tsleep((caddr_t) sc, LPTPRI | PCATCH,
+			error = tsleep((void *) sc, LPTPRI | PCATCH,
 			    "lptwrite2", 0);
 			if (error)
 				return (error);
@@ -333,16 +312,13 @@ pushbytes(sc)
  * chars moved to the output queue.
  */
 int
-lptwrite(dev, uio, flags)
-	dev_t dev;
-	struct uio *uio;
-	int flags;
+lptwrite(dev_t dev, struct uio *uio, int flags)
 {
 	struct lpt_softc *sc;
 	size_t n;
 	int error;
 
-	sc = lpt_cd.cd_devs[LPTUNIT(dev)];
+	sc = device_lookup_private(&lpt_cd, LPTUNIT(dev));
 	error = 0;
 
 	while ((n = min(LPT_BSIZE, uio->uio_resid)) != 0) {
@@ -381,7 +357,7 @@ lpt_intr(sc)
 
 	if (sc->sc_count == 0) {
 		/* none, wake up the top half to get more */
-		wakeup((caddr_t) sc);
+		wakeup((void *) sc);
 	}
 
 	return (1);
@@ -392,7 +368,7 @@ int
 lptioctl(dev, cmd, data, flag, l)
 	dev_t dev;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 	int flag;
 	struct lwp *l;
 {

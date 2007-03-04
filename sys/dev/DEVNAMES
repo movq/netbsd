@@ -1,4 +1,4 @@
-#	$NetBSD: DEVNAMES,v 1.225 2007/01/09 23:53:33 cube Exp $
+#	$NetBSD: DEVNAMES,v 1.242 2008/10/11 21:54:12 bouyer Exp $
 #
 # This file contains all used device names and defined attributes in
 # alphabetical order. New devices added to the system somewhere should first
@@ -60,6 +60,7 @@ ahd			MI
 ahsc			amiga
 ahsc			amigappc
 ai			MI
+aiboost			MI
 aic			MI
 akbd			mac68k
 akbd			macppc
@@ -82,9 +83,11 @@ an			MI
 ap			newsmips
 apecs			alpha
 apm			i386
+aps			MI
 arbus			evbmips
 arc			MI		Attribute
 arckbd			acorn26
+arcmsr			MI
 arcpp			acorn26
 arcvideo		acorn26
 arcwskbd		acorn26
@@ -156,6 +159,7 @@ bah			MI
 bandit			macppc
 bba			MI
 bce			MI
+bcsp			MI
 be			MI
 bge			MI
 bha			MI
@@ -173,6 +177,7 @@ bonito			algor
 bpp			MI
 brgphy			MI
 bt3c			MI
+btbc			MI
 bt_dac			sparc		Attribute
 bt_dac			sparc64		Attribute
 bthidev			MI
@@ -182,6 +187,7 @@ btl			arc
 btms			MI
 btnmgr			hpcmips
 btsco			MI
+btuart			MI
 btvmei			MI
 btvmeii			MI
 button			hpcmips
@@ -243,7 +249,6 @@ clock			cats
 clock			luna68k
 clock			mvme68k
 clock			netwinder
-clock			pc532
 clock			sparc
 clock			sparc64
 clock			sun2
@@ -376,6 +381,7 @@ empsc			amiga
 empsc			amigappc
 emuxki			MI
 en			MI
+envctrl			sparc64
 ep			MI
 epclk			evbarm
 epcom			evbarm
@@ -388,7 +394,6 @@ esa			MI
 esc			acorn32		Attribute
 esh			MI
 esiop			MI
-esl			MI
 esm			MI
 eso			MI
 esp			MI
@@ -450,8 +455,9 @@ fddi			MI		Attribute
 fea			MI
 ffb			sparc64
 fhpib			hp300
+finsio			MI
 fiq			acorn26		Attribute
-flash			pmppc
+flash			evbppc
 flsc			amiga
 flsc			amigappc
 fms			MI
@@ -473,6 +479,7 @@ gayle			amiga		Attribute
 gayle			amigappc	Attribute
 gbox			hp300
 gbus			alpha
+gcscpcib		i386
 gdrom			dreamcast
 gem			MI
 gentbi			MI
@@ -626,6 +633,7 @@ iopsp			MI
 ipaqbus			hpcarm
 ipaqlcd			hpcarm
 ipaqpcic		hpcarm
+ipmi			amd64
 ipmi			i386
 ipmi			xen
 ippp			MI
@@ -650,7 +658,7 @@ isdntel			MI
 isdntrc			MI
 isic			MI
 isp			MI
-it			MI
+itesio			MI
 it8368e			hpcmips
 ite			amiga
 ite			amigappc
@@ -677,6 +685,7 @@ j720lcd			hpcarm
 j720pwr			hpcarm
 j720ssp			hpcarm
 j720tp			hpcarm
+jme			MI
 joy			arc
 joy			bebox
 joy			cats
@@ -701,7 +710,6 @@ kue			MI
 latches			acorn26
 lc			MI
 lca			alpha
-lcspx			vax
 ld			MI
 le			MI
 le24			MI		Attribute
@@ -711,6 +719,7 @@ lebuffer		MI
 ledma			MI
 leo			atari
 lfmiop			MI
+lii			MI
 lkkbd			alpha
 lkkbd			vax
 lkms			vax
@@ -727,7 +736,6 @@ lpt			MI
 lpt			amiga
 lpt			amigappc
 lpt			mvme68k
-lpt			pc532
 lpt			sgimips
 lpt			sparc64
 lsi64854		MI		Attribute
@@ -773,7 +781,6 @@ mainbus			newsmips
 mainbus			next68k
 mainbus			ofppc
 mainbus			ofppc		Attribute
-mainbus			pc532
 mainbus			pmax
 mainbus			prep
 mainbus			prep		Attribute
@@ -878,7 +885,6 @@ mtty			MI
 mu			vax
 mulaw			MI		Attribute
 nca			MI
-ncr			pc532
 ncr5380sbc		MI		Attribute
 ncr53c9x		MI		Attribute
 ncrsc			mvme68k
@@ -894,6 +900,7 @@ newgpbusif		hpcmips
 nextdisplay		next68k
 nextkbd			next68k
 nfe			MI
+nfsmb			MI
 nhpib			hp300
 ni			MI
 njata			MI
@@ -959,6 +966,7 @@ osiop			MI
 otgsc			amiga
 otgsc			amigappc
 panel			cobalt
+pad			MI
 par			amiga
 par			amigappc
 par			x68k
@@ -1100,8 +1108,7 @@ rtc			acorn26
 rtc			acorn32
 rtc			evbmips
 rtc			hp300
-rtc			pc532
-rtc			pmppc
+rtc			evbppc
 rtc			sparc
 rtc			x68k
 rtfps			MI
@@ -1144,7 +1151,6 @@ sci			amigappc	Attribute
 sci			evbsh3
 scif			evbsh3
 scif			hpcsh
-scn			pc532
 scr			shark
 scsi			MI		Attribute
 scsibus			MI
@@ -1210,6 +1216,7 @@ spifi			newsmips
 splash			MI		Attribute
 spkr			MI
 sppp			MI		Attribute
+spx			vax
 sqphy			MI
 ss			MI
 st			MI
@@ -1316,12 +1323,14 @@ udav			MI
 udsbr			MI
 uep			MI
 uftdi			MI
+ug			MI
 ugen			MI
 uha			MI
 uhci			MI
 uhid			MI
 uhidbus			MI		Attribute
 uhidev			MI
+uhmodem			MI
 uhub			MI
 uipaq			MI
 uirda			MI
@@ -1368,7 +1377,6 @@ vga			MI
 vge			MI
 viaenv			MI
 viaide			MI
-viapm			MI
 vidc			acorn32
 vidcaudio		acorn32
 vidcvideo		acorn32
@@ -1490,3 +1498,4 @@ zstty			sun2
 zstty			sun3
 zstty			x68k
 zx			MI
+zyd			MI

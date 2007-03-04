@@ -1,4 +1,30 @@
-/*	$NetBSD: uipc_socket2.c,v 1.81 2006/11/01 10:17:59 yamt Exp $	*/
+/*	$NetBSD: uipc_socket2.c,v 1.100 2008/10/24 22:23:20 dyoung Exp $	*/
+
+/*-
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*
  * Copyright (c) 1982, 1986, 1988, 1990, 1993
@@ -32,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_socket2.c,v 1.81 2006/11/01 10:17:59 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_socket2.c,v 1.100 2008/10/24 22:23:20 dyoung Exp $");
 
 #include "opt_mbuftrace.h"
 #include "opt_sb_max.h"
@@ -45,21 +71,57 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_socket2.c,v 1.81 2006/11/01 10:17:59 yamt Exp $
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/protosw.h>
+#include <sys/domain.h>
 #include <sys/poll.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/signalvar.h>
 #include <sys/kauth.h>
+#include <sys/pool.h>
+#include <sys/uidinfo.h>
 
 /*
- * Primitive routines for operating on sockets and socket buffers
+ * Primitive routines for operating on sockets and socket buffers.
+ *
+ * Locking rules and assumptions:
+ *
+ * o socket::so_lock can change on the fly.  The low level routines used
+ *   to lock sockets are aware of this.  When so_lock is acquired, the
+ *   routine locking must check to see if so_lock still points to the
+ *   lock that was acquired.  If so_lock has changed in the meantime, the
+ *   now irellevant lock that was acquired must be dropped and the lock
+ *   operation retried.  Although not proven here, this is completely safe
+ *   on a multiprocessor system, even with relaxed memory ordering, given
+ *   the next two rules:
+ *
+ * o In order to mutate so_lock, the lock pointed to by the current value
+ *   of so_lock must be held: i.e., the socket must be held locked by the
+ *   changing thread.  The thread must issue membar_exit() to prevent
+ *   memory accesses being reordered, and can set so_lock to the desired
+ *   value.  If the lock pointed to by the new value of so_lock is not
+ *   held by the changing thread, the socket must then be considered
+ *   unlocked.
+ *
+ * o If so_lock is mutated, and the previous lock referred to by so_lock
+ *   could still be visible to other threads in the system (e.g. via file
+ *   descriptor or protocol-internal reference), then the old lock must
+ *   remain valid until the socket and/or protocol control block has been
+ *   torn down.
+ *
+ * o If a socket has a non-NULL so_head value (i.e. is in the process of
+ *   connecting), then locking the socket must also lock the socket pointed
+ *   to by so_head: their lock pointers must match.
+ *
+ * o If a socket has connections in progress (so_q, so_q0 not empty) then
+ *   locking the socket must also lock the sockets attached to both queues.
+ *   Again, their lock pointers must match.
+ *
+ * o Beyond the initial lock assigment in socreate(), assigning locks to
+ *   sockets is the responsibility of the individual protocols / protocol
+ *   domains.
  */
 
-/* strings for sleep message: */
-const char	netcon[] = "netcon";
-const char	netcls[] = "netcls";
-const char	netio[] = "netio";
-const char	netlck[] = "netlck";
+static pool_cache_t socket_cache;
 
 u_long	sb_max = SB_MAX;	/* maximum socket buffer size */
 static u_long sb_max_adj;	/* adjusted sb_max */
@@ -98,6 +160,8 @@ void
 soisconnecting(struct socket *so)
 {
 
+	KASSERT(solocked(so));
+
 	so->so_state &= ~(SS_ISCONNECTED|SS_ISDISCONNECTING);
 	so->so_state |= SS_ISCONNECTING;
 }
@@ -108,14 +172,27 @@ soisconnected(struct socket *so)
 	struct socket	*head;
 
 	head = so->so_head;
+
+	KASSERT(solocked(so));
+	KASSERT(head == NULL || solocked2(so, head));
+
 	so->so_state &= ~(SS_ISCONNECTING|SS_ISDISCONNECTING|SS_ISCONFIRMING);
 	so->so_state |= SS_ISCONNECTED;
-	if (head && soqremque(so, 0)) {
-		soqinsque(head, so, 1);
-		sorwakeup(head);
-		wakeup((caddr_t)&head->so_timeo);
+	if (head && so->so_onq == &head->so_q0) {
+		if ((so->so_options & SO_ACCEPTFILTER) == 0) {
+			soqremque(so, 0);
+			soqinsque(head, so, 1);
+			sorwakeup(head);
+			cv_broadcast(&head->so_cv);
+		} else {
+			so->so_upcall =
+			    head->so_accf->so_accept_filter->accf_callback;
+			so->so_upcallarg = head->so_accf->so_accept_filter_arg;
+			so->so_rcv.sb_flags |= SB_UPCALL;
+			so->so_options &= ~SO_ACCEPTFILTER;
+			(*so->so_upcall)(so, so->so_upcallarg, M_DONTWAIT);		}
 	} else {
-		wakeup((caddr_t)&so->so_timeo);
+		cv_broadcast(&so->so_cv);
 		sorwakeup(so);
 		sowwakeup(so);
 	}
@@ -125,9 +202,11 @@ void
 soisdisconnecting(struct socket *so)
 {
 
+	KASSERT(solocked(so));
+
 	so->so_state &= ~SS_ISCONNECTING;
 	so->so_state |= (SS_ISDISCONNECTING|SS_CANTRCVMORE|SS_CANTSENDMORE);
-	wakeup((caddr_t)&so->so_timeo);
+	cv_broadcast(&so->so_cv);
 	sowwakeup(so);
 	sorwakeup(so);
 }
@@ -136,11 +215,21 @@ void
 soisdisconnected(struct socket *so)
 {
 
+	KASSERT(solocked(so));
+
 	so->so_state &= ~(SS_ISCONNECTING|SS_ISCONNECTED|SS_ISDISCONNECTING);
 	so->so_state |= (SS_CANTRCVMORE|SS_CANTSENDMORE|SS_ISDISCONNECTED);
-	wakeup((caddr_t)&so->so_timeo);
+	cv_broadcast(&so->so_cv);
 	sowwakeup(so);
 	sorwakeup(so);
+}
+
+void
+soinit2(void)
+{
+
+	socket_cache = pool_cache_init(sizeof(struct socket), 0, 0, 0,
+	    "socket", NULL, IPL_SOFTNET, NULL, NULL, NULL);
 }
 
 /*
@@ -155,50 +244,110 @@ struct socket *
 sonewconn(struct socket *head, int connstatus)
 {
 	struct socket	*so;
-	int		soqueue;
+	int		soqueue, error;
 
+	KASSERT(solocked(head));
+
+	if ((head->so_options & SO_ACCEPTFILTER) != 0)
+		connstatus = 0;
 	soqueue = connstatus ? 1 : 0;
 	if (head->so_qlen + head->so_q0len > 3 * head->so_qlimit / 2)
-		return ((struct socket *)0);
-	so = pool_get(&socket_pool, PR_NOWAIT);
+		return NULL;
+	so = soget(false);
 	if (so == NULL)
-		return (NULL);
-	memset((caddr_t)so, 0, sizeof(*so));
+		return NULL;
+	mutex_obj_hold(head->so_lock);
+	so->so_lock = head->so_lock;
 	so->so_type = head->so_type;
 	so->so_options = head->so_options &~ SO_ACCEPTCONN;
 	so->so_linger = head->so_linger;
 	so->so_state = head->so_state | SS_NOFDREF;
+	so->so_nbio = head->so_nbio;
 	so->so_proto = head->so_proto;
 	so->so_timeo = head->so_timeo;
 	so->so_pgid = head->so_pgid;
 	so->so_send = head->so_send;
 	so->so_receive = head->so_receive;
 	so->so_uidinfo = head->so_uidinfo;
+	so->so_egid = head->so_egid;
+	so->so_cpid = head->so_cpid;
 #ifdef MBUFTRACE
 	so->so_mowner = head->so_mowner;
 	so->so_rcv.sb_mowner = head->so_rcv.sb_mowner;
 	so->so_snd.sb_mowner = head->so_snd.sb_mowner;
 #endif
 	(void) soreserve(so, head->so_snd.sb_hiwat, head->so_rcv.sb_hiwat);
+	so->so_snd.sb_lowat = head->so_snd.sb_lowat;
+	so->so_rcv.sb_lowat = head->so_rcv.sb_lowat;
+	so->so_rcv.sb_timeo = head->so_rcv.sb_timeo;
+	so->so_snd.sb_timeo = head->so_snd.sb_timeo;
+	so->so_rcv.sb_flags |= head->so_rcv.sb_flags & SB_AUTOSIZE;
+	so->so_snd.sb_flags |= head->so_snd.sb_flags & SB_AUTOSIZE;
 	soqinsque(head, so, soqueue);
-	if ((*so->so_proto->pr_usrreq)(so, PRU_ATTACH,
-	    (struct mbuf *)0, (struct mbuf *)0, (struct mbuf *)0,
-	    (struct lwp *)0)) {
+	error = (*so->so_proto->pr_usrreq)(so, PRU_ATTACH, NULL, NULL,
+	    NULL, NULL);
+	KASSERT(solocked(so));
+	if (error != 0) {
 		(void) soqremque(so, soqueue);
-		pool_put(&socket_pool, so);
-		return (NULL);
+		/*
+		 * Remove acccept filter if one is present.
+		 * XXX Is this really needed?
+		 */
+		if (so->so_accf != NULL)
+			(void)accept_filt_clear(so);
+		soput(so);
+		return NULL;
 	}
 	if (connstatus) {
 		sorwakeup(head);
-		wakeup((caddr_t)&head->so_timeo);
+		cv_broadcast(&head->so_cv);
 		so->so_state |= connstatus;
 	}
-	return (so);
+	return so;
+}
+
+struct socket *
+soget(bool waitok)
+{
+	struct socket *so;
+
+	so = pool_cache_get(socket_cache, (waitok ? PR_WAITOK : PR_NOWAIT));
+	if (__predict_false(so == NULL))
+		return (NULL);
+	memset(so, 0, sizeof(*so));
+	TAILQ_INIT(&so->so_q0);
+	TAILQ_INIT(&so->so_q);
+	cv_init(&so->so_cv, "socket");
+	cv_init(&so->so_rcv.sb_cv, "netio");
+	cv_init(&so->so_snd.sb_cv, "netio");
+	selinit(&so->so_rcv.sb_sel);
+	selinit(&so->so_snd.sb_sel);
+	so->so_rcv.sb_so = so;
+	so->so_snd.sb_so = so;
+	return so;
+}
+
+void
+soput(struct socket *so)
+{
+
+	KASSERT(!cv_has_waiters(&so->so_cv));
+	KASSERT(!cv_has_waiters(&so->so_rcv.sb_cv));
+	KASSERT(!cv_has_waiters(&so->so_snd.sb_cv));
+	seldestroy(&so->so_rcv.sb_sel);
+	seldestroy(&so->so_snd.sb_sel);
+	mutex_obj_free(so->so_lock);
+	cv_destroy(&so->so_cv);
+	cv_destroy(&so->so_rcv.sb_cv);
+	cv_destroy(&so->so_snd.sb_cv);
+	pool_cache_put(socket_cache, so);
 }
 
 void
 soqinsque(struct socket *head, struct socket *so, int q)
 {
+
+	KASSERT(solocked2(head, so));
 
 #ifdef DIAGNOSTIC
 	if (so->so_onq != NULL)
@@ -222,6 +371,8 @@ soqremque(struct socket *so, int q)
 	struct socket	*head;
 
 	head = so->so_head;
+
+	KASSERT(solocked(so));
 	if (q == 0) {
 		if (so->so_onq != &head->so_q0)
 			return (0);
@@ -231,6 +382,7 @@ soqremque(struct socket *so, int q)
 			return (0);
 		head->so_qlen--;
 	}
+	KASSERT(solocked2(so, head));
 	TAILQ_REMOVE(so->so_onq, so, so_qe);
 	so->so_onq = NULL;
 	so->so_head = NULL;
@@ -251,6 +403,8 @@ void
 socantsendmore(struct socket *so)
 {
 
+	KASSERT(solocked(so));
+
 	so->so_state |= SS_CANTSENDMORE;
 	sowwakeup(so);
 }
@@ -258,6 +412,8 @@ socantsendmore(struct socket *so)
 void
 socantrcvmore(struct socket *so)
 {
+
+	KASSERT(solocked(so));
 
 	so->so_state |= SS_CANTRCVMORE;
 	sorwakeup(so);
@@ -269,32 +425,23 @@ socantrcvmore(struct socket *so)
 int
 sbwait(struct sockbuf *sb)
 {
+	struct socket *so;
+	kmutex_t *lock;
+	int error;
 
-	sb->sb_flags |= SB_WAIT;
-	return (tsleep((caddr_t)&sb->sb_cc,
-	    (sb->sb_flags & SB_NOINTR) ? PSOCK : PSOCK | PCATCH, netio,
-	    sb->sb_timeo));
-}
+	so = sb->sb_so;
 
-/*
- * Lock a sockbuf already known to be locked;
- * return any error returned from sleep (EINTR).
- */
-int
-sb_lock(struct sockbuf *sb)
-{
-	int	error;
+	KASSERT(solocked(so));
 
-	while (sb->sb_flags & SB_LOCK) {
-		sb->sb_flags |= SB_WANT;
-		error = tsleep((caddr_t)&sb->sb_flags,
-		    (sb->sb_flags & SB_NOINTR) ?  PSOCK : PSOCK|PCATCH,
-		    netlck, 0);
-		if (error)
-			return (error);
-	}
-	sb->sb_flags |= SB_LOCK;
-	return (0);
+	sb->sb_flags |= SB_NOTIFY;
+	lock = so->so_lock;
+	if ((sb->sb_flags & SB_NOINTR) != 0)
+		error = cv_timedwait(&sb->sb_cv, lock, sb->sb_timeo);
+	else
+		error = cv_timedwait_sig(&sb->sb_cv, lock, sb->sb_timeo);
+	if (__predict_false(lock != so->so_lock))
+		solockretry(so, lock);
+	return error;
 }
 
 /*
@@ -305,22 +452,39 @@ sb_lock(struct sockbuf *sb)
 void
 sowakeup(struct socket *so, struct sockbuf *sb, int code)
 {
-	selnotify(&sb->sb_sel, 0);
-	sb->sb_flags &= ~SB_SEL;
-	if (sb->sb_flags & SB_WAIT) {
-		sb->sb_flags &= ~SB_WAIT;
-		wakeup((caddr_t)&sb->sb_cc);
-	}
-	if (sb->sb_flags & SB_ASYNC) {
-		int band;
-		if (code == POLL_IN)
-			band = POLLIN|POLLRDNORM;
-		else
-			band = POLLOUT|POLLWRNORM;
+	int band;
+
+	KASSERT(solocked(so));
+	KASSERT(sb->sb_so == so);
+
+	if (code == POLL_IN)
+		band = POLLIN|POLLRDNORM;
+	else
+		band = POLLOUT|POLLWRNORM;
+	sb->sb_flags &= ~SB_NOTIFY;
+	selnotify(&sb->sb_sel, band, NOTE_SUBMIT);
+	cv_broadcast(&sb->sb_cv);
+	if (sb->sb_flags & SB_ASYNC)
 		fownsignal(so->so_pgid, SIGIO, code, band, so);
-	}
 	if (sb->sb_flags & SB_UPCALL)
 		(*so->so_upcall)(so, so->so_upcallarg, M_DONTWAIT);
+}
+
+/*
+ * Reset a socket's lock pointer.  Wake all threads waiting on the
+ * socket's condition variables so that they can restart their waits
+ * using the new lock.  The existing lock must be held.
+ */
+void
+solockreset(struct socket *so, kmutex_t *lock)
+{
+
+	KASSERT(solocked(so));
+
+	so->so_lock = lock;
+	cv_broadcast(&so->so_snd.sb_cv);
+	cv_broadcast(&so->so_rcv.sb_cv);
+	cv_broadcast(&so->so_cv);
 }
 
 /*
@@ -374,6 +538,9 @@ sb_max_set(u_long new_sbmax)
 int
 soreserve(struct socket *so, u_long sndcc, u_long rcvcc)
 {
+
+	KASSERT(so->so_lock == NULL || solocked(so));
+
 	/*
 	 * there's at least one application (a configure script of screen)
 	 * which expects a fifo is writable even if it has "some" bytes
@@ -417,19 +584,19 @@ sbreserve(struct sockbuf *sb, u_long cc, struct socket *so)
 	rlim_t maxcc;
 	struct uidinfo *uidinfo;
 
-	KDASSERT(sb_max_adj != 0);
+	KASSERT(so->so_lock == NULL || solocked(so));
+	KASSERT(sb->sb_so == so);
+	KASSERT(sb_max_adj != 0);
+
 	if (cc == 0 || cc > sb_max_adj)
 		return (0);
-	if (so) {
-		if (l && kauth_cred_geteuid(l->l_cred) == so->so_uidinfo->ui_uid)
-			maxcc = l->l_proc->p_rlimit[RLIMIT_SBSIZE].rlim_cur;
-		else
-			maxcc = RLIM_INFINITY;
-		uidinfo = so->so_uidinfo;
-	} else {
-		uidinfo = uid_find(0);	/* XXX: nothing better */
+
+	if (kauth_cred_geteuid(l->l_cred) == so->so_uidinfo->ui_uid)
+		maxcc = l->l_proc->p_rlimit[RLIMIT_SBSIZE].rlim_cur;
+	else
 		maxcc = RLIM_INFINITY;
-	}
+
+	uidinfo = so->so_uidinfo;
 	if (!chgsbsize(uidinfo, &sb->sb_hiwat, cc, maxcc))
 		return 0;
 	sb->sb_mbmax = min(cc * 2, sb_max);
@@ -439,15 +606,17 @@ sbreserve(struct sockbuf *sb, u_long cc, struct socket *so)
 }
 
 /*
- * Free mbufs held by a socket, and reserved mbuf space.
+ * Free mbufs held by a socket, and reserved mbuf space.  We do not assert
+ * that the socket is held locked here: see sorflush().
  */
 void
 sbrelease(struct sockbuf *sb, struct socket *so)
 {
 
+	KASSERT(sb->sb_so == so);
+
 	sbflush(sb);
-	(void)chgsbsize(so->so_uidinfo, &sb->sb_hiwat, 0,
-	    RLIM_INFINITY);
+	(void)chgsbsize(so->so_uidinfo, &sb->sb_hiwat, 0, RLIM_INFINITY);
 	sb->sb_mbmax = 0;
 }
 
@@ -482,6 +651,8 @@ sblastrecordchk(struct sockbuf *sb, const char *where)
 {
 	struct mbuf *m = sb->sb_mb;
 
+	KASSERT(solocked(sb->sb_so));
+
 	while (m && m->m_nextpkt)
 		m = m->m_nextpkt;
 
@@ -500,6 +671,8 @@ sblastmbufchk(struct sockbuf *sb, const char *where)
 {
 	struct mbuf *m = sb->sb_mb;
 	struct mbuf *n;
+
+	KASSERT(solocked(sb->sb_so));
 
 	while (m && m->m_nextpkt)
 		m = m->m_nextpkt;
@@ -549,6 +722,8 @@ sbappend(struct sockbuf *sb, struct mbuf *m)
 {
 	struct mbuf	*n;
 
+	KASSERT(solocked(sb->sb_so));
+
 	if (m == 0)
 		return;
 
@@ -590,6 +765,7 @@ void
 sbappendstream(struct sockbuf *sb, struct mbuf *m)
 {
 
+	KASSERT(solocked(sb->sb_so));
 	KDASSERT(m->m_nextpkt == NULL);
 	KASSERT(sb->sb_mb == sb->sb_lastrecord);
 
@@ -609,18 +785,22 @@ sbappendstream(struct sockbuf *sb, struct mbuf *m)
 void
 sbcheck(struct sockbuf *sb)
 {
-	struct mbuf	*m;
+	struct mbuf	*m, *m2;
 	u_long		len, mbcnt;
+
+	KASSERT(solocked(sb->sb_so));
 
 	len = 0;
 	mbcnt = 0;
-	for (m = sb->sb_mb; m; m = m->m_next) {
-		len += m->m_len;
-		mbcnt += MSIZE;
-		if (m->m_flags & M_EXT)
-			mbcnt += m->m_ext.ext_size;
-		if (m->m_nextpkt)
-			panic("sbcheck nextpkt");
+	for (m = sb->sb_mb; m; m = m->m_nextpkt) {
+		for (m2 = m; m2 != NULL; m2 = m2->m_next) {
+			len += m2->m_len;
+			mbcnt += MSIZE;
+			if (m2->m_flags & M_EXT)
+				mbcnt += m2->m_ext.ext_size;
+			if (m2->m_nextpkt != NULL)
+				panic("sbcheck nextpkt");
+		}
 	}
 	if (len != sb->sb_cc || mbcnt != sb->sb_mbcnt) {
 		printf("cc %lu != %lu || mbcnt %lu != %lu\n", len, sb->sb_cc,
@@ -638,6 +818,8 @@ void
 sbappendrecord(struct sockbuf *sb, struct mbuf *m0)
 {
 	struct mbuf	*m;
+
+	KASSERT(solocked(sb->sb_so));
 
 	if (m0 == 0)
 		return;
@@ -671,6 +853,8 @@ void
 sbinsertoob(struct sockbuf *sb, struct mbuf *m0)
 {
 	struct mbuf	*m, **mp;
+
+	KASSERT(solocked(sb->sb_so));
 
 	if (m0 == 0)
 		return;
@@ -724,6 +908,8 @@ sbappendaddr(struct sockbuf *sb, const struct sockaddr *asa, struct mbuf *m0,
 	struct mbuf	*m, *n, *nlast;
 	int		space, len;
 
+	KASSERT(solocked(sb->sb_so));
+
 	space = asa->sa_len;
 
 	if (m0 != NULL) {
@@ -759,7 +945,7 @@ sbappendaddr(struct sockbuf *sb, const struct sockaddr *asa, struct mbuf *m0,
 		}
 	}
 	m->m_len = asa->sa_len;
-	memcpy(mtod(m, caddr_t), asa, asa->sa_len);
+	memcpy(mtod(m, void *), asa, asa->sa_len);
 	if (n)
 		n->m_next = m0;		/* concatenate data to control */
 	else
@@ -776,7 +962,6 @@ sbappendaddr(struct sockbuf *sb, const struct sockaddr *asa, struct mbuf *m0,
 
 	sb->sb_mbtail = nlast;
 	SBLASTMBUFCHK(sb, "sbappendaddr");
-
 	SBLASTRECORDCHK(sb, "sbappendaddr 2");
 
 	return (1);
@@ -792,6 +977,8 @@ m_prepend_sockaddr(struct sockbuf *sb, struct mbuf *m0,
 {
 	struct mbuf *m;
 	const int salen = asa->sa_len;
+
+	KASSERT(solocked(sb->sb_so));
 
 	/* only the first in each chain need be a pkthdr */
 	MGETHDR(m, M_DONTWAIT, MT_SONAME);
@@ -810,7 +997,7 @@ m_prepend_sockaddr(struct sockbuf *sb, struct mbuf *m0,
 	KASSERT(salen <= MHLEN);
 #endif
 	m->m_len = salen;
-	memcpy(mtod(m, caddr_t), asa, salen);
+	memcpy(mtod(m, void *), asa, salen);
 	m->m_next = m0;
 	m->m_pkthdr.len = salen + m0->m_pkthdr.len;
 
@@ -824,6 +1011,8 @@ sbappendaddrchain(struct sockbuf *sb, const struct sockaddr *asa,
 	int space;
 	struct mbuf *m, *n, *n0, *nlast;
 	int error;
+
+	KASSERT(solocked(sb->sb_so));
 
 	/*
 	 * XXX sbprio reserved for encoding priority of this* request:
@@ -920,6 +1109,8 @@ sbappendcontrol(struct sockbuf *sb, struct mbuf *m0, struct mbuf *control)
 	struct mbuf	*m, *mlast, *n;
 	int		space;
 
+	KASSERT(solocked(sb->sb_so));
+
 	space = 0;
 	if (control == 0)
 		panic("sbappendcontrol");
@@ -948,7 +1139,6 @@ sbappendcontrol(struct sockbuf *sb, struct mbuf *m0, struct mbuf *control)
 
 	sb->sb_mbtail = mlast;
 	SBLASTMBUFCHK(sb, "sbappendcontrol");
-
 	SBLASTRECORDCHK(sb, "sbappendcontrol 2");
 
 	return (1);
@@ -964,6 +1154,8 @@ sbcompress(struct sockbuf *sb, struct mbuf *m, struct mbuf *n)
 {
 	int		eor;
 	struct mbuf	*o;
+
+	KASSERT(solocked(sb->sb_so));
 
 	eor = 0;
 	while (m) {
@@ -982,7 +1174,7 @@ sbcompress(struct sockbuf *sb, struct mbuf *m, struct mbuf *n)
 		    m->m_len <= MCLBYTES / 4 && /* XXX Don't copy too much */
 		    m->m_len <= M_TRAILINGSPACE(n) &&
 		    n->m_type == m->m_type) {
-			memcpy(mtod(n, caddr_t) + n->m_len, mtod(m, caddr_t),
+			memcpy(mtod(n, char *) + n->m_len, mtod(m, void *),
 			    (unsigned)m->m_len);
 			n->m_len += m->m_len;
 			sb->sb_cc += m->m_len;
@@ -1017,6 +1209,7 @@ void
 sbflush(struct sockbuf *sb)
 {
 
+	KASSERT(solocked(sb->sb_so));
 	KASSERT((sb->sb_flags & SB_LOCK) == 0);
 
 	while (sb->sb_mbcnt)
@@ -1035,6 +1228,8 @@ void
 sbdrop(struct sockbuf *sb, int len)
 {
 	struct mbuf	*m, *mn, *next;
+
+	KASSERT(solocked(sb->sb_so));
 
 	next = (m = sb->sb_mb) ? m->m_nextpkt : 0;
 	while (len > 0) {
@@ -1088,6 +1283,8 @@ sbdroprecord(struct sockbuf *sb)
 {
 	struct mbuf	*m, *mn;
 
+	KASSERT(solocked(sb->sb_so));
+
 	m = sb->sb_mb;
 	if (m) {
 		sb->sb_mb = m->m_nextpkt;
@@ -1104,7 +1301,7 @@ sbdroprecord(struct sockbuf *sb)
  * with the specified type for presentation on a socket buffer.
  */
 struct mbuf *
-sbcreatecontrol(caddr_t p, int size, int type, int level)
+sbcreatecontrol(void *p, int size, int type, int level)
 {
 	struct cmsghdr	*cp;
 	struct mbuf	*m;
@@ -1130,4 +1327,117 @@ sbcreatecontrol(caddr_t p, int size, int type, int level)
 	cp->cmsg_level = level;
 	cp->cmsg_type = type;
 	return (m);
+}
+
+void
+solockretry(struct socket *so, kmutex_t *lock)
+{
+
+	while (lock != so->so_lock) {
+		mutex_exit(lock);
+		lock = so->so_lock;
+		mutex_enter(lock);
+	}
+}
+
+bool
+solocked(struct socket *so)
+{
+
+	return mutex_owned(so->so_lock);
+}
+
+bool
+solocked2(struct socket *so1, struct socket *so2)
+{
+	kmutex_t *lock;
+
+	lock = so1->so_lock;
+	if (lock != so2->so_lock)
+		return false;
+	return mutex_owned(lock);
+}
+
+/*
+ * Assign a default lock to a new socket.  For PRU_ATTACH, and done by
+ * protocols that do not have special locking requirements.
+ */
+void
+sosetlock(struct socket *so)
+{
+	kmutex_t *lock;
+
+	if (so->so_lock == NULL) {
+		lock = softnet_lock;
+		so->so_lock = lock;
+		mutex_obj_hold(lock);
+		mutex_enter(lock);
+	}
+
+	/* In all cases, lock must be held on return from PRU_ATTACH. */
+	KASSERT(solocked(so));
+}
+
+/*
+ * Set lock on sockbuf sb; sleep if lock is already held.
+ * Unless SB_NOINTR is set on sockbuf, sleep is interruptible.
+ * Returns error without lock if sleep is interrupted.
+ */
+int
+sblock(struct sockbuf *sb, int wf)
+{
+	struct socket *so;
+	kmutex_t *lock;
+	int error;
+
+	KASSERT(solocked(sb->sb_so));
+
+	for (;;) {
+		if (__predict_true((sb->sb_flags & SB_LOCK) == 0)) {
+			sb->sb_flags |= SB_LOCK;
+			return 0;
+		}
+		if (wf != M_WAITOK)
+			return EWOULDBLOCK;
+		so = sb->sb_so;
+		lock = so->so_lock;
+		if ((sb->sb_flags & SB_NOINTR) != 0) {
+			cv_wait(&so->so_cv, lock);
+			error = 0;
+		} else
+			error = cv_wait_sig(&so->so_cv, lock);
+		if (__predict_false(lock != so->so_lock))
+			solockretry(so, lock);
+		if (error != 0)
+			return error;
+	}
+}
+
+void
+sbunlock(struct sockbuf *sb)
+{
+	struct socket *so;
+
+	so = sb->sb_so;
+
+	KASSERT(solocked(so));
+	KASSERT((sb->sb_flags & SB_LOCK) != 0);
+
+	sb->sb_flags &= ~SB_LOCK;
+	cv_broadcast(&so->so_cv);
+}
+
+int
+sowait(struct socket *so, int timo)
+{
+	kmutex_t *lock;
+	int error;
+
+	KASSERT(solocked(so));
+
+	lock = so->so_lock;
+	error = cv_timedwait_sig(&so->so_cv, lock, timo);
+	if (__predict_false(lock != so->so_lock))
+		solockretry(so, lock);
+	return error;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: siginfo.h,v 1.15 2007/02/09 21:55:37 ad Exp $	 */
+/*	$NetBSD: siginfo.h,v 1.17 2008/04/28 20:24:11 martin Exp $	 */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -61,7 +54,7 @@ struct _ksiginfo {
 		struct {
 			pid_t	_pid;
 			uid_t	_uid;
-			sigval_t	_sigval;
+			sigval_t	_value;
 		} _rt;
 
 		struct {
@@ -144,7 +137,7 @@ typedef union siginfo {
 #define	si_code		_info._code
 #define	si_errno	_info._errno
 
-#define	si_sigval	_info._reason._rt._sigval
+#define	si_value	_info._reason._rt._value
 #define	si_pid		_info._reason._child._pid
 #define	si_uid		_info._reason._child._uid
 #define	si_status	_info._reason._child._status
@@ -163,7 +156,7 @@ typedef union siginfo {
 #define	ksi_code	ksi_info._code
 #define	ksi_errno	ksi_info._errno
 
-#define	ksi_sigval	ksi_info._reason._rt._sigval
+#define	ksi_value	ksi_info._reason._rt._value
 #define	ksi_pid		ksi_info._reason._child._pid
 #define	ksi_uid		ksi_info._reason._child._uid
 #define	ksi_status	ksi_info._reason._child._status

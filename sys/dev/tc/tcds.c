@@ -1,4 +1,4 @@
-/* $NetBSD: tcds.c,v 1.19 2006/03/31 17:39:33 thorpej Exp $ */
+/* $NetBSD: tcds.c,v 1.23 2008/07/09 13:19:33 joerg Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -65,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcds.c,v 1.19 2006/03/31 17:39:33 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcds.c,v 1.23 2008/07/09 13:19:33 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -83,7 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: tcds.c,v 1.19 2006/03/31 17:39:33 thorpej Exp $");
 
 #include <dev/ic/ncr53c9xvar.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/tc/tcvar.h>
 #include <dev/tc/tcdsreg.h>
@@ -92,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: tcds.c,v 1.19 2006/03/31 17:39:33 thorpej Exp $");
 #include "locators.h"
 
 struct tcds_softc {
-	struct	device sc_dv;
+	device_t sc_dev;
 	bus_space_tag_t sc_bst;
 	bus_space_handle_t sc_bsh;
 	bus_dma_tag_t sc_dmat;
@@ -106,11 +99,11 @@ struct tcds_softc {
 #define	TCDSF_FASTSCSI		0x02	/* supports Fast SCSI */
 
 /* Definition of the driver for autoconfig. */
-static int	tcdsmatch(struct device *, struct cfdata *, void *);
-static void	tcdsattach(struct device *, struct device *, void *);
+static int	tcdsmatch(device_t, cfdata_t, void *);
+static void	tcdsattach(device_t, device_t, void *);
 static int     tcdsprint(void *, const char *);
 
-CFATTACH_DECL(tcds, sizeof(struct tcds_softc),
+CFATTACH_DECL_NEW(tcds, sizeof(struct tcds_softc),
     tcdsmatch, tcdsattach, NULL, NULL);
 
 /*static*/ int	tcds_intr(void *);
@@ -144,7 +137,7 @@ tcds_lookup(const char *modname)
 }
 
 static int
-tcdsmatch(struct device *parent, struct cfdata *cfdata, void *aux)
+tcdsmatch(device_t parent, cfdata_t cfdata, void *aux)
 {
 	struct tc_attach_args *ta = aux;
 
@@ -152,7 +145,7 @@ tcdsmatch(struct device *parent, struct cfdata *cfdata, void *aux)
 }
 
 static void
-tcdsattach(struct device *parent, struct device *self, void *aux)
+tcdsattach(device_t parent, device_t self, void *aux)
 {
 	struct tcds_softc *sc = device_private(self);
 	struct tc_attach_args *ta = aux;
@@ -163,6 +156,8 @@ tcdsattach(struct device *parent, struct device *self, void *aux)
 	int i, gpi2;
 	const struct evcnt *pevcnt;
 	int locs[TCDSCF_NLOCS];
+
+	sc->sc_dev = self;
 
 	td = tcds_lookup(ta->ta_modname);
 	if (td == NULL)
@@ -183,7 +178,7 @@ tcdsattach(struct device *parent, struct device *self, void *aux)
 	 */
 	if (bus_space_map(sc->sc_bst, ta->ta_addr,
 	    (TCDS_SCSI1_OFFSET + 0x100), 0, &sc->sc_bsh)) {
-		printf("%s: unable to map device\n", sc->sc_dv.dv_xname);
+		aprint_error_dev(self, "unable to map device\n");
 		return;
 	}
 
@@ -194,8 +189,7 @@ tcdsattach(struct device *parent, struct device *self, void *aux)
 	    0x100, &sbsh[0]) ||
 	    bus_space_subregion(sc->sc_bst, sc->sc_bsh, TCDS_SCSI1_OFFSET,
 	    0x100, &sbsh[1])) {
-		printf("%s: unable to subregion SCSI chip space\n",
-		    sc->sc_dv.dv_xname);
+		aprint_error_dev(self, "unable to subregion SCSI chip space\n");
 		return;
 	}
 
@@ -233,7 +227,7 @@ tcdsattach(struct device *parent, struct device *self, void *aux)
 		cp = slotc->sc_name;
 		snprintf(cp, sizeof(slotc->sc_name), "chip %d", i);
 		evcnt_attach_dynamic(&slotc->sc_evcnt, EVCNT_TYPE_INTR,
-		    pevcnt, sc->sc_dv.dv_xname, cp);
+		    pevcnt, device_xname(self), cp);
 
 		slotc->sc_slot = i;
 		slotc->sc_bst = sc->sc_bst;
@@ -329,7 +323,7 @@ tcdsprint(void *aux, const char *pnp)
 }
 
 void
-tcds_intr_establish(struct device *tcds, int slot, int (*func)(void *),
+tcds_intr_establish(device_t tcds, int slot, int (*func)(void *),
     void *arg)
 {
 	struct tcds_softc *sc = device_private(tcds);
@@ -343,7 +337,7 @@ tcds_intr_establish(struct device *tcds, int slot, int (*func)(void *),
 }
 
 void
-tcds_intr_disestablish(struct device *tcds, int slot)
+tcds_intr_disestablish(device_t tcds, int slot)
 {
 	struct tcds_softc *sc = device_private(tcds);
 
@@ -484,7 +478,7 @@ tcds_intr(void *arg)
 	 */
 #define	PRINTINTR(msg, bits)						\
 	if (ir & bits)							\
-		printf("%s: %s", sc->sc_dv.dv_xname, msg);
+		printf("%s: %s", device_xname(sc->sc_dev), msg);
 	PRINTINTR("SCSI0 DREQ interrupt.\n", TCDS_CIR_SCSI0_DREQ);
 	PRINTINTR("SCSI1 DREQ interrupt.\n", TCDS_CIR_SCSI1_DREQ);
 	PRINTINTR("SCSI0 prefetch interrupt.\n", TCDS_CIR_SCSI0_PREFETCH);
@@ -542,13 +536,13 @@ tcds_params(struct tcds_softc *sc, int chip, int *idp, int *fastp)
 
 	if (id < 0 || id > 7) {
 		printf("%s: WARNING: bad SCSI ID %d for chip %d, using 7\n",
-		    sc->sc_dv.dv_xname, id, chip);
+		    device_xname(sc->sc_dev), id, chip);
 		id = 7;
 	}
 
 	if (fast)
 		printf("%s: fast mode set for chip %d\n",
-		    sc->sc_dv.dv_xname, chip);
+		    device_xname(sc->sc_dev), chip);
 
 	*idp = id;
 	*fastp = fast;

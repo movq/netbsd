@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs.h,v 1.64 2006/11/13 05:44:37 dyoung Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.69 2008/08/17 00:23:02 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -92,8 +92,8 @@
 #define	__const		const		/* define reserved names to standard */
 #define	__signed	signed
 #define	__volatile	volatile
-#if defined(__cplusplus)
-#define	__inline	inline		/* convert to C++ keyword */
+#if defined(__cplusplus) || defined(__PCC__)
+#define	__inline	inline		/* convert to C++/C99 keyword */
 #else
 #if !defined(__GNUC__) && !defined(__lint__)
 #define	__inline			/* delete GCC keyword */
@@ -171,18 +171,30 @@
  * these work for GNU C++ (modulo a slight glitch in the C++ grammar
  * in the distribution version of 2.5.5).
  */
-#if !__GNUC_PREREQ__(2, 5)
-#define	__attribute__(x)	/* delete __attribute__ if non-gcc or gcc1 */
-#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
-#define	__dead		__volatile
-#define	__pure		__const
-#endif
+#if !__GNUC_PREREQ__(2, 0)
+#define __attribute__(x)
 #endif
 
-/* Delete pseudo-keywords wherever they are not available or needed. */
-#ifndef __dead
+#if __GNUC_PREREQ__(2, 5)
+#define	__dead		__attribute__((__noreturn__))
+#elif defined(__GNUC__)
+#define	__dead		__volatile
+#else
 #define	__dead
+#endif
+
+#if __GNUC_PREREQ__(2, 96)
+#define	__pure		__attribute__((__pure__))
+#elif defined(__GNUC__)
+#define	__pure		__const
+#else
 #define	__pure
+#endif
+
+#if __GNUC_PREREQ__(3, 0)
+#define	__noinline	__attribute__((__noinline__))
+#else
+#define	__noinline	/* nothing */
 #endif
 
 #if __GNUC_PREREQ__(2, 7)
@@ -201,6 +213,10 @@
 #define	__packed	__attribute__((__packed__))
 #define	__aligned(x)	__attribute__((__aligned__(x)))
 #define	__section(x)	__attribute__((__section__(x)))
+#elif defined(__PCC__)
+#define	__packed	_Pragma("packed")
+#define	__aligned(x)   	_Pragma("aligned " #x)
+#define	__section(x)   	_Pragma("section " ## x)
 #elif defined(__lint__)
 #define	__packed	/* delete */
 #define	__aligned(x)	/* delete */
@@ -215,12 +231,12 @@
  * C99 defines the restrict type qualifier keyword, which was made available
  * in GCC 2.92.
  */
-#if __STDC_VERSION__ >= 199901L
-#define	__restrict	restrict
-#else
-#if !__GNUC_PREREQ__(2, 92)
+#if defined(__lint__)
 #define	__restrict	/* delete __restrict when not supported */
-#endif
+#elif __STDC_VERSION__ >= 199901L
+#define	__restrict	restrict
+#elif !__GNUC_PREREQ__(2, 92)
+#define	__restrict	/* delete __restrict when not supported */
 #endif
 
 /*
@@ -245,7 +261,7 @@
 #endif /* _KERNEL */
 
 #if !defined(_STANDALONE) && !defined(_KERNEL)
-#ifdef __GNUC__
+#if defined(__GNUC__) || defined(__PCC__)
 #define	__RENAME(x)	___RENAME(x)
 #else
 #ifdef __lint__

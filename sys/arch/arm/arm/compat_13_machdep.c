@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_13_machdep.c,v 1.12 2007/02/18 21:10:32 ad Exp $	*/
+/*	$NetBSD: compat_13_machdep.c,v 1.15 2008/04/24 18:39:20 ad Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -38,7 +38,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.12 2007/02/18 21:10:32 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.15 2008/04/24 18:39:20 ad Exp $");
 
 #include <sys/systm.h>
 #include <sys/signalvar.h>
@@ -52,11 +52,11 @@ __KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.12 2007/02/18 21:10:32 ad Ex
 #include <compat/sys/signalvar.h>
 
 int
-compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
+compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct compat_13_sys_sigreturn_args /* {
+	/* {
 		syscallarg(struct sigcontext13 *) sigcntxp;
-	} */ *uap = v;
+	} */
 	struct sigcontext13 *scp, context;
 	struct trapframe *tf;
 	struct proc *p = l->l_proc;
@@ -68,7 +68,7 @@ compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 	 * program jumps out of a signal handler.
 	 */
 	scp = SCARG(uap, sigcntxp);
-	if (copyin((caddr_t)scp, &context, sizeof(*scp)) != 0)
+	if (copyin((void *)scp, &context, sizeof(*scp)) != 0)
 		return (EFAULT);
 
 	/*
@@ -99,7 +99,7 @@ compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 	tf->tf_pc    = context.sc_pc;
 	tf->tf_spsr  = context.sc_spsr;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	/* Restore signal stack. */
 	if (context.sc_onstack & SS_ONSTACK)
@@ -111,7 +111,7 @@ compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 	native_sigset13_to_sigset(&context.sc_mask, &mask);
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }

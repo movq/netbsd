@@ -1,4 +1,4 @@
-/*	$NetBSD: if_devar.h,v 1.46 2006/11/22 01:54:09 uebayasi Exp $	*/
+/*	$NetBSD: if_devar.h,v 1.50 2008/06/12 22:44:47 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1994-1997 Matt Thomas (matt@3am-software.com)
@@ -480,7 +480,7 @@ struct _tulip_softc_t {
     struct intrhand tulip_ih;		/* intrrupt vectoring */
     struct atshutdown tulip_ats;	/* shutdown hook */
 #if _BSDI_VERSION < 199401
-    caddr_t tulip_bpf;			/* for BPF */
+    void *tulip_bpf;			/* for BPF */
 #else
     prf_t tulip_pf;			/* printf function */
 #if _BSDI_VERSION >= 199701
@@ -878,11 +878,11 @@ static void tulip_softintr(void);
 #if defined(TULIP_BUS_DMA) && !defined(TULIP_BUS_DMA_NORX)
 #define TULIP_RXDESC_PRESYNC(sc, di, s)	\
 	bus_dmamap_sync((sc)->tulip_dmatag, (sc)->tulip_rxdescmap, \
-		   (caddr_t) di - (caddr_t) (sc)->tulip_rxdescs, \
+		   (char *) di - (char *) (sc)->tulip_rxdescs, \
 		   (s), BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE)
 #define TULIP_RXDESC_POSTSYNC(sc, di, s)	\
 	bus_dmamap_sync((sc)->tulip_dmatag, (sc)->tulip_rxdescmap, \
-		   (caddr_t) di - (caddr_t) (sc)->tulip_rxdescs, \
+		   (char *) di - (char *) (sc)->tulip_rxdescs, \
 		   (s), BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE)
 #define	TULIP_RXMAP_PRESYNC(sc, map) \
 	bus_dmamap_sync((sc)->tulip_dmatag, (map), 0, (map)->dm_mapsize, \
@@ -905,11 +905,11 @@ static void tulip_softintr(void);
 #if defined(TULIP_BUS_DMA) && !defined(TULIP_BUS_DMA_NOTX)
 #define TULIP_TXDESC_PRESYNC(sc, di, s)	\
 	bus_dmamap_sync((sc)->tulip_dmatag, (sc)->tulip_txdescmap, \
-			(caddr_t) di - (caddr_t) (sc)->tulip_txdescs, \
+			(char *) di - (char *) (sc)->tulip_txdescs, \
 			(s), BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE)
 #define TULIP_TXDESC_POSTSYNC(sc, di, s)	\
 	bus_dmamap_sync((sc)->tulip_dmatag, (sc)->tulip_txdescmap, \
-			(caddr_t) di - (caddr_t) (sc)->tulip_txdescs, \
+			(char *) di - (char *) (sc)->tulip_txdescs, \
 			(s), BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE)
 #define	TULIP_TXMAP_PRESYNC(sc, map) \
 	bus_dmamap_sync((sc)->tulip_dmatag, (map), 0, (map)->dm_mapsize, \
@@ -970,39 +970,11 @@ NETISR_SET(NETISR_DE, tulip_softintr);
 #define	loudprintf			if (bootverbose) printf
 #endif
 
-#if defined(__bsdi__)
-#define	ifnet_ret_t int
-typedef u_long ioctl_cmd_t;
-extern struct cfdriver decd;
-#define	TULIP_UNIT_TO_SOFTC(unit)	((tulip_softc_t *) decd.cd_devs[unit])
-#define TULIP_IFP_TO_SOFTC(ifp)		(TULIP_UNIT_TO_SOFTC((ifp)->if_unit))
-#define	TULIP_ETHER_IFATTACH(sc)	ether_attach(&(sc)->tulip_if)
-#if _BSDI_VERSION >= 199510
-#if 0
-#define	TULIP_BURSTSIZE(unit)		log2_burst_size
-#endif
-#define	loudprintf			aprint_verbose
-#define	printf				(*sc->tulip_pf)
-#define	MCNT(x) (sizeof(x) / sizeof(struct ifmedia_entry))
-#elif _BSDI_VERSION <= 199401
-#define	DRQNONE				0
-#define	loudprintf			printf
-static void
-arp_ifinit(
-    struct arpcom *ac,
-    struct ifaddr *ifa)
-{
-    ac->ac_ipaddr = IA_SIN(ifa)->sin_addr;
-    arpwhohas(ac, &ac->ac_ipaddr);
-}
-#endif
-#endif	/* __bsdi__ */
-
 #if defined(__NetBSD__)
 #define	ifnet_ret_t void
 typedef u_long ioctl_cmd_t;
 extern struct cfdriver de_cd;
-#define	TULIP_UNIT_TO_SOFTC(unit)	((tulip_softc_t *) de_cd.cd_devs[unit])
+#define	TULIP_UNIT_TO_SOFTC(unit)	((tulip_softc_t *)device_lookup_private(&de_cd,unit))
 #define TULIP_IFP_TO_SOFTC(ifp)         ((tulip_softc_t *)((ifp)->if_softc))
 #define	tulip_unit			tulip_dev.dv_unit
 #define	tulip_xname			tulip_if.if_xname

@@ -1,4 +1,4 @@
-/*	$NetBSD: rwlock.h,v 1.1 2007/02/18 07:24:52 matt Exp $	*/
+/*	$NetBSD: rwlock.h,v 1.5 2008/04/28 20:23:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,11 +32,8 @@
 #ifndef _ARM_RWLOCK_H_
 #define	_ARM_RWLOCK_H_
 
-#include <arm/atomic.h>
-
 struct krwlock {
 	volatile uintptr_t	rw_owner;
-	uint32_t		rw_id;
 };
 
 #ifdef __RWLOCK_PRIVATE
@@ -53,7 +43,11 @@ struct krwlock {
 #define	RW_RECEIVE(rw)			/* nothing */
 #define	RW_GIVE(rw)			/* nothing */
 
-#define	RW_CAS(p, o, n)			atomic_cas((p), (o), (n))
+unsigned long	_lock_cas(volatile unsigned long *,
+    unsigned long, unsigned long);
+
+#define	RW_CAS(p, o, n)			\
+    (_lock_cas((volatile unsigned long *)(p), (o), (n)) == (o))
 
 #endif	/* __RWLOCK_PRIVATE */
 

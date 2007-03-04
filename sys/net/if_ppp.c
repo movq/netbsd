@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ppp.c,v 1.112 2007/02/17 22:34:08 dyoung Exp $	*/
+/*	$NetBSD: if_ppp.c,v 1.123 2008/06/15 16:37:21 christos Exp $	*/
 /*	Id: if_ppp.c,v 1.6 1997/03/04 03:33:00 paulus Exp 	*/
 
 /*
@@ -102,7 +102,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ppp.c,v 1.112 2007/02/17 22:34:08 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ppp.c,v 1.123 2008/06/15 16:37:21 christos Exp $");
 
 #include "ppp.h"
 
@@ -126,6 +126,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_ppp.c,v 1.112 2007/02/17 22:34:08 dyoung Exp $");
 #include <sys/malloc.h>
 #include <sys/conf.h>
 #include <sys/kauth.h>
+#include <sys/intr.h>
+#include <sys/simplelock.h>
+#include <sys/socketvar.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -134,8 +137,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_ppp.c,v 1.112 2007/02/17 22:34:08 dyoung Exp $");
 #ifdef PPP_FILTER
 #include <net/bpf.h>
 #endif
-
-#include <machine/intr.h>
 
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
@@ -160,14 +161,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_ppp.c,v 1.112 2007/02/17 22:34:08 dyoung Exp $");
 #include <net/ppp_defs.h>
 #include <net/if_ppp.h>
 #include <net/if_pppvar.h>
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 #ifdef PPP_COMPRESS
 #define PACKETPTR	struct mbuf *
 #include <net/ppp-comp.h>
 #endif
 
-static int	pppsioctl(struct ifnet *, u_long, caddr_t);
+static int	pppsioctl(struct ifnet *, u_long, void *);
 static void	ppp_requeue(struct ppp_softc *);
 static void	ppp_ccp(struct ppp_softc *, struct mbuf *m, int rcvd);
 static void	ppp_ccp_closed(struct ppp_softc *);
@@ -177,9 +178,6 @@ static void	pppdumpm(struct mbuf *m0);
 static void	ppp_ifstart(struct ifnet *ifp);
 #endif
 
-#ifndef __HAVE_GENERIC_SOFT_INTERRUPTS
-void		pppnetisr(void);
-#endif
 static void	pppintr(void *);
 
 /*
@@ -296,9 +294,8 @@ ppp_create(const char *name, int unit)
 
     simple_unlock(&ppp_list_mutex);
 
-    (void)snprintf(sc->sc_if.if_xname, sizeof(sc->sc_if.if_xname), "%s%d",
-	name, sc->sc_unit = unit);
-    callout_init(&sc->sc_timo_ch);
+    if_initname(&sc->sc_if, name, sc->sc_unit = unit);
+    callout_init(&sc->sc_timo_ch, 0);
     sc->sc_if.if_softc = sc;
     sc->sc_if.if_mtu = PPP_MTU;
     sc->sc_if.if_flags = IFF_POINTOPOINT | IFF_MULTICAST;
@@ -377,13 +374,11 @@ pppalloc(pid_t pid)
     if (sc == NULL)
 	sc = ppp_create(ppp_cloner.ifc_name, -1);
 
-#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
-    sc->sc_si = softintr_establish(IPL_SOFTNET, pppintr, sc);
+    sc->sc_si = softint_establish(SOFTINT_NET, pppintr, sc);
     if (sc->sc_si == NULL) {
 	printf("%s: unable to establish softintr\n", sc->sc_if.if_xname);
 	return (NULL);
     }
-#endif
     sc->sc_flags = 0;
     sc->sc_mru = PPP_MRU;
     sc->sc_relinq = NULL;
@@ -415,9 +410,7 @@ pppdealloc(struct ppp_softc *sc)
 {
     struct mbuf *m;
 
-#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
-    softintr_disestablish(sc->sc_si);
-#endif
+    softint_disestablish(sc->sc_si);
     if_down(&sc->sc_if);
     sc->sc_if.if_flags &= ~(IFF_UP|IFF_RUNNING);
     sc->sc_devp = NULL;
@@ -488,7 +481,7 @@ pppdealloc(struct ppp_softc *sc)
  * Ioctl routine for generic ppp devices.
  */
 int
-pppioctl(struct ppp_softc *sc, u_long cmd, caddr_t data, int flag,
+pppioctl(struct ppp_softc *sc, u_long cmd, void *data, int flag,
     struct lwp *l)
 {
     int s, error, flags, mru, npx;
@@ -702,7 +695,7 @@ pppioctl(struct ppp_softc *sc, u_long cmd, caddr_t data, int flag,
 	if (newcodelen != 0) {
 	    newcode = malloc(newcodelen, M_DEVBUF, M_WAITOK);
 	    /* WAITOK -- malloc() never fails. */
-	    if ((error = copyin((caddr_t)nbp->bf_insns, (caddr_t)newcode,
+	    if ((error = copyin((void *)nbp->bf_insns, (void *)newcode,
 			       newcodelen)) != 0) {
 		free(newcode, M_DEVBUF);
 		return error;
@@ -753,7 +746,7 @@ pppioctl(struct ppp_softc *sc, u_long cmd, caddr_t data, int flag,
  * Process an ioctl request to the ppp network interface.
  */
 static int
-pppsioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+pppsioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
     struct lwp *l = curlwp;	/* XXX */
     struct ppp_softc *sc = ifp->if_softc;
@@ -808,20 +801,19 @@ pppsioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 	    KAUTH_NETWORK_INTERFACE, KAUTH_REQ_NETWORK_INTERFACE_SETPRIV,
 	    ifp, (void *)cmd, NULL) != 0))
 	    break;
-	sc->sc_if.if_mtu = ifr->ifr_mtu;
-	break;
-
+	/*FALLTHROUGH*/
     case SIOCGIFMTU:
-	ifr->ifr_mtu = sc->sc_if.if_mtu;
+	if ((error = ifioctl_common(&sc->sc_if, cmd, data)) == ENETRESET)
+		error = 0;
 	break;
 
     case SIOCADDMULTI:
     case SIOCDELMULTI:
-	if (ifr == 0) {
+	if (ifr == NULL) {
 	    error = EAFNOSUPPORT;
 	    break;
 	}
-	switch (ifr->ifr_addr.sa_family) {
+	switch (ifreq_getaddr(cmd, ifr)->sa_family) {
 #ifdef INET
 	case AF_INET:
 	    break;
@@ -1116,11 +1108,7 @@ ppp_restart(struct ppp_softc *sc)
     int s = splhigh();	/* XXX IMP ME HARDER */
 
     sc->sc_flags &= ~SC_TBUSY;
-#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
-    softintr_schedule(sc->sc_si);
-#else
-    schednetisr(NETISR_PPP);
-#endif
+    softint_schedule(sc->sc_si);
     splx(s);
 }
 
@@ -1270,18 +1258,6 @@ ppp_dequeue(struct ppp_softc *sc)
     return m;
 }
 
-#ifndef __HAVE_GENERIC_SOFT_INTERRUPTS
-void
-pppnetisr(void)
-{
-	struct ppp_softc *sc;
-
-	for (sc = LIST_FIRST(&ppp_softc_list); sc != NULL;
-	    sc = LIST_NEXT(sc, sc_iflist))
-		pppintr(sc);
-}
-#endif
-
 /*
  * Software interrupt routine, called at splsoftnet.
  */
@@ -1292,6 +1268,7 @@ pppintr(void *arg)
 	struct mbuf *m;
 	int s;
 
+	mutex_enter(softnet_lock);
 	if (!(sc->sc_flags & SC_TBUSY)
 	    && (IFQ_IS_EMPTY(&sc->sc_if.if_snd) == 0 || sc->sc_fastq.ifq_head
 		|| sc->sc_outm)) {
@@ -1308,6 +1285,7 @@ pppintr(void *arg)
 			break;
 		ppp_inproc(sc, m);
 	}
+	mutex_exit(softnet_lock);
 }
 
 #ifdef PPP_COMPRESS
@@ -1437,11 +1415,7 @@ ppppktin(struct ppp_softc *sc, struct mbuf *m, int lost)
     if (lost)
 	m->m_flags |= M_ERRMARK;
     IF_ENQUEUE(&sc->sc_rawq, m);
-#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
-    softintr_schedule(sc->sc_si);
-#else
-    schednetisr(NETISR_PPP);
-#endif
+    softint_schedule(sc->sc_si);
     splx(s);
 }
 
@@ -1633,7 +1607,7 @@ ppp_inproc(struct ppp_softc *sc, struct mbuf *m)
     if (ilen <= MHLEN && M_IS_CLUSTER(m)) {
 	MGETHDR(mp, M_DONTWAIT, MT_DATA);
 	if (mp != NULL) {
-	    m_copydata(m, 0, ilen, mtod(mp, caddr_t));
+	    m_copydata(m, 0, ilen, mtod(mp, void *));
 	    m_freem(m);
 	    m = mp;
 	    m->m_len = ilen;
@@ -1712,6 +1686,10 @@ ppp_inproc(struct ppp_softc *sc, struct mbuf *m)
 	m->m_pkthdr.len -= PPP_HDRLEN;
 	m->m_data += PPP_HDRLEN;
 	m->m_len -= PPP_HDRLEN;
+#ifdef GATEWAY  
+	if (ip6flow_fastforward(m))
+		return;
+#endif
 	schednetisr(NETISR_IPV6);
 	inq = &ip6intrq;
 	break;

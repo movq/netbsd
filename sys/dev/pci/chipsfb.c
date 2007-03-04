@@ -1,4 +1,4 @@
-/*	$NetBSD: chipsfb.c,v 1.8 2007/01/22 00:12:24 macallan Exp $	*/
+/*	$NetBSD: chipsfb.c,v 1.15 2008/05/08 01:43:17 macallan Exp $	*/
 
 /*
  * Copyright (c) 2006 Michael Lorenz
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -33,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: chipsfb.c,v 1.8 2007/01/22 00:12:24 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: chipsfb.c,v 1.15 2008/05/08 01:43:17 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -173,7 +171,7 @@ struct wsscreen_list chipsfb_screenlist = {
 	sizeof(_chipsfb_scrlist) / sizeof(struct wsscreen_descr *), _chipsfb_scrlist
 };
 
-static int	chipsfb_ioctl(void *, void *, u_long, caddr_t, int,
+static int	chipsfb_ioctl(void *, void *, u_long, void *, int,
 		    struct lwp *);
 static paddr_t	chipsfb_mmap(void *, void *, off_t, int);
 static void	chipsfb_clearscreen(struct chipsfb_softc *);
@@ -278,7 +276,8 @@ chipsfb_attach(struct device *parent, struct device *self, void *aux)
 	prop_dictionary_t dict;
 	pcireg_t screg;
 	ulong defattr;
-	int console = 0, width, height, i, j;
+	bool console = false;
+	int width, height, i, j;
 	uint32_t bg, fg, ul;
 
 	dict = device_properties(self);
@@ -304,14 +303,12 @@ chipsfb_attach(struct device *parent, struct device *self, void *aux)
 	if (pci_mapreg_map(pa, 0x10, PCI_MAPREG_TYPE_MEM,
 	    BUS_SPACE_MAP_LINEAR,
 	    &sc->sc_fbt, &sc->sc_fbh, &sc->sc_fb, &sc->sc_fbsize)) {
-		aprint_error("%s: failed to map the frame buffer.\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "failed to map the frame buffer.\n");
 	}
 
 	/* IO-mapped registers */
-	if (bus_space_map(sc->sc_iot, 0x0, PAGE_SIZE, 0, &sc->sc_ioregh) != 0) {
-		aprint_error("%s: failed to map IO registers.\n",
-		    sc->sc_dev.dv_xname);
+	if (bus_space_map(sc->sc_iot, 0x0, 0x400, 0, &sc->sc_ioregh) != 0) {
+		aprint_error_dev(&sc->sc_dev, "failed to map IO registers.\n");
 	}
 
 	sc->memsize = chipsfb_probe_vram(sc);
@@ -375,8 +372,8 @@ chipsfb_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_bg = ri->ri_devcmap[bg];
 	chipsfb_clearscreen(sc);
 
-	aprint_normal("%s: %d MB aperture, %d MB VRAM at 0x%08x\n",
-	    sc->sc_dev.dv_xname, (u_int)(sc->sc_fbsize >> 20),
+	aprint_normal_dev(&sc->sc_dev, "%d MB aperture, %d MB VRAM at 0x%08x\n",
+	    (u_int)(sc->sc_fbsize >> 20),
 	    sc->memsize >> 20, (u_int)sc->sc_fb);
 #ifdef CHIPSFB_DEBUG
 	aprint_debug("fb: %08lx\n", (ulong)ri->ri_bits);
@@ -685,6 +682,10 @@ chipsfb_putchar(void *cookie, int row, int col, u_int c, long attr)
 	struct vcons_screen *scr = ri->ri_hw;
 	struct chipsfb_softc *sc = scr->scr_cookie;
 
+	if (__predict_false((unsigned int)row > ri->ri_rows ||
+	    (unsigned int)col > ri->ri_cols))
+		return;
+
 	if (sc->sc_mode == WSDISPLAYIO_MODE_EMUL) {
 		uint8_t *data;
 		int fg, bg, uc;
@@ -808,7 +809,7 @@ chipsfb_restore_palette(struct chipsfb_softc *sc)
  */
 
 static int
-chipsfb_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag,
+chipsfb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 	struct lwp *l)
 {
 	struct vcons_data *vd = v;
@@ -882,7 +883,7 @@ chipsfb_mmap(void *v, void *vs, off_t offset, int prot)
 	if (me != NULL) {
 		if (kauth_authorize_generic(me->l_cred, KAUTH_GENERIC_ISSUSER,
 		    NULL) != 0) {
-			aprint_normal("%s: mmap() rejected.\n", sc->sc_dev.dv_xname);
+			aprint_normal_dev(&sc->sc_dev, "mmap() rejected.\n");
 			return -1;
 		}
 	}
@@ -893,11 +894,12 @@ chipsfb_mmap(void *v, void *vs, off_t offset, int prot)
 		return pa;
 	}
 
-#ifdef macppc
+#ifdef PCI_MAGIC_IO_RANGE
 	/* allow mapping of IO space */
-	if ((offset >= 0xf2000000) && (offset < 0xf2800000)) {
-		pa = bus_space_mmap(sc->sc_iot, offset - 0xf2000000, 0, prot,
-		    BUS_SPACE_MAP_LINEAR);
+	if ((offset >= PCI_MAGIC_IO_RANGE) &&
+	    (offset < PCI_MAGIC_IO_RANGE + 0x10000)) {
+		pa = bus_space_mmap(sc->sc_iot, offset - PCI_MAGIC_IO_RANGE,
+		    0, prot, BUS_SPACE_MAP_LINEAR);
 		return pa;
 	}
 #endif

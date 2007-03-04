@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.11 2006/12/21 15:55:23 yamt Exp $	*/
+/*	$NetBSD: intr.c,v 1.15 2007/12/03 15:33:42 ad Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.11 2006/12/21 15:55:23 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.15 2007/12/03 15:33:42 ad Exp $");
 
 #include "opt_irqstats.h"
 
@@ -50,8 +50,6 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.11 2006/12/21 15:55:23 yamt Exp $");
 #include <machine/atomic.h>
 #include <machine/intr.h>
 #include <machine/cpu.h>
-
-#include <net/netisr.h>
 
 u_int soft_interrupts = 0;
 
@@ -82,6 +80,7 @@ extern void sacomsoft(void);
 
 /* Eventually these will become macros */
 
+#ifdef __HAVE_FAST_SOFTINTS
 void setsoftintr(u_int);
 void clearsoftintr(u_int);
 void dosoftints(void);
@@ -103,9 +102,18 @@ setsoftnet(void)
 {
 	atomic_set_bit(&soft_interrupts, SOFTIRQ_BIT(SOFTIRQ_NET));
 }
+#endif
 
 int astpending;
 
+void    set_spl_masks(void);
+
+int current_spl_level = _SPL_HIGH;
+u_int spl_masks[_SPL_LEVELS + 1];
+u_int spl_smasks[_SPL_LEVELS];
+int safepri = _SPL_0;
+
+#ifdef __HAVE_FAST_SOFTINTS
 /* Handle software interrupts */
 
 void
@@ -115,44 +123,8 @@ dosoftints(void)
 	int s;
 
 	softintr_dispatch(current_spl_level);
-
-	softints = soft_interrupts & spl_smasks[current_spl_level];
-	if (softints == 0)
-		return;
-
-	/*
-	 * Network software interrupts
-	 */
-
-	if (softints & SOFTIRQ_BIT(SOFTIRQ_NET)) {
-		s = splsoftnet();
-		++COUNT;
-		INC_SINTRCNT(SOFTIRQ_NET);
-		clearsoftintr(SOFTIRQ_BIT(SOFTIRQ_NET));
-
-#define DONETISR(bit, fn) do {					\
-		if (netisr & (1 << bit)) {			\
-			atomic_clear_bit(&netisr, (1 << bit));	\
-			fn();					\
-		}						\
-} while (0)
-
-#include <net/netisr_dispatch.h>
-
-#undef DONETISR
-
-		(void)splx(s);
-	}
 }
-
-/* This is interrupt / SPL related */
-
-void    set_spl_masks(void);
-
-int current_spl_level = _SPL_HIGH;
-u_int spl_masks[_SPL_LEVELS + 1];
-u_int spl_smasks[_SPL_LEVELS];
-int safepri = _SPL_0;
+#endif
 
 void
 set_spl_masks(void)
@@ -165,16 +137,12 @@ set_spl_masks(void)
 	for (loop = 0; loop <= _SPL_SOFTCLOCK; loop++)
 		spl_masks[loop]    = imask[IPL_SOFTCLOCK];
 
+	spl_masks[_SPL_SOFTBIO]    = imask[IPL_SOFTBIO];
 	spl_masks[_SPL_SOFTNET]    = imask[IPL_SOFTNET];
-	spl_masks[_SPL_BIO]        = imask[IPL_BIO];
-	spl_masks[_SPL_NET]        = imask[IPL_NET];
 	spl_masks[_SPL_SOFTSERIAL] = imask[IPL_SOFTSERIAL];
-	spl_masks[_SPL_TTY]        = imask[IPL_TTY];
 	spl_masks[_SPL_VM]         = imask[IPL_VM];
-	spl_masks[_SPL_AUDIO]      = imask[IPL_AUDIO];
-	spl_masks[_SPL_CLOCK]      = imask[IPL_CLOCK];
+	spl_masks[_SPL_SCHED]      = imask[IPL_SCHED];
 	spl_masks[_SPL_HIGH]       = imask[IPL_HIGH];
-	spl_masks[_SPL_SERIAL]     = imask[IPL_SERIAL];
 	spl_masks[_SPL_LEVELS]     = 0;
 
 	spl_smasks[_SPL_0] = 0xffffffff;
@@ -182,12 +150,14 @@ set_spl_masks(void)
 		spl_smasks[loop] |= SOFTIRQ_BIT(SOFTIRQ_SERIAL);
 	for (loop = 0; loop < _SPL_SOFTNET; ++loop)
 		spl_smasks[loop] |= SOFTIRQ_BIT(SOFTIRQ_NET);
+	for (loop = 0; loop < _SPL_SOFTBIO; ++loop)
+		spl_smasks[loop] |= SOFTIRQ_BIT(SOFTIRQ_BIO);
 	for (loop = 0; loop < _SPL_SOFTCLOCK; ++loop)
 		spl_smasks[loop] |= SOFTIRQ_BIT(SOFTIRQ_CLOCK);
 }
 
 int
-ipl_to_spl(int ipl)
+ipl_to_spl(ipl_t ipl)
 {
 
 	switch (ipl) {
@@ -197,26 +167,16 @@ ipl_to_spl(int ipl)
 		return _SPL_SOFTCLOCK;
 	case IPL_SOFTNET:
 		return _SPL_SOFTNET;
-	case IPL_BIO:
-		return _SPL_BIO;
-	case IPL_NET:
-		return _SPL_NET;
+	case IPL_SOFTBIO:
+		return _SPL_SOFTBIO;
 	case IPL_SOFTSERIAL:
 		return _SPL_SOFTSERIAL;
-	case IPL_TTY:
-		return _SPL_TTY;
 	case IPL_VM:
 		return _SPL_VM;
-	case IPL_AUDIO:
-		return _SPL_AUDIO;
-	case IPL_CLOCK:
-		return _SPL_CLOCK;
-	case IPL_STATCLOCK:
-		return _SPL_STATCLOCK;
+	case IPL_SCHED:
+		return _SPL_SCHED;
 	case IPL_HIGH:
 		return _SPL_HIGH;
-	case IPL_SERIAL:
-		return _SPL_SERIAL;
 	default:
 		panic("bogus ipl %d", ipl);
 	}
@@ -231,7 +191,7 @@ dump_spl_masks(void)
 	int loop;
 
 	for (loop = 0; loop < _SPL_LEVELS; ++loop) {
-		printf("spl_mask[%d]=%08x splsmask[%d]=%08x\n", loop,
+		printf("spl_masks[%d]=%08x spl_smasks[%d]=%08x\n", loop,
 		    spl_masks[loop], loop, spl_smasks[loop]);
 	}
 }

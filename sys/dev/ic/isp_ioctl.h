@@ -1,6 +1,7 @@
-/* $NetBSD: isp_ioctl.h,v 1.9 2006/08/27 20:26:34 christos Exp $ */
+/* $NetBSD: isp_ioctl.h,v 1.11 2008/03/11 05:33:30 mjacob Exp $ */
 /*
- * Copyright (c) 2001 by Matthew Jacob
+ * Copyright (c) 2001-2007 by Matthew Jacob
+ * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -12,23 +13,17 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * Alternatively, this software may be distributed under the terms of the
- * the GNU Public License ("GPL", Library, Version 2).
- *
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * Matthew Jacob <mjacob@feral.com)
- *
+ *  THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ *  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ *  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ *  ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE FOR
+ *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ *  OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ *  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ *  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ *  OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ *  SUCH DAMAGE. 
  */
 /*
  * ioctl definitions for Qlogic FC/SCSI HBA driver
@@ -51,7 +46,7 @@
 #define	ISP_RESETHBA	_IO(ISP_IOC, 2)
 
 /*
- * This ioctl performs a fibre chanel rescan.
+ * This ioctl performs a fibre channel rescan.
  */
 #define	ISP_RESCAN	_IO(ISP_IOC, 3)
 
@@ -59,34 +54,32 @@
  * This ioctl performs a reset and then will set the adapter to the
  * role that was passed in (the old role will be returned). It almost
  * goes w/o saying: use with caution.
+ *
+ * Channel selector stored in bits 8..32 as input to driver.
  */
 #define ISP_SETROLE     _IOWR(ISP_IOC, 4, int)
 
 #define ISP_ROLE_NONE           0x0
-#define ISP_ROLE_INITIATOR      0x1
-#define ISP_ROLE_TARGET         0x2
+#define ISP_ROLE_TARGET         0x1
+#define ISP_ROLE_INITIATOR      0x2
 #define ISP_ROLE_BOTH           (ISP_ROLE_TARGET|ISP_ROLE_INITIATOR)
-#ifndef ISP_DEFAULT_ROLES
-#define ISP_DEFAULT_ROLES       ISP_ROLE_BOTH
-#endif
 
-#ifdef notdef
 /*
  * Get the current adapter role
+ * Channel selector passed in first argument.
  */
 #define ISP_GETROLE     _IOR(ISP_IOC, 5, int)
-#endif
 
 /*
  * Get/Clear Stats
  */
 #define	ISP_STATS_VERSION	0
 typedef struct {
-	u_int8_t	isp_stat_version;
-	u_int8_t	isp_type;		/* (ro) reflects chip type */
-	u_int8_t	isp_revision;		/* (ro) reflects chip version */
-	u_int8_t	unused1;
-	u_int32_t	unused2;
+	uint8_t		isp_stat_version;
+	uint8_t		isp_type;		/* (ro) reflects chip type */
+	uint8_t		isp_revision;		/* (ro) reflects chip version */
+	uint8_t		unused1;
+	uint32_t	unused2;
 	/*
 	 * Statistics Counters
 	 */
@@ -99,7 +92,7 @@ typedef struct {
 #define	ISP_FPHCCMCPLT	5
 #define	ISP_RSCCHIWAT	6
 #define	ISP_FPCCHIWAT	7
-	u_int64_t	isp_stats[ISP_NSTATS];
+	uint64_t	isp_stats[ISP_NSTATS];
 } isp_stats_t;
 
 #define	ISP_GET_STATS	_IOR(ISP_IOC, 6, isp_stats_t)
@@ -117,10 +110,13 @@ typedef struct {
  * only), 24 bit Port ID and Node and Port WWNs.
  */
 struct isp_fc_device {
-	u_int32_t	loopid;	/* 0..255 */
-	u_int32_t	portid;	/* 24 bit Port ID */
-	u_int64_t	node_wwn;
-	u_int64_t	port_wwn;
+	uint32_t	loopid;		/* 0..255 */
+	uint32_t
+			chan 	: 6,
+			role 	: 2,
+			portid	: 24;	/* 24 bit Port ID */
+	uint64_t	node_wwn;
+	uint64_t	port_wwn;
 };
 #define	ISP_FC_GETDINFO	_IOWR(ISP_IOC, 9, struct isp_fc_device)
 
@@ -135,20 +131,22 @@ struct isp_fc_device {
  * topology and capabilities.
  */
 struct isp_hba_device {
-	u_int32_t
+	uint32_t
 					: 8,
-					: 4,
 		fc_speed		: 4,	/* Gbps */
-					: 2,
-		fc_class2		: 1,
-		fc_ip_supported		: 1,
-		fc_scsi_supported	: 1,
+					: 1,
 		fc_topology		: 3,
-		fc_loopid		: 8;
-	u_int64_t	nvram_node_wwn;
-	u_int64_t	nvram_port_wwn;
-	u_int64_t	active_node_wwn;
-	u_int64_t	active_port_wwn;
+		fc_channel		: 8,
+		fc_loopid		: 16;
+	uint8_t		fc_fw_major;
+	uint8_t		fc_fw_minor;
+	uint8_t		fc_fw_micro;
+	uint8_t		fc_nchannels;	/* number of supported channels */
+	uint16_t	fc_nports;	/* number of supported ports */
+	uint64_t	nvram_node_wwn;
+	uint64_t	nvram_port_wwn;
+	uint64_t	active_node_wwn;
+	uint64_t	active_port_wwn;
 };
 
 #define	ISP_TOPO_UNKNOWN	0	/* connection topology unknown */
@@ -157,27 +155,36 @@ struct isp_hba_device {
 #define	ISP_TOPO_NPORT		3	/* N-port */
 #define	ISP_TOPO_FPORT		4	/* F-port */
 
-#define	ISP_FC_GETHINFO	_IOR(ISP_IOC, 12, struct isp_hba_device)
+/* don't use 12 any more */
+#define	ISP_FC_GETHINFO	_IOWR(ISP_IOC, 13, struct isp_hba_device)
+
 /*
- * Set some internal parameters. This doesn't take effect until
- * the chip is reset.
- *
- * Each parameter is generalized to be a name string with an integer value.
- *
- * Known parameters are:
- *
- *	Name				Value Range
- *
- *	"framelength"			512,1024,2048
- *	"exec_throttle"			16..255
- *	"fullduplex"			0,1
- *	"loopid"			0..125
+ * Various Reset Goodies
  */
-
-struct isp_fc_param {
-	char		param_name[16];	/* null terminated */
-	u_int32_t	parameter;
+struct isp_fc_tsk_mgmt {
+	uint32_t	loopid;		/* 0..255/2048 */
+	uint16_t	lun;
+	uint16_t	chan;
+	enum {
+		IPT_CLEAR_ACA,
+		IPT_TARGET_RESET,
+		IPT_LUN_RESET,
+		IPT_CLEAR_TASK_SET,
+		IPT_ABORT_TASK_SET
+	} action;
 };
+/* don't use 97 any more */
+#define	ISP_TSK_MGMT		_IOWR(ISP_IOC, 98, struct isp_fc_tsk_mgmt)
 
-#define	ISP_GET_FC_PARAM	_IOWR(ISP_IOC, 98, struct isp_fc_param)
-#define	ISP_SET_FC_PARAM	_IOWR(ISP_IOC, 99, struct isp_fc_param)
+/*
+ * Just gimme a list of WWPNs that are logged into us.
+ */
+typedef struct {
+	uint16_t count;
+	uint16_t channel;
+	struct wwnpair {
+		uint64_t wwnn;
+		uint64_t wwpn;
+	} wwns[1];
+} isp_dlist_t;
+#define	ISP_FC_GETDLIST 	_IO(ISP_IOC, 14)

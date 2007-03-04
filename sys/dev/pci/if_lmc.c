@@ -1,4 +1,4 @@
-/* $NetBSD: if_lmc.c,v 1.33 2007/02/17 22:34:07 dyoung Exp $ */
+/* $NetBSD: if_lmc.c,v 1.43 2008/06/27 00:53:41 gmcgarry Exp $ */
 
 /*-
  * Copyright (c) 2002-2006 David Boggs. <boggs@boggs.palo-alto.ca.us>
@@ -99,7 +99,6 @@
 # include <sys/mbuf.h>
 # include <sys/socket.h>
 # include <sys/sockio.h>
-# include <sys/lock.h>
 # include <sys/mutex.h>
 # include <sys/module.h>
 # include <sys/bus.h>
@@ -107,7 +106,7 @@
 # include <net/if_types.h>
 # include <net/if_media.h>
 # include <net/netisr.h>
-# include <machine/bus.h>
+# include <sys/bus.h>
 # include <machine/resource.h>
 # include <machine/clock.h>
 # include <sys/rman.h>
@@ -142,6 +141,8 @@
 #endif /*__FreeBSD__*/
 
 #if defined(__NetBSD__)
+# include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_lmc.c,v 1.43 2008/06/27 00:53:41 gmcgarry Exp $");
 # include <sys/param.h>	/* OS version */
 /* -DLKM is passed on the compiler command line */
 # include "opt_inet.h"	/* INET6, INET */
@@ -167,12 +168,13 @@
 # include <sys/device.h>
 # include <sys/reboot.h>
 # include <sys/kauth.h>
+# include <sys/proc.h>
 # include <net/if.h>
 # include <net/if_types.h>
 # include <net/if_media.h>
 # include <net/netisr.h>
-# include <machine/bus.h>
-# include <machine/intr.h>
+# include <sys/bus.h>
+# include <sys/intr.h>
 # include <machine/lock.h>
 # include <machine/types.h>
 # include <dev/pci/pcivar.h>
@@ -223,8 +225,8 @@
 # include <net/if_types.h>
 # include <net/if_media.h>
 # include <net/netisr.h>
-# include <machine/bus.h>
-# include <machine/intr.h>
+# include <sys/bus.h>
+# include <sys/intr.h>
 # include <machine/lock.h>
 # include <uvm/uvm_extern.h>
 # include <dev/pci/pcivar.h>
@@ -278,7 +280,6 @@
 # include <sys/sockio.h>
 # include <sys/device.h>
 # include <sys/reboot.h>
-# include <sys/lock.h>
 # include <net/if.h>
 # include <net/if_types.h>
 # include <net/if_media.h>
@@ -2654,7 +2655,7 @@ static struct stack netgraph_stack =
   };
 
 static int  /* context: process */
-netgraph_ioctl(softc_t *sc, u_long cmd, caddr_t data)
+netgraph_ioctl(softc_t *sc, u_long cmd, void *data)
   {
   if (sc->config.debug)
     printf("%s: netgraph_ioctl() was called\n", NAME_UNIT);
@@ -3130,7 +3131,7 @@ static struct stack p2p_stack =
   };
 
 static int  /* context: process */
-p2p_stack_ioctl(softc_t *sc, u_long cmd, caddr_t data)
+p2p_stack_ioctl(softc_t *sc, u_long cmd, void *data)
   {
   return p2p_ioctl(sc->ifp, cmd, data);
   }
@@ -3279,7 +3280,7 @@ p2p_stack_detach(softc_t *sc)
 /* Callout from P2P: */
 /* Get the state of DCD (Data Carrier Detect). */
 static int  /* never fails */
-p2p_getmdm(struct p2pcom *p2p, caddr_t result)
+p2p_getmdm(struct p2pcom *p2p, void *result)
   {
   softc_t *sc = IFP2SC(&p2p->p2p_if);
 
@@ -3327,7 +3328,7 @@ static struct stack sppp_stack =
 # endif
 
 static int  /* context: process */
-sppp_stack_ioctl(softc_t *sc, u_long cmd, caddr_t data)
+sppp_stack_ioctl(softc_t *sc, u_long cmd, void *data)
   {
   return sppp_ioctl(sc->ifp, cmd, data);
   }
@@ -3537,7 +3538,7 @@ static struct stack rawip_stack =
 #if IFNET
 
 static int  /* context: process */
-rawip_ioctl(softc_t *sc, u_long cmd, caddr_t data)
+rawip_ioctl(softc_t *sc, u_long cmd, void *data)
   {
   struct ifreq *ifr = (struct ifreq *) data;
   int error = 0;
@@ -3558,8 +3559,8 @@ rawip_ioctl(softc_t *sc, u_long cmd, caddr_t data)
     case SIOCSIFMTU:
       if ((ifr->ifr_mtu < 72) || (ifr->ifr_mtu > 65535))
         error = EINVAL;
-      else
-        sc->ifp->if_mtu = ifr->ifr_mtu;
+      else if ((error = ifioctl_common(sc->ifp, cmd, data)) == ENETRESET)
+        error = 0;
       break;
     default:
       error = EINVAL;
@@ -3788,7 +3789,7 @@ ifnet_output(struct ifnet *ifp, struct mbuf *m,
   }
 
 static int  /* context: process */
-ifnet_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+ifnet_ioctl(struct ifnet *ifp, u_long cmd, void *data)
   {
   softc_t *sc = IFP2SC(ifp);
   struct ifreq *ifr = (struct ifreq *) data;
@@ -3832,7 +3833,7 @@ ifnet_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
       break;
 # endif /* FreeBSD || NetBSD */
 
-    case SIOCSIFMEDIA: /* calls ifmedia_change() */
+    case SIOCSIFMEDIA: /* calls lmc_ifmedia_change() */
     case SIOCGIFMEDIA: /* calls ifmedia_status() */
       error = ifmedia_ioctl(ifp, ifr, &sc->ifm, cmd);
       break;
@@ -3974,7 +3975,7 @@ ifnet_attach(softc_t *sc)
   sc->ifp->if_dunit = device_get_unit(sc->dev);
   strlcpy(sc->ifp->if_xname, device_get_nameunit(sc->dev), IFNAMSIZ);
 # elif defined(__NetBSD__)
-  strcpy(sc->ifp->if_xname, sc->dev.dv_xname);
+  strlcpy(sc->ifp->if_xname, device_xname(&sc->dev), IFNAMSIZ);
 # elif defined(__OpenBSD__)
   bcopy(sc->dev.dv_xname, sc->ifp->if_xname, IFNAMSIZ);
 # elif defined(__bsdi__)
@@ -4030,7 +4031,7 @@ ifmedia_setup(softc_t *sc)
   {
   /* Initialize ifmedia mechanism. */
   ifmedia_init(&sc->ifm, IFM_OMASK | IFM_GMASK | IFM_IMASK,
-   ifmedia_change, ifmedia_status);
+   lmc_ifmedia_change, ifmedia_status);
 
 # if defined(__OpenBSD__)
   if (sc->status.card_type == CSID_LMC_T3)
@@ -4061,7 +4062,7 @@ ifmedia_setup(softc_t *sc)
 
 /* SIOCSIFMEDIA: context: process. */
 static int
-ifmedia_change(struct ifnet *ifp)
+lmc_ifmedia_change(struct ifnet *ifp)
   {
   softc_t *sc = IFP2SC(ifp);
   struct config config = sc->config;
@@ -4939,7 +4940,7 @@ create_ring(softc_t *sc, struct desc_ring *ring, int num_descs)
 
   /* Map physical address to kernel virtual address. */
   if ((error = bus_dmamem_map(ring->tag, ring->segs, ring->nsegs,
-   size_descs, (caddr_t *)&ring->first, BUS_DMA_NOWAIT | BUS_DMA_COHERENT)))
+   size_descs, (void **)&ring->first, BUS_DMA_NOWAIT | BUS_DMA_COHERENT)))
     {
     printf("%s: bus_dmamem_map(): error %d\n", NAME_UNIT, error);
     return error;
@@ -5058,7 +5059,7 @@ destroy_ring(softc_t *sc, struct desc_ring *ring)
     bus_dmamap_destroy(ring->tag, ring->map);
   /* Unmap kernel address for DMA descriptor array. */
   if (ring->first)
-    bus_dmamem_unmap(ring->tag, (caddr_t)ring->first, ring->size_descs);
+    bus_dmamem_unmap(ring->tag, (void *)ring->first, ring->size_descs);
   /* Free kernel memory for DMA descriptor array. */
   if (ring->segs[0].ds_addr)
     bus_dmamem_free(ring->tag, ring->segs, ring->nsegs);
@@ -6239,7 +6240,7 @@ attach_stack(softc_t *sc, struct config *config)
  * Always called with top_lock held.
  */
 static int  /* context: process */
-lmc_ioctl(softc_t *sc, u_long cmd, caddr_t data)
+lmc_ioctl(softc_t *sc, u_long cmd, void *data)
   {
   struct iohdr  *iohdr  = (struct iohdr  *) data;
   struct ioctl  *ioctl  = (struct ioctl  *) data;
@@ -7166,7 +7167,7 @@ nbsd_attach(struct device *parent, struct device *self, void *aux)
     }
 
   /* Initialize the top-half and bottom-half locks. */
-  __cpu_simple_lock_init(&sc->top_lock);
+  mutex_init(&sc->top_lock, MUTEX_DEFAULT, IPL_VM);
   __cpu_simple_lock_init(&sc->bottom_lock);
 
   /* Initialize the driver. */
@@ -7189,6 +7190,9 @@ nbsd_detach(struct device *self, int flags)
     pci_intr_disestablish(sc->pa_pc, sc->irq_cookie);
   if (sc->csr_handle)
     bus_space_unmap(sc->csr_tag, sc->csr_handle, TLP_CSR_SIZE);
+
+  /* Destroy locks. */
+  mutex_destroy(&sc->top_lock);
 
   return 0;
   }
@@ -7312,7 +7316,7 @@ obsd_attach(struct device *parent, struct device *self, void *aux)
     return;
     }
   if ((sc->irq_cookie = pci_intr_establish(pa->pa_pc, sc->intr_handle,
-   IPL_NET, bsd_interrupt, sc, self->dv_xname)) == NULL)
+   IPL_NET, bsd_interrupt, sc, device_xname(self))) == NULL)
     {
     printf("%s: pci_intr_establish() failed\n", NAME_UNIT);
     obsd_detach(self, 0);
@@ -7419,10 +7423,10 @@ int if_lmc_lkmentry(struct lkm_table *lkmtp, int cmd, int ver)
         {  /* for each pci bus... */
         int devnum, maxdevs;
         struct pci_attach_args pa;
-        struct device *parent = pci_cd.cd_devs[i];
+        device_t parent = device_lookup(&pci_cd, i);
         /* This is ugly: only way to get pci_chipset_tag. */
         struct pci_sc { struct device dev; pci_chipset_tag_t pc; };
-        struct pci_sc *pci_sc = pci_cd.cd_devs[i];
+        struct pci_sc *pci_sc = device_lookup_private(&pci_cd, i);
 
         if (parent == NULL) continue; /* no pci bus */
         pa.pa_pc   = pci_sc->pc;
@@ -7458,11 +7462,11 @@ int if_lmc_lkmentry(struct lkm_table *lkmtp, int cmd, int ver)
       {
       for (i=lmc_cd.cd_ndevs-1; i>=0; i--)
         {
-        struct device *dev = lmc_cd.cd_devs[i];
+        device_t dev = device_lookup(&lmc_cd, i);
         if (dev == NULL) continue;
         if ((error = config_detach(dev, 0)))
           printf("%s: config_detach(): error %d\n",
-           dev->dv_xname, error);
+           device_xname(dev), error);
         }
       break;
       }

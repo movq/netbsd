@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_ihash.c,v 1.22 2007/02/27 16:11:51 ad Exp $	*/
+/*	$NetBSD: ufs_ihash.c,v 1.26 2008/05/05 17:11:17 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -32,12 +32,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_ihash.c,v 1.22 2007/02/27 16:11:51 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_ihash.c,v 1.26 2008/05/05 17:11:17 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/vnode.h>
-#include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/mutex.h>
 
@@ -60,10 +59,10 @@ kmutex_t	ufs_hashlock;
 void
 ufs_ihashinit(void)
 {
+
 	mutex_init(&ufs_hashlock, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&ufs_ihash_lock, MUTEX_DEFAULT, IPL_NONE);
-	ihashtbl =
-	    hashinit(desiredvnodes, HASH_LIST, M_UFSMNT, M_WAITOK, &ihash);
+	ihashtbl = hashinit(desiredvnodes, HASH_LIST, true, &ihash);
 }
 
 /*
@@ -78,7 +77,7 @@ ufs_ihashreinit(void)
 	u_long oldmask, mask, val;
 	int i;
 
-	hash = hashinit(desiredvnodes, HASH_LIST, M_UFSMNT, M_WAITOK, &mask);
+	hash = hashinit(desiredvnodes, HASH_LIST, true, &mask);
 	mutex_enter(&ufs_ihash_lock);
 	oldhash = ihashtbl;
 	oldmask = ihash;
@@ -92,7 +91,7 @@ ufs_ihashreinit(void)
 		}
 	}
 	mutex_exit(&ufs_ihash_lock);
-	hashdone(oldhash, M_UFSMNT);
+	hashdone(oldhash, HASH_LIST, oldmask);
 }
 
 /*
@@ -101,7 +100,8 @@ ufs_ihashreinit(void)
 void
 ufs_ihashdone(void)
 {
-	hashdone(ihashtbl, M_UFSMNT);
+
+	hashdone(ihashtbl, HASH_LIST, ihash);
 	mutex_destroy(&ufs_hashlock);
 	mutex_destroy(&ufs_ihash_lock);
 }
@@ -116,13 +116,13 @@ ufs_ihashlookup(dev_t dev, ino_t inum)
 	struct inode *ip;
 	struct ihashhead *ipp;
 
-	mutex_enter(&ufs_ihash_lock);
+	KASSERT(mutex_owned(&ufs_ihash_lock));
+
 	ipp = &ihashtbl[INOHASH(dev, inum)];
 	LIST_FOREACH(ip, ipp, i_hash) {
 		if (inum == ip->i_number && dev == ip->i_dev)
 			break;
 	}
-	mutex_exit(&ufs_ihash_lock);
 	if (ip)
 		return (ITOV(ip));
 	return (NULLVP);
@@ -145,10 +145,14 @@ ufs_ihashget(dev_t dev, ino_t inum, int flags)
 	LIST_FOREACH(ip, ipp, i_hash) {
 		if (inum == ip->i_number && dev == ip->i_dev) {
 			vp = ITOV(ip);
-			simple_lock(&vp->v_interlock);
-			mutex_exit(&ufs_ihash_lock);
-			if (vget(vp, flags | LK_INTERLOCK))
-				goto loop;
+			if (flags == 0) {
+				mutex_exit(&ufs_ihash_lock);
+			} else {
+				mutex_enter(&vp->v_interlock);
+				mutex_exit(&ufs_ihash_lock);
+				if (vget(vp, flags | LK_INTERLOCK))
+					goto loop;
+			}
 			return (vp);
 		}
 	}
@@ -167,7 +171,7 @@ ufs_ihashins(struct inode *ip)
 	KASSERT(mutex_owned(&ufs_hashlock));
 
 	/* lock the inode, then put it on the appropriate hash list */
-	lockmgr(&ip->i_vnode->v_lock, LK_EXCLUSIVE, NULL);
+	vlockmgr(&ip->i_vnode->v_lock, LK_EXCLUSIVE);
 
 	mutex_enter(&ufs_ihash_lock);
 	ipp = &ihashtbl[INOHASH(ip->i_dev, ip->i_number)];

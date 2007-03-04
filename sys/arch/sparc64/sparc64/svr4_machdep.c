@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.c,v 1.42 2007/02/09 21:55:13 ad Exp $	 */
+/*	$NetBSD: svr4_machdep.c,v 1.50 2008/04/28 20:23:37 martin Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.42 2007/02/09 21:55:13 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.50 2008/04/28 20:23:37 martin Exp $");
 
 #ifndef _LKM
 #include "opt_ddb.h"
@@ -75,7 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.42 2007/02/09 21:55:13 ad Exp $")
 #include <machine/vmparam.h>
 #include <machine/svr4_machdep.h>
 
-static void svr4_getsiginfo(union svr4_siginfo *, int, u_long, caddr_t);
+static void svr4_getsiginfo(union svr4_siginfo *, int, u_long, void *);
 
 void
 svr4_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
@@ -152,7 +145,7 @@ svr4_getmcontext(struct lwp *l, struct svr4_mcontext *mc, u_long *flags)
 		Debugger();
 #endif
 #endif
-		mutex_enter(&l->l_proc->p_smutex);
+		mutex_enter(l->l_proc->p_lock);
 		sigexit(l, SIGILL);
 	}
 
@@ -255,7 +248,7 @@ svr4_setmcontext(struct lwp *l, struct svr4_mcontext *mc, u_long flags)
 		Debugger();
 #endif
 #endif
-		mutex_enter(&l->l_proc->p_smutex);
+		mutex_enter(l->l_proc->p_lock);
 		sigexit(l, SIGILL);
 	}
 
@@ -351,7 +344,7 @@ svr4_setmcontext(struct lwp *l, struct svr4_mcontext *mc, u_long flags)
  * map the trap code into the svr4 siginfo as best we can
  */
 static void
-svr4_getsiginfo(union svr4_siginfo *si, int sig, u_long code, caddr_t addr)
+svr4_getsiginfo(union svr4_siginfo *si, int sig, u_long code, void *addr)
 {
 	si->si_signo = native_to_svr4_signo[sig];
 	si->si_errno = 0;
@@ -511,7 +504,7 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	 * Allocate space for the signal handler context.
 	 */
 	if (onstack)
-		fp = (struct svr4_sigframe *)((caddr_t)l->l_sigstk.ss_sp +
+		fp = (struct svr4_sigframe *)((char *)l->l_sigstk.ss_sp +
 						l->l_sigstk.ss_size);
 	else
 		fp = (struct svr4_sigframe *)oldsp;
@@ -531,7 +524,7 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	 * Build the argument list for the signal handler.
 	 */
 	svr4_getsiginfo(&frame.sf_si, sig, ksi->ksi_trap,
-	    (caddr_t)(u_long)tf->tf_pc);
+	    (void *)(u_long)tf->tf_pc);
 
 	/* Build stack frame for signal trampoline. */
 	frame.sf_signum = frame.sf_si.si_signo;
@@ -546,7 +539,7 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	 * Modify the signal context to be used by sigreturn.
 	 */
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	svr4_getcontext(l, &frame.sf_uc);
 	frame.sf_uc.uc_mcontext.greg[SVR4_SPARC_SP] = (long)tf->tf_out[6];
 
@@ -560,7 +553,7 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 #endif
 	error = (rwindow_save(l) || copyout(&frame, fp, sizeof(frame)) != 0 ||
 	    CPOUTREG(&((struct rwindow *)newsp)->rw_in[6], oldsp));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error) {
 		/*
@@ -568,14 +561,14 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 		 * instruction to halt it in its tracks.
 		 */
 #ifdef DEBUG
-		mutex_exit(&p->p_smutex);
+		mutex_exit(p->p_lock);
 		if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid)
 			printf("svr4_sendsig: window save or copyout error\n");
 		printf("svr4_sendsig: stack was trashed trying to send sig %d, sending SIGILL\n", sig);
 #ifdef DDB
 		Debugger();
 #endif
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 #endif
 		sigexit(l, SIGILL);
 		/* NOTREACHED */
@@ -601,13 +594,13 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
 #ifdef DEBUG
 	if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid) {
-		mutex_exit(&p->p_smutex);
+		mutex_exit(p->p_lock);
 		printf("svr4_sendsig: about to return to catcher %p thru %p\n", 
 		       catcher, (void *)(u_long)addr);
 #ifdef DDB
 		if (sigdebug & SDB_DDB) Debugger();
 #endif
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 	}
 #endif
 }
@@ -620,9 +613,9 @@ svr4_trap(int type, struct lwp *l)
 	struct proc *p = l->l_proc;
 	int n;
 	struct trapframe64 *tf = l->l_md.md_tf;
-	struct schedstate_percpu *spc;
 	struct timespec ts;
 	struct timeval tv;
+	struct timeval rtime, stime;
 	uint64_t tm;
 
 	if (p->p_emul != &emul_svr4)
@@ -668,15 +661,14 @@ svr4_trap(int type, struct lwp *l)
 		 * for now using the process's real time augmented with its
 		 * current runtime is the best we can do.
 		 */
-		spc = &curcpu()->ci_schedstate;
-
 		microtime(&tv);
+		bintime2timeval(&l->l_rtime, &rtime);
+		bintime2timeval(&l->l_stime, &stime);
 
-		tm = (p->p_rtime.tv_sec + tv.tv_sec -
-				spc->spc_runtime.tv_sec) * (uint64_t)1000000u;
-		tm += p->p_rtime.tv_usec + tv.tv_usec;
-		tm -= spc->spc_runtime.tv_usec;
-		tm *= 1000;
+		tm = (rtime.tv_sec + tv.tv_sec - stime.tv_sec) * 1000000ull;
+		tm += rtime.tv_usec + tv.tv_usec;
+		tm -= stime.tv_usec;
+		tm *= 1000u;
 		tf->tf_out[0] = (tm >> 32) & 0x00000000ffffffffUL;
 		tf->tf_out[1] = tm & 0x00000000ffffffffUL;
 		break;
@@ -699,9 +691,8 @@ svr4_trap(int type, struct lwp *l)
 /*
  */
 int
-svr4_sys_sysarch(struct lwp *l, void *v, register_t *retval)
+svr4_sys_sysarch(struct lwp *l, const struct svr4_sys_sysarch_args *uap, register_t *retval)
 {
-	struct svr4_sys_sysarch_args *uap = v;
 
 	switch (SCARG(uap, op)) {
 	default:

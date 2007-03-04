@@ -1,4 +1,4 @@
-/*	$NetBSD: ufsmount.h,v 1.27 2006/05/14 21:33:39 elad Exp $	*/
+/*	$NetBSD: ufsmount.h,v 1.34 2008/04/17 09:52:47 hannken Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -34,6 +34,8 @@
 #ifndef _UFS_UFS_UFSMOUNT_H_
 #define _UFS_UFS_UFSMOUNT_H_
 
+#include <sys/mount.h> /* struct export_args30 */
+
 /*
  * Arguments to mount UFS-based filesystems
  */
@@ -47,7 +49,7 @@ struct ufs_args {
 struct mfs_args {
 	char	*fspec;			/* name to export for statfs */
 	struct	export_args30 _pad1; /* compat with old userland tools */
-	caddr_t	base;			/* base of file system in memory */
+	void *	base;			/* base of file system in memory */
 	u_long	size;			/* size of file system */
 };
 
@@ -57,7 +59,10 @@ struct mfs_args {
 #include "opt_ffs.h"
 #endif
 
+#include <sys/mutex.h>
+
 #include <ufs/ufs/extattr.h>
+#include <ufs/ufs/quota.h>
 
 struct buf;
 struct inode;
@@ -92,15 +97,15 @@ struct ufsmount {
 	u_long	um_lognindir;			/* log2 of um_nindir */
 	u_long	um_bptrtodb;			/* indir ptr to disk block */
 	u_long	um_seqinc;			/* inc between seq blocks */
+	kmutex_t um_lock;			/* lock on global data */
 	time_t	um_btime[MAXQUOTAS];		/* block quota time limit */
 	time_t	um_itime[MAXQUOTAS];		/* inode quota time limit */
 	char	um_qflags[MAXQUOTAS];		/* quota specific flags */
 	void	*um_oldfscompat;		/* save 4.2 rotbl */
-	TAILQ_HEAD(inodelst, inode) um_snapshots; /* list of active snapshots */
-	daddr_t	*um_snapblklist;		/* snapshot block hints list */
 	int	um_maxsymlinklen;
 	int	um_dirblksiz;
 	u_int64_t um_maxfilesize;
+	void	*um_snapinfo;			/* snapshot private data */
 
 	const struct ufs_ops *um_ops;
 };
@@ -110,8 +115,7 @@ struct ufs_ops {
 	    const struct timespec *, const struct timespec *);
 	int (*uo_update)(struct vnode *, const struct timespec *,
 	    const struct timespec *, int);
-	int (*uo_truncate)(struct vnode *, off_t, int, kauth_cred_t,
-	    struct lwp *);
+	int (*uo_truncate)(struct vnode *, off_t, int, kauth_cred_t);
 	int (*uo_valloc)(struct vnode *, int, kauth_cred_t, struct vnode **);
 	int (*uo_vfree)(struct vnode *, ino_t, int);
 	int (*uo_balloc)(struct vnode *, off_t, int, kauth_cred_t, int,
@@ -124,8 +128,8 @@ struct ufs_ops {
 	(*UFS_OPS(vp)->uo_itimes)(VTOI(vp), (acc), (mod), (cre))
 #define	UFS_UPDATE(vp, acc, mod, flags) \
 	(*UFS_OPS(vp)->uo_update)((vp), (acc), (mod), (flags))
-#define	UFS_TRUNCATE(vp, off, flags, cr, p) \
-	(*UFS_OPS(vp)->uo_truncate)((vp), (off), (flags), (cr), (p))
+#define	UFS_TRUNCATE(vp, off, flags, cr) \
+	(*UFS_OPS(vp)->uo_truncate)((vp), (off), (flags), (cr))
 #define	UFS_VALLOC(vp, mode, cr, vpp) \
 	(*UFS_OPS(vp)->uo_valloc)((vp), (mode), (cr), (vpp))
 #define	UFS_VFREE(vp, ino, mode) \

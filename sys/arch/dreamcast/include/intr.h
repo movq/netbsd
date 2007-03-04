@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.7 2007/02/16 02:53:45 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.9 2008/04/28 20:23:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,16 +35,9 @@
 #define _INTR_N		10	/* TMU0, TMU1, TMU2, SCIF * 4, IRL * 3 */
 
 /* Interrupt priority levels */
-#define	IPL_BIO		9	/* block I/O	(IRL9) */
-#define	IPL_NET		11	/* network	(IRL11) */
-#define	IPL_TTY		12	/* terminal	(IRL13) */
-#define	IPL_VM		IPL_TTY
-#define	IPL_SERIAL	12	/* serial */
-#define	IPL_CLOCK	14	/* clock */
-#define	IPL_STATCLOCK	IPL_CLOCK
-#define	IPL_SCHED	IPL_CLOCK
-#define	IPL_HIGH	15	/* everything */
-#define	IPL_LOCK	IPL_HIGH
+#define	IPL_VM		12
+#define	IPL_SCHED	14
+#define	IPL_HIGH	15
 
 typedef uint8_t ipl_t;
 typedef struct {

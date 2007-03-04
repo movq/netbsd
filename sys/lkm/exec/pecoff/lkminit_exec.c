@@ -1,4 +1,4 @@
-/* $NetBSD: lkminit_exec.c,v 1.6 2005/12/11 12:24:48 christos Exp $ */
+/* $NetBSD: lkminit_exec.c,v 1.8 2008/04/28 20:24:07 martin Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lkminit_exec.c,v 1.6 2005/12/11 12:24:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lkminit_exec.c,v 1.8 2008/04/28 20:24:07 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: lkminit_exec.c,v 1.6 2005/12/11 12:24:48 christos Ex
 #include <sys/exec_coff.h>
 #include <compat/pecoff/pecoff_exec.h>
 
-int exec_pecoff_lkmentry __P((struct lkm_table *, int, int));
+int exec_pecoff_lkmentry(struct lkm_table *, int, int);
 
 static struct execsw exec_pecoff =
 	/* Win32/WinCE PE/COFF (native word size) */

@@ -1,4 +1,4 @@
-/*	$NetBSD: asc.c,v 1.48 2007/01/24 13:08:12 hubertf Exp $	*/
+/*	$NetBSD: asc.c,v 1.53 2008/06/15 10:29:18 tsutsui Exp $	*/
 
 /*
  * Copyright (C) 1997 Scott Reynolds
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: asc.c,v 1.48 2007/01/24 13:08:12 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: asc.c,v 1.53 2008/06/15 10:29:18 tsutsui Exp $");
 
 #include <sys/types.h>
 #include <sys/errno.h>
@@ -177,7 +177,7 @@ ascattach(struct device *parent, struct device *self, void *aux)
 	}
 	sc->sc_open = 0;
 	sc->sc_ringing = 0;
-	callout_init(&sc->sc_bell_ch);
+	callout_init(&sc->sc_bell_ch, 0);
 
 	for (i = 0; i < 256; i++) {	/* up part of wave, four voices? */
 		asc_wave_tab[i] = i / 4;
@@ -212,11 +212,9 @@ int
 ascopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct asc_softc *sc;
-	int unit;
 
-	unit = ASCUNIT(dev);
-	sc = asc_cd.cd_devs[unit];
-	if (unit >= asc_cd.cd_ndevs)
+	sc = device_lookup_private(&asc_cd, ASCUNIT(dev));
+	if (sc == NULL)
 		return (ENXIO);
 	if (sc->sc_open)
 		return (EBUSY);
@@ -230,7 +228,7 @@ ascclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct asc_softc *sc;
 
-	sc = asc_cd.cd_devs[ASCUNIT(dev)];
+	sc = device_lookup_private(&asc_cd, ASCUNIT(dev));
 	sc->sc_open = 0;
 
 	return (0);
@@ -249,13 +247,13 @@ ascwrite(dev_t dev, struct uio *uio, int ioflag)
 }
 
 int
-ascioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
+ascioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct asc_softc *sc;
 	int error;
 	int unit = ASCUNIT(dev);
 
-	sc = asc_cd.cd_devs[unit];
+	sc = device_lookup_private(&asc_cd, unit);
 	error = 0;
 
 	switch (cmd) {
@@ -269,11 +267,10 @@ ascioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 paddr_t
 ascmmap(dev_t dev, off_t off, int prot)
 {
-	int unit = ASCUNIT(dev);
 	struct asc_softc *sc;
 	paddr_t pa;
 
-	sc = asc_cd.cd_devs[unit];
+	sc = device_lookup_private(&asc_cd, ASCUNIT(dev));
 	if ((u_int)off < MAC68K_ASC_LEN) {
 		(void) pmap_extract(pmap_kernel(), (vaddr_t)sc->sc_handle.base,
 		    &pa);

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.c,v 1.36 2007/02/09 21:55:18 ad Exp $	*/
+/*	$NetBSD: linux_machdep.c,v 1.43 2008/04/28 20:23:42 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.36 2007/02/09 21:55:18 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.43 2008/04/28 20:23:42 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -99,10 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.36 2007/02/09 21:55:18 ad Exp $"
  */
 
 void
-linux_setregs(l, epp, stack)
-	struct lwp *l;
-	struct exec_package *epp;
-	u_long stack;
+linux_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
 {
 #ifdef DEBUG
 	struct trapframe *tfp = l->l_md.md_tf;
@@ -138,11 +128,10 @@ setup_linux_rt_sigframe(struct trapframe *tf, int sig, const sigset_t *mask)
 
 	if (onstack)
 		sfp = (struct linux_rt_sigframe *)
-					((caddr_t)l->l_sigstk.ss_sp +
-						l->l_sigstk.ss_size);
+		    ((char *)l->l_sigstk.ss_sp + l->l_sigstk.ss_size);
 	else
 		sfp = (struct linux_rt_sigframe *)(alpha_pal_rdusp());
-	sfp = (struct linux_rt_sigframe *)((caddr_t)sfp - rndfsize);
+	sfp = (struct linux_rt_sigframe *)((char *)sfp - rndfsize);
 
 #ifdef DEBUG
 	if ((sigdebug & SDB_KSTACK) && (p->p_pid == sigpid))
@@ -188,9 +177,9 @@ setup_linux_rt_sigframe(struct trapframe *tf, int sig, const sigset_t *mask)
 	sigframe.info.lsi_uid = kauth_cred_geteuid(l->l_cred);	/* Use real uid here? */
 
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
-	error = copyout((caddr_t)&sigframe, (caddr_t)sfp, fsize);
-	mutex_enter(&p->p_smutex);
+	mutex_exit(p->p_lock);
+	error = copyout((void *)&sigframe, (void *)sfp, fsize);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 #ifdef DEBUG
@@ -244,11 +233,10 @@ void setup_linux_sigframe(tf, sig, mask)
 
 	if (onstack)
 		sfp = (struct linux_sigframe *)
-					((caddr_t)l->l_sigstk.ss_sp +
-						l->l_sigstk.ss_size);
+		    ((char *)l->l_sigstk.ss_sp + l->l_sigstk.ss_size);
 	else
 		sfp = (struct linux_sigframe *)(alpha_pal_rdusp());
-	sfp = (struct linux_sigframe *)((caddr_t)sfp - rndfsize);
+	sfp = (struct linux_sigframe *)((char *)sfp - rndfsize);
 
 #ifdef DEBUG
 	if ((sigdebug & SDB_KSTACK) && (p->p_pid == sigpid))
@@ -259,7 +247,7 @@ void setup_linux_sigframe(tf, sig, mask)
 	/*
 	 * Build the signal context to be used by sigreturn.
 	 */
-	memset(&sigframe.sf_sc, 0, sizeof(struct linux_ucontext));
+	memset(&sigframe.sf_sc, 0, sizeof(struct linux_sigcontext));
 	sigframe.sf_sc.sc_onstack = onstack;
 	native_to_linux_old_sigset(&sigframe.sf_sc.sc_mask, mask);
 	sigframe.sf_sc.sc_pc = tf->tf_regs[FRAME_PC];
@@ -281,9 +269,9 @@ void setup_linux_sigframe(tf, sig, mask)
 	sigframe.sf_sc.sc_traparg_a2 = tf->tf_regs[FRAME_A2];
 
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
-	error = copyout((caddr_t)&sigframe, (caddr_t)sfp, fsize);
-	mutex_enter(&p->p_smutex);
+	mutex_exit(p->p_lock);
+	error = copyout((void *)&sigframe, (void *)sfp, fsize);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 #ifdef DEBUG
@@ -392,7 +380,7 @@ linux_restore_sigcontext(struct lwp *l, struct linux_sigcontext context,
 	 * However, the OSF/1 sigcontext which they use has
 	 * an onstack member.  This could be needed in the future.
 	 */
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	if (context.sc_onstack & LINUX_SA_ONSTACK)
 	    l->l_sigstk.ss_flags |= SS_ONSTACK;
 	else
@@ -400,7 +388,7 @@ linux_restore_sigcontext(struct lwp *l, struct linux_sigcontext context,
 
 	/* Reset the signal mask */
 	(void) sigprocmask1(l, SIG_SETMASK, mask, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	/*
 	 * Check for security violations.
@@ -432,14 +420,11 @@ linux_restore_sigcontext(struct lwp *l, struct linux_sigcontext context,
 }
 
 int
-linux_sys_rt_sigreturn(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+linux_sys_rt_sigreturn(struct lwp *l, const struct linux_sys_rt_sigreturn_args *uap, register_t *retval)
 {
-	struct linux_sys_rt_sigreturn_args /* {
+	/* {
 		syscallarg(struct linux_rt_sigframe *) sfp;
-	} */ *uap = v;
+	} */
 	struct linux_rt_sigframe *sfp, sigframe;
 	sigset_t mask;
 
@@ -457,7 +442,7 @@ linux_sys_rt_sigreturn(l, v, retval)
 	/*
 	 * Fetch the frame structure.
 	 */
-	if (copyin((caddr_t)sfp, &sigframe,
+	if (copyin((void *)sfp, &sigframe,
 			sizeof(struct linux_rt_sigframe)) != 0)
 		return (EFAULT);
 
@@ -469,14 +454,11 @@ linux_sys_rt_sigreturn(l, v, retval)
 
 
 int
-linux_sys_sigreturn(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+linux_sys_sigreturn(struct lwp *l, const struct linux_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct linux_sys_sigreturn_args /* {
+	/* {
 		syscallarg(struct linux_sigframe *) sfp;
-	} */ *uap = v;
+	} */
 	struct linux_sigframe *sfp, frame;
 	sigset_t mask;
 
@@ -493,7 +475,7 @@ linux_sys_sigreturn(l, v, retval)
 	/*
 	 * Fetch the frame structure.
 	 */
-	if (copyin((caddr_t)sfp, &frame, sizeof(struct linux_sigframe)) != 0)
+	if (copyin((void *)sfp, &frame, sizeof(struct linux_sigframe)) != 0)
 		return(EFAULT);
 
 	/* Grab the signal mask. */
@@ -508,16 +490,13 @@ linux_sys_sigreturn(l, v, retval)
  */
 /* XXX XAX update this, add maps, etc... */
 int
-linux_machdepioctl(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+linux_machdepioctl(struct lwp *l, const struct linux_sys_ioctl_args *uap, register_t *retval)
 {
-	struct linux_sys_ioctl_args /* {
+	/* {
 		syscallarg(int) fd;
 		syscallarg(u_long) com;
-		syscallarg(caddr_t) data;
-	} */ *uap = v;
+		syscallarg(void *) data;
+	} */
 	struct sys_ioctl_args bia;
 	u_long com;
 
@@ -536,9 +515,7 @@ linux_machdepioctl(l, v, retval)
 
 /* XXX XAX fix this */
 dev_t
-linux_fakedev(dev, raw)
-	dev_t dev;
-	int raw;
+linux_fakedev(dev_t dev, int raw)
 {
 	return dev;
 }

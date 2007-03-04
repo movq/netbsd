@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.13 2007/02/09 21:55:12 ad Exp $ */
+/*	$NetBSD: syscall.c,v 1.21 2008/10/21 12:16:59 ad Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -49,20 +49,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.13 2007/02/09 21:55:12 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.21 2008/10/21 12:16:59 ad Exp $");
 
-#include "opt_ktrace.h"
 #include "opt_sparc_arch.h"
 #include "opt_multiprocessor.h"
+#include "opt_sa.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/signal.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall.h>
-#ifdef KTRACE
+#include <sys/syscallvar.h>
 #include <sys/ktrace.h>
-#endif
 
 #include <uvm/uvm_extern.h>
 
@@ -234,14 +235,13 @@ syscall_plain(register_t code, struct trapframe *tf, register_t pc)
 	rval.o[0] = 0;
 	rval.o[1] = tf->tf_out[1];
 
-        /* Lock the kernel if the syscall isn't MP-safe. */
-	if (callp->sy_flags & SYCALL_MPSAFE) {
-		error = (*callp->sy_call)(l, &args, rval.o);
-	} else {
-		KERNEL_LOCK(1, l);
-		error = (*callp->sy_call)(l, &args, rval.o);
-		KERNEL_UNLOCK_LAST(l);
-	}
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
+#endif
+
+	error = sy_call(callp, l, &args, rval.o);
 
 	switch (error) {
 	case 0:
@@ -313,23 +313,19 @@ syscall_fancy(register_t code, struct trapframe *tf, register_t pc)
 	if ((error = getargs(p, tf, &code, &callp, &args)) != 0)
 		goto bad;
 
-	KERNEL_LOCK(1, l);
-	if ((error = trace_enter(l, code, code, NULL, args.i)) != 0) {
-		KERNEL_UNLOCK_LAST(l);
+	if ((error = trace_enter(code, args.i, callp->sy_narg)) != 0)
 		goto out;
-	}
 
 	rval.o[0] = 0;
 	rval.o[1] = tf->tf_out[1];
 
-        /* Lock the kernel if the syscall isn't MP-safe. */
-	if (callp->sy_flags & SYCALL_MPSAFE) {
-		KERNEL_UNLOCK_LAST(l);
-		error = (*callp->sy_call)(l, &args, rval.o);
-	} else {
-		error = (*callp->sy_call)(l, &args, rval.o);
-		KERNEL_UNLOCK_LAST(l);
-	}
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
+#endif
+
+	error = sy_call(callp, l, &args, rval.o);
 
 out:
 	switch (error) {
@@ -370,7 +366,7 @@ out:
 		break;
 	}
 
-	trace_exit(l, code, args.i, rval.o, error);
+	trace_exit(code, rval.o, error);
 
 	userret(l, pc, sticks);
 	share_fpu(l, tf);
@@ -383,22 +379,11 @@ void
 child_return(void *arg)
 {
 	struct lwp *l = arg;
-#ifdef KTRACE
-	struct proc *p;
-#endif
 
 	/*
 	 * Return values in the frame set by cpu_fork().
 	 */
-	KERNEL_UNLOCK_LAST(l);
 	userret(l, l->l_md.md_tf->tf_pc, 0);
-#ifdef KTRACE
-	p = l->l_proc;
-	if (KTRPOINT(p, KTR_SYSRET)) {
-		KERNEL_LOCK(1, l);
-		ktrsysret(l,
-			  (p->p_sflag & PS_PPWAIT) ? SYS_vfork : SYS_fork, 0, 0);
-		KERNEL_UNLOCK_LAST(l);
-	}
-#endif
+	ktrsysret((l->l_proc->p_lflag & PL_PPWAIT) ? SYS_vfork : SYS_fork,
+	    0, 0);
 }

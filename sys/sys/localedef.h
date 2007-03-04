@@ -1,4 +1,4 @@
-/*	$NetBSD: localedef.h,v 1.7 2005/11/29 03:12:16 christos Exp $	*/
+/*	$NetBSD: localedef.h,v 1.9 2008/05/17 03:49:54 ginsbach Exp $	*/
 
 /*
  * Copyright (c) 1994 Winning Strategies, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_en.c,v 1.21 2005/12/11 12:23:44 christos Exp $	*/
+/*	$NetBSD: if_en.c,v 1.23 2008/04/05 18:35:32 cegger Exp $	*/
 
 /*
  *
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_en.c,v 1.21 2005/12/11 12:23:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_en.c,v 1.23 2008/04/05 18:35:32 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,9 +54,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_en.c,v 1.21 2005/12/11 12:23:44 christos Exp $");
 
 #include <net/if.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
-#include <machine/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
+#include <sys/cpu.h>
 
 #include <dev/sbus/sbusvar.h>
 
@@ -136,7 +136,7 @@ en_sbus_attach(parent, self, aux)
 			 sa->sa_offset,
 			 4*1024*1024,
 			 0, &sc->en_base) != 0) {
-		printf("%s: cannot map registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map registers\n");
 		return;
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.6 2007/02/28 04:21:52 thorpej Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.9 2008/05/15 23:38:49 rjs Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -68,17 +68,11 @@ static void findroot(void);
 void
 cpu_configure(void)
 {
-	/* startrtclock(); */
 
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("configure: mainbus not configured");
 
-	printf("biomask %x netmask %x ttymask %x\n",
-	    imask[IPL_BIO] & 0x1fffffff,
-	    imask[IPL_NET] & 0x1fffffff,
-	    imask[IPL_TTY] & 0x1fffffff);
-
-	spl0();
+	genppc_cpu_configure();
 }
 
 void
@@ -103,8 +97,7 @@ void
 findroot(void)
 {
 	int unit, part;
-	struct device *dv;
-	char buf[32];
+	device_t dv;
 	const char *name;
 
 #if 0
@@ -121,35 +114,65 @@ findroot(void)
 	part = (bootdev >> B_PARTITIONSHIFT) & B_PARTITIONMASK;
 	unit = (bootdev >> B_UNITSHIFT) & B_UNITMASK;
 
-	sprintf(buf, "%s%d", name, unit);
-	TAILQ_FOREACH(dv, &alldevs, dv_list) {
-		if (strcmp(buf, dv->dv_xname) == 0) {
-			booted_device = dv;
-			booted_partition = part;
-			return;
-		}
+	if ((dv = device_find_by_driver_unit(name, unit)) != NULL) {
+		booted_device = dv;
+		booted_partition = part;
 	}
 }
 
 #define	BUILTIN_ETHERNET_P(pa)						\
 	((pa)->pa_bus == 0 && (pa)->pa_device == 2 && (pa)->pa_function == 0)
 
+#define	BUILTIN_VIDEO_P(pa)						\
+	((pa)->pa_bus == 0 && (pa)->pa_device == 4 && (pa)->pa_function == 0)
+
 void
 device_register(device_t dev, void *aux)
 {
 	device_t pdev;
+	prop_dictionary_t dict;
 
 	if ((pdev = device_parent(dev)) != NULL && device_is_a(pdev, "pci")) {
 		struct pci_attach_args *pa = aux;
 
+		dict = device_properties(dev);
 		if (BUILTIN_ETHERNET_P(pa)) {
-			if (! prop_dictionary_set_bool(device_properties(dev),
+			if (! prop_dictionary_set_bool(dict,
 						       "am79c970-no-eeprom",
 						       true)) {
 				printf("WARNING: unable to set "
 				       "am79c970-no-eeprom property for %s\n",
 				       dev->dv_xname);
 			}
+		}
+
+		if (BUILTIN_VIDEO_P(pa)) {
+			if (! prop_dictionary_set_uint32(dict,  "width", 1024)) {
+				printf("WARNING: unable to set "
+				       "width property for %s\n",
+				       dev->dv_xname);
+			}
+			if (! prop_dictionary_set_uint32(dict,  "height", 768)) {
+				printf("WARNING: unable to set "
+				       "height property for %s\n",
+				       dev->dv_xname);
+			}
+			if (! prop_dictionary_set_uint32(dict,  "depth", 8)) {
+				printf("WARNING: unable to set "
+				       "depth property for %s\n",
+				       dev->dv_xname);
+			}
+			if (! prop_dictionary_set_uint32(dict,  "address", 0)) {
+				printf("WARNING: unable to set "
+				       "address property for %s\n",
+				       dev->dv_xname);
+			}
+			if (! prop_dictionary_set_bool(dict,  "is_console", true)) {
+				printf("WARNING: unable to set "
+				       "address property for %s\n",
+				       dev->dv_xname);
+			}
+
 		}
 	}
 }

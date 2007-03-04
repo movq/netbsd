@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_43.c,v 1.14 2007/02/09 21:55:16 ad Exp $	*/
+/*	$NetBSD: vm_43.c,v 1.16 2007/12/20 23:02:45 dsl Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -82,7 +82,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_43.c,v 1.14 2007/02/09 21:55:16 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_43.c,v 1.16 2007/12/20 23:02:45 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -100,8 +100,7 @@ __KERNEL_RCSID(0, "$NetBSD: vm_43.c,v 1.14 2007/02/09 21:55:16 ad Exp $");
 
 /* ARGSUSED */
 int
-compat_43_sys_getpagesize(struct lwp *l, void *v,
-    register_t *retval)
+compat_43_sys_getpagesize(struct lwp *l, const void *v, register_t *retval)
 {
 
 	*retval = PAGE_SIZE;
@@ -109,18 +108,18 @@ compat_43_sys_getpagesize(struct lwp *l, void *v,
 }
 
 int
-compat_43_sys_mmap(struct lwp *l, void *v, register_t *retval)
+compat_43_sys_mmap(struct lwp *l, const struct compat_43_sys_mmap_args *uap, register_t *retval)
 {
-	struct compat_43_sys_mmap_args /* {
-		syscallarg(caddr_t) addr;
+	/* {
+		syscallarg(void *) addr;
 		syscallarg(size_t) len;
 		syscallarg(int) prot;
 		syscallarg(int) flags;
 		syscallarg(int) fd;
 		syscallarg(long) pos;
-	} */ *uap = v;
+	} */
 	struct sys_mmap_args /* {
-		syscallarg(caddr_t) addr;
+		syscallarg(void *) addr;
 		syscallarg(size_t) len;
 		syscallarg(int) prot;
 		syscallarg(int) flags;

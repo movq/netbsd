@@ -1,4 +1,4 @@
-/*	$NetBSD: stp4020.c,v 1.49 2006/12/11 11:42:48 jdc Exp $ */
+/*	$NetBSD: stp4020.c,v 1.55 2008/04/28 20:23:57 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: stp4020.c,v 1.49 2006/12/11 11:42:48 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: stp4020.c,v 1.55 2008/04/28 20:23:57 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,13 +45,13 @@ __KERNEL_RCSID(0, "$NetBSD: stp4020.c,v 1.49 2006/12/11 11:42:48 jdc Exp $");
 #include <sys/kernel.h>
 #include <sys/kthread.h>
 #include <sys/device.h>
+#include <sys/intr.h>
 
 #include <dev/pcmcia/pcmciareg.h>
 #include <dev/pcmcia/pcmciavar.h>
 #include <dev/pcmcia/pcmciachip.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
 
 #include <dev/sbus/sbusvar.h>
 #include <dev/sbus/stp4020reg.h>
@@ -105,8 +98,10 @@ struct stp4020_socket {
 	int		sock;		/* Socket number (0 or 1) */
 	int		sbus_intno;	/* Do we use first (0) or second (1)
 					   interrupt? */
+#ifndef SUN4U
 	int		int_enable;	/* ICR0 value for interrupt enabled */
 	int		int_disable;	/* ICR0 value for interrupt disabled */
+#endif
 	bus_space_tag_t	tag;		/* socket control io	*/
 	bus_space_handle_t	regs;	/*  space		*/
 	bus_space_tag_t	pcmciat;	/* io space for pcmcia  */
@@ -114,7 +109,9 @@ struct stp4020_socket {
 	int		(*intrhandler)	/* Card driver interrupt handler */
 			   (void *);
 	void		*intrarg;	/* Card interrupt handler argument */
+#ifndef SUN4U
 	void		*softint;	/* cookie for the softintr */
+#endif
 
 	struct {
 		bus_space_handle_t	winaddr;/* this window's address */
@@ -127,10 +124,13 @@ struct stp4020_softc {
 	struct sbusdev	sc_sd;		/* SBus device */
 	pcmcia_chipset_tag_t	sc_pct;	/* Chipset methods */
 
-	struct proc	*event_thread;		/* event handling thread */
+	struct lwp	*event_thread;		/* event handling thread */
 	SIMPLEQ_HEAD(, stp4020_event)	events;	/* Pending events for thread */
 
 	struct stp4020_socket sc_socks[STP4020_NSOCK];
+#ifndef SUN4U
+	bool		sc_use_softint;
+#endif
 };
 
 
@@ -140,7 +140,9 @@ static void	stp4020attach(struct device *, struct device *, void *);
 static int	stp4020_intr(void *);
 static void	stp4020_map_window(struct stp4020_socket *h, int win, int speed);
 static void	stp4020_calc_speed(int bus_speed, int ns, int *length, int *cmd_delay);
+#ifndef SUN4U
 static void	stp4020_intr_dispatch(void *arg);
+#endif
 
 CFATTACH_DECL(nell, sizeof(struct stp4020_softc),
     stp4020match, stp4020attach, NULL, NULL);
@@ -156,7 +158,6 @@ static void	stp4020_wr_winctl(struct stp4020_socket *, int, int, int);
 
 void	stp4020_delay(struct stp4020_softc *sc, unsigned int);
 void	stp4020_attach_socket(struct stp4020_socket *, int);
-void	stp4020_create_event_thread(void *);
 void	stp4020_event_thread(void *);
 void	stp4020_queue_event(struct stp4020_softc *, int, int);
 
@@ -367,12 +368,8 @@ stp4020attach(parent, self, aux)
 	struct sbus_attach_args *sa = aux;
 	struct stp4020_softc *sc = (void *)self;
 	bus_space_tag_t tag;
-	int rev;
-	int i, sbus_intno;
+	int rev, i, sbus_intno, hw_ipl;
 	bus_space_handle_t bh;
-
-	/* lsb of our config flags decides which interrupt we use */
-	sbus_intno = device_cfdata(&sc->sc_dev)->cf_flags & 1;
 
 	/* Transfer bus tags */
 #ifdef SUN4U
@@ -380,7 +377,7 @@ stp4020attach(parent, self, aux)
 #else
 	tag = bus_space_tag_alloc(sa->sa_bustag, sc);
 	if (tag == NULL) {
-		printf("%s: attach: out of memory\n", self->dv_xname);
+		aprint_error_dev(self, "attach: out of memory\n");
 		return;
 	}
 	tag->sparc_read_2 = stp4020_read_2;
@@ -390,6 +387,46 @@ stp4020attach(parent, self, aux)
 	tag->sparc_write_4 = stp4020_write_4;
 	tag->sparc_write_8 = stp4020_write_8;
 #endif	/* SUN4U */
+
+	/* check interrupt options, decide if we need a softint */
+#ifdef SUN4U
+	/*
+	 * On sparc64 the hardware interrupt priority does not restrict
+	 * the IPL we run our interrupt handler on, so we can always just
+	 * use the first interrupt and reqest the handler to run at
+	 * IPL_VM.
+	 */
+	sbus_intno = 0;
+	hw_ipl = IPL_VM;
+#else
+	/*
+	 * We need to check if one of the available interrupts has
+	 * a priority that allows us to establish a handler at IPL_VM.
+	 * If not (hard to imagine), use a soft interrupt.
+	 */
+	sbus_intno = -1;
+	for (i = 0; i < sa->sa_nintr; i++) {
+		struct sbus_softc *bus =
+			(struct sbus_softc *) sa->sa_bustag->cookie;
+		int ipl = bus->sc_intr2ipl[sa->sa_intr[i].oi_pri];
+		if (ipl <= IPL_VM) {
+			sbus_intno = i;
+			sc->sc_use_softint = false;
+			hw_ipl = IPL_VM;
+			break;
+		}
+	}
+	if (sbus_intno == -1) {
+		/*
+		 * We have not found a usable hardware interrupt - so
+		 * use a softint to bounce to the proper IPL.
+		 */
+		printf("no usable HW interrupt found, using softint\n");
+		sbus_intno = 0;
+		sc->sc_use_softint = true;
+		hw_ipl = IPL_NONE;
+	}
+#endif
 
 	/* Set up per-socket static initialization */
 	sc->sc_socks[0].sc = sc->sc_socks[1].sc = sc;
@@ -404,13 +441,13 @@ stp4020attach(parent, self, aux)
 
 	if (sa->sa_nreg < 8) {
 		printf("%s: only %d register sets\n",
-			self->dv_xname, sa->sa_nreg);
+			device_xname(self), sa->sa_nreg);
 		return;
 	}
 
 	if (sa->sa_nintr != 2) {
 		printf("%s: expect 2 interrupt Sbus levels; got %d\n",
-			self->dv_xname, sa->sa_nintr);
+			device_xname(self), sa->sa_nintr);
 		return;
 	}
 
@@ -435,8 +472,7 @@ stp4020attach(parent, self, aux)
 				 sa->sa_reg[i].oa_base,
 				 sa->sa_reg[i].oa_size,
 				 0, &bh) != 0) {
-			printf("%s: attach: cannot map registers\n",
-				self->dv_xname);
+			aprint_error_dev(self, "attach: cannot map registers\n");
 			return;
 		}
 
@@ -461,7 +497,7 @@ stp4020attach(parent, self, aux)
 	if (sa->sa_nintr > sbus_intno) {
 		bus_intr_establish(sa->sa_bustag,
 		    sa->sa_intr[sbus_intno].oi_pri,
-		    IPL_NONE, stp4020_intr, sc);
+		    hw_ipl, stp4020_intr, sc);
 	}
 
 	rev = stp4020_rd_sockctl(&sc->sc_socks[0], STP4020_ISR1_IDX) &
@@ -470,12 +506,7 @@ stp4020attach(parent, self, aux)
 
 	sc->sc_pct = (pcmcia_chipset_tag_t)&stp4020_functions;
 
-	/*
-	 * Arrange that a kernel thread be created to handle
-	 * insert/removal events.
-	 */
 	SIMPLEQ_INIT(&sc->events);
-	kthread_create(stp4020_create_event_thread, sc);
 
 	for (i = 0; i < STP4020_NSOCK; i++) {
 		struct stp4020_socket *h = &sc->sc_socks[i];
@@ -486,6 +517,15 @@ stp4020attach(parent, self, aux)
 			stp4020_dump_regs(h);
 #endif
 		stp4020_attach_socket(h, sa->sa_frequency);
+	}
+
+	/*
+	 * Arrange that a kernel thread be created to handle
+	 * insert/removal events.
+	 */
+	if (kthread_create(PRI_NONE, 0, NULL, stp4020_event_thread, sc,
+	    &sc->event_thread, "%s", device_xname(self))) {
+		panic("%s: unable to create event thread", device_xname(self));
 	}
 }
 
@@ -500,9 +540,11 @@ stp4020_attach_socket(h, speed)
 	/* no interrupt handlers yet */
 	h->intrhandler = NULL;
 	h->intrarg = NULL;
+#ifndef SUN4U
 	h->softint = NULL;
 	h->int_enable = 0;
 	h->int_disable = 0;
+#endif
 
 	/* Map all three windows */
 	stp4020_map_window(h, STP_WIN_ATTR, speed);
@@ -553,23 +595,6 @@ stp4020_attach_socket(h, speed)
 
 	pcmcia_card_attach(h->pcmcia);
 	h->flags |= STP4020_SOCKET_BUSY;
-}
-
-
-/*
- * Deferred thread creation callback.
- */
-void
-stp4020_create_event_thread(arg)
-	void *arg;
-{
-	struct stp4020_softc *sc = arg;
-	const char *name = sc->sc_dev.dv_xname;
-
-	if (kthread_create1(stp4020_event_thread, sc, &sc->event_thread,
-			   "%s", name)) {
-		panic("%s: unable to create event thread", name);
-	}
 }
 
 /*
@@ -637,6 +662,7 @@ stp4020_queue_event(sc, sock, event)
 	wakeup(&sc->events);
 }
 
+#ifndef SUN4U
 /*
  * Softinterrupt called to invoke the real driver interrupt handler.
  */
@@ -655,17 +681,23 @@ stp4020_intr_dispatch(arg)
 	stp4020_wr_sockctl(h, STP4020_ICR0_IDX, h->int_enable);
 	splx(s);
 }
+#endif
 
 int
 stp4020_intr(arg)
 	void *arg;
 {
 	struct stp4020_softc *sc = arg;
-	int i, s, r = 0, cd_change = 0;
+#ifndef SUN4U
+	int s;
+#endif
+	int i, r = 0, cd_change = 0;
 
 
+#ifndef SUN4U
 	/* protect hardware access by splhigh against softint */
 	s = splhigh();
+#endif
 
 	/*
 	 * Check each socket for pending requests.
@@ -724,17 +756,21 @@ stp4020_intr(arg)
 				continue;
 			}
 
+#ifndef SUN4U
 			/*
 			 * Schedule softint to invoke driver interrupt
 			 * handler
 			 */
 			if (h->softint != NULL)
-				softintr_schedule(h->softint);
+				sparc_softintr_schedule(h->softint);
 			/*
 			 * Disable this sbus interrupt, until the soft-int
 			 * handler had a chance to run
 			 */
 			stp4020_wr_sockctl(h, STP4020_ICR0_IDX, h->int_disable);
+#else
+			(*h->intrhandler)(h->intrarg);
+#endif
 		}
 
 		/* informational messages */
@@ -776,7 +812,9 @@ stp4020_intr(arg)
 			printf("stp4020[%d]: unhandled interrupt: 0x%x\n", h->sock, v);
 
 	}
+#ifndef SUN4U
 	splx(s);
+#endif
 
 	return (r);
 }
@@ -1036,14 +1074,18 @@ stp4020_chip_socket_settype(pch, type)
 		    |STP4020_ICR0_SPKREN;
 		v |= h->sbus_intno ? STP4020_ICR0_IOILVL_SB1
 				   : STP4020_ICR0_IOILVL_SB0;
+#ifndef SUN4U
 		h->int_enable = v;
 		h->int_disable = v & ~STP4020_ICR0_IOIE;
-		DPRINTF(("%s: configuring card for IO useage\n", h->sc->sc_dev.dv_xname));
+#endif
+		DPRINTF(("%s: configuring card for IO useage\n", device_xname(&h->sc->sc_dev)));
 	} else {
 		v |= STP4020_ICR0_IFTYPE_MEM;
+#ifndef SUN4U
 		h->int_enable = h->int_disable = v;
-		DPRINTF(("%s: configuring card for IO useage\n", h->sc->sc_dev.dv_xname));
-		DPRINTF(("%s: configuring card for MEM ONLY useage\n", h->sc->sc_dev.dv_xname));
+#endif
+		DPRINTF(("%s: configuring card for IO useage\n", device_xname(&h->sc->sc_dev)));
+		DPRINTF(("%s: configuring card for MEM ONLY useage\n", device_xname(&h->sc->sc_dev)));
 	}
 	stp4020_wr_sockctl(h, STP4020_ICR0_IDX, v);
 }
@@ -1087,8 +1129,13 @@ stp4020_chip_intr_establish(pch, pf, ipl, handler, arg)
 
 	h->intrhandler = handler;
 	h->intrarg = arg;
-	h->softint = softintr_establish(ipl, stp4020_intr_dispatch, h);
-	return h->softint;
+#ifndef SUN4U
+	if (h->sc->sc_use_softint) {
+		h->softint = sparc_softintr_establish(ipl, stp4020_intr_dispatch, h);
+		return h->softint;
+	}
+#endif
+	return h;
 }
 
 void
@@ -1100,10 +1147,12 @@ stp4020_chip_intr_disestablish(pch, ih)
 
 	h->intrhandler = NULL;
 	h->intrarg = NULL;
+#ifndef SUN4U
 	if (h->softint) {
-		softintr_disestablish(h->softint);
+		sparc_softintr_disestablish(h->softint);
 		h->softint = NULL;
 	}
+#endif
 }
 
 /*

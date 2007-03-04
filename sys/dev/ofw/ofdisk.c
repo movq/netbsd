@@ -1,4 +1,4 @@
-/*	$NetBSD: ofdisk.c,v 1.34 2007/01/29 01:52:45 hubertf Exp $	*/
+/*	$NetBSD: ofdisk.c,v 1.41 2008/06/12 22:28:26 cegger Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofdisk.c,v 1.34 2007/01/29 01:52:45 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofdisk.c,v 1.41 2008/06/12 22:28:26 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -134,8 +134,7 @@ ofdisk_attach(struct device *parent, struct device *self, void *aux)
 	of->sc_phandle = oba->oba_phandle;
 	of->sc_unit = oba->oba_unit;
 	of->sc_ihandle = 0;
-	of->sc_dk.dk_driver = &ofdisk_dkdriver;
-	of->sc_dk.dk_name = of->sc_dev.dv_xname;
+	disk_init(&of->sc_dk, device_xname(&of->sc_dev), &ofdisk_dkdriver);
 	disk_attach(&of->sc_dk);
 	printf("\n");
 
@@ -150,20 +149,17 @@ ofdisk_attach(struct device *parent, struct device *self, void *aux)
 int
 ofdisk_open(dev_t dev, int flags, int fmt, struct lwp *lwp)
 {
-	int unit = DISKUNIT(dev);
 	struct ofdisk_softc *of;
 	char path[256];
 	int error, l, part;
 
-	if (unit >= ofdisk_cd.cd_ndevs)
-		return ENXIO;
-	if (!(of = ofdisk_cd.cd_devs[unit]))
+	of = device_lookup_private(&ofdisk_cd, DISKUNIT(dev));
+	if (of == NULL)
 		return ENXIO;
 
 	part = DISKPART(dev);
 
-	if ((error = lockmgr(&of->sc_dk.dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
-		return (error);
+	mutex_enter(&of->sc_dk.dk_openlock);
 
 	/*
 	 * If there are wedges, and this is not RAW_PART, then we
@@ -225,22 +221,20 @@ ofdisk_open(dev_t dev, int flags, int fmt, struct lwp *lwp)
 	of->sc_dk.dk_openmask =
 	    of->sc_dk.dk_copenmask | of->sc_dk.dk_bopenmask;
 
-	(void) lockmgr(&of->sc_dk.dk_openlock, LK_RELEASE, NULL);
-	return 0;
 
+	error = 0;
  bad1:
-	(void) lockmgr(&of->sc_dk.dk_openlock, LK_RELEASE, NULL);
+	mutex_exit(&of->sc_dk.dk_openlock);
 	return (error);
 }
 
 int
 ofdisk_close(dev_t dev, int flags, int fmt, struct lwp *l)
 {
-	struct ofdisk_softc *of = ofdisk_cd.cd_devs[DISKUNIT(dev)];
-	int error;
+	struct ofdisk_softc *of =
+		device_lookup_private(&ofdisk_cd, DISKUNIT(dev));
 
-	if ((error = lockmgr(&of->sc_dk.dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
-		return (error);
+	mutex_enter(&of->sc_dk.dk_openlock);
 
 	switch (fmt) {
 	case S_IFCHR:
@@ -263,14 +257,15 @@ ofdisk_close(dev_t dev, int flags, int fmt, struct lwp *l)
 		of->sc_ihandle = 0;
 	}
 
-	(void) lockmgr(&of->sc_dk.dk_openlock, LK_RELEASE, NULL);
+	mutex_exit(&of->sc_dk.dk_openlock);
 	return 0;
 }
 
 void
 ofdisk_strategy(struct buf *bp)
 {
-	struct ofdisk_softc *of = ofdisk_cd.cd_devs[DISKUNIT(bp->b_dev)];
+	struct ofdisk_softc *of =
+		device_lookup_private(&ofdisk_cd, DISKUNIT(bp->b_dev));
 	struct partition *p;
 	u_quad_t off;
 	int read;
@@ -305,7 +300,6 @@ ofdisk_strategy(struct buf *bp)
 
 	if (read < 0) {
 		bp->b_error = EIO;
-		bp->b_flags |= B_ERROR;
 		bp->b_resid = bp->b_bcount;
 	} else
 		bp->b_resid = bp->b_bcount - read;
@@ -320,7 +314,8 @@ done:
 static void
 ofminphys(struct buf *bp)
 {
-	struct ofdisk_softc *of = ofdisk_cd.cd_devs[DISKUNIT(bp->b_dev)];
+	struct ofdisk_softc *of =
+		device_lookup_private(&ofdisk_cd, DISKUNIT(bp->b_dev));
 
 	if (bp->b_bcount > of->max_transfer)
 		bp->b_bcount = of->max_transfer;
@@ -339,9 +334,10 @@ ofdisk_write(dev_t dev, struct uio *uio, int flags)
 }
 
 int
-ofdisk_ioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
+ofdisk_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	struct ofdisk_softc *of = ofdisk_cd.cd_devs[DISKUNIT(dev)];
+	struct ofdisk_softc *of =
+		device_lookup_private(&ofdisk_cd, DISKUNIT(dev));
 	int error;
 #ifdef __HAVE_OLD_DISKLABEL
 	struct disklabel newlabel;
@@ -387,9 +383,7 @@ ofdisk_ioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		if ((flag & FWRITE) == 0)
 			return EBADF;
 
-		if ((error = lockmgr(&of->sc_dk.dk_openlock, LK_EXCLUSIVE,
-				     NULL)) != 0)
-			return (error);
+		mutex_enter(&of->sc_dk.dk_openlock);
 
 		error = setdisklabel(of->sc_dk.dk_label,
 		    lp, /*of->sc_dk.dk_openmask */0,
@@ -403,7 +397,7 @@ ofdisk_ioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 			    DISKUNIT(dev), RAW_PART), ofdisk_strategy,
 			    of->sc_dk.dk_label, of->sc_dk.dk_cpulabel);
 
-		(void) lockmgr(&of->sc_dk.dk_openlock, LK_RELEASE, NULL);
+		mutex_exit(&of->sc_dk.dk_openlock);
 
 		return error;
 	}
@@ -431,7 +425,8 @@ ofdisk_ioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 			return (EBADF);
 
 		/* If the ioctl happens here, the parent is us. */
-		strcpy(dkw->dkw_parent, of->sc_dev.dv_xname);
+		strlcpy(dkw->dkw_parent, device_xname(&of->sc_dev),
+			sizeof(dkw->dkw_parent));
 		return (dkwedge_add(dkw));
 	    }
 
@@ -446,7 +441,8 @@ ofdisk_ioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 			return (EBADF);
 
 		/* If the ioctl happens here, the parent is us. */
-		strcpy(dkw->dkw_parent, of->sc_dev.dv_xname);
+		strlcpy(dkw->dkw_parent, device_xname(&of->sc_dev),
+			sizeof(dkw->dkw_parent));
 		return (dkwedge_del(dkw));
 	    }
 
@@ -466,7 +462,7 @@ ofdisk_ioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 }
 
 int
-ofdisk_dump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
+ofdisk_dump(dev_t dev, daddr_t blkno, void *va, size_t size)
 {
 	return EINVAL;
 }
@@ -476,12 +472,11 @@ ofdisk_size(dev_t dev)
 {
 	struct ofdisk_softc *of;
 	struct disklabel *lp;
-	int size, part, omask, unit;
+	int size, part, omask;
 
-	unit = DISKUNIT(dev);
-	if (unit >= ofdisk_cd.cd_ndevs ||
-	    (of = ofdisk_cd.cd_devs[unit]) == NULL)
-		return -1;
+	of = device_lookup_private(&ofdisk_cd, DISKUNIT(dev));
+	if (of == NULL)
+		return ENXIO;
 
 	part = DISKPART(dev);
 	omask = of->sc_dk.dk_openmask & (1 << part);
@@ -535,11 +530,11 @@ ofdisk_getdefaultlabel(struct ofdisk_softc *of, struct disklabel *lp)
 }
 
 void
-ofdisk_getdisklabel(dev)
-	dev_t dev;
+ofdisk_getdisklabel(dev_t dev)
 {
 	int unit = DISKUNIT(dev);
-	struct ofdisk_softc *of = ofdisk_cd.cd_devs[unit];
+	struct ofdisk_softc *of =
+		device_lookup_private(&ofdisk_cd, unit);
 	struct disklabel *lp = of->sc_dk.dk_label;
 	const char *errmes;
 	int l;
@@ -568,6 +563,6 @@ ofdisk_getdisklabel(dev)
 		    unit, RAW_PART), ofdisk_strategy, lp,
 		    of->sc_dk.dk_cpulabel);
 		if (errmes != NULL)
-			printf("%s: %s\n", of->sc_dev.dv_xname, errmes);
+			printf("%s: %s\n", device_xname(&of->sc_dev), errmes);
 	}
 }

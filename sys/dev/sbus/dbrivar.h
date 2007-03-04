@@ -1,4 +1,4 @@
-/*	$NetBSD: dbrivar.h,v 1.4 2006/03/09 20:44:18 macallan Exp $	*/
+/*	$NetBSD: dbrivar.h,v 1.10 2008/05/16 15:38:20 macallan Exp $	*/
 
 /*
  * Copyright (C) 1997 Rudolf Koenig (rfkoenig@immd4.informatik.uni-erlangen.de)
@@ -19,25 +19,17 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by Rudolf Koenig, Brent 
- *      Baccala, Jared D. McNeill.
- * 4. Neither the name of the author nor the names of any contributors may
- *    be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHORS ``AS IS'' AND ANY EXPRESS OR
+ * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+ * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+ * IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
 
@@ -45,7 +37,7 @@
 #define DBRI_VAR_H
 
 #define	DBRI_NUM_COMMANDS	64
-#define	DBRI_NUM_DESCRIPTORS	64
+#define	DBRI_NUM_DESCRIPTORS	32
 #define	DBRI_INT_BLOCKS		64
 
 #define DBRI_PIPE_MAX		32
@@ -56,7 +48,7 @@ enum direction {
 };
 
 /* DBRI DMA transmit descriptor */
-struct dbri_mem {
+struct dbri_xmit {
 	volatile uint32_t	flags;
 		#define TX_EOF	0x80000000	/* End of frame marker */
 		#define TX_BCNT(x)	((x&0x3fff)<<16)
@@ -73,6 +65,23 @@ struct dbri_mem {
 		#define TS_UNDERRUN	0x0008	/* DMA underrun */
 };
 
+struct dbri_recv {
+	volatile uint32_t	status;
+		#define RX_EOF		0x80000000
+		#define RX_COMPLETED	0x40000000
+		#define RX_BCNT(x)	((x & 0x3fff) << 16)
+		#define RX_CRCERROR	0x00000080
+		#define RX_BBC		0x00000040	/* bad byte count */
+		#define RX_ABORT	0x00000020
+		#define RX_OVERRUN	0x00000008
+	volatile uint32_t	ba;
+	volatile uint32_t	nda;
+	volatile uint32_t	flags;
+		#define RX_BSIZE(x)	(x & 0x3fff)
+		#define RX_FINAL	0x00008000
+		#define RX_MARKER	0x00004000
+};
+		
 struct dbri_pipe {
 	uint32_t	sdp;		/* SDP command word */
 	enum direction	direction;
@@ -86,46 +95,51 @@ struct dbri_pipe {
 
 struct dbri_desc {
 	int		busy;
-	caddr_t		buf;		/* cpu view of buffer */
-	caddr_t		buf_dvma;	/* device view */
+	void *		buf;		/* cpu view of buffer */
+	void *		buf_dvma;	/* device view */
 	bus_addr_t	dmabase;
 	bus_dma_segment_t dmaseg;
 	bus_dmamap_t	dmamap;
 	size_t		len;
 	void		(*callback)(void *);
 	void		*callback_args;
+	void		*softint;
 };
 
 struct dbri_dma {
 	volatile uint32_t	command[DBRI_NUM_COMMANDS];
 	volatile int32_t	intr[DBRI_INT_BLOCKS];
-	struct dbri_mem		desc[DBRI_NUM_DESCRIPTORS];
-	bus_dmamap_t		dmamap;
+	struct dbri_xmit	xmit[DBRI_NUM_DESCRIPTORS];
+	struct dbri_recv	recv[DBRI_NUM_DESCRIPTORS];
 };
 
 struct dbri_softc {
-	struct device	sc_dev;		/* base device */
+	device_t	sc_dev;		/* base device */
 
 	struct sbusdev	sc_sd;		/* sbus device */
 	bus_space_handle_t sc_ioh;
 	bus_space_tag_t	sc_iot;
+	/* DMA buffer for sending commands to the chip */
 	bus_dma_tag_t	sc_dmat;
 	bus_dmamap_t	sc_dmamap;
 	bus_dma_segment_t sc_dmaseg;
 	
 	int		sc_have_powerctl;
-	int		sc_powerstate;
+	int		sc_powerstate;	/* DBRI's powered up or not */
+	int		sc_pmgrstate;	/* PWR_RESUME etc. */
 	int		sc_burst;	/* DVMA burst size in effect */
 	
 	bus_addr_t	sc_dmabase;	/* VA of buffer we provide */
-	caddr_t		sc_membase;
+	void *		sc_membase;
 	int		sc_bufsiz;	/* size of the buffer */
 	int		sc_locked;
 	int		sc_irqp;
 
 	int		sc_waitseen;
 
-	int		sc_open;
+	int		sc_refcount;
+	int		sc_playing;
+	int		sc_recording;
 
 	int		sc_liu_state;
 	void		(*sc_liu)(void *);
@@ -135,7 +149,11 @@ struct dbri_softc {
 	struct dbri_desc sc_desc[DBRI_NUM_DESCRIPTORS];
 
 	struct cs4215_state	sc_mm;
-	int		sc_latt, sc_ratt;
+	int		sc_latt, sc_ratt;	/* output attenuation */
+	int		sc_linp, sc_rinp;	/* input volume */
+	int		sc_monitor;		/* monitor volume */
+	int		sc_input;		/* 0 - line, 1 - mic */
+
 	int		sc_ctl_mode;
 	
 	uint32_t	sc_version;

@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.127 2007/02/15 18:33:26 reinoud Exp $	*/
+/*	$NetBSD: fd.c,v 1.141 2008/06/11 21:25:31 drochner Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -108,7 +101,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.127 2007/02/15 18:33:26 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.141 2008/06/11 21:25:31 drochner Exp $");
 
 #include "opt_ddb.h"
 #include "opt_md.h"
@@ -132,13 +125,13 @@ __KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.127 2007/02/15 18:33:26 reinoud Exp $");
 #include <sys/syslog.h>
 #include <sys/queue.h>
 #include <sys/conf.h>
+#include <sys/intr.h>
 
 #include <dev/cons.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <machine/autoconf.h>
-#include <machine/intr.h>
 
 #include <sparc/sparc/auxreg.h>
 #include <sparc/dev/fdreg.h>
@@ -359,7 +352,7 @@ static void establish_chip_type(
 		bus_space_handle_t);
 
 #ifdef MEMORY_DISK_HOOKS
-int	fd_read_md_image(size_t *, caddr_t *);
+int	fd_read_md_image(size_t *, void **);
 #endif
 
 #define OBP_FDNAME	(CPU_ISSUN4M ? "SUNW,fdtwo" : "fd")
@@ -542,7 +535,7 @@ fdconf(struct fdc_softc *fdc)
 void
 fdcattach_mainbus(struct device *parent, struct device *self, void *aux)
 {
-	struct fdc_softc *fdc = (void *)self;
+	struct fdc_softc *fdc = device_private(self);
 	struct mainbus_attach_args *ma = aux;
 
 	fdc->sc_bustag = ma->ma_bustag;
@@ -570,7 +563,7 @@ fdcattach_mainbus(struct device *parent, struct device *self, void *aux)
 void
 fdcattach_obio(struct device *parent, struct device *self, void *aux)
 {
-	struct fdc_softc *fdc = (void *)self;
+	struct fdc_softc *fdc = device_private(self);
 	union obio_attach_args *uoba = aux;
 	struct sbus_attach_args *sa = &uoba->uoba_sbus;
 
@@ -611,8 +604,8 @@ fdcattach(struct fdc_softc *fdc, int pri)
 	int drive_attached;
 	char code;
 
-	callout_init(&fdc->sc_timo_ch);
-	callout_init(&fdc->sc_intr_ch);
+	callout_init(&fdc->sc_timo_ch, 0);
+	callout_init(&fdc->sc_intr_ch, 0);
 
 	fdc->sc_state = DEVIDLE;
 	fdc->sc_itask = FDC_ITASK_NONE;
@@ -652,7 +645,7 @@ fdcattach(struct fdc_softc *fdc, int pri)
 		return (-1);
 	}
 
-	fdc->sc_sicookie = softintr_establish(IPL_BIO, fdcswintr, fdc);
+	fdc->sc_sicookie = softint_establish(SOFTINT_BIO, fdcswintr, fdc);
 	if (fdc->sc_sicookie == NULL) {
 		printf("\n%s: cannot register soft interrupt handler\n",
 			fdc->sc_dev.dv_xname);
@@ -683,7 +676,7 @@ fdcattach(struct fdc_softc *fdc, int pri)
 int
 fdmatch(struct device *parent, struct cfdata *match, void *aux)
 {
-	struct fdc_softc *fdc = (void *)parent;
+	struct fdc_softc *fdc = device_private(parent);
 	bus_space_tag_t t = fdc->sc_bustag;
 	bus_space_handle_t h = fdc->sc_handle;
 	struct fdc_attach_args *fa = aux;
@@ -757,14 +750,14 @@ fdmatch(struct device *parent, struct cfdata *match, void *aux)
 void
 fdattach(struct device *parent, struct device *self, void *aux)
 {
-	struct fdc_softc *fdc = (void *)parent;
-	struct fd_softc *fd = (void *)self;
+	struct fdc_softc *fdc = device_private(parent);
+	struct fd_softc *fd = device_private(self);
 	struct fdc_attach_args *fa = aux;
 	struct fd_type *type = fa->fa_deftype;
 	int drive = fa->fa_drive;
 
-	callout_init(&fd->sc_motoron_ch);
-	callout_init(&fd->sc_motoroff_ch);
+	callout_init(&fd->sc_motoron_ch, 0);
+	callout_init(&fd->sc_motoroff_ch, 0);
 
 	/* XXX Allow `flags' to override device type? */
 
@@ -788,8 +781,7 @@ fdattach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * Initialize and attach the disk structure.
 	 */
-	fd->sc_dk.dk_name = fd->sc_dv.dv_xname;
-	fd->sc_dk.dk_driver = &fddkdriver;
+	disk_init(&fd->sc_dk, fd->sc_dv.dv_xname, &fddkdriver);
 	disk_attach(&fd->sc_dk);
 
 	/*
@@ -821,14 +813,13 @@ fdstrategy(struct buf *bp)
  	int s;
 
 	/* Valid unit, controller, and request? */
-	if (unit >= fd_cd.cd_ndevs ||
-	    (fd = fd_cd.cd_devs[unit]) == 0 ||
+	if ((fd = device_lookup_private(&fd_cd, unit)) == 0 ||
 	    bp->b_blkno < 0 ||
 	    (((bp->b_bcount % FD_BSIZE(fd)) != 0 ||
 	      (bp->b_blkno * DEV_BSIZE) % FD_BSIZE(fd) != 0) &&
 	     (bp->b_flags & B_FORMAT) == 0)) {
 		bp->b_error = EINVAL;
-		goto bad;
+		goto done;
 	}
 
 	/* If it's a null transfer, return immediately. */
@@ -848,7 +839,7 @@ fdstrategy(struct buf *bp)
 		if (sz < 0) {
 			/* If past end of disk, return EINVAL. */
 			bp->b_error = EINVAL;
-			goto bad;
+			goto done;
 		}
 		/* Otherwise, truncate request. */
 		bp->b_bcount = sz << DEV_BSHIFT;
@@ -883,8 +874,6 @@ fdstrategy(struct buf *bp)
 	splx(s);
 	return;
 
-bad:
-	bp->b_flags |= B_ERROR;
 done:
 	/* Toss transfer; we're done early. */
 	biodone(bp);
@@ -893,7 +882,7 @@ done:
 void
 fdstart(struct fd_softc *fd)
 {
-	struct fdc_softc *fdc = (void *)device_parent(&fd->sc_dv);
+	struct fdc_softc *fdc = device_private(device_parent(&fd->sc_dv));
 	int active = fdc->sc_drives.tqh_first != 0;
 
 	/* Link into controller queue. */
@@ -908,7 +897,7 @@ fdstart(struct fd_softc *fd)
 void
 fdfinish(struct fd_softc *fd, struct buf *bp)
 {
-	struct fdc_softc *fdc = (void *)device_parent(&fd->sc_dv);
+	struct fdc_softc *fdc = device_private(device_parent(&fd->sc_dv));
 
 	/*
 	 * Move this drive to the end of the queue to give others a `fair'
@@ -1005,7 +994,7 @@ void
 fd_motor_on(void *arg)
 {
 	struct fd_softc *fd = arg;
-	struct fdc_softc *fdc = (void *)device_parent(&fd->sc_dv);
+	struct fdc_softc *fdc = device_private(device_parent(&fd->sc_dv));
 	int s;
 
 	s = splbio();
@@ -1093,9 +1082,7 @@ fdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 	struct fd_type *type;
 
 	unit = FDUNIT(dev);
-	if (unit >= fd_cd.cd_ndevs)
-		return (ENXIO);
-	fd = fd_cd.cd_devs[unit];
+	fd = device_lookup_private(&fd_cd, unit);
 	if (fd == NULL)
 		return (ENXIO);
 	type = fd_dev_to_type(fd, dev);
@@ -1136,7 +1123,7 @@ fdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 int
 fdclose(dev_t dev, int flags, int fmt, struct lwp *l)
 {
-	struct fd_softc *fd = fd_cd.cd_devs[FDUNIT(dev)];
+	struct fd_softc *fd = device_lookup_private(&fd_cd, FDUNIT(dev));
 	int pmask = (1 << DISKPART(dev));
 
 	fd->sc_flags &= ~FD_OPEN;
@@ -1301,14 +1288,14 @@ fdc_c_hwintr(void *arg)
 			fdc->sc_istatus = FDC_ISTATUS_ERROR;
 		else
 			fdc->sc_istatus = FDC_ISTATUS_DONE;
-		softintr_schedule(fdc->sc_sicookie);
+		softint_schedule(fdc->sc_sicookie);
 		return (1);
 	case FDC_ITASK_RESULT:
 		if (fdcresult(fdc) == -1)
 			fdc->sc_istatus = FDC_ISTATUS_ERROR;
 		else
 			fdc->sc_istatus = FDC_ISTATUS_DONE;
-		softintr_schedule(fdc->sc_sicookie);
+		softint_schedule(fdc->sc_sicookie);
 		return (1);
 	case FDC_ITASK_DMA:
 		/* Proceed with pseudo-DMA below */
@@ -1316,7 +1303,7 @@ fdc_c_hwintr(void *arg)
 	default:
 		printf("fdc: stray hard interrupt: itask=%d\n", fdc->sc_itask);
 		fdc->sc_istatus = FDC_ISTATUS_SPURIOUS;
-		softintr_schedule(fdc->sc_sicookie);
+		softint_schedule(fdc->sc_sicookie);
 		return (1);
 	}
 
@@ -1333,15 +1320,17 @@ fdc_c_hwintr(void *arg)
 			break;
 
 		if ((msr & NE7_NDM) == 0) {
+			/* Execution phase finished, get result. */
 			fdcresult(fdc);
 			fdc->sc_istatus = FDC_ISTATUS_DONE;
-			softintr_schedule(fdc->sc_sicookie);
-#ifdef FD_DEBUG
-			if (fdc_debug > 1)
-				printf("fdc: overrun: tc = %d\n", fdc->sc_tc);
-#endif
+			softint_schedule(fdc->sc_sicookie);
 			break;
 		}
+
+		if (fdc->sc_tc == 0)
+			/* For some reason the controller wants to transfer
+			   more data then what we want to transfer. */
+			panic("fdc: overrun");
 
 		/* Another byte can be transferred */
 		if ((msr & NE7_DIO) != 0)
@@ -1353,10 +1342,7 @@ fdc_c_hwintr(void *arg)
 
 		fdc->sc_data++;
 		if (--fdc->sc_tc == 0) {
-			fdc->sc_istatus = FDC_ISTATUS_DONE;
 			FTC_FLIP;
-			fdcresult(fdc);
-			softintr_schedule(fdc->sc_sicookie);
 			break;
 		}
 	}
@@ -1571,7 +1557,7 @@ loop:
 		read = bp->b_flags & B_READ;
 
 		/* Setup for pseudo DMA */
-		fdc->sc_data = bp->b_data + fd->sc_skip;
+		fdc->sc_data = (char *)bp->b_data + fd->sc_skip;
 		fdc->sc_tc = fd->sc_nbytes;
 
 		bus_space_write_1(fdc->sc_bustag, fdc->sc_handle,
@@ -1898,7 +1884,6 @@ fdcretry(struct fdc_softc *fdc)
 		}
 
 	failsilent:
-		bp->b_flags |= B_ERROR;
 		bp->b_error = error;
 		fdfinish(fd, bp);
 	}
@@ -1906,7 +1891,7 @@ fdcretry(struct fdc_softc *fdc)
 }
 
 int
-fdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
+fdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
 	struct fd_softc *fd;
 	struct fdc_softc *fdc;
@@ -1922,8 +1907,8 @@ fdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 	if (unit >= fd_cd.cd_ndevs)
 		return (ENXIO);
 
-	fd = fd_cd.cd_devs[FDUNIT(dev)];
-	fdc = (struct fdc_softc *)device_parent(&fd->sc_dv);
+	fd = device_lookup_private(&fd_cd, FDUNIT(dev));
+	fdc = device_private(device_parent(&fd->sc_dv));
 
 	switch (cmd) {
 	case DIOCGDINFO:
@@ -2139,17 +2124,18 @@ int
 fdformat(dev_t dev, struct ne7_fd_formb *finfo, struct proc *p)
 {
 	int rv = 0;
-	struct fd_softc *fd = fd_cd.cd_devs[FDUNIT(dev)];
+	struct fd_softc *fd = device_lookup_private(&fd_cd, FDUNIT(dev));
 	struct fd_type *type = fd->sc_type;
 	struct buf *bp;
 
 	/* set up a buffer header for fdstrategy() */
-	bp = getiobuf_nowait();
+	bp = getiobuf(NULL, false);
 	if (bp == NULL)
 		return (ENOBUFS);
 
 	bp->b_vp = NULL;
-	bp->b_flags = B_BUSY | B_PHYS | B_FORMAT;
+	bp->b_cflags = BC_BUSY;
+	bp->b_flags = B_PHYS | B_FORMAT;
 	bp->b_proc = p;
 	bp->b_dev = dev;
 
@@ -2162,7 +2148,7 @@ fdformat(dev_t dev, struct ne7_fd_formb *finfo, struct proc *p)
 		      / DEV_BSIZE;
 
 	bp->b_bcount = sizeof(struct fd_idfield_data) * finfo->fd_formb_nsecs;
-	bp->b_data = (caddr_t)finfo;
+	bp->b_data = (void *)finfo;
 
 #ifdef FD_DEBUG
 	if (fdc_debug) {
@@ -2202,7 +2188,7 @@ void
 fdgetdisklabel(dev_t dev)
 {
 	int unit = FDUNIT(dev), i;
-	struct fd_softc *fd = fd_cd.cd_devs[unit];
+	struct fd_softc *fd = device_lookup_private(&fd_cd, unit);
 	struct disklabel *lp = fd->sc_dk.dk_label;
 	struct cpu_disklabel *clp = fd->sc_dk.dk_cpulabel;
 
@@ -2263,7 +2249,7 @@ fdgetdisklabel(dev_t dev)
 void
 fd_do_eject(struct fd_softc *fd)
 {
-	struct fdc_softc *fdc = (void *)device_parent(&fd->sc_dv);
+	struct fdc_softc *fdc = device_private(device_parent(&fd->sc_dv));
 
 	if (CPU_ISSUN4C) {
 		auxregbisc(AUXIO4C_FDS, AUXIO4C_FEJ);
@@ -2289,7 +2275,7 @@ fd_mountroot_hook(struct device *dev)
 {
 	int c;
 
-	fd_do_eject((struct fd_softc *)dev);
+	fd_do_eject(device_private(dev));
 	printf("Insert filesystem floppy and press return.");
 	for (;;) {
 		c = cngetc();
@@ -2305,16 +2291,16 @@ fd_mountroot_hook(struct device *dev)
 #define FDMICROROOTSIZE ((2*18*80) << DEV_BSHIFT)
 
 int
-fd_read_md_image(size_t	*sizep, caddr_t	*addrp)
+fd_read_md_image(size_t	*sizep, void *	*addrp)
 {
 	struct buf buf, *bp = &buf;
 	dev_t dev;
 	off_t offset;
-	caddr_t addr;
+	void *addr;
 
 	dev = makedev(54,0);	/* XXX */
 
-	MALLOC(addr, caddr_t, FDMICROROOTSIZE, M_DEVBUF, M_WAITOK);
+	MALLOC(addr, void *, FDMICROROOTSIZE, M_DEVBUF, M_WAITOK);
 	*addrp = addr;
 
 	if (fdopen(dev, 0, S_IFCHR, NULL))
@@ -2327,28 +2313,27 @@ fd_read_md_image(size_t	*sizep, caddr_t	*addrp)
 		bp->b_error = 0;
 		bp->b_resid = 0;
 		bp->b_proc = NULL;
-		bp->b_flags = B_BUSY | B_PHYS | B_RAW | B_READ;
+		bp->b_cflags |= BC_BUSY;
+		bp->b_flags = B_PHYS | B_RAW | B_READ;
 		bp->b_blkno = btodb(offset);
 		bp->b_bcount = DEV_BSIZE;
 		bp->b_data = addr;
 		fdstrategy(bp);
-		while ((bp->b_flags & B_DONE) == 0) {
-			tsleep((caddr_t)bp, PRIBIO + 1, "physio", 0);
-		}
+		biowait(bp);
 		if (bp->b_error)
 			panic("fd: mountroot: fdread error %d", bp->b_error);
 
 		if (bp->b_resid != 0)
 			break;
 
-		addr += DEV_BSIZE;
+		addr = (char *)addr + DEV_BSIZE;
 		offset += DEV_BSIZE;
 		if (offset + DEV_BSIZE > FDMICROROOTSIZE)
 			break;
 	}
 	(void)fdclose(dev, 0, S_IFCHR, NULL);
 	*sizep = offset;
-	fd_do_eject(fd_cd.cd_devs[FDUNIT(dev)]);
+	fd_do_eject(device_lookup_private(&fd_cd, FDUNIT(dev)));
 	return (0);
 }
 #endif /* MEMORY_DISK_HOOKS */

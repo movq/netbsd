@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.31 2007/02/22 16:46:48 thorpej Exp $	*/
+/*	$NetBSD: pmap.c,v 1.36 2008/04/28 20:23:37 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -89,7 +82,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.31 2007/02/22 16:46:48 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.36 2008/04/28 20:23:37 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_pmap_debug.h"
@@ -408,7 +401,7 @@ void	_pmap_switch(pmap_t);
 
 #ifdef	PMAP_DEBUG
 void pmap_print(pmap_t);
-void pv_print(struct vm_page *);
+void pv_print(paddr_t);
 void pmeg_print(pmeg_t);
 static void pmeg_verify_empty(vaddr_t);
 #endif	/* PMAP_DEBUG */
@@ -426,13 +419,9 @@ current_pmap(void)
 	struct vm_map *map;
 	pmap_t	pmap;
 
-	if (curlwp == NULL)
-		pmap = kernel_pmap;
-	else {
-		vm = curproc->p_vmspace;
-		map = &vm->vm_map;
-		pmap = vm_map_pmap(map);
-	}
+	vm = curproc->p_vmspace;
+	map = &vm->vm_map;
+	pmap = vm_map_pmap(map);
 
 	return (pmap);
 }
@@ -1808,7 +1797,7 @@ pmap_init(void)
 
 	/* Initialize the pmap pool. */
 	pool_init(&pmap_pmap_pool, sizeof(struct pmap), 0, 0, 0, "pmappl",
-		  &pool_allocator_nointr);
+		  &pool_allocator_nointr, IPL_NONE);
 }
 
 /*
@@ -2419,8 +2408,8 @@ pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot)
 	}
 #ifdef	PMAP_DEBUG
 	if ((pmap_debug & PMD_SETPTE) || (va == pmap_db_watchva)) {
-		printf("pmap: set_pte pmap=%p va=0x%lx old=0x%x new=0x%x "
-		       "(ek)\n", pmap, va, old_pte, new_pte);
+		printf("pmap: set_pte pmap=%p va=0x%lx new=0x%x "
+		       "(ek)\n", pmap, va, new_pte);
 	}
 #endif
 	/* cache flush done above */
@@ -2788,7 +2777,7 @@ pmap_activate(struct lwp *l)
 {
 	pmap_t pmap = l->l_proc->p_vmspace->vm_map.pmap;
 
-	if (curlwp && l->l_proc == curproc) {
+	if (l->l_proc == curproc) {
 		_pmap_switch(pmap);
 	}
 }
@@ -2956,7 +2945,7 @@ pmap_page_protect(struct vm_page *pg, vm_prot_t prot)
 	s = splvm();
 #ifdef PMAP_DEBUG
 	if (pmap_debug & PMD_PROTECT)
-		printf("pmap_page_protect(0x%lx, 0x%lx)\n", pa, prot);
+		printf("pmap_page_protect(0x%lx, 0x%x)\n", pa, prot);
 #endif
 	switch (prot) {
 	case VM_PROT_ALL:
@@ -3878,7 +3867,7 @@ pmeg_print(pmeg_t pmegp)
 {
 	db_printf("link_next=%p  link_prev=%p\n",
 		  TAILQ_NEXT(pmegp, pmeg_link),
-		  TAILQ_PREV(pmegp, pmeg_link));
+		  TAILQ_PREV(pmegp, pmeg_tailq, pmeg_link));
 	db_printf("index=0x%x owner=%p own_vers=0x%x\n",
 		  pmegp->pmeg_index, pmegp->pmeg_owner, pmegp->pmeg_version);
 	db_printf("va=0x%lx wired=0x%x reserved=0x%x vpgs=0x%x qstate=0x%x\n",

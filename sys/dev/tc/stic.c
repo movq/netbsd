@@ -1,4 +1,4 @@
-/*	$NetBSD: stic.c,v 1.37 2006/12/02 03:10:43 elad Exp $	*/
+/*	$NetBSD: stic.c,v 1.45 2008/07/09 13:19:33 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,43 +30,13 @@
  */
 
 /*
- * Copyright (c) 1998, 1999 Tohru Nishimura.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Tohru Nishimura
- *	for the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-/*
  * Driver for the DEC PixelStamp interface chip (STIC).
  *
  * XXX The bt459 interface shouldn't be replicated here.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.37 2006/12/02 03:10:43 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.45 2008/07/09 13:19:33 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,6 +48,8 @@ __KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.37 2006/12/02 03:10:43 elad Exp $");
 #include <sys/callout.h>
 #include <sys/conf.h>
 #include <sys/kauth.h>
+#include <sys/lwp.h>
+#include <sys/event.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -95,8 +60,8 @@ __KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.37 2006/12/02 03:10:43 elad Exp $");
 #endif
 
 #include <machine/vmparam.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
@@ -158,7 +123,7 @@ __KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.37 2006/12/02 03:10:43 elad Exp $");
 	tc_wmb();				\
    } while (0)
 
-static int	sticioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
+static int	sticioctl(void *, void *, u_long, void *, int, struct lwp *);
 static int	stic_alloc_screen(void *, const struct wsscreen_descr *,
 				  void **, int *, int *, long *);
 static void	stic_free_screen(void *, void *);
@@ -434,7 +399,7 @@ stic_reset(struct stic_info *si)
 }
 
 void
-stic_attach(struct device *self, struct stic_info *si, int console)
+stic_attach(device_t self, struct stic_info *si, int console)
 {
 	struct wsemuldisplaydev_attach_args waa;
 
@@ -444,7 +409,7 @@ stic_attach(struct device *self, struct stic_info *si, int console)
 	} else
 		si->si_unit = -1;
 
-	callout_init(&si->si_switch_callout);
+	callout_init(&si->si_switch_callout, 0);
 
 	/*
 	 * Allocate backing for the console.  We could trawl back through
@@ -559,7 +524,7 @@ stic_clear_screen(struct stic_info *si)
 }
 
 static int
-sticioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag, struct lwp *l)
+sticioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct stic_info *si;
 	int s;
@@ -1045,7 +1010,7 @@ stic_putchar(void *cookie, int r, int c, u_int uc, long attr)
 	r *= font->fontheight;
 	c *= font->fontwidth;
 	uc = (uc - font->firstchar) * font->stride * font->fontheight;
-	fr = (u_short *)((caddr_t)font->data + uc);
+	fr = (u_short *)((char *)font->data + uc);
 	bgcolor = DUPBYTE0((attr & 0xf0) >> 4);
 	fgcolor = DUPBYTE0(attr & 0x0f);
 

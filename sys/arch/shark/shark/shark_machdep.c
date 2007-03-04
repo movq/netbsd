@@ -1,4 +1,4 @@
-/*	$NetBSD: shark_machdep.c,v 1.26 2006/10/26 22:49:36 bjh21 Exp $	*/
+/*	$NetBSD: shark_machdep.c,v 1.30 2008/04/17 00:03:36 macallan Exp $	*/
 
 /*
  * Copyright 1997
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.26 2006/10/26 22:49:36 bjh21 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.30 2008/04/17 00:03:36 macallan Exp $");
 
 #include "opt_ddb.h"
 
@@ -70,14 +70,14 @@ __KERNEL_RCSID(0, "$NetBSD: shark_machdep.c,v 1.26 2006/10/26 22:49:36 bjh21 Exp
 #include <arm/arm32/machdep.h>
 #include <arm/undefined.h>
 
-#include "opt_ipkdb.h"
-
 #include <dev/ofw/openfirm.h>
 #include <machine/ofw.h>
 #include <machine/isa_machdep.h>
 #include <dev/isa/isavar.h>
 #include <dev/ofisa/ofisavar.h>
 #include <shark/shark/sequoia.h>
+
+#include "isadma.h"
 
 #include "wd.h"
 #include "cd.h"
@@ -115,6 +115,8 @@ extern void consinit		__P((void));
 int	ofbus_match __P((struct device *, struct cfdata *, void *));
 void	ofbus_attach __P((struct device *, struct device *, void *));
 
+
+paddr_t isa_io_physaddr, isa_mem_physaddr;
 
 /*
  *  Exported variables
@@ -204,7 +206,6 @@ initarm(void *arg)
 {
 	ofw_handle_t ofw_handle = arg;
 	paddr_t  pclean;
-	paddr_t  isa_io_physaddr, isa_mem_physaddr;
 	vaddr_t  isa_io_virtaddr, isa_mem_virtaddr;
 	paddr_t  isadmaphysbufs;
 	extern char shark_fiq[], shark_fiq_end[];
@@ -241,7 +242,9 @@ initarm(void *arg)
 	process_kernel_args();
 
 	ofw_configisadma(&isadmaphysbufs);
+#if (NISADMA > 0)
 	isa_dma_init();
+#endif
 
 	/* allocate a cache clean space */
 	if ((pclean = ofw_getcleaninfo()) != -1) {

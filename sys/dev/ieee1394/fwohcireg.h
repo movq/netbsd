@@ -1,4 +1,4 @@
-/*	$NetBSD: fwohcireg.h,v 1.15 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: fwohcireg.h,v 1.17 2007/11/05 19:08:57 kiyohara Exp $	*/
 
 /*-
  * Copyright (c) 2003 Hidetoshi Shimokawa
@@ -33,7 +33,7 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  * 
- * $FreeBSD: /repoman/r/ncvs/src/sys/dev/firewire/fwohcireg.h,v 1.22 2005/05/20 12:37:16 marius Exp $
+ * $FreeBSD: src/sys/dev/firewire/fwohcireg.h,v 1.23 2007/04/30 14:06:30 simokawa Exp $
  *
  */
 #define		PCI_CBMEM		PCIR_BAR(0)
@@ -339,7 +339,7 @@ struct fwohcidb_tr{
 	struct fw_xfer *xfer;
 	struct fwohcidb *db;
 	bus_dmamap_t dma_map;
-	caddr_t buf;
+	void *buf;
 	bus_addr_t bus_addr;
 	int dbcnt;
 };

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vlan.c,v 1.52 2006/11/16 01:33:40 christos Exp $	*/
+/*	$NetBSD: if_vlan.c,v 1.60 2008/10/11 17:19:41 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -85,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vlan.c,v 1.52 2006/11/16 01:33:40 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vlan.c,v 1.60 2008/10/11 17:19:41 bouyer Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -139,8 +132,8 @@ struct ifvlan {
 		int	ifvm_encaplen;	/* encapsulation length */
 		int	ifvm_mtufudge;	/* MTU fudged by this much */
 		int	ifvm_mintu;	/* min transmission unit */
-		u_int16_t ifvm_proto;	/* encapsulation ethertype */
-		u_int16_t ifvm_tag;	/* tag to apply on packets */
+		uint16_t ifvm_proto;	/* encapsulation ethertype */
+		uint16_t ifvm_tag;	/* tag to apply on packets */
 	} ifv_mib;
 	LIST_HEAD(__vlan_mchead, vlan_mc_entry) ifv_mc_listhead;
 	LIST_ENTRY(ifvlan) ifv_list;
@@ -178,7 +171,7 @@ const struct vlan_multisw vlan_ether_multisw = {
 static int	vlan_clone_create(struct if_clone *, int);
 static int	vlan_clone_destroy(struct ifnet *);
 static int	vlan_config(struct ifvlan *, struct ifnet *);
-static int	vlan_ioctl(struct ifnet *, u_long, caddr_t);
+static int	vlan_ioctl(struct ifnet *, u_long, void *);
 static void	vlan_start(struct ifnet *);
 static void	vlan_unconfig(struct ifnet *);
 
@@ -225,8 +218,7 @@ vlan_clone_create(struct if_clone *ifc, int unit)
 	struct ifnet *ifp;
 	int s;
 
-	ifv = malloc(sizeof(struct ifvlan), M_DEVBUF, M_WAITOK);
-	memset(ifv, 0, sizeof(struct ifvlan));
+	ifv = malloc(sizeof(struct ifvlan), M_DEVBUF, M_WAITOK|M_ZERO);
 	ifp = &ifv->ifv_if;
 	LIST_INIT(&ifv->ifv_mc_listhead);
 
@@ -234,8 +226,7 @@ vlan_clone_create(struct if_clone *ifc, int unit)
 	LIST_INSERT_HEAD(&ifv_list, ifv, ifv_list);
 	splx(s);
 
-	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "%s%d", ifc->ifc_name,
-	    unit);
+	if_initname(ifp, ifc->ifc_name, unit);
 	ifp->if_softc = ifv;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_start = vlan_start;
@@ -302,7 +293,7 @@ vlan_config(struct ifvlan *ifv, struct ifnet *p)
 
 				ifr.ifr_flags = p->if_flags;
 				error = (*p->if_ioctl)(p, SIOCSIFFLAGS,
-				    (caddr_t) &ifr);
+				    (void *) &ifr);
 				if (error) {
 					if (ec->ec_nvlans-- == 1)
 						ec->ec_capenable &=
@@ -338,7 +329,7 @@ vlan_config(struct ifvlan *ifv, struct ifnet *p)
 		/*
 		 * We inherit the parent's Ethernet address.
 		 */
-		ether_ifattach(ifp, LLADDR(p->if_sadl));
+		ether_ifattach(ifp, CLLADDR(p->if_sadl));
 		ifp->if_hdrlen = sizeof(struct ether_vlan_header); /* XXX? */
 		break;
 	    }
@@ -395,7 +386,7 @@ vlan_unconfig(struct ifnet *ifp)
 
 				ifr.ifr_flags = ifv->ifv_p->if_flags;
 				(void) (*ifv->ifv_p->if_ioctl)(ifv->ifv_p,
-				    SIOCSIFFLAGS, (caddr_t) &ifr);
+				    SIOCSIFFLAGS, (void *) &ifr);
 			}
 		}
 
@@ -464,13 +455,14 @@ vlan_set_promisc(struct ifnet *ifp)
 }
 
 static int
-vlan_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+vlan_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct lwp *l = curlwp;	/* XXX */
 	struct ifvlan *ifv = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *) data;
 	struct ifreq *ifr = (struct ifreq *) data;
 	struct ifnet *pr;
+	struct ifcapreq *ifcr;
 	struct vlanreq vlr;
 	struct sockaddr *sa;
 	int s, error = 0;
@@ -498,20 +490,18 @@ vlan_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 	case SIOCGIFADDR:
 		sa = (struct sockaddr *)&ifr->ifr_data;
-		memcpy(sa->sa_data, LLADDR(ifp->if_sadl), ifp->if_addrlen);
+		memcpy(sa->sa_data, CLLADDR(ifp->if_sadl), ifp->if_addrlen);
 		break;
 
 	case SIOCSIFMTU:
-		if (ifv->ifv_p != NULL) {
-			if (ifr->ifr_mtu >
-			     (ifv->ifv_p->if_mtu - ifv->ifv_mtufudge) ||
-			    ifr->ifr_mtu <
-			     (ifv->ifv_mintu - ifv->ifv_mtufudge))
-				error = EINVAL;
-			else
-				ifp->if_mtu = ifr->ifr_mtu;
-		} else
+		if (ifv->ifv_p == NULL)
 			error = EINVAL;
+		else if (
+		    ifr->ifr_mtu > (ifv->ifv_p->if_mtu - ifv->ifv_mtufudge) ||
+		    ifr->ifr_mtu < (ifv->ifv_mintu - ifv->ifv_mtufudge))
+			error = EINVAL;
+		else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
+			error = 0;
 		break;
 
 	case SIOCSETVLAN:
@@ -572,6 +562,17 @@ vlan_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		    (*ifv->ifv_msw->vmsw_delmulti)(ifv, ifr) : EINVAL;
 		break;
 
+	case SIOCSIFCAP:
+		ifcr = data;
+		/* make sure caps are enabled on parent */
+		if ((ifv->ifv_p->if_capenable & ifcr->ifcr_capenable) !=
+		    ifcr->ifcr_capenable) {
+			error = EINVAL;
+			break;
+		}
+		if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
+			error = 0;
+		break;
 	default:
 		error = EINVAL;
 	}
@@ -584,14 +585,15 @@ vlan_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 static int
 vlan_ether_addmulti(struct ifvlan *ifv, struct ifreq *ifr)
 {
+	const struct sockaddr *sa = ifreq_getaddr(SIOCADDMULTI, ifr);
 	struct vlan_mc_entry *mc;
-	u_int8_t addrlo[ETHER_ADDR_LEN], addrhi[ETHER_ADDR_LEN];
+	uint8_t addrlo[ETHER_ADDR_LEN], addrhi[ETHER_ADDR_LEN];
 	int error;
 
-	if (ifr->ifr_addr.sa_len > sizeof(struct sockaddr_storage))
+	if (sa->sa_len > sizeof(struct sockaddr_storage))
 		return (EINVAL);
 
-	error = ether_addmulti(ifr, &ifv->ifv_ec);
+	error = ether_addmulti(sa, &ifv->ifv_ec);
 	if (error != ENETRESET)
 		return (error);
 
@@ -611,13 +613,13 @@ vlan_ether_addmulti(struct ifvlan *ifv, struct ifreq *ifr)
 	 * As ether_addmulti() returns ENETRESET, following two
 	 * statement shouldn't fail.
 	 */
-	(void)ether_multiaddr(&ifr->ifr_addr, addrlo, addrhi);
+	(void)ether_multiaddr(sa, addrlo, addrhi);
 	ETHER_LOOKUP_MULTI(addrlo, addrhi, &ifv->ifv_ec, mc->mc_enm);
-	memcpy(&mc->mc_addr, &ifr->ifr_addr, ifr->ifr_addr.sa_len);
+	memcpy(&mc->mc_addr, sa, sa->sa_len);
 	LIST_INSERT_HEAD(&ifv->ifv_mc_listhead, mc, mc_entries);
 
 	error = (*ifv->ifv_p->if_ioctl)(ifv->ifv_p, SIOCADDMULTI,
-	    (caddr_t)ifr);
+	    (void *)ifr);
 	if (error != 0)
 		goto ioctl_failed;
 	return (error);
@@ -626,33 +628,34 @@ vlan_ether_addmulti(struct ifvlan *ifv, struct ifreq *ifr)
 	LIST_REMOVE(mc, mc_entries);
 	FREE(mc, M_DEVBUF);
  alloc_failed:
-	(void)ether_delmulti(ifr, &ifv->ifv_ec);
+	(void)ether_delmulti(sa, &ifv->ifv_ec);
 	return (error);
 }
 
 static int
 vlan_ether_delmulti(struct ifvlan *ifv, struct ifreq *ifr)
 {
+	const struct sockaddr *sa = ifreq_getaddr(SIOCDELMULTI, ifr);
 	struct ether_multi *enm;
 	struct vlan_mc_entry *mc;
-	u_int8_t addrlo[ETHER_ADDR_LEN], addrhi[ETHER_ADDR_LEN];
+	uint8_t addrlo[ETHER_ADDR_LEN], addrhi[ETHER_ADDR_LEN];
 	int error;
 
 	/*
 	 * Find a key to lookup vlan_mc_entry.  We have to do this
 	 * before calling ether_delmulti for obvious reason.
 	 */
-	if ((error = ether_multiaddr(&ifr->ifr_addr, addrlo, addrhi)) != 0)
+	if ((error = ether_multiaddr(sa, addrlo, addrhi)) != 0)
 		return (error);
 	ETHER_LOOKUP_MULTI(addrlo, addrhi, &ifv->ifv_ec, enm);
 
-	error = ether_delmulti(ifr, &ifv->ifv_ec);
+	error = ether_delmulti(sa, &ifv->ifv_ec);
 	if (error != ENETRESET)
 		return (error);
 
 	/* We no longer use this multicast address.  Tell parent so. */
 	error = (*ifv->ifv_p->if_ioctl)(ifv->ifv_p, SIOCDELMULTI,
-	    (caddr_t)ifr);
+	    (void *)ifr);
 	if (error == 0) {
 		/* And forget about this address. */
 		for (mc = LIST_FIRST(&ifv->ifv_mc_listhead); mc != NULL;
@@ -665,7 +668,7 @@ vlan_ether_delmulti(struct ifvlan *ifv, struct ifreq *ifr)
 		}
 		KASSERT(mc != NULL);
 	} else
-		(void)ether_addmulti(ifr, &ifv->ifv_ec);
+		(void)ether_addmulti(sa, &ifv->ifv_ec);
 	return (error);
 }
 
@@ -689,8 +692,9 @@ vlan_ether_purgemulti(struct ifvlan *ifv)
 
 	memcpy(ifr->ifr_name, ifp->if_xname, IFNAMSIZ);
 	while ((mc = LIST_FIRST(&ifv->ifv_mc_listhead)) != NULL) {
-		memcpy(&ifr->ifr_addr, &mc->mc_addr, mc->mc_addr.ss_len);
-		(void)(*ifp->if_ioctl)(ifp, SIOCDELMULTI, (caddr_t)ifr);
+		ifreq_setaddr(SIOCDELMULTI, ifr,
+		    (const struct sockaddr *)&mc->mc_addr);
+		(void)(*ifp->if_ioctl)(ifp, SIOCDELMULTI, (void *)ifr);
 		LIST_REMOVE(mc, mc_entries);
 		FREE(mc, M_DEVBUF);
 	}
@@ -784,8 +788,8 @@ vlan_start(struct ifnet *ifp)
 				 * Transform the Ethernet header into an
 				 * Ethernet header with 802.1Q encapsulation.
 				 */
-				memmove(mtod(m, caddr_t),
-				    mtod(m, caddr_t) + ifv->ifv_encaplen,
+				memmove(mtod(m, void *),
+				    mtod(m, char *) + ifv->ifv_encaplen,
 				    sizeof(struct ether_header));
 				evl = mtod(m, struct ether_vlan_header *);
 				evl->evl_proto = evl->evl_encap_proto;
@@ -909,8 +913,8 @@ vlan_input(struct ifnet *ifp, struct mbuf *m)
 	 * header has already been fixed up above.
 	 */
 	if (mtag == NULL) {
-		memmove(mtod(m, caddr_t) + ifv->ifv_encaplen,
-		    mtod(m, caddr_t), sizeof(struct ether_header));
+		memmove(mtod(m, char *) + ifv->ifv_encaplen,
+		    mtod(m, void *), sizeof(struct ether_header));
 		m_adj(m, ifv->ifv_encaplen);
 	}
 

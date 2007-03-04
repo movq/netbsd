@@ -1,4 +1,4 @@
-/*	$NetBSD: agp_sis.c,v 1.10 2006/11/16 01:33:08 christos Exp $	*/
+/*	$NetBSD: agp_sis.c,v 1.13 2008/06/09 06:49:54 freza Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -29,13 +29,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agp_sis.c,v 1.10 2006/11/16 01:33:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agp_sis.c,v 1.13 2008/06/09 06:49:54 freza Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
-#include <sys/lock.h>
 #include <sys/proc.h>
 #include <sys/conf.h>
 #include <sys/device.h>
@@ -48,7 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: agp_sis.c,v 1.10 2006/11/16 01:33:08 christos Exp $"
 #include <dev/pci/agpvar.h>
 #include <dev/pci/agpreg.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 struct agp_sis_softc {
 	u_int32_t	initial_aperture; /* aperture size at startup */
@@ -75,9 +74,9 @@ static struct agp_methods agp_sis_methods = {
 };
 
 int
-agp_sis_attach(struct device *parent, struct device *self, void *aux)
+agp_sis_attach(device_t parent, device_t self, void *aux)
 {
-	struct agp_softc *sc = (struct agp_softc *)self;
+	struct agp_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	struct agp_sis_softc *ssc;
 	struct agp_gatt *gatt;

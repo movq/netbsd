@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_km.c,v 1.93 2007/02/21 23:00:13 thorpej Exp $	*/
+/*	$NetBSD: uvm_km.c,v 1.101 2008/08/04 13:37:33 pooka Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -90,10 +90,8 @@
  *
  * the vm system has several standard kernel submaps, including:
  *   kmem_map => contains only wired kernel memory for the kernel
- *		malloc.   *** access to kmem_map must be protected
- *		by splvm() because we are allowed to call malloc()
- *		at interrupt time ***
- *   mb_map => memory for large mbufs,  *** protected by splvm ***
+ *		malloc.
+ *   mb_map => memory for large mbufs,
  *   pager_map => used to map "buf" structures into kernel space
  *   exec_map => used during exec to handle exec args
  *   etc...
@@ -105,7 +103,7 @@
  * object is equal to the size of kernel virtual address space (i.e. the
  * value "VM_MAX_KERNEL_ADDRESS - VM_MIN_KERNEL_ADDRESS").
  *
- * note that just because a kernel object spans the entire kernel virutal
+ * note that just because a kernel object spans the entire kernel virtual
  * address space doesn't mean that it has to be mapped into the entire space.
  * large chunks of a kernel object's space go unused either because
  * that area of kernel VM is unmapped, or there is some other type of
@@ -130,7 +128,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_km.c,v 1.93 2007/02/21 23:00:13 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_km.c,v 1.101 2008/08/04 13:37:33 pooka Exp $");
 
 #include "opt_uvmhist.h"
 
@@ -216,9 +214,11 @@ km_vacache_init(struct vm_map *map, const char *name, size_t size)
 	struct vm_map_kernel *vmk;
 	struct pool *pp;
 	struct pool_allocator *pa;
+	int ipl;
 
 	KASSERT(VM_MAP_IS_KERNEL(map));
 	KASSERT(size < (vm_map_max(map) - vm_map_min(map)) / 2); /* sanity */
+
 
 	vmk = vm_map_to_kernel(map);
 	pp = &vmk->vmk_vacache;
@@ -229,7 +229,14 @@ km_vacache_init(struct vm_map *map, const char *name, size_t size)
 	pa->pa_pagesz = (unsigned int)size;
 	pa->pa_backingmap = map;
 	pa->pa_backingmapptr = NULL;
-	pool_init(pp, PAGE_SIZE, 0, 0, PR_NOTOUCH | PR_RECURSIVE, name, pa);
+
+	if ((map->flags & VM_MAP_INTRSAFE) != 0)
+		ipl = IPL_VM;
+	else
+		ipl = IPL_NONE;
+
+	pool_init(pp, PAGE_SIZE, 0, 0, PR_NOTOUCH | PR_RECURSIVE, name, pa,
+	    ipl);
 }
 
 void
@@ -257,16 +264,8 @@ void
 uvm_km_va_drain(struct vm_map *map, uvm_flag_t flags)
 {
 	struct vm_map_kernel *vmk = vm_map_to_kernel(map);
-	const bool intrsafe = (map->flags & VM_MAP_INTRSAFE) != 0;
-	int s = 0xdeadbeaf; /* XXX: gcc */
 
-	if (intrsafe) {
-		s = splvm();
-	}
 	callback_run_roundrobin(&vmk->vmk_reclaim_callback, NULL);
-	if (intrsafe) {
-		splx(s);
-	}
 }
 
 /*
@@ -289,7 +288,7 @@ uvm_km_init(vaddr_t start, vaddr_t end)
 
 	/* kernel_object: for pageable anonymous kernel memory */
 	uao_init();
-	uvm.kernel_object = uao_create(VM_MAX_KERNEL_ADDRESS -
+	uvm_kernel_object = uao_create(VM_MAX_KERNEL_ADDRESS -
 				 VM_MIN_KERNEL_ADDRESS, UAO_FLAG_KERNOBJ);
 
 	/*
@@ -400,7 +399,7 @@ uvm_km_suballoc(struct vm_map *map, vaddr_t *vmin /* IN/OUT */,
 void
 uvm_km_pgremove(vaddr_t startva, vaddr_t endva)
 {
-	struct uvm_object * const uobj = uvm.kernel_object;
+	struct uvm_object * const uobj = uvm_kernel_object;
 	const voff_t start = startva - vm_map_min(kernel_map);
 	const voff_t end = endva - vm_map_min(kernel_map);
 	struct vm_page *pg;
@@ -412,7 +411,7 @@ uvm_km_pgremove(vaddr_t startva, vaddr_t endva)
 	KASSERT(startva < endva);
 	KASSERT(endva <= VM_MAX_KERNEL_ADDRESS);
 
-	simple_lock(&uobj->vmobjlock);
+	mutex_enter(&uobj->vmobjlock);
 
 	for (curoff = start; curoff < end; curoff = nextoff) {
 		nextoff = curoff + PAGE_SIZE;
@@ -421,7 +420,7 @@ uvm_km_pgremove(vaddr_t startva, vaddr_t endva)
 			pg->flags |= PG_WANTED;
 			UVM_UNLOCK_AND_WAIT(pg, &uobj->vmobjlock, 0,
 				    "km_pgrm", 0);
-			simple_lock(&uobj->vmobjlock);
+			mutex_enter(&uobj->vmobjlock);
 			nextoff = curoff;
 			continue;
 		}
@@ -436,18 +435,18 @@ uvm_km_pgremove(vaddr_t startva, vaddr_t endva)
 		}
 		uao_dropswap(uobj, curoff >> PAGE_SHIFT);
 		if (pg != NULL) {
-			uvm_lock_pageq();
+			mutex_enter(&uvm_pageqlock);
 			uvm_pagefree(pg);
-			uvm_unlock_pageq();
+			mutex_exit(&uvm_pageqlock);
 		}
 	}
-	simple_unlock(&uobj->vmobjlock);
+	mutex_exit(&uobj->vmobjlock);
 
 	if (swpgonlydelta > 0) {
-		simple_lock(&uvm.swap_data_lock);
+		mutex_enter(&uvm_swap_data_lock);
 		KASSERT(uvmexp.swpgonly >= swpgonlydelta);
 		uvmexp.swpgonly -= swpgonlydelta;
-		simple_unlock(&uvm.swap_data_lock);
+		mutex_exit(&uvm_swap_data_lock);
 	}
 }
 
@@ -503,10 +502,10 @@ uvm_km_check_empty(vaddr_t start, vaddr_t end, bool intrsafe)
 		if (!intrsafe) {
 			const struct vm_page *pg;
 
-			simple_lock(&uvm.kernel_object->vmobjlock);
-			pg = uvm_pagelookup(uvm.kernel_object,
+			mutex_enter(&uvm_kernel_object->vmobjlock);
+			pg = uvm_pagelookup(uvm_kernel_object,
 			    va - vm_map_min(kernel_map));
-			simple_unlock(&uvm.kernel_object->vmobjlock);
+			mutex_exit(&uvm_kernel_object->vmobjlock);
 			if (pg) {
 				panic("uvm_km_check_empty: "
 				    "has page hashed at %p", (const void *)va);
@@ -548,7 +547,7 @@ uvm_km_alloc(struct vm_map *map, vsize_t size, vsize_t align, uvm_flag_t flags)
 
 	kva = vm_map_min(map);	/* hint */
 	size = round_page(size);
-	obj = (flags & UVM_KMF_PAGEABLE) ? uvm.kernel_object : NULL;
+	obj = (flags & UVM_KMF_PAGEABLE) ? uvm_kernel_object : NULL;
 	UVMHIST_LOG(maphist,"  (map=0x%x, obj=0x%x, size=0x%x, flags=%d)",
 		    map, obj, size, flags);
 
@@ -624,7 +623,7 @@ uvm_km_alloc(struct vm_map *map, vsize_t size, vsize_t align, uvm_flag_t flags)
 		 * map it in
 		 */
 
-		pmap_kenter_pa(loopva, VM_PAGE_TO_PHYS(pg), prot);
+		pmap_kenter_pa(loopva, VM_PAGE_TO_PHYS(pg), prot|PMAP_KMPAGE);
 		loopva += PAGE_SIZE;
 		offset += PAGE_SIZE;
 		loopsize -= PAGE_SIZE;
@@ -660,6 +659,10 @@ uvm_km_free(struct vm_map *map, vaddr_t addr, vsize_t size, uvm_flag_t flags)
 		pmap_kremove(addr, size);
 	}
 
+	/*
+	 * uvm_unmap_remove calls pmap_update for us.
+	 */
+
 	uvm_unmap1(map, addr, addr + size, UVM_FLAG_QUANTUM|UVM_FLAG_VAONLY);
 }
 
@@ -685,17 +688,11 @@ uvm_km_alloc_poolpage_cache(struct vm_map *map, bool waitok)
 	struct vm_page *pg;
 	struct pool *pp = &vm_map_to_kernel(map)->vmk_vacache;
 	vaddr_t va;
-	int s = 0xdeadbeaf; /* XXX: gcc */
-	const bool intrsafe = (map->flags & VM_MAP_INTRSAFE) != 0;
 
 	if ((map->flags & VM_MAP_VACACHE) == 0)
 		return uvm_km_alloc_poolpage(map, waitok);
 
-	if (intrsafe)
-		s = splvm();
 	va = (vaddr_t)pool_get(pp, waitok ? PR_WAITOK : PR_NOWAIT);
-	if (intrsafe)
-		splx(s);
 	if (va == 0)
 		return 0;
 	KASSERT(!pmap_extract(pmap_kernel(), va, NULL));
@@ -706,15 +703,12 @@ again:
 			uvm_wait("plpg");
 			goto again;
 		} else {
-			if (intrsafe)
-				s = splvm();
 			pool_put(pp, (void *)va);
-			if (intrsafe)
-				splx(s);
 			return 0;
 		}
 	}
-	pmap_kenter_pa(va, VM_PAGE_TO_PHYS(pg), VM_PROT_READ|VM_PROT_WRITE);
+	pmap_kenter_pa(va, VM_PAGE_TO_PHYS(pg),
+	    VM_PROT_READ|VM_PROT_WRITE|PMAP_KMPAGE);
 	pmap_update(pmap_kernel());
 
 	return va;
@@ -743,15 +737,9 @@ uvm_km_alloc_poolpage(struct vm_map *map, bool waitok)
 	return (va);
 #else
 	vaddr_t va;
-	int s = 0xdeadbeaf; /* XXX: gcc */
-	const bool intrsafe = (map->flags & VM_MAP_INTRSAFE) != 0;
 
-	if (intrsafe)
-		s = splvm();
 	va = uvm_km_alloc(map, PAGE_SIZE, 0,
 	    (waitok ? 0 : UVM_KMF_NOWAIT | UVM_KMF_TRYLOCK) | UVM_KMF_WIRED);
-	if (intrsafe)
-		splx(s);
 	return (va);
 #endif /* PMAP_MAP_POOLPAGE */
 }
@@ -770,8 +758,6 @@ uvm_km_free_poolpage_cache(struct vm_map *map, vaddr_t addr)
 	uvm_km_free_poolpage(map, addr);
 #else
 	struct pool *pp;
-	int s = 0xdeadbeaf; /* XXX: gcc */
-	const bool intrsafe = (map->flags & VM_MAP_INTRSAFE) != 0;
 
 	if ((map->flags & VM_MAP_VACACHE) == 0) {
 		uvm_km_free_poolpage(map, addr);
@@ -786,11 +772,7 @@ uvm_km_free_poolpage_cache(struct vm_map *map, vaddr_t addr)
 #endif
 	KASSERT(!pmap_extract(pmap_kernel(), addr, NULL));
 	pp = &vm_map_to_kernel(map)->vmk_vacache;
-	if (intrsafe)
-		s = splvm();
 	pool_put(pp, (void *)addr);
-	if (intrsafe)
-		splx(s);
 #endif
 }
 
@@ -804,13 +786,6 @@ uvm_km_free_poolpage(struct vm_map *map, vaddr_t addr)
 	pa = PMAP_UNMAP_POOLPAGE(addr);
 	uvm_pagefree(PHYS_TO_VM_PAGE(pa));
 #else
-	int s = 0xdeadbeaf; /* XXX: gcc */
-	const bool intrsafe = (map->flags & VM_MAP_INTRSAFE) != 0;
-
-	if (intrsafe)
-		s = splvm();
 	uvm_km_free(map, addr, PAGE_SIZE, UVM_KMF_WIRED);
-	if (intrsafe)
-		splx(s);
 #endif /* PMAP_UNMAP_POOLPAGE */
 }

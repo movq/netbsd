@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_subr.c,v 1.154 2007/02/22 06:34:44 thorpej Exp $	*/
+/*	$NetBSD: kern_subr.c,v 1.192 2008/10/14 14:17:49 pooka Exp $	*/
 
 /*-
- * Copyright (c) 1997, 1998, 1999, 2002 The NetBSD Foundation, Inc.
+ * Copyright (c) 1997, 1998, 1999, 2002, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -86,15 +79,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.154 2007/02/22 06:34:44 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.192 2008/10/14 14:17:49 pooka Exp $");
 
 #include "opt_ddb.h"
 #include "opt_md.h"
 #include "opt_syscall_debug.h"
 #include "opt_ktrace.h"
 #include "opt_ptrace.h"
-#include "opt_systrace.h"
 #include "opt_powerhook.h"
+#include "opt_tftproot.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -104,12 +97,15 @@ __KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.154 2007/02/22 06:34:44 thorpej Exp 
 #include <sys/device.h>
 #include <sys/reboot.h>
 #include <sys/conf.h>
+#include <sys/disk.h>
 #include <sys/disklabel.h>
 #include <sys/queue.h>
-#include <sys/systrace.h>
 #include <sys/ktrace.h>
 #include <sys/ptrace.h>
 #include <sys/fcntl.h>
+#include <sys/kauth.h>
+#include <sys/vnode.h>
+#include <sys/pmf.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -121,6 +117,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.154 2007/02/22 06:34:44 thorpej Exp 
 static struct device *finddevice(const char *);
 static struct device *getdisk(char *, int, int, dev_t *, int);
 static struct device *parsedisk(char *, int, int, dev_t *);
+static const char *getwedgename(const char *, int);
 
 /*
  * A generic linear hook.
@@ -132,7 +129,11 @@ struct hook_desc {
 };
 typedef LIST_HEAD(, hook_desc) hook_list_t;
 
-MALLOC_DEFINE(M_IOV, "iov", "large iov's");
+#ifdef TFTPROOT
+int tftproot_dhcpboot(struct device *);
+#endif
+
+dev_t	dumpcdev;	/* for savecore */
 
 void
 uio_setup_sysspace(struct uio *uio)
@@ -146,16 +147,11 @@ uiomove(void *buf, size_t n, struct uio *uio)
 {
 	struct vmspace *vm = uio->uio_vmspace;
 	struct iovec *iov;
-	u_int cnt;
+	size_t cnt;
 	int error = 0;
 	char *cp = buf;
-#ifdef MULTIPROCESSOR
-	int hold_count;
-#endif
 
-	KERNEL_UNLOCK_ALL(NULL, &hold_count);
-
-	ASSERT_SLEEPABLE(NULL, "uiomove");
+	ASSERT_SLEEPABLE();
 
 #ifdef DIAGNOSTIC
 	if (uio->uio_rw != UIO_READ && uio->uio_rw != UIO_WRITE)
@@ -188,7 +184,7 @@ uiomove(void *buf, size_t n, struct uio *uio)
 		if (error) {
 			break;
 		}
-		iov->iov_base = (caddr_t)iov->iov_base + cnt;
+		iov->iov_base = (char *)iov->iov_base + cnt;
 		iov->iov_len -= cnt;
 		uio->uio_resid -= cnt;
 		uio->uio_offset += cnt;
@@ -196,7 +192,7 @@ uiomove(void *buf, size_t n, struct uio *uio)
 		KDASSERT(cnt <= n);
 		n -= cnt;
 	}
-	KERNEL_LOCK(hold_count, NULL);
+
 	return (error);
 }
 
@@ -242,7 +238,7 @@ again:
 	} else {
 		*(char *)iov->iov_base = c;
 	}
-	iov->iov_base = (caddr_t)iov->iov_base + 1;
+	iov->iov_base = (char *)iov->iov_base + 1;
 	iov->iov_len--;
 	uio->uio_resid--;
 	uio->uio_offset++;
@@ -273,7 +269,7 @@ copyin_vmspace(struct vmspace *vm, const void *uaddr, void *kaddr, size_t len)
 	iov.iov_len = len;
 	uio.uio_iov = &iov;
 	uio.uio_iovcnt = 1;
-	uio.uio_offset = (off_t)(intptr_t)uaddr;
+	uio.uio_offset = (off_t)(uintptr_t)uaddr;
 	uio.uio_resid = len;
 	uio.uio_rw = UIO_READ;
 	UIO_SETUP_SYSSPACE(&uio);
@@ -306,7 +302,7 @@ copyout_vmspace(struct vmspace *vm, const void *kaddr, void *uaddr, size_t len)
 	iov.iov_len = len;
 	uio.uio_iov = &iov;
 	uio.uio_iovcnt = 1;
-	uio.uio_offset = (off_t)(intptr_t)uaddr;
+	uio.uio_offset = (off_t)(uintptr_t)uaddr;
 	uio.uio_resid = len;
 	uio.uio_rw = UIO_WRITE;
 	UIO_SETUP_SYSSPACE(&uio);
@@ -377,72 +373,6 @@ ioctl_copyout(int ioctlflags, const void *src, void *dst, size_t len)
 	return copyout(src, dst, len);
 }
 
-/*
- * General routine to allocate a hash table.
- * Allocate enough memory to hold at least `elements' list-head pointers.
- * Return a pointer to the allocated space and set *hashmask to a pattern
- * suitable for masking a value to use as an index into the returned array.
- */
-void *
-hashinit(u_int elements, enum hashtype htype, struct malloc_type *mtype,
-    int mflags, u_long *hashmask)
-{
-	u_long hashsize, i;
-	LIST_HEAD(, generic) *hashtbl_list;
-	TAILQ_HEAD(, generic) *hashtbl_tailq;
-	size_t esize;
-	void *p;
-
-	if (elements == 0)
-		panic("hashinit: bad cnt");
-	for (hashsize = 1; hashsize < elements; hashsize <<= 1)
-		continue;
-
-	switch (htype) {
-	case HASH_LIST:
-		esize = sizeof(*hashtbl_list);
-		break;
-	case HASH_TAILQ:
-		esize = sizeof(*hashtbl_tailq);
-		break;
-	default:
-#ifdef DIAGNOSTIC
-		panic("hashinit: invalid table type");
-#else
-		return NULL;
-#endif
-	}
-
-	if ((p = malloc(hashsize * esize, mtype, mflags)) == NULL)
-		return (NULL);
-
-	switch (htype) {
-	case HASH_LIST:
-		hashtbl_list = p;
-		for (i = 0; i < hashsize; i++)
-			LIST_INIT(&hashtbl_list[i]);
-		break;
-	case HASH_TAILQ:
-		hashtbl_tailq = p;
-		for (i = 0; i < hashsize; i++)
-			TAILQ_INIT(&hashtbl_tailq[i]);
-		break;
-	}
-	*hashmask = hashsize - 1;
-	return (p);
-}
-
-/*
- * Free memory from hash table previosly allocated via hashinit().
- */
-void
-hashdone(void *hashtbl, struct malloc_type *mtype)
-{
-
-	free(hashtbl, mtype);
-}
-
-
 static void *
 hook_establish(hook_list_t *list, void (*fn)(void *), void *arg)
 {
@@ -493,10 +423,8 @@ hook_proc_run(hook_list_t *list, struct proc *p)
 {
 	struct hook_desc *hd;
 
-	for (hd = LIST_FIRST(list); hd != NULL; hd = LIST_NEXT(hd, hk_list)) {
-		((void (*)(struct proc *, void *))*hd->hk_fn)(p,
-		    hd->hk_arg);
-	}
+	LIST_FOREACH(hd, list, hk_list)
+		((void (*)(struct proc *, void *))*hd->hk_fn)(p, hd->hk_arg);
 }
 
 /*
@@ -551,6 +479,8 @@ doshutdownhooks(void)
 		free(dp, M_DEVBUF);
 #endif
 	}
+
+	pmf_system_shutdown(boothowto);
 }
 
 /*
@@ -696,6 +626,7 @@ powerhook_establish(const char *name, void (*fn)(int, void *), void *arg)
 	strlcpy(ndp->sfd_name, name, sizeof(ndp->sfd_name));
 	CIRCLEQ_INSERT_HEAD(&powerhook_list, ndp, sfd_list);
 
+	aprint_error("%s: WARNING: powerhook_establish is deprecated\n", name);
 	return (ndp);
 }
 
@@ -726,46 +657,55 @@ dopowerhooks(int why)
 	struct powerhook_desc *dp;
 
 #ifdef POWERHOOK_DEBUG
-	printf("dopowerhooks ");
-	switch (why) {
-	case PWR_RESUME:
-		printf("resume");
-		break;
-	case PWR_SOFTRESUME:
-		printf("softresume");
-		break;
-	case PWR_SUSPEND:
-		printf("suspend");
-		break;
-	case PWR_SOFTSUSPEND:
-		printf("softsuspend");
-		break;
-	case PWR_STANDBY:
-		printf("standby");
-		break;
-	}
-	printf(":");
+	const char *why_name;
+	static const char * pwr_names[] = {PWR_NAMES};
+	why_name = why < __arraycount(pwr_names) ? pwr_names[why] : "???";
 #endif
 
 	if (why == PWR_RESUME || why == PWR_SOFTRESUME) {
 		CIRCLEQ_FOREACH_REVERSE(dp, &powerhook_list, sfd_list) {
 #ifdef POWERHOOK_DEBUG
-			printf(" %s", dp->sfd_name);
+			printf("dopowerhooks %s: %s (%p)\n", why_name, dp->sfd_name, dp);
 #endif
 			(*dp->sfd_fn)(why, dp->sfd_arg);
 		}
 	} else {
 		CIRCLEQ_FOREACH(dp, &powerhook_list, sfd_list) {
 #ifdef POWERHOOK_DEBUG
-			printf(" %s", dp->sfd_name);
+			printf("dopowerhooks %s: %s (%p)\n", why_name, dp->sfd_name, dp);
 #endif
 			(*dp->sfd_fn)(why, dp->sfd_arg);
 		}
 	}
 
 #ifdef POWERHOOK_DEBUG
-	printf(".\n");
+	printf("dopowerhooks: %s done\n", why_name);
 #endif
+}
+
+static int
+isswap(struct device *dv)
+{
+	struct dkwedge_info wi;
+	struct vnode *vn;
+	int error;
+
+	if (device_class(dv) != DV_DISK || !device_is_a(dv, "dk"))
+		return 0;
+
+	if ((vn = opendisk(dv)) == NULL)
+		return 0;
+
+	error = VOP_IOCTL(vn, DIOCGWEDGEINFO, &wi, FREAD, NOCRED);
+	VOP_CLOSE(vn, FREAD, NOCRED);
+	vput(vn);
+	if (error) {
+#ifdef DEBUG_WEDGE
+		printf("%s: Get wedge info returned %d\n", device_xname(dv), error);
+#endif
+		return 0;
+	}
+	return strcmp(wi.dkw_ptype, DKW_PTYPE_SWAP) == 0;
 }
 
 /*
@@ -773,17 +713,14 @@ dopowerhooks(int why)
  */
 
 #include "md.h"
-#if NMD == 0
-#undef MEMORY_DISK_HOOKS
-#endif
 
-#ifdef MEMORY_DISK_HOOKS
-static struct device fakemdrootdev[NMD];
+#if NMD > 0
 extern struct cfdriver md_cd;
-#endif
-
 #ifdef MEMORY_DISK_IS_ROOT
-#define BOOT_FROM_MEMORY_HOOKS 1
+int md_is_root = 1;
+#else
+int md_is_root = 0;
+#endif
 #endif
 
 /*
@@ -806,10 +743,7 @@ void
 setroot(struct device *bootdv, int bootpartition)
 {
 	struct device *dv;
-	int len;
-#ifdef MEMORY_DISK_HOOKS
-	int i;
-#endif
+	int len, majdev;
 	dev_t nrootdev;
 	dev_t ndumpdev = NODEV;
 	char buf[128];
@@ -821,21 +755,20 @@ setroot(struct device *bootdv, int bootpartition)
 	const char *deffsname;
 	struct vfsops *vops;
 
-#ifdef MEMORY_DISK_HOOKS
-	for (i = 0; i < NMD; i++) {
-		fakemdrootdev[i].dv_class  = DV_DISK;
-		fakemdrootdev[i].dv_cfdata = NULL;
-		fakemdrootdev[i].dv_cfdriver = &md_cd;
-		fakemdrootdev[i].dv_unit   = i;
-		fakemdrootdev[i].dv_parent = NULL;
-		snprintf(fakemdrootdev[i].dv_xname,
-		    sizeof(fakemdrootdev[i].dv_xname), "md%d", i);
-	}
-#endif /* MEMORY_DISK_HOOKS */
+#ifdef TFTPROOT
+	if (tftproot_dhcpboot(bootdv) != 0)
+		boothowto |= RB_ASKNAME;
+#endif
 
-#ifdef MEMORY_DISK_IS_ROOT
-	bootdv = &fakemdrootdev[0];
-	bootpartition = 0;
+#if NMD > 0
+	if (md_is_root) {
+		/*
+		 * XXX there should be "root on md0" in the config file,
+		 * but it isn't always
+		 */
+		bootdv = md_cd.cd_devs[0];
+		bootpartition = 0;
+	}
 #endif
 
 	/*
@@ -866,6 +799,8 @@ setroot(struct device *bootdv, int bootpartition)
 			rootspec = (const char *)ifp->if_xname;
 		}
 	}
+	if (vops != NULL)
+		vfs_delref(vops);
 
 	/*
 	 * If wildcarded root and we the boot device wasn't determined,
@@ -881,7 +816,7 @@ setroot(struct device *bootdv, int bootpartition)
 		for (;;) {
 			printf("root device");
 			if (bootdv != NULL) {
-				printf(" (default %s", bootdv->dv_xname);
+				printf(" (default %s", device_xname(bootdv));
 				if (DEV_USES_PARTITIONS(bootdv))
 					printf("%c", bootpartition + 'a');
 				printf(")");
@@ -889,7 +824,7 @@ setroot(struct device *bootdv, int bootpartition)
 			printf(": ");
 			len = cngetsn(buf, sizeof(buf));
 			if (len == 0 && bootdv != NULL) {
-				strlcpy(buf, bootdv->dv_xname, sizeof(buf));
+				strlcpy(buf, device_xname(bootdv), sizeof(buf));
 				len = strlen(buf);
 			}
 			if (len > 0 && buf[len - 1] == '*') {
@@ -924,7 +859,7 @@ setroot(struct device *bootdv, int bootpartition)
 				/*
 				 * Note, we know it's a disk if we get here.
 				 */
-				printf(" (default %sb)", defdumpdv->dv_xname);
+				printf(" (default %sb)", device_xname(defdumpdv));
 			}
 			printf(": ");
 			len = cngetsn(buf, sizeof(buf));
@@ -996,19 +931,21 @@ setroot(struct device *bootdv, int bootpartition)
 				printf(" halt reboot\n");
 			} else {
 				mountroot = vops->vfs_mountroot;
+				vfs_delref(vops);
 				break;
 			}
 		}
 
 	} else if (rootspec == NULL) {
-		int majdev;
-
 		/*
 		 * Wildcarded root; use the boot device.
 		 */
 		rootdv = bootdv;
 
-		majdev = devsw_name2blk(bootdv->dv_xname, NULL, 0);
+		if (bootdv)
+			majdev = devsw_name2blk(device_xname(bootdv), NULL, 0);
+		else
+			majdev = -1;
 		if (majdev >= 0) {
 			/*
 			 * Root is on a disk.  `bootpartition' is root,
@@ -1037,6 +974,11 @@ setroot(struct device *bootdv, int bootpartition)
 			goto haveroot;
 		}
 
+		if (rootdev == NODEV &&
+		    device_class(dv) == DV_DISK && device_is_a(dv, "dk") &&
+		    (majdev = devsw_name2blk(device_xname(dv), NULL, 0)) >= 0)
+			rootdev = makedev(majdev, device_unit(dv));
+
 		rootdevname = devsw_blk2name(major(rootdev));
 		if (rootdevname == NULL) {
 			printf("unknown device major 0x%x\n", rootdev);
@@ -1063,7 +1005,7 @@ setroot(struct device *bootdv, int bootpartition)
 	switch (device_class(rootdv)) {
 	case DV_IFNET:
 	case DV_DISK:
-		aprint_normal("root on %s", rootdv->dv_xname);
+		aprint_normal("root on %s", device_xname(rootdv));
 		if (DEV_USES_PARTITIONS(rootdv))
 			aprint_normal("%c", DISKPART(rootdev) + 'a');
 		break;
@@ -1119,16 +1061,28 @@ setroot(struct device *bootdv, int bootpartition)
 			goto nodumpdev;
 		}
 	} else {				/* (c) */
-		if (DEV_USES_PARTITIONS(rootdv) == 0)
-			goto nodumpdev;
-		else {
+		if (DEV_USES_PARTITIONS(rootdv) == 0) {
+			for (dv = TAILQ_FIRST(&alldevs); dv != NULL;
+			    dv = TAILQ_NEXT(dv, dv_list))
+				if (isswap(dv))
+					break;
+			if (dv == NULL)
+				goto nodumpdev;
+
+			majdev = devsw_name2blk(device_xname(dv), NULL, 0);
+			if (majdev < 0)
+				goto nodumpdev;
+			dumpdv = dv;
+			dumpdev = makedev(majdev, device_unit(dumpdv));
+		} else {
 			dumpdv = rootdv;
 			dumpdev = MAKEDISKDEV(major(rootdev),
 			    device_unit(dumpdv), 1);
 		}
 	}
 
-	aprint_normal(" dumps on %s", dumpdv->dv_xname);
+	dumpcdev = devsw_blk2chr(dumpdev);
+	aprint_normal(" dumps on %s", device_xname(dumpdv));
 	if (DEV_USES_PARTITIONS(dumpdv))
 		aprint_normal("%c", DISKPART(dumpdev) + 'a');
 	aprint_normal("\n");
@@ -1136,58 +1090,38 @@ setroot(struct device *bootdv, int bootpartition)
 
  nodumpdev:
 	dumpdev = NODEV;
+	dumpcdev = NODEV;
 	aprint_normal("\n");
 }
 
 static struct device *
 finddevice(const char *name)
 {
-	struct device *dv;
-#if defined(BOOT_FROM_MEMORY_HOOKS)
-	int j;
-#endif /* BOOT_FROM_MEMORY_HOOKS */
+	const char *wname;
 
-#ifdef BOOT_FROM_MEMORY_HOOKS
-	for (j = 0; j < NMD; j++) {
-		if (strcmp(name, fakemdrootdev[j].dv_xname) == 0) {
-			dv = &fakemdrootdev[j];
-			return (dv);
-		}
-	}
-#endif /* BOOT_FROM_MEMORY_HOOKS */
+	if ((wname = getwedgename(name, strlen(name))) != NULL)
+		return dkwedge_find_by_wname(wname);
 
-	for (dv = TAILQ_FIRST(&alldevs); dv != NULL;
-	    dv = TAILQ_NEXT(dv, dv_list))
-		if (strcmp(dv->dv_xname, name) == 0)
-			break;
-	return (dv);
+	return device_find_by_xname(name);
 }
 
 static struct device *
 getdisk(char *str, int len, int defpart, dev_t *devp, int isdump)
 {
 	struct device	*dv;
-#ifdef MEMORY_DISK_HOOKS
-	int		i;
-#endif
 
 	if ((dv = parsedisk(str, len, defpart, devp)) == NULL) {
 		printf("use one of:");
-#ifdef MEMORY_DISK_HOOKS
-		if (isdump == 0)
-			for (i = 0; i < NMD; i++)
-				printf(" %s[a-%c]", fakemdrootdev[i].dv_xname,
-				    'a' + MAXPARTITIONS - 1);
-#endif
 		TAILQ_FOREACH(dv, &alldevs, dv_list) {
 			if (DEV_USES_PARTITIONS(dv))
-				printf(" %s[a-%c]", dv->dv_xname,
+				printf(" %s[a-%c]", device_xname(dv),
 				    'a' + MAXPARTITIONS - 1);
 			else if (device_class(dv) == DV_DISK)
-				printf(" %s", dv->dv_xname);
+				printf(" %s", device_xname(dv));
 			if (isdump == 0 && device_class(dv) == DV_IFNET)
-				printf(" %s", dv->dv_xname);
+				printf(" %s", device_xname(dv));
 		}
+		dkwedge_print_wnames();
 		if (isdump)
 			printf(" none");
 #if defined(DDB)
@@ -1195,18 +1129,28 @@ getdisk(char *str, int len, int defpart, dev_t *devp, int isdump)
 #endif
 		printf(" halt reboot\n");
 	}
-	return (dv);
+	return dv;
+}
+
+static const char *
+getwedgename(const char *name, int namelen)
+{
+	const char *wpfx = "wedge:";
+	const int wpfxlen = strlen(wpfx);
+
+	if (namelen < wpfxlen || strncmp(name, wpfx, wpfxlen) != 0)
+		return NULL;
+
+	return name + wpfxlen;
 }
 
 static struct device *
 parsedisk(char *str, int len, int defpart, dev_t *devp)
 {
 	struct device *dv;
+	const char *wname;
 	char *cp, c;
 	int majdev, part;
-#ifdef MEMORY_DISK_HOOKS
-	int i;
-#endif
 	if (len == 0)
 		return (NULL);
 
@@ -1221,27 +1165,23 @@ parsedisk(char *str, int len, int defpart, dev_t *devp)
 
 	cp = str + len - 1;
 	c = *cp;
-	if (c >= 'a' && c <= ('a' + MAXPARTITIONS - 1)) {
+
+	if ((wname = getwedgename(str, len)) != NULL) {
+		if ((dv = dkwedge_find_by_wname(wname)) == NULL)
+			return NULL;
+		part = defpart;
+		goto gotdisk;
+	} else if (c >= 'a' && c <= ('a' + MAXPARTITIONS - 1)) {
 		part = c - 'a';
 		*cp = '\0';
 	} else
 		part = defpart;
 
-#ifdef MEMORY_DISK_HOOKS
-	for (i = 0; i < NMD; i++)
-		if (strcmp(str, fakemdrootdev[i].dv_xname) == 0) {
-			dv = &fakemdrootdev[i];
-			goto gotdisk;
-		}
-#endif
-
 	dv = finddevice(str);
 	if (dv != NULL) {
 		if (device_class(dv) == DV_DISK) {
-#ifdef MEMORY_DISK_HOOKS
  gotdisk:
-#endif
-			majdev = devsw_name2blk(dv->dv_xname, NULL, 0);
+			majdev = devsw_name2blk(device_xname(dv), NULL, 0);
 			if (majdev < 0)
 				panic("parsedisk");
 			if (DEV_USES_PARTITIONS(dv))
@@ -1341,10 +1281,6 @@ trace_is_enabled(struct proc *p)
 	if (ISSET(p->p_traceflag, (KTRFAC_SYSCALL | KTRFAC_SYSRET)))
 		return (true);
 #endif
-#ifdef SYSTRACE
-	if (ISSET(p->p_flag, PK_SYSTRACE))
-		return (true);
-#endif
 #ifdef PTRACE
 	if (ISSET(p->p_slflag, PSL_SYSCALL))
 		return (true);
@@ -1357,37 +1293,21 @@ trace_is_enabled(struct proc *p)
  * Start trace of particular system call. If process is being traced,
  * this routine is called by MD syscall dispatch code just before
  * a system call is actually executed.
- * MD caller guarantees the passed 'code' is within the supported
- * system call number range for emulation the process runs under.
  */
 int
-trace_enter(struct lwp *l, register_t code,
-    register_t realcode, const struct sysent *callp, void *args)
+trace_enter(register_t code, const register_t *args, int narg)
 {
-	struct proc *p = l->l_proc;
-
-
-#if defined(SYSCALL_DEBUG) || defined(KTRACE) || defined(PTRACE) || defined(SYSTRACE)
 #ifdef SYSCALL_DEBUG
-	scdebug_call(l, code, args);
+	scdebug_call(code, args);
 #endif /* SYSCALL_DEBUG */
 
-#ifdef KTRACE
-	if (KTRPOINT(p, KTR_SYSCALL))
-		ktrsyscall(l, code, realcode, callp, args);
-#endif /* KTRACE */
+	ktrsyscall(code, args, narg);
 
 #ifdef PTRACE
-	if ((p->p_slflag & (PSL_SYSCALL|PSL_TRACED)) ==
+	if ((curlwp->l_proc->p_slflag & (PSL_SYSCALL|PSL_TRACED)) ==
 	    (PSL_SYSCALL|PSL_TRACED))
-		process_stoptrace(l);
+		process_stoptrace();
 #endif
-
-#ifdef SYSTRACE
-	if (ISSET(p->p_flag, PK_SYSTRACE))
-		return systrace_enter(l, code, args);
-#endif
-#endif /* SYSCALL_DEBUG || {K,P,SYS}TRACE */
 	return 0;
 }
 
@@ -1399,33 +1319,17 @@ trace_enter(struct lwp *l, register_t code,
  * system call number range for emulation the process runs under.
  */
 void
-trace_exit(struct lwp *l, register_t code, void *args, register_t rval[],
-    int error)
+trace_exit(register_t code, register_t rval[], int error)
 {
-	struct proc *p = l->l_proc;
-
-#if defined(SYSCALL_DEBUG) || defined(KTRACE) || defined(PTRACE) || defined(SYSTRACE)
 #ifdef SYSCALL_DEBUG
-	scdebug_ret(l, code, error, rval);
+	scdebug_ret(code, error, rval);
 #endif /* SYSCALL_DEBUG */
 
-#ifdef KTRACE
-	if (KTRPOINT(p, KTR_SYSRET))
-		ktrsysret(l, code, error, rval);
-#endif /* KTRACE */
+	ktrsysret(code, error, rval);
 	
 #ifdef PTRACE
-	if ((p->p_slflag & (PSL_SYSCALL|PSL_TRACED)) ==
+	if ((curlwp->l_proc->p_slflag & (PSL_SYSCALL|PSL_TRACED)) ==
 	    (PSL_SYSCALL|PSL_TRACED))
-		process_stoptrace(l);
+		process_stoptrace();
 #endif
-
-#ifdef SYSTRACE
-	if (ISSET(p->p_flag, PK_SYSTRACE)) {
-		KERNEL_LOCK(1, l);
-		systrace_exit(l, code, args, rval, error);
-		KERNEL_UNLOCK_LAST(l);
-	}
-#endif
-#endif /* SYSCALL_DEBUG || {K,P,SYS}TRACE */
 }

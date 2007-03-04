@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_tty.c,v 1.32 2007/02/09 21:55:32 ad Exp $	*/
+/*	$NetBSD: tty_tty.c,v 1.37 2008/04/24 15:35:30 ad Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993, 1995
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_tty.c,v 1.32 2007/02/09 21:55:32 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_tty.c,v 1.37 2008/04/24 15:35:30 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,7 +74,7 @@ cttyopen(dev_t dev, int flag, int mode, struct lwp *l)
 	  (flag&FREAD ? VREAD : 0) | (flag&FWRITE ? VWRITE : 0), l->l_cred, l);
 	if (!error)
 #endif /* PARANOID */
-		error = VOP_OPEN(ttyvp, flag, NOCRED, l);
+		error = VOP_OPEN(ttyvp, flag, NOCRED);
 	VOP_UNLOCK(ttyvp, 0);
 	return (error);
 }
@@ -99,25 +99,19 @@ static int
 cttywrite(dev_t dev, struct uio *uio, int flag)
 {
 	struct vnode *ttyvp = cttyvp(curproc);
-	struct mount *mp;
 	int error;
 
 	if (ttyvp == NULL)
 		return (EIO);
-	mp = NULL;
-	if (ttyvp->v_type != VCHR &&
-	    (error = vn_start_write(ttyvp, &mp, V_WAIT | V_PCATCH)) != 0)
-		return (error);
 	vn_lock(ttyvp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_WRITE(ttyvp, uio, flag, NOCRED);
 	VOP_UNLOCK(ttyvp, 0);
-	vn_finished_write(mp, 0);
 	return (error);
 }
 
 /*ARGSUSED*/
 static int
-cttyioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
+cttyioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
 	struct vnode *ttyvp = cttyvp(l->l_proc);
 	int rv;
@@ -127,16 +121,16 @@ cttyioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 	if (cmd == TIOCSCTTY)		/* XXX */
 		return (EINVAL);
 	if (cmd == TIOCNOTTY) {
-		rw_enter(&proclist_lock, RW_WRITER);
+		mutex_enter(proc_lock);
 		if (!SESS_LEADER(l->l_proc)) {
 			l->l_proc->p_lflag &= ~PL_CONTROLT;
 			rv = 0;
 		} else
 			rv = EINVAL;
-		rw_exit(&proclist_lock);
+		mutex_exit(proc_lock);
 		return (rv);
 	}
-	return (VOP_IOCTL(ttyvp, cmd, addr, flag, NOCRED, l));
+	return (VOP_IOCTL(ttyvp, cmd, addr, flag, NOCRED));
 }
 
 /*ARGSUSED*/
@@ -147,7 +141,7 @@ cttypoll(dev_t dev, int events, struct lwp *l)
 
 	if (ttyvp == NULL)
 		return (seltrue(dev, events, l));
-	return (VOP_POLL(ttyvp, events, l));
+	return (VOP_POLL(ttyvp, events));
 }
 
 static int

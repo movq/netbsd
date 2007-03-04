@@ -1,4 +1,4 @@
-/* $NetBSD: cgd.c,v 1.43 2007/01/19 18:59:59 cbiere Exp $ */
+/* $NetBSD: cgd.c,v 1.53 2008/09/12 16:51:55 christos Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgd.c,v 1.43 2007/01/19 18:59:59 cbiere Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgd.c,v 1.53 2008/09/12 16:51:55 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -54,7 +47,6 @@ __KERNEL_RCSID(0, "$NetBSD: cgd.c,v 1.43 2007/01/19 18:59:59 cbiere Exp $");
 #include <sys/disklabel.h>
 #include <sys/fcntl.h>
 #include <sys/vnode.h>
-#include <sys/lock.h>
 #include <sys/conf.h>
 
 #include <dev/dkvar.h>
@@ -92,7 +84,7 @@ static int	cgd_ioctl_set(struct cgd_softc *, void *, struct lwp *);
 static int	cgd_ioctl_clr(struct cgd_softc *, void *, struct lwp *);
 static int	cgdinit(struct cgd_softc *, const char *, struct vnode *,
 			struct lwp *);
-static void	cgd_cipher(struct cgd_softc *, caddr_t, caddr_t,
+static void	cgd_cipher(struct cgd_softc *, void *, void *,
 			   size_t, daddr_t, size_t, int);
 
 /* Pseudo-disk Interface */
@@ -177,8 +169,7 @@ cgdsoftc_init(struct cgd_softc *cs, int num)
 	snprintf(sbuf, DK_XNAME_SIZE, "cgd%d", num);
 	simple_lock_init(&cs->sc_slock);
 	dk_sc_init(&cs->sc_dksc, cs, sbuf);
-	cs->sc_dksc.sc_dkdev.dk_driver = &cgddkdriver;
-	pseudo_disk_init(&cs->sc_dksc.sc_dkdev);
+	disk_init(&cs->sc_dksc.sc_dkdev, cs->sc_dksc.sc_xname, &cgddkdriver);
 }
 
 void
@@ -259,7 +250,7 @@ static void *
 cgd_getdata(struct dk_softc *dksc, unsigned long size)
 {
 	struct	cgd_softc *cs =dksc->sc_osc;
-	caddr_t	data = NULL;
+	void *	data = NULL;
 
 	simple_lock(&cs->sc_slock);
 	if (cs->sc_data_used == 0) {
@@ -275,7 +266,7 @@ cgd_getdata(struct dk_softc *dksc, unsigned long size)
 }
 
 static void
-cgd_putdata(struct dk_softc *dksc, caddr_t data)
+cgd_putdata(struct dk_softc *dksc, void *data)
 {
 	struct	cgd_softc *cs =dksc->sc_osc;
 
@@ -293,9 +284,10 @@ cgdstart(struct dk_softc *dksc, struct buf *bp)
 {
 	struct	cgd_softc *cs = dksc->sc_osc;
 	struct	buf *nbp;
-	caddr_t	addr;
-	caddr_t	newaddr;
+	void *	addr;
+	void *	newaddr;
 	daddr_t	bn;
+	struct	vnode *vp;
 
 	DPRINTF_FOLLOW(("cgdstart(%p, %p)\n", dksc, bp));
 	disk_busy(&dksc->sc_dkdev); /* XXX: put in dksubr.c */
@@ -307,7 +299,7 @@ cgdstart(struct dk_softc *dksc, struct buf *bp)
 	 * we can fail quickly if they are unavailable.
 	 */
 
-	nbp = getiobuf_nowait();
+	nbp = getiobuf(cs->sc_tvn, false);
 	if (nbp == NULL) {
 		disk_unbusy(&dksc->sc_dkdev, 0, (bp->b_flags & B_READ));
 		return -1;
@@ -331,18 +323,22 @@ cgdstart(struct dk_softc *dksc, struct buf *bp)
 	}
 
 	nbp->b_data = newaddr;
-	nbp->b_flags = bp->b_flags | B_CALL;
+	nbp->b_flags = bp->b_flags;
+	nbp->b_oflags = bp->b_oflags;
+	nbp->b_cflags = bp->b_cflags;
 	nbp->b_iodone = cgdiodone;
 	nbp->b_proc = bp->b_proc;
 	nbp->b_blkno = bn;
-	nbp->b_vp = cs->sc_tvn;
 	nbp->b_bcount = bp->b_bcount;
 	nbp->b_private = bp;
 
 	BIO_COPYPRIO(nbp, bp);
 
 	if ((nbp->b_flags & B_READ) == 0) {
-		V_INCR_NUMOUTPUT(nbp->b_vp);
+		vp = nbp->b_vp;
+		mutex_enter(&vp->v_interlock);
+		vp->v_numoutput++;
+		mutex_exit(&vp->v_interlock);
 	}
 	VOP_STRATEGY(cs->sc_tvn, nbp);
 	return 0;
@@ -364,10 +360,8 @@ cgdiodone(struct buf *nbp)
 	DPRINTF(CGDB_IO, (" dev 0x%x, nbp %p bn %" PRId64 " addr %p bcnt %d\n",
 	    nbp->b_dev, nbp, nbp->b_blkno, nbp->b_data,
 	    nbp->b_bcount));
-	if (nbp->b_flags & B_ERROR) {
-		obp->b_flags |= B_ERROR;
-		obp->b_error  = nbp->b_error ? nbp->b_error : EIO;
-
+	if (nbp->b_error != 0) {
+		obp->b_error = nbp->b_error;
 		printf("%s: error %d\n", dksc->sc_xname, obp->b_error);
 	}
 
@@ -389,7 +383,7 @@ cgdiodone(struct buf *nbp)
 
 	/* Request is complete for whatever reason */
 	obp->b_resid = 0;
-	if (obp->b_flags & B_ERROR)
+	if (obp->b_error != 0)
 		obp->b_resid = obp->b_bcount;
 	disk_unbusy(&dksc->sc_dkdev, obp->b_bcount - obp->b_resid,
 	    (obp->b_flags & B_READ));
@@ -428,7 +422,7 @@ cgdwrite(dev_t dev, struct uio *uio, int flags)
 }
 
 static int
-cgdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
+cgdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct	cgd_softc *cs;
 	struct	dk_softc *dksc;
@@ -476,7 +470,7 @@ cgdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 }
 
 static int
-cgddump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
+cgddump(dev_t dev, daddr_t blkno, void *va, size_t size)
 {
 	struct	cgd_softc *cs;
 
@@ -492,6 +486,16 @@ cgddump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
  */
 #define MAX_KEYSIZE	1024
 
+static const struct {
+	const char *n;
+	int v;
+	int d;
+} encblkno[] = {
+	{ "encblkno",  CGD_CIPHER_CBC_ENCBLKNO8, 1 },
+	{ "encblkno8", CGD_CIPHER_CBC_ENCBLKNO8, 1 },
+	{ "encblkno1", CGD_CIPHER_CBC_ENCBLKNO1, 8 },
+};
+
 /* ARGSUSED */
 static int
 cgd_ioctl_set(struct cgd_softc *cs, void *data, struct lwp *l)
@@ -499,12 +503,13 @@ cgd_ioctl_set(struct cgd_softc *cs, void *data, struct lwp *l)
 	struct	 cgd_ioctl *ci = data;
 	struct	 vnode *vp;
 	int	 ret;
+	size_t	 i;
 	size_t	 keybytes;			/* key length in bytes */
 	const char *cp;
 	char	 *inbuf;
 
 	cp = ci->ci_disk;
-	if ((ret = dk_lookup(cp, l, &vp)) != 0)
+	if ((ret = dk_lookup(cp, l, &vp, UIO_USERSPACE)) != 0)
 		return ret;
 
 	inbuf = malloc(MAX_KEYSIZE, M_TEMP, M_WAITOK);
@@ -522,12 +527,16 @@ cgd_ioctl_set(struct cgd_softc *cs, void *data, struct lwp *l)
 		goto bail;
 	}
 
-	/* right now we only support encblkno, so hard-code it */
 	(void)memset(inbuf, 0, MAX_KEYSIZE);
 	ret = copyinstr(ci->ci_ivmethod, inbuf, MAX_KEYSIZE, NULL);
 	if (ret)
 		goto bail;
-	if (strcmp("encblkno", inbuf)) {
+
+	for (i = 0; i < __arraycount(encblkno); i++)
+		if (strcmp(encblkno[i].n, inbuf) == 0)
+			break;
+
+	if (i == __arraycount(encblkno)) {
 		ret = EINVAL;
 		goto bail;
 	}
@@ -537,15 +546,22 @@ cgd_ioctl_set(struct cgd_softc *cs, void *data, struct lwp *l)
 		ret = EINVAL;
 		goto bail;
 	}
+
 	(void)memset(inbuf, 0, MAX_KEYSIZE);
 	ret = copyin(ci->ci_key, inbuf, keybytes);
 	if (ret)
 		goto bail;
 
 	cs->sc_cdata.cf_blocksize = ci->ci_blocksize;
-	cs->sc_cdata.cf_mode = CGD_CIPHER_CBC_ENCBLKNO;
+	cs->sc_cdata.cf_mode = encblkno[i].v;
 	cs->sc_cdata.cf_priv = cs->sc_cfuncs->cf_init(ci->ci_keylen, inbuf,
 	    &cs->sc_cdata.cf_blocksize);
+	/*
+	 * The blocksize is supposed to be in bytes. Unfortunately originally
+	 * it was expressed in bits. For compatibility we maintain encblkno
+	 * and encblkno8.
+	 */
+	cs->sc_cdata.cf_blocksize /= encblkno[i].d;
 	(void)memset(inbuf, 0, MAX_KEYSIZE);
 	if (!cs->sc_cdata.cf_priv) {
 		printf("cgd: unable to initialize cipher\n");
@@ -562,7 +578,7 @@ cgd_ioctl_set(struct cgd_softc *cs, void *data, struct lwp *l)
 	cs->sc_dksc.sc_flags |= DKF_INITED;
 
 	/* Attach the disk. */
-	pseudo_disk_attach(&cs->sc_dksc.sc_dkdev);
+	disk_attach(&cs->sc_dksc.sc_dkdev);
 
 	/* Try and read the disklabel. */
 	dk_getdisklabel(di, &cs->sc_dksc, 0 /* XXX ? */);
@@ -574,7 +590,7 @@ cgd_ioctl_set(struct cgd_softc *cs, void *data, struct lwp *l)
 
 bail:
 	free(inbuf, M_TEMP);
-	(void)vn_close(vp, FREAD|FWRITE, l->l_cred, l);
+	(void)vn_close(vp, FREAD|FWRITE, l->l_cred);
 	return ret;
 }
 
@@ -593,13 +609,13 @@ cgd_ioctl_clr(struct cgd_softc *cs, void *data, struct lwp *l)
 	splx(s);
 	bufq_free(cs->sc_dksc.sc_bufq);
 
-	(void)vn_close(cs->sc_tvn, FREAD|FWRITE, l->l_cred, l);
+	(void)vn_close(cs->sc_tvn, FREAD|FWRITE, l->l_cred);
 	cs->sc_cfuncs->cf_destroy(cs->sc_cdata.cf_priv);
 	free(cs->sc_tpath, M_DEVBUF);
 	free(cs->sc_data, M_DEVBUF);
 	cs->sc_data_used = 0;
 	cs->sc_dksc.sc_flags &= ~DKF_INITED;
-	pseudo_disk_detach(&cs->sc_dksc.sc_dkdev);
+	disk_detach(&cs->sc_dksc.sc_dkdev);
 
 	return 0;
 }
@@ -627,12 +643,12 @@ cgdinit(struct cgd_softc *cs, const char *cpath, struct vnode *vp,
 	cs->sc_tpath = malloc(cs->sc_tpathlen, M_DEVBUF, M_WAITOK);
 	memcpy(cs->sc_tpath, tmppath, cs->sc_tpathlen);
 
-	if ((ret = VOP_GETATTR(vp, &va, l->l_cred, l)) != 0)
+	if ((ret = VOP_GETATTR(vp, &va, l->l_cred)) != 0)
 		goto bail;
 
 	cs->sc_tdev = va.va_rdev;
 
-	ret = VOP_IOCTL(vp, DIOCGPART, &dpart, FREAD, l->l_cred, l);
+	ret = VOP_IOCTL(vp, DIOCGPART, &dpart, FREAD, l->l_cred);
 	if (ret)
 		goto bail;
 
@@ -718,9 +734,11 @@ blkno2blkno_buf(char *sbuf, daddr_t blkno)
 }
 
 static void
-cgd_cipher(struct cgd_softc *cs, caddr_t dst, caddr_t src,
-	   size_t len, daddr_t blkno, size_t secsize, int dir)
+cgd_cipher(struct cgd_softc *cs, void *dstv, void *srcv,
+    size_t len, daddr_t blkno, size_t secsize, int dir)
 {
+	char		*dst = dstv;
+	char 		*src = srcv;
 	cfunc_cipher	*cipher = cs->sc_cfuncs->cf_cipher;
 	struct uio	dstuio;
 	struct uio	srcuio;

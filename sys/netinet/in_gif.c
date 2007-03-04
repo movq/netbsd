@@ -1,4 +1,4 @@
-/*	$NetBSD: in_gif.c,v 1.54 2007/02/17 05:31:39 dyoung Exp $	*/
+/*	$NetBSD: in_gif.c,v 1.59 2008/04/12 05:58:22 thorpej Exp $	*/
 /*	$KAME: in_gif.c,v 1.66 2001/07/29 04:46:09 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_gif.c,v 1.54 2007/02/17 05:31:39 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_gif.c,v 1.59 2008/04/12 05:58:22 thorpej Exp $");
 
 #include "opt_inet.h"
 #include "opt_iso.h"
@@ -90,13 +90,17 @@ const struct protosw in_gif_protosw =
 int
 in_gif_output(struct ifnet *ifp, int family, struct mbuf *m)
 {
+	struct rtentry *rt;
 	struct gif_softc *sc = (struct gif_softc*)ifp;
-	struct sockaddr_in *dst = (struct sockaddr_in *)&sc->gif_ro.ro_dst;
 	struct sockaddr_in *sin_src = (struct sockaddr_in *)sc->gif_psrc;
 	struct sockaddr_in *sin_dst = (struct sockaddr_in *)sc->gif_pdst;
 	struct ip iphdr;	/* capsule IP header, host byte ordered */
 	int proto, error;
 	u_int8_t tos;
+	union {
+		struct sockaddr		dst;
+		struct sockaddr_in	dst4;
+	} u;
 
 	if (sin_src == NULL || sin_dst == NULL ||
 	    sin_src->sin_family != AF_INET ||
@@ -179,25 +183,14 @@ in_gif_output(struct ifnet *ifp, int family, struct mbuf *m)
 		return ENOBUFS;
 	bcopy(&iphdr, mtod(m, struct ip *), sizeof(struct ip));
 
-	if (dst->sin_family != sin_dst->sin_family ||
-	    !in_hosteq(dst->sin_addr, sin_dst->sin_addr))
-		rtcache_free(&sc->gif_ro);
-	else
-		rtcache_check(&sc->gif_ro);
-	if (sc->gif_ro.ro_rt == NULL) {
-		memset(dst, 0, sizeof(*dst));
-		dst->sin_family = sin_dst->sin_family;
-		dst->sin_len = sizeof(struct sockaddr_in);
-		dst->sin_addr = sin_dst->sin_addr;
-		rtcache_init(&sc->gif_ro);
-		if (sc->gif_ro.ro_rt == NULL) {
-			m_freem(m);
-			return ENETUNREACH;
-		}
+	sockaddr_in_init(&u.dst4, &sin_dst->sin_addr, 0);
+	if ((rt = rtcache_lookup(&sc->gif_ro, &u.dst)) == NULL) {
+		m_freem(m);
+		return ENETUNREACH;
 	}
 
 	/* If the route constitutes infinite encapsulation, punt. */
-	if (sc->gif_ro.ro_rt->rt_ifp == ifp) {
+	if (rt->rt_ifp == ifp) {
 		rtcache_free(&sc->gif_ro);
 		m_freem(m);
 		return ENETUNREACH;	/*XXX*/
@@ -228,13 +221,13 @@ in_gif_input(struct mbuf *m, ...)
 
 	if (gifp == NULL || (gifp->if_flags & IFF_UP) == 0) {
 		m_freem(m);
-		ipstat.ips_nogif++;
+		ip_statinc(IP_STAT_NOGIF);
 		return;
 	}
 #ifndef GIF_ENCAPCHECK
 	if (!gif_validate4(ip, (struct gif_softc *)gifp, m->m_pkthdr.rcvif)) {
 		m_freem(m);
-		ipstat.ips_nogif++;
+		ip_statinc(IP_STAT_NOGIF);
 		return;
 	}
 #endif
@@ -287,7 +280,7 @@ in_gif_input(struct mbuf *m, ...)
 		break;
 #endif
 	default:
-		ipstat.ips_nogif++;
+		ip_statinc(IP_STAT_NOGIF);
 		m_freem(m);
 		return;
 	}
@@ -368,7 +361,7 @@ gif_encapcheck4(struct mbuf *m, int off, int proto, void *arg)
 	/* sanity check done in caller */
 	sc = (struct gif_softc *)arg;
 
-	m_copydata(m, 0, sizeof(ip), (caddr_t)&ip);
+	m_copydata(m, 0, sizeof(ip), (void *)&ip);
 	ifp = ((m->m_flags & M_PKTHDR) != 0) ? m->m_pkthdr.rcvif : NULL;
 
 	return gif_validate4(&ip, sc, ifp);

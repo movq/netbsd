@@ -1,7 +1,7 @@
-/*	$NetBSD: vnd.c,v 1.162 2007/02/21 22:59:58 thorpej Exp $	*/
+/*	$NetBSD: vnd.c,v 1.187 2008/09/24 07:57:30 ad Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 1998, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -137,7 +130,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vnd.c,v 1.162 2007/02/21 22:59:58 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vnd.c,v 1.187 2008/09/24 07:57:30 ad Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "fs_nfs.h"
@@ -171,6 +164,8 @@ __KERNEL_RCSID(0, "$NetBSD: vnd.c,v 1.162 2007/02/21 22:59:58 thorpej Exp $");
 #include <miscfs/specfs/specdev.h>
 
 #include <dev/vndvar.h>
+
+#include <prop/proplib.h>
 
 #if defined(VNDDEBUG) && !defined(DEBUG)
 #define DEBUG
@@ -227,6 +222,7 @@ static void	handle_with_rdwr(struct vnd_softc *, const struct buf *,
 		    struct buf *);
 static void	handle_with_strategy(struct vnd_softc *, const struct buf *,
 		    struct buf *);
+static void	vnd_set_properties(struct vnd_softc *);
 
 static dev_type_open(vndopen);
 static dev_type_close(vndclose);
@@ -246,16 +242,16 @@ const struct cdevsw vnd_cdevsw = {
 	nostop, notty, nopoll, nommap, nokqfilter, D_DISK
 };
 
-static int	vnd_match(struct device *, struct cfdata *, void *);
-static void	vnd_attach(struct device *, struct device *, void *);
-static int	vnd_detach(struct device *, int);
+static int	vnd_match(device_t, cfdata_t, void *);
+static void	vnd_attach(device_t, device_t, void *);
+static int	vnd_detach(device_t, int);
 
-CFATTACH_DECL(vnd, sizeof(struct vnd_softc),
+CFATTACH_DECL_NEW(vnd, sizeof(struct vnd_softc),
     vnd_match, vnd_attach, vnd_detach, NULL);
 extern struct cfdriver vnd_cd;
 
 static struct vnd_softc	*vnd_spawn(int);
-int	vnd_destroy(struct device *);
+int	vnd_destroy(device_t);
 
 void
 vndattach(int num)
@@ -269,33 +265,37 @@ vndattach(int num)
 }
 
 static int
-vnd_match(struct device *self, struct cfdata *cfdata,
-    void *aux)
+vnd_match(device_t self, cfdata_t cfdata, void *aux)
 {
+
 	return 1;
 }
 
 static void
-vnd_attach(struct device *parent, struct device *self,
-    void *aux)
+vnd_attach(device_t parent, device_t self, void *aux)
 {
-	struct vnd_softc *sc = (struct vnd_softc *)self;
+	struct vnd_softc *sc = device_private(self);
 
+	sc->sc_dev = self;
 	sc->sc_comp_offsets = NULL;
 	sc->sc_comp_buff = NULL;
 	sc->sc_comp_decombuf = NULL;
 	bufq_alloc(&sc->sc_tab, "disksort", BUFQ_SORT_RAWBLOCK);
-	pseudo_disk_init(&sc->sc_dkdev);
+	disk_init(&sc->sc_dkdev, device_xname(self), NULL);
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static int
-vnd_detach(struct device *self, int flags)
+vnd_detach(device_t self, int flags)
 {
-	struct vnd_softc *sc = (struct vnd_softc *)self;
+	struct vnd_softc *sc = device_private(self);
 	if (sc->sc_flags & VNF_INITED)
 		return EBUSY;
 
+	pmf_device_deregister(self);
 	bufq_free(sc->sc_tab);
+	disk_destroy(&sc->sc_dkdev);
 
 	return 0;
 }
@@ -311,14 +311,14 @@ vnd_spawn(int unit)
 	cf->cf_unit = unit;
 	cf->cf_fstate = FSTATE_STAR;
 
-	return (struct vnd_softc *)config_attach_pseudo(cf);
+	return device_private(config_attach_pseudo(cf));
 }
 
 int
-vnd_destroy(struct device *dev)
+vnd_destroy(device_t dev)
 {
 	int error;
-	struct cfdata *cf;
+	cfdata_t cf;
 
 	cf = device_cfdata(dev);
 	error = config_detach(dev, DETACH_QUIET);
@@ -340,7 +340,7 @@ vndopen(dev_t dev, int flags, int mode, struct lwp *l)
 	if (vnddebug & VDB_FOLLOW)
 		printf("vndopen(0x%x, 0x%x, 0x%x, %p)\n", dev, flags, mode, l);
 #endif
-	sc = device_lookup(&vnd_cd, unit);
+	sc = device_lookup_private(&vnd_cd, unit);
 	if (sc == NULL) {
 		sc = vnd_spawn(unit);
 		if (sc == NULL)
@@ -404,7 +404,7 @@ vndclose(dev_t dev, int flags, int mode, struct lwp *l)
 	if (vnddebug & VDB_FOLLOW)
 		printf("vndclose(0x%x, 0x%x, 0x%x, %p)\n", dev, flags, mode, l);
 #endif
-	sc = device_lookup(&vnd_cd, unit);
+	sc = device_lookup_private(&vnd_cd, unit);
 	if (sc == NULL)
 		return ENXIO;
 
@@ -429,9 +429,9 @@ vndclose(dev_t dev, int flags, int mode, struct lwp *l)
 	vndunlock(sc);
 
 	if ((sc->sc_flags & VNF_INITED) == 0) {
-		if ((error = vnd_destroy((struct device *)sc)) != 0) {
-			aprint_error("%s: unable to detach instance\n",
-			    sc->sc_dev.dv_xname);
+		if ((error = vnd_destroy(sc->sc_dev)) != 0) {
+			aprint_error_dev(sc->sc_dev,
+			    "unable to detach instance\n");
 			return error;
 		}
 	}
@@ -447,16 +447,13 @@ vndstrategy(struct buf *bp)
 {
 	int unit = vndunit(bp->b_dev);
 	struct vnd_softc *vnd =
-	    (struct vnd_softc *)device_lookup(&vnd_cd, unit);
+	    device_lookup_private(&vnd_cd, unit);
 	struct disklabel *lp = vnd->sc_dkdev.dk_label;
 	daddr_t blkno;
 	int s = splbio();
 
-	bp->b_resid = bp->b_bcount;
-
 	if ((vnd->sc_flags & VNF_INITED) == 0) {
 		bp->b_error = ENXIO;
-		bp->b_flags |= B_ERROR;
 		goto done;
 	}
 
@@ -465,7 +462,6 @@ vndstrategy(struct buf *bp)
 	 */
 	if ((bp->b_bcount % lp->d_secsize) != 0) {
 		bp->b_error = EINVAL;
-		bp->b_flags |= B_ERROR;
 		goto done;
 	}
 
@@ -474,7 +470,11 @@ vndstrategy(struct buf *bp)
 	 */
 	if ((vnd->sc_flags & VNF_READONLY) && !(bp->b_flags & B_READ)) {
 		bp->b_error = EACCES;
-		bp->b_flags |= B_ERROR;
+		goto done;
+	}
+
+	/* If it's a nil transfer, wake up the top half now. */
+	if (bp->b_bcount == 0) {
 		goto done;
 	}
 
@@ -491,10 +491,6 @@ vndstrategy(struct buf *bp)
 		    bp, vnd->sc_flags & (VNF_WLABEL|VNF_LABELLING)) <= 0)
 			goto done;
 	}
-
-	/* If it's a nil transfer, wake up the top half now. */
-	if (bp->b_bcount == 0)
-		goto done;
 
 	/*
 	 * Put the block number in terms of the logical blocksize
@@ -523,10 +519,50 @@ vndstrategy(struct buf *bp)
 	wakeup(&vnd->sc_tab);
 	splx(s);
 	return;
+
 done:
+	bp->b_resid = bp->b_bcount;
 	biodone(bp);
 	splx(s);
 }
+
+static bool
+vnode_has_strategy(struct vnd_softc *vnd)
+{
+	return vnode_has_op(vnd->sc_vp, VOFFSET(vop_bmap)) &&
+	    vnode_has_op(vnd->sc_vp, VOFFSET(vop_strategy));
+}
+
+/* XXX this function needs a reliable check to detect
+ * sparse files. Otherwise, bmap/strategy may be used
+ * and fail on non-allocated blocks. VOP_READ/VOP_WRITE
+ * works on sparse files.
+ */
+#if notyet
+static bool
+vnode_strategy_probe(struct vnd_softc *vnd)
+{
+	int error;
+	daddr_t nbn;
+
+	if (!vnode_has_strategy(vnd))
+		return false;
+
+	/* Convert the first logical block number to its
+	 * physical block number.
+	 */
+	error = 0;
+	vn_lock(vnd->sc_vp, LK_EXCLUSIVE | LK_RETRY | LK_CANRECURSE);
+	error = VOP_BMAP(vnd->sc_vp, 0, NULL, &nbn, NULL);
+	VOP_UNLOCK(vnd->sc_vp, 0);
+
+	/* Test if that worked. */
+	if (error == 0 && (long)nbn == -1)
+		return false;
+
+	return true;
+}
+#endif
 
 static void
 vndthread(void *arg)
@@ -535,13 +571,12 @@ vndthread(void *arg)
 	bool usestrategy;
 	int s;
 
-	/* Determine whether we can use VOP_BMAP and VOP_STRATEGY to
+	/* Determine whether we can *use* VOP_BMAP and VOP_STRATEGY to
 	 * directly access the backing vnode.  If we can, use these two
 	 * operations to avoid messing with the local buffer cache.
 	 * Otherwise fall back to regular VOP_READ/VOP_WRITE operations
 	 * which are guaranteed to work with any file system. */
-	usestrategy = vnode_has_op(vnd->sc_vp, VOFFSET(vop_bmap)) &&
-	    vnode_has_op(vnd->sc_vp, VOFFSET(vop_strategy));
+	usestrategy = vnode_has_strategy(vnd);
 
 #ifdef DEBUG
 	if (vnddebug & VDB_INIT)
@@ -574,12 +609,11 @@ vndthread(void *arg)
 		flags = obp->b_flags;
 #ifdef DEBUG
 		if (vnddebug & VDB_FOLLOW)
-			printf("vndthread(%p\n", obp);
+			printf("vndthread(%p)\n", obp);
 #endif
 
 		if (vnd->sc_vp->v_mount == NULL) {
 			obp->b_error = ENXIO;
-			obp->b_flags |= B_ERROR;
 			goto done;
 		}
 #ifdef VND_COMPRESSION
@@ -616,13 +650,16 @@ vndthread(void *arg)
 		disk_busy(&vnd->sc_dkdev);
 
 		bp = &vnx->vx_buf;
-		BUF_INIT(bp);
-		bp->b_flags = (obp->b_flags & B_READ) | B_CALL;
+		buf_init(bp);
+		bp->b_flags = (obp->b_flags & B_READ);
+		bp->b_oflags = obp->b_oflags;
+		bp->b_cflags = obp->b_cflags;
 		bp->b_iodone = vndiodone;
 		bp->b_private = obp;
 		bp->b_vp = vnd->sc_vp;
+		bp->b_objlock = &bp->b_vp->v_interlock;
 		bp->b_data = obp->b_data;
-		bp->b_bcount = bp->b_resid = obp->b_bcount;
+		bp->b_bcount = obp->b_bcount;
 		BIO_COPYPRIO(bp, obp);
 
 		/* Handle the request using the appropriate operations. */
@@ -701,15 +738,14 @@ handle_with_rdwr(struct vnd_softc *vnd, const struct buf *obp, struct buf *bp)
 	    vp, bp->b_data, bp->b_bcount, offset,
 	    UIO_SYSSPACE, 0, vnd->sc_cred, &resid, NULL);
 	bp->b_resid = resid;
-	if (bp->b_error != 0)
-		bp->b_flags |= B_ERROR;
-	else
-		KASSERT(!(bp->b_flags & B_ERROR));
 
 	/* We need to increase the number of outputs on the vnode if
 	 * there was any write to it. */
-	if (!doread)
-		V_INCR_NUMOUTPUT(vp);
+	if (!doread) {
+		mutex_enter(&vp->v_interlock);
+		vp->v_numoutput++;
+		mutex_exit(&vp->v_interlock);
+	}
 
 	biodone(bp);
 }
@@ -727,20 +763,15 @@ handle_with_strategy(struct vnd_softc *vnd, const struct buf *obp,
 	int bsize, error, flags, skipped;
 	size_t resid, sz;
 	off_t bn, offset;
-	struct mount *mp;
+	struct vnode *vp;
 
 	flags = obp->b_flags;
 
-	mp = NULL;
 	if (!(flags & B_READ)) {
-		int s;
-		
-		s = splbio();
-		V_INCR_NUMOUTPUT(bp->b_vp);
-		splx(s);
-
-		vn_start_write(vnd->sc_vp, &mp, V_WAIT);
-		KASSERT(mp != NULL);
+		vp = bp->b_vp;
+		mutex_enter(&vp->v_interlock);
+		vp->v_numoutput++;
+		mutex_exit(&vp->v_interlock);
 	}
 
 	/* convert to a byte offset within the file. */
@@ -757,10 +788,10 @@ handle_with_strategy(struct vnd_softc *vnd, const struct buf *obp,
 	 * the client rather than the server.
 	 */
 	error = 0;
+	bp->b_resid = bp->b_bcount;
 	for (offset = 0, resid = bp->b_resid; resid;
 	    resid -= sz, offset += sz) {
 		struct buf *nbp;
-		struct vnode *vp;
 		daddr_t nbn;
 		int off, nra;
 
@@ -796,11 +827,11 @@ handle_with_strategy(struct vnd_softc *vnd, const struct buf *obp,
 #ifdef	DEBUG
 		if (vnddebug & VDB_IO)
 			printf("vndstrategy: vp %p/%p bn 0x%qx/0x%" PRIx64
-			       " sz 0x%zx\n",
-			    vnd->sc_vp, vp, (long long)bn, nbn, sz);
+			    " sz 0x%zx\n", vnd->sc_vp, vp, (long long)bn,
+			    nbn, sz);
 #endif
 
-		nbp = getiobuf();
+		nbp = getiobuf(vp, true);
 		nestiobuf_setup(bp, nbp, offset, sz);
 		nbp->b_blkno = nbn + btodb(off);
 
@@ -817,11 +848,6 @@ handle_with_strategy(struct vnd_softc *vnd, const struct buf *obp,
 		bn += sz;
 	}
 	nestiobuf_done(bp, skipped, error);
-
-	if (!(flags & B_READ)) {
-		KASSERT(mp != NULL);
-		vn_finished_write(mp, 0);
-	}
 }
 
 static void
@@ -836,7 +862,7 @@ vndiodone(struct buf *bp)
 #ifdef DEBUG
 	if (vnddebug & VDB_IO) {
 		printf("vndiodone1: bp %p iodone: error %d\n",
-		    bp, (bp->b_flags & B_ERROR) != 0 ? bp->b_error : 0);
+		    bp, bp->b_error);
 	}
 #endif
 	disk_unbusy(&vnd->sc_dkdev, bp->b_bcount - bp->b_resid,
@@ -845,9 +871,9 @@ vndiodone(struct buf *bp)
 	if (vnd->sc_active == 0) {
 		wakeup(&vnd->sc_tab);
 	}
-	obp->b_flags |= bp->b_flags & B_ERROR;
 	obp->b_error = bp->b_error;
 	obp->b_resid = bp->b_resid;
+	buf_destroy(bp);
 	VND_PUTXFER(vnd, vnx);
 	biodone(obp);
 }
@@ -864,7 +890,7 @@ vndread(dev_t dev, struct uio *uio, int flags)
 		printf("vndread(0x%x, %p)\n", dev, uio);
 #endif
 
-	sc = device_lookup(&vnd_cd, unit);
+	sc = device_lookup_private(&vnd_cd, unit);
 	if (sc == NULL)
 		return ENXIO;
 
@@ -886,7 +912,7 @@ vndwrite(dev_t dev, struct uio *uio, int flags)
 		printf("vndwrite(0x%x, %p)\n", dev, uio);
 #endif
 
-	sc = device_lookup(&vnd_cd, unit);
+	sc = device_lookup_private(&vnd_cd, unit);
 	if (sc == NULL)
 		return ENXIO;
 
@@ -906,19 +932,19 @@ vnd_cget(struct lwp *l, int unit, int *un, struct vattr *va)
 	if (*un < 0)
 		return EINVAL;
 
-	vnd = device_lookup(&vnd_cd, *un);
+	vnd = device_lookup_private(&vnd_cd, *un);
 	if (vnd == NULL)
 		return (*un >= vnd_cd.cd_ndevs) ? ENXIO : -1;
 
 	if ((vnd->sc_flags & VNF_INITED) == 0)
 		return -1;
 
-	return VOP_GETATTR(vnd->sc_vp, va, l->l_cred, l);
+	return VOP_GETATTR(vnd->sc_vp, va, l->l_cred);
 }
 
 /* ARGSUSED */
 static int
-vndioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
+vndioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	int unit = vndunit(dev);
 	struct vnd_softc *vnd;
@@ -937,7 +963,7 @@ vndioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		printf("vndioctl(0x%x, 0x%lx, %p, 0x%x, %p): unit %d\n",
 		    dev, cmd, data, flag, l->l_proc, unit);
 #endif
-	vnd = device_lookup(&vnd_cd, unit);
+	vnd = device_lookup_private(&vnd_cd, unit);
 	if (vnd == NULL &&
 #ifdef COMPAT_30
 	    cmd != VNDIOOCGET &&
@@ -993,11 +1019,11 @@ vndioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		fflags = FREAD;
 		if ((vio->vnd_flags & VNDIOF_READONLY) == 0)
 			fflags |= FWRITE;
-		NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, vio->vnd_file, l);
+		NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, vio->vnd_file);
 		if ((error = vn_open(&nd, fflags, 0)) != 0)
 			goto unlock_and_exit;
 		KASSERT(l);
-		error = VOP_GETATTR(nd.ni_vp, &vattr, l->l_cred, l);
+		error = VOP_GETATTR(nd.ni_vp, &vattr, l->l_cred);
 		if (!error && nd.ni_vp->v_type != VREG)
 			error = EOPNOTSUPP;
 		if (error) {
@@ -1019,7 +1045,7 @@ vndioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 			M_TEMP, M_WAITOK);
  
 			/* read compressed file header */
-			error = vn_rdwr(UIO_READ, nd.ni_vp, (caddr_t)ch,
+			error = vn_rdwr(UIO_READ, nd.ni_vp, (void *)ch,
 			  sizeof(struct vnd_comp_header), 0, UIO_SYSSPACE,
 			  IO_UNIT|IO_NODELOCKED, l->l_cred, NULL, NULL);
 			if(error) {
@@ -1059,7 +1085,7 @@ vndioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
  
 			/* read in the offsets */
 			error = vn_rdwr(UIO_READ, nd.ni_vp,
-			  (caddr_t)vnd->sc_comp_offsets,
+			  (void *)vnd->sc_comp_offsets,
 			  sizeof(u_int64_t) * vnd->sc_comp_numoffs,
 			  sizeof(struct vnd_comp_header), UIO_SYSSPACE,
 			  IO_UNIT|IO_NODELOCKED, l->l_cred, NULL, NULL);
@@ -1174,6 +1200,8 @@ vndioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 			vnd->sc_geom.vng_ncylinders = vnd->sc_size;
 		}
 
+		vnd_set_properties(vnd);
+
 		if (vio->vnd_flags & VNDIOF_READONLY) {
 			vnd->sc_flags |= VNF_READONLY;
 		}
@@ -1186,8 +1214,8 @@ vndioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		vnd->sc_flags |= VNF_INITED;
 
 		/* create the kernel thread, wait for it to be up */
-		error = kthread_create1(vndthread, vnd, &vnd->sc_kthread,
-		    vnd->sc_dev.dv_xname);
+		error = kthread_create(PRI_NONE, 0, NULL, vndthread, vnd,
+		    &vnd->sc_kthread, device_xname(vnd->sc_dev));
 		if (error)
 			goto close_and_exit;
 		while ((vnd->sc_flags & VNF_KTHREAD) == 0) {
@@ -1204,12 +1232,11 @@ vndioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 #endif
 
 		/* Attach the disk. */
-		vnd->sc_dkdev.dk_name = vnd->sc_dev.dv_xname;
-		pseudo_disk_attach(&vnd->sc_dkdev);
+		disk_attach(&vnd->sc_dkdev);
 
 		/* Initialize the xfer and buffer pools. */
 		pool_init(&vnd->sc_vxpool, sizeof(struct vndxfer), 0,
-		    0, 0, "vndxpl", NULL);
+		    0, 0, "vndxpl", NULL, IPL_BIO);
 
 		/* Try and read the disklabel. */
 		vndgetdisklabel(dev, vnd);
@@ -1219,7 +1246,7 @@ vndioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		break;
 
 close_and_exit:
-		(void) vn_close(nd.ni_vp, fflags, l->l_cred, l);
+		(void) vn_close(nd.ni_vp, fflags, l->l_cred);
 unlock_and_exit:
 #ifdef VND_COMPRESSION
 		/* free any allocated memory (for compressed file) */
@@ -1273,7 +1300,7 @@ unlock_and_exit:
 		pool_destroy(&vnd->sc_vxpool);
 
 		/* Detatch the disk. */
-		pseudo_disk_detach(&vnd->sc_dkdev);
+		disk_detach(&vnd->sc_dkdev);
 		break;
 
 #ifdef COMPAT_30
@@ -1497,7 +1524,6 @@ static void
 vndclear(struct vnd_softc *vnd, int myminor)
 {
 	struct vnode *vp = vnd->sc_vp;
-	struct lwp *l = curlwp;
 	int fflags = FREAD;
 	int bmaj, cmaj, i, mn;
 	int s;
@@ -1512,7 +1538,7 @@ vndclear(struct vnd_softc *vnd, int myminor)
 
 	/* Nuke the vnodes for any open instances */
 	for (i = 0; i < MAXPARTITIONS; i++) {
-		mn = DISKMINOR(device_unit(&vnd->sc_dev), i);
+		mn = DISKMINOR(device_unit(vnd->sc_dev), i);
 		vdevgone(bmaj, mn, mn, VBLK);
 		if (mn != myminor) /* XXX avoid to kill own vnode */
 			vdevgone(cmaj, mn, mn, VCHR);
@@ -1552,7 +1578,7 @@ vndclear(struct vnd_softc *vnd, int myminor)
 	      | VNF_VUNCONF | VNF_COMP);
 	if (vp == (struct vnode *)0)
 		panic("vndclear: null vp");
-	(void) vn_close(vp, fflags, vnd->sc_cred, l);
+	(void) vn_close(vp, fflags, vnd->sc_cred);
 	kauth_cred_free(vnd->sc_cred);
 	vnd->sc_vp = (struct vnode *)0;
 	vnd->sc_cred = (kauth_cred_t)0;
@@ -1568,7 +1594,7 @@ vndsize(dev_t dev)
 	int size;
 
 	unit = vndunit(dev);
-	sc = (struct vnd_softc *)device_lookup(&vnd_cd, unit);
+	sc = device_lookup_private(&vnd_cd, unit);
 	if (sc == NULL)
 		return -1;
 
@@ -1595,7 +1621,7 @@ vndsize(dev_t dev)
 }
 
 static int
-vnddump(dev_t dev, daddr_t blkno, caddr_t va,
+vnddump(dev_t dev, daddr_t blkno, void *va,
     size_t size)
 {
 
@@ -1660,7 +1686,7 @@ vndgetdisklabel(dev_t dev, struct vnd_softc *sc)
 		 * Lack of disklabel is common, but we print the warning
 		 * anyway, since it might contain other useful information.
 		 */
-		printf("%s: %s\n", sc->sc_dev.dv_xname, errstring);
+		aprint_normal_dev(sc->sc_dev, "%s\n", errstring);
 
 		/*
 		 * For historical reasons, if there's no disklabel
@@ -1733,10 +1759,10 @@ compstrategy(struct buf *bp, off_t bn)
 	int error;
 	int unit = vndunit(bp->b_dev);
 	struct vnd_softc *vnd =
-	    (struct vnd_softc *)device_lookup(&vnd_cd, unit);
+	    device_lookup_private(&vnd_cd, unit);
 	u_int32_t comp_block;
 	struct uio auio;
-	caddr_t addr;
+	char *addr;
 	int s;
 
 	/* set up constants for data move */
@@ -1745,6 +1771,7 @@ compstrategy(struct buf *bp, off_t bn)
 
 	/* read, and transfer the data */
 	addr = bp->b_data;
+	bp->b_resid = bp->b_bcount;
 	s = splbio();
 	while (bp->b_resid > 0) {
 		unsigned length;
@@ -1758,7 +1785,6 @@ compstrategy(struct buf *bp, off_t bn)
 		/* check for good block number */
 		if (comp_block >= vnd->sc_comp_numoffs) {
 			bp->b_error = EINVAL;
-			bp->b_flags |= B_ERROR;
 			splx(s);
 			return;
 		}
@@ -1770,10 +1796,10 @@ compstrategy(struct buf *bp, off_t bn)
 			vn_lock(vnd->sc_vp, LK_EXCLUSIVE | LK_RETRY);
 			error = vn_rdwr(UIO_READ, vnd->sc_vp, vnd->sc_comp_buff,
 			    length, vnd->sc_comp_offsets[comp_block],
-			    UIO_SYSSPACE, IO_UNIT, vnd->sc_cred, NULL, NULL);
+			    UIO_SYSSPACE, IO_NODELOCKED|IO_UNIT, vnd->sc_cred,
+			    NULL, NULL);
 			if (error) {
 				bp->b_error = error;
-				bp->b_flags |= B_ERROR;
 				VOP_UNLOCK(vnd->sc_vp, 0);
 				splx(s);
 				return;
@@ -1787,11 +1813,10 @@ compstrategy(struct buf *bp, off_t bn)
 			error = inflate(&vnd->sc_comp_stream, Z_FINISH);
 			if (error != Z_STREAM_END) {
 				if (vnd->sc_comp_stream.msg)
-					printf("%s: compressed file, %s\n",
-					    vnd->sc_dev.dv_xname,
+					aprint_normal_dev(vnd->sc_dev,
+					    "compressed file, %s\n",
 					    vnd->sc_comp_stream.msg);
 				bp->b_error = EBADMSG;
-				bp->b_flags |= B_ERROR;
 				VOP_UNLOCK(vnd->sc_vp, 0);
 				splx(s);
 				return;
@@ -1815,7 +1840,6 @@ compstrategy(struct buf *bp, off_t bn)
 		    length_in_buffer, &auio);
 		if (error) {
 			bp->b_error = error;
-			bp->b_flags |= B_ERROR;
 			splx(s);
 			return;
 		}
@@ -1840,3 +1864,45 @@ vnd_free(void *aux, void *ptr)
 	free(ptr, M_TEMP);
 }
 #endif /* VND_COMPRESSION */
+
+static void
+vnd_set_properties(struct vnd_softc *vnd)
+{
+	prop_dictionary_t disk_info, odisk_info, geom;
+
+	disk_info = prop_dictionary_create();
+
+	geom = prop_dictionary_create();
+
+	prop_dictionary_set_uint64(geom, "sectors-per-unit",
+	    vnd->sc_geom.vng_nsectors * vnd->sc_geom.vng_ntracks *
+	    vnd->sc_geom.vng_ncylinders);
+
+	prop_dictionary_set_uint32(geom, "sector-size",
+	    vnd->sc_geom.vng_secsize);
+
+	prop_dictionary_set_uint16(geom, "sectors-per-track",
+	    vnd->sc_geom.vng_nsectors);
+
+	prop_dictionary_set_uint16(geom, "tracks-per-cylinder",
+	    vnd->sc_geom.vng_ntracks);
+
+	prop_dictionary_set_uint64(geom, "cylinders-per-unit",
+	    vnd->sc_geom.vng_ncylinders);
+
+	prop_dictionary_set(disk_info, "geometry", geom);
+	prop_object_release(geom);
+
+	prop_dictionary_set(device_properties(vnd->sc_dev),
+	    "disk-info", disk_info);
+
+	/*
+	 * Don't release disk_info here; we keep a reference to it.
+	 * disk_detach() will release it when we go away.
+	 */
+
+	odisk_info = vnd->sc_dkdev.dk_info;
+	vnd->sc_dkdev.dk_info = disk_info;
+	if (odisk_info)
+		prop_object_release(odisk_info);
+}

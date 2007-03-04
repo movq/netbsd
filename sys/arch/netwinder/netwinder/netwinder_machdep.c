@@ -1,4 +1,4 @@
-/*	$NetBSD: netwinder_machdep.c,v 1.63 2006/11/24 22:04:23 wiz Exp $	*/
+/*	$NetBSD: netwinder_machdep.c,v 1.66 2008/04/27 18:58:47 matt Exp $	*/
 
 /*
  * Copyright (c) 1997,1998 Mark Brinicombe.
@@ -40,10 +40,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netwinder_machdep.c,v 1.63 2006/11/24 22:04:23 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netwinder_machdep.c,v 1.66 2008/04/27 18:58:47 matt Exp $");
 
 #include "opt_ddb.h"
-#include "opt_ipkdb.h"
 #include "opt_pmap_debug.h"
 
 #include <sys/param.h>
@@ -124,11 +123,7 @@ u_int dc21285_fclk = 63750000;
 /* Define various stack sizes in pages */
 #define IRQ_STACK_SIZE	1
 #define ABT_STACK_SIZE	1
-#ifdef IPKDB
-#define UND_STACK_SIZE	2
-#else
 #define UND_STACK_SIZE	1
-#endif
 
 struct nwbootinfo nwbootinfo;
 BootConfig bootconfig;		/* Boot config storage */
@@ -150,7 +145,6 @@ int max_processes = 64;			/* Default number */
 #endif	/* !PMAP_STATIC_L1S */
 
 /* Physical and virtual addresses for some global pages */
-pv_addr_t systempage;
 pv_addr_t irqstack;
 pv_addr_t undstack;
 pv_addr_t abtstack;
@@ -413,7 +407,6 @@ initarm(void *arg)
 	int loop1;
 	u_int l1pagetable;
 	extern char _end[];
-	pv_addr_t kernel_l1pt;
 
 	/*
 	 * Turn the led off, then turn it yellow.
@@ -454,7 +447,7 @@ initarm(void *arg)
 	 * early versions of NeTTrom fill this in with bogus values,
 	 * so we need to sanity check it.
 	 */
-	memcpy(&nwbootinfo, (caddr_t)(KERNEL_BASE + 0x100),
+	memcpy(&nwbootinfo, (void *)(KERNEL_BASE + 0x100),
 	    sizeof(nwbootinfo));
 #ifdef VERBOSE_INIT_ARM
 	printf("NeTTrom boot info:\n");
@@ -536,7 +529,6 @@ initarm(void *arg)
 	memset((char *)(var), 0, ((np) * PAGE_SIZE));
 
 	loop1 = 0;
-	kernel_l1pt.pv_pa = kernel_l1pt.pv_va = 0;
 	for (loop = 0; loop <= NUM_KERNEL_PTS; ++loop) {
 		/* Are we 16KB aligned for an L1 ? */
 		if ((physical_freestart & (L1_TABLE_SIZE - 1)) == 0
@@ -843,8 +835,7 @@ initarm(void *arg)
 
 	/* Boot strap pmap telling it where the kernel page table is */
 	printf("pmap ");
-	pmap_bootstrap((pd_entry_t *)kernel_l1pt.pv_va, KERNEL_VM_BASE,
-	    KERNEL_VM_BASE + KERNEL_VM_SIZE);
+	pmap_bootstrap(KERNEL_VM_BASE, KERNEL_VM_BASE + KERNEL_VM_SIZE);
 
 	/* Now that pmap is inited, we can set cpu_reset_address */
 	cpu_reset_address = (u_int)vtophys((vaddr_t)netwinder_reset);
@@ -860,14 +851,6 @@ initarm(void *arg)
 	 */
 	if (nwbootinfo.bi_pagesize == 0xdeadbeef)
 		printf("WARNING: NeTTrom boot info corrupt\n");
-
-#ifdef IPKDB
-	/* Initialise ipkdb */
-	ipkdb_init();
-	if (boothowto & RB_KDB)
-		ipkdb_connect(0);
-#endif
-
 
 #if NKSYMS || defined(DDB) || defined(LKM)
 	/* Firmware doesn't load symbols. */

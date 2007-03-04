@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.71 2007/02/22 16:48:59 thorpej Exp $ */
+/*	$NetBSD: db_interface.c,v 1.79 2008/08/08 17:09:28 skrll Exp $ */
 
 /*
  * Mach Operating System
@@ -33,18 +33,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.71 2007/02/22 16:48:59 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.79 2008/08/08 17:09:28 skrll Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_multiprocessor.h"
-#include "opt_lockdebug.h"
 
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>
+#include <sys/simplelock.h>
 
 #include <dev/cons.h>
 
@@ -199,8 +199,6 @@ void kdb_kbd_trap(struct trapframe *);
 void db_prom_cmd(db_expr_t, bool, db_expr_t, const char *);
 void db_proc_cmd(db_expr_t, bool, db_expr_t, const char *);
 void db_dump_pcb(db_expr_t, bool, db_expr_t, const char *);
-void db_lock_cmd(db_expr_t, bool, db_expr_t, const char *);
-void db_simple_lock_cmd(db_expr_t, bool, db_expr_t, const char *);
 void db_uvmhistdump(db_expr_t, bool, db_expr_t, const char *);
 #ifdef MULTIPROCESSOR
 void db_cpu_cmd(db_expr_t, bool, db_expr_t, const char *);
@@ -373,9 +371,9 @@ db_proc_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 		db_printf(" ctx: %p cpuset %x",
 			  p->p_vmspace->vm_map.pmap->pm_ctx,
 			  p->p_vmspace->vm_map.pmap->pm_cpuset);
-	db_printf("\npmap:%p wchan:%p pri:%d upri:%d\n",
+	db_printf("\npmap:%p wchan:%p pri:%d epri:%d\n",
 		  p->p_vmspace->vm_map.pmap,
-		  l->l_wchan, l->l_priority, l->l_usrpri);
+		  l->l_wchan, l->l_priority, lwp_eprio(l));
 	db_printf("maxsaddr:%p ssiz:%d pg or %llxB\n",
 		  p->p_vmspace->vm_maxsaddr, p->p_vmspace->vm_ssize,
 		  (unsigned long long)ctob(p->p_vmspace->vm_ssize));
@@ -449,46 +447,6 @@ db_page_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 	    PHYS_TO_VM_PAGE(addr));
 }
 
-void
-db_lock_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
-{
-	struct lock *l;
-
-	if (!have_addr) {
-		db_printf("What lock address?\n");
-		return;
-	}
-
-	l = (struct lock *)addr;
-	db_printf("interlock=%x flags=%x\n waitcount=%x sharecount=%x "
-	    "exclusivecount=%x\n wmesg=%s recurselevel=%x\n",
-	    l->lk_interlock.lock_data, l->lk_flags, l->lk_waitcount,
-	    l->lk_sharecount, l->lk_exclusivecount, l->lk_wmesg,
-	    l->lk_recurselevel);
-}
-
-void
-db_simple_lock_cmd(db_expr_t addr, bool have_addr, db_expr_t count,
-		   const char *modif)
-{
-	struct simplelock *l;
-
-	if (!have_addr) {
-		db_printf("What lock address?\n");
-		return;
-	}
-
-	l = (struct simplelock *)addr;
-	db_printf("lock_data=%d", l->lock_data);
-#ifdef LOCKDEBUG
-	db_printf(" holder=%ld\n"
-	    " last locked=%s:%d\n last unlocked=%s:%d\n",
-	    l->lock_holder, l->lock_file, l->lock_line, l->unlock_file,
-	    l->unlock_line);
-#endif
-	db_printf("\n");
-}
-
 #if defined(MULTIPROCESSOR)
 extern void cpu_debug_dump(void); /* XXX */
 
@@ -527,33 +485,15 @@ db_cpu_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 
 #endif /* MULTIPROCESSOR */
 
-#include <uvm/uvm.h>
-
-#ifdef UVMHIST
-extern void uvmhist_dump(struct uvm_history *);
-#endif
-extern struct uvm_history_head uvm_histories;
-
-void
-db_uvmhistdump(db_expr_t addr, bool have_addr, db_expr_t count,
-	       const char *modif)
-{
-
-	uvmhist_dump(uvm_histories.lh_first);
-}
-
 const struct db_command db_machine_command_table[] = {
-	{ "prom",	db_prom_cmd,	0,	0 },
-	{ "proc",	db_proc_cmd,	0,	0 },
-	{ "pcb",	db_dump_pcb,	0,	0 },
-	{ "lock",	db_lock_cmd,	0,	0 },
-	{ "slock",	db_simple_lock_cmd,	0,	0 },
-	{ "page",	db_page_cmd,	0,	0 },
-	{ "uvmdump",	db_uvmhistdump,	0,	0 },
+	{ DDB_ADD_CMD("prom",	db_prom_cmd,	0,	NULL,NULL,NULL) },
+	{ DDB_ADD_CMD("proc",	db_proc_cmd,	0,	NULL,NULL,NULL) },
+	{ DDB_ADD_CMD("pcb",	db_dump_pcb,	0,	NULL,NULL,NULL) },
+	{ DDB_ADD_CMD("page",	db_page_cmd,	0,	NULL,NULL,NULL) },
 #ifdef MULTIPROCESSOR
-	{ "cpu",	db_cpu_cmd,	0,	0 },
+	{ DDB_ADD_CMD("cpu",	db_cpu_cmd,	0,	NULL,NULL,NULL) },
 #endif
-	{ (char *)0, }
+	{ DDB_ADD_CMD(NULL,     NULL,           0,NULL,NULL,NULL) }
 };
 #endif /* DDB */
 

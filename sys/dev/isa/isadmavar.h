@@ -1,4 +1,4 @@
-/*	$NetBSD: isadmavar.h,v 1.21 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: isadmavar.h,v 1.23 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -93,7 +86,7 @@ struct isa_mem {
 	int chan;
 	bus_size_t size;
 	bus_addr_t addr;
-	caddr_t kva;
+	void *kva;
 	struct isa_mem *next;
 };
 
@@ -126,8 +119,8 @@ int	   _isa_dmamem_alloc(struct isa_dma_state *, int, bus_size_t,
 void	   _isa_dmamem_free(struct isa_dma_state *, int, bus_addr_t,
 	       bus_size_t);
 int	   _isa_dmamem_map(struct isa_dma_state *, int, bus_addr_t,
-	       bus_size_t, caddr_t *, int);
-void	   _isa_dmamem_unmap(struct isa_dma_state *, int, caddr_t,
+	       bus_size_t, void **, int);
+void	   _isa_dmamem_unmap(struct isa_dma_state *, int, void *,
 	       size_t);
 paddr_t	   _isa_dmamem_mmap(struct isa_dma_state *, int, bus_addr_t,
 	       bus_size_t, off_t, int, int);

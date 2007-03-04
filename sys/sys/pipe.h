@@ -1,4 +1,4 @@
-/* $NetBSD: pipe.h,v 1.18 2005/12/11 12:25:20 christos Exp $ */
+/* $NetBSD: pipe.h,v 1.24 2008/02/29 12:04:48 yamt Exp $ */
 
 /*
  * Copyright (c) 1996 John S. Dyson
@@ -69,7 +69,7 @@ struct pipebuf {
 	u_int	in;		/* in pointer */
 	u_int	out;		/* out pointer */
 	size_t	size;		/* size of buffer */
-	caddr_t	buffer;		/* kva of buffer */
+	void *	buffer;		/* kva of buffer */
 };
 
 /*
@@ -87,9 +87,6 @@ struct pipemapping {
  * Bits in pipe_state.
  */
 #define PIPE_ASYNC	0x001	/* Async I/O */
-#define PIPE_WANTR	0x002	/* Reader wants some characters */
-#define PIPE_WANTW	0x004	/* Writer wants space to put characters */
-#define PIPE_WANTCLOSE	0x008	/* Pipe is wanted to be run-down */
 #define PIPE_EOF	0x010	/* Pipe is in EOF condition */
 #define PIPE_SIGNALR	0x020	/* Do selwakeup() on read(2) */
 #define PIPE_DIRECTW	0x040	/* Pipe in direct write mode setup */
@@ -104,7 +101,11 @@ struct pipemapping {
  * Two of these are linked together to produce bi-directional pipes.
  */
 struct pipe {
-	struct	simplelock pipe_slock;	/* pipe mutex */
+	kmutex_t *pipe_lock;		/* pipe mutex */
+	kcondvar_t pipe_rcv;		/* cv for readers */
+	kcondvar_t pipe_wcv;		/* cv for writers */
+	kcondvar_t pipe_draincv;	/* cv for close */
+	kcondvar_t pipe_lkcv;		/* locking */
 	struct	pipebuf pipe_buffer;	/* data storage */
 	struct	pipemapping pipe_map;	/* pipe mapping for direct I/O */
 	struct	selinfo pipe_sel;	/* for compat with select */
@@ -137,10 +138,8 @@ struct pipe {
 }
 
 #ifdef _KERNEL
-int sysctl_dopipe(int *, u_int, void *, size_t *, void *, size_t);
-
-#define PIPE_LOCK(pipe)		simple_lock(&(pipe)->pipe_slock);
-#define PIPE_UNLOCK(pipe)	simple_unlock(&(pipe)->pipe_slock);
-
+int	sysctl_dopipe(int *, u_int, void *, size_t *, void *, size_t);
+void	pipe_init(void);
 #endif /* _KERNEL */
+
 #endif /* !_SYS_PIPE_H_ */

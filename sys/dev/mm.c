@@ -1,4 +1,4 @@
-/*	$NetBSD: mm.c,v 1.9 2006/11/16 01:32:45 christos Exp $	*/
+/*	$NetBSD: mm.c,v 1.13 2008/10/08 16:11:23 oster Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mm.c,v 1.9 2006/11/16 01:32:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mm.c,v 1.13 2008/10/08 16:11:23 oster Exp $");
 
 /*
  * Memory special file
@@ -52,11 +45,12 @@ __KERNEL_RCSID(0, "$NetBSD: mm.c,v 1.9 2006/11/16 01:32:45 christos Exp $");
 #include <sys/malloc.h>
 #include <sys/ioctl.h>
 #include <sys/proc.h>
+#include <sys/termios.h>
 
 dev_type_ioctl(mmioctl);
 
 int
-mmioctl(dev_t dev, u_long cmd, caddr_t data, int flag,
+mmioctl(dev_t dev, u_long cmd, void *data, int flag,
     struct lwp *l)
 {
 	switch (minor(dev)) {
@@ -68,6 +62,7 @@ mmioctl(dev_t dev, u_long cmd, caddr_t data, int flag,
 		case FIOGETOWN:
 		case TIOCGPGRP:
 		case TIOCSPGRP:
+		case TIOCGETA:
 			return ENOTTY;
 		case FIOASYNC:
 			if ((*(int *)data) == 0)

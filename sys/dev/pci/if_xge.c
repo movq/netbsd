@@ -1,4 +1,4 @@
-/*      $NetBSD: if_xge.c,v 1.4 2006/11/16 01:33:09 christos Exp $ */
+/*      $NetBSD: if_xge.c,v 1.9 2008/04/10 19:13:37 cegger Exp $ */
 
 /*
  * Copyright (c) 2004, SUNET, Swedish University Computer Network.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.4 2006/11/16 01:33:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.9 2008/04/10 19:13:37 cegger Exp $");
 
 #include "bpfilter.h"
 #include "rnd.h"
@@ -69,8 +69,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.4 2006/11/16 01:33:09 christos Exp $");
 #include <net/bpf.h>
 #endif
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 #include <machine/endian.h>
 
 #include <dev/mii/mii.h>
@@ -80,7 +80,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_xge.c,v 1.4 2006/11/16 01:33:09 christos Exp $");
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcidevs.h>
 
-#include <sys/lock.h>
 #include <sys/proc.h>
 
 #include <dev/pci/if_xgereg.h>
@@ -190,7 +189,7 @@ static void xge_stop(struct ifnet *, int);
 static int xge_add_rxbuf(struct xge_softc *, int);
 static void xge_mcast_filter(struct xge_softc *sc);
 static int xge_setup_xgxs(struct xge_softc *sc);
-static int xge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data);
+static int xge_ioctl(struct ifnet *ifp, u_long cmd, void *data);
 static int xge_init(struct ifnet *ifp);
 static void xge_ifmedia_status(struct ifnet *, struct ifmediareq *);
 static int xge_xgmii_mediachange(struct ifnet *);
@@ -254,7 +253,7 @@ pif_wkey(struct xge_softc *sc, bus_size_t csr, uint64_t val)
 CFATTACH_DECL(xge, sizeof(struct xge_softc),
     xge_match, xge_attach, NULL, NULL);
 
-#define XNAME sc->sc_dev.dv_xname
+#define XNAME device_xname(&sc->sc_dev)
 
 #define XGE_RXSYNC(desc, what) \
 	bus_dmamap_sync(sc->sc_dmat, sc->sc_rxmap, \
@@ -524,7 +523,7 @@ xge_attach(struct device *parent, struct device *self, void *aux)
 	    ether_sprintf(enaddr));
 
 	ifp = &sc->sc_ethercom.ec_if;
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	ifp->if_baudrate = 10000000000LL;
 	ifp->if_init = xge_init;
 	ifp->if_stop = xge_stop;
@@ -555,14 +554,13 @@ xge_attach(struct device *parent, struct device *self, void *aux)
 	 * Setup interrupt vector before initializing.
 	 */
 	if (pci_intr_map(pa, &ih))
-		return aprint_error("%s: unable to map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		return aprint_error_dev(&sc->sc_dev, "unable to map interrupt\n");
 	intrstr = pci_intr_string(pc, ih);
 	if ((sc->sc_ih =
 	    pci_intr_establish(pc, ih, IPL_NET, xge_intr, sc)) == NULL)
-		return aprint_error("%s: unable to establish interrupt at %s\n",
-		    sc->sc_dev.dv_xname, intrstr ? intrstr : "<unknown>");
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+		return aprint_error_dev(&sc->sc_dev, "unable to establish interrupt at %s\n",
+		    intrstr ? intrstr : "<unknown>");
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 #ifdef XGE_EVENT_COUNTERS
 	evcnt_attach_dynamic(&sc->sc_intr, EVCNT_TYPE_MISC,
@@ -831,7 +829,7 @@ xge_intr(void *pv)
 }
 
 int 
-xge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+xge_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct xge_softc *sc = ifp->if_softc;
 	struct ifreq *ifr = (struct ifreq *) data;
@@ -841,12 +839,12 @@ xge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 	switch (cmd) {
 	case SIOCSIFMTU:
-		if (ifr->ifr_mtu < ETHERMIN || ifr->ifr_mtu > XGE_MAX_MTU) {
+		if (ifr->ifr_mtu < ETHERMIN || ifr->ifr_mtu > XGE_MAX_MTU)
 			error = EINVAL;
-		} else {
+		else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET){
 			PIF_WCSR(RMAC_MAX_PYLD_LEN,
 			    RMAC_PYLD_LEN(ifr->ifr_mtu));
-			ifp->if_mtu = ifr->ifr_mtu;
+			error = 0;
 		}
 		break;
 
@@ -856,10 +854,16 @@ xge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 
 	default:
-		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET){
+		if ((error = ether_ioctl(ifp, cmd, data)) != ENETRESET)
+			break;
+
+		error = 0;
+
+		if (cmd != SIOCADDMULTI && cmd != SIOCDELMULTI)
+			;
+		else if (ifp->if_flags & IFF_RUNNING) {
 			/* Change multicast list */
 			xge_mcast_filter(sc);
-			error = 0;
 		}
 		break;
 	}
@@ -1014,7 +1018,7 @@ xge_alloc_txmem(struct xge_softc *sc)
 	struct txd *txp;
 	bus_dma_segment_t seg;
 	bus_addr_t txdp;
-	caddr_t kva;
+	void *kva;
 	int i, rseg, state;
 
 #define TXMAPSZ (NTXDESCS*NTXFRAGS*sizeof(struct txd))
@@ -1068,7 +1072,7 @@ xge_alloc_rxmem(struct xge_softc *sc)
 {
 	struct rxd_4k *rxpp;
 	bus_dma_segment_t seg;
-	caddr_t kva;
+	void *kva;
 	int i, rseg, state;
 
 	/* sanity check */

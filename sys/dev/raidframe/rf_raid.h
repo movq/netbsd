@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_raid.h,v 1.35 2005/12/11 12:23:37 christos Exp $	*/
+/*	$NetBSD: rf_raid.h,v 1.37 2007/09/16 02:13:35 oster Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -204,9 +204,8 @@ struct RF_Raid_s {
 	/*
          * Statistics
          */
-	int     parity_rewrite_stripes_done;
-	int     recon_stripes_done;
-	int     copyback_stripes_done;
+	RF_StripeCount_t     parity_rewrite_stripes_done;
+	RF_StripeCount_t     copyback_stripes_done;
 
 	int     recon_in_progress;
 	int     parity_rewrite_in_progress;
@@ -292,7 +291,7 @@ struct RF_Raid_s {
 							 * region log */
 	RF_RegionBufferQueue_t parityBufferPool;	/* buffers for holding
 							 * parity */
-	caddr_t parityLogBufferHeap;	/* pool of unused parity logs */
+	void *parityLogBufferHeap;	/* pool of unused parity logs */
 	RF_Thread_t pLogDiskThreadHandle;
 
 #endif				/* RF_INCLUDE_PARITYLOGGING > 0 */

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.21 2007/02/16 02:53:46 ad Exp $	*/
+/*	$NetBSD: cpu.h,v 1.28 2008/09/06 09:45:57 skrll Exp $	*/
 
 /*	$OpenBSD: cpu.h,v 1.20 2001/01/29 00:01:58 mickey Exp $	*/
 
@@ -74,7 +74,7 @@
 /*
  * A CPU description.
  */
-struct hppa_cpu_info { 
+struct hppa_cpu_info {
 
 	/* The official name of the chip. */
 	const char *hppa_cpu_info_chip_name;
@@ -186,7 +186,6 @@ struct clockframe {
 #define	CLKF_USERMODE(framep)	((framep)->cf_flags & T_USER)
 
 #define	cpu_signotify(l)	(setsoftast())
-#define	cpu_need_resched(ci)	(want_resched = 1, setsoftast())
 #define	cpu_need_proftick(l)	((l)->l_pflag |= LP_OWEUPC, setsoftast())
 
 #include <sys/cpu_data.h>
@@ -197,6 +196,7 @@ struct cpu_info {
 	int		ci_cpuid;	/* CPU index (see cpus[] array) */
 	int		ci_mtx_count;
 	int		ci_mtx_oldspl;
+	int		ci_want_resched;
 };
 
 #include <machine/intr.h>
@@ -222,14 +222,15 @@ extern struct cpu_info cpu_info_store;
 void	cpu_boot_secondary_processors(void);
 #endif
 
+/*
+ * DON'T CHANGE THIS - this is assumed in lots of places.
+ */
 #define	HPPA_SID_KERNEL 0
-
-extern int want_resched;
 
 #define DELAY(x) delay(x)
 
 static __inline paddr_t
-kvtop(const caddr_t va)
+kvtop(const void *va)
 {
 	paddr_t pa;
 
@@ -240,15 +241,14 @@ kvtop(const caddr_t va)
 extern int (*cpu_desidhash)(void);
 
 void	delay(u_int);
-void	hppa_init(paddr_t);
+void	hppa_init(paddr_t, void *);
 void	trap(int, struct trapframe *);
 void	hppa_ras(struct lwp *);
 int	spcopy(pa_space_t, const void *, pa_space_t, void *, size_t);
 int	spstrcpy(pa_space_t, const void *, pa_space_t, void *, size_t,
 		 size_t *);
 int	copy_on_fault(void);
-void	switch_trampoline(void);
-void	switch_exit(struct lwp *, void (*)(struct lwp *));
+void	lwp_trampoline(void);
 int	cpu_dumpsize(void);
 int	cpu_dump(void);
 #endif
@@ -264,12 +264,9 @@ int	cpu_dump(void);
  * CTL_MACHDEP definitions.
  */
 #define	CPU_CONSDEV		1	/* dev_t: console terminal device */
-#define	CPU_MAXID		2	/* number of valid machdep ids */
+#define	CPU_BOOTED_KERNEL	2	/* string: booted kernel name */
+#define	CPU_MAXID		3	/* number of valid machdep ids */
 
-#define CTL_MACHDEP_NAMES { \
-	{ 0, 0 }, \
-	{ "console_device", CTLTYPE_STRUCT }, \
-}
 #endif
 
 #endif /* _MACHINE_CPU_H_ */

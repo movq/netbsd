@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuconf.h,v 1.13 2007/01/06 00:50:54 christos Exp $	*/
+/*	$NetBSD: cpuconf.h,v 1.15 2008/10/14 16:01:22 matt Exp $	*/
 
 /*
  * Copyright (c) 2002 Wasabi Systems, Inc.
@@ -56,6 +56,7 @@
  * YOU ARE ADDING SUPPORT FOR.
  */
 
+#if 0
 /*
  * Step 1: Count the number of CPU types configured into the kernel.
  */
@@ -68,8 +69,11 @@
 			 defined(CPU_ARM9E) +				\
 			 defined(CPU_ARM10) +				\
 			 defined(CPU_ARM11) +				\
+			 defined(CPU_ARM1136) +				\
+			 defined(CPU_ARM1176) +				\
 			 defined(CPU_SA110) + defined(CPU_SA1100) +	\
 			 defined(CPU_SA1110) +				\
+			 defined(CPU_FA526) +				\
 			 defined(CPU_IXP12X0) +				\
 			 defined(CPU_XSCALE_80200) +			\
 			 defined(CPU_XSCALE_80321) +			\
@@ -78,6 +82,7 @@
 #else
 #define	CPU_NTYPES	2
 #endif /* _KERNEL_OPT */
+#endif
 
 /*
  * Step 2: Determine which ARM architecture versions are configured.
@@ -98,7 +103,7 @@
 
 #if !defined(_KERNEL_OPT) ||						\
     (defined(CPU_ARM7TDMI) || defined(CPU_ARM8) || defined(CPU_ARM9) ||	\
-     defined(CPU_SA110) || defined(CPU_SA1100) || \
+     defined(CPU_SA110) || defined(CPU_SA1100) || defined(CPU_FA526) || \
      defined(CPU_SA1110) || defined(CPU_IXP12X0) || defined(CPU_XSCALE_IXP425))
 #define	ARM_ARCH_4	1
 #else
@@ -148,6 +153,10 @@
  *	ARM_MMU_XSCALE		XScale MMU.  Compatible with generic ARM
  *				MMU, but also has several extensions which
  *				require different PTE layout to use.
+ *
+ *	ARM_MMU_V6		ARM v6 MMU.  Compatible with generic ARM
+ *				MMU, but also has several extensions which
+ *				require different PTE layouts to use.
  */
 #if !defined(_KERNEL_OPT) ||						\
     (defined(CPU_ARM2) || defined(CPU_ARM250) || defined(CPU_ARM3))
@@ -159,7 +168,7 @@
 #if !defined(_KERNEL_OPT) ||						\
     (defined(CPU_ARM6) || defined(CPU_ARM7) || defined(CPU_ARM7TDMI) ||	\
      defined(CPU_ARM8) || defined(CPU_ARM9) || defined(CPU_ARM9E) ||	\
-     defined(CPU_ARM10) || defined(CPU_ARM11))
+     defined(CPU_ARM10) || defined(CPU_FA526))
 #define	ARM_MMU_GENERIC		1
 #else
 #define	ARM_MMU_GENERIC		0
@@ -181,8 +190,15 @@
 #define	ARM_MMU_XSCALE		0
 #endif
 
+#if !defined(_KERNEL_OPT) ||						\
+	 defined(CPU_ARM11)
+#define	ARM_MMU_V6		1
+#else
+#define	ARM_MMU_V6		0
+#endif
+
 #define	ARM_NMMUS		(ARM_MMU_MEMC + ARM_MMU_GENERIC +	\
-				 ARM_MMU_SA1 + ARM_MMU_XSCALE)
+				 ARM_MMU_SA1 + ARM_MMU_XSCALE + ARM_MMU_V6)
 #if ARM_NMMUS == 0
 #error ARM_NMMUS is 0
 #endif

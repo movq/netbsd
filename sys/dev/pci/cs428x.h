@@ -1,4 +1,4 @@
-/*	$NetBSD: cs428x.h,v 1.11 2006/08/06 16:21:11 jmcneill Exp $	*/
+/*	$NetBSD: cs428x.h,v 1.14 2007/12/09 20:28:07 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2000 Tatoku Ogaito.  All rights reserved.
@@ -48,8 +48,8 @@
 /* DMA */
 struct cs428x_dma {
 	bus_dmamap_t map;
-	caddr_t addr;		/* real DMA buffer */
-	caddr_t dum;		/* dummy buffer for audio driver */
+	void *addr;		/* real DMA buffer */
+	void *dum;		/* dummy buffer for audio driver */
 	bus_dma_segment_t segs[1];
 	int nsegs;
 	size_t size;
@@ -74,7 +74,10 @@ enum cs428x_flags {
 struct cs428x_softc {
 	struct device	      sc_dev;
 
+	pci_chipset_tag_t sc_pc;
+	pcitag_t sc_pt;
 	pci_intr_handle_t *   sc_ih;
+	pci_intr_handle_t intrh;
 
 	/* I/O (BA0) */
 	bus_space_tag_t	      ba0t;
@@ -138,8 +141,27 @@ struct cs428x_softc {
 	struct ac97_host_if host_if;
 
 	/* Power Management */
-	char	sc_suspend;
-	void   *sc_powerhook;		/* Power Hook */
+	union {
+		struct {
+			uint32_t pctl;
+			uint32_t pba;
+			uint32_t pfie;
+			uint32_t pdtc;
+			uint32_t cctl;
+			uint32_t cba;
+			uint32_t cie;
+		} cs4280;
+		struct {
+			uint32_t dba0;
+			uint32_t dbc0;
+			uint32_t dmr0;
+			uint32_t dcr0;
+			uint32_t dba1;
+			uint32_t dbc1;
+			uint32_t dmr1;
+			uint32_t dcr1;
+		} cs4281;
+	} sc_suspend_state;
 
 	/* CLKRUN hack (CS428X_FLAG_CLKRUN), only for CS4280 */
 	int sc_active;

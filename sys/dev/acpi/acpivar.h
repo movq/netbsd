@@ -1,4 +1,4 @@
-/*	$NetBSD: acpivar.h,v 1.28 2006/11/26 12:30:05 cube Exp $	*/
+/*	$NetBSD: acpivar.h,v 1.33 2008/07/15 16:15:28 dyoung Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -41,7 +41,7 @@
  * support.
  */
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/pci/pcivar.h>
 #include <dev/isa/isavar.h>
 
@@ -83,6 +83,7 @@ struct acpi_devnode {
 	ACPI_DEVICE_INFO *ad_devinfo;	/* our ACPI device info */
 	struct acpi_scope *ad_scope;	/* backpointer to scope */
 	struct device	*ad_device;	/* pointer to configured device */
+	char		ad_name[5];	/* Human-readable device name */
 };
 
 /*
@@ -105,7 +106,7 @@ struct acpi_scope {
  *	Software state of the ACPI subsystem.
  */
 struct acpi_softc {
-	struct device sc_dev;		/* base device info */
+	device_t sc_dev;		/* base device info */
 	bus_space_tag_t sc_iot;		/* PCI I/O space tag */
 	bus_space_tag_t sc_memt;	/* PCI MEM space tag */
 	pci_chipset_tag_t sc_pc;	/* PCI chipset tag */
@@ -259,9 +260,10 @@ extern const struct acpi_resource_parse_ops acpi_resource_parse_ops_default;
 
 int		acpi_check(device_t, const char *);
 int		acpi_probe(void);
-ACPI_STATUS	acpi_OsGetRootPointer(UINT32, ACPI_POINTER *);
+ACPI_PHYSICAL_ADDRESS	acpi_OsGetRootPointer(void);
 int		acpi_match_hid(ACPI_DEVICE_INFO *, const char * const *);
 void		acpi_set_wake_gpe(ACPI_HANDLE);
+void		acpi_clear_wake_gpe(ACPI_HANDLE);
 
 ACPI_STATUS	acpi_eval_integer(ACPI_HANDLE, const char *, ACPI_INTEGER *);
 ACPI_STATUS	acpi_eval_string(ACPI_HANDLE, const char *, char **);
@@ -288,19 +290,6 @@ char *		acpi_pci_link_name(void *);
 ACPI_HANDLE	acpi_pci_link_handle(void *);
 void		acpi_pci_link_state(void);
 
-
-
-
-#if defined(_KERNEL_OPT)
-#include "acpiec.h"
-
-#if NACPIEC > 0
-void		acpiec_early_attach(struct device *);
-#endif
-#else
-#define	NACPIEC	0
-#endif
-
 struct acpi_io		*acpi_res_io(struct acpi_resources *, int);
 struct acpi_iorange	*acpi_res_iorange(struct acpi_resources *, int);
 struct acpi_mem		*acpi_res_mem(struct acpi_resources *, int);
@@ -317,7 +306,7 @@ ACPI_STATUS	acpi_enter_sleep_state(struct acpi_softc *, int);
  * quirk handling
  */
 struct acpi_quirk {
-	uint32_t aq_tabletype;	/* what type of table (FADT, DSDT, etc) */
+	const char *aq_tabletype; /* what type of table (FADT, DSDT, etc) */
 	const char *aq_oemid;	/* compared against the table OemId */
 	int aq_oemrev;		/* compared against the table OemRev */
 	int aq_cmpop;		/* how to compare the oemrev number */

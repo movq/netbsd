@@ -1,5 +1,5 @@
 /*-
- * $NetBSD: if_lmc.h,v 1.8 2007/02/17 22:34:07 dyoung Exp $
+ * $NetBSD: if_lmc.h,v 1.14 2008/09/08 23:36:54 gmcgarry Exp $
  *
  * Copyright (c) 2002-2006 David Boggs. (boggs@boggs.palo-alto.ca.us)
  * All rights reserved.
@@ -814,7 +814,7 @@ struct synth				/* programmable oscillator params  */
   unsigned x:2;				/* div by 1|2|4|8                  */
   unsigned r:2;				/* div by 1|2|4|8                  */
   unsigned prescale:13;			/* log(final divisor): 2, 4 or 9   */
-  } __attribute__ ((packed));
+  } __packed;
 
 #define SYNTH_FREF	        20e6	/* reference xtal =  20 MHz        */
 #define SYNTH_FMIN	        50e6	/* internal VCO min  50 MHz        */
@@ -1012,7 +1012,7 @@ static __inline int test_and_set(volatile int *ptr, int val)
 # if _BSDI_VERSION <= 199910
 extern struct cfdriver lmccd;
 #  undef  IFP2SC
-#  define UNIT2SC(unit)		((softc_t *)lmccd.cd_devs[unit])
+#  define UNIT2SC(unit)		((softc_t *)device_lookup_private(&lmccd, unit))
 #  define IFP2SC(ifp)		(UNIT2SC((ifp)->if_unit))
 # endif
 #endif /* __bsdi__ */
@@ -1053,12 +1053,11 @@ typedef int intr_return_t;
 # define WRITE_PCI_CFG(sc, addr, data) pci_conf_write((sc)->pa_pc, (sc)->pa_tag, addr, data)
 # define  READ_CSR(sc, csr)	 bus_space_read_4 ((sc)->csr_tag, (sc)->csr_handle, csr)
 # define WRITE_CSR(sc, csr, val) bus_space_write_4((sc)->csr_tag, (sc)->csr_handle, csr, val)
-# define NAME_UNIT		sc->dev.dv_xname
+# define NAME_UNIT		device_xname(&sc->dev)
 # define BOOT_VERBOSE		(boothowto & AB_VERBOSE)
-# define TOP_LOCK(sc)		({ while (__cpu_simple_lock_try(&(sc)->top_lock)==0) \
-				 tsleep((sc), PCATCH|PZERO, DEVICE_NAME, 1); 0; })
-# define TOP_TRYLOCK(sc)	__cpu_simple_lock_try(&(sc)->top_lock)
-# define TOP_UNLOCK(sc)		__cpu_simple_unlock  (&(sc)->top_lock)
+# define TOP_LOCK(sc)		(mutex_spin_enter(&(sc)->top_lock), 0)
+# define TOP_TRYLOCK(sc)	mutex_tryenter(&(sc)->top_lock)
+# define TOP_UNLOCK(sc)		mutex_spin_exit(&(sc)->top_lock)
 # define BOTTOM_TRYLOCK(sc)	__cpu_simple_lock_try(&(sc)->bottom_lock)
 # define BOTTOM_UNLOCK(sc)	__cpu_simple_unlock  (&(sc)->bottom_lock)
 # define CHECK_CAP		kauth_authorize_generic(curlwp->l_cred, KAUTH_GENERIC_ISSUSER, NULL)
@@ -1179,7 +1178,7 @@ struct dma_desc
 #else					/* BUS_DMA */
 # define TLP_BUS_DSL_VAL	0
 #endif
-  } __attribute__ ((packed));
+  } __packed;
 
 /* Tulip DMA descriptor status bits */
 #define TLP_DSTS_OWNER		0x80000000
@@ -1248,7 +1247,7 @@ struct card				/* an object */
 struct stack				/* an object */
   {
 #if IFNET || NETGRAPH
-  int (*ioctl) (softc_t *, u_long, caddr_t);
+  int (*ioctl) (softc_t *, u_long, void *);
   void (*input) (softc_t *, struct mbuf *);
   void (*output) (softc_t *);
 #elif NETDEV
@@ -1290,7 +1289,11 @@ struct softc
   void *irq_cookie;
   void *sdh_cookie;
   struct mbuf *tx_mbuf;			/* hang mbuf here while building dma descs */
+#if defined(__NetBSD__)
+  kmutex_t top_lock;			/* lock card->watchdog vs ioctls           */
+#else
   __cpu_simple_lock_t top_lock;		/* lock card->watchdog vs ioctls           */
+#endif
   __cpu_simple_lock_t bottom_lock;	/* lock buf queues & descriptor rings   */
 #endif					/* __NetBSD__ || __OpenBSD__ */
 
@@ -1491,7 +1494,7 @@ static void t1_attach(softc_t *, struct config *);
 static void t1_detach(softc_t *);
 
 #if NETGRAPH
-static int netgraph_ioctl(softc_t *, u_long, caddr_t);
+static int netgraph_ioctl(softc_t *, u_long, void *);
 static void netgraph_input(softc_t *, struct mbuf *);
 static void netgraph_output(softc_t *);
 static void netgraph_watchdog(softc_t *);
@@ -1523,19 +1526,19 @@ static int gen_hdlc_card_params(struct net_device *, unsigned short,
 #endif /* GEN_HDLC */
 
 #if P2P
-static int p2p_stack_ioctl(softc_t *, u_long, caddr_t);
+static int p2p_stack_ioctl(softc_t *, u_long, void *);
 static void p2p_stack_input(softc_t *, struct mbuf *);
 static void p2p_stack_output(softc_t *);
 static void p2p_stack_watchdog(softc_t *);
 static int p2p_stack_open(softc_t *, struct config *);
 static int p2p_stack_attach(softc_t *, struct config *);
 static int p2p_stack_detach(softc_t *);
-static int p2p_getmdm(struct p2pcom *, caddr_t);
+static int p2p_getmdm(struct p2pcom *, void *);
 static int p2p_mdmctl(struct p2pcom *, int);
 #endif /* P2P */
 
 #if SPPP
-static int sppp_stack_ioctl(softc_t *, u_long, caddr_t);
+static int sppp_stack_ioctl(softc_t *, u_long, void *);
 static void sppp_stack_input(softc_t *, struct mbuf *);
 static void sppp_stack_output(softc_t *);
 static void sppp_stack_watchdog(softc_t *);
@@ -1547,7 +1550,7 @@ static void sppp_tlf(struct sppp *);
 #endif /* SPPP */
 
 #if IFNET
-static int rawip_ioctl(softc_t *, u_long, caddr_t);
+static int rawip_ioctl(softc_t *, u_long, void *);
 static void rawip_input(softc_t *, struct mbuf *);
 static void rawip_output(softc_t *);
 #elif NETDEV
@@ -1564,7 +1567,7 @@ static int rawip_detach(softc_t *);
 static void ifnet_input(struct ifnet *, struct mbuf *);
 static int ifnet_output(struct ifnet *, struct mbuf *,
 			const struct sockaddr *, struct rtentry *);
-static int ifnet_ioctl(struct ifnet *, u_long, caddr_t);
+static int ifnet_ioctl(struct ifnet *, u_long, void *);
 static void ifnet_start(struct ifnet *);
 static void ifnet_watchdog(struct ifnet *);
 
@@ -1573,7 +1576,7 @@ static int ifnet_attach(softc_t *);
 static void ifnet_detach(softc_t *);
 
 static void ifmedia_setup(softc_t *);
-static int ifmedia_change(struct ifnet *);
+static int lmc_ifmedia_change(struct ifnet *);
 static void ifmedia_status(struct ifnet *, struct ifmediareq *);
 #endif /* IFNET */
 
@@ -1647,7 +1650,7 @@ static irqreturn_t linux_interrupt(int, void *, struct pt_regs *);
 static int open_proto(softc_t *, struct config *);
 static int attach_stack(softc_t *, struct config *);
 
-static int lmc_ioctl(softc_t *, u_long, caddr_t);
+static int lmc_ioctl(softc_t *, u_long, void *);
 static void lmc_watchdog(softc_t *);
 
 static void set_ready(softc_t *, int);

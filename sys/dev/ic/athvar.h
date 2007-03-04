@@ -1,4 +1,4 @@
-/*	$NetBSD: athvar.h,v 1.19 2006/07/14 13:37:25 seanb Exp $	*/
+/*	$NetBSD: athvar.h,v 1.25 2008/07/09 19:47:24 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -148,27 +148,28 @@ struct ath_txq {
 	 * State for patching up CTS when bursting.
 	 */
 	struct	ath_buf		*axq_linkbuf;	/* va of last buffer */
+	u_int			axq_timer;	/* transmit timeout */
 };
 
 #define ATH_TXQ_INSERT_TAIL(_tq, _elm, _field) do { \
 	STAILQ_INSERT_TAIL(&(_tq)->axq_q, (_elm), _field); \
 	(_tq)->axq_depth++; \
+	(_tq)->axq_timer = 5; \
 } while (0)
 #define ATH_TXQ_REMOVE_HEAD(_tq, _field) do { \
 	STAILQ_REMOVE_HEAD(&(_tq)->axq_q, _field); \
-	(_tq)->axq_depth--; \
+	if (--(_tq)->axq_depth == 0) \
+		(_tq)->axq_timer = 0; \
 } while (0)
 
 struct taskqueue;
 struct ath_tx99;
 
 struct ath_softc {
-	struct device		sc_dev;
+	device_t 		sc_dev;
 	struct ethercom		sc_ec;		/* interface common */
 	struct ath_stats	sc_stats;	/* interface statistics */
 	struct ieee80211com	sc_ic;		/* IEEE 802.11 common */
-	int			(*sc_enable)(struct ath_softc *);
-	void			(*sc_disable)(struct ath_softc *);
 	void			(*sc_power)(struct ath_softc *, int);
 	int			sc_regdomain;
 	int			sc_countrycode;
@@ -189,8 +190,7 @@ struct ath_softc {
 	struct ath_ratectrl	*sc_rc;		/* tx rate control support */
 	struct ath_tx99		*sc_tx99;	/* tx99 adjunct state */
 	void			(*sc_setdefantenna)(struct ath_softc *, u_int);
-	unsigned int		sc_invalid : 1,	/* disable hardware accesses */
-				sc_mrretry : 1,	/* multi-rate retry support */
+	unsigned int		sc_mrretry : 1,	/* multi-rate retry support */
 				sc_softled : 1,	/* enable LED gpio status */
 				sc_splitmic: 1,	/* split TKIP MIC keys */
 				sc_needmib : 1,	/* enable MIB stats intr */
@@ -233,7 +233,7 @@ struct ath_softc {
 	u_int16_t		sc_ledoff;	/* off time for current blink */
 	struct callout		sc_ledtimer;	/* led off timer */
 
-	caddr_t			sc_drvbpf;
+	void *			sc_drvbpf;
 	union {
 		struct ath_tx_radiotap_header th;
 		u_int8_t	pad[64];
@@ -260,7 +260,6 @@ struct ath_softc {
 	struct ath_descdma	sc_txdma;	/* TX descriptors */
 	ath_bufhead		sc_txbuf;	/* transmit buffer */
 	ath_txbuf_lock_t	sc_txbuflock;	/* txbuf lock */
-	int			sc_tx_timer;	/* transmit timeout */
 	u_int			sc_txqsetup;	/* h/w queues setup */
 	u_int			sc_txintrperiod;/* tx interrupt batching */
 	struct ath_txq		sc_txq[HAL_NUM_TX_QUEUES];
@@ -288,7 +287,6 @@ struct ath_softc {
 	HAL_NODE_STATS		sc_halstats;	/* station-mode rssi stats */
 	struct callout		sc_scan_ch;	/* callout handle for scan */
 	struct callout		sc_dfs_ch;	/* callout handle for dfs */
-	void			*sc_powerhook;	/* power management hook */
 	u_int			sc_flags;	/* misc flags */
 };
 #define	sc_if			sc_ec.ec_if
@@ -296,19 +294,14 @@ struct ath_softc {
 #define	sc_rx_th		u_rx_rt.th
 
 #define	ATH_ATTACHED		0x0001		/* attach has succeeded */
-#define ATH_ENABLED		0x0002		/* chip is enabled */
-
-#define	ATH_IS_ENABLED(sc)	((sc)->sc_flags & ATH_ENABLED)
 
 #define	ATH_TXQ_SETUP(sc, i)	((sc)->sc_txqsetup & (1<<i))
 
 int	ath_attach(u_int16_t, struct ath_softc *);
 int	ath_detach(struct ath_softc *);
-void	ath_resume(struct ath_softc *, int);
-void	ath_suspend(struct ath_softc *, int);
 int	ath_activate(struct device *, enum devact);
-void	ath_power(int, void *);
-void	ath_shutdown(void *);
+bool	ath_resume(struct ath_softc *);
+void	ath_suspend(struct ath_softc *);
 int	ath_intr(void *);
 int	ath_reset(struct ifnet *);
 void	ath_sysctlattach(struct ath_softc *);

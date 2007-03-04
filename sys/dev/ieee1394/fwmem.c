@@ -1,4 +1,4 @@
-/*	$NetBSD: fwmem.c,v 1.2 2005/12/11 12:22:02 christos Exp $	*/
+/*	$NetBSD: fwmem.c,v 1.8 2007/12/11 11:34:08 lukem Exp $	*/
 /*-
  * Copyright (c) 2002-2003
  * 	Hidetoshi Shimokawa. All rights reserved.
@@ -35,8 +35,9 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef __FBSDID
-__FBSDID("$FreeBSD: /repoman/r/ncvs/src/sys/dev/firewire/fwmem.c,v 1.31 2005/01/06 01:42:41 imp Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fwmem.c,v 1.8 2007/12/11 11:34:08 lukem Exp $");
+#if defined(__FreeBSD__)
+__FBSDID("$FreeBSD: src/sys/dev/firewire/fwmem.c,v 1.34 2007/06/06 14:31:36 simokawa Exp $");
 #endif
 
 #if defined(__FreeBSD__)
@@ -55,7 +56,7 @@ __FBSDID("$FreeBSD: /repoman/r/ncvs/src/sys/dev/firewire/fwmem.c,v 1.31 2005/01/
 #endif
 
 #include <sys/bus.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <sys/signal.h>
 #include <sys/mman.h>
@@ -84,7 +85,7 @@ __FBSDID("$FreeBSD: /repoman/r/ncvs/src/sys/dev/firewire/fwmem.c,v 1.31 2005/01/
 #include <sys/malloc.h>
 #include <sys/sysctl.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/ieee1394/fw_port.h>
 #include <dev/ieee1394/firewire.h>
@@ -209,6 +210,7 @@ MALLOC_DEFINE(M_FWMEM, "fwmem", "fwmem/IEEE1394");
 
 struct fwmem_softc {
 	struct fw_eui64 eui;
+	struct firewire_softc *sc;
 	int refcount;
 	STAILQ_HEAD(, fw_xfer) xferlist;
 };
@@ -216,7 +218,7 @@ struct fwmem_softc {
 static struct fw_xfer *
 fwmem_xfer_req(
 	struct fw_device *fwdev,
-	caddr_t sc,
+	void *sc,
 	int spd,
 	int slen,
 	int rlen,
@@ -245,7 +247,7 @@ fwmem_xfer_req(
 struct fw_xfer *
 fwmem_read_quad(
 	struct fw_device *fwdev,
-	caddr_t	sc,
+	void *	sc,
 	uint8_t spd,
 	uint16_t dst_hi,
 	uint32_t dst_lo,
@@ -282,7 +284,7 @@ fwmem_read_quad(
 struct fw_xfer *
 fwmem_write_quad(
 	struct fw_device *fwdev,
-	caddr_t	sc,
+	void *	sc,
 	uint8_t spd,
 	uint16_t dst_hi,
 	uint32_t dst_lo,
@@ -318,7 +320,7 @@ fwmem_write_quad(
 struct fw_xfer *
 fwmem_read_block(
 	struct fw_device *fwdev,
-	caddr_t	sc,
+	void *	sc,
 	uint8_t spd,
 	uint16_t dst_hi,
 	uint32_t dst_lo,
@@ -356,7 +358,7 @@ fwmem_read_block(
 struct fw_xfer *
 fwmem_write_block(
 	struct fw_device *fwdev,
-	caddr_t	sc,
+	void *	sc,
 	uint8_t spd,
 	uint16_t dst_hi,
 	uint32_t dst_lo,
@@ -399,18 +401,24 @@ FW_OPEN(fwmem)
 	FW_OPEN_START;
 
 	if (dev->si_drv1 != NULL) {
-		if ((flags & FWRITE) != 0)
+		if ((flags & FWRITE) != 0) {
+			FW_GUNLOCK(sc->fc);
 			return (EBUSY);
+		}
+		FW_GUNLOCK(sc->fc);
 		fms = (struct fwmem_softc *)dev->si_drv1;
 		fms->refcount ++;
 	} else {
-		fms = (struct fwmem_softc *)malloc(sizeof(struct fwmem_softc),
-							M_FWMEM, M_WAITOK);
-		if (fms == NULL)
+		dev->si_drv1 = (void *)-1;
+		FW_GUNLOCK(sc->fc);
+		dev->si_drv1 = malloc(sizeof(struct fwmem_softc),
+		    M_FWMEM, M_WAITOK);
+		if (dev->si_drv1 == NULL)
 			return ENOMEM;
-		bcopy(&fwmem_eui64, &fms->eui, sizeof(struct fw_eui64));
-		dev->si_drv1 = (void *)fms;
 		dev->si_iosize_max = DFLTPHYS;
+		fms = (struct fwmem_softc *)dev->si_drv1;
+		bcopy(&fwmem_eui64, &fms->eui, sizeof(struct fw_eui64));
+		fms->sc = sc;
 		fms->refcount = 1;
 		STAILQ_INIT(&fms->xferlist);
 		xfer = fw_xfer_alloc(M_FWMEM);
@@ -429,7 +437,10 @@ FW_CLOSE(fwmem)
 	FW_CLOSE_START;
 
 	fms = (struct fwmem_softc *)dev->si_drv1;
+
+	FW_GLOCK(fms->sc->fc);
 	fms->refcount --;
+	FW_GUNLOCK(fms->sc->fc);
 	if (fwmem_debug)
 		printf("%s: refcount=%d\n", __func__, fms->refcount);
 	if (fms->refcount < 1) {
@@ -456,7 +467,6 @@ fwmem_biodone(struct fw_xfer *xfer)
 	if (bp->bio_error != 0) {
 		if (fwmem_debug)
 			printf("%s: err=%d\n", __func__, bp->bio_error);
-		bp->bio_flags |= BIO_ERROR;
 		bp->bio_resid = bp->bio_bcount;
 	}
 
@@ -474,7 +484,7 @@ fwmem_strategy(struct bio *bp)
 	struct fwmem_softc *fms;
 	struct fw_device *fwdev;
 	struct fw_xfer *xfer;
-	int err=0, s, iolen;
+	int err = 0, s, iolen;
 
 	CTR0(KTR_DEV, "strategy");
 
@@ -482,7 +492,7 @@ fwmem_strategy(struct bio *bp)
 
 	s = splfw();
 	fms = (struct fwmem_softc *)dev->si_drv1;
-	fwdev = fw_noderesolve_eui64(sc->fc, &fms->eui);
+	fwdev = fw_noderesolve_eui64(fms->sc->fc, &fms->eui);
 	if (fwdev == NULL) {
 		if (fwmem_debug)
 			printf("fwmem: no such device ID:%08x%08x\n",
@@ -527,7 +537,6 @@ error:
 		if (fwmem_debug)
 			printf("%s: err=%d\n", __func__, err);
 		bp->bio_error = err;
-		bp->bio_flags |= BIO_ERROR;
 		bp->bio_resid = bp->bio_bcount;
 		biodone(bp);
 	}

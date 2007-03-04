@@ -1,4 +1,4 @@
-# 	$NetBSD: INSTALL,v 1.41 2007/02/17 01:27:07 tsutsui Exp $
+# 	$NetBSD: INSTALL,v 1.45 2008/07/31 07:41:02 simonb Exp $
 
 #	config for bootable floppy kernel
 #
@@ -25,7 +25,6 @@ options 	MEMORY_DISK_ROOT_SIZE=2880	# 1.44 Megabytes
 #options 	SYSVMSG			# System V message queues
 #options 	SYSVSEM			# System V semaphores
 #options 	SYSVSHM			# System V shared memory
-#options 	SHMMAXPGS=1024		# 1024 pages is the default
 #options 	LKM			# loadable kernel modules
 options 	USERCONF		# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
@@ -45,7 +44,8 @@ options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
 #options 	COMPAT_15		# NetBSD 1.5 binary compatibility
 #options 	COMPAT_16		# NetBSD 1.6 binary compatibility
 #options 	COMPAT_20		# NetBSD 2.0 binary compatibility
-#options 	COMPAT_30		# NetBSD 3.0 compatibility.
+#options 	COMPAT_30		# NetBSD 3.0 binary compatibility.
+#options 	COMPAT_40		# NetBSD 4.0 binary compatibility.
 options 	COMPAT_BSDPTY		# /dev/[pt]ty?? ptys.
 
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -69,6 +69,7 @@ file-system	MSDOSFS		# MS-DOS FAT file system
 #options 	FFS_EI		# ffs endian independent support
 options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+options 	WAPBL		# File system journaling support - Experimental
 
 # Networking options
 options 	INET		# Internet protocols

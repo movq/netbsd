@@ -1,4 +1,4 @@
-/*	$NetBSD: hme.c,v 1.55 2006/11/24 19:46:59 christos Exp $	*/
+/*	$NetBSD: hme.c,v 1.66 2008/05/04 17:06:09 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.55 2006/11/24 19:46:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.66 2008/05/04 17:06:09 xtraeme Exp $");
 
 /* #define HMEDEBUG */
 
@@ -87,18 +80,18 @@ __KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.55 2006/11/24 19:46:59 christos Exp $");
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/ic/hmereg.h>
 #include <dev/ic/hmevar.h>
 
 void		hme_start(struct ifnet *);
-void		hme_stop(struct hme_softc *);
-int		hme_ioctl(struct ifnet *, u_long, caddr_t);
+void		hme_stop(struct hme_softc *,bool);
+int		hme_ioctl(struct ifnet *, u_long, void *);
 void		hme_tick(void *);
 void		hme_watchdog(struct ifnet *);
 void		hme_shutdown(void *);
-void		hme_init(struct hme_softc *);
+int		hme_init(struct hme_softc *);
 void		hme_meminit(struct hme_softc *);
 void		hme_mifinit(struct hme_softc *);
 void		hme_reset(struct hme_softc *);
@@ -110,7 +103,6 @@ static void	hme_mii_writereg(struct device *, int, int, int);
 static void	hme_mii_statchg(struct device *);
 
 int		hme_mediachange(struct ifnet *);
-void		hme_mediastatus(struct ifnet *, struct ifmediareq *);
 
 struct mbuf	*hme_get(struct hme_softc *, int, uint32_t);
 int		hme_put(struct hme_softc *, int, struct mbuf *);
@@ -169,7 +161,7 @@ hme_config(sc)
 	 */
 
 	/* Make sure the chip is stopped. */
-	hme_stop(sc);
+	hme_stop(sc, true);
 
 
 	/*
@@ -206,8 +198,8 @@ hme_config(sc)
 	if ((error = bus_dmamem_alloc(dmatag, size,
 				      2048, 0,
 				      &seg, 1, &rseg, BUS_DMA_NOWAIT)) != 0) {
-		printf("%s: DMA buffer alloc error %d\n",
-			sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "DMA buffer alloc error %d\n",
+			error);
 		return;
 	}
 
@@ -215,8 +207,8 @@ hme_config(sc)
 	if ((error = bus_dmamem_map(dmatag, &seg, rseg, size,
 				    &sc->sc_rb.rb_membase,
 				    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-		printf("%s: DMA buffer map error %d\n",
-			sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "DMA buffer map error %d\n",
+			error);
 		bus_dmamap_unload(dmatag, sc->sc_dmamap);
 		bus_dmamem_free(dmatag, &seg, rseg);
 		return;
@@ -224,8 +216,8 @@ hme_config(sc)
 
 	if ((error = bus_dmamap_create(dmatag, size, 1, size, 0,
 				    BUS_DMA_NOWAIT, &sc->sc_dmamap)) != 0) {
-		printf("%s: DMA map create error %d\n",
-			sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "DMA map create error %d\n",
+			error);
 		return;
 	}
 
@@ -233,18 +225,18 @@ hme_config(sc)
 	if ((error = bus_dmamap_load(dmatag, sc->sc_dmamap,
 	    sc->sc_rb.rb_membase, size, NULL,
 	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
-		printf("%s: DMA buffer map load error %d\n",
-			sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "DMA buffer map load error %d\n",
+			error);
 		bus_dmamem_free(dmatag, &seg, rseg);
 		return;
 	}
 	sc->sc_rb.rb_dmabase = sc->sc_dmamap->dm_segs[0].ds_addr;
 
-	printf("%s: Ethernet address %s\n", sc->sc_dev.dv_xname,
+	printf("%s: Ethernet address %s\n", device_xname(&sc->sc_dev),
 	    ether_sprintf(sc->sc_enaddr));
 
 	/* Initialize ifnet structure. */
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = hme_start;
 	ifp->if_ioctl = hme_ioctl;
@@ -263,7 +255,8 @@ hme_config(sc)
 	mii->mii_writereg = hme_mii_writereg;
 	mii->mii_statchg = hme_mii_statchg;
 
-	ifmedia_init(&mii->mii_media, 0, hme_mediachange, hme_mediastatus);
+	sc->sc_ethercom.ec_mii = mii;
+	ifmedia_init(&mii->mii_media, 0, hme_mediachange, ether_mediastatus);
 
 	hme_mifinit(sc);
 
@@ -273,8 +266,8 @@ hme_config(sc)
 	child = LIST_FIRST(&mii->mii_phys);
 	if (child == NULL) {
 		/* No PHY attached */
-		ifmedia_add(&sc->sc_media, IFM_ETHER|IFM_MANUAL, 0, NULL);
-		ifmedia_set(&sc->sc_media, IFM_ETHER|IFM_MANUAL);
+		ifmedia_add(&sc->sc_mii.mii_media, IFM_ETHER|IFM_MANUAL, 0, NULL);
+		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_MANUAL);
 	} else {
 		/*
 		 * Walk along the list of attached MII devices and
@@ -290,10 +283,9 @@ hme_config(sc)
 			 * connector.
 			 */
 			if (child->mii_phy > 1 || child->mii_inst > 1) {
-				printf("%s: cannot accommodate MII device %s"
+				aprint_error_dev(&sc->sc_dev, "cannot accommodate MII device %s"
 				       " at phy %d, instance %d\n",
-				       sc->sc_dev.dv_xname,
-				       child->mii_dev.dv_xname,
+				       device_xname(child->mii_dev),
 				       child->mii_phy, child->mii_inst);
 				continue;
 			}
@@ -305,7 +297,7 @@ hme_config(sc)
 		 * XXX - we can really do the following ONLY if the
 		 * phy indeed has the auto negotiation capability!!
 		 */
-		ifmedia_set(&sc->sc_media, IFM_ETHER|IFM_AUTO);
+		ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_AUTO);
 	}
 
 	/* claim 802.1q capability */
@@ -320,11 +312,11 @@ hme_config(sc)
 		panic("hme_config: can't establish shutdownhook");
 
 #if NRND > 0
-	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
+	rnd_attach_source(&sc->rnd_source, device_xname(&sc->sc_dev),
 			  RND_TYPE_NET, 0);
 #endif
 
-	callout_init(&sc->sc_tick_ch);
+	callout_init(&sc->sc_tick_ch, 0);
 }
 
 void
@@ -348,20 +340,21 @@ hme_reset(sc)
 	int s;
 
 	s = splnet();
-	hme_init(sc);
+	(void)hme_init(sc);
 	splx(s);
 }
 
 void
-hme_stop(sc)
-	struct hme_softc *sc;
+hme_stop(struct hme_softc *sc, bool chip_only)
 {
 	bus_space_tag_t t = sc->sc_bustag;
 	bus_space_handle_t seb = sc->sc_seb;
 	int n;
 
-	callout_stop(&sc->sc_tick_ch);
-	mii_down(&sc->sc_mii);
+	if (!chip_only) {
+		callout_stop(&sc->sc_tick_ch);
+		mii_down(&sc->sc_mii);
+	}
 
 	/* Mask all interrupts */
 	bus_space_write_4(t, seb, HME_SEBI_IMASK, 0xffffffff);
@@ -377,7 +370,7 @@ hme_stop(sc)
 		DELAY(20);
 	}
 
-	printf("%s: hme_stop: reset failed\n", sc->sc_dev.dv_xname);
+	printf("%s: hme_stop: reset failed\n", device_xname(&sc->sc_dev));
 }
 
 void
@@ -386,7 +379,7 @@ hme_meminit(sc)
 {
 	bus_addr_t txbufdma, rxbufdma;
 	bus_addr_t dma;
-	caddr_t p;
+	char *p;
 	unsigned int ntbuf, nrbuf, i;
 	struct hme_ring *hr = &sc->sc_rb;
 
@@ -405,7 +398,7 @@ hme_meminit(sc)
 	dma += ntbuf * HME_XD_SIZE;
 	/* We have reserved descriptor space until the next 2048 byte boundary.*/
 	dma = (bus_addr_t)roundup((u_long)dma, 2048);
-	p = (caddr_t)roundup((u_long)p, 2048);
+	p = (void *)roundup((u_long)p, 2048);
 
 	/*
 	 * Allocate receive descriptors
@@ -416,7 +409,7 @@ hme_meminit(sc)
 	dma += nrbuf * HME_XD_SIZE;
 	/* Again move forward to the next 2048 byte boundary.*/
 	dma = (bus_addr_t)roundup((u_long)dma, 2048);
-	p = (caddr_t)roundup((u_long)p, 2048);
+	p = (void *)roundup((u_long)p, 2048);
 
 
 	/*
@@ -461,7 +454,7 @@ hme_meminit(sc)
  * Initialization of interface; set up initialization block
  * and transmit/receive descriptor rings.
  */
-void
+int
 hme_init(sc)
 	struct hme_softc *sc;
 {
@@ -473,6 +466,7 @@ hme_init(sc)
 	bus_space_handle_t mac = sc->sc_mac;
 	u_int8_t *ea;
 	u_int32_t v;
+	int rc;
 
 	/*
 	 * Initialization sequence. The numbered steps below correspond
@@ -482,7 +476,7 @@ hme_init(sc)
 	 */
 
 	/* step 1 & 2. Reset the Ethernet Channel */
-	hme_stop(sc);
+	hme_stop(sc, false);
 
 	/* Re-initialize the MIF */
 	hme_mifinit(sc);
@@ -633,7 +627,8 @@ hme_init(sc)
 		(*sc->sc_hwinit)(sc);
 
 	/* Set the current media. */
-	mii_mediachg(&sc->sc_mii);
+	if ((rc = hme_mediachange(ifp)) != 0)
+		return rc;
 
 	/* Start the one second timer. */
 	callout_reset(&sc->sc_tick_ch, hz, hme_tick, sc);
@@ -643,6 +638,7 @@ hme_init(sc)
 	sc->sc_if_flags = ifp->if_flags;
 	ifp->if_timer = 0;
 	hme_start(ifp);
+	return 0;
 }
 
 /*
@@ -674,16 +670,16 @@ hme_put(sc, ri, m)
 {
 	struct mbuf *n;
 	int len, tlen = 0;
-	caddr_t bp;
+	char *bp;
 
-	bp = sc->sc_rb.rb_txbuf + (ri % sc->sc_rb.rb_ntbuf) * _HME_BUFSZ;
+	bp = (char *)sc->sc_rb.rb_txbuf + (ri % sc->sc_rb.rb_ntbuf) * _HME_BUFSZ;
 	for (; m; m = n) {
 		len = m->m_len;
 		if (len == 0) {
 			MFREE(m, n);
 			continue;
 		}
-		memcpy(bp, mtod(m, caddr_t), len);
+		memcpy(bp, mtod(m, void *), len);
 		bp += len;
 		tlen += len;
 		MFREE(m, n);
@@ -705,7 +701,7 @@ hme_get(sc, ri, flags)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct mbuf *m, *m0, *newm;
-	caddr_t bp;
+	char *bp;
 	int len, totlen;
 
 	totlen = HME_XD_DECODE_RSIZE(flags);
@@ -717,7 +713,7 @@ hme_get(sc, ri, flags)
 	len = MHLEN;
 	m = m0;
 
-	bp = sc->sc_rb.rb_rxbuf + (ri % sc->sc_rb.rb_nrbuf) * _HME_BUFSZ;
+	bp = (char *)sc->sc_rb.rb_rxbuf + (ri % sc->sc_rb.rb_nrbuf) * _HME_BUFSZ;
 
 	while (totlen > 0) {
 		if (totlen >= MINCLSIZE) {
@@ -728,7 +724,7 @@ hme_get(sc, ri, flags)
 		}
 
 		if (m == m0) {
-			caddr_t newdata = (caddr_t)
+			char *newdata = (char *)
 			    ALIGN(m->m_data + sizeof(struct ether_header)) -
 			    sizeof(struct ether_header);
 			len -= newdata - m->m_data;
@@ -736,7 +732,7 @@ hme_get(sc, ri, flags)
 		}
 
 		m->m_len = len = min(totlen, len);
-		memcpy(mtod(m, caddr_t), bp, len);
+		memcpy(mtod(m, void *), bp, len);
 		bp += len;
 
 		totlen -= len;
@@ -762,7 +758,7 @@ hme_get(sc, ri, flags)
 		if (sc->sc_ethercom.ec_capenable & ETHERCAP_VLAN_MTU) {
 			pktlen = m0->m_pkthdr.len - ETHER_HDR_LEN -
 				ETHER_VLAN_ENCAP_LEN;
-			eh = (struct ether_header *) mtod(m0, caddr_t) +
+			eh = (struct ether_header *) mtod(m0, void *) +
 				ETHER_VLAN_ENCAP_LEN;
 		} else {
 			pktlen = m0->m_pkthdr.len - ETHER_HDR_LEN;
@@ -770,7 +766,7 @@ hme_get(sc, ri, flags)
 		}
 		if (ntohs(eh->ether_type) != ETHERTYPE_IP)
 			goto swcsum;
-		ip = (struct ip *) ((caddr_t) eh + ETHER_HDR_LEN);
+		ip = (struct ip *) ((char *)eh + ETHER_HDR_LEN);
 
 		/* IPv4 only */
 		if (ip->ip_v != IPVERSION)
@@ -801,7 +797,7 @@ hme_get(sc, ri, flags)
 				goto swcsum;
 			if (pktlen < (hlen + sizeof(struct udphdr)))
 				goto swcsum;
-			uh = (struct udphdr *)((caddr_t)ip + hlen);
+			uh = (struct udphdr *)((char *)ip + hlen);
 			/* no checksum */
 			if (uh->uh_sum == 0)
 				goto swcsum;
@@ -820,7 +816,7 @@ hme_get(sc, ri, flags)
 
 			optsum = 0;
 			temp = hlen - sizeof(struct ip);
-			opts = (uint16_t *) ((caddr_t) ip + sizeof(struct ip));
+			opts = (uint16_t *)((char *)ip + sizeof(struct ip));
 
 			while (temp > 1) {
 				optsum += ntohs(*opts++);
@@ -872,7 +868,7 @@ hme_read(sc, ix, flags)
 	    ETHERMTU + sizeof(struct ether_header))) {
 #ifdef HMEDEBUG
 		printf("%s: invalid packet size %d; dropping\n",
-		    sc->sc_dev.dv_xname, len);
+		    device_xname(&sc->sc_dev), len);
 #endif
 		ifp->if_ierrors++;
 		return;
@@ -905,7 +901,7 @@ hme_start(ifp)
 	struct ifnet *ifp;
 {
 	struct hme_softc *sc = (struct hme_softc *)ifp->if_softc;
-	caddr_t txd = sc->sc_rb.rb_txd;
+	void *txd = sc->sc_rb.rb_txd;
 	struct mbuf *m;
 	unsigned int txflags;
 	unsigned int ri, len;
@@ -1056,7 +1052,7 @@ int
 hme_rint(sc)
 	struct hme_softc *sc;
 {
-	caddr_t xdr = sc->sc_rb.rb_rxd;
+	void *xdr = sc->sc_rb.rb_rxd;
 	unsigned int nrbuf = sc->sc_rb.rb_nrbuf;
 	unsigned int ri;
 	u_int32_t flags;
@@ -1073,7 +1069,7 @@ hme_rint(sc)
 
 		if (flags & HME_XD_OFL) {
 			printf("%s: buffer overflow, ri=%d; flags=0x%x\n",
-					sc->sc_dev.dv_xname, ri, flags);
+					device_xname(&sc->sc_dev), ri, flags);
 		} else
 			hme_read(sc, ri, flags);
 
@@ -1105,11 +1101,11 @@ hme_eint(sc, status)
 		st = bus_space_read_4(t, mif, HME_MIFI_STAT);
 		sm = bus_space_read_4(t, mif, HME_MIFI_SM);
 		printf("%s: XXXlink status changed: cfg=%x, stat %x, sm %x\n",
-			sc->sc_dev.dv_xname, cf, st, sm);
+			device_xname(&sc->sc_dev), cf, st, sm);
 		return (1);
 	}
 
-	printf("%s: status=%s\n", sc->sc_dev.dv_xname,
+	printf("%s: status=%s\n", device_xname(&sc->sc_dev),
 		bitmask_snprintf(status, HME_SEB_STAT_BITS, bits,sizeof(bits)));
 	return (1);
 }
@@ -1149,7 +1145,7 @@ hme_watchdog(ifp)
 {
 	struct hme_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
+	log(LOG_ERR, "%s: device timeout\n", device_xname(&sc->sc_dev));
 	++ifp->if_oerrors;
 
 	hme_reset(sc);
@@ -1168,8 +1164,8 @@ hme_mifinit(sc)
 	int instance, phy;
 	u_int32_t v;
 
-	if (sc->sc_media.ifm_cur != NULL) {
-		instance = IFM_INST(sc->sc_media.ifm_cur->ifm_media);
+	if (sc->sc_mii.mii_media.ifm_cur != NULL) {
+		instance = IFM_INST(sc->sc_mii.mii_media.ifm_cur->ifm_media);
 		phy = sc->sc_phys[instance];
 	} else
 		/* No media set yet, pick phy arbitrarily.. */
@@ -1255,7 +1251,7 @@ hme_mii_readreg(self, phy, reg)
 	}
 
 	v = 0;
-	printf("%s: mii_read timeout\n", sc->sc_dev.dv_xname);
+	printf("%s: mii_read timeout\n", device_xname(&sc->sc_dev));
 
 out:
 	/* Restore MIFI_CFG register */
@@ -1326,7 +1322,7 @@ hme_mii_writereg(self, phy, reg, val)
 			goto out;
 	}
 
-	printf("%s: mii_write timeout\n", sc->sc_dev.dv_xname);
+	printf("%s: mii_write timeout\n", device_xname(&sc->sc_dev));
 out:
 	/* Restore MIFI_CFG register */
 	bus_space_write_4(t, mif, HME_MIFI_CFG, mifi_cfg);
@@ -1373,14 +1369,13 @@ hme_mediachange(ifp)
 	bus_space_handle_t mac = sc->sc_mac;
 	int instance = IFM_INST(sc->sc_mii.mii_media.ifm_cur->ifm_media);
 	int phy = sc->sc_phys[instance];
+	int rc;
 	u_int32_t v;
 
 #ifdef HMEDEBUG
 	if (sc->sc_debug)
 		printf("hme_mediachange: phy = %d\n", phy);
 #endif
-	if (IFM_TYPE(sc->sc_media.ifm_media) != IFM_ETHER)
-		return (EINVAL);
 
 	/* Select the current PHY in the MIF configuration register */
 	v = bus_space_read_4(t, mif, HME_MIFI_CFG);
@@ -1396,22 +1391,9 @@ hme_mediachange(ifp)
 		v |= HME_MAC_XIF_MIIENABLE;
 	bus_space_write_4(t, mac, HME_MACI_XIF, v);
 
-	return (mii_mediachg(&sc->sc_mii));
-}
-
-void
-hme_mediastatus(ifp, ifmr)
-	struct ifnet *ifp;
-	struct ifmediareq *ifmr;
-{
-	struct hme_softc *sc = ifp->if_softc;
-
-	if ((ifp->if_flags & IFF_UP) == 0)
-		return;
-
-	mii_pollstat(&sc->sc_mii);
-	ifmr->ifm_active = sc->sc_mii.mii_media_active;
-	ifmr->ifm_status = sc->sc_mii.mii_media_status;
+	if ((rc = mii_mediachg(&sc->sc_mii)) == ENXIO)
+		return 0;
+	return rc;
 }
 
 /*
@@ -1421,11 +1403,10 @@ int
 hme_ioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 {
 	struct hme_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
-	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error = 0;
 
 	s = splnet();
@@ -1440,14 +1421,14 @@ hme_ioctl(ifp, cmd, data)
 				hme_setladrf(sc);
 			else {
 				ifp->if_flags |= IFF_UP;
-				hme_init(sc);
+				error = hme_init(sc);
 			}
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
 		default:
 			ifp->if_flags |= IFF_UP;
-			hme_init(sc);
+			error = hme_init(sc);
 			break;
 		}
 		break;
@@ -1463,7 +1444,7 @@ hme_ioctl(ifp, cmd, data)
 			 * If interface is marked down and it is running, then
 			 * stop it.
 			 */
-			hme_stop(sc);
+			hme_stop(sc, false);
 			ifp->if_flags &= ~IFF_RUNNING;
 		} else if ((ifp->if_flags & IFF_UP) != 0 &&
 		    	   (ifp->if_flags & IFF_RUNNING) == 0) {
@@ -1471,7 +1452,7 @@ hme_ioctl(ifp, cmd, data)
 			 * If interface is marked up and it is stopped, then
 			 * start it.
 			 */
-			hme_init(sc);
+			error = hme_init(sc);
 		} else if ((ifp->if_flags & IFF_UP) != 0) {
 			/*
 			 * If setting debug or promiscuous mode, do not reset
@@ -1484,40 +1465,31 @@ hme_ioctl(ifp, cmd, data)
 				    == (sc->sc_if_flags & (~RESETIGN)))
 					hme_setladrf(sc);
 				else
-					hme_init(sc);
+					error = hme_init(sc);
 			}
 #undef RESETIGN
 		}
 
 		if (sc->sc_ec_capenable != sc->sc_ethercom.ec_capenable)
-			hme_init(sc);
+			error = hme_init(sc);
 
 		break;
 
-	case SIOCADDMULTI:
-	case SIOCDELMULTI:
-		error = (cmd == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->sc_ethercom) :
-		    ether_delmulti(ifr, &sc->sc_ethercom);
+	default:
+		if ((error = ether_ioctl(ifp, cmd, data)) != ENETRESET)
+			break;
 
-		if (error == ENETRESET) {
+		error = 0;
+
+		if (cmd != SIOCADDMULTI && cmd != SIOCDELMULTI)
+			;
+		else if (ifp->if_flags & IFF_RUNNING) {
 			/*
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
 			 */
-			if (ifp->if_flags & IFF_RUNNING)
-				hme_setladrf(sc);
-			error = 0;
+			hme_setladrf(sc);
 		}
-		break;
-
-	case SIOCGIFMEDIA:
-	case SIOCSIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &sc->sc_media, cmd);
-		break;
-
-	default:
-		error = EINVAL;
 		break;
 	}
 
@@ -1531,7 +1503,7 @@ hme_shutdown(arg)
 	void *arg;
 {
 
-	hme_stop((struct hme_softc *)arg);
+	hme_stop((struct hme_softc *)arg, false);
 }
 
 /*
@@ -1655,7 +1627,7 @@ hme_copytobuf_contig(sc, from, ri, len)
 	void *from;
 	int ri, len;
 {
-	volatile caddr_t buf = sc->sc_rb.rb_txbuf + (ri * _HME_BUFSZ);
+	volatile void *buf = sc->sc_rb.rb_txbuf + (ri * _HME_BUFSZ);
 
 	/*
 	 * Just call memcpy() to do the work.
@@ -1669,7 +1641,7 @@ hme_copyfrombuf_contig(sc, to, boff, len)
 	void *to;
 	int boff, len;
 {
-	volatile caddr_t buf = sc->sc_rb.rb_rxbuf + (ri * _HME_BUFSZ);
+	volatile void *buf = sc->sc_rb.rb_rxbuf + (ri * _HME_BUFSZ);
 
 	/*
 	 * Just call memcpy() to do the work.

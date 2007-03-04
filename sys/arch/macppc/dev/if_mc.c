@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mc.c,v 1.11 2005/12/24 20:07:15 perry Exp $	*/
+/*	$NetBSD: if_mc.c,v 1.14 2008/10/05 05:01:08 macallan Exp $	*/
 
 /*-
  * Copyright (c) 1997 David Huang <khym@bga.com>
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.11 2005/12/24 20:07:15 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.14 2008/10/05 05:01:08 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -52,9 +52,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.11 2005/12/24 20:07:15 perry Exp $");
 
 #include <dev/ofw/openfirm.h>
 
-#include <machine/pio.h>
 #include <machine/bus.h>
 #include <machine/autoconf.h>
+#include <machine/pio.h>
 
 #include <macppc/dev/am79c950reg.h>
 #include <macppc/dev/if_mcvar.h>
@@ -117,6 +117,7 @@ mc_attach(parent, self, aux)
 	u_int *reg;
 
 	sc->sc_node = ca->ca_node;
+	sc->sc_regt = ca->ca_tag;
 
 	reg  = ca->ca_reg;
 	reg[0] += ca->ca_baseaddr;
@@ -126,7 +127,7 @@ mc_attach(parent, self, aux)
 	sc->sc_txdma = mapiodev(reg[2], reg[3]);
 	sc->sc_rxdma = mapiodev(reg[4], reg[5]);
 	bus_space_map(sc->sc_regt, reg[0], reg[1], 0, &sc->sc_regh);
-					/* XXX sc_regt is uninitialized */
+
 	sc->sc_tail = 0;
 	sc->sc_txdmacmd = dbdma_alloc(sizeof(dbdma_command_t) * 2);
 	sc->sc_rxdmacmd = (void *)dbdma_alloc(sizeof(dbdma_command_t) * 8);
@@ -174,9 +175,9 @@ mc_attach(parent, self, aux)
 	dbdma_reset(sc->sc_txdma);
 
 	/* install interrupt handlers */
-	/*intr_establish(ca->ca_intr[1], IST_LEVEL, IPL_NET, mc_dmaintr, sc);*/
-	intr_establish(ca->ca_intr[2], IST_LEVEL, IPL_NET, mc_dmaintr, sc);
-	intr_establish(ca->ca_intr[0], IST_LEVEL, IPL_NET, mcintr, sc);
+	/*intr_establish(ca->ca_intr[1], IST_EDGE, IPL_NET, mc_dmaintr, sc);*/
+	intr_establish(ca->ca_intr[2], IST_EDGE, IPL_NET, mc_dmaintr, sc);
+	intr_establish(ca->ca_intr[0], IST_EDGE, IPL_NET, mcintr, sc);
 
 	sc->sc_biucc = XMTSP_64;
 	sc->sc_fifocc = XMTFW_16 | RCVFW_64 | XMTFWU | RCVFWU |
@@ -243,19 +244,19 @@ mc_dmaintr(arg)
 
 		cmd = &sc->sc_rxdmacmd[i];
 		/* flushcache(cmd, sizeof(dbdma_command_t)); */
-		status = dbdma_ld16(&cmd->d_status);
-		resid = dbdma_ld16(&cmd->d_resid);
+		status = in16rb(&cmd->d_status);
+		resid = in16rb(&cmd->d_resid);
 
 		/*if ((status & D_ACTIVE) == 0)*/
 		if ((status & 0x40) == 0)
 			continue;
 
 #if 1
-		if (dbdma_ld16(&cmd->d_count) != ETHERMTU + 22)
+		if (in16rb(&cmd->d_count) != ETHERMTU + 22)
 			printf("bad d_count\n");
 #endif
 
-		datalen = dbdma_ld16(&cmd->d_count) - resid;
+		datalen = in16rb(&cmd->d_count) - resid;
 		datalen -= 4;	/* 4 == status bytes */
 
 		if (datalen < 4 + sizeof(struct ether_header)) {
@@ -318,7 +319,7 @@ mc_reset_rxdma(sc)
 
 	DBDMA_BUILD(cmd, DBDMA_CMD_NOP, 0, 0, 0,
 		DBDMA_INT_NEVER, DBDMA_WAIT_NEVER, DBDMA_BRANCH_ALWAYS);
-	dbdma_st32(&cmd->d_cmddep, kvtop((caddr_t)sc->sc_rxdmacmd));
+	out32rb(&cmd->d_cmddep, kvtop((void *)sc->sc_rxdmacmd));
 	cmd++;
 
 	dbdma_start(dmareg, sc->sc_rxdmacmd);
@@ -350,7 +351,7 @@ mc_reset_txdma(sc)
 		DBDMA_INT_NEVER, DBDMA_WAIT_NEVER, DBDMA_BRANCH_NEVER);
 
 	out32rb(&dmareg->d_cmdptrhi, 0);
-	out32rb(&dmareg->d_cmdptrlo, kvtop((caddr_t)sc->sc_txdmacmd));
+	out32rb(&dmareg->d_cmdptrlo, kvtop((void *)sc->sc_txdmacmd));
 
 	/* restore old value */
 	NIC_PUT(sc, MACE_MACCC, maccc);

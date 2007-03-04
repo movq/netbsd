@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_core.c,v 1.3 2007/02/17 22:31:42 pavel Exp $	*/
+/*	$NetBSD: kern_core.c,v 1.12 2008/04/24 18:39:23 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_core.c,v 1.3 2007/02/17 22:31:42 pavel Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_core.c,v 1.12 2008/04/24 18:39:23 ad Exp $");
 
 #include "opt_coredump.h"
 
@@ -85,26 +85,18 @@ coredump(struct lwp *l, const char *pattern)
 	kauth_cred_t		cred;
 	struct nameidata	nd;
 	struct vattr		vattr;
-	struct mount		*mp;
 	struct coredump_iostate	io;
+	struct plimit		*lim;
 	int			error, error1;
-	char			*name = NULL;
+	char			*name;
+
+	name = PNBUF_GET();
 
 	p = l->l_proc;
 	vm = p->p_vmspace;
 
-	rw_enter(&proclist_lock, RW_READER);	/* p_session */
-	mutex_enter(&p->p_mutex);
-
-	/*
-	 * Make sure the process has not set-id, to prevent data leaks,
-	 * unless it was specifically requested to allow set-id coredumps.
-	 */
-	if ((p->p_flag & PK_SUGID) && !security_setidcore_dump) {
-		mutex_exit(&p->p_mutex);
-		rw_exit(&proclist_lock);
-		return EPERM;
-	}
+	mutex_enter(proc_lock);		/* p_session */
+	mutex_enter(p->p_lock);
 
 	/*
 	 * Refuse to core if the data + stack + user size is larger than
@@ -113,9 +105,10 @@ coredump(struct lwp *l, const char *pattern)
 	 */
 	if (USPACE + ctob(vm->vm_dsize + vm->vm_ssize) >=
 	    p->p_rlimit[RLIMIT_CORE].rlim_cur) {
-		mutex_exit(&p->p_mutex);
-		rw_exit(&proclist_lock);
-		return EFBIG;		/* better error code? */
+		error = EFBIG;		/* better error code? */
+		mutex_exit(p->p_lock);
+		mutex_exit(proc_lock);
+		goto done;
 	}
 
 	/*
@@ -125,55 +118,58 @@ coredump(struct lwp *l, const char *pattern)
 	kauth_cred_hold(p->p_cred);
 	cred = p->p_cred;
 
-restart:
 	/*
 	 * The core dump will go in the current working directory.  Make
 	 * sure that the directory is still there and that the mount flags
 	 * allow us to write core dumps there.
+	 *
+	 * XXX: this is partially bogus, it should be checking the directory
+	 * into which the file is actually written - which probably needs
+	 * a flag on namei()
 	 */
 	vp = p->p_cwdi->cwdi_cdir;
 	if (vp->v_mount == NULL ||
 	    (vp->v_mount->mnt_flag & MNT_NOCOREDUMP) != 0) {
 		error = EPERM;
-		mutex_exit(&p->p_mutex);
-		rw_exit(&proclist_lock);
+		mutex_exit(p->p_lock);
+		mutex_exit(proc_lock);
 		goto done;
 	}
 
-	if ((p->p_flag & PK_SUGID) && security_setidcore_dump)
+	/*
+	 * Make sure the process has not set-id, to prevent data leaks,
+	 * unless it was specifically requested to allow set-id coredumps.
+	 */
+	if (p->p_flag & PK_SUGID) {
+		if (!security_setidcore_dump) {
+			error = EPERM;
+			mutex_exit(p->p_lock);
+			mutex_exit(proc_lock);
+			goto done;
+		}
 		pattern = security_setidcore_path;
-
-	if (pattern == NULL)
-		pattern = p->p_limit->pl_corename;
-	if (name == NULL) {
-		name = PNBUF_GET();
 	}
+
+	/* It is (just) possible for p_limit and pl_corename to change */
+	lim = p->p_limit;
+	mutex_enter(&lim->pl_lock);
+	if (pattern == NULL)
+		pattern = lim->pl_corename;
 	error = coredump_buildname(p, name, pattern, MAXPATHLEN);
-	mutex_exit(&p->p_mutex);
-	rw_exit(&proclist_lock);
+	mutex_exit(&lim->pl_lock);
+	mutex_exit(p->p_lock);
+	mutex_exit(proc_lock);
 	if (error)
 		goto done;
-	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_SYSSPACE, name, l);
+	NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_SYSSPACE, name);
 	if ((error = vn_open(&nd, O_CREAT | O_NOFOLLOW | FWRITE,
 	    S_IRUSR | S_IWUSR)) != 0)
 		goto done;
 	vp = nd.ni_vp;
 
-	if (vn_start_write(vp, &mp, V_NOWAIT) != 0) {
-		VOP_UNLOCK(vp, 0);
-		if ((error = vn_close(vp, FWRITE, cred, l)) != 0)
-			goto done;
-		if ((error = vn_start_write(NULL, &mp,
-		    V_WAIT | V_SLEEPONLY | V_PCATCH)) != 0)
-			goto done;
-		rw_enter(&proclist_lock, RW_READER);	/* p_session */
-		mutex_enter(&p->p_mutex);
-		goto restart;
-	}
-
 	/* Don't dump to non-regular files or files with links. */
 	if (vp->v_type != VREG ||
-	    VOP_GETATTR(vp, &vattr, cred, l) || vattr.va_nlink != 1) {
+	    VOP_GETATTR(vp, &vattr, cred) || vattr.va_nlink != 1) {
 		error = EINVAL;
 		goto out;
 	}
@@ -186,8 +182,7 @@ restart:
 		vattr.va_mode = security_setidcore_mode;
 	}
 
-	VOP_LEASE(vp, l, cred, LEASE_WRITE);
-	VOP_SETATTR(vp, &vattr, cred, l);
+	VOP_SETATTR(vp, &vattr, cred);
 	p->p_acflag |= ACORE;
 
 	io.io_lwp = l;
@@ -199,8 +194,7 @@ restart:
 	error = (*p->p_execsw->es_coredump)(l, &io);
  out:
 	VOP_UNLOCK(vp, 0);
-	vn_finished_write(mp, 0);
-	error1 = vn_close(vp, FWRITE, cred, l);
+	error1 = vn_close(vp, FWRITE, cred);
 	if (error == 0)
 		error = error1;
 done:
@@ -216,7 +210,7 @@ coredump_buildname(struct proc *p, char *dst, const char *src, size_t len)
 	char		*d, *end;
 	int		i;
 
-	LOCK_ASSERT(rw_read_held(&proclist_lock));
+	KASSERT(mutex_owned(proc_lock));
 
 	for (s = src, d = dst, end = d + len; *s != '\0'; s++) {
 		if (*s == '%') {

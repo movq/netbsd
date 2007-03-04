@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.62 2007/02/16 02:53:44 ad Exp $	*/
+/*	$NetBSD: cpu.h,v 1.70 2008/02/27 18:26:15 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -97,8 +97,10 @@
 #include <sys/cpu_data.h>
 struct cpu_info {
 	struct cpu_data ci_data;	/* MI per-cpu data */
+	cpuid_t	ci_cpuid;
 	int	ci_mtx_count;
         int	ci_mtx_oldspl;
+        int	ci_want_resched;
 };
 
 extern struct cpu_info cpu_info_store;
@@ -137,8 +139,7 @@ struct clockframe {
  * Preempt the current process if in interrupt from user mode,
  * or after the current trap/syscall if in system mode.
  */
-extern int want_resched;	/* resched() was called */
-#define	cpu_need_resched(ci)	{want_resched = 1; setsoftast();}
+#define	cpu_need_resched(ci,flags)	{ci->ci_want_resched = 1; setsoftast();}
 
 /*
  * Give a profiling tick to the current process from the softclock
@@ -184,11 +185,6 @@ extern int machineid;
 #define CPU_CONSDEV	1	/* dev_t: console terminal device */
 #define CPU_MAXID	2	/* number of valid machdep ids */
 
-#define CTL_MACHDEP_NAMES { \
-	{ 0, 0 }, \
-	{ "console_device", CTLTYPE_STRUCT }, \
-}
-
 #ifdef _KERNEL
 /*
  * Prototypes from amiga_init.c
@@ -204,11 +200,6 @@ int	is_a4000 __P((void));
 #ifdef DRACO
 #define	is_draco() ((machineid >> 24) == 0x7d ? (machineid >> 16) & 0xff : 0)
 #endif
-
-/*
- * Prototypes from clock.c
- */
-u_long	clkread __P((void));
 
 #ifdef DRACO
 /*
@@ -227,7 +218,6 @@ void	drsc_handler __P((void));
  */
 struct fpframe;
 struct user;
-struct pcb;
 
 void	clearseg __P((vm_offset_t));
 void	doboot __P((void)) __attribute__((__noreturn__));
@@ -238,32 +228,13 @@ void	m68881_restore __P((struct fpframe *));
 #endif
 void	physcopyseg __P((vm_offset_t, vm_offset_t));
 u_int	probeva __P((u_int, u_int));
-void	proc_trampoline __P((void));
-void	savectx __P((struct pcb *));
-void	switch_exit __P((struct lwp *));
-void	switch_lwp_exit __P((struct lwp *));
 
 /*
  * Prototypes from machdep.c
  */
-int	badaddr __P((caddr_t));
-int	badbaddr __P((caddr_t));
+int	badaddr __P((void *));
+int	badbaddr __P((void *));
 void	bootsync __P((void));
-void	dumpconf __P((void));
-
-/*
- * Prototypes from sys_machdep.c:
- */
-int	cachectl1 __P((unsigned long, vaddr_t, size_t, struct proc *));
-int	dma_cachectl __P((caddr_t, int));
-
-/*
- * Prototypes from vm_machdep.c
- */
-int	kvtop __P((caddr_t));
-void	physaccess __P((caddr_t,  caddr_t, int, int));
-void	physunaccess __P((caddr_t, int));
-void	setredzone __P((u_int *, caddr_t));
 
 /*
  * Prototypes from pmap.c:

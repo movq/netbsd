@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.h,v 1.168 2007/02/18 15:20:34 dsl Exp $	*/
+/*	$NetBSD: sysctl.h,v 1.177 2008/08/27 08:53:55 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -46,11 +46,13 @@
 #include <sys/proc.h>
 #include <uvm/uvm_extern.h>
 
+
 /* For offsetof() */
 #if defined(_KERNEL) || defined(_STANDALONE)
 #include <sys/systm.h>
 #else
 #include <stddef.h>
+#include <stdbool.h>
 #endif
 
 /*
@@ -84,6 +86,7 @@ struct ctlname {
 #define	CTLTYPE_STRING	3	/* name describes a string */
 #define	CTLTYPE_QUAD	4	/* name describes a 64-bit number */
 #define	CTLTYPE_STRUCT	5	/* name describes a structure */
+#define	CTLTYPE_BOOL	6	/* name describes a bool */
 
 /*
  * Flags that apply to each node, governing access and other features
@@ -239,7 +242,7 @@ struct ctlname {
 #define	KERN_PROC2		47	/* struct: process entries */
 #define	KERN_PROC_ARGS		48	/* struct: process argv/env */
 #define	KERN_FSCALE		49	/* int: fixpt FSCALE */
-#define	KERN_CCPU		50	/* int: fixpt ccpu */
+#define	KERN_CCPU		50	/* old: fixpt ccpu */
 #define	KERN_CP_TIME		51	/* struct: CPU time counters */
 #define	KERN_OLDSYSVIPC_INFO	52	/* old: number of valid kern ids */
 #define	KERN_MSGBUF		53	/* kernel message buffer */
@@ -326,7 +329,7 @@ struct ctlname {
 	{ "proc2", CTLTYPE_STRUCT }, \
 	{ "proc_args", CTLTYPE_STRING }, \
 	{ "fscale", CTLTYPE_INT }, \
-	{ "ccpu", CTLTYPE_INT }, \
+	{ 0, 0 }, \
 	{ "cp_time", CTLTYPE_STRUCT }, \
 	{ 0, 0 }, \
 	{ "msgbuf", CTLTYPE_STRUCT }, \
@@ -458,6 +461,7 @@ struct kinfo_proc {
 #define	KI_WMESGLEN	8
 #define	KI_MAXLOGNAME	24	/* extra for 8 byte alignment */
 #define	KI_MAXEMULLEN	16
+#define	KI_LNAMELEN	20	/* extra 4 for alignment */
 
 #define KI_NOCPU	(~(uint64_t)0)
 
@@ -649,6 +653,12 @@ struct kinfo_lwp {
 	char	l_wmesg[KI_WMESGLEN];	/* wchan message */
 	uint64_t l_wchan;		/* PTR: sleep address. */
 	uint64_t l_cpuid;		/* LONG: CPU id */
+	uint32_t l_rtime_sec;		/* STRUCT TIMEVAL: Real time. */
+	uint32_t l_rtime_usec;		/* STRUCT TIMEVAL: Real time. */
+	uint32_t l_cpticks;		/* INT: ticks during l_swtime */
+	uint32_t l_pctcpu;		/* FIXPT_T: cpu usage for ps */
+	uint32_t l_pid;			/* PID_T: process identifier */
+	char	l_name[KI_LNAMELEN];	/* CHAR[]: name, may be empty */
 };
 
 /*
@@ -799,6 +809,7 @@ struct kinfo_file {
 #define	HW_USERMEM64	14		/* quad: non-kernel memory (bytes) */
 #define	HW_IOSTATNAMES	15		/* string: iostat names */
 #define	HW_MAXID	15		/* number of valid hw ids */
+#define	HW_NCPUONLINE	16		/* number CPUs online */
 
 #define	CTL_HW_NAMES { \
 	{ 0, 0 }, \
@@ -816,6 +827,7 @@ struct kinfo_file {
 	{ "cnmagic", CTLTYPE_STRING }, \
 	{ "physmem64", CTLTYPE_QUAD }, \
 	{ "usermem64", CTLTYPE_QUAD }, \
+	{ "ncpuonline", CTLTYPE_INT }, \
 }
 
 /*
@@ -840,7 +852,7 @@ struct kinfo_file {
 #define	USER_POSIX2_SW_DEV	17	/* int: POSIX2_SW_DEV */
 #define	USER_POSIX2_UPE		18	/* int: POSIX2_UPE */
 #define	USER_STREAM_MAX		19	/* int: POSIX2_STREAM_MAX */
-#define	USER_TZNAME_MAX		20	/* int: POSIX2_TZNAME_MAX */
+#define	USER_TZNAME_MAX		20	/* int: _POSIX_TZNAME_MAX */
 #define	USER_ATEXIT_MAX		21	/* int: {ATEXIT_MAX} */
 #define	USER_MAXID		22	/* number of valid user ids */
 
@@ -1051,6 +1063,7 @@ extern struct ctldebug debug15, debug16, debug17, debug18, debug19;
 	void name(struct sysctllog **)
 #ifdef SYSCTL_DEBUG_SETUP
 #define SYSCTL_SETUP(name, desc)				\
+	SYSCTL_SETUP_PROTO(name);				\
 	static void __CONCAT(___,name)(struct sysctllog **);	\
 	void name(struct sysctllog **clog) {			\
 		printf("%s\n", desc);				\
@@ -1059,6 +1072,7 @@ extern struct ctldebug debug15, debug16, debug17, debug18, debug19;
 	static void __CONCAT(___,name)(struct sysctllog **clog)
 #else  /* !SYSCTL_DEBUG_SETUP */
 #define SYSCTL_SETUP(name, desc)				\
+	SYSCTL_SETUP_PROTO(name);				\
 	__link_set_add_text(sysctl_funcs, name);		\
 	void name(struct sysctllog **clog)
 #endif /* !SYSCTL_DEBUG_SETUP */
@@ -1101,7 +1115,7 @@ typedef int (*sysctlfn)(SYSCTLFN_PROTO);
 /*
  * used in more than just sysctl
  */
-void	fill_eproc(struct proc *, struct eproc *);
+void	fill_eproc(struct proc *, struct eproc *, bool);
 
 /*
  * subsystem setup
@@ -1111,9 +1125,10 @@ void	sysctl_init(void);
 /*
  * typical syscall call order
  */
-int	sysctl_lock(struct lwp *, void *, size_t);
+void	sysctl_lock(bool);
 int	sysctl_dispatch(SYSCTLFN_PROTO);
-void	sysctl_unlock(struct lwp *);
+void	sysctl_unlock(void);
+void	sysctl_relock(void);
 
 /*
  * tree navigation primitives (must obtain lock before using these)
@@ -1234,6 +1249,7 @@ struct sysctlnode {
 		int32_t scu_alias;		/* node this node refers to */
 		int32_t scu_idata;		/* immediate "int" data */
 		u_quad_t scu_qdata;		/* immediate "u_quad_t" data */
+		bool scu_bdata;			/* immediate bool data */
 	} sysctl_un;
 	__sysc_pad(size_t) _sysctl_size;	/* size of instrumented data */
 	__sysc_pad(sysctlfn) _sysctl_func;	/* access helper function */
@@ -1263,6 +1279,7 @@ struct sysctlnode {
 #define sysctl_alias	sysctl_un.scu_alias
 #define sysctl_idata	sysctl_un.scu_idata
 #define sysctl_qdata	sysctl_un.scu_qdata
+#define sysctl_bdata	sysctl_un.scu_bdata
 
 /*
  * when requesting a description of a node (a set of nodes, actually),

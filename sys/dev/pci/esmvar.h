@@ -1,4 +1,4 @@
-/*	$NetBSD: esmvar.h,v 1.13 2005/12/11 12:22:49 christos Exp $	*/
+/*	$NetBSD: esmvar.h,v 1.16 2008/02/23 02:17:16 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 Matt Fredette
@@ -123,7 +123,7 @@
 
 struct esm_dma {
 	bus_dmamap_t		map;
-	caddr_t			addr;
+	void *			addr;
 	bus_dma_segment_t	segs[1];
 	int			nsegs;
 	size_t			size;
@@ -135,7 +135,7 @@ struct esm_dma {
 
 struct esm_chinfo {
 	uint32_t		base;		/* DMA base */
-	caddr_t			buffer;		/* upper layer buffer */
+	void *			buffer;		/* upper layer buffer */
 	uint32_t		offset;		/* offset into buffer */
 	uint32_t		blocksize;	/* block size in bytes */
 	uint32_t		bufsize;	/* buffer size in bytes */
@@ -154,6 +154,7 @@ struct esm_softc {
 
 	bus_space_tag_t		st;
 	bus_space_handle_t	sh;
+	bus_size_t		sz;
 
 	pcitag_t		tag;
 	pci_chipset_tag_t	pc;
@@ -178,10 +179,6 @@ struct esm_softc {
 
 	void			(*sc_rintr)(void *);
 	void			*sc_rarg;
-
-	/* Power Management */
-	char			esm_suspend;
-	void			*esm_powerhook;
 };
 
 enum esm_quirk_flags {
@@ -202,7 +199,6 @@ int	esm_attach_codec(void *, struct ac97_codec_if *);
 int	esm_reset_codec(void *);
 enum ac97_host_flags	esm_flags_codec(void *);
 
-void	esm_power(struct esm_softc *, int);
 void	esm_init(struct esm_softc *);
 void	esm_initcodec(struct esm_softc *);
 
@@ -227,16 +223,5 @@ void	esm_free(void *, void *, struct malloc_type *);
 size_t	esm_round_buffersize(void *, int, size_t);
 paddr_t	esm_mappage(void *, void *, off_t, int);
 int	esm_get_props(void *);
-
-int	esm_match(struct device *, struct cfdata *, void *);
-void	esm_attach(struct device *, struct device *, void *);
-int	esm_intr(void *);
-
-int	esm_allocmem(struct esm_softc *, size_t, size_t,
-	    struct esm_dma *);
-
-int	esm_suspend(struct esm_softc *);
-int	esm_resume(struct esm_softc *);
-int	esm_shutdown(struct esm_softc *);
 
 enum esm_quirk_flags	esm_get_quirks(pcireg_t);

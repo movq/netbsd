@@ -1,4 +1,4 @@
-/*	$NetBSD: altq_priq.c,v 1.18 2006/11/16 01:32:37 christos Exp $	*/
+/*	$NetBSD: altq_priq.c,v 1.20 2008/06/18 09:06:27 yamt Exp $	*/
 /*	$KAME: altq_priq.c,v 1.13 2005/04/13 03:44:25 suz Exp $	*/
 /*
  * Copyright (C) 2000-2003
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altq_priq.c,v 1.18 2006/11/16 01:32:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altq_priq.c,v 1.20 2008/06/18 09:06:27 yamt Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_altq.h"
@@ -221,7 +221,7 @@ priq_getqstats(struct pf_altq *a, void *ubuf, int *nbytes)
 
 	get_class_stats(&stats, cl);
 
-	if ((error = copyout((caddr_t)&stats, ubuf, sizeof(stats))) != 0)
+	if ((error = copyout((void *)&stats, ubuf, sizeof(stats))) != 0)
 		return (error);
 	*nbytes = sizeof(stats);
 	return (0);
@@ -454,7 +454,7 @@ priq_enqueue(struct ifaltq *ifq, struct mbuf *m, struct altq_pktattr *pktattr)
 		return (ENOBUFS);
 	}
 	cl = NULL;
-	if ((t = m_tag_find(m, PACKET_TAG_PF_QID, NULL)) != NULL)
+	if ((t = m_tag_find(m, PACKET_TAG_ALTQ_QID, NULL)) != NULL)
 		cl = clh_to_clp(pif, ((struct altq_tag *)(t+1))->qid);
 #ifdef ALTQ3_COMPAT
 	else if ((ifq->altq_flags & ALTQF_CLASSIFY) && pktattr != NULL)
@@ -706,7 +706,7 @@ priqclose(dev_t dev, int flag, int fmt,
 }
 
 int
-priqioctl(dev_t dev, ioctlcmd_t cmd, caddr_t addr, int flag,
+priqioctl(dev_t dev, ioctlcmd_t cmd, void *addr, int flag,
     struct lwp *l)
 {
 	struct priq_if *pif;
@@ -968,7 +968,7 @@ priqcmd_class_stats(struct priq_class_stats *ap)
 			get_class_stats(&stats, cl);
 		else
 			memset(&stats, 0, sizeof(stats));
-		if ((error = copyout((caddr_t)&stats, (caddr_t)usp++,
+		if ((error = copyout((void *)&stats, (void *)usp++,
 				     sizeof(stats))) != 0)
 			return (error);
 	}

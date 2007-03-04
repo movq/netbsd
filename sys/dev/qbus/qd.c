@@ -1,4 +1,4 @@
-/*	$NetBSD: qd.c,v 1.36 2006/03/28 17:38:34 thorpej Exp $	*/
+/*	$NetBSD: qd.c,v 1.44 2008/06/12 23:06:14 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1988 Regents of the University of California.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: qd.c,v 1.36 2006/03/28 17:38:34 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: qd.c,v 1.44 2008/06/12 23:06:14 cegger Exp $");
 
 #include "opt_ddb.h"
 
@@ -77,12 +77,12 @@ __KERNEL_RCSID(0, "$NetBSD: qd.c,v 1.36 2006/03/28 17:38:34 thorpej Exp $");
 
 #include <dev/cons.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/scb.h>
 
 #ifdef __vax__
 #include <machine/sid.h>
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 #include <machine/pte.h>
 #endif
 
@@ -166,7 +166,7 @@ volatile struct pte *QVmap[NQD];
 int Qbus_unmap[NQD];		/* Qbus mapper release code */
 struct qdmap qdmap[NQD];	/* QDSS register map structure */
 struct qdflags qdflags[NQD];	/* QDSS register map structure */
-caddr_t qdbase[NQD];		/* base address of each QDSS unit */
+void *qdbase[NQD];		/* base address of each QDSS unit */
 struct buf qdbuf[NQD];		/* buf structs used by strategy */
 short qdopened[NQD];		/* graphics device is open exclusive use */
 
@@ -234,8 +234,8 @@ int QDlast_DMAtype;		/* type of the last DMA operation */
  */
 #define TOY ((time.tv_sec * 100) + (time.tv_usec / 10000))
 
-void qd_attach(struct device *, struct device *, void *);
-static int qd_match(struct device *, struct cfdata *, void *);
+void qd_attach(device_t, device_t, void *);
+static int qd_match(device_t, cfdata_t, void *);
 
 static void qddint(void *);	/* DMA gate array intrpt service */
 static void qdaint(void *);	/* Dragon ADDER intrpt service */
@@ -423,7 +423,7 @@ qdearly()
 #define	QIOPAGE	0x20000000	/* XXX */
 #define	UBAIOPAGES 16
 	tmp = QIOPAGE + ubdevreg(QDSSCSR);
-	if (badaddr((caddr_t)tmp, sizeof(short)))
+	if (badaddr((void *)tmp, sizeof(short)))
 		return;
 
 	MAPVIRT(qvmem[0], 64 * 1024 * NQD / VAX_NBPG);
@@ -462,7 +462,7 @@ void
 qdcninit(cndev)
 	struct  consdev *cndev;
 {
-	caddr_t phys_adr;		/* physical QDSS base adrs */
+	void *phys_adr;		/* physical QDSS base adrs */
 	u_int mapix;			/* index into QVmap[] array */
 	int unit;
 
@@ -496,7 +496,7 @@ qdcninit(cndev)
 	/*
 	 * load qdmap struct with the virtual addresses of the QDSS elements
 	 */
-	qdbase[unit] = (caddr_t) (qvmem[0]);
+	qdbase[unit] = (void *) (qvmem[0]);
 	qdmap[unit].template = qdbase[unit] + TMPSTART;
 	qdmap[unit].adder = qdbase[unit] + ADDER;
 	qdmap[unit].dga = qdbase[unit] + DGA;
@@ -522,6 +522,7 @@ qdcninit(cndev)
 	ldfont(unit);			/* load the console font */
 	ldcursor(unit, cons_cursor);	/* load default cursor map */
 	setup_input(unit);		/* init the DUART */
+	selinit(&qdrsel[unit]);
 
 	/* Set flag so probe knows */
 	qd0cninited = 1;
@@ -549,8 +550,8 @@ CFATTACH_DECL(qd, sizeof(struct qd_softc),
  */
 static int
 qd_match(parent, match, aux)
-	struct device *parent;
-	struct cfdata *match;
+	device_t parent;
+	cfdata_t match;
 	void *aux;
 {
 	struct qd_softc ssc;
@@ -562,7 +563,7 @@ qd_match(parent, match, aux)
 	int vector;
 #ifdef notdef
 	int *ptep;			/* page table entry pointer */
-	caddr_t phys_adr;		/* physical QDSS base adrs */
+	void *phys_adr;		/* physical QDSS base adrs */
 	u_int mapix;
 #endif
 
@@ -608,7 +609,7 @@ qd_match(parent, match, aux)
 			* find an empty 64kb adrs boundary
 			*/
 
-			qdbase[unit] = (caddr_t) (qvmem[0] + QMEMSIZE - CHUNK);
+			qdbase[unit] = (void *) (qvmem[0] + QMEMSIZE - CHUNK);
 
 			/*
 			* find the cpusw entry that matches this machine.
@@ -622,7 +623,7 @@ qd_match(parent, match, aux)
 			*/
 			mapix = (int) (VTOP(qdbase[unit]) - VTOP(qvmem[0]));
 			ptep = (int *) QVmap[0] + mapix;
-			phys_adr = (caddr_t)(((int)*ptep&0x001FFFFF)<<VAX_PGSHIFT);
+			phys_adr = (void *)(((int)*ptep&0x001FFFFF)<<VAX_PGSHIFT);
 			*(u_short *)reg = (u_short) ((int)phys_adr >> 16);
 
 			/*
@@ -675,7 +676,7 @@ qd_match(parent, match, aux)
 			 qdaddr = (void *)reg;
 
 			 /* Lame probe for QDSS.  Should be ok for qd0 */
-			 if (badaddr((caddr_t)qdaddr, sizeof(short)))
+			 if (badaddr((void *)qdaddr, sizeof(short)))
 				 return 0;
 
 			 qdcninit(NULL);
@@ -728,7 +729,7 @@ qd_match(parent, match, aux)
 
 
 void qd_attach(parent, self, aux)
-	   struct device *parent, *self;
+	   device_t parent, *self;
 	   void *aux;
 {
 	struct uba_attach_args *ua = aux;
@@ -791,14 +792,12 @@ void qd_attach(parent, self, aux)
 
 /*ARGSUSED*/
 int
-qdopen(dev, flag, mode, p)
-	dev_t dev;
-	int flag, mode;
-	struct proc *p;
+qdopen(dev_t dev, int flag, int mode, struct proc *p)
 {
 	volatile struct dga *dga;	/* ptr to gate array struct */
 	struct tty *tp;
 	volatile struct duart *duart;
+	struct uba_softc *sc;
 	int unit;
 	int minor_dev;
 
@@ -808,8 +807,9 @@ qdopen(dev, flag, mode, p)
 	/*
 	* check for illegal conditions
 	*/
-	if (unit >= qd_cd.cd_ndevs || qd_cd.cd_devs[unit] == NULL)
-		return (ENXIO);		/* no such device or address */
+	sc = device_lookup_private(&qd_cd, unit);
+	if (sc == NULL)
+		return ENXIO;
 
 	duart = (struct duart *) qdmap[unit].duart;
 	dga = (struct dga *) qdmap[unit].dga;
@@ -877,10 +877,7 @@ qdopen(dev, flag, mode, p)
 
 /*ARGSUSED*/
 int
-qdclose(dev, flag, mode, p)
-	dev_t dev;
-	int flag, mode;
-	struct proc *p;
+qdclose(dev_t dev, int flag, int mode, struct proc *p)
 {
 	struct tty *tp;
 	struct qdmap *qd;
@@ -898,8 +895,7 @@ qdclose(dev, flag, mode, p)
 	unit = minor_dev >> 2;		/* get QDSS number */
 	qd = &qdmap[unit];
 
-	uh = (struct uba_softc *)
-	     device_parent((struct device *)(qd_cd.cd_devs[unit]));
+	uh = device_private(device_parent(device_lookup(&qd_cd, unit)));
 
 
 	if ((minor_dev & 0x03) == 2) {
@@ -1078,7 +1074,7 @@ int
 qdioctl(dev, cmd, datap, flags, p)
 	dev_t dev;
 	u_long cmd;
-	caddr_t datap;
+	void *datap;
 	int flags;
 	struct proc *p;
 {
@@ -1101,8 +1097,7 @@ qdioctl(dev, cmd, datap, flags, p)
 	short *temp;			/* a pointer to template RAM */
 	struct uba_softc *uh;
 
-	uh = (struct uba_softc *)
-	     device_parent((struct device *)(qd_cd.cd_devs[unit]));
+	uh = device_private(device_parent(device_lookup(&qd_cd, unit)));
 
 	/*
 	* service graphic device ioctl commands
@@ -1122,7 +1117,7 @@ qdioctl(dev, cmd, datap, flags, p)
 		s = spl5();
 		GETEND(eq_header[unit]);
 		splx(s);
-		bcopy((caddr_t)event, datap, sizeof(struct _vs_event));
+		bcopy((void *)event, datap, sizeof(struct _vs_event));
 		break;
 
 	case QD_RESET:
@@ -1241,7 +1236,7 @@ qdioctl(dev, cmd, datap, flags, p)
 		/*
 		 * stuff qdmap structure in return buffer
 		 */
-		bcopy((caddr_t)qd, datap, sizeof(struct qdmap));
+		bcopy((void *)qd, datap, sizeof(struct qdmap));
 
 		break;
 
@@ -1267,7 +1262,7 @@ qdioctl(dev, cmd, datap, flags, p)
 		* set up QBUS map registers for DMA
 		*/
 		DMAheader[unit]->QBAreg =
-		    uballoc(uh, (caddr_t)DMAheader[unit], DMAbuf_size, 0);
+		    uballoc(uh, (void *)DMAheader[unit], DMAbuf_size, 0);
 		if (DMAheader[unit]->QBAreg == 0)
 		    printf("qd%d: qdioctl: QBA setup error\n", unit);
 		Qbus_unmap[unit] = DMAheader[unit]->QBAreg;
@@ -1623,7 +1618,7 @@ qdkqfilter(dev_t dev, struct knote *kn)
 		break;
 
 	default:
-		return (1);
+		return (EINVAL);
 	}
 
 	kn->kn_hook = (void *)(intptr_t) dev;
@@ -1717,8 +1712,7 @@ qd_strategy(bp)
 
 	unit = (minor(bp->b_dev) >> 2) & 0x07;
 
-	uh = (struct uba_softc *)
-	     device_parent((struct device *)(qd_cd.cd_devs[unit]));
+	uh = device_private(device_parent(device_lookup(&qd_cd, unit)));
 
 	/*
 	* init pointers
@@ -1759,7 +1753,7 @@ panic("qd_strategy");
 	dga->csr &= ~DMA_IE;
 	dga->csr &= ~0x0600;		/* halt DMA (reset fifo) */
 	dga->csr |= DMA_ERR;		/* clear error condition */
-	bp->b_flags |= B_ERROR;		/* flag an error to physio() */
+	bp->b_error = EIO;		/* flag an error to physio() */
 
 	/*
 	 * if DMA was running, flush spurious intrpt
@@ -1808,17 +1802,7 @@ void qdstart(tp)
 		if (unit == 0)
 			blitc(which_unit, (u_char)c);
 	}
-	/*
-	* If there are sleepers, and output has drained below low
-	* water mark, wake up the sleepers.
-	*/
-	if (tp->t_outq.c_cc <= tp->t_lowat) {
-		if (tp->t_state & TS_ASLEEP){
-			tp->t_state &= ~TS_ASLEEP;
-			wakeup((caddr_t) &tp->t_outq);
-		}
-	}
-
+	ttypull(tp);
 	tp->t_state &= ~TS_BUSY;
 
 out:
@@ -2060,7 +2044,7 @@ static void
 qddint(arg)
 	void *arg;
 {
-	struct device *dv = arg;
+	device_t dv = arg;
 	struct DMAreq_header *header;
 	struct DMAreq *request;
 	volatile struct dga *dga;
@@ -2102,7 +2086,7 @@ qddint(arg)
 	*/
 	if (qdflags[unit].user_dma) {
 		qdflags[unit].user_dma = 0;
-		wakeup((caddr_t)&qdflags[unit].user_dma);
+		wakeup((void *)&qdflags[unit].user_dma);
 		return;
 	}
 
@@ -2121,7 +2105,7 @@ qddint(arg)
 		header->newest = header->oldest;
 		header->used = 0;
 
-		selnotify(&qdrsel[unit], 0);
+		selnotify(&qdrsel[unit], 0, 0);
 
 		if (dga->bytcnt_lo != 0) {
 			dga->bytcnt_lo = 0;
@@ -2136,7 +2120,7 @@ qddint(arg)
 	* wakeup "select" client.
 	*/
 	if (DMA_ISFULL(header)) {
-		selnotify(&qdrsel[unit], 0);
+		selnotify(&qdrsel[unit], 0, 0);
 	}
 
 	header->DMAreq[header->oldest].DMAdone |= REQUEST_DONE;
@@ -2152,7 +2136,7 @@ qddint(arg)
 	* if no more DMA pending, wake up "select" client and exit
 	*/
 	if (DMA_ISEMPTY(header)) {
-		selnotify(&qdrsel[unit], 0);
+		selnotify(&qdrsel[unit], 0, 0);
 		DMA_CLRACTIVE(header);  /* flag DMA done */
 		return;
 	}
@@ -2238,7 +2222,7 @@ static void
 qdaint(arg)
 	void *arg;
 {
-	struct device *dv = arg;
+	device_t dv = arg;
 	volatile struct adder *adder;
 	struct color_buf *cbuf;
 	int i;
@@ -2322,10 +2306,9 @@ qdaint(arg)
  */
 
 static void
-qdiint(arg)
-	void *arg;
+qdiint(void *arg)
 {
-	struct device *dv = arg;
+	device_t dv = arg;
 	struct _vs_event *event;
 	struct qdinput *eqh;
 	volatile struct dga *dga;
@@ -2784,7 +2767,7 @@ GET_TBUTTON:
 		* do select wakeup
 		*/
 		if (do_wakeup) {
-			selnotify(&qdrsel[unit], 0);
+			selnotify(&qdrsel[unit], 0, 0);
 			do_wakeup = 0;
 		}
 	} else {
@@ -2794,7 +2777,7 @@ GET_TBUTTON:
 		if (qdpolling)
 			return;
 
-		if (unit >= qd_cd.cd_ndevs || qd_cd.cd_devs[unit] == NULL)
+		if (unit >= qd_cd.cd_ndevs || device_lookup(&qd_cd, unit) == NULL)
 			return;		/* no such device or address */
 
 		tp = qd_tty[unit << 2];

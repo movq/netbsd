@@ -1,4 +1,4 @@
-/* $NetBSD: i82596var.h,v 1.6 2006/07/08 16:07:47 skrll Exp $ */
+/* $NetBSD: i82596var.h,v 1.10 2008/04/04 17:03:42 tsutsui Exp $ */
 
 /*
  * Copyright (c) 2003 Jochen Kunz.
@@ -45,7 +45,7 @@ struct iee_scp {
 	volatile uint16_t scp_sysbus;		/* Sysbus Byte */
 	volatile uint32_t scp_pad2;
 	volatile uint32_t scp_iscp_addr;	/* Int. Sys. Conf. Pointer */
-} __attribute__((__packed__));
+} __packed;
 
 
 
@@ -54,7 +54,7 @@ struct iee_iscp {
 	volatile uint16_t iscp_bussy;		/* Even Word, bits 0..15 */
 	volatile uint16_t iscp_pad;		/* Odd Word, bits 16..32 */
 	volatile uint32_t iscp_scb_addr;	/* address of SCB */
-} __attribute__((__packed__));
+} __packed;
 
 
 
@@ -72,7 +72,7 @@ struct iee_scb {
 	volatile uint32_t scb_short_fr_err;	/* Short Frame Errors */
 	volatile uint16_t scb_tt_off;		/* Bus Throtle Off Timer */
 	volatile uint16_t scb_tt_on;		/* Bus Throtle On Timer */
-} __attribute__((__packed__));
+} __packed;
 /* [1] In MONITOR mode these counters change function. */
 
 
@@ -100,7 +100,7 @@ struct iee_cb {
 		volatile uint32_t cb_tdr;	/* Time & Flags from TDR CMD */
 		volatile uint32_t cb_dump_addr;	/* Address of Dump buffer */
 	};
-} __attribute__((__packed__));
+} __packed;
 
 
 
@@ -110,7 +110,7 @@ struct iee_tbd {
 	volatile uint16_t tbd_pad;
 	volatile uint32_t tbd_link_addr;	/* Link Address to next RFD */
 	volatile uint32_t tbd_tb_addr;		/* Transmit Buffer Address */
-} __attribute__((__packed__));
+} __packed;
 
 
 
@@ -126,7 +126,7 @@ struct iee_rfd {
 	volatile uint8_t rfd_src_addr[6];	/* Source Address */
 	volatile uint16_t rfd_length;		/* Length Field */
 	volatile uint16_t rfd_pad;		/* Optional Data */
-} __attribute__((__packed__));
+} __packed;
 
 
 
@@ -138,7 +138,7 @@ struct iee_rbd {
 	volatile uint32_t rbd_rb_addr;		/* Receive Buffer Address */
 	volatile uint16_t rbd_size;		/* Size of Receive Buffer */
 	volatile uint16_t rbd_pad2;
-} __attribute__((__packed__));
+} __packed;
 
 
 
@@ -149,7 +149,7 @@ struct iee_rbd {
 
 
 struct iee_softc {
-	struct device sc_dev;		/* common device data */
+	device_t sc_dev;		/* common device data */
 	struct ifmedia sc_ifmedia;	/* media interface */
 	struct ethercom sc_ethercom;	/* ethernet specific stuff */
 	enum i82596_types sc_type;
@@ -160,7 +160,7 @@ struct iee_softc {
 	bus_dmamap_t sc_tx_map[IEE_NCB];
 	struct mbuf *sc_rx_mbuf[IEE_NRFD];
 	struct mbuf *sc_tx_mbuf[IEE_NCB];
-	caddr_t sc_shmem_addr;
+	uint8_t *sc_shmem_addr;
 	int sc_next_cb;
 	int sc_next_tbd;
 	int sc_rx_done;

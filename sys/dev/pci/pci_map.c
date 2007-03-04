@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_map.c,v 1.18 2006/11/16 01:33:09 christos Exp $	*/
+/*	$NetBSD: pci_map.c,v 1.24 2008/07/22 04:52:19 bjs Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_map.c,v 1.18 2006/11/16 01:33:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_map.c,v 1.24 2008/07/22 04:52:19 bjs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -86,12 +79,12 @@ pci_io_find(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t type,
 	splx(s);
 
 	if (PCI_MAPREG_TYPE(address) != PCI_MAPREG_TYPE_IO) {
-		printf("pci_io_find: expected type i/o, found mem\n");
+		aprint_debug("pci_io_find: expected type i/o, found mem\n");
 		return (1);
 	}
 
 	if (PCI_MAPREG_IO_SIZE(mask) == 0) {
-		printf("pci_io_find: void region\n");
+		aprint_debug("pci_io_find: void region\n");
 		return (1);
 	}
 
@@ -163,8 +156,11 @@ pci_mem_find(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t type,
 			printf("pci_mem_find: expected type mem, found i/o\n");
 			return (1);
 		}
+		/* XXX Allow 64bit bars for 32bit requests.*/
 		if (PCI_MAPREG_MEM_TYPE(address) !=
-		    PCI_MAPREG_MEM_TYPE(type)) {
+		    PCI_MAPREG_MEM_TYPE(type) &&
+		    PCI_MAPREG_MEM_TYPE(address) !=
+		    PCI_MAPREG_MEM_TYPE_64BIT) {
 			printf("pci_mem_find: "
 			    "expected mem type %08x, found %08x\n",
 			    PCI_MAPREG_MEM_TYPE(type),
@@ -178,7 +174,7 @@ pci_mem_find(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t type,
 
 	if ((is64bit && PCI_MAPREG_MEM64_SIZE(wmask) == 0) ||
 	    (!is64bit && PCI_MAPREG_MEM_SIZE(mask) == 0)) {
-		printf("pci_mem_find: void region\n");
+		aprint_debug("pci_mem_find: void region\n");
 		return (1);
 	}
 
@@ -275,6 +271,15 @@ pci_mapreg_map(struct pci_attach_args *pa, int reg, pcireg_t type,
     int busflags, bus_space_tag_t *tagp, bus_space_handle_t *handlep,
     bus_addr_t *basep, bus_size_t *sizep)
 {
+	return pci_mapreg_submap(pa, reg, type, busflags, 0, 0, tagp, 
+	    handlep, basep, sizep);
+}
+
+int
+pci_mapreg_submap(struct pci_attach_args *pa, int reg, pcireg_t type,
+    int busflags, bus_size_t maxsize, bus_size_t offset, bus_space_tag_t *tagp,
+	bus_space_handle_t *handlep, bus_addr_t *basep, bus_size_t *sizep)
+{
 	bus_space_tag_t tag;
 	bus_space_handle_t handle;
 	bus_addr_t base;
@@ -308,7 +313,17 @@ pci_mapreg_map(struct pci_attach_args *pa, int reg, pcireg_t type,
 		splx(s);
 	}
 
-	if (bus_space_map(tag, base, size, busflags | flags, &handle))
+	/* If we're called with maxsize/offset of 0, behave like 
+	 * pci_mapreg_map.
+	 */
+
+	maxsize = (maxsize && offset) ? maxsize : size;
+	base += offset;
+
+	if ((maxsize < size && offset + maxsize <= size) || offset != 0)
+		return (1);
+
+	if (bus_space_map(tag, base, maxsize, busflags | flags, &handle))
 		return (1);
 
 	if (tagp != 0)
@@ -318,7 +333,7 @@ pci_mapreg_map(struct pci_attach_args *pa, int reg, pcireg_t type,
 	if (basep != 0)
 		*basep = base;
 	if (sizep != 0)
-		*sizep = size;
+		*sizep = maxsize;
 
 	return (0);
 }

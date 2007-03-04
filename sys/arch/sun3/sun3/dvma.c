@@ -1,4 +1,4 @@
-/*	$NetBSD: dvma.c,v 1.32 2007/02/22 16:45:48 thorpej Exp $	*/
+/*	$NetBSD: dvma.c,v 1.34 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.32 2007/02/22 16:45:48 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dvma.c,v 1.34 2008/04/28 20:23:38 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -121,13 +114,13 @@ dvma_init(void)
 void *
 dvma_malloc(size_t bytes)
 {
-	caddr_t new_mem;
+	void *new_mem;
 	vsize_t new_size;
 
 	if (bytes == 0)
 		return NULL;
 	new_size = m68k_round_page(bytes);
-	new_mem = (caddr_t)uvm_km_alloc(phys_map, new_size, 0, UVM_KMF_WIRED);
+	new_mem = (void *)uvm_km_alloc(phys_map, new_size, 0, UVM_KMF_WIRED);
 	if (new_mem == 0)
 		panic("dvma_malloc: no space in phys_map");
 	/* The pmap code always makes DVMA pages non-cached. */
@@ -231,7 +224,7 @@ dvma_mapin(void *kva, int len, int canwait /* ignored */)
 	seg_dma += seg_off;
 
 	splx(s);
-	return (caddr_t)seg_dma;
+	return (void *)seg_dma;
 }
 
 /*

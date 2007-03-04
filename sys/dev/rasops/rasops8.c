@@ -1,4 +1,4 @@
-/* 	$NetBSD: rasops8.c,v 1.21 2006/02/18 13:57:33 jmcneill Exp $	*/
+/* 	$NetBSD: rasops8.c,v 1.24 2008/04/28 20:23:56 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rasops8.c,v 1.21 2006/02/18 13:57:33 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rasops8.c,v 1.24 2008/04/28 20:23:56 martin Exp $");
 
 #include "opt_rasops.h"
 
@@ -73,7 +66,7 @@ static int	stamp_mutex;	/* XXX see note in README */
  */
 #define STAMP_SHIFT(fb,n)	((n*4-2) >= 0 ? (fb)>>(n*4-2):(fb)<<-(n*4-2))
 #define STAMP_MASK		(0xf << 2)
-#define STAMP_READ(o)		(*(int32_t *)((caddr_t)stamp + (o)))
+#define STAMP_READ(o)		(*(int32_t *)((char *)stamp + (o)))
 
 /*
  * Initialize a 'rasops_info' descriptor for this depth.
@@ -289,7 +282,8 @@ rasops8_putchar8(cookie, row, col, uc, attr)
 			rp[0] = rp[1] = stamp[0];
 			DELTA(rp, ri->ri_stride, int32_t *);
 			if (ri->ri_hwbits) {
-				hp[0] = hp[1] = stamp[0];
+				hp[0] = stamp[0];
+				hp[1] = stamp[0];
 				DELTA(hp, ri->ri_stride, int32_t *);
 			}
 		}
@@ -321,7 +315,8 @@ rasops8_putchar8(cookie, row, col, uc, attr)
 		rp[0] = rp[1] = stamp[15];
 		if (ri->ri_hwbits) {
 			DELTA(hp, -(ri->ri_stride << 1), int32_t *);
-			hp[0] = hp[1] = stamp[15];
+			hp[0] = stamp[15];
+			hp[1] = stamp[15];
 		}
 	}
 
@@ -385,7 +380,9 @@ rasops8_putchar12(cookie, row, col, uc, attr)
 			rp[0] = rp[1] = rp[2] = c;
 			DELTA(rp, ri->ri_stride, int32_t *);
 			if (ri->ri_hwbits) {
-				hrp[0] = hrp[1] = hrp[2] = c;
+				hrp[0] = c;
+				hrp[1] = c;
+				hrp[2] = c;
 				DELTA(hrp, ri->ri_stride, int32_t *);
 			}
 		}
@@ -417,7 +414,9 @@ rasops8_putchar12(cookie, row, col, uc, attr)
 		rp[0] = rp[1] = rp[2] = stamp[15];
 		if (ri->ri_hwbits) {
 			DELTA(hrp, -(ri->ri_stride << 1), int32_t *);
-			hrp[0] = hrp[1] = hrp[2] = stamp[15];
+			hrp[0] = stamp[15];
+			hrp[1] = stamp[15];
+			hrp[2] = stamp[15];
 		}
 	}
 
@@ -478,8 +477,12 @@ rasops8_putchar16(cookie, row, col, uc, attr)
 	if (uc == ' ') {
 		while (height--) {
 			rp[0] = rp[1] = rp[2] = rp[3] = stamp[0];
-			if (ri->ri_hwbits)
-				hrp[0] = hrp[1] = hrp[2] = hrp[3] = stamp[0];
+			if (ri->ri_hwbits) {
+				hrp[0] = stamp[0];
+				hrp[1] = stamp[0];
+				hrp[2] = stamp[0];
+				hrp[3] = stamp[0];
+			}
 		}
 	} else {
 		uc -= ri->ri_font->firstchar;
@@ -511,7 +514,10 @@ rasops8_putchar16(cookie, row, col, uc, attr)
 		rp[0] = rp[1] = rp[2] = rp[3] = stamp[15];
 		if (ri->ri_hwbits) {
 			DELTA(hrp, -(ri->ri_stride << 1), int32_t *);
-			hrp[0] = hrp[1] = hrp[2] = hrp[3] = stamp[15];
+			hrp[0] = stamp[15];
+			hrp[1] = stamp[15];
+			hrp[2] = stamp[15];
+			hrp[3] = stamp[15];
 		}
 	}
 

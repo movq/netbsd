@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bridge.c,v 1.49 2007/02/21 02:24:14 dyoung Exp $	*/
+/*	$NetBSD: if_bridge.c,v 1.62 2008/06/15 16:37:21 christos Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.49 2007/02/21 02:24:14 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.62 2008/06/15 16:37:21 christos Exp $");
 
 #include "opt_bridge_ipf.h"
 #include "opt_inet.h"
@@ -115,10 +115,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_bridge.c,v 1.49 2007/02/21 02:24:14 dyoung Exp $"
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
 #include <netinet/ip_var.h>
+#include <netinet/ip_private.h>		/* XXX */
 
 #include <netinet/ip6.h>
 #include <netinet6/in6_var.h>
 #include <netinet6/ip6_var.h>
+#include <netinet6/ip6_private.h>	/* XXX */
 #endif /* BRIDGE_IPF && PFIL_HOOKS */
 
 /*
@@ -178,7 +180,7 @@ void	bridgeattach(int);
 static int	bridge_clone_create(struct if_clone *, int);
 static int	bridge_clone_destroy(struct ifnet *);
 
-static int	bridge_ioctl(struct ifnet *, u_long, caddr_t);
+static int	bridge_ioctl(struct ifnet *, u_long, void *);
 static int	bridge_init(struct ifnet *);
 static void	bridge_stop(struct ifnet *, int);
 static void	bridge_start(struct ifnet *);
@@ -260,70 +262,45 @@ struct bridge_control {
 #define	BC_F_SUSER		0x04	/* do super-user check */
 
 static const struct bridge_control bridge_control_table[] = {
-	{ bridge_ioctl_add,		sizeof(struct ifbreq),
-	  BC_F_COPYIN|BC_F_SUSER },
-	{ bridge_ioctl_del,		sizeof(struct ifbreq),
-	  BC_F_COPYIN|BC_F_SUSER },
+[BRDGADD] = {bridge_ioctl_add, sizeof(struct ifbreq), BC_F_COPYIN|BC_F_SUSER},
+[BRDGDEL] = {bridge_ioctl_del, sizeof(struct ifbreq), BC_F_COPYIN|BC_F_SUSER}, 
 
-	{ bridge_ioctl_gifflags,	sizeof(struct ifbreq),
-	  BC_F_COPYIN|BC_F_COPYOUT },
-	{ bridge_ioctl_sifflags,	sizeof(struct ifbreq),
-	  BC_F_COPYIN|BC_F_SUSER },
+[BRDGGIFFLGS] = {bridge_ioctl_gifflags, sizeof(struct ifbreq), BC_F_COPYIN|BC_F_COPYOUT}, 
+[BRDGSIFFLGS] = {bridge_ioctl_sifflags, sizeof(struct ifbreq), BC_F_COPYIN|BC_F_SUSER}, 
 
-	{ bridge_ioctl_scache,		sizeof(struct ifbrparam),
-	  BC_F_COPYIN|BC_F_SUSER },
-	{ bridge_ioctl_gcache,		sizeof(struct ifbrparam),
-	  BC_F_COPYOUT },
+[BRDGSCACHE] = {bridge_ioctl_scache, sizeof(struct ifbrparam), BC_F_COPYIN|BC_F_SUSER}, 
+[BRDGGCACHE] = {bridge_ioctl_gcache, sizeof(struct ifbrparam), BC_F_COPYOUT}, 
 
-	{ bridge_ioctl_gifs,		sizeof(struct ifbifconf),
-	  BC_F_COPYIN|BC_F_COPYOUT },
-	{ bridge_ioctl_rts,		sizeof(struct ifbaconf),
-	  BC_F_COPYIN|BC_F_COPYOUT },
+[BRDGGIFS] = {bridge_ioctl_gifs, sizeof(struct ifbifconf), BC_F_COPYIN|BC_F_COPYOUT}, 
+[BRDGRTS] = {bridge_ioctl_rts, sizeof(struct ifbaconf), BC_F_COPYIN|BC_F_COPYOUT}, 
 
-	{ bridge_ioctl_saddr,		sizeof(struct ifbareq),
-	  BC_F_COPYIN|BC_F_SUSER },
+[BRDGSADDR] = {bridge_ioctl_saddr, sizeof(struct ifbareq), BC_F_COPYIN|BC_F_SUSER}, 
 
-	{ bridge_ioctl_sto,		sizeof(struct ifbrparam),
-	  BC_F_COPYIN|BC_F_SUSER },
-	{ bridge_ioctl_gto,		sizeof(struct ifbrparam),
-	  BC_F_COPYOUT },
+[BRDGSTO] = {bridge_ioctl_sto, sizeof(struct ifbrparam), BC_F_COPYIN|BC_F_SUSER}, 
+[BRDGGTO] = {bridge_ioctl_gto, sizeof(struct ifbrparam), BC_F_COPYOUT}, 
 
-	{ bridge_ioctl_daddr,		sizeof(struct ifbareq),
-	  BC_F_COPYIN|BC_F_SUSER },
+[BRDGDADDR] = {bridge_ioctl_daddr, sizeof(struct ifbareq), BC_F_COPYIN|BC_F_SUSER}, 
 
-	{ bridge_ioctl_flush,		sizeof(struct ifbreq),
-	  BC_F_COPYIN|BC_F_SUSER },
+[BRDGFLUSH] = {bridge_ioctl_flush, sizeof(struct ifbreq), BC_F_COPYIN|BC_F_SUSER}, 
 
-	{ bridge_ioctl_gpri,		sizeof(struct ifbrparam),
-	  BC_F_COPYOUT },
-	{ bridge_ioctl_spri,		sizeof(struct ifbrparam),
-	  BC_F_COPYIN|BC_F_SUSER },
+[BRDGGPRI] = {bridge_ioctl_gpri, sizeof(struct ifbrparam), BC_F_COPYOUT}, 
+[BRDGSPRI] = {bridge_ioctl_spri, sizeof(struct ifbrparam), BC_F_COPYIN|BC_F_SUSER}, 
 
-	{ bridge_ioctl_ght,		sizeof(struct ifbrparam),
-	  BC_F_COPYOUT },
-	{ bridge_ioctl_sht,		sizeof(struct ifbrparam),
-	  BC_F_COPYIN|BC_F_SUSER },
+[BRDGGHT] = {bridge_ioctl_ght, sizeof(struct ifbrparam), BC_F_COPYOUT}, 
+[BRDGSHT] = {bridge_ioctl_sht, sizeof(struct ifbrparam), BC_F_COPYIN|BC_F_SUSER}, 
 
-	{ bridge_ioctl_gfd,		sizeof(struct ifbrparam),
-	  BC_F_COPYOUT },
-	{ bridge_ioctl_sfd,		sizeof(struct ifbrparam),
-	  BC_F_COPYIN|BC_F_SUSER },
+[BRDGGFD] = {bridge_ioctl_gfd, sizeof(struct ifbrparam), BC_F_COPYOUT}, 
+[BRDGSFD] = {bridge_ioctl_sfd, sizeof(struct ifbrparam), BC_F_COPYIN|BC_F_SUSER}, 
 
-	{ bridge_ioctl_gma,		sizeof(struct ifbrparam),
-	  BC_F_COPYOUT },
-	{ bridge_ioctl_sma,		sizeof(struct ifbrparam),
-	  BC_F_COPYIN|BC_F_SUSER },
+[BRDGGMA] = {bridge_ioctl_gma, sizeof(struct ifbrparam), BC_F_COPYOUT}, 
+[BRDGSMA] = {bridge_ioctl_sma, sizeof(struct ifbrparam), BC_F_COPYIN|BC_F_SUSER}, 
 
-	{ bridge_ioctl_sifprio,		sizeof(struct ifbreq),
-	  BC_F_COPYIN|BC_F_SUSER },
+[BRDGSIFPRIO] = {bridge_ioctl_sifprio, sizeof(struct ifbreq), BC_F_COPYIN|BC_F_SUSER}, 
 
-	{ bridge_ioctl_sifcost,		sizeof(struct ifbreq),
-	  BC_F_COPYIN|BC_F_SUSER },
+[BRDGSIFCOST] = {bridge_ioctl_sifcost, sizeof(struct ifbreq), BC_F_COPYIN|BC_F_SUSER}, 
 #if defined(BRIDGE_IPF) && defined(PFIL_HOOKS)
-	{ bridge_ioctl_gfilt,		sizeof(struct ifbrparam),
-	  BC_F_COPYOUT },
-	{ bridge_ioctl_sfilt,		sizeof(struct ifbrparam),
-	  BC_F_COPYIN|BC_F_SUSER },
+[BRDGGFILT] = {bridge_ioctl_gfilt, sizeof(struct ifbrparam), BC_F_COPYOUT},
+[BRDGSFILT] = {bridge_ioctl_sfilt, sizeof(struct ifbrparam), BC_F_COPYIN|BC_F_SUSER},
 #endif /* BRIDGE_IPF && PFIL_HOOKS */
 };
 static const int bridge_control_table_size = __arraycount(bridge_control_table);
@@ -343,7 +320,7 @@ bridgeattach(int n)
 {
 
 	pool_init(&bridge_rtnode_pool, sizeof(struct bridge_rtnode),
-	    0, 0, 0, "brtpl", NULL);
+	    0, 0, 0, "brtpl", NULL, IPL_NET);
 
 	LIST_INIT(&bridge_list);
 	if_clone_attach(&bridge_cloner);
@@ -361,8 +338,7 @@ bridge_clone_create(struct if_clone *ifc, int unit)
 	struct ifnet *ifp;
 	int s;
 
-	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK);
-	memset(sc, 0, sizeof(*sc));
+	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK|M_ZERO);
 	ifp = &sc->sc_if;
 
 	sc->sc_brtmax = BRIDGE_RTABLE_MAX;
@@ -377,13 +353,12 @@ bridge_clone_create(struct if_clone *ifc, int unit)
 	/* Initialize our routing table. */
 	bridge_rtable_init(sc);
 
-	callout_init(&sc->sc_brcallout);
-	callout_init(&sc->sc_bstpcallout);
+	callout_init(&sc->sc_brcallout, 0);
+	callout_init(&sc->sc_bstpcallout, 0);
 
 	LIST_INIT(&sc->sc_iflist);
 
-	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "%s%d", ifc->ifc_name,
-	    unit);
+	if_initname(ifp, ifc->ifc_name, unit);
 	ifp->if_softc = sc;
 	ifp->if_mtu = ETHERMTU;
 	ifp->if_ioctl = bridge_ioctl;
@@ -446,7 +421,7 @@ bridge_clone_destroy(struct ifnet *ifp)
  *	Handle a control request from the operator.
  */
 static int
-bridge_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+bridge_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct bridge_softc *sc = ifp->if_softc;
 	struct lwp *l = curlwp;	/* XXX */
@@ -1514,7 +1489,7 @@ bridge_input(struct ifnet *ifp, struct mbuf *m)
 	 */
 	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		/* It is destined for us. */
-		if (memcmp(LLADDR(bif->bif_ifp->if_sadl), eh->ether_dhost,
+		if (memcmp(CLLADDR(bif->bif_ifp->if_sadl), eh->ether_dhost,
 		    ETHER_ADDR_LEN) == 0
 #if NCARP > 0
 		    || (bif->bif_ifp->if_carp && carp_ourether(bif->bif_ifp->if_carp,
@@ -1529,7 +1504,7 @@ bridge_input(struct ifnet *ifp, struct mbuf *m)
 		}
 
 		/* We just received a packet that we sent out. */
-		if (memcmp(LLADDR(bif->bif_ifp->if_sadl), eh->ether_shost,
+		if (memcmp(CLLADDR(bif->bif_ifp->if_sadl), eh->ether_shost,
 		    ETHER_ADDR_LEN) == 0
 #if NCARP > 0
 		    || (bif->bif_ifp->if_carp && carp_ourether(bif->bif_ifp->if_carp,
@@ -1971,7 +1946,7 @@ bridge_ipf(void *arg, struct mbuf **mp, struct ifnet *ifp, int dir)
 	int snap, error;
 	struct ether_header *eh1, eh2;
 	struct llc llc1;
-	u_int16_t ether_type;
+	uint16_t ether_type;
 
 	snap = 0;
 	error = -1;	/* Default error if not error == 0 */
@@ -2016,12 +1991,12 @@ bridge_ipf(void *arg, struct mbuf **mp, struct ifnet *ifp, int dir)
 	}
 
 	/* Strip off the Ethernet header and keep a copy. */
-	m_copydata(*mp, 0, ETHER_HDR_LEN, (caddr_t) &eh2);
+	m_copydata(*mp, 0, ETHER_HDR_LEN, (void *) &eh2);
 	m_adj(*mp, ETHER_HDR_LEN);
 
 	/* Strip off snap header, if present */
 	if (snap) {
-		m_copydata(*mp, 0, sizeof(struct llc), (caddr_t) &llc1);
+		m_copydata(*mp, 0, sizeof(struct llc), (void *) &llc1);
 		m_adj(*mp, sizeof(struct llc));
 	}
 
@@ -2061,13 +2036,13 @@ bridge_ipf(void *arg, struct mbuf **mp, struct ifnet *ifp, int dir)
 		M_PREPEND(*mp, sizeof(struct llc), M_DONTWAIT);
 		if (*mp == NULL)
 			return error;
-		bcopy(&llc1, mtod(*mp, caddr_t), sizeof(struct llc));
+		bcopy(&llc1, mtod(*mp, void *), sizeof(struct llc));
 	}
 
 	M_PREPEND(*mp, ETHER_HDR_LEN, M_DONTWAIT);
 	if (*mp == NULL)
 		return error;
-	bcopy(&eh2, mtod(*mp, caddr_t), ETHER_HDR_LEN);
+	bcopy(&eh2, mtod(*mp, void *), ETHER_HDR_LEN);
 
 	return 0;
 
@@ -2099,16 +2074,16 @@ bridge_ip_checkbasic(struct mbuf **mp)
 	if (*mp == NULL)
 		return -1;
 
-	if (IP_HDR_ALIGNED_P(mtod(m, caddr_t)) == 0) {
+	if (IP_HDR_ALIGNED_P(mtod(m, void *)) == 0) {
 		if ((m = m_copyup(m, sizeof(struct ip),
 			(max_linkhdr + 3) & ~3)) == NULL) {
 			/* XXXJRT new stat, please */
-			ipstat.ips_toosmall++;
+			ip_statinc(IP_STAT_TOOSMALL);
 			goto bad;
 		}
 	} else if (__predict_false(m->m_len < sizeof (struct ip))) {
 		if ((m = m_pullup(m, sizeof (struct ip))) == NULL) {
-			ipstat.ips_toosmall++;
+			ip_statinc(IP_STAT_TOOSMALL);
 			goto bad;
 		}
 	}
@@ -2116,17 +2091,17 @@ bridge_ip_checkbasic(struct mbuf **mp)
 	if (ip == NULL) goto bad;
 
 	if (ip->ip_v != IPVERSION) {
-		ipstat.ips_badvers++;
+		ip_statinc(IP_STAT_BADVERS);
 		goto bad;
 	}
 	hlen = ip->ip_hl << 2;
 	if (hlen < sizeof(struct ip)) { /* minimum header length */
-		ipstat.ips_badhlen++;
+		ip_statinc(IP_STAT_BADHLEN);
 		goto bad;
 	}
 	if (hlen > m->m_len) {
 		if ((m = m_pullup(m, hlen)) == 0) {
-			ipstat.ips_badhlen++;
+			ip_statinc(IP_STAT_BADHLEN);
 			goto bad;
 		}
 		ip = mtod(m, struct ip *);
@@ -2160,7 +2135,7 @@ bridge_ip_checkbasic(struct mbuf **mp)
          * Check for additional length bogosity
          */
         if (len < hlen) {
-                ipstat.ips_badlen++;
+		ip_statinc(IP_STAT_BADLEN);
                 goto bad;
         }
 
@@ -2170,7 +2145,7 @@ bridge_ip_checkbasic(struct mbuf **mp)
          * Drop packet if shorter than we expect.
          */
         if (m->m_pkthdr.len < len) {
-                ipstat.ips_tooshort++;
+		ip_statinc(IP_STAT_TOOSHORT);
                 goto bad;
         }
 
@@ -2201,19 +2176,19 @@ bridge_ip6_checkbasic(struct mbuf **mp)
          * it.  Otherwise, if it is aligned, make sure the entire base
          * IPv6 header is in the first mbuf of the chain.
          */
-        if (IP6_HDR_ALIGNED_P(mtod(m, caddr_t)) == 0) {
+        if (IP6_HDR_ALIGNED_P(mtod(m, void *)) == 0) {
                 struct ifnet *inifp = m->m_pkthdr.rcvif;
                 if ((m = m_copyup(m, sizeof(struct ip6_hdr),
                                   (max_linkhdr + 3) & ~3)) == NULL) {
                         /* XXXJRT new stat, please */
-                        ip6stat.ip6s_toosmall++;
+			ip6_statinc(IP6_STAT_TOOSMALL);
                         in6_ifstat_inc(inifp, ifs6_in_hdrerr);
                         goto bad;
                 }
         } else if (__predict_false(m->m_len < sizeof(struct ip6_hdr))) {
                 struct ifnet *inifp = m->m_pkthdr.rcvif;
                 if ((m = m_pullup(m, sizeof(struct ip6_hdr))) == NULL) {
-                        ip6stat.ip6s_toosmall++;
+			ip6_statinc(IP6_STAT_TOOSMALL);
                         in6_ifstat_inc(inifp, ifs6_in_hdrerr);
                         goto bad;
                 }
@@ -2222,7 +2197,7 @@ bridge_ip6_checkbasic(struct mbuf **mp)
         ip6 = mtod(m, struct ip6_hdr *);
 
         if ((ip6->ip6_vfc & IPV6_VERSION_MASK) != IPV6_VERSION) {
-                ip6stat.ip6s_badvers++;
+		ip6_statinc(IP6_STAT_BADVERS);
                 in6_ifstat_inc(m->m_pkthdr.rcvif, ifs6_in_hdrerr);
                 goto bad;
         }

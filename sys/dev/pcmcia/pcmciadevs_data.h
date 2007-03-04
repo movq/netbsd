@@ -1,10 +1,10 @@
-/*	$NetBSD: pcmciadevs_data.h,v 1.224 2007/02/10 03:14:56 ichiro Exp $	*/
+/*	$NetBSD: pcmciadevs_data.h,v 1.230 2008/09/06 22:08:38 rmind Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: pcmciadevs,v 1.221 2007/02/10 03:14:03 ichiro Exp
+ *	NetBSD: pcmciadevs,v 1.227 2008/09/06 22:07:11 rmind Exp
  */
 /* $FreeBSD: src/sys/dev/pccard/pccarddevs,v 1.20 2001/11/19 05:02:55 imp Exp $*/
 
@@ -23,13 +23,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -209,6 +202,13 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    0,
 	    "Anycom",
 	    "Anycom Bluetooth CF Card LSE039",	}
+	,
+	{
+	    PCMCIA_VENDOR_ANYCOM, PCMCIA_PRODUCT_ANYCOM_LSE139,
+	    PCMCIA_CIS_ANYCOM_LSE139,
+	    0,
+	    "Anycom",
+	    "Anycom Bluetooth CF Card LSE139",	}
 	,
 	{
 	    PCMCIA_VENDOR_ARCHOS, PCMCIA_PRODUCT_ARCHOS_ARC_ATAPI,
@@ -897,11 +897,46 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    "Nokia C020 WLAN Card",	}
 	,
 	{
+	    PCMCIA_VENDOR_OLICOM, PCMCIA_PRODUCT_OLICOM_OC2220,
+	    PCMCIA_CIS_OLICOM_OC2220,
+	    0,
+	    "Olicom",
+	    "GoCard Ethernet",	}
+	,
+	{
 	    PCMCIA_VENDOR_OLICOM, PCMCIA_PRODUCT_OLICOM_TR,
 	    PCMCIA_CIS_OLICOM_TR,
 	    0,
 	    "Olicom",
 	    "GoCard Token Ring 16/4",	}
+	,
+	{
+	    PCMCIA_VENDOR_OLICOM, PCMCIA_PRODUCT_OLICOM_OC2231,
+	    PCMCIA_CIS_OLICOM_OC2231,
+	    0,
+	    "Olicom",
+	    "GoCard Combo Eth/Modem 288",	}
+	,
+	{
+	    PCMCIA_VENDOR_OLICOM, PCMCIA_PRODUCT_OLICOM_OC3231,
+	    PCMCIA_CIS_OLICOM_OC3231,
+	    0,
+	    "Olicom",
+	    "GoCard Token Ring 16/4/Modem 288",	}
+	,
+	{
+	    PCMCIA_VENDOR_OLICOM, PCMCIA_PRODUCT_OLICOM_OC2232,
+	    PCMCIA_CIS_OLICOM_OC2232,
+	    0,
+	    "Olicom",
+	    "GoCard Combo Eth/Modem 336",	}
+	,
+	{
+	    PCMCIA_VENDOR_OLICOM, PCMCIA_PRODUCT_OLICOM_OC3232,
+	    PCMCIA_CIS_OLICOM_OC3232,
+	    0,
+	    "Olicom",
+	    "GoCard Token Ring 16/4/Modem 336",	}
 	,
 	{
 	    PCMCIA_VENDOR_OSITECH, PCMCIA_PRODUCT_OSITECH_TRUMPCARD_SOD,
@@ -1014,6 +1049,13 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    0,
 	    "Sharp Corporation",
 	    "PALDIO 611S PC CARD",	}
+	,
+	{
+	    PCMCIA_VENDOR_SIERRA, PCMCIA_PRODUCT_SIERRA_AC850,
+	    PCMCIA_CIS_SIERRA_AC850,
+	    0,
+	    "Sierra Wireless",
+	    "AC850",	}
 	,
 	{
 	    PCMCIA_VENDOR_SIMPLETECH, PCMCIA_PRODUCT_SIMPLETECH_COMMUNICATOR288,
@@ -1135,6 +1177,13 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    "TDK LAC-CF010",	}
 	,
 	{
+	    PCMCIA_VENDOR_TDK, PCMCIA_PRODUCT_TDK_DFL9610,
+	    PCMCIA_CIS_TDK_DFL9610,
+	    0,
+	    "TDK Corporation",
+	    "TDK DFL9610 Ethernet & Digital Cellular",	}
+	,
+	{
 	    PCMCIA_VENDOR_TDK, PCMCIA_PRODUCT_TDK_C6500012,
 	    PCMCIA_CIS_TDK_C6500012,
 	    0,
@@ -1142,11 +1191,11 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    "TDK ELSA MicroLink MC all",	}
 	,
 	{
-	    PCMCIA_VENDOR_TDK, PCMCIA_PRODUCT_TDK_DFL9610,
-	    PCMCIA_CIS_TDK_DFL9610,
+	    PCMCIA_VENDOR_TDK, PCMCIA_PRODUCT_TDK_BLUETOOTH_PCCARD,
+	    PCMCIA_CIS_TDK_BLUETOOTH_PCCARD,
 	    0,
 	    "TDK Corporation",
-	    "TDK DFL9610 Ethernet & Digital Cellular",	}
+	    "TDK Bluetooth PCcard",	}
 	,
 	{
 	    PCMCIA_VENDOR_TELECOMDEVICE, PCMCIA_PRODUCT_TELECOMDEVICE_TCD_HPC100,
@@ -1364,6 +1413,13 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    0,
 	    "Corega K.K.",
 	    "Corega FEtherII PCC-TXD",	}
+	,
+	{
+	    PCMCIA_VENDOR_UNKNOWN, PCMCIA_PRODUCT_COREGA_LAPCCTXD,
+	    PCMCIA_CIS_COREGA_LAPCCTXD,
+	    0,
+	    "Corega K.K.",
+	    "Corega LAPCCTXD",	}
 	,
 	{
 	    PCMCIA_VENDOR_UNKNOWN, PCMCIA_PRODUCT_COREGA_WIRELESS_LAN_PCC_11,
@@ -2052,6 +2108,14 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    PCMCIA_CIS_INVALID,
 	    0,
 	    "Kingston",
+	    NULL,
+	},
+	{
+	    PCMCIA_VENDOR_SIERRA,
+	    PCMCIA_KNOWNDEV_NOPROD,
+	    PCMCIA_CIS_INVALID,
+	    0,
+	    "Sierra Wireless",
 	    NULL,
 	},
 	{

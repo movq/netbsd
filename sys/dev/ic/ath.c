@@ -1,4 +1,4 @@
-/*	$NetBSD: ath.c,v 1.81 2007/01/29 01:52:45 hubertf Exp $	*/
+/*	$NetBSD: ath.c,v 1.102 2008/07/09 19:47:24 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -41,7 +41,7 @@
 __FBSDID("$FreeBSD: src/sys/dev/ath/if_ath.c,v 1.104 2005/09/16 10:09:23 ru Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ath.c,v 1.81 2007/01/29 01:52:45 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ath.c,v 1.102 2008/07/09 19:47:24 joerg Exp $");
 #endif
 
 /*
@@ -64,13 +64,12 @@ __KERNEL_RCSID(0, "$NetBSD: ath.c,v 1.81 2007/01/29 01:52:45 hubertf Exp $");
 #include <sys/sysctl.h>
 #include <sys/mbuf.h>
 #include <sys/malloc.h>
-#include <sys/lock.h>
 #include <sys/kernel.h>
 #include <sys/socket.h>
 #include <sys/sockio.h>
 #include <sys/errno.h>
 #include <sys/callout.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <sys/endian.h>
 
 #include <net/if.h>
@@ -133,7 +132,7 @@ static void	ath_stop(struct ifnet *, int);
 static void	ath_start(struct ifnet *);
 static int	ath_media_change(struct ifnet *);
 static void	ath_watchdog(struct ifnet *);
-static int	ath_ioctl(struct ifnet *, u_long, caddr_t);
+static int	ath_ioctl(struct ifnet *, u_long, void *);
 static void	ath_fatal_proc(void *, int);
 static void	ath_rxorn_proc(void *, int);
 static void	ath_bmiss_proc(void *, int);
@@ -194,15 +193,11 @@ static int	ath_getchannels(struct ath_softc *, u_int cc,
 			HAL_BOOL outdoor, HAL_BOOL xchanmode);
 static void	ath_led_event(struct ath_softc *, int);
 static void	ath_update_txpow(struct ath_softc *);
+static void	ath_freetx(struct mbuf *);
+static void	ath_restore_diversity(struct ath_softc *);
 
 static int	ath_rate_setup(struct ath_softc *, u_int mode);
 static void	ath_setcurmode(struct ath_softc *, enum ieee80211_phymode);
-
-#ifdef __NetBSD__
-int	ath_enable(struct ath_softc *);
-void	ath_disable(struct ath_softc *);
-void	ath_power(int, void *);
-#endif
 
 #if NBPFILTER > 0
 static void	ath_bpfattach(struct ath_softc *);
@@ -264,51 +259,6 @@ static	void ath_printtxbuf(struct ath_buf *bf, int);
 #define	KEYPRINTF(sc, k, ix, mac)
 #endif
 
-#ifdef __NetBSD__
-int
-ath_activate(struct device *self, enum devact act)
-{
-	struct ath_softc *sc = (struct ath_softc *)self;
-	int rv = 0, s;
-
-	s = splnet();
-	switch (act) {
-	case DVACT_ACTIVATE:
-		rv = EOPNOTSUPP;
-		break;
-	case DVACT_DEACTIVATE:
-		if_deactivate(&sc->sc_if);
-		break;
-	}
-	splx(s);
-	return rv;
-}
-
-int
-ath_enable(struct ath_softc *sc)
-{
-	if (ATH_IS_ENABLED(sc) == 0) {
-		if (sc->sc_enable != NULL && (*sc->sc_enable)(sc) != 0) {
-			printf("%s: device enable failed\n",
-				sc->sc_dev.dv_xname);
-			return (EIO);
-		}
-		sc->sc_flags |= ATH_ENABLED;
-	}
-	return (0);
-}
-
-void
-ath_disable(struct ath_softc *sc)
-{
-	if (!ATH_IS_ENABLED(sc))
-		return;
-	if (sc->sc_disable != NULL)
-		(*sc->sc_disable)(sc);
-	sc->sc_flags &= ~ATH_ENABLED;
-}
-#endif /* __NetBSD__ */
-
 MALLOC_DEFINE(M_ATHDEV, "athdev", "ath driver dma buffers");
 
 int
@@ -322,7 +272,7 @@ ath_attach(u_int16_t devid, struct ath_softc *sc)
 
 	DPRINTF(sc, ATH_DEBUG_ANY, "%s: devid 0x%x\n", __func__, devid);
 
-	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
+	memcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
 
 	ah = ath_hal_attach(devid, sc, sc->sc_st, sc->sc_sh, &status);
 	if (ah == NULL) {
@@ -339,7 +289,10 @@ ath_attach(u_int16_t devid, struct ath_softc *sc)
 		goto bad;
 	}
 	sc->sc_ah = ah;
-	sc->sc_invalid = 0;	/* ready to go, enable interrupt handling */
+
+	if (!prop_dictionary_set_bool(device_properties(sc->sc_dev),
+	    "pmf-powerdown", false))
+		goto bad;
 
 	/*
 	 * Check if the MAC has multi-rate retry support.
@@ -524,6 +477,7 @@ ath_attach(u_int16_t devid, struct ath_softc *sc)
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_SIMPLEX | IFF_BROADCAST | IFF_MULTICAST;
 	ifp->if_start = ath_start;
+	ifp->if_stop = ath_stop;
 	ifp->if_watchdog = ath_watchdog;
 	ifp->if_ioctl = ath_ioctl;
 	ifp->if_init = ath_ifinit;
@@ -637,14 +591,7 @@ ath_attach(u_int16_t devid, struct ath_softc *sc)
 	ath_bpfattach(sc);
 #endif
 
-#ifdef __NetBSD__
 	sc->sc_flags |= ATH_ATTACHED;
-	sc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
-	    ath_power, sc);
-	if (sc->sc_powerhook == NULL)
-		printf("%s: WARNING: unable to establish power hook\n",
-			sc->sc_dev.dv_xname);
-#endif
 
 	/*
 	 * Setup dynamic sysctl's now that country code and
@@ -661,7 +608,8 @@ bad2:
 bad:
 	if (ah)
 		ath_hal_detach(ah);
-	sc->sc_invalid = 1;
+	/* XXX don't get under the abstraction like this */
+	sc->sc_dev->dv_flags &= ~DVF_ACTIVE;
 	return error;
 }
 
@@ -706,81 +654,50 @@ ath_detach(struct ath_softc *sc)
 	ath_hal_detach(sc->sc_ah);
 	if_detach(ifp);
 	splx(s);
-	powerhook_disestablish(sc->sc_powerhook);
 
 	return 0;
 }
 
-#ifdef __NetBSD__
 void
-ath_power(int why, void *arg)
+ath_suspend(struct ath_softc *sc)
 {
-	struct ath_softc *sc = arg;
-	int s;
-
-	DPRINTF(sc, ATH_DEBUG_ANY, "ath_power(%d)\n", why);
-
-	s = splnet();
-	switch (why) {
-	case PWR_SUSPEND:
-	case PWR_STANDBY:
-		ath_suspend(sc, why);
-		break;
-	case PWR_RESUME:
-		ath_resume(sc, why);
-		break;
-	case PWR_SOFTSUSPEND:
-	case PWR_SOFTSTANDBY:
-	case PWR_SOFTRESUME:
-		break;
-	}
-	splx(s);
-}
-#endif
-
-void
-ath_suspend(struct ath_softc *sc, int why)
-{
-	struct ifnet *ifp = &sc->sc_if;
-
-	DPRINTF(sc, ATH_DEBUG_ANY, "%s: if_flags %x\n",
-		__func__, ifp->if_flags);
-
-	ath_stop(ifp, 1);
-	if (sc->sc_power != NULL)
-		(*sc->sc_power)(sc, why);
+	/*
+	 * Set the chip in full sleep mode.  Note that we are
+	 * careful to do this only when bringing the interface
+	 * completely to a stop.  When the chip is in this state
+	 * it must be carefully woken up or references to
+	 * registers in the PCI clock domain may freeze the bus
+	 * (and system).  This varies by chip and is mostly an
+	 * issue with newer parts that go to sleep more quickly.
+	 */
+	ath_hal_setpower(sc->sc_ah, HAL_PM_FULL_SLEEP);
 }
 
-void
-ath_resume(struct ath_softc *sc, int why)
+bool
+ath_resume(struct ath_softc *sc)
 {
-	struct ifnet *ifp = &sc->sc_if;
+	int i;
+	struct ath_hal *ah = sc->sc_ah;
 
-	DPRINTF(sc, ATH_DEBUG_ANY, "%s: if_flags %x\n",
-		__func__, ifp->if_flags);
+	ath_hal_setpower(ah, HAL_PM_AWAKE);
 
-	if (ifp->if_flags & IFF_UP) {
-		ath_init(sc);
-#if 0
-		(void)ath_intr(sc);
-#endif
-		if (sc->sc_power != NULL)
-			(*sc->sc_power)(sc, why);
-		if (ifp->if_flags & IFF_RUNNING)
-			ath_start(ifp);
-	}
+	/*
+	 * Reset the key cache since some parts do not
+	 * reset the contents on initial power up.
+	 */
+	for (i = 0; i < sc->sc_keymax; i++)
+		ath_hal_keyreset(ah, i);
+
+	ath_hal_resettxqueue(ah, sc->sc_bhalq);
+	for (i = 0; i < HAL_NUM_TX_QUEUES; i++)
+		if (ATH_TXQ_SETUP(sc, i))
+			ath_hal_resettxqueue(ah, i);
+
 	if (sc->sc_softled) {
 		ath_hal_gpioCfgOutput(sc->sc_ah, sc->sc_ledpin);
 		ath_hal_gpioset(sc->sc_ah, sc->sc_ledpin, !sc->sc_ledon);
 	}
-}
-
-void
-ath_shutdown(void *arg)
-{
-	struct ath_softc *sc = arg;
-
-	ath_stop(&sc->sc_if, 1);
+	return true;
 }
 
 /*
@@ -794,7 +711,7 @@ ath_intr(void *arg)
 	struct ath_hal *ah = sc->sc_ah;
 	HAL_INT status;
 
-	if (sc->sc_invalid) {
+	if (!device_is_active(sc->sc_dev)) {
 		/*
 		 * The hardware is not ready/present, don't touch anything.
 		 * Note this can happen early on if the IRQ is shared.
@@ -1016,10 +933,12 @@ ath_init(struct ath_softc *sc)
 	DPRINTF(sc, ATH_DEBUG_ANY, "%s: if_flags 0x%x\n",
 		__func__, ifp->if_flags);
 
-	ATH_LOCK(sc);
-
-	if ((error = ath_enable(sc)) != 0)
-		return error;
+	if (device_is_active(sc->sc_dev)) {
+		ATH_LOCK(sc);
+	} else if (!pmf_device_resume_self(sc->sc_dev))
+		return ENXIO;
+	else
+		ATH_LOCK(sc);
 
 	/*
 	 * Stop anything previously setup.  This is safe
@@ -1052,7 +971,7 @@ ath_init(struct ath_softc *sc)
 	 * Likewise this is set during reset so update
 	 * state cached in the driver.
 	 */
-	sc->sc_diversity = ath_hal_getdiversity(ah);
+	ath_restore_diversity(sc);
 	sc->sc_calinterval = 1;
 	sc->sc_caltries = 0;
 
@@ -1113,8 +1032,8 @@ ath_stop_locked(struct ifnet *ifp, int disable)
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ath_hal *ah = sc->sc_ah;
 
-	DPRINTF(sc, ATH_DEBUG_ANY, "%s: invalid %u if_flags 0x%x\n",
-		__func__, sc->sc_invalid, ifp->if_flags);
+	DPRINTF(sc, ATH_DEBUG_ANY, "%s: invalid %d if_flags 0x%x\n",
+		__func__, !device_is_enabled(sc->sc_dev), ifp->if_flags);
 
 	ATH_LOCK_ASSERT(sc);
 	if (ifp->if_flags & IFF_RUNNING) {
@@ -1140,7 +1059,7 @@ ath_stop_locked(struct ifnet *ifp, int disable)
 		ieee80211_new_state(ic, IEEE80211_S_INIT, -1);
 		ifp->if_flags &= ~IFF_RUNNING;
 		ifp->if_timer = 0;
-		if (!sc->sc_invalid) {
+		if (device_is_enabled(sc->sc_dev)) {
 			if (sc->sc_softled) {
 				callout_stop(&sc->sc_ledtimer);
 				ath_hal_gpioset(ah, sc->sc_ledpin,
@@ -1150,7 +1069,7 @@ ath_stop_locked(struct ifnet *ifp, int disable)
 			ath_hal_intrset(ah, 0);
 		}
 		ath_draintxq(sc);
-		if (!sc->sc_invalid) {
+		if (device_is_enabled(sc->sc_dev)) {
 			ath_stoprecv(sc);
 			ath_hal_phydisable(ah);
 		} else
@@ -1158,7 +1077,7 @@ ath_stop_locked(struct ifnet *ifp, int disable)
 		IF_PURGE(&ifp->if_snd);
 		ath_beacon_free(sc);
 		if (disable)
-			ath_disable(sc);
+			pmf_device_suspend_self(sc->sc_dev);
 	}
 }
 
@@ -1169,19 +1088,21 @@ ath_stop(struct ifnet *ifp, int disable)
 
 	ATH_LOCK(sc);
 	ath_stop_locked(ifp, disable);
-	if (!sc->sc_invalid) {
-		/*
-		 * Set the chip in full sleep mode.  Note that we are
-		 * careful to do this only when bringing the interface
-		 * completely to a stop.  When the chip is in this state
-		 * it must be carefully woken up or references to
-		 * registers in the PCI clock domain may freeze the bus
-		 * (and system).  This varies by chip and is mostly an
-		 * issue with newer parts that go to sleep more quickly.
-		 */
-		ath_hal_setpower(sc->sc_ah, HAL_PM_FULL_SLEEP);
-	}
 	ATH_UNLOCK(sc);
+}
+
+static void
+ath_restore_diversity(struct ath_softc *sc)
+{
+	struct ifnet *ifp = &sc->sc_if;
+	struct ath_hal *ah = sc->sc_ah;
+
+	if (!ath_hal_setdiversity(sc->sc_ah, sc->sc_diversity) ||
+	    sc->sc_diversity != ath_hal_getdiversity(ah)) {
+		if_printf(ifp, "could not restore diversity setting %d\n",
+		    sc->sc_diversity);
+		sc->sc_diversity = ath_hal_getdiversity(ah);
+	}
 }
 
 /*
@@ -1216,7 +1137,7 @@ ath_reset(struct ifnet *ifp)
 		if_printf(ifp, "%s: unable to reset hardware; hal status %u\n",
 			__func__, status);
 	ath_update_txpow(sc);		/* update tx power state */
-	sc->sc_diversity = ath_hal_getdiversity(ah);
+	ath_restore_diversity(sc);
 	sc->sc_calinterval = 1;
 	sc->sc_caltries = 0;
 	if (ath_startrecv(sc) != 0)	/* restart recv */
@@ -1251,6 +1172,7 @@ ath_txfrag_cleanup(struct ath_softc *sc,
 	while ((bf = STAILQ_FIRST(frags)) != NULL) {
 		STAILQ_REMOVE_HEAD(frags, bf_list);
 		STAILQ_INSERT_TAIL(&sc->sc_txbuf, bf, bf_list);
+		sc->sc_if.if_flags &= ~IFF_OACTIVE;
 		ieee80211_node_decref(ni);
 	}
 }
@@ -1271,6 +1193,9 @@ ath_txfrag_setup(struct ath_softc *sc, ath_bufhead *frags,
 	for (m = m0->m_nextpkt; m != NULL; m = m->m_nextpkt) {
 		bf = STAILQ_FIRST(&sc->sc_txbuf);
 		if (bf == NULL) {       /* out of buffers, cleanup */
+			DPRINTF(sc, ATH_DEBUG_XMIT, "%s: out of xmit buffers\n",
+				__func__);
+			sc->sc_if.if_flags |= IFF_OACTIVE;
 			ath_txfrag_cleanup(sc, frags, ni);
 			break;
 		}
@@ -1296,7 +1221,8 @@ ath_start(struct ifnet *ifp)
 	struct ether_header *eh;
 	ath_bufhead frags;
 
-	if ((ifp->if_flags & IFF_RUNNING) == 0 || sc->sc_invalid)
+	if ((ifp->if_flags & IFF_RUNNING) == 0 ||
+	    !device_is_active(sc->sc_dev))
 		return;
 	for (;;) {
 		/*
@@ -1405,6 +1331,7 @@ ath_start(struct ifnet *ifp)
 				DPRINTF(sc, ATH_DEBUG_ANY,
 				    "%s: out of txfrag buffers\n", __func__);
 				ic->ic_stats.is_tx_nobuf++;     /* XXX */
+				ath_freetx(m);
 				goto bad;
 			}
 		} else {
@@ -1459,7 +1386,6 @@ ath_start(struct ifnet *ifp)
 			goto nextfrag;
 		}
 
-		sc->sc_tx_timer = 5;
 		ifp->if_timer = 1;
 	}
 }
@@ -1777,6 +1703,11 @@ ath_key_delete(struct ieee80211com *ic, const struct ieee80211_key *k)
 
 	DPRINTF(sc, ATH_DEBUG_KEYCACHE, "%s: delete key %u\n", __func__, keyix);
 
+	if (!device_has_power(sc->sc_dev)) {
+		aprint_error_dev(sc->sc_dev, "deleting keyix %d w/o power\n",
+		    k->wk_keyix);
+	}
+
 	ath_hal_keyreset(ah, keyix);
 	/*
 	 * Handle split tx/rx keying required for TKIP with h/w MIC.
@@ -1811,6 +1742,10 @@ ath_key_set(struct ieee80211com *ic, const struct ieee80211_key *k,
 {
 	struct ath_softc *sc = ic->ic_ifp->if_softc;
 
+	if (!device_has_power(sc->sc_dev)) {
+		aprint_error_dev(sc->sc_dev, "setting keyix %d w/o power\n",
+		    k->wk_keyix);
+	}
 	return ath_keyset(sc, k, mac, ic->ic_bss);
 }
 
@@ -1886,49 +1821,16 @@ ath_calcrxfilter(struct ath_softc *sc, enum ieee80211_state state)
 }
 
 static void
-ath_mcastfilter_accum(caddr_t dl, u_int32_t *mfilt)
-{
-	u_int32_t val;
-	u_int8_t pos;
-
-	/* calculate XOR of eight 6bit values */
-	val = LE_READ_4(dl + 0);
-	pos = (val >> 18) ^ (val >> 12) ^ (val >> 6) ^ val;
-	val = LE_READ_4(dl + 3);
-	pos ^= (val >> 18) ^ (val >> 12) ^ (val >> 6) ^ val;
-	pos &= 0x3f;
-	mfilt[pos / 32] |= (1 << (pos % 32));
-}
-
-static void
-ath_mcastfilter_compute(struct ath_softc *sc, u_int32_t *mfilt)
-{
-	struct ifnet *ifp = &sc->sc_if;
-	struct ether_multi *enm;
-	struct ether_multistep estep;
-
-	mfilt[0] = mfilt[1] = 0;
-	ETHER_FIRST_MULTI(estep, &sc->sc_ec, enm);
-	while (enm != NULL) {
-		/* XXX Punt on ranges. */
-		if (!IEEE80211_ADDR_EQ(enm->enm_addrlo, enm->enm_addrhi)) {
-			mfilt[0] = mfilt[1] = ~((u_int32_t)0);
-			ifp->if_flags |= IFF_ALLMULTI;
-			return;
-		}
-		ath_mcastfilter_accum(enm->enm_addrlo, mfilt);
-		ETHER_NEXT_MULTI(estep, enm);
-	}
-	ifp->if_flags &= ~IFF_ALLMULTI;
-}
-
-static void
 ath_mode_init(struct ath_softc *sc)
 {
+	struct ifnet *ifp = &sc->sc_if;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ath_hal *ah = sc->sc_ah;
-	u_int32_t rfilt, mfilt[2];
+	struct ether_multi *enm;
+	struct ether_multistep estep;
+	u_int32_t rfilt, mfilt[2], val;
 	int i;
+	uint8_t pos;
 
 	/* configure rx filter */
 	rfilt = ath_calcrxfilter(sc, ic->ic_state);
@@ -1954,34 +1856,32 @@ ath_mode_init(struct ath_softc *sc)
 	 *
 	 * XXX should get from lladdr instead of arpcom but that's more work
 	 */
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(sc->sc_if.if_sadl));
+	IEEE80211_ADDR_COPY(ic->ic_myaddr, CLLADDR(sc->sc_if.if_sadl));
 	ath_hal_setmac(ah, ic->ic_myaddr);
 
 	/* calculate and install multicast filter */
-#ifdef __FreeBSD__
-	if ((ifp->if_flags & IFF_ALLMULTI) == 0) {
-		mfilt[0] = mfilt[1] = 0;
-		IF_ADDR_LOCK(ifp);
-		TAILQ_FOREACH(ifma, &ifp->if_multiaddrs, ifma_link) {
-			caddr_t dl;
-
-			/* calculate XOR of eight 6bit values */
-			dl = LLADDR((struct sockaddr_dl *) ifma->ifma_addr);
-			val = LE_READ_4(dl + 0);
-			pos = (val >> 18) ^ (val >> 12) ^ (val >> 6) ^ val;
-			val = LE_READ_4(dl + 3);
-			pos ^= (val >> 18) ^ (val >> 12) ^ (val >> 6) ^ val;
-			pos &= 0x3f;
-			mfilt[pos / 32] |= (1 << (pos % 32));
+	ifp->if_flags &= ~IFF_ALLMULTI;
+	mfilt[0] = mfilt[1] = 0;
+	ETHER_FIRST_MULTI(estep, &sc->sc_ec, enm);
+	while (enm != NULL) {
+		void *dl;
+		/* XXX Punt on ranges. */
+		if (!IEEE80211_ADDR_EQ(enm->enm_addrlo, enm->enm_addrhi)) {
+			mfilt[0] = mfilt[1] = 0xffffffff;
+			ifp->if_flags |= IFF_ALLMULTI;
+			break;
 		}
-		IF_ADDR_UNLOCK(ifp);
-	} else {
-		mfilt[0] = mfilt[1] = ~0;
+		dl = enm->enm_addrlo;
+		val = LE_READ_4((char *)dl + 0);
+		pos = (val >> 18) ^ (val >> 12) ^ (val >> 6) ^ val;
+		val = LE_READ_4((char *)dl + 3);
+		pos ^= (val >> 18) ^ (val >> 12) ^ (val >> 6) ^ val;
+		pos &= 0x3f;
+		mfilt[pos / 32] |= (1 << (pos % 32));
+
+		ETHER_NEXT_MULTI(estep, enm);
 	}
-#endif
-#ifdef __NetBSD__
-	ath_mcastfilter_compute(sc, mfilt);
-#endif
+
 	ath_hal_setmcastfilter(ah, mfilt[0], mfilt[1]);
 	DPRINTF(sc, ATH_DEBUG_MODE, "%s: RX filter 0x%x, MC filter %08x:%08x\n",
 		__func__, rfilt, mfilt[0], mfilt[1]);
@@ -2565,7 +2465,7 @@ ath_descdma_setup(struct ath_softc *sc,
 	const char *name, int nbuf, int ndesc)
 {
 #define	DS2PHYS(_dd, _ds) \
-	((_dd)->dd_desc_paddr + ((caddr_t)(_ds) - (caddr_t)(_dd)->dd_desc))
+	((_dd)->dd_desc_paddr + ((char *)(_ds) - (char *)(_dd)->dd_desc))
 	struct ifnet *ifp = &sc->sc_if;
 	struct ath_desc *ds;
 	struct ath_buf *bf;
@@ -2592,7 +2492,7 @@ ath_descdma_setup(struct ath_softc *sc,
 	}
 
 	error = bus_dmamem_map(dd->dd_dmat, &dd->dd_dseg, dd->dd_dnseg,
-	    dd->dd_desc_len, (caddr_t *)&dd->dd_desc, BUS_DMA_COHERENT);
+	    dd->dd_desc_len, (void **)&dd->dd_desc, BUS_DMA_COHERENT);
 	if (error != 0) {
 		if_printf(ifp, "unable to map %u %s descriptors, error = %u\n",
 		    nbuf * ndesc, dd->dd_name, error);
@@ -2653,7 +2553,7 @@ fail4:
 fail3:
 	bus_dmamap_destroy(dd->dd_dmat, dd->dd_dmamap);
 fail2:
-	bus_dmamem_unmap(dd->dd_dmat, (caddr_t)dd->dd_desc, dd->dd_desc_len);
+	bus_dmamem_unmap(dd->dd_dmat, (void *)dd->dd_desc, dd->dd_desc_len);
 fail1:
 	bus_dmamem_free(dd->dd_dmat, &dd->dd_dseg, dd->dd_dnseg);
 fail0:
@@ -2671,7 +2571,7 @@ ath_descdma_cleanup(struct ath_softc *sc,
 
 	bus_dmamap_unload(dd->dd_dmat, dd->dd_dmamap);
 	bus_dmamap_destroy(dd->dd_dmat, dd->dd_dmamap);
-	bus_dmamem_unmap(dd->dd_dmat, (caddr_t)dd->dd_desc, dd->dd_desc_len);
+	bus_dmamem_unmap(dd->dd_dmat, (void *)dd->dd_desc, dd->dd_desc_len);
 	bus_dmamem_free(dd->dd_dmat, &dd->dd_dseg, dd->dd_dnseg);
 
 	STAILQ_FOREACH(bf, head, bf_list) {
@@ -2951,7 +2851,7 @@ static void
 ath_rx_proc(void *arg, int npending)
 {
 #define	PA2DESC(_sc, _pa) \
-	((struct ath_desc *)((caddr_t)(_sc)->sc_rxdma.dd_desc + \
+	((struct ath_desc *)((char *)(_sc)->sc_rxdma.dd_desc + \
 		((_pa) - (_sc)->sc_rxdma.dd_desc_paddr)))
 	struct ath_softc *sc = arg;
 	struct ath_buf *bf;
@@ -3143,7 +3043,7 @@ rx_accept:
 		}
 
 		if (IFF_DUMPPKTS(sc, ATH_DEBUG_RECV)) {
-			ieee80211_dump_pkt(mtod(m, caddr_t), len,
+			ieee80211_dump_pkt(mtod(m, void *), len,
 				   sc->sc_hwmap[ds->ds_rxstat.rs_rate].ieeerate,
 				   ds->ds_rxstat.rs_rssi);
 		}
@@ -3418,9 +3318,8 @@ again:
 		n = m->m_next;
 		if (n == NULL)
 			break;
-		if ((m->m_flags & M_RDONLY) == 0 &&
-		    n->m_len < M_TRAILINGSPACE(m)) {
-			bcopy(mtod(n, void *), mtod(m, char *) + m->m_len,
+		if (n->m_len < M_TRAILINGSPACE(m)) {
+			memcpy(mtod(m, char *) + m->m_len, mtod(n, void *),
 				n->m_len);
 			m->m_len += n->m_len;
 			m->m_next = n->m_next;
@@ -3498,6 +3397,15 @@ ath_freetx(struct mbuf *m)
 }
 
 static int
+deduct_pad_bytes(int len, int hdrlen)
+{
+	/* XXX I am suspicious that this code, which I extracted
+	 * XXX from ath_tx_start() for reuse, does the right thing.
+	 */
+	return len - (hdrlen & 3);
+}
+
+static int
 ath_tx_start(struct ath_softc *sc, struct ieee80211_node *ni, struct ath_buf *bf,
     struct mbuf *m0)
 {
@@ -3529,7 +3437,7 @@ ath_tx_start(struct ath_softc *sc, struct ieee80211_node *ni, struct ath_buf *bf
 	 * Packet length must not include any
 	 * pad bytes; deduct them here.
 	 */
-	pktlen = m0->m_pkthdr.len - (hdrlen & 3);
+	pktlen = deduct_pad_bytes(m0->m_pkthdr.len, hdrlen);
 
 	if (iswep) {
 		const struct ieee80211_cipher *cip;
@@ -3806,8 +3714,10 @@ ath_tx_start(struct ath_softc *sc, struct ieee80211_node *ni, struct ath_buf *bf
 			 * the ACK duration
 			 */
 			dur += ath_hal_computetxtime(ah, rt,
-					m0->m_nextpkt->m_pkthdr.len,
-					rix, shortPreamble);
+			    deduct_pad_bytes(m0->m_nextpkt->m_pkthdr.len,
+			        hdrlen) -  
+			    deduct_pad_bytes(m0->m_pkthdr.len, hdrlen) + pktlen,
+			    rix, shortPreamble);
 		}
 		if (isfrag) {
 			/*
@@ -3867,7 +3777,7 @@ ath_tx_start(struct ath_softc *sc, struct ieee80211_node *ni, struct ath_buf *bf
 		ctsrate = 0;
 
 	if (IFF_DUMPPKTS(sc, ATH_DEBUG_XMIT))
-		ieee80211_dump_pkt(mtod(m0, caddr_t), m0->m_len,
+		ieee80211_dump_pkt(mtod(m0, void *), m0->m_len,
 			sc->sc_hwmap[txrate].ieeerate, -1);
 #if NBPFILTER > 0
 	if (ic->ic_rawbpf)
@@ -4014,7 +3924,7 @@ ath_tx_processq(struct ath_softc *sc, struct ath_txq *txq)
 
 	DPRINTF(sc, ATH_DEBUG_TX_PROC, "%s: tx queue %u head %p link %p\n",
 		__func__, txq->axq_qnum,
-		(caddr_t)(uintptr_t) ath_hal_gettxbuf(sc->sc_ah, txq->axq_qnum),
+		(void *)(uintptr_t) ath_hal_gettxbuf(sc->sc_ah, txq->axq_qnum),
 		txq->axq_link);
 	nacked = 0;
 	for (;;) {
@@ -4100,6 +4010,7 @@ ath_tx_processq(struct ath_softc *sc, struct ath_txq *txq)
 
 		ATH_TXBUF_LOCK(sc);
 		STAILQ_INSERT_TAIL(&sc->sc_txbuf, bf, bf_list);
+		sc->sc_if.if_flags &= ~IFF_OACTIVE;
 		ATH_TXBUF_UNLOCK(sc);
 	}
 	return nacked;
@@ -4123,12 +4034,11 @@ ath_tx_proc_q0(void *arg, int npending)
 	struct ath_softc *sc = arg;
 	struct ifnet *ifp = &sc->sc_if;
 
-	if (txqactive(sc->sc_ah, 0) && ath_tx_processq(sc, &sc->sc_txq[0]))
+	if (txqactive(sc->sc_ah, 0) && ath_tx_processq(sc, &sc->sc_txq[0]) > 0){
 		sc->sc_lastrx = ath_hal_gettsf64(sc->sc_ah);
+	}
 	if (txqactive(sc->sc_ah, sc->sc_cabq->axq_qnum))
 		ath_tx_processq(sc, sc->sc_cabq);
-	ifp->if_flags &= ~IFF_OACTIVE;
-	sc->sc_tx_timer = 0;
 
 	if (sc->sc_softled)
 		ath_led_event(sc, ATH_LED_TX);
@@ -4161,12 +4071,9 @@ ath_tx_proc_q0123(void *arg, int npending)
 		nacked += ath_tx_processq(sc, &sc->sc_txq[3]);
 	if (txqactive(sc->sc_ah, sc->sc_cabq->axq_qnum))
 		ath_tx_processq(sc, sc->sc_cabq);
-	if (nacked)
+	if (nacked) {
 		sc->sc_lastrx = ath_hal_gettsf64(sc->sc_ah);
-	ath_tx_processq(sc, sc->sc_cabq);
-
-	ifp->if_flags &= ~IFF_OACTIVE;
-	sc->sc_tx_timer = 0;
+	}
 
 	if (sc->sc_softled)
 		ath_led_event(sc, ATH_LED_TX);
@@ -4191,11 +4098,9 @@ ath_tx_proc(void *arg, int npending)
 	for (i = 0; i < HAL_NUM_TX_QUEUES; i++)
 		if (ATH_TXQ_SETUP(sc, i) && txqactive(sc->sc_ah, i))
 			nacked += ath_tx_processq(sc, &sc->sc_txq[i]);
-	if (nacked)
+	if (nacked) {
 		sc->sc_lastrx = ath_hal_gettsf64(sc->sc_ah);
-
-	ifp->if_flags &= ~IFF_OACTIVE;
-	sc->sc_tx_timer = 0;
+	}
 
 	if (sc->sc_softled)
 		ath_led_event(sc, ATH_LED_TX);
@@ -4242,6 +4147,7 @@ ath_tx_draintxq(struct ath_softc *sc, struct ath_txq *txq)
 		}
 		ATH_TXBUF_LOCK(sc);
 		STAILQ_INSERT_TAIL(&sc->sc_txbuf, bf, bf_list);
+		sc->sc_if.if_flags &= ~IFF_OACTIVE;
 		ATH_TXBUF_UNLOCK(sc);
 	}
 }
@@ -4254,7 +4160,7 @@ ath_tx_stopdma(struct ath_softc *sc, struct ath_txq *txq)
 	(void) ath_hal_stoptxdma(ah, txq->axq_qnum);
 	DPRINTF(sc, ATH_DEBUG_RESET, "%s: tx queue [%u] %p, link %p\n",
 	    __func__, txq->axq_qnum,
-	    (caddr_t)(uintptr_t) ath_hal_gettxbuf(ah, txq->axq_qnum),
+	    (void *)(uintptr_t) ath_hal_gettxbuf(ah, txq->axq_qnum),
 	    txq->axq_link);
 }
 
@@ -4265,16 +4171,15 @@ static void
 ath_draintxq(struct ath_softc *sc)
 {
 	struct ath_hal *ah = sc->sc_ah;
-	struct ifnet *ifp = &sc->sc_if;
 	int i;
 
 	/* XXX return value */
-	if (!sc->sc_invalid) {
+	if (device_is_active(sc->sc_dev)) {
 		/* don't touch the hardware if marked invalid */
 		(void) ath_hal_stoptxdma(ah, sc->sc_bhalq);
 		DPRINTF(sc, ATH_DEBUG_RESET,
 		    "%s: beacon queue %p\n", __func__,
-		    (caddr_t)(uintptr_t) ath_hal_gettxbuf(ah, sc->sc_bhalq));
+		    (void *)(uintptr_t) ath_hal_gettxbuf(ah, sc->sc_bhalq));
 		for (i = 0; i < HAL_NUM_TX_QUEUES; i++)
 			if (ATH_TXQ_SETUP(sc, i))
 				ath_tx_stopdma(sc, &sc->sc_txq[i]);
@@ -4282,8 +4187,6 @@ ath_draintxq(struct ath_softc *sc)
 	for (i = 0; i < HAL_NUM_TX_QUEUES; i++)
 		if (ATH_TXQ_SETUP(sc, i))
 			ath_tx_draintxq(sc, &sc->sc_txq[i]);
-	ifp->if_flags &= ~IFF_OACTIVE;
-	sc->sc_tx_timer = 0;
 }
 
 /*
@@ -4293,7 +4196,7 @@ static void
 ath_stoprecv(struct ath_softc *sc)
 {
 #define	PA2DESC(_sc, _pa) \
-	((struct ath_desc *)((caddr_t)(_sc)->sc_rxdma.dd_desc + \
+	((struct ath_desc *)((char *)(_sc)->sc_rxdma.dd_desc + \
 		((_pa) - (_sc)->sc_rxdma.dd_desc_paddr)))
 	struct ath_hal *ah = sc->sc_ah;
 
@@ -4306,7 +4209,7 @@ ath_stoprecv(struct ath_softc *sc)
 		struct ath_buf *bf;
 
 		printf("%s: rx queue %p, link %p\n", __func__,
-			(caddr_t)(uintptr_t) ath_hal_getrxbuf(ah), sc->sc_rxlink);
+			(void *)(uintptr_t) ath_hal_getrxbuf(ah), sc->sc_rxlink);
 		STAILQ_FOREACH(bf, &sc->sc_rxbuf, bf_list) {
 			struct ath_desc *ds = bf->bf_desc;
 			HAL_STATUS status = ath_hal_rxprocdesc(ah, ds,
@@ -4469,7 +4372,7 @@ ath_chan_set(struct ath_softc *sc, struct ieee80211_channel *chan)
 		}
 		sc->sc_curchan = hchan;
 		ath_update_txpow(sc);		/* update tx power state */
-		sc->sc_diversity = ath_hal_getdiversity(ah);
+		ath_restore_diversity(sc);
 		sc->sc_calinterval = 1;
 		sc->sc_caltries = 0;
 
@@ -5106,11 +5009,12 @@ ath_printrxbuf(struct ath_buf *bf, int done)
 
 	for (i = 0, ds = bf->bf_desc; i < bf->bf_nseg; i++, ds++) {
 		printf("R%d (%p %" PRIx64
-		    ") %08x %08x %08x %08x %08x %08x %c\n", i, ds,
+		    ") %08x %08x %08x %08x %08x %08x %02x %02x %c\n", i, ds,
 		    (uint64_t)bf->bf_daddr + sizeof (struct ath_desc) * i,
 		    ds->ds_link, ds->ds_data,
 		    ds->ds_ctl0, ds->ds_ctl1,
 		    ds->ds_hw[0], ds->ds_hw[1],
+		    ds->ds_rxstat.rs_status, ds->ds_rxstat.rs_keyix,
 		    !done ? ' ' : (ds->ds_rxstat.rs_status == 0) ? '*' : '!');
 	}
 }
@@ -5139,18 +5043,33 @@ ath_watchdog(struct ifnet *ifp)
 {
 	struct ath_softc *sc = ifp->if_softc;
 	struct ieee80211com *ic = &sc->sc_ic;
+	struct ath_txq *axq;
+	int i;
 
 	ifp->if_timer = 0;
-	if ((ifp->if_flags & IFF_RUNNING) == 0 || sc->sc_invalid)
+	if ((ifp->if_flags & IFF_RUNNING) == 0 ||
+	    !device_is_active(sc->sc_dev))
 		return;
-	if (sc->sc_tx_timer) {
-		if (--sc->sc_tx_timer == 0) {
-			if_printf(ifp, "device timeout\n");
+	for (i = 0; i < HAL_NUM_TX_QUEUES; i++) {
+		if (!ATH_TXQ_SETUP(sc, i))
+			continue;
+		axq = &sc->sc_txq[i];
+		ATH_TXQ_LOCK(axq);
+		if (axq->axq_timer == 0)
+			;
+		else if (--axq->axq_timer == 0) {
+			ATH_TXQ_UNLOCK(axq);
+			if_printf(ifp, "device timeout (txq %d, "
+			    "txintrperiod %d)\n", i, sc->sc_txintrperiod);
+			if (sc->sc_txintrperiod > 1)
+				sc->sc_txintrperiod--;
 			ath_reset(ifp);
 			ifp->if_oerrors++;
 			sc->sc_stats.ast_watchdog++;
+			break;
 		} else
 			ifp->if_timer = 1;
+		ATH_TXQ_UNLOCK(axq);
 	}
 	ieee80211_watchdog(ic);
 }
@@ -5217,7 +5136,7 @@ bad:
 }
 
 static int
-ath_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+ath_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 #define	IS_RUNNING(ifp) \
 	((ifp->if_flags & IFF_UP) && (ifp->if_flags & IFF_RUNNING))
@@ -5246,17 +5165,13 @@ ath_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			 * torn down much of our state.  There's
 			 * probably a better way to deal with this.
 			 */
-			if (!sc->sc_invalid && ic->ic_bss != NULL)
-				ath_init(sc);	/* XXX lose error */
-		} else
+			error = ath_init(sc);
+		} else if (device_is_active(sc->sc_dev))
 			ath_stop_locked(ifp, 1);
 		break;
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		error = (cmd == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->sc_ec) :
-		    ether_delmulti(ifr, &sc->sc_ec);
-		if (error == ENETRESET) {
+		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 			if (ifp->if_flags & IFF_RUNNING)
 				ath_mode_init(sc);
 			error = 0;
@@ -5281,14 +5196,13 @@ ath_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 	default:
 		error = ieee80211_ioctl(ic, cmd, data);
-		if (error == ENETRESET) {
-			if (IS_RUNNING(ifp) &&
-			    ic->ic_roaming != IEEE80211_ROAMING_MANUAL)
-				ath_init(sc);	/* XXX lose error */
+		if (error != ENETRESET)
+			;
+		else if (IS_RUNNING(ifp) &&
+		         ic->ic_roaming != IEEE80211_ROAMING_MANUAL)
+			error = ath_init(sc);
+		else
 			error = 0;
-		}
-		if (error == ERESTART)
-			error = IS_RUNNING(ifp) ? ath_reset(ifp) : 0;
 		break;
 	}
 	ATH_UNLOCK(sc);

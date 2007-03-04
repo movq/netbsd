@@ -1,4 +1,4 @@
-/*	$NetBSD: gtidma.c,v 1.9 2006/03/29 06:55:32 thorpej Exp $	*/
+/*	$NetBSD: gtidma.c,v 1.14 2008/09/08 23:36:54 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 2002 Allegro Networks, Inc., Wasabi Systems, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gtidma.c,v 1.9 2006/03/29 06:55:32 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gtidma.c,v 1.14 2008/09/08 23:36:54 gmcgarry Exp $");
 
 #include "opt_idma.h"
 #include "opt_ddb.h"
@@ -59,8 +59,8 @@ __KERNEL_RCSID(0, "$NetBSD: gtidma.c,v 1.9 2006/03/29 06:55:32 thorpej Exp $");
 #include <uvm/uvm_extern.h>
 
 #include <machine/psl.h>
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/intr.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <powerpc/atomic.h>
 
@@ -94,7 +94,7 @@ int idmadebug = 0;
 #ifdef DIAGNOSTIC
 
 unsigned char idmalock[CACHELINESIZE]
-	__attribute__ ((aligned(CACHELINESIZE))) = { 0 };
+	__aligned(CACHELINESIZE) = { 0 };
 
 #endif
 
@@ -150,7 +150,7 @@ _mftb()
 #define IDMA_LIST_SYNC_POST(c, p)	idma_list_sync_post(c, p)
 
 static inline void
-idma_cache_flush(void * p)
+idma_cache_flush(void *p)
 {
 	KASSERT(((unsigned int)p & (CACHELINESIZE-1)) == 0);
         __asm volatile ("eieio; dcbf 0,%0; eieio; lwz %0,0(%0); sync;"
@@ -158,7 +158,7 @@ idma_cache_flush(void * p)
 }
 
 static inline void
-idma_cache_invalidate(void * const p)
+idma_cache_invalidate(void *const p)
 {
 	KASSERT(((unsigned int)p & (CACHELINESIZE-1)) == 0);
 	__asm volatile ("eieio; dcbi 0,%0; sync;" :: "r"(p));
@@ -267,7 +267,7 @@ STATIC int
 idma_match(
 	struct device * const parent,
 	struct cfdata * const self,
-	void * const aux)
+	void *const aux)
 {
 	struct gt_attach_args * const ga = (struct gt_attach_args *)aux;
 
@@ -281,7 +281,7 @@ STATIC void
 idma_attach(
 	struct device * const parent,
 	struct device * const self,
-	void * const aux)
+	void *const aux)
 {
 	struct gt_softc * const gtsc = device_private(parent);
 	idma_softc_t * const sc = device_private(self);
@@ -299,7 +299,7 @@ idma_attach(
 	sc->idma_reg_size = 0x100;
 	sc->idma_ien = 0;
         sc->idma_callout_state = 0;
-	callout_init(&sc->idma_callout);
+	callout_init(&sc->idma_callout, 0);
 
 	for (i=0; i < NIDMA_CHANS; i++)
 		idma_chan_init(sc, &sc->idma_chan[i], i);
@@ -336,11 +336,11 @@ idma_attach(
 	sc->idma_ih[3] = ih;
 
 
-	printf("%s: irpt at irqs %d, %d, %d, %d\n", sc->idma_dev.dv_xname,
+	printf("%s: irpt at irqs %d, %d, %d, %d\n", device_xname(&sc->idma_dev),
 		IRQ_IDMA0_1, IRQ_IDMA2_3, IRQ_IDMA4_5, IRQ_IDMA6_7);
 #ifdef IDMA_ABORT_TEST
 	printf("%s: CAUTION: IDMA_ABORT_TEST enabled\n",
-		sc->idma_dev.dv_xname);
+		device_xname(&sc->idma_dev));
 #endif
 
 }
@@ -433,7 +433,7 @@ idma_chan_t *
 idma_chan_alloc(
 	const unsigned int ndesc,
 	int (* const callback)(void *, idma_desch_t *, u_int32_t),
-	void * const arg)
+	void *const arg)
 {
 	idma_softc_t * const sc = idma_sc;	/* XXX */
 	idma_chan_t *idcp;
@@ -996,7 +996,7 @@ idma_abort(idma_desch_t *iddhp, unsigned int flags, const char *str)
 
 		if (try >= 100)
 			panic("%s: idma_abort %p failed\n",
-				sc->idma_dev.dv_xname, iddhp);
+				device_xname(&sc->idma_dev), iddhp);
 
 	}
 	if ((flags & IDMA_ABORT_CANCEL) == 0)
@@ -1207,14 +1207,14 @@ idma_done(
 	callback = idcp->idc_callback;
 	if (callback == 0) {
 		DIAGPRF(("%s: idma_done: chan %d no callback\n",
-			sc->idma_dev.dv_xname, chan));
+			device_xname(&sc->idma_dev), chan));
 		idma_desch_free(iddhp);
 	}
 	(*callback)(idcp->idc_arg, iddhp, ccause);
 }
 
 STATIC int
-idma_intr0_1(void * const arg)
+idma_intr0_1(void *const arg)
 {
 	unsigned int reg = IDMA_CAUSE_REG(0);
 	unsigned int shift = IDMA_MASK_SHIFT(0);
@@ -1225,7 +1225,7 @@ idma_intr0_1(void * const arg)
 }
 
 STATIC int
-idma_intr2_3(void * const arg)
+idma_intr2_3(void *const arg)
 {
 	unsigned int reg = IDMA_CAUSE_REG(2);
 	unsigned int shift = IDMA_MASK_SHIFT(2);
@@ -1236,7 +1236,7 @@ idma_intr2_3(void * const arg)
 }
 
 STATIC int
-idma_intr4_5(void * const arg)
+idma_intr4_5(void *const arg)
 {
 	unsigned int reg = IDMA_CAUSE_REG(4);
 	unsigned int shift = IDMA_MASK_SHIFT(4);
@@ -1247,7 +1247,7 @@ idma_intr4_5(void * const arg)
 }
 
 STATIC int
-idma_intr6_7(void * const arg)
+idma_intr6_7(void *const arg)
 {
 	unsigned int reg = IDMA_CAUSE_REG(6);
 	unsigned int shift = IDMA_MASK_SHIFT(6);
@@ -1315,7 +1315,7 @@ idma_intr_comm(
 		if (iddhp == 0) {
 			DIAGPRF(("%s: idma_intr_comm: chan %d ccause 0x%x"
 				" idc_active == 0\n",
-				sc->idma_dev.dv_xname,
+				device_xname(&sc->idma_dev),
 				chan, ccause));
 			idma_qstart(sc, idcp, chan);
 			goto next;
@@ -1337,14 +1337,14 @@ idma_intr_comm(
 		case IDMA_DESC_CTL_OWN:
 			DIAGPRF(("%s: idma_intr_comm: chan %d "
 				"descriptor OWN error, abort\n",
-				sc->idma_dev.dv_xname, chan));
+				device_xname(&sc->idma_dev), chan));
 			idma_abort(iddhp, 0, "idma_intr_comm: OWN error");
 			goto next;
 		case IDMA_DESC_CTL_TERM:
 		case (IDMA_DESC_CTL_OWN|IDMA_DESC_CTL_TERM):
 			DIAGPRF(("%s: idma_intr_comm: chan %d "
 				"transfer terminated, retry\n",
-				sc->idma_dev.dv_xname, chan));
+				device_xname(&sc->idma_dev), chan));
 			idma_retry(sc, idcp, chan, iddhp);
 			goto next;
 		}
@@ -1363,7 +1363,7 @@ next:
 }
 
 STATIC void
-idma_time(void * const arg)
+idma_time(void *const arg)
 {
 	idma_softc_t * const sc = (idma_softc_t *)arg;
 	idma_chan_t *idcp;
@@ -1422,12 +1422,12 @@ idma_print_active(
 	cur = gt_read(&sc->idma_gt->gt_dev, IDMA_CUR_REG(chan));
 
 	printf("%s: regs { %#x, %#x, %#x, %#x } current %#x\n",
-		sc->idma_dev.dv_xname, cnt, src, dst, nxt, cur);
+		device_xname(&sc->idma_dev), cnt, src, dst, nxt, cur);
 
 	do {
 		iddp = iddhp->idh_desc_va;
 		printf("%s: desc %p/%p { %#x, %#x, %#x, %#x }\n",
-			sc->idma_dev.dv_xname,
+			device_xname(&sc->idma_dev),
 			iddhp->idh_desc_va, iddhp->idh_desc_pa,
 			idma_desc_read(&iddp->idd_ctl),
 			idma_desc_read(&iddp->idd_src_addr),

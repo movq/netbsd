@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_uuid.c,v 1.9 2007/02/09 21:55:31 ad Exp $	*/
+/*	$NetBSD: kern_uuid.c,v 1.15 2008/07/02 14:47:34 matt Exp $	*/
 
 /*
  * Copyright (c) 2002 Marcel Moolenaar
@@ -29,12 +29,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_uuid.c,v 1.9 2007/02/09 21:55:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_uuid.c,v 1.15 2008/07/02 14:47:34 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/endian.h>
 #include <sys/kernel.h>
-#include <sys/lock.h>
+#include <sys/mutex.h>
 #include <sys/socket.h>
 #include <sys/systm.h>
 #include <sys/uuid.h>
@@ -58,9 +58,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_uuid.c,v 1.9 2007/02/09 21:55:31 ad Exp $");
  * sequence fields are written in the native byte order.
  */
 
-/* XXX Do we have a similar ASSERT()? */
-#define CTASSERT(x)
-
 CTASSERT(sizeof(struct uuid) == 16);
 
 /* We use an alternative, more convenient representation in the generator. */
@@ -82,7 +79,14 @@ CTASSERT(sizeof(struct uuid_private) == 16);
 static struct uuid_private uuid_last;
 
 /* "UUID generator mutex lock" */
-static struct simplelock uuid_mutex = SIMPLELOCK_INITIALIZER;
+static kmutex_t uuid_mutex;
+
+void
+uuid_init(void)
+{
+
+	mutex_init(&uuid_mutex, MUTEX_DEFAULT, IPL_NONE);
+}
 
 /*
  * Return the first MAC address we encounter or, if none was found,
@@ -103,6 +107,7 @@ uuid_node(uint16_t *node)
 	int i, s;
 
 	s = splnet();
+	KERNEL_LOCK(1, NULL);
 	IFNET_FOREACH(ifp) {
 		/* Walk the address list */
 		IFADDR_FOREACH(ifa, ifp) {
@@ -110,12 +115,14 @@ uuid_node(uint16_t *node)
 			if (sdl != NULL && sdl->sdl_family == AF_LINK &&
 			    sdl->sdl_type == IFT_ETHER) {
 				/* Got a MAC address. */
-				memcpy(node, LLADDR(sdl), UUID_NODE_LEN);
+				memcpy(node, CLLADDR(sdl), UUID_NODE_LEN);
+				KERNEL_UNLOCK_ONE(NULL);
 				splx(s);
 				return;
 			}
 		}
 	}
+	KERNEL_UNLOCK_ONE(NULL);
 	splx(s);
 
 	for (i = 0; i < (UUID_NODE_LEN>>1); i++)
@@ -153,7 +160,7 @@ uuid_generate(struct uuid_private *uuid, uint64_t *timep, int count)
 {
 	uint64_t xtime;
 
-	simple_lock(&uuid_mutex);
+	mutex_enter(&uuid_mutex);
 
 	uuid_node(uuid->node);
 	xtime = uuid_time();
@@ -171,16 +178,16 @@ uuid_generate(struct uuid_private *uuid, uint64_t *timep, int count)
 	uuid_last = *uuid;
 	uuid_last.time.ll = (xtime + count - 1) & ((1LL << 60) - 1LL);
 
-	simple_unlock(&uuid_mutex);
+	mutex_exit(&uuid_mutex);
 }
 
 int
-sys_uuidgen(struct lwp *l, void *v, register_t *retval)
+sys_uuidgen(struct lwp *l, const struct sys_uuidgen_args *uap, register_t *retval)
 {
-	struct sys_uuidgen_args *uap = v;
 	struct uuid_private uuid;
 	uint64_t xtime;
 	int error;
+	int i;
 
 	/*
 	 * Limit the number of UUIDs that can be created at the same time
@@ -200,18 +207,17 @@ sys_uuidgen(struct lwp *l, void *v, register_t *retval)
 	uuid.seq = htobe16(uuid.seq | 0x8000);
 
 	/* XXX: this should copyout larger chunks at a time. */
-	do {
+	for (i = 0; i < SCARG(uap, count); xtime++, i++) {
 		/* Set time and version (=1) and deal with byte order. */
 		uuid.time.x.low = (uint32_t)xtime;
 		uuid.time.x.mid = (uint16_t)(xtime >> 32);
 		uuid.time.x.hi = ((uint16_t)(xtime >> 48) & 0xfff) | (1 << 12);
-		error = copyout(&uuid, SCARG(uap,store), sizeof(uuid));
-		SCARG(uap, store)++;
-		SCARG(uap, count)--;
-		xtime++;
-	} while (SCARG(uap, count) > 0 && error == 0);
+		error = copyout(&uuid, SCARG(uap,store) + i, sizeof(uuid));
+		if (error != 0)
+			return error;
+	}
 
-	return (error);
+	return 0;
 }
 
 int
@@ -306,7 +312,7 @@ uuid_dec_be(void const *buf, struct uuid *uuid)
 	int i;
 
 	uuid->time_low = be32dec(p);
-	uuid->time_mid = le16dec(p + 4);
+	uuid->time_mid = be16dec(p + 4);
 	uuid->time_hi_and_version = be16dec(p + 6);
 	uuid->clock_seq_hi_and_reserved = p[8];
 	uuid->clock_seq_low = p[9];

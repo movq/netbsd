@@ -1,4 +1,4 @@
-/* $NetBSD: lkminit_exec.c,v 1.10 2005/12/11 12:24:48 christos Exp $ */
+/* $NetBSD: lkminit_exec.c,v 1.13 2008/04/28 20:24:07 martin Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lkminit_exec.c,v 1.10 2005/12/11 12:24:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lkminit_exec.c,v 1.13 2008/04/28 20:24:07 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,15 +41,14 @@ __KERNEL_RCSID(0, "$NetBSD: lkminit_exec.c,v 1.10 2005/12/11 12:24:48 christos E
 #include <sys/signalvar.h>
 
 #include <machine/elf_machdep.h>
-#define ELFSIZE	32
 #include <sys/exec_elf.h>
 
 #include <compat/linux/common/linux_exec.h>
 
-int exec_linux_elf_lkmentry __P((struct lkm_table *, int, int));
+int exec_linux_elf_lkmentry(struct lkm_table *, int, int);
 
 static struct execsw exec_linux_elf =
-	/* Linux Elf32 */
+	/* Linux Elf */
 	{ sizeof (Elf_Ehdr),
 	  ELFNAME2(exec,makecmds),
 	  { ELFNAME2(linux,probe) },
@@ -65,7 +57,7 @@ static struct execsw exec_linux_elf =
 	  LINUX_ELF_AUX_ARGSIZ,
 	  ELFNAME2(linux,copyargs),
 	  NULL,
-	  coredump_elf32,	/* XXX ELF64? */
+	  ELFNAMEEND(coredump),
 	  linux_exec_setup_stack };
 
 /*

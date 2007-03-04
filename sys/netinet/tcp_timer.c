@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_timer.c,v 1.76 2006/10/09 16:27:07 rpaulo Exp $	*/
+/*	$NetBSD: tcp_timer.c,v 1.82 2008/10/10 10:21:05 ad Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -47,13 +47,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -100,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_timer.c,v 1.76 2006/10/09 16:27:07 rpaulo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_timer.c,v 1.82 2008/10/10 10:21:05 ad Exp $");
 
 #include "opt_inet.h"
 #include "opt_tcp_debug.h"
@@ -138,6 +131,7 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_timer.c,v 1.76 2006/10/09 16:27:07 rpaulo Exp $"
 #include <netinet/tcp_seq.h>
 #include <netinet/tcp_timer.h>
 #include <netinet/tcp_var.h>
+#include <netinet/tcp_private.h>
 #include <netinet/tcp_congctl.h>
 #include <netinet/tcpip.h>
 #ifdef TCP_DEBUG
@@ -148,11 +142,12 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_timer.c,v 1.76 2006/10/09 16:27:07 rpaulo Exp $"
  * Various tunable timer parameters.  These are initialized in tcp_init(),
  * unless they are patched.
  */
-int	tcp_keepidle = 0;
-int	tcp_keepintvl = 0;
-int	tcp_keepcnt = 0;		/* max idle probes */
+u_int	tcp_keepinit = 0;
+u_int	tcp_keepidle = 0;
+u_int	tcp_keepintvl = 0;
+u_int	tcp_keepcnt = 0;		/* max idle probes */
+
 int	tcp_maxpersistidle = 0;		/* max idle time in persist */
-int	tcp_maxidle;			/* computed in tcp_slowtimo() */
 
 /*
  * Time to delay the ACK.  This is initialized in tcp_init(), unless
@@ -179,6 +174,9 @@ void
 tcp_timer_init(void)
 {
 
+	if (tcp_keepinit == 0)
+		tcp_keepinit = TCPTV_KEEP_INIT;
+
 	if (tcp_keepidle == 0)
 		tcp_keepidle = TCPTV_KEEP_IDLE;
 
@@ -196,31 +194,12 @@ tcp_timer_init(void)
 }
 
 /*
- * Return how many timers are currently being invoked.
- */
-int
-tcp_timers_invoking(struct tcpcb *tp)
-{
-	int i;
-	int count = 0;
-
-	for (i = 0; i < TCPT_NTIMERS; i++)
-		if (callout_invoking(&tp->t_timer[i]))
-			count++;
-	if (callout_invoking(&tp->t_delack_ch))
-		count++;
-
-	return count;
-}
-
-/*
  * Callout to process delayed ACKs for a TCPCB.
  */
 void
 tcp_delack(void *arg)
 {
 	struct tcpcb *tp = arg;
-	int s;
 
 	/*
 	 * If tcp_output() wasn't able to transmit the ACK
@@ -228,16 +207,17 @@ tcp_delack(void *arg)
 	 * ACK callout.
 	 */
 
-	s = splsoftnet();
-	callout_ack(&tp->t_delack_ch);
-	if (tcp_isdead(tp)) {
-		splx(s);
+	mutex_enter(softnet_lock);
+	if ((tp->t_flags & (TF_DEAD | TF_DELACK)) != TF_DELACK) {
+		mutex_exit(softnet_lock);
 		return;
 	}
 
 	tp->t_flags |= TF_ACKNOW;
+	KERNEL_LOCK(1, NULL);
 	(void) tcp_output(tp);
-	splx(s);
+	KERNEL_UNLOCK_ONE(NULL);
+	mutex_exit(softnet_lock);
 }
 
 /*
@@ -248,13 +228,11 @@ tcp_delack(void *arg)
 void
 tcp_slowtimo(void)
 {
-	int s;
 
-	s = splsoftnet();
-	tcp_maxidle = tcp_keepcnt * tcp_keepintvl;
+	mutex_enter(softnet_lock);
 	tcp_iss_seq += TCP_ISSINCR;			/* increment iss */
 	tcp_now++;					/* for timestamps */
-	splx(s);
+	mutex_exit(softnet_lock);
 }
 
 /*
@@ -283,19 +261,18 @@ tcp_timer_rexmt(void *arg)
 {
 	struct tcpcb *tp = arg;
 	uint32_t rto;
-	int s;
 #ifdef TCP_DEBUG
 	struct socket *so = NULL;
 	short ostate;
 #endif
 
-	s = splsoftnet();
-	callout_ack(&tp->t_timer[TCPT_REXMT]);
-	if (tcp_isdead(tp)) {
-		splx(s);
+	mutex_enter(softnet_lock);
+	if ((tp->t_flags & TF_DEAD) != 0) {
+		mutex_exit(softnet_lock);
 		return;
 	}
 
+	KERNEL_LOCK(1, NULL);
 	if ((tp->t_flags & TF_PMTUD_PEND) && tp->t_inpcb &&
 	    SEQ_GEQ(tp->t_pmtud_th_seq, tp->snd_una) &&
 	    SEQ_LT(tp->t_pmtud_th_seq, (int)(tp->snd_una + tp->t_ourmss))) {
@@ -317,7 +294,8 @@ tcp_timer_rexmt(void *arg)
 		 */
 		in_pcbnotifyall(&tcbtable, icmpsrc.sin_addr, EMSGSIZE,
 		    tcp_mtudisc);
- 		splx(s);
+		KERNEL_UNLOCK_ONE(NULL);
+		mutex_exit(softnet_lock);
  		return;
  	}
 #ifdef TCP_DEBUG
@@ -346,12 +324,12 @@ tcp_timer_rexmt(void *arg)
 
 	if (++tp->t_rxtshift > TCP_MAXRXTSHIFT) {
 		tp->t_rxtshift = TCP_MAXRXTSHIFT;
-		tcpstat.tcps_timeoutdrop++;
+		TCP_STATINC(TCP_STAT_TIMEOUTDROP);
 		tp = tcp_drop(tp, tp->t_softerror ?
 		    tp->t_softerror : ETIMEDOUT);
 		goto out;
 	}
-	tcpstat.tcps_rexmttimeo++;
+	TCP_STATINC(TCP_STAT_REXMTTIMEO);
 	rto = TCP_REXMTVAL(tp);
 	if (rto < tp->t_rttmin)
 		rto = tp->t_rttmin;
@@ -368,7 +346,7 @@ tcp_timer_rexmt(void *arg)
 	 * value here...
 	 */
 	if (tp->t_mtudisc && tp->t_rxtshift > TCP_MAXRXTSHIFT / 6) {
-		tcpstat.tcps_pmtublackhole++;
+		TCP_STATINC(TCP_STAT_PMTUBLACKHOLE);
 
 #ifdef INET
 		/* try turning PMTUD off */
@@ -431,7 +409,8 @@ tcp_timer_rexmt(void *arg)
 		tcp_trace(TA_USER, ostate, tp, NULL,
 		    PRU_SLOWTIMO | (TCPT_REXMT << 8));
 #endif
-	splx(s);
+	KERNEL_UNLOCK_ONE(NULL);
+	mutex_exit(softnet_lock);
 }
 
 void
@@ -439,19 +418,18 @@ tcp_timer_persist(void *arg)
 {
 	struct tcpcb *tp = arg;
 	uint32_t rto;
-	int s;
 #ifdef TCP_DEBUG
 	struct socket *so = NULL;
 	short ostate;
 #endif
 
-	s = splsoftnet();
-	callout_ack(&tp->t_timer[TCPT_PERSIST]);
-	if (tcp_isdead(tp)) {
-		splx(s);
+	mutex_enter(softnet_lock);
+	if ((tp->t_flags & TF_DEAD) != 0) {
+		mutex_exit(softnet_lock);
 		return;
 	}
 
+	KERNEL_LOCK(1, NULL);
 #ifdef TCP_DEBUG
 #ifdef INET
 	if (tp->t_inpcb)
@@ -483,11 +461,11 @@ tcp_timer_persist(void *arg)
 	if (tp->t_rxtshift == TCP_MAXRXTSHIFT &&
 	    ((tcp_now - tp->t_rcvtime) >= tcp_maxpersistidle ||
 	    (tcp_now - tp->t_rcvtime) >= rto * tcp_totbackoff)) {
-		tcpstat.tcps_persistdrops++;
+		TCP_STATINC(TCP_STAT_PERSISTDROPS);
 		tp = tcp_drop(tp, ETIMEDOUT);
 		goto out;
 	}
-	tcpstat.tcps_persisttimeo++;
+	TCP_STATINC(TCP_STAT_PERSISTTIMEO);
 	tcp_setpersist(tp);
 	tp->t_force = 1;
 	(void) tcp_output(tp);
@@ -499,7 +477,8 @@ tcp_timer_persist(void *arg)
 		tcp_trace(TA_USER, ostate, tp, NULL,
 		    PRU_SLOWTIMO | (TCPT_PERSIST << 8));
 #endif
-	splx(s);
+	KERNEL_UNLOCK_ONE(NULL);
+	mutex_exit(softnet_lock);
 }
 
 void
@@ -507,17 +486,17 @@ tcp_timer_keep(void *arg)
 {
 	struct tcpcb *tp = arg;
 	struct socket *so = NULL;	/* Quell compiler warning */
-	int s;
 #ifdef TCP_DEBUG
 	short ostate;
 #endif
 
-	s = splsoftnet();
-	callout_ack(&tp->t_timer[TCPT_KEEP]);
-	if (tcp_isdead(tp)) {
-		splx(s);
+	mutex_enter(softnet_lock);
+	if ((tp->t_flags & TF_DEAD) != 0) {
+		mutex_exit(softnet_lock);
 		return;
 	}
+
+	KERNEL_LOCK(1, NULL);
 
 #ifdef TCP_DEBUG
 	ostate = tp->t_state;
@@ -528,7 +507,7 @@ tcp_timer_keep(void *arg)
 	 * or drop connection if idle for too long.
 	 */
 
-	tcpstat.tcps_keeptimeo++;
+	TCP_STATINC(TCP_STAT_KEEPTIMEO);
 	if (TCPS_HAVEESTABLISHED(tp->t_state) == 0)
 		goto dropit;
 #ifdef INET
@@ -542,9 +521,9 @@ tcp_timer_keep(void *arg)
 	KASSERT(so != NULL);
 	if (so->so_options & SO_KEEPALIVE &&
 	    tp->t_state <= TCPS_CLOSE_WAIT) {
-	    	if ((tcp_maxidle > 0) &&
+	    	if ((tp->t_maxidle > 0) &&
 		    ((tcp_now - tp->t_rcvtime) >=
-		     tcp_keepidle + tcp_maxidle))
+		     tp->t_keepidle + tp->t_maxidle))
 			goto dropit;
 		/*
 		 * Send a packet designed to force a response
@@ -558,7 +537,7 @@ tcp_timer_keep(void *arg)
 		 * by the protocol spec, this requires the
 		 * correspondent TCP to respond.
 		 */
-		tcpstat.tcps_keepprobe++;
+		TCP_STATINC(TCP_STAT_KEEPPROBE);
 		if (tcp_compat_42) {
 			/*
 			 * The keepalive packet must have nonzero
@@ -572,38 +551,38 @@ tcp_timer_keep(void *arg)
 			    (struct mbuf *)NULL, NULL, tp->rcv_nxt,
 			    tp->snd_una - 1, 0);
 		}
-		TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepintvl);
+		TCP_TIMER_ARM(tp, TCPT_KEEP, tp->t_keepintvl);
 	} else
-		TCP_TIMER_ARM(tp, TCPT_KEEP, tcp_keepidle);
+		TCP_TIMER_ARM(tp, TCPT_KEEP, tp->t_keepidle);
 
 #ifdef TCP_DEBUG
 	if (tp && so->so_options & SO_DEBUG)
 		tcp_trace(TA_USER, ostate, tp, NULL,
 		    PRU_SLOWTIMO | (TCPT_KEEP << 8));
 #endif
-	splx(s);
+	KERNEL_UNLOCK_ONE(NULL);
+	mutex_exit(softnet_lock);
 	return;
 
  dropit:
-	tcpstat.tcps_keepdrops++;
+	TCP_STATINC(TCP_STAT_KEEPDROPS);
 	(void) tcp_drop(tp, ETIMEDOUT);
-	splx(s);
+	KERNEL_UNLOCK_ONE(NULL);
+	mutex_exit(softnet_lock);
 }
 
 void
 tcp_timer_2msl(void *arg)
 {
 	struct tcpcb *tp = arg;
-	int s;
 #ifdef TCP_DEBUG
 	struct socket *so = NULL;
 	short ostate;
 #endif
 
-	s = splsoftnet();
-	callout_ack(&tp->t_timer[TCPT_2MSL]);
-	if (tcp_isdead(tp)) {
-		splx(s);
+	mutex_enter(softnet_lock);
+	if ((tp->t_flags & TF_DEAD) != 0) {
+		mutex_exit(softnet_lock);
 		return;
 	}
 
@@ -611,6 +590,7 @@ tcp_timer_2msl(void *arg)
 	 * 2 MSL timeout went off, clear the SACK scoreboard, reset
 	 * the FACK estimate.
 	 */
+	KERNEL_LOCK(1, NULL);
 	tcp_free_sackholes(tp);
 	tp->snd_fack = tp->snd_una;
 
@@ -634,8 +614,9 @@ tcp_timer_2msl(void *arg)
 	 * control block.  Otherwise, check again in a bit.
 	 */
 	if (tp->t_state != TCPS_TIME_WAIT &&
-	    ((tcp_maxidle == 0) || ((tcp_now - tp->t_rcvtime) <= tcp_maxidle)))
-		TCP_TIMER_ARM(tp, TCPT_2MSL, tcp_keepintvl);
+	    ((tp->t_maxidle == 0) ||
+	    ((tcp_now - tp->t_rcvtime) <= tp->t_maxidle)))
+	    TCP_TIMER_ARM(tp, TCPT_2MSL, tp->t_keepintvl);
 	else
 		tp = tcp_close(tp);
 
@@ -644,5 +625,6 @@ tcp_timer_2msl(void *arg)
 		tcp_trace(TA_USER, ostate, tp, NULL,
 		    PRU_SLOWTIMO | (TCPT_2MSL << 8));
 #endif
-	splx(s);
+	mutex_exit(softnet_lock);
+	KERNEL_UNLOCK_ONE(NULL);
 }

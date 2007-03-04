@@ -1,4 +1,4 @@
-/* $NetBSD: lkminit_vfs.c,v 1.4 2005/12/11 12:24:49 christos Exp $ */
+/* $NetBSD: lkminit_vfs.c,v 1.7 2008/06/28 15:50:20 rumble Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lkminit_vfs.c,v 1.4 2005/12/11 12:24:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lkminit_vfs.c,v 1.7 2008/06/28 15:50:20 rumble Exp $");
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
@@ -53,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: lkminit_vfs.c,v 1.4 2005/12/11 12:24:49 christos Exp
 #include <fs/cd9660/iso.h>
 #include <fs/cd9660/cd9660_extern.h>
 
-int cd9660_lkmentry __P((struct lkm_table *, int, int));
+int cd9660_lkmentry(struct lkm_table *, int, int);
 
 /*
  * This is the vfsops table for the file system in question
@@ -68,8 +61,8 @@ MOD_VFS("cd9660", -1, &cd9660_vfsops);
 /*
  * take care of fs specific sysctl nodes
  */
-static int load __P((struct lkm_table *, int));
-static int unload __P((struct lkm_table *, int));
+static int load(struct lkm_table *, int);
+static int unload(struct lkm_table *, int);
 static struct sysctllog *_cd9660_log;
 
 /*
@@ -91,7 +84,26 @@ load(lkmtp, cmd)
 	int cmd;
 {
 
-	sysctl_vfs_cd9660_setup(&_cd9660_log);
+	sysctl_createv(&_cd9660_log, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT, CTLTYPE_NODE, "vfs", NULL,
+		       NULL, 0, NULL, 0,
+		       CTL_VFS, CTL_EOL);
+	sysctl_createv(&_cd9660_log, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT, CTLTYPE_NODE, "cd9660",
+		       SYSCTL_DESCR("ISO-9660 file system"),
+		       NULL, 0, NULL, 0,
+		       CTL_VFS, 14, CTL_EOL);
+	sysctl_createv(&_cd9660_log, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "utf8_joliet",
+		       SYSCTL_DESCR("Encode Joliet filenames to UTF-8"),
+		       NULL, 0, &cd9660_utf8_joliet, 0,
+		       CTL_VFS, 14, CD9660_UTF8_JOLIET, CTL_EOL);
+	/*
+	 * XXX the "14" above could be dynamic, thereby eliminating
+	 * one more instance of the "number to vfs" mapping problem,
+	 * but "14" is the order as taken from sys/mount.h
+	 */
 	return (0);
 }
 

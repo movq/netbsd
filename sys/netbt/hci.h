@@ -1,4 +1,4 @@
-/*	$NetBSD: hci.h,v 1.9 2007/02/20 16:53:21 kiyohara Exp $	*/
+/*	$NetBSD: hci.h,v 1.28 2008/09/08 23:36:55 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -54,14 +54,14 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: hci.h,v 1.9 2007/02/20 16:53:21 kiyohara Exp $
+ * $Id: hci.h,v 1.28 2008/09/08 23:36:55 gmcgarry Exp $
  * $FreeBSD: src/sys/netgraph/bluetooth/include/ng_hci.h,v 1.6 2005/01/07 01:45:43 imp Exp $
  */
 
 /*
  * This file contains everything that applications need to know from
  * Host Controller Interface (HCI). Information taken from Bluetooth
- * Core Specifications (v1.1 and v2.0)
+ * Core Specifications (v1.1, v2.0 and v2.1)
  *
  * This file can be included by both kernel and userland applications.
  *
@@ -90,13 +90,15 @@
 #define HCI_FEATURES_SIZE		8   /* LMP features */
 #define HCI_UNIT_NAME_SIZE		248 /* unit name size */
 #define HCI_DEVNAME_SIZE		16  /* same as dv_xname */
+#define HCI_COMMANDS_SIZE		64  /* supported commands mask */
 
 /* HCI specification */
 #define HCI_SPEC_V10			0x00 /* v1.0 */
 #define HCI_SPEC_V11			0x01 /* v1.1 */
 #define HCI_SPEC_V12			0x02 /* v1.2 */
 #define HCI_SPEC_V20			0x03 /* v2.0 */
-/* 0x02 - 0xFF - reserved for future use */
+#define HCI_SPEC_V21			0x04 /* v2.1 */
+/* 0x05 - 0xFF - reserved for future use */
 
 /* LMP features (and page 0 of extended features) */
 /* ------------------- byte 0 --------------------*/
@@ -146,16 +148,25 @@
 #define HCI_LMP_3SLOT_EDR_ACL		0x80
 /* ------------------- byte 5 --------------------*/
 #define HCI_LMP_5SLOT_EDR_ACL		0x01
-/* reserved				0x02 */
-/* reserved				0x04 */
+#define HCI_LMP_SNIFF_SUBRATING		0x02
+#define HCI_LMP_PAUSE_ENCRYPTION	0x04
 #define HCI_LMP_AFH_CAPABLE_MASTER	0x08
 #define HCI_LMP_AFH_CLASS_MASTER	0x10
 #define HCI_LMP_EDR_eSCO_2MBPS		0x20
 #define HCI_LMP_EDR_eSCO_3MBPS		0x40
 #define HCI_LMP_3SLOT_EDR_eSCO		0x80
 /* ------------------- byte 6 --------------------*/
-/* reserved					  */
+#define HCI_LMP_EXTENDED_INQUIRY	0x01
+/* reserved				0x02 */
+/* reserved				0x04 */
+#define HCI_LMP_SIMPLE_PAIRING		0x08
+#define HCI_LMP_ENCAPSULATED_PDU	0x10
+#define HCI_LMP_ERRDATA_REPORTING	0x20
+#define HCI_LMP_NOFLUSH_PB_FLAG		0x40
+/* reserved				0x80 */
 /* ------------------- byte 7 --------------------*/
+#define HCI_LMP_LINK_SUPERVISION_TO	0x01
+#define HCI_LMP_INQ_RSP_TX_POWER	0x02
 #define HCI_LMP_EXTENDED_FEATURES	0x80
 
 /* Link types */
@@ -391,7 +402,7 @@ typedef struct {
 	uint8_t		type;	/* MUST be 0x01 */
 	uint16_t	opcode; /* OpCode */
 	uint8_t		length; /* parameter(s) length in bytes */
-} __attribute__ ((__packed__)) hci_cmd_hdr_t;
+} __packed hci_cmd_hdr_t;
 
 #define HCI_CMD_PKT			0x01
 #define HCI_CMD_PKT_SIZE		(sizeof(hci_cmd_hdr_t) + 0xff)
@@ -401,7 +412,7 @@ typedef struct {
 	uint8_t		type;	     /* MUST be 0x02 */
 	uint16_t	con_handle;  /* connection handle + PB + BC flags */
 	uint16_t	length;      /* payload length in bytes */
-} __attribute__ ((__packed__)) hci_acldata_hdr_t;
+} __packed hci_acldata_hdr_t;
 
 #define HCI_ACL_DATA_PKT		0x02
 #define HCI_ACL_PKT_SIZE		(sizeof(hci_acldata_hdr_t) + 0xffff)
@@ -411,7 +422,7 @@ typedef struct {
 	uint8_t		type;	    /* MUST be 0x03 */
 	uint16_t	con_handle; /* connection handle + reserved bits */
 	uint8_t		length;     /* payload length in bytes */
-} __attribute__ ((__packed__)) hci_scodata_hdr_t;
+} __packed hci_scodata_hdr_t;
 
 #define HCI_SCO_DATA_PKT		0x03
 #define HCI_SCO_PKT_SIZE		(sizeof(hci_scodata_hdr_t) + 0xff)
@@ -421,7 +432,7 @@ typedef struct {
 	uint8_t		type;	/* MUST be 0x04 */
 	uint8_t		event;  /* event */
 	uint8_t		length; /* parameter(s) length in bytes */
-} __attribute__ ((__packed__)) hci_event_hdr_t;
+} __packed hci_event_hdr_t;
 
 #define HCI_EVENT_PKT			0x04
 #define HCI_EVENT_PKT_SIZE		(sizeof(hci_event_hdr_t) + 0xff)
@@ -429,7 +440,7 @@ typedef struct {
 /* HCI status return parameter */
 typedef struct {
 	uint8_t		status; /* 0x00 - success */
-} __attribute__ ((__packed__)) hci_status_rp;
+} __packed hci_status_rp;
 
 /**************************************************************************
  **************************************************************************
@@ -445,7 +456,7 @@ typedef struct {
 	uint8_t		lap[HCI_LAP_SIZE]; /* LAP */
 	uint8_t		inquiry_length;    /* (N x 1.28) sec */
 	uint8_t		num_responses;     /* Max. # of responses */
-} __attribute__ ((__packed__)) hci_inquiry_cp;
+} __packed hci_inquiry_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_INQUIRY_CANCEL				0x0002
@@ -461,7 +472,7 @@ typedef struct {
 	uint8_t		lap[HCI_LAP_SIZE]; /* LAP */
 	uint8_t		inquiry_length;    /* (inquiry_length * 1.28) sec */
 	uint8_t		num_responses;     /* Max. # of responses */
-} __attribute__ ((__packed__)) hci_periodic_inquiry_cp;
+} __packed hci_periodic_inquiry_cp;
 
 typedef hci_status_rp	hci_periodic_inquiry_rp;
 
@@ -479,7 +490,7 @@ typedef struct {
 	uint8_t		page_scan_mode;     /* reserved - set to 0x00 */
 	uint16_t	clock_offset;       /* clock offset */
 	uint8_t		accept_role_switch; /* accept role switch? 0x00 == No */
-} __attribute__ ((__packed__)) hci_create_con_cp;
+} __packed hci_create_con_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_DISCONNECT				0x0006
@@ -487,7 +498,7 @@ typedef struct {
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
 	uint8_t		reason;     /* reason to disconnect */
-} __attribute__ ((__packed__)) hci_discon_cp;
+} __packed hci_discon_cp;
 /* No return parameter(s) */
 
 /* Add SCO Connection is deprecated */
@@ -496,26 +507,26 @@ typedef struct {
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
 	uint16_t	pkt_type;   /* packet type */
-} __attribute__ ((__packed__)) hci_add_sco_con_cp;
+} __packed hci_add_sco_con_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_CREATE_CON_CANCEL			0x0008
 #define HCI_CMD_CREATE_CON_CANCEL			0x0408
 typedef struct {
 	bdaddr_t	bdaddr;		/* destination address */
-} __attribute__ ((__packed__)) hci_create_con_cancel_cp;
+} __packed hci_create_con_cancel_cp;
 
 typedef struct {
 	uint8_t		status;		/* 0x00 - success */
 	bdaddr_t	bdaddr;		/* destination address */
-} __attribute__ ((__packed__)) hci_create_con_cancel_rp;
+} __packed hci_create_con_cancel_rp;
 
 #define HCI_OCF_ACCEPT_CON				0x0009
 #define HCI_CMD_ACCEPT_CON				0x0409
 typedef struct {
 	bdaddr_t	bdaddr; /* address of unit to be connected */
 	uint8_t		role;   /* connection role */
-} __attribute__ ((__packed__)) hci_accept_con_cp;
+} __packed hci_accept_con_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_REJECT_CON				0x000a
@@ -523,7 +534,7 @@ typedef struct {
 typedef struct {
 	bdaddr_t	bdaddr; /* remote address */
 	uint8_t		reason; /* reason to reject */
-} __attribute__ ((__packed__)) hci_reject_con_cp;
+} __packed hci_reject_con_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_LINK_KEY_REP				0x000b
@@ -531,23 +542,23 @@ typedef struct {
 typedef struct {
 	bdaddr_t	bdaddr;            /* remote address */
 	uint8_t		key[HCI_KEY_SIZE]; /* key */
-} __attribute__ ((__packed__)) hci_link_key_rep_cp;
+} __packed hci_link_key_rep_cp;
 
 typedef struct {
 	uint8_t		status; /* 0x00 - success */
 	bdaddr_t	bdaddr; /* unit address */
-} __attribute__ ((__packed__)) hci_link_key_rep_rp;
+} __packed hci_link_key_rep_rp;
 
 #define HCI_OCF_LINK_KEY_NEG_REP			0x000c
 #define HCI_CMD_LINK_KEY_NEG_REP			0x040C
 typedef struct {
 	bdaddr_t	bdaddr; /* remote address */
-} __attribute__ ((__packed__)) hci_link_key_neg_rep_cp;
+} __packed hci_link_key_neg_rep_cp;
 
 typedef struct {
 	uint8_t		status; /* 0x00 - success */
 	bdaddr_t	bdaddr; /* unit address */
-} __attribute__ ((__packed__)) hci_link_key_neg_rep_rp;
+} __packed hci_link_key_neg_rep_rp;
 
 #define HCI_OCF_PIN_CODE_REP				0x000d
 #define HCI_CMD_PIN_CODE_REP				0x040D
@@ -555,37 +566,37 @@ typedef struct {
 	bdaddr_t	bdaddr;               /* remote address */
 	uint8_t		pin_size;             /* pin code length (in bytes) */
 	uint8_t		pin[HCI_PIN_SIZE];    /* pin code */
-} __attribute__ ((__packed__)) hci_pin_code_rep_cp;
+} __packed hci_pin_code_rep_cp;
 
 typedef struct {
 	uint8_t		status; /* 0x00 - success */
 	bdaddr_t	bdaddr; /* unit address */
-} __attribute__ ((__packed__)) hci_pin_code_rep_rp;
+} __packed hci_pin_code_rep_rp;
 
 #define HCI_OCF_PIN_CODE_NEG_REP			0x000e
 #define HCI_CMD_PIN_CODE_NEG_REP			0x040E
 typedef struct {
 	bdaddr_t	bdaddr; /* remote address */
-} __attribute__ ((__packed__)) hci_pin_code_neg_rep_cp;
+} __packed hci_pin_code_neg_rep_cp;
 
 typedef struct {
 	uint8_t		status; /* 0x00 - success */
 	bdaddr_t	bdaddr; /* unit address */
-} __attribute__ ((__packed__)) hci_pin_code_neg_rep_rp;
+} __packed hci_pin_code_neg_rep_rp;
 
 #define HCI_OCF_CHANGE_CON_PACKET_TYPE			0x000f
 #define HCI_CMD_CHANGE_CON_PACKET_TYPE			0x040F
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
 	uint16_t	pkt_type;   /* packet type */
-} __attribute__ ((__packed__)) hci_change_con_pkt_type_cp;
+} __packed hci_change_con_pkt_type_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_AUTH_REQ				0x0011
 #define HCI_CMD_AUTH_REQ				0x0411
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_auth_req_cp;
+} __packed hci_auth_req_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_SET_CON_ENCRYPTION			0x0013
@@ -593,21 +604,21 @@ typedef struct {
 typedef struct {
 	uint16_t	con_handle;        /* connection handle */
 	uint8_t		encryption_enable; /* 0x00 - disable, 0x01 - enable */
-} __attribute__ ((__packed__)) hci_set_con_encryption_cp;
+} __packed hci_set_con_encryption_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_CHANGE_CON_LINK_KEY			0x0015
 #define HCI_CMD_CHANGE_CON_LINK_KEY			0x0415
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_change_con_link_key_cp;
+} __packed hci_change_con_link_key_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_MASTER_LINK_KEY				0x0017
 #define HCI_CMD_MASTER_LINK_KEY				0x0417
 typedef struct {
 	uint8_t		key_flag; /* key flag */
-} __attribute__ ((__packed__)) hci_master_link_key_cp;
+} __packed hci_master_link_key_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_REMOTE_NAME_REQ				0x0019
@@ -617,25 +628,25 @@ typedef struct {
 	uint8_t		page_scan_rep_mode; /* page scan repetition mode */
 	uint8_t		page_scan_mode;     /* page scan mode */
 	uint16_t	clock_offset;       /* clock offset */
-} __attribute__ ((__packed__)) hci_remote_name_req_cp;
+} __packed hci_remote_name_req_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_REMOTE_NAME_REQ_CANCEL			0x001a
 #define HCI_CMD_REMOTE_NAME_REQ_CANCEL			0x041A
 typedef struct {
 	bdaddr_t	bdaddr;             /* remote address */
-} __attribute__ ((__packed__)) hci_remote_name_req_cancel_cp;
+} __packed hci_remote_name_req_cancel_cp;
 
 typedef struct {
 	uint8_t		status;		/* 0x00 - success */
 	bdaddr_t	bdaddr;         /* remote address */
-} __attribute__ ((__packed__)) hci_remote_name_req_cancel_rp;
+} __packed hci_remote_name_req_cancel_rp;
 
 #define HCI_OCF_READ_REMOTE_FEATURES			0x001b
 #define HCI_CMD_READ_REMOTE_FEATURES			0x041B
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_read_remote_features_cp;
+} __packed hci_read_remote_features_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_READ_REMOTE_EXTENDED_FEATURES		0x001c
@@ -643,35 +654,35 @@ typedef struct {
 typedef struct {
 	uint16_t	con_handle;	/* connection handle */
 	uint8_t		page;		/* page number */
-} __attribute__ ((__packed__)) hci_read_remote_extended_features_cp;
+} __packed hci_read_remote_extended_features_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_READ_REMOTE_VER_INFO			0x001d
 #define HCI_CMD_READ_REMOTE_VER_INFO			0x041D
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_read_remote_ver_info_cp;
+} __packed hci_read_remote_ver_info_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_READ_CLOCK_OFFSET			0x001f
 #define HCI_CMD_READ_CLOCK_OFFSET			0x041F
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_read_clock_offset_cp;
+} __packed hci_read_clock_offset_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_READ_LMP_HANDLE				0x0020
 #define HCI_CMD_READ_LMP_HANDLE				0x0420
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_read_lmp_handle_cp;
+} __packed hci_read_lmp_handle_cp;
 
 typedef struct {
 	uint8_t		status;	    /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
 	uint8_t		lmp_handle; /* LMP handle */
 	uint32_t	reserved;   /* reserved */
-} __attribute__ ((__packed__)) hci_read_lmp_handle_rp;
+} __packed hci_read_lmp_handle_rp;
 
 #define HCI_OCF_SETUP_SCO_CON				0x0028
 #define HCI_CMD_SETUP_SCO_CON				0x0428
@@ -683,7 +694,7 @@ typedef struct {
 	uint16_t	voice;		/* voice setting */
 	uint8_t		rt_effort;	/* retransmission effort */
 	uint16_t	pkt_type;	/* packet types */
-} __attribute__ ((__packed__)) hci_setup_sco_con_cp;
+} __packed hci_setup_sco_con_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_ACCEPT_SCO_CON_REQ			0x0029
@@ -696,7 +707,7 @@ typedef struct {
 	uint16_t	content;	/* voice setting */
 	uint8_t		rt_effort;	/* retransmission effort */
 	uint16_t	pkt_type;	/* packet types */
-} __attribute__ ((__packed__)) hci_accept_sco_con_req_cp;
+} __packed hci_accept_sco_con_req_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_REJECT_SCO_CON_REQ			0x002a
@@ -704,8 +715,103 @@ typedef struct {
 typedef struct {
 	bdaddr_t	bdaddr;		/* remote address */
 	uint8_t		reason;		/* reject error code */
-} __attribute__ ((__packed__)) hci_reject_sco_con_req_cp;
+} __packed hci_reject_sco_con_req_cp;
 /* No return parameter(s) */
+
+#define HCI_OCF_IO_CAPABILITY_REP			0x002b
+#define HCI_CMD_IO_CAPABILITY_REP			0x042a
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote address */
+	uint8_t		io_cap;		/* IO capability */
+	uint8_t		oob_data;	/* OOB data present */
+	uint8_t		auth_req;	/* auth requirements */
+} __packed hci_io_capability_rep_cp;
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	bdaddr_t	bdaddr;		/* remote address */
+} __packed hci_io_capability_rep_rp;
+
+#define HCI_OCF_USER_CONFIRM_REP			0x002c
+#define HCI_CMD_USER_CONFIRM_REP			0x042c
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote address */
+} __packed hci_user_confirm_rep_cp;
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	bdaddr_t	bdaddr;		/* remote address */
+} __packed hci_user_confirm_rep_rp;
+
+#define HCI_OCF_USER_CONFIRM_NEG_REP			0x002d
+#define HCI_CMD_USER_CONFIRM_NEG_REP			0x042d
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote address */
+} __packed hci_user_confirm_neg_rep_cp;
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	bdaddr_t	bdaddr;		/* remote address */
+} __packed hci_user_confirm_neg_rep_rp;
+
+#define HCI_OCF_USER_PASSKEY_REP			0x002e
+#define HCI_CMD_USER_PASSKEY_REP			0x042e
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote address */
+	uint32_t	value;		/* 000000 - 999999 */
+} __packed hci_user_passkey_rep_cp;
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	bdaddr_t	bdaddr;		/* remote address */
+} __packed hci_user_passkey_rep_rp;
+
+#define HCI_OCF_USER_PASSKEY_NEG_REP			0x002f
+#define HCI_CMD_USER_PASSKEY_NEG_REP			0x042f
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote address */
+} __packed hci_user_passkey_neg_rep_cp;
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	bdaddr_t	bdaddr;		/* remote address */
+} __packed hci_user_passkey_neg_rep_rp;
+
+#define HCI_OCF_OOB_DATA_REP				0x0030
+#define HCI_CMD_OOB_DATA_REP				0x0430
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote address */
+	uint8_t		c[16];		/* pairing hash */
+	uint8_t		r[16];		/* pairing randomizer */
+} __packed hci_user_oob_data_rep_cp;
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	bdaddr_t	bdaddr;		/* remote address */
+} __packed hci_user_oob_data_rep_rp;
+
+#define HCI_OCF_OOB_DATA_NEG_REP			0x0033
+#define HCI_CMD_OOB_DATA_NEG_REP			0x0433
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote address */
+} __packed hci_user_oob_data_neg_rep_cp;
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	bdaddr_t	bdaddr;		/* remote address */
+} __packed hci_user_oob_data_neg_rep_rp;
+
+#define HCI_OCF_IO_CAPABILITY_NEG_REP			0x0034
+#define HCI_CMD_IO_CAPABILITY_NEG_REP			0x0434
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote address */
+	uint8_t		reason;		/* error code */
+} __packed hci_io_capability_neg_rep_cp;
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	bdaddr_t	bdaddr;		/* remote address */
+} __packed hci_io_capability_neg_rep_rp;
 
 /**************************************************************************
  **************************************************************************
@@ -721,7 +827,7 @@ typedef struct {
 	uint16_t	con_handle;   /* connection handle */
 	uint16_t	max_interval; /* (max_interval * 0.625) msec */
 	uint16_t	min_interval; /* (max_interval * 0.625) msec */
-} __attribute__ ((__packed__)) hci_hold_mode_cp;
+} __packed hci_hold_mode_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_SNIFF_MODE				0x0003
@@ -732,14 +838,14 @@ typedef struct {
 	uint16_t	min_interval; /* (max_interval * 0.625) msec */
 	uint16_t	attempt;      /* (2 * attempt - 1) * 0.625 msec */
 	uint16_t	timeout;      /* (2 * attempt - 1) * 0.625 msec */
-} __attribute__ ((__packed__)) hci_sniff_mode_cp;
+} __packed hci_sniff_mode_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_EXIT_SNIFF_MODE				0x0004
 #define HCI_CMD_EXIT_SNIFF_MODE				0x0804
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_exit_sniff_mode_cp;
+} __packed hci_exit_sniff_mode_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_PARK_MODE				0x0005
@@ -748,14 +854,14 @@ typedef struct {
 	uint16_t	con_handle;   /* connection handle */
 	uint16_t	max_interval; /* (max_interval * 0.625) msec */
 	uint16_t	min_interval; /* (max_interval * 0.625) msec */
-} __attribute__ ((__packed__)) hci_park_mode_cp;
+} __packed hci_park_mode_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_EXIT_PARK_MODE				0x0006
 #define HCI_CMD_EXIT_PARK_MODE				0x0806
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_exit_park_mode_cp;
+} __packed hci_exit_park_mode_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_QOS_SETUP				0x0007
@@ -768,52 +874,52 @@ typedef struct {
 	uint32_t	peak_bandwidth;  /* bytes per second */
 	uint32_t	latency;         /* microseconds */
 	uint32_t	delay_variation; /* microseconds */
-} __attribute__ ((__packed__)) hci_qos_setup_cp;
+} __packed hci_qos_setup_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_ROLE_DISCOVERY				0x0009
 #define HCI_CMD_ROLE_DISCOVERY				0x0809
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_role_discovery_cp;
+} __packed hci_role_discovery_cp;
 
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
 	uint8_t		role;       /* role for the connection handle */
-} __attribute__ ((__packed__)) hci_role_discovery_rp;
+} __packed hci_role_discovery_rp;
 
 #define HCI_OCF_SWITCH_ROLE				0x000b
 #define HCI_CMD_SWITCH_ROLE				0x080B
 typedef struct {
 	bdaddr_t	bdaddr; /* remote address */
 	uint8_t		role;   /* new local role */
-} __attribute__ ((__packed__)) hci_switch_role_cp;
+} __packed hci_switch_role_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_READ_LINK_POLICY_SETTINGS		0x000c
 #define HCI_CMD_READ_LINK_POLICY_SETTINGS		0x080C
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_read_link_policy_settings_cp;
+} __packed hci_read_link_policy_settings_cp;
 
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
 	uint16_t	settings;   /* link policy settings */
-} __attribute__ ((__packed__)) hci_read_link_policy_settings_rp;
+} __packed hci_read_link_policy_settings_rp;
 
 #define HCI_OCF_WRITE_LINK_POLICY_SETTINGS		0x000d
 #define HCI_CMD_WRITE_LINK_POLICY_SETTINGS		0x080D
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
 	uint16_t	settings;   /* link policy settings */
-} __attribute__ ((__packed__)) hci_write_link_policy_settings_cp;
+} __packed hci_write_link_policy_settings_cp;
 
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_write_link_policy_settings_rp;
+} __packed hci_write_link_policy_settings_rp;
 
 #define HCI_OCF_READ_DEFAULT_LINK_POLICY_SETTINGS	0x000e
 #define HCI_CMD_READ_DEFAULT_LINK_POLICY_SETTINGS	0x080E
@@ -821,13 +927,13 @@ typedef struct {
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	settings;   /* link policy settings */
-} __attribute__ ((__packed__)) hci_read_default_link_policy_settings_rp;
+} __packed hci_read_default_link_policy_settings_rp;
 
 #define HCI_OCF_WRITE_DEFAULT_LINK_POLICY_SETTINGS	0x000f
 #define HCI_CMD_WRITE_DEFAULT_LINK_POLICY_SETTINGS	0x080F
 typedef struct {
 	uint16_t	settings;   /* link policy settings */
-} __attribute__ ((__packed__)) hci_write_default_link_policy_settings_cp;
+} __packed hci_write_default_link_policy_settings_cp;
 
 typedef hci_status_rp	hci_write_default_link_policy_settings_rp;
 
@@ -842,8 +948,22 @@ typedef struct {
 	uint32_t	token_bucket;
 	uint32_t	peak_bandwidth;
 	uint32_t	latency;
-} __attribute__ ((__packed__)) hci_flow_specification_cp;
+} __packed hci_flow_specification_cp;
 /* No return parameter(s) */
+
+#define HCI_OCF_SNIFF_SUBRATING				0x0011
+#define HCI_CMD_SNIFF_SUBRATING				0x0810
+typedef struct {
+	uint16_t	con_handle;	/* connection handle */
+	uint16_t	max_latency;
+	uint16_t	max_timeout;	/* max remote timeout */
+	uint16_t	min_timeout;	/* min local timeout */
+} __packed hci_sniff_subrating_cp;
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	uint16_t	con_handle;	/* connection handle */
+} __packed hci_sniff_subrating_rp;
 
 /**************************************************************************
  **************************************************************************
@@ -857,7 +977,7 @@ typedef struct {
 #define HCI_CMD_SET_EVENT_MASK				0x0C01
 typedef struct {
 	uint8_t		event_mask[HCI_EVENT_MASK_SIZE]; /* event_mask */
-} __attribute__ ((__packed__)) hci_set_event_mask_cp;
+} __packed hci_set_event_mask_cp;
 
 typedef hci_status_rp	hci_set_event_mask_rp;
 
@@ -873,7 +993,7 @@ typedef struct {
 	uint8_t		filter_condition_type; /* filter condition type */
 /* variable size condition
 	uint8_t		condition[]; -- conditions */
-} __attribute__ ((__packed__)) hci_set_event_filter_cp;
+} __packed hci_set_event_filter_cp;
 
 typedef hci_status_rp	hci_set_event_filter_rp;
 
@@ -881,12 +1001,12 @@ typedef hci_status_rp	hci_set_event_filter_rp;
 #define HCI_CMD_FLUSH					0x0C08
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_flush_cp;
+} __packed hci_flush_cp;
 
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_flush_rp;
+} __packed hci_flush_rp;
 
 #define HCI_OCF_READ_PIN_TYPE				0x0009
 #define HCI_CMD_READ_PIN_TYPE				0x0C09
@@ -894,13 +1014,13 @@ typedef struct {
 typedef struct {
 	uint8_t		status;   /* 0x00 - success */
 	uint8_t		pin_type; /* PIN type */
-} __attribute__ ((__packed__)) hci_read_pin_type_rp;
+} __packed hci_read_pin_type_rp;
 
 #define HCI_OCF_WRITE_PIN_TYPE				0x000a
 #define HCI_CMD_WRITE_PIN_TYPE				0x0C0A
 typedef struct {
 	uint8_t		pin_type; /* PIN type */
-} __attribute__ ((__packed__)) hci_write_pin_type_cp;
+} __packed hci_write_pin_type_cp;
 
 typedef hci_status_rp	hci_write_pin_type_rp;
 
@@ -914,13 +1034,13 @@ typedef hci_status_rp	hci_create_new_unit_key_rp;
 typedef struct {
 	bdaddr_t	bdaddr;   /* address */
 	uint8_t		read_all; /* read all keys? 0x01 - yes */
-} __attribute__ ((__packed__)) hci_read_stored_link_key_cp;
+} __packed hci_read_stored_link_key_cp;
 
 typedef struct {
 	uint8_t		status;        /* 0x00 - success */
 	uint16_t	max_num_keys;  /* Max. number of keys */
 	uint16_t	num_keys_read; /* Number of stored keys */
-} __attribute__ ((__packed__)) hci_read_stored_link_key_rp;
+} __packed hci_read_stored_link_key_rp;
 
 #define HCI_OCF_WRITE_STORED_LINK_KEY			0x0011
 #define HCI_CMD_WRITE_STORED_LINK_KEY			0x0C11
@@ -929,30 +1049,30 @@ typedef struct {
 /* these are repeated "num_keys_write" times
 	bdaddr_t	bdaddr;             --- remote address(es)
 	uint8_t		key[HCI_KEY_SIZE];  --- key(s) */
-} __attribute__ ((__packed__)) hci_write_stored_link_key_cp;
+} __packed hci_write_stored_link_key_cp;
 
 typedef struct {
 	uint8_t		status;           /* 0x00 - success */
 	uint8_t		num_keys_written; /* # of keys successfully written */
-} __attribute__ ((__packed__)) hci_write_stored_link_key_rp;
+} __packed hci_write_stored_link_key_rp;
 
 #define HCI_OCF_DELETE_STORED_LINK_KEY			0x0012
 #define HCI_CMD_DELETE_STORED_LINK_KEY			0x0C12
 typedef struct {
 	bdaddr_t	bdaddr;     /* address */
 	uint8_t		delete_all; /* delete all keys? 0x01 - yes */
-} __attribute__ ((__packed__)) hci_delete_stored_link_key_cp;
+} __packed hci_delete_stored_link_key_cp;
 
 typedef struct {
 	uint8_t		status;           /* 0x00 - success */
 	uint16_t	num_keys_deleted; /* Number of keys deleted */
-} __attribute__ ((__packed__)) hci_delete_stored_link_key_rp;
+} __packed hci_delete_stored_link_key_rp;
 
 #define HCI_OCF_WRITE_LOCAL_NAME			0x0013
 #define HCI_CMD_WRITE_LOCAL_NAME			0x0C13
 typedef struct {
 	char		name[HCI_UNIT_NAME_SIZE]; /* new unit name */
-} __attribute__ ((__packed__)) hci_write_local_name_cp;
+} __packed hci_write_local_name_cp;
 
 typedef hci_status_rp	hci_write_local_name_rp;
 
@@ -962,7 +1082,7 @@ typedef hci_status_rp	hci_write_local_name_rp;
 typedef struct {
 	uint8_t		status;                   /* 0x00 - success */
 	char		name[HCI_UNIT_NAME_SIZE]; /* unit name */
-} __attribute__ ((__packed__)) hci_read_local_name_rp;
+} __packed hci_read_local_name_rp;
 
 #define HCI_OCF_READ_CON_ACCEPT_TIMEOUT			0x0015
 #define HCI_CMD_READ_CON_ACCEPT_TIMEOUT			0x0C15
@@ -970,13 +1090,13 @@ typedef struct {
 typedef struct {
 	uint8_t		status;  /* 0x00 - success */
 	uint16_t	timeout; /* (timeout * 0.625) msec */
-} __attribute__ ((__packed__)) hci_read_con_accept_timeout_rp;
+} __packed hci_read_con_accept_timeout_rp;
 
 #define HCI_OCF_WRITE_CON_ACCEPT_TIMEOUT		0x0016
 #define HCI_CMD_WRITE_CON_ACCEPT_TIMEOUT		0x0C16
 typedef struct {
 	uint16_t	timeout; /* (timeout * 0.625) msec */
-} __attribute__ ((__packed__)) hci_write_con_accept_timeout_cp;
+} __packed hci_write_con_accept_timeout_cp;
 
 typedef hci_status_rp	hci_write_con_accept_timeout_rp;
 
@@ -986,13 +1106,13 @@ typedef hci_status_rp	hci_write_con_accept_timeout_rp;
 typedef struct {
 	uint8_t		status;  /* 0x00 - success */
 	uint16_t	timeout; /* (timeout * 0.625) msec */
-} __attribute__ ((__packed__)) hci_read_page_timeout_rp;
+} __packed hci_read_page_timeout_rp;
 
 #define HCI_OCF_WRITE_PAGE_TIMEOUT			0x0018
 #define HCI_CMD_WRITE_PAGE_TIMEOUT			0x0C18
 typedef struct {
 	uint16_t	timeout; /* (timeout * 0.625) msec */
-} __attribute__ ((__packed__)) hci_write_page_timeout_cp;
+} __packed hci_write_page_timeout_cp;
 
 typedef hci_status_rp	hci_write_page_timeout_rp;
 
@@ -1002,13 +1122,13 @@ typedef hci_status_rp	hci_write_page_timeout_rp;
 typedef struct {
 	uint8_t		status;      /* 0x00 - success */
 	uint8_t		scan_enable; /* Scan enable */
-} __attribute__ ((__packed__)) hci_read_scan_enable_rp;
+} __packed hci_read_scan_enable_rp;
 
 #define HCI_OCF_WRITE_SCAN_ENABLE			0x001a
 #define HCI_CMD_WRITE_SCAN_ENABLE			0x0C1A
 typedef struct {
 	uint8_t		scan_enable; /* Scan enable */
-} __attribute__ ((__packed__)) hci_write_scan_enable_cp;
+} __packed hci_write_scan_enable_cp;
 
 typedef hci_status_rp	hci_write_scan_enable_rp;
 
@@ -1019,14 +1139,14 @@ typedef struct {
 	uint8_t		status;             /* 0x00 - success */
 	uint16_t	page_scan_interval; /* interval * 0.625 msec */
 	uint16_t	page_scan_window;   /* window * 0.625 msec */
-} __attribute__ ((__packed__)) hci_read_page_scan_activity_rp;
+} __packed hci_read_page_scan_activity_rp;
 
 #define HCI_OCF_WRITE_PAGE_SCAN_ACTIVITY		0x001c
 #define HCI_CMD_WRITE_PAGE_SCAN_ACTIVITY		0x0C1C
 typedef struct {
 	uint16_t	page_scan_interval; /* interval * 0.625 msec */
 	uint16_t	page_scan_window;   /* window * 0.625 msec */
-} __attribute__ ((__packed__)) hci_write_page_scan_activity_cp;
+} __packed hci_write_page_scan_activity_cp;
 
 typedef hci_status_rp	hci_write_page_scan_activity_rp;
 
@@ -1037,14 +1157,14 @@ typedef struct {
 	uint8_t		status;                /* 0x00 - success */
 	uint16_t	inquiry_scan_interval; /* interval * 0.625 msec */
 	uint16_t	inquiry_scan_window;   /* window * 0.625 msec */
-} __attribute__ ((__packed__)) hci_read_inquiry_scan_activity_rp;
+} __packed hci_read_inquiry_scan_activity_rp;
 
 #define HCI_OCF_WRITE_INQUIRY_SCAN_ACTIVITY		0x001e
 #define HCI_CMD_WRITE_INQUIRY_SCAN_ACTIVITY		0x0C1E
 typedef struct {
 	uint16_t	inquiry_scan_interval; /* interval * 0.625 msec */
 	uint16_t	inquiry_scan_window;   /* window * 0.625 msec */
-} __attribute__ ((__packed__)) hci_write_inquiry_scan_activity_cp;
+} __packed hci_write_inquiry_scan_activity_cp;
 
 typedef hci_status_rp	hci_write_inquiry_scan_activity_rp;
 
@@ -1054,29 +1174,31 @@ typedef hci_status_rp	hci_write_inquiry_scan_activity_rp;
 typedef struct {
 	uint8_t		status;      /* 0x00 - success */
 	uint8_t		auth_enable; /* 0x01 - enabled */
-} __attribute__ ((__packed__)) hci_read_auth_enable_rp;
+} __packed hci_read_auth_enable_rp;
 
 #define HCI_OCF_WRITE_AUTH_ENABLE			0x0020
 #define HCI_CMD_WRITE_AUTH_ENABLE			0x0C20
 typedef struct {
 	uint8_t		auth_enable; /* 0x01 - enabled */
-} __attribute__ ((__packed__)) hci_write_auth_enable_cp;
+} __packed hci_write_auth_enable_cp;
 
 typedef hci_status_rp	hci_write_auth_enable_rp;
 
+/* Read Encryption Mode is deprecated */
 #define HCI_OCF_READ_ENCRYPTION_MODE			0x0021
 #define HCI_CMD_READ_ENCRYPTION_MODE			0x0C21
 /* No command parameter(s) */
 typedef struct {
 	uint8_t		status;          /* 0x00 - success */
 	uint8_t		encryption_mode; /* encryption mode */
-} __attribute__ ((__packed__)) hci_read_encryption_mode_rp;
+} __packed hci_read_encryption_mode_rp;
 
+/* Write Encryption Mode is deprecated */
 #define HCI_OCF_WRITE_ENCRYPTION_MODE			0x0022
 #define HCI_CMD_WRITE_ENCRYPTION_MODE			0x0C22
 typedef struct {
 	uint8_t		encryption_mode; /* encryption mode */
-} __attribute__ ((__packed__)) hci_write_encryption_mode_cp;
+} __packed hci_write_encryption_mode_cp;
 
 typedef hci_status_rp	hci_write_encryption_mode_rp;
 
@@ -1086,13 +1208,13 @@ typedef hci_status_rp	hci_write_encryption_mode_rp;
 typedef struct {
 	uint8_t		status;                 /* 0x00 - success */
 	uint8_t		uclass[HCI_CLASS_SIZE]; /* unit class */
-} __attribute__ ((__packed__)) hci_read_unit_class_rp;
+} __packed hci_read_unit_class_rp;
 
 #define HCI_OCF_WRITE_UNIT_CLASS			0x0024
 #define HCI_CMD_WRITE_UNIT_CLASS			0x0C24
 typedef struct {
 	uint8_t		uclass[HCI_CLASS_SIZE]; /* unit class */
-} __attribute__ ((__packed__)) hci_write_unit_class_cp;
+} __packed hci_write_unit_class_cp;
 
 typedef hci_status_rp	hci_write_unit_class_rp;
 
@@ -1102,13 +1224,13 @@ typedef hci_status_rp	hci_write_unit_class_rp;
 typedef struct {
 	uint8_t		status;   /* 0x00 - success */
 	uint16_t	settings; /* voice settings */
-} __attribute__ ((__packed__)) hci_read_voice_setting_rp;
+} __packed hci_read_voice_setting_rp;
 
 #define HCI_OCF_WRITE_VOICE_SETTING			0x0026
 #define HCI_CMD_WRITE_VOICE_SETTING			0x0C26
 typedef struct {
 	uint16_t	settings; /* voice settings */
-} __attribute__ ((__packed__)) hci_write_voice_setting_cp;
+} __packed hci_write_voice_setting_cp;
 
 typedef hci_status_rp	hci_write_voice_setting_rp;
 
@@ -1116,25 +1238,25 @@ typedef hci_status_rp	hci_write_voice_setting_rp;
 #define HCI_CMD_READ_AUTO_FLUSH_TIMEOUT			0x0C27
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_read_auto_flush_timeout_cp;
+} __packed hci_read_auto_flush_timeout_cp;
 
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
 	uint16_t	timeout;    /* 0x00 - no flush, timeout * 0.625 msec */
-} __attribute__ ((__packed__)) hci_read_auto_flush_timeout_rp;
+} __packed hci_read_auto_flush_timeout_rp;
 
 #define HCI_OCF_WRITE_AUTO_FLUSH_TIMEOUT		0x0028
 #define HCI_CMD_WRITE_AUTO_FLUSH_TIMEOUT		0x0C28
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
 	uint16_t	timeout;    /* 0x00 - no flush, timeout * 0.625 msec */
-} __attribute__ ((__packed__)) hci_write_auto_flush_timeout_cp;
+} __packed hci_write_auto_flush_timeout_cp;
 
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_write_auto_flush_timeout_rp;
+} __packed hci_write_auto_flush_timeout_rp;
 
 #define HCI_OCF_READ_NUM_BROADCAST_RETRANS		0x0029
 #define HCI_CMD_READ_NUM_BROADCAST_RETRANS		0x0C29
@@ -1142,13 +1264,13 @@ typedef struct {
 typedef struct {
 	uint8_t		status;  /* 0x00 - success */
 	uint8_t		counter; /* number of broadcast retransmissions */
-} __attribute__ ((__packed__)) hci_read_num_broadcast_retrans_rp;
+} __packed hci_read_num_broadcast_retrans_rp;
 
 #define HCI_OCF_WRITE_NUM_BROADCAST_RETRANS		0x002a
 #define HCI_CMD_WRITE_NUM_BROADCAST_RETRANS		0x0C2A
 typedef struct {
 	uint8_t		counter; /* number of broadcast retransmissions */
-} __attribute__ ((__packed__)) hci_write_num_broadcast_retrans_cp;
+} __packed hci_write_num_broadcast_retrans_cp;
 
 typedef hci_status_rp	hci_write_num_broadcast_retrans_rp;
 
@@ -1158,13 +1280,13 @@ typedef hci_status_rp	hci_write_num_broadcast_retrans_rp;
 typedef struct {
 	uint8_t		status;             /* 0x00 - success */
 	uint8_t		hold_mode_activity; /* Hold mode activities */
-} __attribute__ ((__packed__)) hci_read_hold_mode_activity_rp;
+} __packed hci_read_hold_mode_activity_rp;
 
 #define HCI_OCF_WRITE_HOLD_MODE_ACTIVITY		0x002c
 #define HCI_CMD_WRITE_HOLD_MODE_ACTIVITY		0x0C2C
 typedef struct {
 	uint8_t		hold_mode_activity; /* Hold mode activities */
-} __attribute__ ((__packed__)) hci_write_hold_mode_activity_cp;
+} __packed hci_write_hold_mode_activity_cp;
 
 typedef hci_status_rp	hci_write_hold_mode_activity_rp;
 
@@ -1173,13 +1295,13 @@ typedef hci_status_rp	hci_write_hold_mode_activity_rp;
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
 	uint8_t		type;       /* Xmit level type */
-} __attribute__ ((__packed__)) hci_read_xmit_level_cp;
+} __packed hci_read_xmit_level_cp;
 
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
 	char		level;      /* -30 <= level <= 30 dBm */
-} __attribute__ ((__packed__)) hci_read_xmit_level_rp;
+} __packed hci_read_xmit_level_rp;
 
 #define HCI_OCF_READ_SCO_FLOW_CONTROL			0x002e
 #define HCI_CMD_READ_SCO_FLOW_CONTROL			0x0C2E
@@ -1187,13 +1309,13 @@ typedef struct {
 typedef struct {
 	uint8_t		status;       /* 0x00 - success */
 	uint8_t		flow_control; /* 0x00 - disabled */
-} __attribute__ ((__packed__)) hci_read_sco_flow_control_rp;
+} __packed hci_read_sco_flow_control_rp;
 
 #define HCI_OCF_WRITE_SCO_FLOW_CONTROL			0x002f
 #define HCI_CMD_WRITE_SCO_FLOW_CONTROL			0x0C2F
 typedef struct {
 	uint8_t		flow_control; /* 0x00 - disabled */
-} __attribute__ ((__packed__)) hci_write_sco_flow_control_cp;
+} __packed hci_write_sco_flow_control_cp;
 
 typedef hci_status_rp	hci_write_sco_flow_control_rp;
 
@@ -1201,7 +1323,7 @@ typedef hci_status_rp	hci_write_sco_flow_control_rp;
 #define HCI_CMD_HC2H_FLOW_CONTROL			0x0C31
 typedef struct {
 	uint8_t		hc2h_flow; /* Host Controller to Host flow control */
-} __attribute__ ((__packed__)) hci_hc2h_flow_control_cp;
+} __packed hci_hc2h_flow_control_cp;
 
 typedef hci_status_rp	hci_h2hc_flow_control_rp;
 
@@ -1212,7 +1334,7 @@ typedef struct {
 	uint8_t		max_sco_size; /* Max. size of SCO packet (bytes) */
 	uint16_t	num_acl_pkts;  /* Max. number of ACL packets */
 	uint16_t	num_sco_pkts;  /* Max. number of SCO packets */
-} __attribute__ ((__packed__)) hci_host_buffer_size_cp;
+} __packed hci_host_buffer_size_cp;
 
 typedef hci_status_rp	hci_host_buffer_size_rp;
 
@@ -1223,32 +1345,32 @@ typedef struct {
 /* these are repeated "num_con_handles" times
 	uint16_t	con_handle;    --- connection handle(s)
 	uint16_t	compl_pkts;    --- # of completed packets */
-} __attribute__ ((__packed__)) hci_host_num_compl_pkts_cp;
+} __packed hci_host_num_compl_pkts_cp;
 /* No return parameter(s) */
 
 #define HCI_OCF_READ_LINK_SUPERVISION_TIMEOUT		0x0036
 #define HCI_CMD_READ_LINK_SUPERVISION_TIMEOUT		0x0C36
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_read_link_supervision_timeout_cp;
+} __packed hci_read_link_supervision_timeout_cp;
 
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
 	uint16_t	timeout;    /* Link supervision timeout * 0.625 msec */
-} __attribute__ ((__packed__)) hci_read_link_supervision_timeout_rp;
+} __packed hci_read_link_supervision_timeout_rp;
 
 #define HCI_OCF_WRITE_LINK_SUPERVISION_TIMEOUT		0x0037
 #define HCI_CMD_WRITE_LINK_SUPERVISION_TIMEOUT		0x0C37
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
 	uint16_t	timeout;    /* Link supervision timeout * 0.625 msec */
-} __attribute__ ((__packed__)) hci_write_link_supervision_timeout_cp;
+} __packed hci_write_link_supervision_timeout_cp;
 
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_write_link_supervision_timeout_rp;
+} __packed hci_write_link_supervision_timeout_rp;
 
 #define HCI_OCF_READ_NUM_SUPPORTED_IAC			0x0038
 #define HCI_CMD_READ_NUM_SUPPORTED_IAC			0x0C38
@@ -1256,7 +1378,7 @@ typedef struct {
 typedef struct {
 	uint8_t		status;  /* 0x00 - success */
 	uint8_t		num_iac; /* # of supported IAC during scan */
-} __attribute__ ((__packed__)) hci_read_num_supported_iac_rp;
+} __packed hci_read_num_supported_iac_rp;
 
 #define HCI_OCF_READ_IAC_LAP				0x0039
 #define HCI_CMD_READ_IAC_LAP				0x0C39
@@ -1266,7 +1388,7 @@ typedef struct {
 	uint8_t		num_iac; /* # of IAC */
 /* these are repeated "num_iac" times
 	uint8_t		laps[HCI_LAP_SIZE]; --- LAPs */
-} __attribute__ ((__packed__)) hci_read_iac_lap_rp;
+} __packed hci_read_iac_lap_rp;
 
 #define HCI_OCF_WRITE_IAC_LAP				0x003a
 #define HCI_CMD_WRITE_IAC_LAP				0x0C3A
@@ -1274,23 +1396,25 @@ typedef struct {
 	uint8_t		num_iac; /* # of IAC */
 /* these are repeated "num_iac" times
 	uint8_t		laps[HCI_LAP_SIZE]; --- LAPs */
-} __attribute__ ((__packed__)) hci_write_iac_lap_cp;
+} __packed hci_write_iac_lap_cp;
 
 typedef hci_status_rp	hci_write_iac_lap_rp;
 
+/* Read Page Scan Period Mode is deprecated */
 #define HCI_OCF_READ_PAGE_SCAN_PERIOD			0x003b
 #define HCI_CMD_READ_PAGE_SCAN_PERIOD			0x0C3B
 /* No command parameter(s) */
 typedef struct {
 	uint8_t		status;                /* 0x00 - success */
 	uint8_t		page_scan_period_mode; /* Page scan period mode */
-} __attribute__ ((__packed__)) hci_read_page_scan_period_rp;
+} __packed hci_read_page_scan_period_rp;
 
+/* Write Page Scan Period Mode is deprecated */
 #define HCI_OCF_WRITE_PAGE_SCAN_PERIOD			0x003c
 #define HCI_CMD_WRITE_PAGE_SCAN_PERIOD			0x0C3C
 typedef struct {
 	uint8_t		page_scan_period_mode; /* Page scan period mode */
-} __attribute__ ((__packed__)) hci_write_page_scan_period_cp;
+} __packed hci_write_page_scan_period_cp;
 
 typedef hci_status_rp	hci_write_page_scan_period_rp;
 
@@ -1301,14 +1425,14 @@ typedef hci_status_rp	hci_write_page_scan_period_rp;
 typedef struct {
 	uint8_t		status;         /* 0x00 - success */
 	uint8_t		page_scan_mode; /* Page scan mode */
-} __attribute__ ((__packed__)) hci_read_page_scan_rp;
+} __packed hci_read_page_scan_rp;
 
 /* Write Page Scan Mode is deprecated */
 #define HCI_OCF_WRITE_PAGE_SCAN				0x003e
 #define HCI_CMD_WRITE_PAGE_SCAN				0x0C3E
 typedef struct {
 	uint8_t		page_scan_mode; /* Page scan mode */
-} __attribute__ ((__packed__)) hci_write_page_scan_cp;
+} __packed hci_write_page_scan_cp;
 
 typedef hci_status_rp	hci_write_page_scan_rp;
 
@@ -1316,7 +1440,7 @@ typedef hci_status_rp	hci_write_page_scan_rp;
 #define HCI_CMD_SET_AFH_CLASSIFICATION			0x0C3F
 typedef struct {
 	uint8_t		classification[10];
-} __attribute__ ((__packed__)) hci_set_afh_classification_cp;
+} __packed hci_set_afh_classification_cp;
 
 typedef hci_status_rp	hci_set_afh_classification_rp;
 
@@ -1327,13 +1451,13 @@ typedef hci_status_rp	hci_set_afh_classification_rp;
 typedef struct {
 	uint8_t		status;		/* 0x00 - success */
 	uint8_t		type;		/* inquiry scan type */
-} __attribute__ ((__packed__)) hci_read_inquiry_scan_type_rp;
+} __packed hci_read_inquiry_scan_type_rp;
 
 #define HCI_OCF_WRITE_INQUIRY_SCAN_TYPE			0x0043
 #define HCI_CMD_WRITE_INQUIRY_SCAN_TYPE			0x0C43
 typedef struct {
 	uint8_t		type;		/* inquiry scan type */
-} __attribute__ ((__packed__)) hci_write_inquiry_scan_type_cp;
+} __packed hci_write_inquiry_scan_type_cp;
 
 typedef hci_status_rp	hci_write_inquiry_scan_type_rp;
 
@@ -1344,13 +1468,13 @@ typedef hci_status_rp	hci_write_inquiry_scan_type_rp;
 typedef struct {
 	uint8_t		status;		/* 0x00 - success */
 	uint8_t		mode;		/* inquiry mode */
-} __attribute__ ((__packed__)) hci_read_inquiry_mode_rp;
+} __packed hci_read_inquiry_mode_rp;
 
 #define HCI_OCF_WRITE_INQUIRY_MODE			0x0045
 #define HCI_CMD_WRITE_INQUIRY_MODE			0x0C45
 typedef struct {
 	uint8_t		mode;		/* inquiry mode */
-} __attribute__ ((__packed__)) hci_write_inquiry_mode_cp;
+} __packed hci_write_inquiry_mode_cp;
 
 typedef hci_status_rp	hci_write_inquiry_mode_rp;
 
@@ -1361,13 +1485,13 @@ typedef hci_status_rp	hci_write_inquiry_mode_rp;
 typedef struct {
 	uint8_t		status;		/* 0x00 - success */
 	uint8_t		type;		/* page scan type */
-} __attribute__ ((__packed__)) hci_read_page_scan_type_rp;
+} __packed hci_read_page_scan_type_rp;
 
 #define HCI_OCF_WRITE_PAGE_SCAN_TYPE			0x0047
 #define HCI_CMD_WRITE_PAGE_SCAN_TYPE			0x0C47
 typedef struct {
 	uint8_t		type;		/* page scan type */
-} __attribute__ ((__packed__)) hci_write_page_scan_type_cp;
+} __packed hci_write_page_scan_type_cp;
 
 typedef hci_status_rp	hci_write_page_scan_type_rp;
 
@@ -1378,15 +1502,124 @@ typedef hci_status_rp	hci_write_page_scan_type_rp;
 typedef struct {
 	uint8_t		status;		/* 0x00 - success */
 	uint8_t		mode;		/* assessment mode */
-} __attribute__ ((__packed__)) hci_read_afh_assessment_rp;
+} __packed hci_read_afh_assessment_rp;
 
 #define HCI_OCF_WRITE_AFH_ASSESSMENT			0x0049
 #define HCI_CMD_WRITE_AFH_ASSESSMENT			0x0C49
 typedef struct {
 	uint8_t		mode;		/* assessment mode */
-} __attribute__ ((__packed__)) hci_write_afh_assessment_cp;
+} __packed hci_write_afh_assessment_cp;
 
 typedef hci_status_rp	hci_write_afh_assessment_rp;
+
+#define HCI_OCF_READ_EXTENDED_INQUIRY_RSP		0x0051
+#define HCI_CMD_READ_EXTENDED_INQUIRY_RSP		0x0C51
+/* No command parameter(s) */
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	uint8_t		fec_required;
+	uint8_t		response[240];
+} __packed hci_read_extended_inquiry_rsp_rp;
+
+#define HCI_OCF_WRITE_EXTENDED_INQUIRY_RSP		0x0052
+#define HCI_CMD_WRITE_EXTENDED_INQUIRY_RSP		0x0C52
+typedef struct {
+	uint8_t		fec_required;
+	uint8_t		response[240];
+} __packed hci_write_extended_inquiry_rsp_cp;
+
+typedef hci_status_rp	hci_write_extended_inquiry_rsp_rp;
+
+#define HCI_OCF_REFRESH_ENCRYPTION_KEY			0x0053
+#define HCI_CMD_REFRESH_ENCRYPTION_KEY			0x0C53
+typedef struct {
+	uint16_t	con_handle;	/* connection handle */
+} __packed hci_refresh_encryption_key_cp;
+
+typedef hci_status_rp	hci_refresh_encryption_key_rp;
+
+#define HCI_OCF_READ_SIMPLE_PAIRING_MODE		0x0055
+#define HCI_CMD_READ_SIMPLE_PAIRING_MODE		0x0C55
+/* No command parameter(s) */
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	uint8_t		mode;		/* simple pairing mode */
+} __packed hci_read_simple_pairing_mode_rp;
+
+#define HCI_OCF_WRITE_SIMPLE_PAIRING_MODE		0x0056
+#define HCI_CMD_WRITE_SIMPLE_PAIRING_MODE		0x0C56
+typedef struct {
+	uint8_t		mode;		/* simple pairing mode */
+} __packed hci_write_simple_pairing_mode_cp;
+
+typedef hci_status_rp	hci_write_simple_pairing_mode_rp;
+
+#define HCI_OCF_READ_LOCAL_OOB_DATA			0x0057
+#define HCI_CMD_READ_LOCAL_OOB_DATA			0x0C57
+/* No command parameter(s) */
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	uint8_t		c[16];		/* pairing hash */
+	uint8_t		r[16];		/* pairing randomizer */
+} __packed hci_read_local_oob_data_rp;
+
+#define HCI_OCF_READ_INQUIRY_RSP_XMIT_POWER		0x0058
+#define HCI_CMD_READ_INQUIRY_RSP_XMIT_POWER		0x0C58
+/* No command parameter(s) */
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	int8_t		power;		/* TX power */
+} __packed hci_read_inquiry_rsp_xmit_power_rp;
+
+#define HCI_OCF_WRITE_INQUIRY_RSP_XMIT_POWER		0x0059
+#define HCI_CMD_WRITE_INQUIRY_RSP_XMIT_POWER		0x0C59
+typedef struct {
+	int8_t		power;		/* TX power */
+} __packed hci_write_inquiry_rsp_xmit_power_cp;
+
+typedef hci_status_rp	hci_write_inquiry_rsp_xmit_power_rp;
+
+#define HCI_OCF_READ_DEFAULT_ERRDATA_REPORTING		0x005A
+#define HCI_CMD_READ_DEFAULT_ERRDATA_REPORTING		0x0C5A
+/* No command parameter(s) */
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	uint8_t		reporting;	/* erroneous data reporting */
+} __packed hci_read_default_errdata_reporting_rp;
+
+#define HCI_OCF_WRITE_DEFAULT_ERRDATA_REPORTING		0x005B
+#define HCI_CMD_WRITE_DEFAULT_ERRDATA_REPORTING		0x0C5B
+typedef struct {
+	uint8_t		reporting;	/* erroneous data reporting */
+} __packed hci_write_default_errdata_reporting_cp;
+
+typedef hci_status_rp	hci_write_default_errdata_reporting_rp;
+
+#define HCI_OCF_ENHANCED_FLUSH				0x005F
+#define HCI_CMD_ENHANCED_FLUSH				0x0C5F
+typedef struct {
+	uint16_t	con_handle;	/* connection handle */
+	uint8_t		packet_type;
+} __packed hci_enhanced_flush_cp;
+
+/* No response parameter(s) */
+
+#define HCI_OCF_SEND_KEYPRESS_NOTIFICATION		0x0060
+#define HCI_CMD_SEND_KEYPRESS_NOTIFICATION		0x0C60
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote address */
+	uint8_t		type;		/* notification type */
+} __packed hci_send_keypress_notification_cp;
+
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	bdaddr_t	bdaddr;		/* remote address */
+} __packed hci_send_keypress_notification_rp;
 
 /**************************************************************************
  **************************************************************************
@@ -1406,15 +1639,15 @@ typedef struct {
 	uint8_t		lmp_version;    /* LMP version */
 	uint16_t	manufacturer;   /* Hardware manufacturer name */
 	uint16_t	lmp_subversion; /* LMP sub-version */
-} __attribute__ ((__packed__)) hci_read_local_ver_rp;
+} __packed hci_read_local_ver_rp;
 
 #define HCI_OCF_READ_LOCAL_COMMANDS			0x0002
 #define HCI_CMD_READ_LOCAL_COMMANDS			0x1002
 /* No command parameter(s) */
 typedef struct {
 	uint8_t		status;		/* 0x00 - success */
-	uint8_t		commands[64];	/* opcode bitmask */
-} __attribute__ ((__packed__)) hci_read_local_commands_rp;
+	uint8_t		commands[HCI_COMMANDS_SIZE];	/* opcode bitmask */
+} __packed hci_read_local_commands_rp;
 
 #define HCI_OCF_READ_LOCAL_FEATURES			0x0003
 #define HCI_CMD_READ_LOCAL_FEATURES			0x1003
@@ -1422,20 +1655,20 @@ typedef struct {
 typedef struct {
 	uint8_t		status;                      /* 0x00 - success */
 	uint8_t		features[HCI_FEATURES_SIZE]; /* LMP features bitmsk*/
-} __attribute__ ((__packed__)) hci_read_local_features_rp;
+} __packed hci_read_local_features_rp;
 
 #define HCI_OCF_READ_LOCAL_EXTENDED_FEATURES		0x0004
 #define HCI_CMD_READ_LOCAL_EXTENDED_FEATURES		0x1004
 typedef struct {
 	uint8_t		page;		/* page number */
-} __attribute__ ((__packed__)) hci_read_local_extended_features_cp;
+} __packed hci_read_local_extended_features_cp;
 
 typedef struct {
 	uint8_t		status;		/* 0x00 - success */
 	uint8_t		page;		/* page number */
 	uint8_t		max_page;	/* maximum page number */
 	uint8_t		features[HCI_FEATURES_SIZE];	/* LMP features */
-} __attribute__ ((__packed__)) hci_read_local_extended_features_rp;
+} __packed hci_read_local_extended_features_rp;
 
 #define HCI_OCF_READ_BUFFER_SIZE			0x0005
 #define HCI_CMD_READ_BUFFER_SIZE			0x1005
@@ -1446,7 +1679,7 @@ typedef struct {
 	uint8_t		max_sco_size; /* Max. size of SCO packet (bytes) */
 	uint16_t	num_acl_pkts;  /* Max. number of ACL packets */
 	uint16_t	num_sco_pkts;  /* Max. number of SCO packets */
-} __attribute__ ((__packed__)) hci_read_buffer_size_rp;
+} __packed hci_read_buffer_size_rp;
 
 /* Read Country Code is deprecated */
 #define HCI_OCF_READ_COUNTRY_CODE			0x0007
@@ -1455,7 +1688,7 @@ typedef struct {
 typedef struct {
 	uint8_t		status;       /* 0x00 - success */
 	uint8_t		country_code; /* 0x00 - NAM, EUR, JP; 0x01 - France */
-} __attribute__ ((__packed__)) hci_read_country_code_rp;
+} __packed hci_read_country_code_rp;
 
 #define HCI_OCF_READ_BDADDR				0x0009
 #define HCI_CMD_READ_BDADDR				0x1009
@@ -1463,7 +1696,7 @@ typedef struct {
 typedef struct {
 	uint8_t		status; /* 0x00 - success */
 	bdaddr_t	bdaddr; /* unit address */
-} __attribute__ ((__packed__)) hci_read_bdaddr_rp;
+} __packed hci_read_bdaddr_rp;
 
 /**************************************************************************
  **************************************************************************
@@ -1477,75 +1710,75 @@ typedef struct {
 #define HCI_CMD_READ_FAILED_CONTACT_CNTR		0x1401
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_read_failed_contact_cntr_cp;
+} __packed hci_read_failed_contact_cntr_cp;
 
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
 	uint16_t	counter;    /* number of consecutive failed contacts */
-} __attribute__ ((__packed__)) hci_read_failed_contact_cntr_rp;
+} __packed hci_read_failed_contact_cntr_rp;
 
 #define HCI_OCF_RESET_FAILED_CONTACT_CNTR		0x0002
 #define HCI_CMD_RESET_FAILED_CONTACT_CNTR		0x1402
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_reset_failed_contact_cntr_cp;
+} __packed hci_reset_failed_contact_cntr_cp;
 
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_reset_failed_contact_cntr_rp;
+} __packed hci_reset_failed_contact_cntr_rp;
 
 #define HCI_OCF_READ_LINK_QUALITY			0x0003
 #define HCI_CMD_READ_LINK_QUALITY			0x1403
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_read_link_quality_cp;
+} __packed hci_read_link_quality_cp;
 
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
 	uint8_t		quality;    /* higher value means better quality */
-} __attribute__ ((__packed__)) hci_read_link_quality_rp;
+} __packed hci_read_link_quality_rp;
 
 #define HCI_OCF_READ_RSSI				0x0005
 #define HCI_CMD_READ_RSSI				0x1405
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_read_rssi_cp;
+} __packed hci_read_rssi_cp;
 
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
 	char		rssi;       /* -127 <= rssi <= 127 dB */
-} __attribute__ ((__packed__)) hci_read_rssi_rp;
+} __packed hci_read_rssi_rp;
 
 #define HCI_OCF_READ_AFH_CHANNEL_MAP			0x0006
 #define HCI_CMD_READ_AFH_CHANNEL_MAP			0x1406
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_read_afh_channel_map_cp;
+} __packed hci_read_afh_channel_map_cp;
 
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
 	uint8_t		mode;       /* AFH mode */
 	uint8_t		map[10];    /* AFH Channel Map */
-} __attribute__ ((__packed__)) hci_read_afh_channel_map_rp;
+} __packed hci_read_afh_channel_map_rp;
 
 #define HCI_OCF_READ_CLOCK				0x0007
 #define HCI_CMD_READ_CLOCK				0x1407
 typedef struct {
 	uint16_t	con_handle;	/* connection handle */
 	uint8_t		clock;		/* which clock */
-} __attribute__ ((__packed__)) hci_read_clock_cp;
+} __packed hci_read_clock_cp;
 
 typedef struct {
 	uint8_t		status;		/* 0x00 - success */
 	uint16_t	con_handle;	/* connection handle */
 	uint32_t	clock;		/* clock value */
 	uint16_t	accuracy;	/* clock accuracy */
-} __attribute__ ((__packed__)) hci_read_clock_rp;
+} __packed hci_read_clock_rp;
 
 
 /**************************************************************************
@@ -1562,13 +1795,13 @@ typedef struct {
 typedef struct {
 	uint8_t		status; /* 0x00 - success */
 	uint8_t		lbmode; /* loopback mode */
-} __attribute__ ((__packed__)) hci_read_loopback_mode_rp;
+} __packed hci_read_loopback_mode_rp;
 
 #define HCI_OCF_WRITE_LOOPBACK_MODE			0x0002
 #define HCI_CMD_WRITE_LOOPBACK_MODE			0x1802
 typedef struct {
 	uint8_t		lbmode; /* loopback mode */
-} __attribute__ ((__packed__)) hci_write_loopback_mode_cp;
+} __packed hci_write_loopback_mode_cp;
 
 typedef hci_status_rp	hci_write_loopback_mode_rp;
 
@@ -1576,6 +1809,14 @@ typedef hci_status_rp	hci_write_loopback_mode_rp;
 #define HCI_CMD_ENABLE_UNIT_UNDER_TEST			0x1803
 /* No command parameter(s) */
 typedef hci_status_rp	hci_enable_unit_under_test_rp;
+
+#define HCI_OCF_WRITE_SIMPLE_PAIRING_DEBUG_MODE		0x0004
+#define HCI_CMD_WRITE_SIMPLE_PAIRING_DEBUG_MODE		0x1804
+typedef struct {
+	uint8_t		mode;	/* simple pairing debug mode */
+} __packed hci_write_simple_pairing_debug_mode_cp;
+
+typedef hci_status_rp	hci_write_simple_pairing_debug_mode_rp;
 
 /**************************************************************************
  **************************************************************************
@@ -1605,13 +1846,13 @@ typedef hci_status_rp	hci_enable_unit_under_test_rp;
 #define HCI_EVENT_INQUIRY_COMPL			0x01
 typedef struct {
 	uint8_t		status; /* 0x00 - success */
-} __attribute__ ((__packed__)) hci_inquiry_compl_ep;
+} __packed hci_inquiry_compl_ep;
 
 #define HCI_EVENT_INQUIRY_RESULT		0x02
 typedef struct {
 	uint8_t		num_responses;      /* number of responses */
 /*	hci_inquiry_response[num_responses]   -- see below */
-} __attribute__ ((__packed__)) hci_inquiry_result_ep;
+} __packed hci_inquiry_result_ep;
 
 typedef struct {
 	bdaddr_t	bdaddr;                   /* unit address */
@@ -1620,7 +1861,7 @@ typedef struct {
 	uint8_t		page_scan_mode;           /* page scan mode */
 	uint8_t		uclass[HCI_CLASS_SIZE];   /* unit class */
 	uint16_t	clock_offset;             /* clock offset */
-} __attribute__ ((__packed__)) hci_inquiry_response;
+} __packed hci_inquiry_response;
 
 #define HCI_EVENT_CON_COMPL			0x03
 typedef struct {
@@ -1629,61 +1870,61 @@ typedef struct {
 	bdaddr_t	bdaddr;          /* remote unit address */
 	uint8_t		link_type;       /* Link type */
 	uint8_t		encryption_mode; /* Encryption mode */
-} __attribute__ ((__packed__)) hci_con_compl_ep;
+} __packed hci_con_compl_ep;
 
 #define HCI_EVENT_CON_REQ			0x04
 typedef struct {
 	bdaddr_t	bdaddr;                 /* remote unit address */
 	uint8_t		uclass[HCI_CLASS_SIZE]; /* remote unit class */
 	uint8_t		link_type;              /* link type */
-} __attribute__ ((__packed__)) hci_con_req_ep;
+} __packed hci_con_req_ep;
 
 #define HCI_EVENT_DISCON_COMPL			0x05
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
 	uint8_t		reason;     /* reason to disconnect */
-} __attribute__ ((__packed__)) hci_discon_compl_ep;
+} __packed hci_discon_compl_ep;
 
 #define HCI_EVENT_AUTH_COMPL			0x06
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_auth_compl_ep;
+} __packed hci_auth_compl_ep;
 
 #define HCI_EVENT_REMOTE_NAME_REQ_COMPL		0x07
 typedef struct {
 	uint8_t		status;                   /* 0x00 - success */
 	bdaddr_t	bdaddr;                   /* remote unit address */
 	char		name[HCI_UNIT_NAME_SIZE]; /* remote unit name */
-} __attribute__ ((__packed__)) hci_remote_name_req_compl_ep;
+} __packed hci_remote_name_req_compl_ep;
 
 #define HCI_EVENT_ENCRYPTION_CHANGE		0x08
 typedef struct {
 	uint8_t		status;            /* 0x00 - success */
 	uint16_t	con_handle;        /* Connection handle */
 	uint8_t		encryption_enable; /* 0x00 - disable */
-} __attribute__ ((__packed__)) hci_encryption_change_ep;
+} __packed hci_encryption_change_ep;
 
 #define HCI_EVENT_CHANGE_CON_LINK_KEY_COMPL	0x09
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* Connection handle */
-} __attribute__ ((__packed__)) hci_change_con_link_key_compl_ep;
+} __packed hci_change_con_link_key_compl_ep;
 
 #define HCI_EVENT_MASTER_LINK_KEY_COMPL		0x0a
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* Connection handle */
 	uint8_t		key_flag;   /* Key flag */
-} __attribute__ ((__packed__)) hci_master_link_key_compl_ep;
+} __packed hci_master_link_key_compl_ep;
 
 #define HCI_EVENT_READ_REMOTE_FEATURES_COMPL	0x0b
 typedef struct {
 	uint8_t		status;                      /* 0x00 - success */
 	uint16_t	con_handle;                  /* Connection handle */
 	uint8_t		features[HCI_FEATURES_SIZE]; /* LMP features bitmsk*/
-} __attribute__ ((__packed__)) hci_read_remote_features_compl_ep;
+} __packed hci_read_remote_features_compl_ep;
 
 #define HCI_EVENT_READ_REMOTE_VER_INFO_COMPL	0x0c
 typedef struct {
@@ -1692,7 +1933,7 @@ typedef struct {
 	uint8_t		lmp_version;    /* LMP version */
 	uint16_t	manufacturer;   /* Hardware manufacturer name */
 	uint16_t	lmp_subversion; /* LMP sub-version */
-} __attribute__ ((__packed__)) hci_read_remote_ver_info_compl_ep;
+} __packed hci_read_remote_ver_info_compl_ep;
 
 #define HCI_EVENT_QOS_SETUP_COMPL		0x0d
 typedef struct {
@@ -1704,38 +1945,38 @@ typedef struct {
 	uint32_t	peak_bandwidth;  /* bytes per second */
 	uint32_t	latency;         /* microseconds */
 	uint32_t	delay_variation; /* microseconds */
-} __attribute__ ((__packed__)) hci_qos_setup_compl_ep;
+} __packed hci_qos_setup_compl_ep;
 
 #define HCI_EVENT_COMMAND_COMPL			0x0e
 typedef struct {
 	uint8_t		num_cmd_pkts; /* # of HCI command packets */
 	uint16_t	opcode;       /* command OpCode */
 	/* command return parameters (if any) */
-} __attribute__ ((__packed__)) hci_command_compl_ep;
+} __packed hci_command_compl_ep;
 
 #define HCI_EVENT_COMMAND_STATUS		0x0f
 typedef struct {
 	uint8_t		status;       /* 0x00 - pending */
 	uint8_t		num_cmd_pkts; /* # of HCI command packets */
 	uint16_t	opcode;       /* command OpCode */
-} __attribute__ ((__packed__)) hci_command_status_ep;
+} __packed hci_command_status_ep;
 
 #define HCI_EVENT_HARDWARE_ERROR		0x10
 typedef struct {
 	uint8_t		hardware_code; /* hardware error code */
-} __attribute__ ((__packed__)) hci_hardware_error_ep;
+} __packed hci_hardware_error_ep;
 
 #define HCI_EVENT_FLUSH_OCCUR			0x11
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_flush_occur_ep;
+} __packed hci_flush_occur_ep;
 
 #define HCI_EVENT_ROLE_CHANGE			0x12
 typedef struct {
 	uint8_t		status; /* 0x00 - success */
 	bdaddr_t	bdaddr; /* address of remote unit */
 	uint8_t		role;   /* new connection role */
-} __attribute__ ((__packed__)) hci_role_change_ep;
+} __packed hci_role_change_ep;
 
 #define HCI_EVENT_NUM_COMPL_PKTS		0x13
 typedef struct {
@@ -1743,7 +1984,7 @@ typedef struct {
 /* these are repeated "num_con_handles" times
 	uint16_t	con_handle; --- connection handle(s)
 	uint16_t	compl_pkts; --- # of completed packets */
-} __attribute__ ((__packed__)) hci_num_compl_pkts_ep;
+} __packed hci_num_compl_pkts_ep;
 
 #define HCI_EVENT_MODE_CHANGE			0x14
 typedef struct {
@@ -1751,7 +1992,7 @@ typedef struct {
 	uint16_t	con_handle; /* connection handle */
 	uint8_t		unit_mode;  /* remote unit mode */
 	uint16_t	interval;   /* interval * 0.625 msec */
-} __attribute__ ((__packed__)) hci_mode_change_ep;
+} __packed hci_mode_change_ep;
 
 #define HCI_EVENT_RETURN_LINK_KEYS		0x15
 typedef struct {
@@ -1759,24 +2000,24 @@ typedef struct {
 /* these are repeated "num_keys" times
 	bdaddr_t	bdaddr;               --- remote address(es)
 	uint8_t		key[HCI_KEY_SIZE]; --- key(s) */
-} __attribute__ ((__packed__)) hci_return_link_keys_ep;
+} __packed hci_return_link_keys_ep;
 
 #define HCI_EVENT_PIN_CODE_REQ			0x16
 typedef struct {
 	bdaddr_t	bdaddr; /* remote unit address */
-} __attribute__ ((__packed__)) hci_pin_code_req_ep;
+} __packed hci_pin_code_req_ep;
 
 #define HCI_EVENT_LINK_KEY_REQ			0x17
 typedef struct {
 	bdaddr_t	bdaddr; /* remote unit address */
-} __attribute__ ((__packed__)) hci_link_key_req_ep;
+} __packed hci_link_key_req_ep;
 
 #define HCI_EVENT_LINK_KEY_NOTIFICATION		0x18
 typedef struct {
 	bdaddr_t	bdaddr;            /* remote unit address */
 	uint8_t		key[HCI_KEY_SIZE]; /* link key */
 	uint8_t		key_type;          /* type of the key */
-} __attribute__ ((__packed__)) hci_link_key_notification_ep;
+} __packed hci_link_key_notification_ep;
 
 #define HCI_EVENT_LOOPBACK_COMMAND		0x19
 typedef hci_cmd_hdr_t	hci_loopback_command_ep;
@@ -1784,45 +2025,45 @@ typedef hci_cmd_hdr_t	hci_loopback_command_ep;
 #define HCI_EVENT_DATA_BUFFER_OVERFLOW		0x1a
 typedef struct {
 	uint8_t		link_type; /* Link type */
-} __attribute__ ((__packed__)) hci_data_buffer_overflow_ep;
+} __packed hci_data_buffer_overflow_ep;
 
 #define HCI_EVENT_MAX_SLOT_CHANGE		0x1b
 typedef struct {
 	uint16_t	con_handle;    /* connection handle */
 	uint8_t		lmp_max_slots; /* Max. # of slots allowed */
-} __attribute__ ((__packed__)) hci_max_slot_change_ep;
+} __packed hci_max_slot_change_ep;
 
 #define HCI_EVENT_READ_CLOCK_OFFSET_COMPL	0x1c
 typedef struct {
 	uint8_t		status;       /* 0x00 - success */
 	uint16_t	con_handle;   /* Connection handle */
 	uint16_t	clock_offset; /* Clock offset */
-} __attribute__ ((__packed__)) hci_read_clock_offset_compl_ep;
+} __packed hci_read_clock_offset_compl_ep;
 
 #define HCI_EVENT_CON_PKT_TYPE_CHANGED		0x1d
 typedef struct {
 	uint8_t		status;     /* 0x00 - success */
 	uint16_t	con_handle; /* connection handle */
 	uint16_t	pkt_type;   /* packet type */
-} __attribute__ ((__packed__)) hci_con_pkt_type_changed_ep;
+} __packed hci_con_pkt_type_changed_ep;
 
 #define HCI_EVENT_QOS_VIOLATION			0x1e
 typedef struct {
 	uint16_t	con_handle; /* connection handle */
-} __attribute__ ((__packed__)) hci_qos_violation_ep;
+} __packed hci_qos_violation_ep;
 
 /* Page Scan Mode Change Event is deprecated */
 #define HCI_EVENT_PAGE_SCAN_MODE_CHANGE		0x1f
 typedef struct {
 	bdaddr_t	bdaddr;         /* destination address */
 	uint8_t		page_scan_mode; /* page scan mode */
-} __attribute__ ((__packed__)) hci_page_scan_mode_change_ep;
+} __packed hci_page_scan_mode_change_ep;
 
 #define HCI_EVENT_PAGE_SCAN_REP_MODE_CHANGE	0x20
 typedef struct {
 	bdaddr_t	bdaddr;             /* destination address */
 	uint8_t		page_scan_rep_mode; /* page scan repetition mode */
-} __attribute__ ((__packed__)) hci_page_scan_rep_mode_change_ep;
+} __packed hci_page_scan_rep_mode_change_ep;
 
 #define HCI_EVENT_FLOW_SPECIFICATION_COMPL	0x21
 typedef struct {
@@ -1835,13 +2076,13 @@ typedef struct {
 	uint32_t	bucket_size;	/* token bucket size */
 	uint32_t	peak_bandwidth;	/* peak bandwidth */
 	uint32_t	latency;	/* access latency */
-} __attribute__ ((__packed__)) hci_flow_specification_compl_ep;
+} __packed hci_flow_specification_compl_ep;
 
 #define HCI_EVENT_RSSI_RESULT			0x22
 typedef struct {
 	uint8_t		num_responses;      /* number of responses */
 /*	hci_rssi_response[num_responses]   -- see below */
-} __attribute__ ((__packed__)) hci_rssi_result_ep;
+} __packed hci_rssi_result_ep;
 
 typedef struct {
 	bdaddr_t	bdaddr;			/* unit address */
@@ -1850,7 +2091,7 @@ typedef struct {
 	uint8_t		uclass[HCI_CLASS_SIZE];	/* unit class */
 	uint16_t	clock_offset;		/* clock offset */
 	int8_t		rssi;			/* rssi */
-} __attribute__ ((__packed__)) hci_rssi_response_ep;
+} __packed hci_rssi_response;
 
 #define HCI_EVENT_READ_REMOTE_EXTENDED_FEATURES	0x23
 typedef struct {
@@ -1859,7 +2100,7 @@ typedef struct {
 	uint8_t		page;		/* page number */
 	uint8_t		max;		/* max page number */
 	uint8_t		features[HCI_FEATURES_SIZE]; /* LMP features bitmsk*/
-} __attribute__ ((__packed__)) hci_read_remote_extended_features_ep;
+} __packed hci_read_remote_extended_features_ep;
 
 #define HCI_EVENT_SCO_CON_COMPL			0x2c
 typedef struct {
@@ -1872,7 +2113,7 @@ typedef struct {
 	uint16_t	rxlen;		/* rx packet length */
 	uint16_t	txlen;		/* tx packet length */
 	uint8_t		mode;		/* air mode */
-} __attribute__ ((__packed__)) hci_sco_con_compl_ep;
+} __packed hci_sco_con_compl_ep;
 
 #define HCI_EVENT_SCO_CON_CHANGED		0x2d
 typedef struct {
@@ -1882,7 +2123,99 @@ typedef struct {
 	uint8_t		window;		/* retransmission window */
 	uint16_t	rxlen;		/* rx packet length */
 	uint16_t	txlen;		/* tx packet length */
-} __attribute__ ((__packed__)) hci_sco_con_changed_ep;
+} __packed hci_sco_con_changed_ep;
+
+#define HCI_EVENT_SNIFF_SUBRATING		0x2e
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	uint16_t	con_handle;	/* connection handle */
+	uint16_t	tx_latency;	/* max transmit latency */
+	uint16_t	rx_latency;	/* max receive latency */
+	uint16_t	remote_timeout;	/* remote timeout */
+	uint16_t	local_timeout;	/* local timeout */
+} __packed hci_sniff_subrating_ep;
+
+#define HCI_EVENT_EXTENDED_RESULT		0x2f
+typedef struct {
+	uint8_t		num_responses;	/* must be 0x01 */
+	bdaddr_t	bdaddr;		/* remote device address */
+	uint8_t		page_scan_rep_mode;
+	uint8_t		reserved;
+	uint8_t		uclass[HCI_CLASS_SIZE];
+	uint16_t	clock_offset;
+	int8_t		rssi;
+	uint8_t		response[240];	/* extended inquiry response */
+} __packed hci_extended_result_ep;
+
+#define HCI_EVENT_ENCRYPTION_KEY_REFRESH	0x30
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	uint16_t	con_handle;	/* connection handle */
+} __packed hci_encryption_key_refresh_ep;
+
+#define HCI_EVENT_IO_CAPABILITY_REQ		0x31
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote device address */
+} __packed hci_io_capability_req_ep;
+
+#define HCI_EVENT_IO_CAPABILITY_RSP		0x32
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote device address */
+	uint8_t		io_capability;
+	uint8_t		oob_data_present;
+	uint8_t		auth_requirement;
+} __packed hci_io_capability_rsp_ep;
+
+#define HCI_EVENT_USER_CONFIRM_REQ		0x33
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote device address */
+	uint32_t	value;		/* 000000 - 999999 */
+} __packed hci_user_confirm_req_ep;
+
+#define HCI_EVENT_USER_PASSKEY_REQ		0x34
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote device address */
+} __packed hci_user_passkey_req_ep;
+
+#define HCI_EVENT_REMOTE_OOB_DATA_REQ		0x35
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote device address */
+} __packed hci_remote_oob_data_req_ep;
+
+#define HCI_EVENT_SIMPLE_PAIRING_COMPL		0x36
+typedef struct {
+	uint8_t		status;		/* 0x00 - success */
+	bdaddr_t	bdaddr;		/* remote device address */
+} __packed hci_simple_pairing_compl_ep;
+
+#define HCI_EVENT_LINK_SUPERVISION_TO_CHANGED	0x38
+typedef struct {
+	uint16_t	con_handle;	/* connection handle */
+	uint16_t	timeout;	/* link supervision timeout */
+} __packed hci_link_supervision_to_changed_ep;
+
+#define HCI_EVENT_ENHANCED_FLUSH_COMPL		0x39
+typedef struct {
+	uint16_t	con_handle;	/* connection handle */
+} __packed hci_enhanced_flush_compl_ep;
+
+#define HCI_EVENT_USER_PASSKEY_NOTIFICATION	0x3b
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote device address */
+	uint32_t	value;		/* 000000 - 999999 */
+} __packed hci_user_passkey_notification_ep;
+
+#define HCI_EVENT_KEYPRESS_NOTIFICATION		0x3c
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote device address */
+	uint8_t		notification_type;
+} __packed hci_keypress_notification_ep;
+
+#define HCI_EVENT_REMOTE_FEATURES_NOTIFICATION	0x3d
+typedef struct {
+	bdaddr_t	bdaddr;		/* remote device address */
+	uint8_t		features[HCI_FEATURES_SIZE]; /* LMP features bitmsk*/
+} __packed hci_remote_features_notification_ep;
 
 #define HCI_EVENT_BT_LOGO			0xfe
 
@@ -1999,7 +2332,6 @@ struct btreq {
 #define btr_sco_mtu	btru.btri.btri_sco_mtu
 #define btr_link_policy btru.btri.btri_link_policy
 #define btr_packet_type btru.btri.btri_packet_type
-#define btr_uclass	btru.btri.btri_uclass
 #define btr_stats	btru.btrs
 
 /* hci_unit & btr_flags */
@@ -2012,7 +2344,13 @@ struct btreq {
 #define BTF_INIT_BDADDR		(1<<5)	/* waiting for bdaddr */
 #define BTF_INIT_BUFFER_SIZE	(1<<6)	/* waiting for buffer size */
 #define BTF_INIT_FEATURES	(1<<7)	/* waiting for features */
-#define BTF_INIT		(BTF_INIT_BDADDR | BTF_INIT_BUFFER_SIZE | BTF_INIT_FEATURES)
+#define BTF_POWER_UP_NOOP	(1<<8)	/* should wait for No-op on power up */
+#define BTF_INIT_COMMANDS	(1<<9)	/* waiting for supported commands */
+
+#define BTF_INIT		(BTF_INIT_BDADDR	\
+				| BTF_INIT_BUFFER_SIZE	\
+				| BTF_INIT_FEATURES	\
+				| BTF_INIT_COMMANDS)
 
 /**************************************************************************
  **************************************************************************
@@ -2022,10 +2360,14 @@ struct btreq {
 
 #ifdef _KERNEL
 
+#include <sys/condvar.h>
+#include <sys/device.h>
+
 struct l2cap_channel;
 struct mbuf;
 struct sco_pcb;
 struct socket;
+struct sockopt;
 
 /* global HCI kernel variables */
 
@@ -2044,6 +2386,7 @@ struct hci_link {
 
 	/* common info */
 	uint16_t		 hl_state;	/* connection state */
+	uint16_t		 hl_flags;	/* link flags */
 	bdaddr_t		 hl_bdaddr;	/* dest address */
 	uint16_t		 hl_handle;	/* connection handle */
 	uint8_t			 hl_type;	/* link type */
@@ -2053,11 +2396,12 @@ struct hci_link {
 	uint16_t		 hl_refcnt;	/* reference count */
 	uint16_t		 hl_mtu;	/* signalling mtu for link */
 	uint16_t		 hl_flush;	/* flush timeout */
+	uint16_t		 hl_clock;	/* remote clock offset */
 
 	TAILQ_HEAD(,l2cap_pdu)	 hl_txq;	/* queue of outgoing PDUs */
 	int			 hl_txqlen;	/* number of fragments */
 	struct mbuf		*hl_rxp;	/* incoming PDU (accumulating)*/
-	struct callout		 hl_expire;	/* connection expiry timer */
+	callout_t		 hl_expire;	/* connection expiry timer */
 	TAILQ_HEAD(,l2cap_req)	 hl_reqs;	/* pending requests */
 
 	/* SCO link info */
@@ -2066,11 +2410,23 @@ struct hci_link {
 	MBUFQ_HEAD()		 hl_data;	/* SCO outgoing data */
 };
 
-/* hci_link state bits */
+/* hci_link state */
 #define HCI_LINK_CLOSED		0  /* closed */
 #define HCI_LINK_WAIT_CONNECT	1  /* waiting to connect */
-#define HCI_LINK_OPEN		2  /* ready and willing */
-#define HCI_LINK_BLOCK		3  /* open but blocking (see hci_acl_start) */
+#define HCI_LINK_WAIT_AUTH	2  /* waiting for auth */
+#define HCI_LINK_WAIT_ENCRYPT	3  /* waiting for encrypt */
+#define HCI_LINK_WAIT_SECURE	4  /* waiting for secure */
+#define HCI_LINK_OPEN		5  /* ready and willing */
+#define HCI_LINK_BLOCK		6  /* open but blocking (see hci_acl_start) */
+
+/* hci_link flags */
+#define HCI_LINK_AUTH_REQ	(1<<0)  /* authentication requested */
+#define HCI_LINK_ENCRYPT_REQ	(1<<1)  /* encryption requested */
+#define HCI_LINK_SECURE_REQ	(1<<2)	/* secure link requested */
+#define HCI_LINK_AUTH		(1<<3)	/* link is authenticated */
+#define HCI_LINK_ENCRYPT	(1<<4)	/* link is encrypted */
+#define HCI_LINK_SECURE		(1<<5)	/* link is secured */
+#define HCI_LINK_CREATE_CON	(1<<6)	/* "Create Connection" pending */
 
 /*
  * Bluetooth Memo
@@ -2078,21 +2434,38 @@ struct hci_link {
  */
 struct hci_memo {
 	struct timeval		time;		/* time of last response */
-	hci_inquiry_response	response;	/* inquiry response */
+	bdaddr_t		bdaddr;
+	uint8_t			page_scan_rep_mode;
+	uint8_t			page_scan_mode;
+	uint16_t		clock_offset;
 	LIST_ENTRY(hci_memo)	next;
+};
+
+/*
+ * The Bluetooth HCI interface attachment structure
+ */
+struct hci_if {
+	int	(*enable)(device_t);
+	void	(*disable)(device_t);
+	void	(*output_cmd)(device_t, struct mbuf *);
+	void	(*output_acl)(device_t, struct mbuf *);
+	void	(*output_sco)(device_t, struct mbuf *);
+	void	(*get_stats)(device_t, struct bt_stats *, int);
+	int	ipl;		/* for locking */
 };
 
 /*
  * The Bluetooth HCI device unit structure
  */
 struct hci_unit {
-	void		*hci_softc;		/* ptr to device softc */
-	struct device	*hci_bthub;		/* bthub(4) handle */
+	device_t	 hci_dev;		/* bthci handle */
+	device_t	 hci_bthub;		/* bthub(4) handle */
+	const struct hci_if *hci_if;		/* bthci driver interface */
 
 	/* device info */
-	char		*hci_devname;		/* device name */
 	bdaddr_t	 hci_bdaddr;		/* device address */
 	uint16_t	 hci_flags;		/* see BTF_ above */
+	kcondvar_t	 hci_init;		/* sleep on this */
 
 	uint16_t	 hci_packet_type;	/* packet types */
 	uint16_t	 hci_acl_mask;		/* ACL packet capabilities */
@@ -2100,6 +2473,8 @@ struct hci_unit {
 
 	uint16_t	 hci_link_policy;	/* link policy */
 	uint16_t	 hci_lmp_mask;		/* link policy capabilities */
+
+	uint8_t		 hci_cmds[HCI_COMMANDS_SIZE]; /* opcode bitmask */
 
 	/* flow control */
 	uint16_t	 hci_max_acl_size;	/* ACL payload mtu */
@@ -2111,25 +2486,9 @@ struct hci_unit {
 	TAILQ_HEAD(,hci_link)	hci_links;	/* list of ACL/SCO links */
 	LIST_HEAD(,hci_memo)	hci_memos;	/* cached memo list */
 
-	/*
-	 * h/w driver callbacks
-	 *
-	 * the device driver must supply these.
-	 */
-	int	(*hci_enable)		/* enable device */
-		(struct hci_unit *);
-	void	(*hci_disable)		/* disable device */
-		(struct hci_unit *);
-	void	(*hci_start_cmd)	/* initiate cmd output routine */
-		(struct hci_unit *);
-	void	(*hci_start_acl)	/* initiate acl output routine */
-		(struct hci_unit *);
-	void	(*hci_start_sco)	/* initiate sco output routine */
-		(struct hci_unit *);
-	ipl_cookie_t hci_ipl;		/* to block queue operations */
-
 	/* input queues */
 	void			*hci_rxint;	/* receive interrupt cookie */
+	kmutex_t		 hci_devlock;	/* device queue lock */
 	MBUFQ_HEAD()		 hci_eventq;	/* Event queue */
 	MBUFQ_HEAD()		 hci_aclrxq;	/* ACL rx queue */
 	MBUFQ_HEAD()		 hci_scorxq;	/* SCO rx queue */
@@ -2139,12 +2498,7 @@ struct hci_unit {
 
 	/* output queues */
 	MBUFQ_HEAD()		 hci_cmdwait;	/* pending commands */
-	MBUFQ_HEAD()		 hci_cmdq;	/* Command queue */
-	MBUFQ_HEAD()		 hci_acltxq;	/* ACL tx queue */
-	MBUFQ_HEAD()		 hci_scotxq;	/* SCO tx queue */
 	MBUFQ_HEAD()		 hci_scodone;	/* SCO done queue */
-
-	struct bt_stats		 hci_stats;	/* unit statistics */
 
 	SIMPLEQ_ENTRY(hci_unit) hci_next;
 };
@@ -2166,6 +2520,8 @@ struct hci_link *hci_acl_open(struct hci_unit *, bdaddr_t *);
 struct hci_link *hci_acl_newconn(struct hci_unit *, bdaddr_t *);
 void hci_acl_close(struct hci_link *, int);
 void hci_acl_timeout(void *);
+int hci_acl_setmode(struct hci_link *);
+void hci_acl_linkmode(struct hci_link *);
 void hci_acl_recv(struct mbuf *, struct hci_unit *);
 int hci_acl_send(struct mbuf *, struct hci_link *, struct l2cap_channel *);
 void hci_acl_start(struct hci_link *);
@@ -2174,33 +2530,35 @@ struct hci_link *hci_sco_newconn(struct hci_unit *, bdaddr_t *);
 void hci_sco_recv(struct mbuf *, struct hci_unit *);
 void hci_sco_start(struct hci_link *);
 void hci_sco_complete(struct hci_link *, int);
-struct hci_link *hci_link_alloc(struct hci_unit *);
+struct hci_link *hci_link_alloc(struct hci_unit *, bdaddr_t *, uint8_t);
 void hci_link_free(struct hci_link *, int);
-struct hci_link *hci_link_lookup_bdaddr(struct hci_unit *, bdaddr_t *, uint16_t);
+struct hci_link *hci_link_lookup_bdaddr(struct hci_unit *, bdaddr_t *, uint8_t);
 struct hci_link *hci_link_lookup_handle(struct hci_unit *, uint16_t);
 
 /* hci_misc.c */
 int hci_route_lookup(bdaddr_t *, bdaddr_t *);
 struct hci_memo *hci_memo_find(struct hci_unit *, bdaddr_t *);
+struct hci_memo *hci_memo_new(struct hci_unit *, bdaddr_t *);
 void hci_memo_free(struct hci_memo *);
 
 /* hci_socket.c */
 void hci_drop(void *);
 int hci_usrreq(struct socket *, int, struct mbuf *, struct mbuf *, struct mbuf *, struct lwp *);
-int hci_ctloutput(int, struct socket *, int, int, struct mbuf **);
+int hci_ctloutput(int, struct socket *, struct sockopt *);
 void hci_mtap(struct mbuf *, struct hci_unit *);
 
 /* hci_unit.c */
-void hci_attach(struct hci_unit *);
+struct hci_unit *hci_attach(const struct hci_if *, device_t, uint16_t);
 void hci_detach(struct hci_unit *);
 int hci_enable(struct hci_unit *);
 void hci_disable(struct hci_unit *);
 struct hci_unit *hci_unit_lookup(bdaddr_t *);
 int hci_send_cmd(struct hci_unit *, uint16_t, void *, uint8_t);
-void hci_input_event(struct hci_unit *, struct mbuf *);
-void hci_input_acl(struct hci_unit *, struct mbuf *);
-void hci_input_sco(struct hci_unit *, struct mbuf *);
-void hci_complete_sco(struct hci_unit *, struct mbuf *);
+void hci_num_cmds(struct hci_unit *, uint8_t);
+bool hci_input_event(struct hci_unit *, struct mbuf *);
+bool hci_input_acl(struct hci_unit *, struct mbuf *);
+bool hci_input_sco(struct hci_unit *, struct mbuf *);
+bool hci_complete_sco(struct hci_unit *, struct mbuf *);
 void hci_output_cmd(struct hci_unit *, struct mbuf *);
 void hci_output_acl(struct hci_unit *, struct mbuf *);
 void hci_output_sco(struct hci_unit *, struct mbuf *);

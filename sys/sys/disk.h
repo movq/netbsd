@@ -1,4 +1,4 @@
-/*	$NetBSD: disk.h,v 1.42 2006/11/25 11:59:58 scw Exp $	*/
+/*	$NetBSD: disk.h,v 1.51 2008/04/28 20:24:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2004 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -86,11 +79,15 @@
  * Disk device structures.
  */
 
+#ifdef _KERNEL
+#include <sys/device.h>
+#endif
 #include <sys/dkio.h>
 #include <sys/time.h>
 #include <sys/queue.h>
-#include <sys/lock.h>
+#include <sys/mutex.h>
 #include <sys/iostat.h>
+
 #include <prop/proplib.h>
 
 struct buf;
@@ -232,6 +229,7 @@ __link_set_add_data(dkwedge_methods, name ## _ddm)
 #define	DKW_PTYPE_CCD		"ccd"
 #define	DKW_PTYPE_APPLEUFS	"appleufs"
 #define	DKW_PTYPE_NTFS		"ntfs"
+#define	DKW_PTYPE_CGD		"cgd"
 
 /*
  * Disk geometry dictionary.
@@ -405,7 +403,7 @@ struct disk_geom {
 
 struct disk {
 	TAILQ_ENTRY(disk) dk_link;	/* link in global disklist */
-	char		*dk_name;	/* disk name */
+	const char	*dk_name;	/* disk name */
 	prop_dictionary_t dk_info;	/* reference to disk-info dictionary */
 	int		dk_bopenmask;	/* block devices open */
 	int		dk_copenmask;	/* character devices open */
@@ -420,16 +418,16 @@ struct disk {
 	 */
 	struct io_stats	*dk_stats;
 
-	struct	dkdriver *dk_driver;	/* pointer to driver */
+	const struct dkdriver *dk_driver;	/* pointer to driver */
 
 	/*
 	 * Information required to be the parent of a disk wedge.
 	 */
-	struct lock	dk_rawlock;	/* lock on these fields */
-	struct vnode	*dk_rawvp;	/* vnode for the RAW_PART bdev */
+	kmutex_t	dk_rawlock;	/* lock on these fields */
 	u_int		dk_rawopens;	/* # of openes of rawvp */
+	struct vnode	*dk_rawvp;	/* vnode for the RAW_PART bdev */
 
-	struct lock	dk_openlock;	/* lock on these and openmask */
+	kmutex_t	dk_openlock;	/* lock on these and openmask */
 	u_int		dk_nwedges;	/* # of configured wedges */
 					/* all wedges on this disk */
 	LIST_HEAD(, dkwedge_softc) dk_wedges;
@@ -450,7 +448,7 @@ struct dkdriver {
 #ifdef notyet
 	int	(*d_open)(dev_t, int, int, struct proc *);
 	int	(*d_close)(dev_t, int, int, struct proc *);
-	int	(*d_ioctl)(dev_t, u_long, caddr_t, int, struct proc *);
+	int	(*d_ioctl)(dev_t, u_long, void *, int, struct proc *);
 	int	(*d_dump)(dev_t);
 	void	(*d_start)(struct buf *, daddr_t);
 	int	(*d_mklabel)(struct disk *);
@@ -480,7 +478,7 @@ struct disk_badsecinfo {
 	uint32_t	dbsi_skip;	/* how many to skip past */
 	uint32_t	dbsi_copied;	/* how many got copied back */
 	uint32_t	dbsi_left;	/* remaining to copy */
-	caddr_t		dbsi_buffer;	/* region to copy disk_badsectors to */
+	void *		dbsi_buffer;	/* region to copy disk_badsectors to */
 };
 
 #define	DK_STRATEGYNAMELEN	32
@@ -496,27 +494,28 @@ struct disk_strategy {
 #ifdef _KERNEL
 extern	int disk_count;			/* number of disks in global disklist */
 
-struct device;
 struct proc;
 
 void	disk_attach(struct disk *);
 void	disk_detach(struct disk *);
-void	pseudo_disk_init(struct disk *);
-void	pseudo_disk_attach(struct disk *);
-void	pseudo_disk_detach(struct disk *);
+void	disk_init(struct disk *, const char *, const struct dkdriver *);
+void	disk_destroy(struct disk *);
 void	disk_busy(struct disk *);
 void	disk_unbusy(struct disk *, long, int);
 void	disk_blocksize(struct disk *, int);
 struct disk *disk_find(const char *);
-int	disk_ioctl(struct disk *, u_long, caddr_t, int, struct lwp *);
+int	disk_ioctl(struct disk *, u_long, void *, int, struct lwp *);
 
+void	dkwedge_init(void);
 int	dkwedge_add(struct dkwedge_info *);
 int	dkwedge_del(struct dkwedge_info *);
 void	dkwedge_delall(struct disk *);
 int	dkwedge_list(struct disk *, struct dkwedge_list *, struct lwp *);
 void	dkwedge_discover(struct disk *);
-void	dkwedge_set_bootwedge(struct device *, daddr_t, uint64_t);
+void	dkwedge_set_bootwedge(device_t, daddr_t, uint64_t);
 int	dkwedge_read(struct disk *, struct vnode *, daddr_t, void *, size_t);
+device_t dkwedge_find_by_wname(const char *);
+void	dkwedge_print_wnames(void);
 #endif
 
 #endif /* _SYS_DISK_H_ */

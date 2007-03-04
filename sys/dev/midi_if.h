@@ -1,4 +1,4 @@
-/*	$NetBSD: midi_if.h,v 1.18 2006/06/30 13:56:25 chap Exp $	*/
+/*	$NetBSD: midi_if.h,v 1.21 2008/04/28 20:23:47 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,7 +50,7 @@ struct midi_hw_if {
 	void	(*close)(void *);		/* close hardware */
 	int	(*output)(void *, int);	/* output a byte */
 	void	(*getinfo)(void *, struct midi_info *);
-	int	(*ioctl)(void *, u_long, caddr_t, int, struct lwp *);
+	int	(*ioctl)(void *, u_long, void *, int, struct lwp *);
 };
 
 /*
@@ -90,9 +83,8 @@ struct midi_hw_if_ext {
 };
 void midi_register_hw_if_ext(struct midi_hw_if_ext *);
 
-void	midi_attach(struct midi_softc *, struct device *);
-struct device *midi_attach_mi(const struct midi_hw_if *, void *,
-				   struct device *);
+void	midi_attach(struct midi_softc *, device_t);
+device_t midi_attach_mi(const struct midi_hw_if *, void *, device_t);
 
 int	midi_unit_count(void);
 void	midi_getinfo(dev_t, struct midi_info *);

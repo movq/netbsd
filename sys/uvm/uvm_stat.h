@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_stat.h,v 1.39 2006/02/16 20:17:20 perry Exp $	*/
+/*	$NetBSD: uvm_stat.h,v 1.44 2008/08/08 17:09:28 skrll Exp $	*/
 
 /*
  *
@@ -42,6 +42,10 @@
 #endif
 
 #include <sys/queue.h>
+#ifdef UVMHIST
+#include <sys/cpu.h>
+#include <sys/malloc.h>
+#endif
 
 /*
  * uvm_stat: monitor what is going on with uvm (or whatever)
@@ -68,9 +72,9 @@ struct uvm_history {
 	LIST_ENTRY(uvm_history) list;	/* link on list of all histories */
 	int n;				/* number of entries */
 	int f; 				/* next free one */
-	int unused;			/* old location of struct simplelock */
+	int unused;			/* old location of lock */
 	struct uvm_history_ent *e;	/* the malloc'd entries */
-	struct simplelock l;		/* lock on this history */
+	kmutex_t l;			/* lock on this history */
 };
 
 LIST_HEAD(uvm_history_head, uvm_history);
@@ -117,7 +121,7 @@ do { \
 	(NAME).namelen = strlen(__STRING(NAME)); \
 	(NAME).n = (N); \
 	(NAME).f = 0; \
-	simple_lock_init(&(NAME).l); \
+	mutex_init(&(NAME).l, MUTEX_SPIN, IPL_HIGH); \
 	(NAME).e = (struct uvm_history_ent *) \
 		malloc(sizeof(struct uvm_history_ent) * (N), M_TEMP, \
 		    M_WAITOK); \
@@ -131,7 +135,7 @@ do { \
 	(NAME).namelen = strlen(__STRING(NAME)); \
 	(NAME).n = sizeof(BUF) / sizeof(struct uvm_history_ent); \
 	(NAME).f = 0; \
-	simple_lock_init(&(NAME).l); \
+	mutex_init(&(NAME).l, MUTEX_SPIN, IPL_HIGH); \
 	(NAME).e = (struct uvm_history_ent *) (BUF); \
 	memset((NAME).e, 0, sizeof(struct uvm_history_ent) * (NAME).n); \
 	LIST_INSERT_HEAD(&uvm_histories, &(NAME), list); \
@@ -142,7 +146,7 @@ extern int uvmhist_print_enabled;
 #define UVMHIST_PRINTNOW(E) \
 do { \
 		if (uvmhist_print_enabled) { \
-			uvmhist_print(E); \
+			uvmhist_entry_print(E); \
 			DELAY(100000); \
 		} \
 } while (/*CONSTCOND*/ 0)
@@ -152,12 +156,11 @@ do { \
 
 #define UVMHIST_LOG(NAME,FMT,A,B,C,D) \
 do { \
-	int _i_, _s_ = splhigh(); \
-	simple_lock(&(NAME).l); \
+	int _i_; \
+	mutex_enter(&(NAME).l); \
 	_i_ = (NAME).f; \
 	(NAME).f = (_i_ + 1 < (NAME).n) ? _i_ + 1 : 0; \
-	simple_unlock(&(NAME).l); \
-	splx(_s_); \
+	mutex_exit(&(NAME).l); \
 	if (!cold) \
 		microtime(&(NAME).e[_i_].tv); \
 	(NAME).e[_i_].cpunum = cpu_number(); \
@@ -176,11 +179,9 @@ do { \
 #define UVMHIST_CALLED(NAME) \
 do { \
 	{ \
-		int _s = splhigh(); \
-		simple_lock(&(NAME).l); \
+		mutex_enter(&(NAME).l); \
 		_uvmhist_call = _uvmhist_cnt++; \
-		simple_unlock(&(NAME).l); \
-		splx(_s); \
+		mutex_exit(&(NAME).l); \
 	} \
 	UVMHIST_LOG(NAME,"called!", 0, 0, 0, 0); \
 } while (/*CONSTCOND*/ 0)
@@ -190,10 +191,10 @@ do { \
 	static const char *const _uvmhist_name = FNAME; \
 	int _uvmhist_call;
 
-static __inline void uvmhist_print(struct uvm_history_ent *);
+static __inline void uvmhist_entry_print(struct uvm_history_ent *);
 
 static __inline void
-uvmhist_print(e)
+uvmhist_entry_print(e)
 	struct uvm_history_ent *e;
 {
 	printf("%06ld.%06ld ", e->tv.tv_sec, e->tv.tv_usec);

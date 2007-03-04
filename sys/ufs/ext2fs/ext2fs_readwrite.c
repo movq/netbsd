@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_readwrite.c,v 1.45 2007/02/21 23:00:10 thorpej Exp $	*/
+/*	$NetBSD: ext2fs_readwrite.c,v 1.52 2008/05/16 09:22:00 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_readwrite.c,v 1.45 2007/02/21 23:00:10 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_readwrite.c,v 1.52 2008/05/16 09:22:00 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -177,11 +177,11 @@ ext2fs_read(void *v)
 			xfersize = bytesinfile;
 
 		if (lblktosize(fs, nextlbn) >= ext2fs_size(ip))
-			error = bread(vp, lbn, size, NOCRED, &bp);
+			error = bread(vp, lbn, size, NOCRED, 0, &bp);
 		else {
 			int nextsize = fs->e2fs_bsize;
 			error = breadn(vp, lbn,
-				size, &nextlbn, &nextsize, 1, NOCRED, &bp);
+				size, &nextlbn, &nextsize, 1, NOCRED, 0, &bp);
 		}
 		if (error)
 			break;
@@ -202,10 +202,10 @@ ext2fs_read(void *v)
 		error = uiomove((char *)bp->b_data + blkoffset, xfersize, uio);
 		if (error)
 			break;
-		brelse(bp);
+		brelse(bp, 0);
 	}
 	if (bp != NULL)
-		brelse(bp);
+		brelse(bp, 0);
 
 out:
 	if (!(vp->v_mount->mnt_flag & MNT_NOATIME)) {
@@ -286,7 +286,9 @@ ext2fs_write(void *v)
 	if (vp->v_type == VREG && p &&
 	    uio->uio_offset + uio->uio_resid >
 	    p->p_rlimit[RLIMIT_FSIZE].rlim_cur) {
+		mutex_enter(proc_lock);
 		psignal(p, SIGXFSZ);
+		mutex_exit(proc_lock);
 		return (EFBIG);
 	}
 	if (uio->uio_resid == 0)
@@ -303,6 +305,9 @@ ext2fs_write(void *v)
 			bytelen = MIN(fs->e2fs_bsize - blkoffset,
 			    uio->uio_resid);
 
+			if (vp->v_size < oldoff + bytelen) {
+				uvm_vnp_setwritesize(vp, oldoff + bytelen);
+			}
 			error = ufs_balloc_range(vp, uio->uio_offset,
 			    bytelen, ap->a_cred, 0);
 			if (error)
@@ -331,13 +336,13 @@ ext2fs_write(void *v)
 			 */
 
 			if (!async && oldoff >> 16 != uio->uio_offset >> 16) {
-				simple_lock(&vp->v_interlock);
+				mutex_enter(&vp->v_interlock);
 				error = VOP_PUTPAGES(vp, (oldoff >> 16) << 16,
 				    (uio->uio_offset >> 16) << 16, PGO_CLEANIT);
 			}
 		}
 		if (error == 0 && ioflag & IO_SYNC) {
-			simple_lock(&vp->v_interlock);
+			mutex_enter(&vp->v_interlock);
 			error = VOP_PUTPAGES(vp, trunc_page(oldoff),
 			    round_page(blkroundup(fs, uio->uio_offset)),
 			    PGO_CLEANIT | PGO_SYNCIO);
@@ -400,8 +405,7 @@ out:
 	if (resid > uio->uio_resid)
 		VN_KNOTE(vp, NOTE_WRITE | (extended ? NOTE_EXTEND : 0));
 	if (error) {
-		(void) ext2fs_truncate(vp, osize, ioflag & IO_SYNC, ap->a_cred,
-		    p);
+		(void) ext2fs_truncate(vp, osize, ioflag & IO_SYNC, ap->a_cred);
 		uio->uio_offset -= resid - uio->uio_resid;
 		uio->uio_resid = resid;
 	} else if (resid > uio->uio_resid && (ioflag & IO_SYNC) == IO_SYNC)

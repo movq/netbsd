@@ -1,5 +1,8 @@
-/* $NetBSD: if_srt.c,v 1.4 2007/02/17 22:34:09 dyoung Exp $ */
+/* $NetBSD: if_srt.c,v 1.8 2008/06/15 16:37:21 christos Exp $ */
 /* This file is in the public domain. */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: if_srt.c,v 1.8 2008/06/15 16:37:21 christos Exp $");
 
 #include "opt_inet.h"
 
@@ -128,10 +131,9 @@ static RT *find_rt(SOFTC *sc, int af, ...)
 
 /* Network device interface. */
 
-static int srt_if_ioctl(struct ifnet *intf, u_long cmd, caddr_t data)
+static int srt_if_ioctl(struct ifnet *intf, u_long cmd, void *data)
 {
  struct ifaddr *ifa;
- struct ifreq *ifr;
  int s;
  int err;
 
@@ -157,12 +159,9 @@ static int srt_if_ioctl(struct ifnet *intf, u_long cmd, caddr_t data)
        /* XXX do we need to do more here for either of these? */
        break;
     case SIOCSIFMTU:
-       ifr = (void *) data;
-       ((SOFTC *)intf->if_softc)->intf.if_mtu = ifr->ifr_mtu;
-       break;
     case SIOCGIFMTU:
-       ifr = (void *) data;
-       ifr->ifr_mtu = intf->if_mtu;
+       if ((err = ifioctl_common(intf, cmd, data)) == ENETRESET)
+             err = 0;
        break;
     default:
        err = EINVAL;
@@ -245,7 +244,7 @@ static int srt_clone_create(struct if_clone *cl, int unit)
  sc->rts = 0;
  sc->flags = 0;
  sc->kflags = 0;
- snprintf(&sc->intf.if_xname[0],sizeof(sc->intf.if_xname),"%s%d",cl->ifc_name,unit);
+ if_initname(&sc->intf,cl->ifc_name,unit);
  sc->intf.if_softc = sc;
  sc->intf.if_mtu = 65535;
  sc->intf.if_flags = IFF_POINTOPOINT;
@@ -328,7 +327,7 @@ static int srt_close(dev_t dev, int flag, int mode, struct lwp *l)
 static int srt_ioctl(
 	dev_t dev,
 	u_long cmd,
-	caddr_t data,
+	void *data,
 	int flag,
 	struct lwp *l )
 {

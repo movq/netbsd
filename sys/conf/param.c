@@ -1,4 +1,4 @@
-/*	$NetBSD: param.c,v 1.51 2007/01/20 20:00:13 ad Exp $	*/
+/*	$NetBSD: param.c,v 1.58 2008/07/12 11:50:07 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1989 Regents of the University of California.
@@ -37,13 +37,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: param.c,v 1.51 2007/01/20 20:00:13 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: param.c,v 1.58 2008/07/12 11:50:07 gmcgarry Exp $");
 
 #include "opt_hz.h"
 #include "opt_rtc_offset.h"
 #include "opt_sysv.h"
 #include "opt_sysvparam.h"
 #include "opt_nmbclusters.h"
+#include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,8 +69,13 @@ __KERNEL_RCSID(0, "$NetBSD: param.c,v 1.51 2007/01/20 20:00:13 ad Exp $");
 #include <sys/msg.h>
 #endif
 
+/*
+ * PCC cannot handle the 80KB string literal.
+ */
+#if !defined(__PCC__)
 #define CONFIG_FILE
 #include "config_file.h"
+#endif
 
 /*
  * System parameter formulae.
@@ -101,6 +107,10 @@ __KERNEL_RCSID(0, "$NetBSD: param.c,v 1.51 2007/01/20 20:00:13 ad Exp $");
 #define	MAXFILES	(3 * (NPROC + MAXUSERS) + 80)
 #endif
 
+#ifndef MAXEXEC
+#define	MAXEXEC		16
+#endif
+
 int	hz = HZ;
 int	tick = 1000000 / HZ;
 /* can adjust 240ms in 60s */
@@ -108,8 +118,17 @@ int	tickadj = (240000 / (60 * HZ)) ? (240000 / (60 * HZ)) : 1;
 int	rtc_offset = RTC_OFFSET;
 int	maxproc = NPROC;
 int	desiredvnodes = NVNODE;
-int	maxfiles = MAXFILES;
+u_int	maxfiles = MAXFILES;
 int	fscale = FSCALE;	/* kernel uses `FSCALE', user uses `fscale' */
+int	maxexec = MAXEXEC;	/* max number of concurrent exec() calls */
+
+#ifdef MULTIPROCESSOR
+u_int	maxcpus = MAXCPUS;
+size_t	coherency_unit = COHERENCY_UNIT;
+#else
+u_int	maxcpus = 1;
+size_t	coherency_unit = ALIGNBYTES + 1;
+#endif
 
 /*
  * Various mbuf-related parameters.  These can also be changed at run-time
@@ -186,22 +205,6 @@ struct	msginfo msginfo = {
 	MSGSEG		/* number of message segments */
 };
 #endif
-
-/*
- * These control when and to what priority a process gets after a certain
- * amount of CPU time expires.  AUTONICETIME is in seconds.
- * AUTONICEVAL is NOT offset by NZERO, i.e. it's between PRIO_MIN and PRIO_MAX.
- */
-#ifndef AUTONICETIME
-#define AUTONICETIME 0		/* disabled */
-#endif
-
-#ifndef AUTONICEVAL
-#define AUTONICEVAL 4		/* default + 4 */
-#endif
-
-int autonicetime = AUTONICETIME;
-int autoniceval = AUTONICEVAL;
 
 /*
  * Actual network mbuf sizes (read-only), for netstat.

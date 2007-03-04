@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bridgevar.h,v 1.9 2007/02/17 22:34:08 dyoung Exp $	*/
+/*	$NetBSD: if_bridgevar.h,v 1.11 2007/07/09 21:11:00 ad Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -149,7 +149,7 @@ struct ifbreq {
 struct ifbifconf {
 	uint32_t	ifbic_len;	/* buffer size */
 	union {
-		caddr_t	ifbicu_buf;
+		void *	ifbicu_buf;
 		struct ifbreq *ifbicu_req;
 	} ifbic_ifbicu;
 #define	ifbic_buf	ifbic_ifbicu.ifbicu_buf
@@ -178,7 +178,7 @@ struct ifbareq {
 struct ifbaconf {
 	uint32_t	ifbac_len;	/* buffer size */
 	union {
-		caddr_t ifbacu_buf;
+		void *ifbacu_buf;
 		struct ifbareq *ifbacu_req;
 	} ifbac_ifbacu;
 #define	ifbac_buf	ifbac_ifbacu.ifbacu_buf
@@ -293,8 +293,8 @@ struct bridge_softc {
 	uint32_t		sc_brtmax;	/* max # of addresses */
 	uint32_t		sc_brtcnt;	/* cur. # of addresses */
 	uint32_t		sc_brttimeout;	/* rt timeout in seconds */
-	struct callout		sc_brcallout;	/* bridge callout */
-	struct callout		sc_bstpcallout;	/* STP callout */
+	callout_t		sc_brcallout;	/* bridge callout */
+	callout_t		sc_bstpcallout;	/* STP callout */
 	LIST_HEAD(, bridge_iflist) sc_iflist;	/* member interface list */
 	LIST_HEAD(, bridge_rtnode) *sc_rthash;	/* our forwarding table */
 	LIST_HEAD(, bridge_rtnode) sc_rtlist;	/* list version of above */

@@ -1,4 +1,4 @@
-/*	$NetBSD: bfs_sysvbfs.c,v 1.6 2007/02/22 06:37:00 thorpej Exp $	*/
+/*	$NetBSD: bfs_sysvbfs.c,v 1.10 2008/05/16 09:21:59 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: bfs_sysvbfs.c,v 1.6 2007/02/22 06:37:00 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bfs_sysvbfs.c,v 1.10 2008/05/16 09:21:59 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -110,18 +103,18 @@ bc_read(void *self, uint8_t *buf, daddr_t block)
 	struct bc_io_ops *bio = self;
 	struct buf *bp = NULL;
 
-	if (bread(bio->vp, block, DEV_BSIZE, bio->cred, &bp) != 0)
+	if (bread(bio->vp, block, DEV_BSIZE, bio->cred, 0, &bp) != 0)
 		goto error_exit;
 	memcpy(buf, bp->b_data, DEV_BSIZE);
-	brelse(bp);
+	brelse(bp, 0);
 
 	return true;
  error_exit:
-	printf("%s: block %lld read failed.\n", __FUNCTION__, 
+	printf("%s: block %lld read failed.\n", __func__, 
 	    (long long int)block);
 
 	if (bp != NULL)
-		brelse(bp);
+		brelse(bp, 0);
 	return false;
 }
 
@@ -147,7 +140,7 @@ bc_write(void *self, uint8_t *buf, daddr_t block)
 	struct buf *bp;
 
 #if 0
-	printf("%s: block=%lld\n", __FUNCTION__, block);
+	printf("%s: block=%lld\n", __func__, block);
 #endif
 	if ((bp = getblk(bio->vp, block, DEV_BSIZE, 0, 0)) == 0) {
 		printf("getblk failed.\n");

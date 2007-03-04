@@ -1,4 +1,4 @@
-/*	$NetBSD: amdpm.c,v 1.25 2007/02/05 23:38:15 jmcneill Exp $	*/
+/*	$NetBSD: amdpm.c,v 1.30 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amdpm.c,v 1.25 2007/02/05 23:38:15 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amdpm.c,v 1.30 2008/04/28 20:23:54 martin Exp $");
 
 #include "opt_amdpm.h"
 
@@ -48,10 +41,8 @@ __KERNEL_RCSID(0, "$NetBSD: amdpm.c,v 1.25 2007/02/05 23:38:15 jmcneill Exp $");
 #include <sys/callout.h>
 #include <sys/rnd.h>
 
-#ifdef __HAVE_TIMECOUNTER
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/ic/acpipmtimer.h>
-#endif
 
 #include <dev/i2c/i2cvar.h>
 
@@ -118,7 +109,7 @@ amdpm_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_pa = pa;
 
 #if 0
-	aprint_normal("%s: ", sc->sc_dev.dv_xname);
+	aprint_normal_dev(&sc->sc_dev, "");
 	pci_conf_print(pa->pa_pc, pa->pa_tag, NULL);
 #endif
 
@@ -134,39 +125,34 @@ amdpm_attach(struct device *parent, struct device *self, void *aux)
 	confreg = pci_conf_read(pa->pa_pc, pa->pa_tag, AMDPM_CONFREG);
 
 	if ((confreg & AMDPM_PMIOEN) == 0) {
-		aprint_error("%s: PMxx space isn't enabled\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "PMxx space isn't enabled\n");
 		return;
 	}
 
 	if (sc->sc_nforce) {
 		pmptrreg = pci_conf_read(pa->pa_pc, pa->pa_tag, NFORCE_PMPTR);
-		aprint_normal("%s: power management at 0x%04x\n",
-		    sc->sc_dev.dv_xname, NFORCE_PMBASE(pmptrreg));
+		aprint_normal_dev(&sc->sc_dev, "power management at 0x%04x\n",
+		    NFORCE_PMBASE(pmptrreg));
 		if (bus_space_map(sc->sc_iot, NFORCE_PMBASE(pmptrreg),
 		    AMDPM_PMSIZE, 0, &sc->sc_ioh)) {
-			aprint_error("%s: failed to map PMxx space\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "failed to map PMxx space\n");
 			return;
 		}
 	} else {
 		pmptrreg = pci_conf_read(pa->pa_pc, pa->pa_tag, AMDPM_PMPTR);
 		if (bus_space_map(sc->sc_iot, AMDPM_PMBASE(pmptrreg),
 		    AMDPM_PMSIZE, 0, &sc->sc_ioh)) {
-			aprint_error("%s: failed to map PMxx space\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "failed to map PMxx space\n");
 			return;
 		}
 	}
 
-#ifdef __HAVE_TIMECOUNTER
 	/* don't attach a timecounter on nforce boards */
 	if ((confreg & AMDPM_TMRRST) == 0 && (confreg & AMDPM_STOPTMR) == 0 &&
 	    !sc->sc_nforce) {
 		acpipmtimer_attach(&sc->sc_dev, sc->sc_iot, sc->sc_ioh,
 		  AMDPM_TMR, ((confreg & AMDPM_TMR32) ? ACPIPMT_32BIT : 0));
 	}
-#endif
 
 	/* try to attach devices on the smbus */
 	if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_AMD_PBC8111_ACPI ||
@@ -186,12 +172,12 @@ amdpm_attach(struct device *parent, struct device *self, void *aux)
 			delay(1);
 		}
 		if ((pmreg & AMDPM_RNGDONE) != 0) {
-			aprint_normal("%s: "
+			aprint_normal_dev(&sc->sc_dev, ""
 			    "random number generator enabled (apprx. %dms)\n",
-			    sc->sc_dev.dv_xname, i);
-			callout_init(&sc->sc_rnd_ch);
+			    i);
+			callout_init(&sc->sc_rnd_ch, 0);
 			rnd_attach_source(&sc->sc_rnd_source,
-			    sc->sc_dev.dv_xname, RND_TYPE_RNG,
+			    device_xname(&sc->sc_dev), RND_TYPE_RNG,
 			    /*
 			     * XXX Careful!  The use of RND_FLAG_NO_ESTIMATE
 			     * XXX here is unobvious: we later feed raw bits
@@ -206,12 +192,12 @@ amdpm_attach(struct device *parent, struct device *self, void *aux)
 			    RND_FLAG_NO_ESTIMATE);
 #ifdef AMDPM_RND_COUNTERS
 			evcnt_attach_dynamic(&sc->sc_rnd_hits, EVCNT_TYPE_MISC,
-			    NULL, sc->sc_dev.dv_xname, "rnd hits");
+			    NULL, device_xname(&sc->sc_dev), "rnd hits");
 			evcnt_attach_dynamic(&sc->sc_rnd_miss, EVCNT_TYPE_MISC,
-			    NULL, sc->sc_dev.dv_xname, "rnd miss");
+			    NULL, device_xname(&sc->sc_dev), "rnd miss");
 			for (i = 0; i < 256; i++) {
 				evcnt_attach_dynamic(&sc->sc_rnd_data[i],
-				    EVCNT_TYPE_MISC, NULL, sc->sc_dev.dv_xname,
+				    EVCNT_TYPE_MISC, NULL, device_xname(&sc->sc_dev),
 				    "rnd data");
 			}
 #endif

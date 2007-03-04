@@ -1,4 +1,4 @@
-/*	$NetBSD: lock_stubs.S,v 1.3 2007/02/19 22:04:07 simonb Exp $	*/
+/*	$NetBSD: lock_stubs.S,v 1.9 2008/04/28 20:23:28 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,10 +62,6 @@
 #define	BDSYNC		nop
 #endif	/* MIPS_HAS_LLSC != 0 && defined(MULTIPROCESSOR) */
 
-#if !(defined(__mips_n32) || defined(_LP64))
-STRONG_ALIAS(_lock_cas4, _lock_cas)
-#endif	/* !(n32 || LP64) */
-
 STRONG_ALIAS(mb_read, mb_memory)
 STRONG_ALIAS(mb_write, mb_memory)
 
@@ -91,44 +80,68 @@ END(mb_memory)
 	.set	noat
 
 /*
- * int _lock_cas(uintptr_t *val, uintptr_t old, uintptr_t new);
+ * unsigned long _atomic_cas_ulong(volatile unsigned long *val,
+ *     unsigned long old, unsigned long new);
  */
-LEAF(_lock_cas)
-	LL	t0, (a0)
+LEAF(_atomic_cas_ulong)
 1:
+	LL	t0, (a0)
 	bne	t0, a1, 2f
 	 addu	t1, zero, a2
 	SC	t1, (a0)
 	beq	t1, zero, 1b
-	 LL	t0, (a0)
-	SYNC
+	 nop
 	j	ra
-	 li	v0, 1
+	 addu	v0, zero, a1
 2:
 	j	ra
-	 addu	v0, zero, zero
-END(_lock_cas)
+	 addu	v0, zero, t0
+END(_atomic_cas_ulong)
+
+STRONG_ALIAS(atomic_cas_ulong,_atomic_cas_ulong)
+STRONG_ALIAS(_atomic_cas_ptr,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_ptr,_atomic_cas_ulong)
+
+STRONG_ALIAS(_atomic_cas_ulong_ni,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_ulong_ni,_atomic_cas_ulong)
+STRONG_ALIAS(_atomic_cas_ptr_ni,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_ptr_ni,_atomic_cas_ulong)
 
 #if defined(__mips_n32) || defined(_LP64)
+STRONG_ALIAS(_atomic_cas_64,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_64,_atomic_cas_ulong)
+
+STRONG_ALIAS(_atomic_cas_64_ni,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_64_ni,_atomic_cas_ulong)
+#endif
+
 /*
- * int _lock_cas4(uint32_t *val, uint32_t old, uint32_t new);
+ * unsigned int _atomic_cas_uint(volatile unsigned int *val,
+ *    unsigned int old, unsigned int new);
  */
-LEAF(_lock_cas4)
-	ll	t0, (a0)
+LEAF(_atomic_cas_uint)
 1:
+	ll	t0, (a0)
 	bne	t0, a1, 2f
 	 addu	t1, zero, a2
 	sc	t1, (a0)
 	beq	t1, zero, 1b
-	 ll	t0, (a0)
-	SYNC
+	 nop
 	j	ra
-	 li	v0, 1
+	 addu	v0, zero, a1
 2:
 	j	ra
-	 addu	v0, zero, zero
-END(_lock_cas4)
-#endif	/* n32 || LP64 */
+	 addu	v0, zero, t0
+END(_atomic_cas_uint)
+
+STRONG_ALIAS(_atomic_cas_32,_atomic_cas_uint)
+STRONG_ALIAS(atomic_cas_32,_atomic_cas_uint)
+STRONG_ALIAS(atomic_cas_uint,_atomic_cas_uint)
+
+STRONG_ALIAS(_atomic_cas_32_ni,_atomic_cas_uint)
+STRONG_ALIAS(atomic_cas_32_ni,_atomic_cas_uint)
+STRONG_ALIAS(_atomic_cas_uint_ni,_atomic_cas_uint)
+STRONG_ALIAS(atomic_cas_uint_ni,_atomic_cas_uint)
 
 #ifndef LOCKDEBUG
 
@@ -137,10 +150,9 @@ END(_lock_cas4)
  */
 LEAF(mutex_enter)
 	LL	t0, MTX_OWNER(a0)
-	LDPTR	t1, _C_LABEL(curlwp)
 1:
 	bne	t0, zero, 2f
-	 addu	t2, zero, t1
+	 addu	t2, zero, MIPS_CURLWP
 	SC	t2, MTX_OWNER(a0)
 	beq	t2, zero, 1b
 	 LL	t0, MTX_OWNER(a0)
@@ -156,10 +168,9 @@ END(mutex_enter)
  */
 LEAF(mutex_exit)
 	LL	t0, MTX_OWNER(a0)
-	LDPTR	t1, _C_LABEL(curlwp)
 	BDSYNC
 1:
-	bne	t0, t1, 2f
+	bne	t0, MIPS_CURLWP, 2f
 	 addu	t2, zero, zero
 	SC	t2, MTX_OWNER(a0)
 	beq	t2, zero, 1b
@@ -175,13 +186,12 @@ END(mutex_exit)
  * void	mutex_spin_enter(kmutex_t *mtx);
  */
 LEAF(mutex_spin_enter)
-	lui	t2, %hi(_C_LABEL(cpu_info_store))	/* XXXSMP */
-	ori	t2, t2, %lo(_C_LABEL(cpu_info_store))	/* XXXSMP */
-	lw	t6, CPU_INFO_MTX_COUNT(t2)
+	lw	t2, L_CPU(MIPS_CURLWP)
 	li	t7, -1
+	lw	t6, CPU_INFO_MTX_COUNT(t2)
+	lw	t1, MTX_IPL(a0)
 	addu	t6, t6, t7
 	sw	t6, CPU_INFO_MTX_COUNT(t2)
-	lw	t1, MTX_IPL(a0)
 	mfc0	v0, MIPS_COP_0_STATUS
 	and	t1, t1, MIPS_INT_MASK
 	nor	t1, zero, t1
@@ -225,16 +235,13 @@ END(mutex_spin_enter)
  * Lock stubs for MIPS1 and a couple of oddball MIPS3 CPUs.  These are
  * implemented using restartable sequences, since LL/SC are not available.
  *
- * The order of the generated code is particularly important here..  Some
- * assmptions:
- *
- * o We won't reference more than one memory location in KSEG2 during
- *   a critical section, so that there's reduced chance of the TLB miss
- *   handler us bouncing back around for a second go.
+ * The order of the generated code is particularly important here.  Some
+ * assumptions:
  *
  * o All of the critical sections are 20 bytes in size, and the entry
  *   to each critical section is aligned on a 16 byte boundary (see
- *   top of _lock_ras() for why).
+ *   top of _lock_ras() for why).  The entry is defined here as the
+ *   point after where a restart occurs if we trap within the section.
  *
  * o The entire code block is aligned on a 128 byte boundary, and is
  *   128 bytes in size.  This is to allow us to do an pessimistic check
@@ -253,10 +260,9 @@ END(mutex_spin_enter)
 	.set	noreorder
 	.set	noat
 
-STRONG_ALIAS(_lock_cas4, _lock_cas)
-
 /*
- * int _lock_cas(uintptr_t *val, uintptr_t old, uintptr_t new);
+ * unsigned long _atomic_cas_ulong(volatile unsigned long *val,
+ *     unsigned long old, unsigned long new);
  */
 	.text
 	.align	7
@@ -265,19 +271,36 @@ EXPORT(_lock_ras_start)
 
 	.space	12
 
-LEAF_NOPROFILE(_lock_cas)
+LEAF_NOPROFILE(_atomic_cas_ulong)
 	LDPTR	t0, (a0)	/* <- critical section start */
-_lock_cas_start:
+_atomic_cas_start:
 	 nop
 	bne	t0, a1, 1f
  	 nop
 	STPTR	a2, (a0)	/* <- critical section end */
 	j	ra
-	 li	v0, 1
+	 addu	v0, zero, a1
 1:
 	j	ra
-	 addu	v0, zero, zero
-END(_lock_cas)
+	 addu	v0, zero, t0
+END(_atomic_cas_ulong)
+
+STRONG_ALIAS(atomic_cas_ulong,_atomic_cas_ulong)
+STRONG_ALIAS(_atomic_cas_32,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_32,_atomic_cas_ulong)
+STRONG_ALIAS(_atomic_cas_uint,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_uint,_atomic_cas_ulong)
+STRONG_ALIAS(_atomic_cas_ptr,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_ptr,_atomic_cas_ulong)
+
+STRONG_ALIAS(_atomic_cas_ulong_ni,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_ulong_ni,_atomic_cas_ulong)
+STRONG_ALIAS(_atomic_cas_32_ni,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_32_ni,_atomic_cas_ulong)
+STRONG_ALIAS(_atomic_cas_uint_ni,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_uint_ni,_atomic_cas_ulong)
+STRONG_ALIAS(_atomic_cas_ptr_ni,_atomic_cas_ulong)
+STRONG_ALIAS(atomic_cas_ptr_ni,_atomic_cas_ulong)
 
 #ifndef LOCKDEBUG
 /*
@@ -285,14 +308,14 @@ END(_lock_cas)
  */
 	nop
 	nop
+	nop
 LEAF_NOPROFILE(mutex_enter)
-	lui	t2, %hi(_C_LABEL(curlwp))
 	LDPTR	t0, (a0)	/* <- critical section start */
 _mutex_enter_start:
-	LDPTR	t1, (%lo(_C_LABEL(curlwp)))(t2)
+	nop
 	bne	t0, zero, 1f
 	 nop			
-	STPTR	t1, (a0)	/* <- critical section end */
+	STPTR	MIPS_CURLWP, (a0)/* <- critical section end */
 	j	ra
 	 nop
 1:	j	_C_LABEL(mutex_vector_enter)
@@ -303,13 +326,13 @@ END(mutex_enter)
  * int mutex_exit(kmutex_t *mtx);
  */
 	nop
+	nop
+	nop
 LEAF_NOPROFILE(mutex_exit)
-	lui	t2, %hi(_C_LABEL(curlwp))
-	LDPTR	t1, (%lo(_C_LABEL(curlwp)))(t2)
 	LDPTR	t0, (a0)	/* <- critical section start */
 _mutex_exit_start:
 	 nop
-	bne	t0, t1, 1f
+	bne	t0, MIPS_CURLWP, 1f
 	 nop			
 	STPTR	zero, (a0)	/* <- critical section end */
 	j	ra
@@ -324,13 +347,12 @@ END(mutex_exit)
  * void	mutex_spin_enter(kmutex_t *mtx);
  */
 LEAF(mutex_spin_enter)
-	lui	t2, %hi(_C_LABEL(cpu_info_store))	/* XXXSMP */
-	ori	t2, t2, %lo(_C_LABEL(cpu_info_store))	/* XXXSMP */
-	lw	t6, CPU_INFO_MTX_COUNT(t2)
+	lw	t2, L_CPU(MIPS_CURLWP)
 	li	t7, -1
+	lw	t6, CPU_INFO_MTX_COUNT(t2)
+	lw	t1, MTX_IPL(a0)
 	addu	t6, t6, t7
 	sw	t6, CPU_INFO_MTX_COUNT(t2)
-	lw	t1, MTX_IPL(a0)
 	mfc0	v0, MIPS_COP_0_STATUS
 	and	t1, t1, MIPS_INT_MASK
 	nor	t1, zero, t1
@@ -386,21 +408,22 @@ END(mutex_spin_enter)
 LEAF_NOPROFILE(_lock_ras)
 	li	t1, -16
 	and	t2, k1, t1
-	lui	t0, %hi(_lock_cas_start)
-	ori	t0, t0, %lo(_lock_cas_start)
+	la	t0, _atomic_cas_start
 	beq	t2, t0, 1f
-#ifndef LOCKDEBUG
-	 addiu	t0, _mutex_enter_start - _lock_cas_start
-	beq	t2, t0, 1f
-	 addiu	t0, _mutex_exit_start - _mutex_enter_start
-	beq	t2, t0, 1f
-#endif	/* !LOCKDEBUG */
 	 nop
+#ifndef LOCKDEBUG
+	addiu	t0, _mutex_enter_start - _atomic_cas_start
+	beq	t2, t0, 1f
+	 nop
+	addiu	t0, _mutex_exit_start - _mutex_enter_start
+	beq	t2, t0, 1f
+	 nop
+#endif	/* !LOCKDEBUG */
 	j	ra
+	 nop
 1:
-	 li	t1, -4
 	j	ra
-	 addu	k1, t0, t1
+	 addiu	k1, t0, -4
 END(_lock_ras)
 
 #endif	/* MIPS_HAS_LLSC == 0 */
@@ -413,26 +436,24 @@ END(_lock_ras)
 LEAF(mutex_spin_exit)
 #if defined(DIAGNOSTIC)
 	lw	t0, MTX_LOCK(a0)
-	lui	t1, %hi(_C_LABEL(cpu_info_store))	/* XXXSMP */
-	beq	t0, zero, 2f
-	 ori	t1, t1, %lo(_C_LABEL(cpu_info_store))	/* XXXSMP */
 	SYNC
+	beq	t0, zero, 2f
+	 lw	t1, L_CPU(MIPS_CURLWP)
 	sw	zero, MTX_LOCK(a0)
 #elif defined(MULTIPROCESSOR)
 	SYNC
+	lw	t1, L_CPU(MIPS_CURLWP)
 	sw      zero, MTX_LOCK(a0)
-	lui	t1, %hi(_C_LABEL(cpu_info_store))	/* XXXSMP */
-	ori	t1, t1, %lo(_C_LABEL(cpu_info_store))	/* XXXSMP */
 #else
-	lui	t1, %hi(_C_LABEL(cpu_info_store))
-	ori	t1, t1, %lo(_C_LABEL(cpu_info_store))
+	lw	t1, L_CPU(MIPS_CURLWP)
+	nop
 #endif
 	lw	t0, CPU_INFO_MTX_COUNT(t1)
+	lw	a0, CPU_INFO_MTX_OLDSPL(t1)
 	addiu	t0, t0, 1
 	sw	t0, CPU_INFO_MTX_COUNT(t1)
 	bne	t0, zero, 1f
-	 lw	a0, CPU_INFO_MTX_OLDSPL(t1)
-	mfc0	v0, MIPS_COP_0_STATUS
+	 mfc0	v0, MIPS_COP_0_STATUS
 	and	a0, a0, (MIPS_INT_MASK | MIPS_SR_INT_IE)
 	li	v1, ~(MIPS_INT_MASK | MIPS_SR_INT_IE)
 	and	v1, v1, v0

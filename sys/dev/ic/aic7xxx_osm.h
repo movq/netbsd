@@ -1,4 +1,4 @@
-/*	$NetBSD: aic7xxx_osm.h,v 1.17 2006/11/16 01:32:51 christos Exp $	*/
+/*	$NetBSD: aic7xxx_osm.h,v 1.20 2008/04/08 12:07:25 cegger Exp $	*/
 
 /*
  * NetBSD platform specific driver option settings, data structures,
@@ -58,8 +58,8 @@
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -206,7 +206,7 @@ typedef struct callout ahc_timer_t;
 /***************************** Timer Facilities *******************************/
 void ahc_timeout(void*);
 
-#define ahc_timer_init callout_init
+#define ahc_timer_init(x) callout_init(x, 0)
 #define ahc_timer_stop callout_stop
 
 static __inline void
@@ -508,7 +508,7 @@ static __inline void	ahc_platform_dump_card_state(struct ahc_softc *);
 static __inline void
 ahc_print_path(struct ahc_softc *ahc, struct scb *scb)
 {
-	printf("%s:", ahc->sc_dev.dv_xname);
+	printf("%s:", device_xname(&ahc->sc_dev));
 }
 
 static __inline void

@@ -1,4 +1,4 @@
-/*	$NetBSD: altq_red.c,v 1.24 2006/11/16 01:32:37 christos Exp $	*/
+/*	$NetBSD: altq_red.c,v 1.28 2008/06/18 09:06:27 yamt Exp $	*/
 /*	$KAME: altq_red.c,v 1.20 2005/04/13 03:44:25 suz Exp $	*/
 
 /*
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altq_red.c,v 1.24 2006/11/16 01:32:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altq_red.c,v 1.28 2008/06/18 09:06:27 yamt Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_altq.h"
@@ -82,7 +82,6 @@ __KERNEL_RCSID(0, "$NetBSD: altq_red.c,v 1.24 2006/11/16 01:32:37 christos Exp $
 #include <sys/sockio.h>
 #include <sys/proc.h>
 #include <sys/kernel.h>
-#include <sys/kauth.h>
 #ifdef ALTQ_FLOWVALVE
 #include <sys/queue.h>
 #include <sys/time.h>
@@ -527,7 +526,7 @@ mark_ecn(struct mbuf *m, struct altq_pktattr *pktattr, int flags)
 	void		*hdr;
 	int		 af;
 
-	t = m_tag_find(m, PACKET_TAG_PF_QID, NULL);
+	t = m_tag_find(m, PACKET_TAG_ALTQ_QID, NULL);
 	if (t != NULL) {
 		at = (struct altq_tag *)(t + 1);
 		if (at == NULL)
@@ -547,8 +546,8 @@ mark_ecn(struct mbuf *m, struct altq_pktattr *pktattr, int flags)
 
 	/* verify that pattr_hdr is within the mbuf data */
 	for (m0 = m; m0 != NULL; m0 = m0->m_next)
-		if (((caddr_t)hdr >= m0->m_data) &&
-		    ((caddr_t)hdr < m0->m_data + m0->m_len))
+		if (((char *)hdr >= m0->m_data) &&
+		    ((char *)hdr < m0->m_data + m0->m_len))
 			break;
 	if (m0 == NULL) {
 		/* ick, tag info is stale */
@@ -753,7 +752,7 @@ redclose(dev_t dev, int flag, int fmt,
 }
 
 int
-redioctl(dev_t dev, ioctlcmd_t cmd, caddr_t addr, int flag,
+redioctl(dev_t dev, ioctlcmd_t cmd, void *addr, int flag,
     struct lwp *l)
 {
 	red_queue_t *rqp;
@@ -1086,11 +1085,7 @@ red_purgeq(red_queue_t *rqp)
 
 #define	FV_STATS
 
-#if (__FreeBSD_version > 300000) || defined(__HAVE_TIMECOUNTER)
 #define	FV_TIMESTAMP(tp)	getmicrotime(tp)
-#else
-#define	FV_TIMESTAMP(tp)	{ (*(tp)) = time; }
-#endif
 
 /*
  * Brtt table: 127 entry table to convert drop rate (p) to

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.82 2007/01/24 13:08:14 hubertf Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.91 2008/06/22 16:29:36 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -143,7 +136,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.82 2007/01/24 13:08:14 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.91 2008/06/22 16:29:36 tsutsui Exp $");
 
 #include "hil.h"
 #include "dvbox.h"
@@ -218,8 +211,7 @@ static int	dio_scan(int (*func)(bus_space_tag_t, bus_addr_t, int));
 static int	dio_scode_probe(int,
 		    int (*func)(bus_space_tag_t, bus_addr_t, int));
 
-extern	caddr_t internalhpib;
-extern	char *extiobase;
+extern	void *internalhpib;
 
 /* How we were booted. */
 u_int	bootdev;
@@ -286,16 +278,15 @@ static void	setbootdev(void);
 static struct dev_data *dev_data_lookup(struct device *);
 static void	dev_data_insert(struct dev_data *, ddlist_t *);
 
-static int	mainbusmatch(struct device *, struct cfdata *, void *);
-static void	mainbusattach(struct device *, struct device *, void *);
-static int	mainbussearch(struct device *, struct cfdata *,
-			      const int *, void *);
+static int	mainbusmatch(device_t, cfdata_t, void *);
+static void	mainbusattach(device_t, device_t, void *);
+static int	mainbussearch(device_t, cfdata_t, const int *, void *);
 
-CFATTACH_DECL(mainbus, sizeof(struct device),
+CFATTACH_DECL_NEW(mainbus, 0,
     mainbusmatch, mainbusattach, NULL, NULL);
 
 static int
-mainbusmatch(struct device *parent, struct cfdata *match, void *aux)
+mainbusmatch(device_t parent, cfdata_t cf, void *aux)
 {
 	static int mainbus_matched = 0;
 
@@ -308,18 +299,17 @@ mainbusmatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-mainbusattach(struct device *parent, struct device *self, void *aux)
+mainbusattach(device_t parent, device_t self, void *aux)
 {
 
-	printf("\n");
+	aprint_normal("\n");
 
 	/* Search for and attach children. */
 	config_search_ia(mainbussearch, self, "mainbus", NULL);
 }
 
 static int
-mainbussearch(struct device *parent, struct cfdata *cf,
-	      const int *ldesc, void *aux)
+mainbussearch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 
 	if (config_match(parent, cf, NULL) > 0)
@@ -344,15 +334,11 @@ cpu_configure(void)
 	/* Kick off autoconfiguration. */
 	(void)splhigh();
 
-	softintr_init();
-
 	if (config_rootfound("mainbus", NULL) == NULL)
 		panic("no mainbus found");
 
 	/* Configuration is finished, turn on interrupts. */
 	(void)spl0();
-
-	intr_printlevels();
 }
 
 /**********************************************************************
@@ -396,8 +382,8 @@ cpu_rootconf(void)
 	if (rootspec == NULL) {
 		vops = vfs_getopsbyname("nfs");
 		if (vops != NULL && vops->vfs_mountroot == mountroot) {
-			for (dd = dev_data_list.lh_first;
-			    dd != NULL; dd = dd->dd_list.le_next) {
+			for (dd = LIST_FIRST(&dev_data_list);
+			    dd != NULL; dd = LIST_NEXT(dd, dd_list)) {
 				if (device_class(dd->dd_dev) == DV_IFNET) {
 					/* Got it! */
 					dv = dd->dd_dev;
@@ -550,8 +536,8 @@ findbootdev(void)
 	 * always starts at scode 0 and works its way up.
 	 */
 	if (netboot) {
-		for (dd = dev_data_list.lh_first; dd != NULL;
-		    dd = dd->dd_list.le_next) {
+		for (dd = LIST_FIRST(&dev_data_list); dd != NULL;
+		    dd = LIST_NEXT(dd, dd_list)) {
 			if (device_class(dd->dd_dev) == DV_IFNET) {
 				/*
 				 * Found it!
@@ -622,8 +608,8 @@ findbootdev_slave(ddlist_t *ddlist, int ctlr, int slave, int punit)
 	/*
 	 * Find the booted controller.
 	 */
-	for (cdd = ddlist->lh_first; ctlr != 0 && cdd != NULL;
-	    cdd = cdd->dd_clist.le_next)
+	for (cdd = LIST_FIRST(ddlist); ctlr != 0 && cdd != NULL;
+	    cdd = LIST_NEXT(cdd, dd_clist))
 		ctlr--;
 	if (cdd == NULL) {
 		/*
@@ -636,8 +622,8 @@ findbootdev_slave(ddlist_t *ddlist, int ctlr, int slave, int punit)
 	 * Now find the device with the right slave/punit
 	 * that's a child of the controller.
 	 */
-	for (dd = dev_data_list.lh_first; dd != NULL;
-	    dd = dd->dd_list.le_next) {
+	for (dd = LIST_FIRST(&dev_data_list); dd != NULL;
+	    dd = LIST_NEXT(dd, dd_list)) {
 		/*
 		 * "sd" -> "scsibus" -> "spc"
 		 * "rd" -> "hpibbus" -> "fhpib"
@@ -716,8 +702,8 @@ setbootdev(void)
 		 * "rd" -> "hpibbus" -> "fhpib"
 		 * "sd" -> "scsibus" -> "spc"
 		 */
-		for (cdd = dev_data_list_hpib.lh_first, ctlr = 0;
-		    cdd != NULL; cdd = cdd->dd_clist.le_next, ctlr++) {
+		for (cdd = LIST_FIRST(&dev_data_list_hpib), ctlr = 0;
+		    cdd != NULL; cdd = LIST_NEXT(cdd, dd_clist), ctlr++) {
 			if (cdd->dd_dev ==
 			    device_parent(device_parent(root_device))) {
 				/*
@@ -734,9 +720,9 @@ setbootdev(void)
 
  out:
 	/* Don't need this anymore. */
-	for (dd = dev_data_list.lh_first; dd != NULL; ) {
+	for (dd = LIST_FIRST(&dev_data_list); dd != NULL; ) {
 		cdd = dd;
-		dd = dd->dd_list.le_next;
+		dd = LIST_NEXT(dd, dd_list);
 		free(cdd, M_DEVBUF);
 	}
 }
@@ -749,7 +735,8 @@ dev_data_lookup(struct device *dev)
 {
 	struct dev_data *dd;
 
-	for (dd = dev_data_list.lh_first; dd != NULL; dd = dd->dd_list.le_next)
+	for (dd = LIST_FIRST(&dev_data_list); dd != NULL;
+	    dd = LIST_NEXT(dd, dd_list))
 		if (dd->dd_dev == dev)
 			return dd;
 
@@ -771,7 +758,7 @@ dev_data_insert(struct dev_data *dd, ddlist_t *ddlist)
 	}
 #endif
 
-	de = ddlist->lh_first;
+	de = LIST_FIRST(ddlist);
 
 	/*
 	 * Just insert at head if list is empty.
@@ -786,7 +773,7 @@ dev_data_insert(struct dev_data *dd, ddlist_t *ddlist)
 	 * is greater than ours.  When we find it, insert ourselves
 	 * into the list before it.
 	 */
-	for (; de->dd_clist.le_next != NULL; de = de->dd_clist.le_next) {
+	for (; LIST_NEXT(de, dd_clist) != NULL; de = LIST_NEXT(de, dd_clist)) {
 		if (de->dd_scode > dd->dd_scode) {
 			LIST_INSERT_BEFORE(de, dd, dd_clist);
 			return;
@@ -911,12 +898,11 @@ dio_scan(int (*func)(bus_space_tag_t, bus_addr_t, int))
 }
 
 static int
-dio_scode_probe(int scode,
-    int (*func)(bus_space_tag_t, bus_addr_t, int))
+dio_scode_probe(int scode, int (*func)(bus_space_tag_t, bus_addr_t, int))
 {
 	struct bus_space_tag tag;
 	bus_space_tag_t bst;
-	caddr_t pa, va;
+	void *pa, *va;
 
 	bst = &tag;
 	memset(bst, 0, sizeof(struct bus_space_tag));
@@ -949,7 +935,7 @@ iomap_init(void)
 	/* extiobase is initialized by pmap_bootstrap(). */
 	extio_ex = extent_create("extio", (u_long) extiobase,
 	    (u_long) extiobase + (ptoa(EIOMAPSIZE) - 1), M_DEVBUF,
-	    (caddr_t) extio_ex_storage, sizeof(extio_ex_storage),
+	    (void *) extio_ex_storage, sizeof(extio_ex_storage),
 	    EX_NOCOALESCE|EX_NOWAIT);
 }
 
@@ -957,8 +943,8 @@ iomap_init(void)
  * Allocate/deallocate a cache-inhibited range of kernel virtual address
  * space mapping the indicated physical address range [pa - pa+size)
  */
-caddr_t
-iomap(caddr_t pa, int size)
+void *
+iomap(void *pa, int size)
 {
 	u_long kva;
 	int error;
@@ -974,25 +960,26 @@ iomap(caddr_t pa, int size)
 	if (error)
 		return 0;
 
-	physaccess((caddr_t) kva, pa, size, PG_RW|PG_CI);
-	return (caddr_t)kva;
+	physaccess((void *) kva, pa, size, PG_RW|PG_CI);
+	return (void *)kva;
 }
 
 /*
  * Unmap a previously mapped device.
  */
 void
-iounmap(caddr_t kva, int size)
+iounmap(void *kva, int size)
 {
 
 #ifdef DEBUG
-	if (((int)kva & PGOFSET) || (size & PGOFSET))
+	if (((vaddr_t)kva & PGOFSET) || (size & PGOFSET))
 		panic("iounmap: unaligned");
-	if (kva < extiobase || kva >= extiobase + ptoa(EIOMAPSIZE))
+	if ((uint8_t *)kva < extiobase ||
+	    (uint8_t *)kva >= extiobase + ptoa(EIOMAPSIZE))
 		panic("iounmap: bad address");
 #endif
 	physunaccess(kva, size);
-	if (extent_free(extio_ex, (u_long) kva, size,
+	if (extent_free(extio_ex, (vaddr_t)kva, size,
 	    EX_NOWAIT | (extio_ex_malloc_safe ? EX_MALLOCOK : 0)))
 		printf("iounmap: kva %p size 0x%x: can't free region\n",
 		    kva, size);

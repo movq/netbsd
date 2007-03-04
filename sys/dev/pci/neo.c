@@ -1,4 +1,4 @@
-/*	$NetBSD: neo.c,v 1.35 2006/11/16 01:33:09 christos Exp $	*/
+/*	$NetBSD: neo.c,v 1.39 2008/04/10 19:13:37 cegger Exp $	*/
 
 /*
  * Copyright (c) 1999 Cameron Grant <gandalf@vilnya.demon.co.uk>
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: neo.c,v 1.35 2006/11/16 01:33:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: neo.c,v 1.39 2008/04/10 19:13:37 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: neo.c,v 1.35 2006/11/16 01:33:09 christos Exp $");
 #include <sys/malloc.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcivar.h>
@@ -162,8 +162,6 @@ struct neo_softc {
 
 	struct ac97_codec_if *codec_if;
 	struct ac97_host_if host_if;
-
-	void		*powerhook;
 };
 
 /* -------------------------------------------------------------------- */
@@ -207,7 +205,6 @@ static void	neo_free(void *, void *, struct malloc_type *);
 static size_t	neo_round_buffersize(void *, int, size_t);
 static paddr_t	neo_mappage(void *, void *, off_t, int);
 static int	neo_get_props(void *);
-static void	neo_power(int, void *);
 
 CFATTACH_DECL(neo, sizeof(struct neo_softc),
     neo_match, neo_attach, NULL, NULL);
@@ -405,7 +402,7 @@ neo_intr(void *p)
 		nm_ackint(sc, sc->misc1int);
 		x = nm_rd_1(sc, 0x400);
 		nm_wr_1(sc, 0x400, x | 2);
-		printf("%s: misc int 1\n", sc->dev.dv_xname);
+		printf("%s: misc int 1\n", device_xname(&sc->dev));
 		rv = 1;
 	}
 	if (status & sc->misc2int) {
@@ -413,13 +410,13 @@ neo_intr(void *p)
 		nm_ackint(sc, sc->misc2int);
 		x = nm_rd_1(sc, 0x400);
 		nm_wr_1(sc, 0x400, x & ~2);
-		printf("%s: misc int 2\n", sc->dev.dv_xname);
+		printf("%s: misc int 2\n", device_xname(&sc->dev));
 		rv = 1;
 	}
 	if (status) {
 		status &= ~sc->misc2int;
 		nm_ackint(sc, sc->misc2int);
-		printf("%s: unknown int\n", sc->dev.dv_xname);
+		printf("%s: unknown int\n", device_xname(&sc->dev));
 		rv = 1;
 	}
 
@@ -552,16 +549,15 @@ neo_match(struct device *parent, struct cfdata *match,
 	return 0;
 }
 
-static void
-neo_power(int why, void *addr)
+static bool
+neo_resume(device_t dv PMF_FN_ARGS)
 {
-	struct neo_softc *sc;
+	struct neo_softc *sc = device_private(dv);
 
-	sc = (struct neo_softc *)addr;
-	if (why == PWR_RESUME) {
-		nm_init(sc);
-		sc->codec_if->vtbl->restore_ports(sc->codec_if);
-	}
+	nm_init(sc);
+	sc->codec_if->vtbl->restore_ports(sc->codec_if);	
+
+	return true;
 }
 
 static void
@@ -586,19 +582,19 @@ neo_attach(struct device *parent, struct device *self, void *aux)
 	/* Map I/O register */
 	if (pci_mapreg_map(pa, PCI_MAPREG_START, PCI_MAPREG_TYPE_MEM, 0,
 			   &sc->bufiot, &sc->bufioh, &sc->buf_pciaddr, NULL)) {
-		printf("%s: can't map buffer\n", sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "can't map buffer\n");
 		return;
 	}
 
 	if (pci_mapreg_map(pa, PCI_MAPREG_START + 4, PCI_MAPREG_TYPE_MEM,
 	    BUS_SPACE_MAP_LINEAR, &sc->regiot, &sc->regioh, NULL, NULL)) {
-		printf("%s: can't map registers\n", sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "can't map registers\n");
 		return;
 	}
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: couldn't map interrupt\n", sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "couldn't map interrupt\n");
 		return;
 	}
 
@@ -606,14 +602,13 @@ neo_attach(struct device *parent, struct device *self, void *aux)
 	sc->ih = pci_intr_establish(pc, ih, IPL_AUDIO, neo_intr, sc);
 
 	if (sc->ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		       sc->dev.dv_xname);
+		aprint_error_dev(&sc->dev, "couldn't establish interrupt");
 		if (intrstr != NULL)
 			printf(" at %s", intrstr);
 		printf("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->dev.dv_xname, intrstr);
+	printf("%s: interrupting at %s\n", device_xname(&sc->dev), intrstr);
 
 	if (nm_init(sc) != 0)
 		return;
@@ -634,7 +629,8 @@ neo_attach(struct device *parent, struct device *self, void *aux)
 	if (ac97_attach(&sc->host_if, self) != 0)
 		return;
 
-	sc->powerhook = powerhook_establish(sc->dev.dv_xname, neo_power, sc);
+	if (!pmf_device_register(self, NULL, neo_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	audio_attach_mi(&neo_hw_if, sc, &sc->dev);
 }

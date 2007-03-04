@@ -1,4 +1,4 @@
-/*	$NetBSD: gus.c,v 1.96 2006/11/16 01:33:00 christos Exp $	*/
+/*	$NetBSD: gus.c,v 1.102 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *	  Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -95,7 +88,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gus.c,v 1.96 2006/11/16 01:33:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gus.c,v 1.102 2008/04/28 20:23:52 martin Exp $");
 
 #include "gus.h"
 #if NGUS > 0
@@ -113,10 +106,10 @@ __KERNEL_RCSID(0, "$NetBSD: gus.c,v 1.96 2006/11/16 01:33:00 christos Exp $");
 #include <sys/malloc.h>
 #include <sys/kernel.h>
 
-#include <machine/cpu.h>
-#include <machine/intr.h>
-#include <machine/bus.h>
-#include <machine/cpufunc.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
+#include <sys/bus.h>
+
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
 #include <dev/mulaw.h>
@@ -188,7 +181,7 @@ struct gus_softc {
 	bus_space_handle_t sc_ioh3;	/* ICS2101 handle */
 	bus_space_handle_t sc_ioh4;	/* MIDI handle */
 
-	struct callout sc_dmaout_ch;
+	callout_t sc_dmaout_ch;
 
 	int sc_iobase;			/* I/O base address */
 	int sc_irq;			/* IRQ used */
@@ -345,7 +338,7 @@ int	gusstats = 0;
 struct dma_record {
 	struct timeval tv;
 	u_long gusaddr;
-	caddr_t bsdaddr;
+	void *bsdaddr;
 	u_short count;
 	u_char channel;
 	u_char direction;
@@ -362,10 +355,10 @@ int	gusopen(void *, int);
 void	gusclose(void *);
 void	gusmax_close(void *);
 int	gusintr(void *);
-int	gus_set_in_gain(caddr_t, u_int, u_char);
-int	gus_get_in_gain(caddr_t);
-int	gus_set_out_gain(caddr_t, u_int, u_char);
-int	gus_get_out_gain(caddr_t);
+int	gus_set_in_gain(void *, u_int, u_char);
+int	gus_get_in_gain(void *);
+int	gus_set_out_gain(void *, u_int, u_char);
+int	gus_get_out_gain(void *);
 int	gus_set_params(void *, int, int, audio_params_t *,
 	    audio_params_t *, stream_filter_list_t *, stream_filter_list_t *);
 int	gusmax_set_params(void *, int, int, audio_params_t *,
@@ -393,7 +386,7 @@ STATIC int	gus_mic_ctl(void *, int);
 STATIC int	gus_linein_ctl(void *, int);
 STATIC int	gus_test_iobase(bus_space_tag_t, int);
 STATIC void	guspoke(bus_space_tag_t, bus_space_handle_t, long, u_char);
-STATIC void	gusdmaout(struct gus_softc *, int, u_long, caddr_t, int);
+STATIC void	gusdmaout(struct gus_softc *, int, u_long, void *, int);
 STATIC int	gus_init_cs4231(struct gus_softc *);
 STATIC void	gus_init_ics2101(struct gus_softc *);
 
@@ -829,12 +822,12 @@ gusattach(struct device *parent, struct device *self, void *aux)
 	bus_space_handle_t ioh1, ioh2, ioh3, ioh4;
 	int		iobase, i;
 	unsigned char	c, m;
-	int d = -1;
+	int d = -1, s;
 	const struct audio_hw_if *hwif;
 
 	sc = (void *) self;
 	ia = aux;
-	callout_init(&sc->sc_dmaout_ch);
+	callout_init(&sc->sc_dmaout_ch, 0);
 
 	sc->sc_iot = iot = ia->ia_iot;
 	sc->sc_ic = ia->ia_ic;
@@ -842,20 +835,20 @@ gusattach(struct device *parent, struct device *self, void *aux)
 
 	/* Map i/o space */
 	if (bus_space_map(iot, iobase, GUS_NPORT1, 0, &ioh1))
-		panic("%s: can't map io port range 1", self->dv_xname);
+		panic("%s: can't map io port range 1", device_xname(self));
 	sc->sc_ioh1 = ioh1;
 	if (bus_space_map(iot, iobase+GUS_IOH2_OFFSET, GUS_NPORT2, 0, &ioh2))
-		panic("%s: can't map io port range 2", self->dv_xname);
+		panic("%s: can't map io port range 2", device_xname(self));
 	sc->sc_ioh2 = ioh2;
 
 	/* XXX Maybe we shouldn't fail on mapping this, but just assume
 	 * the card is of revision 0? */
 	if (bus_space_map(iot, iobase+GUS_IOH3_OFFSET, GUS_NPORT3, 0, &ioh3))
-		panic("%s: can't map io port range 3", self->dv_xname);
+		panic("%s: can't map io port range 3", device_xname(self));
 	sc->sc_ioh3 = ioh3;
 
 	if (bus_space_map(iot, iobase+GUS_IOH4_OFFSET, GUS_NPORT4, 0, &ioh4))
-		panic("%s: can't map io port range 4", self->dv_xname);
+		panic("%s: can't map io port range 4", device_xname(self));
 	sc->sc_ioh4 = ioh4;
 
 	sc->sc_iobase = iobase;
@@ -906,7 +899,7 @@ gusattach(struct device *parent, struct device *self, void *aux)
 	}
 	if (d == -1)
 		printf("%s: WARNING: Cannot initialize drq\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(&sc->sc_dev));
 
 	/*
 	 * Program the IRQ and DMA channels on the GUS.  Note that we hardwire
@@ -918,7 +911,7 @@ gusattach(struct device *parent, struct device *self, void *aux)
 	 * The order of these operations is very magical.
 	 */
 
-	disable_intr();		/* XXX needed? */
+	s = splhigh();		/* XXX needed? */
 
 	bus_space_write_1(iot, ioh1, GUS_REG_CONTROL, GUS_REG_IRQCTL);
 	bus_space_write_1(iot, ioh1, GUS_MIX_CONTROL, m);
@@ -944,7 +937,7 @@ gusattach(struct device *parent, struct device *self, void *aux)
 	     (m | GUSMASK_LATCHES) & ~(GUSMASK_LINE_OUT|GUSMASK_LINE_IN));
 	bus_space_write_1(iot, ioh2, GUS_VOICE_SELECT, 0x00);
 
-	enable_intr();
+	splx(s);
 
 	sc->sc_mixcontrol =
 		(m | GUSMASK_LATCHES) & ~(GUSMASK_LINE_OUT|GUSMASK_LINE_IN);
@@ -953,14 +946,14 @@ gusattach(struct device *parent, struct device *self, void *aux)
 		sc->sc_play_maxsize = isa_dmamaxsize(sc->sc_ic,
 		    sc->sc_playdrq);
 		if (isa_drq_alloc(sc->sc_ic, sc->sc_playdrq) != 0) {
-			printf("%s: can't reserve drq %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_playdrq);
+			aprint_error_dev(&sc->sc_dev, "can't reserve drq %d\n",
+			    sc->sc_playdrq);
 			return;
 		}
 		if (isa_dmamap_create(sc->sc_ic, sc->sc_playdrq,
 		    sc->sc_play_maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW)) {
-			printf("%s: can't create map for drq %d\n",
-			       sc->sc_dev.dv_xname, sc->sc_playdrq);
+			aprint_error_dev(&sc->sc_dev, "can't create map for drq %d\n",
+			       sc->sc_playdrq);
 			return;
 		}
 	}
@@ -968,14 +961,14 @@ gusattach(struct device *parent, struct device *self, void *aux)
 		sc->sc_req_maxsize = isa_dmamaxsize(sc->sc_ic,
 		    sc->sc_recdrq);
 		if (isa_drq_alloc(sc->sc_ic, sc->sc_recdrq) != 0) {
-			printf("%s: can't reserve drq %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_recdrq);
+			aprint_error_dev(&sc->sc_dev, "can't reserve drq %d\n",
+			    sc->sc_recdrq);
 			return;
 		}
 		if (isa_dmamap_create(sc->sc_ic, sc->sc_recdrq,
 		    sc->sc_req_maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW)) {
-			printf("%s: can't create map for drq %d\n",
-			       sc->sc_dev.dv_xname, sc->sc_recdrq);
+			aprint_error_dev(&sc->sc_dev, "can't create map for drq %d\n",
+			       sc->sc_recdrq);
 			return;
 		}
 	}
@@ -1027,7 +1020,7 @@ gusattach(struct device *parent, struct device *self, void *aux)
 	snprintf(gus_device.version, sizeof(gus_device.version), "%d",
 	    sc->sc_revision);
 
-	printf("\n%s: Gravis UltraSound", sc->sc_dev.dv_xname);
+	printf("\n%s: Gravis UltraSound", device_xname(&sc->sc_dev));
 	if (sc->sc_revision >= 10)
 		printf(" MAX");
 	else {
@@ -1041,7 +1034,7 @@ gusattach(struct device *parent, struct device *self, void *aux)
 	/* A GUS MAX should always have a CODEC installed */
 	if ((sc->sc_revision >= 10) & !(HAS_CODEC(sc)))
 		printf("%s: WARNING: did not attach CODEC on MAX\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(&sc->sc_dev));
 
 	/*
 	 * Setup a default interrupt handler
@@ -1239,7 +1232,7 @@ stereo_dmaintr(void *arg)
 	}
 #endif
 
-	gusdmaout(sc, sa->flags, sa->dmabuf, (caddr_t) sa->buffer, sa->size);
+	gusdmaout(sc, sa->flags, sa->dmabuf, (void *) sa->buffer, sa->size);
 
 	sa->flags = 0;
 	sa->dmabuf = 0;
@@ -1331,7 +1324,7 @@ gus_dma_output(void *addr, void *tbuf, int size,
 	}
 #endif
 
-	gusdmaout(sc, flags, boarddma, (caddr_t) buffer, size);
+	gusdmaout(sc, flags, boarddma, (void *) buffer, size);
 
 	return 0;
 }
@@ -1472,7 +1465,7 @@ gus_dmaout_timeout(void *arg)
 	sc = arg;
 	iot = sc->sc_iot;
 	ioh2 = sc->sc_ioh2;
-	printf("%s: dmaout timeout\n", sc->sc_dev.dv_xname);
+	printf("%s: dmaout timeout\n", device_xname(&sc->sc_dev));
 	/*
 	 * Stop any DMA.
 	 */
@@ -1586,7 +1579,7 @@ gus_dmaout_dointr(struct gus_softc *sc)
 	if (sc->sc_voc[GUS_VOICE_LEFT].voccntl &
 	    GUSMASK_VOICE_STOPPED) {
 		if (sc->sc_flags & GUS_PLAYING) {
-			printf("%s: playing yet stopped?\n", sc->sc_dev.dv_xname);
+			printf("%s: playing yet stopped?\n", device_xname(&sc->sc_dev));
 		}
 		sc->sc_bufcnt++; /* another yet to be played */
 		gus_start_playing(sc, sc->sc_dmabuf);
@@ -1733,7 +1726,7 @@ gus_voice_intr(struct gus_softc *sc)
 			if (status & GUSMASK_VOICE_STOPPED) {
 				if (voice != GUS_VOICE_LEFT) {
 					DMAPRINTF(("%s: spurious voice %d stop?\n",
-						   sc->sc_dev.dv_xname, voice));
+						   device_xname(&sc->sc_dev), voice));
 					gus_stop_voice(sc, voice, 0);
 					continue;
 				}
@@ -1749,14 +1742,14 @@ gus_voice_intr(struct gus_softc *sc)
 					 * in place.  Start the voice again.
 					 */
 					printf("%s: stopped voice not drained? (%x)\n",
-					       sc->sc_dev.dv_xname, sc->sc_bufcnt);
+					       device_xname(&sc->sc_dev), sc->sc_bufcnt);
 					gus_falsestops++;
 
 					sc->sc_playbuf = ++sc->sc_playbuf % sc->sc_nbufs;
 					gus_start_playing(sc, sc->sc_playbuf);
 				} else if (sc->sc_bufcnt < 0) {
 					panic("%s: negative bufcnt in stopped voice",
-					      sc->sc_dev.dv_xname);
+					      device_xname(&sc->sc_dev));
 				} else {
 					sc->sc_playbuf = -1; /* none are active */
 					gus_stops++;
@@ -1936,7 +1929,7 @@ gus_continue_playing(struct gus_softc *sc, int voice)
 		DPRINTF(("gus: bufcnt 0 on continuing voice?\n"));
 	}
 	if (sc->sc_playbuf == sc->sc_dmabuf && (sc->sc_flags & GUS_LOCKED)) {
-		printf("%s: continue into active dmabuf?\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "continue into active dmabuf?\n");
 		return 1;
 	}
 
@@ -2010,7 +2003,7 @@ gus_continue_playing(struct gus_softc *sc, int voice)
  */
 STATIC void
 gusdmaout(struct gus_softc *sc, int flags,
-	  u_long gusaddr, caddr_t buffaddr, int length)
+	  u_long gusaddr, void *buffaddr, int length)
 {
 	unsigned char c;
 	bus_space_tag_t iot;
@@ -2362,7 +2355,7 @@ gus_set_params(
  */
 
 int
-gusmax_round_blocksize(void * addr, int blocksize,
+gusmax_round_blocksize(void *addr, int blocksize,
 		       int mode, const audio_params_t *param)
 {
 	struct ad1848_isa_softc *ac;
@@ -2375,7 +2368,7 @@ gusmax_round_blocksize(void * addr, int blocksize,
 }
 
 int
-gus_round_blocksize(void * addr, int blocksize,
+gus_round_blocksize(void *addr, int blocksize,
     int mode, const audio_params_t *param)
 {
 	struct gus_softc *sc;
@@ -2411,7 +2404,7 @@ gus_round_blocksize(void * addr, int blocksize,
 }
 
 int
-gus_get_out_gain(caddr_t addr)
+gus_get_out_gain(void *addr)
 {
 	struct gus_softc *sc;
 
@@ -2441,7 +2434,7 @@ gus_set_voices(struct gus_softc *sc, int voices)
  * Actually set the settings of various values on the card
  */
 int
-gusmax_commit_settings(void * addr)
+gusmax_commit_settings(void *addr)
 {
 	struct ad1848_isa_softc *ac;
 	struct gus_softc *sc;
@@ -3009,7 +3002,7 @@ gus_getdev(void *addr, struct audio_device *dev)
  */
 
 int
-gus_set_in_gain(caddr_t addr, u_int gain,
+gus_set_in_gain(void *addr, u_int gain,
     u_char balance)
 {
 
@@ -3018,7 +3011,7 @@ gus_set_in_gain(caddr_t addr, u_int gain,
 }
 
 int
-gus_get_in_gain(caddr_t addr)
+gus_get_in_gain(void *addr)
 {
 
 	DPRINTF(("gus_get_in_gain called\n"));

@@ -1,4 +1,4 @@
-/* $NetBSD: mcpcia.c,v 1.19 2005/12/11 12:16:17 christos Exp $ */
+/* $NetBSD: mcpcia.c,v 1.22 2008/06/12 12:09:23 dogcow Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,7 +67,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: mcpcia.c,v 1.19 2005/12/11 12:16:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcpcia.c,v 1.22 2008/06/12 12:09:23 dogcow Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,7 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: mcpcia.c,v 1.19 2005/12/11 12:16:17 christos Exp $")
 #include <alpha/pci/mcpciavar.h>
 #include <alpha/pci/pci_kn300.h>
 
-#define KV(_addr)	((caddr_t)ALPHA_PHYS_TO_K0SEG((_addr)))
+#define KV(_addr)	((void *)ALPHA_PHYS_TO_K0SEG((_addr)))
 #define	MCPCIA_SYSBASE(mc)	\
 	((((unsigned long) (mc)->cc_gid) << MCBUS_GID_SHIFT) | \
 	 (((unsigned long) (mc)->cc_mid) << MCBUS_MID_SHIFT) | \
@@ -326,7 +319,7 @@ mcpcia_config_cleanup()
 	 * Turn on Hard, Soft error interrupts. Maybe i2c too.
 	 */
 	for (i = 0; i < mcpcia_cd.cd_ndevs; i++) {
-		if ((mcp = mcpcia_cd.cd_devs[i]) == NULL)
+		if ((mcp = device_lookup_private(&mcpcia_cd, i)) == NULL)
 			continue;
 		
 		ccp = mcp->mcpcia_cc;

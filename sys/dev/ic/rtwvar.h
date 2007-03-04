@@ -1,4 +1,4 @@
-/* $NetBSD: rtwvar.h,v 1.30 2007/01/06 08:27:53 dyoung Exp $ */
+/* $NetBSD: rtwvar.h,v 1.37 2008/03/12 18:02:21 dyoung Exp $ */
 /*-
  * Copyright (c) 2004, 2005 David Young.  All rights reserved.
  *
@@ -94,18 +94,14 @@ enum rtw_rfchipid {
 	RTW_RFCHIPID_MAXIM = 4,
 	RTW_RFCHIPID_GCT = 5
 };
-
 /* sc_flags */
-#define RTW_F_ENABLED		0x00000001	/* chip is enabled */
 #define RTW_F_DIGPHY		0x00000002	/* digital PHY */
 #define RTW_F_DFLANTB		0x00000004	/* B antenna is default */
 #define RTW_F_ANTDIV		0x00000010	/* h/w antenna diversity */
 #define RTW_F_9356SROM		0x00000020	/* 93c56 SROM */
-#define RTW_F_SLEEP		0x00000040	/* chip is asleep */
-#define RTW_F_INVALID		0x00000080	/* chip is absent */
-#define	RTW_F_DK_VALID		0x00000100	/* keys in DK0-DK3 are valid */
-#define	RTW_C_RXWEP_40		0x00000200	/* h/w decrypts 40-bit WEP */
-#define	RTW_C_RXWEP_104		0x00000400	/* h/w decrypts 104-bit WEP */
+#define	RTW_F_DK_VALID		0x00000040	/* keys in DK0-DK3 are valid */
+#define	RTW_C_RXWEP_40		0x00000080	/* h/w decrypts 40-bit WEP */
+#define	RTW_C_RXWEP_104		0x00000100	/* h/w decrypts 104-bit WEP */
 	/* all PHY flags */
 #define RTW_F_ALLPHY		(RTW_F_DIGPHY|RTW_F_DFLANTB|RTW_F_ANTDIV)
 enum rtw_access {RTW_ACCESS_NONE = 0,
@@ -115,6 +111,7 @@ enum rtw_access {RTW_ACCESS_NONE = 0,
 struct rtw_regs {
 	bus_space_tag_t		r_bt;
 	bus_space_handle_t	r_bh;
+	bus_size_t		r_sz;
 	enum rtw_access		r_access;
 };
 
@@ -236,41 +233,50 @@ struct rtw_descs {
 	 (1 << IEEE80211_RADIOTAP_DB_ANTSIGNAL)		|	\
 	 0)
 
+#define RTW_PHILIPS_RX_RADIOTAP_PRESENT					\
+	((1 << IEEE80211_RADIOTAP_TSFT)			|	\
+	 (1 << IEEE80211_RADIOTAP_FLAGS)		|	\
+	 (1 << IEEE80211_RADIOTAP_RATE)			|	\
+	 (1 << IEEE80211_RADIOTAP_CHANNEL)		|	\
+	 (1 << IEEE80211_RADIOTAP_DB_ANTSIGNAL)		|	\
+	 0)
+
 struct rtw_rx_radiotap_header {
 	struct ieee80211_radiotap_header	rr_ihdr;
 	uint64_t				rr_tsft;
-	uint8_t				rr_flags;
-	uint8_t				rr_rate;
+	uint8_t					rr_flags;
+	uint8_t					rr_rate;
 	uint16_t				rr_chan_freq;
 	uint16_t				rr_chan_flags;
-	uint16_t				rr_barker_lock;
-	uint8_t				rr_antsignal;
-} __attribute__((__packed__));
+	union {
+		struct {
+			uint16_t		o_barker_lock;
+			uint8_t			o_antsignal;
+		} u_other;
+		struct {
+			uint8_t			p_antsignal;
+		} u_philips;
+	} rr_u;
+} __packed;
 
 #define RTW_TX_RADIOTAP_PRESENT				\
-	((1 << IEEE80211_RADIOTAP_FLAGS)	|	\
-	 (1 << IEEE80211_RADIOTAP_RATE)		|	\
+	((1 << IEEE80211_RADIOTAP_RATE)		|	\
 	 (1 << IEEE80211_RADIOTAP_CHANNEL)	|	\
 	 0)
 
 struct rtw_tx_radiotap_header {
 	struct ieee80211_radiotap_header	rt_ihdr;
-	uint8_t				rt_flags;
-	uint8_t				rt_rate;
+	uint8_t					rt_rate;
+	uint8_t					rt_pad;
 	uint16_t				rt_chan_freq;
 	uint16_t				rt_chan_flags;
-} __attribute__((__packed__));
+} __packed;
 
 enum rtw_attach_state {FINISHED, FINISH_DESCMAP_LOAD, FINISH_DESCMAP_CREATE,
 	FINISH_DESC_MAP, FINISH_DESC_ALLOC, FINISH_RXMAPS_CREATE,
 	FINISH_TXMAPS_CREATE, FINISH_RESET, FINISH_READ_SROM, FINISH_PARSE_SROM,
 	FINISH_RF_ATTACH, FINISH_ID_STA, FINISH_TXDESCBLK_SETUP,
 	FINISH_TXCTLBLK_SETUP, DETACHED};
-
-struct rtw_hooks {
-	void			*rh_shutdown;	/* shutdown hook */
-	void			*rh_power;	/* power management hook */
-};
 
 struct rtw_mtbl {
 	int			(*mt_newstate)(struct ieee80211com *,
@@ -411,7 +417,7 @@ struct rtw_led_state {
 };
 
 struct rtw_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 	struct ethercom		sc_ec;
 	struct ieee80211com	sc_ic;
 	struct rtw_regs		sc_regs;
@@ -450,13 +456,9 @@ struct rtw_softc {
 	/* interrupt acknowledge hook */
 	void (*sc_intr_ack)(struct rtw_regs *);
 
-	int			(*sc_enable)(struct rtw_softc *);
-	void			(*sc_disable)(struct rtw_softc *);
-	void			(*sc_power)(struct rtw_softc *, int);
 	struct rtw_mtbl		sc_mtbl;
-	struct rtw_hooks	sc_hooks;
 
-	caddr_t			sc_radiobpf;
+	void *			sc_radiobpf;
 
 	struct callout		sc_scan_ch;
 	u_int			sc_cur_chan;
@@ -500,12 +502,10 @@ void rtw_attach(struct rtw_softc *);
 int rtw_detach(struct rtw_softc *);
 int rtw_intr(void *);
 
-void rtw_disable(struct rtw_softc *);
-int rtw_enable(struct rtw_softc *);
+bool rtw_suspend(device_t PMF_FN_PROTO);
+bool rtw_resume(device_t PMF_FN_PROTO);
 
-int rtw_activate(struct device *, enum devact);
-void rtw_power(int, void *);
-void rtw_shutdown(void *);
+int rtw_activate(device_t, enum devact);
 
 const char *rtw_pwrstate_string(enum rtw_pwrstate);
 

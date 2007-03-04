@@ -1,4 +1,4 @@
-/*	$NetBSD: biconsdev.c,v 1.17 2006/10/01 19:28:43 elad Exp $	*/
+/*	$NetBSD: biconsdev.c,v 1.20 2007/11/19 18:51:46 ad Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: biconsdev.c,v 1.17 2006/10/01 19:28:43 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: biconsdev.c,v 1.20 2007/11/19 18:51:46 ad Exp $");
 
 #include "biconsdev.h"
 #include <sys/param.h>
@@ -149,16 +149,9 @@ biconsdev_output(struct tty *tp)
 	s = spltty();
 	tp->t_state &= ~TS_BUSY;
 	/* Come back if there's more to do */
-	if (tp->t_outq.c_cc) {
+	if (ttypull(tp)) {
 		tp->t_state |= TS_TIMEOUT;
-		callout_reset(&tp->t_rstrt_ch, 1, ttrstrt, tp);
-	}
-	if (tp->t_outq.c_cc <= tp->t_lowat) {
-		if (tp->t_state&TS_ASLEEP) {
-			tp->t_state &= ~TS_ASLEEP;
-			wakeup((caddr_t)&tp->t_outq);
-		}
-		selwakeup(&tp->t_wsel);
+		callout_schedule(&tp->t_rstrt_ch, 1);
 	}
 	splx(s);
 }
@@ -240,7 +233,7 @@ biconsdevtty(dev_t dev)
 }
 
 int
-biconsdevioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
+biconsdevioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct tty *tp = &biconsdev_tty[0];
 	int error;

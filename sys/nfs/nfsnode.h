@@ -1,4 +1,4 @@
-/*	 $NetBSD: nfsnode.h,v 1.61 2007/02/15 16:01:51 yamt Exp $	*/
+/*	 $NetBSD: nfsnode.h,v 1.68 2008/10/22 11:36:06 matt Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -38,7 +38,9 @@
 #ifndef _NFS_NFSNODE_H_
 #define _NFS_NFSNODE_H_
 
+#include <sys/condvar.h>
 #include <sys/mutex.h>
+#include <sys/rb.h>
 
 #ifndef _NFS_NFS_H_
 #include <nfs/nfs.h>
@@ -162,7 +164,7 @@ struct nfsnode {
 #define n_sillyrename	n_un2.nf_silly
 #define n_dirgens	n_un2.ndir_dirgens
 
-	LIST_ENTRY(nfsnode)	n_hash;		/* Hash chain */
+	struct rb_node		n_rbnode;	/* red/black node */
 	nfsfh_t			*n_fhp;		/* NFS File Handle */
 	struct vattr		*n_vattr;	/* Vnode attribute cache */
 	struct vnode		*n_vnode;	/* associated vnode */
@@ -180,7 +182,6 @@ struct nfsnode {
 	kauth_cred_t		n_rcred;
 	kauth_cred_t		n_wcred;
 };
-LIST_HEAD(nfsnodehashhead, nfsnode);
 
 /*
  * Values for n_commitflags
@@ -212,19 +213,25 @@ LIST_HEAD(nfsnodehashhead, nfsnode);
 #define VTONFS(vp)	((struct nfsnode *)(vp)->v_data)
 #define NFSTOV(np)	((np)->n_vnode)
 
+#ifdef _KERNEL
+
 /*
  * Per-nfsiod datas
  */
 struct nfs_iod {
-	struct simplelock nid_slock;
-	struct proc *nid_proc;
-	struct proc *nid_want;
+	kmutex_t nid_lock;
+	kcondvar_t nid_cv;
+	LIST_ENTRY(nfs_iod) nid_idle;
 	struct nfsmount *nid_mount;
+	bool nid_exiting;
+
+	LIST_ENTRY(nfs_iod) nid_all;
 };
 
-#ifdef _KERNEL
-
-extern struct nfs_iod nfs_asyncdaemon[NFS_MAXASYNCDAEMON];
+LIST_HEAD(nfs_iodlist, nfs_iod);
+extern kmutex_t nfs_iodlist_lock;
+extern struct nfs_iodlist nfs_iodlist_idle;
+extern struct nfs_iodlist nfs_iodlist_all;
 extern u_long nfsdirhashmask;
 
 /*
@@ -243,7 +250,6 @@ int	nfs_getattr	__P((void *));
 int	nfs_setattr	__P((void *));
 int	nfs_read	__P((void *));
 int	nfs_write	__P((void *));
-#define	nfs_lease_check	genfs_nullop
 int	nfsspec_read	__P((void *));
 int	nfsspec_write	__P((void *));
 int	nfsfifo_read	__P((void *));

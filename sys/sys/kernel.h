@@ -1,4 +1,4 @@
-/*	$NetBSD: kernel.h,v 1.25 2006/06/08 17:23:11 drochner Exp $	*/
+/*	$NetBSD: kernel.h,v 1.27 2008/01/20 18:09:13 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -56,14 +56,9 @@ extern int cold;		/* still working on startup */
 extern int tick;		/* usec per tick (1000000 / hz) */
 extern int tickadj;		/* "standard" clock skew, us./tick */
 extern int hardclock_ticks;	/* # of hardclock ticks */
-#ifndef __HAVE_TIMECOUNTER
-extern int tickfix;		/* periodic tick adj. tick not integral */
-extern int tickfixinterval;	/* interval at which to apply adjustment */
-#endif
 extern int hz;			/* system clock's frequency */
 extern int stathz;		/* statistics clock's frequency */
 extern int profhz;		/* profiling clock's frequency */
-extern int lbolt;		/* once a second sleep address */
 
 extern int profsrc;		/* profiling source */
 

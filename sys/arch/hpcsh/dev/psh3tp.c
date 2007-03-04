@@ -1,4 +1,4 @@
-/*	$NetBSD: psh3tp.c,v 1.8 2007/02/22 05:39:44 thorpej Exp $	*/
+/*	$NetBSD: psh3tp.c,v 1.12 2008/03/31 15:49:29 kiyohara Exp $	*/
 /*
  * Copyright (c) 2005 KIYOHARA Takashi
  * All rights reserved.
@@ -92,23 +92,23 @@ volatile int psh3tp_debug = 4;
 
 
 struct psh3tp_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 
 #define PSH3TP_WSMOUSE_ENABLED	0x01
 	int sc_enabled;
 	struct callout sc_touch_ch;
-	struct device *sc_wsmousedev;
+	device_t sc_wsmousedev;
 	struct tpcalib_softc sc_tpcalib; /* calibration info for wsmouse */
 };
 
 
 /* config machinery */
-static int psh3tp_match(struct device *, struct cfdata *, void *);
-static void psh3tp_attach(struct device *, struct device *, void *);
+static int psh3tp_match(device_t, struct cfdata *, void *);
+static void psh3tp_attach(device_t, device_t, void *);
 
 /* wsmouse accessops */
 static int psh3tp_wsmouse_enable(void *);
-static int psh3tp_wsmouse_ioctl(void *, u_long, caddr_t, int, struct lwp *);
+static int psh3tp_wsmouse_ioctl(void *, u_long, void *, int, struct lwp *);
 static void psh3tp_wsmouse_disable(void *);
 
 /* internal driver routines */
@@ -139,14 +139,13 @@ static const struct wsmouse_calibcoords psh3tp_default_calib = {
 };
 
 
-CFATTACH_DECL(psh3tp, sizeof(struct psh3tp_softc),
+CFATTACH_DECL_NEW(psh3tp, sizeof(struct psh3tp_softc),
     psh3tp_match, psh3tp_attach, NULL, NULL);
 
 
 /* ARGSUSED */
 static int
-psh3tp_match(struct device *parent __unused, struct cfdata *cf,
-	     void *aux __unused)
+psh3tp_match(device_t parent __unused, struct cfdata *cf, void *aux __unused)
 {
 
 	if (!platid_match(&platid, &platid_mask_MACH_HITACHI_PERSONA))
@@ -167,8 +166,7 @@ psh3tp_match(struct device *parent __unused, struct cfdata *cf,
  */
 /* ARGSUSED */
 static void
-psh3tp_attach(struct device *parent __unused, struct device *self,
-	      void *aux __unused)
+psh3tp_attach(device_t parent __unused, device_t self, void *aux __unused)
 {
 	struct psh3tp_softc *sc = device_private(self);
 	struct wsmousedev_attach_args wsma;
@@ -176,6 +174,7 @@ psh3tp_attach(struct device *parent __unused, struct device *self,
 	aprint_naive("\n");
 	aprint_normal("\n");
 
+	sc->sc_dev = self;
 	sc->sc_enabled = 0;
 
 	/* touch-panel as a pointing device */
@@ -190,10 +189,10 @@ psh3tp_attach(struct device *parent __unused, struct device *self,
 	/* init calibration, set default parameters */
 	tpcalib_init(&sc->sc_tpcalib);
 	tpcalib_ioctl(&sc->sc_tpcalib, WSMOUSEIO_SCALIBCOORDS,
-	    (caddr_t)__UNCONST(&psh3tp_default_calib), 0, 0);
+	    (void *)__UNCONST(&psh3tp_default_calib), 0, 0);
 
 	/* used when in polling mode */
-	callout_init(&sc->sc_touch_ch);
+	callout_init(&sc->sc_touch_ch, 0);
 
 	/* establish interrupt handler, but disable until opened */
 	intc_intr_establish(SH7709_INTEVT2_IRQ2,
@@ -486,7 +485,7 @@ psh3tp_get_raw_xy(int *rawxp, int *rawyp)
 
 
 static int
-psh3tp_wsmouse_ioctl(void *self, u_long cmd, caddr_t data, int flag,
+psh3tp_wsmouse_ioctl(void *self, u_long cmd, void *data, int flag,
 		     struct lwp *l)
 {
 	struct psh3tp_softc *sc = (struct psh3tp_softc *)self;

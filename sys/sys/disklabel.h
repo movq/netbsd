@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.98 2007/03/01 21:30:50 martin Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.102 2008/08/19 12:16:49 haad Exp $	*/
 
 /*
  * Copyright (c) 1987, 1988, 1993
@@ -305,12 +305,13 @@ x(JFS2,		16,	"jfs")		/* IBM JFS2 */ \
 x(CGD,		17,	"cgd")		/* cryptographic pseudo-disk */ \
 x(VINUM,	18,	"vinum")	/* vinum volume */ \
 x(FLASH,	19,	"flash")	/* flash memory devices */ \
-
-#ifndef OMIT_DKTYPENUMS
+x(DM,           20,     "dm")           /* device-mapper pseudo-disk devices */\
+    
+#ifndef _LOCORE
 #define DKTYPE_NUMS(tag, number, name) __CONCAT(DTYPE_,tag=number),
 enum { DKTYPE_DEFN(DKTYPE_NUMS) DKMAXTYPES };
 #undef	DKTYPE_NUMS
-#endif /* OMIT_DKTYPENUMS */
+#endif
 
 #ifdef DKTYPENAMES
 #define	DKTYPE_NAMES(tag, number, name) ARRAY_INIT(number,name),
@@ -349,12 +350,13 @@ x(APPLEUFS,22, "Apple UFS", "ffs",   "ffs")   /* Apple UFS */ \
 x(VINUM,   23, "vinum",      NULL,    NULL)   /* Vinum */ \
 x(UDF,     24, "UDF",        NULL,   "udf")  /* UDF */ \
 x(SYSVBFS, 25, "SysVBFS",    NULL,  "sysvbfs")/* System V boot file system */ \
+x(EFS,     26, "EFS",        NULL,   "efs")   /* SGI's Extent Filesystem */
 
-#ifndef OMIT_FSTYPENUMS
+#ifndef _LOCORE
 #define	FS_TYPENUMS(tag, number, name, fsck, mount) __CONCAT(FS_,tag=number),
 enum { FSTYPE_DEFN(FS_TYPENUMS) FSMAXTYPES };
 #undef	FS_TYPENUMS
-#endif /* OMIT_FSTYPENUMS */
+#endif
 
 #ifdef	FSTYPENAMES
 #define	FS_TYPENAMES(tag, number, name, fsck, mount) ARRAY_INIT(number,name),
@@ -433,6 +435,8 @@ struct partinfo {
 
 struct disk;
 
+int disk_read_sectors(void (*)(struct buf *), const struct disklabel *,
+    struct buf *, unsigned int, int);
 void	 diskerr(const struct buf *, const char *, const char *, int,
 	    int, const struct disklabel *);
 u_int	 dkcksum(struct disklabel *);
@@ -443,6 +447,8 @@ const char *readdisklabel(dev_t, void (*)(struct buf *),
 	    struct disklabel *, struct cpu_disklabel *);
 int	 writedisklabel(dev_t, void (*)(struct buf *), struct disklabel *,
 	    struct cpu_disklabel *);
+const char *convertdisklabel(struct disklabel *, void (*)(struct buf *),
+    struct buf *, uint32_t);
 int	 bounds_check_with_label(struct disk *, struct buf *, int);
 int	 bounds_check_with_mediasize(struct buf *, int, uint64_t);
 #endif

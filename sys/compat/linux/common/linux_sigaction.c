@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_sigaction.c,v 1.30 2007/02/09 21:55:19 ad Exp $	*/
+/*	$NetBSD: linux_sigaction.c,v 1.34 2008/10/17 20:21:34 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_sigaction.c,v 1.30 2007/02/09 21:55:19 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_sigaction.c,v 1.34 2008/10/17 20:21:34 njoly Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,25 +50,26 @@ __KERNEL_RCSID(0, "$NetBSD: linux_sigaction.c,v 1.30 2007/02/09 21:55:19 ad Exp 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
 #include <compat/linux/common/linux_util.h>
+#include <compat/linux/common/linux_ipc.h>
+#include <compat/linux/common/linux_sem.h>
 
 #include <compat/linux/linux_syscallargs.h>
 
 /* Used on: alpha (aka osf_sigaction), arm, i386, m68k, mips, ppc */
 /* Not used on: sparc, sparc64, amd64 */
 
-#ifndef __amd64__
 /*
  * The Linux sigaction() system call. Do the usual conversions,
  * and just call sigaction().
  */
 int
-linux_sys_sigaction(struct lwp *l, void *v, register_t *retval)
+linux_sys_sigaction(struct lwp *l, const struct linux_sys_sigaction_args *uap, register_t *retval)
 {
-	struct linux_sys_sigaction_args /* {
+	/* {
 		syscallarg(int) signum;
 		syscallarg(const struct linux_old_sigaction *) nsa;
 		syscallarg(struct linux_old_sigaction *) osa;
-	} */ *uap = v;
+	} */
 	struct linux_old_sigaction nlsa, olsa;
 	struct sigaction nbsa, obsa;
 	int error, sig;
@@ -112,4 +106,3 @@ linux_sys_sigaction(struct lwp *l, void *v, register_t *retval)
 	}
 	return (0);
 }
-#endif /* !amd64 */

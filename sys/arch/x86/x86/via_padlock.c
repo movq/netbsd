@@ -1,5 +1,5 @@
 /*	$OpenBSD: via.c,v 1.8 2006/11/17 07:47:56 tom Exp $	*/
-/*	$NetBSD	*/
+/*	$NetBSD: via_padlock.c,v 1.9 2008/04/16 16:06:52 cegger Exp $ */
 
 /*-
  * Copyright (c) 2003 Jason Wright
@@ -20,7 +20,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: via_padlock.c,v 1.1 2007/02/17 00:28:25 daniel Exp $");
+__KERNEL_RCSID(0, "$NetBSD: via_padlock.c,v 1.9 2008/04/16 16:06:52 cegger Exp $");
 
 #include "opt_viapadlock.h"
 
@@ -31,9 +31,11 @@ __KERNEL_RCSID(0, "$NetBSD: via_padlock.c,v 1.1 2007/02/17 00:28:25 daniel Exp $
 #include <sys/rnd.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
+#include <sys/cpu.h>
 
-#include <machine/cpu.h>
 #include <x86/specialreg.h>
+
+#include <machine/cpufunc.h>
 
 #include <opencrypto/cryptodev.h>
 #include <opencrypto/cryptosoft.h>
@@ -44,20 +46,21 @@ __KERNEL_RCSID(0, "$NetBSD: via_padlock.c,v 1.1 2007/02/17 00:28:25 daniel Exp $
 
 #ifdef VIA_PADLOCK
 
-int	via_padlock_crypto_newsession(void *, u_int32_t *, struct cryptoini *);
+int	via_padlock_crypto_newsession(void *, uint32_t *, struct cryptoini *);
 int	via_padlock_crypto_process(void *, struct cryptop *, int);
 int	via_padlock_crypto_swauth(struct cryptop *, struct cryptodesc *,
-	    struct swcr_data *, caddr_t);
+	    struct swcr_data *, void *);
 int	via_padlock_crypto_encdec(struct cryptop *, struct cryptodesc *,
-	    struct via_padlock_session *, struct via_padlock_softc *, caddr_t);
-int	via_padlock_crypto_freesession(void *, u_int64_t);
+	    struct via_padlock_session *, struct via_padlock_softc *, void *);
+int	via_padlock_crypto_freesession(void *, uint64_t);
 static	__inline void via_padlock_cbc(void *, void *, void *, void *, int,
 	    void *);
 
 void
 via_padlock_attach(void)
 {
-	if (!(cpu_feature_padlock & CPUID_FEAT_VACE))
+#define VIA_ACE (CPUID_VIA_HAS_ACE|CPUID_VIA_DO_ACE)
+	if ((cpu_feature_padlock & VIA_ACE) != VIA_ACE)
 		return;
 
 	struct via_padlock_softc *vp_sc;
@@ -84,8 +87,11 @@ via_padlock_attach(void)
 	    via_padlock_crypto_process, vp_sc);
 
 	REGISTER(CRYPTO_AES_CBC);
+	REGISTER(CRYPTO_MD5_HMAC_96);
 	REGISTER(CRYPTO_MD5_HMAC);
+	REGISTER(CRYPTO_SHA1_HMAC_96);
 	REGISTER(CRYPTO_SHA1_HMAC);
+	REGISTER(CRYPTO_RIPEMD160_HMAC_96);
 	REGISTER(CRYPTO_RIPEMD160_HMAC);
 	REGISTER(CRYPTO_SHA2_HMAC);
 
@@ -93,7 +99,7 @@ via_padlock_attach(void)
 }
 
 int
-via_padlock_crypto_newsession(void *arg, u_int32_t *sidp, struct cryptoini *cri)
+via_padlock_crypto_newsession(void *arg, uint32_t *sidp, struct cryptoini *cri)
 {
 	struct cryptoini *c;
 	struct via_padlock_softc *sc = arg;
@@ -182,12 +188,21 @@ via_padlock_crypto_newsession(void *arg, u_int32_t *sidp, struct cryptoini *cri)
 
 		/* Use hashing implementations from the cryptosoft code. */
 		case CRYPTO_MD5_HMAC:
+			axf = &swcr_auth_hash_hmac_md5;
+			goto authcommon;
+		case CRYPTO_MD5_HMAC_96:
 			axf = &swcr_auth_hash_hmac_md5_96;
 			goto authcommon;
 		case CRYPTO_SHA1_HMAC:
+			axf = &swcr_auth_hash_hmac_sha1;
+			goto authcommon;
+		case CRYPTO_SHA1_HMAC_96:
 			axf = &swcr_auth_hash_hmac_sha1_96;
 			goto authcommon;
 		case CRYPTO_RIPEMD160_HMAC:
+			axf = &swcr_auth_hash_hmac_ripemd_160;
+			goto authcommon;
+		case CRYPTO_RIPEMD160_HMAC_96:
 			axf = &swcr_auth_hash_hmac_ripemd_160_96;
 			goto authcommon;
 		case CRYPTO_SHA2_HMAC:
@@ -259,13 +274,13 @@ via_padlock_crypto_newsession(void *arg, u_int32_t *sidp, struct cryptoini *cri)
 }
 
 int
-via_padlock_crypto_freesession(void *arg, u_int64_t tid)
+via_padlock_crypto_freesession(void *arg, uint64_t tid)
 {
 	struct via_padlock_softc *sc = arg;
 	struct swcr_data *swd;
 	struct auth_hash *axf;
 	int sesn;
-	u_int32_t sid = ((u_int32_t)tid) & 0xffffffff;
+	uint32_t sid = ((uint32_t)tid) & 0xffffffff;
 
 	KASSERT(sc != NULL /*, ("via_padlock_crypto_freesession: null softc")*/);
 	if (sc == NULL)
@@ -314,7 +329,7 @@ via_padlock_cbc(void *cw, void *src, void *dst, void *key, int rep,
 
 int
 via_padlock_crypto_swauth(struct cryptop *crp, struct cryptodesc *crd,
-    struct swcr_data *sw, caddr_t buf)
+    struct swcr_data *sw, void *buf)
 {
 	int	type;
 
@@ -328,9 +343,9 @@ via_padlock_crypto_swauth(struct cryptop *crp, struct cryptodesc *crd,
 
 int
 via_padlock_crypto_encdec(struct cryptop *crp, struct cryptodesc *crd,
-    struct via_padlock_session *ses, struct via_padlock_softc *sc, caddr_t buf)
+    struct via_padlock_session *ses, struct via_padlock_softc *sc, void *buf)
 {
-	u_int32_t *key;
+	uint32_t *key;
 	int err = 0;
 
 	if ((crd->crd_len % 16) != 0) {
@@ -360,7 +375,7 @@ via_padlock_crypto_encdec(struct cryptop *crp, struct cryptodesc *crd,
 				cuio_copyback((struct uio *)crp->crp_buf,
 				    crd->crd_inject, 16, sc->op_iv);
 			else
-				memcpy(crp->crp_buf + crd->crd_inject,
+				memcpy((char *)crp->crp_buf + crd->crd_inject,
 				    sc->op_iv, 16);
 		}
 	} else {
@@ -376,7 +391,7 @@ via_padlock_crypto_encdec(struct cryptop *crp, struct cryptodesc *crd,
 				cuio_copydata((struct uio *)crp->crp_buf,
 				    crd->crd_inject, 16, sc->op_iv);
 			else
-				memcpy(sc->op_iv, crp->crp_buf +
+				memcpy(sc->op_iv, (char *)crp->crp_buf +
 				    crd->crd_inject, 16);
 		}
 	}
@@ -388,7 +403,7 @@ via_padlock_crypto_encdec(struct cryptop *crp, struct cryptodesc *crd,
 		cuio_copydata((struct uio *)crp->crp_buf,
 		    crd->crd_skip, crd->crd_len, sc->op_buf);
 	else
-		memcpy(sc->op_buf, crp->crp_buf + crd->crd_skip,
+		memcpy(sc->op_buf, (char *)crp->crp_buf + crd->crd_skip,
 		    crd->crd_len);
 
 	sc->op_cw[1] = sc->op_cw[2] = sc->op_cw[3] = 0;
@@ -402,7 +417,7 @@ via_padlock_crypto_encdec(struct cryptop *crp, struct cryptodesc *crd,
 		cuio_copyback((struct uio *)crp->crp_buf,
 		    crd->crd_skip, crd->crd_len, sc->op_buf);
 	else
-		memcpy(crp->crp_buf + crd->crd_skip, sc->op_buf,
+		memcpy((char *)crp->crp_buf + crd->crd_skip, sc->op_buf,
 		    crd->crd_len);
 
 	/* copy out last block for use as next session IV */
@@ -416,8 +431,8 @@ via_padlock_crypto_encdec(struct cryptop *crp, struct cryptodesc *crd,
 			    crd->crd_skip + crd->crd_len - 16, 16,
 			    ses->ses_iv);
 		else
-			memcpy(ses->ses_iv, crp->crp_buf + crd->crd_skip +
-			    crd->crd_len - 16, 16);
+			memcpy(ses->ses_iv, (char *)crp->crp_buf +
+			    crd->crd_skip + crd->crd_len - 16, 16);
 	}
 
 	if (sc->op_buf != NULL) {

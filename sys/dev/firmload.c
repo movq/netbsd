@@ -1,4 +1,4 @@
-/*	$NetBSD: firmload.c,v 1.7 2007/01/14 10:56:34 is Exp $	*/
+/*	$NetBSD: firmload.c,v 1.11 2008/04/28 20:23:46 martin Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: firmload.c,v 1.7 2007/01/14 10:56:34 is Exp $");
+__KERNEL_RCSID(0, "$NetBSD: firmload.c,v 1.11 2008/04/28 20:23:46 martin Exp $");
 
 /*
  * The firmload API provides an interface for device drivers to access
@@ -251,7 +244,7 @@ firmware_open(const char *drvname, const char *imgname, firmware_handle_t *fhp)
 	for (path = firmware_path_first(drvname, imgname, pnbuf, &prefix);
 	     path != NULL;
 	     path = firmware_path_next(drvname, imgname, pnbuf, &prefix)) {
-		NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, path, curlwp);
+		NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, path);
 		error = vn_open(&nd, FREAD, 0);
 		if (error == ENOENT)
 			continue;
@@ -266,17 +259,17 @@ firmware_open(const char *drvname, const char *imgname, firmware_handle_t *fhp)
 
 	vp = nd.ni_vp;
 
-	error = VOP_GETATTR(vp, &va, kauth_cred_get(), curlwp);
+	error = VOP_GETATTR(vp, &va, kauth_cred_get());
 	if (error) {
 		VOP_UNLOCK(vp, 0);
-		(void)vn_close(vp, FREAD, kauth_cred_get(), curlwp);
+		(void)vn_close(vp, FREAD, kauth_cred_get());
 		firmware_handle_free(fh);
 		return (error);
 	}
 
 	if (va.va_type != VREG) {
 		VOP_UNLOCK(vp, 0);
-		(void)vn_close(vp, FREAD, kauth_cred_get(), curlwp);
+		(void)vn_close(vp, FREAD, kauth_cred_get());
 		firmware_handle_free(fh);
 		return (EINVAL);
 	}
@@ -302,7 +295,7 @@ firmware_close(firmware_handle_t fh)
 {
 	int error;
 
-	error = vn_close(fh->fh_vp, FREAD, kauth_cred_get(), curlwp);
+	error = vn_close(fh->fh_vp, FREAD, kauth_cred_get());
 	firmware_handle_free(fh);
 	return (error);
 }

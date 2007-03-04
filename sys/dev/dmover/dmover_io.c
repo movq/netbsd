@@ -1,4 +1,4 @@
-/*	$NetBSD: dmover_io.c,v 1.25 2007/01/13 18:42:45 cube Exp $	*/
+/*	$NetBSD: dmover_io.c,v 1.31 2008/03/26 13:33:58 ad Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003 Wasabi Systems, Inc.
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dmover_io.c,v 1.25 2007/01/13 18:42:45 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dmover_io.c,v 1.31 2008/03/26 13:33:58 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/queue.h>
@@ -64,7 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: dmover_io.c,v 1.25 2007/01/13 18:42:45 cube Exp $");
 #include <sys/proc.h>
 #include <sys/poll.h>
 #include <sys/malloc.h>
-#include <sys/lock.h>
+#include <sys/simplelock.h>
 #include <sys/file.h>
 #include <sys/filedesc.h>
 #include <sys/filio.h>
@@ -138,9 +138,9 @@ dmoverioattach(int count)
 {
 
 	pool_init(&dmio_state_pool, sizeof(struct dmio_state),
-	    0, 0, 0, "dmiostate", NULL);
+	    0, 0, 0, "dmiostate", NULL, IPL_SOFTCLOCK);
 	pool_init(&dmio_usrreq_state_pool, sizeof(struct dmio_usrreq_state),
-	    0, 0, 0, "dmiourstate", NULL);
+	    0, 0, 0, "dmiourstate", NULL, IPL_SOFTCLOCK);
 }
 
 /*
@@ -320,7 +320,7 @@ dmio_usrreq_fini(struct dmio_state *ds, struct dmio_usrreq_state *dus)
 		free(dus->dus_uio_in, M_TEMP);
 	}
 
-	workqueue_enqueue(dmio_cleaner, &dus->dus_work);
+	workqueue_enqueue(dmio_cleaner, &dus->dus_work, NULL);
 }
 
 static void
@@ -387,7 +387,7 @@ dmio_read(struct file *fp, off_t *offp, struct uio *uio,
 			}
 			if (ds->ds_flags & DMIO_STATE_SEL) {
 				ds->ds_flags &= ~DMIO_STATE_SEL;
-				selwakeup(&ds->ds_selq);
+				selnotify(&ds->ds_selq, POLLIN | POLLRDNORM, 0);
 			}
 			break;
 		}
@@ -448,6 +448,7 @@ dmio_usrreq_done(struct dmover_request *dreq)
 		dmover_request_free(dreq);
 		if (ds->ds_nreqs == 0) {
 			simple_unlock(&ds->ds_slock);
+			seldestroy(&ds->ds_selq);
 			pool_put(&dmio_state_pool, ds);
 			return;
 		}
@@ -459,7 +460,7 @@ dmio_usrreq_done(struct dmover_request *dreq)
 		}
 		if (ds->ds_flags & DMIO_STATE_SEL) {
 			ds->ds_flags &= ~DMIO_STATE_SEL;
-			selwakeup(&ds->ds_selq);
+			selnotify(&ds->ds_selq, POLLOUT | POLLWRNORM, 0);
 		}
 	}
 	simple_unlock(&ds->ds_slock);
@@ -574,7 +575,7 @@ dmio_write(struct file *fp, off_t *offp, struct uio *uio,
  *	Ioctl file op.
  */
 static int
-dmio_ioctl(struct file *fp, u_long cmd, void *data, struct lwp *l)
+dmio_ioctl(struct file *fp, u_long cmd, void *data)
 {
 	struct dmio_state *ds = (struct dmio_state *) fp->f_data;
 	int error, s;
@@ -634,7 +635,7 @@ dmio_ioctl(struct file *fp, u_long cmd, void *data, struct lwp *l)
  *	Poll file op.
  */
 static int
-dmio_poll(struct file *fp, int events, struct lwp *l)
+dmio_poll(struct file *fp, int events)
 {
 	struct dmio_state *ds = (struct dmio_state *) fp->f_data;
 	int s, revents = 0;
@@ -666,7 +667,7 @@ dmio_poll(struct file *fp, int events, struct lwp *l)
 			revents |= events & (POLLOUT | POLLWRNORM);
 
 	if (revents == 0) {
-		selrecord(l, &ds->ds_selq);
+		selrecord(curlwp, &ds->ds_selq);
 		ds->ds_flags |= DMIO_STATE_SEL;
 	}
 
@@ -683,7 +684,7 @@ dmio_poll(struct file *fp, int events, struct lwp *l)
  *	Close file op.
  */
 static int
-dmio_close(struct file *fp, struct lwp *l)
+dmio_close(struct file *fp)
 {
 	struct dmio_state *ds = (struct dmio_state *) fp->f_data;
 	struct dmio_usrreq_state *dus;
@@ -710,6 +711,7 @@ dmio_close(struct file *fp, struct lwp *l)
 	if (ds->ds_nreqs == 0) {
 		dses = ds->ds_session;
 		simple_unlock(&ds->ds_slock);
+		seldestroy(&ds->ds_selq);
 		pool_put(&dmio_state_pool, ds);
 	} else {
 		dses = NULL;
@@ -750,7 +752,7 @@ dmoverioopen(dev_t dev, int flag, int mode, struct lwp *l)
 	int error, fd, s;
 
 	/* falloc() will use the descriptor for us. */
-	if ((error = falloc(l, &fp, &fd)) != 0)
+	if ((error = fd_allocfile(&fp, &fd)) != 0)
 		return (error);
 
 	s = splsoftclock();
@@ -761,6 +763,7 @@ dmoverioopen(dev_t dev, int flag, int mode, struct lwp *l)
 	simple_lock_init(&ds->ds_slock);
 	TAILQ_INIT(&ds->ds_pending);
 	TAILQ_INIT(&ds->ds_complete);
+	selinit(&ds->ds_selq);
 
-	return fdclone(l, fp, fd, flag, &dmio_fileops, ds);
+	return fd_clone(fp, fd, flag, &dmio_fileops, ds);
 }

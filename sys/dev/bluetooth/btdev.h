@@ -1,4 +1,4 @@
-/*	$NetBSD: btdev.h,v 1.5 2006/10/04 19:23:59 plunky Exp $	*/
+/*	$NetBSD: btdev.h,v 1.8 2008/03/28 21:17:37 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -43,12 +43,9 @@
 #define BTDEVladdr		"local-bdaddr"
 #define BTDEVraddr		"remote-bdaddr"
 #define BTDEVservice		"service-name"
-
-#ifdef _KERNEL
-struct btdev {
-	struct device		sc_dev;
-	LIST_ENTRY(btdev)	sc_next;
-};
-#endif /* _KERNEL */
+#define BTDEVmode		"link-mode"
+#define BTDEVauth		"auth"
+#define BTDEVencrypt		"encrypt"
+#define BTDEVsecure		"secure"
 
 #endif /* _DEV_BLUETOOTH_BTDEV_H_ */

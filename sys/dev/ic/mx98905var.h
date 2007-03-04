@@ -1,4 +1,4 @@
-/*	$NetBSD: mx98905var.h,v 1.1 2001/12/15 17:47:35 bjh21 Exp $	*/
+/*	$NetBSD: mx98905var.h,v 1.3 2008/04/28 20:23:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,7 +45,7 @@
 
 void	mx98905_attach(struct dp8390_softc *);
 int	mx98905_write_mbuf(struct dp8390_softc *, struct mbuf *, int);
-int	mx98905_ring_copy(struct dp8390_softc *, int, caddr_t, u_short);
+int	mx98905_ring_copy(struct dp8390_softc *, int, void *, u_short);
 void	mx98905_read_hdr(struct dp8390_softc *, int, struct dp8390_ring *);
 void	mx98905_readmem(bus_space_tag_t, bus_space_handle_t,
     bus_space_tag_t, bus_space_handle_t, int, u_int8_t *, size_t, int);

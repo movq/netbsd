@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_disk.c,v 1.84 2007/03/01 21:30:50 martin Exp $	*/
+/*	$NetBSD: subr_disk.c,v 1.93 2008/04/28 20:24:04 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -74,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.84 2007/03/01 21:30:50 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.93 2008/04/28 20:24:04 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -184,23 +177,28 @@ disk_find(const char *name)
 	return (NULL);
 }
 
-static void
-disk_init0(struct disk *diskp)
+void
+disk_init(struct disk *diskp, const char *name, const struct dkdriver *driver)
 {
 
 	/*
 	 * Initialize the wedge-related locks and other fields.
 	 */
-	lockinit(&diskp->dk_rawlock, PRIBIO, "dkrawlk", 0, 0);
-	lockinit(&diskp->dk_openlock, PRIBIO, "dkoplk", 0, 0);
+	mutex_init(&diskp->dk_rawlock, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&diskp->dk_openlock, MUTEX_DEFAULT, IPL_NONE);
 	LIST_INIT(&diskp->dk_wedges);
 	diskp->dk_nwedges = 0;
 	diskp->dk_labelsector = LABELSECTOR;
 	disk_blocksize(diskp, DEV_BSIZE);
+	diskp->dk_name = name;
+	diskp->dk_driver = driver;
 }
 
-static void
-disk_attach0(struct disk *diskp)
+/*
+ * Attach a disk.
+ */
+void
+disk_attach(struct disk *diskp)
 {
 
 	/*
@@ -223,8 +221,11 @@ disk_attach0(struct disk *diskp)
 	diskp->dk_stats = iostat_alloc(IOSTAT_DISK, diskp, diskp->dk_name);
 }
 
-static void
-disk_detach0(struct disk *diskp)
+/*
+ * Detach a disk.
+ */
+void
+disk_detach(struct disk *diskp)
 {
 
 	/*
@@ -247,56 +248,12 @@ disk_detach0(struct disk *diskp)
 	free(diskp->dk_cpulabel, M_DEVBUF);
 }
 
-/*
- * Attach a disk.
- */
 void
-disk_attach(struct disk *diskp)
+disk_destroy(struct disk *diskp)
 {
 
-	disk_init0(diskp);
-	disk_attach0(diskp);
-}
-
-/*
- * Detach a disk.
- */
-void
-disk_detach(struct disk *diskp)
-{
-
-	(void) lockmgr(&diskp->dk_openlock, LK_DRAIN, NULL);
-	disk_detach0(diskp);
-}
-
-/*
- * Initialize a pseudo disk.
- */
-void
-pseudo_disk_init(struct disk *diskp)
-{
-
-	disk_init0(diskp);
-}
-
-/*
- * Attach a pseudo disk.
- */
-void
-pseudo_disk_attach(struct disk *diskp)
-{
-
-	disk_attach0(diskp);
-}
-
-/*
- * Detach a pseudo disk.
- */
-void
-pseudo_disk_detach(struct disk *diskp)
-{
-
-	disk_detach0(diskp);
+	mutex_destroy(&diskp->dk_openlock);
+	mutex_destroy(&diskp->dk_rawlock);
 }
 
 /*
@@ -348,23 +305,18 @@ bounds_check_with_mediasize(struct buf *bp, int secsize, uint64_t mediasize)
 		if (sz == 0) {
 			/* If exactly at end of disk, return EOF. */
 			bp->b_resid = bp->b_bcount;
-			goto done;
+			return 0;
 		}
 		if (sz < 0) {
 			/* If past end of disk, return EINVAL. */
 			bp->b_error = EINVAL;
-			goto bad;
+			return 0;
 		}
 		/* Otherwise, truncate request. */
 		bp->b_bcount = sz << DEV_BSHIFT;
 	}
 
 	return 1;
-
-bad:
-	bp->b_flags |= B_ERROR;
-done:
-	return 0;
 }
 
 /*
@@ -383,7 +335,7 @@ bounds_check_with_label(struct disk *dk, struct buf *bp, int wlabel)
 	/* Protect against division by zero. XXX: Should never happen?!?! */
 	if (lp->d_secpercyl == 0) {
 		bp->b_error = EINVAL;
-		goto bad;
+		return -1;
 	}
 
 	p_size = p->p_size << dk->dk_blkshift;
@@ -401,12 +353,12 @@ bounds_check_with_label(struct disk *dk, struct buf *bp, int wlabel)
 		if (sz == 0) {
 			/* If exactly at end of disk, return EOF. */
 			bp->b_resid = bp->b_bcount;
-			return (0);
+			return 0;
 		}
 		if (sz < 0) {
 			/* If past end of disk, return EINVAL. */
 			bp->b_error = EINVAL;
-			goto bad;
+			return -1;
 		}
 		/* Otherwise, truncate request. */
 		bp->b_bcount = sz << DEV_BSHIFT;
@@ -417,17 +369,89 @@ bounds_check_with_label(struct disk *dk, struct buf *bp, int wlabel)
 	    bp->b_blkno + p_offset + sz > labelsector &&
 	    (bp->b_flags & B_READ) == 0 && !wlabel) {
 		bp->b_error = EROFS;
-		goto bad;
+		return -1;
 	}
 
 	/* calculate cylinder for disksort to order transfers with */
 	bp->b_cylinder = (bp->b_blkno + p->p_offset) /
 	    (lp->d_secsize / DEV_BSIZE) / lp->d_secpercyl;
-	return (1);
+	return 1;
+}
 
-bad:
-	bp->b_flags |= B_ERROR;
-	return (-1);
+int
+disk_read_sectors(void (*strat)(struct buf *), const struct disklabel *lp,
+    struct buf *bp, unsigned int sector, int count)
+{
+	bp->b_blkno = sector;
+	bp->b_bcount = count * lp->d_secsize;
+	bp->b_flags = (bp->b_flags & ~B_WRITE) | B_READ;
+	bp->b_oflags &= ~BO_DONE;
+	bp->b_cylinder = sector / lp->d_secpercyl;
+	(*strat)(bp);
+	return biowait(bp);
+}
+
+const char *
+convertdisklabel(struct disklabel *lp, void (*strat)(struct buf *),
+    struct buf *bp, uint32_t secperunit)
+{
+	struct partition rp, *altp, *p;
+	int geom_ok;
+
+	memset(&rp, 0, sizeof(rp));
+	rp.p_size = secperunit;
+	rp.p_fstype = FS_UNUSED;
+
+	/* If we can seek to d_secperunit - 1, believe the disk geometry. */
+	if (secperunit != 0 &&
+	    disk_read_sectors(strat, lp, bp, secperunit - 1, 1) == 0)
+		geom_ok = 1;
+	else
+		geom_ok = 0;
+
+#if 0
+	printf("%s: secperunit (%" PRIu32 ") %s\n", __func__,
+	    secperunit, geom_ok ? "ok" : "not ok");
+#endif
+
+	p = &lp->d_partitions[RAW_PART];
+	if (RAW_PART == 'c' - 'a')
+		altp = &lp->d_partitions['d' - 'a'];
+	else
+		altp = &lp->d_partitions['c' - 'a'];
+
+	if (lp->d_npartitions > RAW_PART && p->p_offset == 0 && p->p_size != 0)
+		;	/* already a raw partition */
+	else if (lp->d_npartitions > MAX('c', 'd') - 'a' &&
+		 altp->p_offset == 0 && altp->p_size != 0) {
+		/* alternate partition ('c' or 'd') is suitable for raw slot,
+		 * swap with 'd' or 'c'.
+		 */
+		rp = *p;
+		*p = *altp;
+		*altp = rp;
+	} else if (lp->d_npartitions <= RAW_PART &&
+	           lp->d_npartitions > 'c' - 'a') {
+		/* No raw partition is present, but the alternate is present.
+		 * Copy alternate to raw partition.
+		 */
+		lp->d_npartitions = RAW_PART + 1;
+		*p = *altp;
+	} else if (!geom_ok)
+		return "no raw partition and disk reports bad geometry";
+	else if (lp->d_npartitions <= RAW_PART) {
+		memset(&lp->d_partitions[lp->d_npartitions], 0,
+		    sizeof(struct partition) * (RAW_PART - lp->d_npartitions));
+		*p = rp;
+		lp->d_npartitions = RAW_PART + 1;
+	} else if (lp->d_npartitions < MAXPARTITIONS) {
+		memmove(p + 1, p,
+		    sizeof(struct partition) * (lp->d_npartitions - RAW_PART));
+		*p = rp;
+		lp->d_npartitions++;
+	} else
+		return "no raw partition and partition table is full";
+	return NULL;
 }
 
 /*
@@ -435,7 +459,7 @@ bad:
  *	Generic disk ioctl handling.
  */
 int
-disk_ioctl(struct disk *diskp, u_long cmd, caddr_t data, int flag,
+disk_ioctl(struct disk *diskp, u_long cmd, void *data, int flag,
 	   struct lwp *l)
 {
 	int error;

@@ -1,4 +1,4 @@
-/* $NetBSD: tga.c,v 1.64 2007/01/13 18:42:45 cube Exp $ */
+/* $NetBSD: tga.c,v 1.68 2008/04/10 19:13:38 cegger Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tga.c,v 1.64 2007/01/13 18:42:45 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tga.c,v 1.68 2008/04/10 19:13:38 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,8 +39,8 @@ __KERNEL_RCSID(0, "$NetBSD: tga.c,v 1.64 2007/01/13 18:42:45 cube Exp $");
 #include <sys/buf.h>
 #include <sys/ioctl.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -76,7 +76,7 @@ unsigned tga_getdotclock(struct tga_devconfig *dc);
 
 struct tga_devconfig tga_console_dc;
 
-int tga_ioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
+int tga_ioctl(void *, void *, u_long, void *, int, struct lwp *);
 paddr_t tga_mmap(void *, void *, off_t, int);
 static void tga_copyrows(void *, int, int, int);
 static void tga_copycols(void *, int, int, int, int);
@@ -505,13 +505,13 @@ tgaattach(parent, self, aux)
 		return;
 	}
 	printf("board type %s\n", sc->sc_dc->dc_tgaconf->tgac_name);
-	printf("%s: %d x %d, %dbpp, %s RAMDAC\n", sc->sc_dev.dv_xname,
+	printf("%s: %d x %d, %dbpp, %s RAMDAC\n", device_xname(&sc->sc_dev),
 	    sc->sc_dc->dc_wid, sc->sc_dc->dc_ht,
 	    sc->sc_dc->dc_tgaconf->tgac_phys_depth,
 	    sc->sc_dc->dc_ramdac_funcs->ramdac_name);
 
 	if (intrstr != NULL)
-		printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname,
+		printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev),
 		    intrstr);
 
 	aa.console = console;
@@ -537,7 +537,7 @@ tga_ioctl(v, vs, cmd, data, flag, l)
 	void *v;
 	void *vs;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 	int flag;
 	struct lwp *l;
 {
@@ -1260,12 +1260,12 @@ void tga_putchar (c, row, col, uc, attr)
 		*rp = fr[0] | (fr[1] << 8) | (fr[2] << 16) | (fr[3] << 24);
 
 		fr += fs;
-		rp = (int32_t *)((caddr_t)rp + ri->ri_stride);
+		rp = (int32_t *)((char *)rp + ri->ri_stride);
 	}
 
 	/* Do underline */
 	if ((attr & 1) != 0) {
-		rp = (int32_t *)((caddr_t)rp - (ri->ri_stride << 1));
+		rp = (int32_t *)((char *)rp - (ri->ri_stride << 1));
 		*rp = 0xffffffff;
 	}
 
@@ -1321,7 +1321,7 @@ tga_eraserows(c, row, num, attr)
 
 	while (lines--) {
 		*rp = pixels;
-		rp = (int32_t *)((caddr_t)rp + ri->ri_stride);
+		rp = (int32_t *)((char *)rp + ri->ri_stride);
 	}
 
 	/* Set grapics mode back to normal. */
@@ -1375,7 +1375,7 @@ long attr;
 
 	while (lines--) {
 		*rp = pixels;
-		rp = (int32_t *)((caddr_t)rp + ri->ri_stride);
+		rp = (int32_t *)((char *)rp + ri->ri_stride);
 	}
 
 	/* Set grapics mode back to normal. */

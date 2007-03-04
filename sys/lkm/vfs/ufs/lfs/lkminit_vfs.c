@@ -1,4 +1,4 @@
-/* $NetBSD: lkminit_vfs.c,v 1.12 2007/02/09 21:55:36 ad Exp $ */
+/* $NetBSD: lkminit_vfs.c,v 1.16 2008/06/28 15:50:21 rumble Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -34,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lkminit_vfs.c,v 1.12 2007/02/09 21:55:36 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lkminit_vfs.c,v 1.16 2008/06/28 15:50:21 rumble Exp $");
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
@@ -56,10 +49,10 @@ __KERNEL_RCSID(0, "$NetBSD: lkminit_vfs.c,v 1.12 2007/02/09 21:55:36 ad Exp $");
 
 #include <ufs/lfs/lfs_extern.h>
 
-int lfs_lkmentry __P((struct lkm_table *, int, int));
+int lfs_lkmentry(struct lkm_table *, int, int);
 
-static int lfs_load __P((struct lkm_table *, int));
-static int lfs_unload __P((struct lkm_table *, int));
+static int lfs_load(struct lkm_table *, int);
+static int lfs_unload(struct lkm_table *, int);
 static struct sysctllog *_lfs_log;
 
 #define LFS_SYSENT_CNT		4
@@ -69,16 +62,16 @@ static const struct {
 } lfs_sysents[LFS_SYSENT_CNT] = {
 	{ SYS_lfs_bmapv,
 		{ 3, sizeof(struct sys_lfs_bmapv_args), 0,
-			sys_lfs_bmapv } },
+			(sy_call_t *)sys_lfs_bmapv } },
 	{ SYS_lfs_markv,
 		{ 3, sizeof(struct sys_lfs_markv_args), 0,
-			sys_lfs_markv } },
+			(sy_call_t *)sys_lfs_markv } },
 	{ SYS_lfs_segclean,
 		{ 2, sizeof(struct sys_lfs_segclean_args), 0,
-			sys_lfs_segclean } },
+			(sy_call_t *)sys_lfs_segclean } },
 	{ SYS_lfs_segwait,
 		{ 2, sizeof(struct sys_lfs_segwait_args), 0,
-			sys_lfs_segwait } },
+			(sy_call_t *)sys_lfs_segwait } },
 };
 static struct sysent lfs_osysent[LFS_SYSENT_CNT];
 
@@ -91,6 +84,8 @@ extern struct vfsops lfs_vfsops;
  * declare the filesystem
  */
 MOD_VFS("lfs", -1, &lfs_vfsops);
+
+extern void lfs_sysctl_setup(struct sysctllog *);
 
 /*
  * entry point
@@ -130,7 +125,7 @@ lfs_load(lkmtp, cmd)
 		sysent[lfs_sysents[i].sysno] = lfs_sysents[i].sysent;
 	}
 
-	sysctl_vfs_lfs_setup(&_lfs_log);
+	lfs_sysctl_setup(_lfs_log);
 
 	return 0;
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.c,v 1.73 2005/12/24 20:06:46 perry Exp $ */
+/* $NetBSD: cpu.c,v 1.82 2008/04/28 20:23:10 martin Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -66,7 +59,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.73 2005/12/24 20:06:46 perry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.82 2008/04/28 20:23:10 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -77,18 +70,20 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.73 2005/12/24 20:06:46 perry Exp $");
 #include <sys/malloc.h>
 #include <sys/proc.h>
 #include <sys/user.h>
+#include <sys/atomic.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/atomic.h>
 #include <machine/autoconf.h>
-#include <machine/cpu.h>
 #include <machine/cpuvar.h>
 #include <machine/rpb.h>
 #include <machine/prom.h>
 #include <machine/alpha.h>
 
-struct cpu_info cpu_info_primary;
+struct cpu_info cpu_info_primary = {
+	.ci_curlwp = &lwp0
+};
 struct cpu_info *cpu_info_list = &cpu_info_primary;
 
 #if defined(MULTIPROCESSOR)
@@ -215,12 +210,6 @@ cpuattach(parent, self, aux)
 #endif
 	u_int32_t major, minor;
 	struct cpu_info *ci;
-#if defined(MULTIPROCESSOR)
-	extern paddr_t avail_start, avail_end;
-	struct pcb *pcb;
-	struct pglist mlist;
-	int error;
-#endif
 
 	p = LOCATE_PCS(hwrpb, ma->ma_slot);
 	major = PCS_CPU_MAJORTYPE(p);
@@ -290,6 +279,7 @@ recognized:
 #endif
 	ci->ci_cpuid = ma->ma_slot;
 	ci->ci_softc = sc;
+	ci->ci_pcc_freq = hwrpb->rpb_cc_freq;
 
 	/*
 	 * Though we could (should?) attach the LCA cpus' PCI
@@ -317,45 +307,6 @@ recognized:
 		printf("%s: PALcode not valid\n", sc->sc_dev.dv_xname);
 		return;
 	}
-
-	/*
-	 * Allocate UPAGES contiguous pages for the idle PCB and stack.
-	 */
-	error = uvm_pglistalloc(USPACE, avail_start, avail_end, 0, 0,
-	    &mlist, 1, 1);
-	if (error != 0) {
-		if (ma->ma_slot == hwrpb->rpb_primary_cpu_id) {
-			panic("cpu_attach: unable to allocate idle stack for"
-			    " primary");
-		}
-		printf("%s: unable to allocate idle stack\n",
-		    sc->sc_dev.dv_xname);
-		return;
-	}
-
-	ci->ci_idle_pcb_paddr = VM_PAGE_TO_PHYS(TAILQ_FIRST(&mlist));
-	pcb = ci->ci_idle_pcb = (struct pcb *)
-	    ALPHA_PHYS_TO_K0SEG(ci->ci_idle_pcb_paddr);
-	memset(pcb, 0, USPACE);
-
-	/*
-	 * Initialize the idle stack pointer, reserving space for an
-	 * (empty) trapframe (XXX is the trapframe really necessary?)
-	 */
-	pcb->pcb_hw.apcb_ksp = pcb->pcb_hw.apcb_backup_ksp =
-	    (u_int64_t)pcb + USPACE - sizeof(struct trapframe);
-
-	/*
-	 * Initialize the idle PCB.
-	 */
-	pcb->pcb_hw.apcb_asn = lwp0.l_addr->u_pcb.pcb_hw.apcb_asn;
-	pcb->pcb_hw.apcb_ptbr = lwp0.l_addr->u_pcb.pcb_hw.apcb_ptbr;
-#if 0
-	printf("%s: hwpcb ksp = 0x%lx\n", sc->sc_dev.dv_xname,
-	    pcb->pcb_hw.apcb_ksp);
-	printf("%s: hwpcb ptbr = 0x%lx\n", sc->sc_dev.dv_xname,
-	    pcb->pcb_hw.apcb_ptbr);
-#endif
 #endif /* MULTIPROCESSOR */
 
 	/*
@@ -366,11 +317,20 @@ recognized:
 		cpu_announce_extensions(ci);
 #if defined(MULTIPROCESSOR)
 		ci->ci_flags |= CPUF_PRIMARY|CPUF_RUNNING;
-		atomic_setbits_ulong(&cpus_booted, (1UL << ma->ma_slot));
-		atomic_setbits_ulong(&cpus_running, (1UL << ma->ma_slot));
+		atomic_or_ulong(&cpus_booted, (1UL << ma->ma_slot));
+		atomic_or_ulong(&cpus_running, (1UL << ma->ma_slot));
 #endif /* MULTIPROCESSOR */
 	} else {
 #if defined(MULTIPROCESSOR)
+		int error;
+
+		error = mi_cpu_attach(ci);
+		if (error != 0) {
+			aprint_error("%s: mi_cpu_attach failed with %d\n",
+			    sc->sc_dev.dv_xname, error);
+			return;
+		}
+
 		/*
 		 * Boot the secondary processor.  It will announce its
 		 * extensions, and then spin until we tell it to go
@@ -430,23 +390,30 @@ cpu_boot_secondary_processors(void)
 {
 	struct cpu_info *ci;
 	u_long i;
+	bool did_patch = false;
 
 	for (i = 0; i < ALPHA_MAXPROCS; i++) {
 		ci = cpu_info[i];
-		if (ci == NULL || ci->ci_idle_pcb == NULL)
+		if (ci == NULL || ci->ci_data.cpu_idlelwp == NULL)
 			continue;
 		if (ci->ci_flags & CPUF_PRIMARY)
 			continue;
 		if ((cpus_booted & (1UL << i)) == 0)
 			continue;
 
+		/* Patch MP-criticial kernel routines. */
+		if (did_patch == false) {
+			alpha_patch(true);
+			did_patch = true;
+		}
+
 		/*
 		 * Link the processor into the list, and launch it.
 		 */
 		ci->ci_next = cpu_info_list->ci_next;
 		cpu_info_list->ci_next = ci;
-		atomic_setbits_ulong(&ci->ci_flags, CPUF_RUNNING);
-		atomic_setbits_ulong(&cpus_running, (1U << i));
+		atomic_or_ulong(&ci->ci_flags, CPUF_RUNNING);
+		atomic_or_ulong(&cpus_running, (1U << i));
 	}
 }
 
@@ -458,7 +425,7 @@ cpu_boot_secondary(struct cpu_info *ci)
 	struct pcb *pcb;
 	u_long cpumask;
 
-	pcb = ci->ci_idle_pcb;
+	pcb = &ci->ci_data.cpu_idlelwp->l_addr->u_pcb;
 	primary_pcsp = LOCATE_PCS(hwrpb, hwrpb->rpb_primary_cpu_id);
 	pcsp = LOCATE_PCS(hwrpb, ci->ci_cpuid);
 	cpumask = (1UL << ci->ci_cpuid);
@@ -528,10 +495,10 @@ cpu_pause_resume(u_long cpu_id, int pause)
 	u_long cpu_mask = (1UL << cpu_id);
 
 	if (pause) {
-		atomic_setbits_ulong(&cpus_paused, cpu_mask);
+		atomic_or_ulong(&cpus_paused, cpu_mask);
 		alpha_send_ipi(cpu_id, ALPHA_IPI_PAUSE);
 	} else
-		atomic_clearbits_ulong(&cpus_paused, cpu_mask);
+		atomic_and_ulong(&cpus_paused, ~cpu_mask);
 }
 
 void
@@ -559,8 +526,8 @@ cpu_halt(void)
 	pcsp->pcs_flags &= ~(PCS_RC | PCS_HALT_REQ);
 	pcsp->pcs_flags |= PCS_HALT_STAY_HALTED;
 
-	atomic_clearbits_ulong(&cpus_running, (1UL << cpu_id));
-	atomic_clearbits_ulong(&cpus_booted, (1U << cpu_id));
+	atomic_and_ulong(&cpus_running, ~(1UL << cpu_id));
+	atomic_and_ulong(&cpus_booted, ~(1U << cpu_id));
 
 	alpha_pal_halt();
 	/* NOTREACHED */
@@ -573,7 +540,7 @@ cpu_hatch(struct cpu_info *ci)
 	u_long cpumask = (1UL << cpu_id);
 
 	/* Mark the kernel pmap active on this processor. */
-	atomic_setbits_ulong(&pmap_kernel()->pm_cpus, cpumask);
+	atomic_or_ulong(&pmap_kernel()->pm_cpus, cpumask);
 
 	/* Initialize trap vectors for this processor. */
 	trap_init();
@@ -581,7 +548,7 @@ cpu_hatch(struct cpu_info *ci)
 	/* Yahoo!  We're running kernel code!  Announce it! */
 	cpu_announce_extensions(ci);
 
-	atomic_setbits_ulong(&cpus_booted, cpumask);
+	atomic_or_ulong(&cpus_booted, cpumask);
 
 	/*
 	 * Spin here until we're told we can start.
@@ -598,10 +565,7 @@ cpu_hatch(struct cpu_info *ci)
 	ALPHA_TBIA();
 	alpha_pal_imb();
 
-	cc_microset(ci);
-
-	/* Initialize our base "runtime". */
-	microtime(&ci->ci_schedstate.spc_runtime);
+	cc_calibrate_cpu(ci);
 }
 
 int
@@ -623,11 +587,12 @@ cpu_iccb_send(long cpu_id, const char *msg)
 
 	/*
 	 * Copy the message into the ICCB, and tell the secondary console
-	 * that it's there.  The atomic operation performs a memory barrier.
+	 * that it's there.
 	 */
 	strcpy(pcsp->pcs_iccb.iccb_rxbuf, msg);
 	pcsp->pcs_iccb.iccb_rxlen = strlen(msg);
-	atomic_setbits_ulong(&hwrpb->rpb_rxrdy, cpumask);
+	atomic_or_ulong(&hwrpb->rpb_rxrdy, cpumask);
+	membar_sync();
 
 	/* Wait for the message to be received. */
 	for (timeout = 10000; timeout != 0; timeout--) {

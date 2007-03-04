@@ -1,4 +1,4 @@
-/*	$NetBSD: vm86.h,v 1.14 2006/02/16 20:17:13 perry Exp $	*/
+/*	$NetBSD: vm86.h,v 1.16 2008/04/28 20:23:24 martin Exp $	*/
 
 #undef	VM86_USE_VIF
 
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -76,9 +69,9 @@ struct vm86_struct {
 #define VCPU_586		5
 
 #ifdef _KERNEL
-int i386_vm86(struct lwp *, char *, register_t *);
+int x86_vm86(struct lwp *, char *, register_t *);
 #ifdef COMPAT_16
-int compat_16_i386_vm86(struct lwp *, char *, register_t *);
+int compat_16_x86_vm86(struct lwp *, char *, register_t *);
 #endif
 void vm86_gpfault(struct lwp *, int);
 void vm86_return(struct lwp *, int);

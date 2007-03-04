@@ -1,4 +1,4 @@
-/* $NetBSD: lkminit_emul.c,v 1.10 2005/12/11 12:24:47 christos Exp $ */
+/* $NetBSD: lkminit_emul.c,v 1.12 2008/04/28 20:24:06 martin Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lkminit_emul.c,v 1.10 2005/12/11 12:24:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lkminit_emul.c,v 1.12 2008/04/28 20:24:06 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/ioctl.h>
@@ -48,10 +41,10 @@ __KERNEL_RCSID(0, "$NetBSD: lkminit_emul.c,v 1.10 2005/12/11 12:24:47 christos E
 
 extern const struct emul emul_svr4;
 
-int compat_svr4_lkmentry __P((struct lkm_table *, int, int));
+int compat_svr4_lkmentry(struct lkm_table *, int, int);
 
-static int svr4_init __P((struct lkm_table *lkmtp, int cmd));
-static int svr4_done __P((struct lkm_table *lkmtp, int cmd));
+static int svr4_init(struct lkm_table *lkmtp, int cmd);
+static int svr4_done(struct lkm_table *lkmtp, int cmd);
 
 /*
  * declare the emulation
@@ -84,7 +77,7 @@ svr4_init(lkmtp, cmd)
 	 * overkill given that only svr4 compat needs an initialization.
 	 */
 #define	IDTVEC(name)	__CONCAT(X, name)
-	extern void IDTVEC(svr4_fasttrap) __P((void));
+	extern void IDTVEC(svr4_fasttrap)(void);
 
 	setgate(&idt[0xd2], &IDTVEC(svr4_fasttrap), 0, SDT_SYS386TGT,
 		SEL_UPL, GSEL(GCODE_SEL, SEL_KPL));

@@ -1,7 +1,7 @@
-/*	$NetBSD: sys_sig.c,v 1.6 2007/02/27 15:19:54 ad Exp $	*/
+/*	$NetBSD: sys_sig.c,v 1.17 2008/10/15 06:51:20 wrstuden Exp $	*/
 
 /*-
- * Copyright (c) 2006 The NetBSD Foundation, Inc.
+ * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -73,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_sig.c,v 1.6 2007/02/27 15:19:54 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_sig.c,v 1.17 2008/10/15 06:51:20 wrstuden Exp $");
 
 #include "opt_ptrace.h"
 #include "opt_compat_netbsd.h"
@@ -84,6 +77,8 @@ __KERNEL_RCSID(0, "$NetBSD: sys_sig.c,v 1.6 2007/02/27 15:19:54 ad Exp $");
 #include <sys/signalvar.h>
 #include <sys/proc.h>
 #include <sys/pool.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscallargs.h>
 #include <sys/kauth.h>
 #include <sys/wait.h>
@@ -92,13 +87,13 @@ __KERNEL_RCSID(0, "$NetBSD: sys_sig.c,v 1.6 2007/02/27 15:19:54 ad Exp $");
 #ifdef COMPAT_16
 /* ARGSUSED */
 int
-compat_16_sys___sigaction14(struct lwp *l, void *v, register_t *retval)
+compat_16_sys___sigaction14(struct lwp *l, const struct compat_16_sys___sigaction14_args *uap, register_t *retval)
 {
-	struct compat_16_sys___sigaction14_args /* {
+	/* {
 		syscallarg(int)				signum;
 		syscallarg(const struct sigaction *)	nsa;
 		syscallarg(struct sigaction *)		osa;
-	} */ *uap = v;
+	} */
 	struct sigaction	nsa, osa;
 	int			error;
 
@@ -123,15 +118,15 @@ compat_16_sys___sigaction14(struct lwp *l, void *v, register_t *retval)
 
 /* ARGSUSED */
 int
-sys___sigaction_sigtramp(struct lwp *l, void *v, register_t *retval)
+sys___sigaction_sigtramp(struct lwp *l, const struct sys___sigaction_sigtramp_args *uap, register_t *retval)
 {
-	struct sys___sigaction_sigtramp_args /* {
+	/* {
 		syscallarg(int)				signum;
 		syscallarg(const struct sigaction *)	nsa;
 		syscallarg(struct sigaction *)		osa;
 		syscallarg(void *)			tramp;
 		syscallarg(int)				vers;
-	} */ *uap = v;
+	} */
 	struct sigaction nsa, osa;
 	int error;
 
@@ -158,13 +153,13 @@ sys___sigaction_sigtramp(struct lwp *l, void *v, register_t *retval)
  * return old mask as return value; the library stub does the rest.
  */
 int
-sys___sigprocmask14(struct lwp *l, void *v, register_t *retval)
+sys___sigprocmask14(struct lwp *l, const struct sys___sigprocmask14_args *uap, register_t *retval)
 {
-	struct sys___sigprocmask14_args /* {
+	/* {
 		syscallarg(int)			how;
 		syscallarg(const sigset_t *)	set;
 		syscallarg(sigset_t *)		oset;
-	} */ *uap = v;
+	} */
 	struct proc	*p = l->l_proc;
 	sigset_t	nss, oss;
 	int		error;
@@ -174,10 +169,10 @@ sys___sigprocmask14(struct lwp *l, void *v, register_t *retval)
 		if (error)
 			return (error);
 	}
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	error = sigprocmask1(l, SCARG(uap, how),
 	    SCARG(uap, set) ? &nss : 0, SCARG(uap, oset) ? &oss : 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	if (error)
 		return (error);
 	if (SCARG(uap, oset)) {
@@ -190,11 +185,11 @@ sys___sigprocmask14(struct lwp *l, void *v, register_t *retval)
 
 /* ARGSUSED */
 int
-sys___sigpending14(struct lwp *l, void *v, register_t *retval)
+sys___sigpending14(struct lwp *l, const struct sys___sigpending14_args *uap, register_t *retval)
 {
-	struct sys___sigpending14_args /* {
+	/* {
 		syscallarg(sigset_t *)	set;
-	} */ *uap = v;
+	} */
 	sigset_t ss;
 
 	sigpending1(l, &ss);
@@ -208,11 +203,11 @@ sys___sigpending14(struct lwp *l, void *v, register_t *retval)
  */
 /* ARGSUSED */
 int
-sys___sigsuspend14(struct lwp *l, void *v, register_t *retval)
+sys___sigsuspend14(struct lwp *l, const struct sys___sigsuspend14_args *uap, register_t *retval)
 {
-	struct sys___sigsuspend14_args /* {
+	/* {
 		syscallarg(const sigset_t *)	set;
-	} */ *uap = v;
+	} */
 	sigset_t	ss;
 	int		error;
 
@@ -227,12 +222,12 @@ sys___sigsuspend14(struct lwp *l, void *v, register_t *retval)
 
 /* ARGSUSED */
 int
-sys___sigaltstack14(struct lwp *l, void *v, register_t *retval)
+sys___sigaltstack14(struct lwp *l, const struct sys___sigaltstack14_args *uap, register_t *retval)
 {
-	struct sys___sigaltstack14_args /* {
+	/* {
 		syscallarg(const struct sigaltstack *)	nss;
 		syscallarg(struct sigaltstack *)	oss;
-	} */ *uap = v;
+	} */
 	struct sigaltstack	nss, oss;
 	int			error;
 
@@ -255,12 +250,12 @@ sys___sigaltstack14(struct lwp *l, void *v, register_t *retval)
 
 /* ARGSUSED */
 int
-sys_kill(struct lwp *l, void *v, register_t *retval)
+sys_kill(struct lwp *l, const struct sys_kill_args *uap, register_t *retval)
 {
-	struct sys_kill_args /* {
+	/* {
 		syscallarg(int)	pid;
 		syscallarg(int)	signum;
-	} */ *uap = v;
+	} */
 	struct proc	*p;
 	ksiginfo_t	ksi;
 	int signum = SCARG(uap, signum);
@@ -275,21 +270,20 @@ sys_kill(struct lwp *l, void *v, register_t *retval)
 	ksi.ksi_uid = kauth_cred_geteuid(l->l_cred);
 	if (SCARG(uap, pid) > 0) {
 		/* kill single process */
-		if ((p = p_find(SCARG(uap, pid), PFIND_UNLOCK_FAIL)) == NULL)
+		mutex_enter(proc_lock);
+		if ((p = p_find(SCARG(uap, pid), PFIND_LOCKED)) == NULL) {
+			mutex_exit(proc_lock);
 			return (ESRCH);
-		mutex_enter(&p->p_mutex);
+		}
+		mutex_enter(p->p_lock);
 		error = kauth_authorize_process(l->l_cred,
-		    KAUTH_PROCESS_CANSIGNAL, p, (void *)(uintptr_t)signum,
+		    KAUTH_PROCESS_SIGNAL, p, KAUTH_ARG(signum),
 		    NULL, NULL);
 		if (!error && signum) {
-			mutex_enter(&proclist_mutex);
-			mutex_enter(&p->p_smutex);
 			kpsignal2(p, &ksi);
-			mutex_exit(&p->p_smutex);
-			mutex_exit(&proclist_mutex);
 		}
-		mutex_exit(&p->p_mutex);
-		rw_exit(&proclist_lock);
+		mutex_exit(p->p_lock);
+		mutex_exit(proc_lock);
 		return (error);
 	}
 	switch (SCARG(uap, pid)) {
@@ -305,28 +299,28 @@ sys_kill(struct lwp *l, void *v, register_t *retval)
 
 /* ARGSUSED */
 int
-sys_getcontext(struct lwp *l, void *v, register_t *retval)
+sys_getcontext(struct lwp *l, const struct sys_getcontext_args *uap, register_t *retval)
 {
-	struct sys_getcontext_args /* {
+	/* {
 		syscallarg(struct __ucontext *) ucp;
-	} */ *uap = v;
+	} */
 	struct proc *p = l->l_proc;
 	ucontext_t uc;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	getucontext(l, &uc);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (copyout(&uc, SCARG(uap, ucp), sizeof (*SCARG(uap, ucp))));
 }
 
 /* ARGSUSED */
 int
-sys_setcontext(struct lwp *l, void *v, register_t *retval)
+sys_setcontext(struct lwp *l, const struct sys_setcontext_args *uap, register_t *retval)
 {
-	struct sys_setcontext_args /* {
+	/* {
 		syscallarg(const ucontext_t *) ucp;
-	} */ *uap = v;
+	} */
 	struct proc *p = l->l_proc;
 	ucontext_t uc;
 	int error;
@@ -336,9 +330,9 @@ sys_setcontext(struct lwp *l, void *v, register_t *retval)
 		return (error);
 	if (!(uc.uc_flags & _UC_CPU))
 		return (EINVAL);
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	error = setucontext(l, &uc);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	if (error)
  		return (error);
 
@@ -353,10 +347,10 @@ sys_setcontext(struct lwp *l, void *v, register_t *retval)
  * it's own sigtimedwait() wrapper to DTRT WRT individual threads.
  */
 int
-sys___sigtimedwait(struct lwp *l, void *v, register_t *retval)
+sys___sigtimedwait(struct lwp *l, const struct sys___sigtimedwait_args *uap, register_t *retval)
 {
 
-	return __sigtimedwait1(l, v, retval, copyout, copyin, copyout);
+	return __sigtimedwait1(l, uap, retval, copyout, copyin, copyout);
 }
 
 int
@@ -395,8 +389,7 @@ sigaction1(struct lwp *l, int signum, const struct sigaction *nsa,
 		return (EINVAL);
 	}
 
-	mutex_enter(&p->p_mutex);	/* p_flag */
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	ps = p->p_sigacts;
 	if (osa)
@@ -489,8 +482,7 @@ sigaction1(struct lwp *l, int signum, const struct sigaction *nsa,
 		lwp_unlock(l);
 	}
  out:
-	mutex_exit(&p->p_smutex);
-	mutex_exit(&p->p_mutex);
+	mutex_exit(p->p_lock);
 	ksiginfo_queue_drain(&kq);
 
 	return (error);
@@ -500,29 +492,32 @@ int
 sigprocmask1(struct lwp *l, int how, const sigset_t *nss, sigset_t *oss)
 {
 	int more;
+	struct proc *p = l->l_proc;
+	sigset_t *mask;
+	mask = (p->p_sa != NULL) ? &p->p_sa->sa_sigmask : &l->l_sigmask;
 
-	LOCK_ASSERT(mutex_owned(&l->l_proc->p_smutex));
+	KASSERT(mutex_owned(p->p_lock));
 
 	if (oss)
-		*oss = l->l_sigmask;
+		*oss = *mask;
 	if (nss) {
 		switch (how) {
 		case SIG_BLOCK:
-			sigplusset(nss, &l->l_sigmask);
+			sigplusset(nss, mask);
 			more = 0;
 			break;
 		case SIG_UNBLOCK:
-			sigminusset(nss, &l->l_sigmask);
+			sigminusset(nss, mask);
 			more = 1;
 			break;
 		case SIG_SETMASK:
-			l->l_sigmask = *nss;
+			*mask = *nss;
 			more = 1;
 			break;
 		default:
 			return (EINVAL);
 		}
-		sigminusset(&sigcantmask, &l->l_sigmask);
+		sigminusset(&sigcantmask, mask);
 		if (more && sigispending(l, 0)) {
 			/*
 			 * Check for pending signals on return to user.
@@ -541,11 +536,10 @@ sigpending1(struct lwp *l, sigset_t *ss)
 {
 	struct proc *p = l->l_proc;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	*ss = l->l_sigpend.sp_set;
 	sigplusset(&p->p_sigpend.sp_set, ss);
-	sigminusset(&l->l_sigmask, ss);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 }
 
 int
@@ -557,13 +551,13 @@ sigsuspend1(struct lwp *l, const sigset_t *ss)
 
 	if (ss) {
 		/*
-		 * When returning from sigpause, we want
+		 * When returning from sigsuspend, we want
 		 * the old mask to be restored after the
 		 * signal handler has finished.  Thus, we
 		 * save it here and mark the sigctx structure
 		 * to indicate this.
 		 */
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 		l->l_sigrestore = 1;
 		l->l_sigoldmask = l->l_sigmask;
 		l->l_sigmask = *ss;
@@ -575,7 +569,7 @@ sigsuspend1(struct lwp *l, const sigset_t *ss)
 			l->l_flag |= LW_PENDSIG;
 			lwp_unlock(l);
 		}
-		mutex_exit(&p->p_smutex);
+		mutex_exit(p->p_lock);
 	}
 
 	while (kpause("pause", true, 0, NULL) == 0)
@@ -592,7 +586,7 @@ sigaltstack1(struct lwp *l, const struct sigaltstack *nss,
 	struct proc *p = l->l_proc;
 	int error = 0;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (oss)
 		*oss = l->l_sigstk;
@@ -610,20 +604,20 @@ sigaltstack1(struct lwp *l, const struct sigaltstack *nss,
 			l->l_sigstk = *nss;
 	}
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (error);
 }
 
 int
-__sigtimedwait1(struct lwp *l, void *v, register_t *retval,
+__sigtimedwait1(struct lwp *l, const struct sys___sigtimedwait_args *uap, register_t *retval,
     copyout_t put_info, copyin_t fetch_timeout, copyout_t put_timeout)
 {
-	struct sys___sigtimedwait_args /* {
+	/* {
 		syscallarg(const sigset_t *) set;
 		syscallarg(siginfo_t *) info;
 		syscallarg(struct timespec *) timeout;
-	} */ *uap = v;
+	} */
 	struct proc *p = l->l_proc;
 	int error, signum;
 	int timo = 0;
@@ -670,13 +664,20 @@ __sigtimedwait1(struct lwp *l, void *v, register_t *retval,
 	/*
 	 * Allocate a ksi up front.  We can't sleep with the mutex held.
 	 */
-	KERNEL_LOCK(1, l);	/* XXXSMP ksiginfo_alloc() -> pool_get()  */
 	ksi = ksiginfo_alloc(p, NULL, PR_WAITOK);
-	KERNEL_UNLOCK_ONE(l);	/* XXXSMP */
 	if (ksi == NULL)
 		return (ENOMEM);
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
+
+	/*
+	 * SA processes can have no more than 1 sigwaiter.
+	 */
+	if ((p->p_sflag & PS_SA) != 0 && !LIST_EMPTY(&p->p_sigwaiters)) {
+		mutex_exit(p->p_lock);
+		error = EINVAL;
+		goto out;
+	}
 
 	if ((signum = sigget(&p->p_sigpend, ksi, 0, &l->l_sigwaitset)) == 0)
 		signum = sigget(&l->l_sigpend, ksi, 0, &l->l_sigwaitset);
@@ -685,7 +686,7 @@ __sigtimedwait1(struct lwp *l, void *v, register_t *retval,
 		/*
 		 * We found a pending signal - copy it out to the user.
 		 */
-		mutex_exit(&p->p_smutex);
+		mutex_exit(p->p_lock);
 		goto out;
 	}
 
@@ -698,7 +699,7 @@ __sigtimedwait1(struct lwp *l, void *v, register_t *retval,
 	/*
 	 * Wait for signal to arrive. We can either be woken up or time out.
 	 */
-	error = cv_timedwait_sig(&l->l_sigcv, &p->p_smutex, timo);
+	error = cv_timedwait_sig(&l->l_sigcv, p->p_lock, timo);
 
 	/*
 	 * Need to find out if we woke as a result of lwp_wakeup() or a
@@ -716,7 +717,7 @@ __sigtimedwait1(struct lwp *l, void *v, register_t *retval,
 		LIST_REMOVE(l, l_sigwaiter);
 	}
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	/*
 	 * If the sleep was interrupted (either by signal or wakeup), update
@@ -750,9 +751,7 @@ __sigtimedwait1(struct lwp *l, void *v, register_t *retval,
 		error = (*put_info)(&ksi->ksi_info, SCARG(uap, info),
 		    sizeof(ksi->ksi_info));
 
-	KERNEL_LOCK(1, l);	/* XXXSMP ksiginfo_free() -> pool_put()  */	
 	ksiginfo_free(ksi);
-	KERNEL_UNLOCK_ONE(l);	/* XXXSMP */
 
 	return error;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: pucdata.c,v 1.51 2007/01/28 21:44:29 chs Exp $	*/
+/*	$NetBSD: pucdata.c,v 1.55 2008/09/06 22:36:40 rmind Exp $	*/
 
 /*
  * Copyright (c) 1998, 1999 Christopher G. Demetriou.  All rights reserved.
@@ -36,12 +36,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pucdata.c,v 1.51 2007/01/28 21:44:29 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pucdata.c,v 1.55 2008/09/06 22:36:40 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 
+#include <dev/pci/pcidevs.h>
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pucvar.h>
@@ -1258,8 +1259,82 @@ const struct puc_device_description puc_devices[] = {
 	    },
 	},
 	{   "EXAR XR17D158",
-	    {   0x13a8, 0x0154, 0,      0       },
+	    {   0x13a8, 0x0158, 0,      0       },
 	    {   0xffff, 0xffff, 0,      0       },
+	    {
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0000, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0200, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0400, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0600, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0800, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0a00, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0c00, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0e00, COM_FREQ * 8 },
+	    },
+	},
+
+	/* I-O DATA RSA-PCI: 2S */
+	{   "I-O DATA RSA-PCI 2-port serial",
+	    {	0x10fc, 0x0007, 0, 0 },
+	    {	0xffff, 0xffff, 0, 0 },
+	    {
+		{ PUC_PORT_TYPE_COM, 0x14, 0x00, COM_FREQ },
+		{ PUC_PORT_TYPE_COM, 0x18, 0x00, COM_FREQ },
+	    },
+	},
+ 
+	/* Digi International Digi Neo 4 Serial */
+	{ "Digi International Digi Neo 4 Serial",
+	    {	PCI_VENDOR_DIGI, PCI_PRODUCT_DIGI_NEO4,		0, 0  },
+	    {	0xffff, 0xffff,					0, 0  },
+	    {
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0000, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0200, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0400, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0600, COM_FREQ * 8 },
+	    },
+	},
+
+	/* Digi International Digi Neo 8 Serial */
+	{ "Digi International Digi Neo 8 Serial",
+	    {	PCI_VENDOR_DIGI, PCI_PRODUCT_DIGI_NEO8,		0, 0  },
+	    {	0xffff, 0xffff,					0, 0  },
+	    {
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0000, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0200, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0400, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0600, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0800, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0a00, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0c00, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0e00, COM_FREQ * 8 },
+	    },
+	},
+
+	/*
+	 * B&B Electronics MIPort Serial cards.
+	 */
+	{ "BBELEC ISOLATED_2_PORT",
+	    {	PCI_VENDOR_BBELEC, PCI_PRODUCT_BBELEC_ISOLATED_2_PORT, 0, 0 },
+	    {	0xffff, 0xffff, 0,	0	},
+	    {
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0000, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0200, COM_FREQ * 8 },
+	    },
+	},
+	{ "BBELEC ISOLATED_4_PORT",
+	    {	PCI_VENDOR_BBELEC, PCI_PRODUCT_BBELEC_ISOLATED_4_PORT, 0, 0 },
+	    {	0xffff, 0xffff, 0,	0	},
+	    {
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0000, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0200, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0400, COM_FREQ * 8 },
+		{ PUC_PORT_TYPE_COM, 0x10, 0x0600, COM_FREQ * 8 },
+	    },
+	},
+	{ "BBELEC ISOLATED_8_PORT",
+	    {	PCI_VENDOR_BBELEC, PCI_PRODUCT_BBELEC_ISOLATED_8_PORT, 0, 0 },
+	    {	0xffff, 0xffff, 0,	0	},
 	    {
 		{ PUC_PORT_TYPE_COM, 0x10, 0x0000, COM_FREQ * 8 },
 		{ PUC_PORT_TYPE_COM, 0x10, 0x0200, COM_FREQ * 8 },

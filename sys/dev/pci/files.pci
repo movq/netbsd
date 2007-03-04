@@ -1,4 +1,4 @@
-#	$NetBSD: files.pci,v 1.277 2007/01/25 00:11:58 macallan Exp $
+#	$NetBSD: files.pci,v 1.306 2008/10/11 21:54:12 bouyer Exp $
 #
 # Config file and device description for machine-independent PCI code.
 # Included by ports that need it.  Requires that the SCSI files be
@@ -71,6 +71,11 @@ file	dev/pci/amr.c			amr
 
 attach	ld at amr with ld_amr
 file	dev/pci/ld_amr.c		ld_amr
+
+# Areca SATA RAID Controllers
+device	arcmsr: scsi
+attach	arcmsr at pci
+file	dev/pci/arcmsr.c		arcmsr
 
 # Compaq RAID controllers
 attach	cac at pci with cac_pci
@@ -217,9 +222,8 @@ attach	pciide at pci
 file	dev/pci/pciide.c		pciide
 
 # AHCI SATA controllers
-device	ahcisata: ata, ata_dma, ata_udma, sata
-attach	ahcisata at pci
-file	dev/pci/ahcisata.c		ahcisata
+attach	ahcisata at pci with ahcisata_pci
+file	dev/pci/ahcisata_pci.c		ahcisata_pci
 
 # Acard IDE controllers
 device	acardide: ata, ata_dma, ata_udma, pciide_common, wdc_common
@@ -260,6 +264,13 @@ file	dev/pci/hptide.c		hptide
 device	iteide: ata, ata_dma, ata_udma, pciide_common, wdc_common
 attach	iteide at pci
 file	dev/pci/iteide.c		iteide
+
+# Jmicron hybrid IDE/AHCI controllers
+define  jmide_hl { }
+device	jmide: ata, ata_dma, ata_udma, pciide_common, wdc_common, jmide_hl
+attach	jmide at pci
+attach	ahcisata at jmide_hl with jmahci
+file	dev/pci/jmide.c			jmide | jmahci needs-flag
 
 # Opti IDE controllers
 device	optiide: ata, ata_dma, pciide_common, wdc_common
@@ -352,6 +363,11 @@ file	dev/pci/if_hme_pci.c		hme_pci
 attach	gem at pci with gem_pci
 file	dev/pci/if_gem_pci.c		gem_pci
 
+# JMicron JMC2[56]0 ethernet controllers
+device	jme: ether, ifnet, arp, mii
+attach	jme at pci
+file	dev/pci/if_jme.c		jme
+
 # NE2000-compatible PCI Ethernet cards
 defparam opt_ipkdb.h	IPKDB_NE_PCISLOT
 defflag	opt_ipkdb.h	IPKDB_NE_PCI		: IPKDB_NE
@@ -380,6 +396,7 @@ attach	esh at pci with esh_pci
 file	dev/pci/if_esh_pci.c		esh_pci
 
 # generic PCI VGA
+defflag	opt_vga.h	VGA_POST:	X86EMU
 attach	vga at pci with vga_pci
 file	dev/pci/vga_pci.c		vga_pci			needs-flag
 
@@ -584,12 +601,11 @@ file	dev/pci/if_vr.c			vr
 # SiS 900 Fast Ethernet controllers
 device	sip: ether, ifnet, arp, mii, mii_bitbang
 attach	sip at pci
-file	dev/pci/if_sip.c		sip
+file	dev/pci/if_sip.c		sip | gsip
 
 # National Semiconductor DP83820 Gigabit Ethernet
 device	gsip: ether, ifnet, arp, mii, mii_bitbang
 attach	gsip at pci
-file	dev/pci/if_gsip.c		gsip
 
 # Level One LXT-1001 Gigabit Ethernet
 #device	glxt: ether, ifnet, arp, mii
@@ -750,7 +766,8 @@ attach	joy at pci with joy_pci
 file	dev/pci/joy_pci.c		joy_pci
 
 # ATI Mach64 framebuffer console driver
-device	machfb: wsemuldisplaydev, rasops8, fb, vcons, videomode
+defflag	opt_machfb.h	MACHFB_DEBUG
+device	machfb: wsemuldisplaydev, rasops8, fb, vcons, videomode, edid, drm
 attach	machfb at pci
 file	dev/pci/machfb.c		machfb
 
@@ -760,17 +777,37 @@ attach	voodoofb at pci
 file	dev/pci/voodoofb.c		voodoofb
 
 # VIA UniChrome framebuffer console driver
-device	unichromefb: wsemuldisplaydev, rasops16, rasops32, vcons
+device	unichromefb: wsemuldisplaydev, rasops16, rasops32, vcons, drm
 attach	unichromefb at pci
 file	dev/pci/unichromefb.c		unichromefb needs-flag
 
 # ATI Radeon framebuffer console driver
 # (Note: to enable the BIOS parser, add options RADEON_BIOS_INIT to the config)
-device	radeonfb: wsemuldisplaydev, videomode, rasops32, vcons, splash, iic, i2c_bitbang, ddc_read_edid, edid
+device	radeonfb: wsemuldisplaydev, videomode, rasops32, vcons, splash, iic, i2c_bitbang, ddc_read_edid, edid, drm
 attach	radeonfb at pci
 file	dev/pci/radeonfb.c	radeonfb
 file	dev/pci/radeonfb_i2c.c	radeonfb
 file	dev/pci/radeonfb_bios.c	radeonfb
+defflag opt_radeonfb.h	RADEONFB_DEBUG
+
+# Chelsio Terminator 3 (T3) 10 gigabit ethernet
+device	cxgbc { }
+attach	cxgbc at pci
+device	cxgb: ether, ifnet, arp
+attach	cxgb at cxgbc
+file	dev/pci/cxgb_main.c		cxgbc | cxgb
+file	dev/pci/cxgb_mc5.c		cxgbc | cxgb
+file	dev/pci/cxgb_vsc8211.c		cxgbc | cxgb
+file	dev/pci/cxgb_ael1002.c		cxgbc | cxgb
+file	dev/pci/cxgb_mv88e1xxx.c	cxgbc | cxgb
+file	dev/pci/cxgb_vsc7323.c		cxgbc | cxgb
+file	dev/pci/cxgb_xgmac.c		cxgbc | cxgb
+file	dev/pci/cxgb_t3_hw.c		cxgbc | cxgb
+file	dev/pci/cxgb_sge.c		cxgbc | cxgb
+file	dev/pci/cxgb_lro.c		cxgbc | cxgb
+# file	dev/pci/cxgb_offload.c		cxgbc | cxgb
+file	dev/pci/cxgb_l2t.c		cxgbc | cxgb
+file	dev/pci/cxgb_osdep.c		cxgbc | cxgb
 
 # Chips & Technologies 65550 framebuffer console driver
 device	chipsfb: wsemuldisplaydev, rasops8, vcons, videomode
@@ -826,6 +863,11 @@ device	wpi: ifnet, arp, wlan, firmload
 attach	wpi at pci
 file	dev/pci/if_wpi.c		wpi
 
+# Intel PRO/Wireless 4965AGN Mini-PCI Adapter
+device	iwn: ifnet, arp, wlan, firmload
+attach	iwn at pci
+file	dev/pci/if_iwn.c		iwn
+
 # Workbit NinjaSCSI-32 controllers
 # device declaration in sys/conf/files
 attach	njs at pci with njs_pci
@@ -861,3 +903,43 @@ attach	mskc at pci
 device	msk: ether, ifnet, arp, mii
 attach	msk at mskc
 file	dev/pci/if_msk.c		mskc | msk
+
+#
+# Direct Rendering Manager
+#
+include "dev/pci/drm/files.pcidrm"
+
+# generic framebuffer console driver, PCI frontend
+attach genfb at pci with genfb_pci
+file	dev/pci/genfb_pci.c	genfb_pci
+
+# NVIDIA nForce2/3/4 SMBus controller
+device	nfsmbc { }
+attach	nfsmbc at pci
+device	nfsmb: i2cbus
+attach	nfsmb at nfsmbc
+file	dev/pci/nfsmb.c			nfsmbc | nfsmb
+
+# Intel ICH SMBus controller
+device	ichsmb: i2cbus
+attach	ichsmb at pci
+file	dev/pci/ichsmb.c		ichsmb
+
+# ATI Rage 128 framebuffer console driver
+device	r128fb: wsemuldisplaydev, rasops8, vcons, videomode, iic, i2c_bitbang
+attach	r128fb at pci
+file	dev/pci/r128fb.c		r128fb
+defflag	opt_r128fb.h	R128FB_DEBUG
+defflag	opt_r128fb.h	R128FB_WAIT
+
+# Atheros/Attansic L2 Fast-Ethernet
+device	lii: ether, ifnet, arp, mii
+attach	lii at pci
+file	dev/pci/if_lii.c		lii
+
+# Silicon Image SteelVine SATA-II controllers
+define siisata
+file dev/ic/siisata.c atapibus & atabus & siisata
+device siisata: ata, ata_dma, ata_udma, sata, siisata
+attach siisata at pci with siisata_pci
+file dev/pci/siisata_pci.c siisata_pci

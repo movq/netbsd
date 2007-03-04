@@ -1,4 +1,4 @@
-/*	$NetBSD: fstrans.h,v 1.3 2007/01/29 15:42:50 hannken Exp $	*/
+/*	$NetBSD: fstrans.h,v 1.9 2008/04/28 20:24:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -64,14 +57,25 @@ enum fstrans_state {
 };
 
 void	fstrans_init(void);
-#define fstrans_start(mp, t)		_fstrans_start((mp), (t), 1)
+#define fstrans_start(mp, t)						\
+do {									\
+	_fstrans_start((mp), (t), 1);					\
+} while (/* CONSTCOND */ 0)
 #define fstrans_start_nowait(mp, t)	_fstrans_start((mp), (t), 0)
 int	_fstrans_start(struct mount *, enum fstrans_lock_type, int);
 void	fstrans_done(struct mount *);
 int	fstrans_is_owner(struct mount *);
+int	fstrans_mount(struct mount *);
+void	fstrans_unmount(struct mount *);
 
 int	fstrans_setstate(struct mount *, enum fstrans_state);
 enum fstrans_state fstrans_getstate(struct mount *);
+
+int	fscow_establish(struct mount *, int (*)(void *, struct buf *, bool),
+	    void *);
+int	fscow_disestablish(struct mount *, int (*)(void *, struct buf *, bool),
+	    void *);
+int	fscow_run(struct buf *, bool);
 
 int	vfs_suspend(struct mount *, int);
 void	vfs_resume(struct mount *);

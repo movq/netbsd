@@ -1,4 +1,4 @@
-/* $NetBSD: linux_syscall.c,v 1.21 2007/02/09 21:55:01 ad Exp $ */
+/* $NetBSD: linux_syscall.c,v 1.29 2008/10/21 12:16:58 ad Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -96,7 +89,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.21 2007/02/09 21:55:01 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.29 2008/10/21 12:16:58 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -104,6 +97,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.21 2007/02/09 21:55:01 ad Exp $"
 #include <sys/user.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
+#include <sys/syscallvar.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -158,8 +152,6 @@ linux_syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 
 	LWP_CACHE_CREDS(l, p);
 
-	KERNEL_LOCK(1, l);
-
 	uvmexp.syscalls++;
 	l->l_md.md_tf = framep;
 
@@ -182,7 +174,7 @@ linux_syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	nargs = callp->sy_narg + hidden;
 	switch (nargs) {
 	default:
-		error = copyin((caddr_t)alpha_pal_rdusp(), &copyargs[6],
+		error = copyin((void *)alpha_pal_rdusp(), &copyargs[6],
 		    (nargs - 6) * sizeof(u_int64_t));
 		if (error)
 			goto bad;
@@ -208,7 +200,7 @@ linux_syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 
 	rval[0] = 0;
 	rval[1] = 0;
-	error = (*callp->sy_call)(l, args, rval);
+	error = sy_call(callp, l, args, rval);
 
 	switch (error) {
 	case 0:
@@ -229,7 +221,6 @@ linux_syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 		break;
 	}
 
-	KERNEL_UNLOCK_LAST(l);
 	userret(l);
 }
 
@@ -244,8 +235,6 @@ linux_syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	struct proc *p = l->l_proc;
 
 	LWP_CACHE_CREDS(l, p);
-
-	KERNEL_LOCK(1, l);
 
 	uvmexp.syscalls++;
 	l->l_md.md_tf = framep;
@@ -269,7 +258,7 @@ linux_syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	nargs = callp->sy_narg + hidden;
 	switch (nargs) {
 	default:
-		error = copyin((caddr_t)alpha_pal_rdusp(), &copyargs[6],
+		error = copyin((void *)alpha_pal_rdusp(), &copyargs[6],
 		    (nargs - 6) * sizeof(u_int64_t));
 		if (error) {
 			args = copyargs;
@@ -296,12 +285,12 @@ linux_syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	args += hidden;
 
 
-	if ((error = trace_enter(l, code, code, NULL, args)) != 0)
+	if ((error = trace_enter(code, args, callp->sy_narg)) != 0)
 		goto out;
 
 	rval[0] = 0;
 	rval[1] = 0;
-	error = (*callp->sy_call)(l, args, rval);
+	error = sy_call(callp, l, args, rval);
 out:
 	switch (error) {
 	case 0:
@@ -322,9 +311,7 @@ out:
 		break;
 	}
 
-	KERNEL_UNLOCK_LAST(l);
-
-	trace_exit(l, code, args, rval, error);
+	trace_exit(code, rval, error);
 
 	userret(l);
 }

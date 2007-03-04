@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cs_isa.c,v 1.18 2006/11/16 01:33:00 christos Exp $	*/
+/*	$NetBSD: if_cs_isa.c,v 1.20 2008/04/08 20:08:49 cegger Exp $	*/
 
 /*
  * Copyright 1997
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cs_isa.c,v 1.18 2006/11/16 01:33:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cs_isa.c,v 1.20 2008/04/08 20:08:49 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,8 +50,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_isa.c,v 1.18 2006/11/16 01:33:00 christos Exp 
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -238,7 +238,7 @@ cs_isa_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	if (bus_space_map(sc->sc_iot, ia->ia_io[0].ir_addr, CS8900_IOSIZE,
 	    0, &sc->sc_ioh)) {
-		printf("%s: unable to map i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to map i/o space\n");
 		return;
 	}
 
@@ -246,7 +246,7 @@ cs_isa_attach(struct device *parent, struct device *self, void *aux)
 	 * Validate IRQ.
 	 */
 	if (CS8900_IRQ_ISVALID(sc->sc_irq) == 0) {
-		printf("%s: invalid IRQ %d\n", sc->sc_dev.dv_xname, sc->sc_irq);
+		aprint_error_dev(&sc->sc_dev, "invalid IRQ %d\n", sc->sc_irq);
 		return;
 	}
 
@@ -260,8 +260,7 @@ cs_isa_attach(struct device *parent, struct device *self, void *aux)
 	    CS8900_MEMBASE_ISVALID(ia->ia_iomem[0].ir_addr)) {
 		if (bus_space_map(sc->sc_memt, ia->ia_iomem[0].ir_addr,
 		    CS8900_MEMSIZE, 0, &sc->sc_memh)) {
-			printf("%s: unable to map memory space\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "unable to map memory space\n");
 		} else {
 			sc->sc_cfgflags |= CFGFLG_MEM_MODE;
 			sc->sc_pktpgaddr = ia->ia_iomem[0].ir_addr;
@@ -271,8 +270,7 @@ cs_isa_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ih = isa_intr_establish(ia->ia_ic, sc->sc_irq, IST_EDGE,
 	    IPL_NET, cs_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: unable to establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to establish interrupt\n");
 		return;
 	}
 

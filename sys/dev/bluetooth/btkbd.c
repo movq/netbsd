@@ -1,4 +1,34 @@
-/*	$NetBSD: btkbd.c,v 1.5 2006/11/16 01:32:48 christos Exp $	*/
+/*	$NetBSD: btkbd.c,v 1.10 2008/09/09 03:54:56 cube Exp $	*/
+
+/*
+ * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Lennart Augustsson (lennart@augustsson.net) at
+ * Carlstedt Research & Technology.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -36,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btkbd.c,v 1.5 2006/11/16 01:32:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btkbd.c,v 1.10 2008/09/09 03:54:56 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -79,7 +109,7 @@ struct btkbd_mod {
 
 struct btkbd_softc {
 	struct bthidev		 sc_hidev;	/* device+ */
-	struct device		*sc_wskbd;	/* child */
+	device_t		 sc_wskbd;	/* child */
 	int			 sc_enabled;
 
 	int			(*sc_output)	/* output method */
@@ -106,7 +136,7 @@ struct btkbd_softc {
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 	int			 sc_rawkbd;
 #ifdef BTKBD_REPEAT
-	struct callout		 sc_repeat;
+	callout_t		 sc_repeat;
 	int			 sc_nrep;
 	char			 sc_rep[MAXKEYS];
 #endif
@@ -114,17 +144,17 @@ struct btkbd_softc {
 };
 
 /* autoconf(9) methods */
-static int	btkbd_match(struct device *, struct cfdata *, void *);
-static void	btkbd_attach(struct device *, struct device *, void *);
-static int	btkbd_detach(struct device *, int);
+static int	btkbd_match(device_t, struct cfdata *, void *);
+static void	btkbd_attach(device_t, device_t, void *);
+static int	btkbd_detach(device_t, int);
 
-CFATTACH_DECL(btkbd, sizeof(struct btkbd_softc),
+CFATTACH_DECL_NEW(btkbd, sizeof(struct btkbd_softc),
     btkbd_match, btkbd_attach, btkbd_detach, NULL);
 
 /* wskbd(4) accessops */
 static int	btkbd_enable(void *, int);
 static void	btkbd_set_leds(void *, int);
-static int	btkbd_ioctl(void *, unsigned long, caddr_t, int, struct lwp *);
+static int	btkbd_ioctl(void *, unsigned long, void *, int, struct lwp *);
 
 static const struct wskbd_accessops btkbd_accessops = {
 	btkbd_enable,
@@ -164,8 +194,7 @@ static void btkbd_repeat(void *);
  */
 
 static int
-btkbd_match(struct device *self, struct cfdata *cfdata,
-    void *aux)
+btkbd_match(device_t self, struct cfdata *cfdata, void *aux)
 {
 	struct bthidev_attach_args *ba = aux;
 
@@ -177,9 +206,9 @@ btkbd_match(struct device *self, struct cfdata *cfdata,
 }
 
 static void
-btkbd_attach(struct device *parent, struct device *self, void *aux)
+btkbd_attach(device_t parent, device_t self, void *aux)
 {
-	struct btkbd_softc *sc = (struct btkbd_softc *)self;
+	struct btkbd_softc *sc = device_private(self);
 	struct bthidev_attach_args *ba = aux;
 	struct wskbddev_attach_args wska;
 	const char *parserr;
@@ -197,7 +226,7 @@ btkbd_attach(struct device *parent, struct device *self, void *aux)
 
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 #ifdef BTKBD_REPEAT
-	callout_init(&sc->sc_repeat);
+	callout_init(&sc->sc_repeat, 0);
 	callout_setfunc(&sc->sc_repeat, btkbd_repeat, sc);
 #endif
 #endif
@@ -207,19 +236,20 @@ btkbd_attach(struct device *parent, struct device *self, void *aux)
 	wska.accessops = &btkbd_accessops;
 	wska.accesscookie = sc;
 
-	sc->sc_wskbd = config_found((struct device *)sc, &wska, wskbddevprint);
+	sc->sc_wskbd = config_found(self, &wska, wskbddevprint);
 }
 
 static int
-btkbd_detach(struct device *self, int flags)
+btkbd_detach(device_t self, int flags)
 {
-	struct btkbd_softc *sc = (struct btkbd_softc *)self;
+	struct btkbd_softc *sc = device_private(self);
 	int err = 0;
 
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 #ifdef BTKBD_REPEAT
 	callout_stop(&sc->sc_repeat);
 	KASSERT(!callout_invoking(&sc->sc_repeat));
+	callout_destroy(&sc->sc_repeat);
 #endif
 #endif
 
@@ -300,7 +330,7 @@ btkbd_parse_desc(struct btkbd_softc *sc, int id, const void *desc, int dlen)
 static int
 btkbd_enable(void *self, int on)
 {
-	struct btkbd_softc *sc = (struct btkbd_softc *)self;
+	struct btkbd_softc *sc = self;
 
 	sc->sc_enabled = on;
 	return 0;
@@ -309,7 +339,7 @@ btkbd_enable(void *self, int on)
 static void
 btkbd_set_leds(void *self, int leds)
 {
-	struct btkbd_softc *sc = (struct btkbd_softc *)self;
+	struct btkbd_softc *sc = self;
 	uint8_t report;
 
 	if (sc->sc_leds == leds)
@@ -337,10 +367,10 @@ btkbd_set_leds(void *self, int leds)
 }
 
 static int
-btkbd_ioctl(void *self, unsigned long cmd, caddr_t data, int flag,
+btkbd_ioctl(void *self, unsigned long cmd, void *data, int flag,
     struct lwp *l)
 {
-	struct btkbd_softc *sc = (struct btkbd_softc *)self;
+	struct btkbd_softc *sc = self;
 
 	switch (cmd) {
 	case WSKBDIO_GTYPE:

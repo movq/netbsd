@@ -1,4 +1,4 @@
-/*	$NetBSD: msc.c,v 1.37 2007/02/22 05:04:12 thorpej Exp $ */
+/*	$NetBSD: msc.c,v 1.41 2008/05/25 19:22:21 ad Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -93,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msc.c,v 1.37 2007/02/22 05:04:12 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msc.c,v 1.41 2008/05/25 19:22:21 ad Exp $");
 
 #include "msc.h"
 
@@ -376,12 +376,12 @@ mscopen(dev_t dev, int flag, int mode, struct lwp *l)
 		ms->OutFlush = true;
 		msc->closing = false;
 	}
+	splx(s);	
 
-	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp)) {
-		splx(s);	
+	if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN, tp))
 		return (EBUSY);
-	}
 
+	mutex_spin_enter(&tty_lock);
 	/* initialize tty */
 	if ((tp->t_state & TS_ISOPEN) == 0 && tp->t_wopen == 0) {
 		ttychars(tp);
@@ -438,11 +438,11 @@ mscopen(dev_t dev, int flag, int mode, struct lwp *l)
 #if DEBUG_CD
 		printf("msc%d: %d waiting for CD\n", msc->unit, MSCLINE(dev));
 #endif
-		error = ttysleep(tp, (caddr_t)&tp->t_rawq, TTIPRI | PCATCH, ttopen, 0);
+		error = ttysleep(tp, &tp->t_rawcv, true, 0);
 		tp->t_wopen--;
 
 		if (error) {
-			splx(s);
+			mutex_spin_exit(&tty_lock);
 			return(error);
 		}
 	}
@@ -458,13 +458,12 @@ mscopen(dev_t dev, int flag, int mode, struct lwp *l)
 			ttstart (tp);
 		}
 
-	splx(s);
-
 	/*
 	 * Reset the tty pointer, as there could have been a dialout
 	 * use of the tty with a dialin open waiting.
 	 */
 	tp->t_dev = dev;
+	mutex_spin_exit(&tty_lock);
 
 	return tp->t_linesw->l_open(dev, tp);
 }
@@ -778,7 +777,7 @@ NoRoomForYa:
 
 
 int
-mscioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
+mscioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	register struct tty *tp;
 	register int slot;
@@ -1002,17 +1001,7 @@ mscstart(register struct tty *tp)
 
 	/* wake up if below low water */
 	cc = tp->t_outq.c_cc;
-
-	if (cc <= tp->t_lowat) {
-		if (tp->t_state & TS_ASLEEP) {
-			tp->t_state &= ~TS_ASLEEP;
-			wakeup((caddr_t)&tp->t_outq);
-		}
-		selwakeup(&tp->t_wsel);
-	}
-
-	/* don't bother if no characters or busy */
-	if (cc == 0 || (tp->t_state & TS_BUSY))
+	if (!ttypull(tp) || (tp->t_state & TS_BUSY))
 		goto out;
 
 	/*

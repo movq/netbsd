@@ -1,4 +1,4 @@
-/*	$NetBSD: ptrace.h,v 1.3 2002/02/28 01:58:53 uch Exp $	*/
+/*	$NetBSD: ptrace.h,v 1.7 2008/10/26 19:37:59 uwe Exp $	*/
 
 /*
  * Copyright (c) 1993 Christopher G. Demetriou
@@ -30,10 +30,25 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifndef _SH3_PTRACE_H_
+#define _SH3_PTRACE_H_
+
 /*
  * sh3-dependent ptrace definitions
  */
 
-#define	PT_GETREGS	(PT_FIRSTMACH + 1)
-#define	PT_SETREGS	(PT_FIRSTMACH + 2)
+/* old struct reg (now struct __reg40) that was missing r_gbr */
+#define	PT___GETREGS40	(PT_FIRSTMACH + 1)
+#define	PT___SETREGS40	(PT_FIRSTMACH + 2)
 
+#define	PT_GETREGS	(PT_FIRSTMACH + 3)
+#define	PT_SETREGS	(PT_FIRSTMACH + 4)
+
+#define PT_MACHDEP_STRINGS \
+	"(unused)", \
+	"PT___GETREGS40", \
+	"PT___SETREGS40", \
+	"PT_GETREGS", \
+	"PT_SETREGS",
+
+#endif /* !_SH3_PTRACE_H_ */

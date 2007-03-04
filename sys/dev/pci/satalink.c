@@ -1,4 +1,4 @@
-/*	$NetBSD: satalink.c,v 1.34 2007/02/09 21:55:27 ad Exp $	*/
+/*	$NetBSD: satalink.c,v 1.38 2008/04/28 20:23:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: satalink.c,v 1.34 2007/02/09 21:55:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: satalink.c,v 1.38 2008/04/28 20:23:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -263,10 +256,10 @@ static const struct {
 /* Interrupt steering bit in BA5[0x200]. */
 #define	IDEDMA_CMD_INT_STEER	(1U << 1)
 
-static int  satalink_match(struct device *, struct cfdata *, void *);
-static void satalink_attach(struct device *, struct device *, void *);
+static int  satalink_match(device_t, cfdata_t, void *);
+static void satalink_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(satalink, sizeof(struct pciide_softc),
+CFATTACH_DECL_NEW(satalink, sizeof(struct pciide_softc),
     satalink_match, satalink_attach, NULL, NULL);
 
 static void sii3112_chip_map(struct pciide_softc*, struct pci_attach_args*);
@@ -303,8 +296,7 @@ static const struct pciide_product_desc pciide_satalink_products[] =  {
 };
 
 static int
-satalink_match(struct device *parent, struct cfdata *match,
-    void *aux)
+satalink_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -316,10 +308,12 @@ satalink_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-satalink_attach(struct device *parent, struct device *self, void *aux)
+satalink_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (struct pciide_softc *)self;
+	struct pciide_softc *sc = device_private(self);
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa,
 	    pciide_lookup_product(pa->pa_id, pciide_satalink_products));
@@ -389,9 +383,11 @@ ba5_write_4(struct pciide_softc *sc, bus_addr_t reg, uint32_t val)
  * This may also happen on the 3114 (ragge 050527)
  */
 static void
-sii_fixup_cacheline(struct pciide_softc *sc, struct pci_attach_args *pa)
+sii_fixup_cacheline(struct pciide_softc *sc, struct pci_attach_args *pa, int n)
 {
-	pcireg_t cls, reg40, reg44;
+	pcireg_t cls, reg;
+	int i;
+	static bus_addr_t addr[] = { 0x40, 0x44, 0x240, 0x244 };
 
 	cls = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_BHLC_REG);
 	cls = (cls >> PCI_CACHELINE_SHIFT) & PCI_CACHELINE_MASK;
@@ -406,12 +402,11 @@ sii_fixup_cacheline(struct pciide_softc *sc, struct pci_attach_args *pa)
 	if (cls < 32)
 		cls = 32;
 	cls = (cls + 31) / 32;
-	reg40 = ba5_read_4(sc, 0x40);
-	reg44 = ba5_read_4(sc, 0x44);
-	if ((reg40 & 0x7) < cls)
-		ba5_write_4(sc, 0x40, (reg40 & ~0x07) | cls);
-	if ((reg44 & 0x7) < cls)
-		ba5_write_4(sc, 0x44, (reg44 & ~0x07) | cls);
+	for (i = 0; i < n; i++) {
+		reg = ba5_read_4(sc, addr[i]);
+		if ((reg & 0x7) < cls)
+			ba5_write_4(sc, addr[i], (reg & 0x07) | cls);
+	}
 }
 
 static void
@@ -442,20 +437,20 @@ sii3112_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	delay(50 * 1000);
 
 	if (scs_cmd & SCS_CMD_BA5_EN) {
-		aprint_verbose("%s: SATALink BA5 register space enabled\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "SATALink BA5 register space enabled\n");
 		if (pci_mapreg_map(pa, PCI_MAPREG_START + 0x14,
 				   PCI_MAPREG_TYPE_MEM|
 				   PCI_MAPREG_MEM_TYPE_32BIT, 0,
 				   &sc->sc_ba5_st, &sc->sc_ba5_sh,
 				   NULL, NULL) != 0)
-			aprint_error("%s: unable to map SATALink BA5 "
-			    "register space\n", sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+			aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+			    "unable to map SATALink BA5 register space\n");
 		else
 			sc->sc_ba5_en = 1;
 	} else {
-		aprint_verbose("%s: SATALink BA5 register space disabled\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "SATALink BA5 register space disabled\n");
 
 		cfgctl = pci_conf_read(pa->pa_pc, pa->pa_tag,
 				       SII3112_PCI_CFGCTL);
@@ -463,8 +458,8 @@ sii3112_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			       cfgctl | CFGCTL_BA5INDEN);
 	}
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 
@@ -479,7 +474,7 @@ sii3112_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		sc->sc_dma_boundary = 8192;
 	}
 
-	sii_fixup_cacheline(sc, pa);
+	sii_fixup_cacheline(sc, pa, 2);
 
 	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
 	sc->sc_wdcdev.sc_atac.atac_pio_cap = 4;
@@ -533,7 +528,7 @@ sii3114_mapreg_dma(struct pciide_softc *sc, struct pci_attach_args *pa)
 	sc->sc_wdcdev.dma_start = pciide_dma_start;
 	sc->sc_wdcdev.dma_finish = pciide_dma_finish;
 
-	if (device_cfdata(&sc->sc_wdcdev.sc_atac.atac_dev)->cf_flags &
+	if (device_cfdata(sc->sc_wdcdev.sc_atac.atac_dev)->cf_flags &
 	    PCIIDE_OPTIONS_NODMA) {
 		aprint_verbose(
 		    ", but unused (forced off by config file)");
@@ -602,7 +597,7 @@ sii3114_chansetup(struct pciide_softc *sc, int channel)
 	if (cp->ata_channel.ch_queue == NULL) {
 		aprint_error("%s %s channel: "
 		    "can't allocate memory for command queue",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+		    device_xname(sc->sc_wdcdev.sc_atac.atac_dev), cp->name);
 		return (0);
 	}
 	return (1);
@@ -623,8 +618,8 @@ sii3114_mapchan(struct pciide_channel *cp)
 	if (bus_space_subregion(sc->sc_ba5_st, sc->sc_ba5_sh,
 			satalink_ba5_regmap[wdc_cp->ch_channel].ba5_IDE_TF0,
 			9, &wdr->cmd_baseioh) != 0) {
-		aprint_error("%s: couldn't subregion %s cmd base\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "couldn't subregion %s cmd base\n", cp->name);
 		goto bad;
 	}
 
@@ -632,8 +627,8 @@ sii3114_mapchan(struct pciide_channel *cp)
 	if (bus_space_subregion(sc->sc_ba5_st, sc->sc_ba5_sh,
 			satalink_ba5_regmap[wdc_cp->ch_channel].ba5_IDE_TF8,
 			1, &cp->ctl_baseioh) != 0) {
-		aprint_error("%s: couldn't subregion %s ctl base\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "couldn't subregion %s ctl base\n", cp->name);
 		goto bad;
 	}
 	wdr->ctl_ioh = cp->ctl_baseioh;
@@ -642,9 +637,9 @@ sii3114_mapchan(struct pciide_channel *cp)
 		if (bus_space_subregion(wdr->cmd_iot, wdr->cmd_baseioh,
 					i, i == 0 ? 4 : 1,
 					&wdr->cmd_iohs[i]) != 0) {
-			aprint_error("%s: couldn't subregion %s channel "
-				     "cmd regs\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+			aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+			    "couldn't subregion %s channel cmd regs\n",
+			    cp->name);
 			goto bad;
 		}
 	}
@@ -703,14 +698,14 @@ sii3114_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 			   PCI_MAPREG_MEM_TYPE_32BIT, 0,
 			   &sc->sc_ba5_st, &sc->sc_ba5_sh,
 			   NULL, NULL) != 0) {
-		aprint_error("%s: unable to map SATALink BA5 "
-		    "register space\n", sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "unable to map SATALink BA5 register space\n");
 		return;
 	}
 	sc->sc_ba5_en = 1;
 
-	aprint_verbose("%s: %dMHz PCI bus\n", sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
-	    (scs_cmd & SCS_CMD_M66EN) ? 66 : 33);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "%dMHz PCI bus\n", (scs_cmd & SCS_CMD_M66EN) ? 66 : 33);
 
 	/*
 	 * Set the Interrupt Steering bit in the IDEDMA_CMD register of
@@ -720,12 +715,12 @@ sii3114_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	 */
 	BA5_WRITE_4(sc, 2, ba5_IDEDMA_CMD, IDEDMA_CMD_INT_STEER);
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	sii3114_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 
-	sii_fixup_cacheline(sc, pa);
+	sii_fixup_cacheline(sc, pa, 4);
 
 	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
 	sc->sc_wdcdev.sc_atac.atac_pio_cap = 4;
@@ -747,8 +742,8 @@ sii3114_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 
 	/* Map and establish the interrupt handler. */
 	if (pci_intr_map(pa, &intrhandle) != 0) {
-		aprint_error("%s: couldn't map native-PCI interrupt\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "couldn't map native-PCI interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pa->pa_pc, intrhandle);
@@ -756,12 +751,12 @@ sii3114_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 					   /* XXX */
 					   pciide_pci_intr, sc);
 	if (sc->sc_pci_ih != NULL) {
-		aprint_normal("%s: using %s for native-PCI interrupt\n",
-			      sc->sc_wdcdev.sc_atac.atac_dev.dv_xname,
-			      intrstr ? intrstr : "unknown interrupt");
+		aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "using %s for native-PCI interrupt\n",
+		    intrstr ? intrstr : "unknown interrupt");
 	} else {
-		aprint_error("%s: couldn't establish native-PCI interrupt",
-			     sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "couldn't establish native-PCI interrupt");
 		if (intrstr != NULL)
 			aprint_normal(" at %s", intrstr);
 		aprint_normal("\n");
@@ -822,8 +817,9 @@ sii3112_drv_probe(struct ata_channel *chp)
 
 	sstatus = BA5_READ_4(sc, chp->ch_channel, ba5_SStatus);
 #if 0
-	aprint_normal("%s: port %d: SStatus=0x%08x, SControl=0x%08x\n",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, chp->ch_channel, sstatus,
+	aprint_normal_dev(&sc->sc_wdcdev.sc_atac.atac_dev,
+	    "port %d: SStatus=0x%08x, SControl=0x%08x\n",
+	    chp->ch_channel, sstatus,
 	    BA5_READ_4(sc, chp->ch_channel, ba5_SControl));
 #endif
 	switch (sstatus & SStatus_DET_mask) {
@@ -832,14 +828,14 @@ sii3112_drv_probe(struct ata_channel *chp)
 		break;
 
 	case SStatus_DET_DEV_NE:
-		aprint_error("%s: port %d: device connected, but "
-		    "communication not established\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, chp->ch_channel);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "port %d: device connected, but "
+		    "communication not established\n", chp->ch_channel);
 		break;
 
 	case SStatus_DET_OFFLINE:
-		aprint_error("%s: port %d: PHY offline\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, chp->ch_channel);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "port %d: PHY offline\n", chp->ch_channel);
 		break;
 
 	case SStatus_DET_DEV:
@@ -863,7 +859,7 @@ sii3112_drv_probe(struct ata_channel *chp)
 				      wdr->cmd_iohs[wd_cyl_hi], 0);
 #if 0
 		printf("%s: port %d: scnt=0x%x sn=0x%x cl=0x%x ch=0x%x\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, chp->ch_channel,
+		    device_xname(&sc->sc_wdcdev.sc_atac.atac_dev), chp->ch_channel,
 		    scnt, sn, cl, ch);
 #endif
 		/*
@@ -877,14 +873,16 @@ sii3112_drv_probe(struct ata_channel *chp)
 			chp->ch_drive[0].drive_flags |= DRIVE_ATA;
 		splx(s);
 
-		aprint_normal("%s: port %d: device present, speed: %s\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, chp->ch_channel,
+		aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "port %d: device present, speed: %s\n",
+		    chp->ch_channel,
 		    sata_speed(sstatus));
 		break;
 
 	default:
-		aprint_error("%s: port %d: unknown SStatus: 0x%08x\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, chp->ch_channel, sstatus);
+		aprint_error_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+		    "port %d: unknown SStatus: 0x%08x\n",
+		    chp->ch_channel, sstatus);
 	}
 }
 

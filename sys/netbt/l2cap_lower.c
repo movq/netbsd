@@ -1,4 +1,4 @@
-/*	$NetBSD: l2cap_lower.c,v 1.1 2006/06/19 15:44:45 gdamore Exp $	*/
+/*	$NetBSD: l2cap_lower.c,v 1.9 2008/08/05 13:08:31 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: l2cap_lower.c,v 1.1 2006/06/19 15:44:45 gdamore Exp $");
+__KERNEL_RCSID(0, "$NetBSD: l2cap_lower.c,v 1.9 2008/08/05 13:08:31 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -58,6 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: l2cap_lower.c,v 1.1 2006/06/19 15:44:45 gdamore Exp 
  * Config failed
  * Other end reported invalid CID
  * Normal disconnection
+ * Change link mode failed
  */
 void
 l2cap_close(struct l2cap_channel *chan, int err)
@@ -118,9 +119,8 @@ l2cap_recv_frame(struct mbuf *m, struct hci_link *link)
 	hdr.dcid = le16toh(hdr.dcid);
 
 	DPRINTFN(5, "(%s) received packet (%d bytes)\n",
-		    link->hl_unit->hci_devname, hdr.length);
+		    device_xname(link->hl_unit->hci_dev), hdr.length);
 
-	// wasnt this checked in hci_acl_recv() already?
 	if (hdr.length != m->m_pkthdr.len)
 		goto failed;
 
@@ -130,18 +130,20 @@ l2cap_recv_frame(struct mbuf *m, struct hci_link *link)
 	}
 
 	if (hdr.dcid == L2CAP_CLT_CID) {
-		m_freem(m);	// TODO
+		m_freem(m);	/* TODO */
 		return;
 	}
 
 	chan = l2cap_cid_lookup(hdr.dcid);
-	if (chan) {
+	if (chan != NULL && chan->lc_link == link
+	    && chan->lc_imtu >= hdr.length
+	    && chan->lc_state == L2CAP_OPEN) {
 		(*chan->lc_proto->input)(chan->lc_upper, m);
 		return;
 	}
 
-	DPRINTF("(%s) dropping %d L2CAP data bytes for unknown CID #%d\n",
-		link->hl_unit->hci_devname, hdr.length, hdr.dcid);
+	DPRINTF("(%s) invalid L2CAP packet dropped, CID #%d, length %d\n",
+		device_xname(link->hl_unit->hci_dev), hdr.dcid, hdr.length);
 
 failed:
 	m_freem(m);
@@ -192,8 +194,8 @@ l2cap_start(struct l2cap_channel *chan)
 
 	MBUFQ_DEQUEUE(&chan->lc_txq, m);
 
-	KASSERT(chan->lc_link);
-	KASSERT(m);
+	KASSERT(chan->lc_link != NULL);
+	KASSERT(m != NULL);
 
 	DPRINTFN(5, "CID #%d sending packet (%d bytes)\n",
 		chan->lc_lcid, m->m_pkthdr.len);

@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.13 2007/02/22 22:17:02 skrll Exp $	*/
+/*	$NetBSD: db_interface.c,v 1.16 2008/04/24 07:28:30 skrll Exp $	*/
 
 /*	$OpenBSD: db_interface.c,v 1.16 2001/03/22 23:31:45 mickey Exp $	*/
 
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.13 2007/02/22 22:17:02 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.16 2008/04/24 07:28:30 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -204,152 +204,4 @@ int
 db_valid_breakpoint(db_addr_t addr)
 {
 	return (1);
-}
-
-void
-db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
-    const char *modif, void (*pr)(const char *, ...))
-{
-	register_t *fp, pc, rp, nargs, *argp;
-	char **argnp, *argnames[HPPA_FRAME_NARGS];
-	bool kernel_only = true;
-	bool trace_thread = false;
-	bool lwpaddr = false;
-	db_sym_t sym;
-	db_expr_t off;
-	const char *name;
-	const char *cp = modif;
-	char c;
-
-	if (count < 0)
-		count = 65536;
-
-	while ((c = *cp++) != 0) {
-		if (c == 'a') {
-			lwpaddr = true;
-			trace_thread = true;
-		}
-		if (c == 't')
-			trace_thread = true;
-		if (c == 'u')
-			kernel_only = false;
-	}
-
-	if (!have_addr) {
-		fp = (register_t *)ddb_regs.tf_r3;
-		pc = ddb_regs.tf_iioq_head;
-		rp = ddb_regs.tf_rp;
-	} else {
-		if (trace_thread) {
-			struct proc *p;
-			struct user *u;
-			struct lwp *l;
-			if (lwpaddr) {
-				l = (struct lwp *)addr;
-				p = l->l_proc;
-				(*pr)("trace: pid %d ", p->p_pid);
-			} else {
-				(*pr)("trace: pid %d ", (int)addr);
-				p = p_find(addr, PFIND_LOCKED);
-				if (p == NULL) {
-					(*pr)("not found\n");
-					return;
-				}
-				l = proc_representative_lwp(p, NULL, 0);
-			}
-			(*pr)("lid %d ", l->l_lid);
-			if (!(l->l_flag & LW_INMEM)) {
-				(*pr)("swapped out\n");
-				return;
-			}
-			u = l->l_addr;
-			if (p == curproc && l == curlwp) {
-				fp = (int *)ddb_regs.tf_t3;
-				pc = ddb_regs.tf_iioq_head;
-				(*pr)("at %p\n", fp);
-			} else {
-				fp = (int *)(u->u_pcb.pcb_ksp -
-				    (HPPA_FRAME_SIZE + 16*4));
-				pc = 0;
-				(*pr)("at %p\n", fp);
-			}
-		} else {
-			pc = 0;
-			fp = (register_t *)addr;
-		}
-		rp = ((register_t *)fp)[-5];
-	}
-
-#ifdef DDB_DEBUG
-	pr(">> %x, %x, %x\t", fp, pc, rp);
-#endif
-	while (fp && count--) {
-
-		if (USERMODE(pc))
-			return;
-
-		sym = db_search_symbol(pc, DB_STGY_ANY, &off);
-		db_symbol_values (sym, &name, NULL);
-
-		pr("%s(", name);
-
-		/* args */
-		nargs = HPPA_FRAME_NARGS;
-		argnp = NULL;
-		if (db_sym_numargs(sym, &nargs, argnames))
-			argnp = argnames;
-		else
-			nargs = 4;
-		/*
-		 * XXX first four args are passed on registers, and may not
-		 * be stored on stack, dunno how to recover their values yet
-		 */
-		for (argp = &fp[-9]; nargs--; argp--) {
-			if (argnp)
-				pr("%s=", *argnp++);
-			pr("%lx%s", db_get_value((int)argp, 4, false),
-				  nargs? ",":"");
-		}
-		pr(") at ");
-		db_printsym(pc, DB_STGY_PROC, pr);
-		pr("\n");
-
-		/* TODO: print locals */
-
-		/* next frame */
-		pc = rp;
-		rp = fp[-5];
-
-		/* if a terminal frame and not a start of a page
-		 * then skip the trapframe and the terminal frame */
-		if (!fp[0]) {
-			struct trapframe *tf;
-
-			tf = (struct trapframe *)((char *)fp - sizeof(*tf));
-
-			if (tf->tf_flags & TFF_SYS)
-				pr("-- syscall #%d(%x, %x, %x, %x, ...)\n",
-				    tf->tf_t1, tf->tf_arg0, tf->tf_arg1,
-				    tf->tf_arg2, tf->tf_arg3);
-			else
-				pr("-- trap #%d%s\n", tf->tf_flags & 0x3f,
-				    (tf->tf_flags & T_USER)? " from user" : "");
-
-			if (!(tf->tf_flags & TFF_LAST)) {
-				fp = (register_t *)tf->tf_r3;
-				pc = tf->tf_iioq_head;
-				rp = tf->tf_rp;
-			} else
-				fp = 0;
-		} else
-			fp = (register_t *)fp[0];
-#ifdef DDB_DEBUG
-		pr(">> %x, %x, %x\t", fp, pc, rp);
-#endif
-	}
-
-	if (count && pc) {
-		db_printsym(pc, DB_STGY_XTRN, pr);
-		pr(":\n");
-	}
 }

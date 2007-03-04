@@ -1,4 +1,4 @@
-/*	$NetBSD: if_an_pci.c,v 1.21 2006/11/16 01:33:08 christos Exp $	*/
+/*	$NetBSD: if_an_pci.c,v 1.27 2008/07/03 18:10:08 drochner Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_an_pci.c,v 1.21 2006/11/16 01:33:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_an_pci.c,v 1.27 2008/07/03 18:10:08 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -66,8 +59,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_an_pci.c,v 1.21 2006/11/16 01:33:08 christos Exp 
 #include <net80211/ieee80211_netbsd.h>
 #include <net80211/ieee80211_var.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/ic/anreg.h>
 #include <dev/ic/anvar.h>
@@ -81,6 +74,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_an_pci.c,v 1.21 2006/11/16 01:33:08 christos Exp 
 
 struct an_pci_softc {
 	struct an_softc sc_an;		/* real "an" softc */
+	pci_chipset_tag_t sc_pct;
+	pcitag_t sc_pcitag;
 
 	/* PCI-specific goo. */
 	void	*sc_ih;			/* interrupt handle */
@@ -89,7 +84,7 @@ struct an_pci_softc {
 static int	an_pci_match(struct device *, struct cfdata *, void *);
 static void	an_pci_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL(an_pci, sizeof(struct an_pci_softc),
+CFATTACH_DECL_NEW(an_pci, sizeof(struct an_pci_softc),
     an_pci_match, an_pci_attach, NULL, NULL);
 
 static const struct an_pci_product {
@@ -122,12 +117,17 @@ static void
 an_pci_attach(struct device *parent, struct device *self, void *aux)
 {
         struct pci_attach_args *pa = (struct pci_attach_args *)aux;
-	struct an_pci_softc *psc = (struct an_pci_softc *) self;
+	struct an_pci_softc *psc = device_private(self);
 	struct an_softc *sc = &psc->sc_an;
         char devinfo[256];
 	char const *intrstr;
 	pci_intr_handle_t ih;
+	bus_size_t iosize;
 	u_int32_t csr;
+
+	sc->sc_dev = self;
+	psc->sc_pct = pa->pa_pc;
+	psc->sc_pcitag = pa->pa_tag;
 
 	aprint_naive(": 802.11 controller\n");
 
@@ -136,8 +136,8 @@ an_pci_attach(struct device *parent, struct device *self, void *aux)
 
         /* Map I/O registers */
         if (pci_mapreg_map(pa, AN_PCI_IOBA, PCI_MAPREG_TYPE_IO, 0,
-	    &sc->sc_iot, &sc->sc_ioh, NULL, NULL) != 0) {
-                aprint_error("%s: unable to map registers\n", self->dv_xname);
+	    &sc->sc_iot, &sc->sc_ioh, NULL, &iosize) != 0) {
+                aprint_error_dev(self, "unable to map registers\n");
                 return;
         }
 
@@ -148,26 +148,29 @@ an_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-        	aprint_error("%s: unable to map interrupt\n", self->dv_xname);
+        	aprint_error_dev(self, "unable to map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pa->pa_pc, ih);
 	psc->sc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_NET, an_intr, sc);
 	if (psc->sc_ih == NULL) {
-		aprint_error("%s: unable to establish interrupt",
-		    self->dv_xname);
+		aprint_error_dev(self, "unable to establish interrupt");
 		if (intrstr != NULL)
 			aprint_normal(" at %s", intrstr);
 		aprint_normal("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", self->dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 	sc->sc_enabled = 1;
 
 	if (an_attach(sc) != 0) {
-		aprint_error("%s: failed to attach controller\n",
-		    self->dv_xname);
+		aprint_error_dev(self, "failed to attach controller\n");
 		pci_intr_disestablish(pa->pa_pc, psc->sc_ih);
-		bus_space_unmap(sc->sc_iot, sc->sc_ioh, AN_IOSIZ);
+		bus_space_unmap(sc->sc_iot, sc->sc_ioh, iosize);
 	}
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+	else
+		pmf_class_network_register(self, &sc->sc_if);
 }

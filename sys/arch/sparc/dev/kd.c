@@ -1,4 +1,4 @@
-/*	$NetBSD: kd.c,v 1.42 2007/02/16 13:55:42 ad Exp $	*/
+/*	$NetBSD: kd.c,v 1.48 2008/04/28 20:23:35 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.42 2007/02/16 13:55:42 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.48 2008/04/28 20:23:35 martin Exp $");
 
 #include "opt_kgdb.h"
 #include "fb.h"
@@ -131,6 +124,7 @@ kd_init(struct kd_softc *kd)
 	struct tty *tp;
 
 	tp = ttymalloc();
+	callout_setfunc(&tp->t_rstrt_ch, kd_later, tp);
 	tp->t_oproc = kdstart;
 	tp->t_param = kdparam;
 	tp->t_dev = makedev(cdevsw_lookup_major(&kd_cdevsw), 0);
@@ -303,7 +297,7 @@ kdpoll(dev_t dev, int events, struct lwp *l)
 }
 
 int
-kdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
+kdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct kd_softc *kd;
 	struct tty *tp;
@@ -350,7 +344,7 @@ kdstart(struct tty *tp)
 		goto out;
 
 	cl = &tp->t_outq;
-	if (cl->c_cc) {
+	if (ttypull(tp)) {
 		tp->t_state |= TS_BUSY;
 		if ((s1 & PSR_PIL) == 0) {
 			/* called at level zero - update screen now. */
@@ -360,15 +354,8 @@ kdstart(struct tty *tp)
 			tp->t_state &= ~TS_BUSY;
 		} else {
 			/* called at interrupt level - do it later */
-			callout_reset(&tp->t_rstrt_ch, 0, kd_later, tp);
+			callout_schedule(&tp->t_rstrt_ch, 0);
 		}
-	}
-	if (cl->c_cc <= tp->t_lowat) {
-		if (tp->t_state & TS_ASLEEP) {
-			tp->t_state &= ~TS_ASLEEP;
-			wakeup((caddr_t)cl);
-		}
-		selwakeup(&tp->t_wsel);
 	}
 out:
 	splx(s2);
@@ -472,11 +459,17 @@ static struct cons_channel prom_cons_channel = {
 	NULL			/* will be set by kd driver */
 };
 
-static struct callout prom_cons_callout = CALLOUT_INITIALIZER;
+static struct callout prom_cons_callout;
 
 static int
 kd_rom_iopen(struct cons_channel *cc)
 {
+	static bool callo;
+
+	if (!callo) {
+		callout_init(&prom_cons_callout, 0);
+		callo = true;
+	}
 
 	/* Poll for ROM input 4 times per second */
 	callout_reset(&prom_cons_callout, hz / 4, kd_rom_intr, cc);

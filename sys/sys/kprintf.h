@@ -1,4 +1,4 @@
-/*	$NetBSD: kprintf.h,v 1.7 2005/12/11 12:25:20 christos Exp $	*/
+/*	$NetBSD: kprintf.h,v 1.9 2008/01/04 18:21:06 ad Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1988, 1991, 1993
@@ -37,8 +37,7 @@
 #ifndef _SYS_KPRINTF_H_
 #define	_SYS_KPRINTF_H_
 
-#include "opt_multiprocessor.h"
-#include <sys/lock.h>
+#include <sys/simplelock.h>
 
 /*
  * Implementation internals of the kernel printf.  Exposing them here
@@ -46,7 +45,8 @@
  * they need.
  */
 
-#if defined(MULTIPROCESSOR)
+/* max size buffer kprintf needs to print quad_t [size in base 8 + \0] */
+#define KPRINTF_BUFSIZE         (sizeof(quad_t) * NBBY / 3 + 2)
 
 extern struct simplelock kprintf_slock;
 
@@ -66,13 +66,6 @@ do {									\
 	__cpu_simple_unlock(&kprintf_slock.lock_data);			\
 	splx((s));							\
 } while (/*CONSTCOND*/0)
-
-#else
-
-#define	KPRINTF_MUTEX_ENTER(s)	(s) = splhigh()
-#define	KPRINTF_MUTEX_EXIT(s)	splx((s))
-
-#endif /* MULTIPROCESSOR */
 
 /* flags for kprintf */
 #define	TOCONS		0x0001	/* to the console */

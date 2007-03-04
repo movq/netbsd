@@ -1,4 +1,4 @@
-/*	$NetBSD: vga_pci.c,v 1.30 2006/11/16 01:33:10 christos Exp $	*/
+/*	$NetBSD: vga_pci.c,v 1.44 2008/08/03 02:12:22 joerg Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga_pci.c,v 1.30 2006/11/16 01:33:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vga_pci.c,v 1.44 2008/08/03 02:12:22 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,6 +52,15 @@ __KERNEL_RCSID(0, "$NetBSD: vga_pci.c,v 1.30 2006/11/16 01:33:10 christos Exp $"
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
 
+#include "opt_vga.h"
+
+#ifdef VGA_POST
+#  if defined(__i386__) || defined(__amd64__)
+#    include "acpi.h"
+#  endif
+#include <x86/vga_post.h>
+#endif
+
 #define	NBARS		6	/* number of PCI BARs */
 
 struct vga_bar {
@@ -69,16 +78,24 @@ struct vga_pci_softc {
 
 	struct vga_bar sc_bars[NBARS];
 	struct vga_bar sc_rom;
+
+#ifdef VGA_POST
+	struct vga_post *sc_posth;
+#endif
+
+	struct pci_attach_args sc_paa;
 };
 
 static int	vga_pci_match(struct device *, struct cfdata *, void *);
 static void	vga_pci_attach(struct device *, struct device *, void *);
+static int	vga_pci_rescan(struct device *, const char *, const int *);
 static int	vga_pci_lookup_quirks(struct pci_attach_args *);
+static bool	vga_pci_resume(device_t dv PMF_FN_PROTO);
 
-CFATTACH_DECL(vga_pci, sizeof(struct vga_pci_softc),
-    vga_pci_match, vga_pci_attach, NULL, NULL);
+CFATTACH_DECL2_NEW(vga_pci, sizeof(struct vga_pci_softc),
+    vga_pci_match, vga_pci_attach, NULL, NULL, vga_pci_rescan, NULL);
 
-static int	vga_pci_ioctl(void *, u_long, caddr_t, int, struct lwp *);
+static int	vga_pci_ioctl(void *, u_long, void *, int, struct lwp *);
 static paddr_t	vga_pci_mmap(void *, off_t, int);
 
 static const struct vga_funcs vga_pci_funcs = {
@@ -164,17 +181,20 @@ vga_pci_match(struct device *parent, struct cfdata *match,
 static void
 vga_pci_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct vga_pci_softc *psc = (void *) self;
+	struct vga_pci_softc *psc = device_private(self);
 	struct vga_softc *sc = &psc->sc_vga;
 	struct pci_attach_args *pa = aux;
 	char devinfo[256];
 	int bar, reg;
 
+	sc->sc_dev = self;
 	psc->sc_pc = pa->pa_pc;
 	psc->sc_pcitag = pa->pa_tag;
+	psc->sc_paa = *pa;
 
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	printf(": %s (rev. 0x%02x)\n", devinfo,
+	aprint_naive("\n");
+	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(pa->pa_class));
 
 	/*
@@ -193,27 +213,72 @@ vga_pci_attach(struct device *parent, struct device *self, void *aux)
 			/* Don't bother fetching I/O BARs. */
 			continue;
 		}
+#ifndef __LP64__
 		if (PCI_MAPREG_MEM_TYPE(psc->sc_bars[bar].vb_type) ==
 		    PCI_MAPREG_MEM_TYPE_64BIT) {
 			/* XXX */
-			printf("%s: WARNING: ignoring 64-bit BAR @ 0x%02x\n",
-			    sc->sc_dev.dv_xname, reg);
+			aprint_error_dev(self,
+			    "WARNING: ignoring 64-bit BAR @ 0x%02x\n", reg);
 			bar++;
 			continue;
 		}
+#endif
 		if (pci_mapreg_info(psc->sc_pc, psc->sc_pcitag, reg,
 		     psc->sc_bars[bar].vb_type,
 		     &psc->sc_bars[bar].vb_base,
 		     &psc->sc_bars[bar].vb_size,
 		     &psc->sc_bars[bar].vb_flags))
-			printf("%s: WARNING: strange BAR @ 0x%02x\n",
-			       sc->sc_dev.dv_xname, reg);
+			aprint_error_dev(self,
+			    "WARNING: strange BAR @ 0x%02x\n", reg);
 	}
 
 	/* XXX Expansion ROM? */
 
 	vga_common_attach(sc, pa->pa_iot, pa->pa_memt, WSDISPLAY_TYPE_PCIVGA,
 			  vga_pci_lookup_quirks(pa), &vga_pci_funcs);
+
+#ifdef VGA_POST
+	psc->sc_posth = vga_post_init(pa->pa_bus, pa->pa_device, pa->pa_function);
+	if (psc->sc_posth == NULL)
+		aprint_error_dev(self, "WARNING: could not prepare POST handler\n");
+#endif
+
+	/*
+	 * XXX Do not use the generic PCI framework for now as
+	 * XXX it would power down the device when the console
+	 * XXX is still using it.
+	 */
+	if (!pmf_device_register(self, NULL, vga_pci_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+	config_found_ia(self, "drm", aux, vga_drm_print);
+}
+
+static int
+vga_pci_rescan(struct device *self, const char *ifattr, const int *locators)
+{
+	struct vga_pci_softc *psc = device_private(self);
+
+	config_found_ia(self, "drm", &psc->sc_paa, vga_drm_print);
+
+	return 0;
+}
+
+static bool
+vga_pci_resume(device_t dv PMF_FN_ARGS)
+{
+#if defined(VGA_POST) && NACPI > 0
+	extern int acpi_md_vbios_reset;
+#endif
+	struct vga_pci_softc *sc = device_private(dv);
+
+	vga_resume(&sc->sc_vga);
+
+#if defined(VGA_POST) && NACPI > 0
+	if (sc->sc_posth != NULL && acpi_md_vbios_reset == 2)
+		vga_post_call(sc->sc_posth);
+#endif
+
+	return true;
 }
 
 int
@@ -225,8 +290,17 @@ vga_pci_cnattach(bus_space_tag_t iot, bus_space_tag_t memt,
 	return (vga_cnattach(iot, memt, WSDISPLAY_TYPE_PCIVGA, 0));
 }
 
+int
+vga_drm_print(void *aux, const char *pnp)
+{
+	if (pnp)
+		aprint_normal("drm at %s", pnp);
+	return (UNCONF);
+}
+
+
 static int
-vga_pci_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct lwp *l)
+vga_pci_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct vga_config *vc = v;
 	struct vga_pci_softc *psc = (void *) vc->softc;

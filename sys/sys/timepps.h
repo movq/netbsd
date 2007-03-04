@@ -1,4 +1,4 @@
-/*	$NetBSD: timepps.h,v 1.15 2006/06/07 22:34:18 kardel Exp $	*/
+/*	$NetBSD: timepps.h,v 1.18 2008/04/21 12:56:31 ad Exp $	*/
 
 /*
  * Copyright (c) 1998 Jonathan Stone
@@ -131,7 +131,10 @@ typedef struct {
 
 #ifdef _KERNEL
 
-#ifdef __HAVE_TIMECOUNTER
+#include <sys/mutex.h>
+
+extern kmutex_t timecounter_lock;
+
 struct pps_state {
 	/* Capture information. */
 	struct timehands *capth;
@@ -150,8 +153,7 @@ struct pps_state {
 void pps_capture(struct pps_state *);
 void pps_event(struct pps_state *, int);
 void pps_init(struct pps_state *);
-int pps_ioctl(unsigned long, caddr_t, struct pps_state *);
-#endif /* __HAVE_TIMECOUNTER */
+int pps_ioctl(unsigned long, void *, struct pps_state *);
 
 #else /* !_KERNEL */
 

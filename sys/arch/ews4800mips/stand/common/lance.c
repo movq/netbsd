@@ -1,4 +1,4 @@
-/*	$NetBSD: lance.c,v 1.3 2007/02/22 05:31:54 thorpej Exp $	*/
+/*	$NetBSD: lance.c,v 1.5 2008/04/28 20:23:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -133,7 +126,7 @@ lance_get(void *data, size_t len)
 		}
 	}
 #ifdef DEBUG
-	printf("%s: %d [%d,%d] %d\n", __FUNCTION__, len, start, end, n);
+	printf("%s: %d [%d,%d] %d\n", __func__, len, start, end, n);
 #endif
 	if (start < 0 || end < 0)
 		return false;

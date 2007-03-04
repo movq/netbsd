@@ -1,4 +1,4 @@
-/*	$NetBSD: sco_upper.c,v 1.4 2006/11/16 01:33:45 christos Exp $	*/
+/*	$NetBSD: sco_upper.c,v 1.8 2008/08/06 15:01:24 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,12 +32,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sco_upper.c,v 1.4 2006/11/16 01:33:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sco_upper.c,v 1.8 2008/08/06 15:01:24 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/mbuf.h>
 #include <sys/proc.h>
+#include <sys/socketvar.h>
 #include <sys/systm.h>
 
 #include <netbt/bluetooth.h>
@@ -62,9 +63,9 @@ sco_attach(struct sco_pcb **handle,
 {
 	struct sco_pcb *pcb;
 
-	KASSERT(handle);
-	KASSERT(proto);
-	KASSERT(upper);
+	KASSERT(handle != NULL);
+	KASSERT(proto != NULL);
+	KASSERT(upper != NULL);
 
 	pcb = malloc(sizeof(struct sco_pcb), M_BLUETOOTH,
 			M_NOWAIT | M_ZERO);
@@ -150,12 +151,9 @@ sco_connect(struct sco_pcb *pcb, struct sockaddr_bt *dest)
 	if (acl == NULL || acl->hl_state != HCI_LINK_OPEN)
 		return EHOSTUNREACH;
 
-	sco = hci_link_alloc(unit);
+	sco = hci_link_alloc(unit, &pcb->sp_raddr, HCI_LINK_SCO);
 	if (sco == NULL)
 		return ENOMEM;
-
-	sco->hl_type = HCI_LINK_SCO;
-	bdaddr_copy(&sco->hl_bdaddr, &pcb->sp_raddr);
 
 	sco->hl_link = hci_acl_open(unit, &pcb->sp_raddr);
 	KASSERT(sco->hl_link == acl);
@@ -230,7 +228,7 @@ sco_detach(struct sco_pcb **handle)
 {
 	struct sco_pcb *pcb;
 
-	KASSERT(handle);
+	KASSERT(handle != NULL);
 	pcb = *handle;
 	*handle = NULL;
 
@@ -314,17 +312,18 @@ sco_send(struct sco_pcb *pcb, struct mbuf *m)
 }
 
 /*
- * sco_setopt(pcb, option, addr)
+ * sco_setopt(pcb, sopt)
  *
  *	Set SCO pcb options
  */
 int
-sco_setopt(struct sco_pcb *pcb, int opt, void *addr)
+sco_setopt(struct sco_pcb *pcb, const struct sockopt *sopt)
 {
 	int err = 0;
 
-	switch (opt) {
+	switch (sopt->sopt_name) {
 	default:
+		err = ENOPROTOOPT;
 		break;
 	}
 
@@ -332,28 +331,28 @@ sco_setopt(struct sco_pcb *pcb, int opt, void *addr)
 }
 
 /*
- * sco_getopt(pcb, option, addr)
+ * sco_getopt(pcb, sopt)
  *
  *	Get SCO pcb options
  */
 int
-sco_getopt(struct sco_pcb *pcb, int opt, void *addr)
+sco_getopt(struct sco_pcb *pcb, struct sockopt *sopt)
 {
 
-	switch (opt) {
+	switch (sopt->sopt_name) {
 	case SO_SCO_MTU:
-		*(uint16_t *)addr = pcb->sp_mtu;
-		return sizeof(uint16_t);
+		return sockopt_set(sopt, &pcb->sp_mtu, sizeof(uint16_t));
 
 	case SO_SCO_HANDLE:
-		if (pcb->sp_link) {
-			*(uint16_t *)addr = pcb->sp_link->hl_handle;
-			return sizeof(uint16_t);
-		}
-		break;
+		if (pcb->sp_link)
+			return sockopt_set(sopt,
+			    &pcb->sp_link->hl_handle, sizeof(uint16_t));
+
+		return ENOTCONN;
 
 	default:
 		break;
 	}
-	return 0;
+
+	return ENOPROTOOPT;
 }

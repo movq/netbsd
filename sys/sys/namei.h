@@ -1,4 +1,11 @@
-/*	$NetBSD: namei.h,v 1.47 2006/12/24 08:54:55 elad Exp $	*/
+/*	$NetBSD: namei.h,v 1.60 2008/04/11 15:51:38 ad Exp $	*/
+
+/*
+ * WARNING: GENERATED FILE.  DO NOT EDIT
+ * (edit namei.src and run make namei)
+ *   by:   NetBSD: gennameih.awk,v 1.1 2007/08/15 14:08:11 pooka Exp 
+ *   from: NetBSD: namei.src,v 1.8 2008/04/11 15:51:25 ad Exp 
+ */
 
 /*
  * Copyright (c) 1985, 1989, 1991, 1993
@@ -35,8 +42,11 @@
 #define	_SYS_NAMEI_H_
 
 #include <sys/queue.h>
+#include <sys/mutex.h>
 
 #ifdef _KERNEL
+#include <sys/kauth.h>
+
 /*
  * Encapsulation of namei parameters.
  */
@@ -46,15 +56,12 @@ struct nameidata {
 	 */
 	const char *ni_dirp;		/* pathname pointer */
 	enum	uio_seg ni_segflg;	/* location of pathname */
-     /* u_long	ni_nameiop;		   namei operation */
-     /* u_long	ni_flags;		   flags to namei */
-     /* struct	proc *ni_proc;		   process requesting lookup */
 	/*
 	 * Arguments to lookup.
 	 */
-     /* kauth_cred_t ni_cred;		   credentials */
 	struct	vnode *ni_startdir;	/* starting directory */
 	struct	vnode *ni_rootdir;	/* logical root directory */
+	struct	vnode *ni_erootdir;	/* emulation root directory */
 	/*
 	 * Results: returned from/manipulated by lookup
 	 */
@@ -63,9 +70,9 @@ struct nameidata {
 	/*
 	 * Shared between namei and lookup/commit routines.
 	 */
-	size_t	ni_pathlen;		/* remaining chars in path */
-	const char *ni_next;		/* next location in pathname */
-	u_long	ni_loopcnt;		/* count of symlinks encountered */
+	size_t		ni_pathlen;	/* remaining chars in path */
+	const char	*ni_next;	/* next location in pathname */
+	unsigned int	ni_loopcnt;	/* count of symlinks encountered */
 	/*
 	 * Lookup parameters: this structure describes the subset of
 	 * information from the nameidata structure that is passed
@@ -75,18 +82,17 @@ struct nameidata {
 		/*
 		 * Arguments to lookup.
 		 */
-		u_long	cn_nameiop;	/* namei operation */
-		u_long	cn_flags;	/* flags to namei */
-		struct	lwp *cn_lwp;	/* lwp requesting lookup */
-		kauth_cred_t cn_cred;	/* credentials */
+		uint32_t	cn_nameiop;	/* namei operation */
+		uint32_t	cn_flags;	/* flags to namei */
+		kauth_cred_t 	cn_cred;	/* credentials */
 		/*
 		 * Shared between lookup and commit routines.
 		 */
-		char	*cn_pnbuf;	/* pathname buffer */
-		const char *cn_nameptr;	/* pointer to looked up name */
-		long	cn_namelen;	/* length of looked up component */
-		u_long	cn_hash;	/* hash value of looked up name */
-		long	cn_consume;	/* chars to consume in lookup() */
+		char		*cn_pnbuf;	/* pathname buffer */
+		const char 	*cn_nameptr;	/* pointer to looked up name */
+		size_t		cn_namelen;	/* length of looked up comp */
+		u_long		cn_hash;	/* hash val of looked up name */
+		size_t		cn_consume;	/* chars to consume in lookup */
 	} ni_cnd;
 };
 
@@ -106,6 +112,8 @@ struct nameidata {
 #define	NOCACHE		0x0020	/* name must not be left in cache */
 #define	FOLLOW		0x0040	/* follow symbolic links */
 #define	NOFOLLOW	0x0000	/* do not follow symbolic links (pseudo) */
+#define	TRYEMULROOT	0x0010	/* try relative to emulation root first */
+#define	EMULROOTSET	0x0080	/* emulation root already in ni_erootdir */
 #define	MODMASK		0x00fc	/* mask of operational modifiers */
 /*
  * Namei parameter descriptors.
@@ -134,17 +142,17 @@ struct nameidata {
 #define	DOWHITEOUT	0x0040000	/* do whiteouts */
 #define	REQUIREDIR	0x0080000	/* must be a directory */
 #define	CREATEDIR	0x0200000	/* trailing slashes are ok */
-#define	PARAMASK	0x03fff00	/* mask of parameter descriptors */
+#define	PARAMASK	0x02fff00	/* mask of parameter descriptors */
+
 /*
  * Initialization of an nameidata structure.
  */
-#define NDINIT(ndp, op, flags, segflg, namep, l) { \
+#define NDINIT(ndp, op, flags, segflg, namep) { \
 	(ndp)->ni_cnd.cn_nameiop = op; \
 	(ndp)->ni_cnd.cn_flags = flags; \
 	(ndp)->ni_segflg = segflg; \
 	(ndp)->ni_dirp = namep; \
-	(ndp)->ni_cnd.cn_lwp = l; \
-	(ndp)->ni_cnd.cn_cred = l->l_cred; \
+	(ndp)->ni_cnd.cn_cred = kauth_cred_get(); \
 }
 #endif
 
@@ -157,17 +165,26 @@ struct nameidata {
 
 #define	NCHNAMLEN	31	/* maximum name segment length we bother with */
 
+/*
+ * Namecache entry.  This structure is arranged so that frequently
+ * accessed and mostly read-only data is toward the front, with
+ * infrequently accessed data and the lock towards the rear.  The
+ * lock is then more likely to be in a seperate cache line.
+ */
 struct	namecache {
 	LIST_ENTRY(namecache) nc_hash;	/* hash chain */
-	TAILQ_ENTRY(namecache) nc_lru;	/* LRU chain */
 	LIST_ENTRY(namecache) nc_vhash;	/* directory hash chain */
-	LIST_ENTRY(namecache) nc_dvlist;
 	struct	vnode *nc_dvp;		/* vnode of parent of name */
-	LIST_ENTRY(namecache) nc_vlist;
 	struct	vnode *nc_vp;		/* vnode the name refers to */
 	int	nc_flags;		/* copy of componentname's ISWHITEOUT */
 	char	nc_nlen;		/* length of name */
 	char	nc_name[NCHNAMLEN];	/* segment name */
+	void	*nc_gcqueue;		/* queue for garbage collection */
+	TAILQ_ENTRY(namecache) nc_lru;	/* psuedo-lru chain */
+	LIST_ENTRY(namecache) nc_dvlist;
+	LIST_ENTRY(namecache) nc_vlist;
+	kmutex_t nc_lock;		/* lock on this entry */
+	int	nc_hittime;		/* last time scored a hit */
 };
 
 #ifdef _KERNEL
@@ -175,14 +192,12 @@ struct	namecache {
 #include <sys/pool.h>
 
 struct mount;
+struct cpu_info;
 
-extern struct pool pnbuf_pool;		/* pathname buffer pool */
-extern struct pool_cache pnbuf_cache;	/* pathname buffer cache */
+extern pool_cache_t pnbuf_cache;	/* pathname buffer cache */
 
-#define	PNBUF_GET()	pool_cache_get(&pnbuf_cache, PR_WAITOK)
-#define	PNBUF_PUT(pnb)	pool_cache_put(&pnbuf_cache, (pnb))
-
-typedef struct pathname_internal *pathname_t;
+#define	PNBUF_GET()	pool_cache_get(pnbuf_cache, PR_WAITOK)
+#define	PNBUF_PUT(pnb)	pool_cache_put(pnbuf_cache, (pnb))
 
 int	namei(struct nameidata *);
 uint32_t namei_hash(const char *, const char **);
@@ -199,12 +214,10 @@ int	cache_revlookup(struct vnode *, struct vnode **, char **, char *);
 void	cache_enter(struct vnode *, struct vnode *, struct componentname *);
 void	nchinit(void);
 void	nchreinit(void);
+void	cache_cpu_init(struct cpu_info *);
 void	cache_purgevfs(struct mount *);
 void	namecache_print(struct vnode *, void (*)(const char *, ...));
 
-int pathname_get(const char *, enum uio_seg, pathname_t *);
-const char *pathname_path(pathname_t);
-void pathname_put(pathname_t);
 #endif
 
 /*
@@ -227,4 +240,35 @@ struct	nchstats {
 #ifdef _KERNEL
 extern struct nchstats nchstats;
 #endif
+/* #endif !_SYS_NAMEI_H_ (generated by gennameih.awk) */
+
+/* Definitions match above, but with NAMEI_ prefix */
+#define NAMEI_LOOKUP	0
+#define NAMEI_CREATE	1
+#define NAMEI_DELETE	2
+#define NAMEI_RENAME	3
+#define NAMEI_OPMASK	3
+#define NAMEI_LOCKLEAF	0x0004
+#define NAMEI_LOCKPARENT	0x0008
+#define NAMEI_NOCACHE	0x0020
+#define NAMEI_FOLLOW	0x0040
+#define NAMEI_NOFOLLOW	0x0000
+#define NAMEI_TRYEMULROOT	0x0010
+#define NAMEI_EMULROOTSET	0x0080
+#define NAMEI_MODMASK	0x00fc
+#define NAMEI_NOCROSSMOUNT	0x0000100
+#define NAMEI_RDONLY	0x0000200
+#define NAMEI_HASBUF	0x0000400
+#define NAMEI_SAVENAME	0x0000800
+#define NAMEI_SAVESTART	0x0001000
+#define NAMEI_ISDOTDOT	0x0002000
+#define NAMEI_MAKEENTRY	0x0004000
+#define NAMEI_ISLASTCN	0x0008000
+#define NAMEI_ISSYMLINK	0x0010000
+#define NAMEI_ISWHITEOUT	0x0020000
+#define NAMEI_DOWHITEOUT	0x0040000
+#define NAMEI_REQUIREDIR	0x0080000
+#define NAMEI_CREATEDIR	0x0200000
+#define NAMEI_PARAMASK	0x02fff00
+
 #endif /* !_SYS_NAMEI_H_ */

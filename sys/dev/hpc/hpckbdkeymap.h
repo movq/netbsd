@@ -1,4 +1,4 @@
-/*	$NetBSD: hpckbdkeymap.h,v 1.46 2006/10/12 21:19:13 uwe Exp $	*/
+/*	$NetBSD: hpckbdkeymap.h,v 1.48 2008/04/28 20:23:48 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -721,7 +714,7 @@ const uint8_t persona_hpw50pad_jp_keytrans[] = {
 };
 
 const int persona_hpw50pad_special_keymap[] = {
-	[KEY_SPECIAL_OFF]	= -1,	/* 5 */
+	[KEY_SPECIAL_OFF]	= 5,
 	[KEY_SPECIAL_LIGHT]	= -1
 };
 
@@ -763,7 +756,7 @@ const uint8_t persona_hpw200ec_keytrans[] = {
 };
 
 const int persona_hpw200ec_special_keymap[] = {
-	[KEY_SPECIAL_OFF]	= -1,	/* 5 */
+	[KEY_SPECIAL_OFF]	= 5,
 	[KEY_SPECIAL_LIGHT]	= -1
 };
 

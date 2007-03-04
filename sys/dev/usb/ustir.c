@@ -1,4 +1,4 @@
-/*	$NetBSD: ustir.c,v 1.17 2006/11/16 01:33:27 christos Exp $	*/
+/*	$NetBSD: ustir.c,v 1.26 2008/05/24 16:40:58 cube Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ustir.c,v 1.17 2006/11/16 01:33:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ustir.c,v 1.26 2008/05/24 16:40:58 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -176,7 +169,7 @@ struct ustir_softc {
 	u_int			sc_rd_expectdataticks;
 	u_char			sc_rd_err;
 	struct framestate	sc_framestate;
-	struct proc		*sc_thread;
+	struct lwp		*sc_thread;
 	struct selinfo		sc_rd_sel;
 
 	u_int8_t		*sc_wr_buf;
@@ -195,7 +188,7 @@ struct ustir_softc {
 
 	struct ustir_speedrec const *sc_speedrec;
 
-	struct device		*sc_child;
+	device_t		sc_child;
 	struct irda_params	sc_params;
 
 	int			sc_refcnt;
@@ -220,7 +213,7 @@ Static int ustir_poll(void *h, int events, struct lwp *l);
 Static int ustir_kqfilter(void *h, struct knote *kn);
 
 #ifdef USTIR_DEBUG_IOCTLS
-Static int ustir_ioctl(void *h, u_long cmd, caddr_t addr, int flag, struct lwp *l);
+Static int ustir_ioctl(void *h, u_long cmd, void *addr, int flag, struct lwp *l);
 #endif
 
 Static struct irframe_methods const ustir_methods = {
@@ -288,16 +281,20 @@ ustir_dumpdata(u_int8_t const *data, size_t dlen, char const *desc)
 }
 #endif
 
-USB_DECLARE_DRIVER(ustir);
+int ustir_match(device_t, cfdata_t, void *);
+void ustir_attach(device_t, device_t, void *);
+void ustir_childdet(device_t, device_t);
+int ustir_detach(device_t, int);
+int ustir_activate(device_t, enum devact);
+extern struct cfdriver ustir_cd;
+CFATTACH_DECL2_NEW(ustir, sizeof(struct ustir_softc), ustir_match,
+    ustir_attach, ustir_detach, ustir_activate, NULL, ustir_childdet);
 
 USB_MATCH(ustir)
 {
 	USB_MATCH_START(ustir, uaa);
 
 	DPRINTFN(50,("ustir_match\n"));
-
-	if (uaa->iface == NULL)
-		return UMATCH_NONE;
 
 	if (uaa->vendor == USB_VENDOR_SIGMATEL &&
 	    uaa->product == USB_PRODUCT_SIGMATEL_IRDA)
@@ -310,7 +307,7 @@ USB_ATTACH(ustir)
 {
 	USB_ATTACH_START(ustir, sc, uaa);
 	usbd_device_handle dev = uaa->device;
-	usbd_interface_handle iface = uaa->iface;
+	usbd_interface_handle iface;
 	char *devinfop;
 	usb_endpoint_descriptor_t *ed;
 	u_int8_t epcount;
@@ -319,10 +316,18 @@ USB_ATTACH(ustir)
 
 	DPRINTFN(10,("ustir_attach: sc=%p\n", sc));
 
+	sc->sc_dev = self;
+
 	devinfop = usbd_devinfo_alloc(dev, 0);
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
+
+	if (usbd_set_config_index(dev, 0, 1)
+	    || usbd_device2interface_handle(dev, 0, &iface)) {
+		aprint_error_dev(self, "Configuration failed\n");
+		USB_ATTACH_ERROR_RETURN;
+	}
 
 	sc->sc_udev = dev;
 	sc->sc_iface = iface;
@@ -335,8 +340,7 @@ USB_ATTACH(ustir)
 	for (i = 0; i < epcount; i++) {
 		ed = usbd_interface2endpoint_descriptor(iface, i);
 		if (ed == NULL) {
-			printf("%s: couldn't get ep %d\n",
-			    USBDEVNAME(sc->sc_dev), i);
+			aprint_error_dev(self, "couldn't get ep %d\n", i);
 			USB_ATTACH_ERROR_RETURN;
 		}
 		if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_IN &&
@@ -348,7 +352,7 @@ USB_ATTACH(ustir)
 		}
 	}
 	if (sc->sc_rd_addr == -1 || sc->sc_wr_addr == -1) {
-		printf("%s: missing endpoint\n", USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "missing endpoint\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
@@ -362,8 +366,19 @@ USB_ATTACH(ustir)
 	ia.ia_handle = sc;
 
 	sc->sc_child = config_found(self, &ia, ir_print);
+	selinit(&sc->sc_rd_sel);
+	selinit(&sc->sc_wr_sel);
 
 	USB_ATTACH_SUCCESS_RETURN;
+}
+
+void
+ustir_childdet(device_t self, device_t child)
+{
+	struct ustir_softc *sc = device_private(self);
+
+	KASSERT(sc->sc_child == child);
+	sc->sc_child = NULL;
 }
 
 USB_DETACH(ustir)
@@ -402,13 +417,14 @@ USB_DETACH(ustir)
 	}
 	splx(s);
 
-	if (sc->sc_child != NULL) {
+	if (sc->sc_child != NULL)
 		rv = config_detach(sc->sc_child, flags);
-		sc->sc_child = NULL;
-	}
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
 			   USBDEV(sc->sc_dev));
+
+	seldestroy(&sc->sc_rd_sel);
+	seldestroy(&sc->sc_wr_sel);
 
 	return rv;
 }
@@ -565,7 +581,7 @@ deframe_rd_ur(struct ustir_softc *sc)
 		case FR_FRAMEOK:
 			sc->sc_ur_framelen = sc->sc_framestate.bufindex;
 			wakeup(&sc->sc_ur_framelen); /* XXX should use flag */
-			selnotify(&sc->sc_rd_sel, 0);
+			selnotify(&sc->sc_rd_sel, 0, 0);
 			return 1;
 		}
 	}
@@ -612,9 +628,9 @@ ustir_periodic(struct ustir_softc *sc)
 		err = ustir_read_reg(sc, STIR_REG_STATUS,
 				     &regval);
 		if (err != USBD_NORMAL_COMPLETION) {
-			printf("%s: status register read failed: %s\n",
-			       USBDEVNAME(sc->sc_dev),
-			       usbd_errstr(err));
+			aprint_error_dev(sc->sc_dev,
+			    "status register read failed: %s\n",
+			     usbd_errstr(err));
 		} else {
 			DPRINTFN(10, ("%s: status register = 0x%x\n",
 				      __func__,
@@ -643,9 +659,9 @@ ustir_periodic(struct ustir_softc *sc)
 							      STIR_REG_STATUS,
 							      0);
 				if (err != USBD_NORMAL_COMPLETION) {
-					printf("%s: FIFO reset failed: %s\n",
-					       USBDEVNAME(sc->sc_dev),
-					       usbd_errstr(err));
+					aprint_error_dev(sc->sc_dev,
+					    "FIFO reset failed: %s\n",
+					    usbd_errstr(err));
 				} else {
 					/* FIFO reset */
 					sc->sc_direction = udir_idle;
@@ -789,7 +805,7 @@ ustir_rd_cb(usbd_xfer_handle xfer, usbd_private_handle priv,
 
 		/* Wake up for possible output */
 		wakeup(&sc->sc_wr_buf);
-		selnotify(&sc->sc_wr_sel, 0);
+		selnotify(&sc->sc_wr_sel, 0, 0);
 	}
 }
 
@@ -837,9 +853,9 @@ ustir_start_read(struct ustir_softc *sc)
 }
 
 Static int
-ustir_activate(device_ptr_t self, enum devact act)
+ustir_activate(device_t self, enum devact act)
 {
-	struct ustir_softc *sc = (struct ustir_softc *)self;
+	struct ustir_softc *sc = device_private(self);
 	int error = 0;
 
 	switch (act) {
@@ -920,12 +936,15 @@ ustir_open(void *h, int flag, int mode,
 	deframe_init(&sc->sc_framestate, &framedef_sir, sc->sc_ur_buf,
 		     IRDA_MAX_FRAME_SIZE);
 
-	error = kthread_create1(ustir_thread, sc, &sc->sc_thread, "%s",
-				sc->sc_dev.dv_xname);
-	if (error)
-		goto bad5;
 	/* Increment reference for thread */
 	sc->sc_refcnt++;
+
+	error = kthread_create(PRI_NONE, 0, NULL, ustir_thread, sc,
+	    &sc->sc_thread, "%s", device_xname(sc->sc_dev));
+	if (error) {
+		sc->sc_refcnt--;
+		goto bad5;
+	}
 
 	return 0;
 
@@ -1283,7 +1302,7 @@ ustir_kqfilter(void *h, struct knote *kn)
 		kn->kn_fop = &ustirwrite_filtops;
 		break;
 	default:
-		return (1);
+		return (EINVAL);
 	}
 
 	kn->kn_hook = sc;
@@ -1296,7 +1315,7 @@ ustir_kqfilter(void *h, struct knote *kn)
 }
 
 #ifdef USTIR_DEBUG_IOCTLS
-Static int ustir_ioctl(void *h, u_long cmd, caddr_t addr, int flag, struct lwp *l)
+Static int ustir_ioctl(void *h, u_long cmd, void *addr, int flag, struct lwp *l)
 {
 	struct ustir_softc *sc = h;
 	int error;

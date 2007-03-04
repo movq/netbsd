@@ -1,4 +1,4 @@
-/*	$NetBSD: arm32_machdep.c,v 1.47 2007/02/22 05:14:04 thorpej Exp $	*/
+/*	$NetBSD: arm32_machdep.c,v 1.58 2008/08/07 04:17:25 matt Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -42,9 +42,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.47 2007/02/22 05:14:04 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.58 2008/08/07 04:17:25 matt Exp $");
 
 #include "opt_md.h"
+#include "opt_cpuoptions.h"
 #include "opt_pmap_debug.h"
 
 #include <sys/param.h>
@@ -60,6 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.47 2007/02/22 05:14:04 thorpej E
 #include <sys/device.h>
 #include <uvm/uvm_extern.h>
 #include <sys/sysctl.h>
+#include <sys/cpu.h>
 
 #include <dev/cons.h>
 
@@ -67,10 +69,8 @@ __KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.47 2007/02/22 05:14:04 thorpej E
 #include <arm/arm32/machdep.h>
 #include <machine/bootconfig.h>
 
-#include "opt_ipkdb.h"
 #include "md.h"
 
-struct vm_map *exec_map = NULL;
 struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
@@ -87,9 +87,14 @@ char	machine[] = MACHINE;		/* from <machine/param.h> */
 char	machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
 
 /* Our exported CPU info; we can have only one. */
-struct cpu_info cpu_info_store;
+struct cpu_info cpu_info_store = {
+	.ci_cpl = IPL_HIGH,
+#ifndef PROCESS_ID_IS_CURLWP
+	.ci_curlwp = &lwp0,
+#endif
+};
 
-caddr_t	msgbufaddr;
+void *	msgbufaddr;
 extern paddr_t msgbufphys;
 
 int kernel_debug = 0;
@@ -179,11 +184,11 @@ halt()
 void
 bootsync(void)
 {
-	static int bootsyncdone = 0;
+	static bool bootsyncdone = false;
 
 	if (bootsyncdone) return;
 
-	bootsyncdone = 1;
+	bootsyncdone = true;
 
 	/* Make sure we can still manage to do things */
 	if (GetCPSR() & I32_bit) {
@@ -207,7 +212,7 @@ bootsync(void)
  *
  */
 void
-cpu_startup()
+cpu_startup(void)
 {
 	vaddr_t minaddr;
 	vaddr_t maxaddr;
@@ -249,13 +254,6 @@ cpu_startup()
 	minaddr = 0;
 
 	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
-
-	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
@@ -273,11 +271,8 @@ cpu_startup()
 
 	curpcb = &lwp0.l_addr->u_pcb;
 	curpcb->pcb_flags = 0;
-	curpcb->pcb_un.un_32.pcb32_und_sp = (u_int)lwp0.l_addr +
-	    USPACE_UNDEF_STACK_TOP;
 	curpcb->pcb_un.un_32.pcb32_sp = (u_int)lwp0.l_addr +
 	    USPACE_SVC_STACK_TOP;
-	pmap_set_pcb_pagedir(pmap_kernel(), curpcb);
 
         curpcb->pcb_tf = (struct trapframe *)curpcb->pcb_un.un_32.pcb32_sp - 1;
 }
@@ -420,3 +415,96 @@ parse_mi_bootargs(args)
 		if (integer)
 			boothowto |= AB_VERBOSE;
 }
+
+void
+cpu_need_resched(struct cpu_info *ci, int flags)
+{
+	bool immed = (flags & RESCHED_IMMED) != 0;
+
+	if (ci->ci_want_resched && !immed)
+		return;
+
+	ci->ci_want_resched = 1;
+	if (curlwp != ci->ci_data.cpu_idlelwp)
+		setsoftast();
+}
+
+bool
+cpu_intr_p(void)
+{
+	return curcpu()->ci_intr_depth != 0;
+}
+
+#ifdef __HAVE_FAST_SOFTINTS
+#if IPL_SOFTSERIAL != IPL_SOFTNET + 1
+#error IPLs are screwed up
+#elif IPL_SOFTNET != IPL_SOFTBIO + 1
+#error IPLs are screwed up
+#elif IPL_SOFTBIO != IPL_SOFTCLOCK + 1
+#error IPLs are screwed up
+#elif !(IPL_SOFTCLOCK > IPL_NONE)
+#error IPLs are screwed up
+#elif (IPL_NONE != 0)
+#error IPLs are screwed up
+#endif
+
+#define	SOFTINT2IPLMAP \
+	(((IPL_SOFTSERIAL - IPL_SOFTCLOCK) << (SOFTINT_SERIAL * 4)) | \
+	 ((IPL_SOFTNET    - IPL_SOFTCLOCK) << (SOFTINT_NET    * 4)) | \
+	 ((IPL_SOFTBIO    - IPL_SOFTCLOCK) << (SOFTINT_BIO    * 4)) | \
+	 ((IPL_SOFTCLOCK  - IPL_SOFTCLOCK) << (SOFTINT_CLOCK  * 4)))
+#define	SOFTINT2IPL(l)	((SOFTINT2IPLMAP >> ((l) * 4)) & 0x0f)
+
+/*
+ * This returns a mask of softint IPLs that be dispatch at <ipl>
+ * SOFTIPLMASK(IPL_NONE)	= 0xffffffff
+ * SOFTIPLMASK(IPL_SOFTCLOCK)	= 0xfffffff0
+ */
+#define	SOFTIPLMASK(ipl) (~0 << (ipl))
+
+void softint_switch(lwp_t *, int);
+
+void
+softint_trigger(uintptr_t mask)
+{
+	curcpu()->ci_softints |= mask;
+}
+
+void
+softint_init_md(lwp_t *l, u_int level, uintptr_t *machdep)
+{
+	lwp_t ** lp = &curcpu()->ci_softlwps[level];
+	KASSERT(*lp == NULL || *lp == l);
+	*lp = l;
+	*machdep = 1 << SOFTINT2IPL(level);
+}
+
+void
+dosoftints(void)
+{
+	struct cpu_info * const ci = curcpu();
+	const int opl = ci->ci_cpl;
+	const uint32_t softiplmask = SOFTIPLMASK(opl);
+
+	for (;;) {
+		u_int softints = ci->ci_softints & softiplmask;
+		if (softints == 0)
+			return;
+		ci->ci_cpl = IPL_HIGH;
+#define	DOSOFTINT(n) \
+		if (softints & (1 << (IPL_SOFT ## n - IPL_SOFTCLOCK))) { \
+			ci->ci_softints &= \
+			    ~(1 << (IPL_SOFT ## n - IPL_SOFTCLOCK)); \
+			softint_switch(ci->ci_softlwps[SOFTINT_ ## n], \
+			    IPL_SOFT ## n); \
+			ci->ci_cpl = opl; \
+			continue; \
+		}
+		DOSOFTINT(SERIAL);
+		DOSOFTINT(NET);
+		DOSOFTINT(BIO);
+		DOSOFTINT(CLOCK);
+		panic("dosoftints wtf (softints=%u?, ipl=%d)", softints, opl);
+	}
+}
+#endif /* __HAVE_FAST_SOFTINTS */

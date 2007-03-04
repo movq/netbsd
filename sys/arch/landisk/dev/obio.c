@@ -1,4 +1,4 @@
-/*	$NetBSD: obio.c,v 1.1 2006/09/01 21:26:18 uwe Exp $	*/
+/*	$NetBSD: obio.c,v 1.6 2008/04/28 20:23:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.1 2006/09/01 21:26:18 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.6 2008/04/28 20:23:26 martin Exp $");
 
 #include "btn_obio.h"
 #include "pwrsw_obio.h"
@@ -66,17 +59,24 @@ __KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.1 2006/09/01 21:26:18 uwe Exp $");
 
 #include "locators.h"
 
-static int	obio_match(struct device *, struct cfdata *, void *);
-static void	obio_attach(struct device *, struct device *, void *);
-static int	obio_print(void *, const char *);
-static int	obio_search(struct device *, struct cfdata *,
-		    const int *, void *);
 
-CFATTACH_DECL(obio, sizeof(struct device),
+struct obio_softc {
+	device_t sc_dev;
+
+	bus_space_tag_t sc_iot;		/* io space tag */
+	bus_space_tag_t sc_memt;	/* mem space tag */
+};
+
+static int	obio_match(device_t, cfdata_t, void *);
+static void	obio_attach(device_t, device_t, void *);
+static int	obio_print(void *, const char *);
+static int	obio_search(device_t, cfdata_t, const int *, void *);
+
+CFATTACH_DECL_NEW(obio, sizeof(struct obio_softc),
     obio_match, obio_attach, NULL, NULL);
 
 static int
-obio_match(struct device *parent, struct cfdata *cf, void *aux)
+obio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct obiobus_attach_args *oba = aux;
 
@@ -87,12 +87,15 @@ obio_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 static void
-obio_attach(struct device *parent, struct device *self, void *aux)
+obio_attach(device_t parent, device_t self, void *aux)
 {
-	struct obio_softc *sc = (struct obio_softc *)self;
+	struct obio_softc *sc = device_private(self);
 	struct obiobus_attach_args *oba = aux;
 
-	printf("\n");
+	aprint_naive("\n");
+	aprint_normal("\n");
+
+	sc->sc_dev = self;
 
 	sc->sc_iot = oba->oba_iot;
 	sc->sc_memt = oba->oba_memt;
@@ -106,13 +109,12 @@ obio_attach(struct device *parent, struct device *self, void *aux)
 }
 
 static int
-obio_search(struct device *parent, struct cfdata *cf,
-    const int *ldesc, void *aux)
+obio_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct obio_io res_io[1];
 	struct obio_iomem res_mem[1];
 	struct obio_irq res_irq[1];
-	struct obio_softc *sc = (struct obio_softc *)parent;
+	struct obio_softc *sc = device_private(parent);
 	struct obio_attach_args oa;
 	int tryagain;
 

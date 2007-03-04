@@ -1,4 +1,4 @@
-/*	$NetBSD: mii_physubr.c,v 1.53 2006/11/16 21:24:07 christos Exp $	*/
+/*	$NetBSD: mii_physubr.c,v 1.60 2008/05/04 17:06:09 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.53 2006/11/16 21:24:07 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.60 2008/05/04 17:06:09 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -266,7 +259,7 @@ mii_phy_auto_timeout(void *arg)
 	struct mii_softc *sc = arg;
 	int s;
 
-	if (!device_is_active(&sc->mii_dev))
+	if (!device_is_active(sc->mii_dev))
 		return;
 
 	s = splnet();
@@ -337,16 +330,6 @@ mii_phy_reset(struct mii_softc *sc)
 		reg = BMCR_RESET | BMCR_ISO;
 	PHY_WRITE(sc, MII_BMCR, reg);
 
-	/*
-	 * It is best to allow a little time for the reset to settle
-	 * in before we start polling the BMCR again.  Notably, the
-	 * DP83840A manual states that there should be a 500us delay
-	 * between asserting software reset and attempting MII serial
-	 * operations.  Also, a DP83815 can get into a bad state on
-	 * cable removal and reinsertion if we do not delay here.
-	 */
-	delay(500);
-
 	/* Wait another 100ms for it to complete. */
 	for (i = 0; i < 100; i++) {
 		reg = PHY_READ(sc, MII_BMCR);
@@ -385,7 +368,7 @@ mii_phy_update(struct mii_softc *sc, int cmd)
 	    sc->mii_media_status != mii->mii_media_status ||
 	    cmd == MII_MEDIACHG) {
 		mii_phy_statusmsg(sc);
-		(*mii->mii_statchg)(device_parent(&sc->mii_dev));
+		(*mii->mii_statchg)(device_parent(sc->mii_dev));
 		sc->mii_media_active = mii->mii_media_active;
 		sc->mii_media_status = mii->mii_media_status;
 	}
@@ -572,6 +555,7 @@ mii_phy_detach(struct device *self, int flags)
 		callout_stop(&sc->mii_nway_ch);
 
 	mii_phy_delete_media(sc);
+	LIST_REMOVE(sc, mii_list);
 
 	return (0);
 }
@@ -632,4 +616,13 @@ mii_phy_flowstatus(struct mii_softc *sc)
 		return (IFM_FLOW|IFM_ETH_RXPAUSE|IFM_ETH_TXPAUSE);
 	}
 	/* NOTREACHED */
+}
+
+bool
+mii_phy_resume(device_t dv PMF_FN_ARGS)
+{
+	struct mii_softc *sc = device_private(dv);
+
+	PHY_RESET(sc);
+	return PHY_SERVICE(sc, sc->mii_pdata, MII_MEDIACHG) == 0;
 }

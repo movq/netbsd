@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.20 2007/03/04 01:57:21 tsutsui Exp $	*/
+/*	$NetBSD: intr.h,v 1.31 2008/06/22 17:35:14 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,20 +47,13 @@
  */
 #define	IPL_NONE	0
 #define	IPL_SOFTCLOCK	1
-#define	IPL_SOFTNET	2
-#define	IPL_SOFTSERIAL	3
-#define	IPL_SOFT	4	/* disable all software interrupts */
-#define	IPL_BIO		5
-#define	IPL_NET		6
-#define	IPL_TTY		7
-#define	IPL_TTYNOBUF	8	/* IPL_TTY + higher ISR priority */
-#define	IPL_VM		9
-#define	IPL_CLOCK	10
-#define	IPL_STATCLOCK	IPL_CLOCK
-#define	IPL_HIGH	11
-#define	IPL_SCHED	IPL_HIGH
-#define	IPL_LOCK	IPL_HIGH
-#define	NIPL		12
+#define	IPL_SOFTBIO	2
+#define	IPL_SOFTNET	3
+#define	IPL_SOFTSERIAL	4
+#define	IPL_VM		5
+#define	IPL_SCHED	6
+#define	IPL_HIGH	7
+#define	NIPL		8
 
 /*
  * Convert PSL values to m68k CPU IPLs and vice-versa.
@@ -76,20 +62,27 @@
 #define	PSLTOIPL(x)	(((x) >> 8) & 0xf)
 #define	IPLTOPSL(x)	((((x) & 0xf) << 8) | PSL_S)
 
-#ifdef _KERNEL
+extern int idepth;
 
-extern u_short hp300_ipl2psl[];
+static inline bool
+cpu_intr_p(void) 
+{
+ 
+	return idepth != 0;
+}
+
+extern const uint16_t ipl2psl_table[NIPL];
 
 typedef int ipl_t;
 typedef struct {
-	int _psl;
+	uint16_t _psl;
 } ipl_cookie_t;
 
 static inline ipl_cookie_t
 makeiplcookie(ipl_t ipl)
 {
 
-	return (ipl_cookie_t){._psl = hp300_ipl2psl[ipl]};
+	return (ipl_cookie_t){._psl = ipl2psl_table[ipl]};
 }
 
 static inline int
@@ -105,20 +98,13 @@ splraiseipl(ipl_cookie_t icookie)
 
 /* These spl calls are used by machine-independent code. */
 /* spl0 requires checking for software interrupts */
-#define	splsoft()	splraise1()
-#define	splsoftclock()	splsoft()
-#define	splsoftnet()	splsoft()
-#define	splsoftserial()	splsoft()
-#define	splbio()	_splraise(hp300_ipl2psl[IPL_BIO])
-#define	splnet()	_splraise(hp300_ipl2psl[IPL_NET])
-#define	spltty()	_splraise(hp300_ipl2psl[IPL_TTY])
-#define	splserial()	_splraise(hp300_ipl2psl[IPL_TTY])
-#define	splvm()		_splraise(hp300_ipl2psl[IPL_VM])
-#define	splclock()	spl6()
-#define	splstatclock()	splclock()
+#define	splsoftbio()	splraise1()
+#define	splsoftclock()	splraise1()
+#define	splsoftnet()	splraise1()
+#define	splsoftserial()	splraise1()
+#define	splvm()		splraise5()
+#define	splsched()	spl6()
 #define	splhigh()	spl7()
-#define	splsched()	spl7()
-#define	spllock()	spl7()
 
 /* watch out for side effects */
 #define	splx(s)		((s) & PSL_IPL ? _spl((s)) : spl0())
@@ -144,10 +130,5 @@ void	intr_init(void);
 void	*intr_establish(int (*)(void *), void *, int, int);
 void	intr_disestablish(void *);
 void	intr_dispatch(int);
-void	intr_printlevels(void);
-
-#endif /* _KERNEL */
-
-#include <m68k/softintr.h>
 
 #endif /* _HP300_INTR_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos32_exec.c,v 1.27 2007/02/19 15:10:03 cube Exp $	 */
+/*	$NetBSD: sunos32_exec.c,v 1.30 2008/10/15 06:51:20 wrstuden Exp $	 */
 
 /*
  * Copyright (c) 2001 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos32_exec.c,v 1.27 2007/02/19 15:10:03 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos32_exec.c,v 1.30 2008/10/15 06:51:20 wrstuden Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -41,6 +39,8 @@ __KERNEL_RCSID(0, "$NetBSD: sunos32_exec.c,v 1.27 2007/02/19 15:10:03 cube Exp $
 
 #include <uvm/uvm_extern.h>
 
+#include <compat/netbsd32/netbsd32.h>
+#include <compat/netbsd32/netbsd32_syscallargs.h>
 #include <compat/sunos32/sunos32.h>
 #include <compat/sunos32/sunos32_syscall.h>
 #include <compat/sunos32/sunos32_exec.h>
@@ -95,6 +95,7 @@ const struct emul emul_sunos = {
 	NULL,
 	NULL,
 	uvm_default_mapaddr,
+	NULL,
 	NULL,
 	0,
 	NULL,

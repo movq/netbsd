@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gm.c,v 1.27 2006/09/07 02:40:31 dogcow Exp $	*/
+/*	$NetBSD: if_gm.c,v 1.33 2008/01/19 22:10:15 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.27 2006/09/07 02:40:31 dogcow Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.33 2008/01/19 22:10:15 dyoung Exp $");
 
 #include "opt_inet.h"
 #include "rnd.h"
@@ -83,8 +83,8 @@ struct gmac_softc {
 	struct gmac_dma *sc_rxlist;
 	int sc_txnext;
 	int sc_rxlast;
-	caddr_t sc_txbuf[NTXBUF];
-	caddr_t sc_rxbuf[NRXBUF];
+	void *sc_txbuf[NTXBUF];
+	void *sc_rxbuf[NRXBUF];
 	struct mii_data sc_mii;
 	struct callout sc_tick_ch;
 	char sc_laddr[6];
@@ -96,39 +96,37 @@ struct gmac_softc {
 
 #define sc_if sc_ethercom.ec_if
 
-int gmac_match __P((struct device *, struct cfdata *, void *));
-void gmac_attach __P((struct device *, struct device *, void *));
+int gmac_match(struct device *, struct cfdata *, void *);
+void gmac_attach(struct device *, struct device *, void *);
 
-static inline u_int gmac_read_reg __P((struct gmac_softc *, int));
-static inline void gmac_write_reg __P((struct gmac_softc *, int, u_int));
+static inline u_int gmac_read_reg(struct gmac_softc *, int);
+static inline void gmac_write_reg(struct gmac_softc *, int, u_int);
 
-static inline void gmac_start_txdma __P((struct gmac_softc *));
-static inline void gmac_start_rxdma __P((struct gmac_softc *));
-static inline void gmac_stop_txdma __P((struct gmac_softc *));
-static inline void gmac_stop_rxdma __P((struct gmac_softc *));
+static inline void gmac_start_txdma(struct gmac_softc *);
+static inline void gmac_start_rxdma(struct gmac_softc *);
+static inline void gmac_stop_txdma(struct gmac_softc *);
+static inline void gmac_stop_rxdma(struct gmac_softc *);
 
-int gmac_intr __P((void *));
-void gmac_tint __P((struct gmac_softc *));
-void gmac_rint __P((struct gmac_softc *));
-struct mbuf * gmac_get __P((struct gmac_softc *, caddr_t, int));
-void gmac_start __P((struct ifnet *));
-int gmac_put __P((struct gmac_softc *, caddr_t, struct mbuf *));
+int gmac_intr(void *);
+void gmac_tint(struct gmac_softc *);
+void gmac_rint(struct gmac_softc *);
+struct mbuf * gmac_get(struct gmac_softc *, void *, int);
+void gmac_start(struct ifnet *);
+int gmac_put(struct gmac_softc *, void *, struct mbuf *);
 
-void gmac_stop __P((struct gmac_softc *));
-void gmac_reset __P((struct gmac_softc *));
-void gmac_init __P((struct gmac_softc *));
-void gmac_init_mac __P((struct gmac_softc *));
-void gmac_setladrf __P((struct gmac_softc *));
+void gmac_stop(struct gmac_softc *);
+void gmac_reset(struct gmac_softc *);
+void gmac_init(struct gmac_softc *);
+void gmac_init_mac(struct gmac_softc *);
+void gmac_setladrf(struct gmac_softc *);
 
-int gmac_ioctl __P((struct ifnet *, u_long, caddr_t));
-void gmac_watchdog __P((struct ifnet *));
+int gmac_ioctl(struct ifnet *, u_long, void *);
+void gmac_watchdog(struct ifnet *);
 
-int gmac_mediachange __P((struct ifnet *));
-void gmac_mediastatus __P((struct ifnet *, struct ifmediareq *));
-int gmac_mii_readreg __P((struct device *, int, int));
-void gmac_mii_writereg __P((struct device *, int, int, int));
-void gmac_mii_statchg __P((struct device *));
-void gmac_mii_tick __P((void *));
+int gmac_mii_readreg(struct device *, int, int);
+void gmac_mii_writereg(struct device *, int, int, int);
+void gmac_mii_statchg(struct device *);
+void gmac_mii_tick(void *);
 
 CFATTACH_DECL(gm, sizeof(struct gmac_softc),
     gmac_match, gmac_attach, NULL, NULL);
@@ -227,7 +225,7 @@ gmac_attach(parent, self, aux)
 	printf(": Ethernet address %s\n", ether_sprintf(laddr));
 	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
 
-	callout_init(&sc->sc_tick_ch);
+	callout_init(&sc->sc_tick_ch, 0);
 
 	gmac_reset(sc);
 	gmac_init_mac(sc);
@@ -246,7 +244,8 @@ gmac_attach(parent, self, aux)
 	mii->mii_writereg = gmac_mii_writereg;
 	mii->mii_statchg = gmac_mii_statchg;
 
-	ifmedia_init(&mii->mii_media, 0, gmac_mediachange, gmac_mediastatus);
+	sc->sc_ethercom.ec_mii = mii;
+	ifmedia_init(&mii->mii_media, 0, ether_mediachange, ether_mediastatus);
 	mii_attach(self, mii, 0xffffffff, MII_PHY_ANY, MII_OFFSET_ANY, 0);
 
 	/* Choose a default media. */
@@ -434,7 +433,7 @@ next:
 struct mbuf *
 gmac_get(sc, pkt, totlen)
 	struct gmac_softc *sc;
-	caddr_t pkt;
+	void *pkt;
 	int totlen;
 {
 	struct mbuf *m;
@@ -469,7 +468,7 @@ gmac_get(sc, pkt, totlen)
 			len = MCLBYTES;
 		}
 		m->m_len = len = min(totlen, len);
-		memcpy(mtod(m, caddr_t), pkt, len);
+		memcpy(mtod(m, void *), pkt, len);
 		pkt += len;
 		totlen -= len;
 		*mp = m;
@@ -485,7 +484,7 @@ gmac_start(ifp)
 {
 	struct gmac_softc *sc = ifp->if_softc;
 	struct mbuf *m;
-	caddr_t buff;
+	void *buff;
 	int i, tlen;
 	volatile struct gmac_dma *dp;
 
@@ -544,7 +543,7 @@ gmac_start(ifp)
 int
 gmac_put(sc, buff, m)
 	struct gmac_softc *sc;
-	caddr_t buff;
+	void *buff;
 	struct mbuf *m;
 {
 	int len, tlen = 0;
@@ -553,7 +552,7 @@ gmac_put(sc, buff, m)
 		len = m->m_len;
 		if (len == 0)
 			continue;
-		memcpy(buff, mtod(m, caddr_t), len);
+		memcpy(buff, mtod(m, void *), len);
 		buff += len;
 		tlen += len;
 	}
@@ -795,7 +794,7 @@ int
 gmac_ioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 {
 	struct gmac_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -854,11 +853,9 @@ gmac_ioctl(ifp, cmd, data)
 
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		error = (cmd == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->sc_ethercom) :
-		    ether_delmulti(ifr, &sc->sc_ethercom);
-
-		if (error == ENETRESET) {
+	case SIOCGIFMEDIA:
+	case SIOCSIFMEDIA:
+		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 			/*
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
@@ -870,12 +867,6 @@ gmac_ioctl(ifp, cmd, data)
 			error = 0;
 		}
 		break;
-
-	case SIOCGIFMEDIA:
-	case SIOCSIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &sc->sc_mii.mii_media, cmd);
-		break;
-
 	default:
 		error = EINVAL;
 	}
@@ -895,28 +886,6 @@ gmac_watchdog(ifp)
 
 	gmac_reset(sc);
 	gmac_init(sc);
-}
-
-int
-gmac_mediachange(ifp)
-	struct ifnet *ifp;
-{
-	struct gmac_softc *sc = ifp->if_softc;
-
-	return mii_mediachg(&sc->sc_mii);
-}
-
-void
-gmac_mediastatus(ifp, ifmr)
-	struct ifnet *ifp;
-	struct ifmediareq *ifmr;
-{
-	struct gmac_softc *sc = ifp->if_softc;
-
-	mii_pollstat(&sc->sc_mii);
-
-	ifmr->ifm_status = sc->sc_mii.mii_media_status;
-	ifmr->ifm_active = sc->sc_mii.mii_media_active;
 }
 
 int

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.35 2007/02/22 05:17:25 thorpej Exp $	*/
+/*	$NetBSD: machdep.c,v 1.42 2008/09/14 15:03:17 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -77,12 +77,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.35 2007/02/22 05:17:25 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.42 2008/09/14 15:03:17 tsutsui Exp $");
 
 #include "opt_bufcache.h"
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
-#include "opt_compat_hpux.h"
 #include "opt_compat_netbsd.h"
 #include "opt_sysv.h"
 #include "opt_panicbutton.h"
@@ -148,7 +147,6 @@ char machine[] = MACHINE;		/* CPU "architecture" */
 /* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
-struct vm_map *exec_map = NULL;  
 struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
@@ -157,7 +155,6 @@ extern vaddr_t virtual_avail;
 /*
  * Declare these as initialized data so we can patch them.
  */
-caddr_t	msgbufaddr;
 /*int	maxmem;*/			/* max memory per process */
 int	physmem = MAXMEM;	/* max supported memory, changes to actual */
 /*
@@ -311,12 +308,6 @@ cpu_startup()
 	printf("real mem  = %d\n", ctob(physmem));
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
 
 	/*
 	 * Allocate a submap for physio
@@ -414,11 +405,8 @@ cpu_reboot(howto, bootstr)
 	char *bootstr;
 {
 
-#if __GNUC__	/* XXX work around lame compiler problem (gcc 2.7.2) */
-	(void)&howto;
-#endif
 	/* take a snap shot before clobbering any registers */
-	if (curlwp && curlwp->l_addr)
+	if (curlwp->l_addr)
 		savectx(&curlwp->l_addr->u_pcb);
 
 	/* If system is cold, just halt. */
@@ -528,7 +516,7 @@ dumpsys()
 	const struct bdevsw *bdev;
 	daddr_t blkno;		/* current block to write */
 				/* dump routine */
-	int (*dump) __P((dev_t, daddr_t, caddr_t, size_t));
+	int (*dump) __P((dev_t, daddr_t, void *, size_t));
 	int pg;			/* page being dumped */
 	vm_offset_t maddr;	/* PA being dumped */
 	int error;		/* error code from (*dump)() */
@@ -616,7 +604,7 @@ int	*nofault;
 
 int
 badaddr(addr)
-	caddr_t addr;
+	void *addr;
 {
 	int i;
 	label_t	faultbuf;
@@ -633,7 +621,7 @@ badaddr(addr)
 
 int
 badbaddr(addr)
-	caddr_t addr;
+	void *addr;
 {
 	int i;
 	label_t	faultbuf;

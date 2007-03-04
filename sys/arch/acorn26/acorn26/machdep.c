@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.19 2007/02/22 04:47:28 thorpej Exp $ */
+/* $NetBSD: machdep.c,v 1.23 2008/07/02 17:28:54 ad Exp $ */
 
 /*-
  * Copyright (c) 1998 Ben Harris
@@ -32,7 +32,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.19 2007/02/22 04:47:28 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.23 2008/07/02 17:28:54 ad Exp $");
 
 #include <sys/buf.h>
 #include <sys/kernel.h>
@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.19 2007/02/22 04:47:28 thorpej Exp $")
 #include <sys/reboot.h>
 #include <sys/sysctl.h>
 #include <sys/systm.h>
+#include <sys/cpu.h>
 
 #include <dev/i2c/i2cvar.h>
 #include <dev/i2c/pcf8583var.h>
@@ -61,7 +62,6 @@ struct cpu_info cpu_info_store;
 /* For reading NVRAM during bootstrap. */
 i2c_tag_t acorn26_i2c_tag;
 
-struct vm_map *exec_map = NULL;
 struct vm_map *phys_map = NULL;
 struct vm_map *mb_map = NULL; /* and ever more shall be so */
 
@@ -160,13 +160,6 @@ cpu_startup()
 	minaddr = 0;
 
 	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   NCARGS, VM_MAP_PAGEABLE, false, NULL);
-
-	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
@@ -213,4 +206,17 @@ cmos_write(int location, int value)
 
 	return (pcfrtc_bootstrap_write(acorn26_i2c_tag, 0x50,
 	    location, &val, 1));
+}
+
+void
+cpu_need_resched(struct cpu_info *ci, int flags)
+{
+	bool immed = (flags & RESCHED_IMMED) != 0;
+
+	if (ci->ci_want_resched && !immed)
+		return;
+
+	ci->ci_want_resched = 1;
+	if (curlwp != ci->ci_data.cpu_idlelwp)
+		setsoftast();
 }

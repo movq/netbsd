@@ -1,4 +1,4 @@
-/*	$NetBSD: if_auereg.h,v 1.17 2006/09/15 10:47:34 is Exp $	*/
+/*	$NetBSD: if_auereg.h,v 1.21 2008/05/22 01:21:18 dyoung Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -226,30 +226,18 @@ struct aue_cdata {
 struct aue_softc {
 	USBBASEDEVICE		aue_dev;
 
-#if defined(__FreeBSD__)
-	struct arpcom		arpcom;
-	device_t		aue_miibus;
-#define GET_IFP(sc) (&(sc)->arpcom.ac_if)
-#define GET_MII(sc) (device_get_softc((sc)->aue_miibus))
-#elif defined(__NetBSD__)
 	struct ethercom		aue_ec;
 	struct mii_data		aue_mii;
 #if NRND > 0
 	rndsource_element_t	rnd_source;
 #endif
-	struct workqueue	*wqp;
-	struct work		wk;
+	struct lwp		*aue_thread;
+	int			aue_closing;
+	kcondvar_t		aue_domc;
+	kcondvar_t		aue_closemc;
+	kmutex_t		aue_mcmtx;
 #define GET_IFP(sc) (&(sc)->aue_ec.ec_if)
 #define GET_MII(sc) (&(sc)->aue_mii)
-#elif defined(__OpenBSD__)
-	struct arpcom		arpcom;
-	struct mii_data		aue_mii;
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
-#define GET_IFP(sc) (&(sc)->arpcom.ac_if)
-#define GET_MII(sc) (&(sc)->aue_mii)
-#endif
 
 	usb_callout_t		aue_stat_ch;
 
@@ -275,8 +263,7 @@ struct aue_softc {
 	struct usb_task		aue_tick_task;
 	struct usb_task		aue_stop_task;
 
-	struct lock		aue_mii_lock;
-
+	kmutex_t		aue_mii_lock;
 };
 
 #define AUE_TIMEOUT		1000

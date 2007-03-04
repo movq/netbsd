@@ -1,4 +1,4 @@
-/*	$NetBSD: mutex.h,v 1.3 2007/02/15 02:48:48 mhitch Exp $	*/
+/*	$NetBSD: mutex.h,v 1.7 2008/04/28 20:23:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,6 @@
 
 struct kmutex {
 	uintptr_t	mtx_pad1;
-	uint32_t	mtx_pad2[3];
 };
 
 #else	/* __MUTEX_PRIVATE */
@@ -51,11 +43,21 @@ struct kmutex {
 #include <machine/lock.h>
 
 struct kmutex {
-	volatile uintptr_t	mtx_owner;
-	ipl_cookie_t		mtx_ipl;
-	__cpu_simple_lock_t	mtx_lock;
-	volatile uint32_t	mtx_id;
+	union {
+		/* Adaptive mutex */
+		volatile uintptr_t	mtxu_owner;	/* 0-3 */
+
+		struct {
+			ipl_cookie_t		mtxs_ipl;	/* 0-1 */
+			__cpu_simple_lock_t	mtxs_lock;	/* 2 */
+			uint8_t			mtxs_unused;	/* 3 */
+		} s;
+	} u;
 };
+
+#define	mtx_owner		u.mtxu_owner
+#define	mtx_ipl			u.s.mtxs_ipl
+#define	mtx_lock		u.s.mtxs_lock
 
 #define	__HAVE_SIMPLE_MUTEXES		1
 #define	__HAVE_MUTEX_STUBS		1
@@ -63,9 +65,7 @@ struct kmutex {
 #define	MUTEX_RECEIVE(mtx)		mb_read()
 #define	MUTEX_GIVE(mtx)			mb_memory()
 
-#define	MUTEX_CAS(p, o, n)		_lock_cas((p), (o), (n))
-
-int	_lock_cas(volatile uintptr_t *, uintptr_t, uintptr_t);
+#define	MUTEX_CAS(p, o, n)		(atomic_cas_uint((p), (o), (n)) == (o))
 
 #endif	/* __MUTEX_PRIVATE */
 

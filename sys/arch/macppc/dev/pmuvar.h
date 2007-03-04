@@ -10,9 +10,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -28,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmuvar.h,v 1.2 2007/02/15 01:44:54 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmuvar.h,v 1.7 2008/04/29 06:53:02 martin Exp $");
 
 #ifndef PMUVAR_H
 #define PMUVAR_H
@@ -68,6 +65,10 @@ __KERNEL_RCSID(0, "$NetBSD: pmuvar.h,v 1.2 2007/02/15 01:44:54 macallan Exp $");
 #define PMU_INT_ACK		0x78	/* Read interrupt bits */
 #define PMU_CPU_SPEED		0x7d	/* Control CPU speed on some models */
 #define PMU_SLEEP		0x7f	/* Put CPU to sleep */
+#define PMU_SET_POLL_MASK	0x86	/*
+					 * 16bit mask enables autopolling per
+					 * device
+					 */
 #define PMU_I2C_CMD		0x9a	/* i2c commands */
 #define PMU_GET_LID_STATE	0xdc	/* Report lid state */
 #define PMU_GET_VERSION		0xea	/* Identify thyself */
@@ -141,7 +142,8 @@ enum {
 
 struct pmu_ops {
 	void *cookie;
-	int (*do_command)(void *, int, int, uint8_t *, uint8_t *);
+	int (*do_command)(void *, int, int, uint8_t *, int, uint8_t *);
+	void (*register_callback)(void *, void (*)(void *), void *);
 };
 
 void pmu_poweroff(void);

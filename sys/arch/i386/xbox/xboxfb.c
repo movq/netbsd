@@ -1,4 +1,4 @@
-/* $NetBSD: xboxfb.c,v 1.9 2007/01/07 19:40:50 jmcneill Exp $ */
+/*	$NetBSD: xboxfb.c,v 1.12 2008/07/09 20:40:16 joerg Exp $	*/
 
 /*
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -33,6 +33,8 @@
  */
 
 #include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: xboxfb.c,v 1.12 2008/07/09 20:40:16 joerg Exp $");
+
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -96,7 +98,6 @@ MALLOC_DEFINE(M_XBOXFB, "xboxfb", "xboxfb shadow framebuffer");
 */
 
 struct xboxfb_softc {
-	struct device sc_dev;
 	struct vcons_data vd;
 
 	bus_space_tag_t sc_memt;
@@ -116,13 +117,13 @@ static uint8_t *xboxfb_console_bits;
 static int xboxfb_console_width;
 static int xboxfb_console_height;
 
-static int	xboxfb_match(struct device *, struct cfdata *, void *);
-static void	xboxfb_attach(struct device *, struct device *, void *);
+static int	xboxfb_match(device_t, cfdata_t, void *);
+static void	xboxfb_attach(device_t, device_t, void *);
 
 static uint8_t	xboxfb_get_avpack(void);
 static void	xboxfb_clear_fb(struct xboxfb_softc *);
 
-CFATTACH_DECL(xboxfb, sizeof(struct xboxfb_softc), xboxfb_match,
+CFATTACH_DECL_NEW(xboxfb, sizeof(struct xboxfb_softc), xboxfb_match,
 	xboxfb_attach, NULL, NULL);
 
 /* static void	xboxfb_init(struct xboxfb_softc *); */
@@ -151,7 +152,7 @@ struct wsscreen_list xboxfb_screenlist = {
 		_xboxfb_scrlist
 };
 
-static int	xboxfb_ioctl(void *, void *, u_long, caddr_t, int,
+static int	xboxfb_ioctl(void *, void *, u_long, void *, int,
 			struct lwp *);
 static paddr_t	xboxfb_mmap(void *, void *, off_t, int);
 static void	xboxfb_init_screen(void *, struct vcons_screen *, int,
@@ -169,7 +170,7 @@ struct wsdisplay_accessops xboxfb_accessops = {
 };
 
 static int
-xboxfb_match(struct device *parent, struct cfdata *match, void *aux)
+xboxfb_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 
@@ -188,9 +189,9 @@ xboxfb_match(struct device *parent, struct cfdata *match, void *aux)
 };
 
 static void
-xboxfb_attach(struct device *parent, struct device *self, void *aux)
+xboxfb_attach(device_t parent, device_t self, void *aux)
 {
-	struct xboxfb_softc *sc = (void *)self;
+	struct xboxfb_softc *sc = device_private(self);
 	struct wsemuldisplaydev_attach_args aa;
 	struct rasops_info *ri;
 	int console;
@@ -234,7 +235,7 @@ xboxfb_attach(struct device *parent, struct device *self, void *aux)
  */
 
 static int
-xboxfb_ioctl(void *v, void*vs, u_long cmd, caddr_t data, int flag,
+xboxfb_ioctl(void *v, void*vs, u_long cmd, void *data, int flag,
 	struct lwp *l)
 {
 	struct vcons_data *vd = v;

@@ -1,4 +1,4 @@
-/*	$NetBSD: mscp.c,v 1.24 2006/03/25 23:20:18 thorpej Exp $	*/
+/*	$NetBSD: mscp.c,v 1.29 2008/04/08 20:10:44 cegger Exp $	*/
 
 /*
  * Copyright (c) 1988 Regents of the University of California.
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mscp.c,v 1.24 2006/03/25 23:20:18 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mscp.c,v 1.29 2008/04/08 20:10:44 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -87,7 +87,7 @@ __KERNEL_RCSID(0, "$NetBSD: mscp.c,v 1.24 2006/03/25 23:20:18 thorpej Exp $");
 #include <sys/proc.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/mscp/mscp.h>
 #include <dev/mscp/mscpreg.h>
@@ -189,7 +189,7 @@ loop:
 		mi->mi_rsp.mri_next = nextrsp;
 		if (mi->mi_wantcredits && mi->mi_credits > MSCP_MINCREDITS) {
 			mi->mi_wantcredits = 0;
-			wakeup((caddr_t) &mi->mi_wantcredits);
+			wakeup((void *) &mi->mi_wantcredits);
 		}
 		return;
 	}
@@ -205,7 +205,7 @@ loop:
 			mi->mi_flags |= MSC_READY;
 		} else {
 			printf("%s: SETCTLRC failed: %d ",
-			    mi->mi_dev.dv_xname, mp->mscp_status);
+			    device_xname(&mi->mi_dev), mp->mscp_status);
 			mscp_printevent(mp);
 		}
 		goto done;
@@ -245,7 +245,7 @@ loop:
 	case MSCPT_MAINTENANCE:
 	default:
 		printf("%s: unit %d: unknown message type 0x%x ignored\n",
-			mi->mi_dev.dv_xname, mp->mscp_unit,
+			device_xname(&mi->mi_dev), mp->mscp_unit,
 			MSCP_MSGTYPE(mp->mscp_msgtc));
 		goto done;
 	}
@@ -266,7 +266,7 @@ loop:
 		 * invalid commands), but that is the way of it.
 		 */
 		if (st == M_ST_INVALCMD && mp->mscp_cmdref != 0) {
-			printf("%s: bad lbn (%d)?\n", drive->dv_xname,
+			printf("%s: bad lbn (%d)?\n", device_xname(drive),
 				(int)mp->mscp_seq.seq_lbn);
 			error = EIO;
 			goto rwend;
@@ -350,7 +350,7 @@ rwend:
 			 * No buffer means there is a bug somewhere!
 			 */
 			printf("%s: io done, but bad xfer number?\n",
-			    drive->dv_xname);
+			    device_xname(drive));
 			mscp_hexdump(mp);
 			break;
 		}
@@ -369,24 +369,11 @@ rwend:
 		 * WHAT STATUS WILL THESE HAVE?	 IT SURE WOULD BE NICE
 		 * IF DEC SOLD DOCUMENTATION FOR THEIR OWN CONTROLLERS.
 		 */
-		if (error) {
-			bp->b_flags |= B_ERROR;
-			bp->b_error = error;
-		}
+		bp->b_error = error;
 		if (st == M_ST_OFFLINE || st == M_ST_AVAILABLE) {
 #ifdef notyet
 			(*md->md_offline)(ui, mp);
 #endif
-		}
-
-		/*
-		 * If the transfer has something to do with bad
-		 * block forwarding, let the driver handle the
-		 * rest.
-		 */
-		if ((bp->b_flags & B_BAD) != 0 && me->me_bb != NULL) {
-			(*me->me_bb)(drive, mp, bp);
-			goto out;
 		}
 
 		/*
@@ -430,7 +417,7 @@ out:
 		 * handle it (if it does replaces).
 		 */
 		if (me->me_replace == NULL)
-			printf("%s: bogus REPLACE end\n", drive->dv_xname);
+			printf("%s: bogus REPLACE end\n", device_xname(drive));
 		else
 			(*me->me_replace)(drive, mp);
 		break;
@@ -442,7 +429,7 @@ out:
 		 */
 unknown:
 		printf("%s: unknown opcode 0x%x status 0x%x ignored\n",
-			drive->dv_xname, mp->mscp_opcode, mp->mscp_status);
+			device_xname(drive), mp->mscp_opcode, mp->mscp_status);
 #ifdef DIAGNOSTIC
 		mscp_hexdump(mp);
 #endif

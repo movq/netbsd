@@ -1,5 +1,5 @@
-/*	$NetBSD: if_nfevar.h,v 1.1 2006/03/12 22:40:42 chs Exp $	*/
-/*	$OpenBSD: if_nfevar.h,v 1.11 2006/02/19 13:57:02 damien Exp $	*/
+/*	$NetBSD: if_nfevar.h,v 1.9 2008/04/20 08:57:37 cube Exp $	*/
+/*	$OpenBSD: if_nfevar.h,v 1.13 2007/12/05 08:30:33 jsg Exp $	*/
 
 /*-
  * Copyright (c) 2005 Jonathan Gray <jsg@openbsd.org>
@@ -38,7 +38,7 @@ struct nfe_tx_ring {
 };
 
 struct nfe_jbuf {
-	caddr_t			buf;
+	void			*buf;
 	bus_addr_t		physaddr;
 	SLIST_ENTRY(nfe_jbuf)	jnext;
 };
@@ -56,17 +56,19 @@ struct nfe_rx_ring {
 	bus_addr_t		physaddr;
 	struct nfe_desc32	*desc32;
 	struct nfe_desc64	*desc64;
-	caddr_t			jpool;
+	void			*jpool;
 	struct nfe_rx_data	data[NFE_RX_RING_COUNT];
 	struct nfe_jbuf		jbuf[NFE_JPOOL_COUNT];
+	int			jbufmap[NFE_RX_RING_COUNT];
 	SLIST_HEAD(, nfe_jbuf)	jfreelist;
 	int			bufsz;
 	int			cur;
 	int			next;
+	kmutex_t		mtx;
 };
 
 struct nfe_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 	struct ethercom		sc_ethercom;
 	uint8_t			sc_enaddr[ETHER_ADDR_LEN];
 	bus_space_handle_t	sc_memh;
@@ -75,15 +77,16 @@ struct nfe_softc {
 	bus_dma_tag_t		sc_dmat;
 	struct mii_data		sc_mii;
 	struct callout		sc_tick_ch;
-	void			*sc_powerhook;
 
 	int			sc_if_flags;
 	u_int			sc_flags;
-#define NFE_JUMBO_SUP	0x01
-#define NFE_40BIT_ADDR	0x02
-#define NFE_HW_CSUM	0x04
-#define NFE_HW_VLAN	0x08
-#define NFE_USE_JUMBO	0x10
+#define NFE_JUMBO_SUP		0x01
+#define NFE_40BIT_ADDR		0x02
+#define NFE_HW_CSUM		0x04
+#define NFE_HW_VLAN		0x08
+#define NFE_USE_JUMBO		0x10
+#define NFE_CORRECT_MACADDR	0x20
+#define NFE_PWR_MGMT		0x40
 
 	uint32_t		rxtxctl;
 	uint8_t			mii_phyaddr;

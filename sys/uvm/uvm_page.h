@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_page.h,v 1.47 2007/02/21 23:00:14 thorpej Exp $	*/
+/*	$NetBSD: uvm_page.h,v 1.55 2008/06/04 15:06:04 ad Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -84,8 +84,9 @@
  *	page, indexed by page number.  Each structure
  *	is an element of several lists:
  *
- *		A hash table bucket used to quickly
- *		perform object/offset lookups
+ *		A red-black tree rooted with the containing
+ *		object is used to quickly perform object+
+ *		offset lookups
  *
  *		A list of all pages for a given object,
  *		so they can be quickly deactivated at
@@ -108,8 +109,8 @@
  * items (depending on who locked what).  some time, in BSD, the bit
  * fields were dumped and all the flags were lumped into one short.
  * that is fine for a single threaded uniprocessor OS, but bad if you
- * want to actual make use of locking (simple_lock's).  so, we've
- * separated things back out again.
+ * want to actual make use of locking.  so, we've separated things
+ * back out again.
  *
  * note the page structure has no lock of its own.
  */
@@ -117,11 +118,20 @@
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm_pglist.h>
 
+#include <sys/rb.h>
+
 struct vm_page {
-	TAILQ_ENTRY(vm_page)	pageq;		/* queue info for FIFO
+	struct rb_node		rb_node;	/* tree of pages in obj (O) */
+
+	union {
+		TAILQ_ENTRY(vm_page) queue;
+		LIST_ENTRY(vm_page) list;
+	} pageq;				/* queue info for FIFO
 						 * queue or free list (P) */
-	TAILQ_ENTRY(vm_page)	hashq;		/* hash table links (O)*/
-	TAILQ_ENTRY(vm_page)	listq;		/* pages in same object (O)*/
+	union {
+		TAILQ_ENTRY(vm_page) queue;
+		LIST_ENTRY(vm_page) list;
+	} listq;				/* pages in same object (O)*/
 
 	struct vm_anon		*uanon;		/* anon (O,P) */
 	struct uvm_object	*uobject;	/* object (O,P) */
@@ -141,6 +151,7 @@ struct vm_page {
 #if defined(UVM_PAGE_TRKOWN)
 	/* debugging fields to track page ownership */
 	pid_t			owner;		/* proc that set PG_BUSY */
+	lwpid_t			lowner;		/* lwp that set PG_BUSY */
 	const char		*owner_tag;	/* why it was set busy */
 #endif
 };
@@ -261,9 +272,6 @@ void uvm_page_rehash(void);
 void uvm_page_recolor(int);
 void uvm_pageidlezero(void);
 
-int uvm_lock_fpageq(void);
-void uvm_unlock_fpageq(int);
-
 void uvm_pageactivate(struct vm_page *);
 vaddr_t uvm_pageboot_alloc(vsize_t);
 void uvm_pagecopy(struct vm_page *, struct vm_page *);
@@ -290,14 +298,8 @@ static int vm_physseg_find(paddr_t, int *);
 
 #define UVM_PAGE_HASH_PENALTY	4	/* XXX: a guess */
 
-#define uvm_lock_pageq()	simple_lock(&uvm.pageqlock)
-#define uvm_unlock_pageq()	simple_unlock(&uvm.pageqlock)
-#define	UVM_LOCK_ASSERT_PAGEQ()	LOCK_ASSERT(simple_lock_held(&uvm.pageqlock))
-
 #define uvm_pagehash(obj,off) \
 	(((unsigned long)obj+(unsigned long)atop(off)) & uvm.page_hashmask)
-
-#define	UVM_PAGEZERO_TARGET	(uvmexp.free)
 
 #define VM_PAGE_TO_PHYS(entry)	((entry)->phys_addr)
 
@@ -315,9 +317,7 @@ static int vm_physseg_find(paddr_t, int *);
  * vm_physseg_find: find vm_physseg structure that belongs to a PA
  */
 static __inline int
-vm_physseg_find(pframe, offp)
-	paddr_t pframe;
-	int	*offp;
+vm_physseg_find(paddr_t pframe, int *offp)
 {
 #if VM_PHYSSEG_MAX == 1
 
@@ -397,8 +397,7 @@ vm_physseg_find(pframe, offp)
  * back from an I/O mapping (ugh!).   used in some MD code as well.
  */
 static __inline struct vm_page *
-PHYS_TO_VM_PAGE(pa)
-	paddr_t pa;
+PHYS_TO_VM_PAGE(paddr_t pa)
 {
 	paddr_t pf = atop(pa);
 	int	off;
@@ -411,6 +410,7 @@ PHYS_TO_VM_PAGE(pa)
 }
 
 #define VM_PAGE_IS_FREE(entry)  ((entry)->pqflags & PQ_FREE)
+#define	VM_FREE_PAGE_TO_CPU(pg)	((struct uvm_cpu *)((uintptr_t)pg->offset))
 
 #ifdef DEBUG
 void uvm_pagezerocheck(struct vm_page *);

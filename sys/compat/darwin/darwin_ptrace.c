@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_ptrace.c,v 1.11 2007/02/09 21:55:16 ad Exp $ */
+/*	$NetBSD: darwin_ptrace.c,v 1.17 2008/04/28 20:23:41 martin Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_ptrace.c,v 1.11 2007/02/09 21:55:16 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_ptrace.c,v 1.17 2008/04/28 20:23:41 martin Exp $");
 
 #include "opt_ptrace.h"
 
@@ -64,22 +57,20 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_ptrace.c,v 1.11 2007/02/09 21:55:16 ad Exp $"
 #define ISSET(t, f)     ((t) & (f))
 
 int
-darwin_sys_ptrace(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+darwin_sys_ptrace(struct lwp *l, const struct darwin_sys_ptrace_args *uap, register_t *retval)
 {
 #if defined(PTRACE) || defined(_LKM)
-	struct darwin_sys_ptrace_args /* {
+	/* {
 		syscallarg(int) req;
 		syscallarg(pid_t) pid;
-		syscallarg(caddr_t) addr;
+		syscallarg(void *) addr;
 		syscallarg(int) data;
-	} */ *uap = v;
+	} */
 	int req = SCARG(uap, req);
 	struct proc *p = l->l_proc;
 	struct darwin_emuldata *ded = NULL;
 	struct proc *t;			/* target process */
+	struct sys_ptrace_args bsd_ua;
 	int error;
 
 #ifdef _LKM
@@ -89,6 +80,11 @@ darwin_sys_ptrace(l, v, retval)
 #endif
 
 	/* XXXAD locking */
+	SCARG(&bsd_ua, req) = SCARG(uap, req);
+	SCARG(&bsd_ua, pid) = SCARG(uap, pid);
+	SCARG(&bsd_ua, addr) = SCARG(uap, addr);
+	SCARG(&bsd_ua, data) = SCARG(uap, data);
+
 
 	ded = (struct darwin_emuldata *)p->p_emuldata;
 
@@ -106,8 +102,8 @@ darwin_sys_ptrace(l, v, retval)
 
 		ded->ded_flags |= DARWIN_DED_SIGEXC;
 
-		SCARG(uap, req) = PT_ATTACH;
-		if ((error = sys_ptrace(l, v, retval)) != 0)
+		SCARG(&bsd_ua, req) = PT_ATTACH;
+		if ((error = sys_ptrace(l, &bsd_ua, retval)) != 0)
 			 ded->ded_flags &= ~DARWIN_DED_SIGEXC;
 
 		return error;
@@ -140,18 +136,18 @@ darwin_sys_ptrace(l, v, retval)
 		 * If the process is not marked as stopped,
 		 * sys_ptrace sanity checks will return EBUSY.
 		 */
-		mutex_enter(&proclist_mutex);
-		mutex_enter(&t->p_smutex);
+		mutex_enter(proc_lock);
+		mutex_enter(t->p_lock);
 		proc_stop(t, 0, SIGSTOP);
-		mutex_exit(&t->p_smutex);
-		mutex_exit(&proclist_mutex);
+		mutex_exit(t->p_lock);
+		mutex_exit(proc_lock);
 
-		if ((error = sys_ptrace(l, v, retval)) != 0) {
-			mutex_enter(&proclist_mutex);
-			mutex_enter(&t->p_smutex);
+		if ((error = sys_ptrace(l, &bsd_ua, retval)) != 0) {
+			mutex_enter(proc_lock);
+			mutex_enter(t->p_lock);
 			proc_unstop(t);
-			mutex_exit(&t->p_smutex);
-			mutex_exit(&proclist_mutex);
+			mutex_exit(t->p_lock);
+			mutex_exit(proc_lock);
 			if (had_sigexc)
 				ded->ded_flags |= DARWIN_DED_SIGEXC;
 		}
@@ -199,7 +195,7 @@ darwin_sys_ptrace(l, v, retval)
 
 	/* The other ptrace commands are the same on NetBSD */
 	default:
-		return sys_ptrace(l, v, retval);
+		return sys_ptrace(l, &bsd_ua, retval);
 		break;
 	}
 
@@ -210,17 +206,16 @@ darwin_sys_ptrace(l, v, retval)
 }
 
 int
-darwin_sys_kdebug_trace(struct lwp *l, void *v,
-    register_t *retval)
+darwin_sys_kdebug_trace(struct lwp *l, const struct darwin_sys_kdebug_trace_args *uap, register_t *retval)
 {
-	struct darwin_sys_kdebug_trace_args /* {
+	/* {
 		syscallarg(int) debugid;
 		syscallarg(int) arg1;
 		syscallarg(int) arg2;
 		syscallarg(int) arg3;
 		syscallarg(int) arg4;
 		syscallarg(int) arg5;
-	} */ *uap = v;
+	} */
 	int args[4];
 	char *str;
 

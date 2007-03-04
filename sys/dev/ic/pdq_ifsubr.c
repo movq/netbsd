@@ -1,4 +1,4 @@
-/*	$NetBSD: pdq_ifsubr.c,v 1.47 2006/11/16 01:32:52 christos Exp $	*/
+/*	$NetBSD: pdq_ifsubr.c,v 1.52 2008/04/08 12:07:27 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pdq_ifsubr.c,v 1.47 2006/11/16 01:32:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pdq_ifsubr.c,v 1.52 2008/04/08 12:07:27 cegger Exp $");
 
 #ifdef __NetBSD__
 #include "opt_inet.h"
@@ -417,7 +417,7 @@ int
 pdq_ifioctl(
     struct ifnet *ifp,
     ioctl_cmd_t cmd,
-    caddr_t data)
+    void *data)
 {
     pdq_softc_t *sc = PDQ_OS_IFP_TO_SOFTC(ifp);
     int s, error = 0;
@@ -448,8 +448,8 @@ pdq_ifioctl(
 	}
 	case SIOCGIFADDR: {
 	    struct ifreq *ifr = (struct ifreq *)data;
-	    memcpy((caddr_t) ((struct sockaddr *)&ifr->ifr_data)->sa_data,
-		(caddr_t) PDQ_LANADDR(sc), 6);
+	    error = ifreq_setaddr(cmd, ifr,
+	        (const struct sockaddr *)sc->sc_if.if_sadl);
 	    break;
 	}
 
@@ -463,12 +463,7 @@ pdq_ifioctl(
 	    /*
 	     * Update multicast listeners
 	     */
-	    if (cmd == SIOCADDMULTI)
-		error = ether_addmulti((struct ifreq *)data, PDQ_FDDICOM(sc));
-	    else
-		error = ether_delmulti((struct ifreq *)data, PDQ_FDDICOM(sc));
-
-	    if (error == ENETRESET) {
+	    if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 		if (sc->sc_if.if_flags & IFF_RUNNING)
 		    pdq_run(sc->sc_pdq);
 		error = 0;
@@ -489,7 +484,8 @@ pdq_ifioctl(
 		error = EINVAL;
 		break;
 	    }
-	    ifp->if_mtu = ifr->ifr_mtu;
+	    if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
+		error = 0;
 	    break;
 	}
 #endif /* SIOCSIFMTU */
@@ -551,7 +547,7 @@ pdq_ifattach(
 
     if_attach(ifp);
 #if defined(__NetBSD__)
-    fddi_ifattach(ifp, (caddr_t)&sc->sc_pdq->pdq_hwaddr);
+    fddi_ifattach(ifp, (void *)&sc->sc_pdq->pdq_hwaddr);
 #else
     fddi_ifattach(ifp);
 #endif
@@ -579,7 +575,7 @@ pdq_os_memalloc_contig(
     if (!not_ok) {
 	steps = 1;
 	not_ok = bus_dmamem_map(sc->sc_dmatag, db_segs, db_nsegs,
-				sizeof(*pdq->pdq_dbp), (caddr_t *) &pdq->pdq_dbp,
+				sizeof(*pdq->pdq_dbp), (void **) &pdq->pdq_dbp,
 				BUS_DMA_NOWAIT);
     }
     if (!not_ok) {
@@ -604,7 +600,7 @@ pdq_os_memalloc_contig(
 	steps = 5;
 	not_ok = bus_dmamem_map(sc->sc_dmatag, ui_segs, ui_nsegs,
 			    PDQ_OS_PAGESIZE,
-			    (caddr_t *) &pdq->pdq_unsolicited_info.ui_events,
+			    (void **) &pdq->pdq_unsolicited_info.ui_events,
 			    BUS_DMA_NOWAIT);
     }
     if (!not_ok) {
@@ -631,7 +627,7 @@ pdq_os_memalloc_contig(
 #else
 	not_ok = bus_dmamem_map(sc->sc_dmatag, cb_segs, 1,
 				sizeof(*pdq->pdq_cbp),
-				(caddr_t *)&pdq->pdq_cbp,
+				(void **)&pdq->pdq_cbp,
 				BUS_DMA_NOWAIT|BUS_DMA_COHERENT);
 #endif
     }
@@ -662,7 +658,7 @@ pdq_os_memalloc_contig(
 	}
 	case 9: {
 	    bus_dmamem_unmap(sc->sc_dmatag,
-			     (caddr_t)pdq->pdq_cbp, sizeof(*pdq->pdq_cbp));
+			     (void *)pdq->pdq_cbp, sizeof(*pdq->pdq_cbp));
 	    /* FALL THROUGH */
 	}
 	case 8: {
@@ -675,7 +671,7 @@ pdq_os_memalloc_contig(
 	}
 	case 6: {
 	    bus_dmamem_unmap(sc->sc_dmatag,
-			     (caddr_t) pdq->pdq_unsolicited_info.ui_events,
+			     (void *) pdq->pdq_unsolicited_info.ui_events,
 			     PDQ_OS_PAGESIZE);
 	    /* FALL THROUGH */
 	}
@@ -693,7 +689,7 @@ pdq_os_memalloc_contig(
 	}
 	case 2: {
 	    bus_dmamem_unmap(sc->sc_dmatag,
-			     (caddr_t) pdq->pdq_dbp,
+			     (void *) pdq->pdq_dbp,
 			     sizeof(*pdq->pdq_dbp));
 	    /* FALL THROUGH */
 	}
@@ -768,12 +764,12 @@ pdq_os_databuf_alloc(
 
     MGETHDR(m, M_DONTWAIT, MT_DATA);
     if (m == NULL) {
-	printf("%s: can't alloc small buf\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(&sc->sc_dev, "can't alloc small buf\n");
 	return NULL;
     }
     MCLGET(m, M_DONTWAIT);
     if ((m->m_flags & M_EXT) == 0) {
-	printf("%s: can't alloc cluster\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(&sc->sc_dev, "can't alloc cluster\n");
         m_free(m);
 	return NULL;
     }
@@ -782,13 +778,13 @@ pdq_os_databuf_alloc(
 
     if (bus_dmamap_create(sc->sc_dmatag, PDQ_OS_DATABUF_SIZE,
 			   1, PDQ_OS_DATABUF_SIZE, 0, BUS_DMA_NOWAIT, &map)) {
-	printf("%s: can't create dmamap\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(&sc->sc_dev, "can't create dmamap\n");
 	m_free(m);
 	return NULL;
     }
     if (bus_dmamap_load_mbuf(sc->sc_dmatag, map, m,
     			     BUS_DMA_READ|BUS_DMA_NOWAIT)) {
-	printf("%s: can't load dmamap\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(&sc->sc_dev, "can't load dmamap\n");
 	bus_dmamap_destroy(sc->sc_dmatag, map);
 	m_free(m);
 	return NULL;

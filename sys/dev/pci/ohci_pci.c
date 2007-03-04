@@ -1,4 +1,4 @@
-/*	$NetBSD: ohci_pci.c,v 1.31 2006/11/16 01:33:09 christos Exp $	*/
+/*	$NetBSD: ohci_pci.c,v 1.39 2008/04/28 20:23:55 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ohci_pci.c,v 1.31 2006/11/16 01:33:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ohci_pci.c,v 1.39 2008/04/28 20:23:55 martin Exp $");
 
 #include "ehci.h"
 
@@ -49,7 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: ohci_pci.c,v 1.31 2006/11/16 01:33:09 christos Exp $
 #include <sys/proc.h>
 #include <sys/queue.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/usb_pci.h>
@@ -68,12 +61,12 @@ struct ohci_pci_softc {
 	struct usb_pci		sc_pci;
 #endif
 	pci_chipset_tag_t	sc_pc;
+	pcitag_t		sc_tag;
 	void 			*sc_ih;		/* interrupt vectoring */
 };
 
 static int
-ohci_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ohci_pci_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
 
@@ -86,9 +79,9 @@ ohci_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-ohci_pci_attach(struct device *parent, struct device *self, void *aux)
+ohci_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct ohci_pci_softc *sc = (struct ohci_pci_softc *)self;
+	struct ohci_pci_softc *sc = device_private(self);
 	struct pci_attach_args *pa = (struct pci_attach_args *)aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pcitag_t tag = pa->pa_tag;
@@ -98,7 +91,10 @@ ohci_pci_attach(struct device *parent, struct device *self, void *aux)
 	char devinfo[256];
 	usbd_status r;
 	const char *vendor;
-	const char *devname = sc->sc.sc_bus.bdev.dv_xname;
+	const char *devname = device_xname(self);
+
+	sc->sc.sc_dev = self;
+	sc->sc.sc_bus.hci_private = sc;
 
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
 	printf(": %s (rev. 0x%02x)\n", devinfo, PCI_REVISION(pa->pa_class));
@@ -115,6 +111,7 @@ ohci_pci_attach(struct device *parent, struct device *self, void *aux)
 			  OHCI_ALL_INTRS);
 
 	sc->sc_pc = pc;
+	sc->sc_tag = tag;
 	sc->sc.sc_bus.dmatag = pa->pa_dmat;
 
 	/* Enable the device. */
@@ -154,18 +151,21 @@ ohci_pci_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 #if NEHCI > 0
-	usb_pci_add(&sc->sc_pci, pa, &sc->sc.sc_bus);
+	usb_pci_add(&sc->sc_pci, pa, self);
 #endif
 
+	if (!pmf_device_register1(self, ohci_suspend, ohci_resume,
+	                          ohci_shutdown))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
 	/* Attach usb device. */
-	sc->sc.sc_child = config_found((void *)sc, &sc->sc.sc_bus,
-				       usbctlprint);
+	sc->sc.sc_child = config_found(self, &sc->sc.sc_bus, usbctlprint);
 }
 
 static int
 ohci_pci_detach(device_ptr_t self, int flags)
 {
-	struct ohci_pci_softc *sc = (struct ohci_pci_softc *)self;
+	struct ohci_pci_softc *sc = device_private(self);
 	int rv;
 
 	rv = ohci_detach(&sc->sc, flags);
@@ -185,5 +185,6 @@ ohci_pci_detach(device_ptr_t self, int flags)
 	return (0);
 }
 
-CFATTACH_DECL(ohci_pci, sizeof(struct ohci_pci_softc),
-    ohci_pci_match, ohci_pci_attach, ohci_pci_detach, ohci_activate);
+CFATTACH_DECL2_NEW(ohci_pci, sizeof(struct ohci_pci_softc),
+    ohci_pci_match, ohci_pci_attach, ohci_pci_detach, ohci_activate, NULL,
+    ohci_childdet);

@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pager.h,v 1.34 2006/02/22 22:28:18 drochner Exp $	*/
+/*	$NetBSD: uvm_pager.h,v 1.38 2008/08/22 10:48:22 hannken Exp $	*/
 
 /*
  *
@@ -150,18 +150,20 @@ struct uvm_pagerops {
 /* pager flags [mostly for flush] */
 
 #define PGO_CLEANIT	0x001	/* write dirty pages to backing store */
-#define PGO_SYNCIO	0x002	/* if PGO_CLEANIT: use sync I/O? */
+#define PGO_SYNCIO	0x002	/* use sync I/O */
 #define PGO_DEACTIVATE	0x004	/* deactivate flushed pages */
 #define PGO_FREE	0x008	/* free flushed pages */
 /* if PGO_FREE is not set then the pages stay where they are. */
 
 #define PGO_ALLPAGES	0x010	/* flush whole object/get all pages */
+#define PGO_JOURNALLOCKED 0x020	/* journal is already locked [put] */
 #define PGO_LOCKED	0x040	/* fault data structures are locked [get] */
 #define PGO_BUSYFAIL	0x080	/* fail if a page is busy [put] */
 #define PGO_OVERWRITE	0x200	/* pages will be overwritten before unlocked */
 #define PGO_PASTEOF	0x400	/* allow allocation of pages past EOF */
 #define PGO_NOBLOCKALLOC 0x800	/* backing block allocation is not needed */
 #define PGO_NOTIMESTAMP 0x1000	/* don't mark object accessed/modified */
+#define PGO_RECLAIM	0x2000	/* object is being reclaimed */
 
 /* page we are not interested in getting */
 #define PGO_DONTCARE ((struct vm_page *) -1L)	/* [get only] */
@@ -177,20 +179,12 @@ struct vm_page *uvm_pageratop(vaddr_t);
 vaddr_t	uvm_pagermapin(struct vm_page **, int, int);
 void	uvm_pagermapout(vaddr_t, int);
 
+extern size_t pager_map_size;
+
 /* Flags to uvm_pagermapin() */
 #define	UVMPAGER_MAPIN_WAITOK	0x01	/* it's okay to wait */
 #define	UVMPAGER_MAPIN_READ	0x02	/* device -> host */
 #define	UVMPAGER_MAPIN_WRITE	0x00	/* host -> device (pseudo flag) */
-
-/*
- * XXX
- * this is needed until the device strategy interface
- * is changed to do physically-addressed i/o.
- */
-
-#ifndef PAGER_MAP_SIZE
-#define PAGER_MAP_SIZE       (16 * 1024 * 1024)
-#endif
 
 #endif /* _KERNEL */
 

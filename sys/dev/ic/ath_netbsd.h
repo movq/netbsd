@@ -1,4 +1,4 @@
-/*	$NetBSD: ath_netbsd.h,v 1.5 2006/02/05 06:03:26 xtraeme Exp $ */
+/*	$NetBSD: ath_netbsd.h,v 1.8 2007/11/26 23:52:40 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2003, 2004 David Young
@@ -37,10 +37,7 @@ typedef struct ath_task {
 	void	*t_context;
 } ath_task_t;
 
-#define	M_RDONLY	M_EXT	/* XXX check different/additional flags? */
-
-#define	CALLOUT_MPSAFE	0
-#define ATH_CALLOUT_INIT(__ch, __mpsafe) callout_init((__ch))
+#define ATH_CALLOUT_INIT(__ch, __mpsafe) callout_init((__ch), 0)
 
 #define TASK_INIT(__task, __zero, __func, __context)	\
 	do {						\
@@ -122,9 +119,8 @@ typedef struct ath_lock ath_txbuf_lock_t;
 	    SYSCTL_DESCR(__descr), NULL, 0, &ath_##__var, 0, CTL_CREATE,\
 	    CTL_EOL)
 
-extern void device_printf(struct device, const char *fmt, ...);
-struct mbuf *m_defrag(struct mbuf *, int);
-struct mbuf *m_getcl(int, int, int);
+extern void device_printf(device_t, const char *fmt, ...)
+    __attribute__((__format__(__printf__,2,3)));
 const struct sysctlnode *ath_sysctl_treetop(struct sysctllog **);
 const struct sysctlnode *ath_sysctl_instance(const char *, struct sysctllog **);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_rtw_pci.c,v 1.7 2006/09/01 03:24:58 dyoung Exp $	*/
+/*	$NetBSD: if_rtw_pci.c,v 1.12 2008/04/28 20:23:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_rtw_pci.c,v 1.7 2006/09/01 03:24:58 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_rtw_pci.c,v 1.12 2008/04/28 20:23:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -69,8 +62,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_rtw_pci.c,v 1.7 2006/09/01 03:24:58 dyoung Exp $"
 #include <net80211/ieee80211_radiotap.h>
 #include <net80211/ieee80211_var.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/ic/rtwreg.h>
 #include <dev/ic/sa2400reg.h>
@@ -96,11 +89,12 @@ struct rtw_pci_softc {
 	pcitag_t		psc_pcitag;	/* our PCI tag */
 };
 
-static int	rtw_pci_match(struct device *, struct cfdata *, void *);
-static void	rtw_pci_attach(struct device *, struct device *, void *);
+static int	rtw_pci_match(device_t, struct cfdata *, void *);
+static void	rtw_pci_attach(device_t, device_t, void *);
+static int	rtw_pci_detach(device_t, int);
 
-CFATTACH_DECL(rtw_pci, sizeof(struct rtw_pci_softc),
-    rtw_pci_match, rtw_pci_attach, NULL, NULL);
+CFATTACH_DECL_NEW(rtw_pci, sizeof(struct rtw_pci_softc),
+    rtw_pci_match, rtw_pci_attach, rtw_pci_detach, NULL);
 
 static const struct rtw_pci_product {
 	u_int32_t	app_vendor;	/* PCI vendor ID */
@@ -131,7 +125,7 @@ rtw_pci_lookup(const struct pci_attach_args *pa)
 }
 
 static int
-rtw_pci_match(struct device *parent, struct cfdata *match, void *aux)
+rtw_pci_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -141,48 +135,50 @@ rtw_pci_match(struct device *parent, struct cfdata *match, void *aux)
 	return (0);
 }
 
-static int
-rtw_pci_enable(struct rtw_softc *sc)
+static bool
+rtw_pci_resume(device_t self PMF_FN_ARGS)
 {
-	struct rtw_pci_softc *psc = (void *)sc;
+	struct rtw_pci_softc *psc = device_private(self);
+	struct rtw_softc *sc = &psc->psc_rtw;
 
 	/* Establish the interrupt. */
 	psc->psc_intrcookie = pci_intr_establish(psc->psc_pc, psc->psc_ih,
 	    IPL_NET, rtw_intr, sc);
 	if (psc->psc_intrcookie == NULL) {
-		aprint_error("%s: unable to establish interrupt\n",
-		    sc->sc_dev.dv_xname);
-		return (1);
+		aprint_error_dev(sc->sc_dev, "unable to establish interrupt\n");
+		return false;
 	}
 
-	return (0);
+	return rtw_resume(self, flags);
 }
 
-static void
-rtw_pci_disable(struct rtw_softc *sc)
+static bool
+rtw_pci_suspend(device_t self PMF_FN_ARGS)
 {
-	struct rtw_pci_softc *psc = (void *)sc;
+	struct rtw_pci_softc *psc = device_private(self);
+
+	if (!rtw_suspend(self, flags))
+		return false;
 
 	/* Unhook the interrupt handler. */
 	pci_intr_disestablish(psc->psc_pc, psc->psc_intrcookie);
 	psc->psc_intrcookie = NULL;
+	return true;
 }
 
 static void
-rtw_pci_attach(struct device *parent, struct device *self, void *aux)
+rtw_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct rtw_pci_softc *psc = (void *) self;
+	struct rtw_pci_softc *psc = device_private(self);
 	struct rtw_softc *sc = &psc->psc_rtw;
 	struct rtw_regs *regs = &sc->sc_regs;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	const char *intrstr = NULL;
-	bus_space_tag_t iot, memt;
-	bus_space_handle_t ioh, memh;
-	int ioh_valid, memh_valid;
 	const struct rtw_pci_product *app;
 	int error;
 
+	sc->sc_dev = self;
 	psc->psc_pc = pa->pa_pc;
 	psc->psc_pcitag = pa->pa_tag;
 
@@ -193,12 +189,6 @@ rtw_pci_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	/*
-	 * No power management hooks.
-	 * XXX Maybe we should add some!
-	 */
-	sc->sc_flags |= RTW_F_ENABLED;
-
-	/*
 	 * Get revision info, and set some chip-specific variables.
 	 */
 	sc->sc_rev = PCI_REVISION(pa->pa_class);
@@ -206,31 +196,24 @@ rtw_pci_attach(struct device *parent, struct device *self, void *aux)
 	    (sc->sc_rev >> 4) & 0xf, sc->sc_rev & 0xf);
 
 	/* power up chip */
-	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, sc,
-	    NULL)) && error != EOPNOTSUPP) {
-		aprint_error("%s: cannot activate %d\n", sc->sc_dev.dv_xname,
-		    error);
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, self, NULL)) != 0 &&
+	    error != EOPNOTSUPP) {
+		aprint_error_dev(self, "cannot activate %d\n", error);
 		return;
 	}
 
 	/*
 	 * Map the device.
 	 */
-	ioh_valid = (pci_mapreg_map(pa, RTW_PCI_IOBA,
-	    PCI_MAPREG_TYPE_IO, 0,
-	    &iot, &ioh, NULL, NULL) == 0);
-	memh_valid = (pci_mapreg_map(pa, RTW_PCI_MMBA,
+	if (pci_mapreg_map(pa, RTW_PCI_MMBA,
 	    PCI_MAPREG_TYPE_MEM|PCI_MAPREG_MEM_TYPE_32BIT, 0,
-	    &memt, &memh, NULL, NULL) == 0);
-
-	if (memh_valid) {
-		regs->r_bt = memt;
-		regs->r_bh = memh;
-	} else if (ioh_valid) {
-		regs->r_bt = iot;
-		regs->r_bh = ioh;
-	} else {
-		aprint_error(": unable to map device registers\n");
+	    &regs->r_bt, &regs->r_bh, NULL, &regs->r_sz) == 0)
+		;
+	else if (pci_mapreg_map(pa, RTW_PCI_IOBA, PCI_MAPREG_TYPE_IO, 0,
+	    &regs->r_bt, &regs->r_bh, NULL, &regs->r_sz) == 0)
+		;
+	else {
+		aprint_error_dev(self, "unable to map device registers\n");
 		return;
 	}
 
@@ -247,29 +230,53 @@ rtw_pci_attach(struct device *parent, struct device *self, void *aux)
 	 * Map and establish our interrupt.
 	 */
 	if (pci_intr_map(pa, &psc->psc_ih)) {
-		aprint_error("%s: unable to map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, psc->psc_ih);
 	psc->psc_intrcookie = pci_intr_establish(pc, psc->psc_ih, IPL_NET,
 	    rtw_intr, sc);
 	if (psc->psc_intrcookie == NULL) {
-		aprint_error("%s: unable to establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to establish interrupt");
 		if (intrstr != NULL)
 			aprint_error(" at %s", intrstr);
-		printf("\n");
+		aprint_error("\n");
 		return;
 	}
 
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
-
-	sc->sc_enable = rtw_pci_enable;
-	sc->sc_disable = rtw_pci_disable;
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	/*
 	 * Finish off the attach.
 	 */
 	rtw_attach(sc);
+
+	if (!pmf_device_register(sc->sc_dev, rtw_pci_suspend,
+	                         rtw_pci_resume)) {
+		aprint_error_dev(sc->sc_dev,
+		    "couldn't establish power handler\n");
+	} else {
+		pmf_class_network_register(self, &sc->sc_if);
+		/*
+		 * Power down the socket.
+		 */
+		pmf_device_suspend_self(self);
+	}
+}
+
+static int
+rtw_pci_detach(device_t self, int flags)
+{
+	struct rtw_pci_softc *psc = device_private(self);
+	struct rtw_softc *sc = &psc->psc_rtw;
+	struct rtw_regs *regs = &sc->sc_regs;
+	int rc;
+
+	if ((rc = rtw_detach(sc)) != 0)
+		return rc;
+	if (psc->psc_intrcookie != NULL)
+		pci_intr_disestablish(psc->psc_pc, psc->psc_intrcookie);
+	bus_space_unmap(regs->r_bt, regs->r_bh, regs->r_sz);
+
+	return 0;
 }

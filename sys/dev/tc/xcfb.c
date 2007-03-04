@@ -1,7 +1,11 @@
-/* $NetBSD: xcfb.c,v 1.42 2006/04/12 19:38:24 jmmv Exp $ */
+/* $NetBSD: xcfb.c,v 1.47 2008/07/09 13:19:33 joerg Exp $ */
 
-/*
- * Copyright (c) 1998, 1999 Tohru Nishimura.  All rights reserved.
+/*-
+ * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Tohru Nishimura.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,27 +15,22 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Tohru Nishimura
- *	for the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xcfb.c,v 1.42 2006/04/12 19:38:24 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xcfb.c,v 1.47 2008/07/09 13:19:33 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,8 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: xcfb.c,v 1.42 2006/04/12 19:38:24 jmmv Exp $");
 #include <sys/buf.h>
 #include <sys/ioctl.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
@@ -83,7 +82,6 @@ struct hwcursor64 {
 #define	IMS332_WLOW	(IOASIC_SLOT_7_START + 0x20000)
 
 struct xcfb_softc {
-	struct device sc_dev;
 	vaddr_t sc_vaddr;
 	size_t sc_size;
 	struct rasops_info *sc_ri;
@@ -99,13 +97,13 @@ struct xcfb_softc {
 static int  xcfbmatch(struct device *, struct cfdata *, void *);
 static void xcfbattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL(xcfb, sizeof(struct xcfb_softc),
+CFATTACH_DECL_NEW(xcfb, sizeof(struct xcfb_softc),
     xcfbmatch, xcfbattach, NULL, NULL);
 
 static tc_addr_t xcfb_consaddr;
 static struct rasops_info xcfb_console_ri;
 static void xcfb_common_init(struct rasops_info *);
-static void xcfbhwinit(caddr_t);
+static void xcfbhwinit(void *);
 int xcfb_cnattach(void);
 
 struct wsscreen_descr xcfb_stdscreen = {
@@ -123,7 +121,7 @@ static const struct wsscreen_list xcfb_screenlist = {
 	sizeof(_xcfb_scrlist) / sizeof(struct wsscreen_descr *), _xcfb_scrlist
 };
 
-static int	xcfbioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
+static int	xcfbioctl(void *, void *, u_long, void *, int, struct lwp *);
 static paddr_t	xcfbmmap(void *, void *, off_t, int);
 
 static int	xcfb_alloc_screen(void *, const struct wsscreen_descr *,
@@ -203,7 +201,7 @@ static const u_int8_t shuffle[256] = {
 };
 
 static int
-xcfbmatch(struct device *parent, struct cfdata *match, void *aux)
+xcfbmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct tc_attach_args *ta = aux;
 
@@ -214,7 +212,7 @@ xcfbmatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-xcfbattach(struct device *parent, struct device *self, void *aux)
+xcfbattach(device_t parent, device_t self, void *aux)
 {
 	struct xcfb_softc *sc = device_private(self);
 	struct tc_attach_args *ta = aux;
@@ -280,14 +278,14 @@ xcfb_common_init(struct rasops_info *ri)
 	int cookie;
 
 	/* initialize colormap and cursor hardware */
-	xcfbhwinit((caddr_t)ri->ri_hw);
+	xcfbhwinit((void *)ri->ri_hw);
 
 	ri->ri_flg = RI_CENTER;
 	ri->ri_depth = 8;
 	ri->ri_width = 1024;
 	ri->ri_height = 768;
 	ri->ri_stride = 1024;
-	ri->ri_bits = (caddr_t)MIPS_PHYS_TO_KSEG1(XCFB_FB_BASE);
+	ri->ri_bits = (void *)MIPS_PHYS_TO_KSEG1(XCFB_FB_BASE);
 
 	/* clear the screen */
 	memset(ri->ri_bits, 0, ri->ri_stride * ri->ri_height);
@@ -335,13 +333,13 @@ xcfb_cnattach(void)
 }
 
 static void
-xcfbhwinit(caddr_t base)
+xcfbhwinit(void *base)
 {
 	volatile u_int32_t *csr;
 	u_int32_t i;
 	const u_int8_t *p;
 
-	csr = (volatile u_int32_t *)(base + IOASIC_CSR);
+	csr = (volatile u_int32_t *)((char *)base + IOASIC_CSR);
 	i = *csr;
 	i &= ~XINE_CSR_VDAC_ENABLE;
 	*csr = i;
@@ -393,7 +391,7 @@ xcfbhwinit(caddr_t base)
 }
 
 static int
-xcfbioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag, struct lwp *l)
+xcfbioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct xcfb_softc *sc = v;
 	struct rasops_info *ri = sc->sc_ri;
@@ -523,7 +521,7 @@ xcfbintr(void *v)
 	struct xcfb_softc *sc = v;
 	u_int32_t *intr, i;
 
-	intr = (u_int32_t *)((caddr_t)sc->sc_ri->ri_hw + IOASIC_INTR);
+	intr = (u_int32_t *)((char *)sc->sc_ri->ri_hw + IOASIC_INTR);
 	i = *intr;
 	i &= ~XINE_INTR_VINT;
 	*intr = i;
@@ -753,8 +751,8 @@ ims332_load_curshape(struct xcfb_softc *sc)
 static void
 ims332_write_reg(int regno, u_int32_t val)
 {
-	caddr_t high8 = (caddr_t)(ioasic_base + IMS332_HIGH);
-	caddr_t low16 = (caddr_t)(ioasic_base + IMS332_WLOW) + (regno << 4);
+	void *high8 = (void *)(ioasic_base + IMS332_HIGH);
+	void *low16 = (void *)(ioasic_base + IMS332_WLOW + (regno << 4));
 
 	*(volatile u_int16_t *)high8 = (val & 0xff0000) >> 8;
 	*(volatile u_int16_t *)low16 = val;
@@ -764,8 +762,8 @@ ims332_write_reg(int regno, u_int32_t val)
 static u_int32_t
 ims332_read_reg(int regno)
 {
-	caddr_t high8 = (caddr_t)(ioasic_base + IMS332_HIGH);
-	caddr_t low16 = (caddr_t)(ioasic_base + IMS332_RLOW) + (regno << 4);
+	void *high8 = (void *)(ioasic_base + IMS332_HIGH);
+	void *low16 = (void *)(ioasic_base + IMS332_RLOW) + (regno << 4);
 	u_int v0, v1;
 
 	v1 = *(volatile u_int16_t *)high8;

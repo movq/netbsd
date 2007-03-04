@@ -1,7 +1,7 @@
-/*	$NetBSD: spl.S,v 1.15 2007/02/09 21:55:04 ad Exp $	*/
+/*	$NetBSD: spl.S,v 1.32 2008/07/01 18:49:21 bouyer Exp $	*/
 
 /*
- * Copyright (c) 1998, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,39 +29,34 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <machine/asm.h>
+__KERNEL_RCSID(0, "$NetBSD: spl.S,v 1.32 2008/07/01 18:49:21 bouyer Exp $");
+
 #include "opt_vm86.h"
 #include "opt_ddb.h"
-#include <machine/asm.h>
+#include "opt_xen.h"
+
 #include <machine/trap.h>
 #include <machine/segments.h>
 #include <machine/frameasm.h>
 
 #include "assym.h"
 
-	.data
-	.globl	_C_LABEL(netisr)
 	.text
 
-#if 0
-#if defined(PROF) || defined(GPROF)
+#ifndef XEN
 /*
- * XXXX TODO
+ * int splraise(int s);
  */
-	.globl	_C_LABEL(splhigh), _C_LABEL(splx)
-
-	ALIGN_TEXT
-_C_LABEL(splhigh):
-	movl	$IPL_HIGH,%eax
-	xchgl	%eax,CPUVAR(ILEVEL)
+ENTRY(splraise)
+	movl	4(%esp),%edx
+	movl	CPUVAR(ILEVEL),%eax
+	cmpl	%edx,%eax
+	ja	1f
+	movl	%edx,CPUVAR(ILEVEL)
+1:
 	ret
-
-	ALIGN_TEXT
-_C_LABEL(splx):
-	movl	4(%esp),%ecx
-	SPLLOWER(_C_LABEL(Xspllower))
-	/* ret */
-#endif /* PROF || GPROF */
-#endif
+END(splraise)
 
 /*
  * void spllower(int s);
@@ -77,30 +65,28 @@ _C_LABEL(splx):
  * i686_spllower().  This must use pushf/cli/popf as it is used
  * early in boot where interrupts are disabled via eflags/IE.
  */
-	.align 64
-
 ENTRY(spllower)
-	movl	CPUVAR(SELF150), %eax
 	movl	4(%esp), %ecx
-	cmpl	(CPU_INFO_ILEVEL-0x150)(%eax), %ecx
+	cmpl	CPUVAR(ILEVEL), %ecx
 	jae	1f
-	movl	(CPU_INFO_IUNMASK-0x150)(%eax,%ecx,4), %edx
+	movl	CPUVAR(IUNMASK)(,%ecx,4), %edx
 	pushf
 	cli
-	testl	(CPU_INFO_IPENDING-0x150)(%eax), %edx
+	testl	CPUVAR(IPENDING), %edx
 	jnz	2f
-	movl	%ecx, (CPU_INFO_ILEVEL-0x150)(%eax)
+	movl	%ecx, CPUVAR(ILEVEL)
 	popf
 1:
 	ret
 2:
 	popf
 	jmp	_C_LABEL(Xspllower)
-	.align	64
+	.align	32
 LABEL(spllower_end)
+END(spllower)
 
 /*
- * void	i686_spllower(int s);
+ * void	cx8_spllower(int s);
  *
  * spllower() optimized for Pentium Pro and later, which have long
  * pipelines that will be stalled by pushf/cli/popf.  Must be the
@@ -112,33 +98,31 @@ LABEL(spllower_end)
  * edx : eax = old level / old ipending 
  * ecx : ebx = new level / old ipending
  */
-	.align	64
-
-ENTRY(i686_spllower)
+ENTRY(cx8_spllower)
 	movl	4(%esp),%ecx
 	movl	CPUVAR(ILEVEL),%edx
 	cmpl	%edx,%ecx			/* new level is lower? */
 	pushl	%ebx
 	jae,pn	1f
+0:
 	movl	CPUVAR(IPENDING),%eax
 	testl	%eax,CPUVAR(IUNMASK)(,%ecx,4)	/* deferred interrupts? */
 	movl	%eax,%ebx
-	/*
-	 * On the P4 this jump is cheaper than patching in junk
-	 * using cmovnz.  Is cmpxchg expensive if it fails?
-	 */
 	jnz,pn	2f
 	cmpxchg8b CPUVAR(ISTATE)		/* swap in new ilevel */
-	jnz,pn	2f
+	jnz,pn	0b
 1:
 	popl	%ebx
 	ret
 2:
 	popl	%ebx
-LABEL(i686_spllower_patch)
+LABEL(cx8_spllower_patch)
 	jmp	_C_LABEL(Xspllower)
-	.align	64
-LABEL(i686_spllower_end)
+	.align	32
+LABEL(cx8_spllower_end)
+END(cx8_spllower)
+
+#endif /* XEN */
 
 /*
  * void Xspllower(int s);
@@ -158,31 +142,40 @@ LABEL(i686_spllower_end)
  * the sending CPU will never see the that CPU accept the IPI
  * (see pmap_tlb_shootnow).
  */
-	nop
-	.align	4	/* Don't get confused with i686_spllower_end */
+	nop	/* Don't get confused with cx8_spllower_end */
 
 IDTVEC(spllower)
-#if defined(DDB) || defined(GPROF)
 	pushl	%ebp
 	movl	%esp,%ebp
 	MCOUNT_ASM
-#endif /* defined(DDB) || defined(GPROF) */
 	pushl	%ebx
 	pushl	%esi
 	pushl	%edi
-#if defined(DDB) || defined(GPROF)
 	movl	8(%ebp),%ebx
-#else /* defined(DDB) || defined(GPROF) */
-	movl	16(%esp),%ebx
-#endif /* defined(DDB) || defined(GPROF) */
 	movl	$.Lspllower_resume,%esi		# address to resume loop at
-	cli
+1:
+# because of the way Xen interrupts works *%esi will in fact be called
+# from Xdoreti via iret. So we have to always disable interrupts here
+# for Xen
+#ifndef XEN
+	CLI(%eax)
+#endif
 .Lspllower_resume:
+#ifdef XEN
+	CLI(%eax)
+#endif
 #if defined(DEBUG)
+#ifndef XEN
 	pushf
 	popl	%eax
 	testl	$PSL_I,%eax
 	jnz	.Lspllower_panic
+#else
+	movl    CPUVAR(VCPU),%eax
+	movb	EVTCHN_UPCALL_MASK(%eax), %al
+	andb	%al, %al
+	jz	.Lspllower_panic
+#endif /* XEN */
 #endif /* defined(DEBUG) */
 	movl	%ebx,%eax		# get cpl
 	movl	CPUVAR(IUNMASK)(,%eax,4),%eax
@@ -194,20 +187,29 @@ IDTVEC(spllower)
 	jmp	*IS_RECURSE(%eax)
 2:
 	movl	%ebx,CPUVAR(ILEVEL)
-	sti
+#ifdef XEN
+	STIC(%eax)
+	jz 4f
+	call	_C_LABEL(stipending)
+	testl	%eax,%eax
+	jnz	1b
+4:
+#else
+	STI(%eax)
+#endif /* XEN */
 	popl	%edi
 	popl	%esi
 	popl	%ebx
-#if defined(DDB) || defined(GPROF)
 	leave
-#endif /* defined(DDB) || defined(GPROF) */
 	ret
 #if defined(DEBUG)
 .Lspllower_panic:
+	addl $8, %esp
 	pushl	$1f
 	call	_C_LABEL(panic)
 1:	.asciz	"SPLLOWER: INTERRUPT ENABLED"
 #endif /* defined(DEBUG) */
+IDTVEC_END(spllower)
 
 /*
  * Handle return from interrupt after device handler finishes.
@@ -220,15 +222,25 @@ IDTVEC(spllower)
  * called with interrupt disabled.
  */
 IDTVEC(doreti)
+#ifndef XEN
 	IDEPTH_DECR
 	popl	%ebx			# get previous priority
+#endif
+.Ldoreti_resume_stic:
 	movl	$.Ldoreti_resume,%esi	# address to resume loop at
 .Ldoreti_resume:
 #if defined(DEBUG)
+#ifndef XEN
 	pushf
 	popl	%eax
 	testl	$PSL_I,%eax
 	jnz	.Ldoreti_panic
+#else
+	movl    CPUVAR(VCPU),%eax
+	movb	EVTCHN_UPCALL_MASK(%eax), %al
+	andb	%al, %al
+	jz	.Ldoreti_panic
+#endif /* XEN */
 #endif /* defined(DEBUG) */
 	movl	%ebx,%eax
 	movl	CPUVAR(IUNMASK)(,%eax,4),%eax
@@ -241,39 +253,196 @@ IDTVEC(doreti)
 2:	/* Check for ASTs on exit to user mode. */
 	movl	%ebx,CPUVAR(ILEVEL)
 5:
-	testb   $SEL_RPL,TF_CS(%esp)
-	jnz	.Ldoreti_checkast
+	testb   $CHK_UPL,TF_CS(%esp)
+	jnz	doreti_checkast
 #ifdef VM86
 	testl	$PSL_VM,TF_EFLAGS(%esp)
 	jz	6f
 #else
 	jmp	6f
 #endif
-.Ldoreti_checkast:
+	.globl doreti_checkast
+doreti_checkast:
 	CHECK_ASTPENDING(%eax)
 	jz	3f
-4:	CLEAR_ASTPENDING(%eax)
-	sti
+	CLEAR_ASTPENDING(%eax)
+	STI(%eax)
 	movl	$T_ASTFLT,TF_TRAPNO(%esp)	/* XXX undo later.. */
 	/* Pushed T_ASTFLT into tf_trapno on entry. */
 	pushl	%esp
 	call	_C_LABEL(trap)
 	addl	$4,%esp
-	cli
+	CLI(%eax)
 	jmp	5b
 3:
-	CHECK_DEFERRED_SWITCH(%eax)
+	CHECK_DEFERRED_SWITCH
 	jnz	9f
 6:
+#ifdef XEN
+	STIC(%eax)
+	jz	4f
+	call	_C_LABEL(stipending)
+	testl   %eax,%eax
+	jz 4f
+	CLI(%eax)
+	jmp	.Ldoreti_resume_stic
+4:
+#endif /* XEN */
 	INTRFASTEXIT
 9:
-	sti
+	STI(%eax)
 	call	_C_LABEL(pmap_load)
-	cli
-	jmp	.Ldoreti_checkast	/* recheck ASTs */
+	CLI(%eax)
+	jmp	doreti_checkast	/* recheck ASTs */
 #if defined(DEBUG)
 .Ldoreti_panic:
 	pushl	$1f
 	call	_C_LABEL(panic)
 1:	.asciz	"DORETI: INTERRUPT ENABLED"
 #endif /* defined(DEBUG) */
+IDTVEC_END(doreti)
+
+#ifdef XEN
+/*
+ * void evtchn_do_event(int evtch, struct intrframe *regs)
+ */
+
+ENTRY(call_evtchn_do_event)
+	IDEPTH_INCR
+	/*
+	 * IDEPTH_INCR leaves old %esp in %eax.
+	 */
+	pushl	8(%eax)	/* regs */
+	pushl	4(%eax)	/* evtch */
+	call	_C_LABEL(evtchn_do_event)
+	addl	$8, %esp
+	IDEPTH_DECR
+	ret
+END(call_evtchn_do_event)
+#ifdef DOM0OPS
+/*
+ * void xenevt_event(int port)
+ */
+
+ENTRY(call_xenevt_event)
+	IDEPTH_INCR
+	/*
+	 * IDEPTH_INCR leaves old %esp in %eax.
+	 */
+	pushl	4(%eax)	/* evtch */
+	call	_C_LABEL(xenevt_event)
+	addl	$4, %esp
+	IDEPTH_DECR
+	ret
+END(call_xenevt_event)
+#endif /* DOM0OPS */
+#endif /* XEN */
+
+#ifndef XEN
+/*
+ * Xsoftintr()
+ *
+ * Switch to the LWP assigned to handle interrupts from the given
+ * source.  We borrow the VM context from the interrupted LWP.
+ *
+ * On entry:
+ *
+ *	%eax		intrsource
+ *	%esi		address to return to
+ */
+IDTVEC(softintr)
+	pushl	$_C_LABEL(softintr_ret)	/* set up struct switchframe */
+	pushl	%ebx
+	pushl	%esi
+	pushl	%edi
+	movl	$IPL_HIGH,CPUVAR(ILEVEL)
+	movl	CPUVAR(CURLWP),%esi
+	movl	IS_LWP(%eax),%edi	/* switch to handler LWP */
+	movl	%edi,CPUVAR(CURLWP)
+	movl	L_ADDR(%edi),%edx
+	movl	L_ADDR(%esi),%ecx
+	movl	%esp,PCB_ESP(%ecx)
+	movl	%ebp,PCB_EBP(%ecx)
+	movl	PCB_ESP0(%edx),%esp	/* onto new stack */
+	sti
+	pushl	IS_MAXLEVEL(%eax)	/* ipl to run at */
+	pushl	%esi
+	call	_C_LABEL(softint_dispatch)/* run handlers */
+	addl	$8,%esp
+	cli
+	movl	L_ADDR(%esi),%ecx
+	movl	PCB_ESP(%ecx),%esp
+	xchgl	%esi,CPUVAR(CURLWP)	/* must be globally visible */
+	popl	%edi			/* unwind switchframe */
+	popl	%esi
+	addl	$8,%esp
+	jmp	*%esi			/* back to splx/doreti */
+IDTVEC_END(softintr)
+
+/*
+ * softintr_ret()
+ *
+ * Trampoline function that gets returned to by cpu_switchto() when
+ * an interrupt handler blocks.  On entry:
+ *
+ *	%eax		prevlwp from cpu_switchto()
+ */
+ENTRY(softintr_ret)
+	incl	CPUVAR(MTX_COUNT)	/* re-adjust after mi_switch */
+	movl	$0, L_CTXSWTCH(%eax)	/* %eax from cpu_switchto */
+	cli
+	jmp	*%esi			/* back to splx/doreti */
+END(softintr_ret)
+
+/*
+ * void softint_trigger(uintptr_t machdep);
+ *
+ * Software interrupt registration.
+ */
+ENTRY(softint_trigger)
+	movl	4(%esp),%eax
+	orl	%eax,CPUVAR(IPENDING)	/* atomic on local cpu */
+	ret
+END(softint_trigger)
+
+/*
+ * Xpreemptrecurse()
+ *
+ * Handles preemption interrupts via Xspllower().
+ */
+IDTVEC(preemptrecurse)
+	movl	$IPL_PREEMPT, CPUVAR(ILEVEL)
+	sti
+	pushl	$0
+	call	_C_LABEL(kpreempt)
+	addl	$4, %esp
+	cli
+	jmp	*%esi
+IDTVEC_END(preemptrecurse)
+
+/*
+ * Xpreemptresume()
+ *
+ * Handles preemption interrupts via Xdoreti().
+ */
+IDTVEC(preemptresume)
+	movl	$IPL_PREEMPT, CPUVAR(ILEVEL)
+	sti
+	testb   $CHK_UPL, TF_CS(%esp)
+	jnz	1f
+#ifdef VM86
+	testl	$PSL_VM,TF_EFLAGS(%esp)
+	jnz	1f
+#endif
+	movl	TF_EIP(%esp), %eax
+	pushl	%eax
+	call	_C_LABEL(kpreempt)		# from kernel
+	addl	$4, %esp
+	cli
+	jmp	*%esi
+1:
+	call	_C_LABEL(preempt)		# from user
+	cli
+	jmp	*%esi
+IDTVEC_END(preemptresume)
+#endif /* !XEN */

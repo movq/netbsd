@@ -1,4 +1,4 @@
-/*	$NetBSD: rcons_kern.c,v 1.17 2005/12/11 12:23:44 christos Exp $ */
+/*	$NetBSD: rcons_kern.c,v 1.21 2007/11/19 18:51:50 ad Exp $ */
 
 /*
  * Copyright (c) 1991, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rcons_kern.c,v 1.17 2005/12/11 12:23:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rcons_kern.c,v 1.21 2007/11/19 18:51:50 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -101,16 +101,9 @@ rcons_output(tp)
 	s = spltty();
 	tp->t_state &= ~TS_BUSY;
 	/* Come back if there's more to do */
-	if (tp->t_outq.c_cc) {
+	if (ttypull(tp)) {
 		tp->t_state |= TS_TIMEOUT;
-		callout_reset(&tp->t_rstrt_ch, 1, ttrstrt, tp);
-	}
-	if (tp->t_outq.c_cc <= tp->t_lowat) {
-		if (tp->t_state&TS_ASLEEP) {
-			tp->t_state &= ~TS_ASLEEP;
-			wakeup((caddr_t)&tp->t_outq);
-		}
-		selwakeup(&tp->t_wsel);
+		callout_schedule(&tp->t_rstrt_ch, 1);
 	}
 	splx(s);
 }
@@ -177,7 +170,7 @@ rcons_init(rc, clear)
 {
 	mydevicep = rc;
 
-	callout_init(&rc->rc_belltmr_ch);
+	callout_init(&rc->rc_belltmr_ch, 0);
 
 	/* Initialize operations set, clear screen and turn cursor on */
 	rcons_init_ops(rc);

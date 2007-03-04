@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.32 2007/02/22 05:26:18 thorpej Exp $ */
+/* $NetBSD: machdep.c,v 1.37 2008/07/02 17:28:55 ad Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -107,7 +107,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.32 2007/02/22 05:26:18 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.37 2008/07/02 17:28:55 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -167,7 +167,6 @@ struct	user *proc0paddr;
 struct cpu_info cpu_info_store;
 
 /* Maps for VM objects. */
-struct vm_map *exec_map = NULL;
 struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
@@ -186,10 +185,10 @@ void
 mach_init(int argc, char **argv, yamon_env_var *envp, u_long memsize)
 {
 	bus_space_handle_t sh;
-	caddr_t kernend;
+	void *kernend;
 	const char *cp;
 	u_long first, last;
-	caddr_t v;
+	void *v;
 	int freqok, howto, i;
 	const struct alchemy_board *board;
 
@@ -199,8 +198,8 @@ mach_init(int argc, char **argv, yamon_env_var *envp, u_long memsize)
 	KASSERT(board != NULL);
 
 	/* clear the BSS segment */
-	kernend = (caddr_t)mips_round_page(end);
-	memset(edata, 0, kernend - (caddr_t)edata);
+	kernend = (void *)mips_round_page(end);
+	memset(edata, 0, (char *)kernend - edata);
 
 	/* set CPU model info for sysctl_hw */
 	strcpy(cpu_model, board->ab_name);
@@ -364,11 +363,11 @@ mach_init(int argc, char **argv, yamon_env_var *envp, u_long memsize)
 	/*
 	 * Init mapping for u page(s) for proc0.
 	 */
-	v = (caddr_t) uvm_pageboot_alloc(USPACE);
+	v = (void *) uvm_pageboot_alloc(USPACE);
 	lwp0.l_addr = proc0paddr = (struct user *)v;
-	lwp0.l_md.md_regs = (struct frame *)(v + USPACE) - 1;
-	curpcb = &lwp0.l_addr->u_pcb;
-	curpcb->pcb_context[11] = MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	lwp0.l_md.md_regs = (struct frame *)((char *)v + USPACE) - 1;
+	proc0paddr->u_pcb.pcb_context[11] =
+	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
 
 	/*
 	 * Initialize debuggers, and break into them, if appropriate.
@@ -413,12 +412,6 @@ cpu_startup(void)
 	printf("total memory = %s\n", pbuf);
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
 
 	/*
 	 * Allocate a submap for physio

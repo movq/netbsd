@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.85 2007/02/17 00:28:24 daniel Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.92 2008/05/10 16:12:32 ad Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.85 2007/02/17 00:28:24 daniel Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.92 2008/05/10 16:12:32 ad Exp $");
 
 #include "opt_compat_oldboot.h"
 #include "opt_multiprocessor.h"
@@ -61,7 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.85 2007/02/17 00:28:24 daniel Exp $")
 #include <machine/cpu.h>
 #include <machine/gdt.h>
 #include <machine/pcb.h>
-#include <x86/x86/tsc.h>
+#include <machine/cpufunc.h>
 
 #include "ioapic.h"
 #include "lapic.h"
@@ -77,6 +77,8 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.85 2007/02/17 00:28:24 daniel Exp $")
 #include "bios32.h"
 #if NBIOS32 > 0
 #include <machine/bios32.h>
+/* XXX */
+extern void platform_init(void);
 #endif
 
 #include "opt_pcibios.h"
@@ -104,13 +106,12 @@ cpu_configure(void)
 
 #if NBIOS32 > 0
 	bios32_init();
+	platform_init();
 #endif
 #ifdef PCIBIOS
 	pcibios_init();
 #endif
 
-	/* kvm86 needs a TSS */
-	i386_proc0_tss_ldt_init();
 #ifdef KVM86
 	kvm86_init();
 #endif
@@ -123,18 +124,13 @@ cpu_configure(void)
 #endif
 
 #if NIOAPIC > 0
-	lapic_set_lvt();
 	ioapic_enable();
 #endif
 	/* resync cr0 after FPU configuration */
 	lwp0.l_addr->u_pcb.pcb_cr0 = rcr0();
 #ifdef MULTIPROCESSOR
 	/* propagate this to the idle pcb's. */
-	cpu_init_idle_pcbs();
-#endif
-
-#if defined(I586_CPU) || defined(I686_CPU)
-	init_TSC_tc();
+	cpu_init_idle_lwps();
 #endif
 
 	spl0();
@@ -142,7 +138,7 @@ cpu_configure(void)
 	lapic_tpr = 0;
 #endif
 
-#if defined(I686_CPU) && defined(VIA_PADLOCK)
+#if defined(VIA_PADLOCK)
 	via_padlock_attach();
-#endif /* defined(I686_CPU) && defined(VIA_PADLOCK) */
+#endif
 }

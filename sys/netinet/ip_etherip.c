@@ -1,4 +1,4 @@
-/*      $NetBSD: ip_etherip.c,v 1.4 2007/02/17 22:34:11 dyoung Exp $        */
+/*      $NetBSD: ip_etherip.c,v 1.11 2008/10/19 23:28:31 hans Exp $        */
 
 /*
  *  Copyright (c) 2006, Hans Rosenfeld <rosenfeld@grumpf.hope-2000.org>
@@ -58,8 +58,10 @@
  */
 
 #include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: ip_etherip.c,v 1.11 2008/10/19 23:28:31 hans Exp $");
 
 #include "opt_inet.h"
+#include "bpfilter.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -86,17 +88,25 @@
 #include <net/if_ether.h>
 #include <net/if_media.h>
 #include <net/if_etherip.h>
+#if NBPFILTER > 0
+#include <net/bpf.h>
+#endif
 
 #include <machine/stdarg.h>
 
 int
 ip_etherip_output(struct ifnet *ifp, struct mbuf *m)
 {
+	struct rtentry *rt;
 	struct etherip_softc *sc = (struct etherip_softc*)ifp->if_softc;
 	struct sockaddr_in *sin_src, *sin_dst;
 	struct ip iphdr;        /* capsule IP header, host byte ordered */
 	struct etherip_header eiphdr;
 	int proto, error;
+	union {
+		struct sockaddr		dst;
+		struct sockaddr_in	dst4;
+	} u;
 
 	sin_src = (struct sockaddr_in *)sc->sc_src;
 	sin_dst = (struct sockaddr_in *)sc->sc_dst;
@@ -152,28 +162,14 @@ ip_etherip_output(struct ifnet *ifp, struct mbuf *m)
 		m = m_pullup(m, sizeof(struct ip));
 	memcpy(mtod(m, struct ip *), &iphdr, sizeof(struct ip));
 
-	if (rtcache_getdst(&sc->sc_ro)->sa_family != sin_dst->sin_family ||
-	    !in_hosteq(satocsin(rtcache_getdst(&sc->sc_ro))->sin_addr,
-	               sin_dst->sin_addr))
-		rtcache_free(&sc->sc_ro);
-	else
-		rtcache_check(&sc->sc_ro);
-
-	if (sc->sc_ro.ro_rt == NULL) {
-		struct sockaddr_in *dst = satosin(&sc->sc_ro.ro_dst);
-		memset(dst, 0, sizeof(struct sockaddr_in));
-		dst->sin_family = sin_dst->sin_family;
-		dst->sin_len    = sizeof(struct sockaddr_in);
-		dst->sin_addr   = sin_dst->sin_addr;
-		rtcache_init(&sc->sc_ro);
-		if (sc->sc_ro.ro_rt == NULL) {
-			m_freem(m);
-			return ENETUNREACH ;
-		}
+	sockaddr_in_init(&u.dst4, &sin_dst->sin_addr, 0);
+	if ((rt = rtcache_lookup(&sc->sc_ro, &u.dst)) == NULL) {
+		m_freem(m);
+		return ENETUNREACH;
 	}
 
 	/* if it constitutes infinite encapsulation, punt. */
-	if (sc->sc_ro.ro_rt->rt_ifp == ifp) {
+	if (rt->rt_ifp == ifp) {
 		rtcache_free(&sc->sc_ro);
 		m_freem(m);
 		return ENETUNREACH;     /*XXX*/
@@ -191,7 +187,7 @@ ip_etherip_input(struct mbuf *m, ...)
 	const struct ip *ip;
 	struct sockaddr_in *src, *dst;
 	struct ifnet *ifp = NULL;
-	int off, proto;
+	int off, proto, s;
 	va_list ap;
 
 	va_start(ap, m);
@@ -201,7 +197,7 @@ ip_etherip_input(struct mbuf *m, ...)
 
 	if (proto != IPPROTO_ETHERIP) {
 		m_freem(m);
-		ipstat.ips_noproto++;
+		ip_statinc(IP_STAT_NOPROTO);
 		return;
 	}
 
@@ -230,7 +226,7 @@ ip_etherip_input(struct mbuf *m, ...)
 	/* no matching device found */
 	if (!ifp) {
 		m_freem(m);
-		ipstat.ips_odropped++;
+		ip_statinc(IP_STAT_ODROPPED);
 		return;
 	}
 
@@ -267,7 +263,10 @@ ip_etherip_input(struct mbuf *m, ...)
 #endif
 
 	ifp->if_ipackets++;
+
+	s = splnet();
 	(ifp->if_input)(ifp, m);
+	splx(s);
 
 	return;
 }

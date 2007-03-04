@@ -1,4 +1,4 @@
-/*	$NetBSD: pdqvar.h,v 1.36 2005/12/11 12:21:28 christos Exp $	*/
+/*	$NetBSD: pdqvar.h,v 1.40 2008/06/24 10:12:06 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -39,6 +39,30 @@
 
 #define	PDQ_OS_TX_TIMEOUT		5	/* seconds */
 
+enum _pdq_boolean_t { 
+    PDQ_FALSE=0,
+    PDQ_TRUE=1
+}; 
+
+enum _pdq_type_t {
+    PDQ_DEFPA,		/* PCI-bus */
+    PDQ_DEFEA,		/* EISA-bus */
+    PDQ_DEFTA,		/* TurboChannel */
+    PDQ_DEFAA,		/* FutureBus+ */
+    PDQ_DEFQA		/* Q-bus */
+};
+
+enum _pdq_state_t {
+    PDQS_RESET=0,
+    PDQS_UPGRADE=1,
+    PDQS_DMA_UNAVAILABLE=2,
+    PDQS_DMA_AVAILABLE=3,
+    PDQS_LINK_AVAILABLE=4,
+    PDQS_LINK_UNAVAILABLE=5,
+    PDQS_HALTED=6,
+    PDQS_RING_MEMBER=7
+}; 
+
 typedef struct _pdq_t pdq_t;
 typedef struct _pdq_csrs_t pdq_csrs_t;
 typedef struct _pdq_pci_csrs_t pdq_pci_csrs_t;
@@ -49,14 +73,6 @@ typedef unsigned char pdq_uint8_t;
 typedef enum _pdq_boolean_t pdq_boolean_t;
 typedef enum _pdq_type_t pdq_type_t;
 typedef enum _pdq_state_t pdq_state_t;
-
-enum _pdq_type_t {
-    PDQ_DEFPA,		/* PCI-bus */
-    PDQ_DEFEA,		/* EISA-bus */
-    PDQ_DEFTA,		/* TurboChannel */
-    PDQ_DEFAA,		/* FutureBus+ */
-    PDQ_DEFQA		/* Q-bus */
-};
 
 #if defined(PDQTEST)
 #include <pdq_os_test.h>
@@ -85,7 +101,7 @@ enum _pdq_type_t {
 #define	PDQ_OS_PAGESIZE			NBPG
 #endif
 #define	PDQ_OS_USEC_DELAY(n)		DELAY(n)
-#define	PDQ_OS_MEMZERO(p, n)		memset((caddr_t)(p), 0, (n))
+#define	PDQ_OS_MEMZERO(p, n)		memset((void *)(p), 0, (n))
 #if defined(__NetBSD__) && !defined(PDQ_NO_BUS_DMA)
 #define PDQ_BUS_DMA
 #endif
@@ -139,8 +155,8 @@ typedef pdq_bus_memaddr_t pdq_bus_memoffset_t;
 #if !defined(PDQ_HWSUPPORT)
 #include <net/if_media.h>
 #endif
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 #define PDQ_OS_HDR_OFFSET	(PDQ_RX_FC_OFFSET-3)
 #define	PDQ_OS_PTR_FMT		"%p"
 #define	PDQ_OS_CSR_FMT		"0x%lx"
@@ -228,7 +244,7 @@ extern void pdq_os_databuf_free(struct _pdq_os_ctx_t *, struct mbuf *);
 #define	PDQ_OS_IFP_TO_SOFTC(ifp)		((pdq_softc_t *) (ifp)->if_softc)
 #define	PDQ_ARP_IFINIT(sc, ifa)			arp_ifinit(&(sc)->sc_if, (ifa))
 #define	PDQ_FDDICOM(sc)				(&(sc)->sc_ec)
-#define	PDQ_LANADDR(sc)				LLADDR((sc)->sc_if.if_sadl)
+#define	PDQ_LANADDR(sc)				CLLADDR((sc)->sc_if.if_sadl)
 #define	PDQ_LANADDR_SIZE(sc)			((sc)->sc_if.if_sadl->sdl_alen)
 #endif
 
@@ -287,7 +303,7 @@ extern void pdq_os_databuf_free(struct _pdq_os_ctx_t *, struct mbuf *);
 #endif
 
 #ifndef PDQ_OS_IFP_TO_SOFTC
-#define	PDQ_OS_IFP_TO_SOFTC(ifp)	((pdq_softc_t *) ((caddr_t) ifp - offsetof(pdq_softc_t, sc_ac.ac_if)))
+#define	PDQ_OS_IFP_TO_SOFTC(ifp)	((pdq_softc_t *) ((void *) ifp - offsetof(pdq_softc_t, sc_ac.ac_if)))
 #endif
 
 
@@ -332,7 +348,7 @@ typedef struct _pdq_os_ctx_t {
 #if !defined(__bsdi__) || _BSDI_VERSION >= 199401
 #define	sc_bpf		sc_if.if_bpf
 #else
-    caddr_t sc_bpf;
+    void *sc_bpf;
 #endif
 #if defined(PDQ_BUS_DMA)
 #if !defined(__NetBSD__)
@@ -349,7 +365,7 @@ extern void pdq_ifreset(pdq_softc_t *);
 extern void pdq_ifinit(pdq_softc_t *);
 extern void pdq_ifwatchdog(struct ifnet *);
 extern ifnet_ret_t pdq_ifstart(struct ifnet *);
-extern int pdq_ifioctl(struct ifnet *, ioctl_cmd_t, caddr_t);
+extern int pdq_ifioctl(struct ifnet *, ioctl_cmd_t, void *);
 extern void pdq_ifattach(pdq_softc_t *, ifnet_ret_t (*ifwatchdog)(int));
 #endif /* !PDQ_HWSUPPORT */
 
@@ -366,10 +382,10 @@ extern void pdq_ifattach(pdq_softc_t *, ifnet_ret_t (*ifwatchdog)(int));
 
 #define	PDQ_OS_PAGESIZE			PAGESIZE
 #define	PDQ_OS_USEC_DELAY(n)		drv_usecwait(n)
-#define	PDQ_OS_MEMZERO(p, n)		bzero((caddr_t)(p), (n))
-#define	PDQ_OS_VA_TO_BUSPA(pdq, p)		vtop((caddr_t)p, NULL)
+#define	PDQ_OS_MEMZERO(p, n)		bzero((void *)(p), (n))
+#define	PDQ_OS_VA_TO_BUSPA(pdq, p)		vtop((void *)p, NULL)
 #define	PDQ_OS_MEMALLOC(n)		kmem_zalloc(n, KM_NOSLEEP)
-#define	PDQ_OS_MEMFREE(p, n)		kmem_free((caddr_t) p, n)
+#define	PDQ_OS_MEMFREE(p, n)		kmem_free((void *) p, n)
 #define	PDQ_OS_MEMALLOC_CONTIG(n)	kmem_zalloc_physreq(n, decfddiphysreq_db, KM_NOSLEEP)
 #define	PDQ_OS_MEMFREE_CONTIG(p, n)	PDQ_OS_MEMFREE(p, n)
 

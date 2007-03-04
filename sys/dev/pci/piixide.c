@@ -1,4 +1,4 @@
-/*	$NetBSD: piixide.c,v 1.36 2007/02/09 21:55:27 ad Exp $	*/
+/*	$NetBSD: piixide.c,v 1.47 2008/10/01 15:38:15 christos Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: piixide.c,v 1.36 2007/02/09 21:55:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: piixide.c,v 1.47 2008/10/01 15:38:15 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,10 +48,12 @@ static u_int32_t piix_setup_idetim_timings(u_int8_t, u_int8_t, u_int8_t);
 static u_int32_t piix_setup_idetim_drvs(struct ata_drive_datas *);
 static u_int32_t piix_setup_sidetim_timings(u_int8_t, u_int8_t, u_int8_t);
 static void piixsata_chip_map(struct pciide_softc*, struct pci_attach_args *);
+static int piix_dma_init(void *, int, int, void *, size_t, int);
 
-static void piixide_powerhook(int, void *);
-static int  piixide_match(struct device *, struct cfdata *, void *);
-static void piixide_attach(struct device *, struct device *, void *);
+static bool piixide_resume(device_t PMF_FN_PROTO);
+static bool piixide_suspend(device_t PMF_FN_PROTO);
+static int  piixide_match(device_t, cfdata_t, void *);
+static void piixide_attach(device_t, device_t, void *);
 
 static const struct pciide_product_desc pciide_intel_products[] =  {
 	{ PCI_PRODUCT_INTEL_82092AA,
@@ -199,6 +201,11 @@ static const struct pciide_product_desc pciide_intel_products[] =  {
 	  "Intel 82801H Serial ATA Controller (ICH8)",
 	  piixsata_chip_map,
 	},
+	{ PCI_PRODUCT_INTEL_82801HBM_IDE,
+	  0,
+	  "Intel 82801HBM IDE Controller (ICH8M)",
+	  piix_chip_map,
+	},
 	{ PCI_PRODUCT_INTEL_82801HBM_SATA_1,
 	  0,
 	  "Intel 82801HBM Serial ATA Controller (ICH8M)",
@@ -209,14 +216,54 @@ static const struct pciide_product_desc pciide_intel_products[] =  {
 	  "Intel 82801HBM Serial ATA Controller (ICH8M)",
 	  piixsata_chip_map,
 	},
+	{ PCI_PRODUCT_INTEL_82801HEM_SATA,
+	  0,
+	  "Intel 82801HEM Serial ATA Controller (ICH8M)",
+	  piixsata_chip_map,
+	},
 	{ PCI_PRODUCT_INTEL_63XXESB_IDE,
 	  0,
 	  "Intel 631xESB/632xESB IDE Controller",
 	  piix_chip_map,
 	},
+	{ PCI_PRODUCT_INTEL_82801I_SATA_1,
+	  0,
+	  "Intel 82801I Serial ATA Controller (ICH9)",
+	  piixsata_chip_map,
+	},
+	{ PCI_PRODUCT_INTEL_82801I_SATA_2,
+	  0,
+	  "Intel 82801I Serial ATA Controller (ICH9)",
+	  piixsata_chip_map,
+	},
+	{ PCI_PRODUCT_INTEL_82801I_SATA_3,
+	  0,
+	  "Intel 82801I Serial ATA Controller (ICH9)",
+	  piixsata_chip_map,
+	},
 	{ PCI_PRODUCT_INTEL_63XXESB_SATA,
 	  0,
 	  "Intel 631xESB/632xESB Serial ATA Controller",
+	  piixsata_chip_map,
+	},
+	{ PCI_PRODUCT_INTEL_ICH10_SATA2_2x1,
+	  0,
+	  "Intel ICH10 Serial ATA 2 Controller 2x1",
+	  piixsata_chip_map,
+	},
+	{ PCI_PRODUCT_INTEL_ICH10_SATA2_2x2,
+	  0,
+	  "Intel ICH10 Serial ATA 2 Controller 2x2",
+	  piixsata_chip_map,
+	},
+	{ PCI_PRODUCT_INTEL_ICH10_SATA2_4x1,
+	  0,
+	  "Intel ICH10 Serial ATA 2 Controller 4x1",
+	  piixsata_chip_map,
+	},
+	{ PCI_PRODUCT_INTEL_ICH10_SATA2_4x2,
+	  0,
+	  "Intel ICH10 Serial ATA 2 Controller 4x2",
 	  piixsata_chip_map,
 	},
 	{ 0,
@@ -226,12 +273,11 @@ static const struct pciide_product_desc pciide_intel_products[] =  {
 	}
 };
 
-CFATTACH_DECL(piixide, sizeof(struct pciide_softc),
+CFATTACH_DECL_NEW(piixide, sizeof(struct pciide_softc),
     piixide_match, piixide_attach, NULL, NULL);
 
 static int
-piixide_match(struct device *parent, struct cfdata *match,
-    void *aux)
+piixide_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -243,50 +289,44 @@ piixide_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-piixide_attach(struct device *parent, struct device *self, void *aux)
+piixide_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
-	struct pciide_softc *sc = (struct pciide_softc *)self;
+	struct pciide_softc *sc = device_private(self);
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	pciide_common_attach(sc, pa,
 	    pciide_lookup_product(pa->pa_id, pciide_intel_products));
 
-	/* Setup our powerhook */
-	sc->sc_powerhook = powerhook_establish(
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, piixide_powerhook, sc);
-	if (sc->sc_powerhook == NULL)
-		printf("%s: WARNING: unable to establish PCI power hook\n",
-		    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	if (!pmf_device_register(self, piixide_suspend, piixide_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
-static void
-piixide_powerhook(int why, void *hdl)
+static bool
+piixide_resume(device_t dv PMF_FN_ARGS)
 {
-	struct pciide_softc *sc = (struct pciide_softc *)hdl;
+	struct pciide_softc *sc = device_private(dv);
 
-	switch (why) {
-	case PWR_SUSPEND:
-	case PWR_STANDBY:
-		pci_conf_capture(sc->sc_pc, sc->sc_tag, &sc->sc_pciconf);
-		sc->sc_idetim = pci_conf_read(sc->sc_pc, sc->sc_tag,
-		    PIIX_IDETIM);
-		sc->sc_udmatim = pci_conf_read(sc->sc_pc, sc->sc_tag,
-		    PIIX_UDMATIM);
-		break;
-	case PWR_RESUME:
-		pci_conf_restore(sc->sc_pc, sc->sc_tag, &sc->sc_pciconf);
-		pci_conf_write(sc->sc_pc, sc->sc_tag, PIIX_IDETIM,
-		    sc->sc_idetim);
-		pci_conf_write(sc->sc_pc, sc->sc_tag, PIIX_UDMATIM,
-		    sc->sc_udmatim);
-		break;
-	case PWR_SOFTSUSPEND:
-	case PWR_SOFTSTANDBY:
-	case PWR_SOFTRESUME:
-		break;
-	}
+	pci_conf_write(sc->sc_pc, sc->sc_tag, PIIX_IDETIM,
+	    sc->sc_pm_reg[0]);
+	pci_conf_write(sc->sc_pc, sc->sc_tag, PIIX_UDMAREG,
+	    sc->sc_pm_reg[1]);
 
-	return;
+	return true;
+}
+
+static bool
+piixide_suspend(device_t dv PMF_FN_ARGS)
+{
+	struct pciide_softc *sc = device_private(dv);
+
+	sc->sc_pm_reg[0] = pci_conf_read(sc->sc_pc, sc->sc_tag,
+	    PIIX_IDETIM);
+	sc->sc_pm_reg[1] = pci_conf_read(sc->sc_pc, sc->sc_tag,
+	    PIIX_UDMAREG);
+
+	return true;
 }
 
 static void
@@ -301,14 +341,16 @@ piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	if (pciide_chipen(sc, pa) == 0)
 		return;
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 	sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
 	if (sc->sc_dma_ok) {
 		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DMA;
 		sc->sc_wdcdev.irqack = pciide_irqack;
+		/* Do all revisions require DMA alignment workaround? */
+		sc->sc_wdcdev.dma_init = piix_dma_init;
 		switch(sc->sc_pp->ide_product) {
 		case PCI_PRODUCT_INTEL_82371AB_IDE:
 		case PCI_PRODUCT_INTEL_82440MX_IDE:
@@ -324,6 +366,7 @@ piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		case PCI_PRODUCT_INTEL_6300ESB_IDE:
 		case PCI_PRODUCT_INTEL_82801FB_IDE:
 		case PCI_PRODUCT_INTEL_82801G_IDE:
+		case PCI_PRODUCT_INTEL_82801HBM_IDE:
 			sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_UDMA;
 		}
 	}
@@ -343,6 +386,7 @@ piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	case PCI_PRODUCT_INTEL_6300ESB_IDE:
 	case PCI_PRODUCT_INTEL_82801FB_IDE:
 	case PCI_PRODUCT_INTEL_82801G_IDE:
+	case PCI_PRODUCT_INTEL_82801HBM_IDE:
 		sc->sc_wdcdev.sc_atac.atac_udma_cap = 5;
 		break;
 	default:
@@ -378,7 +422,8 @@ piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801EB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801FB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_6300ESB_IDE ||
-		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801G_IDE) {
+		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801G_IDE ||
+		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801HBM_IDE) {
 			ATADEBUG_PRINT((", IDE_CONTROL 0x%x",
 			    pci_conf_read(sc->sc_pc, sc->sc_tag, PIIX_CONFIG)),
 			    DEBUG_PROBE);
@@ -398,8 +443,8 @@ piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		if ((PIIX_IDETIM_READ(idetim, channel) &
 		    PIIX_IDETIM_IDE) == 0) {
 #if 1
-			aprint_normal("%s: %s channel ignored (disabled)\n",
-			    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname, cp->name);
+			aprint_normal_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+			    "%s channel ignored (disabled)\n", cp->name);
 			cp->ata_channel.ch_flags |= ATACH_DISABLED;
 			continue;
 #else
@@ -442,7 +487,8 @@ piix_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801EB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801FB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_6300ESB_IDE ||
-		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801G_IDE) {
+		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801G_IDE ||
+		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801HBM_IDE) {
 			ATADEBUG_PRINT((", IDE_CONTROL 0x%x",
 			    pci_conf_read(sc->sc_pc, sc->sc_tag, PIIX_CONFIG)),
 			    DEBUG_PROBE);
@@ -605,7 +651,8 @@ piix3_4_setup_channel(struct ata_channel *chp)
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801EB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801FB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_6300ESB_IDE ||
-		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801G_IDE) {
+		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801G_IDE ||
+		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801HBM_IDE) {
 			ideconf |= PIIX_CONFIG_PINGPONG;
 		}
 		if (sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801BA_IDE ||
@@ -617,7 +664,8 @@ piix3_4_setup_channel(struct ata_channel *chp)
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801EB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801FB_IDE ||
 		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_6300ESB_IDE ||
-		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801G_IDE) {
+		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801G_IDE ||
+		    sc->sc_pp->ide_product == PCI_PRODUCT_INTEL_82801HBM_IDE) {
 			/* setup Ultra/100 */
 			if (drvp->UDMA_mode > 2 &&
 			    (ideconf & PIIX_CONFIG_CR(channel, drive)) == 0)
@@ -797,8 +845,8 @@ piixsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	if (pciide_chipen(sc, pa) == 0)
 		return;
 
-	aprint_verbose("%s: bus-master DMA support present",
-	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
+	aprint_verbose_dev(sc->sc_wdcdev.sc_atac.atac_dev,
+	    "bus-master DMA support present");
 	pciide_mapreg_dma(sc, pa);
 	aprint_verbose("\n");
 
@@ -807,6 +855,8 @@ piixsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 	if (sc->sc_dma_ok) {
 		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DMA | ATAC_CAP_UDMA;
 		sc->sc_wdcdev.irqack = pciide_irqack;
+		/* Do all revisions require DMA alignment workaround? */
+		sc->sc_wdcdev.dma_init = piix_dma_init;
 		sc->sc_wdcdev.sc_atac.atac_dma_cap = 2;
 		sc->sc_wdcdev.sc_atac.atac_udma_cap = 6;
 	}
@@ -835,4 +885,16 @@ piixsata_chip_map(struct pciide_softc *sc, struct pci_attach_args *pa)
 		pciide_mapchan(pa, cp, interface, &cmdsize, &ctlsize,
 		    pciide_pci_intr);
 	}
+}
+
+static int
+piix_dma_init(void *v, int channel, int drive, void *databuf,
+    size_t datalen, int flags)
+{
+
+	/* use PIO for unaligned transfer */
+	if (((uintptr_t)databuf) & 0x1)
+		return EINVAL;
+
+	return pciide_dma_init(v, channel, drive, databuf, datalen, flags);
 }

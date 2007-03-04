@@ -1,4 +1,4 @@
-/*	$NetBSD: mca_machdep.c,v 1.31 2007/02/22 04:38:04 matt Exp $	*/
+/*	$NetBSD: mca_machdep.c,v 1.36 2008/09/08 23:36:54 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mca_machdep.c,v 1.31 2007/02/22 04:38:04 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mca_machdep.c,v 1.36 2008/09/08 23:36:54 gmcgarry Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -56,9 +49,9 @@ __KERNEL_RCSID(0, "$NetBSD: mca_machdep.c,v 1.31 2007/02/22 04:38:04 matt Exp $"
 
 #include <machine/bioscall.h>
 #include <machine/psl.h>
-
 #include <machine/bus.h>
 #include <machine/bus_private.h>
+#include <machine/pio.h>
 
 #include <dev/isa/isavar.h>
 #include <dev/isa/isareg.h>
@@ -85,7 +78,7 @@ struct bios_config {
 #define FEATURE_DMA3	0x80	/* DMA channel 3 used by hard disk BIOS	*/
 	uint8_t		feature2;
 	uint8_t		pad[9];
-} __attribute__ ((packed));
+} __packed;
 
 /*
  * Used to encode DMA channel into ISA DMA cookie. We use upper 4 bits of
@@ -307,16 +300,13 @@ mca_busprobe(void)
 	bioscall(0x15, &regs);
 
 	if ((regs.EFLAGS & PSL_C) || regs.AH != 0) {
-#ifdef DEBUG
-		printf("BIOS CFG: Not supported. Not AT-compatible?\n");
-#endif
+		aprint_verbose("BIOS CFG: Not supported. Not AT-compatible?\n");
 		return;
 	}
 
 	paddr = (regs.ES << 4) + regs.BX;
 	scp = (struct bios_config *)ISA_HOLE_VADDR(paddr);
 
-#if 1 /* MCAVERBOSE */
 	bitmask_snprintf((scp->feature2 << 8) | scp->feature1,
 		"\20"
 		"\01MCA+ISA"
@@ -337,9 +327,8 @@ mca_busprobe(void)
 		"\020DMA32\n",
 		buf, sizeof(buf));
 
-	aprint_normal("BIOS CFG: Model-SubM-Rev: %02x-%02x-%02x, 0x%s\n",
+	aprint_verbose("BIOS CFG: Model-SubM-Rev: %02x-%02x-%02x, 0x%s\n",
 		scp->model, scp->submodel, scp->bios_rev, buf);
-#endif
 
 	MCA_system = (scp->feature1 & FEATURE_MCABUS) ? 1 : 0;
 }

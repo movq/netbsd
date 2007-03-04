@@ -1,4 +1,4 @@
-/*	$NetBSD: lock_stubs.S,v 1.6 2007/02/20 00:28:53 skrll Exp $	*/
+/*	$NetBSD: lock_stubs.S,v 1.13 2008/04/28 20:23:23 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,9 +42,9 @@
 #include "assym.h"
 
 /*
- * int _lock_cas(uintptr_t *val, uintptr_t old, uintptr_t new);
+ * uintptr_t _lock_cas(volatile uintptr_t *val, uintptr_t old, uintptr_t new);
  *
- * Perform an atomic compare-and-set operation.
+ * Perform an atomic compare-and-swap operation.
  *
  * On single CPU systems, this can use a restartable sequence:
  * there we don't need the overhead of interlocking.
@@ -59,8 +52,11 @@
 
 #ifndef MULTIPROCESSOR
 
-	.global _lock_cas_rasstart
-	.global _lock_cas_rasend
+	.global _lock_cas_ras_start
+	.global _lock_cas_ras_end
+
+	.global mutex_enter_crit_start
+	.global mutex_enter_crit_end
 
 	.import	curlwp, data
 	.import mutex_vector_enter, code
@@ -68,18 +64,35 @@
 	.import mutex_wakeup, code
 
 LEAF_ENTRY(_lock_cas)
-_lock_cas_rasstart:
+_lock_cas_ras_start:
 	ldw	0(%arg0),%t1
 	comb,<>	%arg1, %t1, 1f
-	 ldi	0,%ret0
+	 copy	%t1,%ret0
+_lock_cas_ras_end:
 	stw	%arg2,0(%arg0)
-_lock_cas_rasend:
-
-	ldi	1,%ret0
+	copy	%arg1,%ret0
 1:
 	bv,n	%r0(%rp)
 
 EXIT(_lock_cas)
+
+STRONG_ALIAS(_atomic_cas_ulong,_lock_cas)
+STRONG_ALIAS(atomic_cas_ulong,_lock_cas)
+STRONG_ALIAS(_atomic_cas_32,_lock_cas)
+STRONG_ALIAS(atomic_cas_32,_lock_cas)
+STRONG_ALIAS(_atomic_cas_uint,_lock_cas)
+STRONG_ALIAS(atomic_cas_uint,_lock_cas)
+STRONG_ALIAS(_atomic_cas_ptr,_lock_cas)
+STRONG_ALIAS(atomic_cas_ptr,_lock_cas)
+
+STRONG_ALIAS(_atomic_cas_ulong_ni,_lock_cas)
+STRONG_ALIAS(atomic_cas_ulong_ni,_lock_cas)
+STRONG_ALIAS(_atomic_cas_32_ni,_lock_cas)
+STRONG_ALIAS(atomic_cas_32_ni,_lock_cas)
+STRONG_ALIAS(_atomic_cas_uint_ni,_lock_cas)
+STRONG_ALIAS(atomic_cas_uint_ni,_lock_cas)
+STRONG_ALIAS(_atomic_cas_ptr_ni,_lock_cas)
+STRONG_ALIAS(atomic_cas_ptr_ni,_lock_cas)
 
 #ifndef LOCKDEBUG
 /*
@@ -102,8 +115,10 @@ LEAF_ENTRY(mutex_exit)
 	 */
 
 	ldi	1,%t2				/* unlocked = 1 */
+	ldo	(MTX_LOCK + HPPA_LDCW_ALIGN - 1)(%arg0), %t3
+	depi	0, 31, 4, %t3
 	stw	%t1,MTX_OWNER(%arg0)
-	stw	%t2,MTX_LOCK(%arg0)
+	stw	%t2,0(%t3)			/* %t3 is properly aligned */
 	sync
 
 	/*	
@@ -164,13 +179,18 @@ LEAF_ENTRY(mutex_enter)
 	 * else can acquire the mutex while the lock is held.
 	 */
 .Lmutexunowned:
-	ldcw	MTX_LOCK(%arg0), %ret0
+	ldo	(MTX_LOCK + HPPA_LDCW_ALIGN - 1)(%arg0), %t1
+	depi	0, 31, 4, %t1
+	ldcw	0(%t1), %ret0
+
+mutex_enter_crit_start:
 	comib,=	0,%ret0,.Lenter_slowpath
 
 	ldil	L%curlwp, %t1
 	ldw	R%curlwp(%t1), %t2
 
 	bv	%r0(%rp)
+mutex_enter_crit_end:
 	 stw	%t2,MTX_OWNER(%arg0)
 EXIT(mutex_enter)
 

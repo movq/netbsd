@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.95 2007/02/22 16:45:49 thorpej Exp $	*/
+/*	$NetBSD: pmap.c,v 1.99 2008/04/28 20:23:38 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -112,7 +105,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.95 2007/02/22 16:45:49 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.99 2008/04/28 20:23:38 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_pmap_debug.h"
@@ -536,13 +529,9 @@ current_pmap(void)
 	struct vm_map *map;
 	pmap_t	pmap;
 
-	if (curlwp == NULL)
-		pmap = &kernel_pmap;
-	else {
-		vm = curproc->p_vmspace;
-		map = &vm->vm_map;
-		pmap = vm_map_pmap(map);
-	}
+	vm = curproc->p_vmspace;
+	map = &vm->vm_map;
+	pmap = vm_map_pmap(map);
 
 	return pmap;
 }
@@ -1103,7 +1092,7 @@ pmap_init(void)
 
 	/** Initialize the pmap pools **/
 	pool_init(&pmap_pmap_pool, sizeof(struct pmap), 0, 0, 0, "pmappl",
-	    &pool_allocator_nointr);
+	    &pool_allocator_nointr, IPL_NONE);
 }
 
 /* pmap_init_a_tables()			INTERNAL

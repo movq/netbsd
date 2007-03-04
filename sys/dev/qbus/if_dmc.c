@@ -1,4 +1,4 @@
-/*	$NetBSD: if_dmc.c,v 1.13 2006/03/29 18:17:36 thorpej Exp $	*/
+/*	$NetBSD: if_dmc.c,v 1.16 2008/04/05 19:16:49 cegger Exp $	*/
 /*
  * Copyright (c) 1982, 1986 Regents of the University of California.
  * All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_dmc.c,v 1.13 2006/03/29 18:17:36 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_dmc.c,v 1.16 2008/04/05 19:16:49 cegger Exp $");
 
 #undef DMCDEBUG	/* for base table dump on fatal error */
 
@@ -63,7 +63,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_dmc.c,v 1.13 2006/03/29 18:17:36 thorpej Exp $");
 #include <netinet/in_var.h>
 #endif
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/qbus/ubareg.h>
 #include <dev/qbus/ubavar.h>
@@ -178,7 +178,7 @@ static  void dmcrestart(struct dmc_softc *);
 static  void dmcload(struct dmc_softc *, int, u_short, u_short);
 static  void dmcstart(struct ifnet *);
 static  void dmctimeout(struct ifnet *);
-static  int dmcioctl(struct ifnet *, u_long, caddr_t);
+static  int dmcioctl(struct ifnet *, u_long, void *);
 static  int dmcoutput(struct ifnet *, struct mbuf *, struct sockaddr *,
 	struct rtentry *);
 static  void dmcreset(struct device *);
@@ -256,7 +256,7 @@ dmcattach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ioh = ua->ua_ioh;
 	sc->sc_dmat = ua->ua_dmat;
 
-	strcpy(sc->sc_if.if_xname, sc->sc_dev.dv_xname);
+	strlcpy(sc->sc_if.if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	sc->sc_if.if_mtu = DMCMTU;
 	sc->sc_if.if_init = dmcinit;
 	sc->sc_if.if_output = dmcoutput;
@@ -272,9 +272,9 @@ dmcattach(struct device *parent, struct device *self, void *aux)
 	    &sc->sc_tintrcnt);
 	uba_reset_establish(dmcreset, &sc->sc_dev);
 	evcnt_attach_dynamic(&sc->sc_rintrcnt, EVCNT_TYPE_INTR, ua->ua_evcnt,
-	    sc->sc_dev.dv_xname, "intr");
+	    device_xname(&sc->sc_dev), "intr");
 	evcnt_attach_dynamic(&sc->sc_tintrcnt, EVCNT_TYPE_INTR, ua->ua_evcnt,
-	    sc->sc_dev.dv_xname, "intr");
+	    device_xname(&sc->sc_dev), "intr");
 
 	if_attach(&sc->sc_if);
 }
@@ -327,7 +327,7 @@ dmcinit(struct ifnet *ifp)
 	/* map base table */
 	if ((sc->sc_flag & DMC_BMAPPED) == 0) {
 		sc->sc_ui.ui_size = sizeof(struct dmc_base);
-		sc->sc_ui.ui_vaddr = (caddr_t)&sc->dmc_base;
+		sc->sc_ui.ui_vaddr = (void *)&sc->dmc_base;
 		uballoc((void *)device_parent(&sc->sc_dev), &sc->sc_ui, 0);
 		sc->sc_flag |= DMC_BMAPPED;
 	}
@@ -338,8 +338,7 @@ dmcinit(struct ifnet *ifp)
 		    (void *)device_parent(&sc->sc_dev),
 		    sizeof(struct dmc_header) + DMCMTU,
 		    sc->sc_ifr, NRCV, sc->sc_ifw, NXMT) == 0) {
-			printf("%s: can't allocate uba resources\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(&sc->sc_dev, "can't allocate uba resources\n");
 			ifp->if_flags &= ~IFF_UP;
 			return 0;
 		}
@@ -503,7 +502,7 @@ dmcrint(void *arg)
 	int n;
 
 	if ((qp = sc->sc_qactive) == (struct dmc_command *) 0) {
-		printf("%s: dmcrint no command\n", sc->sc_dev.dv_xname);
+		printf("%s: dmcrint no command\n", device_xname(&sc->sc_dev));
 		return;
 	}
 	while (DMC_RBYTE(DMC_BSEL0) & DMC_RDYI) {
@@ -590,15 +589,14 @@ dmcxint(void *a)
 			if (rp >= &sc->sc_rbufs[NRCV])
 				panic("dmc rcv");
 			if ((rp->flags & DBUF_DMCS) == 0)
-				printf("%s: done unalloc rbuf\n",
-				    sc->sc_dev.dv_xname);
+				aprint_error_dev(&sc->sc_dev, "done unalloc rbuf\n");
 
 			len = (arg & DMC_CCOUNT) - sizeof (struct dmc_header);
 			if (len < 0 || len > DMCMTU) {
 				ifp->if_ierrors++;
 #ifdef DMCDEBUG
 				printd("%s: bad rcv pkt addr 0x%x len 0x%x\n",
-				    sc->sc_dev.dv_xname, pkaddr, len);
+				    device_xname(&sc->sc_dev), pkaddr, len);
 #endif
 				goto setup;
 			}
@@ -667,13 +665,13 @@ dmcxint(void *a)
 				ifxp++;
 			}
 			if (rp >= &sc->sc_xbufs[NXMT]) {
-				printf("%s: bad packet address 0x%x\n",
-				    sc->sc_dev.dv_xname, pkaddr);
+				aprint_error_dev(&sc->sc_dev, "bad packet address 0x%x\n",
+				    pkaddr);
 				break;
 			}
 			if ((rp->flags & DBUF_DMCS) == 0)
-				printf("%s: unallocated packet 0x%x\n",
-				    sc->sc_dev.dv_xname, pkaddr);
+				aprint_error_dev(&sc->sc_dev, "unallocated packet 0x%x\n",
+				    pkaddr);
 			/* mark buffer free */
 			if_ubaend(&sc->sc_ifuba, ifxp);
 			rp->flags &= ~DBUF_DMCS;
@@ -701,7 +699,7 @@ dmcxint(void *a)
 					    buf, sizeof(buf));
 					log(LOG_ERR,
 					    "%s: fatal error, flags=%s\n",
-					    sc->sc_dev.dv_xname, buf);
+					    device_xname(&sc->sc_dev), buf);
 				}
 				dmcrestart(sc);
 				break;
@@ -734,7 +732,7 @@ dmcxint(void *a)
 #ifdef DMCDEBUG
 			bitmask_snprintf(arg, CNTLO_BITS, buf, sizeof(buf));
 			printd("%s: soft error, flags=%s\n",
-			    sc->sc_dev.dv_xname, buf);
+			    device_xname(&sc->sc_dev), buf);
 #endif
 			if ((sc->sc_flag & DMC_RESTART) == 0) {
 				/*
@@ -750,7 +748,7 @@ dmcxint(void *a)
 
 		default:
 			printf("%s: bad control %o\n",
-			    sc->sc_dev.dv_xname, cmd);
+			    device_xname(&sc->sc_dev), cmd);
 			break;
 		}
 	}
@@ -836,7 +834,7 @@ bad:
  */
 /* ARGSUSED */
 int
-dmcioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+dmcioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	int s = splnet(), error = 0;
 	register struct dmc_softc *sc = ifp->if_softc;
@@ -881,7 +879,7 @@ dmcrestart(struct dmc_softc *sc)
 
 #ifdef DMCDEBUG
 	/* dump base table */
-	printf("%s base table:\n", sc->sc_dev.dv_xname);
+	printf("%s base table:\n", device_xname(&sc->sc_dev));
 	for (i = 0; i < sizeof (struct dmc_base); i++)
 		printf("%o\n" ,dmc_base[unit].d_base[i]);
 #endif
@@ -896,7 +894,7 @@ dmcrestart(struct dmc_softc *sc)
 		;
 	/* Did the timer expire or did the DMR finish? */
 	if ((DMC_RBYTE(DMC_BSEL1) & DMC_RUN) == 0) {
-		log(LOG_ERR, "%s: M820 Test Failed\n", sc->sc_dev.dv_xname);
+		log(LOG_ERR, "%s: M820 Test Failed\n", device_xname(&sc->sc_dev));
 		return;
 	}
 
@@ -949,7 +947,7 @@ dmctimeout(struct ifnet *ifp)
 		bitmask_snprintf(DMC_RBYTE(DMC_BSEL2) & 0xff, DMC2BITS,
 		    buf2, sizeof(buf2));
 		log(LOG_ERR, "%s: output timeout, bsel0=%s bsel2=%s\n",
-		    sc->sc_dev.dv_xname, buf1, buf2);
+		    device_xname(&sc->sc_dev), buf1, buf2);
 		dmcrestart(sc);
 	}
 }

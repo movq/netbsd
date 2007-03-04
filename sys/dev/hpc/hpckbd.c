@@ -1,4 +1,4 @@
-/*	$NetBSD: hpckbd.c,v 1.21 2007/01/29 01:52:44 hubertf Exp $ */
+/*	$NetBSD: hpckbd.c,v 1.25 2008/04/28 20:23:48 martin Exp $ */
 
 /*-
  * Copyright (c) 1999-2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpckbd.c,v 1.21 2007/01/29 01:52:44 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpckbd.c,v 1.25 2008/04/28 20:23:48 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,8 +38,8 @@ __KERNEL_RCSID(0, "$NetBSD: hpckbd.c,v 1.21 2007/01/29 01:52:44 hubertf Exp $");
 
 #include <sys/tty.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <machine/config_hook.h>
 #include <machine/platid.h>
@@ -117,7 +110,7 @@ CFATTACH_DECL(hpckbd, sizeof(struct hpckbd_softc),
 /* wskbd accessopts */
 int	hpckbd_enable(void *, int);
 void	hpckbd_set_leds(void *, int);
-int	hpckbd_ioctl(void *, u_long, caddr_t, int, struct lwp *);
+int	hpckbd_ioctl(void *, u_long, void *, int, struct lwp *);
 
 /* consopts */
 struct	hpckbd_core hpckbd_consdata;
@@ -370,7 +363,7 @@ __hpckbd_input(void *arg, int flag, int scancode)
 
 		if (scancode == hc->hc_special[KEY_SPECIAL_OFF]) {
 			config_hook_call(CONFIG_HOOK_BUTTONEVENT,
-			    CONFIG_HOOK_BUTTONEVENT_POWER, NULL);
+			    CONFIG_HOOK_BUTTONEVENT_POWER, (void *)1 /* on */);
 		} else if (scancode == hc->hc_special[KEY_SPECIAL_LIGHT]) {
 			static int onoff; /* XXX -uch */
 			config_hook_call(CONFIG_HOOK_BUTTONEVENT,
@@ -467,7 +460,7 @@ hpckbd_set_leds(void *arg, int leds)
 }
 
 int
-hpckbd_ioctl(void *arg, u_long cmd, caddr_t data, int flag,
+hpckbd_ioctl(void *arg, u_long cmd, void *data, int flag,
 	     struct lwp *l)
 {
 #ifdef WSDISPLAY_COMPAT_RAWKBD

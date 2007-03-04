@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_pci_link.c,v 1.7 2006/09/24 06:03:20 dogcow Exp $	*/
+/*	$NetBSD: acpi_pci_link.c,v 1.13 2008/06/04 21:37:03 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2002 Mitsuru IWASAKI <iwasaki@jp.freebsd.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_pci_link.c,v 1.7 2006/09/24 06:03:20 dogcow Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_pci_link.c,v 1.13 2008/06/04 21:37:03 jmcneill Exp $");
 
 #include "opt_acpi.h"
 #include <sys/param.h>
@@ -91,7 +91,6 @@ struct acpi_pci_link_softc {
 	struct link *pl_links;
 	char pl_name[32];
 	ACPI_HANDLE pl_handle;
-	void *pl_powerhook;
 	TAILQ_ENTRY(acpi_pci_link_softc) pl_list;
 };
 
@@ -110,6 +109,8 @@ struct link {
 	int	l_num_irqs;
 	int	*l_irqs;
 	int	l_references;
+	int	l_dev_count;
+	pcitag_t *l_devices;
 	int	l_routed:1;
 	int	l_isa_irq:1;
 	ACPI_RESOURCE l_prs_template;
@@ -140,7 +141,6 @@ static void acpi_pci_link_dump(struct acpi_pci_link_softc *);
 static int acpi_pci_link_attach(struct acpi_pci_link_softc *);
 static uint8_t acpi_pci_link_search_irq(struct acpi_pci_link_softc *, int, int,
 					int);
-static void acpi_pci_link_resume(int, void *);
 static struct link *acpi_pci_link_lookup(struct acpi_pci_link_softc *, int);
 static ACPI_STATUS acpi_pci_link_srs(struct acpi_pci_link_softc *,
 				     ACPI_BUFFER *);
@@ -227,7 +227,7 @@ link_add_crs(ACPI_RESOURCE *res, void *context)
 				link->l_irq = res->Data.Irq.Interrupts[0];
 				link->l_trig = res->Data.Irq.Triggering;
 				link->l_pol = res->Data.Irq.Polarity;
-		}
+			}
 		} else if (res->Data.ExtendedIrq.InterruptCount == 1) {
 			link->l_irq = res->Data.ExtendedIrq.Interrupts[0];
 			link->l_trig = res->Data.ExtendedIrq.Triggering;
@@ -382,7 +382,7 @@ link_valid_irq(struct link *link, int irq)
 	 * For links routed via an ISA interrupt, if the SCI is routed via
 	 * an ISA interrupt, the SCI is always treated as a valid IRQ.
 	 */
-	if (link->l_isa_irq && AcpiGbl_FADT->SciInt == irq &&
+	if (link->l_isa_irq && AcpiGbl_FADT.SciInterrupt == irq &&
 	    irq < NUM_ISA_INTERRUPTS)
 		return (TRUE);
 
@@ -468,6 +468,8 @@ acpi_pci_link_attach(struct acpi_pci_link_softc *sc)
 		sc->pl_links[i].l_sc = sc;
 		sc->pl_links[i].l_isa_irq = FALSE;
 		sc->pl_links[i].l_res_index = -1;
+		sc->pl_links[i].l_dev_count = 0;
+		sc->pl_links[i].l_devices = NULL;
 	}
 
 	/* Try to read the current settings from _CRS if it is valid. */
@@ -546,11 +548,57 @@ acpi_pci_link_attach(struct acpi_pci_link_softc *sc)
 	return (0);
 fail:
 	ACPI_SERIAL_END(pci_link);
-	for (i = 0; i < sc->pl_num_links; i++)
+	for (i = 0; i < sc->pl_num_links; i++) {
 		if (sc->pl_links[i].l_irqs != NULL)
 			free(sc->pl_links[i].l_irqs, M_PCI_LINK);
+		if (sc->pl_links[i].l_devices != NULL)
+			free(sc->pl_links[i].l_devices, M_PCI_LINK);
+	}
 	free(sc->pl_links, M_PCI_LINK);
 	return (ENXIO);
+}
+
+static void
+acpi_pci_link_add_functions(struct acpi_pci_link_softc *sc, struct link *link,
+    int bus, int device, int pin)
+{
+	uint32_t value;
+	uint8_t func, maxfunc, ipin;
+	pcitag_t tag;
+
+	tag = pci_make_tag(acpi_softc->sc_pc, bus, device, 0);
+	/* See if we have a valid device at function 0. */
+	value = pci_conf_read(acpi_softc->sc_pc, tag,  PCI_BHLC_REG);
+	if (PCI_HDRTYPE_TYPE(value) > PCI_HDRTYPE_PCB)
+		return;
+	if (PCI_HDRTYPE_MULTIFN(value))
+		maxfunc = 7;
+	else
+		maxfunc = 0;
+
+	/* Scan all possible functions at this device. */
+	for (func = 0; func <= maxfunc; func++) {
+		tag = pci_make_tag(acpi_softc->sc_pc, bus, device, func);
+		value = pci_conf_read(acpi_softc->sc_pc, tag, PCI_ID_REG);
+		if (PCI_VENDOR(value) == 0xffff)
+			continue;
+		value = pci_conf_read(acpi_softc->sc_pc, tag,
+		    PCI_INTERRUPT_REG);
+		ipin = PCI_INTERRUPT_PIN(value);
+		/*
+		 * See if it uses the pin in question.  Note that the passed
+		 * in pin uses 0 for A, .. 3 for D whereas the intpin
+		 * register uses 0 for no interrupt, 1 for A, .. 4 for D.
+		 */
+		if (ipin != pin + 1)
+			continue;
+
+		link->l_devices = realloc(link->l_devices,
+		    sizeof(pcitag_t) * (link->l_dev_count + 1),
+		    M_PCI_LINK, M_WAITOK);
+		link->l_devices[link->l_dev_count] = tag;
+		++link->l_dev_count;
+	}
 }
 
 static uint8_t
@@ -630,6 +678,7 @@ acpi_pci_link_add_reference(void *v, int index, int bus, int slot, int pin)
 		return;
 	}
 	link->l_references++;
+	acpi_pci_link_add_functions(sc, link, bus, slot, pin);
 	if (link->l_routed)
 		pci_link_interrupt_weights[link->l_irq]++;
 
@@ -921,23 +970,6 @@ acpi_pci_link_route_irqs(struct acpi_pci_link_softc *sc, int *irq, int *pol,
 	return (AE_OK);
 }
 
-static void
-acpi_pci_link_resume(int why, void *arg)
-{
-	struct acpi_pci_link_softc *sc = arg;
-	ACPI_BUFFER srsbuf;
-
-	switch (why) {
-	case PWR_RESUME:
-		ACPI_SERIAL_BEGIN(pci_link);
-		if (ACPI_SUCCESS(acpi_pci_link_srs(sc, &srsbuf)))
-			AcpiOsFree(srsbuf.Pointer);
-		ACPI_SERIAL_END(pci_link);
-	default:
-		break;
-	}
-}
-
 /*
  * Pick an IRQ to use for this unrouted link.
  */
@@ -987,8 +1019,8 @@ acpi_pci_link_choose_irq(struct acpi_pci_link_softc *sc, struct link *link)
 	 * If this is an ISA IRQ, try using the SCI if it is also an ISA
 	 * interrupt as a fallback.
 	 */
-	if (link->l_isa_irq) {
-		pos_irq = AcpiGbl_FADT->SciInt;
+	if (link->l_isa_irq && !PCI_INTERRUPT_VALID(best_irq)) {
+		pos_irq = AcpiGbl_FADT.SciInterrupt;
 		pos_weight = pci_link_interrupt_weights[pos_irq];
 		if (pos_weight < best_weight) {
 			best_weight = pos_weight;
@@ -1009,6 +1041,8 @@ acpi_pci_link_route_interrupt(void *v, int index, int *irq, int *pol, int *trig)
 {
 	struct acpi_pci_link_softc *sc = v;
 	struct link *link;
+	int i;
+	pcireg_t reg;
 
 	ACPI_SERIAL_BEGIN(pci_link);
 	link = acpi_pci_link_lookup(sc, index);
@@ -1029,23 +1063,40 @@ acpi_pci_link_route_interrupt(void *v, int index, int *irq, int *pol, int *trig)
 	}
 
 	/* Choose an IRQ if we need one. */
-	if (!PCI_INTERRUPT_VALID(link->l_irq)) {
-		link->l_irq = acpi_pci_link_choose_irq(sc, link);
-
-		/*
-		 * Try to route the interrupt we picked.  If it fails, then
-		 * assume the interrupt is not routed.
-		 */
-		if (PCI_INTERRUPT_VALID(link->l_irq)) {
-			acpi_pci_link_route_irqs(sc, irq, pol, trig);
-			if (!link->l_routed)
-				link->l_irq = PCI_INVALID_IRQ;
-			else {
-				link->l_pol = *pol;
-				link->l_trig = *trig;
-			}
-		}
+	if (PCI_INTERRUPT_VALID(link->l_irq)) {
+		*irq = link->l_irq;
+		*pol = link->l_pol;
+		*trig = link->l_trig;
+		goto done;
 	}
+
+	link->l_irq = acpi_pci_link_choose_irq(sc, link);
+
+	/*
+	 * Try to route the interrupt we picked.  If it fails, then
+	 * assume the interrupt is not routed.
+	 */
+	if (!PCI_INTERRUPT_VALID(link->l_irq))
+		goto done;
+
+	acpi_pci_link_route_irqs(sc, irq, pol, trig);
+	if (!link->l_routed) {
+		link->l_irq = PCI_INVALID_IRQ;
+		goto done;
+	}
+
+	link->l_pol = *pol;
+	link->l_trig = *trig;
+	for (i = 0; i < link->l_dev_count; ++i) {
+		reg = pci_conf_read(acpi_softc->sc_pc, link->l_devices[i],
+		    PCI_INTERRUPT_REG);
+		reg &= ~(PCI_INTERRUPT_LINE_MASK << PCI_INTERRUPT_LINE_SHIFT);
+		reg |= link->l_irq << PCI_INTERRUPT_LINE_SHIFT;
+		pci_conf_write(acpi_softc->sc_pc, link->l_devices[i],
+		    PCI_INTERRUPT_REG, reg);
+	}
+
+done:
 	ACPI_SERIAL_END(pci_link);
 
 	return (link->l_irq);
@@ -1059,7 +1110,6 @@ static void
 acpi_pci_link_init(struct acpi_pci_link_softc *sc)
 {
 	ACPI_BUFFER buf;
-	char acpipcilinkname[] = "acpi_pci_link";
 
 	/*
 	 * If the SCI is an ISA IRQ, add it to the bitmask of known good
@@ -1070,13 +1120,8 @@ acpi_pci_link_init(struct acpi_pci_link_softc *sc)
 	 * if we are using the APIC, we also shouldn't be having any PCI
 	 * interrupts routed via ISA IRQs, so this is probably ok.
 	 */
-	if (AcpiGbl_FADT->SciInt < NUM_ISA_INTERRUPTS)
-		pci_link_bios_isa_irqs |= (1 << AcpiGbl_FADT->SciInt);
-
-        sc->pl_powerhook = powerhook_establish(acpipcilinkname,
-	    acpi_pci_link_resume, sc);
-        if (sc->pl_powerhook == NULL)
-                aprint_normal("can't establish powerhook\n");
+	if (AcpiGbl_FADT.SciInterrupt < NUM_ISA_INTERRUPTS)
+		pci_link_bios_isa_irqs |= (1 << AcpiGbl_FADT.SciInterrupt);
 
 	buf.Length = sizeof (sc->pl_name);
 	buf.Pointer = sc->pl_name;

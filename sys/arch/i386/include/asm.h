@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.31 2007/02/09 21:55:05 ad Exp $	*/
+/*	$NetBSD: asm.h,v 1.38 2008/05/03 05:54:52 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -84,10 +84,12 @@
 
 /* let kernels and others override entrypoint alignment */
 #if !defined(_ALIGN_TEXT) && !defined(_KERNEL)
-# ifdef __ELF__
+# ifdef _STANDALONE
 #  define _ALIGN_TEXT .align 4
+# elif defined __ELF__
+#  define _ALIGN_TEXT .align 16
 # else
-#  define _ALIGN_TEXT .align 2
+#  define _ALIGN_TEXT .align 4
 # endif
 #endif
 
@@ -98,39 +100,47 @@
 
 #ifdef _KERNEL
 
-#if defined(MULTIPROCESSOR)
 #define CPUVAR(off) %fs:__CONCAT(CPU_INFO_,off)
-#else
-#define CPUVAR(off) _C_LABEL(cpu_info_primary)+__CONCAT(CPU_INFO_,off)
-#endif /* MULTIPROCESSOR */
 
 /* XXX Can't use __CONCAT() here, as it would be evaluated incorrectly. */
 #ifdef __ELF__
 #ifdef __STDC__
 #define	IDTVEC(name) \
 	ALIGN_TEXT; .globl X ## name; .type X ## name,@function; X ## name:
+#define	IDTVEC_END(name) \
+	.size X ## name, . - X ## name
 #else 
 #define	IDTVEC(name) \
 	ALIGN_TEXT; .globl X/**/name; .type X/**/name,@function; X/**/name:
+#define	IDTVEC_END(name) \
+	.size X/**/name, . - X/**/name
 #endif /* __STDC__ */ 
 #else 
 #ifdef __STDC__
 #define	IDTVEC(name) \
 	ALIGN_TEXT; .globl _X ## name; .type _X ## name,@function; _X ## name: 
+#define	IDTVEC_END(name) \
+	.size _X ## name, . - _X ## name
 #else
 #define	IDTVEC(name) \
 	ALIGN_TEXT; .globl _X/**/name; .type _X/**/name,@function; _X/**/name:
+#define	IDTVEC_END(name) \
+	.size _X/**/name, . - _X/**/name
 #endif /* __STDC__ */
 #endif /* __ELF__ */
 
-#ifdef __ELF__
+#ifdef _STANDALONE
 #define ALIGN_DATA	.align	4
-#define ALIGN_TEXT	.align	4,0x90  /* 4-byte boundaries, NOP-filled */
-#define SUPERALIGN_TEXT	.align	16,0x90 /* 16-byte boundaries better for 486 */
+#define ALIGN_TEXT	.align	4	/* 4-byte boundaries */
+#define SUPERALIGN_TEXT	.align	16	/* 15-byte boundaries */
+#elif defined __ELF__
+#define ALIGN_DATA	.align	4
+#define ALIGN_TEXT	.align	16	/* 16-byte boundaries */
+#define SUPERALIGN_TEXT	.align	16	/* 16-byte boundaries */
 #else
 #define ALIGN_DATA	.align	2
-#define ALIGN_TEXT	.align	2,0x90  /* 4-byte boundaries, NOP-filled */
-#define SUPERALIGN_TEXT	.align	4,0x90  /* 16-byte boundaries better for 486 */
+#define ALIGN_TEXT	.align	4	/* 16-byte boundaries */
+#define SUPERALIGN_TEXT	.align	4	/* 16-byte boundaries */
 #endif /* __ELF__ */
 
 #define _ALIGN_TEXT ALIGN_TEXT
@@ -165,11 +175,12 @@
 #define	NENTRY(y)	_ENTRY(_C_LABEL(y))
 #define	ASENTRY(y)	_ENTRY(_ASM_LABEL(y)); _PROF_PROLOGUE
 #define	LABEL(y)	_LABEL(_C_LABEL(y))
+#define	END(y)		.size y, . - y
 
 #define	ASMSTR		.asciz
 
 #ifdef __ELF__
-#define RCSID(x)	.section ".ident"; .asciz x
+#define RCSID(x)	.pushsection ".ident"; .asciz x; .popsection
 #else
 #define RCSID(x)	.text; .asciz x
 #endif

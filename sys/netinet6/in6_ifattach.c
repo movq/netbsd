@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_ifattach.c,v 1.69 2007/02/22 08:52:57 dyoung Exp $	*/
+/*	$NetBSD: in6_ifattach.c,v 1.80 2008/04/24 11:38:38 ad Exp $	*/
 /*	$KAME: in6_ifattach.c,v 1.124 2001/07/18 08:32:51 jinmei Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6_ifattach.c,v 1.69 2007/02/22 08:52:57 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6_ifattach.c,v 1.80 2008/04/24 11:38:38 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: in6_ifattach.c,v 1.69 2007/02/22 08:52:57 dyoung Exp
 #include <sys/kernel.h>
 #include <sys/syslog.h>
 #include <sys/md5.h>
+#include <sys/socketvar.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -63,17 +64,17 @@ unsigned long in6_maxmtu = 0;
 
 int ip6_auto_linklocal = 1;	/* enable by default */
 
-struct callout in6_tmpaddrtimer_ch = CALLOUT_INITIALIZER;
+callout_t in6_tmpaddrtimer_ch;
 
 
 #if 0
-static int get_hostid_ifid __P((struct ifnet *, struct in6_addr *));
+static int get_hostid_ifid(struct ifnet *, struct in6_addr *);
 #endif
-static int get_rand_ifid __P((struct ifnet *, struct in6_addr *));
-static int generate_tmp_ifid __P((u_int8_t *, const u_int8_t *, u_int8_t *));
-static int get_ifid __P((struct ifnet *, struct ifnet *, struct in6_addr *));
-static int in6_ifattach_linklocal __P((struct ifnet *, struct ifnet *));
-static int in6_ifattach_loopback __P((struct ifnet *));
+static int get_rand_ifid(struct ifnet *, struct in6_addr *);
+static int generate_tmp_ifid(u_int8_t *, const u_int8_t *, u_int8_t *);
+static int get_ifid(struct ifnet *, struct ifnet *, struct in6_addr *);
+static int in6_ifattach_linklocal(struct ifnet *, struct ifnet *);
+static int in6_ifattach_loopback(struct ifnet *);
 
 #define EUI64_GBIT	0x01
 #define EUI64_UBIT	0x02
@@ -95,11 +96,11 @@ static int in6_ifattach_loopback __P((struct ifnet *));
  * also, using hostid itself may constitute a privacy threat, much worse
  * than MAC addresses (hostids are used for software licensing).
  * maybe we should use MD5(hostid) instead.
+ *
+ * in6 - upper 64bits are preserved
  */
 static int
-get_hostid_ifid(ifp, in6)
-	struct ifnet *ifp;
-	struct in6_addr *in6;	/* upper 64bits are preserved */
+get_hostid_ifid(struct ifnet *ifp, struct in6_addr *in6)
 {
 	int off, len;
 	static const uint8_t allzero[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -171,9 +172,7 @@ get_rand_ifid(struct ifnet *ifp,
 }
 
 static int
-generate_tmp_ifid(seed0, seed1, ret)
-	u_int8_t *seed0, *ret;
-	const u_int8_t *seed1;
+generate_tmp_ifid(u_int8_t *seed0, const u_int8_t *seed1, u_int8_t *ret)
 {
 	MD5_CTX ctxt;
 	u_int8_t seed[16], digest[16], nullbuf[8];
@@ -318,25 +317,25 @@ generate_tmp_ifid(seed0, seed1, ret)
 }
 /*
  * Get interface identifier for the specified interface.
- * XXX assumes single sockaddr_dl (AF_LINK address) per an interface
+ * XXX assumes single sockaddr_dl (AF_LINK address) per an interfacea
+ *
+ * in6 - upper 64bits are preserved
  */
 int
-in6_get_hw_ifid(ifp, in6)
-	struct ifnet *ifp;
-	struct in6_addr *in6;	/* upper 64bits are preserved */
+in6_get_hw_ifid(struct ifnet *ifp, struct in6_addr *in6)
 {
 	struct ifaddr *ifa;
-	struct sockaddr_dl *sdl;
-	char *addr;
+	const struct sockaddr_dl *sdl;
+	const char *addr;
 	size_t addrlen;
 	static u_int8_t allzero[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
 	static u_int8_t allone[8] =
 		{ 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
-	TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
+	IFADDR_FOREACH(ifa, ifp) {
 		if (ifa->ifa_addr->sa_family != AF_LINK)
 			continue;
-		sdl = (struct sockaddr_dl *)ifa->ifa_addr;
+		sdl = satocsdl(ifa->ifa_addr);
 		if (sdl == NULL)
 			continue;
 		if (sdl->sdl_alen == 0)
@@ -348,7 +347,7 @@ in6_get_hw_ifid(ifp, in6)
 	return -1;
 
 found:
-	addr = LLADDR(sdl);
+	addr = CLLADDR(sdl);
 	addrlen = sdl->sdl_alen;
 
 	switch (ifp->if_type) {
@@ -454,12 +453,12 @@ found:
  * Get interface identifier for the specified interface.  If it is not
  * available on ifp0, borrow interface identifier from other information
  * sources.
+ *
+ * altifp - secondary EUI64 source
  */
 static int
-get_ifid(ifp0, altifp, in6)
-	struct ifnet *ifp0;
-	struct ifnet *altifp;	/*secondary EUI64 source*/
-	struct in6_addr *in6;
+get_ifid(struct ifnet *ifp0, struct ifnet *altifp, 
+	struct in6_addr *in6)
 {
 	struct ifnet *ifp;
 
@@ -525,10 +524,12 @@ success:
 	return 0;
 }
 
+/*
+ * altifp - secondary EUI64 source
+ */
+
 static int
-in6_ifattach_linklocal(ifp, altifp)
-	struct ifnet *ifp;
-	struct ifnet *altifp;	/*secondary EUI64 source*/
+in6_ifattach_linklocal(struct ifnet *ifp, struct ifnet *altifp)
 {
 	struct in6_ifaddr *ia;
 	struct in6_aliasreq ifra;
@@ -563,16 +564,14 @@ in6_ifattach_linklocal(ifp, altifp)
 	if (in6_setscope(&ifra.ifra_addr.sin6_addr, ifp, NULL))
 		return -1;
 
-	ifra.ifra_prefixmask.sin6_len = sizeof(struct sockaddr_in6);
-	ifra.ifra_prefixmask.sin6_family = AF_INET6;
-	ifra.ifra_prefixmask.sin6_addr = in6mask64;
+	sockaddr_in6_init(&ifra.ifra_prefixmask, &in6mask64, 0, 0, 0);
 	/* link-local addresses should NEVER expire. */
 	ifra.ifra_lifetime.ia6t_vltime = ND6_INFINITE_LIFETIME;
 	ifra.ifra_lifetime.ia6t_pltime = ND6_INFINITE_LIFETIME;
 
 	/*
 	 * Now call in6_update_ifa() to do a bunch of procedures to configure
-	 * a link-local address. We can set NULL to the 3rd argument, because
+	 * a link-local address. We can set the 3rd argument to NULL, because
 	 * we know there's no other link-local address on the interface
 	 * and therefore we are adding one (instead of updating one).
 	 */
@@ -640,9 +639,12 @@ in6_ifattach_linklocal(ifp, altifp)
 	return 0;
 }
 
+/*
+ * ifp - mut be IFT_LOOP
+ */
+
 static int
-in6_ifattach_loopback(ifp)
-	struct ifnet *ifp;	/* must be IFT_LOOP */
+in6_ifattach_loopback(struct ifnet *ifp)
 {
 	struct in6_aliasreq ifra;
 	int error;
@@ -655,21 +657,15 @@ in6_ifattach_loopback(ifp)
 	 */
 	strncpy(ifra.ifra_name, if_name(ifp), sizeof(ifra.ifra_name));
 
-	ifra.ifra_prefixmask.sin6_len = sizeof(struct sockaddr_in6);
-	ifra.ifra_prefixmask.sin6_family = AF_INET6;
-	ifra.ifra_prefixmask.sin6_addr = in6mask128;
+	sockaddr_in6_init(&ifra.ifra_prefixmask, &in6mask128, 0, 0, 0);
 
 	/*
 	 * Always initialize ia_dstaddr (= broadcast address) to loopback
 	 * address.  Follows IPv4 practice - see in_ifinit().
 	 */
-	ifra.ifra_dstaddr.sin6_len = sizeof(struct sockaddr_in6);
-	ifra.ifra_dstaddr.sin6_family = AF_INET6;
-	ifra.ifra_dstaddr.sin6_addr = in6addr_loopback;
+	sockaddr_in6_init(&ifra.ifra_dstaddr, &in6addr_loopback, 0, 0, 0);
 
-	ifra.ifra_addr.sin6_len = sizeof(struct sockaddr_in6);
-	ifra.ifra_addr.sin6_family = AF_INET6;
-	ifra.ifra_addr.sin6_addr = in6addr_loopback;
+	sockaddr_in6_init(&ifra.ifra_addr, &in6addr_loopback, 0, 0, 0);
 
 	/* the loopback  address should NEVER expire. */
 	ifra.ifra_lifetime.ia6t_vltime = ND6_INFINITE_LIFETIME;
@@ -699,11 +695,8 @@ in6_ifattach_loopback(ifp)
  * when ifp == NULL, the caller is responsible for filling scopeid.
  */
 int
-in6_nigroup(ifp, name, namelen, sa6)
-	struct ifnet *ifp;
-	const char *name;
-	int namelen;
-	struct sockaddr_in6 *sa6;
+in6_nigroup(struct ifnet *ifp, const char *name, int namelen, 
+	struct sockaddr_in6 *sa6)
 {
 	const char *p;
 	u_int8_t *q;
@@ -752,11 +745,11 @@ in6_nigroup(ifp, name, namelen, sa6)
  * XXX multiple loopback interface needs more care.  for instance,
  * nodelocal address needs to be configured onto only one of them.
  * XXX multiple link-local address case
+ *
+ * altifp - secondary EUI64 source
  */
 void
-in6_ifattach(ifp, altifp)
-	struct ifnet *ifp;
-	struct ifnet *altifp;	/* secondary EUI64 source */
+in6_ifattach(struct ifnet *ifp, struct ifnet *altifp)
 {
 	struct in6_ifaddr *ia;
 	struct in6_addr in6;
@@ -835,12 +828,9 @@ in6_ifattach(ifp, altifp)
 	 */
 	if (ip6_auto_linklocal) {
 		ia = in6ifa_ifpforlinklocal(ifp, 0);
-		if (ia == NULL) {
-			if (in6_ifattach_linklocal(ifp, altifp) == 0) {
-				/* linklocal address assigned */
-			} else {
-				/* failed to assign linklocal address. bark? */
-			}
+		if (ia == NULL && in6_ifattach_linklocal(ifp, altifp) != 0) {
+			printf("%s: cannot assign link-local address\n",
+			    ifp->if_xname);
 		}
 	}
 }
@@ -851,8 +841,7 @@ in6_ifattach(ifp, altifp)
  * from the ifnet list in bsdi.
  */
 void
-in6_ifdetach(ifp)
-	struct ifnet *ifp;
+in6_ifdetach(struct ifnet *ifp)
 {
 	struct in6_ifaddr *ia, *oia;
 	struct ifaddr *ifa, *next;
@@ -866,17 +855,15 @@ in6_ifdetach(ifp)
 	/* remove neighbor management table */
 	nd6_purge(ifp);
 
+	/* XXX this code is duplicated in in6_purgeif() --dyoung */
 	/* nuke any of IPv6 addresses we have */
-	for (ifa = TAILQ_FIRST(&ifp->if_addrlist); ifa; ifa = next) {
-		next = TAILQ_NEXT(ifa, ifa_list);
-		if (ifa->ifa_addr->sa_family != AF_INET6)
-			continue;
-		in6_purgeaddr(ifa);
-	}
+	if_purgeaddrs(ifp, AF_INET6, in6_purgeaddr);
 
+	/* XXX isn't this code is redundant, given the above? --dyoung */
+	/* XXX doesn't this code replicate code in in6_purgeaddr() ? --dyoung */
 	/* undo everything done by in6_ifattach(), just in case */
-	for (ifa = TAILQ_FIRST(&ifp->if_addrlist); ifa; ifa = next) {
-		next = TAILQ_NEXT(ifa, ifa_list);
+	for (ifa = IFADDR_FIRST(ifp); ifa != NULL; ifa = next) {
+		next = IFADDR_NEXT(ifa);
 
 		if (ifa->ifa_addr->sa_family != AF_INET6
 		 || !IN6_IS_ADDR_LINKLOCAL(&satosin6(&ifa->ifa_addr)->sin6_addr)) {
@@ -905,8 +892,7 @@ in6_ifdetach(ifp)
 		}
 
 		/* remove from the linked list */
-		TAILQ_REMOVE(&ifp->if_addrlist, &ia->ia_ifa, ifa_list);
-		IFAFREE(&ia->ia_ifa);
+		ifa_remove(ifp, &ia->ia_ifa);
 
 		/* also remove from the IPv6 address chain(itojun&jinmei) */
 		oia = ia;
@@ -942,11 +928,8 @@ in6_ifdetach(ifp)
 }
 
 int
-in6_get_tmpifid(ifp, retbuf, baseid, generate)
-	struct ifnet *ifp;
-	u_int8_t *retbuf;
-	const u_int8_t *baseid;
-	int generate;
+in6_get_tmpifid(struct ifnet *ifp, u_int8_t *retbuf, 
+	const u_int8_t *baseid, int generate)
 {
 	u_int8_t nullbuf[8];
 	struct nd_ifinfo *ndi = ND_IFINFO(ifp);
@@ -979,7 +962,9 @@ in6_tmpaddrtimer(void *ignored_arg)
 	struct nd_ifinfo *ndi;
 	u_int8_t nullbuf[8];
 	struct ifnet *ifp;
-	int s = splsoftnet();
+
+	mutex_enter(softnet_lock);
+	KERNEL_LOCK(1, NULL);
 
 	callout_reset(&in6_tmpaddrtimer_ch,
 	    (ip6_temp_preferred_lifetime - ip6_desync_factor -
@@ -998,5 +983,6 @@ in6_tmpaddrtimer(void *ignored_arg)
 		}
 	}
 
-	splx(s);
+	KERNEL_UNLOCK_ONE(NULL);
+	mutex_exit(softnet_lock);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_atu.c,v 1.24 2006/12/25 18:39:48 wiz Exp $ */
+/*	$NetBSD: if_atu.c,v 1.29 2008/05/24 16:40:58 cube Exp $ */
 /*	$OpenBSD: if_atu.c,v 1.48 2004/12/30 01:53:21 dlg Exp $ */
 /*
  * Copyright (c) 2003, 2004
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atu.c,v 1.24 2006/12/25 18:39:48 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atu.c,v 1.29 2008/05/24 16:40:58 cube Exp $");
 
 #include "bpfilter.h"
 
@@ -63,7 +63,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_atu.c,v 1.24 2006/12/25 18:39:48 wiz Exp $");
 #include <sys/queue.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
@@ -175,7 +175,7 @@ int	atu_newbuf(struct atu_softc *, struct atu_chain *, struct mbuf *);
 void	atu_rxeof(usbd_xfer_handle, usbd_private_handle, usbd_status);
 void	atu_txeof(usbd_xfer_handle, usbd_private_handle, usbd_status);
 void	atu_start(struct ifnet *);
-int	atu_ioctl(struct ifnet *, u_long, caddr_t);
+int	atu_ioctl(struct ifnet *, u_long, void *);
 int	atu_init(struct ifnet *);
 void	atu_stop(struct ifnet *, int);
 void	atu_watchdog(struct ifnet *);
@@ -200,8 +200,8 @@ int	atu_initial_config(struct atu_softc *sc);
 int	atu_join(struct atu_softc *sc, struct ieee80211_node *node);
 int8_t	atu_get_dfu_state(struct atu_softc *sc);
 u_int8_t atu_get_opmode(struct atu_softc *sc, u_int8_t *mode);
-void	atu_internal_firmware(struct device *);
-void	atu_external_firmware(struct device *);
+void	atu_internal_firmware(device_t);
+void	atu_external_firmware(device_t);
 int	atu_get_card_config(struct atu_softc *sc);
 int	atu_media_change(struct ifnet *ifp);
 void	atu_media_status(struct ifnet *ifp, struct ifmediareq *req);
@@ -497,8 +497,8 @@ atu_start_scan(struct atu_softc *sc)
 
 #ifdef ATU_DEBUG
 	if (atudebug) {
-		DPRINTFN(20, ("%s: scan cmd len=%02lx\n",
-		    USBDEVNAME(sc->atu_dev), (unsigned long)sizeof(Scan)));
+		DPRINTFN(20, ("%s: scan cmd len=%02zx\n",
+		    USBDEVNAME(sc->atu_dev), sizeof(Scan)));
 	}
 #endif /* ATU_DEBUG */
 
@@ -660,8 +660,8 @@ atu_initial_config(struct atu_softc *sc)
 
 #ifdef ATU_DEBUG
 	if (atudebug) {
-		DPRINTFN(20, ("%s: configlen=%02lx\n", USBDEVNAME(sc->atu_dev),
-		    (unsigned long)sizeof(cmd)));
+		DPRINTFN(20, ("%s: configlen=%02zx\n", USBDEVNAME(sc->atu_dev),
+		    sizeof(cmd)));
 	}
 #endif /* ATU_DEBUG */
 
@@ -792,9 +792,9 @@ atu_get_opmode(struct atu_softc *sc, u_int8_t *mode)
  * Upload the internal firmware into the device
  */
 void
-atu_internal_firmware(struct device *arg)
+atu_internal_firmware(device_t arg)
 {
-	struct atu_softc *sc = (struct atu_softc *)arg;
+	struct atu_softc *sc = device_private(arg);
 	u_char	state, *ptr = NULL, *firm = NULL, status[6];
 	int block_size, block = 0, err, i;
 	size_t	bytes_left = 0;
@@ -819,14 +819,14 @@ atu_internal_firmware(struct device *arg)
 	 */
 
 	/* Choose the right firmware for the device */
-	for (i = 0; i < sizeof(atu_radfirm)/sizeof(atu_radfirm[0]); i++)
+	for (i = 0; i < __arraycount(atu_radfirm); i++)
 		if (sc->atu_radio == atu_radfirm[i].atur_type) {
 			firm = atu_radfirm[i].atur_internal;
 			bytes_left = atu_radfirm[i].atur_internal_sz;
 		}
 
 	if (firm == NULL) {
-		printf("%s: no firmware found\n", USBDEVNAME(sc->atu_dev));
+		aprint_error_dev(arg, "no firmware found\n");
 		return;
 	}
 
@@ -908,27 +908,26 @@ atu_internal_firmware(struct device *arg)
 	 */
 	usbd_delay_ms(sc->atu_udev, 56+100);
 
-	printf("%s: reattaching after firmware upload\n",
-	    USBDEVNAME(sc->atu_dev));
+	aprint_error_dev(arg, "reattaching after firmware upload\n");
 	usb_needs_reattach(sc->atu_udev);
 }
 
 void
-atu_external_firmware(struct device *arg)
+atu_external_firmware(device_t arg)
 {
-	struct atu_softc *sc = (struct atu_softc *)arg;
+	struct atu_softc *sc = device_private(arg);
 	u_char	*ptr = NULL, *firm = NULL;
 	int	block_size, block = 0, err, i;
 	size_t	bytes_left = 0;
 
-	for (i = 0; i < sizeof(atu_radfirm)/sizeof(atu_radfirm[0]); i++)
+	for (i = 0; i < __arraycount(atu_radfirm); i++)
 		if (sc->atu_radio == atu_radfirm[i].atur_type) {
 			firm = atu_radfirm[i].atur_external;
 			bytes_left = atu_radfirm[i].atur_external_sz;
 		}
 
 	if (firm == NULL) {
-		printf("%s: no firmware found\n", USBDEVNAME(sc->atu_dev));
+		aprint_error_dev(arg, "no firmware found\n");
 		return;
 	}
 	ptr = firm;
@@ -1024,10 +1023,7 @@ USB_MATCH(atu)
 	USB_MATCH_START(atu, uaa);
 	int			i;
 
-	if (!uaa->iface)
-		return(UMATCH_NONE);
-
-	for (i = 0; i < sizeof(atu_devs)/sizeof(atu_devs[0]); i++) {
+	for (i = 0; i < __arraycount(atu_devs); i++) {
 		struct atu_type *t = &atu_devs[i];
 
 		if (uaa->vendor == t->atu_vid &&
@@ -1174,24 +1170,23 @@ USB_ATTACH(atu)
 	u_int8_t			mode, channel;
 	int i;
 
+	sc->atu_dev = self;
 	sc->sc_state = ATU_S_UNCONFIG;
 
 	devinfop = usbd_devinfo_alloc(dev, 0);
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->atu_dev), devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
 	err = usbd_set_config_no(dev, ATU_CONFIG_NO, 1);
 	if (err) {
-		printf("%s: setting config no failed\n",
-		    USBDEVNAME(sc->atu_dev));
+		aprint_error_dev(self, "setting config no failed\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
 	err = usbd_device2interface_handle(dev, ATU_IFACE_IDX, &sc->atu_iface);
 	if (err) {
-		printf("%s: getting interface handle failed\n",
-		    USBDEVNAME(sc->atu_dev));
+		aprint_error_dev(self, "getting interface handle failed\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
@@ -1202,7 +1197,7 @@ USB_ATTACH(atu)
 	 * look up the radio_type for the device
 	 * basically does the same as USB_MATCH
 	 */
-	for (i = 0; i < sizeof(atu_devs)/sizeof(atu_devs[0]); i++) {
+	for (i = 0; i < __arraycount(atu_devs); i++) {
 		struct atu_type *t = &atu_devs[i];
 
 		if (uaa->vendor == t->atu_vid &&
@@ -1228,7 +1223,7 @@ USB_ATTACH(atu)
 		DPRINTF(("%s: starting internal firmware download\n",
 		    USBDEVNAME(sc->atu_dev)));
 
-		atu_internal_firmware((struct device *)sc);
+		atu_internal_firmware(sc->atu_dev);
 		/*
 		 * atu_internal_firmware will cause a reset of the device
 		 * so we don't want to do any more configuration after this
@@ -1236,8 +1231,6 @@ USB_ATTACH(atu)
 		 */
 		USB_ATTACH_SUCCESS_RETURN;
 	}
-
-	uaa->iface = sc->atu_iface;
 
 	if (mode != MODE_NETCARD) {
 		DPRINTFN(15, ("%s: device needs external firmware\n",
@@ -1265,7 +1258,7 @@ USB_ATTACH(atu)
 			}
 		}
 
-		atu_external_firmware((struct device *)sc);
+		atu_external_firmware(sc->atu_dev);
 
 		/*
 		 * atu_external_firmware will call atu_complete_attach after
@@ -1316,15 +1309,14 @@ atu_complete_attach(struct atu_softc *sc)
 	/* read device config & get MAC address */
 	err = atu_get_card_config(sc);
 	if (err) {
-		printf("\n%s: could not get card cfg!\n",
+		aprint_error("\n%s: could not get card cfg!\n",
 		    USBDEVNAME(sc->atu_dev));
 		return;
 	}
 
 #ifdef ATU_DEBUG
 	/* DEBUG : try to get firmware version */
-	err = atu_get_mib(sc, MIB_FW_VERSION, sizeof(fw), 0,
-	    (u_int8_t *)&fw);
+	err = atu_get_mib(sc, MIB_FW_VERSION, sizeof(fw), 0, (u_int8_t *)&fw);
 	if (!err) {
 		DPRINTFN(15, ("%s: firmware: maj:%d min:%d patch:%d "
 		    "build:%d\n", USBDEVNAME(sc->atu_dev), fw.major, fw.minor,
@@ -1336,7 +1328,7 @@ atu_complete_attach(struct atu_softc *sc)
 #endif /* ATU_DEBUG */
 
 	/* Show the world our MAC address */
-	printf("%s: MAC address %s\n", USBDEVNAME(sc->atu_dev),
+	aprint_normal_dev(sc->atu_dev, "MAC address %s\n",
 	    ether_sprintf(ic->ic_myaddr));
 
 	sc->atu_cdata.atu_tx_inuse = 0;
@@ -1422,7 +1414,7 @@ USB_DETACH(atu)
 int
 atu_activate(device_ptr_t self, enum devact act)
 {
-	struct atu_softc *sc = (struct atu_softc *)self;
+	struct atu_softc *sc = device_private(self);
 
 	switch (act) {
 	case DVACT_ACTIVATE:
@@ -2087,7 +2079,7 @@ atu_debug_print(struct atu_softc *sc)
 #endif /* ATU_DEBUG */
 
 int
-atu_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
+atu_ioctl(struct ifnet *ifp, u_long command, void *data)
 {
 	struct atu_softc	*sc = ifp->if_softc;
 	struct ifreq		*ifr = (struct ifreq *)data;

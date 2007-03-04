@@ -1,4 +1,4 @@
-/*	$NetBSD: pccbbreg.h,v 1.11 2006/06/17 17:06:52 jmcneill Exp $	*/
+/*	$NetBSD: pccbbreg.h,v 1.14 2008/07/03 13:37:35 drochner Exp $	*/
 /*
  * Copyright (c) 1999 HAYAKAWA Koichi.  All rights reserved.
  *
@@ -36,14 +36,16 @@
 
 
 #define PCI_SOCKBASE 0x10	/* Socket Base Address Register */
+#define PCI_CBB_SECSTATUS 0x14	/* secondary status (starts at 0x16) */
 #define PCI_BUSNUM   0x18	/* latency timer, Subordinate bus number */
-#define PCI_BCR_INTR 0x3C	/* intr line, intr pin, bridge control regs */
 #define PCI_LEGACY 0x44		/* legacy IO register address (32 bits) */
 #define	PCI_SYSCTRL 0x80	/* System control */
 #define PCI_CBCTRL 0x90		/* Retry status, Card ctrl, Device ctrl */
 
 #define PCI_CLASS_INTERFACE_MASK  0xffffff00
 #define PCI_CLASS_INTERFACE_YENTA 0x06070000
+
+#define CBB_SECSTATUS_CBMABORT	0x20000000
 
 #define CB_SOCKET_EVENT 0x00	/* offset of cardbus socket event reg */
 #define CB_SOCKET_MASK  0x04	/* offset of cardbus socket mask register */
@@ -132,6 +134,13 @@
 #define PCI12XX_CBCTRL_SPK_ENA 0x0200 /* Speaker enable */
 #define PCI12XX_CBCTRL_INTR_DET 0x0100 /* functional interrupt detect */
 
+/* 1: permit burst read from CardBus (default: on) */
+#define	PCI1420_SYSCTRL_MRBURSTDN	__BIT(15)
+/* 1: permit burst read from PCI bus (default: off!) */
+#define	PCI1420_SYSCTRL_MRBURSTUP	__BIT(14)
+
+#define	PCI1420_SYSCTRL_MRBURST	\
+	(PCI1420_SYSCTRL_MRBURSTDN|PCI1420_SYSCTRL_MRBURSTUP)
 
 /* PCI_BCR_INTR additional bit for Rx5C46[567] */
 #define CB_BCRI_RL_3E0_ENA 0x08000000

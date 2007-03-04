@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.19 2007/02/17 22:31:39 pavel Exp $ */
+/*	$NetBSD: process_machdep.c,v 1.22 2008/06/29 07:41:53 nakayama Exp $ */
 
 /*
  * Copyright (c) 1993 The Regents of the University of California.
@@ -95,7 +95,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.19 2007/02/17 22:31:39 pavel Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.22 2008/06/29 07:41:53 nakayama Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -191,7 +191,7 @@ process_sstep(struct lwp *l, int sstep)
 }
 
 int
-process_set_pc(struct lwp *l, caddr_t addr)
+process_set_pc(struct lwp *l, void *addr)
 {
 
 	l->l_md.md_tf->tf_pc = (vaddr_t)addr;
@@ -202,26 +202,25 @@ process_set_pc(struct lwp *l, caddr_t addr)
 int
 process_read_fpregs(struct lwp *l, struct fpreg *regs)
 {
-	extern struct fpstate64	initfpstate;
-	struct fpstate64	*statep = &initfpstate;
+	extern const struct fpstate64 initfpstate;
+	const struct fpstate64	*statep = &initfpstate;
 	struct fpreg32		*regp = (struct fpreg32 *)regs;
 	int i;
 
+	if (l->l_md.md_fpstate)
+		statep = l->l_md.md_fpstate;
 #ifdef __arch64__
 	if (!(curproc->p_flag & PK_32)) {
 		/* 64-bit mode -- copy out fregs */
 		/* NOTE: struct fpreg == struct fpstate */
-		if (l->l_md.md_fpstate)
-			statep = l->l_md.md_fpstate;
 		memcpy(regs, statep, sizeof(struct fpreg64));
 		return 0;
 	}
 #endif
 	/* 32-bit mode -- copy out & convert 32-bit fregs */
-	if (l->l_md.md_fpstate)
-		statep = l->l_md.md_fpstate;
-	for (i=0; i<32; i++)
+	for (i = 0; i < 32; i++)
 		regp->fr_regs[i] = statep->fs_regs[i];
+	regp->fr_fsr = statep->fs_fsr;
 
 	return 0;
 }
@@ -229,29 +228,25 @@ process_read_fpregs(struct lwp *l, struct fpreg *regs)
 int
 process_write_fpregs(struct lwp *l, const struct fpreg *regs)
 {
-
-	extern struct fpstate64	initfpstate;
-	struct fpstate64	*statep = &initfpstate;
+	struct fpstate64	*statep;
 	const struct fpreg32	*regp = (const struct fpreg32 *)regs;
 	int i;
+
+	statep = l->l_md.md_fpstate;
+	if (statep == NULL)
+		return EINVAL;
 
 #ifdef __arch64__
 	if (!(curproc->p_flag & PK_32)) {
 		/* 64-bit mode -- copy in fregs */
-		if (l->l_md.md_fpstate == NULL)
-			return EINVAL;
-
 		/* NOTE: struct fpreg == struct fpstate */
-		memcpy(l->l_md.md_fpstate, regs, sizeof(struct fpreg64));
-		statep = l->l_md.md_fpstate;
+		memcpy(statep, regs, sizeof(struct fpreg64));
 		statep->fs_qsize = 0;
 		return 0;
 	}
 #endif
 	/* 32-bit mode -- copy in & convert 32-bit fregs */
-	if (l->l_md.md_fpstate)
-		statep = l->l_md.md_fpstate;
-	for (i=0; i<32; i++)
+	for (i = 0; i < 32; i++)
 		statep->fs_regs[i] = regp->fr_regs[i];
 	statep->fs_fsr = regp->fr_fsr;
 	statep->fs_qsize = 0;

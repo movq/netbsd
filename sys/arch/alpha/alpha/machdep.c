@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.294 2007/02/22 04:51:26 thorpej Exp $ */
+/* $NetBSD: machdep.c,v 1.307 2008/10/15 06:51:17 wrstuden Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -75,21 +68,21 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.294 2007/02/22 04:51:26 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.307 2008/10/15 06:51:17 wrstuden Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
+#include <sys/cpu.h>
 #include <sys/proc.h>
 #include <sys/ras.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/sched.h>
-#include <sys/buf.h>
 #include <sys/reboot.h>
 #include <sys/device.h>
-#include <sys/file.h>
 #include <sys/malloc.h>
-#include <sys/mbuf.h>
 #include <sys/mman.h>
 #include <sys/msgbuf.h>
 #include <sys/ioctl.h>
@@ -103,6 +96,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.294 2007/02/22 04:51:26 thorpej Exp $"
 #include <sys/conf.h>
 #include <sys/ksyms.h>
 #include <sys/kauth.h>
+#include <sys/atomic.h>
+#include <sys/cpu.h>
+
 #include <machine/kcore.h>
 #include <machine/fpu.h>
 
@@ -115,7 +111,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.294 2007/02/22 04:51:26 thorpej Exp $"
 #include <dev/cons.h>
 
 #include <machine/autoconf.h>
-#include <machine/cpu.h>
 #include <machine/reg.h>
 #include <machine/rpb.h>
 #include <machine/prom.h>
@@ -142,11 +137,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.294 2007/02/22 04:51:26 thorpej Exp $"
 
 #include "ksyms.h"
 
-struct vm_map *exec_map = NULL;
 struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
-caddr_t msgbufaddr;
+void *msgbufaddr;
 
 int	maxmem;			/* max memory per process */
 
@@ -444,7 +438,7 @@ nobootinfo:
 	 * its best to detect things things that have never been seen
 	 * before...
 	 */
-	mddtp = (struct mddt *)(((caddr_t)hwrpb) + hwrpb->rpb_memdat_off);
+	mddtp = (struct mddt *)(((char *)hwrpb) + hwrpb->rpb_memdat_off);
 
 	/* MDDT SANITY CHECKING */
 	mddtweird = 0;
@@ -620,7 +614,7 @@ nobootinfo:
 
 		vps->end -= atop(sz);
 		vps->avail_end -= atop(sz);
-		msgbufaddr = (caddr_t) ALPHA_PHYS_TO_K0SEG(ptoa(vps->end));
+		msgbufaddr = (void *) ALPHA_PHYS_TO_K0SEG(ptoa(vps->end));
 		initmsgbuf(msgbufaddr, sz);
 
 		/* Remove the last segment if it now has no pages. */
@@ -669,14 +663,6 @@ nobootinfo:
 	lwp0.l_md.md_tf =
 	    (struct trapframe *)proc0paddr->u_pcb.pcb_hw.apcb_ksp;
 	simple_lock_init(&proc0paddr->u_pcb.pcb_fpcpu_slock);
-
-	/*
-	 * Initialize the primary CPU's idle PCB to proc0's.  In a
-	 * MULTIPROCESSOR configuration, each CPU will later get
-	 * its own idle PCB when autoconfiguration runs.
-	 */
-	ci->ci_idle_pcb = &proc0paddr->u_pcb;
-	ci->ci_idle_pcb_paddr = (u_long)lwp0.l_md.md_pcbpaddr;
 
 	/* Indicate that proc0 has a CPU. */
 	lwp0.l_cpu = ci;
@@ -760,6 +746,11 @@ nobootinfo:
 		}
 	}
 
+	/*
+	 * Perform any initial kernel patches based on the running system.
+	 * We may perform more later if we attach additional CPUs.
+	 */
+	alpha_patch(false);
 
 	/*
 	 * Figure out the number of CPUs in the box, from RPB fields.
@@ -790,17 +781,14 @@ nobootinfo:
 #endif
 	}
 
-	/*
-	 * Figure out our clock frequency, from RPB fields.
-	 */
-	hz = hwrpb->rpb_intr_freq >> 12;
-	if (!(60 <= hz && hz <= 10240)) {
-		hz = 1024;
 #ifdef DIAGNOSTIC
+	/*
+	 * Check our clock frequency, from RPB fields.
+	 */
+	if ((hwrpb->rpb_intr_freq >> 12) != 1024)
 		printf("WARNING: unbelievable rpb_intr_freq: %ld (%d hz)\n",
 			hwrpb->rpb_intr_freq, hz);
 #endif
-	}
 }
 
 void
@@ -852,13 +840,6 @@ cpu_startup()
 	minaddr = 0;
 
 	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
-
-	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
@@ -906,8 +887,8 @@ alpha_dsr_sysname()
 	if (hwrpb->rpb_version < HWRPB_DSRDB_MINVERS)
 		return (NULL);
 
-	dsr = (struct dsrdb *)(((caddr_t)hwrpb) + hwrpb->rpb_dsrdb_off);
-	sysname = (const char *)((caddr_t)dsr + (dsr->dsr_sysname_off +
+	dsr = (struct dsrdb *)(((char *)hwrpb) + hwrpb->rpb_dsrdb_off);
+	sysname = (const char *)((char *)dsr + (dsr->dsr_sysname_off +
 	    sizeof(u_int64_t)));
 	return (sysname);
 }
@@ -1116,7 +1097,7 @@ cpu_dump_mempagecnt()
 int
 cpu_dump()
 {
-	int (*dump) __P((dev_t, daddr_t, caddr_t, size_t));
+	int (*dump) __P((dev_t, daddr_t, void *, size_t));
 	char buf[dbtob(1)];
 	kcore_seg_t *segp;
 	cpu_kcore_hdr_t *cpuhdrp;
@@ -1156,7 +1137,7 @@ cpu_dump()
 		memsegp[i].size = mem_clusters[i].size & ~PAGE_MASK;
 	}
 
-	return (dump(dumpdev, dumplo, (caddr_t)buf, dbtob(1)));
+	return (dump(dumpdev, dumplo, (void *)buf, dbtob(1)));
 }
 
 /*
@@ -1219,7 +1200,7 @@ dumpsys()
 	u_long maddr;
 	int psize;
 	daddr_t blkno;
-	int (*dump) __P((dev_t, daddr_t, caddr_t, size_t));
+	int (*dump) __P((dev_t, daddr_t, void *, size_t));
 	int error;
 
 	/* Save registers. */
@@ -1278,7 +1259,7 @@ dumpsys()
 				n =  BYTES_PER_DUMP;
 	
 			error = (*dump)(dumpdev, blkno,
-			    (caddr_t)ALPHA_PHYS_TO_K0SEG(maddr), n);
+			    (void *)ALPHA_PHYS_TO_K0SEG(maddr), n);
 			if (error)
 				goto err;
 			maddr += n;
@@ -1432,7 +1413,7 @@ regdump(framep)
 void *
 getframe(const struct lwp *l, int sig, int *onstack)
 {
-	void * frame;
+	void *frame;
 
 	/* Do we need to jump onto the signal stack? */
 	*onstack =
@@ -1440,7 +1421,7 @@ getframe(const struct lwp *l, int sig, int *onstack)
 	    (SIGACTION(l->l_proc, sig).sa_flags & SA_ONSTACK) != 0;
 
 	if (*onstack)
-		frame = (void *)((caddr_t)l->l_sigstk.ss_sp +
+		frame = (void *)((char *)l->l_sigstk.ss_sp +
 					l->l_sigstk.ss_size);
 	else
 		frame = (void *)(alpha_pal_rdusp());
@@ -1502,13 +1483,13 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	frame.sf_si._info = ksi->ksi_info;
 	frame.sf_uc.uc_flags = _UC_SIGMASK;
 	frame.sf_uc.uc_sigmask = *mask;
-	frame.sf_uc.uc_link = NULL;
+	frame.sf_uc.uc_link = l->l_ctxlink;
 	memset(&frame.sf_uc.uc_stack, 0, sizeof(frame.sf_uc.uc_stack));
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	cpu_getmcontext(l, &frame.sf_uc.uc_mcontext, &frame.sf_uc.uc_flags);
 	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		/*
@@ -1576,6 +1557,24 @@ sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 #ifdef COMPAT_16
 	}
 #endif
+}
+
+void 
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted, void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+       	struct trapframe *tf;
+
+	tf = l->l_md.md_tf;
+
+	tf->tf_regs[FRAME_PC] = (u_int64_t)upcall;
+	tf->tf_regs[FRAME_RA] = 0;
+	tf->tf_regs[FRAME_A0] = type;
+	tf->tf_regs[FRAME_A1] = (u_int64_t)sas;
+	tf->tf_regs[FRAME_A2] = nevents;
+	tf->tf_regs[FRAME_A3] = ninterrupted;
+	tf->tf_regs[FRAME_A4] = (u_int64_t)ap;
+	tf->tf_regs[FRAME_T12] = (u_int64_t)upcall;  /* t12 is pv */
+	alpha_pal_wrusp((unsigned long)sp);
 }
 
 /*
@@ -1690,7 +1689,7 @@ fpusave_cpu(struct cpu_info *ci, int save)
 
 #if defined(MULTIPROCESSOR)
 	s = splhigh();		/* block IPIs for the duration */
-	atomic_setbits_ulong(&ci->ci_flags, CPUF_FPUSAVE);
+	atomic_or_ulong(&ci->ci_flags, CPUF_FPUSAVE);
 #endif
 
 	l = ci->ci_fpcurlwp;
@@ -1713,7 +1712,7 @@ fpusave_cpu(struct cpu_info *ci, int save)
 
  out:
 #if defined(MULTIPROCESSOR)
-	atomic_clearbits_ulong(&ci->ci_flags, CPUF_FPUSAVE);
+	atomic_and_ulong(&ci->ci_flags, ~CPUF_FPUSAVE);
 	splx(s);
 #endif
 	return;
@@ -1940,7 +1939,7 @@ cpu_getmcontext(l, mcp, flags)
 	gr[_REG_PS] = frame->tf_regs[FRAME_PS];
 
 	if ((ras_pc = (__greg_t)ras_lookup(l->l_proc,
-	    (caddr_t) gr[_REG_PC])) != -1)
+	    (void *) gr[_REG_PC])) != -1)
 		gr[_REG_PC] = ras_pc;
 
 	*flags |= _UC_CPU | _UC_UNIQUE;
@@ -1998,4 +1997,26 @@ cpu_setmcontext(l, mcp, flags)
 	}
 
 	return (0);
+}
+
+/*
+ * Preempt the current process if in interrupt from user mode,
+ * or after the current trap/syscall if in system mode.
+ */
+void
+cpu_need_resched(struct cpu_info *ci, int flags)
+{
+#if defined(MULTIPROCESSOR)
+	bool immed = (flags & RESCHED_IMMED) != 0;
+#endif /* defined(MULTIPROCESSOR) */
+
+	aston(ci->ci_data.cpu_onproc);
+	ci->ci_want_resched = 1;
+	if (ci->ci_data.cpu_onproc != ci->ci_data.cpu_idlelwp) {
+#if defined(MULTIPROCESSOR)
+		if (immed && ci != curcpu()) {
+			alpha_send_ipi(ci->ci_cpuid, 0);
+		}
+#endif /* defined(MULTIPROCESSOR) */
+	}
 }

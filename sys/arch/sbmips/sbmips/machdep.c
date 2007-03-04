@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.32 2007/02/22 16:55:22 thorpej Exp $ */
+/* $NetBSD: machdep.c,v 1.38 2008/07/02 17:28:56 ad Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.32 2007/02/22 16:55:22 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.38 2008/07/02 17:28:56 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
@@ -125,7 +125,6 @@ void	*ksym_start, *ksym_end;
 struct cpu_info cpu_info_store;
 
 /* Maps for VM objects. */
-struct vm_map *exec_map = NULL;
 struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
@@ -149,7 +148,7 @@ void	mach_init(long, long, long, long);
  */
 int	safepri = MIPS_INT_MASK | MIPS_SR_INT_IE;
 
-extern caddr_t esym;
+extern void *esym;
 extern struct user *proc0paddr;
 
 /*
@@ -158,7 +157,7 @@ extern struct user *proc0paddr;
 void
 mach_init(long fwhandle, long magic, long bootdata, long reserved)
 {
-	caddr_t kernend, p0;
+	void *kernend, *p0;
 	u_long first, last;
 	extern char edata[], end[];
 	int i;
@@ -192,12 +191,12 @@ mach_init(long fwhandle, long magic, long bootdata, long reserved)
 		bootinfo.esym = (vaddr_t)end;
 	}
 
-	kernend = (caddr_t)mips_round_page(end);
+	kernend = (void *)mips_round_page(end);
 #if NKSYMS || defined(DDB) || defined(LKM)
 	if (magic == BOOTINFO_MAGIC) {
 		ksym_start = (void *)bootinfo.ssym;
 		ksym_end   = (void *)bootinfo.esym;
-		kernend = (caddr_t)mips_round_page((vaddr_t)ksym_end);
+		kernend = (void *)mips_round_page((vaddr_t)ksym_end);
 	}
 #endif
 
@@ -320,11 +319,11 @@ mach_init(long fwhandle, long magic, long bootdata, long reserved)
 	/*
 	 * Allocate space for proc0's USPACE
 	 */
-	p0 = (caddr_t)pmap_steal_memory(USPACE, NULL, NULL);
+	p0 = (void *)pmap_steal_memory(USPACE, NULL, NULL);
 	lwp0.l_addr = proc0paddr = (struct user *)p0;
-	lwp0.l_md.md_regs = (struct frame *)(p0 + USPACE) - 1;
-	curpcb = &lwp0.l_addr->u_pcb;
-	curpcb->pcb_context[11] = MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	lwp0.l_md.md_regs = (struct frame *)((char *)p0 + USPACE) - 1;
+	proc0paddr->u_pcb.pcb_context[11] =
+	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
 
 	pmap_bootstrap();
 
@@ -360,12 +359,6 @@ cpu_startup(void)
 	printf("total memory = %s\n", pbuf);
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively
-	 * limits the number of processes exec'ing at any time.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr, 16 * NCARGS,
-	    VM_MAP_PAGEABLE, false, NULL);
 	/*
 	 * Allocate a submap for physio.
 	 */

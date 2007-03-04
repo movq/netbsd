@@ -1,4 +1,4 @@
-/*	$NetBSD: mpt_netbsd.c,v 1.10 2005/12/11 12:21:28 christos Exp $	*/
+/*	$NetBSD: mpt_netbsd.c,v 1.14 2008/04/08 12:07:26 cegger Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -72,10 +72,12 @@
  *
  * Adapted from the FreeBSD "mpt" driver by Jason R. Thorpe for
  * Wasabi Systems, Inc.
+ *
+ * Additional contributions by Garrett D'Amore on behalf of TELES AG.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpt_netbsd.c,v 1.10 2005/12/11 12:21:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpt_netbsd.c,v 1.14 2008/04/08 12:07:26 cegger Exp $");
 
 #include <dev/ic/mpt.h>			/* pulls in all headers */
 
@@ -122,13 +124,8 @@ mpt_scsipi_attach(mpt_softc_t *mpt)
 	chan->chan_channel = 0;
 	chan->chan_flags = 0;
 	chan->chan_nluns = 8;
-	if (mpt->is_fc) {
-		chan->chan_ntargets = 256;
-		chan->chan_id = 256;
-	} else {
-		chan->chan_ntargets = 16;
-		chan->chan_id = mpt->mpt_ini_id;
-	}
+	chan->chan_ntargets = mpt->mpt_max_devices;
+	chan->chan_id = mpt->mpt_ini_id;
 
 	(void) config_found(&mpt->sc_dev, &mpt->sc_channel, scsiprint);
 }
@@ -139,7 +136,7 @@ mpt_dma_mem_alloc(mpt_softc_t *mpt)
 	bus_dma_segment_t reply_seg, request_seg;
 	int reply_rseg, request_rseg;
 	bus_addr_t pptr, end;
-	caddr_t vptr;
+	char *vptr;
 	size_t len;
 	int error, i;
 
@@ -154,8 +151,7 @@ mpt_dma_mem_alloc(mpt_softc_t *mpt)
 	len = sizeof(request_t) * MPT_MAX_REQUESTS(mpt);
 	mpt->request_pool = malloc(len, M_DEVBUF, M_WAITOK | M_ZERO);
 	if (mpt->request_pool == NULL) {
-		aprint_error("%s: unable to allocate request pool\n",
-		    mpt->sc_dev.dv_xname);
+		aprint_error_dev(&mpt->sc_dev, "unable to allocate request pool\n");
 		return (ENOMEM);
 	}
 
@@ -165,32 +161,32 @@ mpt_dma_mem_alloc(mpt_softc_t *mpt)
 	error = bus_dmamem_alloc(mpt->sc_dmat, PAGE_SIZE, PAGE_SIZE, 0,
 	    &reply_seg, 1, &reply_rseg, 0);
 	if (error) {
-		aprint_error("%s: unable to allocate reply area, error = %d\n",
-		    mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to allocate reply area, error = %d\n",
+		    error);
 		goto fail_0;
 	}
 
 	error = bus_dmamem_map(mpt->sc_dmat, &reply_seg, reply_rseg, PAGE_SIZE,
-	    (caddr_t *) &mpt->reply, BUS_DMA_COHERENT/*XXX*/);
+	    (void **) &mpt->reply, BUS_DMA_COHERENT/*XXX*/);
 	if (error) {
-		aprint_error("%s: unable to map reply area, error = %d\n",
-		    mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to map reply area, error = %d\n",
+		    error);
 		goto fail_1;
 	}
 
 	error = bus_dmamap_create(mpt->sc_dmat, PAGE_SIZE, 1, PAGE_SIZE,
 	    0, 0, &mpt->reply_dmap);
 	if (error) {
-		aprint_error("%s: unable to create reply DMA map, error = %d\n",
-		    mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to create reply DMA map, error = %d\n",
+		    error);
 		goto fail_2;
 	}
 
 	error = bus_dmamap_load(mpt->sc_dmat, mpt->reply_dmap, mpt->reply,
 	    PAGE_SIZE, NULL, 0);
 	if (error) {
-		aprint_error("%s: unable to load reply DMA map, error = %d\n",
-		    mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to load reply DMA map, error = %d\n",
+		    error);
 		goto fail_3;
 	}
 	mpt->reply_phys = mpt->reply_dmap->dm_segs[0].ds_addr;
@@ -201,38 +197,38 @@ mpt_dma_mem_alloc(mpt_softc_t *mpt)
 	error = bus_dmamem_alloc(mpt->sc_dmat, MPT_REQ_MEM_SIZE(mpt),
 	    PAGE_SIZE, 0, &request_seg, 1, &request_rseg, 0);
 	if (error) {
-		aprint_error("%s: unable to allocate request area, "
-		    "error = %d\n", mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to allocate request area, "
+		    "error = %d\n", error);
 		goto fail_4;
 	}
 
 	error = bus_dmamem_map(mpt->sc_dmat, &request_seg, request_rseg,
-	    MPT_REQ_MEM_SIZE(mpt), (caddr_t *) &mpt->request, 0);
+	    MPT_REQ_MEM_SIZE(mpt), (void **) &mpt->request, 0);
 	if (error) {
-		aprint_error("%s: unable to map request area, error = %d\n",
-		    mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to map request area, error = %d\n",
+		    error);
 		goto fail_5;
 	}
 
 	error = bus_dmamap_create(mpt->sc_dmat, MPT_REQ_MEM_SIZE(mpt), 1,
 	    MPT_REQ_MEM_SIZE(mpt), 0, 0, &mpt->request_dmap);
 	if (error) {
-		aprint_error("%s: unable to create request DMA map, "
-		    "error = %d\n", mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to create request DMA map, "
+		    "error = %d\n", error);
 		goto fail_6;
 	}
 
 	error = bus_dmamap_load(mpt->sc_dmat, mpt->request_dmap, mpt->request,
 	    MPT_REQ_MEM_SIZE(mpt), NULL, 0);
 	if (error) {
-		aprint_error("%s: unable to load request DMA map, error = %d\n",
-		    mpt->sc_dev.dv_xname, error);
+		aprint_error_dev(&mpt->sc_dev, "unable to load request DMA map, error = %d\n",
+		    error);
 		goto fail_7;
 	}
 	mpt->request_phys = mpt->request_dmap->dm_segs[0].ds_addr;
 
 	pptr = mpt->request_phys;
-	vptr = (caddr_t) mpt->request;
+	vptr = (void *) mpt->request;
 	end = pptr + MPT_REQ_MEM_SIZE(mpt);
 
 	for (i = 0; pptr < end; i++) {
@@ -252,8 +248,8 @@ mpt_dma_mem_alloc(mpt_softc_t *mpt)
 		error = bus_dmamap_create(mpt->sc_dmat, MAXPHYS,
 		    MPT_SGL_MAX, MAXPHYS, 0, 0, &req->dmap);
 		if (error) {
-			aprint_error("%s: unable to create req %d DMA map, "
-			    "error = %d\n", mpt->sc_dev.dv_xname, i, error);
+			aprint_error_dev(&mpt->sc_dev, "unable to create req %d DMA map, "
+			    "error = %d\n", i, error);
 			goto fail_8;
 		}
 	}
@@ -270,7 +266,7 @@ mpt_dma_mem_alloc(mpt_softc_t *mpt)
  fail_7:
 	bus_dmamap_destroy(mpt->sc_dmat, mpt->request_dmap);
  fail_6:
-	bus_dmamem_unmap(mpt->sc_dmat, (caddr_t)mpt->request, PAGE_SIZE);
+	bus_dmamem_unmap(mpt->sc_dmat, (void *)mpt->request, PAGE_SIZE);
  fail_5:
 	bus_dmamem_free(mpt->sc_dmat, &request_seg, request_rseg);
  fail_4:
@@ -278,7 +274,7 @@ mpt_dma_mem_alloc(mpt_softc_t *mpt)
  fail_3:
 	bus_dmamap_destroy(mpt->sc_dmat, mpt->reply_dmap);
  fail_2:
-	bus_dmamem_unmap(mpt->sc_dmat, (caddr_t)mpt->reply, PAGE_SIZE);
+	bus_dmamem_unmap(mpt->sc_dmat, (void *)mpt->reply, PAGE_SIZE);
  fail_1:
 	bus_dmamem_free(mpt->sc_dmat, &reply_seg, reply_rseg);
  fail_0:
@@ -324,7 +320,7 @@ mpt_prt(mpt_softc_t *mpt, const char *fmt, ...)
 {
 	va_list ap;
 
-	printf("%s: ", mpt->sc_dev.dv_xname);
+	printf("%s: ", device_xname(&mpt->sc_dev));
 	va_start(ap, fmt);
 	vprintf(fmt, ap);
 	va_end(ap);
@@ -702,7 +698,7 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 		mpt_req->Control = MPI_SCSIIO_CONTROL_NODATATRANSFER;
 
 	/* Set the queue behavior. */
-	if (__predict_true(mpt->is_fc ||
+	if (__predict_true((!mpt->is_scsi) ||
 			   (mpt->mpt_tag_enable &
 			    (1 << periph->periph_target)))) {
 		switch (XS_CTL_TAGTYPE(xs)) {
@@ -725,16 +721,16 @@ mpt_run_xfer(mpt_softc_t *mpt, struct scsipi_xfer *xs)
 			break;
 
 		default:
-			if (mpt->is_fc)
-				mpt_req->Control |= MPI_SCSIIO_CONTROL_SIMPLEQ;
-			else
+			if (mpt->is_scsi)
 				mpt_req->Control |= MPI_SCSIIO_CONTROL_UNTAGGED;
+			else
+				mpt_req->Control |= MPI_SCSIIO_CONTROL_SIMPLEQ;
 			break;
 		}
 	} else
 		mpt_req->Control |= MPI_SCSIIO_CONTROL_UNTAGGED;
 
-	if (__predict_false(mpt->is_fc == 0 &&
+	if (__predict_false(mpt->is_scsi &&
 			    (mpt->mpt_disc_enable &
 			     (1 << periph->periph_target)) == 0))
 		mpt_req->Control |= MPI_SCSIIO_CONTROL_NO_DISCONNECT;
@@ -937,7 +933,7 @@ mpt_set_xfer_mode(mpt_softc_t *mpt, struct scsipi_xfer_mode *xm)
 {
 	fCONFIG_PAGE_SCSI_DEVICE_1 tmp;
 
-	if (mpt->is_fc) {
+	if (!mpt->is_scsi) {
 		/*
 		 * SCSI transport settings don't make any sense for
 		 * Fibre Channel; silently ignore the request.
@@ -1132,7 +1128,7 @@ mpt_event_notify_reply(mpt_softc_t *mpt, MSG_EVENT_NOTIFY_REPLY *msg)
 		mpt_prt(mpt, "EvtLogData: Event Data:");
 		for (i = 0; i < msg->EventDataLength; i++) {
 			if ((i % 4) == 0)
-				printf("%s:\t", mpt->sc_dev.dv_xname);
+				printf("%s:\t", device_xname(&mpt->sc_dev));
 			printf("0x%08x%c", msg->Data[i],
 			    ((i % 4) == 3) ? '\n' : ' ');
 		}
@@ -1252,6 +1248,44 @@ mpt_event_notify_reply(mpt_softc_t *mpt, MSG_EVENT_NOTIFY_REPLY *msg)
 		 * This is just an acknowledgement of our
 		 * mpt_send_event_request().
 		 */
+		break;
+
+	case MPI_EVENT_SAS_PHY_LINK_STATUS:
+		switch ((msg->Data[0] >> 12) & 0x0f) {
+		case 0x00:
+			mpt_prt(mpt, "Phy %d: Link Status Unknown",
+			    msg->Data[0] & 0xff);
+			break;
+		case 0x01:
+			mpt_prt(mpt, "Phy %d: Link Disabled",
+			    msg->Data[0] & 0xff);
+			break;
+		case 0x02:
+			mpt_prt(mpt, "Phy %d: Failed Speed Negotiation",
+			    msg->Data[0] & 0xff);
+			break;
+		case 0x03:
+			mpt_prt(mpt, "Phy %d: SATA OOB Complete",
+			    msg->Data[0] & 0xff);
+			break;
+		case 0x08:
+			mpt_prt(mpt, "Phy %d: Link Rate 1.5 Gbps",
+			    msg->Data[0] & 0xff);
+			break;
+		case 0x09:
+			mpt_prt(mpt, "Phy %d: Link Rate 3.0 Gbps",
+			    msg->Data[0] & 0xff);
+			break;
+		default:
+			mpt_prt(mpt, "Phy %d: SAS Phy Link Status Event: "
+			    "Unknown event (%0x)",
+			    msg->Data[0] & 0xff, (msg->Data[0] >> 8) & 0xff);
+		}
+		break;
+
+	case MPI_EVENT_SAS_DEVICE_STATUS_CHANGE:
+	case MPI_EVENT_SAS_DISCOVERY:
+		/* ignore these events for now */
 		break;
 
 	default:

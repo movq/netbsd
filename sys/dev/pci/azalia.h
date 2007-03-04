@@ -1,4 +1,4 @@
-/*	$NetBSD: azalia.h,v 1.15 2007/02/05 13:52:27 kent Exp $	*/
+/*	$NetBSD: azalia.h,v 1.20 2008/08/14 23:43:27 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -350,7 +343,7 @@
 #define		CORB_UNSOL_ENABLE	0x80
 #define		CORB_UNSOL_TAG(x)	(x & 0x3f)
 #define CORB_GET_PIN_SENSE		0xf09
-#define		CORB_PS_PRESENSE	0x80000000
+#define		CORB_PS_PRESENCE	0x80000000
 #define		CORB_PS_IMPEDANCE(x)	(x & 0x7fffffff)
 #define CORB_EXECUTE_PIN_SENSE		0x709
 #define		CORB_PS_RIGHT		0x1
@@ -442,7 +435,9 @@
 #define HDA_MAX_CHANNELS	16
 
 
-#define PCI_SUBCLASS_HDAUDIO	0x03
+#ifndef PCI_SUBCLASS_MULTIMEDIA_HDAUDIO
+#define PCI_SUBCLASS_MULTIMEDIA_HDAUDIO	0x03
+#endif
 
 /* memory-mapped types */
 typedef struct {
@@ -536,6 +531,15 @@ typedef struct {
 					 (nid >= (codec)->wstart &&   \
 					  nid < (codec)->wend))
 
+#define PIN_STATUS(wid, conn)						\
+	do {								\
+		if ((wid)->type != COP_AWTYPE_PIN_COMPLEX)		\
+			(conn) = 0;					\
+		else							\
+			(conn) =					\
+			    ((wid)->d.pin.config & CORB_CD_PORT_MASK) >> 30; \
+	} while (0)
+
 typedef struct {
 	int nconv;
 	nid_t conv[HDA_MAX_CHANNELS]; /* front, surround, clfe, side, ... */
@@ -556,7 +560,7 @@ typedef struct codec_t {
 	int (*get_port)(struct codec_t *, mixer_ctrl_t *);
 	int (*unsol_event)(struct codec_t *, int);
 
-	struct azalia_t *az;
+	device_t dev; 		/* parent azalia(4) instance */
 	uint32_t vid;		/* codec vendor/device ID */
 	uint32_t subid;		/* PCI subvendor/device ID */
 	const char *name;

@@ -1,4 +1,4 @@
-/*	$NetBSD: agp_amd.c,v 1.17 2006/11/16 01:33:08 christos Exp $	*/
+/*	$NetBSD: agp_amd.c,v 1.20 2008/06/09 06:49:54 freza Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -29,13 +29,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agp_amd.c,v 1.17 2006/11/16 01:33:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agp_amd.c,v 1.20 2008/06/09 06:49:54 freza Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
-#include <sys/lock.h>
 #include <sys/proc.h>
 #include <sys/conf.h>
 #include <sys/device.h>
@@ -102,7 +101,7 @@ agp_amd_alloc_gatt(struct agp_softc *sc)
 	u_int32_t entries = apsize >> AGP_PAGE_SHIFT;
 	struct agp_amd_gatt *gatt;
 	int i, npages;
-	caddr_t vdir;
+	void *vdir;
 
 	gatt = malloc(sizeof(struct agp_amd_gatt), M_AGP, M_NOWAIT);
 	if (!gatt)
@@ -119,7 +118,7 @@ agp_amd_alloc_gatt(struct agp_softc *sc)
 
 	gatt->ag_vdir = (u_int32_t *)vdir;
 	gatt->ag_entries = entries;
-	gatt->ag_virtual = (u_int32_t *)(vdir + AGP_PAGE_SIZE);
+	gatt->ag_virtual = (u_int32_t *)((char *)vdir + AGP_PAGE_SIZE);
 	gatt->ag_physical = gatt->ag_pdir + AGP_PAGE_SIZE;
 	gatt->ag_size = AGP_PAGE_SIZE + entries * sizeof(u_int32_t);
 
@@ -148,7 +147,7 @@ static void
 agp_amd_free_gatt(struct agp_softc *sc, struct agp_amd_gatt *gatt)
 {
 	agp_free_dmamem(sc->as_dmat, gatt->ag_size,
-	    gatt->ag_dmamap, (caddr_t)gatt->ag_virtual, &gatt->ag_dmaseg,
+	    gatt->ag_dmamap, (void *)gatt->ag_virtual, &gatt->ag_dmaseg,
 	    gatt->ag_nseg);
 	free(gatt, M_AGP);
 }
@@ -169,9 +168,9 @@ agp_amd_match(const struct pci_attach_args *pa)
 }
 
 int
-agp_amd_attach(struct device *parent, struct device *self, void *aux)
+agp_amd_attach(device_t parent, device_t self, void *aux)
 {
-	struct agp_softc *sc = (void *)self;
+	struct agp_softc *sc = device_private(self);
 	struct agp_amd_softc *asc;
 	struct pci_attach_args *pa = aux;
 	struct agp_amd_gatt *gatt;

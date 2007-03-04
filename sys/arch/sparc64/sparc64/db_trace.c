@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.38 2007/02/22 05:10:30 matt Exp $ */
+/*	$NetBSD: db_trace.c,v 1.40 2008/07/02 19:49:58 rmind Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.38 2007/02/22 05:10:30 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.40 2008/07/02 19:49:58 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -97,7 +97,8 @@ db_stack_trace_print(addr, have_addr, count, modif, pr)
 					(*pr)("not found\n");
 					return;
 				}
-				l = proc_representative_lwp(p, NULL, 0);
+				l = LIST_FIRST(&p->p_lwps);
+				KASSERT(l != NULL);
 			}
 			(*pr)("lid %d ", l->l_lid);
                         if ((l->l_flag & LW_INMEM) == 0) {
@@ -318,7 +319,7 @@ db_dump_stack(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif
 			db_printf("Window %x ", i);
 			db_print_window(frame - BIAS);
 			if (!INKERNEL(((struct frame64 *)(u_long)(frame))))
-				copyin(((caddr_t)&((struct frame64 *)(u_long)frame)->fr_fp), &frame, sizeof(frame));
+				copyin(((void *)&((struct frame64 *)(u_long)frame)->fr_fp), &frame, sizeof(frame));
 			else
 				frame = ((struct frame64 *)(u_long)frame)->fr_fp;
 		} else {
@@ -408,7 +409,7 @@ db_dump_trap(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 #endif
 #if 0
 	if (tf == curlwp->p_md.md_tf) {
-		struct rwindow32 *kstack = (struct rwindow32 *)(((caddr_t)tf)+CCFSZ);
+		struct rwindow32 *kstack = (struct rwindow32 *)(((void *)tf)+CCFSZ);
 		db_printf("ins (from stack):\n%016llx %016llx %016llx %016llx\n",
 			  (int64_t)kstack->rw_local[0], (int64_t)kstack->rw_local[1],
 			  (int64_t)kstack->rw_local[2], (int64_t)kstack->rw_local[3]);

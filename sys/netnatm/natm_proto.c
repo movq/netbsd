@@ -1,4 +1,4 @@
-/*	$NetBSD: natm_proto.c,v 1.10 2007/01/13 18:52:04 cube Exp $	*/
+/*	$NetBSD: natm_proto.c,v 1.13 2008/04/24 11:38:39 ad Exp $	*/
 
 /*
  *
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: natm_proto.c,v 1.10 2007/01/13 18:52:04 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: natm_proto.c,v 1.13 2008/04/24 11:38:39 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,21 +64,52 @@ struct npcblist natm_pcbs = LIST_HEAD_INITIALIZER(natm_pcbs);
 struct	ifqueue natmintrq;       	/* natm packet input queue */
 int	natmqmaxlen = IFQ_MAXLEN;	/* max # of packets on queue */
 
+PR_WRAP_USRREQ(natm_usrreq)
+
+#define	natm_usrreq	natm_usrreq_wrapper
+
 const struct protosw natmsw[] = {
-{ SOCK_STREAM,	&natmdomain,	PROTO_NATMAAL5, PR_CONNREQUIRED,
-  0,	0,	0,	0,
-  natm_usrreq,
-  0,	0,	0,	0,
+{ .pr_type = SOCK_STREAM,
+  .pr_domain = &natmdomain,
+  .pr_protocol = PROTO_NATMAAL5,
+  .pr_flags = PR_CONNREQUIRED,
+  .pr_input = 0,
+  .pr_output = 0,
+  .pr_ctlinput = 0,
+  .pr_ctloutput = 0,
+  .pr_usrreq = natm_usrreq,
+  .pr_init = 0,
+  .pr_fasttimo = 0,
+  .pr_slowtimo = 0,
+  .pr_drain = 0
 },
-{ SOCK_DGRAM,	&natmdomain,	PROTO_NATMAAL5,	PR_CONNREQUIRED | PR_ATOMIC,
-  0,	0,	0,	0,
-  natm_usrreq,
-  0,	0,	0,	0,
+{ .pr_type = SOCK_DGRAM,
+  .pr_domain = &natmdomain,
+  .pr_protocol = PROTO_NATMAAL5,
+  .pr_flags = PR_CONNREQUIRED | PR_ATOMIC,
+  .pr_input = 0,
+  .pr_output = 0,
+  .pr_ctlinput = 0,
+  .pr_ctloutput = 0,
+  .pr_usrreq = natm_usrreq,
+  .pr_init = 0,
+  .pr_fasttimo = 0,
+  .pr_slowtimo = 0,
+  .pr_drain = 0
 },
-{ SOCK_STREAM,	&natmdomain,	PROTO_NATMAAL0, PR_CONNREQUIRED,
-  0,	0,	0,	0,
-  natm_usrreq,
-  0,	0,	0,	0,
+{ .pr_type = SOCK_STREAM,
+  .pr_domain = &natmdomain,
+  .pr_protocol = PROTO_NATMAAL0,
+  .pr_flags = PR_CONNREQUIRED,
+  .pr_input = 0,
+  .pr_output = 0,
+  .pr_ctlinput = 0,
+  .pr_ctloutput = 0,
+  .pr_usrreq = natm_usrreq,
+  .pr_init = 0,
+  .pr_fasttimo = 0,
+  .pr_slowtimo = 0,
+  .pr_drain = 0
 },
 };
 
@@ -89,6 +120,7 @@ struct domain natmdomain = {
 	.dom_protosw = natmsw,
 	.dom_protoswNPROTOSW = &natmsw[sizeof(natmsw)/sizeof(natmsw[0])],
 	.dom_ifqueues = { &natmintrq, NULL },
+	.dom_rtcache = LIST_HEAD_INITIALIZER(natmdomain.dom_rtcache)
 };
 #ifdef NATM_STAT
 u_int natm_sodropcnt = 0;		/* # mbufs dropped due to full sb */

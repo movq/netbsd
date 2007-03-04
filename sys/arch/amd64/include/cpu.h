@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.14 2007/02/16 02:53:44 ad Exp $	*/
+/*	$NetBSD: cpu.h,v 1.58 2008/10/26 00:08:15 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -37,318 +37,64 @@
 #ifndef _AMD64_CPU_H_
 #define _AMD64_CPU_H_
 
-#if defined(_KERNEL)
-#if defined(_KERNEL_OPT)
-#include "opt_multiprocessor.h"
-#include "opt_lockdebug.h"
-#endif
+#ifdef __x86_64__
 
-/*
- * Definitions unique to x86-64 cpu support.
- */
-#include <machine/frame.h>
-#include <machine/segments.h>
-#include <machine/tss.h>
-#include <machine/intrdefs.h>
-#include <x86/cacheinfo.h>
+#include <x86/cpu.h>
 
-#include <sys/device.h>
-#include <sys/lock.h>
-#include <sys/cpu_data.h>
-#include <sys/cc_microtime.h>
+#ifdef _KERNEL
 
-struct cpu_info {
-	struct device *ci_dev;
-	struct cpu_info *ci_self;
-	void *ci_self200;		/* self + 0x200, see lock_stubs.S */
-	struct cpu_data ci_data;	/* MI per-cpu data */
-	struct cc_microtime_state ci_cc;/* cc_microtime state */
-	struct cpu_info *ci_next;
+#if defined(__GNUC__) && !defined(_LKM)
+static struct cpu_info *x86_curcpu(void);
+static lwp_t *x86_curlwp(void);
 
-	struct lwp *ci_curlwp;
-	struct simplelock ci_slock;
-	u_int ci_cpuid;
-	u_int ci_apicid;
+__inline static struct cpu_info * __unused
+x86_curcpu(void)
+{
+	struct cpu_info *ci;
 
-	u_int64_t ci_scratch;
-
-	struct lwp *ci_fpcurlwp;
-	int ci_fpsaving;
-
-	volatile u_int32_t ci_tlb_ipi_mask;
-
-	struct pcb *ci_curpcb;
-	struct pcb *ci_idle_pcb;
-	int ci_idle_tss_sel;
-
-	struct intrsource *ci_isources[MAX_INTR_SOURCES];
-	volatile int	ci_mtx_count;	/* Negative count of spin mutexes */
-	volatile int	ci_mtx_oldspl;	/* Old SPL at this ci_idepth */
-
-	/* The following must be aligned for cmpxchg8b. */
-	struct {
-		uint32_t	ipending;
-		int		ilevel;
-	} ci_istate __aligned(8);
-#define ci_ipending	ci_istate.ipending
-#define	ci_ilevel	ci_istate.ilevel
-
-	int		ci_idepth;
-	u_int32_t	ci_imask[NIPL];
-	u_int32_t	ci_iunmask[NIPL];
-
-	paddr_t 	ci_idle_pcb_paddr;
-	u_int		ci_flags;
-	u_int32_t	ci_ipis;
-
-	u_int32_t	ci_feature_flags;
-	u_int32_t	ci_signature;
-	u_int64_t	ci_tsc_freq;
-
-	struct cpu_functions *ci_func;
-	void (*cpu_setup) __P((struct cpu_info *));
-	void (*ci_info) __P((struct cpu_info *));
-
-	int		ci_want_resched;
-	int		ci_astpending;
-	struct trapframe *ci_ddb_regs;
-
-	struct x86_cache_info ci_cinfo[CAI_COUNT];
-
-	char		*ci_gdt;
-
-	struct x86_64_tss	ci_doubleflt_tss;
-	struct x86_64_tss	ci_ddbipi_tss;
-
-	char *ci_doubleflt_stack;
-	char *ci_ddbipi_stack;
-
-	struct evcnt ci_ipi_events[X86_NIPI];
-};
-
-#define CPUF_BSP	0x0001		/* CPU is the original BSP */
-#define CPUF_AP		0x0002		/* CPU is an AP */ 
-#define CPUF_SP		0x0004		/* CPU is only processor */  
-#define CPUF_PRIMARY	0x0008		/* CPU is active primary processor */
-
-#define CPUF_PRESENT	0x1000		/* CPU is present */
-#define CPUF_RUNNING	0x2000		/* CPU is running */
-#define CPUF_PAUSE	0x4000		/* CPU is paused in DDB */
-#define CPUF_GO		0x8000		/* CPU should start running */
-
-
-extern struct cpu_info cpu_info_primary;
-extern struct cpu_info *cpu_info_list;
-
-#define CPU_INFO_ITERATOR		int
-#define CPU_INFO_FOREACH(cii, ci)	cii = 0, ci = cpu_info_list; \
-					ci != NULL; ci = ci->ci_next
-
-#if defined(MULTIPROCESSOR)
-
-#define X86_MAXPROCS		32	/* bitmask; can be bumped to 64 */
-
-#define CPU_STARTUP(_ci)	((_ci)->ci_func->start(_ci))
-#define CPU_STOP(_ci)		((_ci)->ci_func->stop(_ci))
-#define CPU_START_CLEANUP(_ci)	((_ci)->ci_func->cleanup(_ci))
-
-#define curcpu()	({struct cpu_info *__ci;                  \
-			__asm volatile("movq %%gs:8,%0" : "=r" (__ci)); \
-			__ci;})
-#define cpu_number()	(curcpu()->ci_cpuid)
-
-#define CPU_IS_PRIMARY(ci)	((ci)->ci_flags & CPUF_PRIMARY)
-
-extern struct cpu_info *cpu_info[X86_MAXPROCS];
-
-void cpu_boot_secondary_processors __P((void));
-void cpu_init_idle_pcbs __P((void));    
-
-
-#else /* !MULTIPROCESSOR */
-
-#define X86_MAXPROCS		1
-
-extern struct cpu_info cpu_info_primary;
-
-#define curcpu()		(&cpu_info_primary)
-
-/*
- * definitions of cpu-dependent requirements
- * referenced in generic code
- */
-#define	cpu_number()		0
-#define CPU_IS_PRIMARY(ci)	1
-
-#endif
-
-/*
- * Preempt the current process if in interrupt from user mode,
- * or after the current trap/syscall if in system mode.
- */
-extern void cpu_need_resched(struct cpu_info *);
-
-#define aston(l)	((l)->l_md.md_astpending = 1)
-
-extern u_int32_t cpus_attached;
-
-#define curpcb		curcpu()->ci_curpcb
-#define curlwp		curcpu()->ci_curlwp
-
-/*
- * Arguments to hardclock, softclock and statclock
- * encapsulate the previous machine state in an opaque
- * clockframe; for now, use generic intrframe.
- */
-struct clockframe {
-	struct intrframe cf_if;
-};
-
-#define	CLKF_USERMODE(frame)	USERMODE((frame)->cf_if.if_cs, (frame)->cf_if.if_rflags)
-#define CLKF_PC(frame)		((frame)->cf_if.if_rip)
-#define CLKF_INTR(frame)	(curcpu()->ci_idepth > 1)
-
-/*
- * This is used during profiling to integrate system time.  It can safely
- * assume that the process is resident.
- */
-#define LWP_PC(l)		((l)->l_md.md_regs->tf_rip)
-
-/*
- * Give a profiling tick to the current process when the user profiling
- * buffer pages are invalid.  On the i386, request an ast to send us
- * through trap(), marking the proc as needing a profiling tick.
- */
-extern void cpu_need_proftick(struct lwp *);
-
-/*
- * Notify an LWP that it has a signal pending, process as soon as possible.
- */
-extern void cpu_signotify(struct lwp *);
-
-/*
- * We need a machine-independent name for this.
- */
-extern void (*delay_func) __P((int));
-
-#define DELAY(x)		(*delay_func)(x)
-#define delay(x)		(*delay_func)(x)
-
-
-/*
- * pull in #defines for kinds of processors
- */
-
-extern int biosbasemem;
-extern int biosextmem;
-extern int cpu;
-extern int cpu_feature;
-extern int cpu_id;
-extern char cpu_vendor[];
-extern int cpuid_level;
-
-/* identcpu.c */
-
-void	identifycpu __P((struct cpu_info *));
-void cpu_probe_features __P((struct cpu_info *));
-
-/* machdep.c */
-void	dumpconf __P((void));
-int	cpu_maxproc __P((void));
-void	cpu_reset __P((void));
-void	x86_64_proc0_tss_ldt_init __P((void));
-void	x86_64_init_pcb_tss_ldt __P((struct cpu_info *));
-void	cpu_proc_fork __P((struct proc *, struct proc *));
-
-struct region_descriptor;
-void	lgdt __P((struct region_descriptor *));
-void	fillw __P((short, void *, size_t));
-
-struct pcb;
-void	savectx __P((struct pcb *));
-void	switch_exit __P((struct lwp *, void (*)(struct lwp *)));
-void	proc_trampoline __P((void));
-void	child_trampoline __P((void));
-
-/* clock.c */
-void	initrtclock __P((u_long));
-void	startrtclock __P((void));
-void	i8254_delay __P((int));
-void	i8254_microtime __P((struct timeval *));
-void	i8254_initclocks __P((void));
-
-void cpu_init_msrs __P((struct cpu_info *));
-
-
-/* vm_machdep.c */
-int kvtop __P((caddr_t));
-
-/* trap.c */
-void	child_return __P((void *));
-
-/* consinit.c */
-void kgdb_port_init __P((void));
-
-/* bus_machdep.c */
-void x86_bus_space_init __P((void));
-void x86_bus_space_mallocok __P((void));
-
-/* powernow_k8.c */
-void k8_powernow_init(void);
-
-#endif /* _KERNEL */
-
-#include <machine/psl.h>
-
-/* 
- * CTL_MACHDEP definitions.
- */
-#define	CPU_CONSDEV		1	/* dev_t: console terminal device */
-#define	CPU_BIOSBASEMEM		2	/* int: bios-reported base mem (K) */
-#define	CPU_BIOSEXTMEM		3	/* int: bios-reported ext. mem (K) */
-#define	CPU_NKPDE		4	/* int: number of kernel PDEs */
-#define	CPU_BOOTED_KERNEL	5	/* string: booted kernel name */
-#define CPU_DISKINFO		6	/* disk geometry information */
-#define CPU_FPU_PRESENT		7	/* FPU is present */
-#define	CPU_MAXID		8	/* number of valid machdep ids */
-
-#define	CTL_MACHDEP_NAMES { \
-	{ 0, 0 }, \
-	{ "console_device", CTLTYPE_STRUCT }, \
-	{ "biosbasemem", CTLTYPE_INT }, \
-	{ "biosextmem", CTLTYPE_INT }, \
-	{ "nkpde", CTLTYPE_INT }, \
-	{ "booted_kernel", CTLTYPE_STRING }, \
-	{ "diskinfo", CTLTYPE_STRUCT }, \
-	{ "fpu_present", CTLTYPE_INT }, \
+	__asm volatile("movq %%gs:%1, %0" :
+	    "=r" (ci) :
+	    "m"
+	    (*(struct cpu_info * const *)offsetof(struct cpu_info, ci_self)));
+	return ci;
 }
 
+__inline static lwp_t * __unused __attribute__ ((const))
+x86_curlwp(void)
+{
+	lwp_t *l;
 
-/*
- * Structure for CPU_DISKINFO sysctl call.
- * XXX this should be somewhere else.
- */
-#define MAX_BIOSDISKS	16
+	__asm volatile("movq %%gs:%1, %0" :
+	    "=r" (l) :
+	    "m"
+	    (*(struct cpu_info * const *)offsetof(struct cpu_info, ci_curlwp)));
+	return l;
+}
 
-struct disklist {
-	int dl_nbiosdisks;			   /* number of bios disks */
-	struct biosdisk_info {
-		int bi_dev;			   /* BIOS device # (0x80 ..) */
-		int bi_cyl;			   /* cylinders on disk */
-		int bi_head;			   /* heads per track */
-		int bi_sec;			   /* sectors per track */
-		u_int64_t bi_lbasecs;		   /* total sec. (iff ext13) */
-#define BIFLAG_INVALID		0x01
-#define BIFLAG_EXTINT13		0x02
-		int bi_flags;
-	} dl_biosdisks[MAX_BIOSDISKS];
+__inline static void __unused
+cpu_set_curpri(int pri)
+{
 
-	int dl_nnativedisks;			   /* number of native disks */
-	struct nativedisk_info {
-		char ni_devname[16];		   /* native device name */
-		int ni_nmatches; 		   /* # of matches w/ BIOS */
-		int ni_biosmatches[MAX_BIOSDISKS]; /* indices in dl_biosdisks */
-	} dl_nativedisks[1];			   /* actually longer */
-};
+	__asm volatile(
+	    "movl %1, %%gs:%0" :
+	    "=m" (*(struct cpu_info *)offsetof(struct cpu_info, ci_schedstate.spc_curpriority)) :
+	    "r" (pri)
+	);
+}
+#endif	/* __GNUC__ && !_LKM */
+
+#define	CLKF_USERMODE(frame)	USERMODE((frame)->cf_if.if_tf.tf_cs, \
+				    (frame)->cf_if.if_tf.tf_rflags)
+#define CLKF_PC(frame)		((frame)->cf_if.if_tf.tf_rip)
+#define CLKF_INTR(frame)	(curcpu()->ci_idepth > 0)
+#define LWP_PC(l)		((l)->l_md.md_regs->tf_rip)
+
+#endif	/* _KERNEL */
+
+#else	/*	__x86_64__	*/
+
+#include <i386/cpu.h>
+
+#endif	/*	__x86_64__	*/
 
 #endif /* !_AMD64_CPU_H_ */

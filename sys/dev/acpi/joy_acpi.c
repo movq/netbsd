@@ -1,40 +1,4 @@
-/* $NetBSD: joy_acpi.c,v 1.5 2006/11/16 01:32:47 christos Exp $ */
-
-/*
- * Copyright (c) 2004 The NetBSD Foundation, Inc.
- * All rights reserved.
- *
- * This code is derived from software contributed to The NetBSD Foundation
- * by Juan Romero Pardines <xtraeme@NetBSD.org>.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
- * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
- * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+/* $NetBSD: joy_acpi.c,v 1.8 2008/03/26 18:27:07 xtraeme Exp $ */
 
 /*
  * Copyright (c) 2002 Jared D. McNeill <jmcneill@invisible.ca>
@@ -66,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: joy_acpi.c,v 1.5 2006/11/16 01:32:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: joy_acpi.c,v 1.8 2008/03/26 18:27:07 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -75,7 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: joy_acpi.c,v 1.5 2006/11/16 01:32:47 christos Exp $"
 #include <sys/device.h>
 #include <sys/proc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/acpi/acpica.h>
 #include <dev/acpi/acpireg.h>
@@ -83,14 +47,14 @@ __KERNEL_RCSID(0, "$NetBSD: joy_acpi.c,v 1.5 2006/11/16 01:32:47 christos Exp $"
 
 #include <dev/ic/joyvar.h>
 
-static int	joy_acpi_match(struct device *, struct cfdata *, void *);
-static void	joy_acpi_attach(struct device *, struct device *, void *);
+static int	joy_acpi_match(device_t, cfdata_t, void *);
+static void	joy_acpi_attach(device_t, device_t, void *);
 
 struct joy_acpi_softc {
 	struct joy_softc sc_joy;
 };
 
-CFATTACH_DECL(joy_acpi, sizeof(struct joy_acpi_softc), joy_acpi_match,
+CFATTACH_DECL_NEW(joy_acpi, sizeof(struct joy_acpi_softc), joy_acpi_match,
     joy_acpi_attach, NULL, NULL);
 
 /*
@@ -106,8 +70,7 @@ static const char * const joy_acpi_ids[] = {
  * joy_acpi_match: autoconf(9) match routine
  */
 static int
-joy_acpi_match(struct device *parent, struct cfdata *match,
-    void *aux)
+joy_acpi_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -121,9 +84,9 @@ joy_acpi_match(struct device *parent, struct cfdata *match,
  * joy_acpi_attach: autoconf(9) attach routine
  */
 static void
-joy_acpi_attach(struct device *parent, struct device *self, void *aux)
+joy_acpi_attach(device_t parent, device_t self, void *aux)
 {
-	struct joy_acpi_softc *asc = (struct joy_acpi_softc *)self;
+	struct joy_acpi_softc *asc = device_private(self);
 	struct joy_softc *sc = &asc->sc_joy;
 	struct acpi_attach_args *aa = aux;
 	struct acpi_resources res;
@@ -133,8 +96,10 @@ joy_acpi_attach(struct device *parent, struct device *self, void *aux)
 	aprint_naive("\n");
 	aprint_normal("\n");
 
+	sc->sc_dev = self;
+
 	/* parse resources */
-	rv = acpi_resource_parse(&sc->sc_dev, aa->aa_node->ad_handle, "_CRS",
+	rv = acpi_resource_parse(sc->sc_dev, aa->aa_node->ad_handle, "_CRS",
 	    &res, &acpi_resource_parse_ops_default);
 	if (ACPI_FAILURE(rv))
 		return;
@@ -142,15 +107,15 @@ joy_acpi_attach(struct device *parent, struct device *self, void *aux)
 	/* find our i/o registers */
 	io = acpi_res_io(&res, 0);
 	if (io == NULL) {
-		aprint_error("%s: unable to find i/o register resource\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self,
+		    "unable to find i/o register resource\n");
 		goto out;
 	}
 
 	sc->sc_iot = aa->aa_iot;
 	if (bus_space_map(sc->sc_iot, io->ar_base, io->ar_length,
 		    0, &sc->sc_ioh)) {
-		aprint_error("%s: can't map i/o space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "can't map i/o space\n");
 		goto out;
 	}
 

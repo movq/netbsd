@@ -1,4 +1,4 @@
-/* $NetBSD: xboxcontroller.c,v 1.3 2007/01/07 19:08:05 jmcneill Exp $ */
+/* $NetBSD: xboxcontroller.c,v 1.10 2008/05/24 16:40:58 cube Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by Jared D. McNeill.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -33,14 +27,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xboxcontroller.c,v 1.3 2007/01/07 19:08:05 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xboxcontroller.c,v 1.10 2008/05/24 16:40:58 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsmousevar.h>
@@ -65,7 +59,7 @@ struct xboxcontroller_softc {
 #define	XBOX_CONTROLLER_MODE_MOUSE	1
 #define	XBOX_CONTROLLER_MODE_JOYSTICK	2
 
-	struct device		*sc_wsmousedev;
+	device_t		sc_wsmousedev;
 	char			sc_enabled;
 	char			sc_dying;
 };
@@ -74,7 +68,7 @@ static void xboxcontroller_intr(usbd_xfer_handle, usbd_private_handle,
 				usbd_status);
 
 static int xboxcontroller_wsmouse_enable(void *);
-static int xboxcontroller_wsmouse_ioctl(void *, u_long, caddr_t, int,
+static int xboxcontroller_wsmouse_ioctl(void *, u_long, void *, int,
 					struct lwp *);
 static void xboxcontroller_wsmouse_disable(void *);
 
@@ -84,14 +78,19 @@ static const struct wsmouse_accessops xboxcontroller_accessops = {
 	xboxcontroller_wsmouse_disable
 };
 
-USB_DECLARE_DRIVER(xboxcontroller);
+int xboxcontroller_match(device_t, cfdata_t, void *);
+void xboxcontroller_attach(device_t, device_t, void *);
+void xboxcontroller_childdet(device_t, device_t);
+int xboxcontroller_detach(device_t, int);
+int xboxcontroller_activate(device_t, enum devact);
+extern struct cfdriver xboxcontroller_cd;
+CFATTACH_DECL2_NEW(xboxcontroller, sizeof(struct xboxcontroller_softc),
+    xboxcontroller_match, xboxcontroller_attach, xboxcontroller_detach,
+    xboxcontroller_activate, NULL, xboxcontroller_childdet);
 
 USB_MATCH(xboxcontroller)
 {
 	USB_MATCH_START(xboxcontroller, uaa);
-
-	if (uaa->iface != NULL)
-		return UMATCH_NONE;
 
 	if (uaa->vendor == USB_VENDOR_MICROSOFT) {
 		switch (uaa->product) {
@@ -114,8 +113,9 @@ USB_ATTACH(xboxcontroller)
 	char *devinfo;
 
 	devinfo = usbd_devinfo_alloc(dev, 0);
+	sc->sc_dev = self;
 	USB_ATTACH_SETUP;
-	aprint_normal("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfo);
+	aprint_normal_dev(self, "%s\n", devinfo);
 	usbd_devinfo_free(devinfo);
 
 	sc->sc_drvmode = XBOX_CONTROLLER_MODE_MOUSE;
@@ -125,22 +125,22 @@ USB_ATTACH(xboxcontroller)
 	sc->sc_udev = dev;
 	err = usbd_set_config_no(dev, 1, 1);
 	if (err) {
-		aprint_error("%s: setting config no failed: %s\n",
-		    USBDEVNAME(sc->sc_dev), usbd_errstr(err));
+		aprint_error_dev(self, "setting config no failed: %s\n",
+		    usbd_errstr(err));
 		sc->sc_dying = 1;
 		USB_ATTACH_ERROR_RETURN;
 	}
 	err = usbd_device2interface_handle(dev, 0, &sc->sc_iface);
 	if (err) {
-		aprint_error("%s: failed to get interface: %s\n",
-		    USBDEVNAME(sc->sc_dev), usbd_errstr(err));
+		aprint_error_dev(self, "failed to get interface: %s\n",
+		    usbd_errstr(err));
 		sc->sc_dying = 1;
 		USB_ATTACH_ERROR_RETURN;
 	}
 
 	ed = usbd_interface2endpoint_descriptor(sc->sc_iface, 0);
 	if (ed == NULL) {
-		aprint_error("%s: couldn't get ep 0\n", USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev, "couldn't get ep 0\n");
 		sc->sc_dying = 1;
 		USB_ATTACH_ERROR_RETURN;
 	}
@@ -158,6 +158,15 @@ USB_ATTACH(xboxcontroller)
 	USB_ATTACH_SUCCESS_RETURN;
 }
 
+void
+xboxcontroller_childdet(device_t self, device_t child)
+{
+	struct xboxcontroller_softc *sc = device_private(self);
+
+	KASSERT(sc->sc_wsmousedev == child);
+	sc->sc_wsmousedev = NULL;
+}
+
 USB_DETACH(xboxcontroller)
 {
 	USB_DETACH_START(xboxcontroller, sc);
@@ -173,10 +182,8 @@ USB_DETACH(xboxcontroller)
 
 	sc->sc_dying = 1;
 
-	if (sc->sc_wsmousedev != NULL) {
+	if (sc->sc_wsmousedev != NULL)
 		rv = config_detach(sc->sc_wsmousedev, flags);
-		sc->sc_wsmousedev = NULL;
-	}
 
 	return rv;
 }
@@ -184,10 +191,9 @@ USB_DETACH(xboxcontroller)
 int
 xboxcontroller_activate(device_ptr_t self, enum devact act)
 {
-	struct xboxcontroller_softc *sc;
+	struct xboxcontroller_softc *sc = device_private(self);
 	int rv;
 
-	sc = (struct xboxcontroller_softc *)self;
 	rv = 0;
 
 	switch (act) {
@@ -277,8 +283,8 @@ xboxcontroller_wsmouse_enable(void *opaque)
 	    XBOX_CONTROLLER_BUFSZ, xboxcontroller_intr,
 	    USBD_DEFAULT_INTERVAL);
 	if (err) {
-		aprint_error("%s: open pipe failed: %s\n",
-		    USBDEVNAME(sc->sc_dev), usbd_errstr(err));
+		aprint_error_dev(sc->sc_dev, "open pipe failed: %s\n",
+		    usbd_errstr(err));
 		free(sc->sc_buf, M_USBDEV);
 		sc->sc_buf = NULL;
 		sc->sc_ep = NULL;
@@ -298,7 +304,7 @@ xboxcontroller_wsmouse_disable(void *opaque)
 	sc = (struct xboxcontroller_softc *)opaque;
 
 	if (!sc->sc_enabled) {
-		printf("%s: already disabled!\n", USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(sc->sc_dev, "already disabled!\n");
 		return;
 	}
 
@@ -319,7 +325,7 @@ xboxcontroller_wsmouse_disable(void *opaque)
 }
 
 static int
-xboxcontroller_wsmouse_ioctl(void *opaque, u_long cmd, caddr_t data, int flag,
+xboxcontroller_wsmouse_ioctl(void *opaque, u_long cmd, void *data, int flag,
 			     struct lwp *l)
 {
 

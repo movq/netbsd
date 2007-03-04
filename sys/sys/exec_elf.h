@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_elf.h,v 1.89 2006/11/22 15:08:47 riz Exp $	*/
+/*	$NetBSD: exec_elf.h,v 1.95 2008/04/28 20:24:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -296,6 +289,7 @@ typedef struct {
 #define	EM_NS32K	97	/* National Semiconductor 32000 series */
 
 /* Unofficial machine types follow */
+#define	EM_AVR32	6317	/* used by NetBSD/avr32 */
 #define	EM_ALPHA_EXP	36902	/* used by NetBSD/alpha; obsolete */
 #define	EM_NUM		36903
 
@@ -345,11 +339,6 @@ typedef struct {
 #define	PF_R		0x4	/* Segment is readable */
 #define	PF_W		0x2	/* Segment is writable */
 #define	PF_X		0x1	/* Segment is executable */
-
-#define	PF_PAXMPROTECT		0x08000000	/* Explicitly enable PaX MPROTECT */
-#define	PF_PAXNOMPROTECT	0x04000000	/* Explicitly disable PaX MPROTECT */
-#define	PF_PAXGUARD		0x02000000	/* Explicitly enable PaX Segvguard */
-#define	PF_PAXNOGUARD		0x01000000	/* Explicitly disable PaX Segvguard */
 
 #define	PF_MASKOS	0x0ff00000	/* Operating system specific values */
 #define	PF_MASKPROC	0xf0000000	/* Processor-specific values */
@@ -587,6 +576,7 @@ typedef struct {
 
 #define	DT_LOOS		0x60000000	/* Operating system specific range */
 #define DT_VERSYM	0x6ffffff0	/* Symbol versions */
+#define	DT_FLAGS_1	0x6ffffffb	/* ELF dynamic flags */
 #define DT_VERDEF	0x6ffffffc	/* Versions defined by file */
 #define DT_VERDEFNUM	0x6ffffffd	/* Number of versions defined by file */
 #define DT_VERNEED	0x6ffffffe	/* Versions needed by file */
@@ -594,6 +584,9 @@ typedef struct {
 #define	DT_HIOS		0x6fffffff
 #define	DT_LOPROC	0x70000000	/* Processor-specific range */
 #define	DT_HIPROC	0x7fffffff
+
+/* Flag values for DT_FLAGS_1 (incomplete) */
+#define	DF_1_INITFIRST	0x00000020	/* Object's init/fini take priority */
 
 /*
  * Auxiliary Vectors
@@ -678,6 +671,12 @@ typedef struct {
 
 /* NetBSD-specific note type: Emulation name.  desc is emul name string. */
 #define	ELF_NOTE_TYPE_NETBSD_TAG	1
+/* NetBSD-specific note name and description sizes */
+#define	ELF_NOTE_NETBSD_NAMESZ		7
+#define	ELF_NOTE_NETBSD_DESCSZ		4
+/* NetBSD-specific note name */
+#define	ELF_NOTE_NETBSD_NAME		"NetBSD\0\0"
+
 /* NetBSD-specific note type: Checksum.  There should be 1 NOTE per PT_LOAD
    section.  desc is a tuple of <phnum>(16),<chk-type>(16),<chk-value>. */
 #define	ELF_NOTE_TYPE_CHECKSUM_TAG	2
@@ -686,11 +685,18 @@ typedef struct {
 #define	ELF_NOTE_CHECKSUM_SHA1		3
 #define	ELF_NOTE_CHECKSUM_SHA256	4
 
-/* NetBSD-specific note name and description sizes */
-#define	ELF_NOTE_NETBSD_NAMESZ		7
-#define	ELF_NOTE_NETBSD_DESCSZ		4
-/* NetBSD-specific note name */
-#define	ELF_NOTE_NETBSD_NAME		"NetBSD\0\0"
+/* NetBSD-specific note type: PaX.  There should be 1 NOTE per executable.
+   section.  desc is a 32 bit bitmask */
+#define ELF_NOTE_TYPE_PAX_TAG		3
+#define	ELF_NOTE_PAX_MPROTECT		0x01	/* Force enable Mprotect */
+#define	ELF_NOTE_PAX_NOMPROTECT		0x02	/* Force disable Mprotect */
+#define	ELF_NOTE_PAX_GUARD		0x04	/* Force enable Segvguard */
+#define	ELF_NOTE_PAX_NOGUARD		0x08	/* Force disable Servguard */
+#define	ELF_NOTE_PAX_ASLR		0x10	/* Force enable ASLR */
+#define	ELF_NOTE_PAX_NOASLR		0x20	/* Force disable ASLR */
+#define ELF_NOTE_PAX_NAMESZ		4
+#define ELF_NOTE_PAX_NAME		"PaX\0"
+#define ELF_NOTE_PAX_DESCSZ		4
 
 /*
  * NetBSD-specific core file information.
@@ -799,7 +805,7 @@ struct netbsd_elfcore_procinfo {
 
 #ifdef _KERNEL
 
-#define ELF_AUX_ENTRIES	12		/* Size of aux array passed to loader */
+#define ELF_AUX_ENTRIES	14	/* Max size of aux array passed to loader */
 #define ELF32_NO_ADDR	(~(Elf32_Addr)0) /* Indicates addr. not yet filled in */
 #define ELF32_LINK_ADDR	((Elf32_Addr)-2) /* advises to use link address */
 #define ELF64_NO_ADDR	(~(Elf64_Addr)0) /* Indicates addr. not yet filled in */

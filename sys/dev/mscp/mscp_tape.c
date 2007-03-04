@@ -1,4 +1,4 @@
-/*	$NetBSD: mscp_tape.c,v 1.29 2006/03/29 07:06:24 thorpej Exp $ */
+/*	$NetBSD: mscp_tape.c,v 1.34 2008/06/11 17:32:30 drochner Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mscp_tape.c,v 1.29 2006/03/29 07:06:24 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mscp_tape.c,v 1.34 2008/06/11 17:32:30 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -56,8 +56,8 @@ __KERNEL_RCSID(0, "$NetBSD: mscp_tape.c,v 1.29 2006/03/29 07:06:24 thorpej Exp $
 #include <sys/proc.h>
 #include <sys/conf.h>
 
-#include <machine/bus.h>
-#include <machine/cpu.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 
 #include <dev/mscp/mscp.h>
 #include <dev/mscp/mscpreg.h>
@@ -219,10 +219,8 @@ mtopen(dev, flag, fmt, l)
 	 * Make sure this is a reasonable open request.
 	 */
 	unit = mtunit(dev);
-	if (unit >= mt_cd.cd_ndevs)
-		return ENXIO;
-	mt = mt_cd.cd_devs[unit];
-	if (mt == 0)
+	mt = device_lookup_private(&mt_cd, unit);
+	if (!mt)
 		return ENXIO;
 
 	if (mt->mt_inuse)
@@ -245,7 +243,7 @@ mtclose(dev, flags, fmt, l)
 	struct	lwp *l;
 {
 	int unit = mtunit(dev);
-	struct mt_softc *mt = mt_cd.cd_devs[unit];
+	struct mt_softc *mt = device_lookup_private(&mt_cd, unit);
 
 	/*
 	 * If we just have finished a writing, write EOT marks.
@@ -275,18 +273,15 @@ mtstrategy(bp)
 	 * Make sure this is a reasonable drive to use.
 	 */
 	unit = mtunit(bp->b_dev);
-	if (unit > mt_cd.cd_ndevs || (mt = mt_cd.cd_devs[unit]) == NULL) {
+	if ((mt = device_lookup_private(&mt_cd, unit)) == NULL) {
 		bp->b_error = ENXIO;
-		goto bad;
+		biodone(bp);
+		return;
 	}
 
 	mt->mt_waswrite = bp->b_flags & B_READ ? 0 : 1;
 	mscp_strategy(bp, device_parent(&mt->mt_dev));
 	return;
-
-bad:
-	bp->b_flags |= B_ERROR;
-	biodone(bp);
 }
 
 int
@@ -327,7 +322,7 @@ mtfillin(bp, mp)
 	struct mscp *mp;
 {
 	int unit = mtunit(bp->b_dev);
-	struct mt_softc *mt = mt_cd.cd_devs[unit];
+	struct mt_softc *mt = device_lookup_private(&mt_cd, unit);
 
 	mp->mscp_unit = mt->mt_hwunit;
 	if (mt->mt_serex == 2) {
@@ -348,7 +343,7 @@ mtdgram(usc, mp, mi)
 	struct mscp *mp;
 	struct mscp_softc *mi;
 {
-	if (mscp_decodeerror(usc == NULL?"unconf mt" : usc->dv_xname, mp, mi))
+	if (mscp_decodeerror(usc == NULL?"unconf mt" : device_xname(usc), mp, mi))
 		return;
 }
 
@@ -363,7 +358,7 @@ mtonline(usc, mp)
 {
 	struct mt_softc *mt = (void *)usc;
 
-	wakeup((caddr_t)&mt->mt_state);
+	wakeup((void *)&mt->mt_state);
 	if ((mp->mscp_status & M_ST_MASK) == M_ST_SUCCESS)
 		mt->mt_state = MT_ONLINE;
 
@@ -420,11 +415,10 @@ mtioerror(usc, mp, bp)
 		mt->mt_serex = 2;
 	else {
 		if (st && st < 17)
-			printf("%s: error %d (%s)\n", mt->mt_dev.dv_xname, st,
+			printf("%s: error %d (%s)\n", device_xname(&mt->mt_dev), st,
 			    mt_ioerrs[st-1]);
 		else
-			printf("%s: error %d\n", mt->mt_dev.dv_xname, st);
-		bp->b_flags |= B_ERROR;
+			printf("%s: error %d\n", device_xname(&mt->mt_dev), st);
 		bp->b_error = EROFS;
 	}
 
@@ -438,12 +432,12 @@ int
 mtioctl(dev, cmd, data, flag, l)
 	dev_t dev;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 	int flag;
 	struct lwp *l;
 {
 	int unit = mtunit(dev);
-	struct mt_softc *mt = mt_cd.cd_devs[unit];
+	struct mt_softc *mt = device_lookup_private(&mt_cd, unit);
 	struct mtop *mtop;
 	int error = 0;
 
@@ -477,7 +471,7 @@ int
 mtdump(dev, blkno, va, size)
 	dev_t	dev;
 	daddr_t blkno;
-	caddr_t va;
+	void *va;
 	size_t	size;
 {
 	return -1;
@@ -574,7 +568,7 @@ mtcmddone(usc, mp)
 
 	if (mp->mscp_status) {
 		mt->mt_ioctlerr = EIO;
-		printf("%s: bad status %x\n", mt->mt_dev.dv_xname,
+		printf("%s: bad status %x\n", device_xname(&mt->mt_dev),
 		    mp->mscp_status);
 	}
 	wakeup(&mt->mt_inuse);

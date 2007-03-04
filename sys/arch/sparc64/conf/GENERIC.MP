@@ -1,17 +1,11 @@
-# $NetBSD: GENERIC.MP,v 1.4 2007/01/24 05:53:56 mrg Exp $
+# $NetBSD: GENERIC.MP,v 1.6 2008/06/29 08:05:43 nakayama Exp $
 #
-# GENERIC Sparc64 kernel configuration with multiprocessor support.
-#
-# XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX
-#    
-#     NOTE:  THIS KERNEL DOES NOT YET WORK.  IT SHOULD COMPILE.
-#
-# XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX XXX
+# GENERIC kernel configuration with multiprocessor support.
 #
 
 include 	"arch/sparc64/conf/GENERIC"
 
-#ident 	"GENERIC.MP-$Revision: 1.4 $"
+#ident		"GENERIC.MP-$Revision: 1.6 $"
 
 options 	MULTIPROCESSOR		# include multiprocessor support
 cpu* 		at mainbus0		# declare additional CPUs

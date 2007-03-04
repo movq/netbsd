@@ -1,4 +1,4 @@
-/*	$NetBSD: ucomvar.h,v 1.14 2006/03/05 17:33:33 christos Exp $	*/
+/*	$NetBSD: ucomvar.h,v 1.17 2008/05/24 16:40:58 cube Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,7 +44,7 @@ struct ucom_methods {
 #define UCOM_SET_BREAK 3
 	int (*ucom_param)(void *sc, int portno, struct termios *);
 	int (*ucom_ioctl)(void *sc, int portno, u_long cmd,
-			  caddr_t data, int flag, usb_proc_ptr p);
+			  void *data, int flag, usb_proc_ptr p);
 	int (*ucom_open)(void *sc, int portno);
 	void (*ucom_close)(void *sc, int portno);
 	void (*ucom_read)(void *sc, int portno, u_char **ptr, u_int32_t *count);
@@ -101,6 +94,5 @@ struct ucom_attach_args {
 };
 
 int ucomprint(void *, const char *);
-int ucomsubmatch(struct device *t, struct cfdata *,
-		 const int *, void *);
+int ucomsubmatch(device_t t, cfdata_t, const int *, void *);
 void ucom_status_change(struct ucom_softc *);
