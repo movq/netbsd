@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.c,v 1.24 2007/02/09 21:55:06 ad Exp $	*/
+/*	$NetBSD: svr4_machdep.c,v 1.29 2008/04/28 20:23:27 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.24 2007/02/09 21:55:06 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.29 2008/04/28 20:23:27 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,7 +64,7 @@ extern short exframesize[];
 extern void	m68881_restore(struct fpframe *);
 extern void	m68881_save(struct fpframe *);
 static void	svr4_getsiginfo(union svr4_siginfo *, int, unsigned long,
-		    caddr_t);
+		    void *);
 
 void
 svr4_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
@@ -214,7 +207,7 @@ svr4_setmcontext(struct lwp *l, svr4_mcontext_t *mc, u_long flags)
 }
 
 static void
-svr4_getsiginfo(union svr4_siginfo *sip, int sig, u_long code, caddr_t addr)
+svr4_getsiginfo(union svr4_siginfo *sip, int sig, u_long code, void *addr)
 {
 
 	/*
@@ -250,7 +243,7 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	svr4_getcontext(l, &sf.sf_uc);
 	/* Passing the PC is *wrong*! */
-	svr4_getsiginfo(&sf.sf_si, sig, code, (caddr_t)frame->f_pc);
+	svr4_getsiginfo(&sf.sf_si, sig, code, (void *)frame->f_pc);
 
 	/* Build stack frame for signal trampoline. */
 	sf.sf_signum = sf.sf_si.si_signo;
@@ -264,9 +257,9 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 #endif
 
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&sf, sfp, sizeof (sf));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		/*
@@ -287,21 +280,18 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
  * sysm68k()
  */
 int
-svr4_sys_sysarch(struct lwp *l, void *v, register_t *retval)
+svr4_sys_sysarch(struct lwp *l, const struct svr4_sys_sysarch_args *uap, register_t *retval)
 {
-	struct svr4_sys_sysarch_args /* {
+	/* {
 		syscallarg(int) op;
 		syscallarg(void *) a1;
-	} */ *uap = v;
+	} */
 	char tmp[MAXHOSTNAMELEN];
 	size_t len;
 	int error, name[2];
 
 	switch (SCARG(uap, op)) {
 	case SVR4_SYSARCH_SETNAME:
-		if ((error = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
-			return (error);
 		if ((error = copyinstr(SCARG(uap, a1), tmp, sizeof (tmp), &len))
 		    != 0)
 			return error;

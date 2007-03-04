@@ -1,4 +1,4 @@
-/*	$NetBSD: obio.c,v 1.53 2007/02/03 17:00:37 tsutsui Exp $	*/
+/*	$NetBSD: obio.c,v 1.56 2008/06/28 12:13:38 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.53 2007/02/03 17:00:37 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.56 2008/06/28 12:13:38 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,19 +49,18 @@ __KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.53 2007/02/03 17:00:37 tsutsui Exp $");
 #include <sun3/sun3/machdep.h>
 #include <sun3/sun3/obio.h>
 
-static int	obio_match(struct device *, struct cfdata *, void *);
-static void	obio_attach(struct device *, struct device *, void *);
+static int	obio_match(device_t, cfdata_t, void *);
+static void	obio_attach(device_t, device_t, void *);
 static int	obio_print(void *, const char *);
-static int	obio_submatch(struct device *, struct cfdata *,
-			      const int *, void *);
+static int	obio_submatch(device_t, cfdata_t, const int *, void *);
 
 struct obio_softc {
-	struct device	sc_dev;
+	device_t	sc_dev;
 	bus_space_tag_t	sc_bustag;
 	bus_dma_tag_t	sc_dmatag;
 };
 
-CFATTACH_DECL(obio, sizeof(struct obio_softc),
+CFATTACH_DECL_NEW(obio, sizeof(struct obio_softc),
     obio_match, obio_attach, NULL, NULL);
 
 static int obio_attached;
@@ -96,7 +88,7 @@ static struct sun68k_bus_space_tag obio_space_tag = {
 static struct sun68k_bus_dma_tag obio_dma_tag;
 
 static int 
-obio_match(struct device *parent, struct cfdata *cf, void *aux)
+obio_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -122,16 +114,17 @@ obio_match(struct device *parent, struct cfdata *cf, void *aux)
 #define OBIO_END	0x200000
 
 static void 
-obio_attach(struct device *parent, struct device *self, void *aux)
+obio_attach(device_t parent, device_t self, void *aux)
 {
 	struct confargs *ca = aux;
-	struct obio_softc *sc = (void *)self;
+	struct obio_softc *sc = device_private(self);
 	struct confargs oba;
 	int addr;
 
 	obio_attached = 1;
+	sc->sc_dev = self;
 
-	printf("\n");
+	aprint_normal("\n");
 
 	sc->sc_bustag = ca->ca_bustag;
 	sc->sc_dmatag = ca->ca_dmatag;
@@ -169,15 +162,14 @@ obio_print(void *args, const char *name)
 
 	/* Be quiet about empty OBIO locations. */
 	if (name)
-		return(QUIET);
+		return QUIET;
 
 	/* Otherwise do the usual. */
-	return(bus_print(args, name));
+	return bus_print(args, name);
 }
 
 int 
-obio_submatch(struct device *parent, struct cfdata *cf,
-	      const int *ldesc, void *aux)
+obio_submatch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 {
 	struct confargs *ca = aux;
 
@@ -190,8 +182,8 @@ obio_submatch(struct device *parent, struct cfdata *cf,
 	 */
 #ifdef	DIAGNOSTIC
 	if (cf->cf_paddr == -1)
-		panic("obio_submatch: invalid address for: %s%d",
-			cf->cf_name, cf->cf_unit);
+		panic("%s: invalid address for: %s%d",
+		    __func__, cf->cf_name, cf->cf_unit);
 #endif
 
 	/*
@@ -210,8 +202,8 @@ obio_submatch(struct device *parent, struct cfdata *cf,
 	 */
 #ifdef	DIAGNOSTIC
 	if (cf->cf_intvec != -1)
-		panic("obio_submatch: %s%d can not have a vector",
-		    cf->cf_name, cf->cf_unit);
+		panic("%s: %s%d can not have a vector",
+		    __func__, cf->cf_name, cf->cf_unit);
 #endif
 
 	/*
@@ -223,7 +215,7 @@ obio_submatch(struct device *parent, struct cfdata *cf,
 	ca->ca_intvec = -1;
 
 	/* Now call the match function of the potential child. */
-	return (config_match(parent, cf, aux));
+	return config_match(parent, cf, aux);
 }
 
 
@@ -236,11 +228,11 @@ obio_submatch(struct device *parent, struct cfdata *cf,
  * The saved mappings are just one page each, which
  * is good enough for all the devices that use this.
  */
-#define SAVE_SHIFT 17
-#define SAVE_INCR (1<<SAVE_SHIFT)
-#define SAVE_MASK (SAVE_INCR-1)
-#define SAVE_SLOTS  16
-#define SAVE_LAST (SAVE_SLOTS * SAVE_INCR)
+#define SAVE_SHIFT	17
+#define SAVE_INCR	(1 << SAVE_SHIFT)
+#define SAVE_MASK	(SAVE_INCR - 1)
+#define SAVE_SLOTS	16
+#define SAVE_LAST	(SAVE_SLOTS * SAVE_INCR)
 
 /*
  * This is our record of "interesting" OBIO mappings that
@@ -316,14 +308,12 @@ save_prom_mappings(void)
 		while (pgva < segva) {
 			pte = get_pte(pgva);
 			if ((pte & (PG_VALID | PG_TYPE)) ==
-				(PG_VALID | PGT_OBIO))
-			{
+			    (PG_VALID | PGT_OBIO)) {
 				/* Have a valid OBIO mapping. */
 				pa = PG_PA(pte);
 				/* Is it one we want to record? */
 				if ((pa < SAVE_LAST) &&
-					((pa & SAVE_MASK) == 0))
-				{
+				    ((pa & SAVE_MASK) == 0)) {
 					i = pa >> SAVE_SHIFT;
 					if (prom_mappings[i] == 0) {
 						prom_mappings[i] = pgva;
@@ -388,6 +378,7 @@ make_required_mappings(void)
 void 
 obio_init(void)
 {
+
 	save_prom_mappings();
 	make_required_mappings();
 

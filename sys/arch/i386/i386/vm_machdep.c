@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.127 2007/02/09 21:55:05 ad Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.139 2008/05/27 14:25:11 ad Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
@@ -80,10 +80,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.127 2007/02/09 21:55:05 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.139 2008/05/27 14:25:11 ad Exp $");
 
 #include "opt_user_ldt.h"
-#include "opt_largepages.h"
 #include "opt_mtrr.h"
 #include "opt_noredzone.h"
 #include "opt_execfmt.h"
@@ -126,7 +125,7 @@ cpu_proc_fork(struct proc *p1, struct proc *p2)
  * Copy and update the pcb and trap frame, making the child ready to run.
  *
  * Rig the child's kernel stack so that it will start out in
- * proc_trampoline() and call child_return() with l2 as an
+ * lwp_trampoline() and call child_return() with l2 as an
  * argument. This causes the newly-created child process to go
  * directly to user level with an apparent return value of 0 from
  * fork(), while the parent process returns normally.
@@ -145,14 +144,13 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 {
 	struct pcb *pcb = &l2->l_addr->u_pcb;
 	struct trapframe *tf;
-	struct switchframe *sf;
 
 #if NNPX > 0
 	/*
 	 * Save p1's npx h/w state to p1's pcb so that we can copy it.
 	 */
 	if (l1->l_addr->u_pcb.pcb_fpcpu != NULL)
-		npxsave_lwp(l1, 1);
+		npxsave_lwp(l1, true);
 #endif
 
 	l2->l_md.md_flags = l1->l_md.md_flags;
@@ -167,27 +165,27 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 		panic("cpu_lwp_fork: curlwp");
 #endif
 	*pcb = l1->l_addr->u_pcb;
+#if defined(XEN)
+	pcb->pcb_iopl = SEL_KPL;
+#endif /* defined(XEN) */
 
 	/*
-	 * Preset these so that gdt_compact() doesn't get confused if called
-	 * during the allocations below.
-	 *
-	 * Note: pcb_ldt_sel is handled in the pmap_activate() call when
-	 * we run the new process.
+	 * Fix up the ring0 esp.
 	 */
-	l2->l_md.md_tss_sel = GSEL(GNULL_SEL, SEL_KPL);
+	pcb->pcb_esp0 = USER_TO_UAREA(l2->l_addr) + KSTACK_SIZE - 16;
 
-	/* Fix up the TSS. */
-	pcb->pcb_tss.tss_ss0 = GSEL(GDATA_SEL, SEL_KPL);
-	pcb->pcb_tss.tss_esp0 = USER_TO_UAREA(l2->l_addr) + KSTACK_SIZE - 16;
+	pcb->pcb_iomap = NULL;
 
-	l2->l_md.md_tss_sel = tss_alloc(pcb);
+	l2->l_md.md_astpending = 0;
+	memcpy(&pcb->pcb_fsd, curpcb->pcb_fsd, sizeof(pcb->pcb_fsd));
+	memcpy(&pcb->pcb_gsd, curpcb->pcb_gsd, sizeof(pcb->pcb_gsd));
 
 	/*
 	 * Copy the trapframe.
 	 */
-	l2->l_md.md_regs = tf = (struct trapframe *)pcb->pcb_tss.tss_esp0 - 1;
+	l2->l_md.md_regs = tf = (struct trapframe *)pcb->pcb_esp0 - 1;
 	*tf = *l1->l_md.md_regs;
+	tf->tf_trapno = T_ASTFLT;
 
 #ifndef NOREDZONE
 	setredzone(l2);
@@ -198,12 +196,7 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	if (stack != NULL)
 		tf->tf_esp = (u_int)stack + stacksize;
 
-	sf = (struct switchframe *)tf - 1;
-	sf->sf_esi = (int)func;
-	sf->sf_ebx = (int)arg;
-	sf->sf_eip = (int)proc_trampoline;
-	pcb->pcb_esp = (int)sf;
-	pcb->pcb_ebp = 0;
+	cpu_setfunc(l2, func, arg);
 }
 
 void
@@ -215,9 +208,9 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 
 	sf->sf_esi = (int)func;
 	sf->sf_ebx = (int)arg;
-	sf->sf_eip = (int)proc_trampoline;
+	sf->sf_eip = (int)lwp_trampoline;
 	pcb->pcb_esp = (int)sf;
-	pcb->pcb_ebp = 0;
+	pcb->pcb_ebp = (int)l;
 }	
 
 void
@@ -236,7 +229,7 @@ cpu_swapout(struct lwp *l)
 	/*
 	 * Make sure we save the FP state before the user area vanishes.
 	 */
-	npxsave_lwp(l, 1);
+	npxsave_lwp(l, true);
 #endif
 }
 
@@ -252,7 +245,7 @@ cpu_lwp_free(struct lwp *l, int proc)
 #if NNPX > 0
 	/* If we were using the FPU, forget about it. */
 	if (l->l_addr->u_pcb.pcb_fpcpu != NULL)
-		npxsave_lwp(l, 0);
+		npxsave_lwp(l, false);
 #endif
 
 #ifdef MTRR
@@ -269,11 +262,7 @@ void
 cpu_lwp_free2(struct lwp *l)
 {
 
-	/* Nuke the TSS. */
-	tss_free(l->l_md.md_tss_sel);
-#ifdef DEBUG
-	l->l_md.md_tss_sel = 0xfeedbeed;
-#endif
+	/* nothing */
 }
 
 #if (defined(EXEC_AOUT) || defined(EXEC_COFF) || defined(EXEC_ECOFF) || \
@@ -345,11 +334,11 @@ setredzone(struct lwp *l)
  * Convert kernel VA to physical address
  */
 int
-kvtop(register caddr_t addr)
+kvtop(register void *addr)
 {
 	paddr_t pa;
 
-	if (pmap_extract(pmap_kernel(), (vaddr_t)addr, &pa) == FALSE)
+	if (pmap_extract(pmap_kernel(), (vaddr_t)addr, &pa) == false)
 		panic("kvtop: zero page frame");
 	return (int)pa;
 }
@@ -371,7 +360,7 @@ vmapbuf(struct buf *bp, vsize_t len)
 	off = (vaddr_t)bp->b_data - faddr;
 	len = round_page(off + len);
 	taddr = uvm_km_alloc(phys_map, len, 0, UVM_KMF_VAONLY|UVM_KMF_WAITVA);
-	bp->b_data = (caddr_t)(taddr + off);
+	bp->b_data = (void *)(taddr + off);
 	/*
 	 * The region is locked, so we expect that pmap_pte() will return
 	 * non-NULL.

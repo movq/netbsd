@@ -1,4 +1,4 @@
-/* $NetBSD: lemac.c,v 1.30 2006/09/07 02:40:32 dogcow Exp $ */
+/* $NetBSD: lemac.c,v 1.35 2008/04/08 12:07:26 cegger Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1997 Matt Thomas <matt@3am-software.com>
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.30 2006/09/07 02:40:32 dogcow Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.35 2008/04/08 12:07:26 cegger Exp $");
 
 #include "opt_inet.h"
 #include "rnd.h"
@@ -68,7 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: lemac.c,v 1.30 2006/09/07 02:40:32 dogcow Exp $");
 #endif
 
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/ic/lemacreg.h>
 #include <dev/ic/lemacvar.h>
@@ -300,13 +300,13 @@ lemac_input(
 	}
     }
     m->m_data += 2;
-    memcpy(m->m_data, (caddr_t)&eh, sizeof(eh));
+    memcpy(m->m_data, (void *)&eh, sizeof(eh));
     if (LEMAC_USE_PIO_MODE(sc)) {
 	LEMAC_INSB(sc, LEMAC_REG_DAT, length - sizeof(eh),
-		   mtod(m, caddr_t) + sizeof(eh));
+		   mtod(m, char *) + sizeof(eh));
     } else {
 	LEMAC_GETBUF16(sc, offset + sizeof(eh), (length - sizeof(eh)) / 2,
-		      (void *) (mtod(m, caddr_t) + sizeof(eh)));
+		      (void *)(mtod(m, char *) + sizeof(eh)));
 	if (length & 1)
 	    m->m_data[length - 1] = LEMAC_GET8(sc, offset + length - 1);
     }
@@ -748,7 +748,7 @@ static int
 lemac_ifioctl(
     struct ifnet *ifp,
     u_long cmd,
-    caddr_t data)
+    void *data)
 {
     lemac_softc_t * const sc = LEMAC_IFP_TO_SOFTC(ifp);
     int s;
@@ -788,12 +788,7 @@ lemac_ifioctl(
 	    /*
 	     * Update multicast listeners
 	     */
-	    if (cmd == SIOCADDMULTI)
-		error = ether_addmulti((struct ifreq *)data, &sc->sc_ec);
-	    else
-		error = ether_delmulti((struct ifreq *)data, &sc->sc_ec);
-
-	    if (error == ENETRESET) {
+	    if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 		/* reset multicast filtering */
 		if (ifp->if_flags & IFF_RUNNING)
 		    lemac_init(sc);
@@ -996,7 +991,7 @@ lemac_ifattach(
 {
     struct ifnet * const ifp = &sc->sc_if;
 
-    strcpy(ifp->if_xname, sc->sc_dv.dv_xname);
+    strlcpy(ifp->if_xname, device_xname(&sc->sc_dv), IFNAMSIZ);
 
     lemac_reset(sc);
 
@@ -1030,7 +1025,7 @@ lemac_ifattach(
 	ether_ifattach(ifp, sc->sc_enaddr);
 
 #if NRND > 0
-	rnd_attach_source(&sc->rnd_source, sc->sc_dv.dv_xname,
+	rnd_attach_source(&sc->rnd_source, device_xname(&sc->sc_dv),
 			  RND_TYPE_NET, 0);
 #endif
 

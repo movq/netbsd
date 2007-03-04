@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.15 2006/06/07 22:37:14 kardel Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.21 2008/05/11 15:32:20 ad Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -46,16 +46,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.15 2006/06/07 22:37:14 kardel Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.21 2008/05/11 15:32:20 ad Exp $");
 
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
+#include <sys/cpu.h>
 
 #include <machine/pte.h>
-#include <machine/cpu.h>
+#include <machine/cpufunc.h>
 
 #include "ioapic.h"
 #include "lapic.h"
@@ -71,6 +72,8 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.15 2006/06/07 22:37:14 kardel Exp $")
 #include "bios32.h"
 #if NBIOS32 > 0
 #include <machine/bios32.h>
+/* XXX */
+extern void platform_init(void);
 #endif
 
 #include <x86/x86/tsc.h>
@@ -86,6 +89,7 @@ cpu_configure()
 
 #if NBIOS32 > 0
 	bios32_init();
+	platform_init();
 #endif
 
 	x86_64_proc0_tss_ldt_init();
@@ -98,15 +102,12 @@ cpu_configure()
 #endif
 
 #if NIOAPIC > 0
-	lapic_set_lvt();
 	ioapic_enable();
 #endif
 
 #ifdef MULTIPROCESSOR
-	cpu_init_idle_pcbs();
+	cpu_init_idle_lwps();
 #endif
-
-	init_TSC_tc();
 
 	spl0();
 	lcr8(0);

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fpa.c,v 1.47 2006/11/16 01:33:08 christos Exp $	*/
+/*	$NetBSD: if_fpa.c,v 1.50 2008/06/12 22:44:47 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_fpa.c,v 1.47 2006/11/16 01:33:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_fpa.c,v 1.50 2008/06/12 22:44:47 cegger Exp $");
 
 #ifdef __NetBSD__
 #include "opt_inet.h"
@@ -125,11 +125,11 @@ static void pdq_pci_shutdown(int howto, void *sc);
 
 #elif defined(__bsdi__)
 extern struct cfdriver fpacd;
-#define	PDQ_PCI_UNIT_TO_SOFTC(unit)	((pdq_softc_t *)fpacd.cd_devs[unit])
+#define	PDQ_PCI_UNIT_TO_SOFTC(unit)	((pdq_softc_t *)device_lookup_private(&fpa_cd, unit))
 
 #elif defined(__NetBSD__)
 extern struct cfdriver fpa_cd;
-#define	PDQ_PCI_UNIT_TO_SOFTC(unit)	((pdq_softc_t *)fpa_cd.cd_devs[unit])
+#define	PDQ_PCI_UNIT_TO_SOFTC(unit)	((pdq_softc_t *)device_lookup_private(&fpa_cd, unit))
 #define	pdq_pci_ifwatchdog		NULL
 #endif
 
@@ -223,7 +223,7 @@ pdq_pci_attach(
 	free((void *) sc, M_DEVBUF);
 	return;
     }
-    bcopy((caddr_t) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
+    bcopy((void *) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
     pdqs_pci[unit] = sc;
     pdq_ifattach(sc, pdq_pci_ifwatchdog);
     pci_map_int(config_id, pdq_pci_ifintr, (void*) sc, &net_imask);
@@ -319,7 +319,7 @@ pdq_pci_probe(
     ia->ia_drq = DRQNONE;
 
     /* Get the memory base address; assume the BIOS set it up correctly */
-    ia->ia_maddr = (caddr_t) (pci_inl(pa, PCI_CBMA) & ~7);
+    ia->ia_maddr = (void *) (pci_inl(pa, PCI_CBMA) & ~7);
     pci_outl(pa, PCI_CBMA, 0xFFFFFFFF);
     ia->ia_msize = ((~pci_inl(pa, PCI_CBMA)) | 7) + 1;
     pci_outl(pa, PCI_CBMA, (int) ia->ia_maddr);
@@ -365,7 +365,7 @@ pdq_pci_attach(
 	return;
     }
 
-    bcopy((caddr_t) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
+    bcopy((void *) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
 
     pdq_ifattach(sc, pdq_pci_ifwatchdog);
 
@@ -410,7 +410,7 @@ static void
 pdq_pci_attach(
     struct device * const parent,
     struct device * const self,
-    void * const aux)
+    void *const aux)
 {
     pdq_softc_t * const sc = (pdq_softc_t *)self;
     struct pci_attach_args * const pa = (struct pci_attach_args *) aux;
@@ -430,7 +430,7 @@ pdq_pci_attach(
 	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_CFLT, data);
     }
 
-    strcpy(sc->sc_if.if_xname, sc->sc_dev.dv_xname);
+    strlcpy(sc->sc_if.if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
     sc->sc_if.if_flags = 0;
     sc->sc_if.if_softc = sc;
 
@@ -474,20 +474,20 @@ pdq_pci_attach(
 				sc->sc_if.if_xname, 0,
 				(void *) sc, PDQ_DEFPA);
     if (sc->sc_pdq == NULL) {
-	aprint_error("%s: initialization failed\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(&sc->sc_dev, "initialization failed\n");
 	return;
     }
 
     pdq_ifattach(sc, pdq_pci_ifwatchdog);
 
     if (pci_intr_map(pa, &intrhandle)) {
-	aprint_error("%s: couldn't map interrupt\n", self->dv_xname);
+	aprint_error_dev(self, "couldn't map interrupt\n");
 	return;
     }
     intrstr = pci_intr_string(pa->pa_pc, intrhandle);
     sc->sc_ih = pci_intr_establish(pa->pa_pc, intrhandle, IPL_NET, pdq_pci_ifintr, sc);
     if (sc->sc_ih == NULL) {
-	aprint_error("%s: couldn't establish interrupt", self->dv_xname);
+	aprint_error_dev(self, "couldn't establish interrupt");
 	if (intrstr != NULL)
 	    aprint_normal(" at %s", intrstr);
 	aprint_normal("\n");
@@ -496,9 +496,9 @@ pdq_pci_attach(
 
     sc->sc_ats = shutdownhook_establish((void (*)(void *)) pdq_hwreset, sc->sc_pdq);
     if (sc->sc_ats == NULL)
-	aprint_error("%s: warning: couldn't establish shutdown hook\n", self->dv_xname);
+	aprint_error_dev(self, "warning: couldn't establish shutdown hook\n");
     if (intrstr != NULL)
-	aprint_normal("%s: interrupting at %s\n", self->dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 }
 
 CFATTACH_DECL(fpa, sizeof(pdq_softc_t),

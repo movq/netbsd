@@ -1,4 +1,4 @@
-/*	$NetBSD: atareg.h,v 1.29 2006/11/16 01:32:47 christos Exp $	*/
+/*	$NetBSD: atareg.h,v 1.32 2007/12/25 18:33:36 perry Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.
@@ -194,9 +194,11 @@ atacmd_tostatq(int cmd32)
 #endif /* _KERNEL */
 
 /* Subcommands for SET_FEATURES (features register) */
+#define	WDSF_8BIT_PIO_EN	0x01
 #define	WDSF_WRITE_CACHE_EN	0x02
 #define	WDSF_SET_MODE		0x03
 #define	WDSF_REASSIGN_EN	0x04
+#define	WDSF_APM_EN		0x05
 #define	WDSF_RETRY_DS		0x33
 #define	WDSF_SET_CACHE_SGMT	0x54
 #define	WDSF_READAHEAD_DS	0x55
@@ -204,6 +206,7 @@ atacmd_tostatq(int cmd32)
 #define	WDSF_ECC_DS		0x77
 #define	WDSF_WRITE_CACHE_DS	0x82
 #define	WDSF_REASSIGN_DS	0x84
+#define	WDSF_APM_DS		0x85
 #define	WDSF_ECC_EN		0x88
 #define	WDSF_RETRY_EN		0x99
 #define	WDSF_SET_CURRENT	0x9a
@@ -350,17 +353,20 @@ struct ataparams {
     u_int16_t	atap_pkt_bsyclr;	/* 72: tme to clear BSY after service */
     u_int16_t	__reserved4[2];
     u_int16_t	atap_queuedepth;   	/* 75: */
-#define WDC_QUEUE_DEPTH_MASK 0x0F
+#define WDC_QUEUE_DEPTH_MASK 0x1F
     u_int16_t   atap_sata_caps;/* 76: */
 #define SATA_SIGNAL_GEN1	0x02
 #define SATA_SIGNAL_GEN2	0x04
 #define SATA_NATIVE_CMDQ	0x0100
 #define SATA_HOST_PWR_MGMT	0x0200
+#define SATA_PHY_EVNT_CNT	0x0400
     u_int16_t   atap_sata_reserved;    /* 77: */
     u_int16_t   atap_sata_features_supp;    /* 78: */
 #define SATA_NONZERO_OFFSETS	0x02
 #define SATA_DMA_SETUP_AUTO	0x04
 #define SATA_DRIVE_PWR_MGMT	0x08
+#define SATA_IN_ORDER_DATA	0x10
+#define SATA_SW_STTNGS_PRS	0x40
     u_int16_t   atap_sata_features_en;    /* 79: */
     u_int16_t	atap_ata_major;  	/* 80: Major version number */
 #define	WDC_VER_ATA1	0x0002
@@ -469,7 +475,7 @@ struct ata_smart_attr {
 	u_int8_t		worst;
 	u_int8_t		raw[6];
 	u_int8_t		reserved;
-} __attribute__((packed));
+} __packed;
 
 struct ata_smart_attributes {
 	u_int16_t		data_structure_revision;
@@ -487,13 +493,13 @@ struct ata_smart_attributes {
 	u_int8_t		reserved_374_385[12];
 	u_int8_t		vendor_specific_386_509[125];
 	int8_t			checksum;
-} __attribute__((packed));
+} __packed;
 
 struct ata_smart_thresh {
 	u_int8_t		id;
 	u_int8_t		value;
 	u_int8_t		reserved[10];
-} __attribute__((packed));
+} __packed;
 
 struct ata_smart_thresholds {
 	u_int16_t		data_structure_revision;
@@ -501,7 +507,7 @@ struct ata_smart_thresholds {
 	u_int8_t		reserved[18];
 	u_int8_t		vendor_specific[131];
 	int8_t			checksum;
-} __attribute__((packed));
+} __packed;
 
 struct ata_smart_selftest {
 	u_int8_t		number;
@@ -510,7 +516,7 @@ struct ata_smart_selftest {
 	u_int8_t		failure_check_point;
 	u_int32_t		lba_first_error;
 	u_int8_t		vendor_specific[15];
-} __attribute__((packed));
+} __packed;
 
 struct ata_smart_selftestlog {
 	u_int16_t		data_structure_revision;
@@ -519,6 +525,6 @@ struct ata_smart_selftestlog {
 	u_int8_t		mostrecenttest;
 	u_int8_t		reserved[2];
 	u_int8_t		checksum;
-} __attribute__((packed));
+} __packed;
 
 #endif /* _DEV_ATA_ATAREG_H_ */

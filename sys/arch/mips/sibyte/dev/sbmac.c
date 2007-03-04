@@ -1,4 +1,4 @@
-/* $NetBSD: sbmac.c,v 1.21 2005/12/11 12:18:12 christos Exp $ */
+/* $NetBSD: sbmac.c,v 1.28 2008/02/07 01:21:52 dyoung Exp $ */
 
 /*
  * Copyright 2000, 2001, 2004
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbmac.c,v 1.21 2005/12/11 12:18:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbmac.c,v 1.28 2008/02/07 01:21:52 dyoung Exp $");
 
 #include "bpfilter.h"
 #include "opt_inet.h"
@@ -255,10 +255,8 @@ static uint64_t sbmac_addr2reg(u_char *ptr);
 static void sbmac_intr(void *xsc, uint32_t status, uint32_t pc);
 static void sbmac_start(struct ifnet *ifp);
 static void sbmac_setmulti(struct sbmac_softc *sc);
-static int sbmac_ether_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data);
-static int sbmac_ioctl(struct ifnet *ifp, u_long command, caddr_t data);
-static int sbmac_mediachange(struct ifnet *ifp);
-static void sbmac_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr);
+static int sbmac_ether_ioctl(struct ifnet *ifp, u_long cmd, void *data);
+static int sbmac_ioctl(struct ifnet *ifp, u_long command, void *data);
 static void sbmac_watchdog(struct ifnet *ifp);
 static int sbmac_match(struct device *parent, struct cfdata *match, void *aux);
 static void sbmac_attach(struct device *parent, struct device *self, void *aux);
@@ -539,7 +537,7 @@ sbdma_add_rcvbuffer(sbmacdma_t *d, struct mbuf *m)
 	 * fill in the descriptor
 	 */
 
-	d->sbdma_dscrtable[dsc].dscr_a = KVTOPHYS(mtod(m_new, caddr_t)) |
+	d->sbdma_dscrtable[dsc].dscr_a = KVTOPHYS(mtod(m_new, void *)) |
 	    V_DMA_DSCRA_A_SIZE(NUMCACHEBLKS(ETHER_ALIGN + m_new->m_len)) |
 	    M_DMA_DSCRA_INTERRUPT;
 
@@ -618,7 +616,7 @@ sbdma_add_txbuffer(sbmacdma_t *d, struct mbuf *m)
 		 * Loop thru this mbuf record.
 		 * The head mbuf will have SOP set.
 		 */
-		d->sbdma_dscrtable[dsc].dscr_a = KVTOPHYS(mtod(m,caddr_t)) |
+		d->sbdma_dscrtable[dsc].dscr_a = KVTOPHYS(mtod(m,void *)) |
 		    M_DMA_ETHTX_SOP;
 
 		/*
@@ -646,7 +644,7 @@ sbdma_add_txbuffer(sbmacdma_t *d, struct mbuf *m)
 				continue;	/* Skip 0-length mbufs */
 
 			len = m_temp->m_len;
-			addr = KVTOPHYS(mtod(m_temp, caddr_t));
+			addr = KVTOPHYS(mtod(m_temp, void *));
 
 			/*
 			 * Check to see if the mbuf spans a page boundary.  If
@@ -660,7 +658,7 @@ sbdma_add_txbuffer(sbmacdma_t *d, struct mbuf *m)
 				len -= next_len;
 
 				if (addr + len ==
-				    KVTOPHYS(mtod(m_temp, caddr_t) + len)) {
+				    KVTOPHYS(mtod(m_temp, char *) + len)) {
 					SBMAC_EVCNT_INCR(sc->sbm_ev_txkeep);
 					len += next_len;
 					next_len = 0;
@@ -702,7 +700,7 @@ again:
 			num_mbufs++;
 
 			if (next_len != 0) {
-				addr = KVTOPHYS(mtod(m_temp, caddr_t) + len);
+				addr = KVTOPHYS(mtod(m_temp, char *) + len);
 				len = next_len;
 
 				next_len = 0;
@@ -753,7 +751,7 @@ again:
 		 * Copy data
 		 */
 
-		m_copydata(m,0,m->m_pkthdr.len,mtod(m_new,caddr_t));
+		m_copydata(m,0,m->m_pkthdr.len,mtod(m_new,void *));
 		m_new->m_len = m_new->m_pkthdr.len = m->m_pkthdr.len;
 
 		/* Free old mbuf 'm', actual mbuf is now 'm_new' */
@@ -768,7 +766,7 @@ again:
 		 * fill in the descriptor
 		 */
 
-		d->sbdma_dscrtable[dsc].dscr_a = KVTOPHYS(mtod(m_new,caddr_t)) |
+		d->sbdma_dscrtable[dsc].dscr_a = KVTOPHYS(mtod(m_new,void *)) |
 		    V_DMA_DSCRA_A_SIZE(NUMCACHEBLKS(m_new->m_len)) |
 		    M_DMA_DSCRA_INTERRUPT |
 		    M_DMA_ETHTX_SOP;
@@ -1031,9 +1029,9 @@ sbdma_tx_process(struct sbmac_softc *sc, sbmacdma_t *d)
 		d->sbdma_ctxtable[curidx] = NULL;
 
 		/*
-		 * for transmits, we just free buffers.
+		 * for transmits we just free buffers and count packets.
 		 */
-
+		ifp->if_opackets++;
 		m_freem(m);
 
 		/*
@@ -1953,7 +1951,7 @@ sbmac_setmulti(struct sbmac_softc *sc)
  */
 
 static int
-sbmac_ether_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+sbmac_ether_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ifaddr *ifa = (struct ifaddr *) data;
 	struct sbmac_softc *sc = ifp->if_softc;
@@ -2015,7 +2013,7 @@ sbmac_ether_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
  */
 
 static int
-sbmac_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
+sbmac_ioctl(struct ifnet *ifp, u_long command, void *data)
 {
 	struct sbmac_softc *sc = ifp->if_softc;
 	struct ifreq *ifr = (struct ifreq *) data;
@@ -2029,12 +2027,11 @@ sbmac_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 		error = sbmac_ether_ioctl(ifp, command, data);
 		break;
 	case SIOCSIFMTU:
-		if (ifr->ifr_mtu > ETHER_MAX_LEN)
+		if (ifr->ifr_mtu < ETHERMIN || ifr->ifr_mtu > ETHERMTU)
 			error = EINVAL;
-		else {
-			ifp->if_mtu = ifr->ifr_mtu;
+		else if ((error = ifioctl_common(ifp, command, data)) == ENETRESET)
 			/* XXX Program new MTU here */
-		}
+			error = 0;
 		break;
 	case SIOCSIFFLAGS:
 		if (ifp->if_flags & IFF_UP) {
@@ -2063,14 +2060,13 @@ sbmac_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		if (ifp->if_flags & IFF_RUNNING) {
-			sbmac_setmulti(sc);
-			error = 0;
-		}
-		break;
 	case SIOCSIFMEDIA:
 	case SIOCGIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &sc->sc_mii.mii_media, command);
+		if ((error = ether_ioctl(ifp, command, data)) == ENETRESET) {
+			error = 0;
+			if (ifp->if_flags & IFF_RUNNING)
+				sbmac_setmulti(sc);
+		}
 		break;
 	default:
 		error = EINVAL;
@@ -2096,16 +2092,6 @@ sbmac_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
  *	else error code
  */
 
-static int
-sbmac_mediachange(struct ifnet *ifp)
-{
-	struct sbmac_softc *sc = ifp->if_softc;
-
-	if (ifp->if_flags & IFF_UP)
-		mii_mediachg(&sc->sc_mii);
-	return(0);
-}
-
 /*
  *  SBMAC_IFMEDIA_STS(ifp, ifmr)
  *
@@ -2118,16 +2104,6 @@ sbmac_mediachange(struct ifnet *ifp)
  *  Return value:
  *	nothing
  */
-
-static void
-sbmac_mediastatus(struct ifnet *ifp, struct ifmediareq *req)
-{
-	struct sbmac_softc	*sc = ifp->if_softc;
-
-  	mii_pollstat(&sc->sc_mii);
-	req->ifm_status = sc->sc_mii.mii_media_status;
-	req->ifm_active = sc->sc_mii.mii_media_active;
-}
 
 /*
  *  SBMAC_WATCHDOG(ifp)
@@ -2318,7 +2294,7 @@ sbmac_attach(struct device *parent, struct device *self, void *aux)
 
 	sbmac_initctx(sc);
 
-	callout_init(&(sc->sc_tick_ch));
+	callout_init(&(sc->sc_tick_ch), 0);
 
 	/*
 	 * Read the ethernet address.  The firwmare left this programmed
@@ -2387,8 +2363,9 @@ sbmac_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_mii.mii_readreg  = sbmac_mii_readreg;
 	sc->sc_mii.mii_writereg = sbmac_mii_writereg;
 	sc->sc_mii.mii_statchg  = sbmac_mii_statchg;
-	ifmedia_init(&sc->sc_mii.mii_media, 0, sbmac_mediachange,
-	    sbmac_mediastatus);
+	sc->sc_ethercom.ec_mii = &sc->sc_mii;
+	ifmedia_init(&sc->sc_mii.mii_media, 0, ether_mediachange,
+	    ether_mediastatus);
 	mii_attach(&sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 	    MII_OFFSET_ANY, 0);
 

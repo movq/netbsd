@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cs_ofisa.c,v 1.15 2006/03/29 07:09:33 thorpej Exp $	*/
+/*	$NetBSD: if_cs_ofisa.c,v 1.18 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa.c,v 1.15 2006/03/29 07:09:33 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa.c,v 1.18 2008/04/28 20:23:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,8 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_cs_ofisa.c,v 1.15 2006/03/29 07:09:33 thorpej Exp
 #include <netinet/if_inarp.h>
 #endif
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/ofw/openfirm.h>
 #include <dev/isa/isavar.h>
@@ -244,19 +237,17 @@ cs_ofisa_attach(parent, self, aux)
 		printf("\n");
 
 	if (message != NULL)
-		printf("%s: %s\n", sc->sc_dev.dv_xname, message);
+		printf("%s: %s\n", device_xname(&sc->sc_dev), message);
 
 	if (defmedia == -1) {
-		printf("%s: unable to get default media\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to get default media\n");
 		defmedia = media[0];	/* XXX What to do? */
 	}
 
 	sc->sc_ih = isa_intr_establish(isc->sc_ic, sc->sc_irq, intr.share,
 	    IPL_NET, cs_intr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: unable to establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to establish interrupt\n");
 		return;
 	}
 

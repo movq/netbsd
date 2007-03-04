@@ -1,4 +1,4 @@
-/*	$NetBSD: midisyn.c,v 1.20 2006/11/16 01:32:45 christos Exp $	*/
+/*	$NetBSD: midisyn.c,v 1.22 2008/04/28 20:23:47 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: midisyn.c,v 1.20 2006/11/16 01:32:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: midisyn.c,v 1.22 2008/04/28 20:23:47 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/ioctl.h>
@@ -88,7 +81,7 @@ int	midisyn_open(void *, int,
 void	midisyn_close(void *);
 int	midisyn_sysrt(void *, int);
 void	midisyn_getinfo(void *, struct midi_info *);
-int	midisyn_ioctl(void *, u_long, caddr_t, int, struct lwp *);
+int	midisyn_ioctl(void *, u_long, void *, int, struct lwp *);
 
 const struct midi_hw_if midisyn_hw_if = {
 	midisyn_open,
@@ -203,7 +196,7 @@ midisyn_getinfo(void *addr, struct midi_info *mi)
 }
 
 int
-midisyn_ioctl(void *maddr, u_long cmd, caddr_t addr, int flag, struct lwp *l)
+midisyn_ioctl(void *maddr, u_long cmd, void *addr, int flag, struct lwp *l)
 {
 	midisyn *ms = maddr;
 

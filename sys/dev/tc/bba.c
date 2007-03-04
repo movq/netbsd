@@ -1,4 +1,4 @@
-/* $NetBSD: bba.c,v 1.30 2006/03/31 07:34:31 he Exp $ */
+/* $NetBSD: bba.c,v 1.34 2008/04/28 20:23:58 martin Exp $ */
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -12,13 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -36,7 +29,7 @@
 /* maxine/alpha baseboard audio (bba) */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bba.c,v 1.30 2006/03/31 07:34:31 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bba.c,v 1.34 2008/04/28 20:23:58 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,9 +37,9 @@ __KERNEL_RCSID(0, "$NetBSD: bba.c,v 1.30 2006/03/31 07:34:31 he Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -74,7 +67,7 @@ struct bba_mem {
 	struct bba_mem *next;
 	bus_addr_t addr;
 	bus_size_t size;
-	caddr_t kva;
+	void *kva;
 };
 
 struct bba_dma_state {
@@ -228,7 +221,7 @@ bba_attach(struct device *parent, struct device *self, void *aux)
 	/* get the bus space handle for codec */
 	if (bus_space_subregion(sc->sc_bst, sc->sc_bsh,
 	    ia->iada_offset, 0, &sc->sc_codec_bsh)) {
-		printf("%s: unable to map device\n", asc->sc_dev.dv_xname);
+		aprint_error_dev(&asc->sc_dev, "unable to map device\n");
 		return;
 	}
 
@@ -301,7 +294,7 @@ bba_allocm(void *addr, int direction, size_t size,
 	struct bba_softc *sc;
 	bus_dma_segment_t seg;
 	int rseg;
-	caddr_t kva;
+	void *kva;
 	struct bba_mem *m;
 	int w;
 	int state;
@@ -314,15 +307,14 @@ bba_allocm(void *addr, int direction, size_t size,
 
 	if (bus_dmamem_alloc(sc->sc_dmat, size, BBA_DMABUF_ALIGN,
 	    BBA_DMABUF_BOUNDARY, &seg, 1, &rseg, w)) {
-		printf("%s: can't allocate DMA buffer\n",
-		    asc->sc_dev.dv_xname);
+		aprint_error_dev(&asc->sc_dev, "can't allocate DMA buffer\n");
 		goto bad;
 	}
 	state |= 1;
 
 	if (bus_dmamem_map(sc->sc_dmat, &seg, rseg, size,
 	    &kva, w | BUS_DMA_COHERENT)) {
-		printf("%s: can't map DMA buffer\n", asc->sc_dev.dv_xname);
+		aprint_error_dev(&asc->sc_dev, "can't map DMA buffer\n");
 		goto bad;
 	}
 	state |= 2;
@@ -353,10 +345,10 @@ bba_freem(void *addr, void *ptr, struct malloc_type *pool)
 	struct bba_softc *sc;
 	struct bba_mem **mp, *m;
 	bus_dma_segment_t seg;
-	caddr_t kva;
+	void *kva;
 
 	sc = addr;
-	kva = (caddr_t)addr;
+	kva = (void *)addr;
 	for (mp = &sc->sc_mem_head; *mp && (*mp)->kva != kva;
 	    mp = &(*mp)->next)
 		continue;
@@ -630,10 +622,10 @@ bba_mappage(void *addr, void *mem, off_t offset, int prot)
 	struct bba_softc *sc;
 	struct bba_mem **mp;
 	bus_dma_segment_t seg;
-	caddr_t kva;
+	void *kva;
 
 	sc = addr;
-	kva = (caddr_t)mem;
+	kva = (void *)mem;
 	for (mp = &sc->sc_mem_head; *mp && (*mp)->kva != kva;
 	    mp = &(*mp)->next)
 		continue;

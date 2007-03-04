@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdi.h,v 1.72 2006/12/05 17:35:35 christos Exp $	*/
+/*	$NetBSD: usbdi.h,v 1.76 2008/04/28 20:24:01 martin Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usbdi.h,v 1.18 1999/11/17 22:33:49 n_hibma Exp $	*/
 
 /*
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,6 +30,9 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+#ifndef _USBDI_H_
+#define _USBDI_H_
 
 typedef struct usbd_bus		*usbd_bus_handle;
 typedef struct usbd_device	*usbd_device_handle;
@@ -227,19 +223,32 @@ const struct usb_devno *usb_match_device(const struct usb_devno *,
 /* Attach data */
 struct usb_attach_arg {
 	int			port;
+	int			vendor;
+	int			product;
+	int			release;
+	usbd_device_handle	device;	/* current device */
+	int			class, subclass, proto;
+	int			usegeneric;
+};
+
+struct usbif_attach_arg {
+	int			port;
 	int			configno;
 	int			ifaceno;
 	int			vendor;
 	int			product;
 	int			release;
 	usbd_device_handle	device;	/* current device */
+
 	usbd_interface_handle	iface; /* current interface */
-	int			usegeneric;
+	int			class, subclass, proto;
+
+	/* XXX need accounting for interfaces not matched to */
+
 	usbd_interface_handle  *ifaces;	/* all interfaces */
 	int			nifaces; /* number of interfaces */
 };
 
-#if defined(__NetBSD__) || defined(__OpenBSD__)
 /* Match codes. */
 #define UMATCH_HIGHEST					15
 /* First five codes is for a whole device. */
@@ -262,39 +271,13 @@ struct usb_attach_arg {
 /* No match */
 #define UMATCH_NONE					 0
 
-#elif defined(__FreeBSD__)
-/* FreeBSD needs values less than zero */
-#define UMATCH_VENDOR_PRODUCT_REV			(-10)
-#define UMATCH_VENDOR_PRODUCT				(-20)
-#define UMATCH_VENDOR_DEVCLASS_DEVPROTO			(-30)
-#define UMATCH_DEVCLASS_DEVSUBCLASS_DEVPROTO		(-40)
-#define UMATCH_DEVCLASS_DEVSUBCLASS			(-50)
-#define UMATCH_VENDOR_PRODUCT_REV_CONF_IFACE		(-60)
-#define UMATCH_VENDOR_PRODUCT_CONF_IFACE		(-70)
-#define UMATCH_VENDOR_IFACESUBCLASS_IFACEPROTO		(-80)
-#define UMATCH_VENDOR_IFACESUBCLASS			(-90)
-#define UMATCH_IFACECLASS_IFACESUBCLASS_IFACEPROTO	(-100)
-#define UMATCH_IFACECLASS_IFACESUBCLASS			(-110)
-#define UMATCH_IFACECLASS				(-120)
-#define UMATCH_IFACECLASS_GENERIC			(-130)
-#define UMATCH_GENERIC					(-140)
-#define UMATCH_NONE					(ENXIO)
-
-#endif
-
-#if defined(__FreeBSD__)
-int usbd_driver_load(module_t mod, int what, void *arg);
-#endif
-
 /* XXX Perhaps USB should have its own levels? */
-#ifdef USB_USE_SOFTINTR
-#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 #define splusb splsoftnet
-#else
-#define	splusb splsoftclock
-#endif /* __HAVE_GENERIC_SOFT_INTERRUPTS */
-#else
-#define splusb splbio
-#endif /* USB_USE_SOFTINTR */
 #define splhardusb splbio
 #define IPL_USB IPL_BIO
+#define splsoftusb splusb
+#define IPL_SOFTUSB IPL_SOFTNET
+#define IPL_HARDUSB IPL_USB
+
+
+#endif /* _USBDI_H_ */

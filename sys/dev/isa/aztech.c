@@ -1,4 +1,4 @@
-/* $NetBSD: aztech.c,v 1.12 2006/11/16 01:33:00 christos Exp $ */
+/* $NetBSD: aztech.c,v 1.14 2008/04/08 20:08:49 cegger Exp $ */
 /* $OpenBSD: aztech.c,v 1.2 2001/12/05 10:27:06 mickey Exp $ */
 /* $RuOBSD: aztech.c,v 1.11 2001/10/20 13:23:47 pva Exp $ */
 
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aztech.c,v 1.12 2006/11/16 01:33:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aztech.c,v 1.14 2008/04/08 20:08:49 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,7 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: aztech.c,v 1.12 2006/11/16 01:33:00 christos Exp $")
 #include <sys/device.h>
 #include <sys/radioio.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isavar.h>
 #include <dev/ic/lm700x.h>
@@ -176,7 +176,7 @@ az_attach(struct device *parent, struct device *self, void *aux)
 	/* remap I/O */
 	if (bus_space_map(sc->lm.iot, ia->ia_io[0].ir_addr,
 	    ia->ia_io[0].ir_size, 0, &sc->lm.ioh))
-		panic(": bus_space_map() of %s failed", sc->sc_dev.dv_xname);
+		panic(": bus_space_map() of %s failed", device_xname(&sc->sc_dev));
 
 	printf(": Aztech/PackardBell\n");
 

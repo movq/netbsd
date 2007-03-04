@@ -1,4 +1,4 @@
-/* $NetBSD: vga.c,v 1.91 2006/11/16 01:32:52 christos Exp $ */
+/* $NetBSD: vga.c,v 1.100 2008/03/16 19:57:39 dyoung Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -27,15 +27,15 @@
  * rights to redistribute these changes.
  */
 
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: vga.c,v 1.100 2008/03/16 19:57:39 dyoung Exp $");
+
 /* for WSCONS_SUPPORT_PCVTFONTS */
 #include "opt_wsdisplay_compat.h"
 /* for WSDISPLAY_CUSTOM_BORDER */
 #include "opt_wsdisplay_border.h"
 /* for WSDISPLAY_CUSTOM_OUTPUT */
 #include "opt_wsmsgattrs.h"
-
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga.c,v 1.91 2006/11/16 01:32:52 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: vga.c,v 1.91 2006/11/16 01:32:52 christos Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/queue.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/ic/mc6845reg.h>
 #include <dev/ic/pcdisplayvar.h>
@@ -279,7 +279,7 @@ const struct wsscreen_list vga_screenlist = {
 	_vga_scrlist_mono
 };
 
-static int	vga_ioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
+static int	vga_ioctl(void *, void *, u_long, void *, int, struct lwp *);
 static paddr_t	vga_mmap(void *, void *, off_t, int);
 static int	vga_alloc_screen(void *, const struct wsscreen_descr *,
 				 void **, int *, int *, long *);
@@ -565,7 +565,7 @@ vga_init(struct vga_config *vc, bus_space_tag_t iot, bus_space_tag_t memt)
 	LIST_INIT(&vc->screens);
 	vc->active = NULL;
 	vc->currenttype = vh->vh_mono ? &vga_25lscreen_mono : &vga_25lscreen;
-	callout_init(&vc->vc_switch_callout);
+	callout_init(&vc->vc_switch_callout, 0);
 
 	wsfont_init();
 	if (vga_no_builtinfont) {
@@ -665,7 +665,7 @@ vga_common_attach(struct vga_softc *sc, bus_space_tag_t iot,
 	aa.accessops = &vga_accessops;
 	aa.accesscookie = vc;
 
-	config_found(&sc->sc_dev, &aa, wsemuldisplaydevprint);
+	config_found_ia(sc->sc_dev, "wsemuldisplaydev", &aa, wsemuldisplaydevprint);
 }
 
 int
@@ -740,14 +740,19 @@ vga_is_console(bus_space_tag_t iot, int type)
 {
 #ifdef __i386__
 	struct device *dv;
+	deviter_t di;
 	struct vesafb_softc *vesafb;
 
-	for (dv = alldevs.tqh_first; dv; dv=dv->dv_list.tqe_next)
-		if (strncmp(dv->dv_xname, "vesafb", 6) == 0) {
-			vesafb = (struct vesafb_softc *)dv;
-			if (vesafb->sc_isconsole)
+	for (dv = deviter_first(&di, 0); dv != NULL; dv = deviter_next(&di)) {
+		if (device_is_a(dv, "vesafb")) {
+			vesafb = device_private(dv);
+			if (vesafb->sc_isconsole) {
+				deviter_release(&di);
 				return (0);
+			}
 		}
+	}
+	deviter_release(&di);
 #endif
 	if (vgaconsole &&
 	    !vga_console_attached &&
@@ -789,7 +794,7 @@ vga_set_video(struct vga_config *vc, int state)
 }
 
 int
-vga_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag, struct lwp *l)
+vga_ioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct vga_config *vc = v;
 	struct vgascreen *scr = vs;
@@ -1103,6 +1108,10 @@ vga_allocattr(void *id, int fg, int bg, int flags, long *attrp)
 {
 	struct vgascreen *scr = id;
 	struct vga_config *vc = scr->cfg;
+
+	if (__predict_false((unsigned int)fg >= sizeof(fgansitopc) || 
+	    (unsigned int)bg >= sizeof(bgansitopc)))
+		return (EINVAL);
 
 	if (vc->hdl.vh_mono) {
 		if (flags & WSATTR_WSCOLORS)
@@ -1484,3 +1493,11 @@ vga_setborder(struct vga_config *vc, u_int value)
 	return (0);
 }
 #endif /* WSDISPLAY_CUSTOM_BORDER */
+
+void
+vga_resume(struct vga_softc *sc)
+{
+#ifdef VGA_RESET_ON_RESUME
+	vga_initregs(&sc->sc_vc->hdl);
+#endif
+}

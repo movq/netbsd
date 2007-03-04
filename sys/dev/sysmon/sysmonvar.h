@@ -1,4 +1,4 @@
-/*	$NetBSD: sysmonvar.h,v 1.12 2006/07/08 20:26:06 christos Exp $	*/
+/*	$NetBSD: sysmonvar.h,v 1.27 2008/06/03 15:00:57 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2000 Zembu Labs, Inc.
@@ -36,15 +36,20 @@
 #ifndef _DEV_SYSMON_SYSMONVAR_H_
 #define	_DEV_SYSMON_SYSMONVAR_H_
 
+#include <sys/param.h>
 #include <sys/envsys.h>
 #include <sys/wdog.h>
 #include <sys/power.h>
 #include <sys/queue.h>
+#include <sys/callout.h>
+#include <sys/mutex.h>
+#include <sys/condvar.h>
 
 struct lwp;
 struct proc;
 struct knote;
 struct uio;
+struct workqueue;
 
 #define	SYSMON_MINOR_ENVSYS	0
 #define	SYSMON_MINOR_WDOG	1
@@ -54,36 +59,74 @@ struct uio;
  * Environmental sensor support
  *****************************************************************************/
 
+struct sme_event;
+struct sme_sensor_names;
+
 struct sysmon_envsys {
-	int32_t sme_envsys_version;	/* ENVSYS API version */
+	const char *sme_name;		/* envsys device name */
+	u_int sme_nsensors;		/* sensors count, from driver */
+	u_int sme_fsensor;		/* sensor index base, from sysmon */
+#define SME_SENSOR_IDX(sme, idx) 	((idx) - (sme)->sme_fsensor)
+	int sme_class;			/* class of device */
+#define SME_CLASS_BATTERY	1		/* device is a battery */
+#define SME_CLASS_ACADAPTER	2		/* device is an AC adapter */
+	int sme_flags;			/* additional flags */
+#define SME_FLAG_BUSY 		0x00000001 	/* device busy */
+#define SME_DISABLE_REFRESH	0x00000002	/* disable sme_refresh */
+#define SME_CALLOUT_INITIALIZED	0x00000004	/* callout was initialized */
+#define SME_INIT_REFRESH        0x00000008      /* call sme_refresh() after
+						   interrupts are enabled in
+						   the autoconf(9) process. */
+#define SME_POLL_ONLY           0x00000010      /* only poll sme_refresh */
 
-	LIST_ENTRY(sysmon_envsys) sme_list;
-
-	const struct envsys_range *sme_ranges;
-	struct envsys_basic_info *sme_sensor_info;
-	struct envsys_tre_data *sme_sensor_data;
 	void *sme_cookie;		/* for ENVSYS back-end */
 
-	/* Callbacks */
-	int (*sme_gtredata)(struct sysmon_envsys *, struct envsys_tre_data *);
-	int (*sme_streinfo)(struct sysmon_envsys *, struct envsys_basic_info *);
+	/* 
+	 * Function callback to receive data from device.
+	 */
+	void (*sme_refresh)(struct sysmon_envsys *, envsys_data_t *);
 
-	u_int sme_fsensor;		/* sensor index base, from sysmon */
-	u_int sme_nsensors;		/* sensor count, from driver */
-	int sme_flags;			/* SME_FLAG_ flags defined below */
+	struct workqueue *sme_wq;	/* the workqueue for the events */
+	struct callout sme_callout;	/* for the events */
+	uint64_t sme_events_timeout;	/* the timeout used in the callout */
+
+	/* 
+	 * linked list for the sysmon envsys devices.
+	 */
+	LIST_ENTRY(sysmon_envsys) sme_list;
+
+	/* 
+	 * linked list for the events that a device maintains.
+	 */
+	LIST_HEAD(, sme_event) sme_events_list;
+
+	/*
+	 * tailq for the sensors that a device maintains.
+	 */
+	TAILQ_HEAD(, envsys_data) sme_sensors_list;
+
+	/*
+	 * Locking/synchronization.
+	 */
+	kmutex_t sme_mtx;
+	kmutex_t sme_callout_mtx;
+	kcondvar_t sme_condvar;
 };
-
-#define	SME_FLAG_BUSY	0x00000001		/* sme is busy */
-#define	SME_FLAG_WANTED	0x00000002		/* someone waiting for this */
-
-#define	SME_SENSOR_IDX(sme, idx)	((idx) - (sme)->sme_fsensor)
 
 int	sysmonopen_envsys(dev_t, int, int, struct lwp *);
 int	sysmonclose_envsys(dev_t, int, int, struct lwp *);
-int	sysmonioctl_envsys(dev_t, u_long, caddr_t, int, struct lwp *);
+int	sysmonioctl_envsys(dev_t, u_long, void *, int, struct lwp *);
+
+struct sysmon_envsys 	*sysmon_envsys_create(void);
+void 			sysmon_envsys_destroy(struct sysmon_envsys *);
 
 int	sysmon_envsys_register(struct sysmon_envsys *);
 void	sysmon_envsys_unregister(struct sysmon_envsys *);
+
+int	sysmon_envsys_sensor_attach(struct sysmon_envsys *, envsys_data_t *);
+int	sysmon_envsys_sensor_detach(struct sysmon_envsys *, envsys_data_t *);
+
+void	sysmon_envsys_init(void);
 
 /*****************************************************************************
  * Watchdog timer support
@@ -105,10 +148,12 @@ struct sysmon_wdog {
 
 int	sysmonopen_wdog(dev_t, int, int, struct lwp *);
 int	sysmonclose_wdog(dev_t, int, int, struct lwp *);
-int	sysmonioctl_wdog(dev_t, u_long, caddr_t, int, struct lwp *);
+int	sysmonioctl_wdog(dev_t, u_long, void *, int, struct lwp *);
 
 int     sysmon_wdog_register(struct sysmon_wdog *);
-void    sysmon_wdog_unregister(struct sysmon_wdog *);
+int     sysmon_wdog_unregister(struct sysmon_wdog *);
+
+void	sysmon_wdog_init(void);
 
 /*****************************************************************************
  * Power management support
@@ -126,7 +171,7 @@ int	sysmonclose_power(dev_t, int, int, struct lwp *);
 int	sysmonread_power(dev_t, struct uio *, int);
 int	sysmonpoll_power(dev_t, int, struct lwp *);
 int	sysmonkqfilter_power(dev_t, struct knote *);
-int	sysmonioctl_power(dev_t, u_long, caddr_t, int, struct lwp *);
+int	sysmonioctl_power(dev_t, u_long, void *, int, struct lwp *);
 
 void	sysmon_power_settype(const char *);
 
@@ -134,7 +179,8 @@ int	sysmon_pswitch_register(struct sysmon_pswitch *);
 void	sysmon_pswitch_unregister(struct sysmon_pswitch *);
 
 void	sysmon_pswitch_event(struct sysmon_pswitch *, int);
- 
-int	sysmonioctl_envsys(dev_t, u_long, caddr_t, int, struct lwp *);
+void	sysmon_penvsys_event(struct penvsys_state *, int);
+
+void	sysmon_power_init(void);
 
 #endif /* _DEV_SYSMON_SYSMONVAR_H_ */

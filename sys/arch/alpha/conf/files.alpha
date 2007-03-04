@@ -1,4 +1,4 @@
-# $NetBSD: files.alpha,v 1.171 2007/02/09 21:55:01 ad Exp $
+# $NetBSD: files.alpha,v 1.179 2008/02/20 21:43:33 drochner Exp $
 #
 # alpha-specific configuration info
 
@@ -76,16 +76,6 @@ include "dev/ata/files.ata"
 
 # Memory Disk
 file	dev/md_root.c			memory_disk_hooks
-
-# Raster operations
-include "dev/rasops/files.rasops"
-include "dev/wsfont/files.wsfont"
-
-#
-# "Workstation Console" glue.
-#
-include "dev/wscons/files.wscons"
-
 
 #
 # TurboLaser Bus Support
@@ -391,7 +381,7 @@ file	arch/alpha/a12/a12dc.c	a12dc		needs-flag
 # Devices that can live on multiple busses
 #
 
-device	mcclock
+device	mcclock: mc146818
 attach	mcclock at ioasic with mcclock_ioasic
 attach	mcclock at isa with mcclock_isa
 attach	mcclock at gbus with mcclock_tlsb
@@ -411,10 +401,11 @@ file	arch/alpha/alpha/clock.c
 file	arch/alpha/alpha/cpuconf.c
 file	arch/alpha/alpha/interrupt.c
 file	arch/alpha/alpha/ipifuncs.c		multiprocessor
+file	arch/alpha/alpha/kobj_machdep.c		modular
 file	arch/alpha/alpha/machdep.c
 file	arch/alpha/alpha/mainbus.c
 file	arch/alpha/alpha/mem.c
-file	kern/kern_microtime.c
+file	arch/alpha/alpha/patch.c
 file	arch/alpha/alpha/pmap.c
 file	arch/alpha/alpha/process_machdep.c
 file	arch/alpha/alpha/procfs_machdep.c	procfs
@@ -428,11 +419,7 @@ file	arch/alpha/alpha/disksubr.c
 file	arch/alpha/common/bus_dma.c
 file	arch/alpha/common/comlogout.c
 file	dev/cons.c
-
-# Network protocol checksum routines
-file	arch/alpha/alpha/in_cksum.c		inet
-file	netinet/in4_cksum.c			inet
-file	netns/ns_cksum.c			ns
+file	kern/kern_cctr.c
 
 # PROM console support (for ports that don't have native console support)
 file	arch/alpha/alpha/promcons.c

@@ -1,4 +1,4 @@
-/*	$NetBSD: dp8390.c,v 1.62 2007/01/13 19:46:21 cube Exp $	*/
+/*	$NetBSD: dp8390.c,v 1.68 2008/03/12 14:31:11 cube Exp $	*/
 
 /*
  * Device driver for National Semiconductor DS8390/WD83C690 based ethernet
@@ -14,7 +14,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dp8390.c,v 1.62 2007/01/13 19:46:21 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dp8390.c,v 1.68 2008/03/12 14:31:11 cube Exp $");
 
 #include "opt_ipkdb.h"
 #include "opt_inet.h"
@@ -54,7 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: dp8390.c,v 1.62 2007/01/13 19:46:21 cube Exp $");
 #include <net/bpfdesc.h>
 #endif
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #ifdef IPKDB_DP8390
 #include <ipkdb/ipkdb.h>
@@ -73,7 +73,7 @@ static inline void	dp8390_xmit(struct dp8390_softc *);
 static inline void	dp8390_read_hdr(struct dp8390_softc *,
 			    int, struct dp8390_ring *);
 static inline int	dp8390_ring_copy(struct dp8390_softc *,
-			    int, caddr_t, u_short);
+			    int, void *, u_short);
 static inline int	dp8390_write_mbuf(struct dp8390_softc *,
 			    struct mbuf *, int);
 
@@ -129,7 +129,7 @@ dp8390_config(sc)
 	dp8390_stop(sc);
 
 	/* Initialize ifnet structure. */
-	strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
+	strcpy(ifp->if_xname, device_xname(sc->sc_dev));
 	ifp->if_softc = sc;
 	ifp->if_start = dp8390_start;
 	ifp->if_ioctl = dp8390_ioctl;
@@ -140,7 +140,7 @@ dp8390_config(sc)
 	IFQ_SET_READY(&ifp->if_snd);
 
 	/* Print additional info when attached. */
-	printf("%s: Ethernet address %s\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(sc->sc_dev, "Ethernet address %s\n",
 	    ether_sprintf(sc->sc_enaddr));
 
 	/* Initialize media goo. */
@@ -156,7 +156,7 @@ dp8390_config(sc)
 	ether_ifattach(ifp, sc->sc_enaddr);
 
 #if NRND > 0
-	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
+	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
 	    RND_TYPE_NET, 0);
 #endif
 
@@ -258,7 +258,7 @@ dp8390_watchdog(ifp)
 {
 	struct dp8390_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
+	log(LOG_ERR, "%s: device timeout\n", device_xname(sc->sc_dev));
 	++sc->sc_ec.ec_if.if_oerrors;
 
 	dp8390_reset(sc);
@@ -350,7 +350,7 @@ dp8390_init(sc)
 	/* Copy out our station address. */
 	for (i = 0; i < ETHER_ADDR_LEN; ++i)
 		NIC_PUT(regt, regh, ED_P1_PAR0 + i,
-		    LLADDR(ifp->if_sadl)[i]);
+		    CLLADDR(ifp->if_sadl)[i]);
 
 	/* Set multicast filter on chip. */
 	dp8390_getmcaf(&sc->sc_ec, mcaf);
@@ -587,11 +587,11 @@ loop:
 		len = (len & ED_PAGE_MASK) | (nlen << ED_PAGE_SHIFT);
 #ifdef DIAGNOSTIC
 		if (len != packet_hdr.count) {
-			printf("%s: length does not match "
-			    "next packet pointer\n", sc->sc_dev.dv_xname);
-			printf("%s: len %04x nlen %04x start %02x "
-			    "first %02x curr %02x next %02x stop %02x\n",
-			    sc->sc_dev.dv_xname, packet_hdr.count, len,
+			aprint_verbose_dev(sc->sc_dev, "length does not match "
+			    "next packet pointer\n");
+			aprint_verbose_dev(sc->sc_dev, "len %04x nlen %04x "
+			    "start %02x first %02x curr %02x next %02x "
+			    "stop %02x\n", packet_hdr.count, len,
 			    sc->rec_page_start, sc->next_packet, current,
 			    packet_hdr.next_packet, sc->rec_page_stop);
 		}
@@ -616,7 +616,7 @@ loop:
 			/* Really BAD.  The ring pointers are corrupted. */
 			log(LOG_ERR, "%s: NIC memory corrupt - "
 			    "invalid packet length %d\n",
-			    sc->sc_dev.dv_xname, len);
+			    device_xname(sc->sc_dev), len);
 			++sc->sc_ec.ec_if.if_ierrors;
 			dp8390_reset(sc);
 			return;
@@ -653,7 +653,7 @@ dp8390_intr(arg)
 #endif
 
 	if (sc->sc_enabled == 0 ||
-	    !device_is_active(&sc->sc_dev))
+	    !device_is_active(sc->sc_dev))
 		return (0);
 
 	/* Set NIC to page 0 registers. */
@@ -778,7 +778,7 @@ dp8390_intr(arg)
 #ifdef DIAGNOSTIC
 				log(LOG_WARNING, "%s: warning - receiver "
 				    "ring buffer overrun\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 #endif
 				/* Stop/reset/re-init NIC. */
 				dp8390_reset(sc);
@@ -793,7 +793,7 @@ dp8390_intr(arg)
 #ifdef DEBUG
 					if (dp8390_debug) {
 						printf("%s: receive error %x\n",
-						    sc->sc_dev.dv_xname,
+						    device_xname(sc->sc_dev),
 						    NIC_GET(regt, regh,
 							ED_P0_RSR));
 					}
@@ -862,7 +862,7 @@ int
 dp8390_ioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 {
 	struct dp8390_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *) data;
@@ -892,8 +892,8 @@ dp8390_ioctl(ifp, cmd, data)
 		break;
 
 	case SIOCSIFFLAGS:
-		if ((ifp->if_flags & IFF_UP) == 0 &&
-		    (ifp->if_flags & IFF_RUNNING) != 0) {
+		switch (ifp->if_flags & (IFF_UP|IFF_RUNNING)) {
+		case IFF_RUNNING:
 			/*
 			 * If interface is marked down and it is running, then
 			 * stop it.
@@ -901,8 +901,8 @@ dp8390_ioctl(ifp, cmd, data)
 			dp8390_stop(sc);
 			ifp->if_flags &= ~IFF_RUNNING;
 			dp8390_disable(sc);
-		} else if ((ifp->if_flags & IFF_UP) != 0 &&
-		    (ifp->if_flags & IFF_RUNNING) == 0) {
+			break;
+		case IFF_UP:
 			/*
 			 * If interface is marked up and it is stopped, then
 			 * start it.
@@ -910,13 +910,17 @@ dp8390_ioctl(ifp, cmd, data)
 			if ((error = dp8390_enable(sc)) != 0)
 				break;
 			dp8390_init(sc);
-		} else if ((ifp->if_flags & IFF_UP) != 0) {
+			break;
+		case IFF_UP|IFF_RUNNING:
 			/*
 			 * Reset the interface to pick up changes in any other
 			 * flags that affect hardware registers.
 			 */
 			dp8390_stop(sc);
 			dp8390_init(sc);
+			break;
+		default:
+			break;
 		}
 		break;
 
@@ -928,11 +932,7 @@ dp8390_ioctl(ifp, cmd, data)
 		}
 
 		/* Update our multicast list. */
-		error = (cmd == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->sc_ec) :
-		    ether_delmulti(ifr, &sc->sc_ec);
-
-		if (error == ENETRESET) {
+		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 			/*
 			 * Multicast list has changed; set the hardware filter
 			 * accordingly.
@@ -951,7 +951,7 @@ dp8390_ioctl(ifp, cmd, data)
 		break;
 
 	default:
-		error = EINVAL;
+		error = ENODEV;
 		break;
 	}
 
@@ -1097,7 +1097,7 @@ dp8390_get(sc, src, total_len)
 		 * Make sure the data after the Ethernet header is aligned.
 		 */
 		if (m == m0) {
-			caddr_t newdata = (caddr_t)
+			char *newdata = (char *)
 			    ALIGN(m->m_data + sizeof(struct ether_header)) -
 			    sizeof(struct ether_header);
 			len -= newdata - m->m_data;
@@ -1106,9 +1106,9 @@ dp8390_get(sc, src, total_len)
 
 		m->m_len = len = min(total_len, len);
 		if (sc->ring_copy)
-			src = (*sc->ring_copy)(sc, src, mtod(m, caddr_t), len);
+			src = (*sc->ring_copy)(sc, src, mtod(m, void *), len);
 		else
-			src = dp8390_ring_copy(sc, src, mtod(m, caddr_t), len);
+			src = dp8390_ring_copy(sc, src, mtod(m, void *), len);
 
 		total_len -= len;
 		if (total_len > 0) {
@@ -1188,7 +1188,7 @@ static inline int
 dp8390_ring_copy(sc, src, dst, amount)
 	struct dp8390_softc *sc;
 	int src;
-	caddr_t dst;
+	void *dst;
 	u_short amount;
 {
 	bus_space_tag_t buft = sc->sc_buft;
@@ -1204,7 +1204,7 @@ dp8390_ring_copy(sc, src, dst, amount)
 
 		amount -= tmp_amount;
 		src = sc->mem_ring;
-		dst += tmp_amount;
+		dst = (char *)dst + tmp_amount;
 	}
 	bus_space_read_region_1(buft, bufh, src, dst, amount);
 
@@ -1255,8 +1255,8 @@ dp8390_enable(sc)
 
 	if (sc->sc_enabled == 0 && sc->sc_enable != NULL) {
 		if ((*sc->sc_enable)(sc) != 0) {
-			printf("%s: device enable failed\n",
-			    sc->sc_dev.dv_xname);
+			aprint_error_dev(sc->sc_dev,
+			    "device enable failed\n");
 			return (EIO);
 		}
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.11 2006/02/16 20:17:13 perry Exp $	*/
+/*	$NetBSD: pmap.h,v 1.16 2008/01/06 13:27:20 dsl Exp $	*/
 
 /*	$OpenBSD: pmap.h,v 1.14 2001/05/09 15:31:24 art Exp $	*/
 
@@ -82,6 +82,7 @@
 #ifndef	_HPPA_PMAP_H_
 #define	_HPPA_PMAP_H_
 
+#include <sys/simplelock.h>
 #include <machine/pte.h>
 
 typedef
@@ -132,10 +133,10 @@ do { if (pmap) { \
 #define pmap_release(pmap)
 #define pmap_copy(dpmap,spmap,da,len,sa)
 #define	pmap_update(p)
-void	pmap_activate __P((struct lwp *));
+void	pmap_activate(struct lwp *);
 
 static __inline void
-pmap_deactivate(struct lwp *lwp)
+pmap_deactivate(struct lwp *l)
 {
 }
 

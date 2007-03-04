@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos_machdep.c,v 1.24 2007/02/09 21:55:13 ad Exp $	*/
+/*	$NetBSD: sunos_machdep.c,v 1.30 2008/05/29 14:51:26 mrg Exp $	*/
 
 /*
  * Copyright (c) 1995 Matthew R. Green
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -29,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos_machdep.c,v 1.24 2007/02/09 21:55:13 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos_machdep.c,v 1.30 2008/05/29 14:51:26 mrg Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ddb.h"
@@ -83,9 +81,7 @@ struct sunos_sigframe {
 };
 
 void
-sunos_sendsig(ksi, mask)
-	const ksiginfo_t *ksi;
-	const sigset_t *mask;
+sunos_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 {
 	register struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
@@ -157,7 +153,7 @@ sunos_sendsig(ksi, mask)
 	 * so that the debugger and _longjmp code can back up through it.
 	 */
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	newsp = (struct rwindow32 *)((long)fp - sizeof(struct rwindow32));
 	write_user_windows();
 #ifdef DEBUG
@@ -165,11 +161,11 @@ sunos_sendsig(ksi, mask)
 	    printf("sunos_sendsig: saving sf to %p, setting stack pointer %p to %p\n",
 		   fp, &(((struct rwindow32 *)newsp)->rw_in[6]), oldsp);
 #endif
-	kwin = (struct rwindow32 *)(((caddr_t)tf)-CCFSZ);
+	kwin = (struct rwindow32 *)(((char *)tf)-CCFSZ);
 	error = (rwindow_save(l) || 
-	    copyout((caddr_t)&sf, (caddr_t)fp, sizeof sf) || 
+	    copyout((void *)&sf, (void *)fp, sizeof sf) || 
 	    suword(&(((struct rwindow32 *)newsp)->rw_in[6]), (u_long)oldsp));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error) {
 		/*
@@ -214,14 +210,8 @@ sunos_sendsig(ksi, mask)
 }
 
 int
-sunos_sys_sigreturn(l, v, retval)
-        register struct lwp *l;
-	void *v;
-	register_t *retval;
+sunos_sys_sigreturn(register struct lwp *l, const struct sunos_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct sunos_sys_sigreturn_args /* 
-		syscallarg(struct sigcontext13 *) sigcntxp;
-	} */ *uap = v;
 	struct proc *p = l->l_proc;
 	struct sunos_sigcontext sc, *scp;
 	sigset_t mask;
@@ -230,7 +220,7 @@ sunos_sys_sigreturn(l, v, retval)
 	/* First ensure consistent stack state (see sendsig). */
 	write_user_windows();
 	if (rwindow_save(l)) {
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 		sigexit(l, SIGILL);
 	}
 #ifdef DEBUG
@@ -244,7 +234,7 @@ sunos_sys_sigreturn(l, v, retval)
 #endif
 
 	scp = (struct sunos_sigcontext *)SCARG(uap, sigcntxp);
-	if ((vaddr_t)scp & 3 || (copyin((caddr_t)scp, &sc, sizeof sc) != 0))
+	if ((vaddr_t)scp & 3 || (copyin((void *)scp, &sc, sizeof sc) != 0))
 		return (EFAULT);
 	scp = &sc;
 
@@ -282,7 +272,7 @@ sunos_sys_sigreturn(l, v, retval)
 	}
 #endif
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	if (scp->sc_onstack & SS_ONSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
 	else
@@ -290,7 +280,7 @@ sunos_sys_sigreturn(l, v, retval)
 	/* Restore signal mask */
 	native_sigset13_to_sigset(&scp->sc_mask, &mask);
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }

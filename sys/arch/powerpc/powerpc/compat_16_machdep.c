@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_16_machdep.c,v 1.7 2007/02/09 21:55:11 ad Exp $	*/
+/*	$NetBSD: compat_16_machdep.c,v 1.11 2008/04/24 18:39:21 ad Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.7 2007/02/09 21:55:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.11 2008/04/24 18:39:21 ad Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_altivec.h"
@@ -75,7 +75,7 @@ sendsig_sigcontext(int sig, const sigset_t *mask, u_long code)
 
 	/* Allocate space for the signal handler context. */
 	if (onstack)
-		fp = (struct sigcontext *)((caddr_t)l->l_sigstk.ss_sp +
+		fp = (struct sigcontext *)((char *)l->l_sigstk.ss_sp +
 						l->l_sigstk.ss_size);
 	else
 		fp = (struct sigcontext *)tf->fixreg[1];
@@ -116,9 +116,9 @@ sendsig_sigcontext(int sig, const sigset_t *mask, u_long code)
 	native_sigset_to_sigset13(mask, &frame.__sc_mask13);
 #endif
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&frame, fp, sizeof frame);
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		/*
@@ -168,11 +168,11 @@ sendsig_sigcontext(int sig, const sigset_t *mask, u_long code)
  * System call to cleanup state after a signal handler returns.
  */
 int
-compat_16_sys___sigreturn14(struct lwp *l, void *v, register_t *retval)
+compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigreturn14_args *uap, register_t *retval)
 {
-	struct compat_16_sys___sigreturn14_args /* {
+	/* {
 		syscallarg(struct sigcontext *) sigcntxp;
-	} */ *uap = v;
+	} */
 	struct proc *p = l->l_proc;
 	struct sigcontext sc;
 	struct trapframe *tf;
@@ -213,7 +213,7 @@ compat_16_sys___sigreturn14(struct lwp *l, void *v, register_t *retval)
 	tf->tf_xtra[TF_MQ] = utf->mq;
 #endif
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	/* Restore signal stack. */
 	if (sc.sc_onstack & SS_ONSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
@@ -221,7 +221,7 @@ compat_16_sys___sigreturn14(struct lwp *l, void *v, register_t *retval)
 		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
 	/* Restore signal mask. */
 	(void) sigprocmask1(l, SIG_SETMASK, &sc.sc_mask, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }

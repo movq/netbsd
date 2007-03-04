@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2005/12/11 12:18:03 christos Exp $
+#	$NetBSD: Makefile,v 1.8 2008/10/25 22:27:37 apb Exp $
 
 # Makefile for macppc tags file
 
@@ -7,7 +7,12 @@ SIMACPPC=	${SYSDIR}/arch/macppc/macppc/*.[ch] \
 		${SYSDIR}/arch/macppc/include/*.h \
 		${SYSDIR}/arch/macppc/dev/*.[ch] \
 		${SYSDIR}/arch/macppc/pci/*.[ch] \
-		${SYSDIR}/../contrib/sys/dev/ic/*.[ch]
+		${SYSDIR}/contrib/dev/ath/*.[ch] \
+		${SYSDIR}/contrib/dev/ath/netbsd/*.[ch] \
+		${SYSDIR}/contrib/dev/ath/public/*.[ch]
+SIMACPPC+=	${SYSDIR}/arch/powerpc/powerpc/*.[ch] \
+		${SYSDIR}/arch/powerpc/include/*.h \
+		${SYSDIR}/arch/powerpc/pci/*.[ch]
 AIMACPPC=	${SYSDIR}/arch/macppc/macppc/*.[sS]
 
 # Directories in which to place tags links
@@ -16,10 +21,12 @@ DIMACPPC=	macppc dev include pci
 .include "../../kern/Make.tags.inc"
 
 tags:
-	rm -f ${TIMACPPC}
-	-echo ${SIMACPPC} ${COMM} | xargs ctags -wadtf ${TIMACPPC}
+	-rm -f ${TIMACPPC}
+	-echo ${SIMACPPC} | xargs ctags -wadtf ${TIMACPPC}
+	-${FINDCOMM} | xargs ctags -wadtf ${TIMACPPC}
 	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${AIMACPPC} | \
-	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3	\1	/^\2(\3\4$$/;" \
+	    ${TOOL_SED} -e \
+	"s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3	\1	/^\2(\3\4$$/;" \
 		>> ${TIMACPPC}
 	sort -o ${TIMACPPC} ${TIMACPPC}
 
@@ -27,6 +34,6 @@ links:
 	-for i in ${DIMACPPC}; do \
 	    (cd $$i && rm -f tags; ln -s ../tags tags); done
 
-SUBDIR=	compile include stand
+SUBDIR=	compile include stand ../powerpc/include
 
 .include <bsd.subdir.mk>

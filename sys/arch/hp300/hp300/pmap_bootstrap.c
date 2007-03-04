@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_bootstrap.c,v 1.27 2005/12/11 12:17:18 christos Exp $	*/
+/*	$NetBSD: pmap_bootstrap.c,v 1.34 2007/12/29 16:48:03 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.27 2005/12/11 12:17:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.34 2007/12/29 16:48:03 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -55,7 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.27 2005/12/11 12:17:18 christos
 
 extern char *etext;
 extern int Sysptsize;
-extern char *extiobase, *proc0paddr;
+extern char *proc0paddr;
 extern st_entry_t *Sysseg;
 extern pt_entry_t *Sysptmap, *Sysmap;
 extern vaddr_t CLKbase, MMUbase;
@@ -71,7 +71,7 @@ extern int protection_codes[];
 extern int pmap_aliasmask;
 #endif
 
-void	pmap_bootstrap __P((paddr_t, paddr_t));
+void	pmap_bootstrap(paddr_t, paddr_t);
 
 /*
  * Special purpose kernel virtual addresses, used for mapping
@@ -82,8 +82,9 @@ void	pmap_bootstrap __P((paddr_t, paddr_t));
  *	ledbase:	SPU LEDs
  *	msgbufaddr:	kernel message buffer
  */
-caddr_t		CADDR1, CADDR2, vmmap, ledbase;
-extern caddr_t	msgbufaddr;
+void *CADDR1, *CADDR2, *ledbase;
+char *vmmap;
+void *msgbufaddr;
 
 /*
  * Bootstrap the VM system.
@@ -385,7 +386,7 @@ pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
 		(pt_entry_t *)(kptmpa - firstpa);
 	/*
 	 * Sysmap: kernel page table (as mapped through Sysptmap)
-	 * Immediately follows `nptpages' of static kernel page table.
+	 * Allocated at the end of KVA space.
 	 */
 	RELOC(Sysmap, pt_entry_t *) =
 	    (pt_entry_t *)m68k_ptob((NPTEPG - 2) * NPTEPG);
@@ -508,15 +509,15 @@ pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
 
 		RELOC(bootinfo_va, vaddr_t) = (vaddr_t)va;
 		va += PAGE_SIZE;
-		RELOC(CADDR1, caddr_t) = (caddr_t)va;
+		RELOC(CADDR1, void *) = (void *)va;
 		va += PAGE_SIZE;
-		RELOC(CADDR2, caddr_t) = (caddr_t)va;
+		RELOC(CADDR2, void *) = (void *)va;
 		va += PAGE_SIZE;
-		RELOC(vmmap, caddr_t) = (caddr_t)va;
+		RELOC(vmmap, void *) = (void *)va;
 		va += PAGE_SIZE;
-		RELOC(ledbase, caddr_t) = (caddr_t)va;
+		RELOC(ledbase, void *) = (void *)va;
 		va += PAGE_SIZE;
-		RELOC(msgbufaddr, caddr_t) = (caddr_t)va;
+		RELOC(msgbufaddr, void *) = (void *)va;
 		va += m68k_round_page(MSGBUFSIZE);
 		RELOC(virtual_avail, vaddr_t) = va;
 	}

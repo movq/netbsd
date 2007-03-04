@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_sysctl.c,v 1.48 2007/02/17 22:31:41 pavel Exp $ */
+/*	$NetBSD: darwin_sysctl.c,v 1.61 2008/07/02 19:49:58 rmind Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,9 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_sysctl.c,v 1.48 2007/02/17 22:31:41 pavel Exp $");
-
-#include "opt_ktrace.h"
+__KERNEL_RCSID(0, "$NetBSD: darwin_sysctl.c,v 1.61 2008/07/02 19:49:58 rmind Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -51,9 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_sysctl.c,v 1.48 2007/02/17 22:31:41 pavel Exp
 #include <sys/proc.h>
 #include <sys/malloc.h>
 #include <sys/sysctl.h>
-#ifdef KTRACE
 #include <sys/ktrace.h>
-#endif
 #include <sys/tty.h>
 #include <sys/kauth.h>
 
@@ -290,9 +279,8 @@ SYSCTL_SETUP(sysctl_darwin_emul_setup, "darwin emulated sysctl tree setup")
 
 
 int
-darwin_sys___sysctl(struct lwp *l, void *v, register_t *retval)
+darwin_sys___sysctl(struct lwp *l, const struct darwin_sys___sysctl_args *uap, register_t *retval)
 {
-	struct darwin_sys___sysctl_args *uap = v;
 	int error, nerror, name[CTL_MAXNAME];
 	size_t savelen = 0, oldlen = 0;
 
@@ -318,30 +306,17 @@ darwin_sys___sysctl(struct lwp *l, void *v, register_t *retval)
 	if (error)
 		return (error);
 
-#ifdef KTRACE
-	if (KTRPOINT(l->l_proc, KTR_MIB))
-		ktrmib(l, name, SCARG(uap, namelen));
-#endif
-
-	/*
-	 * wire old so that copyout() is less likely to fail?
-	 */
-	error = sysctl_lock(l, SCARG(uap, oldp), savelen);
-	if (error)
-		return (error);
+	ktrmib(name, SCARG(uap, namelen));
 
 	/*
 	 * dispatch request into darwin sysctl tree
 	 */
+	sysctl_lock(SCARG(uap, newp) != NULL);
 	error = sysctl_dispatch(&name[0], SCARG(uap, namelen),
 				SCARG(uap, oldp), &oldlen,
 				SCARG(uap, newp), SCARG(uap, newlen),
 				&name[0], l, &darwin_sysctl_root);
-
-	/*
-	 * release the sysctl lock
-	 */
-	sysctl_unlock(l);
+	sysctl_unlock();
 
 	/*
 	 * reset caller's oldlen, even if we got an error
@@ -446,7 +421,7 @@ SYSCTL_SETUP(sysctl_emul_darwin_setup, "sysctl emul.darwin subtree setup")
  * of course).
  */
 int
-darwin_sys_getpid(struct lwp *l, void *v, register_t *retval)
+darwin_sys_getpid(struct lwp *l, const void *v, register_t *retval)
 {
 	struct darwin_emuldata *ded;
 	struct proc *p = l->l_proc;
@@ -648,7 +623,7 @@ darwin_sysctl_dokproc(SYSCTLFN_ARGS)
 		elem_count = name[3];
 	}
 
-	rw_enter(&proclist_lock, RW_READER);
+	mutex_enter(proc_lock);
 
 	pd = proclists;
 again:
@@ -715,7 +690,7 @@ again:
 		}
 		if (buflen >= sizeof(struct darwin_kinfo_proc)) {
 			darwin_fill_kproc(p, &kproc);
-			error = copyout((caddr_t)&kproc, dp, sizeof(kproc));
+			error = copyout((void *)&kproc, dp, sizeof(kproc));
 			if (error)
 				goto cleanup;
 			dp++;
@@ -726,10 +701,10 @@ again:
 	pd++;
 	if (pd->pd_list != NULL)
 		goto again;
-	rw_exit(&proclist_lock);
+	mutex_exit(proc_lock);
 
 	if (where != NULL) {
-		*oldlenp = (caddr_t)dp - where;
+		*oldlenp = (char *)dp - where;
 		if (needed > *oldlenp)
 			return (ENOMEM);
 	} else {
@@ -738,7 +713,7 @@ again:
 	}
 	return (0);
  cleanup:
-	rw_exit(&proclist_lock);
+	mutex_exit(proc_lock);
 	return (error);
 }
 
@@ -746,16 +721,15 @@ again:
  * Native struct proc to Darwin's struct kinfo_proc
  */
 static void
-darwin_fill_kproc(p, dkp)
-	struct proc *p;
-	struct darwin_kinfo_proc *dkp;
+darwin_fill_kproc(struct proc *p, struct darwin_kinfo_proc *dkp)
 {
 	struct lwp *l;
 	struct darwin_extern_proc *dep;
 	struct darwin_eproc *de;
 
 	printf("fillkproc: pid %d\n", p->p_pid);
-	l = proc_representative_lwp(p, NULL, 1);
+	l = LIST_FIRST(&p->p_lwps);
+	KASSERT(l != NULL);
 	(void)memset(dkp, 0, sizeof(*dkp));
 
 	dep = (struct darwin_extern_proc *)&dkp->kp_proc;
@@ -774,7 +748,7 @@ darwin_fill_kproc(p, dkp)
 	/* dep->p_debugger */
 	/* dep->p_sigwait */
 	dep->p_estcpu = p->p_estcpu;
-	dep->p_cpticks = p->p_cpticks;
+	/* dep->p_cpticks */
 	dep->p_pctcpu = p->p_pctcpu;
 	/* (ptr) dep->p_wchan */
 	/* (ptr) dep->p_wmesg */
@@ -817,7 +791,8 @@ darwin_fill_kproc(p, dkp)
 	de->e_ucred.cr_uid = kauth_cred_geteuid(p->p_cred);
 	de->e_ucred.cr_ngroups = kauth_cred_ngroups(p->p_cred);
 	kauth_cred_getgroups(p->p_cred, de->e_ucred.cr_groups,
-	    sizeof(de->e_ucred.cr_groups) / sizeof(de->e_ucred.cr_groups[0]));
+	    sizeof(de->e_ucred.cr_groups) / sizeof(de->e_ucred.cr_groups[0]),
+	    UIO_SYSSPACE);
 	de->e_vm.vm_refcnt = p->p_vmspace->vm_refcnt;
 	de->e_vm.vm_rssize = p->p_vmspace->vm_rssize;
 	de->e_vm.vm_swrss = p->p_vmspace->vm_swrss;
@@ -842,7 +817,7 @@ darwin_fill_kproc(p, dkp)
 		/* de->e_tpgid */
 		/* (ptr) de->e_tsess */
 	}
-	if (l->l_wmesg)
+	if (l->l_wchan && l->l_wmesg)
 		strlcpy(de->e_wmesg, l->l_wmesg, DARWIN_WMESGLEN);
 	de->e_xsize = 0;
 	de->e_xrssize = 0;
@@ -866,8 +841,12 @@ native_to_darwin_pflag(int *dfp, struct proc *p)
 	int bf = p->p_flag;
 	int bsf = p->p_sflag;
 	int bslf = p->p_slflag;
-	struct lwp *l = proc_representative_lwp(p, NULL, 1);
-	int lf = l->l_flag;
+	struct lwp *l;
+	int lf;
+
+	l = LIST_FIRST(&p->p_lwps);
+	KASSERT(l != NULL);
+	lf = l->l_flag;
 
 	if (bf & PK_ADVLOCK)
 		df |= DARWIN_P_ADVLOCK;
@@ -875,7 +854,7 @@ native_to_darwin_pflag(int *dfp, struct proc *p)
 		df |= DARWIN_P_CONTROLT;
 	if (bsf & PS_NOCLDSTOP)
 		df |= DARWIN_P_NOCLDSTOP;
-	if (bsf & PS_PPWAIT)
+	if (p->p_lflag & PL_PPWAIT)
 		df |= DARWIN_P_PPWAIT;
 	if (bsf & PST_PROFIL)
 		df |= DARWIN_P_PROFIL;

@@ -1,4 +1,4 @@
-/*	$NetBSD: ss_mustek.c,v 1.35 2006/11/16 01:33:26 christos Exp $	*/
+/*	$NetBSD: ss_mustek.c,v 1.37 2008/04/05 15:47:01 cegger Exp $	*/
 
 /*
  * Copyright (c) 1995 Joachim Koenig-Baltes.  All rights reserved.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ss_mustek.c,v 1.35 2006/11/16 01:33:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ss_mustek.c,v 1.37 2008/04/05 15:47:01 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -111,7 +111,7 @@ mustek_attach(struct ss_softc *ss, struct scsipibus_attach_args *sa)
 	SC_DEBUG(periph, SCSIPI_DB1, ("mustek_attach: start\n"));
 	ss->sio.scan_scanner_type = 0;
 
-	printf("\n%s: ", ss->sc_dev.dv_xname);
+	printf("\n%s: ", device_xname(&ss->sc_dev));
 
 	/* first, check the model which determines resolutions */
 	if (!memcmp(sa->sa_inqbuf.product, "MFS-06000CX", 11)) {
@@ -547,7 +547,7 @@ mustek_get_status(struct ss_softc *ss, int timeout, int update)
 		    (timeout-- <= 0))
 			break;
 		/* please wait a second */
-		tsleep((caddr_t)mustek_get_status, PRIBIO + 1, "mtkrdy", hz);
+		tsleep((void *)mustek_get_status, PRIBIO + 1, "mtkrdy", hz);
 	}
 
 	if (update) {

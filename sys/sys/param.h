@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.255 2007/02/26 12:43:47 yamt Exp $	*/
+/*	$NetBSD: param.h,v 1.330 2008/10/09 11:02:17 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -63,7 +63,7 @@
  *	2.99.9		(299000900)
  */
 
-#define	__NetBSD_Version__	499001300	/* NetBSD 4.99.13 */
+#define	__NetBSD_Version__	499007300	/* NetBSD 4.99.73 */
 
 #define __NetBSD_Prereq__(M,m,p) (((((M) * 100000000) + \
     (m) * 1000000) + (p) * 100) <= __NetBSD_Version__)
@@ -94,6 +94,7 @@
  * Redefined constants are from POSIX 1003.1 limits file.
  *
  * MAXCOMLEN should be >= sizeof(ac_comm) (see <acct.h>)
+ * MAXHOSTNAMELEN should be >= (_POSIX_HOST_NAME_MAX + 1) (see <limits.h>)
  * MAXLOGNAME should be >= UT_NAMESIZE (see <utmp.h>)
  */
 #include <sys/syslimits.h>
@@ -136,6 +137,13 @@
 #define	NVNODE	(NPROC + NTEXT + 100)
 #define	NVNODE_IMPLICIT
 #endif
+#ifndef VNODE_VA_MAXPCT
+#define	VNODE_VA_MAXPCT	20
+#endif
+#ifndef BUFCACHE_VA_MAXPCT
+#define	BUFCACHE_VA_MAXPCT	20
+#endif
+#define	VNODE_COST	2048			/* assumed space in bytes */
 #endif /* _KERNEL */
 
 /* Signals. */
@@ -156,6 +164,19 @@
 /* bytes to disk blocks */
 #define	dbtob(x)	((x) << DEV_BSHIFT)
 #define	btodb(x)	((x) >> DEV_BSHIFT)
+
+#ifndef COHERENCY_UNIT
+#define	COHERENCY_UNIT		64
+#endif
+#ifndef CACHE_LINE_SIZE
+#define	CACHE_LINE_SIZE		64
+#endif
+#ifndef MAXCPUS
+#define	MAXCPUS			32
+#endif
+#ifndef MAX_LWP_PER_PROC
+#define	MAX_LWP_PER_PROC	8000
+#endif
 
 /*
  * Stack macros.  On most architectures, the stack grows down,
@@ -189,26 +210,74 @@
 #endif /* defined(_KERNEL) || defined(__EXPOSE_STACK) */
 
 /*
- * Priorities.  Note that with 32 run queues, differences less than 4 are
- * insignificant.
+ * Historic priority levels.  These are meaningless and remain only
+ * for source compatibility.  Do not use in new code.
  */
 #define	PSWP	0
 #define	PVM	4
 #define	PINOD	8
 #define	PRIBIO	16
 #define	PVFS	20
-#define	PZERO	22		/* No longer magic, shouldn't be here.  XXX */
+#define	PZERO	22
 #define	PSOCK	24
 #define	PWAIT	32
 #define	PLOCK	36
 #define	PPAUSE	40
 #define	PUSER	50
-#define	MAXPRI	127		/* Priorities range from 0 through MAXPRI. */
+#define	MAXPRI	127
 
-#define	PRIMASK 	0x0ff
 #define	PCATCH		0x100	/* OR'd with pri for tsleep to check signals */
-#define	PNORELOCK	0x200	/* OR'd with pri for cond_wait() to not relock
-				   the interlock */
+#define	PNORELOCK	0x200	/* OR'd with pri for tsleep to not relock */
+
+/*
+ * New priority levels.
+ */
+#define	PRI_COUNT		224
+#define	PRI_NONE		(-1)
+
+#define	PRI_KERNEL_RT		192
+#define	NPRI_KERNEL_RT		32
+#define	MAXPRI_KERNEL_RT	(PRI_KERNEL_RT + NPRI_KERNEL_RT - 1)
+
+#define	PRI_USER_RT		128
+#define	NPRI_USER_RT		64
+#define	MAXPRI_USER_RT		(PRI_USER_RT + NPRI_USER_RT - 1)
+
+#define	PRI_KTHREAD		96
+#define	NPRI_KTHREAD		32
+#define	MAXPRI_KTHREAD		(PRI_KTHREAD + NPRI_KTHREAD - 1)
+
+#define	PRI_KERNEL		64
+#define	NPRI_KERNEL		32
+#define	MAXPRI_KERNEL		(PRI_KERNEL + NPRI_KERNEL - 1)
+
+#define	PRI_USER		0
+#define	NPRI_USER		64
+#define	MAXPRI_USER		(PRI_USER + NPRI_USER - 1)
+
+/* Priority range used by POSIX real-time features */
+#define	SCHED_PRI_MIN		0
+#define	SCHED_PRI_MAX		63
+
+/*
+ * Kernel thread priorities.
+ */
+#define	PRI_SOFTSERIAL	MAXPRI_KERNEL_RT
+#define	PRI_SOFTNET	(MAXPRI_KERNEL_RT - schedppq * 1)
+#define	PRI_SOFTBIO	(MAXPRI_KERNEL_RT - schedppq * 2)
+#define	PRI_SOFTCLOCK	(MAXPRI_KERNEL_RT - schedppq * 3)
+
+#define	PRI_XCALL	MAXPRI_KTHREAD
+#define	PRI_PGDAEMON	(MAXPRI_KTHREAD - schedppq * 1)
+#define	PRI_VM		(MAXPRI_KTHREAD - schedppq * 2)
+#define	PRI_IOFLUSH	(MAXPRI_KTHREAD - schedppq * 3)
+#define	PRI_BIO		(MAXPRI_KTHREAD - schedppq * 4)
+
+#define	PRI_IDLE	PRI_USER
+
+/*
+ * Miscellaneous.
+ */
 #define	NBPW	sizeof(int)	/* number of bytes per word (integer) */
 
 #define	CMASK	022		/* default file mask: S_IWGRP|S_IWOTH */
@@ -242,6 +311,8 @@
  * maximum number of symbolic links that may be expanded in a path name.
  * It should be set high enough to allow all legitimate uses, but halt
  * infinite loops reasonably quickly.
+ *
+ * MAXSYMLINKS should be >= _POSIX_SYMLOOP_MAX (see <limits.h>)
  */
 #define	MAXPATHLEN	PATH_MAX
 #define	MAXSYMLINKS	32
@@ -257,7 +328,8 @@
 #define	howmany(x, y)	(((x)+((y)-1))/(y))
 #endif
 #define	roundup(x, y)	((((x)+((y)-1))/(y))*(y))
-#define rounddown(x,y)	(((x)/(y))*(y))
+#define	rounddown(x,y)	(((x)/(y))*(y))
+#define	roundup2(x, m)	(((x) + m - 1) & ~(m - 1))
 #define	powerof2(x)	((((x)-1)&(x))==0)
 
 /* Macros for min/max. */
@@ -336,6 +408,16 @@
 	    ((ms +0u) / 1000u) * hz : \
 	    ((ms +0u) * hz) / 1000u)
 #endif
+#ifndef hztoms
+#define hztoms(t) \
+	(__predict_false((t) >= 0x20000) ? \
+	    ((t +0u) / hz) * 1000u : \
+	    ((t +0u) * 1000u) / hz)
+#endif
+
+extern const int schedppq;
+extern size_t coherency_unit;
+
 #endif /* _KERNEL */
 
 /*

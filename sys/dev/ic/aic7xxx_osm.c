@@ -1,4 +1,4 @@
-/*	$NetBSD: aic7xxx_osm.c,v 1.24 2006/11/16 01:32:51 christos Exp $	*/
+/*	$NetBSD: aic7xxx_osm.c,v 1.27 2008/04/08 12:07:25 cegger Exp $	*/
 
 /*
  * Bus independent FreeBSD shim for the aic7xxx based adaptec SCSI controllers
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aic7xxx_osm.c,v 1.24 2006/11/16 01:32:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aic7xxx_osm.c,v 1.27 2008/04/08 12:07:25 cegger Exp $");
 
 #include <dev/ic/aic7xxx_osm.h>
 #include <dev/ic/aic7xxx_inline.h>
@@ -56,7 +56,7 @@ static void	ahc_setup_data(struct ahc_softc *ahc,
 			       struct scsipi_xfer *xs, struct scb *scb);
 static void	ahc_set_recoveryscb(struct ahc_softc *ahc, struct scb *scb);
 static int	ahc_ioctl(struct scsipi_channel *channel, u_long cmd,
-			  caddr_t addr, int flag, struct proc *p);
+			  void *addr, int flag, struct proc *p);
 
 
 
@@ -101,7 +101,7 @@ ahc_attach(struct ahc_softc *ahc)
 	}
 
 	ahc_controller_info(ahc, ahc_info, sizeof(ahc_info));
-	printf("%s: %s\n", ahc->sc_dev.dv_xname, ahc_info);
+	printf("%s: %s\n", device_xname(&ahc->sc_dev), ahc_info);
 
 	if ((ahc->flags & AHC_PRIMARY_CHANNEL) == 0) {
 		ahc->sc_child = config_found((void *)&ahc->sc_dev,
@@ -243,7 +243,7 @@ ahc_done(struct ahc_softc *ahc, struct scb *scb)
 }
 
 static int
-ahc_ioctl(struct scsipi_channel *channel, u_long cmd, caddr_t addr,
+ahc_ioctl(struct scsipi_channel *channel, u_long cmd, void *addr,
     int flag, struct proc *p)
 {
 	struct ahc_softc *ahc = (void *)channel->chan_adapter->adapt_dev;
@@ -623,6 +623,7 @@ ahc_execute_scb(void *arg, bus_dma_segment_t *dm_segs, int nsegments)
 	/*
 	 * If we can't use interrupts, poll for completion
 	 */
+
 	SC_DEBUG(xs->xs_periph, SCSIPI_DB3, ("cmd_poll\n"));
 	do {
 		if (ahc_poll(ahc, xs->timeout)) {
@@ -1048,8 +1049,7 @@ ahc_detach(struct device *self, int flags)
 	if (rv == 0 && ahc->sc_child_b != NULL)
 		rv = config_detach(ahc->sc_child_b, flags);
 
-	shutdownhook_disestablish(ahc->shutdown_hook);
-
+	pmf_device_deregister(self);
 	ahc_free(ahc);
 
 	return (rv);

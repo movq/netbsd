@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie_vme.c,v 1.22 2005/12/11 12:24:07 christos Exp $	*/
+/*	$NetBSD: if_ie_vme.c,v 1.24 2008/04/05 16:06:12 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1995 Charles D. Cranor
@@ -145,7 +145,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.22 2005/12/11 12:24:07 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.24 2008/04/05 16:06:12 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -160,8 +160,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.22 2005/12/11 12:24:07 christos Exp 
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 #ifdef __sparc__
 #include <machine/autoconf.h>
 #endif
@@ -306,8 +306,8 @@ ie_vmeintr(sc, where)
          * check for parity error
          */
 	if (read_iev(vsc, status) & IEVME_PERR) {
-		printf("%s: parity error (ctrl 0x%x @ 0x%02x%04x)\n",
-		       sc->sc_dev.dv_xname, read_iev(vsc, pectrl),
+		aprint_error_dev(&sc->sc_dev, "parity error (ctrl 0x%x @ 0x%02x%04x)\n",
+		       read_iev(vsc, pectrl),
 		       read_iev(vsc, pectrl) & IEVME_HADDR,
 		       read_iev(vsc, peaddr));
 		write_iev(vsc, pectrl, read_iev(vsc, pectrl) | IEVME_PARACK);
@@ -594,7 +594,7 @@ ie_vme_attach(parent, self, aux)
 
 	sc->do_xmitnopchain = 0;
 
-	printf("\n%s:", self->dv_xname);
+	printf("\n%s:", device_xname(self));
 
 #ifdef __sparc__
 	prom_getether(0, myaddr);

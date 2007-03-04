@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_bootstrap.c,v 1.23 2005/12/11 12:18:17 christos Exp $	*/
+/*	$NetBSD: pmap_bootstrap.c,v 1.29 2008/01/12 09:54:29 tsutsui Exp $	*/
 
 /* 
  * Copyright (c) 1991, 1993
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.23 2005/12/11 12:18:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.29 2008/01/12 09:54:29 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/kcore.h>
@@ -74,10 +74,11 @@ extern int protection_codes[];
  *	vmmap:		/dev/mem, crash dumps, parity error checking
  *	msgbufaddr:	kernel message buffer
  */
-caddr_t		CADDR1, CADDR2, vmmap;
-extern caddr_t	msgbufaddr;
+void *CADDR1, *CADDR2;
+char *vmmap;
+void *msgbufaddr;
 
-void	pmap_bootstrap __P((paddr_t, paddr_t));
+void	pmap_bootstrap(paddr_t, paddr_t);
 
 /*
  * Bootstrap the VM system.
@@ -91,9 +92,7 @@ void	pmap_bootstrap __P((paddr_t, paddr_t));
  * XXX a PIC compiler would make this much easier.
  */
 void
-pmap_bootstrap(nextpa, firstpa)
-	paddr_t nextpa;
-	paddr_t firstpa;
+pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
 {
 	paddr_t kstpa, kptpa, kptmpa, lkptpa, p0upa;
 	u_int nptpages, kstsize;
@@ -126,7 +125,7 @@ pmap_bootstrap(nextpa, firstpa)
 	 *	(PA - firstpa + KERNBASE).
 	 */
 	iiomappages = m68k_btop(RELOC(intiotop_phys, u_int) -
-			       RELOC(intiobase_phys, u_int));
+	    RELOC(intiobase_phys, u_int));
 
 #if defined(M68040) || defined(M68060)
 	if (RELOC(mmutype, int) == MMU_68040)
@@ -143,8 +142,7 @@ pmap_bootstrap(nextpa, firstpa)
 	p0upa = nextpa;
 	nextpa += USPACE;
 	kptpa = nextpa;
-	nptpages = RELOC(Sysptsize, int) +
-		(iiomappages + NPTEPG - 1) / NPTEPG;
+	nptpages = RELOC(Sysptsize, int) + (iiomappages + NPTEPG - 1) / NPTEPG;
 	nextpa += nptpages * PAGE_SIZE;
 
 	/*
@@ -308,7 +306,7 @@ pmap_bootstrap(nextpa, firstpa)
 	 * the last page of physical memory.
 	 */
 	pte = (u_int *)lkptpa;
-	epte = &pte[NPTEPG-1];
+	epte = &pte[NPTEPG - 1];
 	while (pte < epte)
 		*pte++ = PG_NV;
 
@@ -393,7 +391,7 @@ pmap_bootstrap(nextpa, firstpa)
 		(pt_entry_t *)(kptmpa - firstpa);
 	/*
 	 * Sysmap: kernel page table (as mapped through Sysptmap)
-	 * Immediately follows `nptpages' of static kernel page table.
+	 * Allocated at the end of KVA space.
 	 */
 	RELOC(Sysmap, pt_entry_t *) =
 	    (pt_entry_t *)m68k_ptob((NPTEPG - 2) * NPTEPG);
@@ -535,7 +533,7 @@ pmap_bootstrap(nextpa, firstpa)
 			
 			kpm->pm_stfree = ~l2tobm(0);
 			num = roundup(nptpages * (NPTEPG / SG4_LEV3SIZE),
-				      SG4_LEV2SIZE) / SG4_LEV2SIZE;
+			    SG4_LEV2SIZE) / SG4_LEV2SIZE;
 			while (num)
 				kpm->pm_stfree &= ~l2tobm(num--);
 			kpm->pm_stfree &= ~l2tobm(MAXKL2SIZE-1);
@@ -553,13 +551,13 @@ pmap_bootstrap(nextpa, firstpa)
 	{
 		vaddr_t va = RELOC(virtual_avail, vaddr_t);
 
-		RELOC(CADDR1, caddr_t) = (caddr_t)va;
+		RELOC(CADDR1, void *) = (void *)va;
 		va += PAGE_SIZE;
-		RELOC(CADDR2, caddr_t) = (caddr_t)va;
+		RELOC(CADDR2, void *) = (void *)va;
 		va += PAGE_SIZE;
-		RELOC(vmmap, caddr_t) = (caddr_t)va;
+		RELOC(vmmap, void *) = (void *)va;
 		va += PAGE_SIZE;
-		RELOC(msgbufaddr, caddr_t) = (caddr_t)va;
+		RELOC(msgbufaddr, void *) = (void *)va;
 		va += m68k_round_page(MSGBUFSIZE);
 		RELOC(virtual_avail, vaddr_t) = va;
 	}

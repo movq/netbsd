@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic.S,v 1.1 2002/10/19 12:46:57 bsh Exp $ */
+/*	$NetBSD: atomic.S,v 1.3 2008/04/27 18:58:43 matt Exp $ */
 
 /*
  * Copyright (C) 1994-1997 Mark Brinicombe
@@ -45,13 +45,13 @@
 ENTRY(atomic_set_bit)
 	mrs	r2, cpsr
 	orr	r3, r2, #(I32_bit)
-	msr	cpsr_all, r3
+	msr	cpsr_c, r3
 
 	ldr	r3, [r0]
 	orr	r3, r3, r1
 	str	r3, [r0]
 
-	msr	cpsr_all, r2
+	msr	cpsr_c, r2
 	mov	pc, lr
 
 
@@ -59,13 +59,57 @@ ENTRY(atomic_set_bit)
 ENTRY(atomic_clear_bit)
 	mrs	r2, cpsr
 	orr	r3, r2, #(I32_bit)
-	msr	cpsr_all, r3
+	msr	cpsr_c, r3
 
 	ldr	r3, [r0]
 	bic	r3, r3, r1
 	str	r3, [r0]
 
-	msr	cpsr_all, r2
+	msr	cpsr_c, r2
 	mov	pc, lr
 
 #endif	/* ATOMIC_SET_BIT_NONINLINE_REQUIRED */
+
+#if 0 && defined(_ARM_ARCH_6)
+
+#define	ATOMIC_OP(NAME, OP, ARG)	\
+ENTRY_NP(atomic_##NAME##_32)		;\
+	mov	ip, r0			;\
+1:      ldrex	r0, [ip]		;\
+	OP	r2, r0, ARG		;\
+	strex	r3, r2, [ip]		;\
+	cmp	r3, #0			;\
+	bne	1b			;\
+	RET				;\
+	END(atomic_##NAME##_32)
+
+ATOMIC_OP(and, and, r1)
+ATOMIC_OP(nand, bic, r1)
+ATOMIC_OP(or, orr, r1)
+ATOMIC_OP(xor, eor, r1)
+ATOMIC_OP(add, add, r1)
+ATOMIC_OP(inc, add, #1)
+ATOMIC_OP(sub, sub, r1)
+ATOMIC_OP(dec, sub, #1)
+
+#define	ATOMIC_OP_NV(NAME, OP, ARG)	\
+ENTRY_NP(atomic_##NAME##_32_nv)		;\
+	mov	ip, r0			;\
+1:      ldrex	r0, [ip]		;\
+	OP	r0, r0, ARG		;\
+	strex	r3, r0, [ip]		;\
+	cmp	r3, #0			;\
+	bne	1b			;\
+	RET				;\
+	END(atomic_##NAME##_32_nv)
+
+ATOMIC_OP_NV(and, and, r1)
+ATOMIC_OP_NV(nand, bic, r1)
+ATOMIC_OP_NV(or, orr, r1)
+ATOMIC_OP_NV(xor, eor, r1)
+ATOMIC_OP_NV(add, add, r1)
+ATOMIC_OP_NV(inc, add, #1)
+ATOMIC_OP_NV(sub, sub, r1)
+ATOMIC_OP_NV(dec, sub, #1)
+
+#endif /* _ARM_ARCH_6 */

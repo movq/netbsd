@@ -1,4 +1,4 @@
-/*	$NetBSD: queue.h,v 1.46 2007/02/26 09:20:52 yamt Exp $	*/
+/*	$NetBSD: queue.h,v 1.49 2008/06/15 16:42:18 christos Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -33,6 +33,8 @@
 
 #ifndef	_SYS_QUEUE_H_
 #define	_SYS_QUEUE_H_
+
+#include <sys/null.h>
 
 /*
  * This file defines five types of data structures: singly-linked lists,
@@ -304,6 +306,14 @@ struct {								\
 		(var);							\
 		(var) = ((var)->field.stqe_next))
 
+#define	STAILQ_CONCAT(head1, head2) do {				\
+	if (!STAILQ_EMPTY((head2))) {					\
+		*(head1)->stqh_last = (head2)->stqh_first;		\
+		(head1)->stqh_last = (head2)->stqh_last;		\
+		STAILQ_INIT((head2));					\
+	}								\
+} while (/*CONSTCOND*/0)
+
 /*
  * Singly-linked Tail queue access methods.
  */
@@ -500,10 +510,24 @@ struct {								\
 		(var);							\
 		(var) = ((var)->field.tqe_next))
 
+#define	TAILQ_FOREACH_SAFE(var, head, field, next)			\
+	for ((var) = ((head)->tqh_first);				\
+	        (var) != NULL && ((next) = TAILQ_NEXT(var, field), 1);	\
+		(var) = (next))
+
 #define	TAILQ_FOREACH_REVERSE(var, head, headname, field)		\
 	for ((var) = (*(((struct headname *)((head)->tqh_last))->tqh_last));	\
 		(var);							\
 		(var) = (*(((struct headname *)((var)->field.tqe_prev))->tqh_last)))
+
+#define	TAILQ_CONCAT(head1, head2, field) do {				\
+	if (!TAILQ_EMPTY(head2)) {					\
+		*(head1)->tqh_last = (head2)->tqh_first;		\
+		(head2)->tqh_first->field.tqe_prev = (head1)->tqh_last;	\
+		(head1)->tqh_last = (head2)->tqh_last;			\
+		TAILQ_INIT((head2));					\
+	}								\
+} while (/*CONSTCOND*/0)
 
 /*
  * Tail queue access methods.

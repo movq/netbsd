@@ -1,4 +1,4 @@
-/*	$NetBSD: tms320av110.c,v 1.18 2005/12/11 12:21:28 christos Exp $	*/
+/*	$NetBSD: tms320av110.c,v 1.21 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tms320av110.c,v 1.18 2005/12/11 12:21:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tms320av110.c,v 1.21 2008/04/28 20:23:51 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,7 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: tms320av110.c,v 1.18 2005/12/11 12:21:28 christos Ex
 #include <dev/ic/tms320av110reg.h>
 #include <dev/ic/tms320av110var.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 int tav_open(void *, int);
 void tav_close(void *);
@@ -342,7 +335,7 @@ tav_getdev(void *hdl, struct audio_device *ret)
 	/* guaranteed to be <= 4 in length */
 	snprintf(ret->version, sizeof(ret->version), "%u",
 	    tav_read_byte(iot, ioh, TAV_VERSION));
-	strlcpy(ret->config, sc->sc_dev.dv_xname, sizeof(ret->config));
+	strlcpy(ret->config, device_xname(&sc->sc_dev), sizeof(ret->config));
 
 	return 0;
 }

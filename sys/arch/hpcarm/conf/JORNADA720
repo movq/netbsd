@@ -1,4 +1,4 @@
-#	$NetBSD: JORNADA720,v 1.64 2007/03/01 14:57:38 kiyohara Exp $
+#	$NetBSD: JORNADA720,v 1.70 2008/07/31 07:41:01 simonb Exp $
 #
 #	JORNADA -- Windows-CE based jornada 720
 #
@@ -7,7 +7,7 @@ include	"arch/hpcarm/conf/std.hpcarm"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.64 $"
+#ident 		"GENERIC-$Revision: 1.70 $"
 
 # estimated number of users
 maxusers	32
@@ -54,6 +54,7 @@ file-system	TMPFS		# Efficient memory file-system
 #options 	QUOTA		# UFS quotas
 #options 	FFS_EI		# FFS Endian Independant support
 options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 #options 	NFSSERVER
 
@@ -80,6 +81,7 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 # Compatibility options
 
 #options 	COMPAT_43	# 4.3BSD compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_20	# NetBSD 2.0 compatibility.
 options 	COMPAT_16	# NetBSD 1.6 compatibility.
@@ -124,7 +126,6 @@ options 	NFS_BOOT_DHCP
 #options 	DIAGNOSTIC	# internal consistency checks
 #options 	DEBUG		# expensive debugging checks/support
 #options 	PMAP_DEBUG	# Enable pmap_debug_level code
-#options 	IPKDB		# remote kernel debugging
 options 	DDB		# in-kernel debugger
 #options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #makeoptions	DEBUG="-g"	# compile full symbol table
@@ -239,9 +240,12 @@ urlphy* at mii? phy ?			# Realtek RTL8150L internal PHYs
 
 # Bluetooth PCMCIA Controllers
 bt3c*	at pcmcia? function ?		# 3Com 3CRWB6096-A
+btbc*	at pcmcia? function ?		# AnyCom BlueCard LSE041/039/139
 
 # Bluetooth Device Hub
+bthub*	at bcsp?
 bthub*	at bt3c?
+bthub*	at btbc?
 bthub*	at btuart?
 
 # Bluetooth HID support
@@ -331,4 +335,5 @@ pseudo-device	md	1		# Ramdisk driver
 pseudo-device	rnd			# /dev/random and in-kernel generator
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
+pseudo-device	bcsp			# BlueCore Serial Protocol
 pseudo-device	btuart			# Bluetooth HCI UART (H4)

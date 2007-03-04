@@ -1,4 +1,4 @@
-/*	$NetBSD: bfs.h,v 1.3 2007/02/21 23:00:03 thorpej Exp $	*/
+/*	$NetBSD: bfs.h,v 1.5 2008/04/28 20:24:02 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -69,14 +62,14 @@ struct bfs_super_block_header {
 	uint32_t magic;
 	uint32_t data_start_byte;
 	uint32_t data_end_byte;
-} __attribute__((__packed__));
+} __packed;
 
 struct bfs_compaction {
 	uint32_t from;
 	uint32_t to;
 	uint32_t from_backup;
 	uint32_t to_backup;
-} __attribute__((__packed__));
+} __packed;
 
 struct bfs_fileattr {
 	uint32_t type;
@@ -88,7 +81,7 @@ struct bfs_fileattr {
 	int32_t mtime;
 	int32_t ctime;
 	int32_t padding[4];
-} __attribute__((__packed__));	/* 48byte */
+} __packed;	/* 48byte */
 
 struct bfs_inode {
 	uint16_t number;		/*  0 */
@@ -97,7 +90,7 @@ struct bfs_inode {
 	uint32_t end_sector;		/*  8 */
 	uint32_t eof_offset_byte;	/* 12 (offset from super block start) */
 	struct bfs_fileattr attr;	/* 16 */
-} __attribute__((__packed__));	/* 64byte */
+} __packed;	/* 64byte */
 
 struct bfs_super_block {
 	struct bfs_super_block_header header;
@@ -105,12 +98,12 @@ struct bfs_super_block {
 	char fsname[6];
 	char volume[6];
 	int32_t padding[118];
-} __attribute__((__packed__));
+} __packed;
 
 struct bfs_dirent {
 	uint16_t inode;
 	char name[BFS_FILENAME_MAXLEN];
-} __attribute__((__packed__)); /* 16byte */
+} __packed; /* 16byte */
 
 #if defined _KERNEL || defined _STANDALONE
 /* Software definition */

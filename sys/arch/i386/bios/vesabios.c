@@ -1,4 +1,4 @@
-/* $NetBSD: vesabios.c,v 1.23 2007/02/20 00:09:57 xtraeme Exp $ */
+/* $NetBSD: vesabios.c,v 1.27 2008/09/08 23:36:53 gmcgarry Exp $ */
 
 /*
  * Copyright (c) 2002, 2004
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vesabios.c,v 1.23 2007/02/20 00:09:57 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vesabios.c,v 1.27 2008/09/08 23:36:53 gmcgarry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,7 +52,7 @@ struct vbeinfoblock
 	uint16_t OemSoftwareRev;
 	uint32_t OemVendorNamePtr, OemProductNamePtr, OemProductRevPtr;
 	/* data area, in total max 512 bytes for VBE 2.0 */
-} __attribute__ ((packed));
+} __packed;
 
 #define FAR2FLATPTR(p) ((p & 0xffff) + ((p >> 12) & 0xffff0))
 
@@ -66,12 +66,10 @@ static void vbefreeinfo(struct vbeinfoblock *);
 static const char *mm2txt(unsigned int);
 #endif
 
-CFATTACH_DECL(vesabios, sizeof(struct device),
-    vesabios_match, vesabios_attach, NULL, NULL);
+CFATTACH_DECL_NEW(vesabios, 0, vesabios_match, vesabios_attach, NULL, NULL);
 
 static int
-vesabios_match( struct device *parent, struct cfdata *match,
-    void *aux)
+vesabios_match(device_t parent, cfdata_t match, void *aux)
 {
 
 	return 1;
@@ -160,8 +158,7 @@ mm2txt(unsigned int mm)
 #endif
 
 static void
-vesabios_attach(struct device *parent, struct device *dev,
-    void *aux)
+vesabios_attach(device_t parent, device_t self, void *aux)
 {
 	struct vbeinfoblock *vi;
 	unsigned char *buf;
@@ -185,6 +182,8 @@ vesabios_attach(struct device *parent, struct device *dev,
 	aprint_naive("\n");
 	aprint_normal(": version %d.%d",
 	    vi->VbeVersion >> 8, vi->VbeVersion & 0xff);
+
+	vbaa.vbaa_vbeversion = vi->VbeVersion;
 
 	res = kvm86_bios_read(FAR2FLATPTR(vi->OemVendorNamePtr),
 			      name, sizeof(name));
@@ -218,8 +217,7 @@ vesabios_attach(struct device *parent, struct device *dev,
 
 	buf = kvm86_bios_addpage(0x2000);
 	if (!buf) {
-		aprint_error("%s: kvm86_bios_addpage(0x2000) failed\n",
-		    dev->dv_xname);
+		aprint_error_dev(self, "kvm86_bios_addpage(0x2000) failed\n");
 		return;
 	}
 	for (i = 0; i < nmodes; i++) {
@@ -232,16 +230,16 @@ vesabios_attach(struct device *parent, struct device *dev,
 
 		res = kvm86_bioscall(0x10, &tf);
 		if (res || (tf.tf_eax & 0xff) != 0x4f) {
-			aprint_error("%s: vbecall: res=%d, ax=%x\n",
-			    dev->dv_xname, res, tf.tf_eax);
-			aprint_error("%s: error getting info for mode %04x\n",
-			    dev->dv_xname, modes[i]);
+			aprint_error_dev(self, "vbecall: res=%d, ax=%x\n",
+			    res, tf.tf_eax);
+			aprint_error_dev(self, "error getting info for mode %04x\n",
+			    modes[i]);
 			continue;
 		}
 		mi = (struct modeinfoblock *)buf;
 #ifdef VESABIOSVERBOSE
-		aprint_verbose("%s: VESA mode %04x: attributes %04x",
-		       dev->dv_xname, modes[i], mi->ModeAttributes);
+		aprint_verbose_dev(self, "VESA mode %04x: attributes %04x",
+		       modes[i], mi->ModeAttributes);
 #endif
 		if (!(mi->ModeAttributes & 1)) {
 #ifdef VESABIOSVERBOSE
@@ -259,6 +257,11 @@ vesabios_attach(struct device *parent, struct device *dev,
 			if (mi->ModeAttributes & 0x80) {
 				/* flat buffer */
 				rastermodes[nrastermodes++] = modes[i];
+#ifdef VESABIOSVERBOSE
+				aprint_verbose_dev(self, "memory window "
+				    "granularity %d Kb, window size %d Kb\n",
+				    mi->WinGranularity/1024, mi->WinSize/1024);
+#endif
 			}
 		} else {
 			/* text */
@@ -277,14 +280,14 @@ vesabios_attach(struct device *parent, struct device *dev,
 		vbaa.vbaa_modes = rastermodes;
 		vbaa.vbaa_nmodes = nrastermodes;
 
-		config_found(dev, &vbaa, vesabios_print);
+		config_found(self, &vbaa, vesabios_print);
 	}
 	if (ntextmodes) {
 		vbaa.vbaa_type = "text";
 		vbaa.vbaa_modes = textmodes;
 		vbaa.vbaa_nmodes = ntextmodes;
 
-		config_found(dev, &vbaa, vesabios_print);
+		config_found(self, &vbaa, vesabios_print);
 	}
 }
 

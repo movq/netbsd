@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.c,v 1.30 2007/02/09 21:55:19 ad Exp $	*/
+/*	$NetBSD: linux_machdep.c,v 1.38 2008/04/28 20:23:42 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.30 2007/02/09 21:55:19 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.38 2008/04/28 20:23:42 martin Exp $");
 
 #define COMPAT_LINUX 1
 
@@ -53,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.30 2007/02/09 21:55:19 ad Exp $"
 #include <sys/syscallargs.h>
 #include <sys/kauth.h>
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 #include <machine/reg.h>
 
 #include <compat/linux/common/linux_types.h>
@@ -82,10 +75,10 @@ extern int sigpid;
 #define SDB_FPSTATE	0x04
 #endif
 
-void setup_linux_sigframe __P((struct frame *frame, int sig,
-    const sigset_t *mask, caddr_t usp));
-void setup_linux_rt_sigframe __P((struct frame *frame, int sig,
-    const sigset_t *mask, caddr_t usp, struct lwp *l));
+void setup_linux_sigframe(struct frame *frame, int sig,
+    const sigset_t *mask, void *usp);
+void setup_linux_rt_sigframe(struct frame *frame, int sig,
+    const sigset_t *mask, void *usp, struct lwp *l);
 
 /*
  * Deal with some m68k-specific things in the Linux emulation code.
@@ -95,10 +88,7 @@ void setup_linux_rt_sigframe __P((struct frame *frame, int sig,
  * Setup registers on program execution.
  */
 void
-linux_setregs(l, epp, stack)
-	struct lwp *l;
-	struct exec_package *epp;
-	u_long stack;
+linux_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
 {
 
 	setregs(l, epp, stack);
@@ -108,11 +98,7 @@ linux_setregs(l, epp, stack)
  * Setup signal frame for old signal interface.
  */
 void
-setup_linux_sigframe(frame, sig, mask, usp)
-	struct frame *frame;
-	int sig;
-	const sigset_t *mask;
-	caddr_t usp;
+setup_linux_sigframe(struct frame *frame, int sig, const sigset_t *mask, void *usp)
 {
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
@@ -236,9 +222,9 @@ setup_linux_sigframe(frame, sig, mask, usp)
 	kf.sf_c.c_sc.sc_ps = frame->f_sr;
 	sendsig_reset(l, sig);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&kf, fp, sizeof(struct linux_sigframe));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error) {
 #ifdef DEBUG
@@ -275,12 +261,7 @@ setup_linux_sigframe(frame, sig, mask, usp)
  * Setup signal frame for new RT signal interface.
  */
 void
-setup_linux_rt_sigframe(frame, sig, mask, usp, l)
-	struct frame *frame;
-	int sig;
-	const sigset_t *mask;
-	caddr_t usp;
-	struct lwp *l;
+setup_linux_rt_sigframe(struct frame *frame, int sig, const sigset_t *mask, void *usp, struct lwp *l)
 {
 	struct proc *p = l->l_proc;
 	struct linux_rt_sigframe *fp, kf;
@@ -423,9 +404,9 @@ setup_linux_rt_sigframe(frame, sig, mask, usp, l)
 	kf.sf_uc.uc_stack.ss_size = l->l_sigstk.ss_size;
 	sendsig_reset(l, sig);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&kf, fp, sizeof(struct linux_rt_sigframe));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error) {
 #ifdef DEBUG
@@ -472,7 +453,7 @@ linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct frame *frame = (struct frame *)l->l_md.md_regs;
 	int onstack;
 	/* user stack for signal context */
-	caddr_t usp = getframe(l, sig, &onstack);
+	void *usp = getframe(l, sig, &onstack);
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
 
 	/* Setup the signal frame (and part of the trapframe). */
@@ -512,10 +493,7 @@ linux_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
  */
 /* ARGSUSED */
 int
-linux_sys_sigreturn(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+linux_sys_sigreturn(struct lwp *l, const void *v, register_t *retval)
 {
 	struct proc *p = l->l_proc;
 	struct frame *frame;
@@ -537,13 +515,13 @@ linux_sys_sigreturn(l, v, retval)
 #ifdef DEBUG
 	if (sigdebug & SDB_FOLLOW)
 		printf("linux_sys_sigreturn: pid %d, usp %p\n",
-			p->p_pid, (caddr_t) usp);
+			p->p_pid, (void *) usp);
 #endif
 
 	/* Grab whole of the sigcontext. */
-	if (copyin((caddr_t) usp, &tsigc2, sizeof tsigc2)) {
+	if (copyin((void *) usp, &tsigc2, sizeof tsigc2)) {
 bad:
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 		sigexit(l, SIGSEGV);
 	}
 
@@ -571,7 +549,7 @@ bad:
 			sz, frame->f_stackadj);
 #endif
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	/* Restore signal stack. */
 	l->l_sigstk.ss_flags &= ~SS_ONSTACK;
@@ -585,7 +563,7 @@ bad:
 #endif
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	/*
 	 * Restore the user supplied information.
@@ -671,10 +649,7 @@ bad:
 
 /* ARGSUSED */
 int
-linux_sys_rt_sigreturn(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+linux_sys_rt_sigreturn(struct lwp *l, const void *v, register_t *retval)
 {
 	struct proc *p = l->l_proc;
 	struct frame *frame;
@@ -689,7 +664,8 @@ linux_sys_rt_sigreturn(l, v, retval)
 	 * usp + 8 is a pointer to ucontext structure.
 	 */
 	frame = (struct frame *) l->l_md.md_regs;
-	error = copyin((caddr_t) frame->f_regs[SP] + 8, (void *) &ucp, sizeof(void *));
+	error = copyin((char *)frame->f_regs[SP] + 8, (void *)&ucp,
+	    sizeof(void *));
 	if (error || (int) ucp & 1)
 		goto bad;		/* error or odd address */
 
@@ -701,7 +677,7 @@ linux_sys_rt_sigreturn(l, v, retval)
 	/* Grab whole of the ucontext. */
 	if (copyin(ucp, &tuc, sizeof tuc)) {
 bad:		
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 		sigexit(l, SIGSEGV);
 	}
 
@@ -730,7 +706,7 @@ bad:
 	if (tuc.uc_mc.mc_version != LINUX_MCONTEXT_VERSION)
 		goto bad;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	/* Restore signal stack. */
 	l->l_sigstk.ss_flags =
@@ -741,7 +717,7 @@ bad:
 	linux_to_native_sigset(&mask, &tuc.uc_sigmask);
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	/*
 	 * Restore the user supplied information.
@@ -833,17 +809,14 @@ bad:
 
 /* ARGSUSED */
 int
-linux_sys_cacheflush(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+linux_sys_cacheflush(struct lwp *l, const struct linux_sys_cacheflush_args *uap, register_t *retval)
 {
-	struct linux_sys_cacheflush_args /* {
+	/* {
 		syscallarg(unsigned long)	addr;
 		syscallarg(int)			scope;
 		syscallarg(int)			cache;
 		syscallarg(unsigned long)	len;
-	} */ *uap = v;
+	} */
 	struct proc *p = l->l_proc;
 	int scope, cache;
 	vaddr_t addr;
@@ -896,9 +869,7 @@ linux_sys_cacheflush(l, v, retval)
  * Convert NetBSD's devices to Linux's.
  */
 dev_t
-linux_fakedev(dev, raw)
-	dev_t dev;
-	int raw;
+linux_fakedev(dev_t dev, int raw)
 {
 
 	/* do nothing for now */
@@ -909,16 +880,13 @@ linux_fakedev(dev, raw)
  * We come here in a last attempt to satisfy a Linux ioctl() call.
  */
 int
-linux_machdepioctl(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+linux_machdepioctl(struct lwp *l, const struct linux_sys_ioctl_args *uap, register_t *retval)
 {
-	struct linux_sys_ioctl_args /* {
+	/* {
 		syscallarg(int) fd;
 		syscallarg(u_long) com;
-		syscallarg(caddr_t) data;
-	} */ *uap = v;
+		syscallarg(void *) data;
+	} */
 	struct sys_ioctl_args bia;
 	u_long com;
 

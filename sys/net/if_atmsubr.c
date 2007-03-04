@@ -1,4 +1,4 @@
-/*      $NetBSD: if_atmsubr.c,v 1.38 2007/02/17 22:34:08 dyoung Exp $       */
+/*      $NetBSD: if_atmsubr.c,v 1.42 2008/06/15 16:37:21 christos Exp $       */
 
 /*
  *
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atmsubr.c,v 1.38 2007/02/17 22:34:08 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atmsubr.c,v 1.42 2008/06/15 16:37:21 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_gateway.h"
@@ -56,7 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_atmsubr.c,v 1.38 2007/02/17 22:34:08 dyoung Exp $
 #include <sys/errno.h>
 #include <sys/syslog.h>
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 #include <net/if.h>
 #include <net/netisr.h>
@@ -101,13 +101,13 @@ int
 atm_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
     struct rtentry *rt0)
 {
-	u_int16_t etype = 0;			/* if using LLC/SNAP */
+	uint16_t etype = 0;			/* if using LLC/SNAP */
 	int error = 0, sz;
 	struct atm_pseudohdr atmdst, *ad;
 	struct mbuf *m = m0;
 	struct rtentry *rt;
 	struct atmllc *atmllc;
-	u_int32_t atm_flags;
+	uint32_t atm_flags;
 	ALTQ_DECL(struct altq_pktattr pktattr;)
 
 	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) != (IFF_UP|IFF_RUNNING))
@@ -237,7 +237,7 @@ atm_input(struct ifnet *ifp, struct atm_pseudohdr *ah, struct mbuf *m,
     void *rxhand)
 {
 	struct ifqueue *inq;
-	u_int16_t etype = ETHERTYPE_IP; /* default */
+	uint16_t etype = ETHERTYPE_IP; /* default */
 	int s;
 
 	if ((ifp->if_flags & IFF_UP) == 0) {
@@ -297,6 +297,10 @@ atm_input(struct ifnet *ifp, struct atm_pseudohdr *ah, struct mbuf *m,
 #endif /* INET */
 #ifdef INET6
 	  case ETHERTYPE_IPV6:
+#ifdef GATEWAY  
+		if (ip6flow_fastforward(m))
+			return;
+#endif
 		  schednetisr(NETISR_IPV6);
 		  inq = &ip6intrq;
 		  break;
@@ -354,10 +358,9 @@ pvcsif_alloc(void)
 	if (pvc_number >= pvc_max_number)
 		return (NULL);
 	MALLOC(pvcsif, struct pvcsif *, sizeof(struct pvcsif),
-	       M_DEVBUF, M_WAITOK);
+	       M_DEVBUF, M_WAITOK|M_ZERO);
 	if (pvcsif == NULL)
 		return (NULL);
-	memset(pvcsif, 0, sizeof(struct pvcsif));
 
 #ifdef __NetBSD__
 	snprintf(pvcsif->sif_if.if_xname, sizeof(pvcsif->sif_if.if_xname),

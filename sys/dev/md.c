@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.47 2006/11/16 01:32:45 christos Exp $	*/
+/*	$NetBSD: md.c,v 1.56 2008/06/16 10:27:47 drochner Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross, Leo Weppelman.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: md.c,v 1.47 2006/11/16 01:32:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: md.c,v 1.56 2008/06/16 10:27:47 drochner Exp $");
 
 #include "opt_md.h"
 
@@ -67,23 +67,21 @@ __KERNEL_RCSID(0, "$NetBSD: md.c,v 1.47 2006/11/16 01:32:45 christos Exp $");
 #include <dev/md.h>
 
 /*
- * By default, include the user-space functionality.
+ * The user-space functionality is included by default.
  * Use  `options MEMORY_DISK_SERVER=0' to turn it off.
  */
 #ifndef MEMORY_DISK_SERVER
-#define	MEMORY_DISK_SERVER 1
+#error MEMORY_DISK_SERVER should be defined by opt_md.h
 #endif	/* MEMORY_DISK_SERVER */
 
 /*
  * We should use the raw partition for ioctl.
  */
-#define MD_MAX_UNITS	0x10
 #define MD_UNIT(unit)	DISKUNIT(unit)
 
 /* autoconfig stuff... */
 
 struct md_softc {
-	struct device sc_dev;	/* REQUIRED first entry */
 	struct disk sc_dkdev;	/* hook for generic disk handling */
 	struct md_conf sc_md;
 	struct bufq_state *sc_buflist;
@@ -95,7 +93,7 @@ struct md_softc {
 
 void	mdattach(int);
 
-static void	md_attach(struct device *, struct device *, void *);
+static void	md_attach(device_t, device_t, void *);
 
 static dev_type_open(mdopen);
 static dev_type_close(mdclose);
@@ -116,8 +114,9 @@ const struct cdevsw md_cdevsw = {
 
 static struct dkdriver mddkdriver = { mdstrategy, NULL };
 
-static int   ramdisk_ndevs;
-static void *ramdisk_devs[MD_MAX_UNITS];
+extern struct cfdriver md_cd;
+CFATTACH_DECL_NEW(md, sizeof(struct md_softc),
+	0, md_attach, 0, NULL);
 
 /*
  * This is called if we are configured as a pseudo-device
@@ -125,44 +124,34 @@ static void *ramdisk_devs[MD_MAX_UNITS];
 void
 mdattach(int n)
 {
-	struct md_softc *sc;
 	int i;
+	cfdata_t cf;
 
-#ifdef	DIAGNOSTIC
-	if (ramdisk_ndevs) {
-		aprint_error("ramdisk: multiple attach calls?\n");
+	if (config_cfattach_attach("md", &md_ca)) {
+		printf("md: cfattach_attach failed\n");
 		return;
 	}
-#endif
 
 	/* XXX:  Are we supposed to provide a default? */
 	if (n <= 1)
 		n = 1;
-	if (n > MD_MAX_UNITS)
-		n = MD_MAX_UNITS;
-	ramdisk_ndevs = n;
 
 	/* Attach as if by autoconfig. */
 	for (i = 0; i < n; i++) {
-
-		sc = malloc(sizeof(*sc), M_DEVBUF, M_NOWAIT|M_ZERO);
-		if (!sc) {
-			aprint_error("ramdisk: malloc for attach failed!\n");
-			return;
-		}
-		ramdisk_devs[i] = sc;
-		sc->sc_dev.dv_unit = i;
-		snprintf(sc->sc_dev.dv_xname, sizeof(sc->sc_dev.dv_xname),
-		    "md%d", i);
-		md_attach(NULL, &sc->sc_dev, NULL);
+		cf = malloc(sizeof(*cf), M_DEVBUF, M_WAITOK);
+		cf->cf_name = "md";
+		cf->cf_atname = "md";
+		cf->cf_unit = i;
+		cf->cf_fstate = FSTATE_NOTFOUND;
+		(void)config_attach_pseudo(cf);
 	}
 }
 
 static void
-md_attach(struct device *parent, struct device *self,
+md_attach(device_t parent, device_t self,
     void *aux)
 {
-	struct md_softc *sc = (struct md_softc *)self;
+	struct md_softc *sc = device_private(self);
 
 	bufq_alloc(&sc->sc_buflist, "fcfs", 0);
 
@@ -173,15 +162,17 @@ md_attach(struct device *parent, struct device *self,
 	 * All it would need to do is setup the md_conf struct.
 	 * See sys/dev/md_root.c for an example.
 	 */
-	md_attach_hook(device_unit(&sc->sc_dev), &sc->sc_md);
+	md_attach_hook(device_unit(self), &sc->sc_md);
 #endif
 
 	/*
 	 * Initialize and attach the disk structure.
 	 */
-	sc->sc_dkdev.dk_driver = &mddkdriver;
-	sc->sc_dkdev.dk_name = sc->sc_dev.dv_xname;
+	disk_init(&sc->sc_dkdev, device_xname(self), &mddkdriver);
 	disk_attach(&sc->sc_dkdev);
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 /*
@@ -201,13 +192,9 @@ static int	md_ioctl_kalloc(struct md_softc *sc, struct md_conf *umd,
 static int
 mdsize(dev_t dev)
 {
-	int unit;
 	struct md_softc *sc;
 
-	unit = MD_UNIT(dev);
-	if (unit >= ramdisk_ndevs)
-		return 0;
-	sc = ramdisk_devs[unit];
+	sc = device_lookup_private(&md_cd, MD_UNIT(dev));
 	if (sc == NULL)
 		return 0;
 
@@ -224,9 +211,7 @@ mdopen(dev_t dev, int flag, int fmt, struct lwp *l)
 	struct md_softc *sc;
 
 	unit = MD_UNIT(dev);
-	if (unit >= ramdisk_ndevs)
-		return ENXIO;
-	sc = ramdisk_devs[unit];
+	sc = device_lookup_private(&md_cd, unit);
 	if (sc == NULL)
 		return ENXIO;
 
@@ -254,12 +239,6 @@ mdopen(dev_t dev, int flag, int fmt, struct lwp *l)
 static int
 mdclose(dev_t dev, int flag, int fmt, struct lwp *l)
 {
-	int unit;
-
-	unit = MD_UNIT(dev);
-
-	if (unit >= ramdisk_ndevs)
-		return ENXIO;
 
 	return 0;
 }
@@ -267,15 +246,9 @@ mdclose(dev_t dev, int flag, int fmt, struct lwp *l)
 static int
 mdread(dev_t dev, struct uio *uio, int flags)
 {
-	int unit;
 	struct md_softc *sc;
 
-	unit = MD_UNIT(dev);
-
-	if (unit >= ramdisk_ndevs)
-		return ENXIO;
-
-	sc = ramdisk_devs[unit];
+	sc = device_lookup_private(&md_cd, MD_UNIT(dev));
 
 	if (sc->sc_type == MD_UNCONFIGURED)
 		return ENXIO;
@@ -286,15 +259,9 @@ mdread(dev_t dev, struct uio *uio, int flags)
 static int
 mdwrite(dev_t dev, struct uio *uio, int flags)
 {
-	int unit;
 	struct md_softc *sc;
 
-	unit = MD_UNIT(dev);
-
-	if (unit >= ramdisk_ndevs)
-		return ENXIO;
-
-	sc = ramdisk_devs[unit];
+	sc = device_lookup_private(&md_cd, MD_UNIT(dev));
 
 	if (sc->sc_type == MD_UNCONFIGURED)
 		return ENXIO;
@@ -309,17 +276,14 @@ mdwrite(dev_t dev, struct uio *uio, int flags)
 static void
 mdstrategy(struct buf *bp)
 {
-	int unit;
 	struct md_softc	*sc;
-	caddr_t	addr;
+	void *	addr;
 	size_t off, xfer;
 
-	unit = MD_UNIT(bp->b_dev);
-	sc = ramdisk_devs[unit];
+	sc = device_lookup_private(&md_cd, MD_UNIT(bp->b_dev));
 
 	if (sc->sc_type == MD_UNCONFIGURED) {
 		bp->b_error = ENXIO;
-		bp->b_flags |= B_ERROR;
 		goto done;
 	}
 
@@ -328,7 +292,7 @@ mdstrategy(struct buf *bp)
 	case MD_UMEM_SERVER:
 		/* Just add this job to the server's queue. */
 		BUFQ_PUT(sc->sc_buflist, bp);
-		wakeup((caddr_t)sc);
+		wakeup((void *)sc);
 		/* see md_server_loop() */
 		/* no biodone in this case */
 		return;
@@ -347,7 +311,7 @@ mdstrategy(struct buf *bp)
 		xfer = bp->b_resid;
 		if (xfer > (sc->sc_size - off))
 			xfer = (sc->sc_size - off);
-		addr = sc->sc_addr + off;
+		addr = (char *)sc->sc_addr + off;
 		if (bp->b_flags & B_READ)
 			memcpy(bp->b_data, addr, xfer);
 		else
@@ -359,7 +323,6 @@ mdstrategy(struct buf *bp)
 		bp->b_resid = bp->b_bcount;
 	set_eio:
 		bp->b_error = EIO;
-		bp->b_flags |= B_ERROR;
 		break;
 	}
  done:
@@ -367,14 +330,12 @@ mdstrategy(struct buf *bp)
 }
 
 static int
-mdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
+mdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
-	int unit;
 	struct md_softc *sc;
 	struct md_conf *umd;
 
-	unit = MD_UNIT(dev);
-	sc = ramdisk_devs[unit];
+	sc = device_lookup_private(&md_cd, MD_UNIT(dev));
 
 	/* If this is not the raw partition, punt! */
 	if (DISKPART(dev) != RAW_PART)
@@ -423,7 +384,7 @@ md_ioctl_kalloc(struct md_softc *sc, struct md_conf *umd,
 		return ENOMEM;
 
 	/* This unit is now configured. */
-	sc->sc_addr = (caddr_t)addr; 	/* kernel space */
+	sc->sc_addr = (void *)addr; 	/* kernel space */
 	sc->sc_size = (size_t)size;
 	sc->sc_type = MD_KMEM_ALLOCATED;
 	return 0;
@@ -443,7 +404,7 @@ md_ioctl_server(struct md_softc *sc, struct md_conf *umd,
 	int error;
 
 	/* Sanity check addr, size. */
-	end = (vaddr_t) (umd->md_addr + umd->md_size);
+	end = (vaddr_t) ((char *)umd->md_addr + umd->md_size);
 
 	if ((end >= VM_MAXUSER_ADDRESS) ||
 		(end < ((vaddr_t) umd->md_addr)) )
@@ -471,7 +432,7 @@ static int
 md_server_loop(struct md_softc *sc)
 {
 	struct buf *bp;
-	caddr_t addr;	/* user space address */
+	void *addr;	/* user space address */
 	size_t off;	/* offset into "device" */
 	size_t xfer;	/* amount to transfer */
 	int error;
@@ -479,7 +440,7 @@ md_server_loop(struct md_softc *sc)
 	for (;;) {
 		/* Wait for some work to arrive. */
 		while ((bp = BUFQ_GET(sc->sc_buflist)) == NULL) {
-			error = tsleep((caddr_t)sc, md_sleep_pri, "md_idle", 0);
+			error = tsleep((void *)sc, md_sleep_pri, "md_idle", 0);
 			if (error)
 				return error;
 		}
@@ -497,7 +458,7 @@ md_server_loop(struct md_softc *sc)
 		xfer = bp->b_resid;
 		if (xfer > (sc->sc_size - off))
 			xfer = (sc->sc_size - off);
-		addr = sc->sc_addr + off;
+		addr = (char *)sc->sc_addr + off;
 		if (bp->b_flags & B_READ)
 			error = copyin(addr, bp->b_data, xfer);
 		else
@@ -508,7 +469,6 @@ md_server_loop(struct md_softc *sc)
 	done:
 		if (error) {
 			bp->b_error = error;
-			bp->b_flags |= B_ERROR;
 		}
 		biodone(bp);
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: ukyopon.c,v 1.5 2007/01/29 01:52:45 hubertf Exp $	*/
+/*	$NetBSD: ukyopon.c,v 1.11 2008/06/27 16:05:59 drochner Exp $	*/
 
 /*
  * Copyright (c) 1998, 2005 The NetBSD Foundation, Inc.
@@ -19,13 +19,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ukyopon.c,v 1.5 2007/01/29 01:52:45 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ukyopon.c,v 1.11 2008/06/27 16:05:59 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,7 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: ukyopon.c,v 1.5 2007/01/29 01:52:45 hubertf Exp $");
 #include <sys/device.h>
 #include <sys/poll.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbcdc.h>
@@ -90,7 +83,7 @@ struct ukyopon_softc {
 #define UKYOPON_DATA_IFACE_INDEX	3
 
 Static void	ukyopon_get_status(void *, int, u_char *, u_char *);
-Static int	ukyopon_ioctl(void *, int, u_long, caddr_t, int, usb_proc_ptr);
+Static int	ukyopon_ioctl(void *, int, u_long, void *, int, usb_proc_ptr);
 
 Static struct ucom_methods ukyopon_methods = {
 	ukyopon_get_status,
@@ -107,20 +100,10 @@ USB_DECLARE_DRIVER(ukyopon);
 
 USB_MATCH(ukyopon)
 {
-	USB_MATCH_START(ukyopon, uaa);
-	usb_device_descriptor_t *dd;
-	usb_interface_descriptor_t *id;
+	USB_IFMATCH_START(ukyopon, uaa);
 
-	if (uaa->iface == NULL)
-		return (UMATCH_NONE);
-
-	id = usbd_get_interface_descriptor(uaa->iface);
-	dd = usbd_get_device_descriptor(uaa->device);
-	if (id == NULL || dd == NULL)
-		return (UMATCH_NONE);
-
-	if (UGETW(dd->idVendor) == USB_VENDOR_KYOCERA &&
-	    UGETW(dd->idProduct) == USB_PRODUCT_KYOCERA_AHK3001V &&
+	if (uaa->vendor == USB_VENDOR_KYOCERA &&
+	    uaa->product == USB_PRODUCT_KYOCERA_AHK3001V &&
 	    (uaa->ifaceno == UKYOPON_MODEM_IFACE_INDEX ||
 	     uaa->ifaceno == UKYOPON_DATA_IFACE_INDEX))
 		return (UMATCH_VENDOR_PRODUCT);
@@ -130,7 +113,7 @@ USB_MATCH(ukyopon)
 
 USB_ATTACH(ukyopon)
 {
-	USB_ATTACH_START(ukyopon, sc, uaa);
+	USB_IFATTACH_START(ukyopon, sc, uaa);
 	struct ucom_attach_args uca;
 
 	uca.portno = (uaa->ifaceno == UKYOPON_MODEM_IFACE_INDEX) ?
@@ -160,7 +143,7 @@ ukyopon_get_status(void *addr, int portno, u_char *lsr, u_char *msr)
 }
 
 Static int
-ukyopon_ioctl(void *addr, int portno, u_long cmd, caddr_t data, int flag,
+ukyopon_ioctl(void *addr, int portno, u_long cmd, void *data, int flag,
 	      usb_proc_ptr p)
 {
 	struct ukyopon_softc *sc = addr;
@@ -171,7 +154,7 @@ ukyopon_ioctl(void *addr, int portno, u_long cmd, caddr_t data, int flag,
 	case UKYOPON_IDENTIFY:
 		strncpy(arg_id->ui_name, UKYOPON_NAME, sizeof arg_id->ui_name);
 		arg_id->ui_busno =
-		    USBDEVUNIT(*(device_ptr_t)sc->sc_umodem.sc_udev->bus->usbctl);
+		    USBDEVUNIT(sc->sc_umodem.sc_udev->bus->usbctl);
 		arg_id->ui_address = sc->sc_umodem.sc_udev->address;
 		arg_id->ui_model = UKYOPON_MODEL_UNKNOWN;
 		arg_id->ui_porttype = portno;
@@ -185,17 +168,13 @@ ukyopon_ioctl(void *addr, int portno, u_long cmd, caddr_t data, int flag,
 	return (error);
 }
 
-#ifdef __strong_alias
-__strong_alias(ukyopon_activate,umodem_common_activate)
-#else
 int
 ukyopon_activate(device_ptr_t self, enum devact act)
 {
-	struct ukyopon_softc *sc = (struct ukyopon_softc *)self;
+	struct ukyopon_softc *sc = device_private(self);
 
 	return umodem_common_activate(&sc->sc_umodem, act);
 }
-#endif
 
 USB_DETACH(ukyopon)
 {

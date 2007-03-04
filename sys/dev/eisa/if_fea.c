@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fea.c,v 1.33 2006/11/16 01:32:50 christos Exp $	*/
+/*	$NetBSD: if_fea.c,v 1.37 2008/06/12 21:48:16 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_fea.c,v 1.33 2006/11/16 01:32:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_fea.c,v 1.37 2008/06/12 21:48:16 cegger Exp $");
 
 #include "opt_inet.h"
 
@@ -90,8 +90,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_fea.c,v 1.33 2006/11/16 01:32:50 christos Exp $")
 #include <dev/pdq/pdqvar.h>
 #include <dev/pdq/pdqreg.h>
 #elif defined(__NetBSD__)
-#include <machine/cpu.h>
-#include <machine/bus.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
 
 #include <dev/ic/pdqvar.h>
 #include <dev/ic/pdqreg.h>
@@ -116,7 +116,7 @@ static pdq_softc_t *pdqs_eisa[16];
 
 #elif defined(__bsdi__)
 extern struct cfdriver feacd;
-#define	PDQ_EISA_UNIT_TO_SOFTC(unit)	((pdq_softc_t *)feacd.cd_devs[unit])
+#define	PDQ_EISA_UNIT_TO_SOFTC(unit)	((pdq_softc_t *)device_lookup_private(&feacd, unit))
 #define	DEFEA_INTRENABLE		0x28	/* edge interrupt */
 static const int pdq_eisa_irqs[4] = { IRQ9, IRQ10, IRQ11, IRQ15 };
 #define	DEFEA_DECODE_IRQ(n)		(pdq_eisa_irqs[(n)])
@@ -310,7 +310,7 @@ pdq_eisa_attach(
 	return -1;
     }
 
-    bcopy((caddr_t) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
+    bcopy((void *) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
     pdq_ifattach(sc, pdq_eisa_ifwatchdog);
 
     ed->kdc->kdc_state = DC_BUSY;	 /* host adapters always busy */
@@ -382,7 +382,7 @@ pdq_eisa_probe(
     /* EISA bus masters don't use host DMA channels */
     ia->ia_drq = DRQNONE;
 
-    ia->ia_maddr = (caddr_t) maddr;
+    ia->ia_maddr = (void *) maddr;
     ia->ia_msize = msiz;
     return 1;
 }
@@ -413,7 +413,7 @@ pdq_eisa_attach(
 	return;
     }
 
-    bcopy((caddr_t) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
+    bcopy((void *) sc->sc_pdq->pdq_hwaddr.lanaddr_bytes, sc->sc_ac.ac_enaddr, 6);
 
     pdq_ifattach(sc, pdq_eisa_ifwatchdog);
 
@@ -470,12 +470,13 @@ pdq_eisa_attach(
 
     sc->sc_iotag = ea->ea_iot;
     sc->sc_dmatag = ea->ea_dmat;
-    bcopy(sc->sc_dev.dv_xname, sc->sc_if.if_xname, IFNAMSIZ);
+    memcpy(sc->sc_if.if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
     sc->sc_if.if_flags = 0;
     sc->sc_if.if_softc = sc;
 
     if (bus_space_map(sc->sc_iotag, EISA_SLOT_ADDR(ea->ea_slot), EISA_SLOT_SIZE, 0, &sc->sc_iobase)) {
-	printf("\n%s: failed to map I/O!\n", sc->sc_dev.dv_xname);
+	aprint_normal("\n");
+	aprint_error_dev(&sc->sc_dev, "failed to map I/O!\n");
 	return;
     }
 
@@ -485,8 +486,9 @@ pdq_eisa_attach(
 	sc->sc_csrtag = ea->ea_memt;
 	if (bus_space_map(sc->sc_csrtag, maddr, msiz, 0, &sc->sc_membase)) {
 	    bus_space_unmap(sc->sc_iotag, sc->sc_iobase, EISA_SLOT_SIZE);
-	    printf("\n%s: failed to map memory (0x%x-0x%x)!\n",
-		   sc->sc_dev.dv_xname, maddr, maddr + msiz - 1);
+	    aprint_normal("\n");
+	    aprint_error_dev(&sc->sc_dev, "failed to map memory (0x%x-0x%x)!\n",
+			maddr, maddr + msiz - 1);
 	    return;
 	}
     } else {
@@ -499,21 +501,21 @@ pdq_eisa_attach(
 				sc->sc_if.if_xname, 0,
 				(void *) sc, PDQ_DEFEA);
     if (sc->sc_pdq == NULL) {
-	printf("%s: initialization failed\n", sc->sc_dev.dv_xname);
+	aprint_error_dev(&sc->sc_dev, "initialization failed\n");
 	return;
     }
 
     pdq_ifattach(sc, pdq_eisa_ifwatchdog);
 
     if (eisa_intr_map(ea->ea_ec, irq, &ih)) {
-	printf("%s: couldn't map interrupt (%d)\n", sc->sc_dev.dv_xname, irq);
+	aprint_error_dev(&sc->sc_dev, "couldn't map interrupt (%d)\n", irq);
 	return;
     }
     intrstr = eisa_intr_string(ea->ea_ec, ih);
     sc->sc_ih = eisa_intr_establish(ea->ea_ec, ih, IST_LEVEL, IPL_NET,
 				    (int (*)(void *)) pdq_interrupt, sc->sc_pdq);
     if (sc->sc_ih == NULL) {
-	printf("%s: couldn't establish interrupt", sc->sc_dev.dv_xname);
+	aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt");
 	if (intrstr != NULL)
 	    printf(" at %s", intrstr);
 	printf("\n");
@@ -521,11 +523,11 @@ pdq_eisa_attach(
     }
     sc->sc_ats = shutdownhook_establish((void (*)(void *)) pdq_hwreset, sc->sc_pdq);
     if (sc->sc_ats == NULL)
-	printf("%s: warning: couldn't establish shutdown hook\n", self->dv_xname);
+	aprint_error_dev(self, "warning: couldn't establish shutdown hook\n");
     if (sc->sc_csrtag != sc->sc_iotag)
-	printf("%s: using iomem 0x%x-0x%x\n", sc->sc_dev.dv_xname, maddr, maddr + msiz - 1);
+	printf("%s: using iomem 0x%x-0x%x\n", device_xname(&sc->sc_dev), maddr, maddr + msiz - 1);
     if (intrstr != NULL)
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev), intrstr);
 }
 
 CFATTACH_DECL(fea, sizeof(pdq_softc_t),

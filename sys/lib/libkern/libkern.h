@@ -1,4 +1,4 @@
-/*	$NetBSD: libkern.h,v 1.68 2007/02/21 23:00:06 thorpej Exp $	*/
+/*	$NetBSD: libkern.h,v 1.82 2008/09/08 23:36:55 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -43,25 +43,25 @@
 #define LIBKERN_BODY
 #endif
 
-LIBKERN_INLINE int imax __P((int, int)) __attribute__ ((unused));
-LIBKERN_INLINE int imin __P((int, int)) __attribute__ ((unused));
-LIBKERN_INLINE u_int max __P((u_int, u_int)) __attribute__ ((unused));
-LIBKERN_INLINE u_int min __P((u_int, u_int)) __attribute__ ((unused));
-LIBKERN_INLINE long lmax __P((long, long)) __attribute__ ((unused));
-LIBKERN_INLINE long lmin __P((long, long)) __attribute__ ((unused));
-LIBKERN_INLINE u_long ulmax __P((u_long, u_long)) __attribute__ ((unused));
-LIBKERN_INLINE u_long ulmin __P((u_long, u_long)) __attribute__ ((unused));
-LIBKERN_INLINE int abs __P((int)) __attribute__ ((unused));
+LIBKERN_INLINE int imax __P((int, int)) __unused;
+LIBKERN_INLINE int imin __P((int, int)) __unused;
+LIBKERN_INLINE u_int max __P((u_int, u_int)) __unused;
+LIBKERN_INLINE u_int min __P((u_int, u_int)) __unused;
+LIBKERN_INLINE long lmax __P((long, long)) __unused;
+LIBKERN_INLINE long lmin __P((long, long)) __unused;
+LIBKERN_INLINE u_long ulmax __P((u_long, u_long)) __unused;
+LIBKERN_INLINE u_long ulmin __P((u_long, u_long)) __unused;
+LIBKERN_INLINE int abs __P((int)) __unused;
 
-LIBKERN_INLINE int isspace __P((int)) __attribute__((__unused__));
-LIBKERN_INLINE int isascii __P((int)) __attribute__((__unused__));
-LIBKERN_INLINE int isupper __P((int)) __attribute__((__unused__));
-LIBKERN_INLINE int islower __P((int)) __attribute__((__unused__));
-LIBKERN_INLINE int isalpha __P((int)) __attribute__((__unused__));
-LIBKERN_INLINE int isdigit __P((int)) __attribute__((__unused__));
-LIBKERN_INLINE int isxdigit __P((int)) __attribute__((__unused__));
-LIBKERN_INLINE int toupper __P((int)) __attribute__((__unused__));
-LIBKERN_INLINE int tolower __P((int)) __attribute__((__unused__));
+LIBKERN_INLINE int isspace __P((int)) __unused;
+LIBKERN_INLINE int isascii __P((int)) __unused;
+LIBKERN_INLINE int isupper __P((int)) __unused;
+LIBKERN_INLINE int islower __P((int)) __unused;
+LIBKERN_INLINE int isalpha __P((int)) __unused;
+LIBKERN_INLINE int isdigit __P((int)) __unused;
+LIBKERN_INLINE int isxdigit __P((int)) __unused;
+LIBKERN_INLINE int toupper __P((int)) __unused;
+LIBKERN_INLINE int tolower __P((int)) __unused;
 
 #ifdef LIBKERN_BODY
 LIBKERN_INLINE int
@@ -179,10 +179,10 @@ tolower(int ch)
 #else
 #ifdef __STDC__
 #define	assert(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __assert("", __FILE__, __LINE__, #e))
+			    __kernassert("", __FILE__, __LINE__, #e))
 #else
 #define	assert(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __assert("", __FILE__, __LINE__, "e"))
+			    __kernassert("", __FILE__, __LINE__, "e"))
 #endif
 #endif
 
@@ -192,21 +192,31 @@ tolower(int ch)
 #endif
 #endif
 
+#define	CTASSERT(x)		_CTASSERT(x, __LINE__)
+#define	_CTASSERT(x, y)		__CTASSERT(x, y)
+#define	__CTASSERT(x, y)	typedef char __ctassert ## y[(x) ? 1 : -1];
+
 #ifndef DIAGNOSTIC
 #define _DIAGASSERT(a)	(void)0
 #ifdef lint
-#define	KASSERT(e)	/* NOTHING */
+#define	KASSERTMSG(e, msg)	/* NOTHING */
+#define	KASSERT(e)		/* NOTHING */
 #else /* !lint */
-#define	KASSERT(e)	((void)0)
+#define	KASSERTMSG(e, msg)	((void)0)
+#define	KASSERT(e)		((void)0)
 #endif /* !lint */
 #else /* DIAGNOSTIC */
 #define _DIAGASSERT(a)	assert(a)
+#define	KASSERTMSG(e, msg) do {		\
+	if (__predict_false((e)))	\
+		panic msg;		\
+	} while (/*CONSTCOND*/ 0)
 #ifdef __STDC__
 #define	KASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __assert("diagnostic ", __FILE__, __LINE__, #e))
+			    __kernassert("diagnostic ", __FILE__, __LINE__, #e))
 #else
 #define	KASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __assert("diagnostic ", __FILE__, __LINE__, "e"))
+			    __kernassert("diagnostic ", __FILE__, __LINE__,"e"))
 #endif
 #endif
 
@@ -219,10 +229,10 @@ tolower(int ch)
 #else
 #ifdef __STDC__
 #define	KDASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __assert("debugging ", __FILE__, __LINE__, #e))
+			    __kernassert("debugging ", __FILE__, __LINE__, #e))
 #else
 #define	KDASSERT(e)	(__predict_true((e)) ? (void)0 :		    \
-			    __assert("debugging ", __FILE__, __LINE__, "e"))
+			    __kernassert("debugging ", __FILE__, __LINE__, "e"))
 #endif
 #endif
 /*
@@ -235,9 +245,18 @@ tolower(int ch)
     ((size_t)(unsigned long)(&(((type *)0)->member)))
 #endif
 
+#define	MTPRNG_RLEN		624
+struct mtprng_state {
+	unsigned int mt_idx; 
+	uint32_t mt_elem[MTPRNG_RLEN];
+	uint32_t mt_count;
+	uint32_t mt_sparse[3];
+};
+
 /* Prototypes for non-quad routines. */
 /* XXX notyet #ifdef _STANDALONE */
 int	 bcmp __P((const void *, const void *, size_t));
+void 	 bcopy __P((const void *, void *, size_t));
 void	 bzero __P((void *, size_t));
 /* #endif */
 
@@ -281,12 +300,11 @@ char	*strstr __P((const char *, const char *));
  * ffs is an instruction on vax.
  */
 int	 ffs __P((int));
-#if __GNUC_PREREQ__(2, 95) && !defined(__vax__)
+#if __GNUC_PREREQ__(2, 95) && (!defined(__vax__) || __GNUC_PREREQ__(4,1))
 #define	ffs(x)		__builtin_ffs(x)
 #endif
 
-void	 __assert __P((const char *, const char *, int, const char *))
-	    __attribute__((__noreturn__));
+void	 __kernassert __P((const char *, const char *, int, const char *));
 unsigned int
 	bcdtobin __P((unsigned int));
 unsigned int
@@ -308,6 +326,10 @@ char	*initstate __P((unsigned long, char *, size_t));
 char	*setstate __P((char *));
 #endif /* SMALL_RANDOM */
 long	 random __P((void));
+void	 mtprng_init32(struct mtprng_state *, uint32_t);
+void	 mtprng_initarray(struct mtprng_state *, const uint32_t *, size_t);
+uint32_t mtprng_rawrandom(struct mtprng_state *);
+uint32_t mtprng_random(struct mtprng_state *);
 int	 scanc __P((u_int, const u_char *, const u_char *, int));
 int	 skpc __P((int, size_t, u_char *));
 int	 strcasecmp __P((const char *, const char *));

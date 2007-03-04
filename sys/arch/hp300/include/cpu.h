@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.49 2007/02/16 02:53:46 ad Exp $	*/
+/*	$NetBSD: cpu.h,v 1.59 2008/02/27 18:26:15 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1982, 1990, 1993
@@ -103,8 +103,10 @@
 #include <sys/cpu_data.h>
 struct cpu_info {
 	struct cpu_data ci_data;	/* MI per-cpu data */
+	cpuid_t	ci_cpuid;
 	int	ci_mtx_count;
 	int	ci_mtx_oldspl;
+	int	ci_want_resched;
 };
 
 extern struct cpu_info cpu_info_store;
@@ -139,7 +141,8 @@ struct clockframe {
 #define	CLKF_INTR(framep)	(((framep)->sr & PSL_M) == 0)
 #else
 /* but until we start using PSL_M, we have to do this instead */
-#define	CLKF_INTR(framep)	(0)	/* XXX */
+#include <machine/intr.h>
+#define	CLKF_INTR(framep)	(idepth > 1)	/* XXX */
 #endif
 
 
@@ -147,15 +150,16 @@ struct clockframe {
  * Preempt the current process if in interrupt from user mode,
  * or after the current trap/syscall if in system mode.
  */
-extern int want_resched;	/* resched() was called */
-#define	cpu_need_resched(ci)	{ want_resched++; aston(); }
+#define	cpu_need_resched(ci, flags)	\
+	do { ci->ci_want_resched = 1; aston(); } while (/* CONSTCOND */0)
 
 /*
  * Give a profiling tick to the current process when the user profiling
  * buffer pages are invalid.  On the hp300, request an ast to send us
  * through trap, marking the proc as needing a profiling tick.
  */
-#define	cpu_need_proftick(l)	{ (l)->l_flag |= LP_OWEUPC; aston(); }
+#define	cpu_need_proftick(l)	\
+	do { (l)->l_flag |= LP_OWEUPC; aston(); } while (/* CONSTCOND */0)
 
 /*
  * Notify the current process (p) that it has a signal pending,
@@ -174,32 +178,21 @@ extern int astpending;		/* need to trap before returning to user mode */
 #define	CPU_CONSDEV		1	/* dev_t: console terminal device */
 #define	CPU_MAXID		2	/* number of valid machdep ids */
 
-#define CTL_MACHDEP_NAMES { \
-	{ 0, 0 }, \
-	{ "console_device", CTLTYPE_STRUCT }, \
-}
-
 /*
  * The rest of this should probably be moved to <machine/hp300spu.h>,
  * although some of it could probably be put into generic 68k headers.
  */
 
 #ifdef _KERNEL
-extern	char *intiobase, *intiolimit;
+extern	uint8_t *intiobase, *intiolimit, *extiobase;
 extern	void (*vectab[])(void);
 
-struct frame;
 struct fpframe;
-struct pcb;
 
 /* locore.s functions */
 void	m68881_save(struct fpframe *);
 void	m68881_restore(struct fpframe *);
-int	suline(caddr_t, caddr_t);
-void	savectx(struct pcb *);
-void	switch_exit(struct lwp *);
-void	switch_lwp_exit(struct lwp *);
-void	proc_trampoline(void);
+int	suline(void *, void *);
 void	loadustp(int);
 
 void	doboot(void) __attribute__((__noreturn__));
@@ -210,16 +203,8 @@ void	ecacheoff(void);
 void	hp300_calibrate_delay(void);
 
 /* machdep.c functions */
-int	badaddr(caddr_t);
-int	badbaddr(caddr_t);
-
-/* sys_machdep.c functions */
-int	cachectl1(unsigned long, vaddr_t, size_t, struct proc *);
-
-/* vm_machdep.c functions */
-void	physaccess(caddr_t, caddr_t, int, int);
-void	physunaccess(caddr_t, int);
-int	kvtop(caddr_t);
+int	badaddr(void *);
+int	badbaddr(void *);
 
 /* what is this supposed to do? i.e. how is it different than startrtclock? */
 #define	enablertclock()
@@ -244,10 +229,10 @@ int	kvtop(caddr_t);
  * conversion between physical and kernel virtual addresses is easy.
  */
 #define	ISIIOVA(va) \
-	((char *)(va) >= intiobase && (char *)(va) < intiolimit)
-#define	IIOV(pa)	((int)(pa)-INTIOBASE+(int)intiobase)
-#define	IIOP(va)	((int)(va)-(int)intiobase+INTIOBASE)
-#define	IIOPOFF(pa)	((int)(pa)-INTIOBASE)
+	((uint8_t *)(va) >= intiobase && (uint8_t *)(va) < intiolimit)
+#define	IIOV(pa)	((paddr_t)(pa)-INTIOBASE+(vaddr_t)intiobase)
+#define	IIOP(va)	((vaddr_t)(va)-(vaddr_t)intiobase+INTIOBASE)
+#define	IIOPOFF(pa)	((paddr_t)(pa)-INTIOBASE)
 #define	IIOMAPSIZE	btoc(INTIOTOP-INTIOBASE)	/* 2mb */
 
 /*

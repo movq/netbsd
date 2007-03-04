@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.h,v 1.67 2007/02/16 02:53:44 ad Exp $ */
+/* $NetBSD: cpu.h,v 1.74 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -129,7 +122,7 @@
 
 #ifdef _KERNEL
 #include <sys/cpu_data.h>
-#include <sys/cc_microtime.h>
+#include <sys/cctr.h>
 #include <machine/frame.h>
 
 /*
@@ -142,11 +135,17 @@ struct mchkinfo {
 
 struct cpu_info {
 	/*
+	 * Private members accessed in assembly with 8 bit offsets.
+	 */
+	struct lwp *ci_fpcurlwp;	/* current owner of the FPU */
+	paddr_t ci_curpcb;		/* PA of current HW PCB */
+
+	/*
 	 * Public members.
 	 */
 	struct lwp *ci_curlwp;		/* current owner of the processor */
 	struct cpu_data ci_data;	/* MI per-cpu data */
-	struct cc_microtime_state ci_cc;/* cc_microtime state */
+	struct cctr_state ci_cc;	/* cycle counter state */
 	struct cpu_info *ci_next;	/* next cpu_info structure */
 	int ci_mtx_count;
 	int ci_mtx_oldspl;
@@ -156,14 +155,11 @@ struct cpu_info {
 	 */
 	struct mchkinfo ci_mcinfo;	/* machine check info */
 	cpuid_t ci_cpuid;		/* our CPU ID */
-	struct lwp *ci_fpcurlwp;	/* current owner of the FPU */
-	paddr_t ci_curpcb;		/* PA of current HW PCB */
-	struct pcb *ci_idle_pcb;	/* our idle PCB */
-	paddr_t ci_idle_pcb_paddr;	/* PA of idle PCB */
 	struct cpu_softc *ci_softc;	/* pointer to our device */
 	u_long ci_want_resched;		/* preempt current process */
 	u_long ci_intrdepth;		/* interrupt trap depth */
 	struct trapframe *ci_db_regs;	/* registers for debuggers */
+	uint64_t ci_pcc_freq;		/* cpu cycles/second */
 
 #if defined(MULTIPROCESSOR)
 	volatile u_long ci_flags;	/* flags; see below */
@@ -237,17 +233,6 @@ struct clockframe {
 #define	LWP_PC(p)		((l)->l_md.md_tf->tf_regs[FRAME_PC])
 
 /*
- * Preempt the current process if in interrupt from user mode,
- * or after the current trap/syscall if in system mode.
- */
-#define	cpu_need_resched(ci)						\
-do {									\
-	(ci)->ci_want_resched = 1;					\
-	if ((ci)->ci_curlwp != NULL)					\
-		aston((ci)->ci_curlwp); 	      			\
-} while (/*CONSTCOND*/0)
-
-/*
  * Give a profiling tick to the current process when the user profiling
  * buffer pages are invalid.  On the Alpha, request an AST to send us
  * through trap, marking the proc as needing a profiling tick.
@@ -285,17 +270,6 @@ do {									\
 #define	CPU_FP_SYNC_COMPLETE	7	/* int: always fixup sync fp traps */
 #define	CPU_MAXID		8	/* 7 valid machdep IDs */
 
-#define	CTL_MACHDEP_NAMES { \
-	{ 0, 0 }, \
-	{ "console_device", CTLTYPE_STRUCT }, \
-	{ "root_device", CTLTYPE_STRING }, \
-	{ "unaligned_print", CTLTYPE_INT }, \
-	{ "unaligned_fix", CTLTYPE_INT }, \
-	{ "unaligned_sigbus", CTLTYPE_INT }, \
-	{ "booted_kernel", CTLTYPE_STRING }, \
-	{ "fp_sync_complete", CTLTYPE_INT }, \
-}
-
 #ifdef _KERNEL
 
 struct pcb;
@@ -305,7 +279,8 @@ struct rpb;
 struct trapframe;
 
 int	badaddr(void *, size_t);
-#define microtime(tv)	cc_microtime(tv)
+
+#define	cpu_idle()	/* nothing */
 
 #endif /* _KERNEL */
 #endif /* _ALPHA_CPU_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: utoppy.c,v 1.8 2006/11/16 01:33:27 christos Exp $	*/
+/*	$NetBSD: utoppy.c,v 1.12 2008/05/24 16:40:58 cube Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: utoppy.c,v 1.8 2006/11/16 01:33:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: utoppy.c,v 1.12 2008/05/24 16:40:58 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -196,9 +189,6 @@ USB_MATCH(utoppy)
 {
 	USB_MATCH_START(utoppy, uaa);
 
-	if (uaa->iface == NULL)
-		return (UMATCH_NONE);
-
 	if (uaa->vendor == USB_VENDOR_TOPFIELD &&
 	    uaa->product == USB_PRODUCT_TOPFIELD_TF5000PVR)
 		return (UMATCH_VENDOR_PRODUCT);
@@ -210,25 +200,34 @@ USB_ATTACH(utoppy)
 {
 	USB_ATTACH_START(utoppy, sc, uaa);
 	usbd_device_handle dev = uaa->device;
+	usbd_interface_handle iface;
 	usb_endpoint_descriptor_t *ed;
 	char *devinfop;
 	u_int8_t epcount;
 	int i;
 
+	sc->sc_dev = self;
+
 	devinfop = usbd_devinfo_alloc(dev, 0);
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
 	sc->sc_dying = 0;
 	sc->sc_refcnt = 0;
 	sc->sc_udev = dev;
 
+	if (usbd_set_config_index(dev, 0, 1)
+	    || usbd_device2interface_handle(dev, 0, &iface)) {
+		aprint_error_dev(self, "Configuration failed\n");
+		USB_ATTACH_ERROR_RETURN;
+	}
+
 	epcount = 0;
-	(void) usbd_endpoint_count(uaa->iface, &epcount);
+	(void) usbd_endpoint_count(iface, &epcount);
 	if (epcount != UTOPPY_NUMENDPOINTS) {
-		printf("%s: Expected %d endpoints, got %d\n",
-		    USBDEVNAME(sc->sc_dev), UTOPPY_NUMENDPOINTS, epcount);
+		aprint_error_dev(self, "Expected %d endpoints, got %d\n",
+		    UTOPPY_NUMENDPOINTS, epcount);
 		USB_ATTACH_ERROR_RETURN;
 	}
 
@@ -236,10 +235,9 @@ USB_ATTACH(utoppy)
 	sc->sc_out = -1;
 
 	for (i = 0; i < epcount; i++) {
-		ed = usbd_interface2endpoint_descriptor(uaa->iface, i);
+		ed = usbd_interface2endpoint_descriptor(iface, i);
 		if (ed == NULL) {
-			printf("%s: couldn't get ep %d\n",
-			    USBDEVNAME(sc->sc_dev), i);
+			aprint_error_dev(self, "couldn't get ep %d\n", i);
 			USB_ATTACH_ERROR_RETURN;
 		}
 
@@ -253,40 +251,36 @@ USB_ATTACH(utoppy)
 	}
 
 	if (sc->sc_out == -1 || sc->sc_in == -1) {
-		printf("%s: could not find bulk in/out endpoints\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self,
+		    "could not find bulk in/out endpoints\n");
 		sc->sc_dying = 1;
 		USB_ATTACH_ERROR_RETURN;
 	}
 
-	sc->sc_iface = uaa->iface;
+	sc->sc_iface = iface;
 	sc->sc_udev = dev;
 
 	sc->sc_out_xfer = usbd_alloc_xfer(sc->sc_udev);
 	if (sc->sc_out_xfer == NULL) {
-		printf("%s: could not allocate bulk out xfer\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "could not allocate bulk out xfer\n");
 		goto fail0;
 	}
 
 	sc->sc_out_buf = usbd_alloc_buffer(sc->sc_out_xfer, UTOPPY_FRAG_SIZE);
 	if (sc->sc_out_buf == NULL) {
-		printf("%s: could not allocate bulk out buffer\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "could not allocate bulk out buffer\n");
 		goto fail1;
 	}
 
 	sc->sc_in_xfer = usbd_alloc_xfer(sc->sc_udev);
 	if (sc->sc_in_xfer == NULL) {
-		printf("%s: could not allocate bulk in xfer\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "could not allocate bulk in xfer\n");
 		goto fail1;
 	}
 
 	sc->sc_in_buf = usbd_alloc_buffer(sc->sc_in_xfer, UTOPPY_FRAG_SIZE);
 	if (sc->sc_in_buf == NULL) {
-		printf("%s: could not allocate bulk in buffer\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "could not allocate bulk in buffer\n");
 		goto fail2;
 	}
 
@@ -308,7 +302,7 @@ USB_ATTACH(utoppy)
 int
 utoppy_activate(device_ptr_t self, enum devact act)
 {
-	struct utoppy_softc *sc = (struct utoppy_softc *)self;
+	struct utoppy_softc *sc = device_private(self);
 
 	switch (act) {
 	case DVACT_ACTIVATE:
@@ -535,7 +529,7 @@ utoppy_bulk_transfer(usbd_xfer_handle xfer, usbd_pipe_handle pipe,
 		splx(s);
 		return (err);
 	}
-	error = tsleep((caddr_t)xfer, PZERO, lbl, 0);
+	error = tsleep((void *)xfer, PZERO, lbl, 0);
 	splx(s);
 	if (error) {
 		usbd_abort_pipe(pipe);
@@ -1658,7 +1652,7 @@ utoppywrite(dev_t dev, struct uio *uio, int flags)
 }
 
 int
-utoppyioctl(dev_t dev, u_long cmd, caddr_t data, int flag,
+utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
     struct lwp *l)
 {
 	struct utoppy_softc *sc;

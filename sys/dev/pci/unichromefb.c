@@ -1,7 +1,7 @@
-/* $NetBSD: unichromefb.c,v 1.5 2007/01/12 04:20:33 ober Exp $ */
+/* $NetBSD: unichromefb.c,v 1.14 2008/05/05 11:42:45 jmcneill Exp $ */
 
 /*-
- * Copyright (c) 2006 Jared D. McNeill <jmcneill@invisible.ca>
+ * Copyright (c) 2006, 2008 Jared D. McNeill <jmcneill@invisible.ca>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,12 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by Jared D. McNeill.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -57,18 +51,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: unichromefb.c,v 1.5 2007/01/12 04:20:33 ober Exp $");
+__KERNEL_RCSID(0, "$NetBSD: unichromefb.c,v 1.14 2008/05/05 11:42:45 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcidevs.h>
+#include <dev/pci/pciio.h>
 
 #include <dev/wscons/wsdisplayvar.h>
 #include <dev/wscons/wsconsio.h>
@@ -98,17 +93,23 @@ __KERNEL_RCSID(0, "$NetBSD: unichromefb.c,v 1.5 2007/01/12 04:20:33 ober Exp $")
 #define UNICHROMEFB_HEIGHT	1024
 
 struct unichromefb_softc {
-	struct device		sc_dev;
+	device_t		sc_dev;
 	struct vcons_data	sc_vd;
 	void *			sc_fbbase;
 	unsigned int		sc_fbaddr;
 	unsigned int		sc_fbsize;
+	bus_addr_t		sc_mmiobase;
+	bus_size_t		sc_mmiosize;
 
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 
 	bus_space_tag_t		sc_memt;
 	bus_space_handle_t	sc_memh;
+	bus_space_tag_t		sc_apmemt;
+	bus_space_handle_t	sc_apmemh;
+
+	struct pci_attach_args	sc_pa;
 
 	int			sc_width;
 	int			sc_height;
@@ -123,6 +124,10 @@ struct unichromefb_softc {
 static int unichromefb_match(struct device *, struct cfdata *, void *);
 static void unichromefb_attach(struct device *, struct device *, void *);
 
+static int unichromefb_drm_print(void *, const char *);
+static int unichromefb_drm_unmap(struct unichromefb_softc *);
+static int unichromefb_drm_map(struct unichromefb_softc *);
+
 struct wsscreen_descr unichromefb_stdscreen = {
 	"fb",
 	0, 0,
@@ -131,7 +136,7 @@ struct wsscreen_descr unichromefb_stdscreen = {
 	WSSCREEN_WSCOLORS, NULL,
 };
 
-static int	unichromefb_ioctl(void *, void *, u_long, caddr_t, int,
+static int	unichromefb_ioctl(void *, void *, u_long, void *, int,
 				  struct lwp *);
 static paddr_t	unichromefb_mmap(void *, void *, off_t, int);
 
@@ -219,7 +224,7 @@ struct wsscreen_list unichromefb_screenlist = {
 	_unichromefb_scrlist
 };
 
-CFATTACH_DECL(unichromefb, sizeof(struct unichromefb_softc),
+CFATTACH_DECL_NEW(unichromefb, sizeof(struct unichromefb_softc),
     unichromefb_match, unichromefb_attach, NULL, NULL);
 
 static int
@@ -247,19 +252,16 @@ unichromefb_match(struct device *parent, struct cfdata *match, void *opaque)
 static void
 unichromefb_attach(struct device *parent, struct device *self, void *opaque)
 {
-	struct unichromefb_softc *sc;
+	struct unichromefb_softc *sc = device_private(self);
 	struct pci_attach_args *pa;
 	struct rasops_info *ri;
 	struct wsemuldisplaydev_attach_args aa;
-	bus_space_handle_t ap_memh;
 	uint8_t val;
-	bus_addr_t mmiobase;
-	bus_size_t mmiosize;
 	long defattr;
 
-	sc = (struct unichromefb_softc *)self;
 	pa = (struct pci_attach_args *)opaque;
 
+	sc->sc_dev = self;
 	sc->sc_width = UNICHROMEFB_WIDTH;
 	sc->sc_height = UNICHROMEFB_HEIGHT;
 	sc->sc_depth = UNICHROMEFB_DEPTH;
@@ -268,6 +270,7 @@ unichromefb_attach(struct device *parent, struct device *self, void *opaque)
 	sc->sc_wsmode = WSDISPLAYIO_MODE_EMUL;
 
 	sc->sc_iot = pa->pa_iot;
+	sc->sc_pa = *pa;
 
 #if NVGA > 0
 	/* XXX vga_cnattach claims the I/O registers that we need;
@@ -281,23 +284,24 @@ unichromefb_attach(struct device *parent, struct device *self, void *opaque)
 		return;
 	}
 
-	sc->sc_memt = pa->pa_memt;
+	sc->sc_apmemt = pa->pa_memt;
 	val = uni_rd(sc, VIASR, SR30);
 	sc->sc_fbaddr = val << 24;
 	val = uni_rd(sc, VIASR, SR39);
 	sc->sc_fbsize = val * (4*1024*1024);
 	if (sc->sc_fbsize < 16*1024*1024 || sc->sc_fbsize > 64*1024*1024)
 		sc->sc_fbsize = 16*1024*1024;
-	if (bus_space_map(sc->sc_memt, sc->sc_fbaddr, sc->sc_fbsize,
-	    BUS_SPACE_MAP_LINEAR, &ap_memh)) {
+	if (bus_space_map(sc->sc_apmemt, sc->sc_fbaddr, sc->sc_fbsize,
+	    BUS_SPACE_MAP_LINEAR, &sc->sc_apmemh)) {
 		aprint_error(": failed to map aperture at 0x%08x/0x%x\n",
 		    sc->sc_fbaddr, sc->sc_fbsize);
 		return;
 	}
-	sc->sc_fbbase = (caddr_t)bus_space_vaddr(sc->sc_memt, ap_memh);
+	sc->sc_fbbase = (void *)bus_space_vaddr(sc->sc_apmemt, sc->sc_apmemh);
 
 	if (pci_mapreg_map(pa, 0x14, PCI_MAPREG_TYPE_MEM, 0,
-	    &sc->sc_memt, &sc->sc_memh, &mmiobase, &mmiosize)) {
+	    &sc->sc_memt, &sc->sc_memh, &sc->sc_mmiobase,
+	    &sc->sc_mmiosize)) {
 		sc->sc_accel = 0;
 		aprint_error(": failed to map MMIO registers\n");
 	} else {
@@ -308,9 +312,9 @@ unichromefb_attach(struct device *parent, struct device *self, void *opaque)
 	aprint_normal(": VIA UniChrome frame buffer\n");
 
 	if (sc->sc_accel)
-		aprint_normal("%s: MMIO @0x%08x/0x%x\n",
-		    sc->sc_dev.dv_xname, (uint32_t)mmiobase,
-		    (uint32_t)mmiosize);
+		aprint_normal_dev(self, "MMIO @0x%08x/0x%x\n",
+		    (uint32_t)sc->sc_mmiobase,
+		    (uint32_t)sc->sc_mmiosize);
 
 	ri = &unichromefb_console_screen.scr_ri;
 	memset(ri, 0, sizeof(struct rasops_info));
@@ -327,7 +331,7 @@ unichromefb_attach(struct device *parent, struct device *self, void *opaque)
 		uni_fillrect(sc, 0, 0, sc->sc_width, sc->sc_height, 0);
 	}
 
-	aprint_normal("%s: FB @0x%08x (%dx%dx%d)\n", sc->sc_dev.dv_xname,
+	aprint_normal_dev(self, "FB @0x%08x (%dx%dx%d)\n",
 	       sc->sc_fbaddr, sc->sc_width, sc->sc_height, sc->sc_depth);
 
 	unichromefb_console_screen.scr_flags |= VCONS_SCREEN_IS_STATIC;
@@ -348,11 +352,72 @@ unichromefb_attach(struct device *parent, struct device *self, void *opaque)
 
 	config_found(self, &aa, wsemuldisplaydevprint);
 
+	config_found_ia(self, "drm", opaque, unichromefb_drm_print);
+
 	return;
 }
 
 static int
-unichromefb_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag,
+unichromefb_drm_print(void *opaque, const char *pnp)
+{
+	if (pnp)
+		aprint_normal("drm at %s", pnp);
+
+	return UNCONF;
+}
+
+static int
+unichromefb_drm_unmap(struct unichromefb_softc *sc)
+{
+	aprint_debug_dev(sc->sc_dev, "releasing bus resources\n");
+
+	bus_space_unmap(sc->sc_apmemt, sc->sc_apmemh, sc->sc_fbsize);
+	bus_space_unmap(sc->sc_memt, sc->sc_memh, sc->sc_mmiosize);
+	bus_space_unmap(sc->sc_iot, sc->sc_ioh, 0x20);
+
+	return 0;
+}
+
+static int
+unichromefb_drm_map(struct unichromefb_softc *sc)
+{
+	int rv;
+
+	rv = bus_space_map(sc->sc_iot, VIA_REGBASE, 0x20, 0,
+	    &sc->sc_ioh);
+	if (rv) {
+		aprint_error_dev(sc->sc_dev, "failed to map I/O registers\n");
+		return rv;
+	}
+	rv = bus_space_map(sc->sc_apmemt, sc->sc_fbaddr, sc->sc_fbsize,
+	    BUS_SPACE_MAP_LINEAR, &sc->sc_apmemh);
+	if (rv) {
+		aprint_error_dev(sc->sc_dev,
+		    "failed to map aperture at 0x%08x/0x%x\n",
+		    sc->sc_fbaddr, sc->sc_fbsize);
+		return rv;
+	}
+	sc->sc_fbbase = (void *)bus_space_vaddr(sc->sc_apmemt, sc->sc_apmemh);
+	rv = pci_mapreg_map(&sc->sc_pa, 0x14, PCI_MAPREG_TYPE_MEM, 0,
+	    &sc->sc_memt, &sc->sc_memh, &sc->sc_mmiobase,
+	    &sc->sc_mmiosize);
+	if (rv) {
+		aprint_error_dev(sc->sc_dev, "failed to map MMIO registers\n");
+		sc->sc_accel = 0;
+	}
+
+	uni_setmode(sc, UNICHROMEFB_MODE, sc->sc_depth);
+	uni_init_dac(sc, IGA1);
+	if (sc->sc_accel)
+		uni_init_accel(sc);
+
+	aprint_debug_dev(sc->sc_dev, "re-acquired bus resources\n");
+
+	return 0;
+}
+
+static int
+unichromefb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 		  struct lwp *l)
 {
 	struct vcons_data *vd;
@@ -392,8 +457,15 @@ unichromefb_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag,
 			int new_mode = *(int *)data;
 			if (new_mode != sc->sc_wsmode) {
 				sc->sc_wsmode = new_mode;
-				if (new_mode == WSDISPLAYIO_MODE_EMUL)
+				switch (new_mode) {
+				case WSDISPLAYIO_MODE_EMUL:
+					unichromefb_drm_map(sc);
 					vcons_redraw_screen(vd->active);
+					break;
+				default:
+					unichromefb_drm_unmap(sc);
+					break;
+				}
 			}
 		}
 		return 0;
@@ -401,6 +473,12 @@ unichromefb_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag,
 		return ENODEV;
 	case WSDISPLAYIO_SPROGRESS:
 		return ENODEV;
+
+	/* PCI config read/write passthrough. */
+	case PCI_IOC_CFGREAD:
+	case PCI_IOC_CFGWRITE:
+		return (pci_devioctl(sc->sc_pa.pa_pc, sc->sc_pa.pa_tag,
+		    cmd, data, flag, l));
 	}
 
 	return EPASSTHROUGH;
@@ -513,7 +591,7 @@ uni_wr_x(struct unichromefb_softc *sc, struct io_reg *tbl, int num)
 	for (i = 0; i < num; i++) {
 		bus_space_write_1(sc->sc_iot, sc->sc_ioh, tbl[i].port,
 		    tbl[i].index);
-		tmp = bus_space_read_1(sc->sc_iot, sc->sc_iot,
+		tmp = bus_space_read_1(sc->sc_iot, sc->sc_ioh,
 		    tbl[i].port + 1);
 		tmp = (tmp & (~tbl[i].mask)) | tbl[i].value;
 		bus_space_write_1(sc->sc_iot, sc->sc_ioh, tbl[i].index + 1,
@@ -546,7 +624,8 @@ uni_setmode(struct unichromefb_softc *sc, int idx, int bpp)
 	/* XXX */
 	vtbl = uni_getmode(idx);
 	if (vtbl == NULL)
-		panic("%s: unsupported mode: %d\n", sc->sc_dev.dv_xname, idx);
+		panic("%s: unsupported mode: %d\n",
+		    device_xname(sc->sc_dev), idx);
 
 	crt = vtbl->crtc;
 
@@ -813,14 +892,15 @@ uni_load_crtc(struct unichromefb_softc *sc,
 				reg = iga1_crtc_reg.ver_sync_end.reg;
 				break;
 			default:
-				printf("%s: unknown index %d while setting up CRTC\n",
-				    sc->sc_dev.dv_xname, i);
+				aprint_error_dev(sc->sc_dev,
+				    "unknown index %d while setting up CRTC\n",
+				    i);
 				break;
 			}
 			break;
 		case IGA2:
-			printf("%s: %s: IGA2 not supported\n",
-			    sc->sc_dev.dv_xname, __func__);
+			aprint_error_dev(sc->sc_dev, "%s: IGA2 not supported\n",
+			    __func__);
 			break;
 		}
 
@@ -895,7 +975,7 @@ uni_load_offset(struct unichromefb_softc *sc, int haddr, int bpp, int iga)
 		    VIACR);
 		break;
 	default:
-		printf("%s: %s: only IGA1 is supported\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(sc->sc_dev, "%s: only IGA1 is supported\n",
 		    __func__);
 		break;
 	}
@@ -916,7 +996,7 @@ uni_load_fetchcnt(struct unichromefb_softc *sc, int haddr, int bpp, int iga)
 		    VIASR);
 		break;
 	default:
-		printf("%s: %s: only IGA1 is supported\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(sc->sc_dev, "%s: only IGA1 is supported\n",
 		    __func__);
 		break;
 	}
@@ -976,7 +1056,7 @@ uni_load_fifo(struct unichromefb_softc *sc, int iga, int horact, int veract)
 
 		break;
 	default:
-		printf("%s: %s: only IGA1 is supported\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(sc->sc_dev, "%s: only IGA1 is supported\n",
 		    __func__);
 		break;
 	}
@@ -1000,12 +1080,12 @@ uni_set_depth(struct unichromefb_softc *sc, int bpp, int iga)
 			uni_wr_mask(sc, VIASR, SR15, 0x22, 0xfe);
 			break;
 		default:
-			printf("%s: %s: mode (%d) unsupported\n",
-			    sc->sc_dev.dv_xname, __func__, bpp);
+			aprint_error_dev(sc->sc_dev,
+			    "%s: mode (%d) unsupported\n", __func__, bpp);
 		}
 		break;
 	default:
-		printf("%s: %s: only IGA1 is supported\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(sc->sc_dev, "%s: only IGA1 is supported\n",
 		    __func__);
 		break;
 	}
@@ -1023,8 +1103,7 @@ uni_get_clkval(struct unichromefb_softc *sc, int clk)
 		}
 	}
 
-	aprint_error("%s: can't find matching PLL value\n",
-	    sc->sc_dev.dv_xname);
+	aprint_error_dev(sc->sc_dev, "can't find matching PLL value\n");
 
 	return 0;
 }
@@ -1045,7 +1124,7 @@ uni_set_vclk(struct unichromefb_softc *sc, uint32_t clk, int iga)
 		uni_wr(sc, VIASR, SR46, clk % 0x100);
 		break;
 	default:
-		printf("%s: %s: only IGA1 is supported\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(sc->sc_dev, "%s: only IGA1 is supported\n",
 		    __func__);
 		break;
 	}
@@ -1181,7 +1260,7 @@ uni_wait_idle(struct unichromefb_softc *sc)
 		;
 
 	if (loop >= MAXLOOP)
-		aprint_error("%s: engine stall\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "engine stall\n");
 
 	return;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: sector.c,v 1.3 2007/02/22 05:31:53 thorpej Exp $	*/
+/*	$NetBSD: sector.c,v 1.7 2008/04/28 20:23:18 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sector.c,v 1.3 2007/02/22 05:31:53 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sector.c,v 1.7 2008/04/28 20:23:18 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,7 +63,7 @@ sector_fini(void *self)
 {
 	struct sector_rw *rw = self;
 
-	brelse(rw->buf);
+	brelse(rw->buf, 0);
 	rw->busy = false;
 }
 
@@ -98,7 +91,7 @@ sector_read(void *self, uint8_t *buf, daddr_t sector)
 	b->b_blkno = sector;
 	b->b_cylinder = sector / 100;
 	b->b_bcount = DEV_BSIZE;
-	b->b_flags &= ~(B_DONE);
+	b->b_oflags &= ~(BO_DONE);
 	b->b_flags |= B_READ;
 	rw->strategy(b);
 
@@ -134,7 +127,8 @@ sector_write(void *self, uint8_t *buf, daddr_t sector)
 	b->b_blkno = sector;
 	b->b_cylinder = sector / 100;
 	b->b_bcount = DEV_BSIZE;
-	b->b_flags &= ~(B_READ | B_DONE);
+	b->b_flags &= ~(B_READ);
+	b->b_oflags &= ~(BO_DONE);
 	b->b_flags |= B_WRITE;
 	memcpy(b->b_data, buf, DEV_BSIZE);
 	rw->strategy(b);

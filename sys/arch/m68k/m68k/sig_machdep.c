@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_machdep.c,v 1.33 2007/02/09 21:55:05 ad Exp $	*/
+/*	$NetBSD: sig_machdep.c,v 1.39 2008/10/18 13:38:42 martin Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.33 2007/02/09 21:55:05 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.39 2008/10/18 13:38:42 martin Exp $");
 
 #include "opt_compat_netbsd.h"
 
@@ -88,6 +88,8 @@ __KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.33 2007/02/09 21:55:05 ad Exp $");
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/ras.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
 #include <sys/ucontext.h>
@@ -100,6 +102,7 @@ __KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.33 2007/02/09 21:55:05 ad Exp $");
 #include <machine/frame.h>
 
 #include <m68k/m68k.h>
+#include <m68k/saframe.h>
 
 extern short exframesize[];
 struct fpframe m68k_cached_fpu_idle_frame;
@@ -200,15 +203,15 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	kf.sf_si._info = ksi->ksi_info;
 	kf.sf_uc.uc_flags = _UC_SIGMASK;
 	kf.sf_uc.uc_sigmask = *mask;
-	kf.sf_uc.uc_link = NULL;
+	kf.sf_uc.uc_link = l->l_ctxlink;
 	kf.sf_uc.uc_flags |= (l->l_sigstk.ss_flags & SS_ONSTACK)
 	    ? _UC_SETSTACK : _UC_CLRSTACK;
 	memset(&kf.sf_uc.uc_stack, 0, sizeof(kf.sf_uc.uc_stack));
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	cpu_getmcontext(l, &kf.sf_uc.uc_mcontext, &kf.sf_uc.uc_flags);
 	error = copyout(&kf, fp, sizeof(kf));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		/*
@@ -236,6 +239,36 @@ sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	else
 #endif
 		sendsig_siginfo(ksi, mask);
+}
+
+void
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted, void *sas,
+    void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct saframe *sfp, sf;
+	struct frame *frame;
+
+	frame = (struct frame *)l->l_md.md_regs;
+
+	/* Finally, copy out the rest of the frame */
+	sf.sa_ra = 0;
+	sf.sa_type = type;
+	sf.sa_sas = sas;
+	sf.sa_events = nevents;
+	sf.sa_interrupted = ninterrupted;
+	sf.sa_arg = ap;
+
+	sfp = (struct saframe *)sp - 1;
+	if (copyout(&sf, sfp, sizeof(sf)) != 0) {
+		/* Copying onto the stack didn't work. Die. */
+		sigexit(l, SIGILL);
+		/* NOTREACHED */
+	}
+
+	frame->f_pc = (int)upcall;
+	frame->f_regs[SP] = (int) sfp;
+	frame->f_regs[A6] = 0; /* indicate call-frame-top to debuggers */
+	frame->f_sr &= ~PSL_T;
 }
 
 void
@@ -267,7 +300,7 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, u_int *flags)
 	gr[_REG_PC] = frame->f_pc;
 
 	if ((ras_pc = (__greg_t)ras_lookup(l->l_proc,
-	    (caddr_t) gr[_REG_PC])) != -1)
+	    (void *) gr[_REG_PC])) != -1)
 		gr[_REG_PC] = ras_pc;
 
 	*flags |= _UC_CPU;
@@ -430,12 +463,12 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, u_int flags)
 			m68881_restore(fpf);
 	}
 
-	mutex_enter(&l->l_proc->p_smutex);
+	mutex_enter(l->l_proc->p_lock);
 	if (flags & _UC_SETSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
 	if (flags & _UC_CLRSTACK)
 		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
-	mutex_exit(&l->l_proc->p_smutex);
+	mutex_exit(l->l_proc->p_lock);
 
 	return 0;
 }

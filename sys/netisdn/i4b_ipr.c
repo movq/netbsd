@@ -27,7 +27,7 @@
  *	i4b_ipr.c - isdn4bsd IP over raw HDLC ISDN network driver
  *	---------------------------------------------------------
  *
- *	$Id: i4b_ipr.c,v 1.25 2007/02/20 07:43:28 he Exp $
+ *	$Id: i4b_ipr.c,v 1.29 2008/02/07 01:22:03 dyoung Exp $
  *
  * $FreeBSD$
  *
@@ -59,7 +59,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.25 2007/02/20 07:43:28 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.29 2008/02/07 01:22:03 dyoung Exp $");
 
 #include "irip.h"
 #include "opt_irip.h"
@@ -146,7 +146,7 @@ __KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.25 2007/02/20 07:43:28 he Exp $");
 #include <netisdn/i4b_l4.h>
 
 #ifndef __FreeBSD__
-#include <machine/cpu.h> /* For softnet */
+#include <sys/cpu.h> /* For softnet */
 #endif
 
 #ifdef __FreeBSD__
@@ -245,10 +245,10 @@ enum ipr_states {
 #endif
 PDEVSTATIC void iripattach(void *);
 PSEUDO_SET(iripattach, i4b_ipr);
-static int irpioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, caddr_t data);
+static int irpioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, void *data);
 #else
 PDEVSTATIC void iripattach __P((void));
-static int iripioctl(struct ifnet *ifp, u_long cmd, caddr_t data);
+static int iripioctl(struct ifnet *ifp, u_long cmd, void *data);
 #endif
 
 #ifdef __bsdi__
@@ -332,7 +332,7 @@ iripattach()
 #endif
 
 #if defined(__NetBSD__) && __NetBSD_Version__ >= 104230000
-		callout_init(&sc->sc_callout);
+		callout_init(&sc->sc_callout, 0);
 #endif
 
 		sc->sc_if.if_mtu = I4BIPRMTU;
@@ -562,10 +562,10 @@ iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
  *---------------------------------------------------------------------------*/
 #ifdef __FreeBSD__
 static int
-iripioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, caddr_t data)
+iripioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, void *data)
 #else
 static int
-iripioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+iripioctl(struct ifnet *ifp, u_long cmd, void *data)
 #endif
 {
 #if defined(__FreeBSD__) || defined(__bsdi__)
@@ -622,8 +622,8 @@ iripioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 				error = EINVAL;
 			else if(ifr->ifr_mtu < I4BIPRMINMTU)
 				error = EINVAL;
-			else
-				ifp->if_mtu = ifr->ifr_mtu;
+			else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
+				error = 0;
 			break;
 #endif /* __OPENBSD__ */
 

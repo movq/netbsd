@@ -1,4 +1,4 @@
-/* $NetBSD: compat_16_machdep.c,v 1.10 2007/02/09 21:55:00 ad Exp $ */
+/* $NetBSD: compat_16_machdep.c,v 1.14 2008/04/28 20:23:10 martin Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -92,7 +85,7 @@
 #include <machine/cpu.h>
 #include <machine/reg.h>
 
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.10 2007/02/09 21:55:00 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.14 2008/04/28 20:23:10 martin Exp $");
 
 
 #ifdef DEBUG
@@ -169,9 +162,9 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 #endif
 
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
-	error = copyout(&frame, (caddr_t)fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
+	mutex_exit(p->p_lock);
+	error = copyout(&frame, (void *)fp, sizeof(frame));
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		/*
@@ -250,14 +243,11 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
  */
 /* ARGSUSED */
 int
-compat_16_sys___sigreturn14(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigreturn14_args *uap, register_t *retval)
 {
-	struct compat_16_sys___sigreturn14_args /* {
+	/* {
 		syscallarg(struct sigcontext *) sigcntxp;
-	} */ *uap = v;
+	} */
 	struct sigcontext *scp, ksc;
 	struct proc *p = l->l_proc;
 
@@ -274,7 +264,7 @@ compat_16_sys___sigreturn14(l, v, retval)
 	if (ALIGN(scp) != (u_int64_t)scp)
 		return (EINVAL);
 
-	if (copyin((caddr_t)scp, &ksc, sizeof(ksc)) != 0)
+	if (copyin((void *)scp, &ksc, sizeof(ksc)) != 0)
 		return (EFAULT);
 
 	if (ksc.sc_regs[R_ZERO] != 0xACEDBADE)		/* magic number */
@@ -296,7 +286,7 @@ compat_16_sys___sigreturn14(l, v, retval)
 	l->l_addr->u_pcb.pcb_fp.fpr_cr = ksc.sc_fpcr;
 	l->l_md.md_flags = ksc.sc_fp_control & MDP_FP_C;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	/* Restore signal stack. */
 	if (ksc.sc_onstack & SS_ONSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
@@ -304,7 +294,7 @@ compat_16_sys___sigreturn14(l, v, retval)
 		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
 	/* Restore signal mask. */
 	(void) sigprocmask1(l, SIG_SETMASK, &ksc.sc_mask, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 #ifdef DEBUG
 	if (sigdebug & SDB_FOLLOW)

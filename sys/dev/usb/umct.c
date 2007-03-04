@@ -1,4 +1,4 @@
-/*	$NetBSD: umct.c,v 1.21 2007/01/29 01:52:45 hubertf Exp $	*/
+/*	$NetBSD: umct.c,v 1.26 2008/05/24 16:40:58 cube Exp $	*/
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umct.c,v 1.21 2007/01/29 01:52:45 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umct.c,v 1.26 2008/05/24 16:40:58 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -99,7 +92,7 @@ struct	umct_softc {
 
 	u_char			sc_status;
 
-	device_ptr_t		sc_subdev;	/* ucom device */
+	device_t		sc_subdev;	/* ucom device */
 
 	u_char			sc_dying;	/* disconnecting */
 
@@ -154,14 +147,18 @@ static const struct usb_devno umct_devs[] = {
 };
 #define umct_lookup(v, p) usb_lookup(umct_devs, v, p)
 
-USB_DECLARE_DRIVER(umct);
+int umct_match(device_t, struct cfdata *, void *);
+void umct_attach(device_t, device_t, void *);
+void umct_childdet(device_t, device_t);
+int umct_detach(device_t, int);
+int umct_activate(device_t, enum devact);
+extern struct cfdriver umct_cd;
+CFATTACH_DECL2_NEW(umct, sizeof(struct umct_softc), umct_match,
+    umct_attach, umct_detach, umct_activate, NULL, umct_childdet);
 
 USB_MATCH(umct)
 {
 	USB_MATCH_START(umct, uaa);
-
-	if (uaa->iface != NULL)
-		return (UMATCH_NONE);
 
 	return (umct_lookup(uaa->vendor, uaa->product) != NULL ?
 		UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
@@ -176,14 +173,15 @@ USB_ATTACH(umct)
 	usb_endpoint_descriptor_t *ed;
 
 	char *devinfop;
-	char *devname = USBDEVNAME(sc->sc_dev);
 	usbd_status err;
 	int i;
 	struct ucom_attach_args uca;
 
+	sc->sc_dev = self;
+
 	devinfop = usbd_devinfo_alloc(dev, 0);
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", devname, devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
         sc->sc_udev = dev;
@@ -199,8 +197,8 @@ USB_ATTACH(umct)
 	/* Move the device into the configured state. */
 	err = usbd_set_config_index(dev, UMCT_CONFIG_INDEX, 1);
 	if (err) {
-		printf("\n%s: failed to set configuration, err=%s\n",
-			devname, usbd_errstr(err));
+		aprint_error_dev(self, "failed to set configuration, err=%s\n",
+		    usbd_errstr(err));
 		sc->sc_dying = 1;
 		USB_ATTACH_ERROR_RETURN;
 	}
@@ -209,8 +207,8 @@ USB_ATTACH(umct)
 	cdesc = usbd_get_config_descriptor(sc->sc_udev);
 
 	if (cdesc == NULL) {
-		printf("%s: failed to get configuration descriptor\n",
-			USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self,
+		    "failed to get configuration descriptor\n");
 		sc->sc_dying = 1;
 		USB_ATTACH_ERROR_RETURN;
 	}
@@ -219,8 +217,8 @@ USB_ATTACH(umct)
 	err = usbd_device2interface_handle(dev, UMCT_IFACE_INDEX,
 							&sc->sc_iface);
 	if (err) {
-		printf("\n%s: failed to get interface, err=%s\n",
-			devname, usbd_errstr(err));
+		aprint_error_dev(self, "failed to get interface, err=%s\n",
+		    usbd_errstr(err));
 		sc->sc_dying = 1;
 		USB_ATTACH_ERROR_RETURN;
 	}
@@ -233,8 +231,8 @@ USB_ATTACH(umct)
 	for (i = 0; i < id->bNumEndpoints; i++) {
 		ed = usbd_interface2endpoint_descriptor(sc->sc_iface, i);
 		if (ed == NULL) {
-			printf("%s: no endpoint descriptor for %d\n",
-				USBDEVNAME(sc->sc_dev), i);
+			aprint_error_dev(self,
+			    "no endpoint descriptor for %d\n", i);
 			sc->sc_dying = 1;
 			USB_ATTACH_ERROR_RETURN;
 		}
@@ -259,22 +257,19 @@ USB_ATTACH(umct)
 	}
 
 	if (uca.bulkin == -1) {
-		printf("%s: Could not find data bulk in\n",
-			USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "Could not find data bulk in\n");
 		sc->sc_dying = 1;
 		USB_ATTACH_ERROR_RETURN;
 	}
 
 	if (uca.bulkout == -1) {
-		printf("%s: Could not find data bulk out\n",
-			USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "Could not find data bulk out\n");
 		sc->sc_dying = 1;
 		USB_ATTACH_ERROR_RETURN;
 	}
 
 	if (sc->sc_intr_number== -1) {
-		printf("%s: Could not find interrupt in\n",
-			USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "Could not find interrupt in\n");
 		sc->sc_dying = 1;
 		USB_ATTACH_ERROR_RETURN;
 	}
@@ -308,6 +303,15 @@ USB_ATTACH(umct)
 	USB_ATTACH_SUCCESS_RETURN;
 }
 
+void
+umct_childdet(device_t self, device_t child)
+{
+	struct umct_softc *sc = device_private(self);
+
+	KASSERT(sc->sc_subdev == child);
+	sc->sc_subdev = NULL;
+}
+
 USB_DETACH(umct)
 {
 	USB_DETACH_START(umct, sc);
@@ -323,10 +327,8 @@ USB_DETACH(umct)
         }
 
 	sc->sc_dying = 1;
-	if (sc->sc_subdev != NULL) {
+	if (sc->sc_subdev != NULL)
 		rv = config_detach(sc->sc_subdev, flags);
-		sc->sc_subdev = NULL;
-	}
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
 			   USBDEV(sc->sc_dev));
@@ -335,9 +337,9 @@ USB_DETACH(umct)
 }
 
 int
-umct_activate(device_ptr_t self, enum devact act)
+umct_activate(device_t self, enum devact act)
 {
-	struct umct_softc *sc = (struct umct_softc *)self;
+	struct umct_softc *sc = device_private(self);
 	int rv = 0;
 
 	switch (act) {
@@ -619,7 +621,7 @@ umct_intr(usbd_xfer_handle xfer, usbd_private_handle priv,
 		sc->sc_msr |= UMSR_DSR;
 	if (ISSET(mstatus, MSR_DCD))
 		sc->sc_msr |= UMSR_DCD;
-	ucom_status_change((struct ucom_softc *)sc->sc_subdev);
+	ucom_status_change(device_private(sc->sc_subdev));
 }
 
 void

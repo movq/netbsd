@@ -1,4 +1,4 @@
-/*	$NetBSD: resourcevar.h,v 1.33 2007/02/09 21:55:37 ad Exp $	*/
+/*	$NetBSD: resourcevar.h,v 1.46 2008/10/11 13:40:58 pooka Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -34,11 +34,10 @@
 #ifndef	_SYS_RESOURCEVAR_H_
 #define	_SYS_RESOURCEVAR_H_
 
-#include <sys/lock.h>
+#include <sys/mutex.h>
 
 /*
  * Kernel per-process accounting / statistics
- * (not necessarily resident except when running).
  */
 struct pstats {
 #define	pstat_startzero	p_ru
@@ -50,7 +49,7 @@ struct pstats {
 	struct	itimerval p_timer[3];	/* virtual-time timers */
 
 	struct uprof {			/* profile arguments */
-		caddr_t	pr_base;	/* buffer base */
+		char *	pr_base;	/* buffer base */
 		size_t  pr_size;	/* buffer size */
 		u_long	pr_off;		/* pc offset */
 		u_int   pr_scale;	/* pc scaling */
@@ -68,14 +67,19 @@ struct pstats {
  * ("threads") share modifications, the PL_SHAREMOD flag is set,
  * and a copy must be made for the child of a new fork that isn't
  * sharing modifications to the limits.
+ *
+ * The PL_xxx flags are never cleared, once either is set p->p_limit
+ * will never be changed again.
  */
 struct plimit {
 	struct	rlimit pl_rlimit[RLIM_NLIMITS];
 	char	*pl_corename;
 #define	PL_SHAREMOD	0x01		/* modifications are shared */
-	int	p_lflags;
-	int	p_refcnt;		/* number of references */
-	struct simplelock p_slock;	/* mutex for p_refcnt */
+#define	PL_WRITEABLE	0x02		/* private to this process */
+	int	pl_flags;
+	int	pl_refcnt;		/* number of references */
+	kmutex_t pl_lock;		/* mutex for pl_refcnt */
+	struct plimit *pl_sv_limit;	/* saved when PL_WRITEABLE set */
 };
 
 /* add user profiling from AST XXXSMP */
@@ -89,36 +93,6 @@ struct plimit {
 	} while (/* CONSTCOND */ 0)
 
 #ifdef _KERNEL
-/*
- * Structure associated with user caching.
- */
-struct uidinfo {
-	LIST_ENTRY(uidinfo) ui_hash;
-	uid_t	ui_uid;
-	long	ui_proccnt;	/* Number of processes */
-	long	ui_lockcnt;	/* Number of locks */
-	rlim_t	ui_sbsize;	/* socket buffer size */
-	struct simplelock ui_slock; /* mutex for everything */
-
-};
-#define	UIHASH(uid)	(&uihashtbl[(uid) & uihash])
-#define UILOCK(uip, s) \
-    do { \
-	s = splsoftnet(); \
-	simple_lock(&uip->ui_slock); \
-    } while (/*CONSTCOND*/0)
-#define UIUNLOCK(uip, s) \
-    do { \
-	simple_unlock(&uip->ui_slock); \
-	splx(s); \
-    } while (/*CONSTCOND*/0)
-
-extern LIST_HEAD(uihashhead, uidinfo) *uihashtbl;
-extern u_long uihash;		/* size of hash table - 1 */
-int       chgproccnt(uid_t, int);
-int       chgsbsize(struct uidinfo *, u_long *, u_long, rlim_t);
-struct uidinfo *uid_find(uid_t);
-
 extern char defcorename[];
 
 extern int security_setidcore_dump;
@@ -127,13 +101,19 @@ extern uid_t security_setidcore_owner;
 extern gid_t security_setidcore_group;
 extern mode_t security_setidcore_mode;
 
-void	 addupc_intr(struct lwp *, u_long);
-void	 addupc_task(struct lwp *, u_long, u_int);
-void	 calcru(struct proc *, struct timeval *, struct timeval *,
+void	addupc_intr(struct lwp *, u_long);
+void	addupc_task(struct lwp *, u_long, u_int);
+void	calcru(struct proc *, struct timeval *, struct timeval *,
 	    struct timeval *, struct timeval *);
-struct plimit *limcopy(struct proc *);
-void limfree(struct plimit *);
+
+struct plimit *lim_copy(struct plimit *lim);
+void	lim_addref(struct plimit *lim);
+void	lim_privatise(struct proc *p, bool set_shared);
+void	limfree(struct plimit *);
+
+void	resource_init(void);
 void	ruadd(struct rusage *, struct rusage *);
+void	rulwps(proc_t *, struct rusage *);
 struct	pstats *pstatscopy(struct pstats *);
 void 	pstatsfree(struct pstats *);
 extern rlim_t maxdmap;

@@ -1,4 +1,4 @@
-/*	$NetBSD: igsfb.c,v 1.41 2007/01/13 19:45:28 cube Exp $ */
+/*	$NetBSD: igsfb.c,v 1.44 2008/04/08 12:07:26 cegger Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Valeriy E. Ushakov
@@ -31,7 +31,7 @@
  * Integraphics Systems IGA 168x and CyberPro series.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: igsfb.c,v 1.41 2007/01/13 19:45:28 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: igsfb.c,v 1.44 2008/04/08 12:07:26 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: igsfb.c,v 1.41 2007/01/13 19:45:28 cube Exp $");
 #include <sys/malloc.h>
 #include <sys/ioctl.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/wscons/wsdisplayvar.h>
 #include <dev/wscons/wsconsio.h>
@@ -78,7 +78,7 @@ static const struct wsscreen_list igsfb_screenlist = {
  * wsdisplay_accessops
  */
 
-static int	igsfb_ioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
+static int	igsfb_ioctl(void *, void *, u_long, void *, int, struct lwp *);
 static paddr_t	igsfb_mmap(void *, void *, off_t, int);
 
 static struct wsdisplay_accessops igsfb_accessops = {
@@ -191,7 +191,7 @@ igsfb_attach_subr(struct igsfb_softc *sc, int isconsole)
 	dc->dc_console.scr_flags |= VCONS_SCREEN_IS_STATIC;
 
 	printf("%s: %dMB, %s%dx%d, %dbpp\n",
-	       sc->sc_dev.dv_xname,
+	       device_xname(&sc->sc_dev),
 	       (uint32_t)(dc->dc_vmemsz >> 20),
 	       (dc->dc_hwflags & IGSFB_HW_BSWAP)
 		   ? (dc->dc_hwflags & IGSFB_HW_BE_SELECT)
@@ -589,7 +589,7 @@ igsfb_mmap(void *v, void *vs, off_t offset, int prot)
  * wsdisplay_accessops: ioctl()
  */
 static int
-igsfb_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag,
+igsfb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 	struct lwp *l)
 {
 	struct vcons_data *vd = v;

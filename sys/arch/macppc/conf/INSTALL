@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.103 2007/01/20 21:42:12 he Exp $
+#	$NetBSD: INSTALL,v 1.107 2008/07/31 07:41:02 simonb Exp $
 #
 # config file for INSTALL FLOPPY
 #
@@ -28,8 +28,9 @@ options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
 options 	COMPAT_14	# NetBSD 1.4,
 options 	COMPAT_15	# NetBSD 1.5,
 options 	COMPAT_16	# NetBSD 1.6,
-options 	COMPAT_20	# NetBSD 2.0
-options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_20	# NetBSD 2.0,
+options 	COMPAT_30	# NetBSD 3.0,
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
@@ -45,6 +46,7 @@ file-system 	MSDOSFS		# MS-DOS file system
 options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
 options 	APPLE_UFS	# Apple UFS support in FFS
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
+options 	WAPBL		# File system journaling support - Experimental
 
 # Networking options
 options 	INET		# IP + ICMP + TCP + UDP
@@ -94,7 +96,8 @@ ahc*	at pci? dev ? function ?	# Adaptec [23]94x, aic78x0 SCSI
 iha*	at pci? dev ? function ?	# Initio INIC-940/950 SCSI
 pcscp*	at pci? dev ? function ?	# AMD Am53c974 PCscsi-PCI SCSI
 siop*	at pci? dev ? function ?	# NCR 53c8xx SCSI
-ofb*	at pci? dev ? function ?	# Generic Open Firmware Framebuffer
+#ofb*	at pci? dev ? function ?	# Generic Open Firmware Framebuffer
+genfb*	at pci? dev ? function ?
 cbb*	at pci? dev ? function ?	# PCI-CardBus bridge
 ohci*	at pci? dev ? function ?	# Open Host Controller
 pciide* at pci? dev ? function ? flags 0x0000	# GENERIC pciide driver
@@ -150,15 +153,22 @@ wi*	at obio?			# AirMac
 esp*	at obio? flags 0x00ff		# 53c9x SCSI
 mesh*	at obio? flags 0xffff		# MESH SCSI
 nvram*	at obio?			# nvram
-adb*	at obio?			# Apple Desktop Bus
-akbd*	at adb?				# ADB keyboard
+#adb*	at obio?			# Apple Desktop Bus
+#akbd*	at adb?				# ADB keyboard
+cuda*	at obio?			# Apple CUDA
+pmu*	at obio?			# Apple CUDA
+nadb*	at cuda?			# new ADB Bus abstraction
+nadb*	at pmu?				# new ADB Bus abstraction
+adbkbd* at nadb?			# ADB keyboard
+
 zsc*	at obio?
 zstty*	at zsc? channel ?
 mediabay* at obio?
 wdc*	at mediabay? flags 0
 
-wsdisplay0 at ofb? console ?
-wskbd0	at akbd? console ?
+wsdisplay0 at wsemuldisplaydev? console 1
+wsdisplay* at wsemuldisplaydev? console 0
+wskbd*	at wskbddev?
 
 scsibus* at scsi?
 
@@ -176,10 +186,9 @@ sd*	at atapibus? drive ? flags 0x0000	# ATAPI disk drives
 
 usb*	at ohci?
 uhub*	at usb?
-uhub*	at uhub? port ? configuration ? interface ?
+uhub*	at uhub? port ?
 uhidev* 	at uhub? port ? configuration ? interface ?
 ukbd* 	at uhidev? reportid ?
-wskbd*	at ukbd? console ?
 
 pseudo-device	md		1	# memory disk
 #pseudo-device	fss		4	# file system snapshot device

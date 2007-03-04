@@ -1,5 +1,4 @@
-/*	$NetBSD: asm_2200.h,v 1.7 2005/12/11 12:22:27 christos Exp $	*/
-/* @(#)asm_2200.h 1.6 */
+/* $NetBSD: asm_2200.h,v 1.9 2008/03/11 05:33:30 mjacob Exp $ */
 /*
  * Copyright (C) 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002 by Qlogic, Inc.
  * All rights reserved.
@@ -24,7 +23,7 @@
  * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+ */ 
 
 /************************************************************************
  *									*
@@ -36,7 +35,7 @@
 /*
  *	Firmware Version 2.02.06 (08:39 Jun 26, 2003)
  */
-static const u_int16_t isp_2200_risc_code[] = {
+static const uint16_t isp_2200_risc_code[] = {
 	0x0470, 0x0000, 0x0000, 0x96cf, 0x0000, 0x0002, 0x0002, 0x0006,
 	0x0007, 0x2043, 0x4f50, 0x5952, 0x4947, 0x4854, 0x2032, 0x3030,
 	0x3120, 0x514c, 0x4f47, 0x4943, 0x2043, 0x4f52, 0x504f, 0x5241,
@@ -4864,3 +4863,7 @@ static const u_int16_t isp_2200_risc_code[] = {
 	0x0004, 0x0008, 0x0010, 0x0020, 0x0040, 0x0080, 0x0100, 0x0200,
 	0x0400, 0x0800, 0x1000, 0x2000, 0x4000, 0x8000, 0xa332
 };
+#ifdef	ISP_2200_RISC_CODE
+#undef	ISP_2200_RISC_CODE
+#endif
+#define	ISP_2200_RISC_CODE (const uint16_t *) isp_2200_risc_code

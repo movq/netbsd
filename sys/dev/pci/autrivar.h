@@ -1,4 +1,4 @@
-/*	$NetBSD: autrivar.h,v 1.2 2001/11/18 17:15:48 augustss Exp $	*/
+/*	$NetBSD: autrivar.h,v 1.4 2007/12/09 20:28:06 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2001 SOMEYA Yoshihiko and KUROSAWA Takahiro.
@@ -33,7 +33,7 @@
  */
 struct autri_dma {
 	bus_dmamap_t		map;
-	caddr_t			addr;		/* VA */
+	void *			addr;		/* VA */
 	bus_dma_segment_t	segs[1];
 	int			nsegs;
 	size_t			size;
@@ -85,8 +85,6 @@ struct autri_softc {
 
 	u_int32_t		sc_class;
 	int			sc_revision;
-
-	int			sc_old_power;
 
 	/*
 	 * Play/record status

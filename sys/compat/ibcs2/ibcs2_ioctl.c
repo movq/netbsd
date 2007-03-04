@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_ioctl.c,v 1.38 2007/02/09 21:55:17 ad Exp $	*/
+/*	$NetBSD: ibcs2_ioctl.c,v 1.45 2008/06/24 10:03:17 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Scott Bartram
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_ioctl.c,v 1.38 2007/02/09 21:55:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_ioctl.c,v 1.45 2008/06/24 10:03:17 gmcgarry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -113,15 +113,13 @@ static const u_long s2btab[] = {
 	38400,
 };
 
-static void stios2btios __P((struct ibcs2_termios *, struct termios *));
-static void btios2stios __P((struct termios *, struct ibcs2_termios *));
-static void stios2stio __P((struct ibcs2_termios *, struct ibcs2_termio *));
-static void stio2stios __P((struct ibcs2_termio *, struct ibcs2_termios *));
+static void stios2btios(struct ibcs2_termios *, struct termios *);
+static void btios2stios(struct termios *, struct ibcs2_termios *);
+static void stios2stio(struct ibcs2_termios *, struct ibcs2_termio *);
+static void stio2stios(struct ibcs2_termio *, struct ibcs2_termios *);
 
 static void
-stios2btios(st, bt)
-	struct ibcs2_termios *st;
-	struct termios *bt;
+stios2btios(struct ibcs2_termios *st, struct termios *bt)
 {
 	u_long l, r;
 
@@ -212,9 +210,7 @@ stios2btios(st, bt)
 }
 
 static void
-btios2stios(bt, st)
-	struct termios *bt;
-	struct ibcs2_termios *st;
+btios2stios(struct termios *bt, struct ibcs2_termios *st)
 {
 	int i;
 	u_long l, r;
@@ -303,9 +299,7 @@ btios2stios(bt, st)
 }
 
 static void
-stios2stio(ts, t)
-	struct ibcs2_termios *ts;
-	struct ibcs2_termio *t;
+stios2stio(struct ibcs2_termios *ts, struct ibcs2_termio *t)
 {
 
 	t->c_iflag = ts->c_iflag;
@@ -317,9 +311,7 @@ stios2stio(ts, t)
 }
 
 static void
-stio2stios(t, ts)
-	struct ibcs2_termio *t;
-	struct ibcs2_termios *ts;
+stio2stios(struct ibcs2_termio *t, struct ibcs2_termios *ts)
 {
 
 	ts->c_iflag = t->c_iflag;
@@ -331,34 +323,34 @@ stio2stios(t, ts)
 }
 
 int
-ibcs2_sys_ioctl(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+ibcs2_sys_ioctl(struct lwp *l, const struct ibcs2_sys_ioctl_args *uap, register_t *retval)
 {
-	struct ibcs2_sys_ioctl_args /* {
+	/* {
 		syscallarg(int) fd;
 		syscallarg(int) cmd;
-		syscallarg(caddr_t) data;
-	} */ *uap = v;
+		syscallarg(void *) data;
+	} */
 	struct proc *p = l->l_proc;
-	struct filedesc *fdp = p->p_fd;
 	struct file *fp;
-	int (*ctl)(struct file *, u_long, void *, struct lwp *);
+	int (*ctl)(struct file *, u_long, void *);
 	struct termios bts;
 	struct ibcs2_termios sts;
 	struct ibcs2_termio st;
+	struct sys_ioctl_args bsd_ua;
 	int error, t;
 
+	SCARG(&bsd_ua, fd) = SCARG(uap, fd);
+	SCARG(&bsd_ua, data) = SCARG(uap, data);
+
 	/* Handle the easy ones first */
-	switch (SCARG(uap, cmd)) {
+	switch ((unsigned long)SCARG(uap, cmd)) {
 	case IBCS2_TIOCGWINSZ:
-		SCARG(uap, cmd) = TIOCGWINSZ;
-		return sys_ioctl(l, uap, retval);
+		SCARG(&bsd_ua, com) = TIOCGWINSZ;
+		return sys_ioctl(l, &bsd_ua, retval);
 
 	case IBCS2_TIOCSWINSZ:
-		SCARG(uap, cmd) = TIOCSWINSZ;
-		return sys_ioctl(l, uap, retval);
+		SCARG(&bsd_ua, com) = TIOCSWINSZ;
+		return sys_ioctl(l, &bsd_ua, retval);
 
 	case IBCS2_TIOCGPGRP:
 		return copyout(&p->p_pgrp->pg_id, SCARG(uap, data),
@@ -380,22 +372,21 @@ ibcs2_sys_ioctl(l, v, retval)
 		return ENOSYS;
 
 	case IBCS2_SIOCSOCKSYS:
-		return ibcs2_socksys(l, uap, retval);
+		return ibcs2_socksys(l, (const void *)uap, retval);
 
 	case IBCS2_I_NREAD:     /* STREAMS */
-	        SCARG(uap, cmd) = FIONREAD;
-		return sys_ioctl(l, uap, retval);
+		SCARG(&bsd_ua, com) = FIONREAD;
+		return sys_ioctl(l, &bsd_ua, retval);
 	default:
 		break;
 	}
 
-	if ((fp = fd_getfile(fdp, SCARG(uap, fd))) == NULL) {
+	if ((fp = fd_getfile(SCARG(uap, fd))) == NULL) {
 		DPRINTF(("ibcs2_ioctl(%d): bad fd %d ", p->p_pid,
 			 SCARG(uap, fd)));
 		return EBADF;
 	}
 
-	FILE_USE(fp);
 	if ((fp->f_flag & (FREAD|FWRITE)) == 0) {
 		DPRINTF(("ibcs2_ioctl(%d): bad fp flag ", p->p_pid));
 		error = EBADF;
@@ -404,11 +395,11 @@ ibcs2_sys_ioctl(l, v, retval)
 
 	ctl = fp->f_ops->fo_ioctl;
 
-	switch (SCARG(uap, cmd)) {
+	switch ((unsigned long)SCARG(uap, cmd)) {
 	case IBCS2_TCGETA:
 	case IBCS2_XCGETA:
 	case IBCS2_OXCGETA:
-		if ((error = (*ctl)(fp, TIOCGETA, &bts, l)) != 0)
+		if ((error = (*ctl)(fp, TIOCGETA, &bts)) != 0)
 			goto out;
 
 		btios2stios(&bts, &sts);
@@ -432,7 +423,7 @@ ibcs2_sys_ioctl(l, v, retval)
 		}
 
 		/* get full BSD termios so we don't lose information */
-		if ((error = (*ctl)(fp, TIOCGETA, &bts, l)) != 0) {
+		if ((error = (*ctl)(fp, TIOCGETA, &bts)) != 0) {
 			DPRINTF(("ibcs2_ioctl(%d): TCSET ctl failed fd %d ",
 			    p->p_pid, SCARG(uap, fd)));
 			goto out;
@@ -447,7 +438,7 @@ ibcs2_sys_ioctl(l, v, retval)
 		stios2btios(&sts, &bts);
 
 		t = SCARG(uap, cmd) - IBCS2_TCSETA + TIOCSETA;
-		error = (*ctl)(fp, t, &bts, l);
+		error = (*ctl)(fp, t, &bts);
 		break;
 
 	case IBCS2_XCSETA:
@@ -458,7 +449,7 @@ ibcs2_sys_ioctl(l, v, retval)
 
 		stios2btios(&sts, &bts);
 		t = SCARG(uap, cmd) - IBCS2_XCSETA + TIOCSETA;
-		error = (*ctl)(fp, t, &bts, l);
+		error = (*ctl)(fp, t, &bts);
 		break;
 
 	case IBCS2_OXCSETA:
@@ -468,21 +459,21 @@ ibcs2_sys_ioctl(l, v, retval)
 			goto out;
 		stios2btios(&sts, &bts);
 		t = SCARG(uap, cmd) - IBCS2_OXCSETA + TIOCSETA;
-		error = (*ctl)(fp, t, &bts, l);
+		error = (*ctl)(fp, t, &bts);
 		break;
 
 	case IBCS2_TCSBRK:
 		t = (int) SCARG(uap, data);
 		t = (t ? t : 1) * hz * 4;
 		t /= 10;
-		if ((error = (*ctl)(fp, TIOCSBRK, NULL, l)) != 0)
+		if ((error = (*ctl)(fp, TIOCSBRK, NULL)) != 0)
 			goto out;
 		error = tsleep(&t, PZERO | PCATCH, "ibcs2_tcsbrk", t);
 		if (error == EINTR || error == ERESTART) {
-			(void)(*ctl)(fp, TIOCCBRK, NULL, l);
+			(void)(*ctl)(fp, TIOCCBRK, NULL);
 			error = EINTR;
 		} else
-			error = (*ctl)(fp, TIOCCBRK, NULL, l);
+			error = (*ctl)(fp, TIOCCBRK, NULL);
 		break;
 
 	case IBCS2_TCXONC:
@@ -493,10 +484,10 @@ ibcs2_sys_ioctl(l, v, retval)
 			error = ENOSYS;
 			break;
 		case 2:
-			error = (*ctl)(fp, TIOCSTOP, NULL, l);
+			error = (*ctl)(fp, TIOCSTOP, NULL);
 			break;
 		case 3:
-			error = (*ctl)(fp, TIOCSTART, (void *)1, l);
+			error = (*ctl)(fp, TIOCSTART, (void *)1);
 			break;
 		default:
 			error = EINVAL;
@@ -519,13 +510,13 @@ ibcs2_sys_ioctl(l, v, retval)
 			error = EINVAL;
 			goto out;
 		}
-		error = (*ctl)(fp, TIOCFLUSH, &t, l);
+		error = (*ctl)(fp, TIOCFLUSH, &t);
 		break;
 
 	case IBCS2_FIONBIO:
 		if ((error = copyin(SCARG(uap, data), &t, sizeof(t))) != 0)
 			goto out;
-		error = (*ctl)(fp, FIONBIO, (caddr_t)&t, l);
+		error = (*ctl)(fp, FIONBIO, (void *)&t);
 		break;
 
 	default:
@@ -534,51 +525,47 @@ ibcs2_sys_ioctl(l, v, retval)
 		error = ENOSYS;
 		break;
 	}
-out:
-	FILE_UNUSE(fp, l);
+ out:
+	fd_putfile(SCARG(uap, fd));
 	return error;
 }
 
 int
-ibcs2_sys_gtty(struct lwp *l, void *v, register_t *retval)
+ibcs2_sys_gtty(struct lwp *l, const struct ibcs2_sys_gtty_args *uap, register_t *retval)
 {
-	struct ibcs2_sys_gtty_args /* {
+	/* {
 		syscallarg(int) fd;
 		syscallarg(struct sgttyb *) tb;
-	} */ *uap = v;
-	struct proc *p = l->l_proc;
-	struct filedesc *fdp = p->p_fd;
+	} */
 	struct file *fp;
 	struct sgttyb tb;
 	struct ibcs2_sgttyb itb;
 	int error;
 
-	if ((fp = fd_getfile(fdp, SCARG(uap, fd))) == NULL) {
-		DPRINTF(("ibcs2_sys_gtty(%d): bad fd %d ", p->p_pid,
+	if ((fp = fd_getfile(SCARG(uap, fd))) == NULL) {
+		DPRINTF(("ibcs2_sys_gtty(%d): bad fd %d ", curproc->p_pid,
 			 SCARG(uap, fd)));
 		return EBADF;
 	}
-	FILE_USE(fp);
-
 	if ((fp->f_flag & (FREAD|FWRITE)) == 0) {
-		DPRINTF(("ibcs2_sys_gtty(%d): bad fp flag ", p->p_pid));
+		DPRINTF(("ibcs2_sys_gtty(%d): bad fp flag ", curproc->p_pid));
 		error = EBADF;
 		goto out;
 	}
 
-	error = (*fp->f_ops->fo_ioctl)(fp, TIOCGETP, (caddr_t)&tb, l);
+	error = (*fp->f_ops->fo_ioctl)(fp, TIOCGETP, (void *)&tb);
 	if (error)
 		goto out;
 
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 
 	itb.sg_ispeed = tb.sg_ispeed;
 	itb.sg_ospeed = tb.sg_ospeed;
 	itb.sg_erase = tb.sg_erase;
 	itb.sg_kill = tb.sg_kill;
 	itb.sg_flags = tb.sg_flags & ~(IBCS2_GHUPCL|IBCS2_GXTABS);
-	return copyout((caddr_t)&itb, SCARG(uap, tb), sizeof(itb));
+	return copyout((void *)&itb, SCARG(uap, tb), sizeof(itb));
 out:
-	FILE_UNUSE(fp, l);
+	fd_putfile(SCARG(uap, fd));
 	return error;
 }

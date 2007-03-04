@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.46 2007/02/22 16:57:57 thorpej Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.48 2008/07/02 19:49:58 rmind Exp $	*/
 /*	$OpenBSD: db_trace.c,v 1.3 1997/03/21 02:10:48 niklas Exp $	*/
 
 /* 
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.46 2007/02/22 16:57:57 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.48 2008/07/02 19:49:58 rmind Exp $");
 
 #include "opt_ppcarch.h"
 
@@ -146,7 +146,8 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 					(*pr)("not found\n");
 					return;
 				}
-				l = proc_representative_lwp(p, NULL, 0);
+				l = LIST_FIRST(&p->p_lwps);
+				KASSERT(l != NULL);
 			}
 			(*pr)("lid %d ", l->l_lid);
 			if ((l->l_flag & LW_INMEM) == 0) {
@@ -250,9 +251,11 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 #ifdef PPC_OEA
 			if (tf->exc == EXC_DSI)
 				(*pr)(" dsisr=%#x", tf->dsisr);
+#ifdef PPC_OEA601
 			if ((mfpvr() >> 16) == MPC601)
 				(*pr)(" mq=%#x", tf->tf_xtra[TF_MQ]);
-#endif
+#endif /* PPC_OEA601 */
+#endif /* PPC_OEA */
 #ifdef PPC_IBM4XX
 			if (tf->exc == EXC_DSI)
 				(*pr)(" dear=%#x", tf->dar);

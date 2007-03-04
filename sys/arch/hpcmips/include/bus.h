@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.20 2007/02/21 20:41:24 mrg Exp $	*/
+/*	$NetBSD: bus.h,v 1.23 2008/04/28 20:23:21 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -72,8 +65,8 @@
  * derived from arch/arm/include/bus.h Rev. 1.3
  */
 
-#ifndef _SYS_BUS_H_
-#define _SYS_BUS_H_
+#ifndef _HPCMIPS_BUS_H_
+#define _HPCMIPS_BUS_H_
 
 #include <machine/bus_types.h>
 
@@ -983,8 +976,8 @@ struct bus_dma_ops {
 	void	(*bd_mem_free)(bus_dma_tag_t,
 		    bus_dma_segment_t *, int);
 	int	(*bd_mem_map)(bus_dma_tag_t, bus_dma_segment_t *,
-		    int, size_t, caddr_t *, int);
-	void	(*bd_mem_unmap)(bus_dma_tag_t, caddr_t, size_t);
+		    int, size_t, void **, int);
+	void	(*bd_mem_unmap)(bus_dma_tag_t, void *, size_t);
 	paddr_t	(*bd_mem_mmap)(bus_dma_tag_t, bus_dma_segment_t *,
 		    int, off_t, int, int);
 };
@@ -1049,8 +1042,8 @@ int	__bs_c(f,_bd_mem_alloc)(bus_dma_tag_t, bus_size_t, bus_size_t,	\
 	    bus_size_t, bus_dma_segment_t *, int, int *, int);		\
 void	__bs_c(f,_bd_mem_free)(bus_dma_tag_t, bus_dma_segment_t *, int);\
 int	__bs_c(f,_bd_mem_map)(bus_dma_tag_t, bus_dma_segment_t *,	\
-	    int, size_t, caddr_t *, int);				\
-void	__bs_c(f,_bd_mem_unmap)(bus_dma_tag_t, caddr_t, size_t);	\
+	    int, size_t, void **, int);				\
+void	__bs_c(f,_bd_mem_unmap)(bus_dma_tag_t, void *, size_t);	\
 paddr_t	__bs_c(f,_bd_mem_mmap)(bus_dma_tag_t, bus_dma_segment_t *,	\
 	    int, off_t, int, int);
 
@@ -1099,4 +1092,4 @@ struct bus_dmamap {
 
 #include <machine/bus_machdep.h>
 
-#endif /* _SYS_BUS_H_ */
+#endif /* _HPCMIPS_BUS_H_ */

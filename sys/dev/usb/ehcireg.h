@@ -1,4 +1,4 @@
-/*	$NetBSD: ehcireg.h,v 1.25 2006/10/09 11:38:54 mlelstv Exp $	*/
+/*	$NetBSD: ehcireg.h,v 1.28 2008/08/02 22:23:18 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2001, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,6 +61,9 @@
 #define  EHCI_LEG_HC_OS_OWNED		0x01000000
 #define  EHCI_LEG_HC_BIOS_OWNED		0x00010000
 #define PCI_EHCI_USBLEGCTLSTS	0x04
+#define  EHCI_LEG_EXT_SMI_BAR		0x80000000
+#define  EHCI_LEG_EXT_SMI_PCICMD	0x40000000
+#define  EHCI_LEG_EXT_SMI_OS_CHANGE	0x20000000
 
 #define EHCI_CAP_GET_ID(cap) ((cap) & 0xff)
 #define EHCI_CAP_GET_NEXT(cap) (((cap) >> 8) & 0xff)
@@ -192,10 +188,41 @@ typedef u_int32_t ehci_link_t;
 
 typedef u_int32_t ehci_physaddr_t;
 
+typedef u_int32_t ehci_isoc_trans_t;
+typedef u_int32_t ehci_isoc_bufr_ptr_t;
+
 /* Isochronous Transfer Descriptor */
 typedef struct {
-	volatile ehci_link_t	itd_next;
-	/* XXX many more */
+	volatile ehci_link_t		itd_next;
+	volatile ehci_isoc_trans_t	itd_ctl[8];
+#define EHCI_ITD_GET_STATUS(x) (((x) >> 28) & 0xf)
+#define EHCI_ITD_SET_STATUS(x) (((x) & 0xf) << 28)
+#define EHCI_ITD_ACTIVE		0x80000000
+#define EHCI_ITD_BUF_ERR	0x40000000
+#define EHCI_ITD_BABBLE		0x20000000
+#define EHCI_ITD_ERROR		0x10000000
+#define EHCI_ITD_GET_LEN(x) (((x) >> 16) & 0xfff)
+#define EHCI_ITD_SET_LEN(x) (((x) & 0xfff) << 16)
+#define EHCI_ITD_IOC		0x8000
+#define EHCI_ITD_GET_IOC(x) (((x) >> 15) & 1)
+#define EHCI_ITD_SET_IOC(x) (((x) << 15) & EHCI_ITD_IOC)
+#define EHCI_ITD_GET_PG(x) (((x) >> 12) & 0xf)
+#define EHCI_ITD_SET_PG(x) (((x) & 0xf) << 12)
+#define EHCI_ITD_GET_OFFS(x) (((x) >> 0) & 0xfff)
+#define EHCI_ITD_SET_OFFS(x) (((x) & 0xfff) << 0)
+	volatile ehci_isoc_bufr_ptr_t	itd_bufr[7];
+#define EHCI_ITD_GET_BPTR(x) ((x) & 0xfffff000)
+#define EHCI_ITD_SET_BPTR(x) ((x) & 0xfffff000)
+#define EHCI_ITD_GET_EP(x) (((x) >> 8) & 0xf)
+#define EHCI_ITD_SET_EP(x) (((x) & 0xf) << 8)
+#define EHCI_ITD_GET_DADDR(x) ((x) & 0x7f)
+#define EHCI_ITD_SET_DADDR(x) ((x) & 0x7f)
+#define EHCI_ITD_GET_DIR(x) (((x) >> 11) & 1)
+#define EHCI_ITD_SET_DIR(x) (((x) & 1) << 11)
+#define EHCI_ITD_GET_MAXPKT(x) ((x) & 0x7ff)
+#define EHCI_ITD_SET_MAXPKT(x) ((x) & 0x7ff)
+#define EHCI_ITD_GET_MULTI(x) ((x) & 0x3)
+#define EHCI_ITD_SET_MULTI(x) ((x) & 0x3)
 } ehci_itd_t;
 #define EHCI_ITD_ALIGN 32
 

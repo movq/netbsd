@@ -1,4 +1,4 @@
-/*	$NetBSD: if_se.c,v 1.63 2007/01/13 18:42:45 cube Exp $	*/
+/*	$NetBSD: if_se.c,v 1.72 2008/06/08 18:18:34 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1997 Ian W. Dall <ian.dall@dsto.defence.gov.au>
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_se.c,v 1.63 2007/01/13 18:42:45 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_se.c,v 1.72 2008/06/08 18:18:34 tsutsui Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
@@ -201,7 +201,7 @@ static void	se_ifstart(struct ifnet *);
 static void	sestart(struct scsipi_periph *);
 
 static void	sedone(struct scsipi_xfer *, int);
-static int	se_ioctl(struct ifnet *, u_long, caddr_t);
+static int	se_ioctl(struct ifnet *, u_long, void *);
 static void	sewatchdog(struct ifnet *);
 
 static inline u_int16_t ether_cmp(void *, void *);
@@ -311,8 +311,8 @@ seattach(parent, self, aux)
 	printf("\n");
 	SC_DEBUG(periph, SCSIPI_DB2, ("seattach: "));
 
-	callout_init(&sc->sc_ifstart_ch);
-	callout_init(&sc->sc_recv_ch);
+	callout_init(&sc->sc_ifstart_ch, 0);
+	callout_init(&sc->sc_recv_ch, 0);
 
 
 	/*
@@ -344,7 +344,7 @@ seattach(parent, self, aux)
 	se_get_addr(sc, myaddr);
 
 	/* Initialize ifnet structure. */
-	strlcpy(ifp->if_xname, sc->sc_dev.dv_xname, sizeof(ifp->if_xname));
+	strlcpy(ifp->if_xname, device_xname(&sc->sc_dev), sizeof(ifp->if_xname));
 	ifp->if_softc = sc;
 	ifp->if_start = se_ifstart;
 	ifp->if_ioctl = se_ioctl;
@@ -475,8 +475,7 @@ se_ifstart(ifp)
 	    sc->sc_tbuf, len, SERETRIES,
 	    SETIMEOUT, NULL, XS_CTL_NOSLEEP|XS_CTL_ASYNC|XS_CTL_DATA_OUT);
 	if (error) {
-		printf("%s: not queued, error %d\n",
-		    sc->sc_dev.dv_xname, error);
+		aprint_error_dev(&sc->sc_dev, "not queued, error %d\n", error);
 		ifp->if_oerrors++;
 		ifp->if_flags &= ~IFF_OACTIVE;
 	} else
@@ -606,7 +605,7 @@ se_get(sc, data, totlen)
 		}
 
 		if (m == m0) {
-			caddr_t newdata = (caddr_t)
+			char *newdata = (char *)
 			    ALIGN(m->m_data + sizeof(struct ether_header)) -
 			    sizeof(struct ether_header);
 			len -= newdata - m->m_data;
@@ -614,7 +613,7 @@ se_get(sc, data, totlen)
 		}
 
 		m->m_len = len = min(totlen, len);
-		memcpy(mtod(m, caddr_t), data, len);
+		memcpy(mtod(m, void *), data, len);
 		data += len;
 
 		totlen -= len;
@@ -665,7 +664,7 @@ se_read(sc, data, datalen)
 		    len > MAX_SNAP) {
 #ifdef SEDEBUG
 			printf("%s: invalid packet size %d; dropping\n",
-			       sc->sc_dev.dv_xname, len);
+			       device_xname(&sc->sc_dev), len);
 #endif
 			ifp->if_ierrors++;
 			goto next_packet;
@@ -713,7 +712,7 @@ sewatchdog(ifp)
 {
 	struct se_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", sc->sc_dev.dv_xname);
+	log(LOG_ERR, "%s: device timeout\n", device_xname(&sc->sc_dev));
 	++ifp->if_oerrors;
 
 	se_reset(sc);
@@ -776,7 +775,7 @@ se_get_addr(sc, myaddr)
 	    (void *)&get_addr_cmd, sizeof(get_addr_cmd),
 	    myaddr, ETHER_ADDR_LEN, SERETRIES, SETIMEOUT, NULL,
 	    XS_CTL_DATA_IN | XS_CTL_DATA_ONSTACK);
-	printf("%s: ethernet address %s\n", sc->sc_dev.dv_xname,
+	printf("%s: ethernet address %s\n", device_xname(&sc->sc_dev),
 	    ether_sprintf(myaddr));
 	return (error);
 }
@@ -823,6 +822,7 @@ se_init(sc)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct scsi_ctron_ether_generic set_addr_cmd;
+	uint8_t enaddr[ETHER_ADDR_LEN];
 	int error;
 
 #if NBPFILTER > 0
@@ -838,9 +838,10 @@ se_init(sc)
 
 	PROTOCMD(ctron_ether_set_addr, set_addr_cmd);
 	_lto2b(ETHER_ADDR_LEN, set_addr_cmd.length);
+	memcpy(enaddr, CLLADDR(ifp->if_sadl), sizeof(enaddr));
 	error = se_scsipi_cmd(sc->sc_periph,
 	    (void *)&set_addr_cmd, sizeof(set_addr_cmd),
-	    LLADDR(ifp->if_sadl), ETHER_ADDR_LEN, SERETRIES, SETIMEOUT, NULL,
+	    enaddr, ETHER_ADDR_LEN, SERETRIES, SETIMEOUT, NULL,
 	    XS_CTL_DATA_OUT);
 	if (error != 0)
 		return (error);
@@ -881,11 +882,14 @@ se_set_multi(sc, addr)
 	int error;
 
 	if (sc->sc_debug)
-		printf("%s: set_set_multi: %s\n", sc->sc_dev.dv_xname,
+		printf("%s: set_set_multi: %s\n", device_xname(&sc->sc_dev),
 		    ether_sprintf(addr));
 
 	PROTOCMD(ctron_ether_set_multi, set_multi_cmd);
 	_lto2b(sizeof(addr), set_multi_cmd.length);
+	/* XXX sizeof(addr) is the size of the pointer.  Surely it
+	 * is too small? --dyoung
+	 */
 	error = se_scsipi_cmd(sc->sc_periph,
 	    (void *)&set_multi_cmd, sizeof(set_multi_cmd),
 	    addr, sizeof(addr), SERETRIES, SETIMEOUT, NULL, XS_CTL_DATA_OUT);
@@ -901,11 +905,14 @@ se_remove_multi(sc, addr)
 	int error;
 
 	if (sc->sc_debug)
-		printf("%s: se_remove_multi: %s\n", sc->sc_dev.dv_xname,
+		printf("%s: se_remove_multi: %s\n", device_xname(&sc->sc_dev),
 		    ether_sprintf(addr));
 
 	PROTOCMD(ctron_ether_remove_multi, remove_multi_cmd);
 	_lto2b(sizeof(addr), remove_multi_cmd.length);
+	/* XXX sizeof(addr) is the size of the pointer.  Surely it
+	 * is too small? --dyoung
+	 */
 	error = se_scsipi_cmd(sc->sc_periph,
 	    (void *)&remove_multi_cmd, sizeof(remove_multi_cmd),
 	    addr, sizeof(addr), SERETRIES, SETIMEOUT, NULL, XS_CTL_DATA_OUT);
@@ -973,11 +980,12 @@ static int
 se_ioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 {
 	struct se_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
 	struct ifreq *ifr = (struct ifreq *)data;
+	struct sockaddr *sa;
 	int s, error = 0;
 
 	s = splnet();
@@ -1051,17 +1059,20 @@ se_ioctl(ifp, cmd, data)
 
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		error = (cmd == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->sc_ethercom) :
-		    ether_delmulti(ifr, &sc->sc_ethercom);
-		if (error == ENETRESET) {
+		sa = sockaddr_dup(ifreq_getaddr(cmd, ifr), M_NOWAIT);
+		if (sa == NULL) {
+			error = ENOBUFS;
+			break;
+		}
+		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 			if (ifp->if_flags & IFF_RUNNING) {
 				error = (cmd == SIOCADDMULTI) ?
-				   se_set_multi(sc, ifr->ifr_addr.sa_data) :
-				   se_remove_multi(sc, ifr->ifr_addr.sa_data);
+				   se_set_multi(sc, sa->sa_data) :
+				   se_remove_multi(sc, sa->sa_data);
 			} else
 				error = 0;
 		}
+		sockaddr_free(sa);
 		break;
 
 	default:
@@ -1089,8 +1100,7 @@ se_enable(sc)
 	    (error = scsipi_adapter_addref(adapt)) == 0)
 		sc->sc_enabled = 1;
 	else
-		printf("%s: device enable failed\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "device enable failed\n");
 
 	return (error);
 }
@@ -1127,9 +1137,7 @@ seopen(dev, flag, fmt, l)
 	struct scsipi_adapter *adapt;
 
 	unit = SEUNIT(dev);
-	if (unit >= se_cd.cd_ndevs)
-		return (ENXIO);
-	sc = se_cd.cd_devs[unit];
+	sc = device_lookup_private(&se_cd, unit);
 	if (sc == NULL)
 		return (ENXIO);
 
@@ -1159,7 +1167,7 @@ seclose(dev, flag, fmt, l)
 	int flag, fmt;
 	struct lwp *l;
 {
-	struct se_softc *sc = se_cd.cd_devs[SEUNIT(dev)];
+	struct se_softc *sc = device_lookup_private(&se_cd, SEUNIT(dev));
 	struct scsipi_periph *periph = sc->sc_periph;
 	struct scsipi_adapter *adapt = periph->periph_channel->chan_adapter;
 
@@ -1181,11 +1189,11 @@ int
 seioctl(dev, cmd, addr, flag, l)
 	dev_t dev;
 	u_long cmd;
-	caddr_t addr;
+	void *addr;
 	int flag;
 	struct lwp *l;
 {
-	struct se_softc *sc = se_cd.cd_devs[SEUNIT(dev)];
+	struct se_softc *sc = device_lookup_private(&se_cd, SEUNIT(dev));
 
 	return (scsipi_do_ioctl(sc->sc_periph, dev, cmd, addr, flag, l));
 }

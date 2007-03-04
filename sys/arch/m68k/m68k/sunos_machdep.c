@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos_machdep.c,v 1.33 2007/02/09 21:55:05 ad Exp $	*/
+/*	$NetBSD: sunos_machdep.c,v 1.36 2008/04/24 18:39:20 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos_machdep.c,v 1.33 2007/02/09 21:55:05 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos_machdep.c,v 1.36 2008/04/24 18:39:20 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -155,9 +155,9 @@ sunos_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 		sigdelset(&p->p_sigctx.ps_sigignore, sig);
 		sigdelset(&p->p_sigctx.ps_sigcatch, sig);
 		sigdelset(&l->l_sigmask, sig);
-		mutex_exit(&p->p_smutex);
+		mutex_exit(p->p_lock);
 		psignal(p, sig);
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 		return;
 	}
 
@@ -187,9 +187,9 @@ sunos_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	native_sigset_to_sigset13(mask, &kf.sf_sc.sc_mask);
 
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&kf, fp, sizeof(kf));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 #ifdef DEBUG
@@ -235,10 +235,9 @@ sunos_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
  * a machine fault.
  */
 int
-sunos_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
+sunos_sys_sigreturn(struct lwp *l, const struct sunos_sys_sigreturn_args *uap, register_t *retval)
 {
 	struct proc *p = l->l_proc;
-	struct sunos_sys_sigreturn_args *uap = v;
 	struct sunos_sigcontext *scp;
 	struct frame *frame;
 	struct sunos_sigcontext tsigc;
@@ -251,7 +250,7 @@ sunos_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 #endif
 	if ((int)scp & 1)
 		return EINVAL;
-	if (copyin((caddr_t)scp, (caddr_t)&tsigc, sizeof(tsigc)) != 0)
+	if (copyin((void *)scp, (void *)&tsigc, sizeof(tsigc)) != 0)
 		return EFAULT;
 	scp = &tsigc;
 
@@ -268,7 +267,7 @@ sunos_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 	frame->f_pc = scp->sc_pc;
 	frame->f_sr = scp->sc_ps;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	/* Restore signal stack. */
 	if (scp->sc_onstack & SS_ONSTACK)
@@ -280,7 +279,7 @@ sunos_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 	native_sigset13_to_sigset(&scp->sc_mask, &mask);
 	(void)sigprocmask1(l, SIG_SETMASK, &mask, 0);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return EJUSTRETURN;
 }

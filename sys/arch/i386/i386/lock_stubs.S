@@ -1,7 +1,7 @@
-/*	$NetBSD: lock_stubs.S,v 1.2 2007/02/09 21:55:04 ad Exp $	*/
+/*	$NetBSD: lock_stubs.S,v 1.21 2008/06/27 18:16:02 ad Exp $	*/
 
 /*-
- * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *      
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,23 +30,19 @@
  */
 
 /*
- * Note on the 80386: the 80386 doesn't have a compare-and-exchange
- * operation.  Stepping A of the i486 has these instructions wired to a
- * different opcode, so should use these stubs also.  They are rare, so
- * we don't make the effort.
- *
  * The sizes listed against each function are for a kernel compiled
- * with options MULTIPROCESSOR && DIAGNOSTIC && !I386_CPU.  The offsets
- * are for a kernel compiled without the I386_CPU option.  Where possible
- * we make each routine fit into an assumed 64-byte cache line.
+ * with options MULTIPROCESSOR && DIAGNOSTIC.  Where possible we make
+ * each routine fit into an assumed 64-byte cache line.  Please check
+ * alignment with 'objdump -d' after making changes.
  */
+
+#include <machine/asm.h>
+__KERNEL_RCSID(0, "$NetBSD: lock_stubs.S,v 1.21 2008/06/27 18:16:02 ad Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"
-#include "opt_cputype.h"
 #include "opt_ddb.h"
 
-#include <machine/asm.h>
 #include <machine/cputypes.h>
 
 #include "assym.h"
@@ -62,29 +51,10 @@
 #define	FULL
 #endif
 
-#if defined(I386_CPU)
-#define	STUB(name, alternate)					\
-	NENTRY(name) ;						\
-	cmpl	$CPUCLASS_386, _C_LABEL(cpu_class) ;		\
-	movl	4(%esp), %edx ;					\
-	je	_C_LABEL(alternate)
-#define	ALIGN64		.align	16	/* don't bother */
-#define	ALIGN32		.align	16	/* don't bother */
-#else
-#define	STUB(name, alternate)					\
-	NENTRY(name) ;						\
-	movl	4(%esp), %edx
 #define	ALIGN64		.align	64
 #define	ALIGN32		.align	32
-#endif
-
-#if defined(MULTIPROCESSOR)
-#define	LOCK		lock
-#else
-#define	LOCK		/* nothing */
-#endif
-
-#define	END(name,a)	.align	a; LABEL(name)
+#define	LOCK(num)	.Lpatch/**/num:	lock
+#define	ENDLABEL(name,a) .align	a; LABEL(name)
 
 #if !defined(LOCKDEBUG)
 
@@ -95,13 +65,17 @@
  */
 	ALIGN64
 
-STUB(mutex_enter, mutex_vector_enter)		/* 0x0000, 20 bytes */
+ENTRY(mutex_enter)
+	movl	4(%esp), %edx
 	movl	CPUVAR(CURLWP), %ecx
 	xorl	%eax, %eax
-	LOCK
+	LOCK(1)
 	cmpxchgl %ecx, MTX_OWNER(%edx)
-	jnz,pn	_C_LABEL(mutex_vector_enter)
+	jnz	1f
 	ret
+1:
+	jmp	_C_LABEL(mutex_vector_enter)
+END(mutex_enter)
 
 /*
  * void mutex_exit(kmutex_t *mtx);
@@ -112,23 +86,24 @@ STUB(mutex_enter, mutex_vector_enter)		/* 0x0000, 20 bytes */
  * on multiprocessor systems, and comments in arch/x86/include/lock.h about
  * memory ordering on Intel x86 systems.
  */
-	ALIGN32
-
-STUB(mutex_exit, mutex_vector_exit)		/* 0x0020, 19 bytes */
+ENTRY(mutex_exit)
+	movl	4(%esp), %edx
 	movl	CPUVAR(CURLWP), %eax
 	xorl	%ecx, %ecx
 	cmpxchgl %ecx, MTX_OWNER(%edx)
-	jnz,pn	_C_LABEL(mutex_vector_exit)
+	jnz	1f
 	ret
+1:
+	jmp	_C_LABEL(mutex_vector_exit)
+END(mutex_exit)
 
 /*
  * void rw_enter(krwlock_t *rwl, krw_t op);
  *
  * Acquire one hold on a RW lock.
  */
-	ALIGN64
-
-STUB(rw_enter, rw_vector_enter)			/* 0x0040, 60 bytes */
+ENTRY(rw_enter)
+	movl	4(%esp), %edx
 	cmpl	$RW_READER, 8(%esp)
 	jne	2f
 
@@ -138,8 +113,8 @@ STUB(rw_enter, rw_vector_enter)			/* 0x0040, 60 bytes */
 1:	movl	RW_OWNER(%edx), %eax
 	testb	$(RW_WRITE_LOCKED|RW_WRITE_WANTED), %al
 	leal	RW_READ_INCR(%eax), %ecx
-	jnz,pn	_C_LABEL(rw_vector_enter)
-	LOCK
+	jnz	3f
+	LOCK(2)
 	cmpxchgl %ecx, RW_OWNER(%edx)
 	jnz,pn	1b
 	ret
@@ -150,19 +125,21 @@ STUB(rw_enter, rw_vector_enter)			/* 0x0040, 60 bytes */
 2:	movl	CPUVAR(CURLWP), %ecx
 	xorl	%eax, %eax
 	orl	$RW_WRITE_LOCKED, %ecx
-	LOCK
+	LOCK(3)
 	cmpxchgl %ecx, RW_OWNER(%edx)
-	jnz,pn	_C_LABEL(rw_vector_enter)
+	jnz	3f
 	ret
+3:
+	jmp	_C_LABEL(rw_vector_enter)
+END(rw_enter)
 
 /*
  * void rw_exit(krwlock_t *rwl);
  *
  * Release one hold on a RW lock.
  */
-	ALIGN64
-
-STUB(rw_exit, rw_vector_exit)			/* 0x0080, 61 bytes */
+ENTRY(rw_exit)
+	movl	4(%esp), %edx
 	movl	RW_OWNER(%edx), %eax
 	testb	$RW_WRITE_LOCKED, %al
 	jnz	2f
@@ -171,11 +148,11 @@ STUB(rw_exit, rw_vector_exit)			/* 0x0080, 61 bytes */
 	 * Reader
 	 */
 1:	testb	$RW_HAS_WAITERS, %al
-	jnz,pn	3f
+	jnz	3f
 	cmpl	$RW_READ_INCR, %eax
 	leal	-RW_READ_INCR(%eax), %ecx
-	jb,pn	3f
-	LOCK
+	jb	3f
+	LOCK(4)
 	cmpxchgl %ecx, RW_OWNER(%edx)
 	jnz,pn	1b
 	ret
@@ -185,16 +162,58 @@ STUB(rw_exit, rw_vector_exit)			/* 0x0080, 61 bytes */
 	 */
 2:	leal	-RW_WRITE_LOCKED(%eax), %ecx
 	subl	CPUVAR(CURLWP), %ecx
-	jnz,pn	3f
-	LOCK
+	jnz	3f
+	LOCK(5)
 	cmpxchgl %ecx, RW_OWNER(%edx)
-	jnz,pn	3f
+	jnz	3f
 	ret
 
 	/*
 	 * Slow path.
 	 */
 3:	jmp	_C_LABEL(rw_vector_exit)
+END(rw_exit)
+
+/*
+ * int rw_tryenter(krwlock_t *rwl, krw_t op);
+ *
+ * Try to acquire one hold on a RW lock.
+ */
+ENTRY(rw_tryenter)
+	movl	4(%esp), %edx
+	cmpl	$RW_READER, 8(%esp)
+	jne	2f
+
+	/*
+	 * Reader
+	 */
+	movl	RW_OWNER(%edx), %eax
+1:
+	leal	RW_READ_INCR(%eax), %ecx
+	testb	$(RW_WRITE_LOCKED|RW_WRITE_WANTED), %al
+	jnz	3f
+	LOCK(12)
+	cmpxchgl %ecx, RW_OWNER(%edx)
+	jnz	1b
+	movl	%edx, %eax			/* nonzero */
+	ret
+
+	/*
+	 * Writer
+	 */
+2:
+	movl	CPUVAR(CURLWP), %ecx
+	orl	$RW_WRITE_LOCKED, %ecx
+	xorl	%eax, %eax
+	LOCK(13)
+	cmpxchgl %ecx, RW_OWNER(%edx)
+	movl	$0, %eax
+	setz	%al
+	ret
+3:
+	xorl	%eax, %eax
+	ret
+END(rw_tryenter)
 
 #ifndef __XEN__
 
@@ -203,117 +222,95 @@ STUB(rw_exit, rw_vector_exit)			/* 0x0080, 61 bytes */
  *
  * Acquire a spin mutex and post a load fence.
  */
-	ALIGN64
-
-STUB(mutex_spin_enter, mutex_vector_enter)	/* 0x00c0, 51 bytes */
-	movl	CPUVAR(SELF150), %eax
-	movl	(CPU_INFO_ILEVEL-0x150)(%eax), %ecx
-	subl	$1, (CPU_INFO_MTX_COUNT-0x150)(%eax)/* decl does not set CF */
-	jnc	1f
-	movl	%ecx, (CPU_INFO_MTX_OLDSPL-0x150)(%eax)
-1:	movb	MTX_IPL(%edx), %ch
+ENTRY(mutex_spin_enter)
+	movl	4(%esp), %edx
+	movb	CPUVAR(ILEVEL), %cl
+	movb	MTX_IPL(%edx), %ch
+	movl	$0x01, %eax
 	cmpb	%ch, %cl
-	jg,pn	2f
-	movb	%ch, (CPU_INFO_ILEVEL-0x150)(%eax)/* splraiseipl() */
+	jg	1f
+	movb	%ch, CPUVAR(ILEVEL)		/* splraiseipl() */
+1:
+	subl	%eax, CPUVAR(MTX_COUNT)		/* decl does not set CF */
+	jnc	2f
+	movb	%cl, CPUVAR(MTX_OLDSPL)
 2:
-#if defined(FULL)
-	mov	$0x0100, %eax			/* new + expected value */
-	LOCK
-	cmpxchgb %ah, MTX_LOCK(%edx)		/* lock it */
-	jnz,pn	_C_LABEL(mutex_spin_retry)
+#ifdef FULL
+	xchgb	%al, MTX_LOCK(%edx)		/* lock it */
+	testb	%al, %al
+	jnz	3f
 #endif
 	ret
+3:
+	jmp	_C_LABEL(mutex_spin_retry)
 
 	ALIGN64
 LABEL(mutex_spin_enter_end)
+END(mutex_spin_enter)
 
 /*
- * void mutex_spin_exit(kmutex_t *mtx);
- *
  * Release a spin mutex and post a store fence.
  */
-	ALIGN64
-
-STUB(mutex_spin_exit, mutex_vector_exit)	/* 0x0100, 50 bytes */
-#if defined(DIAGNOSTIC)
-	movl	$0x0001, %eax			/* new + expected value */
-	cmpxchgb %ah, MTX_LOCK(%edx)
-	jnz,pn	_C_LABEL(mutex_vector_exit)
-#elif defined(MULTIPROCESSOR)
-	movb	$0x00,MTX_LOCK(%edx)
-#endif
-	movl	CPUVAR(SELF150), %eax
-	movl	(CPU_INFO_MTX_OLDSPL-0x150)(%eax), %ecx
-	incl	(CPU_INFO_MTX_COUNT-0x150)(%eax)
+ENTRY(mutex_spin_exit)
+	movl	4(%esp), %edx
+	movl	CPUVAR(MTX_OLDSPL), %ecx
+	incl	CPUVAR(MTX_COUNT)
+	movb	$0, MTX_LOCK(%edx)		/* zero */
 	jnz	1f
-	cmpl	(CPU_INFO_ILEVEL-0x150)(%eax), %ecx
-	movl    %ecx, 4(%esp)
-	jae	1f
-	movl	(CPU_INFO_IUNMASK-0x150)(%eax,%ecx,4), %edx
+	movl	%fs:CPU_INFO_IUNMASK(,%ecx,4), %edx
 	cli
-	testl	(CPU_INFO_IPENDING-0x150)(%eax), %edx
+	testl	CPUVAR(IPENDING), %edx
+	movl    %ecx, 4(%esp)
 	jnz	_C_LABEL(Xspllower)		/* does sti */
-	movl	%ecx, (CPU_INFO_ILEVEL-0x150)(%eax)
+	movl	%ecx, CPUVAR(ILEVEL)
 	sti
 1:	ret
-
-	ALIGN64
+	nop					/* XXX round up */
+	.align	32
 LABEL(mutex_spin_exit_end)
-
-#if !defined(I386_CPU) && defined(I686_CPU) && !defined(DIAGNOSTIC)
+END(mutex_spin_exit)
 
 /*
- * Patch for i686 CPUs where cli/sti is prohibitavely expensive.
+ * Patch for i686 CPUs where cli/sti is prohibitively expensive.
  * Must be the same size as mutex_spin_exit().
  */
-	ALIGN64
-
-ENTRY(i686_mutex_spin_exit)			/* 64 bytes */
+ENTRY(i686_mutex_spin_exit)
 	mov	4(%esp),%edx
-	xorl	%eax,%eax
-	pushl	%edi
-	fs
-	movl	(CPU_INFO_SELF150)(%eax), %edi	/* now splx() */
-	pushl	%ebx
-	movl	(CPU_INFO_MTX_OLDSPL-0x150)(%edi), %ecx
-	incl	(CPU_INFO_MTX_COUNT-0x150)(%edi)
-	movb	%al, MTX_LOCK(%edx)		/* zero */
-	movl	(CPU_INFO_ILEVEL-0x150)(%edi), %edx
+	movl	CPUVAR(MTX_OLDSPL), %ecx
+	incl	CPUVAR(MTX_COUNT)
+	movb	%ch, MTX_LOCK(%edx)		/* zero */
 	jnz	1f
-	cmpl	%edx, %ecx			/* new level is lower? */
-	movl	(CPU_INFO_IPENDING-0x150)(%edi), %eax
-	jae,pn	1f
-	testl	%eax,(CPU_INFO_IUNMASK-0x150)(%edi,%ecx,4)
+	pushl	%ebx
+0:
+	movl	CPUVAR(IPENDING), %eax
+	testl	%eax, %fs:CPU_INFO_IUNMASK(,%ecx,4)
 	movl	%eax, %ebx
 	/*
 	 * On a P4 this jump is cheaper than patching in junk using
 	 * cmovnz.  Is cmpxchg expensive if it fails?
 	 */
-	jnz,pn	2f
-	cmpxchg8b (CPU_INFO_ISTATE-0x150)(%edi)	/* swap in new ilevel */
-	jnz,pn	2f
-1:
+	jnz	2f
+	cmpxchg8b CPUVAR(ISTATE)		/* swap in new ilevel */
+	jnz	0b
 	popl	%ebx
-	popl	%edi
+1:
 	ret
 2:
 	popl	%ebx
-	popl	%edi
 	movl	%ecx,4(%esp)
 LABEL(i686_mutex_spin_exit_patch)
 	jmp	_C_LABEL(Xspllower)
-	ALIGN64
+	.align	32
 LABEL(i686_mutex_spin_exit_end)
-
-#endif	/* !defined(I386_CPU) && defined(I686_CPU) && !defined(DIAGNOSTIC) */
+END(i686_mutex_spin_exit)
 
 #else	/* !__XEN__ */
 
 /* For now; strong alias not working for some reason. */
-NENTRY(mutex_spin_enter)
+ENTRY(mutex_spin_enter)
 	jmp	_C_LABEL(mutex_vector_enter)
 
-NENTRY(mutex_spin_exit)
+ENTRY(mutex_spin_exit)
 	jmp	_C_LABEL(mutex_vector_exit)
 
 #endif	/* !__XEN__ */
@@ -321,83 +318,57 @@ NENTRY(mutex_spin_exit)
 #endif	/* !LOCKDEBUG */
 
 /*
- * int _lock_cas(uintptr_t *val, uintptr_t old, uintptr_t new);
- *
- * Perform an atomic compare-and-set operation.
+ * Spinlocks.
  */
-	ALIGN64
+ENTRY(__cpu_simple_lock_init)
+	movl	4(%esp), %edx
+	movb	$0, (%edx)
+	ret
+END(__cpu_simple_lock_init)
 
-STUB(_lock_cas, _80386_lock_cas)		/* 32 bytes */
-	movl	8(%esp), %eax
-	movl	12(%esp), %ecx
-	LOCK
-	cmpxchgl %ecx, (%edx)
+NENTRY(__cpu_simple_lock)
+	movl	4(%esp), %edx
+	movl	$0x0100, %eax
+1:
+	LOCK(6)
+	cmpxchgb %ah, (%edx)
+	jnz	2f
+	ret
+2:
+	movl	$0x0100, %eax
+	pause
+	nop
+	nop
+	cmpb	$0, (%edx)
+	je	1b
+	jmp	2b
+END(__cpu_simple_lock)
+
+ENTRY(__cpu_simple_unlock)
+	movl	4(%esp), %edx
+	movb	$0, (%edx)
+	ret
+END(__cpu_simple_unlock)
+
+ENTRY(__cpu_simple_lock_try)
+	movl	4(%esp), %edx
+	movl	$0x0100, %eax
+	LOCK(7)
+	cmpxchgb %ah, (%edx)
 	movl	$0, %eax
-	setz	%al
+	setz	%al	
 	ret
-
-#ifdef I386_CPU
-/*
- * Since we can't do compare-and-exchange atomically with an 80386, we must
- * disable interrupts in order to support preemption.  On the i386 this is
- * cheap to do.  For other architectures a restartable sequence is usually
- * a better option.
- */
-_80386_lock_cas:
-	movl	8(%esp), %eax
-	movl	12(%esp), %ecx
-	cli
-	cmpl	%eax, (%edx)
-	jne	1f
-	movl	%ecx, (%edx)
-	movb	$1, %al
-	sti
-	ret
-
-1:	sti
-	xorl	%eax, %eax
-	ret
-#endif	/* I386_CPU */
+END(__cpu_simple_lock_try)
 
 /*
- * Memory barrier operations, may be patched at runtime.
+ * Patchpoints to replace with NOP when ncpu == 1.
  */
-	.align	8
+	.data
 
-NENTRY(mb_read)
-	lock
-	addl	$0, 0(%esp)
-	ret
-END(mb_read_end, 8)
-
-NENTRY(mb_write)
-	/* Nothing at the moment. */
-	ret
-END(mb_write_end, 8)
-
-NENTRY(mb_memory)
-	lock
-	addl	$0, 0(%esp)
-	ret
-END(mb_memory_end, 8)
-
-#ifdef I686_CPU
-NENTRY(sse2_mb_read)
-	lfence
-	ret
-END(sse2_mb_read_end, 8)
-
-NENTRY(sse2_mb_memory)
-	mfence
-	ret
-END(sse2_mb_memory_end, 8)
-#endif	/* I686_CPU */
-
-/*
- * Make sure code after the ret is properly encoded with nopness
- * by gas, or could stall newer processors.
- */
-
-NENTRY(x86_mb_nop)
-	ret
-END(x86_mb_nop_end, 8)
+#ifndef LOCKDEBUG
+LABEL(x86_lockpatch)
+	.long	.Lpatch1, .Lpatch2, .Lpatch3, .Lpatch4
+	.long	.Lpatch5, .Lpatch6, .Lpatch7, .Lpatch12
+	.long	.Lpatch13
+	.long	0
+#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: radix.h,v 1.18 2007/02/17 07:46:38 dyoung Exp $	*/
+/*	$NetBSD: radix.h,v 1.20 2008/05/11 20:22:38 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1993
@@ -121,9 +121,6 @@ struct radix_node_head {
 		(const void *v, const void *mask, struct radix_node_head *head);
 	struct	radix_node *(*rnh_matchpkt)	/* locate based on packet hdr */
 		(const void *v, struct radix_node_head *head);
-	int	(*rnh_walktree)			/* traverse tree */
-		(struct radix_node_head *,
-		     int (*)(struct radix_node *, void *), void *);
 	struct	radix_node rnh_nodes[3];	/* empty tree for common case */
 };
 
@@ -131,9 +128,6 @@ struct radix_node_head {
 #ifdef _KERNEL
 extern struct radix_mask *rn_mkfreelist;
 
-#define Bcmp(a, b, n) ((n) == 0 ? 0 : memcmp((a), (b), (n)))
-#define Bcopy(a, b, n) memmove((b), (a), (n))
-#define Bzero(p, n) memset((p), 0, (n));
 #define R_Malloc(p, t, n) (p = (t) malloc((size_t)(n), M_RTABLE, M_NOWAIT))
 #define Free(p) free(p, M_RTABLE);
 #endif /*_KERNEL*/

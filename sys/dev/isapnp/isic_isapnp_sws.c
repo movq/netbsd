@@ -47,7 +47,7 @@
  *		EXPERIMENTAL !!!!
  *		=================
  *
- *	$Id: isic_isapnp_sws.c,v 1.10 2007/01/29 01:52:45 hubertf Exp $
+ *	$Id: isic_isapnp_sws.c,v 1.13 2008/04/08 20:09:27 cegger Exp $
  *
  *	last edit-date: [Fri Jan  5 11:38:29 2001]
  *
@@ -57,7 +57,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_isapnp_sws.c,v 1.10 2007/01/29 01:52:45 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_isapnp_sws.c,v 1.13 2008/04/08 20:09:27 cegger Exp $");
 
 #include "opt_isicpnp.h"
 #ifdef ISICPNP_SEDLBAUER
@@ -96,7 +96,7 @@ __KERNEL_RCSID(0, "$NetBSD: isic_isapnp_sws.c,v 1.10 2007/01/29 01:52:45 hubertf
 #include <machine/clock.h>
 #include <i386/isa/isa_device.h>
 #else
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <sys/device.h>
 #endif
 
@@ -302,9 +302,9 @@ isic_attach_sws(struct isa_device *dev)
 	sc->sc_bfifolen = HSCX_FIFO_LEN;
 	dev->id_msize   = 0;
 
-	ISAC_BASE   = (caddr_t) (((u_int) sc->sc_port) + SWS_ISAC);
-	HSCX_A_BASE = (caddr_t) (((u_int) sc->sc_port) + SWS_HSCX0);
-	HSCX_B_BASE = (caddr_t) (((u_int) sc->sc_port) + SWS_HSCX1);
+	ISAC_BASE   = (void *) (((u_int) sc->sc_port) + SWS_ISAC);
+	HSCX_A_BASE = (void *) (((u_int) sc->sc_port) + SWS_HSCX0);
+	HSCX_B_BASE = (void *) (((u_int) sc->sc_port) + SWS_HSCX1);
 
 	/*
 	 * Read HSCX A/B VSTR.  Expected value for the SWS PnP card is
@@ -366,11 +366,11 @@ isic_attach_sws(struct isic_softc *sc)
             ((HSCX_READ(1, H_VSTR) & 0xf) != 0x5) )
 	{
 		printf("%s: HSCX VSTR test failed for SWS PnP\n",
-			sc->sc_dev.dv_xname);
+			device_xname(&sc->sc_dev));
 		printf("%s: HSC0: VSTR: %#x\n",
-			sc->sc_dev.dv_xname, HSCX_READ(0, H_VSTR));
+			device_xname(&sc->sc_dev), HSCX_READ(0, H_VSTR));
 		printf("%s: HSC1: VSTR: %#x\n",
-			sc->sc_dev.dv_xname, HSCX_READ(1, H_VSTR));
+			device_xname(&sc->sc_dev), HSCX_READ(1, H_VSTR));
 		return;
 	}
 

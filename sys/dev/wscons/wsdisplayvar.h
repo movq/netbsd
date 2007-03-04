@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplayvar.h,v 1.41 2006/11/06 19:51:12 macallan Exp $ */
+/* $NetBSD: wsdisplayvar.h,v 1.47 2008/03/25 00:49:20 cube Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -33,7 +33,7 @@
 #ifndef _DEV_WSCONS_WSDISPLAYVAR_H
 #define _DEV_WSCONS_WSDISPLAYVAR_H
 
-struct device;
+#include <sys/device.h>
 
 /*
  * WSDISPLAY interfaces
@@ -111,7 +111,7 @@ struct wsdisplay_char;
  * with these functions, which is passed to them when they are invoked.
  */
 struct wsdisplay_accessops {
-	int	(*ioctl)(void *, void *, u_long, caddr_t, int, struct lwp *);
+	int	(*ioctl)(void *, void *, u_long, void *, int, struct lwp *);
 	paddr_t	(*mmap)(void *, void *, off_t, int);
 	int	(*alloc_screen)(void *, const struct wsscreen_descr *,
 				void **, int *, int *, long *);
@@ -174,6 +174,8 @@ void	wsdisplay_preattach(const struct wsscreen_descr *, void *, int, int,
 int	wsdisplaydevprint(void *, const char *);
 int	wsemuldisplaydevprint(void *, const char *);
 
+int	wsdisplay_handlex(int);
+
 /*
  * Console interface.
  */
@@ -196,18 +198,17 @@ int wsdisplay_getactivescreen(struct wsdisplay_softc *);
 int wsscreen_switchwait(struct wsdisplay_softc *, int);
 
 int wsdisplay_internal_ioctl(struct wsdisplay_softc *, struct wsscreen *,
-			     u_long, caddr_t, int, struct lwp *);
+			     u_long, void *, int, struct lwp *);
 
-int wsdisplay_usl_ioctl1(struct wsdisplay_softc *,
-			 u_long, caddr_t, int, struct lwp *);
+int wsdisplay_usl_ioctl1(device_t, u_long, void *, int, struct lwp *);
 
 int wsdisplay_usl_ioctl2(struct wsdisplay_softc *, struct wsscreen *,
-			 u_long, caddr_t, int, struct lwp *);
+			 u_long, void *, int, struct lwp *);
 
-int wsdisplay_stat_ioctl(struct wsdisplay_softc *, u_long, caddr_t,
+int wsdisplay_stat_ioctl(struct wsdisplay_softc *, u_long, void *,
 			 int, struct lwp *);
 
-int wsdisplay_cfg_ioctl(struct wsdisplay_softc *, u_long, caddr_t,
+int wsdisplay_cfg_ioctl(struct wsdisplay_softc *, u_long, void *,
 			int, struct lwp *);
 
 #ifdef WSDISPLAY_SCROLLSUPPORT
@@ -219,13 +220,12 @@ void wsdisplay_scroll(void *, int);
 #define WSDISPLAY_SCROLL_RESET		(1 << 2)
 #define WSDISPLAY_SCROLL_LOW		(1 << 3)
 
-int wsdisplay_stat_inject(struct device *, u_int, int);
+int wsdisplay_stat_inject(device_t, u_int, int);
 
 /*
  * for general use
  */
 #define WSDISPLAY_NULLSCREEN	-1
-void wsdisplay_switchtoconsole(void);
 const struct wsscreen_descr *wsdisplay_screentype_pick(
     const struct wsscreen_list *, const char *);
 

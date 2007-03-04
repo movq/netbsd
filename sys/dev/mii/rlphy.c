@@ -1,4 +1,4 @@
-/*	$NetBSD: rlphy.c,v 1.12 2006/11/16 01:33:06 christos Exp $	*/
+/*	$NetBSD: rlphy.c,v 1.22 2008/05/04 17:06:10 xtraeme Exp $	*/
 /*	$OpenBSD: rlphy.c,v 1.20 2005/07/31 05:27:30 pvalchev Exp $	*/
 
 /*
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rlphy.c,v 1.12 2006/11/16 01:33:06 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rlphy.c,v 1.22 2008/05/04 17:06:10 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,25 +53,32 @@ __KERNEL_RCSID(0, "$NetBSD: rlphy.c,v 1.12 2006/11/16 01:33:06 christos Exp $");
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 #include <dev/mii/miidevs.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <dev/ic/rtl81x9reg.h>
 
-int	rlphymatch(struct device *, struct cfdata *, void *);
-void	rlphyattach(struct device *, struct device *, void *);
+struct rlphy_softc {
+	struct mii_softc sc_mii;
+	int sc_rtl8201l;
+};
 
-CFATTACH_DECL(rlphy, sizeof(struct mii_softc),
+int	rlphymatch(device_t, cfdata_t, void *);
+void	rlphyattach(device_t, device_t, void *);
+
+CFATTACH_DECL_NEW(rlphy, sizeof(struct rlphy_softc),
     rlphymatch, rlphyattach, mii_phy_detach, mii_phy_activate);
 
 int	rlphy_service(struct mii_softc *, struct mii_data *, int);
 void	rlphy_status(struct mii_softc *);
 
+static void rlphy_reset(struct mii_softc *);
+
 const struct mii_phy_funcs rlphy_funcs = {
-	rlphy_service, rlphy_status, mii_phy_reset,
+	rlphy_service, rlphy_status, rlphy_reset,
 };
 
 static const struct mii_phydesc rlphys[] = {
 	{ MII_OUI_yyREALTEK,		MII_MODEL_yyREALTEK_RTL8201L,
-          MII_STR_yyREALTEK_RTL8201L },
+	  MII_STR_yyREALTEK_RTL8201L },
 	{ MII_OUI_ICPLUS,		MII_MODEL_ICPLUS_IP101,
 	  MII_STR_ICPLUS_IP101 },
 
@@ -80,7 +87,7 @@ static const struct mii_phydesc rlphys[] = {
 };
 
 int
-rlphymatch(struct device *parent, struct cfdata *match, void *aux)
+rlphymatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct mii_attach_args *ma = aux;
 
@@ -102,18 +109,22 @@ rlphymatch(struct device *parent, struct cfdata *match, void *aux)
 }
 
 void
-rlphyattach(struct device *parent, struct device *self, void *aux)
+rlphyattach(device_t parent, device_t self, void *aux)
 {
-	struct mii_softc *sc = device_private(self);
+	struct rlphy_softc *rsc = device_private(self);
+	struct mii_softc *sc = &rsc->sc_mii;
 	struct mii_attach_args *ma = aux;
 	struct mii_data *mii = ma->mii_data;
 
+	aprint_naive("\n");
 	if (MII_MODEL(ma->mii_id2) == MII_MODEL_yyREALTEK_RTL8201L) {
+		rsc->sc_rtl8201l = 1;
 		aprint_normal(": %s, rev. %d\n", MII_STR_yyREALTEK_RTL8201L,
 		    MII_REV(ma->mii_id2));
 	} else
 		aprint_normal(": Realtek internal PHY\n");
 
+	sc->mii_dev = self;
 	sc->mii_inst = mii->mii_instance;
 	sc->mii_phy = ma->mii_phyno;
 	sc->mii_funcs = &rlphy_funcs;
@@ -124,12 +135,15 @@ rlphyattach(struct device *parent, struct device *self, void *aux)
 
 	PHY_RESET(sc);
 
-	aprint_normal("%s: ", sc->mii_dev.dv_xname);
+	aprint_normal_dev(self, "");
 	sc->mii_capabilities =
 	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
 	if (sc->mii_capabilities & BMSR_MEDIAMASK)
 		mii_phy_add_media(sc);
 	aprint_normal("\n");
+
+	if (!pmf_device_register(self, NULL, mii_phy_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 int
@@ -138,9 +152,6 @@ rlphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
 
 	int rv;
-
-	if (!device_is_active(&sc->mii_dev))
-		return ENXIO;
 
 	/*
 	 * Can't isolate the RTL8139 phy, so it has to be the only one.
@@ -239,6 +250,7 @@ rlphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 void
 rlphy_status(struct mii_softc *sc)
 {
+	struct rlphy_softc *rsc = (void *)sc;
 	struct mii_data *mii = sc->mii_pdata;
 	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
 	int bmsr, bmcr, anlpar;
@@ -316,18 +328,31 @@ rlphy_status(struct mii_softc *sc)
 		 *   can test the 'SPEED10' bit of the MAC's media status
 		 *   register.
 		 */
-		if (device_is_a(device_parent(&sc->mii_dev), "rtk")) {
-			if (PHY_READ(sc, RTK_MEDIASTAT) & RTK_MEDIASTAT_SPEED10)
-				mii->mii_media_active |= IFM_10_T;
-			else
-				mii->mii_media_active |= IFM_100_TX;
-		} else {
+		if (rsc->sc_rtl8201l) {
 			if (PHY_READ(sc, 0x0019) & 0x01)
 				mii->mii_media_active |= IFM_100_TX;
 			else
 				mii->mii_media_active |= IFM_10_T;
+		} else {
+			if (PHY_READ(sc, RTK_MEDIASTAT) & RTK_MEDIASTAT_SPEED10)
+				mii->mii_media_active |= IFM_10_T;
+			else
+				mii->mii_media_active |= IFM_100_TX;
 		}
 
 	} else
 		mii->mii_media_active = ife->ifm_media;
+}
+
+static void
+rlphy_reset(struct mii_softc *sc)
+{
+
+	mii_phy_reset(sc);
+
+	/*
+	 * XXX RealTek PHY doesn't set the BMCR properly after
+	 * XXX reset, which breaks autonegotiation.
+	 */
+	PHY_WRITE(sc, MII_BMCR, BMCR_AUTOEN);
 }

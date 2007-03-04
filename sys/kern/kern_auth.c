@@ -1,4 +1,30 @@
-/* $NetBSD: kern_auth.c,v 1.46 2007/02/24 20:41:33 christos Exp $ */
+/* $NetBSD: kern_auth.c,v 1.61 2008/08/15 01:31:02 matt Exp $ */
+
+/*-
+ * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*-
  * Copyright (c) 2005, 2006 Elad Efrat <elad@NetBSD.org>
@@ -28,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_auth.c,v 1.46 2007/02/24 20:41:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_auth.c,v 1.61 2008/08/15 01:31:02 matt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -40,7 +66,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_auth.c,v 1.46 2007/02/24 20:41:33 christos Exp 
 #include <sys/kmem.h>
 #include <sys/rwlock.h>
 #include <sys/sysctl.h>		/* for pi_[p]cread */
-#include <sys/mutex.h>
+#include <sys/atomic.h>
 #include <sys/specificdata.h>
 
 /*
@@ -59,8 +85,17 @@ struct kauth_key {
  * relevant.
  */
 struct kauth_cred {
-	kmutex_t cr_lock;		/* lock on cr_refcnt */
+	/*
+	 * Ensure that the first part of the credential resides in its own
+	 * cache line.  Due to sharing there aren't many kauth_creds in a
+	 * typical system, but the reference counts change very often.
+	 * Keeping it seperate from the rest of the data prevents false
+	 * sharing between CPUs.
+	 */
 	u_int cr_refcnt;		/* reference count */
+#if COHERENCY_UNIT > 4
+	uint8_t cr_pad[COHERENCY_UNIT - 4];
+#endif
 	uid_t cr_uid;			/* user id */
 	uid_t cr_euid;			/* effective user id */
 	uid_t cr_svuid;			/* saved effective user id */
@@ -95,11 +130,9 @@ struct kauth_scope {
 
 static int kauth_cred_hook(kauth_cred_t, kauth_action_t, void *, void *);
 
-static POOL_INIT(kauth_cred_pool, sizeof(struct kauth_cred), 0, 0, 0,
-    "kauthcredpl", &pool_allocator_nointr);
-
 /* List of scopes and its lock. */
-static SIMPLEQ_HEAD(, kauth_scope) scope_list;
+static SIMPLEQ_HEAD(, kauth_scope) scope_list =
+    SIMPLEQ_HEAD_INITIALIZER(scope_list);
 
 /* Built-in scopes: generic, process. */
 static kauth_scope_t kauth_builtin_scope_generic;
@@ -113,6 +146,7 @@ static kauth_scope_t kauth_builtin_scope_cred;
 static unsigned int nsecmodels = 0;
 
 static specificdata_domain_t kauth_domain;
+static pool_cache_t kauth_cred_cache;
 krwlock_t	kauth_lock;
 
 /* Allocate new, empty kauth credentials. */
@@ -121,10 +155,17 @@ kauth_cred_alloc(void)
 {
 	kauth_cred_t cred;
 
-	cred = pool_get(&kauth_cred_pool, PR_WAITOK);
-	memset(cred, 0, sizeof(*cred));
-	mutex_init(&cred->cr_lock, MUTEX_DEFAULT, IPL_NONE);
+	cred = pool_cache_get(kauth_cred_cache, PR_WAITOK);
+
 	cred->cr_refcnt = 1;
+	cred->cr_uid = 0;
+	cred->cr_euid = 0;
+	cred->cr_svuid = 0;
+	cred->cr_gid = 0;
+	cred->cr_egid = 0;
+	cred->cr_svgid = 0;
+	cred->cr_ngroups = 0;
+
 	specificdata_init(kauth_domain, &cred->cr_sd);
 	kauth_cred_hook(cred, KAUTH_CRED_INIT, NULL, NULL);
 
@@ -138,34 +179,27 @@ kauth_cred_hold(kauth_cred_t cred)
 	KASSERT(cred != NULL);
 	KASSERT(cred->cr_refcnt > 0);
 
-        mutex_enter(&cred->cr_lock);
-        cred->cr_refcnt++;
-        mutex_exit(&cred->cr_lock);
+        atomic_inc_uint(&cred->cr_refcnt);
 }
 
 /* Decrease reference count to cred. If reached zero, free it. */
 void
 kauth_cred_free(kauth_cred_t cred)
 {
-	u_int refcnt;
 
 	KASSERT(cred != NULL);
 	KASSERT(cred->cr_refcnt > 0);
 
-	mutex_enter(&cred->cr_lock);
-	refcnt = --cred->cr_refcnt;
-	mutex_exit(&cred->cr_lock);
+	if (atomic_dec_uint_nv(&cred->cr_refcnt) > 0)
+		return;
 
-	if (refcnt == 0) {
-		kauth_cred_hook(cred, KAUTH_CRED_FREE, NULL, NULL);
-		specificdata_fini(kauth_domain, &cred->cr_sd);
-		mutex_destroy(&cred->cr_lock);
-		pool_put(&kauth_cred_pool, cred);
-	}
+	kauth_cred_hook(cred, KAUTH_CRED_FREE, NULL, NULL);
+	specificdata_fini(kauth_domain, &cred->cr_sd);
+	pool_cache_put(kauth_cred_cache, cred);
 }
 
-void
-kauth_cred_clone(kauth_cred_t from, kauth_cred_t to)
+static void
+kauth_cred_clone1(kauth_cred_t from, kauth_cred_t to, bool copy_groups)
 {
 	KASSERT(from != NULL);
 	KASSERT(to != NULL);
@@ -177,10 +211,18 @@ kauth_cred_clone(kauth_cred_t from, kauth_cred_t to)
 	to->cr_gid = from->cr_gid;
 	to->cr_egid = from->cr_egid;
 	to->cr_svgid = from->cr_svgid;
-	to->cr_ngroups = from->cr_ngroups;
-	memcpy(to->cr_groups, from->cr_groups, sizeof(to->cr_groups));
+	if (copy_groups) {
+		to->cr_ngroups = from->cr_ngroups;
+		memcpy(to->cr_groups, from->cr_groups, sizeof(to->cr_groups));
+	}
 
 	kauth_cred_hook(from, KAUTH_CRED_COPY, to, NULL);
+}
+
+void
+kauth_cred_clone(kauth_cred_t from, kauth_cred_t to)
+{
+	kauth_cred_clone1(from, to, true);
 }
 
 /*
@@ -230,10 +272,10 @@ void
 kauth_proc_fork(struct proc *parent, struct proc *child)
 {
 
-	mutex_enter(&parent->p_mutex);
+	mutex_enter(parent->p_lock);
 	kauth_cred_hold(parent->p_cred);
 	child->p_cred = parent->p_cred;
-	mutex_exit(&parent->p_mutex);
+	mutex_exit(parent->p_lock);
 
 	/* XXX: relies on parent process stalling during fork() */
 	kauth_cred_hook(parent->p_cred, KAUTH_CRED_FORK, parent,
@@ -384,32 +426,80 @@ kauth_cred_group(kauth_cred_t cred, u_int idx)
 
 /* XXX elad: gmuid is unused for now. */
 int
-kauth_cred_setgroups(kauth_cred_t cred, gid_t *grbuf, size_t len, uid_t gmuid)
+kauth_cred_setgroups(kauth_cred_t cred, const gid_t *grbuf, size_t len,
+    uid_t gmuid, enum uio_seg seg)
 {
+	int error = 0;
+
 	KASSERT(cred != NULL);
 	KASSERT(cred->cr_refcnt == 1);
-	KASSERT(len <= sizeof(cred->cr_groups) / sizeof(cred->cr_groups[0]));
 
-	if (len)
-		memcpy(cred->cr_groups, grbuf, len * sizeof(cred->cr_groups[0]));
+	if (len > __arraycount(cred->cr_groups))
+		return EINVAL;
+
+	if (len) {
+		if (seg == UIO_SYSSPACE) {
+			memcpy(cred->cr_groups, grbuf,
+			    len * sizeof(cred->cr_groups[0]));
+		} else {
+			error = copyin(grbuf, cred->cr_groups,
+			    len * sizeof(cred->cr_groups[0]));
+			if (error != 0)
+				len = 0;
+		}
+	}
 	memset(cred->cr_groups + len, 0xff,
 	    sizeof(cred->cr_groups) - (len * sizeof(cred->cr_groups[0])));
 
 	cred->cr_ngroups = len;
 
-	return (0);
+	return error;
+}
+
+/* This supports sys_setgroups() */
+int
+kauth_proc_setgroups(struct lwp *l, kauth_cred_t ncred)
+{
+	kauth_cred_t cred;
+	int error;
+
+	/*
+	 * At this point we could delete duplicate groups from ncred,
+	 * and plausibly sort the list - but in general the later is
+	 * a bad idea.
+	 */
+	proc_crmod_enter();
+	/* Maybe we should use curproc here ? */
+	cred = l->l_proc->p_cred;
+
+	kauth_cred_clone1(cred, ncred, false);
+
+	error = kauth_authorize_process(cred, KAUTH_PROCESS_SETID,
+	    l->l_proc, NULL, NULL, NULL);
+	if (error != 0) {
+		proc_crmod_leave(cred, ncred, false);
+			return error;
+	}
+
+	/* Broadcast our credentials to the process and other LWPs. */
+ 	proc_crmod_leave(ncred, cred, true);
+	return 0;
 }
 
 int
-kauth_cred_getgroups(kauth_cred_t cred, gid_t *grbuf, size_t len)
+kauth_cred_getgroups(kauth_cred_t cred, gid_t *grbuf, size_t len,
+    enum uio_seg seg)
 {
 	KASSERT(cred != NULL);
-	KASSERT(len <= cred->cr_ngroups);
 
-	memset(grbuf, 0xff, sizeof(*grbuf) * len);
+	if (len > cred->cr_ngroups)
+		return EINVAL;
+
+	if (seg == UIO_USERSPACE)
+		return copyout(cred->cr_groups, grbuf, sizeof(*grbuf) * len);
 	memcpy(grbuf, cred->cr_groups, sizeof(*grbuf) * len);
 
-	return (0);
+	return 0;
 }
 
 int
@@ -509,7 +599,7 @@ kauth_uucred_to_cred(kauth_cred_t cred, const struct uucred *uuc)
 	cred->cr_svgid = uuc->cr_gid;
 	cred->cr_ngroups = min(uuc->cr_ngroups, NGROUPS);
 	kauth_cred_setgroups(cred, __UNCONST(uuc->cr_groups),
-	    cred->cr_ngroups, -1);
+	    cred->cr_ngroups, -1, UIO_SYSSPACE);
 }
 
 /*
@@ -527,7 +617,7 @@ kauth_cred_to_uucred(struct uucred *uuc, const kauth_cred_t cred)
 	uuc->cr_uid = cred->cr_euid;  
 	uuc->cr_gid = cred->cr_egid;  
 	uuc->cr_ngroups = ng;
-	kauth_cred_getgroups(cred, uuc->cr_groups, ng);
+	kauth_cred_getgroups(cred, uuc->cr_groups, ng, UIO_SYSSPACE);
 }
 
 /*
@@ -573,8 +663,7 @@ kauth_cred_toucred(kauth_cred_t cred, struct ki_ucred *uc)
 	uc->cr_ref = cred->cr_refcnt;
 	uc->cr_uid = cred->cr_euid;
 	uc->cr_gid = cred->cr_egid;
-	uc->cr_ngroups = min(cred->cr_ngroups,
-			     sizeof(uc->cr_groups) / sizeof(uc->cr_groups[0]));
+	uc->cr_ngroups = min(cred->cr_ngroups, __arraycount(uc->cr_groups));
 	memcpy(uc->cr_groups, cred->cr_groups,
 	       uc->cr_ngroups * sizeof(uc->cr_groups[0]));
 }
@@ -705,8 +794,11 @@ kauth_register_scope(const char *id, kauth_scope_callback_t callback,
 void
 kauth_init(void)
 {
-	SIMPLEQ_INIT(&scope_list);
 	rw_init(&kauth_lock);
+
+	kauth_cred_cache = pool_cache_init(sizeof(struct kauth_cred),
+	    coherency_unit, 0, 0, "kcredpl", NULL, IPL_NONE,
+	    NULL, NULL, NULL);
 
 	/* Create specificdata domain. */
 	kauth_domain = specificdata_domain_create();
@@ -839,11 +931,6 @@ kauth_authorize_action(kauth_scope_t scope, kauth_cred_t cred,
 {
 	kauth_listener_t listener;
 	int error, allow, fail;
-
-#if 0 /* defined(LOCKDEBUG) */
-	spinlock_switchcheck();
-	simple_lock_only_held(NULL, "kauth_authorize_action");
-#endif
 
 	KASSERT(cred != NULL);
 	KASSERT(action != 0);

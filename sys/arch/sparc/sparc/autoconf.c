@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.221 2006/03/29 04:16:47 thorpej Exp $ */
+/*	$NetBSD: autoconf.c,v 1.229 2008/07/17 14:39:26 cegger Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.221 2006/03/29 04:16:47 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.229 2008/07/17 14:39:26 cegger Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -311,7 +311,7 @@ bootstrap(void)
 	 * bytes available for the buffer at this location (see the
 	 * comment in locore.s at the top of the .text segment).
 	 */
-	initmsgbuf((caddr_t)KERNBASE, 8192);
+	initmsgbuf((void *)KERNBASE, 8192);
 #endif
 
 #if NKSYMS || defined(DDB) || defined(LKM)
@@ -913,10 +913,9 @@ st_crazymap(int n)
 void
 cpu_configure(void)
 {
-	extern struct user *proc0paddr;	/* XXX see below */
 
 	/* initialise the softintr system */
-	softintr_init();
+	sparc_softintr_init();
 
 	/* build the bootpath */
 	bootpath_build();
@@ -973,7 +972,10 @@ cpu_configure(void)
 	 * XXX stack running into it during auto-configuration.
 	 * XXX - should fix stack usage.
 	 */
-	bzero(proc0paddr, sizeof(struct user));
+	{
+		extern struct user *proc0paddr;
+		bzero(proc0paddr, sizeof(struct user));
+	}
 
 	spl0();
 }
@@ -1464,32 +1466,6 @@ romgetcursoraddr(int **rowp, int **colp)
 #endif /* RASTERCONSOLE */
 
 /*
- * find a device matching "name" and unit number
- */
-struct device *
-getdevunit(const char *name, int unit)
-{
-	struct device *dev = alldevs.tqh_first;
-	char num[10], fullname[16];
-	int lunit;
-
-	/* compute length of name and decimal expansion of unit number */
-	sprintf(num, "%d", unit);
-	lunit = strlen(num);
-	if (strlen(name) + lunit >= sizeof(fullname) - 1)
-		panic("config_attach: device name too long");
-
-	strcpy(fullname, name);
-	strcat(fullname, num);
-
-	while (strcmp(dev->dv_xname, fullname) != 0) {
-		if ((dev = dev->dv_list.tqe_next) == NULL)
-			return NULL;
-	}
-	return dev;
-}
-
-/*
  * Device registration used to determine the boot device.
  */
 #include <dev/scsipi/scsi_all.h>
@@ -1791,12 +1767,12 @@ device_register(struct device *dev, void *aux)
 		struct scsipi_periph *periph = sa->sa_periph;
 		struct scsipi_channel *chan = periph->periph_channel;
 		struct scsibus_softc *sbsc =
-			(struct scsibus_softc *)device_parent(dev);
+			device_private(device_parent(dev));
 		u_int target = bp->val[0];
 		u_int lun = bp->val[1];
 
 		/* Check the controller that this scsibus is on */
-		if ((bp-1)->dev != device_parent(&sbsc->sc_dev))
+		if ((bp-1)->dev != device_parent(sbsc->sc_dev))
 			return;
 
 		/*

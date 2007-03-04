@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.shark.inc,v 1.7 2007/03/04 02:35:50 tsutsui Exp $
+#	$NetBSD: Makefile.shark.inc,v 1.11 2008/06/07 18:47:41 he Exp $
 
 MACHINE_ARCH=		arm
 CPPFLAGS+=		-D${MACHINE}
@@ -18,6 +18,19 @@ SYSTEM_LD_HEAD_EXTRA+=; \
 
 SYSTEM_LD_TAIL_EXTRA+=; \
 	echo \
-	 "${OBJCOPY} -O a.out-arm-netbsd -R .ident -R .arm.atpcs -R .comment $@ $@.aout"; \
-	${OBJCOPY} -O a.out-arm-netbsd -R .ident -R .arm.atpcs -R .comment $@ $@.aout
+	 "${OBJCOPY} -O a.out-arm-netbsd \
+		-R .ident -R .arm.atpcs -R .comment -R .note.netbsd.ident \
+		-R .debug_abbrev -R .debug_info -R .debug_line -R .debug_str \
+		-R .debug_frame -R .debug_loc -R .debug_pubnames \
+		-R .debug_aranges \
+		$@ $@.aout"; \
+	${OBJCOPY} -O a.out-arm-netbsd \
+		-R .ident -R .arm.atpcs -R .comment -R .note.netbsd.ident \
+		-R .debug_abbrev -R .debug_info -R .debug_line -R .debug_str \
+		-R .debug_frame -R .debug_loc -R .debug_pubnames \
+		-R .debug_aranges \
+		$@ $@.aout
+
+KERNIMAGES=	netbsd netbsd.aout
+
 .endif

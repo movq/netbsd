@@ -1,4 +1,4 @@
-/* $NetBSD: except.c,v 1.19 2007/02/22 04:47:28 thorpej Exp $ */
+/* $NetBSD: except.c,v 1.21 2008/06/23 17:58:17 matt Exp $ */
 /*-
  * Copyright (c) 1998, 1999, 2000 Ben Harris
  * All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: except.c,v 1.19 2007/02/22 04:47:28 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: except.c,v 1.21 2008/06/23 17:58:17 matt Exp $");
 
 #include "opt_ddb.h"
 
@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: except.c,v 1.19 2007/02/22 04:47:28 thorpej Exp $");
 #include <sys/syslog.h>
 #include <sys/systm.h>
 #include <sys/user.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -204,7 +205,7 @@ do_fault(struct trapframe *tf, struct lwp *l,
 	if (pmap_fault(map->pmap, va, atype))
 		return;
 
-	if (current_intr_depth != 0) {
+	if (cpu_intr_p()) {
 		KASSERT((tf->tf_r15 & R15_MODE) != R15_MODE_USR);
 		error = EFAULT;
 	} else

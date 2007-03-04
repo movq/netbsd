@@ -1,4 +1,4 @@
-/*	$NetBSD: ccd.c,v 1.117 2007/02/15 15:40:51 ad Exp $	*/
+/*	$NetBSD: ccd.c,v 1.129 2008/04/28 20:23:46 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 1999, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -125,7 +118,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ccd.c,v 1.117 2007/02/15 15:40:51 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ccd.c,v 1.129 2008/04/28 20:23:46 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -196,7 +189,7 @@ static void	ccdintr(struct ccd_softc *, struct buf *);
 static int	ccdinit(struct ccd_softc *, char **, struct vnode **,
 		    struct lwp *);
 static struct ccdbuf *ccdbuffer(struct ccd_softc *, struct buf *,
-		    daddr_t, caddr_t, long);
+		    daddr_t, void *, long);
 static void	ccdgetdefaultlabel(struct ccd_softc *, struct disklabel *);
 static void	ccdgetdisklabel(dev_t);
 static void	ccdmakedisklabel(struct ccd_softc *);
@@ -255,15 +248,14 @@ ccdattach(int num)
 
 	/* Initialize the component buffer pool. */
 	pool_init(&ccd_cbufpool, sizeof(struct ccdbuf), 0,
-	    0, 0, "ccdpl", NULL);
+	    0, 0, "ccdpl", NULL, IPL_BIO);
 
 	/* Initialize per-softc structures. */
 	for (i = 0; i < num; i++) {
 		cs = &ccd_softc[i];
 		snprintf(cs->sc_xname, sizeof(cs->sc_xname), "ccd%d", i);
-		cs->sc_dkdev.dk_name = cs->sc_xname;	/* XXX */
-		mutex_init(&cs->sc_lock, MUTEX_DRIVER, IPL_NONE);
-		pseudo_disk_init(&cs->sc_dkdev);
+		mutex_init(&cs->sc_lock, MUTEX_DEFAULT, IPL_NONE);
+		disk_init(&cs->sc_dkdev, cs->sc_xname, NULL); /* XXX */
 	}
 }
 
@@ -326,7 +318,7 @@ ccdinit(struct ccd_softc *cs, char **cpaths, struct vnode **vpp,
 		/*
 		 * XXX: Cache the component's dev_t.
 		 */
-		if ((error = VOP_GETATTR(vpp[ix], &va, l->l_cred, l)) != 0) {
+		if ((error = VOP_GETATTR(vpp[ix], &va, l->l_cred)) != 0) {
 #ifdef DEBUG
 			if (ccddebug & (CCDB_FOLLOW|CCDB_INIT))
 				printf("%s: %s: getattr failed %s = %d\n",
@@ -341,7 +333,7 @@ ccdinit(struct ccd_softc *cs, char **cpaths, struct vnode **vpp,
 		 * Get partition information for the component.
 		 */
 		error = VOP_IOCTL(vpp[ix], DIOCGPART, &dpart,
-		    FREAD, l->l_cred, l);
+		    FREAD, l->l_cred);
 		if (error) {
 #ifdef DEBUG
 			if (ccddebug & (CCDB_FOLLOW|CCDB_INIT))
@@ -671,7 +663,6 @@ ccdstrategy(struct buf *bp)
 			printf("ccdstrategy: unit %d: not inited\n", unit);
 #endif
 		bp->b_error = ENXIO;
-		bp->b_flags |= B_ERROR;
 		goto done;
 	}
 
@@ -713,7 +704,7 @@ ccdstart(struct ccd_softc *cs)
 	long bcount, rcount;
 	struct buf *bp;
 	struct ccdbuf *cbp;
-	caddr_t addr;
+	char *addr;
 	daddr_t bn;
 	SIMPLEQ_HEAD(, ccdbuf) cbufq;
 
@@ -766,7 +757,7 @@ ccdstart(struct ccd_softc *cs)
 			SIMPLEQ_REMOVE_HEAD(&cbufq, cb_q);
 			if ((cbp->cb_buf.b_flags & B_READ) == 0)
 				cbp->cb_buf.b_vp->v_numoutput++;
-			DEV_STRATEGY(&cbp->cb_buf);
+			bdev_strategy(&cbp->cb_buf);
 		}
 	}
 }
@@ -775,7 +766,7 @@ ccdstart(struct ccd_softc *cs)
  * Build a component buffer header.
  */
 static struct ccdbuf *
-ccdbuffer(struct ccd_softc *cs, struct buf *bp, daddr_t bn, caddr_t addr,
+ccdbuffer(struct ccd_softc *cs, struct buf *bp, daddr_t bn, void *addr,
     long bcount)
 {
 	struct ccdcinfo *ci;
@@ -839,14 +830,17 @@ ccdbuffer(struct ccd_softc *cs, struct buf *bp, daddr_t bn, caddr_t addr,
 	cbp = CCD_GETBUF();
 	if (cbp == NULL)
 		return (NULL);
-	BUF_INIT(&cbp->cb_buf);
-	cbp->cb_buf.b_flags = bp->b_flags | B_CALL;
+	buf_init(&cbp->cb_buf);
+	cbp->cb_buf.b_flags = bp->b_flags;
+	cbp->cb_buf.b_oflags = bp->b_oflags;
+	cbp->cb_buf.b_cflags = bp->b_cflags;
 	cbp->cb_buf.b_iodone = ccdiodone;
 	cbp->cb_buf.b_proc = bp->b_proc;
 	cbp->cb_buf.b_dev = ci->ci_dev;
 	cbp->cb_buf.b_blkno = cbn + cboff;
 	cbp->cb_buf.b_data = addr;
 	cbp->cb_buf.b_vp = ci->ci_vp;
+	cbp->cb_buf.b_objlock = &ci->ci_vp->v_interlock;
 	if (cs->sc_ileave == 0)
 		cbc = dbtob((u_int64_t)(ci->ci_size - cbn));
 	else
@@ -885,7 +879,7 @@ ccdintr(struct ccd_softc *cs, struct buf *bp)
 	/*
 	 * Request is done for better or worse, wakeup the top half.
 	 */
-	if (bp->b_flags & B_ERROR)
+	if (bp->b_error != 0)
 		bp->b_resid = bp->b_bcount;
 	disk_unbusy(&cs->sc_dkdev, (bp->b_bcount - bp->b_resid),
 	    (bp->b_flags & B_READ));
@@ -920,15 +914,13 @@ ccdiodone(struct buf *vbp)
 	}
 #endif
 
-	if (cbp->cb_buf.b_flags & B_ERROR) {
-		bp->b_flags |= B_ERROR;
-		bp->b_error = cbp->cb_buf.b_error ?
-		    cbp->cb_buf.b_error : EIO;
-
+	if (cbp->cb_buf.b_error != 0) {
+		bp->b_error = cbp->cb_buf.b_error;
 		printf("%s: error %d on component %d\n",
 		       cs->sc_xname, bp->b_error, cbp->cb_comp);
 	}
 	count = cbp->cb_buf.b_bcount;
+	buf_destroy(&cbp->cb_buf);
 	CCD_PUTBUF(cbp);
 
 	/*
@@ -985,7 +977,7 @@ ccdwrite(dev_t dev, struct uio *uio, int flags)
 }
 
 static int
-ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
+ccdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	int unit = ccdunit(dev);
 	int s, i, j, lookedup = 0, error = 0;
@@ -1098,10 +1090,11 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 			if (ccddebug & CCDB_INIT)
 				printf("ccdioctl: lookedup = %d\n", lookedup);
 #endif
-			if ((error = dk_lookup(cpp[i], l, &vpp[i])) != 0) {
+			if ((error = dk_lookup(cpp[i], l, &vpp[i],
+			    UIO_USERSPACE)) != 0) {
 				for (j = 0; j < lookedup; ++j)
 					(void)vn_close(vpp[j], FREAD|FWRITE,
-					    uc, l);
+					    uc);
 				free(vpp, M_DEVBUF);
 				free(cpp, M_DEVBUF);
 				goto out;
@@ -1115,7 +1108,7 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		if ((error = ccdinit(cs, cpp, vpp, l)) != 0) {
 			for (j = 0; j < lookedup; ++j)
 				(void)vn_close(vpp[j], FREAD|FWRITE,
-				    uc, l);
+				    uc);
 			free(vpp, M_DEVBUF);
 			free(cpp, M_DEVBUF);
 			goto out;
@@ -1138,7 +1131,7 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		bufq_alloc(&cs->sc_bufq, "fcfs", 0);
 
 		/* Attach the disk. */
-		pseudo_disk_attach(&cs->sc_dkdev);
+		disk_attach(&cs->sc_dkdev);
 
 		/* Try and read the disklabel. */
 		ccdgetdisklabel(dev);
@@ -1183,7 +1176,7 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 				    cs->sc_cinfo[i].ci_vp);
 #endif
 			(void)vn_close(cs->sc_cinfo[i].ci_vp, FREAD|FWRITE,
-			    uc, l);
+			    uc);
 			free(cs->sc_cinfo[i].ci_path, M_DEVBUF);
 		}
 
@@ -1197,7 +1190,7 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		cs->sc_flags &= ~(CCDF_INITED|CCDF_VLABEL);
 
 		/* Detatch the disk. */
-		pseudo_disk_detach(&cs->sc_dkdev);
+		disk_detach(&cs->sc_dkdev);
 		break;
 
 	case DIOCGDINFO:
@@ -1232,7 +1225,7 @@ ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 		 */
 		for (error = 0, i = 0; i < cs->sc_nccdisks; i++) {
 			j = VOP_IOCTL(cs->sc_cinfo[i].ci_vp, cmd, data,
-				      flag, uc, l);
+				      flag, uc);
 			if (j != 0 && error == 0)
 				error = j;
 		}
@@ -1345,7 +1338,7 @@ ccdsize(dev_t dev)
 }
 
 static int
-ccddump(dev_t dev, daddr_t blkno, caddr_t va,
+ccddump(dev_t dev, daddr_t blkno, void *va,
     size_t size)
 {
 

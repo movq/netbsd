@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide_opti_reg.h,v 1.10 2006/02/16 20:17:19 perry Exp $	*/
+/*	$NetBSD: pciide_opti_reg.h,v 1.12 2008/04/28 20:23:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -112,7 +105,7 @@
  * break things in subtle ways if the wdc registers are accessed
  * by an interrupt routine while this magic sequence is executing.
  */
-static __inline u_int8_t __attribute__((__unused__))
+static __inline u_int8_t __unused
 opti_read_config(struct ata_channel *chp, int reg)
 {
 	struct wdc_regs *wdr = CHAN_TO_WDC_REGS(chp);
@@ -137,7 +130,7 @@ opti_read_config(struct ata_channel *chp, int reg)
 	return rv;
 }
 
-static __inline void __attribute__((__unused__))
+static __inline void __unused
 opti_write_config(struct ata_channel *chp, int reg, u_int8_t val)
 {
 	struct wdc_regs *wdr = CHAN_TO_WDC_REGS(chp);
@@ -164,25 +157,25 @@ opti_write_config(struct ata_channel *chp, int reg, u_int8_t val)
  * supported by the OPTi chip. The first index of the two-dimensional
  * arrays is used for a 33MHz PCIbus, the second for a 25MHz PCIbus.
  */
-static const u_int8_t opti_tim_cp[2][8] __attribute__((__unused__)) = {
+static const u_int8_t opti_tim_cp[2][8] __unused = {
 	/* Command Pulse */
 	{5, 4, 3, 2, 2, 7, 2, 2},
 	{4, 3, 2, 2, 1, 5, 2, 1}
 };
 
-static const u_int8_t opti_tim_rt[2][8] __attribute__((__unused__)) = {
+static const u_int8_t opti_tim_rt[2][8] __unused = {
 	/* Recovery Time */
 	{9, 4, 0, 0, 0, 6, 0, 0},
 	{6, 2, 0, 0, 0, 4, 0, 0}
 };
 
-static const u_int8_t opti_tim_as[2][8] __attribute__((__unused__)) = {
+static const u_int8_t opti_tim_as[2][8] __unused = {
 	/* Address Setup */
 	{2, 1, 1, 1, 0, 0, 0, 0},
 	{1, 1, 0, 0, 0, 0, 0, 0}
 };
 
-static const u_int8_t opti_tim_em[8] __attribute__((__unused__)) = {
+static const u_int8_t opti_tim_em[8] __unused = {
 	/* Enhanced Mode */
 	0, 0, 0, 1, 2, 0, 1 ,2
 };

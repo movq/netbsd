@@ -1,4 +1,4 @@
-/*	$NetBSD: altq_cbq.c,v 1.23 2006/11/16 01:32:37 christos Exp $	*/
+/*	$NetBSD: altq_cbq.c,v 1.25 2008/06/18 09:06:27 yamt Exp $	*/
 /*	$KAME: altq_cbq.c,v 1.21 2005/04/13 03:44:24 suz Exp $	*/
 
 /*
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altq_cbq.c,v 1.23 2006/11/16 01:32:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altq_cbq.c,v 1.25 2008/06/18 09:06:27 yamt Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_altq.h"
@@ -474,7 +474,7 @@ cbq_getqstats(struct pf_altq *a, void *ubuf, int *nbytes)
 
 	get_class_stats(&stats, cl);
 
-	if ((error = copyout((caddr_t)&stats, ubuf, sizeof(stats))) != 0)
+	if ((error = copyout((void *)&stats, ubuf, sizeof(stats))) != 0)
 		return (error);
 	*nbytes = sizeof(stats);
 	return (0);
@@ -513,7 +513,7 @@ cbq_enqueue(struct ifaltq *ifq, struct mbuf *m, struct altq_pktattr *pktattr)
 		return (ENOBUFS);
 	}
 	cl = NULL;
-	if ((t = m_tag_find(m, PACKET_TAG_PF_QID, NULL)) != NULL)
+	if ((t = m_tag_find(m, PACKET_TAG_ALTQ_QID, NULL)) != NULL)
 		cl = clh_to_clp(cbqp, ((struct altq_tag *)(t+1))->qid);
 #ifdef ALTQ3_COMPAT
 	else if ((ifq->altq_flags & ALTQF_CLASSIFY) && pktattr != NULL)
@@ -879,7 +879,7 @@ cbq_getstats(struct cbq_getstats *gsp)
 		get_class_stats(&stats, cl);
 		stats.handle = cl->stats_.handle;
 
-		if ((error = copyout((caddr_t)&stats, (caddr_t)usp++,
+		if ((error = copyout((void *)&stats, (void *)usp++,
 		    sizeof(stats))) != 0)
 			return (error);
 	}
@@ -1000,7 +1000,7 @@ cbqclose(dev_t dev, int flag, int fmt,
 }
 
 int
-cbqioctl(dev_t dev, ioctlcmd_t cmd, caddr_t addr, int flag,
+cbqioctl(dev_t dev, ioctlcmd_t cmd, void *addr, int flag,
     struct lwp *l)
 {
 	int	error = 0;

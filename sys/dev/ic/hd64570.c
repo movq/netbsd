@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64570.c,v 1.35 2007/02/17 22:34:07 dyoung Exp $	*/
+/*	$NetBSD: hd64570.c,v 1.39 2008/04/08 12:07:26 cegger Exp $	*/
 
 /*
  * Copyright (c) 1999 Christian E. Hopps
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.35 2007/02/17 22:34:07 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.39 2008/04/08 12:07:26 cegger Exp $");
 
 #include "bpfilter.h"
 #include "opt_inet.h"
@@ -103,9 +103,9 @@ __KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.35 2007/02/17 22:34:07 dyoung Exp $");
 #include <net/bpf.h>
 #endif
 
-#include <machine/cpu.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
@@ -171,11 +171,11 @@ static	void sca_port_down(sca_port_t *);
 
 static	int sca_output(struct ifnet *, struct mbuf *, const struct sockaddr *,
 			    struct rtentry *);
-static	int sca_ioctl(struct ifnet *, u_long, caddr_t);
+static	int sca_ioctl(struct ifnet *, u_long, void *);
 static	void sca_start(struct ifnet *);
 static	void sca_watchdog(struct ifnet *);
 
-static struct mbuf *sca_mbuf_alloc(struct sca_softc *, caddr_t, u_int);
+static struct mbuf *sca_mbuf_alloc(struct sca_softc *, void *, u_int);
 
 #if SCA_DEBUG_LEVEL > 0
 static	void sca_frame_print(sca_port_t *, sca_desc_t *, u_int8_t *);
@@ -471,7 +471,7 @@ sca_port_attach(struct sca_softc *sc, u_int port)
 		printf("%s: port %d\n", ifp->if_xname, port);
 	else
 		printf("%s at %s port %d\n",
-		       ifp->if_xname, sc->sc_parent->dv_xname, port);
+		       ifp->if_xname, device_xname(sc->sc_parent), port);
 
 	/*
 	 * reset the last seen times on the cisco keepalive protocol
@@ -929,7 +929,7 @@ static int
 sca_ioctl(ifp, cmd, addr)
      struct ifnet *ifp;
      u_long cmd;
-     caddr_t addr;
+     void *addr;
 {
 	struct ifreq *ifr;
 	struct ifaddr *ifa;
@@ -981,7 +981,7 @@ sca_ioctl(ifp, cmd, addr)
 			error = EAFNOSUPPORT;		/* XXX */
 			break;
 		}
-		switch (ifr->ifr_addr.sa_family) {
+		switch (ifreq_getaddr(cmd, ifr)->sa_family) {
 #ifdef INET
 		case AF_INET:
 			break;
@@ -2011,7 +2011,7 @@ sca_port_starttx(sca_port_t *scp)
  * otherwise let the caller handle copying the data in.
  */
 static struct mbuf *
-sca_mbuf_alloc(struct sca_softc *sc, caddr_t p, u_int len)
+sca_mbuf_alloc(struct sca_softc *sc, void *p, u_int len)
 {
 	struct mbuf *m;
 
@@ -2037,7 +2037,7 @@ sca_mbuf_alloc(struct sca_softc *sc, caddr_t p, u_int len)
 	if (p != NULL) {
 		/* XXX do we need to sync here? */
 		if (sc->sc_usedma)
-			memcpy(mtod(m, caddr_t), p, len);
+			memcpy(mtod(m, void *), p, len);
 		else
 			bus_space_read_region_1(sc->scu_memt, sc->scu_memh,
 			    sca_page_addr(sc, p), mtod(m, u_int8_t *), len);
@@ -2127,7 +2127,7 @@ sca_print_clock_info(struct sca_softc *sc)
 	u_int32_t mhz, div;
 	int i;
 
-	printf("%s: base clock %d Hz\n", sc->sc_parent->dv_xname,
+	printf("%s: base clock %d Hz\n", device_xname(sc->sc_parent),
 	    sc->sc_baseclock);
 
 	/* print the information about the port clock selection */

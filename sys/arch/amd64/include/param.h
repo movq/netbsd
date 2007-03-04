@@ -1,11 +1,9 @@
-/*	$NetBSD: param.h,v 1.3 2006/08/28 13:43:35 yamt Exp $	*/
+/*	$NetBSD: param.h,v 1.9 2008/10/26 00:08:15 mrg Exp $	*/
+
+#ifdef __x86_64__
 
 #ifdef _KERNEL
-#ifdef _LOCORE
-#include <machine/psl.h>
-#else
 #include <machine/cpu.h>
-#endif
 #endif
 
 #define	_MACHINE	amd64
@@ -60,11 +58,12 @@
 
 #define	SSIZE		1		/* initial stack size/NBPG */
 #define	SINCR		1		/* increment of stack/NBPG */
-#define	UPAGES		5		/* pages of u-area */
+#define	UPAGES		3		/* pages of u-area */
 #define	USPACE		(UPAGES * NBPG)	/* total size of u-area */
+#define	INTRSTACKSIZE	4096
 
 #ifndef MSGBUFSIZE
-#define MSGBUFSIZE	4*NBPG		/* default message buffer size */
+#define MSGBUFSIZE	8*NBPG		/* default message buffer size */
 #endif
 
 /*
@@ -130,3 +129,9 @@
 #define round_pdr(x)			x86_round_pdr(x)
 
 #define mstohz(ms) ((ms + 0UL) * hz / 1000)
+
+#else	/*	__x86_64__	*/
+
+#include <i386/param.h>
+
+#endif	/*	__x86_64__	*/

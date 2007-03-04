@@ -1,4 +1,4 @@
-/*	$NetBSD: mfs_vnops.c,v 1.43 2006/05/14 21:32:45 elad Exp $	*/
+/*	$NetBSD: mfs_vnops.c,v 1.52 2008/06/02 00:24:28 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mfs_vnops.c,v 1.43 2006/05/14 21:32:45 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mfs_vnops.c,v 1.52 2008/06/02 00:24:28 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,7 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: mfs_vnops.c,v 1.43 2006/05/14 21:32:45 elad Exp $");
 #include <sys/buf.h>
 #include <sys/bufq.h>
 #include <sys/vnode.h>
-#include <sys/malloc.h>
+#include <sys/kmem.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/specfs/specdev.h>
@@ -85,8 +85,8 @@ const struct vnodeopv_entry_desc mfs_vnodeop_entries[] = {
 	{ &vop_abortop_desc, mfs_abortop },		/* abortop */
 	{ &vop_inactive_desc, mfs_inactive },		/* inactive */
 	{ &vop_reclaim_desc, mfs_reclaim },		/* reclaim */
-	{ &vop_lock_desc, mfs_lock },			/* lock */
-	{ &vop_unlock_desc, mfs_unlock },		/* unlock */
+	{ &vop_lock_desc, genfs_nolock },		/* lock */
+	{ &vop_unlock_desc, genfs_nounlock },		/* unlock */
 	{ &vop_bmap_desc, mfs_bmap },			/* bmap */
 	{ &vop_strategy_desc, mfs_strategy },		/* strategy */
 	{ &vop_print_desc, mfs_print },			/* print */
@@ -115,7 +115,6 @@ mfs_open(void *v)
 		struct vnode *a_vp;
 		int  a_mode;
 		kauth_cred_t a_cred;
-		struct lwp *a_l;
 	} */ *ap = v;
 
 	if (ap->a_vp->v_type != VBLK) {
@@ -138,23 +137,22 @@ mfs_strategy(void *v)
 	struct vnode *vp = ap->a_vp;
 	struct buf *bp = ap->a_bp;
 	struct mfsnode *mfsp;
-	struct proc *p = curproc;		/* XXX */
 
 	if (vp->v_type != VBLK || vp->v_usecount == 0)
 		panic("mfs_strategy: bad dev");
 	mfsp = VTOMFS(vp);
 	/* check for mini-root access */
 	if (mfsp->mfs_proc == NULL) {
-		caddr_t base;
+		void *base;
 
-		base = mfsp->mfs_baseoff + (bp->b_blkno << DEV_BSHIFT);
+		base = (char *)mfsp->mfs_baseoff + (bp->b_blkno << DEV_BSHIFT);
 		if (bp->b_flags & B_READ)
 			memcpy(bp->b_data, base, bp->b_bcount);
 		else
 			memcpy(base, bp->b_data, bp->b_bcount);
 		bp->b_resid = 0;
 		biodone(bp);
-	} else if (mfsp->mfs_proc == p) {
+	} else if (mfsp->mfs_proc == curproc) {
 		mfs_doio(bp, mfsp->mfs_baseoff);
 	} else if (doing_shutdown) {
 		/*
@@ -166,28 +164,27 @@ mfs_strategy(void *v)
 		bp->b_resid = 0;
 		biodone(bp);
 	} else {
+		mutex_enter(&mfs_lock);
 		BUFQ_PUT(mfsp->mfs_buflist, bp);
-		wakeup((caddr_t)vp);
+		cv_broadcast(&mfsp->mfs_cv);
+		mutex_exit(&mfs_lock);
 	}
 	return (0);
 }
 
 /*
  * Memory file system I/O.
- *
- * Trivial on the HP since buffer has already been mapping into KVA space.
  */
 void
-mfs_doio(struct buf *bp, caddr_t base)
+mfs_doio(struct buf *bp, void *base)
 {
-	base += (bp->b_blkno << DEV_BSHIFT);
+
+	base = (char *)base + (bp->b_blkno << DEV_BSHIFT);
 	if (bp->b_flags & B_READ)
 		bp->b_error = copyin(base, bp->b_data, bp->b_bcount);
 	else
 		bp->b_error = copyout(bp->b_data, base, bp->b_bcount);
-	if (bp->b_error)
-		bp->b_flags |= B_ERROR;
-	else
+	if (bp->b_error == 0)
 		bp->b_resid = 0;
 	biodone(bp);
 }
@@ -226,7 +223,6 @@ mfs_close(void *v)
 		struct vnode *a_vp;
 		int  a_fflag;
 		kauth_cred_t a_cred;
-		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct mfsnode *mfsp = VTOMFS(vp);
@@ -236,30 +232,33 @@ mfs_close(void *v)
 	/*
 	 * Finish any pending I/O requests.
 	 */
+	mutex_enter(&mfs_lock);
 	while ((bp = BUFQ_GET(mfsp->mfs_buflist)) != NULL) {
+		mutex_exit(&mfs_lock);
 		mfs_doio(bp, mfsp->mfs_baseoff);
-		wakeup((caddr_t)bp);
+		mutex_enter(&mfs_lock);
 	}
+	mutex_exit(&mfs_lock);
 	/*
 	 * On last close of a memory filesystem
 	 * we must invalidate any in core blocks, so that
 	 * we can, free up its vnode.
 	 */
-	if ((error = vinvalbuf(vp, V_SAVE, ap->a_cred, ap->a_l, 0, 0)) != 0)
+	if ((error = vinvalbuf(vp, V_SAVE, ap->a_cred, curlwp, 0, 0)) != 0)
 		return (error);
 	/*
 	 * There should be no way to have any more uses of this
 	 * vnode, so if we find any other uses, it is a panic.
 	 */
-	if (vp->v_usecount > 1)
-		printf("mfs_close: ref count %d > 1\n", vp->v_usecount);
-	if (vp->v_usecount > 1 || BUFQ_PEEK(mfsp->mfs_buflist) != NULL)
+	if (BUFQ_PEEK(mfsp->mfs_buflist) != NULL)
 		panic("mfs_close");
 	/*
 	 * Send a request to the filesystem server to exit.
 	 */
+	mutex_enter(&mfs_lock);
 	mfsp->mfs_shutdown = 1;
-	wakeup((caddr_t)vp);
+	cv_broadcast(&mfsp->mfs_cv);
+	mutex_exit(&mfs_lock);
 	return (0);
 }
 
@@ -272,7 +271,6 @@ mfs_inactive(void *v)
 {
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
-		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct mfsnode *mfsp = VTOMFS(vp);
@@ -294,9 +292,20 @@ mfs_reclaim(void *v)
 		struct vnode *a_vp;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
+	struct mfsnode *mfsp = VTOMFS(vp);
+	int refcnt;
 
-	FREE(vp->v_data, M_MFSNODE);
+	mutex_enter(&mfs_lock);
 	vp->v_data = NULL;
+	refcnt = --mfsp->mfs_refcnt;
+	mutex_exit(&mfs_lock);
+
+	if (refcnt == 0) {
+		bufq_free(mfsp->mfs_buflist);
+		cv_destroy(&mfsp->mfs_cv);
+		kmem_free(mfsp, sizeof(*mfsp));
+	}
+
 	return (0);
 }
 

@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.2 2007/02/18 16:25:45 ad Exp $
+#	$NetBSD: Makefile,v 1.5 2008/01/19 13:11:21 chris Exp $
 
 INCSDIR= /usr/include/zaurus
 
-INCS=	ansi.h aout_machdep.h asm.h \
+INCS=	ansi.h aout_machdep.h apmvar.h asm.h \
 	bswap.h bus.h \
 	cdefs.h cpu.h \
 	disklabel.h \
@@ -10,7 +10,7 @@ INCS=	ansi.h aout_machdep.h asm.h \
 	float.h fp.h frame.h \
 	ieee.h ieeefp.h \
 	int_const.h int_fmtio.h int_limits.h int_mwgwtypes.h int_types.h \
-	intr.h ipkdb.h \
+	intr.h \
 	limits.h lock.h \
 	math.h mcontext.h mutex.h \
 	param.h pcb.h pmap.h pmc.h proc.h profile.h ptrace.h \

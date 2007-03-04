@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_reconstruct.h,v 1.22 2005/12/11 12:23:37 christos Exp $	*/
+/*	$NetBSD: rf_reconstruct.h,v 1.24 2008/05/19 19:49:55 oster Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -47,8 +47,8 @@ struct RF_ReconConfig_s {
 };
 /* a reconstruction buffer */
 struct RF_ReconBuffer_s {
-	RF_Raid_t *raidPtr;	/* void * to avoid recursive includes */
-	caddr_t buffer;		/* points to the data */
+	RF_Raid_t *raidPtr;	/* void *to avoid recursive includes */
+	void *buffer;		/* points to the data */
 	RF_StripeNum_t parityStripeID;	/* the parity stripe that this data
 					 * relates to */
 	int     which_ru;	/* which reconstruction unit within the PSS */
@@ -184,6 +184,7 @@ int rf_ForceOrBlockRecon(RF_Raid_t *, RF_AccessStripeMap_t *,
 			 void (*cbFunc) (RF_Raid_t *, void *),
 			 void *);
 int rf_UnblockRecon(RF_Raid_t *, RF_AccessStripeMap_t *);
+void rf_WakeupHeadSepCBWaiters(RF_Raid_t *);
 
 extern struct pool rf_reconbuffer_pool;
 

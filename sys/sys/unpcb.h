@@ -1,4 +1,4 @@
-/*	$NetBSD: unpcb.h,v 1.14 2005/12/11 12:25:21 christos Exp $	*/
+/*	$NetBSD: unpcb.h,v 1.17 2008/04/24 11:38:39 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -33,6 +33,9 @@
 
 #ifndef _SYS_UNPCB_H_
 #define _SYS_UNPCB_H_
+
+#include <sys/un.h>
+#include <sys/mutex.h>
 
 /*
  * Protocol control block for an active
@@ -73,16 +76,32 @@ struct	unpcb {
 	struct	unpcb *unp_refs;	/* referencing socket linked list */
 	struct 	unpcb *unp_nextref;	/* link in unp_refs list */
 	struct	sockaddr_un *unp_addr;	/* bound address of socket */
+	kmutex_t *unp_streamlock;	/* lock for est. stream connections */
 	size_t	unp_addrlen;		/* size of socket address */
 	int	unp_cc;			/* copy of rcv.sb_cc */
 	int	unp_mbcnt;		/* copy of rcv.sb_mbcnt */
 	struct	timespec unp_ctime;	/* holds creation time */
 	int	unp_flags;		/* misc flags; see below*/
+	struct	unpcbid unp_connid; 	/* pid and eids of peer */
 };
 
-/* unp_flags */
+/*
+ * Flags in unp_flags.
+ *
+ * UNP_EIDSVALID - indicates that the unp_connid member is filled in
+ * and is really the effective ids of the connected peer.  This is used
+ * to determine whether the contents should be sent to the user or
+ * not.
+ *
+ * UNP_EIDSBIND - indicates that the unp_connid member is filled
+ * in with data for the listening process.  This is set up in unp_bind() when
+ * it fills in unp_connid for later consumption by unp_connect().
+ */
 #define	UNP_WANTCRED	0x0001		/* credentials wanted */
 #define	UNP_CONNWAIT	0x0002		/* connect blocks until accepted */
+#define	UNP_EIDSVALID	0x0004		/* unp_connid contains valid data */
+#define	UNP_EIDSBIND	0x0008		/* unp_connid was set by bind() */
+#define	UNP_BUSY	0x0010		/* busy connecting or binding */
 
 #define	sotounpcb(so)	((struct unpcb *)((so)->so_pcb))
 

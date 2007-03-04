@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ray.c,v 1.63 2006/11/16 01:33:20 christos Exp $	*/
+/*	$NetBSD: if_ray.c,v 1.70 2008/04/05 21:31:23 cegger Exp $	*/
 
 /*
  * Copyright (c) 2000 Christian E. Hopps
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ray.c,v 1.63 2006/11/16 01:33:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ray.c,v 1.70 2008/04/05 21:31:23 cegger Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -95,9 +95,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_ray.c,v 1.63 2006/11/16 01:33:20 christos Exp $")
 #include <net/bpfdesc.h>
 #endif
 
-#include <machine/cpu.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/pcmcia/pcmciareg.h>
 #include <dev/pcmcia/pcmciavar.h>
@@ -158,12 +158,8 @@ struct ray_softc {
 
 	struct pcmcia_function		*sc_pf;
 	void				*sc_ih;
-	void				*sc_sdhook;
-	void				*sc_pwrhook;
 	int				sc_attached;
 
-	int				sc_flags;	/*. misc flags */
-#define RAY_FLAGS_RESUMEINIT	0x0001
 	int				sc_resetloop;
 
 	struct callout			sc_check_ccs_ch;
@@ -230,7 +226,6 @@ struct ray_softc {
 #define	sc_version	sc_ecf_startup.e_fw_build_string
 #define	sc_tibsize	sc_ecf_startup.e_tib_size
 #define	sc_if		sc_ec.ec_if
-#define	sc_xname	sc_dev.dv_xname
 
 /* modes of operation */
 #define	SC_MODE_ADHOC	0	/* ad-hoc mode */
@@ -302,15 +297,15 @@ static u_int ray_find_free_tx_ccs(struct ray_softc *, u_int);
 static u_int8_t ray_free_ccs(struct ray_softc *, bus_size_t);
 static void ray_free_ccs_chain(struct ray_softc *, u_int);
 static void ray_if_start(struct ifnet *);
+static void ray_if_stop(struct ifnet *, int);
 static int ray_init(struct ray_softc *);
 static int ray_intr(void *);
 static void ray_intr_start(struct ray_softc *);
-static int ray_ioctl(struct ifnet *, u_long, caddr_t);
+static int ray_ioctl(struct ifnet *, u_long, void *);
 static int ray_issue_cmd(struct ray_softc *, bus_size_t, u_int);
 static int ray_match(struct device *, struct cfdata *, void *);
 static int ray_media_change(struct ifnet *);
 static void ray_media_status(struct ifnet *, struct ifmediareq *);
-void ray_power(int, void *);
 static ray_cmd_func_t ray_rccs_intr(struct ray_softc *, bus_size_t);
 static void ray_read_region(struct ray_softc *, bus_size_t,void *,size_t);
 static void ray_recv(struct ray_softc *, bus_size_t);
@@ -320,7 +315,6 @@ static void ray_reset(struct ray_softc *);
 static void ray_reset_resetloop(void *);
 static int ray_send_auth(struct ray_softc *, u_int8_t *, u_int8_t);
 static void ray_set_pending(struct ray_softc *, u_int);
-static void ray_shutdown(void *);
 static int ray_simple_cmd(struct ray_softc *, u_int, u_int);
 static void ray_start_assoc(struct ray_softc *);
 static void ray_start_join_net(struct ray_softc *);
@@ -519,7 +513,7 @@ ray_attach(struct device *parent, struct device *self, void *aux)
 	/*XXXmem8|common*/
 	error = pcmcia_function_configure(pa->pf, ray_validate_config);
 	if (error) {
-		aprint_error("%s: configure failed, error=%d\n", self->dv_xname,
+		aprint_error_dev(self, "configure failed, error=%d\n",
 		    error);
 		return;
 	}
@@ -528,9 +522,9 @@ ray_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_memt = cfe->memspace[0].handle.memt;
 	sc->sc_memh = cfe->memspace[0].handle.memh;
 
-	callout_init(&sc->sc_reset_resetloop_ch);
-	callout_init(&sc->sc_disable_ch);
-	callout_init(&sc->sc_start_join_timo_ch);
+	callout_init(&sc->sc_reset_resetloop_ch, 0);
+	callout_init(&sc->sc_disable_ch, 0);
+	callout_init(&sc->sc_start_join_timo_ch, 0);
 
 	error = ray_enable(sc);
 	if (error)
@@ -543,15 +537,15 @@ ray_attach(struct device *parent, struct device *self, void *aux)
 
 	/* check to see that card initialized properly */
 	if (ep->e_status != RAY_ECFS_CARD_OK) {
-		aprint_error("%s: card failed self test: status %d\n",
-		    self->dv_xname, sc->sc_ecf_startup.e_status);
+		aprint_error_dev(self, "card failed self test: status %d\n",
+		    sc->sc_ecf_startup.e_status);
 		goto fail2;
 	}
 
 	/* check firmware version */
 	if (sc->sc_version != SC_BUILD_4 && sc->sc_version != SC_BUILD_5) {
-		aprint_error("%s: unsupported firmware version %d\n",
-		    self->dv_xname, ep->e_fw_build_string);
+		aprint_error_dev(self, "unsupported firmware version %d\n",
+		    ep->e_fw_build_string);
 		goto fail2;
 	}
 
@@ -571,25 +565,25 @@ ray_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_omode = sc->sc_mode = RAY_MODE_DEFAULT;
 	sc->sc_countrycode = sc->sc_dcountrycode =
 	    RAY_PID_COUNTRY_CODE_DEFAULT;
-	sc->sc_flags &= ~RAY_FLAGS_RESUMEINIT;
 
 	/*
 	 * attach the interface
 	 */
 	/* The version isn't the most accurate way, but it's easy. */
-	aprint_normal("%s: firmware version %d\n", self->dv_xname,
+	aprint_normal_dev(self, "firmware version %d\n",
 	    sc->sc_version);
 	if (sc->sc_version != SC_BUILD_4)
-		aprint_normal("%s: supported rates %0x:%0x:%0x:%0x:%0x:%0x:%0x:%0x\n",
-		    self->dv_xname, ep->e_rates[0], ep->e_rates[1],
+		aprint_normal_dev(self, "supported rates %0x:%0x:%0x:%0x:%0x:%0x:%0x:%0x\n",
+		    ep->e_rates[0], ep->e_rates[1],
 		    ep->e_rates[2], ep->e_rates[3], ep->e_rates[4],
 		    ep->e_rates[5], ep->e_rates[6], ep->e_rates[7]);
-	aprint_normal("%s: 802.11 address %s\n", self->dv_xname,
+	aprint_normal_dev(self, "802.11 address %s\n",
 	    ether_sprintf(ep->e_station_addr));
 
-	memcpy(ifp->if_xname, self->dv_xname, IFNAMSIZ);
+	memcpy(ifp->if_xname, device_xname(self), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = ray_if_start;
+	ifp->if_stop = ray_if_stop;
 	ifp->if_ioctl = ray_ioctl;
 	ifp->if_mtu = ETHERMTU;
 	ifp->if_flags = IFF_BROADCAST|IFF_SIMPLEX|IFF_MULTICAST;
@@ -609,8 +603,10 @@ ray_attach(struct device *parent, struct device *self, void *aux)
 	else
 		ifmedia_set(&sc->sc_media, IFM_INFRA);
 
-	sc->sc_sdhook = shutdownhook_establish(ray_shutdown, sc);
-	sc->sc_pwrhook = powerhook_establish(self->dv_xname, ray_power, sc);
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+	else
+		pmf_class_network_register(self, ifp);
 
 	/* The attach is successful. */
 	sc->sc_attached = 1;
@@ -633,7 +629,7 @@ ray_activate(dev, act)
 	int s;
 	int rv = 0;
 
-	RAY_DPRINTF(("%s: activate\n", sc->sc_xname));
+	RAY_DPRINTF(("%s: activate\n", device_xname(&sc->sc_dev)));
 
 	s = splnet();
 	switch (act) {
@@ -655,17 +651,14 @@ ray_detach(struct device *self, int flags)
 	struct ray_softc *sc;
 	struct ifnet *ifp;
 
-	sc = (struct ray_softc *)self;
+	sc = device_private(self);
 	ifp = &sc->sc_if;
-	RAY_DPRINTF(("%s: detach\n", sc->sc_xname));
+	RAY_DPRINTF(("%s: detach\n", device_xname(&sc->sc_dev)));
 
 	if (!sc->sc_attached)
                 return (0);
 
-	if (sc->sc_pwrhook)
-		powerhook_disestablish(sc->sc_pwrhook);
-	if (sc->sc_sdhook)
-		shutdownhook_disestablish(sc->sc_sdhook);
+	pmf_device_deregister(self);
 
 	if (sc->sc_if.if_flags & IFF_UP)
 		ray_disable(sc);
@@ -688,7 +681,7 @@ ray_enable(sc)
 {
 	int error;
 
-	RAY_DPRINTF(("%s: enable\n", sc->sc_xname));
+	RAY_DPRINTF(("%s: enable\n", device_xname(&sc->sc_dev)));
 
 	sc->sc_ih = pcmcia_intr_establish(sc->sc_pf, IPL_NET,
 	    ray_intr, sc);
@@ -711,7 +704,7 @@ static void
 ray_disable(sc)
 	struct ray_softc *sc;
 {
-	RAY_DPRINTF(("%s: disable\n", sc->sc_xname));
+	RAY_DPRINTF(("%s: disable\n", device_xname(&sc->sc_dev)));
 
 	ray_stop(sc);
 
@@ -738,7 +731,7 @@ ray_init(sc)
 	bus_size_t ccs;
 	int i;
 
-	RAY_DPRINTF(("%s: init\n", sc->sc_xname));
+	RAY_DPRINTF(("%s: init\n", device_xname(&sc->sc_dev)));
 
 	if ((sc->sc_if.if_flags & IFF_RUNNING))
 		ray_stop(sc);
@@ -746,7 +739,7 @@ ray_init(sc)
 	if (pcmcia_function_enable(sc->sc_pf))
 		return (EIO);
 
-	RAY_DPRINTF(("%s: init post-enable\n", sc->sc_xname));
+	RAY_DPRINTF(("%s: init post-enable\n", device_xname(&sc->sc_dev)));
 
 	/* reset some values */
 	memset(sc->sc_ccsinuse, 0, sizeof(sc->sc_ccsinuse));
@@ -760,7 +753,6 @@ ray_init(sc)
 	sc->sc_running = 0;
 	sc->sc_txfree = RAY_CCS_NTX;
 	sc->sc_checkcounters = 0;
-	sc->sc_flags &= ~RAY_FLAGS_RESUMEINIT;
 	sc->sc_authstate = RAY_AUTH_UNAUTH;
 
 	/* get startup results */
@@ -772,7 +764,7 @@ ray_init(sc)
 	if (ep->e_status != RAY_ECFS_CARD_OK) {
 		pcmcia_function_disable(sc->sc_pf);
 		printf("%s: card failed self test: status %d\n",
-		    sc->sc_xname, sc->sc_ecf_startup.e_status);
+		    device_xname(&sc->sc_dev), sc->sc_ecf_startup.e_status);
 		return (EIO);
 	}
 
@@ -790,8 +782,8 @@ ray_init(sc)
 	/* clear the interrupt if present */
 	REG_WRITE(sc, RAY_HCSIR, 0);
 
-	callout_init(&sc->sc_check_ccs_ch);
-	callout_init(&sc->sc_check_scheduled_ch);
+	callout_init(&sc->sc_check_ccs_ch, 0);
+	callout_init(&sc->sc_check_scheduled_ch, 0);
 
 	/* we are now up and running -- and are busy until download is cplt */
 	sc->sc_if.if_flags |= IFF_RUNNING | IFF_OACTIVE;
@@ -816,7 +808,7 @@ static void
 ray_stop(sc)
 	struct ray_softc *sc;
 {
-	RAY_DPRINTF(("%s: stop\n", sc->sc_xname));
+	RAY_DPRINTF(("%s: stop\n", device_xname(&sc->sc_dev)));
 
 	callout_stop(&sc->sc_check_ccs_ch);
 	sc->sc_timocheck = 0;
@@ -846,15 +838,14 @@ ray_reset(sc)
 {
 	if (++sc->sc_resetloop >= RAY_MAX_RESETS) {
 		if (sc->sc_resetloop == RAY_MAX_RESETS) {
-			printf("%s: unable to correct, disabling\n",
-			    sc->sc_xname);
+			aprint_error_dev(&sc->sc_dev, "unable to correct, disabling\n");
 			callout_stop(&sc->sc_reset_resetloop_ch);
 			callout_reset(&sc->sc_disable_ch, 1,
 			    (void (*)(void *))ray_disable, sc);
 		}
 	} else {
-		printf("%s: unexpected failure resetting hw [%d more]\n",
-		    sc->sc_xname, RAY_MAX_RESETS - sc->sc_resetloop);
+		aprint_error_dev(&sc->sc_dev, "unexpected failure resetting hw [%d more]\n",
+		    RAY_MAX_RESETS - sc->sc_resetloop);
 		callout_stop(&sc->sc_reset_resetloop_ch);
 		ray_init(sc);
 		callout_reset(&sc->sc_reset_resetloop_ch, 30 * hz,
@@ -878,47 +869,11 @@ ray_reset_resetloop(arg)
 	sc->sc_resetloop = 0;
 }
 
-void
-ray_power(int why, void *arg)
-{
-#if 0
-	struct ray_softc *sc;
-
-	/* can't do this until power hooks are called from thread */
-	sc = arg;
-	switch (why) {
-	case PWR_RESUME:
-		if ((sc->sc_flags & RAY_FLAGS_RESUMEINIT))
-			ray_init(sc);
-		break;
-	case PWR_SUSPEND:
-		if ((sc->sc_if.if_flags & IFF_RUNNING)) {
-			ray_stop(sc);
-			sc->sc_flags |= RAY_FLAGS_RESUMEINIT;
-		}
-		break;
-	case PWR_STANDBY:
-	default:
-		break;
-	}
-#endif
-}
-
-static void
-ray_shutdown(arg)
-	void *arg;
-{
-	struct ray_softc *sc;
-
-	sc = arg;
-	ray_disable(sc);
-}
-
 static int
 ray_ioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 {
 	struct ieee80211_nwid nwid;
 	struct ray_param_req pr;
@@ -971,11 +926,7 @@ ray_ioctl(ifp, cmd, data)
 		if (cmd == SIOCDELMULTI)
 			RAY_DPRINTF(("%s: ioctl: cmd SIOCDELMULTI\n",
 			    ifp->if_xname));
-		if (cmd == SIOCADDMULTI)
-			error = ether_addmulti(ifr, &sc->sc_ec);
-		else
-			error = ether_delmulti(ifr, &sc->sc_ec);
-		if (error == ENETRESET) {
+		if ((error = ether_ioctl(ifp, cmd, data)) == ENETRESET) {
 			if (ifp->if_flags & IFF_RUNNING)
 				ray_update_mcast(sc);
 			error = 0;
@@ -1072,6 +1023,14 @@ ray_if_start(ifp)
 
 	sc = ifp->if_softc;
 	ray_intr_start(sc);
+}
+
+static void
+ray_if_stop(struct ifnet *ifp, int disable)
+{
+	struct ray_softc *sc = ifp->if_softc;
+
+	ray_stop(sc);
 }
 
 static int
@@ -1311,7 +1270,7 @@ ray_intr_start(sc)
 		pcount++;
 		m_freem(m0);
 
-		RAY_DPRINTF_XMIT(("%s: sent packet: len %ld\n", sc->sc_xname,
+		RAY_DPRINTF_XMIT(("%s: sent packet: len %ld\n", device_xname(&sc->sc_dev),
 		    (u_long)pktlen));
 	}
 
@@ -1325,14 +1284,14 @@ ray_intr_start(sc)
 		 * be a confused state though because we check above
 		 * and don't issue any commands between.
 		 */
-		printf("%s: dropping tx packets device busy\n", sc->sc_xname);
+		printf("%s: dropping tx packets device busy\n", device_xname(&sc->sc_dev));
 		ray_free_ccs_chain(sc, firsti);
 		ifp->if_oerrors += pcount;
 		return;
 	}
 
 	/* send it off */
-	RAY_DPRINTF(("%s: ray_start issuing %d \n", sc->sc_xname, firsti));
+	RAY_DPRINTF(("%s: ray_start issuing %d \n", device_xname(&sc->sc_dev), firsti));
 	SRAM_WRITE_1(sc, RAY_SCB_CCSI, firsti);
 	RAY_ECF_START_CMD(sc);
 
@@ -1363,7 +1322,7 @@ ray_recv(sc, ccs)
 #ifdef RAY_DEBUG
 	/* have a look if you want to see how the card rx works :) */
 	if (ray_debug && ray_debug_dump_desc)
-		hexdump((caddr_t)sc->sc_memh + RAY_RCS_BASE, 0x400,
+		hexdump((char *)sc->sc_memh + RAY_RCS_BASE, 0x400,
 		    16, 4, 0);
 #endif
 
@@ -1389,19 +1348,19 @@ ray_recv(sc, ccs)
 	siglev = SRAM_READ_FIELD_1(sc, ccs, ray_cmd_rx, c_siglev);
 #endif
 
-	RAY_DPRINTF(("%s: recv pktlen %ld frag %d\n", sc->sc_xname,
+	RAY_DPRINTF(("%s: recv pktlen %ld frag %d\n", device_xname(&sc->sc_dev),
 	    (u_long)pktlen, frag));
-	RAY_DPRINTF_XMIT(("%s: received packet: len %ld\n", sc->sc_xname,
+	RAY_DPRINTF_XMIT(("%s: received packet: len %ld\n", device_xname(&sc->sc_dev),
 	    (u_long)pktlen));
 	if (pktlen > MCLBYTES || pktlen < sizeof(*frame)) {
 		RAY_DPRINTF(("%s: PKTLEN TOO BIG OR TOO SMALL\n",
-		    sc->sc_xname));
+		    device_xname(&sc->sc_dev)));
 		ifp->if_ierrors++;
 		goto done;
 	}
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (!m) {
-		RAY_DPRINTF(("%s: MGETHDR FAILED\n", sc->sc_xname));
+		RAY_DPRINTF(("%s: MGETHDR FAILED\n", device_xname(&sc->sc_dev)));
 		ifp->if_ierrors++;
 		goto done;
 	}
@@ -1409,7 +1368,7 @@ ray_recv(sc, ccs)
 		/* XXX should allow chaining? */
 		MCLGET(m, M_DONTWAIT);
 		if ((m->m_flags & M_EXT) == 0) {
-			RAY_DPRINTF(("%s: MCLGET FAILED\n", sc->sc_xname));
+			RAY_DPRINTF(("%s: MCLGET FAILED\n", device_xname(&sc->sc_dev)));
 			ifp->if_ierrors++;
 			m_freem(m);
 			m = 0;
@@ -1422,7 +1381,7 @@ ray_recv(sc, ccs)
 	m->m_data += fudge;
 	d = mtod(m, u_int8_t *);
 
-	RAY_DPRINTF(("%s: recv ccs index %d\n", sc->sc_xname, first));
+	RAY_DPRINTF(("%s: recv ccs index %d\n", device_xname(&sc->sc_dev), first));
 	i = ni = first;
 	while ((i = ni) && i != RAY_CCS_LINK_NULL) {
 		ccs = RAY_GET_CCS(i);
@@ -1435,11 +1394,13 @@ ray_recv(sc, ccs)
 			len -= 4;
 #endif
 		ni = SRAM_READ_FIELD_1(sc, ccs, ray_cmd_rx, c_nextfrag);
-		RAY_DPRINTF(("%s: recv frag index %d len %ld bufp 0x%x ni %d\n",
-		    sc->sc_xname, i, (u_long)len, (int)bufp, ni));
+		RAY_DPRINTF((
+		    "%s: recv frag index %d len %ld bufp 0x%llx ni %d\n",
+		    device_xname(&sc->sc_dev), i, (u_long)len, (unsigned long long)bufp,
+		    ni));
 		if (len + lenread > pktlen) {
 			RAY_DPRINTF(("%s: BAD LEN current 0x%lx pktlen 0x%lx\n",
-			    sc->sc_xname, (u_long)(len + lenread),
+			    device_xname(&sc->sc_dev), (u_long)(len + lenread),
 			    (u_long)pktlen));
 			ifp->if_ierrors++;
 			m_freem(m);
@@ -1466,7 +1427,7 @@ ray_recv(sc, ccs)
 	}
 done:
 
-	RAY_DPRINTF(("%s: recv frag count %d\n", sc->sc_xname, frag));
+	RAY_DPRINTF(("%s: recv frag count %d\n", device_xname(&sc->sc_dev), frag));
 
 	/* free the rcss */
 	ni = first;
@@ -1481,7 +1442,7 @@ done:
 		return;
 
 	RAY_DPRINTF(("%s: recv got packet pktlen %ld actual %ld\n",
-	    sc->sc_xname, (u_long)pktlen, (u_long)lenread));
+	    device_xname(&sc->sc_dev), (u_long)pktlen, (u_long)lenread));
 #ifdef RAY_DEBUG
 	if (ray_debug && ray_debug_dump_rx)
 		ray_dump_mbuf(sc, m);
@@ -1492,7 +1453,7 @@ done:
 	   & (IEEE80211_FC0_VERSION_MASK|IEEE80211_FC0_TYPE_MASK);
 	if ((fc0 & IEEE80211_FC0_VERSION_MASK) != IEEE80211_FC0_VERSION_0) {
 		RAY_DPRINTF(("%s: pkt not version 0 fc 0x%x\n",
-		    sc->sc_xname, fc0));
+		    device_xname(&sc->sc_dev), fc0));
 		m_freem(m);
 		return;
 	}
@@ -1509,7 +1470,7 @@ done:
 			break;
 		default:
 			RAY_DPRINTF(("%s: mgt packet not supported\n",
-			    sc->sc_dev.dv_xname));
+			    device_xname(&sc->sc_dev)));
 #ifdef RAY_DEBUG
 			hexdump((const u_int8_t*)frame, pktlen, 16, 4, 0);
 #endif
@@ -1520,14 +1481,14 @@ done:
 		return;
 	} else if ((fc0 & IEEE80211_FC0_TYPE_MASK) != IEEE80211_FC0_TYPE_DATA) {
 		RAY_DPRINTF(("%s: pkt not type data fc0 0x%x\n",
-		    sc->sc_xname, fc0));
+		    device_xname(&sc->sc_dev), fc0));
 		m_freem(m);
 		return;
 	}
 
 	if (pktlen < sizeof(*frame) + sizeof(struct llc)) {
 		RAY_DPRINTF(("%s: pkt too small for llc (%ld)\n",
-		    sc->sc_xname, (u_long)pktlen));
+		    device_xname(&sc->sc_dev), (u_long)pktlen));
 		m_freem(m);
 		return;
 	}
@@ -1540,7 +1501,7 @@ done:
 		 * Ethernet2 in 802.11 encapsulation produced by
 		 * the windows driver for the WebGear card
 		 */
-		RAY_DPRINTF(("%s: pkt not snap 0\n", sc->sc_xname));
+		RAY_DPRINTF(("%s: pkt not snap 0\n", device_xname(&sc->sc_dev)));
 		if ((ifp->if_flags & IFF_LINK0) == 0) {
 			m_freem(m);
 			return;
@@ -1555,11 +1516,11 @@ done:
 		src = frame->i_addr3;
 		break;
 	case IEEE80211_FC1_DIR_TODS:
-		RAY_DPRINTF(("%s: pkt ap2ap\n", sc->sc_xname));
+		RAY_DPRINTF(("%s: pkt ap2ap\n", device_xname(&sc->sc_dev)));
 		m_freem(m);
 		return;
 	default:
-		RAY_DPRINTF(("%s: pkt type unknown\n", sc->sc_xname));
+		RAY_DPRINTF(("%s: pkt type unknown\n", device_xname(&sc->sc_dev)));
 		m_freem(m);
 		return;
 	}
@@ -1573,14 +1534,14 @@ done:
 	 */
 	if (issnap) {
 		/* create an ether_header over top of the 802.11+SNAP header */
-		eh = (struct ether_header *)((caddr_t)(frame + 1) - 6);
+		eh = (struct ether_header *)((char *)(frame + 1) - 6);
 		memcpy(eh->ether_shost, src, ETHER_ADDR_LEN);
 		memcpy(eh->ether_dhost, frame->i_addr1, ETHER_ADDR_LEN);
 	} else {
 		/* this is the weird e2 in 802.11 encapsulation */
 		eh = (struct ether_header *)(frame + 1);
 	}
-	m_adj(m, (caddr_t)eh - (caddr_t)frame);
+	m_adj(m, (char *)eh - (char *)frame);
 #if NBPFILTER > 0
 	if (ifp->if_bpf)
 		bpf_mtap(ifp->if_bpf, m);
@@ -1601,7 +1562,7 @@ ray_recv_auth(sc, frame)
 	u_int8_t *var = (u_int8_t *)(frame + 1);
 
 	if (sc->sc_mode == SC_MODE_ADHOC) {
-		RAY_DPRINTF(("%s: recv auth packet:\n", sc->sc_dev.dv_xname));
+		RAY_DPRINTF(("%s: recv auth packet:\n", device_xname(&sc->sc_dev)));
 #ifdef RAY_DEBUG
 		hexdump((const u_int8_t *)frame, sizeof(*frame) + 6, 16, 4, 0);
 #endif
@@ -1609,7 +1570,7 @@ ray_recv_auth(sc, frame)
 
 		if (var[2] == OPEN_AUTH_REQUEST) {
 			RAY_DPRINTF(("%s: Sending authentication response.\n",
-			    sc->sc_dev.dv_xname));
+			    device_xname(&sc->sc_dev)));
 			if (ray_send_auth(sc, frame->i_addr2,
 			    OPEN_AUTH_RESPONSE) == 0) {
 				sc->sc_authstate = RAY_AUTH_NEEDED;
@@ -1618,7 +1579,7 @@ ray_recv_auth(sc, frame)
 			}
 		} else if (var[2] == OPEN_AUTH_RESPONSE) {
 			RAY_DPRINTF(("%s: Authenticated!\n",
-			    sc->sc_dev.dv_xname));
+			    device_xname(&sc->sc_dev)));
 			sc->sc_authstate = RAY_AUTH_AUTH;
 		}
 	}
@@ -1641,7 +1602,7 @@ ray_send_auth(sc, dest, auth_type)
 	ccsindex = ray_find_free_tx_ccs(sc, RAY_CCS_TX_FIRST);
 	if (ccsindex == RAY_CCS_LINK_NULL) {
 		RAY_DPRINTF(("%s: send auth failed -- no free tx slots\n",
-		    sc->sc_dev.dv_xname));
+		    device_xname(&sc->sc_dev)));
 		return (ENOMEM);
 	}
 
@@ -1665,7 +1626,7 @@ ray_send_auth(sc, dest, auth_type)
 	RAY_ECF_START_CMD(sc);
 
 	RAY_DPRINTF_XMIT(("%s: sent auth packet: len %lu\n",
-	    sc->sc_dev.dv_xname, (u_long) sizeof(packet)));
+	    device_xname(&sc->sc_dev), (u_long) sizeof(packet)));
 
 	return (0);
 }
@@ -1732,7 +1693,7 @@ ray_fill_in_tx_ccs(sc, pktlen, i, pi)
 		SRAM_WRITE_FIELD_1(sc, RAY_GET_CCS(pi), ray_cmd_tx, c_link, i);
 
 	RAY_DPRINTF(("%s: ray_alloc_tx_ccs bufp 0x%llx idx %u pidx %u\n",
-	    sc->sc_xname, (unsigned long long)bufp, i, pi));
+	    device_xname(&sc->sc_dev), (unsigned long long)bufp, i, pi));
 
 	return (bufp + RAY_TX_PHY_SIZE);
 }
@@ -1752,11 +1713,11 @@ ray_update_params_done(sc, ccs, stat)
 	rcmd = 0;
 
 	RAY_DPRINTF(("%s: ray_update_params_done stat %d\n",
-	   sc->sc_xname, stat));
+	   device_xname(&sc->sc_dev), stat));
 
 	/* this will get more complex as we add commands */
 	if (stat == RAY_CCS_STATUS_FAIL) {
-		printf("%s: failed to update a promisc\n", sc->sc_xname);
+		printf("%s: failed to update a promisc\n", device_xname(&sc->sc_dev));
 		/* XXX should probably reset */
 		/* rcmd = ray_reset; */
 	}
@@ -1764,7 +1725,7 @@ ray_update_params_done(sc, ccs, stat)
 	if (sc->sc_running & SCP_UPD_PROMISC) {
 		ray_cmd_done(sc, SCP_UPD_PROMISC);
 		sc->sc_promisc = SRAM_READ_1(sc, RAY_HOST_TO_ECF_BASE);
-		RAY_DPRINTF(("%s: new promisc value %d\n", sc->sc_xname,
+		RAY_DPRINTF(("%s: new promisc value %d\n", device_xname(&sc->sc_dev),
 		    sc->sc_promisc));
 	} else if (sc->sc_updreq) {
 		ray_cmd_done(sc, SCP_UPD_UPDATEPARAMS);
@@ -1794,7 +1755,7 @@ ray_check_scheduled(arg)
 	sc = arg;
 	RAY_DPRINTF((
 	    "%s: ray_check_scheduled enter schd 0x%x running 0x%x ready %d\n",
-	    sc->sc_xname, sc->sc_scheduled, sc->sc_running, RAY_ECF_READY(sc)));
+	    device_xname(&sc->sc_dev), sc->sc_scheduled, sc->sc_running, RAY_ECF_READY(sc)));
 
 	if (sc->sc_timoneed) {
 		callout_stop(&sc->sc_check_scheduled_ch);
@@ -1817,7 +1778,7 @@ ray_check_scheduled(arg)
 
 	RAY_DPRINTF((
 	    "%s: ray_check_scheduled exit sched 0x%x running 0x%x ready %d\n",
-	    sc->sc_xname, sc->sc_scheduled, sc->sc_running, RAY_ECF_READY(sc)));
+	    device_xname(&sc->sc_dev), sc->sc_scheduled, sc->sc_running, RAY_ECF_READY(sc)));
 
 	if (sc->sc_scheduled & ~SCP_UPD_MASK)
 		ray_set_pending(sc, sc->sc_scheduled);
@@ -1845,7 +1806,7 @@ ray_check_ccs(arg)
 	s = splnet();
 	sc = arg;
 
-	RAY_DPRINTF(("%s: ray_check_ccs\n", sc->sc_xname));
+	RAY_DPRINTF(("%s: ray_check_ccs\n", device_xname(&sc->sc_dev)));
 
 	sc->sc_timocheck = 0;
 	for (i = RAY_CCS_CMD_FIRST; i <= RAY_CCS_CMD_LAST; i++) {
@@ -1859,7 +1820,7 @@ ray_check_ccs(arg)
 		case RAY_CMD_UPDATE_PARAMS:
 			stat = SRAM_READ_FIELD_1(sc, ccs, ray_cmd, c_status);
 			RAY_DPRINTF(("%s: check ccs idx %u ccs 0x%llx "
-			    "cmd 0x%x stat %u\n", sc->sc_xname, i,
+			    "cmd 0x%x stat %u\n", device_xname(&sc->sc_dev), i,
 			    (unsigned long long)ccs, cmd, stat));
 			goto breakout;
 		}
@@ -1940,7 +1901,7 @@ ray_ccs_done(sc, ccs)
 	stat = SRAM_READ_FIELD_1(sc, ccs, ray_cmd, c_status);
 
 	RAY_DPRINTF(("%s: ray_ccs_done idx %llu cmd 0x%x stat %u\n",
-	    sc->sc_xname, (unsigned long long)RAY_GET_INDEX(ccs), cmd, stat));
+	    device_xname(&sc->sc_dev), (unsigned long long)RAY_GET_INDEX(ccs), cmd, stat));
 
 	rcmd = 0;
 	switch (cmd) {
@@ -2041,7 +2002,7 @@ ray_rccs_intr(sc, ccs)
 	stat = SRAM_READ_FIELD_1(sc, ccs, ray_cmd, c_status);
 
 	RAY_DPRINTF(("%s: ray_rccs_intr idx %llu cmd 0x%x stat %u\n",
-	    sc->sc_xname, (unsigned long long)RAY_GET_INDEX(ccs), cmd, stat));
+	    device_xname(&sc->sc_dev), (unsigned long long)RAY_GET_INDEX(ccs), cmd, stat));
 
 	rcmd = 0;
 	switch (cmd) {
@@ -2096,7 +2057,7 @@ ray_intr(arg)
 
 	sc = arg;
 
-	RAY_DPRINTF(("%s: ray_intr\n", sc->sc_xname));
+	RAY_DPRINTF(("%s: ray_intr\n", device_xname(&sc->sc_dev)));
 
 	if ((++sc->sc_checkcounters % 32) == 0)
 		ray_update_error_counters(sc);
@@ -2113,7 +2074,7 @@ ray_intr(arg)
 		else if (i <= RAY_RCCS_LAST)
 			rcmd = ray_rccs_intr(sc, RAY_GET_CCS(i));
 		else
-			printf("%s: intr: bad cmd index %d\n", sc->sc_xname, i);
+			printf("%s: intr: bad cmd index %d\n", device_xname(&sc->sc_dev), i);
 	}
 
 	if (rcmd)
@@ -2122,7 +2083,7 @@ ray_intr(arg)
 	if (count)
 		REG_WRITE(sc, RAY_HCSIR, 0);
 
-	RAY_DPRINTF(("%s: interrupt handled %d\n", sc->sc_xname, count));
+	RAY_DPRINTF(("%s: interrupt handled %d\n", device_xname(&sc->sc_dev), count));
 
 	return (count ? 1 : 0);
 }
@@ -2160,7 +2121,7 @@ ray_free_ccs(sc, ccs)
 {
 	u_int8_t stat;
 
-	RAY_DPRINTF(("%s: free_ccs idx %llu\n", sc->sc_xname,
+	RAY_DPRINTF(("%s: free_ccs idx %llu\n", device_xname(&sc->sc_dev),
 	    (unsigned long long)RAY_GET_INDEX(ccs)));
 
 	stat = SRAM_READ_FIELD_1(sc, ccs, ray_cmd, c_status);
@@ -2190,7 +2151,7 @@ ray_alloc_ccs(sc, ccsp, cmd, track)
 	bus_size_t ccs;
 	u_int i;
 
-	RAY_DPRINTF(("%s: alloc_ccs cmd %d\n", sc->sc_xname, cmd));
+	RAY_DPRINTF(("%s: alloc_ccs cmd %d\n", device_xname(&sc->sc_dev), cmd));
 
 	/* for tracked commands, if not ready just set pending */
 	if (track && !RAY_ECF_READY(sc)) {
@@ -2231,11 +2192,11 @@ ray_set_pending(sc, cmdf)
 	struct ray_softc *sc;
 	u_int cmdf;
 {
-	RAY_DPRINTF(("%s: ray_set_pending 0x%x\n", sc->sc_xname, cmdf));
+	RAY_DPRINTF(("%s: ray_set_pending 0x%x\n", device_xname(&sc->sc_dev), cmdf));
 
 	sc->sc_scheduled |= cmdf;
 	if (!sc->sc_timoneed) {
-		RAY_DPRINTF(("%s: ray_set_pending new timo\n", sc->sc_xname));
+		RAY_DPRINTF(("%s: ray_set_pending new timo\n", device_xname(&sc->sc_dev)));
 		callout_reset(&sc->sc_check_scheduled_ch,
 		    RAY_CHECK_SCHED_TIMEOUT, ray_check_scheduled, sc);
 		sc->sc_timoneed = 1;
@@ -2252,7 +2213,7 @@ ray_cmd_schedule(sc, cmdf)
 {
 	int track;
 
-	RAY_DPRINTF(("%s: ray_cmd_schedule 0x%x\n", sc->sc_xname, cmdf));
+	RAY_DPRINTF(("%s: ray_cmd_schedule 0x%x\n", device_xname(&sc->sc_dev), cmdf));
 
 	track = cmdf;
 	if ((cmdf & SCP_UPD_MASK) == 0)
@@ -2272,7 +2233,7 @@ ray_cmd_is_scheduled(sc, cmdf)
 	struct ray_softc *sc;
 	int cmdf;
 {
-	RAY_DPRINTF(("%s: ray_cmd_is_scheduled 0x%x\n", sc->sc_xname, cmdf));
+	RAY_DPRINTF(("%s: ray_cmd_is_scheduled 0x%x\n", device_xname(&sc->sc_dev), cmdf));
 
 	return ((sc->sc_scheduled & cmdf) ? 1 : 0);
 }
@@ -2285,7 +2246,7 @@ ray_cmd_cancel(sc, cmdf)
 	struct ray_softc *sc;
 	int cmdf;
 {
-	RAY_DPRINTF(("%s: ray_cmd_cancel 0x%x\n", sc->sc_xname, cmdf));
+	RAY_DPRINTF(("%s: ray_cmd_cancel 0x%x\n", device_xname(&sc->sc_dev), cmdf));
 
 	sc->sc_scheduled &= ~cmdf;
 	if ((cmdf & SCP_UPD_MASK) && (sc->sc_scheduled & SCP_UPD_MASK) == 0)
@@ -2306,7 +2267,7 @@ ray_cmd_ran(sc, cmdf)
 	struct ray_softc *sc;
 	int cmdf;
 {
-	RAY_DPRINTF(("%s: ray_cmd_ran 0x%x\n", sc->sc_xname, cmdf));
+	RAY_DPRINTF(("%s: ray_cmd_ran 0x%x\n", device_xname(&sc->sc_dev), cmdf));
 
 	if (cmdf & SCP_UPD_MASK)
 		sc->sc_running |= cmdf | SCP_UPDATESUBCMD;
@@ -2328,7 +2289,7 @@ ray_cmd_is_running(sc, cmdf)
 	struct ray_softc *sc;
 	int cmdf;
 {
-	RAY_DPRINTF(("%s: ray_cmd_is_running 0x%x\n", sc->sc_xname, cmdf));
+	RAY_DPRINTF(("%s: ray_cmd_is_running 0x%x\n", device_xname(&sc->sc_dev), cmdf));
 
 	return ((sc->sc_running & cmdf) ? 1 : 0);
 }
@@ -2341,7 +2302,7 @@ ray_cmd_done(sc, cmdf)
 	struct ray_softc *sc;
 	int cmdf;
 {
-	RAY_DPRINTF(("%s: ray_cmd_done 0x%x\n", sc->sc_xname, cmdf));
+	RAY_DPRINTF(("%s: ray_cmd_done 0x%x\n", device_xname(&sc->sc_dev), cmdf));
 
 	sc->sc_running &= ~cmdf;
 	if (cmdf & SCP_UPD_MASK) {
@@ -2367,7 +2328,7 @@ ray_issue_cmd(sc, ccs, track)
 {
 	u_int i;
 
-	RAY_DPRINTF(("%s: ray_cmd_issue 0x%x\n", sc->sc_xname, track));
+	RAY_DPRINTF(("%s: ray_cmd_issue 0x%x\n", device_xname(&sc->sc_dev), track));
 
 	/*
 	 * XXX other drivers did this, but I think
@@ -2417,7 +2378,7 @@ ray_update_subcmd(sc)
 {
 	int submask, i;
 
-	RAY_DPRINTF(("%s: ray_update_subcmd\n", sc->sc_xname));
+	RAY_DPRINTF(("%s: ray_update_subcmd\n", device_xname(&sc->sc_dev)));
 
 	ray_cmd_cancel(sc, SCP_UPDATESUBCMD);
 	if ((sc->sc_if.if_flags & IFF_RUNNING) == 0)
@@ -2506,7 +2467,7 @@ ray_download_params(sc)
 	struct ray_startup_params_tail_4 *sp4;
 	bus_size_t off;
 
-	RAY_DPRINTF(("%s: init_startup_params\n", sc->sc_xname));
+	RAY_DPRINTF(("%s: init_startup_params\n", device_xname(&sc->sc_dev)));
 
 	ray_cmd_cancel(sc, SCP_UPD_STARTUP);
 
@@ -2835,7 +2796,7 @@ ray_start_join_net_done(sc, cmd, ccs, stat)
 			return (ray_start_join_net);
 	}
 	RAY_DPRINTF(("%s: net start/join nwid %.32s bssid %s inited %d\n",
-	    sc->sc_xname, sc->sc_cnwid.i_nwid, ether_sprintf(sc->sc_bssid),
+	    device_xname(&sc->sc_dev), sc->sc_cnwid.i_nwid, ether_sprintf(sc->sc_bssid),
 		SRAM_READ_FIELD_1(sc, ccs, ray_cmd_net, c_inited)));
 
 	/* network is now active */
@@ -3273,7 +3234,7 @@ ray_dump_mbuf(sc, m)
 	u_int8_t *d, *ed;
 	u_int i;
 
-	printf("%s: pkt dump:", sc->sc_xname);
+	printf("%s: pkt dump:", device_xname(&sc->sc_dev));
 	i = 0;
 	for (; m; m = m->m_next) {
 		d = mtod(m, u_int8_t *);

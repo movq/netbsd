@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.h,v 1.22 2006/07/23 22:06:14 ad Exp $	*/
+/*	$NetBSD: sem.h,v 1.27 2008/10/22 11:25:19 ad Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -199,11 +192,6 @@ extern struct seminfo seminfo;
 extern struct semid_ds *sema;		/* semaphore id pool */
 
 /*
- * Macro to find a particular sem_undo vector
- */
-#define SEMU(ix)	((struct sem_undo *)(((long)semu)+ix * SEMUSZ))
-
-/*
  * Parameters to the semconfig system call
  */
 #define	SEM_CONFIG_FREEZE	0	/* Freeze the semaphore facility. */
@@ -228,6 +216,10 @@ void	seminit(void);
 void	semexit(struct proc *, void *);
 
 int	semctl1(struct lwp *, int, int, int, void *, register_t *);
+#define get_semctl_arg(cmd, sembuf, arg) \
+    ((cmd) == IPC_SET || (cmd) == IPC_STAT ? (void *)sembuf \
+    : (cmd) == GETALL || (cmd) == SETVAL || (cmd) == SETALL ? (void *)arg \
+    : NULL)
 #endif /* !_KERNEL */
 
 #endif /* !_SYS_SEM_H_ */

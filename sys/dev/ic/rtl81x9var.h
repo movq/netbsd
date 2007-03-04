@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl81x9var.h,v 1.37 2006/11/25 02:42:18 tsutsui Exp $	*/
+/*	$NetBSD: rtl81x9var.h,v 1.41 2008/04/25 11:27:19 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998
@@ -58,23 +58,14 @@ struct rtk_type {
 	uint16_t		rtk_vid;
 	uint16_t		rtk_did;
 	int			rtk_basetype;
-	const char		*rtk_name;
-};
-
-struct rtk_hwrev {
-	uint32_t		rtk_rev;
-	int			rtk_type;
-	const char		*rtk_desc;
-};
-
 #define RTK_8129		1
 #define RTK_8139		2
 #define RTK_8139CPLUS		3
 #define RTK_8169		4
-
-#define RTK_ISCPLUS(x)	((x)->rtk_type == RTK_8139CPLUS || \
-			 (x)->rtk_type == RTK_8169)
-
+#define RTK_8168		5
+#define RTK_8101E		6
+	const char		*rtk_name;
+};
 
 struct rtk_mii_frame {
 	uint8_t			mii_stdelim;
@@ -186,20 +177,25 @@ struct rtk_tx_desc {
 };
 
 struct rtk_softc {
-	struct device sc_dev;		/* generic device structures */
+	device_t sc_dev;		/* generic device structures */
 	struct ethercom		ethercom;	/* interface info */
 	struct mii_data		mii;
 	struct callout		rtk_tick_ch;	/* tick callout */
 	bus_space_handle_t	rtk_bhandle;	/* bus space handle */
 	bus_space_tag_t		rtk_btag;	/* bus space tag */
-	int			rtk_type;
+	u_int			sc_quirk;	/* chip quirks */
+#define RTKQ_8129		0x00000001	/* 8129 */
+#define RTKQ_8139CPLUS		0x00000002	/* 8139C+ */
+#define RTKQ_8169NONS		0x00000004	/* old non-single 8169 */
+#define RTKQ_PCIE		0x00000008	/* PCIe variants */
+
 	bus_dma_tag_t 		sc_dmat;
 
 	bus_dma_segment_t 	sc_dmaseg;	/* for rtk(4) */
 	int			sc_dmanseg;	/* for rtk(4) */
 
 	bus_dmamap_t 		recv_dmamap;	/* for rtk(4) */
-	caddr_t			rtk_rx_buf;
+	void *			rtk_rx_buf;
 
 	struct rtk_tx_desc	rtk_tx_descs[RTK_TX_LIST_CNT];
 	SIMPLEQ_HEAD(, rtk_tx_desc) rtk_tx_free;
@@ -212,16 +208,16 @@ struct rtk_softc {
 	int			re_testmode;
 
 	int			sc_flags;	/* misc flags */
-	int			sc_txthresh;	/* Early tx threshold */
-	int			sc_rev;		/* revision within rtk_type */
+#define RTK_ATTACHED 0x00000001 /* attach has succeeded */
+#define RTK_ENABLED  0x00000002 /* chip is enabled	*/
+#define RTK_IS_ENABLED(sc)	((sc)->sc_flags & RTK_ENABLED)
 
-	void	*sc_sdhook;			/* shutdown hook */
-	void	*sc_powerhook;			/* power management hook */
+	int			sc_txthresh;	/* Early tx threshold */
+	int			sc_rev;		/* MII revision */
 
 	/* Power management hooks. */
 	int	(*sc_enable)	(struct rtk_softc *);
 	void	(*sc_disable)	(struct rtk_softc *);
-	void	(*sc_power)	(struct rtk_softc *, int);
 #if NRND > 0
 	rndsource_element_t     rnd_source;
 #endif
@@ -265,11 +261,6 @@ struct rtk_softc {
 #define RE_TXPADDADDR(sc)	\
 	((sc)->re_ldata.re_rx_list_map->dm_segs[0].ds_addr + RE_TXPADOFF)
 
-
-#define RTK_ATTACHED 0x00000001 /* attach has succeeded */
-#define RTK_ENABLED  0x00000002 /* chip is enabled	*/
-
-#define RTK_IS_ENABLED(sc)	((sc)->sc_flags & RTK_ENABLED)
 
 #define RTK_TXTH_MAX	RTK_TXTH_1536
 

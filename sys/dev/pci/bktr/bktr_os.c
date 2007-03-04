@@ -1,6 +1,6 @@
 /* $SourceForge: bktr_os.c,v 1.5 2003/03/11 23:11:25 thomasklausner Exp $ */
 
-/*	$NetBSD: bktr_os.c,v 1.45 2006/11/16 01:33:20 christos Exp $	*/
+/*	$NetBSD: bktr_os.c,v 1.53 2008/06/24 10:22:03 gmcgarry Exp $	*/
 /* $FreeBSD: src/sys/dev/bktr/bktr_os.c,v 1.20 2000/10/20 08:16:53 roger Exp$ */
 
 /*
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bktr_os.c,v 1.45 2006/11/16 01:33:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bktr_os.c,v 1.53 2008/06/24 10:22:03 gmcgarry Exp $");
 
 #ifdef __FreeBSD__
 #include "bktr.h"
@@ -89,7 +89,7 @@ __KERNEL_RCSID(0, "$NetBSD: bktr_os.c,v 1.45 2006/11/16 01:33:20 christos Exp $"
 
 #if (__FreeBSD_version >=300000)
 #include <machine/bus_memio.h>	/* used by bus space */
-#include <machine/bus.h>	/* used by bus space and newbus */
+#include <sys/bus.h>	/* used by bus space and newbus */
 #include <sys/bus.h>
 #endif
 
@@ -165,7 +165,7 @@ SYSCTL_INT(_hw_bt848, OID_AUTO, slow_msp_audio, CTLFLAG_RW, &bt848_slow_msp_audi
 #define BKTR_DEBUG
 #ifdef BKTR_DEBUG
 int bktr_debug = 0;
-#define DPR(x)	(bktr_debug ? printf x : 0)
+#define DPR(x)	if (bktr_debug) printf x
 #else
 #define DPR(x)
 #endif
@@ -320,14 +320,14 @@ bktr_probe(device_t dev)
 static int
 bktr_attach(device_t dev)
 {
-	u_long		latency;
-	u_long		fun;
-	u_long		val;
+	u_int		latency;
+	u_int		fun;
+	u_int		val;
 	unsigned int	rev;
 	unsigned int	unit;
 	int		error = 0;
 #ifdef BROOKTREE_IRQ
-	u_long		old_irq, new_irq;
+	u_int		old_irq, new_irq;
 #endif
 
 	struct bktr_softc *bktr = device_get_softc(dev);
@@ -517,6 +517,7 @@ bktr_detach(device_t dev)
 	    destroy_dev(bktr->bktrdev_alias);
 	}
 #endif
+	seldestroy(&bktr->vbi_select);
 
 	/*
 	 * Deallocate resources.
@@ -739,7 +740,7 @@ bktr_write(dev_t dev, struct uio *uio, int ioflag)
  *
  */
 int
-bktr_ioctl(dev_t dev, ioctl_cmd_t cmd, caddr_t arg, int flag, struct proc* pr)
+bktr_ioctl(dev_t dev, ioctl_cmd_t cmd, void *arg, int flag, struct proc* pr)
 {
 	bktr_ptr_t	bktr;
 	int		unit;
@@ -849,7 +850,7 @@ static const char*	bktr_probe(pcici_t tag, pcidi_t type);
 static void		bktr_attach(pcici_t tag, int unit);
 static void		bktr_intr(void *arg) { common_bktr_intr(arg); }
 
-static u_long	bktr_count;
+static u_int	bktr_count;
 
 static struct	pci_device bktr_device = {
 	"bktr",
@@ -926,12 +927,12 @@ static	void
 bktr_attach(pcici_t tag, int unit)
 {
 	bktr_ptr_t	bktr;
-	u_long		latency;
-	u_long		fun;
+	u_int		latency;
+	u_int		fun;
 	unsigned int	rev;
 	unsigned long	base;
 #ifdef BROOKTREE_IRQ
-	u_long		old_irq, new_irq;
+	u_int		old_irq, new_irq;
 #endif
 
 	bktr = &brooktree[unit];
@@ -1211,7 +1212,7 @@ bktr_write(dev_t dev, struct uio *uio, int ioflag)
  *
  */
 int
-bktr_ioctl(dev_t dev, ioctl_cmd_t cmd, caddr_t arg, int flag, struct proc* pr)
+bktr_ioctl(dev_t dev, ioctl_cmd_t cmd, void *arg, int flag, struct proc* pr)
 {
 	bktr_ptr_t	bktr;
 	int		unit;
@@ -1382,10 +1383,10 @@ static void
 bktr_attach(struct device *parent, struct device *self, void *aux)
 {
 	bktr_ptr_t	bktr;
-	u_long		latency;
+	u_int		latency;
 
 #if defined(__OpenBSD__)
-	u_long		fun;
+	u_int		fun;
 	unsigned int	rev;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
@@ -1428,7 +1429,7 @@ bktr_attach(struct device *parent, struct device *self, void *aux)
 	intrstr = pci_intr_string(pa->pa_pc, ih);
 
 	bktr->ih = pci_intr_establish(pa->pa_pc, ih, IPL_VIDEO,
-				      bktr_intr, bktr, bktr->bktr_dev.dv_xname);
+				      bktr_intr, bktr, device_xname(&bktr->bktr_dev));
 	if (bktr->ih == NULL) {
 		printf(": couldn't establish interrupt");
 		if (intrstr != NULL)
@@ -1506,6 +1507,7 @@ bktr_attach(struct device *parent, struct device *self, void *aux)
 	if (intrstr != NULL)
 		printf("%s: interrupting at %s\n", bktr_name(bktr),
 		       intrstr);
+	selinit(&bktr->vbi_select);
 #endif /* __NetBSD__ */
 
 /*
@@ -1557,7 +1559,7 @@ get_bktr_mem(bktr, dmapp, size)
         bus_dma_segment_t seg;
         bus_size_t align;
         int rseg;
-        caddr_t kva;
+        void *kva;
 
         /*
          * Allocate a DMA area
@@ -1621,9 +1623,9 @@ free_bktr_mem(bktr, dmap, kva)
         bus_dma_tag_t dmat = bktr->dmat;
 
 #ifdef __NetBSD__
-        bus_dmamem_unmap(dmat, (caddr_t)kva, dmap->dm_mapsize);
+        bus_dmamem_unmap(dmat, (void *)kva, dmap->dm_mapsize);
 #else
-        bus_dmamem_unmap(dmat, (caddr_t)kva, bktr->dm_mapsize);
+        bus_dmamem_unmap(dmat, (void *)kva, bktr->dm_mapsize);
 #endif
         bus_dmamem_free(dmat, dmap->dm_segs, 1);
         bus_dmamap_destroy(dmat, dmap);
@@ -1658,10 +1660,9 @@ bktr_open(dev_t dev, int flags, int fmt,
 	unit = UNIT(dev);
 
 	/* unit out of range */
-	if ((unit >= bktr_cd.cd_ndevs) || (bktr_cd.cd_devs[unit] == NULL))
+	bktr = device_lookup_private(&bktr_cd, unit);
+	if (bktr == NULL)
 		return(ENXIO);
-
-	bktr = bktr_cd.cd_devs[unit];
 
 	if (!(bktr->flags & METEOR_INITIALIZED)) /* device not found */
 		return(ENXIO);
@@ -1691,7 +1692,7 @@ bktr_close(dev_t dev, int flags, int fmt,
 
 	unit = UNIT(dev);
 
-	bktr = bktr_cd.cd_devs[unit];
+	bktr = device_lookup_private(&bktr_cd, unit);
 
 	switch (FUNCTION(dev)) {
 	case VIDEO_DEV:
@@ -1716,7 +1717,7 @@ bktr_read(dev_t dev, struct uio *uio, int ioflag)
 
 	unit = UNIT(dev);
 
-	bktr = bktr_cd.cd_devs[unit];
+	bktr = device_lookup_private(&bktr_cd, unit);
 
 	switch (FUNCTION(dev)) {
 	case VIDEO_DEV:
@@ -1743,7 +1744,7 @@ bktr_write(dev_t dev, struct uio *uio, int ioflag)
  *
  */
 int
-bktr_ioctl(dev_t dev, ioctl_cmd_t cmd, caddr_t arg, int flag,
+bktr_ioctl(dev_t dev, ioctl_cmd_t cmd, void *arg, int flag,
     struct lwp *l)
 {
 	bktr_ptr_t	bktr;
@@ -1751,7 +1752,7 @@ bktr_ioctl(dev_t dev, ioctl_cmd_t cmd, caddr_t arg, int flag,
 
 	unit = UNIT(dev);
 
-	bktr = bktr_cd.cd_devs[unit];
+	bktr = device_lookup_private(&bktr_cd, unit);
 
 	if (bktr->bigbuf == 0)	/* no frame buffer allocated (ioctl failed) */
 		return(ENOMEM);
@@ -1780,7 +1781,7 @@ bktr_mmap(dev_t dev, off_t offset, int nprot)
 	if (FUNCTION(dev) > 0)	/* only allow mmap on /dev/bktr[n] */
 		return(-1);
 
-	bktr = bktr_cd.cd_devs[unit];
+	bktr = device_lookup_private(&bktr_cd, unit);
 
 	if ((vaddr_t)offset >= bktr->alloc_pages * PAGE_SIZE)
 		return(-1);

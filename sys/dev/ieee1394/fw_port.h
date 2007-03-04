@@ -1,4 +1,4 @@
-/*	$NetBSD: fw_port.h,v 1.20 2006/11/16 01:32:59 christos Exp $	*/
+/*	$NetBSD: fw_port.h,v 1.30 2008/06/24 10:12:42 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2004 KIYOHARA Takashi
  * All rights reserved.
@@ -45,45 +45,162 @@
 #endif
 
 #if defined(__DragonFly__) || __FreeBSD_version < 500000
-#define dev2unit(x)	((minor(x) & 0xff) | (minor(x) >> 8))
-#define unit2minor(x)	(((x) & 0xff) | (((x) << 8) & ~0xffff))
-#endif
-
-#ifdef __DragonFly__
-typedef d_thread_t fw_proc;
-typedef d_thread_t fw_thread;
-#include <sys/select.h>
-#define M_DONTWAIT MB_DONTWAIT
-#elif __FreeBSD_version >= 500000
-typedef struct thread fw_proc;
-typedef struct thread fw_thread;
-#include <sys/selinfo.h>
+#define fw_dev_t dev_t
 #else
-typedef struct proc fw_thread;
-typedef struct proc fw_proc;
-#include <sys/select.h>
+#define fw_dev_t struct cdev *
 #endif
-
 
 #if defined(__DragonFly__) || __FreeBSD_version < 500000
-#define CALLOUT_INIT(x) callout_init(x)
-#define DEV_T dev_t
-#define FW_LOCK
-#define FW_UNLOCK
-#define THREAD_CREATE(f, sc, p, name, arg) \
-     kthread_create(f, (void *)sc, p, name, arg)
-#define THREAD_EXIT(x)  kthread_exit()
+#define fw_dev2unit(x)	((minor(x) & 0xff) | (minor(x) >> 8))
+#define fw_unit2minor(x) (((x) & 0xff) | (((x) << 8) & ~0xffff))
 #else
-#define CALLOUT_INIT(x) callout_init(x, 0 /* mpsafe */)
-#define DEV_T struct cdev *
-#define FW_LOCK         mtx_lock(&Giant)
-#define FW_UNLOCK       mtx_unlock(&Giant)
-#define THREAD_CREATE(f, sc, p, name, arg) \
-     kthread_create(f, (void *)sc, p, 0, 0, name, arg)
-#define THREAD_EXIT(x)  kthread_exit(x)
+#define fw_dev2unit(x)	dev2unit(x)
+#define fw_unit2minor(x) unit2minor(x)
 #endif
-#define fw_kthread_create(func, arg) \
-				func((arg))
+
+#define fw_timevalcmp(tv1, tv2, op)	timevalcmp((tv1), (tv2), op)
+#define fw_timevalsub(tv1, tv2)		timevalsub((tv1), (tv2))
+
+#define fw_get_nameunit(dev)		device_get_nameunit((dev))
+#define fw_get_unit(dev)		device_get_unit((dev))
+
+#define fw_printf(dev, ...)		device_printf((dev), __VA_ARGS__)
+
+/* atomic macros */
+#define fw_atomic_set_int(P, V)		atomic_set_int((P), (V))
+#define fw_atomic_readandclear_int(p)	atomic_readandclear_int((p))
+
+/* mutex macros */
+#include <sys/mutex.h>
+typedef struct mtx fw_mtx_t;
+#define fw_mtx_init(mutex, name, type, opts) \
+				mtx_init(mutex, name, type, opts)
+#define fw_mtx_lock(mutex)	mtx_lock(mutex)
+#define fw_mtx_unlock(mutex)	mtx_unlock(mutex)
+#define fw_mtx_destroy(mutex)	mtx_destroy(mutex)
+#define fw_mtx_assert(mutex, what) \
+				mtx_assert(mutex, what)
+
+#define fw_msleep(ident, mtx, priority, wmesg, timo) \
+	msleep(ident, mtx, priority, wmesg, timo);
+
+/* taskqueue macros */
+#include <sys/taskqueue.h>
+typedef struct task fw_task_t;
+#define FW_TASK_INIT(task, priority, func, context) \
+				TASK_INIT((task), (priority), (func), (context))
+#define fw_taskqueue_enqueue(queue, task) \
+				taskqueue_enqueue((queue), (task))
+#define fw_taskqueue_create_fast(name, mflags, enqueue, taskqueue) \
+	taskqueue_create_fast((name), (mflags), (enqueue), (taskqueue))
+#define fw_taskqueue_start_threads(taskqueue, n, x, fmt, ...) \
+	taskqueue_start_threads((taskqueue), (n), (x), (fmt), ...)
+
+/* kthread macros */
+#ifdef __DragonFly__
+typedef d_thread_t fw_thread_t;
+typedef d_thread_t fw_proc_t;
+#define fw_kthread_create(func, arg, newpp, fmt, ...) \
+	kthread_create(func, arg, newpp, fmt, __VA_ARGS__)
+#define fw_kthread_exit(x)	kthread_exit()
+#elif __FreeBSD_version >= 500000
+typedef struct thread fw_thread_t;
+typedef struct thread fw_proc_t;
+#define fw_kthread_create(func, arg, newpp, fmt, ...) \
+	kthread_create(func, arg, newpp, 0, 0, fmt, __VA_ARGS__)
+#define fw_kthread_exit(ecode)	kthread_exit((ecode))
+#else
+typedef struct proc fw_thread_t;
+typedef struct proc fw_proc_t;
+#define fw_kthread_create(func, arg, newpp, fmt, ...) \
+	kproc_create(func, arg, newpp, fmt, __VA_ARGS__)
+#define fw_kthread_exit(ecode)	kproc_exit((ecode))
+#endif
+
+/* callout macros */
+#if defined(__DragonFly__) || __FreeBSD_version < 500000
+#define fw_callout_init(c)	callout_init((c), 0)
+#else
+#define fw_callout_init(c)	callout_init(c, 1 /* mpsafe */)
+#endif
+#define fw_callout_reset(c, ticks, func, arg) \
+				callout_reset((c), (ticks), (func), (arg))
+#define fw_callout_stop(c)	callout_stop((c))
+
+/* bus_dma macros */
+typedef bus_dma_tag_t fw_bus_dma_tag_t;
+#if defined(__FreeBSD__) && __FreeBSD_version >= 501102
+#define fw_bus_dma_tag_create(t,					     \
+	    a, b, laddr, haddr, ffunc, farg, s, ns, mxss, f, lfunc, larg, tp)\
+	bus_dma_tag_create((t), (a), (b), (laddr), (haddr),		     \
+	    (ffunc), (farg), (s), (ns), (mxss), (f), (lfunc), (larg), (tp))
+#else
+#define fw_bus_dma_tag_create(t, a, b,					\
+	    laddr, haddr, ffunc, farg, s, ns, mxss, f, lfunc, larg, tp)	\
+	bus_dma_tag_create((t), (a), (b), (laddr), (haddr),		\
+	    (ffunc), (farg), (s), (ns), (mxss), (f), (tp))
+#endif
+#define fw_bus_dma_tag_destroy(t) \
+	bus_dma_tag_destroy((t))
+#define fw_bus_dmamap_create(t, f, mp) \
+	bus_dmamap_create((t), 0, (mp))
+#define fw_bus_dmamap_destroy((t), (m)) \
+	bus_dmamap_destroy((t), (m))
+#define fw_bus_dmamap_load(t, m, b, l, func, a, f) \
+	bus_dmamap_load((t), (m), (b), (l), (func), (a), 0)
+#define fw_bus_dmamap_load_mbuf(t, m, b, func, a, f) \
+	bus_dmamap_load((t), (m), (b), (func), (a), 0)
+#define fw_bus_dmamap_unload(t, m) \
+	bus_dmamap_unload((t), (m))
+#if __FreeBSD_version < 500000
+#define fw_bus_dmamap_sync(t, m, op)					\
+	do {								\
+		switch ((op)) {						\
+		(BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE):		\
+			bus_dmamap_sync((t), (m), BUS_DMASYNC_PREWRITE);\
+			bus_dmamap_sync((t), (m), BUS_DMASYNC_PREREAD);	\
+			break;						\
+		(BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE):		\
+			/* BUS_DMASYNC_POSTWRITE is probably a no-op. */\
+			bus_dmamap_sync((t), (m), BUS_DMASYNC_POSTREAD);\
+			break;						\
+		default:						\
+			bus_dmamap_sync((t), (m), (op));		\
+		}							\
+	} while (/*CONSTCOND*/0)
+#else
+#define fw_bus_dmamap_sync(t, m, op) \
+	bus_dmamap_sync((t), (m), (op))
+#endif
+#define fw_bus_dmamem_alloc(t, vp, f, mp) \
+	bus_dmamem_alloc((t), (vp), (f), (mp))
+#define fw_bus_dmamem_free(t, v, m) \
+        bus_dmamem_free((t), (v), (m))
+
+
+#define fw_config_pending_incr()
+#define fw_config_pending_decr()
+
+#define splfw()		splimp()
+#define splfwnet()	splimp()
+#define splfwsbp()	splcam()
+
+#ifdef __DragonFly__
+#include <sys/select.h>
+#elif __FreeBSD_version >= 500000
+#include <sys/selinfo.h>
+#else
+#include <sys/select.h>
+#endif
+
+#define FW_KASSERT(expression, str) \
+				KASSERT(expression, str)
+
+
+#ifdef __DragonFly__
+#define M_DONTWAIT MB_DONTWAIT
+#endif
+
 
 /*
  * fw attach macro for FreeBSD
@@ -94,7 +211,7 @@ typedef struct proc fw_proc;
 #define FW_ATTACH_START(dname, sc, fwa)					\
 	struct __CONCAT(dname,_softc) *sc =				\
 	    ((struct __CONCAT(dname,_softc) *)device_get_softc(dev));	\
-	__attribute__((__unused__))struct fw_attach_args *fwa =		\
+	__unused struct fw_attach_args *fwa =		\
 	    device_get_ivars(dev)
 #define FW_ATTACH_RETURN(r)	return (r)
 
@@ -109,22 +226,14 @@ typedef struct proc fw_proc;
 	    ((struct __CONCAT(dname,_softc) *)device_get_softc(dev))
 
 /*
- * fw intr macro for FreeBSD
- */
-#define FW_INTR(fwohci)	\
-	void		\
-	fwohci_intr(void *arg)
-#define FW_INTR_RETURN(r)	return
-
-/*
  * fw open macro for FreeBSD
  */
 #define FW_OPEN(dname)	\
 	int		\
-	__CONCAT(dname,_open)(DEV_T dev, int flags, int fmt, fw_proc *td)
+	__CONCAT(dname,_open)(fw_dev_t dev, int flags, int fmt, fw_proc_t td)
 #define FW_OPEN_START			\
 	int unit = DEV2UNIT(dev);	\
-	__attribute__((__unused__))struct firewire_softc *sc = \
+	__unused struct firewire_softc *sc = \
 	    devclass_get_softc(firewire_devclass, unit)
 
 /*
@@ -132,8 +241,8 @@ typedef struct proc fw_proc;
  */
 #define FW_CLOSE(dname)		\
 	int			\
-	__CONCAT(dname,_close)(DEV_T dev, int flags, \
-	int fmt, fw_proc *td)
+	__CONCAT(dname,_close)(fw_dev_t dev, int flags, \
+	int fmt, fw_proc_t td)
 #define FW_CLOSE_START
 
 /*
@@ -141,7 +250,7 @@ typedef struct proc fw_proc;
  */
 #define FW_READ(dname)	\
 	int		\
-	__CONCAT(dname,_read)(DEV_T dev, struct uio *uio, int ioflag) 
+	__CONCAT(dname,_read)(fw_dev_t dev, struct uio *uio, int ioflag) 
 #define FW_READ_START
 
 /*
@@ -149,7 +258,7 @@ typedef struct proc fw_proc;
  */
 #define FW_WRITE(dname)	\
 	int		\
-	__CONCAT(dname,_write)(DEV_T dev, struct uio *uio, int ioflag)
+	__CONCAT(dname,_write)(fw_dev_t dev, struct uio *uio, int ioflag)
 #define FW_WRITE_START
 
 /*
@@ -158,19 +267,18 @@ typedef struct proc fw_proc;
 #define FW_IOCTL(dname)					\
 	int						\
 	__CONCAT(dname,_ioctl)				\
-	    (DEV_T dev, u_long cmd, caddr_t data, int flag, fw_proc *td)
+	    (fw_dev_t dev, u_long cmd, void *data, int flag, fw_proc_t td)
 #define FW_IOCTL_START			\
 	int unit = DEV2UNIT(dev);       \
-	__attribute__((__unused__))struct firewire_softc *sc = \
+	__unused struct firewire_softc *sc = \
 	    devclass_get_softc(firewire_devclass, unit)
-
 
 /*
  * fw poll macro for FreeBSD
  */
 #define FW_POLL(dname)	\
 	int		\
-	__CONCAT(dname,_poll)(DEV_T dev, int events, fw_proc *td)
+	__CONCAT(dname,_poll)(fw_dev_t dev, int events, fw_proc_t td)
 #define FW_POLL_START
 
 /*
@@ -179,12 +287,12 @@ typedef struct proc fw_proc;
 #if defined(__DragonFly__) || __FreeBSD_version < 500102
 #define FW_MMAP(dname)	\
 	int		\
-	__CONCAT(dname,_mmap)(DEV_T dev, vm_offset_t offset, int nproto)
+	__CONCAT(dname,_mmap)(fw_dev_t dev, vm_offset_t offset, int nproto)
 #else
 #define FW_MMAP(dname)		\
 	int			\
 	__CONCAT(dname,_mmap)	\
-	   (DEV_T dev, vm_offset_t offset, vm_paddr_t *paddr, int nproto)
+	   (fw_dev_t dev, vm_offset_t offset, vm_paddr_t *paddr, int nproto)
 #endif
 #define FW_MMAP_START
 
@@ -192,48 +300,43 @@ typedef struct proc fw_proc;
  * fw strategy macro for FreeBSD
  */
 #define FW_STRATEGY_START		\
-	DEV_T dev = bp->bio_dev;	\
+	fw_dev_t dev = bp->bio_dev;	\
 	int unit = DEV2UNIT(dev);	\
-	__attribute__((__unused__))struct firewire_softc *sc = \
+	__unused struct firewire_softc *sc = \
 	    devclass_get_softc(firewire_devclass, unit)
 
 /*
  * if macro for FreeBSD
  */
-#define IF_STOP(dname)	\
-	static void	\
-	__CONCAT(dname,_stop)(struct __CONCAT(dname,_softc) *fwip)
-#define IF_STOP_START(dname, ifp, sc) \
-	struct ifnet *ifp = &(sc)->fwip_if
 #define IF_DETACH_START(dname, sc)		\
 	struct __CONCAT(dname,_softc) *sc =	\
 	    (struct __CONCAT(dname,_softc) *)device_get_softc(dev)
+#define IF_IOCTL_START(dname, sc)		\
+	struct __CONCAT(dname,_softc) *sc =	\
+	    ((struct fwip_eth_softc *)ifp->if_softc)->fwip
 #define IF_INIT(dname)	\
 	static void	\
 	__CONCAT(dname,_init)(void *arg)
 #define IF_INIT_START(dname, sc, ifp)			\
 	struct __CONCAT(dname,_softc) *sc =		\
 	    ((struct fwip_eth_softc *)arg)->fwip;	\
-	struct ifnet *ifp = &(sc)->fwip_if
+	struct ifnet *ifp = (sc)->fw_softc.fwip_ifp
 #define IF_INIT_RETURN(r)	return
-#define IF_IOCTL_START(dname, sc)		\
-	struct __CONCAT(dname,_softc) *sc =	\
-	    ((struct fwip_eth_softc *)ifp->if_softc)->fwip
+#define IF_STOP(dname)	\
+	static void	\
+	__CONCAT(dname,_stop)(struct __CONCAT(dname,_softc) *fwip)
+#define IF_STOP_START(dname, ifp, sc) \
+	struct ifnet *ifp = (sc)->fw_softc.fwip_ifp;
 
 /*
  * fwohci macro for FreeBSD
  */
-#define FWOHCI_INIT_END
 #define FWOHCI_DETACH()	\
 	int		\
 	fwohci_detach(struct fwohci_softc *sc, device_t dev)
 #define FWOHCI_DETACH_START
 #define FWOHCI_DETACH_END
-#define FWOHCI_STOP()	\
-	int		\
-	fwohci_stop(struct fwohci_softc *sc, device_t dev)
-#define FWOHCI_STOP_START
-#define FWOHCI_STOP_RETURN(r)	return (r) 
+#define FWOHCI_INIT_END
 
 /*
  * firewire macro for FreeBSD
@@ -304,6 +407,7 @@ typedef struct proc fw_proc;
 	do {								    \
 		sbp->sim = cam_sim_alloc(sbp_action, sbp_poll, "sbp", sbp,  \
 				 device_get_unit(dev),			    \
+				 &sbp->mtx,				    \
 				 /*untagged*/ 1,			    \
 				 /*tagged*/ SBP_QUEUE_LEN - 1,		    \
 				 devq);					    \
@@ -313,6 +417,7 @@ typedef struct proc fw_proc;
 			return ENXIO;					    \
 		}							    \
 									    \
+		SBP_LOCK(sbp);						    \
 		if (xpt_bus_register(sbp->sim, /*bus*/0) != CAM_SUCCESS)    \
 			goto fail;					    \
 									    \
@@ -323,6 +428,7 @@ typedef struct proc fw_proc;
 			goto fail;					    \
 		}							    \
 		xpt_async(AC_BUS_RESET, sbp->path, /*arg*/ NULL);	    \
+		SBP_UNLOCK(sbp);					    \
 	} while (/*CONSTCOND*/0)
 #define SBP_DEVICE(d)		((d)->path)
 #define SBP_DEVICE_FREEZE(d, x)	xpt_freeze_devq((d)->path, (x))
@@ -344,16 +450,24 @@ typedef struct proc fw_proc;
 /*
  * fwip macro for FreeBSD
  */
-#define FWIP_ATTACH_START						\
-	int unit = device_get_unit(dev);				\
-	struct fw_hwaddr *hwaddr = &fwip->fw_softc.fwcom.fc_hwaddr
-#define FWIP_ATTACH_SETUP	bzero(fwip, sizeof(struct fwip_softc))
+#define FWIP_ATTACH_START		\
+	int unit = device_get_unit(dev);\
+	struct fw_hwaddr *hwaddr;
+#define FWIP_ATTACH_SETUP						\
+	do {								\
+		fwip->fw_softc.fwip_ifp = if_alloc(IFT_IEEE1394);	\
+		hwaddr = &IFP2FWC(fwip->fw_softc.fwip_ifp)->fc_hwaddr;	\
+	} while (/*CONSTCOND*/0)
 
 #define FWDEV_MAKEDEV(sc)	fwdev_makedev(sc)
 
 #define FIREWIRE_IFATTACH(ifp, ha) \
 				firewire_ifattach((ifp), (ha))
-#define FIREWIRE_IFDETACH(ifp)	firewire_ifdetach((ifp));
+#define FIREWIRE_IFDETACH(ifp)		\
+	do {				\
+		firewire_ifdetach(ifp);	\
+		if_free(ifp);		\
+	} while (/*CONSTCOND*/0)
 #define FIREWIRE_BUSRESET(ifp)	firewire_busreset((ifp))
 #define FIREWIRE_INPUT(ifp, m, src) \
 				firewire_input((ifp), (m), (src))
@@ -381,14 +495,14 @@ typedef struct proc fw_proc;
 		return fwmem_close(dev, flags, fmt, td)
 #define FWDEV_READ_START	\
         if (DEV_FWMEM(dev))	\
-		return physio(dev, uio, ioflag)
+		return (physio(dev, uio, ioflag))
 #define FWDEV_WRITE_START	\
         if (DEV_FWMEM(dev))	\
-		return physio(dev, uio, ioflag)
+		return (physio(dev, uio, ioflag))
 #define FWDEV_IOCTL_START	\
 	if (DEV_FWMEM(dev))	\
 		return fwmem_ioctl(dev, cmd, data, flag, td)
-#define FWDEV_IOCTL_REDIRECT	fc->ioctl (dev, cmd, data, flag, td)
+#define FWDEV_IOCTL_REDIRECT	fc->ioctl(dev, cmd, data, flag, td)
 #define FWDEV_POLL_START	\
 	if (DEV_FWMEM(dev))	\
 		return fwmem_poll(dev, events, td)
@@ -468,66 +582,6 @@ typedef struct scsi_inquiry_data sbp_scsi_inquiry_data;
 	    (((ms) + 0u) / 1000u) * hz : \
 	    (((ms) + 0u) * hz) / 1000u)
 
-#define config_pending_incr()
-#define config_pending_decr()
-
-/*
- * bus_dma macros for FreeBSD
- */
-typedef bus_dma_tag_t fw_bus_dma_tag_t;
-
-#if defined(__FreeBSD__) && __FreeBSD_version >= 501102
-#define fw_bus_dma_tag_create(t,					     \
-	    a, b, laddr, haddr, ffunc, farg, s, ns, mxss, f, lfunc, larg, tp)\
-	bus_dma_tag_create((t), (a), (b), (laddr), (haddr),		     \
-	    (ffunc), (farg), (s), (ns), (mxss), (f), (lfunc), (larg), (tp))
-#else
-#define fw_bus_dma_tag_create(t, a, b,					\
-	    laddr, haddr, ffunc, farg, s, ns, mxss, f, lfunc, larg, tp)	\
-	bus_dma_tag_create((t), (a), (b), (laddr), (haddr),		\
-	    (ffunc), (farg), (s), (ns), (mxss), (f), (tp))
-#endif
-#define fw_bus_dma_tag_destroy(t) \
-	bus_dma_tag_destroy((t))
-#define fw_bus_dmamap_create(t, f, mp) \
-	bus_dmamap_create((t), 0, (mp))
-#define fw_bus_dmamap_destroy((t), (m)) \
-	bus_dmamap_destroy((t), (m))
-#define fw_bus_dmamap_load(t, m, b, l, func, a, f) \
-	bus_dmamap_load((t), (m), (b), (l), (func), (a), 0)
-#define fw_bus_dmamap_load_mbuf(t, m, b, func, a, f) \
-	bus_dmamap_load((t), (m), (b), (func), (a), 0)
-#define fw_bus_dmamap_unload(t, m) \
-	bus_dmamap_unload((t), (m))
-#if __FreeBSD_version < 500000
-#define fw_bus_dmamap_sync(t, m, op)					\
-	do {								\
-		switch ((op)) {						\
-		(BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE):		\
-			bus_dmamap_sync((t), (m), BUS_DMASYNC_PREWRITE);\
-			bus_dmamap_sync((t), (m), BUS_DMASYNC_PREREAD);	\
-			break;						\
-		(BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE):		\
-			/* BUS_DMASYNC_POSTWRITE is probably a no-op. */\
-			bus_dmamap_sync((t), (m), BUS_DMASYNC_POSTREAD);\
-			break;						\
-		default:						\
-			bus_dmamap_sync((t), (m), (op));		\
-		}							\
-	} while (/*CONSTCOND*/0)
-#else
-#define fw_bus_dmamap_sync(t, m, op) \
-	bus_dmamap_sync((t), (m), (op))
-#endif
-#define fw_bus_dmamem_alloc(t, vp, f, mp) \
-	bus_dmamem_alloc((t), (vp), (f), (mp))
-#define fw_bus_dmamem_free(t, v, m) \
-        bus_dmamem_free((t), (v), (m))
-
-#define splfw()		splimp()
-#define splfwnet()	splimp()
-#define splfwsbp()	splcam()
-
 
 #elif defined(__NetBSD__)
 #define OS_STR			"NetBSD"
@@ -535,572 +589,11 @@ typedef bus_dma_tag_t fw_bus_dma_tag_t;
 #define OS_VER_STR		"NetBSD-2"
 #define PROJECT_STR		"NetBSD Project"
 
-#define SSD_CURRENT_ERROR	0x70
-#define SSD_DEFERRED_ERROR	0x71
-
-#define T_RBC				T_SIMPLE_DIRECT
-
-#define SCSI_STATUS_CHECK_COND		SCSI_CHECK
-#define SCSI_STATUS_BUSY		SCSI_BUSY
-#define SCSI_STATUS_CMD_TERMINATED	SCSI_TERMINATED
-
-#define GIANT_REQUIRED
-#define IFF_NEEDSGIANT	0
-
-#define MTAG_FIREWIRE			1394
-#define MTAG_FIREWIRE_HWADDR		0
-#define MTAG_FIREWIRE_SENDER_EUID	1
-
-#define BUS_SPACE_MAXSIZE_32BIT		0xFFFFFFFF
-
-#define DFLTPHYS			(64 * 1024)	/* fake */
-
-#define dev2unit	minor
-#define unit2minor(x)	(((x) & 0xff) | (((x) << 12) & ~0xfffff)) /* XXX */
-
-typedef struct lwp fw_proc;
-typedef struct proc fw_thread;
-#include <sys/select.h>
-
-#define CALLOUT_INIT(x) callout_init(x)
-#define DEV_T dev_t
-#define FW_LOCK
-#define FW_UNLOCK
-#define THREAD_CREATE(f, sc, p, name, arg) \
-     kthread_create1(f, (void *)sc, p, name, arg)
-#define THREAD_EXIT(x)  kthread_exit(x)
-#define fw_kthread_create(func, arg) \
-				kthread_create((func), (arg))
+#define fw_dev_t dev_t
 
 struct fwbus_attach_args {
 	const char *name;
 };
-
-
-/*
- * fw attach macro for NetBSD
- */
-#define FW_ATTACH(dname) 	\
-	void			\
-	__CONCAT(dname,attach)	\
-	    (struct device *parent, struct device *self, void *aux)
-#define FW_ATTACH_START(dname, sc, fwa)					\
-	struct __CONCAT(dname,_softc) *sc =				\
-	    (struct __CONCAT(dname,_softc) *)self;			\
-	__attribute__((__unused__))struct fw_attach_args *fwa =		\
-	    (struct fw_attach_args *)aux
-#define FW_ATTACH_RETURN(r)	return
-
-/*
- * fw detach macro for NetBSD
- */
-#define FW_DETACH(dname)	\
-	int			\
-	__CONCAT(dname,detach)(struct device *self, int flags)
-#define FW_DETACH_START(dname, sc)					\
-	struct __CONCAT(dname,_softc) *sc =				\
-	    (struct __CONCAT(dname,_softc) *)self
-
-/*
- * fw intr macro for NetBSD
- */
-#define FW_INTR(fwohci)	\
-	int		\
-	fwohci_intr(void *arg)
-#define FW_INTR_RETURN(r)	return (r)
-
-/*
- * fw open macro for NetBSD
- */
-#define FW_OPEN(dname)	\
-	int		\
-	__CONCAT(dname,_open)(dev_t _dev, int flags, int fmt,  \
-	fw_proc *td)
-#define FW_OPEN_START							\
-	struct firewire_softc *sc, *dev;				\
-									\
-	sc = dev = device_lookup(&ieee1394if_cd, DEV2UNIT(_dev));	\
-	if (dev == NULL)						\
-		return ENXIO
-
-/*
- * fw close macro for NetBSD
- */
-#define FW_CLOSE(dname)		\
-	int			\
-	__CONCAT(dname,_close)(dev_t _dev, int flags, \
-	int fmt, fw_proc *td)
-#define FW_CLOSE_START							  \
-	int unit = DEV2UNIT(_dev);					  \
-	struct firewire_softc *dev = device_lookup(&ieee1394if_cd, unit); \
-									  \
-	if (dev == NULL)						  \
-		return ENXIO
-
-/*
- * fw read macro for NetBSD
- */
-#define FW_READ(dname)	\
-	int		\
-	__CONCAT(dname,_read)(dev_t _dev, struct uio *uio, int ioflag) 
-#define FW_READ_START					\
-	int unit = DEV2UNIT(_dev);			\
-	struct firewire_softc *dev;			\
-							\
-	dev = device_lookup(&ieee1394if_cd, unit);	\
-	if (dev == NULL)				\
-		return ENXIO
-
-/*
- * fw write macro for NetBSD
- */
-#define FW_WRITE(dname)	\
-	int		\
-	__CONCAT(dname,_write)(dev_t _dev, struct uio *uio, int ioflag)
-#define FW_WRITE_START					\
-	int unit = DEV2UNIT(_dev);			\
-	struct firewire_softc *dev;			\
-							\
-	dev = device_lookup(&ieee1394if_cd, unit);	\
-	if (dev == NULL)				\
-		return ENXIO
-
-/*
- * fw ioctl macro for NetBSD
- */
-#define FW_IOCTL(dname)					\
-	int						\
-	__CONCAT(dname,_ioctl)				\
-	    (dev_t _dev, u_long cmd, caddr_t data,	\
-	    int flag, fw_proc *td)
-#define FW_IOCTL_START					\
-	int unit = DEV2UNIT(_dev);			\
-	struct firewire_softc *sc, *dev;		\
-							\
-	sc = dev = device_lookup(&ieee1394if_cd, unit);	\
-	if (dev == NULL)				\
-		return ENXIO
-
-/*
- * fw poll macro for NetBSD
- */
-#define FW_POLL(dname)	\
-	int		\
-	__CONCAT(dname,_poll)(dev_t _dev, int events, \
-	fw_proc *td)
-#define FW_POLL_START					\
-	int unit = DEV2UNIT(_dev);			\
-	struct firewire_softc *dev;			\
-							\
-	dev = device_lookup(&ieee1394if_cd, unit);	\
-	if (dev == NULL)				\
-		return ENXIO
-
-/*
- * fw mmap macro for NetBSD
- */
-#define FW_MMAP(dname)	\
-	paddr_t		\
-	__CONCAT(dname,_mmap)(dev_t _dev, off_t offset, \
-	int nproto)
-#define FW_MMAP_START					\
-	int unit = DEV2UNIT(_dev);			\
-	struct firewire_softc *dev;			\
-							\
-	dev = device_lookup(&ieee1394if_cd, unit);	\
-	if (dev == NULL)				\
-		return ENXIO
-
-/*
- * fw strategy macro for NetBSD
- */
-#define FW_STRATEGY_START				\
-	dev_t _dev = bp->bio_dev;			\
-	int unit = DEV2UNIT(_dev);			\
-	struct firewire_softc *sc, *dev;		\
-							\
-	sc = dev = device_lookup(&ieee1394if_cd, unit);	\
-	if (dev == NULL)				\
-		return
-
-/*
- * if macro for NetBSD
- */
-#define IF_STOP(dname)	\
-	void		\
-	__CONCAT(dname,_stop)(struct ifnet *ifp, int disable)
-#define IF_STOP_START(dname, ifp, sc)		\
-	struct __CONCAT(dname,_softc) *sc =	\
-	    ((struct fwip_eth_softc *)(ifp)->if_softc)->fwip
-#define IF_DETACH_START(dname, sc)		\
-	struct __CONCAT(dname,_softc) *sc =	\
-	    (struct __CONCAT(dname,_softc) *)self
-#define IF_INIT(dname)	\
-	int		\
-	__CONCAT(dname,_init)(struct ifnet *ifp)
-#define IF_INIT_START(dname, sc, ifp)	\
-	struct __CONCAT(dname,_softc) *sc =	\
-	    ((struct fwip_eth_softc *)ifp->if_softc)->fwip
-#define IF_INIT_RETURN(r)	return (r)
-#define IF_IOCTL_START(dname, sc)		\
-	struct __CONCAT(dname,_softc) *sc =	\
-	    ((struct fwip_eth_softc *)ifp->if_softc)->fwip
-
-/*
- * fwohci macro for NetBSD
- */
-#define FWOHCI_INIT_END							      \
-	do {								      \
-		struct fwbus_attach_args faa;				      \
-		faa.name = "ieee1394if";				      \
-		sc->sc_shutdownhook = shutdownhook_establish(fwohci_stop, sc);\
-		sc->sc_powerhook = powerhook_establish(sc->fc._dev.dv_xname,  \
-		    fwohci_power, sc);					      \
-		sc->fc.bdev = config_found(sc->fc.dev, &faa, fwohci_print);   \
-	} while (/*CONSTCOND*/0)
-#define FWOHCI_DETACH()	\
-	int		\
-	fwohci_detach(struct fwohci_softc *sc, int flags)
-#define FWOHCI_DETACH_START		\
-	if (sc->fc.bdev != NULL)	\
-		config_detach(sc->fc.bdev, flags) 
-#define FWOHCI_DETACH_END					\
-        if (sc->sc_powerhook != NULL)				\
-		powerhook_disestablish(sc->sc_powerhook);	\
-	if (sc->sc_shutdownhook != NULL)			\
-		shutdownhook_disestablish(sc->sc_shutdownhook)
-#define FWOHCI_STOP()	\
-	void	\
-	fwohci_stop(void *arg)
-#define FWOHCI_STOP_START	struct fwohci_softc *sc = arg
-#define FWOHCI_STOP_RETURN(r)	return
-
-/*
- * firewire macro for NetBSD
- */
-#define FIREWIRE_ATTACH_START						\
-	struct firewire_comm *fc = (struct firewire_comm *)parent;	\
-									\
-	aprint_normal(": IEEE1394 bus\n");				\
-									\
-	fc->bdev = (struct device *)sc;					\
-	sc->dev = &sc->_dev;						\
-	SLIST_INIT(&sc->devlist)
-#define FWDEV_DESTROYDEV(sc)
-#define FIREWIRE_GENERIC_ATTACH						    \
-	do {								    \
-		struct fw_attach_args faa;				    \
-		struct firewire_dev_list *devlist, *elm;		    \
-									    \
-		devlist = malloc(					    \
-		    sizeof (struct firewire_dev_list), M_DEVBUF, M_NOWAIT); \
-		if (devlist == NULL)					    \
-			break;						    \
-									    \
-		faa.name = "fwip";					    \
-		faa.fc = fc;						    \
-		faa.fwdev = NULL;					    \
-		devlist->dev = config_found(sc->dev, &faa, firewire_print); \
-		if (devlist->dev == NULL) {				    \
-			free(devlist, M_DEVBUF);			    \
-			break;						    \
-		}							    \
-									    \
-		if (SLIST_EMPTY(&sc->devlist))				    \
-			SLIST_INSERT_HEAD(&sc->devlist, devlist, link);	    \
-		else {							    \
-			for (elm = SLIST_FIRST(&sc->devlist);		    \
-			    SLIST_NEXT(elm, link) != NULL;		    \
-			    elm = SLIST_NEXT(elm, link));		    \
-			SLIST_INSERT_AFTER(elm, devlist, link);		    \
-		}							    \
-	} while (/*CONSTCOND*/0)
-#define FIREWIRE_GENERIC_DETACH						      \
-	do {								      \
-		struct firewire_dev_list *devlist;			      \
-		int err;						      \
-									      \
-		while ((devlist = SLIST_FIRST(&sc->devlist)) != NULL) {	      \
-			if ((err = config_detach(devlist->dev, flags)) != 0)  \
-				return err;				      \
-			SLIST_REMOVE(					      \
-			    &sc->devlist, devlist, firewire_dev_list, link);  \
-			free(devlist, M_DEVBUF);			      \
-		}							      \
-	} while (/*CONSTCOND*/0)
-#define FIREWIRE_SBP_ATTACH						      \
-	do {								      \
-		struct firewire_softc *sc = (struct firewire_softc *)fc->bdev;\
-		struct firewire_dev_list *devlist, *elm;		      \
-		int locs[IEEE1394IFCF_NLOCS];				      \
-									      \
-		devlist = malloc(					      \
-		    sizeof (struct firewire_dev_list), M_DEVBUF, M_NOWAIT);   \
-		if (devlist == NULL) {					      \
-			printf("memory allocation failed\n");		      \
-			break;						      \
-		}							      \
-									      \
-		locs[IEEE1394IFCF_EUIHI] = fwdev->eui.hi;		      \
-		locs[IEEE1394IFCF_EUILO] = fwdev->eui.lo;		      \
-									      \
-		fwa.fwdev = fwdev;					      \
-		fwdev->sbp = config_found_sm_loc(sc->dev, "ieee1394if",	      \
-		    locs, &fwa, firewire_print, config_stdsubmatch);	      \
-		if (fwdev->sbp == NULL) {				      \
-			free(devlist, M_DEVBUF);			      \
-			break;						      \
-		}							      \
-									      \
-		devlist->fwdev = fwdev;					      \
-		devlist->dev = fwdev->sbp;				      \
-									      \
-		if (SLIST_EMPTY(&sc->devlist))				      \
-			SLIST_INSERT_HEAD(&sc->devlist, devlist, link);	      \
-		else {							      \
-			for (elm = SLIST_FIRST(&sc->devlist);		      \
-			    SLIST_NEXT(elm, link) != NULL;		      \
-			    elm = SLIST_NEXT(elm, link));		      \
-			SLIST_INSERT_AFTER(elm, devlist, link);		      \
-		}							      \
-	} while (/*CONSTCOND*/0)
-#define FIREWIRE_SBP_DETACH						      \
-	do {								      \
-		struct firewire_softc *sc = (struct firewire_softc *)fc->bdev;\
-		struct firewire_dev_list *devlist;			      \
-									      \
-		SLIST_FOREACH(devlist, &sc->devlist, link) {		      \
-			if (devlist->fwdev != fwdev)			      \
-				continue;				      \
-			SLIST_REMOVE(					      \
-			    &sc->devlist, devlist, firewire_dev_list, link);  \
-			free(devlist, M_DEVBUF);			      \
-									      \
-			if (config_detach(fwdev->sbp, DETACH_FORCE) != 0)     \
-				return;					      \
-		}							      \
-	} while (/*CONSTCOND*/0)
-#define FIREWIRE_CHILDREN_FOREACH_FUNC(func, fdc)			      \
-	do {								      \
-		struct firewire_dev_list *devlist;			      \
-		struct firewire_softc *sc = (struct firewire_softc *)fc->bdev;\
-									      \
-		if (!SLIST_EMPTY(&sc->devlist)) {			      \
-			SLIST_FOREACH(devlist, &sc->devlist, link) {	      \
-				(fdc) =					      \
-				    (struct firewire_dev_comm *)devlist->dev; \
-				if ((fdc)->func != NULL)		      \
-					(fdc)->func((fdc));		      \
-			}						      \
-		}							      \
-	} while (/*CONSTCOND*/0)
-
-/*
- * sbp macro for NetBSD
- */
-#define SBP_ATTACH_START					\
-	do {							\
-		aprint_normal(": SBP-2/SCSI over IEEE1394\n");	\
-								\
-		sbp->fd.dev = &sbp->fd._dev;			\
-	} while (/*CONSTCOND*/0)
-#define SBP_SCSIBUS_ATTACH						    \
-	do {								    \
-		struct scsipi_adapter *sc_adapter = &sbp->sc_adapter;	    \
-		struct scsipi_channel *sc_channel = &sbp->sc_channel;	    \
-		struct sbp_target *target = &sbp->target;		    \
-									    \
-		sc_adapter->adapt_dev = sbp->fd.dev;			    \
-		sc_adapter->adapt_nchannels = 1;			    \
-		sc_adapter->adapt_max_periph = 1;			    \
-		sc_adapter->adapt_request = sbp_scsipi_request;		    \
-		sc_adapter->adapt_minphys = sbp_minphys;		    \
-		sc_adapter->adapt_openings = 8;				    \
-					/*Start with some. Grow as needed.*/\
-									    \
-		sc_channel->chan_adapter = sc_adapter;			    \
-		sc_channel->chan_bustype = &scsi_bustype;		    \
-		sc_channel->chan_defquirks = PQUIRK_ONLYBIG;		    \
-		sc_channel->chan_channel = 0;				    \
-		sc_channel->chan_flags =				    \
-		    SCSIPI_CHAN_CANGROW | SCSIPI_CHAN_NOSETTLE;		    \
-									    \
-		/* We set nluns 0 now */				    \
-		sc_channel->chan_ntargets = 1;				    \
-		sc_channel->chan_nluns = target->num_lun;		    \
-		sc_channel->chan_id = 1;				    \
-									    \
-		if ((sbp->sc_bus =					    \
-		    config_found(sbp->fd.dev, sc_channel, scsiprint)) ==    \
-		    NULL) {						    \
-			device_printf(sbp->fd.dev, "attach failed\n");	    \
-			return;						    \
-		}							    \
-	} while (/*CONSTCOND*/0)
-#define SBP_DEVICE(d)		((d)->periph)
-#define SBP_DEVICE_FREEZE(d, x)	scsipi_periph_freeze((d)->periph, (x));
-#define SBP_DEVICE_THAW(d, x)						\
-	do {								\
-		if ((d)->periph)					\
-			scsipi_periph_thaw((d)->periph, (x));		\
-		/* XXXX */						\
-		scsipi_channel_thaw(&(d)->target->sbp->sc_channel, 0);	\
-	} while (/*CONSTCOND*/0)
-#define SBP_BUS_FREEZE(b)	scsipi_channel_freeze(&(b)->sc_channel, 1)
-#define SBP_BUS_THAW(b)		scsipi_channel_thaw(&(b)->sc_channel, 1)
-#define SBP_DEVICE_PREATTACH()	\
-	if (!sbp->proc)		\
-		fw_kthread_create(fw_kthread_create0, sbp)
-
-/*
- * fwip macro for NetBSD
- */
-#define FWIP_ATTACH_START						\
-	device_t dev = &fwip->fd._dev;					\
-	struct fw_hwaddr *hwaddr =					\
-	    (struct fw_hwaddr *)&fwip->fw_softc.fwcom.ic_hwaddr
-#define FWIP_ATTACH_SETUP	aprint_normal(": IP over IEEE1394\n")
-
-#define FWDEV_MAKEDEV(sc)
-#define FIREWIRE_IFATTACH(ifp, ha)					       \
-	do {								       \
-		if_attach((ifp));					       \
-		ieee1394_ifattach((ifp), (const struct ieee1394_hwaddr *)(ha));\
-	} while (/*CONSTCOND*/0)
-#define FIREWIRE_IFDETACH(ifp)			\
-	do {					\
-		ieee1394_ifdetach((ifp));	\
-		if_detach((ifp));		\
-	} while (/*CONSTCOND*/0)
-#define FIREWIRE_BUSRESET(ifp)	ieee1394_drain((ifp))
-#define FIREWIRE_INPUT(ifp, m, src) \
-				ieee1394_input((ifp), (m), (src))
-#define	FWIP_INIT(sc)		fwip_init(&(sc)->fwip_if)
-#define	FWIP_STOP(sc)		fwip_stop(&(sc)->fwip_if, 1)
-#define FIREWIRE_IOCTL(ifp, cmd, data) \
-				ieee1394_ioctl((ifp), (cmd), (data))
-#define IF_INITNAME(ifp, dev, unit)	\
-	strcpy((ifp)->if_xname, (dev)->dv_xname);
-#define SET_IFFUNC(ifp, start, ioctl, init, stop)	\
-	do {						\
-		(ifp)->if_start = (start);		\
-		(ifp)->if_ioctl = (ioctl);		\
-		(ifp)->if_init = (init);		\
-		(ifp)->if_stop = (stop);		\
-	} while (/*CONSTCOND*/0)
-
-/*
- * fwdev macro for NetBSD
- */
-#define FWDEV_OPEN_START	\
-	if (DEV_FWMEM(_dev))	\
-		return fwmem_open(_dev, flags, fmt, td)
-#define FWDEV_CLOSE_START	\
-        if (DEV_FWMEM(_dev))	\
-		return fwmem_close(_dev, flags, fmt, td)
-#define FWDEV_READ_START	\
-        if (DEV_FWMEM(_dev))	\
-		return physio(fw_strategy, NULL, _dev, ioflag, minphys, uio)
-#define FWDEV_WRITE_START	\
-        if (DEV_FWMEM(_dev))	\
-		return physio(fw_strategy, NULL, _dev, ioflag, minphys, uio)
-#define FWDEV_IOCTL_START	\
-	if (DEV_FWMEM(_dev))	\
-		return fwmem_ioctl(_dev, cmd, data, flag, td)
-#define FWDEV_IOCTL_REDIRECT	fc->ioctl (_dev, cmd, data, flag, td)
-#define FWDEV_POLL_START	\
-	if (DEV_FWMEM(_dev))	\
-		return fwmem_poll(_dev, events, td)
-#define FWDEV_MMAP_START	\
-        if (DEV_FWMEM(_dev)) 	\
-		return fwmem_mmap(_dev, offset, nproto)
-#define FWDEV_STRATEGY_START		\
-	if (DEV_FWMEM(_dev)) {		\
-		fwmem_strategy(bp);	\
-		return;			\
-	}
-
-#define XS_REQ_INVALID		XS_DRIVER_STUFFUP
-#define XS_SCSI_BUS_RESET	XS_RESET
-#define XS_BDR_SENT		XS_RESET
-#define XS_DEV_NOT_THERE	XS_DRIVER_STUFFUP
-#define XS_CMD_TIMEOUT		XS_TIMEOUT
-#define XS_REQUEUE_REQ		XS_REQUEUE
-#define XS_REQ_CMP		XS_NOERROR
-#define XS_REQ_CMP_ERR		XS_DRIVER_STUFFUP
-#define XS_UA_ABORT		XS_DRIVER_STUFFUP
-
-typedef struct scsipi_xfer sbp_scsi_xfer;
-typedef struct scsipi_inquiry_data sbp_scsi_inquiry_data;
-
-#define SCSI_XFER_TARGET(x)	((x)->xs_periph->periph_target)
-#define SCSI_XFER_LUN(x)	((x)->xs_periph->periph_lun)
-#define SCSI_XFER_ERROR(x)	((x)->error)
-#define SCSI_XFER_DIR(x) \
-	((x)->xs_control & (XS_CTL_DATA_IN | XS_CTL_DATA_OUT))
-#define     SCSI_XFER_DATA_IN	XS_CTL_DATA_IN
-#define SCSI_XFER_CALLOUT(x)	((x)->xs_callout)
-#define SCSI_XFER_TIMEOUT(x)	((x)->timeout)
-#define SCSI_XFER_OPECODE(x)	((x)->cmd->opcode)
-#define SCSI_XFER_STATUS(x)	((x)->xs_status)
-#define SCSI_XFER_EVPD(x)	((x)->cmd->bytes[0] & SI_EVPD)
-#define     SI_EVPD		0x01
-#define SCSI_XFER_CMDLEN(x)	((x)->cmdlen)
-#define SCSI_XFER_CMD(x)	((x)->cmd)
-#define SCSI_XFER_DATALEN(x)	((x)->datalen)
-#define SCSI_XFER_DATA(x)	((x)->data)
-#define SCSI_XFER_SENSELEN(x)	(0 /* XXXXX */)
-#define SCSI_SENSE_DATA(x)	(&(x)->sense.scsi_sense)
-#define SCSI_INQUIRY_DATA(x)	((x)->data)
-#define SCSI_XFER_FUNCCODE(x)	XPT_SCSI_IO
-#define SCSI_XFER_10BCMD_DUMP(x)\
-	((x)->cmd->opcode),	\
-	((x)->cmd->bytes[0]),	\
-	((x)->cmd->bytes[1]),	\
-	((x)->cmd->bytes[2]),	\
-	((x)->cmd->bytes[3]),	\
-	((x)->cmd->bytes[4]),	\
-	((x)->cmd->bytes[5]),	\
-	((x)->cmd->bytes[6]),	\
-	((x)->cmd->bytes[7]),	\
-	((x)->cmd->bytes[8])
-#define SCSI_XFER_REQUEST_COMPLETE(x) \
-	((x)->resid = 0)
-#define SCSI_TRANSFER_DONE(x)	scsipi_done((x))
-
-#define NOT_LUN_WILDCARD(l)	(1)
-#define CAM_XFER_FLAGS(x)	(0)	/* XXX */
-#define CAM_SCATTER_VALID	(0)	/* XXX */
-#define CAM_DATA_PHYS		(0)	/* XXX */
-#define XPT_SCSI_IO		(1)	/* XXX */
-
-
-#define splfw()		splvm()
-#define splfwnet()	splnet()
-#define splfwsbp()	splbio()
-#define splsoftvm()	splbio()
-
-#define roundup2(x, y) roundup((x), (y))
-#ifndef rounddown
-#define rounddown(x, y) ((x) / (y) * (y))
-#endif
-
-#define timevalcmp(tv1, tv2, op)	timercmp((tv1), (tv2), op)
-#define timevalsub(tv1, tv2)		timersub((tv1), (tv2), (tv1))
-
-#define device_get_nameunit(dev) (dev)->dv_xname
-#define device_get_unit(dev)		device_unit((dev))
-
-/*
- * queue macros for NetBSD
- */
-#define STAILQ_LAST(head, type, field) \
-	(STAILQ_EMPTY((head)) ? NULL : \
-	(struct type *) \
-	((char *)(head)->stqh_last - (size_t)&((struct type *)0)->field))
-
-#define TASK_INIT(task, priority, func, context)
-
 
 struct fw_hwaddr {
 	uint32_t		sender_unique_ID_hi;
@@ -1112,21 +605,80 @@ struct fw_hwaddr {
 };
 
 
-/*
- * mbuf macros for NetBSD
- */
-#include <sys/mbuf.h>
-#define	M_TRYWAIT	M_WAITOK
+#define fw_dev2unit(x)		minor(x)
+#define fw_unit2minor(x)	(((x) & 0xff) | (((x) << 12) & ~0xfffff))
 
-#define m_tag_alloc(cookie, type, len, wait) \
-				m_tag_get((type), (len), (wait))
-#define m_tag_locate(m, cookie, type, t) \
-				m_tag_find((m), (type), (t))
+#define fw_timevalcmp(tv1, tv2, op)	timercmp((tv1), (tv2), op)
+#define fw_timevalsub(tv1, tv2)		timersub((tv1), (tv2), (tv1))
 
-/*
- * bus_dma macros for NetBSD
- */
-#include <machine/bus.h>
+#define fw_get_nameunit(dev)		device_xname(dev)
+#define fw_get_unit(dev)		device_unit((dev))
+
+#define fw_printf(dev, ...)		aprint_normal_dev((dev), __VA_ARGS__)
+
+/* atomic macros */
+/* XXXX: unsafe... */
+#define fw_atomic_set_int(P, V)	(*(u_int *)(P) |= (V))
+static __inline int
+fw_atomic_readandclear_int(int *p)
+{
+	int _p = *p;
+
+	*p = 0;
+	return _p;
+}
+
+/* mutex macros */
+/* XXXX: unsafe... */
+typedef void *fw_mtx_t;
+#define fw_mtx_init(mutex, name, type, opts)
+#define fw_mtx_lock(mutex)	(void)(mutex)	/* XXXX */
+#define fw_mtx_unlock(mutex)	(void)(mutex)	/* XXXX */
+#define fw_mtx_destroy(mutex)
+#define fw_mtx_assert(mutex, what)
+
+#define fw_msleep(ident, mtx, priority, wmesg, timo) \
+				tsleep((ident), (priority), (wmesg), (timo))
+
+/* taskqueue macros */
+/* XXXX: unsafe... */
+typedef void (*task_fn_t)(void *context, int pending);
+typedef struct {
+	STAILQ_ENTRY(task) ta_link;	/* link for queue */
+	u_short ta_pending;		/* count times queued */
+	u_short ta_priority;		/* priority of task in queue */
+	task_fn_t ta_func;		/* task handler */
+	void *ta_context;		/* argument for handler */
+} fw_task_t;
+#define fw_taskqueue_enqueue(queue, task) \
+	(task)->ta_func((task)->ta_context, 0)
+#define FW_TASK_INIT(task, priority, func, context)	\
+	do {						\
+		(task)->ta_priority = (priority);	\
+		(task)->ta_func = (func);		\
+		(task)->ta_context = (context);		\
+	} while (/*CONSTCOND*/0)
+#define fw_taskqueue_create_fast(name, mflags, enqueue, taskqueue) \
+	NULL
+#define fw_taskqueue_start_threads(taskqueue, n, x, fmt, ...)
+
+/* kthread macros */
+typedef struct proc fw_thread_t;
+typedef struct lwp *fw_proc_t;
+#define fw_kthread_create(func, arg, newpp, fmt, ...)	\
+	kthread_create(PRI_NONE, 0, NULL,		\
+	    (func), (arg), (newpp), (fmt), __VA_ARGS__)
+#define fw_kthread_exit(ecode)	kthread_exit((ecode))
+
+/* callout macros */
+#define fw_callout_init(c)	callout_init((c), 0)
+#define fw_callout_reset(c, ticks, func, arg) \
+				callout_reset((c), (ticks), (func), (arg))
+#define fw_callout_stop(c)	callout_stop((c))
+
+/* bus_dma macros */
+#include <sys/malloc.h>
+#include <sys/bus.h>
 struct fw_bus_dma_tag {
 	bus_dma_tag_t tag;
 	bus_size_t alignment;
@@ -1159,7 +711,7 @@ _fw_bus_dma_tag_create(bus_dma_tag_t parent,
 {
 	fw_bus_dma_tag_t tag;
 
-	tag = malloc(sizeof (struct fw_bus_dma_tag), M_DEVBUF, M_NOWAIT);
+	tag = malloc(sizeof(struct fw_bus_dma_tag), M_DEVBUF, M_NOWAIT);
 	if (tag == NULL)
 		return ENOMEM;
 
@@ -1232,7 +784,7 @@ fw_bus_dmamem_alloc(fw_bus_dma_tag_t ft, void **vp, int f, bus_dmamap_t *mp)
 	    BUS_DMA_BUS1 | BUS_DMA_BUS2 | BUS_DMA_BUS3 | BUS_DMA_BUS4 |
 	    BUS_DMA_COHERENT | BUS_DMA_NOCACHE);
 	err = bus_dmamem_map(ft->tag,
-	    &segs, nsegs, ft->size, (caddr_t *)vp, mf);
+	    &segs, nsegs, ft->size, (void **)vp, mf);
 	if (err) {
 		printf("fw_bus_dmamem_alloc: failed(2)\n");
 		bus_dmamem_free(ft->tag, &segs, nsegs);
@@ -1248,7 +800,7 @@ fw_bus_dmamem_alloc(fw_bus_dma_tag_t ft, void **vp, int f, bus_dmamap_t *mp)
 	    ft->size, nsegs, ft->maxsegsz, ft->boundary, cf, mp);
 	if (err) {
 		printf("fw_bus_dmamem_alloc: failed(3)\n");
-		bus_dmamem_unmap(ft->tag, (caddr_t)*vp, ft->size);
+		bus_dmamem_unmap(ft->tag, (void *)*vp, ft->size);
 		bus_dmamem_free(ft->tag, &segs, nsegs);\
 	}
 
@@ -1261,29 +813,566 @@ fw_bus_dmamem_alloc(fw_bus_dma_tag_t ft, void **vp, int f, bus_dmamap_t *mp)
 		bus_dmamap_destroy((ft)->tag, (m));			\
 	} while (/*CONSTCOND*/0)
 
+#define fw_config_pending_incr()	config_pending_incr()
+#define fw_config_pending_decr()	config_pending_decr()
 
-#define device_printf(dev, fmt, ...)			\
-	do {						\
-		aprint_normal("%s: ", (dev)->dv_xname);	\
-		aprint_normal((fmt) ,##__VA_ARGS__);	\
+#define splfw()		splvm()
+#define splfwnet()	splnet()
+#define splfwsbp()	splbio()
+#define splsoftvm()	splbio()
+
+#include <sys/select.h>
+
+#define FW_KASSERT(expression, str) \
+				KASSERT(expression)
+
+/*
+ * fw attach macro for NetBSD
+ */
+#define FW_ATTACH(dname) 	\
+	void			\
+	__CONCAT(dname,attach)	\
+	    (device_t parent, device_t self, void *aux)
+#define FW_ATTACH_START(dname, sc, fwa)					\
+	struct __CONCAT(dname,_softc) *sc = device_private(self);	\
+	__unused struct fw_attach_args *fwa = (struct fw_attach_args *)aux
+#define FW_ATTACH_RETURN(r)	return
+
+/*
+ * fw detach macro for NetBSD
+ */
+#define FW_DETACH(dname)	\
+	int			\
+	__CONCAT(dname,detach)(device_t self, int flags)
+#define FW_DETACH_START(dname, sc)	\
+	struct __CONCAT(dname,_softc) *sc = device_private(self)
+
+/*
+ * fw open macro for NetBSD
+ */
+#define FW_OPEN(dname)	\
+	int		\
+	__CONCAT(dname,_open)(dev_t _dev, int flags, int fmt,  fw_proc_t td)
+#define FW_OPEN_START							 \
+	struct firewire_softc *sc, *dev;				 \
+									 \
+	sc = dev = device_lookup_private(&ieee1394if_cd, DEV2UNIT(_dev));\
+	if (dev == NULL)						 \
+		return ENXIO
+
+/*
+ * fw close macro for NetBSD
+ */
+#define FW_CLOSE(dname)		\
+	int			\
+	__CONCAT(dname,_close)(dev_t _dev, int flags, int fmt, fw_proc_t td)
+#define FW_CLOSE_START						\
+	int unit = DEV2UNIT(_dev);				\
+	struct firewire_softc *dev;				\
+								\
+	dev = device_lookup_private(&ieee1394if_cd, unit);	\
+	if (dev == NULL)					\
+		return ENXIO
+
+/*
+ * fw read macro for NetBSD
+ */
+#define FW_READ(dname)	\
+	int		\
+	__CONCAT(dname,_read)(dev_t _dev, struct uio *uio, int ioflag) 
+#define FW_READ_START						\
+	int unit = DEV2UNIT(_dev);				\
+	struct firewire_softc *dev;				\
+								\
+	dev = device_lookup_private(&ieee1394if_cd, unit);	\
+	if (dev == NULL)					\
+		return ENXIO
+
+/*
+ * fw write macro for NetBSD
+ */
+#define FW_WRITE(dname)	\
+	int		\
+	__CONCAT(dname,_write)(dev_t _dev, struct uio *uio, int ioflag)
+#define FW_WRITE_START						\
+	int unit = DEV2UNIT(_dev);				\
+	struct firewire_softc *dev;				\
+								\
+	dev = device_lookup_private(&ieee1394if_cd, unit);	\
+	if (dev == NULL)					\
+		return ENXIO
+
+/*
+ * fw ioctl macro for NetBSD
+ */
+#define FW_IOCTL(dname)		\
+	int			\
+	__CONCAT(dname,_ioctl)	\
+	    (dev_t _dev, u_long cmd, void *data, int flag, fw_proc_t td)
+#define FW_IOCTL_START						\
+	int unit = DEV2UNIT(_dev);				\
+	struct firewire_softc *sc, *dev;			\
+								\
+	sc = dev = device_lookup_private(&ieee1394if_cd, unit);	\
+	if (dev == NULL)					\
+		return ENXIO
+
+/*
+ * fw poll macro for NetBSD
+ */
+#define FW_POLL(dname)	\
+	int		\
+	__CONCAT(dname,_poll)(dev_t _dev, int events, fw_proc_t td)
+#define FW_POLL_START						\
+	int unit = DEV2UNIT(_dev);				\
+	struct firewire_softc *dev;				\
+								\
+	dev = device_lookup_private(&ieee1394if_cd, unit);	\
+	if (dev == NULL)					\
+		return ENXIO
+
+/*
+ * fw mmap macro for NetBSD
+ */
+#define FW_MMAP(dname)	\
+	paddr_t		\
+	__CONCAT(dname,_mmap)(dev_t _dev, off_t offset, int nproto)
+#define FW_MMAP_START						\
+	int unit = DEV2UNIT(_dev);				\
+	struct firewire_softc *dev;				\
+								\
+	dev = device_lookup_private(&ieee1394if_cd, unit);	\
+	if (dev == NULL)					\
+		return ENXIO
+
+/*
+ * fw strategy macro for NetBSD
+ */
+#define FW_STRATEGY_START					\
+	dev_t _dev = bp->bio_dev;				\
+	int unit = DEV2UNIT(_dev);				\
+	struct firewire_softc *sc, *dev;			\
+								\
+	sc = dev = device_lookup_private(&ieee1394if_cd, unit);	\
+	if (dev == NULL)					\
+		return
+
+/*
+ * if macro for NetBSD
+ */
+#define IF_DETACH_START(dname, sc)		\
+	struct __CONCAT(dname,_softc) *sc = device_private(self)
+#define IF_IOCTL_START(dname, sc)		\
+	struct __CONCAT(dname,_softc) *sc =	\
+	    ((struct fwip_eth_softc *)ifp->if_softc)->fwip
+#define IF_INIT(dname)	\
+	int		\
+	__CONCAT(dname,_init)(struct ifnet *ifp)
+#define IF_INIT_START(dname, sc, ifp)	\
+	struct __CONCAT(dname,_softc) *sc =	\
+	    ((struct fwip_eth_softc *)(ifp)->if_softc)->fwip
+#define IF_INIT_RETURN(r)	return (r)
+#define IF_STOP(dname)	\
+	void		\
+	__CONCAT(dname,_stop)(struct ifnet *ifp, int disable)
+#define IF_STOP_START(dname, ifp, sc)		\
+	struct __CONCAT(dname,_softc) *sc =	\
+	    ((struct fwip_eth_softc *)(ifp)->if_softc)->fwip
+
+/*
+ * fwohci macro for NetBSD
+ */
+#define FWOHCI_DETACH()	\
+	int		\
+	fwohci_detach(struct fwohci_softc *sc, int flags)
+#define FWOHCI_DETACH_START		\
+	if (sc->fc.bdev != NULL)	\
+		config_detach(sc->fc.bdev, flags) 
+#define FWOHCI_DETACH_END
+#define FWOHCI_INIT_END							      \
+	do {								      \
+		struct fwbus_attach_args faa;				      \
+		faa.name = "ieee1394if";				      \
+		sc->fc.bdev = config_found(sc->fc.dev, &faa, fwohci_print);   \
 	} while (/*CONSTCOND*/0)
+
+/*
+ * firewire macro for NetBSD
+ */
+#define FIREWIRE_ATTACH_START						\
+	struct firewire_comm *fc = device_private(parent);		\
+									\
+	aprint_normal(": IEEE1394 bus\n");				\
+									\
+	fc->bdev = sc->dev = self;					\
+	SLIST_INIT(&sc->devlist)
+#define FWDEV_DESTROYDEV(sc)
+#define FIREWIRE_GENERIC_ATTACH						    \
+	do {								    \
+		struct fw_attach_args faa;				    \
+		struct firewire_dev_list *devlist, *elm;		    \
+									    \
+		devlist = malloc(					    \
+		    sizeof(struct firewire_dev_list), M_DEVBUF, M_NOWAIT);  \
+		if (devlist == NULL)					    \
+			break;						    \
+									    \
+		faa.name = "fwip";					    \
+		faa.fc = fc;						    \
+		faa.fwdev = NULL;					    \
+		devlist->dev = config_found(sc->dev, &faa, firewire_print); \
+		if (devlist->dev == NULL) {				    \
+			free(devlist, M_DEVBUF);			    \
+			break;						    \
+		}							    \
+									    \
+		if (SLIST_EMPTY(&sc->devlist))				    \
+			SLIST_INSERT_HEAD(&sc->devlist, devlist, link);	    \
+		else {							    \
+			for (elm = SLIST_FIRST(&sc->devlist);		    \
+			    SLIST_NEXT(elm, link) != NULL;		    \
+			    elm = SLIST_NEXT(elm, link));		    \
+			SLIST_INSERT_AFTER(elm, devlist, link);		    \
+		}							    \
+	} while (/*CONSTCOND*/0)
+#define FIREWIRE_GENERIC_DETACH						      \
+	do {								      \
+		struct firewire_dev_list *devlist;			      \
+		int err;						      \
+									      \
+		while ((devlist = SLIST_FIRST(&sc->devlist)) != NULL) {	      \
+			if ((err = config_detach(devlist->dev, flags)) != 0)  \
+				return err;				      \
+			SLIST_REMOVE(					      \
+			    &sc->devlist, devlist, firewire_dev_list, link);  \
+			free(devlist, M_DEVBUF);			      \
+		}							      \
+	} while (/*CONSTCOND*/0)
+#define FIREWIRE_SBP_ATTACH						      \
+	do {								      \
+		struct firewire_softc *sc = device_private(fc->bdev);	      \
+		struct firewire_dev_list *devlist, *elm;		      \
+		int locs[IEEE1394IFCF_NLOCS];				      \
+									      \
+		devlist = malloc(					      \
+		    sizeof(struct firewire_dev_list), M_DEVBUF, M_NOWAIT);    \
+		if (devlist == NULL) {					      \
+			printf("memory allocation failed\n");		      \
+			break;						      \
+		}							      \
+									      \
+		locs[IEEE1394IFCF_EUIHI] = fwdev->eui.hi;		      \
+		locs[IEEE1394IFCF_EUILO] = fwdev->eui.lo;		      \
+									      \
+		fwa.fwdev = fwdev;					      \
+		fwdev->sbp = config_found_sm_loc(sc->dev, "ieee1394if",	      \
+		    locs, &fwa, firewire_print, config_stdsubmatch);	      \
+		if (fwdev->sbp == NULL) {				      \
+			free(devlist, M_DEVBUF);			      \
+			break;						      \
+		}							      \
+									      \
+		devlist->fwdev = fwdev;					      \
+		devlist->dev = fwdev->sbp;				      \
+									      \
+		if (SLIST_EMPTY(&sc->devlist))				      \
+			SLIST_INSERT_HEAD(&sc->devlist, devlist, link);	      \
+		else {							      \
+			for (elm = SLIST_FIRST(&sc->devlist);		      \
+			    SLIST_NEXT(elm, link) != NULL;		      \
+			    elm = SLIST_NEXT(elm, link));		      \
+			SLIST_INSERT_AFTER(elm, devlist, link);		      \
+		}							      \
+	} while (/*CONSTCOND*/0)
+#define FIREWIRE_SBP_DETACH						      \
+	do {								      \
+		struct firewire_softc *sc = device_private(fc->bdev);	      \
+		struct firewire_dev_list *devlist;			      \
+									      \
+		SLIST_FOREACH(devlist, &sc->devlist, link) {		      \
+			if (devlist->fwdev != fwdev)			      \
+				continue;				      \
+			SLIST_REMOVE(					      \
+			    &sc->devlist, devlist, firewire_dev_list, link);  \
+			free(devlist, M_DEVBUF);			      \
+									      \
+			if (config_detach(fwdev->sbp, DETACH_FORCE) != 0)     \
+				return;					      \
+		}							      \
+	} while (/*CONSTCOND*/0)
+#define FIREWIRE_CHILDREN_FOREACH_FUNC(func, fdc)			      \
+	do {								      \
+		struct firewire_dev_list *devlist;			      \
+		struct firewire_softc *sc = device_private(fc->bdev);	      \
+									      \
+		if (!SLIST_EMPTY(&sc->devlist)) {			      \
+			SLIST_FOREACH(devlist, &sc->devlist, link) {	      \
+				(fdc) =	device_private(devlist->dev);	      \
+				if ((fdc)->func != NULL)		      \
+					(fdc)->func((fdc));		      \
+			}						      \
+		}							      \
+	} while (/*CONSTCOND*/0)
+
+/*
+ * sbp macro for NetBSD
+ */
+#define SBP_ATTACH_START					\
+	do {							\
+		aprint_normal(": SBP-2/SCSI over IEEE1394\n");	\
+								\
+		sbp->fd.dev = self;				\
+	} while (/*CONSTCOND*/0)
+#define SBP_SCSIBUS_ATTACH						    \
+	do {								    \
+		struct scsipi_adapter *sc_adapter = &sbp->sc_adapter;	    \
+		struct scsipi_channel *sc_channel = &sbp->sc_channel;	    \
+		struct sbp_target *target = &sbp->target;		    \
+									    \
+		sc_adapter->adapt_dev = sbp->fd.dev;			    \
+		sc_adapter->adapt_nchannels = 1;			    \
+		sc_adapter->adapt_max_periph = 1;			    \
+		sc_adapter->adapt_request = sbp_scsipi_request;		    \
+		sc_adapter->adapt_minphys = sbp_minphys;		    \
+		sc_adapter->adapt_openings = 8;				    \
+					/*Start with some. Grow as needed.*/\
+									    \
+		sc_channel->chan_adapter = sc_adapter;			    \
+		sc_channel->chan_bustype = &scsi_bustype;		    \
+		sc_channel->chan_defquirks = PQUIRK_ONLYBIG;		    \
+		sc_channel->chan_channel = 0;				    \
+		sc_channel->chan_flags =				    \
+		    SCSIPI_CHAN_CANGROW | SCSIPI_CHAN_NOSETTLE;		    \
+									    \
+		/* We set nluns 0 now */				    \
+		sc_channel->chan_ntargets = 1;				    \
+		sc_channel->chan_nluns = target->num_lun;		    \
+		sc_channel->chan_id = 1;				    \
+									    \
+		if ((sbp->sc_bus =					    \
+		    config_found(sbp->fd.dev, sc_channel, scsiprint)) ==    \
+		    NULL) {						    \
+			fw_printf(sbp->fd.dev, "attach failed\n");	    \
+			return;						    \
+		}							    \
+	} while (/*CONSTCOND*/0)
+#define SBP_DEVICE(d)		((d)->periph)
+#define SBP_DEVICE_FREEZE(d, x)	scsipi_periph_freeze((d)->periph, (x));
+#define SBP_DEVICE_THAW(d, x)						\
+	do {								\
+		if ((d)->periph)					\
+			scsipi_periph_thaw((d)->periph, (x));		\
+		/* XXXX */						\
+		scsipi_channel_thaw(&(d)->target->sbp->sc_channel, 0);	\
+	} while (/*CONSTCOND*/0)
+#define SBP_BUS_FREEZE(b)	scsipi_channel_freeze(&(b)->sc_channel, 1)
+#define SBP_BUS_THAW(b)		scsipi_channel_thaw(&(b)->sc_channel, 1)
+#define SBP_DEVICE_PREATTACH()						\
+	do {								\
+		if (!sbp->lwp) {					\
+			/* create thread */				\
+			if (kthread_create(PRI_NONE, 0, NULL,		\
+			    sbp_scsipi_scan_target, &sbp->target,	\
+			    &sbp->lwp, "sbp%d_attach",			\
+			    device_unit(sbp->fd.dev))) {		\
+				fw_printf(sbp->fd.dev,			\
+				    "unable to create thread");		\
+				panic("fw_kthread_create");		\
+			}						\
+		}							\
+	} while (/*CONSTCOND*/0)
+
+/*
+ * fwip macro for NetBSD
+ */
+#define FWIP_ATTACH_START						\
+	device_t dev = self;						\
+	struct fw_hwaddr *hwaddr;
+#define FWIP_ATTACH_SETUP						      \
+	do {								      \
+		aprint_normal(": IP over IEEE1394\n");			      \
+		fwip->fd.dev = self;					      \
+		fwip->fw_softc.fwip_ifp = &fwip->fw_softc.fwcom.fc_if;	      \
+		hwaddr = (struct fw_hwaddr *)&fwip->fw_softc.fwcom.ic_hwaddr; \
+	} while (/*CONSTCOND*/0)
+
+#define FWDEV_MAKEDEV(sc)
+#define FIREWIRE_IFATTACH(ifp, ha)					       \
+	do {								       \
+		if_attach((ifp));					       \
+		ieee1394_ifattach((ifp), (const struct ieee1394_hwaddr *)(ha));\
+	} while (/*CONSTCOND*/0)
+#define FIREWIRE_IFDETACH(ifp)			\
+	do {					\
+		ieee1394_ifdetach(ifp);		\
+		if_detach(ifp);			\
+	} while (/*CONSTCOND*/0)
+#define FIREWIRE_BUSRESET(ifp)	ieee1394_drain((ifp))
+#define FIREWIRE_INPUT(ifp, m, src) \
+				ieee1394_input((ifp), (m), (src))
+#define	FWIP_INIT(sc)		fwip_init((sc)->fw_softc.fwip_ifp)
+#define	FWIP_STOP(sc)		fwip_stop((sc)->fw_softc.fwip_ifp, 1)
+#define FIREWIRE_IOCTL(ifp, cmd, data) \
+				ieee1394_ioctl((ifp), (cmd), (data))
+#define IF_INITNAME(ifp, dev, unit)	\
+	strlcpy((ifp)->if_xname, device_xname(dev), IFNAMSIZ);
+#define SET_IFFUNC(ifp, start, ioctl, init, stop)	\
+	do {						\
+		(ifp)->if_start = (start);		\
+		(ifp)->if_ioctl = (ioctl);		\
+		(ifp)->if_init = (init);		\
+		(ifp)->if_stop = (stop);		\
+	} while (/*CONSTCOND*/0)
+
+/*
+ * fwdev macro for NetBSD
+ */
+#define FWDEV_OPEN_START	\
+	if (DEV_FWMEM(_dev))	\
+		return fwmem_open(_dev, flags, fmt, td)
+#define FWDEV_CLOSE_START	\
+        if (DEV_FWMEM(_dev))	\
+		return fwmem_close(_dev, flags, fmt, td)
+#define FWDEV_READ_START	\
+        if (DEV_FWMEM(_dev))	\
+		return physio(fw_strategy, NULL, _dev, ioflag, minphys, uio)
+#define FWDEV_WRITE_START	\
+        if (DEV_FWMEM(_dev))	\
+		return physio(fw_strategy, NULL, _dev, ioflag, minphys, uio)
+#define FWDEV_IOCTL_START	\
+	if (DEV_FWMEM(_dev))	\
+		return fwmem_ioctl(_dev, cmd, data, flag, td)
+#define FWDEV_IOCTL_REDIRECT	fc->ioctl(_dev, cmd, data, flag, td)
+#define FWDEV_POLL_START	\
+	if (DEV_FWMEM(_dev))	\
+		return fwmem_poll(_dev, events, td)
+#define FWDEV_MMAP_START	\
+        if (DEV_FWMEM(_dev)) 	\
+		return fwmem_mmap(_dev, offset, nproto)
+#define FWDEV_STRATEGY_START		\
+	if (DEV_FWMEM(_dev)) {		\
+		fwmem_strategy(bp);	\
+		return;			\
+	}
+
+#define XS_REQ_INVALID		XS_DRIVER_STUFFUP
+#define XS_SCSI_BUS_RESET	XS_RESET
+#define XS_BDR_SENT		XS_RESET
+#define XS_DEV_NOT_THERE	XS_DRIVER_STUFFUP
+#define XS_CMD_TIMEOUT		XS_TIMEOUT
+#define XS_REQUEUE_REQ		XS_REQUEUE
+#define XS_REQ_CMP		XS_NOERROR
+#define XS_REQ_CMP_ERR		XS_DRIVER_STUFFUP
+#define XS_UA_ABORT		XS_DRIVER_STUFFUP
+
+typedef struct scsipi_xfer sbp_scsi_xfer;
+typedef struct scsipi_inquiry_data sbp_scsi_inquiry_data;
+
+#define SCSI_XFER_TARGET(x)	((x)->xs_periph->periph_target)
+#define SCSI_XFER_LUN(x)	((x)->xs_periph->periph_lun)
+#define SCSI_XFER_ERROR(x)	((x)->error)
+#define SCSI_XFER_DIR(x) \
+	((x)->xs_control & (XS_CTL_DATA_IN | XS_CTL_DATA_OUT))
+#define     SCSI_XFER_DATA_IN	XS_CTL_DATA_IN
+#define SCSI_XFER_CALLOUT(x)	((x)->xs_callout)
+#define SCSI_XFER_TIMEOUT(x)	((x)->timeout)
+#define SCSI_XFER_OPECODE(x)	((x)->cmd->opcode)
+#define SCSI_XFER_STATUS(x)	((x)->xs_status)
+#define SCSI_XFER_EVPD(x)	((x)->cmd->bytes[0] & SI_EVPD)
+#define     SI_EVPD		0x01
+#define SCSI_XFER_CMDLEN(x)	((x)->cmdlen)
+#define SCSI_XFER_CMD(x)	((x)->cmd)
+#define SCSI_XFER_DATALEN(x)	((x)->datalen)
+#define SCSI_XFER_DATA(x)	((x)->data)
+#define SCSI_XFER_SENSELEN(x)	(0 /* XXXXX */)
+#define SCSI_SENSE_DATA(x)	(&(x)->sense.scsi_sense)
+#define SCSI_INQUIRY_DATA(x)	((x)->data)
+#define SCSI_XFER_FUNCCODE(x)	XPT_SCSI_IO
+#define SCSI_XFER_10BCMD_DUMP(x)\
+	((x)->cmd->opcode),	\
+	((x)->cmd->bytes[0]),	\
+	((x)->cmd->bytes[1]),	\
+	((x)->cmd->bytes[2]),	\
+	((x)->cmd->bytes[3]),	\
+	((x)->cmd->bytes[4]),	\
+	((x)->cmd->bytes[5]),	\
+	((x)->cmd->bytes[6]),	\
+	((x)->cmd->bytes[7]),	\
+	((x)->cmd->bytes[8])
+#define SCSI_XFER_REQUEST_COMPLETE(x) \
+	((x)->resid = 0)
+#define SCSI_TRANSFER_DONE(x)	scsipi_done((x))
+
+#define NOT_LUN_WILDCARD(l)	(1)
+#define CAM_XFER_FLAGS(x)	(0)	/* XXX */
+#define CAM_SCATTER_VALID	(0)	/* XXX */
+#define CAM_DATA_PHYS		(0)	/* XXX */
+#define XPT_SCSI_IO		(1)	/* XXX */
+
+#ifndef rounddown
+#define rounddown(x, y) ((x) / (y) * (y))
+#endif
+
+
+/*
+ * additional queue macros for NetBSD
+ */
+#define STAILQ_LAST(head, type, field) \
+	(STAILQ_EMPTY((head)) ? (struct type *)NULL : \
+	(struct type *) \
+	((char *)(head)->stqh_last - (size_t)&((struct type *)0)->field))
+#define STAILQ_FOREACH_SAFE(var, head, field, _var)	\
+				(void)(_var);		\
+				STAILQ_FOREACH(var, head, field)
+
+
+/*
+ * additional mbuf macros for NetBSD
+ */
+#include <sys/mbuf.h>
+#define	M_TRYWAIT	M_WAITOK
+
+#define MTAG_FIREWIRE			1394
+#define MTAG_FIREWIRE_HWADDR		0
+#define MTAG_FIREWIRE_SENDER_EUID	1
+
+#define m_tag_alloc(cookie, type, len, wait) \
+				m_tag_get((type), (len), (wait))
+#define m_tag_locate(m, cookie, type, t) \
+				m_tag_find((m), (type), (t))
+
+/* additional bpf macros */
+#define bpf_peers_present(if_bpf)	(if_bpf)
 
 
 #define CTR0(m, format)
 #define CTR1(m, format, p1)
 
-
 #define OHCI_CSR_WRITE(sc, reg, val) \
 	bus_space_write_4((sc)->bst, (sc)->bsh, reg, val)
 
-/*
- * XXXXXXXXXXX
- */
-#define atomic_set_int(P, V) (*(u_int*)(P) |= (V))
+#define FILTER_STRAY		0
+#define FILTER_HANDLED		1
+
+#define SSD_CURRENT_ERROR	0x70
+#define SSD_DEFERRED_ERROR	0x71
+
+#define T_RBC				T_SIMPLE_DIRECT
+
+#define SCSI_STATUS_CHECK_COND		SCSI_CHECK
+#define SCSI_STATUS_BUSY		SCSI_BUSY
+#define SCSI_STATUS_CMD_TERMINATED	SCSI_TERMINATED
+
+#define BUS_SPACE_MAXSIZE_32BIT		0xFFFFFFFF
+
+#define DFLTPHYS			(64 * 1024)	/* fake */
+
+#define kdb_backtrace()
+#define kdb_active		0
 
 #endif
 #endif
 #if defined(__NetBSD__)
-#define vm_offset_t caddr_t
+#define vm_offset_t void *
 #endif
 #endif

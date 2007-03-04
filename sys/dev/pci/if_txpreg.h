@@ -1,4 +1,4 @@
-/* $NetBSD: if_txpreg.h,v 1.3 2005/12/11 12:22:50 christos Exp $ */
+/* $NetBSD: if_txpreg.h,v 1.5 2008/04/10 19:13:37 cegger Exp $ */
 
 /*
  * Copyright (c) 2001 Aaron Campbell <aaron@monkey.org>.
@@ -526,7 +526,7 @@ struct txp_hostvar {
 
 struct txp_dma_alloc {
 	u_int64_t		dma_paddr;
-	caddr_t			dma_vaddr;
+	void *			dma_vaddr;
 	bus_dmamap_t		dma_map;
 	bus_dma_segment_t	dma_seg;
 	int			dma_nseg;
@@ -596,7 +596,7 @@ struct txp_softc {
 #define TXP_FIBER		0x4
 };
 
-#define	TXP_DEVNAME(sc)		((sc)->sc_cold ? "" : (sc)->sc_dev.dv_xname)
+#define	TXP_DEVNAME(sc)		((sc)->sc_cold ? "" : device_xname(&(sc)->sc_dev))
 
 struct txp_fw_file_header {
 	u_int8_t	magicid[8];	/* TYPHOON\0 */

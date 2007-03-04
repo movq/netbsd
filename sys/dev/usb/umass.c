@@ -1,4 +1,4 @@
-/*	$NetBSD: umass.c,v 1.123 2007/01/09 16:46:02 christos Exp $	*/
+/*	$NetBSD: umass.c,v 1.129 2008/09/06 21:49:00 rmind Exp $	*/
 
 /*
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -131,7 +124,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umass.c,v 1.123 2007/01/09 16:46:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umass.c,v 1.129 2008/09/06 21:49:00 rmind Exp $");
 
 #include "atapibus.h"
 #include "scsibus.h"
@@ -258,22 +251,17 @@ Static void umass_dump_buffer(struct umass_softc *sc, u_int8_t *buffer,
 
 USB_MATCH(umass)
 {
-	USB_MATCH_START(umass, uaa);
+	USB_IFMATCH_START(umass, uaa);
 	const struct umass_quirk *quirk;
-	usb_interface_descriptor_t *id;
-
-	if (uaa->iface == NULL)
-		return (UMATCH_NONE);
 
 	quirk = umass_lookup(uaa->vendor, uaa->product);
-	if (quirk != NULL)
+	if (quirk != NULL && quirk->uq_match != UMASS_QUIRK_USE_DEFAULTMATCH)
 		return (quirk->uq_match);
 
-	id = usbd_get_interface_descriptor(uaa->iface);
-	if (id == NULL || id->bInterfaceClass != UICLASS_MASS)
+	if (uaa->class != UICLASS_MASS)
 		return (UMATCH_NONE);
 
-	switch (id->bInterfaceSubClass) {
+	switch (uaa->subclass) {
 	case UISUBCLASS_RBC:
 	case UISUBCLASS_SFF8020I:
 	case UISUBCLASS_QIC157:
@@ -285,7 +273,7 @@ USB_MATCH(umass)
 		return (UMATCH_IFACECLASS);
 	}
 
-	switch (id->bInterfaceProtocol) {
+	switch (uaa->proto) {
 	case UIPROTO_MASS_CBI_I:
 	case UIPROTO_MASS_CBI:
 	case UIPROTO_MASS_BBB_OLD:
@@ -300,7 +288,7 @@ USB_MATCH(umass)
 
 USB_ATTACH(umass)
 {
-	USB_ATTACH_START(umass, sc, uaa);
+	USB_IFATTACH_START(umass, sc, uaa);
 	const struct umass_quirk *quirk;
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
@@ -309,9 +297,11 @@ USB_ATTACH(umass)
 	usbd_status err;
 	int i, bno, error;
 
+	sc->sc_dev = self;
+
 	devinfop = usbd_devinfo_alloc(uaa->device, 0);
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
 	sc->sc_udev = uaa->device;
@@ -334,12 +324,8 @@ USB_ATTACH(umass)
 		sc->sc_busquirks = 0;
 	}
 
-	id = usbd_get_interface_descriptor(sc->sc_iface);
-	if (id == NULL)
-		USB_ATTACH_ERROR_RETURN;
-
 	if (sc->sc_wire == UMASS_WPROTO_UNSPEC) {
-		switch (id->bInterfaceProtocol) {
+		switch (uaa->proto) {
 		case UIPROTO_MASS_CBI:
 			sc->sc_wire = UMASS_WPROTO_CBI;
 			break;
@@ -354,13 +340,13 @@ USB_ATTACH(umass)
 			DPRINTF(UDMASS_GEN,
 				("%s: Unsupported wire protocol %u\n",
 				USBDEVNAME(sc->sc_dev),
-				id->bInterfaceProtocol));
+				uaa->proto));
 			USB_ATTACH_ERROR_RETURN;
 		}
 	}
 
 	if (sc->sc_cmd == UMASS_CPROTO_UNSPEC) {
-		switch (id->bInterfaceSubClass) {
+		switch (uaa->subclass) {
 		case UISUBCLASS_SCSI:
 			sc->sc_cmd = UMASS_CPROTO_SCSI;
 			break;
@@ -379,7 +365,7 @@ USB_ATTACH(umass)
 			DPRINTF(UDMASS_GEN,
 				("%s: Unsupported command protocol %u\n",
 				USBDEVNAME(sc->sc_dev),
-				id->bInterfaceSubClass));
+				uaa->subclass));
 			USB_ATTACH_ERROR_RETURN;
 		}
 	}
@@ -420,14 +406,12 @@ USB_ATTACH(umass)
 		break;
 	}
 
-	printf("%s: using %s over %s\n", USBDEVNAME(sc->sc_dev), sCommand,
-	       sWire);
+	aprint_normal_dev(self, "using %s over %s\n", sCommand, sWire);
 
 	if (quirk != NULL && quirk->uq_init != NULL) {
 		err = (*quirk->uq_init)(sc);
 		if (err) {
-			printf("%s: quirk init failed\n",
-			       USBDEVNAME(sc->sc_dev));
+			aprint_error_dev(self, "quirk init failed\n");
 			umass_disco(sc);
 			USB_ATTACH_ERROR_RETURN;
 		}
@@ -444,11 +428,12 @@ USB_ATTACH(umass)
 	 * The endpoint addresses are not fixed, so we have to read them
 	 * from the device descriptors of the current interface.
 	 */
+	id = usbd_get_interface_descriptor(sc->sc_iface);
 	for (i = 0 ; i < id->bNumEndpoints ; i++) {
 		ed = usbd_interface2endpoint_descriptor(sc->sc_iface, i);
 		if (ed == NULL) {
-			printf("%s: could not read endpoint descriptor\n",
-			       USBDEVNAME(sc->sc_dev));
+			aprint_error_dev(self,
+			    "could not read endpoint descriptor\n");
 			USB_ATTACH_ERROR_RETURN;
 		}
 		if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_IN
@@ -475,8 +460,8 @@ USB_ATTACH(umass)
 	if (!sc->sc_epaddr[UMASS_BULKIN] || !sc->sc_epaddr[UMASS_BULKOUT] ||
 	    (sc->sc_wire == UMASS_WPROTO_CBI_I &&
 	     !sc->sc_epaddr[UMASS_INTRIN])) {
-		printf("%s: endpoint not found %u/%u/%u\n",
-		       USBDEVNAME(sc->sc_dev), sc->sc_epaddr[UMASS_BULKIN],
+		aprint_error_dev(self, "endpoint not found %u/%u/%u\n",
+		       sc->sc_epaddr[UMASS_BULKIN],
 		       sc->sc_epaddr[UMASS_BULKOUT],
 		       sc->sc_epaddr[UMASS_INTRIN]);
 		USB_ATTACH_ERROR_RETURN;
@@ -485,11 +470,12 @@ USB_ATTACH(umass)
 	/*
 	 * Get the maximum LUN supported by the device.
 	 */
-	if (sc->sc_wire == UMASS_WPROTO_BBB) {
+	if (sc->sc_wire == UMASS_WPROTO_BBB &&
+	    (sc->sc_quirks & UMASS_QUIRK_NOGETMAXLUN) == 0) {
 		err = umass_bbb_get_max_lun(sc, &sc->maxlun);
 		if (err) {
-			printf("%s: unable to get Max Lun: %s\n",
-			       USBDEVNAME(sc->sc_dev), usbd_errstr(err));
+			aprint_error_dev(self, "unable to get Max Lun: %s\n",
+			    usbd_errstr(err));
 			USB_ATTACH_ERROR_RETURN;
 		}
 		if (sc->maxlun > 0)
@@ -506,8 +492,8 @@ USB_ATTACH(umass)
 				USBD_EXCLUSIVE_USE,
 				&sc->sc_pipe[UMASS_BULKOUT]);
 	if (err) {
-		printf("%s: cannot open %u-out pipe (bulk)\n",
-		       USBDEVNAME(sc->sc_dev), sc->sc_epaddr[UMASS_BULKOUT]);
+		aprint_error_dev(self, "cannot open %u-out pipe (bulk)\n",
+		    sc->sc_epaddr[UMASS_BULKOUT]);
 		umass_disco(sc);
 		USB_ATTACH_ERROR_RETURN;
 	}
@@ -517,8 +503,8 @@ USB_ATTACH(umass)
 	err = usbd_open_pipe(sc->sc_iface, sc->sc_epaddr[UMASS_BULKIN],
 				USBD_EXCLUSIVE_USE, &sc->sc_pipe[UMASS_BULKIN]);
 	if (err) {
-		printf("%s: could not open %u-in pipe (bulk)\n",
-		       USBDEVNAME(sc->sc_dev), sc->sc_epaddr[UMASS_BULKIN]);
+		aprint_error_dev(self, "could not open %u-in pipe (bulk)\n",
+		    sc->sc_epaddr[UMASS_BULKIN]);
 		umass_disco(sc);
 		USB_ATTACH_ERROR_RETURN;
 	}
@@ -541,9 +527,8 @@ USB_ATTACH(umass)
 		err = usbd_open_pipe(sc->sc_iface, sc->sc_epaddr[UMASS_INTRIN],
 				USBD_EXCLUSIVE_USE, &sc->sc_pipe[UMASS_INTRIN]);
 		if (err) {
-			printf("%s: couldn't open %u-in (intr)\n",
-			       USBDEVNAME(sc->sc_dev),
-			       sc->sc_epaddr[UMASS_INTRIN]);
+			aprint_error_dev(self, "couldn't open %u-in (intr)\n",
+			    sc->sc_epaddr[UMASS_INTRIN]);
 			umass_disco(sc);
 			USB_ATTACH_ERROR_RETURN;
 		}
@@ -556,8 +541,7 @@ USB_ATTACH(umass)
 	for (i = 0; i < XFER_NR; i++) {
 		sc->transfer_xfer[i] = usbd_alloc_xfer(uaa->device);
 		if (sc->transfer_xfer[i] == NULL) {
-			printf("%s: Out of memory\n",
-			       USBDEVNAME(sc->sc_dev));
+			aprint_error_dev(self, "Out of memory\n");
 			umass_disco(sc);
 			USB_ATTACH_ERROR_RETURN;
 		}
@@ -576,8 +560,7 @@ USB_ATTACH(umass)
 		sc->data_buffer = usbd_alloc_buffer(sc->transfer_xfer[bno],
 						    UMASS_MAX_TRANSFER_SIZE);
 		if (sc->data_buffer == NULL) {
-			printf("%s: no buffer memory\n",
-			       USBDEVNAME(sc->sc_dev));
+			aprint_error_dev(self, "no buffer memory\n");
 			umass_disco(sc);
 			USB_ATTACH_ERROR_RETURN;
 		}
@@ -607,7 +590,7 @@ USB_ATTACH(umass)
 #if NSCSIBUS > 0
 		error = umass_scsi_attach(sc);
 #else
-		printf("%s: scsibus not configured\n", USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "scsibus not configured\n");
 #endif
 		break;
 
@@ -616,8 +599,7 @@ USB_ATTACH(umass)
 #if NATAPIBUS > 0
 		error = umass_atapi_attach(sc);
 #else
-		printf("%s: atapibus not configured\n",
-		       USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "atapibus not configured\n");
 #endif
 		break;
 
@@ -625,24 +607,27 @@ USB_ATTACH(umass)
 #if NWD > 0
 		error = umass_isdata_attach(sc);
 #else
-		printf("%s: isdata not configured\n", USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "isdata not configured\n");
 #endif
 		break;
 
 	default:
-		printf("%s: command protocol=0x%x not supported\n",
-		       USBDEVNAME(sc->sc_dev), sc->sc_cmd);
+		aprint_error_dev(self, "command protocol=0x%x not supported\n",
+		    sc->sc_cmd);
 		umass_disco(sc);
 		USB_ATTACH_ERROR_RETURN;
 	}
 	if (error) {
-		printf("%s: bus attach failed\n", USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "bus attach failed\n");
 		umass_disco(sc);
 		USB_ATTACH_ERROR_RETURN;
 	}
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
 			   USBDEV(sc->sc_dev));
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	DPRINTF(UDMASS_GEN, ("%s: Attach finished\n", USBDEVNAME(sc->sc_dev)));
 
@@ -657,6 +642,8 @@ USB_DETACH(umass)
 
 	DPRINTF(UDMASS_USB, ("%s: detached\n", USBDEVNAME(sc->sc_dev)));
 
+	pmf_device_deregister(self);
+
 	/* Abort the pipes to wake up any waiting processes. */
 	for (i = 0 ; i < UMASS_NEP ; i++) {
 		if (sc->sc_pipe[i] != NULL)
@@ -667,7 +654,7 @@ USB_DETACH(umass)
 	s = splusb();
 	if (--sc->sc_refcnt >= 0) {
 #ifdef DIAGNOSTIC
-		printf("%s: waiting for refcnt\n", USBDEVNAME(sc->sc_dev));
+		aprint_normal_dev(self, "waiting for refcnt\n");
 #endif
 		/* Wait for processes to go away. */
 		usb_detach_wait(USBDEV(sc->sc_dev));
@@ -694,9 +681,9 @@ USB_DETACH(umass)
 }
 
 int
-umass_activate(struct device *dev, enum devact act)
+umass_activate(device_t dev, enum devact act)
 {
-	struct umass_softc *sc = (struct umass_softc *)dev;
+	struct umass_softc *sc = device_private(dev);
 	struct umassbus_softc *scbus = sc->bus;
 	int rv = 0;
 

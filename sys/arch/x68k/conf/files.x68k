@@ -1,4 +1,4 @@
-#	$NetBSD: files.x68k,v 1.62 2007/03/04 02:08:08 tsutsui Exp $
+#	$NetBSD: files.x68k,v 1.65 2008/02/20 21:43:35 drochner Exp $
 #
 # new style config file for x68k architecture
 #
@@ -39,7 +39,6 @@ file	arch/m68k/m68k/cacheops.c
 file	arch/m68k/m68k/db_memrw.c	ddb
 file	arch/m68k/m68k/pmap_motorola.c
 file	arch/m68k/m68k/procfs_machdep.c	procfs
-file	arch/m68k/m68k/softintr.c
 file	arch/m68k/m68k/sys_machdep.c
 file	arch/m68k/m68k/vm_machdep.c
 
@@ -194,10 +193,6 @@ include "compat/aoutm68k/files.aoutm68k"
 include	"compat/sunos/files.sunos"
 file	arch/m68k/m68k/sunos_machdep.c	compat_sunos
 
-# HP-UX Binary Compatibility (COMPAT_HPUX)
-include	"compat/hpux/files.hpux"
-file	arch/m68k/m68k/hpux_machdep.c	compat_hpux
-
 # SVR4 Binary Compatibility (COMPAT_SVR4)
 include "compat/svr4/files.svr4"
 
@@ -210,7 +205,6 @@ file arch/m68k/m68k/linux_trap.c	compat_linux
 include "compat/ossaudio/files.ossaudio"
 
 # USB support
-include "dev/wscons/files.wscons"
 include "dev/usb/files.usb"
 
 include "arch/x68k/conf/majors.x68k"

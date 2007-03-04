@@ -1,4 +1,30 @@
-/*	$NetBSD: init_main.c,v 1.296 2007/03/03 10:08:18 itohy Exp $	*/
+/*	$NetBSD: init_main.c,v 1.370 2008/10/25 15:40:59 tsutsui Exp $	*/
+
+/*-
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1992, 1993
@@ -71,22 +97,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.296 2007/03/03 10:08:18 itohy Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.370 2008/10/25 15:40:59 tsutsui Exp $");
 
+#include "opt_ddb.h"
 #include "opt_ipsec.h"
-#include "opt_kcont.h"
-#include "opt_multiprocessor.h"
 #include "opt_ntp.h"
 #include "opt_pipe.h"
 #include "opt_posix.h"
 #include "opt_syscall_debug.h"
 #include "opt_sysv.h"
-#include "opt_systrace.h"
 #include "opt_fileassoc.h"
 #include "opt_ktrace.h"
 #include "opt_pax.h"
+#include "opt_wapbl.h"
 
 #include "rnd.h"
+#include "sysmon_envsys.h"
+#include "sysmon_power.h"
+#include "sysmon_taskq.h"
+#include "sysmon_wdog.h"
 #include "veriexec.h"
 
 #include <sys/param.h>
@@ -95,9 +124,8 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.296 2007/03/03 10:08:18 itohy Exp $"
 #include <sys/file.h>
 #include <sys/errno.h>
 #include <sys/callout.h>
+#include <sys/cpu.h>
 #include <sys/kernel.h>
-#include <sys/kcont.h>
-#include <sys/kmem.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/kthread.h>
@@ -114,13 +142,29 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.296 2007/03/03 10:08:18 itohy Exp $"
 #include <sys/exec.h>
 #include <sys/socketvar.h>
 #include <sys/protosw.h>
+#include <sys/percpu.h>
+#include <sys/pset.h>
+#include <sys/sysctl.h>
 #include <sys/reboot.h>
 #include <sys/user.h>
 #include <sys/sysctl.h>
 #include <sys/event.h>
 #include <sys/mbuf.h>
+#include <sys/sched.h>
 #include <sys/sleepq.h>
 #include <sys/iostat.h>
+#include <sys/vmem.h>
+#include <sys/uuid.h>
+#include <sys/extent.h>
+#include <sys/disk.h>
+#include <sys/mqueue.h>
+#include <sys/msgbuf.h>
+#include <sys/module.h>
+#include <sys/event.h>
+#include <sys/lockf.h>
+#include <sys/once.h>
+#include <sys/ksyms.h>
+#include <sys/uidinfo.h>
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
 #endif
@@ -133,9 +177,6 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.296 2007/03/03 10:08:18 itohy Exp $"
 #ifdef SYSVMSG
 #include <sys/msg.h>
 #endif
-#ifdef SYSTRACE
-#include <sys/systrace.h>
-#endif
 #ifdef P1003_1B_SEMAPHORE
 #include <sys/ksem.h>
 #endif
@@ -144,9 +185,7 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.296 2007/03/03 10:08:18 itohy Exp $"
 #if NRND > 0
 #include <sys/rnd.h>
 #endif
-#ifndef PIPE_SOCKETPAIR
 #include <sys/pipe.h>
-#endif
 #ifdef LKM
 #include <sys/lkm.h>
 #endif
@@ -156,27 +195,37 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.296 2007/03/03 10:08:18 itohy Exp $"
 #ifdef KTRACE
 #include <sys/ktrace.h>
 #endif
-#include <sys/lockdebug.h>
-#include <sys/debug.h>
 #include <sys/kauth.h>
+#ifdef WAPBL
+#include <sys/wapbl.h>
+#endif
 #include <net80211/ieee80211_netbsd.h>
 
 #include <sys/syscall.h>
 #include <sys/syscallargs.h>
 
-#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD)
+#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD) || defined(PAX_ASLR)
 #include <sys/pax.h>
-#endif /* PAX_MPROTECT || PAX_SEGVGUARD */
+#endif /* PAX_MPROTECT || PAX_SEGVGUARD || PAX_ASLR */
+
 #include <ufs/ufs/quota.h>
 
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/syncfs/syncfs.h>
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm.h>
 
+#if NSYSMON_TASKQ > 0
+#include <dev/sysmon/sysmon_taskq.h>
+#endif
+
 #include <dev/cons.h>
+
+#if NSYSMON_ENVSYS > 0 || NSYSMON_POWER > 0 || NSYSMON_WDOG > 0
+#include <dev/sysmon/sysmonvar.h>
+#endif
 
 #include <net/if.h>
 #include <net/raw_cb.h>
@@ -186,6 +235,7 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.296 2007/03/03 10:08:18 itohy Exp $"
 extern struct proc proc0;
 extern struct lwp lwp0;
 extern struct cwdinfo cwdi0;
+extern time_t rootfstime;
 
 #ifndef curlwp
 struct	lwp *curlwp = &lwp0;
@@ -196,14 +246,13 @@ struct	vnode *rootvp, *swapdev_vp;
 int	boothowto;
 int	cold = 1;			/* still working on startup */
 struct timeval boottime;	        /* time at system startup - will only follow settime deltas */
-time_t	rootfstime;			/* recorded root fs time, if known */
-int	ncpu =  1;			/* number of CPUs configured, assume 1 */
 
-volatile int start_init_exec;		/* semaphore for start_init() */
+int	start_init_exec;		/* semaphore for start_init() */
 
 static void check_console(struct lwp *l);
 static void start_init(void *);
 void main(void);
+void ssp_init(void);
 
 #if defined(__SSP__) || defined(__SSP_ALL__)
 long __stack_chk_guard[8] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -213,6 +262,40 @@ void
 __stack_chk_fail(void)
 {
 	panic("stack overflow detected; terminated");
+}
+
+void
+ssp_init(void)
+{
+	int s;
+
+#ifdef DIAGNOSTIC
+	printf("Initializing SSP:");
+#endif
+	/*
+	 * We initialize ssp here carefully:
+	 *	1. after we got some entropy
+	 *	2. without calling a function
+	 */
+	size_t i;
+	long guard[__arraycount(__stack_chk_guard)];
+
+	arc4randbytes(guard, sizeof(guard));
+	s = splhigh();
+	for (i = 0; i < __arraycount(guard); i++)
+		__stack_chk_guard[i] = guard[i];
+	splx(s);
+#ifdef DIAGNOSTIC
+	for (i = 0; i < __arraycount(guard); i++)
+		printf("%lx ", guard[i]);
+	printf("\n");
+#endif
+}
+#else
+void
+ssp_init(void)
+{
+
 }
 #endif
 
@@ -233,35 +316,19 @@ __secmodel_none(void)
 void
 main(void)
 {
-#ifdef __HAVE_TIMECOUNTER
 	struct timeval time;
-#endif
 	struct lwp *l;
 	struct proc *p;
-	struct pdevinit *pdev;
 	int s, error;
-	extern struct pdevinit pdevinit[];
-	extern void schedcpu(void *);
 #ifdef NVNODE_IMPLICIT
 	int usevnodes;
 #endif
-#ifdef MULTIPROCESSOR
 	CPU_INFO_ITERATOR cii;
 	struct cpu_info *ci;
-#endif
 
-	/*
-	 * Initialize the current LWP pointer (curlwp) before
-	 * any possible traps/probes to simplify trap processing.
-	 */
 	l = &lwp0;
-	curlwp = l;
+#ifndef LWP0_CPU_INFO
 	l->l_cpu = curcpu();
-	l->l_proc = &proc0;
-	l->l_lid = 1;
-
-#ifdef LOCKDEBUG
-	lockdebug_init();
 #endif
 
 	/*
@@ -270,20 +337,23 @@ main(void)
 	 */
 	consinit();
 
-	KERNEL_LOCK_INIT();
+	kernel_lock_init();
+	once_init();
 
 	uvm_init();
 
-#ifdef DEBUG
-	debug_init();
-#endif
+	percpu_init();
 
-	kmem_init();
+	/* Initialize lock caches. */
+	mutex_obj_init();
+
+	/* Initialize the extent manager. */
+	extent_init();
 
 	/* Do machine-dependent initialization. */
 	cpu_startup();
 
-	/* Initialize callouts. */
+	/* Initialize callouts, part 1. */
 	callout_startup();
 
 	/*
@@ -300,26 +370,15 @@ main(void)
 	/* Initialize the buffer cache */
 	bufinit();
 
-	/*
-	 * Initialize mbuf's.  Do this now because we might attempt to
-	 * allocate mbufs or mbuf clusters during autoconfiguration.
-	 */
-	mbinit();
-
 	/* Initialize sockets. */
 	soinit();
-
-#ifdef KCONT
-	/* Initialize kcont. */
-        kcont_init();
-#endif
 
 	/*
 	 * The following things must be done before autoconfiguration.
 	 */
 	evcnt_init();		/* initialize event counters */
 #if NRND > 0
-	rnd_init();		/* initialize RNG */
+	rnd_init();		/* initialize random number generator */
 #endif
 
 	/* Initialize process and pgrp structures. */
@@ -329,18 +388,42 @@ main(void)
 	/* Initialize signal-related data structures. */
 	signal_init();
 
+	/* Initialize resource management. */
+	resource_init();
+
 	/* Create process 0 (the swapper). */
 	proc0_init();
 
-	/*
-	 * Charge root for one process.
-	 */
+	/* Initialize the UID hash table. */
+	uid_init();
+
+	/* Charge root for one process. */
 	(void)chgproccnt(0, 1);
 
+	/* Initialize timekeeping. */
+	time_init();
+
 	/* Initialize the run queues, turnstiles and sleep queues. */
-	rqinit();
+	mutex_init(&cpu_lock, MUTEX_DEFAULT, IPL_NONE);
+	sched_rqinit();
 	turnstile_init();
 	sleeptab_init(&sleeptab);
+
+	/* Initialize processor-sets */
+	psets_init();
+
+	/* MI initialization of the boot cpu */
+	error = mi_cpu_attach(curcpu());
+	KASSERT(error == 0);
+
+	/* Initialize timekeeping, part 2. */
+	time_init2();
+
+	/*
+	 * Initialize mbuf's.  Do this now because we might attempt to
+	 * allocate mbufs or mbuf clusters during autoconfiguration.
+	 */
+	mbinit();
 
 	/* Initialize the sysctl subsystem. */
 	sysctl_init();
@@ -348,61 +431,83 @@ main(void)
 	/* Initialize I/O statistics. */
 	iostat_init();
 
+	/* Initialize the log device. */
+	loginit();
+
+	/* Start module system. */
+	module_init();
+
 	/* Initialize the file systems. */
 #ifdef NVNODE_IMPLICIT
 	/*
 	 * If maximum number of vnodes in namei vnode cache is not explicitly
 	 * defined in kernel config, adjust the number such as we use roughly
-	 * 1.0% of memory for vnode cache (but not less than NVNODE vnodes).
+	 * 10% of memory for vnodes and associated data structures in the
+	 * assumed worst case.  Do not provide fewer than NVNODE vnodes.
 	 */
-	usevnodes = (ptoa((unsigned)physmem) / 100) / sizeof(struct vnode);
+	usevnodes =
+	    calc_cache_size(kernel_map, 10, VNODE_VA_MAXPCT) / VNODE_COST;
 	if (usevnodes > desiredvnodes)
 		desiredvnodes = usevnodes;
 #endif
 	vfsinit();
+	lf_init();
 
 	/* Initialize fstrans. */
 	fstrans_init();
 
-#ifdef __HAVE_TIMECOUNTER
+	/* Initialize the file descriptor system. */
+	fd_sys_init();
+
+	/* Initialize kqueue. */
+	kqueue_init();
+
+	/* Initialize asynchronous I/O. */
+	aio_sysinit();
+
+	/* Initialize message queues. */
+	mqueue_sysinit();
+
+	/* Initialize the system monitor subsystems. */
+#if NSYSMON_TASKQ > 0
+	sysmon_task_queue_preinit();
+#endif
+
+#if NSYSMON_ENVSYS > 0
+	sysmon_envsys_init();
+#endif
+
+#if NSYSMON_POWER > 0
+	sysmon_power_init();
+#endif
+
+#if NSYSMON_WDOG > 0
+	sysmon_wdog_init();
+#endif
+
 	inittimecounter();
 	ntp_init();
-#endif /* __HAVE_TIMECOUNTER */
+
+	/* Initialize the device switch tables. */
+	devsw_init();
+
+	/* Initialize tty subsystem. */
+	tty_init();
+	ttyldisc_init();
+
+	/* Initialize the buffer cache, part 2. */
+	bufinit2();
+
+	/* Initialize the disk wedge subsystem. */
+	dkwedge_init();
+
+	/* Initialize interfaces. */
+	ifinit1();
 
 	/* Configure the system hardware.  This will enable interrupts. */
 	configure();
 
-#if defined(__SSP__) || defined(__SSP_ALL__)
-	{
-#ifdef DIAGNOSTIC
-		printf("Initializing SSP:");
-#endif
-		/*
-		 * We initialize ssp here carefully:
-		 *	1. after we got some entropy
-		 *	2. without calling a function
-		 */
-		size_t i;
-		long guard[__arraycount(__stack_chk_guard)];
-
-		arc4randbytes(guard, sizeof(guard));
-		for (i = 0; i < __arraycount(guard); i++)
-			__stack_chk_guard[i] = guard[i];
-#ifdef DIAGNOSTIC
-		for (i = 0; i < __arraycount(guard); i++)
-			printf("%lx ", guard[i]);
-		printf("\n");
-#endif
-	}
-#endif
 	ubc_init();		/* must be after autoconfig */
-
-	/* Lock the kernel on behalf of proc0. */
-	KERNEL_LOCK(1, l);
-
-#ifdef SYSTRACE
-	systrace_init();
-#endif
 
 #ifdef SYSVSHM
 	/* Initialize System V style shared memory. */
@@ -431,13 +536,9 @@ main(void)
 	veriexec_init();
 #endif /* NVERIEXEC > 0 */
 
-#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD)
+#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD) || defined(PAX_ASLR)
 	pax_init();
-#endif /* PAX_MPROTECT || PAX_SEGVGUARD */
-
-	/* Attach pseudo-devices. */
-	for (pdev = pdevinit; pdev->pdev_attach != NULL; pdev++)
-		(*pdev->pdev_attach)(pdev->pdev_count);
+#endif /* PAX_MPROTECT || PAX_SEGVGUARD || PAX_ASLR */
 
 #ifdef	FAST_IPSEC
 	/* Attach network crypto subsystem */
@@ -459,15 +560,25 @@ main(void)
 	kmstartup();
 #endif
 
-	/* Initialize system accouting. */
+	/* Initialize system accounting. */
 	acct_init();
 
-	/* Kick off timeout driven events by calling first time. */
-	schedcpu(NULL);
+#ifndef PIPE_SOCKETPAIR
+	/* Initialize pipes. */
+	pipe_init();
+#endif
 
 #ifdef KTRACE
 	/* Initialize ktrace. */
 	ktrinit();
+#endif
+
+	/* Initialize the UUID system calls. */
+	uuid_init();
+
+#ifdef WAPBL
+	/* Initialize write-ahead physical block logging. */
+	wapbl_init();
 #endif
 
 	/*
@@ -483,19 +594,10 @@ main(void)
 		panic("fork init");
 
 	/*
-	 * Create any kernel threads who's creation was deferred because
-	 * initproc had not yet been created.
+	 * Load any remaining builtin modules, and hand back temporary
+	 * storage to the VM system.
 	 */
-	kthread_run_deferred_queue();
-
-	/*
-	 * Now that device driver threads have been created, wait for
-	 * them to finish any deferred autoconfiguration.  Note we don't
-	 * need to lock this semaphore, since we haven't booted any
-	 * secondary processors, yet.
-	 */
-	while (config_pending)
-		(void) tsleep(&config_pending, PWAIT, "cfpend", 0);
+	module_init_class(MODULE_CLASS_ANY);
 
 	/*
 	 * Finalize configuration now that all real devices have been
@@ -559,51 +661,44 @@ main(void)
 	 * from the file system.  Reset l->l_rtime as it may have been
 	 * munched in mi_switch() after the time got set.
 	 */
-#ifdef __HAVE_TIMECOUNTER
 	getmicrotime(&time);
-#else
-	mono_time = time;
-#endif
 	boottime = time;
-	rw_enter(&proclist_lock, RW_READER);
+	mutex_enter(proc_lock);
 	LIST_FOREACH(p, &allproc, p_list) {
 		KASSERT((p->p_flag & PK_MARKER) == 0);
-		mutex_enter(&p->p_smutex);
+		mutex_enter(p->p_lock);
 		p->p_stats->p_start = time;
 		LIST_FOREACH(l, &p->p_lwps, l_sibling) {
 			lwp_lock(l);
-			l->l_cpu->ci_schedstate.spc_runtime = time;
-			l->l_rtime.tv_sec = l->l_rtime.tv_usec = 0;
+			memset(&l->l_rtime, 0, sizeof(l->l_rtime));
 			lwp_unlock(l);
 		}
-		mutex_exit(&p->p_smutex);
+		mutex_exit(p->p_lock);
 	}
-	rw_exit(&proclist_lock);
+	mutex_exit(proc_lock);
+	binuptime(&curlwp->l_stime);
+
+	for (CPU_INFO_FOREACH(cii, ci)) {
+		ci->ci_schedstate.spc_lastmod = time_second;
+	}
 
 	/* Create the pageout daemon kernel thread. */
 	uvm_swap_init();
-	if (kthread_create1(uvm_pageout, NULL, NULL, "pagedaemon"))
+	if (kthread_create(PRI_PGDAEMON, KTHREAD_MPSAFE, NULL, uvm_pageout,
+	    NULL, NULL, "pgdaemon"))
 		panic("fork pagedaemon");
 
 	/* Create the filesystem syncer kernel thread. */
-	if (kthread_create1(sched_sync, NULL, NULL, "ioflush"))
+	if (kthread_create(PRI_IOFLUSH, KTHREAD_MPSAFE, NULL, sched_sync,
+	    NULL, NULL, "ioflush"))
 		panic("fork syncer");
 
 	/* Create the aiodone daemon kernel thread. */
 	if (workqueue_create(&uvm.aiodone_queue, "aiodoned",
-	    uvm_aiodone_worker, NULL, PVM, IPL_BIO, 0))
+	    uvm_aiodone_worker, NULL, PRI_VM, IPL_NONE, WQ_MPSAFE))
 		panic("fork aiodoned");
 
-#if defined(MULTIPROCESSOR)
-	/* Boot the secondary processors. */
-	cpu_boot_secondary_processors();
-
-	/* Count the number of running CPUs. */
-	for (CPU_INFO_FOREACH(cii, ci)) {
-		ncpu++;
-	}
-	ncpu--;
-#endif
+	vmem_rehash_start();
 
 	/* Initialize exec structures */
 	exec_init(1);
@@ -611,18 +706,14 @@ main(void)
 	/*
 	 * Okay, now we can let init(8) exec!  It's off to userland!
 	 */
+	mutex_enter(proc_lock);
 	start_init_exec = 1;
-	wakeup(&start_init_exec);
+	cv_broadcast(&lbolt);
+	mutex_exit(proc_lock);
 
 	/* The scheduler is an infinite loop. */
 	uvm_scheduler();
 	/* NOTREACHED */
-}
-
-void
-setrootfstime(time_t t)
-{
-	rootfstime = t;
 }
 
 static void
@@ -631,7 +722,7 @@ check_console(struct lwp *l)
 	struct nameidata nd;
 	int error;
 
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, "/dev/console", l);
+	NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, "/dev/console");
 	error = namei(&nd);
 	if (error == 0)
 		vrele(nd.ni_vp);
@@ -644,7 +735,7 @@ check_console(struct lwp *l)
 /*
  * List of paths to try when searching for "init".
  */
-static const char *initpaths[] = {
+static const char * const initpaths[] = {
 	"/sbin/init",
 	"/sbin/oinit",
 	"/sbin/init.bak",
@@ -682,8 +773,10 @@ start_init(void *arg)
 	/*
 	 * Wait for main() to tell us that it's safe to exec.
 	 */
+	mutex_enter(proc_lock);
 	while (start_init_exec == 0)
-		(void) tsleep(&start_init_exec, PWAIT, "initexec", 0);
+		cv_wait(&lbolt, proc_lock);
+	mutex_exit(proc_lock);
 
 	/*
 	 * This is not the right way to do this.  We really should
@@ -703,7 +796,7 @@ start_init(void *arg)
 		    UVM_ADV_NORMAL,
                     UVM_FLAG_FIXED|UVM_FLAG_OVERLAY|UVM_FLAG_COPYONW)) != 0)
 		panic("init: couldn't allocate argument space");
-	p->p_vmspace->vm_maxsaddr = (caddr_t)STACK_MAX(addr, PAGE_SIZE);
+	p->p_vmspace->vm_maxsaddr = (void *)STACK_MAX(addr, PAGE_SIZE);
 
 	ipx = 0;
 	while (1) {
@@ -718,13 +811,25 @@ start_init(void *arg)
 					path = initpaths[ipx++];
 				else
 					continue;
+			} else if (len == 4 && strcmp(ipath, "halt") == 0) {
+				cpu_reboot(RB_HALT, NULL);
+			} else if (len == 6 && strcmp(ipath, "reboot") == 0) {
+				cpu_reboot(0, NULL);
+#if defined(DDB)
+			} else if (len == 3 && strcmp(ipath, "ddb") == 0) {
+				console_debugger();
+				continue;
+#endif
 			} else {
 				ipath[len] = '\0';
 				path = ipath;
 			}
 		} else {
-			if ((path = initpaths[ipx++]) == NULL)
-				break;
+			if ((path = initpaths[ipx++]) == NULL) {
+				ipx = 0;
+				boothowto |= RB_ASKNAME;
+				continue;
+			}
 		}
 
 		ucp = (char *)USRSTACK;
@@ -758,7 +863,7 @@ start_init(void *arg)
 #endif
 			arg1 = STACK_ALLOC(ucp, i);
 			ucp = STACK_MAX(arg1, i);
-			(void)copyout((caddr_t)flags, arg1, i);
+			(void)copyout((void *)flags, arg1, i);
 		}
 
 		/*
@@ -778,20 +883,20 @@ start_init(void *arg)
 		/*
 		 * Move out the arg pointers.
 		 */
-		ucp = (caddr_t)STACK_ALIGN(ucp, ALIGNBYTES);
+		ucp = (void *)STACK_ALIGN(ucp, ALIGNBYTES);
 		uap = (char **)STACK_ALLOC(ucp, sizeof(char *) * 3);
 		SCARG(&args, path) = arg0;
 		SCARG(&args, argp) = uap;
 		SCARG(&args, envp) = NULL;
 		slash = strrchr(path, '/');
 		if (slash)
-			(void)suword((caddr_t)uap++,
+			(void)suword((void *)uap++,
 			    (long)arg0 + (slash + 1 - path));
 		else
-			(void)suword((caddr_t)uap++, (long)arg0);
+			(void)suword((void *)uap++, (long)arg0);
 		if (options != 0)
-			(void)suword((caddr_t)uap++, (long)arg1);
-		(void)suword((caddr_t)uap++, 0);	/* terminator */
+			(void)suword((void *)uap++, (long)arg1);
+		(void)suword((void *)uap++, 0);	/* terminator */
 
 		/*
 		 * Now try to exec the program.  If can't for any reason
@@ -806,4 +911,27 @@ start_init(void *arg)
 	}
 	printf("init: not found\n");
 	panic("no init");
+}
+
+/*
+ * calculate cache size from physmem and vm_map size.
+ */
+vaddr_t
+calc_cache_size(struct vm_map *map, int pct, int va_pct)
+{
+	paddr_t t;
+
+	/* XXX should consider competing cache if any */
+	/* XXX should consider submaps */
+	t = (uintmax_t)physmem * pct / 100 * PAGE_SIZE;
+	if (map != NULL) {
+		vsize_t vsize;
+
+		vsize = vm_map_max(map) - vm_map_min(map);
+		vsize = (uintmax_t)vsize * va_pct / 100;
+		if (t > vsize) {
+			t = vsize;
+		}
+	}
+	return t;
 }

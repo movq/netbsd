@@ -1,4 +1,4 @@
-/*	$NetBSD: ss.c,v 1.69 2006/11/16 01:33:26 christos Exp $	*/
+/*	$NetBSD: ss.c,v 1.74 2008/06/08 18:18:34 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 Kenneth Stailey.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ss.c,v 1.69 2006/11/16 01:33:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ss.c,v 1.74 2008/06/08 18:18:34 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -166,7 +166,7 @@ ssattach(struct device *parent, struct device *self, void *aux)
 	 */
 	bufq_alloc(&ss->buf_queue, "fcfs", 0);
 
-	callout_init(&ss->sc_callout);
+	callout_init(&ss->sc_callout, 0);
 
 	/*
 	 * look for non-standard scanners with help of the quirk table
@@ -249,10 +249,8 @@ ssopen(dev_t dev, int flag, int mode, struct lwp *l)
 	struct scsipi_adapter *adapt;
 
 	unit = SSUNIT(dev);
-	if (unit >= ss_cd.cd_ndevs)
-		return (ENXIO);
-	ss = ss_cd.cd_devs[unit];
-	if (!ss)
+	ss = device_lookup_private(&ss_cd, unit);
+	if (ss == NULL)
 		return (ENXIO);
 
 	if (!device_is_active(&ss->sc_dev))
@@ -267,7 +265,7 @@ ssopen(dev_t dev, int flag, int mode, struct lwp *l)
 	    unit, ss_cd.cd_ndevs));
 
 	if (periph->periph_flags & PERIPH_OPEN) {
-		printf("%s: already open\n", ss->sc_dev.dv_xname);
+		aprint_error_dev(&ss->sc_dev, "already open\n");
 		return (EBUSY);
 	}
 
@@ -313,7 +311,7 @@ bad:
 static int
 ssclose(dev_t dev, int flag, int mode, struct lwp *l)
 {
-	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(dev)];
+	struct ss_softc *ss = device_lookup_private(&ss_cd, SSUNIT(dev));
 	struct scsipi_periph *periph = ss->sc_periph;
 	struct scsipi_adapter *adapt = periph->periph_channel->chan_adapter;
 	int error;
@@ -350,7 +348,7 @@ ssclose(dev_t dev, int flag, int mode, struct lwp *l)
 static void
 ssminphys(struct buf *bp)
 {
-	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(bp->b_dev)];
+	struct ss_softc *ss = device_lookup_private(&ss_cd, SSUNIT(bp->b_dev));
 	struct scsipi_periph *periph = ss->sc_periph;
 
 	scsipi_adapter_minphys(periph->periph_channel, bp);
@@ -373,7 +371,7 @@ ssminphys(struct buf *bp)
 static int
 ssread(dev_t dev, struct uio *uio, int flag)
 {
-	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(dev)];
+	struct ss_softc *ss = device_lookup_private(&ss_cd, SSUNIT(dev));
 	int error;
 
 	if (!device_is_active(&ss->sc_dev))
@@ -400,7 +398,7 @@ ssread(dev_t dev, struct uio *uio, int flag)
 static void
 ssstrategy(struct buf *bp)
 {
-	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(bp->b_dev)];
+	struct ss_softc *ss = device_lookup_private(&ss_cd, SSUNIT(bp->b_dev));
 	struct scsipi_periph *periph = ss->sc_periph;
 	int s;
 
@@ -411,7 +409,6 @@ ssstrategy(struct buf *bp)
 	 * If the device has been made invalid, error out
 	 */
 	if (!device_is_active(&ss->sc_dev)) {
-		bp->b_flags |= B_ERROR;
 		if (periph->periph_flags & PERIPH_OPEN)
 			bp->b_error = EIO;
 		else
@@ -421,7 +418,6 @@ ssstrategy(struct buf *bp)
 
 	/* If negative offset, error */
 	if (bp->b_blkno < 0) {
-		bp->b_flags |= B_ERROR;
 		bp->b_error = EINVAL;
 		goto done;
 	}
@@ -490,7 +486,7 @@ ssstart(struct scsipi_periph *periph)
 		/* if a special awaits, let it proceed first */
 		if (periph->periph_flags & PERIPH_WAITING) {
 			periph->periph_flags &= ~PERIPH_WAITING;
-			wakeup((caddr_t)periph);
+			wakeup((void *)periph);
 			return;
 		}
 
@@ -525,8 +521,6 @@ ssdone(struct scsipi_xfer *xs, int error)
 	if (bp) {
 		bp->b_error = error;
 		bp->b_resid = xs->resid;
-		if (error)
-			bp->b_flags |= B_ERROR;
 		biodone(bp);
 	}
 }
@@ -537,9 +531,9 @@ ssdone(struct scsipi_xfer *xs, int error)
  * knows about the internals of this device
  */
 int
-ssioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
+ssioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
-	struct ss_softc *ss = ss_cd.cd_devs[SSUNIT(dev)];
+	struct ss_softc *ss = device_lookup_private(&ss_cd, SSUNIT(dev));
 	int error = 0;
 	struct scan_io *sio;
 

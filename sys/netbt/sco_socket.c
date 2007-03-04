@@ -1,4 +1,4 @@
-/*	$NetBSD: sco_socket.c,v 1.5 2006/11/16 01:33:45 christos Exp $	*/
+/*	$NetBSD: sco_socket.c,v 1.11 2008/08/06 15:01:24 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -30,7 +30,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sco_socket.c,v 1.5 2006/11/16 01:33:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sco_socket.c,v 1.11 2008/08/06 15:01:24 plunky Exp $");
+
+/* load symbolic names */
+#ifdef BLUETOOTH_DEBUG
+#define PRUREQUESTS
+#define PRCOREQUESTS
+#endif
 
 #include <sys/param.h>
 #include <sys/domain.h>
@@ -56,6 +62,7 @@ static void sco_connected(void *);
 static void sco_disconnected(void *, int);
 static void *sco_newconn(void *, struct sockaddr_bt *, struct sockaddr_bt *);
 static void sco_complete(void *, int);
+static void sco_linkmode(void *, int);
 static void sco_input(void *, struct mbuf *);
 
 static const struct btproto sco_proto = {
@@ -64,6 +71,7 @@ static const struct btproto sco_proto = {
 	sco_disconnected,
 	sco_newconn,
 	sco_complete,
+	sco_linkmode,
 	sco_input,
 };
 
@@ -105,9 +113,14 @@ sco_usrreq(struct socket *up, int req, struct mbuf *m,
 		return EOPNOTSUPP;
 
 	case PRU_ATTACH:
+		if (up->so_lock == NULL) {
+			mutex_obj_hold(bt_lock);
+			up->so_lock = bt_lock;
+			solock(up);
+		}
+		KASSERT(solocked(up));
 		if (pcb)
 			return EINVAL;
-
 		err = soreserve(up, sco_sendspace, sco_recvspace);
 		if (err)
 			return err;
@@ -135,7 +148,7 @@ sco_usrreq(struct socket *up, int req, struct mbuf *m,
 		return sco_detach((struct sco_pcb **)&up->so_pcb);
 
 	case PRU_BIND:
-		KASSERT(nam);
+		KASSERT(nam != NULL);
 		sa = mtod(nam, struct sockaddr_bt *);
 
 		if (sa->bt_len != sizeof(struct sockaddr_bt))
@@ -147,7 +160,7 @@ sco_usrreq(struct socket *up, int req, struct mbuf *m,
 		return sco_bind(pcb, sa);
 
 	case PRU_CONNECT:
-		KASSERT(nam);
+		KASSERT(nam != NULL);
 		sa = mtod(nam, struct sockaddr_bt *);
 
 		if (sa->bt_len != sizeof(struct sockaddr_bt))
@@ -160,13 +173,13 @@ sco_usrreq(struct socket *up, int req, struct mbuf *m,
 		return sco_connect(pcb, sa);
 
 	case PRU_PEERADDR:
-		KASSERT(nam);
+		KASSERT(nam != NULL);
 		sa = mtod(nam, struct sockaddr_bt *);
 		nam->m_len = sizeof(struct sockaddr_bt);
 		return sco_peeraddr(pcb, sa);
 
 	case PRU_SOCKADDR:
-		KASSERT(nam);
+		KASSERT(nam != NULL);
 		sa = mtod(nam, struct sockaddr_bt *);
 		nam->m_len = sizeof(struct sockaddr_bt);
 		return sco_sockaddr(pcb, sa);
@@ -176,7 +189,7 @@ sco_usrreq(struct socket *up, int req, struct mbuf *m,
 		break;
 
 	case PRU_SEND:
-		KASSERT(m);
+		KASSERT(m != NULL);
 		if (m->m_pkthdr.len == 0)
 			break;
 
@@ -208,7 +221,7 @@ sco_usrreq(struct socket *up, int req, struct mbuf *m,
 		return sco_listen(pcb);
 
 	case PRU_ACCEPT:
-		KASSERT(nam);
+		KASSERT(nam != NULL);
 		sa = mtod(nam, struct sockaddr_bt *);
 		nam->m_len = sizeof(struct sockaddr_bt);
 		return sco_peeraddr(pcb, sa);
@@ -238,11 +251,9 @@ release:
  * get/set socket options
  */
 int
-sco_ctloutput(int req, struct socket *so, int level,
-		int optname, struct mbuf **opt)
+sco_ctloutput(int req, struct socket *so, struct sockopt *sopt)
 {
 	struct sco_pcb *pcb = (struct sco_pcb *)so->so_pcb;
-	struct mbuf *m;
 	int err = 0;
 
 	DPRINTFN(2, "req %s\n", prcorequests[req]);
@@ -250,30 +261,20 @@ sco_ctloutput(int req, struct socket *so, int level,
 	if (pcb == NULL)
 		return EINVAL;
 
-	if (level != BTPROTO_SCO)
-		return 0;
+	if (sopt->sopt_level != BTPROTO_SCO)
+		return ENOPROTOOPT;
 
 	switch(req) {
 	case PRCO_GETOPT:
-		m = m_get(M_WAIT, MT_SOOPTS);
-		m->m_len = sco_getopt(pcb, optname, mtod(m, uint8_t *));
-		if (m->m_len == 0) {
-			m_freem(m);
-			m = NULL;
-			err = EINVAL;
-		}
-		*opt = m;
+		err = sco_getopt(pcb, sopt);
 		break;
 
 	case PRCO_SETOPT:
-		m = *opt;
-		KASSERT(m != NULL);
-		err = sco_setopt(pcb, optname, mtod(m, uint8_t *));
-		m_freem(m);
+		err = sco_setopt(pcb, sopt);
 		break;
 
 	default:
-		err = EINVAL;
+		err = ENOPROTOOPT;
 		break;
 	}
 
@@ -338,6 +339,11 @@ sco_complete(void *arg, int num)
 		sbdroprecord(&so->so_snd);
 
 	sowwakeup(so);
+}
+
+static void
+sco_linkmode(void *arg, int mode)
+{
 }
 
 static void

@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.311 2007/03/01 14:57:38 kiyohara Exp $
+# $NetBSD: GENERIC,v 1.325 2008/08/10 15:31:20 tls Exp $
 #
 # This machine description file is used to generate the default NetBSD
 # kernel.
@@ -19,7 +19,7 @@ include 	"arch/alpha/conf/std.alpha"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-ident		"GENERIC-$Revision: 1.311 $"
+ident		"GENERIC-$Revision: 1.325 $"
 
 maxusers 32
 
@@ -46,7 +46,6 @@ options 	API_UP1000	# EV6:		Alpha Processor, Inc. UP1000
 
 # Standard system options
 options 	KTRACE			# System call tracing support
-#options 	SYSTRACE		# System call vetting via systrace(1)
 options 	NTP			# kernel PLL for NTP
 
 # Enable experimental buffer queue strategy for better responsiveness under
@@ -95,6 +94,7 @@ file-system	PTYFS		# /dev/pts/N support
 options 	QUOTA		# UFS quotas
 #options 	FFS_EI		# FFS Endian Independant support
 options 	SOFTDEP		# FFS soft updates support.
+options 	WAPBL		# File system journaling support - Experimental
 #options 	UFS_DIRHASH	# UFS Large Directory Hashing - Experimental
 options 	NFSSERVER	# Sun NFS-compatible file system server
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -109,8 +109,8 @@ options 	INET6		# IPV6
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
-options 	ISO,TPIP	# OSI
-options 	EON		# OSI tunneling over IP
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 options 	NETATALK	# AppleTalk networking protocols
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -148,6 +148,7 @@ options 	COMPAT_15
 options 	COMPAT_16
 options 	COMPAT_20
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 # OSF/1 binary compatibility
 options 	COMPAT_OSF1
@@ -161,14 +162,9 @@ options 	SYSVMSG
 
 # System V-like semaphores
 options 	SYSVSEM
-#options 	SEMMNI=10	# number of semaphore identifiers
-#options 	SEMMNS=60	# number of semaphores in system
-#options 	SEMUME=10	# max number of undo entries per process
-#options 	SEMMNU=30	# number of undo structures in system
 
 # System V-like shared memory
 options 	SYSVSHM
-#options 	SHMMAXPGS=1024		# 1024 pages is the default
 
 # p1003.1b semaphore support
 options 	P1003_1B_SEMAPHORE
@@ -535,14 +531,18 @@ fd*	at	fdc? drive ?
 ld*	at	cac? unit ?
 ld*	at	mlx? unit ?
 
+# PCMCIA USB controllers
+slhci*	at pcmcia? function ?			# ScanLogic SL811HS
+
 # USB bus support
-usb*	at uhci?
-usb*	at ohci?
 usb*	at ehci?
+usb*	at ohci?
+usb*	at slhci?
+usb*	at uhci?
 
 # USB Hubs
 uhub*	at usb?
-uhub*	at uhub? port ? configuration ? interface ?
+uhub*	at uhub? port ?
 
 # USB HID device
 uhidev*	at uhub? port ? configuration ? interface ?
@@ -629,12 +629,15 @@ ugen*	at uhub? port ?
 
 # Bluetooth PCMCIA Controllers
 bt3c* at pcmcia? function ?		# 3Com 3CRWB6096-A
+btbc* at pcmcia? function ?		# AnyCom BlueCard LSE041/039/139
 
 # Bluetooth USB Controllers
-ubt* at uhub? port ? configuration ? interface ?
+ubt* at uhub? port ?
 
 # Bluetooth Device Hub
+bthub* at bcsp?
 bthub* at bt3c?
+bthub* at btbc?
 bthub* at btuart?
 bthub* at ubt?
 
@@ -673,6 +676,11 @@ wsmouse*	at	vsms?
 wskbd*		at	pckbd?
 wsmouse*	at	pms?
 
+#
+# accept filters
+pseudo-device   accf_data		# "dataready" accept filter
+pseudo-device   accf_http		# "httpready" accept filter
+
 pseudo-device 	crypto			# /dev/crypto device
 pseudo-device	swcrypto		# software crypto implementation
 
@@ -710,6 +718,7 @@ pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
 pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	bridge			# simple inter-network bridging
 #options 	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
+pseudo-device	agr			# IEEE 802.3ad link aggregation
 pseudo-device	sequencer	1	# MIDI sequencer
 pseudo-device	rnd			# /dev/random and in-kernel generator
 #options 	RND_COM			# use "com" randomness too
@@ -724,7 +733,10 @@ pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
 pseudo-device	lockstat		# lock profiling
+pseudo-device	bcsp			# BlueCore Serial Protocol
 pseudo-device	btuart			# Bluetooth HCI UART (H4)
+
+#options	FILEASSOC		# fileassoc(9) - required for Veriexec
 
 # Veriexec
 #
@@ -742,4 +754,6 @@ pseudo-device	btuart			# Bluetooth HCI UART (H4)
 #options 	VERIFIED_EXEC_FP_SHA1
 #options 	VERIFIED_EXEC_FP_MD5
 
-options 	PAX_MPROTECT=0		# PaX mprotect(2) restrictions
+options PAX_MPROTECT=0			# PaX mprotect(2) restrictions
+#options PAX_SEGVGUARD=0			# PaX Segmentation fault guard
+options PAX_ASLR=0			# PaX Address Space Layout Randomization

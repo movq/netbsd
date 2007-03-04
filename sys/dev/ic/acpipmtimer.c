@@ -1,13 +1,14 @@
-/* $NetBSD: acpipmtimer.c,v 1.1 2006/06/26 16:13:21 drochner Exp $ */
+/* $NetBSD: acpipmtimer.c,v 1.6 2008/04/08 12:07:25 cegger Exp $ */
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: acpipmtimer.c,v 1.6 2008/04/08 12:07:25 cegger Exp $");
 
 #include <sys/types.h>
-
-#ifdef __HAVE_TIMECOUNTER
 
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <sys/time.h>
 #include <sys/timetc.h>
 
@@ -36,7 +37,7 @@ acpipmtimer_attach(struct device *dev,
 	if (!tc)
 		return (-1);
 
-	tc->tc.tc_name = dev->dv_xname;
+	tc->tc.tc_name = device_xname(dev);
 	tc->tc.tc_frequency = ACPI_PM_TIMER_FREQUENCY;
 	if (flags & ACPIPMT_32BIT)
 		tc->tc.tc_counter_mask = 0xffffffff;
@@ -56,7 +57,7 @@ acpipmtimer_attach(struct device *dev,
 
 	tc->tc.tc_priv = tc;
 	tc_init(&tc->tc);
-	aprint_normal("%s %d-bit timer\n", tc->tc.tc_name,
+	aprint_normal("%s: %d-bit timer\n", tc->tc.tc_name,
 		      (flags & ACPIPMT_32BIT ? 32 : 24));
 	return (0);
 }
@@ -86,5 +87,3 @@ acpihwtimer_read_fast(struct timecounter *tc)
 
 	return r(h);
 }
-
-#endif

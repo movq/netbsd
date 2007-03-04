@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.52 2006/10/15 19:59:50 martin Exp $ */
+/*	$NetBSD: intr.c,v 1.60 2008/05/18 22:40:14 martin Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -41,10 +41,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.52 2006/10/15 19:59:50 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.60 2008/05/18 22:40:14 martin Exp $");
 
 #include "opt_ddb.h"
-#include "pcons.h"
+#include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,8 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.52 2006/10/15 19:59:50 martin Exp $");
 #include <sys/malloc.h>
 
 #include <dev/cons.h>
-
-#include <net/netisr.h>
 
 #include <machine/cpu.h>
 #include <machine/ctlreg.h>
@@ -69,8 +67,6 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.52 2006/10/15 19:59:50 martin Exp $");
 struct intrhand *intrlev[MAXINTNUM];
 
 void	strayintr(const struct trapframe64 *, int);
-int	softintr(void *);
-int	softnet(void *);
 int	intr_list_handler(void *);
 
 /*
@@ -119,85 +115,11 @@ strayintr(const struct trapframe64 *fp, int vectored)
 }
 
 /*
- * Level 1 software interrupt (could also be Sbus level 1 interrupt).
- * Three possible reasons:
- *	Network software interrupt
- *	Soft clock interrupt
- */
-int
-softintr(void *fp)
-{
-#if NPCONS >0
-	extern void pcons_dopoll(void);
-
-	pcons_dopoll();
-#endif
-	return (1);
-}
-
-int
-softnet(void *fp)
-{
-	int n, s;
-	
-	s = splhigh();
-	n = netisr;
-	netisr = 0;
-	splx(s);
-	
-#define DONETISR(bit, fn) do {		\
-	if (n & (1 << bit))		\
-		fn();			\
-} while (0)
-#include <net/netisr_dispatch.h>
-#undef DONETISR
-	return (1);
-}
-
-struct intrhand soft01intr = { .ih_fun = softintr, .ih_number = 1 };
-struct intrhand soft01net = { .ih_fun = softnet, .ih_number = 1 };
-
-#if 1
-void 
-setsoftint() {
-	send_softint(-1, IPL_SOFTINT, &soft01intr);
-}
-void 
-setsoftnet() {
-	send_softint(-1, IPL_SOFTNET, &soft01net);
-}
-#endif
-
-/*
- * Level 15 interrupts are special, and not vectored here.
- * Only `prewired' interrupts appear here; boot-time configured devices
- * are attached via intr_establish() below.
- */
-struct intrhand *intrhand[16] = {
-	NULL,			/*  0 = error */
-	&soft01intr,		/*  1 = software level 1 + Sbus */
-	NULL,	 		/*  2 = Sbus level 2 (4m: Sbus L1) */
-	NULL,			/*  3 = SCSI + DMA + Sbus level 3 (4m: L2,lpt)*/
-	NULL,			/*  4 = software level 4 (tty softint) (scsi) */
-	NULL,			/*  5 = Ethernet + Sbus level 4 (4m: Sbus L3) */
-	NULL,			/*  6 = software level 6 (not used) (4m: enet)*/
-	NULL,			/*  7 = video + Sbus level 5 */
-	NULL,			/*  8 = Sbus level 6 */
-	NULL,			/*  9 = Sbus level 7 */
-	NULL,			/* 10 = counter 0 = clock */
-	NULL,			/* 11 = floppy */
-	NULL,			/* 12 = zs hardware interrupt */
-	NULL,			/* 13 = audio chip */
-	NULL,			/* 14 = counter 1 = profiling timer */
-	NULL			/* 15 = async faults */
-};
-
-/*
  * PCI devices can share interrupts so we need to have
  * a handler to hand out interrupts.
  */
 int
-intr_list_handler(void * arg)
+intr_list_handler(void *arg)
 {
 	int claimed = 0;
 	struct intrhand *ih = (struct intrhand *)arg;
@@ -219,18 +141,33 @@ intr_list_handler(void * arg)
 	return (claimed);
 }
 
+#ifdef MULTIPROCESSOR
+static int intr_biglock_wrapper(void *);
+
+static int
+intr_biglock_wrapper(void *vp)
+{
+	struct intrhand *ih = vp;
+	int ret;
+
+	KERNEL_LOCK(1, NULL);
+	ret = (*ih->ih_realfun)(ih->ih_realarg);
+	KERNEL_UNLOCK_ONE(NULL);
+
+	return ret;
+}
+#endif
 
 /*
  * Attach an interrupt handler to the vector chain for the given level.
  * This is not possible if it has been taken away as a fast vector.
  */
 void
-intr_establish(int level, struct intrhand *ih)
+intr_establish(int level, bool mpsafe, struct intrhand *ih)
 {
-	register struct intrhand **p, *q = NULL;
+	struct intrhand *q = NULL;
 	int s;
 
-	s = splhigh();
 	/*
 	 * This is O(N^2) for long chains, but chains are never long
 	 * and we do want to preserve order.
@@ -239,6 +176,16 @@ intr_establish(int level, struct intrhand *ih)
 	ih->ih_pending = 0; /* XXXX caller should have done this before */
 	ih->ih_next = NULL;
 
+#ifdef MULTIPROCESSOR
+	if (!mpsafe) {
+		ih->ih_realarg = ih->ih_arg;
+		ih->ih_realfun = ih->ih_fun;
+		ih->ih_arg = ih;
+		ih->ih_fun = intr_biglock_wrapper;
+	}
+#endif
+
+	s = splhigh();
 	/*
 	 * Store in fast lookup table
 	 */
@@ -287,39 +234,36 @@ intr_establish(int level, struct intrhand *ih)
 	} else
 		panic("intr_establish: bad intr number %x", ih->ih_number);
 
-	/* If it's not shared, stick it in the intrhand list for that level. */
-	if (q == NULL) {
-		for (p = &intrhand[level]; (q = *p) != NULL; p = &q->ih_next)
-			;
-		*p = ih;
-	}
-
 	splx(s);
 }
 
+/*
+ * Prepare an interrupt handler used for send_softint.
+ */
 void *
-softintr_establish(int level, void (*fun)(void *), void *arg)
+sparc_softintr_establish(int pil, int (*fun)(void *), void *arg)
 {
 	struct intrhand *ih;
 
-	ih = malloc(sizeof(*ih), M_DEVBUF, 0);
-	memset(ih, 0, sizeof(*ih));
-	ih->ih_fun = (int (*)(void *))fun;	/* XXX */
+	ih = malloc(sizeof(struct intrhand), M_DEVBUF, M_NOWAIT|M_ZERO);
+	if (ih == NULL)
+		panic("could not allocate softint interrupt handler");
+
+	ih->ih_fun = fun;
+	ih->ih_pil = pil;
 	ih->ih_arg = arg;
-	ih->ih_pil = level;
-	ih->ih_pending = 0;
-	ih->ih_clr = NULL;
-	return (void *)ih;
+	return ih;
 }
 
 void
-softintr_disestablish(void *cookie)
+sparc_softintr_disestablish(void *cookie)
 {
+
 	free(cookie, M_DEVBUF);
 }
 
 void
-softintr_schedule(void *cookie)
+sparc_softintr_schedule(void *cookie)
 {
 	struct intrhand *ih = (struct intrhand *)cookie;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ffb.c,v 1.31 2006/10/15 19:55:32 martin Exp $	*/
+/*	$NetBSD: ffb.c,v 1.35 2008/08/28 19:17:55 martin Exp $	*/
 /*	$OpenBSD: creator.c,v 1.20 2002/07/30 19:48:15 jason Exp $	*/
 
 /*
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffb.c,v 1.31 2006/10/15 19:55:32 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffb.c,v 1.35 2008/08/28 19:17:55 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -88,7 +88,7 @@ struct wsscreen_list ffb_screenlist = {
 
 static struct vcons_screen ffb_console_screen;
 
-int	ffb_ioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
+int	ffb_ioctl(void *, void *, u_long, void *, int, struct lwp *);
 static int ffb_blank(struct ffb_softc *, u_long, u_int *);
 paddr_t ffb_mmap(void *, void *, off_t, int);
 void	ffb_ras_fifo_wait(struct ffb_softc *, int);
@@ -194,7 +194,7 @@ ffb_attach(struct ffb_softc *sc)
 	printf(", model %s, dac %u\n", model, sc->sc_dacrev);
 	if (sc->sc_needredraw) 
 		printf("%s: found old DAC, enabling redraw on unblank\n", 
-		    sc->sc_dv.dv_xname);
+		    device_xname(&sc->sc_dv));
 
 	ffb_blank(sc, WSDISPLAYIO_SVIDEO, &blank);
 
@@ -253,7 +253,7 @@ ffb_attach(struct ffb_softc *sc)
 }
 
 int
-ffb_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flags, struct lwp *l)
+ffb_ioctl(void *v, void *vs, u_long cmd, void *data, int flags, struct lwp *l)
 {
 	struct vcons_data *vd = v;
 	struct ffb_softc *sc = vd->cookie;
@@ -262,7 +262,7 @@ ffb_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flags, struct lwp *l)
 	
 #ifdef FFBDEBUG
 	printf("ffb_ioctl: %s cmd _IO%s%s('%c', %lu)\n",
-	       sc->sc_dv.dv_xname,
+	       device_xname(&sc->sc_dv),
 	       (cmd & IOC_IN) ? "W" : "", (cmd & IOC_OUT) ? "R" : "",
 	       (char)IOCGROUP(cmd), cmd & 0xff);
 #endif
@@ -299,13 +299,13 @@ ffb_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flags, struct lwp *l)
 		/* the console driver is not using the hardware cursor */
 		break;
 	case FBIOGCURPOS:
-		printf("%s: FBIOGCURPOS not implemented\n", sc->sc_dv.dv_xname);
+		printf("%s: FBIOGCURPOS not implemented\n", device_xname(&sc->sc_dv));
 		return EIO;
 	case FBIOSCURPOS:
-		printf("%s: FBIOSCURPOS not implemented\n", sc->sc_dv.dv_xname);
+		printf("%s: FBIOSCURPOS not implemented\n", device_xname(&sc->sc_dv));
 		return EIO;
 	case FBIOGCURMAX:
-		printf("%s: FBIOGCURMAX not implemented\n", sc->sc_dv.dv_xname);
+		printf("%s: FBIOGCURMAX not implemented\n", device_xname(&sc->sc_dv));
 		return EIO;
 
 	case WSDISPLAYIO_GTYPE:
@@ -613,7 +613,7 @@ ffb_ras_setfg(struct ffb_softc *sc, int32_t fg)
 static void
 ffbfb_unblank(struct device *dev)
 {
-	struct ffb_softc *sc = (struct ffb_softc *)dev;
+	struct ffb_softc *sc = device_private(dev);
 	struct vcons_screen *ms = sc->vd.active;
 	u_int on = 1;
 	int redraw = 0;
@@ -649,10 +649,9 @@ int
 ffbfb_open(dev_t dev, int flags, int mode, struct lwp *l)
 {
 	struct ffb_softc *sc;
-	int unit = minor(dev);
 
-	sc = ffb_cd.cd_devs[unit];
-	if (unit >= ffb_cd.cd_ndevs || ffb_cd.cd_devs[unit] == NULL)
+	sc = device_lookup_private(&ffb_cd, minor(dev));
+	if (sc == NULL)
 		return ENXIO;
 		
 	sc->sc_locked = 1;
@@ -662,7 +661,7 @@ ffbfb_open(dev_t dev, int flags, int mode, struct lwp *l)
 int
 ffbfb_close(dev_t dev, int flags, int mode, struct lwp *l)
 {
-	struct ffb_softc *sc = ffb_cd.cd_devs[minor(dev)];
+	struct ffb_softc *sc = device_lookup_private(&ffb_cd, minor(dev));
 	struct vcons_screen *ms = sc->vd.active;
 	
 	sc->sc_locked = 0;
@@ -677,9 +676,9 @@ ffbfb_close(dev_t dev, int flags, int mode, struct lwp *l)
 }
 
 int
-ffbfb_ioctl(dev_t dev, u_long cmd, caddr_t data, int flags, struct lwp *l)
+ffbfb_ioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 {
-	struct ffb_softc *sc = ffb_cd.cd_devs[minor(dev)];
+	struct ffb_softc *sc = device_lookup_private(&ffb_cd, minor(dev));
 
 	return ffb_ioctl(&sc->vd, NULL, cmd, data, flags, l);
 }
@@ -687,7 +686,7 @@ ffbfb_ioctl(dev_t dev, u_long cmd, caddr_t data, int flags, struct lwp *l)
 paddr_t
 ffbfb_mmap(dev_t dev, off_t off, int prot)
 {
-	struct ffb_softc *sc = ffb_cd.cd_devs[minor(dev)];
+	struct ffb_softc *sc = device_lookup_private(&ffb_cd, minor(dev));
 	uint64_t size;
 	int i, reg;
 	off_t o;

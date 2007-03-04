@@ -1,7 +1,11 @@
-/* $NetBSD: vsxxx.c,v 1.7 2006/11/12 19:00:43 plunky Exp $ */
+/* $NetBSD: vsxxx.c,v 1.10 2008/06/12 21:51:12 cegger Exp $ */
 
-/*
- * Copyright (c) 1999 Tohru Nishimura.  All rights reserved.
+/*-
+ * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Tohru Nishimura.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,27 +15,22 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Tohru Nishimura.
- *	for the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vsxxx.c,v 1.7 2006/11/12 19:00:43 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vsxxx.c,v 1.10 2008/06/12 21:51:12 cegger Exp $");
 
 /*
  * Common machinary for VSXXX mice and tablet
@@ -77,7 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: vsxxx.c,v 1.7 2006/11/12 19:00:43 plunky Exp $");
 extern struct cfdriver vsms_cd;
 
 static int  vsxxx_enable(void *);
-static int  vsxxx_ioctl(void *, u_long, caddr_t, int, struct proc *);
+static int  vsxxx_ioctl(void *, u_long, void *, int, struct proc *);
 static void vsxxx_disable(void *);
 
 struct wsmouse_accessops vsxxx_accessops = {	/* EXPORT */
@@ -107,7 +106,7 @@ static int
 vsxxx_ioctl(v, cmd, data, flag, p)
 	void *v;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 	int flag;
 	struct proc *p;
 {
@@ -119,10 +118,9 @@ vsxxx_ioctl(v, cmd, data, flag, p)
 }
 
 /* EXPORT */ void
-vsxxx_input(data)
-	int data;
+vsxxx_input(int data)
 {
-	struct vsxxx_softc *sc = (void *)vsms_cd.cd_devs[0];
+	struct vsxxx_softc *sc = device_lookup_private(&vsms_cd, 0);
 	int x, y;
 
 	if (data & VS_START_FRAME)

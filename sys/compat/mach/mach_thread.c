@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_thread.c,v 1.39 2007/02/09 21:55:22 ad Exp $ */
+/*	$NetBSD: mach_thread.c,v 1.48 2008/10/15 06:51:19 wrstuden Exp $ */
 
 /*-
  * Copyright (c) 2002-2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,18 +30,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_thread.c,v 1.39 2007/02/09 21:55:22 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_thread.c,v 1.48 2008/10/15 06:51:19 wrstuden Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/signal.h>
-#include <sys/lock.h>
+#include <sys/rwlock.h>
 #include <sys/queue.h>
 #include <sys/proc.h>
 #include <sys/resource.h>
 #include <sys/resourcevar.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 
 #include <compat/mach/mach_types.h>
 #include <compat/mach/mach_message.h>
@@ -62,14 +57,13 @@ __KERNEL_RCSID(0, "$NetBSD: mach_thread.c,v 1.39 2007/02/09 21:55:22 ad Exp $");
 #include <compat/mach/mach_syscallargs.h>
 
 int
-mach_sys_syscall_thread_switch(struct lwp *l, void *v,
-    register_t *retval)
+mach_sys_syscall_thread_switch(struct lwp *l, const struct mach_sys_syscall_thread_switch_args *uap, register_t *retval)
 {
-	struct mach_sys_syscall_thread_switch_args /* {
+	/* {
 		syscallarg(mach_port_name_t) thread_name;
 		syscallarg(int) option;
 		syscallarg(mach_msg_timeout_t) option_time;
-	} */ *uap = v;
+	} */
 	int timeout;
 	struct mach_emuldata *med;
 
@@ -108,13 +102,11 @@ mach_sys_syscall_thread_switch(struct lwp *l, void *v,
 }
 
 int
-mach_sys_swtch_pri(struct lwp *l, void *v, register_t *retval)
+mach_sys_swtch_pri(struct lwp *l, const struct mach_sys_swtch_pri_args *uap, register_t *retval)
 {
-#if 0	/* pri is not used yet */
-	struct mach_sys_swtch_pri_args /* {
+	/* {
 		syscallarg(int) pri;
-	} */ *uap = v;
-#endif
+	} */
 
 	/*
 	 * Copied from preempt(9). We cannot just call preempt
@@ -122,18 +114,16 @@ mach_sys_swtch_pri(struct lwp *l, void *v, register_t *retval)
 	 */
 	KERNEL_UNLOCK_ALL(l, &l->l_biglocks);
 	lwp_lock(l);
-	if (l->l_stat == LSONPROC) {
-		l->l_priority = l->l_usrpri;
+	if (l->l_stat == LSONPROC)
 		l->l_proc->p_stats->p_ru.ru_nivcsw++;	/* XXXSMP */
-	}
-	*retval = mi_switch(l, NULL);
+	*retval = mi_switch(l);
 	KERNEL_LOCK(l->l_biglocks, l);
 
 	return 0;
 }
 
 int
-mach_sys_swtch(struct lwp *l, void *v, register_t *retval)
+mach_sys_swtch(struct lwp *l, const void *v, register_t *retval)
 {
 	struct mach_sys_swtch_pri_args cup;
 
@@ -144,8 +134,7 @@ mach_sys_swtch(struct lwp *l, void *v, register_t *retval)
 
 
 int
-mach_thread_policy(args)
-	struct mach_trap_args *args;
+mach_thread_policy(struct mach_trap_args *args)
 {
 	mach_thread_policy_request_t *req = args->smsg;
 	mach_thread_policy_reply_t *rep = args->rmsg;
@@ -172,8 +161,7 @@ mach_thread_policy(args)
 
 /* XXX it might be possible to use this on another task */
 int
-mach_thread_create_running(args)
-	struct mach_trap_args *args;
+mach_thread_create_running(struct mach_trap_args *args)
 {
 	mach_thread_create_running_request_t *req = args->smsg;
 	mach_thread_create_running_reply_t *rep = args->rmsg;
@@ -207,21 +195,25 @@ mach_thread_create_running(args)
                 return (ENOMEM);
 
 	flags = 0;
-	if ((error = newlwp(l, p, uaddr, inmem, flags, NULL, 0,
-	    mach_create_thread_child, (void *)&mctc, &mctc.mctc_lwp)) != 0)
+	if ((error = lwp_create(l, p, uaddr, inmem, flags, NULL, 0,
+	    mach_create_thread_child, (void *)&mctc, &mctc.mctc_lwp,
+	    SCHED_OTHER)) != 0)
+	{
+		uvm_uarea_free(uaddr, curcpu());
 		return mach_msg_error(args, error);
+	}
 
 	/*
 	 * Make the child runnable.
 	 */
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	lwp_lock(mctc.mctc_lwp);
 	mctc.mctc_lwp->l_private = 0;
 	mctc.mctc_lwp->l_stat = LSRUN;
-	setrunqueue(mctc.mctc_lwp);
+	sched_enqueue(mctc.mctc_lwp, false);
 	p->p_nrlwps++;
 	lwp_unlock(mctc.mctc_lwp);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	/*
 	 * Get the child's kernel port
@@ -248,8 +240,7 @@ mach_thread_create_running(args)
 }
 
 int
-mach_thread_info(args)
-	struct mach_trap_args *args;
+mach_thread_info(struct mach_trap_args *args)
 {
 	mach_thread_info_request_t *req = args->smsg;
 	mach_thread_info_reply_t *rep = args->rmsg;
@@ -318,11 +309,11 @@ mach_thread_info(args)
 
 		pti = (struct mach_policy_timeshare_info *)rep->rep_out;
 
-		pti->max_priority = tl->l_usrpri;
-		pti->base_priority = tl->l_usrpri;
-		pti->cur_priority = tl->l_usrpri;
+		pti->max_priority = tl->l_priority;
+		pti->base_priority = tl->l_priority;
+		pti->cur_priority = tl->l_priority;
 		pti->depressed = 0;
-		pti->depress_priority = tl->l_usrpri;
+		pti->depress_priority = tl->l_priority;
 		break;
 	}
 
@@ -341,8 +332,7 @@ mach_thread_info(args)
 }
 
 int
-mach_thread_get_state(args)
-	struct mach_trap_args *args;
+mach_thread_get_state(struct mach_trap_args *args)
 {
 	mach_thread_get_state_request_t *req = args->smsg;
 	mach_thread_get_state_reply_t *rep = args->rmsg;
@@ -368,8 +358,7 @@ mach_thread_get_state(args)
 }
 
 int
-mach_thread_set_state(args)
-	struct mach_trap_args *args;
+mach_thread_set_state(struct mach_trap_args *args)
 {
 	mach_thread_set_state_request_t *req = args->smsg;
 	mach_thread_set_state_reply_t *rep = args->rmsg;
@@ -398,8 +387,7 @@ mach_thread_set_state(args)
 }
 
 int
-mach_thread_suspend(args)
-	struct mach_trap_args *args;
+mach_thread_suspend(struct mach_trap_args *args)
 {
 	mach_thread_suspend_request_t *req = args->smsg;
 	mach_thread_suspend_reply_t *rep = args->rmsg;
@@ -409,10 +397,10 @@ mach_thread_suspend(args)
 	struct proc *p = tl->l_proc;
 	int error;
 
-	mutex_enter(&p->p_mutex);
+	mutex_enter(p->p_lock);
 	lwp_lock(tl);
 	error = lwp_suspend(l, tl);
-	mutex_exit(&p->p_mutex);
+	mutex_exit(p->p_lock);
 
 	*msglen = sizeof(*rep);
 	mach_set_header(rep, req, *msglen);
@@ -423,8 +411,7 @@ mach_thread_suspend(args)
 }
 
 int
-mach_thread_resume(args)
-	struct mach_trap_args *args;
+mach_thread_resume(struct mach_trap_args *args)
 {
 	mach_thread_resume_request_t *req = args->smsg;
 	mach_thread_resume_reply_t *rep = args->rmsg;
@@ -432,10 +419,10 @@ mach_thread_resume(args)
 	struct lwp *tl = args->tl;
 	struct proc *p = tl->l_proc;
 
-	mutex_enter(&p->p_mutex);
+	mutex_enter(p->p_lock);
 	lwp_lock(tl);
 	lwp_continue(tl);
-	mutex_exit(&p->p_mutex);
+	mutex_exit(p->p_lock);
 
 	*msglen = sizeof(*rep);
 	mach_set_header(rep, req, *msglen);
@@ -446,8 +433,7 @@ mach_thread_resume(args)
 }
 
 int
-mach_thread_abort(args)
-	struct mach_trap_args *args;
+mach_thread_abort(struct mach_trap_args *args)
 {
 	mach_thread_abort_request_t *req = args->smsg;
 	mach_thread_abort_reply_t *rep = args->rmsg;
@@ -465,8 +451,7 @@ mach_thread_abort(args)
 }
 
 int
-mach_thread_set_policy(args)
-	struct mach_trap_args *args;
+mach_thread_set_policy(struct mach_trap_args *args)
 {
 	mach_thread_set_policy_request_t *req = args->smsg;
 	mach_thread_set_policy_reply_t *rep = args->rmsg;

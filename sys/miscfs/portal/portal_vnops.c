@@ -1,4 +1,4 @@
-/*	$NetBSD: portal_vnops.c,v 1.70 2007/02/09 21:55:36 ad Exp $	*/
+/*	$NetBSD: portal_vnops.c,v 1.79 2008/04/24 11:38:37 ad Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: portal_vnops.c,v 1.70 2007/02/09 21:55:36 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: portal_vnops.c,v 1.79 2008/04/24 11:38:37 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,7 +105,7 @@ int	portal_reclaim(void *);
 int	portal_print(void *);
 #define	portal_islocked	genfs_islocked
 int	portal_pathconf(void *);
-#define	portal_advlock	genfs_badop
+#define	portal_advlock	genfs_eopnotsupp
 #define	portal_bwrite	genfs_eopnotsupp
 #define	portal_putpages	genfs_null_putpages
 
@@ -213,6 +213,7 @@ portal_lookup(v)
 	if (error)
 		goto bad;
 	fvp->v_type = VREG;
+	uvm_vnp_setsize(fvp, 0);
 	MALLOC(fvp->v_data, void *, sizeof(struct portalnode), M_TEMP,
 	    M_WAITOK);
 
@@ -233,8 +234,8 @@ portal_lookup(v)
 	memcpy(pt->pt_arg, pname, pt->pt_size);
 	pt->pt_fileid = portal_fileid++;
 
+	vn_lock(fvp, LK_EXCLUSIVE | LK_RETRY);
 	*vpp = fvp;
-	VOP_LOCK(fvp, LK_EXCLUSIVE | LK_RETRY);
 	return (0);
 
 bad:;
@@ -253,8 +254,7 @@ portal_connect(so, so2)
 	struct unpcb *unp2;
 	struct unpcb *unp3;
 
-	if (so2 == 0)
-		return (ECONNREFUSED);
+	KASSERT(solocked2(so, so2));
 
 	if (so->so_type != so2->so_type)
 		return (EPROTOTYPE);
@@ -287,13 +287,11 @@ portal_open(v)
 		struct vnode *a_vp;
 		int  a_mode;
 		kauth_cred_t a_cred;
-		struct lwp *a_l;
 	} */ *ap = v;
-	struct socket *so = 0;
+	struct socket *so = 0, *so2;
 	struct portalnode *pt;
-	struct lwp *l = ap->a_l;
+	struct lwp *l = curlwp;
 	struct vnode *vp = ap->a_vp;
-	int s;
 	struct uio auio;
 	struct iovec aiov[2];
 	int res;
@@ -311,7 +309,7 @@ portal_open(v)
 	/*
 	 * Nothing to do when opening the root node.
 	 */
-	if (vp->v_flag & VROOT)
+	if (vp->v_vflag & VV_ROOT)
 		return (0);
 
 	/*
@@ -324,11 +322,17 @@ portal_open(v)
 
 	pt = VTOPORTAL(vp);
 	fmp = VFSTOPORTAL(vp->v_mount);
+	so2 = fmp->pm_server->f_data;
+
+	if (so2 == NULL) {
+		/* XXX very fishy */
+		return ECONNREFUSED;
+	}
 
 	/*
 	 * Create a new socket.
 	 */
-	error = socreate(AF_LOCAL, &so, SOCK_STREAM, 0, l);
+	error = socreate(AF_LOCAL, &so, SOCK_STREAM, 0, l, so2);
 	if (error)
 		goto bad;
 
@@ -336,16 +340,21 @@ portal_open(v)
 	 * Reserve some buffer space
 	 */
 	res = pt->pt_size + sizeof(pcred) + 512;	/* XXX */
+	solock(so);
 	error = soreserve(so, res, res);
-	if (error)
+	if (error) {
+		sounlock(so);
 		goto bad;
+	}
 
 	/*
 	 * Kick off connection
 	 */
-	error = portal_connect(so, (struct socket *)fmp->pm_server->f_data);
-	if (error)
+	error = portal_connect(so, so2);
+	if (error) {
+		sounlock(so);
 		goto bad;
+	}
 
 	/*
 	 * Wait for connection to complete
@@ -360,19 +369,17 @@ portal_open(v)
 	 * will happen if the server dies.  Sleep for 5 second intervals
 	 * and keep polling the reference count.   XXX.
 	 */
-	s = splsoftnet();
 	while ((so->so_state & SS_ISCONNECTING) && so->so_error == 0) {
 		if (fmp->pm_server->f_count == 1) {
 			error = ECONNREFUSED;
-			splx(s);
+			sounlock(so);
 			goto bad;
 		}
-		(void) tsleep(&so->so_timeo, PSOCK, "portalcon", 5 * hz);
+		sowait(so, 5 * hz);
 	}
-	splx(s);
-
 	if (so->so_error) {
 		error = so->so_error;
+		sounlock(so);
 		goto bad;
 	}
 
@@ -383,13 +390,14 @@ portal_open(v)
 	so->so_snd.sb_timeo = 0;
 	so->so_rcv.sb_flags |= SB_NOINTR;
 	so->so_snd.sb_flags |= SB_NOINTR;
-
+	sounlock(so);
 
 	pcred.pcr_flag = ap->a_mode;
 	pcred.pcr_uid = kauth_cred_geteuid(ap->a_cred);
 	pcred.pcr_gid = kauth_cred_getegid(ap->a_cred);
 	pcred.pcr_ngroups = kauth_cred_ngroups(ap->a_cred);
-	kauth_cred_getgroups(ap->a_cred, pcred.pcr_groups, pcred.pcr_ngroups);
+	kauth_cred_getgroups(ap->a_cred, pcred.pcr_groups, pcred.pcr_ngroups,
+	    UIO_SYSSPACE);
 	aiov[0].iov_base = &pcred;
 	aiov[0].iov_len = sizeof(pcred);
 	aiov[1].iov_base = pt->pt_arg;
@@ -401,8 +409,7 @@ portal_open(v)
 	auio.uio_resid = aiov[0].iov_len + aiov[1].iov_len;
 	UIO_SETUP_SYSSPACE(&auio);
 
-	error = (*so->so_send)(so, (struct mbuf *) 0, &auio,
-			(struct mbuf *) 0, (struct mbuf *) 0, 0, l);
+	error = (*so->so_send)(so, NULL, &auio, NULL, NULL, 0, l);
 	if (error)
 		goto bad;
 
@@ -483,7 +490,7 @@ portal_open(v)
 	 * Check that the mode the file is being opened for is a subset
 	 * of the mode of the existing descriptor.
 	 */
- 	fp = l->l_proc->p_fd->fd_ofiles[fd];
+ 	fp = l->l_proc->p_fd->fd_ofiles[fd]->ff_file;
 	if (((ap->a_mode & (FREAD|FWRITE)) | fp->f_flag) != fp->f_flag) {
 		portal_closefd(l, fd); /* XXXNJWLWP */
 		error = EACCES;
@@ -507,7 +514,9 @@ bad:;
 	}
 
 	if (so) {
+		solock(so);
 		soshutdown(so, 2);
+		sounlock(so);
 		soclose(so);
 	}
 	return (error);
@@ -521,7 +530,6 @@ portal_getattr(v)
 		struct vnode *a_vp;
 		struct vattr *a_vap;
 		kauth_cred_t a_cred;
-		struct lwp *a_l;
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct vattr *vap = ap->a_vap;
@@ -536,14 +544,13 @@ portal_getattr(v)
 	/* Make all times be current TOD. */
 	getnanotime(&vap->va_ctime);
 	vap->va_atime = vap->va_mtime = vap->va_ctime;
-	vap->va_atime = vap->va_mtime = vap->va_ctime;
 	vap->va_gen = 0;
 	vap->va_flags = 0;
 	vap->va_rdev = 0;
 	/* vap->va_qbytes = 0; */
 	vap->va_bytes = 0;
 	/* vap->va_qsize = 0; */
-	if (vp->v_flag & VROOT) {
+	if (vp->v_vflag & VV_ROOT) {
 		vap->va_type = VDIR;
 		vap->va_mode = S_IRUSR|S_IWUSR|S_IXUSR|
 				S_IRGRP|S_IWGRP|S_IXGRP|
@@ -569,13 +576,12 @@ portal_setattr(v)
 		struct vnode *a_vp;
 		struct vattr *a_vap;
 		kauth_cred_t a_cred;
-		struct lwp *a_l;
 	} */ *ap = v;
 
 	/*
 	 * Can't mess with the root vnode
 	 */
-	if (ap->a_vp->v_flag & VROOT)
+	if (ap->a_vp->v_vflag & VV_ROOT)
 		return (EACCES);
 
 	return (0);
@@ -600,7 +606,6 @@ portal_inactive(v)
 {
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
-		struct lwp *a_l;
 	} */ *ap = v;
 
 	VOP_UNLOCK(ap->a_vp, 0);

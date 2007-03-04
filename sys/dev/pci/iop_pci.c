@@ -1,4 +1,4 @@
-/*	$NetBSD: iop_pci.c,v 1.18 2006/11/16 01:33:09 christos Exp $	*/
+/*	$NetBSD: iop_pci.c,v 1.23 2008/04/28 20:23:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,9 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iop_pci.c,v 1.18 2006/11/16 01:33:09 christos Exp $");
-
-#include "opt_i2o.h"
+__KERNEL_RCSID(0, "$NetBSD: iop_pci.c,v 1.23 2008/04/28 20:23:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: iop_pci.c,v 1.18 2006/11/16 01:33:09 christos Exp $"
 #include <sys/proc.h>
 
 #include <machine/endian.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcivar.h>
@@ -149,7 +140,7 @@ iop_pci_attach(struct device *parent, struct device *self, void *aux)
 	/* Map the register window. */
 	if (pci_mapreg_map(pa, i, PCI_MAPREG_TYPE_MEM, 0, &sc->sc_iot,
 	    &sc->sc_ioh, NULL, NULL)) {
-		printf("%s: can't map register window\n", sc->sc_dv.dv_xname);
+		aprint_error_dev(&sc->sc_dv, "can't map register window\n");
 		return;
 	}
 
@@ -169,8 +160,7 @@ iop_pci_attach(struct device *parent, struct device *self, void *aux)
 #endif
 		if (pci_mapreg_map(pa, i, PCI_MAPREG_TYPE_MEM, 0,
 		    &sc->sc_msg_iot, &sc->sc_msg_ioh, NULL, NULL)) {
-			printf("%s: can't map 2nd register window\n",
-			    sc->sc_dv.dv_xname);
+			aprint_error_dev(&sc->sc_dv, "can't map 2nd register window\n");
 			return;
 		}
 	} else {
@@ -190,7 +180,7 @@ iop_pci_attach(struct device *parent, struct device *self, void *aux)
 	pci_conf_write(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG,
 		       reg | PCI_COMMAND_MASTER_ENABLE);
 
-	/* Map and establish the interrupt.  XXX IPL_BIO. */
+	/* Map and establish the interrupt.. */
 	if (pci_intr_map(pa, &ih)) {
 		printf("can't map interrupt\n");
 		return;

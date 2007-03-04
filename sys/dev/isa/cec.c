@@ -1,4 +1,4 @@
-/*	$NetBSD: cec.c,v 1.5 2007/01/10 20:38:32 cube Exp $	*/
+/*	$NetBSD: cec.c,v 1.9 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cec.c,v 1.5 2007/01/10 20:38:32 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cec.c,v 1.9 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,7 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: cec.c,v 1.5 2007/01/10 20:38:32 cube Exp $");
 #include <sys/device.h>
 #include <sys/kernel.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isavar.h>
 #include <dev/isa/isadmavar.h>
@@ -91,7 +84,7 @@ struct cec_softc {
 #define	CECF_TIMO	0x10
 #define CECF_USEDMA	0x20
 	int sc_ppoll_slave;		/* XXX stash our ppoll address */
-	struct callout sc_timeout_ch;
+	callout_t sc_timeout_ch;
 };
 
 int	cecprobe(struct device *, struct cfdata *, void *);
@@ -199,7 +192,7 @@ cecattach(struct device *parent, struct device *self, void *aux)
 
 	if (bus_space_map(sc->sc_iot, ia->ia_io[0].ir_addr, CEC_IOSIZE,
 	    0, &sc->sc_ioh) != 0) {
-		printf("%s: unable to map I/O space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to map I/O space\n");
 		return;
 	}
 
@@ -211,8 +204,8 @@ cecattach(struct device *parent, struct device *self, void *aux)
 		maxsize = isa_dmamaxsize(sc->sc_ic, sc->sc_drq);
 		if (isa_dmamap_create(sc->sc_ic, sc->sc_drq,
 		    maxsize, BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW)) {
-			printf("%s: unable to create map for drq %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_drq);
+			aprint_error_dev(&sc->sc_dev, "unable to create map for drq %d\n",
+			    sc->sc_drq);
 			sc->sc_flags &= ~CECF_USEDMA;
 		}
 	}
@@ -225,12 +218,11 @@ cecattach(struct device *parent, struct device *self, void *aux)
 	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 	    IST_EDGE, IPL_BIO, cecintr, sc);
 	if (sc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "couldn't establish interrupt\n");
 		return;
 	}
 
-	callout_init(&sc->sc_timeout_ch);
+	callout_init(&sc->sc_timeout_ch, 0);
 
 	/* attach MI GPIB bus */
 	cec_ic.cookie = (void *)sc;
@@ -706,7 +698,7 @@ cectimeout(void *v)
 		bus_space_write_1(iot, ioh, NEC7210_AUXMR, AUXCMD_TCA);
 		sc->sc_flags &= ~(CECF_IO | CECF_READ | CECF_TIMO);
 		isa_dmaabort(sc->sc_ic, sc->sc_drq);
-		printf("%s: %s timeout\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(&sc->sc_dev, "%s timeout\n",
 		    sc->sc_flags & CECF_READ ? "read" : "write");
 		gpibintr(sc->sc_gpib);
 	}

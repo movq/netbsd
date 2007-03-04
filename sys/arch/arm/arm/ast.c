@@ -1,4 +1,4 @@
-/*	$NetBSD: ast.c,v 1.10 2007/02/18 07:25:34 matt Exp $	*/
+/*	$NetBSD: ast.c,v 1.15 2008/07/22 07:07:23 matt Exp $	*/
 
 /*
  * Copyright (c) 1994,1995 Mark Brinicombe
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ast.c,v 1.10 2007/02/18 07:25:34 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ast.c,v 1.15 2008/07/22 07:07:23 matt Exp $");
 
 #include "opt_ddb.h"
 
@@ -69,19 +69,13 @@ __KERNEL_RCSID(0, "$NetBSD: ast.c,v 1.10 2007/02/18 07:25:34 matt Exp $");
 /*
  * Prototypes
  */
-void ast __P((struct trapframe *));
+void ast(struct trapframe *);
  
-int want_resched = 0;
-int astpending;
-
 void
 userret(struct lwp *l)
 {
-
 	/* Invoke MI userret code */
 	mi_userret(l);
-
-	curcpu()->ci_schedstate.spc_curpriority = l->l_priority = l->l_usrpri;
 }
 
 
@@ -111,7 +105,7 @@ ast(struct trapframe *tf)
 #ifdef DEBUG
 	if (l == NULL)
 		panic("ast: no curlwp!");
-	if (&l->l_addr->u_pcb == 0)
+	if (&l->l_addr->u_pcb == NULL)
 		panic("ast: no pcb!");
 #endif	
 
@@ -123,10 +117,8 @@ ast(struct trapframe *tf)
 	}
 
 	/* Allow a forced task switch. */
-	if (want_resched)
+	if (l->l_cpu->ci_want_resched)
 		preempt();
 
 	userret(l);
 }
-
-/* End of ast.c */

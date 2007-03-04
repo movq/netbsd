@@ -1,4 +1,4 @@
-/*	$NetBSD: agp_ali.c,v 1.11 2006/11/16 01:33:08 christos Exp $	*/
+/*	$NetBSD: agp_ali.c,v 1.15 2008/06/09 06:49:54 freza Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agp_ali.c,v 1.11 2006/11/16 01:33:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agp_ali.c,v 1.15 2008/06/09 06:49:54 freza Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -38,7 +38,6 @@ __KERNEL_RCSID(0, "$NetBSD: agp_ali.c,v 1.11 2006/11/16 01:33:08 christos Exp $"
 #include <sys/proc.h>
 #include <sys/conf.h>
 #include <sys/device.h>
-#include <sys/lock.h>
 #include <sys/agpio.h>
 
 #include <uvm/uvm_extern.h>
@@ -48,10 +47,9 @@ __KERNEL_RCSID(0, "$NetBSD: agp_ali.c,v 1.11 2006/11/16 01:33:08 christos Exp $"
 #include <dev/pci/agpvar.h>
 #include <dev/pci/agpreg.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 struct agp_ali_softc {
-	struct agp_softc agp;
 	u_int32_t	initial_aperture; /* aperture size at startup */
 	struct agp_gatt *gatt;
 };
@@ -77,9 +75,9 @@ static struct agp_methods agp_ali_methods = {
 };
 
 int
-agp_ali_attach(struct device *parent, struct device *self, void *aux)
+agp_ali_attach(device_t parent, device_t self, void *aux)
 {
-	struct agp_softc *sc = (struct agp_softc *)self;
+	struct agp_softc *sc = device_private(self);
 	struct agp_ali_softc *asc;
 	struct pci_attach_args *pa = aux;
 	struct agp_gatt *gatt;
@@ -169,14 +167,14 @@ static const u_int32_t agp_ali_table[] = {
 	0,			/* 0 - invalid */
 	1,			/* 1 - invalid */
 	2,			/* 2 - invalid */
-	4*M,			/* 3 - invalid */
-	8*M,			/* 4 - invalid */
-	0,			/* 5 - invalid */
-	16*M,			/* 6 - invalid */
-	32*M,			/* 7 - invalid */
-	64*M,			/* 8 - invalid */
-	128*M,			/* 9 - invalid */
-	256*M,			/* 10 - invalid */
+	4*M,			/* 3 */
+	8*M,			/* 4 */
+	0,			/* 5 - Reserved */
+	16*M,			/* 6 */
+	32*M,			/* 7 */
+	64*M,			/* 8 */
+	128*M,			/* 9 */
+	256*M,			/* 10 */
 };
 #define agp_ali_table_size (sizeof(agp_ali_table) / sizeof(agp_ali_table[0]))
 
@@ -200,6 +198,9 @@ agp_ali_set_aperture(struct agp_softc *sc, u_int32_t aperture)
 {
 	int i;
 	pcireg_t reg;
+
+	if (aperture & (aperture - 1) || aperture < 1*M)
+		return EINVAL;
 
 	for (i = 0; i < agp_ali_table_size; i++)
 		if (agp_ali_table[i] == aperture)

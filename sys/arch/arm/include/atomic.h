@@ -1,4 +1,4 @@
-/* $NetBSD: atomic.h,v 1.8 2007/02/28 23:46:17 bjh21 Exp $ */
+/* $NetBSD: atomic.h,v 1.10 2008/01/13 11:19:05 chris Exp $ */
 
 /*
  * Copyright (C) 1994-1997 Mark Brinicombe
@@ -46,7 +46,7 @@
 
 
 #ifndef _LOCORE
-
+#ifdef _KERNEL
 #include <sys/types.h>
 #include <arm/armreg.h>			/* I32_bit */
 
@@ -64,16 +64,16 @@ bool atomic_cas(volatile uintptr_t *, uintptr_t, uintptr_t);
 		__asm volatile(			\
 			"mrs  %0, cpsr;"		\
 			"orr  %1, %0, %2;"		\
-			"msr  cpsr_all, %1;"		\
+			"msr  cpsr_c, %1;"		\
 			: "=r" (cpsr_save), "=r" (tmp)	\
 			: "I" (I32_bit)		\
-		        : "cc" );		\
+		        );			\
 		(expr);				\
 		 __asm volatile(		\
-			"msr  cpsr_all, %0"	\
+			"msr  cpsr_c, %0"	\
 			: /* no output */	\
 			: "r" (cpsr_save)	\
-			: "cc" );		\
+			);			\
 	} while(0)
 #else /* __PROG26 */
 #define __with_interrupts_disabled(expr)				\
@@ -128,5 +128,6 @@ inline_atomic_cas(volatile uintptr_t *cell, uintptr_t old, uintptr_t new)
 
 #undef __with_interrupts_disabled
 
+#endif /* _KERNEL */
 #endif /* _LOCORE */
 #endif /* _ARM_ATOMIC_H_ */

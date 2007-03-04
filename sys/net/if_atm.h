@@ -1,4 +1,4 @@
-/*      $NetBSD: if_atm.h,v 1.16 2007/02/17 22:34:08 dyoung Exp $       */
+/*      $NetBSD: if_atm.h,v 1.18 2008/02/20 17:05:52 matt Exp $       */
 
 /*
  *
@@ -64,7 +64,7 @@
  */
 
 struct atm_pseudohdr {
-  u_int8_t atm_ph[4];	/* flags+VPI+VCI1(msb)+VCI2(lsb) */
+  uint8_t atm_ph[4];	/* flags+VPI+VCI1(msb)+VCI2(lsb) */
 };
 
 #define ATM_PH_FLAGS(X)	((X)->atm_ph[0])
@@ -125,9 +125,9 @@ struct pvctxreq {
 
 #define ATMLLC_HDR "\252\252\3\0\0\0"
 struct atmllc {
-  u_int8_t llchdr[6];	/* aa.aa.03.00.00.00 */
-  u_int8_t type[2];	/* "ethernet" type */
-} __attribute__((__packed__));
+  uint8_t llchdr[6];	/* aa.aa.03.00.00.00 */
+  uint8_t type[2];	/* "ethernet" type */
+} __packed;
 
 /* ATM_LLC macros: note type code in host byte order */
 #define ATM_LLC_TYPE(X) (((X)->type[0] << 8) | ((X)->type[1]))

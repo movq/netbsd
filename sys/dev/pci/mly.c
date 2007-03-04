@@ -1,4 +1,4 @@
-/*	$NetBSD: mly.c,v 1.33 2006/12/02 03:10:43 elad Exp $	*/
+/*	$NetBSD: mly.c,v 1.39 2008/06/08 12:43:52 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -77,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mly.c,v 1.33 2006/12/02 03:10:43 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mly.c,v 1.39 2008/06/08 12:43:52 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,7 +88,7 @@ __KERNEL_RCSID(0, "$NetBSD: mly.c,v 1.33 2006/12/02 03:10:43 elad Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/scsipi/scsi_all.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -123,9 +116,9 @@ static void	mly_check_event(struct mly_softc *);
 static void	mly_complete_event(struct mly_softc *, struct mly_ccb *);
 static void	mly_complete_rescan(struct mly_softc *, struct mly_ccb *);
 static int	mly_dmamem_alloc(struct mly_softc *, int, bus_dmamap_t *,
-				 caddr_t *, bus_addr_t *, bus_dma_segment_t *);
+				 void **, bus_addr_t *, bus_dma_segment_t *);
 static void	mly_dmamem_free(struct mly_softc *, int, bus_dmamap_t,
-				caddr_t, bus_dma_segment_t *);
+				void *, bus_dma_segment_t *);
 static int	mly_enable_mmbox(struct mly_softc *);
 static void	mly_fetch_event(struct mly_softc *);
 static int	mly_get_controllerinfo(struct mly_softc *);
@@ -138,7 +131,6 @@ static void	mly_release_ccbs(struct mly_softc *);
 static int	mly_scan_btl(struct mly_softc *, int, int);
 static void	mly_scan_channel(struct mly_softc *, int);
 static void	mly_thread(void *);
-static void	mly_thread_create(void *);
 
 static int	mly_ccb_alloc(struct mly_softc *, struct mly_ccb **);
 static void	mly_ccb_complete(struct mly_softc *, struct mly_ccb *);
@@ -153,7 +145,7 @@ static int	mly_ccb_wait(struct mly_softc *, struct mly_ccb *, int);
 static void	mly_get_xfer_mode(struct mly_softc *, int,
 				  struct scsipi_xfer_mode *);
 static void	mly_scsipi_complete(struct mly_softc *, struct mly_ccb *);
-static int	mly_scsipi_ioctl(struct scsipi_channel *, u_long, caddr_t,
+static int	mly_scsipi_ioctl(struct scsipi_channel *, u_long, void *,
 				 int, struct proc *);
 static void	mly_scsipi_minphys(struct buf *);
 static void	mly_scsipi_request(struct scsipi_channel *,
@@ -337,7 +329,7 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 		mly->mly_iot = iot;
 		mly->mly_ioh = ioh;
 	} else {
-		printf("%s: can't map i/o or memory space\n", self->dv_xname);
+		aprint_error_dev(self, "can't map i/o or memory space\n");
 		return;
 	}
 
@@ -352,13 +344,13 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 	 * Map and establish the interrupt.
 	 */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: can't map interrupt\n", self->dv_xname);
+		aprint_error_dev(self, "can't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	mly->mly_ih = pci_intr_establish(pc, ih, IPL_BIO, mly_intr, mly);
 	if (mly->mly_ih == NULL) {
-		printf("%s: can't establish interrupt", self->dv_xname);
+		aprint_error_dev(self, "can't establish interrupt");
 		if (intrstr != NULL)
 			printf(" at %s", intrstr);
 		printf("\n");
@@ -366,7 +358,7 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	if (intrstr != NULL)
-		printf("%s: interrupting at %s\n", mly->mly_dv.dv_xname,
+		printf("%s: interrupting at %s\n", device_xname(&mly->mly_dv),
 		    intrstr);
 
 	/*
@@ -400,11 +392,11 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 	 * Allocate and map the scatter/gather lists.
 	 */
 	rv = mly_dmamem_alloc(mly, MLY_SGL_SIZE * MLY_MAX_CCBS,
-	    &mly->mly_sg_dmamap, (caddr_t *)&mly->mly_sg,
+	    &mly->mly_sg_dmamap, (void **)&mly->mly_sg,
 	    &mly->mly_sg_busaddr, &mly->mly_sg_seg);
 	if (rv) {
 		printf("%s: unable to allocate S/G maps\n",
-		    mly->mly_dv.dv_xname);
+		    device_xname(&mly->mly_dv));
 		goto bad;
 	}
 	state++;
@@ -413,11 +405,10 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 	 * Allocate and map the memory mailbox.
 	 */
 	rv = mly_dmamem_alloc(mly, sizeof(struct mly_mmbox),
-	    &mly->mly_mmbox_dmamap, (caddr_t *)&mly->mly_mmbox,
+	    &mly->mly_mmbox_dmamap, (void **)&mly->mly_mmbox,
 	    &mly->mly_mmbox_busaddr, &mly->mly_mmbox_seg);
 	if (rv) {
-		printf("%s: unable to allocate mailboxes\n",
-		    mly->mly_dv.dv_xname);
+		aprint_error_dev(&mly->mly_dv, "unable to allocate mailboxes\n");
 		goto bad;
 	}
 	state++;
@@ -439,8 +430,7 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 	 * platforms where the controller BIOS does not run.
 	 */
 	if (mly_fwhandshake(mly)) {
-		printf("%s: unable to bring controller online\n",
-		    mly->mly_dv.dv_xname);
+		aprint_error_dev(&mly->mly_dv, "unable to bring controller online\n");
 		goto bad;
 	}
 
@@ -450,20 +440,17 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 	 * know how many we want.
 	 */
 	if (mly_alloc_ccbs(mly)) {
-		printf("%s: unable to allocate CCBs\n",
-		    mly->mly_dv.dv_xname);
+		aprint_error_dev(&mly->mly_dv, "unable to allocate CCBs\n");
 		goto bad;
 	}
 	state++;
 	if (mly_get_controllerinfo(mly)) {
-		printf("%s: unable to retrieve controller info\n",
-		    mly->mly_dv.dv_xname);
+		aprint_error_dev(&mly->mly_dv, "unable to retrieve controller info\n");
 		goto bad;
 	}
 	mly_release_ccbs(mly);
 	if (mly_alloc_ccbs(mly)) {
-		printf("%s: unable to allocate CCBs\n",
-		    mly->mly_dv.dv_xname);
+		aprint_error_dev(&mly->mly_dv, "unable to allocate CCBs\n");
 		state--;
 		goto bad;
 	}
@@ -473,8 +460,7 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 	 * initial health status buffer.
 	 */
 	if (mly_get_eventstatus(mly)) {
-		printf("%s: unable to retrieve event status\n",
-		    mly->mly_dv.dv_xname);
+		aprint_error_dev(&mly->mly_dv, "unable to retrieve event status\n");
 		goto bad;
 	}
 
@@ -482,8 +468,7 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 	 * Enable memory-mailbox mode.
 	 */
 	if (mly_enable_mmbox(mly)) {
-		printf("%s: unable to enable memory mailbox\n",
-		    mly->mly_dv.dv_xname);
+		aprint_error_dev(&mly->mly_dv, "unable to enable memory mailbox\n");
 		goto bad;
 	}
 
@@ -493,7 +478,7 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 	mi = mly->mly_controllerinfo;
 
 	printf("%s: %d physical channel%s, firmware %d.%02d-%d-%02d "
-	    "(%02d%02d%02d%02d), %dMB RAM\n", mly->mly_dv.dv_xname,
+	    "(%02d%02d%02d%02d), %dMB RAM\n", device_xname(&mly->mly_dv),
 	    mi->physical_channels_present,
 	    (mi->physical_channels_present) > 1 ? "s" : "",
 	    mi->fw_major, mi->fw_minor, mi->fw_turn, mi->fw_build,
@@ -550,9 +535,12 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * Finally, create our monitoring thread.
 	 */
-	kthread_create(mly_thread_create, mly);
-
 	mly->mly_state |= MLY_STATE_INITOK;
+	rv = kthread_create(PRI_NONE, 0, NULL, mly_thread, mly,
+	    &mly->mly_thread, "%s", device_xname(&mly->mly_dv));
+ 	if (rv != 0)
+		aprint_error_dev(&mly->mly_dv, "unable to create thread (%d)\n",
+		    rv);
 	return;
 
  bad:
@@ -560,11 +548,11 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 		mly_release_ccbs(mly);
 	if (state > 1)
 		mly_dmamem_free(mly, sizeof(struct mly_mmbox),
-		    mly->mly_mmbox_dmamap, (caddr_t)mly->mly_mmbox,
+		    mly->mly_mmbox_dmamap, (void *)mly->mly_mmbox,
 		    &mly->mly_mmbox_seg);
 	if (state > 0)
 		mly_dmamem_free(mly, MLY_SGL_SIZE * MLY_MAX_CCBS,
-		    mly->mly_sg_dmamap, (caddr_t)mly->mly_sg,
+		    mly->mly_sg_dmamap, (void *)mly->mly_sg,
 		    &mly->mly_sg_seg);
 }
 
@@ -596,12 +584,11 @@ mly_shutdown(void *cookie)
 	int i;
 
 	for (i = 0; i < mly_cd.cd_ndevs; i++) {
-		if ((mly = device_lookup(&mly_cd, i)) == NULL)
+		if ((mly = device_lookup_private(&mly_cd, i)) == NULL)
 			continue;
 
 		if (mly_flush(mly))
-			printf("%s: unable to flush cache\n",
-			    mly->mly_dv.dv_xname);
+			aprint_error_dev(&mly->mly_dv, "unable to flush cache\n");
 	}
 }
 
@@ -754,7 +741,7 @@ mly_complete_rescan(struct mly_softc *mly, struct mly_ccb *mc)
 #ifdef MLYDEBUG
 			printf("%s: WARNING: BTL rescan (logical) for %d:%d "
 			    "returned data for %d:%d instead\n",
-			   mly->mly_dv.dv_xname, bus, target,
+			   device_xname(&mly->mly_dv), bus, target,
 			   MLY_LOGDEV_BUS(mly, tmp),
 			   MLY_LOGDEV_TARGET(mly, tmp));
 #endif
@@ -771,7 +758,7 @@ mly_complete_rescan(struct mly_softc *mly, struct mly_ccb *mc)
 #ifdef MLYDEBUG
 			printf("%s: WARNING: BTL rescan (physical) for %d:%d "
 			    " returned data for %d:%d instead\n",
-			   mly->mly_dv.dv_xname,
+			   device_xname(&mly->mly_dv),
 			   bus, target, pdi->channel, pdi->target);
 #endif
 			goto out;
@@ -788,7 +775,7 @@ mly_complete_rescan(struct mly_softc *mly, struct mly_ccb *mc)
 		if (pdi->command_tags != 0)
 			btl.mb_flags |= MLY_BTL_TQING;
 	} else {
-		printf("%s: BTL rescan result invalid\n", mly->mly_dv.dv_xname);
+		printf("%s: BTL rescan result invalid\n", device_xname(&mly->mly_dv));
 		goto out;
 	}
 
@@ -1097,7 +1084,7 @@ mly_fetch_event(struct mly_softc *mly)
 	return;
 
  bad:
-	printf("%s: couldn't fetch event %u\n", mly->mly_dv.dv_xname, event);
+	printf("%s: couldn't fetch event %u\n", device_xname(&mly->mly_dv), event);
 	free(mc->mc_data, M_DEVBUF);
 	mly_ccb_free(mly, mc);
 }
@@ -1118,8 +1105,8 @@ mly_complete_event(struct mly_softc *mly, struct mly_ccb *mc)
 	if (mc->mc_status == SCSI_OK)
 		mly_process_event(mly, me);
 	else
-		printf("%s: unable to fetch event; status = 0x%x\n",
-		    mly->mly_dv.dv_xname, mc->mc_status);
+		aprint_error_dev(&mly->mly_dv, "unable to fetch event; status = 0x%x\n",
+		    mc->mc_status);
 
 	free(me, M_DEVBUF);
 
@@ -1181,7 +1168,7 @@ mly_process_event(struct mly_softc *mly, struct mly_event *me)
 		/*
 		 * Error on physical drive.
 		 */
-		printf("%s: physical device %d:%d %s\n", mly->mly_dv.dv_xname,
+		printf("%s: physical device %d:%d %s\n", device_xname(&mly->mly_dv),
 		    me->channel, me->target, tp);
 		if (action == 'r')
 			mly->mly_btl[me->channel][me->target].mb_flags |=
@@ -1195,7 +1182,7 @@ mly_process_event(struct mly_softc *mly, struct mly_event *me)
 	 	 */
 		bus = MLY_LOGDEV_BUS(mly, me->lun);
 		target = MLY_LOGDEV_TARGET(mly, me->lun);
-		printf("%s: logical device %d:%d %s\n", mly->mly_dv.dv_xname,
+		printf("%s: logical device %d:%d %s\n", device_xname(&mly->mly_dv),
 		    bus, target, tp);
 		if (action == 'r')
 			mly->mly_btl[bus][target].mb_flags |= MLY_BTL_RESCAN;
@@ -1217,13 +1204,13 @@ mly_process_event(struct mly_softc *mly, struct mly_event *me)
 		/*
 		 * XXX Should translate this if SCSIVERBOSE.
 		 */
-		printf("%s: physical device %d:%d %s\n", mly->mly_dv.dv_xname,
+		printf("%s: physical device %d:%d %s\n", device_xname(&mly->mly_dv),
 		    me->channel, me->target, tp);
 		printf("%s:  sense key %d  asc %02x  ascq %02x\n",
-		    mly->mly_dv.dv_xname, SSD_SENSE_KEY(ssd->flags),
+		    device_xname(&mly->mly_dv), SSD_SENSE_KEY(ssd->flags),
 		    ssd->asc, ssd->ascq);
 		printf("%s:  info %x%x%x%x  csi %x%x%x%x\n",
-		    mly->mly_dv.dv_xname, ssd->info[0], ssd->info[1],
+		    device_xname(&mly->mly_dv), ssd->info[0], ssd->info[1],
 		    ssd->info[2], ssd->info[3], ssd->csi[0],
 		    ssd->csi[1], ssd->csi[2],
 		    ssd->csi[3]);
@@ -1233,41 +1220,22 @@ mly_process_event(struct mly_softc *mly, struct mly_event *me)
 		break;
 
 	case 'e':
-		printf("%s: ", mly->mly_dv.dv_xname);
+		printf("%s: ", device_xname(&mly->mly_dv));
 		printf(tp, me->target, me->lun);
 		break;
 
 	case 'c':
-		printf("%s: controller %s\n", mly->mly_dv.dv_xname, tp);
+		printf("%s: controller %s\n", device_xname(&mly->mly_dv), tp);
 		break;
 
 	case '?':
-		printf("%s: %s - %d\n", mly->mly_dv.dv_xname, tp, event);
+		printf("%s: %s - %d\n", device_xname(&mly->mly_dv), tp, event);
 		break;
 
 	default:
 		/* Probably a 'noisy' event being ignored. */
 		break;
 	}
-}
-
-/*
- * Create the monitoring thread.  Called after the standard kernel threads
- * have been created.
- */
-static void
-mly_thread_create(void *cookie)
-{
-	struct mly_softc *mly;
-	int rv;
-
-	mly = cookie;
-
-	rv = kthread_create1(mly_thread, mly, &mly->mly_thread, "%s",
-	    mly->mly_dv.dv_xname);
- 	if (rv != 0)
-		printf("%s: unable to create thread (%d)\n",
-		    mly->mly_dv.dv_xname, rv);
 }
 
 /*
@@ -1417,7 +1385,7 @@ mly_ccb_submit(struct mly_softc *mly, struct mly_ccb *mc)
 		mly_outb(mly, mly->mly_idbr, MLY_HM_CMDSENT);
 	} else {
 		pkt = &mly->mly_mmbox->mmm_command[mly->mly_mmbox_cmd_idx];
-		off = (caddr_t)pkt - (caddr_t)mly->mly_mmbox;
+		off = (char *)pkt - (char *)mly->mly_mmbox;
 
 		bus_dmamap_sync(mly->mly_dmat, mly->mly_mmbox_dmamap,
 		    off, sizeof(mly->mly_mmbox->mmm_command[0]),
@@ -1484,7 +1452,7 @@ mly_intr(void *cookie)
 		} else {
 			/* Slot 0xffff may mean "extremely bogus command". */
 			printf("%s: got HM completion for illegal slot %u\n",
-			    mly->mly_dv.dv_xname, slot);
+			    device_xname(&mly->mly_dv), slot);
 		}
 
 		/* Unconditionally acknowledge status. */
@@ -1499,7 +1467,7 @@ mly_intr(void *cookie)
 	if (mly_odbr_true(mly, MLY_AM_STSREADY)) {
 		for (;;) {
 			sp = &mly->mly_mmbox->mmm_status[mly->mly_mmbox_sts_idx];
-			off = (caddr_t)sp - (caddr_t)mly->mly_mmbox;
+			off = (char *)sp - (char *)mly->mly_mmbox;
 
 			bus_dmamap_sync(mly->mly_dmat, mly->mly_mmbox_dmamap,
 			    off, sizeof(mly->mly_mmbox->mmm_command[0]),
@@ -1523,7 +1491,7 @@ mly_intr(void *cookie)
 				 * command".
 				 */
 				printf("%s: got AM completion for illegal "
-				    "slot %u at %d\n", mly->mly_dv.dv_xname,
+				    "slot %u at %d\n", device_xname(&mly->mly_dv),
 				    slot, mly->mly_mmbox_sts_idx);
 			}
 
@@ -1650,7 +1618,7 @@ mly_alloc_ccbs(struct mly_softc *mly)
 	 */
 	rv = mly_dmamem_alloc(mly,
 	    mly->mly_ncmds * sizeof(union mly_cmd_packet),
-	    &mly->mly_pkt_dmamap, (caddr_t *)&mly->mly_pkt,
+	    &mly->mly_pkt_dmamap, (void **)&mly->mly_pkt,
 	    &mly->mly_pkt_busaddr, &mly->mly_pkt_seg);
 	if (rv)
 		return (rv);
@@ -1699,7 +1667,7 @@ mly_release_ccbs(struct mly_softc *mly)
 
 	/* Release the packet storage. */
 	mly_dmamem_free(mly, mly->mly_ncmds * sizeof(union mly_cmd_packet),
-	    mly->mly_pkt_dmamap, (caddr_t)mly->mly_pkt, &mly->mly_pkt_seg);
+	    mly->mly_pkt_dmamap, (void *)mly->mly_pkt, &mly->mly_pkt_seg);
 }
 
 /*
@@ -1862,7 +1830,7 @@ mly_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 #ifdef DIAGNOSTIC
 		/* XXX Increase if/when we support large SCSI commands. */
 		if (xs->cmdlen > MLY_CMD_SCSI_SMALL_CDB) {
-			printf("%s: cmd too large\n", mly->mly_dv.dv_xname);
+			printf("%s: cmd too large\n", device_xname(&mly->mly_dv));
 			xs->error = XS_DRIVER_STUFFUP;
 			scsipi_done(xs);
 			break;
@@ -2026,7 +1994,7 @@ mly_scsipi_complete(struct mly_softc *mly, struct mly_ccb *mc)
 
 	default:
 		printf("%s: unknown SCSI status 0x%x\n",
-		    mly->mly_dv.dv_xname, xs->status);
+		    device_xname(&mly->mly_dv), xs->status);
 		xs->error = XS_DRIVER_STUFFUP;
 		break;
 	}
@@ -2088,7 +2056,7 @@ mly_get_xfer_mode(struct mly_softc *mly, int bus, struct scsipi_xfer_mode *xm)
  * ioctl hook; used here only to initiate low-level rescans.
  */
 static int
-mly_scsipi_ioctl(struct scsipi_channel *chan, u_long cmd, caddr_t data,
+mly_scsipi_ioctl(struct scsipi_channel *chan, u_long cmd, void *data,
     int flag, struct proc *p)
 {
 	struct mly_softc *mly;
@@ -2129,7 +2097,7 @@ mly_fwhandshake(struct mly_softc *mly)
 		return (0);
 
 	printf("%s: controller initialization started\n",
-	    mly->mly_dv.dv_xname);
+	    device_xname(&mly->mly_dv));
 
 	/*
 	 * Spin waiting for initialization to finish, or for a message to be
@@ -2148,36 +2116,36 @@ mly_fwhandshake(struct mly_softc *mly)
 		case MLY_MSG_SPINUP:
 			if (!spinup) {
 				printf("%s: drive spinup in progress\n",
-				    mly->mly_dv.dv_xname);
+				    device_xname(&mly->mly_dv));
 				spinup = 1;
 			}
 			break;
 
 		case MLY_MSG_RACE_RECOVERY_FAIL:
 			printf("%s: mirror race recovery failed - \n",
-			    mly->mly_dv.dv_xname);
+			    device_xname(&mly->mly_dv));
 			printf("%s: one or more drives offline\n",
-			    mly->mly_dv.dv_xname);
+			    device_xname(&mly->mly_dv));
 			break;
 
 		case MLY_MSG_RACE_IN_PROGRESS:
 			printf("%s: mirror race recovery in progress\n",
-			    mly->mly_dv.dv_xname);
+			    device_xname(&mly->mly_dv));
 			break;
 
 		case MLY_MSG_RACE_ON_CRITICAL:
 			printf("%s: mirror race recovery on critical drive\n",
-			    mly->mly_dv.dv_xname);
+			    device_xname(&mly->mly_dv));
 			break;
 
 		case MLY_MSG_PARITY_ERROR:
 			printf("%s: FATAL MEMORY PARITY ERROR\n",
-			    mly->mly_dv.dv_xname);
+			    device_xname(&mly->mly_dv));
 			return (ENXIO);
 
 		default:
 			printf("%s: unknown initialization code 0x%x\n",
-			    mly->mly_dv.dv_xname, error);
+			    device_xname(&mly->mly_dv), error);
 			break;
 		}
 	}
@@ -2205,7 +2173,7 @@ mly_padstr(char *dst, const char *src, int len)
  */
 static int
 mly_dmamem_alloc(struct mly_softc *mly, int size, bus_dmamap_t *dmamap,
-		 caddr_t *kva, bus_addr_t *paddr, bus_dma_segment_t *seg)
+		 void **kva, bus_addr_t *paddr, bus_dma_segment_t *seg)
 {
 	int rseg, rv, state;
 
@@ -2213,7 +2181,7 @@ mly_dmamem_alloc(struct mly_softc *mly, int size, bus_dmamap_t *dmamap,
 
 	if ((rv = bus_dmamem_alloc(mly->mly_dmat, size, PAGE_SIZE, 0,
 	    seg, 1, &rseg, BUS_DMA_NOWAIT)) != 0) {
-		printf("%s: dmamem_alloc = %d\n", mly->mly_dv.dv_xname, rv);
+		aprint_error_dev(&mly->mly_dv, "dmamem_alloc = %d\n", rv);
 		goto bad;
 	}
 
@@ -2221,7 +2189,7 @@ mly_dmamem_alloc(struct mly_softc *mly, int size, bus_dmamap_t *dmamap,
 
 	if ((rv = bus_dmamem_map(mly->mly_dmat, seg, 1, size, kva,
 	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
-		printf("%s: dmamem_map = %d\n", mly->mly_dv.dv_xname, rv);
+		aprint_error_dev(&mly->mly_dv, "dmamem_map = %d\n", rv);
 		goto bad;
 	}
 
@@ -2229,7 +2197,7 @@ mly_dmamem_alloc(struct mly_softc *mly, int size, bus_dmamap_t *dmamap,
 
 	if ((rv = bus_dmamap_create(mly->mly_dmat, size, size, 1, 0,
 	    BUS_DMA_NOWAIT, dmamap)) != 0) {
-		printf("%s: dmamap_create = %d\n", mly->mly_dv.dv_xname, rv);
+		aprint_error_dev(&mly->mly_dv, "dmamap_create = %d\n", rv);
 		goto bad;
 	}
 
@@ -2237,7 +2205,7 @@ mly_dmamem_alloc(struct mly_softc *mly, int size, bus_dmamap_t *dmamap,
 
 	if ((rv = bus_dmamap_load(mly->mly_dmat, *dmamap, *kva, size,
 	    NULL, BUS_DMA_NOWAIT)) != 0) {
-		printf("%s: dmamap_load = %d\n", mly->mly_dv.dv_xname, rv);
+		aprint_error_dev(&mly->mly_dv, "dmamap_load = %d\n", rv);
 		goto bad;
 	}
 
@@ -2261,7 +2229,7 @@ mly_dmamem_alloc(struct mly_softc *mly, int size, bus_dmamap_t *dmamap,
  */
 static void
 mly_dmamem_free(struct mly_softc *mly, int size, bus_dmamap_t dmamap,
-		caddr_t kva, bus_dma_segment_t *seg)
+		void *kva, bus_dma_segment_t *seg)
 {
 
 	bus_dmamap_unload(mly->mly_dmat, dmamap);
@@ -2279,7 +2247,7 @@ mlyopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 	struct mly_softc *mly;
 
-	if ((mly = device_lookup(&mly_cd, minor(dev))) == NULL)
+	if ((mly = device_lookup_private(&mly_cd, minor(dev))) == NULL)
 		return (ENXIO);
 	if ((mly->mly_state & MLY_STATE_INITOK) == 0)
 		return (ENXIO);
@@ -2299,7 +2267,7 @@ mlyclose(dev_t dev, int flag, int mode,
 {
 	struct mly_softc *mly;
 
-	mly = device_lookup(&mly_cd, minor(dev));
+	mly = device_lookup_private(&mly_cd, minor(dev));
 	mly->mly_state &= ~MLY_STATE_OPEN;
 	return (0);
 }
@@ -2308,13 +2276,13 @@ mlyclose(dev_t dev, int flag, int mode,
  * Handle control operations.
  */
 int
-mlyioctl(dev_t dev, u_long cmd, caddr_t data, int flag,
+mlyioctl(dev_t dev, u_long cmd, void *data, int flag,
     struct lwp *l)
 {
 	struct mly_softc *mly;
 	int rv;
 
-	mly = device_lookup(&mly_cd, minor(dev));
+	mly = device_lookup_private(&mly_cd, minor(dev));
 
 	switch (cmd) {
 	case MLYIO_COMMAND:

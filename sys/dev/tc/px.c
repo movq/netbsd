@@ -1,4 +1,4 @@
-/* 	$NetBSD: px.c,v 1.28 2006/03/31 17:39:33 thorpej Exp $	*/
+/* 	$NetBSD: px.c,v 1.34 2008/07/09 13:19:33 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: px.c,v 1.28 2006/03/31 17:39:33 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: px.c,v 1.34 2008/07/09 13:19:33 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,8 +51,8 @@ __KERNEL_RCSID(0, "$NetBSD: px.c,v 1.28 2006/03/31 17:39:33 thorpej Exp $");
 #endif
 
 #include <machine/autoconf.h>
-#include <machine/cpu.h>
-#include <machine/bus.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
 
 #include <dev/cons.h>
 
@@ -99,7 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: px.c,v 1.28 2006/03/31 17:39:33 thorpej Exp $");
 
 static void	px_attach(struct device *, struct device *, void *);
 static void	px_init(struct stic_info *, int);
-static int	px_ioctl(struct stic_info *, u_long, caddr_t, int,
+static int	px_ioctl(struct stic_info *, u_long, void *, int,
 			 struct lwp *);
 static int	px_match(struct device *, struct cfdata *, void *);
 
@@ -110,16 +103,16 @@ static int	px_pbuf_post(struct stic_info *, u_int32_t *);
 void	px_cnattach(tc_addr_t);
 
 struct px_softc {
-	struct	device px_dv;
+	device_t px_dev;
 	struct	stic_info *px_si;
 	volatile u_int32_t	*px_qpoll[PX_BUF_COUNT];
 };
 
-CFATTACH_DECL(px, sizeof(struct px_softc),
+CFATTACH_DECL_NEW(px, sizeof(struct px_softc),
     px_match, px_attach, NULL, NULL);
 
 static int
-px_match(struct device *parent, struct cfdata *match, void *aux)
+px_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct tc_attach_args *ta;
 
@@ -129,7 +122,7 @@ px_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-px_attach(struct device *parent, struct device *self, void *aux)
+px_attach(device_t parent, device_t self, void *aux)
 {
 	struct stic_info *si;
 	struct tc_attach_args *ta;
@@ -139,6 +132,8 @@ px_attach(struct device *parent, struct device *self, void *aux)
 
 	px = device_private(self);
 	ta = (struct tc_attach_args *)aux;
+
+	px->px_dev = self;
 
 	if (ta->ta_addr == stic_consinfo.si_slotbase) {
 		si = &stic_consinfo;
@@ -165,7 +160,7 @@ px_attach(struct device *parent, struct device *self, void *aux)
 		    si->si_buf_phys + STIC_XCOMM_SIZE;
 		v = ((v & 0xffff8000) << 3) | (v & 0x7fff);
 		px->px_qpoll[i] = (volatile u_int32_t *)
-		    ((caddr_t)si->si_slotbase + (v >> 9));
+		    ((char *)si->si_slotbase + (v >> 9));
 	}
 
 	stic_attach(self, si, console);
@@ -186,10 +181,10 @@ static void
 px_init(struct stic_info *si, int bootstrap)
 {
 	struct pglist pglist;
-	caddr_t kva, bva;
+	char *kva, *bva;
 	paddr_t bpa;
 
-	kva = (caddr_t)si->si_slotbase;
+	kva = (void *)si->si_slotbase;
 
 	/*
 	 * Allocate memory for the packet buffers.  It must be located below
@@ -202,7 +197,7 @@ px_init(struct stic_info *si, int bootstrap)
 		 * UVM won't be initialised at this point, so grab memory
 		 * directly from vm_physmem[].
 		 */
-		bva = (caddr_t)uvm_pageboot_alloc(PX_BUF_SIZE + PX_BUF_ALIGN);
+		bva = (char *)uvm_pageboot_alloc(PX_BUF_SIZE + PX_BUF_ALIGN);
 		bpa = (STIC_KSEG_TO_PHYS(bva) + PX_BUF_ALIGN - 1) &
 		    ~(PX_BUF_ALIGN - 1);
 		if (bpa + PX_BUF_SIZE > 8192*1024)
@@ -268,7 +263,7 @@ px_intr(void *cookie)
 	 * Simply clear the flag and report the error.
 	 */
 	if ((state & STIC_INT_E) != 0) {
-		printf("%s: error intr, %x %x %x %x %x", px->px_dv.dv_xname,
+		aprint_error_dev(px->px_dev, "error intr, %x %x %x %x %x",
 		    sr->sr_ipdvint, sr->sr_sticsr, sr->sr_buscsr,
 		    sr->sr_busadr, sr->sr_busdat);
 		sr->sr_ipdvint = STIC_INT_E_WE | STIC_INT_E_EN;
@@ -319,7 +314,7 @@ px_pbuf_get(struct stic_info *si)
 
 	si->si_pbuf_select ^= STIC_PACKET_SIZE;
 	off = si->si_pbuf_select + STIC_XCOMM_SIZE;
-	return ((u_int32_t *)((caddr_t)si->si_buf + off));
+	return ((u_int32_t *)((char *)si->si_buf + off));
 }
 
 static int
@@ -335,7 +330,7 @@ px_pbuf_post(struct stic_info *si, u_int32_t *buf)
 	/* Get address of poll register for this buffer. */
 	v = (u_long)STIC_KSEG_TO_PHYS(buf);
 	v = ((v & 0xffff8000) << 3) | (v & 0x7fff);
-	poll = (volatile u_int32_t *)((caddr_t)si->si_slotbase + (v >> 9));
+	poll = (volatile u_int32_t *)((char *)si->si_slotbase + (v >> 9));
 
 	/*
 	 * Read the poll register and make sure the stamp wants to accept
@@ -360,7 +355,7 @@ px_pbuf_post(struct stic_info *si, u_int32_t *buf)
 }
 
 static int
-px_ioctl(struct stic_info *si, u_long cmd, caddr_t data, int flag,
+px_ioctl(struct stic_info *si, u_long cmd, void *data, int flag,
 	 struct lwp *l)
 {
 	volatile struct stic_xcomm *sxc;

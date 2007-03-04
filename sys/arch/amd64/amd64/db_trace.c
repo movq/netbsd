@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.11 2007/02/22 04:54:36 thorpej Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.14 2008/09/05 13:37:24 tron Exp $	*/
 
 /* 
  * Mach Operating System
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.11 2007/02/22 04:54:36 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.14 2008/09/05 13:37:24 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,30 +52,30 @@ static int db_x86_64_regop(const struct db_variable *, db_expr_t *, int);
  * Machine register set.
  */
 const struct db_variable db_regs[] = {
-	{ "ds",		dbreg(ds),     db_x86_64_regop },
-	{ "es",		dbreg(es),     db_x86_64_regop },
-	{ "fs",		dbreg(fs),     db_x86_64_regop },
-	{ "gs",		dbreg(gs),     db_x86_64_regop },
-	{ "rdi",	dbreg(rdi),    db_x86_64_regop },
-	{ "rsi",	dbreg(rsi),    db_x86_64_regop },
-	{ "rbp",	dbreg(rbp),    db_x86_64_regop },
-	{ "rbx",	dbreg(rbx),    db_x86_64_regop },
-	{ "rdx",	dbreg(rdx),    db_x86_64_regop },
-	{ "rcx",	dbreg(rcx),    db_x86_64_regop },
-	{ "rax",	dbreg(rax),    db_x86_64_regop },
-	{ "r8",		dbreg(r8),     db_x86_64_regop },
-	{ "r9",		dbreg(r9),     db_x86_64_regop },
-	{ "r10",	dbreg(r10),    db_x86_64_regop },
-	{ "r11",	dbreg(r11),    db_x86_64_regop },
-	{ "r12",	dbreg(r12),    db_x86_64_regop },
-	{ "r13",	dbreg(r13),    db_x86_64_regop },
-	{ "r14",	dbreg(r14),    db_x86_64_regop },
-	{ "r15",	dbreg(r15),    db_x86_64_regop },
-	{ "rip",	dbreg(rip),    db_x86_64_regop },
-	{ "cs",		dbreg(cs),     db_x86_64_regop },
-	{ "rflags",	dbreg(rflags), db_x86_64_regop },
-	{ "rsp",	dbreg(rsp),    db_x86_64_regop },
-	{ "ss",		dbreg(ss),     db_x86_64_regop },
+	{ "ds",		dbreg(ds),     db_x86_64_regop, NULL },
+	{ "es",		dbreg(es),     db_x86_64_regop, NULL },
+	{ "fs",		dbreg(fs),     db_x86_64_regop, NULL },
+	{ "gs",		dbreg(gs),     db_x86_64_regop, NULL },
+	{ "rdi",	dbreg(rdi),    db_x86_64_regop, NULL },
+	{ "rsi",	dbreg(rsi),    db_x86_64_regop, NULL },
+	{ "rbp",	dbreg(rbp),    db_x86_64_regop, NULL },
+	{ "rbx",	dbreg(rbx),    db_x86_64_regop, NULL },
+	{ "rdx",	dbreg(rdx),    db_x86_64_regop, NULL },
+	{ "rcx",	dbreg(rcx),    db_x86_64_regop, NULL },
+	{ "rax",	dbreg(rax),    db_x86_64_regop, NULL },
+	{ "r8",		dbreg(r8),     db_x86_64_regop, NULL },
+	{ "r9",		dbreg(r9),     db_x86_64_regop, NULL },
+	{ "r10",	dbreg(r10),    db_x86_64_regop, NULL },
+	{ "r11",	dbreg(r11),    db_x86_64_regop, NULL },
+	{ "r12",	dbreg(r12),    db_x86_64_regop, NULL },
+	{ "r13",	dbreg(r13),    db_x86_64_regop, NULL },
+	{ "r14",	dbreg(r14),    db_x86_64_regop, NULL },
+	{ "r15",	dbreg(r15),    db_x86_64_regop, NULL },
+	{ "rip",	dbreg(rip),    db_x86_64_regop, NULL },
+	{ "cs",		dbreg(cs),     db_x86_64_regop, NULL },
+	{ "rflags",	dbreg(rflags), db_x86_64_regop, NULL },
+	{ "rsp",	dbreg(rsp),    db_x86_64_regop, NULL },
+	{ "ss",		dbreg(ss),     db_x86_64_regop, NULL },
 };
 const struct db_variable * const db_eregs =
 	db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
@@ -226,8 +226,8 @@ db_nextframe(long **nextframe, long **retaddr, long **arg0, db_addr_t *ip,
 	    && traptype == INTERRUPT) {
 		for (i = 0; i < 4; i++) {
 			ifp = (struct intrframe *)(argp + i);
-			err = db_get_value((long)&ifp->__if_err, 8, false);
-			trapno = db_get_value((long)&ifp->__if_trapno,
+			err = db_get_value((long)&ifp->if_tf.tf_err, 8, false);
+			trapno = db_get_value((long)&ifp->if_tf.tf_trapno,
 			    8, false);
 			if ((err == 0 || err == IREENT_MAGIC) && trapno == T_ASTFLT) {
 				*nextframe = (long *)ifp - 1;
@@ -351,7 +351,8 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 					(*pr)("not found\n");
 					return;
 				}
-				l = proc_representative_lwp(p, NULL, 0);
+				l = LIST_FIRST(&p->p_lwps);
+				KASSERT(l != NULL);
 			}
 			(*pr)("lid %d ", l->l_lid);
 			if (!(l->l_flag & LW_INMEM)) {

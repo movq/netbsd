@@ -29,7 +29,7 @@ copyright="\
  * SUCH DAMAGE.
  */
 "
-SCRIPT_ID='$NetBSD: vnode_if.sh,v 1.43 2006/11/30 21:06:29 pooka Exp $'
+SCRIPT_ID='$NetBSD: vnode_if.sh,v 1.49 2008/05/19 17:06:02 ad Exp $'
 
 # Script to produce VFS front-end sugar.
 #
@@ -93,6 +93,7 @@ awk_parser='
 /^vop_/	{
 	name=$1;
 	argc=0;
+	willmake=-1;
 	next;
 }
 # Last line of description
@@ -127,6 +128,12 @@ awk_parser='
 		i++;
 	} else
 		willrele[argc] = 0;
+
+	if ($2 == "WILLMAKE") {
+		willmake=argc;
+		i++;
+	}
+
 	argtype[argc] = $i; i++;
 	while (i < NF) {
 		argtype[argc] = argtype[argc]" "$i;
@@ -213,6 +220,8 @@ BEGIN	{
 	vop_offset = 1; # start at 1, to count the 'default' op
 
 	printf("\n/* Special cases: */\n#include <sys/buf.h>\n");
+	printf("#ifndef _KERNEL\n#include <stdbool.h>\n#endif\n\n");
+
 	argc=1;
 	argtype[0]="struct buf *";
 	argname[0]="bp";
@@ -249,23 +258,19 @@ __KERNEL_RCSID(0, \"\$NetBSD\$\");
 "
 
 echo '
-/*
- * If we have LKM support, always include the non-inline versions for
- * LKMs.  Otherwise, do it based on the option.
- */
 #include "opt_vnode_lockdebug.h"'
 echo '
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/buf.h>
 #include <sys/vnode.h>
+#include <sys/lock.h>
 
 const struct vnodeop_desc vop_default_desc = {
 	0,
 	"default",
 	0,
 	NULL,
-	VDESC_NO_OFFSET,
 	VDESC_NO_OFFSET,
 	VDESC_NO_OFFSET,
 	VDESC_NO_OFFSET,
@@ -331,8 +336,6 @@ function doit() {
 	do_offset("struct vnode **");
 	# cred (if any)
 	do_offset("kauth_cred_t");
-	# lwp (if any)
-	do_offset("struct lwp *");
 	# componentname
 	do_offset("struct componentname *");
 	# transport layer information
@@ -345,7 +348,7 @@ function doit() {
 		if (i < (argc-1)) printf(",\n    ");
 	}
 	printf(")\n");
-	printf("{\n\tstruct %s_args a;\n", name);
+	printf("{\n\tint error;\n\tbool mpsafe;\n\tstruct %s_args a;\n", name);
 	printf("#ifdef VNODE_LOCKDEBUG\n");
 	for (i=0; i<argc; i++) {
 		if (lockstate[i] != -1)
@@ -357,7 +360,7 @@ function doit() {
 		printf("\ta.a_%s = %s;\n", argname[i], argname[i]);
 		if (lockstate[i] != -1) {
 			printf("#ifdef VNODE_LOCKDEBUG\n");
-			printf("\tislocked_%s = (%s->v_flag & VLOCKSWORK) ? (VOP_ISLOCKED(%s) == LK_EXCLUSIVE) : %d;\n",
+			printf("\tislocked_%s = (%s->v_vflag & VV_LOCKSWORK) ? (VOP_ISLOCKED(%s) == LK_EXCLUSIVE) : %d;\n",
 			    argname[i], argname[i], argname[i], lockstate[i]);
 			printf("\tif (islocked_%s != %d)\n", argname[i],
 			    lockstate[i]);
@@ -365,13 +368,26 @@ function doit() {
 			printf("#endif\n");
 		}
 	}
-	printf("\treturn (VCALL(%s%s, VOFFSET(%s), &a));\n}\n",
+	printf("\tmpsafe = (%s%s->v_vflag & VV_MPSAFE);\n", argname[0], arg0special);
+	printf("\tif (!mpsafe) { KERNEL_LOCK(1, curlwp); }\n");
+	printf("\terror = (VCALL(%s%s, VOFFSET(%s), &a));\n",
 		argname[0], arg0special, name);
+	printf("\tif (!mpsafe) { KERNEL_UNLOCK_ONE(curlwp); }\n");
+	if (willmake != -1) {
+		printf("#ifdef DIAGNOSTIC\n");
+		printf("\tif (error == 0)\n"				\
+		    "\t\tKASSERT((*%s)->v_size != VSIZENOTSET\n"	\
+		    "\t\t    && (*%s)->v_writesize != VSIZENOTSET);\n",
+		    argname[willmake], argname[willmake]);
+		printf("#endif /* DIAGNOSTIC */\n");
+	}
+	printf("\treturn error;\n}\n");
 }
 BEGIN	{
 	printf("\n/* Special cases: */\n");
 	# start from 1 (vop_default is at 0)
 	argc=1;
+	willmake=-1;
 	argdir[0]="IN";
 	argtype[0]="struct buf *";
 	argname[0]="bp";

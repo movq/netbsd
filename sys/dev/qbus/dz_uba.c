@@ -1,4 +1,4 @@
-/*	$NetBSD: dz_uba.c,v 1.25 2006/05/14 21:45:00 elad Exp $ */
+/*	$NetBSD: dz_uba.c,v 1.28 2008/03/15 00:57:15 matt Exp $ */
 /*
  * Copyright (c) 1998 Ludd, University of Lule}, Sweden. All rights reserved.
  * Copyright (c) 1996  Ken C. Wellsch.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dz_uba.c,v 1.25 2006/05/14 21:45:00 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dz_uba.c,v 1.28 2008/03/15 00:57:15 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: dz_uba.c,v 1.25 2006/05/14 21:45:00 elad Exp $");
 #include <sys/syslog.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/pte.h>
 #include <machine/trap.h>
 #include <machine/scb.h>
@@ -58,20 +58,17 @@ __KERNEL_RCSID(0, "$NetBSD: dz_uba.c,v 1.25 2006/05/14 21:45:00 elad Exp $");
 
 #include "ioconf.h"
 
-static	int	dz_uba_match(struct device *, struct cfdata *, void *);
-static	void	dz_uba_attach(struct device *, struct device *, void *);
+static	int	dz_uba_match(device_t, cfdata_t, void *);
+static	void	dz_uba_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(dz_uba, sizeof(struct dz_softc),
+CFATTACH_DECL_NEW(dz_uba, sizeof(struct dz_softc),
     dz_uba_match, dz_uba_attach, NULL, NULL);
 
 /* Autoconfig handles: setup the controller to interrupt, */
 /* then complete the housecleaning for full operation */
 
 static int
-dz_uba_match(parent, cf, aux)
-	struct device *parent;
-	struct cfdata *cf;
-	void *aux;
+dz_uba_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct uba_attach_args *ua = aux;
 	bus_space_tag_t	iot = ua->ua_iot;
@@ -110,13 +107,12 @@ dz_uba_match(parent, cf, aux)
 }
 
 static void
-dz_uba_attach(parent, self, aux)
-	struct device *parent, *self;
-	void *aux;
+dz_uba_attach(device_t parent, device_t self, void *aux)
 {
 	struct dz_softc *sc = device_private(self);
 	struct uba_attach_args *ua = aux;
 
+	sc->sc_dev = self;
 	sc->sc_iot = ua->ua_iot;
 	sc->sc_ioh = ua->ua_ioh;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: elinkxlreg.h,v 1.13 2006/11/17 21:35:24 tsutsui Exp $	*/
+/*	$NetBSD: elinkxlreg.h,v 1.15 2008/04/28 20:23:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -281,7 +274,7 @@ struct ex_txdesc {
 #define DPDMEMPAD_DMADDR(sc)	((sc)->sc_dpddma + DPDMEMPAD_OFF)
 
 #define DPD_DMADDR(s,t) \
-	((s)->sc_dpddma + ((caddr_t)((t)->tx_dpd) - (caddr_t)((s)->sc_dpd)))
+	((s)->sc_dpddma + ((char *)((t)->tx_dpd) - (char *)((s)->sc_dpd)))
 
 /*
  * Frame Start Header bitfields.

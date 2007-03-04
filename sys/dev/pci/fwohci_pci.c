@@ -1,4 +1,4 @@
-/*	$NetBSD: fwohci_pci.c,v 1.25 2006/11/16 01:33:08 christos Exp $	*/
+/*	$NetBSD: fwohci_pci.c,v 1.32 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fwohci_pci.c,v 1.25 2006/11/16 01:33:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fwohci_pci.c,v 1.32 2008/04/28 20:23:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,8 +38,8 @@ __KERNEL_RCSID(0, "$NetBSD: fwohci_pci.c,v 1.25 2006/11/16 01:33:08 christos Exp
 #include <sys/device.h>
 #include <sys/select.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -59,18 +52,24 @@ __KERNEL_RCSID(0, "$NetBSD: fwohci_pci.c,v 1.25 2006/11/16 01:33:08 christos Exp
 
 struct fwohci_pci_softc {
 	struct fwohci_softc psc_sc;
+
 	pci_chipset_tag_t psc_pc;
+	pcitag_t psc_tag;
+
 	void *psc_ih;
 };
 
-static int fwohci_pci_match(struct device *, struct cfdata *, void *);
-static void fwohci_pci_attach(struct device *, struct device *, void *);
+static int fwohci_pci_match(device_t, struct cfdata *, void *);
+static void fwohci_pci_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(fwohci_pci, sizeof(struct fwohci_pci_softc),
+static bool fwohci_pci_suspend(device_t PMF_FN_PROTO);
+static bool fwohci_pci_resume(device_t PMF_FN_PROTO);
+
+CFATTACH_DECL_NEW(fwohci_pci, sizeof(struct fwohci_pci_softc),
     fwohci_pci_match, fwohci_pci_attach, NULL, NULL);
 
 static int
-fwohci_pci_match(struct device *parent, struct cfdata *match,
+fwohci_pci_match(device_t parent, struct cfdata *match,
     void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
@@ -84,11 +83,10 @@ fwohci_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-fwohci_pci_attach(struct device *parent, struct device *self,
-    void *aux)
+fwohci_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = (struct pci_attach_args *) aux;
-	struct fwohci_pci_softc *psc = (struct fwohci_pci_softc *) self;
+	struct fwohci_pci_softc *psc = device_private(self);
 	char devinfo[256];
 	char const *intrstr;
 	pci_intr_handle_t ih;
@@ -100,16 +98,17 @@ fwohci_pci_attach(struct device *parent, struct device *self,
 	aprint_normal(": %s (rev. 0x%02x)\n", devinfo,
 	    PCI_REVISION(pa->pa_class));
 
+	psc->psc_sc.fc.dev = self;
 	psc->psc_sc.fc.dmat = pa->pa_dmat;
 	psc->psc_pc = pa->pa_pc;
+	psc->psc_tag = pa->pa_tag;
 
 	/* Map I/O registers */
 	if (pci_mapreg_map(pa, PCI_OHCI_MAP_REGISTER, PCI_MAPREG_TYPE_MEM, 0,
 	    &psc->psc_sc.bst, &psc->psc_sc.bsh,
 	    NULL, &psc->psc_sc.bssize)) {
-		aprint_error("%s: can't map OHCI register space\n",
-		    self->dv_xname);
-		return;
+		aprint_error_dev(self, "can't map OHCI register space\n");
+		goto fail;
 	}
 
 	/* Disable interrupts, so we don't get any spurious ones. */
@@ -122,25 +121,62 @@ fwohci_pci_attach(struct device *parent, struct device *self,
 
 	/* Map and establish the interrupt. */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: couldn't map interrupt\n", self->dv_xname);
-		return;
+		aprint_error_dev(self, "couldn't map interrupt\n");
+		goto fail;
 	}
 	intrstr = pci_intr_string(pa->pa_pc, ih);
-	psc->psc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_BIO, fwohci_intr,
+	psc->psc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_BIO, fwohci_filt,
 	    &psc->psc_sc);
 	if (psc->psc_ih == NULL) {
-		aprint_error("%s: couldn't establish interrupt",
-		    self->dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
-			aprint_normal(" at %s", intrstr);
-		aprint_normal("\n");
-		return;
+			aprint_error(" at %s", intrstr);
+		aprint_error("\n");
+		goto fail;
 	}
-	aprint_normal("%s: interrupting at %s\n", self->dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
-	if (fwohci_init(&(psc->psc_sc), &(psc->psc_sc.fc._dev)) != 0) {
+	if (!pmf_device_register(self, fwohci_pci_suspend, fwohci_pci_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
+	if (fwohci_init(&(psc->psc_sc), psc->psc_sc.fc.dev) != 0) {
 		pci_intr_disestablish(pa->pa_pc, psc->psc_ih);
 		bus_space_unmap(psc->psc_sc.bst, psc->psc_sc.bsh,
 		    psc->psc_sc.bssize);
 	}
+
+	return;
+
+fail:
+	/* In the event that we fail to attach, register a null pnp handler */
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
+	return;
+}
+
+static bool
+fwohci_pci_suspend(device_t dv PMF_FN_ARGS)
+{
+	struct fwohci_pci_softc *psc = device_private(dv);
+	int s;
+
+	s = splbio();
+	fwohci_stop(&psc->psc_sc, psc->psc_sc.fc.dev);
+	splx(s);
+
+	return true;
+}
+
+static bool
+fwohci_pci_resume(device_t dv PMF_FN_ARGS)
+{
+	struct fwohci_pci_softc *psc = device_private(dv);
+	int s;
+
+	s = splbio();
+	fwohci_resume(&psc->psc_sc, psc->psc_sc.fc.dev);
+	splx(s);
+
+	return true;
 }

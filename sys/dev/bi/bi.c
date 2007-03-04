@@ -1,4 +1,4 @@
-/*	$NetBSD: bi.c,v 1.21 2005/12/11 12:21:15 christos Exp $ */
+/*	$NetBSD: bi.c,v 1.24 2008/03/11 05:34:01 matt Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -41,20 +41,20 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bi.c,v 1.21 2005/12/11 12:21:15 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bi.c,v 1.24 2008/03/11 05:34:01 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
-#include <machine/cpu.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 
 #include <dev/bi/bireg.h>
 #include <dev/bi/bivar.h>
 
 static int bi_print(void *, const char *);
 
-struct bi_list bi_list[] = {
+static const struct bi_list bi_list[] = {
 	{BIDT_MS820, DT_HAVDRV, "ms820"},
 	{BIDT_DRB32, DT_UNSUPP, "drb32"},
 	{BIDT_DWBUA, DT_HAVDRV|DT_ADAPT, "dwbua"},
@@ -74,12 +74,10 @@ struct bi_list bi_list[] = {
 };
 
 int
-bi_print(aux, name)
-	void *aux;
-	const char *name;
+bi_print(void *aux, const char *name)
 {
 	struct bi_attach_args *ba = aux;
-	struct bi_list *bl;
+	const struct bi_list *bl;
 	u_int16_t nr;
 
 	nr = bus_space_read_2(ba->ba_iot, ba->ba_ioh, 0);
@@ -111,13 +109,12 @@ bi_print(aux, name)
 }
 
 void
-bi_attach(sc)
-	struct bi_softc *sc;
+bi_attach(struct bi_softc *sc)
 {
 	struct bi_attach_args ba;
 	int nodenr;
 
-	printf("\n");
+	aprint_normal("\n");
 
 	ba.ba_iot = sc->sc_iot;
 	ba.ba_busnr = sc->sc_busnr;
@@ -133,17 +130,17 @@ bi_attach(sc)
 	for (nodenr = 0; nodenr < NNODEBI; nodenr++) {
 		if (bus_space_map(sc->sc_iot, sc->sc_addr + BI_NODE(nodenr),
 		    BI_NODESIZE, 0, &ba.ba_ioh)) {
-			printf("bi_attach: bus_space_map failed, node %d\n",
-			    nodenr);
+			aprint_error_dev(sc->sc_dev,
+			    "bus_space_map failed, node %d\n", nodenr);
 			return;
 		}
-		if (badaddr((caddr_t)ba.ba_ioh, 4) ||
+		if (badaddr((void *)ba.ba_ioh, 4) ||
 		    (bus_space_read_2(ba.ba_iot, ba.ba_ioh, 0) == 0)) {
 			bus_space_unmap(ba.ba_iot, ba.ba_ioh, BI_NODESIZE);
 			continue;
 		}
 		ba.ba_nodenr = nodenr;
 		ba.ba_ivec = sc->sc_lastiv + 64 + 4 * nodenr; /* all on spl5 */
-		config_found(&sc->sc_dev, &ba, bi_print);
+		config_found(sc->sc_dev, &ba, bi_print);
 	}
 }

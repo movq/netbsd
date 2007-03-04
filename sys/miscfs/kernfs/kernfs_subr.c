@@ -1,4 +1,4 @@
-/*	$NetBSD: kernfs_subr.c,v 1.11 2007/02/27 16:11:51 ad Exp $	*/
+/*	$NetBSD: kernfs_subr.c,v 1.16 2008/05/05 17:11:17 ad Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kernfs_subr.c,v 1.11 2007/02/27 16:11:51 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kernfs_subr.c,v 1.16 2008/05/05 17:11:17 ad Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ipsec.h"
@@ -233,7 +233,7 @@ again:
 	vp->v_type = kt->kt_vtype;
 
 	if (kfs_type == KFSkern)
-		vp->v_flag = VROOT;
+		vp->v_vflag = VV_ROOT;
 
 	kernfs_hashins(kfs);
 	uvm_vnp_setsize(vp, 0);
@@ -266,8 +266,7 @@ kernfs_hashinit()
 
 	mutex_init(&kfs_hashlock, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&kfs_ihash_lock, MUTEX_DEFAULT, IPL_NONE);
-	kfs_hashtbl = hashinit(desiredvnodes / 4, HASH_LIST, M_UFSMNT,
-	    M_WAITOK, &kfs_ihash);
+	kfs_hashtbl = hashinit(desiredvnodes / 4, HASH_LIST, true, &kfs_ihash);
 }
 
 void
@@ -277,8 +276,7 @@ kernfs_hashreinit()
 	struct kfs_hashhead *oldhash, *hash;
 	u_long i, oldmask, mask, val;
 
-	hash = hashinit(desiredvnodes / 4, HASH_LIST, M_UFSMNT, M_WAITOK,
-	    &mask);
+	hash = hashinit(desiredvnodes / 4, HASH_LIST, true, &mask);
 
 	mutex_enter(&kfs_ihash_lock);
 	oldhash = kfs_hashtbl;
@@ -293,7 +291,7 @@ kernfs_hashreinit()
 		}
 	}
 	mutex_exit(&kfs_ihash_lock);
-	hashdone(oldhash, M_UFSMNT);
+	hashdone(oldhash, HASH_LIST, oldmask);
 }
 
 /*
@@ -303,7 +301,7 @@ void
 kernfs_hashdone()
 {
 
-	hashdone(kfs_hashtbl, M_UFSMNT);
+	hashdone(kfs_hashtbl, HASH_LIST, kfs_ihash);
 	mutex_destroy(&kfs_hashlock);
 	mutex_destroy(&kfs_ihash_lock);
 }
@@ -326,7 +324,7 @@ kernfs_hashget(type, mp, kt, value)
 		vp = KERNFSTOV(pp);
 		if (pp->kfs_type == type && vp->v_mount == mp &&
 		    pp->kfs_kt == kt && pp->kfs_value == value) {
-			simple_lock(&vp->v_interlock);
+			mutex_enter(&vp->v_interlock);
 			mutex_exit(&kfs_ihash_lock);
 			if (vget(vp, LK_EXCLUSIVE | LK_INTERLOCK))
 				goto loop;
@@ -347,7 +345,7 @@ kernfs_hashins(pp)
 	struct kfs_hashhead *ppp;
 
 	/* lock the kfsnode, then put it on the appropriate hash list */
-	lockmgr(&pp->kfs_vnode->v_lock, LK_EXCLUSIVE, (struct simplelock *)0);
+	vlockmgr(&pp->kfs_vnode->v_lock, LK_EXCLUSIVE);
 
 	mutex_enter(&kfs_ihash_lock);
 	ppp = &kfs_hashtbl[KFSVALUEHASH(pp->kfs_value)];

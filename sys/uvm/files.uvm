@@ -1,13 +1,14 @@
-#	$NetBSD: files.uvm,v 1.8 2006/11/25 21:40:06 christos Exp $
+#	$NetBSD: files.uvm,v 1.11 2008/06/04 17:47:40 ad Exp $
 
 #
 # UVM options
 # 
 defflag opt_uvmhist.h		UVMHIST UVMHIST_PRINT
-defflag opt_uvm.h		USE_TOPDOWN_VM UVMMAP_NOCOUNTERS
+defflag opt_uvm.h		USE_TOPDOWN_VM UVMMAP_COUNTERS
 defflag opt_vmswap.h		VMSWAP
 defflag opt_readahead.h		READAHEAD_STATS
 defflag opt_ubc.h		UBC_STATS
+defparam opt_pagermap.h		PAGER_MAP_SIZE
 defflag				PDPOLICY_CLOCKPRO
 
 file	uvm/uvm_amap.c
@@ -24,7 +25,7 @@ file	uvm/uvm_loan.c
 file	uvm/uvm_map.c
 file	uvm/uvm_meter.c
 file	uvm/uvm_mmap.c
-file	uvm/uvm_mremap.c		compat_linux
+file	uvm/uvm_mremap.c
 file	uvm/uvm_object.c
 file	uvm/uvm_page.c
 file	uvm/uvm_pager.c

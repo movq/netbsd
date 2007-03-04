@@ -1,4 +1,4 @@
-/*	$NetBSD: mscp_disk.c,v 1.53 2006/03/29 07:06:24 thorpej Exp $	*/
+/*	$NetBSD: mscp_disk.c,v 1.60 2008/06/11 17:32:30 drochner Exp $	*/
 /*
  * Copyright (c) 1988 Regents of the University of California.
  * All rights reserved.
@@ -81,7 +81,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mscp_disk.c,v 1.53 2006/03/29 07:06:24 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mscp_disk.c,v 1.60 2008/06/11 17:32:30 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -100,8 +100,8 @@ __KERNEL_RCSID(0, "$NetBSD: mscp_disk.c,v 1.53 2006/03/29 07:06:24 thorpej Exp $
 #include <ufs/ufs/dinode.h>
 #include <ufs/ffs/fs.h>
 
-#include <machine/bus.h>
-#include <machine/cpu.h>
+#include <sys/bus.h>
+#include <sys/cpu.h>
 
 #include <dev/mscp/mscp.h>
 #include <dev/mscp/mscpreg.h>
@@ -206,7 +206,7 @@ ra_putonline(ra)
 	dl = ra->ra_disk.dk_label;
 
 	ra->ra_state = DK_RDLABEL;
-	printf("%s", ra->ra_dev.dv_xname);
+	printf("%s", device_xname(&ra->ra_dev));
 	maj = cdevsw_lookup_major(&ra_cdevsw);
 	if ((msg = readdisklabel(MAKEDISKDEV(maj, device_unit(&ra->ra_dev),
 	    RAW_PART), rastrategy, dl, NULL)) != NULL)
@@ -237,17 +237,13 @@ raopen(dev, flag, fmt, l)
 	 * Make sure this is a reasonable open request.
 	 */
 	unit = DISKUNIT(dev);
-	if (unit >= ra_cd.cd_ndevs)
-		return ENXIO;
-	ra = ra_cd.cd_devs[unit];
-	if (ra == 0)
+	ra = device_lookup_private(&ra_cd, unit);
+	if (!ra)
 		return ENXIO;
 
 	part = DISKPART(dev);
 
-	if ((error = lockmgr(&ra->ra_disk.dk_openlock, LK_EXCLUSIVE,
-			     NULL)) != 0)
-		return (error);
+	mutex_enter(&ra->ra_disk.dk_openlock);
 
 	/*
 	 * If there are wedges, and this is not RAW_PART, then we
@@ -283,7 +279,7 @@ raopen(dev, flag, fmt, l)
 	 */
 #if notyet
 	while (ra->ra_state != DK_OPEN)
-		if ((error = tsleep((caddr_t)ra, (PZERO + 1) | PCATCH,
+		if ((error = tsleep((void *)ra, (PZERO + 1) | PCATCH,
 		    devopn, 0))) {
 			splx(s);
 			return (error);
@@ -301,11 +297,9 @@ raopen(dev, flag, fmt, l)
 		break;
 	}
 	ra->ra_disk.dk_openmask |= mask;
-	(void) lockmgr(&ra->ra_disk.dk_openlock, LK_RELEASE, NULL);
-	return 0;
-
+	error = 0;
  bad1:
-	(void) lockmgr(&ra->ra_disk.dk_openlock, LK_RELEASE, NULL);
+	mutex_exit(&ra->ra_disk.dk_openlock);
 	return (error);
 }
 
@@ -317,12 +311,10 @@ raclose(dev, flags, fmt, l)
 	struct	lwp *l;
 {
 	int unit = DISKUNIT(dev);
-	struct ra_softc *ra = ra_cd.cd_devs[unit];
-	int error, mask = (1 << DISKPART(dev));
+	struct ra_softc *ra = device_lookup_private(&ra_cd, unit);
+	int mask = (1 << DISKPART(dev));
 
-	if ((error = lockmgr(&ra->ra_disk.dk_openlock, LK_EXCLUSIVE,
-			     NULL)) != 0)
-		return (error);
+	mutex_enter(&ra->ra_disk.dk_openlock);
 
 	switch (fmt) {
 	case S_IFCHR:
@@ -350,7 +342,7 @@ raclose(dev, flags, fmt, l)
 		ra->ra_wlabel = 0;
 	}
 #endif
-	(void) lockmgr(&ra->ra_disk.dk_openlock, LK_RELEASE, NULL);
+	mutex_exit(&ra->ra_disk.dk_openlock);
 	return (0);
 }
 
@@ -369,9 +361,8 @@ rastrategy(bp)
 	 * Make sure this is a reasonable drive to use.
 	 */
 	unit = DISKUNIT(bp->b_dev);
-	if (unit > ra_cd.cd_ndevs || (ra = ra_cd.cd_devs[unit]) == NULL) {
+	if ((ra = device_lookup_private(&ra_cd, unit)) == NULL) {
 		bp->b_error = ENXIO;
-		bp->b_flags |= B_ERROR;
 		goto done;
 	}
 	/*
@@ -389,7 +380,6 @@ rastrategy(bp)
 	/* If disk is not online, try to put it online */
 	if (ra->ra_state == DK_CLOSED)
 		if (ra_putonline(ra) == MSCP_FAILED) {
-			bp->b_flags |= B_ERROR;
 			bp->b_error = EIO;
 			goto done;
 		}
@@ -439,13 +429,13 @@ int
 raioctl(dev, cmd, data, flag, l)
 	dev_t dev;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 	int flag;
 	struct lwp *l;
 {
 	int unit = DISKUNIT(dev);
 	struct disklabel *lp, *tp;
-	struct ra_softc *ra = ra_cd.cd_devs[unit];
+	struct ra_softc *ra = device_lookup_private(&ra_cd, unit);
 	int error = 0;
 #ifdef __HAVE_OLD_DISKLABEL
 	struct disklabel newlabel;
@@ -489,9 +479,7 @@ raioctl(dev, cmd, data, flag, l)
 		if ((flag & FWRITE) == 0)
 			error = EBADF;
 		else {
-			if ((error = lockmgr(&ra->ra_disk.dk_openlock,
-					     LK_EXCLUSIVE, NULL)) != 0)
-				break;
+			mutex_enter(&ra->ra_disk.dk_openlock);
 			error = setdisklabel(lp, tp, 0, 0);
 			if ((error == 0) && (cmd == DIOCWDINFO
 #ifdef __HAVE_OLD_DISKLABEL
@@ -503,8 +491,7 @@ raioctl(dev, cmd, data, flag, l)
 				error = writedisklabel(dev, rastrategy, lp,0);
 				ra->ra_wlabel = 0;
 			}
-			(void) lockmgr(&ra->ra_disk.dk_openlock,
-				       LK_RELEASE, NULL);
+			mutex_exit(&ra->ra_disk.dk_openlock);
 		}
 		break;
 
@@ -551,7 +538,8 @@ raioctl(dev, cmd, data, flag, l)
 			return (EBADF);
 
 		/* If the ioctl happens here, the parent is us. */
-		strcpy(dkw->dkw_parent, ra->ra_dev.dv_xname);
+		strlcpy(dkw->dkw_parent, device_xname(&ra->ra_dev),
+			sizeof(dkw->dkw_parent));
 		return (dkwedge_add(dkw));
 	    }
 
@@ -563,7 +551,8 @@ raioctl(dev, cmd, data, flag, l)
 			return (EBADF);
 
 		/* If the ioctl happens here, the parent is us. */
-		strcpy(dkw->dkw_parent, ra->ra_dev.dv_xname);
+		strlcpy(dkw->dkw_parent, device_xname(&ra->ra_dev),
+			sizeof(dkw->dkw_parent));
 		return (dkwedge_del(dkw));
 	    }
 
@@ -586,7 +575,7 @@ int
 radump(dev, blkno, va, size)
 	dev_t	dev;
 	daddr_t blkno;
-	caddr_t va;
+	void *va;
 	size_t	size;
 {
 	return ENXIO;
@@ -602,10 +591,9 @@ rasize(dev)
 	int unit = DISKUNIT(dev);
 	struct ra_softc *ra;
 
-	if (unit >= ra_cd.cd_ndevs || ra_cd.cd_devs[unit] == 0)
+	ra = device_lookup_private(&ra_cd, unit);
+	if (!ra)
 		return -1;
-
-	ra = ra_cd.cd_devs[unit];
 
 	if (ra->ra_state == DK_CLOSED)
 		if (ra_putonline(ra) == MSCP_FAILED)
@@ -695,14 +683,15 @@ rxattach(parent, self, aux)
 	rx->ra_hwunit = mp->mscp_unit;
 	mi->mi_dp[mp->mscp_unit] = self;
 
-	rx->ra_disk.dk_name = rx->ra_dev.dv_xname;
 #if NRX
 	if (MSCP_MID_ECH(1, mp->mscp_guse.guse_mediaid) == 'X' - '@')
-		rx->ra_disk.dk_driver = &rxdkdriver;
+		disk_init((struct disk *)&rx->ra_disk, device_xname(&rx->ra_dev), 
+		    &rxdkdriver);
 #endif
 #if NRA
 	if (MSCP_MID_ECH(1, mp->mscp_guse.guse_mediaid) != 'X' - '@')
-		rx->ra_disk.dk_driver = &radkdriver;
+		disk_init((struct disk *)&rx->ra_disk, device_xname(&rx->ra_dev), 
+		    &radkdriver);
 #endif
 	disk_attach((struct disk *)&rx->ra_disk);
 
@@ -716,7 +705,7 @@ rxattach(parent, self, aux)
 	disk_printtype(mp->mscp_unit, mp->mscp_guse.guse_mediaid);
 #ifdef DEBUG
 	printf("%s: nspt %d group %d ngpc %d rct %d nrpt %d nrct %d\n",
-	    self->dv_xname, mp->mscp_guse.guse_nspt, mp->mscp_guse.guse_group,
+	    device_xname(self), mp->mscp_guse.guse_nspt, mp->mscp_guse.guse_group,
 	    mp->mscp_guse.guse_ngpc, mp->mscp_guse.guse_rctsize,
 	    mp->mscp_guse.guse_nrpt, mp->mscp_guse.guse_nrct);
 #endif
@@ -779,10 +768,8 @@ rxopen(dev, flag, fmt, l)
 	 * Make sure this is a reasonable open request.
 	 */
 	unit = DISKUNIT(dev);
-	if (unit >= rx_cd.cd_ndevs)
-		return ENXIO;
-	rx = rx_cd.cd_devs[unit];
-	if (rx == 0)
+	rx = device_lookup_private(&rx_cd, unit);
+	if (!rx)
 		return ENXIO;
 
 	/*
@@ -815,16 +802,14 @@ rxstrategy(bp)
 	 * Make sure this is a reasonable drive to use.
 	 */
 	unit = DISKUNIT(bp->b_dev);
-	if (unit > rx_cd.cd_ndevs || (rx = rx_cd.cd_devs[unit]) == NULL) {
+	if ((rx = device_lookup_private(&rx_cd, unit)) == NULL) {
 		bp->b_error = ENXIO;
-		bp->b_flags |= B_ERROR;
 		goto done;
 	}
 
 	/* If disk is not online, try to put it online */
 	if (rx->ra_state == DK_CLOSED)
 		if (rx_putonline(rx) == MSCP_FAILED) {
-			bp->b_flags |= B_ERROR;
 			bp->b_error = EIO;
 			goto done;
 		}
@@ -876,13 +861,13 @@ int
 rxioctl(dev, cmd, data, flag, l)
 	dev_t dev;
 	u_long cmd;
-	caddr_t data;
+	void *data;
 	int flag;
 	struct lwp *l;
 {
 	int unit = DISKUNIT(dev);
 	struct disklabel *lp;
-	struct rx_softc *rx = rx_cd.cd_devs[unit];
+	struct rx_softc *rx = device_lookup_private(&rx_cd, unit);
 	int error = 0;
 
 	lp = rx->ra_disk.dk_label;
@@ -916,7 +901,7 @@ int
 rxdump(dev, blkno, va, size)
 	dev_t dev;
 	daddr_t blkno;
-	caddr_t va;
+	void *va;
 	size_t size;
 {
 
@@ -965,7 +950,7 @@ rrdgram(usc, mp, mi)
 	struct mscp *mp;
 	struct mscp_softc *mi;
 {
-	if (mscp_decodeerror(usc == NULL?"unconf disk" : usc->dv_xname, mp, mi))
+	if (mscp_decodeerror(usc == NULL?"unconf disk" : device_xname(usc), mp, mi))
 		return;
 	/*
 	 * SDI status information bytes 10 and 11 are the microprocessor
@@ -991,12 +976,12 @@ rriodone(usc, bp)
 	unit = DISKUNIT(bp->b_dev);
 #if NRA
 	if (cdevsw_lookup(bp->b_dev) == &ra_cdevsw)
-		ra = ra_cd.cd_devs[unit];
+		ra = device_lookup_private(&ra_cd, unit);
 	else
 #endif
 #if NRX
 	if (cdevsw_lookup(bp->b_dev) == &rx_cdevsw)
-		ra = rx_cd.cd_devs[unit];
+		ra = device_lookup_private(&rx_cd, unit);
 	else
 #endif
 		panic("rriodone: unexpected major %d unit %d",
@@ -1019,9 +1004,9 @@ rronline(usc, mp)
 	struct rx_softc *rx = (struct rx_softc *)usc;
 	struct disklabel *dl;
 
-	wakeup((caddr_t)&rx->ra_state);
+	wakeup((void *)&rx->ra_state);
 	if ((mp->mscp_status & M_ST_MASK) != M_ST_SUCCESS) {
-		printf("%s: attempt to bring on line failed: ", usc->dv_xname);
+		aprint_error_dev(usc, "attempt to bring on line failed: ");
 		mscp_printevent(mp);
 		return (MSCP_FAILED);
 	}
@@ -1088,7 +1073,7 @@ rrgotstatus(usc, mp)
 	struct mscp *mp;
 {
 	if ((mp->mscp_status & M_ST_MASK) != M_ST_SUCCESS) {
-		printf("%s: attempt to get status failed: ", usc->dv_xname);
+		aprint_error_dev(usc, "attempt to get status failed: ");
 		mscp_printevent(mp);
 		return (MSCP_FAILED);
 	}
@@ -1129,13 +1114,12 @@ rrioerror(usc, mp, bp)
 	switch (code & M_ST_MASK) {
 	/* The unit has fallen offline. Try to figure out why. */
 	case M_ST_OFFLINE:
-		bp->b_flags |= B_ERROR;
 		bp->b_error = EIO;
 		ra->ra_state = DK_CLOSED;
 		if (code & M_OFFLINE_UNMOUNTED)
-			printf("%s: not mounted/spun down\n", usc->dv_xname);
+			aprint_error_dev(usc, "not mounted/spun down\n");
 		if (code & M_OFFLINE_DUPLICATE)
-			printf("%s: duplicate unit number!!!\n", usc->dv_xname);
+			aprint_error_dev(usc, "duplicate unit number!!!\n");
 		return MSCP_DONE;
 
 	case M_ST_AVAILABLE:
@@ -1143,7 +1127,7 @@ rrioerror(usc, mp, bp)
 		return MSCP_DONE;
 
 	default:
-		printf("%s:", usc->dv_xname);
+		printf("%s:", device_xname(usc));
 		break;
 	}
 	return (MSCP_FAILED);
@@ -1164,11 +1148,11 @@ rrfillin(bp, mp)
 
 #if NRA
 	if (cdevsw_lookup(bp->b_dev) == &ra_cdevsw)
-		rx = ra_cd.cd_devs[unit];
+		rx = device_lookup_private(&ra_cd, unit);
 #endif
 #if NRX
 	if (cdevsw_lookup(bp->b_dev) == &rx_cdevsw)
-		rx = rx_cd.cd_devs[unit];
+		rx = device_lookup_private(&rx_cd, unit);
 #endif
 	lp = rx->ra_disk.dk_label;
 

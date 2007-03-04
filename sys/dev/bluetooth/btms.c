@@ -1,4 +1,34 @@
-/*	$NetBSD: btms.c,v 1.5 2006/11/16 01:32:48 christos Exp $	*/
+/*	$NetBSD: btms.c,v 1.8 2008/09/09 03:54:56 cube Exp $	*/
+
+/*
+ * Copyright (c) 1998 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Lennart Augustsson (lennart@augustsson.net) at
+ * Carlstedt Research & Technology.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -36,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btms.c,v 1.5 2006/11/16 01:32:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btms.c,v 1.8 2008/09/09 03:54:56 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -63,7 +93,7 @@ __KERNEL_RCSID(0, "$NetBSD: btms.c,v 1.5 2006/11/16 01:32:48 christos Exp $");
 struct btms_softc {
 	struct bthidev		 sc_hidev;	/* device+ */
 
-	struct device		*sc_wsmouse;	/* child */
+	device_t		 sc_wsmouse;	/* child */
 	int			 sc_enabled;
 	uint16_t		 sc_flags;
 
@@ -84,16 +114,16 @@ struct btms_softc {
 #define BTMS_HASW		(1 << 2)	/* has W direction */
 
 /* autoconf(9) methods */
-static int	btms_match(struct device *, struct cfdata *, void *);
-static void	btms_attach(struct device *, struct device *, void *);
-static int	btms_detach(struct device *, int);
+static int	btms_match(device_t, struct cfdata *, void *);
+static void	btms_attach(device_t, device_t, void *);
+static int	btms_detach(device_t, int);
 
-CFATTACH_DECL(btms, sizeof(struct btms_softc),
+CFATTACH_DECL_NEW(btms, sizeof(struct btms_softc),
     btms_match, btms_attach, btms_detach, NULL);
 
 /* wsmouse(4) accessops */
 static int	btms_wsmouse_enable(void *);
-static int	btms_wsmouse_ioctl(void *, unsigned long, caddr_t, int, struct lwp *);
+static int	btms_wsmouse_ioctl(void *, unsigned long, void *, int, struct lwp *);
 static void	btms_wsmouse_disable(void *);
 
 static const struct wsmouse_accessops btms_wsmouse_accessops = {
@@ -111,8 +141,7 @@ static void btms_input(struct bthidev *, uint8_t *, int);
  */
 
 static int
-btms_match(struct device *parent, struct cfdata *match,
-    void *aux)
+btms_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct bthidev_attach_args *ba = aux;
 
@@ -124,9 +153,9 @@ btms_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-btms_attach(struct device *parent, struct device *self, void *aux)
+btms_attach(device_t parent, device_t self, void *aux)
 {
-	struct btms_softc *sc = (struct btms_softc *)self;
+	struct btms_softc *sc = device_private(self);
 	struct bthidev_attach_args *ba = aux;
 	struct wsmousedev_attach_args wsma;
 	struct hid_location *zloc;
@@ -145,9 +174,7 @@ btms_attach(struct device *parent, struct device *self, void *aux)
 			&flags);
 
 	if (hl == 0 || NOTMOUSE(flags)) {
-		printf("\n%s: X report 0x%04x not supported\n",
-		       sc->sc_hidev.sc_dev.dv_xname, flags);
-
+		aprint_error("X report 0x%04x not supported\n", flags);
 		return;
 	}
 
@@ -161,9 +188,7 @@ btms_attach(struct device *parent, struct device *self, void *aux)
 			&flags);
 
 	if (hl == 0 || NOTMOUSE(flags)) {
-		printf("\n%s: Y report 0x%04x not supported\n",
-			sc->sc_hidev.sc_dev.dv_xname, flags);
-
+		aprint_error("Y report 0x%04x not supported\n", flags);
 		return;
 	}
 
@@ -179,8 +204,7 @@ btms_attach(struct device *parent, struct device *self, void *aux)
 	zloc = &sc->sc_loc_z;
 	if (hl) {
 		if (NOTMOUSE(flags)) {
-			printf("\n%s: Wheel report 0x%04x not supported\n",
-				sc->sc_hidev.sc_dev.dv_xname, flags);
+			aprint_error("Wheel report 0x%04x ignored\n", flags);
 
 			/* ignore Bad Z coord */
 			sc->sc_loc_z.size = 0;
@@ -251,13 +275,13 @@ btms_attach(struct device *parent, struct device *self, void *aux)
 	wsma.accessops = &btms_wsmouse_accessops;
 	wsma.accesscookie = sc;
 
-	sc->sc_wsmouse = config_found((struct device *)sc, &wsma, wsmousedevprint);
+	sc->sc_wsmouse = config_found(self, &wsma, wsmousedevprint);
 }
 
 static int
-btms_detach(struct device *self, int flags)
+btms_detach(device_t self, int flags)
 {
-	struct btms_softc *sc = (struct btms_softc *)self;
+	struct btms_softc *sc = device_private(self);
 	int err = 0;
 
 	if (sc->sc_wsmouse != NULL) {
@@ -276,7 +300,7 @@ btms_detach(struct device *self, int flags)
 static int
 btms_wsmouse_enable(void *self)
 {
-	struct btms_softc *sc = (struct btms_softc *)self;
+	struct btms_softc *sc = self;
 
 	if (sc->sc_enabled)
 		return EBUSY;
@@ -286,10 +310,10 @@ btms_wsmouse_enable(void *self)
 }
 
 static int
-btms_wsmouse_ioctl(void *self, unsigned long cmd, caddr_t data,
+btms_wsmouse_ioctl(void *self, unsigned long cmd, void *data,
     int flag, struct lwp *l)
 {
-	/* struct btms_softc *sc = (struct btms_softc *)self; */
+	/* struct btms_softc *sc = self; */
 
 	switch (cmd) {
 	case WSMOUSEIO_GTYPE:
@@ -306,7 +330,7 @@ btms_wsmouse_ioctl(void *self, unsigned long cmd, caddr_t data,
 static void
 btms_wsmouse_disable(void *self)
 {
-	struct btms_softc *sc = (struct btms_softc *)self;
+	struct btms_softc *sc = self;
 
 	sc->sc_enabled = 0;
 }

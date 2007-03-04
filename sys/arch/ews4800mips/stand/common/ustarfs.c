@@ -1,4 +1,4 @@
-/*	$NetBSD: ustarfs.c,v 1.5 2007/02/22 05:31:54 thorpej Exp $	*/
+/*	$NetBSD: ustarfs.c,v 1.7 2008/04/28 20:23:19 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -100,12 +93,12 @@ ustarfs_load(const char *file, void **addrp, size_t *sizep)
 	/* Load file */
 	sz = ROUND_SECTOR(sz);
 	if ((*addrp = alloc(sz)) == 0) {
-		printf("%s: can't allocate memory.\n", __FUNCTION__);
+		printf("%s: can't allocate memory.\n", __func__);
 		return false;
 	}
 
 	if (!__block_read_n(*addrp, block, sz >> DEV_BSHIFT)) {
-		printf("%s: can't load file.\n", __FUNCTION__);
+		printf("%s: can't load file.\n", __func__);
 		dealloc(*addrp, sz);
 		return false;
 	}

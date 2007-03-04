@@ -1,4 +1,4 @@
-/* $NetBSD: lkminit_vfs.c,v 1.6 2005/12/11 12:24:50 christos Exp $ */
+/* $NetBSD: lkminit_vfs.c,v 1.9 2008/06/28 15:50:20 rumble Exp $ */
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lkminit_vfs.c,v 1.6 2005/12/11 12:24:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lkminit_vfs.c,v 1.9 2008/06/28 15:50:20 rumble Exp $");
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
@@ -53,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: lkminit_vfs.c,v 1.6 2005/12/11 12:24:50 christos Exp
 #include <sys/vnode.h>
 #include <miscfs/overlay/overlay.h>
 
-int overlay_lkmentry __P((struct lkm_table *, int, int));
+int overlay_lkmentry(struct lkm_table *, int, int);
 
 /*
  * This is the vfsops table for the file system in question
@@ -68,8 +61,8 @@ MOD_VFS("overlay", -1, &overlay_vfsops);
 /*
  * take care of fs specific sysctl nodes
  */
-static int load __P((struct lkm_table *, int));
-static int unload __P((struct lkm_table *, int));
+static int load(struct lkm_table *, int);
+static int unload(struct lkm_table *, int);
 static struct sysctllog *_overlay_log;
 
 /*
@@ -91,7 +84,15 @@ load(lkmtp, cmd)
 	int cmd;
 {
 
-	sysctl_vfs_overlay_setup(&_overlay_log);
+	sysctl_createv(&_overlay_log, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT, CTLTYPE_NODE, "vfs", NULL,
+		       NULL, 0, NULL, 0,
+		       CTL_VFS, CTL_EOL);
+	sysctl_createv(&_overlay_log, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT, CTLTYPE_NODE, "overlay",
+		       SYSCTL_DESCR("Overlay file system"),
+		       NULL, 0, NULL, 0,
+		       CTL_VFS, CTL_CREATE, CTL_EOL);
 	return (0);
 }
 

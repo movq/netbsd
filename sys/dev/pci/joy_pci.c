@@ -1,4 +1,4 @@
-/*	$NetBSD: joy_pci.c,v 1.14 2006/11/16 01:33:09 christos Exp $	*/
+/*	$NetBSD: joy_pci.c,v 1.17 2008/04/28 20:23:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: joy_pci.c,v 1.14 2006/11/16 01:33:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: joy_pci.c,v 1.17 2008/04/28 20:23:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -55,24 +48,21 @@ __KERNEL_RCSID(0, "$NetBSD: joy_pci.c,v 1.14 2006/11/16 01:33:09 christos Exp $"
 static int bar_is_io(pci_chipset_tag_t pc, pcitag_t tag, int reg);
 
 static int
-joy_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+joy_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
 	if (PCI_CLASS(pa->pa_class) == PCI_CLASS_INPUT &&
 	    PCI_SUBCLASS(pa->pa_class) == PCI_SUBCLASS_INPUT_GAMEPORT &&
 	    PCI_INTERFACE(pa->pa_class) == 0x10)
-		return (1);
+		return 1;
 
 	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_CREATIVELABS &&
 	    (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_CREATIVELABS_SBJOY ||
 	     PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_CREATIVELABS_SBJOY2))
-	{
-		return (1);
-	}
+		return 1;
 
-	return (0);
+	return 0;
 }
 
 /* check if this BAR assigns/requests IO space */
@@ -97,42 +87,44 @@ bar_is_io(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 }
 
 static void
-joy_pci_attach(struct device *parent, struct device *self, void *aux)
+joy_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct joy_softc *sc = (struct joy_softc *)self;
+	struct joy_softc *sc = device_private(self);
 	struct pci_attach_args *pa = aux;
 	char devinfo[256];
 	bus_size_t mapsize;
 	int reg;
 
 	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	printf(": %s (rev 0x%02x)\n", devinfo, PCI_REVISION(pa->pa_class));
-
+	aprint_normal(": %s (rev 0x%02x)\n", devinfo, PCI_REVISION(pa->pa_class));
+	
 	for (reg = PCI_MAPREG_START; reg < PCI_MAPREG_END;
 	     reg += sizeof(pcireg_t))
 		if (bar_is_io(pa->pa_pc, pa->pa_tag, reg))
 			break;
 	if (reg >= PCI_MAPREG_END) {
-		printf("%s: violates PCI spec, no IO region found\n",
-		       sc->sc_dev.dv_xname);
+		aprint_error_dev(self,
+		    "violates PCI spec, no IO region found\n");
 		return;
 	}
 
 	if (pci_mapreg_map(pa, reg, PCI_MAPREG_TYPE_IO, 0,
 	    &sc->sc_iot, &sc->sc_ioh, NULL, &mapsize)) {
-		printf("%s: could not map IO space\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "could not map IO space\n");
 		return;
 	}
 
 	if (mapsize != 2) {
 		if (!bus_space_subregion(sc->sc_iot, sc->sc_ioh, 1, 1, &sc->sc_ioh) < 0) {
-			printf("%s: error mapping subregion\n", sc->sc_dev.dv_xname);
+			aprint_error_dev(self, "error mapping subregion\n");
 			return;
 		}
 	}
 
+	sc->sc_dev = self;
+
 	joyattach(sc);
 }
 
-CFATTACH_DECL(joy_pci, sizeof(struct joy_softc),
+CFATTACH_DECL_NEW(joy_pci, sizeof(struct joy_softc),
     joy_pci_match, joy_pci_attach, NULL, NULL);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_lookup.c,v 1.49 2007/02/09 21:55:37 ad Exp $	*/
+/*	$NetBSD: ext2fs_lookup.c,v 1.55 2007/12/08 19:29:53 pooka Exp $	*/
 
 /*
  * Modified for NetBSD 1.2E
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_lookup.c,v 1.49 2007/02/09 21:55:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_lookup.c,v 1.55 2007/12/08 19:29:53 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,6 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: ext2fs_lookup.c,v 1.49 2007/02/09 21:55:37 ad Exp $"
 #include <sys/malloc.h>
 #include <sys/dirent.h>
 #include <sys/kauth.h>
+#include <sys/proc.h>
 
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufsmount.h>
@@ -142,10 +143,10 @@ ext2fs_readdir(void *v)
 	struct m_ext2fs *fs = VTOI(vp)->i_e2fs;
 
 	struct ext2fs_direct *dp;
-	struct dirent dstd;
+	struct dirent *dstd;
 	struct uio auio;
 	struct iovec aiov;
-	caddr_t dirbuf;
+	void *dirbuf;
 	off_t off = uio->uio_offset;
 	off_t *cookies = NULL;
 	int nc = 0, ncookies = 0;
@@ -167,8 +168,10 @@ ext2fs_readdir(void *v)
 	auio.uio_resid = e2fs_count;
 	UIO_SETUP_SYSSPACE(&auio);
 	dirbuf = malloc(e2fs_count, M_TEMP, M_WAITOK);
+	dstd = malloc(sizeof(struct dirent), M_TEMP, M_WAITOK | M_ZERO);
 	if (ap->a_ncookies) {
-		nc = ncookies = e2fs_count / 16;
+		nc = e2fs_count / _DIRENT_MINSIZE((struct dirent *)0);
+		ncookies = nc;
 		cookies = malloc(sizeof (off_t) * ncookies, M_TEMP, M_WAITOK);
 		*ap->a_cookies = cookies;
 	}
@@ -185,11 +188,12 @@ ext2fs_readdir(void *v)
 				error = EIO;
 				break;
 			}
-			ext2fs_dirconv2ffs(dp, &dstd);
-			if(dstd.d_reclen > uio->uio_resid) {
+			ext2fs_dirconv2ffs(dp, dstd);
+			if(dstd->d_reclen > uio->uio_resid) {
 				break;
 			}
-			if ((error = uiomove((caddr_t)&dstd, dstd.d_reclen, uio)) != 0) {
+			error = uiomove(dstd, dstd->d_reclen, uio);
+			if (error != 0) {
 				break;
 			}
 			off = off + e2d_reclen;
@@ -206,6 +210,7 @@ ext2fs_readdir(void *v)
 		uio->uio_offset = off;
 	}
 	FREE(dirbuf, M_TEMP);
+	FREE(dstd, M_TEMP);
 	*ap->a_eofflag = ext2fs_size(VTOI(ap->a_vp)) <= uio->uio_offset;
 	if (ap->a_ncookies) {
 		if (error) {
@@ -295,7 +300,7 @@ ext2fs_lookup(void *v)
 	/*
 	 * Check accessiblity of directory.
 	 */
-	if ((error = VOP_ACCESS(vdp, VEXEC, cred, cnp->cn_lwp)) != 0)
+	if ((error = VOP_ACCESS(vdp, VEXEC, cred)) != 0)
 		return (error);
 
 	if ((flags & ISLASTCN) && (vdp->v_mount->mnt_flag & MNT_RDONLY) &&
@@ -364,7 +369,7 @@ searchloop:
 		 */
 		if ((dp->i_offset & bmask) == 0) {
 			if (bp != NULL)
-				brelse(bp);
+				brelse(bp, 0);
 			error = ext2fs_blkatoff(vdp, (off_t)dp->i_offset, NULL,
 			    &bp);
 			if (error != 0)
@@ -468,7 +473,7 @@ searchloop:
 		goto searchloop;
 	}
 	if (bp != NULL)
-		brelse(bp);
+		brelse(bp, 0);
 	/*
 	 * If creating, and at end of pathname and current
 	 * directory has not been removed, then can consider
@@ -480,7 +485,7 @@ searchloop:
 		 * Access for write is interpreted as allowing
 		 * creation of files in the directory.
 		 */
-		error = VOP_ACCESS(vdp, VWRITE, cred, cnp->cn_lwp);
+		error = VOP_ACCESS(vdp, VWRITE, cred);
 		if (error)
 			return (error);
 		/*
@@ -541,13 +546,13 @@ found:
 		error = ext2fs_setsize(dp,
 				dp->i_offset + EXT2FS_DIRSIZ(ep->e2d_namlen));
 		if (error) {
-			brelse(bp);
+			brelse(bp, 0);
 			return (error);
 		}
 		dp->i_flag |= IN_CHANGE | IN_UPDATE;
 		uvm_vnp_setsize(vdp, ext2fs_size(dp));
 	}
-	brelse(bp);
+	brelse(bp, 0);
 
 	/*
 	 * Found component in pathname.
@@ -566,7 +571,7 @@ found:
 		/*
 		 * Write access to directory required to delete files.
 		 */
-		if ((error = VOP_ACCESS(vdp, VWRITE, cred, cnp->cn_lwp)) != 0)
+		if ((error = VOP_ACCESS(vdp, VWRITE, cred)) != 0)
 			return (error);
 		/*
 		 * Return pointer to current entry in dp->i_offset,
@@ -614,7 +619,7 @@ found:
 	 * regular file, or empty directory.
 	 */
 	if (nameiop == RENAME && (flags & ISLASTCN)) {
-		error = VOP_ACCESS(vdp, VWRITE, cred, cnp->cn_lwp);
+		error = VOP_ACCESS(vdp, VWRITE, cred);
 		if (error)
 			return (error);
 		/*
@@ -779,7 +784,7 @@ ext2fs_direnter(struct inode *ip, struct vnode *dvp, struct componentname *cnp)
 		newdir.e2d_reclen = h2fs16(dirblksiz);
 		auio.uio_resid = newentrysize;
 		aiov.iov_len = newentrysize;
-		aiov.iov_base = (caddr_t)&newdir;
+		aiov.iov_base = (void *)&newdir;
 		auio.uio_iov = &aiov;
 		auio.uio_iovcnt = 1;
 		auio.uio_rw = UIO_WRITE;
@@ -836,7 +841,7 @@ ext2fs_direnter(struct inode *ip, struct vnode *dvp, struct componentname *cnp)
 		dsize = EXT2FS_DIRSIZ(nep->e2d_namlen);
 		spacefree += fs2h16(nep->e2d_reclen) - dsize;
 		loc += fs2h16(nep->e2d_reclen);
-		memcpy((caddr_t)ep, (caddr_t)nep, dsize);
+		memcpy((void *)ep, (void *)nep, dsize);
 	}
 	/*
 	 * Update the pointer fields in the previous entry (if any),
@@ -860,12 +865,12 @@ ext2fs_direnter(struct inode *ip, struct vnode *dvp, struct componentname *cnp)
 		ep->e2d_reclen = h2fs16(dsize);
 		ep = (struct ext2fs_direct *)((char *)ep + dsize);
 	}
-	memcpy((caddr_t)ep, (caddr_t)&newdir, (u_int)newentrysize);
+	memcpy((void *)ep, (void *)&newdir, (u_int)newentrysize);
 	error = VOP_BWRITE(bp);
 	dp->i_flag |= IN_CHANGE | IN_UPDATE;
 	if (!error && dp->i_endoff && dp->i_endoff < ext2fs_size(dp))
 		error = ext2fs_truncate(dvp, (off_t)dp->i_endoff, IO_SYNC,
-		    cnp->cn_cred, cnp->cn_lwp->l_proc);
+		    cnp->cn_cred);
 	return (error);
 }
 
@@ -966,7 +971,7 @@ ext2fs_dirempty(struct inode *ip, ino_t parentino, kauth_cred_t cred)
 #define	MINDIRSIZ (sizeof (struct ext2fs_dirtemplate) / 2)
 
 	for (off = 0; off < ext2fs_size(ip); off += fs2h16(dp->e2d_reclen)) {
-		error = vn_rdwr(UIO_READ, ITOV(ip), (caddr_t)dp, MINDIRSIZ, off,
+		error = vn_rdwr(UIO_READ, ITOV(ip), (void *)dp, MINDIRSIZ, off,
 		   UIO_SYSSPACE, IO_NODELOCKED, cred, &count, NULL);
 		/*
 		 * Since we read MINDIRSIZ, residual must
@@ -1029,7 +1034,7 @@ ext2fs_checkpath(struct inode *source, struct inode *target,
 			error = ENOTDIR;
 			break;
 		}
-		error = vn_rdwr(UIO_READ, vp, (caddr_t)&dirbuf,
+		error = vn_rdwr(UIO_READ, vp, (void *)&dirbuf,
 			sizeof (struct ext2fs_dirtemplate), (off_t)0,
 			UIO_SYSSPACE, IO_NODELOCKED, cred, (size_t *)0,
 			NULL);

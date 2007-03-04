@@ -1,4 +1,4 @@
-/*	$NetBSD: interrupt.c,v 1.2 2007/02/16 13:27:00 tsutsui Exp $	*/
+/*	$NetBSD: interrupt.c,v 1.4 2008/03/14 16:43:27 tsutsui Exp $	*/
 /*	$OpenBSD: trap.c,v 1.22 1999/05/24 23:08:59 jason Exp $	*/
 
 /*
@@ -78,18 +78,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.2 2007/02/16 13:27:00 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.4 2008/03/14 16:43:27 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+#include <sys/intr.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
 #include <mips/locore.h>
 
 #include <machine/autoconf.h>
-#include <machine/intr.h>
 #include <machine/pio.h>
 
 #include <arc/arc/timervar.h>
@@ -141,9 +142,14 @@ cpu_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
 {
 	struct clockframe cf;
 	struct cpu_inttab *inttab;
+	struct cpu_info *ci;
+	uint32_t handled;
 	u_int i;
 
+	handled = 0;
+	ci = curcpu();
 	uvmexp.intrs++;
+	ci->ci_idepth++;
 
 	cf.pc = pc;
 	cf.sr = status;
@@ -161,9 +167,9 @@ cpu_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
 		 */
 		mips3_cp0_compare_write(0);
 #endif
-		cause &= ~MIPS_INT_MASK_5;
+		handled |= MIPS_INT_MASK_5;
 	}
-	_splset((status & MIPS_INT_MASK_5) | MIPS_SR_INT_IE);
+	_splset((status & handled) | MIPS_SR_INT_IE);
 
 	/*
 	 *  If there is an independent timer interrupt handler, call it first.
@@ -171,9 +177,9 @@ cpu_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
 	 */
 	inttab = &cpu_int_tab[ARC_INTPRI_TIMER_INT];
 	if (inttab->int_mask & ipending) {
-		cause &= (*inttab->int_hand)(ipending, &cf);
+		handled |= (*inttab->int_hand)(ipending, &cf);
 	}
-	_splset((status & ~cause & MIPS_HARD_INT_MASK) | MIPS_SR_INT_IE);
+	_splset((status & handled) | MIPS_SR_INT_IE);
 
 	inttab++;
 
@@ -183,18 +189,20 @@ cpu_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
 	 */
 	for (i = ARC_INTPRI_TIMER_INT + 1; i < ARC_NINTPRI; i++) {
 		if (inttab->int_mask & ipending) {
-			cause &= (*inttab->int_hand)(ipending, &cf);
+			handled |= (*inttab->int_hand)(ipending, &cf);
 		}
 		inttab++;
 	}
+	cause &= ~handled;
 	_splset((status & ~cause & MIPS_HARD_INT_MASK) | MIPS_SR_INT_IE);
+	ci->ci_idepth--;
 
+#ifdef __HAVE_FAST_SOFTINTS
 	/* software interrupts */
 	ipending &= (MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0);
 	if (ipending == 0)
 		return;
-
 	_clrsoftintr(ipending);
-
 	softintr_dispatch(ipending);
+#endif
 }

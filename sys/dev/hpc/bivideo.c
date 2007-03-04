@@ -1,4 +1,4 @@
-/*	$NetBSD: bivideo.c,v 1.25 2006/10/10 23:09:21 he Exp $	*/
+/*	$NetBSD: bivideo.c,v 1.28 2008/04/06 20:28:36 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1999-2001
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bivideo.c,v 1.25 2006/10/10 23:09:21 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bivideo.c,v 1.28 2008/04/06 20:28:36 cegger Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_hpcfb.h"
@@ -50,7 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: bivideo.c,v 1.25 2006/10/10 23:09:21 he Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 #include <machine/bootinfo.h>
 #include <machine/config_hook.h>
@@ -81,7 +81,7 @@ int bivideo_dont_attach = 0;
  */
 int	bivideomatch(struct device *, struct cfdata *, void *);
 void	bivideoattach(struct device *, struct device *, void *);
-int	bivideo_ioctl(void *, u_long, caddr_t, int, struct lwp *);
+int	bivideo_ioctl(void *, u_long, void *, int, struct lwp *);
 paddr_t	bivideo_mmap(void *, off_t, int);
 
 struct bivideo_softc {
@@ -174,15 +174,14 @@ bivideoattach(struct device *parent, struct device *self, void *aux)
 	}
 	printf("\n");
 	printf("%s: framebuffer address: 0x%08lx\n",
-		sc->sc_dev.dv_xname, (u_long)bootinfo->fb_addr);
+		device_xname(&sc->sc_dev), (u_long)bootinfo->fb_addr);
 
 	/* Add a suspend hook to power saving */
 	sc->sc_powerstate = 0;
-	sc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
+	sc->sc_powerhook = powerhook_establish(device_xname(&sc->sc_dev),
 	    bivideo_power, sc);
 	if (sc->sc_powerhook == NULL)
-		printf("%s: WARNING: unable to establish power hook\n",
-			sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "WARNING: unable to establish power hook\n");
 
 	/* initialize backlight brightness and lcd contrast */
 	sc->sc_lcd_inited = 0;
@@ -374,7 +373,7 @@ bivideo_update_powerstate(struct bivideo_softc *sc, int updates)
 }
 
 int
-bivideo_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct lwp *l)
+bivideo_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct bivideo_softc *sc = (struct bivideo_softc *)v;
 	struct hpcfb_fbconf *fbconf;

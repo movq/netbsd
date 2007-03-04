@@ -1,4 +1,4 @@
-/*	$NetBSD: mutex.h,v 1.4 2007/02/15 22:52:42 ad Exp $	*/
+/*	$NetBSD: mutex.h,v 1.9 2008/04/28 20:23:23 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -46,27 +39,30 @@
  * know who owns the lock.  For adaptive mutexes, we need an owner
  * field and additional interlock
  */
+
 #ifndef __ASSEMBLER__
+
+#include <machine/lock.h>
+
 struct kmutex {
 	union {
 		/*
-		 * Only the low 4 bytes of the lock will be used by
-		 * __cpu_simple_lock(), but it must be aligned on a
-		 * 16-byte boundary.  See hppa/lock.h
+		 * Only the 16 bytes aligned word of __cpu_simple_lock_t will
+		 * be used. It's 16 bytes to simplify the allocation.
+		 * See hppa/lock.h
 		 */
 #ifdef __MUTEX_PRIVATE
-		__cpu_simple_lock_t	mtxu_lock;		/* 0-15 */
 		struct {
-			volatile uint32_t	mtxs_lockword;	/* 0-3 */
-			volatile uint32_t	mtxs_owner;	/* 4-7 */
-			ipl_cookie_t		mtxs_ipl;	/* 8-11 */
-			volatile uint8_t	mtxs_waiters;	/* 12 */
+			__cpu_simple_lock_t	mtxu_lock;	/* 0-15 */
+			volatile uint32_t	mtxs_owner;	/* 16-19 */
+			ipl_cookie_t		mtxs_ipl;	/* 20-23 */
+			volatile uint8_t	mtxs_waiters;	/* 24 */
 
 			/* For LOCKDEBUG */
-			uint8_t			mtxs_id[3];	/* 13-15 */
+			uint8_t			mtxs_dodebug;	/* 25 */
 		} s;
 #endif
-		uint8_t			mtxu_pad[16];		/* 0-15 */
+		uint8_t			mtxu_pad[32];	/* 0 - 32 */
 	} u;
 } __aligned (16);
 #endif
@@ -75,11 +71,11 @@ struct kmutex {
 
 #define	__HAVE_MUTEX_STUBS	1
 
-#define	mtx_lock	u.mtxu_lock
+#define	mtx_lock	u.s.mtxu_lock
 #define	mtx_owner	u.s.mtxs_owner
 #define	mtx_ipl		u.s.mtxs_ipl
 #define	mtx_waiters	u.s.mtxs_waiters
-#define	mtx_id		u.s.mtxs_id
+#define	mtx_dodebug	u.s.mtxs_dodebug
 
 /* Magic constants for mtx_owner */
 #define	MUTEX_ADAPTIVE_UNOWNED		0xffffff00
@@ -116,22 +112,18 @@ MUTEX_HAS_WAITERS(volatile kmutex_t *mtx)
 }
 
 static inline void
-MUTEX_INITIALIZE_SPIN(kmutex_t *mtx, u_int id, int ipl)
+MUTEX_INITIALIZE_SPIN(kmutex_t *mtx, bool dodebug, int ipl)
 {
 	mtx->mtx_ipl = makeiplcookie(ipl);
-	mtx->mtx_id[0] = (uint8_t)id;
-	mtx->mtx_id[1] = (uint8_t)(id >> 8);
-	mtx->mtx_id[2] = (uint8_t)(id >> 16);
+	mtx->mtx_dodebug = dodebug;
 	mtx->mtx_owner = MUTEX_SPIN_FLAG;
 	__cpu_simple_lock_init(&mtx->mtx_lock);
 }
 
 static inline void
-MUTEX_INITIALIZE_ADAPTIVE(kmutex_t *mtx, u_int id)
+MUTEX_INITIALIZE_ADAPTIVE(kmutex_t *mtx, bool dodebug)
 {
-	mtx->mtx_id[0] = (uint8_t)id;
-	mtx->mtx_id[1] = (uint8_t)(id >> 8);
-	mtx->mtx_id[2] = (uint8_t)(id >> 16);
+	mtx->mtx_dodebug = dodebug;
 	mtx->mtx_owner = MUTEX_ADAPTIVE_UNOWNED;
 	__cpu_simple_lock_init(&mtx->mtx_lock);
 }
@@ -140,17 +132,12 @@ static inline void
 MUTEX_DESTROY(kmutex_t *mtx)
 {
 	mtx->mtx_owner = 0xffffffff;
-	mtx->mtx_id[0] = 0xff;
-	mtx->mtx_id[1] = 0xff;
-	mtx->mtx_id[2] = 0xff;
 }
 
-static inline u_int
-MUTEX_GETID(kmutex_t *mtx)
+static inline bool
+MUTEX_DEBUG_P(kmutex_t *mtx)
 {
-	return (u_int)mtx->mtx_id[0] |
-	    ((u_int)mtx->mtx_id[1] << 8) |
-	    ((u_int)mtx->mtx_id[2] << 16);
+	return mtx->mtx_dodebug != 0;
 }
 
 static inline int

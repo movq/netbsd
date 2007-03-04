@@ -1,4 +1,4 @@
-/*	$NetBSD: power.h,v 1.4 2005/12/11 12:25:20 christos Exp $	*/
+/*	$NetBSD: power.h,v 1.12 2008/08/22 11:27:50 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -78,6 +78,7 @@
  *	Lid switch		This is e.g. the lid of a laptop.  This kind
  *				of switch has state.  We know if it is open
  *				or closed.
+ *
  */
 
 #define	PSWITCH_TYPE_POWER	0	/* power button */
@@ -85,25 +86,140 @@
 #define	PSWITCH_TYPE_LID	2	/* lid switch */
 #define	PSWITCH_TYPE_RESET	3	/* reset button */
 #define	PSWITCH_TYPE_ACADAPTER	4	/* AC adapter presence */
+#define	PSWITCH_TYPE_HOTKEY	5	/* hotkey button */
+#define		PSWITCH_HK_DISPLAY_CYCLE	"display-cycle"
+#define		PSWITCH_HK_LOCK_SCREEN		"lock-screen"
+#define		PSWITCH_HK_BATTERY_INFO		"battery-info"
+#define		PSWITCH_HK_EJECT_BUTTON		"eject-button"
+#define		PSWITCH_HK_ZOOM_BUTTON		"zoom-button"
+#define		PSWITCH_HK_VENDOR_BUTTON	"vendor-button"
 
-#define	PSWITCH_EVENT_PRESSED	0	/* button pressed, lid closed,
-					   AC adapter online */
-#define	PSWITCH_EVENT_RELEASED	1	/* button released, lid open,
-					   AC adapter offline */
-
-#define	PSWITCH_STATE_PRESSED	0	/* button pressed/lid closed */
-#define	PSWITCH_STATE_RELEASED	1	/* button released/lid open */
-#define	PSWITCH_STATE_UNKNOWN	-1
+#define	PSWITCH_EVENT_PRESSED	0	/* button pressed, lid closed, AC off */
+#define	PSWITCH_EVENT_RELEASED	1	/* button released, lid open, AC on */
 
 /*
- * This structure describes the state of a power switch.  It is used
- * by the POWER_IOC_GET_SWSTATE ioctl, as well as in power mangement
- * event messages.
+ * This structure describes the state of a power switch.
  */
 struct pswitch_state {
 	char	psws_name[16];		/* power switch name */
 	int32_t	psws_type;		/* type of switch (qualifier) */
 	int32_t	psws_state;		/* state of the switch/event */
+};
+
+/*
+ * envsys(4) events:
+ *
+ * envsys events are sent by the sysmon envsys framework when
+ * a warning or critical condition happens in a sensor.
+ *
+ * We define the folowing types of envsys events:
+ *
+ *	sensor temperature	To handle temperature sensors.
+ *
+ *	sensor voltage		To handle voltage sensors (AC/DC).
+ *
+ *	sensor power		To handle power sensors (W/Ampere).
+ *
+ *	sensor resistance	To handle resistance sensors (Ohms).
+ *
+ *	sensor battery		To handle battery sensors (Ah/Wh).
+ *
+ *	sensor fan		To handle fan sensors.
+ *
+ *	sensor drive		To handle drive sensors.
+ *
+ * 	sensor indicator	To handle indicator/integer sensors.
+ */
+
+#define PENVSYS_TYPE_TEMP		10
+#define PENVSYS_TYPE_VOLTAGE		11
+#define PENVSYS_TYPE_POWER		12
+#define PENVSYS_TYPE_RESISTANCE 	13
+#define PENVSYS_TYPE_BATTERY		14
+#define PENVSYS_TYPE_FAN		15
+#define PENVSYS_TYPE_DRIVE		16
+#define PENVSYS_TYPE_INDICATOR		17
+
+/*
+ * The following events apply for temperatures, power, resistance, 
+ * voltages, battery and fan sensors:
+ *
+ * 	PENVSYS_EVENT_CRITICAL		A critical limit.
+ *
+ * 	PENVSYS_EVENT_CRITOVER		A critical over limit.
+ *
+ * 	PENVSYS_EVENT_CRITUNDER		A critical under limit.
+ *
+ * 	PENVSYS_EVENT_WARNOVER		A warning under limit.
+ *
+ * 	PENVSYS_EVENT_WARNUNDER		A warning over limit.
+ *
+ * The following events apply to the same except for batteries:
+ *
+ * 	PENVSYS_EVENT_USER_CRITMAX	User critical max limit.
+ *
+ * 	PENVSYS_EVENT_USER_CRITMIN	User critical min limit.
+ *
+ *	PENVSYS_EVENT_USER_WARNMAX	User warning max limit.
+ *
+ *	PENVSYS_EVENT_USER_WARNMIN	User warning min limit.
+ *
+ * The folowing event apply to all sensors, when the state is
+ * valid or the warning or critical limit is not valid anymore:
+ *
+ * 	PENVSYS_EVENT_NORMAL		Normal state in the sensor.
+ */
+
+#define PENVSYS_EVENT_NORMAL 		90
+#define PENVSYS_EVENT_CRITICAL 		100
+#define PENVSYS_EVENT_CRITOVER 		110
+#define PENVSYS_EVENT_CRITUNDER 	120
+#define PENVSYS_EVENT_WARNOVER 		130
+#define PENVSYS_EVENT_WARNUNDER 	140
+#define PENVSYS_EVENT_USER_CRITMAX 	150
+#define PENVSYS_EVENT_USER_WARNMAX  	155
+#define PENVSYS_EVENT_USER_CRITMIN  	160
+#define PENVSYS_EVENT_USER_WARNMIN  	165
+
+/*
+ * The following events apply for battery sensors:
+ *
+ * 	PENVSYS_EVENT_BATT_USERCAP	User critical capacity.
+ *
+ *	PENVSYS_EVENT_BATT_USERWARN	User warning capacity.
+ *
+ * 	PENVSYS_EVENT_LOW_POWER		AC Adapter is OFF and all batteries
+ * 					are discharged.
+ */
+
+#define PENVSYS_EVENT_BATT_USERCAP 	170
+#define PENVSYS_EVENT_BATT_USERWARN 	175
+#define PENVSYS_EVENT_LOW_POWER 	180
+
+/*
+ * The following event apply for battery state and drive sensors:
+ *
+ * 	PENVSYS_EVENT_STATE_CHANGED	State has changed.
+ *
+ */
+#define PENVSYS_EVENT_STATE_CHANGED 	190
+
+/*
+ * The following events are used internally to associate multiple
+ * external states with a single event monitor
+ */
+#define PENVSYS_EVENT_HW_LIMITS		200
+#define PENVSYS_EVENT_USER_LIMITS	210
+#define PENVSYS_EVENT_BATT_USER_LIMITS	220
+
+/*
+ * This structure defines the properties of an envsys event.
+ */
+struct penvsys_state {
+	char	pes_dvname[16];		/* device name */
+	char	pes_sensname[32];	/* sensor name */
+	char	pes_statedesc[64];	/* sensor state description */
+	int32_t	pes_type;		/* envsys power type */
 };
 
 /*
@@ -115,23 +231,26 @@ struct pswitch_state {
 #define	POWER_EVENT_MSG_SIZE	32
 
 #define	POWER_EVENT_SWITCH_STATE_CHANGE		0
+#define POWER_EVENT_ENVSYS_STATE_CHANGE		1
 
-typedef struct {
+typedef struct power_event {
 	int32_t		pev_type;	/* power event type */
 	union {
-		int32_t	_pev_d_space[(POWER_EVENT_MSG_SIZE /
-				      sizeof(int32_t)) - 1];
+		int32_t	 _pev_d_space[(POWER_EVENT_MSG_SIZE /
+				       sizeof(int32_t)) - 1];
 
 		/*
 		 * This field is used for:
 		 *
-		 *	POWER_EVENT_SWITCH_STATE_CHANGE
+		 * 	POWER_EVENT_SWITCH_STATE_CHANGE
 		 */
 		struct pswitch_state _pev_d_switch;
 	} _pev_data;
 } power_event_t;
 
-#define	pev_switch	_pev_data._pev_d_switch
+#define pev_switch	_pev_data._pev_d_switch
+
+#define POWER_EVENT_RECVDICT	_IOWR('P', 1, struct plistref)
 
 /*
  * POWER_IOC_GET_TYPE:

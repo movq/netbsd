@@ -1,4 +1,4 @@
-/*	$NetBSD: ne2000.c,v 1.53 2007/01/13 19:46:21 cube Exp $	*/
+/*	$NetBSD: ne2000.c,v 1.59 2008/04/28 20:23:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -55,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.53 2007/01/13 19:46:21 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.59 2008/04/28 20:23:50 martin Exp $");
 
 #include "opt_ipkdb.h"
 
@@ -74,7 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.53 2007/01/13 19:46:21 cube Exp $");
 #include <net/if_ether.h>
 
 #include <sys/bswap.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #ifndef __BUS_SPACE_HAS_STREAM_METHODS
 #define	bus_space_write_stream_2	bus_space_write_2
@@ -95,7 +88,7 @@ __KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.53 2007/01/13 19:46:21 cube Exp $");
 #include <dev/ic/ax88190reg.h>
 
 int	ne2000_write_mbuf(struct dp8390_softc *, struct mbuf *, int);
-int	ne2000_ring_copy(struct dp8390_softc *, int, caddr_t, u_short);
+int	ne2000_ring_copy(struct dp8390_softc *, int, void *, u_short);
 void	ne2000_read_hdr(struct dp8390_softc *, int, struct dp8390_ring *);
 int	ne2000_test_mem(struct dp8390_softc *);
 
@@ -136,7 +129,7 @@ ne2000_attach(nsc, myea)
 	switch (nsc->sc_type) {
 	case NE2000_TYPE_UNKNOWN:
 	default:
-		printf("%s: where did the card go?\n", dsc->sc_dev.dv_xname);
+		aprint_error_dev(dsc->sc_dev, "where did the card go?\n");
 		return (1);
 	case NE2000_TYPE_NE1000:
 		memsize = 8192;
@@ -224,8 +217,7 @@ ne2000_attach(nsc, myea)
 		}
 
 		if (mstart == 0) {
-			printf("%s: cannot find start of RAM\n",
-			    dsc->sc_dev.dv_xname);
+			aprint_error_dev(&dsc->sc_dev, "cannot find start of RAM\n");
 			return (1);
 		}
 
@@ -253,7 +245,7 @@ ne2000_attach(nsc, myea)
 		}
 
 		printf("%s: RAM start 0x%x, size %d\n",
-		    dsc->sc_dev.dv_xname, mstart, memsize);
+		    device_xname(&dsc->sc_dev), mstart, memsize);
 
 		dsc->mem_start = mstart;
 	}
@@ -295,7 +287,7 @@ ne2000_attach(nsc, myea)
 		dsc->sc_media_init = dp8390_media_init;
 
 	if (dp8390_config(dsc)) {
-		printf("%s: setup failed\n", dsc->sc_dev.dv_xname);
+		aprint_error_dev(dsc->sc_dev, "setup failed\n");
 		return (1);
 	}
 
@@ -321,7 +313,7 @@ ne2000_detect(nict, nich, asict, asich)
 {
 	static u_int8_t test_pattern[32] = "THIS is A memory TEST pattern";
 	u_int8_t test_buffer[32], tmp;
-	int i, rv = 0;
+	int i, rv = NE2000_TYPE_UNKNOWN;
 
 	/* Reset the board. */
 #ifdef GWETHER
@@ -642,7 +634,7 @@ ne2000_write_mbuf(sc, m, buf)
 	if (maxwait == 0) {
 		log(LOG_WARNING,
 		    "%s: remote transmit DMA failed to complete\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 		dp8390_reset(sc);
 	}
 
@@ -655,12 +647,13 @@ ne2000_write_mbuf(sc, m, buf)
  * ring-wrap.
  */
 int
-ne2000_ring_copy(sc, src, dst, amount)
+ne2000_ring_copy(sc, src, dstv, amount)
 	struct dp8390_softc *sc;
 	int src;
-	caddr_t dst;
+	void *dstv;
 	u_short amount;
 {
+	char *dst = dstv;
 	struct ne2000_softc *nsc = (struct ne2000_softc *)sc;
 	bus_space_tag_t nict = sc->sc_regt;
 	bus_space_handle_t nich = sc->sc_regh;

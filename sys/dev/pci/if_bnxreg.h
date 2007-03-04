@@ -1,5 +1,5 @@
-/*	$NetBSD: if_bnxreg.h,v 1.1 2006/12/17 23:02:06 bouyer Exp $	*/
-/*	$OpenBSD: if_bnxreg.h,v 1.11 2006/08/21 03:22:09 brad Exp $	*/
+/*	$NetBSD: if_bnxreg.h,v 1.7 2008/06/24 10:17:45 gmcgarry Exp $	*/
+/*	$OpenBSD: if_bnxreg.h,v 1.17 2006/11/20 21:26:27 brad Exp $	*/
 
 /*-
  * Copyright (c) 2006 Broadcom Corporation
@@ -148,8 +148,7 @@
 /* Print a message based on the logging level and code path. */
 #define DBPRINT(sc, level, format, args...)				\
 	if (BNX_LOG_MSG(level)) {					\
-		aprint_debug("%s: " format, 				\
-		sc->bnx_dev.dv_xname, ## args);				\
+		aprint_debug_dev(sc->bnx_dev, format, ## args);		\
 	}
 
 /* Runs a particular command based on the logging level and code path. */
@@ -192,11 +191,11 @@
 
 #else
 
-#define DBPRINT(level, format, args...)
-#define DBRUN(m, args...)
-#define DBRUNLV(level, args...)
-#define DBRUNCP(cp, args...)
-#define DBRUNIF(cond, args...)
+#define DBPRINT(level, format, ...)
+#define DBRUN(m, ...)
+#define DBRUNLV(level, ...)
+#define DBRUNCP(cp, ...)
+#define DBRUNIF(cond, ...)
 #define DB_RANDOMFALSE(defects)
 #define DB_OR_RANDOMFALSE(percent)
 #define DB_AND_RANDOMFALSE(percent)
@@ -659,12 +658,12 @@ struct flash_spec {
  * PCI registers defined in the PCI 2.2 spec.
  */
 #define BNX_PCI_BAR0			0x10
-#define BNX_PCI_PCIX_CMD		0x42
+#define BNX_PCI_PCIX_CMD		0x40
 
 /****************************************************************************/
 /* Convenience definitions.                                                 */
 /****************************************************************************/
-#define	BNX_PRINTF(sc, fmt, args...)	aprint_error("%s: " fmt, sc->bnx_dev.dv_xname, ##args)
+#define	BNX_PRINTF(sc, fmt, ...)	aprint_error_dev(sc->bnx_dev, fmt, __VA_ARGS__)
 
 #define REG_WR(sc, reg, val)		bus_space_write_4(sc->bnx_btag, sc->bnx_bhandle, reg, val)
 #define REG_WR16(sc, reg, val)		bus_space_write_2(sc->bnx_btag, sc->bnx_bhandle, reg, val)
@@ -698,7 +697,8 @@ struct tx_bd {
 	u_int32_t tx_bd_haddr_hi;
 	u_int32_t tx_bd_haddr_lo;
 	u_int32_t tx_bd_mss_nbytes;
-	u_int32_t tx_bd_vlan_tag_flags;
+	u_int16_t tx_bd_flags;
+	u_int16_t tx_bd_vlan_tag;
 		#define TX_BD_FLAGS_CONN_FAULT		(1<<0)
 		#define TX_BD_FLAGS_TCP_UDP_CKSUM	(1<<1)
 		#define TX_BD_FLAGS_IP_CKSUM		(1<<2)
@@ -4587,28 +4587,11 @@ struct fw_info {
 #define BNX_STATS_BLK_SZ		sizeof(struct statistics_block)
 #define BNX_TX_CHAIN_PAGE_SZ	BCM_PAGE_SIZE
 #define BNX_RX_CHAIN_PAGE_SZ	BCM_PAGE_SIZE
-/*
- * Mbuf pointers. We need these to keep track of the virtual addresses
- * of our mbuf chains since we can only convert from physical to virtual,
- * not the other way around.
- */
-
-struct bnx_dmamap_arg {
-	struct bnx_softc	*sc;				/* Pointer back to device context */
-	bus_addr_t			busaddr;		/* Physical address of mapped memory */
-	u_int32_t					tx_flags;		/* Flags for frame transmit */
-	u_int16_t					prod;
-	u_int16_t					chain_prod;
-	int					maxsegs;		/* Max segments supported for this mapped memory */
-	u_int32_t					prod_bseq;
-	struct tx_bd		*tx_chain[TX_PAGES];
-};
-
 
 struct bnx_softc
 {
-	struct device			bnx_dev;			/* Parent device handle */
-	struct ethercom			ethercom;
+	device_t bnx_dev;
+	struct ethercom			bnx_ec;
 	struct pci_attach_args		bnx_pa;
 
 	struct ifmedia		bnx_ifmedia;		/* TBI media info */
@@ -4704,7 +4687,6 @@ struct bnx_softc
 	u_int16_t					tx_cons;
 	u_int32_t					tx_prod_bseq;	/* Counts the bytes used.  */
 
-	int					bnx_link;
 	struct callout				bnx_timeout;
 
 	/* Frame size and mbuf allocation size for RX frames. */

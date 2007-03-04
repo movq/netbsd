@@ -1,4 +1,4 @@
-/*	$NetBSD: mfs_extern.h,v 1.23 2006/05/14 21:32:45 elad Exp $	*/
+/*	$NetBSD: mfs_extern.h,v 1.30 2008/06/28 01:34:05 rumble Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,8 +34,9 @@
 #ifndef _UFS_MFS_MFS_EXTERN_H_
 #define _UFS_MFS_MFS_EXTERN_H_
 
+#include <sys/param.h>
+#include <sys/mount.h>
 #include <sys/mallocvar.h>
-MALLOC_DECLARE(M_MFSNODE);
 
 struct buf;
 struct mount;
@@ -48,30 +49,28 @@ __BEGIN_DECLS
 #define	mfs_ioctl	genfs_enoioctl
 
 /* mfs_vfsops.c */
-int	mfs_mountroot(void);
-int	mfs_initminiroot(caddr_t);
-int	mfs_mount(struct mount *, const char *, void *,
-			     struct nameidata *, struct lwp *);
-int	mfs_start(struct mount *, int, struct lwp *);
-int	mfs_statvfs(struct mount *, struct statvfs *, struct lwp *);
+VFS_PROTOS(mfs);
 
-void	mfs_init(void);
-void	mfs_reinit(void);
-void	mfs_done(void);
+int	mfs_initminiroot(void *);
 
 /* mfs_vnops.c */
 int	mfs_open(void *);
 int	mfs_strategy(void *);
-void	mfs_doio(struct buf *, caddr_t);
+void	mfs_doio(struct buf *, void *);
 int	mfs_bmap(void *);
 int	mfs_close(void *);
 int	mfs_inactive(void *);
 int	mfs_reclaim(void *);
 int	mfs_print(void *);
+int	mfs_fsync(void *);
 
-#ifdef SYSCTL_SETUP_PROTO
-SYSCTL_SETUP_PROTO(sysctl_vfs_mfs_setup);
-#endif /* SYSCTL_SETUP_PROTO */
+#ifdef _KERNEL
+
+#include <sys/mutex.h>
+
+extern kmutex_t	mfs_lock;
+
+#endif
 
 __END_DECLS
 

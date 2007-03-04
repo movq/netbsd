@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.7 2007/02/22 20:09:42 dogcow Exp $	*/
+/*	$NetBSD: db_interface.c,v 1.19 2008/10/15 08:13:17 ad Exp $	*/
 
 /*
  * Mach Operating System
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.7 2007/02/22 20:09:42 dogcow Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.19 2008/10/15 08:13:17 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -42,6 +42,8 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.7 2007/02/22 20:09:42 dogcow Exp 
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>
+#include <sys/atomic.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -53,7 +55,6 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.7 2007/02/22 20:09:42 dogcow Exp 
 #include <machine/i82093var.h>
 #include <machine/i82489reg.h>
 #include <machine/i82489var.h>
-#include <machine/atomic.h>
 
 #include <ddb/db_sym.h>
 #include <ddb/db_command.h>
@@ -73,27 +74,29 @@ void db_mach_cpu (db_expr_t, bool, db_expr_t, const char *);
 
 const struct db_command db_machine_command_table[] = {
 #ifdef MULTIPROCESSOR
-	{ "cpu",	db_mach_cpu,	0,	0 },
+	{ DDB_ADD_CMD("cpu",	db_mach_cpu,	0,
+	  "switch to another cpu", "cpu-no", NULL) },
 #endif
-	{ (char *)0, },
+	{ DDB_ADD_CMD(NULL,     NULL,          0,NULL,NULL,NULL) },
 };
 
-void kdbprinttrap __P((int, int));
+void kdbprinttrap(int, int);
 #ifdef MULTIPROCESSOR
 extern void ddb_ipi(struct trapframe);
 static void ddb_suspend(struct trapframe *);
 int ddb_vec;
+static bool ddb_mp_online;
 #endif
 
 #define NOCPU	-1
 
 int ddb_cpu = NOCPU;
 
-typedef void (vector) __P((void));
+typedef void (vector)(void);
 extern vector Xintrddb;
 
 void
-db_machine_init()
+db_machine_init(void)
 {
 
 #ifdef MULTIPROCESSOR
@@ -124,26 +127,26 @@ db_suspend_others(void)
 	if (win) {
 		x86_ipi(ddb_vec, LAPIC_DEST_ALLEXCL, LAPIC_DLMODE_FIXED);
 	}
+	ddb_mp_online = x86_mp_online;
+	x86_mp_online = false;
 	return win;
 }
 
 static void
 db_resume_others(void)
 {
-	int i;
+	CPU_INFO_ITERATOR cii;
+	struct cpu_info *ci;
 
+	x86_mp_online = ddb_mp_online;
 	__cpu_simple_lock(&db_lock);
 	ddb_cpu = NOCPU;
 	__cpu_simple_unlock(&db_lock);
 
-	for (i=0; i < X86_MAXPROCS; i++) {
-		struct cpu_info *ci = cpu_info[i];
-		if (ci == NULL)
-			continue;
+	for (CPU_INFO_FOREACH(cii, ci)) {
 		if (ci->ci_flags & CPUF_PAUSE)
-			x86_atomic_clearbits_l(&ci->ci_flags, CPUF_PAUSE);
+			atomic_and_32(&ci->ci_flags, ~CPUF_PAUSE);
 	}
-
 }
 
 #endif
@@ -152,8 +155,7 @@ db_resume_others(void)
  * Print trap reason.
  */
 void
-kdbprinttrap(type, code)
-	int type, code;
+kdbprinttrap(int type, int code)
 {
 	db_printf("kernel: ");
 	if (type >= trap_types || type < 0)
@@ -167,9 +169,7 @@ kdbprinttrap(type, code)
  *  kdb_trap - field a TRACE or BPT trap
  */
 int
-kdb_trap(type, code, regs)
-	int type, code;
-	db_regs_t *regs;
+kdb_trap(int type, int code, db_regs_t *regs)
 {
 	int s;
 	db_regs_t dbreg;
@@ -227,7 +227,7 @@ kdb_trap(type, code, regs)
 }
 
 void
-cpu_Debugger()
+cpu_Debugger(void)
 {
 	breakpoint();
 }
@@ -259,22 +259,19 @@ ddb_suspend(struct trapframe *frame)
 
 	ci->ci_ddb_regs = &regs;
 
-	x86_atomic_setbits_l(&ci->ci_flags, CPUF_PAUSE);
+	atomic_or_32(&ci->ci_flags, CPUF_PAUSE);
 
 	while (ci->ci_flags & CPUF_PAUSE)
 		;
 	ci->ci_ddb_regs = 0;
+	tlbflushg();
 }
 
 
 extern void cpu_debug_dump(void); /* XXX */
 
 void
-db_mach_cpu(addr, have_addr, count, modif)
-	db_expr_t	addr;
-	bool		have_addr;
-	db_expr_t	count;
-	const char *	modif;
+db_mach_cpu(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 {
 	struct cpu_info *ci;
 	if (!have_addr) {
@@ -282,11 +279,11 @@ db_mach_cpu(addr, have_addr, count, modif)
 		return;
 	}
 
-	if ((addr < 0) || (addr >= X86_MAXPROCS)) {
+	if (addr < 0) {
 		db_printf("%ld: CPU out of range\n", addr);
 		return;
 	}
-	ci = cpu_info[addr];
+	ci = cpu_lookup(addr);
 	if (ci == NULL) {
 		db_printf("CPU %ld not configured\n", addr);
 		return;

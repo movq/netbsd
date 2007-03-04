@@ -1,4 +1,4 @@
-/*	$NetBSD: if_epic_pci.c,v 1.32 2006/11/16 01:33:08 christos Exp $	*/
+/*	$NetBSD: if_epic_pci.c,v 1.37 2008/07/06 14:32:56 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_epic_pci.c,v 1.32 2006/11/16 01:33:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_epic_pci.c,v 1.37 2008/07/06 14:32:56 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,8 +53,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_epic_pci.c,v 1.32 2006/11/16 01:33:08 christos Ex
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/mii/miivar.h>
 
@@ -85,14 +78,14 @@ struct epic_pci_softc {
 	void	*sc_ih;			/* interrupt handle */
 };
 
-static int	epic_pci_match(struct device *, struct cfdata *, void *);
-static void	epic_pci_attach(struct device *, struct device *, void *);
+static int	epic_pci_match(device_t, cfdata_t, void *);
+static void	epic_pci_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(epic_pci, sizeof(struct epic_pci_softc),
+CFATTACH_DECL_NEW(epic_pci, sizeof(struct epic_pci_softc),
     epic_pci_match, epic_pci_attach, NULL, NULL);
 
 static const struct epic_pci_product {
-	u_int32_t	epp_prodid;	/* PCI product ID */
+	uint32_t	epp_prodid;	/* PCI product ID */
 	const char	*epp_name;	/* device name */
 } epic_pci_products[] = {
 	{ PCI_PRODUCT_SMC_83C170,	"SMC 83c170 Fast Ethernet" },
@@ -106,13 +99,13 @@ epic_pci_lookup(const struct pci_attach_args *pa)
 	const struct epic_pci_product *epp;
 
 	if (PCI_VENDOR(pa->pa_id) != PCI_VENDOR_SMC)
-		return (NULL);
+		return NULL;
 
 	for (epp = epic_pci_products; epp->epp_name != NULL; epp++)
 		if (PCI_PRODUCT(pa->pa_id) == epp->epp_prodid)
-			return (epp);
+			return epp;
 
-	return (NULL);
+	return NULL;
 }
 
 static const struct epic_pci_subsys_info {
@@ -140,27 +133,26 @@ epic_pci_subsys_lookup(const struct pci_attach_args *pa)
 
 	for (esp = epic_pci_subsys_info; esp->subsysid != 0xffffffff; esp++)
 		if (esp->subsysid == reg)
-			return (esp);
+			return esp;
 
-	return (NULL);
+	return NULL;
 }
 
 static int
-epic_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+epic_pci_match(device_t parent, cfdata_t cf, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
 	if (epic_pci_lookup(pa) != NULL)
-		return (1);
+		return 1;
 
-	return (0);
+	return 0;
 }
 
 static void
-epic_pci_attach(struct device *parent, struct device *self, void *aux)
+epic_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct epic_pci_softc *psc = (struct epic_pci_softc *)self;
+	struct epic_pci_softc *psc = device_private(self);
 	struct epic_softc *sc = &psc->sc_epic;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
@@ -173,22 +165,23 @@ epic_pci_attach(struct device *parent, struct device *self, void *aux)
 	int ioh_valid, memh_valid;
 	int error;
 
+	sc->sc_dev = self;
+
 	aprint_naive(": Ethernet controller\n");
 
 	epp = epic_pci_lookup(pa);
 	if (epp == NULL) {
-		printf("\n");
-		panic("epic_pci_attach: impossible");
+		aprint_normal("\n");
+		panic("%s: impossible", __func__);
 	}
 
 	aprint_normal(": %s, rev. %d\n", epp->epp_name,
 	    PCI_REVISION(pa->pa_class));
 
 	/* power up chip */
-	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, sc,
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, self,
 	    NULL)) && error != EOPNOTSUPP) {
-		aprint_error("%s: cannot activate %d\n", sc->sc_dev.dv_xname,
-		    error);
+		aprint_error_dev(self, "cannot activate %d\n", error);
 		return;
 	}
 
@@ -209,8 +202,7 @@ epic_pci_attach(struct device *parent, struct device *self, void *aux)
 		sc->sc_st = iot;
 		sc->sc_sh = ioh;
 	} else {
-		aprint_error("%s: unable to map device registers\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map device registers\n");
 		return;
 	}
 
@@ -225,21 +217,19 @@ epic_pci_attach(struct device *parent, struct device *self, void *aux)
 	 * Map and establish our interrupt.
 	 */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: unable to map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	psc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, epic_intr, sc);
 	if (psc->sc_ih == NULL) {
-		aprint_error("%s: unable to establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "unable to establish interrupt");
 		if (intrstr != NULL)
 			aprint_normal(" at %s", intrstr);
 		aprint_normal("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	esp = epic_pci_subsys_lookup(pa);
 	if (esp)

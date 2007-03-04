@@ -1,4 +1,4 @@
-/* $NetBSD: auixp.c,v 1.21 2006/11/16 01:33:08 christos Exp $ */
+/* $NetBSD: auixp.c,v 1.28 2008/04/10 19:13:36 cegger Exp $ */
 
 /*
  * Copyright (c) 2004, 2005 Reinoud Zandijk <reinoud@netbsd.org>
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auixp.c,v 1.21 2006/11/16 01:33:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auixp.c,v 1.28 2008/04/10 19:13:36 cegger Exp $");
 
 #include <sys/types.h>
 #include <sys/errno.h>
@@ -65,8 +65,8 @@ __KERNEL_RCSID(0, "$NetBSD: auixp.c,v 1.21 2006/11/16 01:33:08 christos Exp $");
 #include <sys/audioio.h>
 #include <sys/queue.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcivar.h>
@@ -130,9 +130,9 @@ struct audio_device auixp_device = {
 
 
 /* autoconfig */
-static int	auixp_match( struct device *, struct cfdata *, void *);
-static void	auixp_attach(struct device *, struct device *, void *);
-static int	auixp_detach(struct device *, int);
+static int	auixp_match(device_t, struct cfdata *, void *);
+static void	auixp_attach(device_t, device_t, void *);
+static int	auixp_detach(device_t, int);
 
 
 /* audio(9) function prototypes */
@@ -164,19 +164,10 @@ static int	auixp_allocmem(struct auixp_softc *, size_t, size_t,
 static int	auixp_freemem(struct auixp_softc *, struct auixp_dma *);
 static paddr_t	auixp_mappage(void *, void *, off_t, int);
 
-
-/* power management (do we support that already?) */
-#if 0
-static void	auixp_powerhook(int, void *);
-static int	auixp_suspend(struct auixp_softc *);
-static int	auixp_resume(struct auixp_softc *);
-#endif
-
-
 /* Supporting subroutines */
 static int	auixp_init(struct auixp_softc *);
 static void	auixp_autodetect_codecs(struct auixp_softc *);
-static void	auixp_post_config(struct device *);
+static void	auixp_post_config(device_t);
 
 static void	auixp_reset_aclink(struct auixp_softc *);
 static int	auixp_attach_codec(void *, struct ac97_codec_if *);
@@ -202,6 +193,8 @@ static void	auixp_program_dma_chain(struct auixp_softc *,
 					struct auixp_dma *);
 static void	auixp_dma_update(struct auixp_softc *, struct auixp_dma *);
 static void	auixp_update_busbusy(struct auixp_softc *);
+
+static bool	auixp_resume(device_t PMF_FN_PROTO);
 
 
 #ifdef DEBUG_AUIXP
@@ -485,8 +478,7 @@ auixp_malloc(void *hdl, int direction, size_t size,
 	error = auixp_allocmem(sc, size, 16, dma);
 	if (error) {
 		free(dma, type);
-		printf("%s: auixp_malloc: not enough memory\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "auixp_malloc: not enough memory\n");
 
 		return NULL;
 	}
@@ -660,8 +652,7 @@ auixp_allocate_dma_chain(struct auixp_softc *sc, struct auixp_dma **dmap)
 	error = auixp_allocmem(sc, DMA_DESC_CHAIN * sizeof(atiixp_dma_desc_t),
 	    16, dma);
 	if (error) {
-		printf("%s: can't malloc dma descriptor chain\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't malloc dma descriptor chain\n");
 		free(dma, M_DEVBUF);
 		return ENOMEM;
 	}
@@ -686,7 +677,7 @@ auixp_program_dma_chain(struct auixp_softc *sc, struct auixp_dma *dma)
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
 	/* get hardware start address of DMA chain and set valid-flag in it */
-	/* XXX allways at start? XXX */
+	/* XXX always at start? XXX */
 	value = DMAADDR(dma);
 	value = value | ATI_REG_LINKPTR_EN;
 
@@ -709,9 +700,9 @@ auixp_dma_update(struct auixp_softc *sc, struct auixp_dma *dma)
 
 	/* be very paranoid */
 	if (!dma)
-		panic("%s: update: dma = NULL", sc->sc_dev.dv_xname);
+		panic("%s: update: dma = NULL", device_xname(&sc->sc_dev));
 	if (!dma->intr)
-		panic("%s: update: dma->intr = NULL", sc->sc_dev.dv_xname);
+		panic("%s: update: dma->intr = NULL", device_xname(&sc->sc_dev));
 
 	/* request more input from upper layer */
 	(*dma->intr)(dma->intrarg);
@@ -775,7 +766,7 @@ auixp_trigger_output(void *hdl, void *start, void *end, int blksize,
 	 * NOTE, we can assume its in one block since we asked for it to be in
 	 * one contiguous blob; XXX change this? XXX
 	 */
-	blocks = (size_t) (((caddr_t) end) - ((caddr_t) start)) / blksize;
+	blocks = (size_t) (((char *) end) - ((char *) start)) / blksize;
 
 	/* lookup `start' address in our list of DMA area's */
 	SLIST_FOREACH(sound_dma, &sc->sc_dma_list, dma_chain) {
@@ -786,7 +777,7 @@ auixp_trigger_output(void *hdl, void *start, void *end, int blksize,
 	/* not ours ? then bail out */
 	if (!sound_dma) {
 		printf("%s: auixp_trigger_output: bad sound addr %p\n",
-		    sc->sc_dev.dv_xname, start);
+		    device_xname(&sc->sc_dev), start);
 		return EINVAL;
 	}
 
@@ -850,7 +841,7 @@ auixp_trigger_input(void *hdl, void *start, void *end, int blksize,
 	 * NOTE, we can assume its in one block since we asked for it to be in
 	 * one contiguous blob; XXX change this? XXX
 	 */
-	blocks = (size_t) (((caddr_t) end) - ((caddr_t) start)) / blksize;
+	blocks = (size_t) (((char *) end) - ((char *) start)) / blksize;
 
 	/* lookup `start' address in our list of DMA area's */
 	SLIST_FOREACH(sound_dma, &sc->sc_dma_list, dma_chain) {
@@ -861,7 +852,7 @@ auixp_trigger_input(void *hdl, void *start, void *end, int blksize,
 	/* not ours ? then bail out */
 	if (!sound_dma) {
 		printf("%s: auixp_trigger_input: bad sound addr %p\n",
-		    sc->sc_dev.dv_xname, start);
+		    device_xname(&sc->sc_dev), start);
 		return EINVAL;
 	}
 
@@ -927,7 +918,7 @@ auixp_intr(void *softc)
 	if (status == 0)
 		return 0;
 
-	DPRINTF(("%s: (status = %x)\n", sc->sc_dev.dv_xname, status));
+	DPRINTF(("%s: (status = %x)\n", device_xname(&sc->sc_dev), status));
 
 	/* check DMA UPDATE flags for input & output */
 	if (status & ATI_REG_ISR_IN_STATUS) {
@@ -1074,8 +1065,7 @@ auixp_mappage(void *hdl, void *mem, off_t off, int prot)
 
 /* Is it my hardware? */
 static int
-auixp_match(struct device *dev, struct cfdata *match,
-    void *aux)
+auixp_match(device_t dev, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa;
 
@@ -1096,7 +1086,7 @@ auixp_match(struct device *dev, struct cfdata *match,
 
 /* it is... now hook up and set up the resources we need */
 static void
-auixp_attach(struct device *parent, struct device *self, void *aux)
+auixp_attach(device_t parent, device_t self, void *aux)
 {
 	struct auixp_softc *sc;
 	struct pci_attach_args *pa;
@@ -1107,9 +1097,9 @@ auixp_attach(struct device *parent, struct device *self, void *aux)
 	const char *intrstr;
 	uint32_t data;
 	char devinfo[256];
-	int revision, len, error;
+	int revision, error;
 
-	sc = (struct auixp_softc *)self;
+	sc = device_private(self);
 	pa = (struct pci_attach_args *)aux;
 	tag = pa->pa_tag;
 	pc = pa->pa_pc;
@@ -1141,8 +1131,7 @@ auixp_attach(struct device *parent, struct device *self, void *aux)
 	/* map memory; its not sized -> what is the size? max PCI slot size? */
 	if (pci_mapreg_map(pa, PCI_CBIO, PCI_MAPREG_TYPE_MEM, 0,
 	    &sc->sc_iot, &sc->sc_ioh, &sc->sc_iob, &sc->sc_ios)) {
-		aprint_error("%s: can't map memory space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't map memory space\n");
 		return;
 	}
 
@@ -1168,7 +1157,7 @@ auixp_attach(struct device *parent, struct device *self, void *aux)
 
 	/* map interrupt on the pci bus */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: can't map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't map interrupt\n");
 		return;
 	}
 
@@ -1178,51 +1167,30 @@ auixp_attach(struct device *parent, struct device *self, void *aux)
 	/* establish interrupt routine hookup at IPL_AUDIO level */
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_AUDIO, auixp_intr, self);
 	if (sc->sc_ih == NULL) {
-		aprint_error("%s: can't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "can't establish interrupt");
 		if (intrstr != NULL)
 			aprint_normal(" at %s", intrstr);
 		aprint_normal("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", intrstr);
 
 	/* power up chip */
-	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, sc,
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, self,
 	    pci_activate_null)) && error != EOPNOTSUPP) {
-		aprint_error("%s: cannot activate %d\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(&sc->sc_dev, "cannot activate %d\n",
 		    error);
 		return;
 	}
 
 	/* init chip */
 	if (auixp_init(sc) == -1) {
-		aprint_error("%s: auixp_attach: unable to initialize the card\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "auixp_attach: unable to initialize the card\n");
 		return;
 	}
 
-	/* XXX set up power hooks; not implemented yet XXX */
-
-	len = 1;	/* shut up gcc */
-#ifdef notyet
-	/* create suspend save area */
-	len = sizeof(uint16_t) * (ESA_REV_B_CODE_MEMORY_LENGTH
-	    + ESA_REV_B_DATA_MEMORY_LENGTH + 1);
-	sc->savemem = (uint16_t *)malloc(len, M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (sc->savemem == NULL) {
-		aprint_error("%s: unable to allocate suspend buffer\n",
-		    sc->sc_dev.dv_xname);
-		return;
-	}
-
-	sc->powerhook = powerhook_establish(sc->sc_dev.dv_xname,
-	    auixp_powerhook, sc);
-	if (sc->powerhook == NULL)
-		aprint_error("%s: WARNING: unable to establish powerhook\n",
-		    sc->sc_dev.dv_xname);
-
-#endif
+	if (!pmf_device_register(self, NULL, auixp_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	/*
 	 * delay further configuration of codecs and audio after interrupts
@@ -1234,14 +1202,14 @@ auixp_attach(struct device *parent, struct device *self, void *aux)
 
 /* called from autoconfigure system when interrupts are enabled */
 static void
-auixp_post_config(struct device *self)
+auixp_post_config(device_t self)
 {
 	struct auixp_softc *sc;
 	struct auixp_codec *codec;
 	int codec_nr;
 	int res, i;
 
-	sc = (struct auixp_softc *)self;
+	sc = device_private(self);
 	/* detect the AC97 codecs */
 	auixp_autodetect_codecs(sc);
 
@@ -1290,7 +1258,7 @@ auixp_post_config(struct device *self)
 	    &sc->sc_encodings);
 	if (res) {
 		printf("%s: auconv_create_encodings failed; "
-		    "no attachments\n", sc->sc_dev.dv_xname);
+		    "no attachments\n", device_xname(&sc->sc_dev));
 		return;
 	}
 
@@ -1303,8 +1271,8 @@ auixp_post_config(struct device *self)
 	}
 
 	if (sc->has_spdif) {
-		aprint_normal("%s: codec spdif support detected but disabled "
-		    "for now\n", sc->sc_dev.dv_xname);
+		aprint_normal_dev(&sc->sc_dev, "codec spdif support detected but disabled "
+		    "for now\n");
 		sc->has_spdif = 0;
 	}
 
@@ -1373,11 +1341,11 @@ auixp_disable_interrupts(struct auixp_softc *sc)
 
 /* dismantle what we've set up by undoing setup */
 static int
-auixp_detach(struct device *self, int flags)
+auixp_detach(device_t self, int flags)
 {
 	struct auixp_softc *sc;
 
-	sc = (struct auixp_softc *)self;
+	sc = device_private(self);
 	/* XXX shouldn't we just reset the chip? XXX */
 	/*
 	 * should we explicitly disable interrupt generation and acknowledge
@@ -1393,8 +1361,7 @@ auixp_detach(struct device *self, int flags)
 	if (sc->sc_ios)
 		bus_space_unmap(sc->sc_iot, sc->sc_ioh, sc->sc_ios);
 
-	if (sc->savemem)
-		free(sc->savemem, M_DEVBUF);
+	pmf_device_deregister(self);
 
 	return 0;
 }
@@ -1467,7 +1434,7 @@ auixp_read_codec(void *aux, uint8_t reg, uint16_t *result)
 
 	if (reg < 0x7c)
 		printf("%s: codec read timeout! (reg %x)\n",
-		    sc->sc_dev.dv_xname, reg);
+		    device_xname(&sc->sc_dev), reg);
 
 	return 0xffff;
 }
@@ -1542,7 +1509,7 @@ auixp_wait_for_codecs(struct auixp_softc *sc, const char *func)
 		timeout--;
 	} while (timeout > 0);
 
-	printf("%s: %s: timed out\n", func, sc->sc_dev.dv_xname);
+	printf("%s: %s: timed out\n", func, device_xname(&sc->sc_dev));
 	return -1;
 }
 
@@ -1578,7 +1545,7 @@ auixp_autodetect_codecs(struct auixp_softc *sc)
 	if (timeout == 0)
 		printf("%s: WARNING: timeout during codec detection; "
 			"codecs might be present but haven't interrupted\n",
-			sc->sc_dev.dv_xname);
+			device_xname(&sc->sc_dev));
 
 	/* disable all interrupts for now */
 	auixp_disable_interrupts(sc);
@@ -1624,7 +1591,7 @@ auixp_autodetect_codecs(struct auixp_softc *sc)
 	if (sc->sc_num_codecs == 0) {
 		printf("%s: no codecs detected or "
 				"no codecs managed to initialise\n",
-				sc->sc_dev.dv_xname);
+				device_xname(&sc->sc_dev));
 		return;
 	}
 
@@ -1683,7 +1650,7 @@ auixp_reset_aclink(struct auixp_softc *sc)
 	/* if power is down, power it up */
 	value = bus_space_read_4(iot, ioh, ATI_REG_CMD);
 	if (value & ATI_REG_CMD_POWERDOWN) {
-		printf("%s: powering up\n", sc->sc_dev.dv_xname);
+		printf("%s: powering up\n", device_xname(&sc->sc_dev));
 
 		/* explicitly enable power */
 		value &= ~ATI_REG_CMD_POWERDOWN;
@@ -1693,7 +1660,7 @@ auixp_reset_aclink(struct auixp_softc *sc)
 		DELAY(20);
 	};
 
-	printf("%s: soft resetting aclink\n", sc->sc_dev.dv_xname);
+	printf("%s: soft resetting aclink\n", device_xname(&sc->sc_dev));
 
 	/* perform a soft reset */
 	value  = bus_space_read_4(iot, ioh, ATI_REG_CMD);
@@ -1714,7 +1681,7 @@ auixp_reset_aclink(struct auixp_softc *sc)
 	value = bus_space_read_4(iot, ioh, ATI_REG_CMD);
 	while (!(value & ATI_REG_CMD_ACLINK_ACTIVE)) {
 		printf("%s: not up; resetting aclink hardware\n",
-				sc->sc_dev.dv_xname);
+			device_xname(&sc->sc_dev));
 
 		/* dip aclink reset but keep the acsync */
 		value &= ~ATI_REG_CMD_AC_RESET;
@@ -1738,11 +1705,11 @@ auixp_reset_aclink(struct auixp_softc *sc)
 	};
 
 	if (timeout == 0) {
-		printf("%s: giving up aclink reset\n", sc->sc_dev.dv_xname);
+		printf("%s: giving up aclink reset\n", device_xname(&sc->sc_dev));
 	};
 	if (timeout != 10) {
 		printf("%s: aclink hardware reset successful\n",
-			sc->sc_dev.dv_xname);
+			device_xname(&sc->sc_dev));
 	};
 
 	/* assert reset and sync for safety */
@@ -1785,52 +1752,17 @@ auixp_init(struct auixp_softc *sc)
 	return 0;
 }
 
-
-/*
- * TODO power saving and suspend / resume support
- *
- */
-
-#if 0
-static void
-auixp_powerhook(int why, void *hdl)
+static bool
+auixp_resume(device_t dv PMF_FN_ARGS)
 {
-	struct auixp_softc *sc;
+	struct auixp_softc *sc = device_private(dv);
 
-	sc = (struct auixp_softc *)hdl;
-	switch (why) {
-	case PWR_SUSPEND:
-	case PWR_STANDBY:
-		auixp_suspend(sc);
-		break;
-	case PWR_RESUME:
-		auixp_resume(sc);
-#if notyet
-		/* XXX fix me XXX */
-		(sc->codec_if->vtbl->restore_ports)(sc->codec_if);
-#endif
-		break;
-	}
+	auixp_reset_codec(sc);
+	delay(1000);
+	(sc->sc_codec[0].codec_if->vtbl->restore_ports)(sc->sc_codec[0].codec_if);
+
+	return true;
 }
-
-
-static int
-auixp_suspend(struct auixp_softc *sc)
-{
-
-	/* XXX no power functions yet XXX */
-	return 0;
-}
-
-
-static int
-auixp_resume(struct auixp_softc *sc)
-{
-
-	/* XXX no power functions yet XXX */
-	return 0;
-}
-#endif /* 0 */
 
 #ifdef DEBUG_AUIXP
 
@@ -1845,7 +1777,7 @@ auixp_dumpreg(void)
 	sc  = static_sc;
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
-	printf("%s register dump:\n", sc->sc_dev.dv_xname);
+	printf("%s register dump:\n", device_xname(&sc->sc_dev));
 	for (i = 0; i < 256; i+=4) {
 		printf("\t0x%02x: 0x%08x\n", i, bus_space_read_4(iot, ioh, i));
 	}

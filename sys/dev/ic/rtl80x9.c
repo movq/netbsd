@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl80x9.c,v 1.11 2005/12/11 12:21:28 christos Exp $	*/
+/*	$NetBSD: rtl80x9.c,v 1.14 2008/04/28 20:23:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtl80x9.c,v 1.11 2005/12/11 12:21:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtl80x9.c,v 1.14 2008/04/28 20:23:51 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,8 +44,8 @@ __KERNEL_RCSID(0, "$NetBSD: rtl80x9.c,v 1.11 2005/12/11 12:21:28 christos Exp $"
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/ic/dp8390reg.h>
 #include <dev/ic/dp8390var.h>
@@ -178,8 +171,8 @@ rtl80x9_media_init(sc)
 	int i, defmedia;
 	u_int8_t conf2, conf3;
 
-	printf("%s: 10base2, 10baseT, 10baseT-FDX, auto, default ",
-	    sc->sc_dev.dv_xname);
+	aprint_normal_dev(sc->sc_dev,
+	    "10base2, 10baseT, 10baseT-FDX, auto, default ");
 
 	bus_space_write_1(sc->sc_regt, sc->sc_regh, ED_P0_CR, ED_CR_PAGE_3);
 

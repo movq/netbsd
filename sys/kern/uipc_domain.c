@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_domain.c,v 1.63 2007/02/17 22:34:07 dyoung Exp $	*/
+/*	$NetBSD: uipc_domain.c,v 1.76 2008/04/24 11:38:36 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_domain.c,v 1.63 2007/02/17 22:34:07 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_domain.c,v 1.76 2008/04/24 11:38:36 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -50,14 +50,20 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_domain.c,v 1.63 2007/02/17 22:34:07 dyoung Exp 
 #include <sys/un.h>
 #include <sys/unpcb.h>
 #include <sys/file.h>
+#include <sys/filedesc.h>
 #include <sys/kauth.h>
+
+MALLOC_DECLARE(M_SOCKADDR);
+
+MALLOC_DEFINE(M_SOCKADDR, "sockaddr", "socket endpoints");
 
 void	pffasttimo(void *);
 void	pfslowtimo(void *);
 
 struct domainhead domains = STAILQ_HEAD_INITIALIZER(domains);
+static struct domain *domain_array[AF_MAX];
 
-struct callout pffasttimo_ch, pfslowtimo_ch;
+callout_t pffasttimo_ch, pfslowtimo_ch;
 
 /*
  * Current time values for fast and slow timeouts.  We can use u_int
@@ -87,8 +93,8 @@ domaininit(void)
 	if (rt_domain)
 		domain_attach(rt_domain);
 
-	callout_init(&pffasttimo_ch);
-	callout_init(&pfslowtimo_ch);
+	callout_init(&pffasttimo_ch, CALLOUT_MPSAFE);
+	callout_init(&pfslowtimo_ch, CALLOUT_MPSAFE);
 
 	callout_reset(&pffasttimo_ch, 1, pffasttimo, NULL);
 	callout_reset(&pfslowtimo_ch, 1, pfslowtimo, NULL);
@@ -100,6 +106,8 @@ domain_attach(struct domain *dp)
 	const struct protosw *pr;
 
 	STAILQ_INSERT_TAIL(&domains, dp, dom_link);
+	if (dp->dom_family < __arraycount(domain_array))
+		domain_array[dp->dom_family] = dp;
 
 	if (dp->dom_init)
 		(*dp->dom_init)();
@@ -126,6 +134,9 @@ struct domain *
 pffinddomain(int family)
 {
 	struct domain *dp;
+
+	if (family < __arraycount(domain_array) && domain_array[family] != NULL)
+		return domain_array[family];
 
 	DOMAIN_FOREACH(dp)
 		if (dp->dom_family == family)
@@ -173,6 +184,126 @@ pffindproto(int family, int protocol, int type)
 			maybe = pr;
 	}
 	return (maybe);
+}
+
+void *
+sockaddr_addr(struct sockaddr *sa, socklen_t *slenp)
+{
+	const struct domain *dom;
+
+	if ((dom = pffinddomain(sa->sa_family)) == NULL ||
+	    dom->dom_sockaddr_addr == NULL)
+		return NULL;
+
+	return (*dom->dom_sockaddr_addr)(sa, slenp);
+}
+
+const void *
+sockaddr_const_addr(const struct sockaddr *sa, socklen_t *slenp)
+{
+	const struct domain *dom;
+	
+	if ((dom = pffinddomain(sa->sa_family)) == NULL ||
+	    dom->dom_sockaddr_const_addr == NULL)
+		return NULL;
+
+	return (*dom->dom_sockaddr_const_addr)(sa, slenp);
+}
+
+const struct sockaddr *
+sockaddr_any(const struct sockaddr *sa)
+{
+	const struct domain *dom;
+	
+	if ((dom = pffinddomain(sa->sa_family)) == NULL)
+		return NULL;
+
+	return dom->dom_sa_any;
+}
+
+const void *
+sockaddr_anyaddr(const struct sockaddr *sa, socklen_t *slenp)
+{
+	const struct sockaddr *any;
+
+	if ((any = sockaddr_any(sa)) == NULL)
+		return NULL;
+
+	return sockaddr_const_addr(any, slenp);
+}
+
+struct sockaddr *
+sockaddr_alloc(sa_family_t af, socklen_t socklen, int flags)
+{
+	struct sockaddr *sa;
+	socklen_t reallen = MAX(socklen, offsetof(struct sockaddr, sa_data[0]));
+
+	if ((sa = malloc(reallen, M_SOCKADDR, flags)) == NULL)
+		return NULL;
+
+	sa->sa_family = af;
+	sa->sa_len = reallen;
+	return sa;
+}
+
+struct sockaddr *
+sockaddr_copy(struct sockaddr *dst, socklen_t socklen,
+    const struct sockaddr *src)
+{
+	if (__predict_false(socklen < src->sa_len)) {
+		panic("%s: source too long, %d < %d bytes", __func__, socklen,
+		    src->sa_len);
+	}
+	return memcpy(dst, src, src->sa_len);
+}
+
+int
+sockaddr_cmp(const struct sockaddr *sa1, const struct sockaddr *sa2)
+{
+	int len, rc;
+	struct domain *dom;
+
+	if (sa1->sa_family != sa2->sa_family)
+		return sa1->sa_family - sa2->sa_family;
+
+	dom = pffinddomain(sa1->sa_family);
+
+	if (dom != NULL && dom->dom_sockaddr_cmp != NULL)
+		return (*dom->dom_sockaddr_cmp)(sa1, sa2);
+
+	len = MIN(sa1->sa_len, sa2->sa_len);
+
+	if (dom == NULL || dom->dom_sa_cmplen == 0) {
+		if ((rc = memcmp(sa1, sa2, len)) != 0)
+			return rc;
+		return sa1->sa_len - sa2->sa_len;
+	}
+
+	if ((rc = memcmp((const char *)sa1 + dom->dom_sa_cmpofs,
+		         (const char *)sa2 + dom->dom_sa_cmpofs,
+			 MIN(dom->dom_sa_cmplen,
+			     len - MIN(len, dom->dom_sa_cmpofs)))) != 0)
+		return rc;
+
+	return MIN(dom->dom_sa_cmplen + dom->dom_sa_cmpofs, sa1->sa_len) -
+	       MIN(dom->dom_sa_cmplen + dom->dom_sa_cmpofs, sa2->sa_len);
+}
+
+struct sockaddr *
+sockaddr_dup(const struct sockaddr *src, int flags)
+{
+	struct sockaddr *dst;
+
+	if ((dst = sockaddr_alloc(src->sa_family, src->sa_len, flags)) == NULL)
+		return NULL;
+
+	return sockaddr_copy(dst, dst->sa_len, src);
+}
+
+void
+sockaddr_free(struct sockaddr *sa)
+{
+	free(sa, M_SOCKADDR);
 }
 
 /*
@@ -241,7 +372,7 @@ sysctl_dounpcb(struct kinfo_pcb *pcb, const struct socket *so)
 static int
 sysctl_unpcblist(SYSCTLFN_ARGS)
 {
-	struct file *fp;
+	struct file *fp, *dfp, *np;
 	struct socket *so;
 	struct kinfo_pcb pcb;
 	char *dp;
@@ -281,14 +412,26 @@ sysctl_unpcblist(SYSCTLFN_ARGS)
 	pf2 = (oldp == NULL) ? 0 : pf;
 
 	/*
+	 * allocate dummy file descriptor to make position in list.
+	 */
+	sysctl_unlock();
+	if ((dfp = fgetdummy()) == NULL) {
+	 	sysctl_relock();
+		return ENOMEM;
+	}
+
+	/*
 	 * there's no "list" of local domain sockets, so we have
 	 * to walk the file list looking for them.  :-/
 	 */
+	mutex_enter(&filelist_lock);
 	LIST_FOREACH(fp, &filehead, f_list) {
+	    	np = LIST_NEXT(fp, f_list);
+		if (fp->f_count == 0 || fp->f_type != DTYPE_SOCKET ||
+		    fp->f_data == NULL)
+			continue;
 		if (kauth_authorize_generic(l->l_cred,
 		    KAUTH_GENERIC_CANSEE, fp->f_cred) != 0)
-			continue;
-		if (fp->f_type != DTYPE_SOCKET)
 			continue;
 		so = (struct socket *)fp->f_data;
 		if (so->so_type != type)
@@ -296,8 +439,17 @@ sysctl_unpcblist(SYSCTLFN_ARGS)
 		if (so->so_proto->pr_domain->dom_family != pf)
 			continue;
 		if (len >= elem_size && elem_count > 0) {
+			mutex_enter(&fp->f_lock);
+			fp->f_count++;
+			mutex_exit(&fp->f_lock);
+			LIST_INSERT_AFTER(fp, dfp, f_list);
+			mutex_exit(&filelist_lock);
 			sysctl_dounpcb(&pcb, so);
 			error = copyout(&pcb, dp, out_size);
+			closef(fp);
+			mutex_enter(&filelist_lock);
+			np = LIST_NEXT(dfp, f_list);
+			LIST_REMOVE(dfp, f_list);
 			if (error)
 				break;
 			dp += elem_size;
@@ -309,10 +461,12 @@ sysctl_unpcblist(SYSCTLFN_ARGS)
 				elem_count--;
 		}
 	}
-
-	*oldlenp = needed;
+	mutex_exit(&filelist_lock);
+	fputdummy(dfp);
+ 	*oldlenp = needed;
 	if (oldp == NULL)
 		*oldlenp += PCB_SLOP * sizeof(struct kinfo_pcb);
+ 	sysctl_relock();
 
 	return (error);
 }
@@ -409,7 +563,7 @@ pfslowtimo(void *arg)
 			if (pr->pr_slowtimo)
 				(*pr->pr_slowtimo)();
 	}
-	callout_reset(&pfslowtimo_ch, hz / 2, pfslowtimo, NULL);
+	callout_schedule(&pfslowtimo_ch, hz / 2);
 }
 
 void
@@ -425,5 +579,5 @@ pffasttimo(void *arg)
 			if (pr->pr_fasttimo)
 				(*pr->pr_fasttimo)();
 	}
-	callout_reset(&pffasttimo_ch, hz / 5, pffasttimo, NULL);
+	callout_schedule(&pffasttimo_ch, hz / 5);
 }

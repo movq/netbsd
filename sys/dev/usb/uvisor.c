@@ -1,4 +1,4 @@
-/*	$NetBSD: uvisor.c,v 1.34 2007/01/24 12:26:49 drochner Exp $	*/
+/*	$NetBSD: uvisor.c,v 1.40 2008/05/24 16:40:58 cube Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvisor.c,v 1.34 2007/01/24 12:26:49 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvisor.c,v 1.40 2008/05/24 16:40:58 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,7 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: uvisor.c,v 1.34 2007/01/24 12:26:49 drochner Exp $")
 #include <sys/tty.h>
 
 #include <dev/usb/usb.h>
-#include <dev/usb/usbhid.h>
 
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usbdi_util.h>
@@ -197,14 +189,18 @@ static const struct uvisor_type uvisor_devs[] = {
 };
 #define uvisor_lookup(v, p) ((const struct uvisor_type *)usb_lookup(uvisor_devs, v, p))
 
-USB_DECLARE_DRIVER(uvisor);
+int uvisor_match(device_t, cfdata_t, void *);
+void uvisor_attach(device_t, device_t, void *);
+void uvisor_childdet(device_t, device_t);
+int uvisor_detach(device_t, int);
+int uvisor_activate(device_t, enum devact);
+extern struct cfdriver uvisor_cd;
+CFATTACH_DECL2_NEW(uvisor, sizeof(struct uvisor_softc), uvisor_match,
+    uvisor_attach, uvisor_detach, uvisor_activate, NULL, uvisor_childdet);
 
 USB_MATCH(uvisor)
 {
 	USB_MATCH_START(uvisor, uaa);
-
-	if (uaa->iface != NULL)
-		return (UMATCH_NONE);
 
 	DPRINTFN(20,("uvisor: vendor=0x%x, product=0x%x\n",
 		     uaa->vendor, uaa->product));
@@ -223,38 +219,40 @@ USB_ATTACH(uvisor)
 	struct uvisor_palm_connection_info palmconinfo;
 	usb_endpoint_descriptor_t *ed;
 	char *devinfop;
-	char *devname = USBDEVNAME(sc->sc_dev);
+	const char *devname = device_xname(self);
 	int i, j, hasin, hasout, port;
 	usbd_status err;
 	struct ucom_attach_args uca;
 
 	DPRINTFN(10,("\nuvisor_attach: sc=%p\n", sc));
 
+	sc->sc_dev = self;
+
 	/* Move the device into the configured state. */
 	err = usbd_set_config_index(dev, UVISOR_CONFIG_INDEX, 1);
 	if (err) {
-		printf("\n%s: failed to set configuration, err=%s\n",
+		aprint_error("\n%s: failed to set configuration, err=%s\n",
 		       devname, usbd_errstr(err));
 		goto bad;
 	}
 
 	err = usbd_device2interface_handle(dev, UVISOR_IFACE_INDEX, &iface);
 	if (err) {
-		printf("\n%s: failed to get interface, err=%s\n",
+		aprint_error("\n%s: failed to get interface, err=%s\n",
 		       devname, usbd_errstr(err));
 		goto bad;
 	}
 
 	devinfop = usbd_devinfo_alloc(dev, 0);
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", devname, devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
 	sc->sc_flags = uvisor_lookup(uaa->vendor, uaa->product)->uv_flags;
 
 	if ((sc->sc_flags & (VISOR | PALM4)) == 0) {
-		printf("%s: init failed, device type is neither visor nor palm\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self,
+		    "init failed, device type is neither visor nor palm\n");
 		goto bad;
 	}
 
@@ -274,8 +272,7 @@ USB_ATTACH(uvisor)
 
 	err = uvisor_init(sc, &coninfo, &palmconinfo);
 	if (err) {
-		printf("%s: init failed, %s\n", USBDEVNAME(sc->sc_dev),
-		       usbd_errstr(err));
+		aprint_error_dev(self, "init failed, %s\n", usbd_errstr(err));
 		goto bad;
 	}
 
@@ -331,8 +328,9 @@ USB_ATTACH(uvisor)
 					"ucombus", NULL, &uca,
 					ucomprint, ucomsubmatch);
 			else
-				printf("%s: no proper endpoints for port %d (%d,%d)\n",
-				    USBDEVNAME(sc->sc_dev), port, hasin, hasout);
+				aprint_error_dev(self,
+				    "no proper endpoints for port %d (%d,%d)\n",
+				    port, hasin, hasout);
 		}
 
 	} else {
@@ -376,7 +374,7 @@ bad:
 int
 uvisor_activate(device_ptr_t self, enum devact act)
 {
-	struct uvisor_softc *sc = (struct uvisor_softc *)self;
+	struct uvisor_softc *sc = device_private(self);
 	int rv = 0;
 	int i;
 
@@ -395,20 +393,32 @@ uvisor_activate(device_ptr_t self, enum devact act)
 	return (rv);
 }
 
-int
-uvisor_detach(device_ptr_t self, int flags)
+void
+uvisor_childdet(device_t self, device_t child)
 {
-	struct uvisor_softc *sc = (struct uvisor_softc *)self;
+	int i;
+	struct uvisor_softc *sc = device_private(self);
+
+	for (i = 0; i < sc->sc_numcon; i++) {
+		if (sc->sc_subdevs[i] == child)
+			break;
+	}
+	KASSERT(i < sc->sc_numcon);
+	sc->sc_subdevs[i] = NULL;
+}
+
+int
+uvisor_detach(device_t self, int flags)
+{
+	struct uvisor_softc *sc = device_private(self);
 	int rv = 0;
 	int i;
 
 	DPRINTF(("uvisor_detach: sc=%p flags=%d\n", sc, flags));
 	sc->sc_dying = 1;
 	for (i = 0; i < sc->sc_numcon; i++) {
-		if (sc->sc_subdevs[i] != NULL) {
+		if (sc->sc_subdevs[i] != NULL)
 			rv |= config_detach(sc->sc_subdevs[i], flags);
-			sc->sc_subdevs[i] = NULL;
-		}
 	}
 
 	if (sc->sc_udev)

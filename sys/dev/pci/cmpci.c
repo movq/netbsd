@@ -1,4 +1,4 @@
-/*	$NetBSD: cmpci.c,v 1.34 2006/11/16 01:33:08 christos Exp $	*/
+/*	$NetBSD: cmpci.c,v 1.38 2008/04/10 19:13:36 cegger Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cmpci.c,v 1.34 2006/11/16 01:33:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cmpci.c,v 1.38 2008/04/10 19:13:36 cegger Exp $");
 
 #if defined(AUDIO_DEBUG) || defined(DEBUG)
 #define DPRINTF(x) if (cmpcidebug) printf x
@@ -74,8 +74,8 @@ int cmpcidebug = 0;
 #include <dev/pci/cmpcivar.h>
 
 #include <dev/ic/mpuvar.h>
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 /*
  * Low-level HW interface
@@ -120,11 +120,11 @@ static int cmpci_intr(void *);
  * DMA stuffs
  */
 static int cmpci_alloc_dmamem(struct cmpci_softc *, size_t,
-	struct malloc_type *, int, caddr_t *);
-static int cmpci_free_dmamem(struct cmpci_softc *, caddr_t,
+	struct malloc_type *, int, void **);
+static int cmpci_free_dmamem(struct cmpci_softc *, void *,
 	struct malloc_type *);
 static struct cmpci_dmanode * cmpci_find_dmamem(struct cmpci_softc *,
-	caddr_t);
+	void *);
 
 
 /*
@@ -411,28 +411,25 @@ cmpci_attach(struct device *parent, struct device *self, void *aux)
 	/* map I/O space */
 	if (pci_mapreg_map(pa, CMPCI_PCI_IOBASEREG, PCI_MAPREG_TYPE_IO, 0,
 		&sc->sc_iot, &sc->sc_ioh, NULL, NULL)) {
-		aprint_error("%s: failed to map I/O space\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "failed to map I/O space\n");
 		return;
 	}
 
 	/* interrupt */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: failed to map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "failed to map interrupt\n");
 		return;
 	}
 	strintr = pci_intr_string(pa->pa_pc, ih);
 	sc->sc_ih=pci_intr_establish(pa->pa_pc, ih, IPL_AUDIO, cmpci_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error("%s: failed to establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "failed to establish interrupt");
 		if (strintr != NULL)
 			aprint_normal(" at %s", strintr);
 		aprint_normal("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, strintr);
+	aprint_normal_dev(&sc->sc_dev, "interrupting at %s\n", strintr);
 
 	sc->sc_dmat = pa->pa_dmat;
 
@@ -524,10 +521,12 @@ cmpci_attach(struct device *parent, struct device *self, void *aux)
 static int
 cmpci_intr(void *handle)
 {
-	struct cmpci_softc *sc;
+	struct cmpci_softc *sc = handle;
+#if NMPU > 0
+	struct mpu_softc *sc_mpu = device_private(sc->sc_mpudev);
+#endif
 	uint32_t intrstat;
 
-	sc = handle;
 	intrstat = bus_space_read_4(sc->sc_iot, sc->sc_ioh,
 	    CMPCI_REG_INTR_STATUS);
 
@@ -562,8 +561,8 @@ cmpci_intr(void *handle)
 		    CMPCI_REG_CH1_INTR_ENABLE);
 
 #if NMPU > 0
-	if (intrstat & CMPCI_REG_UART_INTR && sc->sc_mpudev != NULL)
-		mpu_intr(sc->sc_mpudev);
+	if (intrstat & CMPCI_REG_UART_INTR && sc_mpu != NULL)
+		mpu_intr(sc_mpu);
 #endif
 
 	return 1;
@@ -669,7 +668,7 @@ cmpci_set_params(void *handle, int setmode, int usemode,
 		md_divide = cmpci_index_to_divider(md_index);
 		p->sample_rate = cmpci_index_to_rate(md_index);
 		DPRINTF(("%s: sample:%u, divider=%d\n",
-			 sc->sc_dev.dv_xname, p->sample_rate, md_divide));
+			 device_xname(&sc->sc_dev), p->sample_rate, md_divide));
 
 		ind = auconv_set_converter(cmpci_formats, CMPCI_NFORMATS,
 					   mode, p, FALSE, fil);
@@ -1011,7 +1010,7 @@ cmpci_query_devinfo(void *handle, mixer_devinfo_t *dip)
 
 static int
 cmpci_alloc_dmamem(struct cmpci_softc *sc, size_t size, struct malloc_type *type,
-		   int flags, caddr_t *r_addr)
+		   int flags, void **r_addr)
 {
 	int error;
 	struct cmpci_dmanode *n;
@@ -1066,7 +1065,7 @@ cmpci_alloc_dmamem(struct cmpci_softc *sc, size_t size, struct malloc_type *type
 }
 
 static int
-cmpci_free_dmamem(struct cmpci_softc *sc, caddr_t addr, struct malloc_type *type)
+cmpci_free_dmamem(struct cmpci_softc *sc, void *addr, struct malloc_type *type)
 {
 	struct cmpci_dmanode **nnp;
 
@@ -1086,7 +1085,7 @@ cmpci_free_dmamem(struct cmpci_softc *sc, caddr_t addr, struct malloc_type *type
 }
 
 static struct cmpci_dmanode *
-cmpci_find_dmamem(struct cmpci_softc *sc, caddr_t addr)
+cmpci_find_dmamem(struct cmpci_softc *sc, void *addr)
 {
 	struct cmpci_dmanode *p;
 
@@ -1113,7 +1112,7 @@ static void *
 cmpci_allocm(void *handle, int direction, size_t size,
 	     struct malloc_type *type, int flags)
 {
-	caddr_t addr;
+	void *addr;
 
 	addr = NULL;	/* XXX gcc */
 
@@ -1691,7 +1690,7 @@ cmpci_trigger_output(void *handle, void *start, void *end, int blksize,
 	    DMAADDR(p));
 	delay(10);
 	bus_space_write_2(sc->sc_iot, sc->sc_ioh, CMPCI_REG_DMA0_BYTES,
-	    ((caddr_t)end - (caddr_t)start + 1) / bps - 1);
+	    ((char *)end - (char *)start + 1) / bps - 1);
 	delay(10);
 
 	/* set interrupt count */
@@ -1730,7 +1729,7 @@ cmpci_trigger_input(void *handle, void *start, void *end, int blksize,
 	    DMAADDR(p));
 	delay(10);
 	bus_space_write_2(sc->sc_iot, sc->sc_ioh, CMPCI_REG_DMA1_BYTES,
-	    ((caddr_t)end - (caddr_t)start + 1) / bps - 1);
+	    ((char *)end - (char *)start + 1) / bps - 1);
 	delay(10);
 
 	/* set interrupt count */

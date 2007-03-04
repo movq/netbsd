@@ -1,4 +1,4 @@
-/*	$NetBSD: pciide_sl82c105_reg.h,v 1.3 2005/12/11 12:22:50 christos Exp $	*/
+/*	$NetBSD: pciide_sl82c105_reg.h,v 1.6 2008/04/28 20:23:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -54,13 +47,13 @@
 #define	SYMPH_P0D0CR	0x44		/* port 0 drive 0 control */
 #define	SYMPH_P0D1CR	0x48		/* port 0 drive 1 control */
 #define	SYMPH_P1D0CR	0x4c		/* port 1 drive 0 control */
-#define	SYMPH_P1D1CR	0c50		/* port 1 drive 1 control */
+#define	SYMPH_P1D1CR	0x50		/* port 1 drive 1 control */
 
 #define	IDECR_IDE_IRQB	(1U << 30)	/* IDE_IRQB signal */
 #define	IDECR_IDE_IRQA	(1U << 28)	/* IDE_IRQA signal */
 #define	IDECR_RA_SHIFT	16		/* read-ahead duration */
 #define	IDECR_RA_MASK	(0x7ff << IDECR_RA_SHIFT)
-#define	IDECR_LEGIRQ	(1U << 1)	/* legacy IRQ mode */
+#define	IDECR_LEGIRQ	(1U << 11)	/* don't use legacy IRQ mode */
 #define	IDECR_P1F16	(1U << 5)	/* port 1 fast 16 */
 #define	IDECR_P1EN	(1U << 4)	/* port 1 enable */
 #define	IDECR_P0F16	(1U << 1)	/* port 0 fast 16 */
@@ -86,7 +79,7 @@ struct symph_cmdtime {
 };
 
 static const struct symph_cmdtime symph_pio_times[]
-    __attribute__((__unused__)) = {
+    __unused = {
 /*        programmed               actual       */
 	{ 5, 13 },		/* 6, 14 */
 	{ 4, 7 },		/* 5, 8 */
@@ -97,13 +90,13 @@ static const struct symph_cmdtime symph_pio_times[]
 };
 
 static const struct symph_cmdtime symph_sw_dma_times[]
-    __attribute__((__unused__)) = {
+    __unused = {
 /*        programmed               actual       */
 	{ 15, 15 },		/* 16, 16 */
 };
 
 static const struct symph_cmdtime symph_mw_dma_times[]
-     __attribute__((__unused__)) = {
+     __unused = {
 /*        programmed               actual       */
 	{ 7, 7 },		/* 8, 8 */
 	{ 2, 1 },		/* 3, 2 */

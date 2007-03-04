@@ -1,4 +1,4 @@
-/*	$NetBSD: pcibios.c,v 1.33 2007/02/05 07:48:20 dyoung Exp $	*/
+/*	$NetBSD: pcibios.c,v 1.36 2008/04/28 20:23:25 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -67,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcibios.c,v 1.33 2007/02/05 07:48:20 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcibios.c,v 1.36 2008/04/28 20:23:25 martin Exp $");
 
 #include "opt_pcibios.h"
 #include "opt_pcifixup.h"
@@ -231,14 +224,14 @@ pcibios_pir_init(void)
 {
 	char *devinfo;
 	paddr_t pa;
-	caddr_t p;
+	char *p;
 	unsigned char cksum;
 	uint16_t tablesize;
 	uint8_t rev_maj, rev_min;
 	int i;
 
 	for (pa = PCI_IRQ_TABLE_START; pa < PCI_IRQ_TABLE_END; pa += 16) {
-		p = (caddr_t)ISA_HOLE_VADDR(pa);
+		p = (void *)ISA_HOLE_VADDR(pa);
 		if (*(int *)p != BIOS32_MAKESIG('$', 'P', 'I', 'R')) {
 			/*
 			 * XXX: Some laptops (Toshiba/Libretto L series)
@@ -403,12 +396,12 @@ pcibios_get_intr_routing(struct pcibios_intr_routing *table,
 	int rv;
 	struct {
 		uint16_t size;
-		caddr_t offset;
+		void *offset;
 		uint16_t segment;
-	} __attribute__((__packed__)) args;
+	} __packed args;
 
 	args.size = *nentries * sizeof(*table);
-	args.offset = (caddr_t)table;
+	args.offset = (void *)table;
 	args.segment = GSEL(GDATA_SEL, SEL_KPL);
 
 	memset(table, 0, args.size);

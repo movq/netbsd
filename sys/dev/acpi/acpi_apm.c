@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_apm.c,v 1.8 2006/11/16 01:32:47 christos Exp $	*/
+/*	$NetBSD: acpi_apm.c,v 1.14 2008/04/28 20:23:47 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_apm.c,v 1.8 2006/11/16 01:32:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_apm.c,v 1.14 2008/04/28 20:23:47 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,27 +98,27 @@ static int acpiapm_node = CTL_EOL, standby_node = CTL_EOL;
 
 struct acpi_softc;
 extern ACPI_STATUS acpi_enter_sleep_state(struct acpi_softc *, int);
-static int acpiapm_match(struct device *, struct cfdata *, void *);
-static void acpiapm_attach(struct device *, struct device *, void *);
+static int acpiapm_match(device_t, cfdata_t , void *);
+static void acpiapm_attach(device_t, device_t, void *);
 static int sysctl_state(SYSCTLFN_PROTO);
 
-CFATTACH_DECL(acpiapm, sizeof(struct apm_softc),
+CFATTACH_DECL_NEW(acpiapm, sizeof(struct apm_softc),
     acpiapm_match, acpiapm_attach, NULL, NULL);
 
 static int
 /*ARGSUSED*/
-acpiapm_match(struct device *parent,
-	struct cfdata *match, void *aux)
+acpiapm_match(device_t parent, cfdata_t match, void *aux)
 {
 	return apm_match();
 }
 
 static void
 /*ARGSUSED*/
-acpiapm_attach(struct device *parent, struct device *self, void *aux)
+acpiapm_attach(device_t parent, device_t self, void *aux)
 {
-	struct apm_softc *sc = (struct apm_softc *)self;
+	struct apm_softc *sc = device_private(self);
 
+	sc->sc_dev = self;
 	sc->sc_ops = &acpiapm_accessops;
 	sc->sc_cookie = parent;
 	sc->sc_vers = 0x0102;
@@ -239,7 +232,7 @@ acpiapm_enable(void *opaque, int onoff)
 static int
 acpiapm_set_powstate(void *opaque, u_int devid, u_int powstat)
 {
-	struct acpi_softc *sc = opaque;
+	struct acpi_softc *sc = device_private((device_t)opaque);
 
 	if (devid != APM_DEV_ALLDEVS)
 		return APM_ERR_UNRECOG_DEV;
@@ -289,12 +282,14 @@ acpiapm_get_powstat(void *opaque, u_int batteryid,
 	(void)memset(pinfo, 0, sizeof(*pinfo));
 	pinfo->ac_state = APM_AC_UNKNOWN;
 	pinfo->minutes_valid = 0;
-	pinfo->minutes_left = 0xffff; /* unknown */
+	pinfo->minutes_left = 0;
 	pinfo->batteryid = 0;
 	pinfo->nbattery = 0;	/* to be incremented as batteries are found */
 	pinfo->battery_flags = 0;
 	pinfo->battery_state = APM_BATT_UNKNOWN; /* ignored */
 	pinfo->battery_life = APM_BATT_LIFE_UNKNOWN;
+
+	sysmonopen_envsys(0, 0, 0, &lwp0);
 
 	for (i = 0;; i++) {
 		const char *desc;
@@ -316,13 +311,13 @@ acpiapm_get_powstat(void *opaque, u_int batteryid,
 		DPRINTF(("%d %s %d %d\n", i, desc, data, flags));
 		if ((flags & ENVSYS_FCURVALID) == 0)
 			continue;
-		if (strstr(desc, " disconnected")) {
-			pinfo->ac_state = data ? APM_AC_OFF : APM_AC_ON;
+		if (strstr(desc, " connected")) {
+			pinfo->ac_state = data ? APM_AC_ON : APM_AC_OFF;
 		} else if (strstr(desc, " present") && data == 0)
 			pinfo->battery_flags |= APM_BATT_FLAG_NO_SYSTEM_BATTERY;
 		else if (strstr(desc, " charging") && data)
 			pinfo->battery_flags |= APM_BATT_FLAG_CHARGING;
-		else if (strstr(desc, " discharging") && data)
+		else if (strstr(desc, " charging") && !data)
 			pinfo->battery_flags &= ~APM_BATT_FLAG_CHARGING;
 		else if (strstr(desc, " warn cap"))
 			warncap = data / 1000;
@@ -335,7 +330,8 @@ acpiapm_get_powstat(void *opaque, u_int batteryid,
 		else if (strstr(desc, " design cap"))
 			descap = data / 1000;
 		else if (strstr(desc, " charge") &&
-		    strstr(desc, " charge rate") == NULL) {
+		    strstr(desc, " charge rate") == NULL &&
+		    strstr(desc, " charge state") == NULL) {
 			cap += data / 1000;
 			cap_valid = 1;
 			pinfo->nbattery++;
@@ -345,6 +341,7 @@ acpiapm_get_powstat(void *opaque, u_int batteryid,
 			discharge_valid = 1;
 		}
 	}
+	sysmonclose_envsys(0, 0, 0, &lwp0);
 
 	if (cap_valid > 0)  {
 		if (warncap != -1 && cap < warncap)

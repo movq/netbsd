@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_subr.c,v 1.29 2005/12/08 03:09:04 thorpej Exp $	*/
+/*	$NetBSD: tty_subr.c,v 1.34 2008/07/16 18:27:49 drochner Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994 Theo de Raadt
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_subr.c,v 1.29 2005/12/08 03:09:04 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_subr.c,v 1.34 2008/07/16 18:27:49 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,6 +92,7 @@ clalloc(struct clist *clp, int size, int quot)
 	clp->c_ce = clp->c_cs + size;
 	clp->c_cn = size;
 	clp->c_cc = 0;
+
 	return (0);
 }
 
@@ -104,7 +105,6 @@ clfree(struct clist *clp)
 		free(clp->c_cq, M_TTYS);
 	clp->c_cs = clp->c_cq = (u_char *)0;
 }
-
 
 /*
  * Get a character from a clist.
@@ -129,6 +129,7 @@ getc(struct clist *clp)
 			c |= TTY_QUOTE;
 #endif
 	}
+	*clp->c_cf = 0; /* wipe out to avoid information disclosure */
 	if (++clp->c_cf == clp->c_ce)
 		clp->c_cf = clp->c_cs;
 	if (--clp->c_cc == 0)

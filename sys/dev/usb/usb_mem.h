@@ -1,4 +1,4 @@
-/*	$NetBSD: usb_mem.h,v 1.23 2005/12/11 12:24:01 christos Exp $	*/
+/*	$NetBSD: usb_mem.h,v 1.27 2008/06/28 17:42:53 bouyer Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usb_mem.h,v 1.9 1999/11/17 22:33:47 n_hibma Exp $	*/
 
 /*
@@ -17,13 +17,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
 typedef struct usb_dma_block {
 	bus_dma_tag_t tag;
 	bus_dmamap_t map;
-        caddr_t kaddr;
+        void *kaddr;
         bus_dma_segment_t segs[1];
         int nsegs;
         size_t size;
@@ -55,10 +48,11 @@ typedef struct usb_dma_block {
 
 #define DMAADDR(dma, o) ((dma)->block->map->dm_segs[0].ds_addr + (dma)->offs + (o))
 #define KERNADDR(dma, o) \
-	((void *)((char *)((dma)->block->kaddr + (dma)->offs) + (o)))
+	((void *)((char *)(dma)->block->kaddr + (dma)->offs + (o)))
 
 usbd_status	usb_allocmem(usbd_bus_handle,size_t,size_t, usb_dma_t *);
 void		usb_freemem(usbd_bus_handle, usb_dma_t *);
+void		usb_syncmem(usb_dma_t *, bus_addr_t, bus_size_t, int ops);
 
 #ifdef __NetBSD__
 struct extent;
@@ -66,11 +60,11 @@ struct extent;
 struct usb_dma_reserve {
 	bus_dma_tag_t dtag;
 	bus_dmamap_t map;
-	caddr_t vaddr;
+	void *vaddr;
 	bus_addr_t paddr;
 	size_t size;
 	struct extent *extent;
-	void *softc;
+	device_t dv;
 };
 
 #if defined(_KERNEL_OPT)
@@ -83,7 +77,7 @@ struct usb_dma_reserve {
 
 usbd_status usb_reserve_allocm(struct usb_dma_reserve *, usb_dma_t *,
 				u_int32_t);
-int usb_setup_reserve(void *, struct usb_dma_reserve *, bus_dma_tag_t, size_t);
+int usb_setup_reserve(device_t, struct usb_dma_reserve *, bus_dma_tag_t, size_t);
 void usb_reserve_freem(struct usb_dma_reserve *, usb_dma_t *);
 
 #endif

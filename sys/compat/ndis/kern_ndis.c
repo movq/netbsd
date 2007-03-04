@@ -35,7 +35,7 @@
 __FBSDID("$FreeBSD: src/sys/compat/ndis/kern_ndis.c,v 1.60.2.5 2005/04/01 17:14:20 wpaul Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: kern_ndis.c,v 1.9 2007/02/09 21:55:22 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_ndis.c,v 1.14 2008/01/18 09:38:06 skrll Exp $");
 #endif
 
 #include <sys/param.h>
@@ -63,7 +63,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_ndis.c,v 1.9 2007/02/09 21:55:22 ad Exp $");
 #include <sys/mbuf.h>
 #endif
 #include <sys/kthread.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 #ifdef __FreeBSD__
 #include <machine/resource.h>
 #include <sys/bus.h>
@@ -147,9 +147,7 @@ struct ndisproc {
 };
 
 static void ndis_return(void *);
-//#ifdef NDIS_LKM
-/*static*/ int ndis_create_kthreads(void);
-//#endif
+static int ndis_create_kthreads(void);
 static void ndis_destroy_kthreads(void);
 static void ndis_stop_thread(int);
 static int ndis_enlarge_thrqueue(int);
@@ -265,15 +263,6 @@ MOD_MISC( "ndisapi");
 
 #ifndef NDIS_LKM
 int ndis_lkm_handle(struct lkm_table *lkmtp, int cmd);
-void call_ndis_create_kthreads(void *arg);
-
-/* Just to schedule ndis_create_kthreads() to be called after init
- * has been created.
- */
-void call_ndis_create_kthreads(void *arg)
-{
-	ndis_create_kthreads();
-}
 #endif
 
 /*static*/ int
@@ -300,15 +289,9 @@ ndis_lkm_handle(struct lkm_table *lkmtp, int cmd)
 			patch++;
 		}
 
-#ifdef NDIS_LKM
-		ndis_create_kthreads();
-#else
-		/* Shedule threads to be created after autoconfiguration */
-		kthread_create(call_ndis_create_kthreads, NULL);
-#endif
-
 		TAILQ_INIT(&ndis_devhead);
 
+		ndis_create_kthreads();
 		break;
 	case LKM_E_UNLOAD:
 		/* stop kthreads */
@@ -578,7 +561,9 @@ ndis_destroy_kthreads()
 	}
 
 	mtx_destroy(&ndis_req_mtx);
+#ifndef __NetBSD__
 	mtx_destroy(&ndis_thr_mtx);
+#endif
 
 	return;
 }
@@ -1218,7 +1203,7 @@ ndis_create_sysctls(arg)
 		}
 
 		/* See if we already have a sysctl with this name */
-/* TODO: Is something like this nesicary in NetBSD?  I'm guessing this
+/* TODO: Is something like this necessary in NetBSD?  I'm guessing this
    TODO: is just checking if any of the information in the .inf file was
    TODO: already determined by FreeBSD's autoconfiguration which seems to
    TODO: add dev.XXX sysctl's beginning with %.  (NetBSD dosen't seem to do this).
@@ -1409,7 +1394,7 @@ ndis_return_packet(buf, arg)
 	void			*buf;	/* not used */
 	void			*arg;
 #else
-ndis_return_packet(struct mbuf *m, caddr_t buf,
+ndis_return_packet(struct mbuf *m, void *buf,
     size_t size, void *arg)
 #endif
 

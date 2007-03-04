@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_lockf.c,v 1.57 2007/02/09 21:55:32 ad Exp $	*/
+/*	$NetBSD: vfs_lockf.c,v 1.69 2008/10/11 13:40:57 pooka Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_lockf.c,v 1.57 2007/02/09 21:55:32 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_lockf.c,v 1.69 2008/10/11 13:40:57 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,12 +46,14 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_lockf.c,v 1.57 2007/02/09 21:55:32 ad Exp $");
 #include <sys/pool.h>
 #include <sys/fcntl.h>
 #include <sys/lockf.h>
+#include <sys/atomic.h>
 #include <sys/kauth.h>
+#include <sys/uidinfo.h>
 
 /*
  * The lockf structure is a kernel structure which contains the information
  * associated with a byte range lock.  The lockf structures are linked into
- * the inode structure. Locks are sorted by the starting byte of the lock for
+ * the vnode structure.  Locks are sorted by the starting byte of the lock for
  * efficiency.
  *
  * lf_next is used for two purposes, depending on whether the lock is
@@ -64,6 +66,7 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_lockf.c,v 1.57 2007/02/09 21:55:32 ad Exp $");
 TAILQ_HEAD(locklist, lockf);
 
 struct lockf {
+	kcondvar_t lf_cv;	 /* Signalling */
 	short	lf_flags;	 /* Lock semantics: F_POSIX, F_FLOCK, F_WAIT */
 	short	lf_type;	 /* Lock type: F_RDLCK, F_WRLCK */
 	off_t	lf_start;	 /* The byte # of the start of the lock */
@@ -79,8 +82,9 @@ struct lockf {
 /* Maximum length of sleep chains to traverse to try and detect deadlock. */
 #define MAXDEPTH 50
 
-static POOL_INIT(lockfpool, sizeof(struct lockf), 0, 0, 0, "lockfpl",
-    &pool_allocator_nointr);
+static pool_cache_t lockf_cache;
+static kmutex_t *lockf_lock;
+static char lockstr[] = "lockf";
 
 /*
  * This variable controls the maximum number of processes that will
@@ -97,7 +101,7 @@ int	lockf_debug = 0;
 
 /*
  * XXX TODO
- * Misc cleanups: "caddr_t id" should be visible in the API as a
+ * Misc cleanups: "void *id" should be visible in the API as a
  * "struct proc *".
  * (This requires rototilling all VFS's which support advisory locking).
  */
@@ -164,10 +168,10 @@ lf_printlist(const char *tag, struct lockf *lock)
 			"unknown", lf->lf_start, lf->lf_end);
 		TAILQ_FOREACH(blk, &lf->lf_blkhd, lf_block) {
 			if (blk->lf_flags & F_POSIX)
-				printf("proc %d",
+				printf("; proc %d",
 				    ((struct proc *)blk->lf_id)->p_pid);
 			else
-				printf("file %p", (struct file *)blk->lf_id);
+				printf("; file %p", (struct file *)blk->lf_id);
 			printf(", %s, start %qx, end %qx",
 				blk->lf_type == F_RDLCK ? "shared" :
 				blk->lf_type == F_WRLCK ? "exclusive" :
@@ -190,18 +194,17 @@ lf_alloc(uid_t uid, int allowfail)
 {
 	struct uidinfo *uip;
 	struct lockf *lock;
-	int s;
+	u_long lcnt;
 
 	uip = uid_find(uid);
-	UILOCK(uip, s);
-	if (uid && allowfail && uip->ui_lockcnt >
+	lcnt = atomic_inc_ulong_nv(&uip->ui_lockcnt);
+	if (uid && allowfail && lcnt >
 	    (allowfail == 1 ? maxlocksperuid : (maxlocksperuid * 2))) {
-		UIUNLOCK(uip, s);
+		atomic_dec_ulong(&uip->ui_lockcnt);
 		return NULL;
 	}
-	uip->ui_lockcnt++;
-	UIUNLOCK(uip, s);
-	lock = pool_get(&lockfpool, PR_WAITOK);
+
+	lock = pool_cache_get(lockf_cache, PR_WAITOK);
 	lock->lf_uid = uid;
 	return lock;
 }
@@ -210,13 +213,30 @@ static void
 lf_free(struct lockf *lock)
 {
 	struct uidinfo *uip;
-	int s;
 
 	uip = uid_find(lock->lf_uid);
-	UILOCK(uip, s);
-	uip->ui_lockcnt--;
-	UIUNLOCK(uip, s);
-	pool_put(&lockfpool, lock);
+	atomic_dec_ulong(&uip->ui_lockcnt);
+	pool_cache_put(lockf_cache, lock);
+}
+
+static int
+lf_ctor(void *arg, void *obj, int flag)
+{
+	struct lockf *lock;
+
+	lock = obj;
+	cv_init(&lock->lf_cv, lockstr);
+
+	return 0;
+}
+
+static void
+lf_dtor(void *arg, void *obj)
+{
+	struct lockf *lock;
+
+	lock = obj;
+	cv_destroy(&lock->lf_cv);
 }
 
 /*
@@ -364,6 +384,8 @@ lf_split(struct lockf *lock1, struct lockf *lock2, struct lockf **sparelock)
 	splitlock = *sparelock;
 	*sparelock = NULL;
 	memcpy(splitlock, lock1, sizeof(*splitlock));
+	cv_init(&splitlock->lf_cv, lockstr);
+
 	splitlock->lf_start = lock2->lf_end + 1;
 	TAILQ_INIT(&splitlock->lf_blkhd);
 	lock1->lf_end = lock2->lf_start - 1;
@@ -391,7 +413,7 @@ lf_wakelock(struct lockf *listhead)
 		if (lockf_debug & 2)
 			lf_print("lf_wakelock: awakening", wakelock);
 #endif
-		wakeup(wakelock);
+		cv_broadcast(&wakelock->lf_cv);
 	}
 }
 
@@ -419,7 +441,7 @@ lf_clearlock(struct lockf *unlock, struct lockf **sparelock)
 #endif /* LOCKF_DEBUG */
 	prev = head;
 	while ((ovcase = lf_findoverlap(lf, unlock, SELF,
-					&prev, &overlap)) != 0) {
+	    &prev, &overlap)) != 0) {
 		/*
 		 * Wakeup the list of locks to be retried.
 		 */
@@ -496,26 +518,18 @@ lf_getblock(struct lockf *lock)
  */
 static int
 lf_setlock(struct lockf *lock, struct lockf **sparelock,
-    struct simplelock *interlock)
+    kmutex_t *interlock)
 {
 	struct lockf *block;
 	struct lockf **head = lock->lf_head;
 	struct lockf **prev, *overlap, *ltmp;
-	static char lockstr[] = "lockf";
-	int ovcase, priority, needtolink, error;
+	int ovcase, needtolink, error;
 
 #ifdef LOCKF_DEBUG
 	if (lockf_debug & 1)
 		lf_print("lf_setlock", lock);
 #endif /* LOCKF_DEBUG */
 
-	/*
-	 * Set the priority
-	 */
-	priority = PLOCK;
-	if (lock->lf_type == F_WRLCK)
-		priority += 4;
-	priority |= PCATCH;
 	/*
 	 * Scan lock list for this file looking for locks that would block us.
 	 */
@@ -547,28 +561,22 @@ lf_setlock(struct lockf *lock, struct lockf **sparelock,
 			p = (struct proc *)block->lf_id;
 			KASSERT(p != NULL);
 			while (i++ < maxlockdepth) {
-				mutex_enter(&p->p_smutex);
+				mutex_enter(p->p_lock);
 				if (p->p_nlwps > 1) {
-					mutex_exit(&p->p_smutex);
+					mutex_exit(p->p_lock);
 					break;
 				}
 				wlwp = LIST_FIRST(&p->p_lwps);
 				lwp_lock(wlwp);
-				if (wlwp->l_wmesg != lockstr) {
+				if (wlwp->l_wchan == NULL ||
+				    wlwp->l_wmesg != lockstr) {
 					lwp_unlock(wlwp);
-					mutex_exit(&p->p_smutex);
+					mutex_exit(p->p_lock);
 					break;
 				}
 				waitblock = wlwp->l_wchan;
 				lwp_unlock(wlwp);
-				mutex_exit(&p->p_smutex);
-				if (waitblock == NULL) {
-					/*
-					 * this lwp just got up but
-					 * not returned from ltsleep yet.
-					 */
-					break;
-				}
+				mutex_exit(p->p_lock);
 				/* Get the owner of the blocking lock */
 				waitblock = waitblock->lf_next;
 				if ((waitblock->lf_flags & F_POSIX) == 0)
@@ -612,10 +620,10 @@ lf_setlock(struct lockf *lock, struct lockf **sparelock,
 			lf_printlist("lf_setlock", block);
 		}
 #endif /* LOCKF_DEBUG */
-		error = ltsleep(lock, priority, lockstr, 0, interlock);
+		error = cv_wait_sig(&lock->lf_cv, interlock);
 
 		/*
-		 * We may have been awakened by a signal (in
+		 * We may have been awoken by a signal (in
 		 * which case we must remove ourselves from the
 		 * blocked list) and/or by another process
 		 * releasing a lock (in which case we have already
@@ -802,7 +810,7 @@ lf_advlock(struct vop_advlock_args *ap, struct lockf **head, off_t size)
 	struct flock *fl = ap->a_fl;
 	struct lockf *lock = NULL;
 	struct lockf *sparelock;
-	struct simplelock *interlock = &ap->a_vp->v_interlock;
+	kmutex_t *interlock = lockf_lock;
 	off_t start, end;
 	int error = 0;
 
@@ -830,7 +838,7 @@ lf_advlock(struct vop_advlock_args *ap, struct lockf **head, off_t size)
 		return EINVAL;
 
 	/*
-	 * Allocate locks before acquiring the simple lock.  We need two
+	 * Allocate locks before acquiring the interlock.  We need two
 	 * locks in the worst case.
 	 */
 	switch (ap->a_op) {
@@ -867,7 +875,7 @@ lf_advlock(struct vop_advlock_args *ap, struct lockf **head, off_t size)
 		goto quit;
 	}
 
-	simple_lock(interlock);
+	mutex_enter(interlock);
 
 	/*
 	 * Avoid the common case of unlocking when inode has no locks.
@@ -889,12 +897,6 @@ lf_advlock(struct vop_advlock_args *ap, struct lockf **head, off_t size)
 	 */
 	lock->lf_start = start;
 	lock->lf_end = end;
-	/* XXX NJWLWP
-	 * I don't want to make the entire VFS universe use LWPs, because
-	 * they don't need them, for the most part. This is an exception,
-	 * and a kluge.
-	 */
-
 	lock->lf_head = head;
 	lock->lf_type = fl->l_type;
 	lock->lf_next = (struct lockf *)0;
@@ -929,7 +931,7 @@ lf_advlock(struct vop_advlock_args *ap, struct lockf **head, off_t size)
 	}
 
 quit_unlock:
-	simple_unlock(interlock);
+	mutex_exit(interlock);
 quit:
 	if (lock)
 		lf_free(lock);
@@ -937,4 +939,18 @@ quit:
 		lf_free(sparelock);
 
 	return error;
+}
+
+/*
+ * Initialize subsystem.   XXX We use a global lock.  This could be the
+ * vnode interlock, but the deadlock detection code may need to inspect
+ * locks belonging to other files.
+ */
+void
+lf_init(void)
+{
+
+	lockf_cache = pool_cache_init(sizeof(struct lockf), 0, 0, 0, "lockf",
+ 	    NULL, IPL_NONE, lf_ctor, lf_dtor, NULL);
+        lockf_lock = mutex_obj_alloc(MUTEX_DEFAULT, IPL_NONE);
 }

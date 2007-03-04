@@ -1,4 +1,4 @@
-/*	$NetBSD: protosw.h,v 1.40 2007/02/17 22:34:17 dyoung Exp $	*/
+/*	$NetBSD: protosw.h,v 1.44 2008/08/06 15:01:24 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -60,6 +60,7 @@
 struct mbuf;
 struct sockaddr;
 struct socket;
+struct sockopt;
 struct domain;
 struct proc;
 struct lwp;
@@ -78,7 +79,7 @@ struct protosw {
 	void	*(*pr_ctlinput)		/* control input (from below) */
 			(int, const struct sockaddr *, void *);
 	int	(*pr_ctloutput)		/* control output (from above) */
-			(int, struct socket *, int, int, struct mbuf **);
+			(int, struct socket *, struct sockopt *);
 
 /* user-protocol hook */
 	int	(*pr_usrreq)		/* user request: see list below */
@@ -159,7 +160,7 @@ struct protosw {
 #define	PRU_NREQ		23
 
 #ifdef PRUREQUESTS
-const char * const prurequests[] = {
+static const char * const prurequests[] = {
 	"ATTACH",	"DETACH",	"BIND",		"LISTEN",
 	"CONNECT",	"ACCEPT",	"DISCONNECT",	"SHUTDOWN",
 	"RCVD",		"SEND",		"ABORT",	"CONTROL",
@@ -173,7 +174,7 @@ const char * const prurequests[] = {
  * The arguments to the ctlinput routine are
  *	(*protosw[].pr_ctlinput)(cmd, sa, arg);
  * where cmd is one of the commands below, sa is a pointer to a sockaddr,
- * and arg is an optional caddr_t argument used within a protocol family.
+ * and arg is an optional void *argument used within a protocol family.
  */
 #define	PRC_IFDOWN		0	/* interface transition */
 #define	PRC_ROUTEDEAD		1	/* select new route if possible ??? */
@@ -202,7 +203,7 @@ const char * const prurequests[] = {
 	((cmd) >= PRC_REDIRECT_NET && (cmd) <= PRC_REDIRECT_TOSHOST)
 
 #ifdef PRCREQUESTS
-const char * const prcrequests[] = {
+static const char * const prcrequests[] = {
 	"IFDOWN", "ROUTEDEAD", "#2", "DEC-BIT-QUENCH2",
 	"QUENCH", "MSGSIZE", "HOSTDEAD", "#7",
 	"NET-UNREACH", "HOST-UNREACH", "PROTO-UNREACH", "PORT-UNREACH",
@@ -214,14 +215,9 @@ const char * const prcrequests[] = {
 
 /*
  * The arguments to ctloutput are:
- *	(*protosw[].pr_ctloutput)(req, so, level, optname, optval);
+ *	(*protosw[].pr_ctloutput)(req, so, sopt);
  * req is one of the actions listed below, so is a (struct socket *),
- * level is an indication of which protocol layer the option is intended.
- * optname is a protocol dependent socket option request,
- * optval is a pointer to a mbuf-chain pointer, for value-return results.
- * The protocol is responsible for disposal of the mbuf chain *optval
- * if supplied,
- * the caller is responsible for any space held by *optval, when returned.
+ * sopt is a (struct sockopt *)
  * A non-zero return from usrreq gives an
  * UNIX error number which should be passed to higher level software.
  */
@@ -231,15 +227,12 @@ const char * const prcrequests[] = {
 #define	PRCO_NCMDS	2
 
 #ifdef PRCOREQUESTS
-const char * const prcorequests[] = {
+static const char * const prcorequests[] = {
 	"GETOPT", "SETOPT",
 };
 #endif
 
 #ifdef _KERNEL
-extern const char * const prurequests[];
-extern const char * const prcrequests[];
-extern const char * const prcorequests[];
 /*
  * Monotonically increasing time values for slow and fast timers.
  */
@@ -264,6 +257,47 @@ const struct protosw *pffindtype(int, int);
 struct domain *pffinddomain(int);
 void pfctlinput(int, const struct sockaddr *);
 void pfctlinput2(int, const struct sockaddr *, void *);
+
+/*
+ * Wrappers for non-MPSAFE protocols
+ */
+#include <sys/systm.h>	/* kernel_lock */
+
+#define	PR_WRAP_USRREQ(name)				\
+static int						\
+name##_wrapper(struct socket *a, int b, struct mbuf *c,	\
+     struct mbuf *d, struct mbuf *e, struct lwp *f)	\
+{							\
+	int rv;						\
+	KERNEL_LOCK(1, NULL);				\
+	rv = name(a, b, c, d, e, f);			\
+	KERNEL_UNLOCK_ONE(NULL);			\
+	return rv;					\
+}
+
+#define	PR_WRAP_CTLOUTPUT(name)				\
+static int						\
+name##_wrapper(int a, struct socket *b,			\
+    struct sockopt *c)					\
+{							\
+	int rv;						\
+	KERNEL_LOCK(1, NULL);				\
+	rv = name(a, b, c);				\
+	KERNEL_UNLOCK_ONE(NULL);			\
+	return rv;					\
+}
+
+#define	PR_WRAP_CTLINPUT(name)				\
+static void *						\
+name##_wrapper(int a, const struct sockaddr *b, void *c)\
+{							\
+	void *rv;					\
+	KERNEL_LOCK(1, NULL);				\
+	rv = name(a, b, c);				\
+	KERNEL_UNLOCK_ONE(NULL);			\
+	return rv;					\
+}
+
 #endif /* _KERNEL */
 
 #endif /* !_SYS_PROTOSW_H_ */

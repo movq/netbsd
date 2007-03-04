@@ -39,7 +39,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  *
- * $Id: ahc_pci.c,v 1.58 2006/11/16 01:33:08 christos Exp $
+ * $Id: ahc_pci.c,v 1.63 2008/02/22 23:24:07 dyoung Exp $
  *
  * //depot/aic7xxx/aic7xxx/aic7xxx_pci.c#57 $
  *
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahc_pci.c,v 1.58 2006/11/16 01:33:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahc_pci.c,v 1.63 2008/02/22 23:24:07 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,8 +60,8 @@ __KERNEL_RCSID(0, "$NetBSD: ahc_pci.c,v 1.58 2006/11/16 01:33:08 christos Exp $"
 #include <sys/device.h>
 #include <sys/reboot.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
@@ -709,6 +709,9 @@ static void ahc_probe_ext_scbram(struct ahc_softc *ahc);
 
 static void ahc_pci_intr(struct ahc_softc *);
 
+static bool ahc_pci_suspend(device_t PMF_FN_PROTO);
+static bool ahc_pci_resume(device_t PMF_FN_PROTO);
+
 static const struct ahc_pci_identity *
 ahc_find_pci_device(pcireg_t id, pcireg_t subid, u_int func)
 {
@@ -741,8 +744,7 @@ ahc_find_pci_device(pcireg_t id, pcireg_t subid, u_int func)
 }
 
 static int
-ahc_pci_probe(struct device *parent, struct cfdata *match,
-    void *aux)
+ahc_pci_probe(device_t parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	const struct	   ahc_pci_identity *entry;
@@ -754,11 +756,11 @@ ahc_pci_probe(struct device *parent, struct cfdata *match,
 }
 
 static void
-ahc_pci_attach(struct device *parent, struct device *self, void *aux)
+ahc_pci_attach(device_t parent, device_t self, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 	const struct	   ahc_pci_identity *entry;
-	struct		   ahc_softc *ahc = (void *)self;
+	struct		   ahc_softc *ahc = device_private(self);
 	pcireg_t	   command;
 	u_int		   our_id = 0;
 	u_int		   sxfrctl1;
@@ -780,8 +782,9 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 	pci_intr_handle_t  ih;
 	const char        *intrstr;
 	struct ahc_pci_busdata *bd;
+	bool               override_ultra;
 
-	ahc_set_name(ahc, ahc->sc_dev.dv_xname);
+	ahc_set_name(ahc, device_xname(&ahc->sc_dev));
 	ahc->parent_dmat = pa->pa_dmat;
 
 	command = pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_COMMAND_STATUS_REG);
@@ -953,8 +956,8 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 	intrstr = pci_intr_string(pa->pa_pc, ih);
 	ahc->ih = pci_intr_establish(pa->pa_pc, ih, IPL_BIO, ahc_intr, ahc);
 	if (ahc->ih == NULL) {
-		printf("%s: couldn't establish interrupt",
-		       ahc->sc_dev.dv_xname);
+		aprint_error_dev(&ahc->sc_dev,
+		    "couldn't establish interrupt\n");
 		if (intrstr != NULL)
 			printf(" at %s", intrstr);
 		printf("\n");
@@ -1000,8 +1003,14 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * We cannot perform ULTRA speeds without the presence
 	 * of the external precision resistor.
+	 * Allow override for the SGI O2 though, which has two onboard ahc
+	 * that fail here but are perfectly capable of ultra speeds.
 	 */
-	if ((ahc->features & AHC_ULTRA) != 0) {
+	override_ultra = FALSE;
+	prop_dictionary_get_bool(device_properties(self),
+	    "aic7xxx-override-ultra", &override_ultra);
+
+	if (((ahc->features & AHC_ULTRA) != 0) && (!override_ultra)) {
 		uint32_t dvconfig;
 
 		dvconfig = pci_conf_read(pa->pa_pc, pa->pa_tag, DEVCONFIG);
@@ -1092,6 +1101,7 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
 	if (ahc_init(ahc))
 		goto error_out;
 
+	pmf_device_register(self, ahc_pci_suspend, ahc_pci_resume);
 	ahc_attach(ahc);
 
 	return;
@@ -1099,6 +1109,35 @@ ahc_pci_attach(struct device *parent, struct device *self, void *aux)
  error_out:
 	ahc_free(ahc);
 	return;
+}
+
+/*
+ * XXX we should call the real suspend and resume functions here
+ * but for some reason ahc_suspend() panics on shutdown
+ */
+
+static bool
+ahc_pci_suspend(device_t dev PMF_FN_ARGS)
+{
+	struct ahc_softc *sc = device_private(dev);
+#if 0
+	return (ahc_suspend(sc) == 0);
+#else
+	ahc_shutdown(sc);
+	return true;
+#endif
+}
+
+static bool
+ahc_pci_resume(device_t dev PMF_FN_ARGS)
+{
+#if 0
+	struct ahc_softc *sc = device_private(dev);
+
+	return (ahc_resume(sc) == 0);
+#else
+	return true;
+#endif
 }
 
 CFATTACH_DECL(ahc_pci, sizeof(struct ahc_softc),
@@ -1709,7 +1748,7 @@ ahc_aha29160C_setup(struct ahc_softc *ahc)
 static int
 ahc_raid_setup(struct ahc_softc *ahc)
 {
-	printf("%s: RAID functionality unsupported\n", ahc->sc_dev.dv_xname);
+	aprint_normal_dev(&ahc->sc_dev, "RAID functionality unsupported\n");
 	return (ENXIO);
 }
 

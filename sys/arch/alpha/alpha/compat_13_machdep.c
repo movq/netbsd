@@ -1,4 +1,4 @@
-/* $NetBSD: compat_13_machdep.c,v 1.14 2007/02/09 21:55:00 ad Exp $ */
+/* $NetBSD: compat_13_machdep.c,v 1.17 2008/04/24 18:39:20 ad Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.14 2007/02/09 21:55:00 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.17 2008/04/24 18:39:20 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,14 +59,11 @@ __KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.14 2007/02/09 21:55:00 ad Ex
  */
 /* ARGSUSED */
 int
-compat_13_sys_sigreturn(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct compat_13_sys_sigreturn_args /* {
+	/* {
 		syscallarg(struct sigcontext13 *) sigcntxp;
-	} */ *uap = v;
+	} */
 	struct sigcontext13 *scp, ksc;
 	struct proc *p = l->l_proc;
 	sigset13_t mask13;
@@ -81,7 +78,7 @@ compat_13_sys_sigreturn(l, v, retval)
 	if (ALIGN(scp) != (u_int64_t)scp)
 		return (EINVAL);
 
-	if (copyin((caddr_t)scp, &ksc, sizeof(ksc)) != 0)
+	if (copyin((void *)scp, &ksc, sizeof(ksc)) != 0)
 		return (EFAULT);
 
 	if (ksc.sc_regs[R_ZERO] != 0xACEDBADE)		/* magic number */
@@ -102,7 +99,7 @@ compat_13_sys_sigreturn(l, v, retval)
 	    sizeof(struct fpreg));
 	/* XXX ksc.sc_fp_control ? */
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	/* Restore signal stack. */
 	if (ksc.sc_onstack & SS_ONSTACK)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
@@ -115,7 +112,7 @@ compat_13_sys_sigreturn(l, v, retval)
 	mask13 = ksc.sc_mask;
 	native_sigset13_to_sigset(&mask13, &mask);
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	return (EJUSTRETURN);
 }

@@ -33,7 +33,7 @@
  *	isdn4bsd layer1 driver for Dynalink IS64PH isdn TA
  *	==================================================
  *
- *	$Id: isic_isapnp_dynalink.c,v 1.7 2005/12/11 12:22:16 christos Exp $
+ *	$Id: isic_isapnp_dynalink.c,v 1.10 2008/04/08 20:09:27 cegger Exp $
  *
  *      last edit-date: [Fri Jan  5 11:38:29 2001]
  *
@@ -75,7 +75,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_isapnp_dynalink.c,v 1.7 2005/12/11 12:22:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_isapnp_dynalink.c,v 1.10 2008/04/08 20:09:27 cegger Exp $");
 
 #include "opt_isicpnp.h"
 #ifdef ISICPNP_DYNALINK
@@ -106,7 +106,7 @@ __KERNEL_RCSID(0, "$NetBSD: isic_isapnp_dynalink.c,v 1.7 2005/12/11 12:22:16 chr
 #elif defined(__bsdi__)
 #include <i386/isa/pnp.h>
 #else
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <sys/device.h>
 #endif
 
@@ -247,9 +247,9 @@ isic_probe_Dyn(struct isa_device *dev, unsigned int iobase2)
 	sc->sc_bfifolen = HSCX_FIFO_LEN;
 
 	/* setup ISAC and HSCX base addr */
-	ISAC_BASE = (caddr_t) sc->sc_port;
-	HSCX_A_BASE = (caddr_t) sc->sc_port + 1;
-	HSCX_B_BASE = (caddr_t) sc->sc_port + 1 + HSCXB_HACK;
+	ISAC_BASE = (void *) sc->sc_port;
+	HSCX_A_BASE = (void *) sc->sc_port + 1;
+	HSCX_B_BASE = (void *) sc->sc_port + 1 + HSCXB_HACK;
 
 	/* Read HSCX A/B VSTR.  Expected value is 0x05 (V2.1). */
 	if( ((HSCX_READ(0, H_VSTR) & 0xf) != 0x5) ||
@@ -344,9 +344,9 @@ set_softc(struct isic_softc *sc, struct isa_attach_args *ia, int unit)
 	sc->sc_bfifolen = HSCX_FIFO_LEN;
 
 	/* setup ISAC and HSCX base addr */
-	ISAC_BASE = (caddr_t) sc->sc_port;
-	HSCX_A_BASE = (caddr_t) sc->sc_port + 1;
-	HSCX_B_BASE = (caddr_t) sc->sc_port + 1 + HSCXB_HACK;
+	ISAC_BASE = (void *) sc->sc_port;
+	HSCX_A_BASE = (void *) sc->sc_port + 1;
+	HSCX_B_BASE = (void *) sc->sc_port + 1 + HSCXB_HACK;
 	return 1;
 }
 
@@ -431,11 +431,11 @@ void isic_attach_Dyn(struct isic_softc *sc)
 	if( ((HSCX_READ(0, H_VSTR) & 0xf) != 0x5) || ((HSCX_READ(1, H_VSTR) & 0xf) != 0x5) )
 	{
 		printf("%s: HSCX VSTR test failed for Dynalink PnP\n",
-			sc->sc_dev.dv_xname);
+			device_xname(&sc->sc_dev));
 		printf("%s: HSC0: VSTR: %#x\n",
-			sc->sc_dev.dv_xname, HSCX_READ(0, H_VSTR));
+			device_xname(&sc->sc_dev), HSCX_READ(0, H_VSTR));
 		printf("%s: HSC1: VSTR: %#x\n",
-			sc->sc_dev.dv_xname, HSCX_READ(1, H_VSTR));
+			device_xname(&sc->sc_dev), HSCX_READ(1, H_VSTR));
 		return;
 	}
 

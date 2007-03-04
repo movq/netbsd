@@ -1,4 +1,4 @@
-/*	$NetBSD: cgthree_sbus.c,v 1.17 2006/03/29 04:16:50 thorpej Exp $ */
+/*	$NetBSD: cgthree_sbus.c,v 1.21 2008/04/28 20:23:57 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -85,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgthree_sbus.c,v 1.17 2006/03/29 04:16:50 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgthree_sbus.c,v 1.21 2008/04/28 20:23:57 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -97,7 +90,7 @@ __KERNEL_RCSID(0, "$NetBSD: cgthree_sbus.c,v 1.17 2006/03/29 04:16:50 thorpej Ex
 #include <sys/tty.h>
 #include <sys/conf.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/autoconf.h>
 
 #include <dev/sun/fbio.h>
@@ -177,7 +170,7 @@ cgthreeattach_sbus(parent, self, args)
 			 sa->sa_offset + CG3REG_REG,
 			 sizeof(struct fbcontrol),
 			 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-		printf("%s: cannot map control registers\n", self->dv_xname);
+		aprint_error_dev(self, "cannot map control registers\n");
 		return;
 	}
 	sc->sc_fbc = (struct fbcontrol *)bus_space_vaddr(sa->sa_bustag, bh);
@@ -188,7 +181,7 @@ cgthreeattach_sbus(parent, self, args)
 		name = "cgthree";
 
 	if (sa->sa_npromvaddrs != 0)
-		fb->fb_pixels = (caddr_t)(u_long)sa->sa_promvaddrs[0];
+		fb->fb_pixels = (void *)(u_long)sa->sa_promvaddrs[0];
 	if (isconsole && fb->fb_pixels == NULL) {
 		int ramsize = fb->fb_type.fb_height * fb->fb_linebytes;
 		if (sbus_bus_map(sa->sa_bustag,
@@ -196,7 +189,7 @@ cgthreeattach_sbus(parent, self, args)
 				 sa->sa_offset + CG3REG_MEM,
 				 ramsize,
 				 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-			printf("%s: cannot map pixels\n", self->dv_xname);
+			aprint_error_dev(self, "cannot map pixels\n");
 			return;
 		}
 		fb->fb_pixels = (char *)bus_space_vaddr(sa->sa_bustag, bh);

@@ -1,11 +1,8 @@
-/*	$NetBSD: attimer.c,v 1.2 2005/12/11 12:21:26 christos Exp $	*/
+/*	$NetBSD: attimer.c,v 1.9 2008/06/12 22:30:30 cegger Exp $	*/
 
 /*
  *  Copyright (c) 2005 The NetBSD Foundation.
  *  All rights reserved.
- *
- *  This code is derived from software contributed to the NetBSD Foundation
- *   by Quentin Garnier.
  *
  *  Redistribution and use in source and binary forms, with or without
  *  modification, are permitted provided that the following conditions
@@ -15,13 +12,6 @@
  *  2. Redistributions in binary form must reproduce the above copyright
  *     notice, this list of conditions and the following disclaimer in the
  *     documentation and/or other materials provided with the distribution.
- *  3. All advertising materials mentioning features or use of this software
- *     must display the following acknowledgement:
- *         This product includes software developed by the NetBSD
- *         Foundation, Inc. and its contributors.
- *  4. Neither the name of The NetBSD Foundation nor the names of its
- *     contributors may be used to endorse or promote products derived
- *     from this software without specific prior written permission.
  *
  *  THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  *  ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,14 +33,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: attimer.c,v 1.2 2005/12/11 12:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: attimer.c,v 1.9 2008/06/12 22:30:30 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isareg.h>
 
@@ -63,6 +53,20 @@ void
 attimer_attach(struct attimer_softc *sc)
 {
 	sc->sc_flags |= ATT_CONFIGURED;
+
+	if (!pmf_device_register(sc->sc_dev, NULL, NULL))
+		aprint_error_dev(sc->sc_dev, "couldn't establish power handler\n");
+}
+
+int
+attimer_detach(device_t self, int flags)
+{
+	struct attimer_softc *sc = device_private(self);
+
+	pmf_device_deregister(self);
+	sc->sc_flags &= ~ATT_CONFIGURED;
+	bus_space_unmap(sc->sc_iot, sc->sc_ioh, sc->sc_size);
+	return 0;
 }
 
 /*
@@ -74,28 +78,31 @@ attimer_attach(struct attimer_softc *sc)
  * computer with more than one pcppi/attimer accessible.
  */
 
-struct attimer_softc *
-attimer_attach_speaker()
+device_t
+attimer_attach_speaker(void)
 {
 	int i;
 	struct attimer_softc *sc;
 
-	for (i = 0; i < attimer_cd.cd_ndevs; i++)
-		if (attimer_cd.cd_devs[i] != NULL) {
-			sc = (struct attimer_softc *)attimer_cd.cd_devs[i];
-			if ((sc->sc_flags & ATT_CONFIGURED) &&
-			    !(sc->sc_flags & ATT_ATTACHED)) {
-				sc->sc_flags |= ATT_ATTACHED;
-				return sc;
-			}
+	for (i = 0; i < attimer_cd.cd_ndevs; i++) {
+		sc = device_lookup_private(&attimer_cd, i);
+		if (sc == NULL)
+			continue;
+		if ((sc->sc_flags & ATT_CONFIGURED) &&
+		    !(sc->sc_flags & ATT_ATTACHED)) {
+			sc->sc_flags |= ATT_ATTACHED;
+			return sc->sc_dev;
 		}
+	}
 	return NULL;
 }
 
 void
-attimer_set_pitch(struct attimer_softc *sc, int pitch)
+attimer_set_pitch(device_t dev, int pitch)
 {
+	struct attimer_softc *sc = device_private(dev);
 	int s;
+
 	s = splhigh();
 	bus_space_write_1(sc->sc_iot, sc->sc_ioh, TIMER_MODE,
 	    TIMER_SEL2 | TIMER_16BIT | TIMER_SQWAVE);

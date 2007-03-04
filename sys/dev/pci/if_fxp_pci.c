@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fxp_pci.c,v 1.52 2006/11/26 01:15:39 enami Exp $	*/
+/*	$NetBSD: if_fxp_pci.c,v 1.60 2008/07/09 17:07:28 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_fxp_pci.c,v 1.52 2006/11/26 01:15:39 enami Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_fxp_pci.c,v 1.60 2008/07/09 17:07:28 joerg Exp $");
 
 #include "rnd.h"
 
@@ -68,8 +61,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_fxp_pci.c,v 1.52 2006/11/26 01:15:39 enami Exp $"
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/mii/miivar.h>
 
@@ -86,23 +79,22 @@ struct fxp_pci_softc {
 	pci_chipset_tag_t psc_pc;	/* pci chipset tag */
 	pcireg_t psc_regs[0x20>>2];	/* saved PCI config regs (sparse) */
 	pcitag_t psc_tag;		/* pci register tag */
-	void *psc_powerhook;		/* power hook */
 
 	int psc_pwrmgmt_csr_reg;	/* ACPI power management register */
 	pcireg_t psc_pwrmgmt_csr;	/* ...and the contents at D0 */
 	struct pci_conf_state psc_pciconf; /* standard PCI configuration regs */
 };
 
-static int	fxp_pci_match(struct device *, struct cfdata *, void *);
-static void	fxp_pci_attach(struct device *, struct device *, void *);
+static int	fxp_pci_match(device_t, cfdata_t, void *);
+static void	fxp_pci_attach(device_t, device_t, void *);
 
 static int	fxp_pci_enable(struct fxp_softc *);
 static void	fxp_pci_disable(struct fxp_softc *);
 
-static void	fxp_pci_confreg_restore(struct fxp_pci_softc *psc);
-static void	fxp_pci_powerhook(int why, void *arg);
+static void fxp_pci_confreg_restore(struct fxp_pci_softc *psc);
+static bool fxp_pci_resume(device_t dv PMF_FN_PROTO);
 
-CFATTACH_DECL(fxp_pci, sizeof(struct fxp_pci_softc),
+CFATTACH_DECL_NEW(fxp_pci, sizeof(struct fxp_pci_softc),
     fxp_pci_match, fxp_pci_attach, NULL, NULL);
 
 static const struct fxp_pci_product {
@@ -161,6 +153,8 @@ static const struct fxp_pci_product {
 	  "Intel 82562EZ (ICH6)" },
 	{ PCI_PRODUCT_INTEL_82801G_LAN,
 	  "Intel 82801GB/GR (ICH7) Network Controller" },
+	{ PCI_PRODUCT_INTEL_82801GB_LAN,
+	  "Intel 82801GB 10/100 Network Controller" },
 	{ 0,
 	  NULL },
 };
@@ -181,8 +175,7 @@ fxp_pci_lookup(const struct pci_attach_args *pa)
 }
 
 static int
-fxp_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+fxp_pci_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -193,6 +186,7 @@ fxp_pci_match(struct device *parent, struct cfdata *match,
 }
 
 /*
+ * On resume : (XXX it is necessary with new pmf framework ?) 
  * Restore PCI configuration registers that may have been clobbered.
  * This is necessary due to bugs on the Sony VAIO Z505-series on-board
  * ethernet, after an APM suspend/resume, as well as after an ACPI
@@ -240,35 +234,20 @@ fxp_pci_confreg_restore(struct fxp_pci_softc *psc)
 	    psc->psc_regs[(PCI_MAPREG_START+0x8)>>2]);
 }
 
-
-/*
- * Power handler routine. Called when the system is transitioning into/out
- * of power save modes. We restore the (bashed) PCI configuration registers
- * on a resume.
- */
-static void
-fxp_pci_powerhook(int why, void *arg)
+static bool
+fxp_pci_resume(device_t dv PMF_FN_ARGS)
 {
-	struct fxp_pci_softc *psc = arg;
+	struct fxp_pci_softc *psc = device_private(dv);
+	fxp_pci_confreg_restore(psc);
 
-	switch (why) {
-	case PWR_SUSPEND:
-		pci_conf_capture(psc->psc_pc, psc->psc_tag, &psc->psc_pciconf);
-		break;
-	case PWR_RESUME:
-		pci_conf_restore(psc->psc_pc, psc->psc_tag, &psc->psc_pciconf);
-		fxp_pci_confreg_restore(psc);
-		break;
-	}
-
-	return;
+	return true;
 }
 
 static void
-fxp_pci_attach(struct device *parent, struct device *self, void *aux)
+fxp_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct fxp_pci_softc *psc = (struct fxp_pci_softc *)self;
-	struct fxp_softc *sc = (struct fxp_softc *)self;
+	struct fxp_pci_softc *psc = device_private(self);
+	struct fxp_softc *sc = &psc->psc_fxp;
 	struct pci_attach_args *pa = aux;
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
@@ -281,6 +260,8 @@ fxp_pci_attach(struct device *parent, struct device *self, void *aux)
 	bus_size_t size;
 	int flags;
 	int error;
+
+	sc->sc_dev = self;
 
 	aprint_naive(": Ethernet controller\n");
 
@@ -465,7 +446,7 @@ fxp_pci_attach(struct device *parent, struct device *self, void *aux)
 	    pci_conf_read(pc, pa->pa_tag, PCI_MAPREG_START+0x8);
 
 	/* power up chip */
-	switch ((error = pci_activate(pa->pa_pc, pa->pa_tag, sc,
+	switch ((error = pci_activate(pa->pa_pc, pa->pa_tag, self,
 	    pci_activate_null))) {
 	case EOPNOTSUPP:
 		break;
@@ -474,8 +455,7 @@ fxp_pci_attach(struct device *parent, struct device *self, void *aux)
 		sc->sc_disable = fxp_pci_disable;
 		break;
 	default:
-		aprint_error("%s: cannot activate %d\n", sc->sc_dev.dv_xname,
-		    error);
+		aprint_error_dev(self, "cannot activate %d\n", error);
 		return;
 	}
 
@@ -488,21 +468,19 @@ fxp_pci_attach(struct device *parent, struct device *self, void *aux)
 	 * Map and establish our interrupt.
 	 */
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error("%s: couldn't map interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, fxp_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error("%s: couldn't establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
 			aprint_normal(" at %s", intrstr);
 		aprint_normal("\n");
 		return;
 	}
-	aprint_normal("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	/* Finish off the attach. */
 	fxp_attach(sc);
@@ -510,12 +488,10 @@ fxp_pci_attach(struct device *parent, struct device *self, void *aux)
 		fxp_disable(sc);
 
 	/* Add a suspend hook to restore PCI config state */
-	psc->psc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
-	    fxp_pci_powerhook, psc);
-	if (psc->psc_powerhook == NULL)
-		aprint_error(
-		    "%s: WARNING: unable to establish pci power hook\n",
-		    sc->sc_dev.dv_xname);
+	if (!pmf_device_register(self, NULL, fxp_pci_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+	else
+		pmf_class_network_register(self, &sc->sc_ethercom.ec_if);
 }
 
 static int
@@ -524,7 +500,7 @@ fxp_pci_enable(struct fxp_softc *sc)
 	struct fxp_pci_softc *psc = (void *) sc;
 
 #if 0
-	printf("%s: going to power state D0\n", sc->sc_dev.dv_xname);
+	printf("%s: going to power state D0\n", device_xname(self));
 #endif
 
 	/* Bring the device into D0 power state. */
@@ -550,7 +526,7 @@ fxp_pci_disable(struct fxp_softc *sc)
 		return;
 
 #if 0
-	printf("%s: going to power state D3\n", sc->sc_dev.dv_xname);
+	printf("%s: going to power state D3\n", device_xname(self));
 #endif
 
 	/* Put the device into D3 state. */

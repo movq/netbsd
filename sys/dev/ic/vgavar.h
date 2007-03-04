@@ -1,4 +1,4 @@
-/* $NetBSD: vgavar.h,v 1.25 2006/08/13 20:24:51 jmcneill Exp $ */
+/* $NetBSD: vgavar.h,v 1.28 2008/03/14 22:12:08 cube Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -42,7 +42,7 @@ struct vga_handle {
 #define vh_memh 	vh_ph.ph_memh
 
 struct vga_funcs {
-	int (*vf_ioctl)(void *, u_long, caddr_t, int, struct lwp *);
+	int (*vf_ioctl)(void *, u_long, void *, int, struct lwp *);
 	paddr_t (*vf_mmap)(void *, off_t, int);
 };
 
@@ -80,7 +80,7 @@ struct vga_config {
 };
 
 struct vga_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct vga_config *sc_vc;
 };
 
@@ -192,6 +192,8 @@ int	vga_is_console(bus_space_tag_t, int);
 int	vga_cnattach(bus_space_tag_t, bus_space_tag_t, int, int);
 int	vga_cndetach(void);
 
+void	vga_resume(struct vga_softc *);
+
 #ifndef VGA_RASTERCONSOLE
 struct wsscreen_descr;
 void 	vga_loadchars(struct vga_handle *, int, int, int, int, const char *);
@@ -204,8 +206,7 @@ void 	vga_setscreentype(struct vga_handle *, const struct wsscreen_descr *);
 #else /* !VGA_RASTERCONSOLE */
 void 	vga_load_builtinfont(struct vga_handle *, u_int8_t *, int, int);
 #endif /* !VGA_RASTERCONSOLE */
-#ifdef VGA_RESET
 void	vga_reset(struct vga_handle *, void (*)(struct vga_handle *));
-#endif
+void	vga_initregs(struct vga_handle *);
 
 extern int vga_no_builtinfont;

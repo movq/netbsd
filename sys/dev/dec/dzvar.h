@@ -1,4 +1,4 @@
-/*	$NetBSD: dzvar.h,v 1.8 2005/12/11 12:21:20 christos Exp $	*/
+/*	$NetBSD: dzvar.h,v 1.10 2008/03/15 00:57:15 matt Exp $	*/
 /*
  * Copyright (c) 1992, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -82,7 +82,7 @@
 #define DZ_PORT(u)	((u)&07)	/* extract the port # */
 
 struct	dz_softc {
-	struct	device	sc_dev;		/* Autoconf blaha */
+	device_t	sc_dev;		/* Autoconf blaha */
 	struct	evcnt	sc_rintrcnt;	/* recevive interrupt counts */
 	struct	evcnt	sc_tintrcnt;	/* transmit interrupt counts */
 	struct	dz_regs	sc_dr;		/* reg pointers */
@@ -100,8 +100,8 @@ struct	dz_softc {
 		int		(*dz_catch)(void *, int); /* Fast catch recv */
 		struct	tty *	dz_tty;		/* what we work on */
 #ifdef notyet
-		caddr_t		dz_mem;		/* pointers to clist output */
-		caddr_t		dz_end;		/*   allowing pdma action */
+		void *		dz_mem;		/* pointers to clist output */
+		void *		dz_end;		/*   allowing pdma action */
 #endif
 	} sc_dz[NDZLINE];
 };

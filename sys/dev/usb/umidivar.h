@@ -1,4 +1,4 @@
-/*	$NetBSD: umidivar.h,v 1.9 2006/06/30 13:56:25 chap Exp $	*/
+/*	$NetBSD: umidivar.h,v 1.13 2008/07/08 11:34:43 gmcgarry Exp $	*/
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -14,13 +14,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	  This product includes software developed by the NetBSD
- *	  Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -50,7 +43,7 @@
 /* midi device */
 struct umidi_mididev {
 	struct umidi_softc	*sc;
-	struct device		*mdev;
+	device_t		mdev;
 	/* */
 	struct umidi_jack	*in_jack;
 	struct umidi_jack	*out_jack;
@@ -95,9 +88,7 @@ struct umidi_endpoint {
 	int			num_open;
 	int			num_jacks;
 	int			soliciting;
-#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	void			*solicit_cookie;
-#endif
 	int			armed;
 	struct umidi_jack	*jacks[UMIDI_MAX_EPJACKS];
 	u_int16_t		this_schedule; /* see UMIDI_MAX_EPJACKS */
@@ -109,7 +100,7 @@ struct umidi_softc {
 	USBBASEDEVICE		sc_dev;
 	usbd_device_handle	sc_udev;
 	usbd_interface_handle	sc_iface;
-	struct umidi_quirk	*sc_quirk;
+	const struct umidi_quirk	*sc_quirk;
 
 	int			sc_dying;
 

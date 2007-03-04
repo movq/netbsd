@@ -1,4 +1,4 @@
-/*	$NetBSD: agpvar.h,v 1.12 2006/08/17 17:11:28 christos Exp $	*/
+/*	$NetBSD: agpvar.h,v 1.17 2008/06/09 06:49:54 freza Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -32,7 +32,7 @@
 #define _PCI_AGPVAR_H_
 
 #include <sys/mallocvar.h>
-#include <sys/lock.h>
+#include <sys/mutex.h>
 
 struct agpbus_attach_args {
 	char	*_apa_busname; /* XXX placeholder */
@@ -92,7 +92,7 @@ struct agp_memory {
 	off_t		am_offset;		/* page offset if bound */
 	int		am_is_bound;		/* non-zero if bound */
 	bus_addr_t	  am_physical;
-	caddr_t		  am_virtual;
+	void *		  am_virtual;
 	bus_dmamap_t	  am_dmamap;
 	bus_dma_segment_t *am_dmaseg;
 	int		  am_nseg;
@@ -128,7 +128,7 @@ struct agp_methods {
  * All chipset drivers must have this at the start of their softc.
  */
 struct agp_softc {
-	struct device		as_dev;
+	device_t		as_dev;
 	bus_space_tag_t		as_apt;
 	int			as_capoff;
 	bus_addr_t		as_apaddr;
@@ -144,7 +144,7 @@ struct agp_softc {
 #if 0
 	dev_t			as_devnode;	/* from make_dev */
 #endif
-	struct lock		as_lock;	/* lock for access to GATT */
+	kmutex_t		as_mtx;		/* mutex for access to GATT */
 	struct agp_methods	*as_methods;	/* chipset-dependent API */
 	void			*as_chipc;	/* chipset-dependent state */
 	pci_chipset_tag_t	as_pc;
@@ -181,6 +181,7 @@ int agp_generic_unbind_memory(struct agp_softc *, struct agp_memory *);
 
 /* The vendor has already been matched when these functions are called */
 int agp_amd_match(const struct pci_attach_args *);
+int agp_amd64_match(const struct pci_attach_args *);
 
 int agp_ali_attach(struct device *, struct device *, void *);
 int agp_amd_attach(struct device *, struct device *, void *);
@@ -188,10 +189,11 @@ int agp_i810_attach(struct device *, struct device *, void *);
 int agp_intel_attach(struct device *, struct device *, void *);
 int agp_via_attach(struct device *, struct device *, void *);
 int agp_sis_attach(struct device *, struct device *, void *);
+int agp_amd64_attach(struct device *, struct device *, void *);
 
-int agp_alloc_dmamem(bus_dma_tag_t, size_t, int, bus_dmamap_t *, caddr_t *,
+int agp_alloc_dmamem(bus_dma_tag_t, size_t, int, bus_dmamap_t *, void **,
 		     bus_addr_t *, bus_dma_segment_t *, int, int *);
-void agp_free_dmamem(bus_dma_tag_t, size_t, bus_dmamap_t, caddr_t,
+void agp_free_dmamem(bus_dma_tag_t, size_t, bus_dmamap_t, void *,
 		     bus_dma_segment_t *, int) ;
 
 MALLOC_DECLARE(M_AGP);
@@ -261,5 +263,11 @@ int agp_unbind_memory(void *, void *);
  * agp_alloc_memory().
  */
 void agp_memory_info(void *, void *, struct agp_memory_info *);
+
+/*
+ * XXX horrible hack to allow drm code to use our mapping
+ * of VGA chip registers
+ */
+int agp_i810_borrow(bus_addr_t, bus_space_handle_t *);
 
 #endif /* !_PCI_AGPPRIV_H_ */

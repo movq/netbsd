@@ -1,4 +1,4 @@
-/*	$NetBSD: exec.c,v 1.24 2005/12/11 12:24:46 christos Exp $	*/
+/*	$NetBSD: exec.c,v 1.26 2008/03/25 21:23:50 christos Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -48,10 +48,7 @@
 #include "stand.h"
 
 void
-exec(path, loadaddr, howto)
-	char *path;
-	char *loadaddr;
-	int howto;
+exec(char *path, char *loadaddr, int howto)
 {
 #ifndef INSECURE
 	struct stat sb;
@@ -80,11 +77,11 @@ exec(path, loadaddr, howto)
 		return;
 	}
 
-        /* Text */
+	/* Text */
 	printf("%ld", x.a_text);
 	addr = loadaddr;
 	if (N_GETMAGIC(x) == ZMAGIC) {
-		bcopy(&x, addr, sizeof(x));
+		(void)memcpy(addr, &x, sizeof(x));
 		addr += sizeof(x);
 		x.a_text -= sizeof(x);
 	}
@@ -95,20 +92,20 @@ exec(path, loadaddr, howto)
 		while ((long)addr & (N_PAGSIZ(x) - 1))
 			*addr++ = 0;
 
-        /* Data */
+	/* Data */
 	printf("+%ld", x.a_data);
 	if (read(io, addr, x.a_data) != (ssize_t)x.a_data)
 		goto shread;
 	addr += x.a_data;
 
-        /* Bss */
+	/* Bss */
 	printf("+%ld", x.a_bss);
 	for (i = 0; i < (int)x.a_bss; i++)
 		*addr++ = 0;
 
-        /* Symbols */
+	/* Symbols */
 	ssym = addr;
-	bcopy(&x.a_syms, addr, sizeof(x.a_syms));
+	(void)memcpy(addr, &x.a_syms, sizeof(x.a_syms));
 	addr += sizeof(x.a_syms);
 	if (x.a_syms) {
 		printf("+[%ld", x.a_syms);
@@ -121,12 +118,12 @@ exec(path, loadaddr, howto)
 	if (x.a_syms && read(io, &i, sizeof(int)) != sizeof(int))
 		goto shread;
 
-	bcopy(&i, addr, sizeof(int));
+	(void)memcpy(addr, &i, sizeof(int));
 	if (i) {
 		i -= sizeof(int);
 		addr += sizeof(int);
 		if (read(io, addr, i) != i)
-                	goto shread;
+			goto shread;
 		addr += i;
 	}
 
@@ -139,7 +136,7 @@ exec(path, loadaddr, howto)
 
 #define	round_to_size(x) \
 	(((int)(x) + sizeof(int) - 1) & ~(sizeof(int) - 1))
-        esym = (char *)round_to_size(addr - loadaddr);
+	esym = (char *)round_to_size(addr - loadaddr);
 #undef round_to_size
 
 	/* and note the end address of all this	*/
@@ -154,9 +151,9 @@ exec(path, loadaddr, howto)
 	 */
 
 #ifdef EXEC_DEBUG
-        printf("ssym=0x%x esym=0x%x\n", ssym, esym);
-        printf("\n\nReturn to boot...\n");
-        getchar();
+	printf("ssym=0x%x esym=0x%x\n", ssym, esym);
+	printf("\n\nReturn to boot...\n");
+	getchar();
 #endif
 
 	machdep_start((char *)x.a_entry, howto, loadaddr, ssym, esym);

@@ -1,4 +1,9 @@
-/* $NetBSD: udf_osta.c,v 1.4 2007/02/22 06:37:01 thorpej Exp $ */
+/* $NetBSD: udf_osta.c,v 1.7 2008/05/19 20:12:36 reinoud Exp $ */
+
+#include <sys/cdefs.h>
+#ifndef lint
+__KERNEL_RCSID(0, "$NetBSD: udf_osta.c,v 1.7 2008/05/19 20:12:36 reinoud Exp $");
+#endif /* not lint */
 
 /*
  * Various routines from the OSTA 2.01 specs.  Copyrights are included with
@@ -9,6 +14,9 @@
 
 #include "udf_osta.h"
 
+#ifndef _KERNEL
+#include <ctype.h>
+#endif
 
 /*****************************************************************************/
 /***********************************************************************
@@ -196,6 +204,27 @@ udf_unicode_cksum(s, n)
 	return crc;
 }
 
+
+/*
+  * Calculates a 16-bit checksum of the Implementation Use
+  * Extended Attribute header or Application Use Extended Attribute
+  * header. The fields AttributeType through ImplementationIdentifier
+  * (or ApplicationIdentifier) inclusively represent the
+  * data covered by the checksum (48 bytes).
+  *
+  */
+uint16_t udf_ea_cksum(uint8_t *data) {
+        uint16_t checksum = 0;
+        int      count;
+
+        for (count = 0; count < 48; count++) {
+               checksum += *data++;
+        }
+
+        return checksum;
+}
+
+
 #ifdef MAIN
 unsigned char bytes[] = { 0x70, 0x6A, 0x77 };
 
@@ -259,7 +288,7 @@ int IsIllegal(unicode_t ch);
 
 /* #include <stdio.h> */
 static int UnicodeIsPrint(unicode_t ch) {
-	return (ch >=' ') && (ch < 127);
+	return (ch >=' ') && (ch != 127);
 }
 
 
@@ -272,9 +301,11 @@ int UnicodeLength(unicode_t *string) {
 }
 
 
-static int isprint(unsigned char c) {
+#ifdef _KERNEL
+static int isprint(int c) {
 	return (c >= ' ') && (c != 127);
 }
+#endif
 
 
 /***********************************************************************

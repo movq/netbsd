@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_sysctl.c,v 1.25 2007/02/09 21:55:19 ad Exp $	*/
+/*	$NetBSD: linux_sysctl.c,v 1.36 2008/06/18 12:24:18 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by the NetBSD
- *      Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -41,11 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_sysctl.c,v 1.25 2007/02/09 21:55:19 ad Exp $");
-
-#if defined (_KERNEL_OPT)
-#include "opt_ktrace.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: linux_sysctl.c,v 1.36 2008/06/18 12:24:18 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -53,17 +42,19 @@ __KERNEL_RCSID(0, "$NetBSD: linux_sysctl.c,v 1.25 2007/02/09 21:55:19 ad Exp $")
 #include <sys/proc.h>
 #include <sys/mount.h>
 #include <sys/sysctl.h>
+#include <sys/sched.h>
 #include <sys/syscallargs.h>
-#ifdef KTRACE
 #include <sys/ktrace.h>
-#endif
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
+#include <compat/linux/common/linux_ipc.h>
+#include <compat/linux/common/linux_sem.h>
 
 #include <compat/linux/linux_syscallargs.h>
 #include <compat/linux/common/linux_sysctl.h>
 #include <compat/linux/common/linux_exec.h>
+#include <compat/linux/common/linux_machdep.h>
 
 char linux_sysname[128] = "Linux";
 #if defined(__amd64__) || defined(__i386__) || defined(__powerpc__)
@@ -121,9 +112,8 @@ SYSCTL_SETUP(linux_sysctl_setup, "linux emulated sysctl subtree setup")
  * linux sysctl system call
  */
 int
-linux_sys___sysctl(struct lwp *l, void *v, register_t *retval)
+linux_sys___sysctl(struct lwp *l, const struct linux_sys___sysctl_args *uap, register_t *retval)
 {
-	struct linux_sys___sysctl_args *uap = v;
 	struct linux___sysctl ls;
 	int error, nerror, name[CTL_MAXNAME];
 	size_t savelen = 0, oldlen = 0;
@@ -155,29 +145,17 @@ linux_sys___sysctl(struct lwp *l, void *v, register_t *retval)
 	if (error)
 		return (error);
 
-#ifdef KTRACE
-       if (KTRPOINT(l->l_proc, KTR_MIB))
-               ktrmib(l, name, ls.nlen);
-#endif
-	/*
-	 * wire old so that copyout() is less likely to fail?
-	 */
-	error = sysctl_lock(l, ls.oldval, savelen);
-	if (error)
-		return (error);
+	ktrmib(name, ls.nlen);
 
 	/*
 	 * dispatch request into linux sysctl tree
 	 */
+	sysctl_lock(ls.newval != NULL);
 	error = sysctl_dispatch(&name[0], ls.nlen,
 				ls.oldval, &oldlen,
 				ls.newval, ls.newlen,
 				&name[0], l, &linux_sysctl_root);
-
-	/*
-	 * release the sysctl lock
-	 */
-	sysctl_unlock(l);
+	sysctl_unlock();
 
 	/*
 	 * reset caller's oldlen, even if we got an error

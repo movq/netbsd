@@ -1,4 +1,4 @@
-/*	$NetBSD: if_faith.c,v 1.38 2007/02/17 22:34:08 dyoung Exp $	*/
+/*	$NetBSD: if_faith.c,v 1.44 2008/10/24 17:07:33 dyoung Exp $	*/
 /*	$KAME: if_faith.c,v 1.21 2001/02/20 07:59:26 itojun Exp $	*/
 
 /*
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_faith.c,v 1.38 2007/02/17 22:34:08 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_faith.c,v 1.44 2008/10/24 17:07:33 dyoung Exp $");
 
 #include "opt_inet.h"
 
@@ -54,7 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_faith.c,v 1.38 2007/02/17 22:34:08 dyoung Exp $")
 #include <sys/time.h>
 #include <sys/queue.h>
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -83,10 +83,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_faith.c,v 1.38 2007/02/17 22:34:08 dyoung Exp $")
 
 #include <net/net_osdep.h>
 
-static int	faithioctl(struct ifnet *, u_long, caddr_t);
+static int	faithioctl(struct ifnet *, u_long, void *);
 static int	faithoutput(struct ifnet *, struct mbuf *,
 		            const struct sockaddr *, struct rtentry *);
-static void	faithrtrequest(int, struct rtentry *, struct rt_addrinfo *);
+static void	faithrtrequest(int, struct rtentry *,
+		               const struct rt_addrinfo *);
 
 void	faithattach(int);
 
@@ -111,10 +112,9 @@ faith_clone_create(struct if_clone *ifc, int unit)
 {
 	struct ifnet *ifp;
 
-	ifp = malloc(sizeof(*ifp), M_DEVBUF, M_WAITOK | M_ZERO);
+	ifp = if_alloc(IFT_FAITH);
 
-	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "%s%d",
-	    ifc->ifc_name, unit);
+	if_initname(ifp, ifc->ifc_name, unit);
 
 	ifp->if_mtu = FAITHMTU;
 	/* Change to BROADCAST experimentaly to announce its prefix. */
@@ -214,7 +214,7 @@ faithoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 /* ARGSUSED */
 static void
 faithrtrequest(int cmd, struct rtentry *rt,
-    struct rt_addrinfo *info)
+    const struct rt_addrinfo *info)
 {
 	if (rt)
 		rt->rt_rmx.rmx_mtu = rt->rt_ifp->if_mtu; /* for ISO */
@@ -225,7 +225,7 @@ faithrtrequest(int cmd, struct rtentry *rt,
  */
 /* ARGSUSED */
 static int
-faithioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+faithioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ifaddr *ifa;
 	struct ifreq *ifr = (struct ifreq *)data;
@@ -266,7 +266,8 @@ faithioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 
 #ifdef SIOCSIFMTU
 	case SIOCSIFMTU:
-		ifp->if_mtu = ifr->ifr_mtu;
+		if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET)
+			error = 0;
 		break;
 #endif
 

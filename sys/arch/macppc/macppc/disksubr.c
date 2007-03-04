@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.38 2006/11/25 11:59:56 scw Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.43 2008/01/02 11:48:26 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -106,7 +106,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.38 2006/11/25 11:59:56 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.43 2008/01/02 11:48:26 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -393,7 +393,7 @@ read_mac_label(dev, strat, lp, osdep)
 	lp->d_npartitions = ((maxslot >= RAW_PART) ? maxslot : RAW_PART) + 1;
 
 done:
-	brelse(bp);
+	brelse(bp, 0);
 	return msg;
 }
 
@@ -438,7 +438,7 @@ read_dos_label(dev, strat, lp, osdep)
 		goto done;
 	}
 	/* XXX */
-	dp = (struct mbr_partition *)(bp->b_data + MBR_PART_OFFSET);
+	dp = (struct mbr_partition *)((char *)bp->b_data + MBR_PART_OFFSET);
 	bsdp = NULL;
 	for (i = 0; i < MBR_PART_COUNT; i++, dp++) {
 		switch (dp->mbrp_type) {
@@ -454,7 +454,8 @@ read_dos_label(dev, strat, lp, osdep)
 	}
 	if (!bsdp) {
 		/* generate fake disklabel */
-		dp = (struct mbr_partition *)(bp->b_data + MBR_PART_OFFSET);
+		dp = (struct mbr_partition *)((char *)bp->b_data +
+		    MBR_PART_OFFSET);
 		for (i = 0; i < MBR_PART_COUNT; i++, dp++) {
 			if (!dp->mbrp_type)
 				continue;
@@ -501,7 +502,7 @@ read_dos_label(dev, strat, lp, osdep)
 	lp->d_npartitions = ((maxslot >= RAW_PART) ? maxslot : RAW_PART) + 1;
 
  done:
-	brelse(bp);
+	brelse(bp, 0);
 	return (msg);
 }
 
@@ -532,21 +533,24 @@ get_netbsd_label(dev, strat, lp, osdep)
 	if (biowait(bp))
 		goto done;
 
-	for (dlp = (struct disklabel *)(bp->b_data + osdep->cd_labeloffset);
-	     dlp <= (struct disklabel *)(bp->b_data + lp->d_secsize - sizeof (*dlp));
+	for (dlp = (struct disklabel *)((char *)bp->b_data +
+		 osdep->cd_labeloffset);
+	     dlp <= (struct disklabel *)((char *)bp->b_data + lp->d_secsize -
+	         sizeof (*dlp));
 	     dlp = (struct disklabel *)((char *)dlp + sizeof(long))) {
 		if (dlp->d_magic == DISKMAGIC
 		    && dlp->d_magic2 == DISKMAGIC
 		    && dlp->d_npartitions <= MAXPARTITIONS
 		    && dkcksum(dlp) == 0) {
 			*lp = *dlp;
-			osdep->cd_labeloffset = (caddr_t)dlp - bp->b_data;
-			brelse(bp);
+			osdep->cd_labeloffset = (char *)dlp -
+			    (char *)bp->b_data;
+			brelse(bp, 0);
 			return 1;
 		}
 	}
 done:
-	brelse(bp);
+	brelse(bp, 0);
 	return 0;
 }
 
@@ -608,8 +612,8 @@ readdisklabel(dev, strat, lp, osdep)
 			/* it ignores labelsector/offset */
 			msg = read_mac_label(dev, strat, lp, osdep);
 			/* the disklabel is fictious */
-		} else if (bswap16(*(u_int16_t *)(bp->b_data + MBR_MAGIC_OFFSET))
-			   == MBR_MAGIC) {
+		} else if (bswap16(*(u_int16_t *)((char *)bp->b_data +
+		    MBR_MAGIC_OFFSET)) == MBR_MAGIC) {
 			/* read_dos_label figures out labelsector/offset */
 			msg = read_dos_label(dev, strat, lp, osdep);
 			if (!msg)
@@ -621,7 +625,7 @@ readdisklabel(dev, strat, lp, osdep)
 	}
 
 done:
-	brelse(bp);
+	brelse(bp, 0);
 	return (msg);
 }
 
@@ -691,17 +695,18 @@ writedisklabel(dev, strat, lp, osdep)
 	if (error != 0)
 		goto done;
 
-	bp->b_flags &= ~(B_READ|B_DONE);
+	bp->b_flags &= ~B_READ;
 	bp->b_flags |= B_WRITE;
+	bp->b_oflags &= ~BO_DONE;
 
-	memcpy((caddr_t)bp->b_data + osdep->cd_labeloffset, (caddr_t)lp,
+	memcpy((char *)bp->b_data + osdep->cd_labeloffset, (void *)lp,
 	    sizeof *lp);
 
 	(*strat)(bp);
 	error = biowait(bp);
 
 done:
-	brelse(bp);
+	brelse(bp, 0);
 
 	return error;
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: sti.c,v 1.6 2006/04/12 19:38:23 jmmv Exp $ */
+/* $NetBSD: sti.c,v 1.9 2008/04/08 12:07:27 cegger Exp $ */
 
 /*	$OpenBSD: sti.c,v 1.35 2003/12/16 06:07:13 mickey Exp $	*/
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sti.c,v 1.6 2006/04/12 19:38:23 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sti.c,v 1.9 2008/04/08 12:07:27 cegger Exp $");
 
 #include "wsdisplay.h"
 
@@ -46,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: sti.c,v 1.6 2006/04/12 19:38:23 jmmv Exp $");
 
 #include <uvm/uvm.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/wscons/wsdisplayvar.h>
 #include <dev/wscons/wsconsio.h>
@@ -74,7 +74,7 @@ struct wsdisplay_emulops sti_emulops = {
 	sti_alloc_attr
 };
 
-int sti_ioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
+int sti_ioctl(void *, void *, u_long, void *, int, struct lwp *);
 paddr_t sti_mmap(void *, void *, off_t, int);
 int sti_alloc_screen(void *, const struct wsscreen_descr *,
 	void **, int *, int *, long *);
@@ -333,12 +333,12 @@ sti_attach_common(struct sti_softc *sc)
 	printf(": %s rev %d.%02d;%d, ID 0x%016llX\n"
 	    "%s: %dx%d frame buffer, %dx%dx%d display, offset %dx%d\n",
 	    cfg.name, dd->dd_grrev >> 4, dd->dd_grrev & 0xf, dd->dd_lrrev,
-	    *(u_int64_t *)dd->dd_grid, sc->sc_dev.dv_xname, cfg.fbwidth,
+	    *(u_int64_t *)dd->dd_grid, device_xname(&sc->sc_dev), cfg.fbwidth,
 	    cfg.fbheight, cfg.width, cfg.height, cfg.bppu, cfg.owidth,
 	    cfg.oheight);
 
 	if ((error = sti_fetchfonts(sc, &cfg, dd->dd_fntaddr))) {
-		printf("%s: cannot fetch fonts (%d)\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(&sc->sc_dev, "cannot fetch fonts (%d)\n",
 		    error);
 		return;
 	}
@@ -422,7 +422,7 @@ sti_fetchfonts(struct sti_softc *sc, struct sti_inqconfout *cfg, u_int32_t addr)
 			    (u_int32_t *)fp, sizeof(struct sti_font) / 4);
 
 		printf("%s: %dx%d font type %d, %d bpc, charset %d-%d\n",
-		    sc->sc_dev.dv_xname, fp->width, fp->height, fp->type,
+		    device_xname(&sc->sc_dev), fp->width, fp->height, fp->type,
 		    fp->bpc, fp->first, fp->last);
 
 		size = sizeof(struct sti_font) +
@@ -464,8 +464,8 @@ sti_fetchfonts(struct sti_softc *sc, struct sti_inqconfout *cfg, u_int32_t addr)
 
 			(*sc->unpmv)(&a.flags, &a.in, &a.out, &sc->sc_cfg);
 			if (a.out.errno) {
-				printf("%s: unpmv %d returned %d\n",
-				    sc->sc_dev.dv_xname, uc, a.out.errno);
+				aprint_error_dev(&sc->sc_dev, "unpmv %d returned %d\n",
+				    uc, a.out.errno);
 				return (0);
 			}
 		}
@@ -494,7 +494,7 @@ sti_init(struct sti_softc *sc, int mode)
 	     STI_INITF_PBETI | STI_INITF_ICMT : 0);
 	a.in.text_planes = 1;
 #ifdef STIDEBUG
-	printf("%s: init,%p(%x, %p, %p, %p)\n", sc->sc_dev.dv_xname,
+	printf("%s: init,%p(%x, %p, %p, %p)\n", device_xname(&sc->sc_dev),
 	    sc->init, a.flags.flags, &a.in, &a.out, &sc->sc_cfg);
 #endif
 	(*sc->init)(&a.flags, &a.in, &a.out, &sc->sc_cfg);
@@ -556,7 +556,7 @@ sti_bmove(struct sti_softc *sc, int x1, int y1, int x2, int y2, int h, int w,
 	(*sc->blkmv)(&a.flags, &a.in, &a.out, &sc->sc_cfg);
 #ifdef STIDEBUG
 	if (a.out.errno)
-		printf("%s: blkmv returned %d\n", sc->sc_dev.dv_xname,
+		aprint_error_dev(&sc->sc_dev, "blkmv returned %d\n",
 		    a.out.errno);
 #endif
 }
@@ -582,7 +582,7 @@ sti_setcment(struct sti_softc *sc, u_int i, u_char r, u_char g, u_char b)
 }
 
 int
-sti_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag, struct lwp *l)
+sti_ioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct sti_softc *sc = v;
 	struct wsdisplay_fbinfo *wdf;

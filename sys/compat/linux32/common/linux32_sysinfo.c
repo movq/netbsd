@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_sysinfo.c,v 1.2 2007/02/09 21:55:21 ad Exp $ */
+/*	$NetBSD: linux32_sysinfo.c,v 1.6 2007/12/20 23:02:58 dsl Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,12 +33,13 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_sysinfo.c,v 1.2 2007/02/09 21:55:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_sysinfo.c,v 1.6 2007/12/20 23:02:58 dsl Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/dirent.h>
+#include <sys/proc.h>
 
 #include <sys/syscallargs.h>
 
@@ -59,14 +60,11 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_sysinfo.c,v 1.2 2007/02/09 21:55:21 ad Exp $
 
 /* ARGSUSED */
 int
-linux32_sys_sysinfo(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+linux32_sys_sysinfo(struct lwp *l, const struct linux32_sys_sysinfo_args *uap, register_t *retval)
 {
-	struct linux32_sys_sysinfo_args /* {
+	/* {
 		syscallarg(struct linux32_sysinfo *) arg;
-	} */ *uap = v;
+	} */
 	struct linux32_sysinfo si;
 	struct loadavg *la;
 
@@ -89,6 +87,6 @@ linux32_sys_sysinfo(l, v, retval)
 	si.freebig = 0;
 	si.mem_unit = 1;
 
-	return (copyout(&si, NETBSD32PTR64(SCARG(uap, arg)), sizeof si));
+	return (copyout(&si, SCARG_P32(uap, arg), sizeof si));
 }
 

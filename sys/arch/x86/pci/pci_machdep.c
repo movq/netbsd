@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.22 2007/02/22 04:58:26 matt Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.34 2008/04/28 20:23:40 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -80,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.22 2007/02/22 04:58:26 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.34 2008/04/28 20:23:40 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -88,14 +81,14 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.22 2007/02/22 04:58:26 matt Exp $"
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <sys/device.h>
-#include <sys/lock.h>
+#include <sys/bus.h>
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
 #include <machine/bus_private.h>
 
 #include <machine/pio.h>
+#include <machine/lock.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -135,17 +128,17 @@ struct pci_bridge_hook_arg {
 }; 
 
 
-struct simplelock pci_conf_slock = SIMPLELOCK_INITIALIZER;
+__cpu_simple_lock_t pci_conf_lock = __SIMPLELOCK_UNLOCKED;
 
 #define	PCI_CONF_LOCK(s)						\
 do {									\
 	(s) = splhigh();						\
-	simple_lock(&pci_conf_slock);					\
+	__cpu_simple_lock(&pci_conf_lock);				\
 } while (0)
 
 #define	PCI_CONF_UNLOCK(s)						\
 do {									\
-	simple_unlock(&pci_conf_slock);					\
+	__cpu_simple_unlock(&pci_conf_lock);				\
 	splx((s));							\
 } while (0)
 
@@ -161,7 +154,7 @@ do {									\
 #define _qe(bus, dev, fcn, vend, prod) \
 	{_m1tag(bus, dev, fcn), PCI_ID_CODE(vend, prod)}
 struct {
-	u_int32_t tag;
+	uint32_t tag;
 	pcireg_t id;
 } pcim1_quirk_tbl[] = {
 	_qe(0, 0, 0, PCI_VENDOR_COMPAQ, PCI_PRODUCT_COMPAQ_TRIFLEX1),
@@ -242,12 +235,11 @@ struct x86_bus_dma_tag pci_bus_dma64_tag = {
 #endif
 
 void
-pci_attach_hook(struct device *parent, struct device *self,
-    struct pcibus_attach_args *pba)
+pci_attach_hook(device_t parent, device_t self, struct pcibus_attach_args *pba)
 {
 
 	if (pba->pba_bus == 0)
-		printf(": configuration mode %d", pci_mode);
+		aprint_normal(": configuration mode %d", pci_mode);
 #ifdef MPBIOS
 	mpbios_pci_attach_hook(parent, self, pba);
 #endif
@@ -376,6 +368,7 @@ pci_conf_read( pci_chipset_tag_t pc, pcitag_t tag,
 	pcireg_t data;
 	int s;
 
+	KASSERT((reg & 0x3) == 0);
 #if defined(__i386__) && defined(XBOX)
 	if (arch_i386_is_xbox) {
 		int bus, dev, fn;
@@ -428,6 +421,7 @@ pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg,
 {
 	int s;
 
+	KASSERT((reg & 0x3) == 0);
 #if defined(__i386__) && defined(XBOX)
 	if (arch_i386_is_xbox) {
 		int bus, dev, fn;
@@ -474,7 +468,7 @@ mode2:
 }
 
 int
-pci_mode_detect()
+pci_mode_detect(void)
 {
 
 #ifdef PCI_CONF_MODE
@@ -484,7 +478,7 @@ pci_mode_detect()
 #error Invalid PCI configuration mode.
 #endif
 #else
-	u_int32_t sav, val;
+	uint32_t sav, val;
 	int i;
 	pcireg_t idreg;
 
@@ -501,8 +495,7 @@ pci_mode_detect()
 	/*
 	 * catch some known buggy implementations of mode 1
 	 */
-	for (i = 0; i < sizeof(pcim1_quirk_tbl) / sizeof(pcim1_quirk_tbl[0]);
-	     i++) {
+	for (i = 0; i < __arraycount(pcim1_quirk_tbl); i++) {
 		pcitag_t t;
 
 		if (!pcim1_quirk_tbl[i].tag)

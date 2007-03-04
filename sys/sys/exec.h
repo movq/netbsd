@@ -1,4 +1,4 @@
-/*	$NetBSD: exec.h,v 1.115 2006/12/20 11:35:29 elad Exp $	*/
+/*	$NetBSD: exec.h,v 1.124 2008/07/02 17:28:57 ad Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -113,12 +113,6 @@ struct ps_strings {
 };
 
 /*
- * Below the ps_strings and sigtramp, we may require a gap on the stack
- * (used to copyin/copyout various emulation data structures).
- */
-#define	STACKGAPLEN	4096	/* plenty enough for now */
-
-/*
  * the following structures allow execve() to put together processes
  * in a more extensible and cleaner way.
  *
@@ -195,11 +189,18 @@ struct exec_package {
 	vaddr_t	ep_vm_minaddr;		/* bottom of process address space */
 	vaddr_t	ep_vm_maxaddr;		/* top of process address space */
 	u_int	ep_flags;		/* flags; see below. */
-	char	**ep_fa;		/* a fake args vector for scripts */
+	size_t	ep_fa_len;		/* byte size of ep_fa */
+	struct exec_fakearg {
+		char *fa_arg;
+		size_t fa_len;
+	} *ep_fa;			/* a fake args vector for scripts */
 	int	ep_fd;			/* a file descriptor we're holding */
 	void	*ep_emul_arg;		/* emulation argument */
-	const struct	execsw *ep_es;	/* appropriate execsw entry */
-	const struct	execsw *ep_esch;/* checked execsw entry */
+	const struct	execsw *ep_esch;/* execsw entry */
+	struct vnode *ep_emul_root;     /* base of emulation filesystem */
+	struct vnode *ep_interp;        /* vnode of (elf) interpeter */
+	uint32_t ep_pax_flags;		/* pax flags */
+	char	*ep_path;		/* absolute path of executable */
 };
 #define	EXEC_INDIR	0x0001		/* script handling already done */
 #define	EXEC_HASFD	0x0002		/* holding a shell script */
@@ -207,7 +208,6 @@ struct exec_package {
 #define	EXEC_SKIPARG	0x0008		/* don't copy user-supplied argv[0] */
 #define	EXEC_DESTR	0x0010		/* destructive ops performed */
 #define	EXEC_32		0x0020		/* 32-bit binary emulation */
-#define	EXEC_HASES	0x0040		/* don't update exec switch pointer */
 
 struct exec_vmcmd {
 	int	(*ev_proc)(struct lwp *, struct exec_vmcmd *);
@@ -225,10 +225,6 @@ struct exec_vmcmd {
 };
 
 #ifdef _KERNEL
-#include <sys/mallocvar.h>
-
-MALLOC_DECLARE(M_EXEC);
-
 /*
  * funtions used either by execve() or the various CPU-dependent execve()
  * hooks.
@@ -283,6 +279,8 @@ void	new_vmcmd(struct exec_vmcmd_set *,
 typedef	int (*execve_fetch_element_t)(char * const *, size_t, char **);
 int	execve1(struct lwp *, const char *, char * const *, char * const *,
     execve_fetch_element_t);
+
+extern int	maxexec;
 
 #endif /* _KERNEL */
 

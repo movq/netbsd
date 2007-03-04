@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_pcmcia.c,v 1.108 2006/11/16 01:33:20 christos Exp $ */
+/*	$NetBSD: wdc_pcmcia.c,v 1.112 2008/06/05 20:34:00 uwe Exp $ */
 
 /*-
  * Copyright (c) 1998, 2003, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_pcmcia.c,v 1.108 2006/11/16 01:33:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_pcmcia.c,v 1.112 2008/06/05 20:34:00 uwe Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -46,8 +39,8 @@ __KERNEL_RCSID(0, "$NetBSD: wdc_pcmcia.c,v 1.108 2006/11/16 01:33:20 christos Ex
 #include <sys/systm.h>
 #include <sys/proc.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/pcmcia/pcmciareg.h>
 #include <dev/pcmcia/pcmciavar.h>
@@ -89,13 +82,13 @@ struct wdc_pcmcia_softc {
 #define bus_space_write_region_stream_4 bus_space_write_region_4
 #endif /* __BUS_SPACE_HAS_STREAM_METHODS */
 
-static int wdc_pcmcia_match(struct device *, struct cfdata *, void *);
+static int wdc_pcmcia_match(device_t, cfdata_t, void *);
 static int wdc_pcmcia_validate_config_io(struct pcmcia_config_entry *);
 static int wdc_pcmcia_validate_config_memory(struct pcmcia_config_entry *);
-static void wdc_pcmcia_attach(struct device *, struct device *, void *);
-static int wdc_pcmcia_detach(struct device *, int);
+static void wdc_pcmcia_attach(device_t, device_t, void *);
+static int wdc_pcmcia_detach(device_t, int);
 
-CFATTACH_DECL(wdc_pcmcia, sizeof(struct wdc_pcmcia_softc),
+CFATTACH_DECL_NEW(wdc_pcmcia, sizeof(struct wdc_pcmcia_softc),
     wdc_pcmcia_match, wdc_pcmcia_attach, wdc_pcmcia_detach, wdcactivate);
 
 static const struct wdc_pcmcia_product {
@@ -169,15 +162,14 @@ static const struct wdc_pcmcia_product {
 static const size_t wdc_pcmcia_nproducts =
     sizeof(wdc_pcmcia_products) / sizeof(wdc_pcmcia_products[0]);
 
-static int	wdc_pcmcia_enable(struct device *, int);
+static int	wdc_pcmcia_enable(device_t, int);
 static void	wdc_pcmcia_datain_memory(struct ata_channel *, int, void *,
 					 size_t);
 static void	wdc_pcmcia_dataout_memory(struct ata_channel *, int, void *,
 					  size_t);
 
 static int
-wdc_pcmcia_match(struct device *parent, struct cfdata *match,
-    void *aux)
+wdc_pcmcia_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct pcmcia_attach_args *pa = aux;
 
@@ -212,10 +204,9 @@ wdc_pcmcia_validate_config_memory(struct pcmcia_config_entry *cfe)
 }
 
 static void
-wdc_pcmcia_attach(struct device *parent, struct device *self,
-    void *aux)
+wdc_pcmcia_attach(device_t parent, device_t self, void *aux)
 {
-	struct wdc_pcmcia_softc *sc = (void *)self;
+	struct wdc_pcmcia_softc *sc = device_private(self);
 	struct pcmcia_attach_args *pa = aux;
 	struct pcmcia_config_entry *cfe;
 	struct wdc_regs *wdr;
@@ -224,6 +215,9 @@ wdc_pcmcia_attach(struct device *parent, struct device *self,
 	int i;
 	int error;
 
+	aprint_naive("\n");
+
+	sc->sc_wdcdev.sc_atac.atac_dev = self;
 	sc->sc_pf = pa->pf;
 
 	error = pcmcia_function_configure(pa->pf,
@@ -233,8 +227,7 @@ wdc_pcmcia_attach(struct device *parent, struct device *self,
 		error = pcmcia_function_configure(pa->pf,
 		    wdc_pcmcia_validate_config_memory);
 	if (error) {
-		aprint_error("%s: configure failed, error=%d\n", self->dv_xname,
-		    error);
+		aprint_error_dev(self, "configure failed, error=%d\n", error);
 		return;
 	}
 
@@ -275,14 +268,13 @@ wdc_pcmcia_attach(struct device *parent, struct device *self,
 		    wdr->cmd_baseioh,
 		    offset + i, i == 0 ? 4 : 1,
 		    &wdr->cmd_iohs[i]) != 0) {
-			aprint_error("%s: can't subregion I/O space\n",
-			    self->dv_xname);
+			aprint_error_dev(self, "can't subregion I/O space\n");
 			goto fail;
 		}
 	}
 
 	if (cfe->iftype == PCMCIA_IFTYPE_MEMORY) {
-		aprint_normal("%s: memory mapped mode\n", self->dv_xname);
+		aprint_normal_dev(self, "memory mapped mode\n");
 		wdr->data32iot = cfe->memspace[0].handle.memt;
 		if (bus_space_subregion(cfe->memspace[0].handle.memt,
 		    cfe->memspace[0].handle.memh, offset + 1024, 1024,
@@ -292,7 +284,7 @@ wdc_pcmcia_attach(struct device *parent, struct device *self,
 		sc->sc_wdcdev.dataout_pio = wdc_pcmcia_dataout_memory;
 		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_NOIRQ;
 	} else {
-		aprint_normal("%s: i/o mapped mode\n", self->dv_xname);
+		aprint_normal_dev(self, "i/o mapped mode\n");
 		wdr->data32iot = wdr->cmd_iot;
 		wdr->data32ioh = wdr->cmd_iohs[wd_data];
 		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DATA32;
@@ -338,9 +330,9 @@ fail:
 }
 
 static int
-wdc_pcmcia_detach(struct device *self, int flags)
+wdc_pcmcia_detach(device_t self, int flags)
 {
-	struct wdc_pcmcia_softc *sc = (struct wdc_pcmcia_softc *)self;
+	struct wdc_pcmcia_softc *sc = device_private(self);
 	int error;
 
 	if (sc->sc_state != WDC_PCMCIA_ATTACHED)
@@ -357,7 +349,7 @@ wdc_pcmcia_detach(struct device *self, int flags)
 static int
 wdc_pcmcia_enable(struct device *self, int onoff)
 {
-	struct wdc_pcmcia_softc *sc = (void *)self;
+	struct wdc_pcmcia_softc *sc = device_private(self);
 	int error;
 
 	if (onoff) {

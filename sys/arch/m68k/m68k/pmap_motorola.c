@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_motorola.c,v 1.25 2007/02/22 17:09:44 thorpej Exp $        */
+/*	$NetBSD: pmap_motorola.c,v 1.39 2008/06/28 13:22:14 tsutsui Exp $        */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -124,9 +117,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap_motorola.c,v 1.25 2007/02/22 17:09:44 thorpej Exp $");
-
-#include "opt_compat_hpux.h"
+__KERNEL_RCSID(0, "$NetBSD: pmap_motorola.c,v 1.39 2008/06/28 13:22:14 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -269,8 +260,6 @@ int		pmap_aliasmask;	/* seperation at which VA aliasing ok */
 int		protostfree;	/* prototype (default) free ST map */
 #endif
 
-extern caddr_t	CADDR1, CADDR2;
-
 pt_entry_t	*caddr1_pte;	/* PTE for CADDR1 */
 pt_entry_t	*caddr2_pte;	/* PTE for CADDR2 */
 
@@ -279,28 +268,30 @@ struct pool	pmap_pmap_pool;	/* memory pool for pmap structures */
 struct pv_entry *pmap_alloc_pv(void);
 void	pmap_free_pv(struct pv_entry *);
 void	pmap_collect_pv(void);
-#ifdef COMPAT_HPUX
-int	pmap_mapmulti(pmap_t, vaddr_t);
-#endif /* COMPAT_HPUX */
 
 #define	PAGE_IS_MANAGED(pa)	(pmap_initialized &&			\
 				 vm_physseg_find(atop((pa)), NULL) != -1)
 
-#define	pa_to_pvh(pa)							\
-({									\
-	int bank_, pg_ = 0;	/* XXX gcc4 -Wuninitialized */		\
-									\
-	bank_ = vm_physseg_find(atop((pa)), &pg_);			\
-	&vm_physmem[bank_].pmseg.pvent[pg_];				\
-})
+static inline struct pv_entry *pa_to_pvh(paddr_t pa);
+static inline char *pa_to_attribute(paddr_t pa);
 
-#define	pa_to_attribute(pa)						\
-({									\
-	int bank_, pg_ = 0;	/* XXX gcc4 -Wuninitialized */		\
-									\
-	bank_ = vm_physseg_find(atop((pa)), &pg_);			\
-	&vm_physmem[bank_].pmseg.attrs[pg_];				\
-})
+static inline struct pv_entry *
+pa_to_pvh(paddr_t pa)
+{
+	int bank, pg = 0;	/* XXX gcc4 -Wuninitialized */
+
+	bank = vm_physseg_find(atop((pa)), &pg);
+	return &vm_physmem[bank].pmseg.pvent[pg];
+}
+
+static inline char *
+pa_to_attribute(paddr_t pa)
+{
+	int bank, pg = 0;	/* XXX gcc4 -Wuninitialized */
+
+	bank = vm_physseg_find(atop((pa)), &pg);
+	return &vm_physmem[bank].pmseg.attrs[pg];
+}
 
 /*
  * Internal routines
@@ -500,7 +491,7 @@ pmap_init(void)
 	 * Initialize the pmap pools.
 	 */
 	pool_init(&pmap_pmap_pool, sizeof(struct pmap), 0, 0, 0, "pmappl",
-	    &pool_allocator_nointr);
+	    &pool_allocator_nointr, IPL_NONE);
 
 	/*
 	 * Now that this is done, mark the pages shared with the
@@ -553,24 +544,24 @@ pmap_alloc_pv(void)
 	if (pv_nfree == 0) {
 		pvp = (struct pv_page *)uvm_km_alloc(kernel_map, PAGE_SIZE, 0,
 		    UVM_KMF_WIRED | UVM_KMF_ZERO);
-		if (pvp == 0)
+		if (pvp == NULL)
 			panic("pmap_alloc_pv: uvm_km_alloc() failed");
 		pvp->pvp_pgi.pgi_freelist = pv = &pvp->pvp_pv[1];
 		for (i = NPVPPG - 2; i; i--, pv++)
 			pv->pv_next = pv + 1;
-		pv->pv_next = 0;
+		pv->pv_next = NULL;
 		pv_nfree += pvp->pvp_pgi.pgi_nfree = NPVPPG - 1;
 		TAILQ_INSERT_HEAD(&pv_page_freelist, pvp, pvp_pgi.pgi_list);
 		pv = &pvp->pvp_pv[0];
 	} else {
 		--pv_nfree;
-		pvp = pv_page_freelist.tqh_first;
+		pvp = TAILQ_FIRST(&pv_page_freelist);
 		if (--pvp->pvp_pgi.pgi_nfree == 0) {
 			TAILQ_REMOVE(&pv_page_freelist, pvp, pvp_pgi.pgi_list);
 		}
 		pv = pvp->pvp_pgi.pgi_freelist;
 #ifdef DIAGNOSTIC
-		if (pv == 0)
+		if (pv == NULL)
 			panic("pmap_alloc_pv: pgi_nfree inconsistent");
 #endif
 		pvp->pvp_pgi.pgi_freelist = pv->pv_next;
@@ -620,10 +611,10 @@ pmap_collect_pv(void)
 
 	TAILQ_INIT(&pv_page_collectlist);
 
-	for (pvp = pv_page_freelist.tqh_first; pvp; pvp = npvp) {
+	for (pvp = TAILQ_FIRST(&pv_page_freelist); pvp != NULL; pvp = npvp) {
 		if (pv_nfree < NPVPPG)
 			break;
-		npvp = pvp->pvp_pgi.pgi_list.tqe_next;
+		npvp = TAILQ_NEXT(&pvp->pvp_pgi, pgi_list);
 		if (pvp->pvp_pgi.pgi_nfree > NPVPPG / 3) {
 			TAILQ_REMOVE(&pv_page_freelist, pvp, pvp_pgi.pgi_list);
 			TAILQ_INSERT_TAIL(&pv_page_collectlist, pvp,
@@ -633,24 +624,24 @@ pmap_collect_pv(void)
 		}
 	}
 
-	if (pv_page_collectlist.tqh_first == 0)
+	if (TAILQ_FIRST(&pv_page_collectlist) == NULL)
 		return;
 
 	for (ph = &pv_table[page_cnt - 1]; ph >= &pv_table[0]; ph--) {
-		if (ph->pv_pmap == 0)
+		if (ph->pv_pmap == NULL)
 			continue;
 		s = splvm();
-		for (ppv = ph; (pv = ppv->pv_next) != 0; ) {
+		for (ppv = ph; (pv = ppv->pv_next) != NULL; ) {
 			pvp = (struct pv_page *) trunc_page((vaddr_t)pv);
 			if (pvp->pvp_pgi.pgi_nfree == -1) {
-				pvp = pv_page_freelist.tqh_first;
+				pvp = TAILQ_FIRST(&pv_page_freelist);
 				if (--pvp->pvp_pgi.pgi_nfree == 0) {
 					TAILQ_REMOVE(&pv_page_freelist, pvp,
 					    pvp_pgi.pgi_list);
 				}
 				npv = pvp->pvp_pgi.pgi_freelist;
 #ifdef DIAGNOSTIC
-				if (npv == 0)
+				if (npv == NULL)
 					panic("pmap_collect_pv: "
 					    "pgi_nfree inconsistent");
 #endif
@@ -664,8 +655,8 @@ pmap_collect_pv(void)
 		splx(s);
 	}
 
-	for (pvp = pv_page_collectlist.tqh_first; pvp; pvp = npvp) {
-		npvp = pvp->pvp_pgi.pgi_list.tqe_next;
+	for (pvp = TAILQ_FIRST(&pv_page_collectlist); pvp != NULL; pvp = npvp) {
+		npvp = TAILQ_NEXT(&pvp->pvp_pgi, pgi_list);
 		uvm_km_free(kernel_map, (vaddr_t)pvp, PAGE_SIZE, UVM_KMF_WIRED);
 	}
 }
@@ -836,7 +827,8 @@ pmap_activate(struct lwp *l)
 	PMAP_DPRINTF(PDB_FOLLOW|PDB_SEGTAB,
 	    ("pmap_activate(%p)\n", l));
 
-	PMAP_ACTIVATE(pmap, curlwp == NULL || l->l_proc == curproc);
+	PMAP_ACTIVATE(pmap, (curlwp->l_flag & LW_IDLE) != 0 ||
+	    l->l_proc == curproc);
 }
 
 /*
@@ -1028,7 +1020,7 @@ pmap_page_protect(struct vm_page *pg, vm_prot_t prot)
 /*
  * pmap_protect:		[ INTERFACE ]
  *
- *	Set the physical protectoin on the specified range of this map
+ *	Set the physical protection on the specified range of this map
  *	as requested.
  */
 void
@@ -2020,7 +2012,7 @@ pmap_is_modified(struct vm_page *pg)
  *	Note: no locking is necessary in this function.
  */
 paddr_t
-pmap_phys_address(int ppn)
+pmap_phys_address(paddr_t ppn)
 {
 	return m68k_ptob(ppn);
 }
@@ -2049,42 +2041,6 @@ pmap_prefer(vaddr_t foff, vaddr_t *vap)
 	}
 }
 #endif /* M68K_MMU_HP */
-
-#ifdef COMPAT_HPUX
-/*
- * pmap_mapmulti:
- *
- *	'PUX hack for dealing with the so called multi-mapped address space.
- *	The first 256mb is mapped in at every 256mb region from 0x10000000
- *	up to 0xF0000000.  This allows for 15 bits of tag information.
- *
- *	We implement this at the segment table level, the machine independent
- *	VM knows nothing about it.
- */
-int
-pmap_mapmulti(pmap_t pmap, vaddr_t va)
-{
-	st_entry_t *ste, *bste;
-
-#ifdef DEBUG
-	if (pmapdebug & PDB_MULTIMAP) {
-		ste = pmap_ste(pmap, HPMMBASEADDR(va));
-		printf("pmap_mapmulti(%p, %lx): bste %p(%x)",
-		    pmap, va, ste, *ste);
-		ste = pmap_ste(pmap, va);
-		printf(" ste %p(%x)\n", ste, *ste);
-	}
-#endif
-	bste = pmap_ste(pmap, HPMMBASEADDR(va));
-	ste = pmap_ste(pmap, va);
-	if (*ste == SG_NV && (*bste & SG_V)) {
-		*ste = *bste;
-		TBIAU();
-		return 0;
-	}
-	return EFAULT;
-}
-#endif /* COMPAT_HPUX */
 
 /*
  * Miscellaneous support routines follow
@@ -2228,9 +2184,9 @@ pmap_remove_mapping(pmap_t pmap, vaddr_t va, pt_entry_t *pte, int flags)
 #endif
 			pmap_remove_mapping(pmap_kernel(), ptpva,
 			    NULL, PRM_TFLUSH|PRM_CFLUSH);
-			simple_lock(&uvm.kernel_object->vmobjlock);
+			mutex_enter(&uvm_kernel_object->vmobjlock);
 			uvm_pagefree(PHYS_TO_VM_PAGE(ptppa));
-			simple_unlock(&uvm.kernel_object->vmobjlock);
+			mutex_exit(&uvm_kernel_object->vmobjlock);
 			PMAP_DPRINTF(PDB_REMOVE|PDB_PTPAGE,
 			    ("remove: PT page 0x%lx (0x%lx) freed\n",
 			    ptpva, ptppa));
@@ -2607,15 +2563,15 @@ pmap_enter_ptpage(pmap_t pmap, vaddr_t va, bool can_fail)
 	{
 		if (*ste == SG_NV) {
 			int ix;
-			caddr_t addr;
+			void *addr;
 
 			ix = bmtol2(pmap->pm_stfree);
 			if (ix == -1)
 				panic("enter: out of address space"); /* XXX */
 			pmap->pm_stfree &= ~l2tobm(ix);
-			addr = (caddr_t)&pmap->pm_stab[ix*SG4_LEV2SIZE];
+			addr = (void *)&pmap->pm_stab[ix*SG4_LEV2SIZE];
 			memset(addr, 0, SG4_LEV2SIZE*sizeof(st_entry_t));
-			addr = (caddr_t)&pmap->pm_stpa[ix*SG4_LEV2SIZE];
+			addr = (void *)&pmap->pm_stpa[ix*SG4_LEV2SIZE];
 			*ste = (u_int)addr | SG_RW | SG_U | SG_V;
 
 			PMAP_DPRINTF(PDB_ENTER|PDB_PTPAGE|PDB_SEGTAB,
@@ -2662,7 +2618,7 @@ pmap_enter_ptpage(pmap_t pmap, vaddr_t va, bool can_fail)
 		kpt->kpt_next = kpt_used_list;
 		kpt_used_list = kpt;
 		ptpa = kpt->kpt_pa;
-		memset((caddr_t)kpt->kpt_va, 0, PAGE_SIZE);
+		memset((void *)kpt->kpt_va, 0, PAGE_SIZE);
 		pmap_enter(pmap, va, ptpa, VM_PROT_READ | VM_PROT_WRITE,
 		    VM_PROT_READ | VM_PROT_WRITE | PMAP_WIRED);
 		pmap_update(pmap);
@@ -2690,15 +2646,15 @@ pmap_enter_ptpage(pmap_t pmap, vaddr_t va, bool can_fail)
 		pmap->pm_sref++;
 		PMAP_DPRINTF(PDB_ENTER|PDB_PTPAGE,
 		    ("enter: about to alloc UPT pg at %lx\n", va));
-		simple_lock(&uvm.kernel_object->vmobjlock);
-		while ((pg = uvm_pagealloc(uvm.kernel_object,
+		mutex_enter(&uvm_kernel_object->vmobjlock);
+		while ((pg = uvm_pagealloc(uvm_kernel_object,
 					   va - vm_map_min(kernel_map),
 					   NULL, UVM_PGA_ZERO)) == NULL) {
-			simple_unlock(&uvm.kernel_object->vmobjlock);
+			mutex_exit(&uvm_kernel_object->vmobjlock);
 			uvm_wait("ptpage");
-			simple_lock(&uvm.kernel_object->vmobjlock);
+			mutex_enter(&uvm_kernel_object->vmobjlock);
 		}
-		simple_unlock(&uvm.kernel_object->vmobjlock);
+		mutex_exit(&uvm_kernel_object->vmobjlock);
 		pg->flags &= ~(PG_BUSY|PG_FAKE);
 		UVM_PAGE_OWN(pg, NULL);
 		ptpa = VM_PAGE_TO_PHYS(pg);
@@ -2806,13 +2762,13 @@ pmap_ptpage_addref(vaddr_t ptpva)
 {
 	struct vm_page *pg;
 
-	simple_lock(&uvm.kernel_object->vmobjlock);
-	pg = uvm_pagelookup(uvm.kernel_object, ptpva - vm_map_min(kernel_map));
+	mutex_enter(&uvm_kernel_object->vmobjlock);
+	pg = uvm_pagelookup(uvm_kernel_object, ptpva - vm_map_min(kernel_map));
 	pg->wire_count++;
 	PMAP_DPRINTF(PDB_ENTER|PDB_PTPAGE|PDB_SEGTAB,
 	    ("ptpage addref: pg %p now %d\n",
 	     pg, pg->wire_count));
-	simple_unlock(&uvm.kernel_object->vmobjlock);
+	mutex_exit(&uvm_kernel_object->vmobjlock);
 }
 
 /*
@@ -2826,13 +2782,13 @@ pmap_ptpage_delref(vaddr_t ptpva)
 	struct vm_page *pg;
 	int rv;
 
-	simple_lock(&uvm.kernel_object->vmobjlock);
-	pg = uvm_pagelookup(uvm.kernel_object, ptpva - vm_map_min(kernel_map));
+	mutex_enter(&uvm_kernel_object->vmobjlock);
+	pg = uvm_pagelookup(uvm_kernel_object, ptpva - vm_map_min(kernel_map));
 	rv = --pg->wire_count;
 	PMAP_DPRINTF(PDB_ENTER|PDB_PTPAGE|PDB_SEGTAB,
 	    ("ptpage delref: pg %p now %d\n",
 	     pg, pg->wire_count));
-	simple_unlock(&uvm.kernel_object->vmobjlock);
+	mutex_exit(&uvm_kernel_object->vmobjlock);
 	return rv;
 }
 
@@ -2848,8 +2804,6 @@ pmap_procwr(struct proc	*p, vaddr_t va, size_t len)
 
 	(void)cachectl1(0x80000004, va, len, p);
 }
-
-#ifdef mvme68k
 
 void
 _pmap_set_page_cacheable(pmap_t pmap, vaddr_t va)
@@ -2905,8 +2859,6 @@ _pmap_page_is_cacheable(pmap_t pmap, vaddr_t va)
 
 	return (pmap_pte_ci(pmap_pte(pmap, va)) == 0) ? 1 : 0;
 }
-
-#endif /* mvme68k */
 
 #ifdef DEBUG
 /*

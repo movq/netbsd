@@ -1,4 +1,4 @@
-/*	$NetBSD: hpcfb.c,v 1.40 2006/11/16 01:32:50 christos Exp $	*/
+/*	$NetBSD: hpcfb.c,v 1.47 2008/04/06 20:28:36 cegger Exp $	*/
 
 /*-
  * Copyright (c) 1999
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpcfb.c,v 1.40 2006/11/16 01:32:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpcfb.c,v 1.47 2008/04/06 20:28:36 cegger Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_hpcfb.h"
@@ -55,7 +55,6 @@ __KERNEL_RCSID(0, "$NetBSD: hpcfb.c,v 1.40 2006/11/16 01:32:50 christos Exp $");
 #include <sys/signalvar.h>
 #include <sys/proc.h>
 #include <sys/kthread.h>
-#include <sys/lock.h>
 #include <sys/user.h>
 #include <sys/device.h>
 #include <sys/conf.h>
@@ -65,7 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: hpcfb.c,v 1.40 2006/11/16 01:32:50 christos Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
@@ -164,7 +163,6 @@ struct hpcfb_softc {
 	int sc_polling;
 	int sc_mapping;
 	struct proc *sc_thread;
-	struct lock sc_lock;
 	void *sc_wantedscreen;
 	void (*sc_switchcb)(void *, int, int);
 	void *sc_switchcbarg;
@@ -180,14 +178,13 @@ int	hpcfbmatch(struct device *, struct cfdata *, void *);
 void	hpcfbattach(struct device *, struct device *, void *);
 int	hpcfbprint(void *, const char *);
 
-int	hpcfb_ioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
+int	hpcfb_ioctl(void *, void *, u_long, void *, int, struct lwp *);
 paddr_t	hpcfb_mmap(void *, void *, off_t, int);
 
 void	hpcfb_refresh_screen(struct hpcfb_softc *);
 void	hpcfb_doswitch(struct hpcfb_softc *);
 
 #ifdef HPCFB_JUMP
-static void	hpcfb_create_thread(void *);
 static void	hpcfb_thread(void *);
 #endif /* HPCFB_JUMP */
 
@@ -318,14 +315,13 @@ hpcfbattach(struct device *parent,
 
 	sc->sc_polling = 0; /* XXX */
 	sc->sc_mapping = 0; /* XXX */
-	callout_init(&sc->sc_switch_callout);
+	callout_init(&sc->sc_switch_callout, 0);
 
 	/* Add a power hook to power management */
-	sc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
+	sc->sc_powerhook = powerhook_establish(device_xname(&sc->sc_dev),
 	    hpcfb_power, sc);
 	if (sc->sc_powerhook == NULL)
-		printf("%s: WARNING: unable to establish power hook\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "WARNING: unable to establish power hook\n");
 
 	wa.console = hpcfbconsole;
 	wa.scrdata = &hpcfb_screenlist;
@@ -338,28 +334,19 @@ hpcfbattach(struct device *parent,
 	/*
 	 * Create a kernel thread to scroll,
 	 */
-	kthread_create(hpcfb_create_thread, sc);
+	if (kthread_create(PRI_NONE, 0, NULL, hpcfb_thread, sc,
+	    &sc->sc_thread, "%s", device_xname(&sc->sc_dev)) != 0) {
+		/*
+		 * We were unable to create the HPCFB thread; bail out.
+		 */
+		sc->sc_thread = 0;
+		aprint_error_dev(&sc->sc_dev, "unable to create thread, kernel "
+		    "hpcfb scroll support disabled\n");
+	}
 #endif /* HPCFB_JUMP */
 }
 
 #ifdef HPCFB_JUMP
-void
-hpcfb_create_thread(void *arg)
-{
-	struct hpcfb_softc *sc = arg;
-
-	if (kthread_create1(hpcfb_thread, sc, &sc->sc_thread,
-	    "%s", sc->sc_dev.dv_xname) == 0)
-		return;
-
-	/*
-	 * We were unable to create the HPCFB thread; bail out.
-	 */
-	sc->sc_thread = 0;
-	printf("%s: unable to create thread, kernel hpcfb scroll support disabled\n",
-	    sc->sc_dev.dv_xname);
-}
-
 void
 hpcfb_thread(void *arg)
 {
@@ -443,7 +430,7 @@ hpcfb_init(struct hpcfb_fbconf *fbconf,	struct hpcfb_devconfig *dc)
 	ri = &dc->dc_rinfo;
 	memset(ri, 0, sizeof(struct rasops_info));
 	ri->ri_depth = fbconf->hf_pixel_width;
-	ri->ri_bits = (caddr_t)fbaddr;
+	ri->ri_bits = (void *)fbaddr;
 	ri->ri_width = fbconf->hf_width;
 	ri->ri_height = fbconf->hf_height;
 	ri->ri_stride = fbconf->hf_bytes_per_line;
@@ -497,7 +484,7 @@ hpcfb_init(struct hpcfb_fbconf *fbconf,	struct hpcfb_devconfig *dc)
 	dc->dc_max_row = 0;
 	dc->dc_min_row = dc->dc_rows;
 	dc->dc_scroll = 0;
-	callout_init(&dc->dc_scroll_ch);
+	callout_init(&dc->dc_scroll_ch, 0);
 #endif /* HPCFB_JUMP */
 	dc->dc_memsize = ri->ri_stride * ri->ri_height;
 	/* hook rasops in hpcfb_ops */
@@ -554,7 +541,7 @@ hpcfb_cmap_reorder(struct hpcfb_fbconf *fbconf, struct hpcfb_devconfig *dc)
 }
 
 int
-hpcfb_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag,
+hpcfb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 	struct lwp *l)
 {
 	struct hpcfb_softc *sc = v;
@@ -647,29 +634,26 @@ hpcfb_power(int why, void *arg)
 	switch (why) {
 	case PWR_STANDBY:
 		break;
-	case PWR_SOFTSUSPEND:
-		/* XXX, casting to 'struct wsdisplay_softc *' means
-		   that you should not call the method here... */
-		sc->sc_screen_resumed = wsdisplay_getactivescreen(
-			(struct wsdisplay_softc *)sc->sc_wsdisplay);
+	case PWR_SOFTSUSPEND: {
+		struct wsdisplay_softc *wsc = device_private(sc->sc_wsdisplay);
+
+		sc->sc_screen_resumed = wsdisplay_getactivescreen(wsc);
+
 		if (wsdisplay_switch(sc->sc_wsdisplay,
-		    WSDISPLAY_NULLSCREEN,
-		    1 /* waitok */) == 0) {
-			wsscreen_switchwait(
-				(struct wsdisplay_softc *)sc->sc_wsdisplay,
-				WSDISPLAY_NULLSCREEN);
+		    WSDISPLAY_NULLSCREEN, 1 /* waitok */) == 0) {
+			wsscreen_switchwait(wsc, WSDISPLAY_NULLSCREEN);
 		} else {
 			sc->sc_screen_resumed = WSDISPLAY_NULLSCREEN;
 		}
 
 		sc->sc_dc->dc_state &= ~HPCFB_DC_CURRENT;
 		break;
+	    }
 	case PWR_SOFTRESUME:
 		sc->sc_dc->dc_state |= HPCFB_DC_CURRENT;
 		if (sc->sc_screen_resumed != WSDISPLAY_NULLSCREEN)
 			wsdisplay_switch(sc->sc_wsdisplay,
-			    sc->sc_screen_resumed,
-			    1 /* waitok */);
+			    sc->sc_screen_resumed, 1 /* waitok */);
 		break;
 	}
 }

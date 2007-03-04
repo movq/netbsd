@@ -1,4 +1,4 @@
-/*	$NetBSD: time.h,v 1.56 2006/06/18 21:09:24 uwe Exp $	*/
+/*	$NetBSD: time.h,v 1.62 2008/07/15 16:18:09 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -74,7 +74,7 @@ struct timezone {
 };
 
 /* Operations on timevals. */
-#define	timerclear(tvp)		(tvp)->tv_sec = (tvp)->tv_usec = 0
+#define	timerclear(tvp)		(tvp)->tv_sec = (tvp)->tv_usec = 0L
 #define	timerisset(tvp)		((tvp)->tv_sec || (tvp)->tv_usec)
 #define	timercmp(tvp, uvp, cmp)						\
 	(((tvp)->tv_sec == (uvp)->tv_sec) ?				\
@@ -99,7 +99,12 @@ struct timezone {
 		}							\
 	} while (/* CONSTCOND */ 0)
 
-#ifdef _KERNEL
+/*
+ * hide bintime for _STANDALONE because this header is used for hpcboot.exe,
+ * which is built with compilers which don't recognize LL suffix.
+ *	http://mail-index.NetBSD.org/tech-userlevel/2008/02/27/msg000181.html
+ */
+#if !defined(_STANDALONE)
 struct bintime {
 	time_t	sec;
 	uint64_t frac;
@@ -158,7 +163,7 @@ static __inline void
 bintime2timespec(const struct bintime *bt, struct timespec *ts)
 {
 
-	ts->tv_sec = (/* XXX NetBSD not SUS compliant - MUST FIX */time_t)bt->sec;
+	ts->tv_sec = bt->sec;
 	ts->tv_nsec =
 	    (long)(((uint64_t)1000000000 * (uint32_t)(bt->frac >> 32)) >> 32);
 }
@@ -189,11 +194,11 @@ timeval2bintime(const struct timeval *tv, struct bintime *bt)
 	/* 18446744073709 = int(2^64 / 1000000) */
 	bt->frac = tv->tv_usec * (uint64_t)18446744073709LL;
 }
-#endif /* _KERNEL */
+#endif /* !defined(_STANDALONE) */
 
 /* Operations on timespecs. */
-#define	timespecclear(tsp)		(tsp)->tv_sec = (tsp)->tv_nsec = 0
-#define	timespecisset(tsp)		((tsp)->tv_sec || (tsp)->tv_nsec)
+#define	timespecclear(tsp)	(tsp)->tv_sec = (time_t)((tsp)->tv_nsec = 0L)
+#define	timespecisset(tsp)	((tsp)->tv_sec || (tsp)->tv_nsec)
 #define	timespeccmp(tsp, usp, cmp)					\
 	(((tsp)->tv_sec == (usp)->tv_sec) ?				\
 	    ((tsp)->tv_nsec cmp (usp)->tv_nsec) :			\
@@ -216,6 +221,7 @@ timeval2bintime(const struct timeval *tv, struct bintime *bt)
 			(vsp)->tv_nsec += 1000000000L;			\
 		}							\
 	} while (/* CONSTCOND */ 0)
+#define timespec2ns(x) (((uint64_t)(x)->tv_sec) * 1000000000L + (x)->tv_nsec)
 #endif /* _NETBSD_SOURCE */
 
 /*
@@ -265,7 +271,7 @@ __BEGIN_DECLS
 #if (_POSIX_C_SOURCE - 0) >= 200112L || \
     defined(_XOPEN_SOURCE) || defined(_NETBSD_SOURCE)
 int	getitimer(int, struct itimerval *);
-int	gettimeofday(struct timeval * __restrict, void * __restrict);
+int	gettimeofday(struct timeval * __restrict, void *__restrict);
 int	setitimer(int, const struct itimerval * __restrict,
 	    struct itimerval * __restrict);
 int	utimes(const char *, const struct timeval [2]);
@@ -276,7 +282,7 @@ int	adjtime(const struct timeval *, struct timeval *);
 int	futimes(int, const struct timeval [2]);
 int	lutimes(const char *, const struct timeval [2]);
 int	settimeofday(const struct timeval * __restrict,
-	    const void * __restrict);
+	    const void *__restrict);
 #endif /* _NETBSD_SOURCE */
 __END_DECLS
 

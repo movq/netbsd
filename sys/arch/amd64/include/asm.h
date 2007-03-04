@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.7 2007/02/09 21:55:01 ad Exp $	*/
+/*	$NetBSD: asm.h,v 1.13 2008/10/26 00:08:15 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -37,6 +37,8 @@
 #ifndef _AMD64_ASM_H_
 #define _AMD64_ASM_H_
 
+#ifdef __x86_64__
+
 #ifdef PIC
 #define PIC_PLT(x)	x@PLT
 #define PIC_GOT(x)	x@GOTPCREL(%rip)
@@ -60,7 +62,11 @@
 
 /* let kernels and others override entrypoint alignment */
 #ifndef _ALIGN_TEXT
-#define _ALIGN_TEXT .align 4
+# ifdef _STANDALONE
+#  define _ALIGN_TEXT .align 4
+# else
+#  define _ALIGN_TEXT .align 16
+# endif
 #endif
 
 #define _ENTRY(x) \
@@ -100,7 +106,7 @@
 
 #define	ASMSTR		.asciz
 
-#define RCSID(x)	.text; .asciz x
+#define RCSID(x)	.pushsection ".ident"; .asciz x; .popsection
 
 #define	WEAK_ALIAS(alias,sym)						\
 	.weak alias;							\
@@ -123,5 +129,11 @@
 	.stabs msg,30,0,0,0 ;						\
 	.stabs __STRING(sym),1,0,0,0
 #endif /* __STDC__ */
+
+#else	/*	__x86_64__	*/
+
+#include <i386/asm.h>
+
+#endif	/*	__x86_64__	*/
 
 #endif /* !_AMD64_ASM_H_ */

@@ -1,10 +1,10 @@
-/*	$NetBSD: miidevs.h,v 1.73 2007/02/17 23:24:44 jmcneill Exp $	*/
+/*	$NetBSD: miidevs.h,v 1.81 2008/09/28 18:30:47 bouyer Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: miidevs,v 1.70 2007/02/17 23:24:32 jmcneill Exp
+ *	NetBSD: miidevs,v 1.78 2008/09/28 18:30:11 bouyer Exp
  */
 
 /*-
@@ -23,13 +23,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -62,12 +55,14 @@
 #define	MII_OUI_ALTIMA	0x0010a9	/* Altima Communications */
 #define	MII_OUI_AMD	0x00001a	/* Advanced Micro Devices */
 #define	MII_OUI_BROADCOM	0x001018	/* Broadcom Corporation */
+#define	MII_OUI_BROADCOM2	0x000af7	/* Broadcom Corporation */
 #define	MII_OUI_CICADA	0x0003F1	/* Cicada Semiconductor */
 #define	MII_OUI_DAVICOM	0x00606e	/* Davicom Semiconductor */
 #define	MII_OUI_ENABLESEMI	0x0010dd	/* Enable Semiconductor */
 #define	MII_OUI_ICPLUS	0x0090c3	/* IC Plus Corp. */
 #define	MII_OUI_ICS	0x00a0be	/* Integrated Circuit Systems */
 #define	MII_OUI_INTEL	0x00aa00	/* Intel */
+#define	MII_OUI_JMICRON	0x00d831	/* JMicron */
 #define	MII_OUI_LEVEL1	0x00207b	/* Level 1 */
 #define	MII_OUI_MARVELL	0x005043	/* Marvell Semiconductor */
 #define	MII_OUI_MYSON	0x00c0b4	/* Myson Technology */
@@ -90,6 +85,7 @@
 /* bad bitorder (bits "g" and "h" (= MSBs byte 1) lost) */
 #define	MII_OUI_yyAMD	0x000058	/* Advanced Micro Devices */
 #define	MII_OUI_xxBROADCOM	0x000818	/* Broadcom Corporation */
+#define	MII_OUI_xxBROADCOM_ALT1	0x0050ef	/* Broadcom Corporation */
 #define	MII_OUI_xxDAVICOM	0x000676	/* Davicom Semiconductor */
 #define	MII_OUI_yyINTEL	0x005500	/* Intel */
 #define	MII_OUI_xxMARVELL	0x000ac2	/* Marvell Semiconductor */
@@ -176,6 +172,14 @@
 #define	MII_STR_BROADCOM_BCM5714	"BCM5714 1000BASE-T media interface"
 #define	MII_MODEL_BROADCOM_BCM5780	0x0035
 #define	MII_STR_BROADCOM_BCM5780	"BCM5780 1000BASE-T media interface"
+#define	MII_MODEL_BROADCOM_BCM5708C	0x0036
+#define	MII_STR_BROADCOM_BCM5708C	"BCM5708C 1000BASE-T media interface"
+#define	MII_MODEL_BROADCOM2_BCM5755	0x000c
+#define	MII_STR_BROADCOM2_BCM5755	"BCM5755 1000BASE-T media interface"
+#define	MII_MODEL_BROADCOM2_BCM5754	0x000e
+#define	MII_STR_BROADCOM2_BCM5754	"BCM5754/5787 1000BASE-T media interface"
+#define	MII_MODEL_xxBROADCOM_ALT1_BCM5906	0x0004
+#define	MII_STR_xxBROADCOM_ALT1_BCM5906	"BCM5906 10/100baseTX media interface"
  
 /* Cicada Semiconductor PHYs (now owned by Vitesse?) */
 #define	MII_MODEL_CICADA_CS8201	0x0001
@@ -223,11 +227,19 @@
 #define	MII_STR_yyINTEL_I82562ET	"i82562ET 10/100 media interface"
 #define	MII_MODEL_yyINTEL_I82553	0x0035
 #define	MII_STR_yyINTEL_I82553	"i82553 10/100 media interface"
+#define	MII_MODEL_yyINTEL_I82566	0x0039
+#define	MII_STR_yyINTEL_I82566	"i82566 10/100/1000 media interface"
 #define	MII_MODEL_xxMARVELL_I82563	0x000a
 #define	MII_STR_xxMARVELL_I82563	"i82563 10/100/1000 media interface"
 
 #define	MII_MODEL_yyINTEL_IGP01E1000	0x0038
 #define	MII_STR_yyINTEL_IGP01E1000	"Intel IGP01E1000 Gigabit PHY"
+
+/* JMicron PHYs */
+#define	MII_MODEL_JMICRON_JMC250	0x0021
+#define	MII_STR_JMICRON_JMC250	"JMC250 10/100/1000 media interface"
+#define	MII_MODEL_JMICRON_JMC260	0x0022
+#define	MII_STR_JMICRON_JMC260	"JMC260 10/100 media interface"
 
 /* Level 1 PHYs */
 #define	MII_MODEL_xxLEVEL1_LXT970	0x0000
@@ -256,6 +268,8 @@
 #define	MII_STR_xxMARVELL_E6060	"Marvell 88E6060 10/100 5-port PHY switch"
 #define	MII_MODEL_xxMARVELL_E1111	0x000c
 #define	MII_STR_xxMARVELL_E1111	"Marvell 88E1111 Gigabit PHY"
+#define	MII_MODEL_xxMARVELL_E1116	0x0021
+#define	MII_STR_xxMARVELL_E1116	"Marvell 88E1116 Gigabit PHY"
 
 /* Myson Technology PHYs */
 #define	MII_MODEL_xxMYSON_MTD972	0x0000
@@ -295,9 +309,9 @@
 #define	MII_MODEL_yyREALTEK_RTL8201L	0x0020
 #define	MII_STR_yyREALTEK_RTL8201L	"RTL8201L 10/100 media interface"
 #define	MII_MODEL_xxREALTEK_RTL8169S	0x0011
-#define	MII_STR_xxREALTEK_RTL8169S	"RTL8169S/8110S 1000BASE-T media interface"
+#define	MII_STR_xxREALTEK_RTL8169S	"RTL8169S/8110S/8211 1000BASE-T media interface"
 #define	MII_MODEL_REALTEK_RTL8169S	0x0011
-#define	MII_STR_REALTEK_RTL8169S	"RTL8169S/8110S 1000BASE-T media interface"
+#define	MII_STR_REALTEK_RTL8169S	"RTL8169S/8110S/8211 1000BASE-T media interface"
 
 /* Seeq PHYs */
 #define	MII_MODEL_SEEQ_80220	0x0003

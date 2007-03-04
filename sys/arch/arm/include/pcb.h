@@ -1,4 +1,4 @@
-/*	$NetBSD: pcb.h,v 1.13 2006/09/27 21:42:05 manu Exp $	*/
+/*	pcb.h,v 1.14.22.2 2007/11/06 23:15:05 matt Exp	*/
 
 /*
  * Copyright (c) 2001 Matt Thomas <matt@3am-software.com>.
@@ -40,21 +40,17 @@
 #include <machine/fp.h>
 
 #include <arm/arm32/pte.h>
+#include <arm/reg.h>
 
 struct trapframe;
 
 struct pcb_arm32 {
-	paddr_t	pcb32_pagedir;			/* PT hooks */
-	pd_entry_t *pcb32_pl1vec;		/* PTR to vector_base L1 entry*/
-	pd_entry_t pcb32_l1vec;			/* Value to stuff on ctx sw */
-	u_int	pcb32_dacr;			/* Domain Access Control Reg */
-	void	*pcb32_cstate;			/* &pmap->pm_cstate */
 	/*
 	 * WARNING!
 	 * cpuswitch.S relies on pcb32_r8 being quad-aligned in struct pcb
 	 * (due to the use of "strd" when compiled for XSCALE)
 	 */
-	u_int	pcb32_r8;			/* used */
+	u_int	pcb32_r8 __aligned(8);		/* used */
 	u_int	pcb32_r9;			/* used */
 	u_int	pcb32_r10;			/* used */
 	u_int	pcb32_r11;			/* used */
@@ -62,7 +58,13 @@ struct pcb_arm32 {
 	u_int	pcb32_sp;			/* used */
 	u_int	pcb32_lr;
 	u_int	pcb32_pc;
-	u_int	pcb32_und_sp;
+
+	/*
+	 * ARMv6 has two user thread/process id registers which can hold
+	 * any 32bit quanttiies.
+	 */
+	u_int	pcb32_user_pid_rw;		/* p15, 0, Rd, c13, c0, 2 */
+	u_int	pcb32_user_pid_ro;		/* p15, 0, Rd, c13, c0, 3 */
 };
 #define	pcb_pagedir	pcb_un.un_32.pcb32_pagedir
 #define	pcb_pl1vec	pcb_un.un_32.pcb32_pl1vec
@@ -84,12 +86,14 @@ struct pcb {
 #define	PCB_OWNFPU	0x00000001
 #define	PCB_NOALIGNFLT	0x00000002		/* For EXEC_AOUT */
 	struct	trapframe *pcb_tf;
-	caddr_t	pcb_onfault;			/* On fault handler */
+	void *	pcb_onfault;			/* On fault handler */
 	union	{
 		struct	pcb_arm32 un_32;
 		struct	pcb_arm26 un_26;
 	} pcb_un;
-	struct	fpe_sp_state pcb_fpstate;	/* Floating Point state */
+	struct	fpe_sp_state pcb_fpstate;	/* FPA Floating Point state */
+	struct	vfpreg pcb_vfp;			/* VFP registers */
+	struct	cpu_info *pcb_vfpcpu;		/* CPU holding VFP state */
 };
 #define	pcb_ff	pcb_fpstate			/* for arm26 */
 

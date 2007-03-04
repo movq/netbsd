@@ -1,4 +1,4 @@
-/*	$NetBSD: pckbc_acpi.c,v 1.19 2006/11/16 01:32:47 christos Exp $	*/
+/*	$NetBSD: pckbc_acpi.c,v 1.30 2008/09/16 11:24:55 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -49,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pckbc_acpi.c,v 1.19 2006/11/16 01:32:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pckbc_acpi.c,v 1.30 2008/09/16 11:24:55 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,9 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: pckbc_acpi.c,v 1.19 2006/11/16 01:32:47 christos Exp
 #include <sys/malloc.h>
 #include <sys/errno.h>
 #include <sys/queue.h>
-#include <sys/lock.h>
-
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
@@ -71,8 +62,8 @@ __KERNEL_RCSID(0, "$NetBSD: pckbc_acpi.c,v 1.19 2006/11/16 01:32:47 christos Exp
 
 #include <dev/acpi/acpivar.h>
 
-static int	pckbc_acpi_match(struct device *, struct cfdata *, void *);
-static void	pckbc_acpi_attach(struct device *, struct device *, void *);
+static int	pckbc_acpi_match(device_t, cfdata_t, void *);
+static void	pckbc_acpi_attach(device_t, device_t, void *);
 
 struct pckbc_acpi_softc {
 	struct pckbc_softc sc_pckbc;
@@ -88,10 +79,11 @@ static struct pckbc_acpi_softc *first;
 
 extern struct cfdriver pckbc_cd;
 
-CFATTACH_DECL(pckbc_acpi, sizeof(struct pckbc_acpi_softc),
+CFATTACH_DECL_NEW(pckbc_acpi, sizeof(struct pckbc_acpi_softc),
     pckbc_acpi_match, pckbc_acpi_attach, NULL, NULL);
 
 static void	pckbc_acpi_intr_establish(struct pckbc_softc *, pckbc_slot_t);
+static void	pckbc_acpi_finish_attach(device_t);
 
 /*
  * Supported Device IDs
@@ -110,6 +102,7 @@ static const char * const pckbc_acpi_ids_ms[] = {
 	"PNP0F19",
 	"PNP0F1B",
 	"PNP0F1C",
+	"SYN0302",
 	NULL
 };
 
@@ -117,8 +110,7 @@ static const char * const pckbc_acpi_ids_ms[] = {
  * pckbc_acpi_match: autoconf(9) match routine
  */
 static int
-pckbc_acpi_match(struct device *parent, struct cfdata *match,
-    void *aux)
+pckbc_acpi_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 	int rv;
@@ -136,20 +128,20 @@ pckbc_acpi_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-pckbc_acpi_attach(struct device *parent, struct device *self,
-    void *aux)
+pckbc_acpi_attach(device_t parent, device_t self, void *aux)
 {
-	struct pckbc_acpi_softc *psc = (void *) self;
+	struct pckbc_acpi_softc *psc = device_private(self);
 	struct pckbc_softc *sc = &psc->sc_pckbc;
 	struct pckbc_internal *t;
 	struct acpi_attach_args *aa = aux;
 	bus_space_handle_t ioh_d, ioh_c;
 	pckbc_slot_t peer;
 	struct acpi_resources res;
-	struct acpi_io *io0, *io1;
+	struct acpi_io *io0, *io1, *ioswap;
 	struct acpi_irq *irq;
 	ACPI_STATUS rv;
 
+	sc->sc_dv = self;
 	psc->sc_ic = aa->aa_ic;
 
 	if (acpi_match_hid(aa->aa_node->ad_devinfo, pckbc_acpi_ids_kbd)) {
@@ -159,7 +151,7 @@ pckbc_acpi_attach(struct device *parent, struct device *self,
 		psc->sc_slot = PCKBC_AUX_SLOT;
 		peer = PCKBC_KBD_SLOT;
 	} else {
-		printf(": unknown port!\n");
+		aprint_error(": unknown port!\n");
 		panic("pckbc_acpi_attach: impossible");
 	}
 
@@ -167,7 +159,7 @@ pckbc_acpi_attach(struct device *parent, struct device *self,
 	aprint_normal(": %s port\n", pckbc_slot_names[psc->sc_slot]);
 
 	/* parse resources */
-	rv = acpi_resource_parse(&sc->sc_dv, aa->aa_node->ad_handle, "_CRS",
+	rv = acpi_resource_parse(sc->sc_dv, aa->aa_node->ad_handle, "_CRS",
 	    &res, &acpi_resource_parse_ops_default);
 	if (ACPI_FAILURE(rv))
 		return;
@@ -175,7 +167,7 @@ pckbc_acpi_attach(struct device *parent, struct device *self,
 	/* find our IRQ */
 	irq = acpi_res_irq(&res, 0);
 	if (irq == NULL) {
-		aprint_error("%s: unable to find irq resource\n", sc->sc_dv.dv_xname);
+		aprint_error_dev(self, "unable to find irq resource\n");
 		goto out;
 	}
 	psc->sc_irq = irq->ar_irq;
@@ -188,10 +180,21 @@ pckbc_acpi_attach(struct device *parent, struct device *self,
 	    (psc->sc_slot == PCKBC_KBD_SLOT)) {
 
 		io0 = acpi_res_io(&res, 0);
-		if (io0 == NULL) {
-			aprint_error("%s: unable to find i/o resources\n",
-			    sc->sc_dv.dv_xname);
+		io1 = acpi_res_io(&res, 1);
+		if (io0 == NULL || io1 == NULL) {
+			aprint_error_dev(self,
+			    "unable to find i/o resources\n");
 			goto out;
+		}
+
+		/*
+		 * JDM: Some firmware doesn't report resources in the order we
+		 * expect; sort IO resources here (lowest first)
+		 */
+		if (io0->ar_base > io1->ar_base) {
+			ioswap = io0;
+			io0 = io1;
+			io1 = ioswap;
 		}
 
 		if (pckbc_is_console(aa->aa_iot, io0->ar_base)) {
@@ -201,12 +204,6 @@ pckbc_acpi_attach(struct device *parent, struct device *self,
 			pckbc_console_attached = 1;
 			/* t->t_cmdbyte was initialized by cnattach */
 		} else {
-			io1 = acpi_res_io(&res, 1);
-			if (io1 == NULL) {
-				aprint_error("%s: unable to find i/o resources\n",
-				    sc->sc_dv.dv_xname);
-				goto out;
-			}
 			if (bus_space_map(aa->aa_iot, io0->ar_base,
 					  io0->ar_length, 0, &ioh_d) ||
 			    bus_space_map(aa->aa_iot, io1->ar_base,
@@ -214,30 +211,32 @@ pckbc_acpi_attach(struct device *parent, struct device *self,
 				panic("pckbc_acpi_attach: couldn't map");
 
 			t = malloc(sizeof(struct pckbc_internal),
-			    M_DEVBUF, M_WAITOK);
-			memset(t, 0, sizeof(*t));
+			    M_DEVBUF, M_WAITOK|M_ZERO);
 			t->t_iot = aa->aa_iot;
 			t->t_ioh_d = ioh_d;
 			t->t_ioh_c = ioh_c;
 			t->t_addr = io0->ar_base;
 			t->t_cmdbyte = KC8_CPU;	/* Enable ports */
-			callout_init(&t->t_cleanup);
+			callout_init(&t->t_cleanup, 0);
 		}
 
 		t->t_sc = &first->sc_pckbc;
 		first->sc_pckbc.id = t;
 
+		if (!pmf_device_register(self, NULL, pckbc_resume))
+			aprint_error_dev(self,
+			    "couldn't establish power handler\n");
+
 		first->sc_pckbc.intr_establish = pckbc_acpi_intr_establish;
-		config_defer(&first->sc_pckbc.sc_dv,
-			     (void(*)(struct device *))pckbc_attach);
-	}
+		config_defer(first->sc_pckbc.sc_dv, pckbc_acpi_finish_attach);
+	} else if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
  out:
 	acpi_resource_cleanup(&res);
 }
 
 static void
-pckbc_acpi_intr_establish(struct pckbc_softc *sc,
-    pckbc_slot_t slot)
+pckbc_acpi_intr_establish(struct pckbc_softc *sc, pckbc_slot_t slot)
 {
 	struct pckbc_acpi_softc *psc;
 	isa_chipset_tag_t ic = NULL;
@@ -249,7 +248,7 @@ pckbc_acpi_intr_establish(struct pckbc_softc *sc,
 	 * Note we're always called with sc == first.
 	 */
 	for (i = 0; i < pckbc_cd.cd_ndevs; i++) {
-		psc = pckbc_cd.cd_devs[i];
+		psc = device_lookup_private(&pckbc_cd, i);
 		if (psc && psc->sc_slot == slot) {
 			irq = psc->sc_irq;
 			ist = psc->sc_ist;
@@ -260,10 +259,18 @@ pckbc_acpi_intr_establish(struct pckbc_softc *sc,
 	if (i < pckbc_cd.cd_ndevs)
 		rv = isa_intr_establish(ic, irq, ist, IPL_TTY, pckbcintr, sc);
 	if (rv == NULL) {
-		aprint_error("%s: unable to establish interrupt for %s slot\n",
-		    sc->sc_dv.dv_xname, pckbc_slot_names[slot]);
+		aprint_error_dev(sc->sc_dv,
+		    "unable to establish interrupt for %s slot\n",
+		    pckbc_slot_names[slot]);
 	} else {
-		aprint_normal("%s: using irq %d for %s slot\n", sc->sc_dv.dv_xname,
+		aprint_normal_dev(sc->sc_dv, "using irq %d for %s slot\n",
 		    irq, pckbc_slot_names[slot]);
 	}
+}
+
+static void
+pckbc_acpi_finish_attach(device_t dv)
+{
+
+	pckbc_attach(device_private(dv));
 }

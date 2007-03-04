@@ -1,4 +1,4 @@
-/* $NetBSD: i4b_l2.c,v 1.21 2007/01/24 13:08:15 hubertf Exp $ */
+/* $NetBSD: i4b_l2.c,v 1.24 2008/07/20 01:05:27 martin Exp $ */
 
 /*
  * Copyright (c) 1997, 2000 Hellmuth Michaelis. All rights reserved.
@@ -29,7 +29,7 @@
  *      i4b_l2.c - ISDN layer 2 (Q.921)
  *	-------------------------------
  *
- *	$Id: i4b_l2.c,v 1.21 2007/01/24 13:08:15 hubertf Exp $
+ *	$Id: i4b_l2.c,v 1.24 2008/07/20 01:05:27 martin Exp $
  *
  * $FreeBSD$
  *
@@ -38,7 +38,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_l2.c,v 1.21 2007/01/24 13:08:15 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_l2.c,v 1.24 2008/07/20 01:05:27 martin Exp $");
 
 #ifdef __FreeBSD__
 #include "i4bq921.h"
@@ -231,14 +231,14 @@ isdn_layer2_status_ind(l2_softc_t *l2sc, struct isdn_l3_driver *drv, int status,
 			l2sc->i_queue.ifq_maxlen = IQUEUE_MAXLEN;
 			l2sc->ua_frame = NULL;
 			memset(&l2sc->stat, 0, sizeof(lapdstat_t));
-			i4b_l2_unit_init(l2sc);
 
 			/* initialize the callout handles for timeout routines */
-			callout_init(&l2sc->T200_callout);
-			callout_init(&l2sc->T202_callout);
-			callout_init(&l2sc->T203_callout);
-			callout_init(&l2sc->IFQU_callout);
+			callout_init(&l2sc->T200_callout, 0);
+			callout_init(&l2sc->T202_callout, 0);
+			callout_init(&l2sc->T203_callout, 0);
+			callout_init(&l2sc->IFQU_callout, 0);
 
+			i4b_l2_unit_init(l2sc);
 			break;
 
 		case STI_L1STAT:	/* state of layer 1 */
@@ -280,7 +280,7 @@ isdn_layer2_status_ind(l2_softc_t *l2sc, struct isdn_l3_driver *drv, int status,
 /*---------------------------------------------------------------------------*
  *	MDL_COMMAND_REQ from layer 3
  *---------------------------------------------------------------------------*/
-int i4b_mdl_command_req(struct isdn_l3_driver *drv, int command, void * parm)
+int i4b_mdl_command_req(struct isdn_l3_driver *drv, int command, void *parm)
 {
 	struct l2_softc *sc = (l2_softc_t*)drv->l1_token;
 

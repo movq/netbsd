@@ -1,4 +1,4 @@
-/*	$NetBSD: vm86.c,v 1.44 2007/02/09 21:55:05 ad Exp $	*/
+/*	$NetBSD: vm86.c,v 1.48 2008/04/28 20:23:24 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm86.c,v 1.44 2007/02/09 21:55:05 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm86.c,v 1.48 2008/04/28 20:23:24 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,7 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: vm86.c,v 1.44 2007/02/09 21:55:05 ad Exp $");
 #include <machine/vm86.h>
 
 static void fast_intxx(struct lwp *, int);
-static inline int is_bitset(int, caddr_t);
+static inline int is_bitset(int, void *);
 
 #define	CS(tf)		(*(u_short *)&tf->tf_cs)
 #define	IP(tf)		(*(u_short *)&tf->tf_eip)
@@ -112,11 +105,11 @@ static inline int is_bitset(int, caddr_t);
 static inline int
 is_bitset(nr, bitmap)
 	int nr;
-	caddr_t bitmap;
+	void *bitmap;
 {
 	u_int byte;		/* bt instruction doesn't do
 					   bytes--it examines ints! */
-	bitmap += nr / NBBY;
+	bitmap = (char *)bitmap + (nr / NBBY);
 	nr = nr % NBBY;
 	byte = fubyte(bitmap);
 
@@ -172,7 +165,7 @@ fast_intxx(l, intrno)
 	 * Fetch intr handler info from "real-mode" IDT based at addr 0 in
 	 * the user address space.
 	 */
-	if (copyin((caddr_t)(intrno * sizeof(ihand)), &ihand, sizeof(ihand))) {
+	if (copyin((void *)(intrno * sizeof(ihand)), &ihand, sizeof(ihand))) {
 		/*
 		 * No IDT!  What Linux does here is simply call back into
 		 * userspace with the VM86_INTx arg as if it was a revectored
@@ -214,7 +207,7 @@ vm86_return(l, retval)
 	struct proc *p = l->l_proc;
 	ksiginfo_t ksi;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	/*
 	 * We can't set the virtual flags in our real trap frame,
@@ -239,7 +232,7 @@ vm86_return(l, retval)
 		/* NOTREACHED */
 	}
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	KSI_INIT_TRAP(&ksi);
 	ksi.ksi_signo = SIGURG;
@@ -379,7 +372,7 @@ bad:
 }
 
 int
-i386_vm86(struct lwp *l, char *args, register_t *retval)
+x86_vm86(struct lwp *l, char *args, register_t *retval)
 {
 	struct trapframe *tf = l->l_md.md_regs;
 	struct pcb *pcb = &l->l_addr->u_pcb;
@@ -440,9 +433,9 @@ i386_vm86(struct lwp *l, char *args, register_t *retval)
 
 	/* Going into vm86 mode jumps off the signal stack. */
 	p = l->l_proc;
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 	l->l_sigstk.ss_flags &= ~SS_ONSTACK;
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 	set_vflags(l, vm86s.regs[_REG_EFL] | PSL_VM);
 

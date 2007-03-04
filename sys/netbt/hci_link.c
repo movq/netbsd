@@ -1,4 +1,4 @@
-/*	$NetBSD: hci_link.c,v 1.9 2006/12/26 00:00:22 alc Exp $	*/
+/*	$NetBSD: hci_link.c,v 1.20 2008/04/24 11:38:37 ad Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hci_link.c,v 1.9 2006/12/26 00:00:22 alc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hci_link.c,v 1.20 2008/04/24 11:38:37 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -72,17 +72,14 @@ hci_acl_open(struct hci_unit *unit, bdaddr_t *bdaddr)
 	hci_create_con_cp cp;
 	int err;
 
-	KASSERT(unit);
-	KASSERT(bdaddr);
+	KASSERT(unit != NULL);
+	KASSERT(bdaddr != NULL);
 
 	link = hci_link_lookup_bdaddr(unit, bdaddr, HCI_LINK_ACL);
 	if (link == NULL) {
-		link = hci_link_alloc(unit);
+		link = hci_link_alloc(unit, bdaddr, HCI_LINK_ACL);
 		if (link == NULL)
 			return NULL;
-
-		link->hl_type = HCI_LINK_ACL;
-		bdaddr_copy(&link->hl_bdaddr, bdaddr);
 	}
 
 	switch(link->hl_state) {
@@ -96,9 +93,9 @@ hci_acl_open(struct hci_unit *unit, bdaddr_t *bdaddr)
 
 		memo = hci_memo_find(unit, bdaddr);
 		if (memo != NULL) {
-			cp.page_scan_rep_mode = memo->response.page_scan_rep_mode;
-			cp.page_scan_mode = memo->response.page_scan_mode;
-			cp.clock_offset = htole16(memo->response.clock_offset);
+			cp.page_scan_rep_mode = memo->page_scan_rep_mode;
+			cp.page_scan_mode = memo->page_scan_mode;
+			cp.clock_offset = memo->clock_offset;
 		}
 
 		if (unit->hci_link_policy & HCI_LINK_POLICY_ENABLE_ROLE_SWITCH)
@@ -110,10 +107,14 @@ hci_acl_open(struct hci_unit *unit, bdaddr_t *bdaddr)
 			return NULL;
 		}
 
+		link->hl_flags |= HCI_LINK_CREATE_CON;
 		link->hl_state = HCI_LINK_WAIT_CONNECT;
 		break;
 
 	case HCI_LINK_WAIT_CONNECT:
+	case HCI_LINK_WAIT_AUTH:
+	case HCI_LINK_WAIT_ENCRYPT:
+	case HCI_LINK_WAIT_SECURE:
 		/*
 		 * somebody else already trying to connect, we just
 		 * sit on the bench with them..
@@ -148,7 +149,7 @@ void
 hci_acl_close(struct hci_link *link, int err)
 {
 
-	KASSERT(link);
+	KASSERT(link != NULL);
 
 	if (--link->hl_refcnt == 0) {
 		if (link->hl_state == HCI_LINK_CLOSED)
@@ -177,11 +178,9 @@ hci_acl_newconn(struct hci_unit *unit, bdaddr_t *bdaddr)
 	if (link != NULL)
 		return NULL;
 
-	link = hci_link_alloc(unit);
+	link = hci_link_alloc(unit, bdaddr, HCI_LINK_ACL);
 	if (link != NULL) {
 		link->hl_state = HCI_LINK_WAIT_CONNECT;
-		link->hl_type = HCI_LINK_ACL;
-		bdaddr_copy(&link->hl_bdaddr, bdaddr);
 
 		if (hci_acl_expiry > 0)
 			callout_schedule(&link->hl_expire, hci_acl_expiry * hz);
@@ -195,9 +194,9 @@ hci_acl_timeout(void *arg)
 {
 	struct hci_link *link = arg;
 	hci_discon_cp cp;
-	int s, err;
+	int err;
 
-	s = splsoftnet();
+	mutex_enter(bt_lock);
 	callout_ack(&link->hl_expire);
 
 	if (link->hl_refcnt > 0)
@@ -211,6 +210,9 @@ hci_acl_timeout(void *arg)
 		hci_link_free(link, ECONNRESET);
 		break;
 
+	case HCI_LINK_WAIT_AUTH:
+	case HCI_LINK_WAIT_ENCRYPT:
+	case HCI_LINK_WAIT_SECURE:
 	case HCI_LINK_OPEN:
 		cp.con_handle = htole16(link->hl_handle);
 		cp.reason = 0x13; /* "Remote User Terminated Connection" */
@@ -231,7 +233,169 @@ hci_acl_timeout(void *arg)
 	}
 
 out:
-	splx(s);
+	mutex_exit(bt_lock);
+}
+
+/*
+ * Initiate any Link Mode change requests.
+ */
+int
+hci_acl_setmode(struct hci_link *link)
+{
+	int err;
+
+	KASSERT(link != NULL);
+	KASSERT(link->hl_unit != NULL);
+
+	if (link->hl_state != HCI_LINK_OPEN)
+		return EINPROGRESS;
+
+	if ((link->hl_flags & HCI_LINK_AUTH_REQ)
+	    && !(link->hl_flags & HCI_LINK_AUTH)) {
+		hci_auth_req_cp cp;
+
+		DPRINTF("requesting auth for handle #%d\n",
+			link->hl_handle);
+
+		link->hl_state = HCI_LINK_WAIT_AUTH;
+		cp.con_handle = htole16(link->hl_handle);
+		err = hci_send_cmd(link->hl_unit, HCI_CMD_AUTH_REQ,
+				   &cp, sizeof(cp));
+
+		return (err == 0 ? EINPROGRESS : err);
+	}
+
+	if ((link->hl_flags & HCI_LINK_ENCRYPT_REQ)
+	    && !(link->hl_flags & HCI_LINK_ENCRYPT)) {
+		hci_set_con_encryption_cp cp;
+
+		/* XXX we should check features for encryption capability */
+
+		DPRINTF("requesting encryption for handle #%d\n",
+			link->hl_handle);
+
+		link->hl_state = HCI_LINK_WAIT_ENCRYPT;
+		cp.con_handle = htole16(link->hl_handle);
+		cp.encryption_enable = 0x01;
+
+		err = hci_send_cmd(link->hl_unit, HCI_CMD_SET_CON_ENCRYPTION,
+				   &cp, sizeof(cp));
+
+		return (err == 0 ? EINPROGRESS : err);
+	}
+
+	if ((link->hl_flags & HCI_LINK_SECURE_REQ)) {
+		hci_change_con_link_key_cp cp;
+
+		/* always change link key for SECURE requests */
+		link->hl_flags &= ~HCI_LINK_SECURE;
+
+		DPRINTF("changing link key for handle #%d\n",
+			link->hl_handle);
+
+		link->hl_state = HCI_LINK_WAIT_SECURE;
+		cp.con_handle = htole16(link->hl_handle);
+
+		err = hci_send_cmd(link->hl_unit, HCI_CMD_CHANGE_CON_LINK_KEY,
+				   &cp, sizeof(cp));
+
+		return (err == 0 ? EINPROGRESS : err);
+	}
+
+	return 0;
+}
+
+/*
+ * Link Mode changed.
+ *
+ * This is called from event handlers when the mode change
+ * is complete. We notify upstream and restart the link.
+ */
+void
+hci_acl_linkmode(struct hci_link *link)
+{
+	struct l2cap_channel *chan, *next;
+	int err, mode = 0;
+
+	DPRINTF("handle #%d, auth %s, encrypt %s, secure %s\n",
+		link->hl_handle,
+		(link->hl_flags & HCI_LINK_AUTH ? "on" : "off"),
+		(link->hl_flags & HCI_LINK_ENCRYPT ? "on" : "off"),
+		(link->hl_flags & HCI_LINK_SECURE ? "on" : "off"));
+
+	if (link->hl_flags & HCI_LINK_AUTH)
+		mode |= L2CAP_LM_AUTH;
+
+	if (link->hl_flags & HCI_LINK_ENCRYPT)
+		mode |= L2CAP_LM_ENCRYPT;
+
+	if (link->hl_flags & HCI_LINK_SECURE)
+		mode |= L2CAP_LM_SECURE;
+
+	/*
+	 * The link state will only be OPEN here if the mode change
+	 * was successful. So, we can proceed with L2CAP connections,
+	 * or notify already establshed channels, to allow any that
+	 * are dissatisfied to disconnect before we restart.
+	 */
+	next = LIST_FIRST(&l2cap_active_list);
+	while ((chan = next) != NULL) {
+		next = LIST_NEXT(chan, lc_ncid);
+
+		if (chan->lc_link != link)
+			continue;
+
+		switch(chan->lc_state) {
+		case L2CAP_WAIT_SEND_CONNECT_REQ: /* we are connecting */
+			if ((mode & chan->lc_mode) != chan->lc_mode) {
+				l2cap_close(chan, ECONNABORTED);
+				break;
+			}
+
+			chan->lc_state = L2CAP_WAIT_RECV_CONNECT_RSP;
+			err = l2cap_send_connect_req(chan);
+			if (err) {
+				l2cap_close(chan, err);
+				break;
+			}
+			break;
+
+		case L2CAP_WAIT_SEND_CONNECT_RSP: /* they are connecting */
+			if ((mode & chan->lc_mode) != chan->lc_mode) {
+				l2cap_send_connect_rsp(link, chan->lc_ident,
+							0, chan->lc_rcid,
+							L2CAP_SECURITY_BLOCK);
+
+				l2cap_close(chan, ECONNABORTED);
+				break;
+			}
+
+			l2cap_send_connect_rsp(link, chan->lc_ident,
+						chan->lc_lcid, chan->lc_rcid,
+						L2CAP_SUCCESS);
+
+			chan->lc_state = L2CAP_WAIT_CONFIG;
+			chan->lc_flags |= (L2CAP_WAIT_CONFIG_RSP | L2CAP_WAIT_CONFIG_REQ);
+			err = l2cap_send_config_req(chan);
+			if (err) {
+				l2cap_close(chan, err);
+				break;
+			}
+			break;
+
+		case L2CAP_WAIT_RECV_CONNECT_RSP:
+		case L2CAP_WAIT_CONFIG:
+		case L2CAP_OPEN: /* already established */
+			(*chan->lc_proto->linkmode)(chan->lc_upper, mode);
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	link->hl_state = HCI_LINK_OPEN;
+	hci_acl_start(link);
 }
 
 /*
@@ -248,8 +412,8 @@ hci_acl_recv(struct mbuf *m, struct hci_unit *unit)
 	uint16_t handle, want;
 	int pb, got;
 
-	KASSERT(m);
-	KASSERT(unit);
+	KASSERT(m != NULL);
+	KASSERT(unit != NULL);
 
 	KASSERT(m->m_pkthdr.len >= sizeof(hdr));
 	m_copydata(m, 0, sizeof(hdr), &hdr);
@@ -257,13 +421,14 @@ hci_acl_recv(struct mbuf *m, struct hci_unit *unit)
 
 #ifdef DIAGNOSTIC
 	if (hdr.type != HCI_ACL_DATA_PKT) {
-		printf("%s: bad ACL packet type\n", unit->hci_devname);
+		aprint_error_dev(unit->hci_dev, "bad ACL packet type\n");
 		goto bad;
 	}
 
 	if (m->m_pkthdr.len != le16toh(hdr.length)) {
-		printf("%s: bad ACL packet length (%d != %d)\n",
-			unit->hci_devname, m->m_pkthdr.len, le16toh(hdr.length));
+		aprint_error_dev(unit->hci_dev,
+		    "bad ACL packet length (%d != %d)\n",
+		    m->m_pkthdr.len, le16toh(hdr.length));
 		goto bad;
 	}
 #endif
@@ -278,7 +443,7 @@ hci_acl_recv(struct mbuf *m, struct hci_unit *unit)
 		hci_discon_cp cp;
 
 		DPRINTF("%s: dumping packet for unknown handle #%d\n",
-			unit->hci_devname, handle);
+			device_xname(unit->hci_dev), handle);
 
 		/*
 		 * There is no way to find out what this connection handle is
@@ -295,13 +460,11 @@ hci_acl_recv(struct mbuf *m, struct hci_unit *unit)
 	switch (pb) {
 	case HCI_PACKET_START:
 		if (link->hl_rxp != NULL)
-			printf("%s: dropped incomplete ACL packet\n",
-				unit->hci_devname);
+			aprint_error_dev(unit->hci_dev,
+			    "dropped incomplete ACL packet\n");
 
 		if (m->m_pkthdr.len < sizeof(l2cap_hdr_t)) {
-			printf("%s: short ACL packet\n",
-				unit->hci_devname);
-
+			aprint_error_dev(unit->hci_dev, "short ACL packet\n");
 			goto bad;
 		}
 
@@ -311,8 +474,8 @@ hci_acl_recv(struct mbuf *m, struct hci_unit *unit)
 
 	case HCI_PACKET_FRAGMENT:
 		if (link->hl_rxp == NULL) {
-			printf("%s: unexpected packet fragment\n",
-				unit->hci_devname);
+			aprint_error_dev(unit->hci_dev,
+			    "unexpected packet fragment\n");
 
 			goto bad;
 		}
@@ -324,9 +487,7 @@ hci_acl_recv(struct mbuf *m, struct hci_unit *unit)
 		break;
 
 	default:
-		printf("%s: unknown packet type\n",
-			unit->hci_devname);
-
+		aprint_error_dev(unit->hci_dev, "unknown packet type\n");
 		goto bad;
 	}
 
@@ -363,8 +524,8 @@ hci_acl_send(struct mbuf *m, struct hci_link *link,
 	struct mbuf *n = NULL;
 	int plen, mlen, num = 0;
 
-	KASSERT(link);
-	KASSERT(m);
+	KASSERT(link != NULL);
+	KASSERT(m != NULL);
 	KASSERT(m->m_flags & M_PKTHDR);
 	KASSERT(m->m_pkthdr.len > 0);
 
@@ -385,7 +546,7 @@ hci_acl_send(struct mbuf *m, struct hci_link *link,
 	mlen = link->hl_unit->hci_max_acl_size;
 
 	DPRINTFN(5, "%s: handle #%d, plen = %d, max = %d\n",
-		link->hl_unit->hci_devname, link->hl_handle, plen, mlen);
+		device_xname(link->hl_unit->hci_dev), link->hl_handle, plen, mlen);
 
 	while (plen > 0) {
 		if (plen > mlen) {
@@ -425,12 +586,13 @@ nomem:
 /*
  * Start sending ACL data on link.
  *
+ *	This is called when the queue may need restarting: as new data
+ * is queued, after link mode changes have completed, or when device
+ * buffers have cleared.
+ *
  *	We may use all the available packet slots. The reason that we add
  * the ACL encapsulation here rather than in hci_acl_send() is that L2CAP
  * signal packets may be queued before the handle is given to us..
- *
- * this is called from hci_acl_send() above, and the event processing
- * code (for CON_COMPL and NUM_COMPL_PKTS)
  */
 void
 hci_acl_start(struct hci_link *link)
@@ -441,10 +603,10 @@ hci_acl_start(struct hci_link *link)
 	struct mbuf *m;
 	uint16_t handle;
 
-	KASSERT(link);
+	KASSERT(link != NULL);
 
 	unit = link->hl_unit;
-	KASSERT(unit);
+	KASSERT(unit != NULL);
 
 	/* this is mainly to block ourselves (below) */
 	if (link->hl_state != HCI_LINK_OPEN)
@@ -537,10 +699,10 @@ hci_acl_complete(struct hci_link *link, int num)
 	while (num > 0) {
 		pdu = TAILQ_FIRST(&link->hl_txq);
 		if (pdu == NULL) {
-			printf("%s: %d packets completed on handle #%x "
-				"but none pending!\n",
-				link->hl_unit->hci_devname, num,
-				link->hl_handle);
+			aprint_error_dev(link->hl_unit->hci_dev,
+			    "%d packets completed on handle #%x but none pending!\n",
+			    num, link->hl_handle);
+
 			return;
 		}
 
@@ -619,14 +781,11 @@ hci_sco_newconn(struct hci_unit *unit, bdaddr_t *bdaddr)
 		bdaddr_copy(&new->sp_laddr, &unit->hci_bdaddr);
 		bdaddr_copy(&new->sp_raddr, bdaddr);
 
-		sco = hci_link_alloc(unit);
+		sco = hci_link_alloc(unit, bdaddr, HCI_LINK_SCO);
 		if (sco == NULL) {
 			sco_detach(&new);
 			return NULL;
 		}
-
-		sco->hl_type = HCI_LINK_SCO;
-		bdaddr_copy(&sco->hl_bdaddr, bdaddr);
 
 		sco->hl_link = hci_acl_open(unit, bdaddr);
 		KASSERT(sco->hl_link == acl);
@@ -652,8 +811,8 @@ hci_sco_recv(struct mbuf *m, struct hci_unit *unit)
 	hci_scodata_hdr_t hdr;
 	uint16_t handle;
 
-	KASSERT(m);
-	KASSERT(unit);
+	KASSERT(m != NULL);
+	KASSERT(unit != NULL);
 
 	KASSERT(m->m_pkthdr.len >= sizeof(hdr));
 	m_copydata(m, 0, sizeof(hdr), &hdr);
@@ -661,12 +820,15 @@ hci_sco_recv(struct mbuf *m, struct hci_unit *unit)
 
 #ifdef DIAGNOSTIC
 	if (hdr.type != HCI_SCO_DATA_PKT) {
-		printf("%s: bad SCO packet type\n", unit->hci_devname);
+		aprint_error_dev(unit->hci_dev, "bad SCO packet type\n");
 		goto bad;
 	}
 
 	if (m->m_pkthdr.len != hdr.length) {
-		printf("%s: bad SCO packet length (%d != %d)\n", unit->hci_devname, m->m_pkthdr.len, hdr.length);
+		aprint_error_dev(unit->hci_dev,
+		    "bad SCO packet length (%d != %d)\n",
+		    m->m_pkthdr.len, hdr.length);
+
 		goto bad;
 	}
 #endif
@@ -677,7 +839,7 @@ hci_sco_recv(struct mbuf *m, struct hci_unit *unit)
 	link = hci_link_lookup_handle(unit, handle);
 	if (link == NULL || link->hl_type == HCI_LINK_ACL) {
 		DPRINTF("%s: dumping packet for unknown handle #%d\n",
-			unit->hci_devname, handle);
+			device_xname(unit->hci_dev), handle);
 
 		goto bad;
 	}
@@ -713,21 +875,23 @@ hci_sco_complete(struct hci_link *link, int num)
  */
 
 struct hci_link *
-hci_link_alloc(struct hci_unit *unit)
+hci_link_alloc(struct hci_unit *unit, bdaddr_t *bdaddr, uint8_t type)
 {
 	struct hci_link *link;
 
-	KASSERT(unit);
+	KASSERT(unit != NULL);
 
 	link = malloc(sizeof(struct hci_link), M_BLUETOOTH, M_NOWAIT | M_ZERO);
 	if (link == NULL)
 		return NULL;
 
 	link->hl_unit = unit;
+	link->hl_type = type;
 	link->hl_state = HCI_LINK_CLOSED;
+	bdaddr_copy(&link->hl_bdaddr, bdaddr);
 
 	/* init ACL portion */
-	callout_init(&link->hl_expire);
+	callout_init(&link->hl_expire, 0);
 	callout_setfunc(&link->hl_expire, hci_acl_timeout, link);
 
 	TAILQ_INIT(&link->hl_txq);	/* outgoing packets */
@@ -740,7 +904,7 @@ hci_link_alloc(struct hci_unit *unit)
 	MBUFQ_INIT(&link->hl_data);
 
 	/* attach to unit */
-	TAILQ_INSERT_HEAD(&unit->hci_links, link, hl_next);
+	TAILQ_INSERT_TAIL(&unit->hci_links, link, hl_next);
 	return link;
 }
 
@@ -751,7 +915,7 @@ hci_link_free(struct hci_link *link, int err)
 	struct l2cap_pdu *pdu;
 	struct l2cap_channel *chan, *next;
 
-	KASSERT(link);
+	KASSERT(link != NULL);
 
 	DPRINTF("#%d, type = %d, state = %d, refcnt = %d\n",
 		link->hl_handle, link->hl_type,
@@ -821,6 +985,20 @@ hci_link_free(struct hci_link *link, int err)
 	if (callout_invoking(&link->hl_expire))
 		return;
 
+	callout_destroy(&link->hl_expire);
+
+	/*
+	 * If we made a note of clock offset, keep it in a memo
+	 * to facilitate reconnections to this device
+	 */
+	if (link->hl_clock != 0) {
+		struct hci_memo *memo;
+
+		memo = hci_memo_new(link->hl_unit, &link->hl_bdaddr);
+		if (memo != NULL)
+			memo->clock_offset = link->hl_clock;
+	}
+
 	TAILQ_REMOVE(&link->hl_unit->hci_links, link, hl_next);
 	free(link, M_BLUETOOTH);
 }
@@ -831,12 +1009,12 @@ hci_link_free(struct hci_link *link, int err)
  * handle (ie new links)
  */
 struct hci_link *
-hci_link_lookup_bdaddr(struct hci_unit *unit, bdaddr_t *bdaddr, uint16_t type)
+hci_link_lookup_bdaddr(struct hci_unit *unit, bdaddr_t *bdaddr, uint8_t type)
 {
 	struct hci_link *link;
 
-	KASSERT(unit);
-	KASSERT(bdaddr);
+	KASSERT(unit != NULL);
+	KASSERT(bdaddr != NULL);
 
 	TAILQ_FOREACH(link, &unit->hci_links, hl_next) {
 		if (link->hl_type != type)
@@ -857,7 +1035,7 @@ hci_link_lookup_handle(struct hci_unit *unit, uint16_t handle)
 {
 	struct hci_link *link;
 
-	KASSERT(unit);
+	KASSERT(unit != NULL);
 
 	TAILQ_FOREACH(link, &unit->hci_links, hl_next) {
 		if (handle == link->hl_handle)

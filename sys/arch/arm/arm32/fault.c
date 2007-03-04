@@ -1,4 +1,4 @@
-/*	$NetBSD: fault.c,v 1.64 2007/02/18 07:25:35 matt Exp $	*/
+/*	$NetBSD: fault.c,v 1.71 2008/10/17 08:20:48 cegger Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -81,7 +81,7 @@
 #include "opt_kgdb.h"
 
 #include <sys/types.h>
-__KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.64 2007/02/18 07:25:35 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.71 2008/10/17 08:20:48 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -89,6 +89,9 @@ __KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.64 2007/02/18 07:25:35 matt Exp $");
 #include <sys/user.h>
 #include <sys/kernel.h>
 #include <sys/kauth.h>
+
+#include <sys/savar.h>
+#include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm_stat.h>
@@ -100,7 +103,6 @@ __KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.64 2007/02/18 07:25:35 matt Exp $");
 
 #include <machine/frame.h>
 #include <arm/arm32/katelib.h>
-#include <machine/cpu.h>
 #include <machine/intr.h>
 #if defined(DDB) || defined(KGDB)
 #include <machine/db_machdep.h>
@@ -174,9 +176,7 @@ static inline void
 call_trapsignal(struct lwp *l, ksiginfo_t *ksi)
 {
 
-	KERNEL_LOCK(1, l);
 	TRAPSIGNAL(l, ksi);
-	KERNEL_UNLOCK_LAST(l);
 }
 
 static inline int
@@ -198,8 +198,8 @@ data_abort_fixup(trapframe_t *tf, u_int fsr, u_int far, struct lwp *l)
 #ifdef THUMB_CODE
 	if (tf->tf_spsr & PSR_T_bit) {
 		printf("pc = 0x%08x, opcode 0x%04x, 0x%04x, insn = ",
-		    tf->tf_pc, *((u_int16 *)(tf->tf_pc & ~1),
-		    *((u_int16 *)((tf->tf_pc + 2) & ~1));
+		    tf->tf_pc, *((u_int16 *)(tf->tf_pc & ~1)),
+		    *((u_int16 *)((tf->tf_pc + 2) & ~1)));
 	}
 	else
 #endif
@@ -246,8 +246,9 @@ data_abort_handler(trapframe_t *tf)
 	if (__predict_true((tf->tf_spsr & I32_bit) == 0))
 		enable_interrupts(I32_bit);
 
-	/* Get the current lwp structure or lwp0 if there is none */
-	l = (curlwp != NULL) ? curlwp : &lwp0;
+	/* Get the current lwp structure */
+	KASSERT(curlwp != NULL);
+	l = curlwp;
 
 	UVMHIST_LOG(maphist, " (pc=0x%x, l=0x%x, far=0x%x, fsr=0x%x)",
 	    tf->tf_pc, l, far, fsr);
@@ -378,8 +379,13 @@ data_abort_handler(trapframe_t *tf)
 			user = 1;
 			goto do_trapsignal;
 		}
-	} else
+	} else {
 		map = &l->l_proc->p_vmspace->vm_map;
+		if ((l->l_flag & LW_SA) && (~l->l_pflag & LP_SA_NOBLOCK)) {
+			l->l_savp->savp_faultaddr = (vaddr_t)far;
+			l->l_pflag |= LP_SA_PAGEFAULT;
+		}
+	}
 
 	/*
 	 * We need to know whether the page should be mapped
@@ -439,11 +445,13 @@ data_abort_handler(trapframe_t *tf)
 	last_fault_code = fsr;
 #endif
 	if (pmap_fault_fixup(map->pmap, va, ftype, user)) {
+		if (map != kernel_map)
+			l->l_pflag &= ~LP_SA_PAGEFAULT;
 		UVMHIST_LOG(maphist, " <- ref/mod emul", 0, 0, 0, 0);
 		goto out;
 	}
 
-	if (__predict_false(current_intr_depth > 0)) {
+	if (__predict_false(curcpu()->ci_intr_depth > 0)) {
 		if (pcb->pcb_onfault) {
 			tf->tf_r0 = EINVAL;
 			tf->tf_pc = (register_t)(intptr_t) pcb->pcb_onfault;
@@ -457,6 +465,9 @@ data_abort_handler(trapframe_t *tf)
 	pcb->pcb_onfault = NULL;
 	error = uvm_fault(map, va, ftype);
 	pcb->pcb_onfault = onfault;
+
+	if (map != kernel_map)
+		l->l_pflag &= ~LP_SA_PAGEFAULT;
 
 	if (__predict_true(error == 0)) {
 		if (user)
@@ -490,7 +501,7 @@ data_abort_handler(trapframe_t *tf)
 	ksi.ksi_code = (error == EACCES) ? SEGV_ACCERR : SEGV_MAPERR;
 	ksi.ksi_addr = (u_int32_t *)(intptr_t) far;
 	ksi.ksi_trap = fsr;
-	UVMHIST_LOG(maphist, " <- erorr (%d)", error, 0, 0, 0);
+	UVMHIST_LOG(maphist, " <- error (%d)", error, 0, 0, 0);
 
 do_trapsignal:
 	call_trapsignal(l, &ksi);
@@ -832,12 +843,20 @@ prefetch_abort_handler(trapframe_t *tf)
 	}
 
 #ifdef DIAGNOSTIC
-	if (__predict_false(current_intr_depth > 0)) {
+	if (__predict_false(l->l_cpu->ci_intr_depth > 0)) {
 		printf("\nNon-emulated prefetch abort with intr_depth > 0\n");
 		dab_fatal(tf, 0, tf->tf_pc, NULL, NULL);
 	}
 #endif
+	if (map != kernel_map && l->l_flag & LW_SA) {
+		l->l_savp->savp_faultaddr = fault_pc;
+		l->l_pflag |= LP_SA_PAGEFAULT;
+	}
+
 	error = uvm_fault(map, va, VM_PROT_READ);
+
+	if (map != kernel_map)
+		l->l_pflag &= ~LP_SA_PAGEFAULT;
 
 	if (__predict_true(error == 0)) {
 		UVMHIST_LOG (maphist, " <- uvm", 0, 0, 0, 0);

@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_prof.c,v 1.38 2007/02/09 21:55:31 ad Exp $	*/
+/*	$NetBSD: subr_prof.c,v 1.43 2007/12/20 23:03:10 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_prof.c,v 1.38 2007/02/09 21:55:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_prof.c,v 1.43 2007/12/20 23:03:10 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: subr_prof.c,v 1.38 2007/02/09 21:55:31 ad Exp $");
 #include <sys/syscallargs.h>
 #include <sys/sysctl.h>
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 #ifdef GPROF
 #include <sys/malloc.h>
@@ -215,14 +215,14 @@ SYSCTL_SETUP(sysctl_kern_gprof_setup, "sysctl kern.profiling subtree setup")
  */
 /* ARGSUSED */
 int
-sys_profil(struct lwp *l, void *v, register_t *retval)
+sys_profil(struct lwp *l, const struct sys_profil_args *uap, register_t *retval)
 {
-	struct sys_profil_args /* {
-		syscallarg(caddr_t) samples;
+	/* {
+		syscallarg(char *) samples;
 		syscallarg(u_int) size;
 		syscallarg(u_int) offset;
 		syscallarg(u_int) scale;
-	} */ *uap = v;
+	} */
 	struct proc *p = l->l_proc;
 	struct uprof *upp;
 
@@ -275,13 +275,13 @@ addupc_intr(struct lwp *l, u_long pc)
 {
 	struct uprof *prof;
 	struct proc *p;
-	caddr_t addr;
+	void *addr;
 	u_int i;
 	int v;
 
 	p = l->l_proc;
 
-	LOCK_ASSERT(mutex_owned(&p->p_stmutex));
+	KASSERT(mutex_owned(&p->p_stmutex));
 
 	prof = &p->p_stats->p_prof;
 	if (pc < prof->pr_off ||
@@ -308,7 +308,7 @@ addupc_task(struct lwp *l, u_long pc, u_int ticks)
 {
 	struct uprof *prof;
 	struct proc *p;
-	caddr_t addr;
+	void *addr;
 	int error;
 	u_int i;
 	u_short v;
@@ -330,9 +330,9 @@ addupc_task(struct lwp *l, u_long pc, u_int ticks)
 
 	addr = prof->pr_base + i;
 	mutex_spin_exit(&p->p_stmutex);
-	if ((error = copyin(addr, (caddr_t)&v, sizeof(v))) == 0) {
+	if ((error = copyin(addr, (void *)&v, sizeof(v))) == 0) {
 		v += ticks;
-		error = copyout((caddr_t)&v, addr, sizeof(v));
+		error = copyout((void *)&v, addr, sizeof(v));
 	}
 	if (error != 0) {
 		mutex_spin_enter(&p->p_stmutex);

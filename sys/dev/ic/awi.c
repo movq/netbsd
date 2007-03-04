@@ -1,4 +1,4 @@
-/*	$NetBSD: awi.c,v 1.73 2006/10/04 15:36:23 christos Exp $	*/
+/*	$NetBSD: awi.c,v 1.80 2008/05/16 22:11:51 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -86,7 +79,7 @@
 
 #include <sys/cdefs.h>
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: awi.c,v 1.73 2006/10/04 15:36:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awi.c,v 1.80 2008/05/16 22:11:51 dyoung Exp $");
 #endif
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/sys/dev/awi/awi.c,v 1.30 2004/01/15 13:30:06 onoe Exp $");
@@ -136,8 +129,8 @@ __FBSDID("$FreeBSD: src/sys/dev/awi/awi.c,v 1.30 2004/01/15 13:30:06 onoe Exp $"
 #include <net/bpf.h>
 #endif
 
-#include <machine/cpu.h>
-#include <machine/bus.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
 
 #ifdef __NetBSD__
 #include <dev/ic/am79c930reg.h>
@@ -159,7 +152,7 @@ static int  awi_init(struct ifnet *);
 static void awi_stop(struct ifnet *, int);
 static void awi_start(struct ifnet *);
 static void awi_watchdog(struct ifnet *);
-static int  awi_ioctl(struct ifnet *, u_long, caddr_t);
+static int  awi_ioctl(struct ifnet *, u_long, void *);
 static int  awi_media_change(struct ifnet *);
 static void awi_media_status(struct ifnet *, struct ifmediareq *);
 static int  awi_mode_init(struct awi_softc *);
@@ -217,29 +210,6 @@ struct awi_chanset awi_chanset[] = {
     { 0, 0, 0, 0, 0 }
 };
 
-#ifdef __FreeBSD__
-devclass_t awi_devclass;
-
-#if __FreeBSD_version < 500043
-static char *ether_sprintf(u_int8_t *);
-
-static char *
-ether_sprintf(u_int8_t *enaddr)
-{
-	static char strbuf[18];
-
-	sprintf(strbuf, "%6D", enaddr, ":");
-	return strbuf;
-}
-#endif
-
-#define	IFQ_PURGE(ifq)		IF_DRAIN(ifq)
-#define IF_POLL(ifq, m)		((m) = (ifq)->ifq_head)
-#define IFQ_POLL(ifq, m)	IF_POLL((ifq), (m))
-#define IFQ_DEQUEUE(ifq, m)	IF_DEQUEUE((ifq), (m))
-
-#endif
-
 #ifdef AWI_DEBUG
 int awi_debug = 0;
 
@@ -287,7 +257,7 @@ awi_attach(struct awi_softc *sc)
 	ifp->if_init = awi_init;
 	ifp->if_stop = awi_stop;
 	IFQ_SET_READY(&ifp->if_snd);
-	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
+	memcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 #endif
 #ifdef __FreeBSD__
 	ifp->if_init = awi_init0;
@@ -590,7 +560,7 @@ awi_init(struct ifnet *ifp)
 		return ENODEV;
 	}
 #if 0
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
+	IEEE80211_ADDR_COPY(ic->ic_myaddr, CLLADDR(ifp->if_sadl));
 #endif
 	memset(&sc->sc_mib_mac.aDesired_ESS_ID, 0, AWI_ESS_ID_SIZE);
 	sc->sc_mib_mac.aDesired_ESS_ID[0] = IEEE80211_ELEMID_SSID;
@@ -919,7 +889,7 @@ awi_watchdog(struct ifnet *ifp)
 }
 
 static int
-awi_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+awi_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct awi_softc *sc = ifp->if_softc;
 	struct ifreq *ifr = (struct ifreq *)data;
@@ -954,9 +924,7 @@ awi_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 #ifdef __FreeBSD__
 		error = ENETRESET;	/* XXX */
 #else
-		error = (cmd == SIOCADDMULTI) ?
-		    ether_addmulti(ifr, &sc->sc_ec) :
-		    ether_delmulti(ifr, &sc->sc_ec);
+		error = ether_ioctl(ifp, cmd, data);
 #endif
 		if (error == ENETRESET) {
 			/* do not rescan */
@@ -1135,7 +1103,7 @@ awi_mode_init(struct awi_softc *sc)
 		if (n == AWI_GROUP_ADDR_SIZE)
 			goto set_mib;
 		IEEE80211_ADDR_COPY(sc->sc_mib_addr.aGroup_Addresses[n],
-		    LLADDR((struct sockaddr_dl *)ifma->ifma_addr));
+		    CLLADDR(satocsdl(ifma->ifma_addr)));
 		n++;
 	}
 #else
@@ -1338,7 +1306,7 @@ awi_devget(struct awi_softc *sc, u_int32_t off, u_int16_t len)
 		if (top == NULL) {
 			int hdrlen = sizeof(struct ieee80211_frame) +
 			    sizeof(struct llc);
-			caddr_t newdata = (caddr_t)
+			char *newdata = (char *)
 			    ALIGN(m->m_data + hdrlen) - hdrlen;
 			m->m_len -= newdata - m->m_data;
 			m->m_data = newdata;
@@ -2174,16 +2142,16 @@ awi_ether_modcap(struct awi_softc *sc, struct mbuf *m)
 		if (m == NULL)
 			return NULL;
 	}
-	memcpy(&wh, mtod(m, caddr_t), sizeof(wh));
+	memcpy(&wh, mtod(m, void *), sizeof(wh));
 	if (wh.i_fc[0] != (IEEE80211_FC0_VERSION_0 | IEEE80211_FC0_TYPE_DATA))
 		return m;
-	memcpy(&eh, mtod(m, caddr_t) + sizeof(wh), sizeof(eh));
+	memcpy(&eh, mtod(m, char *) + sizeof(wh), sizeof(eh));
 	m_adj(m, sizeof(eh) - sizeof(*llc));
 	if (ic->ic_opmode == IEEE80211_M_IBSS ||
 	    ic->ic_opmode == IEEE80211_M_AHDEMO)
 		IEEE80211_ADDR_COPY(wh.i_addr2, eh.ether_shost);
-	memcpy(mtod(m, caddr_t), &wh, sizeof(wh));
-	llc = (struct llc *)(mtod(m, caddr_t) + sizeof(wh));
+	memcpy(mtod(m, void *), &wh, sizeof(wh));
+	llc = (struct llc *)(mtod(m, char *) + sizeof(wh));
 	llc->llc_dsap = llc->llc_ssap = LLC_SNAP_LSAP;
 	llc->llc_control = LLC_UI;
 	llc->llc_snap.org_code[0] = 0;

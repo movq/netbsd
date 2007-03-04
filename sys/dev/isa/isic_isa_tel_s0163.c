@@ -37,7 +37,7 @@
  *	isic - I4B Siemens ISDN Chipset Driver for Teles S0/16.3
  *	========================================================
  *
- *	$Id: isic_isa_tel_s0163.c,v 1.8 2005/12/11 12:22:03 christos Exp $
+ *	$Id: isic_isa_tel_s0163.c,v 1.10 2007/10/19 12:00:19 ad Exp $
  *
  *      last edit-date: [Fri Jan  5 11:37:22 2001]
  *
@@ -49,7 +49,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_isa_tel_s0163.c,v 1.8 2005/12/11 12:22:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_isa_tel_s0163.c,v 1.10 2007/10/19 12:00:19 ad Exp $");
 
 #include "opt_isicisa.h"
 #ifdef ISICISA_TEL_S0_16_3
@@ -74,7 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: isic_isa_tel_s0163.c,v 1.8 2005/12/11 12:22:03 chris
 #elif defined(__bsdi__)
 	/* XXX */
 #else
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <sys/device.h>
 #endif
 
@@ -306,21 +306,21 @@ isic_probe_s0163(struct isa_device *dev)
 	switch(dev->id_iobase)
 	{
 		case 0xd80:
-		        ISAC_BASE = (caddr_t) 0x960;
-			HSCX_A_BASE = (caddr_t) 0x160;
-			HSCX_B_BASE = (caddr_t) 0x560;
+		        ISAC_BASE = (void *) 0x960;
+			HSCX_A_BASE = (void *) 0x160;
+			HSCX_B_BASE = (void *) 0x560;
 			break;
 
 		case 0xe80:
-	        	ISAC_BASE = (caddr_t) 0xa60;
-			HSCX_A_BASE = (caddr_t) 0x260;
-			HSCX_B_BASE = (caddr_t) 0x660;
+	        	ISAC_BASE = (void *) 0xa60;
+			HSCX_A_BASE = (void *) 0x260;
+			HSCX_B_BASE = (void *) 0x660;
 			break;
 
 		case 0xf80:
-		        ISAC_BASE = (caddr_t) 0xb60;
-			HSCX_A_BASE = (caddr_t) 0x360;
-			HSCX_B_BASE = (caddr_t) 0x760;
+		        ISAC_BASE = (void *) 0xb60;
+			HSCX_A_BASE = (void *) 0x360;
+			HSCX_B_BASE = (void *) 0x760;
 			break;
 	}
 
@@ -395,21 +395,21 @@ set_softc(struct isic_softc *sc, struct isa_attach_args *ia, int unit)
 	switch(ia->ia_iobase)
 	{
 		case 0xd80:
-		        ISAC_BASE = (caddr_t) 0x960;
-			HSCX_A_BASE = (caddr_t) 0x160;
-			HSCX_B_BASE = (caddr_t) 0x560;
+		        ISAC_BASE = (void *) 0x960;
+			HSCX_A_BASE = (void *) 0x160;
+			HSCX_B_BASE = (void *) 0x560;
 			break;
 
 		case 0xe80:
-	        	ISAC_BASE = (caddr_t) 0xa60;
-			HSCX_A_BASE = (caddr_t) 0x260;
-			HSCX_B_BASE = (caddr_t) 0x660;
+	        	ISAC_BASE = (void *) 0xa60;
+			HSCX_A_BASE = (void *) 0x260;
+			HSCX_B_BASE = (void *) 0x660;
 			break;
 
 		case 0xf80:
-		        ISAC_BASE = (caddr_t) 0xb60;
-			HSCX_A_BASE = (caddr_t) 0x360;
-			HSCX_B_BASE = (caddr_t) 0x760;
+		        ISAC_BASE = (void *) 0xb60;
+			HSCX_A_BASE = (void *) 0x360;
+			HSCX_B_BASE = (void *) 0x760;
 			break;
 	}
 	return 1;

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_stereg.h,v 1.3 2002/06/24 16:55:17 bouyer Exp $	*/
+/*	$NetBSD: if_stereg.h,v 1.5 2008/04/28 20:23:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -50,7 +43,7 @@
 struct ste_frag {
 	uint32_t	frag_addr;	/* buffer address */
 	uint32_t	frag_len;	/* buffer length */
-} __attribute__((__packed__));
+} __packed;
 
 #define	FRAG_LEN	0x00001fff	/* length mask */
 #define	FRAG_LAST	(1U << 31)	/* last frag in list */
@@ -65,7 +58,7 @@ struct ste_tfd {
 	uint32_t	tfd_control;	/* control bits */
 					/* the buffer fragments */
 	struct ste_frag tfd_frags[STE_NTXFRAGS];
-} __attribute__((__packed__));
+} __packed;
 
 #define	TFD_WordAlign_dword	0		/* align to dword in TxFIFO */
 #define	TFD_WordAlign_word	2		/* align to word in TxFIFO */
@@ -86,7 +79,7 @@ struct ste_rfd {
 	uint32_t	rfd_next;	/* next RFD in list */
 	uint32_t	rfd_status;	/* status bits */
 	struct ste_frag rfd_frag;	/* the buffer */
-} __attribute__((__packed__));
+} __packed;
 
 #define	RFD_RxDMAFrameLen(x)	((x) & FRAG_LEN)
 #define	RFD_RxFrameError	(1U << 14)

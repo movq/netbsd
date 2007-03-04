@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_mutex.c,v 1.8 2007/03/03 10:08:19 itohy Exp $	*/
+/*	$NetBSD: kern_mutex.c,v 1.44 2008/10/15 06:51:20 wrstuden Exp $	*/
 
 /*-
- * Copyright (c) 2002, 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002, 2006, 2007, 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,12 +37,10 @@
  *	    Richard McDougall.
  */
 
-#include "opt_multiprocessor.h"
-
 #define	__MUTEX_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_mutex.c,v 1.8 2007/03/03 10:08:19 itohy Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_mutex.c,v 1.44 2008/10/15 06:51:20 wrstuden Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -59,10 +50,16 @@ __KERNEL_RCSID(0, "$NetBSD: kern_mutex.c,v 1.8 2007/03/03 10:08:19 itohy Exp $")
 #include <sys/systm.h>
 #include <sys/lockdebug.h>
 #include <sys/kernel.h>
+#include <sys/atomic.h>
+#include <sys/intr.h>
+#include <sys/lock.h>
+#include <sys/pool.h>
 
 #include <dev/lockstat.h>
 
-#include <machine/intr.h>
+#include <machine/lock.h>
+
+#include "opt_sa.h"
 
 /*
  * When not running a debug kernel, spin mutexes are not much
@@ -78,16 +75,16 @@ __KERNEL_RCSID(0, "$NetBSD: kern_mutex.c,v 1.8 2007/03/03 10:08:19 itohy Exp $")
  */
 
 #define	MUTEX_WANTLOCK(mtx)					\
-    LOCKDEBUG_WANTLOCK(MUTEX_GETID(mtx),			\
-        (uintptr_t)__builtin_return_address(0), 0)
+    LOCKDEBUG_WANTLOCK(MUTEX_DEBUG_P(mtx), (mtx),		\
+        (uintptr_t)__builtin_return_address(0), false, false)
 #define	MUTEX_LOCKED(mtx)					\
-    LOCKDEBUG_LOCKED(MUTEX_GETID(mtx),				\
+    LOCKDEBUG_LOCKED(MUTEX_DEBUG_P(mtx), (mtx), NULL,		\
         (uintptr_t)__builtin_return_address(0), 0)
 #define	MUTEX_UNLOCKED(mtx)					\
-    LOCKDEBUG_UNLOCKED(MUTEX_GETID(mtx),			\
+    LOCKDEBUG_UNLOCKED(MUTEX_DEBUG_P(mtx), (mtx),		\
         (uintptr_t)__builtin_return_address(0), 0)
 #define	MUTEX_ABORT(mtx, msg)					\
-    mutex_abort(mtx, __FUNCTION__, msg)
+    mutex_abort(mtx, __func__, msg)
 
 #if defined(LOCKDEBUG)
 
@@ -120,14 +117,19 @@ do {								\
 /*
  * Spin mutex SPL save / restore.
  */
+#ifndef MUTEX_COUNT_BIAS
+#define	MUTEX_COUNT_BIAS	0
+#endif
 
 #define	MUTEX_SPIN_SPLRAISE(mtx)					\
 do {									\
-	struct cpu_info *x__ci = curcpu();				\
+	struct cpu_info *x__ci;						\
 	int x__cnt, s;							\
-	x__cnt = x__ci->ci_mtx_count--;					\
 	s = splraiseipl(mtx->mtx_ipl);					\
-	if (x__cnt == 0)						\
+	x__ci = curcpu();						\
+	x__cnt = x__ci->ci_mtx_count--;					\
+	__insn_barrier();						\
+	if (x__cnt == MUTEX_COUNT_BIAS)					\
 		x__ci->ci_mtx_oldspl = (s);				\
 } while (/* CONSTCOND */ 0)
 
@@ -136,7 +138,7 @@ do {									\
 	struct cpu_info *x__ci = curcpu();				\
 	int s = x__ci->ci_mtx_oldspl;					\
 	__insn_barrier();						\
-	if (++(x__ci->ci_mtx_count) == 0)				\
+	if (++(x__ci->ci_mtx_count) == MUTEX_COUNT_BIAS)		\
 		splx(s);						\
 } while (/* CONSTCOND */ 0)
 
@@ -151,28 +153,27 @@ do {									\
 
 #define	MUTEX_OWNER(owner)						\
 	(owner & MUTEX_THREAD)
-#define	MUTEX_OWNED(owner)						\
-	(owner != 0)
 #define	MUTEX_HAS_WAITERS(mtx)						\
 	(((int)(mtx)->mtx_owner & MUTEX_BIT_WAITERS) != 0)
 
-#define	MUTEX_INITIALIZE_ADAPTIVE(mtx, id)				\
+#define	MUTEX_INITIALIZE_ADAPTIVE(mtx, dodebug)				\
 do {									\
-	(mtx)->mtx_id = (id);						\
+	if (dodebug)							\
+		(mtx)->mtx_owner |= MUTEX_BIT_DEBUG;			\
 } while (/* CONSTCOND */ 0);
 
-#define	MUTEX_INITIALIZE_SPIN(mtx, id, ipl)				\
+#define	MUTEX_INITIALIZE_SPIN(mtx, dodebug, ipl)			\
 do {									\
 	(mtx)->mtx_owner = MUTEX_BIT_SPIN;				\
+	if (dodebug)							\
+		(mtx)->mtx_owner |= MUTEX_BIT_DEBUG;			\
 	(mtx)->mtx_ipl = makeiplcookie((ipl));				\
-	(mtx)->mtx_id = (id);						\
 	__cpu_simple_lock_init(&(mtx)->mtx_lock);			\
 } while (/* CONSTCOND */ 0)
 
 #define	MUTEX_DESTROY(mtx)						\
 do {									\
 	(mtx)->mtx_owner = MUTEX_THREAD;				\
-	(mtx)->mtx_id = -1;						\
 } while (/* CONSTCOND */ 0);
 
 #define	MUTEX_SPIN_P(mtx)		\
@@ -180,13 +181,25 @@ do {									\
 #define	MUTEX_ADAPTIVE_P(mtx)		\
     (((mtx)->mtx_owner & MUTEX_BIT_SPIN) == 0)
 
-#define	MUTEX_GETID(mtx)		((mtx)->mtx_id)
+#define	MUTEX_DEBUG_P(mtx)	(((mtx)->mtx_owner & MUTEX_BIT_DEBUG) != 0)
+#if defined(LOCKDEBUG)
+#define	MUTEX_OWNED(owner)		(((owner) & ~MUTEX_BIT_DEBUG) != 0)
+#define	MUTEX_INHERITDEBUG(new, old)	(new) |= (old) & MUTEX_BIT_DEBUG
+#else /* defined(LOCKDEBUG) */
+#define	MUTEX_OWNED(owner)		((owner) != 0)
+#define	MUTEX_INHERITDEBUG(new, old)	/* nothing */
+#endif /* defined(LOCKDEBUG) */
 
 static inline int
 MUTEX_ACQUIRE(kmutex_t *mtx, uintptr_t curthread)
 {
 	int rv;
-	rv = MUTEX_CAS(&mtx->mtx_owner, 0UL, curthread);
+	uintptr_t old = 0;
+	uintptr_t new = curthread;
+
+	MUTEX_INHERITDEBUG(old, mtx->mtx_owner);
+	MUTEX_INHERITDEBUG(new, old);
+	rv = MUTEX_CAS(&mtx->mtx_owner, old, new);
 	MUTEX_RECEIVE(mtx);
 	return rv;
 }
@@ -203,8 +216,12 @@ MUTEX_SET_WAITERS(kmutex_t *mtx, uintptr_t owner)
 static inline void
 MUTEX_RELEASE(kmutex_t *mtx)
 {
+	uintptr_t new;
+
 	MUTEX_GIVE(mtx);
-	mtx->mtx_owner = 0;
+	new = 0;
+	MUTEX_INHERITDEBUG(new, mtx->mtx_owner);
+	mtx->mtx_owner = new;
 }
 
 static inline void
@@ -236,17 +253,16 @@ __strong_alias(mutex_spin_exit,mutex_vector_exit);
 void	mutex_abort(kmutex_t *, const char *, const char *);
 void	mutex_dump(volatile void *);
 int	mutex_onproc(uintptr_t, struct cpu_info **);
-static struct lwp *mutex_owner(wchan_t);
 
 lockops_t mutex_spin_lockops = {
 	"Mutex",
-	0,
+	LOCKOPS_SPIN,
 	mutex_dump
 };
 
 lockops_t mutex_adaptive_lockops = {
 	"Mutex",
-	1,
+	LOCKOPS_SLEEP,
 	mutex_dump
 };
 
@@ -255,8 +271,20 @@ syncobj_t mutex_syncobj = {
 	turnstile_unsleep,
 	turnstile_changepri,
 	sleepq_lendpri,
-	mutex_owner,
+	(void *)mutex_owner,
 };
+
+/* Mutex cache */
+#define	MUTEX_OBJ_MAGIC	0x5aa3c85d
+struct kmutexobj {
+	kmutex_t	mo_lock;
+	u_int		mo_magic;
+	u_int		mo_refcnt;
+};
+
+static int	mutex_obj_ctor(void *, void *, int);
+
+static pool_cache_t	mutex_obj_cache;
 
 /*
  * mutex_dump:
@@ -280,17 +308,12 @@ mutex_dump(volatile void *cookie)
  *	generates a lot of machine code in the DIAGNOSTIC case, so
  *	we ask the compiler to not inline it.
  */
-
-#if __GNUC_PREREQ__(3, 0)
-__attribute ((noinline)) __attribute ((noreturn))
-#endif
-void
+void __noinline
 mutex_abort(kmutex_t *mtx, const char *func, const char *msg)
 {
 
-	LOCKDEBUG_ABORT(MUTEX_GETID(mtx), mtx, (MUTEX_SPIN_P(mtx) ?
+	LOCKDEBUG_ABORT(mtx, (MUTEX_SPIN_P(mtx) ?
 	    &mutex_spin_lockops : &mutex_adaptive_lockops), func, msg);
-	/* NOTREACHED */
 }
 
 /*
@@ -305,23 +328,43 @@ mutex_abort(kmutex_t *mtx, const char *func, const char *msg)
 void
 mutex_init(kmutex_t *mtx, kmutex_type_t type, int ipl)
 {
-	u_int id;
+	bool dodebug;
 
 	memset(mtx, 0, sizeof(*mtx));
 
-	if (type == MUTEX_DRIVER)
-		type = (ipl == IPL_NONE ? MUTEX_ADAPTIVE : MUTEX_SPIN);
-
 	switch (type) {
 	case MUTEX_ADAPTIVE:
-	case MUTEX_DEFAULT:
 		KASSERT(ipl == IPL_NONE);
-		id = LOCKDEBUG_ALLOC(mtx, &mutex_adaptive_lockops);
-		MUTEX_INITIALIZE_ADAPTIVE(mtx, id);
+		break;
+	case MUTEX_DEFAULT:
+	case MUTEX_DRIVER:
+		if (ipl == IPL_NONE || ipl == IPL_SOFTCLOCK ||
+		    ipl == IPL_SOFTBIO || ipl == IPL_SOFTNET ||
+		    ipl == IPL_SOFTSERIAL) {
+			type = MUTEX_ADAPTIVE;
+		} else {
+			type = MUTEX_SPIN;
+		}
+		break;
+	default:
+		break;
+	}
+
+	switch (type) {
+	case MUTEX_NODEBUG:
+		dodebug = LOCKDEBUG_ALLOC(mtx, NULL,
+		    (uintptr_t)__builtin_return_address(0));
+		MUTEX_INITIALIZE_SPIN(mtx, dodebug, ipl);
+		break;
+	case MUTEX_ADAPTIVE:
+		dodebug = LOCKDEBUG_ALLOC(mtx, &mutex_adaptive_lockops,
+		    (uintptr_t)__builtin_return_address(0));
+		MUTEX_INITIALIZE_ADAPTIVE(mtx, dodebug);
 		break;
 	case MUTEX_SPIN:
-		id = LOCKDEBUG_ALLOC(mtx, &mutex_spin_lockops);
-		MUTEX_INITIALIZE_SPIN(mtx, id, ipl);
+		dodebug = LOCKDEBUG_ALLOC(mtx, &mutex_spin_lockops,
+		    (uintptr_t)__builtin_return_address(0));
+		MUTEX_INITIALIZE_SPIN(mtx, dodebug, ipl);
 		break;
 	default:
 		panic("mutex_init: impossible type");
@@ -342,10 +385,10 @@ mutex_destroy(kmutex_t *mtx)
 		MUTEX_ASSERT(mtx, !MUTEX_OWNED(mtx->mtx_owner) &&
 		    !MUTEX_HAS_WAITERS(mtx));
 	} else {
-		MUTEX_ASSERT(mtx, mtx->mtx_lock != __SIMPLELOCK_LOCKED);
+		MUTEX_ASSERT(mtx, !__SIMPLELOCK_LOCKED_P(&mtx->mtx_lock));
 	}
 
-	LOCKDEBUG_FREE(mtx, MUTEX_GETID(mtx));
+	LOCKDEBUG_FREE(MUTEX_DEBUG_P(mtx), mtx);
 	MUTEX_DESTROY(mtx);
 }
 
@@ -354,15 +397,11 @@ mutex_destroy(kmutex_t *mtx)
  *
  *	Return true if an adaptive mutex owner is running on a CPU in the
  *	system.  If the target is waiting on the kernel big lock, then we
- *	return false immediately.  This is necessary to avoid deadlock
- *	against the big lock.
+ *	must release it.  This is necessary to avoid deadlock.
  *
  *	Note that we can't use the mutex owner field as an LWP pointer.  We
  *	don't have full control over the timing of our execution, and so the
  *	pointer could be completely invalid by the time we dereference it.
- *
- *	XXX This should be optimised further to reduce potential cache line
- *	ping-ponging and skewing of the spin time while busy waiting.
  */
 #ifdef MULTIPROCESSOR
 int
@@ -376,23 +415,23 @@ mutex_onproc(uintptr_t owner, struct cpu_info **cip)
 		return 0;
 	l = (struct lwp *)MUTEX_OWNER(owner);
 
-	if ((ci = *cip) != NULL && ci->ci_curlwp == l) {
-		mb_read(); /* XXXSMP Very expensive, necessary? */
-		return ci->ci_biglock_wanted != l;
-	}
+	/* See if the target is running on a CPU somewhere. */
+	if ((ci = *cip) != NULL && ci->ci_curlwp == l)
+		goto run;
+	for (CPU_INFO_FOREACH(cii, ci))
+		if (ci->ci_curlwp == l)
+			goto run;
 
-	for (CPU_INFO_FOREACH(cii, ci)) {
-		if (ci->ci_curlwp == l) {
-			*cip = ci;
-			mb_read(); /* XXXSMP Very expensive, necessary? */
-			return ci->ci_biglock_wanted != l;
-		}
-	}
-
+	/* No: it may be safe to block now. */
 	*cip = NULL;
 	return 0;
+
+ run:
+ 	/* Target is running; do we need to block? */
+ 	*cip = ci;
+	return ci->ci_biglock_wanted != l;
 }
-#endif
+#endif	/* MULTIPROCESSOR */
 
 /*
  * mutex_vector_enter:
@@ -410,6 +449,9 @@ mutex_vector_enter(kmutex_t *mtx)
 #ifdef MULTIPROCESSOR
 	struct cpu_info *ci = NULL;
 	u_int count;
+#endif
+#ifdef KERN_SA
+	int f;
 #endif
 	LOCKSTAT_COUNTER(spincnt);
 	LOCKSTAT_COUNTER(slpcnt);
@@ -446,7 +488,7 @@ mutex_vector_enter(kmutex_t *mtx)
 		do {
 			if (panicstr != NULL)
 				break;
-			while (mtx->mtx_lock == __SIMPLELOCK_LOCKED) {
+			while (__SIMPLELOCK_LOCKED_P(&mtx->mtx_lock)) {
 				SPINLOCK_BACKOFF(count); 
 #ifdef LOCKDEBUG
 				if (SPINLOCK_SPINOUT(spins))
@@ -473,16 +515,9 @@ mutex_vector_enter(kmutex_t *mtx)
 	MUTEX_ASSERT(mtx, curthread != 0);
 	MUTEX_WANTLOCK(mtx);
 
-#ifdef LOCKDEBUG
 	if (panicstr == NULL) {
-		simple_lock_only_held(NULL, "mutex_enter");
-#ifdef MULTIPROCESSOR
 		LOCKDEBUG_BARRIER(&kernel_lock, 1);
-#else
-		LOCKDEBUG_BARRIER(NULL, 1);
-#endif
 	}
-#endif
 
 	LOCKSTAT_ENTER(lsflag);
 
@@ -491,8 +526,7 @@ mutex_vector_enter(kmutex_t *mtx)
 	 * determine that the owner is not running on a processor,
 	 * then we stop spinning, and sleep instead.
 	 */
-	for (;;) {
-		owner = mtx->mtx_owner;
+	for (owner = mtx->mtx_owner;;) {
 		if (!MUTEX_OWNED(owner)) {
 			/*
 			 * Mutex owner clear could mean two things:
@@ -505,6 +539,7 @@ mutex_vector_enter(kmutex_t *mtx)
 			 */
 			if (MUTEX_ACQUIRE(mtx, curthread))
 				break;
+			owner = mtx->mtx_owner;
 			continue;
 		}
 
@@ -523,10 +558,10 @@ mutex_vector_enter(kmutex_t *mtx)
 			LOCKSTAT_START_TIMER(lsflag, spintime);
 			count = SPINLOCK_BACKOFF_MIN;
 			for (;;) {
+				SPINLOCK_BACKOFF(count);
 				owner = mtx->mtx_owner;
 				if (!mutex_onproc(owner, &ci))
 					break;
-				SPINLOCK_BACKOFF(count);
 			}
 			LOCKSTAT_STOP_TIMER(lsflag, spintime);
 			LOCKSTAT_COUNT(spincnt, 1);
@@ -544,6 +579,7 @@ mutex_vector_enter(kmutex_t *mtx)
 		 */
 		if (!MUTEX_SET_WAITERS(mtx, owner)) {
 			turnstile_exit(mtx);
+			owner = mtx->mtx_owner;
 			continue;
 		}
 
@@ -581,7 +617,7 @@ mutex_vector_enter(kmutex_t *mtx)
 		 *   or preempted).
 		 *
 		 * o At any given time, MUTEX_SET_WAITERS() can only ever
-		 *   be in progress on one CPU in the system - guarenteed
+		 *   be in progress on one CPU in the system - guaranteed
 		 *   by the turnstile chain lock.
 		 *
 		 * o No other operations other than MUTEX_SET_WAITERS()
@@ -598,7 +634,7 @@ mutex_vector_enter(kmutex_t *mtx)
 		 *   completes before the modification of curlwp becomes
 		 *   visible to this CPU.
 		 *
-		 * o cpu_switch() posts a store fence before setting curlwp
+		 * o mi_switch() posts a store fence before setting curlwp
 		 *   and before resuming execution of an LWP.
 		 * 
 		 * o _kernel_lock() posts a store fence before setting
@@ -617,7 +653,7 @@ mutex_vector_enter(kmutex_t *mtx)
 		 *    value of the waiters flag.
 		 *
 		 * 2. The onproc check returns false: the holding LWP is
-		 *    not running.  We now have the oppertunity to check
+		 *    not running.  We now have the opportunity to check
 		 *    if mutex_exit() has blatted the modifications made
 		 *    by MUTEX_SET_WAITERS().
 		 *
@@ -641,12 +677,23 @@ mutex_vector_enter(kmutex_t *mtx)
 		 * If the waiters bit is not set it's unsafe to go asleep,
 		 * as we might never be awoken.
 		 */
-		mb_read();
-		if (mutex_onproc(owner, &ci) || !MUTEX_HAS_WAITERS(mtx)) {
+		if ((membar_consumer(), mutex_onproc(owner, &ci)) ||
+		    (membar_consumer(), !MUTEX_HAS_WAITERS(mtx))) {
 			turnstile_exit(mtx);
+			owner = mtx->mtx_owner;
 			continue;
 		}
 #endif	/* MULTIPROCESSOR */
+
+#ifdef KERN_SA
+		/*
+		 * Sleeping for a mutex should not generate an upcall.
+		 * So set LP_SA_NOBLOCK to indicate this.
+		 * f indicates if we should clear LP_SA_NOBLOCK when done.
+		 */
+		f = ~curlwp->l_pflag & LP_SA_NOBLOCK;
+		curlwp->l_pflag |= LP_SA_NOBLOCK;
+#endif /* KERN_SA */
 
 		LOCKSTAT_START_TIMER(lsflag, slptime);
 
@@ -655,7 +702,11 @@ mutex_vector_enter(kmutex_t *mtx)
 		LOCKSTAT_STOP_TIMER(lsflag, slptime);
 		LOCKSTAT_COUNT(slpcnt, 1);
 
-		turnstile_unblock();
+#ifdef KERN_SA
+		curlwp->l_pflag ^= f;
+#endif /* KERN_SA */
+
+		owner = mtx->mtx_owner;
 	}
 
 	LOCKSTAT_EVENT(lsflag, mtx, LB_ADAPTIVE_MUTEX | LB_SLEEP1,
@@ -681,8 +732,11 @@ mutex_vector_exit(kmutex_t *mtx)
 
 	if (MUTEX_SPIN_P(mtx)) {
 #ifdef FULL
-		if (mtx->mtx_lock != __SIMPLELOCK_LOCKED)
+		if (__predict_false(!__SIMPLELOCK_LOCKED_P(&mtx->mtx_lock))) {
+			if (panicstr != NULL)
+				return;
 			MUTEX_ABORT(mtx, "exiting unheld spin mutex");
+		}
 		MUTEX_UNLOCKED(mtx);
 		__cpu_simple_unlock(&mtx->mtx_lock);
 #endif
@@ -690,7 +744,7 @@ mutex_vector_exit(kmutex_t *mtx)
 		return;
 	}
 
-	if (__predict_false(panicstr != NULL) || __predict_false(cold)) {
+	if (__predict_false((uintptr_t)panicstr | cold)) {
 		MUTEX_UNLOCKED(mtx);
 		MUTEX_RELEASE(mtx);
 		return;
@@ -700,6 +754,23 @@ mutex_vector_exit(kmutex_t *mtx)
 	MUTEX_DASSERT(mtx, curthread != 0);
 	MUTEX_ASSERT(mtx, MUTEX_OWNER(mtx->mtx_owner) == curthread);
 	MUTEX_UNLOCKED(mtx);
+
+#ifdef LOCKDEBUG
+	/*
+	 * Avoid having to take the turnstile chain lock every time
+	 * around.  Raise the priority level to splhigh() in order
+	 * to disable preemption and so make the following atomic.
+	 */
+	{
+		int s = splhigh();
+		if (!MUTEX_HAS_WAITERS(mtx)) {
+			MUTEX_RELEASE(mtx);
+			splx(s);
+			return;
+		}
+		splx(s);
+	}
+#endif
 
 	/*
 	 * Get this lock's turnstile.  This gets the interlock on
@@ -752,10 +823,12 @@ int
 mutex_owned(kmutex_t *mtx)
 {
 
+	if (mtx == NULL)
+		return 0;
 	if (MUTEX_ADAPTIVE_P(mtx))
 		return MUTEX_OWNER(mtx->mtx_owner) == (uintptr_t)curlwp;
 #ifdef FULL
-	return mtx->mtx_lock == __SIMPLELOCK_LOCKED;
+	return __SIMPLELOCK_LOCKED_P(&mtx->mtx_lock);
 #else
 	return 1;
 #endif
@@ -767,10 +840,9 @@ mutex_owned(kmutex_t *mtx)
  *	Return the current owner of an adaptive mutex.  Used for
  *	priority inheritance.
  */
-static struct lwp *
-mutex_owner(wchan_t obj)
+lwp_t *
+mutex_owner(kmutex_t *mtx)
 {
-	kmutex_t *mtx = (void *)(uintptr_t)obj; /* discard qualifiers */
 
 	MUTEX_ASSERT(mtx, MUTEX_ADAPTIVE_P(mtx));
 	return (struct lwp *)MUTEX_OWNER(mtx->mtx_owner);
@@ -849,7 +921,7 @@ mutex_spin_retry(kmutex_t *mtx)
 	do {
 		if (panicstr != NULL)
 			break;
-		while (mtx->mtx_lock == __SIMPLELOCK_LOCKED) {
+		while (__SIMPLELOCK_LOCKED_P(&mtx->mtx_lock)) {
 			SPINLOCK_BACKOFF(count); 
 #ifdef LOCKDEBUG
 			if (SPINLOCK_SPINOUT(spins))
@@ -870,45 +942,86 @@ mutex_spin_retry(kmutex_t *mtx)
 #endif	/* defined(__HAVE_SPIN_MUTEX_STUBS) || defined(FULL) */
 
 /*
- * sched_lock_idle:
+ * mutex_obj_init:
  *
- *	XXX Ugly hack for cpu_switch().
+ *	Initialize the mutex object store.
  */
 void
-sched_lock_idle(void)
+mutex_obj_init(void)
 {
-#ifdef FULL
-	kmutex_t *mtx = &sched_mutex;
 
-	curcpu()->ci_mtx_count--;
-
-	if (!__cpu_simple_lock_try(&mtx->mtx_lock)) {
-		mutex_spin_retry(mtx);
-		return;
-	}
-
-	MUTEX_LOCKED(mtx);
-#else
-	curcpu()->ci_mtx_count--;
-#endif	/* FULL */
+	mutex_obj_cache = pool_cache_init(sizeof(struct kmutexobj),
+	    coherency_unit, 0, 0, "mutex", NULL, IPL_NONE, mutex_obj_ctor,
+	    NULL, NULL);
 }
 
 /*
- * sched_unlock_idle:
+ * mutex_obj_ctor:
  *
- *	XXX Ugly hack for cpu_switch().
+ *	Initialize a new lock for the cache.
+ */
+static int
+mutex_obj_ctor(void *arg, void *obj, int flags)
+{
+	struct kmutexobj * mo = obj;
+
+	mo->mo_magic = MUTEX_OBJ_MAGIC;
+
+	return 0;
+}
+
+/*
+ * mutex_obj_alloc:
+ *
+ *	Allocate a single lock object.
+ */
+kmutex_t *
+mutex_obj_alloc(kmutex_type_t type, int ipl)
+{
+	struct kmutexobj *mo;
+
+	mo = pool_cache_get(mutex_obj_cache, PR_WAITOK);
+	mutex_init(&mo->mo_lock, type, ipl);
+	mo->mo_refcnt = 1;
+
+	return (kmutex_t *)mo;
+}
+
+/*
+ * mutex_obj_hold:
+ *
+ *	Add a single reference to a lock object.  A reference to the object
+ *	must already be held, and must be held across this call.
  */
 void
-sched_unlock_idle(void)
+mutex_obj_hold(kmutex_t *lock)
 {
-#ifdef FULL
-	kmutex_t *mtx = &sched_mutex;
+	struct kmutexobj *mo = (struct kmutexobj *)lock;
 
-	if (mtx->mtx_lock != __SIMPLELOCK_LOCKED)
-		MUTEX_ABORT(mtx, "sched_unlock_idle");
+	KASSERT(mo->mo_magic == MUTEX_OBJ_MAGIC);
+	KASSERT(mo->mo_refcnt > 0);
 
-	MUTEX_UNLOCKED(mtx);
-	__cpu_simple_unlock(&mtx->mtx_lock);
-#endif	/* FULL */
-	curcpu()->ci_mtx_count++;
+	atomic_inc_uint(&mo->mo_refcnt);
+}
+
+/*
+ * mutex_obj_free:
+ *
+ *	Drop a reference from a lock object.  If the last reference is being
+ *	dropped, free the object and return true.  Otherwise, return false.
+ */
+bool
+mutex_obj_free(kmutex_t *lock)
+{
+	struct kmutexobj *mo = (struct kmutexobj *)lock;
+
+	KASSERT(mo->mo_magic == MUTEX_OBJ_MAGIC);
+	KASSERT(mo->mo_refcnt > 0);
+
+	if (atomic_dec_uint_nv(&mo->mo_refcnt) > 0) {
+		return false;
+	}
+	mutex_destroy(&mo->mo_lock);
+	pool_cache_put(mutex_obj_cache, mo);
+	return true;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: atavar.h,v 1.73 2006/09/30 15:56:18 itohy Exp $	*/
+/*	$NetBSD: atavar.h,v 1.77 2008/10/02 21:05:17 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.
@@ -98,11 +98,10 @@ struct ata_queue {
 
 /* ATA bus instance state information. */
 struct atabus_softc {
-	struct device sc_dev;
+	device_t sc_dev;
 	struct ata_channel *sc_chan;
 	int sc_flags;
 #define ATABUSCF_OPEN	0x01
-	void *sc_powerhook;
 };
 
 /*
@@ -186,7 +185,7 @@ struct ata_drive_datas {
 	/* Callbacks into the drive's driver. */
 	void	(*drv_done)(void *);	/* transfer is done */
 
-	struct device *drv_softc;	/* ATA drives softc, if any */
+	device_t drv_softc;	/* ATA drives softc, if any */
 	void *chnl_softc;		/* channel softc */
 };
 
@@ -341,7 +340,6 @@ struct ata_channel {
 #define ATACH_DMA_WAIT 0x20	/* controller is waiting for DMA */
 #define ATACH_PIOBM_WAIT 0x40	/* controller is waiting for busmastering PIO */
 #define	ATACH_DISABLED 0x80	/* channel is disabled */
-#define ATACH_TH_RUN   0x100	/* the kernel thread is working */
 #define ATACH_TH_RESET 0x200	/* someone ask the thread to reset */
 	u_int8_t ch_status;	/* copy of status register */
 	u_int8_t ch_error;	/* copy of error register */
@@ -369,7 +367,7 @@ struct ata_channel {
 	struct ata_queue *ch_queue;
 
 	/* The channel kernel thread */
-	struct proc *ch_thread;
+	struct lwp *ch_thread;
 };
 
 /*
@@ -381,7 +379,7 @@ struct ata_channel {
  * XXX There is still some lingering wdc-centricity here.
  */
 struct atac_softc {
-	struct device atac_dev;		/* generic device info */
+	device_t atac_dev;		/* generic device info */
 
 	int	atac_cap;		/* controller capabilities */
 

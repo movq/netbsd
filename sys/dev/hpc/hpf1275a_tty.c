@@ -1,4 +1,4 @@
-/*	$NetBSD: hpf1275a_tty.c,v 1.19 2006/11/16 01:32:50 christos Exp $ */
+/*	$NetBSD: hpf1275a_tty.c,v 1.23 2008/04/06 20:28:36 cegger Exp $ */
 
 /*
  * Copyright (c) 2004 Valeriy E. Ushakov
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpf1275a_tty.c,v 1.19 2006/11/16 01:32:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpf1275a_tty.c,v 1.23 2008/04/06 20:28:36 cegger Exp $");
 
 #include "opt_wsdisplay_compat.h"
 
@@ -83,7 +83,7 @@ static int	hpf1275a_detach(struct device *, int);
 /* wskbd(4) accessops */
 static int	hpf1275a_wskbd_enable(void *, int);
 static void	hpf1275a_wskbd_set_leds(void *, int);
-static int	hpf1275a_wskbd_ioctl(void *, u_long, caddr_t, int,
+static int	hpf1275a_wskbd_ioctl(void *, u_long, void *, int,
 				     struct lwp *);
 
 
@@ -304,7 +304,7 @@ hpf1275a_open(dev_t dev, struct tty *tp)
 	static struct cfdata hpf1275a_cfdata = {
 		.cf_name = "hpf1275a",
 		.cf_atname = "hpf1275a",
-		.cf_unit = DVUNIT_ANY,
+		.cf_unit = 0,
 		.cf_fstate = FSTATE_STAR,
 	};
 	struct lwp *l = curlwp;		/* XXX */
@@ -346,7 +346,9 @@ hpf1275a_close(struct tty *tp, int flag)
 	int s;
 
 	s = spltty();
+	mutex_spin_enter(&tty_lock);
 	ttyflush(tp, FREAD | FWRITE);
+	mutex_spin_exit(&tty_lock);	 /* XXX */
 	ttyldisc_release(tp->t_linesw);
 	tp->t_linesw = ttyldisc_default();
 	if (sc != NULL) {
@@ -385,7 +387,7 @@ hpf1275a_input(int c, struct tty *tp)
 
 	xtscan = hpf1275a_to_xtscan[code];
 	if (xtscan == 0) {
-		printf("%s: unknown code 0x%x\n", sc->sc_dev.dv_xname, code);
+		aprint_error_dev(&sc->sc_dev, "unknown code 0x%x\n", code);
 		return (0);
 	}
 
@@ -427,7 +429,7 @@ hpf1275a_wskbd_set_leds(void *self, int leds)
 
 
 static int
-hpf1275a_wskbd_ioctl(void *self, u_long cmd, caddr_t data, int flag,
+hpf1275a_wskbd_ioctl(void *self, u_long cmd, void *data, int flag,
 		     struct lwp *l)
 {
 #ifdef WSDISPLAY_COMPAT_RAWKBD

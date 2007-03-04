@@ -1,4 +1,4 @@
-/*	$NetBSD: qec.c,v 1.34 2005/12/11 12:23:44 christos Exp $ */
+/*	$NetBSD: qec.c,v 1.39 2008/04/28 20:23:57 martin Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: qec.c,v 1.34 2005/12/11 12:23:44 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: qec.c,v 1.39 2008/04/28 20:23:57 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,8 +39,8 @@ __KERNEL_RCSID(0, "$NetBSD: qec.c,v 1.34 2005/12/11 12:23:44 christos Exp $");
 #include <sys/device.h>
 #include <sys/malloc.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 #include <machine/autoconf.h>
 
 #include <dev/sbus/sbusvar.h>
@@ -125,7 +118,7 @@ qecattach(parent, self, aux)
 
 	if (sa->sa_nreg < 2) {
 		printf("%s: only %d register sets\n",
-			self->dv_xname, sa->sa_nreg);
+			device_xname(self), sa->sa_nreg);
 		return;
 	}
 
@@ -134,7 +127,7 @@ qecattach(parent, self, aux)
 			 sa->sa_reg[0].oa_base,
 			 sa->sa_reg[0].oa_size,
 			 0, &sc->sc_regs) != 0) {
-		printf("%s: attach: cannot map registers\n", self->dv_xname);
+		aprint_error_dev(self, "attach: cannot map registers\n");
 		return;
 	}
 
@@ -148,10 +141,10 @@ qecattach(parent, self, aux)
 			 sa->sa_reg[1].oa_base,
 			 sa->sa_reg[1].oa_size,
 			 BUS_SPACE_MAP_LINEAR, &bh) != 0) {
-		printf("%s: attach: cannot map registers\n", self->dv_xname);
+		aprint_error_dev(self, "attach: cannot map registers\n");
 		return;
 	}
-	sc->sc_buffer = (caddr_t)bus_space_vaddr(sa->sa_bustag, bh);
+	sc->sc_buffer = (void *)bus_space_vaddr(sa->sa_bustag, bh);
 	sc->sc_bufsiz = (bus_size_t)sa->sa_reg[1].oa_size;
 
 	/* Get number of on-board channels */
@@ -181,7 +174,7 @@ qecattach(parent, self, aux)
 	/* Allocate a bus tag */
 	sbt = bus_space_tag_alloc(sc->sc_bustag, sc);
 	if (sbt == NULL) {
-		printf("%s: attach: out of memory\n", self->dv_xname);
+		aprint_error_dev(self, "attach: out of memory\n");
 		return;
 	}
 
@@ -198,7 +191,7 @@ qecattach(parent, self, aux)
 		break;
 	case ENOENT:
 	default:
-		panic("%s: error getting ranges property", self->dv_xname);
+		panic("%s: error getting ranges property", device_xname(self));
 	}
 
 	/*
@@ -262,7 +255,7 @@ qec_intr_establish(t, pri, level, handler, arg, fastvec)
 		 */
 		if (sc->sc_intr == NULL) {
 			printf("%s: warning: no interrupts\n",
-				sc->sc_dev.dv_xname);
+				device_xname(&sc->sc_dev));
 			return (NULL);
 		}
 		pri = sc->sc_intr->oi_pri;
@@ -326,7 +319,7 @@ qec_meminit(qr, pktbufsz)
 {
 	bus_addr_t txbufdma, rxbufdma;
 	bus_addr_t dma;
-	caddr_t p;
+	void *p;
 	unsigned int ntbuf, nrbuf, i;
 
 	p = qr->rb_membase;
@@ -340,7 +333,7 @@ qec_meminit(qr, pktbufsz)
 	 */
 	qr->rb_txd = (struct qec_xd *)p;
 	qr->rb_txddma = dma;
-	p += QEC_XD_RING_MAXSIZE * sizeof(struct qec_xd);
+	p = (char *)p + QEC_XD_RING_MAXSIZE * sizeof(struct qec_xd);
 	dma += QEC_XD_RING_MAXSIZE * sizeof(struct qec_xd);
 
 	/*
@@ -348,7 +341,7 @@ qec_meminit(qr, pktbufsz)
 	 */
 	qr->rb_rxd = (struct qec_xd *)p;
 	qr->rb_rxddma = dma;
-	p += QEC_XD_RING_MAXSIZE * sizeof(struct qec_xd);
+	p = (char *)p + QEC_XD_RING_MAXSIZE * sizeof(struct qec_xd);
 	dma += QEC_XD_RING_MAXSIZE * sizeof(struct qec_xd);
 
 
@@ -357,7 +350,7 @@ qec_meminit(qr, pktbufsz)
 	 */
 	qr->rb_txbuf = p;
 	txbufdma = dma;
-	p += ntbuf * pktbufsz;
+	p = (char *)p + ntbuf * pktbufsz;
 	dma += ntbuf * pktbufsz;
 
 	/*
@@ -365,7 +358,7 @@ qec_meminit(qr, pktbufsz)
 	 */
 	qr->rb_rxbuf = p;
 	rxbufdma = dma;
-	p += nrbuf * pktbufsz;
+	p = (char *)p + nrbuf * pktbufsz;
 	dma += nrbuf * pktbufsz;
 
 	/*

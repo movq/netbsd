@@ -27,14 +27,14 @@
  *	i4b_usr_sti.c - USRobotics Sportster ISDN TA intern (Tina-pp)
  *	-------------------------------------------------------------
  *
- *	$Id: isic_isa_usr_sti.c,v 1.6 2005/12/11 12:22:03 christos Exp $
+ *	$Id: isic_isa_usr_sti.c,v 1.8 2007/10/19 12:00:20 ad Exp $
  *
  *      last edit-date: [Fri Jan  5 11:37:22 2001]
  *
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_isa_usr_sti.c,v 1.6 2005/12/11 12:22:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_isa_usr_sti.c,v 1.8 2007/10/19 12:00:20 ad Exp $");
 
 #include "opt_isicisa.h"
 #ifdef ISICISA_USR_STI
@@ -57,7 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: isic_isa_usr_sti.c,v 1.6 2005/12/11 12:22:03 christo
 #include <machine/clock.h>
 #include <i386/isa/isa_device.h>
 #else
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <sys/device.h>
 #endif
 
@@ -232,9 +232,9 @@ isic_probe_usrtai(struct isa_device *dev)
 
 	/* setup ISAC and HSCX base addr */
 
-	ISAC_BASE   = (caddr_t)dev->id_iobase + USR_ISAC_OFF;
-	HSCX_A_BASE = (caddr_t)dev->id_iobase + USR_HSCXA_OFF;
-	HSCX_B_BASE = (caddr_t)dev->id_iobase + USR_HSCXB_OFF;
+	ISAC_BASE   = (void *)dev->id_iobase + USR_ISAC_OFF;
+	HSCX_A_BASE = (void *)dev->id_iobase + USR_HSCXA_OFF;
+	HSCX_B_BASE = (void *)dev->id_iobase + USR_HSCXB_OFF;
 
 	/*
 	 * Read HSCX A/B VSTR.  Expected value for USR Sportster TA based

@@ -1,4 +1,4 @@
-/* $NetBSD: cpu.h,v 1.15 2007/03/04 02:23:16 tsutsui Exp $ */
+/* $NetBSD: cpu.h,v 1.25 2008/02/27 18:26:15 xtraeme Exp $ */
 
 /*
  * Copyright (c) 1982, 1990, 1993
@@ -94,8 +94,10 @@
 #include <sys/cpu_data.h>
 struct cpu_info {
 	struct cpu_data ci_data;	/* MI per-cpu data */
+	cpuid_t	ci_cpuid;
 	int	ci_mtx_count;
 	int	ci_mtx_oldspl;
+	int	ci_want_resched;
 };
 
 extern struct cpu_info cpu_info_store;
@@ -138,7 +140,7 @@ struct clockframe {
  * Preempt the current process if in interrupt from user mode,
  * or after the current trap/syscall if in system mode.
  */
-#define cpu_need_resched(ci)	{ want_resched = 1; aston(); }
+#define cpu_need_resched(ci,flags)	{ ci->ci_want_resched = 1; aston(); }
 
 /*
  * Give a profiling tick to the current process when the user profiling
@@ -156,7 +158,6 @@ struct clockframe {
 #define aston()		(astpending = 1)
 
 extern int	astpending;	/* need to trap before returning to user mode */
-extern int	want_resched;	/* resched() was called */
 
 #endif /* _KERNEL */
 
@@ -165,11 +166,6 @@ extern int	want_resched;	/* resched() was called */
  */
 #define CPU_CONSDEV		1	/* dev_t: console terminal device */
 #define CPU_MAXID		2	/* number of valid machdep ids */
-
-#define CTL_MACHDEP_NAMES { \
-	{ 0, 0 }, \
-	{ "console_device", CTLTYPE_STRUCT }, \
-}
 
 /*
  * Values for machtype
@@ -187,28 +183,14 @@ void	dumpconf __P((void));
 void	dumpsys __P((void));
 
 /* locore.s functions */
-struct pcb;
 struct fpframe;
-int	suline __P((caddr_t, caddr_t));
-void	savectx __P((struct pcb *));
-void	switch_exit __P((struct lwp *));
-void	switch_lwp_exit __P((struct lwp *));
-void	proc_trampoline __P((void));
+int	suline __P((void *, void *));
 void	loadustp __P((int));
 void	m68881_save __P((struct fpframe *));
 void	m68881_restore __P((struct fpframe *));
 
 /* machdep.c functions */
-int	badaddr __P((caddr_t, int));
-
-/* sys_machdep.c functions */
-int	cachectl1 __P((unsigned long, vaddr_t, size_t, struct proc *));
-int	dma_cachectl __P((caddr_t, int));
-
-/* vm_machdep.c functions */
-void	physaccess __P((caddr_t, caddr_t, int, int));
-void	physunaccess __P((caddr_t, int));
-int	kvtop __P((caddr_t));
+int	badaddr __P((void *, int));
 
 #endif
 

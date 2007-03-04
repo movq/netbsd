@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tlp_eisa.c,v 1.18 2006/11/16 01:32:50 christos Exp $	*/
+/*	$NetBSD: if_tlp_eisa.c,v 1.21 2008/04/28 20:23:48 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -43,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tlp_eisa.c,v 1.18 2006/11/16 01:32:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tlp_eisa.c,v 1.21 2008/04/28 20:23:48 martin Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -75,8 +68,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_tlp_eisa.c,v 1.18 2006/11/16 01:32:50 christos Ex
 #endif
 
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/mii/miivar.h>
 #include <dev/mii/mii_bitbang.h>
@@ -251,8 +244,7 @@ tlp_eisa_attach(struct device *parent, struct device *self, void *aux)
 	 * None of the DE425 boards have the new-style SROMs.
 	 */
 	if (tlp_parse_old_srom(sc, enaddr) == 0) {
-		printf("%s: unable to decode old-style SROM\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to decode old-style SROM\n");
 		return;
 	}
 
@@ -272,23 +264,22 @@ tlp_eisa_attach(struct device *parent, struct device *self, void *aux)
 	 * Map and establish our interrupt.
 	 */
 	if (eisa_intr_map(ec, irq, &ih)) {
-		printf("%s: unable to map interrupt (%u)\n",
-		    sc->sc_dev.dv_xname, irq);
+		aprint_error_dev(&sc->sc_dev, "unable to map interrupt (%u)\n",
+		    irq);
 		return;
 	}
 	intrstr = eisa_intr_string(ec, ih);
 	esc->sc_ih = eisa_intr_establish(ec, ih,
 	    (val & 0x01) ? IST_EDGE : IST_LEVEL, IPL_NET, tlp_intr, sc);
 	if (esc->sc_ih == NULL) {
-		printf("%s: unable to establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to establish interrupt");
 		if (intrstr != NULL)
 			printf(" at %s", intrstr);
 		printf("\n");
 		return;
 	}
 	if (intrstr != NULL)
-		printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname,
+		printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev),
 		    intrstr);
 
 	/*

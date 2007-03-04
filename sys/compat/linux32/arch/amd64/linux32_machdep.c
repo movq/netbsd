@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_machdep.c,v 1.6 2007/02/17 22:31:41 pavel Exp $ */
+/*	$NetBSD: linux32_machdep.c,v 1.20 2008/10/19 09:44:31 njoly Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -31,7 +31,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_machdep.c,v 1.6 2007/02/17 22:31:41 pavel Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_machdep.c,v 1.20 2008/10/19 09:44:31 njoly Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,7 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_machdep.c,v 1.6 2007/02/17 22:31:41 pavel Ex
 #include <compat/linux32/common/linux32_exec.h>
 #include <compat/linux32/linux32_syscallargs.h>
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 #include <machine/cpufunc.h>
 #include <machine/psl.h>
 #include <machine/reg.h>
@@ -87,16 +87,16 @@ extern char linux32_sigcode[1];
 extern char linux32_rt_sigcode[1];
 extern char linux32_esigcode[1];
 
-extern void (osyscall_return) __P((void));
+extern void (osyscall_return)(void);
 
-static void linux32_save_ucontext __P((struct lwp *, struct trapframe *,
-    const sigset_t *, struct sigaltstack *, struct linux32_ucontext *));
-static void linux32_save_sigcontext __P((struct lwp *, struct trapframe *,
-    const sigset_t *, struct linux32_sigcontext *));
-static void linux32_rt_sendsig __P((const ksiginfo_t *, const sigset_t *));
-static void linux32_old_sendsig __P((const ksiginfo_t *, const sigset_t *));
-static int linux32_restore_sigcontext __P((struct lwp *, 
-    struct linux32_sigcontext *, register_t *));
+static void linux32_save_ucontext(struct lwp *, struct trapframe *,
+    const sigset_t *, struct sigaltstack *, struct linux32_ucontext *);
+static void linux32_save_sigcontext(struct lwp *, struct trapframe *,
+    const sigset_t *, struct linux32_sigcontext *);
+static void linux32_rt_sendsig(const ksiginfo_t *, const sigset_t *);
+static void linux32_old_sendsig(const ksiginfo_t *, const sigset_t *);
+static int linux32_restore_sigcontext(struct lwp *, 
+    struct linux32_sigcontext *, register_t *);
 
 void
 linux32_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
@@ -128,22 +128,22 @@ linux32_old_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* Allocate space for the signal handler context. */
 	if (onstack)
-		fp = (struct linux32_sigframe *)((caddr_t)sas->ss_sp +
+		fp = (struct linux32_sigframe *)((char *)sas->ss_sp +
 		    sas->ss_size);
 	else
 		fp = (struct linux32_sigframe *)tf->tf_rsp;
 	fp--;
 
 	/* Build stack frame for signal trampoline. */
-	frame.sf_handler = (linux32_handler_t)(long)catcher;
+	NETBSD32PTR32(frame.sf_handler, catcher);
 	frame.sf_sig = native_to_linux32_signo[sig];
 
 	linux32_save_sigcontext(l, tf, mask, &frame.sf_sc);
 
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		/*
@@ -163,7 +163,7 @@ linux32_old_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	tf->tf_ds = GSEL(GUDATA32_SEL, SEL_UPL) & 0xffffffff;
 	tf->tf_rip = ((long)p->p_sigctx.ps_sigcode) & 0xffffffff;
 	tf->tf_cs = GSEL(GUCODE32_SEL, SEL_UPL) & 0xffffffff;
-	tf->tf_rflags &= ~(PSL_T|PSL_VM|PSL_AC) & 0xffffffff;
+	tf->tf_rflags &= ~PSL_CLEARSIG & 0xffffffff;
 	tf->tf_rsp = (long)fp & 0xffffffff;
 	tf->tf_ss = GSEL(GUDATA32_SEL, SEL_UPL) & 0xffffffff;
 
@@ -195,30 +195,30 @@ linux32_rt_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* Allocate space for the signal handler context. */
 	if (onstack)
-		fp = (struct linux32_rt_sigframe *)((caddr_t)sas->ss_sp +
+		fp = (struct linux32_rt_sigframe *)((char *)sas->ss_sp +
 		    sas->ss_size);
 	else
 		fp = (struct linux32_rt_sigframe *)tf->tf_rsp;
 	fp--;
 
 	/* Build stack frame for signal trampoline. */
-	frame.sf_handler = (linux32_handler_t)(long)catcher;
+	NETBSD32PTR32(frame.sf_handler, catcher);
 	frame.sf_sig = native_to_linux32_signo[sig];
-	frame.sf_sip = (linux32_siginfop_t)(long)&fp->sf_si;
-	frame.sf_ucp = (linux32_ucontextp_t)(long)&fp->sf_uc;
+	NETBSD32PTR32(frame.sf_sip, &fp->sf_si);
+	NETBSD32PTR32(frame.sf_ucp, &fp->sf_uc);
 
 	lsi = &frame.sf_si;
 	(void)memset(lsi, 0, sizeof(frame.sf_si));
 	lsi->lsi_errno = native_to_linux32_errno[ksi->ksi_errno];
-	lsi->lsi_code = ksi->ksi_code;
-	lsi->lsi_signo = native_to_linux32_signo[frame.sf_sig];
+	lsi->lsi_code = native_to_linux_si_code(ksi->ksi_code);
+	lsi->lsi_signo = frame.sf_sig;
 	switch (lsi->lsi_signo) {
 	case LINUX32_SIGILL:
 	case LINUX32_SIGFPE:
 	case LINUX32_SIGSEGV:
 	case LINUX32_SIGBUS:
 	case LINUX32_SIGTRAP:
-		lsi->lsi_addr = (netbsd32_voidp)(long)ksi->ksi_addr;
+		NETBSD32PTR32(lsi->lsi_addr, ksi->ksi_addr);
 		break;
 	case LINUX32_SIGCHLD:
 		lsi->lsi_uid = ksi->ksi_uid;
@@ -240,17 +240,17 @@ linux32_rt_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 		lsi->lsi_pid = ksi->ksi_pid;
 		if (lsi->lsi_signo == LINUX32_SIGALRM ||
 		    lsi->lsi_signo >= LINUX32_SIGRTMIN)
-			lsi->lsi_value.sival_ptr = 
-			     (netbsd32_voidp)(long)ksi->ksi_sigval.sival_ptr;
+			NETBSD32PTR32(lsi->lsi_value.sival_ptr,
+			     ksi->ksi_value.sival_ptr);
 		break;
 	}
 
 	/* Save register context. */
-	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
 	linux32_save_ucontext(l, tf, mask, sas, &frame.sf_uc);
+	sendsig_reset(l, sig);
+	mutex_exit(p->p_lock);
 	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 		/*
@@ -271,7 +271,7 @@ linux32_rt_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	tf->tf_rip = (((long)p->p_sigctx.ps_sigcode) +
 	    (linux32_rt_sigcode - linux32_sigcode)) & 0xffffffff;
 	tf->tf_cs = GSEL(GUCODE32_SEL, SEL_UPL) & 0xffffffff;
-	tf->tf_rflags &= ~(PSL_T|PSL_VM|PSL_AC) & 0xffffffff;
+	tf->tf_rflags &= ~PSL_CLEARSIG & 0xffffffff;
 	tf->tf_rsp = (long)fp & 0xffffffff;
 	tf->tf_ss = GSEL(GUDATA32_SEL, SEL_UPL) & 0xffffffff;
 
@@ -344,15 +344,10 @@ linux32_setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 }
 
 static void
-linux32_save_ucontext(l, tf, mask, sas, uc)
-	struct lwp *l;
-	struct trapframe *tf;
-	const sigset_t *mask;
-	struct sigaltstack *sas;
-	struct linux32_ucontext *uc;
+linux32_save_ucontext(struct lwp *l, struct trapframe *tf, const sigset_t *mask, struct sigaltstack *sas, struct linux32_ucontext *uc)
 {
 	uc->uc_flags = 0;
-	uc->uc_link = (linux32_ucontextp_t)(long)NULL;
+	NETBSD32PTR32(uc->uc_link, NULL);
 	native_to_linux32_sigaltstack(&uc->uc_stack, sas);
 	linux32_save_sigcontext(l, tf, mask, &uc->uc_mcontext);
 	native_to_linux32_sigset(&uc->uc_sigmask, mask);
@@ -386,8 +381,8 @@ linux32_save_sigcontext(l, tf, mask, sc)
 	sc->sc_ss = tf->tf_ss;
 	sc->sc_err = tf->tf_err;
 	sc->sc_trapno = tf->tf_trapno;
-	/* sc->sc_cr2 = l->l_addr->u_pcb.pcb_cr2; */ /* XXX */
-	sc->sc_387 = (linux32_fpstatep_t)(long)NULL;
+	sc->sc_cr2 = l->l_addr->u_pcb.pcb_cr2;
+	NETBSD32PTR32(sc->sc_387, NULL);
 
 	/* Save signal stack. */
 	/* Linux doesn't save the onstack flag in sigframe */
@@ -397,38 +392,30 @@ linux32_save_sigcontext(l, tf, mask, sc)
 }
 
 int
-linux32_sys_sigreturn(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+linux32_sys_sigreturn(struct lwp *l, const struct linux32_sys_sigreturn_args *uap, register_t *retval)
 {
-	struct linux32_sys_sigreturn_args /* {
+	/* {
 		syscallarg(linux32_sigcontextp_t) scp;
-	} */ *uap = v;
+	} */
 	struct linux32_sigcontext ctx;
 	int error;
 
-	if ((error = copyin(NETBSD32PTR64(SCARG(uap, scp)), 
-	    &ctx, sizeof(ctx))) != 0)
+	if ((error = copyin(SCARG_P32(uap, scp), &ctx, sizeof(ctx))) != 0)
 		return error;
 
 	return linux32_restore_sigcontext(l, &ctx, retval);
 }
 
 int
-linux32_sys_rt_sigreturn(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+linux32_sys_rt_sigreturn(struct lwp *l, const struct linux32_sys_rt_sigreturn_args *uap, register_t *retval)
 {
-	struct linux32_sys_rt_sigreturn_args /* {
+	/* {
 		syscallarg(linux32_ucontextp_t) ucp;
-	} */ *uap = v;
+	} */
 	struct linux32_ucontext ctx;
 	int error;
 
-	if ((error = copyin(NETBSD32PTR64(SCARG(uap, ucp)), 
-	    &ctx, sizeof(ctx))) != 0)
+	if ((error = copyin(SCARG_P32(uap, ucp), &ctx, sizeof(ctx))) != 0)
 		return error;
 
 	return linux32_restore_sigcontext(l, &ctx.uc_mcontext, retval);
@@ -493,12 +480,12 @@ linux32_restore_sigcontext(l, scp, retval)
 	tf->tf_rsp = (register_t)scp->sc_esp_at_signal & 0xffffffff;
 	tf->tf_ss = (register_t)scp->sc_ss & 0xffffffff;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	/* Restore signal stack. */
 	ss_gap = (ssize_t)
-	    ((caddr_t)NETBSD32PTR64(scp->sc_esp_at_signal) 
-	     - (caddr_t)sas->ss_sp);
+	    ((char *)NETBSD32IPTR64(scp->sc_esp_at_signal) 
+	     - (char *)sas->ss_sp);
 	if (ss_gap >= 0 && ss_gap < sas->ss_size)
 		sas->ss_flags |= SS_ONSTACK;
 	else
@@ -508,7 +495,7 @@ linux32_restore_sigcontext(l, scp, retval)
 	linux32_old_to_native_sigset(&mask, &scp->sc_mask);
 	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 #ifdef DEBUG_LINUX
 	printf("linux32_sigreturn: rip = 0x%lx, rsp = 0x%lx, flags = 0x%lx\n",

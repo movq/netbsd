@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.98 2006/09/03 22:27:45 gdamore Exp $ */
+/*	$NetBSD: clock.c,v 1.102 2007/10/17 19:57:14 garbled Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -88,7 +88,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.98 2006/09/03 22:27:45 gdamore Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.102 2007/10/17 19:57:14 garbled Exp $");
 
 #include "opt_sparc_arch.h"
 
@@ -201,11 +201,8 @@ setstatclockrate(int newhz)
 void
 schedintr(void *v)
 {
-	struct lwp *l = curlwp;
 
-	/* XXX - should consult a cpuinfo.schedtickpending */
-	if (l != NULL)
-		schedclock(l);
+	schedclock(curlwp);
 }
 
 /*
@@ -220,7 +217,7 @@ eeprom_uio(struct uio *uio)
 	int error;
 	int off;	/* NOT off_t */
 	u_int cnt, bcnt;
-	caddr_t buf = NULL;
+	char *buf = NULL;
 
 	if (!CPU_ISSUN4)
 		return (ENODEV);
@@ -255,7 +252,7 @@ eeprom_uio(struct uio *uio)
 
 	if (uio->uio_rw == UIO_READ)
 		for (bcnt = 0; bcnt < EEPROM_SIZE; ++bcnt)
-			*(char *)(buf + bcnt) = *(char *)(eeprom_va + bcnt);
+			buf[bcnt] = eeprom_va[bcnt];
 
 	if ((error = uiomove(buf + off, (int)cnt, uio)) != 0)
 		goto out;

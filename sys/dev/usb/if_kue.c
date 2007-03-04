@@ -1,4 +1,4 @@
-/*	$NetBSD: if_kue.c,v 1.58 2006/11/16 01:33:26 christos Exp $	*/
+/*	$NetBSD: if_kue.c,v 1.63 2008/05/24 16:40:58 cube Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_kue.c,v 1.58 2006/11/16 01:33:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_kue.c,v 1.63 2008/05/24 16:40:58 cube Exp $");
 
 #if defined(__NetBSD__)
 #include "opt_inet.h"
@@ -189,7 +189,7 @@ Static int kue_open_pipes(struct kue_softc *);
 Static void kue_rxeof(usbd_xfer_handle, usbd_private_handle, usbd_status);
 Static void kue_txeof(usbd_xfer_handle, usbd_private_handle, usbd_status);
 Static void kue_start(struct ifnet *);
-Static int kue_ioctl(struct ifnet *, u_long, caddr_t);
+Static int kue_ioctl(struct ifnet *, u_long, void *);
 Static void kue_init(void *);
 Static void kue_stop(struct kue_softc *);
 Static void kue_watchdog(struct ifnet *);
@@ -404,9 +404,6 @@ USB_MATCH(kue)
 
 	DPRINTFN(25,("kue_match: enter\n"));
 
-	if (uaa->iface != NULL)
-		return (UMATCH_NONE);
-
 	return (kue_lookup(uaa->vendor, uaa->product) != NULL ?
 		UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
 }
@@ -430,15 +427,16 @@ USB_ATTACH(kue)
 
 	DPRINTFN(5,(" : kue_attach: sc=%p, dev=%p", sc, dev));
 
+	sc->kue_dev = self;
+
 	devinfop = usbd_devinfo_alloc(dev, 0);
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->kue_dev), devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
 	err = usbd_set_config_no(dev, KUE_CONFIG_NO, 1);
 	if (err) {
-		printf("%s: setting config no failed\n",
-		    USBDEVNAME(sc->kue_dev));
+		aprint_error_dev(self, " setting config no failed\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
@@ -448,15 +446,13 @@ USB_ATTACH(kue)
 
 	/* Load the firmware into the NIC. */
 	if (kue_load_fw(sc)) {
-		printf("%s: loading firmware failed\n",
-		    USBDEVNAME(sc->kue_dev));
+		aprint_error_dev(self, "loading firmware failed\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
 	err = usbd_device2interface_handle(dev, KUE_IFACE_IDX, &iface);
 	if (err) {
-		printf("%s: getting interface handle failed\n",
-		    USBDEVNAME(sc->kue_dev));
+		aprint_error_dev(self, "getting interface handle failed\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
@@ -467,8 +463,7 @@ USB_ATTACH(kue)
 	for (i = 0; i < id->bNumEndpoints; i++) {
 		ed = usbd_interface2endpoint_descriptor(iface, i);
 		if (ed == NULL) {
-			printf("%s: couldn't get ep %d\n",
-			    USBDEVNAME(sc->kue_dev), i);
+			aprint_error_dev(self, "couldn't get ep %d\n", i);
 			USB_ATTACH_ERROR_RETURN;
 		}
 		if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_IN &&
@@ -484,7 +479,7 @@ USB_ATTACH(kue)
 	}
 
 	if (sc->kue_ed[KUE_ENDPT_RX] == 0 || sc->kue_ed[KUE_ENDPT_TX] == 0) {
-		printf("%s: missing endpoint\n", USBDEVNAME(sc->kue_dev));
+		aprint_error_dev(self, "missing endpoint\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
@@ -492,16 +487,15 @@ USB_ATTACH(kue)
 	err = kue_ctl(sc, KUE_CTL_READ, KUE_CMD_GET_ETHER_DESCRIPTOR,
 	    0, &sc->kue_desc, sizeof(sc->kue_desc));
 	if (err) {
-		printf("%s: could not read Ethernet descriptor\n",
-		    USBDEVNAME(sc->kue_dev));
+		aprint_error_dev(self, "could not read Ethernet descriptor\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
 	sc->kue_mcfilters = malloc(KUE_MCFILTCNT(sc) * ETHER_ADDR_LEN,
 	    M_USBDEV, M_NOWAIT);
 	if (sc->kue_mcfilters == NULL) {
-		printf("%s: no memory for multicast filter buffer\n",
-		    USBDEVNAME(sc->kue_dev));
+		aprint_error_dev(self,
+		    "no memory for multicast filter buffer\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
@@ -510,7 +504,7 @@ USB_ATTACH(kue)
 	/*
 	 * A KLSI chip was detected. Inform the world.
 	 */
-	printf("%s: Ethernet address %s\n", USBDEVNAME(sc->kue_dev),
+	aprint_normal_dev(self, "Ethernet address %s\n",
 	    ether_sprintf(sc->kue_desc.kue_macaddr));
 
 	/* Initialize interface info.*/
@@ -580,8 +574,7 @@ USB_DETACH(kue)
 	if (sc->kue_ep[KUE_ENDPT_TX] != NULL ||
 	    sc->kue_ep[KUE_ENDPT_RX] != NULL ||
 	    sc->kue_ep[KUE_ENDPT_INTR] != NULL)
-		printf("%s: detach has active endpoints\n",
-		       USBDEVNAME(sc->kue_dev));
+		aprint_debug_dev(self, "detach has active endpoints\n");
 #endif
 
 	sc->kue_attached = 0;
@@ -593,7 +586,7 @@ USB_DETACH(kue)
 int
 kue_activate(device_ptr_t self, enum devact act)
 {
-	struct kue_softc *sc = (struct kue_softc *)self;
+	struct kue_softc *sc = device_private(self);
 
 	DPRINTFN(2,("%s: %s: enter\n", USBDEVNAME(sc->kue_dev), __func__));
 
@@ -951,7 +944,7 @@ kue_init(void *xsc)
 	struct kue_softc	*sc = xsc;
 	struct ifnet		*ifp = GET_IFP(sc);
 	int			s;
-	u_char			*eaddr;
+	u_char			eaddr[ETHER_ADDR_LEN];
 
 	DPRINTFN(5,("%s: %s: enter\n", USBDEVNAME(sc->kue_dev),__func__));
 
@@ -960,11 +953,7 @@ kue_init(void *xsc)
 
 	s = splnet();
 
-#if defined(__NetBSD__)
-	eaddr = LLADDR(ifp->if_sadl);
-#else
-	eaddr = sc->arpcom.ac_enaddr;
-#endif /* defined(__NetBSD__) */
+	memcpy(eaddr, CLLADDR(ifp->if_sadl), sizeof(eaddr));
 	/* Set MAC address */
 	kue_ctl(sc, KUE_CTL_WRITE, KUE_CMD_SET_MAC, 0, eaddr, ETHER_ADDR_LEN);
 
@@ -1058,7 +1047,7 @@ kue_open_pipes(struct kue_softc *sc)
 }
 
 Static int
-kue_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
+kue_ioctl(struct ifnet *ifp, u_long command, void *data)
 {
 	struct kue_softc	*sc = ifp->if_softc;
 	struct ifaddr 		*ifa = (struct ifaddr *)data;
@@ -1098,10 +1087,10 @@ kue_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 		break;
 
 	case SIOCSIFMTU:
-		if (ifr->ifr_mtu > ETHERMTU)
+		if (ifr->ifr_mtu < ETHERMIN || ifr->ifr_mtu > ETHERMTU)
 			error = EINVAL;
-		else
-			ifp->if_mtu = ifr->ifr_mtu;
+		else if ((error = ifioctl_common(ifp, command, data)) == ENETRESET)
+			error = 0;
 		break;
 
 	case SIOCSIFFLAGS:

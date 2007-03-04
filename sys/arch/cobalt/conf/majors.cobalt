@@ -1,4 +1,4 @@
-#	$NetBSD: majors.cobalt,v 1.18 2006/11/24 22:04:21 wiz Exp $
+#	$NetBSD: majors.cobalt,v 1.24 2008/10/12 04:36:36 tsutsui Exp $
 #
 # Device majors for cobalt
 #
@@ -37,10 +37,23 @@ device-major	isdnbchan	char 30			isdnbchan
 device-major	isdntrc		char 31			isdntrc
 device-major	isdntel		char 32			isdntel
 device-major	clockctl	char 33			clockctl
-device-major	systrace	char 34			systrace
 device-major	cgd		char 35  block 11	cgd
 device-major	panel		char 36			panel
 device-major	ksyms		char 37			ksyms
+device-major	pci		char 38			pci
+device-major	zstty		char 39			zstty
+device-major	usb		char 40			usb
+device-major	uhid		char 41			uhid
+device-major	ulpt		char 42			ulpt
+device-major	ugen		char 43			ugen
+device-major	ucom		char 44			ucom
+device-major	urio		char 45			urio
+device-major	uscanner	char 46			uscanner
+device-major	audio		char 47			audio
+device-major	midi		char 48			midi
+device-major	sequencer	char 49			sequencer
+device-major	vcoda		char 50			vcoda
+
 device-major	altq		char 77			altq
 
 device-major	nsmb		char 98			nsmb

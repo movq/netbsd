@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pdpolicy_clockpro.c,v 1.8 2007/02/22 06:05:01 thorpej Exp $	*/
+/*	$NetBSD: uvm_pdpolicy_clockpro.c,v 1.15 2008/06/04 12:41:40 ad Exp $	*/
 
 /*-
  * Copyright (c)2005, 2006 YAMAMOTO Takashi,
@@ -43,7 +43,7 @@
 #else /* defined(PDSIM) */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_pdpolicy_clockpro.c,v 1.8 2007/02/22 06:05:01 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_pdpolicy_clockpro.c,v 1.15 2008/06/04 12:41:40 ad Exp $");
 
 #include "opt_ddb.h"
 
@@ -89,7 +89,8 @@ int clockpro_hashfactor = CLOCKPRO_HASHFACTOR;
 
 PDPOL_EVCNT_DEFINE(nresrecordobj)
 PDPOL_EVCNT_DEFINE(nresrecordanon)
-PDPOL_EVCNT_DEFINE(nreslookup)
+PDPOL_EVCNT_DEFINE(nreslookupobj)
+PDPOL_EVCNT_DEFINE(nreslookupanon)
 PDPOL_EVCNT_DEFINE(nresfoundobj)
 PDPOL_EVCNT_DEFINE(nresfoundanon)
 PDPOL_EVCNT_DEFINE(nresanonfree)
@@ -231,17 +232,19 @@ static void
 pageq_insert_tail(pageq_t *q, struct vm_page *pg)
 {
 
-	TAILQ_INSERT_TAIL(&q->q_q, pg, pageq);
+	TAILQ_INSERT_TAIL(&q->q_q, pg, pageq.queue);
 	q->q_len++;
 }
 
+#if defined(LISTQ)
 static void
 pageq_insert_head(pageq_t *q, struct vm_page *pg)
 {
 
-	TAILQ_INSERT_HEAD(&q->q_q, pg, pageq);
+	TAILQ_INSERT_HEAD(&q->q_q, pg, pageq.queue);
 	q->q_len++;
 }
+#endif
 
 static void
 pageq_remove(pageq_t *q, struct vm_page *pg)
@@ -251,7 +254,7 @@ pageq_remove(pageq_t *q, struct vm_page *pg)
 	KASSERT(clockpro_queue(&clockpro, clockpro_getq(pg)) == q);
 #endif
 	KASSERT(q->q_len > 0);
-	TAILQ_REMOVE(&q->q_q, pg, pageq);
+	TAILQ_REMOVE(&q->q_q, pg, pageq.queue);
 	q->q_len--;
 }
 
@@ -280,6 +283,7 @@ clockpro_insert_tail(struct clockpro_state *s, int qidx, struct vm_page *pg)
 	pageq_insert_tail(q, pg);
 }
 
+#if defined(LISTQ)
 static void
 clockpro_insert_head(struct clockpro_state *s, int qidx, struct vm_page *pg)
 {
@@ -289,6 +293,7 @@ clockpro_insert_head(struct clockpro_state *s, int qidx, struct vm_page *pg)
 	pageq_insert_head(q, pg);
 }
 
+#endif
 /* ---------------------------------------- */
 
 typedef uint32_t nonres_cookie_t;
@@ -439,16 +444,30 @@ nonresident_getbucket(objid_t obj, off_t idx)
 static void
 nonresident_rotate(struct bucket *b)
 {
+	const int target = cycle_target;
+	const int cycle = b->cycle;
+	int cur;
+	int todo;
 
-	while (b->cycle - cycle_target < 0) {
-		if (b->pages[b->cur] != NONRES_COOKIE_INVAL) {
+	todo = target - cycle;
+	if (todo >= BUCKETSIZE * 2) {
+		todo = (todo % BUCKETSIZE) + BUCKETSIZE;
+	}
+	cur = b->cur;
+	while (todo > 0) {
+		if (b->pages[cur] != NONRES_COOKIE_INVAL) {
 			PDPOL_EVCNT_INCR(nreshandhot);
 			COLDTARGET_ADJ(-1);
 		}
-		b->pages[b->cur] = NONRES_COOKIE_INVAL;
-		b->cur = (b->cur + 1) % BUCKETSIZE;
-		b->cycle++;
+		b->pages[cur] = NONRES_COOKIE_INVAL;
+		cur++;
+		if (cur == BUCKETSIZE) {
+			cur = 0;
+		}
+		todo--;
 	}
+	b->cycle = target;
+	b->cur = cur;
 }
 
 static bool
@@ -502,7 +521,11 @@ nonresident_pagelookupremove(struct vm_page *pg)
 {
 	bool found = nonresident_lookupremove(pageobj(pg), pageidx(pg));
 
-	PDPOL_EVCNT_INCR(nreslookup);
+	if (pg->uobject) {
+		PDPOL_EVCNT_INCR(nreslookupobj);
+	} else {
+		PDPOL_EVCNT_INCR(nreslookupanon);
+	}
 	if (found) {
 		if (pg->uobject) {
 			PDPOL_EVCNT_INCR(nresfoundobj);
@@ -707,7 +730,7 @@ clockpro_pageenqueue(struct vm_page *pg)
 	bool speculative = (pg->pqflags & PQ_SPECULATIVE) != 0; /* XXX */
 
 	KASSERT((~pg->pqflags & (PQ_INITIALREF|PQ_SPECULATIVE)) != 0);
-	UVM_LOCK_ASSERT_PAGEQ();
+	KASSERT(mutex_owned(&uvm_pageqlock));
 	check_sanity();
 	KASSERT(clockpro_getq(pg) == CLOCKPRO_NOQUEUE);
 	s->s_npages++;
@@ -1067,7 +1090,7 @@ void
 uvmpdpol_pagedeactivate(struct vm_page *pg)
 {
 
-	pg->pqflags &= ~PQ_REFERENCED;
+	clockpro_clearreferencebit(pg);
 }
 
 void
@@ -1170,7 +1193,7 @@ clockpro_dropswap(pageq_t *q, int *todo)
 {
 	struct vm_page *pg;
 
-	TAILQ_FOREACH_REVERSE(pg, &q->q_q, pglist, pageq) {
+	TAILQ_FOREACH_REVERSE(pg, &q->q_q, pglist, pageq.queue) {
 		if (*todo <= 0) {
 			break;
 		}
@@ -1289,7 +1312,7 @@ clockpro_dump(void)
 	    (name), nhot, ncold, ntest, nspeculative, ninitialref, nref)
 
 	INITCOUNT();
-	TAILQ_FOREACH(pg, &clockpro_queue(s, CLOCKPRO_NEWQ)->q_q, pageq) {
+	TAILQ_FOREACH(pg, &clockpro_queue(s, CLOCKPRO_NEWQ)->q_q, pageq.queue) {
 		if (clockpro_getq(pg) != CLOCKPRO_NEWQ) {
 			printf("newq corrupt %p\n", pg);
 		}
@@ -1299,7 +1322,7 @@ clockpro_dump(void)
 	PRINTCOUNT("newq");
 
 	INITCOUNT();
-	TAILQ_FOREACH(pg, &clockpro_queue(s, CLOCKPRO_COLDQ)->q_q, pageq) {
+	TAILQ_FOREACH(pg, &clockpro_queue(s, CLOCKPRO_COLDQ)->q_q, pageq.queue) {
 		if (clockpro_getq(pg) != CLOCKPRO_COLDQ) {
 			printf("coldq corrupt %p\n", pg);
 		}
@@ -1309,7 +1332,7 @@ clockpro_dump(void)
 	PRINTCOUNT("coldq");
 
 	INITCOUNT();
-	TAILQ_FOREACH(pg, &clockpro_queue(s, CLOCKPRO_HOTQ)->q_q, pageq) {
+	TAILQ_FOREACH(pg, &clockpro_queue(s, CLOCKPRO_HOTQ)->q_q, pageq.queue) {
 		if (clockpro_getq(pg) != CLOCKPRO_HOTQ) {
 			printf("hotq corrupt %p\n", pg);
 		}
@@ -1324,9 +1347,9 @@ clockpro_dump(void)
 	PRINTCOUNT("hotq");
 
 	INITCOUNT();
-	TAILQ_FOREACH(pg, &clockpro_queue(s, CLOCKPRO_LISTQ)->q_q, pageq) {
+	TAILQ_FOREACH(pg, &clockpro_queue(s, CLOCKPRO_LISTQ)->q_q, pageq.queue) {
 #if !defined(LISTQ)
-		printf("listq %p\n");
+		printf("listq %p\n", pg);
 #endif /* !defined(LISTQ) */
 		if (clockpro_getq(pg) != CLOCKPRO_LISTQ) {
 			printf("listq corrupt %p\n", pg);
@@ -1354,7 +1377,7 @@ pdsim_dumpq(int qidx)
 	pageq_t *q = clockpro_queue(s, qidx);
 	struct vm_page *pg;
 
-	TAILQ_FOREACH(pg, &q->q_q, pageq) {
+	TAILQ_FOREACH(pg, &q->q_q, pageq.queue) {
 		DPRINTF(" %" PRIu64 "%s%s%s%s%s%s",
 		    pg->offset >> PAGE_SHIFT,
 		    (pg->pqflags & PQ_HOT) ? "H" : "",

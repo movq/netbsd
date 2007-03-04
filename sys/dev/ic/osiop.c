@@ -1,6 +1,6 @@
-/*	$NetBSD: osiop.c,v 1.26 2006/03/29 04:16:49 thorpej Exp $	*/
+/*	$NetBSD: osiop.c,v 1.36 2008/05/14 13:29:28 tsutsui Exp $	*/
 
-/*
+/*-
  * Copyright (c) 2001 Izumi Tsutsui.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -11,8 +11,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -93,14 +91,11 @@
  * MI NCR53C710 scsi adaptor driver; based on arch/amiga/dev/siop.c:
  *	NetBSD: siop.c,v 1.43 1999/09/30 22:59:53 thorpej Exp
  *
- * bus_space/bus_dma'fied by Izumi Tsutsui <tsutsui@ceres.dti.ne.jp>
- *
- * The 53c710 datasheet is available at:
- * http://www.lsilogic.com/techlib/techdocs/storage_stand_prod/index.html
+ * bus_space/bus_dma'fied by Izumi Tsutsui <tsutsui@NetBSD.org>
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osiop.c,v 1.26 2006/03/29 04:16:49 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osiop.c,v 1.36 2008/05/14 13:29:28 tsutsui Exp $");
 
 /* #define OSIOP_DEBUG */
 
@@ -120,8 +115,8 @@ __KERNEL_RCSID(0, "$NetBSD: osiop.c,v 1.26 2006/03/29 04:16:49 thorpej Exp $");
 #include <dev/scsipi/scsiconf.h>
 #include <dev/scsipi/scsi_message.h>
 
-#include <machine/cpu.h>
-#include <machine/bus.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
 
 #include <dev/ic/osiopreg.h>
 #include <dev/ic/osiopvar.h>
@@ -195,25 +190,26 @@ osiop_attach(struct osiop_softc *sc)
 	err = bus_dmamem_alloc(sc->sc_dmat, PAGE_SIZE, PAGE_SIZE, 0,
 	    &seg, 1, &nseg, BUS_DMA_NOWAIT);
 	if (err) {
-		printf(": failed to allocate script memory, err=%d\n", err);
+		aprint_error(": failed to allocate script memory, err=%d\n",
+		    err);
 		return;
 	}
 	err = bus_dmamem_map(sc->sc_dmat, &seg, nseg, PAGE_SIZE,
-	    (caddr_t *)&sc->sc_script, BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
+	    (void **)&sc->sc_script, BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
 	if (err) {
-		printf(": failed to map script memory, err=%d\n", err);
+		aprint_error(": failed to map script memory, err=%d\n", err);
 		return;
 	}
 	err = bus_dmamap_create(sc->sc_dmat, PAGE_SIZE, 1, PAGE_SIZE, 0,
 	    BUS_DMA_NOWAIT, &sc->sc_scrdma);
 	if (err) {
-		printf(": failed to create script map, err=%d\n", err);
+		aprint_error(": failed to create script map, err=%d\n", err);
 		return;
 	}
 	err = bus_dmamap_load(sc->sc_dmat, sc->sc_scrdma,
 	    sc->sc_script, PAGE_SIZE, NULL, BUS_DMA_NOWAIT);
 	if (err) {
-		printf(": failed to load script map, err=%d\n", err);
+		aprint_error(": failed to load script map, err=%d\n", err);
 		return;
 	}
 
@@ -231,14 +227,14 @@ osiop_attach(struct osiop_softc *sc)
 	    sizeof(struct osiop_ds) * OSIOP_NACB, PAGE_SIZE, 0,
 	    &seg, 1, &nseg, BUS_DMA_NOWAIT);
 	if (err) {
-		printf(": failed to allocate ds memory, err=%d\n", err);
+		aprint_error(": failed to allocate ds memory, err=%d\n", err);
 		return;
 	}
 	err = bus_dmamem_map(sc->sc_dmat, &seg, nseg,
-	    sizeof(struct osiop_ds) * OSIOP_NACB, (caddr_t *)&sc->sc_ds,
+	    sizeof(struct osiop_ds) * OSIOP_NACB, (void **)&sc->sc_ds,
 	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
 	if (err) {
-		printf(": failed to map ds memory, err=%d\n", err);
+		aprint_error(": failed to map ds memory, err=%d\n", err);
 		return;
 	}
 	err = bus_dmamap_create(sc->sc_dmat,
@@ -246,24 +242,24 @@ osiop_attach(struct osiop_softc *sc)
 	    sizeof(struct osiop_ds) * OSIOP_NACB, 0,
 	    BUS_DMA_NOWAIT, &sc->sc_dsdma);
 	if (err) {
-		printf(": failed to create ds map, err=%d\n", err);
+		aprint_error(": failed to create ds map, err=%d\n", err);
 		return;
 	}
 	err = bus_dmamap_load(sc->sc_dmat, sc->sc_dsdma, sc->sc_ds,
 	    sizeof(struct osiop_ds) * OSIOP_NACB, NULL, BUS_DMA_NOWAIT);
 	if (err) {
-		printf(": failed to load ds map, err=%d\n", err);
+		aprint_error(": failed to load ds map, err=%d\n", err);
 		return;
 	}
 
 	acb = malloc(sizeof(struct osiop_acb) * OSIOP_NACB,
 	    M_DEVBUF, M_NOWAIT|M_ZERO);
 	if (acb == NULL) {
-		printf(": can't allocate memory for acb\n");
+		aprint_error(": can't allocate memory for acb\n");
 		return;
 	}
 	sc->sc_acb = acb;
-	sc->sc_cfflags = device_cfdata(&sc->sc_dev)->cf_flags;
+	sc->sc_cfflags = device_cfdata(sc->sc_dev)->cf_flags;
 	sc->sc_nexus = NULL;
 	sc->sc_active = 0;
 	memset(sc->sc_tinfo, 0, sizeof(sc->sc_tinfo));
@@ -277,17 +273,10 @@ osiop_attach(struct osiop_softc *sc)
 	for (i = 0; i < OSIOP_NACB; i++) {
 		bus_addr_t dsa;
 
-		/* XXX How much size is required for each command block? */
-		err = bus_dmamap_create(sc->sc_dmat, PAGE_SIZE, 1, PAGE_SIZE,
-		    0, BUS_DMA_NOWAIT, &acb->cmddma);
-		if (err) {
-			printf(": failed to create cmddma map, err=%d\n", err);
-			return;
-		}
 		err = bus_dmamap_create(sc->sc_dmat, OSIOP_MAX_XFER, OSIOP_NSG,
 		    OSIOP_MAX_XFER, 0, BUS_DMA_NOWAIT, &acb->datadma);
 		if (err) {
-			printf(": failed to create datadma map, err=%d\n",
+			aprint_error(": failed to create datadma map, err=%d\n",
 			    err);
 			return;
 		}
@@ -298,6 +287,7 @@ osiop_attach(struct osiop_softc *sc)
 
 		dsa = sc->sc_dsdma->dm_segs[0].ds_addr + acb->dsoffset;
 		acb->ds->id.addr = dsa + OSIOP_DSIDOFF;
+		acb->ds->cmd.addr = dsa + OSIOP_DSCMDOFF;
 		acb->ds->status.count = 1;
 		acb->ds->status.addr = dsa + OSIOP_DSSTATOFF;
 		acb->ds->msg.count = 1;
@@ -313,7 +303,7 @@ osiop_attach(struct osiop_softc *sc)
 		acb++;
 	}
 
-	printf(": NCR53C710 rev %d, %dMHz, SCSI ID %d\n",
+	aprint_normal(": NCR53C710 rev %d, %dMHz, SCSI ID %d\n",
 	    osiop_read_1(sc, OSIOP_CTEST8) >> 4, sc->sc_clock_freq, sc->sc_id);
 
 	/*
@@ -324,7 +314,7 @@ osiop_attach(struct osiop_softc *sc)
 	/*
 	 * Fill in the adapter.
 	 */
-	sc->sc_adapter.adapt_dev = &sc->sc_dev;
+	sc->sc_adapter.adapt_dev = sc->sc_dev;
 	sc->sc_adapter.adapt_nchannels = 1;
 	sc->sc_adapter.adapt_openings = OSIOP_NACB;
 	sc->sc_adapter.adapt_max_periph = 1;
@@ -345,7 +335,7 @@ osiop_attach(struct osiop_softc *sc)
 	/*
 	 * Now try to attach all the sub devices.
 	 */
-	config_found(&sc->sc_dev, &sc->sc_channel, scsiprint);
+	config_found(sc->sc_dev, &sc->sc_channel, scsiprint);
 }
 
 /*
@@ -374,7 +364,7 @@ osiop_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 	struct osiop_softc *sc;
 	int err, flags, s;
 
-	sc = (struct osiop_softc *)chan->chan_adapter->adapt_dev;
+	sc = device_private(chan->chan_adapter->adapt_dev);
 
 	switch (req) {
 	case ADAPTER_REQ_RUN_XFER:
@@ -410,19 +400,6 @@ osiop_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 		acb->status = ACB_S_READY;
 		acb->xs = xs;
 
-		/* Setup DMA map for SCSI command buffer */
-		err = bus_dmamap_load(sc->sc_dmat, acb->cmddma,
-		    xs->cmd, xs->cmdlen, NULL, BUS_DMA_NOWAIT);
-		if (err) {
-			printf("%s: unable to load cmd DMA map: %d\n",
-			    sc->sc_dev.dv_xname, err);
-			xs->error = XS_DRIVER_STUFFUP;
-			TAILQ_INSERT_TAIL(&sc->free_list, acb, chain);
-			scsipi_done(xs);
-			splx(s);
-			return;
-		}
-
 		/* Setup DMA map for data buffer */
 		if (xs->xs_control & (XS_CTL_DATA_IN | XS_CTL_DATA_OUT)) {
 			err = bus_dmamap_load(sc->sc_dmat, acb->datadma,
@@ -432,20 +409,14 @@ osiop_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 			     BUS_DMA_READ : BUS_DMA_WRITE));
 			if (err) {
 				printf("%s: unable to load data DMA map: %d\n",
-				    sc->sc_dev.dv_xname, err);
+				    device_xname(sc->sc_dev), err);
 				xs->error = XS_DRIVER_STUFFUP;
 				scsipi_done(xs);
-				bus_dmamap_unload(sc->sc_dmat, acb->cmddma);
 				TAILQ_INSERT_TAIL(&sc->free_list, acb, chain);
 				splx(s);
 				return;
 			}
-			bus_dmamap_sync(sc->sc_dmat, acb->datadma,
-			    0, xs->datalen, (xs->xs_control & XS_CTL_DATA_IN) ?
-			    BUS_DMASYNC_PREREAD : BUS_DMASYNC_PREWRITE);
 		}
-		bus_dmamap_sync(sc->sc_dmat, acb->cmddma, 0, xs->cmdlen,
-		    BUS_DMASYNC_PREWRITE);
 
 		acb->cmdlen = xs->cmdlen;
 		acb->datalen = xs->datalen;
@@ -501,7 +472,7 @@ osiop_poll(struct osiop_softc *sc, struct osiop_acb *acb)
 	to = xs->timeout / 1000;
 	if (!TAILQ_EMPTY(&sc->nexus_list))
 		printf("%s: osiop_poll called with disconnected device\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 	for (;;) {
 		i = 1000;
 		while (((istat = osiop_read_1(sc, OSIOP_ISTAT)) &
@@ -537,7 +508,7 @@ osiop_poll(struct osiop_softc *sc, struct osiop_acb *acb)
 		if (osiop_checkintr(sc, istat, dstat, sstat0, &status)) {
 			if (acb != sc->sc_nexus)
 				printf("%s: osiop_poll disconnected device"
-				    " completed\n", sc->sc_dev.dv_xname);
+				    " completed\n", device_xname(sc->sc_dev));
 			else if ((sc->sc_flags & OSIOP_INTDEFER) == 0) {
 				sc->sc_flags &= ~OSIOP_INTSOFF;
 				osiop_write_1(sc, OSIOP_SIEN, sc->sc_sien);
@@ -567,10 +538,10 @@ osiop_sched(struct osiop_softc *sc)
 #ifdef OSIOP_DEBUG
 	if (sc->sc_nexus != NULL) {
 		printf("%s: osiop_sched- nexus %p/%d ready %p/%d\n",
-		    sc->sc_dev.dv_xname, sc->sc_nexus,
+		    device_xname(sc->sc_dev), sc->sc_nexus,
 		    sc->sc_nexus->xs->xs_periph->periph_target,
-		    sc->ready_list.tqh_first,
-		    sc->ready_list.tqh_first->xs->xs_periph->periph_target);
+		    TAILQ_FIRST(&sc->ready_list),
+		    TAILQ_FIRST(&sc->ready_list)->xs->xs_periph->periph_target);
 		return;
 	}
 #endif
@@ -591,7 +562,7 @@ osiop_sched(struct osiop_softc *sc)
 	if (acb == NULL) {
 #ifdef OSIOP_DEBUG
 		printf("%s: osiop_sched didn't find ready command\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 #endif
 		return;
 	}
@@ -627,7 +598,7 @@ osiop_scsidone(struct osiop_acb *acb, int status)
 #ifdef OSIOP_DEBUG
 	if (acb->status != ACB_S_DONE)
 		printf("%s: acb not done (status %d)\n",
-		    sc->sc_dev.dv_xname, acb->status);
+		    device_xname(sc->sc_dev), acb->status);
 #endif
 
 	xs->status = status;
@@ -657,7 +628,7 @@ osiop_scsidone(struct osiop_acb *acb, int status)
 	default:
 #ifdef OSIOP_DEBUG
 		printf("%s: osiop_scsidone: unknown status code (0x%02x)\n",
-		    sc->sc_dev.dv_xname, status);
+		    device_xname(sc->sc_dev), status);
 #endif
 		xs->error = XS_DRIVER_STUFFUP;
 		break;
@@ -669,10 +640,6 @@ osiop_scsidone(struct osiop_acb *acb, int status)
 		    BUS_DMASYNC_POSTREAD : BUS_DMASYNC_POSTWRITE);
 		bus_dmamap_unload(sc->sc_dmat, acb->datadma);
 	}
-
-	bus_dmamap_sync(sc->sc_dmat, acb->cmddma, 0, acb->cmdlen,
-	    BUS_DMASYNC_POSTWRITE);
-	bus_dmamap_unload(sc->sc_dmat, acb->cmddma);
 
 	/*
 	 * Remove the ACB from whatever queue it's on.  We have to do a bit of
@@ -689,7 +656,7 @@ osiop_scsidone(struct osiop_acb *acb, int status)
 			dosched = 1;	/* start next command */
 		sc->sc_active--;
 		OSIOP_TRACE('d', 'a', status, 0);
-	} else if (sc->ready_list.tqh_last == &acb->chain.tqe_next) {
+	} else if (sc->ready_list.tqh_last == &TAILQ_NEXT(acb, chain)) {
 		TAILQ_REMOVE(&sc->ready_list, acb, chain);
 		OSIOP_TRACE('d', 'r', status, 0);
 	} else {
@@ -704,12 +671,12 @@ osiop_scsidone(struct osiop_acb *acb, int status)
 			}
 		}
 		if (acb2 == NULL) {
-			if (acb->chain.tqe_next != NULL) {
+			if (TAILQ_NEXT(acb, chain) != NULL) {
 				TAILQ_REMOVE(&sc->ready_list, acb, chain);
 				sc->sc_active--;
 			} else {
 				printf("%s: can't find matching acb\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 #ifdef DDB
 #if 0
 				Debugger();
@@ -737,7 +704,7 @@ osiop_abort(struct osiop_softc *sc, const char *where)
 {
 
 	printf("%s: abort %s: dstat %02x, sstat0 %02x sbcl %02x\n",
-	    sc->sc_dev.dv_xname, where,
+	    device_xname(sc->sc_dev), where,
 	    osiop_read_1(sc, OSIOP_DSTAT),
 	    osiop_read_1(sc, OSIOP_SSTAT0),
 	    osiop_read_1(sc, OSIOP_SBCL));
@@ -779,7 +746,7 @@ osiop_init(struct osiop_softc *sc)
 		sc->sc_flags |= OSIOP_NODMA;
 #ifdef OSIOP_DEBUG
 		printf("%s: DMA disabled; use polling\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
 #endif
 	}
 
@@ -788,10 +755,10 @@ osiop_init(struct osiop_softc *sc)
 #ifdef OSIOP_DEBUG
 	if (inhibit_sync != 0)
 		printf("%s: Inhibiting synchronous transfer: 0x%02x\n",
-		    sc->sc_dev.dv_xname, inhibit_sync);
+		    device_xname(sc->sc_dev), inhibit_sync);
 	if (inhibit_disc != 0)
 		printf("%s: Inhibiting disconnect: 0x%02x\n",
-		    sc->sc_dev.dv_xname, inhibit_disc);
+		    device_xname(sc->sc_dev), inhibit_disc);
 #endif
 	for (i = 0; i < OSIOP_NTGT; i++) {
 		if (inhibit_sync & (1 << i))
@@ -812,7 +779,7 @@ osiop_reset(struct osiop_softc *sc)
 	uint8_t stat;
 
 #ifdef OSIOP_DEBUG
-	printf("%s: resetting chip\n", sc->sc_dev.dv_xname);
+	printf("%s: resetting chip\n", device_xname(sc->sc_dev));
 #endif
 	if (sc->sc_flags & OSIOP_ALIVE)
 		osiop_abort(sc, "reset");
@@ -953,8 +920,9 @@ osiop_start(struct osiop_softc *sc)
 
 	acb->intstat = 0;
 
+	/* Copy SCSI command to DMA buffer */
+	memcpy(ds->scsipi_cmd, xs->cmd, acb->cmdlen);
 	ds->cmd.count = acb->cmdlen;
-	ds->cmd.addr = acb->cmddma->dm_segs[0].ds_addr;
 
 	ti = &sc->sc_tinfo[target];
 	ds->scsi_addr = ((1 << 16) << target) | (ti->sxfer << 8);
@@ -1014,6 +982,10 @@ osiop_start(struct osiop_softc *sc)
 			ds->data[i].count = datadma->dm_segs[i].ds_len;
 			ds->data[i].addr  = datadma->dm_segs[i].ds_addr;
 		}
+		/* sync xfer data buffer */
+		bus_dmamap_sync(sc->sc_dmat, acb->datadma,
+		    0, acb->datalen, (xs->xs_control & XS_CTL_DATA_IN) ?
+		    BUS_DMASYNC_PREREAD : BUS_DMASYNC_PREWRITE);
 	}
 
 	/* sync script data structure */
@@ -1048,7 +1020,7 @@ osiop_start(struct osiop_softc *sc)
 	if (TAILQ_EMPTY(&sc->nexus_list)) {
 		if (osiop_read_1(sc, OSIOP_ISTAT) & OSIOP_ISTAT_CON)
 			printf("%s: osiop_select while connected?\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 		osiop_write_4(sc, OSIOP_TEMP, 0);
 		osiop_write_1(sc, OSIOP_SBCL, ti->sbcl);
 		osiop_write_4(sc, OSIOP_DSA,
@@ -1102,7 +1074,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 	    (osiop_read_4(sc, OSIOP_DSP) < scraddr ||
 	    osiop_read_4(sc, OSIOP_DSP) >= scraddr + sizeof(osiop_script))) {
 		printf("%s: dsp not within script dsp %x scripts %lx:%lx",
-		    sc->sc_dev.dv_xname,
+		    device_xname(sc->sc_dev),
 		    osiop_read_4(sc, OSIOP_DSP),
 		    scraddr, scraddr + sizeof(osiop_script));
 		printf(" istat %x dstat %x sstat0 %x\n", istat, dstat, sstat0);
@@ -1133,7 +1105,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 
 		if (acb == NULL) {
 			printf("%s: COMPLETE with no active command?\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			goto bad_phase;
 		}
 #ifdef OSIOP_DEBUG
@@ -1150,10 +1122,10 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 		if (ti->state == NEG_WAITS) {
 			if (ds->msgbuf[1] == MSG_INVALID)
 				printf("%s: target %d ignored sync request\n",
-				    sc->sc_dev.dv_xname, target);
+				    device_xname(sc->sc_dev), target);
 			else if (ds->msgbuf[1] == MSG_MESSAGE_REJECT)
 				printf("%s: target %d rejected sync request\n",
-				    sc->sc_dev.dv_xname, target);
+				    device_xname(sc->sc_dev), target);
 			ti->period = 0;
 			ti->offset = 0;
 			osiop_update_xfer_mode(sc, target);
@@ -1171,7 +1143,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 		}
 		if (ds->msgbuf[0] != MSG_CMDCOMPLETE)
 			printf("%s: message was not COMMAND COMPLETE: %02x\n",
-			    sc->sc_dev.dv_xname, ds->msgbuf[0]);
+			    device_xname(sc->sc_dev), ds->msgbuf[0]);
 #endif
 		if (!TAILQ_EMPTY(&sc->nexus_list))
 			osiop_write_1(sc, OSIOP_DCNTL,
@@ -1183,7 +1155,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 	if (dstat & OSIOP_DSTAT_SIR && intcode == A_int_syncmsg) {
 		if (acb == NULL) {
 			printf("%s: sync message with no active command?\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			goto bad_phase;
 		}
 		target = acb->xs->xs_periph->periph_target;
@@ -1232,7 +1204,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 #endif
 		if (acb == NULL) {
 			printf("%s: Phase mismatch with no active command?\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			goto bad_phase;
 		}
 		if (acb->datalen > 0) {
@@ -1296,7 +1268,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 			osiop_write_4(sc, OSIOP_DSP, scraddr + Ent_switch);
 			break;
 		default:
-			printf("%s: invalid phase\n", sc->sc_dev.dv_xname);
+			printf("%s: invalid phase\n", device_xname(sc->sc_dev));
 			goto bad_phase;
 		}
 		return (0);
@@ -1305,7 +1277,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 		/* Select timed out */
 		if (acb == NULL) {
 			printf("%s: Select timeout with no active command?\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			goto bad_phase;
 		}
 #ifdef OSIOP_DEBUG
@@ -1352,7 +1324,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 		target = sc->sc_id;
 	if (sstat0 & OSIOP_SSTAT0_UDC) {
 		printf("%s: target %d disconnected unexpectedly",
-		    sc->sc_dev.dv_xname, target);
+		    device_xname(sc->sc_dev), target);
 		if (acb == NULL)
 			printf("with no active command?");
 		printf("\n");
@@ -1370,7 +1342,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 		/* Disconnect */
 		if (acb == NULL) {
 			printf("%s: Disconnect with no active command?\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			return (0);
 		}
 #ifdef OSIOP_DEBUG
@@ -1378,7 +1350,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 			printf("%s: ID %02x disconnected TEMP %x (+%lx) "
 			    "curaddr %lx curlen %lx buf %x len %x dfifo %x "
 			    "dbc %x sstat1 %x starts %d acb %p\n",
-			    sc->sc_dev.dv_xname, 1 << target,
+			    device_xname(sc->sc_dev), 1 << target,
 			    osiop_read_4(sc, OSIOP_TEMP),
 			    (osiop_read_4(sc, OSIOP_TEMP) != 0) ?
 			        osiop_read_4(sc, OSIOP_TEMP) - scraddr : 0,
@@ -1406,7 +1378,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 			    acb->curlen != ds->data[0].count)
 				printf("%s: curaddr/curlen already set? "
 				    "n %lx iob %lx/%lx chain[0] %x/%x\n",
-				    sc->sc_dev.dv_xname, n,
+				    device_xname(sc->sc_dev), n,
 				    acb->curaddr, acb->curlen,
 				    ds->data[0].addr, ds->data[0].count);
 			if (n < Ent_datain)
@@ -1422,7 +1394,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 #ifdef OSIOP_DEBUG
 			if (osiop_debug & DEBUG_DISC) {
 				printf("%s: TEMP offset %ld",
-				    sc->sc_dev.dv_xname, n);
+				    device_xname(sc->sc_dev), n);
 				printf(" curaddr %lx curlen %lx\n",
 				    acb->curaddr, acb->curlen);
 			}
@@ -1441,11 +1413,11 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 #ifdef OSIOP_DEBUG
 			if (osiop_debug & DEBUG_DISC)
 				printf("%s: adjusting DMA chain\n",
-				    sc->sc_dev.dv_xname);
+				    device_xname(sc->sc_dev));
 			if (intcode == A_int_disc_wodp)
 				printf("%s: ID %02x disconnected "
 				    "without Save Data Pointers\n",
-				    sc->sc_dev.dv_xname, 1 << target);
+				    device_xname(sc->sc_dev), 1 << target);
 #endif
 			for (i = 0; i < OSIOP_NSG; i++) {
 				if (ds->data[i].count == 0)
@@ -1521,11 +1493,11 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 #ifdef OSIOP_DEBUG
 		if (osiop_debug & DEBUG_DISC)
 			printf("%s: target ID %02x reselected dsps %x\n",
-			    sc->sc_dev.dv_xname, reselid, intcode);
+			    device_xname(sc->sc_dev), reselid, intcode);
 		resmsg = osiop_read_1(sc, OSIOP_SFBR);
 		if (!MSG_ISIDENTIFY(resmsg))
 			printf("%s: Reselect message in was not identify: "
-			    "%02x\n", sc->sc_dev.dv_xname, resmsg);
+			    "%02x\n", device_xname(sc->sc_dev), resmsg);
 #endif
 		if (sc->sc_nexus != NULL) {
 			struct scsipi_periph *periph =
@@ -1533,7 +1505,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 #ifdef OSIOP_DEBUG
 			if (osiop_debug & DEBUG_DISC)
 				printf("%s: reselect ID %02x w/active\n",
-				    sc->sc_dev.dv_xname, reselid);
+				    device_xname(sc->sc_dev), reselid);
 #endif
 			TAILQ_INSERT_HEAD(&sc->ready_list,
 			    sc->sc_nexus, chain);
@@ -1565,7 +1537,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 		}
 		if (acb == NULL) {
 			printf("%s: target ID %02x reselect nexus_list %p\n",
-			    sc->sc_dev.dv_xname, reselid,
+			    device_xname(sc->sc_dev), reselid,
 			    TAILQ_FIRST(&sc->nexus_list));
 			panic("unable to find reselecting device");
 		}
@@ -1584,7 +1556,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 		    (ctest2 & OSIOP_CTEST2_SIGP) == 0)
 			printf("%s: reselect interrupted (Sig_P?) "
 			    "scntl1 %x ctest2 %x sfbr %x istat %x/%x\n",
-			    sc->sc_dev.dv_xname,
+			    device_xname(sc->sc_dev),
 			    osiop_read_1(sc, OSIOP_SCNTL1), ctest2,
 			    osiop_read_1(sc, OSIOP_SFBR), istat,
 			    osiop_read_1(sc, OSIOP_ISTAT));
@@ -1593,7 +1565,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 		if (sc->sc_nexus == NULL) {
 #ifdef OSIOP_DEBUG
 			printf("%s: reselect interrupted, sc_nexus == NULL\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 #if 0
 			osiop_dump(sc);
 #ifdef DDB
@@ -1618,11 +1590,11 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 		/* Unrecognized message in byte */
 		if (acb == NULL) {
 			printf("%s: Bad message-in with no active command?\n",
-			    sc->sc_dev.dv_xname);
+			    device_xname(sc->sc_dev));
 			goto bad_phase;
 		}
 		printf("%s: Unrecognized message in data "
-		    "sfbr %x msg %x sbcl %x\n", sc->sc_dev.dv_xname,
+		    "sfbr %x msg %x sbcl %x\n", device_xname(sc->sc_dev),
 		    osiop_read_1(sc, OSIOP_SFBR), ds->msgbuf[1],
 		    osiop_read_1(sc, OSIOP_SBCL));
 		/* what should be done here? */
@@ -1635,7 +1607,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 	if (dstat & OSIOP_DSTAT_SIR && intcode == A_int_status) {
 		/* Status phase wasn't followed by message in phase? */
 		printf("%s: Status phase not followed by message in phase? "
-		    "sbcl %x sbdl %x\n", sc->sc_dev.dv_xname,
+		    "sbcl %x sbdl %x\n", device_xname(sc->sc_dev),
 		    osiop_read_1(sc, OSIOP_SBCL),
 		    osiop_read_1(sc, OSIOP_SBDL));
 		if (osiop_read_1(sc, OSIOP_SBCL) == 0xa7) {
@@ -1654,12 +1626,12 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 		return (0);	/* osiop_reset has cleaned up */
 	}
 	if (sstat0 & OSIOP_SSTAT0_SGE)
-		printf("%s: SCSI Gross Error\n", sc->sc_dev.dv_xname);
+		printf("%s: SCSI Gross Error\n", device_xname(sc->sc_dev));
 	if (sstat0 & OSIOP_SSTAT0_PAR)
-		printf("%s: Parity Error\n", sc->sc_dev.dv_xname);
+		printf("%s: Parity Error\n", device_xname(sc->sc_dev));
 	if (dstat & OSIOP_DSTAT_IID)
 		printf("%s: Invalid instruction detected\n",
-		    sc->sc_dev.dv_xname);
+		    device_xname(sc->sc_dev));
  bad_phase:
 	/*
 	 * temporary panic for unhandled conditions
@@ -1669,7 +1641,7 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 	 */
 	printf("osiop_chkintr: target %x ds %p\n", target, ds);
 	printf("scripts %lx ds %lx dsp %x dcmd %x\n", scraddr,
-	    sc->sc_dsdma->dm_segs[0].ds_addr + acb->dsoffset,
+	    acb ? sc->sc_dsdma->dm_segs[0].ds_addr + acb->dsoffset : 0,
 	    osiop_read_4(sc, OSIOP_DSP),
 	    osiop_read_4(sc, OSIOP_DBC));
 	printf("osiop_chkintr: istat %x dstat %x sstat0 %x "
@@ -1677,18 +1649,21 @@ osiop_checkintr(struct osiop_softc *sc, uint8_t istat, uint8_t dstat,
 	    istat, dstat, sstat0, intcode,
 	    osiop_read_4(sc, OSIOP_DSA),
 	    osiop_read_1(sc, OSIOP_SBCL),
-	    ds->stat[0], ds->msgbuf[0], ds->msgbuf[1],
+	    ds ? ds->stat[0] : 0,
+	    ds ? ds->msgbuf[0] : 0,
+	    ds ? ds->msgbuf[1] : 0,
 	    osiop_read_1(sc, OSIOP_SFBR));
 #ifdef OSIOP_DEBUG
 	if (osiop_debug & DEBUG_DMA)
 		panic("osiop_chkintr: **** temp ****");
-#endif
 #ifdef DDB
 	Debugger();
 #endif
+#endif
 	osiop_reset(sc);	/* hard reset */
 	*status = SCSI_OSIOP_NOSTATUS;
-	acb->status = ACB_S_DONE;
+	if (acb != NULL)
+		acb->status = ACB_S_DONE;
 	return (0);		/* osiop_reset cleaned up */
 }
 
@@ -1699,7 +1674,7 @@ osiop_select(struct osiop_softc *sc)
 
 #ifdef OSIOP_DEBUG
 	if (osiop_debug & DEBUG_CMD)
-		printf("%s: select ", sc->sc_dev.dv_xname);
+		printf("%s: select ", device_xname(sc->sc_dev));
 #endif
 
 	if (acb->xs->xs_control & XS_CTL_POLL || sc->sc_flags & OSIOP_NODMA) {
@@ -1757,7 +1732,8 @@ osiop_intr(struct osiop_softc *sc)
 		/* XXX needs sync */
 		printf("%s: spurious interrupt? "
 		    "istat %x dstat %x sstat0 %x nexus %p status %x\n",
-		    sc->sc_dev.dv_xname, istat, dstat, sstat0, sc->sc_nexus,
+		    device_xname(sc->sc_dev),
+		    istat, dstat, sstat0, sc->sc_nexus,
 		    (sc->sc_nexus != NULL) ? sc->sc_nexus->ds->stat[0] : 0);
 	}
 #endif
@@ -1767,7 +1743,7 @@ osiop_intr(struct osiop_softc *sc)
 		/* XXX needs sync */
 		printf("%s: intr istat %x dstat %x sstat0 %x dsps %x "
 		    "sbcl %x dsp %x dcmd %x sts %x msg %x\n",
-		    sc->sc_dev.dv_xname,
+		    device_xname(sc->sc_dev),
 		    istat, dstat, sstat0,
 		    osiop_read_4(sc, OSIOP_DSPS),
 		    osiop_read_1(sc, OSIOP_SBCL),
@@ -1796,7 +1772,7 @@ osiop_intr(struct osiop_softc *sc)
 				periph = sc->sc_nexus->xs->xs_periph;
 				printf("%s: SCSI bus busy at completion"
 				    " targ %d sbcl %02x sfbr %x lcrc "
-				    "%02x dsp +%x\n", sc->sc_dev.dv_xname,
+				    "%02x dsp +%x\n", device_xname(sc->sc_dev),
 				    periph->periphtarget,
 				    osiop_read_1(sc, OSIOP_SBCL),
 				    osiop_read_1(sc, OSIOP_SFBR),
@@ -1945,7 +1921,7 @@ osiop_dump(struct osiop_softc *sc)
 	osiop_dump_trace();
 #endif
 	printf("%s@%p istat %02x\n",
-	    sc->sc_dev.dv_xname, sc, osiop_read_1(sc, OSIOP_ISTAT));
+	    device_xname(sc->sc_dev), sc, osiop_read_1(sc, OSIOP_ISTAT));
 	if ((acb = TAILQ_FIRST(&sc->free_list)) != NULL) {
 		printf("Free list:\n");
 		while (acb) {

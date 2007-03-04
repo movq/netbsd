@@ -1,7 +1,11 @@
-/* $NetBSD: tfb.c,v 1.50 2006/04/12 19:38:24 jmmv Exp $ */
+/* $NetBSD: tfb.c,v 1.55 2008/07/09 13:19:33 joerg Exp $ */
 
-/*
- * Copyright (c) 1998, 1999 Tohru Nishimura.  All rights reserved.
+/*-
+ * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * This code is derived from software contributed to The NetBSD Foundation
+ * by Tohru Nishimura.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -11,27 +15,22 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *      This product includes software developed by Tohru Nishimura
- *	for the NetBSD Project.
- * 4. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tfb.c,v 1.50 2006/04/12 19:38:24 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tfb.c,v 1.55 2008/07/09 13:19:33 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,8 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: tfb.c,v 1.50 2006/04/12 19:38:24 jmmv Exp $");
 #include <sys/buf.h>
 #include <sys/ioctl.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
@@ -142,7 +141,6 @@ struct hwcursor64 {
 };
 
 struct tfb_softc {
-	struct device sc_dev;
 	vaddr_t sc_vaddr;
 	size_t sc_size;
 	struct rasops_info *sc_ri;
@@ -176,10 +174,10 @@ struct tfb_softc {
 #define	TX_CTL_SEG_ENA	0x10
 #define	TX_CTL_SEG	0x0f
 
-static int  tfbmatch(struct device *, struct cfdata *, void *);
-static void tfbattach(struct device *, struct device *, void *);
+static int  tfbmatch(device_t, cfdata_t, void *);
+static void tfbattach(device_t, device_t, void *);
 
-CFATTACH_DECL(tfb, sizeof(struct tfb_softc),
+CFATTACH_DECL_NEW(tfb, sizeof(struct tfb_softc),
     tfbmatch, tfbattach, NULL, NULL);
 
 static void tfb_common_init(struct rasops_info *);
@@ -202,7 +200,7 @@ static const struct wsscreen_list tfb_screenlist = {
 	sizeof(_tfb_scrlist) / sizeof(struct wsscreen_descr *), _tfb_scrlist
 };
 
-static int	tfbioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
+static int	tfbioctl(void *, void *, u_long, void *, int, struct lwp *);
 static paddr_t	tfbmmap(void *, void *, off_t, int);
 
 static int	tfb_alloc_screen(void *, const struct wsscreen_descr *,
@@ -222,7 +220,7 @@ static const struct wsdisplay_accessops tfb_accessops = {
 
 int  tfb_cnattach(tc_addr_t);
 static int  tfbintr(void *);
-static void tfbhwinit(caddr_t);
+static void tfbhwinit(void *);
 
 static int  get_cmap(struct tfb_softc *, struct wsdisplay_cmap *);
 static int  set_cmap(struct tfb_softc *, struct wsdisplay_cmap *);
@@ -267,7 +265,7 @@ static const u_int8_t flip[256] = {
 };
 
 static int
-tfbmatch(struct device *parent, struct cfdata *match, void *aux)
+tfbmatch(device_t parent, cfdata_t match, void *aux)
 {
 	struct tc_attach_args *ta = aux;
 
@@ -280,7 +278,7 @@ tfbmatch(struct device *parent, struct cfdata *match, void *aux)
 
 
 static void
-tfbattach(struct device *parent, struct device *self, void *aux)
+tfbattach(device_t parent, device_t self, void *aux)
 {
 	struct tfb_softc *sc = device_private(self);
 	struct tc_attach_args *ta = aux;
@@ -317,8 +315,8 @@ tfbattach(struct device *parent, struct device *self, void *aux)
 
 	tc_intr_establish(parent, ta->ta_cookie, IPL_TTY, tfbintr, sc);
 
-	*(u_int8_t *)((caddr_t)ri->ri_hw + TX_CONTROL) &= ~0x40;
-	*(u_int8_t *)((caddr_t)ri->ri_hw + TX_CONTROL) |= 0x40;
+	*(u_int8_t *)((char *)ri->ri_hw + TX_CONTROL) &= ~0x40;
+	*(u_int8_t *)((char *)ri->ri_hw + TX_CONTROL) |= 0x40;
 
 	waa.console = console;
 	waa.scrdata = &tfb_screenlist;
@@ -331,10 +329,10 @@ tfbattach(struct device *parent, struct device *self, void *aux)
 static void
 tfb_common_init(struct rasops_info *ri)
 {
-	caddr_t base;
+	char *base;
 	int cookie;
 
-	base = (caddr_t)ri->ri_hw;
+	base = (void *)ri->ri_hw;
 
 	/* initialize colormap and cursor hardware */
 	tfbhwinit(base);
@@ -393,7 +391,7 @@ tfb_cmap_init(struct tfb_softc *sc)
 }
 
 static int
-tfbioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag, struct lwp *l)
+tfbioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	struct tfb_softc *sc = v;
 	struct rasops_info *ri = sc->sc_ri;
@@ -541,10 +539,10 @@ static int
 tfbintr(void *arg)
 {
 	struct tfb_softc *sc = arg;
-	caddr_t base, vdac, curs;
+	char *base, *vdac, *curs;
 	int v;
 
-	base = (caddr_t)sc->sc_ri->ri_hw;
+	base = (void *)sc->sc_ri->ri_hw;
 	*(u_int8_t *)(base + TX_CONTROL) &= ~0x40;
 	if (sc->sc_changed == 0)
 		goto done;
@@ -645,14 +643,14 @@ done:
 }
 
 static void
-tfbhwinit(caddr_t tfbbase)
+tfbhwinit(void *tfbbase)
 {
-	caddr_t vdac, curs;
+	char *vdac, *curs;
 	const u_int8_t *p;
 	int i;
 
-	vdac = tfbbase + TX_BT463_OFFSET;
-	curs = tfbbase + TX_BT431_OFFSET;
+	vdac = (char *)tfbbase + TX_BT463_OFFSET;
+	curs = (char *)tfbbase + TX_BT431_OFFSET;
 	SELECT463(vdac, BT463_IREG_COMMAND_0);
 	REGWRITE32(vdac, bt_reg, 0x40);	/* CMD 0 */
 	REGWRITE32(vdac, bt_reg, 0x46);	/* CMD 1 */

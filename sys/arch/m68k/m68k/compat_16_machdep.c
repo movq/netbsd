@@ -1,4 +1,4 @@
-/*    $NetBSD: compat_16_machdep.c,v 1.9 2007/02/09 21:55:05 ad Exp $   */
+/*    $NetBSD: compat_16_machdep.c,v 1.12 2008/04/24 18:39:20 ad Exp $   */
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.9 2007/02/09 21:55:05 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.12 2008/04/24 18:39:20 ad Exp $");
 
 #include "opt_compat_netbsd.h"
 
@@ -104,7 +104,6 @@ __KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.9 2007/02/09 21:55:05 ad Exp
 #include <machine/frame.h>
 
 extern  short exframesize[];
-int	compat_16_sys___sigreturn14(struct lwp *, void *, register_t *);
 void	m68881_save(struct fpframe *);
 void	m68881_restore(struct fpframe *);
 
@@ -233,9 +232,9 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	native_sigset_to_sigset13(mask, &kf.sf_sc.__sc_mask13);
 #endif
 	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 	error = copyout(&kf, fp, sizeof(kf));
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	if (error != 0) {
 #ifdef DEBUG
@@ -283,11 +282,11 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
  * a machine fault.
  */
 int
-compat_16_sys___sigreturn14(struct lwp *l, void *v, register_t *retval)
+compat_16_sys___sigreturn14(struct lwp *l, const struct compat_16_sys___sigreturn14_args *uap, register_t *retval)
 {
-	struct compat_16_sys___sigreturn14_args /* {
+	/* {
 		syscallarg(struct sigcontext *) sigcntxp;
-	} */ *uap = v;
+	} */
 	struct proc *p = l->l_proc;
 	struct sigcontext *scp;
 	struct frame *frame;
@@ -330,7 +329,7 @@ compat_16_sys___sigreturn14(struct lwp *l, void *v, register_t *retval)
 	 * See if there is anything to do before we go to the
 	 * expense of copying in close to 1/2K of data
 	 */
-	flags = fuword((caddr_t)rf);
+	flags = fuword((void *)rf);
 #ifdef DEBUG
 	if (sigdebug & SDB_FOLLOW)
 		printf("sigreturn(%d): sc_ap %x flags %x\n",
@@ -340,7 +339,7 @@ compat_16_sys___sigreturn14(struct lwp *l, void *v, register_t *retval)
 	if (flags == -1)
 		return EINVAL;
 
-	if (flags == 0 || copyin((caddr_t)rf, &tstate, sizeof(tstate)) != 0)
+	if (flags == 0 || copyin((void *)rf, &tstate, sizeof(tstate)) != 0)
 		goto restore;
 #ifdef DEBUG
 	if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid)
@@ -399,7 +398,7 @@ compat_16_sys___sigreturn14(struct lwp *l, void *v, register_t *retval)
 	frame->f_pc = scp->sc_pc;
 	frame->f_sr = scp->sc_ps;
 
-	mutex_enter(&p->p_smutex);
+	mutex_enter(p->p_lock);
 
 	/* Restore signal stack. */
 	if (scp->sc_onstack & SS_ONSTACK)
@@ -410,7 +409,7 @@ compat_16_sys___sigreturn14(struct lwp *l, void *v, register_t *retval)
 	/* Restore signal mask. */
 	(void) sigprocmask1(l, SIG_SETMASK, &scp->sc_mask, 0);
 
-	mutex_exit(&p->p_smutex);
+	mutex_exit(p->p_lock);
 
 #ifdef DEBUG
 	if ((sigdebug & SDB_FPSTATE) && *(char *)&tstate.ss_fpstate)

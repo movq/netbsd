@@ -1,4 +1,4 @@
-/*	$NetBSD: scsipi_base.c,v 1.143 2007/02/09 21:55:29 ad Exp $	*/
+/*	$NetBSD: scsipi_base.c,v 1.148 2008/05/11 05:17:23 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002, 2003, 2004 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -38,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.143 2007/02/09 21:55:29 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.148 2008/05/11 05:17:23 mlelstv Exp $");
 
 #include "opt_scsi.h"
 
@@ -104,7 +97,7 @@ scsipi_init(void)
 
 	/* Initialize the scsipi_xfer pool. */
 	pool_init(&scsipi_xfer_pool, sizeof(struct scsipi_xfer), 0,
-	    0, 0, "scxspl", NULL);
+	    0, 0, "scxspl", NULL, IPL_BIO);
 	if (pool_prime(&scsipi_xfer_pool,
 	    PAGE_SIZE / sizeof(struct scsipi_xfer)) == ENOMEM) {
 		printf("WARNING: not enough memory for scsipi_xfer_pool\n");
@@ -119,6 +112,7 @@ scsipi_init(void)
 int
 scsipi_channel_init(struct scsipi_channel *chan)
 {
+	struct scsipi_adapter *adapt = chan->chan_adapter;
 	int i;
 
 	/* Initialize shared data. */
@@ -134,7 +128,13 @@ scsipi_channel_init(struct scsipi_channel *chan)
 	/*
 	 * Create the asynchronous completion thread.
 	 */
-	kthread_create(scsipi_create_completion_thread, chan);
+	if (kthread_create(PRI_NONE, 0, NULL, scsipi_completion_thread, chan,
+	    &chan->chan_thread, "%s", chan->chan_name)) {
+		aprint_error_dev(adapt->adapt_dev, "unable to create completion thread for "
+		    "channel %d\n", chan->chan_channel);
+		panic("scsipi_channel_init");
+	}
+
 	return (0);
 }
 
@@ -469,7 +469,7 @@ scsipi_get_xs(struct scsipi_periph *periph, int flags)
 
 	if (xs != NULL) {
 		memset(xs, 0, sizeof(*xs));
-		callout_init(&xs->xs_callout);
+		callout_init(&xs->xs_callout, 0);
 		xs->xs_periph = periph;
 		xs->xs_control = flags;
 		xs->xs_status = 0;
@@ -1149,6 +1149,9 @@ int
 scsipi_prevent(struct scsipi_periph *periph, int type, int flags)
 {
 	struct scsi_prevent_allow_medium_removal cmd;
+
+	if (periph->periph_quirks & PQUIRK_NODOORLOCK)
+		return 0;
 
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.opcode = SCSI_PREVENT_ALLOW_MEDIUM_REMOVAL;
@@ -1874,7 +1877,7 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 		 * process must NOT be swapped out, as the device will
 		 * be accessing the stack.
 		 */
-		PHOLD(curlwp);
+		uvm_lwp_hold(curlwp);
 	}
 
 	xs->xs_status &= ~XS_STS_DONE;
@@ -2021,7 +2024,7 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	 */
  free_xs:
 	if (xs->xs_control & XS_CTL_DATA_ONSTACK)
-		PRELE(curlwp);
+		uvm_lwp_rele(curlwp);
 
 	s = splbio();
 	scsipi_put_xs(xs);
@@ -2121,27 +2124,6 @@ scsipi_completion_thread(void *arg)
 
 	kthread_exit(0);
 }
-
-/*
- * scsipi_create_completion_thread:
- *
- *	Callback to actually create the completion thread.
- */
-void
-scsipi_create_completion_thread(void *arg)
-{
-	struct scsipi_channel *chan = arg;
-	struct scsipi_adapter *adapt = chan->chan_adapter;
-
-	if (kthread_create1(scsipi_completion_thread, chan,
-	    &chan->chan_thread, "%s", chan->chan_name)) {
-		printf("%s: unable to create completion thread for "
-		    "channel %d\n", adapt->adapt_dev->dv_xname,
-		    chan->chan_channel);
-		panic("scsipi_create_completion_thread");
-	}
-}
-
 /*
  * scsipi_thread_call_callback:
  *
@@ -2214,7 +2196,7 @@ scsipi_print_xfer_mode(struct scsipi_periph *periph)
 	if ((periph->periph_flags & PERIPH_MODE_VALID) == 0)
 		return;
 
-	aprint_normal("%s: ", periph->periph_dev->dv_xname);
+	aprint_normal_dev(periph->periph_dev, "");
 	if (periph->periph_mode & (PERIPH_CAP_SYNC | PERIPH_CAP_DT)) {
 		period = scsipi_sync_factor_to_period(periph->periph_period);
 		aprint_normal("sync (%d.%02dns offset %d)",

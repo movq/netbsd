@@ -1,4 +1,4 @@
-/*	$NetBSD: softintr.h,v 1.1 2007/03/04 01:54:04 tsutsui Exp $	*/
+/*	$NetBSD: softintr.h,v 1.4 2008/04/28 20:23:26 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -39,58 +32,9 @@
 #ifndef _M68K_SOFTINTR_H_
 #define	_M68K_SOFTINTR_H_
 
-#define	SI_SOFTSERIAL	0	/* serial software interrupts */
-#define	SI_SOFTNET	1	/* network software interrupts */
-#define	SI_SOFTCLOCK	2	/* clock software interrupts */
-#define	SI_SOFT		3	/* other software interrupts */
-
-#define	SI_NQUEUES	4
-
-#define	SI_QUEUENAMES {							\
-	"serial",							\
-	"net",								\
-	"clock",							\
-	"misc",								\
-}
-
-#ifdef _KERNEL
-#include <sys/device.h>
-#include <sys/queue.h>
 #include <machine/psl.h>
-
-struct m68k_soft_intrhand {
-	LIST_ENTRY(m68k_soft_intrhand) sih_q;
-	struct m68k_soft_intr *sih_intrhead;
-	void (*sih_func)(void *);
-	void *sih_arg;
-	volatile int sih_pending;
-};
-
-struct m68k_soft_intr {
-	LIST_HEAD(, m68k_soft_intrhand) msi_q;
-	struct evcnt msi_evcnt;
-	uint8_t msi_ipl;
-};
-
-void *softintr_establish(int, void (*)(void *), void *);
-void softintr_disestablish(void *);
-void softintr_init(void);
-void softintr_dispatch(void);
 
 extern volatile uint8_t ssir;
 #define setsoft(x)	ssir |= (1 << (x))
-
-#define softintr_schedule(arg)				\
-do {							\
-	struct m68k_soft_intrhand *__sih = (arg);	\
-	__sih->sih_pending = 1;				\
-	setsoft(__sih->sih_intrhead->msi_ipl);		\
-} while (/* CONSTCOND */0)
-
-/* XXX For legacy software interrupts */
-extern struct m68k_soft_intrhand *softnet_intrhand;
-#define setsoftnet()	softintr_schedule(softnet_intrhand)
-
-#endif /* _KERNEL */
 
 #endif /* _M68K_SOFTINTR_H_ */

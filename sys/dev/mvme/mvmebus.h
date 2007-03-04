@@ -1,4 +1,4 @@
-/*	$NetBSD: mvmebus.h,v 1.1 2002/02/12 20:38:48 scw Exp $	*/
+/*	$NetBSD: mvmebus.h,v 1.3 2008/04/28 20:23:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2002 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -150,8 +143,8 @@ int	mvmebus_dmamem_alloc(void *, vme_size_t, vme_am_t, vme_datasize_t,
 	    vme_swap_t, bus_dma_segment_t *, int, int *, int);
 void	mvmebus_dmamem_free(void *, bus_dma_segment_t *, int);
 int	mvmebus_dmamem_map(bus_dma_tag_t, bus_dma_segment_t *, int,
-	    size_t, caddr_t *, int);
-void	mvmebus_dmamem_unmap(bus_dma_tag_t, caddr_t, size_t);
+	    size_t, void **, int);
+void	mvmebus_dmamem_unmap(bus_dma_tag_t, void *, size_t);
 paddr_t	mvmebus_dmamem_mmap(bus_dma_tag_t, bus_dma_segment_t *, int,
 	    off_t, int, int);
 

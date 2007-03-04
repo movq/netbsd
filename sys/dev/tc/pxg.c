@@ -1,4 +1,4 @@
-/* 	$NetBSD: pxg.c,v 1.25 2007/01/04 18:44:46 elad Exp $	*/
+/* 	$NetBSD: pxg.c,v 1.30 2008/07/09 13:19:33 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pxg.c,v 1.25 2007/01/04 18:44:46 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pxg.c,v 1.30 2008/07/09 13:19:33 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,8 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD: pxg.c,v 1.25 2007/01/04 18:44:46 elad Exp $");
 #endif
 
 #include <machine/autoconf.h>
-#include <machine/cpu.h>
-#include <machine/bus.h>
+#include <sys/cpu.h>
+#include <sys/bus.h>
 
 #include <dev/cons.h>
 
@@ -92,7 +85,7 @@ static int	pxg_intr(void *);
 static int	pxg_match(struct device *, struct cfdata *, void *);
 
 static void	pxg_init(struct stic_info *);
-static int	pxg_ioctl(struct stic_info *, u_long, caddr_t, int, struct lwp *);
+static int	pxg_ioctl(struct stic_info *, u_long, void *, int, struct lwp *);
 static uint32_t	*pxg_pbuf_get(struct stic_info *);
 static int	pxg_pbuf_post(struct stic_info *, u_int32_t *);
 static int	pxg_probe_planes(struct stic_info *);
@@ -101,11 +94,10 @@ static int	pxg_probe_sram(struct stic_info *);
 void	pxg_cnattach(tc_addr_t);
 
 struct pxg_softc {
-	struct	device pxg_dv;
 	struct	stic_info *pxg_si;
 };
 
-CFATTACH_DECL(pxg, sizeof(struct pxg_softc),
+CFATTACH_DECL_NEW(pxg, sizeof(struct pxg_softc),
     pxg_match, pxg_attach, NULL, NULL);
 
 static const char *pxg_types[] = {
@@ -117,7 +109,7 @@ static const char *pxg_types[] = {
 };
 
 static int
-pxg_match(struct device *parent, struct cfdata *match, void *aux)
+pxg_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct tc_attach_args *ta;
 	int i;
@@ -132,7 +124,7 @@ pxg_match(struct device *parent, struct cfdata *match, void *aux)
 }
 
 static void
-pxg_attach(struct device *parent, struct device *self, void *aux)
+pxg_attach(device_t parent, device_t self, void *aux)
 {
 	struct stic_info *si;
 	struct tc_attach_args *ta;
@@ -193,9 +185,9 @@ static void
 pxg_init(struct stic_info *si)
 {
 	volatile u_int32_t *slot;
-	caddr_t kva;
+	char *kva;
 
-	kva = (caddr_t)si->si_slotbase;
+	kva = (void *)si->si_slotbase;
 
 	si->si_vdac = (u_int32_t *)(kva + PXG_VDAC_OFFSET);
 	si->si_vdac_reset = (u_int32_t *)(kva + PXG_VDAC_RESET_OFFSET);
@@ -317,7 +309,7 @@ pxg_pbuf_get(struct stic_info *si)
 
 	si->si_pbuf_select ^= STIC_PACKET_SIZE;
 	off = si->si_pbuf_select + STIC_XCOMM_SIZE;
-	return ((u_int32_t *)((caddr_t)si->si_buf + off));
+	return ((u_int32_t *)((char *)si->si_buf + off));
 }
 
 static int
@@ -332,7 +324,7 @@ pxg_pbuf_post(struct stic_info *si, u_int32_t *buf)
 
 	/* Get address of poll register for this buffer. */
 	v = ((u_long)buf - (u_long)si->si_buf) >> 9;
-	poll = (volatile u_int32_t *)((caddr_t)si->si_slotbase + v);
+	poll = (volatile u_int32_t *)((char *)si->si_slotbase + v);
 
 	/*
 	 * Read the poll register and make sure the stamp wants to accept
@@ -357,7 +349,7 @@ pxg_pbuf_post(struct stic_info *si, u_int32_t *buf)
 }
 
 static int
-pxg_ioctl(struct stic_info *si, u_long cmd, caddr_t data, int flag,
+pxg_ioctl(struct stic_info *si, u_long cmd, void *data, int flag,
 	  struct lwp *l)
 {
 	struct stic_xinfo *sxi;
@@ -422,7 +414,7 @@ pxg_load_fwseg(struct stic_info *si, struct pxg_fwseg *pfs)
 	u_int32_t *dst;
 	u_int left, i;
 
-	dst = (u_int32_t *)((caddr_t)si->si_buf + pfs->pfs_addr);
+	dst = (u_int32_t *)((void *)si->si_buf + pfs->pfs_addr);
 	src = pfs->pfs_data;
 
 	for (left = pfs->pfs_compsize; left != 0; left -= 4) {

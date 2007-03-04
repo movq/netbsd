@@ -1,4 +1,4 @@
-/*	$NetBSD: if_loop.c,v 1.63 2007/02/17 22:34:08 dyoung Exp $	*/
+/*	$NetBSD: if_loop.c,v 1.69 2008/10/24 17:07:33 dyoung Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.63 2007/02/17 22:34:08 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.69 2008/10/24 17:07:33 dyoung Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
@@ -84,7 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.63 2007/02/17 22:34:08 dyoung Exp $");
 #include <sys/ioctl.h>
 #include <sys/time.h>
 
-#include <machine/cpu.h>
+#include <sys/cpu.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -157,10 +157,9 @@ loop_clone_create(struct if_clone *ifc, int unit)
 {
 	struct ifnet *ifp;
 
-	ifp = malloc(sizeof(*ifp), M_DEVBUF, M_WAITOK | M_ZERO);
+	ifp = if_alloc(IFT_LOOP);
 
-	snprintf(ifp->if_xname, sizeof(ifp->if_xname), "%s%d",
-	    ifc->ifc_name, unit);
+	if_initname(ifp, ifc->ifc_name, unit);
 
 	ifp->if_mtu = LOMTU;
 	ifp->if_flags = IFF_LOOPBACK | IFF_MULTICAST | IFF_RUNNING;
@@ -398,7 +397,7 @@ lostart(struct ifnet *ifp)
 /* ARGSUSED */
 void
 lortrequest(int cmd, struct rtentry *rt,
-    struct rt_addrinfo *info)
+    const struct rt_addrinfo *info)
 {
 
 	if (rt)
@@ -410,10 +409,10 @@ lortrequest(int cmd, struct rtentry *rt,
  */
 /* ARGSUSED */
 int
-loioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+loioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct ifaddr *ifa;
-	struct ifreq *ifr;
+	struct ifreq *ifr = data;
 	int error = 0;
 
 	switch (cmd) {
@@ -429,23 +428,21 @@ loioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		break;
 
 	case SIOCSIFMTU:
-		ifr = (struct ifreq *)data;
 		if ((unsigned)ifr->ifr_mtu > LOMTU_MAX)
 			error = EINVAL;
-		else {
+		else if ((error = ifioctl_common(ifp, cmd, data)) == ENETRESET){
 			/* XXX update rt mtu for AF_ISO? */
-			ifp->if_mtu = ifr->ifr_mtu;
+			error = 0;
 		}
 		break;
 
 	case SIOCADDMULTI:
 	case SIOCDELMULTI:
-		ifr = (struct ifreq *)data;
 		if (ifr == NULL) {
 			error = EAFNOSUPPORT;		/* XXX */
 			break;
 		}
-		switch (ifr->ifr_addr.sa_family) {
+		switch (ifreq_getaddr(cmd, ifr)->sa_family) {
 
 #ifdef INET
 		case AF_INET:

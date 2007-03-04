@@ -1,4 +1,4 @@
-/*	$NetBSD: vga_raster.c,v 1.25 2006/11/16 01:32:52 christos Exp $	*/
+/*	$NetBSD: vga_raster.c,v 1.33 2008/10/19 17:47:38 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Bang Jun-Young
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga_raster.c,v 1.25 2006/11/16 01:32:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vga_raster.c,v 1.33 2008/10/19 17:47:38 jmcneill Exp $");
 
 #include "opt_wsmsgattrs.h" /* for WSDISPLAY_CUSTOM_OUTPUT */
 
@@ -67,7 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: vga_raster.c,v 1.25 2006/11/16 01:32:52 christos Exp
 #include <sys/device.h>
 #include <sys/malloc.h>
 #include <sys/queue.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/ic/mc6845reg.h>
 #include <dev/ic/pcdisplayvar.h>
@@ -301,7 +301,7 @@ const struct wsscreen_list vga_screenlist = {
 	_vga_scrlist_mono
 };
 
-static int	vga_raster_ioctl(void *, void *, u_long, caddr_t, int,
+static int	vga_raster_ioctl(void *, void *, u_long, void *, int,
 		    struct lwp *);
 static paddr_t	vga_raster_mmap(void *, void *, off_t, int);
 static int	vga_raster_alloc_screen(void *, const struct wsscreen_descr *,
@@ -349,8 +349,9 @@ vga_cnattach(bus_space_tag_t iot, bus_space_tag_t memt, int type, int check)
 	else if (scr->nrows > 30)
 		/* Unsupported screen type, try 80x30. */
 		typestr = "80x30";
-	scr = wsdisplay_screentype_pick(vga_console_vc.hdl.vh_mono ?
-	    &vga_screenlist_mono : &vga_screenlist, typestr);
+	if (typestr)
+		scr = wsdisplay_screentype_pick(vga_console_vc.hdl.vh_mono ?
+		    &vga_screenlist_mono : &vga_screenlist, typestr);
 	if (scr != vga_console_vc.currenttype)
 		vga_console_vc.currenttype = scr;
 #else
@@ -411,7 +412,7 @@ vga_raster_init(struct vga_config *vc, bus_space_tag_t iot,
 	LIST_INIT(&vc->screens);
 	vc->active = NULL;
 	vc->currenttype = vh->vh_mono ? &vga_25lscreen_mono : &vga_25lscreen;
-	callout_init(&vc->vc_switch_callout);
+	callout_init(&vc->vc_switch_callout, 0);
 
 	wsfont_init();
 	vc->nfonts = 1;
@@ -449,7 +450,8 @@ vga_raster_init_screen(struct vga_config *vc, struct vgascreen *scr,
 	scr->hdl = &vc->hdl;
 	scr->type = type;
 	scr->mindispoffset = 0;
-	scr->maxdispoffset = 0x10000;
+	scr->maxdispoffset = scr->dispoffset +
+	    type->nrows * type->ncols * type->fontheight;
 	vh = &vc->hdl;
 
 	LIST_INIT(&scr->fontset);
@@ -553,7 +555,26 @@ vga_common_attach(struct vga_softc *sc, bus_space_tag_t iot,
 	aa.accessops = &vga_raster_accessops;
 	aa.accesscookie = vc;
 
-	config_found(&sc->sc_dev, &aa, wsemuldisplaydevprint);
+	config_found(sc->sc_dev, &aa, wsemuldisplaydevprint);
+}
+
+int
+vga_cndetach(void)
+{
+	struct vga_config *vc;
+	struct vga_handle *vh;
+
+	vc = &vga_console_vc;
+	vh = &vc->hdl;
+
+	if (vgaconsole) {
+		bus_space_unmap(vh->vh_iot, vh->vh_ioh_vga, 0x10);
+		bus_space_unmap(vh->vh_iot, vh->vh_ioh_6845, 0x10);
+
+		return 1;
+	}
+
+	return 0;
 }
 
 int
@@ -599,7 +620,7 @@ vga_set_video(struct vga_config *vc, int state)
 }
 
 int
-vga_raster_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag,
+vga_raster_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 	struct lwp *l)
 {
 	struct vga_config *vc = v;
@@ -1099,11 +1120,14 @@ void
 vga_raster_putchar(void *id, int row, int col, u_int c, long attr)
 {
 	struct vgascreen *scr = id;
-	int off;
+	size_t off;
 	struct vga_raster_font *fs;
 	u_int tmp_ch;
 
 	off = row * scr->type->ncols + col;
+
+	if (__predict_false(off >= (scr->type->ncols * scr->type->nrows)))
+		return;
 
 	LIST_FOREACH(fs, &scr->fontset, next) {
 		if ((scr->encoding == fs->font->encoding) &&
@@ -1375,6 +1399,10 @@ vga_raster_allocattr(void *id, int fg, int bg, int flags, long *attrp)
 	struct vgascreen *scr = id;
 	struct vga_config *vc = scr->cfg;
 
+	if (__predict_false((unsigned int)fg >= sizeof(fgansitopc) || 
+	    (unsigned int)bg >= sizeof(bgansitopc)))
+	    	return (EINVAL);
+
 	if (vc->hdl.vh_mono) {
 		if (flags & WSATTR_WSCOLORS)
 			return (EINVAL);
@@ -1450,3 +1478,11 @@ vga_raster_replaceattr(void *id, long oldattr, long newattr)
 		vga_restore_screen(scr, type, scr->mem);
 }
 #endif /* WSDISPLAY_CUSTOM_OUTPUT */
+
+void
+vga_resume(struct vga_softc *sc)
+{
+#ifdef VGA_RESET_ON_RESUME
+	vga_initregs(&sc->sc_vc->hdl);
+#endif
+}

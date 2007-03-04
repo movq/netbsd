@@ -1,4 +1,4 @@
-/* $NetBSD: ciphy.c,v 1.11 2006/11/26 15:40:14 tsutsui Exp $ */
+/* $NetBSD: ciphy.c,v 1.15 2008/05/04 17:06:09 xtraeme Exp $ */
 
 /*-
  * Copyright (c) 2004
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ciphy.c,v 1.11 2006/11/26 15:40:14 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ciphy.c,v 1.15 2008/05/04 17:06:09 xtraeme Exp $");
 
 /*
  * Driver for the Cicada CS8201 10/100/1000 copper PHY.
@@ -46,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: ciphy.c,v 1.11 2006/11/26 15:40:14 tsutsui Exp $");
 #include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/socket.h>
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <net/if.h>
 #include <net/if_arp.h>
@@ -58,10 +58,10 @@ __KERNEL_RCSID(0, "$NetBSD: ciphy.c,v 1.11 2006/11/26 15:40:14 tsutsui Exp $");
 
 #include <dev/mii/ciphyreg.h>
 
-static int ciphymatch(struct device *, struct cfdata *, void *);
-static void ciphyattach(struct device *, struct device *, void *);
+static int ciphymatch(device_t, cfdata_t, void *);
+static void ciphyattach(device_t, device_t, void *);
 
-CFATTACH_DECL(ciphy, sizeof(struct mii_softc),
+CFATTACH_DECL_NEW(ciphy, sizeof(struct mii_softc),
     ciphymatch, ciphyattach, mii_phy_detach, mii_phy_activate);
 
 static int	ciphy_service(struct mii_softc *, struct mii_data *, int);
@@ -120,6 +120,7 @@ ciphyattach(struct device *parent, struct device *self, void *aux)
 	aprint_naive(": Media interface\n");
 	aprint_normal(": %s, rev. %d\n", mpd->mpd_name, MII_REV(ma->mii_id2));
 
+	sc->mii_dev = self;
 	sc->mii_inst = mii->mii_instance;
 	sc->mii_phy = ma->mii_phyno;
 	sc->mii_funcs = &ciphy_funcs;
@@ -135,12 +136,15 @@ ciphyattach(struct device *parent, struct device *self, void *aux)
 	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
 	if (sc->mii_capabilities & BMSR_EXTSTAT)
 		sc->mii_extcapabilities = PHY_READ(sc, MII_EXTSR);
-	aprint_normal("%s: ", sc->mii_dev.dv_xname);
+	aprint_normal_dev(self, "");
 	if ((sc->mii_capabilities & BMSR_MEDIAMASK) == 0)
 		aprint_error("no media present");
 	else
 		mii_phy_add_media(sc);
 	aprint_normal("\n");
+
+	if (!pmf_device_register(self, NULL, mii_phy_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 }
 
 static int
@@ -338,8 +342,7 @@ ciphy_status(sc)
 		mii->mii_media_active |= IFM_1000_T;
 		break;
 	default:
-		printf("%s: unknown PHY speed %x\n",
-		    sc->mii_dev.dv_xname,
+		aprint_error_dev(sc->mii_dev, "unknown PHY speed %x\n",
 		    bmsr & CIPHY_AUXCSR_SPEED);
 		break;
 	}
@@ -374,7 +377,7 @@ ciphy_fixup(struct mii_softc *sc)
 	status = PHY_READ(sc, CIPHY_MII_AUXCSR);
 	speed = status & CIPHY_AUXCSR_SPEED;
 
-	if (device_is_a(device_parent(&sc->mii_dev), "nfe")) {
+	if (device_is_a(device_parent(sc->mii_dev), "nfe")) {
 		/* need to set for 2.5V RGMII for NVIDIA adapters */
 		PHY_SETBIT(sc, CIPHY_MII_ECTL1, CIPHY_INTSEL_RGMII);
 		PHY_SETBIT(sc, CIPHY_MII_ECTL1, CIPHY_IOVOL_2500MV);
@@ -418,8 +421,8 @@ ciphy_fixup(struct mii_softc *sc)
 
 		break;
 	default:
-		printf("%s: unknown CICADA PHY model %x\n",
-		    sc->mii_dev.dv_xname, model);
+		aprint_error_dev(sc->mii_dev, "unknown CICADA PHY model %x\n",
+		    model);
 		break;
 	}
 

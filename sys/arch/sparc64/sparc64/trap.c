@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.141 2007/02/10 18:16:18 hannken Exp $ */
+/*	$NetBSD: trap.c,v 1.155 2008/10/15 06:51:19 wrstuden Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
@@ -50,11 +50,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.141 2007/02/10 18:16:18 hannken Exp $");
-
-#define NEW_FPSTATE
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.155 2008/10/15 06:51:19 wrstuden Exp $");
 
 #include "opt_ddb.h"
+#include "opt_multiprocessor.h"
 #include "opt_compat_svr4.h"
 #include "opt_compat_netbsd32.h"
 
@@ -64,8 +63,9 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.141 2007/02/10 18:16:18 hannken Exp $");
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/ras.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/kernel.h>
-#include <sys/malloc.h>
 #include <sys/resource.h>
 #include <sys/signal.h>
 #include <sys/wait.h>
@@ -95,7 +95,6 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.141 2007/02/10 18:16:18 hannken Exp $");
 #endif
 
 #include <sparc/fpu/fpu_extern.h>
-#include <sparc64/sparc64/cache.h>
 
 #ifndef offsetof
 #define	offsetof(s, f) ((size_t)&((s *)0)->f)
@@ -110,6 +109,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.141 2007/02/10 18:16:18 hannken Exp $");
 })
 #endif
 
+#ifdef TRAPSTATS
 /* trapstats */
 int protfix = 0;
 int udmiss = 0;	/* Number of normal/nucleus data/text miss/protection faults */
@@ -134,6 +134,7 @@ int rftucnt = 0;
 int rftuld = 0;
 int rftudone = 0;
 int rftkcnt[5] = { 0, 0, 0, 0, 0 };
+#endif
 
 #ifdef DEBUG
 #define RW_64		0x1
@@ -173,13 +174,13 @@ int	trapdebug = 0/*|TDB_SYSCALL|TDB_STOPSIG|TDB_STOPCPIO|TDB_ADDFLT|TDB_FOLLOW*/
  * set, no matter how it is interpreted.  Appendix N of the Sparc V8 document
  * seems to imply that we should do this, and it does make sense.
  */
-__asm(".align 64");
-struct	fpstate64 initfpstate = {
+const struct fpstate64 initfpstate __aligned(BLOCK_SIZE) = {
 	.fs_regs =
 	{ ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0,
 	  ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0,
 	  ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0,
-	  ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0 }
+	  ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0, ~0 },
+	.fs_qsize = 0
 };
 
 /*
@@ -434,6 +435,14 @@ trap(struct trapframe64 *tf, unsigned int type, vaddr_t pc, long tstate)
 	ksiginfo_t ksi;
 	int error;
 	int code, sig;
+#ifdef MULTIPROCESSOR
+	int s;
+#define	disintr()	s = intr_disable()
+#define	rstintr()	intr_restore(s)
+#else
+#define	disintr()	/* nothing */
+#define	rstintr()	/* nothing */
+#endif
 
 	/* This steps the PC over the trap. */
 #define	ADVANCE (n = tf->tf_npc, tf->tf_pc = n, tf->tf_npc = n + 4)
@@ -509,17 +518,6 @@ trap(struct trapframe64 *tf, unsigned int type, vaddr_t pc, long tstate)
 		 * the FPU.
 		 */
 		if (type == T_FPDISABLED) {
-extern void db_printf(const char * , ...);
-#ifndef NEW_FPSTATE
-			if (fplwp != NULL) {	/* someone else had it */
-				savefpstate(fplwp->l_md.md_fpstate);
-				fplwp = NULL;
-				/* Enable the FPU */
-/*				loadfpstate(initfpstate);*/
-			}
-			tf->tf_tstate |= (PSTATE_PEF << TSTATE_PSTATE_SHIFT);
-			return;
-#else
 			struct lwp *newfplwp;
 
 			/* New scheme */
@@ -528,15 +526,18 @@ extern void db_printf(const char * , ...);
 			} else {
 				newfplwp = curlwp;
 				/* force other cpus to give up this fpstate */
-				if (curlwp->l_md.md_fpstate)
-					save_and_clear_fpstate(newfplwp);
+				if (newfplwp->l_md.md_fpstate)
+					fpusave_lwp(newfplwp, true);
 			}
 			if (fplwp != newfplwp) {
+				disintr();
 				if (fplwp != NULL) {
 					/* someone else had it, maybe? */
+					KASSERT(fplwp->l_md.md_fpstate != NULL);
 					savefpstate(fplwp->l_md.md_fpstate);
 					fplwp = NULL;
 				}
+				rstintr();
 				/* If we have an allocated fpstate, load it */
 				if (newfplwp->l_md.md_fpstate != NULL) {
 					fplwp = newfplwp;
@@ -545,9 +546,8 @@ extern void db_printf(const char * , ...);
 					fplwp = NULL;
 			}
 			/* Enable the FPU */
-			tf->tf_tstate |= (PSTATE_PEF << TSTATE_PSTATE_SHIFT);
+			tf->tf_tstate |= TSTATE_PEF;
 			return;
-#endif
 		}
 		goto dopanic;
 	}
@@ -668,10 +668,9 @@ badtrap:
 		struct fpstate64 *fs = l->l_md.md_fpstate;
 
 		if (fs == NULL) {
-			/* NOTE: fpstate must be 64-bit aligned */
-			fs = malloc((sizeof *fs), M_SUBPROC, M_WAITOK);
+			/* NOTE: fpstate must be 64-byte aligned */
+			fs = pool_cache_get(fpstate_cache, PR_WAITOK);
 			*fs = initfpstate;
-			fs->fs_qsize = 0;
 			l->l_md.md_fpstate = fs;
 		}
 		/*
@@ -688,13 +687,17 @@ badtrap:
 		}
 		if (fplwp != l) {		/* we do not have it */
 			/* but maybe another CPU has it? */
-			save_and_clear_fpstate(l);
-			if (fplwp != NULL)	/* someone else had it */
+			fpusave_lwp(l, true);
+			disintr();
+			if (fplwp != NULL) {	/* someone else had it */
+				KASSERT(fplwp->l_md.md_fpstate != NULL);
 				savefpstate(fplwp->l_md.md_fpstate);
+			}
 			loadfpstate(fs);
 			fplwp = l;		/* now we do have it */
+			rstintr();
 		}
-		tf->tf_tstate |= (PSTATE_PEF << TSTATE_PSTATE_SHIFT);
+		tf->tf_tstate |= TSTATE_PEF;
 		break;
 	}
 
@@ -756,11 +759,14 @@ badtrap:
 		 */
 		if (l != fplwp)
 			panic("fpe without being the FP user");
+		disintr();
+		KASSERT(l->l_md.md_fpstate != NULL);
 		savefpstate(l->l_md.md_fpstate);
 		fplwp = NULL;
-		/* tf->tf_psr &= ~PSR_EF; */	/* share_fpu will do this */
+		rstintr();
+		/* tf->tf_tstate &= ~TSTATE_PEF */ /* share_fpu will do this */
 		if (l->l_md.md_fpstate->fs_qsize == 0) {
-			error = copyin((caddr_t)pc,
+			error = copyin((void *)pc,
 			    &l->l_md.md_fpstate->fs_queue[0].fq_instr,
 			    sizeof(int));
 			if (error) {
@@ -795,8 +801,8 @@ badtrap:
 		break;
 
 	case T_BREAKPOINT:
-		if (LIST_EMPTY(&p->p_raslist) ||
-		    (ras_lookup(p, (caddr_t)(intptr_t)tf->tf_pc) == (caddr_t)-1)) {
+		if (p->p_raslist == NULL ||
+		    (ras_lookup(p, (void *)(intptr_t)tf->tf_pc) == (void *)-1)) {
 			sig = SIGTRAP;
 			KSI_INIT_TRAP(&ksi);
 			ksi.ksi_trap = type;
@@ -856,10 +862,8 @@ badtrap:
 		break;
 	}
 	if (sig != 0) {
-		KERNEL_LOCK(1, l);
 		ksi.ksi_signo = sig;
 		trapsignal(l, &ksi);
-		KERNEL_UNLOCK_LAST(l);
 	}
 	userret(l, pc, sticks);
 	share_fpu(l, tf);
@@ -920,7 +924,7 @@ rwindow_save(struct lwp *l)
 			}
 #endif
 			rwdest += BIAS;
-			if (copyout((caddr_t)&rw[i], (caddr_t)(u_long)rwdest,
+			if (copyout((void *)&rw[i], (void *)(u_long)rwdest,
 				    sizeof(*rw))) {
 #ifdef DEBUG
 			if (rwindow_debug & (RW_ERR | RW_64))
@@ -933,7 +937,7 @@ rwindow_save(struct lwp *l)
 #ifdef DEBUG
 			if (rwindow_debug & RW_64) {
 				printf("Finished copyout(%p, %p, %lx)\n",
-					(caddr_t)&rw[i], (caddr_t)(long)rwdest,
+					(void *)&rw[i], (void *)(long)rwdest,
                                 	sizeof(*rw));
 				Debugger();
 			}
@@ -947,7 +951,7 @@ rwindow_save(struct lwp *l)
 				rwstack.rw_in[j] = (int)rw[i].rw_in[j];
 			}
 			/* Must truncate rwdest */
-			if (copyout(&rwstack, (caddr_t)(u_long)(u_int)rwdest,
+			if (copyout(&rwstack, (void *)(u_long)(u_int)rwdest,
 				    sizeof(rwstack))) {
 #ifdef DEBUG
 				if (rwindow_debug & RW_ERR)
@@ -1061,10 +1065,10 @@ data_access_fault(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 			printf("NULL proc\n");
 		else
 			printf("pid %d(%s); sigmask %x, sigcatch %x\n",
-			       curproc->p_pid, curproc->p_comm,
+			       l->l_proc->p_pid, l->l_proc->p_comm,
 				/* XXX */
-			       curlwp->l_sigmask.__bits[0], 
-			       curproc->p_sigctx.ps_sigcatch.__bits[0]);
+			       l->l_sigmask.__bits[0], 
+			       l->l_proc->p_sigctx.ps_sigcatch.__bits[0]);
 	}
 #endif
 
@@ -1081,7 +1085,7 @@ data_access_fault(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 	} else {
 		access_type = (sfsr & SFSR_W) ? VM_PROT_WRITE : VM_PROT_READ;
 	}
-	if (tstate & (PSTATE_PRIV<<TSTATE_PSTATE_SHIFT)) {
+	if (tstate & TSTATE_PRIV) {
 		extern char Lfsbail[];
 
 		/*
@@ -1107,6 +1111,9 @@ data_access_fault(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 			 * hard to find, so better panic now with a helpfull
 			 * message.
 			 */
+			/*
+			 * XXXMRG in yamt-idlelwp world this seems unlikely?
+			 */
 			if (curlwp == NULL) {
 				panic("cpu%d: kernel data access fault "
 				    "accessing 0x%lx at pc 0x%lx\n",
@@ -1126,8 +1133,19 @@ data_access_fault(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 				return;
 			goto kfault;
 		}
-	} else
+	} else {
 		l->l_md.md_tf = tf;
+		/*
+		 * WRS: Can drop LP_SA_NOBLOCK test iff can only get
+		 * here from a usermode-initiated access. LP_SA_NOBLOCK
+		 * should never be set there - it's kernel-only.
+		 */
+		if ((l->l_flag & LW_SA)
+		    && (~l->l_pflag & LP_SA_NOBLOCK)) {
+			l->l_savp->savp_faultaddr = addr;
+			l->l_pflag |= LP_SA_PAGEFAULT;
+		}
+	}
 
 	vm = p->p_vmspace;
 	/* alas! must call the horrible vm code */
@@ -1152,7 +1170,7 @@ data_access_fault(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 	 * the current limit and we need to reflect that as an access
 	 * error.
 	 */
-	if ((caddr_t)va >= vm->vm_maxsaddr) {
+	if ((void *)va >= vm->vm_maxsaddr) {
 		if (rv == 0)
 			uvm_grow(p, va);
 		else if (rv == EACCES)
@@ -1165,7 +1183,7 @@ data_access_fault(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 		 * address.  Any other page fault in kernel, die; if user
 		 * fault, deliver SIGSEGV.
 		 */
-		if (tstate & (PSTATE_PRIV << TSTATE_PSTATE_SHIFT)) {
+		if (tstate & TSTATE_PRIV) {
 kfault:
 			onfault = l->l_addr ?
 			    (long)l->l_addr->u_pcb.pcb_onfault : 0;
@@ -1225,6 +1243,7 @@ kfault:
 		trapsignal(l, &ksi);
 	}
 	if ((tstate & TSTATE_PRIV) == 0) {
+		l->l_pflag &= ~LP_SA_PAGEFAULT;
 		userret(l, pc, sticks);
 		share_fpu(l, tf);
 	}
@@ -1337,7 +1356,7 @@ data_access_error(struct trapframe64 *tf, unsigned int type, vaddr_t afva,
 	}
 #endif
 
-	if (tstate & (PSTATE_PRIV<<TSTATE_PSTATE_SHIFT)) {
+	if (tstate & TSTATE_PRIV) {
 		if (!onfault) {
 			extern int trap_trace_dis;
 			char buf[768];
@@ -1461,7 +1480,7 @@ text_access_fault(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 	/* Now munch on protections... */
 
 	access_type = VM_PROT_EXECUTE;
-	if (tstate & (PSTATE_PRIV << TSTATE_PSTATE_SHIFT)) {
+	if (tstate & TSTATE_PRIV) {
 		extern int trap_trace_dis;
 		trap_trace_dis = 1; /* Disable traptrace for printf */
 		(void) splhigh();
@@ -1488,7 +1507,7 @@ text_access_fault(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 	 * the current limit and we need to reflect that as an access
 	 * error.
 	 */
-	if ((caddr_t)va >= vm->vm_maxsaddr) {
+	if ((void *)va >= vm->vm_maxsaddr) {
 		if (rv == 0)
 			uvm_grow(p, va);
 	}
@@ -1612,7 +1631,7 @@ text_access_error(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 		       type, sfsr, pc, afsr, afva, tf);
 		trap_trace_dis--; /* Reenable traptrace for printf */
 
-		if (tstate & (PSTATE_PRIV<<TSTATE_PSTATE_SHIFT))
+		if (tstate & TSTATE_PRIV)
 			panic("text_access_error: kernel memory error");
 
 		/* User fault -- Berr */
@@ -1645,7 +1664,7 @@ text_access_error(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 	/* Now munch on protections... */
 
 	access_type = VM_PROT_EXECUTE;
-	if (tstate & (PSTATE_PRIV << TSTATE_PSTATE_SHIFT)) {
+	if (tstate & TSTATE_PRIV) {
 		extern int trap_trace_dis;
 		trap_trace_dis = 1; /* Disable traptrace for printf */
 		bitmask_snprintf(sfsr, SFSR_BITS, buf, sizeof buf);
@@ -1668,7 +1687,7 @@ text_access_error(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 	 * the current limit and we need to reflect that as an access
 	 * error.
 	 */
-	if ((caddr_t)va >= vm->vm_maxsaddr) {
+	if ((void *)va >= vm->vm_maxsaddr) {
 		if (rv == 0)
 			uvm_grow(p, va);
 		else if (rv == EACCES)

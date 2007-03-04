@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt.c,v 1.68 2006/11/16 01:32:51 christos Exp $	*/
+/*	$NetBSD: lpt.c,v 1.75 2008/06/10 22:53:08 cegger Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994 Charles M. Hannum.
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lpt.c,v 1.68 2006/11/16 01:32:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lpt.c,v 1.75 2008/06/10 22:53:08 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,9 +67,9 @@ __KERNEL_RCSID(0, "$NetBSD: lpt.c,v 1.68 2006/11/16 01:32:51 christos Exp $");
 #include <sys/device.h>
 #include <sys/conf.h>
 #include <sys/syslog.h>
+#include <sys/intr.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
 
 #include <dev/ic/lptreg.h>
 #include <dev/ic/lptvar.h>
@@ -104,6 +104,8 @@ const struct cdevsw lpt_cdevsw = {
 #define	LPTUNIT(s)	(minor(s) & 0x1f)
 #define	LPTFLAGS(s)	(minor(s) & 0xe0)
 
+static void	lptsoftintr(void *);
+
 void
 lpt_attach_subr(sc)
 	struct lpt_softc *sc;
@@ -118,9 +120,21 @@ lpt_attach_subr(sc)
 
 	bus_space_write_1(iot, ioh, lpt_control, LPC_NINIT);
 
-	callout_init(&sc->sc_wakeup_ch);
+	callout_init(&sc->sc_wakeup_ch, 0);
+	sc->sc_sih = softint_establish(SOFTINT_SERIAL, lptsoftintr, sc);
 
 	sc->sc_dev_ok = 1;
+}
+
+int
+lpt_detach_subr(device_t self, int flags)
+{
+	struct lpt_softc *sc = device_private(self);
+
+	sc->sc_dev_ok = 0;
+	softint_disestablish(sc->sc_sih);
+	callout_destroy(&sc->sc_wakeup_ch);
+	return 0;
 }
 
 /*
@@ -137,7 +151,7 @@ lptopen(dev_t dev, int flag, int mode, struct lwp *l)
 	int error;
 	int spin;
 
-	sc = device_lookup(&lpt_cd, LPTUNIT(dev));
+	sc = device_lookup_private(&lpt_cd, LPTUNIT(dev));
 	if (!sc || !sc->sc_dev_ok)
 		return ENXIO;
 
@@ -148,7 +162,7 @@ lptopen(dev_t dev, int flag, int mode, struct lwp *l)
 
 #ifdef DIAGNOSTIC
 	if (sc->sc_state)
-		printf("%s: stat=0x%x not zero\n", sc->sc_dev.dv_xname,
+		aprint_verbose_dev(sc->sc_dev, "stat=0x%x not zero\n",
 		    sc->sc_state);
 #endif
 
@@ -157,7 +171,7 @@ lptopen(dev_t dev, int flag, int mode, struct lwp *l)
 
 	sc->sc_state = LPT_INIT;
 	sc->sc_flags = flags;
-	LPRINTF(("%s: open: flags=0x%x\n", sc->sc_dev.dv_xname,
+	LPRINTF(("%s: open: flags=0x%x\n", device_xname(sc->sc_dev),
 	    (unsigned)flags));
 	iot = sc->sc_iot;
 	ioh = sc->sc_ioh;
@@ -179,7 +193,7 @@ lptopen(dev_t dev, int flag, int mode, struct lwp *l)
 		}
 
 		/* wait 1/4 second, give up if we get a signal */
-		error = tsleep((caddr_t)sc, LPTPRI | PCATCH, "lptopen", STEP);
+		error = tsleep((void *)sc, LPTPRI | PCATCH, "lptopen", STEP);
 		if (error != EWOULDBLOCK) {
 			sc->sc_state = 0;
 			return error;
@@ -200,7 +214,7 @@ lptopen(dev_t dev, int flag, int mode, struct lwp *l)
 	if ((sc->sc_flags & LPT_NOINTR) == 0)
 		lptwakeup(sc);
 
-	LPRINTF(("%s: opened\n", sc->sc_dev.dv_xname));
+	LPRINTF(("%s: opened\n", device_xname(sc->sc_dev)));
 	return 0;
 }
 
@@ -218,13 +232,13 @@ lptnotready(status, sc)
 	if (sc->sc_state & LPT_OPEN) {
 		if (new & LPS_SELECT)
 			log(LOG_NOTICE,
-			    "%s: offline\n", sc->sc_dev.dv_xname);
+			    "%s: offline\n", device_xname(sc->sc_dev));
 		else if (new & LPS_NOPAPER)
 			log(LOG_NOTICE,
-			    "%s: out of paper\n", sc->sc_dev.dv_xname);
+			    "%s: out of paper\n", device_xname(sc->sc_dev));
 		else if (new & LPS_NERR)
 			log(LOG_NOTICE,
-			    "%s: output error\n", sc->sc_dev.dv_xname);
+			    "%s: output error\n", device_xname(sc->sc_dev));
 	}
 
 	return status;
@@ -251,7 +265,8 @@ int
 lptclose(dev_t dev, int flag, int mode,
     struct lwp *l)
 {
-	struct lpt_softc *sc = device_lookup(&lpt_cd, LPTUNIT(dev));
+	struct lpt_softc *sc =
+	    device_lookup_private(&lpt_cd, LPTUNIT(dev));
 	bus_space_tag_t iot = sc->sc_iot;
 	bus_space_handle_t ioh = sc->sc_ioh;
 
@@ -266,7 +281,7 @@ lptclose(dev_t dev, int flag, int mode,
 	bus_space_write_1(iot, ioh, lpt_control, LPC_NINIT);
 	free(sc->sc_inbuf, M_DEVBUF);
 
-	LPRINTF(("%s: closed\n", sc->sc_dev.dv_xname));
+	LPRINTF(("%s: closed\n", device_xname(sc->sc_dev)));
 	return 0;
 }
 
@@ -295,7 +310,7 @@ lptpushbytes(sc)
 					tic = tic + tic + 1;
 					if (tic > TIMEOUT)
 						tic = TIMEOUT;
-					error = tsleep((caddr_t)sc,
+					error = tsleep((void *)sc,
 					    LPTPRI | PCATCH, "lptpsh", tic);
 					if (error != EWOULDBLOCK)
 						return error;
@@ -322,13 +337,14 @@ lptpushbytes(sc)
 		while (sc->sc_count > 0) {
 			/* if the printer is ready for a char, give it one */
 			if ((sc->sc_state & LPT_OBUSY) == 0) {
-				LPRINTF(("%s: write %lu\n", sc->sc_dev.dv_xname,
+				LPRINTF(("%s: write %lu\n",
+				    device_xname(sc->sc_dev),
 				    (u_long)sc->sc_count));
 				s = spllpt();
 				(void) lptintr(sc);
 				splx(s);
 			}
-			error = tsleep((caddr_t)sc, LPTPRI | PCATCH,
+			error = tsleep((void *)sc, LPTPRI | PCATCH,
 			    "lptwrite2", 0);
 			if (error)
 				return error;
@@ -344,7 +360,8 @@ lptpushbytes(sc)
 int
 lptwrite(dev_t dev, struct uio *uio, int flags)
 {
-	struct lpt_softc *sc = device_lookup(&lpt_cd, LPTUNIT(dev));
+	struct lpt_softc *sc =
+	    device_lookup_private(&lpt_cd, LPTUNIT(dev));
 	size_t n;
 	int error = 0;
 
@@ -402,14 +419,21 @@ lptintr(arg)
 
 	if (sc->sc_count == 0) {
 		/* none, wake up the top half to get more */
-		wakeup((caddr_t)sc);
+		softint_schedule(sc->sc_sih);
 	}
 
 	return 1;
 }
 
+static void
+lptsoftintr(void *cookie)
+{
+
+	wakeup(cookie);
+}
+
 int
-lptioctl(dev_t dev, u_long cmd, caddr_t data,
+lptioctl(dev_t dev, u_long cmd, void *data,
     int flag, struct lwp *l)
 {
 	return ENODEV;

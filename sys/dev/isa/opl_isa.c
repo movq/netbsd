@@ -1,4 +1,4 @@
-/*	$NetBSD: opl_isa.c,v 1.16 2006/11/16 01:33:00 christos Exp $	*/
+/*	$NetBSD: opl_isa.c,v 1.19 2008/04/28 20:23:52 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -37,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opl_isa.c,v 1.16 2006/11/16 01:33:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opl_isa.c,v 1.19 2008/04/28 20:23:52 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,7 +44,7 @@ __KERNEL_RCSID(0, "$NetBSD: opl_isa.c,v 1.16 2006/11/16 01:33:00 christos Exp $"
 #include <sys/audioio.h>
 #include <sys/midiio.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/audio_if.h>
 #include <dev/midi_if.h>
@@ -63,15 +56,14 @@ __KERNEL_RCSID(0, "$NetBSD: opl_isa.c,v 1.16 2006/11/16 01:33:00 christos Exp $"
 
 #define OPL_SIZE 4
 
-int	opl_isa_match(struct device *, struct cfdata *, void *);
-void	opl_isa_attach(struct device *, struct device *, void *);
+int	opl_isa_match(device_t, cfdata_t, void *);
+void	opl_isa_attach(device_t, device_t, void *);
 
-CFATTACH_DECL(opl_isa, sizeof(struct opl_softc),
+CFATTACH_DECL_NEW(opl_isa, sizeof(struct opl_softc),
     opl_isa_match, opl_isa_attach, NULL, NULL);
 
 int
-opl_isa_match(struct device *parent, struct cfdata *match,
-    void *aux)
+opl_isa_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_handle_t ioh;
@@ -102,16 +94,17 @@ opl_isa_match(struct device *parent, struct cfdata *match,
 }
 
 void
-opl_isa_attach(struct device *parent, struct device *self, void *aux)
+opl_isa_attach(device_t parent, device_t self, void *aux)
 {
-	struct opl_softc *sc = (struct opl_softc *)self;
+	struct opl_softc *sc = device_private(self);
 	struct isa_attach_args *ia = aux;
 
+	sc->mididev.dev = self;
 	sc->iot = ia->ia_iot;
 
 	if (bus_space_map(sc->iot, ia->ia_io[0].ir_addr, OPL_SIZE,
 	    0, &sc->ioh)) {
-		printf("opl_isa_attach: bus_space_map failed\n");
+		aprint_error("opl_isa_attach: bus_space_map failed\n");
 		return;
 	}
 	sc->offs = 0;

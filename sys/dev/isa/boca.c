@@ -1,4 +1,4 @@
-/*	$NetBSD: boca.c,v 1.47 2006/11/16 01:33:00 christos Exp $	*/
+/*	$NetBSD: boca.c,v 1.50 2008/04/08 20:08:49 cegger Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: boca.c,v 1.47 2006/11/16 01:33:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: boca.c,v 1.50 2008/04/08 20:08:49 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,8 +43,8 @@ __KERNEL_RCSID(0, "$NetBSD: boca.c,v 1.47 2006/11/16 01:33:00 christos Exp $");
 #include <sys/kernel.h>
 #include <sys/callout.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
@@ -64,7 +64,7 @@ struct boca_softc {
 	int sc_alive;			/* mask of slave units attached */
 	void *sc_slaves[NSLAVES];	/* com device unit numbers */
 	bus_space_handle_t sc_slaveioh[NSLAVES];
-	struct callout fixup;
+	callout_t fixup;
 };
 
 int bocaprobe(struct device *, struct cfdata *, void *);
@@ -166,8 +166,7 @@ bocaattach(struct device *parent, struct device *self, void *aux)
 		if (!com_is_console(iot, iobase, &sc->sc_slaveioh[i]) &&
 		    bus_space_map(iot, iobase, COM_NPORTS, 0,
 			&sc->sc_slaveioh[i])) {
-			printf("%s: can't map i/o space for slave %d\n",
-			     sc->sc_dev.dv_xname, i);
+			aprint_error_dev(&sc->sc_dev, "can't map i/o space for slave %d\n", i);
 			return;
 		}
 	}
@@ -187,7 +186,7 @@ bocaattach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 	    IST_EDGE, IPL_SERIAL, bocaintr, sc);
-	callout_init(&sc->fixup);
+	callout_init(&sc->fixup, 0);
 	callout_reset(&sc->fixup, hz/10, boca_fixup, sc);
 }
 
@@ -209,7 +208,7 @@ bocaintr(arg)
 		if (bits & (1 << (n))) { \
 			if (comintr(sc->sc_slaves[n]) == 0) { \
 				printf("%s: bogus intr for port %d\n", \
-				    sc->sc_dev.dv_xname, n); \
+				    device_xname(&sc->sc_dev), n); \
 			} \
 		}
 		TRY(0);

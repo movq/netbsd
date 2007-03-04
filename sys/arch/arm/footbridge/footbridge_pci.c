@@ -1,4 +1,4 @@
-/*	$NetBSD: footbridge_pci.c,v 1.13 2007/02/25 18:42:00 chris Exp $	*/
+/*	$NetBSD: footbridge_pci.c,v 1.15 2008/05/10 15:29:25 chris Exp $	*/
 
 /*
  * Copyright (c) 1997,1998 Mark Brinicombe.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: footbridge_pci.c,v 1.13 2007/02/25 18:42:00 chris Exp $");
+__KERNEL_RCSID(0, "$NetBSD: footbridge_pci.c,v 1.15 2008/05/10 15:29:25 chris Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,13 +95,15 @@ struct arm32_pci_chipset footbridge_pci_chipset = {
 	footbridge_pci_intr_disestablish
 };
 
+struct arm32_dma_range footbridge_dma_ranges[1];
+
 /*
  * PCI doesn't have any special needs; just use the generic versions
  * of these functions.
  */
 struct arm32_bus_dma_tag footbridge_pci_bus_dma_tag = {
-	0,
-	0,
+	footbridge_dma_ranges,
+	1,
 	NULL,
 	_bus_dmamap_create, 
 	_bus_dmamap_destroy,
@@ -337,7 +339,7 @@ footbridge_pci_intr_string(pcv, ih)
 	void *pcv;
 	pci_intr_handle_t ih;
 {
-	static char irqstr[8];		/* 4 + 2 + NULL + sanity */
+	static char irqstr[7+2+3]; /* "isairq dd" + NULL + sanity */
 
 #ifdef PCI_DEBUG
 	printf("footbridge_pci_intr_string(pcv=%p, ih=0x%lx)\n", pcv, ih);

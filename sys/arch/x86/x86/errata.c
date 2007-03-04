@@ -1,4 +1,4 @@
-/*	$NetBSD: errata.c,v 1.7 2007/02/21 22:59:55 thorpej Exp $	*/
+/*	$NetBSD: errata.c,v 1.18 2008/05/25 15:52:07 chris Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -52,12 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: errata.c,v 1.7 2007/02/21 22:59:55 thorpej Exp $");
-
-#include "opt_multiprocessor.h"
-#ifdef i386
-#include "opt_cputype.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: errata.c,v 1.18 2008/05/25 15:52:07 chris Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>
@@ -68,8 +56,6 @@ __KERNEL_RCSID(0, "$NetBSD: errata.c,v 1.7 2007/02/21 22:59:55 thorpej Exp $");
 
 #include <x86/cpuvar.h>
 #include <x86/cputypes.h>
-
-#if defined(I686_CPU) || defined(__x86_64__)
 
 typedef struct errata {
 	u_short		e_num;
@@ -83,6 +69,7 @@ typedef struct errata {
 typedef enum cpurev {
 	BH_E4, CH_CG, CH_D0, DH_CG, DH_D0, DH_E3, DH_E6, JH_E1,
 	JH_E6, SH_B0, SH_B3, SH_C0, SH_CG, SH_D0, SH_E4, SH_E5,
+	DR_BA, DR_B2, DR_B3,
 	OINK
 } cpurev_t;
 
@@ -97,6 +84,7 @@ static const u_int cpurevs[] = {
 	SH_CG, 0x0000f4a, SH_CG, 0x0000f5a, SH_CG, 0x0000f7a,
 	SH_D0, 0x0010f40, SH_D0, 0x0010f50, SH_D0, 0x0010f70,
 	SH_E4, 0x0020f51, SH_E4, 0x0020f71, SH_E5, 0x0020f42,
+	DR_BA, 0x0100f2a, DR_B2, 0x0100f22, DR_B3, 0x0100f23,
 	OINK
 };
 
@@ -134,6 +122,14 @@ static const uint8_t x86_errata_set8[] = {
 	DH_D0, DH_D0, DH_E3, DH_E3, DH_E6, DH_E6, JH_E1, JH_E6,
 	JH_E6, SH_B0, SH_B3, SH_C0, SH_C0, SH_CG, SH_CG, SH_CG, 
 	SH_D0, SH_D0, SH_D0, SH_E4, SH_E4, SH_E5, OINK
+};
+
+static const uint8_t x86_errata_set9[] = {
+	DR_BA, DR_B2, OINK
+};
+
+static const uint8_t x86_errata_set10[] = {
+	DR_BA, DR_B2, DR_B3, OINK
 };
 
 static bool x86_errata_setmsr(struct cpu_info *, errata_t *);
@@ -197,7 +193,6 @@ static errata_t errata[] = {
 		113, FALSE, MSR_BU_CFG, x86_errata_set3,
 		x86_errata_setmsr, BU_CFG_WBENHWSBDIS
 	},
-#ifdef MULTIPROCESSOR
 	/*
 	 * 69: Multiprocessor Coherency Problem with Hardware
 	 * Prefetch Mechanism
@@ -230,7 +225,6 @@ static errata_t errata[] = {
 		107, FALSE, MSR_BU_CFG, x86_errata_set2,
 		x86_errata_testmsr, BU_CFG_THRL2IDXCMPDIS
 	},
-#if 0
 	/*
 	 * 122: TLB Flush Filter May Cause Coherency Problem in
 	 * Multiprocessor Systems
@@ -239,8 +233,41 @@ static errata_t errata[] = {
 		122, FALSE, MSR_HWCR, x86_errata_set4,
 		x86_errata_setmsr, HWCR_FFDIS
 	},
-#endif
-#endif	/* MULTIPROCESSOR */
+	/*
+	 * 254: Internal Resource Livelock Involving Cached TLB Reload
+	 */
+	{
+		254, FALSE, MSR_BU_CFG, x86_errata_set9,
+		x86_errata_testmsr, BU_CFG_ERRATA_254
+	},
+	/*
+	 * 261: Processor May Stall Entering Stop-Grant Due to Pending Data
+	 * Cache Scrub
+	 */
+	{
+		261, FALSE, MSR_DC_CFG, x86_errata_set10,
+		x86_errata_testmsr, DC_CFG_ERRATA_261
+	},
+	/*
+	 * 298: L2 Eviction May Occur During Processor Operation To Set
+	 * Accessed or Dirty Bit
+	 */
+	{
+		298, FALSE, MSR_HWCR, x86_errata_set9,
+		x86_errata_testmsr, HWCR_TLBCACHEDIS
+	},
+	{
+		298, FALSE, MSR_BU_CFG, x86_errata_set9,
+		x86_errata_testmsr, BU_CFG_ERRATA_298
+	},
+	/*
+	 * 309: Processor Core May Execute Incorrect Instructions on
+	 * Concurrent L2 and Northbridge Response
+	 */
+	{
+		309, FALSE, MSR_BU_CFG, x86_errata_set9,
+		x86_errata_testmsr, BU_CFG_ERRATA_309
+	},
 };
 
 static bool 
@@ -269,28 +296,33 @@ x86_errata_setmsr(struct cpu_info *ci, errata_t *e)
 	if ((val & e->e_data2) != 0)
 		return FALSE;
 	wrmsr_locked(e->e_data1, OPTERON_MSR_PASSCODE, val | e->e_data2);
+	aprint_debug_dev(ci->ci_dev, "erratum %d patched\n",
+	    e->e_num);
 
 	return FALSE;
 }
 
 void
-x86_errata(struct cpu_info *ci, int vendor)
+x86_errata(void)
 {
-	uint32_t code, dummy;
+	struct cpu_info *ci;
+	uint32_t descs[4];
 	errata_t *e, *ex;
 	cpurev_t rev;
 	int i, j, upgrade;
 	static int again;
 
-	if (vendor != CPUVENDOR_AMD)
+	if (cpu_vendor != CPUVENDOR_AMD)
 		return;
 
-	CPUID(0x80000001, code, dummy, dummy, dummy);
+	ci = curcpu();
+
+	x86_cpuid(0x80000001, descs);
 
 	for (i = 0;; i += 2) {
 		if ((rev = cpurevs[i]) == OINK)
 			return;
-		if (cpurevs[i + 1] == code)
+		if (cpurevs[i + 1] == descs[0])
 			break;
 	}
 
@@ -306,35 +338,24 @@ x86_errata(struct cpu_info *ci, int vendor)
 				continue;
 		}
 
-		aprint_debug("%s: testing for erratum %d\n",
-		    ci->ci_dev->dv_xname, e->e_num);
+		aprint_debug_dev(ci->ci_dev, "testing for erratum %d\n",
+		    e->e_num);
 
 		if (e->e_act == NULL)
 			e->e_reported = TRUE;
 		else if ((*e->e_act)(ci, e) == FALSE)
 			continue;
 
-		aprint_debug("%s: erratum %d present\n",
-		    ci->ci_dev->dv_xname, e->e_num);
+		aprint_verbose_dev(ci->ci_dev, "erratum %d present\n",
+		    e->e_num);
 		upgrade = 1;
 	}
 
 	if (upgrade && !again) {
 		again = 1;
-		aprint_normal("%s: WARNING: AMD errata present, BIOS upgrade "
-		    "may be\n", ci->ci_dev->dv_xname);
-		aprint_normal("%s: WARNING: necessary to ensure reliable "
-		    "operation\n", ci->ci_dev->dv_xname);
+		aprint_normal_dev(ci->ci_dev, "WARNING: errata present, BIOS upgrade "
+		    "may be\n");
+		aprint_normal_dev(ci->ci_dev, "WARNING: necessary to ensure reliable "
+		    "operation\n");
 	}
 }
-
-#else	/* defined(I686_CPU) || defined(__x86_64__) */
-
-void
-x86_errata(struct cpu_info *ci, int vendor)
-{
-	(void)ci;
-	(void)vendor;
-}
-
-#endif	/* defined(I686_CPU) || defined(__x86_64__) */

@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_vnode.c,v 1.80 2007/02/22 06:05:02 thorpej Exp $	*/
+/*	$NetBSD: uvm_vnode.c,v 1.90 2008/01/02 11:49:21 ad Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_vnode.c,v 1.80 2007/02/22 06:05:02 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_vnode.c,v 1.90 2008/01/02 11:49:21 ad Exp $");
 
 #include "fs_nfs.h"
 #include "opt_uvmhist.h"
@@ -91,137 +91,16 @@ static int	uvn_findpage(struct uvm_object *, voff_t, struct vm_page **,
  * master pager structure
  */
 
-struct uvm_pagerops uvm_vnodeops = {
-	NULL,
-	uvn_reference,
-	uvn_detach,
-	NULL,
-	uvn_get,
-	uvn_put,
+const struct uvm_pagerops uvm_vnodeops = {
+	.pgo_reference = uvn_reference,
+	.pgo_detach = uvn_detach,
+	.pgo_get = uvn_get,
+	.pgo_put = uvn_put,
 };
 
 /*
  * the ops!
  */
-
-/*
- * uvn_attach
- *
- * attach a vnode structure to a VM object.  if the vnode is already
- * attached, then just bump the reference count by one and return the
- * VM object.   if not already attached, attach and return the new VM obj.
- * the "accessprot" tells the max access the attaching thread wants to
- * our pages.
- *
- * => caller must _not_ already be holding the lock on the uvm_object.
- * => in fact, nothing should be locked so that we can sleep here.
- * => note that uvm_object is first thing in vnode structure, so their
- *    pointers are equiv.
- */
-
-struct uvm_object *
-uvn_attach(void *arg, vm_prot_t accessprot)
-{
-	struct vnode *vp = arg;
-	struct uvm_object *uobj = &vp->v_uobj;
-	struct vattr vattr;
-	const struct bdevsw *bdev;
-	int result;
-	struct partinfo pi;
-	voff_t used_vnode_size;
-	UVMHIST_FUNC("uvn_attach"); UVMHIST_CALLED(maphist);
-
-	UVMHIST_LOG(maphist, "(vn=0x%x)", arg,0,0,0);
-	used_vnode_size = (voff_t)0;
-
-	/*
-	 * first get a lock on the uobj.
-	 */
-
-	simple_lock(&uobj->vmobjlock);
-	while (vp->v_flag & VXLOCK) {
-		vp->v_flag |= VXWANT;
-		UVMHIST_LOG(maphist, "  SLEEPING on blocked vn",0,0,0,0);
-		UVM_UNLOCK_AND_WAIT(uobj, &uobj->vmobjlock, false,
-		    "uvn_attach", 0);
-		simple_lock(&uobj->vmobjlock);
-		UVMHIST_LOG(maphist,"  WOKE UP",0,0,0,0);
-	}
-
-	/*
-	 * if we're mapping a BLK device, make sure it is a disk.
-	 */
-	if (vp->v_type == VBLK) {
-		bdev = bdevsw_lookup(vp->v_rdev);
-		if (bdev == NULL || bdev->d_type != D_DISK) {
-			simple_unlock(&uobj->vmobjlock);
-			UVMHIST_LOG(maphist,"<- done (VBLK not D_DISK!)",
-				    0,0,0,0);
-			return(NULL);
-		}
-	}
-	KASSERT(vp->v_type == VREG || vp->v_type == VBLK);
-
-	/*
-	 * set up our idea of the size
-	 * if this hasn't been done already.
-	 */
-	if (vp->v_size == VSIZENOTSET) {
-
-
-	vp->v_flag |= VXLOCK;
-	simple_unlock(&uobj->vmobjlock); /* drop lock in case we sleep */
-		/* XXX: curproc? */
-	if (vp->v_type == VBLK) {
-		/*
-		 * We could implement this as a specfs getattr call, but:
-		 *
-		 *	(1) VOP_GETATTR() would get the file system
-		 *	    vnode operation, not the specfs operation.
-		 *
-		 *	(2) All we want is the size, anyhow.
-		 */
-		bdev = bdevsw_lookup(vp->v_rdev);
-		if (bdev != NULL) {
-			result = (*bdev->d_ioctl)(vp->v_rdev, DIOCGPART,
-						  (caddr_t)&pi, FREAD, curlwp);
-		} else {
-			result = ENXIO;
-		}
-		if (result == 0) {
-			/* XXX should remember blocksize */
-			used_vnode_size = (voff_t)pi.disklab->d_secsize *
-			    (voff_t)pi.part->p_size;
-		}
-	} else {
-		result = VOP_GETATTR(vp, &vattr, curlwp->l_cred, curlwp);
-		if (result == 0)
-			used_vnode_size = vattr.va_size;
-	}
-
-	/* relock object */
-	simple_lock(&uobj->vmobjlock);
-
-	if (vp->v_flag & VXWANT) {
-		wakeup(vp);
-	}
-	vp->v_flag &= ~(VXLOCK|VXWANT);
-
-	if (result != 0) {
-		simple_unlock(&uobj->vmobjlock);
-		UVMHIST_LOG(maphist,"<- done (VOP_GETATTR FAILED!)", 0,0,0,0);
-		return(NULL);
-	}
-	vp->v_size = used_vnode_size;
-
-	}
-
-	simple_unlock(&uobj->vmobjlock);
-	UVMHIST_LOG(maphist,"<- done, refcnt=%d", vp->v_usecount,
-	    0, 0, 0);
-	return uobj;
-}
-
 
 /*
  * uvn_reference
@@ -269,9 +148,9 @@ uvn_put(struct uvm_object *uobj, voff_t offlo, voff_t offhi, int flags)
 	struct vnode *vp = (struct vnode *)uobj;
 	int error;
 
-	LOCK_ASSERT(simple_lock_held(&vp->v_interlock));
+	KASSERT(mutex_owned(&vp->v_interlock));
 	error = VOP_PUTPAGES(vp, offlo, offhi, flags);
-	LOCK_ASSERT(!simple_lock_held(&vp->v_interlock));
+
 	return error;
 }
 
@@ -301,20 +180,16 @@ uvn_get(struct uvm_object *uobj, voff_t offset,
 	UVMHIST_LOG(ubchist, "vp %p off 0x%x", vp, (int)offset, 0,0);
 
 	if ((access_type & VM_PROT_WRITE) == 0 && (flags & PGO_LOCKED) == 0) {
-		simple_unlock(&vp->v_interlock);
 		vn_ra_allocctx(vp);
 		uvm_ra_request(vp->v_ractx, advice, uobj, offset,
 		    *npagesp << PAGE_SHIFT);
-		simple_lock(&vp->v_interlock);
 	}
 
 	error = VOP_GETPAGES(vp, offset, pps, npagesp, centeridx,
 			     access_type, advice, flags);
 
-	LOCK_ASSERT(((flags & PGO_LOCKED) != 0 &&
-		     simple_lock_held(&vp->v_interlock)) ||
-		    ((flags & PGO_LOCKED) == 0 &&
-		     !simple_lock_held(&vp->v_interlock)));
+	KASSERT(((flags & PGO_LOCKED) != 0 && mutex_owned(&vp->v_interlock)) ||
+	    (flags & PGO_LOCKED) == 0);
 	return error;
 }
 
@@ -388,9 +263,9 @@ uvn_findpage(struct uvm_object *uobj, voff_t offset, struct vm_page **pgp,
 					UVMHIST_LOG(ubchist, "nowait",0,0,0,0);
 					return 0;
 				}
-				simple_unlock(&uobj->vmobjlock);
+				mutex_exit(&uobj->vmobjlock);
 				uvm_wait("uvn_fp1");
-				simple_lock(&uobj->vmobjlock);
+				mutex_enter(&uobj->vmobjlock);
 				continue;
 			}
 			UVMHIST_LOG(ubchist, "alloced %p", pg,0,0,0);
@@ -410,7 +285,7 @@ uvn_findpage(struct uvm_object *uobj, voff_t offset, struct vm_page **pgp,
 			UVMHIST_LOG(ubchist, "wait %p", pg,0,0,0);
 			UVM_UNLOCK_AND_WAIT(pg, &uobj->vmobjlock, 0,
 					    "uvn_fp2", 0);
-			simple_lock(&uobj->vmobjlock);
+			mutex_enter(&uobj->vmobjlock);
 			continue;
 		}
 
@@ -460,7 +335,7 @@ uvm_vnp_setsize(struct vnode *vp, voff_t newsize)
 	voff_t oldsize;
 	UVMHIST_FUNC("uvm_vnp_setsize"); UVMHIST_CALLED(ubchist);
 
-	simple_lock(&uobj->vmobjlock);
+	mutex_enter(&uobj->vmobjlock);
 	UVMHIST_LOG(ubchist, "vp %p old 0x%x new 0x%x",
 	    vp, vp->v_size, newsize, 0);
 
@@ -469,13 +344,34 @@ uvm_vnp_setsize(struct vnode *vp, voff_t newsize)
 	 * toss some pages...
 	 */
 
-	oldsize = vp->v_size;
-	if (oldsize > pgend && oldsize != VSIZENOTSET) {
+	KASSERT(newsize != VSIZENOTSET);
+	KASSERT(vp->v_size <= vp->v_writesize);
+	KASSERT(vp->v_size == vp->v_writesize ||
+	    newsize == vp->v_writesize || newsize <= vp->v_size);
+
+	oldsize = vp->v_writesize;
+	KASSERT(oldsize != VSIZENOTSET || pgend > oldsize);
+
+	if (oldsize > pgend) {
 		(void) uvn_put(uobj, pgend, 0, PGO_FREE | PGO_SYNCIO);
-		simple_lock(&uobj->vmobjlock);
+		mutex_enter(&uobj->vmobjlock);
 	}
-	vp->v_size = newsize;
-	simple_unlock(&uobj->vmobjlock);
+	vp->v_size = vp->v_writesize = newsize;
+	mutex_exit(&uobj->vmobjlock);
+}
+
+void
+uvm_vnp_setwritesize(struct vnode *vp, voff_t newsize)
+{
+
+	mutex_enter(&vp->v_interlock);
+	KASSERT(newsize != VSIZENOTSET);
+	KASSERT(vp->v_size != VSIZENOTSET);
+	KASSERT(vp->v_writesize != VSIZENOTSET);
+	KASSERT(vp->v_size <= vp->v_writesize);
+	KASSERT(vp->v_size <= newsize);
+	vp->v_writesize = newsize;
+	mutex_exit(&vp->v_interlock);
 }
 
 /*
@@ -511,7 +407,7 @@ uvn_text_p(struct uvm_object *uobj)
 {
 	struct vnode *vp = (struct vnode *)uobj;
 
-	return (vp->v_flag & VEXECMAP) != 0;
+	return (vp->v_iflag & VI_EXECMAP) != 0;
 }
 
 bool
@@ -519,7 +415,7 @@ uvn_clean_p(struct uvm_object *uobj)
 {
 	struct vnode *vp = (struct vnode *)uobj;
 
-	return (vp->v_flag & VONWORKLST) == 0;
+	return (vp->v_iflag & VI_ONWORKLST) == 0;
 }
 
 bool
@@ -528,5 +424,5 @@ uvn_needs_writefault_p(struct uvm_object *uobj)
 	struct vnode *vp = (struct vnode *)uobj;
 
 	return uvn_clean_p(uobj) ||
-	    (vp->v_flag & (VWRITEMAP|VWRITEMAPDIRTY)) == VWRITEMAP;
+	    (vp->v_iflag & (VI_WRMAP|VI_WRMAPDIRTY)) == VI_WRMAP;
 }

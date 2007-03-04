@@ -1,4 +1,4 @@
-/*	$NetBSD: rarp.c,v 1.25 2005/12/11 12:24:46 christos Exp $	*/
+/*	$NetBSD: rarp.c,v 1.28 2008/04/05 05:15:33 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992 Regents of the University of California.
@@ -63,7 +63,7 @@
  * to resolving internet addresses.  Field names used correspond to
  * RFC 826.
  */
-struct	ether_arp {
+struct ether_arp {
 	struct	 arphdr ea_hdr;			/* fixed-size header */
 	u_int8_t arp_sha[ETHER_ADDR_LEN];	/* sender hardware address */
 	u_int8_t arp_spa[4];			/* sender protocol address */
@@ -83,8 +83,7 @@ static ssize_t rarprecv __P((struct iodesc *, void *, size_t, time_t));
  * Ethernet (Reverse) Address Resolution Protocol (see RFC 903, and 826).
  */
 int
-rarp_getipaddress(sock)
-	int sock;
+rarp_getipaddress(int sock)
 {
 	struct iodesc *d;
 	struct ether_arp *ap;
@@ -109,36 +108,36 @@ rarp_getipaddress(sock)
 #endif
 	if (!(d = socktodesc(sock))) {
 		printf("rarp: bad socket. %d\n", sock);
-		return (-1);
+		return -1;
 	}
 #ifdef RARP_DEBUG
  	if (debug)
 		printf("rarp: d=%lx\n", (u_long)d);
 #endif
 
-	bzero((char*)&wbuf.data, sizeof(wbuf.data));
+	(void)memset(&wbuf.data, 0, sizeof(wbuf.data));
 	ap = &wbuf.data.arp;
 	ap->arp_hrd = htons(ARPHRD_ETHER);
 	ap->arp_pro = htons(ETHERTYPE_IP);
 	ap->arp_hln = sizeof(ap->arp_sha); /* hardware address length */
 	ap->arp_pln = sizeof(ap->arp_spa); /* protocol address length */
 	ap->arp_op = htons(ARPOP_REVREQUEST);
-	bcopy(d->myea, ap->arp_sha, 6);
-	bcopy(d->myea, ap->arp_tha, 6);
+	(void)memcpy(ap->arp_sha, d->myea, 6);
+	(void)memcpy(ap->arp_tha, d->myea, 6);
 
 	if (sendrecv(d,
 	    rarpsend, &wbuf.data, sizeof(wbuf.data),
 	    rarprecv, &rbuf.data, sizeof(rbuf.data)) < 0)
 	{
 		printf("No response for RARP request\n");
-		return (-1);
+		return -1;
 	}
 
 	ap = &rbuf.data.arp;
-	bcopy(ap->arp_tpa, (char *)&myip, sizeof(myip));
+	(void)memcpy(&myip, ap->arp_tpa, sizeof(myip));
 #if 0
 	/* XXX - Can NOT assume this is our root server! */
-	bcopy(ap->arp_spa, (char *)&rootip, sizeof(rootip));
+	(void)memcpy(&rootip, ap->arp_spa, sizeof(rootip));
 #endif
 
 	/* Compute our "natural" netmask. */
@@ -150,17 +149,14 @@ rarp_getipaddress(sock)
 		netmask = IN_CLASSC_NET;
 
 	d->myip = myip;
-	return (0);
+	return 0;
 }
 
 /*
  * Broadcast a RARP request (i.e. who knows who I am)
  */
 static ssize_t
-rarpsend(d, pkt, len)
-	struct iodesc *d;
-	void *pkt;
-	size_t len;
+rarpsend(struct iodesc *d, void *pkt, size_t len)
 {
 
 #ifdef RARP_DEBUG
@@ -168,7 +164,7 @@ rarpsend(d, pkt, len)
 		printf("rarpsend: called\n");
 #endif
 
-	return (sendether(d, pkt, len, bcea, ETHERTYPE_REVARP));
+	return sendether(d, pkt, len, bcea, ETHERTYPE_REVARP);
 }
 
 /*
@@ -176,11 +172,7 @@ rarpsend(d, pkt, len)
  * else -1 (and errno == 0)
  */
 static ssize_t
-rarprecv(d, pkt, len, tleft)
-	struct iodesc *d;
-	void *pkt;
-	size_t len;
-	time_t tleft;
+rarprecv(struct iodesc *d, void *pkt, size_t len, time_t tleft)
 {
 	ssize_t n;
 	struct ether_arp *ap;
@@ -196,9 +188,9 @@ rarprecv(d, pkt, len, tleft)
 	if (n == -1 || (size_t)n < sizeof(struct ether_arp)) {
 #ifdef RARP_DEBUG
 		if (debug)
-			printf("bad len=%d\n", n);
+			printf("bad len=%d\n", (int)n);
 #endif
-		return (-1);
+		return -1;
 	}
 
 	if (etype != ETHERTYPE_REVARP) {
@@ -206,7 +198,7 @@ rarprecv(d, pkt, len, tleft)
 		if (debug)
 			printf("bad type=0x%x\n", etype);
 #endif
-		return (-1);
+		return -1;
 	}
 
 	ap = (struct ether_arp *)pkt;
@@ -219,7 +211,7 @@ rarprecv(d, pkt, len, tleft)
 		if (debug)
 			printf("bad hrd/pro/hln/pln\n");
 #endif
-		return (-1);
+		return -1;
 	}
 
 	if (ap->arp_op != htons(ARPOP_REVREPLY)) {
@@ -227,7 +219,7 @@ rarprecv(d, pkt, len, tleft)
 		if (debug)
 			printf("bad op=0x%x\n", ntohs(ap->arp_op));
 #endif
-		return (-1);
+		return -1;
 	}
 
 	/* Is the reply for our Ethernet address? */
@@ -236,7 +228,7 @@ rarprecv(d, pkt, len, tleft)
 		if (debug)
 			printf("unwanted address\n");
 #endif
-		return (-1);
+		return -1;
 	}
 
 	/* We have our answer. */
@@ -244,5 +236,5 @@ rarprecv(d, pkt, len, tleft)
  	if (debug)
 		printf("got it\n");
 #endif
-	return (n);
+	return n;
 }

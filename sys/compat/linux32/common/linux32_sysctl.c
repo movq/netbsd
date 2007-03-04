@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_sysctl.c,v 1.4 2007/02/09 21:55:21 ad Exp $ */
+/*	$NetBSD: linux32_sysctl.c,v 1.9 2008/01/07 16:12:53 ad Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -31,9 +31,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_sysctl.c,v 1.4 2007/02/09 21:55:21 ad Exp $");
-
-#include "opt_ktrace.h"
+__KERNEL_RCSID(0, "$NetBSD: linux32_sysctl.c,v 1.9 2008/01/07 16:12:53 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,9 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_sysctl.c,v 1.4 2007/02/09 21:55:21 ad Exp $"
 #include <sys/mount.h>
 #include <sys/sysctl.h>
 #include <sys/syscallargs.h>
-#ifdef KTRACE
 #include <sys/ktrace.h>
-#endif
 
 #include <compat/netbsd32/netbsd32.h>
 
@@ -150,14 +146,11 @@ SYSCTL_SETUP(linux32_sysctl_setup, "linux32 emulated sysctl subtree setup")
 }
 
 int
-linux32_sys___sysctl(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+linux32_sys___sysctl(struct lwp *l, const struct linux32_sys___sysctl_args *uap, register_t *retval)
 {
-	struct linux32_sys___sysctl_args /* {
+	/* {
 		syscallarg(linux32___sysctlp_t) lsp;
-	} */ *uap = v;
+	} */
 	struct linux32_sysctl ls32;
 	int name[CTL_MAXNAME];
 	size_t savelen;
@@ -168,8 +161,7 @@ linux32_sys___sysctl(l, v, retval)
 	/*
 	 * Read sysctl arguments 
 	 */
-	if ((error = copyin(NETBSD32PTR64(SCARG(uap, lsp)), 
-	    &ls32, sizeof(ls32))) != 0)
+	if ((error = copyin(SCARG_P32(uap, lsp), &ls32, sizeof(ls32))) != 0)
 		return error;
 
 	/*
@@ -198,26 +190,18 @@ linux32_sys___sysctl(l, v, retval)
 	   ls32.nlen * sizeof(int))) != 0)
 		return error;
 
-#ifdef KTRACE
-	if (KTRPOINT(l->l_proc, KTR_MIB))
-		ktrmib(l, name, ls32.nlen);
-#endif
-
-	if ((error = sysctl_lock(l, 
-	    NETBSD32PTR64(ls32.oldval), savelen)) != 0)
-		return error;
-
+	ktrmib(name, ls32.nlen);
 	/*
 	 * First try linux32 tree, then linux tree
 	 */
 	oldlen = (size_t)oldlen32;
+	sysctl_lock(NETBSD32PTR64(ls32.newval) != NULL);
 	error = sysctl_dispatch(name, ls32.nlen,
 				NETBSD32PTR64(ls32.oldval), &oldlen,
 				NETBSD32PTR64(ls32.newval), ls32.newlen,
 				name, l, &linux32_sysctl_root);
 	oldlen32 = (netbsd32_size_t)oldlen;
-
-	sysctl_unlock(l);
+	sysctl_unlock();
 
 	/*
 	 * Check for oldlen overflow (not likely, but who knows...)

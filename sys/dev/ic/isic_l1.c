@@ -1,4 +1,4 @@
-/* $NetBSD: isic_l1.c,v 1.16 2005/12/11 12:21:27 christos Exp $ */
+/* $NetBSD: isic_l1.c,v 1.18 2008/04/08 12:07:26 cegger Exp $ */
 
 /*
  * Copyright (c) 1997, 2000 Hellmuth Michaelis. All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_l1.c,v 1.16 2005/12/11 12:21:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_l1.c,v 1.18 2008/04/08 12:07:26 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/ioctl.h>
@@ -35,7 +35,7 @@ __KERNEL_RCSID(0, "$NetBSD: isic_l1.c,v 1.16 2005/12/11 12:21:27 christos Exp $"
 #include <sys/systm.h>
 #include <sys/mbuf.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <sys/device.h>
 
 #include <sys/socket.h>
@@ -210,7 +210,7 @@ isic_std_ph_activate_req(isdn_layer1token token)
 {
 	struct isic_softc *sc = (struct isic_softc*)token;
 
-	NDBGL1(L1_PRIM, " %s ", sc->sc_dev.dv_xname);
+	NDBGL1(L1_PRIM, " %s ", device_xname(&sc->sc_dev));
 	isic_next_state(sc, EV_PHAR);
 	return(0);
 }
@@ -228,13 +228,13 @@ isic_std_mph_command_req(isdn_layer1token token, int command, void *parm)
 	switch(command)
 	{
 		case CMR_DOPEN:		/* daemon running */
-			NDBGL1(L1_PRIM, "%s, command = CMR_DOPEN", sc->sc_dev.dv_xname);
+			NDBGL1(L1_PRIM, "%s, command = CMR_DOPEN", device_xname(&sc->sc_dev));
 			sc->sc_intr_valid = ISIC_INTR_VALID;
 			pass_down = 1;
 			break;
 
 		case CMR_DCLOSE:	/* daemon not running */
-			NDBGL1(L1_PRIM, "%s, command = CMR_DCLOSE", sc->sc_dev.dv_xname);
+			NDBGL1(L1_PRIM, "%s, command = CMR_DCLOSE", device_xname(&sc->sc_dev));
 			sc->sc_intr_valid = ISIC_INTR_DISABLED;
 			isic_enable_intr(sc, 0);
 			pass_down = 1;
@@ -245,12 +245,12 @@ isic_std_mph_command_req(isdn_layer1token token, int command, void *parm)
 			break;
 
 		case CMR_SETTRACE:
-			NDBGL1(L1_PRIM, "%s, command = CMR_SETTRACE, parm = %p", sc->sc_dev.dv_xname, parm);
+			NDBGL1(L1_PRIM, "%s, command = CMR_SETTRACE, parm = %p", device_xname(&sc->sc_dev), parm);
 			sc->sc_trace = (int)(unsigned long)parm;
 			break;
 
 		default:
-			NDBGL1(L1_ERROR, "ERROR, unknown command = %d, %s, parm = %p", command, sc->sc_dev.dv_xname, parm);
+			NDBGL1(L1_ERROR, "ERROR, unknown command = %d, %s, parm = %p", command, device_xname(&sc->sc_dev), parm);
 			break;
 	}
 

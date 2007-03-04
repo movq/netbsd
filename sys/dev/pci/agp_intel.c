@@ -1,4 +1,4 @@
-/*	$NetBSD: agp_intel.c,v 1.21 2006/11/16 01:33:08 christos Exp $	*/
+/*	$NetBSD: agp_intel.c,v 1.32 2008/06/09 06:49:54 freza Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -29,17 +29,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agp_intel.c,v 1.21 2006/11/16 01:33:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agp_intel.c,v 1.32 2008/06/09 06:49:54 freza Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
-#include <sys/lock.h>
 #include <sys/proc.h>
 #include <sys/agpio.h>
 #include <sys/device.h>
-#include <sys/agpio.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -49,7 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: agp_intel.c,v 1.21 2006/11/16 01:33:08 christos Exp 
 #include <dev/pci/agpvar.h>
 #include <dev/pci/agpreg.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 struct agp_intel_softc {
 	u_int32_t		initial_aperture;
@@ -65,8 +63,6 @@ struct agp_intel_softc {
 #define	CHIP_I850	0x4
 #define	CHIP_I865	0x5
 
-	void			*sc_powerhook;
-	struct pci_conf_state	sc_pciconf;
 };
 
 static u_int32_t agp_intel_get_aperture(struct agp_softc *);
@@ -74,7 +70,8 @@ static int agp_intel_set_aperture(struct agp_softc *, u_int32_t);
 static int agp_intel_bind_page(struct agp_softc *, off_t, bus_addr_t);
 static int agp_intel_unbind_page(struct agp_softc *, off_t);
 static void agp_intel_flush_tlb(struct agp_softc *);
-static void agp_intel_powerhook(int, void *);
+static int agp_intel_init(struct agp_softc *);
+static bool agp_intel_resume(device_t PMF_FN_PROTO);
 
 static struct agp_methods agp_intel_methods = {
 	agp_intel_get_aperture,
@@ -109,13 +106,12 @@ agp_intel_vgamatch(struct pci_attach_args *pa)
 }
 
 int
-agp_intel_attach(struct device *parent, struct device *self, void *aux)
+agp_intel_attach(device_t parent, device_t self, void *aux)
 {
-	struct agp_softc *sc = (struct agp_softc *)self;
-	struct pci_attach_args *pa= aux;
+	struct agp_softc *sc = device_private(self);
+	struct pci_attach_args *pa = aux;
 	struct agp_intel_softc *isc;
 	struct agp_gatt *gatt;
-	pcireg_t reg;
 	u_int32_t value;
 
 	isc = malloc(sizeof *isc, M_AGP, M_NOWAIT|M_ZERO);
@@ -129,7 +125,7 @@ agp_intel_attach(struct device *parent, struct device *self, void *aux)
 
 	if (pci_find_device(&isc->vga_pa, agp_intel_vgamatch) == 0) {
 		aprint_normal(": using generic initialization for Intel AGP\n");
-		aprint_normal("%s", sc->as_dev.dv_xname);
+		aprint_normal_dev(sc->as_dev, "");
 		isc->chiptype = CHIP_INTEL;
 	}
 
@@ -190,6 +186,19 @@ agp_intel_attach(struct device *parent, struct device *self, void *aux)
 		}
 	}
 	isc->gatt = gatt;
+
+	if (!pmf_device_register(self, NULL, agp_intel_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
+	return agp_intel_init(sc);
+}
+
+static int
+agp_intel_init(struct agp_softc *sc)
+{
+	struct agp_intel_softc *isc = sc->as_chipc;
+	struct agp_gatt *gatt = isc->gatt;
+	pcireg_t reg;
 
 	/* Install the gatt. */
 	pci_conf_write(sc->as_pc, sc->as_tag, AGP_INTEL_ATTBASE,
@@ -254,15 +263,12 @@ agp_intel_attach(struct device *parent, struct device *self, void *aux)
 		break;
 
 	default:
-		pci_conf_write(sc->as_pc, sc->as_tag,
-			AGP_INTEL_ERRSTS, 0x70);
+		{
+		reg = pci_conf_read(sc->as_pc, sc->as_tag, AGP_INTEL_ERRSTS);
+		/* clear error bits (write-one-to-clear) - just write back */
+		pci_conf_write(sc->as_pc, sc->as_tag, AGP_INTEL_ERRSTS, reg);
+		}
 	}
-
-	isc->sc_powerhook = powerhook_establish(sc->as_dev.dv_xname,
-	    agp_intel_powerhook, sc);
-	if (isc->sc_powerhook == NULL)
-		aprint_error("%s: couldn't establish powerhook\n",
-		    sc->as_dev.dv_xname);
 
 	return (0);
 }
@@ -275,9 +281,6 @@ agp_intel_detach(struct agp_softc *sc)
 	pcireg_t reg;
 	struct agp_intel_softc *isc = sc->as_chipc;
 
-	if (isc->sc_powerhook)
-		powerhook_disestablish(isc->sc_powerhook);
-
 	error = agp_generic_detach(sc);
 	if (error)
 		return error;
@@ -285,7 +288,7 @@ agp_intel_detach(struct agp_softc *sc)
 	/* XXX i845/i855PM/i840/i850E */
 	reg = pci_conf_read(sc->as_pc, sc->as_tag, AGP_INTEL_NBXCFG);
 	reg &= ~(1 << 9);
-	printf("%s: set NBXCFG to %x\n", __FUNCTION__, reg);
+	printf("%s: set NBXCFG to %x\n", __func__, reg);
 	pci_conf_write(sc->as_pc, sc->as_tag, AGP_INTEL_NBXCFG, reg);
 	pci_conf_write(sc->as_pc, sc->as_tag, AGP_INTEL_ATTBASE, 0);
 	AGP_SET_APERTURE(sc, isc->initial_aperture);
@@ -393,29 +396,13 @@ agp_intel_flush_tlb(struct agp_softc *sc)
 	}
 }
 
-static void
-agp_intel_powerhook(int why, void *opaque)
+static bool
+agp_intel_resume(device_t dv PMF_FN_ARGS)
 {
-	struct agp_softc *sc;
-	struct agp_intel_softc *isc;
+	struct agp_softc *sc = device_private(dv);
 
-	sc = (struct agp_softc *)opaque;
-	isc = (struct agp_intel_softc *)sc->as_chipc;
+	agp_intel_init(sc);
+	agp_flush_cache();
 
-	switch (why) {
-	case PWR_SUSPEND:
-	case PWR_STANDBY:
-		pci_conf_capture(sc->as_pc, sc->as_tag, &isc->sc_pciconf);
-		break;
-	case PWR_RESUME:
-		pci_conf_restore(sc->as_pc, sc->as_tag, &isc->sc_pciconf);
-		agp_flush_cache();
-		break;
-	case PWR_SOFTSUSPEND:
-	case PWR_SOFTSTANDBY:
-	case PWR_SOFTRESUME:
-		break;
-	}
-
-	return;
+	return true;
 }

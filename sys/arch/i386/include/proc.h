@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.30 2007/02/09 21:55:05 ad Exp $	*/
+/*	$NetBSD: proc.h,v 1.36 2008/06/05 21:09:12 ad Exp $	*/
 
 /*
  * Copyright (c) 1991 Regents of the University of California.
@@ -42,17 +42,22 @@
 #include <machine/frame.h>
 
 /*
- * Machine-dependent part of the proc structure for i386.
+ * Machine-dependent part of the lwp structure for i386.
  */
+struct pmap;
+struct vm_page;
+
 struct mdlwp {
 	struct	trapframe *md_regs;	/* registers on current frame */
 	int	md_flags;		/* machine-dependent flags */
-	int	md_tss_sel;		/* TSS selector */
 	volatile int md_astpending;	/* AST pending for this process */
+	struct pmap *md_gc_pmap;	/* pmap being garbage collected */
+	struct vm_page *md_gc_ptp;	/* pages from pmap g/c */
 };
 
 /* md_flags */
 #define	MDL_USEDFPU	0x0001	/* has used the FPU */
+#define	MDL_IOPL	0x0002	/* XEN: i/o privilege */
 
 struct mdproc {
 	int	md_flags;
@@ -65,7 +70,7 @@ struct mdproc {
 
 /* kernel stack params */
 #define	UAREA_USER_OFFSET	(USPACE - ALIGN(sizeof(struct user)))
-#define	KSTACK_LOWEST_ADDR(l)	((caddr_t)USER_TO_UAREA((l)->l_addr))
+#define	KSTACK_LOWEST_ADDR(l)	((void *)USER_TO_UAREA((l)->l_addr))
 #define	KSTACK_SIZE		UAREA_USER_OFFSET
 
 #endif /* _I386_PROC_H_ */

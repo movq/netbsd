@@ -1,4 +1,4 @@
-/*	$NetBSD: com_pcmcia.c,v 1.54 2006/11/16 01:33:20 christos Exp $	 */
+/*	$NetBSD: com_pcmcia.c,v 1.59 2008/08/27 05:39:01 christos Exp $	 */
 
 /*-
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_pcmcia.c,v 1.54 2006/11/16 01:33:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_pcmcia.c,v 1.59 2008/08/27 05:39:01 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -84,8 +77,8 @@ __KERNEL_RCSID(0, "$NetBSD: com_pcmcia.c,v 1.54 2006/11/16 01:33:20 christos Exp
 #include <sys/syslog.h>
 #include <sys/device.h>
 
-#include <machine/intr.h>
-#include <machine/bus.h>
+#include <sys/intr.h>
+#include <sys/bus.h>
 
 #include <dev/pcmcia/pcmciavar.h>
 #include <dev/pcmcia/pcmciareg.h>
@@ -96,10 +89,10 @@ __KERNEL_RCSID(0, "$NetBSD: com_pcmcia.c,v 1.54 2006/11/16 01:33:20 christos Exp
 
 #include <dev/isa/isareg.h>
 
-int com_pcmcia_match(struct device *, struct cfdata *, void *);
+int com_pcmcia_match(device_t, cfdata_t , void *);
 int com_pcmcia_validate_config(struct pcmcia_config_entry *);
-void com_pcmcia_attach(struct device *, struct device *, void *);
-int com_pcmcia_detach(struct device *, int);
+void com_pcmcia_attach(device_t, device_t, void *);
+int com_pcmcia_detach(device_t, int);
 
 int com_pcmcia_enable(struct com_softc *);
 void com_pcmcia_disable(struct com_softc *);
@@ -113,19 +106,20 @@ struct com_pcmcia_softc {
 	int sc_attached;
 };
 
-CFATTACH_DECL(com_pcmcia, sizeof(struct com_pcmcia_softc),
+CFATTACH_DECL_NEW(com_pcmcia, sizeof(struct com_pcmcia_softc),
     com_pcmcia_match, com_pcmcia_attach, com_pcmcia_detach, com_activate);
 
 static const struct pcmcia_product com_pcmcia_products[] = {
 	{ PCMCIA_VENDOR_INVALID, PCMCIA_PRODUCT_INVALID,
 	  PCMCIA_CIS_MEGAHERTZ_XJ2288 },
+	{ PCMCIA_VENDOR_TDK, PCMCIA_PRODUCT_TDK_BLUETOOTH_PCCARD,
+	  PCMCIA_CIS_INVALID },
 };
 static const size_t com_pcmcia_nproducts =
     sizeof(com_pcmcia_products) / sizeof(com_pcmcia_products[0]);
 
 int
-com_pcmcia_match(struct device *parent, struct cfdata *match,
-    void *aux)
+com_pcmcia_match(device_t parent, cfdata_t match, void *aux)
 {
 	int comportmask;
 	struct pcmcia_attach_args *pa = aux;
@@ -166,8 +160,7 @@ com_pcmcia_match(struct device *parent, struct cfdata *match,
 }
 
 int
-com_pcmcia_validate_config(cfe)
-	struct pcmcia_config_entry *cfe;
+com_pcmcia_validate_config(struct pcmcia_config_entry *cfe)
 {
 	if (cfe->iftype != PCMCIA_IFTYPE_IO ||
 	    cfe->num_iospace != 1)
@@ -178,21 +171,20 @@ com_pcmcia_validate_config(cfe)
 }
 
 void
-com_pcmcia_attach(struct device *parent, struct device *self,
-    void *aux)
+com_pcmcia_attach(device_t parent, device_t self, void *aux)
 {
-	struct com_pcmcia_softc *psc = (void *) self;
+	struct com_pcmcia_softc *psc = device_private(self);
 	struct com_softc *sc = &psc->sc_com;
 	struct pcmcia_attach_args *pa = aux;
 	struct pcmcia_config_entry *cfe;
 	int error;
 
+	sc->sc_dev = self;
 	psc->sc_pf = pa->pf;
 
 	error = pcmcia_function_configure(pa->pf, com_pcmcia_validate_config);
 	if (error) {
-		aprint_error("%s: configure failed, error=%d\n", self->dv_xname,
-		    error);
+		aprint_error_dev(self, "configure failed, error=%d\n", error);
 		return;
 	}
 
@@ -211,9 +203,13 @@ com_pcmcia_attach(struct device *parent, struct device *self,
 	sc->enable = com_pcmcia_enable;
 	sc->disable = com_pcmcia_disable;
 
-	aprint_normal("%s", self->dv_xname);
+	aprint_normal("%s", device_xname(self));
 
 	com_attach_subr(sc);
+
+	if (!pmf_device_register1(self, com_suspend, com_resume,
+	    com_cleanup))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	sc->enabled = 0;
 
@@ -226,15 +222,15 @@ fail:
 }
 
 int
-com_pcmcia_detach(self, flags)
-	struct device  *self;
-	int flags;
+com_pcmcia_detach(device_t self, int flags)
 {
-	struct com_pcmcia_softc *psc = (struct com_pcmcia_softc *) self;
+	struct com_pcmcia_softc *psc = device_private(self);
 	int error;
 
 	if (!psc->sc_attached)
 		return (0);
+
+	pmf_device_deregister(self);
 
 	if ((error = com_detach(self, flags)) != 0)
 		return error;
@@ -244,8 +240,7 @@ com_pcmcia_detach(self, flags)
 }
 
 int
-com_pcmcia_enable(sc)
-	struct com_softc *sc;
+com_pcmcia_enable(struct com_softc *sc)
 {
 	struct com_pcmcia_softc *psc = (struct com_pcmcia_softc *) sc;
 	struct pcmcia_function *pf = psc->sc_pf;
@@ -254,8 +249,7 @@ com_pcmcia_enable(sc)
 	/* establish the interrupt. */
 	psc->sc_ih = pcmcia_intr_establish(pf, IPL_SERIAL, comintr, sc);
 	if (psc->sc_ih == NULL) {
-		printf("%s: couldn't establish interrupt\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev, "couldn't establish interrupt\n");
 		return (1);
 	}
 
@@ -282,8 +276,7 @@ com_pcmcia_enable(sc)
 }
 
 void
-com_pcmcia_disable(sc)
-	struct com_softc *sc;
+com_pcmcia_disable(struct com_softc *sc)
 {
 	struct com_pcmcia_softc *psc = (struct com_pcmcia_softc *) sc;
 

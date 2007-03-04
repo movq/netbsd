@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_bat.c,v 1.45 2006/11/16 01:32:47 christos Exp $	*/
+/*	$NetBSD: acpi_bat.c,v 1.69 2008/06/03 15:02:31 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -86,12 +79,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_bat.c,v 1.45 2006/11/16 01:32:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_bat.c,v 1.69 2008/06/03 15:02:31 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>		/* for hz */
 #include <sys/device.h>
+#include <sys/mutex.h>
 #include <dev/sysmon/sysmonvar.h>
 
 #include <dev/acpi/acpica.h>
@@ -111,36 +105,20 @@ __KERNEL_RCSID(0, "$NetBSD: acpi_bat.c,v 1.45 2006/11/16 01:32:47 christos Exp $
 #define ACPIBAT_DISCHARGERATE	9
 #define ACPIBAT_CAPACITY	10
 #define ACPIBAT_CHARGING	11
-#define ACPIBAT_DISCHARGING	12
+#define ACPIBAT_CHARGE_STATE	12
 #define ACPIBAT_NSENSORS	13  /* number of sensors */
 
-static const struct envsys_range acpibat_range_amp[] = {
-	{ 0, 1,		ENVSYS_SVOLTS_DC },
-	{ 1, 2,		ENVSYS_SAMPS },
-	{ 2, 3,		ENVSYS_SAMPHOUR },
-	{ 1, 0,		-1 },
-};
-
-static const struct envsys_range acpibat_range_watt[] = {
-	{ 0, 1,		ENVSYS_SVOLTS_DC },
-	{ 1, 2,		ENVSYS_SWATTS },
-	{ 2, 3,		ENVSYS_SWATTHOUR },
-	{ 1, 0,		-1 },
-};
-
 struct acpibat_softc {
-	struct device sc_dev;		/* base device glue */
 	struct acpi_devnode *sc_node;	/* our ACPI devnode */
 	int sc_flags;			/* see below */
 	int sc_available;		/* available information level */
 
-	struct sysmon_envsys sc_sysmon;
-	struct envsys_basic_info sc_info[ACPIBAT_NSENSORS];
-	struct envsys_tre_data sc_data[ACPIBAT_NSENSORS];
+	struct sysmon_envsys *sc_sme;
+	envsys_data_t sc_sensor[ACPIBAT_NSENSORS];
+	struct timeval sc_lastupdate;
 
-	struct simplelock sc_lock;
-
-	struct timeval sc_lastupdate, sc_updateinterval;
+	kmutex_t sc_mutex;
+	kcondvar_t sc_condvar;
 };
 
 static const char * const bat_hid[] = {
@@ -173,7 +151,6 @@ static const char * const bat_hid[] = {
 #define	ABAT_F_VERBOSE		0x01	/* verbose events */
 #define ABAT_F_PWRUNIT_MA	0x02 	/* mA instead of mW */
 #define ABAT_F_PRESENT		0x04	/* is the battery present? */
-#define ABAT_F_LOCKED		0x08	/* is locked? */
 
 #define ABAT_SET(sc, f)		(void)((sc)->sc_flags |= (f))
 #define ABAT_CLEAR(sc, f)	(void)((sc)->sc_flags &= ~(f))
@@ -188,51 +165,28 @@ static const char * const bat_hid[] = {
 #define ABAT_ALV_INFO		2	/* battery info is available */
 #define ABAT_ALV_STAT		3	/* battery status is available */
 
-#define ABAT_ASSERT_LOCKED(sc)					\
-do {								\
-	if (!((sc)->sc_flags & ABAT_F_LOCKED))			\
-		panic("acpi_bat (expected to be locked)");	\
-} while(/*CONSTCOND*/0)
-#define ABAT_ASSERT_UNLOCKED(sc)				\
-do {								\
-	if (((sc)->sc_flags & ABAT_F_LOCKED))			\
-		panic("acpi_bat (expected to be unlocked)");	\
-} while(/*CONSTCOND*/0)
-#define ABAT_LOCK(sc, s)			\
-do {						\
-	ABAT_ASSERT_UNLOCKED(sc);		\
-	(s) = splhigh();			\
-	simple_lock(&(sc)->sc_lock);		\
-	ABAT_SET((sc), ABAT_F_LOCKED);		\
-} while(/*CONSTCOND*/0)
-#define ABAT_UNLOCK(sc, s)			\
-do {						\
-	ABAT_ASSERT_LOCKED(sc);			\
-	ABAT_CLEAR((sc), ABAT_F_LOCKED);	\
-	simple_unlock(&(sc)->sc_lock);		\
-	splx((s));				\
-} while(/*CONSTCOND*/0)
+static int	acpibat_match(device_t, struct cfdata *, void *);
+static void	acpibat_attach(device_t, struct device *, void *);
+static bool	acpibat_resume(device_t PMF_FN_PROTO);
 
-static int	acpibat_match(struct device *, struct cfdata *, void *);
-static void	acpibat_attach(struct device *, struct device *, void *);
-
-CFATTACH_DECL(acpibat, sizeof(struct acpibat_softc),
+CFATTACH_DECL_NEW(acpibat, sizeof(struct acpibat_softc),
     acpibat_match, acpibat_attach, NULL, NULL);
 
 static void acpibat_clear_presence(struct acpibat_softc *);
 static void acpibat_clear_info(struct acpibat_softc *);
 static void acpibat_clear_stat(struct acpibat_softc *);
-static int acpibat_battery_present(struct acpibat_softc *);
-static ACPI_STATUS acpibat_get_status(struct acpibat_softc *);
-static ACPI_STATUS acpibat_get_info(struct acpibat_softc *);
-static void acpibat_print_info(struct acpibat_softc *);
-static void acpibat_print_stat(struct acpibat_softc *);
+static int acpibat_battery_present(device_t);
+static ACPI_STATUS acpibat_get_status(device_t);
+static ACPI_STATUS acpibat_get_info(device_t);
+static void acpibat_print_info(device_t);
+static void acpibat_print_stat(device_t);
 static void acpibat_update(void *);
+static void acpibat_update_info(void *);
+static void acpibat_update_stat(void *);
 
-static void acpibat_init_envsys(struct acpibat_softc *);
+static void acpibat_init_envsys(device_t);
 static void acpibat_notify_handler(ACPI_HANDLE, UINT32, void *);
-static int acpibat_gtredata(struct sysmon_envsys *, struct envsys_tre_data *);
-static int acpibat_streinfo(struct sysmon_envsys *, struct envsys_basic_info *);
+static void acpibat_refresh(struct sysmon_envsys *, envsys_data_t *);
 
 /*
  * acpibat_match:
@@ -240,8 +194,7 @@ static int acpibat_streinfo(struct sysmon_envsys *, struct envsys_basic_info *);
  *	Autoconfiguration `match' routine.
  */
 static int
-acpibat_match(struct device *parent, struct cfdata *match,
-    void *aux)
+acpibat_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -251,15 +204,32 @@ acpibat_match(struct device *parent, struct cfdata *match,
 	return acpi_match_hid(aa->aa_node->ad_devinfo, bat_hid);
 }
 
+static bool
+acpibat_resume(device_t dv PMF_FN_ARGS)
+{
+	ACPI_STATUS rv;
+
+	rv = AcpiOsExecute(OSL_NOTIFY_HANDLER, acpibat_update_stat, dv);
+	if (ACPI_FAILURE(rv))
+		aprint_error_dev(dv, "unable to queue status check: %s\n",
+		    AcpiFormatException(rv));
+	rv = AcpiOsExecute(OSL_NOTIFY_HANDLER, acpibat_update_info, dv);
+	if (ACPI_FAILURE(rv))
+		aprint_error_dev(dv, "unable to queue info check: %s\n",
+		    AcpiFormatException(rv));
+
+	return true;
+}
+
 /*
  * acpibat_attach:
  *
  *	Autoconfiguration `attach' routine.
  */
 static void
-acpibat_attach(struct device *parent, struct device *self, void *aux)
+acpibat_attach(device_t parent, device_t self, void *aux)
 {
-	struct acpibat_softc *sc = (void *) self;
+	struct acpibat_softc *sc = device_private(self);
 	struct acpi_attach_args *aa = aux;
 	ACPI_STATUS rv;
 
@@ -267,24 +237,17 @@ acpibat_attach(struct device *parent, struct device *self, void *aux)
 	aprint_normal(": ACPI Battery (Control Method)\n");
 
 	sc->sc_node = aa->aa_node;
-	simple_lock_init(&sc->sc_lock);
+
+	mutex_init(&sc->sc_mutex, MUTEX_DEFAULT, IPL_NONE);
+	cv_init(&sc->sc_condvar, device_xname(self));
 
 	rv = AcpiInstallNotifyHandler(sc->sc_node->ad_handle,
-				      ACPI_DEVICE_NOTIFY,
-				      acpibat_notify_handler, sc);
+				      ACPI_ALL_NOTIFY,
+				      acpibat_notify_handler, self);
 	if (ACPI_FAILURE(rv)) {
-		aprint_error("%s: unable to register DEVICE NOTIFY handler: %s\n",
-		       sc->sc_dev.dv_xname, AcpiFormatException(rv));
-		return;
-	}
-
-	/* XXX See acpibat_notify_handler() */
-	rv = AcpiInstallNotifyHandler(sc->sc_node->ad_handle,
-				      ACPI_SYSTEM_NOTIFY,
-				      acpibat_notify_handler, sc);
-	if (ACPI_FAILURE(rv)) {
-		aprint_error("%s: unable to register SYSTEM NOTIFY handler: %s\n",
-		       sc->sc_dev.dv_xname, AcpiFormatException(rv));
+		aprint_error_dev(self,
+		    "unable to register DEVICE/SYSTEM NOTIFY handler: %s\n",
+		    AcpiFormatException(rv));
 		return;
 	}
 
@@ -292,7 +255,10 @@ acpibat_attach(struct device *parent, struct device *self, void *aux)
 	ABAT_SET(sc, ABAT_F_VERBOSE);
 #endif
 
-	acpibat_init_envsys(sc);
+	if (!pmf_device_register(self, NULL, acpibat_resume))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
+	acpibat_init_envsys(self);
 }
 
 /*
@@ -302,9 +268,6 @@ acpibat_attach(struct device *parent, struct device *self, void *aux)
 static void
 acpibat_clear_presence(struct acpibat_softc *sc)
 {
-
-	ABAT_ASSERT_LOCKED(sc);
-
 	acpibat_clear_info(sc);
 	sc->sc_available = ABAT_ALV_NONE;
 	ABAT_CLEAR(sc, ABAT_F_PRESENT);
@@ -313,36 +276,30 @@ acpibat_clear_presence(struct acpibat_softc *sc)
 static void
 acpibat_clear_info(struct acpibat_softc *sc)
 {
-
-	ABAT_ASSERT_LOCKED(sc);
-
 	acpibat_clear_stat(sc);
-	if (sc->sc_available>ABAT_ALV_PRESENCE)
+	if (sc->sc_available > ABAT_ALV_PRESENCE)
 		sc->sc_available = ABAT_ALV_PRESENCE;
-	sc->sc_data[ACPIBAT_DCAPACITY].validflags &= ~ENVSYS_FCURVALID;
-	sc->sc_data[ACPIBAT_LFCCAPACITY].validflags &= ~ENVSYS_FCURVALID;
-	sc->sc_data[ACPIBAT_CAPACITY].validflags &= ~ENVSYS_FMAXVALID;
-	sc->sc_data[ACPIBAT_TECHNOLOGY].validflags &= ~ENVSYS_FCURVALID;
-	sc->sc_data[ACPIBAT_DVOLTAGE].validflags &= ~ENVSYS_FCURVALID;
-	sc->sc_data[ACPIBAT_WCAPACITY].validflags &= ~(ENVSYS_FCURVALID | ENVSYS_FMAXVALID | ENVSYS_FFRACVALID);
-	sc->sc_data[ACPIBAT_LCAPACITY].validflags &= ~(ENVSYS_FCURVALID | ENVSYS_FMAXVALID | ENVSYS_FFRACVALID);
+
+	sc->sc_sensor[ACPIBAT_DCAPACITY].state = ENVSYS_SINVALID;
+	sc->sc_sensor[ACPIBAT_LFCCAPACITY].state = ENVSYS_SINVALID;
+	sc->sc_sensor[ACPIBAT_CAPACITY].state = ENVSYS_SINVALID;
+	sc->sc_sensor[ACPIBAT_TECHNOLOGY].state = ENVSYS_SINVALID;
+	sc->sc_sensor[ACPIBAT_DVOLTAGE].state = ENVSYS_SINVALID;
+	sc->sc_sensor[ACPIBAT_WCAPACITY].state = ENVSYS_SINVALID;
+	sc->sc_sensor[ACPIBAT_LCAPACITY].state = ENVSYS_SINVALID;
 }
 
 static void
 acpibat_clear_stat(struct acpibat_softc *sc)
 {
-
-	ABAT_ASSERT_LOCKED(sc);
-
-	if (sc->sc_available>ABAT_ALV_INFO)
+	if (sc->sc_available > ABAT_ALV_INFO)
 		sc->sc_available = ABAT_ALV_INFO;
-	sc->sc_data[ACPIBAT_CHARGERATE].validflags &= ~ENVSYS_FCURVALID;
-	sc->sc_data[ACPIBAT_DISCHARGERATE].validflags &= ~ENVSYS_FCURVALID;
-	sc->sc_data[ACPIBAT_CAPACITY].validflags &= ~(ENVSYS_FCURVALID | ENVSYS_FFRACVALID);
-	sc->sc_data[ACPIBAT_CAPACITY].warnflags = 0;
-	sc->sc_data[ACPIBAT_VOLTAGE].validflags &= ~ENVSYS_FCURVALID;
-	sc->sc_data[ACPIBAT_CHARGING].validflags &= ~ENVSYS_FCURVALID;
-	sc->sc_data[ACPIBAT_DISCHARGING].validflags &= ~ENVSYS_FCURVALID;
+
+	sc->sc_sensor[ACPIBAT_CHARGERATE].state = ENVSYS_SINVALID;
+	sc->sc_sensor[ACPIBAT_DISCHARGERATE].state = ENVSYS_SINVALID;
+	sc->sc_sensor[ACPIBAT_CAPACITY].state = ENVSYS_SINVALID;
+	sc->sc_sensor[ACPIBAT_VOLTAGE].state = ENVSYS_SINVALID;
+	sc->sc_sensor[ACPIBAT_CHARGING].state = ENVSYS_SINVALID;
 }
 
 
@@ -350,31 +307,29 @@ acpibat_clear_stat(struct acpibat_softc *sc)
  * returns 0 for no battery, 1 for present, and -1 on error
  */
 static int
-acpibat_battery_present(struct acpibat_softc *sc)
+acpibat_battery_present(device_t dv)
 {
-	u_int32_t sta;
-	int s;
+	struct acpibat_softc *sc = device_private(dv);
+	uint32_t sta;
 	ACPI_INTEGER val;
 	ACPI_STATUS rv;
 
 	rv = acpi_eval_integer(sc->sc_node->ad_handle, "_STA", &val);
 	if (ACPI_FAILURE(rv)) {
-		printf("%s: failed to evaluate _STA: %s\n",
-		       sc->sc_dev.dv_xname, AcpiFormatException(rv));
+		aprint_error_dev(dv, "failed to evaluate _STA: %s\n",
+		    AcpiFormatException(rv));
 		return -1;
 	}
 
-	sta = (u_int32_t)val;
+	sta = (uint32_t)val;
 
-	ABAT_LOCK(sc, s);
 	sc->sc_available = ABAT_ALV_PRESENCE;
 	if (sta & ACPIBAT_STA_PRESENT) {
 		ABAT_SET(sc, ABAT_F_PRESENT);
-		sc->sc_data[ACPIBAT_PRESENT].cur.data_s = 1;
+		sc->sc_sensor[ACPIBAT_PRESENT].state = ENVSYS_SVALID;
+		sc->sc_sensor[ACPIBAT_PRESENT].value_cur = 1;
 	} else
-		sc->sc_data[ACPIBAT_PRESENT].cur.data_s = 0;
-	sc->sc_data[ACPIBAT_PRESENT].validflags |= ENVSYS_FCURVALID;
-	ABAT_UNLOCK(sc, s);
+		sc->sc_sensor[ACPIBAT_PRESENT].value_cur = 0;
 
 	return (sta & ACPIBAT_STA_PRESENT) ? 1 : 0;
 }
@@ -386,82 +341,78 @@ acpibat_battery_present(struct acpibat_softc *sc)
  */
 
 static ACPI_STATUS
-acpibat_get_info(struct acpibat_softc *sc)
+acpibat_get_info(device_t dv)
 {
+	struct acpibat_softc *sc = device_private(dv);
 	ACPI_OBJECT *p1, *p2;
 	ACPI_STATUS rv;
 	ACPI_BUFFER buf;
-	int capunit, rateunit, s;
+	int capunit, rateunit;
 
 	rv = acpi_eval_struct(sc->sc_node->ad_handle, "_BIF", &buf);
 	if (ACPI_FAILURE(rv)) {
-		printf("%s: failed to evaluate _BIF: %s\n",
-		    sc->sc_dev.dv_xname, AcpiFormatException(rv));
+		aprint_error_dev(dv, "failed to evaluate _BIF: %s\n",
+		    AcpiFormatException(rv));
 		return rv;
 	}
 	p1 = (ACPI_OBJECT *)buf.Pointer;
 
 	if (p1->Type != ACPI_TYPE_PACKAGE) {
-		printf("%s: expected PACKAGE, got %d\n", sc->sc_dev.dv_xname,
-		    p1->Type);
+		aprint_error_dev(dv, "expected PACKAGE, got %d\n", p1->Type);
 		goto out;
 	}
 	if (p1->Package.Count < 13) {
-		printf("%s: expected 13 elts, got %d\n",
-		    sc->sc_dev.dv_xname, p1->Package.Count);
+		aprint_error_dev(dv, "expected 13 elements, got %d\n",
+		    p1->Package.Count);
 		goto out;
 	}
 	p2 = p1->Package.Elements;
 
-	ABAT_LOCK(sc, s);
 	if ((p2[0].Integer.Value & ACPIBAT_PWRUNIT_MA) != 0) {
 		ABAT_SET(sc, ABAT_F_PWRUNIT_MA);
-		sc->sc_sysmon.sme_ranges = acpibat_range_amp;
 		capunit = ENVSYS_SAMPHOUR;
 		rateunit = ENVSYS_SAMPS;
 	} else {
 		ABAT_CLEAR(sc, ABAT_F_PWRUNIT_MA);
-		sc->sc_sysmon.sme_ranges = acpibat_range_watt;
 		capunit = ENVSYS_SWATTHOUR;
 		rateunit = ENVSYS_SWATTS;
 	}
 
-#define INITDATA(index, unit) \
-	sc->sc_data[index].units = unit;     				\
-	sc->sc_info[index].units = unit;
+	sc->sc_sensor[ACPIBAT_DCAPACITY].units = capunit;
+	sc->sc_sensor[ACPIBAT_LFCCAPACITY].units = capunit;
+	sc->sc_sensor[ACPIBAT_WCAPACITY].units = capunit;
+	sc->sc_sensor[ACPIBAT_LCAPACITY].units = capunit;
+	sc->sc_sensor[ACPIBAT_CHARGERATE].units = rateunit;
+	sc->sc_sensor[ACPIBAT_DISCHARGERATE].units = rateunit;
+	sc->sc_sensor[ACPIBAT_CAPACITY].units = capunit;
 
-	INITDATA(ACPIBAT_DCAPACITY, capunit);
-	INITDATA(ACPIBAT_LFCCAPACITY, capunit);
-	INITDATA(ACPIBAT_WCAPACITY, capunit);
-	INITDATA(ACPIBAT_LCAPACITY, capunit);
-	INITDATA(ACPIBAT_CHARGERATE, rateunit);
-	INITDATA(ACPIBAT_DISCHARGERATE, rateunit);
-	INITDATA(ACPIBAT_CAPACITY, capunit);
-
-#undef INITDATA
-
-	sc->sc_data[ACPIBAT_DCAPACITY].cur.data_s = p2[1].Integer.Value * 1000;
-	sc->sc_data[ACPIBAT_DCAPACITY].validflags |= ENVSYS_FCURVALID;
-	sc->sc_data[ACPIBAT_LFCCAPACITY].cur.data_s = p2[2].Integer.Value * 1000;
-	sc->sc_data[ACPIBAT_LFCCAPACITY].validflags |= ENVSYS_FCURVALID;
-	sc->sc_data[ACPIBAT_CAPACITY].max.data_s = p2[2].Integer.Value * 1000;
-	sc->sc_data[ACPIBAT_CAPACITY].validflags |= ENVSYS_FMAXVALID;
-	sc->sc_data[ACPIBAT_TECHNOLOGY].cur.data_s = p2[3].Integer.Value;
-	sc->sc_data[ACPIBAT_TECHNOLOGY].validflags |= ENVSYS_FCURVALID;
-	sc->sc_data[ACPIBAT_DVOLTAGE].cur.data_s = p2[4].Integer.Value * 1000;
-	sc->sc_data[ACPIBAT_DVOLTAGE].validflags |= ENVSYS_FCURVALID;
-	sc->sc_data[ACPIBAT_WCAPACITY].cur.data_s = p2[5].Integer.Value * 1000;
-	sc->sc_data[ACPIBAT_WCAPACITY].max.data_s = p2[2].Integer.Value * 1000;
-	sc->sc_data[ACPIBAT_WCAPACITY].validflags |= ENVSYS_FCURVALID | ENVSYS_FMAXVALID | ENVSYS_FFRACVALID;
-	sc->sc_data[ACPIBAT_LCAPACITY].cur.data_s = p2[6].Integer.Value * 1000;
-	sc->sc_data[ACPIBAT_LCAPACITY].max.data_s = p2[2].Integer.Value * 1000;
-	sc->sc_data[ACPIBAT_LCAPACITY].validflags |= ENVSYS_FCURVALID | ENVSYS_FMAXVALID | ENVSYS_FFRACVALID;
+	sc->sc_sensor[ACPIBAT_DCAPACITY].value_cur = p2[1].Integer.Value * 1000;
+	sc->sc_sensor[ACPIBAT_DCAPACITY].state = ENVSYS_SVALID;
+	sc->sc_sensor[ACPIBAT_LFCCAPACITY].value_cur = p2[2].Integer.Value * 1000;
+	sc->sc_sensor[ACPIBAT_LFCCAPACITY].state = ENVSYS_SVALID;
+	sc->sc_sensor[ACPIBAT_CAPACITY].value_max = p2[2].Integer.Value * 1000;
+	sc->sc_sensor[ACPIBAT_TECHNOLOGY].value_cur = p2[3].Integer.Value;
+	sc->sc_sensor[ACPIBAT_TECHNOLOGY].state = ENVSYS_SVALID;
+	sc->sc_sensor[ACPIBAT_DVOLTAGE].value_cur = p2[4].Integer.Value * 1000;
+	sc->sc_sensor[ACPIBAT_DVOLTAGE].state = ENVSYS_SVALID;
+	sc->sc_sensor[ACPIBAT_WCAPACITY].value_cur = p2[5].Integer.Value * 1000;
+	sc->sc_sensor[ACPIBAT_WCAPACITY].value_max = p2[2].Integer.Value * 1000;
+	sc->sc_sensor[ACPIBAT_WCAPACITY].state = ENVSYS_SVALID;
+	sc->sc_sensor[ACPIBAT_WCAPACITY].flags |=
+	    (ENVSYS_FPERCENT|ENVSYS_FVALID_MAX);
+	sc->sc_sensor[ACPIBAT_LCAPACITY].value_cur = p2[6].Integer.Value * 1000;
+	sc->sc_sensor[ACPIBAT_LCAPACITY].value_max = p2[2].Integer.Value * 1000;
+	sc->sc_sensor[ACPIBAT_LCAPACITY].state = ENVSYS_SVALID;
+	sc->sc_sensor[ACPIBAT_LCAPACITY].flags |=
+	    (ENVSYS_FPERCENT|ENVSYS_FVALID_MAX);
 	sc->sc_available = ABAT_ALV_INFO;
-	ABAT_UNLOCK(sc, s);
 
-	printf("%s: battery info: %s, %s, %s, %s\n", sc->sc_dev.dv_xname,
-	    p2[12].String.Pointer, p2[11].String.Pointer,
-	    p2[9].String.Pointer, p2[10].String.Pointer);
+	aprint_verbose_dev(dv, "battery info: %s, %s, %s",
+	    p2[12].String.Pointer, p2[11].String.Pointer, p2[9].String.Pointer);
+	if (p2[10].String.Pointer)
+		aprint_verbose(" %s", p2[10].String.Pointer);
+
+	aprint_verbose("\n");
 
 	rv = AE_OK;
 
@@ -476,65 +427,87 @@ out:
  *	Get, and possibly display, the current battery line status.
  */
 static ACPI_STATUS
-acpibat_get_status(struct acpibat_softc *sc)
+acpibat_get_status(device_t dv)
 {
-	int flags, status, s;
+	struct acpibat_softc *sc = device_private(dv);
+	int status, battrate;
 	ACPI_OBJECT *p1, *p2;
 	ACPI_STATUS rv;
 	ACPI_BUFFER buf;
 
 	rv = acpi_eval_struct(sc->sc_node->ad_handle, "_BST", &buf);
 	if (ACPI_FAILURE(rv)) {
-		printf("%s: failed to evaluate _BST: %s\n",
-		    sc->sc_dev.dv_xname, AcpiFormatException(rv));
+		aprint_error_dev(dv, "failed to evaluate _BST: %s\n",
+		    AcpiFormatException(rv));
 		return rv;
 	}
 	p1 = (ACPI_OBJECT *)buf.Pointer;
 
 	if (p1->Type != ACPI_TYPE_PACKAGE) {
-		printf("bat: expected PACKAGE, got %d\n", p1->Type);
+		aprint_error_dev(dv, "expected PACKAGE, got %d\n",
+		    p1->Type);
 		rv = AE_ERROR;
 		goto out;
 	}
 	if (p1->Package.Count < 4) {
-		printf("bat: expected 4 elts, got %d\n", p1->Package.Count);
+		aprint_error_dev(dv, "expected 4 elts, got %d\n",
+		    p1->Package.Count);
 		rv = AE_ERROR;
 		goto out;
 	}
 	p2 = p1->Package.Elements;
 
-	ABAT_LOCK(sc, s);
 	status = p2[0].Integer.Value;
-	sc->sc_data[ACPIBAT_CHARGERATE].validflags &= ~ENVSYS_FCURVALID;
-	sc->sc_data[ACPIBAT_DISCHARGERATE].validflags &= ~ENVSYS_FCURVALID;
-	if (p2[1].Integer.Value != -1) {
-		if (status & ACPIBAT_ST_CHARGING) {
-			sc->sc_data[ACPIBAT_CHARGERATE].cur.data_s = p2[1].Integer.Value * 1000;
-			sc->sc_data[ACPIBAT_CHARGERATE].validflags |= ENVSYS_FCURVALID;
-		} else if (status & ACPIBAT_ST_DISCHARGING) {
-			sc->sc_data[ACPIBAT_DISCHARGERATE].cur.data_s = p2[1].Integer.Value * 1000;
-			sc->sc_data[ACPIBAT_DISCHARGERATE].validflags |= ENVSYS_FCURVALID;
-		}
+	battrate = p2[1].Integer.Value;
+
+	if (status & ACPIBAT_ST_CHARGING) {
+		sc->sc_sensor[ACPIBAT_CHARGERATE].state = ENVSYS_SVALID;
+		sc->sc_sensor[ACPIBAT_CHARGERATE].value_cur = battrate * 1000;
+		sc->sc_sensor[ACPIBAT_DISCHARGERATE].state = ENVSYS_SINVALID;
+		sc->sc_sensor[ACPIBAT_CHARGING].state = ENVSYS_SVALID;
+		sc->sc_sensor[ACPIBAT_CHARGING].value_cur = 1;
+	} else if (status & ACPIBAT_ST_DISCHARGING) {
+		sc->sc_sensor[ACPIBAT_DISCHARGERATE].state = ENVSYS_SVALID;
+		sc->sc_sensor[ACPIBAT_DISCHARGERATE].value_cur = battrate * 1000;
+		sc->sc_sensor[ACPIBAT_CHARGERATE].state = ENVSYS_SINVALID;
+		sc->sc_sensor[ACPIBAT_CHARGING].state = ENVSYS_SVALID;
+		sc->sc_sensor[ACPIBAT_CHARGING].value_cur = 0;
+	} else if (!(status & (ACPIBAT_ST_CHARGING|ACPIBAT_ST_DISCHARGING))) {
+		sc->sc_sensor[ACPIBAT_CHARGING].state = ENVSYS_SVALID;
+		sc->sc_sensor[ACPIBAT_CHARGING].value_cur = 0;
+		sc->sc_sensor[ACPIBAT_CHARGERATE].state = ENVSYS_SINVALID;
+		sc->sc_sensor[ACPIBAT_DISCHARGERATE].state = ENVSYS_SINVALID;
 	}
-	sc->sc_data[ACPIBAT_CAPACITY].cur.data_s = p2[2].Integer.Value * 1000;
-	sc->sc_data[ACPIBAT_CAPACITY].validflags |= ENVSYS_FCURVALID | ENVSYS_FFRACVALID;
-	sc->sc_data[ACPIBAT_VOLTAGE].cur.data_s = p2[3].Integer.Value * 1000;
-	sc->sc_data[ACPIBAT_VOLTAGE].validflags |= ENVSYS_FCURVALID;
-	flags = 0;
-	if (sc->sc_data[ACPIBAT_CAPACITY].cur.data_s <
-	    sc->sc_data[ACPIBAT_WCAPACITY].cur.data_s)
-		flags |= ENVSYS_WARN_UNDER;
-	if (status & ACPIBAT_ST_CRITICAL)
-		flags |= ENVSYS_WARN_CRITUNDER;
-	sc->sc_data[ACPIBAT_CAPACITY].warnflags = flags;
-	sc->sc_data[ACPIBAT_CHARGING].cur.data_s =
-	    ((status & ACPIBAT_ST_CHARGING) != 0);
-	sc->sc_data[ACPIBAT_CHARGING].validflags |= ENVSYS_FCURVALID;
-	sc->sc_data[ACPIBAT_DISCHARGING].cur.data_s =
-	    ((status & ACPIBAT_ST_DISCHARGING) != 0);
-	sc->sc_data[ACPIBAT_DISCHARGING].validflags |= ENVSYS_FCURVALID;
-	sc->sc_available = ABAT_ALV_STAT;
-	ABAT_UNLOCK(sc, s);
+
+	sc->sc_sensor[ACPIBAT_CHARGE_STATE].value_cur =
+	    ENVSYS_BATTERY_CAPACITY_NORMAL;
+
+	sc->sc_sensor[ACPIBAT_CAPACITY].value_cur = p2[2].Integer.Value * 1000;
+	sc->sc_sensor[ACPIBAT_CAPACITY].state = ENVSYS_SVALID;
+	sc->sc_sensor[ACPIBAT_CAPACITY].flags |=
+	    (ENVSYS_FPERCENT|ENVSYS_FVALID_MAX);
+	sc->sc_sensor[ACPIBAT_VOLTAGE].value_cur = p2[3].Integer.Value * 1000;
+	sc->sc_sensor[ACPIBAT_VOLTAGE].state = ENVSYS_SVALID;
+
+	if (sc->sc_sensor[ACPIBAT_CAPACITY].value_cur <
+	    sc->sc_sensor[ACPIBAT_WCAPACITY].value_cur) {
+		sc->sc_sensor[ACPIBAT_CAPACITY].state = ENVSYS_SWARNUNDER;
+		sc->sc_sensor[ACPIBAT_CHARGE_STATE].value_cur =
+		    ENVSYS_BATTERY_CAPACITY_WARNING;
+	}
+
+	if (sc->sc_sensor[ACPIBAT_CAPACITY].value_cur <
+	    sc->sc_sensor[ACPIBAT_LCAPACITY].value_cur) {
+		sc->sc_sensor[ACPIBAT_CAPACITY].state = ENVSYS_SCRITUNDER;
+		sc->sc_sensor[ACPIBAT_CHARGE_STATE].value_cur =
+		    ENVSYS_BATTERY_CAPACITY_LOW;
+	}
+
+	if (status & ACPIBAT_ST_CRITICAL) {
+		sc->sc_sensor[ACPIBAT_CAPACITY].state = ENVSYS_SCRITICAL;
+		sc->sc_sensor[ACPIBAT_CHARGE_STATE].value_cur =
+		    ENVSYS_BATTERY_CAPACITY_CRITICAL;
+	}
 
 	rv = AE_OK;
 
@@ -547,64 +520,68 @@ out:
 #define CAPUNITS(sc)	(ABAT_ISSET((sc), ABAT_F_PWRUNIT_MA)?"Ah":"Wh")
 #define RATEUNITS(sc)	(ABAT_ISSET((sc), ABAT_F_PWRUNIT_MA)?"A":"W")
 static void
-acpibat_print_info(struct acpibat_softc *sc)
+acpibat_print_info(device_t dv)
 {
+	struct acpibat_softc *sc = device_private(dv);
 	const char *tech;
 
-	if (sc->sc_data[ACPIBAT_TECHNOLOGY].cur.data_s)
+	if (sc->sc_sensor[ACPIBAT_TECHNOLOGY].value_cur)
 		tech = "secondary";
 	else
 		tech = "primary";
 
-	printf("%s: %s battery, Design %d.%03d%s, Last full %d.%03d%s "
-	       "Warn %d.%03d%s Low %d.%03d%s\n",
-	       sc->sc_dev.dv_xname, tech,
-	       SCALE(sc->sc_data[ACPIBAT_DCAPACITY].cur.data_s), CAPUNITS(sc),
-	       SCALE(sc->sc_data[ACPIBAT_LFCCAPACITY].cur.data_s),CAPUNITS(sc),
-	       SCALE(sc->sc_data[ACPIBAT_WCAPACITY].cur.data_s), CAPUNITS(sc),
-	       SCALE(sc->sc_data[ACPIBAT_LCAPACITY].cur.data_s), CAPUNITS(sc));
+	aprint_debug_dev(dv, "%s battery, Design %d.%03d%s "
+	    "Last full %d.%03d%s Warn %d.%03d%s Low %d.%03d%s\n",
+	    tech, SCALE(sc->sc_sensor[ACPIBAT_DCAPACITY].value_cur), CAPUNITS(sc),
+	    SCALE(sc->sc_sensor[ACPIBAT_LFCCAPACITY].value_cur),CAPUNITS(sc),
+	    SCALE(sc->sc_sensor[ACPIBAT_WCAPACITY].value_cur), CAPUNITS(sc),
+	    SCALE(sc->sc_sensor[ACPIBAT_LCAPACITY].value_cur), CAPUNITS(sc));
 }
 
 static void
-acpibat_print_stat(struct acpibat_softc *sc)
+acpibat_print_stat(device_t dv)
 {
+	struct acpibat_softc *sc = device_private(dv);
 	const char *capstat, *chargestat;
 	int percent, denom;
+	int32_t value;
 
 	percent = 0;
 
-	if (sc->sc_data[ACPIBAT_CAPACITY].warnflags&ENVSYS_WARN_CRITUNDER)
-		capstat = "CRITICAL ";
-	else if (sc->sc_data[ACPIBAT_CAPACITY].warnflags&ENVSYS_WARN_UNDER)
-		capstat = "UNDER ";
+	if (sc->sc_sensor[ACPIBAT_CAPACITY].state == ENVSYS_SCRITUNDER)
+		capstat = "CRITICAL UNDER ";
+	else if (sc->sc_sensor[ACPIBAT_CAPACITY].state == ENVSYS_SCRITOVER)
+		capstat = "CRITICAL OVER ";
 	else
 		capstat = "";
-	if (sc->sc_data[ACPIBAT_CHARGING].cur.data_s)
-		chargestat = "charging";
-	else if (sc->sc_data[ACPIBAT_DISCHARGING].cur.data_s)
-		chargestat = "discharging";
-	else
+
+	if (sc->sc_sensor[ACPIBAT_CHARGING].state != ENVSYS_SVALID) {
 		chargestat = "idling";
-	denom = sc->sc_data[ACPIBAT_DCAPACITY].cur.data_s / 100;
+		value = 0;
+	} else if (sc->sc_sensor[ACPIBAT_CHARGING].value_cur == 0) {
+		chargestat = "discharging";
+		value = sc->sc_sensor[ACPIBAT_DISCHARGERATE].value_cur;
+	} else {
+		chargestat = "charging";
+		value = sc->sc_sensor[ACPIBAT_CHARGERATE].value_cur;
+	}
+
+	denom = sc->sc_sensor[ACPIBAT_LFCCAPACITY].value_cur / 100;
 	if (denom > 0)
-		percent = (sc->sc_data[ACPIBAT_CAPACITY].cur.data_s) / denom;
-	printf("%s: %s%s: %d.%03dV cap %d.%03d%s (%d%%) rate %d.%03d%s\n",
-	       sc->sc_dev.dv_xname,
-	       capstat, chargestat,
-	       SCALE(sc->sc_data[ACPIBAT_VOLTAGE].cur.data_s),
-	       SCALE(sc->sc_data[ACPIBAT_CAPACITY].cur.data_s), CAPUNITS(sc),
-	       percent,
-	       SCALE(sc->sc_data[ACPIBAT_CHARGING].cur.data_s ?
-		     sc->sc_data[ACPIBAT_CHARGERATE].cur.data_s :
-		     sc->sc_data[ACPIBAT_DISCHARGING].cur.data_s ?
-		     sc->sc_data[ACPIBAT_DISCHARGERATE].cur.data_s : 0),
-		     RATEUNITS(sc));
+		percent = (sc->sc_sensor[ACPIBAT_CAPACITY].value_cur) / denom;
+
+	aprint_debug_dev(dv, "%s%s: %d.%03dV cap %d.%03d%s (%d%%) "
+	    "rate %d.%03d%s\n", capstat, chargestat,
+	    SCALE(sc->sc_sensor[ACPIBAT_VOLTAGE].value_cur),
+	    SCALE(sc->sc_sensor[ACPIBAT_CAPACITY].value_cur), CAPUNITS(sc),
+	    percent, SCALE(value), RATEUNITS(sc));
 }
 
 static void
 acpibat_update(void *arg)
 {
-	struct acpibat_softc *sc = arg;
+	device_t dv = arg;
+	struct acpibat_softc *sc = device_private(dv);
 
 	if (sc->sc_available < ABAT_ALV_INFO) {
 		/* current information is invalid */
@@ -617,26 +594,27 @@ acpibat_update(void *arg)
 		if (sc->sc_available < ABAT_ALV_PRESENCE)
 #endif
 			/* presence is invalid */
-			if (acpibat_battery_present(sc)<0) {
+			if (acpibat_battery_present(dv) < 0) {
 				/* error */
-				printf("%s: cannot get battery presence.\n",
-				       sc->sc_dev.dv_xname);
+				aprint_debug_dev(dv,
+				    "cannot get battery presence.\n");
 				return;
 			}
+
 		if (ABAT_ISSET(sc, ABAT_F_PRESENT)) {
 			/* the battery is present. */
 			if (ABAT_ISSET(sc, ABAT_F_VERBOSE))
-				printf("%s: battery is present.\n",
-				       sc->sc_dev.dv_xname);
-			if (ACPI_FAILURE(acpibat_get_info(sc)))
+				aprint_debug_dev(dv,
+				    "battery is present.\n");
+			if (ACPI_FAILURE(acpibat_get_info(dv)))
 				return;
 			if (ABAT_ISSET(sc, ABAT_F_VERBOSE))
-				acpibat_print_info(sc);
+				acpibat_print_info(dv);
 		} else {
 			/* the battery is not present. */
 			if (ABAT_ISSET(sc, ABAT_F_VERBOSE))
-				printf("%s: battery is not present.\n",
-				       sc->sc_dev.dv_xname);
+				aprint_debug_dev(dv,
+				    "battery is not present.\n");
 			return;
 		}
 	} else {
@@ -647,11 +625,37 @@ acpibat_update(void *arg)
 		}
  	}
 
-	if (ACPI_FAILURE(acpibat_get_status(sc)))
+	if (ACPI_FAILURE(acpibat_get_status(dv)))
 		return;
 
 	if (ABAT_ISSET(sc, ABAT_F_VERBOSE))
-		acpibat_print_stat(sc);
+		acpibat_print_stat(dv);
+}
+
+static void
+acpibat_update_info(void *arg)
+{
+	device_t dev = arg;
+	struct acpibat_softc *sc = device_private(dev);
+
+	mutex_enter(&sc->sc_mutex);
+	acpibat_clear_presence(sc);
+	acpibat_update(arg);
+	mutex_exit(&sc->sc_mutex);
+}
+
+static void
+acpibat_update_stat(void *arg)
+{
+	device_t dev = arg;
+	struct acpibat_softc *sc = device_private(dev);
+
+	mutex_enter(&sc->sc_mutex);
+	acpibat_clear_stat(sc);
+	acpibat_update(arg);
+	microtime(&sc->sc_lastupdate);
+	cv_broadcast(&sc->sc_condvar);
+	mutex_exit(&sc->sc_mutex);
 }
 
 /*
@@ -660,80 +664,60 @@ acpibat_update(void *arg)
  *	Callback from ACPI interrupt handler to notify us of an event.
  */
 static void
-acpibat_notify_handler(ACPI_HANDLE handle, UINT32 notify,
-    void *context)
+acpibat_notify_handler(ACPI_HANDLE handle, UINT32 notify, void *context)
 {
-	struct acpibat_softc *sc = context;
-	int rv, s;
+	device_t dv = context;
+	int rv;
 
 #ifdef ACPI_BAT_DEBUG
-	printf("%s: received notify message: 0x%x\n",
-	       sc->sc_dev.dv_xname, notify);
+	aprint_debug_dev(dv, "received notify message: 0x%x\n", notify);
 #endif
 
 	switch (notify) {
 	case ACPI_NOTIFY_BusCheck:
 		break;
-
 	case ACPI_NOTIFY_DeviceCheck:
 	case ACPI_NOTIFY_BatteryInformationChanged:
-		ABAT_LOCK(sc, s);
-		acpibat_clear_presence(sc);
-		ABAT_UNLOCK(sc, s);
-		rv = AcpiOsQueueForExecution(OSD_PRIORITY_LO,
-					     acpibat_update, sc);
+		rv = AcpiOsExecute(OSL_NOTIFY_HANDLER, acpibat_update_info, dv);
 		if (ACPI_FAILURE(rv))
-			printf("%s: unable to queue status check: %s\n",
-			       sc->sc_dev.dv_xname, AcpiFormatException(rv));
+			aprint_error_dev(dv,
+			    "unable to queue info check: %s\n",
+			    AcpiFormatException(rv));
 		break;
 
 	case ACPI_NOTIFY_BatteryStatusChanged:
-		ABAT_LOCK(sc, s);
-		acpibat_clear_stat(sc);
-		ABAT_UNLOCK(sc, s);
-		rv = AcpiOsQueueForExecution(OSD_PRIORITY_LO,
-					     acpibat_update, sc);
+		rv = AcpiOsExecute(OSL_NOTIFY_HANDLER, acpibat_update_stat, dv);
 		if (ACPI_FAILURE(rv))
-			printf("%s: unable to queue status check: %s\n",
-			       sc->sc_dev.dv_xname, AcpiFormatException(rv));
+			aprint_error_dev(dv,
+			    "unable to queue status check: %s\n",
+			    AcpiFormatException(rv));
 		break;
 
 	default:
-		printf("%s: received unknown notify message: 0x%x\n",
-		       sc->sc_dev.dv_xname, notify);
+		aprint_error_dev(dv,
+		    "received unknown notify message: 0x%x\n", notify);
 	}
 }
 
 static void
-acpibat_init_envsys(struct acpibat_softc *sc)
+acpibat_init_envsys(device_t dv)
 {
-	int capunit, rateunit;
+	struct acpibat_softc *sc = device_private(dv);
+	int i, capunit, rateunit;
 
-#if 0
 	if (sc->sc_flags & ABAT_F_PWRUNIT_MA) {
-#endif
-		/* XXX */
-		sc->sc_sysmon.sme_ranges = acpibat_range_amp;
 		capunit = ENVSYS_SAMPHOUR;
 		rateunit = ENVSYS_SAMPS;
-#if 0
 	} else {
-		sc->sc_sysmon.sme_ranges = acpibat_range_watt;
 		capunit = ENVSYS_SWATTHOUR;
 		rateunit = ENVSYS_SWATTS;
 	}
-#endif
 
-#define INITDATA(index, unit, string) \
-	sc->sc_data[index].sensor = index;				\
-	sc->sc_data[index].units = unit;     				\
-	sc->sc_data[index].validflags = ENVSYS_FVALID;			\
-	sc->sc_data[index].warnflags = 0;				\
-	sc->sc_info[index].sensor = index;				\
-	sc->sc_info[index].units = unit;     				\
-	sc->sc_info[index].validflags = ENVSYS_FVALID;			\
-	snprintf(sc->sc_info[index].desc, sizeof(sc->sc_info->desc),	\
-	    "%s %s", sc->sc_dev.dv_xname, string);			\
+#define INITDATA(index, unit, string)					\
+	sc->sc_sensor[index].state = ENVSYS_SVALID;			\
+	sc->sc_sensor[index].units = unit;     				\
+ 	strlcpy(sc->sc_sensor[index].desc, string,			\
+ 	    sizeof(sc->sc_sensor[index].desc));
 
 	INITDATA(ACPIBAT_PRESENT, ENVSYS_INDICATOR, "present");
 	INITDATA(ACPIBAT_DCAPACITY, capunit, "design cap");
@@ -746,49 +730,71 @@ acpibat_init_envsys(struct acpibat_softc *sc)
 	INITDATA(ACPIBAT_CHARGERATE, rateunit, "charge rate");
 	INITDATA(ACPIBAT_DISCHARGERATE, rateunit, "discharge rate");
 	INITDATA(ACPIBAT_CAPACITY, capunit, "charge");
-	INITDATA(ACPIBAT_CHARGING, ENVSYS_INDICATOR, "charging");
-	INITDATA(ACPIBAT_DISCHARGING, ENVSYS_INDICATOR, "discharging");
+	INITDATA(ACPIBAT_CHARGING, ENVSYS_BATTERY_CHARGE, "charging");
+	INITDATA(ACPIBAT_CHARGE_STATE, ENVSYS_BATTERY_CAPACITY, "charge state");
 
 #undef INITDATA
 
-	sc->sc_sysmon.sme_sensor_info = sc->sc_info;
-	sc->sc_sysmon.sme_sensor_data = sc->sc_data;
-	sc->sc_sysmon.sme_cookie = sc;
-	sc->sc_sysmon.sme_gtredata = acpibat_gtredata;
-	sc->sc_sysmon.sme_streinfo = acpibat_streinfo;
-	sc->sc_sysmon.sme_nsensors = ACPIBAT_NSENSORS;
-	sc->sc_sysmon.sme_envsys_version = 1000;
+	/* Enable monitoring for the charge state sensor */
+	sc->sc_sensor[ACPIBAT_CHARGE_STATE].monitor = true;
+	sc->sc_sensor[ACPIBAT_CHARGE_STATE].flags |= ENVSYS_FMONSTCHANGED;
 
-	sc->sc_updateinterval.tv_sec = 1;
-	sc->sc_updateinterval.tv_usec = 0;
+	/* Disable userland monitoring on these sensors */
+	sc->sc_sensor[ACPIBAT_VOLTAGE].flags = ENVSYS_FMONNOTSUPP;
+	sc->sc_sensor[ACPIBAT_CHARGERATE].flags = ENVSYS_FMONNOTSUPP;
+	sc->sc_sensor[ACPIBAT_DISCHARGERATE].flags = ENVSYS_FMONNOTSUPP;
+	sc->sc_sensor[ACPIBAT_DCAPACITY].flags = ENVSYS_FMONNOTSUPP;
+	sc->sc_sensor[ACPIBAT_LFCCAPACITY].flags = ENVSYS_FMONNOTSUPP;
+	sc->sc_sensor[ACPIBAT_TECHNOLOGY].flags = ENVSYS_FMONNOTSUPP;
+	sc->sc_sensor[ACPIBAT_DVOLTAGE].flags = ENVSYS_FMONNOTSUPP;
+	sc->sc_sensor[ACPIBAT_WCAPACITY].flags = ENVSYS_FMONNOTSUPP;
+	sc->sc_sensor[ACPIBAT_LCAPACITY].flags = ENVSYS_FMONNOTSUPP;
 
-	if (sysmon_envsys_register(&sc->sc_sysmon))
-		printf("%s: unable to register with sysmon\n",
-		    sc->sc_dev.dv_xname);
+	sc->sc_sme = sysmon_envsys_create();
+	for (i = 0; i < ACPIBAT_NSENSORS; i++) {
+		if (sysmon_envsys_sensor_attach(sc->sc_sme,
+						&sc->sc_sensor[i])) {
+			aprint_error_dev(dv, "unable to add sensor%d\n", i);
+			sysmon_envsys_destroy(sc->sc_sme);
+			return;
+		}
+	}
+
+	sc->sc_sme->sme_name = device_xname(dv);
+	sc->sc_sme->sme_cookie = dv;
+	sc->sc_sme->sme_refresh = acpibat_refresh;
+	sc->sc_sme->sme_class = SME_CLASS_BATTERY;
+	sc->sc_sme->sme_flags = SME_POLL_ONLY;
+
+	acpibat_update(dv);
+
+	if (sysmon_envsys_register(sc->sc_sme)) {
+		aprint_error_dev(dv, "unable to register with sysmon\n");
+		sysmon_envsys_destroy(sc->sc_sme);
+	}
 }
 
-static int
-acpibat_gtredata(struct sysmon_envsys *sme, struct envsys_tre_data *tred)
+static void
+acpibat_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 {
-	struct acpibat_softc *sc = sme->sme_cookie;
+	device_t dv = sme->sme_cookie;
+	struct acpibat_softc *sc = device_private(dv);
+	ACPI_STATUS rv;
+	struct timeval tv, tmp;
 
-	if (ratecheck(&sc->sc_lastupdate, &sc->sc_updateinterval))
-		acpibat_update(sc);
+	if (ABAT_ISSET(sc, ABAT_F_PRESENT)) {
+		tmp.tv_sec = 5;
+		tmp.tv_usec = 0;
+		microtime(&tv);
+		timersub(&tv, &tmp, &tv);
+		if (timercmp(&tv, &sc->sc_lastupdate, <))
+			return;
 
-	/* XXX locking */
-	*tred = sc->sc_data[tred->sensor];
-	/* XXX locking */
-
-	return 0;
-}
-
-static int
-acpibat_streinfo(struct sysmon_envsys *sme,
-    struct envsys_basic_info *binfo)
-{
-
-	/* XXX Not implemented */
-	binfo->validflags = 0;
-
-	return 0;
+		if (!mutex_tryenter(&sc->sc_mutex))
+			return;
+		rv = AcpiOsExecute(OSL_NOTIFY_HANDLER, acpibat_update_stat, dv);
+		if (!ACPI_FAILURE(rv))
+			cv_timedwait(&sc->sc_condvar, &sc->sc_mutex, hz);
+		mutex_exit(&sc->sc_mutex);
+	}
 }

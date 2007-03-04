@@ -1,4 +1,4 @@
-/* $NetBSD: au_wired_space.c,v 1.4 2007/02/21 22:59:47 thorpej Exp $ */
+/* $NetBSD: au_wired_space.c,v 1.6 2008/04/28 20:23:27 martin Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -46,13 +46,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -68,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: au_wired_space.c,v 1.4 2007/02/21 22:59:47 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: au_wired_space.c,v 1.6 2008/04/28 20:23:27 martin Exp $");
 
 /*
  * This provides mappings for the upper I/O regions used on some
@@ -649,7 +642,7 @@ au_wired_space_init(bus_space_tag_t bst, const char *name,
 
 	/* allocate extent manager */
 	c->c_extent = extent_create(name, start, start + size, M_DEVBUF,
-	    (caddr_t)c->c_exstore, sizeof (c->c_exstore), EX_NOWAIT);
+	    (void *)c->c_exstore, sizeof (c->c_exstore), EX_NOWAIT);
 	if (c->c_extent == NULL)
 		panic("au_wired_space_init: %s: cannot create extent", name);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_amap.h,v 1.32 2007/02/22 04:38:07 matt Exp $	*/
+/*	$NetBSD: uvm_amap.h,v 1.34 2008/10/26 08:32:02 bjs Exp $	*/
 
 /*
  *
@@ -55,6 +55,8 @@
 /*
  * part 1: amap interface
  */
+
+void	uvm_amap_init(void);
 
 /*
  * forward definition of vm_amap structure.  only amap
@@ -156,7 +158,7 @@ bool		amap_swap_off
  */
 
 struct vm_amap {
-	struct simplelock am_l; /* simple lock [locks all vm_amap fields] */
+	kmutex_t am_l;		/* lock [locks all vm_amap fields] */
 	int am_ref;		/* reference count */
 	int am_flags;		/* flags */
 	int am_maxslot;		/* max # of slots allocated */
@@ -200,10 +202,10 @@ struct vm_amap {
  */
 
 /*
- * defines for handling of large sparce amaps:
+ * defines for handling of large, sparse amaps:
  *
  * one of the problems of array-based amaps is that if you allocate a
- * large sparcely-used area of virtual memory you end up allocating
+ * large, sparsely-used area of virtual memory you end up allocating
  * large arrays that, for the most part, don't get used.  this is a
  * problem for BSD in that the kernel likes to make these types of
  * allocations to "reserve" memory for possible future use.
@@ -256,10 +258,10 @@ struct vm_amap {
  */
 
 #define amap_flags(AMAP)	((AMAP)->am_flags)
-#define amap_lock(AMAP)		simple_lock(&(AMAP)->am_l)
-#define amap_lock_try(AMAP)	simple_lock_try(&(AMAP)->am_l)
+#define amap_lock(AMAP)		mutex_enter(&(AMAP)->am_l)
+#define amap_lock_try(AMAP)	mutex_tryenter(&(AMAP)->am_l)
 #define amap_refs(AMAP)		((AMAP)->am_ref)
-#define amap_unlock(AMAP)	simple_unlock(&(AMAP)->am_l)
+#define amap_unlock(AMAP)	mutex_exit(&(AMAP)->am_l)
 
 /*
  * if we enable PPREF, then we have a couple of extra functions that

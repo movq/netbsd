@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sf_pci.c,v 1.12 2006/11/16 01:33:09 christos Exp $	*/
+/*	$NetBSD: if_sf_pci.c,v 1.16 2008/04/28 20:23:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -15,13 +15,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sf_pci.c,v 1.12 2006/11/16 01:33:09 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sf_pci.c,v 1.16 2008/04/28 20:23:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,8 +52,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_sf_pci.c,v 1.12 2006/11/16 01:33:09 christos Exp 
 #include <net/if_media.h>
 #include <net/if_ether.h>
 
-#include <machine/bus.h>
-#include <machine/intr.h>
+#include <sys/bus.h>
+#include <sys/intr.h>
 
 #include <dev/mii/miivar.h>
 
@@ -78,8 +71,8 @@ struct sf_pci_softc {
 	void	*sc_ih;			/* interrupt handle */
 };
 
-static int	sf_pci_match(struct device *, struct cfdata *, void *);
-static void	sf_pci_attach(struct device *, struct device *, void *);
+static int	sf_pci_match(device_t, struct cfdata *, void *);
+static void	sf_pci_attach(device_t, device_t, void *);
 
 CFATTACH_DECL(sf_pci, sizeof(struct sf_pci_softc),
     sf_pci_match, sf_pci_attach, NULL, NULL);
@@ -160,8 +153,7 @@ sf_pci_lookup(const struct pci_attach_args *pa)
 }
 
 static int
-sf_pci_match(struct device *parent, struct cfdata *match,
-    void *aux)
+sf_pci_match(device_t parent, struct cfdata *match, void *aux)
 {
 	struct pci_attach_args *pa = aux;
 
@@ -172,9 +164,9 @@ sf_pci_match(struct device *parent, struct cfdata *match,
 }
 
 static void
-sf_pci_attach(struct device *parent, struct device *self, void *aux)
+sf_pci_attach(device_t parent, device_t self, void *aux)
 {
-	struct sf_pci_softc *psc = (void *) self;
+	struct sf_pci_softc *psc = device_private(self);
 	struct sf_softc *sc = &psc->sc_starfire;
 	struct pci_attach_args *pa = aux;
 	pci_intr_handle_t ih;
@@ -194,9 +186,9 @@ sf_pci_attach(struct device *parent, struct device *self, void *aux)
 	printf(": %s, rev. %d\n", spp->spp_name, PCI_REVISION(pa->pa_class));
 
 	/* power up chip */
-	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, sc,
-	    NULL)) && error != EOPNOTSUPP) {
-		aprint_error("%s: cannot activate %d\n", sc->sc_dev.dv_xname,
+	if ((error = pci_activate(pa->pa_pc, pa->pa_tag, self, NULL)) &&
+	    error != EOPNOTSUPP) {
+		aprint_error_dev(&sc->sc_dev, "cannot activate %d\n",
 		    error);
 		return;
 	}
@@ -230,8 +222,7 @@ sf_pci_attach(struct device *parent, struct device *self, void *aux)
 		sc->sc_sh = ioh;
 		sc->sc_iomapped = 1;
 	} else {
-		printf("%s: unable to map device registers\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to map device registers\n");
 		return;
 	}
 
@@ -246,20 +237,19 @@ sf_pci_attach(struct device *parent, struct device *self, void *aux)
 	 * Map and establish our interrupt.
 	 */
 	if (pci_intr_map(pa, &ih)) {
-		printf("%s: unable to map interrupt\n", sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pa->pa_pc, ih);
 	psc->sc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_NET, sf_intr, sc);
 	if (psc->sc_ih == NULL) {
-		printf("%s: unable to establish interrupt",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(&sc->sc_dev, "unable to establish interrupt");
 		if (intrstr != NULL)
 			printf(" at %s", intrstr);
 		printf("\n");
 		return;
 	}
-	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
+	printf("%s: interrupting at %s\n", device_xname(&sc->sc_dev), intrstr);
 
 	/*
 	 * Finish off the attach.

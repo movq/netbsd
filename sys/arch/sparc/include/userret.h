@@ -1,4 +1,4 @@
-/*	$NetBSD: userret.h,v 1.5 2007/02/09 21:55:12 ad Exp $ */
+/*	$NetBSD: userret.h,v 1.8 2007/11/05 20:37:48 ad Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -66,14 +66,14 @@ userret(struct lwp *l, int pc, u_quad_t oticks)
  again:
 	mi_userret(l);
 
-	if (cpuinfo.want_ast) {
-		cpuinfo.want_ast = 0;
+	if (cpuinfo.ci_want_ast) {
+		cpuinfo.ci_want_ast = 0;
 		if (l->l_pflag & LP_OWEUPC) {
 			l->l_pflag &= ~LP_OWEUPC;
 			ADDUPROF(l);
 		}
 	}
-	if (cpuinfo.want_resched) {
+	if (cpuinfo.ci_want_resched) {
 		/*
 		 * We are being preempted.
 		 */
@@ -86,8 +86,6 @@ userret(struct lwp *l, int pc, u_quad_t oticks)
 	 */
 	if (p->p_stflag & PST_PROFIL)
 		addupc_task(l, pc, (int)(p->p_sticks - oticks));
-
-	curcpu()->ci_schedstate.spc_curpriority = l->l_priority;
 }
 
 /*

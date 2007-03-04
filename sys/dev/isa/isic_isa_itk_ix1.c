@@ -13,13 +13,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -35,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_isa_itk_ix1.c,v 1.13 2006/11/24 21:23:07 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_isa_itk_ix1.c,v 1.17 2008/04/28 20:23:52 martin Exp $");
 
 #include "opt_isicisa.h"
 
@@ -88,7 +81,7 @@ __KERNEL_RCSID(0, "$NetBSD: isic_isa_itk_ix1.c,v 1.13 2006/11/24 21:23:07 wiz Ex
 #include <machine/clock.h>
 #include <i386/isa/isa_device.h>
 #else
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <sys/device.h>
 #endif
 
@@ -264,9 +257,9 @@ isic_attach_itkix1(struct isa_device *dev)
 	sc->sc_bfifolen = HSCX_FIFO_LEN;
 
 	/* setup ISAC and HSCX base addr */
-	ISAC_BASE = (caddr_t) sc->sc_port;
-	HSCX_A_BASE = (caddr_t) sc->sc_port + 1;
-	HSCX_B_BASE = (caddr_t) sc->sc_port + 2;
+	ISAC_BASE = (void *) sc->sc_port;
+	HSCX_A_BASE = (void *) sc->sc_port + 1;
+	HSCX_B_BASE = (void *) sc->sc_port + 2;
 
 	/* Read HSCX A/B VSTR.  Expected value is 0x05 (V2.1) or 0x04 (V2.0). */
 	hv1 = HSCX_READ(0, H_VSTR) & 0xf;
@@ -317,11 +310,11 @@ int isic_attach_itkix1(struct isic_softc *sc)
 	if((hv1 != 0x05 && hv1 != 0x04) || (hv2 != 0x05 && hv2 != 0x04))
 	{
 		printf("%s: HSCX VSTR test failed for ITK ix1 micro\n",
-			sc->sc_dev.dv_xname);
+			device_xname(&sc->sc_dev));
 		printf("%s: HSC0: VSTR: %#x\n",
-			sc->sc_dev.dv_xname, HSCX_READ(0, H_VSTR));
+			device_xname(&sc->sc_dev), HSCX_READ(0, H_VSTR));
 		printf("%s: HSC1: VSTR: %#x\n",
-			sc->sc_dev.dv_xname, HSCX_READ(1, H_VSTR));
+			device_xname(&sc->sc_dev), HSCX_READ(1, H_VSTR));
 		return 0;
 	}
 

@@ -1,7 +1,7 @@
-/* $NetBSD: pmap.h,v 1.68 2007/02/21 22:59:37 thorpej Exp $ */
+/* $NetBSD: pmap.h,v 1.71 2008/04/28 20:23:11 martin Exp $ */
 
 /*-
- * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999, 2000, 2001, 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -117,7 +110,7 @@
 #include "opt_multiprocessor.h"
 #endif
 
-#include <sys/lock.h>
+#include <sys/mutex.h>
 #include <sys/queue.h>
 
 #include <machine/pte.h>
@@ -144,7 +137,7 @@ struct pmap {
 	TAILQ_ENTRY(pmap)	pm_list;	/* list of all pmaps */
 	pt_entry_t		*pm_lev1map;	/* level 1 map */
 	int			pm_count;	/* pmap reference count */
-	struct simplelock	pm_slock;	/* lock on pmap */
+	kmutex_t		pm_lock;	/* lock on pmap */
 	struct pmap_statistics	pm_stats;	/* pmap statistics */
 	unsigned long		pm_cpus;	/* mask of CPUs using pmap */
 	unsigned long		pm_needisync;	/* mask of CPUs needing isync */
@@ -188,6 +181,8 @@ typedef struct pv_entry {
 #define	PGU_L3PT		4		/* level 3 page table */
 
 #ifdef _KERNEL
+
+#include <sys/atomic.h>
 
 #ifndef _LKM
 #include "opt_dec_kn8ae.h"			/* XXX */
@@ -343,8 +338,8 @@ pmap_l3pte(pmap, v, l2pte)
  * operations, locking the kernel pmap is not necessary.  Therefore,
  * it is not necessary to block interrupts when locking pmap strucutres.
  */
-#define	PMAP_LOCK(pmap)		simple_lock(&(pmap)->pm_slock)
-#define	PMAP_UNLOCK(pmap)	simple_unlock(&(pmap)->pm_slock)
+#define	PMAP_LOCK(pmap)		mutex_enter(&(pmap)->pm_lock)
+#define	PMAP_UNLOCK(pmap)	mutex_exit(&(pmap)->pm_lock)
 
 /*
  * Macro for processing deferred I-stream synchronization.
@@ -359,8 +354,7 @@ do {									\
 	u_long cpu_mask = (1UL << cpu_number());			\
 									\
 	if ((pmap)->pm_needisync & cpu_mask) {				\
-		atomic_clearbits_ulong(&(pmap)->pm_needisync,		\
-		    cpu_mask);						\
+		atomic_and_ulong(&(pmap)->pm_needisync,	~cpu_mask);	\
 		alpha_pal_imb();					\
 	}								\
 } while (0)

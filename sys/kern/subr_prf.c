@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_prf.c,v 1.105 2007/02/22 06:34:45 thorpej Exp $	*/
+/*	$NetBSD: subr_prf.c,v 1.124 2008/09/23 22:20:24 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1988, 1991, 1993
@@ -37,18 +37,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.105 2007/02/22 06:34:45 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.124 2008/09/23 22:20:24 pooka Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
 #include "opt_kgdb.h"
-#include "opt_multiprocessor.h"
 #include "opt_dump.h"
 
 #include <sys/param.h>
 #include <sys/stdint.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
+#include <sys/device.h>
 #include <sys/reboot.h>
 #include <sys/msgbuf.h>
 #include <sys/proc.h>
@@ -59,10 +59,13 @@ __KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.105 2007/02/22 06:34:45 thorpej Exp $
 #include <sys/tprintf.h>
 #include <sys/syslog.h>
 #include <sys/malloc.h>
-#include <sys/lock.h>
 #include <sys/kprintf.h>
+#include <sys/atomic.h>
+#include <sys/cpu.h>
 
 #include <dev/cons.h>
+
+#include <net/if.h>
 
 #ifdef DDB
 #include <ddb/ddbvar.h>
@@ -75,9 +78,7 @@ __KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.105 2007/02/22 06:34:45 thorpej Exp $
 #include <ipkdb/ipkdb.h>
 #endif
 
-#if defined(MULTIPROCESSOR)
 struct simplelock kprintf_slock = SIMPLELOCK_INITIALIZER;
-#endif /* MULTIPROCESSOR */
 
 /*
  * note that stdarg.h and the ansi style va_start macro is used for both
@@ -89,7 +90,6 @@ struct simplelock kprintf_slock = SIMPLELOCK_INITIALIZER;
 
 #ifdef KGDB
 #include <sys/kgdb.h>
-#include <machine/cpu.h>
 #endif
 #ifdef DDB
 #include <ddb/db_output.h>	/* db_printf, db_putchar prototypes */
@@ -99,9 +99,6 @@ struct simplelock kprintf_slock = SIMPLELOCK_INITIALIZER;
 /*
  * defines
  */
-
-/* max size buffer kprintf needs to print quad_t [size in base 8 + \0] */
-#define KPRINTF_BUFSIZE		(sizeof(quad_t) * NBBY / 3 + 2)
 
 
 /*
@@ -119,6 +116,7 @@ extern	struct tty *constty;	/* pointer to console "window" tty */
 extern	int log_open;	/* subr_log: is /dev/klog open? */
 const	char *panicstr; /* arg to first call to panic (used as a flag
 			   to indicate that panic has already been called). */
+struct cpu_info *paniccpu;	/* cpu that first paniced */
 long	panicstart, panicend;	/* position in the msgbuf of the start and
 				   end of the formatted panicstr. */
 int	doing_shutdown;	/* set to indicate shutdown in progress */
@@ -138,26 +136,10 @@ int	dumponpanic = DUMP_ON_PANIC;
 void (*v_putc)(int) = cnputc;	/* start with cnputc (normal cons) */
 void (*v_flush)(void) = cnflush;	/* start with cnflush (normal cons) */
 
-const char hexdigits[] = "0123456789abcdef";
-const char HEXDIGITS[] = "0123456789ABCDEF";
-
 
 /*
  * functions
  */
-
-/*
- * tablefull: warn that a system table is full
- */
-
-void
-tablefull(const char *tab, const char *hint)
-{
-	if (hint)
-		log(LOG_ERR, "%s: table is full - %s\n", tab, hint);
-	else
-		log(LOG_ERR, "%s: table is full\n", tab);
-}
 
 /*
  * twiddle: spin a little propellor on the console.
@@ -189,8 +171,35 @@ twiddle(void)
 void
 panic(const char *fmt, ...)
 {
+	CPU_INFO_ITERATOR cii;
+	struct cpu_info *ci, *oci;
 	int bootopt;
 	va_list ap;
+
+	/*
+	 * Disable preemption.  If already panicing on another CPU, sit
+	 * here and spin until the system is rebooted.  Allow the CPU that
+	 * first paniced to panic again.
+	 */
+	kpreempt_disable();
+	ci = curcpu();
+	oci = atomic_cas_ptr((void *)&paniccpu, NULL, ci);
+	if (oci != NULL && oci != ci) {
+		/* Give interrupts a chance to try and prevent deadlock. */
+		for (;;) {
+			DELAY(10);
+		}
+	}
+
+	/*
+	 * Convert the current thread to a bound thread and prevent all
+	 * CPUs from scheduling unbound jobs.  Do so without taking any
+	 * locks.
+	 */
+	curlwp->l_pflag |= LP_BOUND;
+	for (CPU_INFO_FOREACH(cii, ci)) {
+		ci->ci_schedstate.spc_flags |= SPCF_OFFLINE;
+	}
 
 	bootopt = RB_AUTOBOOT;
 	if (dumponpanic)
@@ -368,7 +377,6 @@ addlog(const char *fmt, ...)
 static void
 putchar(int c, int flags, struct tty *tp)
 {
-	struct kern_msgbuf *mbp;
 
 	if (panicstr)
 		constty = NULL;
@@ -381,30 +389,8 @@ putchar(int c, int flags, struct tty *tp)
 	    (flags & TOCONS) && tp == constty)
 		constty = NULL;
 	if ((flags & TOLOG) &&
-	    c != '\0' && c != '\r' && c != 0177 && msgbufenabled) {
-		mbp = msgbufp;
-		if (mbp->msg_magic != MSG_MAGIC) {
-			/*
-			 * Arguably should panic or somehow notify the
-			 * user...  but how?  Panic may be too drastic,
-			 * and would obliterate the message being kicked
-			 * out (maybe a panic itself), and printf
-			 * would invoke us recursively.  Silently punt
-			 * for now.  If syslog is running, it should
-			 * notice.
-			 */
-			msgbufenabled = 0;
-		} else {
-			mbp->msg_bufc[mbp->msg_bufx++] = c;
-			if (mbp->msg_bufx < 0 || mbp->msg_bufx >= mbp->msg_bufs)
-				mbp->msg_bufx = 0;
-			/* If the buffer is full, keep the most recent data. */
-			if (mbp->msg_bufr == mbp->msg_bufx) {
-				 if (++mbp->msg_bufr >= mbp->msg_bufs)
-					mbp->msg_bufr = 0;
-			}
-		}
-	}
+	    c != '\0' && c != '\r' && c != 0177)
+	    	logputchar(c);
 	if ((flags & TOCONS) && constty == NULL && c != '\0')
 		(*v_putc)(c);
 #ifdef DDB
@@ -428,7 +414,7 @@ uprintf(const char *fmt, ...)
 	struct proc *p = curproc;
 	va_list ap;
 
-	/* mutex_enter(&proclist_mutex); XXXSMP */
+	/* mutex_enter(proc_lock); XXXSMP */
 
 	if (p->p_lflag & PL_CONTROLT && p->p_session->s_ttyvp) {
 		/* No mutex needed; going to process TTY. */
@@ -437,7 +423,7 @@ uprintf(const char *fmt, ...)
 		va_end(ap);
 	}
 
-	/* mutex_exit(&proclist_mutex); XXXSMP */
+	/* mutex_exit(proc_lock); XXXSMP */
 }
 
 void
@@ -476,12 +462,12 @@ tprintf_open(struct proc *p)
 
 	cookie = NULL;
 
-	/* mutex_enter(&proclist_mutex); XXXSMP */
+	mutex_enter(proc_lock);
 	if (p->p_lflag & PL_CONTROLT && p->p_session->s_ttyvp) {
 		SESSHOLD(p->p_session);
 		cookie = (tpr_t)p->p_session;
 	}
-	/* mutex_exit(&proclist_mutex) XXXSMP */
+	mutex_exit(proc_lock);
 
 	return cookie;
 }
@@ -494,8 +480,11 @@ void
 tprintf_close(tpr_t sess)
 {
 
-	if (sess)
+	if (sess) {
+		mutex_enter(proc_lock);
 		SESSRELE((struct session *) sess);
+		mutex_exit(proc_lock);
+	}
 }
 
 /*
@@ -512,7 +501,7 @@ tprintf(tpr_t tpr, const char *fmt, ...)
 	int s, flags = TOLOG;
 	va_list ap;
 
-	/* mutex_enter(&proclist_mutex); XXXSMP */
+	/* mutex_enter(proc_lock); XXXSMP */
 	if (sess && sess->s_ttyvp && ttycheckoutq(sess->s_ttyp, 0)) {
 		flags |= TOTTY;
 		tp = sess->s_ttyp;
@@ -526,7 +515,7 @@ tprintf(tpr_t tpr, const char *fmt, ...)
 	va_end(ap);
 
 	KPRINTF_MUTEX_EXIT(s);
-	/* mutex_exit(&proclist_mutex);	XXXSMP */
+	/* mutex_exit(proc_lock);	XXXSMP */
 
 	logwakeup();
 }
@@ -585,6 +574,16 @@ db_vprintf(const char *fmt, va_list ap)
 
 #endif /* DDB */
 
+static void
+kprintf_internal(const char *fmt, int oflags, void *vp, char *sbuf, ...)
+{
+	va_list ap;
+	
+	va_start(ap, sbuf);
+	(void)kprintf(fmt, oflags, vp, sbuf, ap);
+	va_end(ap);
+}
+
 /*
  * Device autoconfiguration printf routines.  These change their
  * behavior based on the AB_* flags in boothowto.  If AB_SILENT
@@ -596,10 +595,9 @@ db_vprintf(const char *fmt, va_list ap)
  * aprint_normal: Send to console unless AB_QUIET.  Always goes
  * to the log.
  */
-void
-aprint_normal(const char *fmt, ...)
+static void
+aprint_normal_internal(const char *prefix, const char *fmt, va_list ap)
 {
-	va_list ap;
 	int s, flags = TOLOG;
 
 	if ((boothowto & (AB_SILENT|AB_QUIET)) == 0 ||
@@ -608,14 +606,44 @@ aprint_normal(const char *fmt, ...)
 
 	KPRINTF_MUTEX_ENTER(s);
 
-	va_start(ap, fmt);
+	if (prefix)
+		kprintf_internal("%s: ", flags, NULL, NULL, prefix);
 	kprintf(fmt, flags, NULL, NULL, ap);
-	va_end(ap);
 
 	KPRINTF_MUTEX_EXIT(s);
 
 	if (!panicstr)
 		logwakeup();
+}
+
+void
+aprint_normal(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	aprint_normal_internal(NULL, fmt, ap);
+	va_end(ap);
+}
+
+void
+aprint_normal_dev(device_t dv, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	aprint_normal_internal(device_xname(dv), fmt, ap);
+	va_end(ap);
+}
+
+void
+aprint_normal_ifnet(struct ifnet *ifp, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	aprint_normal_internal(ifp->if_xname, fmt, ap);
+	va_end(ap);
 }
 
 /*
@@ -641,10 +669,9 @@ aprint_get_error_count(void)
 	return (count);
 }
 
-void
-aprint_error(const char *fmt, ...)
+static void
+aprint_error_internal(const char *prefix, const char *fmt, va_list ap)
 {
-	va_list ap;
 	int s, flags = TOLOG;
 
 	if ((boothowto & (AB_SILENT|AB_QUIET)) == 0 ||
@@ -655,9 +682,9 @@ aprint_error(const char *fmt, ...)
 
 	aprint_error_count++;
 
-	va_start(ap, fmt);
+	if (prefix)
+		kprintf_internal("%s: ", flags, NULL, NULL, prefix);
 	kprintf(fmt, flags, NULL, NULL, ap);
-	va_end(ap);
 
 	KPRINTF_MUTEX_EXIT(s);
 
@@ -665,35 +692,94 @@ aprint_error(const char *fmt, ...)
 		logwakeup();
 }
 
+void
+aprint_error(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	aprint_error_internal(NULL, fmt, ap);
+	va_end(ap);
+}
+
+void
+aprint_error_dev(device_t dv, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	aprint_error_internal(device_xname(dv), fmt, ap);
+	va_end(ap);
+}
+
+void
+aprint_error_ifnet(struct ifnet *ifp, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	aprint_error_internal(ifp->if_xname, fmt, ap);
+	va_end(ap);
+}
+
 /*
  * aprint_naive: Send to console only if AB_QUIET.  Never goes
  * to the log.
  */
+static void
+aprint_naive_internal(const char *prefix, const char *fmt, va_list ap)
+{
+	int s;
+
+	if ((boothowto & (AB_QUIET|AB_SILENT|AB_VERBOSE)) != AB_QUIET)
+		return;
+
+	KPRINTF_MUTEX_ENTER(s);
+
+	if (prefix)
+		kprintf_internal("%s: ", TOCONS, NULL, NULL, prefix);
+	kprintf(fmt, TOCONS, NULL, NULL, ap);
+
+	KPRINTF_MUTEX_EXIT(s);
+}
+
 void
 aprint_naive(const char *fmt, ...)
 {
 	va_list ap;
-	int s;
 
-	if ((boothowto & (AB_QUIET|AB_SILENT|AB_VERBOSE)) == AB_QUIET) {
-		KPRINTF_MUTEX_ENTER(s);
+	va_start(ap, fmt);
+	aprint_naive_internal(NULL, fmt, ap);
+	va_end(ap);
+}
 
-		va_start(ap, fmt);
-		kprintf(fmt, TOCONS, NULL, NULL, ap);
-		va_end(ap);
+void
+aprint_naive_dev(device_t dv, const char *fmt, ...)
+{
+	va_list ap;
 
-		KPRINTF_MUTEX_EXIT(s);
-	}
+	va_start(ap, fmt);
+	aprint_naive_internal(device_xname(dv), fmt, ap);
+	va_end(ap);
+}
+
+void
+aprint_naive_ifnet(struct ifnet *ifp, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	aprint_naive_internal(ifp->if_xname, fmt, ap);
+	va_end(ap);
 }
 
 /*
  * aprint_verbose: Send to console only if AB_VERBOSE.  Always
  * goes to the log.
  */
-void
-aprint_verbose(const char *fmt, ...)
+static void
+aprint_verbose_internal(const char *prefix, const char *fmt, va_list ap)
 {
-	va_list ap;
 	int s, flags = TOLOG;
 
 	if (boothowto & AB_VERBOSE)
@@ -701,9 +787,9 @@ aprint_verbose(const char *fmt, ...)
 
 	KPRINTF_MUTEX_ENTER(s);
 
-	va_start(ap, fmt);
+	if (prefix)
+		kprintf_internal("%s: ", flags, NULL, NULL, prefix);
 	kprintf(fmt, flags, NULL, NULL, ap);
-	va_end(ap);
 
 	KPRINTF_MUTEX_EXIT(s);
 
@@ -711,24 +797,99 @@ aprint_verbose(const char *fmt, ...)
 		logwakeup();
 }
 
+void
+aprint_verbose(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	aprint_verbose_internal(NULL, fmt, ap);
+	va_end(ap);
+}
+
+void
+aprint_verbose_dev(device_t dv, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	aprint_verbose_internal(device_xname(dv), fmt, ap);
+	va_end(ap);
+}
+
+void
+aprint_verbose_ifnet(struct ifnet *ifp, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	aprint_verbose_internal(ifp->if_xname, fmt, ap);
+	va_end(ap);
+}
+
 /*
  * aprint_debug: Send to console and log only if AB_DEBUG.
  */
+static void
+aprint_debug_internal(const char *prefix, const char *fmt, va_list ap)
+{
+	int s;
+
+	if ((boothowto & AB_DEBUG) == 0)
+		return;
+
+	KPRINTF_MUTEX_ENTER(s);
+
+	if (prefix)
+		kprintf_internal("%s: ", TOCONS | TOLOG, NULL, NULL, prefix);
+	kprintf(fmt, TOCONS | TOLOG, NULL, NULL, ap);
+
+	KPRINTF_MUTEX_EXIT(s);
+}
+
 void
 aprint_debug(const char *fmt, ...)
 {
 	va_list ap;
+
+	va_start(ap, fmt);
+	aprint_debug_internal(NULL, fmt, ap);
+	va_end(ap);
+}
+
+void
+aprint_debug_dev(device_t dv, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	aprint_debug_internal(device_xname(dv), fmt, ap);
+	va_end(ap);
+}
+
+void
+aprint_debug_ifnet(struct ifnet *ifp, const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	aprint_debug_internal(ifp->if_xname, fmt, ap);
+	va_end(ap);
+}
+
+void
+printf_tolog(const char *fmt, ...)
+{
+	va_list ap;
 	int s;
 
-	if (boothowto & AB_DEBUG) {
-		KPRINTF_MUTEX_ENTER(s);
+	KPRINTF_MUTEX_ENTER(s);
 
-		va_start(ap, fmt);
-		kprintf(fmt, TOCONS | TOLOG, NULL, NULL, ap);
-		va_end(ap);
+	va_start(ap, fmt);
+	(void)kprintf(fmt, TOLOG, NULL, NULL, ap);
+	va_end(ap);
 
-		KPRINTF_MUTEX_EXIT(s);
-	}
+	KPRINTF_MUTEX_EXIT(s);
 }
 
 /*
@@ -860,144 +1021,6 @@ vsnprintf(char *bf, size_t size, const char *fmt, va_list ap)
 	retval = kprintf(fmt, TOBUFONLY, &p, bf, ap);
 	*(p) = 0;	/* null terminate */
 	return(retval);
-}
-
-/*
- * bitmask_snprintf: print an interpreted bitmask to a buffer
- *
- * => returns pointer to the buffer
- */
-char *
-bitmask_snprintf(u_quad_t val, const char *p, char *bf, size_t buflen)
-{
-	char *bp, *q;
-	size_t left;
-	const char *sbase;
-	char snbuf[KPRINTF_BUFSIZE];
-	int base, bit, ch, len, sep;
-	u_quad_t field;
-
-	bp = bf;
-	memset(bf, 0, buflen);
-
-	/*
-	 * Always leave room for the trailing NULL.
-	 */
-	left = buflen - 1;
-
-	/*
-	 * Print the value into the buffer.  Abort if there's not
-	 * enough room.
-	 */
-	if (buflen < KPRINTF_BUFSIZE)
-		return (bf);
-
-	ch = *p++;
-	base = ch != '\177' ? ch : *p++;
-	sbase = base == 8 ? "%qo" : base == 10 ? "%qd" : base == 16 ? "%qx" : 0;
-	if (sbase == 0)
-		return (bf);	/* punt if not oct, dec, or hex */
-
-	snprintf(snbuf, sizeof(snbuf), sbase, val);
-	for (q = snbuf ; *q ; q++) {
-		*bp++ = *q;
-		left--;
-	}
-
-	/*
-	 * If the value we printed was 0 and we're using the old-style format,
-	 * or if we don't have room for "<x>", we're done.
-	 */
-	if (((val == 0) && (ch != '\177')) || left < 3)
-		return (bf);
-
-#define PUTBYTE(b, c, l) do {	\
-	*(b)++ = (c);		\
-	if (--(l) == 0)		\
-		goto out;	\
-} while (/*CONSTCOND*/ 0)
-#define PUTSTR(b, p, l) do {		\
-	int c;				\
-	while ((c = *(p)++) != 0) {	\
-		*(b)++ = c;		\
-		if (--(l) == 0)		\
-			goto out;	\
-	}				\
-} while (/*CONSTCOND*/ 0)
-
-	/*
-	 * Chris Torek's new bitmask format is identified by a leading \177
-	 */
-	sep = '<';
-	if (ch != '\177') {
-		/* old (standard) format. */
-		for (;(bit = *p++) != 0;) {
-			if (val & (1 << (bit - 1))) {
-				PUTBYTE(bp, sep, left);
-				for (; (ch = *p) > ' '; ++p) {
-					PUTBYTE(bp, ch, left);
-				}
-				sep = ',';
-			} else
-				for (; *p > ' '; ++p)
-					continue;
-		}
-	} else {
-		/* new quad-capable format; also does fields. */
-		field = val;
-		while ((ch = *p++) != '\0') {
-			bit = *p++;	/* now 0-origin */
-			switch (ch) {
-			case 'b':
-				if (((u_int)(val >> bit) & 1) == 0)
-					goto skip;
-				PUTBYTE(bp, sep, left);
-				PUTSTR(bp, p, left);
-				sep = ',';
-				break;
-			case 'f':
-			case 'F':
-				len = *p++;	/* field length */
-				field = (val >> bit) & ((1ULL << len) - 1);
-				if (ch == 'F')	/* just extract */
-					break;
-				PUTBYTE(bp, sep, left);
-				sep = ',';
-				PUTSTR(bp, p, left);
-				PUTBYTE(bp, '=', left);
-				sprintf(snbuf, sbase, field);
-				q = snbuf; PUTSTR(bp, q, left);
-				break;
-			case '=':
-			case ':':
-				/*
-				 * Here "bit" is actually a value instead,
-				 * to be compared against the last field.
-				 * This only works for values in [0..255],
-				 * of course.
-				 */
-				if ((int)field != bit)
-					goto skip;
-				if (ch == '=')
-					PUTBYTE(bp, '=', left);
-				PUTSTR(bp, p, left);
-				break;
-			default:
-			skip:
-				while (*p++ != '\0')
-					continue;
-				break;
-			}
-		}
-	}
-	if (sep != '<')
-		PUTBYTE(bp, '>', left);
-
-out:
-	return (bf);
-
-#undef PUTBYTE
-#undef PUTSTR
 }
 
 /*

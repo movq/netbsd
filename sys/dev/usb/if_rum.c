@@ -1,8 +1,8 @@
 /*	$OpenBSD: if_rum.c,v 1.40 2006/09/18 16:20:20 damien Exp $	*/
-/*	$NetBSD: if_rum.c,v 1.6 2007/02/26 21:35:44 wiz Exp $	*/
+/*	$NetBSD: if_rum.c,v 1.23 2008/10/21 12:21:46 jun Exp $	*/
 
 /*-
- * Copyright (c) 2005, 2006 Damien Bergamini <damien.bergamini@free.fr>
+ * Copyright (c) 2005-2007 Damien Bergamini <damien.bergamini@free.fr>
  * Copyright (c) 2006 Niall O'Higgins <niallo@openbsd.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -20,11 +20,11 @@
 
 /*-
  * Ralink Technology RT2501USB/RT2601USB chipset driver
- * http://www.ralinktech.com/
+ * http://www.ralinktech.com.tw/
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.6 2007/02/26 21:35:44 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.23 2008/10/21 12:21:46 jun Exp $");
 
 #include "bpfilter.h"
 
@@ -39,9 +39,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.6 2007/02/26 21:35:44 wiz Exp $");
 #include <sys/conf.h>
 #include <sys/device.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/endian.h>
-#include <machine/intr.h>
+#include <sys/intr.h>
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -80,7 +80,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.6 2007/02/26 21:35:44 wiz Exp $");
 #ifdef RUM_DEBUG
 #define DPRINTF(x)	do { if (rum_debug) logprintf x; } while (0)
 #define DPRINTFN(n, x)	do { if (rum_debug >= (n)) logprintf x; } while (0)
-int rum_debug = 0;
+int rum_debug = 1;
 #else
 #define DPRINTF(x)
 #define DPRINTFN(n, x)
@@ -88,27 +88,45 @@ int rum_debug = 0;
 
 /* various supported device vendors/products */
 static const struct usb_devno rum_devs[] = {
-	{ USB_VENDOR_ABOCOM,		USB_PRODUCT_ABOCOM_RT2573 },
+	{ USB_VENDOR_ABOCOM,		USB_PRODUCT_ABOCOM_HWU54DM },
+	{ USB_VENDOR_ABOCOM,		USB_PRODUCT_ABOCOM_RT2573_2 },
+	{ USB_VENDOR_ABOCOM,		USB_PRODUCT_ABOCOM_RT2573_3 },
+	{ USB_VENDOR_ABOCOM,		USB_PRODUCT_ABOCOM_RT2573_4 },
+	{ USB_VENDOR_ABOCOM,		USB_PRODUCT_ABOCOM_WUG2700 },
+	{ USB_VENDOR_AMIT,		USB_PRODUCT_AMIT_CGWLUSB2GO },
+	{ USB_VENDOR_ASUSTEK,		USB_PRODUCT_ASUSTEK_WL167G_2 },
+	{ USB_VENDOR_ASUSTEK,		USB_PRODUCT_ASUSTEK_WL167G_3 },
 	{ USB_VENDOR_BELKIN,		USB_PRODUCT_BELKIN_F5D7050A },
 	{ USB_VENDOR_BELKIN,		USB_PRODUCT_BELKIN_F5D9050V3 },
 	{ USB_VENDOR_CISCOLINKSYS,	USB_PRODUCT_CISCOLINKSYS_WUSB54GC },
+	{ USB_VENDOR_CISCOLINKSYS,	USB_PRODUCT_CISCOLINKSYS_WUSB54GR },
 	{ USB_VENDOR_CONCEPTRONIC,	USB_PRODUCT_CONCEPTRONIC_C54RU2 },
+	{ USB_VENDOR_COREGA,		USB_PRODUCT_COREGA_CGWLUSB2GL },
+	{ USB_VENDOR_COREGA,		USB_PRODUCT_COREGA_CGWLUSB2GPX },
 	{ USB_VENDOR_DICKSMITH,		USB_PRODUCT_DICKSMITH_CWD854F },
 	{ USB_VENDOR_DICKSMITH,		USB_PRODUCT_DICKSMITH_RT2573 },
 	{ USB_VENDOR_DLINK2,		USB_PRODUCT_DLINK2_DWLG122C1 },
 	{ USB_VENDOR_DLINK2,		USB_PRODUCT_DLINK2_WUA1340 },
 	{ USB_VENDOR_GIGABYTE,		USB_PRODUCT_GIGABYTE_GNWB01GS },
+	{ USB_VENDOR_GIGABYTE,		USB_PRODUCT_GIGABYTE_GNWI05GS },
 	{ USB_VENDOR_GIGASET,		USB_PRODUCT_GIGASET_RT2573 },
 	{ USB_VENDOR_GOODWAY,		USB_PRODUCT_GOODWAY_RT2573 },
+	{ USB_VENDOR_GUILLEMOT,		USB_PRODUCT_GUILLEMOT_HWGUSB254LB },
+	{ USB_VENDOR_GUILLEMOT,		USB_PRODUCT_GUILLEMOT_HWGUSB254V2AP },
 	{ USB_VENDOR_HUAWEI3COM,	USB_PRODUCT_HUAWEI3COM_RT2573 },
+	{ USB_VENDOR_MELCO,		USB_PRODUCT_MELCO_G54HP },
 	{ USB_VENDOR_MELCO,		USB_PRODUCT_MELCO_SG54HP },
 	{ USB_VENDOR_MSI,		USB_PRODUCT_MSI_RT2573 },
 	{ USB_VENDOR_MSI,		USB_PRODUCT_MSI_RT2573_2 },
 	{ USB_VENDOR_MSI,		USB_PRODUCT_MSI_RT2573_3 },
+	{ USB_VENDOR_MSI,		USB_PRODUCT_MSI_RT2573_4 },
+	{ USB_VENDOR_NOVATECH,		USB_PRODUCT_NOVATECH_RT2573 },
+	{ USB_VENDOR_PLANEX2,		USB_PRODUCT_PLANEX2_GWUS54HP },
 	{ USB_VENDOR_PLANEX2,		USB_PRODUCT_PLANEX2_GWUS54MINI2 },
 	{ USB_VENDOR_PLANEX2,		USB_PRODUCT_PLANEX2_GWUSMM },
 	{ USB_VENDOR_QCOM,		USB_PRODUCT_QCOM_RT2573 },
 	{ USB_VENDOR_QCOM,		USB_PRODUCT_QCOM_RT2573_2 },
+	{ USB_VENDOR_QCOM,		USB_PRODUCT_QCOM_RT2573_3 },
 	{ USB_VENDOR_RALINK,		USB_PRODUCT_RALINK_RT2573 },
 	{ USB_VENDOR_RALINK_2,          USB_PRODUCT_RALINK_2_RT2573 },
 	{ USB_VENDOR_RALINK,		USB_PRODUCT_RALINK_RT2671 },
@@ -132,7 +150,7 @@ Static void		rum_txeof(usbd_xfer_handle, usbd_private_handle,
 Static void		rum_rxeof(usbd_xfer_handle, usbd_private_handle,
 			    usbd_status);
 #if NBPFILTER > 0
-Static uint8_t		rum_rxrate(struct rum_rx_desc *);
+Static uint8_t		rum_rxrate(const struct rum_rx_desc *);
 #endif
 Static int		rum_ack_rate(struct ieee80211com *, int);
 Static uint16_t		rum_txtime(int, int, uint32_t);
@@ -146,7 +164,7 @@ Static int		rum_tx_data(struct rum_softc *, struct mbuf *,
 			    struct ieee80211_node *);
 Static void		rum_start(struct ifnet *);
 Static void		rum_watchdog(struct ifnet *);
-Static int		rum_ioctl(struct ifnet *, u_long, caddr_t);
+Static int		rum_ioctl(struct ifnet *, u_long, void *);
 Static void		rum_eeprom_read(struct rum_softc *, uint16_t, void *,
 			    int);
 Static uint32_t		rum_read(struct rum_softc *, uint16_t);
@@ -179,6 +197,7 @@ Static void		rum_stop(struct ifnet *, int);
 Static int		rum_load_microcode(struct rum_softc *, const u_char *,
 			    size_t);
 Static int		rum_prepare_beacon(struct rum_softc *);
+Static void		rum_newassoc(struct ieee80211_node *, int);
 Static void		rum_amrr_start(struct rum_softc *,
 			    struct ieee80211_node *);
 Static void		rum_amrr_timeout(void *);
@@ -225,9 +244,6 @@ USB_DECLARE_DRIVER(rum);
 USB_MATCH(rum)
 {
 	USB_MATCH_START(rum, uaa);
-
-	if (uaa->iface != NULL)
-		return UMATCH_NONE;
 
 	return (usb_lookup(rum_devs, uaa->vendor, uaa->product) != NULL) ?
 	    UMATCH_VENDOR_PRODUCT : UMATCH_NONE;
@@ -290,17 +306,17 @@ USB_ATTACH(rum)
 	int i, ntries;
 	uint32_t tmp;
 
+	sc->sc_dev = self;
 	sc->sc_udev = uaa->device;
 	sc->sc_flags = 0;
 
 	devinfop = usbd_devinfo_alloc(sc->sc_udev, 0);
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
 	if (usbd_set_config_no(sc->sc_udev, RT2573_CONFIG_NO, 0) != 0) {
-		printf("%s: could not set configuration no\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "could not set configuration no\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
@@ -308,8 +324,7 @@ USB_ATTACH(rum)
 	error = usbd_device2interface_handle(sc->sc_udev, RT2573_IFACE_INDEX,
 	    &sc->sc_iface);
 	if (error != 0) {
-		printf("%s: could not get interface handle\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "could not get interface handle\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
@@ -322,8 +337,8 @@ USB_ATTACH(rum)
 	for (i = 0; i < id->bNumEndpoints; i++) {
 		ed = usbd_interface2endpoint_descriptor(sc->sc_iface, i);
 		if (ed == NULL) {
-			printf("%s: no endpoint descriptor for iface %d\n",
-			    USBDEVNAME(sc->sc_dev), i);
+			aprint_error_dev(self,
+			    "no endpoint descriptor for iface %d\n", i);
 			USB_ATTACH_ERROR_RETURN;
 		}
 
@@ -335,16 +350,16 @@ USB_ATTACH(rum)
 			sc->sc_tx_no = ed->bEndpointAddress;
 	}
 	if (sc->sc_rx_no == -1 || sc->sc_tx_no == -1) {
-		printf("%s: missing endpoint\n", USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "missing endpoint\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
 	usb_init_task(&sc->sc_task, rum_task, sc);
-	callout_init(&sc->scan_ch);
+	usb_callout_init(sc->sc_scan_ch);
 
 	sc->amrr.amrr_min_success_threshold =  1;
 	sc->amrr.amrr_max_success_threshold = 10;
-	callout_init(&sc->amrr_ch);
+	usb_callout_init(sc->sc_amrr_ch);
 
 	/* retrieve RT2573 rev. no */
 	for (ntries = 0; ntries < 1000; ntries++) {
@@ -353,16 +368,16 @@ USB_ATTACH(rum)
 		DELAY(1000);
 	}
 	if (ntries == 1000) {
-		printf("%s: timeout waiting for chip to settle\n",
-		    USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self, "timeout waiting for chip to settle\n");
 		USB_ATTACH_ERROR_RETURN;
 	}
 
 	/* retrieve MAC address and various other things from EEPROM */
 	rum_read_eeprom(sc);
 
-	printf("%s: MAC/BBP RT%04x (rev 0x%05x), RF %s, address %s\n",
-	    USBDEVNAME(sc->sc_dev), sc->macbbp_rev, tmp,
+	aprint_normal_dev(self,
+	    "MAC/BBP RT%04x (rev 0x%05x), RF %s, address %s\n",
+	    sc->macbbp_rev, tmp,
 	    rum_get_rf(sc->rf_rev), ether_sprintf(ic->ic_myaddr));
 
 	ic->ic_ifp = ifp;
@@ -432,6 +447,7 @@ USB_ATTACH(rum)
 
 	if_attach(ifp);
 	ieee80211_ifattach(ic);
+	ic->ic_newassoc = rum_newassoc;
 
 	/* override state transition machine */
 	sc->sc_newstate = ic->ic_newstate;
@@ -466,12 +482,15 @@ USB_DETACH(rum)
 	struct ifnet *ifp = &sc->sc_if;
 	int s;
 
+	if (!ifp->if_softc)
+		return 0;
+
 	s = splusb();
 
 	rum_stop(ifp, 1);
 	usb_rem_task(sc->sc_udev, &sc->sc_task);
-	callout_stop(&sc->scan_ch);
-	callout_stop(&sc->amrr_ch);
+	usb_uncallout(sc->sc_scan_ch, rum_next_scan, sc);
+	usb_uncallout(sc->sc_amrr_ch, rum_amrr_timeout, sc);
 
 	if (sc->amrr_xfer != NULL) {
 		usbd_free_xfer(sc->amrr_xfer);
@@ -487,9 +506,6 @@ USB_DETACH(rum)
 		usbd_abort_pipe(sc->sc_tx_pipeh);
 		usbd_close_pipe(sc->sc_tx_pipeh);
 	}
-
-	rum_free_rx_list(sc);
-	rum_free_tx_list(sc);
 
 #if NBPFILTER > 0
 	bpfdetach(ifp);
@@ -513,7 +529,7 @@ rum_alloc_tx_list(struct rum_softc *sc)
 
 	sc->tx_queued = 0;
 
-	for (i = 0; i < RT2573_TX_LIST_COUNT; i++) {
+	for (i = 0; i < RUM_TX_LIST_COUNT; i++) {
 		data = &sc->tx_data[i];
 
 		data->sc = sc;
@@ -551,7 +567,7 @@ rum_free_tx_list(struct rum_softc *sc)
 	struct rum_tx_data *data;
 	int i;
 
-	for (i = 0; i < RT2573_TX_LIST_COUNT; i++) {
+	for (i = 0; i < RUM_TX_LIST_COUNT; i++) {
 		data = &sc->tx_data[i];
 
 		if (data->xfer != NULL) {
@@ -572,7 +588,7 @@ rum_alloc_rx_list(struct rum_softc *sc)
 	struct rum_rx_data *data;
 	int i, error;
 
-	for (i = 0; i < RT2573_RX_LIST_COUNT; i++) {
+	for (i = 0; i < RUM_RX_LIST_COUNT; i++) {
 		data = &sc->rx_data[i];
 
 		data->sc = sc;
@@ -623,7 +639,7 @@ rum_free_rx_list(struct rum_softc *sc)
 	struct rum_rx_data *data;
 	int i;
 
-	for (i = 0; i < RT2573_RX_LIST_COUNT; i++) {
+	for (i = 0; i < RUM_RX_LIST_COUNT; i++) {
 		data = &sc->rx_data[i];
 
 		if (data->xfer != NULL) {
@@ -689,7 +705,7 @@ rum_task(void *arg)
 
 	case IEEE80211_S_SCAN:
 		rum_set_chan(sc, ic->ic_curchan);
-		callout_reset(&sc->scan_ch, hz / 5, rum_next_scan, sc);
+		usb_callout(sc->sc_scan_ch, hz / 5, rum_next_scan, sc);
 		break;
 
 	case IEEE80211_S_AUTH:
@@ -720,10 +736,14 @@ rum_task(void *arg)
 		if (ic->ic_opmode != IEEE80211_M_MONITOR)
 			rum_enable_tsf_sync(sc);
 
-		/* enable automatic rate adaptation in STA mode */
-		if (ic->ic_opmode == IEEE80211_M_STA &&
-		    ic->ic_fixed_rate == IEEE80211_FIXED_RATE_NONE)
-			rum_amrr_start(sc, ni);
+		if (ic->ic_opmode == IEEE80211_M_STA) {
+			/* fake a join to init the tx rate */
+			rum_newassoc(ic->ic_bss, 1);
+
+			/* enable automatic rate adaptation in STA mode */
+			if (ic->ic_fixed_rate == IEEE80211_FIXED_RATE_NONE)
+				rum_amrr_start(sc, ni);
+		}
 
 		break;
 	}
@@ -737,8 +757,8 @@ rum_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 	struct rum_softc *sc = ic->ic_ifp->if_softc;
 
 	usb_rem_task(sc->sc_udev, &sc->sc_task);
-	callout_stop(&sc->scan_ch);
-	callout_stop(&sc->amrr_ch);
+	usb_uncallout(sc->sc_scan_ch, rum_next_scan, sc);
+	usb_uncallout(sc->sc_amrr_ch, rum_amrr_timeout, sc);
 
 	/* do it in a process context */
 	sc->sc_state = nstate;
@@ -777,8 +797,6 @@ rum_txeof(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 
 	s = splnet();
 
-	m_freem(data->m);
-	data->m = NULL;
 	ieee80211_free_node(data->ni);
 	data->ni = NULL;
 
@@ -860,7 +878,7 @@ rum_rxeof(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 
 	/* finalize mbuf */
 	m->m_pkthdr.rcvif = ifp;
-	m->m_data = (caddr_t)(desc + 1);
+	m->m_data = (void *)(desc + 1);
 	m->m_pkthdr.len = m->m_len = (le32toh(desc->flags) >> 16) & 0xfff;
 
 	s = splnet();
@@ -905,7 +923,7 @@ skip:	/* setup a new transfer */
  */
 #if NBPFILTER > 0
 Static uint8_t
-rum_rxrate(struct rum_rx_desc *desc)
+rum_rxrate(const struct rum_rx_desc *desc)
 {
 	if (le32toh(desc->flags) & RT2573_RX_OFDM) {
 		/* reverse function of rum_plcp_signal */
@@ -1072,6 +1090,7 @@ rum_tx_mgt(struct rum_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 	struct rum_tx_desc *desc;
 	struct rum_tx_data *data;
 	struct ieee80211_frame *wh;
+	struct ieee80211_key *k;
 	uint32_t flags = 0;
 	uint16_t dur;
 	usbd_status error;
@@ -1087,8 +1106,18 @@ rum_tx_mgt(struct rum_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 
 	wh = mtod(m0, struct ieee80211_frame *);
 
+	if (wh->i_fc[1] & IEEE80211_FC1_WEP) {
+		k = ieee80211_crypto_encap(ic, ni, m0);
+		if (k == NULL) {
+			m_freem(m0);
+			return ENOBUFS;
+		}
+	}
+
+	wh = mtod(m0, struct ieee80211_frame *);
+
 	if (!IEEE80211_IS_MULTICAST(wh->i_addr1)) {
-		flags |= RT2573_TX_ACK;
+		flags |= RT2573_TX_NEED_ACK;
 
 		dur = rum_txtime(RUM_ACK_SIZE, rum_ack_rate(ic, rate),
 		    ic->ic_flags) + sc->sifs;
@@ -1128,8 +1157,8 @@ rum_tx_mgt(struct rum_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 	if ((xferlen % 64) == 0)
 		xferlen += 4;
 
-	DPRINTFN(10, ("sending msg frame len=%lu rate=%u xfer len=%u\n",
-	    (long unsigned int)m0->m_pkthdr.len + RT2573_TX_DESC_SIZE,
+	DPRINTFN(10, ("sending msg frame len=%zu rate=%u xfer len=%u\n",
+	    (size_t)m0->m_pkthdr.len + RT2573_TX_DESC_SIZE,
 	    rate, xferlen));
 
 	usbd_setup_xfer(data->xfer, sc->sc_tx_pipeh, data, data->buf, xferlen,
@@ -1165,6 +1194,8 @@ rum_tx_data(struct rum_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 		rate = ic->ic_bss->ni_rates.rs_rates[ic->ic_fixed_rate];
 	else
 		rate = ni->ni_rates.rs_rates[ni->ni_txrate];
+	if (rate == 0)
+		rate = 2;	/* XXX should not happen */
 	rate &= IEEE80211_RATE_VAL;
 
 	if (wh->i_fc[1] & IEEE80211_FC1_WEP) {
@@ -1181,11 +1212,10 @@ rum_tx_data(struct rum_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 	data = &sc->tx_data[0];
 	desc = (struct rum_tx_desc *)data->buf;
 
-	data->m = m0;
 	data->ni = ni;
 
 	if (!IEEE80211_IS_MULTICAST(wh->i_addr1)) {
-		flags |= RT2573_TX_ACK;
+		flags |= RT2573_TX_NEED_ACK;
 
 		dur = rum_txtime(RUM_ACK_SIZE, rum_ack_rate(ic, rate),
 		    ic->ic_flags) + sc->sifs;
@@ -1219,18 +1249,19 @@ rum_tx_data(struct rum_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 	if ((xferlen % 64) == 0)
 		xferlen += 4;
 
-	DPRINTFN(10, ("sending data frame len=%lu rate=%u xfer len=%u\n",
-	    (long unsigned int)m0->m_pkthdr.len + RT2573_TX_DESC_SIZE,
+	DPRINTFN(10, ("sending data frame len=%zu rate=%u xfer len=%u\n",
+	    (size_t)m0->m_pkthdr.len + RT2573_TX_DESC_SIZE,
 	    rate, xferlen));
+
+	/* mbuf is no longer needed */
+	m_freem(m0);
 
 	usbd_setup_xfer(data->xfer, sc->sc_tx_pipeh, data, data->buf, xferlen,
 	    USBD_FORCE_SHORT_XFER | USBD_NO_COPY, RUM_TX_TIMEOUT, rum_txeof);
 
 	error = usbd_transfer(data->xfer);
-	if (error != USBD_NORMAL_COMPLETION && error != USBD_IN_PROGRESS) {
-		m_freem(m0);
+	if (error != USBD_NORMAL_COMPLETION && error != USBD_IN_PROGRESS)
 		return error;
-	}
 
 	sc->tx_queued++;
 
@@ -1249,7 +1280,7 @@ rum_start(struct ifnet *ifp)
 	for (;;) {
 		IF_POLL(&ic->ic_mgtq, m0);
 		if (m0 != NULL) {
-			if (sc->tx_queued >= RT2573_TX_LIST_COUNT) {
+			if (sc->tx_queued >= RUM_TX_LIST_COUNT) {
 				ifp->if_flags |= IFF_OACTIVE;
 				break;
 			}
@@ -1270,7 +1301,7 @@ rum_start(struct ifnet *ifp)
 			IFQ_POLL(&ifp->if_snd, m0);
 			if (m0 == NULL)
 				break;
-			if (sc->tx_queued >= RT2573_TX_LIST_COUNT) {
+			if (sc->tx_queued >= RUM_TX_LIST_COUNT) {
 				ifp->if_flags |= IFF_OACTIVE;
 				break;
 			}
@@ -1332,7 +1363,7 @@ rum_watchdog(struct ifnet *ifp)
 }
 
 Static int
-rum_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+rum_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct rum_softc *sc = ifp->if_softc;
 	struct ieee80211com *ic = &sc->sc_ic;
@@ -1581,12 +1612,12 @@ rum_set_basicrates(struct rum_softc *sc)
 	if (ic->ic_curmode == IEEE80211_MODE_11B) {
 		/* 11b basic rates: 1, 2Mbps */
 		rum_write(sc, RT2573_TXRX_CSR5, 0x3);
-	} else if (IEEE80211_IS_CHAN_5GHZ(ic->ic_bss->ni_chan)) {
+	} else if (ic->ic_curmode == IEEE80211_MODE_11A) {
 		/* 11a basic rates: 6, 12, 24Mbps */
 		rum_write(sc, RT2573_TXRX_CSR5, 0x150);
 	} else {
-		/* 11g basic rates: 1, 2, 5.5, 11, 6, 12, 24Mbps */
-		rum_write(sc, RT2573_TXRX_CSR5, 0x15f);
+		/* 11b/g basic rates: 1, 2, 5.5, 11Mbps */
+		rum_write(sc, RT2573_TXRX_CSR5, 0xf);
 	}
 }
 
@@ -1971,7 +2002,7 @@ rum_init(struct ifnet *ifp)
 	/* clear STA registers */
 	rum_read_multi(sc, RT2573_STA_CSR0, sc->sta, sizeof sc->sta);
 
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
+	IEEE80211_ADDR_COPY(ic->ic_myaddr, CLLADDR(ifp->if_sadl));
 	rum_set_macaddr(sc, ic->ic_myaddr);
 
 	/* initialize ASIC */
@@ -2026,12 +2057,18 @@ rum_init(struct ifnet *ifp)
 	/*
 	 * Start up the receive pipe.
 	 */
-	for (i = 0; i < RT2573_RX_LIST_COUNT; i++) {
+	for (i = 0; i < RUM_RX_LIST_COUNT; i++) {
 		data = &sc->rx_data[i];
 
 		usbd_setup_xfer(data->xfer, sc->sc_rx_pipeh, data, data->buf,
 		    MCLBYTES, USBD_SHORT_XFER_OK, USBD_NO_TIMEOUT, rum_rxeof);
-		usbd_transfer(data->xfer);
+		error = usbd_transfer(data->xfer);
+		if (error != USBD_NORMAL_COMPLETION &&
+		    error != USBD_IN_PROGRESS) {
+			printf("%s: could not queue Rx transfer\n",
+			    USBDEVNAME(sc->sc_dev));
+			goto fail;
+		}
 	}
 
 	/* update Rx filter */
@@ -2135,8 +2172,8 @@ rum_prepare_beacon(struct rum_softc *sc)
 
 	m0 = ieee80211_beacon_alloc(ic, ic->ic_bss, &sc->sc_bo);
 	if (m0 == NULL) {
-		printf("%s: could not allocate beacon frame\n",
-		    sc->sc_dev.dv_xname);
+		aprint_error_dev(sc->sc_dev,
+		    "could not allocate beacon frame\n");
 		return ENOBUFS;
 	}
 
@@ -2159,6 +2196,13 @@ rum_prepare_beacon(struct rum_softc *sc)
 }
 
 Static void
+rum_newassoc(struct ieee80211_node *ni, int isnew)
+{
+	/* start with lowest Tx rate */
+	ni->ni_txrate = 0;
+}
+
+Static void
 rum_amrr_start(struct rum_softc *sc, struct ieee80211_node *ni)
 {
 	int i;
@@ -2174,7 +2218,7 @@ rum_amrr_start(struct rum_softc *sc, struct ieee80211_node *ni)
 	     i--);
 	ni->ni_txrate = i;
 
-	callout_reset(&sc->amrr_ch, hz, rum_amrr_timeout, sc);
+	usb_callout(sc->sc_amrr_ch, hz, rum_amrr_timeout, sc);
 }
 
 Static void
@@ -2182,9 +2226,6 @@ rum_amrr_timeout(void *arg)
 {
 	struct rum_softc *sc = arg;
 	usb_device_request_t req;
-	int s;
-
-	s = splusb();
 
 	/*
 	 * Asynchronously read statistic registers (cleared by read).
@@ -2199,8 +2240,6 @@ rum_amrr_timeout(void *arg)
 	    USBD_DEFAULT_TIMEOUT, &req, sc->sta, sizeof sc->sta, 0,
 	    rum_amrr_update);
 	(void)usbd_transfer(sc->amrr_xfer);
-
-	splx(s);
 }
 
 Static void
@@ -2230,7 +2269,7 @@ rum_amrr_update(usbd_xfer_handle xfer, usbd_private_handle priv,
 
 	ieee80211_amrr_choose(&sc->amrr, sc->sc_ic.ic_bss, &sc->amn);
 
-	callout_reset(&sc->amrr_ch, hz, rum_amrr_timeout, sc);
+	usb_callout(sc->sc_amrr_ch, hz, rum_amrr_timeout, sc);
 }
 
 int

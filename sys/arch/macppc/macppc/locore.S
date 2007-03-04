@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.57 2006/08/23 05:58:39 sanjayl Exp $	*/
+/*	$NetBSD: locore.S,v 1.60 2008/02/05 18:14:02 garbled Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -65,6 +65,8 @@ GLOBAL(esym)
 	.long	0			/* end of symbol table */
 GLOBAL(proc0paddr)
 	.long	0			/* proc0 p_addr */
+GLOBAL(oeacpufeat)
+	.long	0			/* cpu features */
 
 /*
  * This symbol is here for the benefit of kvm_mkdb, and is supposed to
@@ -138,21 +140,6 @@ __start:
 	bl	_C_LABEL(main)
 	b	_C_LABEL(OF_exit)
 
-#if defined(MULTIPROCESSOR)
-ENTRY(cpu_spinup_trampoline)
-	li	0,0
-	mtmsr	0
-	isync
-
-	lis	3,_C_LABEL(cpu_hatch_stack)@ha
-	lwz	1,_C_LABEL(cpu_hatch_stack)@l(3)
-
-	bl	_C_LABEL(cpu_hatch)
-	bl      _C_LABEL(sched_lock_idle)
-	li      30,0
-	b       _ASM_LABEL(Idle)
-#endif
-
 #if defined (PPC_OEA64_BRIDGE)
 /* Return all 64 bits of HID4 */
 	.text
@@ -198,3 +185,8 @@ _C_LABEL(change_hid4):
  * Pull in common trap vector code.
  */
 #include <powerpc/powerpc/trap_subr.S>
+
+/*
+ * Pull in common pio / bus_space code.
+ */
+#include <powerpc/powerpc/pio_subr.S>

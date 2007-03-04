@@ -1,4 +1,4 @@
-/*	$NetBSD: scsipiconf.h,v 1.108 2006/11/26 05:01:09 itohy Exp $	*/
+/*	$NetBSD: scsipiconf.h,v 1.113 2008/09/08 23:36:54 gmcgarry Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2004 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -204,7 +197,7 @@ struct scsipi_adapter {
 		    scsipi_adapter_req_t, void *);
 	void	(*adapt_minphys)(struct buf *);
 	int	(*adapt_ioctl)(struct scsipi_channel *, u_long,
-		    caddr_t, int, struct proc *);
+		    void *, int, struct proc *);
 	int	(*adapt_enable)(struct device *, int);
 	int	(*adapt_getgeom)(struct scsipi_periph *,
 			struct disk_parms *, u_long);
@@ -283,7 +276,7 @@ struct scsipi_channel {
 
 	int	chan_defquirks;		/* default device's quirks */
 
-	struct proc *chan_thread;	/* completion thread */
+	struct lwp *chan_thread;	/* completion thread */
 	int	chan_tflags;		/* flags for the completion thread */
 
 	int	chan_qfreeze;		/* freeze count for queue */
@@ -388,7 +381,7 @@ struct scsipi_periph {
 	/* Pending scsipi_xfers on this peripherial. */
 	struct scsipi_xfer_queue periph_xferq;
 
-	struct callout periph_callout;
+	callout_t periph_callout;
 
 	/* xfer which has a pending CHECK_CONDITION */
 	struct scsipi_xfer *periph_xscheck;
@@ -447,6 +440,7 @@ struct scsipi_periph {
 #define	PQUIRK_LITTLETOC	0x00000400	/* audio TOC is little-endian */
 #define	PQUIRK_NOCAPACITY	0x00000800	/* no READ CD CAPACITY */
 #define	PQUIRK_NOTUR		0x00001000	/* no TEST UNIT READY */
+#define	PQUIRK_NODOORLOCK	0x00002000	/* can't lock door */
 #define	PQUIRK_NOSENSE		0x00004000	/* can't REQUEST SENSE */
 #define PQUIRK_ONLYBIG		0x00008000	/* only use SCSI_{R,W}_BIG */
 #define PQUIRK_NOBIGMODESENSE	0x00040000	/* has no big mode-sense op */
@@ -498,9 +492,9 @@ typedef enum {
 struct scsipi_xfer {
 	TAILQ_ENTRY(scsipi_xfer) channel_q; /* entry on channel queue */
 	TAILQ_ENTRY(scsipi_xfer) device_q;  /* device's pending xfers */
-	struct callout xs_callout;	/* callout for adapter use */
+	callout_t xs_callout;		/* callout for adapter use */
 	int	xs_control;		/* control flags */
-	volatile int xs_status;	/* status flags */
+	volatile int xs_status;		/* status flags */
 	struct scsipi_periph *xs_periph;/* peripherial doing the xfer */
 	int	xs_retries;		/* the number of times to retry */
 	int	xs_requeuecnt;		/* number of requeues */
@@ -532,7 +526,7 @@ struct scsipi_xfer {
 	u_int8_t xs_tag_id;		/* tag ID */
 
 	struct	scsipi_generic cmdstore
-	    __attribute__ ((aligned (4)));/* stash the command in here */
+	    __aligned(4);		/* stash the command in here */
 };
 
 /*
@@ -663,7 +657,7 @@ int	scsipi_thread_call_callback(struct scsipi_channel *,
 	    void *);
 void	scsipi_async_event(struct scsipi_channel *,
 	    scsipi_async_event_t, void *);
-int	scsipi_do_ioctl(struct scsipi_periph *, dev_t, u_long, caddr_t,
+int	scsipi_do_ioctl(struct scsipi_periph *, dev_t, u_long, void *,
 	    int, struct lwp *);
 
 void	scsipi_print_xfer_mode(struct scsipi_periph *);

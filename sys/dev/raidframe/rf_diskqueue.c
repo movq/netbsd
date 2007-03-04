@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_diskqueue.c,v 1.48 2006/11/16 01:33:23 christos Exp $	*/
+/*	$NetBSD: rf_diskqueue.c,v 1.51 2008/06/17 14:53:11 reinoud Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -66,7 +66,7 @@
  ****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_diskqueue.c,v 1.48 2006/11/16 01:33:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_diskqueue.c,v 1.51 2008/06/17 14:53:11 reinoud Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -440,7 +440,7 @@ rf_DiskIOPromote(RF_DiskQueue_t *queue, RF_StripeNum_t parityStripeID,
 
 RF_DiskQueueData_t *
 rf_CreateDiskQueueData(RF_IoType_t typ, RF_SectorNum_t ssect,
-		       RF_SectorCount_t nsect, caddr_t bf,
+		       RF_SectorCount_t nsect, void *bf,
 		       RF_StripeNum_t parityStripeID,
 		       RF_ReconUnitNum_t which_ru,
 		       int (*wakeF) (void *, int), void *arg,
@@ -449,27 +449,22 @@ rf_CreateDiskQueueData(RF_IoType_t typ, RF_SectorNum_t ssect,
 		       int waitflag)
 {
 	RF_DiskQueueData_t *p;
-	int s;
 
-	s = splbio();
 	p = pool_get(&rf_pools.dqd, waitflag);
-	splx(s);
 	if (p == NULL)
 		return (NULL);
 
 	memset(p, 0, sizeof(RF_DiskQueueData_t));
 	if (waitflag == PR_WAITOK) {
-		p->bp = getiobuf();
+		p->bp = getiobuf(NULL, true);
 	} else {
-		p->bp = getiobuf_nowait();
+		p->bp = getiobuf(NULL, false);
 	}
 	if (p->bp == NULL) {
-		/* no memory for the buffer!?!? */
-		s = splbio();
 		pool_put(&rf_pools.dqd, p);
-		splx(s);
 		return (NULL);
 	}
+	SET(p->bp->b_cflags, BC_BUSY);	/* mark buffer busy */
 
 	p->sectorOffset = ssect + rf_protectedSectors;
 	p->numSector = nsect;

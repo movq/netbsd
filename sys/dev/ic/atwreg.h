@@ -1,4 +1,4 @@
-/*	$NetBSD: atwreg.h,v 1.17 2007/01/09 09:36:28 dyoung Exp $	*/
+/*	$NetBSD: atwreg.h,v 1.22 2008/09/08 23:36:54 gmcgarry Exp $	*/
 
 /*
  * Copyright (c) 2003 The NetBSD Foundation, Inc.  All rights reserved.
@@ -14,25 +14,18 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of the author nor the names of any co-contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY David Young AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL David Young
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
  * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
  * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
  * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
  * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
- * THE POSSIBILITY OF SUCH DAMAGE.
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 /* glossary */
@@ -48,6 +41,8 @@
  */
 
 #include <lib/libkern/libkern.h>
+#include <dev/ic/rf3000reg.h>
+#include <dev/ic/hfa3861areg.h>
 
 /* ADM8211 Host Control and Status Registers */
 
@@ -469,7 +464,16 @@
 #define ATW_BBPCTL_NEGEDGE_DO		__BIT(23)
 /* data-in on negative edge */
 #define ATW_BBPCTL_NEGEDGE_DI		__BIT(22)
-#define ATW_BBPCTL_CCA_ACTLO		__BIT(21)	/* CCA low when busy */
+#define ATW_BBPCTL_CCA_ACTLO		__BIT(21)	/* 1: CCA signal is low
+							 * when channel is busy,
+							 * CCA signal is high
+							 * when channel is
+							 * clear.
+							 * 0: vice-versa
+							 * 1 is suitable for
+							 * the embedded
+							 * RFMD RF3000.
+							 */
 #define ATW_BBPCTL_TYPE_MASK		__BITS(20, 18)	/* BBP type */
 /* start write; reset on completion */
 #define ATW_BBPCTL_WR			__BIT(17)
@@ -520,10 +524,10 @@
 
 /* was magic 0x100E0C0A */
 #define ATW_MMIWADDR_INTERSIL			  \
-	(__SHIFTIN(0x0c, ATW_MMIWADDR_GAIN_MASK)	| \
-	 __SHIFTIN(0x0a, ATW_MMIWADDR_RATE_MASK)	| \
-	 __SHIFTIN(0x0e, ATW_MMIWADDR_LENHI_MASK)	| \
-	 __SHIFTIN(0x10, ATW_MMIWADDR_LENLO_MASK))
+	(__SHIFTIN(HFA3861A_CR6, ATW_MMIWADDR_GAIN_MASK)	| \
+	 __SHIFTIN(HFA3861A_CR5, ATW_MMIWADDR_RATE_MASK)	| \
+	 __SHIFTIN(HFA3861A_CR7, ATW_MMIWADDR_LENHI_MASK)	| \
+	 __SHIFTIN(HFA3861A_CR8, ATW_MMIWADDR_LENLO_MASK))
 
 /* was magic 0x00009101
  *
@@ -540,13 +544,10 @@
 #define	ATW_MMIRADDR1_RSSI_MASK		__BITS(15, 8)
 #define	ATW_MMIRADDR1_RXSTAT_MASK	__BITS(7, 0)
 
-/* was magic 0x00007c7e
- *
- * TBD document registers for Intersil 3861 baseband
- */
+/* was magic 0x00007c7e */
 #define ATW_MMIRADDR1_INTERSIL	\
-	(__SHIFTIN(0x7c, ATW_MMIRADDR1_RSSI_MASK) | \
-	 __SHIFTIN(0x7e, ATW_MMIRADDR1_RXSTAT_MASK))
+	(__SHIFTIN(HFA3861A_CR61, ATW_MMIRADDR1_RSSI_MASK) | \
+	 __SHIFTIN(HFA3861A_CR62, ATW_MMIRADDR1_RXSTAT_MASK))
 
 /* was magic 0x00000301 */
 #define ATW_MMIRADDR1_RFMD	\
@@ -924,7 +925,7 @@ struct atw_txdesc {
 	volatile uint32_t	at_flags;
 	volatile uint32_t	at_buf1;
 	volatile uint32_t	at_buf2;
-} __attribute__((__packed__, __aligned__(4)));
+} __packed __aligned(4);
 
 #define ATW_TXCTL_OWN		__BIT(31)	/* 1: ready to transmit */
 #define ATW_TXCTL_DONE		__BIT(30)	/* 0: not processed */
@@ -943,6 +944,12 @@ struct atw_txdesc {
 						 */
 #define ATW_TXSTAT_ARC_MASK	__BITS(11,0)	/* accumulated retry count */
 
+#define ATW_TXSTAT_ERRMASK	(ATW_TXSTAT_TUF | ATW_TXSTAT_TLT | \
+				 ATW_TXSTAT_TRT | ATW_TXSTAT_TRO | \
+				 ATW_TXSTAT_SOFBR)
+#define ATW_TXSTAT_FMT	"\20\31ATW_TXSTAT_SOFBR\32ATW_TXSTAT_TRO"	\
+			"\33ATW_TXSTAT_TUF\34ATW_TXSTAT_TRT\35ATW_TXSTAT_TLT"
+
 #define ATW_TXFLAG_IC		__BIT(31)	/* interrupt on completion */
 #define ATW_TXFLAG_LS		__BIT(30)	/* packet's last descriptor */
 #define ATW_TXFLAG_FS		__BIT(29)	/* packet's first descriptor */
@@ -954,12 +961,10 @@ struct atw_txdesc {
 /* Rx descriptor */
 struct atw_rxdesc {
 	volatile uint32_t	ar_stat;
-	volatile uint32_t	ar_ctl;
+	volatile uint32_t	ar_ctlrssi;
 	volatile uint32_t	ar_buf1;
 	volatile uint32_t	ar_buf2;
-} __attribute__((__packed__, __aligned__(4)));
-
-#define	ar_rssi	ar_ctl
+} __packed __aligned(4);
 
 #define ATW_RXCTL_RER		__BIT(25)	/* end of ring */
 #define ATW_RXCTL_RCH		__BIT(24)	/* ar_buf2 is 2nd chain */

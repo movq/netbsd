@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_prot.c,v 1.10 2007/02/09 21:55:23 ad Exp $ */
+/* $NetBSD: osf1_prot.c,v 1.13 2007/12/20 23:03:03 dsl Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,11 +58,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_prot.c,v 1.10 2007/02/09 21:55:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_prot.c,v 1.13 2007/12/20 23:03:03 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/prot.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
@@ -78,12 +79,8 @@ __KERNEL_RCSID(0, "$NetBSD: osf1_prot.c,v 1.10 2007/02/09 21:55:23 ad Exp $");
  * setuid(), you'll get a correct description of setgid().
  */
 int
-osf1_sys_setgid(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+osf1_sys_setgid(struct lwp *l, const struct osf1_sys_setgid_args *uap, register_t *retval)
 {
-	struct osf1_sys_setgid_args *uap = v;
 	gid_t gid = SCARG(uap, gid);
 	int error;
 
@@ -108,12 +105,8 @@ osf1_sys_setgid(l, v, retval)
  *	    this function call.
  */
 int
-osf1_sys_setuid(l, v, retval)
-	struct lwp *l;
-	void *v;
-	register_t *retval;
+osf1_sys_setuid(struct lwp *l, const struct osf1_sys_setuid_args *uap, register_t *retval)
 {
-	struct osf1_sys_setuid_args *uap = v;
 	uid_t uid = SCARG(uap, uid);
 	int error;
 

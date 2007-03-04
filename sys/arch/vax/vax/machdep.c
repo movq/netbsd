@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.157 2007/02/22 06:51:30 thorpej Exp $	 */
+/* $NetBSD: machdep.c,v 1.167 2008/10/17 08:12:23 cegger Exp $	 */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -83,7 +83,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.157 2007/02/22 06:51:30 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.167 2008/10/17 08:12:23 cegger Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
@@ -116,6 +116,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.157 2007/02/22 06:51:30 thorpej Exp $"
 
 #include <uvm/uvm_extern.h>
 #include <sys/sysctl.h>
+#include <sys/savar.h>	/* for cpu_upcall */
 
 #include <machine/sid.h>
 #include <machine/pte.h>
@@ -145,7 +146,7 @@ extern vaddr_t virtual_avail, virtual_end;
 char		machine[] = MACHINE;		/* from <machine/param.h> */
 char		machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
 char		cpu_model[100];
-caddr_t		msgbufaddr;
+void *		msgbufaddr;
 int		physmem;
 int		*symtab_start;
 int		*symtab_end;
@@ -162,7 +163,6 @@ static long iomap_ex_storage[EXTENT_FIXED_STORAGE_SIZE(32) / sizeof(long)];
 static struct extent *iomap_ex;
 static int iomap_ex_malloc_safe;
 
-struct vm_map *exec_map = NULL;
 struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
@@ -170,12 +170,8 @@ struct vm_map *phys_map = NULL;
 int iospace_inited = 0;
 #endif
 
-struct softintr_head softclock_head = { IPL_SOFTCLOCK };
-struct softintr_head softnet_head = { IPL_SOFTNET };
-struct softintr_head softserial_head = { IPL_SOFTSERIAL };
-
 void
-cpu_startup()
+cpu_startup(void)
 {
 	vaddr_t		minaddr, maxaddr;
 	extern paddr_t avail_end;
@@ -202,13 +198,6 @@ cpu_startup()
 	spl0();
 
 	minaddr = 0;
-	/*
-	 * Allocate a submap for exec arguments.  This map effectively limits
-	 * the number of processes exec'ing at any time.
-	 * At most one process with the full length is allowed.
-	 */
-	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 NCARGS, VM_MAP_PAGEABLE, false, NULL);
 
 #if VAX46 || VAX48 || VAX49 || VAX53 || VAXANY
 	/*
@@ -230,12 +219,12 @@ cpu_startup()
 	iomap_ex_malloc_safe = 1;
 }
 
-u_int32_t dumpmag = 0x8fca0101;
+uint32_t dumpmag = 0x8fca0101;
 int	dumpsize = 0;
 long	dumplo = 0;
 
 void
-cpu_dumpconf()
+cpu_dumpconf(void)
 {
 	const struct bdevsw *bdev;
 	int		nblks;
@@ -271,8 +260,8 @@ sysctl_machdep_booted_device(SYSCTLFN_ARGS)
 
 	if (booted_device == NULL)
 		return (EOPNOTSUPP);
-	node.sysctl_data = booted_device->dv_xname;
-	node.sysctl_size = strlen(booted_device->dv_xname) + 1;
+	node.sysctl_data = __UNCONST(device_xname(booted_device));
+	node.sysctl_size = strlen(device_xname(booted_device)) + 1;
 	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 }
 
@@ -306,13 +295,12 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 }
 
 void
-setstatclockrate(hzrate)
-	int hzrate;
+setstatclockrate(int hzrate)
 {
 }
 
 void
-consinit()
+consinit(void)
 {
 	extern vaddr_t iospace;
 
@@ -326,7 +314,7 @@ consinit()
 	KASSERT(iospace != 0);
 	iomap_ex = extent_create("iomap", iospace + VAX_NBPG,
 	    iospace + ((IOSPSZ * VAX_NBPG) - 1), M_DEVBUF,
-	    (caddr_t) iomap_ex_storage, sizeof(iomap_ex_storage),
+	    (void *) iomap_ex_storage, sizeof(iomap_ex_storage),
 	    EX_NOCOALESCE|EX_NOWAIT);
 #ifdef DEBUG
 	iospace_inited = 1;
@@ -347,9 +335,7 @@ int	waittime = -1;
 static	volatile int showto; /* Must be volatile to survive MM on -> MM off */
 
 void
-cpu_reboot(howto, b)
-	register int howto;
-	char *b;
+cpu_reboot(int howto, char *b)
 {
 	if ((howto & RB_NOSYNC) == 0 && waittime < 0) {
 		waittime = 0;
@@ -422,7 +408,7 @@ cpu_reboot(howto, b)
 }
 
 void
-dumpsys()
+dumpsys(void)
 {
 	const struct bdevsw *bdev;
 
@@ -470,9 +456,7 @@ dumpsys()
 }
 
 int
-process_read_regs(l, regs)
-	struct lwp    *l;
-	struct reg     *regs;
+process_read_regs(struct lwp *l, struct reg *regs)
 {
 	struct trapframe *tf = l->l_addr->u_pcb.framep;
 
@@ -486,9 +470,7 @@ process_read_regs(l, regs)
 }
 
 int
-process_write_regs(l, regs)
-	struct lwp    *l;
-	const struct reg     *regs;
+process_write_regs(struct lwp *l, const struct reg *regs)
 {
 	struct trapframe *tf = l->l_addr->u_pcb.framep;
 
@@ -503,9 +485,7 @@ process_write_regs(l, regs)
 }
 
 int
-process_set_pc(l, addr)
-	struct	lwp *l;
-	caddr_t addr;
+process_set_pc(struct lwp *l, void *addr)
 {
 	struct	trapframe *tf;
 	void	*ptr;
@@ -522,8 +502,7 @@ process_set_pc(l, addr)
 }
 
 int
-process_sstep(l, sstep)
-	struct lwp    *l;
+process_sstep(struct lwp *l, int sstep)
 {
 	void	       *ptr;
 	struct trapframe *tf;
@@ -557,9 +536,7 @@ process_sstep(l, sstep)
  * be use by console device drivers (before the map system is inited).
  */
 vaddr_t
-vax_map_physmem(phys, size)
-	paddr_t phys;
-	int size;
+vax_map_physmem(paddr_t phys, size_t size)
 {
 	vaddr_t addr;
 	int error;
@@ -596,12 +573,10 @@ vax_map_physmem(phys, size)
  * Unmaps the previous mapped (addr, size) pair.
  */
 void
-vax_unmap_physmem(addr, size)
-	vaddr_t addr;
-	int size;
+vax_unmap_physmem(vaddr_t addr, size_t size)
 {
 #ifdef PHYSMEMDEBUG
-	printf("vax_unmap_physmem: unmapping %d pages at addr %lx\n", 
+	printf("vax_unmap_physmem: unmapping %zu pages at addr %lx\n", 
 	    size, addr);
 #endif
 	addr &= ~VAX_PGOFSET;
@@ -611,42 +586,22 @@ vax_unmap_physmem(addr, size)
 	else if (extent_free(iomap_ex, addr, size * VAX_NBPG,
 			     EX_NOWAIT |
 			     (iomap_ex_malloc_safe ? EX_MALLOCOK : 0)))
-		printf("vax_unmap_physmem: addr 0x%lx size %dvpg: "
+		printf("vax_unmap_physmem: addr 0x%lx size %zu vpg: "
 		    "can't free region\n", addr, size);
 }
 
-void *
-softintr_establish(int ipl, void (*func)(void *), void *arg)
-{
-	struct softintr_handler *sh;
-	struct softintr_head *shd;
-
-	switch (ipl) {
-	case IPL_SOFTCLOCK: shd = &softclock_head; break;
-	case IPL_SOFTNET: shd = &softnet_head; break;
-	case IPL_SOFTSERIAL: shd = &softserial_head; break;
-	default: panic("softintr_establish: unsupported soft IPL");
-	}
-
-	sh = malloc(sizeof(*sh), M_SOFTINTR, M_NOWAIT);
-	if (sh == NULL)
-		return NULL;
-
-	LIST_INSERT_HEAD(&shd->shd_intrs, sh, sh_link);
-	sh->sh_head = shd;
-	sh->sh_pending = 0;
-	sh->sh_func = func;
-	sh->sh_arg = arg;
-
-	return sh;
-}
+#define	SOFTINT_IPLS	((IPL_SOFTCLOCK << (SOFTINT_CLOCK * 5))		\
+			 | (IPL_SOFTBIO << (SOFTINT_BIO * 5))		\
+			 | (IPL_SOFTNET << (SOFTINT_NET * 5))		\
+			 | (IPL_SOFTSERIAL << (SOFTINT_SERIAL * 5)))
 
 void
-softintr_disestablish(void *arg)
+softint_init_md(lwp_t *l, u_int level, uintptr_t *machdep)
 {
-	struct softintr_handler *sh = arg;
-	LIST_REMOVE(sh, sh_link);
-	free(sh, M_SOFTINTR);
+	const int ipl = (SOFTINT_IPLS >> (5 * level)) & 0x1F;
+	l->l_cpu->ci_softlwps[level] = l;
+
+	*machdep = ipl;
 }
 
 #include <dev/bi/bivar.h>
@@ -668,17 +623,63 @@ void	krnlock(void);
 void	krnunlock(void);
 
 void
-krnlock()
+krnlock(void)
 {
 	KERNEL_LOCK(1, NULL);
 }
 
 void
-krnunlock()
+krnunlock(void)
 {
 	KERNEL_UNLOCK_ONE(NULL);
 }
 #endif
+
+void
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+    void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct trapframe *tf = l->l_addr->u_pcb.framep;
+	uint32_t saframe[11], *fp = saframe;
+
+	sp = (void *)((uintptr_t)sp - sizeof(saframe));
+
+	/*
+	 * We don't bother to save the callee's register mask
+	 * since the function is never expected to return.
+	 */
+
+	/*
+	 * Fake a CALLS stack frame.
+	 */
+	*fp++ = 0;			/* condition handler */
+	*fp++ = 0x20000000;		/* saved regmask & PSW */
+	*fp++ = 0;			/* saved AP */
+	*fp++ = 0;			/* saved FP, new call stack */
+	*fp++ = 0;			/* saved PC, new call stack */
+
+	/*
+	 * Now create the argument list.
+	 */
+	*fp++ = 5;			/* argc = 5 */
+	*fp++ = type;
+	*fp++ = (uintptr_t) sas;
+	*fp++ = nevents;
+	*fp++ = ninterrupted;
+	*fp++ = (uintptr_t) ap;
+
+	if (copyout(&saframe, sp, sizeof(saframe)) != 0) {
+		/* Copying onto the stack didn't work, die. */
+		sigexit(l, SIGILL);
+		/* NOTREACHED */
+	}
+
+	tf->ap = (uintptr_t) sp + 20;
+	tf->sp = (long) sp;
+	tf->fp = (long) sp;
+	tf->pc = (long) upcall + 2;
+	tf->psl = (long) PSL_U | PSL_PREVU;
+}
 
 void
 cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
@@ -744,7 +745,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
  * Generic routines for machines with "console program mailbox".
  */
 void
-generic_halt()
+generic_halt(void)
 {
 	if (cpmbx == NULL)  /* Too late to complain here, but avoid panic */
 		__asm("halt");

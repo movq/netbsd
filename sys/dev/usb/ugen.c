@@ -1,4 +1,4 @@
-/*	$NetBSD: ugen.c,v 1.91 2007/02/26 13:28:56 drochner Exp $	*/
+/*	$NetBSD: ugen.c,v 1.99 2008/05/24 16:40:58 cube Exp $	*/
 
 /*
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -21,13 +21,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -44,7 +37,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ugen.c,v 1.91 2007/02/26 13:28:56 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ugen.c,v 1.99 2008/05/24 16:40:58 cube Exp $");
 
 #include "opt_ugen_bulk_ra_wb.h"
 #include "opt_compat_netbsd.h"
@@ -199,7 +192,7 @@ Static void ugen_bulkwb_intr(usbd_xfer_handle xfer, usbd_private_handle addr,
 Static int ugen_do_read(struct ugen_softc *, int, struct uio *, int);
 Static int ugen_do_write(struct ugen_softc *, int, struct uio *, int);
 Static int ugen_do_ioctl(struct ugen_softc *, int, u_long,
-			 caddr_t, int, struct lwp *);
+			 void *, int, struct lwp *);
 Static int ugen_set_config(struct ugen_softc *sc, int configno);
 Static usb_config_descriptor_t *ugen_get_cdesc(struct ugen_softc *sc,
 					       int index, int *lenp);
@@ -230,20 +223,21 @@ USB_ATTACH(ugen)
 	usbd_device_handle udev;
 	char *devinfop;
 	usbd_status err;
-	int conf;
+	int i, dir, conf;
 
 	devinfop = usbd_devinfo_alloc(uaa->device, 0);
 	USB_ATTACH_SETUP;
-	printf("%s: %s\n", USBDEVNAME(sc->sc_dev), devinfop);
+	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
+	sc->sc_dev = self;
 	sc->sc_udev = udev = uaa->device;
 
 	/* First set configuration index 0, the default one for ugen. */
 	err = usbd_set_config_index(udev, 0, 0);
 	if (err) {
-		printf("%s: setting configuration index 0 failed\n",
-		       USBDEVNAME(sc->sc_dev));
+		aprint_error_dev(self,
+		    "setting configuration index 0 failed\n");
 		sc->sc_dying = 1;
 		USB_ATTACH_ERROR_RETURN;
 	}
@@ -252,8 +246,8 @@ USB_ATTACH(ugen)
 	/* Set up all the local state for this configuration. */
 	err = ugen_set_config(sc, conf);
 	if (err) {
-		printf("%s: setting configuration %d failed\n",
-		       USBDEVNAME(sc->sc_dev), conf);
+		aprint_error_dev(self, "setting configuration %d failed\n",
+		    conf);
 		sc->sc_dying = 1;
 		USB_ATTACH_ERROR_RETURN;
 	}
@@ -267,9 +261,20 @@ USB_ATTACH(ugen)
 		}
 	}
 #endif
+	for (i = 0; i < USB_MAX_ENDPOINTS; i++) {
+		for (dir = OUT; dir <= IN; dir++) {
+			struct ugen_endpoint *sce;
+
+			sce = &sc->sc_endpoints[i][dir];
+			selinit(&sce->rsel);
+		}
+	}
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
 			   USBDEV(sc->sc_dev));
+
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
 
 	USB_ATTACH_SUCCESS_RETURN;
 }
@@ -979,7 +984,7 @@ ugenwrite(dev_t dev, struct uio *uio, int flag)
 int
 ugen_activate(device_ptr_t self, enum devact act)
 {
-	struct ugen_softc *sc = (struct ugen_softc *)self;
+	struct ugen_softc *sc = device_private(self);
 
 	switch (act) {
 	case DVACT_ACTIVATE:
@@ -1008,6 +1013,7 @@ USB_DETACH(ugen)
 #endif
 
 	sc->sc_dying = 1;
+	pmf_device_deregister(self);
 	/* Abort all pipes.  Causes processes waiting for transfer to wake. */
 	for (i = 0; i < USB_MAX_ENDPOINTS; i++) {
 		for (dir = OUT; dir <= IN; dir++) {
@@ -1047,6 +1053,13 @@ USB_DETACH(ugen)
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
 			   USBDEV(sc->sc_dev));
 
+	for (i = 0; i < USB_MAX_ENDPOINTS; i++) {
+		for (dir = OUT; dir <= IN; dir++) {
+			sce = &sc->sc_endpoints[i][dir];
+			seldestroy(&sce->rsel);
+		}
+	}
+
 	return (0);
 }
 
@@ -1083,7 +1096,7 @@ ugenintr(usbd_xfer_handle xfer, usbd_private_handle addr, usbd_status status)
 		DPRINTFN(5, ("ugen_intr: waking %p\n", sce));
 		wakeup(sce);
 	}
-	selnotify(&sce->rsel, 0);
+	selnotify(&sce->rsel, 0, 0);
 }
 
 Static void
@@ -1142,7 +1155,7 @@ ugen_isoc_rintr(usbd_xfer_handle xfer, usbd_private_handle addr,
 		DPRINTFN(5, ("ugen_isoc_rintr: waking %p\n", sce));
 		wakeup(sce);
 	}
-	selnotify(&sce->rsel, 0);
+	selnotify(&sce->rsel, 0, 0);
 }
 
 #ifdef UGEN_BULK_RA_WB
@@ -1210,7 +1223,7 @@ ugen_bulkra_intr(usbd_xfer_handle xfer, usbd_private_handle addr,
 		DPRINTFN(5, ("ugen_bulkra_intr: waking %p\n", sce));
 		wakeup(sce);
 	}
-	selnotify(&sce->rsel, 0);
+	selnotify(&sce->rsel, 0, 0);
 }
 
 Static void
@@ -1275,7 +1288,7 @@ ugen_bulkwb_intr(usbd_xfer_handle xfer, usbd_private_handle addr,
 		DPRINTFN(5, ("ugen_bulkwb_intr: waking %p\n", sce));
 		wakeup(sce);
 	}
-	selnotify(&sce->rsel, 0);
+	selnotify(&sce->rsel, 0, 0);
 }
 #endif
 
@@ -1383,7 +1396,7 @@ ugen_get_alt_index(struct ugen_softc *sc, int ifaceidx)
 
 Static int
 ugen_do_ioctl(struct ugen_softc *sc, int endpt, u_long cmd,
-	      caddr_t addr, int flag, struct lwp *l)
+	      void *addr, int flag, struct lwp *l)
 {
 	struct ugen_endpoint *sce;
 	usbd_status err;
@@ -1721,7 +1734,7 @@ ugen_do_ioctl(struct ugen_softc *sc, int endpt, u_long cmd,
 		cdesc = ugen_get_cdesc(sc, fd->ufd_config_index, &len);
 		if (len > fd->ufd_size)
 			len = fd->ufd_size;
-		iov.iov_base = (caddr_t)fd->ufd_data;
+		iov.iov_base = (void *)fd->ufd_data;
 		iov.iov_len = len;
 		uio.uio_iov = &iov;
 		uio.uio_iovcnt = 1;
@@ -1766,7 +1779,7 @@ ugen_do_ioctl(struct ugen_softc *sc, int endpt, u_long cmd,
 		if (len < 0 || len > 32767)
 			return (EINVAL);
 		if (len != 0) {
-			iov.iov_base = (caddr_t)ur->ucr_data;
+			iov.iov_base = (void *)ur->ucr_data;
 			iov.iov_len = len;
 			uio.uio_iov = &iov;
 			uio.uio_iovcnt = 1;
@@ -1820,7 +1833,7 @@ ugen_do_ioctl(struct ugen_softc *sc, int endpt, u_long cmd,
 }
 
 int
-ugenioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
+ugenioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 {
 	int endpt = UGENENDPOINT(dev);
 	struct ugen_softc *sc;
@@ -2042,13 +2055,13 @@ ugenkqfilter(dev_t dev, struct knote *kn)
 	USB_GET_SC(ugen, UGENUNIT(dev), sc);
 
 	if (sc->sc_dying)
-		return (1);
+		return (ENXIO);
 
 	switch (kn->kn_filter) {
 	case EVFILT_READ:
 		sce = &sc->sc_endpoints[UGENENDPOINT(dev)][IN];
 		if (sce == NULL)
-			return (1);
+			return (EINVAL);
 
 		klist = &sce->rsel.sel_klist;
 		switch (sce->edesc->bmAttributes & UE_XFERTYPE) {
@@ -2072,21 +2085,21 @@ ugenkqfilter(dev_t dev, struct knote *kn)
 #endif
 			break;
 		default:
-			return (1);
+			return (EINVAL);
 		}
 		break;
 
 	case EVFILT_WRITE:
 		sce = &sc->sc_endpoints[UGENENDPOINT(dev)][OUT];
 		if (sce == NULL)
-			return (1);
+			return (EINVAL);
 
 		klist = &sce->rsel.sel_klist;
 		switch (sce->edesc->bmAttributes & UE_XFERTYPE) {
 		case UE_INTERRUPT:
 		case UE_ISOCHRONOUS:
 			/* XXX poll doesn't support this */
-			return (1);
+			return (EINVAL);
 
 		case UE_BULK:
 #ifdef UGEN_BULK_RA_WB
@@ -2101,12 +2114,12 @@ ugenkqfilter(dev_t dev, struct knote *kn)
 #endif
 			break;
 		default:
-			return (1);
+			return (EINVAL);
 		}
 		break;
 
 	default:
-		return (1);
+		return (EINVAL);
 	}
 
 	kn->kn_hook = sce;

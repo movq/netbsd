@@ -1,4 +1,4 @@
-/* $NetBSD: atppcvar.h,v 1.7 2005/12/11 12:21:25 christos Exp $ */
+/* $NetBSD: atppcvar.h,v 1.11 2008/05/01 12:06:28 cegger Exp $ */
 
 /*-
  * Copyright (c) 2001 Alcove - Nicolas Souchu
@@ -32,10 +32,11 @@
 #ifndef __ATPPCVAR_H
 #define __ATPPCVAR_H
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 #include <machine/types.h>
 #include <sys/device.h>
 #include <sys/callout.h>
+#include <sys/simplelock.h>
 
 #include <dev/ppbus/ppbus_conf.h>
 
@@ -95,14 +96,14 @@ extern int atppc_verbose;
 /* Single softintr callback entry */
 struct atppc_handler_node {
 	void (*func)(void *);
-	void * arg;
+	void *arg;
 	SLIST_ENTRY(atppc_handler_node) entries;
 };
 
 /* Generic structure to hold parallel port chipset info. */
 struct atppc_softc {
 	/* Generic device attributes */
-	struct device sc_dev;
+	device_t sc_dev;
 
 #if defined(MULTIPROCESSOR) || defined(LOCKDEBUG)
 	/* Simple lock */
@@ -117,10 +118,10 @@ struct atppc_softc {
 	bus_size_t sc_dma_maxsize;
 
 	/* Child device */
-	struct device * child;
+	device_t child;
 
         /* Opaque handle used for interrupt handler establishment */
-	void * sc_ieh;
+	void *sc_ieh;
 
 	/* List of soft interrupts to call */
 	SLIST_HEAD(handler_list, atppc_handler_node) sc_handler_listhead;
@@ -141,9 +142,9 @@ struct atppc_softc {
 	int (*sc_dma_start)(struct atppc_softc *, void *, u_int, u_int8_t);
 	int (*sc_dma_finish)(struct atppc_softc *);
 	int (*sc_dma_abort)(struct atppc_softc *);
-	int (*sc_dma_malloc)(struct device *, caddr_t *, bus_addr_t *,
+	int (*sc_dma_malloc)(device_t, void **, bus_addr_t *,
 		bus_size_t);
-	void (*sc_dma_free)(struct device *, caddr_t *, bus_addr_t *,
+	void (*sc_dma_free)(device_t, void **, bus_addr_t *,
 		bus_size_t);
 
 	/* Microsequence related members */

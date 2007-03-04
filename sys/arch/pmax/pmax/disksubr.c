@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.44 2006/11/25 11:59:57 scw Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.48 2008/01/02 11:48:27 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.44 2006/11/25 11:59:57 scw Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.48 2008/01/02 11:48:27 ad Exp $");
 
 #include "opt_compat_ultrix.h"
 
@@ -88,7 +88,8 @@ readdisklabel(dev, strat, lp, osdep)
 	if (biowait(bp)) {
 		msg = "I/O error";
 	} else for (dlp = (struct disklabel *)bp->b_data;
-	    dlp <= (struct disklabel *)(bp->b_data+DEV_BSIZE-sizeof(*dlp));
+	    dlp <= (struct disklabel *)
+	    ((char *)bp->b_data + DEV_BSIZE - sizeof(*dlp));
 	    dlp = (struct disklabel *)((char *)dlp + sizeof(long))) {
 		if (dlp->d_magic != DISKMAGIC || dlp->d_magic2 != DISKMAGIC) {
 			if (msg == NULL)
@@ -102,7 +103,7 @@ readdisklabel(dev, strat, lp, osdep)
 			break;
 		}
 	}
-	brelse(bp);
+	brelse(bp, 0);
 #ifdef COMPAT_ULTRIX
 	/*
 	 * If no NetBSD label was found, check for an Ultrix label and
@@ -150,7 +151,8 @@ compat_label(dev, strat, lp, osdep)
 	}
 
 	for (dlp = (dec_disklabel *)bp->b_data;
-	     dlp <= (dec_disklabel *)(bp->b_data+DEV_BSIZE-sizeof(*dlp));
+	     dlp <= (dec_disklabel *)
+	     ((char *)bp->b_data + DEV_BSIZE - sizeof(*dlp));
 	     dlp = (dec_disklabel *)((char *)dlp + sizeof(long))) {
 
 		int part;
@@ -195,7 +197,7 @@ compat_label(dev, strat, lp, osdep)
 	}
 
 done:
-	brelse(bp);
+	brelse(bp, 0);
 	return (msg);
 }
 #endif /* COMPAT_ULTRIX */
@@ -274,12 +276,13 @@ writedisklabel(dev, strat, lp, osdep)
 		goto done;
 	for (dlp = (struct disklabel *)bp->b_data;
 	    dlp <= (struct disklabel *)
-	      (bp->b_data + lp->d_secsize - sizeof(*dlp));
+	      ((char *)bp->b_data + lp->d_secsize - sizeof(*dlp));
 	    dlp = (struct disklabel *)((char *)dlp + sizeof(long))) {
 		if (dlp->d_magic == DISKMAGIC && dlp->d_magic2 == DISKMAGIC &&
 		    dkcksum(dlp) == 0) {
 			*dlp = *lp;
-			bp->b_flags &= ~(B_READ|B_DONE);
+			bp->b_oflags &= ~(BO_DONE);
+			bp->b_flags &= ~(B_READ);
 			bp->b_flags |= B_WRITE;
 			(*strat)(bp);
 			error = biowait(bp);
@@ -288,6 +291,6 @@ writedisklabel(dev, strat, lp, osdep)
 	}
 	error = ESRCH;
 done:
-	brelse(bp);
+	brelse(bp, 0);
 	return (error);
 }

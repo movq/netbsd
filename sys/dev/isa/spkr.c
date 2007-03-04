@@ -1,4 +1,4 @@
-/*	$NetBSD: spkr.c,v 1.23 2006/11/16 01:33:00 christos Exp $	*/
+/*	$NetBSD: spkr.c,v 1.28 2008/03/04 14:59:35 cube Exp $	*/
 
 /*
  * Copyright (c) 1990 Eric S. Raymond (esr@snark.thyrsus.com)
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spkr.c,v 1.23 2006/11/16 01:33:00 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spkr.c,v 1.28 2008/03/04 14:59:35 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,20 +56,16 @@ __KERNEL_RCSID(0, "$NetBSD: spkr.c,v 1.23 2006/11/16 01:33:00 christos Exp $");
 #include <sys/ioctl.h>
 #include <sys/conf.h>
 
-#include <machine/bus.h>
+#include <sys/bus.h>
 
 #include <dev/isa/pcppivar.h>
 
 #include <dev/isa/spkrio.h>
 
-int spkrprobe(struct device *, struct cfdata *, void *);
-void spkrattach(struct device *, struct device *, void *);
+int spkrprobe(device_t, cfdata_t, void *);
+void spkrattach(device_t, device_t, void *);
 
-struct spkr_softc {
-	struct device sc_dev;
-};
-
-CFATTACH_DECL(spkr, sizeof(struct spkr_softc),
+CFATTACH_DECL_NEW(spkr, 0,
     spkrprobe, spkrattach, NULL, NULL);
 
 dev_type_open(spkropen);
@@ -172,7 +168,7 @@ static const int pitchtab[] =
 /* 5 */ 2093, 2217, 2349, 2489, 2637, 2794, 2960, 3136, 3322, 3520, 3729, 3951,
 /* 6 */ 4186, 4435, 4698, 4978, 5274, 5588, 5920, 6272, 6644, 7040, 7459, 7902,
 };
-#define NOCTAVES (sizeof(pitchtab) / sizeof(pitchtab[0]) / OCTAVE_NOTES)
+#define NOCTAVES (__arraycount(pitchtab) / OCTAVE_NOTES)
 
 static void
 playinit()
@@ -407,19 +403,22 @@ static void *spkr_inbuf;
 static int spkr_attached = 0;
 
 int
-spkrprobe(struct device *parent, struct cfdata *match,
-    void *aux)
+spkrprobe(device_t parent, cfdata_t match, void *aux)
 {
 	return (!spkr_attached);
 }
 
 void
-spkrattach(struct device *parent, struct device *self,
-    void *aux)
+spkrattach(device_t parent, device_t self, void *aux)
 {
 	printf("\n");
 	ppicookie = ((struct pcppi_attach_args *)aux)->pa_cookie;
 	spkr_attached = 1;
+        if (!device_pmf_is_registered(self))
+		if (!pmf_device_register(self, NULL, NULL))
+			aprint_error_dev(self,
+			    "couldn't establish power handler\n"); 
+
 }
 
 int
@@ -483,7 +482,7 @@ int spkrclose(dev_t dev, int flags, int mode,
     return(0);
 }
 
-int spkrioctl(dev_t dev, u_long cmd, caddr_t data, int	flag,
+int spkrioctl(dev_t dev, u_long cmd, void *data, int	flag,
     struct lwp *l)
 {
 #ifdef SPKRDEBUG
@@ -503,7 +502,7 @@ int spkrioctl(dev_t dev, u_long cmd, caddr_t data, int	flag,
     }
     else if (cmd == SPKRTUNE)
     {
-	tone_t  *tp = (tone_t *)(*(caddr_t *)data);
+	tone_t  *tp = (tone_t *)(*(void **)data);
 	tone_t ttp;
 	int error;
 

@@ -1,4 +1,4 @@
-	$NetBSD: syscalls.master,v 1.32 2007/02/09 21:55:18 ad Exp $
+	$NetBSD: syscalls.master,v 1.35 2008/06/19 12:24:22 hans Exp $
 
 ;	@(#)syscalls.master	8.1 (Berkeley) 7/19/93
 
@@ -39,6 +39,7 @@
 #include <sys/systm.h>
 #include <sys/signal.h>
 #include <sys/mount.h>
+#include <sys/sched.h>
 #include <sys/syscallargs.h>
 #include <compat/ibcs2/ibcs2_types.h>
 #include <compat/ibcs2/ibcs2_signal.h>
@@ -58,16 +59,16 @@
 7	STD		{ int ibcs2_sys_waitsys(int a1, int a2, int a3); }
 8	STD		{ int ibcs2_sys_creat(const char *path, int mode); }
 9	NOARGS		{ int sys_link(char *path, char *link); }
-10	STD		{ int ibcs2_sys_unlink(const char *path); }
+10	NOARGS		{ int sys_unlink(const char *path); }
 11	STD		{ int ibcs2_sys_execv(const char *path, char **argp); }
-12	STD		{ int ibcs2_sys_chdir(const char *path); }
+12	NOARGS		{ int sys_chdir(const char *path); }
 13	STD		{ int ibcs2_sys_time(ibcs2_time_t *tp); }
 14	STD		{ int ibcs2_sys_mknod(const char* path, int mode, \
 			    int dev); }
-15	STD		{ int ibcs2_sys_chmod(const char *path, int mode); }
-16	STD		{ int ibcs2_sys_chown(const char *path, int uid, \
+15	NOARGS		{ int sys_chmod(const char *path, int mode); }
+16	NOARGS		{ int sys___posix_chown(const char *path, int uid, \
 			    int gid); }
-17	NOARGS		{ int sys_obreak(caddr_t nsize); }
+17	NOARGS		{ int sys_obreak(void *nsize); }
 18	STD		{ int ibcs2_sys_stat(const char* path, \
 			    struct ibcs2_stat *st); }
 19	NOARGS		{ long compat_43_sys_lseek(int fd, long offset, \
@@ -95,7 +96,7 @@
 37	STD		{ int ibcs2_sys_kill(int pid, int signo); }
 38	STD		{ int ibcs2_sys_fstatfs(int fd, \
 			    struct ibcs2_statfs *buf, int len, int fstype); }
-39	STD		{ int ibcs2_sys_pgrpsys(int type, caddr_t dummy, \
+39	STD		{ int ibcs2_sys_pgrpsys(int type, void *dummy, \
 			    int pid, int pgid); }
 40	UNIMPL		ibcs2_xenix
 41	NOARGS		{ int sys_dup(u_int fd); }
@@ -126,9 +127,9 @@
 #else
 53	UNIMPL		semsys
 #endif
-54	STD		{ int ibcs2_sys_ioctl(int fd, int cmd, caddr_t data); }
+54	STD		{ int ibcs2_sys_ioctl(int fd, int cmd, void *data); }
 55	STD		{ int ibcs2_sys_uadmin(int cmd, int func, \
-			    caddr_t data); }
+			    void *data); }
 56	UNIMPL
 57	STD		{ int ibcs2_sys_utssys(int a1, int a2, int flag); }
 58	NOARGS		{ int sys_fsync(int fd); }
@@ -153,13 +154,13 @@
 76	OBSOL		rfs_rdebug
 77	OBSOL		rfs_rfstop
 78	UNIMPL		rfs_rfsys
-79	STD		{ int ibcs2_sys_rmdir(const char *path); }
-80	STD		{ int ibcs2_sys_mkdir(const char *path, int mode); }
+79	NOARGS		{ int sys_rmdir(const char *path); }
+80	NOARGS		{ int sys_mkdir(const char *path, int mode); }
 81	STD		{ int ibcs2_sys_getdents(int fd, char *buf, \
 			    int nbytes); }
 82	UNIMPL
 83	UNIMPL
-84	STD		{ int ibcs2_sys_sysfs(int cmd, caddr_t d1, char *buf); }
+84	STD		{ int ibcs2_sys_sysfs(int cmd, void *d1, char *buf); }
 85	STD		{ int ibcs2_sys_getmsg(int fd, \
 			    struct ibcs2_stropts *ctl, \
 			    struct ibcs2_stropts *dat, int *flags); }
@@ -170,11 +171,11 @@
 			    int timeout); }
 88	UNIMPL
 89	UNIMPL
-90	STD		{ int ibcs2_sys_symlink(const char *path, \
+90	NOARGS		{ int sys_symlink(const char *path, \
 			    const char *link); }
 91	STD		{ int ibcs2_sys_lstat(const char *path, \
 			    struct ibcs2_stat *st); }
-92	STD		{ int ibcs2_sys_readlink(const char *path, char *buf, \
+92	NOARGS		{ int sys_readlink(const char *path, char *buf, \
 			    int count); }
 93	NOARGS		{ int sys_fchmod(int fd, int mode); }
 94	NOARGS		{ int sys___posix_fchown(int fd, int uid, int gid); } \
@@ -350,7 +351,7 @@
 245	STD		{ int ibcs2_sys_sysconf(int name); }
 246	STD		{ int ibcs2_sys_pathconf(char *path, int name); }
 247	STD		{ int ibcs2_sys_fpathconf(int fd, int name); }
-248	STD		{ int ibcs2_sys_rename(const char *from, \
+248	NOARGS		{ int sys___posix_rename(const char *from, \
 			    const char *to); }
 249	UNIMPL
 250	STD		{ int ibcs2_sys_scoinfo(struct scoutsname *bp, int len); }

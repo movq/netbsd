@@ -1,4 +1,4 @@
-/*	$NetBSD: umodem.c,v 1.55 2007/01/29 01:52:45 hubertf Exp $	*/
+/*	$NetBSD: umodem.c,v 1.59 2008/06/27 16:05:59 drochner Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -51,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umodem.c,v 1.55 2007/01/29 01:52:45 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umodem.c,v 1.59 2008/06/27 16:05:59 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,20 +85,16 @@ USB_DECLARE_DRIVER(umodem);
 
 USB_MATCH(umodem)
 {
-	USB_MATCH_START(umodem, uaa);
+	USB_IFMATCH_START(umodem, uaa);
 	usb_interface_descriptor_t *id;
 	int cm, acm;
 
-	if (uaa->iface == NULL)
+	if (uaa->class != UICLASS_CDC ||
+	    uaa->subclass != UISUBCLASS_ABSTRACT_CONTROL_MODEL ||
+	    uaa->proto != UIPROTO_CDC_AT)
 		return (UMATCH_NONE);
 
 	id = usbd_get_interface_descriptor(uaa->iface);
-	if (id == NULL ||
-	    id->bInterfaceClass != UICLASS_CDC ||
-	    id->bInterfaceSubClass != UISUBCLASS_ABSTRACT_CONTROL_MODEL ||
-	    id->bInterfaceProtocol != UIPROTO_CDC_AT)
-		return (UMATCH_NONE);
-
 	if (umodem_get_caps(uaa->device, &cm, &acm, id) == -1)
 		return (UMATCH_NONE);
 
@@ -114,7 +103,7 @@ USB_MATCH(umodem)
 
 USB_ATTACH(umodem)
 {
-	USB_ATTACH_START(umodem, sc, uaa);
+	USB_IFATTACH_START(umodem, sc, uaa);
 	struct ucom_attach_args uca;
 
 	uca.portno = UCOM_UNK_PORTNO;
@@ -126,17 +115,13 @@ USB_ATTACH(umodem)
 	USB_ATTACH_SUCCESS_RETURN;
 }
 
-#ifdef __strong_alias
-__strong_alias(umodem_activate,umodem_common_activate)
-#else
 int
 umodem_activate(device_ptr_t self, enum devact act)
 {
-	struct umodem_softc *sc = (struct umodem_softc *)self;
+	struct umodem_softc *sc = device_private(self);
 
 	return umodem_common_activate(sc, act);
 }
-#endif
 
 USB_DETACH(umodem)
 {

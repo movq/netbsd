@@ -1,4 +1,4 @@
-/*	$NetBSD: ums.c,v 1.67 2006/11/16 01:33:27 christos Exp $	*/
+/*	$NetBSD: ums.c,v 1.73 2008/05/24 16:40:58 cube Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -16,13 +16,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
@@ -42,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ums.c,v 1.67 2006/11/16 01:33:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ums.c,v 1.73 2008/05/24 16:40:58 cube Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -106,7 +99,7 @@ struct ums_softc {
 	int nbuttons;
 
 	u_int32_t sc_buttons;	/* mouse button status */
-	struct device *sc_wsmousedev;
+	device_t sc_wsmousedev;
 
 	char			sc_dying;
 };
@@ -118,7 +111,7 @@ Static void ums_intr(struct uhidev *addr, void *ibuf, u_int len);
 
 Static int	ums_enable(void *);
 Static void	ums_disable(void *);
-Static int	ums_ioctl(void *, u_long, caddr_t, int, struct lwp * );
+Static int	ums_ioctl(void *, u_long, void *, int, struct lwp * );
 
 const struct wsmouse_accessops ums_accessops = {
 	ums_enable,
@@ -126,11 +119,17 @@ const struct wsmouse_accessops ums_accessops = {
 	ums_disable,
 };
 
-USB_DECLARE_DRIVER(ums);
+int ums_match(device_t, cfdata_t, void *);
+void ums_attach(device_t, device_t, void *);
+void ums_childdet(device_t, device_t);
+int ums_detach(device_t, int);
+int ums_activate(device_t, enum devact);
+extern struct cfdriver ums_cd;
+CFATTACH_DECL2_NEW(ums, sizeof(struct ums_softc), ums_match, ums_attach,
+    ums_detach, ums_activate, NULL, ums_childdet);
 
 int
-ums_match(struct device *parent, struct cfdata *match,
-    void *aux)
+ums_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct uhidev_attach_arg *uha = aux;
 	int size;
@@ -145,9 +144,9 @@ ums_match(struct device *parent, struct cfdata *match,
 }
 
 void
-ums_attach(struct device *parent, struct device *self, void *aux)
+ums_attach(device_t parent, device_t self, void *aux)
 {
-	struct ums_softc *sc = (struct ums_softc *)self;
+	struct ums_softc *sc = device_private(self);
 	struct uhidev_attach_arg *uha = aux;
 	struct wsmousedev_attach_args a;
 	int size;
@@ -156,6 +155,9 @@ ums_attach(struct device *parent, struct device *self, void *aux)
 	int i, wheel;
 	struct hid_location loc_btn;
 
+	aprint_naive("\n");
+
+	sc->sc_hdev.sc_dev = self;
 	sc->sc_hdev.sc_intr = ums_intr;
 	sc->sc_hdev.sc_parent = uha->parent;
 	sc->sc_hdev.sc_report_id = uha->reportid;
@@ -168,26 +170,29 @@ ums_attach(struct device *parent, struct device *self, void *aux)
 
 	uhidev_get_report_desc(uha->parent, &desc, &size);
 
+	if (!pmf_device_register(self, NULL, NULL))
+		aprint_error_dev(self, "couldn't establish power handler\n");
+
 	if (!hid_locate(desc, size, HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_X),
 	       uha->reportid, hid_input, &sc->sc_loc_x, &flags)) {
-		printf("\n%s: mouse has no X report\n",
+		aprint_error("\n%s: mouse has no X report\n",
 		       USBDEVNAME(sc->sc_hdev.sc_dev));
 		USB_ATTACH_ERROR_RETURN;
 	}
 	if ((flags & MOUSE_FLAGS_MASK) != MOUSE_FLAGS) {
-		printf("\n%s: X report 0x%04x not supported\n",
+		aprint_error("\n%s: X report 0x%04x not supported\n",
 		       USBDEVNAME(sc->sc_hdev.sc_dev), flags);
 		USB_ATTACH_ERROR_RETURN;
 	}
 
 	if (!hid_locate(desc, size, HID_USAGE2(HUP_GENERIC_DESKTOP, HUG_Y),
 	       uha->reportid, hid_input, &sc->sc_loc_y, &flags)) {
-		printf("\n%s: mouse has no Y report\n",
+		aprint_error("\n%s: mouse has no Y report\n",
 		       USBDEVNAME(sc->sc_hdev.sc_dev));
 		USB_ATTACH_ERROR_RETURN;
 	}
 	if ((flags & MOUSE_FLAGS_MASK) != MOUSE_FLAGS) {
-		printf("\n%s: Y report 0x%04x not supported\n",
+		aprint_error("\n%s: Y report 0x%04x not supported\n",
 		       USBDEVNAME(sc->sc_hdev.sc_dev), flags);
 		USB_ATTACH_ERROR_RETURN;
 	}
@@ -198,8 +203,9 @@ ums_attach(struct device *parent, struct device *self, void *aux)
 			   uha->reportid, hid_input, &sc->sc_loc_z, &flags);
 	if (wheel) {
 		if ((flags & MOUSE_FLAGS_MASK) != MOUSE_FLAGS) {
-			printf("\n%s: Wheel report 0x%04x not supported\n",
-			       USBDEVNAME(sc->sc_hdev.sc_dev), flags);
+			aprint_verbose("\n%s: Wheel report 0x%04x not "
+			    "supported\n", USBDEVNAME(sc->sc_hdev.sc_dev),
+			    flags);
 			sc->sc_loc_z.size = 0;	/* Bad Z coord, ignore it */
 		} else {
 			sc->flags |= UMS_Z;
@@ -214,7 +220,8 @@ ums_attach(struct device *parent, struct device *self, void *aux)
 						      HUG_Z),
 			uha->reportid, hid_input, &sc->sc_loc_w, &flags)) {
 			if ((flags & MOUSE_FLAGS_MASK) != MOUSE_FLAGS) {
-				printf("\n%s: Z report 0x%04x not supported\n",
+				aprint_verbose("\n%s: Z report 0x%04x not "
+				    "supported\n",
 				       USBDEVNAME(sc->sc_hdev.sc_dev), flags);
 				sc->sc_loc_w.size = 0;	/* Bad Z, ignore */
 			}
@@ -223,7 +230,7 @@ ums_attach(struct device *parent, struct device *self, void *aux)
 						      HUG_Z),
 		      uha->reportid, hid_input, &sc->sc_loc_z, &flags)) {
 		if ((flags & MOUSE_FLAGS_MASK) != MOUSE_FLAGS) {
-			printf("\n%s: Z report 0x%04x not supported\n",
+			aprint_verbose("\n%s: Z report 0x%04x not supported\n",
 			       USBDEVNAME(sc->sc_hdev.sc_dev), flags);
 			sc->sc_loc_z.size = 0;	/* Bad Z coord, ignore it */
 		} else {
@@ -239,7 +246,7 @@ ums_attach(struct device *parent, struct device *self, void *aux)
 			break;
 	sc->nbuttons = i - 1;
 
-	printf(": %d button%s%s\n",
+	aprint_normal(": %d button%s%s\n",
 	    sc->nbuttons, sc->nbuttons == 1 ? "" : "s",
 	    sc->flags & UMS_Z ? " and Z dir." : "");
 
@@ -274,7 +281,7 @@ ums_attach(struct device *parent, struct device *self, void *aux)
 int
 ums_activate(device_ptr_t self, enum devact act)
 {
-	struct ums_softc *sc = (struct ums_softc *)self;
+	struct ums_softc *sc = device_private(self);
 	int rv = 0;
 
 	switch (act) {
@@ -290,10 +297,19 @@ ums_activate(device_ptr_t self, enum devact act)
 	return (rv);
 }
 
-int
-ums_detach(struct device *self, int flags)
+void
+ums_childdet(device_t self, device_t child)
 {
-	struct ums_softc *sc = (struct ums_softc *)self;
+	struct ums_softc *sc = device_private(self);
+
+	KASSERT(sc->sc_wsmousedev == child);
+	sc->sc_wsmousedev = NULL;
+}
+
+int
+ums_detach(device_t self, int flags)
+{
+	struct ums_softc *sc = device_private(self);
 	int rv = 0;
 
 	DPRINTF(("ums_detach: sc=%p flags=%d\n", sc, flags));
@@ -301,6 +317,8 @@ ums_detach(struct device *self, int flags)
 	/* No need to do reference counting of ums, wsmouse has all the goo. */
 	if (sc->sc_wsmousedev != NULL)
 		rv = config_detach(sc->sc_wsmousedev, flags);
+
+	pmf_device_deregister(self);
 
 	return (rv);
 }
@@ -379,7 +397,7 @@ ums_disable(void *v)
 }
 
 Static int
-ums_ioctl(void *v, u_long cmd, caddr_t data, int flag,
+ums_ioctl(void *v, u_long cmd, void *data, int flag,
     struct lwp * p)
 
 {
