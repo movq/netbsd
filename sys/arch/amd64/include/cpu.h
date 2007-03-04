@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.14 2007/02/16 02:53:44 ad Exp $	*/
+/*	$NetBSD: cpu.h,v 1.17 2007/03/12 16:43:11 ad Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -53,7 +53,7 @@
 #include <x86/cacheinfo.h>
 
 #include <sys/device.h>
-#include <sys/lock.h>
+#include <sys/simplelock.h>
 #include <sys/cpu_data.h>
 #include <sys/cc_microtime.h>
 
@@ -105,7 +105,7 @@ struct cpu_info {
 	u_int32_t	ci_signature;
 	u_int64_t	ci_tsc_freq;
 
-	struct cpu_functions *ci_func;
+	const struct cpu_functions *ci_func;
 	void (*cpu_setup) __P((struct cpu_info *));
 	void (*ci_info) __P((struct cpu_info *));
 
@@ -281,7 +281,7 @@ void cpu_init_msrs __P((struct cpu_info *));
 
 
 /* vm_machdep.c */
-int kvtop __P((caddr_t));
+int kvtop __P((void *));
 
 /* trap.c */
 void	child_return __P((void *));

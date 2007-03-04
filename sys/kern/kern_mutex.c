@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_mutex.c,v 1.8 2007/03/03 10:08:19 itohy Exp $	*/
+/*	$NetBSD: kern_mutex.c,v 1.12 2007/03/12 02:19:14 matt Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006, 2007 The NetBSD Foundation, Inc.
@@ -49,7 +49,7 @@
 #define	__MUTEX_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_mutex.c,v 1.8 2007/03/03 10:08:19 itohy Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_mutex.c,v 1.12 2007/03/12 02:19:14 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -120,6 +120,9 @@ do {								\
 /*
  * Spin mutex SPL save / restore.
  */
+#ifndef MUTEX_COUNT_BIAS
+#define	MUTEX_COUNT_BIAS	0
+#endif
 
 #define	MUTEX_SPIN_SPLRAISE(mtx)					\
 do {									\
@@ -127,7 +130,7 @@ do {									\
 	int x__cnt, s;							\
 	x__cnt = x__ci->ci_mtx_count--;					\
 	s = splraiseipl(mtx->mtx_ipl);					\
-	if (x__cnt == 0)						\
+	if (x__cnt == MUTEX_COUNT_BIAS)					\
 		x__ci->ci_mtx_oldspl = (s);				\
 } while (/* CONSTCOND */ 0)
 
@@ -136,7 +139,7 @@ do {									\
 	struct cpu_info *x__ci = curcpu();				\
 	int s = x__ci->ci_mtx_oldspl;					\
 	__insn_barrier();						\
-	if (++(x__ci->ci_mtx_count) == 0)				\
+	if (++(x__ci->ci_mtx_count) == MUTEX_COUNT_BIAS)		\
 		splx(s);						\
 } while (/* CONSTCOND */ 0)
 
@@ -313,6 +316,11 @@ mutex_init(kmutex_t *mtx, kmutex_type_t type, int ipl)
 		type = (ipl == IPL_NONE ? MUTEX_ADAPTIVE : MUTEX_SPIN);
 
 	switch (type) {
+	case MUTEX_NODEBUG:
+		KASSERT(ipl == IPL_NONE);
+		id = LOCKDEBUG_ALLOC(mtx, NULL);
+		MUTEX_INITIALIZE_ADAPTIVE(mtx, id);
+		break;
 	case MUTEX_ADAPTIVE:
 	case MUTEX_DEFAULT:
 		KASSERT(ipl == IPL_NONE);
@@ -376,15 +384,12 @@ mutex_onproc(uintptr_t owner, struct cpu_info **cip)
 		return 0;
 	l = (struct lwp *)MUTEX_OWNER(owner);
 
-	if ((ci = *cip) != NULL && ci->ci_curlwp == l) {
-		mb_read(); /* XXXSMP Very expensive, necessary? */
+	if ((ci = *cip) != NULL && ci->ci_curlwp == l)
 		return ci->ci_biglock_wanted != l;
-	}
 
 	for (CPU_INFO_FOREACH(cii, ci)) {
 		if (ci->ci_curlwp == l) {
 			*cip = ci;
-			mb_read(); /* XXXSMP Very expensive, necessary? */
 			return ci->ci_biglock_wanted != l;
 		}
 	}
@@ -690,7 +695,7 @@ mutex_vector_exit(kmutex_t *mtx)
 		return;
 	}
 
-	if (__predict_false(panicstr != NULL) || __predict_false(cold)) {
+	if (__predict_false((uintptr_t)panicstr | cold)) {
 		MUTEX_UNLOCKED(mtx);
 		MUTEX_RELEASE(mtx);
 		return;
@@ -905,7 +910,7 @@ sched_unlock_idle(void)
 	kmutex_t *mtx = &sched_mutex;
 
 	if (mtx->mtx_lock != __SIMPLELOCK_LOCKED)
-		MUTEX_ABORT(mtx, "sched_unlock_idle");
+		MUTEX_ABORT(mtx, "sched_mutex not locked");
 
 	MUTEX_UNLOCKED(mtx);
 	__cpu_simple_unlock(&mtx->mtx_lock);
