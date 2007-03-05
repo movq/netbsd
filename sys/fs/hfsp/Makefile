@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2007/03/05 23:01:06 dillo Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2007/03/05 23:01:06 dillo Exp $
 
 INCSDIR= /usr/include/fs/hfsp
 
