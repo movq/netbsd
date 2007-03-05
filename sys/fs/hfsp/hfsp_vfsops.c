@@ -1,4 +1,4 @@
-/*	$NetBSD: hfsp_vfsops.c,v 1.1 2007/03/05 23:01:06 dillo Exp $	*/
+/*	$NetBSD: hfsp_vfsops.c,v 1.1.1.1 2007/03/05 23:01:06 dillo Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2007 The NetBSD Foundation, Inc.
@@ -99,7 +99,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hfsp_vfsops.c,v 1.1 2007/03/05 23:01:06 dillo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hfsp_vfsops.c,v 1.1.1.1 2007/03/05 23:01:06 dillo Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"

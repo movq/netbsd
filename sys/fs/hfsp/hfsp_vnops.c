@@ -1,4 +1,4 @@
-/*	$NetBSD: hfsp_vnops.c,v 1.1 2007/03/05 23:01:07 dillo Exp $	*/
+/*	$NetBSD: hfsp_vnops.c,v 1.1.1.1 2007/03/05 23:01:07 dillo Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2007 The NetBSD Foundation, Inc.
@@ -101,7 +101,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hfsp_vnops.c,v 1.1 2007/03/05 23:01:07 dillo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hfsp_vnops.c,v 1.1.1.1 2007/03/05 23:01:07 dillo Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ipsec.h"

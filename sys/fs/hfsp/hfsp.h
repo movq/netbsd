@@ -1,4 +1,4 @@
-/*	$NetBSD: hfsp.h,v 1.1 2007/03/05 23:01:06 dillo Exp $	*/
+/*	$NetBSD: hfsp.h,v 1.1.1.1 2007/03/05 23:01:06 dillo Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2007 The NetBSD Foundation, Inc.
