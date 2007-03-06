@@ -1,4 +1,4 @@
-/* $NetBSD: unicode.c,v 1.1 2007/03/06 00:10:39 dillo Exp $ */
+/* $NetBSD: unicode.c,v 1.1.1.1 2007/03/06 00:10:39 dillo Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
