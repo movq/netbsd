@@ -1,4 +1,4 @@
-/*	$NetBSD: alist_free.c,v 1.1 2007/04/14 20:17:31 martin Exp $	*/
+/*	$NetBSD: alist_free.c,v 1.1.1.1 2007/04/14 20:17:31 martin Exp $	*/
 
 /*
  * Copyright (C) 2006 by Darren Reed.
