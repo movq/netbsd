@@ -1,4 +1,4 @@
-/* $NetBSD: pic_prepivr.c,v 1.1.2.3 2007/05/03 19:38:37 garbled Exp $ */
+/* $NetBSD: pic_prepivr.c,v 1.1.2.4 2007/05/04 00:57:24 garbled Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_prepivr.c,v 1.1.2.3 2007/05/03 19:38:37 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic_prepivr.c,v 1.1.2.4 2007/05/04 00:57:24 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -53,8 +53,8 @@ __KERNEL_RCSID(0, "$NetBSD: pic_prepivr.c,v 1.1.2.3 2007/05/03 19:38:37 garbled 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
 
+void prepivr_initialize(void);
 static int  prepivr_irq_is_enabled(struct pic_ops *, int);
-static void prepivr_reenable_irq(struct pic_ops *, int, int);
 static void prepivr_enable_irq(struct pic_ops *, int, int);
 static void prepivr_disable_irq(struct pic_ops *, int);
 static void prepivr_clear_irq(struct pic_ops *, int);
@@ -97,7 +97,7 @@ setup_prepivr(void)
 	pic->pic_cookie = (void *)pivr;
 	pic->pic_irq_is_enabled = prepivr_irq_is_enabled;
 	pic->pic_enable_irq = prepivr_enable_irq;
-	pic->pic_reenable_irq = prepivr_reenable_irq;
+	pic->pic_reenable_irq = prepivr_enable_irq;
 	pic->pic_disable_irq = prepivr_disable_irq;
 	pic->pic_clear_irq = prepivr_clear_irq;
 	pic->pic_get_irq = prepivr_get_irq;
@@ -109,7 +109,25 @@ setup_prepivr(void)
 	prepivr->enable_mask = 0xffffffff;
 	prepivr->irqs = 0;
 
+	prepivr_initialize();
+
 	return pic;
+}
+
+void
+prepivr_initialize(void)
+{
+	isa_outb(IO_ICU1, 0x11);		/* program device, four bytes */
+	isa_outb(IO_ICU1+1, 0);			/* starting at this vector */
+	isa_outb(IO_ICU1+1, 1 << IRQ_SLAVE);	/* slave on line 2 */
+	isa_outb(IO_ICU1+1, 1);			/* 8086 mode */
+	isa_outb(IO_ICU1+1, 0xff);		/* leave interrupts masked */
+
+	isa_outb(IO_ICU2, 0x11);		/* program device, four bytes */
+	isa_outb(IO_ICU2+1, 8);			/* starting at this vector */
+	isa_outb(IO_ICU2+1, IRQ_SLAVE);
+	isa_outb(IO_ICU2+1, 1);			/* 8086 mode */
+	isa_outb(IO_ICU2+1, 0xff);		/* leave interrupts masked */
 }
 
 static int
@@ -150,12 +168,6 @@ prepivr_enable_irq(struct pic_ops *pic, int irq, int type)
 	prepivr->enable_mask = ~prepivr->irqs;
 	isa_outb(IO_ICU1+1, prepivr->enable_mask);
 	isa_outb(IO_ICU2+1, prepivr->enable_mask >> 8);
-}
-
-static void
-prepivr_reenable_irq(struct pic_ops *pic, int irq, int type)
-{
-	prepivr_enable_irq(pic, irq, type);
 }
 
 static void
