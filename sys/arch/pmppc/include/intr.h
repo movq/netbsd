@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.11 2007/02/16 02:53:50 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.11.14.1 2007/05/08 17:10:47 garbled Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -39,32 +39,10 @@
 #ifndef _PMPPC_INTR_H_
 #define _PMPPC_INTR_H_
 
-/* Interrupt priority `levels'. */
-#define	IPL_NONE	9	/* nothing */
-#define	IPL_SOFTCLOCK	8	/* software clock interrupt */
-#define	IPL_SOFTNET	7	/* software network interrupt */
-#define	IPL_BIO		6	/* block I/O */
-#define	IPL_NET		5	/* network */
-#define	IPL_SOFTSERIAL	4	/* software serial interrupt */
-#define	IPL_TTY		3	/* terminal */
-#define	IPL_LPT		IPL_TTY
-#define	IPL_VM		3	/* memory allocation */
-/*#define	IPL_AUDIO	2*/	/* audio */
-#define	IPL_CLOCK	1	/* clock */
-#define	IPL_STATCLOCK	IPL_CLOCK
-#define	IPL_HIGH	1	/* everything */
-#define	IPL_SCHED	IPL_HIGH
-#define	IPL_LOCK	IPL_HIGH
-#define	IPL_SERIAL	0	/* serial */
-#define	NIPL		10
-
-/* Interrupt sharing types. */
-#define	IST_NONE	0	/* none */
-#define	IST_PULSE	1	/* pulsed */
-#define	IST_EDGE	2	/* edge-triggered */
-#define	IST_LEVEL	3	/* level-triggered */
+#include <powerpc/intr.h>
 
 #ifndef _LOCORE
+#include <powerpc/softintr.h>
 
 /*
  * Interrupt handler chains.  intr_establish() inserts a handler into
@@ -73,83 +51,22 @@
 struct intrhand {
 	int	(*ih_fun)(void *);
 	void	*ih_arg;
-	u_long	ih_count;
 	struct	intrhand *ih_next;
 	int	ih_level;
 	int	ih_irq;
 };
 
-void	do_pending_int(void);
-void	*intr_establish(int, int, int, int (*)(void *), void *);
-void	intr_disestablish(void *);
+struct pic_ops *setup_cpc700(void);
 
-static __inline int splraise(int);
-static __inline int spllower(int);
-static __inline void splx(int);
-static __inline void set_sint(int);
+void softnet(int);
+void softserial(void);
+int splraise(int);
+int spllower(int);
+void splx(int);
+void softintr(int);
 
-void softnet(int);	/* Defined in machdep.c, used in extintr.c */
-
-extern volatile int cpl, ipending, astpending, tickspending;
+extern volatile int astpending, tickspending;
 extern int imask[];
-extern long intrcnt[];
-
-/*
- * Reorder protection in the following inline functions is
- * protected with the "eieio" instruction.
- */
-static __inline int
-splraise(newcpl)
-	int newcpl;
-{
-	int oldcpl;
-
-	__asm volatile("sync; eieio\n");	/* don't reorder.... */
-	oldcpl = cpl;
-	cpl = oldcpl | newcpl;
-	__asm volatile("sync; eieio\n");	/* reorder protect */
-	return(oldcpl);
-}
-
-static __inline void
-splx(newcpl)
-	int newcpl;
-{
-	__asm volatile("sync; eieio\n");	/* reorder protect */
-	cpl = newcpl;
-	if(ipending & ~newcpl)
-		do_pending_int();
-	__asm volatile("sync; eieio\n");	/* reorder protect */
-}
-
-static __inline int
-spllower(newcpl)
-	int newcpl;
-{
-	int oldcpl;
-
-	__asm volatile("sync; eieio\n");	/* reorder protect */
-	oldcpl = cpl;
-	cpl = newcpl;
-	if(ipending & ~newcpl)
-		do_pending_int();
-	__asm volatile("sync; eieio\n");	/* reorder protect */
-	return(oldcpl);
-}
-
-/* Following code should be implemented with lwarx/stwcx to avoid
- * the disable/enable. i need to read the manual once more.... */
-static __inline void
-set_sint(pending)
-	int	pending;
-{
-	int	msrsave;
-
-	__asm ("mfmsr %0" : "=r"(msrsave));
-	__asm volatile ("mtmsr %0" :: "r"(msrsave & ~PSL_EE));
-	ipending |= pending;
-	__asm volatile ("mtmsr %0" :: "r"(msrsave));
-}
 
 /*
  * IBM CPC700 interrupts
@@ -159,15 +76,15 @@ set_sint(pending)
 
 #define	LEGAL_IRQ(x)	((x) >= 0 && (x) <= 31 && (ICU_MASK & (0x80000000 >> (x))))
 
-#define	SINT_NET	0x20000000
-#define	SINT_CLOCK	0x40000000
-#define	SINT_SERIAL	0x80000000
-#define	SPL_CLOCK	0x00000001
-#define	SINT_MASK	(SINT_CLOCK|SINT_NET|SINT_SERIAL)
+/* Soft interrupt masks. */
+#define SIR_CLOCK	28
+#define SIR_NET		29
+#define SIR_SERIAL	30
+#define SPL_CLOCK	31
 
-#define	setsoftclock()	set_sint(SINT_CLOCK);
-#define	setsoftnet()	set_sint(SINT_NET);
-#define	setsoftserial()	set_sint(SINT_SERIAL);
+#define	setsoftclock()	softintr(SIR_CLOCK)
+#define	setsoftnet()	softintr(SIR_NET)
+#define	setsoftserial()	softintr(SIR_SERIAL)
 
 #define	spl0()		spllower(0)
 
