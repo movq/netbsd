@@ -1,4 +1,4 @@
-/* $NetBSD: pic_prepivr.c,v 1.1.2.6 2007/05/07 17:21:43 garbled Exp $ */
+/* $NetBSD: pic_prepivr.c,v 1.1.2.7 2007/05/09 20:22:38 garbled Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_prepivr.c,v 1.1.2.6 2007/05/07 17:21:43 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic_prepivr.c,v 1.1.2.7 2007/05/09 20:22:38 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -53,19 +53,8 @@ __KERNEL_RCSID(0, "$NetBSD: pic_prepivr.c,v 1.1.2.6 2007/05/07 17:21:43 garbled 
 #include <dev/isa/isareg.h>
 #include <dev/isa/isavar.h>
 
-void prepivr_initialize(void);
-static void prepivr_enable_irq(struct pic_ops *, int, int);
-static void prepivr_disable_irq(struct pic_ops *, int);
 static int  prepivr_get_irq(struct pic_ops *);
-static void prepivr_ack_irq(struct pic_ops *, int);
 static void prepivr_establish_irq(struct pic_ops *, int, int, int);
-
-struct prepivr_ops {
-	struct pic_ops pic;
-	uint32_t pending_events;
-	uint32_t enable_mask;
-	uint32_t irqs;
-};
 
 vaddr_t prep_intr_reg;		/* PReP interrupt vector register */
 uint32_t prep_intr_reg_off;	/* IVR offset within the mapped page */
@@ -82,22 +71,22 @@ uint32_t prep_intr_reg_off;	/* IVR offset within the mapped page */
 struct pic_ops *
 setup_prepivr(void)
 {
-	struct prepivr_ops *prepivr;
+	struct i8259_ops *prepivr;
 	struct pic_ops *pic;
 	uint32_t pivr;
 
-	prepivr = malloc(sizeof(struct prepivr_ops), M_DEVBUF, M_NOWAIT);
+	prepivr = malloc(sizeof(struct i8259_ops), M_DEVBUF, M_NOWAIT);
 	KASSERT(prepivr != NULL);
 	pic = &prepivr->pic;
 
 	pivr = prep_intr_reg + prep_intr_reg_off;
 	pic->pic_numintrs = 16;
 	pic->pic_cookie = (void *)pivr;
-	pic->pic_enable_irq = prepivr_enable_irq;
-	pic->pic_reenable_irq = prepivr_enable_irq;
-	pic->pic_disable_irq = prepivr_disable_irq;
+	pic->pic_enable_irq = i8259_enable_irq;
+	pic->pic_reenable_irq = i8259_enable_irq;
+	pic->pic_disable_irq = i8259_disable_irq;
 	pic->pic_get_irq = prepivr_get_irq;
-	pic->pic_ack_irq = prepivr_ack_irq;
+	pic->pic_ack_irq = i8259_ack_irq;
 	pic->pic_establish_irq = prepivr_establish_irq;
 	strcpy(pic->pic_name, "prepivr");
 	pic_add(pic);
@@ -105,25 +94,9 @@ setup_prepivr(void)
 	prepivr->enable_mask = 0xffffffff;
 	prepivr->irqs = 0;
 
-	prepivr_initialize();
+	i8259_initialize();
 
 	return pic;
-}
-
-void
-prepivr_initialize(void)
-{
-	isa_outb(IO_ICU1, 0x11);		/* program device, four bytes */
-	isa_outb(IO_ICU1+1, 0);			/* starting at this vector */
-	isa_outb(IO_ICU1+1, 1 << IRQ_SLAVE);	/* slave on line 2 */
-	isa_outb(IO_ICU1+1, 1);			/* 8086 mode */
-	isa_outb(IO_ICU1+1, 0xff);		/* leave interrupts masked */
-
-	isa_outb(IO_ICU2, 0x11);		/* program device, four bytes */
-	isa_outb(IO_ICU2+1, 8);			/* starting at this vector */
-	isa_outb(IO_ICU2+1, IRQ_SLAVE);
-	isa_outb(IO_ICU2+1, 1);			/* 8086 mode */
-	isa_outb(IO_ICU2+1, 0xff);		/* leave interrupts masked */
 }
 
 static void
@@ -146,31 +119,6 @@ prepivr_establish_irq(struct pic_ops *pic, int irq, int type, int maxlevel)
 	isa_outb(IO_ELCR2, elcr[1]);
 }
 
-static void
-prepivr_enable_irq(struct pic_ops *pic, int irq, int type)
-{
-	struct prepivr_ops *prepivr = (struct prepivr_ops *)pic;
-
-	prepivr->irqs |= 1 << irq;
-	if (prepivr->irqs >= 0x100) /* IRQS >= 8 in use? */
-		prepivr->irqs |= 1 << IRQ_SLAVE;
-
-	prepivr->enable_mask = ~prepivr->irqs;
-	isa_outb(IO_ICU1+1, prepivr->enable_mask);
-	isa_outb(IO_ICU2+1, prepivr->enable_mask >> 8);
-}
-
-static void
-prepivr_disable_irq(struct pic_ops *pic, int irq)
-{
-	struct prepivr_ops *prepivr = (struct prepivr_ops *)pic;
-	uint32_t mask = 1 << irq;
-
-	prepivr->enable_mask |= mask;
-	isa_outb(IO_ICU1+1, prepivr->enable_mask);
-	isa_outb(IO_ICU2+1, prepivr->enable_mask >> 8);
-}
-
 static int
 prepivr_get_irq(struct pic_ops *pic)
 {
@@ -186,15 +134,4 @@ prepivr_get_irq(struct pic_ops *pic)
 		return 255;
 
 	return irq;
-}
-
-static void
-prepivr_ack_irq(struct pic_ops *pic, int irq)
-{
-	if (irq < 8) {
-		isa_outb(IO_ICU1, 0xe0 | irq);
-	} else {
-		isa_outb(IO_ICU2, 0xe0 | (irq & 7));
-		isa_outb(IO_ICU1, 0xe0 | IRQ_SLAVE);
-	}
 }
