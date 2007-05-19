@@ -1,4 +1,4 @@
-/*	$NetBSD: qmgr_error.c,v 1.1 2007/05/19 16:28:25 heas Exp $	*/
+/*	$NetBSD: qmgr_error.c,v 1.1.1.1 2007/05/19 16:28:25 heas Exp $	*/
 
 /*++
 /* NAME

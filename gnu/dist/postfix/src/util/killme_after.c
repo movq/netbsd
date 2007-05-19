@@ -1,4 +1,4 @@
-/*	$NetBSD: killme_after.c,v 1.1 2007/05/19 16:28:50 heas Exp $	*/
+/*	$NetBSD: killme_after.c,v 1.1.1.1 2007/05/19 16:28:50 heas Exp $	*/
 
 /*++
 /* NAME
