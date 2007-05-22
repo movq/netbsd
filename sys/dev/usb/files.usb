@@ -1,4 +1,4 @@
-#	$NetBSD: files.usb,v 1.73 2007/01/05 17:16:22 jmcneill Exp $
+#	$NetBSD: files.usb,v 1.73.10.1 2007/05/22 14:57:35 itohy Exp $
 #
 # Config file and device description for machine-independent USB code.
 # Included by ports that need it.  Ports that use it must provide
@@ -14,7 +14,8 @@ attach	usb at usbus
 file	dev/usb/usb.c			usb			needs-flag
 file	dev/usb/usbdi.c			usb
 file	dev/usb/usbdi_util.c		usb
-file	dev/usb/usb_mem.c		usb
+file	dev/usb/usb_mem.c		usb & usb_mem_dma
+file	dev/usb/usb_mem_nodma.c		usb & usb_mem_nodma
 file	dev/usb/usb_subr.c		usb
 file	dev/usb/usb_quirks.c		usb
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ulpt.c,v 1.76 2006/11/16 01:33:27 christos Exp $	*/
+/*	$NetBSD: ulpt.c,v 1.76.10.1 2007/05/22 14:57:43 itohy Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/ulpt.c,v 1.24 1999/11/17 22:33:44 n_hibma Exp $	*/
 
 /*
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ulpt.c,v 1.76 2006/11/16 01:33:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ulpt.c,v 1.76.10.1 2007/05/22 14:57:43 itohy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -562,7 +562,7 @@ ulptopen(dev_t dev, int flag, int mode, struct lwp *l)
 		error = EIO;
 		goto err0;
 	}
-	sc->sc_out_xfer = usbd_alloc_xfer(sc->sc_udev);
+	sc->sc_out_xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_out_pipe);
 	if (sc->sc_out_xfer == NULL) {
 		error = ENOMEM;
 		goto err1;
@@ -580,7 +580,7 @@ ulptopen(dev_t dev, int flag, int mode, struct lwp *l)
 			error = EIO;
 			goto err2;
 		}
-		sc->sc_in_xfer = usbd_alloc_xfer(sc->sc_udev);
+		sc->sc_in_xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_in_pipe);
 		if (sc->sc_in_xfer == NULL) {
 			error = ENOMEM;
 			goto err3;

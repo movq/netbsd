@@ -1,4 +1,4 @@
-/*	$NetBSD: urio.c,v 1.26 2006/11/16 01:33:27 christos Exp $	*/
+/*	$NetBSD: urio.c,v 1.26.10.1 2007/05/22 14:57:46 itohy Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: urio.c,v 1.26 2006/11/16 01:33:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: urio.c,v 1.26.10.1 2007/05/22 14:57:46 itohy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -385,7 +385,7 @@ urioread(dev_t dev, struct uio *uio, int flag)
 	if (sc->sc_dying)
 		return (EIO);
 
-	xfer = usbd_alloc_xfer(sc->sc_udev);
+	xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_in_pipe);
 	if (xfer == NULL)
 		return (ENOMEM);
 	bufp = usbd_alloc_buffer(xfer, URIO_BSIZE);
@@ -443,7 +443,7 @@ uriowrite(dev_t dev, struct uio *uio, int flag)
 	if (sc->sc_dying)
 		return (EIO);
 
-	xfer = usbd_alloc_xfer(sc->sc_udev);
+	xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_out_pipe);
 	if (xfer == NULL)
 		return (ENOMEM);
 	bufp = usbd_alloc_buffer(xfer, URIO_BSIZE);

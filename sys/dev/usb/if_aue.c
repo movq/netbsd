@@ -1,4 +1,4 @@
-/*	$NetBSD: if_aue.c,v 1.99 2006/11/16 01:33:26 christos Exp $	*/
+/*	$NetBSD: if_aue.c,v 1.99.10.1 2007/05/22 14:57:36 itohy Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_aue.c,v 1.99 2006/11/16 01:33:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_aue.c,v 1.99.10.1 2007/05/22 14:57:36 itohy Exp $");
 
 #if defined(__NetBSD__)
 #include "opt_inet.h"
@@ -1007,7 +1007,8 @@ aue_rx_list_init(struct aue_softc *sc)
 		if (aue_newbuf(sc, c, NULL) == ENOBUFS)
 			return (ENOBUFS);
 		if (c->aue_xfer == NULL) {
-			c->aue_xfer = usbd_alloc_xfer(sc->aue_udev);
+			c->aue_xfer = usbd_alloc_xfer(sc->aue_udev,
+			    sc->aue_ep[AUE_ENDPT_RX]);
 			if (c->aue_xfer == NULL)
 				return (ENOBUFS);
 			c->aue_buf = usbd_alloc_buffer(c->aue_xfer, AUE_BUFSZ);
@@ -1035,7 +1036,8 @@ aue_tx_list_init(struct aue_softc *sc)
 		c->aue_idx = i;
 		c->aue_mbuf = NULL;
 		if (c->aue_xfer == NULL) {
-			c->aue_xfer = usbd_alloc_xfer(sc->aue_udev);
+			c->aue_xfer = usbd_alloc_xfer(sc->aue_udev,
+			    sc->aue_ep[AUE_ENDPT_TX]);
 			if (c->aue_xfer == NULL)
 				return (ENOBUFS);
 			c->aue_buf = usbd_alloc_buffer(c->aue_xfer, AUE_BUFSZ);

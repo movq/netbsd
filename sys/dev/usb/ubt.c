@@ -1,4 +1,4 @@
-/*	$NetBSD: ubt.c,v 1.22 2006/12/21 15:55:25 yamt Exp $	*/
+/*	$NetBSD: ubt.c,v 1.22.10.1 2007/05/22 14:57:40 itohy Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ubt.c,v 1.22 2006/12/21 15:55:25 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ubt.c,v 1.22.10.1 2007/05/22 14:57:40 itohy Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -838,7 +838,7 @@ ubt_enable(struct hci_unit *unit)
 	}
 
 	/* Commands */
-	sc->sc_cmd_xfer = usbd_alloc_xfer(sc->sc_udev);
+	sc->sc_cmd_xfer = usbd_alloc_default_xfer(sc->sc_udev);
 	if (sc->sc_cmd_xfer == NULL) {
 		error = ENOMEM;
 		goto bad;
@@ -856,7 +856,7 @@ ubt_enable(struct hci_unit *unit)
 		error = EIO;
 		goto bad;
 	}
-	sc->sc_aclrd_xfer = usbd_alloc_xfer(sc->sc_udev);
+	sc->sc_aclrd_xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_aclrd_pipe);
 	if (sc->sc_aclrd_xfer == NULL) {
 		error = ENOMEM;
 		goto bad;
@@ -876,7 +876,7 @@ ubt_enable(struct hci_unit *unit)
 		error = EIO;
 		goto bad;
 	}
-	sc->sc_aclwr_xfer = usbd_alloc_xfer(sc->sc_udev);
+	sc->sc_aclwr_xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_aclwr_pipe);
 	if (sc->sc_aclwr_xfer == NULL) {
 		error = ENOMEM;
 		goto bad;
@@ -897,7 +897,8 @@ ubt_enable(struct hci_unit *unit)
 		}
 
 		for (i = 0 ; i < UBT_NXFERS ; i++) {
-			sc->sc_scord[i].xfer = usbd_alloc_xfer(sc->sc_udev);
+			sc->sc_scord[i].xfer = usbd_alloc_xfer(sc->sc_udev,
+			    sc->sc_scord_pipe);
 			if (sc->sc_scord[i].xfer == NULL) {
 				error = ENOMEM;
 				goto bad;
@@ -924,7 +925,8 @@ ubt_enable(struct hci_unit *unit)
 		}
 
 		for (i = 0 ; i < UBT_NXFERS ; i++) {
-			sc->sc_scowr[i].xfer = usbd_alloc_xfer(sc->sc_udev);
+			sc->sc_scowr[i].xfer = usbd_alloc_xfer(sc->sc_udev,
+			    sc->sc_scowr_pipe);
 			if (sc->sc_scowr[i].xfer == NULL) {
 				error = ENOMEM;
 				goto bad;

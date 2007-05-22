@@ -1,4 +1,4 @@
-/*	$NetBSD: if_atu.c,v 1.24 2006/12/25 18:39:48 wiz Exp $ */
+/*	$NetBSD: if_atu.c,v 1.24.6.1 2007/05/22 14:57:36 itohy Exp $ */
 /*	$OpenBSD: if_atu.c,v 1.48 2004/12/30 01:53:21 dlg Exp $ */
 /*
  * Copyright (c) 2003, 2004
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atu.c,v 1.24 2006/12/25 18:39:48 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atu.c,v 1.24.6.1 2007/05/22 14:57:36 itohy Exp $");
 
 #include "bpfilter.h"
 
@@ -249,7 +249,7 @@ atu_usb_request(struct atu_softc *sc, u_int8_t type,
 
 	s = splnet();
 
-	xfer = usbd_alloc_xfer(sc->atu_udev);
+	xfer = usbd_alloc_default_xfer(sc->atu_udev);
 	usbd_setup_default_xfer(xfer, sc->atu_udev, 0, 500000, &req, data,
 	    length, USBD_SHORT_XFER_OK, 0);
 
@@ -1486,7 +1486,8 @@ atu_rx_list_init(struct atu_softc *sc)
 		c->atu_sc = sc;
 		c->atu_idx = i;
 		if (c->atu_xfer == NULL) {
-			c->atu_xfer = usbd_alloc_xfer(sc->atu_udev);
+			c->atu_xfer = usbd_alloc_xfer(sc->atu_udev,
+			    sc->atu_ep[ATU_ENDPT_RX]);
 			if (c->atu_xfer == NULL)
 				return (ENOBUFS);
 			c->atu_buf = usbd_alloc_buffer(c->atu_xfer,
@@ -1518,7 +1519,8 @@ atu_tx_list_init(struct atu_softc *sc)
 		c->atu_sc = sc;
 		c->atu_idx = i;
 		if (c->atu_xfer == NULL) {
-			c->atu_xfer = usbd_alloc_xfer(sc->atu_udev);
+			c->atu_xfer = usbd_alloc_xfer(sc->atu_udev,
+			    sc->atu_ep[ATU_ENDPT_TX]);
 			if (c->atu_xfer == NULL)
 				return(ENOBUFS);
 			c->atu_mbuf = NULL;

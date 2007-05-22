@@ -1,4 +1,4 @@
-/*	$NetBSD: uhidev.c,v 1.33 2007/01/22 19:39:37 ghen Exp $	*/
+/*	$NetBSD: uhidev.c,v 1.33.10.1 2007/05/22 14:57:42 itohy Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhidev.c,v 1.33 2007/01/22 19:39:37 ghen Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhidev.c,v 1.33.10.1 2007/05/22 14:57:42 itohy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -532,7 +532,7 @@ uhidev_open(struct uhidev *scd)
 		}
 		DPRINTF(("uhidev_open: sc->sc_opipe=%p\n", sc->sc_opipe));
 
-		sc->sc_oxfer = usbd_alloc_xfer(sc->sc_udev);
+		sc->sc_oxfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_opipe);
 		if (sc->sc_oxfer == NULL) {
 			DPRINTF(("uhidev_open: couldn't allocate an xfer\n"));
 			error = ENOMEM;
