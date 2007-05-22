@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ural.c,v 1.21 2007/05/07 07:29:03 xtraeme Exp $ */
+/*	$NetBSD: if_ural.c,v 1.18 2006/11/16 01:33:26 christos Exp $ */
 /*	$FreeBSD: /repoman/r/ncvs/src/sys/dev/usb/if_ural.c,v 1.40 2006/06/02 23:14:40 sam Exp $	*/
 
 /*-
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ural.c,v 1.21 2007/05/07 07:29:03 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ural.c,v 1.18 2006/11/16 01:33:26 christos Exp $");
 
 #include "bpfilter.h"
 
@@ -91,7 +91,6 @@ static const struct usb_devno ural_devs[] = {
 	{ USB_VENDOR_BELKIN,		USB_PRODUCT_BELKIN_F5D7050 },
 	{ USB_VENDOR_CISCOLINKSYS,	USB_PRODUCT_CISCOLINKSYS_WUSB54G },
 	{ USB_VENDOR_CISCOLINKSYS,	USB_PRODUCT_CISCOLINKSYS_WUSB54GP },
-	{ USB_VENDOR_CISCOLINKSYS,	USB_PRODUCT_CISCOLINKSYS_HU200TS },
 	{ USB_VENDOR_CONCEPTRONIC,	USB_PRODUCT_CONCEPTRONIC_C54RU },
 	{ USB_VENDOR_DLINK,		USB_PRODUCT_DLINK_DWLG122 },
 	{ USB_VENDOR_GIGABYTE,		USB_PRODUCT_GIGABYTE_GNWBKG },
@@ -99,17 +98,14 @@ static const struct usb_devno ural_devs[] = {
 	{ USB_VENDOR_MELCO,		USB_PRODUCT_MELCO_KG54 },
 	{ USB_VENDOR_MELCO,		USB_PRODUCT_MELCO_KG54AI },
 	{ USB_VENDOR_MELCO,		USB_PRODUCT_MELCO_KG54YB },
-	{ USB_VENDOR_MELCO,		USB_PRODUCT_MELCO_NINWIFI },
 	{ USB_VENDOR_MSI,		USB_PRODUCT_MSI_MS6861 },
 	{ USB_VENDOR_MSI,		USB_PRODUCT_MSI_MS6865 },
 	{ USB_VENDOR_MSI,		USB_PRODUCT_MSI_MS6869 },
-	{ USB_VENDOR_NOVATECH,		USB_PRODUCT_NOVATECH_NV902W },
 	{ USB_VENDOR_RALINK,		USB_PRODUCT_RALINK_RT2570 },
 	{ USB_VENDOR_RALINK,		USB_PRODUCT_RALINK_RT2570_2 },
 	{ USB_VENDOR_RALINK,		USB_PRODUCT_RALINK_RT2570_3 },
 	{ USB_VENDOR_RALINK_2,		USB_PRODUCT_RALINK_2_RT2570 },
 	{ USB_VENDOR_SMC,		USB_PRODUCT_SMC_2862WG },
-	{ USB_VENDOR_SPHAIRON,		USB_PRODUCT_SPHAIRON_UB801R },
 	{ USB_VENDOR_SURECOM,		USB_PRODUCT_SURECOM_EP9001G },
 	{ USB_VENDOR_VTECH,		USB_PRODUCT_VTECH_RT2570 },
 	{ USB_VENDOR_ZINWELL,		USB_PRODUCT_ZINWELL_ZWXG261 },
@@ -143,7 +139,7 @@ Static int		ural_tx_data(struct ural_softc *, struct mbuf *,
 Static void		ural_start(struct ifnet *);
 Static void		ural_watchdog(struct ifnet *);
 Static int		ural_reset(struct ifnet *);
-Static int		ural_ioctl(struct ifnet *, u_long, void *);
+Static int		ural_ioctl(struct ifnet *, u_long, caddr_t);
 Static void		ural_set_testmode(struct ural_softc *);
 Static void		ural_eeprom_read(struct ural_softc *, uint16_t, void *,
 			    int);
@@ -358,6 +354,9 @@ USB_DECLARE_DRIVER(ural);
 USB_MATCH(ural)
 {
 	USB_MATCH_START(ural, uaa);
+
+	if (uaa->iface != NULL)
+		return UMATCH_NONE;
 
 	return (usb_lookup(ural_devs, uaa->vendor, uaa->product) != NULL) ?
 	    UMATCH_VENDOR_PRODUCT : UMATCH_NONE;
@@ -1488,7 +1487,7 @@ ural_reset(struct ifnet *ifp)
 }
 
 Static int
-ural_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+ural_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct ural_softc *sc = ifp->if_softc;
 	struct ieee80211com *ic = &sc->sc_ic;
