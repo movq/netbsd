@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ural.c,v 1.18 2006/11/16 01:33:26 christos Exp $ */
+/*	$NetBSD: if_ural.c,v 1.18.10.1 2007/05/22 14:57:38 itohy Exp $ */
 /*	$FreeBSD: /repoman/r/ncvs/src/sys/dev/usb/if_ural.c,v 1.40 2006/06/02 23:14:40 sam Exp $	*/
 
 /*-
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ural.c,v 1.18 2006/11/16 01:33:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ural.c,v 1.18.10.1 2007/05/22 14:57:38 itohy Exp $");
 
 #include "bpfilter.h"
 
@@ -585,7 +585,7 @@ ural_alloc_tx_list(struct ural_softc *sc)
 
 		data->sc = sc;
 
-		data->xfer = usbd_alloc_xfer(sc->sc_udev);
+		data->xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_tx_pipeh);
 		if (data->xfer == NULL) {
 			printf("%s: could not allocate tx xfer\n",
 			    USBDEVNAME(sc->sc_dev));
@@ -641,7 +641,7 @@ ural_alloc_rx_list(struct ural_softc *sc)
 
 		data->sc = sc;
 
-		data->xfer = usbd_alloc_xfer(sc->sc_udev);
+		data->xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_rx_pipeh);
 		if (data->xfer == NULL) {
 			printf("%s: could not allocate rx xfer\n",
 			    USBDEVNAME(sc->sc_dev));
@@ -1160,7 +1160,7 @@ ural_tx_bcn(struct ural_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 
 	rate = IEEE80211_IS_CHAN_5GHZ(ni->ni_chan) ? 12 : 2;
 
-	xfer = usbd_alloc_xfer(sc->sc_udev);
+	xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_tx_pipeh);
 	if (xfer == NULL)
 		return ENOMEM;
 
@@ -2162,7 +2162,7 @@ ural_init(struct ifnet *ifp)
 	/*
 	 * Allocate xfer for AMRR statistics requests.
 	 */
-	sc->amrr_xfer = usbd_alloc_xfer(sc->sc_udev);
+	sc->amrr_xfer = usbd_alloc_default_xfer(sc->sc_udev);
 	if (sc->amrr_xfer == NULL) {
 		printf("%s: could not allocate AMRR xfer\n",
 		    USBDEVNAME(sc->sc_dev));

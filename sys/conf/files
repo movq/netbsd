@@ -1,4 +1,4 @@
-#	$NetBSD: files,v 1.831 2007/02/10 11:55:23 ad Exp $
+#	$NetBSD: files,v 1.831.6.1 2007/05/22 14:57:31 itohy Exp $
 
 #	@(#)files.newconf	7.5 (Berkeley) 5/10/93
 
@@ -1024,23 +1024,25 @@ define	pcmciaslot {[slot = -1]}	# PCMCIA slot itself
 #
 
 defparam USB_MEM_RESERVE
+define	usb_mem_dma
+define	usb_mem_nodma
 
-device	uhci: usbus
+device	uhci: usbus, usb_mem_dma
 file	dev/usb/uhci.c			uhci			needs-flag
 
 # OHCI USB controller
 #
-device	ohci: usbus
+device	ohci: usbus, usb_mem_dma
 file	dev/usb/ohci.c			ohci			needs-flag
 
 # EHCI USB controller
 #
-device	ehci: usbus
+device	ehci: usbus, usb_mem_dma
 file	dev/usb/ehci.c			ehci			needs-flag
 
 # SL811HS/T USB controller
 defflag	opt_slhci.h	SLHCI_DEBUG
-device	slhci: usbus
+device	slhci: usbus, usb_mem_nodma
 file	dev/ic/sl811hs.c		slhci			needs-flag
 
 # Myson MTD803 3-in-1 Fast Ethernet Controller

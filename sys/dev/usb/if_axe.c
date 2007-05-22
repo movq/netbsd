@@ -1,4 +1,4 @@
-/*	$NetBSD: if_axe.c,v 1.17 2006/11/16 01:33:26 christos Exp $	*/
+/*	$NetBSD: if_axe.c,v 1.17.10.1 2007/05/22 14:57:36 itohy Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998, 1999, 2000-2003
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_axe.c,v 1.17 2006/11/16 01:33:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_axe.c,v 1.17.10.1 2007/05/22 14:57:36 itohy Exp $");
 
 #if defined(__NetBSD__)
 #include "opt_inet.h"
@@ -730,7 +730,8 @@ axe_rx_list_init(struct axe_softc *sc)
 		if (axe_newbuf(sc, c, NULL) == ENOBUFS)
 			return (ENOBUFS);
 		if (c->axe_xfer == NULL) {
-			c->axe_xfer = usbd_alloc_xfer(sc->axe_udev);
+			c->axe_xfer = usbd_alloc_xfer(sc->axe_udev,
+			    sc->axe_ep[AXE_ENDPT_RX]);
 			if (c->axe_xfer == NULL)
 				return (ENOBUFS);
 			c->axe_buf = usbd_alloc_buffer(c->axe_xfer, AXE_BUFSZ);
@@ -760,7 +761,8 @@ axe_tx_list_init(struct axe_softc *sc)
 		c->axe_idx = i;
 		c->axe_mbuf = NULL;
 		if (c->axe_xfer == NULL) {
-			c->axe_xfer = usbd_alloc_xfer(sc->axe_udev);
+			c->axe_xfer = usbd_alloc_xfer(sc->axe_udev,
+			    sc->axe_ep[AXE_ENDPT_TX]);
 			if (c->axe_xfer == NULL)
 				return (ENOBUFS);
 			c->axe_buf = usbd_alloc_buffer(c->axe_xfer, AXE_BUFSZ);

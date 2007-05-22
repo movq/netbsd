@@ -1,4 +1,4 @@
-/*	$NetBSD: if_kue.c,v 1.58 2006/11/16 01:33:26 christos Exp $	*/
+/*	$NetBSD: if_kue.c,v 1.58.10.1 2007/05/22 14:57:37 itohy Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_kue.c,v 1.58 2006/11/16 01:33:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_kue.c,v 1.58.10.1 2007/05/22 14:57:37 itohy Exp $");
 
 #if defined(__NetBSD__)
 #include "opt_inet.h"
@@ -667,7 +667,8 @@ kue_rx_list_init(struct kue_softc *sc)
 		if (kue_newbuf(sc, c, NULL) == ENOBUFS)
 			return (ENOBUFS);
 		if (c->kue_xfer == NULL) {
-			c->kue_xfer = usbd_alloc_xfer(sc->kue_udev);
+			c->kue_xfer = usbd_alloc_xfer(sc->kue_udev,
+			    sc->kue_ep[KUE_ENDPT_RX]);
 			if (c->kue_xfer == NULL)
 				return (ENOBUFS);
 			c->kue_buf = usbd_alloc_buffer(c->kue_xfer, KUE_BUFSZ);
@@ -695,7 +696,8 @@ kue_tx_list_init(struct kue_softc *sc)
 		c->kue_idx = i;
 		c->kue_mbuf = NULL;
 		if (c->kue_xfer == NULL) {
-			c->kue_xfer = usbd_alloc_xfer(sc->kue_udev);
+			c->kue_xfer = usbd_alloc_xfer(sc->kue_udev,
+			    sc->kue_ep[KUE_ENDPT_TX]);
 			if (c->kue_xfer == NULL)
 				return (ENOBUFS);
 			c->kue_buf = usbd_alloc_buffer(c->kue_xfer, KUE_BUFSZ);

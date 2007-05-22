@@ -1,4 +1,4 @@
-/*	$NetBSD: ugen.c,v 1.91 2007/02/26 13:28:56 drochner Exp $	*/
+/*	$NetBSD: ugen.c,v 1.91.4.1 2007/05/22 14:57:41 itohy Exp $	*/
 
 /*
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ugen.c,v 1.91 2007/02/26 13:28:56 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ugen.c,v 1.91.4.1 2007/05/22 14:57:41 itohy Exp $");
 
 #include "opt_ugen_bulk_ra_wb.h"
 #include "opt_compat_netbsd.h"
@@ -452,7 +452,7 @@ ugenopen(dev_t dev, int flag, int mode, struct lwp *l)
 			}
 			for(i = 0; i < UGEN_NISOREQS; ++i) {
 				sce->isoreqs[i].sce = sce;
-				xfer = usbd_alloc_xfer(sc->sc_udev);
+				xfer = usbd_alloc_xfer(sc->sc_udev, sce->pipeh);
 				if (xfer == 0)
 					goto bad;
 				sce->isoreqs[i].xfer = xfer;
@@ -700,7 +700,7 @@ ugen_do_read(struct ugen_softc *sc, int endpt, struct uio *uio, int flag)
 			break;
 		}
 #endif
-		xfer = usbd_alloc_xfer(sc->sc_udev);
+		xfer = usbd_alloc_xfer(sc->sc_udev, sce->pipeh);
 		if (xfer == 0)
 			return (ENOMEM);
 		while ((n = min(UGEN_BBSIZE, uio->uio_resid)) != 0) {
@@ -907,7 +907,7 @@ ugen_do_write(struct ugen_softc *sc, int endpt, struct uio *uio,
 			break;
 		}
 #endif
-		xfer = usbd_alloc_xfer(sc->sc_udev);
+		xfer = usbd_alloc_xfer(sc->sc_udev, sce->pipeh);
 		if (xfer == 0)
 			return (EIO);
 		while ((n = min(UGEN_BBSIZE, uio->uio_resid)) != 0) {
@@ -930,7 +930,7 @@ ugen_do_write(struct ugen_softc *sc, int endpt, struct uio *uio,
 		usbd_free_xfer(xfer);
 		break;
 	case UE_INTERRUPT:
-		xfer = usbd_alloc_xfer(sc->sc_udev);
+		xfer = usbd_alloc_xfer(sc->sc_udev, sce->pipeh);
 		if (xfer == 0)
 			return (EIO);
 		while ((n = min(UGETW(sce->edesc->wMaxPacketSize),
@@ -1447,7 +1447,8 @@ ugen_do_ioctl(struct ugen_softc *sc, int endpt, u_long cmd,
 			if (sce->ra_wb_bufsize == 0 || sce->ra_wb_reqsize == 0)
 				/* shouldn't happen */
 				return (EINVAL);
-			sce->ra_wb_xfer = usbd_alloc_xfer(sc->sc_udev);
+			sce->ra_wb_xfer = usbd_alloc_xfer(sc->sc_udev,
+			    sce->pipeh);
 			if (sce->ra_wb_xfer == NULL)
 				return (ENOMEM);
 			sce->ra_wb_xferlen = sce->ra_wb_reqsize;
@@ -1520,7 +1521,8 @@ ugen_do_ioctl(struct ugen_softc *sc, int endpt, u_long cmd,
 			if (sce->ra_wb_bufsize == 0 || sce->ra_wb_reqsize == 0)
 				/* shouldn't happen */
 				return (EINVAL);
-			sce->ra_wb_xfer = usbd_alloc_xfer(sc->sc_udev);
+			sce->ra_wb_xfer = usbd_alloc_xfer(sc->sc_udev,
+			    sce->pipeh);
 			if (sce->ra_wb_xfer == NULL)
 				return (ENOMEM);
 			sce->ra_wb_xferlen = sce->ra_wb_reqsize;

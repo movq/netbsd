@@ -1,4 +1,4 @@
-/*	$NetBSD: if_upl.c,v 1.27 2007/02/17 22:34:07 dyoung Exp $	*/
+/*	$NetBSD: if_upl.c,v 1.27.4.1 2007/05/22 14:57:38 itohy Exp $	*/
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_upl.c,v 1.27 2007/02/17 22:34:07 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_upl.c,v 1.27.4.1 2007/05/22 14:57:38 itohy Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -454,7 +454,8 @@ upl_rx_list_init(struct upl_softc *sc)
 		if (upl_newbuf(sc, c, NULL) == ENOBUFS)
 			return (ENOBUFS);
 		if (c->upl_xfer == NULL) {
-			c->upl_xfer = usbd_alloc_xfer(sc->sc_udev);
+			c->upl_xfer = usbd_alloc_xfer(sc->sc_udev,
+			    sc->sc_ep[UPL_ENDPT_RX]);
 			if (c->upl_xfer == NULL)
 				return (ENOBUFS);
 			c->upl_buf = usbd_alloc_buffer(c->upl_xfer, UPL_BUFSZ);
@@ -484,7 +485,8 @@ upl_tx_list_init(struct upl_softc *sc)
 		c->upl_idx = i;
 		c->upl_mbuf = NULL;
 		if (c->upl_xfer == NULL) {
-			c->upl_xfer = usbd_alloc_xfer(sc->sc_udev);
+			c->upl_xfer = usbd_alloc_xfer(sc->sc_udev,
+			    sc->sc_ep[UPL_ENDPT_TX]);
 			if (c->upl_xfer == NULL)
 				return (ENOBUFS);
 			c->upl_buf = usbd_alloc_buffer(c->upl_xfer, UPL_BUFSZ);

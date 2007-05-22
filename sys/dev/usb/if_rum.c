@@ -1,5 +1,5 @@
 /*	$OpenBSD: if_rum.c,v 1.40 2006/09/18 16:20:20 damien Exp $	*/
-/*	$NetBSD: if_rum.c,v 1.6 2007/02/26 21:35:44 wiz Exp $	*/
+/*	$NetBSD: if_rum.c,v 1.6.4.1 2007/05/22 14:57:37 itohy Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 Damien Bergamini <damien.bergamini@free.fr>
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.6 2007/02/26 21:35:44 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.6.4.1 2007/05/22 14:57:37 itohy Exp $");
 
 #include "bpfilter.h"
 
@@ -347,6 +347,7 @@ USB_ATTACH(rum)
 	callout_init(&sc->amrr_ch);
 
 	/* retrieve RT2573 rev. no */
+	tmp = 0;	/* XXX shut up warning */
 	for (ntries = 0; ntries < 1000; ntries++) {
 		if ((tmp = rum_read(sc, RT2573_MAC_CSR0)) != 0)
 			break;
@@ -518,7 +519,7 @@ rum_alloc_tx_list(struct rum_softc *sc)
 
 		data->sc = sc;
 
-		data->xfer = usbd_alloc_xfer(sc->sc_udev);
+		data->xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_tx_pipeh);
 		if (data->xfer == NULL) {
 			printf("%s: could not allocate tx xfer\n",
 			    USBDEVNAME(sc->sc_dev));
@@ -577,7 +578,7 @@ rum_alloc_rx_list(struct rum_softc *sc)
 
 		data->sc = sc;
 
-		data->xfer = usbd_alloc_xfer(sc->sc_udev);
+		data->xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_rx_pipeh);
 		if (data->xfer == NULL) {
 			printf("%s: could not allocate rx xfer\n",
 			    USBDEVNAME(sc->sc_dev));
@@ -1980,7 +1981,7 @@ rum_init(struct ifnet *ifp)
 	/*
 	 * Allocate xfer for AMRR statistics requests.
 	 */
-	sc->amrr_xfer = usbd_alloc_xfer(sc->sc_udev);
+	sc->amrr_xfer = usbd_alloc_default_xfer(sc->sc_udev);
 	if (sc->amrr_xfer == NULL) {
 		printf("%s: could not allocate AMRR xfer\n",
 		    USBDEVNAME(sc->sc_dev));

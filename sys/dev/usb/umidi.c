@@ -1,4 +1,4 @@
-/*	$NetBSD: umidi.c,v 1.29 2007/02/26 13:14:11 drochner Exp $	*/
+/*	$NetBSD: umidi.c,v 1.29.8.1 2007/05/22 14:57:44 itohy Exp $	*/
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umidi.c,v 1.29 2007/02/26 13:14:11 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umidi.c,v 1.29.8.1 2007/05/22 14:57:44 itohy Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -462,7 +462,10 @@ alloc_pipe(struct umidi_endpoint *ep)
 	ep->next_schedule = 0;
 	ep->soliciting = 0;
 	ep->armed = 0;
-	ep->xfer = usbd_alloc_xfer(sc->sc_udev);
+	err = usbd_open_pipe(sc->sc_iface, ep->addr, 0, &ep->pipe);
+	if (err)
+		return err;
+	ep->xfer = usbd_alloc_xfer(sc->sc_udev, ep->pipe);
 	if (ep->xfer == NULL) {
 	    err = USBD_NOMEM;
 	    goto quit;
@@ -474,13 +477,13 @@ alloc_pipe(struct umidi_endpoint *ep)
 	    goto quit;
 	}
 	ep->next_slot = ep->buffer;
-	err = usbd_open_pipe(sc->sc_iface, ep->addr, 0, &ep->pipe);
 	if (err)
 	    usbd_free_xfer(ep->xfer);
 #ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	ep->solicit_cookie = softintr_establish(IPL_SOFTCLOCK,out_solicit,ep);
 #endif
 quit:
+	usbd_close_pipe(ep->pipe);
 	return err;
 }
 

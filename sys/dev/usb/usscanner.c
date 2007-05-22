@@ -1,4 +1,4 @@
-/*	$NetBSD: usscanner.c,v 1.21 2006/11/26 20:14:41 martin Exp $	*/
+/*	$NetBSD: usscanner.c,v 1.21.14.1 2007/05/22 14:57:51 itohy Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usscanner.c,v 1.21 2006/11/26 20:14:41 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usscanner.c,v 1.21.14.1 2007/05/22 14:57:51 itohy Exp $");
 
 #include "scsibus.h"
 #include <sys/param.h>
@@ -116,8 +116,8 @@ struct usscanner_softc {
 
 	usbd_xfer_handle	sc_cmd_xfer;
 	void			*sc_cmd_buffer;
-	usbd_xfer_handle	sc_data_xfer;
-	void			*sc_data_buffer;
+	usbd_xfer_handle	sc_datain_xfer;
+	usbd_xfer_handle	sc_dataout_xfer;
 
 	int			sc_state;
 #define UAS_IDLE	0
@@ -262,7 +262,7 @@ USB_ATTACH(usscanner)
 		USB_ATTACH_ERROR_RETURN;
 	}
 
-	sc->sc_cmd_xfer = usbd_alloc_xfer(uaa->device);
+	sc->sc_cmd_xfer = usbd_alloc_xfer(uaa->device, sc->sc_out_pipe);
 	if (sc->sc_cmd_xfer == NULL) {
 		printf("%s: alloc cmd xfer failed, err=%d\n",
 		       USBDEVNAME(sc->sc_dev), err);
@@ -280,7 +280,7 @@ USB_ATTACH(usscanner)
 		USB_ATTACH_ERROR_RETURN;
 	}
 
-	sc->sc_intr_xfer = usbd_alloc_xfer (uaa->device);
+	sc->sc_intr_xfer = usbd_alloc_xfer(uaa->device, sc->sc_intr_pipe);
 	if (sc->sc_intr_xfer == NULL) {
 	  printf("%s: alloc intr xfer failed, err=%d\n",
 		 USBDEVNAME(sc->sc_dev), err);
@@ -288,17 +288,31 @@ USB_ATTACH(usscanner)
 	  USB_ATTACH_ERROR_RETURN;
         }
 
-	sc->sc_data_xfer = usbd_alloc_xfer(uaa->device);
-	if (sc->sc_data_xfer == NULL) {
+	sc->sc_datain_xfer = usbd_alloc_xfer(uaa->device, sc->sc_in_pipe);
+	if (sc->sc_datain_xfer == NULL) {
 		printf("%s: alloc data xfer failed, err=%d\n",
 		       USBDEVNAME(sc->sc_dev), err);
 		usscanner_cleanup(sc);
 		USB_ATTACH_ERROR_RETURN;
 	}
-	sc->sc_data_buffer = usbd_alloc_buffer(sc->sc_data_xfer,
-					      USSCANNER_MAX_TRANSFER_SIZE);
-	if (sc->sc_data_buffer == NULL) {
-		printf("%s: alloc data buffer failed, err=%d\n",
+	err = usbd_map_alloc(sc->sc_datain_xfer);
+	if (err) {
+		printf("%s: alloc map failed, err=%d\n",
+		       USBDEVNAME(sc->sc_dev), err);
+		usscanner_cleanup(sc);
+		USB_ATTACH_ERROR_RETURN;
+	}
+
+	sc->sc_dataout_xfer = usbd_alloc_xfer(uaa->device, sc->sc_out_pipe);
+	if (sc->sc_dataout_xfer == NULL) {
+		printf("%s: alloc data xfer failed, err=%d\n",
+		       USBDEVNAME(sc->sc_dev), err);
+		usscanner_cleanup(sc);
+		USB_ATTACH_ERROR_RETURN;
+	}
+	err = usbd_map_alloc(sc->sc_dataout_xfer);
+	if (err) {
+		printf("%s: alloc map failed, err=%d\n",
 		       USBDEVNAME(sc->sc_dev), err);
 		usscanner_cleanup(sc);
 		USB_ATTACH_ERROR_RETURN;
@@ -399,9 +413,13 @@ usscanner_cleanup(struct usscanner_softc *sc)
 		usbd_free_xfer(sc->sc_cmd_xfer);
 		sc->sc_cmd_xfer = NULL;
 	}
-	if (sc->sc_data_xfer != NULL) {
-		usbd_free_xfer(sc->sc_data_xfer);
-		sc->sc_data_xfer = NULL;
+	if (sc->sc_datain_xfer != NULL) {
+		usbd_free_xfer(sc->sc_datain_xfer);
+		sc->sc_datain_xfer = NULL;
+	}
+	if (sc->sc_dataout_xfer != NULL) {
+		usbd_free_xfer(sc->sc_dataout_xfer);
+		sc->sc_dataout_xfer = NULL;
 	}
 }
 
@@ -463,7 +481,7 @@ usscanner_intr_cb(usbd_xfer_handle xfer, usbd_private_handle priv,
 	struct usscanner_softc *sc = priv;
 	int s;
 
-	DPRINTFN(10, ("usscanner_data_cb status=%d\n", status));
+	DPRINTFN(10, ("usscanner_intr_cb status=%d\n", status));
 
 #ifdef USSCANNER_DEBUG
 	if (sc->sc_state != UAS_STATUS) {
@@ -502,10 +520,10 @@ usscanner_data_cb(usbd_xfer_handle xfer, usbd_private_handle priv,
 
 	xs->resid = xs->datalen - len;
 
+	usbd_unmap_buffer(xfer);
+
 	switch (status) {
 	case USBD_NORMAL_COMPLETION:
-		if (xs->xs_control & XS_CTL_DATA_IN)
-			memcpy(xs->data, sc->sc_data_buffer, len);
 		xs->error = XS_NOERROR;
 		break;
 	case USBD_TIMEOUT:
@@ -541,10 +559,10 @@ usscanner_sensedata_cb(usbd_xfer_handle xfer, usbd_private_handle priv,
 #endif
 
 	usbd_get_xfer_status(xfer, NULL, NULL, &len, NULL);
+	usbd_unmap_buffer(xfer);
 
 	switch (status) {
 	case USBD_NORMAL_COMPLETION:
-		memcpy(&xs->sense, sc->sc_data_buffer, len);
 		if (len < sizeof xs->sense)
 			xs->error = XS_SHORTSENSE;
 		break;
@@ -612,11 +630,12 @@ usscanner_sensecmd_cb(usbd_xfer_handle xfer, usbd_private_handle priv,
 	}
 
 	sc->sc_state = UAS_SENSEDATA;
-	usbd_setup_xfer(sc->sc_data_xfer, sc->sc_in_pipe, sc,
-	    sc->sc_data_buffer,
+	usbd_map_buffer(xfer, &xs->sense, sizeof xs->sense);
+	usbd_setup_xfer(sc->sc_datain_xfer, sc->sc_in_pipe, sc,
+	    &xs->sense,
 	    sizeof xs->sense, USBD_SHORT_XFER_OK | USBD_NO_COPY,
 	    USSCANNER_TIMEOUT, usscanner_sensedata_cb);
-	err = usbd_transfer(sc->sc_data_xfer);
+	err = usbd_transfer(sc->sc_datain_xfer);
 	if (err == USBD_IN_PROGRESS)
 		return;
 	xs->error = XS_DRIVER_STUFFUP;
@@ -668,18 +687,20 @@ usscanner_cmd_cb(usbd_xfer_handle xfer, usbd_private_handle priv,
 	if (xs->xs_control & XS_CTL_DATA_IN) {
 		DPRINTFN(4, ("usscanner_cmd_cb: data in len=%d\n",
 			     xs->datalen));
+		xfer = sc->sc_datain_xfer;
 		pipe = sc->sc_in_pipe;
 	} else {
 		DPRINTFN(4, ("usscanner_cmd_cb: data out len=%d\n",
 			     xs->datalen));
-		memcpy(sc->sc_data_buffer, xs->data, xs->datalen);
+		xfer = sc->sc_dataout_xfer;
 		pipe = sc->sc_out_pipe;
 	}
 	sc->sc_state = UAS_DATA;
-	usbd_setup_xfer(sc->sc_data_xfer, pipe, sc, sc->sc_data_buffer,
+	usbd_map_buffer(xfer, xs->data, xs->datalen);
+	usbd_setup_xfer(xfer, pipe, sc, xs->data,
 	    xs->datalen, USBD_SHORT_XFER_OK | USBD_NO_COPY,
 	    xs->timeout, usscanner_data_cb);
-	err = usbd_transfer(sc->sc_data_xfer);
+	err = usbd_transfer(xfer);
 	if (err == USBD_IN_PROGRESS)
 		return;
 	xs->error = XS_DRIVER_STUFFUP;

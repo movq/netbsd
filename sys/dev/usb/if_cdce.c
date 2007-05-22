@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cdce.c,v 1.12 2006/11/16 01:33:26 christos Exp $ */
+/*	$NetBSD: if_cdce.c,v 1.12.10.1 2007/05/22 14:57:37 itohy Exp $ */
 
 /*
  * Copyright (c) 1997, 1998, 1999, 2000-2003 Bill Paul <wpaul@windriver.com>
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cdce.c,v 1.12 2006/11/16 01:33:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cdce.c,v 1.12.10.1 2007/05/22 14:57:37 itohy Exp $");
 #include "bpfilter.h"
 
 #include <sys/param.h>
@@ -617,7 +617,8 @@ cdce_rx_list_init(struct cdce_softc *sc)
 		if (cdce_newbuf(sc, c, NULL) == ENOBUFS)
 			return (ENOBUFS);
 		if (c->cdce_xfer == NULL) {
-			c->cdce_xfer = usbd_alloc_xfer(sc->cdce_udev);
+			c->cdce_xfer = usbd_alloc_xfer(sc->cdce_udev,
+			    sc->cdce_bulkin_pipe);
 			if (c->cdce_xfer == NULL)
 				return (ENOBUFS);
 			c->cdce_buf = usbd_alloc_buffer(c->cdce_xfer, CDCE_BUFSZ);
@@ -643,7 +644,8 @@ cdce_tx_list_init(struct cdce_softc *sc)
 		c->cdce_idx = i;
 		c->cdce_mbuf = NULL;
 		if (c->cdce_xfer == NULL) {
-			c->cdce_xfer = usbd_alloc_xfer(sc->cdce_udev);
+			c->cdce_xfer = usbd_alloc_xfer(sc->cdce_udev,
+			    sc->cdce_bulkout_pipe);
 			if (c->cdce_xfer == NULL)
 				return (ENOBUFS);
 			c->cdce_buf = usbd_alloc_buffer(c->cdce_xfer, CDCE_BUFSZ);

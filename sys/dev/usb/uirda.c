@@ -1,4 +1,4 @@
-/*	$NetBSD: uirda.c,v 1.23 2007/02/26 13:36:01 drochner Exp $	*/
+/*	$NetBSD: uirda.c,v 1.23.8.1 2007/05/22 14:57:43 itohy Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uirda.c,v 1.23 2007/02/26 13:36:01 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uirda.c,v 1.23.8.1 2007/05/22 14:57:43 itohy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -466,12 +466,12 @@ uirda_open(void *h, int flag, int mode,
 		error = EIO;
 		goto bad2;
 	}
-	sc->sc_rd_xfer = usbd_alloc_xfer(sc->sc_udev);
+	sc->sc_rd_xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_rd_pipe);
 	if (sc->sc_rd_xfer == NULL) {
 		error = ENOMEM;
 		goto bad3;
 	}
-	sc->sc_wr_xfer = usbd_alloc_xfer(sc->sc_udev);
+	sc->sc_wr_xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_wr_pipe);
 	if (sc->sc_wr_xfer == NULL) {
 		error = ENOMEM;
 		goto bad4;

@@ -1,4 +1,4 @@
-/*	$NetBSD: utoppy.c,v 1.8 2006/11/16 01:33:27 christos Exp $	*/
+/*	$NetBSD: utoppy.c,v 1.8.10.1 2007/05/22 14:57:51 itohy Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: utoppy.c,v 1.8 2006/11/16 01:33:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: utoppy.c,v 1.8.10.1 2007/05/22 14:57:51 itohy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -262,7 +262,7 @@ USB_ATTACH(utoppy)
 	sc->sc_iface = uaa->iface;
 	sc->sc_udev = dev;
 
-	sc->sc_out_xfer = usbd_alloc_xfer(sc->sc_udev);
+	sc->sc_out_xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_out_pipe);
 	if (sc->sc_out_xfer == NULL) {
 		printf("%s: could not allocate bulk out xfer\n",
 		    USBDEVNAME(sc->sc_dev));
@@ -276,7 +276,7 @@ USB_ATTACH(utoppy)
 		goto fail1;
 	}
 
-	sc->sc_in_xfer = usbd_alloc_xfer(sc->sc_udev);
+	sc->sc_in_xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_in_pipe);
 	if (sc->sc_in_xfer == NULL) {
 		printf("%s: could not allocate bulk in xfer\n",
 		    USBDEVNAME(sc->sc_dev));

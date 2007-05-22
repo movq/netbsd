@@ -1,4 +1,4 @@
-/*	$NetBSD: uscanner.c,v 1.54 2006/11/16 01:33:27 christos Exp $	*/
+/*	$NetBSD: uscanner.c,v 1.54.10.1 2007/05/22 14:57:51 itohy Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uscanner.c,v 1.54 2006/11/16 01:33:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uscanner.c,v 1.54.10.1 2007/05/22 14:57:51 itohy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -444,12 +444,12 @@ uscanneropen(dev_t dev, int flag, int mode,
 		}
 	}
 
-	sc->sc_bulkin_xfer = usbd_alloc_xfer(sc->sc_udev);
+	sc->sc_bulkin_xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_bulkin_pipe);
 	if (sc->sc_bulkin_xfer == NULL) {
 		uscanner_do_close(sc);
 		return (ENOMEM);
 	}
-	sc->sc_bulkout_xfer = usbd_alloc_xfer(sc->sc_udev);
+	sc->sc_bulkout_xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_bulkout_pipe);
 	if (sc->sc_bulkout_xfer == NULL) {
 		uscanner_do_close(sc);
 		return (ENOMEM);

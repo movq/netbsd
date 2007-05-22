@@ -1,4 +1,4 @@
-/*	$NetBSD: if_url.c,v 1.24 2006/12/01 20:56:42 drochner Exp $	*/
+/*	$NetBSD: if_url.c,v 1.24.10.1 2007/05/22 14:57:38 itohy Exp $	*/
 /*
  * Copyright (c) 2001, 2002
  *     Shingo WATANABE <nabe@nabechan.org>.  All rights reserved.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_url.c,v 1.24 2006/12/01 20:56:42 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_url.c,v 1.24.10.1 2007/05/22 14:57:38 itohy Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -810,7 +810,8 @@ url_rx_list_init(struct url_softc *sc)
 		if (url_newbuf(sc, c, NULL) == ENOBUFS)
 			return (ENOBUFS);
 		if (c->url_xfer == NULL) {
-			c->url_xfer = usbd_alloc_xfer(sc->sc_udev);
+			c->url_xfer = usbd_alloc_xfer(sc->sc_udev,
+			    sc->sc_pipe_rx);
 			if (c->url_xfer == NULL)
 				return (ENOBUFS);
 			c->url_buf = usbd_alloc_buffer(c->url_xfer, URL_BUFSZ);
@@ -840,7 +841,8 @@ url_tx_list_init(struct url_softc *sc)
 		c->url_idx = i;
 		c->url_mbuf = NULL;
 		if (c->url_xfer == NULL) {
-			c->url_xfer = usbd_alloc_xfer(sc->sc_udev);
+			c->url_xfer = usbd_alloc_xfer(sc->sc_udev,
+			    sc->sc_pipe_tx);
 			if (c->url_xfer == NULL)
 				return (ENOBUFS);
 			c->url_buf = usbd_alloc_buffer(c->url_xfer, URL_BUFSZ);

@@ -1,4 +1,4 @@
-/*	$NetBSD: ustir.c,v 1.17 2006/11/16 01:33:27 christos Exp $	*/
+/*	$NetBSD: ustir.c,v 1.17.10.1 2007/05/22 14:57:51 itohy Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ustir.c,v 1.17 2006/11/16 01:33:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ustir.c,v 1.17.10.1 2007/05/22 14:57:51 itohy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -876,12 +876,12 @@ ustir_open(void *h, int flag, int mode,
 		error = EIO;
 		goto bad2;
 	}
-	sc->sc_rd_xfer = usbd_alloc_xfer(sc->sc_udev);
+	sc->sc_rd_xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_rd_pipe);
 	if (sc->sc_rd_xfer == NULL) {
 		error = ENOMEM;
 		goto bad3;
 	}
-	sc->sc_wr_xfer = usbd_alloc_xfer(sc->sc_udev);
+	sc->sc_wr_xfer = usbd_alloc_xfer(sc->sc_udev, sc->sc_wr_pipe);
 	if (sc->sc_wr_xfer == NULL) {
 		error = ENOMEM;
 		goto bad4;
