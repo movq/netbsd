@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2007/06/21 22:05:28 agc Exp $
+# $NetBSD: Makefile,v 1.1.1.1 2007/06/21 22:05:28 agc Exp $
 
 PROG=icfs
 SRCS=icfs.c virtdir.c
