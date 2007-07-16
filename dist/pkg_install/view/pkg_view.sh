@@ -1,6 +1,6 @@
 #! /bin/sh
 
-# $NetBSD: pkg_view.sh,v 1.1 2007/07/16 13:01:48 joerg Exp $
+# $NetBSD: pkg_view.sh,v 1.1.1.1 2007/07/16 13:01:48 joerg Exp $
 
 #
 # Copyright (c) 2001 Alistair G. Crooks.  All rights reserved.

@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-# $NetBSD: bpm.sh.in,v 1.1 2007/07/16 13:01:46 joerg Exp $
+# $NetBSD: bpm.sh.in,v 1.1.1.1 2007/07/16 13:01:46 joerg Exp $
 #
 # Copyright (c) 2003 Alistair G. Crooks.  All rights reserved.
 #
