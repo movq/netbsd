@@ -1,4 +1,4 @@
-/*	$NetBSD: version.c,v 1.1 2007/07/16 13:01:48 joerg Exp $	*/
+/*	$NetBSD: version.c,v 1.1.1.1 2007/07/16 13:01:48 joerg Exp $	*/
 
 #if HAVE_CONFIG_H
 #include "config.h"
@@ -8,7 +8,7 @@
 #include <sys/cdefs.h>
 #endif
 #ifndef lint
-__RCSID("$NetBSD: version.c,v 1.1 2007/07/16 13:01:48 joerg Exp $");
+__RCSID("$NetBSD: version.c,v 1.1.1.1 2007/07/16 13:01:48 joerg Exp $");
 #endif
 
 /*

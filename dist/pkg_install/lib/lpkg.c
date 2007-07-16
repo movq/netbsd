@@ -1,4 +1,4 @@
-/*	$NetBSD: lpkg.c,v 1.1 2007/07/16 13:01:47 joerg Exp $	*/
+/*	$NetBSD: lpkg.c,v 1.1.1.1 2007/07/16 13:01:47 joerg Exp $	*/
 
 /*
  * Copyright (c) 1999 Christian E. Hopps

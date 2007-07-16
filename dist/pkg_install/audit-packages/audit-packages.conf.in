@@ -1,4 +1,4 @@
-# $NetBSD: audit-packages.conf.in,v 1.1 2007/07/16 13:01:48 joerg Exp $
+# $NetBSD: audit-packages.conf.in,v 1.1.1.1 2007/07/16 13:01:48 joerg Exp $
 
 #
 # sample configuration file for audit-packages(8) and 

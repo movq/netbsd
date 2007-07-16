@@ -1,4 +1,4 @@
-/*	$NetBSD: path.h,v 1.1 2007/07/16 13:01:47 joerg Exp $	*/
+/*	$NetBSD: path.h,v 1.1.1.1 2007/07/16 13:01:47 joerg Exp $	*/
 
 /*-
  * Copyright (c)2002 YAMAMOTO Takashi,

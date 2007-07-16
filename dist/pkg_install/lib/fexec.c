@@ -65,7 +65,7 @@
 #include "lib.h"
 
 #ifndef lint
-__RCSID("$NetBSD: fexec.c,v 1.1 2007/07/16 13:01:47 joerg Exp $");
+__RCSID("$NetBSD: fexec.c,v 1.1.1.1 2007/07/16 13:01:47 joerg Exp $");
 #endif
 
 static int	vfcexec(const char *, int, const char *, va_list);

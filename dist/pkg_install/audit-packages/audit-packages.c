@@ -1,4 +1,4 @@
-/* $NetBSD: audit-packages.c,v 1.1 2007/07/16 13:01:48 joerg Exp $ */
+/* $NetBSD: audit-packages.c,v 1.1.1.1 2007/07/16 13:01:48 joerg Exp $ */
 
 /*
  * Copyright (c) 2007 Adrian Portelli <adrianp@NetBSD.org>.
