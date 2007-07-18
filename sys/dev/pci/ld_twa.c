@@ -1,5 +1,5 @@
 /*	$wasabi: ld_twa.c,v 1.9 2006/02/14 18:44:37 jordanr Exp $	*/
-/*	$NetBSD: ld_twa.c,v 1.5 2007/02/08 18:47:21 ad Exp $ */
+/*	$NetBSD: ld_twa.c,v 1.7 2007/07/29 12:50:22 ad Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001, 2002, 2003, 2004 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_twa.c,v 1.5 2007/02/08 18:47:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_twa.c,v 1.7 2007/07/29 12:50:22 ad Exp $");
 
 #include "rnd.h"
 
@@ -56,6 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: ld_twa.c,v 1.5 2007/02/08 18:47:21 ad Exp $");
 #include <sys/endian.h>
 #include <sys/dkio.h>
 #include <sys/disk.h>
+#include <sys/proc.h>
 #if NRND > 0
 #include <sys/rnd.h>
 #endif
@@ -223,7 +224,6 @@ ld_twa_handler(struct twa_request *tr)
 	status = tr->tr_command->command.cmd_pkt_9k.status;
 
 	if (status != 0) {
-		bp->b_flags |= B_ERROR;
 		bp->b_error = EIO;
 		bp->b_resid = bp->b_bcount;
 	} else {

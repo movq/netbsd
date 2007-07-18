@@ -1,4 +1,4 @@
-#	$NetBSD: files,v 1.851 2007/07/15 08:40:22 dsl Exp $
+#	$NetBSD: files,v 1.857 2007/08/04 11:02:59 ad Exp $
 
 #	@(#)files.newconf	7.5 (Berkeley) 5/10/93
 
@@ -123,7 +123,7 @@ defflag				COMPAT_SUNOS: COMPAT_30
 defflag	opt_compat_svr4.h	COMPAT_SVR4 COMPAT_SVR4_32 SVR4_COMPAT_SOLARIS2
 defflag				COMPAT_ULTRIX
 defflag				COMPAT_NETBSD32
-defflag				COMPAT_AOUT_M68K
+defflag				COMPAT_AOUT_M68K: COMPAT_40
 defflag				COMPAT_M68K4K
 defflag				COMPAT_MACH
 defflag				COMPAT_DARWIN
@@ -1217,6 +1217,9 @@ defpseudo fwiso:	ieee1394
 defpseudo drvctl
 file	kern/kern_drvctl.c		drvctl
 
+# cpu control
+defpseudo cpuctl
+
 #
 # File systems
 #
@@ -1364,11 +1367,13 @@ file	kern/subr_disk.c
 file	kern/subr_iostat.c
 file	kern/subr_evcnt.c
 file	kern/subr_extent.c
+file	kern/subr_hash.c
 file	kern/subr_kmem.c
 file	kern/subr_lockdebug.c
 file	kern/subr_log.c
 file	kern/subr_pool.c
 file	kern/subr_prf.c
+file	kern/subr_prf_bitmask.c
 file	kern/subr_prof.c
 file	kern/subr_once.c
 file	kern/subr_optstr.c
@@ -1402,6 +1407,9 @@ file	kern/tty_tty.c
 file	kern/uipc_domain.c
 file	kern/uipc_mbuf.c
 file	kern/uipc_mbuf2.c
+file	net/link_proto.c		ether | fddi | netatalk | token |
+						wlan | inet | inet6 | iso |
+						natm | bluetooth
 file	kern/uipc_proto.c
 file	kern/uipc_sem.c			p1003_1b_semaphore
 file	kern/uipc_socket.c
@@ -1416,6 +1424,7 @@ file	kern/vfs_init.c
 file	kern/vfs_lockf.c
 file	kern/vfs_lookup.c
 file	kern/vfs_subr.c
+file	kern/vfs_subr2.c
 file	kern/vfs_syscalls.c
 file	kern/vfs_trans.c
 file	kern/vfs_vnops.c

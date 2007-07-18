@@ -1,4 +1,4 @@
-/*	$NetBSD: dtfs_vnops.c,v 1.34 2007/07/17 16:33:27 pooka Exp $	*/
+/*	$NetBSD: dtfs_vnops.c,v 1.37 2007/07/27 08:29:10 pooka Exp $	*/
 
 /*
  * Copyright (c) 2006  Antti Kantee.  All Rights Reserved.
@@ -246,8 +246,8 @@ dtfs_node_readdir(struct puffs_cc *pcc, void *opc,
  again:
 	if (*readoff == DENT_DOT || *readoff == DENT_DOTDOT) {
 		puffs_gendotdent(&dent, pn->pn_va.va_fileid, *readoff, reslen);
-		PUFFS_STORE_DCOOKIE(cookies, ncookies, *readoff);
 		(*readoff)++;
+		PUFFS_STORE_DCOOKIE(cookies, ncookies, *readoff);
 		goto again;
 	}
 
@@ -265,8 +265,8 @@ dtfs_node_readdir(struct puffs_cc *pcc, void *opc,
 		    reslen))
 			break;
 
-		PUFFS_STORE_DCOOKIE(cookies, ncookies, *readoff);
 		(*readoff)++;
+		PUFFS_STORE_DCOOKIE(cookies, ncookies, *readoff);
 	}
 
 	return 0;
@@ -290,6 +290,18 @@ dtfs_node_poll(struct puffs_cc *pcc, void *opc, int *events,
 	puffs_cc_yield(pcc);
 
 	*events = *events & (POLLIN | POLLOUT | POLLRDNORM | POLLWRNORM);
+	return 0;
+}
+
+int
+dtfs_node_mmap(struct puffs_cc *pcc, void *opc, vm_prot_t prot,
+	const struct puffs_cred *pcr, const struct puffs_cid *pcid)
+{
+	struct dtfs_mount *dtm = puffs_cc_getspecific(pcc);
+
+	if ((dtm->dtm_allowprot & prot) != prot)
+		return EACCES;
+
 	return 0;
 }
 
@@ -344,6 +356,7 @@ dtfs_node_link(struct puffs_cc *pcc, void *opc, void *targ,
 	dfd = emalloc(sizeof(struct dtfs_dirent));
 	dfd->dfd_node = targ;
 	dfd->dfd_name = estrndup(pcn->pcn_name, pcn->pcn_namelen);
+	dfd->dfd_namelen = strlen(dfd->dfd_name);
 	dtfs_adddent(pn_dir, dfd);
 
 	dtfs_updatetimes(targ, 0, 1, 0);

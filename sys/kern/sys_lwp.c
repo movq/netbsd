@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_lwp.c,v 1.21 2007/07/11 00:17:23 rmind Exp $	*/
+/*	$NetBSD: sys_lwp.c,v 1.23 2007/08/02 01:48:45 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_lwp.c,v 1.21 2007/07/11 00:17:23 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_lwp.c,v 1.23 2007/08/02 01:48:45 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -221,6 +221,32 @@ sys__lwp_suspend(struct lwp *l, void *v, register_t *retval)
 	 * Suspension of the current LWP will happen on return to userspace.
 	 */
 	error = lwp_suspend(l, t);
+	if (error) {
+		mutex_exit(&p->p_smutex);
+		return error;
+	}
+
+	/*
+	 * Wait for:
+	 *  o process exiting
+	 *  o target LWP suspended
+	 *  o target LWP not suspended and L_WSUSPEND clear
+	 *  o target LWP exited
+	 */
+	for (;;) {
+		error = cv_wait_sig(&p->p_lwpcv, &p->p_smutex);
+		if (error) {
+			error = ERESTART;
+			break;
+		}
+		if ((l->l_flag | t->l_flag) & (LW_WCORE | LW_WEXIT)) {
+			error = ERESTART;
+			break;
+		}
+		if (t->l_stat == LSSUSPENDED ||
+		    (t->l_flag & LW_WSUSPEND) == 0)
+			break;
+	}
 	mutex_exit(&p->p_smutex);
 
 	return error;
@@ -418,6 +444,7 @@ sys__lwp_detach(struct lwp *l, void *v, register_t *retval)
 static inline wchan_t
 lwp_park_wchan(struct proc *p, const void *hint)
 {
+
 	return (wchan_t)((uintptr_t)p ^ (uintptr_t)hint);
 }
 
@@ -439,7 +466,7 @@ sys__lwp_park(struct lwp *l, void *v, register_t *retval)
 
 	if (SCARG(uap, ts) == NULL)
 		return do_sys_lwp_park(l, NULL, SCARG(uap, ucp),
-					SCARG(uap, hint));
+		    SCARG(uap, hint));
 
 	if ((error = copyin(SCARG(uap, ts), &ts, sizeof(ts))) != 0)
 		return error;
@@ -449,7 +476,7 @@ sys__lwp_park(struct lwp *l, void *v, register_t *retval)
 
 int
 do_sys_lwp_park(struct lwp *l, struct timespec *ts, ucontext_t *uc,
-    const void *hint)
+		const void *hint)
 {
 	struct timespec tsx;
 	struct timeval tv;

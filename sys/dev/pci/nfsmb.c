@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsmb.c,v 1.1 2007/07/11 07:53:29 kiyohara Exp $	*/
+/*	$NetBSD: nfsmb.c,v 1.3 2007/07/28 12:31:50 kiyohara Exp $	*/
 /*
  * Copyright (c) 2007 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfsmb.c,v 1.1 2007/07/11 07:53:29 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfsmb.c,v 1.3 2007/07/28 12:31:50 kiyohara Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -130,7 +130,7 @@ nfsmbc_attach(struct device *parent, struct device *self, void *aux)
 	struct nfsmbc_softc *sc = (struct nfsmbc_softc *) self;
 	struct pci_attach_args *pa = aux;
 	struct nfsmbc_attach_args nfsmbca;
-	uint32_t reg;
+	pcireg_t reg;
 	char devinfo[256];
 
 	aprint_naive("\n");
@@ -211,7 +211,7 @@ nfsmb_attach(struct device *parent, struct device *self, void *aux)
 	lockinit(&sc->sc_lock, PZERO, "nfsmb", 0, 0);
 
 	if (bus_space_map(sc->sc_iot, nfsmbcap->nfsmb_addr, NFORCE_SMBSIZE, 0,
-	    &sc->sc_ioh)) {
+	    &sc->sc_ioh) != 0) {
 		aprint_error("%s: failed to map SMBus space\n",
 		    sc->sc_dev.dv_xname);
 		return;
@@ -291,21 +291,19 @@ nfsmb_exec(void *cookie, i2c_op_t op, i2c_addr_t addr, const void *cmd,
 static int
 nfsmb_check_done(struct nfsmb_softc *sc)
 {
+	int us;
 	uint8_t stat;
 
+	us = 10 * 1000;	/* XXXX: wait maximum 10 msec */
+	do {
+		delay(10);
+		us -= 10;
+		if (us <= 0)
+			return -1;
+	} while (bus_space_read_1(sc->sc_iot, sc->sc_ioh,
+	    NFORCE_SMB_PROTOCOL) != 0);
+
 	stat = bus_space_read_1(sc->sc_iot, sc->sc_ioh, NFORCE_SMB_STATUS);
-
-	if (~stat & NFORCE_SMB_STATUS_DONE) {
-		delay(500);
-		stat =
-		    bus_space_read_1(sc->sc_iot, sc->sc_ioh, NFORCE_SMB_STATUS);
-	}
-	if (~stat & NFORCE_SMB_STATUS_DONE) {
-		tsleep(sc, PCATCH, "nfsmb", hz / 100);
-		stat =
-		    bus_space_read_1(sc->sc_iot, sc->sc_ioh, NFORCE_SMB_STATUS);
-	}
-
 	if ((stat & NFORCE_SMB_STATUS_DONE) &&
 	    !(stat & NFORCE_SMB_STATUS_STATUS))
 		return 0;
