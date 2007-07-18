@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_bio.c,v 1.160 2007/07/17 10:24:10 yamt Exp $	*/
+/*	$NetBSD: nfs_bio.c,v 1.164 2007/07/29 13:31:12 ad Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_bio.c,v 1.160 2007/07/17 10:24:10 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_bio.c,v 1.164 2007/07/29 13:31:12 ad Exp $");
 
 #include "opt_nfs.h"
 #include "opt_ddb.h"
@@ -151,8 +151,6 @@ nfs_bioread(vp, uio, ioflag, cred, cflag)
 		advice = IO_ADV_DECODE(ioflag);
 		error = 0;
 		while (uio->uio_resid > 0) {
-			void *win;
-			int flags;
 			vsize_t bytelen;
 
 			nfs_delayedtruncate(vp);
@@ -161,11 +159,9 @@ nfs_bioread(vp, uio, ioflag, cred, cflag)
 			}
 			bytelen =
 			    MIN(np->n_size - uio->uio_offset, uio->uio_resid);
-			win = ubc_alloc(&vp->v_uobj, uio->uio_offset,
-					&bytelen, advice, UBC_READ);
-			error = uiomove(win, bytelen, uio);
-			flags = UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0;
-			ubc_release(win, flags);
+			error = ubc_uiomove(&vp->v_uobj, uio, bytelen,
+			    advice, UBC_READ | UBC_PARTIALOK |
+			    (UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0));
 			if (error) {
 				/*
 				 * XXXkludge
@@ -537,7 +533,7 @@ nfs_write(v)
 			uvm_vnp_setwritesize(vp, uio->uio_offset + bytelen);
 		}
 		error = ubc_uiomove(&vp->v_uobj, uio, bytelen,
-		    UBC_WRITE | UBC_PARTIALOK |
+		    UVM_ADV_RANDOM, UBC_WRITE | UBC_PARTIALOK |
 		    (overwrite ? UBC_FAULTBUSY : 0) |
 		    (UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0));
 		if (error) {
@@ -768,7 +764,7 @@ again:
 			 * Found one, so wake it up and tell it which
 			 * mount to process.
 			 */
-			iod->nid_want = NULL;
+			iod->nid_want = false;
 			iod->nid_mount = nmp;
 			cv_signal(&iod->nid_cv);
 			mutex_enter(&nmp->nm_lock);
@@ -934,7 +930,6 @@ nfs_doio_read(bp, uiop)
 		break;
 	}
 	if (error) {
-		bp->b_flags |= B_ERROR;
 		bp->b_error = error;
 	}
 	return error;
@@ -1076,7 +1071,6 @@ again:
 			goto again;
 		}
 		if (error) {
-			bp->b_flags |= B_ERROR;
 			bp->b_error = np->n_error = error;
 			np->n_flag |= NWRITEERR;
 		}
@@ -1140,7 +1134,6 @@ again:
 		/*
 		 * we got an error.
 		 */
-		bp->b_flags |= B_ERROR;
 		bp->b_error = np->n_error = error;
 		np->n_flag |= NWRITEERR;
 	}
@@ -1184,7 +1177,6 @@ nfs_doio_phys(bp, uiop)
 		}
 	}
 	if (error) {
-		bp->b_flags |= B_ERROR;
 		bp->b_error = error;
 	}
 	return error;

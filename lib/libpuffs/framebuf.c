@@ -1,4 +1,4 @@
-/*	$NetBSD: framebuf.c,v 1.16 2007/07/08 17:24:41 pooka Exp $	*/
+/*	$NetBSD: framebuf.c,v 1.19 2007/07/21 09:29:07 pooka Exp $	*/
 
 /*
  * Copyright (c) 2007  Antti Kantee.  All Rights Reserved.
@@ -28,9 +28,14 @@
  * SUCH DAMAGE.
  */
 
+/*
+ * The event portion of this code is a twisty maze of pointers,
+ * flags, yields and continues.  Sincere aplogies.
+ */
+
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: framebuf.c,v 1.16 2007/07/08 17:24:41 pooka Exp $");
+__RCSID("$NetBSD: framebuf.c,v 1.19 2007/07/21 09:29:07 pooka Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -72,6 +77,15 @@ struct puffs_framebuf {
 
 #define PUFBUF_INCRALLOC 4096
 #define PUFBUF_REMAIN(p) (p->len - p->offset)
+
+/* for poll/kqueue */
+struct puffs_fbevent {
+	struct puffs_cc	*pcc;
+	int what;
+	volatile int rv;
+
+	LIST_ENTRY(puffs_fbevent) pfe_entries;
+};
 
 static struct puffs_fctrl_io *
 getfiobyfd(struct puffs_usermount *pu, int fd)
@@ -482,6 +496,94 @@ puffs_framev_framebuf_ccpromote(struct puffs_framebuf *pufbuf,
 	return 0;
 }
 
+int
+puffs_framev_enqueue_waitevent(struct puffs_cc *pcc, int fd, int *what)
+{
+	struct puffs_usermount *pu = puffs_cc_getusermount(pcc);
+	struct puffs_fctrl_io *fio;
+	struct puffs_fbevent feb;
+	struct kevent kev;
+	int rv, svwhat;
+
+	svwhat = *what;
+
+	if (*what == 0) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	fio = getfiobyfd(pu, fd);
+	if (fio == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	feb.pcc = pcc;
+	feb.what = *what & (PUFFS_FBIO_READ|PUFFS_FBIO_WRITE|PUFFS_FBIO_ERROR);
+
+	if (*what & PUFFS_FBIO_READ)
+		if ((fio->stat & FIO_ENABLE_R) == 0)
+			EV_SET(&kev, fd, EVFILT_READ, EV_ENABLE,
+			    0, 0, (uintptr_t)fio);
+
+	rv = kevent(pu->pu_kq, &kev, 1, NULL, 0, NULL);
+	if (rv != 0)
+		return errno;
+
+	if (*what & PUFFS_FBIO_READ)
+		fio->rwait++;
+	if (*what & PUFFS_FBIO_WRITE)
+		fio->wwait++;
+
+	LIST_INSERT_HEAD(&fio->ev_qing, &feb, pfe_entries);
+	puffs_cc_yield(pcc);
+
+	assert(svwhat == *what);
+
+	if (*what & PUFFS_FBIO_READ) {
+		fio->rwait--;
+		if (fio->rwait == 0 && (fio->stat & FIO_ENABLE_R) == 0) {
+			EV_SET(&kev, fd, EVFILT_READ, EV_DISABLE,
+			    0, 0, (uintptr_t)fio);
+			rv = kevent(pu->pu_kq, &kev, 1, NULL, 0, NULL);
+#if 0
+			if (rv != 0)
+				/* XXXXX oh dear */;
+#endif
+		}
+	}
+	if (*what & PUFFS_FBIO_WRITE)
+		fio->wwait--;
+
+	if (feb.rv == 0) {
+		*what = feb.what;
+		rv = 0;
+	} else {
+		*what = PUFFS_FBIO_ERROR;
+		errno = feb.rv;
+		rv = -1;
+	}
+
+	return rv;
+}
+
+void
+puffs_framev_notify(struct puffs_fctrl_io *fio, int what)
+{
+	struct puffs_fbevent *fbevp;
+
+ restart:
+	LIST_FOREACH(fbevp, &fio->ev_qing, pfe_entries) {
+		if (fbevp->what & what) {
+			fbevp->what = what;
+			fbevp->rv = 0;
+			LIST_REMOVE(fbevp, pfe_entries);
+			puffs_cc_continue(fbevp->pcc);
+			goto restart;
+		}
+	}
+}
+
 static struct puffs_framebuf *
 findbuf(struct puffs_usermount *pu, struct puffs_framectrl *fctrl,
 	struct puffs_fctrl_io *fio, struct puffs_framebuf *findme)
@@ -538,6 +640,11 @@ puffs_framev_input(struct puffs_usermount *pu, struct puffs_framectrl *fctrl,
 		/* error */
 		if (rv) {
 			puffs_framev_readclose(pu, fio, rv);
+			fio->cur_in = NULL;
+			if ((pufbuf->istat & ISTAT_DIRECT) == 0) {
+				assert((pufbuf->istat & ISTAT_NODESTROY) == 0);
+				puffs_framebuf_destroy(pufbuf);
+			}
 			return;
 		}
 
@@ -579,7 +686,7 @@ int
 puffs_framev_output(struct puffs_usermount *pu, struct puffs_framectrl *fctrl,
 	struct puffs_fctrl_io *fio, struct puffs_putreq *ppr)
 {
-	struct puffs_framebuf *pufbuf, *pufbuf_next;
+	struct puffs_framebuf *pufbuf;
 	int rv, complete, done;
 
 	if (fio->stat & FIO_DEAD)
@@ -587,9 +694,8 @@ puffs_framev_output(struct puffs_usermount *pu, struct puffs_framectrl *fctrl,
 
 	for (pufbuf = TAILQ_FIRST(&fio->snd_qing), done = 0;
 	    pufbuf && (fio->stat & FIO_DEAD) == 0 && fio->stat & FIO_ENABLE_W;
-	    pufbuf = pufbuf_next) {
+	    pufbuf = TAILQ_FIRST(&fio->snd_qing)) {
 		complete = 0;
-		pufbuf_next = TAILQ_NEXT(pufbuf, pfb_entries);
 		rv = fctrl->wfb(pu, pufbuf, fio->io_fd, &complete);
 
 		if (rv) {
@@ -646,11 +752,12 @@ puffs_framev_addfd(struct puffs_usermount *pu, int fd, int what)
 	fio = malloc(sizeof(struct puffs_fctrl_io));
 	if (fio == NULL)
 		return -1;
+	memset(fio, 0, sizeof(struct puffs_fctrl_io));
 	fio->io_fd = fd;
 	fio->cur_in = NULL;
-	fio->stat = 0;
 	TAILQ_INIT(&fio->snd_qing);
 	TAILQ_INIT(&fio->res_qing);
+	LIST_INIT(&fio->ev_qing);
 
 	readenable = 0;
 	if ((what & PUFFS_FBIO_READ) == 0)
@@ -680,7 +787,7 @@ puffs_framev_addfd(struct puffs_usermount *pu, int fd, int what)
 
 /*
  * XXX: the following en/disable should be coalesced and executed
- * only during the actual keven call.  So feel free to fix if
+ * only during the actual kevent call.  So feel free to fix if
  * threatened by mindblowing boredom.
  */
 
@@ -689,7 +796,7 @@ puffs_framev_enablefd(struct puffs_usermount *pu, int fd, int what)
 {
 	struct kevent kev;
 	struct puffs_fctrl_io *fio;
-	int rv;
+	int rv = 0;
 
 	assert((what & (PUFFS_FBIO_READ | PUFFS_FBIO_WRITE)) != 0);
 
@@ -700,8 +807,10 @@ puffs_framev_enablefd(struct puffs_usermount *pu, int fd, int what)
 	}
 
 	/* write is enabled in the event loop if there is output */
-	EV_SET(&kev, fd, EVFILT_READ, EV_ENABLE, 0, 0, (uintptr_t)fio);
-	rv = kevent(pu->pu_kq, &kev, 1, NULL, 0, NULL);
+	if (what & PUFFS_FBIO_READ && fio->rwait == 0) {
+		EV_SET(&kev, fd, EVFILT_READ, EV_ENABLE, 0, 0, (uintptr_t)fio);
+		rv = kevent(pu->pu_kq, &kev, 1, NULL, 0, NULL);
+	}
 
 	if (rv == 0) {
 		if (what & PUFFS_FBIO_READ)
@@ -730,18 +839,20 @@ puffs_framev_disablefd(struct puffs_usermount *pu, int fd, int what)
 	}
 
 	i = 0;
-
-	if (what & PUFFS_FBIO_READ) {
+	if (what & PUFFS_FBIO_READ && fio->rwait == 0) {
 		EV_SET(&kev[0], fd,
 		    EVFILT_READ, EV_DISABLE, 0, 0, (uintptr_t)fio);
 		i++;
 	}
-	if (what & PUFFS_FBIO_WRITE && fio->stat & FIO_WR) {
+	if (what & PUFFS_FBIO_WRITE && fio->stat & FIO_WR && fio->wwait == 0) {
 		EV_SET(&kev[1], fd,
 		    EVFILT_WRITE, EV_DISABLE, 0, 0, (uintptr_t)fio);
 		i++;
 	}
-	rv = kevent(pu->pu_kq, kev, i, NULL, 0, NULL);
+	if (i)
+		rv = kevent(pu->pu_kq, kev, i, NULL, 0, NULL);
+	else
+		rv = 0;
 
 	if (rv == 0) {
 		if (what & PUFFS_FBIO_READ)
@@ -822,11 +933,18 @@ static int
 removefio(struct puffs_usermount *pu, struct puffs_fctrl_io *fio, int error)
 {
 	struct puffs_framectrl *pfctrl = &pu->pu_framectrl;
+	struct puffs_fbevent *fbevp;
 
 	LIST_REMOVE(fio, fio_entries);
 	if (pu->pu_state & PU_INLOOP) {
 		puffs_framev_readclose(pu, fio, error);
 		puffs_framev_writeclose(pu, fio, error);
+	}
+
+	while ((fbevp = LIST_FIRST(&fio->ev_qing)) != NULL) {
+		fbevp->rv = error;
+		LIST_REMOVE(fbevp, pfe_entries);
+		puffs_goto(fbevp->pcc);
 	}
 
 	/* don't bother with realloc */

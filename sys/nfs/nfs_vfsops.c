@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_vfsops.c,v 1.179 2007/07/17 11:19:35 pooka Exp $	*/
+/*	$NetBSD: nfs_vfsops.c,v 1.183 2007/08/05 09:40:40 yamt Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1995
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_vfsops.c,v 1.179 2007/07/17 11:19:35 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_vfsops.c,v 1.183 2007/08/05 09:40:40 yamt Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -120,7 +120,7 @@ struct vfsops nfs_vfsops = {
 	nfs_mountroot,
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
-	vfs_stdsuspendctl,
+	(void *)eopnotsupp,	/* vfs_suspendctl */
 	nfs_vnodeopv_descs,
 	0,
 	{ NULL, NULL },
@@ -561,8 +561,7 @@ nfs_decode_args(nmp, argp, l)
 		if (nmp->nm_sotype == SOCK_DGRAM)
 			while (nfs_connect(nmp, (struct nfsreq *)0, l)) {
 				printf("nfs_args: retrying connect\n");
-				(void) tsleep((void *)&lbolt,
-					      PSOCK, "nfscn3", 0);
+				kpause("nfscn3", false, hz, NULL);
 			}
 	}
 }
@@ -579,7 +578,7 @@ nfs_decode_args(nmp, argp, l)
 /* ARGSUSED */
 int
 nfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
-    struct nameidata *ndp, struct lwp *l)
+    struct lwp *l)
 {
 	int error;
 	struct nfs_args *args = data;
@@ -969,7 +968,7 @@ loop:
 		nvp = TAILQ_NEXT(vp, v_mntvnodes);
 		if (waitfor == MNT_LAZY || VOP_ISLOCKED(vp) ||
 		    (LIST_EMPTY(&vp->v_dirtyblkhd) &&
-		     vp->v_uobj.uo_npages == 0))
+		     UVM_OBJ_IS_CLEAN(&vp->v_uobj)))
 			continue;
 		if (vget(vp, LK_EXCLUSIVE))
 			goto loop;
