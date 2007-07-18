@@ -1,7 +1,7 @@
-/*	$NetBSD: pci_machdep.h,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $	*/
+/* $NetBSD: mcclockvar.h,v 1.5 2007/07/21 11:59:56 tsutsui Exp $ */
 
 /*
- * Copyright (c) 1995 Carnegie-Mellon University.
+ * Copyright (c) 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
@@ -26,11 +26,5 @@
  * any improvements or extensions that they make and grant Carnegie the
  * rights to redistribute these changes.
  */
-/*
- * Machine-specific definitions for PCI autoconfiguration.
- */
 
-/*
- * Configuration tag.
- */
-typedef u_long pci_tag_t;
+void mcclock_attach(struct mc146818_softc *);

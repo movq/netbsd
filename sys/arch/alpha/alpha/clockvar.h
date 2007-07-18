@@ -1,7 +1,7 @@
-/*	$NetBSD: pci_machdep.h,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $	*/
+/* $NetBSD: clockvar.h,v 1.5 2007/07/21 11:59:56 tsutsui Exp $ */
 
 /*
- * Copyright (c) 1995 Carnegie-Mellon University.
+ * Copyright (c) 1994, 1995 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
@@ -26,11 +26,9 @@
  * any improvements or extensions that they make and grant Carnegie the
  * rights to redistribute these changes.
  */
-/*
- * Machine-specific definitions for PCI autoconfiguration.
- */
 
 /*
- * Configuration tag.
+ * Definitions for CPU-independent clock handling for the alpha 
  */
-typedef u_long pci_tag_t;
+
+void clockattach(void (*)(void *), void *);
