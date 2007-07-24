@@ -1,4 +1,4 @@
-/*	$NetBSD: ipproto.c,v 1.1 2007/07/24 11:43:13 drochner Exp $	*/
+/*	$NetBSD: ipproto.c,v 1.1.1.1 2007/07/24 11:43:13 drochner Exp $	*/
 
 /* 
  * Redistribution and use in source and binary forms, with or without

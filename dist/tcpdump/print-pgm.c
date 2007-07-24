@@ -1,4 +1,4 @@
-/*	$NetBSD: print-pgm.c,v 1.1 2007/07/24 11:43:01 drochner Exp $	*/
+/*	$NetBSD: print-pgm.c,v 1.1.1.1 2007/07/24 11:43:01 drochner Exp $	*/
 
 /*
  * Redistribution and use in source and binary forms, with or without

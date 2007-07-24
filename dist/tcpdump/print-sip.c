@@ -1,4 +1,4 @@
-/*	$NetBSD: print-sip.c,v 1.1 2007/07/24 11:42:58 drochner Exp $	*/
+/*	$NetBSD: print-sip.c,v 1.1.1.1 2007/07/24 11:42:58 drochner Exp $	*/
 
 /*
  * Redistribution and use in source and binary forms, with or without

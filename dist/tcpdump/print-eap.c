@@ -1,4 +1,4 @@
-/*	$NetBSD: print-eap.c,v 1.1 2007/07/24 11:42:50 drochner Exp $	*/
+/*	$NetBSD: print-eap.c,v 1.1.1.1 2007/07/24 11:42:50 drochner Exp $	*/
 
 /*
  * Copyright (c) 2004 - Michael Richardson <mcr@xelerance.com>
