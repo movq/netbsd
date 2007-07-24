@@ -1,4 +1,4 @@
-/*	$NetBSD: print-slow.c,v 1.1 2007/07/24 11:42:58 drochner Exp $	*/
+/*	$NetBSD: print-slow.c,v 1.1.1.1 2007/07/24 11:42:58 drochner Exp $	*/
 
 /*
  * Copyright (c) 1998-2005 The TCPDUMP project

@@ -1,4 +1,4 @@
-/*	$NetBSD: print-dccp.c,v 1.1 2007/07/24 11:43:03 drochner Exp $	*/
+/*	$NetBSD: print-dccp.c,v 1.1.1.1 2007/07/24 11:43:03 drochner Exp $	*/
 
 /*
  * Copyright (C) Arnaldo Carvalho de Melo 2004

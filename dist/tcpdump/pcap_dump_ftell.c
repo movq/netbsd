@@ -1,4 +1,4 @@
-/*	$NetBSD: pcap_dump_ftell.c,v 1.1 2007/07/24 11:42:54 drochner Exp $	*/
+/*	$NetBSD: pcap_dump_ftell.c,v 1.1.1.1 2007/07/24 11:42:54 drochner Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994, 1995, 1996, 1997

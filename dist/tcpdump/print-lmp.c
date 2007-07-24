@@ -1,4 +1,4 @@
-/*	$NetBSD: print-lmp.c,v 1.1 2007/07/24 11:43:05 drochner Exp $	*/
+/*	$NetBSD: print-lmp.c,v 1.1.1.1 2007/07/24 11:43:05 drochner Exp $	*/
 
 /*
  * Redistribution and use in source and binary forms, with or without

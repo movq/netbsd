@@ -1,4 +1,4 @@
-/*	$NetBSD: print-syslog.c,v 1.1 2007/07/24 11:43:14 drochner Exp $	*/
+/*	$NetBSD: print-syslog.c,v 1.1.1.1 2007/07/24 11:43:14 drochner Exp $	*/
 
 /*
  * Copyright (c) 1998-2004  Hannes Gredler <hannes@tcpdump.org>

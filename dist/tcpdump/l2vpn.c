@@ -1,4 +1,4 @@
-/*	$NetBSD: l2vpn.c,v 1.1 2007/07/24 11:42:52 drochner Exp $	*/
+/*	$NetBSD: l2vpn.c,v 1.1.1.1 2007/07/24 11:42:52 drochner Exp $	*/
 
 /* 
  * Redistribution and use in source and binary forms, with or without

@@ -1,4 +1,4 @@
-/*	$NetBSD: af.c,v 1.1 2007/07/24 11:43:01 drochner Exp $	*/
+/*	$NetBSD: af.c,v 1.1.1.1 2007/07/24 11:43:01 drochner Exp $	*/
 
 /*
  * Copyright (c) 1998-2006 The TCPDUMP project
