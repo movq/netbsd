@@ -1,7 +1,7 @@
-/*	$NetBSD: pci_machdep.h,v 1.1.1.1 1996/05/05 12:17:03 oki Exp $	*/
+/*	$NetBSD: kcore.h,v 1.1 2008/01/01 14:06:43 chris Exp $	*/
 
 /*
- * Copyright (c) 1995 Carnegie-Mellon University.
+ * Copyright (c) 1996 Carnegie-Mellon University.
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
@@ -26,11 +26,32 @@
  * any improvements or extensions that they make and grant Carnegie the
  * rights to redistribute these changes.
  */
-/*
- * Machine-specific definitions for PCI autoconfiguration.
- */
 
 /*
- * Configuration tag.
+ * Modified for NetBSD/i386 by Jason R. Thorpe, Numerical Aerospace
+ * Simulation Facility, NASA Ames Research Center.
  */
-typedef u_long pci_tag_t;
+
+#ifndef _ARM_KCORE_H_
+#define _ARM_KCORE_H_
+
+typedef struct cpu_kcore_hdr {
+	uint32_t	version;		/* structure version */
+	uint32_t	flags;			/* flags */
+#define	KCORE_ARM_APX        0x0001		/* L1 tables are in APX
+						   format */
+	uint32_t	PAKernelL1Table;	/* PA of kernel L1 table */
+	uint32_t	PAUserL1Table;		/* PA of userland L1 table */
+	uint16_t	UserL1TableSize;	/* size of User L1 table */
+	uint32_t	nmemsegs;		/* Number of RAM segments */
+	uint32_t	omemsegs;		/* offset to memsegs */
+
+	/*
+	 * future versions will add fields here.
+	 */
+#if 0
+	phys_ram_seg_t  memsegs[];		/* RAM segments */
+#endif
+} cpu_kcore_hdr_t;
+
+#endif /* _ARM_KCORE_H_ */
