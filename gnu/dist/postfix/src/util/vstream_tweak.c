@@ -1,4 +1,4 @@
-/*	$NetBSD: vstream_tweak.c,v 1.1 2007/08/02 08:05:40 heas Exp $	*/
+/*	$NetBSD: vstream_tweak.c,v 1.1.1.1 2007/08/02 08:05:40 heas Exp $	*/
 
 /*++
 /* NAME
