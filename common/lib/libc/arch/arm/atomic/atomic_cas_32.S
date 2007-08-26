@@ -1,11 +1,11 @@
-/*	$NetBSD: atomic_cas_32.S,v 1.1.2.2 2007/04/22 05:12:41 thorpej Exp $	*/
+/*	$NetBSD: atomic_cas_32.S,v 1.1.2.3 2007/08/26 05:57:03 matt Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Jason R. Thorpe.
+ * by Jason R. Thorpe and Matt Thomas.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -38,13 +38,25 @@
 
 #include "atomic_op_asm.h"
 
-#if defined(_KERNEL)
-
-	.text
-	.align	0
-
+#if defined(_ARM_ARCH_6)
 /*
- * ARM doesn't have a compare-and-swap, so this is implemented
+ * ARMv6 has load-exclusive/store-exclusive which works for both user
+ * and kernel.
+ */
+ENTRY_NP(_atomic_cas_32)
+	mov	r3, r0			/* we need r0 for return value */
+1:
+	ldrex	r0, [r3]		/* load old value */
+	teq	r0, r1			/*   compare? */
+	RETc(ne)			/*     return if different */
+	strex	r4, r2, [r3]		/* store new value */
+	cmpeq	r4, #0			/*   succeed? */
+	bne	1b			/*     nope, try again. */
+	RET				/*    yes, return. */
+	END(_atomic_cas_32)
+#elif defined(_KERNEL)
+/*
+ * ARM before ARMv6 doesn't have a compare-and-swap, so this is implemented
  * as a restartable atomic sequence.  See irq_dispatch.S.
  */
 ENTRY_NP(_atomic_cas_32)
@@ -62,15 +74,18 @@ _C_LABEL(_atomic_cas_32_ras_start):
 _C_LABEL(_atomic_cas_32_ras_end):
 
 1:	RET				/* r0 contains old *addr */
+	END(_atomic_cas_32)
+#else /* _KERNEL */
+
+#error _atomic_cas_32 for user land still needs to be written
+
+#endif /* _KERNEL */
 
 ATOMIC_OP_ALIAS(atomic_cas_32,_atomic_cas_32)
 ATOMIC_OP_ALIAS(atomic_cas_uint,_atomic_cas_32)
-STRONG_ALIAS(_atomic_cas_uint,_atomic_cas_32)
 ATOMIC_OP_ALIAS(atomic_cas_ulong,_atomic_cas_32)
-STRONG_ALIAS(_atomic_cas_ulong,_atomic_cas_32)
 ATOMIC_OP_ALIAS(atomic_cas_ptr,_atomic_cas_32)
+STRONG_ALIAS(_atomic_cas_uint,_atomic_cas_32)
+STRONG_ALIAS(_atomic_cas_ulong,_atomic_cas_32)
 STRONG_ALIAS(_atomic_cas_ptr,_atomic_cas_32)
 
-#else /* _KERNEL */
-
-#endif /* _KERNEL */
