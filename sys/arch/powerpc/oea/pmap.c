@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.48 2007/03/12 18:18:26 ad Exp $	*/
+/*	$NetBSD: pmap.c,v 1.43 2006/10/30 17:52:12 garbled Exp $	*/
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.48 2007/03/12 18:18:26 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.43 2006/10/30 17:52:12 garbled Exp $");
 
 #include "opt_ppcarch.h"
 #include "opt_altivec.h"
@@ -550,7 +550,7 @@ mfrtcltbl(void)
 void
 tlbia(void)
 {
-	char *i;
+	caddr_t i;
 	
 	SYNC();
 #if defined(PPC_OEA)
@@ -560,7 +560,7 @@ tlbia(void)
 	 * This needs to be a per-CPU callback to do the appropriate thing
 	 * for the CPU. XXX
 	 */
-	for (i = 0; i < (char *)0x00040000; i += 0x00001000) {
+	for (i = 0; i < (caddr_t)0x00040000; i += 0x00001000) {
 		TLBIE(i);
 		EIEIO();
 		SYNC();
@@ -568,7 +568,7 @@ tlbia(void)
 #elif defined (PPC_OEA64) || defined (PPC_OEA64_BRIDGE)
 	printf("Invalidating ALL TLB entries......\n");
 	/* This is specifically for the 970, 970UM v1.6 pp. 140. */
-	for (i = 0; i <= (void *)0xFF000; i += 0x00001000) {
+	for (i = 0; i <= (caddr_t)0xFF000; i += 0x00001000) {
 		TLBIEL(i);
 		EIEIO();
 		SYNC();
@@ -932,7 +932,7 @@ pmap_pte_insert(int ptegidx, struct pte *pvo_pt)
  */
 
 int
-pmap_pte_spill(struct pmap *pm, vaddr_t addr, bool exec)
+pmap_pte_spill(struct pmap *pm, vaddr_t addr, boolean_t exec)
 {
 	struct pvo_entry *source_pvo, *victim_pvo, *next_pvo;
 	struct pvo_entry *pvo;
@@ -1166,7 +1166,7 @@ pmap_init(void)
 
 	pool_init(&pmap_mpvo_pool, sizeof(struct pvo_entry),
 	    sizeof(struct pvo_entry), 0, 0, "pmap_mpvopl",
-	    &pmap_pool_mallocator, IPL_NONE);
+	    &pmap_pool_mallocator);
 
 	pool_setlowat(&pmap_mpvo_pool, 1008);
 
@@ -1197,7 +1197,7 @@ pmap_create(void)
 	pmap_t pm;
 
 	pm = pool_get(&pmap_pool, PR_WAITOK);
-	memset((void *)pm, 0, sizeof *pm);
+	memset((caddr_t)pm, 0, sizeof *pm);
 	pmap_pinit(pm);
 	
 	DPRINTFN(CREATE,("pmap_create: pm %p:\n"
@@ -1745,7 +1745,7 @@ pmap_pvo_enter(pmap_t pm, struct pool *pl, struct pvo_head *pvo_head,
 		 * If this is a kernel page, make sure it's active.
 		 */
 		if (pm == pmap_kernel()) {
-			i = pmap_pte_spill(pm, va, false);
+			i = pmap_pte_spill(pm, va, FALSE);
 			KASSERT(i);
 		}
 	}
@@ -2122,7 +2122,7 @@ pmap_remove(pmap_t pm, vaddr_t va, vaddr_t endva)
 /*
  * Get the physical page address for the given pmap/virtual address.
  */
-bool
+boolean_t
 pmap_extract(pmap_t pm, vaddr_t va, paddr_t *pap)
 {
 	struct pvo_entry *pvo;
@@ -2149,7 +2149,7 @@ pmap_extract(pmap_t pm, vaddr_t va, paddr_t *pap)
 				    (~(batu & BAT_BL) << 15) & ~0x1ffffL;
 				if (pap)
 					*pap = (batl & mask) | (va & ~mask);
-				return true;
+				return TRUE;
 			}
 		} else {
 			register_t batu = battable[va >> 23].batu;
@@ -2161,15 +2161,15 @@ pmap_extract(pmap_t pm, vaddr_t va, paddr_t *pap)
 				    (~(batl & BAT601_BSM) << 17) & ~0x1ffffL;
 				if (pap)
 					*pap = (batl & mask) | (va & ~mask);
-				return true;
+				return TRUE;
 			} else if (SR601_VALID_P(sr) &&
 				   SR601_PA_MATCH_P(sr, va)) {
 				if (pap)
 					*pap = va;
-				return true;
+				return TRUE;
 			}
 		}
-		return false;
+		return FALSE;
 #elif defined (PPC_OEA64_BRIDGE)
 	panic("%s: pm: %s, va: 0x%08lx\n", __FUNCTION__, 
 		(pm == pmap_kernel() ? "kernel" : "user"), va);
@@ -2394,7 +2394,7 @@ pmap_deactivate(struct lwp *l)
 {
 }
 
-bool
+boolean_t
 pmap_query_bit(struct vm_page *pg, int ptebit)
 {
 	struct pvo_entry *pvo;
@@ -2402,7 +2402,7 @@ pmap_query_bit(struct vm_page *pg, int ptebit)
 	register_t msr;
 
 	if (pmap_attr_fetch(pg) & ptebit)
-		return true;
+		return TRUE;
 
 	msr = pmap_interrupts_off();
 	LIST_FOREACH(pvo, vm_page_to_pvoh(pg), pvo_vlink) {
@@ -2415,7 +2415,7 @@ pmap_query_bit(struct vm_page *pg, int ptebit)
 			pmap_attr_save(pg, ptebit);
 			PMAP_PVO_CHECK(pvo);		/* sanity check */
 			pmap_interrupts_restore(msr);
-			return true;
+			return TRUE;
 		}
 	}
 	/*
@@ -2438,15 +2438,15 @@ pmap_query_bit(struct vm_page *pg, int ptebit)
 				pmap_attr_save(pg, ptebit);
 				PMAP_PVO_CHECK(pvo);		/* sanity check */
 				pmap_interrupts_restore(msr);
-				return true;
+				return TRUE;
 			}
 		}
 	}
 	pmap_interrupts_restore(msr);
-	return false;
+	return FALSE;
 }
 
-bool
+boolean_t
 pmap_clear_bit(struct vm_page *pg, int ptebit)
 {
 	struct pvo_head *pvoh = vm_page_to_pvoh(pg);
@@ -2828,7 +2828,7 @@ pmap_pool_ualloc(struct pool *pp, int flags)
 		SIMPLEQ_REMOVE_HEAD(&pmap_upvop_head, pvop_link);
 		return pvop;
 	}
-	if (uvm.page_init_done != true) {
+	if (uvm.page_init_done != TRUE) {
 		return (void *) uvm_pageboot_alloc(PAGE_SIZE);
 	}
 	return pmap_pool_malloc(pp, flags);
@@ -2906,7 +2906,7 @@ pmap_steal_memory(vsize_t vsize, vaddr_t *vstartp, vaddr_t *vendp)
 	int npgs, bank;
 	struct vm_physseg *ps;
 
-	if (uvm.page_init_done == true)
+	if (uvm.page_init_done == TRUE)
 		panic("pmap_steal_memory: called _after_ bootstrap");
 
 	*vstartp = VM_MIN_KERNEL_ADDRESS;
@@ -2951,7 +2951,7 @@ pmap_steal_memory(vsize_t vsize, vaddr_t *vstartp, vaddr_t *vendp)
 	}
 
 	va = (vaddr_t) pa;
-	memset((void *) va, 0, size);
+	memset((caddr_t) va, 0, size);
 	pmap_pages_stolen += npgs;
 #ifdef DEBUG
 	if (pmapdebug && npgs > 1) {
@@ -3464,13 +3464,12 @@ pmap_bootstrap(paddr_t kernelstart, paddr_t kernelend)
 
 	pool_init(&pmap_upvo_pool, sizeof(struct pvo_entry),
 	    sizeof(struct pvo_entry), 0, 0, "pmap_upvopl",
-	    &pmap_pool_uallocator, IPL_NONE);
+	    &pmap_pool_uallocator);
 
 	pool_setlowat(&pmap_upvo_pool, 252);
 
 	pool_init(&pmap_pool, sizeof(struct pmap),
-	    sizeof(void *), 0, 0, "pmap_pl", &pmap_pool_uallocator,
-	    IPL_NONE);
+	    sizeof(void *), 0, 0, "pmap_pl", &pmap_pool_uallocator);
 
 #if defined(PMAP_NEED_MAPKERNEL)
 	{

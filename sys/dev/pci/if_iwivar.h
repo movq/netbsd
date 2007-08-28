@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iwivar.h,v 1.13 2006/12/20 16:30:20 skrll Exp $ */
+/*	$NetBSD: if_iwivar.h,v 1.12.6.1 2006/12/29 18:50:40 riz Exp $ */
 
 /*-
  * Copyright (c) 2004, 2005

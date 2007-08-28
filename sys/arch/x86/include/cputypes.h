@@ -1,4 +1,4 @@
-/*	$NetBSD: cputypes.h,v 1.1 2007/01/01 20:56:59 ad Exp $	*/
+/*	$NetBSD: cputypes.h,v 1.1.20.2 2007/06/05 20:28:11 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1993 Christopher G. Demetriou

@@ -1,4 +1,4 @@
-/*	$NetBSD: mt.c,v 1.11 2007/07/29 12:15:43 ad Exp $ */
+/*	$NetBSD: mt.c,v 1.6 2006/03/29 06:33:50 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1996-2003 The NetBSD Foundation, Inc.
@@ -121,7 +121,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mt.c,v 1.11 2007/07/29 12:15:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mt.c,v 1.6 2006/03/29 06:33:50 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -178,7 +178,7 @@ struct	mt_softc {
 
 #define	MTUNIT(x)	(minor(x) & 0x03)
 
-#define B_CMD		B_DEVPRIVATE	/* command buf instead of data */
+#define B_CMD		B_XXX		/* command buf instead of data */
 #define	b_cmd		b_blkno		/* blkno holds cmd when B_CMD */
 
 int	mtmatch(struct device *, struct cfdata *, void *);
@@ -220,7 +220,7 @@ extern struct cfdriver mt_cd;
 
 struct	mtinfo {
 	u_short	hwid;
-	const char	*desc;
+	char	*desc;
 } mtinfo[] = {
 	{ MT7978ID,	"7978"	},
 	{ MT7979AID,	"7979A"	},
@@ -279,8 +279,8 @@ mtattach(parent, self, aux)
 	sc->sc_flags = MTF_EXISTS;
 
 	bufq_alloc(&sc->sc_tab, "fcfs", 0);
-	callout_init(&sc->sc_start_ch, 0);
-	callout_init(&sc->sc_intr_ch, 0);
+	callout_init(&sc->sc_start_ch);
+	callout_init(&sc->sc_intr_ch);
 
 	if (gpibregister(sc->sc_ic, sc->sc_slave, mtcallback, sc,
 	    &sc->sc_hdl)) {
@@ -374,10 +374,10 @@ getstats:
 }
 
 int
-mtopen(dev, flag, mode, l)
+mtopen(dev, flag, mode, p)
 	dev_t dev;
 	int flag, mode;
-	struct lwp *l;
+	struct proc *p;
 {
 	struct mt_softc *sc;
 	int req_den;
@@ -394,7 +394,7 @@ mtopen(dev, flag, mode, l)
 	    sc->sc_flags));
 
 	sc->sc_flags |= MTF_OPEN;
-	sc->sc_ttyp = tprintf_open(l->l_proc);
+	sc->sc_ttyp = tprintf_open(p);
 	if ((sc->sc_flags & MTF_ALIVE) == 0) {
 		error = mtcommand(dev, MTRESET, 0);
 		if (error != 0 || (sc->sc_flags & MTF_ALIVE) == 0)
@@ -407,7 +407,7 @@ mtopen(dev, flag, mode, l)
 			goto errout;
 		if (!(sc->sc_flags & MTF_REW))
 			break;
-		if (tsleep((void *) &lbolt, PCATCH | (PZERO + 1),
+		if (tsleep((caddr_t) &lbolt, PCATCH | (PZERO + 1),
 		    "mt", 0) != 0) {
 			error = EINTR;
 			goto errout;
@@ -480,10 +480,10 @@ errout:
 }
 
 int
-mtclose(dev, flag, fmt, l)
+mtclose(dev, flag, fmt, p)
 	dev_t dev;
 	int flag, fmt;
-	struct lwp *l;
+	struct proc *p;
 {
 	struct mt_softc *sc;
 
@@ -524,7 +524,7 @@ mtcommand(dev, cmd, cnt)
 		bp->b_flags = B_BUSY | B_CMD;
 		mtstrategy(bp);
 		biowait(bp);
-		if (bp->b_error != 0) {
+		if (bp->b_flags & B_ERROR) {
 			error = (int) (unsigned) bp->b_error;
 			break;
 		}
@@ -576,11 +576,12 @@ mtstrategy(bp)
 		}
 		if (bp->b_bcount > s) {
 			tprintf(sc->sc_ttyp,
-				"%s: write record (%d) too big: limit (%d)\n",
+				"%s: write record (%ld) too big: limit (%d)\n",
 				sc->sc_dev.dv_xname, bp->b_bcount, s);
 #if 0 /* XXX see above */
 	    error:
 #endif
+			bp->b_flags |= B_ERROR;
 			bp->b_error = EIO;
 			biodone(bp);
 			return;
@@ -692,7 +693,7 @@ mtstart(sc)
 		    case 2:
 			if (bp->b_cmd != MTNOP || !(bp->b_flags & B_CMD)) {
 				bp->b_error = EBUSY;
-				goto done;
+				goto errdone;
 			}
 			goto done;
 
@@ -707,7 +708,7 @@ mtstart(sc)
 			    case MTWEOF:
 			    case MTFSR:
 				bp->b_error = ENOSPC;
-				goto done;
+				goto errdone;
 
 			    case MTBSF:
 			    case MTOFFL:
@@ -811,7 +812,7 @@ mtstart(sc)
 	} else {
 		if (sc->sc_flags & MTF_PASTEOT) {
 			bp->b_error = ENOSPC;
-			goto done;
+			goto errdone;
 		}
 		if (bp->b_flags & B_READ) {
 			sc->sc_flags |= MTF_IO;
@@ -838,6 +839,8 @@ fatalerror:
 	 */
 	sc->sc_flags &= MTF_EXISTS | MTF_OPEN | MTF_REW;
 	bp->b_error = EIO;
+errdone:
+	bp->b_flags |= B_ERROR;
 done:
 	sc->sc_flags &= ~(MTF_HITEOF | MTF_HITBOF);
 	(void)BUFQ_GET(sc->sc_tab);
@@ -955,6 +958,7 @@ mtintr(sc)
 		if (sc->sc_flags & MTF_ATEOT)
 			sc->sc_flags |= MTF_PASTEOT;
 		else {
+			bp->b_flags |= B_ERROR;
 			bp->b_error = ENOSPC;
 			sc->sc_flags |= MTF_ATEOT;
 		}
@@ -991,11 +995,12 @@ mtintr(sc)
 			    sc->sc_dev.dv_xname, bp->b_bcount, bp->b_resid));
 		} else {
 			tprintf(sc->sc_ttyp,
-				"%s: record (%d) larger than wanted (%d)\n",
+				"%s: record (%d) larger than wanted (%ld)\n",
 				sc->sc_dev.dv_xname, i, bp->b_bcount);
 error:
 			sc->sc_flags &= ~MTF_IO;
 			bp->b_error = EIO;
+			bp->b_flags |= B_ERROR;
 		}
 	}
 	/*
@@ -1043,12 +1048,12 @@ mtwrite(dev, uio, flags)
 }
 
 int
-mtioctl(dev, cmd, data, flag, l)
+mtioctl(dev, cmd, data, flag, p)
 	dev_t dev;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 	int flag;
-	struct lwp *l;
+	struct proc *p;
 {
 	struct mtop *op;
 	int cnt;

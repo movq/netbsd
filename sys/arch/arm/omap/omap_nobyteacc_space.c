@@ -1,4 +1,4 @@
-/*	$NetBSD: omap_nobyteacc_space.c,v 1.1 2007/01/06 00:29:52 christos Exp $ */
+/*	$NetBSD: omap_nobyteacc_space.c,v 1.1.6.2 2007/02/21 18:27:17 snj Exp $ */
 
 /*
  * "nobyteacc" bus_space functions for Texas Instruments OMAP processor.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap_nobyteacc_space.c,v 1.1 2007/01/06 00:29:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap_nobyteacc_space.c,v 1.1.6.2 2007/02/21 18:27:17 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

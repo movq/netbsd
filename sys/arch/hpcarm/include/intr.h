@@ -1,4 +1,4 @@
-/* 	$NetBSD: intr.h,v 1.9 2007/07/01 16:04:57 toshii Exp $	*/
+/* 	$NetBSD: intr.h,v 1.7 2003/06/16 20:01:00 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -49,14 +49,11 @@
 #define IPL_VM		6	/* memory allocation */
 #define IPL_AUDIO	7	/* audio */
 #define IPL_CLOCK	8	/* clock */
-#define	IPL_STATCLOCK	9
-#define IPL_HIGH	10	/*  */
-#define	IPL_SCHED	IPL_HIGH
-#define	IPL_LOCK	IPL_HIGH
-#define IPL_SERIAL	11	/* serial */
-#define IPL_NONE	12
+#define IPL_HIGH	9	/*  */
+#define IPL_SERIAL	10	/* serial */
+#define IPL_NONE	11
 
-#define NIPL		13
+#define NIPL		12
 
 #define	IST_UNUSABLE	-1	/* interrupt cannot be used */
 #define	IST_NONE	0	/* none (dummy) */
@@ -79,7 +76,6 @@
 void *softintr_establish(int, void (*)(void *), void *);
 void softintr_disestablish(void *);
 void softintr_schedule(void *);
-void setsoftnet(void);
 #endif
 
 #endif	/* _HPCARM_INTR_H */

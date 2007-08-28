@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_wait.c,v 1.3 2007/03/18 21:38:33 dsl Exp $ */
+/*	$NetBSD: linux32_wait.c,v 1.1 2006/02/09 19:18:57 manu Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_wait.c,v 1.3 2007/03/18 21:38:33 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_wait.c,v 1.1 2006/02/09 19:18:57 manu Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -43,6 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_wait.c,v 1.3 2007/03/18 21:38:33 dsl Exp $")
 #include <sys/kernel.h>
 #include <sys/fcntl.h>
 #include <sys/select.h>
+#include <sys/sa.h>
 #include <sys/proc.h>
 #include <sys/ucred.h>
 #include <sys/swap.h>
@@ -83,7 +84,7 @@ linux32_sys_waitpid(l, v, retval)
 	struct linux_sys_wait4_args ua;
 
 	SCARG(&ua, pid) = SCARG(uap, pid);
-	SCARG(&ua, status) = SCARG_P32(uap, status);
+	SCARG(&ua, status) = NETBSD32PTR64(SCARG(uap, status));
 	SCARG(&ua, options) = SCARG(uap, options);
 	SCARG(&ua, rusage) = NULL;
 

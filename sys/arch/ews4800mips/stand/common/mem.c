@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.c,v 1.4 2007/02/22 05:31:54 thorpej Exp $	*/
+/*	$NetBSD: mem.c,v 1.2 2006/01/25 18:28:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -53,7 +53,7 @@
 
 void mem_write(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
 void mem_read(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t);
-bool __ga_rom;
+boolean_t __ga_rom;
 
 int
 cmd_mem(int argc, char *argp[], int interactive)
@@ -74,10 +74,10 @@ cmd_mem(int argc, char *argp[], int interactive)
 
 	if (c == 'g') {
 		size = a[3];	/* GA-ROM special */
-		__ga_rom = true;
+		__ga_rom = TRUE;
 	} else {
 		size = a[1] * a[3];
-		__ga_rom = false;
+		__ga_rom = FALSE;
 	}
 
 	p = 0;

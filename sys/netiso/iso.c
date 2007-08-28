@@ -1,4 +1,4 @@
-/*	$NetBSD: iso.c,v 1.42 2007/05/02 20:40:28 dyoung Exp $	*/
+/*	$NetBSD: iso.c,v 1.39 2006/10/25 23:40:57 elad Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -62,7 +62,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iso.c,v 1.42 2007/05/02 20:40:28 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iso.c,v 1.39 2006/10/25 23:40:57 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -230,9 +230,8 @@ iso_netmatch(const struct sockaddr_iso *sisoa,
  *			quantities.
  */
 u_long
-iso_hashchar(void *bufv, int len)
+iso_hashchar(caddr_t buf, int len)
 {
-	char *buf = bufv;
 	u_long h = 0;
 	int    i;
 
@@ -293,7 +292,7 @@ iso_hash(
 	bzero(buf, sizeof(buf));
 
 	bufsize = iso_netof(&siso->siso_addr, buf);
-	hp->afh_nethash = iso_hashchar((void *) buf, bufsize);
+	hp->afh_nethash = iso_hashchar((caddr_t) buf, bufsize);
 
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_ROUTE]) {
@@ -301,7 +300,7 @@ iso_hash(
 	}
 #endif
 
-	hp->afh_hosthash = iso_hashchar((void *) & siso->siso_addr,
+	hp->afh_hosthash = iso_hashchar((caddr_t) & siso->siso_addr,
 					siso->siso_addr.isoa_len);
 
 #ifdef ARGO_DEBUG
@@ -335,7 +334,7 @@ iso_hash(
 u_int
 iso_netof(
 	struct iso_addr *isoa,	/* address */
-	void *        buf)	/* RESULT: network portion of address here */
+	caddr_t         buf)	/* RESULT: network portion of address here */
 {
 	u_int           len = 1;/* length of afi */
 
@@ -424,7 +423,7 @@ iso_netof(
 		len = 0;
 	}
 
-	bcopy((void *) isoa, buf, len);
+	bcopy((caddr_t) isoa, buf, len);
 #ifdef ARGO_DEBUG
 	if (argo_debug[D_ROUTE]) {
 		printf("iso_netof: isoa ");
@@ -442,7 +441,7 @@ iso_netof(
  */
 /* ARGSUSED */
 int
-iso_control(struct socket *so, u_long cmd, void *data, struct ifnet *ifp,
+iso_control(struct socket *so, u_long cmd, caddr_t data, struct ifnet *ifp,
 	struct lwp *l)
 {
 	struct iso_ifreq *ifr = (struct iso_ifreq *) data;
@@ -454,7 +453,7 @@ iso_control(struct socket *so, u_long cmd, void *data, struct ifnet *ifp,
 	 * Find address for this interface, if it exists.
 	 */
 	if (ifp)
-		TAILQ_FOREACH(ia, &iso_ifaddr, ia_list)
+		for (ia = iso_ifaddr.tqh_first; ia != 0; ia = ia->ia_list.tqe_next)
 			if (ia->ia_ifp == ifp)
 				break;
 
@@ -635,7 +634,7 @@ iso_ifinit(struct ifnet *ifp, struct iso_ifaddr *ia, struct sockaddr_iso *siso,
 	 * and to validate the address if necessary.
 	 */
 	if (ifp->if_ioctl &&
-	    (error = (*ifp->if_ioctl) (ifp, SIOCSIFADDR, (void *) ia))) {
+	    (error = (*ifp->if_ioctl) (ifp, SIOCSIFADDR, (caddr_t) ia))) {
 		splx(s);
 		ia->ia_addr = oldaddr;
 		return (error);
@@ -694,13 +693,14 @@ iso_ifwithidi(struct sockaddr *addr)
 		printf("\n");
 	}
 #endif
-	TAILQ_FOREACH(ifp, &ifnet, if_list) {
+	for (ifp = ifnet.tqh_first; ifp != 0; ifp = ifp->if_list.tqe_next) {
 #ifdef ARGO_DEBUG
 		if (argo_debug[D_ROUTE]) {
 			printf("iso_ifwithidi ifnet %s\n", ifp->if_name);
 		}
 #endif
-		TAILQ_FOREACH(ifa, &ifp->if_addrlist, ifa_list) {
+		for (ifa = ifp->if_addrlist.tqh_first; ifa != 0;
+		     ifa = ifa->ifa_list.tqe_next) {
 #ifdef ARGO_DEBUG
 			if (argo_debug[D_ROUTE]) {
 				printf("iso_ifwithidi address ");
@@ -802,17 +802,17 @@ iso_eqtype(
  * NOTES:
  */
 struct iso_ifaddr *
-iso_localifa(const struct sockaddr_iso *siso)
+iso_localifa(struct sockaddr_iso *siso)
 {
 	struct iso_ifaddr *ia;
-	const char *cp1, *cp2, *cp3;
+	char  *cp1, *cp2, *cp3;
 	struct ifnet *ifp;
 	struct iso_ifaddr *ia_maybe = 0;
 	/*
 	 * We make one pass looking for both net matches and an exact
 	 * dst addr.
 	 */
-	TAILQ_FOREACH(ia, &iso_ifaddr, ia_list) {
+	for (ia = iso_ifaddr.tqh_first; ia != 0; ia = ia->ia_list.tqe_next) {
 		if ((ifp = ia->ia_ifp) == 0 || ((ifp->if_flags & IFF_UP) == 0))
 			continue;
 		if (ifp->if_flags & IFF_POINTOPOINT) {
@@ -860,14 +860,14 @@ int
 iso_nlctloutput(
 	int             cmd,		/* command:set or get */
 	int             optname,	/* option of interest */
-	void *        pcb,		/* nl pcb */
+	caddr_t         pcb,		/* nl pcb */
 	struct mbuf    *m)		/* data for set, buffer for get */
 {
 #ifdef TPCONS
 	struct isopcb  *isop = (struct isopcb *) pcb;
 #endif
 	int             error = 0;	/* return value */
-	void *        data;	/* data for option */
+	caddr_t         data;	/* data for option */
 	int             data_len;	/* data's length */
 
 #ifdef ARGO_DEBUG
@@ -880,7 +880,7 @@ iso_nlctloutput(
 	if ((cmd != PRCO_GETOPT) && (cmd != PRCO_SETOPT))
 		return (EOPNOTSUPP);
 
-	data = mtod(m, void *);
+	data = mtod(m, caddr_t);
 	data_len = (m)->m_len;
 
 #ifdef ARGO_DEBUG
@@ -908,7 +908,7 @@ iso_nlctloutput(
 		}
 #endif
 
-		bcopy(data, (void *) isop->isop_x25crud, (unsigned) data_len);
+		bcopy(data, (caddr_t) isop->isop_x25crud, (unsigned) data_len);
 		isop->isop_x25crud_len = data_len;
 		break;
 #endif				/* TPCONS */
@@ -933,14 +933,14 @@ iso_nlctloutput(
  *
  */
 void
-dump_isoaddr(const struct sockaddr_iso *s)
+dump_isoaddr(struct sockaddr_iso *s)
 {
 	if (s->siso_family == AF_ISO) {
 		printf("ISO address: suffixlen %d, %s\n",
 		       s->siso_tlen, clnp_saddr_isop(s));
 	} else if (s->siso_family == AF_INET) {
 		/* hack */
-		const struct sockaddr_in *sin = satocsin(s);
+		struct sockaddr_in *sin = satosin(s);
 
 		printf("%d.%d.%d.%d: %d",
 		       (sin->sin_addr.s_addr >> 24) & 0xff,

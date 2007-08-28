@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls_12.c,v 1.22 2007/04/30 14:05:47 dsl Exp $	*/
+/*	$NetBSD: vfs_syscalls_12.c,v 1.19 2006/11/16 01:32:41 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_12.c,v 1.22 2007/04/30 14:05:47 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_12.c,v 1.19 2006/11/16 01:32:41 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,18 +52,21 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_12.c,v 1.22 2007/04/30 14:05:47 dsl Exp
 #include <sys/proc.h>
 #include <sys/uio.h>
 #include <sys/dirent.h>
-#include <sys/vfs_syscalls.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/sys/stat.h>
-#include <compat/common/compat_file.h>
+
+static void cvtstat __P((struct stat *, struct stat12 *));
 
 /*
  * Convert from a new to an old stat structure.
  */
-void
-compat_12_stat_conv(const struct stat *st, struct stat12 *ost)
+static void
+cvtstat(st, ost)
+	struct stat *st;
+	struct stat12 *ost;
 {
 
 	ost->st_dev = st->st_dev;
@@ -137,11 +140,17 @@ compat_12_sys_stat(struct lwp *l, void *v, register_t *retval)
 	struct stat sb;
 	struct stat12 osb;
 	int error;
+	struct nameidata nd;
 
-	error = do_sys_stat(l, SCARG(uap, path), FOLLOW, &sb);
+	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_USERSPACE,
+	    SCARG(uap, path), l);
+	if ((error = namei(&nd)) != 0)
+		return (error);
+	error = vn_stat(nd.ni_vp, &sb, l);
+	vput(nd.ni_vp);
 	if (error)
 		return (error);
-	compat_12_stat_conv(&sb, &osb);
+	cvtstat(&sb, &osb);
 	error = copyout(&osb, SCARG(uap, ub), sizeof (osb));
 	return (error);
 }
@@ -161,11 +170,17 @@ compat_12_sys_lstat(struct lwp *l, void *v, register_t *retval)
 	struct stat sb;
 	struct stat12 osb;
 	int error;
+	struct nameidata nd;
 
-	error = do_sys_stat(l, SCARG(uap, path), NOFOLLOW, &sb);
+	NDINIT(&nd, LOOKUP, NOFOLLOW | LOCKLEAF, UIO_USERSPACE,
+	    SCARG(uap, path), l);
+	if ((error = namei(&nd)) != 0)
+		return (error);
+	error = vn_stat(nd.ni_vp, &sb, l);
+	vput(nd.ni_vp);
 	if (error)
 		return (error);
-	compat_12_stat_conv(&sb, &osb);
+	cvtstat(&sb, &osb);
 	error = copyout(&osb, SCARG(uap, ub), sizeof (osb));
 	return (error);
 }
@@ -197,7 +212,7 @@ compat_12_sys_fstat(struct lwp *l, void *v, register_t *retval)
 	FILE_UNUSE(fp, l);
 
 	if (error == 0) {
-		compat_12_stat_conv(&ub, &oub);
+		cvtstat(&ub, &oub);
 		error = copyout(&oub, SCARG(uap, sb), sizeof (oub));
 	}
 	return (error);

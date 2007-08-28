@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_bootstrap.c,v 1.35 2007/05/18 10:45:59 tsutsui Exp $	*/
+/*	$NetBSD: pmap_bootstrap.c,v 1.29 2005/12/11 12:19:45 christos Exp $	*/
 
 /* 
  * Copyright (c) 1991, 1993
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.35 2007/05/18 10:45:59 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.29 2005/12/11 12:19:45 christos Exp $");
 
 #include "opt_m680x0.h"
 
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.35 2007/05/18 10:45:59 tsutsui 
 #include <arch/x68k/x68k/iodevice.h>
 
 
-#define RELOC(v, t)	*((t*)((char *)&(v) + firstpa))
+#define RELOC(v, t)	*((t*)((caddr_t)&(v) + firstpa))
 
 extern char *etext;
 extern int Sysptsize;
@@ -74,9 +74,8 @@ void	pmap_bootstrap(paddr_t, paddr_t);
  *	vmmap:		/dev/mem, crash dumps, parity error checking
  *	msgbufaddr:	kernel message buffer
  */
-void *CADDR1, *CADDR2;
-char *vmmap;
-void *msgbufaddr;
+caddr_t		CADDR1, CADDR2, vmmap;
+extern caddr_t	msgbufaddr;
 
 /*
  * Bootstrap the VM system.
@@ -262,9 +261,9 @@ pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
 			*ste++ = SG_NV;
 			*pte++ = PG_NV;
 		}
-		/*
+ 		/*
 		 * Initialize the last one to point to Sysptmap.
-		 */
+ 		 */
 		*ste = kptmpa | SG_RW | SG_V;
 		*pte = kptmpa | PG_RW | PG_CI | PG_V;
 	}
@@ -305,7 +304,7 @@ pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
 		protopte += PAGE_SIZE;
 	}
 	/*
-	 * map the kernel segment table cache invalidated for
+	 * map the kernel segment table cache invalidated for 
 	 * these machines (for the 68040 not strictly necessary, but
 	 * recommended by Motorola; for the 68060 mandatory)
 	 * XXX this includes p0upa.  why?
@@ -353,7 +352,7 @@ pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
 		(pt_entry_t *)(kptmpa - firstpa);
 	/*
 	 * Sysmap: kernel page table (as mapped through Sysptmap)
-	 * Allocated at the end of KVA space.
+	 * Immediately follows `nptpages' of static kernel page table.
 	 */
 	RELOC(Sysmap, pt_entry_t *) =
 	    (pt_entry_t *)m68k_ptob((NPTEPG - 1) * NPTEPG);
@@ -449,13 +448,13 @@ pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
 	{
 		vaddr_t va = RELOC(virtual_avail, vaddr_t);
 
-		RELOC(CADDR1, void *) = (void *)va;
+		RELOC(CADDR1, caddr_t) = (caddr_t)va;
 		va += PAGE_SIZE;
-		RELOC(CADDR2, void *) = (void *)va;
+		RELOC(CADDR2, caddr_t) = (caddr_t)va;
 		va += PAGE_SIZE;
-		RELOC(vmmap, void *) = (void *)va;
+		RELOC(vmmap, caddr_t) = (caddr_t)va;
 		va += PAGE_SIZE;
-		RELOC(msgbufaddr, void *) = (void *)va;
+		RELOC(msgbufaddr, caddr_t) = (caddr_t)va;
 		va += m68k_round_page(MSGBUFSIZE);
 		RELOC(virtual_avail, vaddr_t) = va;
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.h,v 1.12 2007/03/16 22:23:30 dsl Exp $	*/
+/*	$NetBSD: netbsd32_machdep.h,v 1.10 2006/03/29 23:07:50 cube Exp $	*/
 
 #ifndef _MACHINE_NETBSD32_H_
 #define _MACHINE_NETBSD32_H_
@@ -7,8 +7,8 @@
 #include <compat/sys/ucontext.h>
 #include <compat/sys/siginfo.h>
 
-#define NETBSD32_POINTER_TYPE uint32_t
-typedef	struct { NETBSD32_POINTER_TYPE i32; } netbsd32_pointer_t;
+typedef	u_int32_t netbsd32_pointer_t;
+#define	NETBSD32PTR64(p32)	((void *)(u_long)(u_int)(p32))
 
 typedef netbsd32_pointer_t netbsd32_sigcontextp_t;
 
@@ -128,6 +128,15 @@ struct x86_64_get_mtrr_args32 {
 struct x86_64_set_mtrr_args32 {
 	uint32_t mtrrp;
 	uint32_t n;
+};
+
+struct netbsd32_saframe {
+	int			sa_ra;
+	int			sa_type;
+	netbsd32_pointer_t	sa_sas;
+	int			sa_events;
+	int			sa_interrupted;
+	netbsd32_pointer_t	sa_arg;
 };
 
 struct env87 {

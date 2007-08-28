@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.70 2007/03/04 06:00:54 christos Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.69 2006/10/05 14:46:11 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.70 2007/03/04 06:00:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.69 2006/10/05 14:46:11 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -344,7 +344,7 @@ find_dev_byname(char *name)
 int 
 bus_peek(int bustype, int pa, int sz)
 {
-	void *va;
+	caddr_t va;
 	int rv;
 
 	va = bus_tmapin(bustype, pa);
@@ -369,7 +369,7 @@ bus_peek(int bustype, int pa, int sz)
 
 /* from hp300: badbaddr() */
 int 
-peek_byte(void *addr)
+peek_byte(caddr_t addr)
 {
 	label_t faultbuf;
 	int x;
@@ -385,7 +385,7 @@ peek_byte(void *addr)
 }
 
 int 
-peek_word(void *addr)
+peek_word(caddr_t addr)
 {
 	label_t faultbuf;
 	int x;
@@ -401,7 +401,7 @@ peek_word(void *addr)
 }
 
 int 
-peek_long(void *addr)
+peek_long(caddr_t addr)
 {
 	label_t faultbuf;
 	int x;

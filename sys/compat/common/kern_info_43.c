@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_info_43.c,v 1.29 2007/03/04 06:01:13 christos Exp $	*/
+/*	$NetBSD: kern_info_43.c,v 1.25 2006/11/16 01:32:41 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1991, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_info_43.c,v 1.29 2007/03/04 06:01:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_info_43.c,v 1.25 2006/11/16 01:32:41 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,6 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_info_43.c,v 1.29 2007/03/04 06:01:13 christos E
 #include <sys/sysctl.h>
 
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 int
@@ -149,8 +150,8 @@ compat_43_sys_getkerninfo(struct lwp *l, void *v, register_t *retval)
 	int error, name[6];
 	size_t size;
 
-	if (SCARG(uap, size) && (error = copyin((void *)SCARG(uap, size),
-	    (void *)&size, sizeof(size))))
+	if (SCARG(uap, size) && (error = copyin((caddr_t)SCARG(uap, size),
+	    (caddr_t)&size, sizeof(size))))
 		return (error);
 
 	switch (SCARG(uap, op) & 0xff00) {
@@ -236,7 +237,7 @@ compat_43_sys_getkerninfo(struct lwp *l, void *v, register_t *retval)
 
 			COPY(machine);
 			COPY(cpu_model);
-			ksi.ncpu = ncpu;		/* XXX */
+			ksi.ncpu = 1;			/* XXX */
 			ksi.cpuspeed = 40;		/* XXX */
 			ksi.hwflags = 0;		/* XXX */
 			ksi.physmem = ctob(physmem);
@@ -273,7 +274,7 @@ compat_43_sys_getkerninfo(struct lwp *l, void *v, register_t *retval)
 		return (error);
 	*retval = size;
 	if (SCARG(uap, size))
-		error = copyout((void *)&size, (void *)SCARG(uap, size),
+		error = copyout((caddr_t)&size, (caddr_t)SCARG(uap, size),
 		    sizeof(size));
 	return (error);
 }
@@ -289,7 +290,7 @@ compat_43_sys_sethostid(struct lwp *l, void *v, register_t *retval)
 	int error;
 
 	if ((error = kauth_authorize_generic(l->l_cred,
-	    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+	    KAUTH_GENERIC_ISSUSER, &l->l_acflag)) != 0)
 		return (error);
 	hostid = SCARG(uap, hostid);
 	return (0);

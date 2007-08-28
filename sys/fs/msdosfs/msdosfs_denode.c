@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_denode.c,v 1.22 2007/07/23 11:05:47 pooka Exp $	*/
+/*	$NetBSD: msdosfs_denode.c,v 1.17.2.1 2007/09/29 11:33:35 xtraeme Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_denode.c,v 1.22 2007/07/23 11:05:47 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_denode.c,v 1.17.2.1 2007/09/29 11:33:35 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,7 +78,8 @@ u_long dehash;			/* size of hash table - 1 */
 
 struct simplelock msdosfs_ihash_slock;
 
-struct pool msdosfs_denode_pool;
+POOL_INIT(msdosfs_denode_pool, sizeof(struct denode), 0, 0, 0, "msdosnopl",
+    &pool_allocator_nointr);
 
 extern int prtactive;
 
@@ -93,16 +94,19 @@ static struct denode *msdosfs_hashget(dev_t, u_long, u_long);
 static void msdosfs_hashins(struct denode *);
 static void msdosfs_hashrem(struct denode *);
 
+#ifdef _LKM
 MALLOC_DECLARE(M_MSDOSFSFAT);
+#endif
 
 void
 msdosfs_init()
 {
-
+#ifdef _LKM
 	malloc_type_attach(M_MSDOSFSMNT);
 	malloc_type_attach(M_MSDOSFSFAT);
 	pool_init(&msdosfs_denode_pool, sizeof(struct denode), 0, 0, 0,
-	    "msdosnopl", &pool_allocator_nointr, IPL_NONE);
+	    "msdosnopl", &pool_allocator_nointr);
+#endif
 	dehashtbl = hashinit(desiredvnodes / 2, HASH_LIST, M_MSDOSFSMNT,
 	    M_WAITOK, &dehash);
 	simple_lock_init(&msdosfs_ihash_slock);
@@ -144,9 +148,11 @@ void
 msdosfs_done()
 {
 	hashdone(dehashtbl, M_MSDOSFSMNT);
+#ifdef _LKM
 	pool_destroy(&msdosfs_denode_pool);
 	malloc_type_detach(M_MSDOSFSFAT);
 	malloc_type_detach(M_MSDOSFSMNT);
+#endif
 }
 
 static struct denode *
@@ -285,6 +291,7 @@ deget(pmp, dirclust, diroffset, depp)
 	 * need to it.
 	 */
 	vn_lock(nvp, LK_EXCLUSIVE | LK_RETRY);
+	genfs_node_init(nvp, &msdosfs_genfsops);
 	msdosfs_hashins(ldep);
 
 	ldep->de_pmp = pmp;
@@ -329,8 +336,12 @@ deget(pmp, dirclust, diroffset, depp)
 		/* leave the other fields as garbage */
 	} else {
 		error = readep(pmp, dirclust, diroffset, &bp, &direntptr);
-		if (error)
+		if (error) {
+			ldep->de_devvp = NULL;
+			ldep->de_Name[0] = SLOT_DELETED;
+			vput(nvp);
 			return (error);
+		}
 		DE_INTERNALIZE(ldep, direntptr);
 		brelse(bp);
 	}
@@ -359,10 +370,9 @@ deget(pmp, dirclust, diroffset, depp)
 		}
 	} else
 		nvp->v_type = VREG;
-	genfs_node_init(nvp, &msdosfs_genfsops);
 	VREF(ldep->de_devvp);
 	*depp = ldep;
-	uvm_vnp_setsize(nvp, ldep->de_FileSize);
+	nvp->v_size = ldep->de_FileSize;
 	return (0);
 }
 
@@ -459,8 +469,7 @@ detrunc(struct denode *dep, u_long length, int flags, kauth_cred_t cred,
 #endif
 				return (error);
 			}
-			memset((char *)bp->b_data + boff, 0,
-			    pmp->pm_bpcluster - boff);
+			memset(bp->b_data + boff, 0, pmp->pm_bpcluster - boff);
 			if (flags & IO_SYNC)
 				bwrite(bp);
 			else
@@ -618,7 +627,6 @@ msdosfs_reclaim(v)
 #if 0 /* XXX */
 	dep->de_flag = 0;
 #endif
-	genfs_node_destroy(vp);
 	pool_put(&msdosfs_denode_pool, dep);
 	vp->v_data = NULL;
 	return (0);

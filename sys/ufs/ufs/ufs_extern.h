@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_extern.h,v 1.54 2007/08/09 09:22:34 hannken Exp $	*/
+/*	$NetBSD: ufs_extern.h,v 1.49 2006/05/14 21:33:39 elad Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -69,7 +69,7 @@ int	ufs_inactive(void *);
 #define	ufs_islocked	genfs_islocked
 #define	ufs_lease_check genfs_lease_check
 int	ufs_link(void *);
-#define	ufs_lock	genfs_lock
+#define ufs_lock	genfs_lock
 int	ufs_lookup(void *);
 int	ufs_mkdir(void *);
 int	ufs_mknod(void *);
@@ -88,7 +88,7 @@ int	ufs_rmdir(void *);
 int	ufs_setattr(void *);
 int	ufs_strategy(void *);
 int	ufs_symlink(void *);
-#define	ufs_unlock	genfs_unlock
+#define ufs_unlock	genfs_unlock
 int	ufs_whiteout(void *);
 int	ufsspec_close(void *);
 int	ufsspec_read(void *);
@@ -99,7 +99,7 @@ int	ufsfifo_write(void *);
 int	ufsfifo_close(void *);
 
 /* ufs_bmap.c */
-typedef	bool (*ufs_issequential_callback_t)(const struct ufsmount *,
+typedef	boolean_t (*ufs_issequential_callback_t)(const struct ufsmount *,
 						 daddr_t, daddr_t);
 int	ufs_bmaparray(struct vnode *, daddr_t, daddr_t *, struct indir *,
 		      int *, int *, ufs_issequential_callback_t);
@@ -132,21 +132,23 @@ int	ufs_checkpath(struct inode *, struct inode *, kauth_cred_t);
 int	ufs_blkatoff(struct vnode *, off_t, char **, struct buf **);
 
 /* ufs_quota.c */
-/*
- * Flags to chkdq() and chkiq()
- */
-#define	FORCE	0x01	/* force usage changes independent of limits */
-void	ufsquota_init(struct inode *);
-void	ufsquota_free(struct inode *);
 int	getinoquota(struct inode *);
 int	chkdq(struct inode *, int64_t, kauth_cred_t, int);
+int	chkdqchg(struct inode *, int64_t, kauth_cred_t, int);
 int	chkiq(struct inode *, int32_t, kauth_cred_t, int);
-int	quotaon(struct lwp *, struct mount *, int, void *);
+int	chkiqchg(struct inode *, int32_t, kauth_cred_t, int);
+void	chkdquot(struct inode *);
+int	quotaon(struct lwp *, struct mount *, int, caddr_t);
 int	quotaoff(struct lwp *, struct mount *, int);
-int	getquota(struct mount *, u_long, int, void *);
-int	setquota(struct mount *, u_long, int, void *);
-int	setuse(struct mount *, u_long, int, void *);
+int	getquota(struct mount *, u_long, int, caddr_t);
+int	setquota(struct mount *, u_long, int, caddr_t);
+int	setuse(struct mount *, u_long, int, caddr_t);
 int	qsync(struct mount *);
+int	dqget(struct vnode *, u_long, struct ufsmount *, int, struct dquot **);
+void	dqref(struct dquot *);
+void	dqrele(struct vnode *, struct dquot *);
+int	dqsync(struct vnode *, struct dquot *);
+void	dqflush(struct vnode *);
 
 /* ufs_vfsops.c */
 void	ufs_init(void);
@@ -176,8 +178,8 @@ void	ffs_snapgone(struct inode *);
  */
 int   softdep_setup_directory_add(struct buf *, struct inode *, off_t,
 				  ino_t, struct buf *, int);
-void  softdep_change_directoryentry_offset(struct inode *, void *,
-					   void *, void *, int);
+void  softdep_change_directoryentry_offset(struct inode *, caddr_t,
+					   caddr_t, caddr_t, int);
 void  softdep_setup_remove(struct buf *, struct inode *, struct inode *, int);
 void  softdep_setup_directory_change(struct buf *, struct inode *,
 				     struct inode *, ino_t, int);

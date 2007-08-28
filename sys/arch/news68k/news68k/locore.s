@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.43 2007/06/12 03:37:22 mhitch Exp $	*/
+/*	$NetBSD: locore.s,v 1.40.24.1 2007/06/18 09:31:08 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -448,8 +448,7 @@ Lenab1:
 /* set kernel stack, user SP, and initial pcb */
 	movl	_C_LABEL(proc0paddr),%a1| get lwp0 pcb addr
 	lea	%a1@(USPACE-4),%sp	| set kernel stack to end of area
-	lea	_C_LABEL(lwp0),%a2	| initialize lwp0.l_addr
-	movl	%a2,_C_LABEL(curlwp)	|   and curlwp so that
+	lea	_C_LABEL(lwp0),%a2	| initialize lwp0.l_addr so that
 	movl	%a1,%a2@(L_ADDR)	|   we don't deref NULL in trap()
 	movl	#USRSTACK-4,%a2
 	movl	%a2,%usp		| init user SP
@@ -855,9 +854,9 @@ ENTRY_NOPROFILE(lev1intr)		/* Level 1: AST interrupt */
 	movl	%sp@+,%a0
 	jra	_ASM_LABEL(rei)		| handle AST
 
-ENTRY_NOPROFILE(_softintr)		/* Level 2: software interrupt */
+ENTRY_NOPROFILE(lev2intr)		/* Level 2: software interrupt */
 	INTERRUPT_SAVEREG
-	jbsr	_C_LABEL(softintr_dispatch)
+	jbsr	_C_LABEL(intrhand_lev2)
 	INTERRUPT_RESTOREREG
 	rte
 
@@ -997,6 +996,11 @@ Laststkadj:
  * Use common m68k support routines.
  */
 #include <m68k/m68k/support.s>
+
+/*
+ * Use common m68k process manipulation routines.
+ */
+#include <m68k/m68k/proc_subr.s>
 
 /*
  * Use common m68k process/lwp switch and context save subroutines.
@@ -1218,6 +1222,9 @@ GLOBAL(bootdevlun)
 GLOBAL(bootctrllun)
 	.long	0
 GLOBAL(bootaddr)
+	.long	0
+
+GLOBAL(want_resched)
 	.long	0
 
 GLOBAL(proc0paddr)

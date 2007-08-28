@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.8 2007/03/04 06:01:42 christos Exp $	*/
+/*	$NetBSD: md.h,v 1.7 2001/07/02 17:17:25 uch Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
@@ -37,7 +37,7 @@
 #include <sys/ioccom.h>
 
 struct md_conf {
-	void *md_addr;
+	caddr_t md_addr;
 	size_t  md_size;
 	int     md_type;
 };

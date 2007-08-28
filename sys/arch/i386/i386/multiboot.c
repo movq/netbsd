@@ -1,4 +1,4 @@
-/*	$NetBSD: multiboot.c,v 1.12 2007/03/07 21:43:45 thorpej Exp $	*/
+/*	$NetBSD: multiboot.c,v 1.9 2006/11/06 13:35:35 jmmv Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: multiboot.c,v 1.12 2007/03/07 21:43:45 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: multiboot.c,v 1.9 2006/11/06 13:35:35 jmmv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,9 +62,9 @@ __KERNEL_RCSID(0, "$NetBSD: multiboot.c,v 1.12 2007/03/07 21:43:45 thorpej Exp $
  */
 
 struct multiboot_symbols {
-	void *		s_symstart;
+	caddr_t		s_symstart;
 	size_t		s_symsize;
-	void *		s_strstart;
+	caddr_t		s_strstart;
 	size_t		s_strsize;
 };
 
@@ -96,7 +96,7 @@ extern int *		esym;
 static char			Multiboot_Cmdline[255];
 static uint8_t			Multiboot_Drives[255];
 static struct multiboot_info	Multiboot_Info;
-static bool			Multiboot_Loader = false;
+static boolean_t		Multiboot_Loader = FALSE;
 static char			Multiboot_Loader_Name[255];
 static uint8_t			Multiboot_Mmap[1024];
 static struct multiboot_symbols	Multiboot_Symbols;
@@ -140,7 +140,7 @@ multiboot_pre_reloc(struct multiboot_info *mi)
 	struct multiboot_info *midest =
 	    RELOC(struct multiboot_info *, &Multiboot_Info);
 
-	*RELOC(bool *, &Multiboot_Loader) = true;
+	*RELOC(boolean_t *, &Multiboot_Loader) = TRUE;
 	memcpy(midest, mi, sizeof(Multiboot_Info));
 
 	if (mi->mi_flags & MULTIBOOT_INFO_HAS_CMDLINE) {
@@ -375,9 +375,9 @@ copy_syms(struct multiboot_info *mi)
 	}
 	*RELOC(int *, &esym) = (int)(strstart + strsize + KERNBASE);
 
-	ms->s_symstart = (void *)(symstart + KERNBASE);
+	ms->s_symstart = (caddr_t)(symstart + KERNBASE);
 	ms->s_symsize  = symsize;
-	ms->s_strstart = (void *)(strstart + KERNBASE);
+	ms->s_strstart = (caddr_t)(strstart + KERNBASE);
 	ms->s_strsize  = strsize;
 #undef RELOC
 }
@@ -437,10 +437,10 @@ setup_biosgeom(struct multiboot_info *mi)
 static void
 setup_bootdisk(struct multiboot_info *mi)
 {
-	bool found;
+	boolean_t found;
 	struct btinfo_rootdevice bi;
 
-	found = false;
+	found = FALSE;
 
 	if (mi->mi_flags & MULTIBOOT_INFO_HAS_CMDLINE)
 		found = optstr_get(mi->mi_cmdline, "root", bi.devname,
@@ -470,7 +470,7 @@ setup_bootdisk(struct multiboot_info *mi)
 			bi.devname[3] = 'a';
 		bi.devname[4] = '\0';
 
-		found = true;
+		found = TRUE;
 	}
 
 	if (found) {
@@ -535,9 +535,9 @@ static void
 setup_console(struct multiboot_info *mi)
 {
 	struct btinfo_console bi;
-	bool found;
+	boolean_t found;
 
-	found = false;
+	found = FALSE;
 
 	if (mi->mi_flags & MULTIBOOT_INFO_HAS_CMDLINE)
 		found = optstr_get(mi->mi_cmdline, "console", bi.devname,
@@ -680,7 +680,7 @@ setup_memory(struct multiboot_info *mi)
  * Sets up the initial kernel symbol table.  Returns true if this was
  * passed in by Multiboot; false otherwise.
  */
-bool
+boolean_t
 multiboot_ksyms_init(void)
 {
 	struct multiboot_info *mi = &Multiboot_Info;
@@ -700,7 +700,7 @@ multiboot_ksyms_init(void)
 		ehdr.e_version = 1;
 		ehdr.e_ehsize = sizeof(ehdr);
 
-		ksyms_init_explicit((void *)&ehdr,
+		ksyms_init_explicit((caddr_t)&ehdr,
 		    ms->s_symstart, ms->s_symsize,
 		    ms->s_strstart, ms->s_strsize);
 	}

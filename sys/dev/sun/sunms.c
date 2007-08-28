@@ -1,4 +1,4 @@
-/*	$NetBSD: sunms.c,v 1.27 2007/07/09 21:01:23 ad Exp $	*/
+/*	$NetBSD: sunms.c,v 1.24 2006/03/30 16:12:10 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunms.c,v 1.27 2007/07/09 21:01:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunms.c,v 1.24 2006/03/30 16:12:10 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,6 +71,7 @@ __KERNEL_RCSID(0, "$NetBSD: sunms.c,v 1.27 2007/07/09 21:01:23 ad Exp $");
 
 #include <machine/vuid_event.h>
 
+#include <sys/tty.h>
 #include <dev/sun/event_var.h>
 #include <dev/sun/msvar.h>
 #include <dev/sun/kbd_ms_ttyvar.h>
@@ -110,7 +111,7 @@ struct linesw sunms_disc = {
 };
 
 int	sunms_enable(void *);
-int	sunms_ioctl(void *, u_long, void *, int, struct lwp *);
+int	sunms_ioctl(void *, u_long, caddr_t, int, struct lwp *);
 void	sunms_disable(void *);
 
 const struct wsmouse_accessops	sunms_accessops = {
@@ -200,10 +201,15 @@ sunmsiopen(dev, flags)
 	struct tty *tp = (struct tty *)ms->ms_cs;
 	struct lwp *l = curlwp ? curlwp : &lwp0;
 	struct termios t;
+	const struct cdevsw *cdev;
 	int error;
 
+	cdev = cdevsw_lookup(tp->t_dev);
+	if (cdev == NULL)
+		return (ENXIO);
+
 	/* Open the lower device */
-	if ((error = cdev_open(tp->t_dev, O_NONBLOCK|flags,
+	if ((error = (*cdev->d_open)(tp->t_dev, O_NONBLOCK|flags,
 				     0/* ignored? */, l)) != 0)
 		return (error);
 
@@ -236,7 +242,7 @@ int
 sunms_ioctl(v, cmd, data, flag, l)
 	void *v;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 	int flag;
 	struct lwp *l;
 {

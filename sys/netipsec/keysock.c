@@ -1,4 +1,4 @@
-/*	$NetBSD: keysock.c,v 1.14 2007/07/07 18:38:23 degroote Exp $	*/
+/*	$NetBSD: keysock.c,v 1.11 2006/10/13 20:53:59 christos Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/keysock.c,v 1.3.2.1 2003/01/24 05:11:36 sam Exp $	*/
 /*	$KAME: keysock.c,v 1.25 2001/08/13 20:07:41 itojun Exp $	*/
 
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.14 2007/07/07 18:38:23 degroote Exp $");
+__KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.11 2006/10/13 20:53:59 christos Exp $");
 
 #include "opt_ipsec.h"
 
@@ -211,8 +211,11 @@ key_sendup0(
 
 /* XXX this interface should be obsoleted. */
 int
-key_sendup(struct socket *so, struct sadb_msg *msg, u_int len,
-	   int target)	/*target of the resulting message*/
+key_sendup(so, msg, len, target)
+	struct socket *so;
+	struct sadb_msg *msg;
+	u_int len;
+	int target;	/*target of the resulting message*/
 {
 	struct mbuf *m, *n, *mprev;
 	int tlen;
@@ -281,7 +284,7 @@ key_sendup(struct socket *so, struct sadb_msg *msg, u_int len,
 	}
 	m->m_pkthdr.len = len;
 	m->m_pkthdr.rcvif = NULL;
-	m_copyback(m, 0, len, msg);
+	m_copyback(m, 0, len, (caddr_t)msg);
 
 	/* avoid duplicated statistics */
 	pfkeystat.in_total--;
@@ -293,8 +296,10 @@ key_sendup(struct socket *so, struct sadb_msg *msg, u_int len,
 
 /* so can be NULL if target != KEY_SENDUP_ONE */
 int
-key_sendup_mbuf(struct socket *so, struct mbuf *m,
-		int target/*, sbprio */)
+key_sendup_mbuf(so, m, target /*, sbprio */)
+	struct socket *so;
+	struct mbuf *m;
+	int target;
 {
 	struct mbuf *n;
 	struct keycb *kp;
@@ -463,12 +468,12 @@ key_attach(struct socket *so, int proto, struct proc *td)
 	 * eliminate the spl.
 	 */
 	s = splnet();	/* FreeBSD */
-	so->so_pcb = kp;
+	so->so_pcb = (caddr_t)kp;
 	error = raw_usrreqs.pru_attach(so, proto, td);
 	kp = (struct keycb *)sotorawcb(so);
 	if (error) {
 		free(kp, M_PCB);
-		so->so_pcb = NULL;
+		so->so_pcb = (caddr_t) 0;
 		splx(s);
 		return error;
 	}
@@ -616,8 +621,11 @@ key_sockaddr(struct socket *so, struct sockaddr **nam)
  * derived from net/rtsock.c:route_usrreq()
  */
 int
-key_usrreq(struct socket *so, int req,struct mbuf *m, struct mbuf *nam, 
-	   struct mbuf *control, struct lwp *l)
+key_usrreq(so, req, m, nam, control, l)
+	struct socket *so;
+	int req;
+	struct mbuf *m, *nam, *control;
+	struct lwp *l;
 {
 	int error = 0;
 	struct keycb *kp = (struct keycb *)sotorawcb(so);
@@ -626,7 +634,7 @@ key_usrreq(struct socket *so, int req,struct mbuf *m, struct mbuf *nam,
 	s = splsoftnet();
 	if (req == PRU_ATTACH) {
 		kp = (struct keycb *)malloc(sizeof(*kp), M_PCB, M_WAITOK);
-		so->so_pcb = kp;
+		so->so_pcb = (caddr_t)kp;
 		if (so->so_pcb)
 			bzero(so->so_pcb, sizeof(*kp));
 	}
@@ -646,8 +654,8 @@ key_usrreq(struct socket *so, int req,struct mbuf *m, struct mbuf *nam,
 		int af = kp->kp_raw.rcb_proto.sp_protocol;
 		if (error) {
 			pfkeystat.sockerr++;
-			free(kp, M_PCB);
-			so->so_pcb = NULL;
+			free((caddr_t)kp, M_PCB);
+			so->so_pcb = (caddr_t) 0;
 			splx(s);
 			return (error);
 		}
@@ -701,7 +709,7 @@ struct protosw keysw[] = {
 static void
 key_init0(void)
 {
-	bzero(&key_cb, sizeof(key_cb));
+	bzero((caddr_t)&key_cb, sizeof(key_cb));
 	key_init();
 }
 

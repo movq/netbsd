@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_var.h,v 1.45 2007/07/19 20:48:57 dyoung Exp $	*/
+/*	$NetBSD: ip6_var.h,v 1.37.12.1 2007/04/28 18:30:13 bouyer Exp $	*/
 /*	$KAME: ip6_var.h,v 1.33 2000/06/11 14:59:20 jinmei Exp $	*/
 
 /*
@@ -64,8 +64,6 @@
 #ifndef _NETINET6_IP6_VAR_H_
 #define _NETINET6_IP6_VAR_H_
 
-#include <net/route.h>
-
 /*
  * IP6 reassembly queue structure.  Each fragment
  * being reassembled is attached to one of these structures.
@@ -121,7 +119,7 @@ struct	ip6_moptions {
 /* Routing header related info */
 struct	ip6po_rhinfo {
 	struct	ip6_rthdr *ip6po_rhi_rthdr; /* Routing header */
-	struct	route ip6po_rhi_route; /* Route to the 1st hop */
+	struct	route_in6 ip6po_rhi_route; /* Route to the 1st hop */
 };
 #define ip6po_rthdr	ip6po_rhinfo.ip6po_rhi_rthdr
 #define ip6po_route	ip6po_rhinfo.ip6po_rhi_route
@@ -129,7 +127,7 @@ struct	ip6po_rhinfo {
 /* Nexthop related info */
 struct	ip6po_nhinfo {
 	struct	sockaddr *ip6po_nhi_nexthop;
-	struct	route ip6po_nhi_route; /* Route to the nexthop */
+	struct	route_in6 ip6po_nhi_route; /* Route to the nexthop */
 };
 #define ip6po_nexthop	ip6po_nhinfo.ip6po_nhi_nexthop
 #define ip6po_nextroute	ip6po_nhinfo.ip6po_nhi_route
@@ -215,29 +213,6 @@ struct	ip6stat {
 
 	u_quad_t ip6s_forward_cachehit;
 	u_quad_t ip6s_forward_cachemiss;
-
-	u_quad_t ip6s_fastforward;      /* packets fast forwarded */ 
-	u_quad_t ip6s_fastforwardflows; /* number of fast forward flows*/
-};
-
-#define IP6FLOW_HASHBITS         6 /* should not be a multiple of 8 */
-
-/* 
- * Structure for an IPv6 flow (ip6_fastforward).
- */
-struct ip6flow {
-	LIST_ENTRY(ip6flow) ip6f_list;  /* next in active list */
-	LIST_ENTRY(ip6flow) ip6f_hash;  /* next ip6flow in bucket */
-	struct in6_addr ip6f_dst;       /* destination address */
-	struct in6_addr ip6f_src;       /* source address */
-	struct route ip6f_ro;       /* associated route entry */
-	u_int32_t ip6f_flow;		/* flow (tos) */
-	u_quad_t ip6f_uses;               /* number of uses in this period */
-	u_quad_t ip6f_last_uses;          /* number of uses in last period */
-	u_quad_t ip6f_dropped;            /* ENOBUFS returned by if_output */
-	u_quad_t ip6f_forwarded;          /* packets forwarded */
-	u_int ip6f_timer;               /* lifetime timer */
-	time_t ip6f_start;              /* creation time */
 };
 
 #ifdef _KERNEL
@@ -302,92 +277,78 @@ extern int	ip6_prefer_tempaddr; /* whether to prefer temporary addresses
 extern int	ip6_use_defzone; /* whether to use the default scope zone
 				    when unspecified */
 
-#ifdef GATEWAY
-extern int      ip6_maxflows;           /* maximum amount of flows for ip6ff */
-extern int	ip6_hashsize;		/* size of hash table */
-#endif
-
 struct in6pcb;
 
-int	icmp6_ctloutput(int, struct socket *, int, int, struct mbuf **);
+int	icmp6_ctloutput __P((int, struct socket *, int, int, struct mbuf **));
+extern int	ip6_rht0;		/* processing routing header type 0 */
 
-void	ip6_init(void);
-void	ip6intr(void);
-void	ip6_input(struct mbuf *);
-struct in6_ifaddr *ip6_getdstifaddr(struct mbuf *);
-void	ip6_freepcbopts(struct ip6_pktopts *);
-void	ip6_freemoptions(struct ip6_moptions *);
-int	ip6_unknown_opt(u_int8_t *, struct mbuf *, int);
-u_int8_t *ip6_get_prevhdr(struct mbuf *, int);
-int	ip6_nexthdr(struct mbuf *, int, int, int *);
-int	ip6_lasthdr(struct mbuf *, int, int, int *);
+void	ip6_init __P((void));
+void	ip6intr __P((void));
+void	ip6_input __P((struct mbuf *));
+struct in6_ifaddr *ip6_getdstifaddr __P((struct mbuf *));
+void	ip6_freepcbopts __P((struct ip6_pktopts *));
+void	ip6_freemoptions __P((struct ip6_moptions *));
+int	ip6_unknown_opt __P((u_int8_t *, struct mbuf *, int));
+u_int8_t *ip6_get_prevhdr __P((struct mbuf *, int));
+int	ip6_nexthdr __P((struct mbuf *, int, int, int *));
+int	ip6_lasthdr __P((struct mbuf *, int, int, int *));
 
-struct m_tag *ip6_addaux(struct mbuf *);
-struct m_tag *ip6_findaux(struct mbuf *);
-void	ip6_delaux(struct mbuf *);
+struct m_tag *ip6_addaux __P((struct mbuf *));
+struct m_tag *ip6_findaux __P((struct mbuf *));
+void	ip6_delaux __P((struct mbuf *));
 
-int	ip6_mforward(struct ip6_hdr *, struct ifnet *, struct mbuf *);
-int	ip6_process_hopopts(struct mbuf *, u_int8_t *, int, u_int32_t *,
-				 u_int32_t *);
-void	ip6_savecontrol(struct in6pcb *, struct mbuf **, struct ip6_hdr *,
-		struct mbuf *);
-void	ip6_notify_pmtu(struct in6pcb *, const struct sockaddr_in6 *,
-		u_int32_t *);
-int	ip6_sysctl(int *, u_int, void *, size_t *, void *, size_t);
+int	ip6_mforward __P((struct ip6_hdr *, struct ifnet *, struct mbuf *));
+int	ip6_process_hopopts __P((struct mbuf *, u_int8_t *, int, u_int32_t *,
+				 u_int32_t *));
+void	ip6_savecontrol __P((struct in6pcb *, struct mbuf **, struct ip6_hdr *,
+		struct mbuf *));
+void	ip6_notify_pmtu __P((struct in6pcb *, struct sockaddr_in6 *,
+		u_int32_t *));
+int	ip6_sysctl __P((int *, u_int, void *, size_t *, void *, size_t));
 
-void	ip6_forward(struct mbuf *, int);
+void	ip6_forward __P((struct mbuf *, int));
 
-void	ip6_mloopback(struct ifnet *, struct mbuf *,
-	              const struct sockaddr_in6 *);
-int	ip6_output(struct mbuf *, struct ip6_pktopts *,
-			struct route *, int,
+void	ip6_mloopback __P((struct ifnet *, struct mbuf *, struct sockaddr_in6 *));
+int	ip6_output __P((struct mbuf *, struct ip6_pktopts *,
+			struct route_in6 *, int,
 			struct ip6_moptions *, struct socket *,
-			struct ifnet **);
-int	ip6_ctloutput(int, struct socket *, int, int, struct mbuf **);
-int	ip6_raw_ctloutput(int, struct socket *, int, int, struct mbuf **);
-void	ip6_initpktopts(struct ip6_pktopts *);
-int	ip6_setpktopts(struct mbuf *, struct ip6_pktopts *,
-			    struct ip6_pktopts *, int, int);
-void	ip6_clearpktopts(struct ip6_pktopts *, int);
-struct ip6_pktopts *ip6_copypktopts(struct ip6_pktopts *, int);
-int	ip6_optlen(struct in6pcb *);
+			struct ifnet **));
+int	ip6_ctloutput __P((int, struct socket *, int, int, struct mbuf **));
+int	ip6_raw_ctloutput __P((int, struct socket *, int, int, struct mbuf **));
+void	ip6_initpktopts __P((struct ip6_pktopts *));
+int	ip6_setpktopts __P((struct mbuf *, struct ip6_pktopts *,
+			    struct ip6_pktopts *, int, int));
+void	ip6_clearpktopts __P((struct ip6_pktopts *, int));
+struct ip6_pktopts *ip6_copypktopts __P((struct ip6_pktopts *, int));
+int	ip6_optlen __P((struct in6pcb *));
 
-int	route6_input(struct mbuf **, int *, int);
+int	route6_input __P((struct mbuf **, int *, int));
 
-void	frag6_init(void);
-int	frag6_input(struct mbuf **, int *, int);
-void	frag6_slowtimo(void);
-void	frag6_drain(void);
+void	frag6_init __P((void));
+int	frag6_input __P((struct mbuf **, int *, int));
+void	frag6_slowtimo __P((void));
+void	frag6_drain __P((void));
 
-int	ip6flow_init(int);
-struct  ip6flow *ip6flow_reap(int);
-void    ip6flow_create(const struct route *, struct mbuf *);
-void    ip6flow_slowtimo(void);
-int	ip6flow_invalidate_all(int);
+void	rip6_init __P((void));
+int	rip6_input __P((struct mbuf **, int *, int));
+void	rip6_ctlinput __P((int, struct sockaddr *, void *));
+int	rip6_ctloutput __P((int, struct socket *, int, int, struct mbuf **));
+int	rip6_output __P((struct mbuf *, ...));
+int	rip6_usrreq __P((struct socket *,
+	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct lwp *));
 
-void	rip6_init(void);
-int	rip6_input(struct mbuf **, int *, int);
-void	rip6_ctlinput(int, const struct sockaddr *, void *);
-int	rip6_ctloutput(int, struct socket *, int, int, struct mbuf **);
-int	rip6_output(struct mbuf *, struct socket *, struct sockaddr_in6 *,
-			 struct mbuf *);
-int	rip6_usrreq(struct socket *,
-	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct lwp *);
+int	dest6_input __P((struct mbuf **, int *, int));
+int	none_input __P((struct mbuf **, int *, int));
 
-int	dest6_input(struct mbuf **, int *, int);
-int	none_input(struct mbuf **, int *, int);
+struct 	in6_addr *in6_selectsrc __P((struct sockaddr_in6 *,
+	struct ip6_pktopts *, struct ip6_moptions *, struct route_in6 *,
+	struct in6_addr *, struct ifnet **, int *));
+int in6_selectroute __P((struct sockaddr_in6 *, struct ip6_pktopts *,
+	struct ip6_moptions *, struct route_in6 *, struct ifnet **,
+	struct rtentry **, int));
 
-struct route;
-
-struct 	in6_addr *in6_selectsrc(struct sockaddr_in6 *,
-	struct ip6_pktopts *, struct ip6_moptions *, struct route *,
-	struct in6_addr *, struct ifnet **, int *);
-int in6_selectroute(struct sockaddr_in6 *, struct ip6_pktopts *,
-	struct ip6_moptions *, struct route *, struct ifnet **,
-	struct rtentry **, int);
-
-u_int32_t ip6_randomid(void);
-u_int32_t ip6_randomflowlabel(void);
+u_int32_t ip6_randomid __P((void));
+u_int32_t ip6_randomflowlabel __P((void));
 #endif /* _KERNEL */
 
 #endif /* !_NETINET6_IP6_VAR_H_ */

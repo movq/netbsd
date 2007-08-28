@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_ioctl.c,v 1.35 2007/08/15 12:07:31 ad Exp $	*/
+/*	$NetBSD: netbsd32_ioctl.c,v 1.26 2006/09/24 10:20:16 fvdl Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_ioctl.c,v 1.35 2007/08/15 12:07:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_ioctl.c,v 1.26 2006/09/24 10:20:16 fvdl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,12 +46,13 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_ioctl.c,v 1.35 2007/08/15 12:07:31 ad Exp $
 #include <sys/disklabel.h>
 #include <sys/dkio.h>
 #include <sys/malloc.h>
+#include <sys/proc.h>
 #include <sys/sockio.h>
 #include <sys/socket.h>
 #include <sys/ttycom.h>
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
-#include <sys/ktrace.h>
 
 #ifdef __sparc__
 #include <dev/sun/fbio.h>
@@ -66,8 +67,6 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_ioctl.c,v 1.35 2007/08/15 12:07:31 ad Exp $
 #include <netinet/igmp.h>
 #include <netinet/igmp_var.h>
 #include <netinet/ip_mroute.h>
-
-#include <compat/sys/sockio.h>
 
 #include <compat/netbsd32/netbsd32.h>
 #include <compat/netbsd32/netbsd32_ioctl.h>
@@ -158,7 +157,7 @@ netbsd32_to_ifreq(s32p, p, cmd)
 	 * is very driver specific and so we ignore it for now..
 	 */
 	if (cmd == SIOCGIFDATA || cmd == SIOCZIFDATA)
-		p->ifr_data = (void *)NETBSD32PTR64(s32p->ifr_data);
+		p->ifr_data = (caddr_t)NETBSD32PTR64(s32p->ifr_data);
 }
 
 static inline void
@@ -170,7 +169,7 @@ netbsd32_to_ifconf(s32p, p, cmd)
 
 	p->ifc_len = s32p->ifc_len;
 	/* ifc_buf & ifc_req are the same size so this works */
-	p->ifc_buf = (void *)NETBSD32PTR64(s32p->ifc_buf);
+	p->ifc_buf = (caddr_t)NETBSD32PTR64(s32p->ifc_buf);
 }
 
 static inline void
@@ -234,8 +233,8 @@ netbsd32_from_partinfo(p, s32p, cmd)
 	u_long cmd;
 {
 
-	NETBSD32PTR32(s32p->disklab, p->disklab);
-	NETBSD32PTR32(s32p->part, p->part);
+	s32p->disklab = (netbsd32_disklabel_tp_t)(u_long)p->disklab;
+	s32p->part = s32p->part;
 }
 
 #if 0
@@ -271,7 +270,7 @@ netbsd32_from_ifreq(p, s32p, cmd)
 	 */
 	*s32p->ifr_name = *p->ifr_name;
 	if (cmd == SIOCGIFDATA || cmd == SIOCZIFDATA)
-		NETBSD32PTR32(s32p->ifr_data, p->ifr_data);
+		s32p->ifr_data = (netbsd32_caddr_t)(u_long)s32p->ifr_data;
 }
 
 static inline void
@@ -283,7 +282,7 @@ netbsd32_from_ifconf(p, s32p, cmd)
 
 	s32p->ifc_len = p->ifc_len;
 	/* ifc_buf & ifc_req are the same size so this works */
-	NETBSD32PTR32(s32p->ifc_buf, p->ifc_buf);
+	s32p->ifc_buf = (netbsd32_caddr_t)(u_long)p->ifc_buf;
 }
 
 static inline void
@@ -366,8 +365,8 @@ netbsd32_ioctl(l, v, retval)
 	u_long com;
 	int error = 0;
 	u_int size, size32;
-	void *data, *memp = NULL;
-	void *data32, *memp32 = NULL;
+	caddr_t data, memp = NULL;
+	caddr_t data32, memp32 = NULL;
 	int tmp;
 #define STK_PARAMS	128
 	u_long stkbuf[STK_PARAMS/sizeof(u_long)];
@@ -422,22 +421,22 @@ printf("netbsd32_ioctl(%d, %x, %x): %s group %c base %d len %d\n",
 	}
 	memp = NULL;
 	if (size32 > sizeof(stkbuf)) {
-		memp32 = malloc((u_long)size32, M_IOCTLOPS, M_WAITOK);
+		memp32 = (caddr_t)malloc((u_long)size32, M_IOCTLOPS, M_WAITOK);
 		data32 = memp32;
 	} else
-		data32 = (void *)stkbuf32;
+		data32 = (caddr_t)stkbuf32;
 	if (com&IOC_IN) {
 		if (size32) {
-			error = copyin(SCARG_P32(uap, data), data32, size32);
+			error = copyin((caddr_t)NETBSD32PTR64(SCARG(uap, data)),
+			    data32, size32);
 			if (error) {
 				if (memp32)
 					free(memp32, M_IOCTLOPS);
 				goto out;
 			}
-			ktrgenio(SCARG(uap, fd), UIO_WRITE, SCARG_P32(uap, data),
-			    size32, 0);
 		} else
-			*(void **)data32 = SCARG_P32(uap, data);
+			*(caddr_t *)data32 =
+			    (caddr_t)NETBSD32PTR64(SCARG(uap, data));
 	} else if ((com&IOC_OUT) && size32)
 		/*
 		 * Zero the buffer so the user always
@@ -445,7 +444,7 @@ printf("netbsd32_ioctl(%d, %x, %x): %s group %c base %d len %d\n",
 		 */
 		memset(data32, 0, size32);
 	else if (com&IOC_VOID)
-		*(void **)data32 = SCARG_P32(uap, data);
+		*(caddr_t *)data32 = (caddr_t)NETBSD32PTR64(SCARG(uap, data));
 
 	/*
 	 * convert various structures, pointers, and other objects that
@@ -457,7 +456,7 @@ printf("netbsd32_ioctl(%d, %x, %x): %s group %c base %d len %d\n",
 			fp->f_flag |= FNONBLOCK;
 		else
 			fp->f_flag &= ~FNONBLOCK;
-		error = (*fp->f_ops->fo_ioctl)(fp, FIONBIO, (void *)&tmp, l);
+		error = (*fp->f_ops->fo_ioctl)(fp, FIONBIO, (caddr_t)&tmp, l);
 		break;
 
 	case FIOASYNC:
@@ -465,7 +464,7 @@ printf("netbsd32_ioctl(%d, %x, %x): %s group %c base %d len %d\n",
 			fp->f_flag |= FASYNC;
 		else
 			fp->f_flag &= ~FASYNC;
-		error = (*fp->f_ops->fo_ioctl)(fp, FIOASYNC, (void *)&tmp, l);
+		error = (*fp->f_ops->fo_ioctl)(fp, FIOASYNC, (caddr_t)&tmp, l);
 		break;
 
 	case DIOCGPART32:
@@ -574,11 +573,9 @@ printf("netbsd32_ioctl(%d, %x, %x): %s group %c base %d len %d\n",
 	 * Copy any data to user, size was
 	 * already set and checked above.
 	 */
-	if (error == 0 && (com&IOC_OUT) && size32) {
-		error = copyout(data32, SCARG_P32(uap, data), size32);
-		ktrgenio(SCARG(uap, fd), UIO_READ, SCARG_P32(uap, data),
-		    size32, error);
-	}
+	if (error == 0 && (com&IOC_OUT) && size32)
+		error = copyout(data32,
+		    (caddr_t)NETBSD32PTR64(SCARG(uap, data)), size32);
 
 	/* if we malloced data, free it here */
 	if (memp32)

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.18 2007/03/11 05:22:25 thorpej Exp $	*/
+/*	$NetBSD: intr.h,v 1.12 2006/02/16 20:17:14 perry Exp $	*/
 
 /*
  *
@@ -38,55 +38,30 @@
 #ifndef _NEWS68K_INTR_H_
 #define	_NEWS68K_INTR_H_
 
-#include <sys/device.h>
-#include <sys/queue.h>
 #include <machine/psl.h>
 #include <m68k/asm_single.h>
 
-#define	IPL_NONE	0
-#define	IPL_SOFTCLOCK	1
-#define	IPL_SOFTNET	2
-#define	IPL_SOFTSERIAL	3
-#define	IPL_SOFT	4
-#define	IPL_BIO		5
-#define	IPL_NET		6
-#define	IPL_TTY		7
-#define	IPL_VM		8
-#define	IPL_SERIAL	9
-#define	IPL_CLOCK	10
-#define	IPL_STATCLOCK	IPL_CLOCK
-#define	IPL_HIGH	11
-#define	IPL_SCHED	IPL_HIGH
-#define	IPL_LOCK	IPL_HIGH
-#define	NIPL		12
+#ifdef _KERNEL
+/*
+ * news68k can handle software interrupts by its own hardware
+ * so has no need to check for any simulated interrupts, etc.
+ */
+#define	spl0()		_spl0()
 
-#define	SI_SOFTSERIAL	0
-#define	SI_SOFTNET	1
-#define	SI_SOFTCLOCK	2
-#define	SI_SOFT		3
-
-#define	SI_NQUEUES	4
-
-#define	SI_QUEUENAMES {							\
-	"serial",							\
-	"net",								\
-	"clock",							\
-	"misc",								\
-}
-
-typedef int ipl_t;
-typedef struct {
-	uint16_t _psl;
-} ipl_cookie_t;
-
-ipl_cookie_t makeiplcookie(ipl_t);
-
-static inline int
-splraiseipl(ipl_cookie_t icookie)
-{
-
-	return _splraise(icookie._psl);
-}
+#define	spllowersoftclock()	spl2()
+#define	splsoft()	splraise2()
+#define	splsoftclock()	splsoft()
+#define	splsoftnet()	splsoft()
+#define	splbio()	splraise4()
+#define	splnet()	splraise4()
+#define	spltty()	splraise5()
+#define	splvm()		splraise5()
+#define	splserial()     splraise5()
+#define	splclock()	splraise6()
+#define	splstatclock()	splclock()
+#define	splhigh()	spl7()
+#define	splsched()	spl7()
+#define	spllock()	spl7()
 
 static __inline void
 splx(int sr)
@@ -96,66 +71,27 @@ splx(int sr)
 }
 
 /*
- * news68k can handle software interrupts by its own hardware
- * so has no need to check for any simulated interrupts, etc.
- */
-#define	spl0()		_spl0()
-
-#define	splsoft()	splraise2()
-#define	splsoftclock()	splsoft()
-#define	splsoftnet()	splsoft()
-#define	splsoftserial()	splsoft()
-#define	splbio()	splraise4()
-#define	splnet()	splraise4()
-#define	spltty()	splraise5()
-#define	splvm()		splraise5()
-#define	splserial()	splraise5()
-#define	splclock()	splraise6()
-#define	splstatclock()	splclock()
-#define	splhigh()	spl7()
-#define	splsched()	spl7()
-#define	spllock()	spl7()
-
-/*
  * simulated software interrupt register
  */
-#define SOFTINTR_IPL	2
-extern volatile uint8_t *ctrl_int2;
+extern u_char ssir;
+extern volatile u_char *ctrl_int2;
 
-#define	setsoft(x)		(x = 0)
-#define	softintr_assert()	(*ctrl_int2 = 0xff)
-#define	softintr_clear()	(*ctrl_int2 = 0)
+#define	NSIR		(sizeof(ssir) * 8)
+#define	SIR_NET		0
+#define	SIR_CLOCK	1
+#define	NEXT_SIR	2
 
-struct news68k_soft_intrhand {
-	LIST_ENTRY(news68k_soft_intrhand) sih_q;
-	struct news68k_soft_intr *sih_intrhead;
-	void (*sih_fn)(void *);
-	void *sih_arg;
-	volatile int sih_pending;
-};
+#define	siron(x)	single_inst_bset_b((ssir), (x))
+#define	siroff(x)	single_inst_bclr_b((ssir), (x))
+#define	setsoftint(x)	do {				\
+				siron(x);		\
+				*ctrl_int2 = 0xff;	\
+			} while (0)
+#define	setsoftnet()	setsoftint(1 << SIR_NET)
+#define	setsoftclock()	setsoftint(1 << SIR_CLOCK)
 
-struct news68k_soft_intr {
-	LIST_HEAD(, news68k_soft_intrhand) nsi_q;
-	struct evcnt nsi_evcnt;
-	volatile unsigned char nsi_ssir;
-};
-
-void *softintr_establish(int, void (*)(void *), void *);
-void softintr_disestablish(void *);
-void softintr_init(void);
-void softintr_dispatch(void);
-
-#define	softintr_schedule(arg)					\
-	do {							\
-		struct news68k_soft_intrhand *__sih = (arg);	\
-		__sih->sih_pending = 1;				\
-		setsoft(__sih->sih_intrhead->nsi_ssir);		\
-		softintr_assert();				\
-	} while (/*CONSTCOND*/ 0)
-
-/* XXX For legacy software interrupts */
-extern struct news68k_soft_intrhand *softnet_intrhand;
-
-#define	setsoftnet()	softintr_schedule(softnet_intrhand)
+u_char allocate_sir(void (*)(void *), void *);
+void init_sir(void);
+#endif /* _KERNEL */
 
 #endif /* _NEWS68K_INTR_H_ */

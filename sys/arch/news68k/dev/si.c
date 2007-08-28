@@ -1,4 +1,4 @@
-/*	$NetBSD: si.c,v 1.20 2007/03/04 06:00:24 christos Exp $	*/
+/*	$NetBSD: si.c,v 1.18.12.1 2007/02/24 13:32:50 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: si.c,v 1.20 2007/03/04 06:00:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: si.c,v 1.18.12.1 2007/02/24 13:32:50 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -266,7 +266,7 @@ si_dma_start(struct ncr5380_softc *ncr_sc)
 
 	/* set first DMA segment address */
 	dmac->tag = 0;
-	dmac->mapent = kvtop((void *)addr) >> DMAC_SEG_SHIFT;
+	dmac->mapent = kvtop((caddr_t)addr) >> DMAC_SEG_SHIFT;
 	rest = DMAC_SEG_SIZE - offset;
 	addr += rest;
 	len -= rest;
@@ -274,7 +274,7 @@ si_dma_start(struct ncr5380_softc *ncr_sc)
 	/* set all the rest segments */
 	for (i = 1; len > 0; i++) {
 		dmac->tag = i;
-		dmac->mapent = kvtop((void *)addr) >> DMAC_SEG_SHIFT;
+		dmac->mapent = kvtop((caddr_t)addr) >> DMAC_SEG_SHIFT;
 		len -= DMAC_SEG_SIZE;
 		addr += DMAC_SEG_SIZE;
 	}

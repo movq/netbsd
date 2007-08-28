@@ -1,4 +1,4 @@
-/*	$NetBSD: ts.c,v 1.33 2007/07/29 12:15:40 ad Exp $ */
+/*	$NetBSD: ts.c,v 1.31 2006/03/28 17:38:28 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1991 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ts.c,v 1.33 2007/07/29 12:15:40 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ts.c,v 1.31 2006/03/28 17:38:28 thorpej Exp $");
 
 #define TS11_COMPAT	/* don't use extended features provided by TS05 */
 
@@ -263,7 +263,7 @@ tsinit (sc)
 		 */
 		sc->sc_ubainfo = uballoc((struct uba_softc *)
 		    device_parent(&sc->sc_dev),
-		    (void *)&ts[unit], sizeof (struct ts), TS_UBAFLAGS);
+		    (caddr_t)&ts[unit], sizeof (struct ts), TS_UBAFLAGS);
 		sc->sc_ts = (struct ts *)(UBAI_ADDR(sc->sc_ubainfo));
 		sc->sc_mapped = 1;
 	}
@@ -415,8 +415,8 @@ tscommand (dev, cmd, count)
 	debug (("tscommand: calling biowait ...\n"));
 	biowait (bp);
 	if (bp->b_flags & B_WANTED)
-		wakeup ((void *)bp);
-	bp->b_error = 0;
+		wakeup ((caddr_t)bp);
+	bp->b_flags &= B_ERROR;
 }
 
 /*
@@ -444,7 +444,7 @@ tsstart (sc, bp)
 
 		/* bertram: ubarelse ??? */
 		ts_wtab[ctlr] = NULL;
-		dp->b_error = EIO;
+		dp->b_flags |= B_ERROR;
 		biodone (dp);
 
 		if (tsreg->tssr & TS_SC) {	/* Special Condition; Error */
@@ -1083,7 +1083,7 @@ tsintr(ctlr)
 			    (int *)&bp->b_ubinfo);
 
 		if ((sr & TS_TC) != TS_TC_NORM)
-			bp->b_error = EIO;
+			bp->b_flags |= B_ERROR;
 
 		debug (("resid:%d, count:%d, rbpcr:%d\n",
 			bp->b_resid, bp->b_bcount, tsmsgp->rbpcr));
@@ -1223,7 +1223,7 @@ int
 tsioctl (dev, cmd, data, flag, p)
 	dev_t dev;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 	int flag;
 	struct proc *p;
 {
@@ -1285,13 +1285,14 @@ tsioctl (dev, cmd, data, flag, p)
 				debug (("spaceop didn't complete\n"));
 				return (EIO);
 			}
-			if (bp->b_error != 0) {
+			if (bp->b_flags & B_ERROR) {
 				debug (("error in ioctl %d\n", mtop->mt_op));
 				break;
 			}
 		} while (--callcount > 0);
-		if (bp->b_error) 
-			return (bp->b_error);
+		if (bp->b_flags & B_ERROR) 
+			if ((error = bp->b_error) == 0)
+				return (EIO);
 		return (error);		
 
 	case MTIOCGET:			/* get tape status */
@@ -1352,7 +1353,7 @@ int
 tsdump(dev, blkno, va, size)
 	dev_t dev;
 	daddr_t blkno;
-	void *va;
+	caddr_t va;
 	size_t size;
 {
 	trace (("tsdump (%x)\n", dev));

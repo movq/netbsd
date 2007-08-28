@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee.h,v 1.10 2007/02/04 00:39:19 christos Exp $	*/
+/*	$NetBSD: ieee.h,v 1.9.24.1 2007/05/07 19:49:10 pavel Exp $	*/
 
 /*	$OpenBSD: ieee.h,v 1.1 1999/04/20 19:44:04 mickey Exp $	*/
 

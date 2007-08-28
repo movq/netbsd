@@ -1,4 +1,4 @@
-/* $NetBSD: msr_ipifuncs.c,v 1.9 2007/05/15 14:29:36 xtraeme Exp $ */
+/* $NetBSD: msr_ipifuncs.c,v 1.8.6.2 2007/04/20 20:31:27 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -45,12 +45,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msr_ipifuncs.c,v 1.9 2007/05/15 14:29:36 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msr_ipifuncs.c,v 1.8.6.2 2007/04/20 20:31:27 bouyer Exp $");
 
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
-#include <sys/mutex.h>
 #include <sys/lock.h>
 
 #include <x86/cpu_msr.h>
@@ -58,9 +57,12 @@ __KERNEL_RCSID(0, "$NetBSD: msr_ipifuncs.c,v 1.9 2007/05/15 14:29:36 xtraeme Exp
 #include <machine/cpu.h>
 #include <machine/intrdefs.h>
 
-static kmutex_t msr_mtx;
-static volatile uint64_t msr_setvalue, msr_setmask;
-static volatile int msr_type, msr_runcount, msr_read;
+static struct simplelock msr_lock;
+static volatile uint64_t msr_setvalue;
+static volatile uint64_t msr_setmask;
+static volatile int msr_type;
+static volatile int msr_runcount;
+static volatile int msr_read;
 
 
 /*
@@ -99,18 +101,26 @@ msr_write_ipi(struct cpu_info *ci)
 void
 msr_cpu_broadcast(struct msr_cpu_broadcast *mcb)
 {
+	CPU_INFO_ITERATOR cii;
+	struct cpu_info *ci;
+	int ncpu;
 
 	if (!mcb->msr_type)
 		panic("msr_type not defined");
 
+	ncpu = 0;
+	for (CPU_INFO_FOREACH(cii, ci))
+		ncpu++;
+
 	/* We only want one CPU at a time sending these IPIs out. */
-	mutex_enter(&msr_mtx);
+	simple_lock(&msr_lock);
 
 	/* Initialize counter, the task has not run in any cpu yet. */
 	msr_runcount = 0;
 
 	/* Assign requested MSR type, value and mask. */
 	msr_type = mcb->msr_type;
+
 	msr_setvalue = mcb->msr_value;
 	msr_setmask = mcb->msr_mask;
 	msr_read = mcb->msr_read;
@@ -119,11 +129,10 @@ msr_cpu_broadcast(struct msr_cpu_broadcast *mcb)
 	 * Issue a full memory barrier, to make sure the operations
 	 * are done in a serialized way.
 	 */
-	mb_memory();
+	x86_mfence();
 
 	/* Run the IPI write handler in the CPUs. */
 	msr_write_ipi(curcpu());
-
 #ifdef MULTIPROCESSOR
 	if (ncpu > 1)
 		x86_broadcast_ipi(X86_IPI_WRITE_MSR);
@@ -133,7 +142,7 @@ msr_cpu_broadcast(struct msr_cpu_broadcast *mcb)
 		x86_pause();
 
 	/* We're done, so unlock. */
-	mutex_exit(&msr_mtx);
+	simple_unlock(&msr_lock);
 }
 
 /* 
@@ -143,5 +152,5 @@ msr_cpu_broadcast(struct msr_cpu_broadcast *mcb)
 void
 msr_cpu_broadcast_initmtx(void)
 {
-	mutex_init(&msr_mtx, MUTEX_DRIVER, IPL_NONE);
+	simple_lock_init(&msr_lock);
 }

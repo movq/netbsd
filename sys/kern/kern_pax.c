@@ -1,4 +1,4 @@
-/* $NetBSD: kern_pax.c,v 1.16 2007/06/24 20:35:37 christos Exp $ */
+/* $NetBSD: kern_pax.c,v 1.8.2.2 2007/07/09 10:30:56 liamjfoy Exp $ */
 
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
@@ -12,7 +12,10 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Elad Efrat.
+ * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -81,8 +84,6 @@ struct pax_segvguard_uid_entry {
 struct pax_segvguard_entry {
 	LIST_HEAD(, pax_segvguard_uid_entry) segv_uids;
 };
-
-static void pax_segvguard_cb(void *);
 #endif /* PAX_SEGVGUARD */
 
 /* PaX internal setspecific flags */
@@ -181,20 +182,12 @@ SYSCTL_SETUP(sysctl_security_pax_setup, "sysctl security.pax setup")
 void
 pax_init(void)
 {
-#ifdef PAX_SEGVGUARD
-	int error;
-#endif /* PAX_SEGVGUARD */
-
 #ifdef PAX_MPROTECT
 	proc_specific_key_create(&pax_mprotect_key, NULL);
 #endif /* PAX_MPROTECT */
 
 #ifdef PAX_SEGVGUARD
-	error = fileassoc_register("segvguard", pax_segvguard_cb,
-	    &segvguard_id);
-	if (error) {
-		panic("pax_init: segvguard_id: error=%d\n", error);
-	}
+	segvguard_id = fileassoc_register("segvguard", pax_segvguard_cb);
 	proc_specific_key_create(&pax_segvguard_key, NULL);
 #endif /* PAX_SEGVGUARD */
 }
@@ -250,8 +243,8 @@ pax_mprotect(struct lwp *l, vm_prot_t *prot, vm_prot_t *maxprot)
 #endif /* PAX_MPROTECT */
 
 #ifdef PAX_SEGVGUARD
-static void
-pax_segvguard_cb(void *v)
+void
+pax_segvguard_cb(void *v, int what)
 {
 	struct pax_segvguard_entry *p;
 	struct pax_segvguard_uid_entry *up;
@@ -259,10 +252,12 @@ pax_segvguard_cb(void *v)
 	if (v == NULL)
 		return;
 
-	p = v;
-	while ((up = LIST_FIRST(&p->segv_uids)) != NULL) {
-		LIST_REMOVE(up, sue_list);
-		free(up, M_TEMP);
+	if (what == FILEASSOC_CLEANUP_FILE) {
+		p = v;
+		while ((up = LIST_FIRST(&p->segv_uids)) != NULL) {
+			LIST_REMOVE(up, sue_list);
+			free(up, M_TEMP);
+		}
 	}
 
 	free(v, M_TEMP);
@@ -273,14 +268,14 @@ pax_segvguard_cb(void *v)
  */
 int
 pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
-    bool crashed)
+    boolean_t crashed)
 {
 	struct pax_segvguard_entry *p;
 	struct pax_segvguard_uid_entry *up;
 	struct timeval tv;
 	uid_t uid;
 	void *t;
-	bool have_uid;
+	boolean_t have_uid;
 
 	if (!pax_segvguard_enabled)
 		return (0);
@@ -290,7 +285,7 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 	    (!pax_segvguard_global && t != PAX_SEGVGUARD_EXPLICIT_ENABLE))
 		return (0);
 
-	if (vp == NULL)
+	if (segvguard_id == FILEASSOC_INVAL || vp == NULL)
 		return (EFAULT);	
 
 	/* Check if we already monitor the file. */
@@ -308,7 +303,10 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 	 */
 	if (p == NULL) {
 		p = malloc(sizeof(*p), M_TEMP, M_WAITOK);
-		fileassoc_add(vp, segvguard_id, p);
+		if (fileassoc_add(vp, segvguard_id, p) != 0) {
+			fileassoc_table_add(vp->v_mount, 16);
+			fileassoc_add(vp, segvguard_id, p);
+		}
 		LIST_INIT(&p->segv_uids);
 
 		/*
@@ -332,10 +330,10 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 	 * See if it's a culprit we're familiar with.
 	 */
 	uid = kauth_cred_getuid(l->l_cred);
-	have_uid = false;
+	have_uid = FALSE;
 	LIST_FOREACH(up, &p->segv_uids, sue_list) {
 		if (up->sue_uid == uid) {
-			have_uid = true;
+			have_uid = TRUE;
 			break;
 		}
 	}

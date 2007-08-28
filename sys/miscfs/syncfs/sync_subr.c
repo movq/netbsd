@@ -1,4 +1,4 @@
-/*	$NetBSD: sync_subr.c,v 1.29 2007/04/07 15:08:12 hannken Exp $	*/
+/*	$NetBSD: sync_subr.c,v 1.27 2006/11/16 01:33:38 christos Exp $	*/
 
 /*
  * Copyright 1997 Marshall Kirk McKusick. All Rights Reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sync_subr.c,v 1.29 2007/04/07 15:08:12 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sync_subr.c,v 1.27 2006/11/16 01:33:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,7 +58,7 @@ time_t filedelay = 30;			/* time to delay syncing files */
 time_t dirdelay  = 15;			/* time to delay syncing directories */
 time_t metadelay = 10;			/* time to delay syncing metadata */
 
-kmutex_t syncer_mutex;			/* used to freeze syncer */
+struct lock syncer_lock;		/* used to freeze syncer */
 
 static int rushjob;			/* number of slots to run ASAP */
 static int stat_rush_requests;		/* number of times I/O speeded up */
@@ -81,7 +81,7 @@ vn_initialize_syncerd()
 	for (i = 0; i < syncer_last; i++)
 		TAILQ_INIT(&syncer_workitem_pending[i]);
 
-	mutex_init(&syncer_mutex, MUTEX_DEFAULT, IPL_NONE);
+	lockinit(&syncer_lock, PVFS, "synclk", 0, 0);
 }
 
 /*
@@ -167,6 +167,7 @@ sched_sync(void *v)
 {
 	struct synclist *slp;
 	struct vnode *vp;
+	struct mount *mp;
 	long starttime;
 	int s;
 
@@ -186,13 +187,17 @@ sched_sync(void *v)
 			syncer_delayno = 0;
 		splx(s);
 
-		mutex_enter(&syncer_mutex);
+		lockmgr(&syncer_lock, LK_EXCLUSIVE, NULL);
 
 		while ((vp = TAILQ_FIRST(slp)) != NULL) {
-			if (vn_lock(vp, LK_EXCLUSIVE | LK_NOWAIT) == 0) {
-				(void) VOP_FSYNC(vp, curlwp->l_cred,
-				    FSYNC_LAZY, 0, 0, curlwp);
-				VOP_UNLOCK(vp, 0);
+			if (vn_start_write(vp, &mp, V_NOWAIT) == 0) {
+				if (vn_lock(vp, LK_EXCLUSIVE | LK_NOWAIT)
+				    == 0) {
+					(void) VOP_FSYNC(vp, curlwp->l_cred,
+					    FSYNC_LAZY, 0, 0, curlwp);
+					VOP_UNLOCK(vp, 0);
+				}
+				vn_finished_write(mp, 0);
 			}
 			s = splbio();
 			if (TAILQ_FIRST(slp) == vp) {
@@ -215,7 +220,7 @@ sched_sync(void *v)
 		if (bioops.io_sync)
 			(*bioops.io_sync)(NULL);
 
-		mutex_exit(&syncer_mutex);
+		lockmgr(&syncer_lock, LK_RELEASE, NULL);
 
 		/*
 		 * The variable rushjob allows the kernel to speed up the

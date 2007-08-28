@@ -1,4 +1,4 @@
-/*	$NetBSD: gvpio.c,v 1.16 2007/03/04 05:59:20 christos Exp $ */
+/*	$NetBSD: gvpio.c,v 1.14 2003/01/06 13:04:58 wiz Exp $ */
 
 /*
  * Copyright (c) 1997 Ignatios Souvatzis
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gvpio.c,v 1.16 2007/03/04 05:59:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gvpio.c,v 1.14 2003/01/06 13:04:58 wiz Exp $");
 
 /*
  * GVP I/O Extender
@@ -60,7 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: gvpio.c,v 1.16 2007/03/04 05:59:20 christos Exp $");
 struct gvpio_softc {
 	struct device sc_dev;
 	struct bus_space_tag sc_bst;
-	void *sc_cntr;
+	caddr_t sc_cntr;
 	LIST_HEAD(, gvpcom_int_hdl) sc_comhdls;
 	struct isr sc_comisr;
 };
@@ -107,7 +107,7 @@ gvpioattach(struct device *parent, struct device *self, void *auxp)
 	struct gvpio_devs  *giosd;
 	struct gvpbus_args *gap;
 	struct supio_attach_args supa;
-	volatile void *gbase;
+	volatile caddr_t gbase;
 	u_int16_t needpsl;
 
 	giosc = (struct gvpio_softc *)self;
@@ -142,12 +142,10 @@ gvpioattach(struct device *parent, struct device *self, void *auxp)
 	if (giosc->sc_comhdls.lh_first) {
 		/* XXX this should be really in the interrupt stuff */
 		needpsl = PSL_S|PSL_IPL6;
-		if (ipl2spl_table[IPL_SERIAL] < needpsl) {
-			printf("%s: raising ipl2spl_table[IPL_SERIAL] "
-			    "from 0x%x to 0x%x\n",
-			    giosc->sc_dev.dv_xname, ipl2spl_table[IPL_SERIAL],
-			    needpsl);
-			ipl2spl_table[IPL_SERIAL] = needpsl;
+		if (amiga_serialspl < needpsl) {
+			printf("%s: raising amiga_serialspl from 0x%x to 0x%x\n",
+			    giosc->sc_dev.dv_xname, amiga_serialspl, needpsl);
+			amiga_serialspl = needpsl;
 		}
 		giosc->sc_comisr.isr_intr = gvp_com_intr;
 		giosc->sc_comisr.isr_arg = giosc;
@@ -187,7 +185,7 @@ gvp_com_intr(void *p)
 {
 	struct gvpio_softc *sc;
 	struct gvpcom_int_hdl *np;
-	volatile void *cntr;
+	volatile caddr_t cntr;
 
 	sc = (struct gvpio_softc *)p;
 

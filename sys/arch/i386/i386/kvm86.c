@@ -1,4 +1,4 @@
-/* $NetBSD: kvm86.c,v 1.13 2007/03/04 05:59:57 christos Exp $ */
+/* $NetBSD: kvm86.c,v 1.10 2005/12/26 19:23:59 perry Exp $ */
 
 /*
  * Copyright (c) 2002
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kvm86.c,v 1.13 2007/03/04 05:59:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kvm86.c,v 1.10 2005/12/26 19:23:59 perry Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -36,10 +36,7 @@ __KERNEL_RCSID(0, "$NetBSD: kvm86.c,v 1.13 2007/03/04 05:59:57 christos Exp $");
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/malloc.h>
-#include <sys/mutex.h>
-
 #include <uvm/uvm.h>
-
 #include <machine/pcb.h>
 #include <machine/pte.h>
 #include <machine/pmap.h>
@@ -72,8 +69,6 @@ void *bioscallscratchpage;
 #define BIOSCALLSCRATCHPAGE_VMVA 0x1000
 /* a virtual page to map in vm86 memory temporarily */
 vaddr_t bioscalltmpva;
-
-kmutex_t kvm86_mp_lock;
 
 #define KVM86_IOPL3 /* not strictly necessary, saves a lot of traps */
 
@@ -110,7 +105,7 @@ kvm86_init()
 	for (i = 0; i < sizeof(vmd->iomap) / 4; i++)
 		vmd->iomap[i] = 0;
 	pcb->pcb_tss.tss_ioopt =
-		((char *)vmd->iomap - (char *)&pcb->pcb_tss) << 16;
+		((caddr_t)vmd->iomap - (caddr_t)&pcb->pcb_tss) << 16;
 
 	/* setup TSS descriptor (including our iomap) */
 	setsegment(&vmd->sd, &pcb->pcb_tss,
@@ -124,7 +119,6 @@ kvm86_init()
 		  BIOSCALLSCRATCHPAGE_VMVA);
 	bioscallvmd = vmd;
 	bioscalltmpva = uvm_km_alloc(kernel_map, PAGE_SIZE, 0, UVM_KMF_VAONLY);
-	mutex_init(&kvm86_mp_lock, MUTEX_DEFAULT, IPL_NONE);
 }
 
 /*
@@ -141,6 +135,10 @@ kvm86_prepare(vmd)
 	extern paddr_t vm86newptd;
 	extern struct trapframe *vm86frame;
 	extern pt_entry_t *vm86pgtableva;
+
+#ifdef MULTIPROCESSOR
+#error this needs a rewrite for MP
+#endif
 
 	vm86newptd = vtophys((vaddr_t)vmd) | PG_V | PG_RW | PG_U | PG_u;
 	vm86pgtableva = vmd->pgtbl;
@@ -278,9 +276,7 @@ kvm86_bioscall_simple(intno, r)
 	tf.tf_edi = r->EDI;
 	tf.tf_vm86_es = r->ES;
 
-	mutex_enter(&kvm86_mp_lock);
 	res = kvm86_bioscall(intno, &tf);
-	mutex_exit(&kvm86_mp_lock);
 
 	r->EAX = tf.tf_eax;
 	r->EBX = tf.tf_ebx;

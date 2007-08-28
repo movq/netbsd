@@ -1,4 +1,4 @@
-/* $NetBSD: dec_2000_300.c,v 1.14 2007/07/19 12:46:45 tsutsui Exp $ */
+/* $NetBSD: dec_2000_300.c,v 1.11.18.1 2007/08/21 20:00:29 liamjfoy Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: dec_2000_300.c,v 1.14 2007/07/19 12:46:45 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dec_2000_300.c,v 1.11.18.1 2007/08/21 20:00:29 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -135,7 +135,7 @@ dec_2000_300_cons_init(void)
 	jcp = &jensenio_configuration;
 	jensenio_init(jcp, 0);
 
-	ctb = (struct ctb_tt *)(((char *)hwrpb) + hwrpb->rpb_ctb_off);
+	ctb = (struct ctb_tt *)(((caddr_t)hwrpb) + hwrpb->rpb_ctb_off);
 
 	/*
 	 * The Jensen uses an older (pre-Type 4) CTB format.  The

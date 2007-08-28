@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.58 2007/08/07 01:59:23 macallan Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.49.2.1 2007/03/04 12:29:43 bouyer Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.58 2007/08/07 01:59:23 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.49.2.1 2007/03/04 12:29:43 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -54,7 +54,6 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.58 2007/08/07 01:59:23 macallan Exp $
 #include <dev/scsipi/scsiconf.h>
 #include <dev/ata/atavar.h>
 #include <dev/ic/wdcvar.h>
-#include <dev/wsfb/genfbvar.h>
 
 void canonicalize_bootpath __P((void));
 void ofw_stack __P((void));
@@ -64,9 +63,6 @@ char cbootpath[256];
 int    console_node = 0, console_instance = 0;
 
 u_int *heathrow_FCR = NULL;
-
-struct genfb_colormap_callback gfb_cb;
-static void of_set_palette(void *, int, int, int, int);
 
 static void add_model_specifics(prop_dictionary_t);
 static void copyprops(int, prop_dictionary_t);
@@ -263,14 +259,10 @@ device_register(dev, aux)
 	if (device_is_a(device_parent(dev), "pci")) {
 		/* see if this is going to be console */
 		struct pci_attach_args *pa = aux;
-		prop_dictionary_t dict;
 		int node, sub;
 		int console = 0;
 
-		dict = device_properties(dev);
 		node = pcidev_to_ofdev(pa->pa_pc, pa->pa_tag);
-		prop_dictionary_set_uint32(dict, "device_node", node);
-
 		console = (node == console_node);
 
 		if (!console) {
@@ -284,22 +276,15 @@ device_register(dev, aux)
 				sub = OF_peer(sub);
 			}
 			if (sub == console_node) {
-				console = true;
+				console = TRUE;
 			}
 		}
 
 		if (console) {
-			uint64_t cmap_cb;
+			prop_dictionary_t dict;
 
-			prop_dictionary_set_uint32(dict, "instance_handle",
-			    console_instance);
+			dict = device_properties(dev);
 			copyprops(console_node, dict);
-
-			gfb_cb.gcc_cookie = (void *)console_instance;
-			gfb_cb.gcc_set_mapreg = of_set_palette;
-			cmap_cb = (uint64_t)&gfb_cb;
-			prop_dictionary_set_uint64(dict, "cmap_callback",
-			    cmap_cb);
 		}
 	}
 
@@ -413,15 +398,17 @@ cpu_rootconf()
 }
 
 int
-OF_interpret(const char *cmd, int nargs, int nreturns, ...)
+OF_interpret(const char *cmd, int nreturns, ...)
 {
 	va_list ap;
-	int i, len, status;
+	int i;
 	static struct {
 		const char *name;
-		uint32_t nargs;
-		uint32_t nreturns;
-		uint32_t slots[16];
+		int nargs;
+		int nreturns;
+		char *cmd;
+		int status;
+		int results[8];
 	} args = {
 		"interpret",
 		1,
@@ -431,31 +418,19 @@ OF_interpret(const char *cmd, int nargs, int nreturns, ...)
 	ofw_stack();
 	if (nreturns > 8)
 		return -1;
-	if ((len = strlen(cmd)) >= PAGE_SIZE)
+	if ((i = strlen(cmd)) >= PAGE_SIZE)
 		return -1;
-	ofbcopy(cmd, OF_buf, len + 1);
-	i = 0;
-	args.slots[i] = (uint32_t)OF_buf;
-	args.nargs = nargs + 1;
+	ofbcopy(cmd, OF_buf, i + 1);
+	args.cmd = OF_buf;
+	args.nargs = 1;
 	args.nreturns = nreturns + 1;
-	va_start(ap, nreturns);
-	i++;
-	while (i < args.nargs) {
-		args.slots[i] = (uint32_t)va_arg(ap, uint32_t *);
-		i++;
-	}
-
 	if (openfirmware(&args) == -1)
 		return -1;
-	status = args.slots[i];
-	i++;
-
-	while (i < args.nargs + args.nreturns) {
-		*va_arg(ap, uint32_t *) = args.slots[i];
-		i++;
-	}
+	va_start(ap, nreturns);
+	for (i = 0; i < nreturns; i++)
+		*va_arg(ap, int *) = args.results[i];
 	va_end(ap);
-	return status;
+	return args.status;
 }
 
 /*
@@ -532,7 +507,7 @@ add_model_specifics(prop_dictionary_t dict)
 
 	node = OF_finddevice("/");
 
-	if (of_compatible(node, bl_rev_models) != -1) {
+	if (of_compatible(node, bl_rev_models)) {
 		prop_dictionary_set_bool(dict, "backlight_level_reverted", 1);
 	}
 }
@@ -540,43 +515,20 @@ add_model_specifics(prop_dictionary_t dict)
 static void
 copyprops(int node, prop_dictionary_t dict)
 {
-	uint32_t temp;
 
 	prop_dictionary_set_bool(dict, "is_console", 1);
-	if (!OF_to_intprop(dict, node, "width", "width")) {
-
-		OF_interpret("screen-width", 0, 1, &temp);
-		prop_dictionary_set_uint32(dict, "width", temp);
-	}
-	if (!OF_to_intprop(dict, console_node, "height", "height")) {
-
-		OF_interpret("screen-height", 0, 1, &temp);
-		prop_dictionary_set_uint32(dict, "height", temp);
-	}
+	if (!OF_to_intprop(dict, node, "width", "width"))
+		OF_to_intprop(dict, console_node, "screen-width", "width");
+	if (!OF_to_intprop(dict, console_node, "height", "height"))
+		OF_to_intprop(dict, console_node, "screen-height", "height");
 	OF_to_intprop(dict, console_node, "linebytes", "linebytes");
-	if (!OF_to_intprop(dict, console_node, "depth", "depth")) {
-		/*
-		 * XXX we should check linebytes vs. width but those
-		 * FBs that don't have a depth property ( /chaos/control... )
-		 * won't have linebytes either
-		 */
-		prop_dictionary_set_uint32(dict, "depth", 8);
-	}
+	OF_to_intprop(dict, console_node, "depth", "depth");
 	if (!OF_to_intprop(dict, console_node, "address", "address")) {
 		uint32_t fbaddr = 0;
-			OF_interpret("frame-buffer-adr", 0, 1, &fbaddr);
+			OF_interpret("frame-buffer-adr", 1, &fbaddr);
 		if (fbaddr != 0)
 			prop_dictionary_set_uint32(dict, "address", fbaddr);
 	}
 	OF_to_dataprop(dict, console_node, "EDID", "EDID");
 	add_model_specifics(dict);
 }
-
-static void
-of_set_palette(void *cookie, int index, int r, int g, int b)
-{
-	int ih = (int)cookie;
-
-	OF_call_method_1("color!", ih, 4, r, g, b, index);
-}
-

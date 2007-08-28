@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_event.c,v 1.40 2007/07/21 19:23:03 ad Exp $	*/
+/*	$NetBSD: kern_event.c,v 1.33 2006/11/01 10:17:58 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1999,2000,2001 Jonathan Lemon <jlemon@FreeBSD.org>
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.40 2007/07/21 19:23:03 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.33 2006/11/01 10:17:58 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,9 +52,9 @@ __KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.40 2007/07/21 19:23:03 ad Exp $");
 #include <sys/uio.h>
 #include <sys/mount.h>
 #include <sys/filedesc.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/kauth.h>
-#include <sys/conf.h>
 
 static void	kqueue_wakeup(struct kqueue *kq);
 
@@ -105,10 +105,8 @@ static const struct filterops file_filtops =
 static const struct filterops timer_filtops =
 	{ 0, filt_timerattach, filt_timerdetach, filt_timer };
 
-static POOL_INIT(kqueue_pool, sizeof(struct kqueue), 0, 0, 0, "kqueuepl", NULL,
-    IPL_VM);
-static POOL_INIT(knote_pool, sizeof(struct knote), 0, 0, 0, "knotepl", NULL,
-    IPL_VM);
+static POOL_INIT(kqueue_pool, sizeof(struct kqueue), 0, 0, 0, "kqueuepl", NULL);
+static POOL_INIT(knote_pool, sizeof(struct knote), 0, 0, 0, "knotepl", NULL);
 static int	kq_ncallouts = 0;
 static int	kq_calloutmax = (4 * 1024);
 
@@ -257,10 +255,10 @@ kfilter_register(const char *name, const struct filterops *filtops,
 
 		/* copy existing user_kfilters */
 		if (user_kfilters != NULL)
-			memcpy((void *)kfilter, (void *)user_kfilters,
+			memcpy((caddr_t)kfilter, (caddr_t)user_kfilters,
 			    user_kfilterc * sizeof(struct kfilter *));
 					/* zero new sections */
-		memset((char *)kfilter +
+		memset((caddr_t)kfilter +
 		    user_kfilterc * sizeof(struct kfilter *), 0,
 		    (user_kfiltermaxc - user_kfilterc) *
 		    sizeof(struct kfilter *));
@@ -383,8 +381,8 @@ filt_procattach(struct knote *kn)
 	 * setuid/setgid privs (unless you're root).
 	 */
 	if ((kauth_cred_getuid(p->p_cred) != kauth_cred_getuid(curl->l_cred) ||
-	    (p->p_flag & PK_SUGID)) && kauth_authorize_generic(curl->l_cred,
-	    KAUTH_GENERIC_ISSUSER, NULL) != 0)
+	    (p->p_flag & P_SUGID)) && kauth_authorize_generic(curl->l_cred,
+	    KAUTH_GENERIC_ISSUSER, &curl->l_acflag) != 0)
 		return (EACCES);
 
 	kn->kn_ptr.p_proc = p;
@@ -424,6 +422,7 @@ filt_procdetach(struct knote *kn)
 		return;
 
 	p = kn->kn_ptr.p_proc;
+	KASSERT(p->p_stat == SZOMB || pfind(kn->kn_id) == p);
 
 	/* XXXSMP lock the process? */
 	SLIST_REMOVE(&p->p_klist, kn, knote, kn_selnext);
@@ -506,7 +505,7 @@ filt_timerexpire(void *knx)
 
 	if ((kn->kn_flags & EV_ONESHOT) == 0) {
 		tticks = mstohz(kn->kn_sdata);
-		callout_schedule((callout_t *)kn->kn_hook, tticks);
+		callout_schedule((struct callout *)kn->kn_hook, tticks);
 	}
 }
 
@@ -516,7 +515,7 @@ filt_timerexpire(void *knx)
 static int
 filt_timerattach(struct knote *kn)
 {
-	callout_t *calloutp;
+	struct callout *calloutp;
 	int tticks;
 
 	if (kq_ncallouts >= kq_calloutmax)
@@ -533,9 +532,9 @@ filt_timerattach(struct knote *kn)
 	}
 
 	kn->kn_flags |= EV_CLEAR;		/* automatically set */
-	MALLOC(calloutp, callout_t *, sizeof(*calloutp),
+	MALLOC(calloutp, struct callout *, sizeof(*calloutp),
 	    M_KEVENT, 0);
-	callout_init(calloutp, 0);
+	callout_init(calloutp);
 	callout_reset(calloutp, tticks, filt_timerexpire, kn);
 	kn->kn_hook = calloutp;
 
@@ -545,11 +544,10 @@ filt_timerattach(struct knote *kn)
 static void
 filt_timerdetach(struct knote *kn)
 {
-	callout_t *calloutp;
+	struct callout *calloutp;
 
-	calloutp = (callout_t *)kn->kn_hook;
+	calloutp = (struct callout *)kn->kn_hook;
 	callout_stop(calloutp);
-	callout_destroy(calloutp);
 	FREE(calloutp, M_KEVENT);
 	kq_ncallouts--;
 }
@@ -629,7 +627,7 @@ sys_kqueue(struct lwp *l, void *v, register_t *retval)
 	memset((char *)kq, 0, sizeof(struct kqueue));
 	simple_lock_init(&kq->kq_lock);
 	TAILQ_INIT(&kq->kq_head);
-	fp->f_data = (void *)kq;	/* store the kqueue with the fp */
+	fp->f_data = (caddr_t)kq;	/* store the kqueue with the fp */
 	*retval = fd;
 	if (fdp->fd_knlistsize < 0)
 		fdp->fd_knlistsize = 0;	/* this process has a kq */
@@ -1363,7 +1361,7 @@ knote_attach(struct knote *kn, struct filedesc *fdp)
 		list = malloc(size * sizeof(struct klist *), M_KEVENT,M_WAITOK);
 		if (fdp->fd_knlist) {
 			/* copy existing knlist */
-			memcpy((void *)list, (void *)fdp->fd_knlist,
+			memcpy((caddr_t)list, (caddr_t)fdp->fd_knlist,
 			    fdp->fd_knlistsize * sizeof(struct klist *));
 		}
 		/*

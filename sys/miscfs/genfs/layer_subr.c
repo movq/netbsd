@@ -1,4 +1,4 @@
-/*	$NetBSD: layer_subr.c,v 1.21 2006/12/09 16:11:52 chs Exp $	*/
+/*	$NetBSD: layer_subr.c,v 1.20.2.1 2007/02/17 23:27:49 tron Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: layer_subr.c,v 1.21 2006/12/09 16:11:52 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: layer_subr.c,v 1.20.2.1 2007/02/17 23:27:49 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

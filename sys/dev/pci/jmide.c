@@ -1,4 +1,4 @@
-/*	$NetBSD: jmide.c,v 1.2 2007/05/31 21:26:48 bouyer Exp $	*/
+/*	$NetBSD: jmide.c,v 1.2.14.2 2007/08/31 20:09:25 pavel Exp $	*/
 
 /*
  * Copyright (c) 2007 Manuel Bouyer.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: jmide.c,v 1.2 2007/05/31 21:26:48 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: jmide.c,v 1.2.14.2 2007/08/31 20:09:25 pavel Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

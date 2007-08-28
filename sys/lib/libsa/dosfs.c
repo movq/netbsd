@@ -1,4 +1,4 @@
-/*	$NetBSD: dosfs.c,v 1.11 2006/12/02 00:38:22 dogcow Exp $	*/
+/*	$NetBSD: dosfs.c,v 1.10.22.1 2006/12/02 15:22:05 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 Robert Nordier

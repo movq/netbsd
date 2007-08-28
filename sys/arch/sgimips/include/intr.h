@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.23 2007/06/26 12:55:38 tsutsui Exp $	*/
+/*	$NetBSD: intr.h,v 1.19 2005/12/11 12:18:53 christos Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -36,22 +36,16 @@
 #define	_SGIMIPS_INTR_H_
 
 #define	IPL_NONE	0	/* Disable only this interrupt. */
-#define	IPL_SOFT	1	/* generic software interrupts */
-#define	IPL_SOFTSERIAL	2	/* serial software interrupts */
-#define	IPL_SOFTNET	3	/* network software interrupts */
-#define	IPL_SOFTCLOCK	4	/* clock software interrupts */
-#define	IPL_BIO		5	/* Disable block I/O interrupts. */
-#define	IPL_NET		6	/* Disable network interrupts. */
-#define	IPL_TTY		7	/* Disable terminal interrupts. */
-#define	IPL_SERIAL	IPL_TTY
-#define	IPL_LPT		IPL_TTY
-#define	IPL_VM		IPL_TTY
-#define	IPL_CLOCK	8	/* Disable clock interrupts. */
-#define	IPL_STATCLOCK	IPL_CLOCK /* Disable profiling interrupts. */
-#define	IPL_HIGH	9	/* Disable all interrupts. */
-#define	IPL_SCHED	IPL_HIGH
-#define	IPL_LOCK	IPL_HIGH
-#define NIPL		10
+#define	IPL_BIO		1	/* Disable block I/O interrupts. */
+#define	IPL_NET		2	/* Disable network interrupts. */
+#define	IPL_TTY		3	/* Disable terminal interrupts. */
+#define	IPL_CLOCK	4	/* Disable clock interrupts. */
+#define	IPL_STATCLOCK	5	/* Disable profiling interrupts. */
+#ifndef __NO_SOFT_SERIAL_INTERRUPT
+#define	IPL_SERIAL	6	/* Disable serial hardware interrupts. */
+#endif
+#define	IPL_HIGH	7	/* Disable all interrupts. */
+#define NIPL		8
 
 /* Interrupt sharing types. */
 #define IST_NONE	0	/* none */
@@ -60,18 +54,17 @@
 #define IST_LEVEL	3	/* level-triggered */
 
 /* Soft interrupt numbers */
-#define	SI_SOFT		0
-#define	SI_SOFTCLOCK	1
-#define	SI_SOFTNET	2
-#define	SI_SOFTSERIAL	3
+#define	IPL_SOFT	0	/* generic software interrupts */
+#define	IPL_SOFTSERIAL	1	/* serial software interrupts */
+#define	IPL_SOFTNET	2	/* network software interrupts */
+#define	IPL_SOFTCLOCK	3	/* clock software interrupts */
+#define	_IPL_NSOFT	4
 
-#define	SI_NQUEUES	4
-
-#define	SI_QUEUENAMES {							\
+#define	IPL_SOFTNAMES {							\
 	"misc",								\
-	"clock",							\
-	"net",								\
 	"serial",							\
+	"net",								\
+	"clock",							\
 }
 
 #ifdef _KERNEL
@@ -81,7 +74,6 @@
 #include <sys/types.h>
 #include <sys/device.h>
 #include <mips/cpuregs.h>
-#include <mips/locore.h>
 
 #define NINTR	32
 
@@ -104,16 +96,24 @@ struct sgimips_intr {
 
 extern struct sgimips_intrhand intrtab[];
 
-extern const int *ipl2spl_table;
+extern int		_splraise(int);
+extern int		_spllower(int);
+extern int		_splset(int);
+extern int		_splget(void);
+extern void		_splnone(void);
+extern void		_setsoftintr(int);
+extern void		_clrsoftintr(int);
+
+extern u_int32_t 	splmasks[];
 
 #define splhigh()	_splraise(MIPS_INT_MASK)
 #define spl0()		(void)_spllower(0)
 #define splx(s)		(void)_splset(s)
-#define splbio()	_splraise(ipl2spl_table[IPL_BIO])
-#define splnet()	_splraise(ipl2spl_table[IPL_NET])
-#define spltty()	_splraise(ipl2spl_table[IPL_TTY])
+#define splbio()	_splraise(splmasks[IPL_BIO])
+#define splnet()	_splraise(splmasks[IPL_NET])
+#define spltty()	_splraise(splmasks[IPL_TTY])
 #define splvm()		spltty()
-#define splclock()	_splraise(ipl2spl_table[IPL_CLOCK])
+#define splclock()	_splraise(splmasks[IPL_CLOCK])
 #define splstatclock()	splclock()
 
 #define	splsched()	splhigh()
@@ -124,23 +124,10 @@ extern const int *ipl2spl_table;
 #define splsoft()	_splraise(MIPS_SOFT_INT_MASK_1)
 #define splsoftclock()	splsoft()
 #define splsoftnet()	splsoft()
-#define splsoftserial()	splsoft()
+
+#define spllowersoftclock() _spllower(MIPS_SOFT_INT_MASK_1)
 
 extern void *		cpu_intr_establish(int, int, int (*)(void *), void *);
-
-typedef int ipl_t;
-typedef struct {
-	int _spl;
-} ipl_cookie_t;
-
-ipl_cookie_t makeiplcookie(ipl_t);
-
-static inline int
-splraiseipl(ipl_cookie_t icookie)
-{
-
-	return _splraise(icookie._spl);
-}
 
 #include <mips/softintr.h>
 

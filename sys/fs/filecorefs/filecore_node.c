@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_node.c,v 1.10 2007/06/30 09:37:55 pooka Exp $	*/
+/*	$NetBSD: filecore_node.c,v 1.7 2005/12/11 12:24:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1994
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_node.c,v 1.10 2007/06/30 09:37:55 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_node.c,v 1.7 2005/12/11 12:24:25 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,7 +95,8 @@ u_long filecorehash;
 #define	INOHASH(device, inum)	(((device) + ((inum)>>12)) & filecorehash)
 struct simplelock filecore_ihash_slock;
 
-struct pool filecore_node_pool;
+POOL_INIT(filecore_node_pool, sizeof(struct filecore_node), 0, 0, 0,
+    "filecrnopl", &pool_allocator_nointr);
 
 extern int prtactive;	/* 1 => print out reclaim of active vnodes */
 
@@ -105,10 +106,11 @@ extern int prtactive;	/* 1 => print out reclaim of active vnodes */
 void
 filecore_init()
 {
-
+#ifdef _LKM
 	malloc_type_attach(M_FILECOREMNT);
 	pool_init(&filecore_node_pool, sizeof(struct filecore_node), 0, 0, 0,
-	    "filecrnopl", &pool_allocator_nointr, IPL_NONE);
+	    "filecrnopl", &pool_allocator_nointr);
+#endif
 	filecorehashtbl = hashinit(desiredvnodes, HASH_LIST, M_FILECOREMNT,
 	    M_WAITOK, &filecorehash);
 	simple_lock_init(&filecore_ihash_slock);
@@ -151,8 +153,10 @@ void
 filecore_done()
 {
 	hashdone(filecorehashtbl, M_FILECOREMNT);
+#ifdef _LKM
 	pool_destroy(&filecore_node_pool);
 	malloc_type_detach(M_FILECOREMNT);
+#endif
 }
 
 /*
@@ -273,7 +277,6 @@ filecore_reclaim(v)
 		vrele(ip->i_devvp);
 		ip->i_devvp = 0;
 	}
-	genfs_node_destroy(vp);
 	pool_put(&filecore_node_pool, vp->v_data);
 	vp->v_data = NULL;
 	return (0);

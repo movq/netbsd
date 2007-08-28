@@ -1,4 +1,4 @@
-/*	$NetBSD: ct.c,v 1.11 2007/07/29 12:15:43 ad Exp $ */
+/*	$NetBSD: ct.c,v 1.8 2006/03/29 06:33:50 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1996-2003 The NetBSD Foundation, Inc.
@@ -128,7 +128,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ct.c,v 1.11 2007/07/29 12:15:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ct.c,v 1.8 2006/03/29 06:33:50 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -240,7 +240,7 @@ extern struct cfdriver ct_cd;
 struct	ctinfo {
 	short	hwid;
 	short	punit;
-	const char	*desc;
+	char	*desc;
 } ctinfo[] = {
 	{ CT7946ID,	1,	"7946A"	},
 	{ CT7912PID,	1,	"7912P"	},
@@ -378,10 +378,10 @@ ctattach(parent, self, aux)
 
 /*ARGSUSED*/
 int
-ctopen(dev, flag, type, l)
+ctopen(dev, flag, type, p)
 	dev_t dev;
 	int flag, type;
-	struct lwp *l;
+	struct proc *p;
 {
 	struct ct_softc *sc;
 	u_int8_t opt;
@@ -402,7 +402,7 @@ ctopen(dev, flag, type, l)
 	    sc->sc_punit, opt))
 		return (EBUSY);
 
-	sc->sc_tpr = tprintf_open(l->l_proc);
+	sc->sc_tpr = tprintf_open(p);
 	sc->sc_flags |= CTF_OPEN;
 
 	return (0);
@@ -410,10 +410,10 @@ ctopen(dev, flag, type, l)
 
 /*ARGSUSED*/
 int
-ctclose(dev, flag, fmt, l)
+ctclose(dev, flag, fmt, p)
 	dev_t dev;
 	int flag, fmt;
-	struct lwp *l;
+	struct proc *p;
 {
 	struct ct_softc *sc;
 
@@ -657,6 +657,7 @@ cteof(sc, bp)
 	 */
 	if ((bp->b_flags & B_READ) == 0) {
 		bp->b_resid = bp->b_bcount;
+		bp->b_flags |= B_ERROR;
 		bp->b_error = ENOSPC;
 		sc->sc_flags |= CTF_EOT;
 		return;
@@ -825,6 +826,7 @@ ctintr(sc)
 		} else
 			printf("%s: request status failed\n",
 			    sc->sc_dev.dv_xname);
+		bp->b_flags |= B_ERROR;
 		bp->b_error = EIO;
 		goto done;
 	} else
@@ -908,12 +910,12 @@ ctwrite(dev, uio, flags)
 
 /*ARGSUSED*/
 int
-ctioctl(dev, cmd, data, flag, l)
+ctioctl(dev, cmd, data, flag, p)
 	dev_t dev;
 	u_long cmd;
 	int flag;
-	void *data;
-	struct lwp *l;
+	caddr_t data;
+	struct proc *p;
 {
 	struct mtop *op;
 	int cnt;

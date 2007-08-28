@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_subr.c,v 1.164 2007/08/15 12:07:34 ad Exp $	*/
+/*	$NetBSD: kern_subr.c,v 1.150.2.1 2007/05/13 10:28:37 jdc Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2002 The NetBSD Foundation, Inc.
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.164 2007/08/15 12:07:34 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.150.2.1 2007/05/13 10:28:37 jdc Exp $");
 
 #include "opt_ddb.h"
 #include "opt_md.h"
@@ -105,15 +105,12 @@ __KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.164 2007/08/15 12:07:34 ad Exp $");
 #include <sys/device.h>
 #include <sys/reboot.h>
 #include <sys/conf.h>
-#include <sys/disk.h>
 #include <sys/disklabel.h>
 #include <sys/queue.h>
 #include <sys/systrace.h>
 #include <sys/ktrace.h>
 #include <sys/ptrace.h>
 #include <sys/fcntl.h>
-#include <sys/kauth.h>
-#include <sys/vnode.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -125,7 +122,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.164 2007/08/15 12:07:34 ad Exp $");
 static struct device *finddevice(const char *);
 static struct device *getdisk(char *, int, int, dev_t *, int);
 static struct device *parsedisk(char *, int, int, dev_t *);
-static const char *getwedgename(const char *, int);
 
 /*
  * A generic linear hook.
@@ -158,11 +154,9 @@ uiomove(void *buf, size_t n, struct uio *uio)
 	u_int cnt;
 	int error = 0;
 	char *cp = buf;
-#ifdef MULTIPROCESSOR
 	int hold_count;
-#endif
 
-	KERNEL_UNLOCK_ALL(NULL, &hold_count);
+	hold_count = KERNEL_LOCK_RELEASE_ALL();
 
 	ASSERT_SLEEPABLE(NULL, "uiomove");
 
@@ -184,7 +178,7 @@ uiomove(void *buf, size_t n, struct uio *uio)
 		if (!VMSPACE_IS_KERNEL_P(vm)) {
 			if (curcpu()->ci_schedstate.spc_flags &
 			    SPCF_SHOULDYIELD)
-				preempt();
+				preempt(1);
 		}
 
 		if (uio->uio_rw == UIO_READ) {
@@ -197,7 +191,7 @@ uiomove(void *buf, size_t n, struct uio *uio)
 		if (error) {
 			break;
 		}
-		iov->iov_base = (char *)iov->iov_base + cnt;
+		iov->iov_base = (caddr_t)iov->iov_base + cnt;
 		iov->iov_len -= cnt;
 		uio->uio_resid -= cnt;
 		uio->uio_offset += cnt;
@@ -205,7 +199,7 @@ uiomove(void *buf, size_t n, struct uio *uio)
 		KDASSERT(cnt <= n);
 		n -= cnt;
 	}
-	KERNEL_LOCK(hold_count, NULL);
+	KERNEL_LOCK_ACQUIRE_COUNT(hold_count);
 	return (error);
 }
 
@@ -251,7 +245,7 @@ again:
 	} else {
 		*(char *)iov->iov_base = c;
 	}
-	iov->iov_base = (char *)iov->iov_base + 1;
+	iov->iov_base = (caddr_t)iov->iov_base + 1;
 	iov->iov_len--;
 	uio->uio_resid--;
 	uio->uio_offset++;
@@ -385,6 +379,72 @@ ioctl_copyout(int ioctlflags, const void *src, void *dst, size_t len)
 		return kcopy(src, dst, len);
 	return copyout(src, dst, len);
 }
+
+/*
+ * General routine to allocate a hash table.
+ * Allocate enough memory to hold at least `elements' list-head pointers.
+ * Return a pointer to the allocated space and set *hashmask to a pattern
+ * suitable for masking a value to use as an index into the returned array.
+ */
+void *
+hashinit(u_int elements, enum hashtype htype, struct malloc_type *mtype,
+    int mflags, u_long *hashmask)
+{
+	u_long hashsize, i;
+	LIST_HEAD(, generic) *hashtbl_list;
+	TAILQ_HEAD(, generic) *hashtbl_tailq;
+	size_t esize;
+	void *p;
+
+	if (elements == 0)
+		panic("hashinit: bad cnt");
+	for (hashsize = 1; hashsize < elements; hashsize <<= 1)
+		continue;
+
+	switch (htype) {
+	case HASH_LIST:
+		esize = sizeof(*hashtbl_list);
+		break;
+	case HASH_TAILQ:
+		esize = sizeof(*hashtbl_tailq);
+		break;
+	default:
+#ifdef DIAGNOSTIC
+		panic("hashinit: invalid table type");
+#else
+		return NULL;
+#endif
+	}
+
+	if ((p = malloc(hashsize * esize, mtype, mflags)) == NULL)
+		return (NULL);
+
+	switch (htype) {
+	case HASH_LIST:
+		hashtbl_list = p;
+		for (i = 0; i < hashsize; i++)
+			LIST_INIT(&hashtbl_list[i]);
+		break;
+	case HASH_TAILQ:
+		hashtbl_tailq = p;
+		for (i = 0; i < hashsize; i++)
+			TAILQ_INIT(&hashtbl_tailq[i]);
+		break;
+	}
+	*hashmask = hashsize - 1;
+	return (p);
+}
+
+/*
+ * Free memory from hash table previosly allocated via hashinit().
+ */
+void
+hashdone(void *hashtbl, struct malloc_type *mtype)
+{
+
+	free(hashtbl, mtype);
+}
+
 
 static void *
 hook_establish(hook_list_t *list, void (*fn)(void *), void *arg)
@@ -669,55 +729,46 @@ dopowerhooks(int why)
 	struct powerhook_desc *dp;
 
 #ifdef POWERHOOK_DEBUG
-	const char *why_name;
-	static const char * pwr_names[] = {PWR_NAMES};
-	why_name = why < __arraycount(pwr_names) ? pwr_names[why] : "???";
+	printf("dopowerhooks ");
+	switch (why) {
+	case PWR_RESUME:
+		printf("resume");
+		break;
+	case PWR_SOFTRESUME:
+		printf("softresume");
+		break;
+	case PWR_SUSPEND:
+		printf("suspend");
+		break;
+	case PWR_SOFTSUSPEND:
+		printf("softsuspend");
+		break;
+	case PWR_STANDBY:
+		printf("standby");
+		break;
+	}
+	printf(":");
 #endif
 
 	if (why == PWR_RESUME || why == PWR_SOFTRESUME) {
 		CIRCLEQ_FOREACH_REVERSE(dp, &powerhook_list, sfd_list) {
 #ifdef POWERHOOK_DEBUG
-			printf("dopowerhooks %s: %s (%p)\n", why_name, dp->sfd_name, dp);
+			printf(" %s", dp->sfd_name);
 #endif
 			(*dp->sfd_fn)(why, dp->sfd_arg);
 		}
 	} else {
 		CIRCLEQ_FOREACH(dp, &powerhook_list, sfd_list) {
 #ifdef POWERHOOK_DEBUG
-			printf("dopowerhooks %s: %s (%p)\n", why_name, dp->sfd_name, dp);
+			printf(" %s", dp->sfd_name);
 #endif
 			(*dp->sfd_fn)(why, dp->sfd_arg);
 		}
 	}
 
 #ifdef POWERHOOK_DEBUG
-	printf("dopowerhooks: %s done\n", why_name);
+	printf(".\n");
 #endif
-}
-
-static int
-isswap(struct device *dv)
-{
-	struct dkwedge_info wi;
-	struct vnode *vn;
-	int error;
-
-	if (device_class(dv) != DV_DISK || !device_is_a(dv, "dk"))
-		return 0;
-
-	if ((vn = opendisk(dv)) == NULL)
-		return 0;
-
-	error = VOP_IOCTL(vn, DIOCGWEDGEINFO, &wi, FREAD, NOCRED, 0);
-	VOP_CLOSE(vn, FREAD, NOCRED, 0);
-	vput(vn);
-	if (error) {
-#ifdef DEBUG_WEDGE
-		printf("%s: Get wedge info returned %d\n", dv->dv_xname, error);
-#endif
-		return 0;
-	}
-	return strcmp(wi.dkw_ptype, DKW_PTYPE_SWAP) == 0;
 }
 
 /*
@@ -758,7 +809,7 @@ void
 setroot(struct device *bootdv, int bootpartition)
 {
 	struct device *dv;
-	int len, majdev;
+	int len;
 #ifdef MEMORY_DISK_HOOKS
 	int i;
 #endif
@@ -958,6 +1009,8 @@ setroot(struct device *bootdv, int bootpartition)
 		}
 
 	} else if (rootspec == NULL) {
+		int majdev;
+
 		/*
 		 * Wildcarded root; use the boot device.
 		 */
@@ -991,11 +1044,6 @@ setroot(struct device *bootdv, int bootpartition)
 			rootdv = dv;
 			goto haveroot;
 		}
-
-		if (rootdev == NODEV &&
-		    device_class(dv) == DV_DISK && device_is_a(dv, "dk") &&
-		    (majdev = devsw_name2blk(dv->dv_xname, NULL, 0)) >= 0)
-			rootdev = makedev(majdev, device_unit(dv));
 
 		rootdevname = devsw_blk2name(major(rootdev));
 		if (rootdevname == NULL) {
@@ -1079,20 +1127,9 @@ setroot(struct device *bootdv, int bootpartition)
 			goto nodumpdev;
 		}
 	} else {				/* (c) */
-		if (DEV_USES_PARTITIONS(rootdv) == 0) {
-			for (dv = TAILQ_FIRST(&alldevs); dv != NULL;
-			    dv = TAILQ_NEXT(dv, dv_list))
-				if (isswap(dv))
-					break;
-			if (dv == NULL)
-				goto nodumpdev;
-
-			majdev = devsw_name2blk(dv->dv_xname, NULL, 0);
-			if (majdev < 0)
-				goto nodumpdev;
-			dumpdv = dv;
-			dumpdev = makedev(majdev, device_unit(dumpdv));
-		} else {
+		if (DEV_USES_PARTITIONS(rootdv) == 0)
+			goto nodumpdev;
+		else {
 			dumpdv = rootdv;
 			dumpdev = MAKEDISKDEV(major(rootdev),
 			    device_unit(dumpdv), 1);
@@ -1113,27 +1150,25 @@ setroot(struct device *bootdv, int bootpartition)
 static struct device *
 finddevice(const char *name)
 {
-	const char *wname;
 	struct device *dv;
 #if defined(BOOT_FROM_MEMORY_HOOKS)
 	int j;
 #endif /* BOOT_FROM_MEMORY_HOOKS */
 
-	if ((wname = getwedgename(name, strlen(name))) != NULL)
-		return dkwedge_find_by_wname(wname);
-
 #ifdef BOOT_FROM_MEMORY_HOOKS
 	for (j = 0; j < NMD; j++) {
-		if (strcmp(name, fakemdrootdev[j].dv_xname) == 0)
-			return &fakemdrootdev[j];
+		if (strcmp(name, fakemdrootdev[j].dv_xname) == 0) {
+			dv = &fakemdrootdev[j];
+			return (dv);
+		}
 	}
 #endif /* BOOT_FROM_MEMORY_HOOKS */
 
-	TAILQ_FOREACH(dv, &alldevs, dv_list) {
+	for (dv = TAILQ_FIRST(&alldevs); dv != NULL;
+	    dv = TAILQ_NEXT(dv, dv_list))
 		if (strcmp(dv->dv_xname, name) == 0)
 			break;
-	}
-	return dv;
+	return (dv);
 }
 
 static struct device *
@@ -1161,7 +1196,6 @@ getdisk(char *str, int len, int defpart, dev_t *devp, int isdump)
 			if (isdump == 0 && device_class(dv) == DV_IFNET)
 				printf(" %s", dv->dv_xname);
 		}
-		dkwedge_print_wnames();
 		if (isdump)
 			printf(" none");
 #if defined(DDB)
@@ -1169,26 +1203,13 @@ getdisk(char *str, int len, int defpart, dev_t *devp, int isdump)
 #endif
 		printf(" halt reboot\n");
 	}
-	return dv;
-}
-
-static const char *
-getwedgename(const char *name, int namelen)
-{
-	const char *wpfx = "wedge:";
-	const int wpfxlen = strlen(wpfx);
-
-	if (namelen < wpfxlen || strncmp(name, wpfx, wpfxlen) != 0)
-		return NULL;
-
-	return name + wpfxlen;
+	return (dv);
 }
 
 static struct device *
 parsedisk(char *str, int len, int defpart, dev_t *devp)
 {
 	struct device *dv;
-	const char *wname;
 	char *cp, c;
 	int majdev, part;
 #ifdef MEMORY_DISK_HOOKS
@@ -1208,13 +1229,7 @@ parsedisk(char *str, int len, int defpart, dev_t *devp)
 
 	cp = str + len - 1;
 	c = *cp;
-
-	if ((wname = getwedgename(str, len)) != NULL) {
-		if ((dv = dkwedge_find_by_wname(wname)) == NULL)
-			return NULL;
-		part = defpart;
-		goto gotdisk;
-	} else if (c >= 'a' && c <= ('a' + MAXPARTITIONS - 1)) {
+	if (c >= 'a' && c <= ('a' + MAXPARTITIONS - 1)) {
 		part = c - 'a';
 		*cp = '\0';
 	} else
@@ -1231,7 +1246,9 @@ parsedisk(char *str, int len, int defpart, dev_t *devp)
 	dv = finddevice(str);
 	if (dv != NULL) {
 		if (device_class(dv) == DV_DISK) {
+#ifdef MEMORY_DISK_HOOKS
  gotdisk:
+#endif
 			majdev = devsw_name2blk(dv->dv_xname, NULL, 0);
 			if (majdev < 0)
 				panic("parsedisk");
@@ -1320,28 +1337,28 @@ format_bytes(char *buf, size_t len, uint64_t bytes)
 }
 
 /*
- * Return true if system call tracing is enabled for the specified process.
+ * Return TRUE if system call tracing is enabled for the specified process.
  */
-bool
+boolean_t
 trace_is_enabled(struct proc *p)
 {
 #ifdef SYSCALL_DEBUG
-	return (true);
+	return (TRUE);
 #endif
 #ifdef KTRACE
 	if (ISSET(p->p_traceflag, (KTRFAC_SYSCALL | KTRFAC_SYSRET)))
-		return (true);
+		return (TRUE);
 #endif
 #ifdef SYSTRACE
-	if (ISSET(p->p_flag, PK_SYSTRACE))
-		return (true);
+	if (ISSET(p->p_flag, P_SYSTRACE))
+		return (TRUE);
 #endif
 #ifdef PTRACE
-	if (ISSET(p->p_slflag, PSL_SYSCALL))
-		return (true);
+	if (ISSET(p->p_flag, P_SYSCALL))
+		return (TRUE);
 #endif
 
-	return (false);
+	return (FALSE);
 }
 
 /*
@@ -1355,29 +1372,27 @@ int
 trace_enter(struct lwp *l, register_t code,
     register_t realcode, const struct sysent *callp, void *args)
 {
-#if defined(SYSCALL_DEBUG) || defined(KTRACE) || defined(PTRACE) || defined(SYSTRACE)
 	struct proc *p = l->l_proc;
 
+
+#if defined(SYSCALL_DEBUG) || defined(KTRACE) || defined(PTRACE) || defined(SYSTRACE)
 #ifdef SYSCALL_DEBUG
 	scdebug_call(l, code, args);
 #endif /* SYSCALL_DEBUG */
 
-	ktrsyscall(code, realcode, callp, args);
+#ifdef KTRACE
+	if (KTRPOINT(p, KTR_SYSCALL))
+		ktrsyscall(l, code, realcode, callp, args);
+#endif /* KTRACE */
 
 #ifdef PTRACE
-	if ((p->p_slflag & (PSL_SYSCALL|PSL_TRACED)) ==
-	    (PSL_SYSCALL|PSL_TRACED))
+	if ((p->p_flag & (P_SYSCALL|P_TRACED)) == (P_SYSCALL|P_TRACED))
 		process_stoptrace(l);
 #endif
 
 #ifdef SYSTRACE
-	if (ISSET(p->p_flag, PK_SYSTRACE)) {
-		int error;
-		KERNEL_LOCK(1, l);
-		error = systrace_enter(l, code, args);
-		KERNEL_UNLOCK_ONE(l);
-		return error;
-	}
+	if (ISSET(p->p_flag, P_SYSTRACE))
+		return systrace_enter(l, code, args);
 #endif
 #endif /* SYSCALL_DEBUG || {K,P,SYS}TRACE */
 	return 0;
@@ -1394,26 +1409,31 @@ void
 trace_exit(struct lwp *l, register_t code, void *args, register_t rval[],
     int error)
 {
-#if defined(SYSCALL_DEBUG) || defined(KTRACE) || defined(PTRACE) || defined(SYSTRACE)
 	struct proc *p = l->l_proc;
 
+#if defined(SYSCALL_DEBUG) || defined(KTRACE) || defined(PTRACE) || defined(SYSTRACE)
 #ifdef SYSCALL_DEBUG
 	scdebug_ret(l, code, error, rval);
 #endif /* SYSCALL_DEBUG */
 
-	ktrsysret(code, error, rval);
+#ifdef KTRACE
+	if (KTRPOINT(p, KTR_SYSRET)) {
+		KERNEL_PROC_LOCK(l);
+		ktrsysret(l, code, error, rval);
+		KERNEL_PROC_UNLOCK(l);
+	}
+#endif /* KTRACE */
 	
 #ifdef PTRACE
-	if ((p->p_slflag & (PSL_SYSCALL|PSL_TRACED)) ==
-	    (PSL_SYSCALL|PSL_TRACED))
+	if ((p->p_flag & (P_SYSCALL|P_TRACED)) == (P_SYSCALL|P_TRACED))
 		process_stoptrace(l);
 #endif
 
 #ifdef SYSTRACE
-	if (ISSET(p->p_flag, PK_SYSTRACE)) {
-		KERNEL_LOCK(1, l);
+	if (ISSET(p->p_flag, P_SYSTRACE)) {
+		KERNEL_PROC_LOCK(l);
 		systrace_exit(l, code, args, rval, error);
-		KERNEL_UNLOCK_ONE(l);
+		KERNEL_PROC_UNLOCK(l);
 	}
 #endif
 #endif /* SYSCALL_DEBUG || {K,P,SYS}TRACE */

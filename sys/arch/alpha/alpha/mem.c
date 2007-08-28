@@ -1,4 +1,4 @@
-/* $NetBSD: mem.c,v 1.38 2007/07/21 19:06:20 ad Exp $ */
+/* $NetBSD: mem.c,v 1.36 2005/12/11 12:16:10 christos Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -78,7 +78,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.38 2007/07/21 19:06:20 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.36 2005/12/11 12:16:10 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -88,16 +88,15 @@ __KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.38 2007/07/21 19:06:20 ad Exp $");
 #include <sys/msgbuf.h>
 #include <sys/mman.h>
 #include <sys/conf.h>
-#include <sys/event.h>
 
 #include <machine/cpu.h>
 #include <machine/alpha.h>
 
 #include <uvm/uvm_extern.h>
 
-void *zeropage;
+caddr_t zeropage;
 extern int firstusablepage, lastusablepage;
-extern void *msgbufaddr;
+extern caddr_t msgbufaddr;
 
 dev_type_read(mmrw);
 dev_type_ioctl(mmioctl);
@@ -152,7 +151,7 @@ kmemphys:
 			o = uio->uio_offset & PGOFSET;
 			c = min(uio->uio_resid, (int)(PAGE_SIZE - o));
 			error =
-			    uiomove((void *)ALPHA_PHYS_TO_K0SEG(v), c, uio);
+			    uiomove((caddr_t)ALPHA_PHYS_TO_K0SEG(v), c, uio);
 			break;
 
 		case DEV_KMEM:
@@ -164,10 +163,10 @@ kmemphys:
 			}
 
 			c = min(iov->iov_len, MAXPHYS);
-			if (!uvm_kernacc((void *)v, c,
+			if (!uvm_kernacc((caddr_t)v, c,
 			    uio->uio_rw == UIO_READ ? B_READ : B_WRITE))
 				return (EFAULT);
-			error = uiomove((void *)v, c, uio);
+			error = uiomove((caddr_t)v, c, uio);
 			break;
 
 		case DEV_NULL:
@@ -185,7 +184,7 @@ kmemphys:
 			 * of memory for use with /dev/zero.
 			 */
 			if (zeropage == NULL) {
-				zeropage = (void *)
+				zeropage = (caddr_t)
 				    malloc(PAGE_SIZE, M_TEMP, M_WAITOK);
 				memset(zeropage, 0, PAGE_SIZE);
 			}

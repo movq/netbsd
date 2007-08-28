@@ -1,4 +1,4 @@
-/*	$NetBSD: tr2_intr.c,v 1.5 2007/06/26 13:20:19 tsutsui Exp $	*/
+/*	$NetBSD: tr2_intr.c,v 1.3 2006/09/08 17:04:17 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tr2_intr.c,v 1.5 2007/06/26 13:20:19 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tr2_intr.c,v 1.3 2006/09/08 17:04:17 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,34 +54,40 @@ __KERNEL_RCSID(0, "$NetBSD: tr2_intr.c,v 1.5 2007/06/26 13:20:19 tsutsui Exp $")
 SBD_DECL(tr2);
 
 const uint32_t tr2_sr_bits[_IPL_N] = {
-	[IPL_NONE] = 0,
-	[IPL_SOFT] =
-	    MIPS_SOFT_INT_MASK_0,
-	[IPL_SOFTCLOCK] =
-	    MIPS_SOFT_INT_MASK_0,
-	[IPL_SOFTNET] =
-	    MIPS_SOFT_INT_MASK_0 | MIPS_SOFT_INT_MASK_1,
-	[IPL_SOFTSERIAL] =
-	    MIPS_SOFT_INT_MASK_0 | MIPS_SOFT_INT_MASK_1,
-	[IPL_BIO] =
-	    MIPS_SOFT_INT_MASK_0 | MIPS_SOFT_INT_MASK_1 |
-	    MIPS_INT_MASK_0 |
-	    MIPS_INT_MASK_2,
-	[IPL_NET] =
-	    MIPS_SOFT_INT_MASK_0 | MIPS_SOFT_INT_MASK_1 |
-	    MIPS_INT_MASK_0|
-	    MIPS_INT_MASK_2,
-	[IPL_TTY] =
-	    MIPS_SOFT_INT_MASK_0 | MIPS_SOFT_INT_MASK_1 |
-	    MIPS_INT_MASK_0 |
-	    MIPS_INT_MASK_2 |
-	    MIPS_INT_MASK_4,
-	[IPL_CLOCK] =
-	    MIPS_SOFT_INT_MASK_0 | MIPS_SOFT_INT_MASK_1 |
-	    MIPS_INT_MASK_0 |
-	    MIPS_INT_MASK_2 |
-	    MIPS_INT_MASK_4 |
-	    MIPS_INT_MASK_5,
+	0,			/* IPL_NONE */
+
+	MIPS_SOFT_INT_MASK_0,		/* IPL_SOFT */
+
+	MIPS_SOFT_INT_MASK_0,		/* IPL_SOFTCLOCK */
+
+	MIPS_SOFT_INT_MASK_0|
+	MIPS_SOFT_INT_MASK_1,		/* IPL_SOFTNET */
+
+	MIPS_SOFT_INT_MASK_0|
+	MIPS_SOFT_INT_MASK_1,		/* IPL_SOFTSERIAL */
+
+	MIPS_SOFT_INT_MASK_0|
+	MIPS_SOFT_INT_MASK_1|
+	MIPS_INT_MASK_0|
+	MIPS_INT_MASK_2,		/* IPL_BIO */
+
+	MIPS_SOFT_INT_MASK_0|
+	MIPS_SOFT_INT_MASK_1|
+	MIPS_INT_MASK_0|
+	MIPS_INT_MASK_2,		/* IPL_NET */
+
+	MIPS_SOFT_INT_MASK_0|
+	MIPS_SOFT_INT_MASK_1|
+	MIPS_INT_MASK_0|
+	MIPS_INT_MASK_2|
+	MIPS_INT_MASK_4,		/* IPL_{TTY,SERIAL} */
+
+	MIPS_SOFT_INT_MASK_0|
+	MIPS_SOFT_INT_MASK_1|
+	MIPS_INT_MASK_0|
+	MIPS_INT_MASK_2|
+	MIPS_INT_MASK_4|
+	MIPS_INT_MASK_5,		/* IPL_{CLOCK,HIGH} */
 	/* !!! TEST !!! VME INTERRUPT IS NOT MASKED */
 };
 
@@ -173,6 +179,27 @@ tr2_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
 		*PICNIC_INT5_STATUS_REG = 0;
 		r = *PICNIC_INT5_STATUS_REG;
 
+		if ((status & MIPS_INT_MASK) == MIPS_INT_MASK) {
+			if ((ipending & MIPS_INT_MASK & ~MIPS_INT_MASK_5) ==
+			    0) {
+				/*
+				 * If all interrupts were enabled and
+				 * there isno pending interrupts,
+				 * set MIPS_SR_INT_IE so that
+				 * spllowerclock() in hardclock()
+				 * works properly.
+				 */
+				_splset(MIPS_SR_INT_IE);
+			} else {
+				/*
+				 * If there are any pending interrputs,
+				 * clear MIPS_SR_INT_IE in cf.sr so that
+				 * spllowerclock() in hardclock() will
+				 * not happen.
+				 */
+				cf.sr &= ~MIPS_SR_INT_IE;
+			}
+		}
 		hardclock(&cf);
 		timer_tr2_ev.ev_count++;
 		cause &= ~MIPS_INT_MASK_5;

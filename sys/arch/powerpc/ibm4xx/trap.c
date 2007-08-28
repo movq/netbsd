@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.43 2007/07/09 20:52:25 ad Exp $	*/
+/*	$NetBSD: trap.c,v 1.37 2006/10/05 14:48:32 chs Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.43 2007/07/09 20:52:25 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.37 2006/10/05 14:48:32 chs Exp $");
 
 #include "opt_altivec.h"
 #include "opt_ddb.h"
@@ -79,6 +79,8 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.43 2007/07/09 20:52:25 ad Exp $");
 #include <sys/systm.h>
 #include <sys/user.h>
 #include <sys/pool.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/userret.h>
 #include <sys/kauth.h>
 
@@ -102,7 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.43 2007/07/09 20:52:25 ad Exp $");
 /* These definitions should probably be somewhere else			XXX */
 #define	FIRSTARG	3		/* first argument is in reg 3 */
 #define	NARGREG		8		/* 8 args are in registers */
-#define	MOREARGS(sp)	((void *)((int)(sp) + 8)) /* more args go here */
+#define	MOREARGS(sp)	((caddr_t)((int)(sp) + 8)) /* more args go here */
 
 static int fix_unaligned __P((struct lwp *l, struct trapframe *frame));
 
@@ -161,9 +163,9 @@ trap(struct trapframe *frame)
 		ksi.ksi_signo = SIGTRAP;
 		ksi.ksi_trap = EXC_TRC;
 		ksi.ksi_addr = (void *)frame->srr0;
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 		trapsignal(l, &ksi);
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 		break;
 
 	/*
@@ -178,12 +180,16 @@ trap(struct trapframe *frame)
 			vaddr_t va;
 			struct faultbuf *fb = NULL;
 
-			KERNEL_LOCK(1, NULL);
+			KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 			va = frame->dar;
 			if (frame->tf_xtra[TF_PID] == KERNEL_PID) {
 				map = kernel_map;
 			} else {
 				map = &p->p_vmspace->vm_map;
+				if (l->l_flag & L_SA) {
+					l->l_savp->savp_faultaddr = va;
+					l->l_flag |= L_SA_PAGEFAULT;
+				}
 			}
 
 			if (frame->tf_xtra[TF_ESR] & (ESR_DST|ESR_DIZ))
@@ -195,7 +201,9 @@ trap(struct trapframe *frame)
 			    (ftype & VM_PROT_WRITE) ? "write" : "read",
 			    (void *)va, frame->tf_xtra[TF_ESR]));
 			rv = uvm_fault(map, trunc_page(va), ftype);
-			KERNEL_UNLOCK_ONE(NULL);
+			KERNEL_UNLOCK();
+			if (map != kernel_map)
+				l->l_flag &= ~L_SA_PAGEFAULT;
 			if (rv == 0)
 				goto done;
 			if ((fb = l->l_addr->u_pcb.pcb_onfault) != NULL) {
@@ -216,7 +224,7 @@ trap(struct trapframe *frame)
 	case EXC_DSI|EXC_USER:
 		/* FALLTHROUGH */
 	case EXC_DTMISS|EXC_USER:
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 
 		if (frame->tf_xtra[TF_ESR] & (ESR_DST|ESR_DIZ))
 			ftype = VM_PROT_WRITE;
@@ -226,10 +234,15 @@ trap(struct trapframe *frame)
 		    frame->srr0, (ftype & VM_PROT_WRITE) ? "write" : "read",
 		    frame->dar, frame->tf_xtra[TF_ESR]));
 		KASSERT(l == curlwp && (l->l_stat == LSONPROC));
+		if (l->l_flag & L_SA) {
+			l->l_savp->savp_faultaddr = (vaddr_t)frame->dar;
+			l->l_flag |= L_SA_PAGEFAULT;
+		}
 		rv = uvm_fault(&p->p_vmspace->vm_map, trunc_page(frame->dar),
 		    ftype);
 		if (rv == 0) {
-			KERNEL_UNLOCK_LAST(l);
+			l->l_flag &= ~L_SA_PAGEFAULT;
+			KERNEL_PROC_UNLOCK(l);
 			break;
 		}
 		KSI_INIT_TRAP(&ksi);
@@ -245,12 +258,17 @@ trap(struct trapframe *frame)
 			ksi.ksi_signo = SIGKILL;
 		}
 		trapsignal(l, &ksi);
-		KERNEL_UNLOCK_LAST(l);
+		l->l_flag &= ~L_SA_PAGEFAULT;
+		KERNEL_PROC_UNLOCK(l);
 		break;
 
 	case EXC_ITMISS|EXC_USER:
 	case EXC_ISI|EXC_USER:
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
+		if (l->l_flag & L_SA) {
+			l->l_savp->savp_faultaddr = (vaddr_t)frame->srr0;
+			l->l_flag |= L_SA_PAGEFAULT;
+		}
 		ftype = VM_PROT_EXECUTE;
 		DBPRINTF(TDB_ALL,
 		    ("trap(EXC_ISI|EXC_USER) at %lx execute fault tf %p\n",
@@ -258,7 +276,8 @@ trap(struct trapframe *frame)
 		rv = uvm_fault(&p->p_vmspace->vm_map, trunc_page(frame->srr0),
 		    ftype);
 		if (rv == 0) {
-			KERNEL_UNLOCK_LAST(l);
+			l->l_flag &= ~L_SA_PAGEFAULT;
+			KERNEL_PROC_UNLOCK(l);
 			break;
 		}
 		KSI_INIT_TRAP(&ksi);
@@ -267,24 +286,27 @@ trap(struct trapframe *frame)
 		ksi.ksi_addr = (void *)frame->srr0;
 		ksi.ksi_code = (rv == EACCES ? SEGV_ACCERR : SEGV_MAPERR);
 		trapsignal(l, &ksi);
-		KERNEL_UNLOCK_LAST(l);
+		l->l_flag &= ~L_SA_PAGEFAULT;
+		KERNEL_PROC_UNLOCK(l);
 		break;
 
 	case EXC_AST|EXC_USER:
 		curcpu()->ci_astpending = 0;	/* we are about to do it */
+		KERNEL_PROC_LOCK(l);
 		uvmexp.softs++;
-		if (l->l_pflag & LP_OWEUPC) {
-			l->l_pflag &= ~LP_OWEUPC;
-			ADDUPROF(l);
+		if (p->p_flag & P_OWEUPC) {
+			p->p_flag &= ~P_OWEUPC;
+			ADDUPROF(p);
 		}
 		/* Check whether we are being preempted. */
 		if (curcpu()->ci_want_resched)
-			preempt();
+			preempt(0);
+		KERNEL_PROC_UNLOCK(l);
 		break;
 
 
 	case EXC_ALI|EXC_USER:
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 		if (fix_unaligned(l, frame) != 0) {
 			KSI_INIT_TRAP(&ksi);
 			ksi.ksi_signo = SIGBUS;
@@ -293,7 +315,7 @@ trap(struct trapframe *frame)
 			trapsignal(l, &ksi);
 		} else
 			frame->srr0 += 4;
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 		break;
 
 	case EXC_PGM|EXC_USER:
@@ -315,9 +337,9 @@ trap(struct trapframe *frame)
 			ksi.ksi_signo = rv;
 			ksi.ksi_trap = EXC_PGM;
 			ksi.ksi_addr = (void *)frame->srr0;
-			KERNEL_LOCK(1, l);
+			KERNEL_PROC_LOCK(l);
 			trapsignal(l, &ksi);
-			KERNEL_UNLOCK_LAST(l);
+			KERNEL_PROC_UNLOCK(l);
 		}
 		break;
 
@@ -467,10 +489,10 @@ bigcopyin(const void *udaddr, void *kaddr, size_t len)
 	/*
 	 * Stolen from physio():
 	 */
-	uvm_lwp_hold(l);
+	PHOLD(l);
 	error = uvm_vslock(p->p_vmspace, __UNCONST(udaddr), len, VM_PROT_READ);
 	if (error) {
-		uvm_lwp_rele(l);
+		PRELE(l);
 		return EFAULT;
 	}
 	up = (char *)vmaprange(p, (vaddr_t)udaddr, len, VM_PROT_READ);
@@ -478,7 +500,7 @@ bigcopyin(const void *udaddr, void *kaddr, size_t len)
 	memcpy(kp, up, len);
 	vunmaprange((vaddr_t)up, len);
 	uvm_vsunlock(p->p_vmspace, __UNCONST(udaddr), len);
-	uvm_lwp_rele(l);
+	PRELE(l);
 
 	return 0;
 }
@@ -548,10 +570,10 @@ bigcopyout(const void *kaddr, void *udaddr, size_t len)
 	/*
 	 * Stolen from physio():
 	 */
-	uvm_lwp_hold(l);
+	PHOLD(l);
 	error = uvm_vslock(p->p_vmspace, udaddr, len, VM_PROT_WRITE);
 	if (error) {
-		uvm_lwp_rele(l);
+		PRELE(l);
 		return EFAULT;
 	}
 	up = (char *)vmaprange(p, (vaddr_t)udaddr, len,
@@ -560,7 +582,7 @@ bigcopyout(const void *kaddr, void *udaddr, size_t len)
 	memcpy(up, kp, len);
 	vunmaprange((vaddr_t)up, len);
 	uvm_vsunlock(p->p_vmspace, udaddr, len);
-	uvm_lwp_rele(l);
+	PRELE(l);
 
 	return 0;
 }
@@ -674,6 +696,17 @@ startlwp(arg)
 	}
 #endif
 	pool_put(&lwp_uc_pool, uc);
+
+	upcallret(l);
+}
+
+/*
+ * XXX This is a terrible name.
+ */
+void
+upcallret(l)
+	struct lwp *l;
+{
 
 	/* Invoke MI userret code */
 	mi_userret(l);

@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.44 2007/02/19 02:57:40 mrg Exp $ */
+/*	$NetBSD: psl.h,v 1.40 2006/05/04 12:21:18 yamt Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -285,33 +285,22 @@ spl0(void)
 #define	_SPLSET(name, newipl) \
 static __inline void name(void) \
 { \
-	int psr; \
+	int psr, oldipl; \
 	__asm volatile("rd %%psr,%0" : "=r" (psr)); \
-	psr &= ~PSR_PIL; \
+	oldipl = psr & PSR_PIL; \
+	psr &= ~oldipl; \
 	__asm volatile("wr %0,%1,%%psr" : : \
 	    "r" (psr), "n" ((newipl) << 8)); \
 	__asm volatile("nop; nop; nop"); \
 }
 
+_SPLSET(spllowersoftclock, IPL_SOFTCLOCK)
 _SPLSET(spllowerschedclock, IPL_SCHED)
-
-typedef uint8_t ipl_t;
-typedef struct {
-	ipl_t _ipl;
-} ipl_cookie_t;
-
-static inline ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._ipl = ipl};
-}
 
 /* Raise IPL and return previous value */
 static __inline int
-splraiseipl(ipl_cookie_t icookie)
+splraiseipl(int newipl)
 {
-	int newipl = icookie._ipl;
 	int psr, oldipl;
 
 	__asm volatile("rd %%psr,%0" : "=r" (psr));
@@ -331,13 +320,13 @@ splraiseipl(ipl_cookie_t icookie)
 
 #include <sys/spl.h>
 
-#define	splausoft()	splraiseipl(makeiplcookie(IPL_SOFTAUDIO))
-#define	splfdsoft()	splraiseipl(makeiplcookie(IPL_SOFTFDC))
+#define	splausoft()	splraiseipl(IPL_SOFTAUDIO)
+#define	splfdsoft()	splraiseipl(IPL_SOFTFDC)
 
-#define	splfd()		splraiseipl(makeiplcookie(IPL_FD))
-#define	splts102()	splraiseipl(makeiplcookie(IPL_TS102))
+#define	splfd()		splraiseipl(IPL_FD)
+#define	splts102()	splraiseipl(IPL_TS102)
 
-#define	splzs()		splraiseipl(makeiplcookie(IPL_ZS))
+#define	splzs()		splraiseipl(IPL_ZS)
 
 /* splx does not have a return value */
 static __inline void

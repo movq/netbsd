@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.114 2007/05/17 14:51:28 yamt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.98 2006/09/16 08:50:27 gdamore Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.114 2007/05/17 14:51:28 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.98 2006/09/16 08:50:27 gdamore Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -57,6 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.114 2007/05/17 14:51:28 yamt Exp $");
 #include <sys/user.h>
 #include <sys/exec.h>
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/kcore.h>
 #include <sys/boot_flag.h>
@@ -104,11 +105,11 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.114 2007/05/17 14:51:28 yamt Exp $");
 
 struct sgimips_intrhand intrtab[NINTR];
 
-const uint32_t mips_ipl_si_to_sr[SI_NQUEUES] = {
-	[SI_SOFT] = MIPS_SOFT_INT_MASK_0,
-	[SI_SOFTCLOCK] = MIPS_SOFT_INT_MASK_0,
-	[SI_SOFTNET] = MIPS_SOFT_INT_MASK_1,
-	[SI_SOFTSERIAL] = MIPS_SOFT_INT_MASK_1,
+const uint32_t mips_ipl_si_to_sr[_IPL_NSOFT] = {
+	MIPS_SOFT_INT_MASK_0,			/* IPL_SOFT */
+	MIPS_SOFT_INT_MASK_0,			/* IPL_SOFTCLOCK */
+	MIPS_SOFT_INT_MASK_1,			/* IPL_SOFTNET */
+	MIPS_SOFT_INT_MASK_1,			/* IPL_SOFTSERIAL */
 };
 
 /* Our exported CPU info; we can have only one. */
@@ -120,7 +121,7 @@ struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
 int mach_type;		/* IPxx type */
-int mach_subtype;	/* subtype: eg., Guinness/Fullhouse for IP22 */
+int mach_subtype;	/* subtype: eg., Guiness/Fullhouse for IP22 */
 int mach_boardrev;	/* machine board revision, in case it matters */
 
 int physmem;		/* Total physical memory */
@@ -129,46 +130,7 @@ int arcsmem;		/* Memory used by the ARCS firmware */
 int ncpus;
 
 /* CPU interrupt masks */
-const int *ipl2spl_table;
-
-#define	IPL2SPL_TABLE_COMMON \
-	[IPL_SOFT] = MIPS_SOFT_INT_MASK_1, \
-	[IPL_SOFTCLOCK] = MIPS_SOFT_INT_MASK_1, \
-	[IPL_SOFTNET] = MIPS_SOFT_INT_MASK_1, \
-	[IPL_SOFTSERIAL] = MIPS_SOFT_INT_MASK_1, \
-	[IPL_HIGH] = MIPS_INT_MASK,
-
-#if defined(MIPS1)
-static const int sgi_ip12_ipl2spl_table[] = {
-	IPL2SPL_TABLE_COMMON
-	[IPL_BIO] = MIPS_INT_MASK_1|MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK_0,
-	[IPL_NET] = MIPS_INT_MASK_1|MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK_0,
-	[IPL_TTY] = MIPS_INT_MASK_2|MIPS_INT_MASK_1|MIPS_INT_MASK_0|
-	    MIPS_SOFT_INT_MASK_0,
-	[IPL_CLOCK] = MIPS_INT_MASK_4|MIPS_INT_MASK_3|MIPS_INT_MASK_2|
-	    MIPS_INT_MASK_1|MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK_0,
-};
-#endif /* defined(MIPS1) */
-#if defined(MIPS3)
-static const int sgi_ip2x_ipl2spl_table[] = {
-	IPL2SPL_TABLE_COMMON
-	[IPL_BIO] = MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0,
-	[IPL_NET] = MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0,
-	[IPL_TTY] = MIPS_INT_MASK_1|MIPS_INT_MASK_0|
-	    MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0,
-	[IPL_CLOCK] = MIPS_INT_MASK_5|MIPS_INT_MASK_3|MIPS_INT_MASK_2|
-	    MIPS_INT_MASK_1|MIPS_INT_MASK_0|
-	    MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0,
-};
-static const int sgi_ip3x_ipl2spl_table[] = {
-	IPL2SPL_TABLE_COMMON
-	[IPL_BIO] = MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0,
-	[IPL_NET] = MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0,
-	[IPL_TTY] = MIPS_INT_MASK_0|MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0,
-	[IPL_CLOCK] = MIPS_INT_MASK_5|MIPS_INT_MASK_0|
-	    MIPS_SOFT_INT_MASK_1|MIPS_SOFT_INT_MASK_0,
-};
-#endif /* defined(MIPS3) */
+u_int32_t splmasks[IPL_CLOCK+1];
 
 phys_ram_seg_t mem_clusters[VM_PHYSSEG_MAX];
 int mem_cluster_cnt;
@@ -179,7 +141,7 @@ extern void	ip22_sdcache_enable(void);
 #endif
 
 #if defined(MIPS1)
-extern void mips1_fpu_intr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
+extern void mips1_clock_intr(u_int32_t, u_int32_t, u_int32_t, u_int32_t);
 #endif
 
 #if defined(MIPS3)
@@ -208,23 +170,20 @@ static void	nullvoid(void);
 
 void ddb_trap_hook(int where);
 
-static int badaddr_workaround(void *, size_t);
-
 struct platform platform = {
-	.badaddr		= badaddr_workaround,
-	.bus_reset		= unimpl_bus_reset,
-	.cons_init		= unimpl_cons_init,
-	.intr_establish		= unimpl_intr_establish,
-	.clkread		= nulllong,
-	.watchdog_reset		= nullvoid,
-	.watchdog_disable	= nullvoid,
-	.watchdog_enable	= nullvoid,
-	.intr0			= unimpl_intr,
-	.intr1			= unimpl_intr,
-	.intr2			= unimpl_intr,
-	.intr3			= unimpl_intr,
-	.intr4			= unimpl_intr,
-	.intr5			= unimpl_intr
+	unimpl_bus_reset,
+	unimpl_cons_init,
+	unimpl_intr_establish,
+	nulllong,
+	nullvoid,
+	nullvoid,
+	nullvoid,
+	unimpl_intr,
+	unimpl_intr,
+	unimpl_intr,
+	unimpl_intr,
+	unimpl_intr,
+	unimpl_intr,
 };
 
 /*
@@ -233,7 +192,7 @@ struct platform platform = {
  */
 int	safepri = MIPS1_PSL_LOWIPL;
 
-extern void *esym;
+extern caddr_t esym;
 extern u_int32_t ssir;
 extern struct user *proc0paddr;
 
@@ -255,12 +214,12 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	extern char kernel_text[], _end[];
 	paddr_t first, last;
 	int firstpfn, lastpfn;
-	void *v;
+	caddr_t v;
 	vsize_t size;
 	struct arcbios_mem *mem;
-	const char *cpufreq, *osload;
+	const char *cpufreq;
 	struct btinfo_symtab *bi_syms;
-	void *ssym;
+	caddr_t ssym;
 	vaddr_t kernend;
 	int kernstartpfn, kernendpfn;
 	int i, rv, nsym;
@@ -271,16 +230,9 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	 * try to init real arcbios, and if that fails (return value 1),
 	 * fall back to the emulator.  If the latter fails also we
 	 * don't have much to panic with.
-	 *
-	 * The third argument (magic) is the environment variable array if
-	 * there's no bootinfo.
 	 */
-	if (arcbios_init(ARCS_VECTOR) == 1) {
-		if (magic == BOOTINFO_MAGIC)
-			arcemu_init(NULL);	/* XXX - need some prom env */
-		else
-			arcemu_init((const char **)magic);
-	}
+	if (arcbios_init(ARCS_VECTOR) == 1)
+		arcemu_init();
 
 	strcpy(cpu_model, arcbios_system_identifier);
 
@@ -299,8 +251,8 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 		bi_syms = lookup_bootinfo(BTINFO_SYMTAB);
 		if (bi_syms != NULL) {
 			nsym = bi_syms->nsym;
-			ssym = (void *) bi_syms->ssym;
-			esym = (void *) bi_syms->esym;
+			ssym = (caddr_t) bi_syms->ssym;
+			esym = (caddr_t) bi_syms->esym;
 			kernend = round_page((vaddr_t) esym);
 		}
 	}
@@ -323,9 +275,6 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	curcpu()->ci_cpu_freq = strtoul(cpufreq, NULL, 10) * 1000000;
 
 	/*
-	 * Try to get the boot device information from ARCBIOS. If we fail,
-	 * attempt to use the environment variables passed as follows:
-	 *
 	 * argv[0] can be either the bootloader loaded by the PROM, or a
 	 * kernel loaded directly by the PROM.
 	 *
@@ -335,23 +284,14 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	 * If argv[1] isn't an environment string, try to use it to set the
 	 * boot device.
 	 */
-	osload = ARCBIOS->GetEnvironmentVariable("OSLoadPartition");
-	if (osload != NULL)
-		makebootdev(osload);
-	else if (argc > 1 && strchr(argv[1], '=') != 0)
+	if (argc > 1 && strchr(argv[1], '=') != 0)
 		makebootdev(argv[1]);
 
 	boothowto = RB_SINGLE;
 
 	/*
 	 * Single- or multi-user ('auto' in SGI terms).
-	 *
-	 * Query ARCBIOS first, then default to environment variables.
 	 */
-	osload = ARCBIOS->GetEnvironmentVariable("OSLoadOptions");
-	if (osload != NULL && strcmp(osload, "auto") == 0)
-		boothowto &= ~RB_SINGLE;
-
 	for (i = 0; i < argc; i++) {
 		if (strcmp(argv[i], "OSLoadOptions=auto") == 0)
 			boothowto &= ~RB_SINGLE;
@@ -375,16 +315,6 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	 */
 
 	for (i = 0; i < argc; i++) {
-		/*
-		 * Unfortunately, it appears that IP12's prom passes a '-a'
-		 * flag when booting a kernel directly from a disk volume
-		 * header. This corresponds to RB_ASKNAME in NetBSD, but
-		 * appears to mean 'autoboot' in prehistoric SGI-speak.
-		 */
-		if (mach_type < MACH_SGI_IP20 && bootinfo == NULL &&
-		    strcmp(argv[i], "-a") == 0)
-			continue;
-
 		/*
 		 * Extract out any flags passed for the kernel in the
 		 * argument string.  Warn for unknown/invalid flags,
@@ -478,8 +408,11 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 				mach_subtype = MACH_SGI_IP12_HPLC;
                 }
 
-		ipl2spl_table = sgi_ip12_ipl2spl_table;
-		platform.intr0 = mips1_fpu_intr;
+		splmasks[IPL_BIO] = 0x0b00;
+		splmasks[IPL_NET] = 0x0b00;
+		splmasks[IPL_TTY] = 0x1b00;
+		splmasks[IPL_CLOCK] = 0x7f00;
+		platform.intr3 = mips1_clock_intr;
 		break;
 #endif /* MIPS1 */
 
@@ -487,19 +420,32 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	case MACH_SGI_IP20:
 		i = *(volatile u_int32_t *)MIPS_PHYS_TO_KSEG1(0x1fbd0000);
 		mach_boardrev = (i & 0x7000) >> 12;
-		ipl2spl_table = sgi_ip2x_ipl2spl_table;
+
+		splmasks[IPL_BIO] = 0x0700;
+		splmasks[IPL_NET] = 0x0700;
+		splmasks[IPL_TTY] = 0x0f00;
+		splmasks[IPL_CLOCK] = 0xbf00;
 		platform.intr5 = mips3_clock_intr;
 		break;
 	case MACH_SGI_IP22:
-		ipl2spl_table = sgi_ip2x_ipl2spl_table;
+		splmasks[IPL_BIO] = 0x0700;
+		splmasks[IPL_NET] = 0x0700;
+		splmasks[IPL_TTY] = 0x0f00;
+		splmasks[IPL_CLOCK] = 0xbf00;
 		platform.intr5 = mips3_clock_intr;
 		break;
 	case MACH_SGI_IP30:
-		ipl2spl_table = sgi_ip3x_ipl2spl_table;
+		splmasks[IPL_BIO] = 0x0700;
+		splmasks[IPL_NET] = 0x0700;
+		splmasks[IPL_TTY] = 0x0700;
+		splmasks[IPL_CLOCK] = 0x8700;
 		platform.intr5 = mips3_clock_intr;
 		break;
 	case MACH_SGI_IP32:
-		ipl2spl_table = sgi_ip3x_ipl2spl_table;
+		splmasks[IPL_BIO] = 0x0700;
+		splmasks[IPL_NET] = 0x0700;
+		splmasks[IPL_TTY] = 0x0700;
+		splmasks[IPL_CLOCK] = 0x8700;
 		platform.intr5 = mips3_clock_intr;
 		break;
 #endif /* MIPS3 */
@@ -644,11 +590,11 @@ mach_init(int argc, char **argv, int magic, struct btinfo_common *btinfo)
 	/*
 	 * Allocate space for proc0's USPACE.
 	 */
-	v = (void *)uvm_pageboot_alloc(USPACE);
+	v = (caddr_t)uvm_pageboot_alloc(USPACE);
 	lwp0.l_addr = proc0paddr = (struct user *)v;
-	lwp0.l_md.md_regs = (struct frame *)((char *)v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	lwp0.l_md.md_regs = (struct frame *)(v + USPACE) - 1;
+	curpcb = &lwp0.l_addr->u_pcb;
+	curpcb->pcb_context[11] = MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
 }
 
 void
@@ -689,12 +635,12 @@ cpu_startup()
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				    16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
+				    16 * NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 	/*
 	 * Allocate a submap for physio.
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				    VM_PHYS_SIZE, 0, false, NULL);
+				    VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * (No need to allocate an mbuf cluster submap.  Mbuf clusters
@@ -785,26 +731,6 @@ void delay(unsigned long n)
 	do {
 		__asm("addiu %0,%1,-1" : "=r" (__N) : "0" (__N));
 	} while (__N > 0);
-}
-
-/*
- * IP12 appears to be buggy and unable to reliably support badaddr.
- * Approximately 1.8% of the time a false negative (bad address said to
- * be good) is generated and we stomp on invalid registers. Testing has
- * not shown false positives, nor consecutive false negatives to occur.
- */
-static int
-badaddr_workaround(void *addr, size_t size)
-{
-	int i, bad;
-
-	for (i = bad = 0; i < 100; i++) {
-		if (badaddr(addr, size))
-			bad++;
-	}
-
-	/* false positives appear not to occur */
-	return (bad != 0);
 }
 
 /*
@@ -927,11 +853,4 @@ mips_machdep_find_l2cache(struct arcbios_component *comp, struct arcbios_treewal
 		mips_sdcache_ways = 1;
 		break;
 	}
-}
-
-ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._spl = ipl2spl_table[ipl]};
 }

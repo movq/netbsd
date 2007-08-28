@@ -1,4 +1,4 @@
-/*	$NetBSD: arm32_machdep.c,v 1.49 2007/05/17 14:51:15 yamt Exp $	*/
+/*	$NetBSD: arm32_machdep.c,v 1.46 2005/12/11 12:16:41 christos Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.49 2007/05/17 14:51:15 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.46 2005/12/11 12:16:41 christos Exp $");
 
 #include "opt_md.h"
 #include "opt_pmap_debug.h"
@@ -60,7 +60,6 @@ __KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.49 2007/05/17 14:51:15 yamt Exp 
 #include <sys/device.h>
 #include <uvm/uvm_extern.h>
 #include <sys/sysctl.h>
-#include <sys/cpu.h>
 
 #include <dev/cons.h>
 
@@ -90,7 +89,7 @@ char	machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
 /* Our exported CPU info; we can have only one. */
 struct cpu_info cpu_info_store;
 
-void *	msgbufaddr;
+caddr_t	msgbufaddr;
 extern paddr_t msgbufphys;
 
 int kernel_debug = 0;
@@ -254,20 +253,20 @@ cpu_startup()
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
+				   16*NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, 0, false, NULL);
+				   VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
+				 FALSE, NULL);
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
@@ -420,17 +419,4 @@ parse_mi_bootargs(args)
 	    || get_bootconf_option(args, "-v", BOOTOPT_TYPE_BOOLEAN, &integer))
 		if (integer)
 			boothowto |= AB_VERBOSE;
-}
-
-void
-cpu_need_resched(struct cpu_info *ci, int flags)
-{
-	bool immed = (flags & RESCHED_IMMED) != 0;
-
-	if (want_resched && !immed)
-		return;
-
-	want_resched = 1;
-	if (curlwp != ci->ci_data.cpu_idlelwp)
-		setsoftast();
 }

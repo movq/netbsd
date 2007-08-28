@@ -1,4 +1,4 @@
-/*	$NetBSD: floppy_2d.c,v 1.3 2007/02/22 05:31:53 thorpej Exp $	*/
+/*	$NetBSD: floppy_2d.c,v 1.1 2005/12/29 15:20:09 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
 #include <sys/types.h>
 #include "common.h"
 
-bool
+boolean_t
 blk_to_2d_position(uint32_t logical_block_number, uint32_t *position,
     int *count)
 {
@@ -56,7 +56,7 @@ blk_to_2d_position(uint32_t logical_block_number, uint32_t *position,
 	 * 1989-1995 : FM
 	 */
 	if (logical_block_number > 1988)
-		return false;	/* don't support FM track */
+		return FALSE;	/* don't support FM track */
 
 	i = logical_block_number * 2 + 26;
 	cylinder = i / (26 * 2);
@@ -67,6 +67,6 @@ blk_to_2d_position(uint32_t logical_block_number, uint32_t *position,
 	if (count)
 		*count = 2;
 
-	return true;
+	return TRUE;
 }
 

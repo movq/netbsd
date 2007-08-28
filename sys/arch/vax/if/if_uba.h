@@ -1,4 +1,4 @@
-/*	$NetBSD: if_uba.h,v 1.10 2007/03/04 06:00:56 christos Exp $	*/
+/*	$NetBSD: if_uba.h,v 1.9 2005/12/11 12:19:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986 Regents of the University of California.
@@ -75,7 +75,7 @@ struct	ifubinfo {
  * Information per buffer.
  */
 struct ifrw {
-	void *	ifrw_addr;			/* virt addr of header */
+	caddr_t	ifrw_addr;			/* virt addr of header */
 	short	ifrw_bdp;			/* unibus bdp */
 	short	ifrw_flags;			/* type, etc. */
 #define	IFRW_W	0x01				/* is a transmit buffer */
@@ -89,7 +89,7 @@ struct ifrw {
  */
 struct ifxmt {
 	struct	ifrw ifrw;
-	void *	ifw_base;			/* virt addr of buffer */
+	caddr_t	ifw_base;			/* virt addr of buffer */
 	struct	pte ifw_wmap[IF_MAXNUBAMR];	/* base pages for output */
 	struct	mbuf *ifw_xtofree;		/* pages being DMA'd out */
 	short	ifw_xswapd;			/* mask of clusters swapped */

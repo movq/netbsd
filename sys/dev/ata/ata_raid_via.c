@@ -1,4 +1,4 @@
-/*	$NetBSD: ata_raid_via.c,v 1.1 2007/03/27 00:10:20 garbled Exp $	*/
+/*	$NetBSD: ata_raid_via.c,v 1.1.2.2 2007/03/31 16:38:04 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2000,2001,2002 Søren Schmidt <sos@FreeBSD.org>
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ata_raid_via.c,v 1.1 2007/03/27 00:10:20 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ata_raid_via.c,v 1.1.2.2 2007/03/31 16:38:04 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>

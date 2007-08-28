@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.164 2007/05/17 14:51:16 yamt Exp $	*/
+/*	$NetBSD: pmap.c,v 1.157.24.1 2007/02/21 18:33:19 snj Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -212,7 +212,7 @@
 #include <machine/param.h>
 #include <arm/arm32/katelib.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.164 2007/05/17 14:51:16 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.157.24.1 2007/02/21 18:33:19 snj Exp $");
 
 #ifdef PMAP_DEBUG
 
@@ -307,12 +307,12 @@ static paddr_t pmap_kernel_l2ptp_phys;
 static pt_entry_t *csrc_pte, *cdst_pte;
 static vaddr_t csrcp, cdstp;
 char *memhook;
-extern void *msgbufaddr;
+extern caddr_t msgbufaddr;
 
 /*
  * Flag to indicate if pmap_init() has done its thing
  */
-bool pmap_initialized;
+boolean_t pmap_initialized;
 
 /*
  * Misc. locking data structures
@@ -484,8 +484,8 @@ struct pv_entry {
 static int		pmap_set_pt_cache_mode(pd_entry_t *, vaddr_t);
 static void		pmap_alloc_specials(vaddr_t *, int, vaddr_t *,
 			    pt_entry_t **);
-static bool		pmap_is_current(pmap_t);
-static bool		pmap_is_cached(pmap_t);
+static boolean_t	pmap_is_current(pmap_t);
+static boolean_t	pmap_is_cached(pmap_t);
 static void		pmap_enter_pv(struct vm_page *, struct pv_entry *,
 			    pmap_t, vaddr_t, u_int);
 static struct pv_entry *pmap_find_pv(struct vm_page *, pmap_t, vaddr_t);
@@ -511,7 +511,7 @@ static void		pmap_vac_me_kpmap(struct vm_page *, pmap_t, vaddr_t);
 static void		pmap_vac_me_user(struct vm_page *, pmap_t, vaddr_t);
 
 static void		pmap_clearbit(struct vm_page *, u_int);
-static int		pmap_clean_page(struct pv_entry *, bool);
+static int		pmap_clean_page(struct pv_entry *, boolean_t);
 static void		pmap_page_remove(struct vm_page *);
 
 static void		pmap_init_l1(struct l1_ttable *, pd_entry_t *);
@@ -598,7 +598,7 @@ pmap_idcache_wbinv_range(pmap_t pm, vaddr_t va, vsize_t len)
 
 static inline void
 pmap_dcache_wb_range(pmap_t pm, vaddr_t va, vsize_t len,
-    bool do_inv, bool rd_only)
+    boolean_t do_inv, boolean_t rd_only)
 {
 
 	if (pm->pm_cstate.cs_cache_d) {
@@ -633,26 +633,26 @@ pmap_dcache_wbinv_all(pmap_t pm)
 	}
 }
 
-static inline bool
+static inline boolean_t
 pmap_is_current(pmap_t pm)
 {
 
 	if (pm == pmap_kernel() ||
 	    (curproc && curproc->p_vmspace->vm_map.pmap == pm))
-		return (true);
+		return (TRUE);
 
-	return (false);
+	return (FALSE);
 }
 
-static inline bool
+static inline boolean_t
 pmap_is_cached(pmap_t pm)
 {
 
 	if (pm == pmap_kernel() || pmap_cache_state == NULL ||
 	   pmap_cache_state == &pm->pm_cstate)
-		return (true);
+		return (TRUE);
 
-	return (false);
+	return (FALSE);
 }
 
 /*
@@ -1000,7 +1000,7 @@ static inline void
 #ifndef PMAP_INCLUDE_PTE_SYNC
 pmap_free_l2_ptp(pt_entry_t *l2, paddr_t pa)
 #else
-pmap_free_l2_ptp(bool need_sync, pt_entry_t *l2, paddr_t pa)
+pmap_free_l2_ptp(boolean_t need_sync, pt_entry_t *l2, paddr_t pa)
 #endif
 {
 #ifdef PMAP_INCLUDE_PTE_SYNC
@@ -1481,7 +1481,7 @@ pmap_vac_me_user(struct vm_page *pg, pmap_t pm, vaddr_t va)
 				} else
 				if (PV_BEEN_REFD(pv->pv_flags)) {
 					pmap_dcache_wb_range(pv->pv_pmap,
-					    pv->pv_va, PAGE_SIZE, true,
+					    pv->pv_va, PAGE_SIZE, TRUE,
 					    (pv->pv_flags & PVF_WRITE) == 0);
 					pmap_tlb_flushD_SE(pv->pv_pmap,
 					    pv->pv_va);
@@ -1614,8 +1614,8 @@ pmap_clearbit(struct vm_page *pg, u_int maskbits)
 				if (PV_BEEN_REFD(oflags))
 					pmap_dcache_wb_range(pm, pv->pv_va,
 					    PAGE_SIZE,
-					    (maskbits & PVF_REF) ? true : false,
-					    false);
+					    (maskbits & PVF_REF) ? TRUE : FALSE,
+					    FALSE);
 			}
 
 			/* make the pte read only */
@@ -1655,7 +1655,7 @@ pmap_clearbit(struct vm_page *pg, u_int maskbits)
 					if (PV_BEEN_REFD(oflags))
 						pmap_dcache_wb_range(pm,
 						    pv->pv_va, PAGE_SIZE,
-						    true, false);
+						    TRUE, FALSE);
 				} else
 				if ((npte & L2_TYPE_MASK) != L2_TYPE_INV) {
 					/* XXXJRT need idcache_inv_range */
@@ -1666,7 +1666,7 @@ pmap_clearbit(struct vm_page *pg, u_int maskbits)
 					if (PV_BEEN_REFD(oflags))
 						pmap_dcache_wb_range(pm,
 						    pv->pv_va, PAGE_SIZE,
-						    true, true);
+						    TRUE, TRUE);
 				}
 			}
 
@@ -1722,7 +1722,7 @@ pmap_clearbit(struct vm_page *pg, u_int maskbits)
  * it will just result in not the most efficient clean for the page.
  */
 static int
-pmap_clean_page(struct pv_entry *pv, bool is_src)
+pmap_clean_page(struct pv_entry *pv, boolean_t is_src)
 {
 	pmap_t pm, pm_to_clean = NULL;
 	struct pv_entry *npv;
@@ -1803,7 +1803,7 @@ pmap_page_remove(struct vm_page *pg)
 	struct pv_entry *pv, *npv;
 	pmap_t pm, curpm;
 	pt_entry_t *ptep, pte;
-	bool flush;
+	boolean_t flush;
 	u_int flags;
 
 	NPDEBUG(PDB_FOLLOW,
@@ -1826,19 +1826,19 @@ pmap_page_remove(struct vm_page *pg)
 	pg->mdpage.k_mappings = 0;
 	pg->mdpage.urw_mappings = pg->mdpage.uro_mappings = 0;
 
-	flush = false;
+	flush = FALSE;
 	flags = 0;
 	if (curproc)
 		curpm = curproc->p_vmspace->vm_map.pmap;
 	else
 		curpm = pmap_kernel();
 
-	pmap_clean_page(pv, false);
+	pmap_clean_page(pv, FALSE);
 
 	while (pv) {
 		pm = pv->pv_pmap;
-		if (flush == false && (pm == curpm || pm == pmap_kernel()))
-			flush = true;
+		if (flush == FALSE && (pm == curpm || pm == pmap_kernel()))
+			flush = TRUE;
 
 		pmap_acquire_pmap_lock(pm);
 
@@ -2091,7 +2091,7 @@ pmap_enter(pmap_t pm, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
 					} else
 					if (PV_BEEN_REFD(oflags)) {
 						pmap_dcache_wb_range(pm, va,
-						    PAGE_SIZE, true,
+						    PAGE_SIZE, TRUE,
 						    (oflags & PVF_WRITE) == 0);
 					}
 				}
@@ -2145,7 +2145,7 @@ pmap_enter(pmap_t pm, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
 				else
 				if (PV_BEEN_REFD(oflags))
 					pmap_dcache_wb_range(pm, va, PAGE_SIZE,
-					    true, (oflags & PVF_WRITE) == 0);
+					    TRUE, (oflags & PVF_WRITE) == 0);
 			}
 			pool_put(&pmap_pv_pool, pve);
 		}
@@ -2173,7 +2173,7 @@ pmap_enter(pmap_t pm, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
 	 * identical, so there's no need to update the page table.
 	 */
 	if (npte != opte) {
-		bool is_cached = pmap_is_cached(pm);
+		boolean_t is_cached = pmap_is_cached(pm);
 
 		*ptep = npte;
 		if (is_cached) {
@@ -2271,7 +2271,7 @@ pmap_do_remove(pmap_t pm, vaddr_t sva, vaddr_t eva, int skip_wired)
 	if (pm->pm_remove_all || !pmap_is_cached(pm)) {
 		cleanlist_idx = PMAP_REMOVE_CLEAN_LIST_SIZE + 1;
 		if (pm->pm_cstate.cs_tlb == 0)
-			pm->pm_remove_all = true;
+			pm->pm_remove_all = TRUE;
 	} else
 		cleanlist_idx = 0;
 
@@ -2321,7 +2321,7 @@ pmap_do_remove(pmap_t pm, vaddr_t sva, vaddr_t eva, int skip_wired)
 				pmap_vac_me_harder(pg, pm, 0);
 				simple_unlock(&pg->mdpage.pvh_slock);
 				if (pve != NULL) {
-					if (pm->pm_remove_all == false) {
+					if (pm->pm_remove_all == FALSE) {
 						is_exec =
 						   PV_BEEN_EXECD(pve->pv_flags);
 						is_refd =
@@ -2375,11 +2375,11 @@ pmap_do_remove(pmap_t pm, vaddr_t sva, vaddr_t eva, int skip_wired)
 				*ptep = 0;
 				PTE_SYNC(ptep);
 				cleanlist_idx++;
-				pm->pm_remove_all = true;
+				pm->pm_remove_all = TRUE;
 			} else {
 				*ptep = 0;
 				PTE_SYNC(ptep);
-				if (pm->pm_remove_all == false) {
+				if (pm->pm_remove_all == FALSE) {
 					if (is_exec)
 						pmap_tlb_flushID_SE(pm, sva);
 					else
@@ -2403,8 +2403,8 @@ pmap_do_remove(pmap_t pm, vaddr_t sva, vaddr_t eva, int skip_wired)
 						pmap_tlb_flushID_SE(pm, clva);
 					} else {
 						pmap_dcache_wb_range(pm,
-						    clva, PAGE_SIZE, true,
-						    false);
+						    clva, PAGE_SIZE, TRUE,
+						    FALSE);
 						pmap_tlb_flushD_SE(pm, clva);
 					}
 				}
@@ -2423,7 +2423,7 @@ pmap_do_remove(pmap_t pm, vaddr_t sva, vaddr_t eva, int skip_wired)
 			else {
 				cleanlist_idx = PMAP_REMOVE_CLEAN_LIST_SIZE + 1;
 				pmap_idcache_wbinv_all(pm);
-				pm->pm_remove_all = true;
+				pm->pm_remove_all = TRUE;
 			}
 		}
 
@@ -2515,7 +2515,7 @@ pmap_kremove(vaddr_t va, vsize_t len)
 	cpu_cpwait();
 }
 
-bool
+boolean_t
 pmap_extract(pmap_t pm, vaddr_t va, paddr_t *pap)
 {
 	struct l2_dtable *l2;
@@ -2548,7 +2548,7 @@ pmap_extract(pmap_t pm, vaddr_t va, paddr_t *pap)
 		if (l2 == NULL ||
 		    (ptep = l2->l2_bucket[L2_BUCKET(l1idx)].l2b_kva) == NULL) {
 			pmap_release_pmap_lock(pm);
-			return (false);
+			return (FALSE);
 		}
 
 		ptep = &ptep[l2pte_index(va)];
@@ -2556,7 +2556,7 @@ pmap_extract(pmap_t pm, vaddr_t va, paddr_t *pap)
 		pmap_release_pmap_lock(pm);
 
 		if (pte == 0)
-			return (false);
+			return (FALSE);
 
 		switch (pte & L2_TYPE_MASK) {
 		case L2_TYPE_L:
@@ -2572,7 +2572,7 @@ pmap_extract(pmap_t pm, vaddr_t va, paddr_t *pap)
 	if (pap != NULL)
 		*pap = pa;
 
-	return (true);
+	return (TRUE);
 }
 
 void
@@ -2608,7 +2608,7 @@ pmap_protect(pmap_t pm, vaddr_t sva, vaddr_t eva, vm_prot_t prot)
 	 * OK, at this point, we know we're doing write-protect operation.
 	 * If the pmap is active, write-back the range.
 	 */
-	pmap_dcache_wb_range(pm, sva, eva - sva, false, false);
+	pmap_dcache_wb_range(pm, sva, eva - sva, FALSE, FALSE);
 
 	flush = ((eva - sva) >= (PAGE_SIZE * 4)) ? 0 : -1;
 	flags = 0;
@@ -2702,16 +2702,16 @@ pmap_page_protect(struct vm_page *pg, vm_prot_t prot)
  *
  *	Clear the "modified" attribute for a page.
  */
-bool
+boolean_t
 pmap_clear_modify(struct vm_page *pg)
 {
-	bool rv;
+	boolean_t rv;
 
 	if (pg->mdpage.pvh_attrs & PVF_MOD) {
-		rv = true;
+		rv = TRUE;
 		pmap_clearbit(pg, PVF_MOD);
 	} else
-		rv = false;
+		rv = FALSE;
 
 	return (rv);
 }
@@ -2721,16 +2721,16 @@ pmap_clear_modify(struct vm_page *pg)
  *
  *	Clear the "referenced" attribute for a page.
  */
-bool
+boolean_t
 pmap_clear_reference(struct vm_page *pg)
 {
-	bool rv;
+	boolean_t rv;
 
 	if (pg->mdpage.pvh_attrs & PVF_REF) {
-		rv = true;
+		rv = TRUE;
 		pmap_clearbit(pg, PVF_REF);
 	} else
-		rv = false;
+		rv = FALSE;
 
 	return (rv);
 }
@@ -2990,7 +2990,7 @@ pmap_collect(pmap_t pm)
 {
 
 	pmap_idcache_wbinv_all(pm);
-	pm->pm_remove_all = true;
+	pm->pm_remove_all = TRUE;
 	pmap_do_remove(pm, VM_MIN_ADDRESS, VM_MAX_ADDRESS, 1);
 	pmap_update(pm);
 }
@@ -3064,7 +3064,6 @@ pmap_activate(struct lwp *l)
 
 	if (l == curlwp) {
 		u_int cur_dacr, cur_ttb;
-		int oldirqstate;
 
 		__asm volatile("mrc p15, 0, %0, c2, c0, 0" : "=r"(cur_ttb));
 		__asm volatile("mrc p15, 0, %0, c3, c0, 0" : "=r"(cur_dacr));
@@ -3081,7 +3080,7 @@ pmap_activate(struct lwp *l)
 
 		s = splhigh();
 		pmap_acquire_pmap_lock(pm);
-		oldirqstate = disable_interrupts(I32_bit | F32_bit);
+		disable_interrupts(I32_bit | F32_bit);
 
 		/*
 		 * We MUST, I repeat, MUST fix up the L1 entry corresponding
@@ -3101,7 +3100,7 @@ pmap_activate(struct lwp *l)
 		cpu_domains(pcb->pcb_dacr);
 		cpu_setttb(pcb->pcb_pagedir);
 
-		restore_interrupts(oldirqstate);
+		enable_interrupts(I32_bit | F32_bit);
 
 		/*
 		 * Flag any previous userland pmap as being NOT
@@ -3135,7 +3134,7 @@ pmap_update(pmap_t pm)
 		 * the TLB.
 		 */
 		pmap_tlb_flushID(pm);
-		pm->pm_remove_all = false;
+		pm->pm_remove_all = FALSE;
 	}
 
 	if (pmap_is_current(pm)) {
@@ -3171,7 +3170,7 @@ pmap_remove_all(pmap_t pm)
 	 * the cache now, and deferring TLB invalidation to pmap_update().
 	 */
 	pmap_idcache_wbinv_all(pm);
-	pm->pm_remove_all = true;
+	pm->pm_remove_all = TRUE;
 }
 
 /*
@@ -3188,7 +3187,7 @@ pmap_destroy(pmap_t pm)
 
 	if (pm->pm_remove_all) {
 		pmap_tlb_flushID(pm);
-		pm->pm_remove_all = false;
+		pm->pm_remove_all = FALSE;
 	}
 
 	/*
@@ -3338,12 +3337,12 @@ pmap_zero_page_xscale(paddr_t phys)
  * mapped.  This means we never have to flush the cache first.  Called
  * from the idle loop.
  */
-bool
+boolean_t
 pmap_pageidlezero(paddr_t phys)
 {
 	unsigned int i;
 	int *ptr;
-	bool rv = true;
+	boolean_t rv = TRUE;
 #ifdef DEBUG
 	struct vm_page *pg;
 	
@@ -3366,14 +3365,14 @@ pmap_pageidlezero(paddr_t phys)
 
 	for (i = 0, ptr = (int *)cdstp;
 			i < (PAGE_SIZE / sizeof(int)); i++) {
-		if (sched_curcpu_runnable_p()) {
+		if (sched_whichqs != 0) {
 			/*
 			 * A process has become ready.  Abort now,
 			 * so we don't keep it waiting while we
 			 * do slow memory access to finish this
 			 * page.
 			 */
-			rv = false;
+			rv = FALSE;
 			break;
 		}
 		*ptr++ = 0;
@@ -3417,7 +3416,7 @@ pmap_copy_page_generic(paddr_t src, paddr_t dst)
 	 * be created while we have a potentially aliased mapping.
 	 */
 	simple_lock(&src_pg->mdpage.pvh_slock);
-	(void) pmap_clean_page(src_pg->mdpage.pvh_list, true);
+	(void) pmap_clean_page(src_pg->mdpage.pvh_list, TRUE);
 
 	/*
 	 * Map the pages into the page hook points, copy them, and purge
@@ -3461,7 +3460,7 @@ pmap_copy_page_xscale(paddr_t src, paddr_t dst)
 	 * be created while we have a potentially aliased mapping.
 	 */
 	simple_lock(&src_pg->mdpage.pvh_slock);
-	(void) pmap_clean_page(src_pg->mdpage.pvh_list, true);
+	(void) pmap_clean_page(src_pg->mdpage.pvh_list, TRUE);
 
 	/*
 	 * Map the pages into the page hook points, copy them, and purge
@@ -3509,8 +3508,8 @@ pmap_grow_map(vaddr_t va, pt_entry_t cache_mode, paddr_t *pap)
 	pt_entry_t *ptep;
 	paddr_t pa;
 
-	if (uvm.page_init_done == false) {
-		if (uvm_page_physget(&pa) == false)
+	if (uvm.page_init_done == FALSE) {
+		if (uvm_page_physget(&pa) == FALSE)
 			return (1);
 	} else {
 		struct vm_page *pg;
@@ -3725,20 +3724,20 @@ pmap_set_pcb_pagedir(pmap_t pm, struct pcb *pcb)
 
 /*
  * Fetch pointers to the PDE/PTE for the given pmap/VA pair.
- * Returns true if the mapping exists, else false.
+ * Returns TRUE if the mapping exists, else FALSE.
  *
  * NOTE: This function is only used by a couple of arm-specific modules.
  * It is not safe to take any pmap locks here, since we could be right
  * in the middle of debugging the pmap anyway...
  *
- * It is possible for this routine to return false even though a valid
+ * It is possible for this routine to return FALSE even though a valid
  * mapping does exist. This is because we don't lock, so the metadata
  * state may be inconsistent.
  *
  * NOTE: We can return a NULL *ptp in the case where the L1 pde is
  * a "section" mapping.
  */
-bool
+boolean_t
 pmap_get_pde_pte(pmap_t pm, vaddr_t va, pd_entry_t **pdp, pt_entry_t **ptp)
 {
 	struct l2_dtable *l2;
@@ -3747,7 +3746,7 @@ pmap_get_pde_pte(pmap_t pm, vaddr_t va, pd_entry_t **pdp, pt_entry_t **ptp)
 	u_short l1idx;
 
 	if (pm->pm_l1 == NULL)
-		return (false);
+		return (FALSE);
 
 	l1idx = L1_IDX(va);
 	*pdp = pl1pd = &pm->pm_l1->l1_kva[l1idx];
@@ -3755,35 +3754,35 @@ pmap_get_pde_pte(pmap_t pm, vaddr_t va, pd_entry_t **pdp, pt_entry_t **ptp)
 
 	if (l1pte_section_p(l1pd)) {
 		*ptp = NULL;
-		return (true);
+		return (TRUE);
 	}
 
 	if (pm->pm_l2 == NULL)
-		return (false);
+		return (FALSE);
 
 	l2 = pm->pm_l2[L2_IDX(l1idx)];
 
 	if (l2 == NULL ||
 	    (ptep = l2->l2_bucket[L2_BUCKET(l1idx)].l2b_kva) == NULL) {
-		return (false);
+		return (FALSE);
 	}
 
 	*ptp = &ptep[l2pte_index(va)];
-	return (true);
+	return (TRUE);
 }
 
-bool
+boolean_t
 pmap_get_pde(pmap_t pm, vaddr_t va, pd_entry_t **pdp)
 {
 	u_short l1idx;
 
 	if (pm->pm_l1 == NULL)
-		return (false);
+		return (FALSE);
 
 	l1idx = L1_IDX(va);
 	*pdp = &pm->pm_l1->l1_kva[l1idx];
 
-	return (true);
+	return (TRUE);
 }
 
 /************************ Bootstrapping routines ****************************/
@@ -3807,7 +3806,7 @@ pmap_init_l1(struct l1_ttable *l1, pd_entry_t *l1pt)
 		memcpy(l1pt, pmap_kernel()->pm_l1->l1_kva, L1_TABLE_SIZE);
 
 	if (pmap_extract(pmap_kernel(), (vaddr_t)l1pt,
-	    &l1->l1_physaddr) == false)
+	    &l1->l1_physaddr) == FALSE)
 		panic("pmap_init_l1: can't get PA of L1 at %p", l1pt);
 
 	SLIST_INSERT_HEAD(&l1_list, l1, l1_link);
@@ -4000,7 +3999,7 @@ pmap_bootstrap(pd_entry_t *kernel_l1pt, vaddr_t vstart, vaddr_t vend)
 	 * Initialize the pmap pool and cache
 	 */
 	pool_init(&pmap_pmap_pool, sizeof(struct pmap), 0, 0, 0, "pmappl",
-	    &pool_allocator_nointr, IPL_NONE);
+	    &pool_allocator_nointr);
 	pool_cache_init(&pmap_pmap_cache, &pmap_pmap_pool,
 	    pmap_pmap_ctor, NULL, NULL);
 	LIST_INIT(&pmap_pmaps);
@@ -4010,13 +4009,13 @@ pmap_bootstrap(pd_entry_t *kernel_l1pt, vaddr_t vstart, vaddr_t vend)
 	 * Initialize the pv pool.
 	 */
 	pool_init(&pmap_pv_pool, sizeof(struct pv_entry), 0, 0, 0, "pvepl",
-	    &pmap_bootstrap_pv_allocator, IPL_NONE);
+	    &pmap_bootstrap_pv_allocator);
 
 	/*
 	 * Initialize the L2 dtable pool and cache.
 	 */
 	pool_init(&pmap_l2dtable_pool, sizeof(struct l2_dtable), 0, 0, 0,
-	    "l2dtblpl", NULL, IPL_NONE);
+	    "l2dtblpl", NULL);
 	pool_cache_init(&pmap_l2dtable_cache, &pmap_l2dtable_pool,
 	    pmap_l2dtable_ctor, NULL, NULL);
 
@@ -4024,7 +4023,7 @@ pmap_bootstrap(pd_entry_t *kernel_l1pt, vaddr_t vstart, vaddr_t vend)
 	 * Initialise the L2 descriptor table pool and cache
 	 */
 	pool_init(&pmap_l2ptp_pool, L2_TABLE_SIZE_REAL, 0, L2_TABLE_SIZE_REAL,
-	    0, "l2ptppl", NULL, IPL_NONE);
+	    0, "l2ptppl", NULL);
 	pool_cache_init(&pmap_l2ptp_cache, &pmap_l2ptp_pool,
 	    pmap_l2ptp_ctor, NULL, NULL);
 
@@ -4117,7 +4116,7 @@ pmap_init(void)
 	pool_setlowat(&pmap_pv_pool,
 	    (PAGE_SIZE / sizeof(struct pv_entry)) * 2);
 
-	pmap_initialized = true;
+	pmap_initialized = TRUE;
 }
 
 static vaddr_t last_bootstrap_page = 0;

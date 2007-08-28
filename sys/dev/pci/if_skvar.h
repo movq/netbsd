@@ -1,4 +1,4 @@
-/* $NetBSD: if_skvar.h,v 1.12 2007/03/04 06:02:22 christos Exp $ */
+/* $NetBSD: if_skvar.h,v 1.11 2006/09/04 00:54:40 riz Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -131,7 +131,7 @@ struct sk_chain_data {
 	int			sk_rx_cons;
 	int			sk_rx_cnt;
 	/* Stick the jumbo mem management stuff here too. */
-	void *			sk_jslots[SK_JSLOTS];
+	caddr_t			sk_jslots[SK_JSLOTS];
 	void			*sk_jumbo_buf;
 
 };

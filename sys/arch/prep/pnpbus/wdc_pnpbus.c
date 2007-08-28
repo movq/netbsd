@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_pnpbus.c,v 1.6 2007/03/20 05:58:40 garbled Exp $	*/
+/*	$NetBSD: wdc_pnpbus.c,v 1.5.12.1 2007/03/31 15:43:37 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_pnpbus.c,v 1.6 2007/03/20 05:58:40 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_pnpbus.c,v 1.5.12.1 2007/03/31 15:43:37 bouyer Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

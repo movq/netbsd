@@ -1,4 +1,4 @@
-/*	$NetBSD: portal_vfsops.c,v 1.65 2007/07/31 21:14:16 pooka Exp $	*/
+/*	$NetBSD: portal_vfsops.c,v 1.58.2.1 2007/02/17 23:27:49 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: portal_vfsops.c,v 1.65 2007/07/31 21:14:16 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: portal_vfsops.c,v 1.58.2.1 2007/02/17 23:27:49 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -68,7 +68,18 @@ __KERNEL_RCSID(0, "$NetBSD: portal_vfsops.c,v 1.65 2007/07/31 21:14:16 pooka Exp
 
 #include <miscfs/portal/portal.h>
 
-VFS_PROTOS(portal);
+void	portal_init(void);
+void	portal_done(void);
+int	portal_mount(struct mount *, const char *, void *,
+			  struct nameidata *, struct lwp *);
+int	portal_start(struct mount *, int, struct lwp *);
+int	portal_unmount(struct mount *, int, struct lwp *);
+int	portal_root(struct mount *, struct vnode **);
+int	portal_quotactl(struct mount *, int, uid_t, void *,
+			     struct lwp *);
+int	portal_statvfs(struct mount *, struct statvfs *, struct lwp *);
+int	portal_sync(struct mount *, int, kauth_cred_t, struct lwp *);
+int	portal_vget(struct mount *, ino_t, struct vnode **);
 
 void
 portal_init()
@@ -88,30 +99,26 @@ portal_mount(
     struct mount *mp,
     const char *path,
     void *data,
-    size_t *data_len,
+    struct nameidata *ndp,
     struct lwp *l
 )
 {
 	struct file *fp;
-	struct portal_args *args = data;
+	struct portal_args args;
 	struct portalmount *fmp;
 	struct socket *so;
 	struct vnode *rvp;
 	struct proc *p;
 	int error;
 
-	if (*data_len < sizeof *args)
-		return EINVAL;
-
 	p = l->l_proc;
 	if (mp->mnt_flag & MNT_GETARGS) {
 		fmp = VFSTOPORTAL(mp);
 		if (fmp == NULL)
 			return EIO;
-		args->pa_config = NULL;
-		args->pa_socket = 0;	/* XXX */
-		*data_len = sizeof *args;
-		return 0;
+		args.pa_config = NULL;
+		args.pa_socket = 0;	/* XXX */
+		return copyout(&args, data, sizeof(args));
 	}
 	/*
 	 * Update is a no-op
@@ -119,8 +126,12 @@ portal_mount(
 	if (mp->mnt_flag & MNT_UPDATE)
 		return (EOPNOTSUPP);
 
+	error = copyin(data, &args, sizeof(struct portal_args));
+	if (error)
+		return (error);
+
 	/* getsock() will use the descriptor for us */
-	if ((error = getsock(p->p_fd, args->pa_socket, &fp)) != 0)
+	if ((error = getsock(p->p_fd, args.pa_socket, &fp)) != 0)
 		return (error);
 	so = (struct socket *) fp->f_data;
 	FILE_UNUSE(fp, NULL);
@@ -151,8 +162,8 @@ portal_mount(
 	mp->mnt_data = fmp;
 	vfs_getnewfsid(mp);
 
-	return set_statvfs_info(path, UIO_USERSPACE, args->pa_config,
-	    UIO_USERSPACE, mp->mnt_op->vfs_name, mp, l);
+	return set_statvfs_info(path, UIO_USERSPACE, args.pa_config,
+	    UIO_USERSPACE, mp, l);
 }
 
 int
@@ -172,7 +183,17 @@ portal_unmount(struct mount *mp, int mntflags, struct lwp *l)
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
 
-	if (rtvp->v_usecount > 1 && (mntflags & MNT_FORCE) == 0)
+	/*
+	 * Clear out buffer cache.  I don't think we
+	 * ever get anything cached at this level at the
+	 * moment, but who knows...
+	 */
+#ifdef notyet
+	mntflushbuf(mp, 0);
+	if (mntinvalbuf(mp, 1))
+		return (EBUSY);
+#endif
+	if (rtvp->v_usecount > 1)
 		return (EBUSY);
 	if ((error = vflush(mp, rtvp, flags)) != 0)
 		return (error);
@@ -297,7 +318,6 @@ const struct vnodeopv_desc * const portal_vnodeopv_descs[] = {
 
 struct vfsops portal_vfsops = {
 	MOUNT_PORTAL,
-	sizeof (struct portal_args),
 	portal_mount,
 	portal_start,
 	portal_unmount,
@@ -314,7 +334,6 @@ struct vfsops portal_vfsops = {
 	NULL,				/* vfs_mountroot */
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
-	(void *)eopnotsupp,		/* vfs_suspendctl */
 	portal_vnodeopv_descs,
 	0,
 	{ NULL, NULL },

@@ -1,10 +1,10 @@
-/*	$NetBSD: pcmciadevs.h,v 1.225 2007/08/20 00:32:38 kiyohara Exp $	*/
+/*	$NetBSD: pcmciadevs.h,v 1.223 2006/11/16 00:53:31 christos Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: pcmciadevs,v 1.222 2007/08/20 00:29:43 kiyohara Exp
+ *	NetBSD: pcmciadevs,v 1.220 2006/11/16 00:52:48 christos Exp
  */
 /* $FreeBSD: src/sys/dev/pccard/pccarddevs,v 1.20 2001/11/19 05:02:55 imp Exp $*/
 
@@ -101,7 +101,6 @@
 #define	PCMCIA_VENDOR_SYMBOL	0x026c	/* Symbol */
 #define	PCMCIA_VENDOR_BUFFALO	0x026f	/* BUFFALO (Melco Corporation) */
 #define	PCMCIA_VENDOR_LINKSYS2	0x0274	/* The Linksys Group */
-#define	PCMCIA_VENDOR_NECINFRONTIA	0x0288	/* NEC Infrontia */
 #define	PCMCIA_VENDOR_IODATA2	0x028a	/* I-O DATA */
 #define	PCMCIA_VENDOR_ASUSTEK	0x02aa	/* Asustek Computer */
 #define	PCMCIA_VENDOR_SIEMENS	0x02ac	/* Siemens */
@@ -187,8 +186,6 @@
 #define	PCMCIA_PRODUCT_ANYCOM_LSE041	0x0004
 #define	PCMCIA_CIS_ANYCOM_LSE039	{ NULL, NULL, NULL, NULL }
 #define	PCMCIA_PRODUCT_ANYCOM_LSE039	0x0008
-#define	PCMCIA_CIS_ANYCOM_LSE139	{ NULL, NULL, NULL, NULL }
-#define	PCMCIA_PRODUCT_ANYCOM_LSE139	0x000b
 
 /* Archos */
 #define	PCMCIA_CIS_ARCHOS_ARC_ATAPI	{ NULL, NULL, NULL, NULL }
@@ -426,10 +423,6 @@
 #define	PCMCIA_PRODUCT_MOTOROLA_PM100C	0x0302
 #define	PCMCIA_CIS_MOTOROLA_MONTANA_336	{ NULL, NULL, NULL, NULL }
 #define	PCMCIA_PRODUCT_MOTOROLA_MONTANA_336	0x0505
-
-/* NEC Infrontia Products */
-#define	PCMCIA_CIS_NECINFRONTIA_AX420N	{ NULL, NULL, NULL, NULL }
-#define	PCMCIA_PRODUCT_NECINFRONTIA_AX420N	0x1b01
 
 /* New Media Products */
 #define	PCMCIA_CIS_NEWMEDIA_BASICS	{ NULL, NULL, NULL, NULL }

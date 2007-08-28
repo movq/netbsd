@@ -1,4 +1,4 @@
-/*	$NetBSD: movstrSI12_i4.S,v 1.1 2007/03/14 22:22:53 uwe Exp $	*/
+/*	$NetBSD: movstrSI12_i4.S,v 1.1.10.2 2007/04/20 20:35:32 bouyer Exp $	*/
 
 #include <machine/asm.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_output.c,v 1.33 2007/04/29 20:23:36 msaitoh Exp $	*/
+/*	$NetBSD: tp_output.c,v 1.30 2006/07/23 22:06:14 ad Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -62,7 +62,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_output.c,v 1.33 2007/04/29 20:23:36 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tp_output.c,v 1.30 2006/07/23 22:06:14 ad Exp $");
 
 #include "opt_inet.h"
 #include "opt_iso.h"
@@ -104,7 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: tp_output.c,v 1.33 2007/04/29 20:23:36 msaitoh Exp $
  *	using the parameters passed in via (param).
  *	(cmd) may be TP_STRICT or TP_FORCE or both.
  *  Force means it will set all the values in (tpcb) to those in
- *  the input arguments iff no errors were encountered.
+ *  the input arguements iff no errors were encountered.
  *  Strict means that no inconsistency will be tolerated.  If it's
  *  not used, checksum and tpdusize inconsistencies will be tolerated.
  *  The reason for this is that in some cases, when we're negotiating down
@@ -392,7 +392,7 @@ tp_ctloutput(int cmd, struct socket  *so, int level, int optname,
 	struct lwp *l = curlwp;		/* XXX */
 	struct tp_pcb  *tpcb = sototpcb(so);
 	int             s = splsoftnet();
-	void *        value;
+	caddr_t         value;
 	unsigned        val_len;
 	int             error = 0;
 
@@ -491,7 +491,7 @@ tp_ctloutput(int cmd, struct socket  *so, int level, int optname,
 			goto done;
 		}
 	}
-	value = mtod(*mp, void *);	/* it's aligned, don't worry, but
+	value = mtod(*mp, caddr_t);	/* it's aligned, don't worry, but
 					 * lint complains about it */
 	val_len = (*mp)->m_len;
 
@@ -502,7 +502,7 @@ tp_ctloutput(int cmd, struct socket  *so, int level, int optname,
 #define ISOA(t) (((struct isopcb *)(t->tp_npcb))->isop_laddr->siso_addr)
 
 		if (l == 0 || (error = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL))) {
+		    KAUTH_GENERIC_ISSUSER, &l->l_acflag))) {
 			error = EPERM;
 		} else if (cmd != PRCO_SETOPT || tpcb->tp_state != TP_CLOSED ||
 			   (tpcb->tp_flags & TPF_GENERAL_ADDR) ||
@@ -544,7 +544,7 @@ tp_ctloutput(int cmd, struct socket  *so, int level, int optname,
 	case TPOPT_MY_TSEL:
 		if (cmd == PRCO_GETOPT) {
 			ASSERT(tpcb->tp_lsuffixlen <= MAX_TSAP_SEL_LEN);
-			bcopy((void *) tpcb->tp_lsuffix, value, tpcb->tp_lsuffixlen);
+			bcopy((caddr_t) tpcb->tp_lsuffix, value, tpcb->tp_lsuffixlen);
 			(*mp)->m_len = tpcb->tp_lsuffixlen;
 		} else {	/* cmd == PRCO_SETOPT  */
 			if ((val_len > MAX_TSAP_SEL_LEN) || (val_len <= 0)) {
@@ -552,7 +552,7 @@ tp_ctloutput(int cmd, struct socket  *so, int level, int optname,
 				    val_len, (*mp));
 				error = EINVAL;
 			} else {
-				bcopy(value, (void *) tpcb->tp_lsuffix, val_len);
+				bcopy(value, (caddr_t) tpcb->tp_lsuffix, val_len);
 				tpcb->tp_lsuffixlen = val_len;
 			}
 		}
@@ -561,7 +561,7 @@ tp_ctloutput(int cmd, struct socket  *so, int level, int optname,
 	case TPOPT_PEER_TSEL:
 		if (cmd == PRCO_GETOPT) {
 			ASSERT(tpcb->tp_fsuffixlen <= MAX_TSAP_SEL_LEN);
-			bcopy((void *) tpcb->tp_fsuffix, value, tpcb->tp_fsuffixlen);
+			bcopy((caddr_t) tpcb->tp_fsuffix, value, tpcb->tp_fsuffixlen);
 			(*mp)->m_len = tpcb->tp_fsuffixlen;
 		} else {	/* cmd == PRCO_SETOPT  */
 			if ((val_len > MAX_TSAP_SEL_LEN) || (val_len <= 0)) {
@@ -569,7 +569,7 @@ tp_ctloutput(int cmd, struct socket  *so, int level, int optname,
 				    val_len, (*mp));
 				error = EINVAL;
 			} else {
-				bcopy(value, (void *) tpcb->tp_fsuffix, val_len);
+				bcopy(value, (caddr_t) tpcb->tp_fsuffix, val_len);
 				tpcb->tp_fsuffixlen = val_len;
 			}
 		}
@@ -581,7 +581,7 @@ tp_ctloutput(int cmd, struct socket  *so, int level, int optname,
 			printf("%s TPOPT_FLAGS value %p *value 0x%x, flags 0x%x \n",
 			       cmd == PRCO_GETOPT ? "GET" : "SET",
 			       value,
-			       *(unsigned char *)value,
+			       *value,
 			       tpcb->tp_flags);
 		}
 #endif

@@ -1,4 +1,4 @@
-/* $NetBSD: arspi.c,v 1.5 2007/02/28 04:21:53 thorpej Exp $ */
+/* $NetBSD: arspi.c,v 1.2 2006/10/20 06:41:46 gdamore Exp $ */
 
 /*-
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arspi.c,v 1.5 2007/02/28 04:21:53 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arspi.c,v 1.2 2006/10/20 06:41:46 gdamore Exp $");
 
 #include "locators.h"
 
@@ -100,7 +100,7 @@ struct arspi_softc {
 	struct device		sc_dev;
 	struct spi_controller	sc_spi;
 	void			*sc_ih;
-	bool			sc_interrupts;
+	boolean_t		sc_interrupts;
 
 	struct spi_transfer	*sc_transfer;
 	struct spi_chunk	*sc_wchunk;	/* for partial writes */
@@ -212,7 +212,7 @@ arspi_interrupts(struct device *self)
 	int	s;
 
 	s = splserial();
-	sc->sc_interrupts = true;
+	sc->sc_interrupts = TRUE;
 	splx(s);
 #endif
 }
@@ -371,7 +371,7 @@ arspi_done(struct arspi_softc *sc, int err)
 		} else if (err == 0) {
 			/*
 			 * When breaking up write jobs, we have to wait until
-			 * the WIP bit is clear, and we have to separately
+			 * the WIP bit is clear, and we have to seperately
 			 * send WREN for each chunk.  These flags facilitate
 			 * that.
 			 */

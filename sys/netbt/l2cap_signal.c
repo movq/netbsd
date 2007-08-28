@@ -1,4 +1,4 @@
-/*	$NetBSD: l2cap_signal.c,v 1.8 2007/05/16 18:34:49 plunky Exp $	*/
+/*	$NetBSD: l2cap_signal.c,v 1.2.4.3 2007/07/19 16:04:19 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: l2cap_signal.c,v 1.8 2007/05/16 18:34:49 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: l2cap_signal.c,v 1.2.4.3 2007/07/19 16:04:19 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -204,11 +204,9 @@ l2cap_recv_command_rej(struct mbuf *m, struct hci_link *link)
 	case L2CAP_REJ_MTU_EXCEEDED:
 		/*
 		 * I didnt send any commands over L2CAP_MTU_MINIMUM size, but..
-		 *
-		 * XXX maybe we should resend this, instead?
 		 */
 		link->hl_mtu = le16toh(cp.data[0]);
-		callout_schedule(&req->lr_rtx, 0);
+		callout_schedule(&req->lr_rtx, 0);  // XX maybe resend instead?
 		break;
 
 	case L2CAP_REJ_INVALID_CID:
@@ -392,7 +390,7 @@ l2cap_recv_connect_rsp(struct mbuf *m, struct hci_link *link)
 		break;
 
 	case L2CAP_PENDING:
-		/* XXX dont release request, should start eRTX timeout? */
+		// dont release request, should start eRTX timeout?
 		(*chan->lc_proto->connecting)(chan->lc_upper);
 		break;
 
@@ -560,7 +558,7 @@ l2cap_recv_config_req(struct mbuf *m, struct hci_link *link)
 
 		if ((chan->lc_flags & L2CAP_WAIT_CONFIG_RSP) == 0) {
 			chan->lc_state = L2CAP_OPEN;
-			/* XXX how to distinguish REconfiguration? */
+			// XXX how to distinguish REconfiguration?
 			(*chan->lc_proto->connected)(chan->lc_upper);
 		}
 	}
@@ -648,7 +646,7 @@ l2cap_recv_config_rsp(struct mbuf *m, struct hci_link *link)
 
 			if ((chan->lc_flags & L2CAP_WAIT_CONFIG_REQ) == 0) {
 				chan->lc_state = L2CAP_OPEN;
-				/* XXX how to distinguish REconfiguration? */
+				// XXX how to distinguish REconfiguration?
 				(*chan->lc_proto->connected)(chan->lc_upper);
 			}
 		}
@@ -706,7 +704,7 @@ l2cap_recv_config_rsp(struct mbuf *m, struct hci_link *link)
 		}
 
 		if ((cp.flags & L2CAP_OPT_CFLAG_BIT) == 0)
-			l2cap_send_config_req(chan);	/* no state change */
+			l2cap_send_config_req(chan);	// no state change
 
 		goto out;
 

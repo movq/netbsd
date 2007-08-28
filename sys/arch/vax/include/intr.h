@@ -1,4 +1,4 @@
-/* 	$NetBSD: intr.h,v 1.24 2007/03/12 02:22:43 matt Exp $	*/
+/* 	$NetBSD: intr.h,v 1.20 2006/02/16 20:17:15 perry Exp $	*/
 
 /*
  * Copyright (c) 1998 Matt Thomas.
@@ -33,7 +33,6 @@
 #define _VAX_INTR_H_
 
 #include <sys/queue.h>
-#include <machine/mtpr.h>
 
 /* Define the various Interrupt Priority Levels */
 
@@ -77,61 +76,52 @@
 
 
 #ifdef _KERNEL
-typedef int ipl_t;
+#ifndef __lint__
+#define splx(reg)						\
+({								\
+	register int __val;					\
+	__asm volatile ("mfpr $0x12,%0;mtpr %1,$0x12"		\
+				: "=&g" (__val)			\
+				: "g" (reg));			\
+	__val;							\
+})
 
-static inline void
-_splset(ipl_t ipl)
-{
-	mtpr(ipl, PR_IPL);
-}
+#define _splset(reg)						\
+((void)({							\
+	__asm volatile ("mtpr %0,$0x12"			\
+				: 				\
+				: "g" (reg));			\
+}))
 
-static inline ipl_t
-_splget(void)
-{
-	return mfpr(PR_IPL);
-}
+#define splraiseipl(reg)						\
+({								\
+	register int __val;					\
+	__asm volatile ("mfpr $0x12,%0"			\
+				: "=&g" (__val)			\
+				: );				\
+	if ((reg) > __val) {					\
+		_splset(reg);					\
+	}							\
+	__val;							\
+})
 
-static inline ipl_t
-splx(ipl_t new_ipl)
-{
-	ipl_t old_ipl = _splget();
-	_splset(new_ipl);
-	return old_ipl;
-}
-
-typedef struct {
-	uint8_t _ipl;
-} ipl_cookie_t;
-
-static inline ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-	return (ipl_cookie_t){._ipl = (uint8_t)ipl};
-}
-
-static inline int
-splraiseipl(ipl_cookie_t icookie)
-{
-	ipl_t newipl = icookie._ipl;
-	ipl_t oldipl;
-
-	oldipl = _splget();
-	if (newipl > oldipl) {
-		_splset(newipl);
-	}
-	return oldipl;
-}
-
-#define _setsirr(reg)	mtpr((reg), PR_SIRR)
+#define _setsirr(reg)						\
+do {								\
+	__asm volatile ("mtpr %0,$0x14"			\
+				:				\
+				: "g" (reg));			\
+} while (0)
+#endif
 
 #define spl0()		_splset(IPL_NONE)		/* IPL00 */
-#define splddb()	splraiseipl(makeiplcookie(IPL_SOFTDDB)) /* IPL0F */
-#define splconsmedia()	splraiseipl(makeiplcookie(IPL_CONSMEDIA)) /* IPL14 */
+#define spllowersoftclock() _splset(IPL_SOFTCLOCK)	/* IPL08 */
+#define splddb()	splraiseipl(IPL_SOFTDDB)	/* IPL0F */
+#define splconsmedia()	splraiseipl(IPL_CONSMEDIA)	/* IPL14 */
 
 #include <sys/spl.h>
 
 /* These are better to use when playing with VAX buses */
-#define	spluba()	splraiseipl(makeiplcookie(IPL_UBA)) /* IPL17 */
+#define	spluba()	splraiseipl(IPL_UBA)		/* IPL17 */
 #define spl4()		splx(0x14)
 #define spl5()		splx(0x15)
 #define spl6()		splx(0x16)

@@ -1,7 +1,7 @@
-/*	$NetBSD: acpi.c,v 1.102 2007/08/08 08:52:31 cube Exp $	*/
+/*	$NetBSD: acpi.c,v 1.98 2006/11/26 12:30:05 cube Exp $	*/
 
 /*-
- * Copyright (c) 2003, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi.c,v 1.102 2007/08/08 08:52:31 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi.c,v 1.98 2006/11/26 12:30:05 cube Exp $");
 
 #include "opt_acpi.h"
 #include "opt_pcifixup.h"
@@ -86,7 +86,6 @@ __KERNEL_RCSID(0, "$NetBSD: acpi.c,v 1.102 2007/08/08 08:52:31 cube Exp $");
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-#include <sys/mutex.h>
 #include <sys/kernel.h>
 #include <sys/proc.h>
 #include <sys/sysctl.h>
@@ -151,9 +150,8 @@ struct acpi_softc *acpi_softc;
 /*
  * Locking stuff.
  */
-static kmutex_t acpi_slock;
+static struct simplelock acpi_slock;
 static int acpi_locked;
-extern kmutex_t acpi_interrupt_list_mtx;
 
 /*
  * sysctl-related information
@@ -191,8 +189,7 @@ acpi_probe(void)
 		panic("acpi_probe: ACPI has already been probed");
 	beenhere = 1;
 
-	mutex_init(&acpi_slock, MUTEX_DRIVER, IPL_NONE);
-	mutex_init(&acpi_interrupt_list_mtx, MUTEX_DRIVER, IPL_NONE);
+	simple_lock_init(&acpi_slock);
 	acpi_locked = 0;
 
 	/*
@@ -565,8 +562,7 @@ acpi_activate_device(ACPI_HANDLE handle, ACPI_DEVICE_INFO **di)
 		aprint_error("acpi: activate failed for %s\n",
 		       (*di)->HardwareId.Value);
 	} else {
-		aprint_verbose("acpi: activated %s\n",
-		    (*di)->HardwareId.Value);
+		aprint_normal("acpi: activated %s\n", (*di)->HardwareId.Value);
 	}
 
 	(void)AcpiGetObjectInfo(handle, &buf);
@@ -599,8 +595,6 @@ acpi_make_devnode(ACPI_HANDLE handle, UINT32 level, void *context,
 	ACPI_BUFFER buf;
 	ACPI_DEVICE_INFO *devinfo;
 	ACPI_STATUS rv;
-	ACPI_NAME_UNION *anu;
-	int i, clear = 0;
 
 	rv = AcpiGetType(handle, &type);
 	if (ACPI_SUCCESS(rv)) {
@@ -642,19 +636,6 @@ acpi_make_devnode(ACPI_HANDLE handle, UINT32 level, void *context,
 			ad->ad_level = level;
 			ad->ad_scope = as;
 			ad->ad_type = type;
-
-			anu = (ACPI_NAME_UNION *)&devinfo->Name;
-			ad->ad_name[4] = '\0';
-			for (i = 3, clear = 0; i >= 0; i--) {
-				if (!clear && anu->Ascii[i] == '_')
-					ad->ad_name[i] = '\0';
-				else {
-					ad->ad_name[i] = anu->Ascii[i];
-					clear = 1;
-				}
-			}
-			if (ad->ad_name[0] == '\0')
-				ad->ad_name[0] = '_';
 
 			TAILQ_INSERT_TAIL(&as->as_devnodes, ad, ad_list);
 
@@ -699,8 +680,7 @@ acpi_print(void *aux, const char *pnp)
 			    aa->aa_node->ad_devinfo->HardwareId.Value;
 			char *str;
 
-			aprint_normal("%s (%s) ", aa->aa_node->ad_name,
-			    pnpstr);
+			aprint_normal("%s ", pnpstr);
 			rv = acpi_eval_string(aa->aa_node->ad_handle,
 			    "_STR", &str);
 			if (ACPI_SUCCESS(rv)) {
@@ -723,16 +703,14 @@ acpi_print(void *aux, const char *pnp)
 
 #endif
 		} else {
-			aprint_normal("%s (ACPI Object Type '%s' "
-			    "[0x%02x]) ", aa->aa_node->ad_name,
-			     AcpiUtGetTypeName(aa->aa_node->ad_devinfo->Type),
-			     aa->aa_node->ad_devinfo->Type);
+			aprint_normal("ACPI Object Type '%s' (0x%02x) ",
+			   AcpiUtGetTypeName(aa->aa_node->ad_devinfo->Type),
+			   aa->aa_node->ad_devinfo->Type);
 		}
 		aprint_normal("at %s", pnp);
 	} else {
-		aprint_normal(" (%s", aa->aa_node->ad_name);
 		if (aa->aa_node->ad_devinfo->Valid & ACPI_VALID_HID) {
-			aprint_normal(", %s", aa->aa_node->ad_devinfo->HardwareId.Value);
+			aprint_normal(" (%s", aa->aa_node->ad_devinfo->HardwareId.Value);
 			if (aa->aa_node->ad_devinfo->Valid & ACPI_VALID_UID) {
 				const char *uid;
 
@@ -741,8 +719,8 @@ acpi_print(void *aux, const char *pnp)
 					uid = "<null>";
 				aprint_normal("-%s", uid);
 			}
+			aprint_normal(")");
 		}
-		aprint_normal(")");
 	}
 
 	return UNCONF;
@@ -774,7 +752,7 @@ acpi_enable_fixed_events(struct acpi_softc *sc)
 	 */
 
 	if (AcpiGbl_FADT != NULL && AcpiGbl_FADT->PwrButton == 0) {
-		aprint_verbose("%s: fixed-feature power button present\n",
+		aprint_normal("%s: fixed-feature power button present\n",
 		    sc->sc_dev.dv_xname);
 		sc->sc_smpsw_power.smpsw_name = sc->sc_dev.dv_xname;
 		sc->sc_smpsw_power.smpsw_type = PSWITCH_TYPE_POWER;
@@ -795,7 +773,7 @@ acpi_enable_fixed_events(struct acpi_softc *sc)
 	}
 
 	if (AcpiGbl_FADT != NULL && AcpiGbl_FADT->SleepButton == 0) {
-		aprint_verbose("%s: fixed-feature sleep button present\n",
+		aprint_normal("%s: fixed-feature sleep button present\n",
 		    sc->sc_dev.dv_xname);
 		sc->sc_smpsw_sleep.smpsw_name = sc->sc_dev.dv_xname;
 		sc->sc_smpsw_sleep.smpsw_type = PSWITCH_TYPE_SLEEP;

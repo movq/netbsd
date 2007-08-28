@@ -1,4 +1,4 @@
-/*	$NetBSD: igmp.c,v 1.45 2007/04/25 00:11:18 dyoung Exp $	*/
+/*	$NetBSD: igmp.c,v 1.43 2006/10/05 17:35:19 tls Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: igmp.c,v 1.45 2007/04/25 00:11:18 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: igmp.c,v 1.43 2006/10/05 17:35:19 tls Exp $");
 
 #include "opt_mrouting.h"
 
@@ -65,8 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: igmp.c,v 1.45 2007/04/25 00:11:18 dyoung Exp $");
 
 #define IP_MULTICASTOPTS	0
 
-POOL_INIT(igmp_rti_pool, sizeof(struct router_info), 0, 0, 0, "igmppl", NULL,
-    IPL_SOFTNET);
+POOL_INIT(igmp_rti_pool, sizeof(struct router_info), 0, 0, 0, "igmppl", NULL);
 struct igmpstat igmpstat;
 int igmp_timers_are_running;
 static LIST_HEAD(, router_info) rti_head = LIST_HEAD_INITIALIZER(rti_head);
@@ -571,7 +570,8 @@ igmp_sendpkt(struct in_multi *inm, int type)
 	imo.imo_multicast_loop = 0;
 #endif /* MROUTING */
 
-	ip_output(m, NULL, NULL, IP_MULTICASTOPTS, &imo, NULL);
+	ip_output(m, (struct mbuf *)NULL, (struct route *)NULL,
+	    IP_MULTICASTOPTS, &imo, (struct socket *)NULL);
 
 	++igmpstat.igps_snd_reports;
 }

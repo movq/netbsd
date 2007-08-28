@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_bio.c,v 1.176 2007/08/11 19:56:53 pooka Exp $	*/
+/*	$NetBSD: vfs_bio.c,v 1.167.2.1 2007/10/24 22:32:39 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -82,7 +82,7 @@
 #include "opt_softdep.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.176 2007/08/11 19:56:53 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_bio.c,v 1.167.2.1 2007/10/24 22:32:39 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -131,8 +131,8 @@ static int buf_lotsfree(void);
 static int buf_canrelease(void);
 static inline u_long buf_mempoolidx(u_long);
 static inline u_long buf_roundsize(u_long);
-static inline void *buf_malloc(size_t);
-static void buf_mrelease(void *, size_t);
+static inline caddr_t buf_malloc(size_t);
+static void buf_mrelease(caddr_t, size_t);
 static inline void binsheadfree(struct buf *, struct bqueue *);
 static inline void binstailfree(struct buf *, struct bqueue *);
 int count_lock_queue(void); /* XXX */
@@ -179,10 +179,10 @@ int needbuffer;
 struct simplelock bqueue_slock = SIMPLELOCK_INITIALIZER;
 
 /*
- * Buffer pools for I/O buffers.
+ * Buffer pool for I/O buffers.
  */
-static struct pool bufpool;
-static struct pool bufiopool;
+static POOL_INIT(bufpool, sizeof(struct buf), 0, 0, 0, "bufpl",
+    &pool_allocator_nointr);
 
 
 /* XXX - somewhat gross.. */
@@ -233,10 +233,10 @@ static struct pool_allocator bufmempool_allocator = {
 };
 
 /* Buffer memory management variables */
-u_long bufmem_valimit;
-u_long bufmem_hiwater;
-u_long bufmem_lowater;
-u_long bufmem;
+uint64_t bufmem_valimit;
+uint64_t bufmem_hiwater;
+uint64_t bufmem_lowater;
+uint64_t bufmem;
 
 /*
  * MD code can call this to set a hard limit on the amount
@@ -380,7 +380,7 @@ bufinit(void)
 	if (bufmem_valimit != 0) {
 		vaddr_t minaddr = 0, maxaddr;
 		buf_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-					  bufmem_valimit, 0, false, 0);
+					  bufmem_valimit, 0, FALSE, 0);
 		if (buf_map == NULL)
 			panic("bufinit: cannot allocate submap");
 	} else
@@ -397,11 +397,6 @@ bufinit(void)
 	use_std = 1;
 #endif
 
-	pool_init(&bufpool, sizeof(struct buf), 0, 0, 0, "bufpl",
-	    &pool_allocator_nointr, IPL_NONE);
-	pool_init(&bufiopool, sizeof(struct buf), 0, 0, 0, "biopl",
-	    NULL, IPL_BIO);
-
 	bufmempool_allocator.pa_backingmap = buf_map;
 	for (i = 0; i < NMEMPOOLS; i++) {
 		struct pool_allocator *pa;
@@ -415,7 +410,7 @@ bufinit(void)
 		pa = (size <= PAGE_SIZE && use_std)
 			? &pool_allocator_nointr
 			: &bufmempool_allocator;
-		pool_init(pp, size, 0, 0, 0, name, pa, IPL_NONE);
+		pool_init(pp, size, 0, 0, 0, name, pa);
 		pool_setlowat(pp, 1);
 		pool_sethiwat(pp, 1);
 	}
@@ -441,9 +436,10 @@ static int
 buf_lotsfree(void)
 {
 	int try, thresh;
+	struct lwp *l = curlwp;
 
 	/* Always allocate if doing copy on write */
-	if (curlwp->l_pflag & LP_UFSCOW)
+	if (l->l_flag & L_COWINPROGRESS)
 		return 1;
 
 	/* Always allocate if less than the low water mark. */
@@ -531,11 +527,11 @@ buf_roundsize(u_long size)
 	return (1 << (buf_mempoolidx(size) + MEMPOOL_INDEX_OFFSET));
 }
 
-static inline void *
+static inline caddr_t
 buf_malloc(size_t size)
 {
 	u_int n = buf_mempoolidx(size);
-	void *addr;
+	caddr_t addr;
 	int s;
 
 	while (1) {
@@ -560,7 +556,7 @@ buf_malloc(size_t size)
 }
 
 static void
-buf_mrelease(void *addr, size_t size)
+buf_mrelease(caddr_t addr, size_t size)
 {
 
 	pool_put(&bmempools[buf_mempoolidx(size)], addr);
@@ -574,6 +570,8 @@ bio_doread(struct vnode *vp, daddr_t blkno, int size, kauth_cred_t cred,
     int async)
 {
 	struct buf *bp;
+	struct lwp *l  = (curlwp != NULL ? curlwp : &lwp0);	/* XXX */
+	struct proc *p = l->l_proc;
 	struct mount *mp;
 
 	bp = getblk(vp, blkno, size, 0, 0);
@@ -599,7 +597,7 @@ bio_doread(struct vnode *vp, daddr_t blkno, int size, kauth_cred_t cred,
 		VOP_STRATEGY(vp, bp);
 
 		/* Pay for the read. */
-		curproc->p_stats->p_ru.ru_inblock++;
+		p->p_stats->p_ru.ru_inblock++;
 	} else if (async) {
 		brelse(bp);
 	}
@@ -690,6 +688,8 @@ int
 bwrite(struct buf *bp)
 {
 	int rv, sync, wasdelayed, s;
+	struct lwp *l  = (curlwp != NULL ? curlwp : &lwp0);	/* XXX */
+	struct proc *p = l->l_proc;
 	struct vnode *vp;
 	struct mount *mp;
 
@@ -735,8 +735,7 @@ bwrite(struct buf *bp)
 
 	wasdelayed = ISSET(bp->b_flags, B_DELWRI);
 
-	CLR(bp->b_flags, (B_READ | B_DONE | B_DELWRI));
-	bp->b_error = 0;
+	CLR(bp->b_flags, (B_READ | B_DONE | B_ERROR | B_DELWRI));
 
 	/*
 	 * Pay for the I/O operation and make sure the buf is on the correct
@@ -745,7 +744,7 @@ bwrite(struct buf *bp)
 	if (wasdelayed)
 		reassignbuf(bp, bp->b_vp);
 	else
-		curproc->p_stats->p_ru.ru_oublock++;
+		p->p_stats->p_ru.ru_oublock++;
 
 	/* Initiate disk write.  Make sure the appropriate party is charged. */
 	V_INCR_NUMOUTPUT(bp->b_vp);
@@ -796,10 +795,14 @@ vn_bwrite(void *v)
 void
 bdwrite(struct buf *bp)
 {
+	struct lwp *l  = (curlwp != NULL ? curlwp : &lwp0);	/* XXX */
+	struct proc *p = l->l_proc;
+	const struct bdevsw *bdev;
 	int s;
 
 	/* If this is a tape block, write the block now. */
-	if (bdev_type(bp->b_dev) == D_TAPE) {
+	bdev = bdevsw_lookup(bp->b_dev);
+	if (bdev != NULL && bdev->d_type == D_TAPE) {
 		bawrite(bp);
 		return;
 	}
@@ -817,7 +820,7 @@ bdwrite(struct buf *bp)
 
 	if (!ISSET(bp->b_flags, B_DELWRI)) {
 		SET(bp->b_flags, B_DELWRI);
-		curproc->p_stats->p_ru.ru_oublock++;
+		p->p_stats->p_ru.ru_oublock++;
 		reassignbuf(bp, bp->b_vp);
 	}
 
@@ -856,6 +859,8 @@ bawrite(struct buf *bp)
 void
 bdirty(struct buf *bp)
 {
+	struct lwp *l  = (curlwp != NULL ? curlwp : &lwp0);	/* XXX */
+	struct proc *p = l->l_proc;
 
 	LOCK_ASSERT(simple_lock_held(&bp->b_interlock));
 	KASSERT(ISSET(bp->b_flags, B_BUSY));
@@ -864,7 +869,7 @@ bdirty(struct buf *bp)
 
 	if (!ISSET(bp->b_flags, B_DELWRI)) {
 		SET(bp->b_flags, B_DELWRI);
-		curproc->p_stats->p_ru.ru_oublock++;
+		p->p_stats->p_ru.ru_oublock++;
 		reassignbuf(bp, bp->b_vp);
 	}
 }
@@ -904,11 +909,11 @@ brelse(struct buf *bp)
 	 */
 
 	/* If it's locked, don't report an error; try again later. */
-	if (ISSET(bp->b_flags, B_LOCKED) && bp->b_error != 0)
-		bp->b_error = 0;
+	if (ISSET(bp->b_flags, (B_LOCKED|B_ERROR)) == (B_LOCKED|B_ERROR))
+		CLR(bp->b_flags, B_ERROR);
 
 	/* If it's not cacheable, or an error, mark it invalid. */
-	if (ISSET(bp->b_flags, B_NOCACHE) || bp->b_error != 0)
+	if (ISSET(bp->b_flags, (B_NOCACHE|B_ERROR)))
 		SET(bp->b_flags, B_INVAL);
 
 	if (ISSET(bp->b_flags, B_VFLUSH)) {
@@ -919,8 +924,7 @@ brelse(struct buf *bp)
 		 * otherwise leave it in its current position.
 		 */
 		CLR(bp->b_flags, B_VFLUSH);
-		if (!ISSET(bp->b_flags, B_INVAL|B_LOCKED|B_AGE) &&
-		    bp->b_error == 0) {
+		if (!ISSET(bp->b_flags, B_ERROR|B_INVAL|B_LOCKED|B_AGE)) {
 			KDASSERT(!debug_verify_freelist || checkfreelist(bp, &bufqueues[BQ_LRU]));
 			goto already_queued;
 		} else {
@@ -1043,7 +1047,7 @@ start:
 		simple_lock(&bp->b_interlock);
 		if (ISSET(bp->b_flags, B_BUSY)) {
 			simple_unlock(&bqueue_slock);
-			if (curlwp == uvm.pagedaemon_lwp) {
+			if (curproc == uvm.pagedaemon_proc) {
 				simple_unlock(&bp->b_interlock);
 				splx(s);
 				return NULL;
@@ -1128,7 +1132,7 @@ void
 allocbuf(struct buf *bp, int size, int preserve)
 {
 	vsize_t oldsize, desired_size;
-	void *addr;
+	caddr_t addr;
 	int s, delta;
 
 	desired_size = buf_roundsize(size);
@@ -1169,7 +1173,7 @@ allocbuf(struct buf *bp, int size, int preserve)
 			    SPCF_SHOULDYIELD) {
 				simple_unlock(&bqueue_slock);
 				splx(s);
-				preempt();
+				preempt(1);
 				s = splbio();
 				simple_lock(&bqueue_slock);
 			}
@@ -1225,7 +1229,7 @@ start:
 		/*
 		 * XXX: !from_bufq should be removed.
 		 */
-		if (!from_bufq || curlwp != uvm.pagedaemon_lwp) {
+		if (!from_bufq || curproc != uvm.pagedaemon_proc) {
 			/* wait for a free buffer of any kind */
 			needbuffer = 1;
 			ltsleep(&needbuffer, slpflag|(PRIBIO + 1),
@@ -1354,7 +1358,13 @@ biowait(struct buf *bp)
 	simple_lock(&bp->b_interlock);
 	while (!ISSET(bp->b_flags, B_DONE | B_DELWRI))
 		ltsleep(bp, PRIBIO + 1, "biowait", 0, &bp->b_interlock);
-	error = bp->b_error;
+
+	/* check errors. */
+	if (ISSET(bp->b_flags, B_ERROR))
+		error = bp->b_error ? bp->b_error : EIO;
+	else
+		error = 0;
+
 	simple_unlock(&bp->b_interlock);
 	splx(s);
 	return (error);
@@ -1599,8 +1609,20 @@ cleanup:
 	return (error);
 }
 
+static void
+sysctl_bufvm_common(void)
+{
+	int64_t t;
+
+	/* Drain until below new high water mark */
+	while ((t = (int64_t)bufmem - (int64_t)bufmem_hiwater) >= 0) {
+		if (buf_drain(t / (2 * 1024)) <= 0)
+			break;
+	}
+}
+
 static int
-sysctl_bufvm_update(SYSCTLFN_ARGS)
+sysctl_bufcache_update(SYSCTLFN_ARGS)
 {
 	int t, error;
 	struct sysctlnode node;
@@ -1612,14 +1634,32 @@ sysctl_bufvm_update(SYSCTLFN_ARGS)
 	if (error || newp == NULL)
 		return (error);
 
+	if (t < 0 || t > 100)
+		return EINVAL;
+	bufcache = t;
+	buf_setwm();
+
+	sysctl_bufvm_common();
+	return 0;
+}
+
+static int
+sysctl_bufvm_update(SYSCTLFN_ARGS)
+{
+	int64_t t;
+	int error;
+	struct sysctlnode node;
+
+	node = *rnode;
+	node.sysctl_data = &t;
+	t = *(int64_t *)rnode->sysctl_data;
+	error = sysctl_lookup(SYSCTLFN_CALL(&node));
+	if (error || newp == NULL)
+		return (error);
+
 	if (t < 0)
 		return EINVAL;
-	if (rnode->sysctl_data == &bufcache) {
-		if (t > 100)
-			return (EINVAL);
-		bufcache = t;
-		buf_setwm();
-	} else if (rnode->sysctl_data == &bufmem_lowater) {
+	if (rnode->sysctl_data == &bufmem_lowater) {
 		if (bufmem_hiwater - t < 16)
 			return (EINVAL);
 		bufmem_lowater = t;
@@ -1630,11 +1670,7 @@ sysctl_bufvm_update(SYSCTLFN_ARGS)
 	} else
 		return (EINVAL);
 
-	/* Drain until below new high water mark */
-	while ((t = bufmem - bufmem_hiwater) >= 0) {
-		if (buf_drain(t / (2 * 1024)) <= 0)
-			break;
-	}
+	sysctl_bufvm_common();
 
 	return 0;
 }
@@ -1669,25 +1705,25 @@ SYSCTL_SETUP(sysctl_vm_buf_setup, "sysctl vm.buf* subtree setup")
 		       CTLTYPE_INT, "bufcache",
 		       SYSCTL_DESCR("Percentage of physical memory to use for "
 				    "buffer cache"),
-		       sysctl_bufvm_update, 0, &bufcache, 0,
+		       sysctl_bufcache_update, 0, &bufcache, 0,
 		       CTL_VM, CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READONLY,
-		       CTLTYPE_INT, "bufmem",
+		       CTLTYPE_QUAD, "bufmem",
 		       SYSCTL_DESCR("Amount of kernel memory used by buffer "
 				    "cache"),
 		       NULL, 0, &bufmem, 0,
 		       CTL_VM, CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "bufmem_lowater",
+		       CTLTYPE_QUAD, "bufmem_lowater",
 		       SYSCTL_DESCR("Minimum amount of kernel memory to "
 				    "reserve for buffer cache"),
 		       sysctl_bufvm_update, 0, &bufmem_lowater, 0,
 		       CTL_VM, CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "bufmem_hiwater",
+		       CTLTYPE_QUAD, "bufmem_hiwater",
 		       SYSCTL_DESCR("Maximum amount of kernel memory to use "
 				    "for buffer cache"),
 		       sysctl_bufvm_update, 0, &bufmem_hiwater, 0,
@@ -1729,6 +1765,8 @@ vfs_bufstats(void)
 #endif /* DEBUG */
 
 /* ------------------------------ */
+
+static POOL_INIT(bufiopool, sizeof(struct buf), 0, 0, 0, "biopl", NULL);
 
 static struct buf *
 getiobuf1(int prflags)
@@ -1784,8 +1822,11 @@ nestiobuf_iodone(struct buf *bp)
 	KASSERT(mbp != bp);
 
 	error = 0;
-	if (bp->b_error != 0) {
-		error = bp->b_error;
+	if ((bp->b_flags & B_ERROR) != 0) {
+		error = EIO;
+		/* check if an error code was returned */
+		if (bp->b_error)
+			error = bp->b_error;
 	} else if ((bp->b_bcount < bp->b_bufsize) || (bp->b_resid > 0)) {
 		/*
 		 * Not all got transfered, raise an error. We have no way to
@@ -1819,7 +1860,7 @@ nestiobuf_setup(struct buf *mbp, struct buf *bp, int offset, size_t size)
 	bp->b_vp = vp;
 	bp->b_flags = B_BUSY | B_CALL | B_ASYNC | b_read;
 	bp->b_iodone = nestiobuf_iodone;
-	bp->b_data = (char *)mbp->b_data + offset;
+	bp->b_data = mbp->b_data + offset;
 	bp->b_resid = bp->b_bcount = size;
 	bp->b_bufsize = bp->b_bcount;
 	bp->b_private = mbp;
@@ -1851,11 +1892,12 @@ nestiobuf_done(struct buf *mbp, int donebytes, int error)
 	s = splbio();
 	KASSERT(mbp->b_resid >= donebytes);
 	if (error) {
+		mbp->b_flags |= B_ERROR;
 		mbp->b_error = error;
 	}
 	mbp->b_resid -= donebytes;
 	if (mbp->b_resid == 0) {
-		if (mbp->b_error != 0) {
+		if ((mbp->b_flags & B_ERROR) != 0) {
 			mbp->b_resid = mbp->b_bcount; /* be conservative */
 		}
 		biodone(mbp);

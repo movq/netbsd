@@ -1,4 +1,4 @@
-/* $NetBSD: if_mec.c,v 1.12 2007/07/15 23:24:47 macallan Exp $ */
+/* $NetBSD: if_mec.c,v 1.8 2006/04/02 11:20:46 tsutsui Exp $ */
 
 /*
  * Copyright (c) 2004 Izumi Tsutsui.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mec.c,v 1.12 2007/07/15 23:24:47 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mec.c,v 1.8 2006/04/02 11:20:46 tsutsui Exp $");
 
 #include "opt_ddb.h"
 #include "bpfilter.h"
@@ -347,7 +347,7 @@ STATIC int	mec_init(struct ifnet * ifp);
 STATIC void	mec_start(struct ifnet *);
 STATIC void	mec_watchdog(struct ifnet *);
 STATIC void	mec_tick(void *);
-STATIC int	mec_ioctl(struct ifnet *, u_long, void *);
+STATIC int	mec_ioctl(struct ifnet *, u_long, caddr_t);
 STATIC void	mec_reset(struct mec_softc *);
 STATIC void	mec_setfilter(struct mec_softc *);
 STATIC int	mec_intr(void *arg);
@@ -415,7 +415,7 @@ mec_attach(struct device *parent, struct device *self, void *aux)
 	 */
 	if ((err = bus_dmamem_map(sc->sc_dmat, &seg, rseg,
 	    sizeof(struct mec_control_data),
-	    (void **)&sc->sc_control_data, /*BUS_DMA_COHERENT*/ 0)) != 0) {
+	    (caddr_t *)&sc->sc_control_data, /*BUS_DMA_COHERENT*/ 0)) != 0) {
 		printf(": unable to map control data, error = %d\n", err);
 		goto fail_1;
 	}
@@ -447,7 +447,7 @@ mec_attach(struct device *parent, struct device *self, void *aux)
 		}
 	}
 
-	callout_init(&sc->sc_tick_ch, 0);
+	callout_init(&sc->sc_tick_ch);
 
 	/* get ethernet address from ARCBIOS */
 	if ((macaddr = ARCBIOS->GetEnvironmentVariable("eaddr")) == NULL) {
@@ -532,7 +532,7 @@ mec_attach(struct device *parent, struct device *self, void *aux)
  fail_3:
 	bus_dmamap_destroy(sc->sc_dmat, sc->sc_cddmamap);
  fail_2:
-	bus_dmamem_unmap(sc->sc_dmat, (void *)sc->sc_control_data,
+	bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->sc_control_data,
 	    sizeof(struct mec_control_data));
  fail_1:
 	bus_dmamem_free(sc->sc_dmat, &seg, rseg);
@@ -554,10 +554,8 @@ mec_mii_readreg(struct device *self, int phy, int reg)
 
 	bus_space_write_8(st, sh, MEC_PHY_ADDRESS,
 	    (phy << MEC_PHY_ADDR_DEVSHIFT) | (reg & MEC_PHY_ADDR_REGISTER));
-	delay(25);
 	bus_space_write_8(st, sh, MEC_PHY_READ_INITIATE, 1);
 	delay(25);
-	mec_mii_wait(sc);
 
 	for (i = 0; i < 20; i++) {
 		delay(30);
@@ -609,10 +607,8 @@ mec_mii_wait(struct mec_softc *sc)
 
 		if ((busy & MEC_PHY_DATA_BUSY) == 0)
 			return 0;
-#if 0
 		if (busy == 0xffff) /* XXX ? */
 			return 0;
-#endif
 	}
 
 	printf("%s: MII timed out\n", sc->sc_dev.dv_xname);
@@ -914,7 +910,7 @@ mec_start(struct ifnet *ifp)
 				 * so we always have to copy some data anyway.
 				 */
 				m->m_data += MEC_ETHER_ALIGN;
-				m_copydata(m0, 0, len, mtod(m, void *));
+				m_copydata(m0, 0, len, mtod(m, caddr_t));
 				m->m_pkthdr.len = m->m_len = len;
 				error = bus_dmamap_load_mbuf(sc->sc_dmat,
 				    dmamap, m, BUS_DMA_WRITE | BUS_DMA_NOWAIT);
@@ -947,7 +943,7 @@ mec_start(struct ifnet *ifp)
 				    "buflen = %d, bufoff = %d\n",
 				    buflen, bufoff));
 				memcpy(txd->txd_buf + bufoff,
-				    mtod(m0, void *), buflen);
+				    mtod(m0, caddr_t), buflen);
 				txs->txs_flags |= MEC_TXS_TXDBUF | buflen;
 			}
 #if 1
@@ -962,7 +958,7 @@ mec_start(struct ifnet *ifp)
 				buflen = MEC_TXD_ALIGN;
 				bufoff = MEC_TXD_BUFSTART(buflen);
 				memcpy(txd->txd_buf + bufoff,
-				    mtod(m0, void *), buflen);
+				    mtod(m0, caddr_t), buflen);
 				DPRINTF(MEC_DEBUG_START,
 				    ("mec_start: aligned, "
 				    "buflen = %d, bufoff = %d\n",
@@ -1099,7 +1095,7 @@ mec_stop(struct ifnet *ifp, int disable)
 }
 
 STATIC int
-mec_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+mec_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct mec_softc *sc = ifp->if_softc;
 	struct ifreq *ifr = (void *)data;
@@ -1325,7 +1321,7 @@ mec_rxintr(struct mec_softc *sc)
 		len = rxstat & MEC_RXSTAT_LEN;
 
 		if (len < ETHER_MIN_LEN ||
-		    len > (MCLBYTES - MEC_ETHER_ALIGN)) {
+		    len > ETHER_MAX_LEN) {
 			/* invalid length packet; drop it. */
 			DPRINTF(MEC_DEBUG_RXINTR,
 			    ("mec_rxintr: wrong packet\n"));
@@ -1381,7 +1377,7 @@ mec_rxintr(struct mec_softc *sc)
 		 * RX buffer, but we copy whole buffer to avoid unaligned copy.
 		 */
 		MEC_RXBUFSYNC(sc, i, len, BUS_DMASYNC_POSTREAD);
-		memcpy(mtod(m, void *), rxd->rxd_buf, MEC_ETHER_ALIGN + len);
+		memcpy(mtod(m, caddr_t), rxd->rxd_buf, MEC_ETHER_ALIGN + len);
 		MEC_RXBUFSYNC(sc, i, ETHER_MAX_LEN, BUS_DMASYNC_PREREAD);
 		m->m_data += MEC_ETHER_ALIGN;
 

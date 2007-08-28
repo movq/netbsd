@@ -1,4 +1,4 @@
-/*	$NetBSD: ka6400.c,v 1.11 2007/03/04 06:01:01 christos Exp $	*/
+/*	$NetBSD: ka6400.c,v 1.9 2006/09/05 19:32:57 matt Exp $	*/
 
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden. All rights reserved.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka6400.c,v 1.11 2007/03/04 06:01:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka6400.c,v 1.9 2006/09/05 19:32:57 matt Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -75,7 +75,7 @@ static int ka6400_match(struct device *, struct cfdata *, void *);
 static void ka6400_attach(struct device *, struct device *, void*);
 static void ka6400_memerr(void);
 static void ka6400_conf(void);
-static int ka6400_mchk(void *);
+static int ka6400_mchk(caddr_t);
 static void ka6400_steal_pages(void);
 #if defined(MULTIPROCESSOR)
 static void ka6400_startslave(struct device *, struct cpu_info *);
@@ -247,7 +247,7 @@ struct mc6400frame {
 };
 
 static int
-ka6400_mchk(void *cmcf)
+ka6400_mchk(caddr_t cmcf)
 {
 	return (MCHK_PANIC);
 }
@@ -305,16 +305,16 @@ ka6400_enable_cache(void)
 void
 ka6400_steal_pages(void)
 {
-	int i, ncpus;
+	int i, ncpu;
 
 	ka6400_enable_cache(); /* Turn on cache early */
 	if (cca == 0)
 		cca = (void *)rpb.cca_addr;
 	/* Is there any way to get number of CPUs easier??? */
-	for (i = ncpus = 0; i < cca->cca_maxcpu; i++)
+	for (i = ncpu = 0; i < cca->cca_maxcpu; i++)
 		if (cca->cca_console & (1 << i))
-			ncpus++;
-	sprintf(cpu_model, "VAX 6000/4%x0", ncpus + 1);
+			ncpu++;
+	sprintf(cpu_model, "VAX 6000/4%x0", ncpu + 1);
 }
 	
 

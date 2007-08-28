@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.86 2007/05/17 14:51:20 yamt Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.84 2006/06/07 22:37:58 kardel Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.86 2007/05/17 14:51:20 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.84 2006/06/07 22:37:58 kardel Exp $");
 
 #include "opt_compat_oldboot.h"
 #include "opt_multiprocessor.h"
@@ -91,8 +91,6 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.86 2007/05/17 14:51:20 yamt Exp $");
 #include <machine/kvm86.h>
 #endif
 
-#include "opt_viapadlock.h"
-
 /*
  * Determine i/o configuration for a machine.
  */
@@ -109,6 +107,8 @@ cpu_configure(void)
 	pcibios_init();
 #endif
 
+	/* kvm86 needs a TSS */
+	i386_proc0_tss_ldt_init();
 #ifdef KVM86
 	kvm86_init();
 #endif
@@ -128,7 +128,7 @@ cpu_configure(void)
 	lwp0.l_addr->u_pcb.pcb_cr0 = rcr0();
 #ifdef MULTIPROCESSOR
 	/* propagate this to the idle pcb's. */
-	cpu_init_idle_lwps();
+	cpu_init_idle_pcbs();
 #endif
 
 #if defined(I586_CPU) || defined(I686_CPU)
@@ -139,8 +139,4 @@ cpu_configure(void)
 #if NLAPIC > 0
 	lapic_tpr = 0;
 #endif
-
-#if defined(I686_CPU) && defined(VIA_PADLOCK)
-	via_padlock_attach();
-#endif /* defined(I686_CPU) && defined(VIA_PADLOCK) */
 }

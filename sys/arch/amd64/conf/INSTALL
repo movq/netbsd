@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL,v 1.71 2007/06/16 12:35:54 ad Exp $
+# $NetBSD: INSTALL,v 1.60.2.7 2007/08/31 20:09:29 pavel Exp $
 #
 # GENERIC machine description file
 # 
@@ -20,7 +20,7 @@
 
 include	"arch/amd64/conf/std.amd64"
 
-#ident 		"INSTALL-$Revision: 1.71 $"
+#ident 		"INSTALL-$Revision: 1.60.2.7 $"
 
 maxusers	32		# estimated number of users
 
@@ -121,6 +121,7 @@ options 	INET6		# IPV6
 #options 	PCMCIAVERBOSE	# verbose PCMCIA configuration messages
 #options 	SCSIVERBOSE	# human readable SCSI error messages
 #options 	USBVERBOSE	# verbose USB device autoconfig messages
+#options 	I2OVERBOSE	# verbose I2O driver messages
 
 options 	NFS_BOOT_DHCP,NFS_BOOT_BOOTPARAM
 
@@ -315,7 +316,6 @@ cd*	at scsibus? target ? lun ?	# SCSI CD-ROM drives
 
 
 # RAID controllers and devices
-aac*	at pci? dev ? function ?	# Adaptec AAC family
 amr*	at pci? dev ? function ?	# AMI/LSI Logic MegaRAID
 cac*	at pci? dev ? function ?	# Compaq PCI array controllers
 ciss*	at pci? dev ? function ?	# HP Smart Array controllers
@@ -324,7 +324,6 @@ mlx*	at pci? dev ? function ?	# Mylex DAC960 & DEC SWXCR family
 twe*	at pci? dev ? function ?	# 3ware Escalade RAID controllers
 twa*	at pci? dev ? function ?	# 3ware Escalade 9xxx RAID controllers
 
-ld*	at aac? unit ?
 ld*	at amr? unit ?
 ld*	at cac? unit ?
 ld*	at icp? unit ?
@@ -533,7 +532,7 @@ usb*	at uhci?
 
 # USB Hubs
 uhub*	at usb?
-uhub*	at uhub? port ?
+uhub*	at uhub? port ? configuration ? interface ?
 
 # USB HID device
 uhidev*	at uhub? port ? configuration ? interface ?

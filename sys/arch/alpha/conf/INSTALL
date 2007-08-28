@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL,v 1.94 2007/01/01 15:36:16 pavel Exp $
+# $NetBSD: INSTALL,v 1.90.2.2 2007/05/16 21:05:01 jdc Exp $
 #
 # Alpha INSTALL kernel.
 
@@ -48,7 +48,7 @@ file-system	NFS		# Sun NFS-compatible file system client
 file-system	KERNFS		# Kernel variable file system (/kern)
 
 # File system options
-#options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
+#options 	NFS_V2_ONLY	# Exclude NFS3 and NQNFS code to save space
 #options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 # Networking options

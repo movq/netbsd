@@ -1,4 +1,4 @@
-/*	$NetBSD: arm_machdep.c,v 1.15 2007/04/22 08:29:55 dsl Exp $	*/
+/*	$NetBSD: arm_machdep.c,v 1.12 2006/09/27 21:42:05 manu Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -73,11 +73,10 @@
 
 #include "opt_compat_netbsd.h"
 #include "opt_execfmt.h"
-#include "opt_arm_debug.h"
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: arm_machdep.c,v 1.15 2007/04/22 08:29:55 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arm_machdep.c,v 1.12 2006/09/27 21:42:05 manu Exp $");
 
 #include <sys/exec.h>
 #include <sys/proc.h>
@@ -85,7 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: arm_machdep.c,v 1.15 2007/04/22 08:29:55 dsl Exp $")
 #include <sys/user.h>
 #include <sys/pool.h>
 #include <sys/ucontext.h>
-#include <sys/evcnt.h>
+#include <sys/savar.h>
 
 #include <arm/cpufunc.h>
 
@@ -103,24 +102,6 @@ __KERNEL_RCSID(0, "$NetBSD: arm_machdep.c,v 1.15 2007/04/22 08:29:55 dsl Exp $")
  * relocated vectors.
  */
 vaddr_t	vector_page;
-
-#if defined(ARM_LOCK_CAS_DEBUG)
-/*
- * Event counters for tracking activity of the RAS-based _lock_cas()
- * routine.
- */
-struct evcnt _lock_cas_restart =
-    EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL, "_lock_cas", "restart");
-EVCNT_ATTACH_STATIC(_lock_cas_restart);
-
-struct evcnt _lock_cas_success =
-    EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL, "_lock_cas", "success");
-EVCNT_ATTACH_STATIC(_lock_cas_success);
-
-struct evcnt _lock_cas_fail =
-    EVCNT_INITIALIZER(EVCNT_TYPE_MISC, NULL, "_lock_cas", "fail");
-EVCNT_ATTACH_STATIC(_lock_cas_fail);
-#endif /* ARM_LOCK_CAS_DEBUG */
 
 /*
  * Clear registers on exec
@@ -151,7 +132,7 @@ setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 #endif
 
 #ifdef EXEC_AOUT
-	if (pack->ep_esch->es_makecmds == exec_aout_makecmds)
+	if (pack->ep_es->es_makecmds == exec_aout_makecmds)
 		l->l_addr->u_pcb.pcb_flags = PCB_NOALIGNFLT;
 	else
 #endif
@@ -178,4 +159,59 @@ startlwp(void *arg)
 	pool_put(&lwp_uc_pool, uc);
 
 	userret(l);
+}
+
+/*
+ * XXX This is a terrible name.
+ */
+void
+upcallret(struct lwp *l)
+{
+
+	userret(l);
+}
+
+/*
+ * cpu_upcall:
+ *
+ *	Send an an upcall to userland.
+ */
+void 
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted, void *sas,
+    void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct trapframe *tf;
+	struct saframe *sf, frame;
+
+	tf = process_frame(l);
+
+	/* Finally, copy out the rest of the frame. */
+#if 0 /* First 4 args in regs (see below). */
+	frame.sa_type = type;
+	frame.sa_sas = sas;
+	frame.sa_events = nevents;
+	frame.sa_interrupted = ninterrupted;
+#endif
+	frame.sa_arg = ap;
+
+	sf = (struct saframe *)sp - 1;
+	if (copyout(&frame, sf, sizeof(frame)) != 0) {
+		/* Copying onto the stack didn't work. Die. */
+		sigexit(l, SIGILL);
+		/* NOTREACHED */
+	}
+
+	tf->tf_r0 = type;
+	tf->tf_r1 = (int) sas;
+	tf->tf_r2 = nevents;
+	tf->tf_r3 = ninterrupted;
+	tf->tf_pc = (int) upcall;
+#ifdef THUMB_CODE
+	if (((int) upcall) & 1)
+		tf->tf_spsr |= PSR_T_bit;
+	else
+		tf->tf_spsr &= ~PSR_T_bit;
+#endif
+	tf->tf_usr_sp = (int) sf;
+	tf->tf_usr_lr = 0;		/* no return */
 }

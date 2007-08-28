@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_node.c,v 1.95 2007/08/06 11:55:08 yamt Exp $	*/
+/*	$NetBSD: nfs_node.c,v 1.87 2006/11/09 09:53:57 yamt Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_node.c,v 1.95 2007/08/06 11:55:08 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_node.c,v 1.87 2006/11/09 09:53:57 yamt Exp $");
 
 #include "opt_nfs.h"
 
@@ -57,6 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: nfs_node.c,v 1.95 2007/08/06 11:55:08 yamt Exp $");
 #include <nfs/nfs.h>
 #include <nfs/nfsnode.h>
 #include <nfs/nfsmount.h>
+#include <nfs/nqnfs.h>
 #include <nfs/nfs_var.h>
 
 struct nfsnodehashhead *nfsnodehashtbl;
@@ -64,9 +65,9 @@ u_long nfsnodehash;
 struct lock nfs_hashlock;
 
 POOL_INIT(nfs_node_pool, sizeof(struct nfsnode), 0, 0, 0, "nfsnodepl",
-    &pool_allocator_nointr, IPL_NONE);
+    &pool_allocator_nointr);
 POOL_INIT(nfs_vattr_pool, sizeof(struct vattr), 0, 0, 0, "nfsvapl",
-    &pool_allocator_nointr, IPL_NONE);
+    &pool_allocator_nointr);
 
 MALLOC_DEFINE(M_NFSBIGFH, "NFS bigfh", "NFS big filehandle");
 MALLOC_DEFINE(M_NFSNODE, "NFS node", "NFS vnode private part");
@@ -230,7 +231,8 @@ nfs_inactive(v)
 	struct sillyrename *sp;
 	struct lwp *l = ap->a_l;
 	struct vnode *vp = ap->a_vp;
-	bool removed;
+	struct nfsmount *nmp = VFSTONFS(vp->v_mount);
+	boolean_t removed;
 
 	np = VTONFS(vp);
 	if (prtactive && vp->v_usecount != 0)
@@ -243,8 +245,12 @@ nfs_inactive(v)
 	if (sp != NULL)
 		nfs_vinvalbuf(vp, 0, sp->s_cred, l, 1);
 	removed = (np->n_flag & NREMOVED) != 0;
-	np->n_flag &=
-	    (NMODIFIED | NFLUSHINPROG | NFLUSHWANT | NEOFVALID | NTRUNCDELAYED);
+	np->n_flag &= (NMODIFIED | NFLUSHINPROG | NFLUSHWANT | NQNFSEVICTED |
+		NQNFSNONCACHE | NQNFSWRITE | NEOFVALID);
+
+	if ((nmp->nm_flag & NFSMNT_NQNFS) && CIRCLEQ_NEXT(np, n_timer) != 0) {
+		CIRCLEQ_REMOVE(&nmp->nm_timerhead, np, n_timer);
+	}
 
 	if (vp->v_type == VDIR && np->n_dircache)
 		nfs_invaldircache(vp,
@@ -269,11 +275,9 @@ nfs_inactive(v)
 		error = vn_lock(sp->s_dvp, LK_EXCLUSIVE | LK_CANRECURSE);
 		if (error || sp->s_dvp->v_data == NULL) {
 			/* XXX should recover */
-			printf("%s: vp=%p error=%d\n",
-			    __func__, sp->s_dvp, error);
-		} else {
-			nfs_removeit(sp);
+			panic("%s: vp=%p error=%d", __func__, sp->s_dvp, error);
 		}
+		nfs_removeit(sp);
 		kauth_cred_free(sp->s_cred);
 		vput(sp->s_dvp);
 		FREE(sp, M_NFSREQ);
@@ -320,11 +324,7 @@ nfs_reclaim(v)
 		kauth_cred_free(np->n_wcred);
 
 	cache_purge(vp);
-	if (vp->v_type == VREG) {
-		mutex_destroy(&np->n_commitlock);
-	}
-	genfs_node_destroy(vp);
-	pool_put(&nfs_node_pool, np);
+	pool_put(&nfs_node_pool, vp->v_data);
 	vp->v_data = NULL;
 	return (0);
 }

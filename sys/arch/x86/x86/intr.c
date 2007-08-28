@@ -1,40 +1,4 @@
-/*	$NetBSD: intr.c,v 1.29 2007/07/09 20:52:38 ad Exp $	*/
-
-/*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
- * All rights reserved.
- *
- * This code is derived from software contributed to The NetBSD Foundation
- * by Andrew Doran.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *        This product includes software developed by the NetBSD
- *        Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
- * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
- * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+/*	$NetBSD: intr.c,v 1.24 2006/07/08 21:23:38 christos Exp $	*/
 
 /*
  * Copyright 2002 (c) Wasabi Systems, Inc.
@@ -140,12 +104,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.29 2007/07/09 20:52:38 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.24 2006/07/08 21:23:38 christos Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_acpi.h"
 
-#include <sys/param.h>
+#include <sys/cdefs.h>
+#include <sys/param.h> 
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
@@ -154,9 +119,6 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.29 2007/07/09 20:52:38 ad Exp $");
 #include <sys/proc.h>
 #include <sys/errno.h>
 
-#include <uvm/uvm_extern.h>
-
-#include <machine/intr.h>
 #include <machine/atomic.h>
 #include <machine/i8259.h>
 #include <machine/cpu.h>
@@ -198,9 +160,6 @@ static int intr_find_pcibridge(int, pcitag_t *, pci_chipset_tag_t *);
 #endif
 #endif
 
-kmutex_t x86_intr_lock;
-bool x86_intr_lock_initted;
-
 /*
  * Fill in default interrupt table (in case of spurious interrupt
  * during configuration of kernel), setup interrupt control unit
@@ -209,8 +168,6 @@ void
 intr_default_setup(void)
 {
 	int i;
-
-	mutex_init(&x86_intr_lock, MUTEX_DEFAULT, IPL_NONE);
 
 	/* icu vectors */
 	for (i = 0; i < NUM_LEGACY_IRQS; i++) {
@@ -426,7 +383,7 @@ intr_allocate_slot_cpu(struct cpu_info *ci, struct pic *pic, int pin,
 	start = CPU_IS_PRIMARY(ci) ? NUM_LEGACY_IRQS : 0;
 	slot = -1;
 
-	mutex_enter(&x86_intr_lock);
+	simple_lock(&ci->ci_slock);
 	for (i = start; i < MAX_INTR_SOURCES ; i++) {
 		isp = ci->ci_isources[i];
 		if (isp != NULL && isp->is_pic == pic && isp->is_pin == pin) {
@@ -439,7 +396,7 @@ intr_allocate_slot_cpu(struct cpu_info *ci, struct pic *pic, int pin,
 		}
 	}
 	if (slot == -1) {
-		mutex_exit(&x86_intr_lock);
+		simple_unlock(&ci->ci_slock);
 		return EBUSY;
 	}
 
@@ -448,7 +405,7 @@ intr_allocate_slot_cpu(struct cpu_info *ci, struct pic *pic, int pin,
 		MALLOC(isp, struct intrsource *, sizeof (struct intrsource),
 		    M_DEVBUF, M_NOWAIT|M_ZERO);
 		if (isp == NULL) {
-			mutex_exit(&x86_intr_lock);
+			simple_unlock(&ci->ci_slock);
 			return ENOMEM;
 		}
 		snprintf(isp->is_evname, sizeof (isp->is_evname),
@@ -457,7 +414,7 @@ intr_allocate_slot_cpu(struct cpu_info *ci, struct pic *pic, int pin,
 		    pic->pic_dev.dv_xname, isp->is_evname);
 		ci->ci_isources[slot] = isp;
 	}
-	mutex_exit(&x86_intr_lock);
+	simple_unlock(&ci->ci_slock);
 
 	*index = slot;
 	return 0;
@@ -505,9 +462,9 @@ intr_allocate_slot(struct pic *pic, int legacy_irq, int pin, int level,
 			    "pin %d", pin);
 			evcnt_attach_dynamic(&isp->is_evcnt, EVCNT_TYPE_INTR,
 			    NULL, pic->pic_dev.dv_xname, isp->is_evname);
-			mutex_enter(&x86_intr_lock);
+			simple_lock(&ci->ci_slock);
 			ci->ci_isources[slot] = isp;
-			mutex_exit(&x86_intr_lock);
+			simple_unlock(&ci->ci_slock);
 		} else {
 			if (isp->is_pin != pin) {
 				if (pic == &i8259_pic)
@@ -556,10 +513,10 @@ other:
 found:
 		idtvec = idt_vec_alloc(APIC_LEVEL(level), IDT_INTR_HIGH);
 		if (idtvec == 0) {
-			mutex_enter(&x86_intr_lock);
+			simple_lock(&ci->ci_slock);
 			FREE(ci->ci_isources[slot], M_DEVBUF);
 			ci->ci_isources[slot] = NULL;
-			mutex_exit(&x86_intr_lock);
+			simple_unlock(&ci->ci_slock);
 			return EBUSY;
 		}
 	}
@@ -582,11 +539,11 @@ intr_biglock_wrapper(void *vp)
 	struct intrhand *ih = vp;
 	int ret;
 
-	KERNEL_LOCK(1, NULL);
+	KERNEL_LOCK(LK_EXCLUSIVE|LK_CANRECURSE);
 
 	ret = (*ih->ih_realfun)(ih->ih_realarg);
 
-	KERNEL_UNLOCK_ONE(NULL);
+	KERNEL_UNLOCK();
 
 	return ret;
 }
@@ -618,7 +575,7 @@ intr_establish(int legacy_irq, struct pic *pic, int pin, int type, int level,
 	struct intrsource *source;
 	struct intrstub *stubp;
 #ifdef MULTIPROCESSOR
-	bool mpsafe = level >= IPL_SCHED;
+	boolean_t mpsafe = level >= IPL_SCHED;
 #endif /* MULTIPROCESSOR */
 
 #ifdef DIAGNOSTIC
@@ -655,7 +612,7 @@ intr_establish(int legacy_irq, struct pic *pic, int pin, int type, int level,
 		return NULL;
 	}
 
-	mutex_enter(&x86_intr_lock);
+	simple_lock(&ci->ci_slock);
 
 	source->is_pin = pin;
 	source->is_pic = pic;
@@ -670,7 +627,7 @@ intr_establish(int legacy_irq, struct pic *pic, int pin, int type, int level,
 			break;
 	case IST_PULSE:
 		if (type != IST_NONE) {
-			mutex_exit(&x86_intr_lock);
+			simple_unlock(&ci->ci_slock);
 			printf("intr_establish: pic %s pin %d: can't share "
 			       "type %d with %d\n", pic->pic_name, pin,
 				source->is_type, type);
@@ -679,7 +636,7 @@ intr_establish(int legacy_irq, struct pic *pic, int pin, int type, int level,
 		}
 		break;
 	default:
-		mutex_exit(&x86_intr_lock);
+		simple_unlock(&ci->ci_slock);
 		panic("intr_establish: bad intr type %d for pic %s pin %d\n",
 		    source->is_type, pic->pic_dev.dv_xname, pin);
 	}
@@ -714,7 +671,7 @@ intr_establish(int legacy_irq, struct pic *pic, int pin, int type, int level,
 
 	intr_calculatemasks(ci);
 
-	mutex_exit(&x86_intr_lock);
+	simple_unlock(&ci->ci_slock);
 
 	if (ci->ci_isources[slot]->is_resume == NULL ||
 	    source->is_idtvec != idt_vec) {
@@ -760,7 +717,7 @@ intr_disestablish(struct intrhand *ih)
 	source = ci->ci_isources[ih->ih_slot];
 	idtvec = source->is_idtvec;
 
-	mutex_enter(&x86_intr_lock);
+	simple_lock(&ci->ci_slock);
 	pic->pic_hwmask(pic, ih->ih_pin);	
 	x86_atomic_clearbits_l(&ci->ci_ipending, (1 << ih->ih_slot));
 
@@ -771,7 +728,7 @@ intr_disestablish(struct intrhand *ih)
 	     p = &q->ih_next)
 		;
 	if (q == NULL) {
-		mutex_exit(&x86_intr_lock);
+		simple_unlock(&ci->ci_slock);
 		panic("intr_disestablish: handler not registered");
 	}
 
@@ -797,7 +754,7 @@ intr_disestablish(struct intrhand *ih)
 
 	free(ih, M_DEVBUF);
 
-	mutex_exit(&x86_intr_lock);
+	simple_unlock(&ci->ci_slock);
 }
 
 const char *
@@ -861,9 +818,6 @@ cpu_intr_init(struct cpu_info *ci)
 #if NLAPIC > 0 && defined(MULTIPROCESSOR)
 	int i;
 #endif
-#if defined(INTRSTACKSIZE)
-	char *cp;
-#endif /* defined(INTRSTACKSIZE) */
 
 	MALLOC(isp, struct intrsource *, sizeof (struct intrsource), M_DEVBUF,
 	    M_WAITOK|M_ZERO);
@@ -938,24 +892,19 @@ cpu_intr_init(struct cpu_info *ci)
 
 	intr_calculatemasks(ci);
 
-#if defined(INTRSTACKSIZE)
-	cp = (char *)uvm_km_alloc(kernel_map, INTRSTACKSIZE, 0, UVM_KMF_WIRED);
-	ci->ci_intrstack = cp + INTRSTACKSIZE - sizeof(register_t);
-	ci->ci_idepth = -1;
-#endif /* defined(INTRSTACKSIZE) */
 }
 
 #ifdef MULTIPROCESSOR
 void
 x86_softintlock(void)
 {
-	KERNEL_LOCK(1, NULL);
+	KERNEL_LOCK(LK_EXCLUSIVE|LK_CANRECURSE);
 }
 
 void
 x86_softintunlock(void)
 {
-	KERNEL_UNLOCK_ONE(NULL);
+	KERNEL_UNLOCK();
 }
 #endif
 

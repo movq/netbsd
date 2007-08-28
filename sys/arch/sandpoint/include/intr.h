@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.12 2007/02/16 02:53:50 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.10 2006/02/16 20:17:14 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -81,10 +81,7 @@
 #define	IPL_VM		3	/* memory allocation */
 #define	IPL_AUDIO	2	/* audio */
 #define	IPL_CLOCK	1	/* clock */
-#define	IPL_STATCLOCK	IPL_CLOCK
 #define	IPL_HIGH	1	/* everything */
-#define	IPL_SCHED	IPL_HIGH
-#define	IPL_LOCK	IPL_HIGH
 #define	IPL_SERIAL	0	/* serial */
 #define	NIPL		10
 
@@ -95,6 +92,8 @@
 #define	IST_LEVEL	3	/* level-triggered */
 
 #ifndef _LOCORE
+#define	CLKF_BASEPRI(frame)	((frame)->pri == 0)
+
 /*
  * Interrupt handler chains.  intr_establish() inserts a handler into
  * the list.  The handler is called with its (single) argument.
@@ -206,6 +205,7 @@ set_sint(pending)
 #define splvm()		splraise(imask[IPL_VM])
 #define	splserial()	splraise(imask[IPL_SERIAL])
 #define splstatclock()	splclock()
+#define	spllowersoftclock() spllower(imask[IPL_SOFTCLOCK])
 #define	splsoftclock()	splraise(imask[IPL_SOFTCLOCK])
 #define	splsoftnet()	splraise(imask[IPL_SOFTNET])
 #define	splsoftserial()	splraise(imask[IPL_SOFTSERIAL])
@@ -222,25 +222,6 @@ set_sint(pending)
 
 #define splsched()	splhigh()
 #define spllock()	splhigh()
-
-typedef int ipl_t;
-typedef struct {
-	ipl_t _ipl;
-} ipl_cookie_t;
-
-static inline ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._ipl = ipl};
-}
-
-static inline int
-splraiseipl(ipl_cookie_t icookie)
-{
-
-	return splraise(imask[icookie._ipl]);
-}
 
 #endif /* !_LOCORE */
 

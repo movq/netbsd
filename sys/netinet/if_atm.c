@@ -1,4 +1,4 @@
-/*      $NetBSD: if_atm.c,v 1.25 2007/08/07 04:37:04 dyoung Exp $       */
+/*      $NetBSD: if_atm.c,v 1.21 2006/11/16 01:33:45 christos Exp $       */
 
 /*
  *
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atm.c,v 1.25 2007/08/07 04:37:04 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atm.c,v 1.21 2006/11/16 01:33:45 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_natm.h"
@@ -72,6 +72,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_atm.c,v 1.25 2007/08/07 04:37:04 dyoung Exp $");
 #endif
 
 
+#define SDL(s) ((struct sockaddr_dl *)s)
+
 /*
  * atm_rtrequest: handle ATM rt request (in support of generic code)
  *   inputs: "req" = request code
@@ -85,7 +87,7 @@ atm_rtrequest(int req, struct rtentry *rt, struct rt_addrinfo *info)
 	struct sockaddr *gate = rt->rt_gateway;
 	struct atm_pseudoioctl api;
 #ifdef NATM
-	const struct sockaddr_in *sin;
+	struct sockaddr_in *sin;
 	struct natmpcb *npcb = NULL;
 	struct atm_pseudohdr *aph;
 #endif
@@ -113,10 +115,11 @@ atm_rtrequest(int req, struct rtentry *rt, struct rt_addrinfo *info)
 		 */
 
 		if ((rt->rt_flags & RTF_HOST) == 0) {
-			rt_setgate(rt, (const struct sockaddr *)&null_sdl);
+			rt_setgate(rt, rt_key(rt),
+			    (const struct sockaddr *)&null_sdl);
 			gate = rt->rt_gateway;
-			satosdl(gate)->sdl_type = rt->rt_ifp->if_type;
-			satosdl(gate)->sdl_index = rt->rt_ifp->if_index;
+			SDL(gate)->sdl_type = rt->rt_ifp->if_type;
+			SDL(gate)->sdl_index = rt->rt_ifp->if_index;
 			break;
 		}
 
@@ -139,10 +142,10 @@ atm_rtrequest(int req, struct rtentry *rt, struct rt_addrinfo *info)
 		 * let native ATM know we are using this VCI/VPI
 		 * (i.e. reserve it)
 		 */
-		sin = satocsin(rt_getkey(rt));
+		sin = (struct sockaddr_in *) rt_key(rt);
 		if (sin->sin_family != AF_INET)
 			goto failed;
-		aph = (struct atm_pseudohdr *) LLADDR(satosdl(gate));
+		aph = (struct atm_pseudohdr *) LLADDR(SDL(gate));
 		npcb = npcb_add(NULL, rt->rt_ifp, ATM_PH_VCI(aph),
 						ATM_PH_VPI(aph));
 		if (npcb == NULL)
@@ -150,22 +153,22 @@ atm_rtrequest(int req, struct rtentry *rt, struct rt_addrinfo *info)
 		npcb->npcb_flags |= NPCB_IP;
 		npcb->ipaddr.s_addr = sin->sin_addr.s_addr;
 		/* XXX: move npcb to llinfo when ATM ARP is ready */
-		rt->rt_llinfo = (void *) npcb;
+		rt->rt_llinfo = (caddr_t) npcb;
 		rt->rt_flags |= RTF_LLINFO;
 #endif
 		/*
 		 * let the lower level know this circuit is active
 		 */
-		bcopy(CLLADDR(satocsdl(gate)), &api.aph, sizeof(api.aph));
+		bcopy(LLADDR(SDL(gate)), &api.aph, sizeof(api.aph));
 		api.rxhand = NULL;
 		if (rt->rt_ifp->if_ioctl(rt->rt_ifp, SIOCATMENA,
-							(void *)&api) != 0) {
+							(caddr_t)&api) != 0) {
 			printf("atm: couldn't add VC\n");
 			goto failed;
 		}
 
-		satosdl(gate)->sdl_type = rt->rt_ifp->if_type;
-		satosdl(gate)->sdl_index = rt->rt_ifp->if_index;
+		SDL(gate)->sdl_type = rt->rt_ifp->if_type;
+		SDL(gate)->sdl_index = rt->rt_ifp->if_index;
 
 		break;
 
@@ -177,8 +180,8 @@ failed:
 			rt->rt_flags &= ~RTF_LLINFO;
 		}
 #endif
-		rtrequest(RTM_DELETE, rt_getkey(rt), NULL,
-			rt_mask(rt), 0, NULL);
+		rtrequest(RTM_DELETE, rt_key(rt), (struct sockaddr *)0,
+			rt_mask(rt), 0, (struct rtentry **) 0);
 		break;
 
 	case RTM_DELETE:
@@ -199,10 +202,10 @@ failed:
 		 * tell the lower layer to disable this circuit
 		 */
 
-		bcopy(CLLADDR(satocsdl(gate)), &api.aph, sizeof(api.aph));
+		bcopy(LLADDR(SDL(gate)), &api.aph, sizeof(api.aph));
 		api.rxhand = NULL;
 		(void)rt->rt_ifp->if_ioctl(rt->rt_ifp, SIOCATMDIS,
-							(void *)&api);
+							(caddr_t)&api);
 
 		break;
 	}
@@ -225,10 +228,10 @@ failed:
  */
 
 int
-atmresolve(struct rtentry *rt, struct mbuf *m, const struct sockaddr *dst,
+atmresolve(struct rtentry *rt, struct mbuf *m, struct sockaddr *dst,
     struct atm_pseudohdr *desten /* OUT */)
 {
-	const struct sockaddr_dl *sdl;
+	struct sockaddr_dl *sdl;
 
 	if (m->m_flags & (M_BCAST|M_MCAST)) {
 		log(LOG_INFO, "atmresolve: BCAST/MCAST packet detected/dumped");
@@ -254,7 +257,7 @@ atmresolve(struct rtentry *rt, struct mbuf *m, const struct sockaddr *dst,
 	 * ATM ARP [c.f. if_ether.c]).
 	 */
 
-	sdl = satocsdl(rt->rt_gateway);
+	sdl = SDL(rt->rt_gateway);
 
 	/*
 	 * Check the address family and length is valid, the address
@@ -263,7 +266,7 @@ atmresolve(struct rtentry *rt, struct mbuf *m, const struct sockaddr *dst,
 
 
 	if (sdl->sdl_family == AF_LINK && sdl->sdl_alen == sizeof(*desten)) {
-		bcopy(CLLADDR(sdl), desten, sdl->sdl_alen);
+		bcopy(LLADDR(sdl), desten, sdl->sdl_alen);
 		return (1);	/* ok, go for it! */
 	}
 

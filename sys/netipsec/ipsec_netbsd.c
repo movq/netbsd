@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec_netbsd.c,v 1.28 2007/07/07 18:38:22 degroote Exp $	*/
+/*	$NetBSD: ipsec_netbsd.c,v 1.17.12.1 2007/05/24 19:13:11 pavel Exp $	*/
 /*	$KAME: esp_input.c,v 1.60 2001/09/04 08:43:19 itojun Exp $	*/
 /*	$KAME: ah_input.c,v 1.64 2001/09/04 08:43:19 itojun Exp $	*/
 
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipsec_netbsd.c,v 1.28 2007/07/07 18:38:22 degroote Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipsec_netbsd.c,v 1.17.12.1 2007/05/24 19:13:11 pavel Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -88,8 +88,11 @@ __KERNEL_RCSID(0, "$NetBSD: ipsec_netbsd.c,v 1.28 2007/07/07 18:38:22 degroote E
 #include <netipsec/key.h>
 
 /* assumes that ip header and ah header are contiguous on mbuf */
-void*
-ah4_ctlinput(int cmd, const struct sockaddr *sa, void *v)
+void *
+ah4_ctlinput(cmd, sa, v)
+	int cmd;
+	struct sockaddr *sa;
+	void *v;
 {
 	struct ip *ip = v;
 	struct ah *ah;
@@ -98,46 +101,57 @@ ah4_ctlinput(int cmd, const struct sockaddr *sa, void *v)
 
 	if (sa->sa_family != AF_INET ||
 		sa->sa_len != sizeof(struct sockaddr_in))
-		return NULL; 
+		return NULL;
 	if ((unsigned)cmd >= PRC_NCMDS)
 		return NULL;
-
+#ifndef notyet
+	/* jonathan@NetBSD.org: XXX FIXME */
+	(void) ip; (void) ah; (void) icp; (void) sav;
+#else
 	if (cmd == PRC_MSGSIZE && ip_mtudisc && ip && ip->ip_v == 4) {
 		/*
 		 * Check to see if we have a valid SA corresponding to
 		 * the address in the ICMP message payload.
 		 */
-		ah = (struct ah *)((char *)ip + (ip->ip_hl << 2));
-		sav = KEY_ALLOCSA((const union sockaddr_union *)sa,
-					   	IPPROTO_AH, ah->ah_spi, 0, 0);
-
-		if (sav) {
-        	if (sav->state == SADB_SASTATE_MATURE ||
-                sav->state == SADB_SASTATE_DYING) {
-
-				/*
-				 * Now that we've validated that we are actually 
-				 * communicating with the host indicated in the 	
-				 * ICMP message, locate the ICMP header, 
-				 * recalculate the new MTU, and create the
-		 		 * corresponding routing entry.
-		 		 */
-				icp = (struct icmp *)((char *)ip - 
-									  offsetof(struct icmp, icmp_ip));
-				icmp_mtudisc(icp, ip->ip_dst);
-
-			}
-			KEY_FREESAV(&sav);
+		ah = (struct ah *)((caddr_t)ip + (ip->ip_hl << 2));
+		if ((sav = key_allocsa(AF_INET,
+					   (caddr_t) &ip->ip_src,
+					   (caddr_t) &ip->ip_dst,
+					   IPPROTO_AH, ah->ah_spi)) == NULL)
+			return NULL;
+		if (sav->state != SADB_SASTATE_MATURE &&
+			sav->state != SADB_SASTATE_DYING) {
+			key_freesav(sav);
+			return NULL;
 		}
+
+		/* XXX Further validation? */
+
+		key_freesav(sav);
+
+		/*
+		 * Now that we've validated that we are actually communicating
+		 * with the host indicated in the ICMP message, locate the
+		 * ICMP header, recalculate the new MTU, and create the
+		 * corresponding routing entry.
+		 */
+		icp = (struct icmp *)((caddr_t)ip -
+			offsetof(struct icmp, icmp_ip));
+		icmp_mtudisc(icp, ip->ip_dst);
+
+		return NULL;
 	}
+#endif
+
 	return NULL;
 }
 
-
-
 /* assumes that ip header and esp header are contiguous on mbuf */
-void*
-esp4_ctlinput(int cmd, const struct sockaddr *sa, void *v)
+void *
+esp4_ctlinput(cmd, sa, v)
+	int cmd;
+	struct sockaddr *sa;
+	void *v;
 {
 	struct ip *ip = v;
 	struct esp *esp;
@@ -149,42 +163,54 @@ esp4_ctlinput(int cmd, const struct sockaddr *sa, void *v)
 		return NULL;
 	if ((unsigned)cmd >= PRC_NCMDS)
 		return NULL;
-
+#ifndef notyet
+	/* jonathan@NetBSD.org: XXX FIXME */
+	(void) ip; (void) esp; (void) icp; (void) sav;
+#else
 	if (cmd == PRC_MSGSIZE && ip_mtudisc && ip && ip->ip_v == 4) {
 		/*
 		 * Check to see if we have a valid SA corresponding to
 		 * the address in the ICMP message payload.
 		 */
-		esp = (struct esp *)((char *)ip + (ip->ip_hl << 2));
-		sav = KEY_ALLOCSA((const union sockaddr_union *)sa,
-					   	IPPROTO_ESP, esp->esp_spi, 0, 0);
-
-		if (sav) {
-        	if (sav->state == SADB_SASTATE_MATURE ||
-                sav->state == SADB_SASTATE_DYING) {
-
-				/*
-				 * Now that we've validated that we are actually 
-				 * communicating with the host indicated in the 	
-				 * ICMP message, locate the ICMP header, 
-				 * recalculate the new MTU, and create the
-		 		 * corresponding routing entry.
-		 		 */
-
-				icp = (struct icmp *)((char *)ip - 
-									   offsetof(struct icmp, icmp_ip));
-				icmp_mtudisc(icp, ip->ip_dst);
-
-			}
-			KEY_FREESAV(&sav);
+		esp = (struct esp *)((caddr_t)ip + (ip->ip_hl << 2));
+		if ((sav = key_allocsa(AF_INET,
+				       (caddr_t) &ip->ip_src,
+				       (caddr_t) &ip->ip_dst,
+				       IPPROTO_ESP, esp->esp_spi)) == NULL)
+			return NULL;
+		if (sav->state != SADB_SASTATE_MATURE &&
+		    sav->state != SADB_SASTATE_DYING) {
+			key_freesav(sav);
+			return NULL;
 		}
+
+		/* XXX Further validation? */
+
+		key_freesav(sav);
+
+		/*
+		 * Now that we've validated that we are actually communicating
+		 * with the host indicated in the ICMP message, locate the
+		 * ICMP header, recalculate the new MTU, and create the
+		 * corresponding routing entry.
+		 */
+		icp = (struct icmp *)((caddr_t)ip -
+		    offsetof(struct icmp, icmp_ip));
+		icmp_mtudisc(icp, ip->ip_dst);
+
+		return NULL;
 	}
+#endif
+
 	return NULL;
 }
 
 #ifdef INET6
 void
-ah6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
+ah6_ctlinput(cmd, sa, d)
+       int cmd;
+       struct sockaddr *sa;
+       void *d;
 {
        const struct newah *ahp;
        struct newah ah;
@@ -227,10 +253,10 @@ ah6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
                         * this should be rare case,
                         * so we compromise on this copy...
                         */
-                       m_copydata(m, off, sizeof(ah), &ah);
+                       m_copydata(m, off, sizeof(ah), (caddr_t)&ah);
                        ahp = &ah;
                } else
-                       ahp = (struct newah *)(mtod(m, char *) + off);
+                       ahp = (struct newah *)(mtod(m, caddr_t) + off);
 
                if (cmd == PRC_MSGSIZE) {
                        int valid = 0;
@@ -239,8 +265,8 @@ ah6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
                         * Check to see if we have a valid SA corresponding
                         * to the address in the ICMP message payload.
                         */
-                       sav = KEY_ALLOCSA((const union sockaddr_union*)sa,
-                                         IPPROTO_AH, ahp->ah_spi, 0, 0);
+                       sav = KEY_ALLOCSA((union sockaddr_union*)sa,
+                                         IPPROTO_AH, ahp->ah_spi);
 
                        if (sav) {
                                if (sav->state == SADB_SASTATE_MATURE ||
@@ -270,7 +296,10 @@ ah6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
 
 
 void
-esp6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
+esp6_ctlinput(cmd, sa, d)
+	int cmd;
+	struct sockaddr *sa;
+	void *d;
 {
 	const struct newesp *espp;
 	struct newesp esp;
@@ -279,6 +308,7 @@ esp6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
 	struct ip6_hdr *ip6;
 	struct mbuf *m;
 	int off;
+	struct sockaddr_in6 *sa6_src, *sa6_dst;
 
 	if (sa->sa_family != AF_INET6 ||
 	    sa->sa_len != sizeof(struct sockaddr_in6))
@@ -312,9 +342,9 @@ esp6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
 		 * no possibility of an infinite loop of function calls,
 		 * because we don't pass the inner IPv6 header.
 		 */
-		memset(&ip6cp1, 0, sizeof(ip6cp1));
+		bzero(&ip6cp1, sizeof(ip6cp1));
 		ip6cp1.ip6c_src = ip6cp->ip6c_src;
-		pfctlinput2(cmd, sa, &ip6cp1);
+		pfctlinput2(cmd, sa, (void *)&ip6cp1);
 
 		/*
 		 * Then go to special cases that need ESP header information.
@@ -331,10 +361,10 @@ esp6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
 			 * this should be rare case,
 			 * so we compromise on this copy...
 			 */
-			m_copydata(m, off, sizeof(esp), &esp);
+			m_copydata(m, off, sizeof(esp), (caddr_t)&esp);
 			espp = &esp;
 		} else
-			espp = (struct newesp*)(mtod(m, char *) + off);
+			espp = (struct newesp*)(mtod(m, caddr_t) + off);
 
 		if (cmd == PRC_MSGSIZE) {
 			int valid = 0;
@@ -343,10 +373,20 @@ esp6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
 			 * Check to see if we have a valid SA corresponding to
 			 * the address in the ICMP message payload.
 			 */
+			sa6_src = ip6cp->ip6c_src;
+			sa6_dst = (struct sockaddr_in6 *)sa;
+#ifdef KAME
+			sav = key_allocsa(AF_INET6,
+					  (caddr_t)&sa6_src->sin6_addr,
+					  (caddr_t)&sa6_dst->sin6_addr,
+					  IPPROTO_ESP, espp->esp_spi);
+#else
+			/* jonathan@NetBSD.org: XXX FIXME */
+			(void)sa6_src; (void)sa6_dst;
+			sav = KEY_ALLOCSA((union sockaddr_union*)sa,
+					  IPPROTO_ESP, espp->esp_spi);
 
-			sav = KEY_ALLOCSA((const union sockaddr_union*)sa,
-					  IPPROTO_ESP, espp->esp_spi, 0, 0);
-
+#endif
 			if (sav) {
 				if (sav->state == SADB_SASTATE_MATURE ||
 				    sav->state == SADB_SASTATE_DYING)
@@ -516,7 +556,7 @@ SYSCTL_SETUP(sysctl_net_inet_fast_ipsec_setup, "sysctl net.inet.ipsec subtree se
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "cleartos", NULL,
-		       NULL, 0, &ip4_ah_cleartos, 0,
+		       NULL, 0, &/*ip4_*/ah_cleartos, 0,
 		       CTL_NET, PF_INET, IPPROTO_AH,
 		       IPSECCTL_AH_CLEARTOS, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
@@ -598,7 +638,7 @@ SYSCTL_SETUP(sysctl_net_inet_fast_ipsec_setup, "sysctl net.inet.ipsec subtree se
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "ah_cleartos", NULL,
-		       NULL, 0, &ip4_ah_cleartos, 0,
+		       NULL, 0, &/*ip4_*/ah_cleartos, 0,
 		       CTL_NET, PF_INET, ipproto_ipsec,
 		       IPSECCTL_AH_CLEARTOS, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,

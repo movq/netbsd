@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_bio.c,v 1.62 2007/07/27 09:50:37 yamt Exp $	*/
+/*	$NetBSD: uvm_bio.c,v 1.54 2006/11/01 10:18:27 yamt Exp $	*/
 
 /*
  * Copyright (c) 1998 Chuck Silvers.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_bio.c,v 1.62 2007/07/27 09:50:37 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_bio.c,v 1.54 2006/11/01 10:18:27 yamt Exp $");
 
 #include "opt_uvmhist.h"
 #include "opt_ubc.h"
@@ -43,7 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_bio.c,v 1.62 2007/07/27 09:50:37 yamt Exp $");
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/kernel.h>
-#include <sys/proc.h>
 
 #include <uvm/uvm.h>
 
@@ -139,7 +138,6 @@ EVCNT_ATTACH_STATIC(ubc_evcnt_##name);
 
 UBC_EVCNT_DEFINE(wincachehit)
 UBC_EVCNT_DEFINE(wincachemiss)
-UBC_EVCNT_DEFINE(faultbusy)
 
 /*
  * ubc_init
@@ -301,7 +299,7 @@ again:
 	    0);
 
 	if (error == EAGAIN) {
-		kpause("ubc_fault", false, hz, NULL);
+		tsleep(&lbolt, PVM, "ubc_fault", 0);
 		goto again;
 	}
 	if (error) {
@@ -313,7 +311,7 @@ again:
 
 	UVMHIST_LOG(ubchist, "va 0x%lx eva 0x%lx", va, eva, 0, 0);
 	for (i = 0; va < eva; i++, va += PAGE_SIZE) {
-		bool rdonly;
+		boolean_t rdonly;
 		vm_prot_t mask;
 
 		/*
@@ -460,7 +458,7 @@ again:
 		umap = TAILQ_FIRST(UBC_QUEUE(offset));
 		if (umap == NULL) {
 			simple_unlock(&ubc_object.uobj.vmobjlock);
-			kpause("ubc_alloc", false, hz, NULL);
+			tsleep(&lbolt, PVM, "ubc_alloc", 0);
 			goto again;
 		}
 
@@ -514,14 +512,11 @@ again:
 		    PGO_NOTIMESTAMP;
 		int i;
 		KDASSERT(flags & UBC_WRITE);
-		KASSERT(umap->refcount == 1);
 
-		UBC_EVCNT_INCR(faultbusy);
 		if (umap->flags & UMAP_MAPPING_CACHED) {
 			umap->flags &= ~UMAP_MAPPING_CACHED;
 			pmap_remove(pmap_kernel(), va, va + ubc_winsize);
 		}
-again_faultbusy:
 		memset(pgs, 0, sizeof(pgs));
 		simple_lock(&uobj->vmobjlock);
 		error = (*uobj->pgops->pgo_get)(uobj, trunc_page(offset), pgs,
@@ -531,33 +526,12 @@ again_faultbusy:
 			goto out;
 		}
 		for (i = 0; i < npages; i++) {
-			struct vm_page *pg = pgs[i];
-
-			KASSERT(pg->uobject == uobj);
-			if (pg->loan_count != 0) {
-				simple_lock(&uobj->vmobjlock);
-				if (pg->loan_count != 0) {
-					pg = uvm_loanbreak(pg);
-				}
-				simple_unlock(&uobj->vmobjlock);
-				if (pg == NULL) {
-					pmap_kremove(va, ubc_winsize);
-					pmap_update(pmap_kernel());
-					simple_lock(&uobj->vmobjlock);
-					uvm_page_unbusy(pgs, npages);
-					simple_unlock(&uobj->vmobjlock);
-					uvm_wait("ubc_alloc");
-					goto again_faultbusy;
-				}
-				pgs[i] = pg;
-			}
 			pmap_kenter_pa(va + slot_offset + (i << PAGE_SHIFT),
-			    VM_PAGE_TO_PHYS(pg), VM_PROT_READ | VM_PROT_WRITE);
+			    VM_PAGE_TO_PHYS(pgs[i]),
+			    VM_PROT_READ | VM_PROT_WRITE);
 		}
 		pmap_update(pmap_kernel());
 		umap->flags |= UMAP_PAGES_LOCKED;
-	} else {
-		KASSERT((umap->flags & UMAP_PAGES_LOCKED) == 0);
 	}
 
 out:
@@ -574,7 +548,7 @@ ubc_release(void *va, int flags)
 	struct ubc_map *umap;
 	struct uvm_object *uobj;
 	vaddr_t umapva;
-	bool unmapped;
+	boolean_t unmapped;
 	UVMHIST_FUNC("ubc_release"); UVMHIST_CALLED(ubchist);
 
 	UVMHIST_LOG(ubchist, "va %p", va, 0, 0, 0);
@@ -592,9 +566,8 @@ ubc_release(void *va, int flags)
 		struct vm_page *pgs[npages];
 		paddr_t pa;
 		int i;
-		bool rv;
+		boolean_t rv;
 
-		KASSERT((umap->flags & UMAP_MAPPING_CACHED) == 0);
 		if (zerolen) {
 			memset((char *)umapva + endoff, 0, zerolen);
 		}
@@ -615,9 +588,9 @@ ubc_release(void *va, int flags)
 		simple_lock(&uobj->vmobjlock);
 		uvm_page_unbusy(pgs, npages);
 		simple_unlock(&uobj->vmobjlock);
-		unmapped = true;
+		unmapped = TRUE;
 	} else {
-		unmapped = false;
+		unmapped = FALSE;
 	}
 
 	simple_lock(&ubc_object.uobj.vmobjlock);
@@ -653,50 +626,6 @@ ubc_release(void *va, int flags)
 	simple_unlock(&ubc_object.uobj.vmobjlock);
 }
 
-/*
- * ubc_uiomove: move data to/from an object.
- */
-
-int
-ubc_uiomove(struct uvm_object *uobj, struct uio *uio, vsize_t todo, int advice,
-    int flags)
-{
-	voff_t off;
-	const bool overwrite = (flags & UBC_FAULTBUSY) != 0;
-	int error;
-
-	KASSERT(todo <= uio->uio_resid);
-	KASSERT(((flags & UBC_WRITE) != 0 && uio->uio_rw == UIO_WRITE) ||
-	    ((flags & UBC_READ) != 0 && uio->uio_rw == UIO_READ));
-
-	off = uio->uio_offset;
-	error = 0;
-	while (todo > 0) {
-		vsize_t bytelen = todo;
-		void *win;
-
-		win = ubc_alloc(uobj, off, &bytelen, advice, flags);
-		if (error == 0) {
-			error = uiomove(win, bytelen, uio);
-		}
-		if (error != 0 && overwrite) {
-			/*
-			 * if we haven't initialized the pages yet,
-			 * do it now.  it's safe to use memset here
-			 * because we just mapped the pages above.
-			 */
-			memset(win, 0, bytelen);
-		}
-		ubc_release(win, flags);
-		off += bytelen;
-		todo -= bytelen;
-		if (error != 0 && (flags & UBC_PARTIALOK) != 0) {
-			break;
-		}
-	}
-
-	return error;
-}
 
 #if 0 /* notused */
 /*

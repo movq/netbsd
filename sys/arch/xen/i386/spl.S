@@ -1,4 +1,4 @@
-/*	$NetBSD: spl.S,v 1.10 2007/06/28 20:50:30 bouyer Exp $	*/
+/*	$NetBSD: spl.S,v 1.6 2005/12/11 12:19:48 christos Exp $	*/
 /*	NetBSD: spl.S,v 1.11 2004/02/20 17:35:01 yamt Exp 	*/
 
 /*
@@ -105,13 +105,11 @@ IDTVEC(spllower)
 #else /* defined(DDB) || defined(GPROF) */
 	movl	20(%esp),%ebx
 #endif /* defined(DDB) || defined(GPROF) */
-	movl	$.Lspllower_resume,%esi	# address to resume loop at
-1:
-	CLI(%eax)
-.Lspllower_resume:
-	movl	%ebx,%eax		# get cpl
+	movl	$1f,%esi		# address to resume loop at
+1:	movl	%ebx,%eax		# get cpl
 	movl	CPUVAR(IUNMASK)(,%eax,4),%eax
-	andl	CPUVAR(IPENDING),%eax	# any non-masked bits left?
+	CLI(%ecx)
+	andl	CPUVAR(IPENDING),%eax		# any non-masked bits left?
 	jz	2f
 	bsrl	%eax,%eax
 	btrl	%eax,CPUVAR(IPENDING)
@@ -140,14 +138,15 @@ IDTVEC(spllower)
  *   ebx - cpl to restore
  *   esi - address to resume loop at
  *   edi - scratch for Xsoftnet
- *
- * called with interrupt disabled.
  */
 IDTVEC(doreti)
-.Ldoreti_resume:
-	movl	$.Ldoreti_resume,%esi	# address to resume loop at
-	movl	%ebx,%eax
+	popl	%ebx			# get previous priority
+	decl	CPUVAR(IDEPTH)
+	movl	$1f,%esi		# address to resume loop at
+8:
+1:	movl	%ebx,%eax
 	movl	CPUVAR(IUNMASK)(,%eax,4),%eax
+	CLI(%ecx)
 	andl	CPUVAR(IPENDING),%eax
 	jz	2f
 	bsrl    %eax,%eax               # slow, but not worth optimizing
@@ -156,6 +155,7 @@ IDTVEC(doreti)
 	jmp	*IS_RESUME(%eax)
 2:	/* Check for ASTs on exit to user mode. */
 	movl	%ebx,CPUVAR(ILEVEL)
+5:
 	testb   $CHK_UPL,TF_CS(%esp)
 	jnz	doreti_checkast
 #ifdef VM86
@@ -166,7 +166,6 @@ IDTVEC(doreti)
 #endif
 	.globl doreti_checkast
 doreti_checkast:
-	movl	CPUVAR(CURLWP),%eax
 	CHECK_ASTPENDING(%eax)
 	jz	3f
 	CLEAR_ASTPENDING(%eax)
@@ -177,7 +176,7 @@ doreti_checkast:
 	call	_C_LABEL(trap)
 	addl	$4,%esp
 	CLI(%ecx)
-	jmp	.Ldoreti_resume
+	jmp	5b
 3:
 	CHECK_DEFERRED_SWITCH(%eax)
 	jnz	9f
@@ -185,8 +184,7 @@ doreti_checkast:
     	jz	4f
 	call	_C_LABEL(stipending)
 	testl	%eax,%eax
-	CLI(%eax)
-	jnz	.Ldoreti_resume
+	jnz	8b
 4:
 	INTRFASTEXIT
 9:
@@ -194,19 +192,3 @@ doreti_checkast:
 	call	_C_LABEL(pmap_load)
 	CLI(%ecx)
 	jmp	doreti_checkast	/* recheck ASTs */
-
-/*
- * void evtchn_do_event(int evtch, struct intrframe *regs)
- */
-
-NENTRY(call_evtchn_do_event)
-	IDEPTH_INCR
-	/*
-	 * IDEPTH_INCR leaves old %esp in %eax.
-	 */
-	pushl	8(%eax)	/* regs */
-	pushl	4(%eax)	/* evtch */
-	call	_C_LABEL(evtchn_do_event)
-	addl	$8, %esp
-	IDEPTH_DECR
-	ret

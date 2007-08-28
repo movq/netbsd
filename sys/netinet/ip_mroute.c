@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_mroute.c,v 1.104 2007/07/09 21:11:11 ad Exp $	*/
+/*	$NetBSD: ip_mroute.c,v 1.100 2006/11/16 01:33:45 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -93,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_mroute.c,v 1.104 2007/07/09 21:11:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_mroute.c,v 1.100 2006/11/16 01:33:45 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -529,7 +529,7 @@ ip_mrouter_get(struct socket *so, int optname, struct mbuf **m)
  * Handle ioctl commands to obtain information from the cache
  */
 int
-mrt_ioctl(struct socket *so, u_long cmd, void *data)
+mrt_ioctl(struct socket *so, u_long cmd, caddr_t data)
 {
 	int error;
 
@@ -625,19 +625,19 @@ ip_mrouter_init(struct socket *so, struct mbuf *m)
 
 	mfchashtbl =
 	    hashinit(MFCTBLSIZ, HASH_LIST, M_MRTABLE, M_WAITOK, &mfchash);
-	bzero((void *)nexpire, sizeof(nexpire));
+	bzero((caddr_t)nexpire, sizeof(nexpire));
 
 	pim_assert = 0;
 
-	callout_init(&expire_upcalls_ch, 0);
+	callout_init(&expire_upcalls_ch);
 	callout_reset(&expire_upcalls_ch, EXPIRE_TIMEOUT,
 		      expire_upcalls, NULL);
 
-	callout_init(&bw_upcalls_ch, 0);
+	callout_init(&bw_upcalls_ch);
 	callout_reset(&bw_upcalls_ch, BW_UPCALLS_PERIOD,
 		      expire_bw_upcalls_send, NULL);
 
-	callout_init(&bw_meter_ch, 0);
+	callout_init(&bw_meter_ch);
 	callout_reset(&bw_meter_ch, BW_METER_PERIOD,
 		      expire_bw_meter_process, NULL);
 
@@ -688,7 +688,7 @@ ip_mrouter_done(void)
 		}
 	}
 
-	bzero((void *)nexpire, sizeof(nexpire));
+	bzero((caddr_t)nexpire, sizeof(nexpire));
 	free(mfchashtbl, M_MRTABLE);
 	mfchashtbl = NULL;
 
@@ -951,7 +951,7 @@ add_vif(struct mbuf *m)
 		satosin(&ifr.ifr_addr)->sin_len = sizeof(struct sockaddr_in);
 		satosin(&ifr.ifr_addr)->sin_family = AF_INET;
 		satosin(&ifr.ifr_addr)->sin_addr = zeroin_addr;
-		error = (*ifp->if_ioctl)(ifp, SIOCADDMULTI, (void *)&ifr);
+		error = (*ifp->if_ioctl)(ifp, SIOCADDMULTI, (caddr_t)&ifr);
 		if (error)
 			return (error);
 	}
@@ -979,7 +979,7 @@ add_vif(struct mbuf *m)
 	vifp->v_bytes_in = 0;
 	vifp->v_bytes_out = 0;
 
-	callout_init(&vifp->v_repq_ch, 0);
+	callout_init(&vifp->v_repq_ch);
 
 #ifdef RSVP_ISI
 	vifp->v_rsvp_on = 0;
@@ -1036,9 +1036,9 @@ reset_vif(struct vif *vifp)
 		satosin(&ifr.ifr_addr)->sin_family = AF_INET;
 		satosin(&ifr.ifr_addr)->sin_addr = zeroin_addr;
 		ifp = vifp->v_ifp;
-		(*ifp->if_ioctl)(ifp, SIOCDELMULTI, (void *)&ifr);
+		(*ifp->if_ioctl)(ifp, SIOCDELMULTI, (caddr_t)&ifr);
 	}
-	bzero((void *)vifp, sizeof(*vifp));
+	bzero((caddr_t)vifp, sizeof(*vifp));
 }
 
 /*
@@ -1163,12 +1163,12 @@ add_mfc(struct mbuf *m)
 	 */
 	if (mrt_api_config & MRT_API_FLAGS_ALL) {
 		struct mfcctl2 *mp2 = mtod(m, struct mfcctl2 *);
-		bcopy(mp2, (void *)&mfcctl2, sizeof(*mp2));
+		bcopy(mp2, (caddr_t)&mfcctl2, sizeof(*mp2));
 	} else {
 		struct mfcctl *mp = mtod(m, struct mfcctl *);
-		memcpy(&mfcctl2, mp, sizeof(*mp));
-		memset((char *)&mfcctl2 + sizeof(struct mfcctl), 0,
-		    sizeof(mfcctl2) - sizeof(struct mfcctl));
+		bcopy(mp, (caddr_t)&mfcctl2, sizeof(*mp));
+		bzero((caddr_t)&mfcctl2 + sizeof(struct mfcctl),
+		      sizeof(mfcctl2) - sizeof(struct mfcctl));
 	}
 	mfccp = &mfcctl2;
 
@@ -1328,9 +1328,9 @@ del_mfc(struct mbuf *m)
 	if (m == NULL || m->m_len < mfcctl_size)
 		return (EINVAL);
 
-	memcpy(&mfcctl2, mp, sizeof(*mp));
-	memset((char *)&mfcctl2 + sizeof(struct mfcctl), 0,
-	    sizeof(mfcctl2) - sizeof(struct mfcctl));
+	bcopy(mp, (caddr_t)&mfcctl2, sizeof(*mp));
+	bzero((caddr_t)&mfcctl2 + sizeof(struct mfcctl),
+	      sizeof(mfcctl2) - sizeof(struct mfcctl));
 
 	mfccp = &mfcctl2;
 
@@ -1937,7 +1937,7 @@ encap_send(struct ip *ip, struct vif *vifp, struct mbuf *m)
 	/*
 	 * turn the encapsulated IP header back into a valid one.
 	 */
-	ip = (struct ip *)((char *)ip_copy + sizeof(multicast_encap_iphdr));
+	ip = (struct ip *)((caddr_t)ip_copy + sizeof(multicast_encap_iphdr));
 	--ip->ip_ttl;
 	ip->ip_sum = 0;
 	mb_copy->m_data += sizeof(multicast_encap_iphdr);
@@ -2019,7 +2019,7 @@ vif_encapcheck(struct mbuf *m, int off, int proto, void *arg)
 	 */
 
 	/* Obtain the outer IP header and the vif pointer. */
-	m_copydata((struct mbuf *)m, 0, sizeof(ip), (void *)&ip);
+	m_copydata((struct mbuf *)m, 0, sizeof(ip), (caddr_t)&ip);
 	vifp = (struct vif *)arg;
 
 	/*
@@ -2040,7 +2040,7 @@ vif_encapcheck(struct mbuf *m, int off, int proto, void *arg)
 		return 0;
 
 	/* Check that the inner destination is multicast. */
-	m_copydata((struct mbuf *)m, off, sizeof(ip), (void *)&ip);
+	m_copydata((struct mbuf *)m, off, sizeof(ip), (caddr_t)&ip);
 	if (!IN_MULTICAST(ip.ip_dst.s_addr))
 		return 0;
 
@@ -2219,8 +2219,9 @@ tbf_send_packet(struct vif *vifp, struct mbuf *m)
 		imo.imo_multicast_vif = -1;
 #endif
 
-		error = ip_output(m, NULL, NULL, IP_FORWARDING|IP_MULTICASTOPTS,
-		    &imo, NULL);
+		error = ip_output(m, (struct mbuf *)NULL, (struct route *)NULL,
+		    IP_FORWARDING|IP_MULTICASTOPTS, &imo,
+		    (struct socket *)NULL);
 
 		if (mrtdebug & DEBUG_XMIT)
 			log(LOG_DEBUG, "phyint_send on vif %ld err %d\n",
@@ -2889,8 +2890,8 @@ bw_upcalls_send(void)
     }
 
     m->m_len = m->m_pkthdr.len = 0;
-    m_copyback(m, 0, sizeof(struct igmpmsg), (void *)&igmpmsg);
-    m_copyback(m, sizeof(struct igmpmsg), len, (void *)&bw_upcalls[0]);
+    m_copyback(m, 0, sizeof(struct igmpmsg), (caddr_t)&igmpmsg);
+    m_copyback(m, sizeof(struct igmpmsg), len, (caddr_t)&bw_upcalls[0]);
 
     /*
      * Send the upcalls
@@ -3304,8 +3305,8 @@ pim_register_send_rp(struct ip *ip, struct vif *vifp,
      */
     ip_outer->ip_tos = ip->ip_tos;
     if (ntohs(ip->ip_off) & IP_DF)
-	ip_outer->ip_off |= htons(IP_DF);
-    pimhdr = (struct pim_encap_pimhdr *)((char *)ip_outer
+	ip_outer->ip_off |= IP_DF;
+    pimhdr = (struct pim_encap_pimhdr *)((caddr_t)ip_outer
 					 + sizeof(pim_encap_iphdr));
     *pimhdr = pim_encap_pimhdr;
     /* If the iif crosses a border, set the Border-bit */

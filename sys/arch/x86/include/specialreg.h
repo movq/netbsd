@@ -1,4 +1,4 @@
-/*	$NetBSD: specialreg.h,v 1.18 2007/07/11 11:56:36 njoly Exp $	*/
+/*	$NetBSD: specialreg.h,v 1.11.6.1 2007/02/10 14:47:45 tron Exp $	*/
 
 /*-
  * Copyright (c) 1991 The Regents of the University of California.
@@ -146,30 +146,13 @@
 #define CPUID_MPC	0x00080000	/* Multiprocessing Capable */
 #define CPUID_NOX	0x00100000	/* No Execute Page Protection */
 #define CPUID_MMXX	0x00400000	/* AMD MMX Extensions */
-#define CPUID_RDTSCP	0x08000000	/* Read TSC Pair Instruction */
 #define CPUID_3DNOW2	0x40000000	/* 3DNow! Instruction Extension */
 #define CPUID_3DNOW	0x80000000	/* 3DNow! Instructions */
 
 #define CPUID_EXT_FLAGS2	"\20\16PGE\17MCA\20CMOV\21PAT\22PSE36\23PN" \
 				    "\24MPC\25NOX\26B21\27MMXX\30MMX"
-#define CPUID_EXT_FLAGS3	"\20\31FXSR\32SSE\33SSE2\34RDTSCP\35HTT" \
-				    "\36LONG\0373DNOW2\0403DNOW"
-
-/*
- * Centaur Extended Feature flags
- */
-#define CPUID_VIA_HAS_RNG	0x00000004	/* Random number generator */
-#define CPUID_VIA_DO_RNG	0x00000008
-#define CPUID_VIA_HAS_ACE	0x00000040	/* AES Encryption */
-#define CPUID_VIA_DO_ACE	0x00000080
-#define CPUID_VIA_HAS_ACE2	0x00000100	/* AES+CTR instructions */
-#define CPUID_VIA_DO_ACE2	0x00000200
-#define CPUID_VIA_HAS_PHE	0x00000400	/* SHA1+SHA256 HMAC */
-#define CPUID_VIA_DO_PHE	0x00000800
-#define CPUID_VIA_HAS_PMM	0x00001000	/* RSA Instructions */
-#define CPUID_VIA_DO_PMM	0x00002000
-
-#define CPUID_FLAGS_PADLOCK	"\20\3RNG\7AES\11AES/CTR\13SHA1/SHA256\15RSA"
+#define CPUID_EXT_FLAGS3	"\20\31FXSR\32SSE\33SSE2\34B27\35HTT\36LONG" \
+				    "\0373DNOW2\0403DNOW"
 
 /*
  * CPUID "features" bits in %ecx
@@ -179,17 +162,12 @@
 #define	CPUID2_MONITOR	0x00000008	/* MONITOR/MWAIT instructions */
 #define	CPUID2_DS_CPL	0x00000010	/* CPL Qualified Debug Store */
 #define	CPUID2_VMX	0x00000020	/* Virtual Machine Extensions */
-#define	CPUID2_SMX	0x00000040	/* Safer Mode Extensions */
 #define	CPUID2_EST	0x00000080	/* Enhanced SpeedStep Technology */
 #define	CPUID2_TM2	0x00000100	/* Thermal Monitor 2 */
 #define	CPUID2_CID	0x00000400	/* Context ID */
-#define	CPUID2_CX16	0x00002000	/* has CMPXCHG16B instruction */
 #define	CPUID2_xTPR	0x00004000	/* Task Priority Messages disabled? */
-#define	CPUID2_PDCM	0x00008000	/* Perf/Debug Capability MSR */
-#define	CPUID2_DCA	0x00040000	/* Direct Cache Access */
 
-#define CPUID2_FLAGS "\20\1SSE3\4MONITOR\5DS-CPL\6VMX\7SMX\10EST\11TM2" \
-			"\13CID\17xTPR\20PDCM\23DCA"
+#define CPUID2_FLAGS "\20\1SSE3\4MONITOR\5DS-CPL\6VMX\10EST\11TM2\13CID\17xTPR"
 
 #define CPUID2FAMILY(cpuid)	(((cpuid) >> 8) & 0xf)
 #define CPUID2MODEL(cpuid)	(((cpuid) >> 4) & 0xf)
@@ -304,18 +282,6 @@
 #define MSR_MC3_MISC		0x413
 
 /*
- * VIA "Nehemiah" MSRs
- */
-#define MSR_VIA_RNG		0x0000110b
-#define MSR_VIA_RNG_ENABLE	0x00000040
-#define MSR_VIA_RNG_NOISE_MASK	0x00000300
-#define MSR_VIA_RNG_NOISE_A	0x00000000
-#define MSR_VIA_RNG_NOISE_B	0x00000100
-#define MSR_VIA_RNG_2NOISE	0x00000300
-#define MSR_VIA_ACE		0x00001107
-#define MSR_VIA_ACE_ENABLE	0x10000000
-
-/*
  * AMD K6/K7 MSRs.
  */
 #define	MSR_K6_UWCCR		0xc0000085
@@ -327,51 +293,6 @@
 #define	MSR_K7_PERFCTR1		0xc0010005
 #define	MSR_K7_PERFCTR2		0xc0010006
 #define	MSR_K7_PERFCTR3		0xc0010007
-
-/*
- * AMD K8 (Opteron) MSRs.
- */
-#define	MSR_SYSCFG	0xc0000010
-
-#define MSR_EFER	0xc0000080		/* Extended feature enable */
-#define 	EFER_SCE		0x00000001	/* SYSCALL extension */
-#define 	EFER_LME		0x00000100	/* Long Mode Active */
-#define		EFER_LMA		0x00000400	/* Long Mode Enabled */
-#define 	EFER_NXE		0x00000800	/* No-Execute Enabled */
-
-#define MSR_STAR	0xc0000081		/* 32 bit syscall gate addr */
-#define MSR_LSTAR	0xc0000082		/* 64 bit syscall gate addr */
-#define MSR_CSTAR	0xc0000083		/* compat syscall gate addr */
-#define MSR_SFMASK	0xc0000084		/* flags to clear on syscall */
-
-#define MSR_FSBASE	0xc0000100		/* 64bit offset for fs: */
-#define MSR_GSBASE	0xc0000101		/* 64bit offset for gs: */
-#define MSR_KERNELGSBASE 0xc0000102		/* storage for swapgs ins */
-
-/*
- * These require a 'passcode' for access.  See cpufunc.h.
- */
-#define	MSR_HWCR	0xc0010015
-#define		HWCR_FFDIS		0x00000040
-
-#define	MSR_NB_CFG	0xc001001f
-#define		NB_CFG_DISIOREQLOCK	0x0000000000000004ULL
-#define		NB_CFG_DISDATMSK	0x0000001000000000ULL
-
-#define	MSR_LS_CFG	0xc0011020
-#define		LS_CFG_DIS_LS2_SQUISH	0x02000000
-
-#define	MSR_IC_CFG	0xc0011021
-#define		IC_CFG_DIS_SEQ_PREFETCH	0x00000800
-
-#define	MSR_DC_CFG	0xc0011022
-#define		DC_CFG_DIS_CNV_WC_SSO	0x00000004
-#define		DC_CFG_DIS_SMC_CHK_BUF	0x00000400
-
-#define	MSR_BU_CFG	0xc0011023
-#define		BU_CFG_THRL2IDXCMPDIS	0x0000080000000000ULL
-#define		BU_CFG_WBPFSMCCHKDIS	0x0000200000000000ULL
-#define		BU_CFG_WBENHWSBDIS	0x0001000000000000ULL
 
 /*
  * Constants related to MTRRs

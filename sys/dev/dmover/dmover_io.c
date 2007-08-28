@@ -1,4 +1,4 @@
-/*	$NetBSD: dmover_io.c,v 1.27 2007/07/12 20:39:56 rmind Exp $	*/
+/*	$NetBSD: dmover_io.c,v 1.23 2006/07/28 08:51:05 ad Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003 Wasabi Systems, Inc.
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dmover_io.c,v 1.27 2007/07/12 20:39:56 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dmover_io.c,v 1.23 2006/07/28 08:51:05 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/queue.h>
@@ -125,7 +125,6 @@ dev_type_open(dmoverioopen);
 const struct cdevsw dmoverio_cdevsw = {
 	dmoverioopen, noclose, noread, nowrite, noioctl,
 	nostop, notty, nopoll, nommap, nokqfilter,
-	D_OTHER
 };
 
 /*
@@ -138,9 +137,9 @@ dmoverioattach(int count)
 {
 
 	pool_init(&dmio_state_pool, sizeof(struct dmio_state),
-	    0, 0, 0, "dmiostate", NULL, IPL_SOFTCLOCK);
+	    0, 0, 0, "dmiostate", NULL);
 	pool_init(&dmio_usrreq_state_pool, sizeof(struct dmio_usrreq_state),
-	    0, 0, 0, "dmiourstate", NULL, IPL_SOFTCLOCK);
+	    0, 0, 0, "dmiourstate", NULL);
 }
 
 /*
@@ -153,7 +152,7 @@ dmio_cleaner_init(void)
 {
 
 	return workqueue_create(&dmio_cleaner, "dmioclean", dmio_usrreq_fini1,
-	    NULL, PWAIT, IPL_SOFTCLOCK, 0);
+	    NULL, PWAIT, 0 /* IPL_SOFTCLOCK */, 0);
 }
 
 /*
@@ -320,7 +319,7 @@ dmio_usrreq_fini(struct dmio_state *ds, struct dmio_usrreq_state *dus)
 		free(dus->dus_uio_in, M_TEMP);
 	}
 
-	workqueue_enqueue(dmio_cleaner, &dus->dus_work, NULL);
+	workqueue_enqueue(dmio_cleaner, &dus->dus_work);
 }
 
 static void

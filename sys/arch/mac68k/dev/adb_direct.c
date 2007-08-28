@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_direct.c,v 1.58 2007/07/09 20:52:19 ad Exp $	*/
+/*	$NetBSD: adb_direct.c,v 1.55 2006/11/24 22:04:23 wiz Exp $	*/
 
 /* From: adb_direct.c 2.02 4/18/97 jpw */
 
@@ -62,11 +62,12 @@
 #ifdef __NetBSD__
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb_direct.c,v 1.58 2007/07/09 20:52:19 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb_direct.c,v 1.55 2006/11/24 22:04:23 wiz Exp $");
 
 #include "opt_adb.h"
 
 #include <sys/param.h>
+#include <sys/cdefs.h>
 #include <sys/pool.h>
 #include <sys/queue.h>
 #include <sys/systm.h>
@@ -270,9 +271,7 @@ int	tickle_count = 0;		/* how many tickles seen for this packet? */
 int	tickle_serial = 0;		/* the last packet tickled */
 int	adb_cuda_serial = 0;		/* the current packet */
 
-callout_t adb_cuda_tickle_ch;
-
-void *adb_softintr_cookie;
+struct callout adb_cuda_tickle_ch = CALLOUT_INITIALIZER;
 
 extern struct mac68k_machine_S mac68k_machine;
 
@@ -1727,7 +1726,7 @@ adb_pass_up(struct adbCommand *in)
 	if (adb_polling)
 		adb_soft_intr();
 	else
-		softintr_schedule(adb_softintr_cookie);
+		setsoftadb();
 
 	return;
 }
@@ -2110,12 +2109,6 @@ adb_reinit(void)
 	int saveptr;		/* point to next free relocation address */
 	int device;
 	int nonewtimes;		/* times thru loop w/o any new devices */
-	static bool again;
-
-	if (!again) {
-		callout_init(&adb_cuda_tickle_ch, 0);
-		again = true;
-	}
 
 	adb_setup_hw_type();	/* setup hardware type */
 

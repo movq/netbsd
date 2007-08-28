@@ -1,4 +1,4 @@
-/* $NetBSD: sbscn.c,v 1.22 2007/07/09 20:52:23 ad Exp $ */
+/* $NetBSD: sbscn.c,v 1.20 2006/10/01 20:31:50 elad Exp $ */
 
 /*
  * Copyright 2000, 2001
@@ -116,7 +116,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbscn.c,v 1.22 2007/07/09 20:52:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbscn.c,v 1.20 2006/10/01 20:31:50 elad Exp $");
 
 #define	SBSCN_DEBUG
 
@@ -326,7 +326,7 @@ sbscn_attach_channel(struct sbscn_softc *sc, int chan, int intr)
 	ch->ch_o_mask = ch->ch_o_dtr | ch->ch_o_rts;
 
 	ch->ch_intrhand = cpu_intr_establish(intr, IPL_SERIAL, sbscn_intr, ch);
-	callout_init(&ch->ch_diag_callout, 0);
+	callout_init(&ch->ch_diag_callout);
 
 	/* Disable interrupts before configuring the device. */
 	ch->ch_imr = 0;
@@ -742,7 +742,7 @@ sbscntty(dev_t dev)
 }
 
 int
-sbscnioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+sbscnioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct sbscn_softc *sc = sbscn_cd.cd_devs[SBSCN_UNIT(dev)];
 	struct sbscn_channel *ch = &sc->sc_channels[SBSCN_CHAN(dev)];

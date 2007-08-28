@@ -1,4 +1,4 @@
-/*	$NetBSD: umodem_common.c,v 1.12 2007/03/13 13:51:56 drochner Exp $	*/
+/*	$NetBSD: umodem_common.c,v 1.9 2006/11/16 01:33:27 christos Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umodem_common.c,v 1.12 2007/03/13 13:51:56 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umodem_common.c,v 1.9 2006/11/16 01:33:27 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,6 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: umodem_common.c,v 1.12 2007/03/13 13:51:56 drochner 
 #include <dev/usb/usbdevs.h>
 #include <dev/usb/usb_quirks.h>
 
+#include <dev/usb/usbdevs.h>
 #include <dev/usb/ucomvar.h>
 #include <dev/usb/umodemvar.h>
 
@@ -110,7 +111,7 @@ Static void	umodem_intr(usbd_xfer_handle, usbd_private_handle, usbd_status);
 
 int
 umodem_common_attach(device_ptr_t self, struct umodem_softc *sc,
-		     struct usbif_attach_arg *uaa, struct ucom_attach_args *uca)
+		     struct usb_attach_arg *uaa, struct ucom_attach_args *uca)
 {
 	usbd_device_handle dev = uaa->device;
 	usb_interface_descriptor_t *id;
@@ -467,7 +468,7 @@ umodem_param(void *addr, int portno, struct termios *t)
 }
 
 int
-umodem_ioctl(void *addr, int portno, u_long cmd, void *data,
+umodem_ioctl(void *addr, int portno, u_long cmd, caddr_t data,
     int flag, usb_proc_ptr p)
 {
 	struct umodem_softc *sc = addr;

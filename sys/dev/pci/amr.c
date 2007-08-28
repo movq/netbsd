@@ -1,4 +1,4 @@
-/*	$NetBSD: amr.c,v 1.45 2007/07/09 21:00:52 ad Exp $	*/
+/*	$NetBSD: amr.c,v 1.42.2.1 2006/12/04 18:34:15 tron Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amr.c,v 1.45 2007/07/09 21:00:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amr.c,v 1.42.2.1 2006/12/04 18:34:15 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -110,6 +110,7 @@ static int	amr_print(void *, const char *);
 static void	amr_shutdown(void *);
 static void	amr_teardown(struct amr_softc *);
 static void	amr_thread(void *);
+static void	amr_thread_create(void *);
 
 static int	amr_quartz_get_work(struct amr_softc *,
 				    struct amr_mailbox_resp *);
@@ -366,7 +367,7 @@ amr_attach(struct device *parent, struct device *self, void *aux)
 	amr->amr_flags |= AMRF_DMA_ALLOC;
 
 	if ((rv = bus_dmamem_map(amr->amr_dmat, &amr->amr_dmaseg, rseg, size,
-	    (void **)&amr->amr_mbox,
+	    (caddr_t *)&amr->amr_mbox,
 	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
 		aprint_error("%s: unable to map buffer, rv = %d\n",
 		    amr->amr_dv.dv_xname, rv);
@@ -397,7 +398,7 @@ amr_attach(struct device *parent, struct device *self, void *aux)
 
 	amr->amr_mbox_paddr = amr->amr_dmamap->dm_segs[0].ds_addr;
 	amr->amr_sgls_paddr = (amr->amr_mbox_paddr + 0x1fff) & ~0x1fff;
-	amr->amr_sgls = (struct amr_sgentry *)((char *)amr->amr_mbox +
+	amr->amr_sgls = (struct amr_sgentry *)((caddr_t)amr->amr_mbox +
 	    amr->amr_sgls_paddr - amr->amr_dmamap->dm_segs[0].ds_addr);
 
 	/*
@@ -490,15 +491,8 @@ amr_attach(struct device *parent, struct device *self, void *aux)
 	SIMPLEQ_INIT(&amr->amr_ccb_queue);
 
 	/* XXX This doesn't work for newer boards yet. */
-	if ((apt->apt_flags & AT_QUARTZ) == 0) {
-		rv = kthread_create(PRI_NONE, 0, NULL, amr_thread, amr,
-		    &amr->amr_thread, "%s", amr->amr_dv.dv_xname);
- 		if (rv != 0)
-			aprint_error("%s: unable to create thread (%d)",
- 			    amr->amr_dv.dv_xname, rv);
- 		else
- 			amr->amr_flags |= AMRF_THREAD;
-	}
+	if ((apt->apt_flags & AT_QUARTZ) == 0)
+		kthread_create(amr_thread_create, amr);
 }
 
 /*
@@ -529,7 +523,7 @@ amr_teardown(struct amr_softc *amr)
 	if ((fl & AMRF_DMA_LOAD) != 0)
 		bus_dmamap_unload(amr->amr_dmat, amr->amr_dmamap);
 	if ((fl & AMRF_DMA_MAP) != 0)
-		bus_dmamem_unmap(amr->amr_dmat, (void *)amr->amr_mbox,
+		bus_dmamem_unmap(amr->amr_dmat, (caddr_t)amr->amr_mbox,
 		    amr->amr_dmasize);
 	if ((fl & AMRF_DMA_ALLOC) != 0)
 		bus_dmamem_free(amr->amr_dmat, &amr->amr_dmaseg, 1);
@@ -819,6 +813,32 @@ amr_intr(void *cookie)
 }
 
 /*
+ * Create the watchdog thread.
+ */
+static void
+amr_thread_create(void *cookie)
+{
+	struct amr_softc *amr;
+	int rv;
+
+	amr = cookie;
+
+	if ((amr->amr_flags & AMRF_THREAD_EXIT) != 0) {
+		amr->amr_flags ^= AMRF_THREAD_EXIT;
+		wakeup(&amr->amr_flags);
+		return;
+	}
+
+	rv = kthread_create1(amr_thread, amr, &amr->amr_thread, "%s",
+	    amr->amr_dv.dv_xname);
+ 	if (rv != 0)
+		aprint_error("%s: unable to create thread (%d)",
+ 		    amr->amr_dv.dv_xname, rv);
+ 	else
+ 		amr->amr_flags |= AMRF_THREAD;
+}
+
+/*
  * Watchdog thread.
  */
 static void
@@ -1057,7 +1077,7 @@ amr_ccb_map(struct amr_softc *amr, struct amr_ccb *ac, void *data, int size,
 		mb->mb_nsgelem = nsegs;
 		mb->mb_physaddr = htole32(amr->amr_sgls_paddr + sgloff);
 
-		sge = (struct amr_sgentry *)((char *)amr->amr_sgls + sgloff);
+		sge = (struct amr_sgentry *)((caddr_t)amr->amr_sgls + sgloff);
 		for (i = 0; i < nsegs; i++, sge++) {
 			sge->sge_addr = htole32(xfer->dm_segs[i].ds_addr);
 			sge->sge_count = htole32(xfer->dm_segs[i].ds_len);
@@ -1336,7 +1356,7 @@ amrclose(dev_t dev, int flag, int mode, struct lwp *l)
 }
 
 static int
-amrioctl(dev_t dev, u_long cmd, void *data, int flag,
+amrioctl(dev_t dev, u_long cmd, caddr_t data, int flag,
     struct lwp *l)
 {
 	struct amr_softc *amr;

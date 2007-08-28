@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_uuid.c,v 1.11 2007/08/26 23:07:16 dyoung Exp $	*/
+/*	$NetBSD: kern_uuid.c,v 1.8 2006/11/01 10:17:58 yamt Exp $	*/
 
 /*
  * Copyright (c) 2002 Marcel Moolenaar
@@ -29,18 +29,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_uuid.c,v 1.11 2007/08/26 23:07:16 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_uuid.c,v 1.8 2006/11/01 10:17:58 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/endian.h>
 #include <sys/kernel.h>
-#include <sys/mutex.h>
+#include <sys/lock.h>
 #include <sys/socket.h>
 #include <sys/systm.h>
 #include <sys/uuid.h>
 
 /* NetBSD */
 #include <sys/proc.h>
+#include <sys/sa.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 #include <sys/uio.h>
@@ -82,14 +83,7 @@ CTASSERT(sizeof(struct uuid_private) == 16);
 static struct uuid_private uuid_last;
 
 /* "UUID generator mutex lock" */
-static kmutex_t uuid_mutex;
-
-void
-uuid_init(void)
-{
-
-	mutex_init(&uuid_mutex, MUTEX_DEFAULT, IPL_NONE);
-}
+static struct simplelock uuid_mutex = SIMPLELOCK_INITIALIZER;
 
 /*
  * Return the first MAC address we encounter or, if none was found,
@@ -117,7 +111,7 @@ uuid_node(uint16_t *node)
 			if (sdl != NULL && sdl->sdl_family == AF_LINK &&
 			    sdl->sdl_type == IFT_ETHER) {
 				/* Got a MAC address. */
-				memcpy(node, CLLADDR(sdl), UUID_NODE_LEN);
+				memcpy(node, LLADDR(sdl), UUID_NODE_LEN);
 				splx(s);
 				return;
 			}
@@ -160,7 +154,7 @@ uuid_generate(struct uuid_private *uuid, uint64_t *timep, int count)
 {
 	uint64_t xtime;
 
-	mutex_enter(&uuid_mutex);
+	simple_lock(&uuid_mutex);
 
 	uuid_node(uuid->node);
 	xtime = uuid_time();
@@ -178,7 +172,7 @@ uuid_generate(struct uuid_private *uuid, uint64_t *timep, int count)
 	uuid_last = *uuid;
 	uuid_last.time.ll = (xtime + count - 1) & ((1LL << 60) - 1LL);
 
-	mutex_exit(&uuid_mutex);
+	simple_unlock(&uuid_mutex);
 }
 
 int

@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_vnops.c,v 1.140 2007/07/22 19:16:05 pooka Exp $	*/
+/*	$NetBSD: vfs_vnops.c,v 1.129.2.1 2007/01/06 13:22:04 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_vnops.c,v 1.140 2007/07/22 19:16:05 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_vnops.c,v 1.129.2.1 2007/01/06 13:22:04 bouyer Exp $");
 
 #include "fs_union.h"
 #include "veriexec.h"
@@ -72,7 +72,9 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_vnops.c,v 1.140 2007/07/22 19:16:05 pooka Exp $"
 int (*vn_union_readdir_hook) (struct vnode **, struct file *, struct lwp *);
 #endif
 
+#if NVERIEXEC > 0
 #include <sys/verified_exec.h>
+#endif /* NVERIEXEC > 0 */
 
 static int vn_read(struct file *fp, off_t *offset, struct uio *uio,
 	    kauth_cred_t cred, int flags);
@@ -97,32 +99,36 @@ int
 vn_open(struct nameidata *ndp, int fmode, int cmode)
 {
 	struct vnode *vp;
+	struct mount *mp = NULL;	/* XXX: GCC */
 	struct lwp *l = ndp->ni_cnd.cn_lwp;
 	kauth_cred_t cred = l->l_cred;
 	struct vattr va;
 	int error;
-	char *path;
+	pathname_t pn = NULL;
 
-	ndp->ni_cnd.cn_flags &= TRYEMULROOT;
-
+restart:
 	if (fmode & O_CREAT) {
 		ndp->ni_cnd.cn_nameiop = CREATE;
-		ndp->ni_cnd.cn_flags |= LOCKPARENT | LOCKLEAF;
+		ndp->ni_cnd.cn_flags = LOCKPARENT | LOCKLEAF;
 		if ((fmode & O_EXCL) == 0 &&
 		    ((fmode & O_NOFOLLOW) == 0))
 			ndp->ni_cnd.cn_flags |= FOLLOW;
 	} else {
 		ndp->ni_cnd.cn_nameiop = LOOKUP;
-		ndp->ni_cnd.cn_flags |= LOCKLEAF;
+		ndp->ni_cnd.cn_flags = LOCKLEAF;
 		if ((fmode & O_NOFOLLOW) == 0)
 			ndp->ni_cnd.cn_flags |= FOLLOW;
 	}
-
-	VERIEXEC_PATH_GET(ndp->ni_dirp, ndp->ni_segflg, ndp->ni_dirp, path);
-
+#if NVERIEXEC > 0
+	error = pathname_get(ndp->ni_dirp, ndp->ni_segflg, &pn);
+	if (error)
+		goto bad2;
+	ndp->ni_dirp = pathname_path(pn);
+	ndp->ni_segflg = UIO_SYSSPACE;
+#endif /* NVERIEXEC > 0 */
 	error = namei(ndp);
 	if (error)
-		goto out;
+		goto bad2;
 
 	vp = ndp->ni_vp;
 
@@ -139,11 +145,20 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 			va.va_mode = cmode;
 			if (fmode & O_EXCL)
 				 va.va_vaflags |= VA_EXCLUSIVE;
+			if (vn_start_write(ndp->ni_dvp, &mp, V_NOWAIT) != 0) {
+				VOP_ABORTOP(ndp->ni_dvp, &ndp->ni_cnd);
+				vput(ndp->ni_dvp);
+				if ((error = vn_start_write(NULL, &mp,
+				    V_WAIT | V_SLEEPONLY | V_PCATCH)) != 0)
+					goto bad2;
+				goto restart;
+			}
 			VOP_LEASE(ndp->ni_dvp, l, cred, LEASE_WRITE);
 			error = VOP_CREATE(ndp->ni_dvp, &ndp->ni_vp,
 					   &ndp->ni_cnd, &va);
+			vn_finished_write(mp, 0);
 			if (error)
-				goto out;
+				goto bad2;
 			fmode &= ~O_TRUNC;
 			vp = ndp->ni_vp;
 		} else {
@@ -192,24 +207,36 @@ vn_open(struct nameidata *ndp, int fmode, int cmode)
 	if (fmode & O_TRUNC) {
 		VOP_UNLOCK(vp, 0);			/* XXX */
 
+		if ((error = vn_start_write(vp, &mp, V_WAIT | V_PCATCH)) != 0) {
+			vrele(vp);
+			goto bad2;
+		}
 		VOP_LEASE(vp, l, cred, LEASE_WRITE);
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);	/* XXX */
 		VATTR_NULL(&va);
 		va.va_size = 0;
 		error = VOP_SETATTR(vp, &va, cred, l);
+		vn_finished_write(mp, 0);
 		if (error != 0)
 			goto bad;
 	}
 	if ((error = VOP_OPEN(vp, fmode, cred, l)) != 0)
 		goto bad;
+	if (vp->v_type == VREG &&
+	    uvn_attach(vp, fmode & FWRITE ? VM_PROT_WRITE : 0) == NULL) {
+		error = EIO;
+		goto bad;
+	}
 	if (fmode & FWRITE)
 		vp->v_writecount++;
 
 bad:
 	if (error)
 		vput(vp);
-out:
-	VERIEXEC_PATH_PUT(path);
+
+bad2:
+	pathname_put(pn);
+
 	return (error);
 }
 
@@ -282,18 +309,23 @@ vn_close(struct vnode *vp, int flags, kauth_cred_t cred, struct lwp *l)
  * Package up an I/O request on a vnode into a uio and do it.
  */
 int
-vn_rdwr(enum uio_rw rw, struct vnode *vp, void *base, int len, off_t offset,
+vn_rdwr(enum uio_rw rw, struct vnode *vp, caddr_t base, int len, off_t offset,
     enum uio_seg segflg, int ioflg, kauth_cred_t cred, size_t *aresid,
     struct lwp *l)
 {
 	struct uio auio;
 	struct iovec aiov;
+	struct mount *mp = NULL;
 	int error;
 
 	if ((ioflg & IO_NODELOCKED) == 0) {
 		if (rw == UIO_READ) {
 			vn_lock(vp, LK_SHARED | LK_RETRY);
 		} else /* UIO_WRITE */ {
+			if (vp->v_type != VCHR &&
+			    (error = vn_start_write(vp, &mp, V_WAIT | V_PCATCH))
+			    != 0)
+				return (error);
 			vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 		}
 	}
@@ -320,6 +352,8 @@ vn_rdwr(enum uio_rw rw, struct vnode *vp, void *base, int len, off_t offset,
 		if (auio.uio_resid && error == 0)
 			error = EIO;
 	if ((ioflg & IO_NODELOCKED) == 0) {
+		if (rw == UIO_WRITE)
+			vn_finished_write(mp, 0);
 		VOP_UNLOCK(vp, 0);
 	}
 	return (error);
@@ -426,6 +460,7 @@ vn_write(struct file *fp, off_t *offset, struct uio *uio, kauth_cred_t cred,
     int flags)
 {
 	struct vnode *vp = (struct vnode *)fp->f_data;
+	struct mount *mp;
 	int count, error, ioflag = IO_UNIT;
 	struct lwp *l = curlwp;
 
@@ -442,6 +477,10 @@ vn_write(struct file *fp, off_t *offset, struct uio *uio, kauth_cred_t cred,
 		ioflag |= IO_ALTSEMANTICS;
 	if (fp->f_flag & FDIRECT)
 		ioflag |= IO_DIRECT;
+	mp = NULL;
+	if (vp->v_type != VCHR &&
+	    (error = vn_start_write(vp, &mp, V_WAIT | V_PCATCH)) != 0)
+		return (error);
 	VOP_LEASE(vp, l, cred, LEASE_WRITE);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	uio->uio_offset = *offset;
@@ -454,6 +493,7 @@ vn_write(struct file *fp, off_t *offset, struct uio *uio, kauth_cred_t cred,
 			*offset += count - uio->uio_resid;
 	}
 	VOP_UNLOCK(vp, 0);
+	vn_finished_write(mp, 0);
 	return (error);
 }
 
@@ -545,7 +585,7 @@ vn_fcntl(struct file *fp, u_int com, void *data, struct lwp *l)
 static int
 vn_ioctl(struct file *fp, u_long com, void *data, struct lwp *l)
 {
-	struct vnode *vp = ((struct vnode *)fp->f_data), *ovp;
+	struct vnode *vp = ((struct vnode *)fp->f_data);
 	struct proc *p = l->l_proc;
 	struct vattr vattr;
 	int error;
@@ -597,13 +637,10 @@ vn_ioctl(struct file *fp, u_long com, void *data, struct lwp *l)
 		error = VOP_IOCTL(vp, com, data, fp->f_flag,
 		    l->l_cred, l);
 		if (error == 0 && com == TIOCSCTTY) {
-			VREF(vp);
-			mutex_enter(&proclist_lock);
-			ovp = p->p_session->s_ttyvp;
+			if (p->p_session->s_ttyvp)
+				vrele(p->p_session->s_ttyvp);
 			p->p_session->s_ttyvp = vp;
-			mutex_exit(&proclist_lock);
-			if (ovp != NULL)
-				vrele(ovp);
+			VREF(vp);
 		}
 		return (error);
 
@@ -813,6 +850,7 @@ vn_extattr_set(struct vnode *vp, int ioflg, int attrnamespace,
 {
 	struct uio auio;
 	struct iovec aiov;
+	struct mount *mp = NULL;	/* XXX: GCC */
 	int error;
 
 	aiov.iov_len = buflen;
@@ -826,12 +864,15 @@ vn_extattr_set(struct vnode *vp, int ioflg, int attrnamespace,
 	UIO_SETUP_SYSSPACE(&auio);
 
 	if ((ioflg & IO_NODELOCKED) == 0) {
+		if ((error = vn_start_write(vp, &mp, V_WAIT)) != 0)
+			return (error);
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	}
 
 	error = VOP_SETEXTATTR(vp, attrnamespace, attrname, &auio, NULL, l);
 
 	if ((ioflg & IO_NODELOCKED) == 0) {
+		vn_finished_write(mp, 0);
 		VOP_UNLOCK(vp, 0);
 	}
 
@@ -842,9 +883,12 @@ int
 vn_extattr_rm(struct vnode *vp, int ioflg, int attrnamespace,
     const char *attrname, struct lwp *l)
 {
+	struct mount *mp = NULL;	/* XXX: GCC */
 	int error;
 
 	if ((ioflg & IO_NODELOCKED) == 0) {
+		if ((error = vn_start_write(vp, &mp, V_WAIT)) != 0)
+			return (error);
 		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	}
 
@@ -854,10 +898,101 @@ vn_extattr_rm(struct vnode *vp, int ioflg, int attrnamespace,
 		    NULL, l);
 
 	if ((ioflg & IO_NODELOCKED) == 0) {
+		vn_finished_write(mp, 0);
 		VOP_UNLOCK(vp, 0);
 	}
 
 	return (error);
+}
+
+/*
+ * Preparing to start a filesystem write operation. If the operation is
+ * permitted, then we bump the count of operations in progress and
+ * proceed. If a suspend request is in progress, we wait until the
+ * suspension is over, and then proceed.
+ * V_PCATCH    adds PCATCH to the tsleep flags.
+ * V_WAIT      waits until suspension is over. Otherwise returns EWOULDBLOCK.
+ * V_SLEEPONLY wait, but do not bump the operations count.
+ * V_LOWER     this is a lower level operation. No further vnodes should be
+ *             locked. Otherwise it is a upper level operation. No vnodes
+ *             should be locked.
+ */
+int
+vn_start_write(struct vnode *vp, struct mount **mpp, int flags)
+{
+	struct mount *mp;
+	int error, mask, prio;
+
+	/*
+	 * If a vnode is provided, get and return the mount point that
+	 * to which it will write.
+	 */
+	if (vp != NULL) {
+		*mpp = vp->v_mount;
+	}
+	if ((mp = *mpp) == NULL)
+		return (0);
+	mp = mp->mnt_leaf;
+	/*
+	 * Check on status of suspension.
+	 */
+	prio = PUSER - 1;
+	if (flags & V_PCATCH)
+		prio |= PCATCH;
+
+	if ((flags & V_LOWER) == 0)
+		mask = IMNT_SUSPEND;
+	else
+		mask = IMNT_SUSPENDLOW;
+
+	while ((mp->mnt_iflag & mask) != 0) {
+		if ((flags & V_WAIT) == 0)
+			return (EWOULDBLOCK);
+		error = tsleep(&mp->mnt_flag, prio, "suspfs", 0);
+		if (error)
+			return (error);
+	}
+	if (flags & V_SLEEPONLY)
+		return (0);
+	simple_lock(&mp->mnt_slock);
+	if ((flags & V_LOWER) == 0)
+		mp->mnt_writeopcountupper++;
+	else
+		mp->mnt_writeopcountlower++;
+	simple_unlock(&mp->mnt_slock);
+	return (0);
+}
+
+/*
+ * Filesystem write operation has completed. If we are suspending and this
+ * operation is the last one, notify the suspender that the suspension is
+ * now in effect.
+ */
+void
+vn_finished_write(struct mount *mp, int flags)
+{
+	if (mp == NULL)
+		return;
+	mp = mp->mnt_leaf;
+	simple_lock(&mp->mnt_slock);
+	if ((flags & V_LOWER) == 0) {
+		mp->mnt_writeopcountupper--;
+		if (mp->mnt_writeopcountupper < 0)
+			printf("vn_finished_write: neg cnt upper=%d\n",
+			       mp->mnt_writeopcountupper);
+		if ((mp->mnt_iflag & IMNT_SUSPEND) != 0 &&
+		    mp->mnt_writeopcountupper <= 0)
+			wakeup(&mp->mnt_writeopcountupper);
+	} else {
+		mp->mnt_writeopcountlower--;
+		if (mp->mnt_writeopcountlower < 0)
+			printf("vn_finished_write: neg cnt lower=%d\n",
+			       mp->mnt_writeopcountlower);
+		if ((mp->mnt_iflag & IMNT_SUSPENDLOW) != 0 &&
+		    mp->mnt_writeopcountupper <= 0)
+			wakeup(&mp->mnt_writeopcountlower);
+	}
+	simple_unlock(&mp->mnt_slock);
 }
 
 void

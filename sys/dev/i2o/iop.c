@@ -1,7 +1,7 @@
-/*	$NetBSD: iop.c,v 1.66 2007/07/09 21:00:33 ad Exp $	*/
+/*	$NetBSD: iop.c,v 1.61.2.1 2006/12/04 18:34:16 tron Exp $	*/
 
 /*-
- * Copyright (c) 2000, 2001, 2002, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000, 2001, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -41,8 +41,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iop.c,v 1.66 2007/07/09 21:00:33 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iop.c,v 1.61.2.1 2006/12/04 18:34:16 tron Exp $");
 
+#include "opt_i2o.h"
 #include "iop.h"
 
 #include <sys/param.h>
@@ -85,6 +86,14 @@ do {						\
 #define	DPRINTF(x)
 #endif
 
+#ifdef I2OVERBOSE
+#define IFVERBOSE(x)	x
+#define	COMMENT(x)	NULL
+#else
+#define	IFVERBOSE(x)
+#define	COMMENT(x)
+#endif
+
 #define IOP_ICTXHASH_NBUCKETS	16
 #define	IOP_ICTXHASH(ictx)	(&iop_ictxhashtbl[(ictx) & iop_ictxhash])
 
@@ -116,80 +125,83 @@ const struct cdevsw iop_cdevsw = {
 static struct iop_class {
 	u_short	ic_class;
 	u_short	ic_flags;
-	const char *ic_caption;
+#ifdef I2OVERBOSE
+	const char	*ic_caption;
+#endif
 } const iop_class[] = {
 	{
 		I2O_CLASS_EXECUTIVE,
 		0,
-		"executive"
+		IFVERBOSE("executive")
 	},
 	{
 		I2O_CLASS_DDM,
 		0,
-		"device driver module"
+		COMMENT("device driver module")
 	},
 	{
 		I2O_CLASS_RANDOM_BLOCK_STORAGE,
 		IC_CONFIGURE | IC_PRIORITY,
-		"random block storage"
+		IFVERBOSE("random block storage")
 	},
 	{
 		I2O_CLASS_SEQUENTIAL_STORAGE,
 		IC_CONFIGURE | IC_PRIORITY,
-		"sequential storage"
+		IFVERBOSE("sequential storage")
 	},
 	{
 		I2O_CLASS_LAN,
 		IC_CONFIGURE | IC_PRIORITY,
-		"LAN port"
+		IFVERBOSE("LAN port")
 	},
 	{
 		I2O_CLASS_WAN,
 		IC_CONFIGURE | IC_PRIORITY,
-		"WAN port"
+		IFVERBOSE("WAN port")
 	},
 	{
 		I2O_CLASS_FIBRE_CHANNEL_PORT,
 		IC_CONFIGURE,
-		"fibrechannel port"
+		IFVERBOSE("fibrechannel port")
 	},
 	{
 		I2O_CLASS_FIBRE_CHANNEL_PERIPHERAL,
 		0,
-		"fibrechannel peripheral"
+		COMMENT("fibrechannel peripheral")
 	},
  	{
  		I2O_CLASS_SCSI_PERIPHERAL,
  		0,
- 		"SCSI peripheral"
+ 		COMMENT("SCSI peripheral")
  	},
 	{
 		I2O_CLASS_ATE_PORT,
 		IC_CONFIGURE,
-		"ATE port"
+		IFVERBOSE("ATE port")
 	},
 	{
 		I2O_CLASS_ATE_PERIPHERAL,
 		0,
-		"ATE peripheral"
+		COMMENT("ATE peripheral")
 	},
 	{
 		I2O_CLASS_FLOPPY_CONTROLLER,
 		IC_CONFIGURE,
-		"floppy controller"
+		IFVERBOSE("floppy controller")
 	},
 	{
 		I2O_CLASS_FLOPPY_DEVICE,
 		0,
-		"floppy device"
+		COMMENT("floppy device")
 	},
 	{
 		I2O_CLASS_BUS_ADAPTER_PORT,
 		IC_CONFIGURE,
-		"bus adapter port"
+		IFVERBOSE("bus adapter port" )
 	},
 };
 
+#if defined(I2ODEBUG) && defined(I2OVERBOSE)
 static const char * const iop_status[] = {
 	"success",
 	"abort (dirty)",
@@ -204,6 +216,7 @@ static const char * const iop_status[] = {
 	"process abort (partial transfer)",
 	"transaction error",
 };
+#endif
 
 static inline u_int32_t	iop_inl(struct iop_softc *, int);
 static inline void	iop_outl(struct iop_softc *, int, u_int32_t);
@@ -218,6 +231,7 @@ static int	iop_print(void *, const char *);
 static void	iop_shutdown(void *);
 
 static void	iop_adjqparam(struct iop_softc *, int);
+static void	iop_create_reconf_thread(void *);
 static int	iop_handle_reply(struct iop_softc *, u_int32_t);
 static int	iop_hrt_get(struct iop_softc *);
 static int	iop_hrt_get0(struct iop_softc *, struct i2o_hrt *, int);
@@ -291,10 +305,6 @@ iop_init(struct iop_softc *sc, const char *intrstr)
 
 	printf("I2O adapter");
 
-	mutex_init(&sc->sc_intrlock, MUTEX_DRIVER, IPL_VM);
-	mutex_init(&sc->sc_conflock, MUTEX_DRIVER, IPL_NONE);
-	cv_init(&sc->sc_confcv, "iopconf");
-
 	if (iop_ictxhashtbl == NULL)
 		iop_ictxhashtbl = hashinit(IOP_ICTXHASH_NBUCKETS, HASH_LIST,
 		    M_DEVBUF, M_NOWAIT, &iop_ictxhash);
@@ -337,9 +347,6 @@ iop_init(struct iop_softc *sc, const char *intrstr)
 	/* So that our debug checks don't choke. */
 	sc->sc_framesize = 128;
 #endif
-
-	/* Avoid syncing the reply map until it's set up. */
-	sc->sc_curib = 0x123;
 
 	/* Reset the adapter and request status. */
  	if ((rv = iop_reset(sc)) != 0) {
@@ -414,7 +421,6 @@ iop_init(struct iop_softc *sc, const char *intrstr)
 
 		im->im_tctx = i;
 		SLIST_INSERT_HEAD(&sc->sc_im_freelist, im, im_chain);
-		cv_init(&im->im_cv, "iopmsg");
 	}
 
 	/* Initialise the IOP's outbound FIFO. */
@@ -449,6 +455,7 @@ iop_init(struct iop_softc *sc, const char *intrstr)
 	    sc->sc_maxob, le32toh(sc->sc_status.maxoutboundmframes));
 #endif
 
+	lockinit(&sc->sc_conflock, PRIBIO, "iopconf", hz * 30, 0);
 	return;
 
  bail_out3:
@@ -481,15 +488,12 @@ iop_config_interrupts(struct device *self)
 	int locs[IOPCF_NLOCS];
 
 	sc = device_private(self);
-	mutex_enter(&sc->sc_conflock);
-
 	LIST_INIT(&sc->sc_iilist);
 
 	printf("%s: configuring...\n", sc->sc_dv.dv_xname);
 
 	if (iop_hrt_get(sc) != 0) {
 		printf("%s: unable to retrieve HRT\n", sc->sc_dv.dv_xname);
-		mutex_exit(&sc->sc_conflock);
 		return;
 	}
 
@@ -510,10 +514,8 @@ iop_config_interrupts(struct device *self)
 			}
 			niop++;
 		}
-		if (niop == 0) {
-			mutex_exit(&sc->sc_conflock);
+		if (niop == 0)
 			return;
-		}
 
 		i = sizeof(struct i2o_systab_entry) * (niop - 1) +
 		    sizeof(struct i2o_systab);
@@ -548,12 +550,10 @@ iop_config_interrupts(struct device *self)
 	 */
 	if (iop_systab_set(sc) != 0) {
 		printf("%s: unable to set system table\n", sc->sc_dv.dv_xname);
-		mutex_exit(&sc->sc_conflock);
 		return;
 	}
 	if (iop_sys_enable(sc) != 0) {
 		printf("%s: unable to enable system\n", sc->sc_dv.dv_xname);
-		mutex_exit(&sc->sc_conflock);
 		return;
 	}
 
@@ -581,7 +581,6 @@ iop_config_interrupts(struct device *self)
 	    I2O_EVENT_GEN_GENERAL_WARNING);
 	if (rv != 0) {
 		printf("%s: unable to register for events", sc->sc_dv.dv_xname);
-		mutex_exit(&sc->sc_conflock);
 		return;
 	}
 
@@ -597,14 +596,31 @@ iop_config_interrupts(struct device *self)
 	/*
 	 * Start device configuration.
 	 */
-	if ((rv = iop_reconfigure(sc, 0)) == -1)
+	lockmgr(&sc->sc_conflock, LK_EXCLUSIVE, NULL);
+	if ((rv = iop_reconfigure(sc, 0)) == -1) {
 		printf("%s: configure failed (%d)\n", sc->sc_dv.dv_xname, rv);
+		return;
+	}
+	lockmgr(&sc->sc_conflock, LK_RELEASE, NULL);
 
+	kthread_create(iop_create_reconf_thread, sc);
+}
 
+/*
+ * Create the reconfiguration thread.  Called after the standard kernel
+ * threads have been created.
+ */
+static void
+iop_create_reconf_thread(void *cookie)
+{
+	struct iop_softc *sc;
+	int rv;
+
+	sc = cookie;
 	sc->sc_flags |= IOP_ONLINE;
-	rv = kthread_create(PRI_NONE, 0, NULL, iop_reconf_thread, sc,
-	    &sc->sc_reconf_thread, "%s", sc->sc_dv.dv_xname);
-	mutex_exit(&sc->sc_conflock);
+
+	rv = kthread_create1(iop_reconf_thread, sc, &sc->sc_reconf_proc,
+ 	    "%s", sc->sc_dv.dv_xname);
  	if (rv != 0) {
 		printf("%s: unable to create reconfiguration thread (%d)",
  		    sc->sc_dv.dv_xname, rv);
@@ -633,18 +649,21 @@ iop_reconf_thread(void *cookie)
 		DPRINTF(("%s: async reconfig: requested 0x%08x\n",
 		    sc->sc_dv.dv_xname, chgind));
 
+		PHOLD(l);
 		rv = iop_lct_get0(sc, &lct, sizeof(lct), chgind);
+		PRELE(l);
 
 		DPRINTF(("%s: async reconfig: notified (0x%08x, %d)\n",
 		    sc->sc_dv.dv_xname, le32toh(lct.changeindicator), rv));
 
-		mutex_enter(&sc->sc_conflock);
-		if (rv == 0) {
+		if (rv == 0 &&
+		    lockmgr(&sc->sc_conflock, LK_EXCLUSIVE, NULL) == 0) {
 			iop_reconfigure(sc, le32toh(lct.changeindicator));
 			chgind = sc->sc_chgind + 1;
+			lockmgr(&sc->sc_conflock, LK_RELEASE, NULL);
 		}
-		(void)cv_timedwait(&sc->sc_confcv, &sc->sc_conflock, hz * 5);
-		mutex_exit(&sc->sc_conflock);
+
+		tsleep(iop_reconf_thread, PWAIT, "iopzzz", hz * 5);
 	}
 }
 
@@ -659,8 +678,6 @@ iop_reconfigure(struct iop_softc *sc, u_int chgind)
 	struct i2o_lct_entry *le;
 	struct iop_initiator *ii, *nextii;
 	int rv, tid, i;
-
-	KASSERT(mutex_owned(&sc->sc_conflock));
 
 	/*
 	 * If the reconfiguration request isn't the result of LCT change
@@ -851,6 +868,7 @@ iop_adjqparam(struct iop_softc *sc, int mpi)
 static void
 iop_devinfo(int class, char *devinfo, size_t l)
 {
+#ifdef I2OVERBOSE
 	int i;
 
 	for (i = 0; i < sizeof(iop_class) / sizeof(iop_class[0]); i++)
@@ -861,6 +879,10 @@ iop_devinfo(int class, char *devinfo, size_t l)
 		snprintf(devinfo, l, "device (class 0x%x)", class);
 	else
 		strlcpy(devinfo, iop_class[i].ic_caption, l);
+#else
+
+	snprintf(devinfo, l, "device (class 0x%x)", class);
+#endif
 }
 
 static int
@@ -953,7 +975,7 @@ iop_status_get(struct iop_softc *sc, int nosleep)
 		if (nosleep)
 			DELAY(100*1000);
 		else
-			kpause("iopstat", false, hz / 10, NULL);
+			tsleep(iop_status_get, PWAIT, "iopstat", hz / 10);
 	}
 
 	if (st->syncbyte != 0xff) {
@@ -1054,9 +1076,6 @@ iop_ofifo_init(struct iop_softc *sc)
 		}
 
 		sc->sc_rep_phys = sc->sc_rep_dmamap->dm_segs[0].ds_addr;
-
-		/* Now safe to sync the reply map. */
-		sc->sc_curib = 0;
 	}
 
 	/* Populate the outbound FIFO. */
@@ -1102,9 +1121,9 @@ iop_hrt_get(struct iop_softc *sc)
 	struct i2o_hrt hrthdr, *hrt;
 	int size, rv;
 
-	uvm_lwp_hold(curlwp);
+	PHOLD(curlwp);
 	rv = iop_hrt_get0(sc, &hrthdr, sizeof(hrthdr));
-	uvm_lwp_rele(curlwp);
+	PRELE(curlwp);
 	if (rv != 0)
 		return (rv);
 
@@ -1278,7 +1297,7 @@ iop_field_get_all(struct iop_softc *sc, int tid, int group, void *buf,
 	pgop->oat.group = htole16(group);
 
 	if (ii == NULL)
-		uvm_lwp_hold(curlwp);
+		PHOLD(curlwp);
 
 	memset(buf, 0, size);
 	iop_msg_map(sc, im, mb, pgop, sizeof(*pgop), 1, NULL);
@@ -1286,7 +1305,7 @@ iop_field_get_all(struct iop_softc *sc, int tid, int group, void *buf,
 	rv = iop_msg_post(sc, im, mb, (ii == NULL ? 30000 : 0));
 
 	if (ii == NULL)
-		uvm_lwp_rele(curlwp);
+		PRELE(curlwp);
 
 	/* Detect errors; let partial transfers to count as success. */
 	if (ii == NULL && rv == 0) {
@@ -1386,7 +1405,7 @@ iop_table_clear(struct iop_softc *sc, int tid, int group)
 	pgop.oat.group = htole16(group);
 	pgop.oat.fields[0] = htole16(0);
 
-	uvm_lwp_hold(curlwp);
+	PHOLD(curlwp);
 	iop_msg_map(sc, im, mb, &pgop, sizeof(pgop), 1, NULL);
 	rv = iop_msg_post(sc, im, mb, 30000);
 	if (rv != 0)
@@ -1394,7 +1413,7 @@ iop_table_clear(struct iop_softc *sc, int tid, int group)
 		    sc->sc_dv.dv_xname, tid, group);
 
 	iop_msg_unmap(sc, im);
-	uvm_lwp_rele(curlwp);
+	PRELE(curlwp);
 	iop_msg_free(sc, im);
 	return (rv);
 }
@@ -1525,14 +1544,14 @@ iop_systab_set(struct iop_softc *sc)
 		}
 	}
 
-	uvm_lwp_hold(curlwp);
+	PHOLD(curlwp);
 	iop_msg_map(sc, im, mb, iop_systab, iop_systab_size, 1, NULL);
 	iop_msg_map(sc, im, mb, mema, sizeof(mema), 1, NULL);
 	iop_msg_map(sc, im, mb, ioa, sizeof(ioa), 1, NULL);
 	rv = iop_msg_post(sc, im, mb, 5000);
 	iop_msg_unmap(sc, im);
 	iop_msg_free(sc, im);
-	uvm_lwp_rele(curlwp);
+	PRELE(curlwp);
 	return (rv);
 }
 
@@ -1597,6 +1616,7 @@ void
 iop_initiator_register(struct iop_softc *sc, struct iop_initiator *ii)
 {
 	static int ictxgen;
+	int s;
 
 	/* 0 is reserved (by us) for system messages. */
 	ii->ii_ictx = ++ictxgen;
@@ -1612,11 +1632,9 @@ iop_initiator_register(struct iop_softc *sc, struct iop_initiator *ii)
 	} else
 		sc->sc_nuii++;
 
-	cv_init(&ii->ii_cv, "iopevt");
-
-	mutex_spin_enter(&sc->sc_intrlock);
+	s = splbio();
 	LIST_INSERT_HEAD(IOP_ICTXHASH(ii->ii_ictx), ii, ii_hash);
-	mutex_spin_exit(&sc->sc_intrlock);
+	splx(s);
 }
 
 /*
@@ -1626,6 +1644,7 @@ iop_initiator_register(struct iop_softc *sc, struct iop_initiator *ii)
 void
 iop_initiator_unregister(struct iop_softc *sc, struct iop_initiator *ii)
 {
+	int s;
 
 	if ((ii->ii_flags & II_UTILITY) == 0) {
 		LIST_REMOVE(ii, ii_list);
@@ -1633,11 +1652,9 @@ iop_initiator_unregister(struct iop_softc *sc, struct iop_initiator *ii)
 	} else
 		sc->sc_nuii--;
 
-	mutex_spin_enter(&sc->sc_intrlock);
+	s = splbio();
 	LIST_REMOVE(ii, ii_hash);
-	mutex_spin_exit(&sc->sc_intrlock);
-
-	cv_destroy(&ii->ii_cv);
+	splx(s);
 }
 
 /*
@@ -1652,10 +1669,8 @@ iop_handle_reply(struct iop_softc *sc, u_int32_t rmfa)
 	struct iop_initiator *ii;
 	u_int off, ictx, tctx, status, size;
 
-	KASSERT(mutex_owned(&sc->sc_intrlock));
-
 	off = (int)(rmfa - sc->sc_rep_phys);
-	rb = (struct i2o_reply *)((char *)sc->sc_rep + off);
+	rb = (struct i2o_reply *)(sc->sc_rep + off);
 
 	/* Perform reply queue DMA synchronisation. */
 	bus_dmamap_sync(sc->sc_dmat, sc->sc_rep_dmamap, off,
@@ -1758,13 +1773,10 @@ iop_handle_reply(struct iop_softc *sc, u_int32_t rmfa)
 
 		/* Notify the initiator. */
 		if ((im->im_flags & IM_WAIT) != 0)
-			cv_broadcast(&im->im_cv);
+			wakeup(im);
 		else if ((im->im_flags & (IM_POLL | IM_POLL_INTR)) != IM_POLL) {
-			if (ii != NULL) {
-				mutex_spin_exit(&sc->sc_intrlock);
+			if (ii)
 				(*ii->ii_intr)(ii->ii_dv, im, rb);
-				mutex_spin_enter(&sc->sc_intrlock);
-			}
 		}
 	} else {
 		/*
@@ -1772,11 +1784,8 @@ iop_handle_reply(struct iop_softc *sc, u_int32_t rmfa)
 		 *
 		 * Simply pass the reply frame to the initiator.
 		 */
-		if (ii != NULL) {
-			mutex_spin_exit(&sc->sc_intrlock);
+		if (ii)
 			(*ii->ii_intr)(ii->ii_dv, NULL, rb);
-			mutex_spin_enter(&sc->sc_intrlock);
-		}
 	}
 
 	return (status);
@@ -1793,12 +1802,8 @@ iop_intr(void *arg)
 
 	sc = arg;
 
-	mutex_spin_enter(&sc->sc_intrlock);
-
-	if ((iop_inl(sc, IOP_REG_INTR_STATUS) & IOP_INTR_OFIFO) == 0) {
-		mutex_spin_exit(&sc->sc_intrlock);
+	if ((iop_inl(sc, IOP_REG_INTR_STATUS) & IOP_INTR_OFIFO) == 0)
 		return (0);
-	}
 
 	for (;;) {
 		/* Double read to account for IOP bug. */
@@ -1811,7 +1816,6 @@ iop_intr(void *arg)
 		iop_outl(sc, IOP_REG_OFIFO, rmfa);
 	}
 
-	mutex_spin_exit(&sc->sc_intrlock);
 	return (1);
 }
 
@@ -1841,21 +1845,21 @@ iop_msg_alloc(struct iop_softc *sc, int flags)
 {
 	struct iop_msg *im;
 	static u_int tctxgen;
-	int i;
+	int s, i;
 
 #ifdef I2ODEBUG
 	if ((flags & IM_SYSMASK) != 0)
 		panic("iop_msg_alloc: system flags specified");
 #endif
 
-	mutex_spin_enter(&sc->sc_intrlock);
+	s = splbio();
 	im = SLIST_FIRST(&sc->sc_im_freelist);
 #if defined(DIAGNOSTIC) || defined(I2ODEBUG)
 	if (im == NULL)
 		panic("iop_msg_alloc: no free wrappers");
 #endif
 	SLIST_REMOVE_HEAD(&sc->sc_im_freelist, im_chain);
-	mutex_spin_exit(&sc->sc_intrlock);
+	splx(s);
 
 	im->im_tctx = (im->im_tctx & IOP_TCTX_MASK) | tctxgen;
 	tctxgen += (1 << IOP_TCTX_SHIFT);
@@ -1875,6 +1879,7 @@ iop_msg_alloc(struct iop_softc *sc, int flags)
 void
 iop_msg_free(struct iop_softc *sc, struct iop_msg *im)
 {
+	int s;
 
 #ifdef I2ODEBUG
 	if ((im->im_flags & IM_ALLOCED) == 0)
@@ -1882,9 +1887,9 @@ iop_msg_free(struct iop_softc *sc, struct iop_msg *im)
 #endif
 
 	im->im_flags = 0;
-	mutex_spin_enter(&sc->sc_intrlock);
+	s = splbio();
 	SLIST_INSERT_HEAD(&sc->sc_im_freelist, im, im_chain);
-	mutex_spin_exit(&sc->sc_intrlock);
+	splx(s);
 }
 
 /*
@@ -2122,18 +2127,19 @@ int
 iop_post(struct iop_softc *sc, u_int32_t *mb)
 {
 	u_int32_t mfa;
+	int s;
 
 #ifdef I2ODEBUG
 	if ((mb[0] >> 16) > (sc->sc_framesize >> 2))
 		panic("iop_post: frame too large");
 #endif
 
-	mutex_spin_enter(&sc->sc_intrlock);
+	s = splbio();
 
 	/* Allocate a slot with the IOP. */
 	if ((mfa = iop_inl(sc, IOP_REG_IFIFO)) == IOP_MFA_EMPTY)
 		if ((mfa = iop_inl(sc, IOP_REG_IFIFO)) == IOP_MFA_EMPTY) {
-			mutex_spin_exit(&sc->sc_intrlock);
+			splx(s);
 			printf("%s: mfa not forthcoming\n",
 			    sc->sc_dv.dv_xname);
 			return (EAGAIN);
@@ -2153,7 +2159,7 @@ iop_post(struct iop_softc *sc, u_int32_t *mb)
 	/* Post the MFA back to the IOP. */
 	iop_outl(sc, IOP_REG_IFIFO, mfa);
 
-	mutex_spin_exit(&sc->sc_intrlock);
+	splx(s);
 	return (0);
 }
 
@@ -2164,7 +2170,7 @@ int
 iop_msg_post(struct iop_softc *sc, struct iop_msg *im, void *xmb, int timo)
 {
 	u_int32_t *mb;
-	int rv;
+	int rv, s;
 
 	mb = xmb;
 
@@ -2181,7 +2187,7 @@ iop_msg_post(struct iop_softc *sc, struct iop_msg *im, void *xmb, int timo)
 		else
 			iop_msg_wait(sc, im, timo);
 
-		mutex_spin_enter(&sc->sc_intrlock);
+		s = splbio();
 		if ((im->im_flags & IM_REPLIED) != 0) {
 			if ((im->im_flags & IM_NOSTATUS) != 0)
 				rv = 0;
@@ -2193,7 +2199,7 @@ iop_msg_post(struct iop_softc *sc, struct iop_msg *im, void *xmb, int timo)
 				rv = 0;
 		} else
 			rv = EBUSY;
-		mutex_spin_exit(&sc->sc_intrlock);
+		splx(s);
 	} else
 		rv = 0;
 
@@ -2207,9 +2213,11 @@ static void
 iop_msg_poll(struct iop_softc *sc, struct iop_msg *im, int timo)
 {
 	u_int32_t rmfa;
+	int s;
 
-	mutex_spin_enter(&sc->sc_intrlock);
+	s = splbio();
 
+	/* Wait for completion. */
 	for (timo *= 10; timo != 0; timo--) {
 		if ((iop_inl(sc, IOP_REG_INTR_STATUS) & IOP_INTR_OFIFO) != 0) {
 			/* Double read to account for IOP bug. */
@@ -2228,9 +2236,7 @@ iop_msg_poll(struct iop_softc *sc, struct iop_msg *im, int timo)
 		}
 		if ((im->im_flags & IM_REPLIED) != 0)
 			break;
-		mutex_spin_exit(&sc->sc_intrlock);
 		DELAY(100);
-		mutex_spin_enter(&sc->sc_intrlock);
 	}
 
 	if (timo == 0) {
@@ -2244,7 +2250,7 @@ iop_msg_poll(struct iop_softc *sc, struct iop_msg *im, int timo)
 #endif
 	}
 
-	mutex_spin_exit(&sc->sc_intrlock);
+	splx(s);
 }
 
 /*
@@ -2253,15 +2259,15 @@ iop_msg_poll(struct iop_softc *sc, struct iop_msg *im, int timo)
 static void
 iop_msg_wait(struct iop_softc *sc, struct iop_msg *im, int timo)
 {
-	int rv;
+	int s, rv;
 
-	mutex_spin_enter(&sc->sc_intrlock);
+	s = splbio();
 	if ((im->im_flags & IM_REPLIED) != 0) {
-		mutex_spin_exit(&sc->sc_intrlock);
+		splx(s);
 		return;
 	}
-	rv = cv_timedwait(&im->im_cv, &sc->sc_intrlock, mstohz(timo));
-	mutex_spin_exit(&sc->sc_intrlock);
+	rv = tsleep(im, PRIBIO, "iopmsg", mstohz(timo));
+	splx(s);
 
 #ifdef I2ODEBUG
 	if (rv != 0) {
@@ -2299,13 +2305,16 @@ static void
 iop_reply_print(struct iop_softc *sc, struct i2o_reply *rb)
 {
 	u_int function, detail;
+#ifdef I2OVERBOSE
 	const char *statusstr;
+#endif
 
 	function = (le32toh(rb->msgfunc) >> 24) & 0xff;
 	detail = le16toh(rb->detail);
 
 	printf("%s: reply:\n", sc->sc_dv.dv_xname);
 
+#ifdef I2OVERBOSE
 	if (rb->reqstatus < sizeof(iop_status) / sizeof(iop_status[0]))
 		statusstr = iop_status[rb->reqstatus];
 	else
@@ -2313,6 +2322,10 @@ iop_reply_print(struct iop_softc *sc, struct i2o_reply *rb)
 
 	printf("%s:   function=0x%02x status=0x%02x (%s)\n",
 	    sc->sc_dv.dv_xname, function, rb->reqstatus, statusstr);
+#else
+	printf("%s:   function=0x%02x status=0x%02x\n",
+	    sc->sc_dv.dv_xname, function, rb->reqstatus);
+#endif
 	printf("%s:   detail=0x%04x ictx=0x%08x tctx=0x%08x\n",
 	    sc->sc_dv.dv_xname, detail, le32toh(rb->msgictx),
 	    le32toh(rb->msgtctx));
@@ -2503,14 +2516,13 @@ iopclose(dev_t dev, int flag, int mode,
 }
 
 int
-iopioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+iopioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct iop_softc *sc;
 	struct iovec *iov;
 	int rv, i;
 
 	sc = device_lookup(&iop_cd, minor(dev));
-	rv = 0;
 
 	switch (cmd) {
 	case IOPIOCPT:
@@ -2544,7 +2556,8 @@ iopioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		return (ENOTTY);
 	}
 
-	mutex_enter(&sc->sc_conflock);
+	if ((rv = lockmgr(&sc->sc_conflock, LK_SHARED, NULL)) != 0)
+		return (rv);
 
 	switch (cmd) {
 	case IOPIOCGLCT:
@@ -2558,7 +2571,8 @@ iopioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		break;
 
 	case IOPIOCRECONFIG:
-		rv = iop_reconfigure(sc, 0);
+		if ((rv = lockmgr(&sc->sc_conflock, LK_UPGRADE, NULL)) == 0)
+			rv = iop_reconfigure(sc, 0);
 		break;
 
 	case IOPIOCGTIDMAP:
@@ -2572,7 +2586,7 @@ iopioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		break;
 	}
 
-	mutex_exit(&sc->sc_conflock);
+	lockmgr(&sc->sc_conflock, LK_RELEASE, NULL);
 	return (rv);
 }
 

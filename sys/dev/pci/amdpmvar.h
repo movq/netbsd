@@ -1,4 +1,4 @@
-/*	$NetBSD: amdpmvar.h,v 1.5 2007/08/27 15:57:13 xtraeme Exp $	*/
+/*	$NetBSD: amdpmvar.h,v 1.2 2006/04/30 18:46:18 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -39,24 +39,20 @@
 #ifndef _DEV_PCI_AMDPMVAR_H_
 #define _DEV_PCI_AMDPMVAR_H_
 
-#include <sys/rwlock.h>
+#include <sys/lock.h>
 
 struct amdpm_softc {
 	struct device sc_dev;
 
 	pci_chipset_tag_t sc_pc;
 	pcitag_t sc_tag;
-	struct pci_attach_args *sc_pa;
 
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;		/* PMxx space */
-	bus_space_handle_t sc_sm_ioh;		/* SM space */
 
 	i2c_addr_t sc_smbus_slaveaddr;		/* address of smbus slave */
 	struct i2c_controller sc_i2c;		/* i2c controller info */
-	krwlock_t sc_rwlock;
-
-	void *sc_ih;
+	struct lock sc_lock;
 
 	struct callout sc_rnd_ch;
 	rndsource_element_t sc_rnd_source;
@@ -65,8 +61,6 @@ struct amdpm_softc {
 	struct evcnt sc_rnd_miss;
 	struct evcnt sc_rnd_data[256];
 #endif
-
-	char sc_nforce;
 };
 
 #endif /* _DEV_PCI_AMDPMVAR_H_ */

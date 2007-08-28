@@ -1,4 +1,4 @@
-/*	$NetBSD: fusu.S,v 1.12 2007/03/04 05:59:37 christos Exp $	*/
+/*	$NetBSD: fusu.S,v 1.11 2005/12/11 12:16:41 christos Exp $	*/
 
 /*
  * Copyright (c) 1996-1998 Mark Brinicombe.
@@ -46,7 +46,7 @@
 #endif
 
 /*
- * fuword(void *uaddr);
+ * fuword(caddr_t uaddr);
  * Fetch an int from the user's address space.
  */
 
@@ -80,7 +80,7 @@ ENTRY(fuword)
 	mov	pc, lr
 
 /*
- * fusword(void *uaddr);
+ * fusword(caddr_t uaddr);
  * Fetch a short from the user's address space.
  */
 
@@ -118,7 +118,7 @@ ENTRY(fusword)
 	mov	pc, lr
 
 /*
- * fuswintr(void *uaddr);
+ * fuswintr(caddr_t uaddr);
  * Fetch a short from the user's address space.  Can be called during an
  * interrupt.
  */
@@ -174,7 +174,7 @@ _C_LABEL(block_userspace_access):
 	.text
 
 /*
- * fubyte(void *uaddr);
+ * fubyte(caddr_t uaddr);
  * Fetch a byte from the user's address space.
  */
 
@@ -247,7 +247,7 @@ fusupcbfaulttext:
 #endif
 
 /*
- * suword(void *uaddr, int x);
+ * suword(caddr_t uaddr, int x);
  * Store an int in the user's address space.
  */
 
@@ -280,7 +280,7 @@ ENTRY(suword)
 	mov	pc, lr
 
 /*
- * suswintr(void *uaddr, short x);
+ * suswintr(caddr_t uaddr, short x);
  * Store a short in the user's address space.  Can be called during an
  * interrupt.
  */
@@ -326,7 +326,7 @@ ENTRY(suswintr)
 	mov	pc, lr
 
 /*
- * susword(void *uaddr, short x);
+ * susword(caddr_t uaddr, short x);
  * Store a short in the user's address space.
  */
 
@@ -365,7 +365,7 @@ ENTRY(susword)
 	mov	pc, lr
 
 /*
- * subyte(void *uaddr, char x);
+ * subyte(caddr_t uaddr, char x);
  * Store a byte in the user's address space.
  */
 

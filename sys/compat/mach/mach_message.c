@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_message.c,v 1.52 2007/08/15 12:07:30 ad Exp $ */
+/*	$NetBSD: mach_message.c,v 1.49 2006/09/23 03:34:19 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2002-2003 The NetBSD Foundation, Inc.
@@ -37,8 +37,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_message.c,v 1.52 2007/08/15 12:07:30 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_message.c,v 1.49 2006/09/23 03:34:19 jmcneill Exp $");
 
+#include "opt_ktrace.h"
 #include "opt_compat_mach.h" /* For COMPAT_MACH in <sys/ktrace.h> */
 #include "opt_compat_darwin.h"
 
@@ -51,7 +52,9 @@ __KERNEL_RCSID(0, "$NetBSD: mach_message.c,v 1.52 2007/08/15 12:07:30 ad Exp $")
 #include <sys/queue.h>
 #include <sys/malloc.h>
 #include <sys/pool.h>
+#ifdef KTRACE
 #include <sys/ktrace.h>
+#endif
 
 #include <uvm/uvm_extern.h>
 #include <uvm/uvm_map.h>
@@ -185,9 +188,11 @@ mach_msg_send(l, msg, option, send_size)
 		goto out1;
 	}
 
+#ifdef KTRACE
 	/* Dump the Mach message */
-	ktrmmsg((char *)sm, send_size);
-
+	if (KTRPOINT(p, KTR_MMSG))
+		ktrmmsg(l, (char *)sm, send_size);
+#endif
 	/*
 	 * Handle rights in the message
 	 */
@@ -590,9 +595,11 @@ mach_msg_recv(l, urm, option, recv_size, timeout, mn)
 			ret = MACH_RCV_INVALID_DATA;
 			goto unlock;
 		}
-
+#ifdef KTRACE
 		/* Dump the Mach message */
-		ktrmmsg((char *)&sr, sizeof(sr));
+		if (KTRPOINT(p, KTR_MMSG))
+			ktrmmsg(l, (char *)&sr, sizeof(sr));
+#endif
 		goto unlock;
 	}
 
@@ -647,9 +654,11 @@ mach_msg_recv(l, urm, option, recv_size, timeout, mn)
 		ret = MACH_RCV_INVALID_DATA;
 		goto unlock;
 	}
-
+#ifdef KTRACE
 	/* Dump the Mach message */
-	ktrmmsg((char *)mm->mm_msg, mm->mm_size);
+	if (KTRPOINT(p, KTR_MMSG))
+		ktrmmsg(l, (char *)mm->mm_msg, mm->mm_size);
+#endif
 
 	free(mm->mm_msg, M_EMULDATA);
 	mach_message_put_shlocked(mm); /* decrease mp_count */
@@ -701,7 +710,7 @@ mach_get_target_task(l, mp)
 	switch (mp->mp_datatype) {
 	case MACH_MP_PROC:
 		tp = (struct proc *)mp->mp_data;
-		tl = proc_representative_lwp(tp, NULL, 1);
+		tl = proc_representative_lwp(tp);
 		break;
 
 	case MACH_MP_LWP:
@@ -975,10 +984,12 @@ mach_ool_copyin(l, uaddr, kaddr, size, flags)
 		return error;
 	}
 
+#ifdef KTRACE
 	if (size > PAGE_SIZE)
 		size = PAGE_SIZE;
-	if ((flags & MACH_OOL_TRACE))
-		ktrmool(kaddr, size, uaddr);
+	if ((flags & MACH_OOL_TRACE) && KTRPOINT(p, KTR_MOOL))
+		ktrmool(l, kaddr, size, uaddr);
+#endif
 
 	*kaddr = kbuf;
 	return 0;
@@ -1026,10 +1037,12 @@ mach_ool_copyout(l, kaddr, uaddr, size, flags)
 	if ((error = copyout_proc(p, kaddr, (void *)ubuf, size)) != 0)
 		goto out;
 
+#ifdef KTRACE
 	if (size > PAGE_SIZE)
 		size = PAGE_SIZE;
-	if ((flags & MACH_OOL_TRACE))
-		ktrmool(kaddr, size, (void *)ubuf);
+	if ((flags & MACH_OOL_TRACE) && KTRPOINT(p, KTR_MOOL))
+		ktrmool(l, kaddr, size, (void *)ubuf);
+#endif
 
 out:
 	if (flags & MACH_OOL_FREE)
@@ -1153,7 +1166,7 @@ void
 mach_message_init(void)
 {
 	pool_init(&mach_message_pool, sizeof (struct mach_message),
-	    0, 0, 0, "mach_message_pool", NULL, IPL_NONE);
+	    0, 0, 0, "mach_message_pool", NULL);
 	return;
 }
 

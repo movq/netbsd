@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus_machdep.c,v 1.21 2007/01/20 14:46:21 gdt Exp $	*/
+/*	$NetBSD: rbus_machdep.c,v 1.18.24.1 2007/03/28 20:27:09 jdc Exp $	*/
 
 /*
  * Copyright (c) 1999
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.21 2007/01/20 14:46:21 gdt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rbus_machdep.c,v 1.18.24.1 2007/03/28 20:27:09 jdc Exp $");
 
 #include "opt_pcibios.h"
 #include "opt_pcifixup.h"

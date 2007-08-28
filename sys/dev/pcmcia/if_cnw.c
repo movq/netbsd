@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cnw.c,v 1.41 2007/03/04 06:02:27 christos Exp $	*/
+/*	$NetBSD: if_cnw.c,v 1.38 2006/11/16 01:33:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -112,7 +112,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cnw.c,v 1.41 2007/03/04 06:02:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cnw.c,v 1.38 2006/11/16 01:33:20 christos Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -235,7 +235,7 @@ void cnw_transmit(struct cnw_softc *, struct mbuf *);
 struct mbuf *cnw_read(struct cnw_softc *);
 void cnw_recv(struct cnw_softc *);
 int cnw_intr(void *arg);
-int cnw_ioctl(struct ifnet *, u_long, void *);
+int cnw_ioctl(struct ifnet *, u_long, caddr_t);
 void cnw_watchdog(struct ifnet *);
 static int cnw_setdomain(struct cnw_softc *, int);
 static int cnw_setkey(struct cnw_softc *, int);
@@ -1026,33 +1026,13 @@ int
 cnw_ioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 {
 	struct cnw_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
 	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error = 0;
 	struct lwp *l = curlwp;	/*XXX*/
-
-	switch (cmd) {
-	case SIOCSIFADDR:
-	case SIOCSIFFLAGS:
-	case SIOCADDMULTI:
-	case SIOCDELMULTI:
-	case SIOCGCNWDOMAIN:
-	case SIOCGCNWSTATS:
-		break;
-	case SIOCSCNWDOMAIN:
-	case SIOCSCNWKEY:
-	case SIOCGCNWSTATUS:
-		error = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL);
-		if (error)
-			return (error);
-		break;
-	default:
-		return (EINVAL);
-	}
 
 	s = splnet();
 
@@ -1113,14 +1093,26 @@ cnw_ioctl(ifp, cmd, data)
 		break;
 
 	case SIOCSCNWDOMAIN:
+		error = kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, &l->l_acflag);
+		if (error)
+			break;
 		error = cnw_setdomain(sc, ifr->ifr_domain);
 		break;
 
 	case SIOCSCNWKEY:
+		error = kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, &l->l_acflag);
+		if (error)
+			break;
 		error = cnw_setkey(sc, ifr->ifr_key);
 		break;
 
 	case SIOCGCNWSTATUS:
+		error = kauth_authorize_generic(l->l_cred,
+		     KAUTH_GENERIC_ISSUSER, &l->l_acflag);
+		if (error)
+			break;
 		if ((ifp->if_flags & IFF_RUNNING) == 0)
 			break;
 		bus_space_read_region_1(sc->sc_memt, sc->sc_memh,

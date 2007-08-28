@@ -1,4 +1,4 @@
-/*	$NetBSD: omap_mputmr.c,v 1.1 2007/01/06 00:29:52 christos Exp $	*/
+/*	$NetBSD: omap_mputmr.c,v 1.1.6.2 2007/02/21 18:27:17 snj Exp $	*/
 
 /*
  * Based on i80321_timer.c and arch/arm/sa11x0/sa11x0_ost.c
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap_mputmr.c,v 1.1 2007/01/06 00:29:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap_mputmr.c,v 1.1.6.2 2007/02/21 18:27:17 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc.h,v 1.38 2007/03/04 05:59:58 christos Exp $	*/
+/*	$NetBSD: cpufunc.h,v 1.33 2006/08/26 20:08:07 ad Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -49,15 +49,11 @@
 #include <machine/segments.h>
 #include <machine/specialreg.h>
 
-#ifdef _KERNEL
-void	x86_pause(void);
-#else
 static __inline void
 x86_pause(void)
 {
 	__asm volatile("pause");
 }
-#endif
 
 /*
  * XXX it's better to use real lfence insn if available.
@@ -86,9 +82,6 @@ x86_mfence(void)
 }
 
 #ifdef _KERNEL
-
-void	x86_flush(void);
-void	x86_patch(void);
 
 extern unsigned int cpu_feature;
 
@@ -209,11 +202,11 @@ tlbflushg(void)
 
 
 #ifdef notyet
-void	setidt(int idx, /*XXX*/void *func, int typ, int dpl);
+void	setidt(int idx, /*XXX*/caddr_t func, int typ, int dpl);
 #endif
 
 /* debug register */
-void dr0(void *, uint32_t, uint32_t, uint32_t);
+void dr0(caddr_t, uint32_t, uint32_t, uint32_t);
 
 static __inline u_int
 rdr6(void)
@@ -273,32 +266,6 @@ static __inline void
 wrmsr(u_int msr, uint64_t newval)
 {
 	__asm volatile("wrmsr" : : "A" (newval), "c" (msr));
-}
-
-/* 
- * Some of the undocumented AMD64 MSRs need a 'passcode' to access.
- *
- * See LinuxBIOSv2: src/cpu/amd/model_fxx/model_fxx_init.c
- */
-
-#define	OPTERON_MSR_PASSCODE	0x9c5a203a
- 
-static __inline u_int64_t
-rdmsr_locked(u_int msr, u_int code)
-{
-	uint64_t rv;
-	__asm volatile("rdmsr"
-	    : "=A" (rv)
-	    : "c" (msr), "D" (code));
-	return (rv);
-}
-
-static __inline void
-wrmsr_locked(u_int msr, u_int code, u_int64_t newval)
-{
-	__asm volatile("wrmsr"
-	    :
-	    : "A" (newval), "c" (msr), "D" (code));
 }
 
 static __inline void

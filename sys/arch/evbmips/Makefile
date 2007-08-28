@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2007/06/24 01:03:35 dyoung Exp $
+#	$NetBSD: Makefile,v 1.3 2006/08/06 17:21:58 dyoung Exp $
 
 # Makefile for evbmips tags file and boot blocks
 
@@ -18,9 +18,7 @@ DEVBMIPS= evbmips include isa pci
 .include "../../kern/Make.tags.inc"
 
 tags:
-	-rm -f ${TEVBMIPS}
-	-echo ${SEVBMIPS} ${SMIPS} | xargs ctags -wadtf ${TEVBMIPS}
-	-${FINDCOMM} | xargs ctags -wadtf ${TEVBMIPS}
+	-echo ${SEVBMIPS} ${SMIPS} ${COMM} | xargs ctags -wadtf ${TEVBMIPS}
 	egrep "^LEAF(.*)|^[AN]LEAF(.*)|^NON_LEAF(.*)" ${AEVBMIPS} ${AMIPS} | \
 	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
 	    >> ${TEVBMIPS}

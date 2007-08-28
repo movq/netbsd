@@ -1,4 +1,4 @@
-/*	$NetBSD: in_pcb.c,v 1.119 2007/08/21 08:34:33 dyoung Exp $	*/
+/*	$NetBSD: in_pcb.c,v 1.109 2006/11/16 01:33:45 christos Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.119 2007/08/21 08:34:33 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.109 2006/11/16 01:33:45 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -158,8 +158,7 @@ int	anonportmax = IPPORT_ANONMAX;
 int	lowportmin  = IPPORT_RESERVEDMIN;
 int	lowportmax  = IPPORT_RESERVEDMAX;
 
-POOL_INIT(inpcb_pool, sizeof(struct inpcb), 0, 0, 0, "inpcbpl", NULL,
-    IPL_NET);
+POOL_INIT(inpcb_pool, sizeof(struct inpcb), 0, 0, 0, "inpcbpl", NULL);
 
 void
 in_pcbinit(struct inpcbtable *table, int bindhashsize, int connecthashsize)
@@ -191,7 +190,7 @@ in_pcballoc(struct socket *so, void *v)
 	splx(s);
 	if (inp == NULL)
 		return (ENOBUFS);
-	bzero((void *)inp, sizeof(*inp));
+	bzero((caddr_t)inp, sizeof(*inp));
 	inp->inp_af = AF_INET;
 	inp->inp_table = table;
 	inp->inp_socket = so;
@@ -496,7 +495,8 @@ in_pcbdetach(void *v)
 	sofree(so);
 	if (inp->inp_options)
 		(void)m_free(inp->inp_options);
-	rtcache_free(&inp->inp_route);
+	if (inp->inp_route.ro_rt)
+		rtfree(inp->inp_route.ro_rt);
 	ip_freemoptions(inp->inp_moptions);
 	s = splnet();
 	in_pcbstate(inp, INP_ATTACHED);
@@ -515,9 +515,13 @@ in_setsockaddr(struct inpcb *inp, struct mbuf *nam)
 	if (inp->inp_af != AF_INET)
 		return;
 
+	nam->m_len = sizeof (*sin);
 	sin = mtod(nam, struct sockaddr_in *);
-	sockaddr_in_init(sin, &inp->inp_laddr, inp->inp_lport);
-	nam->m_len = sin->sin_len;
+	bzero((caddr_t)sin, sizeof (*sin));
+	sin->sin_family = AF_INET;
+	sin->sin_len = sizeof(*sin);
+	sin->sin_port = inp->inp_lport;
+	sin->sin_addr = inp->inp_laddr;
 }
 
 void
@@ -528,9 +532,13 @@ in_setpeeraddr(struct inpcb *inp, struct mbuf *nam)
 	if (inp->inp_af != AF_INET)
 		return;
 
+	nam->m_len = sizeof (*sin);
 	sin = mtod(nam, struct sockaddr_in *);
-	sockaddr_in_init(sin, &inp->inp_faddr, inp->inp_fport);
-	nam->m_len = sin->sin_len;
+	bzero((caddr_t)sin, sizeof (*sin));
+	sin->sin_family = AF_INET;
+	sin->sin_len = sizeof(*sin);
+	sin->sin_port = inp->inp_fport;
+	sin->sin_addr = inp->inp_faddr;
 }
 
 /*
@@ -666,27 +674,29 @@ in_losing(struct inpcb *inp)
 	if (inp->inp_af != AF_INET)
 		return;
 
-	if ((rt = inp->inp_route.ro_rt) != NULL) {
-		memset(&info, 0, sizeof(info));
-		info.rti_info[RTAX_DST] = rtcache_getdst(&inp->inp_route);
+	if ((rt = inp->inp_route.ro_rt)) {
+		inp->inp_route.ro_rt = 0;
+		bzero((caddr_t)&info, sizeof(info));
+		info.rti_info[RTAX_DST] = &inp->inp_route.ro_dst;
 		info.rti_info[RTAX_GATEWAY] = rt->rt_gateway;
 		info.rti_info[RTAX_NETMASK] = rt_mask(rt);
 		rt_missmsg(RTM_LOSING, &info, rt->rt_flags, 0);
 		if (rt->rt_flags & RTF_DYNAMIC)
-			(void) rtrequest(RTM_DELETE, rt_getkey(rt),
+			(void) rtrequest(RTM_DELETE, rt_key(rt),
 				rt->rt_gateway, rt_mask(rt), rt->rt_flags,
-				NULL);
+				(struct rtentry **)0);
+		else
 		/*
 		 * A new route can be allocated
 		 * the next time output is attempted.
 		 */
-		rtcache_free(&inp->inp_route);
+			rtfree(rt);
 	}
 }
 
 /*
- * After a routing change, flush old routing.  A new route can be
- * allocated the next time output is attempted.
+ * After a routing change, flush old routing
+ * and allocate a (hopefully) better one.
  */
 void
 in_rtchange(struct inpcb *inp, int errno)
@@ -695,8 +705,14 @@ in_rtchange(struct inpcb *inp, int errno)
 	if (inp->inp_af != AF_INET)
 		return;
 
-	rtcache_free(&inp->inp_route);
-
+	if (inp->inp_route.ro_rt) {
+		rtfree(inp->inp_route.ro_rt);
+		inp->inp_route.ro_rt = 0;
+		/*
+		 * A new route can be allocated the next time
+		 * output is attempted.
+		 */
+	}
 	/* XXX SHOULD NOTIFY HIGHER-LEVEL PROTOCOLS */
 }
 
@@ -867,40 +883,57 @@ struct rtentry *
 in_pcbrtentry(struct inpcb *inp)
 {
 	struct route *ro;
-	union {
-		struct sockaddr		dst;
-		struct sockaddr_in	dst4;
-	} u;
 
 	if (inp->inp_af != AF_INET)
 		return (NULL);
 
 	ro = &inp->inp_route;
 
-	sockaddr_in_init(&u.dst4, &inp->inp_faddr, 0);
-	return rtcache_lookup(ro, &u.dst);
+	if (ro->ro_rt && ((ro->ro_rt->rt_flags & RTF_UP) == 0 ||
+	    !in_hosteq(satosin(&ro->ro_dst)->sin_addr, inp->inp_faddr))) {
+		RTFREE(ro->ro_rt);
+		ro->ro_rt = (struct rtentry *)NULL;
+	}
+	if (ro->ro_rt == (struct rtentry *)NULL &&
+	    !in_nullhost(inp->inp_faddr)) {
+		bzero(&ro->ro_dst, sizeof(struct sockaddr_in));
+		ro->ro_dst.sa_family = AF_INET;
+		ro->ro_dst.sa_len = sizeof(ro->ro_dst);
+		satosin(&ro->ro_dst)->sin_addr = inp->inp_faddr;
+		rtalloc(ro);
+	}
+	return (ro->ro_rt);
 }
 
 struct sockaddr_in *
 in_selectsrc(struct sockaddr_in *sin, struct route *ro,
     int soopts, struct ip_moptions *mopts, int *errorp)
 {
-	struct in_ifaddr *ia = NULL;
+	struct in_ifaddr *ia;
 
+	ia = (struct in_ifaddr *)0;
 	/*
-         * If route is known or can be allocated now, take the
-         * source address from the interface.  Otherwise, punt.
+	 * If route is known or can be allocated now,
+	 * our src addr is taken from the i/f, else punt.
+	 * Note that we should check the address family of the cached
+	 * destination, in case of sharing the cache with IPv6.
 	 */
-	if ((soopts & SO_DONTROUTE) != 0)
-		rtcache_free(ro);
-	else {
-		union {
-			struct sockaddr		dst;
-			struct sockaddr_in	dst4;
-		} u;
-
-		sockaddr_in_init(&u.dst4, &sin->sin_addr, 0);
-		(void)rtcache_lookup(ro, &u.dst);
+	if (ro->ro_rt &&
+	    (ro->ro_dst.sa_family != AF_INET ||
+	    !in_hosteq(satosin(&ro->ro_dst)->sin_addr, sin->sin_addr) ||
+	    soopts & SO_DONTROUTE)) {
+		RTFREE(ro->ro_rt);
+		ro->ro_rt = (struct rtentry *)0;
+	}
+	if ((soopts & SO_DONTROUTE) == 0 && /*XXX*/
+	    (ro->ro_rt == (struct rtentry *)0 ||
+	     ro->ro_rt->rt_ifp == (struct ifnet *)0)) {
+		/* No route yet, so try to acquire one */
+		bzero(&ro->ro_dst, sizeof(struct sockaddr_in));
+		ro->ro_dst.sa_family = AF_INET;
+		ro->ro_dst.sa_len = sizeof(struct sockaddr_in);
+		satosin(&ro->ro_dst)->sin_addr = sin->sin_addr;
+		rtalloc(ro);
 	}
 	/*
 	 * If we found a route, use the address
@@ -910,7 +943,7 @@ in_selectsrc(struct sockaddr_in *sin, struct route *ro,
 	 *
 	 * XXX Is this still true?  Do we care?
 	 */
-	if (ro->ro_rt != NULL && !(ro->ro_rt->rt_ifp->if_flags & IFF_LOOPBACK))
+	if (ro->ro_rt && !(ro->ro_rt->rt_ifp->if_flags & IFF_LOOPBACK))
 		ia = ifatoia(ro->ro_rt->rt_ifa);
 	if (ia == NULL) {
 		u_int16_t fport = sin->sin_port;
@@ -918,7 +951,7 @@ in_selectsrc(struct sockaddr_in *sin, struct route *ro,
 		sin->sin_port = 0;
 		ia = ifatoia(ifa_ifwithladdr(sintosa(sin)));
 		sin->sin_port = fport;
-		if (ia == NULL) {
+		if (ia == 0) {
 			/* Find 1st non-loopback AF_INET address */
 			TAILQ_FOREACH(ia, &in_ifaddrhead, ia_list) {
 				if (!(ia->ia_ifp->if_flags & IFF_LOOPBACK))

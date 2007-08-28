@@ -70,7 +70,7 @@
 #define USE_RADIX
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_encap.c,v 1.31 2007/06/13 04:55:25 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_encap.c,v 1.28 2006/05/28 11:07:04 liamjfoy Exp $");
 
 #include "opt_mrouting.h"
 #include "opt_inet.h"
@@ -235,7 +235,7 @@ encap4_lookup(struct mbuf *m, int off, int proto, enum direction dir)
 	matchprio = 0;
 
 #ifdef USE_RADIX
-	rn = rnh->rnh_matchaddr((void *)&pack, rnh);
+	rn = rnh->rnh_matchaddr((caddr_t)&pack, rnh);
 	if (rn && (rn->rn_flags & RNF_ROOT) == 0) {
 		match = (struct encaptab *)rn;
 		matchprio = mask_matchlen(match->srcmask) +
@@ -243,7 +243,7 @@ encap4_lookup(struct mbuf *m, int off, int proto, enum direction dir)
 	}
 #endif
 
-	LIST_FOREACH(ep, &encaptab, chain) {
+	for (ep = LIST_FIRST(&encaptab); ep; ep = LIST_NEXT(ep, chain)) {
 		if (ep->af != AF_INET)
 			continue;
 		if (ep->proto >= 0 && ep->proto != proto)
@@ -359,7 +359,7 @@ encap6_lookup(struct mbuf *m, int off, int proto, enum direction dir)
 	matchprio = 0;
 
 #ifdef USE_RADIX
-	rn = rnh->rnh_matchaddr((void *)&pack, rnh);
+	rn = rnh->rnh_matchaddr((caddr_t)&pack, rnh);
 	if (rn && (rn->rn_flags & RNF_ROOT) == 0) {
 		match = (struct encaptab *)rn;
 		matchprio = mask_matchlen(match->srcmask) +
@@ -367,7 +367,7 @@ encap6_lookup(struct mbuf *m, int off, int proto, enum direction dir)
 	}
 #endif
 
-	LIST_FOREACH(ep, &encaptab, chain) {
+	for (ep = LIST_FIRST(&encaptab); ep; ep = LIST_NEXT(ep, chain)) {
 		if (ep->af != AF_INET6)
 			continue;
 		if (ep->proto >= 0 && ep->proto != proto)
@@ -434,8 +434,8 @@ encap_add(struct encaptab *ep)
 	LIST_INSERT_HEAD(&encaptab, ep, chain);
 #ifdef USE_RADIX
 	if (!ep->func && rnh) {
-		if (!rnh->rnh_addaddr((void *)ep->addrpack,
-		    (void *)ep->maskpack, rnh, ep->nodes)) {
+		if (!rnh->rnh_addaddr((caddr_t)ep->addrpack,
+		    (caddr_t)ep->maskpack, rnh, ep->nodes)) {
 			error = EEXIST;
 			goto fail;
 		}
@@ -459,8 +459,8 @@ encap_remove(struct encaptab *ep)
 	LIST_REMOVE(ep, chain);
 #ifdef USE_RADIX
 	if (!ep->func && rnh) {
-		if (!rnh->rnh_deladdr((void *)ep->addrpack,
-		    (void *)ep->maskpack, rnh))
+		if (!rnh->rnh_deladdr((caddr_t)ep->addrpack,
+		    (caddr_t)ep->maskpack, rnh))
 			error = ESRCH;
 	}
 #endif
@@ -529,7 +529,7 @@ encap_attach(int af, int proto,
 		goto fail;
 
 	/* check if anyone have already attached with exactly same config */
-	LIST_FOREACH(ep, &encaptab, chain) {
+	for (ep = LIST_FIRST(&encaptab); ep; ep = LIST_NEXT(ep, chain)) {
 		if (ep->af != af)
 			continue;
 		if (ep->proto != proto)
@@ -685,7 +685,7 @@ fail:
 
 #ifdef INET6
 void
-encap6_ctlinput(int cmd, const struct sockaddr *sa, void *d0)
+encap6_ctlinput(int cmd, struct sockaddr *sa, void *d0)
 {
 	void *d = d0;
 	struct ip6_hdr *ip6;
@@ -744,7 +744,7 @@ encap6_ctlinput(int cmd, const struct sockaddr *sa, void *d0)
 	}
 
 	/* inform all listeners */
-	LIST_FOREACH(ep, &encaptab, chain) {
+	for (ep = LIST_FIRST(&encaptab); ep; ep = LIST_NEXT(ep, chain)) {
 		if (ep->af != AF_INET6)
 			continue;
 		if (ep->proto >= 0 && ep->proto != nxt)
@@ -769,7 +769,7 @@ encap_detach(const struct encaptab *cookie)
 	struct encaptab *p;
 	int error;
 
-	LIST_FOREACH(p, &encaptab, chain) {
+	for (p = LIST_FIRST(&encaptab); p; p = LIST_NEXT(p, chain)) {
 		if (p == ep) {
 			error = encap_remove(p);
 			if (error)

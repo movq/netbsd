@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.83 2007/08/15 12:07:25 ad Exp $	*/
+/*	$NetBSD: trap.c,v 1.80 2006/07/23 22:06:06 ad Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -77,10 +77,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.83 2007/08/15 12:07:25 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.80 2006/07/23 22:06:06 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
+#include "opt_ktrace.h"
 #include "opt_ns381.h"
 
 #include <sys/param.h>
@@ -91,8 +92,12 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.83 2007/08/15 12:07:25 ad Exp $");
 #include <sys/kernel.h>
 #include <sys/signal.h>
 #include <sys/pool.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/kauth.h>
+#ifdef KTRACE
 #include <sys/ktrace.h>
+#endif
 #include <sys/syscall.h>
 #ifdef KGDB
 #include <sys/kgdb.h>
@@ -384,9 +389,14 @@ trap(struct trapframe frame)
 		 */
 		if (type == T_ABT && va >= KERNBASE)
 			map = kernel_map;
-		else
+		else {
 			map = &vm->vm_map;
-
+			if (l->l_flag & L_SA) {
+				l->l_savp->savp_faultaddr =
+				    (vaddr_t)frame.tf_tear;
+				l->l_flag |= L_SA_PAGEFAULT;
+			}
+		}
 		if ((frame.tf_msr & MSR_DDT) == DDT_WRITE ||
 		    (frame.tf_msr & MSR_STT) == STT_RMW)
 			ftype = VM_PROT_WRITE;
@@ -403,11 +413,12 @@ trap(struct trapframe frame)
 		/* Fault the original page in. */
 		rv = uvm_fault(map, va, ftype);
 		if (rv == 0) {
-			if (map != kernel_map && (void *)va >= vm->vm_maxsaddr)
+			if (map != kernel_map && (caddr_t)va >= vm->vm_maxsaddr)
 				uvm_grow(p, va);
 
 			if (type == T_ABT)
 				return;
+			l->l_flag &= ~L_SA_PAGEFAULT;
 			goto out;
 		}
 
@@ -436,6 +447,7 @@ trap(struct trapframe frame)
 		ksi.ksi_code = sig == SIGKILL ? SI_NOINFO : SEGV_MAPERR;
 		ksi.ksi_addr = (void *)frame.tf_tear;
 		(*p->p_emul->e_trapsignal)(l, &ksi);
+		l->l_flag &= ~L_SA_PAGEFAULT;
 		break;
 	}
 
@@ -483,7 +495,10 @@ child_return(void *arg)
 	l->l_md.md_regs->r_psr &= ~PSL_C;
 
 	userret(l, l->l_md.md_regs->r_pc, 0);
-	ktrsysret(SYS_fork, 0, 0);
+#ifdef KTRACE
+	if (KTRPOINT(l->l_proc, KTR_SYSRET))
+		ktrsysret(l, SYS_fork, 0, 0);
+#endif
 }
 
 /*
@@ -506,6 +521,17 @@ startlwp(void *arg)
 		printf("Error %d from cpu_setmcontext.", error);
 #endif
 	pool_put(&lwp_uc_pool, uc);
+
+	userret(l, l->l_md.md_regs->r_pc, p->p_sticks);
+}
+
+/*
+ * XXX This is a terrible name.
+ */
+void
+upcallret(struct lwp *l)
+{
+	struct proc *p = l->l_proc;
 
 	userret(l, l->l_md.md_regs->r_pc, p->p_sticks);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: iso_snpac.c,v 1.45 2007/08/10 23:55:54 dyoung Exp $	*/
+/*	$NetBSD: iso_snpac.c,v 1.40 2006/11/16 01:33:51 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iso_snpac.c,v 1.45 2007/08/10 23:55:54 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iso_snpac.c,v 1.40 2006/11/16 01:33:51 christos Exp $");
 
 #include "opt_iso.h"
 #ifdef ISO
@@ -133,7 +133,7 @@ static struct sockaddr_iso
 	   Bcopy(r, &a.siso_addr, 1 + (r)->isoa_len);}
 #define S(x) ((struct sockaddr *)&(x))
 
-static const struct sockaddr_dl blank_dl = {
+static struct sockaddr_dl blank_dl = {
 	.sdl_len = sizeof(blank_dl),
 	.sdl_family = AF_LINK,
 };
@@ -208,8 +208,8 @@ llc_rtrequest(int req, struct rtentry *rt, struct rt_addrinfo *info)
 			 */
 			if (rt->rt_flags & RTF_CLONING) {
 				iso_setmcasts(ifp, req);
-				rt_setgate(rt,
-				    (const struct sockaddr *)&blank_dl);
+				rt_setgate(rt, rt_key(rt),
+					   (struct sockaddr *) & blank_dl);
 				return;
 			}
 			if (lc != 0)
@@ -225,7 +225,7 @@ llc_rtrequest(int req, struct rtentry *rt, struct rt_addrinfo *info)
 				break;
 			}
 			R_Malloc(lc, struct llinfo_llc *, sizeof(*lc));
-			rt->rt_llinfo = (void *) lc;
+			rt->rt_llinfo = (caddr_t) lc;
 			if (lc == 0) {
 				log(LOG_DEBUG, "llc_rtrequest: malloc failed\n");
 				break;
@@ -279,11 +279,11 @@ iso_setmcasts(struct ifnet *ifp, int req)
 	for (cpp = addrlist; *cpp; cpp++) {
 		(void)memcpy(ifr.ifr_addr.sa_data, *cpp, 6);
 		if (req == RTM_ADD && (ifp->if_ioctl == 0 ||
-		    (*ifp->if_ioctl)(ifp, SIOCADDMULTI, (void *)&ifr) != 0))
+		    (*ifp->if_ioctl)(ifp, SIOCADDMULTI, (caddr_t)&ifr) != 0))
 			printf("iso_setmcasts: %s unable to add mcast\n",
 			    ifp->if_xname);
 		else if (req == RTM_DELETE && (ifp->if_ioctl == 0 ||
-		    (*ifp->if_ioctl)(ifp, SIOCDELMULTI, (void *)&ifr) != 0))
+		    (*ifp->if_ioctl)(ifp, SIOCDELMULTI, (caddr_t)&ifr) != 0))
 			printf("iso_setmcasts: %s unable to delete mcast\n",
 			    ifp->if_xname);
 	}
@@ -314,8 +314,8 @@ iso_setmcasts(struct ifnet *ifp, int req)
 int
 iso_snparesolve(
 	struct ifnet   *ifp,		/* outgoing interface */
-	const struct sockaddr_iso *dest,	/* destination */
-	void *        snpa,		/* RESULT: snpa to be used */
+	struct sockaddr_iso *dest,	/* destination */
+	caddr_t         snpa,		/* RESULT: snpa to be used */
 	int            *snpa_len)	/* RESULT: length of snpa */
 {
 	struct llinfo_llc *sc;	/* ptr to snpa table entry */
@@ -344,8 +344,9 @@ iso_snparesolve(
 	} else if (iso_systype != SNPA_IS && known_is != 0 &&
 		   (sc = (struct llinfo_llc *) known_is->rt_llinfo) &&
 		   (sc->lc_flags & SNPA_VALID)) {
-		const struct sockaddr_dl *sdl = satocsdl(known_is->rt_gateway);
-		found_snpa = CLLADDR(sdl);
+		struct sockaddr_dl *sdl =
+		(struct sockaddr_dl *) (known_is->rt_gateway);
+		found_snpa = LLADDR(sdl);
 		addrlen = sdl->sdl_alen;
 	} else if (ifp->if_flags & IFF_BROADCAST) {
 		/*
@@ -390,8 +391,8 @@ snpac_free(
 	if (rt && (rt->rt_flags & RTF_UP) &&
 	    (rt->rt_flags & (RTF_DYNAMIC | RTF_MODIFIED))) {
 		RTFREE(rt);
-		rtrequest(RTM_DELETE, rt_getkey(rt), rt->rt_gateway,
-		    rt_mask(rt), rt->rt_flags, NULL);
+		rtrequest(RTM_DELETE, rt_key(rt), rt->rt_gateway, rt_mask(rt),
+			  rt->rt_flags, (struct rtentry **) 0);
 		RTFREE(rt);
 	}
 }
@@ -411,7 +412,7 @@ int
 snpac_add(
 	struct ifnet   *ifp,		/* interface info is related to */
 	struct iso_addr *nsap,		/* nsap to add */
-	void *        snpa,		/* translation */
+	caddr_t         snpa,		/* translation */
 	int             type,		/* SNPA_IS or SNPA_ES */
 	u_short         ht,		/* holding time (in seconds) */
 	int             nsellength)	/* nsaps may differ only in trailing
@@ -458,7 +459,7 @@ add:
 		rt = mrt;
 		rt->rt_refcnt--;
 	} else {
-		struct sockaddr_dl *sdl = satosdl(rt->rt_gateway);
+		struct sockaddr_dl *sdl = (struct sockaddr_dl *) rt->rt_gateway;
 		rt->rt_refcnt--;
 		if ((rt->rt_flags & RTF_LLINFO) == 0)
 			goto add;
@@ -531,7 +532,7 @@ int
 snpac_ioctl(
 	struct socket *so,
 	u_long cmd,		/* ioctl to process */
-	void *data,		/* data for the cmd */
+	caddr_t data,		/* data for the cmd */
 	struct lwp *l)
 {
 	struct systype_req *rq = (struct systype_req *) data;
@@ -548,7 +549,7 @@ snpac_ioctl(
 
 	if (cmd == SIOCSSTYPE) {
 		if (l == NULL || kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL))
+		    KAUTH_GENERIC_ISSUSER, &l->l_acflag))
 			return (EPERM);
 		if ((rq->sr_type & (SNPA_ES | SNPA_IS)) == (SNPA_ES | SNPA_IS))
 			return (EINVAL);
@@ -601,13 +602,13 @@ snpac_logdefis(struct rtentry *sc)
 	known_is = sc;
 	sc->rt_refcnt++;
 	rt = rtalloc1((struct sockaddr *) & zsi, 0);
-	if (rt == 0) {
-		rtrequest(RTM_ADD, sisotosa(&zsi), rt_getkey(sc),
-		    sisotosa(&zmk), RTF_DYNAMIC | RTF_GATEWAY, 0);
-	} else {
+	if (rt == 0)
+		rtrequest(RTM_ADD, sisotosa(&zsi), rt_key(sc), sisotosa(&zmk),
+			  RTF_DYNAMIC | RTF_GATEWAY, 0);
+	else {
 		if ((rt->rt_flags & RTF_DYNAMIC) &&
 		    (rt->rt_flags & RTF_GATEWAY) && rt_mask(rt)->sa_len == 0)
-			rt_setgate(rt, rt_getkey(sc));
+			rt_setgate(rt, rt_key(rt), rt_key(sc));
 	}
 }
 
@@ -667,7 +668,7 @@ snpac_age(void *v)
  *			real multicast addresses can be configured
  */
 int
-snpac_ownmulti(void *snpa, u_int len)
+snpac_ownmulti(caddr_t snpa, u_int len)
 {
 	return (((iso_systype & SNPA_ES) &&
 		 (!memcmp(snpa, all_es_snpa, len))) ||

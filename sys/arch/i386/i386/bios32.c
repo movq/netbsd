@@ -1,4 +1,4 @@
-/*	$NetBSD: bios32.c,v 1.14 2007/08/07 11:30:20 ad Exp $	*/
+/*	$NetBSD: bios32.c,v 1.11 2006/10/01 18:37:54 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -93,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bios32.c,v 1.14 2007/08/07 11:30:20 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bios32.c,v 1.11 2006/10/01 18:37:54 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -125,12 +125,12 @@ void
 bios32_init()
 {
 	paddr_t entry = 0;
-	char *p;
+	caddr_t p;
 	unsigned char cksum;
 	int i;
 
-	for (p = (char *)ISA_HOLE_VADDR(BIOS32_START);
-	     p < (char *)ISA_HOLE_VADDR(BIOS32_END);
+	for (p = (caddr_t)ISA_HOLE_VADDR(BIOS32_START);
+	     p < (caddr_t)ISA_HOLE_VADDR(BIOS32_END);
 	     p += 16) {
 		if (*(int *)p != BIOS32_MAKESIG('_', '3', '2', '_'))
 			continue;
@@ -146,7 +146,7 @@ bios32_init()
 
 		entry = *(uint32_t *)(p + 4);
 
-		aprint_verbose("BIOS32 rev. %d found at 0x%lx\n",
+		aprint_normal("BIOS32 rev. %d found at 0x%lx\n",
 		    *(p + 8), entry);
 
 		if (entry < BIOS32_START ||
@@ -159,13 +159,13 @@ bios32_init()
 	}
 
 	if (entry != 0) {
-		bios32_entry.offset = (void *)ISA_HOLE_VADDR(entry);
+		bios32_entry.offset = (caddr_t)ISA_HOLE_VADDR(entry);
 		bios32_entry.segment = GSEL(GCODE_SEL, SEL_KPL);
 	}
 #if NIPMI > 0
 	/* see if we have SMBIOS extentions */
 	for (p = ISA_HOLE_VADDR(SMBIOS_START);
-	    p < (char *)ISA_HOLE_VADDR(SMBIOS_END); p+= 16) {
+	    p < (caddr_t)ISA_HOLE_VADDR(SMBIOS_END); p+= 16) {
 		struct smbhdr * sh = (struct smbhdr *)p;
 		u_int8_t chksum;
 		vaddr_t eva;
@@ -209,7 +209,6 @@ bios32_init()
 
 		break;
 	}
-	pmap_update(pmap_kernel());
 #endif
 
 }
@@ -249,7 +248,7 @@ bios32_service(service, e, ei)
 		return (0);
 	}
 
-	e->offset = (void *)ISA_HOLE_VADDR(entry);
+	e->offset = (caddr_t)ISA_HOLE_VADDR(entry);
 	e->segment = GSEL(GCODE_SEL, SEL_KPL);
 
 	ei->bei_base = ebx;

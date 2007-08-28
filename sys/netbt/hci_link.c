@@ -1,4 +1,4 @@
-/*	$NetBSD: hci_link.c,v 1.12 2007/07/09 21:11:10 ad Exp $	*/
+/*	$NetBSD: hci_link.c,v 1.8.2.1 2007/07/19 16:04:18 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hci_link.c,v 1.12 2007/07/09 21:11:10 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hci_link.c,v 1.8.2.1 2007/07/19 16:04:18 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -72,8 +72,8 @@ hci_acl_open(struct hci_unit *unit, bdaddr_t *bdaddr)
 	hci_create_con_cp cp;
 	int err;
 
-	KASSERT(unit != NULL);
-	KASSERT(bdaddr != NULL);
+	KASSERT(unit);
+	KASSERT(bdaddr);
 
 	link = hci_link_lookup_bdaddr(unit, bdaddr, HCI_LINK_ACL);
 	if (link == NULL) {
@@ -151,7 +151,7 @@ void
 hci_acl_close(struct hci_link *link, int err)
 {
 
-	KASSERT(link != NULL);
+	KASSERT(link);
 
 	if (--link->hl_refcnt == 0) {
 		if (link->hl_state == HCI_LINK_CLOSED)
@@ -416,8 +416,8 @@ hci_acl_recv(struct mbuf *m, struct hci_unit *unit)
 	uint16_t handle, want;
 	int pb, got;
 
-	KASSERT(m != NULL);
-	KASSERT(unit != NULL);
+	KASSERT(m);
+	KASSERT(unit);
 
 	KASSERT(m->m_pkthdr.len >= sizeof(hdr));
 	m_copydata(m, 0, sizeof(hdr), &hdr);
@@ -531,8 +531,8 @@ hci_acl_send(struct mbuf *m, struct hci_link *link,
 	struct mbuf *n = NULL;
 	int plen, mlen, num = 0;
 
-	KASSERT(link != NULL);
-	KASSERT(m != NULL);
+	KASSERT(link);
+	KASSERT(m);
 	KASSERT(m->m_flags & M_PKTHDR);
 	KASSERT(m->m_pkthdr.len > 0);
 
@@ -582,6 +582,7 @@ hci_acl_send(struct mbuf *m, struct hci_link *link,
 
 nomem:
 	if (m) m_freem(m);
+	if (n) m_freem(n);
 	if (pdu) {
 		MBUFQ_DRAIN(&pdu->lp_data);
 		pool_put(&l2cap_pdu_pool, pdu);
@@ -610,10 +611,10 @@ hci_acl_start(struct hci_link *link)
 	struct mbuf *m;
 	uint16_t handle;
 
-	KASSERT(link != NULL);
+	KASSERT(link);
 
 	unit = link->hl_unit;
-	KASSERT(unit != NULL);
+	KASSERT(unit);
 
 	/* this is mainly to block ourselves (below) */
 	if (link->hl_state != HCI_LINK_OPEN)
@@ -821,8 +822,8 @@ hci_sco_recv(struct mbuf *m, struct hci_unit *unit)
 	hci_scodata_hdr_t hdr;
 	uint16_t handle;
 
-	KASSERT(m != NULL);
-	KASSERT(unit != NULL);
+	KASSERT(m);
+	KASSERT(unit);
 
 	KASSERT(m->m_pkthdr.len >= sizeof(hdr));
 	m_copydata(m, 0, sizeof(hdr), &hdr);
@@ -886,7 +887,7 @@ hci_link_alloc(struct hci_unit *unit)
 {
 	struct hci_link *link;
 
-	KASSERT(unit != NULL);
+	KASSERT(unit);
 
 	link = malloc(sizeof(struct hci_link), M_BLUETOOTH, M_NOWAIT | M_ZERO);
 	if (link == NULL)
@@ -896,7 +897,7 @@ hci_link_alloc(struct hci_unit *unit)
 	link->hl_state = HCI_LINK_CLOSED;
 
 	/* init ACL portion */
-	callout_init(&link->hl_expire, 0);
+	callout_init(&link->hl_expire);
 	callout_setfunc(&link->hl_expire, hci_acl_timeout, link);
 
 	TAILQ_INIT(&link->hl_txq);	/* outgoing packets */
@@ -920,7 +921,7 @@ hci_link_free(struct hci_link *link, int err)
 	struct l2cap_pdu *pdu;
 	struct l2cap_channel *chan, *next;
 
-	KASSERT(link != NULL);
+	KASSERT(link);
 
 	DPRINTF("#%d, type = %d, state = %d, refcnt = %d\n",
 		link->hl_handle, link->hl_type,
@@ -1004,8 +1005,8 @@ hci_link_lookup_bdaddr(struct hci_unit *unit, bdaddr_t *bdaddr, uint16_t type)
 {
 	struct hci_link *link;
 
-	KASSERT(unit != NULL);
-	KASSERT(bdaddr != NULL);
+	KASSERT(unit);
+	KASSERT(bdaddr);
 
 	TAILQ_FOREACH(link, &unit->hci_links, hl_next) {
 		if (link->hl_type != type)
@@ -1026,7 +1027,7 @@ hci_link_lookup_handle(struct hci_unit *unit, uint16_t handle)
 {
 	struct hci_link *link;
 
-	KASSERT(unit != NULL);
+	KASSERT(unit);
 
 	TAILQ_FOREACH(link, &unit->hci_links, hl_next) {
 		if (handle == link->hl_handle)

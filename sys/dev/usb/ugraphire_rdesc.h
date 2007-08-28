@@ -1,4 +1,4 @@
-/*	$NetBSD: ugraphire_rdesc.h,v 1.6 2007/01/22 19:48:57 ghen Exp $	*/
+/*	$NetBSD: ugraphire_rdesc.h,v 1.4.24.2 2007/01/23 18:39:55 tron Exp $	*/
 /*
  * Copyright (c) 2000 Nick Hibma <n_hibma@freebsd.org>
  * All rights reserved.

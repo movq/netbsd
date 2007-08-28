@@ -1,4 +1,4 @@
-/*	$NetBSD: kbd.c,v 1.59 2007/07/09 21:01:23 ad Exp $	*/
+/*	$NetBSD: kbd.c,v 1.57 2006/10/15 20:54:49 martin Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kbd.c,v 1.59 2007/07/09 21:01:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kbd.c,v 1.57 2006/10/15 20:54:49 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -93,7 +93,7 @@ const struct cdevsw kbd_cdevsw = {
 #if NWSKBD > 0
 static int	wssunkbd_enable(void *, int);
 static void	wssunkbd_set_leds(void *, int);
-static int	wssunkbd_ioctl(void *, u_long, void *, int, struct lwp *);
+static int	wssunkbd_ioctl(void *, u_long, caddr_t, int, struct lwp *);
 static void	sunkbd_wskbd_cngetc(void *, u_int *, int *);
 static void	sunkbd_wskbd_cnpollc(void *, int);
 static void	sunkbd_wskbd_cnbell(void *, u_int, u_int, u_int);
@@ -266,7 +266,7 @@ kbdkqfilter(dev_t dev, struct knote *kn)
 }
 
 int
-kbdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+kbdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct kbd_softc *k;
 	struct kbd_state *ks;
@@ -543,7 +543,7 @@ kbd_cc_open(struct cons_channel *cc)
 	/* XXX: verify that callout is not active? */
 	k->k_repeat_start = hz/2;
 	k->k_repeat_step = hz/20;
-	callout_init(&k->k_repeat_ch, 0);
+	callout_init(&k->k_repeat_ch);
 
 	return (ret);
 }
@@ -958,7 +958,7 @@ wssunkbd_set_leds(void *v, int leds)
 }
 
 static int
-wssunkbd_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
+wssunkbd_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct kbd_softc *k = v;
 	
@@ -1035,7 +1035,7 @@ kbd_enable(struct device *dev)
 	/* Attach the wskbd */
 	k->k_wskbd = config_found(&k->k_dev, &a, wskbddevprint);
 
-	callout_init(&k->k_wsbell, 0);
+	callout_init(&k->k_wsbell);
 
 	wssunkbd_enable(k,1);
 	

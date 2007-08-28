@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.3 2007/07/21 12:15:06 tsutsui Exp $	*/
+/*	$NetBSD: cpu.h,v 1.1 2006/04/07 14:21:18 cherry Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -82,7 +82,7 @@
 
 #ifdef _KERNEL
 #include <sys/cpu_data.h>
-#include <sys/cctr.h>
+#include <sys/cc_microtime.h>
 #include <machine/frame.h>
 #include <machine/ia64_cpu.h>
 
@@ -95,7 +95,7 @@ struct cpu_info {
 	 */
 	struct lwp *ci_curlwp;		/* current owner of the processor */
 	struct cpu_data ci_data;	/* MI per-cpu data */
-	struct cctr_state ci_cc;	/* cycle counter state */
+	struct cc_microtime_state ci_cc;/* cc_microtime state */
 	struct cpu_info *ci_next;	/* next cpu_info structure */
 
 	/* XXX: Todo */
@@ -135,6 +135,7 @@ struct clockframe {
 #define	CLKF_PC(cf)		((cf)->cf_tf.tf_special.iip)
 #define	CLKF_CPL(cf)		((cf)->cf_tf.tf_special.psr & IA64_PSR_CPL)
 #define	CLKF_USERMODE(cf)	(CLKF_CPL(cf) != IA64_PSR_CPL_KERN)
+#define	CLKF_BASEPRI(frame)	(0) /*XXX: CHECKME */
 #define	CLKF_INTR(frame)	(curcpu()->ci_intrdepth)
 
 #define	TRAPF_PC(tf)		((tf)->tf_special.iip)
@@ -168,6 +169,11 @@ struct clockframe {
 int	cpu_maxproc(void); /*XXX: Fill in machdep.c */
 
 #define	cpu_proc_fork(p1, p2) /* XXX: Look into this. */
+
+
+/* XXX: TODO: generic microtime support kern/kern_microtime.c 
+ * #define microtime(tv)	cc_microtime(tv) 
+ */
 
 
 #endif /* _KERNEL_ */

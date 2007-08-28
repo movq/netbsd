@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_usrreq.c,v 1.99 2007/08/09 15:23:02 he Exp $	*/
+/*	$NetBSD: uipc_usrreq.c,v 1.94.2.1 2007/08/21 19:33:57 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2004 The NetBSD Foundation, Inc.
@@ -103,7 +103,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_usrreq.c,v 1.99 2007/08/09 15:23:02 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_usrreq.c,v 1.94.2.1 2007/08/21 19:33:57 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -177,7 +177,7 @@ unp_setsockaddr(struct unpcb *unp, struct mbuf *nam)
 	nam->m_len = sun->sun_len;
 	if (nam->m_len > MLEN)
 		MEXTMALLOC(nam, nam->m_len, M_WAITOK);
-	memcpy(mtod(nam, void *), sun, (size_t)nam->m_len);
+	memcpy(mtod(nam, caddr_t), sun, (size_t)nam->m_len);
 }
 
 void
@@ -192,7 +192,7 @@ unp_setpeeraddr(struct unpcb *unp, struct mbuf *nam)
 	nam->m_len = sun->sun_len;
 	if (nam->m_len > MLEN)
 		MEXTMALLOC(nam, nam->m_len, M_WAITOK);
-	memcpy(mtod(nam, void *), sun, (size_t)nam->m_len);
+	memcpy(mtod(nam, caddr_t), sun, (size_t)nam->m_len);
 }
 
 /*ARGSUSED*/
@@ -499,22 +499,17 @@ uipc_ctloutput(int op, struct socket *so, int level, int optname,
 
 	case PRCO_GETOPT:
 		switch (optname) {
-		case LOCAL_PEEREID:
-			if (unp->unp_flags & UNP_EIDSVALID) {
-				*mp = m = m_get(M_WAIT, MT_SOOPTS);
-				m->m_len = sizeof(struct unpcbid);
-				*mtod(m, struct unpcbid *) = unp->unp_connid;
-			} else {
-				error = EINVAL;
-			}
-			break;
 		case LOCAL_CREDS:
 			*mp = m = m_get(M_WAIT, MT_SOOPTS);
 			m->m_len = sizeof(int);
+			switch (optname) {
 
 #define	OPTBIT(bit)	(unp->unp_flags & (bit) ? 1 : 0)
 
-			optval = OPTBIT(UNP_WANTCRED);
+			case LOCAL_CREDS:
+				optval = OPTBIT(UNP_WANTCRED);
+				break;
+			}
 			*mtod(m, int *) = optval;
 			break;
 #undef OPTBIT
@@ -570,7 +565,7 @@ unp_attach(struct socket *so)
 	unp = malloc(sizeof(*unp), M_PCB, M_NOWAIT);
 	if (unp == NULL)
 		return (ENOBUFS);
-	memset((void *)unp, 0, sizeof(*unp));
+	memset((caddr_t)unp, 0, sizeof(*unp));
 	unp->unp_socket = so;
 	so->so_pcb = unp;
 	nanotime(&unp->unp_ctime);
@@ -614,6 +609,7 @@ unp_bind(struct unpcb *unp, struct mbuf *nam, struct lwp *l)
 {
 	struct sockaddr_un *sun;
 	struct vnode *vp;
+	struct mount *mp;
 	struct vattr vattr;
 	size_t addrlen;
 	struct proc *p;
@@ -631,31 +627,40 @@ unp_bind(struct unpcb *unp, struct mbuf *nam, struct lwp *l)
 	 */
 	addrlen = nam->m_len + 1;
 	sun = malloc(addrlen, M_SONAME, M_WAITOK);
-	m_copydata(nam, 0, nam->m_len, (void *)sun);
+	m_copydata(nam, 0, nam->m_len, (caddr_t)sun);
 	*(((char *)sun) + nam->m_len) = '\0';
 
-	NDINIT(&nd, CREATE, FOLLOW | LOCKPARENT | TRYEMULROOT, UIO_SYSSPACE,
+restart:
+	NDINIT(&nd, CREATE, FOLLOW | LOCKPARENT, UIO_SYSSPACE,
 	    sun->sun_path, l);
 
 /* SHOULD BE ABLE TO ADOPT EXISTING AND wakeup() ALA FIFO's */
 	if ((error = namei(&nd)) != 0)
 		goto bad;
 	vp = nd.ni_vp;
-	if (vp != NULL) {
+	if (vp != NULL || vn_start_write(nd.ni_dvp, &mp, V_NOWAIT) != 0) {
 		VOP_ABORTOP(nd.ni_dvp, &nd.ni_cnd);
 		if (nd.ni_dvp == vp)
 			vrele(nd.ni_dvp);
 		else
 			vput(nd.ni_dvp);
 		vrele(vp);
-		error = EADDRINUSE;
-		goto bad;
+		if (vp != NULL) {
+			error = EADDRINUSE;
+			goto bad;
+		}
+		error = vn_start_write(NULL, &mp,
+		    V_WAIT | V_SLEEPONLY | V_PCATCH);
+		if (error)
+			goto bad;
+		goto restart;
 	}
 	VATTR_NULL(&vattr);
 	vattr.va_type = VSOCK;
 	vattr.va_mode = ACCESSPERMS & ~(p->p_cwdi->cwdi_cmask);
 	VOP_LEASE(nd.ni_dvp, l, l->l_cred, LEASE_WRITE);
 	error = VOP_CREATE(nd.ni_dvp, &nd.ni_vp, &nd.ni_cnd, &vattr);
+	vn_finished_write(mp, 0);
 	if (error)
 		goto bad;
 	vp = nd.ni_vp;
@@ -663,10 +668,6 @@ unp_bind(struct unpcb *unp, struct mbuf *nam, struct lwp *l)
 	unp->unp_vnode = vp;
 	unp->unp_addrlen = addrlen;
 	unp->unp_addr = sun;
-	unp->unp_connid.unp_pid = p->p_pid;
-	unp->unp_connid.unp_euid = kauth_cred_geteuid(p->p_cred);
-	unp->unp_connid.unp_egid = kauth_cred_getegid(p->p_cred);
-	unp->unp_flags |= UNP_EIDSBIND;
 	VOP_UNLOCK(vp, 0);
 	return (0);
 
@@ -681,13 +682,11 @@ unp_connect(struct socket *so, struct mbuf *nam, struct lwp *l)
 	struct sockaddr_un *sun;
 	struct vnode *vp;
 	struct socket *so2, *so3;
-	struct unpcb *unp, *unp2, *unp3;
+	struct unpcb *unp2, *unp3;
 	size_t addrlen;
-	struct proc *p;
 	int error;
 	struct nameidata nd;
 
-	p = l->l_proc;
 	/*
 	 * Allocate a temporary sockaddr.  We have to allocate one extra
 	 * byte so that we can ensure that the pathname is nul-terminated.
@@ -696,10 +695,10 @@ unp_connect(struct socket *so, struct mbuf *nam, struct lwp *l)
 	 */
 	addrlen = nam->m_len + 1;
 	sun = malloc(addrlen, M_SONAME, M_WAITOK);
-	m_copydata(nam, 0, nam->m_len, (void *)sun);
+	m_copydata(nam, 0, nam->m_len, (caddr_t)sun);
 	*(((char *)sun) + nam->m_len) = '\0';
 
-	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | TRYEMULROOT, UIO_SYSSPACE, sun->sun_path, l);
+	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_SYSSPACE, sun->sun_path, l);
 
 	if ((error = namei(&nd)) != 0)
 		goto bad2;
@@ -725,7 +724,6 @@ unp_connect(struct socket *so, struct mbuf *nam, struct lwp *l)
 			error = ECONNREFUSED;
 			goto bad;
 		}
-		unp = sotounpcb(so);
 		unp2 = sotounpcb(so2);
 		unp3 = sotounpcb(so3);
 		if (unp2->unp_addr) {
@@ -736,15 +734,7 @@ unp_connect(struct socket *so, struct mbuf *nam, struct lwp *l)
 			unp3->unp_addrlen = unp2->unp_addrlen;
 		}
 		unp3->unp_flags = unp2->unp_flags;
-		unp3->unp_connid.unp_pid = p->p_pid;
-		unp3->unp_connid.unp_euid = kauth_cred_geteuid(p->p_cred);
-		unp3->unp_connid.unp_egid = kauth_cred_getegid(p->p_cred);
-		unp3->unp_flags |= UNP_EIDSVALID;
 		so2 = so3;
-		if (unp2->unp_flags & UNP_EIDSBIND) {
-			unp->unp_connid = unp2->unp_connid;
-			unp->unp_flags |= UNP_EIDSVALID;
-		}
 	}
 	error = unp_connect2(so, so2, PRU_CONNECT);
  bad:
@@ -1285,7 +1275,7 @@ unp_gc(void)
 		FILE_USE(fp);
 		(void) closef(fp, (struct lwp *)0);
 	}
-	free((void *)extra_ref, M_FILE);
+	free((caddr_t)extra_ref, M_FILE);
 	unp_gcing = 0;
 }
 

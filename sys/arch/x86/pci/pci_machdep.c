@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.26 2007/07/22 23:45:50 mjf Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.18 2006/11/16 01:32:39 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.26 2007/07/22 23:45:50 mjf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.18 2006/11/16 01:32:39 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -119,13 +119,6 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.26 2007/07/22 23:45:50 mjf Exp $")
 
 #include "opt_pci_conf_mode.h"
 
-#ifdef __i386__
-#include "opt_xbox.h"
-#ifdef XBOX
-#include <machine/xbox.h>
-#endif
-#endif
-
 int pci_mode = -1;
 
 static void pci_bridge_hook(pci_chipset_tag_t, pcitag_t, void *);
@@ -135,17 +128,17 @@ struct pci_bridge_hook_arg {
 }; 
 
 
-__cpu_simple_lock_t pci_conf_lock = __SIMPLELOCK_UNLOCKED;
+struct simplelock pci_conf_slock = SIMPLELOCK_INITIALIZER;
 
 #define	PCI_CONF_LOCK(s)						\
 do {									\
 	(s) = splhigh();						\
-	__cpu_simple_lock(&pci_conf_lock);				\
+	simple_lock(&pci_conf_slock);					\
 } while (0)
 
 #define	PCI_CONF_UNLOCK(s)						\
 do {									\
-	__cpu_simple_unlock(&pci_conf_lock);				\
+	simple_unlock(&pci_conf_slock);					\
 	splx((s));							\
 } while (0)
 
@@ -188,7 +181,6 @@ struct {
  * of these functions.
  */
 struct x86_bus_dma_tag pci_bus_dma_tag = {
-	0,				/* tag_needs_free */
 #if defined(_LP64) || defined(PAE)
 	PCI32_DMA_BOUNCE_THRESHOLD,	/* bounce_thresh */
 	ISA_DMA_BOUNCE_THRESHOLD,	/* bounce_alloclo */
@@ -206,19 +198,20 @@ struct x86_bus_dma_tag pci_bus_dma_tag = {
 	_bus_dmamap_load_uio,
 	_bus_dmamap_load_raw,
 	_bus_dmamap_unload,
+#if defined(_LP64) || defined(PAE)
 	_bus_dmamap_sync,
+#else
+	NULL,
+#endif
 	_bus_dmamem_alloc,
 	_bus_dmamem_free,
 	_bus_dmamem_map,
 	_bus_dmamem_unmap,
 	_bus_dmamem_mmap,
-	_bus_dmatag_subregion,
-	_bus_dmatag_destroy,
 };
 
 #ifdef _LP64
 struct x86_bus_dma_tag pci_bus_dma64_tag = {
-	0,				/* tag_needs_free */
 	0,
 	0,
 	0,
@@ -236,8 +229,6 @@ struct x86_bus_dma_tag pci_bus_dma64_tag = {
 	_bus_dmamem_map,
 	_bus_dmamem_unmap,
 	_bus_dmamem_mmap,
-	_bus_dmatag_subregion,
-	_bus_dmatag_destroy,
 };
 #endif
 
@@ -247,7 +238,7 @@ pci_attach_hook(struct device *parent, struct device *self,
 {
 
 	if (pba->pba_bus == 0)
-		aprint_normal(": configuration mode %d", pci_mode);
+		printf(": configuration mode %d", pci_mode);
 #ifdef MPBIOS
 	mpbios_pci_attach_hook(parent, self, pba);
 #endif
@@ -259,19 +250,6 @@ pci_attach_hook(struct device *parent, struct device *self,
 int
 pci_bus_maxdevs(pci_chipset_tag_t pc, int busno)
 {
-
-#if defined(__i386__) && defined(XBOX)
-	/*
-	 * Scanning above the first device is fatal on the Microsoft Xbox.
-	 * If busno=1, only allow for one device.
-	 */
-	if (arch_i386_is_xbox) {
-		if (busno == 1)
-			return 1;
-		else if (busno > 1)
-			return 0;
-	}
-#endif
 
 	/*
 	 * Bus number is irrelevant.  If Configuration Mechanism 2 is in
@@ -376,15 +354,6 @@ pci_conf_read( pci_chipset_tag_t pc, pcitag_t tag,
 	pcireg_t data;
 	int s;
 
-#if defined(__i386__) && defined(XBOX)
-	if (arch_i386_is_xbox) {
-		int bus, dev, fn;
-		pci_decompose_tag(pc, tag, &bus, &dev, &fn);
-		if (bus == 0 && dev == 0 && (fn == 1 || fn == 2))
-			return (pcireg_t)-1;
-	}
-#endif
-
 #ifndef PCI_CONF_MODE
 	switch (pci_mode) {
 	case 1:
@@ -427,15 +396,6 @@ pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg,
     pcireg_t data)
 {
 	int s;
-
-#if defined(__i386__) && defined(XBOX)
-	if (arch_i386_is_xbox) {
-		int bus, dev, fn;
-		pci_decompose_tag(pc, tag, &bus, &dev, &fn);
-		if (bus == 0 && dev == 0 && (fn == 1 || fn == 2))
-			return;
-	}
-#endif
 
 #ifndef PCI_CONF_MODE
 	switch (pci_mode) {

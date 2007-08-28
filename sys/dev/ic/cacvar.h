@@ -1,4 +1,4 @@
-/*	$NetBSD: cacvar.h,v 1.16 2007/06/27 17:57:55 mhitch Exp $	*/
+/*	$NetBSD: cacvar.h,v 1.12 2005/12/11 12:21:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -39,10 +39,7 @@
 #ifndef _IC_CACVAR_H_
 #define	_IC_CACVAR_H_
 
-#include <sys/mutex.h>
-#include <sys/condvar.h>
-
-#define	CAC_MAX_CCBS	256
+#define	CAC_MAX_CCBS	20
 #define	CAC_MAX_XFER	(0xffff * 512)
 #define	CAC_SG_SIZE	32
 
@@ -69,7 +66,7 @@
 	(((u_char *)&(x))[0] | (((u_char *)&(x))[1] << 8))
 #define	CAC_GET4(x)							\
 	((((u_char *)&(x))[0] | (((u_char *)&(x))[1] << 8)) |		\
-	(((u_char *)&(x))[2] << 16 | (((u_char *)&(x))[3] << 24)))
+	(((u_char *)&(x))[0] << 16 | (((u_char *)&(x))[1] << 24)))
 
 struct cac_softc;
 struct cac_ccb;
@@ -109,18 +106,16 @@ struct cac_linkage {
 
 struct cac_softc {
 	struct device		sc_dv;
-	kmutex_t		sc_mutex;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 	bus_dma_tag_t		sc_dmat;
 	bus_dmamap_t		sc_dmamap;
 	int			sc_nunits;
 	void			*sc_ih;
-	void *			sc_ccbs;
+	caddr_t			sc_ccbs;
 	paddr_t			sc_ccbs_paddr;
 	SIMPLEQ_HEAD(, cac_ccb)	sc_ccb_free;
 	SIMPLEQ_HEAD(, cac_ccb)	sc_ccb_queue;
-	kcondvar_t		sc_ccb_cv;
 	struct cac_linkage	sc_cl;
 };
 

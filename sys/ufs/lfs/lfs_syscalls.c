@@ -1,7 +1,7 @@
-/*	$NetBSD: lfs_syscalls.c,v 1.122 2007/03/04 06:03:45 christos Exp $	*/
+/*	$NetBSD: lfs_syscalls.c,v 1.118.2.1 2007/06/05 20:35:02 bouyer Exp $	*/
 
 /*-
- * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.122 2007/03/04 06:03:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.118.2.1 2007/06/05 20:35:02 bouyer Exp $");
 
 #ifndef LFS
 # define LFS		/* for prototypes in syscallargs.h */
@@ -81,6 +81,8 @@ __KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.122 2007/03/04 06:03:45 christos 
 #include <sys/vnode.h>
 #include <sys/kernel.h>
 #include <sys/kauth.h>
+
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <ufs/ufs/inode.h>
@@ -90,7 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: lfs_syscalls.c,v 1.122 2007/03/04 06:03:45 christos 
 #include <ufs/lfs/lfs.h>
 #include <ufs/lfs/lfs_extern.h>
 
-struct buf *lfs_fakebuf(struct lfs *, struct vnode *, int, size_t, void *);
+struct buf *lfs_fakebuf(struct lfs *, struct vnode *, int, size_t, caddr_t);
 int lfs_fasthashget(dev_t, ino_t, struct vnode **);
 
 pid_t lfs_cleaner_pid = 0;
@@ -1003,7 +1005,7 @@ sys_lfs_segwait(struct lwp *l, void *v, register_t *retval)
  * we lfs_vref, and it is the caller's responsibility to lfs_vunref
  * when finished.
  */
-extern kmutex_t ufs_hashlock;
+extern struct lock ufs_hashlock;
 
 int
 lfs_fasthashget(dev_t dev, ino_t ino, struct vnode **vpp)
@@ -1028,8 +1030,7 @@ lfs_fasthashget(dev_t dev, ino_t ino, struct vnode **vpp)
 }
 
 int
-lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
-	     struct ufs1_dinode *dinp)
+lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp, struct ufs1_dinode *dinp)
 {
 	struct inode *ip;
 	struct ufs1_dinode *dip;
@@ -1080,13 +1081,13 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 		return (error);
 	}
 
-	mutex_enter(&ufs_hashlock);
-	error = lfs_fasthashget(dev, ino, vpp);
-	if (error != 0 || *vpp != NULL) {
-		mutex_exit(&ufs_hashlock);
-		ungetnewvnode(vp);
-		return (error);
-	}
+	do {
+		error = lfs_fasthashget(dev, ino, vpp);
+		if (error != 0 || *vpp != NULL) {
+			ungetnewvnode(vp);
+			return (error);
+		}
+	} while (lockmgr(&ufs_hashlock, LK_EXCLUSIVE|LK_SLEEPFAIL, 0));
 
 	/* Allocate new vnode/inode. */
 	lfs_vcreate(mp, ino, vp);
@@ -1099,7 +1100,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
 	 */
 	ip = VTOI(vp);
 	ufs_ihashins(ip);
-	mutex_exit(&ufs_hashlock);
+	lockmgr(&ufs_hashlock, LK_RELEASE, 0);
 
 	/*
 	 * XXX
@@ -1176,7 +1177,7 @@ lfs_fastvget(struct mount *mp, ino_t ino, daddr_t daddr, struct vnode **vpp,
  * Make up a "fake" cleaner buffer, copy the data from userland into it.
  */
 struct buf *
-lfs_fakebuf(struct lfs *fs, struct vnode *vp, int lbn, size_t size, void *uaddr)
+lfs_fakebuf(struct lfs *fs, struct vnode *vp, int lbn, size_t size, caddr_t uaddr)
 {
 	struct buf *bp;
 	int error;

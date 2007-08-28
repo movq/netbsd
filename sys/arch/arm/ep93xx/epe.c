@@ -1,4 +1,4 @@
-/*	$NetBSD: epe.c,v 1.12 2007/07/09 20:52:04 ad Exp $	*/
+/*	$NetBSD: epe.c,v 1.8 2006/05/05 18:04:41 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2004 Jesse Off
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: epe.c,v 1.12 2007/07/09 20:52:04 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: epe.c,v 1.8 2006/05/05 18:04:41 thorpej Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -83,6 +83,8 @@ __KERNEL_RCSID(0, "$NetBSD: epe.c,v 1.12 2007/07/09 20:52:04 ad Exp $");
 #include <net/bpfdesc.h>
 #endif
 
+#include <machine/bus.h>
+
 #ifdef IPKDB_EP93XX
 #include <ipkdb/ipkdb.h>
 #endif
@@ -123,7 +125,7 @@ int		epe_mii_readreg (struct device *, int, int);
 void		epe_mii_writereg (struct device *, int, int, int);
 void		epe_statchg (struct device *);
 void		epe_tick (void *);
-static int	epe_ifioctl (struct ifnet *, u_long, void *);
+static int	epe_ifioctl (struct ifnet *, u_long, caddr_t);
 static void	epe_ifstart (struct ifnet *);
 static void	epe_ifwatchdog (struct ifnet *);
 static int	epe_ifinit (struct ifnet *);
@@ -181,7 +183,7 @@ epe_gctx(struct epe_softc *sc)
 
 	/* Handle transmit completions */
 	cur = (u_int32_t *)(EPE_READ(TXStsQCurAdd) -
-		sc->ctrlpage_dsaddr + (char*)sc->ctrlpage);
+		sc->ctrlpage_dsaddr + sc->ctrlpage);
 
 	if (sc->TXStsQ_cur != cur) { 
 		CTRLPAGE_DMASYNC(TX_QLEN * 2 * sizeof(u_int32_t), 
@@ -231,7 +233,7 @@ epe_intr(void *arg)
 	irq = EPE_READ(IntStsC);
 begin:
 	cur = (u_int32_t *)(EPE_READ(RXStsQCurAdd) -
-		sc->ctrlpage_dsaddr + (char*)sc->ctrlpage);
+		sc->ctrlpage_dsaddr + sc->ctrlpage);
 	CTRLPAGE_DMASYNC(TX_QLEN * 3 * sizeof(u_int32_t),
 		RX_QLEN * 4 * sizeof(u_int32_t), 
 		BUS_DMASYNC_PREREAD);
@@ -309,12 +311,12 @@ static void
 epe_init(struct epe_softc *sc)
 {
 	bus_dma_segment_t segs;
-	char *addr;
+	caddr_t addr;
 	int rsegs, err, i;
 	struct ifnet * ifp = &sc->sc_ec.ec_if;
 	int mdcdiv = DEFAULT_MDCDIV;
 
-	callout_init(&sc->epe_tick_ch, 0);
+	callout_init(&sc->epe_tick_ch);
 
 	/* Select primary Individual Address in Address Filter Pointer */
 	EPE_WRITE(AFP, 0);
@@ -372,7 +374,7 @@ epe_init(struct epe_softc *sc)
 	/* Program each queue's start addr, cur addr, and len registers
 	 * with the physical addresses. 
 	 */
-	addr = (char *)sc->ctrlpage_dmamap->dm_segs[0].ds_addr;
+	addr = (caddr_t)sc->ctrlpage_dmamap->dm_segs[0].ds_addr;
 	EPE_WRITE(TXDQBAdd, (u_int32_t)addr);
 	EPE_WRITE(TXDQCurAdd, (u_int32_t)addr);
 	EPE_WRITE(TXDQBLen, TX_QLEN * 2 * sizeof(u_int32_t)); 
@@ -572,7 +574,7 @@ static int
 epe_ifioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 {
 	struct epe_softc *sc = ifp->if_softc;
 	struct ifreq *ifr = (struct ifreq *)data;
@@ -646,8 +648,8 @@ more:
 				goto stop;
 			}
 		}
-		mn->m_data = (void *)(((u_int32_t)mn->m_data + 0x3) & (~0x3)); 
-		m_copydata(m, 0, m->m_pkthdr.len, mtod(mn, void *));
+		mn->m_data = (caddr_t)(((u_int32_t)mn->m_data + 0x3) & (~0x3)); 
+		m_copydata(m, 0, m->m_pkthdr.len, mtod(mn, caddr_t));
 		mn->m_pkthdr.len = mn->m_len = m->m_pkthdr.len;
 		IFQ_DEQUEUE(&ifp->if_snd, m);
 		m_freem(m);

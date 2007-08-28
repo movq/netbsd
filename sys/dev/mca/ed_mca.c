@@ -1,4 +1,4 @@
-/*	$NetBSD: ed_mca.c,v 1.37 2007/07/29 12:50:21 ad Exp $	*/
+/*	$NetBSD: ed_mca.c,v 1.34 2006/11/16 01:33:05 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ed_mca.c,v 1.37 2007/07/29 12:50:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ed_mca.c,v 1.34 2006/11/16 01:33:05 christos Exp $");
 
 #include "rnd.h"
 
@@ -217,13 +217,13 @@ edmcastrategy(bp)
 	    (bp->b_bcount % lp->d_secsize) != 0 ||
 	    (bp->b_bcount / lp->d_secsize) >= (1 << NBBY)) {
 		bp->b_error = EINVAL;
-		goto done;
+		goto bad;
 	}
 
 	/* If device invalidated (e.g. media change, door open), error. */
 	if ((ed->sc_flags & WDF_LOADED) == 0) {
 		bp->b_error = EIO;
-		goto done;
+		goto bad;
 	}
 
 	/* If it's a null transfer, return immediately. */
@@ -262,6 +262,8 @@ edmcastrategy(bp)
 	wakeup_one(ed->edc_softc);
 
 	return;
+bad:
+	bp->b_flags |= B_ERROR;
 done:
 	/* Toss transfer; we're done early. */
 	bp->b_resid = bp->b_bcount;
@@ -295,7 +297,8 @@ edmcaopen(dev_t dev, int flag, int fmt, struct lwp *l)
 
 	part = DISKPART(dev);
 
-	mutex_enter(&wd->sc_dk.dk_openlock);
+	if ((error = lockmgr(&wd->sc_dk.dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
+		return (error);
 
 	/*
 	 * If there are wedges, and this is not RAW_PART, then we
@@ -351,9 +354,11 @@ edmcaopen(dev_t dev, int flag, int fmt, struct lwp *l)
 	wd->sc_dk.dk_openmask =
 	    wd->sc_dk.dk_copenmask | wd->sc_dk.dk_bopenmask;
 
-	error = 0;
+	(void) lockmgr(&wd->sc_dk.dk_openlock, LK_RELEASE, NULL);
+	return 0;
+
  bad1:
-	mutex_exit(&wd->sc_dk.dk_openlock);
+	(void) lockmgr(&wd->sc_dk.dk_openlock, LK_RELEASE, NULL);
 	return (error);
 }
 
@@ -362,10 +367,12 @@ edmcaclose(dev_t dev, int flag, int fmt, struct lwp *l)
 {
 	struct ed_softc *wd = device_lookup(&ed_cd, DISKUNIT(dev));
 	int part = DISKPART(dev);
+	int error;
 
 	ATADEBUG_PRINT(("edmcaclose\n"), DEBUG_FUNCS);
 
-	mutex_enter(&wd->sc_dk.dk_openlock);
+	if ((error = lockmgr(&wd->sc_dk.dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
+		return (error);
 
 	switch (fmt) {
 	case S_IFCHR:
@@ -388,7 +395,7 @@ edmcaclose(dev_t dev, int flag, int fmt, struct lwp *l)
 			wd->sc_flags &= ~WDF_LOADED;
 	}
 
-	mutex_exit(&wd->sc_dk.dk_openlock);
+	(void) lockmgr(&wd->sc_dk.dk_openlock, LK_RELEASE, NULL);
 
 	return 0;
 }
@@ -470,7 +477,7 @@ int
 edmcaioctl(dev, xfer, addr, flag, l)
 	dev_t dev;
 	u_long xfer;
-	void *addr;
+	caddr_t addr;
 	int flag;
 	struct lwp *l;
 {
@@ -503,7 +510,9 @@ edmcaioctl(dev, xfer, addr, flag, l)
 		if ((flag & FWRITE) == 0)
 			return EBADF;
 
-		mutex_enter(&ed->sc_dk.dk_openlock);
+		if ((error = lockmgr(&ed->sc_dk.dk_openlock, LK_EXCLUSIVE,
+				     NULL)) != 0)
+			return (error);
 		ed->sc_flags |= WDF_LABELLING;
 
 		error = setdisklabel(ed->sc_dk.dk_label,
@@ -521,7 +530,7 @@ edmcaioctl(dev, xfer, addr, flag, l)
 		}
 
 		ed->sc_flags &= ~WDF_LABELLING;
-		mutex_exit(&ed->sc_dk.dk_openlock);
+		(void) lockmgr(&ed->sc_dk.dk_openlock, LK_RELEASE, NULL);
 		return (error);
 	}
 
@@ -654,7 +663,7 @@ int
 edmcadump(dev, blkno, va, size)
 	dev_t dev;
 	daddr_t blkno;
-	void *va;
+	caddr_t va;
 	size_t size;
 {
 	struct ed_softc *ed;	/* disk unit to do the I/O */
@@ -710,7 +719,7 @@ edmcadump(dev, blkno, va, size)
 		/* update block count */
 		nblks -= min(nblks, eddumpmulti);
 		blkno += min(nblks, eddumpmulti);
-		va = (char *)va + min(nblks, eddumpmulti) * lp->d_secsize;
+		va += min(nblks, eddumpmulti) * lp->d_secsize;
 	}
 
 	eddoingadump = 0;

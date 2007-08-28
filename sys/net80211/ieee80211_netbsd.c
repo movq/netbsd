@@ -1,4 +1,4 @@
-/* $NetBSD: ieee80211_netbsd.c,v 1.14 2007/03/04 06:03:19 christos Exp $ */
+/* $NetBSD: ieee80211_netbsd.c,v 1.13 2006/03/02 03:38:48 dyoung Exp $ */
 /*-
  * Copyright (c) 2003-2005 Sam Leffler, Errno Consulting
  * All rights reserved.
@@ -30,7 +30,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_freebsd.c,v 1.8 2005/08/08 18:46:35 sam Exp $");
 #else
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.14 2007/03/04 06:03:19 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.13 2006/03/02 03:38:48 dyoung Exp $");
 #endif
 
 /*
@@ -541,14 +541,13 @@ m_align(struct mbuf *m, int len)
  * Return 1 if able to complete the job; otherwise 0.
  */
 int
-m_append(struct mbuf *m0, int len, const void *cpv)
+m_append(struct mbuf *m0, int len, caddr_t cp)
 {
 	struct mbuf *m, *n;
 	int remainder, space;
-	const char *cp = cpv;
 
 	for (m = m0; m->m_next != NULL; m = m->m_next)
-		continue;
+		;
 	remainder = len;
 	space = M_TRAILINGSPACE(m);
 	if (space > 0) {
@@ -557,9 +556,9 @@ m_append(struct mbuf *m0, int len, const void *cpv)
 		 */
 		if (space > remainder)
 			space = remainder;
-		memmove(mtod(m, char *) + m->m_len, cp, space);
+		memmove(mtod(m, caddr_t) + m->m_len, cp, space);
 		m->m_len += space;
-		cp = cp + space, remainder -= space;
+		cp += space, remainder -= space;
 	}
 	while (remainder > 0) {
 		/*
@@ -570,7 +569,7 @@ m_append(struct mbuf *m0, int len, const void *cpv)
 		if (n == NULL)
 			break;
 		n->m_len = min(MLEN, remainder);
-		memmove(mtod(n, void *), cp, n->m_len);
+		memmove(mtod(n, caddr_t), cp, n->m_len);
 		cp += n->m_len, remainder -= n->m_len;
 		m->m_next = n;
 		m = n;

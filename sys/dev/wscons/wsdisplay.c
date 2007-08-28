@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplay.c,v 1.108 2007/03/05 16:06:52 drochner Exp $ */
+/* $NetBSD: wsdisplay.c,v 1.106.2.1 2007/09/11 06:38:18 msaitoh Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsdisplay.c,v 1.108 2007/03/05 16:06:52 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsdisplay.c,v 1.106.2.1 2007/09/11 06:38:18 msaitoh Exp $");
 
 #include "opt_wsdisplay_compat.h"
 #include "opt_wsmsgattrs.h"
@@ -869,7 +869,7 @@ wsdisplayclose(dev_t dev, int flag, int mode, struct lwp *l)
 	if (scr->scr_rawkbd) {
 		int kbmode = WSKBD_TRANSLATED;
 		(void)wsdisplay_internal_ioctl(sc, scr, WSKBDIO_SETMODE,
-					       (void *)&kbmode, 0, l);
+					       (caddr_t)&kbmode, 0, l);
 	}
 #endif
 
@@ -1000,7 +1000,7 @@ wsdisplaytty(dev_t dev)
 }
 
 int
-wsdisplayioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+wsdisplayioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct wsdisplay_softc *sc;
 	struct tty *tp;
@@ -1055,12 +1055,12 @@ wsdisplay_param(struct device *dev, u_long cmd, struct wsdisplay_param *dp)
 	struct wsdisplay_softc *sc = (struct wsdisplay_softc *)dev;
 	return ((*sc->sc_accessops->ioctl)(sc->sc_accesscookie, 
 					   sc->sc_focus->scr_dconf->emulcookie,
-					   cmd, (void *)dp, 0, NULL));
+					   cmd, (caddr_t)dp, 0, NULL));
 }
 
 int
 wsdisplay_internal_ioctl(struct wsdisplay_softc *sc, struct wsscreen *scr,
-	u_long cmd, void *data, int flag, struct lwp *l)
+	u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	int error;
 	char namebuf[16];
@@ -1207,7 +1207,7 @@ wsdisplay_internal_ioctl(struct wsdisplay_softc *sc, struct wsscreen *scr,
 }
 
 int
-wsdisplay_stat_ioctl(struct wsdisplay_softc *sc, u_long cmd, void *data,
+wsdisplay_stat_ioctl(struct wsdisplay_softc *sc, u_long cmd, caddr_t data,
 	int flag, struct lwp *l)
 {
 	switch (cmd) {
@@ -1220,7 +1220,7 @@ wsdisplay_stat_ioctl(struct wsdisplay_softc *sc, u_long cmd, void *data,
 }
 
 int
-wsdisplay_cfg_ioctl(struct wsdisplay_softc *sc, u_long cmd, void *data,
+wsdisplay_cfg_ioctl(struct wsdisplay_softc *sc, u_long cmd, caddr_t data,
 	int flag, struct lwp *l)
 {
 	int error;

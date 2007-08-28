@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_kq.c,v 1.15 2007/07/09 21:10:50 ad Exp $	*/
+/*	$NetBSD: smbfs_kq.c,v 1.13 2006/11/16 01:33:37 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_kq.c,v 1.15 2007/07/09 21:10:50 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_kq.c,v 1.13 2006/11/16 01:33:37 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -94,7 +94,7 @@ struct kevq {
 	struct smb_rq		*rq;	/* request structure */
 };
 
-static struct lwp *smbkql;		/* the kevent handler */
+static struct proc *smbkqp;		/* the kevent handler */
 static struct smb_cred smbkq_scred;
 
 static struct simplelock smbkq_lock = SIMPLELOCK_INITIALIZER;
@@ -132,11 +132,10 @@ smbfs_kqpoll(void *arg)
 	struct kevq *ke;
 	struct vattr attr;
 	int error = 0;
+	struct proc *p = smbkqp;
 	struct lwp *l;
 	u_quad_t osize;
 	int needwake;
-
-	l = curlwp;
 
 	simple_lock(&smbkq_lock);
 	for(;;) {
@@ -156,7 +155,8 @@ smbfs_kqpoll(void *arg)
 			/* save v_size, smbfs_getattr() updates it */
 			osize = ke->vp->v_size;
 
-			error = VOP_GETATTR(ke->vp, &attr, l->l_cred, l);
+			l = proc_representative_lwp(p);
+			error = VOP_GETATTR(ke->vp, &attr, p->p_cred, l);
 			if (error) {
 				/* relock and proceed with next */
 				simple_lock(&smbkq_lock);
@@ -197,7 +197,7 @@ smbfs_kqpoll(void *arg)
 
 		/* Exit if there are no more kevents to watch for */
 		if (kevs == 0) {
-			smbkql = NULL;
+			smbkqp = NULL;
 			break;
 		}
 
@@ -206,7 +206,7 @@ smbfs_kqpoll(void *arg)
 
 		/* wait a while before checking for changes again */
 		if (SLIST_EMPTY(&kdnlist)) {
-			error = ltsleep(smbkql, PSOCK, "smbkqidl",
+			error = ltsleep(smbkqp, PSOCK, "smbkqidl",
 				needwake ? (SMBFS_ATTRTIMO * hz / 2) : 0,
 				&smbkq_lock);
 		}
@@ -274,7 +274,7 @@ smbfskq_dirnotify(void *arg)
 	}
 
 	SLIST_INSERT_HEAD(&kdnlist, ke, k_link);
-	wakeup(smbkql);
+	wakeup(smbkqp);
 }
 
 static void
@@ -437,10 +437,10 @@ smbfs_kqfilter(void *v)
 	(void) VOP_GETATTR(vp, &attr, l->l_cred, l);
 
 	/* ensure the handler is running */
-	if (!smbkql) {
-		error = kthread_create(PRI_NONE, 0, NULL, smbfs_kqpoll,
-		    NULL, &smbkql, "smbkq");
-		smb_makescred(&smbkq_scred, smbkql, smbkql->l_cred);
+	if (!smbkqp) {
+		error = kthread_create1(smbfs_kqpoll, NULL, &smbkqp,
+				"smbkq");
+		smb_makescred(&smbkq_scred, LIST_FIRST(&smbkqp->p_lwps), smbkqp->p_cred);
 		if (error) {
 			kevs--;
 			return (error);
@@ -496,7 +496,7 @@ smbfs_kqfilter(void *v)
 		SLIST_INSERT_HEAD(&kevlist, ke, kev_link);
 
 		/* kick the handler */
-		wakeup(smbkql);
+		wakeup(smbkqp);
 	}
 
 	/* XXXLUKEM lock the struct? */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_socksys.c,v 1.16 2007/03/04 06:01:17 christos Exp $	*/
+/*	$NetBSD: ibcs2_socksys.c,v 1.13 2006/06/26 21:23:57 mrg Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Scott Bartram
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_socksys.c,v 1.16 2007/03/04 06:01:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_socksys.c,v 1.13 2006/06/26 21:23:57 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -37,10 +37,12 @@ __KERNEL_RCSID(0, "$NetBSD: ibcs2_socksys.c,v 1.16 2007/03/04 06:01:17 christos 
 #include <sys/termios.h>
 #include <sys/tty.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <net/if.h>
 
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/ibcs2/ibcs2_socksys.h>
@@ -53,7 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: ibcs2_socksys.c,v 1.16 2007/03/04 06:01:17 christos 
 struct ibcs2_socksys_args {
 	int     fd;
 	int     magic;
-	void *argsp;
+	caddr_t argsp;
 };
 
 int
@@ -72,7 +74,7 @@ ibcs2_socksys(l, v, retval)
 	 * The others are (and should be) only legal on sockets.
 	 */
 
-	error = copyin(uap->argsp, (void *)realargs, sizeof(realargs));
+	error = copyin(uap->argsp, (caddr_t)realargs, sizeof(realargs));
 	if (error)
 		return error;
 	DPRINTF(("ibcs2_socksys: %08x %08x %08x %08x %08x %08x %08x\n",

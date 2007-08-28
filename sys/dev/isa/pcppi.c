@@ -1,4 +1,4 @@
-/* $NetBSD: pcppi.c,v 1.23 2007/07/09 21:00:50 ad Exp $ */
+/* $NetBSD: pcppi.c,v 1.20 2006/11/16 01:33:00 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pcppi.c,v 1.23 2007/07/09 21:00:50 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pcppi.c,v 1.20 2006/11/16 01:33:00 christos Exp $");
 
 #include "attimer.h"
 
@@ -172,7 +172,7 @@ pcppi_attach(struct pcppi_softc *sc)
 {
         struct pcppi_attach_args pa;
 
-        callout_init(&sc->sc_bell_ch, 0);
+        callout_init(&sc->sc_bell_ch);
 
         sc->sc_bellactive = sc->sc_bellpitch = sc->sc_slp = 0;
 
@@ -191,6 +191,10 @@ pcppi_attach(struct pcppi_softc *sc)
 static int
 pcppisearch(device_t parent, cfdata_t cf, const int *locs, void *aux)
 {
+
+	if (cf->cf_fstate == FSTATE_STAR)
+		aprint_error("%s: children must have an explicit unit\n",
+		    device_xname(parent));
 
 	if (config_match(parent, cf, aux))
 		config_attach_loc(parent, cf, locs, aux, NULL);

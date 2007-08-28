@@ -1,4 +1,4 @@
-/*	$NetBSD: copy.S,v 1.5 2007/05/17 14:51:13 yamt Exp $	*/
+/*	$NetBSD: copy.S,v 1.3 2005/12/11 12:16:21 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -43,10 +43,6 @@
 #include <machine/param.h>
 #include <machine/asm.h>
 
-#define GET_CURPCB(reg)	\
-	movq	CPUVAR(CURLWP), reg; \
-	movq	L_ADDR(reg), reg
-
 /*
  * Copy routines from and to userland, plus a few more. See the
  * section 9 manpages for info. Some cases can be optimized more.
@@ -57,7 +53,7 @@
 /*
  * XXXfvdl appears only to be used by pccons.
  *
- * fillw(short pattern, void *addr, size_t len);
+ * fillw(short pattern, caddr_t addr, size_t len);
  * Write len copies of pattern at addr.
  * appears to be used by pccons.
  */
@@ -79,7 +75,7 @@ ENTRY(fillw)
 	ret
 
 ENTRY(kcopy)
-	GET_CURPCB(%rax)
+	movq	CPUVAR(CURPCB),%rax
 	pushq	PCB_ONFAULT(%rax)
 	leaq	_C_LABEL(copy_fault)(%rip),%r11
 	movq	%r11, PCB_ONFAULT(%rax)
@@ -101,7 +97,7 @@ ENTRY(kcopy)
 	rep
 	movsb
 
-	GET_CURPCB(%rdx)
+	movq	CPUVAR(CURPCB),%rdx
 	popq	PCB_ONFAULT(%rdx)
 	xorq	%rax,%rax
 	ret
@@ -122,7 +118,7 @@ ENTRY(kcopy)
 	movsq
 	cld
 
-	GET_CURPCB(%rdx)
+	movq	CPUVAR(CURPCB),%rdx
 	popq	PCB_ONFAULT(%rdx)
 	xorq	%rax,%rax
 	ret
@@ -140,7 +136,7 @@ ENTRY(copyout)
 	cmpq	%r8,%rdx
 	ja	_C_LABEL(copy_efault)
 
-	GET_CURPCB(%rdx)
+	movq	CPUVAR(CURPCB),%rdx
 	leaq	_C_LABEL(copy_fault)(%rip),%r11
 	movq	%r11,PCB_ONFAULT(%rdx)
 
@@ -159,7 +155,7 @@ ENTRY(copyout)
 	ret
 
 ENTRY(copyin)
-	GET_CURPCB(%rax)
+	movq	CPUVAR(CURPCB),%rax
 	pushq	$0
 	leaq	_C_LABEL(copy_fault)(%rip),%r11
 	movq	%r11,PCB_ONFAULT(%rax)
@@ -185,7 +181,7 @@ ENTRY(copyin)
 	rep
 	movsb
 
-	GET_CURPCB(%rdx)
+	movq	CPUVAR(CURPCB),%rdx
 	popq	PCB_ONFAULT(%rdx)
 	xorl	%eax,%eax
 	ret
@@ -194,7 +190,7 @@ NENTRY(copy_efault)
 	movq	$EFAULT,%rax
 
 NENTRY(copy_fault)
-	GET_CURPCB(%rdx)
+	movq	CPUVAR(CURPCB),%rdx
 	popq	PCB_ONFAULT(%rdx)
 	ret
 
@@ -203,7 +199,7 @@ ENTRY(copyoutstr)
 	movq	%rdx,%r8
 	movq	%rcx,%r9
 
-5:	GET_CURPCB(%rax)
+5:	movq	CPUVAR(CURPCB),%rax
 	leaq	_C_LABEL(copystr_fault)(%rip),%r11
 	movq	%r11,PCB_ONFAULT(%rax)
 	/*
@@ -244,7 +240,7 @@ ENTRY(copyinstr)
 	movq	%rdx,%r8
 	movq	%rcx,%r9
 
-	GET_CURPCB(%rcx)
+	movq	CPUVAR(CURPCB),%rcx
 	leaq	_C_LABEL(copystr_fault)(%rip),%r11
 	movq	%r11,PCB_ONFAULT(%rcx)
 
@@ -287,7 +283,7 @@ ENTRY(copystr_efault)
 ENTRY(copystr_fault)
 copystr_return:
 	/* Set *lencopied and return %eax. */
-	GET_CURPCB(%rcx)
+	movq	CPUVAR(CURPCB),%rcx
 	movq	$0,PCB_ONFAULT(%rcx)
 	testq	%r9,%r9
 	jz	8f
@@ -330,7 +326,7 @@ ENTRY(fuword)
 	movq	$VM_MAXUSER_ADDRESS-4,%r11
 	cmpq	%r11,%rdi
 	ja	_C_LABEL(fusuaddrfault)
-	GET_CURPCB(%rcx)
+	movq	CPUVAR(CURPCB),%rcx
 	leaq	_C_LABEL(fusufailure)(%rip),%r11
 	movq	%r11,PCB_ONFAULT(%rcx)
 	movl	(%rdi),%eax
@@ -341,7 +337,7 @@ ENTRY(fusword)
 	movq	$VM_MAXUSER_ADDRESS-2,%r11
 	cmpq	%r11,%rdi
 	ja	_C_LABEL(fusuaddrfault)
-	GET_CURPCB(%rcx)
+	movq	CPUVAR(CURPCB),%rcx
 	leaq	_C_LABEL(fusufailure)(%rip),%r11
 	movq	%r11,PCB_ONFAULT(%rcx)
 	movzwl	(%rdi),%eax
@@ -352,7 +348,7 @@ ENTRY(fuswintr)
 	movq	$VM_MAXUSER_ADDRESS-2,%r11
 	cmpq	%r11,%rdi
 	ja	_C_LABEL(fusuaddrfault)
-	GET_CURPCB(%rcx)
+	movq	CPUVAR(CURPCB),%rcx
 	leaq	_C_LABEL(fusuintrfailure)(%rip),%r11
 	movq	%r11,PCB_ONFAULT(%rcx)
 	movzwl	(%rdi),%eax
@@ -363,7 +359,7 @@ ENTRY(fubyte)
 	movq	$VM_MAXUSER_ADDRESS-1,%r11
 	cmpq	%r11,%rdi
 	ja	_C_LABEL(fusuaddrfault)
-	GET_CURPCB(%rcx)
+	movq	CPUVAR(CURPCB),%rcx
 	leaq	_C_LABEL(fusuintrfailure)(%rip),%r11
 	movq	%r11,PCB_ONFAULT(%rcx)
 	movzbl	(%rdi),%eax
@@ -393,7 +389,7 @@ ENTRY(suword)
 	cmpq	%r11,%rdi
 	ja	_C_LABEL(fusuaddrfault)
 
-	GET_CURPCB(%rcx)
+	movq	CPUVAR(CURPCB),%rcx
 	leaq	_C_LABEL(fusufailure)(%rip),%r11
 	movq	%r11,PCB_ONFAULT(%rcx)
 
@@ -407,7 +403,7 @@ ENTRY(susword)
 	cmpq	%r11,%rdi
 	ja	_C_LABEL(fusuaddrfault)
 
-	GET_CURPCB(%rcx)
+	movq	CPUVAR(CURPCB),%rcx
 	leaq	_C_LABEL(fusufailure)(%rip),%r11
 	movq	%r11,PCB_ONFAULT(%rcx)
 
@@ -420,7 +416,7 @@ ENTRY(suswintr)
 	movq	$VM_MAXUSER_ADDRESS-2,%r11
 	cmpq	%r11,%rdi
 	ja	_C_LABEL(fusuaddrfault)
-	GET_CURPCB(%rcx)
+	movq	CPUVAR(CURPCB),%rcx
 	leaq	_C_LABEL(fusuintrfailure)(%rip),%r11
 	movq	%r11,PCB_ONFAULT(%rcx)
 
@@ -434,7 +430,7 @@ ENTRY(subyte)
 	cmpq	%r11,%rdi
 	ja	_C_LABEL(fusuaddrfault)
 
-	GET_CURPCB(%rcx)
+	movq	CPUVAR(CURPCB),%rcx
 	leaq	_C_LABEL(fusufailure)(%rip),%r11
 	movq	%r11,PCB_ONFAULT(%rcx)
 

@@ -1,4 +1,4 @@
-/* $NetBSD: vesabios.c,v 1.24 2007/03/24 00:07:17 reinoud Exp $ */
+/* $NetBSD: vesabios.c,v 1.22 2006/11/16 01:32:38 christos Exp $ */
 
 /*
  * Copyright (c) 2002, 2004
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vesabios.c,v 1.24 2007/03/24 00:07:17 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vesabios.c,v 1.22 2006/11/16 01:32:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,11 +74,12 @@ vesabios_match( struct device *parent, struct cfdata *match,
     void *aux)
 {
 
-	return 1;
+	return (1);
 }
 
 static int
-vbegetinfo(struct vbeinfoblock **vip)
+vbegetinfo(vip)
+	struct vbeinfoblock **vip;
 {
 	unsigned char *buf;
 	struct trapframe tf;
@@ -87,7 +88,7 @@ vbegetinfo(struct vbeinfoblock **vip)
 	buf = kvm86_bios_addpage(0x2000);
 	if (!buf) {
 		printf("vbegetinfo: kvm86_bios_addpage(0x2000) failed\n");
-		return ENOMEM;
+		return (ENOMEM);
 	}
 
 	memcpy(buf, "VBE2", 4);
@@ -111,34 +112,36 @@ vbegetinfo(struct vbeinfoblock **vip)
 
 	if (vip)
 		*vip = (struct vbeinfoblock *)buf;
-	return 0;
+	return (0);
 
 out:
 	kvm86_bios_delpage(0x2000, buf);
-	return error;
+	return (error);
 }
 
 static void
-vbefreeinfo(struct vbeinfoblock *vip)
+vbefreeinfo(vip)
+	struct vbeinfoblock *vip;
 {
 
 	kvm86_bios_delpage(0x2000, vip);
 }
 
 int
-vbeprobe(void)
+vbeprobe()
 {
 	struct vbeinfoblock *vi;
 
 	if (vbegetinfo(&vi))
-		return 0;
+		return (0);
 	vbefreeinfo(vi);
-	return 1;
+	return (1);
 }
 
 #ifdef VESABIOSVERBOSE
 static const char *
-mm2txt(unsigned int mm)
+mm2txt(mm)
+	unsigned int mm;
 {
 	static char buf[30];
 	static const char *names[] = {
@@ -152,10 +155,10 @@ mm2txt(unsigned int mm)
 		"YUV"
 	};
 
-	if (mm < __arraycount(names))
-		return names[mm];
+	if (mm < sizeof(names)/sizeof(names[0]))
+		return (names[mm]);
 	snprintf(buf, sizeof(buf), "unknown memory model %d", mm);
-	return buf;
+	return (buf);
 }
 #endif
 
@@ -185,8 +188,6 @@ vesabios_attach(struct device *parent, struct device *dev,
 	aprint_naive("\n");
 	aprint_normal(": version %d.%d",
 	    vi->VbeVersion >> 8, vi->VbeVersion & 0xff);
-
-	vbaa.vbaa_vbeversion = vi->VbeVersion;
 
 	res = kvm86_bios_read(FAR2FLATPTR(vi->OemVendorNamePtr),
 			      name, sizeof(name));
@@ -261,12 +262,6 @@ vesabios_attach(struct device *parent, struct device *dev,
 			if (mi->ModeAttributes & 0x80) {
 				/* flat buffer */
 				rastermodes[nrastermodes++] = modes[i];
-#ifdef VESABIOSVERBOSE
-				aprint_verbose("%s: memory window "
-				    "granularity %d Kb, window size %d Kb\n",
-				    dev->dv_xname,
-				    mi->WinGranularity/1024, mi->WinSize/1024);
-#endif
 			}
 		} else {
 			/* text */
@@ -297,11 +292,13 @@ vesabios_attach(struct device *parent, struct device *dev,
 }
 
 static int
-vesabios_print(void *aux, const char *pnp)
+vesabios_print(aux, pnp)
+	void *aux;
+	const char *pnp;
 {
 	struct vesabiosdev_attach_args *vbaa = aux;
 
 	if (pnp)
 		aprint_normal("%s at %s", vbaa->vbaa_type, pnp);
-	return UNCONF;
+	return (UNCONF);
 }

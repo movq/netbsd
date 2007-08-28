@@ -1,4 +1,4 @@
-/*	$NetBSD: endian.h,v 1.26 2007/07/20 15:07:15 christos Exp $	*/
+/*	$NetBSD: endian.h,v 1.24 2006/05/05 15:08:11 christos Exp $	*/
 
 /*
  * Copyright (c) 1987, 1991, 1993
@@ -190,50 +190,13 @@ __END_DECLS
  * to/from an octet stream.
  */
 
-#if __GNUC_PREREQ__(2, 95)
-
-#define __GEN_ENDIAN_ENC(bits, endian) \
-static __inline __unused void \
-endian ## bits ## enc(void *dst, uint ## bits ## _t u) \
-{ \
-	u = hto ## endian ## bits (u); \
-	__builtin_memcpy(dst, &u, sizeof(u)); \
-}
-
-__GEN_ENDIAN_ENC(16, be)
-__GEN_ENDIAN_ENC(32, be)
-__GEN_ENDIAN_ENC(64, be)
-__GEN_ENDIAN_ENC(16, le)
-__GEN_ENDIAN_ENC(32, le)
-__GEN_ENDIAN_ENC(64, le)
-#undef __GEN_ENDIAN_ENC
-
-#define __GEN_ENDIAN_DEC(bits, endian) \
-static __inline __unused uint ## bits ## _t \
-endian ## bits ## dec(const void *buf) \
-{ \
-	uint ## bits ## _t u; \
-	__builtin_memcpy(&u, buf, sizeof(u)); \
-	return endian ## bits ## toh (u); \
-}
-
-__GEN_ENDIAN_DEC(16, be)
-__GEN_ENDIAN_DEC(32, be)
-__GEN_ENDIAN_DEC(64, be)
-__GEN_ENDIAN_DEC(16, le)
-__GEN_ENDIAN_DEC(32, le)
-__GEN_ENDIAN_DEC(64, le)
-#undef __GEN_ENDIAN_DEC
-
-#else	/* !(GCC >= 2.95) */
-
 static __inline void __unused
 be16enc(void *buf, uint16_t u)
 {
 	uint8_t *p = (uint8_t *)buf;
 
-	p[0] = (uint8_t)(((unsigned)u >> 8) & 0xff);
-	p[1] = (uint8_t)(u & 0xff);
+	p[0] = ((unsigned)u >> 8) & 0xff;
+	p[1] = u & 0xff;
 }
 
 static __inline void __unused
@@ -241,8 +204,8 @@ le16enc(void *buf, uint16_t u)
 {
 	uint8_t *p = (uint8_t *)buf;
 
-	p[0] = (uint8_t)(u & 0xff);
-	p[1] = (uint8_t)(((unsigned)u >> 8) & 0xff);
+	p[0] = u & 0xff;
+	p[1] = ((unsigned)u >> 8) & 0xff;
 }
 
 static __inline uint16_t __unused
@@ -250,7 +213,7 @@ be16dec(const void *buf)
 {
 	const uint8_t *p = (const uint8_t *)buf;
 
-	return (uint16_t)((p[0] << 8) | p[1]);
+	return ((p[0] << 8) | p[1]);
 }
 
 static __inline uint16_t __unused
@@ -258,7 +221,7 @@ le16dec(const void *buf)
 {
 	const uint8_t *p = (const uint8_t *)buf;
 
-	return (uint16_t)((p[1] << 8) | p[0]);
+	return ((p[1] << 8) | p[0]);
 }
 
 static __inline void __unused
@@ -266,10 +229,10 @@ be32enc(void *buf, uint32_t u)
 {
 	uint8_t *p = (uint8_t *)buf;
 
-	p[0] = (uint8_t)((u >> 24) & 0xff);
-	p[1] = (uint8_t)((u >> 16) & 0xff);
-	p[2] = (uint8_t)((u >> 8) & 0xff);
-	p[3] = (uint8_t)(u & 0xff);
+	p[0] = (u >> 24) & 0xff;
+	p[1] = (u >> 16) & 0xff;
+	p[2] = (u >> 8) & 0xff;
+	p[3] = u & 0xff;
 }
 
 static __inline void __unused
@@ -277,10 +240,10 @@ le32enc(void *buf, uint32_t u)
 {
 	uint8_t *p = (uint8_t *)buf;
 
-	p[0] = (uint8_t)(u & 0xff);
-	p[1] = (uint8_t)((u >> 8) & 0xff);
-	p[2] = (uint8_t)((u >> 16) & 0xff);
-	p[3] = (uint8_t)((u >> 24) & 0xff);
+	p[0] = u & 0xff;
+	p[1] = (u >> 8) & 0xff;
+	p[2] = (u >> 16) & 0xff;
+	p[3] = (u >> 24) & 0xff;
 }
 
 static __inline uint32_t __unused
@@ -332,8 +295,6 @@ le64dec(const void *buf)
 
 	return (le32dec(p) | ((uint64_t)le32dec(p + 4) << 32));
 }
-
-#endif	/* GCC >= 2.95 */
 
 #endif /* !_LOCORE */
 #endif /* _XOPEN_SOURCE || _NETBSD_SOURCE */

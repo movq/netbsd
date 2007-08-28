@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.38 2007/05/17 14:51:16 yamt Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.35 2006/05/10 06:24:02 skrll Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.38 2007/05/17 14:51:16 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.35 2006/05/10 06:24:02 skrll Exp $");
 
 #include "opt_armfpe.h"
 #include "opt_pmap_debug.h"
@@ -77,7 +77,9 @@ extern pv_addr_t systempage;
 int process_read_regs	__P((struct proc *p, struct reg *regs));
 int process_read_fpregs	__P((struct proc *p, struct fpreg *regs));
 
-void lwp_trampoline(void);
+void	switch_exit	__P((struct lwp *l, struct lwp *l0,
+			     void (*)(struct lwp *)));
+extern void proc_trampoline	__P((void));
 
 /*
  * Special compilation symbols:
@@ -121,8 +123,13 @@ cpu_proc_fork(p1, p2)
  * accordingly.
  */
 void
-cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
-    void (*func)(void *), void *arg)
+cpu_lwp_fork(l1, l2, stack, stacksize, func, arg)
+	struct lwp *l1;
+	struct lwp *l2;
+	void *stack;
+	size_t stacksize;
+	void (*func) __P((void *));
+	void *arg;
 {
 	struct pcb *pcb = (struct pcb *)&l2->l_addr->u_pcb;
 	struct trapframe *tf;
@@ -192,7 +199,20 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	sf = (struct switchframe *)tf - 1;
 	sf->sf_r4 = (u_int)func;
 	sf->sf_r5 = (u_int)arg;
-	sf->sf_pc = (u_int)lwp_trampoline;
+	sf->sf_pc = (u_int)proc_trampoline;
+	pcb->pcb_un.un_32.pcb32_sp = (u_int)sf;
+}
+
+void
+cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
+{
+	struct pcb *pcb = &l->l_addr->u_pcb;
+	struct trapframe *tf = pcb->pcb_tf;
+	struct switchframe *sf = (struct switchframe *)tf - 1;
+
+	sf->sf_r4 = (u_int)func;
+	sf->sf_r5 = (u_int)arg;
+	sf->sf_pc = (u_int)proc_trampoline;
 	pcb->pcb_un.un_32.pcb32_sp = (u_int)sf;
 }
 
@@ -232,8 +252,9 @@ cpu_lwp_free(struct lwp *l, int proc)
 }
 
 void
-cpu_lwp_free2(struct lwp *l)
+cpu_exit(struct lwp *l)
 {
+	switch_exit(l, &lwp0, lwp_exit2);
 }
 
 void
@@ -314,7 +335,7 @@ vmapbuf(bp, len)
 	off = (vaddr_t)bp->b_data - faddr;
 	len = round_page(off + len);
 	taddr = uvm_km_alloc(phys_map, len, 0, UVM_KMF_VAONLY | UVM_KMF_WAITVA);
-	bp->b_data = (void *)(taddr + off);
+	bp->b_data = (caddr_t)(taddr + off);
 
 	/*
 	 * The region is locked, so we expect that pmap_pte() will return

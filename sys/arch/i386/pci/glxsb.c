@@ -1,4 +1,4 @@
-/* $NetBSD: glxsb.c,v 1.2 2007/07/09 20:52:18 ad Exp $ */
+/* $NetBSD: glxsb.c,v 1.1.2.2 2007/06/19 09:26:30 liamjfoy Exp $ */
 /* $OpenBSD: glxsb.c,v 1.7 2007/02/12 14:31:45 tom Exp $ */
 
 /*
@@ -140,7 +140,7 @@ struct glxsb_dma_map {
 	bus_dma_segment_t	dma_seg;
 	int			dma_nsegs;
 	int			dma_size;
-	void *			dma_vaddr;
+	caddr_t 		dma_vaddr;
 	uint32_t		dma_paddr;
 };
 struct glxsb_session {
@@ -245,7 +245,7 @@ glxsb_attach(struct device *parent, struct device *self, void *aux)
 			  RND_TYPE_RNG, RND_FLAG_NO_ESTIMATE);
 
 	/* Install a periodic collector for the "true" (AMD's word) RNG */
-	callout_init(&sc->sc_co, 0);
+	callout_init(&sc->sc_co);
 	callout_setfunc(&sc->sc_co, glxsb_rnd, sc);
 	glxsb_rnd(sc);
 	printf(": RNG");

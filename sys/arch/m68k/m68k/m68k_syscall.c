@@ -1,4 +1,4 @@
-/*	$NetBSD: m68k_syscall.c,v 1.29 2007/08/15 12:07:25 ad Exp $	*/
+/*	$NetBSD: m68k_syscall.c,v 1.25 2006/07/22 06:58:17 tsutsui Exp $	*/
 
 /*-
  * Portions Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -110,9 +110,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: m68k_syscall.c,v 1.29 2007/08/15 12:07:25 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: m68k_syscall.c,v 1.25 2006/07/22 06:58:17 tsutsui Exp $");
 
 #include "opt_execfmt.h"
+#include "opt_ktrace.h"
 #include "opt_compat_netbsd.h"
 #include "opt_compat_aout_m68k.h"
 
@@ -125,7 +126,9 @@ __KERNEL_RCSID(0, "$NetBSD: m68k_syscall.c,v 1.29 2007/08/15 12:07:25 ad Exp $")
 #include <sys/syscall.h>
 #include <sys/syslog.h>
 #include <sys/user.h>
+#ifdef KTRACE
 #include <sys/ktrace.h>
+#endif
 
 #include <machine/psl.h>
 #include <machine/cpu.h>
@@ -201,7 +204,7 @@ aoutm68k_syscall_intern(struct proc *p)
 static void
 syscall_plain(register_t code, struct lwp *l, struct frame *frame)
 {
-	char *params;
+	caddr_t params;
 	const struct sysent *callp;
 	int error, nsys;
 	size_t argsize;
@@ -211,7 +214,7 @@ syscall_plain(register_t code, struct lwp *l, struct frame *frame)
 	nsys = p->p_emul->e_nsysent;
 	callp = p->p_emul->e_sysent;
 
-	params = (char *)frame->f_regs[SP] + sizeof(int);
+	params = (caddr_t)frame->f_regs[SP] + sizeof(int);
 
 	switch (code) {
 	case SYS_syscall:
@@ -257,7 +260,7 @@ syscall_plain(register_t code, struct lwp *l, struct frame *frame)
 
 	argsize = callp->sy_argsize;
 	if (argsize) {
-		error = copyin(params, (void *)args, argsize);
+		error = copyin(params, (caddr_t)args, argsize);
 		if (error)
 			goto bad;
 	}
@@ -317,7 +320,7 @@ syscall_plain(register_t code, struct lwp *l, struct frame *frame)
 static void
 syscall_fancy(register_t code, struct lwp *l, struct frame *frame)
 {
-	char *params;
+	caddr_t params;
 	const struct sysent *callp;
 	int error, nsys;
 	size_t argsize;
@@ -327,7 +330,7 @@ syscall_fancy(register_t code, struct lwp *l, struct frame *frame)
 	nsys = p->p_emul->e_nsysent;
 	callp = p->p_emul->e_sysent;
 
-	params = (char *)frame->f_regs[SP] + sizeof(int);
+	params = (caddr_t)frame->f_regs[SP] + sizeof(int);
 
 	switch (code) {
 	case SYS_syscall:
@@ -373,7 +376,7 @@ syscall_fancy(register_t code, struct lwp *l, struct frame *frame)
 
 	argsize = callp->sy_argsize;
 	if (argsize) {
-		error = copyin(params, (void *)args, argsize);
+		error = copyin(params, (caddr_t)args, argsize);
 		if (error)
 			goto bad;
 	}
@@ -447,7 +450,10 @@ child_return(void *arg)
 	f->f_format = FMT0;
 
 	machine_userret(l, f, 0);
-	ktrsysret(SYS_fork, 0, 0);
+#ifdef KTRACE
+	if (KTRPOINT(l->l_proc, KTR_SYSRET))
+		ktrsysret(l, SYS_fork, 0, 0);
+#endif
 }
 
 /*
@@ -472,6 +478,17 @@ startlwp(void *arg)
 	}
 #endif
 	pool_put(&lwp_uc_pool, uc);
+
+	machine_userret(l, f, 0);
+}
+
+/*
+ * XXX This is a terrible name.
+ */
+void
+upcallret(struct lwp *l)
+{
+	struct frame *f = (struct frame *)l->l_md.md_regs;
 
 	machine_userret(l, f, 0);
 }

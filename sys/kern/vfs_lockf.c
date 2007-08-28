@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_lockf.c,v 1.60 2007/07/09 21:10:57 ad Exp $	*/
+/*	$NetBSD: vfs_lockf.c,v 1.56 2006/08/17 17:11:28 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_lockf.c,v 1.60 2007/07/09 21:10:57 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_lockf.c,v 1.56 2006/08/17 17:11:28 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,7 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_lockf.c,v 1.60 2007/07/09 21:10:57 ad Exp $");
 /*
  * The lockf structure is a kernel structure which contains the information
  * associated with a byte range lock.  The lockf structures are linked into
- * the vnode structure.  Locks are sorted by the starting byte of the lock for
+ * the inode structure. Locks are sorted by the starting byte of the lock for
  * efficiency.
  *
  * lf_next is used for two purposes, depending on whether the lock is
@@ -80,7 +80,7 @@ struct lockf {
 #define MAXDEPTH 50
 
 static POOL_INIT(lockfpool, sizeof(struct lockf), 0, 0, 0, "lockfpl",
-    &pool_allocator_nointr, IPL_NONE);
+    &pool_allocator_nointr);
 
 /*
  * This variable controls the maximum number of processes that will
@@ -97,7 +97,7 @@ int	lockf_debug = 0;
 
 /*
  * XXX TODO
- * Misc cleanups: "void *id" should be visible in the API as a
+ * Misc cleanups: "caddr_t id" should be visible in the API as a
  * "struct proc *".
  * (This requires rototilling all VFS's which support advisory locking).
  */
@@ -190,16 +190,17 @@ lf_alloc(uid_t uid, int allowfail)
 {
 	struct uidinfo *uip;
 	struct lockf *lock;
+	int s;
 
 	uip = uid_find(uid);
-	mutex_enter(&uip->ui_lock);
+	UILOCK(uip, s);
 	if (uid && allowfail && uip->ui_lockcnt >
 	    (allowfail == 1 ? maxlocksperuid : (maxlocksperuid * 2))) {
-		mutex_exit(&uip->ui_lock);
+		UIUNLOCK(uip, s);
 		return NULL;
 	}
 	uip->ui_lockcnt++;
-	mutex_exit(&uip->ui_lock);
+	UIUNLOCK(uip, s);
 	lock = pool_get(&lockfpool, PR_WAITOK);
 	lock->lf_uid = uid;
 	return lock;
@@ -209,11 +210,12 @@ static void
 lf_free(struct lockf *lock)
 {
 	struct uidinfo *uip;
+	int s;
 
 	uip = uid_find(lock->lf_uid);
-	mutex_enter(&uip->ui_lock);
+	UILOCK(uip, s);
 	uip->ui_lockcnt--;
-	mutex_exit(&uip->ui_lock);
+	UIUNLOCK(uip, s);
 	pool_put(&lockfpool, lock);
 }
 
@@ -545,21 +547,18 @@ lf_setlock(struct lockf *lock, struct lockf **sparelock,
 			p = (struct proc *)block->lf_id;
 			KASSERT(p != NULL);
 			while (i++ < maxlockdepth) {
-				mutex_enter(&p->p_smutex);
+				simple_lock(&p->p_lock);
 				if (p->p_nlwps > 1) {
-					mutex_exit(&p->p_smutex);
+					simple_unlock(&p->p_lock);
 					break;
 				}
 				wlwp = LIST_FIRST(&p->p_lwps);
-				lwp_lock(wlwp);
 				if (wlwp->l_wmesg != lockstr) {
-					lwp_unlock(wlwp);
-					mutex_exit(&p->p_smutex);
+					simple_unlock(&p->p_lock);
 					break;
 				}
+				simple_unlock(&p->p_lock);
 				waitblock = wlwp->l_wchan;
-				lwp_unlock(wlwp);
-				mutex_exit(&p->p_smutex);
 				if (waitblock == NULL) {
 					/*
 					 * this lwp just got up but

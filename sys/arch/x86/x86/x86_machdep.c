@@ -1,4 +1,4 @@
-/*	$NetBSD: x86_machdep.c,v 1.10 2007/03/21 00:16:52 xtraeme Exp $	*/
+/*	$NetBSD: x86_machdep.c,v 1.4.2.3 2007/04/22 17:20:44 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: x86_machdep.c,v 1.10 2007/03/21 00:16:52 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: x86_machdep.c,v 1.4.2.3 2007/04/22 17:20:44 bouyer Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -74,7 +74,7 @@ struct bootinfo bootinfo;
 void *
 lookup_bootinfo(int type)
 {
-	bool found;
+	boolean_t found;
 	int i;
 	struct btinfo_common *bic;
 
@@ -101,6 +101,11 @@ check_pa_acc(paddr_t pa, vm_prot_t prot)
 	extern int mem_cluster_cnt;
 	int i;
 
+	if (kauth_authorize_machdep(kauth_cred_get(),
+	    KAUTH_MACHDEP_UNMANAGEDMEM, NULL, NULL, NULL, NULL) == 0) {
+		return 0;
+	}
+
 	for (i = 0; i < mem_cluster_cnt; i++) {
 		const phys_ram_seg_t *seg = &mem_clusters[i];
 		paddr_t lstart = seg->start;
@@ -110,31 +115,17 @@ check_pa_acc(paddr_t pa, vm_prot_t prot)
 		}
 	}
 
-	return kauth_authorize_machdep(kauth_cred_get(),
-	    KAUTH_MACHDEP_UNMANAGEDMEM, NULL, NULL, NULL, NULL);
+	return EPERM;
 }
 
-/*
- * Issue the pause instruction (rep; nop) which acts as a hint to
- * HyperThreading processors that we are spinning on a lock.
- *
- * Not defined as an inline, because even if the CPU does not support
- * HT the delay resulting from a function call is useful for spin lock
- * back off.
- */ 
-void
-x86_pause(void)
-{
-	__asm volatile("pause");
-}
-
-/*
+/*     
  * This function is to initialize the mutex used by x86/msr_ipifuncs.c.
  */
 void
-x86_init(void)
+x86_init(void) 
 {
 #ifndef XEN
-	msr_cpu_broadcast_initmtx();
+	msr_cpu_broadcast_initmtx(); 
 #endif
 }
+

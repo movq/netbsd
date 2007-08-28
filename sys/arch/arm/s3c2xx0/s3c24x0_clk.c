@@ -1,4 +1,4 @@
-/*	$NetBSD: s3c24x0_clk.c,v 1.7 2007/01/06 16:18:18 christos Exp $ */
+/*	$NetBSD: s3c24x0_clk.c,v 1.6.24.1 2007/04/30 18:57:19 bouyer Exp $ */
 
 /*
  * Copyright (c) 2003  Genetec corporation.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: s3c24x0_clk.c,v 1.7 2007/01/06 16:18:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: s3c24x0_clk.c,v 1.6.24.1 2007/04/30 18:57:19 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

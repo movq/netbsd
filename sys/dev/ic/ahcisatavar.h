@@ -1,4 +1,4 @@
-/*	$NetBSD: ahcisatavar.h,v 1.1 2007/05/12 11:04:58 bouyer Exp $	*/
+/*	$NetBSD: ahcisatavar.h,v 1.1.16.2 2007/08/31 20:09:24 pavel Exp $	*/
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.

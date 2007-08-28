@@ -27,14 +27,14 @@
  *	isic - I4B Siemens ISDN Chipset Driver for Creatix PnP cards
  *	============================================================
  *
- *	$Id: isic_isapnp_ctx_s0P.c,v 1.10 2007/03/04 06:02:13 christos Exp $
+ *	$Id: isic_isapnp_ctx_s0P.c,v 1.8 2005/12/11 12:22:16 christos Exp $
  *
  *      last edit-date: [Fri Jan  5 11:38:29 2001]
  *
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_isapnp_ctx_s0P.c,v 1.10 2007/03/04 06:02:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_isapnp_ctx_s0P.c,v 1.8 2005/12/11 12:22:16 christos Exp $");
 
 #include "opt_isicpnp.h"
 #if ISICPNP_CRTX_S0_P
@@ -82,6 +82,7 @@ __KERNEL_RCSID(0, "$NetBSD: isic_isapnp_ctx_s0P.c,v 1.10 2007/03/04 06:02:13 chr
 #include <dev/ic/isac.h>
 #include <dev/ic/hscx.h>
 
+#include <netisdn/i4b_l1l2.h>
 #include <netisdn/i4b_mbuf.h>
 
 #ifndef __FreeBSD__
@@ -286,9 +287,9 @@ isic_probe_Cs0P(struct isa_device *dev, unsigned int iobase2)
 
 	/* setup ISAC and HSCX base addr */
 
-	ISAC_BASE   = (void *) dev->id_iobase - 0x20;
-	HSCX_A_BASE = (void *) iobase2 - 0x20;
-	HSCX_B_BASE = (void *) iobase2;
+	ISAC_BASE   = (caddr_t) dev->id_iobase - 0x20;
+	HSCX_A_BASE = (caddr_t) iobase2 - 0x20;
+	HSCX_B_BASE = (caddr_t) iobase2;
 
 	/*
 	 * Read HSCX A/B VSTR.  Expected value for the Creatix PnP card is

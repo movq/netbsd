@@ -1,4 +1,4 @@
-/*	$NetBSD: omap_a2x_io.S,v 1.1 2007/01/06 00:29:52 christos Exp $ */
+/*	$NetBSD: omap_a2x_io.S,v 1.1.6.2 2007/02/21 18:27:15 snj Exp $ */
 
 /*
  * Copyright (c) 2002  Genetec Corporation.  All rights reserved.

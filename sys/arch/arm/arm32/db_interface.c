@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.42 2007/02/22 05:14:05 thorpej Exp $	*/
+/*	$NetBSD: db_interface.c,v 1.40 2006/04/05 00:38:51 uwe Exp $	*/
 
 /* 
  * Copyright (c) 1996 Scott K. Stevens
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.42 2007/02/22 05:14:05 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.40 2006/04/05 00:38:51 uwe Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -157,9 +157,9 @@ kdb_trap(int type, db_regs_t *regs)
 
 	s = splhigh();
 	db_active++;
-	cnpollc(true);
+	cnpollc(TRUE);
 	db_trap(type, 0/*code*/);
-	cnpollc(false);
+	cnpollc(FALSE);
 	db_active--;
 	splx(s);
 
@@ -186,7 +186,7 @@ db_validate_address(vaddr_t addr)
 	else
 		pmap = p->p_vmspace->vm_map.pmap;
 
-	return (pmap_extract(pmap, addr, NULL) == false);
+	return (pmap_extract(pmap, addr, NULL) == FALSE);
 }
 
 /*
@@ -244,7 +244,7 @@ db_write_text(vaddr_t addr, size_t size, const char *data)
 
 	do {
 		/* Get the PDE of the current VA. */
-		if (pmap_get_pde_pte(pmap, (vaddr_t) dst, &pde, &pte) == false)
+		if (pmap_get_pde_pte(pmap, (vaddr_t) dst, &pde, &pte) == FALSE)
 			goto no_mapping;
 		switch ((oldpde = *pde) & L1_TYPE_MASK) {
 		case L1_TYPE_S:
@@ -462,10 +462,6 @@ branch_taken(u_int insn, u_int pc, db_regs_t *regs)
 	case 0x7:	/* ldr pc, [pc, reg, lsl #2] */
 		addr = db_fetch_reg(insn & 0xf, regs);
 		addr = pc + 8 + (addr << 2);
-		db_read_bytes(addr, 4, (char *)&addr);
-		return (addr);
-	case 0x5:	/* ldr pc, [reg] */
-		addr = db_fetch_reg((insn >> 16) & 0xf, regs);
 		db_read_bytes(addr, 4, (char *)&addr);
 		return (addr);
 	case 0x1:	/* mov pc, reg */

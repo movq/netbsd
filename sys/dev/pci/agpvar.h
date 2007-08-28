@@ -1,4 +1,4 @@
-/*	$NetBSD: agpvar.h,v 1.15 2007/08/04 09:33:05 kiyohara Exp $	*/
+/*	$NetBSD: agpvar.h,v 1.12 2006/08/17 17:11:28 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson
@@ -32,7 +32,7 @@
 #define _PCI_AGPVAR_H_
 
 #include <sys/mallocvar.h>
-#include <sys/mutex.h>
+#include <sys/lock.h>
 
 struct agpbus_attach_args {
 	char	*_apa_busname; /* XXX placeholder */
@@ -92,7 +92,7 @@ struct agp_memory {
 	off_t		am_offset;		/* page offset if bound */
 	int		am_is_bound;		/* non-zero if bound */
 	bus_addr_t	  am_physical;
-	void *		  am_virtual;
+	caddr_t		  am_virtual;
 	bus_dmamap_t	  am_dmamap;
 	bus_dma_segment_t *am_dmaseg;
 	int		  am_nseg;
@@ -144,7 +144,7 @@ struct agp_softc {
 #if 0
 	dev_t			as_devnode;	/* from make_dev */
 #endif
-	kmutex_t		as_mtx;		/* mutex for access to GATT */
+	struct lock		as_lock;	/* lock for access to GATT */
 	struct agp_methods	*as_methods;	/* chipset-dependent API */
 	void			*as_chipc;	/* chipset-dependent state */
 	pci_chipset_tag_t	as_pc;
@@ -181,7 +181,6 @@ int agp_generic_unbind_memory(struct agp_softc *, struct agp_memory *);
 
 /* The vendor has already been matched when these functions are called */
 int agp_amd_match(const struct pci_attach_args *);
-int agp_amd64_match(const struct pci_attach_args *);
 
 int agp_ali_attach(struct device *, struct device *, void *);
 int agp_amd_attach(struct device *, struct device *, void *);
@@ -189,11 +188,10 @@ int agp_i810_attach(struct device *, struct device *, void *);
 int agp_intel_attach(struct device *, struct device *, void *);
 int agp_via_attach(struct device *, struct device *, void *);
 int agp_sis_attach(struct device *, struct device *, void *);
-int agp_amd64_attach(struct device *, struct device *, void *);
 
-int agp_alloc_dmamem(bus_dma_tag_t, size_t, int, bus_dmamap_t *, void **,
+int agp_alloc_dmamem(bus_dma_tag_t, size_t, int, bus_dmamap_t *, caddr_t *,
 		     bus_addr_t *, bus_dma_segment_t *, int, int *);
-void agp_free_dmamem(bus_dma_tag_t, size_t, bus_dmamap_t, void *,
+void agp_free_dmamem(bus_dma_tag_t, size_t, bus_dmamap_t, caddr_t,
 		     bus_dma_segment_t *, int) ;
 
 MALLOC_DECLARE(M_AGP);

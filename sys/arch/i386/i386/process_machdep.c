@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.64 2007/07/09 20:52:16 ad Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.60 2006/11/28 17:27:09 elad Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2001 The NetBSD Foundation, Inc.
@@ -59,11 +59,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.64 2007/07/09 20:52:16 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.60 2006/11/28 17:27:09 elad Exp $");
 
 #include "opt_vm86.h"
 #include "opt_ptrace.h"
-#include "opt_coredump.h"
 #include "npx.h"
 
 #include <sys/param.h>
@@ -85,7 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.64 2007/07/09 20:52:16 ad Exp 
 #include <machine/vm86.h>
 #endif
 
-#if defined(PTRACE) || defined(COREDUMP)
+#ifdef PTRACE
 static inline struct trapframe *
 process_frame(struct lwp *l)
 {
@@ -99,7 +98,7 @@ process_fpframe(struct lwp *l)
 
 	return (&l->l_addr->u_pcb.pcb_savefpu);
 }
-#endif /* defined(PTRACE) || defined(COREDUMP) */
+#endif /* PTRACE */
 
 static int
 xmm_to_s87_tag(const uint8_t *fpac, int regno, uint8_t tw)
@@ -215,7 +214,7 @@ process_s87_to_xmm(const struct save87 *s87, struct savexmm *sxmm)
 #endif
 }
 
-#if defined(PTRACE) || defined(COREDUMP)
+#ifdef PTRACE
 int
 process_read_regs(struct lwp *l, struct reg *regs)
 {
@@ -298,9 +297,7 @@ process_read_fpregs(struct lwp *l, struct fpreg *regs)
 		memcpy(regs, &frame->sv_87, sizeof(*regs));
 	return (0);
 }
-#endif /* defined(PTRACE) || defined(COREDUMP) */
 
-#ifdef PTRACE
 int
 process_write_regs(struct lwp *l, const struct reg *regs)
 {
@@ -394,7 +391,7 @@ process_sstep(struct lwp *l, int sstep)
 }
 
 int
-process_set_pc(struct lwp *l, void *addr)
+process_set_pc(struct lwp *l, caddr_t addr)
 {
 	struct trapframe *tf = process_frame(l);
 
@@ -467,7 +464,7 @@ ptrace_machdep_dorequest(
     struct lwp *l,
     struct lwp *lt,
     int req,
-    void *addr,
+    caddr_t addr,
     int data
 )
 {
@@ -535,7 +532,7 @@ process_machdep_doxmmregs(curl, l, uio)
 	if (kl > uio->uio_resid)
 		kl = uio->uio_resid;
 
-	uvm_lwp_hold(l);
+	PHOLD(l);
 
 	if (kl < 0)
 		error = EINVAL;
@@ -550,7 +547,7 @@ process_machdep_doxmmregs(curl, l, uio)
 			error = process_machdep_write_xmmregs(l, &r);
 	}
 
-	uvm_lwp_rele(l);
+	PRELE(l);
 
 	uio->uio_offset = 0;
 	return (error);
@@ -561,7 +558,7 @@ process_machdep_validxmmregs(p)
 	struct proc *p;
 {
 
-	if (p->p_flag & PK_SYSTEM)
+	if (p->p_flag & P_SYSTEM)
 		return (0);
 
 	return (i386_use_fxsave);

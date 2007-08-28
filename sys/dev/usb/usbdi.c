@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdi.c,v 1.120 2007/08/15 04:00:34 kiyohara Exp $	*/
+/*	$NetBSD: usbdi.c,v 1.114.2.2 2007/04/06 18:43:51 bouyer Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usbdi.c,v 1.28 1999/11/17 22:33:49 n_hibma Exp $	*/
 
 /*
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usbdi.c,v 1.120 2007/08/15 04:00:34 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usbdi.c,v 1.114.2.2 2007/04/06 18:43:51 bouyer Exp $");
 
 #include "opt_compat_netbsd.h"
 
@@ -69,8 +69,9 @@ __KERNEL_RCSID(0, "$NetBSD: usbdi.c,v 1.120 2007/08/15 04:00:34 kiyohara Exp $")
 #include <dev/usb/usb_mem.h>
 #include <dev/usb/usb_quirks.h>
 
-/* UTF-8 encoding stuff */
-#include <fs/unicode.h>
+#if defined(__FreeBSD__)
+#include "usb_if.h"
+#endif
 
 #ifdef USB_DEBUG
 #define DPRINTF(x)	if (usbdebug) logprintf x
@@ -87,6 +88,20 @@ Static void usbd_do_request_async_cb
 Static void usbd_start_next(usbd_pipe_handle pipe);
 Static usbd_status usbd_open_pipe_ival
 	(usbd_interface_handle, u_int8_t, u_int8_t, usbd_pipe_handle *, int);
+
+Static int usbd_nbuses = 0;
+
+void
+usbd_init(void)
+{
+	usbd_nbuses++;
+}
+
+void
+usbd_finish(void)
+{
+	--usbd_nbuses;
+}
 
 static inline int
 usbd_xfer_isread(usbd_xfer_handle xfer)
@@ -271,10 +286,10 @@ usbd_transfer(usbd_xfer_handle xfer)
 	usbd_pipe_handle pipe = xfer->pipe;
 	usb_dma_t *dmap = &xfer->dmabuf;
 	usbd_status err;
-	unsigned int size, flags;
+	u_int size;
 	int s;
 
-	DPRINTFN(5,("usbd_transfer: xfer=%p, flags=%#x, pipe=%p, running=%d\n",
+	DPRINTFN(5,("usbd_transfer: xfer=%p, flags=%d, pipe=%p, running=%d\n",
 		    xfer, xfer->flags, pipe, pipe->running));
 #ifdef USB_DEBUG
 	if (usbdebug > 5)
@@ -300,13 +315,11 @@ usbd_transfer(usbd_xfer_handle xfer)
 		xfer->rqflags |= URQ_AUTO_DMABUF;
 	}
 
-	flags = xfer->flags;
-
 	/* Copy data if going out. */
-	if (!(flags & USBD_NO_COPY) && size != 0 && !usbd_xfer_isread(xfer))
+	if (!(xfer->flags & USBD_NO_COPY) && size != 0 &&
+	    !usbd_xfer_isread(xfer))
 		memcpy(KERNADDR(dmap, 0), xfer->buffer, size);
 
-	/* xfer is not valid after the transfer method unless synchronous */
 	err = pipe->methods->transfer(xfer);
 
 	if (err != USBD_IN_PROGRESS && err) {
@@ -319,7 +332,7 @@ usbd_transfer(usbd_xfer_handle xfer)
 		}
 	}
 
-	if (!(flags & USBD_SYNCHRONOUS))
+	if (!(xfer->flags & USBD_SYNCHRONOUS))
 		return (err);
 
 	/* Sync transfer, wait for completion. */
@@ -1209,19 +1222,30 @@ usbd_get_string0(usbd_device_handle dev, int si, char *buf, int unicode)
 			c = UGETW(us.bString[i]);
 			if (swap)
 				c = (c >> 8) | (c << 8);
-			s += wput_utf8(s, 3, c);
+			if (c < 0x0080) {
+				*s++ = c;
+			} else if (c < 0x0800) {
+				*s++ = 0xc0 | (c >> 6);
+				*s++ = 0x80 | (c & 0x3f);
+			} else {
+				*s++ = 0xe0 | (c >> 12);
+				*s++ = 0x80 | ((c >> 6) & 0x3f);
+				*s++ = 0x80 | (c & 0x3f);
+			}
 		}
 		*s++ = 0;
 	}
 #ifdef COMPAT_30
 	else {
-		for (i = 0; i < n; i++) {
+		int j;
+		for (i = j = 0; i < n && j < USB_MAX_STRING_LEN - 1; i++) {
 			c = UGETW(us.bString[i]);
 			if (swap)
 				c = (c >> 8) | (c << 8);
-			*s++ = (c < 0x80) ? c : '?';
+			/* Encode (16-bit) Unicode as UTF8. */
+			s[j++] = (c < 0x80) ? c : '?';
 		}
-		*s++ = 0;
+		s[j] = 0;
 	}
 #endif
 	return (USBD_NORMAL_COMPLETION);

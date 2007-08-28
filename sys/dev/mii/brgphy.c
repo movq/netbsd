@@ -1,4 +1,4 @@
-/*	$NetBSD: brgphy.c,v 1.34 2007/08/06 12:16:33 markd Exp $	*/
+/*	$NetBSD: brgphy.c,v 1.31.2.2 2007/08/31 21:52:40 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: brgphy.c,v 1.34 2007/08/06 12:16:33 markd Exp $");
+__KERNEL_RCSID(0, "$NetBSD: brgphy.c,v 1.31.2.2 2007/08/31 21:52:40 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

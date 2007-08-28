@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsrvcache.h,v 1.15 2007/06/01 11:56:04 yamt Exp $	*/
+/*	$NetBSD: nfsrvcache.h,v 1.13 2005/12/11 12:25:17 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -45,7 +45,6 @@
 #define	NFSRVCACHESIZ	64
 
 struct nfsrvcache {
-	kcondvar_t rc_cv;
 	TAILQ_ENTRY(nfsrvcache) rc_lru;		/* LRU chain */
 	LIST_ENTRY(nfsrvcache) rc_hash;		/* Hash chain */
 	u_int32_t	rc_xid;				/* rpc id number */
@@ -80,6 +79,7 @@ struct nfsrvcache {
 #define	RC_WANTED	0x02
 #define	RC_REPSTATUS	0x04
 #define	RC_REPMBUF	0x08
+#define	RC_NQNFS	0x10
 #define	RC_INETADDR	0x20
 #define	RC_NAM		0x40
 

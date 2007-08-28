@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.c,v 1.19 2007/03/04 10:21:26 christos Exp $	*/
+/*	$NetBSD: mem.c,v 1.15.8.1 2007/01/06 13:18:16 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -75,7 +75,7 @@
 #include "opt_compat_netbsd.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.19 2007/03/04 10:21:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.15.8.1 2007/01/06 13:18:16 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -92,7 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.19 2007/03/04 10:21:26 christos Exp $");
 #include <uvm/uvm_extern.h>
 
 extern char *memhook;            /* poor name! */
-void *zeropage;
+caddr_t zeropage;
 int physlock;
 
 dev_type_read(mmrw);
@@ -121,7 +121,7 @@ mmrw(dev, uio, flags)
 		/* lock against other uses of shared vmmap */
 		while (physlock > 0) {
 			physlock++;
-			error = tsleep((void *)&physlock, PZERO | PCATCH,
+			error = tsleep((caddr_t)&physlock, PZERO | PCATCH,
 			    "mmrw", 0);
 			if (error)
 				return (error);
@@ -148,7 +148,7 @@ mmrw(dev, uio, flags)
 			pmap_update(pmap_kernel());
 			o = uio->uio_offset & PGOFSET;
 			c = min(uio->uio_resid, (int)(PAGE_SIZE - o));
-			error = uiomove((char *)memhook + o, c, uio);
+			error = uiomove((caddr_t)memhook + o, c, uio);
 			pmap_remove(pmap_kernel(), (vaddr_t)memhook,
 			    (vaddr_t)memhook + PAGE_SIZE);
 			pmap_update(pmap_kernel());
@@ -157,10 +157,10 @@ mmrw(dev, uio, flags)
 		case DEV_KMEM:
 			v = uio->uio_offset;
 			c = min(iov->iov_len, MAXPHYS);
-			if (!uvm_kernacc((void *)v, c,
+			if (!uvm_kernacc((caddr_t)v, c,
 			    uio->uio_rw == UIO_READ ? B_READ : B_WRITE))
 				return (EFAULT);
-			error = uiomove((void *)v, c, uio);
+			error = uiomove((caddr_t)v, c, uio);
 			break;
 
 		case DEV_NULL:
@@ -177,7 +177,7 @@ mmrw(dev, uio, flags)
 				return (0);
 			}
 			if (zeropage == NULL) {
-				zeropage = (void *)
+				zeropage = (caddr_t)
 				    malloc(PAGE_SIZE, M_TEMP, M_WAITOK);
 				memset(zeropage, 0, PAGE_SIZE);
 			}
@@ -192,7 +192,7 @@ mmrw(dev, uio, flags)
 	if (minor(dev) == DEV_MEM) {
 /*unlock:*/
 		if (physlock > 1)
-			wakeup((void *)&physlock);
+			wakeup((caddr_t)&physlock);
 		physlock = 0;
 	}
 	return (error);

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.arm,v 1.29 2007/03/04 12:08:58 bjh21 Exp $
+#	$NetBSD: Makefile.arm,v 1.27 2005/11/10 09:42:42 dbj Exp $
 
 # Makefile for NetBSD
 #
@@ -26,6 +26,7 @@ NEED_OWN_INSTALL_TARGET?=no
 ##
 THISARM=	$S/arch/${MACHINE}
 ARM=		$S/arch/arm
+ARM32=		$S/arch/arm32
 GENASSYM_CONF=	${ARM}/arm32/genassym.cf
 .-include "$S/arch/${MACHINE}/conf/Makefile.${MACHINE}.inc"
 
@@ -43,9 +44,9 @@ KERN_AS=	obj
 ##
 ## (4) local objects, compile rules, and dependencies
 ##
-MD_OBJS+=	${SYSTEM_FIRST_OBJ} locore.o
-MD_CFILES+=
-MD_SFILES+=	${SYSTEM_FIRST_SFILE} ${ARM}/arm32/locore.S
+MD_OBJS=	${SYSTEM_FIRST_OBJ} locore.o
+MD_CFILES=
+MD_SFILES=	${SYSTEM_FIRST_SFILE} ${ARM}/arm32/locore.S
 
 .if defined(SYSTEM_FIRST_OBJ)
 ${SYSTEM_FIRST_OBJ}: ${SYSTEM_FIRST_SFILE} assym.h

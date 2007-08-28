@@ -1,4 +1,4 @@
-#	$NetBSD: files.pci,v 1.295 2007/07/28 10:51:57 kiyohara Exp $
+#	$NetBSD: files.pci,v 1.273.2.3 2007/08/31 20:09:25 pavel Exp $
 #
 # Config file and device description for machine-independent PCI code.
 # Included by ports that need it.  Requires that the SCSI files be
@@ -666,10 +666,15 @@ device	btvmeii: vmebus, univ_pci
 attach	btvmeii at pci
 file	dev/pci/btvmeii.c btvmeii
 
-# VIA VT82C686A/VT8231 PM Timer and Hardware Monitor
-device	viaenv: acpipmtimer, sysmon_envsys
-attach	viaenv at pci
-file	dev/pci/viaenv.c		viaenv
+# VT86C686A power management
+device	viapm {}
+attach	viapm at pci
+file	dev/pci/viapm.c	viapm
+
+# hardware monitoring part of viapm
+device	viaenv: sysmon_envsys
+attach	viaenv at viapm
+file	dev/pci/viaenv.c		viaenv			needs-flag
 
 # Intel PIIX4 power management controller
 device	piixpm: i2cbus, acpipmtimer
@@ -756,8 +761,7 @@ attach	joy at pci with joy_pci
 file	dev/pci/joy_pci.c		joy_pci
 
 # ATI Mach64 framebuffer console driver
-defflag	opt_machfb.h	MACHFB_DEBUG
-device	machfb: wsemuldisplaydev, rasops8, fb, vcons, videomode, edid, drm
+device	machfb: wsemuldisplaydev, rasops8, fb, vcons, videomode
 attach	machfb at pci
 file	dev/pci/machfb.c		machfb
 
@@ -767,42 +771,22 @@ attach	voodoofb at pci
 file	dev/pci/voodoofb.c		voodoofb
 
 # VIA UniChrome framebuffer console driver
-device	unichromefb: wsemuldisplaydev, rasops16, rasops32, vcons, drm
+device	unichromefb: wsemuldisplaydev, rasops16, rasops32, vcons
 attach	unichromefb at pci
 file	dev/pci/unichromefb.c		unichromefb needs-flag
 
 # ATI Radeon framebuffer console driver
 # (Note: to enable the BIOS parser, add options RADEON_BIOS_INIT to the config)
-device	radeonfb: wsemuldisplaydev, videomode, rasops32, vcons, splash, iic, i2c_bitbang, ddc_read_edid, edid, drm
+device	radeonfb: wsemuldisplaydev, videomode, rasops32, vcons, splash, iic, i2c_bitbang, ddc_read_edid, edid
 attach	radeonfb at pci
 file	dev/pci/radeonfb.c	radeonfb
 file	dev/pci/radeonfb_i2c.c	radeonfb
 file	dev/pci/radeonfb_bios.c	radeonfb
-defflag opt_radeonfb.h	RADEONFB_DEBUG
-
-# Chelsio Terminator 3 (T3) 10 gigabit ethernet
-device	cxgbc { }
-attach	cxgbc at pci
-device	cxgb: ether, ifnet, arp
-attach	cxgb at cxgbc
-file	dev/pci/cxgb_main.c		cxgbc | cxgb
-file	dev/pci/cxgb_mc5.c		cxgbc | cxgb
-file	dev/pci/cxgb_vsc8211.c		cxgbc | cxgb
-file	dev/pci/cxgb_ael1002.c		cxgbc | cxgb
-file	dev/pci/cxgb_mv88e1xxx.c	cxgbc | cxgb
-file	dev/pci/cxgb_xgmac.c		cxgbc | cxgb
-file	dev/pci/cxgb_t3_hw.c		cxgbc | cxgb
-file	dev/pci/cxgb_sge.c		cxgbc | cxgb
-file	dev/pci/cxgb_lro.c		cxgbc | cxgb
-file	dev/pci/cxgb_offload.c		cxgbc | cxgb
-file	dev/pci/cxgb_l2t.c		cxgbc | cxgb
 
 # Chips & Technologies 65550 framebuffer console driver
 device	chipsfb: wsemuldisplaydev, rasops8, vcons, videomode
 attach	chipsfb at pci
 file	dev/pci/chipsfb.c		chipsfb
-defflag	opt_chipsfb.h	CHIPSFB_DEBUG
-defflag	opt_chipsfb.h	CHIPSFB_WAIT
 
 # 3Com 3c990
 device	txp: ether, ifnet, arp
@@ -886,24 +870,3 @@ attach	mskc at pci
 device	msk: ether, ifnet, arp, mii
 attach	msk at mskc
 file	dev/pci/if_msk.c		mskc | msk
-
-#
-# Direct Rendering Manager
-#
-include "dev/pci/drm/files.pcidrm"
-
-# generic framebuffer console driver, PCI frontend
-attach genfb at pci with genfb_pci
-file	dev/pci/genfb_pci.c	genfb_pci
-
-# NVIDIA nForce2/3/4 SMBus controller
-device	nfsmbc { }
-attach	nfsmbc at pci
-device	nfsmb: i2cbus
-attach	nfsmb at nfsmbc
-file	dev/pci/nfsmb.c			nfsmbc | nfsmb
-
-# Intel ICH SMBus controller
-device	ichsmb: i2cbus
-attach	ichsmb at pci
-file	dev/pci/ichsmb.c		ichsmb

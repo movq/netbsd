@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.88 2007/06/12 03:34:32 mhitch Exp $	*/
+/*	$NetBSD: locore.s,v 1.86.24.1 2007/06/18 09:31:05 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -602,6 +602,13 @@ Ldorte:
  * Use common m68k support routines.
  */
 #include <m68k/m68k/support.s>
+
+BSS(want_resched,4)
+
+/*
+ * Use common m68k process manipulation routines.
+ */
+#include <m68k/m68k/proc_subr.s>
 
 /*
  * Use common m68k process/lwp switch and context save subroutines.

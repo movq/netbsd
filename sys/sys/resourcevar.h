@@ -1,4 +1,4 @@
-/*	$NetBSD: resourcevar.h,v 1.38 2007/07/12 11:05:42 he Exp $	*/
+/*	$NetBSD: resourcevar.h,v 1.32 2006/07/17 11:38:56 martin Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -34,10 +34,11 @@
 #ifndef	_SYS_RESOURCEVAR_H_
 #define	_SYS_RESOURCEVAR_H_
 
-#include <sys/mutex.h>
+#include <sys/lock.h>
 
 /*
  * Kernel per-process accounting / statistics
+ * (not necessarily resident except when running).
  */
 struct pstats {
 #define	pstat_startzero	p_ru
@@ -49,7 +50,7 @@ struct pstats {
 	struct	itimerval p_timer[3];	/* virtual-time timers */
 
 	struct uprof {			/* profile arguments */
-		char *	pr_base;	/* buffer base */
+		caddr_t	pr_base;	/* buffer base */
 		size_t  pr_size;	/* buffer size */
 		u_long	pr_off;		/* pc offset */
 		u_int   pr_scale;	/* pc scaling */
@@ -74,17 +75,16 @@ struct plimit {
 #define	PL_SHAREMOD	0x01		/* modifications are shared */
 	int	p_lflags;
 	int	p_refcnt;		/* number of references */
-	kmutex_t p_lock;		/* mutex for p_refcnt */
+	struct simplelock p_slock;	/* mutex for p_refcnt */
 };
 
-/* add user profiling from AST XXXSMP */
+/* add user profiling from AST */
 #define	ADDUPROF(p)							\
 	do {								\
-		struct proc *_p = l->l_proc;				\
-		addupc_task(l,						\
-		    (_p)->p_stats->p_prof.pr_addr,			\
-		    (_p)->p_stats->p_prof.pr_ticks);			\
-		(_p)->p_stats->p_prof.pr_ticks = 0;			\
+		addupc_task(p,						\
+		    (p)->p_stats->p_prof.pr_addr,			\
+		    (p)->p_stats->p_prof.pr_ticks);			\
+		(p)->p_stats->p_prof.pr_ticks = 0;			\
 	} while (/* CONSTCOND */ 0)
 
 #ifdef _KERNEL
@@ -97,17 +97,26 @@ struct uidinfo {
 	long	ui_proccnt;	/* Number of processes */
 	long	ui_lockcnt;	/* Number of locks */
 	rlim_t	ui_sbsize;	/* socket buffer size */
-	kmutex_t ui_lock;	/* mutex for everything */
+	struct simplelock ui_slock; /* mutex for everything */
 
 };
 #define	UIHASH(uid)	(&uihashtbl[(uid) & uihash])
+#define UILOCK(uip, s) \
+    do { \
+	s = splsoftnet(); \
+	simple_lock(&uip->ui_slock); \
+    } while (/*CONSTCOND*/0)
+#define UIUNLOCK(uip, s) \
+    do { \
+	simple_unlock(&uip->ui_slock); \
+	splx(s); \
+    } while (/*CONSTCOND*/0)
 
 extern LIST_HEAD(uihashhead, uidinfo) *uihashtbl;
 extern u_long uihash;		/* size of hash table - 1 */
 int       chgproccnt(uid_t, int);
 int       chgsbsize(struct uidinfo *, u_long *, u_long, rlim_t);
 struct uidinfo *uid_find(uid_t);
-void	uid_init(void);
 
 extern char defcorename[];
 
@@ -117,11 +126,11 @@ extern uid_t security_setidcore_owner;
 extern gid_t security_setidcore_group;
 extern mode_t security_setidcore_mode;
 
-void	 addupc_intr(struct lwp *, u_long);
-void	 addupc_task(struct lwp *, u_long, u_int);
+void	 addupc_intr(struct proc *, u_long);
+void	 addupc_task(struct proc *, u_long, u_int);
 void	 calcru(struct proc *, struct timeval *, struct timeval *,
-	    struct timeval *, struct timeval *);
-struct plimit *limcopy(struct proc *);
+	    struct timeval *);
+struct plimit *limcopy(struct plimit *);
 void limfree(struct plimit *);
 void	ruadd(struct rusage *, struct rusage *);
 struct	pstats *pstatscopy(struct pstats *);

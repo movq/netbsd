@@ -1,4 +1,4 @@
-/*	$NetBSD: oboe.c,v 1.26 2007/07/09 21:00:57 ad Exp $	*/
+/*	$NetBSD: oboe.c,v 1.24 2006/11/16 01:33:09 christos Exp $	*/
 
 /*	XXXXFVDL THIS DRIVER IS BROKEN FOR NON-i386 -- vtophys() usage	*/
 
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: oboe.c,v 1.26 2007/07/09 21:00:57 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: oboe.c,v 1.24 2006/11/16 01:33:09 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,7 +55,6 @@ __KERNEL_RCSID(0, "$NetBSD: oboe.c,v 1.26 2007/07/09 21:00:57 ad Exp $");
 #include <sys/tty.h>
 #include <sys/vnode.h>
 #include <sys/poll.h>
-#include <sys/proc.h>
 
 #include <dev/ir/ir.h>
 #include <dev/ir/irdaio.h>
@@ -143,7 +142,7 @@ static int oboe_reset(struct oboe_softc *);
 
 struct oboe_dma {
 	bus_dmamap_t map;
-	void *addr;
+	caddr_t addr;
 	bus_dma_segment_t segs[1];
 	int nsegs;
 	size_t size;

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.84 2007/03/04 11:23:25 tsutsui Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.81 2006/07/21 10:01:39 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2002 The NetBSD Foundation, Inc.
@@ -143,12 +143,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.84 2007/03/04 11:23:25 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.81 2006/07/21 10:01:39 tsutsui Exp $");
 
 #include "hil.h"
 #include "dvbox.h"
 #include "gbox.h"
 #include "hyper.h"
+#include "rbox.h"
 #include "rbox.h"
 #include "topcat.h"
 #include "com_dio.h"
@@ -160,6 +161,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.84 2007/03/04 11:23:25 tsutsui Exp $"
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/conf.h>
+#include <sys/device.h>
 #include <sys/device.h>
 #include <sys/disklabel.h>
 #include <sys/malloc.h>
@@ -218,7 +220,8 @@ static int	dio_scan(int (*func)(bus_space_tag_t, bus_addr_t, int));
 static int	dio_scode_probe(int,
 		    int (*func)(bus_space_tag_t, bus_addr_t, int));
 
-extern	void *internalhpib;
+extern	caddr_t internalhpib;
+extern	char *extiobase;
 
 /* How we were booted. */
 u_int	bootdev;
@@ -317,8 +320,8 @@ mainbusattach(struct device *parent, struct device *self, void *aux)
 }
 
 static int
-mainbussearch(struct device *parent, struct cfdata *cf, const int *ldesc,
-    void *aux)
+mainbussearch(struct device *parent, struct cfdata *cf,
+	      const int *ldesc, void *aux)
 {
 
 	if (config_match(parent, cf, NULL) > 0)
@@ -910,11 +913,12 @@ dio_scan(int (*func)(bus_space_tag_t, bus_addr_t, int))
 }
 
 static int
-dio_scode_probe(int scode, int (*func)(bus_space_tag_t, bus_addr_t, int))
+dio_scode_probe(int scode,
+    int (*func)(bus_space_tag_t, bus_addr_t, int))
 {
 	struct bus_space_tag tag;
 	bus_space_tag_t bst;
-	void *pa, *va;
+	caddr_t pa, va;
 
 	bst = &tag;
 	memset(bst, 0, sizeof(struct bus_space_tag));
@@ -947,7 +951,7 @@ iomap_init(void)
 	/* extiobase is initialized by pmap_bootstrap(). */
 	extio_ex = extent_create("extio", (u_long) extiobase,
 	    (u_long) extiobase + (ptoa(EIOMAPSIZE) - 1), M_DEVBUF,
-	    (void *) extio_ex_storage, sizeof(extio_ex_storage),
+	    (caddr_t) extio_ex_storage, sizeof(extio_ex_storage),
 	    EX_NOCOALESCE|EX_NOWAIT);
 }
 
@@ -955,8 +959,8 @@ iomap_init(void)
  * Allocate/deallocate a cache-inhibited range of kernel virtual address
  * space mapping the indicated physical address range [pa - pa+size)
  */
-void *
-iomap(void *pa, int size)
+caddr_t
+iomap(caddr_t pa, int size)
 {
 	u_long kva;
 	int error;
@@ -972,15 +976,15 @@ iomap(void *pa, int size)
 	if (error)
 		return 0;
 
-	physaccess((void *) kva, pa, size, PG_RW|PG_CI);
-	return (void *)kva;
+	physaccess((caddr_t) kva, pa, size, PG_RW|PG_CI);
+	return (caddr_t)kva;
 }
 
 /*
  * Unmap a previously mapped device.
  */
 void
-iounmap(void *kva, int size)
+iounmap(caddr_t kva, int size)
 {
 
 #ifdef DEBUG

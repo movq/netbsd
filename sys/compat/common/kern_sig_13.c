@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sig_13.c,v 1.15 2007/06/16 20:04:28 dsl Exp $	*/
+/*	$NetBSD: kern_sig_13.c,v 1.13 2006/11/16 01:32:41 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sig_13.c,v 1.15 2007/06/16 20:04:28 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sig_13.c,v 1.13 2006/11/16 01:32:41 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -46,6 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_sig_13.c,v 1.15 2007/06/16 20:04:28 dsl Exp $")
 #include <sys/systm.h>
 
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <machine/limits.h>
@@ -53,7 +54,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_sig_13.c,v 1.15 2007/06/16 20:04:28 dsl Exp $")
 #include <compat/sys/signal.h>
 #include <compat/sys/signalvar.h>
 #include <compat/common/compat_util.h>
-#include <compat/common/compat_sigaltstack.h>
 
 void
 native_sigset13_to_sigset(oss, ss)
@@ -98,6 +98,28 @@ native_sigaction_to_sigaction13(sa, osa)
 	osa->osa_flags = sa->sa_flags;
 }
 
+void
+native_sigaltstack13_to_sigaltstack(osa, sa)
+	const struct sigaltstack13 *osa;
+	struct sigaltstack *sa;
+{
+
+	sa->ss_sp = osa->ss_sp;
+	sa->ss_size = osa->ss_size;
+	sa->ss_flags = osa->ss_flags;
+}
+
+void
+native_sigaltstack_to_sigaltstack13(sa, osa)
+	const struct sigaltstack *sa;
+	struct sigaltstack13 *osa;
+{
+
+	osa->ss_sp = sa->ss_sp;
+	osa->ss_size = sa->ss_size;
+	osa->ss_flags = sa->ss_flags;
+}
+
 int
 compat_13_sys_sigaltstack(struct lwp *l, void *v, register_t *retval)
 {
@@ -105,7 +127,28 @@ compat_13_sys_sigaltstack(struct lwp *l, void *v, register_t *retval)
 		syscallarg(const struct sigaltstack13 *) nss;
 		syscallarg(struct sigaltstack13 *) oss;
 	} */ *uap = v;
-	compat_sigaltstack(uap, sigaltstack13, SS_ONSTACK, SS_DISABLE);
+	struct proc *p = l->l_proc;
+	struct sigaltstack13 ness, oess;
+	struct sigaltstack nbss, obss;
+	int error;
+
+	if (SCARG(uap, nss)) {
+		error = copyin(SCARG(uap, nss), &ness, sizeof(ness));
+		if (error)
+			return (error);
+		native_sigaltstack13_to_sigaltstack(&ness, &nbss);
+	}
+	error = sigaltstack1(p,
+	    SCARG(uap, nss) ? &nbss : 0, SCARG(uap, oss) ? &obss : 0);
+	if (error)
+		return (error);
+	if (SCARG(uap, oss)) {
+		native_sigaltstack_to_sigaltstack13(&obss, &oess);
+		error = copyout(&oess, SCARG(uap, oss), sizeof(oess));
+		if (error)
+			return (error);
+	}
+	return (0);
 }
 
 int
@@ -116,6 +159,7 @@ compat_13_sys_sigaction(struct lwp *l, void *v, register_t *retval)
 		syscallarg(const struct sigaction13 *) nsa;
 		syscallarg(struct sigaction13 *) osa;
 	} */ *uap = v;
+	struct proc *p = l->l_proc;
 	struct sigaction13 nesa, oesa;
 	struct sigaction nbsa, obsa;
 	int error;
@@ -126,7 +170,7 @@ compat_13_sys_sigaction(struct lwp *l, void *v, register_t *retval)
 			return (error);
 		native_sigaction13_to_sigaction(&nesa, &nbsa);
 	}
-	error = sigaction1(l, SCARG(uap, signum),
+	error = sigaction1(p, SCARG(uap, signum),
 	    SCARG(uap, nsa) ? &nbsa : 0, SCARG(uap, osa) ? &obsa : 0,
 	    NULL, 0);
 	if (error)
@@ -154,9 +198,7 @@ compat_13_sys_sigprocmask(struct lwp *l, void *v, register_t *retval)
 
 	ness = SCARG(uap, mask);
 	native_sigset13_to_sigset(&ness, &nbss);
-	mutex_enter(&p->p_smutex);
-	error = sigprocmask1(l, SCARG(uap, how), &nbss, &obss);
-	mutex_exit(&p->p_smutex);
+	error = sigprocmask1(p, SCARG(uap, how), &nbss, &obss);
 	if (error)
 		return (error);
 	native_sigset_to_sigset13(&obss, &oess);
@@ -167,10 +209,11 @@ compat_13_sys_sigprocmask(struct lwp *l, void *v, register_t *retval)
 int
 compat_13_sys_sigpending(struct lwp *l, void *v, register_t *retval)
 {
+	struct proc *p = l->l_proc;
 	sigset13_t ess;
 	sigset_t bss;
 
-	sigpending1(l, &bss);
+	sigpending1(p, &bss);
 	native_sigset_to_sigset13(&bss, &ess);
 	*retval = ess;
 	return (0);
@@ -182,10 +225,11 @@ compat_13_sys_sigsuspend(struct lwp *l, void *v, register_t *retval)
 	struct compat_13_sys_sigsuspend_args /* {
 		syscallarg(sigset13_t) mask;
 	} */ *uap = v;
+	struct proc *p = l->l_proc;
 	sigset13_t ess;
 	sigset_t bss;
 
 	ess = SCARG(uap, mask);
 	native_sigset13_to_sigset(&ess, &bss);
-	return (sigsuspend1(l, &bss));
+	return (sigsuspend1(p, &bss));
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ld.c,v 1.49 2007/07/29 12:50:18 ad Exp $	*/
+/*	$NetBSD: ld.c,v 1.42.2.3 2007/04/30 19:01:15 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.49 2007/07/29 12:50:18 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.42.2.3 2007/04/30 19:01:15 bouyer Exp $");
 
 #include "rnd.h"
 
@@ -63,7 +63,6 @@ __KERNEL_RCSID(0, "$NetBSD: ld.c,v 1.49 2007/07/29 12:50:18 ad Exp $");
 #include <sys/fcntl.h>
 #include <sys/vnode.h>
 #include <sys/syslog.h>
-#include <sys/mutex.h>
 #if NRND > 0
 #include <sys/rnd.h>
 #endif
@@ -76,7 +75,7 @@ static void	ldgetdefaultlabel(struct ld_softc *, struct disklabel *);
 static void	ldgetdisklabel(struct ld_softc *);
 static void	ldminphys(struct buf *bp);
 static void	ldshutdown(void *);
-static void	ldstart(struct ld_softc *, struct buf *);
+static void	ldstart(struct ld_softc *);
 static void	ld_set_properties(struct ld_softc *);
 static void	ld_config_interrupts (struct device *);
 
@@ -107,8 +106,6 @@ void
 ldattach(struct ld_softc *sc)
 {
 	char tbuf[9];
-
-	mutex_init(&sc->sc_mutex, MUTEX_DRIVER, IPL_BIO);
 
 	if ((sc->sc_flags & LDF_ENABLED) == 0) {
 		aprint_normal("%s: disabled\n", sc->sc_dv.dv_xname);
@@ -293,7 +290,8 @@ ldopen(dev_t dev, int flags, int fmt, struct lwp *l)
 		return (ENODEV);
 	part = DISKPART(dev);
 
-	mutex_enter(&sc->sc_dk.dk_openlock);
+	if ((error = lockmgr(&sc->sc_dk.dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
+		return (error);
 
 	if (sc->sc_dk.dk_openmask == 0) {
 		/* Load the partition info if not already loaded. */
@@ -320,9 +318,11 @@ ldopen(dev_t dev, int flags, int fmt, struct lwp *l)
 	sc->sc_dk.dk_openmask =
 	    sc->sc_dk.dk_copenmask | sc->sc_dk.dk_bopenmask;
 
-	error = 0;
+	(void) lockmgr(&sc->sc_dk.dk_openlock, LK_RELEASE, NULL);
+	return (0);
+
  bad1:
-	mutex_exit(&sc->sc_dk.dk_openlock);
+	(void) lockmgr(&sc->sc_dk.dk_openlock, LK_RELEASE, NULL);
 	return (error);
 }
 
@@ -331,13 +331,14 @@ static int
 ldclose(dev_t dev, int flags, int fmt, struct lwp *l)
 {
 	struct ld_softc *sc;
-	int part, unit;
+	int error, part, unit;
 
 	unit = DISKUNIT(dev);
 	part = DISKPART(dev);
 	sc = device_lookup(&ld_cd, unit);
 
-	mutex_enter(&sc->sc_dk.dk_openlock);
+	if ((error = lockmgr(&sc->sc_dk.dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
+		return (error);
 
 	switch (fmt) {
 	case S_IFCHR:
@@ -358,7 +359,7 @@ ldclose(dev_t dev, int flags, int fmt, struct lwp *l)
 			sc->sc_flags &= ~LDF_VLABEL;
 	}
 
-	mutex_exit(&sc->sc_dk.dk_openlock);
+	(void) lockmgr(&sc->sc_dk.dk_openlock, LK_RELEASE, NULL);
 	return (0);
 }
 
@@ -380,7 +381,7 @@ ldwrite(dev_t dev, struct uio *uio, int ioflag)
 
 /* ARGSUSED */
 static int
-ldioctl(dev_t dev, u_long cmd, void *addr, int32_t flag, struct lwp *l)
+ldioctl(dev_t dev, u_long cmd, caddr_t addr, int32_t flag, struct lwp *l)
 {
 	struct ld_softc *sc;
 	int part, unit, error;
@@ -435,7 +436,9 @@ ldioctl(dev_t dev, u_long cmd, void *addr, int32_t flag, struct lwp *l)
 		if ((flag & FWRITE) == 0)
 			return (EBADF);
 
-		mutex_enter(&sc->sc_dk.dk_openlock);
+		if ((error = lockmgr(&sc->sc_dk.dk_openlock, LK_EXCLUSIVE,
+				     NULL)) != 0)
+			return (error);
 		sc->sc_flags |= LDF_LABELLING;
 
 		error = setdisklabel(sc->sc_dk.dk_label,
@@ -452,7 +455,7 @@ ldioctl(dev_t dev, u_long cmd, void *addr, int32_t flag, struct lwp *l)
 			    sc->sc_dk.dk_cpulabel);
 
 		sc->sc_flags &= ~LDF_LABELLING;
-		mutex_exit(&sc->sc_dk.dk_openlock);
+		(void) lockmgr(&sc->sc_dk.dk_openlock, LK_RELEASE, NULL);
 		break;
 
 	case DIOCKLABEL:
@@ -551,7 +554,7 @@ ldstrategy(struct buf *bp)
 
 	if ((sc->sc_flags & LDF_DETACH) != 0) {
 		bp->b_error = EIO;
-		goto done;
+		goto bad;
 	}
 
 	lp = sc->sc_dk.dk_label;
@@ -562,7 +565,7 @@ ldstrategy(struct buf *bp)
 	 */
 	if ((bp->b_bcount % lp->d_secsize) != 0 || bp->b_blkno < 0) {
 		bp->b_error = EINVAL;
-		goto done;
+		goto bad;
 	}
 
 	/* If it's a null transfer, return immediately. */
@@ -596,24 +599,23 @@ ldstrategy(struct buf *bp)
 	bp->b_rawblkno = blkno;
 
 	s = splbio();
-	ldstart(sc, bp);
+	BUFQ_PUT(sc->sc_bufq, bp);
+	ldstart(sc);
 	splx(s);
 	return;
 
+ bad:
+	bp->b_flags |= B_ERROR;
  done:
 	bp->b_resid = bp->b_bcount;
 	biodone(bp);
 }
 
 static void
-ldstart(struct ld_softc *sc, struct buf *bp)
+ldstart(struct ld_softc *sc)
 {
+	struct buf *bp;
 	int error;
-
-	mutex_enter(&sc->sc_mutex);
-
-	if (bp != NULL)
-		BUFQ_PUT(sc->sc_bufq, bp);
 
 	while (sc->sc_queuecnt < sc->sc_maxqueuecnt) {
 		/* See if there is work to do. */
@@ -645,22 +647,19 @@ ldstart(struct ld_softc *sc, struct buf *bp)
 			} else {
 				(void) BUFQ_GET(sc->sc_bufq);
 				bp->b_error = error;
+				bp->b_flags |= B_ERROR;
 				bp->b_resid = bp->b_bcount;
-				mutex_exit(&sc->sc_mutex);
 				biodone(bp);
-				mutex_enter(&sc->sc_mutex);
 			}
 		}
 	}
-
-	mutex_exit(&sc->sc_mutex);
 }
 
 void
 lddone(struct ld_softc *sc, struct buf *bp)
 {
 
-	if (bp->b_error != 0) {
+	if ((bp->b_flags & B_ERROR) != 0) {
 		diskerr(bp, "ld", "error", LOG_PRINTF, 0, sc->sc_dk.dk_label);
 		printf("\n");
 	}
@@ -672,16 +671,13 @@ lddone(struct ld_softc *sc, struct buf *bp)
 #endif
 	biodone(bp);
 
-	mutex_enter(&sc->sc_mutex);
 	if (--sc->sc_queuecnt <= sc->sc_maxqueuecnt) {
 		if ((sc->sc_flags & LDF_DRAIN) != 0) {
 			sc->sc_flags &= ~LDF_DRAIN;
 			wakeup(&sc->sc_queuecnt);
 		}
-		mutex_exit(&sc->sc_mutex);
-		ldstart(sc, NULL);
-	} else
-		mutex_exit(&sc->sc_mutex);
+		ldstart(sc);
+	}
 }
 
 static int
@@ -769,9 +765,8 @@ ldgetdefaultlabel(struct ld_softc *sc, struct disklabel *lp)
  * Take a dump.
  */
 static int
-lddump(dev_t dev, daddr_t blkno, void *vav, size_t size)
+lddump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
 {
-	char *va = vav;
 	struct ld_softc *sc;
 	struct disklabel *lp;
 	int unit, part, nsects, sectoff, towrt, nblk, maxblkcnt, rv;

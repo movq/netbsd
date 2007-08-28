@@ -1,4 +1,4 @@
-/* $NetBSD: trap.c,v 1.115 2007/07/19 12:42:46 tsutsui Exp $ */
+/* $NetBSD: trap.c,v 1.111 2006/07/23 22:06:04 ad Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -100,11 +100,13 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.115 2007/07/19 12:42:46 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.111 2006/07/23 22:06:04 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/user.h>
 #include <sys/syscall.h>
 #include <sys/buf.h>
@@ -214,9 +216,10 @@ printtrap(const u_long a0, const u_long a1, const u_long a2,
 	    framep->tf_regs[FRAME_RA]);
 	printf("CPU %lu    pv         = 0x%lx\n", cpu_id,
 	    framep->tf_regs[FRAME_T12]);
-	printf("CPU %lu    curlwp     = %p\n", cpu_id, curlwp);
-	printf("CPU %lu        pid = %d, comm = %s\n", cpu_id,
-	    curproc->p_pid, curproc->p_comm);
+	printf("CPU %lu    curlwp    = %p\n", cpu_id, curlwp);
+	if (curlwp != NULL)
+		printf("CPU %lu        pid = %d, comm = %s\n", cpu_id,
+		    curproc->p_pid, curproc->p_comm);
 	printf("\n");
 }
 
@@ -263,9 +266,9 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 		 * and per-process unaligned-access-handling flags).
 		 */
 		if (user) {
-			KERNEL_LOCK(1, l);
+			KERNEL_PROC_LOCK(l);
 			i = unaligned_fixup(a0, a1, a2, l);
-			KERNEL_UNLOCK_LAST(l);
+			KERNEL_PROC_UNLOCK(l);
 			if (i == 0)
 				goto out;
 
@@ -360,9 +363,9 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 			break;
 
 		case ALPHA_IF_CODE_OPDEC:
-			KERNEL_LOCK(1, l);
+			KERNEL_PROC_LOCK(l);
 			i = handle_opdec(l, &ucode);
-			KERNEL_UNLOCK_LAST(l);
+			KERNEL_PROC_UNLOCK(l);
 			KSI_INIT_TRAP(&ksi);
 			if (i == 0)
 				goto out;
@@ -393,9 +396,9 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 		case ALPHA_MMCSR_FOE:
 		case ALPHA_MMCSR_FOW:
 			if (user)
-				KERNEL_LOCK(1, l);
+				KERNEL_PROC_LOCK(l);
 			else
-				KERNEL_LOCK(1, NULL);
+				KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 
 			if (pmap_emulate_reference(l, a0, user, a1)) {
 				ftype = VM_PROT_EXECUTE;
@@ -403,9 +406,9 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 			}
 
 			if (user)
-				KERNEL_UNLOCK_LAST(l);
+				KERNEL_PROC_UNLOCK(l);
 			else
-				KERNEL_UNLOCK_ONE(NULL);
+				KERNEL_UNLOCK();
 			goto out;
 
 		case ALPHA_MMCSR_INVALTRANS:
@@ -435,9 +438,13 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 #endif
 			}
 
-			if (user)
-				KERNEL_LOCK(1, l);
-			else {
+			if (user) {
+				KERNEL_PROC_LOCK(l);
+				if (l->l_flag & L_SA) {
+					l->l_savp->savp_faultaddr = (vaddr_t)a0;
+					l->l_flag |= L_SA_PAGEFAULT;
+				}
+			} else {
 				struct cpu_info *ci = curcpu();
 
 				if (l == NULL) {
@@ -473,7 +480,7 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 				if (ci->ci_intrdepth != 0)
 					goto dopanic;
 
-				KERNEL_LOCK(1, NULL);
+				KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 			}
 
 			/*
@@ -504,7 +511,7 @@ do_fault:
 			 * we need to reflect that as an access error.
 			 */
 			if (map != kernel_map &&
-			    (void *)va >= vm->vm_maxsaddr &&
+			    (caddr_t)va >= vm->vm_maxsaddr &&
 			    va < USRSTACK) {
 				if (rv == 0)
 					uvm_grow(l->l_proc, va);
@@ -513,15 +520,16 @@ do_fault:
 					rv = EFAULT;
 			}
 			if (rv == 0) {
-				if (user)
-					KERNEL_UNLOCK_LAST(l);
-				else
-					KERNEL_UNLOCK_ONE(NULL);
+				if (user) {
+					l->l_flag &= ~L_SA_PAGEFAULT;
+					KERNEL_PROC_UNLOCK(l);
+				} else
+					KERNEL_UNLOCK();
 				goto out;
 			}
 
 			if (user == 0) {
-				KERNEL_UNLOCK_ONE(NULL);
+				KERNEL_UNLOCK();
 
 				/* Check for copyin/copyout fault */
 				if (l != NULL &&
@@ -550,7 +558,8 @@ do_fault:
 				ksi.ksi_code = SEGV_ACCERR;
 			else
 				ksi.ksi_code = SEGV_MAPERR;
-			KERNEL_UNLOCK_LAST(l);
+			l->l_flag &= ~L_SA_PAGEFAULT;
+			KERNEL_PROC_UNLOCK(l);
 			break;
 		    }
 
@@ -567,9 +576,9 @@ do_fault:
 #ifdef DEBUG
 	printtrap(a0, a1, a2, entry, framep, 1, user);
 #endif
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 	(*p->p_emul->e_trapsignal)(l, &ksi);
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 out:
 	if (user)
 		userret(l);
@@ -675,24 +684,24 @@ ast(struct trapframe *framep)
 	if (l == NULL)
 		return;
 
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 
 	uvmexp.softs++;
 	l->l_md.md_tf = framep;
 
-	if (l->l_pflag & LP_OWEUPC) {
-		l->l_pflag &= ~LP_OWEUPC;
-		ADDUPROF(l);
+	if (l->l_proc->p_flag & P_OWEUPC) {
+		l->l_proc->p_flag &= ~P_OWEUPC;
+		ADDUPROF(l->l_proc);
 	}
 
 	if (curcpu()->ci_want_resched) {
 		/*
 		 * We are being preempted.
 		 */
-		preempt();
+		preempt(0);
 	}
 
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 	userret(l);
 }
 
@@ -723,7 +732,7 @@ static const int reg_to_framereg[32] = {
 		fpusave_proc(l, 1)
 
 #define	unaligned_load(storage, ptrf, mod)				\
-	if (copyin((void *)va, &(storage), sizeof (storage)) != 0)	\
+	if (copyin((caddr_t)va, &(storage), sizeof (storage)) != 0)	\
 		break;							\
 	signo = 0;							\
 	if ((regptr = ptrf(l, reg)) != NULL)				\
@@ -734,7 +743,7 @@ static const int reg_to_framereg[32] = {
 		(storage) = mod (*regptr);				\
 	else								\
 		(storage) = 0;						\
-	if (copyout(&(storage), (void *)va, sizeof (storage)) != 0)	\
+	if (copyout(&(storage), (caddr_t)va, sizeof (storage)) != 0)	\
 		break;							\
 	signo = 0;
 
@@ -1076,7 +1085,7 @@ handle_opdec(struct lwp *l, u_long *ucodep)
 	l->l_md.md_tf->tf_regs[FRAME_SP] = alpha_pal_rdusp();
 
 	inst_pc = memaddr = l->l_md.md_tf->tf_regs[FRAME_PC] - 4;
-	if (copyin((void *)inst_pc, &inst, sizeof (inst)) != 0) {
+	if (copyin((caddr_t)inst_pc, &inst, sizeof (inst)) != 0) {
 		/*
 		 * really, this should never happen, but in case it
 		 * does we handle it.
@@ -1115,7 +1124,7 @@ handle_opdec(struct lwp *l, u_long *ucodep)
 			u_int8_t b;
 
 			/* XXX ONLY WORKS ON LITTLE-ENDIAN ALPHA */
-			if (copyin((void *)memaddr, &b, sizeof (b)) != 0)
+			if (copyin((caddr_t)memaddr, &b, sizeof (b)) != 0)
 				goto sigsegv;
 			if (regptr != NULL)
 				*regptr = b;
@@ -1123,7 +1132,7 @@ handle_opdec(struct lwp *l, u_long *ucodep)
 			u_int16_t w;
 
 			/* XXX ONLY WORKS ON LITTLE-ENDIAN ALPHA */
-			if (copyin((void *)memaddr, &w, sizeof (w)) != 0)
+			if (copyin((caddr_t)memaddr, &w, sizeof (w)) != 0)
 				goto sigsegv;
 			if (regptr != NULL)
 				*regptr = w;
@@ -1132,14 +1141,14 @@ handle_opdec(struct lwp *l, u_long *ucodep)
 
 			/* XXX ONLY WORKS ON LITTLE-ENDIAN ALPHA */
 			w = (regptr != NULL) ? *regptr : 0;
-			if (copyout(&w, (void *)memaddr, sizeof (w)) != 0)
+			if (copyout(&w, (caddr_t)memaddr, sizeof (w)) != 0)
 				goto sigsegv;
 		} else if (inst.mem_format.opcode == op_stb) {
 			u_int8_t b;
 
 			/* XXX ONLY WORKS ON LITTLE-ENDIAN ALPHA */
 			b = (regptr != NULL) ? *regptr : 0;
-			if (copyout(&b, (void *)memaddr, sizeof (b)) != 0)
+			if (copyout(&b, (caddr_t)memaddr, sizeof (b)) != 0)
 				goto sigsegv;
 		}
 		break;
@@ -1247,6 +1256,17 @@ startlwp(void *arg)
 #endif
 	pool_put(&lwp_uc_pool, uc);
 
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
+	userret(l);
+}
+
+/*
+ * XXX This is a terrible name.
+ */
+void
+upcallret(struct lwp *l)
+{
+	KERNEL_PROC_UNLOCK(l);
+
 	userret(l);
 }

@@ -1,15 +1,16 @@
-/*	$NetBSD: sys_machdep.c,v 1.6 2007/02/09 21:55:03 ad Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.5 2005/12/11 12:17:24 christos Exp $	*/
 
 /*	$OpenBSD: sys_machdep.c,v 1.1 1998/12/29 18:06:48 mickey Exp $	*/
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.6 2007/02/09 21:55:03 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.5 2005/12/11 12:17:24 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 int

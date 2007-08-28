@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_fil.h,v 1.14 2007/07/19 14:04:34 gdt Exp $	*/
+/*	$NetBSD: ip_fil.h,v 1.6.12.5 2007/07/21 12:56:46 liamjfoy Exp $	*/
 
 /*
  * Copyright (C) 1993-2001, 2003 by Darren Reed.

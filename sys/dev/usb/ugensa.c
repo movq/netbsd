@@ -1,4 +1,4 @@
-/*	$NetBSD: ugensa.c,v 1.10 2007/03/13 13:51:55 drochner Exp $	*/
+/*	$NetBSD: ugensa.c,v 1.8 2006/10/11 14:32:28 gdt Exp $	*/
 
 /*
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -95,7 +95,6 @@ static const struct usb_devno ugensa_devs[] = {
 	{ USB_VENDOR_NOVATEL, USB_PRODUCT_NOVATEL_FLEXPACKGPS },
 	{ USB_VENDOR_QUALCOMM_K, USB_PRODUCT_QUALCOMM_K_CDMA_MSM_K },
 	{ USB_VENDOR_SIERRA, USB_PRODUCT_SIERRA_AIRCARD580 },
-	{ USB_VENDOR_NOVATEL2, USB_PRODUCT_NOVATEL2_CDMA_MODEM },
 };
 #define ugensa_lookup(v, p) usb_lookup(ugensa_devs, v, p)
 
@@ -104,6 +103,9 @@ USB_DECLARE_DRIVER(ugensa);
 USB_MATCH(ugensa)
 {
 	USB_MATCH_START(ugensa, uaa);
+
+	if (uaa->iface != NULL)
+		return (UMATCH_NONE);
 
 	DPRINTFN(20,("ugensa: vendor=0x%x, product=0x%x\n",
 		     uaa->vendor, uaa->product));

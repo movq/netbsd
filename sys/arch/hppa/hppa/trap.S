@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.S,v 1.20 2007/05/18 13:29:37 skrll Exp $	*/
+/*	$NetBSD: trap.S,v 1.14 2006/09/15 06:09:36 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -110,9 +110,9 @@
  */
 
 	.section .data
-	.align	64
-$trap_tmp_save:
-	.block	TF_PHYS
+	.align	2048
+$trap_tmp_save:			/* XXX assumed to be aligned on 2048 */
+	.block	TF_PHYS		/* XXX must be aligned to 64 */
 	.align	64
 	.export emergency_stack_start, data
 emergency_stack_start:
@@ -187,7 +187,7 @@ $bsd_syscall:
 	.import $syscall,code
 	.call
 	ldil	L%$syscall, %t2
-	be,n	R%$syscall(%sr1, %t2)
+	be,n	R%$syscall(%sr7, %t2)
 	nop
 
 	.align	NBPG
@@ -380,7 +380,12 @@ $syscall:
 
 	/* do a syscall */
 	.import	syscall,code
-	CALL(syscall, %r1)
+	ldil	L%syscall, %r1
+	ldo	R%syscall(%r1), %r1
+	.call
+	blr	%r0, %rp
+	bv,n	0(%r1)
+	nop
 
 	ldil	L%curlwp, %r1
 	ldw	R%curlwp(%r1), %r1
@@ -409,7 +414,6 @@ $syscall_return:
 	 */
 	copy	%t3, %arg0
 	ldil	L%$trap_tmp_save, %arg1
-	ldo	R%$trap_tmp_save(%arg1), %arg1
 	ldi	TF_PHYS - 4, %arg2
 $syscall_return_copy_loop:
 	ldwm	4(%arg0), %t1
@@ -498,9 +502,9 @@ $syscall_return_copy_loop:
 	 */
 	rsm	RESET_PSW, %r0
 	nop ! nop ! nop ! nop ! nop ! nop ! nop ! nop	/* XXX really? */
+$syscall_return_phys:
 
 	ldil	L%$trap_tmp_save, %t3
-	ldo     R%$trap_tmp_save(%t3), %t3
 
 	/* finally we can restore the space and offset queues and the ipsw */
 	ldw	TF_IISQH(%t3), %t1
@@ -537,6 +541,7 @@ $syscall_end:
 /*
  * interrupt vector table
  */
+/* XXX - fredette changed sr4 to sr7 below: */
 #define	TLABEL(name)	$trap$name
 #define	TELABEL(num)	__CONCAT(trap_ep_,num)
 #define TRAP(name,num) \
@@ -1880,7 +1885,6 @@ ENTRY(TLABEL(all),0)
 	mtctl	%t3, %tr2
 
 	ldil	L%$trap_tmp_save, %t3
-	ldo	R%$trap_tmp_save(%t3), %t3
 	stw	%t1, TF_R22(%t3)	/* use ,bc */
 	stw	%t2, TF_R21(%t3)
 
@@ -2079,16 +2083,23 @@ $trapnowvirt:
 	 * Copy partially saved state from the store into the frame
 	 */
 	ldil	L%$trap_tmp_save, %t2
-	ldo	R%$trap_tmp_save(%t2), %t2
 	/* use ,bc each line */
-	ldw  0(%t2), %r1 ! ldw  4(%t2), %t1 ! stw %r1,  0(%t3) ! stw %t1,  4(%t3)
-	ldw  8(%t2), %r1 ! ldw 12(%t2), %t1 ! stw %r1,  8(%t3) ! stw %t1, 12(%t3)
-	ldw 16(%t2), %r1 ! ldw 20(%t2), %t1 ! stw %r1, 16(%t3) ! stw %t1, 20(%t3)
-	ldw 24(%t2), %r1 ! ldw 28(%t2), %t1 ! stw %r1, 24(%t3) ! stw %t1, 28(%t3)
-	ldw 32(%t2), %r1 ! ldw 36(%t2), %t1 ! stw %r1, 32(%t3) ! stw %t1, 36(%t3)
-	ldw 40(%t2), %r1 ! ldw 44(%t2), %t1 ! stw %r1, 40(%t3) ! stw %t1, 44(%t3)
-	ldw 48(%t2), %r1 ! ldw 52(%t2), %t1 ! stw %r1, 48(%t3) ! stw %t1, 52(%t3)
-	ldw 56(%t2), %r1 ! ldw 60(%t2), %t1 ! stw %r1, 56(%t3) ! stw %t1, 60(%t3)
+	ldw  0(%t2), %r1 ! ldw  4(%t2), %t1
+	stw %r1,  0(%t3) ! stw %t1,  4(%t3)
+	ldw  8(%t2), %r1 ! ldw 12(%t2), %t1
+	stw %r1,  8(%t3) ! stw %t1, 12(%t3)
+	ldw 16(%t2), %r1 ! ldw 20(%t2), %t1
+	stw %r1, 16(%t3) ! stw %t1, 20(%t3)
+	ldw 24(%t2), %r1 ! ldw 28(%t2), %t1
+	stw %r1, 24(%t3) ! stw %t1, 28(%t3)
+	ldw 32(%t2), %r1 ! ldw 36(%t2), %t1
+	stw %r1, 32(%t3) ! stw %t1, 36(%t3)
+	ldw 40(%t2), %r1 ! ldw 44(%t2), %t1
+	stw %r1, 40(%t3) ! stw %t1, 44(%t3)
+	ldw 48(%t2), %r1 ! ldw 52(%t2), %t1
+	stw %r1, 48(%t3) ! stw %t1, 52(%t3)
+	ldw 56(%t2), %r1 ! ldw 60(%t2), %t1
+	stw %r1, 56(%t3) ! stw %t1, 60(%t3)
 
 	/*
 	 * Normally, we'd only have to save and restore the 
@@ -2179,7 +2190,12 @@ $trapnowvirt:
 	ldo	-HPPA_FRAME_SIZE(%sp), %r3
 #endif
 	.import	trap, code
-	CALL(trap, %t1)
+	ldil	L%trap,%t1
+	ldo	R%trap(%t1),%t1
+	.call
+	blr	%r0,%rp
+	bv,n	%r0(%t1)
+	nop
 
 	ldw	-HPPA_FRAME_SIZE+4(%sp), %t3
 	/* see if curlwp has changed */
@@ -2187,9 +2203,12 @@ $trapnowvirt:
 	bb,>=,n	%arg0, TFF_LAST_POS, $trap_return
 	nop
 
-	/* load curlwp's trapframe pointer */
+	/* see if curlwp has really changed */
 	ldil	L%curlwp, %t1
 	ldw	R%curlwp(%t1), %t2
+	comb,=,n %r0, %t2, $trap_return
+
+	/* means curlwp has actually changed */
 	ldw	L_MD(%t2), %t3
 
 $trap_return:

@@ -1,4 +1,4 @@
-/*	$NetBSD: hpux_net.c,v 1.35 2007/08/15 12:07:29 ad Exp $	*/
+/*	$NetBSD: hpux_net.c,v 1.32 2006/06/30 09:06:32 he Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -82,7 +82,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpux_net.c,v 1.35 2007/08/15 12:07:29 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpux_net.c,v 1.32 2006/06/30 09:06:32 he Exp $");
+
+#if defined(_KERNEL_OPT)
+#include "opt_ktrace.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,6 +102,7 @@ __KERNEL_RCSID(0, "$NetBSD: hpux_net.c,v 1.35 2007/08/15 12:07:29 ad Exp $");
 #include <sys/socketvar.h>
 #include <sys/uio.h>
 #include <sys/ktrace.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/hpux/hpux.h>
@@ -108,7 +113,7 @@ struct hpux_sys_setsockopt_args {
 	syscallarg(int) s;
 	syscallarg(int) level;
 	syscallarg(int) name;
-	syscallarg(void *) val;
+	syscallarg(caddr_t) val;
 	syscallarg(int) valsize;
 };
 
@@ -116,7 +121,7 @@ struct hpux_sys_getsockopt_args {
 	syscallarg(int) s;
 	syscallarg(int) level;
 	syscallarg(int) name;
-	syscallarg(void *) val;
+	syscallarg(caddr_t) val;
 	syscallarg(int *) avalsize;
 };
 
@@ -186,19 +191,28 @@ hpux_sys_netioctl(l, v, retval)
 	int *args, i;
 	int code;
 	int error;
+#ifdef KTRACE
+	struct proc *p = l->l_proc;
+#endif
 
 	args = SCARG(uap, args);
 	code = SCARG(uap, call) - MINBSDIPCCODE;
 	if (code < 0 || code >= NUMBSDIPC || hpuxtobsdipc[code].rout == NULL)
 		return (EINVAL);
 	if ((i = hpuxtobsdipc[code].nargs * sizeof (int)) &&
-	    (error = copyin((void *)args, (void *)uap, (u_int)i))) {
-		ktrsyscall(code + MINBSDIPCCODE, code + MINBSDIPCCODE, NULL,
-		    (register_t *)uap);
+	    (error = copyin((caddr_t)args, (caddr_t)uap, (u_int)i))) {
+#ifdef KTRACE
+		if (KTRPOINT(p, KTR_SYSCALL))
+			ktrsyscall(l, code + MINBSDIPCCODE,
+			    code + MINBSDIPCCODE, NULL, (register_t *)uap);
+#endif
 		return (error);
 	}
-	ktrsyscall(code + MINBSDIPCCODE, code + MINBSDIPCCODE, NULL,
-	    (register_t *)uap);
+#ifdef KTRACE
+	if (KTRPOINT(p, KTR_SYSCALL))
+		ktrsyscall(l, code + MINBSDIPCCODE,
+		    code + MINBSDIPCCODE, NULL, (register_t *)uap);
+#endif
 	return ((*hpuxtobsdipc[code].rout)(l, uap, retval));
 }
 
@@ -251,7 +265,7 @@ hpux_sys_setsockopt(l, v, retval)
 	}
 	if (SCARG(uap, val)) {
 		m = m_get(M_WAIT, MT_SOOPTS);
-		if ((error = copyin(SCARG(uap, val), mtod(m, void *),
+		if ((error = copyin(SCARG(uap, val), mtod(m, caddr_t),
 		    (u_int)SCARG(uap, valsize)))) {
 			(void) m_free(m);
 			goto out;
@@ -299,7 +313,7 @@ hpux_sys_setsockopt2(l, v, retval)
 	}
 	if (SCARG(uap, val)) {
 		m = m_get(M_WAIT, MT_SOOPTS);
-		if ((error = copyin(SCARG(uap, val), mtod(m, void *),
+		if ((error = copyin(SCARG(uap, val), mtod(m, caddr_t),
 		    (u_int)SCARG(uap, valsize)))) {
 			(void) m_free(m);
 			goto out;
@@ -330,8 +344,8 @@ hpux_sys_getsockopt(l, v, retval)
 	if ((error = getsock(p->p_fd, SCARG(uap, s), &fp)))
 		return (error);
 	if (SCARG(uap, val)) {
-		if ((error = copyin((void *)SCARG(uap, avalsize),
-		    (void *)&valsize, sizeof (valsize))))
+		if ((error = copyin((caddr_t)SCARG(uap, avalsize),
+		    (caddr_t)&valsize, sizeof (valsize))))
 			goto out;
 	} else
 		valsize = 0;
@@ -349,11 +363,11 @@ hpux_sys_getsockopt(l, v, retval)
 		}
 		if (valsize > m->m_len)
 			valsize = m->m_len;
-		error = copyout(mtod(m, void *), SCARG(uap, val),
+		error = copyout(mtod(m, caddr_t), SCARG(uap, val),
 		    (u_int)valsize);
 		if (error == 0)
-			error = copyout((void *)&valsize,
-			    (void *)SCARG(uap, avalsize), sizeof (valsize));
+			error = copyout((caddr_t)&valsize,
+			    (caddr_t)SCARG(uap, avalsize), sizeof (valsize));
 	}
  bad:
 	if (m != NULL)

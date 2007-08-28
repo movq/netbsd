@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.89 2007/02/09 21:55:02 ad Exp $	*/
+/*	$NetBSD: machdep.c,v 1.88 2005/12/24 20:06:58 perry Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.89 2007/02/09 21:55:02 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.88 2005/12/24 20:06:58 perry Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
@@ -51,6 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.89 2007/02/09 21:55:02 ad Exp $");
 #include <sys/msgbuf.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>

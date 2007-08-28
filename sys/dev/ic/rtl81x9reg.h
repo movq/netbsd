@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl81x9reg.h,v 1.27 2007/03/21 12:17:31 tsutsui Exp $	*/
+/*	$NetBSD: rtl81x9reg.h,v 1.25.2.2 2007/05/16 20:46:41 jdc Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_snvar.h,v 1.10 2007/06/17 05:53:02 tsutsui Exp $	*/
+/*	$NetBSD: if_snvar.h,v 1.7 2005/12/24 20:07:24 perry Exp $	*/
 
 /*
  * Copyright (c) 1991   Algorithmics Ltd (http://www.algor.co.uk)
@@ -31,8 +31,8 @@
 
 #define	SN_REGSIZE	(SN_NREGS * 4)
 
-#include <mips/locore.h>
-#undef wbflush	/* XXX */
+void mips3_wbflush(void);
+void apbus_wbflush(void);
 
 static inline void
 wbflush(void)
@@ -77,7 +77,7 @@ wbflush(void)
 typedef struct mtd {
 	void		*mtd_txp;
 	uint32_t	mtd_vtxp;
-	void 		*mtd_buf;
+	caddr_t		mtd_buf;
 	uint32_t	mtd_vbuf;
 	struct mbuf	*mtd_mbuf;
 } mtd_t;
@@ -90,7 +90,7 @@ struct sn_softc {
 	struct ethercom	sc_ethercom;
 #define sc_if	sc_ethercom.ec_if	/* network visible interface */
 
-	void *		sc_hwbase;	/* hardware base address */
+	caddr_t		sc_hwbase;	/* hardware base address */
 	volatile uint16_t *sc_regbase;	/* register base address */
 
 	int		bitmode;	/* 32 bit mode == 1, 16 == 0 */
@@ -107,10 +107,10 @@ struct sn_softc {
 	int		sc_rxmark;	/* current hw pos in rda ring */
 	int		sc_rdamark;	/* current sw pos in rda ring */
 	int		sc_nrda;	/* total number of RDAs */
-	void		*p_rda;
+	caddr_t		p_rda;
 	uint32_t	v_rda;
 
-	void 		*rbuf[NRBA];
+	caddr_t		rbuf[NRBA];
 
 	struct mtd	mtda[NTDA];
 	int		mtd_hw;		/* idx of first mtd given to hw */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ne2000.c,v 1.54 2007/03/04 06:01:59 christos Exp $	*/
+/*	$NetBSD: ne2000.c,v 1.52 2006/11/16 01:32:52 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.54 2007/03/04 06:01:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.52 2006/11/16 01:32:52 christos Exp $");
 
 #include "opt_ipkdb.h"
 
@@ -95,7 +95,7 @@ __KERNEL_RCSID(0, "$NetBSD: ne2000.c,v 1.54 2007/03/04 06:01:59 christos Exp $")
 #include <dev/ic/ax88190reg.h>
 
 int	ne2000_write_mbuf(struct dp8390_softc *, struct mbuf *, int);
-int	ne2000_ring_copy(struct dp8390_softc *, int, void *, u_short);
+int	ne2000_ring_copy(struct dp8390_softc *, int, caddr_t, u_short);
 void	ne2000_read_hdr(struct dp8390_softc *, int, struct dp8390_ring *);
 int	ne2000_test_mem(struct dp8390_softc *);
 
@@ -655,13 +655,12 @@ ne2000_write_mbuf(sc, m, buf)
  * ring-wrap.
  */
 int
-ne2000_ring_copy(sc, src, dstv, amount)
+ne2000_ring_copy(sc, src, dst, amount)
 	struct dp8390_softc *sc;
 	int src;
-	void *dstv;
+	caddr_t dst;
 	u_short amount;
 {
-	char *dst = dstv;
 	struct ne2000_softc *nsc = (struct ne2000_softc *)sc;
 	bus_space_tag_t nict = sc->sc_regt;
 	bus_space_handle_t nich = sc->sc_regh;
@@ -896,9 +895,6 @@ ne2000_ipkdb_attach(kip)
 		dp->sc_flags |= DP8390_DO_AX88190_WORKAROUND;
 		dp->mem_start = dp->mem_size = 8192 * 2;
 		kip->name = "ax88190";
-		break;
-	default:
-		return -1;
 		break;
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ieee.h,v 1.12 2007/02/04 00:39:43 christos Exp $	*/
+/*	$NetBSD: ieee.h,v 1.10.24.1 2007/05/07 19:49:09 pavel Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

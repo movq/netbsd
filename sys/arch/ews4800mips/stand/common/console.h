@@ -1,4 +1,4 @@
-/*	$NetBSD: console.h,v 1.2 2007/02/21 22:59:41 thorpej Exp $	*/
+/*	$NetBSD: console.h,v 1.1 2005/12/29 15:20:09 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -81,15 +81,15 @@ struct cons {
 	void (*cursor)(int, int);
 	int x, y;
 	enum console_type type;
-	bool erace_previous_cursor;
-	bool cursor_enable;
+	boolean_t erace_previous_cursor;
+	boolean_t cursor_enable;
 };
 
 struct fb {
 	uint8_t *fb_addr;
 	uint32_t fb_size;
 	uint8_t *font_addr;
-	bool active;
+	boolean_t active;
 };
 
 struct zskbd {
@@ -118,7 +118,7 @@ void fb_drawfont(int, int, uint16_t *);
 void fb_drawcursor(int, int);
 void fb_clear(int, int, int, int, int);
 void fb_copy(int, int, int, int, int, int);
-void fb_active(bool);
+void fb_active(boolean_t);
 
 void zskbd_set_addr(uint32_t, uint32_t);
 int zskbd_getc(void);
@@ -133,7 +133,7 @@ int rom_scan(void);
 
 enum console_type console_type(void);
 void console_init(void);
-void console_cursor(bool);
+void console_cursor(boolean_t);
 
 int cnscan(void);
 

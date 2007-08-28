@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_wait.c,v 1.15 2007/05/07 16:53:19 dsl Exp $	*/
+/*	$NetBSD: netbsd32_wait.c,v 1.10 2005/12/11 12:20:22 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_wait.c,v 1.15 2007/05/07 16:53:19 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_wait.c,v 1.10 2005/12/11 12:20:22 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,29 +59,42 @@ netbsd32_wait4(l, v, retval)
 		syscallarg(int) options;
 		syscallarg(netbsd32_rusagep_t) rusage;
 	} */ *uap = v;
-	int		status, error;
-	int		was_zombie;
-	struct rusage	ru;
-	struct netbsd32_rusage	ru32;
+	struct sys_wait4_args ua;
+	caddr_t sg;
+	struct rusage *ruup = NULL;
+	int error;
 
-	error = do_sys_wait(l, &SCARG(uap, pid), &status, SCARG(uap, options),
-	    SCARG_P32(uap, rusage) != NULL ? &ru : NULL, &was_zombie);
-
-	retval[0] = SCARG(uap, pid);
-	if (SCARG(uap, pid) == 0)
-		return error;
-
-	if (SCARG_P32(uap, rusage)) {
-		netbsd32_from_rusage(&ru, &ru32);
-		error = copyout(&ru32, SCARG_P32(uap, rusage), sizeof(ru32));
+	if (SCARG(uap, rusage)) {
+		sg = stackgap_init(l->l_proc, sizeof(*ruup));
+		ruup = (struct rusage *)stackgap_alloc(l->l_proc, &sg,
+		    sizeof(*ruup));
+		if (ruup == NULL)
+			return ENOMEM;
 	}
 
-	if (error == 0 && SCARG_P32(uap, status))
-		error = copyout(&status, SCARG_P32(uap, status), sizeof(status));
+	NETBSD32TO64_UAP(pid);
+	NETBSD32TOP_UAP(status, int);
+	NETBSD32TO64_UAP(options);
+	SCARG(&ua, rusage) = ruup;
+
+	error = sys_wait4(l, &ua, retval);
+	if (error)
+		return error;
+
+	if (ruup != NULL) {
+		struct netbsd32_rusage ru32;
+		struct rusage rus;
+
+		error = copyin(ruup, &rus, sizeof(rus));
+		if (error)
+			return error;
+		netbsd32_from_rusage(&rus, &ru32);
+		error = copyout(&ru32, NETBSD32PTR64(SCARG(uap, rusage)),
+		    sizeof(ru32));
+	}
 
 	return error;
 }
-
 
 int
 netbsd32_getrusage(l, v, retval)
@@ -101,9 +114,7 @@ netbsd32_getrusage(l, v, retval)
 
 	case RUSAGE_SELF:
 		rup = &p->p_stats->p_ru;
-		mutex_enter(&p->p_smutex);
-		calcru(p, &rup->ru_utime, &rup->ru_stime, NULL, NULL);
-		mutex_exit(&p->p_smutex);
+		calcru(p, &rup->ru_utime, &rup->ru_stime, NULL);
 		break;
 
 	case RUSAGE_CHILDREN:
@@ -114,5 +125,6 @@ netbsd32_getrusage(l, v, retval)
 		return (EINVAL);
 	}
 	netbsd32_from_rusage(rup, &ru);
-	return copyout(&ru, SCARG_P32(uap, rusage), sizeof(ru));
+	return (copyout(&ru, (caddr_t)NETBSD32PTR64(SCARG(uap, rusage)),
+	    sizeof(ru)));
 }

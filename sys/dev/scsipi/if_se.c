@@ -1,4 +1,4 @@
-/*	$NetBSD: if_se.c,v 1.66 2007/07/09 21:01:21 ad Exp $	*/
+/*	$NetBSD: if_se.c,v 1.62 2006/09/07 02:40:33 dogcow Exp $	*/
 
 /*
  * Copyright (c) 1997 Ian W. Dall <ian.dall@dsto.defence.gov.au>
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_se.c,v 1.66 2007/07/09 21:01:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_se.c,v 1.62 2006/09/07 02:40:33 dogcow Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
@@ -150,26 +150,24 @@ int se_max_received = 0;	/* Instrumentation */
 #define	PROTOCMD(p, d) \
 	((d) = (p))
 
-#define	PROTOCMD_DECL(name) \
-	static const struct scsi_ctron_ether_generic name
+#define	PROTOCMD_DECL(name, val) \
+	static const struct scsi_ctron_ether_generic name = val
 
-#define	PROTOCMD_DECL_SPECIAL(name) \
-	static const struct __CONCAT(scsi_,name) name
+#define	PROTOCMD_DECL_SPECIAL(name, val) \
+	static const struct __CONCAT(scsi_,name) name = val
 
 /* Command initializers for commands using scsi_ctron_ether_generic */
-PROTOCMD_DECL(ctron_ether_send)  = {CTRON_ETHER_SEND, 0, {0,0}, 0};
-PROTOCMD_DECL(ctron_ether_add_proto) = {CTRON_ETHER_ADD_PROTO, 0, {0,0}, 0};
-PROTOCMD_DECL(ctron_ether_get_addr) = {CTRON_ETHER_GET_ADDR, 0, {0,0}, 0};
-PROTOCMD_DECL(ctron_ether_set_media) = {CTRON_ETHER_SET_MEDIA, 0, {0,0}, 0};
-PROTOCMD_DECL(ctron_ether_set_addr) = {CTRON_ETHER_SET_ADDR, 0, {0,0}, 0};
-PROTOCMD_DECL(ctron_ether_set_multi) = {CTRON_ETHER_SET_MULTI, 0, {0,0}, 0};
-PROTOCMD_DECL(ctron_ether_remove_multi) =
-    {CTRON_ETHER_REMOVE_MULTI, 0, {0,0}, 0};
+PROTOCMD_DECL(ctron_ether_send, {CTRON_ETHER_SEND});
+PROTOCMD_DECL(ctron_ether_add_proto, {CTRON_ETHER_ADD_PROTO});
+PROTOCMD_DECL(ctron_ether_get_addr, {CTRON_ETHER_GET_ADDR});
+PROTOCMD_DECL(ctron_ether_set_media, {CTRON_ETHER_SET_MEDIA});
+PROTOCMD_DECL(ctron_ether_set_addr, {CTRON_ETHER_SET_ADDR});
+PROTOCMD_DECL(ctron_ether_set_multi, {CTRON_ETHER_SET_MULTI});
+PROTOCMD_DECL(ctron_ether_remove_multi, {CTRON_ETHER_REMOVE_MULTI});
 
 /* Command initializers for commands using their own structures */
-PROTOCMD_DECL_SPECIAL(ctron_ether_recv) = {CTRON_ETHER_RECV};
-PROTOCMD_DECL_SPECIAL(ctron_ether_set_mode) =
-    {CTRON_ETHER_SET_MODE, 0, {0,0}, 0};
+PROTOCMD_DECL_SPECIAL(ctron_ether_recv, {CTRON_ETHER_RECV});
+PROTOCMD_DECL_SPECIAL(ctron_ether_set_mode, {CTRON_ETHER_SET_MODE});
 
 struct se_softc {
 	struct device sc_dev;
@@ -201,7 +199,7 @@ static void	se_ifstart(struct ifnet *);
 static void	sestart(struct scsipi_periph *);
 
 static void	sedone(struct scsipi_xfer *, int);
-static int	se_ioctl(struct ifnet *, u_long, void *);
+static int	se_ioctl(struct ifnet *, u_long, caddr_t);
 static void	sewatchdog(struct ifnet *);
 
 static inline u_int16_t ether_cmp(void *, void *);
@@ -241,7 +239,7 @@ dev_type_ioctl(seioctl);
 
 const struct cdevsw se_cdevsw = {
 	seopen, seclose, noread, nowrite, seioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER
+	nostop, notty, nopoll, nommap, nokqfilter,
 };
 
 const struct scsipi_periphsw se_switch = {
@@ -311,8 +309,8 @@ seattach(parent, self, aux)
 	printf("\n");
 	SC_DEBUG(periph, SCSIPI_DB2, ("seattach: "));
 
-	callout_init(&sc->sc_ifstart_ch, 0);
-	callout_init(&sc->sc_recv_ch, 0);
+	callout_init(&sc->sc_ifstart_ch);
+	callout_init(&sc->sc_recv_ch);
 
 
 	/*
@@ -606,7 +604,7 @@ se_get(sc, data, totlen)
 		}
 
 		if (m == m0) {
-			char *newdata = (char *)
+			caddr_t newdata = (caddr_t)
 			    ALIGN(m->m_data + sizeof(struct ether_header)) -
 			    sizeof(struct ether_header);
 			len -= newdata - m->m_data;
@@ -614,7 +612,7 @@ se_get(sc, data, totlen)
 		}
 
 		m->m_len = len = min(totlen, len);
-		memcpy(mtod(m, void *), data, len);
+		memcpy(mtod(m, caddr_t), data, len);
 		data += len;
 
 		totlen -= len;
@@ -973,7 +971,7 @@ static int
 se_ioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 {
 	struct se_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -1181,7 +1179,7 @@ int
 seioctl(dev, cmd, addr, flag, l)
 	dev_t dev;
 	u_long cmd;
-	void *addr;
+	caddr_t addr;
 	int flag;
 	struct lwp *l;
 {

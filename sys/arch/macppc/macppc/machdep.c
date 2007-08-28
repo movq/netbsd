@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.148 2007/07/14 21:48:21 ad Exp $	*/
+/*	$NetBSD: machdep.c,v 1.142.2.2 2007/03/04 12:29:43 bouyer Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.148 2007/07/14 21:48:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.142.2.2 2007/03/04 12:29:43 bouyer Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ddb.h"
@@ -52,6 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.148 2007/07/14 21:48:21 ad Exp $");
 #include <sys/msgbuf.h>
 #include <sys/proc.h>
 #include <sys/reboot.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/syslog.h>
 #include <sys/systm.h>
@@ -98,8 +99,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.148 2007/07/14 21:48:21 ad Exp $");
 #include <dev/usb/ukbdvar.h>
 
 #include <macppc/dev/adbvar.h>
-#include <macppc/dev/pmuvar.h>
-#include <macppc/dev/cudavar.h>
 
 #include <sys/tty.h>
 #include <dev/ic/comreg.h>
@@ -110,8 +109,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.148 2007/07/14 21:48:21 ad Exp $");
 #endif
 
 #include "ksyms.h"
-#include "pmu.h"
-#include "cuda.h"
 #include "wsdisplay.h"
 
 extern int ofmsr;
@@ -384,10 +381,12 @@ void
 cpu_startup()
 {
 	oea_startup(NULL);
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	/*
 	 * Initialize soft interrupt framework.
 	 */
 	softintr__init();
+#endif
 }
 
 /*
@@ -436,6 +435,24 @@ dumpsys()
 {
 	printf("dumpsys: TBD\n");
 }
+
+#ifndef __HAVE_GENERIC_SOFT_INTERRUPTS
+#include "zsc.h"
+#include "com.h"
+/*
+ * Soft tty interrupts.
+ */
+void
+softserial()
+{
+#if NZSC > 0
+	zssoft(NULL);
+#endif
+#if NCOM > 0
+	comsoft();
+#endif
+}
+#endif
 
 #if 0
 /*
@@ -565,7 +582,6 @@ lcsplx(ipl)
 
 #include "akbd.h"
 #include "ukbd.h"
-#include "adbkbd.h"
 #include "ofb.h"
 #include "zstty.h"
 

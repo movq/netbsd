@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_syscall.c,v 1.22 2007/03/04 05:59:57 christos Exp $	*/
+/*	$NetBSD: mach_syscall.c,v 1.20 2006/07/19 21:11:42 ad Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_syscall.c,v 1.22 2007/03/04 05:59:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_syscall.c,v 1.20 2006/07/19 21:11:42 ad Exp $");
 
 #include "opt_vm86.h"
 
@@ -46,6 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: mach_syscall.c,v 1.22 2007/03/04 05:59:57 christos E
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/signal.h>
+#include <sys/savar.h>
 #include <sys/syscall.h>
 
 #include <uvm/uvm_extern.h>
@@ -81,7 +82,7 @@ void
 mach_syscall_plain(frame)
 	struct trapframe *frame;
 {
-	char *params;
+	caddr_t params;
 	const struct sysent *callp;
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
@@ -93,7 +94,7 @@ mach_syscall_plain(frame)
 	LWP_CACHE_CREDS(l, p);
 
 	code = frame->tf_eax;
-	params = (char *)frame->tf_esp + sizeof(int);
+	params = (caddr_t)frame->tf_esp + sizeof(int);
 
 	switch (code) {
 	case SYS_syscall:
@@ -130,7 +131,7 @@ mach_syscall_plain(frame)
 	callp += code;
 	argsize = callp->sy_argsize;
 	if (argsize) {
-		error = copyin(params, (void *)args, argsize);
+		error = copyin(params, (caddr_t)args, argsize);
 		if (error)
 			goto bad;
 	}
@@ -169,7 +170,7 @@ void
 mach_syscall_fancy(frame)
 	struct trapframe *frame;
 {
-	char *params;
+	caddr_t params;
 	const struct sysent *callp;
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
@@ -182,7 +183,7 @@ mach_syscall_fancy(frame)
 
 	code = frame->tf_eax;
 	realcode = code;
-	params = (char *)frame->tf_esp + sizeof(int);
+	params = (caddr_t)frame->tf_esp + sizeof(int);
 
 	switch (code) {
 	case SYS_syscall:
@@ -218,7 +219,7 @@ mach_syscall_fancy(frame)
 	callp += code;
 	argsize = callp->sy_argsize;
 	if (argsize) {
-		error = copyin(params, (void *)args, argsize);
+		error = copyin(params, (caddr_t)args, argsize);
 		if (error)
 			goto bad;
 	}

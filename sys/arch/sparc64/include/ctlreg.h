@@ -1,4 +1,4 @@
-/*	$NetBSD: ctlreg.h,v 1.44 2007/03/31 13:04:21 hannken Exp $ */
+/*	$NetBSD: ctlreg.h,v 1.42.18.2 2007/03/31 16:43:46 bouyer Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath

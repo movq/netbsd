@@ -1,4 +1,4 @@
-/* $NetBSD: nappi_nr.c,v 1.6 2007/07/12 22:02:38 he Exp $ */
+/* $NetBSD: nappi_nr.c,v 1.5 2003/03/25 06:53:16 igy Exp $ */
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nappi_nr.c,v 1.6 2007/07/12 22:02:38 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nappi_nr.c,v 1.5 2003/03/25 06:53:16 igy Exp $");
 
 /*
  * LED support for NAPPI.
@@ -96,7 +96,7 @@ nappinr_attach(struct device *parent, struct device *self, void *aux)
 		return;
 	}
 
-	callout_init(&sc->sc_co, 0);
+	callout_init(&sc->sc_co);
 	callout_reset(&sc->sc_co, hz / 10, nappinr_callout, sc);
 }
 

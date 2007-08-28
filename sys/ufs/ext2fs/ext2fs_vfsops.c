@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_vfsops.c,v 1.117 2007/07/31 21:14:20 pooka Exp $	*/
+/*	$NetBSD: ext2fs_vfsops.c,v 1.105 2006/11/16 01:33:51 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1994
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_vfsops.c,v 1.117 2007/07/31 21:14:20 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_vfsops.c,v 1.105 2006/11/16 01:33:51 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -105,7 +105,7 @@ __KERNEL_RCSID(0, "$NetBSD: ext2fs_vfsops.c,v 1.117 2007/07/31 21:14:20 pooka Ex
 #include <ufs/ext2fs/ext2fs_dir.h>
 #include <ufs/ext2fs/ext2fs_extern.h>
 
-extern kmutex_t ufs_hashlock;
+extern struct lock ufs_hashlock;
 
 int ext2fs_sbupdate(struct ufsmount *, int);
 static int ext2fs_checksb(struct ext2fs *, int);
@@ -123,7 +123,6 @@ const struct vnodeopv_desc * const ext2fs_vnodeopv_descs[] = {
 
 struct vfsops ext2fs_vfsops = {
 	MOUNT_EXT2FS,
-	sizeof (struct ufs_args),
 	ext2fs_mount,
 	ufs_start,
 	ext2fs_unmount,
@@ -140,7 +139,6 @@ struct vfsops ext2fs_vfsops = {
 	ext2fs_mountroot,
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
-	(void *)eopnotsupp,	/* vfs_suspendctl */
 	ext2fs_vnodeopv_descs,
 	0,
 	{ NULL, NULL },
@@ -162,19 +160,22 @@ static const struct ufs_ops ext2fs_ufsops = {
 /*
  * XXX Same structure as FFS inodes?  Should we share a common pool?
  */
-struct pool ext2fs_inode_pool;
-struct pool ext2fs_dinode_pool;
+POOL_INIT(ext2fs_inode_pool, sizeof(struct inode), 0, 0, 0, "ext2fsinopl",
+    &pool_allocator_nointr);
+POOL_INIT(ext2fs_dinode_pool, sizeof(struct ext2fs_dinode), 0, 0, 0,
+    "ext2dinopl", &pool_allocator_nointr);
 
 extern u_long ext2gennumber;
 
 void
 ext2fs_init(void)
 {
-
+#ifdef _LKM
 	pool_init(&ext2fs_inode_pool, sizeof(struct inode), 0, 0, 0,
-	    "ext2fsinopl", &pool_allocator_nointr, IPL_NONE);
+	    "ext2fsinopl", &pool_allocator_nointr);
 	pool_init(&ext2fs_dinode_pool, sizeof(struct ext2fs_dinode), 0, 0, 0,
-	    "ext2dinopl", &pool_allocator_nointr, IPL_NONE);
+	    "ext2dinopl", &pool_allocator_nointr);
+#endif
 	ufs_init();
 }
 
@@ -187,10 +188,11 @@ ext2fs_reinit(void)
 void
 ext2fs_done(void)
 {
-
 	ufs_done();
+#ifdef _LKM
 	pool_destroy(&ext2fs_inode_pool);
 	pool_destroy(&ext2fs_dinode_pool);
+#endif
 }
 
 /*
@@ -249,42 +251,39 @@ ext2fs_mountroot(void)
  * mount system call
  */
 int
-ext2fs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
-	struct lwp *l)
+ext2fs_mount(struct mount *mp, const char *path, void *data,
+	struct nameidata *ndp, struct lwp *l)
 {
-	struct nameidata nd;
 	struct vnode *devvp;
-	struct ufs_args *args = data;
+	struct ufs_args args;
 	struct ufsmount *ump = NULL;
 	struct m_ext2fs *fs;
 	size_t size;
-	int error = 0, flags, update;
+	int error, flags, update;
 	mode_t accessmode;
-
-	if (*data_len < sizeof *args)
-		return EINVAL;
 
 	if (mp->mnt_flag & MNT_GETARGS) {
 		ump = VFSTOUFS(mp);
 		if (ump == NULL)
 			return EIO;
-		memset(args, 0, sizeof *args);
-		args->fspec = NULL;
-		*data_len = sizeof *args;
-		return 0;
+		args.fspec = NULL;
+		return copyout(&args, data, sizeof(args));
 	}
+	error = copyin(data, &args, sizeof (struct ufs_args));
+	if (error)
+		return (error);
 
 	update = mp->mnt_flag & MNT_UPDATE;
 
 	/* Check arguments */
-	if (args->fspec != NULL) {
+	if (args.fspec != NULL) {
 		/*
 		 * Look up the name and verify that it's sane.
 		 */
-		NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, args->fspec, l);
-		if ((error = namei(&nd)) != 0)
+		NDINIT(ndp, LOOKUP, FOLLOW, UIO_USERSPACE, args.fspec, l);
+		if ((error = namei(ndp)) != 0)
 			return (error);
-		devvp = nd.ni_vp;
+		devvp = ndp->ni_vp;
 
 		if (!update) {
 			/*
@@ -318,8 +317,7 @@ ext2fs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
 	 * If mount by non-root, then verify that user has necessary
 	 * permissions on the device.
 	 */
-	if (error == 0 && kauth_authorize_generic(l->l_cred,
-	    KAUTH_GENERIC_ISSUSER, NULL) != 0) {
+	if (error == 0 && kauth_cred_geteuid(l->l_cred) != 0) {
 		accessmode = VREAD;
 		if (update ?
 		    (mp->mnt_iflag & IMNT_WANTRDWR) != 0 :
@@ -402,7 +400,7 @@ ext2fs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
 		}
 
 		if (mp->mnt_flag & MNT_RELOAD) {
-			error = ext2fs_reload(mp, l->l_cred, l);
+			error = ext2fs_reload(mp, ndp->ni_cnd.cn_cred, l);
 			if (error)
 				return (error);
 		}
@@ -418,12 +416,12 @@ ext2fs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
 				fs->e2fs.e2fs_state = E2FS_ERRORS;
 			fs->e2fs_fmod = 1;
 		}
-		if (args->fspec == NULL)
+		if (args.fspec == NULL)
 			return EINVAL;
 	}
 
-	error = set_statvfs_info(path, UIO_USERSPACE, args->fspec,
-	    UIO_USERSPACE, mp->mnt_op->vfs_name, mp, l);
+	error = set_statvfs_info(path, UIO_USERSPACE, args.fspec,
+	    UIO_USERSPACE, mp, l);
 	(void) copystr(mp->mnt_stat.f_mntonname, fs->e2fs_fsmnt,
 	    sizeof(fs->e2fs_fsmnt) - 1, &size);
 	memset(fs->e2fs_fsmnt + size, 0, sizeof(fs->e2fs_fsmnt) - size);
@@ -472,7 +470,7 @@ ext2fs_reload(struct mount *mountp, kauth_cred_t cred, struct lwp *l)
 	struct ext2fs *newfs;
 	struct partinfo dpart;
 	int i, size, error;
-	void *cp;
+	caddr_t cp;
 
 	if ((mountp->mnt_flag & MNT_RDONLY) == 0)
 		return (EINVAL);
@@ -577,7 +575,7 @@ loop:
 			vput(vp);
 			return (error);
 		}
-		cp = (char *)bp->b_data +
+		cp = (caddr_t)bp->b_data +
 		    (ino_to_fsbo(fs, ip->i_number) * EXT2_DINODE_SIZE);
 		e2fs_iload((struct ext2fs_dinode *)cp, ip->i_din.e2fs_din);
 		brelse(bp);
@@ -870,7 +868,7 @@ loop:
 		    ((ip->i_flag &
 		      (IN_CHANGE | IN_UPDATE | IN_MODIFIED)) == 0 &&
 		     LIST_EMPTY(&vp->v_dirtyblkhd) &&
-		     UVM_OBJ_IS_CLEAN(&vp->v_uobj)))
+		     vp->v_uobj.uo_npages == 0))
 		{
 			simple_unlock(&vp->v_interlock);
 			continue;
@@ -932,7 +930,7 @@ ext2fs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 	struct vnode *vp;
 	dev_t dev;
 	int error;
-	void *cp;
+	caddr_t cp;
 
 	ump = VFSTOUFS(mp);
 	dev = ump->um_dev;
@@ -945,18 +943,17 @@ ext2fs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 		*vpp = NULL;
 		return (error);
 	}
-	ip = pool_get(&ext2fs_inode_pool, PR_WAITOK);
 
-	mutex_enter(&ufs_hashlock);
-	if ((*vpp = ufs_ihashget(dev, ino, LK_EXCLUSIVE)) != NULL) {
-		mutex_exit(&ufs_hashlock);
-		ungetnewvnode(vp);
-		pool_put(&ext2fs_inode_pool, ip);
-		return (0);
-	}
+	do {
+		if ((*vpp = ufs_ihashget(dev, ino, LK_EXCLUSIVE)) != NULL) {
+			ungetnewvnode(vp);
+			return (0);
+		}
+	} while (lockmgr(&ufs_hashlock, LK_EXCLUSIVE|LK_SLEEPFAIL, 0));
 
 	vp->v_flag |= VLOCKSWORK;
 
+	ip = pool_get(&ext2fs_inode_pool, PR_WAITOK);
 	memset(ip, 0, sizeof(struct inode));
 	vp->v_data = ip;
 	ip->i_vnode = vp;
@@ -975,7 +972,7 @@ ext2fs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 	 */
 
 	ufs_ihashins(ip);
-	mutex_exit(&ufs_hashlock);
+	lockmgr(&ufs_hashlock, LK_RELEASE, 0);
 
 	/* Read in the disk contents for the inode, copy into the inode. */
 	error = bread(ump->um_devvp, fsbtodb(fs, ino_to_fsba(fs, ino)),
@@ -994,7 +991,7 @@ ext2fs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 		*vpp = NULL;
 		return (error);
 	}
-	cp = (char *)bp->b_data +
+	cp = (caddr_t)bp->b_data +
 	    (ino_to_fsbo(fs, ino) * EXT2_DINODE_SIZE);
 	ip->i_din.e2fs_din = pool_get(&ext2fs_dinode_pool, PR_WAITOK);
 	e2fs_iload((struct ext2fs_dinode *)cp, ip->i_din.e2fs_din);
@@ -1038,7 +1035,7 @@ ext2fs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 		if ((vp->v_mount->mnt_flag & MNT_RDONLY) == 0)
 			ip->i_flag |= IN_MODIFIED;
 	}
-	uvm_vnp_setsize(vp, ext2fs_size(ip));
+	vp->v_size = ext2fs_size(ip);
 	*vpp = vp;
 	return (0);
 }

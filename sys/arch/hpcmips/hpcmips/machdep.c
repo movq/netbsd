@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.94 2007/05/17 14:51:18 yamt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.90 2006/04/09 01:18:14 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1999 Shin Takemura, All rights reserved.
@@ -108,7 +108,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.94 2007/05/17 14:51:18 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.90 2006/04/09 01:18:14 tsutsui Exp $");
 
 #include "opt_vr41xx.h"
 #include "opt_tx39xx.h"
@@ -262,9 +262,9 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 	extern struct user *proc0paddr;
 	extern char edata[], end[];
 #if NKSYMS || defined(DDB) || defined(LKM)
-	extern void *esym;
+	extern caddr_t esym;
 #endif
-	void *kernend;
+	caddr_t kernend;
 	char *cp;
 	int i;
 
@@ -289,14 +289,14 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 				    (sh->sh_offset + sh->sh_size) > symbolsz)
 					symbolsz = sh->sh_offset + sh->sh_size;
 		}
-		esym = (char*)esym + symbolsz;
-		kernend = (void *)mips_round_page(esym);
+		esym += symbolsz;
+		kernend = (caddr_t)mips_round_page(esym);
 		bzero(edata, end - edata);
 	} else
 #endif /* NKSYMS || defined(DDB) || defined(LKM) */
 	{
-		kernend = (void *)mips_round_page(end);
-		memset(edata, 0, (char *)kernend - edata);
+		kernend = (caddr_t)mips_round_page(end);
+		memset(edata, 0, kernend - edata);
 	}
 
 #if defined(BOOT_STANDALONE)
@@ -323,7 +323,7 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 	}
 	/* copy boot parameter for kloader */
 #ifdef KLOADER
-	kloader_bootinfo_set(&kbi, argc, argv, bi, false);
+	kloader_bootinfo_set(&kbi, argc, argv, bi, FALSE);
 #endif
 
 	/* 
@@ -357,7 +357,7 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 	dbg_lcd_test();
 #endif
 	(*platform.fb_init)(&kernend);
-	kernend = (void *)mips_round_page(kernend);
+	kernend = (caddr_t)mips_round_page(kernend);
 
 	/*
 	 * Set the VM page size.
@@ -441,9 +441,9 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 		size_t fssz;
 		fssz = round_page(mfs_initminiroot(kernend));
 #ifdef MEMORY_DISK_DYNAMIC
-		md_root_setconf(kernend, fssz);
+		md_root_setconf((caddr_t)kernend, fssz);
 #endif /* MEMORY_DISK_DYNAMIC */
-		kernend = (char *)kernend + fssz;
+		kernend += fssz;
 	}
 #endif /* MFS */
 
@@ -457,12 +457,12 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 	 */
 	lwp0.l_addr = proc0paddr = (struct user *)kernend;
 	lwp0.l_md.md_regs =
-	    (struct frame *)((char *)kernend + UPAGES * PAGE_SIZE) - 1;
+	    (struct frame *)((caddr_t)kernend + UPAGES * PAGE_SIZE) - 1;
 	memset(kernend, 0, UPAGES * PAGE_SIZE);
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	curpcb = &lwp0.l_addr->u_pcb;
+	curpcb->pcb_context[11] = MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
 
-	kernend = (char *)kernend + UPAGES * PAGE_SIZE;
+	kernend += UPAGES * PAGE_SIZE;
 
 	/* Initialize console and KGDB serial port. */
 	(*platform.cons_init)();
@@ -578,13 +578,13 @@ cpu_startup()
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
+	    16 * NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    VM_PHYS_SIZE, 0, false, NULL);
+	    VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * No need to allocate an mbuf cluster submap.  Mbuf clusters

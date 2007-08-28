@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_fault.c,v 1.120 2007/07/21 19:21:54 ad Exp $	*/
+/*	$NetBSD: uvm_fault.c,v 1.116 2006/12/01 19:15:22 yamt Exp $	*/
 
 /*
  *
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_fault.c,v 1.120 2007/07/21 19:21:54 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_fault.c,v 1.116 2006/12/01 19:15:22 yamt Exp $");
 
 #include "opt_uvmhist.h"
 
@@ -200,7 +200,7 @@ uvmfault_anonflush(struct vm_anon **anons, int n)
 			continue;
 		simple_lock(&anons[lcv]->an_lock);
 		pg = anons[lcv]->an_page;
-		if (pg && (pg->flags & PG_BUSY) == 0) {
+		if (pg && (pg->flags & PG_BUSY) == 0 && pg->loan_count == 0) {
 			uvm_lock_pageq();
 			if (pg->wire_count == 0) {
 				pmap_clear_reference(pg);
@@ -233,7 +233,7 @@ uvmfault_amapcopy(struct uvm_faultinfo *ufi)
 		 * no mapping?  give up.
 		 */
 
-		if (uvmfault_lookup(ufi, true) == false)
+		if (uvmfault_lookup(ufi, TRUE) == FALSE)
 			return;
 
 		/*
@@ -249,7 +249,7 @@ uvmfault_amapcopy(struct uvm_faultinfo *ufi)
 		 */
 
 		if (UVM_ET_ISNEEDSCOPY(ufi->entry)) {
-			uvmfault_unlockmaps(ufi, true);
+			uvmfault_unlockmaps(ufi, TRUE);
 			uvm_wait("fltamapcopy");
 			continue;
 		}
@@ -258,7 +258,7 @@ uvmfault_amapcopy(struct uvm_faultinfo *ufi)
 		 * got it!   unlock and return.
 		 */
 
-		uvmfault_unlockmaps(ufi, true);
+		uvmfault_unlockmaps(ufi, TRUE);
 		return;
 	}
 	/*NOTREACHED*/
@@ -284,8 +284,8 @@ int
 uvmfault_anonget(struct uvm_faultinfo *ufi, struct vm_amap *amap,
     struct vm_anon *anon)
 {
-	bool we_own;	/* we own anon's page? */
-	bool locked;	/* did we relock? */
+	boolean_t we_own;	/* we own anon's page? */
+	boolean_t locked;	/* did we relock? */
 	struct vm_page *pg;
 	int error;
 	UVMHIST_FUNC("uvmfault_anonget"); UVMHIST_CALLED(maphist);
@@ -305,7 +305,7 @@ uvmfault_anonget(struct uvm_faultinfo *ufi, struct vm_amap *amap,
 	 */
 
 	for (;;) {
-		we_own = false;		/* true if we set PG_BUSY on a page */
+		we_own = FALSE;		/* TRUE if we set PG_BUSY on a page */
 		pg = anon->an_page;
 
 		/*
@@ -348,7 +348,7 @@ uvmfault_anonget(struct uvm_faultinfo *ufi, struct vm_amap *amap,
 				    0,0,0);
 				UVM_UNLOCK_AND_WAIT(pg,
 				    &pg->uobject->vmobjlock,
-				    false, "anonget1",0);
+				    FALSE, "anonget1",0);
 			} else {
 				/* anon owns page */
 				uvmfault_unlockall(ufi, amap, NULL, NULL);
@@ -376,7 +376,7 @@ uvmfault_anonget(struct uvm_faultinfo *ufi, struct vm_amap *amap,
 				uvm_wait("flt_noram1");
 			} else {
 				/* we set the PG_BUSY bit */
-				we_own = true;
+				we_own = TRUE;
 				uvmfault_unlockall(ufi, amap, NULL, anon);
 
 				/*
@@ -582,7 +582,7 @@ uvmfault_promote(struct uvm_faultinfo *ufi,
 	KASSERT(amap != NULL);
 	KASSERT(uobjpage != NULL);
 	KASSERT(uobjpage == PGO_DONTCARE || (uobjpage->flags & PG_BUSY) != 0);
-	KASSERT(mutex_owned(&amap->am_l));
+	LOCK_ASSERT(simple_lock_held(&amap->am_l));
 	LOCK_ASSERT(oanon == NULL || simple_lock_held(&oanon->an_lock));
 	LOCK_ASSERT(uobj == NULL || simple_lock_held(&uobj->vmobjlock));
 	LOCK_ASSERT(*spare == NULL || !simple_lock_held(&(*spare)->an_lock));
@@ -699,7 +699,7 @@ uvm_fault_internal(struct vm_map *orig_map, vaddr_t vaddr,
 {
 	struct uvm_faultinfo ufi;
 	vm_prot_t enter_prot, check_prot;
-	bool wired, narrow, promote, locked, shadowed, wire_fault, cow_now;
+	boolean_t wired, narrow, promote, locked, shadowed, wire_fault, cow_now;
 	int npages, nback, nforw, centeridx, error, lcv, gotpages;
 	vaddr_t startva, currva;
 	voff_t uoff;
@@ -727,10 +727,10 @@ uvm_fault_internal(struct vm_map *orig_map, vaddr_t vaddr,
 	ufi.orig_size = PAGE_SIZE;	/* can't get any smaller than this */
 	wire_fault = (fault_flag > 0);
 	if (wire_fault)
-		narrow = true;		/* don't look for neighborhood
+		narrow = TRUE;		/* don't look for neighborhood
 					 * pages on wire */
 	else
-		narrow = false;		/* normal fault */
+		narrow = FALSE;		/* normal fault */
 
 	/*
 	 * "goto ReFault" means restart the page fault from ground zero.
@@ -741,7 +741,7 @@ ReFault:
 	 * lookup and lock the maps
 	 */
 
-	if (uvmfault_lookup(&ufi, false) == false) {
+	if (uvmfault_lookup(&ufi, FALSE) == FALSE) {
 		UVMHIST_LOG(maphist, "<- no mapping @ 0x%x", vaddr, 0,0,0);
 		error = EFAULT;
 		goto done;
@@ -768,7 +768,7 @@ ReFault:
 		UVMHIST_LOG(maphist,
 		    "<- protection failure (prot=0x%x, access=0x%x)",
 		    ufi.entry->protection, access_type, 0, 0);
-		uvmfault_unlockmaps(&ufi, false);
+		uvmfault_unlockmaps(&ufi, FALSE);
 		error = EACCES;
 		goto done;
 	}
@@ -802,7 +802,7 @@ ReFault:
 			/* need to clear */
 			UVMHIST_LOG(maphist,
 			    "  need to clear needs_copy and refault",0,0,0,0);
-			uvmfault_unlockmaps(&ufi, false);
+			uvmfault_unlockmaps(&ufi, FALSE);
 			uvmfault_amapcopy(&ufi);
 			uvmexp.fltamcopy++;
 			goto ReFault;
@@ -831,7 +831,7 @@ ReFault:
 	 */
 
 	if (amap == NULL && uobj == NULL) {
-		uvmfault_unlockmaps(&ufi, false);
+		uvmfault_unlockmaps(&ufi, FALSE);
 		UVMHIST_LOG(maphist,"<- no backing store, no overlay",0,0,0,0);
 		error = EFAULT;
 		goto done;
@@ -844,7 +844,7 @@ ReFault:
 	 * ReFault we will disable this by setting "narrow" to true.
 	 */
 
-	if (narrow == false) {
+	if (narrow == FALSE) {
 
 		/* wide fault (!narrow) */
 		KASSERT(uvmadvice[ufi.entry->advice].advice ==
@@ -862,7 +862,7 @@ ReFault:
 		npages = nback + nforw + 1;
 		centeridx = nback;
 
-		narrow = true;	/* ensure only once per-fault */
+		narrow = TRUE;	/* ensure only once per-fault */
 
 	} else {
 
@@ -894,7 +894,7 @@ ReFault:
 	}
 
 	/* locked: maps(read), amap(if there) */
-	KASSERT(amap == NULL || mutex_owned(&amap->am_l));
+	LOCK_ASSERT(amap == NULL || simple_lock_held(&amap->am_l));
 
 	/*
 	 * for MADV_SEQUENTIAL mappings we want to deactivate the back pages
@@ -926,7 +926,7 @@ ReFault:
 	}
 
 	/* locked: maps(read), amap(if there) */
-	KASSERT(amap == NULL || mutex_owned(&amap->am_l));
+	LOCK_ASSERT(amap == NULL || simple_lock_held(&amap->am_l));
 
 	/*
 	 * map in the backpages and frontpages we found in the amap in hopes
@@ -935,7 +935,7 @@ ReFault:
 	 */
 
 	currva = startva;
-	shadowed = false;
+	shadowed = FALSE;
 	for (lcv = 0 ; lcv < npages ; lcv++, currva += PAGE_SIZE) {
 
 		/*
@@ -962,7 +962,7 @@ ReFault:
 
 		pages[lcv] = PGO_DONTCARE;
 		if (lcv == centeridx) {		/* save center for later! */
-			shadowed = true;
+			shadowed = TRUE;
 			continue;
 		}
 		anon = anons[lcv];
@@ -996,10 +996,10 @@ ReFault:
 	}
 
 	/* locked: maps(read), amap(if there) */
-	KASSERT(amap == NULL || mutex_owned(&amap->am_l));
-	/* (shadowed == true) if there is an anon at the faulting address */
+	LOCK_ASSERT(amap == NULL || simple_lock_held(&amap->am_l));
+	/* (shadowed == TRUE) if there is an anon at the faulting address */
 	UVMHIST_LOG(maphist, "  shadowed=%d, will_get=%d", shadowed,
-	    (uobj && shadowed == false),0,0);
+	    (uobj && shadowed == FALSE),0,0);
 
 	/*
 	 * note that if we are really short of RAM we could sleep in the above
@@ -1017,7 +1017,7 @@ ReFault:
 	 * providing a pgo_fault routine.
 	 */
 
-	if (uobj && shadowed == false && uobj->pgops->pgo_fault != NULL) {
+	if (uobj && shadowed == FALSE && uobj->pgops->pgo_fault != NULL) {
 		simple_lock(&uobj->vmobjlock);
 
 		/* locked: maps(read), amap (if there), uobj */
@@ -1042,7 +1042,7 @@ ReFault:
 	 * (PGO_LOCKED).
 	 */
 
-	if (uobj && shadowed == false) {
+	if (uobj && shadowed == FALSE) {
 		simple_lock(&uobj->vmobjlock);
 
 		/* locked (!shadowed): maps(read), amap (if there), uobj */
@@ -1069,7 +1069,7 @@ ReFault:
 			for (lcv = 0; lcv < npages;
 			     lcv++, currva += PAGE_SIZE) {
 				struct vm_page *curpg;
-				bool readonly;
+				boolean_t readonly;
 
 				curpg = pages[lcv];
 				if (curpg == NULL || curpg == PGO_DONTCARE) {
@@ -1151,9 +1151,9 @@ ReFault:
 	/* locked (!shadowed): maps(read), amap(if there),
 		 uobj(if !null), uobjpage(if !null) */
 	if (shadowed) {
-		KASSERT(mutex_owned(&amap->am_l));
+		LOCK_ASSERT(simple_lock_held(&amap->am_l));
 	} else {
-		KASSERT(amap == NULL || mutex_owned(&amap->am_l));
+		LOCK_ASSERT(amap == NULL || simple_lock_held(&amap->am_l));
 		LOCK_ASSERT(uobj == NULL || simple_lock_held(&uobj->vmobjlock));
 		KASSERT(uobjpage == NULL || (uobjpage->flags & PG_BUSY) != 0);
 	}
@@ -1177,7 +1177,7 @@ ReFault:
 	 * redirect case 2: if we are not shadowed, go to case 2.
 	 */
 
-	if (shadowed == false)
+	if (shadowed == FALSE)
 		goto Case2;
 
 	/* locked: maps(read), amap */
@@ -1191,7 +1191,7 @@ ReFault:
 	simple_lock(&anon->an_lock);
 
 	/* locked: maps(read), amap, anon */
-	KASSERT(mutex_owned(&amap->am_l));
+	LOCK_ASSERT(simple_lock_held(&amap->am_l));
 	LOCK_ASSERT(simple_lock_held(&anon->an_lock));
 
 	/*
@@ -1231,7 +1231,7 @@ ReFault:
 	uobj = anon->an_page->uobject;	/* locked by anonget if !NULL */
 
 	/* locked: maps(read), amap, anon, uobj(if one) */
-	KASSERT(mutex_owned(&amap->am_l));
+	LOCK_ASSERT(simple_lock_held(&amap->am_l));
 	LOCK_ASSERT(simple_lock_held(&anon->an_lock));
 	LOCK_ASSERT(uobj == NULL || simple_lock_held(&uobj->vmobjlock));
 
@@ -1380,7 +1380,7 @@ ReFault:
 	}
 
 	/* locked: maps(read), amap, oanon, anon (if different from oanon) */
-	KASSERT(mutex_owned(&amap->am_l));
+	LOCK_ASSERT(simple_lock_held(&amap->am_l));
 	LOCK_ASSERT(simple_lock_held(&anon->an_lock));
 	LOCK_ASSERT(simple_lock_held(&oanon->an_lock));
 
@@ -1459,9 +1459,9 @@ Case2:
 	 * locked:
 	 * maps(read), amap(if there), uobj(if !null), uobjpage(if !null)
 	 */
-	KASSERT(amap == NULL || mutex_owned(&amap->am_l));
+	LOCK_ASSERT(amap == NULL || simple_lock_held(&amap->am_l));
 	LOCK_ASSERT(uobj == NULL || simple_lock_held(&uobj->vmobjlock));
-	KASSERT(uobjpage == NULL || (uobjpage->flags & PG_BUSY) != 0);
+	LOCK_ASSERT(uobjpage == NULL || (uobjpage->flags & PG_BUSY) != 0);
 
 	/*
 	 * note that uobjpage can not be PGO_DONTCARE at this point.  we now
@@ -1472,7 +1472,7 @@ Case2:
 
 	if (uobj == NULL) {
 		uobjpage = PGO_DONTCARE;
-		promote = true;		/* always need anon here */
+		promote = TRUE;		/* always need anon here */
 	} else {
 		KASSERT(uobjpage != PGO_DONTCARE);
 		promote = cow_now && UVM_ET_ISCOPYONWRITE(ufi.entry);
@@ -1507,7 +1507,7 @@ Case2:
 		    0, access_type & MASK(ufi.entry), ufi.entry->advice,
 		    PGO_SYNCIO);
 		/* locked: uobjpage(if no error) */
-		KASSERT(error != 0 || (uobjpage->flags & PG_BUSY) != 0);
+		LOCK_ASSERT(error != 0 || (uobjpage->flags & PG_BUSY) != 0);
 
 		/*
 		 * recover from I/O
@@ -1558,14 +1558,14 @@ Case2:
 		      ufi.orig_rvaddr - ufi.entry->start))) {
 			if (locked)
 				uvmfault_unlockall(&ufi, amap, NULL, NULL);
-			locked = false;
+			locked = FALSE;
 		}
 
 		/*
 		 * didn't get the lock?   release the page and retry.
 		 */
 
-		if (locked == false) {
+		if (locked == FALSE) {
 			UVMHIST_LOG(maphist,
 			    "  wasn't able to relock after fault: retry",
 			    0,0,0,0);
@@ -1595,9 +1595,9 @@ Case2:
 	 * locked:
 	 * maps(read), amap(if !null), uobj(if !null), uobjpage(if uobj)
 	 */
-	KASSERT(amap == NULL || mutex_owned(&amap->am_l));
+	LOCK_ASSERT(amap == NULL || simple_lock_held(&amap->am_l));
 	LOCK_ASSERT(uobj == NULL || simple_lock_held(&uobj->vmobjlock));
-	KASSERT(uobj == NULL || (uobjpage->flags & PG_BUSY) != 0);
+	LOCK_ASSERT(uobj == NULL || (uobjpage->flags & PG_BUSY) != 0);
 
 	/*
 	 * notes:
@@ -1610,7 +1610,7 @@ Case2:
 	KASSERT(uobj == NULL || uobj == uobjpage->uobject);
 	KASSERT(uobj == NULL || !UVM_OBJ_IS_CLEAN(uobjpage->uobject) ||
 	    (uobjpage->flags & PG_CLEAN) != 0);
-	if (promote == false) {
+	if (promote == FALSE) {
 
 		/*
 		 * we are not promoting.   if the mapping is COW ensure that we
@@ -1750,11 +1750,11 @@ Case2:
 	 *
 	 * note: pg is either the uobjpage or the new page in the new anon
 	 */
-	KASSERT(amap == NULL || mutex_owned(&amap->am_l));
+	LOCK_ASSERT(amap == NULL || simple_lock_held(&amap->am_l));
 	LOCK_ASSERT(uobj == NULL || simple_lock_held(&uobj->vmobjlock));
-	KASSERT(uobj == NULL || (uobjpage->flags & PG_BUSY) != 0);
+	LOCK_ASSERT(uobj == NULL || (uobjpage->flags & PG_BUSY) != 0);
 	LOCK_ASSERT(anon == NULL || simple_lock_held(&anon->an_lock));
-	KASSERT((pg->flags & PG_BUSY) != 0);
+	LOCK_ASSERT((pg->flags & PG_BUSY) != 0);
 
 	/*
 	 * all resources are present.   we can now map it in and free our
@@ -1932,11 +1932,11 @@ uvm_fault_unwire_locked(struct vm_map *map, vaddr_t start, vaddr_t end)
 	 */
 
 	KASSERT(start >= vm_map_min(map) && end <= vm_map_max(map));
-	if (uvm_map_lookup_entry(map, start, &entry) == false)
+	if (uvm_map_lookup_entry(map, start, &entry) == FALSE)
 		panic("uvm_fault_unwire_locked: address not in map");
 
 	for (va = start; va < end; va += PAGE_SIZE) {
-		if (pmap_extract(pmap, va, &pa) == false)
+		if (pmap_extract(pmap, va, &pa) == FALSE)
 			continue;
 
 		/*

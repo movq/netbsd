@@ -1,11 +1,8 @@
-/*	$NetBSD: uvm_object.c,v 1.3 2007/02/17 20:45:36 rmind Exp $	*/
+/*	$NetBSD: uvm_object.c,v 1.2 2006/10/12 10:13:35 yamt Exp $	*/
 
 /*
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
  * All rights reserved.
- *
- * This code is derived from software contributed to The NetBSD Foundation
- * by Mindaugas Rasiukevicius.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -45,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_object.c,v 1.3 2007/02/17 20:45:36 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_object.c,v 1.2 2006/10/12 10:13:35 yamt Exp $");
 
 #include "opt_uvmhist.h"
 

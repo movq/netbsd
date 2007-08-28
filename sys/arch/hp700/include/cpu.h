@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.23 2007/05/17 14:51:18 yamt Exp $	*/
+/*	$NetBSD: cpu.h,v 1.19 2006/08/26 06:07:28 skrll Exp $	*/
 
 /*	$OpenBSD: cpu.h,v 1.20 2001/01/29 00:01:58 mickey Exp $	*/
 
@@ -181,13 +181,14 @@ struct clockframe {
 	int	cf_spl;
 	u_int	cf_pc;
 };
+#define	CLKF_BASEPRI(framep)	((framep)->cf_spl == 0)
 #define	CLKF_PC(framep)		((framep)->cf_pc)
 #define	CLKF_INTR(framep)	((framep)->cf_flags & TFF_INTR)
 #define	CLKF_USERMODE(framep)	((framep)->cf_flags & T_USER)
 
-#define	cpu_signotify(l)	(setsoftast())
-#define	cpu_need_proftick(l)	((l)->l_pflag |= LP_OWEUPC, setsoftast())
-#define	cpu_did_resched()	do { want_resched = 0; } while(0)
+#define	signotify(p)		(setsoftast())
+#define	need_resched(ci)	(want_resched = 1, setsoftast())
+#define	need_proftick(p)	((p)->p_flag |= P_OWEUPC, setsoftast())
 
 #include <sys/cpu_data.h>
 struct cpu_info {
@@ -195,8 +196,6 @@ struct cpu_info {
 
 	struct	lwp	*ci_curlwp;	/* CPU owner */
 	int		ci_cpuid;	/* CPU index (see cpus[] array) */
-	int		ci_mtx_count;
-	int		ci_mtx_oldspl;
 };
 
 #include <machine/intr.h>
@@ -229,7 +228,7 @@ extern int want_resched;
 #define DELAY(x) delay(x)
 
 static __inline paddr_t
-kvtop(const void *va)
+kvtop(const caddr_t va)
 {
 	paddr_t pa;
 
@@ -247,7 +246,8 @@ int	spcopy(pa_space_t, const void *, pa_space_t, void *, size_t);
 int	spstrcpy(pa_space_t, const void *, pa_space_t, void *, size_t,
 		 size_t *);
 int	copy_on_fault(void);
-void	lwp_trampoline(void);
+void	switch_trampoline(void);
+void	switch_exit(struct lwp *, void (*)(struct lwp *));
 int	cpu_dumpsize(void);
 int	cpu_dump(void);
 #endif

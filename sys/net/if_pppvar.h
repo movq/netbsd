@@ -1,4 +1,4 @@
-/*	$NetBSD: if_pppvar.h,v 1.26 2007/07/14 21:02:41 ad Exp $	*/
+/*	$NetBSD: if_pppvar.h,v 1.23 2006/07/23 22:06:12 ad Exp $	*/
 /*	Id: if_pppvar.h,v 1.3 1996/07/01 01:04:37 paulus Exp	 */
 
 /*
@@ -115,7 +115,9 @@ struct ppp_softc {
 	void	*sc_rc_state;		/* receive decompressor state */
 	time_t	sc_last_sent;		/* time (secs) last NP pkt sent */
 	time_t	sc_last_recv;		/* time (secs) last NP pkt rcvd */
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	void	*sc_si;			/* software interrupt handle */
+#endif
 #ifdef PPP_FILTER
 	/* Filter for packets to pass. */
 	struct	bpf_program sc_pass_filt_in;
@@ -154,11 +156,11 @@ struct ppp_softc {
 
 struct	ppp_softc *pppalloc(pid_t);
 void	pppdealloc(struct ppp_softc *);
-int	pppioctl(struct ppp_softc *, u_long, void *, int, struct lwp *);
+int	pppioctl(struct ppp_softc *, u_long, caddr_t, int, struct lwp *);
 void	ppp_restart(struct ppp_softc *);
 void	ppppktin(struct ppp_softc *, struct mbuf *, int);
 struct	mbuf *ppp_dequeue(struct ppp_softc *);
-int	pppoutput(struct ifnet *, struct mbuf *, const struct sockaddr *,
+int	pppoutput(struct ifnet *, struct mbuf *, struct sockaddr *,
 	    struct rtentry *);
 #endif /* _KERNEL */
 

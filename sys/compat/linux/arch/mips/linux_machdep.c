@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.c,v 1.31 2007/06/13 02:11:40 christos Exp $ */
+/*	$NetBSD: linux_machdep.c,v 1.27 2006/07/23 22:06:09 ad Exp $ */
 
 /*-
  * Copyright (c) 1995, 2000, 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.31 2007/06/13 02:11:40 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.27 2006/07/23 22:06:09 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,6 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.31 2007/06/13 02:11:40 christos 
 #include <sys/mount.h>
 #include <sys/vnode.h>
 #include <sys/device.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/filedesc.h>
 #include <sys/exec_elf.h>
@@ -130,7 +131,7 @@ linux_sendsig(ksi, mask)
 	struct proc *p = l->l_proc;
 	struct linux_sigframe *fp;
 	struct frame *f;
-	int i, onstack, error;
+	int i,onstack;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
 	struct linux_sigframe sf;
 
@@ -143,7 +144,7 @@ linux_sendsig(ksi, mask)
 	 * Do we need to jump onto the signal stack?
 	 */
 	onstack =
-	    (l->l_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
+	    (p->p_sigctx.ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
 	    (SIGACTION(p, sig).sa_flags & SA_ONSTACK) != 0;
 
 	/*
@@ -157,8 +158,8 @@ linux_sendsig(ksi, mask)
 	 */
 	if (onstack)
 		fp = (struct linux_sigframe *)
-		    ((uint8_t *)l->l_sigstk.ss_sp
-		    + l->l_sigstk.ss_size);
+		    ((caddr_t)p->p_sigctx.ps_sigstk.ss_sp
+		    + p->p_sigctx.ps_sigstk.ss_size);
 	else
 		/* cast for _MIPS_BSD_API == _MIPS_BSD_API_LP32_64CLEAN case */
 		fp = (struct linux_sigframe *)(u_int32_t)f->f_regs[_R_SP];
@@ -185,22 +186,17 @@ linux_sendsig(ksi, mask)
 	sf.lsf_sc.lsc_status = f->f_regs[_R_SR];
 	sf.lsf_sc.lsc_cause = f->f_regs[_R_CAUSE];
 	sf.lsf_sc.lsc_badvaddr = f->f_regs[_R_BADVADDR];
-	sendsig_reset(l, sig);
 
 	/*
 	 * Save signal stack.  XXX broken
 	 */
-	/* kregs.sc_onstack = l->l_sigstk.ss_flags & SS_ONSTACK; */
+	/* kregs.sc_onstack = p->p_sigctx.ps_sigstk.ss_flags & SS_ONSTACK; */
 
 	/*
 	 * Install the sigframe onto the stack
 	 */
 	fp -= sizeof(struct linux_sigframe);
-	mutex_exit(&p->p_smutex);
-	error = copyout(&sf, fp, sizeof(sf));
-	mutex_enter(&p->p_smutex);
-
-	if (error != 0) {
+	if (copyout(&sf, fp, sizeof(sf)) != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
@@ -229,7 +225,7 @@ linux_sendsig(ksi, mask)
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 
 	return;
 }
@@ -278,16 +274,12 @@ linux_sys_sigreturn(l, v, retval)
 	f->f_regs[_R_BADVADDR] = ksf.lsf_sc.lsc_badvaddr;
 	f->f_regs[_R_CAUSE] = ksf.lsf_sc.lsc_cause;
 
-	mutex_enter(&p->p_smutex);
-
 	/* Restore signal stack. */
-	l->l_sigstk.ss_flags &= ~SS_ONSTACK;
+	p->p_sigctx.ps_sigstk.ss_flags &= ~SS_ONSTACK;
 
 	/* Restore signal mask. */
 	linux_to_native_sigset(&mask, (linux_sigset_t *)&ksf.lsf_mask);
-	(void)sigprocmask1(l, SIG_SETMASK, &mask, 0);
-
-	mutex_exit(&p->p_smutex);
+	(void)sigprocmask1(p, SIG_SETMASK, &mask, 0);
 
 	return (EJUSTRETURN);
 }
@@ -337,8 +329,8 @@ linux_fakedev(dev, raw)
  * We come here in a last attempt to satisfy a Linux ioctl() call
  */
 int
-linux_machdepioctl(l, v, retval)
-	struct lwp *l;
+linux_machdepioctl(p, v, retval)
+	struct proc *p;
 	void *v;
 	register_t *retval;
 {
@@ -437,7 +429,7 @@ linux_sys_sysmips(l, v, retval)
 		size_t len;
 
 		if ((error = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+		    KAUTH_GENERIC_ISSUSER, &l->l_acflag)) != 0)
 			return error;
 		if ((error = copyinstr((char *)SCARG(uap, arg1), nodename,
 		    LINUX___NEW_UTS_LEN, &len)) != 0)

@@ -1,4 +1,4 @@
-/*	$NetBSD: identcpu.c,v 1.23 2007/06/14 12:28:51 njoly Exp $	*/
+/*	$NetBSD: identcpu.c,v 1.7.2.3 2007/09/12 10:05:04 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,10 +36,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.23 2007/06/14 12:28:51 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.7.2.3 2007/09/12 10:05:04 msaitoh Exp $");
 
 #include "opt_enhanced_speedstep.h"
-#include "opt_intel_odcm.h"
 #include "opt_powernow_k8.h"
 
 #include <sys/types.h>
@@ -47,8 +46,8 @@ __KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.23 2007/06/14 12:28:51 njoly Exp $");
 #include <machine/cpu.h>
 #include <machine/cpufunc.h>
 
-#include <x86/cpuvar.h>
 #include <x86/cputypes.h>
+#include <x86/cpuvar.h>
 #include <x86/powernow.h>
 
 /* sysctl wants this. */
@@ -109,7 +108,7 @@ identifycpu(struct cpu_info *ci)
 		bitmask_snprintf(ci->ci_feature_flags,
 		    feature_str[0], buf, sizeof(buf));
 		aprint_verbose("%s: features: %s\n",
-		   ci->ci_dev->dv_xname, buf);
+		    ci->ci_dev->dv_xname, buf);
 	}
 	if ((ci->ci_feature_flags & CPUID_MASK2) != 0) {
 		bitmask_snprintf(ci->ci_feature_flags,
@@ -141,31 +140,23 @@ identifycpu(struct cpu_info *ci)
 
 	x86_print_cacheinfo(ci);
 
+#ifdef ENHANCED_SPEEDSTEP
+        if ((vendor == CPUVENDOR_INTEL) &&
+	    (ci->ci_feature2_flags & CPUID2_EST)) {
+		if (rdmsr(MSR_MISC_ENABLE) & (1 << 16))
+		    est_init(CPUVENDOR_INTEL);
+		else
+		    aprint_normal("%s: Enhanced SpeedStep disabled by "
+			"BIOS\n", device_xname(ci->ci_dev));
+	}
+#endif
+
 #ifdef POWERNOW_K8
 	if (CPUID2FAMILY(ci->ci_signature) == 15 &&
 	    (cpu_model[0] == 'A' || cpu_model[0] == 'O') &&
 	    powernow_probe(ci))
 		k8_powernow_init();
 #endif
-
-	x86_errata(ci, vendor);
-	x86_patch();
-
-#ifdef INTEL_ONDEMAND_CLOCKMOD
-	clockmod_init();
-#endif
-
-#ifdef ENHANCED_SPEEDSTEP
-	if ((vendor == CPUVENDOR_INTEL) &&
-	    (ci->ci_feature2_flags & CPUID2_EST)) {
-		if (rdmsr(MSR_MISC_ENABLE) & (1 << 16))
-			est_init(CPUVENDOR_INTEL);
-		else
-			aprint_normal("%s: Enhanced SpeedStep disabled by "
-			    "BIOS\n", device_xname(ci->ci_dev));
-	}
-#endif
-
 }
 
 void

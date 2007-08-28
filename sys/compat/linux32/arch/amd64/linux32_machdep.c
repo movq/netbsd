@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_machdep.c,v 1.11 2007/05/21 15:35:48 christos Exp $ */
+/*	$NetBSD: linux32_machdep.c,v 1.3 2006/11/22 13:56:09 christos Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -31,7 +31,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_machdep.c,v 1.11 2007/05/21 15:35:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_machdep.c,v 1.3 2006/11/22 13:56:09 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,6 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_machdep.c,v 1.11 2007/05/21 15:35:48 christo
 #include <sys/mount.h>
 #include <sys/vnode.h>
 #include <sys/device.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/filedesc.h>
 #include <sys/exec_elf.h>
@@ -115,10 +116,10 @@ linux32_old_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct proc *p = l->l_proc;
 	struct trapframe *tf;
 	struct linux32_sigframe *fp, frame;
-	int onstack, error;
+	int onstack;
 	int sig = ksi->ksi_signo;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
-	struct sigaltstack *sas = &l->l_sigstk;
+	struct sigaltstack *sas = &p->p_sigctx.ps_sigstk;
 
 	tf = l->l_md.md_regs;
 	/* Do we need to jump onto the signal stack? */
@@ -128,24 +129,19 @@ linux32_old_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* Allocate space for the signal handler context. */
 	if (onstack)
-		fp = (struct linux32_sigframe *)((char *)sas->ss_sp +
+		fp = (struct linux32_sigframe *)((caddr_t)sas->ss_sp +
 		    sas->ss_size);
 	else
 		fp = (struct linux32_sigframe *)tf->tf_rsp;
 	fp--;
 
 	/* Build stack frame for signal trampoline. */
-	NETBSD32PTR32(frame.sf_handler, catcher);
+	frame.sf_handler = (linux32_handler_t)(long)catcher;
 	frame.sf_sig = native_to_linux32_signo[sig];
 
 	linux32_save_sigcontext(l, tf, mask, &frame.sf_sc);
 
-	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
-	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
-
-	if (error != 0) {
+	if (copyout(&frame, fp, sizeof(frame)) != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
@@ -181,11 +177,11 @@ linux32_rt_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct proc *p = l->l_proc;
 	struct trapframe *tf;
 	struct linux32_rt_sigframe *fp, frame;
-	int onstack, error;
+	int onstack;
 	linux32_siginfo_t *lsi;
 	int sig = ksi->ksi_signo;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
-	struct sigaltstack *sas = &l->l_sigstk;
+	struct sigaltstack *sas = &p->p_sigctx.ps_sigstk;
 
 	tf = l->l_md.md_regs;
 	/* Do we need to jump onto the signal stack? */
@@ -195,17 +191,17 @@ linux32_rt_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* Allocate space for the signal handler context. */
 	if (onstack)
-		fp = (struct linux32_rt_sigframe *)((char *)sas->ss_sp +
+		fp = (struct linux32_rt_sigframe *)((caddr_t)sas->ss_sp +
 		    sas->ss_size);
 	else
 		fp = (struct linux32_rt_sigframe *)tf->tf_rsp;
 	fp--;
 
 	/* Build stack frame for signal trampoline. */
-	NETBSD32PTR32(frame.sf_handler, catcher);
+	frame.sf_handler = (linux32_handler_t)(long)catcher;
 	frame.sf_sig = native_to_linux32_signo[sig];
-	NETBSD32PTR32(frame.sf_sip, &fp->sf_si);
-	NETBSD32PTR32(frame.sf_ucp, &fp->sf_uc);
+	frame.sf_sip = (linux32_siginfop_t)(long)&fp->sf_si;
+	frame.sf_ucp = (linux32_ucontextp_t)(long)&fp->sf_uc;
 
 	lsi = &frame.sf_si;
 	(void)memset(lsi, 0, sizeof(frame.sf_si));
@@ -218,7 +214,7 @@ linux32_rt_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	case LINUX32_SIGSEGV:
 	case LINUX32_SIGBUS:
 	case LINUX32_SIGTRAP:
-		NETBSD32PTR32(lsi->lsi_addr, ksi->ksi_addr);
+		lsi->lsi_addr = (netbsd32_voidp)(long)ksi->ksi_addr;
 		break;
 	case LINUX32_SIGCHLD:
 		lsi->lsi_uid = ksi->ksi_uid;
@@ -240,19 +236,15 @@ linux32_rt_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 		lsi->lsi_pid = ksi->ksi_pid;
 		if (lsi->lsi_signo == LINUX32_SIGALRM ||
 		    lsi->lsi_signo >= LINUX32_SIGRTMIN)
-			NETBSD32PTR32(lsi->lsi_value.sival_ptr,
-			     ksi->ksi_value.sival_ptr);
+			lsi->lsi_value.sival_ptr = 
+			     (netbsd32_voidp)(long)ksi->ksi_sigval.sival_ptr;
 		break;
 	}
 
 	/* Save register context. */
-	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
 	linux32_save_ucontext(l, tf, mask, sas, &frame.sf_uc);
-	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
 
-	if (error != 0) {
+	if (copyout(&frame, fp, sizeof(frame)) != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
@@ -309,7 +301,7 @@ linux32_setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 	pcb->pcb_gs = 0;
 
 
-	p->p_flag |= PK_32;
+	p->p_flag |= P_32;
 
 	tf = l->l_md.md_regs;
 	tf->tf_rax = 0;
@@ -352,7 +344,7 @@ linux32_save_ucontext(l, tf, mask, sas, uc)
 	struct linux32_ucontext *uc;
 {
 	uc->uc_flags = 0;
-	NETBSD32PTR32(uc->uc_link, NULL);
+	uc->uc_link = (linux32_ucontextp_t)(long)NULL;
 	native_to_linux32_sigaltstack(&uc->uc_stack, sas);
 	linux32_save_sigcontext(l, tf, mask, &uc->uc_mcontext);
 	native_to_linux32_sigset(&uc->uc_sigmask, mask);
@@ -387,7 +379,7 @@ linux32_save_sigcontext(l, tf, mask, sc)
 	sc->sc_err = tf->tf_err;
 	sc->sc_trapno = tf->tf_trapno;
 	/* sc->sc_cr2 = l->l_addr->u_pcb.pcb_cr2; */ /* XXX */
-	NETBSD32PTR32(sc->sc_387, NULL);
+	sc->sc_387 = (linux32_fpstatep_t)(long)NULL;
 
 	/* Save signal stack. */
 	/* Linux doesn't save the onstack flag in sigframe */
@@ -408,7 +400,8 @@ linux32_sys_sigreturn(l, v, retval)
 	struct linux32_sigcontext ctx;
 	int error;
 
-	if ((error = copyin(SCARG_P32(uap, scp), &ctx, sizeof(ctx))) != 0)
+	if ((error = copyin(NETBSD32PTR64(SCARG(uap, scp)), 
+	    &ctx, sizeof(ctx))) != 0)
 		return error;
 
 	return linux32_restore_sigcontext(l, &ctx, retval);
@@ -426,7 +419,8 @@ linux32_sys_rt_sigreturn(l, v, retval)
 	struct linux32_ucontext ctx;
 	int error;
 
-	if ((error = copyin(SCARG_P32(uap, ucp), &ctx, sizeof(ctx))) != 0)
+	if ((error = copyin(NETBSD32PTR64(SCARG(uap, ucp)), 
+	    &ctx, sizeof(ctx))) != 0)
 		return error;
 
 	return linux32_restore_sigcontext(l, &ctx.uc_mcontext, retval);
@@ -440,7 +434,7 @@ linux32_restore_sigcontext(l, scp, retval)
 {	
 	struct trapframe *tf;
 	struct proc *p = l->l_proc;
-	struct sigaltstack *sas = &l->l_sigstk;
+	struct sigaltstack *sas = &p->p_sigctx.ps_sigstk;
 	sigset_t mask;
 	ssize_t ss_gap;
 
@@ -491,12 +485,10 @@ linux32_restore_sigcontext(l, scp, retval)
 	tf->tf_rsp = (register_t)scp->sc_esp_at_signal & 0xffffffff;
 	tf->tf_ss = (register_t)scp->sc_ss & 0xffffffff;
 
-	mutex_enter(&p->p_smutex);
-
 	/* Restore signal stack. */
 	ss_gap = (ssize_t)
-	    ((char *)NETBSD32IPTR64(scp->sc_esp_at_signal) 
-	     - (char *)sas->ss_sp);
+	    ((caddr_t)NETBSD32PTR64(scp->sc_esp_at_signal) 
+	     - (caddr_t)sas->ss_sp);
 	if (ss_gap >= 0 && ss_gap < sas->ss_size)
 		sas->ss_flags |= SS_ONSTACK;
 	else
@@ -504,10 +496,7 @@ linux32_restore_sigcontext(l, scp, retval)
 
 	/* Restore signal mask. */
 	linux32_old_to_native_sigset(&mask, &scp->sc_mask);
-	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
-
-	mutex_exit(&p->p_smutex);
-
+	(void) sigprocmask1(p, SIG_SETMASK, &mask, 0);
 #ifdef DEBUG_LINUX
 	printf("linux32_sigreturn: rip = 0x%lx, rsp = 0x%lx, flags = 0x%lx\n",
 	    tf->tf_rip, tf->tf_rsp, tf->tf_rflags);

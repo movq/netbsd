@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_syscallargs.h,v 1.56 2007/03/04 06:01:28 christos Exp $ */
+/* $NetBSD: osf1_syscallargs.h,v 1.55 2005/12/11 12:20:23 christos Exp $ */
 
 /*
  * System call argument lists.
@@ -56,7 +56,7 @@ struct osf1_sys_mount_args {
 	syscallarg(int) type;
 	syscallarg(const char *) path;
 	syscallarg(int) flags;
-	syscallarg(void *) data;
+	syscallarg(caddr_t) data;
 };
 
 struct osf1_sys_unmount_args {
@@ -86,9 +86,9 @@ struct osf1_sys_access_args {
 };
 
 struct osf1_sys_set_program_attributes_args {
-	syscallarg(void *) taddr;
+	syscallarg(caddr_t) taddr;
 	syscallarg(unsigned long) tsize;
-	syscallarg(void *) daddr;
+	syscallarg(caddr_t) daddr;
 	syscallarg(unsigned long) dsize;
 };
 
@@ -108,7 +108,7 @@ struct osf1_sys_classcntl_args {
 struct osf1_sys_ioctl_args {
 	syscallarg(int) fd;
 	syscallarg(int) com;
-	syscallarg(void *) data;
+	syscallarg(caddr_t) data;
 };
 
 struct osf1_sys_reboot_args {
@@ -132,7 +132,7 @@ struct osf1_sys_lstat_args {
 };
 
 struct osf1_sys_mmap_args {
-	syscallarg(void *) addr;
+	syscallarg(caddr_t) addr;
 	syscallarg(size_t) len;
 	syscallarg(int) prot;
 	syscallarg(int) flags;
@@ -231,7 +231,7 @@ struct osf1_sys_setgid_args {
 
 struct osf1_sys_sendto_args {
 	syscallarg(int) s;
-	syscallarg(void *) buf;
+	syscallarg(caddr_t) buf;
 	syscallarg(size_t) len;
 	syscallarg(int) flags;
 	syscallarg(struct sockaddr *) to;
@@ -347,17 +347,17 @@ struct osf1_sys_usleep_thread_args {
 
 struct osf1_sys_getsysinfo_args {
 	syscallarg(u_long) op;
-	syscallarg(void *) buffer;
+	syscallarg(caddr_t) buffer;
 	syscallarg(u_long) nbytes;
-	syscallarg(void *) arg;
+	syscallarg(caddr_t) arg;
 	syscallarg(u_long) flag;
 };
 
 struct osf1_sys_setsysinfo_args {
 	syscallarg(u_long) op;
-	syscallarg(void *) buffer;
+	syscallarg(caddr_t) buffer;
 	syscallarg(u_long) nbytes;
-	syscallarg(void *) arg;
+	syscallarg(caddr_t) arg;
 	syscallarg(u_long) flag;
 };
 

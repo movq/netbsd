@@ -1,4 +1,4 @@
-/*	$NetBSD: mpt_mpilib.h,v 1.3 2007/07/27 13:06:51 tron Exp $	*/
+/*	$NetBSD: mpt_mpilib.h,v 1.2.54.1 2007/07/30 20:02:31 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001 by LSI Logic Corporation

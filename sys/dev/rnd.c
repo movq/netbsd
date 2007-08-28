@@ -1,4 +1,4 @@
-/*	$NetBSD: rnd.c,v 1.63 2007/07/09 21:00:29 ad Exp $	*/
+/*	$NetBSD: rnd.c,v 1.57 2006/11/16 01:32:45 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rnd.c,v 1.63 2007/07/09 21:00:29 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rnd.c,v 1.57 2006/11/16 01:32:45 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/ioctl.h>
@@ -129,8 +129,7 @@ volatile u_int32_t rnd_status;
 /*
  * Memory pool; accessed only at splvm().
  */
-POOL_INIT(rnd_mempool, sizeof(rnd_sample_t), 0, 0, 0, "rndsample", NULL,
-    IPL_VM);
+POOL_INIT(rnd_mempool, sizeof(rnd_sample_t), 0, 0, 0, "rndsample", NULL);
 
 /*
  * Our random pool.  This is defined here rather than using the general
@@ -154,7 +153,7 @@ static rndsource_t rnd_source_no_collect = {
 	NULL
 };
 
-struct callout rnd_callout;
+struct callout rnd_callout = CALLOUT_INITIALIZER;
 
 void	rndattach(int);
 
@@ -311,8 +310,6 @@ rnd_init(void)
 	if (rnd_ready)
 		return;
 
-	callout_init(&rnd_callout, 0);
-
 	/*
 	 * take a counter early, hoping that there's some variance in
 	 * the following operations
@@ -437,7 +434,7 @@ rndread(dev_t dev, struct uio *uio, int ioflag)
 		 * If an error occurs, or this is a partial
 		 * read, bail out.
 		 */
-		ret = uiomove((void *)bf, nread, uio);
+		ret = uiomove((caddr_t)bf, nread, uio);
 		if (ret != 0 || nread != n)
 			goto out;
 	}
@@ -466,7 +463,7 @@ rndwrite(dev_t dev, struct uio *uio, int ioflag)
 	while (uio->uio_resid > 0) {
 		n = min(RND_TEMP_BUFFER_SIZE, uio->uio_resid);
 
-		ret = uiomove((void *)bf, n, uio);
+		ret = uiomove((caddr_t)bf, n, uio);
 		if (ret != 0)
 			break;
 
@@ -485,7 +482,7 @@ rndwrite(dev_t dev, struct uio *uio, int ioflag)
 }
 
 int
-rndioctl(dev_t dev, u_long cmd, void *addr, int flag,
+rndioctl(dev_t dev, u_long cmd, caddr_t addr, int flag,
     struct lwp *l)
 {
 	rndsource_element_t *rse;
@@ -497,25 +494,6 @@ rndioctl(dev_t dev, u_long cmd, void *addr, int flag,
 	int ret, s;
 
 	ret = 0;
-
-	switch (cmd) {
-	case FIONBIO:
-	case FIOASYNC:
-	case RNDGETENTCNT:
-		break;
-	case RNDGETPOOLSTAT:
-	case RNDGETSRCNUM:
-	case RNDGETSRCNAME:
-	case RNDCTL:
-	case RNDADDDATA:
-		ret = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
-		    NULL);
-		if (ret)
-			return (ret);
-		break;
-	default:
-		return (EINVAL);
-	}
 
 	switch (cmd) {
 
@@ -534,12 +512,20 @@ rndioctl(dev_t dev, u_long cmd, void *addr, int flag,
 		break;
 
 	case RNDGETPOOLSTAT:
+		if ((ret = kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, &l->l_acflag)) != 0)
+			return (ret);
+
 		s = splsoftclock();
 		rndpool_get_stats(&rnd_pool, addr, sizeof(rndpoolstat_t));
 		splx(s);
 		break;
 
 	case RNDGETSRCNUM:
+		if ((ret = kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, &l->l_acflag)) != 0)
+			return (ret);
+
 		rst = (rndstat_t *)addr;
 
 		if (rst->count == 0)
@@ -580,6 +566,10 @@ rndioctl(dev_t dev, u_long cmd, void *addr, int flag,
 		break;
 
 	case RNDGETSRCNAME:
+		if ((ret = kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, &l->l_acflag)) != 0)
+			return (ret);
+
 		/*
 		 * Scan through the list, trying to find the name.
 		 */
@@ -600,6 +590,10 @@ rndioctl(dev_t dev, u_long cmd, void *addr, int flag,
 		break;
 
 	case RNDCTL:
+		if ((ret = kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, &l->l_acflag)) != 0)
+			return (ret);
+
 		/*
 		 * Set flags to enable/disable entropy counting and/or
 		 * collection.
@@ -641,6 +635,10 @@ rndioctl(dev_t dev, u_long cmd, void *addr, int flag,
 		break;
 
 	case RNDADDDATA:
+		if ((ret = kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, &l->l_acflag)) != 0)
+			return (ret);
+
 		rnddata = (rnddata_t *)addr;
 
 		s = splsoftclock();

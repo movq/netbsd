@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.35 2007/05/17 14:51:17 yamt Exp $ */
+/* $NetBSD: machdep.c,v 1.31 2006/10/02 08:13:53 gdamore Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -107,7 +107,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.35 2007/05/17 14:51:17 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.31 2006/10/02 08:13:53 gdamore Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -186,10 +186,10 @@ void
 mach_init(int argc, char **argv, yamon_env_var *envp, u_long memsize)
 {
 	bus_space_handle_t sh;
-	void *kernend;
+	caddr_t kernend;
 	const char *cp;
 	u_long first, last;
-	void *v;
+	caddr_t v;
 	int freqok, howto, i;
 	const struct alchemy_board *board;
 
@@ -199,8 +199,8 @@ mach_init(int argc, char **argv, yamon_env_var *envp, u_long memsize)
 	KASSERT(board != NULL);
 
 	/* clear the BSS segment */
-	kernend = (void *)mips_round_page(end);
-	memset(edata, 0, (char *)kernend - edata);
+	kernend = (caddr_t)mips_round_page(end);
+	memset(edata, 0, kernend - (caddr_t)edata);
 
 	/* set CPU model info for sysctl_hw */
 	strcpy(cpu_model, board->ab_name);
@@ -364,11 +364,11 @@ mach_init(int argc, char **argv, yamon_env_var *envp, u_long memsize)
 	/*
 	 * Init mapping for u page(s) for proc0.
 	 */
-	v = (void *) uvm_pageboot_alloc(USPACE);
+	v = (caddr_t) uvm_pageboot_alloc(USPACE);
 	lwp0.l_addr = proc0paddr = (struct user *)v;
-	lwp0.l_md.md_regs = (struct frame *)((char *)v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	lwp0.l_md.md_regs = (struct frame *)(v + USPACE) - 1;
+	curpcb = &lwp0.l_addr->u_pcb;
+	curpcb->pcb_context[11] = MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
 
 	/*
 	 * Initialize debuggers, and break into them, if appropriate.
@@ -418,13 +418,13 @@ cpu_startup(void)
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
+	    16 * NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    VM_PHYS_SIZE, 0, false, NULL);
+	    VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * No need to allocate an mbuf cluster submap.  Mbuf clusters

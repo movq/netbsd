@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_log.c,v 1.41 2007/05/17 14:51:41 yamt Exp $	*/
+/*	$NetBSD: subr_log.c,v 1.39 2006/11/01 10:17:58 yamt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_log.c,v 1.41 2007/05/17 14:51:41 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_log.c,v 1.39 2006/11/01 10:17:58 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -141,14 +141,14 @@ logread(dev_t dev, struct uio *uio, int flag)
 	int s;
 	int error = 0;
 
-	s = splsched();
+	s = splhigh();
 	while (mbp->msg_bufr == mbp->msg_bufx) {
 		if (flag & IO_NDELAY) {
 			splx(s);
 			return (EWOULDBLOCK);
 		}
 		logsoftc.sc_state |= LOG_RDWAIT;
-		error = tsleep((void *)mbp, LOG_RDPRI | PCATCH,
+		error = tsleep((caddr_t)mbp, LOG_RDPRI | PCATCH,
 			       "klog", 0);
 		if (error) {
 			splx(s);
@@ -165,7 +165,7 @@ logread(dev_t dev, struct uio *uio, int flag)
 		l = min(l, uio->uio_resid);
 		if (l == 0)
 			break;
-		error = uiomove((void *)&mbp->msg_bufc[mbp->msg_bufr],
+		error = uiomove((caddr_t)&mbp->msg_bufc[mbp->msg_bufr],
 			(int)l, uio);
 		if (error)
 			break;
@@ -181,7 +181,7 @@ static int
 logpoll(dev_t dev, int events, struct lwp *l)
 {
 	int revents = 0;
-	int s = splsched();
+	int s = splhigh();
 
 	if (events & (POLLIN | POLLRDNORM)) {
 		if (msgbufp->msg_bufr != msgbufp->msg_bufx)
@@ -199,7 +199,7 @@ filt_logrdetach(struct knote *kn)
 {
 	int s;
 
-	s = splsched();
+	s = splhigh();
 	SLIST_REMOVE(&logsoftc.sc_selp.sel_klist, kn, knote, kn_selnext);
 	splx(s);
 }
@@ -241,7 +241,7 @@ logkqfilter(dev_t dev, struct knote *kn)
 
 	kn->kn_hook = NULL;
 
-	s = splsched();
+	s = splhigh();
 	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
 	splx(s);
 
@@ -257,14 +257,14 @@ logwakeup(void)
 	if (logsoftc.sc_state & LOG_ASYNC)
 		fownsignal(logsoftc.sc_pgid, SIGIO, 0, 0, NULL);
 	if (logsoftc.sc_state & LOG_RDWAIT) {
-		wakeup((void *)msgbufp);
+		wakeup((caddr_t)msgbufp);
 		logsoftc.sc_state &= ~LOG_RDWAIT;
 	}
 }
 
 /*ARGSUSED*/
 static int
-logioctl(dev_t dev, u_long com, void *data, int flag, struct lwp *lwp)
+logioctl(dev_t dev, u_long com, caddr_t data, int flag, struct lwp *lwp)
 {
 	struct proc *p = lwp->l_proc;
 	long l;
@@ -274,7 +274,7 @@ logioctl(dev_t dev, u_long com, void *data, int flag, struct lwp *lwp)
 
 	/* return number of characters immediately available */
 	case FIONREAD:
-		s = splsched();
+		s = splhigh();
 		l = msgbufp->msg_bufx - msgbufp->msg_bufr;
 		splx(s);
 		if (l < 0)

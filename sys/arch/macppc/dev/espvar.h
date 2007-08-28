@@ -1,4 +1,4 @@
-/*	$NetBSD: espvar.h,v 1.2 2007/03/04 06:00:10 christos Exp $	*/
+/*	$NetBSD: espvar.h,v 1.1 1998/05/15 10:15:48 tsubai Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -52,7 +52,7 @@ struct esp_softc {
 	int sc_pri;				/* SBUS priority */
 
 	size_t	sc_dmasize;
-	void *	*sc_dmaaddr;
+	caddr_t	*sc_dmaaddr;
 	size_t  *sc_dmalen;
 	int sc_dmaactive;
 	int sc_dma_direction;

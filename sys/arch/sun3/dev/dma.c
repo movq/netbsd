@@ -1,4 +1,4 @@
-/*	$NetBSD: dma.c,v 1.19 2007/03/04 13:59:47 tsutsui Exp $ */
+/*	$NetBSD: dma.c,v 1.16 2005/12/11 12:19:20 christos Exp $ */
 
 /*
  * Copyright (c) 1994 Paul Kranenburg.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dma.c,v 1.19 2007/03/04 13:59:47 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dma.c,v 1.16 2005/12/11 12:19:20 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -99,23 +99,9 @@ dmaattach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * Map in the registers.
 	 */
-	sc->sc_bst = ca->ca_bustag;
-	sc->sc_dmatag = ca->ca_dmatag;
-	if (bus_space_map(sc->sc_bst, ca->ca_paddr, DMAREG_SIZE,
-	    0, &sc->sc_bsh) != 0) {
-		printf(": can't map register\n");
-		return;
-	}
-	/*
-	 * Allocate dmamap.
-	 */
-	if (bus_dmamap_create(sc->sc_dmatag, MAXPHYS, 1, MAXPHYS,
-	    0, BUS_DMA_NOWAIT, &sc->sc_dmamap) != 0) {
-		printf(": can't create DMA map\n");
-		return;
-	}
-
-	sc->sc_rev = DMA_GCSR(sc) & D_DEV_ID;
+	sc->sc_regs = bus_mapin(ca->ca_bustype, ca->ca_paddr,
+					  sizeof(struct dma_regs));
+	sc->sc_rev = DMACSR(sc) & D_DEV_ID;
 	id = (sc->sc_rev >> 28) & 0xf;
 	printf(": rev %d\n", id);
 
@@ -147,75 +133,57 @@ espdmafind(int unit)
 
 #define DMAWAIT(SC, COND, MSG, DONTPANIC) do if (COND) {		\
 	int count = 100000;						\
-	while ((COND) && --count > 0)					\
-		DELAY(5);						\
+	while ((COND) && --count > 0) DELAY(5);				\
 	if (count == 0) {						\
 		printf("%s: line %d: CSR = 0x%x\n",			\
-			__FILE__, __LINE__, DMA_GCSR(SC));		\
+			__FILE__, __LINE__, DMACSR(SC));		\
 		if (DONTPANIC)						\
 			printf(MSG);					\
 		else							\
 			panic(MSG);					\
 	}								\
-} while (/* CONSTCOND */0)
+} while (0)
 
 #define DMA_DRAIN(sc, dontpanic) do {					\
-	uint32_t _csr;							\
 	/*								\
 	 * DMA rev0 & rev1: we are not allowed to touch the DMA "flush"	\
 	 *     and "drain" bits while it is still thinking about a	\
 	 *     request.							\
 	 * other revs: D_R_PEND bit reads as 0				\
 	 */								\
-	DMAWAIT(sc, DMA_GCSR(sc) & D_R_PEND, "R_PEND", dontpanic);	\
+	DMAWAIT(sc, DMACSR(sc) & D_R_PEND, "R_PEND", dontpanic);	\
 	/*								\
 	 * Select drain bit (always rev 0,1)				\
 	 * also clears errors and D_TC flag				\
 	 */								\
-	_csr = DMA_GCSR(sc);						\
-	_csr |= D_DRAIN;						\
-	DMA_SCSR(sc, _csr);						\
+	DMACSR(sc) |= D_DRAIN;						\
 	/*								\
 	 * Wait for draining to finish					\
 	 */								\
-	DMAWAIT(sc, DMA_GCSR(sc) & D_PACKCNT, "DRAINING", dontpanic);	\
-} while (/* CONSTCOND */0)
+	DMAWAIT(sc, DMACSR(sc) & D_PACKCNT, "DRAINING", dontpanic);	\
+} while(0)
 
 #define DMA_FLUSH(sc, dontpanic) do {					\
-	uint32_t _csr;							\
 	/*								\
 	 * DMA rev0 & rev1: we are not allowed to touch the DMA "flush"	\
 	 *     and "drain" bits while it is still thinking about a	\
 	 *     request.							\
 	 * other revs: D_R_PEND bit reads as 0				\
 	 */								\
-	DMAWAIT(sc, DMA_GCSR(sc) & D_R_PEND, "R_PEND", dontpanic);	\
-	_csr = DMA_GCSR(sc);						\
-	_csr &= ~(D_WRITE|D_EN_DMA);					\
-	DMA_SCSR(sc, _csr);						\
-	_csr |= D_FLUSH;						\
-	DMA_SCSR(sc, _csr);						\
-} while (/* CONSTCOND */0)
+	DMAWAIT(sc, DMACSR(sc) & D_R_PEND, "R_PEND", dontpanic);	\
+	DMACSR(sc) &= ~(D_WRITE|D_EN_DMA);				\
+	DMACSR(sc) |= D_FLUSH;						\
+} while(0)
 
 void 
 dma_reset(struct dma_softc *sc)
 {
-	uint32_t csr;
-
-	if (sc->sc_dmamap->dm_nsegs > 0)
-		bus_dmamap_unload(sc->sc_dmatag, sc->sc_dmamap);
 
 	DMA_FLUSH(sc, 1);
-	csr = DMA_GCSR(sc);
-
-	csr |= D_RESET;			/* reset DMA */
-	DMA_SCSR(sc, csr);
+	DMACSR(sc) |= D_RESET;		/* reset DMA */
 	DELAY(200);			/* what should this be ? */
-
 	/*DMAWAIT1(sc); why was this here? */
-	csr = DMA_GCSR(sc);
-	csr &= ~D_RESET;		/* de-assert reset line */
-	DMA_SCSR(sc, csr);
+	DMACSR(sc) &= ~D_RESET;		/* de-assert reset line */
 	DELAY(5);			/* allow a few ticks to settle */
 
 	/*
@@ -224,10 +192,7 @@ dma_reset(struct dma_softc *sc)
 	 * Do we need it too?  Apparently not, because the 3/80
 	 * always has the old, REV zero DMA chip.
 	 */
-	csr = DMA_GCSR(sc);
-	csr |= D_INT_EN;		/* enable interrupts */
-
-	DMA_SCSR(sc, csr);
+	DMACSR(sc) |= D_INT_EN;		/* enable interrupts */
 
 	sc->sc_active = 0;
 }
@@ -239,7 +204,7 @@ dma_reset(struct dma_softc *sc)
  * setup a dma transfer
  */
 int 
-dma_setup(struct dma_softc *sc, void **addr, size_t *len, int datain,
+dma_setup(struct dma_softc *sc, caddr_t *addr, size_t *len, int datain,
     size_t *dmasize)
 {
 	uint32_t csr;
@@ -247,7 +212,7 @@ dma_setup(struct dma_softc *sc, void **addr, size_t *len, int datain,
 	DMA_FLUSH(sc, 0);
 
 #if 0
-	DMA_SCSR(sc, DMA_GCSR(sc) & ~D_INT_EN);
+	DMACSR(sc) &= ~D_INT_EN;
 #endif
 	sc->sc_dmaaddr = addr;
 	sc->sc_dmalen = len;
@@ -267,27 +232,31 @@ dma_setup(struct dma_softc *sc, void **addr, size_t *len, int datain,
 
 	/* Program the DMA address */
 	if (sc->sc_dmasize) {
-		if (bus_dmamap_load(sc->sc_dmatag, sc->sc_dmamap,
-		    *sc->sc_dmaaddr, sc->sc_dmasize,
-		    NULL /* kernel address */, BUS_DMA_NOWAIT))
-			panic("%s: cannot allocate DVMA address",
-			    sc->sc_dev.dv_xname);
-		bus_dmamap_sync(sc->sc_dmatag, sc->sc_dmamap, 0, sc->sc_dmasize,
-		    datain ? BUS_DMASYNC_PREREAD : BUS_DMASYNC_PREWRITE);
-		bus_space_write_4(sc->sc_bst, sc->sc_bsh, DMA_REG_ADDR,
-		    sc->sc_dmamap->dm_segs[0].ds_addr);
+		/*
+		 * Use dvma mapin routines to map the buffer into DVMA space.
+		 */
+		sc->sc_dvmaaddr = *sc->sc_dmaaddr;
+		sc->sc_dvmakaddr = dvma_mapin(sc->sc_dvmaaddr,
+					       sc->sc_dmasize, 0);
+		if (sc->sc_dvmakaddr == NULL)
+			panic("dma: cannot allocate DVMA address");
+		sc->sc_dmasaddr = dvma_kvtopa(sc->sc_dvmakaddr, BUS_OBIO);
+		DMADDR(sc) = sc->sc_dmasaddr;
+	} else {
+		/* XXX: What is this about? -gwr */
+		DMADDR(sc) = (uint32_t) *sc->sc_dmaaddr;
 	}
 
 	/* We never have DMAREV_ESC. */
 
 	/* Setup DMA control register */
-	csr = DMA_GCSR(sc);
+	csr = DMACSR(sc);
 	if (datain)
 		csr |= D_WRITE;
 	else
 		csr &= ~D_WRITE;
 	csr |= D_INT_EN;
-	DMA_SCSR(sc, csr);
+	DMACSR(sc) = csr;
 
 	return 0;
 }
@@ -302,25 +271,23 @@ dma_setup(struct dma_softc *sc, void **addr, size_t *len, int datain,
 int 
 espdmaintr(struct dma_softc *sc)
 {
-	struct ncr53c9x_softc *nsc = sc->sc_client;
+	struct ncr53c9x_softc *nsc = sc->sc_esp;
 	char bits[64];
 	int trans, resid;
 	uint32_t csr;
 
-	csr = DMA_GCSR(sc);
+	csr = DMACSR(sc);
 
 	NCR_DMA(("%s: intr: addr 0x%x, csr %s\n",
 		 sc->sc_dev.dv_xname, DMADDR(sc),
 		 bitmask_snprintf(csr, DMACSRBITS, bits, sizeof(bits))));
 
 	if (csr & D_ERR_PEND) {
+		DMACSR(sc) &= ~D_EN_DMA;	/* Stop DMA */
+		DMACSR(sc) |= D_FLUSH;
 		printf("%s: error: csr=%s\n", sc->sc_dev.dv_xname,
 			bitmask_snprintf(csr, DMACSRBITS, bits, sizeof(bits)));
-		csr &= ~D_EN_DMA;	/* Stop DMA */
-		DMA_SCSR(sc, csr);
-		csr |= D_FLUSH;
-		DMA_SCSR(sc, csr);
-		return -1;
+		return (-1);
 	}
 
 	/* This is an "assertion" :) */
@@ -330,8 +297,7 @@ espdmaintr(struct dma_softc *sc)
 	DMA_DRAIN(sc, 0);
 
 	/* DMA has stopped */
-	csr &= ~D_EN_DMA;
-	DMA_SCSR(sc, csr);
+	DMACSR(sc) &= ~D_EN_DMA;
 	sc->sc_active = 0;
 
 	if (sc->sc_dmasize == 0) {
@@ -399,15 +365,11 @@ espdmaintr(struct dma_softc *sc)
 		cache_flush(*sc->sc_dmaaddr, trans);
 #endif
 
-	if (sc->sc_dmamap->dm_nsegs > 0) {
-		bus_dmamap_sync(sc->sc_dmatag, sc->sc_dmamap, 0, sc->sc_dmasize,
-		    (csr & D_WRITE) != 0 ?
-		    BUS_DMASYNC_POSTREAD : BUS_DMASYNC_POSTWRITE);
-		bus_dmamap_unload(sc->sc_dmatag, sc->sc_dmamap);
-	}
+	if (sc->sc_dvmakaddr)
+		dvma_mapout(sc->sc_dvmakaddr, sc->sc_dmasize);
 
 	*sc->sc_dmalen -= trans;
-	*sc->sc_dmaaddr = (char *)*sc->sc_dmaaddr + trans;
+	*sc->sc_dmaaddr += trans;
 
 #if 0	/* this is not normal operation just yet */
 	if (*sc->sc_dmalen == 0 ||
@@ -415,7 +377,7 @@ espdmaintr(struct dma_softc *sc)
 		return 0;
 
 	/* and again */
-	dma_start(sc, sc->sc_dmaaddr, sc->sc_dmalen, DMA_GCSR(sc) & D_WRITE);
+	dma_start(sc, sc->sc_dmaaddr, sc->sc_dmalen, DMACSR(sc) & D_WRITE);
 	return 1;
 #endif
 	return 0;

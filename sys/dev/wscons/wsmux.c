@@ -1,4 +1,4 @@
-/*	$NetBSD: wsmux.c,v 1.48 2007/03/04 06:02:52 christos Exp $	*/
+/*	$NetBSD: wsmux.c,v 1.46 2006/11/16 01:33:31 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 2005 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsmux.c,v 1.48 2007/03/04 06:02:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsmux.c,v 1.46 2006/11/16 01:33:31 christos Exp $");
 
 #include "wsdisplay.h"
 #include "wsmux.h"
@@ -110,8 +110,8 @@ static int wsmux_evsrc_set_display(struct device *, struct wsevsrc *);
 #endif
 
 static int wsmux_do_displayioctl(struct device *dev, u_long cmd,
-				 void *data, int flag, struct lwp *l);
-static int wsmux_do_ioctl(struct device *, u_long, void *,int,struct lwp *);
+				 caddr_t data, int flag, struct lwp *l);
+static int wsmux_do_ioctl(struct device *, u_long, caddr_t,int,struct lwp *);
 
 static int wsmux_add_mux(int, struct wsmux_softc *);
 
@@ -390,7 +390,7 @@ wsmuxread(dev_t dev, struct uio *uio, int flags)
  * ioctl of the pseudo device from device table.
  */
 int
-wsmuxioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+wsmuxioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	int u = WSMUXDEV(minor(dev));
 
@@ -401,7 +401,7 @@ wsmuxioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
  * ioctl of a mux via the parent mux, continuation of wsmuxioctl().
  */
 int
-wsmux_do_ioctl(struct device *dv, u_long cmd, void *data, int flag,
+wsmux_do_ioctl(struct device *dv, u_long cmd, caddr_t data, int flag,
 	       struct lwp *lwp)
 {
 	struct wsmux_softc *sc = (struct wsmux_softc *)dv;
@@ -758,7 +758,7 @@ wsmux_detach_sc(struct wsevsrc *me)
  * Display ioctl() of a mux via the parent mux.
  */
 int
-wsmux_do_displayioctl(struct device *dv, u_long cmd, void *data, int flag,
+wsmux_do_displayioctl(struct device *dv, u_long cmd, caddr_t data, int flag,
 		      struct lwp *l)
 {
 	struct wsmux_softc *sc = (struct wsmux_softc *)dv;
@@ -840,7 +840,7 @@ wsmux_set_display(struct wsmux_softc *sc, struct device *displaydv)
 	sc->sc_base.me_dispdv = displaydv;
 
 	if (displaydv)
-		aprint_verbose("%s: connecting to %s\n",
+		printf("%s: connecting to %s\n",
 		       sc->sc_base.me_dv.dv_xname, displaydv->dv_xname);
 	ok = 0;
 	error = 0;
@@ -870,7 +870,7 @@ wsmux_set_display(struct wsmux_softc *sc, struct device *displaydv)
 		error = 0;
 
 	if (displaydv == NULL)
-		aprint_verbose("%s: disconnecting from %s\n",
+		printf("%s: disconnecting from %s\n",
 		       sc->sc_base.me_dv.dv_xname, odisplaydv->dv_xname);
 
 	return (error);

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_rtk_cardbus.c,v 1.32 2007/03/21 12:17:31 tsutsui Exp $	*/
+/*	$NetBSD: if_rtk_cardbus.c,v 1.31.2.1 2007/05/16 20:44:11 jdc Exp $	*/
 
 /*
  * Copyright (c) 2000 Masanori Kanaoka
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_rtk_cardbus.c,v 1.32 2007/03/21 12:17:31 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_rtk_cardbus.c,v 1.31.2.1 2007/05/16 20:44:11 jdc Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"

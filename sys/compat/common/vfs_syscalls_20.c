@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls_20.c,v 1.17 2007/04/22 08:29:55 dsl Exp $	*/
+/*	$NetBSD: vfs_syscalls_20.c,v 1.15 2006/11/16 01:32:41 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_20.c,v 1.17 2007/04/22 08:29:55 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_20.c,v 1.15 2006/11/16 01:32:41 christos Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_compat_43.h"
@@ -57,6 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_20.c,v 1.17 2007/04/22 08:29:55 dsl Exp
 #include <sys/malloc.h>
 #include <sys/dirent.h>
 #include <sys/sysctl.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/kauth.h>
 
@@ -148,7 +149,7 @@ compat_20_sys_statfs(struct lwp *l, void *v, register_t *retval)
 	int error = 0;
 	struct nameidata nd;
 
-	NDINIT(&nd, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE, SCARG(uap, path), l);
+	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path), l);
 	if ((error = namei(&nd)) != 0)
 		return error;
 

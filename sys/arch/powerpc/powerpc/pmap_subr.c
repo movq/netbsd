@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_subr.c,v 1.18 2007/05/18 11:16:27 rjs Exp $	*/
+/*	$NetBSD: pmap_subr.c,v 1.14 2006/08/05 21:26:49 sanjayl Exp $	*/
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap_subr.c,v 1.18 2007/05/18 11:16:27 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_subr.c,v 1.14 2006/08/05 21:26:49 sanjayl Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_altivec.h"
@@ -305,26 +305,25 @@ pmap_syncicache(paddr_t pa, psize_t len)
 #endif	/* !MULTIPROCESSOR */
 }
 
-bool
+boolean_t
 pmap_pageidlezero(paddr_t pa)
 {
 	register_t msr;
 	register_t *dp = (register_t *) pa;
-	bool rv = true;
-	struct cpu_info *ci = curcpu();
+	boolean_t rv = TRUE;
 	int i;
 
 #if defined(PPC_OEA) || defined (PPC_OEA64_BRIDGE)
 	if (pa < SEGMENT_LENGTH) {
 		for (i = 0; i < PAGE_SIZE / sizeof(dp[0]); i++) {
-			if (ci->ci_want_resched != 0)
-				return false;
+			if (sched_whichqs != 0)
+				return FALSE;
 			*dp++ = 0;
 		}
 #ifdef PMAPCOUNTERS
 		pmap_evcnt_idlezeroed_pages.ev_count++;
 #endif
-		return true;
+		return TRUE;
 	}
 #endif
 
@@ -338,8 +337,8 @@ pmap_pageidlezero(paddr_t pa)
 	 * Zero the page until a process becomes runnable.
 	 */
 	for (i = 0; i < PAGE_SIZE / sizeof(dp[0]); i++) {
-		if (ci->ci_want_resched != 0) {
-			rv = false;
+		if (sched_whichqs != 0) {
+			rv = FALSE;
 			break;
 		}
 		*dp++ = 0;

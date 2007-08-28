@@ -1,4 +1,4 @@
-/*	$NetBSD: cs80bus.c,v 1.9 2007/03/04 06:01:46 christos Exp $	*/
+/*	$NetBSD: cs80bus.c,v 1.7 2006/05/14 21:42:27 elad Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs80bus.c,v 1.9 2007/03/04 06:01:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs80bus.c,v 1.7 2006/05/14 21:42:27 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -147,7 +147,7 @@ cs80busattach(parent, self, aux)
 }
 
 int
-cs80bussearch(parent, cf, ldesc, aux)
+cs80bussearch(parent, cf, aux)
 	struct device *parent;
 	struct cfdata *cf;
 	const int *ldesc;
@@ -342,7 +342,7 @@ cs80status(v, slave, punit, css)
 	rs.c_sram = CS80CMD_SRAM;
 	rs.c_param = 0;		/* single vector (i.e. sector number) */
 	rs.c_cmd = CS80CMD_STATUS;
-	memset((void *)css, 0, sizeof(*css));
+	memset((caddr_t)css, 0, sizeof(*css));
 	(void) gpibsend(sc->sc_ic, slave, CS80CMD_SCMD, &rs, sizeof(rs));
 	(void) gpibrecv(sc->sc_ic, slave, CS80CMD_EXEC, css, sizeof(*css));
 	(void) gpibrecv(sc->sc_ic, slave, CS80CMD_QSTAT, &stat, 1);

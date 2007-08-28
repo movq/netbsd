@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_state.c,v 1.26 2007/06/16 10:52:30 martin Exp $	*/
+/*	$NetBSD: ip_state.c,v 1.15.2.9 2007/10/27 15:58:56 pavel Exp $	*/
 
 /*
  * Copyright (C) 1995-2003 by Darren Reed.
@@ -114,7 +114,7 @@ struct file;
 #if !defined(lint)
 #if defined(__NetBSD__)
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_state.c,v 1.26 2007/06/16 10:52:30 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_state.c,v 1.15.2.9 2007/10/27 15:58:56 pavel Exp $");
 #else
 static const char sccsid[] = "@(#)ip_state.c	1.8 6/5/96 (C) 1993-2000 Darren Reed";
 static const char rcsid[] = "@(#)Id: ip_state.c,v 2.186.2.69 2007/05/26 13:05:14 darrenr Exp";
@@ -2942,9 +2942,15 @@ int why;
 	 * entry (such as ipfstat), it'll do the deref path that'll bring
 	 * us back here to do the real delete & free.
 	 */
-	is->is_ref--;
-	if (is->is_ref > 0)
+	MUTEX_ENTER(&is->is_lock);
+	if (is->is_ref > 1) {
+		is->is_ref--;
+		MUTEX_EXIT(&is->is_lock);
 		return is->is_ref;
+	}
+	MUTEX_EXIT(&is->is_lock);
+
+	is->is_ref = 0;
 
 	if (is->is_tqehead[0] != NULL) {
 		if (fr_deletetimeoutqueue(is->is_tqehead[0]) == 0)
@@ -3546,14 +3552,7 @@ int flags;
 
 		case IPF_TCPS_LAST_ACK: /* 8 */
 			if (tcpflags & TH_ACK) {
-				if ((tcpflags & TH_PUSH) || dlen)
-					/*
-					 * there is still data to be delivered,
-					 * reset timeout
-					 */
-					rval = 1;
-				else
-					rval = 2;
+				rval = 1;
 			}
 			/*
 			 * we cannot detect when we go out of LAST_ACK state to
@@ -3565,23 +3564,15 @@ int flags;
 
 		case IPF_TCPS_FIN_WAIT_2: /* 9 */
 			/* NOT USED */
-#if 0
-			rval = 1;
-			if ((tcpflags & TH_OPENING) == TH_OPENING) {
-				nstate = IPF_TCPS_SYN_RECEIVED;
-			} else if (tcpflags & TH_SYN) {
-				nstate = IPF_TCPS_SYN_SENT;
-			} else if ((tcpflags & (TH_FIN|TH_ACK)) != 0) {
-				nstate = IPF_TCPS_TIME_WAIT;
-			}
-#endif
 			break;
 
 		case IPF_TCPS_TIME_WAIT: /* 10 */
 			/* we're in 2MSL timeout now */
-			rval = 2;
 			if (ostate == IPF_TCPS_LAST_ACK) {
 				nstate = IPF_TCPS_CLOSED;
+				rval = 1;
+			} else {
+				rval = 2;
 			}
 			break;
 
@@ -3936,6 +3927,14 @@ void fr_sttab_destroy(ipftq_t *tqp)
 /* Decrement the reference counter for this state table entry and free it   */
 /* if there are no more things using it.                                    */
 /*                                                                          */
+/* This function is only called when cleaning up after increasing is_ref by */
+/* one earlier in the 'code path' so if is_ref is 1 when entering, we do    */
+/* have an orphan, otherwise not.  However there is a possible race between */
+/* the entry being deleted via flushing with an ioctl call (that calls the  */
+/* delete function directly) and the tail end of packet processing so we    */
+/* need to grab is_lock before doing the check to synchronise the two code  */
+/* paths.                                                                   */
+/*                                                                          */
 /* When operating in userland (ipftest), we have no timers to clear a state */
 /* entry.  Therefore, we make a few simple tests before deleting an entry   */
 /* outright.  We compare states on each side looking for a combination of   */
@@ -3958,17 +3957,23 @@ ipstate_t **isp;
 
 	is = *isp;
 	*isp = NULL;
-	WRITE_ENTER(&ipf_state);
-	is->is_ref--;
-	if (is->is_ref == 0) {
-		is->is_ref++;		/* To counter ref-- in fr_delstate() */
-		fr_delstate(is, ISL_EXPIRE);
+
+	MUTEX_ENTER(&is->is_lock);
+	if (is->is_ref > 1) {
+		is->is_ref--;
+		MUTEX_EXIT(&is->is_lock);
 #ifndef	_KERNEL
-	} else if ((is->is_sti.tqe_state[0] > IPF_TCPS_ESTABLISHED) ||
+		if ((is->is_sti.tqe_state[0] > IPF_TCPS_ESTABLISHED) ||
 		   (is->is_sti.tqe_state[1] > IPF_TCPS_ESTABLISHED)) {
-		fr_delstate(is, ISL_ORPHAN);
+			fr_delstate(is, ISL_ORPHAN);
+		}
 #endif
+		return;
 	}
+	MUTEX_EXIT(&is->is_lock);
+
+	WRITE_ENTER(&ipf_state);
+	fr_delstate(is, ISL_EXPIRE);
 	RWLOCK_EXIT(&ipf_state);
 }
 

@@ -1,4 +1,4 @@
-#	$NetBSD: SIMICS,v 1.32 2007/06/16 12:35:55 ad Exp $
+#	$NetBSD: SIMICS,v 1.29 2006/09/27 21:42:04 manu Exp $
 #
 #	INSTALL_TINY - Tiny Installation kernel, suitable for 4M machines.
 #
@@ -72,8 +72,7 @@ options 	USERCONF	# userconf(4) support
 #options 	COMPAT_15	# NetBSD 1.5,
 #options 	COMPAT_16	# NetBSD 1.6,
 #options 	COMPAT_20	# NetBSD 2.0,
-options 	COMPAT_30	# NetBSD 3.0,
-options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_30	# NetBSD 3.0 compatibility.
 #options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 
@@ -108,7 +107,7 @@ file-system 	FFS		# UFS
 # Filesystem options
 #options 	QUOTA		# UFS quotas
 #options 	NFSSERVER	# Network File System server
-#options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
+#options 	NFS_V2_ONLY	# Exclude NFS3 and NQNFS code to save space
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
 				# immutable) behave as system flags.
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
@@ -135,6 +134,7 @@ options 	PCIVERBOSE	# verbose PCI device autoconfig messages
 #options 	PCI_CONFIG_DUMP	# verbosely dump PCI config space
 #options 	PCMCIAVERBOSE	# verbose PCMCIA configuration messages
 #options 	SCSIVERBOSE	# human readable SCSI error messages
+#options 	I2OVERBOSE	# verbose I2O driver messages
 
 # Squeeze...
 #options 	NVNODE=50

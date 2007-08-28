@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.8 2007/06/04 23:15:00 xtraeme Exp $	*/
+/*	$NetBSD: db_interface.c,v 1.5 2005/12/11 12:16:21 christos Exp $	*/
 
 /*
  * Mach Operating System
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.8 2007/06/04 23:15:00 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.5 2005/12/11 12:16:21 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -69,7 +69,7 @@ int	db_active;
 db_regs_t ddb_regs;	/* register state */
 db_regs_t *ddb_regp;
 
-void db_mach_cpu (db_expr_t, bool, db_expr_t, const char *);
+void db_mach_cpu (db_expr_t, int, db_expr_t, const char *);
 
 const struct db_command db_machine_command_table[] = {
 #ifdef MULTIPROCESSOR
@@ -78,7 +78,7 @@ const struct db_command db_machine_command_table[] = {
 	{ (char *)0, },
 };
 
-void kdbprinttrap(int, int);
+void kdbprinttrap __P((int, int));
 #ifdef MULTIPROCESSOR
 extern void ddb_ipi(struct trapframe);
 static void ddb_suspend(struct trapframe *);
@@ -89,11 +89,11 @@ int ddb_vec;
 
 int ddb_cpu = NOCPU;
 
-typedef void (vector)(void);
+typedef void (vector) __P((void));
 extern vector Xintrddb;
 
 void
-db_machine_init(void)
+db_machine_init()
 {
 
 #ifdef MULTIPROCESSOR
@@ -152,7 +152,8 @@ db_resume_others(void)
  * Print trap reason.
  */
 void
-kdbprinttrap(int type, int code)
+kdbprinttrap(type, code)
+	int type, code;
 {
 	db_printf("kernel: ");
 	if (type >= trap_types || type < 0)
@@ -166,7 +167,9 @@ kdbprinttrap(int type, int code)
  *  kdb_trap - field a TRACE or BPT trap
  */
 int
-kdb_trap(int type, int code, db_regs_t *regs)
+kdb_trap(type, code, regs)
+	int type, code;
+	db_regs_t *regs;
 {
 	int s;
 	db_regs_t dbreg;
@@ -207,9 +210,9 @@ kdb_trap(int type, int code, db_regs_t *regs)
 
 	s = splhigh();
 	db_active++;
-	cnpollc(true);
+	cnpollc(TRUE);
 	db_trap(type, code);
-	cnpollc(false);
+	cnpollc(FALSE);
 	db_active--;
 	splx(s);
 #ifdef MULTIPROCESSOR  
@@ -224,7 +227,7 @@ kdb_trap(int type, int code, db_regs_t *regs)
 }
 
 void
-cpu_Debugger(void)
+cpu_Debugger()
 {
 	breakpoint();
 }
@@ -267,7 +270,11 @@ ddb_suspend(struct trapframe *frame)
 extern void cpu_debug_dump(void); /* XXX */
 
 void
-db_mach_cpu(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_mach_cpu(addr, have_addr, count, modif)
+	db_expr_t	addr;
+	int		have_addr;
+	db_expr_t	count;
+	const char *	modif;
 {
 	struct cpu_info *ci;
 	if (!have_addr) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.47 2007/03/04 06:00:33 christos Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.46 2006/04/16 16:39:37 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.47 2007/03/04 06:00:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.46 2006/04/16 16:39:37 tsutsui Exp $");
 
 #include "opt_cputype.h"
 
@@ -367,7 +367,7 @@ _bus_dmamap_load_uio(t, map, uio, flags)
 	int seg, i, error, first;
 	bus_size_t minlen, resid;
 	struct iovec *iov;
-	void *addr;
+	caddr_t addr;
 
 	/*
 	 * Make sure that on error condition we return "no valid mappings."
@@ -802,7 +802,7 @@ _bus_dmamem_map(t, segs, nsegs, size, kvap, flags)
 	bus_dma_segment_t *segs;
 	int nsegs;
 	size_t size;
-	void **kvap;
+	caddr_t *kvap;
 	int flags;
 {
 	vaddr_t va;
@@ -817,9 +817,9 @@ _bus_dmamem_map(t, segs, nsegs, size, kvap, flags)
 	 */
 	if (nsegs == 1) {
 		if (flags & BUS_DMA_COHERENT)
-			*kvap = (void *)MIPS_PHYS_TO_KSEG1(segs[0].ds_addr);
+			*kvap = (caddr_t)MIPS_PHYS_TO_KSEG1(segs[0].ds_addr);
 		else
-			*kvap = (void *)MIPS_PHYS_TO_KSEG0(segs[0].ds_addr);
+			*kvap = (caddr_t)MIPS_PHYS_TO_KSEG0(segs[0].ds_addr);
 		return (0);
 	}
 
@@ -830,7 +830,7 @@ _bus_dmamem_map(t, segs, nsegs, size, kvap, flags)
 	if (va == 0)
 		return (ENOMEM);
 
-	*kvap = (void *)va;
+	*kvap = (caddr_t)va;
 
 	for (curseg = 0; curseg < nsegs; curseg++) {
 		for (addr = segs[curseg].ds_addr;
@@ -857,7 +857,7 @@ _bus_dmamem_map(t, segs, nsegs, size, kvap, flags)
 void
 _bus_dmamem_unmap(t, kva, size)
 	bus_dma_tag_t t;
-	void *kva;
+	caddr_t kva;
 	size_t size;
 {
 
@@ -870,8 +870,8 @@ _bus_dmamem_unmap(t, kva, size)
 	 * Nothing to do if we mapped it with KSEG0 or KSEG1 (i.e.
 	 * not in KSEG2).
 	 */
-	if (kva >= (void *)MIPS_KSEG0_START &&
-	    kva < (void *)MIPS_KSEG2_START)
+	if (kva >= (caddr_t)MIPS_KSEG0_START &&
+	    kva < (caddr_t)MIPS_KSEG2_START)
 		return;
 
 	size = round_page(size);

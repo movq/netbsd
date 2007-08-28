@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.35 2007/03/04 06:01:08 christos Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.32 2006/11/16 01:32:39 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.35 2007/03/04 06:01:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.32 2006/11/16 01:32:39 christos Exp $");
 
 /*
  * The following is included because _bus_dma_uiomove is derived from
@@ -599,7 +599,7 @@ _bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio,
 	bus_size_t minlen, resid;
 	struct vmspace *vm;
 	struct iovec *iov;
-	void *addr;
+	caddr_t addr;
 	struct x86_bus_dma_cookie *cookie = map->_dm_cookie;
 
 	/*
@@ -621,7 +621,7 @@ _bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio,
 		 * until we have exhausted the residual count.
 		 */
 		minlen = resid < iov[i].iov_len ? resid : iov[i].iov_len;
-		addr = (void *)iov[i].iov_base;
+		addr = (caddr_t)iov[i].iov_base;
 
 		error = _bus_dmamap_load_buffer(t, map, addr, minlen,
 		    vm, flags);
@@ -798,7 +798,7 @@ _bus_dmamap_sync(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 				minlen = len < m->m_len - moff ?
 				    len : m->m_len - moff;
 
-				memcpy(mtod(m, char *) + moff,
+				memcpy(mtod(m, caddr_t) + moff,
 				    (char *)cookie->id_bouncebuf + offset,
 				    minlen);
 
@@ -895,7 +895,7 @@ _bus_dma_alloc_bouncebuf(bus_dma_tag_t t, bus_dmamap_t map,
 		goto out;
 	error = _bus_dmamem_map(t, cookie->id_bouncesegs,
 	    cookie->id_nbouncesegs, cookie->id_bouncebuflen,
-	    (void **)&cookie->id_bouncebuf, flags);
+	    (caddr_t *)&cookie->id_bouncebuf, flags);
 
  out:
 	if (error) {
@@ -960,7 +960,7 @@ _bus_dma_uiomove(void *buf, struct uio *uio, size_t n, int direction)
 		if (!VMSPACE_IS_KERNEL_P(vm) &&
 		    (curlwp->l_cpu->ci_schedstate.spc_flags & SPCF_SHOULDYIELD)
 		    != 0) {
-			preempt();
+			preempt(1);
 		}
 		if (direction == UIO_READ) {
 			error = copyout_vmspace(vm, cp, iov->iov_base, cnt);
@@ -1010,7 +1010,7 @@ _bus_dmamem_free(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs)
  */
 int
 _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
-    size_t size, void **kvap, int flags)
+    size_t size, caddr_t *kvap, int flags)
 {
 	vaddr_t va;
 	bus_addr_t addr;
@@ -1032,7 +1032,7 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 	if (va == 0)
 		return (ENOMEM);
 
-	*kvap = (void *)va;
+	*kvap = (caddr_t)va;
 
 	for (curseg = 0; curseg < nsegs; curseg++) {
 		for (addr = segs[curseg].ds_addr;
@@ -1070,7 +1070,7 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
  */
 
 void
-_bus_dmamem_unmap(bus_dma_tag_t t, void *kva, size_t size)
+_bus_dmamem_unmap(bus_dma_tag_t t, caddr_t kva, size_t size)
 {
 	pt_entry_t *pte;
 	vaddr_t va, endva;
@@ -1192,49 +1192,3 @@ _bus_dmamap_load_buffer(bus_dma_tag_t t, bus_dmamap_t map, void *buf,
 	return (0);
 }
 
-int
-_bus_dmatag_subregion(bus_dma_tag_t tag, bus_addr_t min_addr,
-		      bus_addr_t max_addr, bus_dma_tag_t *newtag, int flags)
-{
-
-	if ((tag->_bounce_thresh != 0   && max_addr >= tag->_bounce_thresh) &&
-	    (tag->_bounce_alloc_hi != 0 && max_addr >= tag->_bounce_alloc_hi) &&
-	    (min_addr <= tag->_bounce_alloc_lo)) {
-		*newtag = tag;
-		/* if the tag must be freed, add a reference */
-		if (tag->_tag_needs_free)
-			(tag->_tag_needs_free)++;
-		return 0;
-	}
-
-	if ((*newtag = malloc(sizeof(struct x86_bus_dma_tag), M_DMAMAP,
-	    (flags & BUS_DMA_NOWAIT) ? M_NOWAIT : M_WAITOK)) == NULL)
-		return ENOMEM;
-
-	**newtag = *tag;
-	(*newtag)->_tag_needs_free = 1;
-
-	if (tag->_bounce_thresh == 0 || max_addr < tag->_bounce_thresh)
-		(*newtag)->_bounce_thresh = max_addr;
-	if (tag->_bounce_alloc_hi == 0 || max_addr < tag->_bounce_alloc_hi)
-		(*newtag)->_bounce_alloc_hi = max_addr;
-	if (min_addr > tag->_bounce_alloc_lo)
-		(*newtag)->_bounce_alloc_lo = min_addr;
-
-	return 0;
-}
-
-void
-_bus_dmatag_destroy(bus_dma_tag_t tag)
-{
-
-	switch (tag->_tag_needs_free) {
-	case 0:
-		break;				/* not allocated with malloc */
-	case 1:
-		free(tag, M_DMAMAP);		/* last reference to tag */
-		break;
-	default:
-		(tag->_tag_needs_free)--;	/* one less reference */
-	}
-}

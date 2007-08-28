@@ -1,4 +1,4 @@
-/*	$NetBSD: ipcomp_output.c,v 1.21 2007/05/23 17:15:03 christos Exp $	*/
+/*	$NetBSD: ipcomp_output.c,v 1.20.2.1 2007/09/25 00:45:48 xtraeme Exp $	*/
 /*	$KAME: ipcomp_output.c,v 1.24 2001/07/26 06:53:18 jinmei Exp $	*/
 
 /*
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipcomp_output.c,v 1.21 2007/05/23 17:15:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipcomp_output.c,v 1.20.2.1 2007/09/25 00:45:48 xtraeme Exp $");
 
 #include "opt_inet.h"
 
@@ -100,8 +100,12 @@ static int ipcomp_output __P((struct mbuf *, u_char *, struct mbuf *,
  *	<-----------------> compoff
  */
 static int
-ipcomp_output(struct mbuf *m, u_char *nexthdrp, struct mbuf *md, 
-	struct ipsecrequest *isr, int af)
+ipcomp_output(m, nexthdrp, md, isr, af)
+	struct mbuf *m;
+	u_char *nexthdrp;
+	struct mbuf *md;
+	struct ipsecrequest *isr;
+	int af;
 {
 	struct mbuf *n;
 	struct mbuf *md0;
@@ -139,8 +143,8 @@ ipcomp_output(struct mbuf *m, u_char *nexthdrp, struct mbuf *md,
 	algo = ipcomp_algorithm_lookup(sav->alg_enc);
 	if ((ntohl(sav->spi) & ~0xffff) != 0 || !algo) {
 		stat->out_inval++;
-		m_freem(m);
-		return EINVAL;
+		error = EINVAL;
+		goto fail1;
 	}
 	if ((sav->flags & SADB_X_EXT_RAWCPI) == 0)
 		cpi = sav->alg_enc;
@@ -167,13 +171,12 @@ ipcomp_output(struct mbuf *m, u_char *nexthdrp, struct mbuf *md,
 	mcopy = m_copym(m, 0, M_COPYALL, M_NOWAIT);
 	if (mcopy == NULL) {
 		error = ENOBUFS;
-		return 0;
+		goto fail1;
 	}
 	md0 = m_copym(md, 0, M_COPYALL, M_NOWAIT);
 	if (md0 == NULL) {
-		m_freem(mcopy);
 		error = ENOBUFS;
-		return 0;
+		goto fail2;
 	}
 	plen0 = plen;
 
@@ -184,18 +187,13 @@ ipcomp_output(struct mbuf *m, u_char *nexthdrp, struct mbuf *md,
 		ipseclog((LOG_DEBUG, "ipcomp%d_output: md is not in chain\n",
 		    afnumber));
 		stat->out_inval++;
-		m_freem(m);
-		m_freem(md0);
-		m_freem(mcopy);
-		return EINVAL;
+		error = EINVAL;
+		goto fail3;
 	}
 	mprev->m_next = NULL;
 	if ((md = ipsec_copypkt(md)) == NULL) {
-		m_freem(m);
-		m_freem(md0);
-		m_freem(mcopy);
 		error = ENOBUFS;
-		goto fail;
+		goto fail3;
 	}
 	mprev->m_next = md;
 
@@ -203,11 +201,9 @@ ipcomp_output(struct mbuf *m, u_char *nexthdrp, struct mbuf *md,
 	if ((*algo->compress)(m, md, &plen) || mprev->m_next == NULL) {
 		ipseclog((LOG_ERR, "packet compression failure\n"));
 		m = NULL;
-		m_freem(md0);
-		m_freem(mcopy);
 		stat->out_inval++;
 		error = EINVAL;
-		goto fail;
+		goto fail3;
 	}
 	stat->out_comphist[sav->alg_enc]++;
 	md = mprev->m_next;
@@ -274,9 +270,8 @@ ipcomp_output(struct mbuf *m, u_char *nexthdrp, struct mbuf *md,
 	if (M_LEADINGSPACE(md) < complen) {
 		MGET(n, M_DONTWAIT, MT_DATA);
 		if (!n) {
-			m_freem(m);
 			error = ENOBUFS;
-			goto fail;
+			goto fail2;
 		}
 		n->m_len = complen;
 		mprev->m_next = n;
@@ -303,9 +298,8 @@ ipcomp_output(struct mbuf *m, u_char *nexthdrp, struct mbuf *md,
 			ipseclog((LOG_ERR,
 			    "IPv4 ESP output: size exceeds limit\n"));
 			ipsecstat.out_inval++;
-			m_freem(m);
 			error = EMSGSIZE;
-			goto fail;
+			goto fail2;
 		}
 		break;
 #endif
@@ -331,7 +325,12 @@ ipcomp_output(struct mbuf *m, u_char *nexthdrp, struct mbuf *md,
 
 	return 0;
 
-fail:
+fail3:
+	m_freem(md0);
+fail2:
+	m_freem(mcopy);
+fail1:
+	m_freem(m);
 #if 1
 	return error;
 #else
@@ -341,14 +340,16 @@ fail:
 
 #ifdef INET
 int
-ipcomp4_output(struct mbuf *m, struct ipsecrequest *isr)
+ipcomp4_output(m, isr)
+	struct mbuf *m;
+	struct ipsecrequest *isr;
 {
 	struct ip *ip;
 	if (m->m_len < sizeof(struct ip)) {
 		ipseclog((LOG_DEBUG, "ipcomp4_output: first mbuf too short\n"));
 		ipsecstat.out_inval++;
 		m_freem(m);
-		return 0;
+		return EINVAL;
 	}
 	ip = mtod(m, struct ip *);
 	/* XXX assumes that m->m_next points to payload */
@@ -358,14 +359,17 @@ ipcomp4_output(struct mbuf *m, struct ipsecrequest *isr)
 
 #ifdef INET6
 int
-ipcomp6_output(struct mbuf *m, u_char *nexthdrp, struct mbuf *md, 
-	struct ipsecrequest *isr)
+ipcomp6_output(m, nexthdrp, md, isr)
+	struct mbuf *m;
+	u_char *nexthdrp;
+	struct mbuf *md;
+	struct ipsecrequest *isr;
 {
 	if (m->m_len < sizeof(struct ip6_hdr)) {
 		ipseclog((LOG_DEBUG, "ipcomp6_output: first mbuf too short\n"));
 		ipsec6stat.out_inval++;
 		m_freem(m);
-		return 0;
+		return EINVAL;
 	}
 	return ipcomp_output(m, nexthdrp, md, isr, AF_INET6);
 }

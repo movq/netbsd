@@ -1,4 +1,4 @@
-/*	$NetBSD: gumstix_start.S,v 1.3 2007/04/20 12:48:52 kiyohara Exp $ */
+/*	$NetBSD: gumstix_start.S,v 1.1 2006/10/16 16:40:14 kiyohara Exp $ */
 /*
  * Copyright (C) 2005, 2006 WIDE Project and SOUM Corporation.
  * All rights reserved.
@@ -118,7 +118,7 @@ _C_LABEL(gumstix_start):
 	adds	r1, r1, #-1
 	bhi	2b
 3:	
-	ldmia	r4!, {r1, r2 , r3}	/* # of sections, PA|attr, VA */
+	ldmia	r4!, {r1,r2,r3}   /* # of sections, PA|attr, VA */
 	cmp	r1, #0
 	bne	2b	
 
@@ -143,33 +143,26 @@ _C_LABEL(gumstix_start):
 Lstart:
 	.word	start
 
+#define MMU_INIT(va,pa,n_sec,attr) \
+	.word	n_sec					    ; \
+	.word	4*((va)>>L1_S_SHIFT)			    ; \
+	.word	(pa)|(attr)				    ;
+
 #ifndef STARTUP_PAGETABLE_ADDR
 #define STARTUP_PAGETABLE_ADDR 0xa0000000	/* aligned 16kByte */
 #endif
-Lstartup_pagetable:
-	.word	STARTUP_PAGETABLE_ADDR
-
-	.globl	_C_LABEL(u_boot_args)
+Lstartup_pagetable:	.word	STARTUP_PAGETABLE_ADDR
+		.globl _C_LABEL(u_boot_args)
 u_boot_args:
-	.space	16			/* r3, r4, r5, r6 */
-
-
-#define MMU_INIT(va,pa,n_sec,attr) \
-	.word	n_sec					    ; \
-	.word	4 * ((va) >> L1_S_SHIFT)		    ; \
-	.word	(pa) | (attr)				    ;
+			.space 16			/* r3, r4, r5, r6 */
 
 mmu_init_table:	
 	/* fill all table VA==PA */
 	MMU_INIT(0x00000000, 0x00000000,
-	    1 << (32 - L1_S_SHIFT), L1_TYPE_S | L1_S_AP(AP_KRW))
-
+	    1<<(32-L1_S_SHIFT), L1_TYPE_S|L1_S_AP(AP_KRW))
 	/* map SDRAM VA==PA, WT cacheable */
-	MMU_INIT(SDRAM_START, SDRAM_START,
-	    64, L1_TYPE_S | L1_S_C | L1_S_AP(AP_KRW))
-
+	MMU_INIT(SDRAM_START, SDRAM_START, 64, L1_TYPE_S|L1_S_C|L1_S_AP(AP_KRW))
 	/* map VA 0xc0000000..0xc3ffffff to PA 0xa0000000..0xa3ffffff */
-	MMU_INIT(0xc0000000, SDRAM_START,
-	    64, L1_TYPE_S | L1_S_C | L1_S_AP(AP_KRW))
+	MMU_INIT(0xc0000000, SDRAM_START, 64, L1_TYPE_S|L1_S_C|L1_S_AP(AP_KRW))
 
-	.word	0			/* end of table */
+	.word 0	/* end of table */

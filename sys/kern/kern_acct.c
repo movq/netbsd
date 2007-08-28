@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_acct.c,v 1.75 2007/07/09 21:10:51 ad Exp $	*/
+/*	$NetBSD: kern_acct.c,v 1.69 2006/11/01 10:17:58 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_acct.c,v 1.75 2007/07/09 21:10:51 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_acct.c,v 1.69 2006/11/01 10:17:58 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,7 +82,8 @@ __KERNEL_RCSID(0, "$NetBSD: kern_acct.c,v 1.75 2007/07/09 21:10:51 ad Exp $");
 #include <sys/syslog.h>
 #include <sys/kernel.h>
 #include <sys/kthread.h>
-#include <sys/kmem.h>
+#include <sys/lock.h>
+#include <sys/malloc.h>
 #include <sys/namei.h>
 #include <sys/errno.h>
 #include <sys/acct.h>
@@ -91,6 +92,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_acct.c,v 1.75 2007/07/09 21:10:51 ad Exp $");
 #include <sys/tty.h>
 #include <sys/kauth.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 /*
@@ -105,12 +107,20 @@ __KERNEL_RCSID(0, "$NetBSD: kern_acct.c,v 1.75 2007/07/09 21:10:51 ad Exp $");
  */
 
 /*
- * Mutex to serialize system calls and kernel threads.
+ * Lock to serialize system calls and kernel threads.
  */
-kmutex_t	acct_lock;
+static struct lock acct_lock;
+#define	ACCT_LOCK()						\
+do {								\
+	(void) lockmgr(&acct_lock, LK_EXCLUSIVE, NULL);		\
+} while (/* CONSTCOND */0)
+#define	ACCT_UNLOCK()						\
+do {								\
+	(void) lockmgr(&acct_lock, LK_RELEASE, NULL);		\
+} while (/* CONSTCOND */0)
 
 /*
- * The global accounting state and related data.  Gain the mutex before
+ * The global accounting state and related data.  Gain the lock before
  * accessing these variables.
  */
 static enum {
@@ -122,7 +132,7 @@ static struct vnode *acct_vp;		/* Accounting vnode pointer. */
 static kauth_cred_t acct_cred;		/* Credential of accounting file
 					   owner (i.e root).  Used when
  					   accounting file i/o.  */
-static struct lwp *acct_dkwatcher;	/* Free disk space checker. */
+static struct proc *acct_dkwatcher;	/* Free disk space checker. */
 
 /*
  * Values associated with enabling and disabling accounting
@@ -176,14 +186,10 @@ acct_chkfree(void)
 	struct statvfs *sb;
 	int64_t bavail;
 
-	sb = kmem_alloc(sizeof(*sb), KM_SLEEP);
-	if (sb == NULL)
-		return (ENOMEM);
+	sb = malloc(sizeof(*sb), M_TEMP, M_WAITOK);
 	error = VFS_STATVFS(acct_vp->v_mount, sb, NULL);
-	if (error != 0) {
-		kmem_free(sb, sizeof(*sb));
+	if (error != 0)
 		return (error);
-	}
 
 	bavail = sb->f_bfree - sb->f_bresvd;
 
@@ -203,7 +209,7 @@ acct_chkfree(void)
 	case ACCT_STOP:
 		break;
 	}
-	kmem_free(sb, sizeof(*sb));
+	free(sb, M_TEMP);
 	return (0);
 }
 
@@ -240,7 +246,7 @@ acctwatch(void *arg)
 	int error;
 
 	log(LOG_NOTICE, "Accounting started\n");
-	mutex_enter(&acct_lock);
+	ACCT_LOCK();
 	while (acct_state != ACCT_STOP) {
 		if (acct_vp->v_type == VBAD) {
 			log(LOG_NOTICE, "Accounting terminated\n");
@@ -254,14 +260,17 @@ acctwatch(void *arg)
 			printf("acctwatch: failed to statvfs, error = %d\n",
 			    error);
 #endif
-		error = kpause("actwat", false, acctchkfreq * hz, &acct_lock);
+
+		ACCT_UNLOCK();
+		error = tsleep(acctwatch, PSWP, "actwat", acctchkfreq * hz);
+		ACCT_LOCK();
 #ifdef DIAGNOSTIC
 		if (error != 0 && error != EWOULDBLOCK)
 			printf("acctwatch: sleep error %d\n", error);
 #endif
 	}
 	acct_dkwatcher = NULL;
-	mutex_exit(&acct_lock);
+	ACCT_UNLOCK();
 
 	kthread_exit(0);
 }
@@ -273,7 +282,7 @@ acct_init(void)
 	acct_state = ACCT_STOP;
 	acct_vp = NULLVP;
 	acct_cred = NULL;
-	mutex_init(&acct_lock, MUTEX_DEFAULT, IPL_NONE);
+	lockinit(&acct_lock, PWAIT, "acctlk", 0, 0);
 }
 
 /*
@@ -301,7 +310,7 @@ sys_acct(struct lwp *l, void *v, register_t *retval)
 	if (SCARG(uap, path) != NULL) {
 		struct vattr va;
 		size_t pad;
-		NDINIT(&nd, LOOKUP, NOFOLLOW | TRYEMULROOT, UIO_USERSPACE, SCARG(uap, path),
+		NDINIT(&nd, LOOKUP, NOFOLLOW, UIO_USERSPACE, SCARG(uap, path),
 		    l);
 		if ((error = vn_open(&nd, FWRITE|O_APPEND, 0)) != 0)
 			return (error);
@@ -333,7 +342,7 @@ sys_acct(struct lwp *l, void *v, register_t *retval)
 		VOP_UNLOCK(nd.ni_vp, 0);
 	}
 
-	mutex_enter(&acct_lock);
+	ACCT_LOCK();
 
 	/*
 	 * If accounting was previously enabled, kill the old space-watcher,
@@ -360,14 +369,14 @@ sys_acct(struct lwp *l, void *v, register_t *retval)
 	}
 
 	if (acct_dkwatcher == NULL) {
-		error = kthread_create(PRI_NONE, 0, NULL, acctwatch, NULL,
-		    &acct_dkwatcher, "acctwatch");
+		error = kthread_create1(acctwatch, NULL, &acct_dkwatcher,
+		    "acctwatch");
 		if (error != 0)
 			acct_stop();
 	}
 
  out:
-	mutex_exit(&acct_lock);
+	ACCT_UNLOCK();
 	return (error);
  bad:
 	vn_close(nd.ni_vp, FWRITE, l->l_cred, l);
@@ -390,7 +399,7 @@ acct_process(struct lwp *l)
 	struct plimit *oplim = NULL;
 	struct proc *p = l->l_proc;
 
-	mutex_enter(&acct_lock);
+	ACCT_LOCK();
 
 	/* If accounting isn't enabled, don't bother */
 	if (acct_state != ACCT_ACTIVE)
@@ -402,13 +411,11 @@ acct_process(struct lwp *l)
 	 *
 	 * XXX We should think about the CPU limit, too.
 	 */
-	mutex_enter(&p->p_mutex);
 	if (p->p_limit->p_refcnt > 1) {
 		oplim = p->p_limit;
-		p->p_limit = limcopy(p);
+		p->p_limit = limcopy(p->p_limit);
 	}
 	p->p_rlimit[RLIMIT_FSIZE].rlim_cur = RLIM_INFINITY;
-	mutex_exit(&p->p_mutex);
 
 	/*
 	 * Get process accounting information.
@@ -418,9 +425,7 @@ acct_process(struct lwp *l)
 	memcpy(acct.ac_comm, p->p_comm, sizeof(acct.ac_comm));
 
 	/* (2) The amount of user and system time that was used */
-	mutex_enter(&p->p_smutex);
-	calcru(p, &ut, &st, NULL, NULL);
-	mutex_exit(&p->p_smutex);
+	calcru(p, &ut, &st, NULL);
 	acct.ac_utime = encode_comp_t(ut.tv_sec, ut.tv_usec);
 	acct.ac_stime = encode_comp_t(st.tv_sec, st.tv_usec);
 
@@ -447,12 +452,10 @@ acct_process(struct lwp *l)
 	acct.ac_gid = kauth_cred_getgid(l->l_cred);
 
 	/* (7) The terminal from which the process was started */
-	mutex_enter(&proclist_lock);
-	if ((p->p_lflag & PL_CONTROLT) && p->p_pgrp->pg_session->s_ttyp)
+	if ((p->p_flag & P_CONTROLT) && p->p_pgrp->pg_session->s_ttyp)
 		acct.ac_tty = p->p_pgrp->pg_session->s_ttyp->t_dev;
 	else
 		acct.ac_tty = NODEV;
-	mutex_exit(&proclist_lock);
 
 	/* (8) The boolean flags that tell how the process terminated, etc. */
 	acct.ac_flag = p->p_acflag;
@@ -461,20 +464,18 @@ acct_process(struct lwp *l)
 	 * Now, just write the accounting information to the file.
 	 */
 	VOP_LEASE(acct_vp, l, l->l_cred, LEASE_WRITE);
-	error = vn_rdwr(UIO_WRITE, acct_vp, (void *)&acct,
+	error = vn_rdwr(UIO_WRITE, acct_vp, (caddr_t)&acct,
 	    sizeof(acct), (off_t)0, UIO_SYSSPACE, IO_APPEND|IO_UNIT,
 	    acct_cred, NULL, NULL);
 	if (error != 0)
 		log(LOG_ERR, "Accounting: write failed %d\n", error);
 
 	if (oplim) {
-		mutex_enter(&p->p_mutex);
 		limfree(p->p_limit);
 		p->p_limit = oplim;
-		mutex_exit(&p->p_mutex);
 	}
 
  out:
-	mutex_exit(&acct_lock);
+	ACCT_UNLOCK();
 	return (error);
 }

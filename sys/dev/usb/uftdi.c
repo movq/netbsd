@@ -1,4 +1,4 @@
-/*	$NetBSD: uftdi.c,v 1.31 2007/03/13 13:51:55 drochner Exp $	*/
+/*	$NetBSD: uftdi.c,v 1.29.2.1 2007/03/08 23:39:42 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uftdi.c,v 1.31 2007/03/13 13:51:55 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uftdi.c,v 1.29.2.1 2007/03/08 23:39:42 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -166,6 +166,9 @@ USB_DECLARE_DRIVER(uftdi);
 USB_MATCH(uftdi)
 {
 	USB_MATCH_START(uftdi, uaa);
+
+	if (uaa->iface != NULL)
+		return (UMATCH_NONE);
 
 	DPRINTFN(20,("uftdi: vendor=0x%x, product=0x%x\n",
 		     uaa->vendor, uaa->product));

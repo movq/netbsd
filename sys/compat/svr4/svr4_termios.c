@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_termios.c,v 1.23 2007/03/04 06:01:33 christos Exp $	 */
+/*	$NetBSD: svr4_termios.c,v 1.20 2005/12/11 12:20:26 christos Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_termios.c,v 1.23 2007/03/04 06:01:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_termios.c,v 1.20 2005/12/11 12:20:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -48,10 +48,12 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_termios.c,v 1.23 2007/03/04 06:01:33 christos E
 #include <sys/termios.h>
 #include <sys/tty.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <net/if.h>
 #include <sys/malloc.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/svr4/svr4_types.h>
@@ -507,7 +509,7 @@ svr4_term_ioctl(fp, l, retval, fd, cmd, data)
 	register_t *retval;
 	int fd;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 {
 	struct termios 		bt;
 	struct svr4_termios	st;
@@ -521,7 +523,7 @@ svr4_term_ioctl(fp, l, retval, fd, cmd, data)
 	switch (cmd) {
 	case SVR4_TCGETA:
 	case SVR4_TCGETS:
-		if ((error = (*ctl)(fp, TIOCGETA, (void *) &bt, l)) != 0)
+		if ((error = (*ctl)(fp, TIOCGETA, (caddr_t) &bt, l)) != 0)
 			return error;
 
 		memset(&st, 0, sizeof(st));
@@ -548,7 +550,7 @@ svr4_term_ioctl(fp, l, retval, fd, cmd, data)
 	case SVR4_TCSETAF:
 	case SVR4_TCSETSF:
 		/* get full BSD termios so we don't lose information */
-		if ((error = (*ctl)(fp, TIOCGETA, (void *) &bt, l)) != 0)
+		if ((error = (*ctl)(fp, TIOCGETA, (caddr_t) &bt, l)) != 0)
 			return error;
 
 		switch (cmd) {
@@ -599,13 +601,13 @@ svr4_term_ioctl(fp, l, retval, fd, cmd, data)
 		print_svr4_termios(&st);
 #endif /* DEBUG_SVR4 */
 
-		return (*ctl)(fp, cmd, (void *) &bt, l);
+		return (*ctl)(fp, cmd, (caddr_t) &bt, l);
 
 	case SVR4_TIOCGWINSZ:
 		{
 			struct svr4_winsize ws;
 
-			error = (*ctl)(fp, TIOCGWINSZ, (void *) &ws, l);
+			error = (*ctl)(fp, TIOCGWINSZ, (caddr_t) &ws, l);
 			if (error)
 				return error;
 			return copyout(&ws, data, sizeof(ws));
@@ -617,7 +619,7 @@ svr4_term_ioctl(fp, l, retval, fd, cmd, data)
 
 			if ((error = copyin(data, &ws, sizeof(ws))) != 0)
 				return error;
-			return (*ctl)(fp, TIOCSWINSZ, (void *) &ws, l);
+			return (*ctl)(fp, TIOCSWINSZ, (caddr_t) &ws, l);
 		}
 
 	default:

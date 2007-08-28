@@ -1,4 +1,4 @@
-/*	$NetBSD: vector.S,v 1.10 2007/02/09 21:55:01 ad Exp $	*/
+/*	$NetBSD: vector.S,v 1.8 2005/12/11 12:16:21 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -227,14 +227,13 @@ calltrap:
 #endif /* DIAGNOSTIC */
 	movq	%rsp,%rdi
 	call	_C_LABEL(trap)
-	movq	CPUVAR(CURLWP),%r14
 2:	/* Check for ASTs on exit to user mode. */
 	cli
-	CHECK_ASTPENDING(%r14)
+	CHECK_ASTPENDING(%r11)
 	je	1f
 	testb	$SEL_RPL,TF_CS(%rsp)
 	jz	1f
-	CLEAR_ASTPENDING(%r14)
+5:	CLEAR_ASTPENDING(%r11)
 	sti
 	movl	$T_ASTFLT,TF_TRAPNO(%rsp)
 	movq	%rsp,%rdi
@@ -361,7 +360,6 @@ IDTVEC(resume_lapic_ltimer)
 	movl	$IPL_CLOCK,CPUVAR(ILEVEL)
 	sti
 	pushq	%rbx
-	movq	%rsp,%rsi
 	xorq	%rdi,%rdi
 	call	_C_LABEL(lapic_clockintr)
 	jmp	_C_LABEL(Xdoreti)
@@ -417,7 +415,6 @@ IDTVEC(intr_/**/name/**/num)						;\
 	movl	IH_LEVEL(%rbx),%r12d					;\
 	cmpl	%r13d,%r12d						;\
 	jle	7f							;\
-	movq	%rsp,%rsi						;\
 	movq	IH_ARG(%rbx),%rdi					;\
 	movl	%r12d,CPUVAR(ILEVEL)					;\
 	call	*IH_FUN(%rbx)		/* call it */			;\

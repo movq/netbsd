@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm.h,v 1.52 2007/07/21 19:21:53 ad Exp $	*/
+/*	$NetBSD: uvm.h,v 1.44 2006/09/15 15:51:12 yamt Exp $	*/
 
 /*
  *
@@ -71,8 +71,6 @@
  */
 #include <machine/vmparam.h>
 
-struct workqueue;
-
 /*
  * uvm structure (vm global state: collected in one structure for ease
  * of reference...)
@@ -85,46 +83,38 @@ struct uvm {
 	struct pgfreelist page_free[VM_NFREELIST]; /* unallocated pages */
 	int page_free_nextcolor;	/* next color to allocate from */
 	struct simplelock pageqlock;	/* lock for active/inactive page q */
-	bool page_init_done;		/* TRUE if uvm_page_init() finished */
-	bool page_idle_zero;		/* TRUE if we should try to zero
+	struct simplelock fpageqlock;	/* lock for free page q */
+	boolean_t page_init_done;	/* TRUE if uvm_page_init() finished */
+	boolean_t page_idle_zero;	/* TRUE if we should try to zero
 					   pages in the idle loop */
 
 		/* page daemon trigger */
 	int pagedaemon;			/* daemon sleeps on this */
-	struct lwp *pagedaemon_lwp;	/* daemon's lid */
+	struct proc *pagedaemon_proc;	/* daemon's pid */
+	struct simplelock pagedaemon_lock;
 
-		/* aiodone daemon */
-	struct workqueue *aiodone_queue;
+		/* aiodone daemon trigger */
+	int aiodoned;			/* daemon sleeps on this */
+	struct proc *aiodoned_proc;	/* daemon's pid */
+	struct simplelock aiodoned_lock;
 
 		/* page hash */
 	struct pglist *page_hash;	/* page hash table (vp/off->page) */
 	int page_nhash;			/* number of buckets */
 	int page_hashmask;		/* hash mask */
+	struct simplelock hashlock;	/* lock on page_hash array */
+
+	struct simplelock kentry_lock;
 
 	/* aio_done is locked by uvm.pagedaemon_lock and splbio! */
 	TAILQ_HEAD(, buf) aio_done;		/* done async i/o reqs */
 
 	/* swap-related items */
-	bool swap_running;
-	kcondvar_t scheduler_cv;
-	bool scheduler_kicked;
-	int swapout_enabled;
+	struct simplelock swap_data_lock;
+
+	/* kernel object: to support anonymous pageable kernel memory */
+	struct uvm_object *kernel_object;
 };
-
-/*
- * kernel object: to support anonymous pageable kernel memory
- */
-extern struct uvm_object *uvm_kernel_object;
-
-/*
- * locks (made globals for lockstat).
- */
-
-extern kmutex_t uvm_fpageqlock;		/* lock for free page q */
-extern kmutex_t uvm_pagedaemon_lock;
-extern kmutex_t uvm_kentry_lock;
-extern kmutex_t uvm_swap_data_lock;
-extern kmutex_t uvm_scheduler_mutex;
 
 #endif /* _KERNEL */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: disk.h,v 1.45 2007/07/21 19:51:49 ad Exp $	*/
+/*	$NetBSD: disk.h,v 1.42 2006/11/25 11:59:58 scw Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2004 The NetBSD Foundation, Inc.
@@ -86,13 +86,11 @@
  * Disk device structures.
  */
 
-#include <sys/device.h>
 #include <sys/dkio.h>
 #include <sys/time.h>
 #include <sys/queue.h>
-#include <sys/mutex.h>
+#include <sys/lock.h>
 #include <sys/iostat.h>
-
 #include <prop/proplib.h>
 
 struct buf;
@@ -427,11 +425,11 @@ struct disk {
 	/*
 	 * Information required to be the parent of a disk wedge.
 	 */
-	kmutex_t	dk_rawlock;	/* lock on these fields */
-	u_int		dk_rawopens;	/* # of openes of rawvp */
+	struct lock	dk_rawlock;	/* lock on these fields */
 	struct vnode	*dk_rawvp;	/* vnode for the RAW_PART bdev */
+	u_int		dk_rawopens;	/* # of openes of rawvp */
 
-	kmutex_t	dk_openlock;	/* lock on these and openmask */
+	struct lock	dk_openlock;	/* lock on these and openmask */
 	u_int		dk_nwedges;	/* # of configured wedges */
 					/* all wedges on this disk */
 	LIST_HEAD(, dkwedge_softc) dk_wedges;
@@ -452,7 +450,7 @@ struct dkdriver {
 #ifdef notyet
 	int	(*d_open)(dev_t, int, int, struct proc *);
 	int	(*d_close)(dev_t, int, int, struct proc *);
-	int	(*d_ioctl)(dev_t, u_long, void *, int, struct proc *);
+	int	(*d_ioctl)(dev_t, u_long, caddr_t, int, struct proc *);
 	int	(*d_dump)(dev_t);
 	void	(*d_start)(struct buf *, daddr_t);
 	int	(*d_mklabel)(struct disk *);
@@ -482,7 +480,7 @@ struct disk_badsecinfo {
 	uint32_t	dbsi_skip;	/* how many to skip past */
 	uint32_t	dbsi_copied;	/* how many got copied back */
 	uint32_t	dbsi_left;	/* remaining to copy */
-	void *		dbsi_buffer;	/* region to copy disk_badsectors to */
+	caddr_t		dbsi_buffer;	/* region to copy disk_badsectors to */
 };
 
 #define	DK_STRATEGYNAMELEN	32
@@ -498,6 +496,7 @@ struct disk_strategy {
 #ifdef _KERNEL
 extern	int disk_count;			/* number of disks in global disklist */
 
+struct device;
 struct proc;
 
 void	disk_attach(struct disk *);
@@ -509,18 +508,15 @@ void	disk_busy(struct disk *);
 void	disk_unbusy(struct disk *, long, int);
 void	disk_blocksize(struct disk *, int);
 struct disk *disk_find(const char *);
-int	disk_ioctl(struct disk *, u_long, void *, int, struct lwp *);
+int	disk_ioctl(struct disk *, u_long, caddr_t, int, struct lwp *);
 
-void	dkwedge_init(void);
 int	dkwedge_add(struct dkwedge_info *);
 int	dkwedge_del(struct dkwedge_info *);
 void	dkwedge_delall(struct disk *);
 int	dkwedge_list(struct disk *, struct dkwedge_list *, struct lwp *);
 void	dkwedge_discover(struct disk *);
-void	dkwedge_set_bootwedge(device_t, daddr_t, uint64_t);
+void	dkwedge_set_bootwedge(struct device *, daddr_t, uint64_t);
 int	dkwedge_read(struct disk *, struct vnode *, daddr_t, void *, size_t);
-device_t dkwedge_find_by_wname(const char *);
-void	dkwedge_print_wnames(void);
 #endif
 
 #endif /* _SYS_DISK_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: fwohci.c,v 1.107 2007/04/21 15:27:43 kiyohara Exp $	*/
+/*	$NetBSD: fwohci.c,v 1.103.2.1 2006/12/30 05:14:16 riz Exp $	*/
 
 /*-
  * Copyright (c) 2003 Hidetoshi Shimokawa
@@ -33,7 +33,7 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- * $FreeBSD: /repoman/r/ncvs/src/sys/dev/firewire/fwohci.c,v 1.86 2007/03/19 03:35:45 simokawa Exp $
+ * $FreeBSD: /repoman/r/ncvs/src/sys/dev/firewire/fwohci.c,v 1.81 2005/03/29 01:44:59 sam Exp $
  *
  */
 
@@ -58,7 +58,7 @@
 #include <sys/ktr.h>
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fwohci.c,v 1.107 2007/04/21 15:27:43 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fwohci.c,v 1.103.2.1 2006/12/30 05:14:16 riz Exp $");
 
 #if defined(__DragonFly__) || __FreeBSD_version < 500000
 #include <machine/clock.h>		/* for DELAY() */
@@ -103,8 +103,6 @@ __KERNEL_RCSID(0, "$NetBSD: fwohci.c,v 1.107 2007/04/21 15:27:43 kiyohara Exp $"
 #include <dev/ieee1394/fwohcireg.h>
 #include <dev/ieee1394/fwohcivar.h>
 #include <dev/ieee1394/firewire_phy.h>
-
-#include "ioconf.h"
 #endif
 
 #undef OHCI_DEBUG
@@ -338,6 +336,7 @@ int fwohci_print(void *, const char *);
 #if defined(__FreeBSD__)
 d_ioctl_t fwohci_ioctl;
 #elif defined(__NetBSD__)
+extern struct cfdriver fwohci_cd;
 dev_type_ioctl(fwohci_ioctl);
 #endif
 
@@ -506,8 +505,6 @@ fwohci_probe_phy(struct fwohci_softc *sc, device_t dev)
  *    It is not actually available port on your PC .
  */
 	OWRITE(sc, OHCI_HCCCTL, OHCI_HCC_LPS);
-	DELAY(500);
-
 	reg = fwphy_rddata(sc, FW_PHY_SPD_REG);
 
 	if((reg >> 5) != 7 ){
@@ -1039,7 +1036,7 @@ again:
 				if (m0 != NULL) {
 					m_copydata(xfer->mbuf, 0,
 						xfer->mbuf->m_pkthdr.len,
-						mtod(m0, void *));
+						mtod(m0, caddr_t));
 					m0->m_len = m0->m_pkthdr.len =
 						xfer->mbuf->m_pkthdr.len;
 					m_freem(xfer->mbuf);
@@ -1355,10 +1352,10 @@ fwohci_db_init(struct fwohci_softc *sc, struct fwohci_dbch *dbch)
 		if (dbch->xferq.flag & FWXFERQ_EXTBUF) {
 			if (idb % dbch->xferq.bnpacket == 0)
 				dbch->xferq.bulkxfer[idb / dbch->xferq.bnpacket
-						].start = (void *)db_tr;
+						].start = (caddr_t)db_tr;
 			if ((idb + 1) % dbch->xferq.bnpacket == 0)
 				dbch->xferq.bulkxfer[idb / dbch->xferq.bnpacket
-						].end = (void *)db_tr;
+						].end = (caddr_t)db_tr;
 		}
 		db_tr++;
 	}
@@ -2663,7 +2660,7 @@ device_printf(sc->fc.dev, "DB %08x %08x %08x\n", bulkxfer, db_tr->bus_addr, fdb_
 		FWOHCI_DMA_SET(db[0].db.desc.depend, dbch->ndesc);
 		FWOHCI_DMA_SET(db[dbch->ndesc - 1].db.desc.depend, dbch->ndesc);
 #endif
-		bulkxfer->end = (void *)db_tr;
+		bulkxfer->end = (caddr_t)db_tr;
 		db_tr = STAILQ_NEXT(db_tr, link);
 	}
 	db = ((struct fwohcidb_tr *)bulkxfer->end)->db;
@@ -2872,7 +2869,7 @@ fwohci_arcv(struct fwohci_softc *sc, struct fwohci_dbch *dbch, int count)
 	u_int spd;
 	int len, plen, hlen, pcnt, offset;
 	int s;
-	void *buf;
+	caddr_t buf;
 	int resCount;
 
 	CTR0(KTR_DEV, "fwohci_arv");
@@ -2919,7 +2916,7 @@ fwohci_arcv(struct fwohci_softc *sc, struct fwohci_dbch *dbch, int count)
 				offset = dbch->buf_offset;
 				if (offset < 0)
 					offset = - offset;
-				buf = (char *)dbch->pdb_tr->buf + offset;
+				buf = dbch->pdb_tr->buf + offset;
 				rlen = dbch->xferq.psize - offset;
 				if (firewire_debug)
 					printf("rlen=%d, offset=%d\n",

@@ -1,4 +1,4 @@
-/*	$NetBSD: usb_subr.c,v 1.148 2007/06/30 09:17:45 mlelstv Exp $	*/
+/*	$NetBSD: usb_subr.c,v 1.138.2.3 2007/07/24 10:24:04 liamjfoy Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usb_subr.c,v 1.18 1999/11/17 22:33:47 n_hibma Exp $	*/
 
 /*
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usb_subr.c,v 1.148 2007/06/30 09:17:45 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usb_subr.c,v 1.138.2.3 2007/07/24 10:24:04 liamjfoy Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_usbverbose.h"
@@ -90,11 +90,8 @@ Static void usbd_devinfo_vp(usbd_device_handle dev,
 Static int usbd_getnewaddr(usbd_bus_handle bus);
 #if defined(__NetBSD__)
 Static int usbd_print(void *, const char *);
-Static int usbd_ifprint(void *, const char *);
 Static int usbd_submatch(device_ptr_t, struct cfdata *,
 			 const int *, void *);
-Static int usbd_ifsubmatch(device_ptr_t, struct cfdata *,
-			   const int *, void *);
 #elif defined(__OpenBSD__)
 Static int usbd_print(void *aux, const char *pnp);
 Static int usbd_submatch(device_ptr_t, void *, void *);
@@ -184,8 +181,8 @@ usbd_get_string_desc(usbd_device_handle dev, int sindex, int langid,
 		return (USBD_SHORT_XFER);
 
 	USETW(req.wLength, sdesc->bLength);	/* the whole string */
- 	err = usbd_do_request_flags(dev, &req, sdesc, USBD_SHORT_XFER_OK,
- 		&actlen, USBD_DEFAULT_TIMEOUT);
+	err = usbd_do_request_flags(dev, &req, sdesc, USBD_SHORT_XFER_OK,
+		&actlen, USBD_DEFAULT_TIMEOUT);
 	if (err)
 		return (err);
 
@@ -571,18 +568,12 @@ usbd_set_config_no(usbd_device_handle dev, int no, int msg)
 usbd_status
 usbd_set_config_index(usbd_device_handle dev, int index, int msg)
 {
+	usb_status_t ds;
 	usb_config_descriptor_t cd, *cdp;
 	usbd_status err;
 	int i, ifcidx, nifc, len, selfpowered, power;
 
 	DPRINTFN(5,("usbd_set_config_index: dev=%p index=%d\n", dev, index));
-
-	if (index >= dev->ddesc.bNumConfigurations &&
-	    index != USB_UNCONFIG_NO) {
-		/* panic? */
-		printf("usbd_set_config_index: illegal index\n");
-		return (USBD_INVAL);
-	}
 
 	/* XXX check that all interfaces are idle */
 	if (dev->config != USB_UNCONFIG_NO) {
@@ -635,45 +626,57 @@ usbd_set_config_index(usbd_device_handle dev, int index, int msg)
 		goto bad;
 	}
 
-	/*
-	 * Figure out if the device is self or bus powered.
-	 */
-#if 0 /* XXX various devices don't report the power state correctly */
+	/* Figure out if the device is self or bus powered. */
 	selfpowered = 0;
-	err = usbd_get_device_status(dev, &ds);
-	if (!err && (UGETW(ds.wStatus) & UDS_SELF_POWERED))
-		selfpowered = 1;
-#endif
-	/*
-	 * Use the power state in the configuration we are going
-	 * to set. This doesn't necessarily reflect the actual
-	 * power state of the device; the driver can control this
-	 * by choosing the appropriate configuration.
-	 */
-	selfpowered = !!(cdp->bmAttributes & UC_SELF_POWERED);
-
+	if (!(dev->quirks->uq_flags & UQ_BUS_POWERED) &&
+	    (cdp->bmAttributes & UC_SELF_POWERED)) {
+		/* May be self powered. */
+		if (cdp->bmAttributes & UC_BUS_POWERED) {
+			/* Must ask device. */
+			if (dev->quirks->uq_flags & UQ_POWER_CLAIM) {
+				/*
+				 * Hub claims to be self powered, but isn't.
+				 * It seems that the power status can be
+				 * determined by the hub characteristics.
+				 */
+				usb_hub_descriptor_t hd;
+				usb_device_request_t req;
+				req.bmRequestType = UT_READ_CLASS_DEVICE;
+				req.bRequest = UR_GET_DESCRIPTOR;
+				USETW(req.wValue, 0);
+				USETW(req.wIndex, 0);
+				USETW(req.wLength, USB_HUB_DESCRIPTOR_SIZE);
+				err = usbd_do_request(dev, &req, &hd);
+				if (!err &&
+				    (UGETW(hd.wHubCharacteristics) &
+				     UHD_PWR_INDIVIDUAL))
+					selfpowered = 1;
+				DPRINTF(("usbd_set_config_index: charac=0x%04x"
+				    ", error=%s\n",
+				    UGETW(hd.wHubCharacteristics),
+				    usbd_errstr(err)));
+			} else {
+				err = usbd_get_device_status(dev, &ds);
+				if (!err &&
+				    (UGETW(ds.wStatus) & UDS_SELF_POWERED))
+					selfpowered = 1;
+				DPRINTF(("usbd_set_config_index: status=0x%04x"
+				    ", error=%s\n",
+				    UGETW(ds.wStatus), usbd_errstr(err)));
+			}
+		} else
+			selfpowered = 1;
+	}
 	DPRINTF(("usbd_set_config_index: (addr %d) cno=%d attr=0x%02x, "
 		 "selfpowered=%d, power=%d\n",
 		 cdp->bConfigurationValue, dev->address, cdp->bmAttributes,
 		 selfpowered, cdp->bMaxPower * 2));
 
 	/* Check if we have enough power. */
-#if 0 /* this is a no-op, see above */
-	if ((cdp->bmAttributes & UC_SELF_POWERED) && !selfpowered) {
-		if (msg)
-			printf("%s: device addr %d (config %d): "
-				 "can't set self powered configuration\n",
-			       USBDEVNAME(dev->bus->bdev), dev->address,
-			       cdp->bConfigurationValue);
-		err = USBD_NO_POWER;
-		goto bad;
-	}
-#endif
 #ifdef USB_DEBUG
 	if (dev->powersrc == NULL) {
 		DPRINTF(("usbd_set_config_index: No power source?\n"));
-		err = USBD_IOERROR;
-		goto bad;
+		return (USBD_IOERROR);
 	}
 #endif
 	power = cdp->bMaxPower * 2;
@@ -794,7 +797,6 @@ usbd_probe_and_attach(device_ptr_t parent, usbd_device_handle dev,
 		      int port, int addr)
 {
 	struct usb_attach_arg uaa;
-	struct usbif_attach_arg uiaa;
 	usb_device_descriptor_t *dd = &dev->ddesc;
 	int found, i, confi, nifaces;
 	usbd_status err;
@@ -816,14 +818,16 @@ usbd_probe_and_attach(device_ptr_t parent, usbd_device_handle dev,
 #endif
 
 	uaa.device = dev;
+	uaa.iface = NULL;
+	uaa.ifaces = NULL;
+	uaa.nifaces = 0;
 	uaa.usegeneric = 0;
 	uaa.port = port;
+	uaa.configno = UHUB_UNK_CONFIGURATION;
+	uaa.ifaceno = UHUB_UNK_INTERFACE;
 	uaa.vendor = UGETW(dd->idVendor);
 	uaa.product = UGETW(dd->idProduct);
 	uaa.release = UGETW(dd->bcdDevice);
-	uaa.class = dd->bDeviceClass;
-	uaa.subclass = dd->bDeviceSubClass;
-	uaa.proto = dd->bDeviceProtocol;
 
 	/* First try with device specific drivers. */
 	DPRINTF(("usbd_probe_and_attach: trying device specific drivers\n"));
@@ -838,12 +842,6 @@ usbd_probe_and_attach(device_ptr_t parent, usbd_device_handle dev,
 	}
 
 	DPRINTF(("usbd_probe_and_attach: no device specific driver found\n"));
-
-	uiaa.device = dev;
-	uiaa.port = port;
-	uiaa.vendor = UGETW(dd->idVendor);
-	uiaa.product = UGETW(dd->idProduct);
-	uiaa.release = UGETW(dd->bcdDevice);
 
 	DPRINTF(("usbd_probe_and_attach: looping over %d configurations\n",
 		 dd->bNumConfigurations));
@@ -868,14 +866,14 @@ usbd_probe_and_attach(device_ptr_t parent, usbd_device_handle dev,
  			return (err);
 		}
 		nifaces = dev->cdesc->bNumInterface;
-		uiaa.configno = dev->cdesc->bConfigurationValue;
+		uaa.configno = dev->cdesc->bConfigurationValue;
 		ifaces = malloc(nifaces * sizeof(*ifaces), M_USB, M_NOWAIT);
 		if (ifaces == NULL)
 			goto nomem;
 		for (i = 0; i < nifaces; i++)
 			ifaces[i] = &dev->ifaces[i];
-		uiaa.ifaces = ifaces;
-		uiaa.nifaces = nifaces;
+		uaa.ifaces = ifaces;
+		uaa.nifaces = nifaces;
 		dev->subdevs = malloc((nifaces+1) * sizeof dv, M_USB,M_NOWAIT);
 		if (dev->subdevs == NULL) {
 			free(ifaces, M_USB);
@@ -890,13 +888,10 @@ nomem:
 		for (i = 0; i < nifaces; i++) {
 			if (ifaces[i] == NULL)
 				continue; /* interface already claimed */
-			uiaa.iface = ifaces[i];
-			uiaa.class = ifaces[i]->idesc->bInterfaceClass;
-			uiaa.subclass = ifaces[i]->idesc->bInterfaceSubClass;
-			uiaa.proto = ifaces[i]->idesc->bInterfaceProtocol;
-			uiaa.ifaceno = ifaces[i]->idesc->bInterfaceNumber;
-			dv = USB_DO_IFATTACH(dev, bdev, parent, &uiaa, usbd_ifprint,
-					     usbd_ifsubmatch);
+			uaa.iface = ifaces[i];
+			uaa.ifaceno = ifaces[i]->idesc->bInterfaceNumber;
+			dv = USB_DO_ATTACH(dev, bdev, parent, &uaa, usbd_print,
+					   usbd_submatch);
 			if (dv != NULL) {
 				dev->subdevs[found++] = dv;
 				dev->subdevs[found] = 0;
@@ -935,7 +930,10 @@ nomem:
 	DPRINTF(("usbd_probe_and_attach: no interface drivers found\n"));
 
 	/* Finally try the generic driver. */
+	uaa.iface = NULL;
 	uaa.usegeneric = 1;
+	uaa.configno = UHUB_UNK_CONFIGURATION;
+	uaa.ifaceno = UHUB_UNK_INTERFACE;
 	dv = USB_DO_ATTACH(dev, bdev, parent, &uaa, usbd_print, usbd_submatch);
 	if (dv != NULL) {
 		dev->subdevs = malloc(2 * sizeof dv, M_USB, M_NOWAIT);
@@ -1193,32 +1191,6 @@ usbd_print(void *aux, const char *pnp)
 	}
 	if (uaa->port != 0)
 		aprint_normal(" port %d", uaa->port);
-#if 0
-	/*
-	 * It gets very crowded with these locators on the attach line.
-	 * They are not really needed since they are printed in the clear
-	 * by each driver.
-	 */
-	if (uaa->vendor != UHUB_UNK_VENDOR)
-		aprint_normal(" vendor 0x%04x", uaa->vendor);
-	if (uaa->product != UHUB_UNK_PRODUCT)
-		aprint_normal(" product 0x%04x", uaa->product);
-	if (uaa->release != UHUB_UNK_RELEASE)
-		aprint_normal(" release 0x%04x", uaa->release);
-#endif
-	return (UNCONF);
-}
-
-int
-usbd_ifprint(void *aux, const char *pnp)
-{
-	struct usbif_attach_arg *uaa = aux;
-
-	DPRINTFN(15, ("usbd_print dev=%p\n", uaa->device));
-	if (pnp)
-		return (QUIET);
-	if (uaa->port != 0)
-		aprint_normal(" port %d", uaa->port);
 	if (uaa->configno != UHUB_UNK_CONFIGURATION)
 		aprint_normal(" configuration %d", uaa->configno);
 	if (uaa->ifaceno != UHUB_UNK_INTERFACE)
@@ -1251,36 +1223,6 @@ usbd_submatch(struct device *parent, void *match, void *aux)
 	struct cfdata *cf = match;
 #endif
 	struct usb_attach_arg *uaa = aux;
-
-	DPRINTFN(5,("usbd_submatch port=%d,%d "
-	    "vendor=%d,%d product=%d,%d release=%d,%d\n",
-	    uaa->port, cf->uhubcf_port,
-	    uaa->vendor, cf->uhubcf_vendor,
-	    uaa->product, cf->uhubcf_product,
-	    uaa->release, cf->uhubcf_release));
-	if (uaa->port != 0 &&	/* root hub has port 0, it should match */
-	    ((cf->uhubcf_port != UHUB_UNK_PORT &&
-	      cf->uhubcf_port != uaa->port) ||
-	     (uaa->vendor != UHUB_UNK_VENDOR &&
-	      cf->uhubcf_vendor != UHUB_UNK_VENDOR &&
-	      cf->uhubcf_vendor != uaa->vendor) ||
-	     (uaa->product != UHUB_UNK_PRODUCT &&
-	      cf->uhubcf_product != UHUB_UNK_PRODUCT &&
-	      cf->uhubcf_product != uaa->product) ||
-	     (uaa->release != UHUB_UNK_RELEASE &&
-	      cf->uhubcf_release != UHUB_UNK_RELEASE &&
-	      cf->uhubcf_release != uaa->release)
-	     )
-	   )
-		return 0;
-	return (config_match(parent, cf, aux));
-}
-
-int
-usbd_ifsubmatch(struct device *parent, struct cfdata *cf,
-	      const int *ldesc, void *aux)
-{
-	struct usbif_attach_arg *uaa = aux;
 
 	DPRINTFN(5,("usbd_submatch port=%d,%d configno=%d,%d "
 	    "ifaceno=%d,%d vendor=%d,%d product=%d,%d release=%d,%d\n",

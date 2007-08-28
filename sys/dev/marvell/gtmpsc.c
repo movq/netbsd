@@ -1,4 +1,4 @@
-/*	$NetBSD: gtmpsc.c,v 1.23 2007/03/04 06:02:14 christos Exp $	*/
+/*	$NetBSD: gtmpsc.c,v 1.21 2006/10/01 19:28:43 elad Exp $	*/
 
 /*
  * Copyright (c) 2002 Allegro Networks, Inc., Wasabi Systems, Inc.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gtmpsc.c,v 1.23 2007/03/04 06:02:14 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gtmpsc.c,v 1.21 2006/10/01 19:28:43 elad Exp $");
 
 #include "opt_kgdb.h"
 
@@ -201,6 +201,8 @@ STATIC int gt_reva_gtmpsc_bug;
 unsigned int sdma_imask;        /* soft copy of SDMA IMASK reg */
 
 #ifdef KGDB
+#include <sys/kgdb.h>
+
 static int gtmpsc_kgdb_addr;
 static int gtmpsc_kgdb_attached;
 
@@ -435,7 +437,7 @@ gtmpscattach(struct device *parent, struct device *self, void *aux)
 	gtmpsc_poll_sdma_t *vmps;
 	gtmpsc_poll_sdma_t *pmps;
 	struct tty *tp;
-	void *kva;
+	caddr_t kva;
 	int rsegs;
 	int err;
 	int s;
@@ -723,7 +725,7 @@ gtmpscpoll(dev_t dev, int events, struct lwp *l)
 }
 
 int
-gtmpscioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+gtmpscioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct gtmpsc_softc *sc = gtmpsc_cd.cd_devs[GTMPSCUNIT(dev)];
 	struct tty *tp = sc->gtmpsc_tty;

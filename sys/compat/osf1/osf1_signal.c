@@ -1,4 +1,4 @@
-/*	$NetBSD: osf1_signal.c,v 1.32 2007/06/16 20:04:28 dsl Exp $	*/
+/*	$NetBSD: osf1_signal.c,v 1.27 2005/12/11 12:20:23 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_signal.c,v 1.32 2007/06/16 20:04:28 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_signal.c,v 1.27 2005/12/11 12:20:23 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,13 +45,13 @@ __KERNEL_RCSID(0, "$NetBSD: osf1_signal.c,v 1.32 2007/06/16 20:04:28 dsl Exp $")
 #include <sys/signalvar.h>
 #include <sys/malloc.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/osf1/osf1.h>
 #include <compat/osf1/osf1_signal.h>
 #include <compat/osf1/osf1_syscallargs.h>
 #include <compat/common/compat_util.h>
-#include <compat/common/compat_sigaltstack.h>
 #include <compat/osf1/osf1_cvt.h>
 
 #if 0
@@ -79,6 +79,7 @@ osf1_sys_sigaction(l, v, retval)
 	register_t *retval;
 {
 	struct osf1_sys_sigaction_args *uap = v;
+	struct proc *p = l->l_proc;
 	struct osf1_sigaction *nosa, *oosa, tmposa;
 	struct sigaction nbsa, obsa;
 	int error;
@@ -94,7 +95,7 @@ osf1_sys_sigaction(l, v, retval)
 		osf1_cvt_sigaction_to_native(&tmposa, &nbsa);
 	}
 
-	if ((error = sigaction1(l,
+	if ((error = sigaction1(p,
 				osf1_to_native_signo[SCARG(uap, signum)],
 				(nosa ? &nbsa : NULL),
 				(oosa ? &obsa : NULL),
@@ -117,9 +118,48 @@ osf1_sys_sigaltstack(l, v, retval)
 	register_t *retval;
 {
 	struct osf1_sys_sigaltstack_args *uap = v;
-	/* We silently ignore OSF1_SS_NOMASK and OSF1_SS_UCONTEXT */
-	compat_sigaltstack(uap, osf1_sigaltstack,
-	    OSF1_SS_ONSTACK, OSF1_SS_DISABLE);
+	struct proc *p = l->l_proc;
+	struct osf1_sigaltstack *noss, *ooss, tmposs;
+	struct sigaltstack *nbss, *obss, tmpbss;
+	struct sys___sigaltstack14_args sa;
+	caddr_t sg;
+	int error;
+
+	sg = stackgap_init(p, 0);
+	noss = SCARG(uap, nss);
+	ooss = SCARG(uap, oss);
+
+	if (ooss != NULL)
+		obss = stackgap_alloc(p, &sg, sizeof(struct sigaltstack));
+	else
+		obss = NULL;
+
+	if (noss != NULL) {
+		nbss = stackgap_alloc(p, &sg, sizeof(struct sigaltstack));
+		if ((error = copyin(noss, &tmposs, sizeof(tmposs))) != 0)
+			return error;
+		if ((error = osf1_cvt_sigaltstack_to_native(&tmposs, &tmpbss)) != 0)
+			return error;
+		if ((error = copyout(&tmpbss, nbss, sizeof(tmpbss))) != 0)
+			return error;
+	} else
+		nbss = NULL;
+
+	SCARG(&sa, nss) = nbss;
+	SCARG(&sa, oss) = obss;
+
+	if ((error = sys___sigaltstack14(l, &sa, retval)) != 0)
+		return error;
+
+	if (obss != NULL) {
+		if ((error = copyin(obss, &tmpbss, sizeof(tmpbss))) != 0)
+			return error;
+		osf1_cvt_sigaltstack_from_native(&tmpbss, &tmposs);
+		if ((error = copyout(&tmposs, ooss, sizeof(tmposs))) != 0)
+			return error;
+	}
+
+	return 0;
 }
 
 #if 0
@@ -133,6 +173,7 @@ osf1_sys_signal(l, v, retval)
 	struct proc *p = l->l_proc;
 	int signum;
 	int error;
+	caddr_t sg = stackgap_init(p, 0);
 
 	if (SCARG(uap, signum) < 0 || SCARG(uap, signum) > OSF1_NSIG)
 		return EINVAL;
@@ -163,23 +204,32 @@ osf1_sys_signal(l, v, retval)
 	case OSF1_SIGNAL_MASK:
 		{
 			struct sys_sigaction_args sa_args;
-			struct sigaction nbsa, obsa;
+			struct sigaction *nbsa, *obsa, sa;
 
-			nbsa.sa_handler = SCARG(uap, handler);
-			sigemptyset(&nbsa.sa_mask);
-			nbsa.sa_flags = 0;
+			nbsa = stackgap_alloc(p, &sg, sizeof(struct sigaction));
+			obsa = stackgap_alloc(p, &sg, sizeof(struct sigaction));
+			SCARG(&sa_args, signum) = signum;
+			SCARG(&sa_args, nsa) = nbsa;
+			SCARG(&sa_args, osa) = obsa;
+
+			sa.sa_handler = SCARG(uap, handler);
+			sigemptyset(&sa.sa_mask);
+			sa.sa_flags = 0;
 #if 0
 			if (signum != SIGALRM)
-				nbsa.sa_flags = SA_RESTART;
+				sa.sa_flags = SA_RESTART;
 #endif
-			error = sigaction1(l, signum, &nbsa, &obsa, ?, ?);
-			if (error != 0) {
+			if ((error = copyout(&sa, nbsa, sizeof(sa))) != 0)
+				return error;
+			if ((error = sys_sigaction(l, &sa_args, retval)) != 0) {
 				DPRINTF(("signal: sigaction failed: %d\n",
 					 error));
 				*retval = (int)OSF1_SIG_ERR;
 				return error;
 			}
-			*retval = (int)obsa.sa_handler;
+			if ((error = copyin(obsa, &sa, sizeof(sa))) != 0)
+				return error;
+			*retval = (int)sa.sa_handler;
 			return 0;
 		}
 
@@ -204,12 +254,19 @@ osf1_sys_signal(l, v, retval)
 	case OSF1_SIGIGNORE_MASK:
 		{
 			struct sys_sigaction_args sa_args;
-			struct sigaction bsa;
+			struct sigaction *bsa, sa;
 
-			bsa.sa_handler = SIG_IGN;
-			sigemptyset(&bsa.sa_mask);
-			bsa.sa_flags = 0;
-			if ((error = sigaction1(l, &bsa, NULL, ?, ?)) != 0) {
+			bsa = stackgap_alloc(p, &sg, sizeof(struct sigaction));
+			SCARG(&sa_args, signum) = signum;
+			SCARG(&sa_args, nsa) = bsa;
+			SCARG(&sa_args, osa) = NULL;
+
+			sa.sa_handler = SIG_IGN;
+			sigemptyset(&sa.sa_mask);
+			sa.sa_flags = 0;
+			if ((error = copyout(&sa, bsa, sizeof(sa))) != 0)
+				return error;
+			if ((error = sys_sigaction(l, &sa_args, retval)) != 0) {
 				DPRINTF(("sigignore: sigaction failed\n"));
 				return error;
 			}
@@ -274,25 +331,19 @@ osf1_sys_sigprocmask(l, v, retval)
 
 	osf1_cvt_sigset_to_native(&oss, &bss);
 
-	mutex_enter(&p->p_smutex);
+	(void) splsched();	/* XXXSMP */
 
 	switch (SCARG(uap, how)) {
 	case OSF1_SIG_BLOCK:
-		*l->l_sigmask |= bss & ~sigcantmask;
+		p->p_sigmask |= bss & ~sigcantmask;
 		break;
 
 	case OSF1_SIG_UNBLOCK:
-		*l->l_sigmask &= ~bss;
-		lwp_lock(l);
-		l->l_flag |= LW_PENDSIG;
-		lwp_unlock(l);
+		p->p_sigmask &= ~bss;
 		break;
 
 	case OSF1_SIG_SETMASK:
-		*l->l_sigmask = bss & ~sigcantmask;
-		lwp_lock(l);
-		l->l_flag |= LW_PENDSIG;
-		lwp_unlock(l);
+		p->p_sigmask = bss & ~sigcantmask;
 		break;
 
 	default:
@@ -300,7 +351,7 @@ osf1_sys_sigprocmask(l, v, retval)
 		break;
 	}
 
-	mutex_exit(&p->p_smutex);
+	(void) spl0();
 
 	return error;
 }

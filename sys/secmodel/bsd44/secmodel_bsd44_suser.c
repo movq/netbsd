@@ -1,4 +1,4 @@
-/* $NetBSD: secmodel_bsd44_suser.c,v 1.37 2007/02/21 23:00:09 thorpej Exp $ */
+/* $NetBSD: secmodel_bsd44_suser.c,v 1.17.2.4 2007/02/09 22:26:07 tron Exp $ */
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
  * All rights reserved.
@@ -11,7 +11,10 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Elad Efrat.
+ * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -38,61 +41,40 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: secmodel_bsd44_suser.c,v 1.37 2007/02/21 23:00:09 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: secmodel_bsd44_suser.c,v 1.17.2.4 2007/02/09 22:26:07 tron Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/kauth.h>
 
 #include <sys/acct.h>
-#include <sys/mutex.h>
 #include <sys/ktrace.h>
 #include <sys/mount.h>
 #include <sys/socketvar.h>
 #include <sys/sysctl.h>
 #include <sys/tty.h>
 #include <net/route.h>
-#include <sys/ptrace.h>
-#include <sys/vnode.h>
 
 #include <miscfs/procfs/procfs.h>
 
 #include <secmodel/bsd44/suser.h>
 
-extern int dovfsusermount;
-
-static kauth_listener_t l_generic, l_system, l_process, l_network, l_machdep,
-    l_device;
-
 void
 secmodel_bsd44_suser_start(void)
 {
-	l_generic = kauth_listen_scope(KAUTH_SCOPE_GENERIC,
+	kauth_listen_scope(KAUTH_SCOPE_GENERIC,
 	    secmodel_bsd44_suser_generic_cb, NULL);
-	l_system = kauth_listen_scope(KAUTH_SCOPE_SYSTEM,
+	kauth_listen_scope(KAUTH_SCOPE_SYSTEM,
 	    secmodel_bsd44_suser_system_cb, NULL);
-	l_process = kauth_listen_scope(KAUTH_SCOPE_PROCESS,
+	kauth_listen_scope(KAUTH_SCOPE_PROCESS,
 	    secmodel_bsd44_suser_process_cb, NULL);
-	l_network = kauth_listen_scope(KAUTH_SCOPE_NETWORK,
+	kauth_listen_scope(KAUTH_SCOPE_NETWORK,
 	    secmodel_bsd44_suser_network_cb, NULL);
-	l_machdep = kauth_listen_scope(KAUTH_SCOPE_MACHDEP,
+	kauth_listen_scope(KAUTH_SCOPE_MACHDEP,
 	    secmodel_bsd44_suser_machdep_cb, NULL);
-	l_device = kauth_listen_scope(KAUTH_SCOPE_DEVICE,
+	kauth_listen_scope(KAUTH_SCOPE_DEVICE,
 	    secmodel_bsd44_suser_device_cb, NULL);
 }
-
-#if defined(_LKM)
-void
-secmodel_bsd44_suser_stop(void)
-{
-	kauth_unlisten_scope(l_generic);
-	kauth_unlisten_scope(l_system);
-	kauth_unlisten_scope(l_process);
-	kauth_unlisten_scope(l_network);
-	kauth_unlisten_scope(l_machdep);
-	kauth_unlisten_scope(l_device);
-}
-#endif /* _LKM */
 
 /*
  * kauth(9) listener
@@ -106,7 +88,7 @@ secmodel_bsd44_suser_generic_cb(kauth_cred_t cred, kauth_action_t action,
     void *cookie, void *arg0, void *arg1,
     void *arg2, void *arg3)
 {
-	bool isroot;
+	boolean_t isroot;
 	int result;
 
 	isroot = (kauth_cred_geteuid(cred) == 0);
@@ -146,7 +128,7 @@ secmodel_bsd44_suser_system_cb(kauth_cred_t cred, kauth_action_t action,
     void *cookie, void *arg0, void *arg1,
     void *arg2, void *arg3)
 {
-	bool isroot;
+	boolean_t isroot;
 	int result;
 	enum kauth_system_req req;
 
@@ -155,85 +137,6 @@ secmodel_bsd44_suser_system_cb(kauth_cred_t cred, kauth_action_t action,
 	req = (enum kauth_system_req)arg0;
 
 	switch (action) {
-	case KAUTH_SYSTEM_MOUNT:
-		switch (req) {
-		case KAUTH_REQ_SYSTEM_MOUNT_GET:
-			result = KAUTH_RESULT_ALLOW;
-			break;
-
-		case KAUTH_REQ_SYSTEM_MOUNT_NEW:
-			if (isroot)
-				result = KAUTH_RESULT_ALLOW;
-			else if (dovfsusermount) {
-				struct vnode *vp = arg1;
-				u_long flags = (u_long)arg2;
-
-				if (!(flags & MNT_NODEV) ||
-				    !(flags & MNT_NOSUID))
-					break;
-
-				if ((vp->v_mount->mnt_flag & MNT_NOEXEC) &&
-				    !(flags & MNT_NOEXEC))
-					break;
-
-				result = KAUTH_RESULT_ALLOW;
-			}
-
-			break;
-
-		case KAUTH_REQ_SYSTEM_MOUNT_UNMOUNT:
-			if (isroot)
-				result = KAUTH_RESULT_ALLOW;
-			else {
-				struct mount *mp = arg1;
-
-				if (mp->mnt_stat.f_owner ==
-				    kauth_cred_geteuid(cred))
-					result = KAUTH_RESULT_ALLOW;
-			}
-
-			break;
-
-		case KAUTH_REQ_SYSTEM_MOUNT_UPDATE:
-			if (isroot)
-				result = KAUTH_RESULT_ALLOW;
-			else if (dovfsusermount) {
-				struct mount *mp = arg1;
-				u_long flags = (u_long)arg2;
-
-				/* No exporting for non-root. */
-				if (flags & MNT_EXPORTED)
-					break;
-
-				if (!(flags & MNT_NODEV) ||
-				    !(flags & MNT_NOSUID))
-					break;
-
-				/*
-				 * Only super-user, or user that did the mount,
-				 * can update.
-				 */
-				if (mp->mnt_stat.f_owner !=
-				    kauth_cred_geteuid(cred))
-					break;
-
-				/* Retain 'noexec'. */
-				if ((mp->mnt_flag & MNT_NOEXEC) &&
-				    !(flags & MNT_NOEXEC))
-					break;
-
-				result = KAUTH_RESULT_ALLOW;
-			}
-
-			break;
-
-		default:
-			result = KAUTH_RESULT_DEFER;
-			break;
-		}
-
-		break;
-
 	case KAUTH_SYSTEM_TIME:
 		switch (req) {
 		case KAUTH_REQ_SYSTEM_TIME_ADJTIME:
@@ -273,41 +176,6 @@ secmodel_bsd44_suser_system_cb(kauth_cred_t cred, kauth_action_t action,
 }
 
 /*
- * common code for corename, rlimit, and stopflag.
- */
-static int
-proc_uidmatch(kauth_cred_t cred, kauth_cred_t target)
-{
-	int r = 0;
-
-	if (kauth_cred_getuid(cred) != kauth_cred_getuid(target) ||
-	    kauth_cred_getuid(cred) != kauth_cred_getsvuid(target)) {
-		/*
-		 * suid proc of ours or proc not ours
-		 */
-		r = EPERM;
-	} else if (kauth_cred_getgid(target) != kauth_cred_getsvgid(target)) {
-		/*
-		 * sgid proc has sgid back to us temporarily
-		 */
-		r = EPERM;
-	} else {
-		/*
-		 * our rgid must be in target's group list (ie,
-		 * sub-processes started by a sgid process)
-		 */
-		int ismember = 0;
-
-		if (kauth_cred_ismember_gid(cred,
-		    kauth_cred_getgid(target), &ismember) != 0 ||
-		    !ismember)
-			r = EPERM;
-	}
-
-	return (r);
-}
-
-/*
  * kauth(9) listener
  *
  * Security model: Traditional NetBSD
@@ -319,7 +187,7 @@ secmodel_bsd44_suser_process_cb(kauth_cred_t cred, kauth_action_t action,
     void *cookie, void *arg0, void *arg1, void *arg2, void *arg3)
 {
 	struct proc *p;
-	bool isroot;
+	boolean_t isroot;
 	int result;
 
 	isroot = (kauth_cred_geteuid(cred) == 0);
@@ -351,7 +219,7 @@ secmodel_bsd44_suser_process_cb(kauth_cred_t cred, kauth_action_t action,
 			break;
 		}
 
-		if ((p->p_traceflag & KTRFAC_ROOT) || (p->p_flag & PK_SUGID)) {
+		if ((p->p_traceflag & KTRFAC_ROOT) || (p->p_flag & P_SUGID)) {
 			result = KAUTH_RESULT_DENY;
 			break;
 		}
@@ -387,7 +255,7 @@ secmodel_bsd44_suser_process_cb(kauth_cred_t cred, kauth_action_t action,
 		case PFSmem:
 			if (kauth_cred_getuid(cred) !=
 			    kauth_cred_getuid(p->p_cred) ||
-			    ISSET(p->p_flag, PK_SUGID)) {
+			    ISSET(p->p_flag, P_SUGID)) {
 				result = KAUTH_RESULT_DENY;
 				break;
 			}
@@ -400,64 +268,7 @@ secmodel_bsd44_suser_process_cb(kauth_cred_t cred, kauth_action_t action,
 		break;
 		}
 
-	case KAUTH_PROCESS_CANPTRACE: {
-		switch ((u_long)arg1) {
-		case PT_ATTACH:
-		case PT_WRITE_I:
-		case PT_WRITE_D:
-		case PT_READ_I:
-		case PT_READ_D:
-		case PT_IO:
-#ifdef PT_GETREGS
-		case PT_GETREGS:
-#endif
-#ifdef PT_SETREGS
-		case PT_SETREGS:
-#endif
-#ifdef PT_GETFPREGS
-		case PT_GETFPREGS:
-#endif
-#ifdef PT_SETFPREGS
-		case PT_SETFPREGS:
-#endif
-#ifdef __HAVE_PTRACE_MACHDEP
-		PTRACE_MACHDEP_REQUEST_CASES
-#endif
-			if (isroot) {
-				result = KAUTH_RESULT_ALLOW;
-				break;
-			}
-
-			if (kauth_cred_getuid(cred) !=
-			    kauth_cred_getuid(p->p_cred) ||
-			    ISSET(p->p_flag, PK_SUGID)) {
-				result = KAUTH_RESULT_DENY;
-				break;
-			}
-
-			result = KAUTH_RESULT_ALLOW;
-			break;
-
-#ifdef PT_STEP
-		case PT_STEP:
-#endif
-		case PT_CONTINUE:
-		case PT_KILL:
-		case PT_DETACH:
-		case PT_LWPINFO:
-		case PT_SYSCALL:
-		case PT_DUMPCORE:
-			result = KAUTH_RESULT_ALLOW;
-			break;
-
-		default:
-	        	result = KAUTH_RESULT_DEFER;
-		        break;
-		}
-
-		break;
-		}
-
+	case KAUTH_PROCESS_CANPTRACE:
 	case KAUTH_PROCESS_CANSYSTRACE:
 		if (isroot) {
 			result = KAUTH_RESULT_ALLOW;
@@ -465,86 +276,40 @@ secmodel_bsd44_suser_process_cb(kauth_cred_t cred, kauth_action_t action,
 		}
 
 		if (kauth_cred_getuid(cred) != kauth_cred_getuid(p->p_cred) ||
-		    ISSET(p->p_flag, PK_SUGID)) {
+		    ISSET(p->p_flag, P_SUGID)) {
 			result = KAUTH_RESULT_DENY;
 			break;
 		}
 
 		result = KAUTH_RESULT_ALLOW;
-		break;
-
-	case KAUTH_PROCESS_CORENAME:
-		result = KAUTH_RESULT_ALLOW;
-
-		if (isroot)
-			break;
-
-		if (proc_uidmatch(cred, p->p_cred) != 0) {
-			result = KAUTH_RESULT_DENY;
-			break;
-		}
-
 		break;
 
 	case KAUTH_PROCESS_NICE:
-		if (isroot) {
+		if (isroot)
 			result = KAUTH_RESULT_ALLOW;
-			break;
-		}
-
-		if (kauth_cred_geteuid(cred) !=
-		    kauth_cred_geteuid(p->p_cred) &&
-		    kauth_cred_getuid(cred) !=
-		    kauth_cred_geteuid(p->p_cred)) {
-			result = KAUTH_RESULT_DENY;
-			break;
-		}
-
-		if ((u_long)arg1 >= p->p_nice)
-			result = KAUTH_RESULT_ALLOW;
-
+		else if ((u_long)arg1 >= p->p_nice)
+			result = KAUTH_RESULT_ALLOW; 
 		break;
 
-	case KAUTH_PROCESS_RLIMIT: {
-		struct rlimit *new_rlimit;
-		u_long which;
-
-		if (isroot) {
+	case KAUTH_PROCESS_RLIMIT:
+		if (isroot)
 			result = KAUTH_RESULT_ALLOW;
-			break;
+		else {
+			struct rlimit *new_rlimit;
+			u_long which;
+
+			new_rlimit = arg1;
+			which = (u_long)arg2;
+
+			if (new_rlimit->rlim_max <=
+			    p->p_rlimit[which].rlim_max)
+				result = KAUTH_RESULT_ALLOW;
 		}
-
-		if ((p != curlwp->l_proc) &&
-		    (proc_uidmatch(cred, p->p_cred) != 0)) {
-			result = KAUTH_RESULT_DENY;
-			break;
-		}
-
-		new_rlimit = arg1;
-		which = (u_long)arg2;
-
-		if (new_rlimit->rlim_max <=
-		    p->p_rlimit[which].rlim_max)
-			result = KAUTH_RESULT_ALLOW;
-
 		break;
-		}
 
 	case KAUTH_PROCESS_SETID:
 		if (isroot)
 			result = KAUTH_RESULT_ALLOW;
-		break;
-
-	case KAUTH_PROCESS_STOPFLAG:
-		result = KAUTH_RESULT_ALLOW;
-
-		if (isroot)
-			break;
-
-		if (proc_uidmatch(cred, p->p_cred) != 0) {
-			result = KAUTH_RESULT_DENY;
-			break;
-		}
 		break;
 
 	default:
@@ -567,7 +332,7 @@ secmodel_bsd44_suser_network_cb(kauth_cred_t cred, kauth_action_t action,
     void *cookie, void *arg0, void *arg1, void *arg2,
     void *arg3)
 {
-	bool isroot;
+	boolean_t isroot;
 	int result;
 	enum kauth_network_req req;
 
@@ -702,7 +467,7 @@ secmodel_bsd44_suser_machdep_cb(kauth_cred_t cred, kauth_action_t action,
     void *cookie, void *arg0, void *arg1, void *arg2,
     void *arg3)
 {
-        bool isroot;
+        boolean_t isroot;
         int result;
 
         isroot = (kauth_cred_geteuid(cred) == 0);
@@ -719,6 +484,10 @@ secmodel_bsd44_suser_machdep_cb(kauth_cred_t cred, kauth_action_t action,
 	case KAUTH_MACHDEP_IOPERM_SET:
 	case KAUTH_MACHDEP_IOPL:
 	case KAUTH_MACHDEP_MTRR_SET:
+		if (isroot)
+			result = KAUTH_RESULT_ALLOW;
+		break;
+
 	case KAUTH_MACHDEP_UNMANAGEDMEM:
 		if (isroot)
 			result = KAUTH_RESULT_ALLOW;
@@ -745,7 +514,7 @@ secmodel_bsd44_suser_device_cb(kauth_cred_t cred, kauth_action_t action,
     void *arg3)
 {
 	struct tty *tty;
-        bool isroot;
+        boolean_t isroot;
         int result;
 
         isroot = (kauth_cred_geteuid(cred) == 0);

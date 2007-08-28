@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_calcea.c,v 1.18 2007/03/09 16:33:27 tsutsui Exp $	*/
+/*	$NetBSD: fpu_calcea.c,v 1.17.24.1 2007/03/31 15:40:39 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fpu_calcea.c,v 1.18 2007/03/09 16:33:27 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu_calcea.c,v 1.17.24.1 2007/03/31 15:40:39 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/signal.h>

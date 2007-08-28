@@ -1,4 +1,4 @@
-/*	$NetBSD: if_wm.c,v 1.144 2007/08/28 01:10:34 msaitoh Exp $	*/
+/*	$NetBSD: if_wm.c,v 1.131.2.5 2007/09/11 08:23:57 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003, 2004 Wasabi Systems, Inc.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_wm.c,v 1.144 2007/08/28 01:10:34 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_wm.c,v 1.131.2.5 2007/09/11 08:23:57 xtraeme Exp $");
 
 #include "bpfilter.h"
 #include "rnd.h"
@@ -286,7 +286,7 @@ struct wm_softc {
 
 	struct mii_data sc_mii;		/* MII/media information */
 
-	callout_t sc_tick_ch;		/* tick callout */
+	struct callout sc_tick_ch;	/* tick callout */
 
 	bus_dmamap_t sc_cddmamap;	/* control data DMA map */
 #define	sc_cddma	sc_cddmamap->dm_segs[0].ds_addr
@@ -353,7 +353,7 @@ struct wm_softc {
 	int	sc_txfifo_head;		/* current head of FIFO */
 	uint32_t sc_txfifo_addr;	/* internal address of start of FIFO */
 	int	sc_txfifo_stall;	/* Tx FIFO is stalled */
-	callout_t sc_txfifo_ch;		/* Tx FIFO stall work-around timer */
+	struct callout sc_txfifo_ch;	/* Tx FIFO stall work-around timer */
 
 	bus_addr_t sc_rdt_reg;		/* offset of RDT register */
 
@@ -519,7 +519,7 @@ do {									\
 
 static void	wm_start(struct ifnet *);
 static void	wm_watchdog(struct ifnet *);
-static int	wm_ioctl(struct ifnet *, u_long, void *);
+static int	wm_ioctl(struct ifnet *, u_long, caddr_t);
 static int	wm_init(struct ifnet *);
 static void	wm_stop(struct ifnet *, int);
 
@@ -571,6 +571,7 @@ static void	wm_kmrn_i80003_writereg(struct wm_softc *, int, int);
 static int	wm_match(struct device *, struct cfdata *, void *);
 static void	wm_attach(struct device *, struct device *, void *);
 static int	wm_is_onboard_nvm_eeprom(struct wm_softc *);
+static void	wm_get_auto_rd_done(struct wm_softc *);
 static int	wm_get_swsm_semaphore(struct wm_softc *);
 static void	wm_put_swsm_semaphore(struct wm_softc *);
 static int	wm_poll_eerd_eewr_done(struct wm_softc *, int);
@@ -934,7 +935,7 @@ wm_attach(struct device *parent, struct device *self, void *aux)
 	pcireg_t preg, memtype;
 	uint32_t reg;
 
-	callout_init(&sc->sc_tick_ch, 0);
+	callout_init(&sc->sc_tick_ch);
 
 	wmp = wm_lookup(pa);
 	if (wmp == NULL) {
@@ -1078,7 +1079,7 @@ wm_attach(struct device *parent, struct device *self, void *aux)
 		aprint_verbose("%s: Communication Streaming Architecture\n",
 		    sc->sc_dev.dv_xname);
 		if (sc->sc_type == WM_T_82547) {
-			callout_init(&sc->sc_txfifo_ch, 0);
+			callout_init(&sc->sc_txfifo_ch);
 			callout_setfunc(&sc->sc_txfifo_ch,
 					wm_82547_txfifo_stall, sc);
 			aprint_verbose("%s: using 82547 Tx FIFO stall "
@@ -1191,7 +1192,7 @@ wm_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, &seg, rseg, cdata_size,
-				    (void **)&sc->sc_control_data, 0)) != 0) {
+				    (caddr_t *)&sc->sc_control_data, 0)) != 0) {
 		aprint_error("%s: unable to map control data, error = %d\n",
 		    sc->sc_dev.dv_xname, error);
 		goto fail_1;
@@ -1651,7 +1652,7 @@ wm_attach(struct device *parent, struct device *self, void *aux)
  fail_3:
 	bus_dmamap_destroy(sc->sc_dmat, sc->sc_cddmamap);
  fail_2:
-	bus_dmamem_unmap(sc->sc_dmat, (void *)sc->sc_control_data,
+	bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->sc_control_data,
 	    cdata_size);
  fail_1:
 	bus_dmamem_free(sc->sc_dmat, &seg, rseg);
@@ -1759,7 +1760,7 @@ wm_tx_offload(struct wm_softc *sc, struct wm_txsoft *txs, uint32_t *cmdp,
 
 	if ((m0->m_pkthdr.csum_flags & (M_CSUM_TSOv4 | M_CSUM_TSOv6)) != 0) {
 		int hlen = offset + iphl;
-		bool v4 = (m0->m_pkthdr.csum_flags & M_CSUM_TSOv4) != 0;
+		boolean_t v4 = (m0->m_pkthdr.csum_flags & M_CSUM_TSOv4) != 0;
 
 		if (__predict_false(m0->m_len <
 				    (hlen + sizeof(struct tcphdr)))) {
@@ -1807,8 +1808,8 @@ wm_tx_offload(struct wm_softc *sc, struct wm_txsoft *txs, uint32_t *cmdp,
 
 			if (v4) {
 				struct ip *ip =
-				    (void *)(mtod(m0, char *) + offset);
-				th = (void *)(mtod(m0, char *) + hlen);
+				    (void *)(mtod(m0, caddr_t) + offset);
+				th = (void *)(mtod(m0, caddr_t) + hlen);
 
 				ip->ip_len = 0;
 				th->th_sum = in_cksum_phdr(ip->ip_src.s_addr,
@@ -2352,7 +2353,7 @@ wm_watchdog(struct ifnet *ifp)
  *	Handle control requests from the operator.
  */
 static int
-wm_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+wm_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct wm_softc *sc = ifp->if_softc;
 	struct ifreq *ifr = (struct ifreq *) data;
@@ -2871,7 +2872,7 @@ wm_tick(void *arg)
 static void
 wm_reset(struct wm_softc *sc)
 {
-	int i;
+	uint32_t reg;
 
 	/*
 	 * Allocate on-chip memory according to the MTU size.
@@ -2981,12 +2982,15 @@ wm_reset(struct wm_softc *sc)
 	}
 	delay(10000);
 
+	/* reload EEPROM */
 	switch(sc->sc_type) {
 	case WM_T_82542_2_0:
 	case WM_T_82542_2_1:
 	case WM_T_82543:
 	case WM_T_82544:
 		delay(10);
+		reg = CSR_READ(sc, WMREG_CTRL_EXT) | CTRL_EXT_EE_RST;
+		CSR_WRITE(sc, WMREG_CTRL_EXT, reg);
 		delay(2000);
 		break;
 	case WM_T_82541:
@@ -2996,19 +3000,15 @@ wm_reset(struct wm_softc *sc)
 		delay(20000);
 		break;
 	case WM_T_82573:
-		delay(10);
+		if (sc->sc_flags & WM_F_EEPROM_FLASH) {
+			delay(10);
+			reg = CSR_READ(sc, WMREG_CTRL_EXT) | CTRL_EXT_EE_RST;
+			CSR_WRITE(sc, WMREG_CTRL_EXT, reg);
+		}
 		/* FALLTHROUGH */
 	default:
-		/* wait for eeprom to reload */
-		for (i = 10; i > 0; i--) {
-			if (CSR_READ(sc, WMREG_EECD) & EECD_EE_AUTORD)
-				break;
-			delay(1000);
-		}
-		if (i == 0) {
-			log(LOG_ERR, "%s: auto read from eeprom failed to "
-			    "complete\n", sc->sc_dev.dv_xname);
-		}
+		/* check EECD_EE_AUTORD */
+		wm_get_auto_rd_done(sc);
 	}
 
 #if 0
@@ -3402,6 +3402,39 @@ wm_stop(struct ifnet *ifp, int disable)
 	/* Mark the interface as down and cancel the watchdog timer. */
 	ifp->if_flags &= ~(IFF_RUNNING | IFF_OACTIVE);
 	ifp->if_timer = 0;
+}
+
+void
+wm_get_auto_rd_done(struct wm_softc *sc)
+{
+	int i;
+
+	/* wait for eeprom to reload */
+	switch (sc->sc_type) {
+	case WM_T_82571:
+	case WM_T_82572:
+	case WM_T_82573:
+	case WM_T_80003:
+	case WM_T_ICH8:
+	case WM_T_ICH9:
+		for (i = 10; i > 0; i--) {
+			if (CSR_READ(sc, WMREG_EECD) & EECD_EE_AUTORD)
+				break;
+			delay(1000);
+		}
+		if (i == 0) {
+			log(LOG_ERR, "%s: auto read from eeprom failed to "
+			    "complete\n", sc->sc_dev.dv_xname);
+		}
+		break;
+	default:
+		delay(5000);
+		break;
+	}
+
+	/* Phy configuration starts after EECD_AUTO_RD is set */
+	if (sc->sc_type == WM_T_82573)
+		delay(25000);
 }
 
 /*
@@ -3894,7 +3927,7 @@ wm_set_filter(struct wm_softc *sc)
 		size = WM_ICH8_RAL_TABSIZE;
 	else
 		size = WM_RAL_TABSIZE;
-	wm_set_ral(sc, CLLADDR(ifp->if_sadl), 0);
+	wm_set_ral(sc, LLADDR(ifp->if_sadl), 0);
 	for (i = 1; i < size; i++)
 		wm_set_ral(sc, NULL, i);
 
@@ -4799,8 +4832,7 @@ wm_put_swsm_semaphore(struct wm_softc *sc)
 }
 
 static int
-wm_get_swfw_semaphore(struct wm_softc *sc, uint16_t mask)
-{
+wm_get_swfw_semaphore(struct wm_softc *sc, uint16_t mask) {
 	uint32_t swfw_sync;
 	uint32_t swmask = mask << SWFW_SOFT_SHIFT;
 	uint32_t fwmask = mask << SWFW_FIRM_SHIFT;
@@ -4829,8 +4861,7 @@ wm_get_swfw_semaphore(struct wm_softc *sc, uint16_t mask)
 }
 
 static void
-wm_put_swfw_semaphore(struct wm_softc *sc, uint16_t mask)
-{
+wm_put_swfw_semaphore(struct wm_softc *sc, uint16_t mask) {
 	uint32_t swfw_sync;
 
 	if (sc->sc_flags & WM_F_EEPROM_SEMAPHORE) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_machdep.c,v 1.44 2007/03/04 07:54:07 christos Exp $	 */
+/*	$NetBSD: svr4_machdep.c,v 1.41 2006/06/07 22:39:39 kardel Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.44 2007/03/04 07:54:07 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.41 2006/06/07 22:39:39 kardel Exp $");
 
 #ifndef _LKM
 #include "opt_ddb.h"
@@ -56,6 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.44 2007/03/04 07:54:07 christos E
 #include <sys/signalvar.h>
 #include <sys/malloc.h>
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/exec_elf.h>
 #include <sys/types.h>
@@ -75,7 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_machdep.c,v 1.44 2007/03/04 07:54:07 christos E
 #include <machine/vmparam.h>
 #include <machine/svr4_machdep.h>
 
-static void svr4_getsiginfo(union svr4_siginfo *, int, u_long, void *);
+static void svr4_getsiginfo(union svr4_siginfo *, int, u_long, caddr_t);
 
 void
 svr4_setregs(struct lwp *l, struct exec_package *epp, u_long stack)
@@ -152,7 +153,6 @@ svr4_getmcontext(struct lwp *l, struct svr4_mcontext *mc, u_long *flags)
 		Debugger();
 #endif
 #endif
-		mutex_enter(&l->l_proc->p_smutex);
 		sigexit(l, SIGILL);
 	}
 
@@ -255,7 +255,6 @@ svr4_setmcontext(struct lwp *l, struct svr4_mcontext *mc, u_long flags)
 		Debugger();
 #endif
 #endif
-		mutex_enter(&l->l_proc->p_smutex);
 		sigexit(l, SIGILL);
 	}
 
@@ -351,7 +350,7 @@ svr4_setmcontext(struct lwp *l, struct svr4_mcontext *mc, u_long flags)
  * map the trap code into the svr4 siginfo as best we can
  */
 static void
-svr4_getsiginfo(union svr4_siginfo *si, int sig, u_long code, void *addr)
+svr4_getsiginfo(union svr4_siginfo *si, int sig, u_long code, caddr_t addr)
 {
 	si->si_signo = native_to_svr4_signo[sig];
 	si->si_errno = 0;
@@ -495,7 +494,7 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct proc *p = l->l_proc;
 	register struct trapframe64 *tf;
 	struct svr4_sigframe *fp, frame;
-	int onstack, error;
+	int onstack;
 	vaddr_t oldsp, newsp, addr;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
 
@@ -504,15 +503,15 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* Do we need to jump onto the signal stack? */
 	onstack =
-	    (l->l_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
+	    (p->p_sigctx.ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
 	    (SIGACTION(p, sig).sa_flags & SA_ONSTACK) != 0;
 
 	/*
 	 * Allocate space for the signal handler context.
 	 */
 	if (onstack)
-		fp = (struct svr4_sigframe *)((char *)l->l_sigstk.ss_sp +
-						l->l_sigstk.ss_size);
+		fp = (struct svr4_sigframe *)((caddr_t)p->p_sigctx.ps_sigstk.ss_sp +
+						p->p_sigctx.ps_sigstk.ss_size);
 	else
 		fp = (struct svr4_sigframe *)oldsp;
 	fp = (struct svr4_sigframe *) ((long) (fp - 1) & ~0x0f);
@@ -530,8 +529,9 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	/*
 	 * Build the argument list for the signal handler.
 	 */
+	svr4_getcontext(l, &frame.sf_uc);
 	svr4_getsiginfo(&frame.sf_si, sig, ksi->ksi_trap,
-	    (void *)(u_long)tf->tf_pc);
+	    (caddr_t)(u_long)tf->tf_pc);
 
 	/* Build stack frame for signal trampoline. */
 	frame.sf_signum = frame.sf_si.si_signo;
@@ -545,9 +545,6 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	/*
 	 * Modify the signal context to be used by sigreturn.
 	 */
-	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
-	svr4_getcontext(l, &frame.sf_uc);
 	frame.sf_uc.uc_mcontext.greg[SVR4_SPARC_SP] = (long)tf->tf_out[6];
 
 	newsp = (u_long)fp - sizeof(struct rwindow);
@@ -558,24 +555,19 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	    printf("svr4_sendsig: saving sf to %p, setting stack pointer %p to %p\n",
 		   fp, &(((struct rwindow *)newsp)->rw_in[6]), (void *)(u_long)oldsp);
 #endif
-	error = (rwindow_save(l) || copyout(&frame, fp, sizeof(frame)) != 0 ||
-	    CPOUTREG(&((struct rwindow *)newsp)->rw_in[6], oldsp));
-	mutex_enter(&p->p_smutex);
-
-	if (error) {
+	if (rwindow_save(l) || copyout(&frame, fp, sizeof(frame)) != 0 ||
+	    CPOUTREG(&((struct rwindow *)newsp)->rw_in[6], oldsp)) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
 		 */
 #ifdef DEBUG
-		mutex_exit(&p->p_smutex);
 		if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid)
 			printf("svr4_sendsig: window save or copyout error\n");
 		printf("svr4_sendsig: stack was trashed trying to send sig %d, sending SIGILL\n", sig);
 #ifdef DDB
 		Debugger();
 #endif
-		mutex_enter(&p->p_smutex);
 #endif
 		sigexit(l, SIGILL);
 		/* NOTREACHED */
@@ -598,16 +590,14 @@ svr4_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 #ifdef DEBUG
 	if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid) {
-		mutex_exit(&p->p_smutex);
 		printf("svr4_sendsig: about to return to catcher %p thru %p\n", 
 		       catcher, (void *)(u_long)addr);
 #ifdef DDB
 		if (sigdebug & SDB_DDB) Debugger();
 #endif
-		mutex_enter(&p->p_smutex);
 	}
 #endif
 }

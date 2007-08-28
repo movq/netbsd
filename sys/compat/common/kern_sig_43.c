@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sig_43.c,v 1.26 2007/02/09 21:55:16 ad Exp $	*/
+/*	$NetBSD: kern_sig_43.c,v 1.25 2006/11/16 01:32:41 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sig_43.c,v 1.26 2007/02/09 21:55:16 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sig_43.c,v 1.25 2006/11/16 01:32:41 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -64,6 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_sig_43.c,v 1.26 2007/02/09 21:55:16 ad Exp $");
 #include <sys/kauth.h>
 
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <machine/cpu.h>
@@ -157,9 +158,7 @@ compat_43_sys_sigblock(struct lwp *l, void *v, register_t *retval)
 
 	nsm = SCARG(uap, mask);
 	compat_43_sigmask_to_sigset(&nsm, &nss);
-	mutex_enter(&p->p_smutex);
-	error = sigprocmask1(l, SIG_BLOCK, &nss, &oss);
-	mutex_exit(&p->p_smutex);
+	error = sigprocmask1(p, SIG_BLOCK, &nss, &oss);
 	if (error)
 		return (error);
 	compat_43_sigset_to_sigmask(&oss, &osm);
@@ -180,9 +179,7 @@ compat_43_sys_sigsetmask(struct lwp *l, void *v, register_t *retval)
 
 	nsm = SCARG(uap, mask);
 	compat_43_sigmask_to_sigset(&nsm, &nss);
-	mutex_enter(&p->p_smutex);
-	error = sigprocmask1(l, SIG_SETMASK, &nss, &oss);
-	mutex_exit(&p->p_smutex);
+	error = sigprocmask1(p, SIG_SETMASK, &nss, &oss);
 	if (error)
 		return (error);
 	compat_43_sigset_to_sigmask(&oss, &osm);
@@ -198,6 +195,7 @@ compat_43_sys_sigstack(struct lwp *l, void *v, register_t *retval)
 		syscallarg(struct sigstack *) nss;
 		syscallarg(struct sigstack *) oss;
 	} */ *uap = v;
+	struct proc *p = l->l_proc;
 	struct sigstack nss, oss;
 	struct sigaltstack nsa, osa;
 	int error;
@@ -208,7 +206,7 @@ compat_43_sys_sigstack(struct lwp *l, void *v, register_t *retval)
 			return (error);
 		compat_43_sigstack_to_sigaltstack(&nss, &nsa);
 	}
-	error = sigaltstack1(l,
+	error = sigaltstack1(p,
 	    SCARG(uap, nss) ? &nsa : 0, SCARG(uap, oss) ? &osa : 0);
 	if (error)
 		return (error);
@@ -233,6 +231,7 @@ compat_43_sys_sigvec(struct lwp *l, void *v, register_t *retval)
 		syscallarg(const struct sigvec *) nsv;
 		syscallarg(struct sigvec *) osv;
 	} */ *uap = v;
+	struct proc *p = l->l_proc;
 	struct sigvec nsv, osv;
 	struct sigaction nsa, osa;
 	int error;
@@ -243,7 +242,7 @@ compat_43_sys_sigvec(struct lwp *l, void *v, register_t *retval)
 			return (error);
 		compat_43_sigvec_to_sigaction(&nsv, &nsa);
 	}
-	error = sigaction1(l, SCARG(uap, signum),
+	error = sigaction1(p, SCARG(uap, signum),
 	    SCARG(uap, nsv) ? &nsa : 0, SCARG(uap, osv) ? &osa : 0,
 	    NULL, 0);
 	if (error)

@@ -1,4 +1,4 @@
-/*	$NetBSD: ptyfs_vnops.c,v 1.23 2007/07/09 21:10:48 ad Exp $	*/
+/*	$NetBSD: ptyfs_vnops.c,v 1.18.2.1 2007/02/17 23:27:45 tron Exp $	*/
 
 /*
  * Copyright (c) 1993, 1995
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ptyfs_vnops.c,v 1.23 2007/07/09 21:10:48 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ptyfs_vnops.c,v 1.18.2.1 2007/02/17 23:27:45 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -156,6 +156,8 @@ static int ptyfs_chown(struct vnode *, uid_t, gid_t, kauth_cred_t,
     struct lwp *);
 static int ptyfs_chmod(struct vnode *, mode_t, kauth_cred_t, struct lwp *);
 static int atoi(const char *, size_t);
+
+extern const struct cdevsw pts_cdevsw, ptc_cdevsw;
 
 /*
  * ptyfs vnode operations.
@@ -379,18 +381,21 @@ ptyfs_setattr(void *v)
 			return EROFS;
 		if (kauth_cred_geteuid(cred) != ptyfs->ptyfs_uid &&
 		    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-		    NULL)) != 0)
+		    &l->l_acflag)) != 0)
 			return error;
-		/* Immutable and append-only flags are not supported on ptyfs. */
-		if (vap->va_flags & (IMMUTABLE | APPEND))
-			return EINVAL;
 		if (kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL) == 0) {
+			if ((ptyfs->ptyfs_flags & (SF_IMMUTABLE | SF_APPEND)) &&
+			    securelevel > 0)
+				return EPERM;
 			/* Snapshot flag cannot be set or cleared */
 			if ((vap->va_flags & SF_SNAPSHOT) !=
 			    (ptyfs->ptyfs_flags & SF_SNAPSHOT))
 				return EPERM;
 			ptyfs->ptyfs_flags = vap->va_flags;
 		} else {
+			if ((ptyfs->ptyfs_flags & (SF_IMMUTABLE | SF_APPEND)) ||
+			    (vap->va_flags & UF_SETTABLE) != vap->va_flags)
+				return EPERM;
 			if ((ptyfs->ptyfs_flags & SF_SETTABLE) !=
 			    (vap->va_flags & SF_SETTABLE))
 				return EPERM;
@@ -398,8 +403,11 @@ ptyfs_setattr(void *v)
 			ptyfs->ptyfs_flags |= (vap->va_flags & UF_SETTABLE);
 		}
 		ptyfs->ptyfs_flag |= PTYFS_CHANGE;
+		if (vap->va_flags & (IMMUTABLE | APPEND))
+			return 0;
 	}
-
+	if (ptyfs->ptyfs_flags & (IMMUTABLE | APPEND))
+		return EPERM;
 	/*
 	 * Go through the fields and update iff not VNOVAL.
 	 */
@@ -421,7 +429,7 @@ ptyfs_setattr(void *v)
 			return EPERM;
 		if (kauth_cred_geteuid(cred) != ptyfs->ptyfs_uid &&
 		    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-		    NULL)) &&
+		    &l->l_acflag)) &&
 		    ((vap->va_vaflags & VA_UTIMES_NULL) == 0 ||
 		    (error = VOP_ACCESS(vp, VWRITE, cred, l)) != 0))
 			return (error);
@@ -466,7 +474,7 @@ ptyfs_chmod(struct vnode *vp, mode_t mode, kauth_cred_t cred, struct lwp *l)
 
 	if (kauth_cred_geteuid(cred) != ptyfs->ptyfs_uid &&
 	    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-	    NULL)) != 0)
+	    &l->l_acflag)) != 0)
 		return error;
 	ptyfs->ptyfs_mode &= ~ALLPERMS;
 	ptyfs->ptyfs_mode |= (mode & ALLPERMS);
@@ -499,7 +507,7 @@ ptyfs_chown(struct vnode *vp, uid_t uid, gid_t gid, kauth_cred_t cred,
 	    !(kauth_cred_getegid(cred) == gid ||
 	    (kauth_cred_ismember_gid(cred, gid, &ismember) == 0 && ismember)))) &&
 	    ((error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-	    NULL)) != 0))
+	    &l->l_acflag)) != 0))
 		return error;
 
 	ptyfs->ptyfs_gid = gid;
@@ -792,9 +800,15 @@ ptyfs_read(void *v)
 
 	switch (ptyfs->ptyfs_type) {
 	case PTYFSpts:
+		VOP_UNLOCK(vp, 0);
+		error = (*pts_cdevsw.d_read)(vp->v_rdev, ap->a_uio,
+		    ap->a_ioflag);
+		vn_lock(vp, LK_RETRY|LK_EXCLUSIVE);
+		return error;
 	case PTYFSptc:
 		VOP_UNLOCK(vp, 0);
-		error = cdev_read(vp->v_rdev, ap->a_uio, ap->a_ioflag);
+		error = (*ptc_cdevsw.d_read)(vp->v_rdev, ap->a_uio,
+		    ap->a_ioflag);
 		vn_lock(vp, LK_RETRY|LK_EXCLUSIVE);
 		return error;
 	default:
@@ -822,9 +836,15 @@ ptyfs_write(void *v)
 
 	switch (ptyfs->ptyfs_type) {
 	case PTYFSpts:
+		VOP_UNLOCK(vp, 0);
+		error = (*pts_cdevsw.d_write)(vp->v_rdev, ap->a_uio,
+		    ap->a_ioflag);
+		vn_lock(vp, LK_RETRY|LK_EXCLUSIVE);
+		return error;
 	case PTYFSptc:
 		VOP_UNLOCK(vp, 0);
-		error = cdev_write(vp->v_rdev, ap->a_uio, ap->a_ioflag);
+		error = (*ptc_cdevsw.d_write)(vp->v_rdev, ap->a_uio,
+		    ap->a_ioflag);
 		vn_lock(vp, LK_RETRY|LK_EXCLUSIVE);
 		return error;
 	default:
@@ -848,8 +868,10 @@ ptyfs_ioctl(void *v)
 
 	switch (ptyfs->ptyfs_type) {
 	case PTYFSpts:
+		return (*pts_cdevsw.d_ioctl)(vp->v_rdev, ap->a_command,
+		    ap->a_data, ap->a_fflag, ap->a_l);
 	case PTYFSptc:
-		return cdev_ioctl(vp->v_rdev, ap->a_command,
+		return (*ptc_cdevsw.d_ioctl)(vp->v_rdev, ap->a_command,
 		    ap->a_data, ap->a_fflag, ap->a_l);
 	default:
 		return EOPNOTSUPP;
@@ -869,8 +891,9 @@ ptyfs_poll(void *v)
 
 	switch (ptyfs->ptyfs_type) {
 	case PTYFSpts:
+		return (*pts_cdevsw.d_poll)(vp->v_rdev, ap->a_events, ap->a_l);
 	case PTYFSptc:
-		return cdev_poll(vp->v_rdev, ap->a_events, ap->a_l);
+		return (*ptc_cdevsw.d_poll)(vp->v_rdev, ap->a_events, ap->a_l);
 	default:
 		return genfs_poll(v);
 	}
@@ -888,8 +911,9 @@ ptyfs_kqfilter(void *v)
 
 	switch (ptyfs->ptyfs_type) {
 	case PTYFSpts:
+		return (*pts_cdevsw.d_kqfilter)(vp->v_rdev, ap->a_kn);
 	case PTYFSptc:
-		return cdev_kqfilter(vp->v_rdev, ap->a_kn);
+		return (*ptc_cdevsw.d_kqfilter)(vp->v_rdev, ap->a_kn);
 	default:
 		return genfs_kqfilter(v);
 	}
@@ -917,7 +941,7 @@ ptyfs_itimes(struct ptyfsnode *ptyfs, const struct timespec *acc,
 	KASSERT(ptyfs->ptyfs_flag & (PTYFS_ACCESS|PTYFS_CHANGE|PTYFS_MODIFY));
 
 	getnanotime(&now);
-	if (ptyfs->ptyfs_flag & PTYFS_ACCESS) {
+	if (ptyfs->ptyfs_flag & (PTYFS_ACCESS|PTYFS_MODIFY)) {
 		if (acc == NULL)
 			acc = &now;
 		ptyfs->ptyfs_atime = *acc;

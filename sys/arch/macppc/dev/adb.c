@@ -1,4 +1,4 @@
-/*	$NetBSD: adb.c,v 1.22 2007/02/15 01:46:32 macallan Exp $	*/
+/*	$NetBSD: adb.c,v 1.20 2006/09/13 03:37:20 gdamore Exp $	*/
 
 /*-
  * Copyright (C) 1994	Bradley A. Grantham
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.22 2007/02/15 01:46:32 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.20 2006/09/13 03:37:20 gdamore Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -42,7 +42,6 @@ __KERNEL_RCSID(0, "$NetBSD: adb.c,v 1.22 2007/02/15 01:46:32 macallan Exp $");
 #include <sys/signalvar.h>
 #include <sys/systm.h>
 
-#include <machine/bus.h>
 #include <machine/autoconf.h>
 
 #include <macppc/dev/adbvar.h>
@@ -114,7 +113,7 @@ adbattach(parent, self, aux)
 	ADBDataBlock adbdata;
 	struct adb_attach_args aa_args;
 	int totaladbs;
-	int adbindex, adbaddr, adb_node;
+	int adbindex, adbaddr;
 
 	extern volatile u_char *Via1Base;
 
@@ -135,38 +134,17 @@ adbattach(parent, self, aux)
 	printf(" irq %d: ", irq);
 
 	adb_polling = 1;
-	adb_node = getnodebyname(ca->ca_node, "adb");
-	if (adb_node)
-		ADBReInit();
+	ADBReInit();
 
 	switch (adbHardware) {
 	case ADB_HW_CUDA:
-		intr_establish(irq, IST_LEVEL, IPL_TTY, adb_intr_cuda, sc);
+		intr_establish(irq, IST_LEVEL, IPL_HIGH, adb_intr_cuda, sc);
 		break;
 	case ADB_HW_PMU:
-		intr_establish(irq, IST_LEVEL, IPL_TTY, pm_intr, sc);
+		intr_establish(irq, IST_LEVEL, IPL_HIGH, pm_intr, sc);
 		pm_init();
 		break;
 	}
-
-	adb_todr_init();
-
-#if NAPM > 0
-	/* Magic for signalling the apm driver to match. */
-	aa_args.origaddr = ADBADDR_APM;
-	aa_args.adbaddr = ADBADDR_APM;
-	aa_args.handler_id = ADBADDR_APM;
-
-	(void)config_found(self, &aa_args, NULL);
-#endif
-
-	/* 
-	 * see if we're supposed to have an ADB bus
-	 * since some PowerBooks don't have one and their PMUs barf on ADB
-	 * commands we bail here if there's no adb node
-	 */
-	if (!adb_node)
-		return;
 
 #ifdef ADB_DEBUG
 	if (adb_debug)
@@ -196,10 +174,20 @@ adbattach(parent, self, aux)
 		(void)config_found(self, &aa_args, adbprint);
 	}
 
+#if NAPM > 0
+	/* Magic for signalling the apm driver to match. */
+	aa_args.origaddr = ADBADDR_APM;
+	aa_args.adbaddr = ADBADDR_APM;
+	aa_args.handler_id = ADBADDR_APM;
+
+	(void)config_found(self, &aa_args, NULL);
+#endif
+
 	if (adbHardware == ADB_HW_CUDA)
 		adb_cuda_autopoll();
 	adb_polling = 0;
 
+	adb_todr_init();
 }
 
 int

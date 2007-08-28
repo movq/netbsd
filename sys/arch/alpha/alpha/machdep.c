@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.299 2007/07/08 10:19:21 pooka Exp $ */
+/* $NetBSD: machdep.c,v 1.290.2.1 2007/01/06 13:18:16 bouyer Exp $ */
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -75,19 +75,23 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.299 2007/07/08 10:19:21 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.290.2.1 2007/01/06 13:18:16 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/kernel.h>
-#include <sys/cpu.h>
 #include <sys/proc.h>
 #include <sys/ras.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/sched.h>
+#include <sys/buf.h>
 #include <sys/reboot.h>
 #include <sys/device.h>
+#include <sys/file.h>
 #include <sys/malloc.h>
+#include <sys/mbuf.h>
 #include <sys/mman.h>
 #include <sys/msgbuf.h>
 #include <sys/ioctl.h>
@@ -105,6 +109,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.299 2007/07/08 10:19:21 pooka Exp $");
 #include <machine/fpu.h>
 
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <uvm/uvm_extern.h>
@@ -144,7 +149,7 @@ struct vm_map *exec_map = NULL;
 struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
-void *msgbufaddr;
+caddr_t msgbufaddr;
 
 int	maxmem;			/* max memory per process */
 
@@ -442,7 +447,7 @@ nobootinfo:
 	 * its best to detect things things that have never been seen
 	 * before...
 	 */
-	mddtp = (struct mddt *)(((char *)hwrpb) + hwrpb->rpb_memdat_off);
+	mddtp = (struct mddt *)(((caddr_t)hwrpb) + hwrpb->rpb_memdat_off);
 
 	/* MDDT SANITY CHECKING */
 	mddtweird = 0;
@@ -618,7 +623,7 @@ nobootinfo:
 
 		vps->end -= atop(sz);
 		vps->avail_end -= atop(sz);
-		msgbufaddr = (void *) ALPHA_PHYS_TO_K0SEG(ptoa(vps->end));
+		msgbufaddr = (caddr_t) ALPHA_PHYS_TO_K0SEG(ptoa(vps->end));
 		initmsgbuf(msgbufaddr, sz);
 
 		/* Remove the last segment if it now has no pages. */
@@ -667,6 +672,14 @@ nobootinfo:
 	lwp0.l_md.md_tf =
 	    (struct trapframe *)proc0paddr->u_pcb.pcb_hw.apcb_ksp;
 	simple_lock_init(&proc0paddr->u_pcb.pcb_fpcpu_slock);
+
+	/*
+	 * Initialize the primary CPU's idle PCB to proc0's.  In a
+	 * MULTIPROCESSOR configuration, each CPU will later get
+	 * its own idle PCB when autoconfiguration runs.
+	 */
+	ci->ci_idle_pcb = &proc0paddr->u_pcb;
+	ci->ci_idle_pcb_paddr = (u_long)lwp0.l_md.md_pcbpaddr;
 
 	/* Indicate that proc0 has a CPU. */
 	lwp0.l_cpu = ci;
@@ -780,14 +793,17 @@ nobootinfo:
 #endif
 	}
 
-#ifdef DIAGNOSTIC
 	/*
-	 * Check our clock frequency, from RPB fields.
+	 * Figure out our clock frequency, from RPB fields.
 	 */
-	if ((hwrpb->rpb_intr_freq >> 12) != 1024)
+	hz = hwrpb->rpb_intr_freq >> 12;
+	if (!(60 <= hz && hz <= 10240)) {
+		hz = 1024;
+#ifdef DIAGNOSTIC
 		printf("WARNING: unbelievable rpb_intr_freq: %ld (%d hz)\n",
 			hwrpb->rpb_intr_freq, hz);
 #endif
+	}
 }
 
 void
@@ -843,13 +859,13 @@ cpu_startup()
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
+				   16 * NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, 0, false, NULL);
+				   VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * No need to allocate an mbuf cluster submap.  Mbuf clusters
@@ -893,8 +909,8 @@ alpha_dsr_sysname()
 	if (hwrpb->rpb_version < HWRPB_DSRDB_MINVERS)
 		return (NULL);
 
-	dsr = (struct dsrdb *)(((char *)hwrpb) + hwrpb->rpb_dsrdb_off);
-	sysname = (const char *)((char *)dsr + (dsr->dsr_sysname_off +
+	dsr = (struct dsrdb *)(((caddr_t)hwrpb) + hwrpb->rpb_dsrdb_off);
+	sysname = (const char *)((caddr_t)dsr + (dsr->dsr_sysname_off +
 	    sizeof(u_int64_t)));
 	return (sysname);
 }
@@ -1103,7 +1119,7 @@ cpu_dump_mempagecnt()
 int
 cpu_dump()
 {
-	int (*dump) __P((dev_t, daddr_t, void *, size_t));
+	int (*dump) __P((dev_t, daddr_t, caddr_t, size_t));
 	char buf[dbtob(1)];
 	kcore_seg_t *segp;
 	cpu_kcore_hdr_t *cpuhdrp;
@@ -1143,7 +1159,7 @@ cpu_dump()
 		memsegp[i].size = mem_clusters[i].size & ~PAGE_MASK;
 	}
 
-	return (dump(dumpdev, dumplo, (void *)buf, dbtob(1)));
+	return (dump(dumpdev, dumplo, (caddr_t)buf, dbtob(1)));
 }
 
 /*
@@ -1206,7 +1222,7 @@ dumpsys()
 	u_long maddr;
 	int psize;
 	daddr_t blkno;
-	int (*dump) __P((dev_t, daddr_t, void *, size_t));
+	int (*dump) __P((dev_t, daddr_t, caddr_t, size_t));
 	int error;
 
 	/* Save registers. */
@@ -1265,7 +1281,7 @@ dumpsys()
 				n =  BYTES_PER_DUMP;
 	
 			error = (*dump)(dumpdev, blkno,
-			    (void *)ALPHA_PHYS_TO_K0SEG(maddr), n);
+			    (caddr_t)ALPHA_PHYS_TO_K0SEG(maddr), n);
 			if (error)
 				goto err;
 			maddr += n;
@@ -1419,16 +1435,19 @@ regdump(framep)
 void *
 getframe(const struct lwp *l, int sig, int *onstack)
 {
-	void *frame;
+	void * frame;
+	struct proc *p;
+
+	p = l->l_proc;
 
 	/* Do we need to jump onto the signal stack? */
 	*onstack =
-	    (l->l_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
-	    (SIGACTION(l->l_proc, sig).sa_flags & SA_ONSTACK) != 0;
+	    (p->p_sigctx.ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
+	    (SIGACTION(p, sig).sa_flags & SA_ONSTACK) != 0;
 
 	if (*onstack)
-		frame = (void *)((char *)l->l_sigstk.ss_sp +
-					l->l_sigstk.ss_size);
+		frame = (void *)((caddr_t)p->p_sigctx.ps_sigstk.ss_sp +
+					p->p_sigctx.ps_sigstk.ss_size);
 	else
 		frame = (void *)(alpha_pal_rdusp());
 	return (frame);
@@ -1455,7 +1474,7 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
 	struct sigacts *ps = p->p_sigacts;
-	int onstack, sig = ksi->ksi_signo, error;
+	int onstack, sig = ksi->ksi_signo;
 	struct sigframe_siginfo *fp, frame;
 	struct trapframe *tf;
 	sig_t catcher = SIGACTION(p, ksi->ksi_signo).sa_handler;
@@ -1489,15 +1508,11 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	frame.sf_si._info = ksi->ksi_info;
 	frame.sf_uc.uc_flags = _UC_SIGMASK;
 	frame.sf_uc.uc_sigmask = *mask;
-	frame.sf_uc.uc_link = l->l_ctxlink;
+	frame.sf_uc.uc_link = NULL;
 	memset(&frame.sf_uc.uc_stack, 0, sizeof(frame.sf_uc.uc_stack));
-	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
 	cpu_getmcontext(l, &frame.sf_uc.uc_mcontext, &frame.sf_uc.uc_flags);
-	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
 
-	if (error != 0) {
+	if (copyout(&frame, fp, sizeof(frame)) != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
@@ -1532,7 +1547,7 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 
 #ifdef DEBUG
 	if (sigdebug & SDB_FOLLOW)
@@ -1563,6 +1578,24 @@ sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 #ifdef COMPAT_16
 	}
 #endif
+}
+
+void 
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted, void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+       	struct trapframe *tf;
+
+	tf = l->l_md.md_tf;
+
+	tf->tf_regs[FRAME_PC] = (u_int64_t)upcall;
+	tf->tf_regs[FRAME_RA] = 0;
+	tf->tf_regs[FRAME_A0] = type;
+	tf->tf_regs[FRAME_A1] = (u_int64_t)sas;
+	tf->tf_regs[FRAME_A2] = nevents;
+	tf->tf_regs[FRAME_A3] = ninterrupted;
+	tf->tf_regs[FRAME_A4] = (u_int64_t)ap;
+	tf->tf_regs[FRAME_T12] = (u_int64_t)upcall;  /* t12 is pv */
+	alpha_pal_wrusp((unsigned long)sp);
 }
 
 /*
@@ -1927,7 +1960,7 @@ cpu_getmcontext(l, mcp, flags)
 	gr[_REG_PS] = frame->tf_regs[FRAME_PS];
 
 	if ((ras_pc = (__greg_t)ras_lookup(l->l_proc,
-	    (void *) gr[_REG_PC])) != -1)
+	    (caddr_t) gr[_REG_PC])) != -1)
 		gr[_REG_PC] = ras_pc;
 
 	*flags |= _UC_CPU | _UC_UNIQUE;
@@ -1985,26 +2018,4 @@ cpu_setmcontext(l, mcp, flags)
 	}
 
 	return (0);
-}
-
-/*
- * Preempt the current process if in interrupt from user mode,
- * or after the current trap/syscall if in system mode.
- */
-void
-cpu_need_resched(struct cpu_info *ci, int flags)
-{
-#if defined(MULTIPROCESSOR)
-	bool immed = (flags & RESCHED_IMMED) != 0;
-#endif /* defined(MULTIPROCESSOR) */
-
-	ci->ci_want_resched = 1;
-	if (ci->ci_curlwp != ci->ci_data.cpu_idlelwp) {
-		aston(ci->ci_curlwp);
-#if defined(MULTIPROCESSOR)
-		if (immed && ci != curcpu()) {
-			alpha_send_ipi(ci->ci_cpuid, 0);
-		}
-#endif /* defined(MULTIPROCESSOR) */
-	}
 }

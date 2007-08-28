@@ -1,4 +1,4 @@
-/*	$NetBSD: freebsd_ioctl.c,v 1.13 2007/05/29 21:32:27 christos Exp $	*/
+/*	$NetBSD: freebsd_ioctl.c,v 1.10 2005/12/11 12:20:02 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Frank van der Linden
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: freebsd_ioctl.c,v 1.13 2007/05/29 21:32:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: freebsd_ioctl.c,v 1.10 2005/12/11 12:20:02 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,11 +40,10 @@ __KERNEL_RCSID(0, "$NetBSD: freebsd_ioctl.c,v 1.13 2007/05/29 21:32:27 christos 
 #include <sys/mount.h>
 #include <sys/sockio.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <net/if.h>
-
-#include <compat/sys/sockio.h>
 
 #include <compat/freebsd/freebsd_syscallargs.h>
 #include <compat/common/compat_util.h>
@@ -122,7 +121,7 @@ freebsd_sys_ioctl(l, v, retval)
 	struct freebsd_sys_ioctl_args /* {
 		syscallarg(int) fd;
 		syscallarg(u_long) com;
-		syscallarg(void *) data;
+		syscallarg(caddr_t) data;
 	} */ *uap = v;
         struct oss_sys_ioctl_args ap;
 	struct sys_ioctl_args nap;

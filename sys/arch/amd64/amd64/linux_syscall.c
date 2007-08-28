@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_syscall.c,v 1.14 2007/04/26 12:54:17 njoly Exp $ */
+/*	$NetBSD: linux_syscall.c,v 1.9 2006/07/19 21:11:39 ad Exp $ */
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.14 2007/04/26 12:54:17 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.9 2006/07/19 21:11:39 ad Exp $");
 
 #include "opt_compat_linux.h"
 
@@ -46,6 +46,8 @@ __KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.14 2007/04/26 12:54:17 njoly Exp
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/signal.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall.h>
 
 #include <uvm/uvm_extern.h>
@@ -62,6 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.14 2007/04/26 12:54:17 njoly Exp
 #include <compat/linux/arch/amd64/linux_siginfo.h>
 #include <compat/linux/arch/amd64/linux_syscall.h>
 #include <compat/linux/arch/amd64/linux_machdep.h>
+#include <compat/linux/common/linux_errno.h>
 
 void linux_syscall_intern(struct proc *);
 static void linux_syscall_plain(struct trapframe *);
@@ -85,7 +88,7 @@ linux_syscall_intern(struct proc *p)
 static void
 linux_syscall_plain(struct trapframe *frame)
 {
-	void *params;
+	caddr_t params;
 	const struct sysent *callp;
 	struct proc *p;
 	struct lwp *l;
@@ -127,8 +130,8 @@ linux_syscall_plain(struct trapframe *frame)
 		}
 		if (argsize > 6) {
 			argsize -= 6;
-			params = (char *)frame->tf_rsp + sizeof(register_t);
-			error = copyin(params, (void *)&args[6],
+			params = (caddr_t)frame->tf_rsp + sizeof(register_t);
+			error = copyin(params, (caddr_t)&args[6],
 					argsize << 3);
 			if (error != 0)
 				goto bad;
@@ -137,9 +140,9 @@ linux_syscall_plain(struct trapframe *frame)
 
 	rval[0] = 0;
 	rval[1] = 0;
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 	error = (*callp->sy_call)(l, argp, rval);
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 
 	switch (error) {
 	case 0:
@@ -159,8 +162,7 @@ linux_syscall_plain(struct trapframe *frame)
 		break;
 	default:
 	bad:
-		error = native_to_linux_errno[error];
-		frame->tf_rax = error;
+		frame->tf_rax = native_to_linux_errno[error];
 		frame->tf_rflags |= PSL_C;	/* carry bit */
 		break;
 	}
@@ -171,7 +173,7 @@ linux_syscall_plain(struct trapframe *frame)
 static void
 linux_syscall_fancy(struct trapframe *frame)
 {
-	void *params;
+	caddr_t params;
 	const struct sysent *callp;
 	struct proc *p;
 	struct lwp *l;
@@ -213,15 +215,15 @@ linux_syscall_fancy(struct trapframe *frame)
 		}
 		if (argsize > 6) {
 			argsize -= 6;
-			params = (char *)frame->tf_rsp + sizeof(register_t);
-			error = copyin(params, (void *)&args[6],
+			params = (caddr_t)frame->tf_rsp + sizeof(register_t);
+			error = copyin(params, (caddr_t)&args[6],
 					argsize << 3);
 			if (error != 0)
 				goto bad;
 		}
 	}
 
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 	if ((error = trace_enter(l, code, code, NULL, argp)) != 0)
 		goto out;
 
@@ -229,7 +231,7 @@ linux_syscall_fancy(struct trapframe *frame)
 	rval[1] = 0;
 	error = (*callp->sy_call)(l, argp, rval);
 out:
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 	switch (error) {
 	case 0:
 		frame->tf_rax = rval[0];
@@ -248,8 +250,7 @@ out:
 		break;
 	default:
 	bad:
-		error = native_to_linux_errno[error];
-		frame->tf_rax = error;
+		frame->tf_rax = native_to_linux_errno[error];
 		frame->tf_rflags |= PSL_C;	/* carry bit */
 		break;
 	}

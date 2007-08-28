@@ -1,7 +1,7 @@
-/*	$NetBSD: locore_c.c,v 1.23 2007/05/17 14:51:28 yamt Exp $	*/
+/*	$NetBSD: locore_c.c,v 1.13 2006/03/04 01:13:35 uwe Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 2002, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -111,145 +111,177 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: locore_c.c,v 1.23 2007/05/17 14:51:28 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore_c.c,v 1.13 2006/03/04 01:13:35 uwe Exp $");
+
+#include "opt_lockdebug.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/cpu.h>
 #include <sys/user.h>
 #include <sys/sched.h>
 #include <sys/proc.h>
 #include <sys/ras.h>
 
-#include <uvm/uvm.h>
 #include <uvm/uvm_extern.h>
 
 #include <sh3/locore.h>
+#include <sh3/cpu.h>
 #include <sh3/pmap.h>
 #include <sh3/mmu_sh3.h>
 #include <sh3/mmu_sh4.h>
 
-void cpu_switch_prepare(struct lwp *, struct lwp *);
-
 void (*__sh_switch_resume)(struct lwp *);
+struct lwp *cpu_switch_search(struct lwp *);
+struct lwp *cpu_switch_prepare(struct lwp *, struct lwp *);
+void idle(void);
 int want_resched;
 
+#ifdef LOCKDEBUG
+#define	SCHED_LOCK_IDLE()	sched_lock_idle()
+#define	SCHED_UNLOCK_IDLE()	sched_unlock_idle()
+#else
+#define	SCHED_LOCK_IDLE()	do {} while (/* CONSTCOND */ 0)
+#define	SCHED_UNLOCK_IDLE()	do {} while (/* CONSTCOND */ 0)
+#endif
+
 
 /*
- * Called from cpu_switchto after olwp's state has been saved.
- * Prepare context switch to nlwp.
+ * Prepare context switch from olwp to nlwp.
+ * This code is shared by cpu_switch and cpu_switchto.
  */
-void
+struct lwp *
 cpu_switch_prepare(struct lwp *olwp, struct lwp *nlwp)
 {
-	struct proc *p = nlwp->l_proc;
+
+	nlwp->l_stat = LSONPROC;
+
+	if (nlwp != olwp) {
+		struct proc *p = nlwp->l_proc;
+
+		curpcb = nlwp->l_md.md_pcb;
+		pmap_activate(nlwp);
+
+		/* Check for Restartable Atomic Sequences. */
+		if (!LIST_EMPTY(&p->p_raslist)) {
+			caddr_t pc;
+
+			pc = ras_lookup(p,
+				(caddr_t)nlwp->l_md.md_regs->tf_spc);
+			if (pc != (caddr_t) -1)
+				nlwp->l_md.md_regs->tf_spc = (int) pc;
+		}
+	}
 
 	curlwp = nlwp;
-	curpcb = nlwp->l_md.md_pcb;
-
-	/* Check for Restartable Atomic Sequences. */
-	if (!LIST_EMPTY(&p->p_raslist)) {
-		void *pc;
-
-		pc = ras_lookup(p, (void *)nlwp->l_md.md_regs->tf_spc);
-		if (pc != (void *) -1)
-			nlwp->l_md.md_regs->tf_spc = (int) pc;
-	}
+	return (nlwp);
 }
-
 
 /*
- * When no processes are on the run queue, wait for something to come
- * ready.  Separate function for profiling.
+ * Find the highest priority lwp and prepare to switching to it.
  */
-void
-cpu_idle(void)
+struct lwp *
+cpu_switch_search(struct lwp *olwp)
 {
+	struct prochd *q;
+	struct lwp *l;
 
-	__asm volatile("sleep");
+	curlwp = NULL;
+
+	SCHED_LOCK_IDLE();
+	while (sched_whichqs == 0) {
+		SCHED_UNLOCK_IDLE();
+		idle();
+		SCHED_LOCK_IDLE();
+	}
+
+	q = &sched_qs[ffs(sched_whichqs) - 1];
+	l = q->ph_link;
+	remrunqueue(l);
+	want_resched = 0;
+	SCHED_UNLOCK_IDLE();
+
+	return (cpu_switch_prepare(olwp, l));
 }
 
+/*
+ * void idle(void):
+ *	When no processes are on the run queue, wait for something to come
+ *	ready. Separated function for profiling.
+ */
+void
+idle()
+{
+
+	spl0();
+	uvm_pageidlezero();
+	__asm volatile("sleep");
+	splsched();
+}
 
 #ifndef P1_STACK
 #ifdef SH3
 /*
- * Prepare kernel stack PTE table.  TLB miss handler checks these.
+ * void sh3_switch_setup(struct lwp *l):
+ *	prepare kernel stack PTE table. TLB miss handler check these.
  */
 void
 sh3_switch_setup(struct lwp *l)
 {
-	struct md_upte *md_upte;
-	uint32_t vpn;
 	pt_entry_t *pte;
+	struct md_upte *md_upte = l->l_md.md_upte;
+	uint32_t vpn;
 	int i;
 
-	/*
-	 * md_upte has mapping for uarea pages in reverse order so
-	 * that mapping for the bottom of the stack (used more often)
-	 * is found on earlier iterations through md_upte in the tlb
-	 * miss handler.
-	 */
-	md_upte = &l->l_md.md_upte[UPAGES-1];
-	vpn = sh3_trunc_page(l->l_addr);
-
-	for (i = 0; i < UPAGES; ++i) {
+	vpn = (uint32_t)l->l_addr;
+	vpn &= ~PGOFSET;
+	for (i = 0; i < UPAGES; i++, vpn += PAGE_SIZE, md_upte++) {
 		pte = __pmap_kpte_lookup(vpn);
 		KDASSERT(pte && *pte != 0);
 
 		md_upte->addr = vpn;
 		md_upte->data = (*pte & PG_HW_BITS) | PG_D | PG_V;
-		--md_upte;
-
-		vpn += PAGE_SIZE;
 	}
 }
 #endif /* SH3 */
 
-
 #ifdef SH4
 /*
- * Prepare kernel stack PTE table.  sh4_switch_resume wires these PTEs.
+ * void sh4_switch_setup(struct lwp *l):
+ *	prepare kernel stack PTE table. sh4_switch_resume wired this PTE.
  */
 void
 sh4_switch_setup(struct lwp *l)
 {
-	struct md_upte *md_upte;
-	uint32_t vpn;
 	pt_entry_t *pte;
+	struct md_upte *md_upte = l->l_md.md_upte;
+	uint32_t vpn;
 	int i, e;
 
-	md_upte = l->l_md.md_upte;
-	vpn = sh3_trunc_page(l->l_addr);
+	vpn = (uint32_t)l->l_addr;
+	vpn &= ~PGOFSET;
 	e = SH4_UTLB_ENTRY - UPAGES;
-
-	for (i = 0; i < UPAGES; ++i) {
+	for (i = 0; i < UPAGES; i++, e++, vpn += PAGE_SIZE) {
 		pte = __pmap_kpte_lookup(vpn);
 		KDASSERT(pte && *pte != 0);
-
 		/* Address array */
 		md_upte->addr = SH4_UTLB_AA | (e << SH4_UTLB_E_SHIFT);
 		md_upte->data = vpn | SH4_UTLB_AA_D | SH4_UTLB_AA_V;
-		++md_upte;
-
+		md_upte++;
 		/* Data array */
 		md_upte->addr = SH4_UTLB_DA1 | (e << SH4_UTLB_E_SHIFT);
 		md_upte->data = (*pte & PG_HW_BITS) |
 		    SH4_UTLB_DA1_D | SH4_UTLB_DA1_V;
-		++md_upte;
-
-		vpn += PAGE_SIZE;
-		++e;
+		md_upte++;
 	}
 }
 #endif /* SH4 */
 #endif /* !P1_STACK */
 
-
 /*
- * Copy a NUL-terminated string, at most maxlen characters long.
- * Return the number of characters copied (including the NUL) in
- * *lencopied.  If the string is too long, return ENAMETOOLONG,
- * else return 0.
+ * copystr(caddr_t from, caddr_t to, size_t maxlen, size_t *lencopied);
+ * Copy a NUL-terminated string, at most maxlen characters long.  Return the
+ * number of characters copied (including the NUL) in *lencopied.  If the
+ * string is too long, return ENAMETOOLONG; else return 0.
  */
 int
 copystr(const void *kfaddr, void *kdaddr, size_t maxlen, size_t *lencopied)

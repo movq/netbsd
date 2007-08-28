@@ -1,4 +1,4 @@
-/*	$NetBSD: bootblock.h,v 1.42 2007/06/29 23:30:31 rumble Exp $	*/
+/*	$NetBSD: bootblock.h,v 1.40 2006/09/01 21:41:46 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2002-2004 The NetBSD Foundation, Inc.
@@ -1069,7 +1069,6 @@ struct x86_boot_params {
 #define	X86_BOOT_MAGIC_1	X86_BOOT_MAGIC(1)	/* pbr.S */
 #define	X86_BOOT_MAGIC_2	X86_BOOT_MAGIC(2)	/* bootxx.S */
 #define	X86_BOOT_MAGIC_PXE	X86_BOOT_MAGIC(3)	/* start_pxe.S */
-#define	X86_BOOT_MAGIC_FAT	X86_BOOT_MAGIC(4)	/* fatboot.S */
 
 		/* values for bp_flags */
 #define	X86_BP_FLAGS_RESET_VIDEO	1
@@ -1268,7 +1267,6 @@ struct pmax_boot_block {
 #define SGI_BOOT_BLOCK_SIZE_VOLHDR	3135
 #define SGI_BOOT_BLOCK_MAGIC		0xbe5a941
 #define SGI_BOOT_BLOCK_MAXPARTITIONS	16
-#define SGI_BOOT_BLOCK_MAXVOLDIRS	15
 #define SGI_BOOT_BLOCK_BLOCKSIZE	512
 
 /*
@@ -1318,7 +1316,7 @@ struct sgi_boot_block {
 		char		name[8];
 		int32_t		block;
 		int32_t		bytes;
-	}		voldir[SGI_BOOT_BLOCK_MAXVOLDIRS];
+	}		voldir[15];
 	struct {
 		int32_t		blocks;
 		int32_t		first;
@@ -1329,11 +1327,8 @@ struct sgi_boot_block {
 } __packed;
 
 #define SGI_PTYPE_VOLHDR	0
-#define SGI_PTYPE_TRKREPL	1
-#define SGI_PTYPE_SECREPL	2
 #define SGI_PTYPE_RAW		3
 #define SGI_PTYPE_BSD		4
-#define SGI_PTYPE_SYSV		5
 #define SGI_PTYPE_VOLUME	6
 #define SGI_PTYPE_EFS		7
 #define SGI_PTYPE_LVOL		8

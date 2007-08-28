@@ -1,4 +1,4 @@
-/*	$NetBSD: extintr.c,v 1.64 2007/07/14 21:48:21 ad Exp $	*/
+/*	$NetBSD: extintr.c,v 1.62 2006/10/13 19:48:41 macallan Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 Tsubai Masanari.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: extintr.c,v 1.64 2007/07/14 21:48:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: extintr.c,v 1.62 2006/10/13 19:48:41 macallan Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -714,7 +714,7 @@ ext_intr(void)
 
 			splraise(is->is_mask);
 			mtmsr(msr | PSL_EE);
-			KERNEL_LOCK(1, NULL);
+			KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 			ih = is->is_hand;
 			while (ih) {
 #ifdef DIAGNOSTIC
@@ -727,7 +727,7 @@ ext_intr(void)
 				(*ih->ih_fun)(ih->ih_arg);
 				ih = ih->ih_next;
 			}
-			KERNEL_UNLOCK_ONE(NULL);
+			KERNEL_UNLOCK();
 			mtmsr(msr);
 			ci->ci_cpl = pcpl;
 
@@ -808,13 +808,13 @@ start:
 	} else {
 		splraise(is->is_mask);
 		mtmsr(msr | PSL_EE);
-		KERNEL_LOCK(1, NULL);
+		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 		ih = is->is_hand;
 		while (ih) {
 			(*ih->ih_fun)(ih->ih_arg);
 			ih = ih->ih_next;
 		}
-		KERNEL_UNLOCK_ONE(NULL);
+		KERNEL_UNLOCK();
 		mtmsr(msr);
 		ci->ci_cpl = pcpl;
 
@@ -867,7 +867,7 @@ again:
 		ci->ci_ipending &= ~(1 << irq);
 		splraise(is->is_mask);
 		mtmsr(emsr);
-		KERNEL_LOCK(1, NULL);
+		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 		ih = is->is_hand;
 		while (ih) {
 #ifdef DIAGNOSTIC
@@ -880,7 +880,7 @@ again:
 			(*ih->ih_fun)(ih->ih_arg);
 			ih = ih->ih_next;
 		}
-		KERNEL_UNLOCK_ONE(NULL);
+		KERNEL_UNLOCK();
 		mtmsr(dmsr);
 		ci->ci_cpl = pcpl;
 
@@ -898,21 +898,36 @@ again:
 		ci->ci_ipending &= ~(1 << SIR_SERIAL);
 		splsoftserial();
 		mtmsr(emsr);
-		KERNEL_LOCK(1, NULL);
+		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 		softintr__run(IPL_SOFTSERIAL);
-		KERNEL_UNLOCK_ONE(NULL);
+#else
+		softserial();
+#endif
+		KERNEL_UNLOCK();
 		mtmsr(dmsr);
 		ci->ci_cpl = pcpl;
 		ci->ci_ev_softserial.ev_count++;
 		goto again;
 	}
 	if ((ci->ci_ipending & ~pcpl) & (1 << SIR_NET)) {
+#ifndef __HAVE_GENERIC_SOFT_INTERRUPTS
+		int pisr;
+#endif
 		ci->ci_ipending &= ~(1 << SIR_NET);
 		splsoftnet();
+#ifndef __HAVE_GENERIC_SOFT_INTERRUPTS
+		pisr = netisr;
+		netisr = 0;
+#endif
 		mtmsr(emsr);
-		KERNEL_LOCK(1, NULL);
+		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 		softintr__run(IPL_SOFTNET);
-		KERNEL_UNLOCK_ONE(NULL);
+#else
+		softnet(pisr);
+#endif
+		KERNEL_UNLOCK();
 		mtmsr(dmsr);
 		ci->ci_cpl = pcpl;
 		ci->ci_ev_softnet.ev_count++;
@@ -922,9 +937,13 @@ again:
 		ci->ci_ipending &= ~(1 << SIR_CLOCK);
 		splsoftclock();
 		mtmsr(emsr);
-		KERNEL_LOCK(1, NULL);
+		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 		softintr__run(IPL_SOFTCLOCK);
-		KERNEL_UNLOCK_ONE(NULL);
+#else
+		softclock(NULL);
+#endif
+		KERNEL_UNLOCK();
 		mtmsr(dmsr);
 		ci->ci_cpl = pcpl;
 		ci->ci_ev_softclock.ev_count++;

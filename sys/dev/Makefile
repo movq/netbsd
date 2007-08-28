@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.25 2007/05/01 17:18:55 bouyer Exp $
+#	$NetBSD: Makefile,v 1.24.6.1 2007/05/08 10:45:04 pavel Exp $
 
 SUBDIR=	apm ata bluetooth dec dmover hpc i2o ic ieee1394 ir isa microcode ofw \
 	pci pckbport pcmcia raidframe sbus scsipi sun tc usb vme wscons

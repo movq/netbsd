@@ -1,4 +1,4 @@
-/* $NetBSD: 3c90xb.c,v 1.13 2007/03/04 05:59:59 christos Exp $ */
+/* $NetBSD: 3c90xb.c,v 1.12 2006/05/11 00:48:05 mrg Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -65,7 +65,7 @@ static struct ex_dpd sndbuf;
 #define PCIDEVNO 4
 static pcihdl_t mytag = PCI_MODE1_ENABLE | (PCIBUSNO << 16) | (PCIDEVNO << 11);
 
-extern void *mapmem __P((int, int));
+extern caddr_t mapmem __P((int, int));
 void *dmamem; /* virtual */
 #define DMABASE 0x3ffd800
 #define DMASIZE 10240

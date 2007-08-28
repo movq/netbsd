@@ -1,4 +1,4 @@
-/*	$NetBSD: mptramp.S,v 1.9 2007/05/17 14:51:21 yamt Exp $	*/
+/*	$NetBSD: mptramp.S,v 1.8 2005/12/11 12:17:41 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -118,7 +118,7 @@
 
         .globl  _C_LABEL(cpu),_C_LABEL(cpu_id),_C_LABEL(cpu_vendor)
 	.globl  _C_LABEL(cpuid_level)
-	.globl  _C_LABEL(idle_loop)
+	.globl	_C_LABEL(mpidle)
 
 	.global _C_LABEL(cpu_spinup_trampoline)
 	.global _C_LABEL(cpu_spinup_trampoline_end)
@@ -221,8 +221,7 @@ _C_LABEL(cpu_spinup_trampoline_end):	#end of code copied to MP_TRAMPOLINE
 mp_cont:
 	HALT(0x15)
 
-	movl	CPU_INFO_IDLELWP(%ecx),%esi
-	movl	L_ADDR(%esi),%esi
+	movl	CPU_INFO_IDLE_PCB(%ecx),%esi
 	
 # %esi now points at our PCB.
 		
@@ -251,7 +250,8 @@ mp_cont:
 	pushl	%ecx
 	call	_C_LABEL(cpu_hatch)
 	HALT(0x33)
-	jmp	_C_LABEL(idle_loop)
+	xorl	%esi,%esi
+	jmp	_C_LABEL(mpidle)
 	
 	.data
 _C_LABEL(mp_pdirpa):

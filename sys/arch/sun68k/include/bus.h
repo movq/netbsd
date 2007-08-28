@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.15 2007/03/04 06:00:55 christos Exp $	*/
+/*	$NetBSD: bus.h,v 1.13 2006/10/03 13:02:33 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2001 The NetBSD Foundation, Inc.
@@ -896,8 +896,8 @@ struct sun68k_bus_dma_tag {
 		    bus_size_t, bus_dma_segment_t *, int, int *, int);
 	void	(*_dmamem_free)(bus_dma_tag_t, bus_dma_segment_t *, int);
 	int	(*_dmamem_map)(bus_dma_tag_t, bus_dma_segment_t *, int, size_t,
-		    void **, int);
-	void	(*_dmamem_unmap)(bus_dma_tag_t, void *, size_t);
+		    caddr_t *, int);
+	void	(*_dmamem_unmap)(bus_dma_tag_t, caddr_t, size_t);
 	paddr_t	(*_dmamem_mmap)(bus_dma_tag_t, bus_dma_segment_t *, int, off_t,
 		    int, int);
 };
@@ -930,9 +930,6 @@ struct sun68k_bus_dma_tag {
 	(*(t)->_dmamem_unmap)((t), (k), (s))
 #define	bus_dmamem_mmap(t, sg, n, o, p, f)			\
 	(*(t)->_dmamem_mmap)((t), (sg), (n), (o), (p), (f))
-
-#define bus_dmatag_subregion(t, mna, mxa, nt, f) EOPNOTSUPP
-#define bus_dmatag_destroy(t)
 
 /*
  *	bus_dmamap_t
@@ -985,8 +982,8 @@ int	_bus_dmamem_alloc(bus_dma_tag_t, bus_size_t, bus_size_t, bus_size_t,
 	    bus_dma_segment_t *, int, int *, int);
 void	_bus_dmamem_free(bus_dma_tag_t, bus_dma_segment_t *, int);
 int	_bus_dmamem_map(bus_dma_tag_t, bus_dma_segment_t *, int, size_t,
-	    void **, int);
-void	_bus_dmamem_unmap(bus_dma_tag_t, void *, size_t);
+	    caddr_t *, int);
+void	_bus_dmamem_unmap(bus_dma_tag_t, caddr_t, size_t);
 paddr_t	_bus_dmamem_mmap(bus_dma_tag_t, bus_dma_segment_t *, int, off_t, int,
 	    int);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: identcpu.c,v 1.74 2007/07/25 13:41:53 xtraeme Exp $	*/
+/*	$NetBSD: identcpu.c,v 1.51.2.7 2007/09/12 10:05:01 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -37,11 +37,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.74 2007/07/25 13:41:53 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.51.2.7 2007/09/12 10:05:01 msaitoh Exp $");
 
 #include "opt_cputype.h"
 #include "opt_enhanced_speedstep.h"
-#include "opt_intel_odcm.h"
 #include "opt_powernow_k7.h"
 #include "opt_powernow_k8.h"
 
@@ -55,17 +54,14 @@ __KERNEL_RCSID(0, "$NetBSD: identcpu.c,v 1.74 2007/07/25 13:41:53 xtraeme Exp $"
 #include <machine/pio.h>
 #include <machine/cpu.h>
 #include <x86/cacheinfo.h>
-#include <x86/cpuvar.h>
-#include <x86/cpu_msr.h>
-#include <x86/powernow.h>
+#include <x86/include/cpuvar.h>
+#include <x86/include/powernow.h>
 
 static const struct x86_cache_info
 intel_cpuid_cache_info[] = {
 	{ CAI_ITLB, 	0x01,	 4, 32,        4 * 1024, NULL },
-	{ CAI_ITLB,     0xb0,    4,128,        4 * 1024, NULL },
 	{ CAI_ITLB2, 	0x02, 0xff,  2, 4 * 1024 * 1024, NULL },
 	{ CAI_DTLB, 	0x03,    4, 64,        4 * 1024, NULL },
-	{ CAI_DTLB,     0xb3,    4,128,        4 * 1024, NULL },
 	{ CAI_DTLB2,    0x04,    4,  8, 4 * 1024 * 1024, NULL },
 	{ CAI_ITLB,     0x50, 0xff, 64,        4 * 1024, "4K/4M: 64 entries" },
 	{ CAI_ITLB,     0x51, 0xff, 64,        4 * 1024, "4K/4M: 128 entries" },
@@ -101,7 +97,6 @@ intel_cpuid_cache_info[] = {
 	{ CAI_L2CACHE,  0x83,  8,      512 * 1024, 32, NULL },
 	{ CAI_L2CACHE,  0x84,  8, 1 * 1024 * 1024, 32, NULL },
 	{ CAI_L2CACHE,  0x85,  8, 2 * 1024 * 1024, 32, NULL },
-	{ CAI_L2CACHE,  0x86,  4,      512 * 1024, 64, NULL },
 	{ 0,               0,  0,	        0,  0, NULL },
 };
 
@@ -139,7 +134,6 @@ static const char * const amd_brand[] = {
 	"4"		/* AMD Athlon(tm) 4 */
 };
 
-int cpu_vendor;
 u_int cpu_serial[3];
 char cpu_brand_string[49];
 static char amd_brand_name[48];
@@ -483,7 +477,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 			{
 				0, 0, 0, 0, 0, 0, "C3 Samuel",
 				"C3 Samuel 2/Ezra", "C3 Ezra-T",
-				"C3 Nehemiah", "C7 Esther", 0, 0, 0, 0, 0,
+				"C3 Nehemiah", 0, 0, 0, 0, 0, 0,
 				"C3"	/* Default */
 			},
 			NULL,
@@ -612,13 +606,12 @@ cyrix6x86_cpu_setup(ci)
 	 * so this should really be optional. XXX
 	 */
 	cyrix_write_reg(0xc2, cyrix_read_reg(0xc2) | 0x08);
-
-	/* 
+	/*
 	 * Do not disable the TSC on the Geode GX, it's reported to
 	 * work fine.
 	 */
 	if (ci->ci_signature != 0x552)
-		disable_tsc(ci);
+	disable_tsc(ci);
 
 	/* enable access to ccr4/ccr5 */
 	c3 = cyrix_read_reg(0xC3);
@@ -652,10 +645,8 @@ winchip_cpu_setup(struct cpu_info *ci)
 void
 via_cpu_probe(struct cpu_info *ci)
 {
-	u_int model = CPUID2MODEL(ci->ci_signature);
-	u_int stepping = CPUID2STEPPING(ci->ci_signature);
 	u_int descs[4];
-	u_int lfunc, msr;
+	u_int lfunc;
 
 	/*
 	 * Determine the largest extended function value.
@@ -669,28 +660,6 @@ via_cpu_probe(struct cpu_info *ci)
 	if (lfunc >= 0x80000001) {
 		CPUID(0x80000001, descs[0], descs[1], descs[2], descs[3]);
 		ci->ci_feature_flags |= descs[3];
-	}
-
-	if (model < 0x9)
-		return;
-
-	/* Nehemiah or Esther */
-	CPUID(0xc0000000, descs[0], descs[1], descs[2], descs[3]);
-	lfunc = descs[0];
-	if (lfunc < 0xc0000001)	/* no ACE, no RNG */
-		return;
-
-	CPUID(0xc0000001, descs[0], descs[1], descs[2], descs[3]);
-	lfunc = descs[3];
-	if (model > 0x9 || stepping >= 8) {	/* ACE */
-		if (lfunc & CPUID_VIA_HAS_ACE) {
-			ci->ci_padlock_flags = lfunc;
-			if ((lfunc & CPUID_VIA_DO_ACE) == 0) {
-				msr = rdmsr(MSR_VIA_ACE);
-				wrmsr(MSR_VIA_ACE, msr | MSR_VIA_ACE_ENABLE);
-				ci->ci_padlock_flags |= CPUID_VIA_DO_ACE;
-			}
-		}
 	}
 }
 
@@ -1213,16 +1182,19 @@ tmx86_get_longrun_status_all(void)
 	    &crusoe_voltage, &crusoe_percentage);
 }
 
+
 static void
 transmeta_cpu_info(struct cpu_info *ci)
 {
 	u_int eax, ebx, ecx, edx, nreg = 0;
 
+	/* XXX aprint_verbose()? */
+
 	CPUID(0x80860000, eax, ebx, ecx, edx);
 	nreg = eax;
 	if (nreg >= 0x80860001) {
 		CPUID(0x80860001, eax, ebx, ecx, edx);
-		aprint_verbose("%s: Processor revision %u.%u.%u.%u\n",
+		aprint_normal("%s: Processor revision %u.%u.%u.%u\n",
 		    ci->ci_dev->dv_xname,
 		    (ebx >> 24) & 0xff,
 		    (ebx >> 16) & 0xff,
@@ -1231,7 +1203,7 @@ transmeta_cpu_info(struct cpu_info *ci)
 	}
 	if (nreg >= 0x80860002) {
 		CPUID(0x80860002, eax, ebx, ecx, edx);
-		aprint_verbose("%s: Code Morphing Software Rev: %u.%u.%u-%u-%u\n",
+		aprint_normal("%s: Code Morphing Software Rev: %u.%u.%u-%u-%u\n",
 		    ci->ci_dev->dv_xname, (ebx >> 24) & 0xff,
 		    (ebx >> 16) & 0xff,
 		    (ebx >> 8) & 0xff,
@@ -1257,14 +1229,14 @@ transmeta_cpu_info(struct cpu_info *ci)
 			    info.regs[i].ecx, info.regs[i].edx);
 		}
 		info.text[64] = 0;
-		aprint_verbose("%s: %s\n", ci->ci_dev->dv_xname, info.text);
+		aprint_normal("%s: %s\n", ci->ci_dev->dv_xname, info.text);
 	}
 
 	if (nreg >= 0x80860007) {
 		crusoe_longrun = tmx86_get_longrun_mode();
 		tmx86_get_longrun_status(&crusoe_frequency,
 		    &crusoe_voltage, &crusoe_percentage);
-		aprint_verbose("%s: LongRun mode: %d  <%dMHz %dmV %d%%>\n",
+		aprint_normal("%s: LongRun mode: %d  <%dMHz %dmV %d%%>\n",
 		    ci->ci_dev->dv_xname,
 		    crusoe_longrun, crusoe_frequency, crusoe_voltage,
 		    crusoe_percentage);
@@ -1290,7 +1262,7 @@ void
 identifycpu(struct cpu_info *ci)
 {
 	const char *name, *modifier, *vendorname, *brand = "";
-	int class = CPUCLASS_386, i, xmax;
+	int class = CPUCLASS_386, vendor, i, xmax;
 	int modif, family, model;
 	const struct cpu_cpuid_nameclass *cpup = NULL;
 	const struct cpu_cpuid_family *cpufam;
@@ -1301,18 +1273,19 @@ identifycpu(struct cpu_info *ci)
 	buf = malloc(MAXPATHLEN, M_TEMP, M_WAITOK);
 	if (ci->ci_cpuid_level == -1) {
 #ifdef DIAGNOSTIC
-		if (cpu < 0 || cpu >= __arraycount(i386_nocpuid_cpus))
+		if (cpu < 0 || cpu >=
+		    sizeof(i386_nocpuid_cpus) / sizeof(i386_nocpuid_cpus[0]))
 			panic("unknown cpu type %d", cpu);
 #endif
 		name = i386_nocpuid_cpus[cpu].cpu_name;
-		cpu_vendor = i386_nocpuid_cpus[cpu].cpu_vendor;
+		vendor = i386_nocpuid_cpus[cpu].cpu_vendor;
 		vendorname = i386_nocpuid_cpus[cpu].cpu_vendorname;
 		class = i386_nocpuid_cpus[cpu].cpu_class;
 		ci->cpu_setup = i386_nocpuid_cpus[cpu].cpu_setup;
 		ci->ci_info = i386_nocpuid_cpus[cpu].cpu_info;
 		modifier = "";
 	} else {
-		xmax = __arraycount(i386_cpuid_cpus);
+		xmax = sizeof (i386_cpuid_cpus) / sizeof (i386_cpuid_cpus[0]);
 		modif = (ci->ci_signature >> 12) & 0x3;
 		family = CPUID2FAMILY(ci->ci_signature);
 		if (family < CPU_MINFAMILY)
@@ -1328,7 +1301,7 @@ identifycpu(struct cpu_info *ci)
 		}
 
 		if (cpup == NULL) {
-			cpu_vendor = CPUVENDOR_UNKNOWN;
+			vendor = CPUVENDOR_UNKNOWN;
 			if (ci->ci_vendor[0] != '\0')
 				vendorname = (char *)&ci->ci_vendor[0];
 			else
@@ -1341,7 +1314,7 @@ identifycpu(struct cpu_info *ci)
 			ci->cpu_setup = NULL;
 			ci->ci_info = NULL;
 		} else {
-			cpu_vendor = cpup->cpu_vendor;
+			vendor = cpup->cpu_vendor;
 			vendorname = cpup->cpu_vendorname;
 			modifier = modifiers[modif];
 			if (family > CPU_MAXFAMILY) {
@@ -1357,7 +1330,7 @@ identifycpu(struct cpu_info *ci)
 			ci->cpu_setup = cpufam->cpu_setup;
 			ci->ci_info = cpufam->cpu_info;
 
-			if (cpu_vendor == CPUVENDOR_INTEL) {
+			if (vendor == CPUVENDOR_INTEL) {
 				if (family == 6 && model >= 5) {
 					const char *tmp;
 					tmp = intel_family6_name(ci);
@@ -1366,13 +1339,14 @@ identifycpu(struct cpu_info *ci)
 				}
 				if (family == CPU_MAXFAMILY &&
 				    ci->ci_brand_id <
-				    __arraycount(i386_intel_brand) &&
+				    (sizeof(i386_intel_brand) /
+				     sizeof(i386_intel_brand[0])) &&
 				    i386_intel_brand[ci->ci_brand_id])
 					name =
 					     i386_intel_brand[ci->ci_brand_id];
 			}
 
-			if (cpu_vendor == CPUVENDOR_AMD) {
+			if (vendor == CPUVENDOR_AMD) {
 				if (family == 6 && model >= 6) {
 					if (ci->ci_brand_id == 1)
 						/* 
@@ -1398,7 +1372,7 @@ identifycpu(struct cpu_info *ci)
 				}
 			}
 			
-			if (cpu_vendor == CPUVENDOR_IDT && family >= 6)
+			if (vendor == CPUVENDOR_IDT && family >= 6)
 				vendorname = "VIA";
 		}
 	}
@@ -1441,7 +1415,7 @@ identifycpu(struct cpu_info *ci)
 	if (ci->ci_info)
 		(*ci->ci_info)(ci);
 
-	if (cpu_vendor == CPUVENDOR_INTEL) {
+	if (vendor == CPUVENDOR_INTEL) {
 		feature_str[0] = CPUID_FLAGS1;
 		feature_str[1] = CPUID_FLAGS2;
 		feature_str[2] = CPUID_FLAGS3;
@@ -1481,12 +1455,6 @@ identifycpu(struct cpu_info *ci)
 		aprint_verbose("%s: features3 %s\n", cpuname, buf);
 	}
 
-	if (ci->ci_padlock_flags) {
-		bitmask_snprintf(ci->ci_padlock_flags,
-			CPUID_FLAGS_PADLOCK, buf, MAXPATHLEN);
-		aprint_verbose("%s: padlock features %s\n", cpuname, buf);
-	}
-
 	free(buf, M_TEMP);
 
 	if (*cpu_brand_string != '\0')
@@ -1494,23 +1462,23 @@ identifycpu(struct cpu_info *ci)
 
 	x86_print_cacheinfo(ci);
 
-	if (cpu_vendor != CPUVENDOR_AMD && (cpu_feature & CPUID_TM)) {
+	if (vendor != CPUVENDOR_AMD && (cpu_feature & CPUID_TM)) {
 		if (rdmsr(MSR_MISC_ENABLE) & (1 << 3)) {
 			if ((cpu_feature2 & CPUID2_TM2) &&
 			    (rdmsr(MSR_THERM2_CTL) & (1 << 16)))
-				aprint_verbose("%s: using thermal monitor 2\n",
+				aprint_normal("%s: using thermal monitor 2\n",
 				    cpuname);
 			else
-				aprint_verbose("%s: using thermal monitor 1\n",
+				aprint_normal("%s: using thermal monitor 1\n",
 				    cpuname);
 		} else {
-			aprint_verbose("%s: enabling thermal monitor 1 ... ",
+			aprint_normal("%s: enabling thermal monitor 1 ... ",
 			    cpuname);
 			wrmsr(MSR_MISC_ENABLE, rdmsr(MSR_MISC_ENABLE) | (1<<3));
 			if (rdmsr(MSR_MISC_ENABLE) & (1 << 3)) {
-				aprint_verbose("enabled.\n");
+				aprint_normal("enabled.\n");
 			} else {
-				aprint_verbose("failed!\n");
+				aprint_normal("failed!\n");
 				aprint_error("%s: failed to enable thermal "
 				    "monitoring!\n", cpuname);
 			}
@@ -1628,7 +1596,7 @@ identifycpu(struct cpu_info *ci)
 #ifdef ENHANCED_SPEEDSTEP
 	if (cpu_feature2 & CPUID2_EST) {
 		if (rdmsr(MSR_MISC_ENABLE) & (1 << 16))
-			est_init(cpu_vendor);
+			est_init(vendor);
 		else
 			aprint_normal("%s: Enhanced SpeedStep disabled by BIOS\n",
 			    cpuname);
@@ -1636,7 +1604,7 @@ identifycpu(struct cpu_info *ci)
 #endif /* ENHANCED_SPEEDSTEP */
 
 #if defined(POWERNOW_K7) || defined(POWERNOW_K8)
-	if (cpu_vendor == CPUVENDOR_AMD && powernow_probe(ci)) {
+	if (vendor == CPUVENDOR_AMD && powernow_probe(ci)) {
 		switch (CPUID2FAMILY(ci->ci_signature)) {
 #ifdef POWERNOW_K7
 		case 6:
@@ -1653,11 +1621,5 @@ identifycpu(struct cpu_info *ci)
 		}
 	}
 #endif /* POWERNOW_K7 || POWERNOW_K8 */
-
-#ifdef INTEL_ONDEMAND_CLOCKMOD
-	clockmod_init();
-#endif
-	x86_errata(ci, cpu_vendor);
-	x86_patch();
 
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: aout2bb.c,v 1.13 2007/03/04 05:59:30 christos Exp $	*/
+/*	$NetBSD: aout2bb.c,v 1.12 2005/12/11 12:16:36 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -97,7 +97,7 @@ main(argc, argv)
 {
 	int ifd, ofd;
 	u_int mid, flags, magic;
-	void *image;
+	caddr_t image;
 	struct exec *eh;
 	struct relocation_info_m68k *rpi;
 	u_int32_t *lptr;
@@ -219,7 +219,7 @@ main(argc, argv)
 	i = 0;
 
 	for (rpi = (struct relocation_info_m68k *)(image+N_TRELOFF(*eh));
-	    (void *)rpi < image+N_TRELOFF(*eh)+trsz; rpi++) {
+	    (caddr_t)rpi < image+N_TRELOFF(*eh)+trsz; rpi++) {
 
 		BE32TOH(((u_int32_t *)rpi)[0]);
 		BE32TOH(((u_int32_t *)rpi)[1]);
@@ -253,7 +253,7 @@ main(argc, argv)
 	}
 
 	for (rpi = (struct relocation_info_m68k *)(image+N_DRELOFF(*eh));
-	    (void *)rpi < image+N_DRELOFF(*eh)+drsz; rpi++) {
+	    (caddr_t)rpi < image+N_DRELOFF(*eh)+drsz; rpi++) {
 
 		BE32TOH(((u_int32_t *)rpi)[0]);
 		BE32TOH(((u_int32_t *)rpi)[1]);

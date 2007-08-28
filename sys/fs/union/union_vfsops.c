@@ -1,4 +1,4 @@
-/*	$NetBSD: union_vfsops.c,v 1.48 2007/07/31 21:14:19 pooka Exp $	*/
+/*	$NetBSD: union_vfsops.c,v 1.40.2.1 2007/02/17 23:27:46 tron Exp $	*/
 
 /*
  * Copyright (c) 1994 The Regents of the University of California.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.48 2007/07/31 21:14:19 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.40.2.1 2007/02/17 23:27:46 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -95,22 +95,29 @@ __KERNEL_RCSID(0, "$NetBSD: union_vfsops.c,v 1.48 2007/07/31 21:14:19 pooka Exp 
 
 #include <fs/union/union.h>
 
-VFS_PROTOS(union);
+int union_mount(struct mount *, const char *, void *, struct nameidata *,
+		     struct lwp *);
+int union_start(struct mount *, int, struct lwp *);
+int union_unmount(struct mount *, int, struct lwp *);
+int union_root(struct mount *, struct vnode **);
+int union_quotactl(struct mount *, int, uid_t, void *, struct lwp *);
+int union_statvfs(struct mount *, struct statvfs *, struct lwp *);
+int union_sync(struct mount *, int, kauth_cred_t, struct lwp *);
+int union_vget(struct mount *, ino_t, struct vnode **);
 
 /*
  * Mount union filesystem
  */
 int
-union_mount(mp, path, data, data_len, l)
+union_mount(mp, path, data, ndp, l)
 	struct mount *mp;
 	const char *path;
 	void *data;
-	size_t *data_len;
+	struct nameidata *ndp;
 	struct lwp *l;
 {
-	struct nameidata nd;
 	int error = 0;
-	struct union_args *args = data;
+	struct union_args args;
 	struct vnode *lowerrootvp = NULLVP;
 	struct vnode *upperrootvp = NULLVP;
 	struct union_mount *um = 0;
@@ -118,9 +125,6 @@ union_mount(mp, path, data, data_len, l)
 	char *xp;
 	int len;
 	size_t size;
-
-	if (*data_len < sizeof *args)
-		return EINVAL;
 
 #ifdef UNION_DIAGNOSTIC
 	printf("union_mount(mp = %p)\n", mp);
@@ -130,10 +134,9 @@ union_mount(mp, path, data, data_len, l)
 		um = MOUNTTOUNIONMOUNT(mp);
 		if (um == NULL)
 			return EIO;
-		args->target = NULL;
-		args->mntflags = um->um_op;
-		*data_len = sizeof *args;
-		return 0;
+		args.target = NULL;
+		args.mntflags = um->um_op;
+		return copyout(&args, data, sizeof(args));
 	}
 	/*
 	 * Update is a no-op
@@ -148,18 +151,26 @@ union_mount(mp, path, data, data_len, l)
 		goto bad;
 	}
 
+	/*
+	 * Get argument
+	 */
+	error = copyin(data, &args, sizeof(struct union_args));
+	if (error)
+		goto bad;
+
 	lowerrootvp = mp->mnt_vnodecovered;
 	VREF(lowerrootvp);
 
 	/*
 	 * Find upper node.
 	 */
-	NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, args->target, l);
+	NDINIT(ndp, LOOKUP, FOLLOW,
+	       UIO_USERSPACE, args.target, l);
 
-	if ((error = namei(&nd)) != 0)
+	if ((error = namei(ndp)) != 0)
 		goto bad;
 
-	upperrootvp = nd.ni_vp;
+	upperrootvp = ndp->ni_vp;
 
 	if (upperrootvp->v_type != VDIR) {
 		error = EINVAL;
@@ -178,7 +189,7 @@ union_mount(mp, path, data, data_len, l)
 	 * same as providing a mount under option to the mount syscall.
 	 */
 
-	um->um_op = args->mntflags & UNMNT_OPMASK;
+	um->um_op = args.mntflags & UNMNT_OPMASK;
 	switch (um->um_op) {
 	case UNMNT_ABOVE:
 		um->um_lowervp = lowerrootvp;
@@ -242,10 +253,11 @@ union_mount(mp, path, data, data_len, l)
 	mp->mnt_flag |= (um->um_uppervp->v_mount->mnt_flag & MNT_RDONLY);
 
 	mp->mnt_data = um;
+	mp->mnt_leaf = um->um_uppervp->v_mount->mnt_leaf;
 	vfs_getnewfsid(mp);
 
 	error = set_statvfs_info( path, UIO_USERSPACE, NULL, UIO_USERSPACE,
-	    mp->mnt_op->vfs_name, mp, l);
+	    mp, l);
 	if (error)
 		goto bad;
 
@@ -272,7 +284,7 @@ union_mount(mp, path, data, data_len, l)
 	xp = mp->mnt_stat.f_mntfromname + len;
 	len = MNAMELEN - len;
 
-	(void) copyinstr(args->target, xp, len - 1, &size);
+	(void) copyinstr(args.target, xp, len - 1, &size);
 	memset(xp + size, 0, len - size);
 
 #ifdef UNION_DIAGNOSTIC
@@ -522,7 +534,6 @@ const struct vnodeopv_desc * const union_vnodeopv_descs[] = {
 
 struct vfsops union_vfsops = {
 	MOUNT_UNION,
-	sizeof (struct union_args),
 	union_mount,
 	union_start,
 	union_unmount,
@@ -539,7 +550,6 @@ struct vfsops union_vfsops = {
 	NULL,				/* vfs_mountroot */
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
-	(void *)eopnotsupp,		/* vfs_suspendctl */
 	union_vnodeopv_descs,
 	0,				/* vfs_refcount */
 	{ NULL, NULL },

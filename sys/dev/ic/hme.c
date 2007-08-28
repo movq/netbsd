@@ -1,4 +1,4 @@
-/*	$NetBSD: hme.c,v 1.58 2007/07/12 17:42:17 martin Exp $	*/
+/*	$NetBSD: hme.c,v 1.55 2006/11/24 19:46:59 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.58 2007/07/12 17:42:17 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.55 2006/11/24 19:46:59 christos Exp $");
 
 /* #define HMEDEBUG */
 
@@ -93,8 +93,8 @@ __KERNEL_RCSID(0, "$NetBSD: hme.c,v 1.58 2007/07/12 17:42:17 martin Exp $");
 #include <dev/ic/hmevar.h>
 
 void		hme_start(struct ifnet *);
-void		hme_stop(struct hme_softc *,bool);
-int		hme_ioctl(struct ifnet *, u_long, void *);
+void		hme_stop(struct hme_softc *);
+int		hme_ioctl(struct ifnet *, u_long, caddr_t);
 void		hme_tick(void *);
 void		hme_watchdog(struct ifnet *);
 void		hme_shutdown(void *);
@@ -169,7 +169,7 @@ hme_config(sc)
 	 */
 
 	/* Make sure the chip is stopped. */
-	hme_stop(sc, true);
+	hme_stop(sc);
 
 
 	/*
@@ -324,7 +324,7 @@ hme_config(sc)
 			  RND_TYPE_NET, 0);
 #endif
 
-	callout_init(&sc->sc_tick_ch, 0);
+	callout_init(&sc->sc_tick_ch);
 }
 
 void
@@ -353,16 +353,15 @@ hme_reset(sc)
 }
 
 void
-hme_stop(struct hme_softc *sc, bool chip_only)
+hme_stop(sc)
+	struct hme_softc *sc;
 {
 	bus_space_tag_t t = sc->sc_bustag;
 	bus_space_handle_t seb = sc->sc_seb;
 	int n;
 
-	if (!chip_only) {
-		callout_stop(&sc->sc_tick_ch);
-		mii_down(&sc->sc_mii);
-	}
+	callout_stop(&sc->sc_tick_ch);
+	mii_down(&sc->sc_mii);
 
 	/* Mask all interrupts */
 	bus_space_write_4(t, seb, HME_SEBI_IMASK, 0xffffffff);
@@ -387,7 +386,7 @@ hme_meminit(sc)
 {
 	bus_addr_t txbufdma, rxbufdma;
 	bus_addr_t dma;
-	char *p;
+	caddr_t p;
 	unsigned int ntbuf, nrbuf, i;
 	struct hme_ring *hr = &sc->sc_rb;
 
@@ -406,7 +405,7 @@ hme_meminit(sc)
 	dma += ntbuf * HME_XD_SIZE;
 	/* We have reserved descriptor space until the next 2048 byte boundary.*/
 	dma = (bus_addr_t)roundup((u_long)dma, 2048);
-	p = (void *)roundup((u_long)p, 2048);
+	p = (caddr_t)roundup((u_long)p, 2048);
 
 	/*
 	 * Allocate receive descriptors
@@ -417,7 +416,7 @@ hme_meminit(sc)
 	dma += nrbuf * HME_XD_SIZE;
 	/* Again move forward to the next 2048 byte boundary.*/
 	dma = (bus_addr_t)roundup((u_long)dma, 2048);
-	p = (void *)roundup((u_long)p, 2048);
+	p = (caddr_t)roundup((u_long)p, 2048);
 
 
 	/*
@@ -483,7 +482,7 @@ hme_init(sc)
 	 */
 
 	/* step 1 & 2. Reset the Ethernet Channel */
-	hme_stop(sc, false);
+	hme_stop(sc);
 
 	/* Re-initialize the MIF */
 	hme_mifinit(sc);
@@ -675,16 +674,16 @@ hme_put(sc, ri, m)
 {
 	struct mbuf *n;
 	int len, tlen = 0;
-	char *bp;
+	caddr_t bp;
 
-	bp = (char *)sc->sc_rb.rb_txbuf + (ri % sc->sc_rb.rb_ntbuf) * _HME_BUFSZ;
+	bp = sc->sc_rb.rb_txbuf + (ri % sc->sc_rb.rb_ntbuf) * _HME_BUFSZ;
 	for (; m; m = n) {
 		len = m->m_len;
 		if (len == 0) {
 			MFREE(m, n);
 			continue;
 		}
-		memcpy(bp, mtod(m, void *), len);
+		memcpy(bp, mtod(m, caddr_t), len);
 		bp += len;
 		tlen += len;
 		MFREE(m, n);
@@ -706,7 +705,7 @@ hme_get(sc, ri, flags)
 {
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct mbuf *m, *m0, *newm;
-	char *bp;
+	caddr_t bp;
 	int len, totlen;
 
 	totlen = HME_XD_DECODE_RSIZE(flags);
@@ -718,7 +717,7 @@ hme_get(sc, ri, flags)
 	len = MHLEN;
 	m = m0;
 
-	bp = (char *)sc->sc_rb.rb_rxbuf + (ri % sc->sc_rb.rb_nrbuf) * _HME_BUFSZ;
+	bp = sc->sc_rb.rb_rxbuf + (ri % sc->sc_rb.rb_nrbuf) * _HME_BUFSZ;
 
 	while (totlen > 0) {
 		if (totlen >= MINCLSIZE) {
@@ -729,7 +728,7 @@ hme_get(sc, ri, flags)
 		}
 
 		if (m == m0) {
-			char *newdata = (char *)
+			caddr_t newdata = (caddr_t)
 			    ALIGN(m->m_data + sizeof(struct ether_header)) -
 			    sizeof(struct ether_header);
 			len -= newdata - m->m_data;
@@ -737,7 +736,7 @@ hme_get(sc, ri, flags)
 		}
 
 		m->m_len = len = min(totlen, len);
-		memcpy(mtod(m, void *), bp, len);
+		memcpy(mtod(m, caddr_t), bp, len);
 		bp += len;
 
 		totlen -= len;
@@ -763,7 +762,7 @@ hme_get(sc, ri, flags)
 		if (sc->sc_ethercom.ec_capenable & ETHERCAP_VLAN_MTU) {
 			pktlen = m0->m_pkthdr.len - ETHER_HDR_LEN -
 				ETHER_VLAN_ENCAP_LEN;
-			eh = (struct ether_header *) mtod(m0, void *) +
+			eh = (struct ether_header *) mtod(m0, caddr_t) +
 				ETHER_VLAN_ENCAP_LEN;
 		} else {
 			pktlen = m0->m_pkthdr.len - ETHER_HDR_LEN;
@@ -771,7 +770,7 @@ hme_get(sc, ri, flags)
 		}
 		if (ntohs(eh->ether_type) != ETHERTYPE_IP)
 			goto swcsum;
-		ip = (struct ip *) ((char *)eh + ETHER_HDR_LEN);
+		ip = (struct ip *) ((caddr_t) eh + ETHER_HDR_LEN);
 
 		/* IPv4 only */
 		if (ip->ip_v != IPVERSION)
@@ -802,7 +801,7 @@ hme_get(sc, ri, flags)
 				goto swcsum;
 			if (pktlen < (hlen + sizeof(struct udphdr)))
 				goto swcsum;
-			uh = (struct udphdr *)((char *)ip + hlen);
+			uh = (struct udphdr *)((caddr_t)ip + hlen);
 			/* no checksum */
 			if (uh->uh_sum == 0)
 				goto swcsum;
@@ -821,7 +820,7 @@ hme_get(sc, ri, flags)
 
 			optsum = 0;
 			temp = hlen - sizeof(struct ip);
-			opts = (uint16_t *)((char *)ip + sizeof(struct ip));
+			opts = (uint16_t *) ((caddr_t) ip + sizeof(struct ip));
 
 			while (temp > 1) {
 				optsum += ntohs(*opts++);
@@ -906,7 +905,7 @@ hme_start(ifp)
 	struct ifnet *ifp;
 {
 	struct hme_softc *sc = (struct hme_softc *)ifp->if_softc;
-	void *txd = sc->sc_rb.rb_txd;
+	caddr_t txd = sc->sc_rb.rb_txd;
 	struct mbuf *m;
 	unsigned int txflags;
 	unsigned int ri, len;
@@ -1057,7 +1056,7 @@ int
 hme_rint(sc)
 	struct hme_softc *sc;
 {
-	void *xdr = sc->sc_rb.rb_rxd;
+	caddr_t xdr = sc->sc_rb.rb_rxd;
 	unsigned int nrbuf = sc->sc_rb.rb_nrbuf;
 	unsigned int ri;
 	u_int32_t flags;
@@ -1422,7 +1421,7 @@ int
 hme_ioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 {
 	struct hme_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -1464,7 +1463,7 @@ hme_ioctl(ifp, cmd, data)
 			 * If interface is marked down and it is running, then
 			 * stop it.
 			 */
-			hme_stop(sc, false);
+			hme_stop(sc);
 			ifp->if_flags &= ~IFF_RUNNING;
 		} else if ((ifp->if_flags & IFF_UP) != 0 &&
 		    	   (ifp->if_flags & IFF_RUNNING) == 0) {
@@ -1532,7 +1531,7 @@ hme_shutdown(arg)
 	void *arg;
 {
 
-	hme_stop((struct hme_softc *)arg, false);
+	hme_stop((struct hme_softc *)arg);
 }
 
 /*
@@ -1656,7 +1655,7 @@ hme_copytobuf_contig(sc, from, ri, len)
 	void *from;
 	int ri, len;
 {
-	volatile void *buf = sc->sc_rb.rb_txbuf + (ri * _HME_BUFSZ);
+	volatile caddr_t buf = sc->sc_rb.rb_txbuf + (ri * _HME_BUFSZ);
 
 	/*
 	 * Just call memcpy() to do the work.
@@ -1670,7 +1669,7 @@ hme_copyfrombuf_contig(sc, to, boff, len)
 	void *to;
 	int boff, len;
 {
-	volatile void *buf = sc->sc_rb.rb_rxbuf + (ri * _HME_BUFSZ);
+	volatile caddr_t buf = sc->sc_rb.rb_rxbuf + (ri * _HME_BUFSZ);
 
 	/*
 	 * Just call memcpy() to do the work.

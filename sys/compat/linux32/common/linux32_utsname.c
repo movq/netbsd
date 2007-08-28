@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_utsname.c,v 1.3 2007/03/18 21:38:33 dsl Exp $ */
+/*	$NetBSD: linux32_utsname.c,v 1.1 2006/02/09 19:18:57 manu Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_utsname.c,v 1.3 2007/03/18 21:38:33 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_utsname.c,v 1.1 2006/02/09 19:18:57 manu Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -43,6 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_utsname.c,v 1.3 2007/03/18 21:38:33 dsl Exp 
 #include <sys/kernel.h>
 #include <sys/fcntl.h>
 #include <sys/select.h>
+#include <sys/sa.h>
 #include <sys/proc.h>
 #include <sys/ucred.h>
 #include <sys/swap.h>
@@ -92,7 +93,7 @@ linux32_sys_uname(l, v, retval)
 #endif 
 	strncpy(luts.l_domainname, domainname, sizeof(luts.l_domainname));
        
-	lp = SCARG_P32(uap, up);
+	lp = (struct linux_utsname *)NETBSD32PTR64(SCARG(uap, up));
 
         return copyout(&luts, lp, sizeof(luts));
 }
@@ -114,5 +115,5 @@ linux32_sys_oldolduname(l, v, retval)
         strncpy(luts.l_version, linux32_version, sizeof(luts.l_version));
         strncpy(luts.l_machine, machine, sizeof(luts.l_machine));
  
-        return copyout(&luts, SCARG_P32(uap, up), sizeof(luts));
+        return copyout(&luts, NETBSD32PTR64(SCARG(uap, up)), sizeof(luts));
 }

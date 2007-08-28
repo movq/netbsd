@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socket.h,v 1.15 2007/07/01 18:45:36 dsl Exp $	*/
+/*	$NetBSD: linux_socket.h,v 1.13 2005/12/11 12:20:19 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -154,38 +154,21 @@
 
 /*
  * Linux alignment requirement for CMSG struct manipulation.
- * Linux aligns on (size_t) boundary on all architectures.
- * Fortunately for linux, linux_cmsghdr is always size_t aligned !
- * since no padding is added between the header and data.
- * XXX: this code isn't right for the compat32 code.
+ * Linux aligns on (long) boundary on all architectures.
  */
-struct linux_cmsghdr {
-	size_t	cmsg_len;	/* NB not socklen_t */
-	int	cmsg_level;
-	int	cmsg_type;
-    /*	unsigned char __cmsg_data[0]; */
-};
-
 #define LINUX_CMSG_ALIGN(n)	\
-	(((n) + sizeof(size_t)-1) & ~(sizeof(size_t)-1))
-/* Linux either uses this, or  &((cmsg)->__cmsg_data) */
+	(((n) + sizeof(long)-1) & ~(sizeof(long)-1))
 #define LINUX_CMSG_DATA(cmsg)	\
-	((u_char *)((struct linux_cmsghdr *)(cmsg) + 1))
+	((u_char *)(void *)(cmsg) + __CMSG_ALIGN(sizeof(struct cmsghdr)))
 #define	LINUX_CMSG_NXTHDR(mhdr, cmsg)	\
-	((((char *)(cmsg) + LINUX_CMSG_ALIGN((cmsg)->cmsg_len) + \
-			    sizeof(*(cmsg))) > \
-	    (((char *)(mhdr)->msg_control) + (mhdr)->msg_controllen)) ? \
-	    (struct linux_cmsghdr *)NULL : \
-	    (struct linux_cmsghdr *)((char *)(cmsg) + \
+	(((__caddr_t)(cmsg) + LINUX_CMSG_ALIGN((cmsg)->cmsg_len) + \
+			    LINUX_CMSG_ALIGN(sizeof(struct cmsghdr)) > \
+	    (((__caddr_t)(mhdr)->msg_control) + (mhdr)->msg_controllen)) ? \
+	    (struct cmsghdr *)NULL : \
+	    (struct cmsghdr *)((__caddr_t)(cmsg) + \
 	        LINUX_CMSG_ALIGN((cmsg)->cmsg_len)))
-/* This the number of bytes removed from each item (excl. final padding) */
-#define LINUX_CMSG_ALIGN_DELTA	\
-	(CMSG_ALIGN(sizeof(struct cmsghdr)) - sizeof(struct linux_cmsghdr))
-
-#define LINUX_CMSG_FIRSTHDR(mhdr) \
-	((mhdr)->msg_controllen >= sizeof(struct linux_cmsghdr) ? \
-	(struct linux_cmsghdr *)(mhdr)->msg_control : NULL)
-
+#define LINUX_CMSG_ALIGNDIFF	\
+	(CMSG_ALIGN(sizeof(struct cmsghdr)) - LINUX_CMSG_ALIGN(sizeof(struct cmsghdr)))
 
 /*
  * Machine specific definitions.

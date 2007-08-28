@@ -1,4 +1,4 @@
-/*	$NetBSD: omap5912_intr.h,v 1.1 2007/01/06 00:53:11 christos Exp $ */
+/*	$NetBSD: omap5912_intr.h,v 1.1.6.2 2007/02/21 18:39:20 snj Exp $ */
 
 /*
  * Define the OMAP5912 specific information and then include the generic OMAP

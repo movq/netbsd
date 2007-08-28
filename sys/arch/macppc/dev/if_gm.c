@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gm.c,v 1.29 2007/07/09 20:52:22 ad Exp $	*/
+/*	$NetBSD: if_gm.c,v 1.27 2006/09/07 02:40:31 dogcow Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.29 2007/07/09 20:52:22 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.27 2006/09/07 02:40:31 dogcow Exp $");
 
 #include "opt_inet.h"
 #include "rnd.h"
@@ -83,8 +83,8 @@ struct gmac_softc {
 	struct gmac_dma *sc_rxlist;
 	int sc_txnext;
 	int sc_rxlast;
-	void *sc_txbuf[NTXBUF];
-	void *sc_rxbuf[NRXBUF];
+	caddr_t sc_txbuf[NTXBUF];
+	caddr_t sc_rxbuf[NRXBUF];
 	struct mii_data sc_mii;
 	struct callout sc_tick_ch;
 	char sc_laddr[6];
@@ -110,9 +110,9 @@ static inline void gmac_stop_rxdma __P((struct gmac_softc *));
 int gmac_intr __P((void *));
 void gmac_tint __P((struct gmac_softc *));
 void gmac_rint __P((struct gmac_softc *));
-struct mbuf * gmac_get __P((struct gmac_softc *, void *, int));
+struct mbuf * gmac_get __P((struct gmac_softc *, caddr_t, int));
 void gmac_start __P((struct ifnet *));
-int gmac_put __P((struct gmac_softc *, void *, struct mbuf *));
+int gmac_put __P((struct gmac_softc *, caddr_t, struct mbuf *));
 
 void gmac_stop __P((struct gmac_softc *));
 void gmac_reset __P((struct gmac_softc *));
@@ -120,7 +120,7 @@ void gmac_init __P((struct gmac_softc *));
 void gmac_init_mac __P((struct gmac_softc *));
 void gmac_setladrf __P((struct gmac_softc *));
 
-int gmac_ioctl __P((struct ifnet *, u_long, void *));
+int gmac_ioctl __P((struct ifnet *, u_long, caddr_t));
 void gmac_watchdog __P((struct ifnet *));
 
 int gmac_mediachange __P((struct ifnet *));
@@ -227,7 +227,7 @@ gmac_attach(parent, self, aux)
 	printf(": Ethernet address %s\n", ether_sprintf(laddr));
 	printf("%s: interrupting at %s\n", sc->sc_dev.dv_xname, intrstr);
 
-	callout_init(&sc->sc_tick_ch, 0);
+	callout_init(&sc->sc_tick_ch);
 
 	gmac_reset(sc);
 	gmac_init_mac(sc);
@@ -434,7 +434,7 @@ next:
 struct mbuf *
 gmac_get(sc, pkt, totlen)
 	struct gmac_softc *sc;
-	void *pkt;
+	caddr_t pkt;
 	int totlen;
 {
 	struct mbuf *m;
@@ -469,7 +469,7 @@ gmac_get(sc, pkt, totlen)
 			len = MCLBYTES;
 		}
 		m->m_len = len = min(totlen, len);
-		memcpy(mtod(m, void *), pkt, len);
+		memcpy(mtod(m, caddr_t), pkt, len);
 		pkt += len;
 		totlen -= len;
 		*mp = m;
@@ -485,7 +485,7 @@ gmac_start(ifp)
 {
 	struct gmac_softc *sc = ifp->if_softc;
 	struct mbuf *m;
-	void *buff;
+	caddr_t buff;
 	int i, tlen;
 	volatile struct gmac_dma *dp;
 
@@ -544,7 +544,7 @@ gmac_start(ifp)
 int
 gmac_put(sc, buff, m)
 	struct gmac_softc *sc;
-	void *buff;
+	caddr_t buff;
 	struct mbuf *m;
 {
 	int len, tlen = 0;
@@ -553,7 +553,7 @@ gmac_put(sc, buff, m)
 		len = m->m_len;
 		if (len == 0)
 			continue;
-		memcpy(buff, mtod(m, void *), len);
+		memcpy(buff, mtod(m, caddr_t), len);
 		buff += len;
 		tlen += len;
 	}
@@ -795,7 +795,7 @@ int
 gmac_ioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 {
 	struct gmac_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;

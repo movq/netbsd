@@ -1,4 +1,4 @@
-/*	$NetBSD: ninjaata32.c,v 1.8 2007/07/09 21:00:37 ad Exp $	*/
+/*	$NetBSD: ninjaata32.c,v 1.5.2.1 2007/03/08 18:29:16 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2006 ITOH Yasufumi <itohy@NetBSD.org>.
@@ -27,12 +27,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ninjaata32.c,v 1.8 2007/07/09 21:00:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ninjaata32.c,v 1.5.2.1 2007/03/08 18:29:16 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-#include <sys/proc.h>
 
 #include <machine/bus.h>
 #include <machine/intr.h>
@@ -126,7 +125,7 @@ njata32_attach(sc)
 	}
 	if ((error = bus_dmamem_map(sc->sc_dmat, &sc->sc_sgt_seg,
 	    sc->sc_sgt_nsegs, sizeof(struct njata32_dma_page),
-	    (void **)&sc->sc_sgtpg,
+	    (caddr_t *)&sc->sc_sgtpg,
 	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
 		printf("%s: unable to map sgt page, error = %d\n",
 		    NJATA32NAME(sc), error);
@@ -245,7 +244,7 @@ fail4:	while (--devno >= 0) {
 	}
 	bus_dmamap_unload(sc->sc_dmat, sc->sc_dmamap_sgt);
 fail3:	bus_dmamap_destroy(sc->sc_dmat, sc->sc_dmamap_sgt);
-fail2:	bus_dmamem_unmap(sc->sc_dmat, (void *)sc->sc_sgtpg,
+fail2:	bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->sc_sgtpg,
 	    sizeof(struct njata32_dma_page));
 fail1:	bus_dmamem_free(sc->sc_dmat, &sc->sc_sgt_seg, sc->sc_sgt_nsegs);
 }
@@ -268,7 +267,7 @@ njata32_detach(sc, flags)
 		}
 		bus_dmamap_unload(sc->sc_dmat, sc->sc_dmamap_sgt);
 		bus_dmamap_destroy(sc->sc_dmat, sc->sc_dmamap_sgt);
-		bus_dmamem_unmap(sc->sc_dmat, (void *)sc->sc_sgtpg,
+		bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->sc_sgtpg,
 		    sizeof(struct njata32_dma_page));
 		bus_dmamem_free(sc->sc_dmat, &sc->sc_sgt_seg, sc->sc_sgt_nsegs);
 	}

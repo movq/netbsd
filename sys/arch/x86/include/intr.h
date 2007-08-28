@@ -1,7 +1,7 @@
-/*	$NetBSD: intr.h,v 1.27 2007/07/09 20:52:37 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.21 2006/07/04 00:30:22 christos Exp $	*/
 
 /*-
- * Copyright (c) 1998, 2001, 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -39,9 +39,14 @@
 #ifndef _X86_INTR_H_
 #define _X86_INTR_H_
 
+#ifdef _KERNEL_OPT
+#include "opt_multiprocessor.h"
+#endif
+
 #include <machine/intrdefs.h>
 
 #ifndef _LOCORE
+#include <machine/cpu.h>
 #include <machine/pic.h>
 
 /*
@@ -87,6 +92,7 @@ struct intrsource {
 #define IS_IPI		0x0002
 #define IS_LOG		0x0004
 
+
 /*
  * Interrupt handler chains.  *_intr_establish() insert a handler into
  * the list.  The handler is called with its (single) argument.
@@ -107,59 +113,105 @@ struct intrhand {
 #define IMASK(ci,level) (ci)->ci_imask[(level)]
 #define IUNMASK(ci,level) (ci)->ci_iunmask[(level)]
 
-void Xspllower(int);
-void spllower(int);
-int splraise(int);
-void softintr(int);
+extern void Xspllower(int);
+
+static __inline int splraise(int);
+static __inline void spllower(int);
+static __inline void softintr(int);
 
 /*
  * Convert spl level to local APIC level
  */
-
 #define APIC_LEVEL(l)   ((l) << 4)
+
+/*
+ * Add a mask to cpl, and return the old value of cpl.
+ */
+static __inline int
+splraise(int nlevel)
+{
+	int olevel;
+	struct cpu_info *ci = curcpu();
+
+	olevel = ci->ci_ilevel;
+	if (nlevel > olevel)
+		ci->ci_ilevel = nlevel;
+	__insn_barrier();
+	return (olevel);
+}
+
+/*
+ * Restore a value to cpl (unmasking interrupts).  If any unmasked
+ * interrupts are pending, call Xspllower() to process them.
+ */
+static __inline void
+spllower(int nlevel)
+{
+	struct cpu_info *ci = curcpu();
+	u_int32_t imask;
+	u_long psl;
+
+	__insn_barrier();
+
+	imask = IUNMASK(ci, nlevel);
+	psl = read_psl();
+	disable_intr();
+	if (ci->ci_ipending & imask) {
+		Xspllower(nlevel);
+		/* Xspllower does enable_intr() */
+	} else {
+		ci->ci_ilevel = nlevel;
+		write_psl(psl);
+	}
+}
+
+#define SPL_ASSERT_BELOW(x) KDASSERT(curcpu()->ci_ilevel < (x))
+
+/*
+ * Software interrupt masks
+ *
+ * NOTE: spllowersoftclock() is used by hardclock() to lower the priority from
+ * clock to softclock before it calls softclock().
+ */
+#define	spllowersoftclock() spllower(IPL_SOFTCLOCK)
 
 /*
  * Miscellaneous
  */
-
-#define SPL_ASSERT_BELOW(x) KDASSERT(curcpu()->ci_ilevel < (x))
 #define	spl0()		spllower(IPL_NONE)
+#define splraiseipl(x) 	splraise(x)
 #define	splx(x)		spllower(x)
-
-typedef uint8_t ipl_t;
-typedef struct {
-	ipl_t _ipl;
-} ipl_cookie_t;
-
-static inline ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._ipl = ipl};
-}
-
-static inline int
-splraiseipl(ipl_cookie_t icookie)
-{
-
-	return splraise(icookie._ipl);
-}
 
 #include <sys/spl.h>
 
 /*
+ * Software interrupt registration
+ *
+ * We hand-code this to ensure that it's atomic.
+ *
+ * XXX always scheduled on the current CPU.
+ */
+static __inline void
+softintr(int sir)
+{
+	struct cpu_info *ci = curcpu();
+
+	__asm volatile("lock ; orl %1, %0" :
+	    "=m"(ci->ci_ipending) : "ir" (1 << sir));
+}
+
+/*
  * XXX
  */
-
 #define	setsoftnet()	softintr(SIR_NET)
 
 /*
  * Stub declarations.
  */
 
-void Xsoftclock(void);
-void Xsoftnet(void);
-void Xsoftserial(void);
+extern void Xsoftclock(void);
+extern void Xsoftnet(void);
+extern void Xsoftserial(void);
 
 extern struct intrstub i8259_stubs[];
 extern struct intrstub ioapic_edge_stubs[];
@@ -188,14 +240,18 @@ struct pic *intr_findpic(int);
 void intr_printconfig(void);
 #endif
 
+#ifdef MULTIPROCESSOR
 int x86_send_ipi(struct cpu_info *, int);
 void x86_broadcast_ipi(int);
 void x86_multicast_ipi(int, int);
 void x86_ipi_handler(void);
+void x86_intlock(struct intrframe *);
+void x86_intunlock(struct intrframe *);
 void x86_softintlock(void);
 void x86_softintunlock(void);
 
 extern void (*ipifunc[X86_NIPI])(struct cpu_info *);
+#endif
 
 #endif /* !_LOCORE */
 
@@ -243,8 +299,21 @@ void	*softintr_establish(int, void (*)(void *), void *);
 void	softintr_disestablish(void *);
 void	softintr_init(void);
 void	softintr_dispatch(int);
-void	softintr_schedule(void *arg);
 
+#define	softintr_schedule(arg)						\
+do {									\
+	struct x86_soft_intrhand *__sih = (arg);			\
+	struct x86_soft_intr *__si = __sih->sih_intrhead;		\
+	int __s;							\
+									\
+	x86_softintr_lock(__si, __s);					\
+	if (__sih->sih_pending == 0) {					\
+		TAILQ_INSERT_TAIL(&__si->softintr_q, __sih, sih_q);	\
+		__sih->sih_pending = 1;					\
+		softintr(__si->softintr_ssir);				\
+	}								\
+	x86_softintr_unlock(__si, __s);					\
+} while (/*CONSTCOND*/ 0)
 #endif /* _LOCORE */
 
 #endif /* !_X86_INTR_H_ */

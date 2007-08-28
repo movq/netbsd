@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_vnops.c,v 1.28 2007/07/29 21:17:41 rumble Exp $	*/
+/*	$NetBSD: cd9660_vnops.c,v 1.24 2006/11/16 01:33:35 christos Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_vnops.c,v 1.28 2007/07/29 21:17:41 rumble Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_vnops.c,v 1.24 2006/11/16 01:33:35 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -315,7 +315,7 @@ cd9660_read(v)
 			return (error);
 		}
 
-		error = uiomove((char *)bp->b_data + on, (int)n, uio);
+		error = uiomove(bp->b_data + on, (int)n, uio);
 		brelse(bp);
 	} while (error == 0 && uio->uio_resid > 0 && n != 0);
 
@@ -459,7 +459,7 @@ cd9660_readdir(v)
 	if (ap->a_ncookies == NULL)
 		idp->cookies = NULL;
 	else {
-		ncookies = uio->uio_resid / _DIRENT_MINSIZE((struct dirent *)0);
+		ncookies = uio->uio_resid / 16;
 		cookies = malloc(ncookies * sizeof(off_t), M_TEMP, M_WAITOK);
 		idp->cookies = cookies;
 		idp->ncookies = ncookies;
@@ -634,7 +634,7 @@ cd9660_readlink(v)
 	u_short	symlen;
 	int	error;
 	char	*symname;
-	bool use_pnbuf;
+	boolean_t use_pnbuf;
 
 	ip  = VTOI(ap->a_vp);
 	imp = ip->i_mnt;
@@ -658,7 +658,7 @@ cd9660_readlink(v)
 	/*
 	 * Setup the directory pointer for this inode
 	 */
-	dirp = (ISODIR *)((char *)bp->b_data + (ip->i_number & imp->im_bmask));
+	dirp = (ISODIR *)(bp->b_data + (ip->i_number & imp->im_bmask));
 
 	/*
 	 * Just make sure, we have a right one....
@@ -767,6 +767,7 @@ cd9660_strategy(v)
 		error = VOP_BMAP(vp, bp->b_lblkno, NULL, &bp->b_blkno, NULL);
 		if (error) {
 			bp->b_error = error;
+			bp->b_flags |= B_ERROR;
 			biodone(bp);
 			return (error);
 		}

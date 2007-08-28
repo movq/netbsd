@@ -1,4 +1,4 @@
-/*	$NetBSD: iopl.c,v 1.27 2007/08/26 22:36:35 dyoung Exp $	*/
+/*	$NetBSD: iopl.c,v 1.22 2006/09/07 02:40:32 dogcow Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -46,8 +46,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iopl.c,v 1.27 2007/08/26 22:36:35 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iopl.c,v 1.22 2006/09/07 02:40:32 dogcow Exp $");
 
+#include "opt_i2o.h"
 #include "opt_inet.h"
 #include "bpfilter.h"
 
@@ -120,7 +121,7 @@ static void	iopl_munge_ether(struct mbuf *, u_int8_t *);
 static void	iopl_munge_fddi(struct mbuf *, u_int8_t *);
 
 static int	iopl_init(struct ifnet *);
-static int	iopl_ioctl(struct ifnet *, u_long, void *);
+static int	iopl_ioctl(struct ifnet *, u_long, caddr_t);
 static void	iopl_start(struct ifnet *);
 static void	iopl_stop(struct ifnet *, int);
 
@@ -193,7 +194,7 @@ iopl_attach(struct device *parent, struct device *self, void *aux)
 	struct iopl_softc *sc;
 	struct iop_softc *iop;
 	struct ifnet *ifp;
-	int rv, iff = 0, ifcap, orphanlimit = 0, maxpktsize; /* XXX */
+	int rv, iff, ifcap, orphanlimit, maxpktsize;
 	struct {
 		struct	i2o_param_op_results pr;
 		struct	i2o_param_read_results prr;
@@ -562,7 +563,7 @@ iopl_rx_alloc(struct iopl_softc *sc, int count)
 {
 	struct iopl_rx *rx;
 	struct mbuf *m;
-	int i, size, rv = 0, state = 0;
+	int i, size, rv, state;
 
 	if (count > sc->sc_rx_maxbkt)
 		count = sc->sc_rx_maxbkt;
@@ -861,8 +862,8 @@ iopl_intr_rx(struct device *dv, struct iop_msg *im, void *reply)
 	struct ifnet *ifp;
 	struct mbuf *m, *m0;
 	u_int32_t *p;
-	int off, err, flg, first, lastpkt, lastbkt, rv, pkt = 0; /* XXX */
-	int len, i, pktlen[IOPL_MAX_BATCH], csumflgs[IOPL_MAX_BATCH];
+	int off, err, flg, first, lastpkt, lastbkt, rv;
+	int len, i, pkt, pktlen[IOPL_MAX_BATCH], csumflgs[IOPL_MAX_BATCH];
 	struct mbuf *head[IOPL_MAX_BATCH], *tail[IOPL_MAX_BATCH];
 
 	rb = (struct i2o_lan_receive_reply *)reply;
@@ -991,7 +992,7 @@ iopl_intr_rx(struct device *dv, struct iop_msg *im, void *reply)
 					continue;
 				}
 				m0->m_data += sc->sc_rx_prepad;
-				m_copydata(m, 0, len, mtod(m0, void *) + off);
+				m_copydata(m, 0, len, mtod(m0, caddr_t) + off);
 				off = 0;
 			} else if (!first) {
 				/*
@@ -1112,7 +1113,6 @@ iopl_intr_tx(struct device *dv, struct iop_msg *im, void *reply)
 	int i, bktcnt;
 
 	sc = (struct iopl_softc *)dv;
-	ifp = &sc->sc_if.sci_if;
 	rb = (struct i2o_lan_send_reply *)reply;
 
 	if ((rb->msgflags & I2O_MSGFLAGS_FAIL) != 0) {
@@ -1236,7 +1236,7 @@ iopl_getpg(struct iopl_softc *sc, int pg)
 static void
 iopl_ifmedia_status(struct ifnet *ifp, struct ifmediareq *req)
 {
-	const struct iopl_media *ilm = NULL; /* XXX */
+	const struct iopl_media *ilm;
 	struct iopl_softc *sc;
 	int s, conntype;
 
@@ -1281,7 +1281,7 @@ iopl_ifmedia_change(struct ifnet *ifp)
 {
 	struct iop_softc *iop;
 	struct iopl_softc *sc;
-	const struct iopl_media *ilm = NULL; /* XXX */
+	const struct iopl_media *ilm;
 	u_int subtype;
 	u_int32_t ciontype;
 	u_int8_t fdx;
@@ -1390,7 +1390,7 @@ iopl_init(struct ifnet *ifp)
 		sc->sc_flags |= (IOPL_MEDIA_CHANGE | IOPL_INITTED);
 		splx(s);
 
-		callout_init(&sc->sc_pg_callout, 0);
+		callout_init(&sc->sc_pg_callout);
 
 		sc->sc_next_pg = -1;
 		iopl_tick_sched(sc);
@@ -1457,7 +1457,7 @@ iopl_init(struct ifnet *ifp)
 	 * Try to set the active MAC address.
 	 */
 	memset(hwaddr, 0, sizeof(hwaddr));
-	memcpy(hwaddr, CLLADDR(ifp->if_sadl), ifp->if_addrlen);
+	memcpy(hwaddr, LLADDR(ifp->if_sadl), ifp->if_addrlen);
 	iop_field_set(iop, sc->sc_tid, I2O_PARAM_LAN_MAC_ADDRESS,
 	    hwaddr, sizeof(hwaddr), I2O_PARAM_LAN_MAC_ADDRESS_localaddr);
 
@@ -1550,8 +1550,7 @@ iopl_start(struct ifnet *ifp)
 	bus_dmamap_t dm;
 	bus_dma_segment_t *ds;
 	bus_addr_t saddr, eaddr;
-	u_int32_t mb[IOP_MAX_MSG_SIZE / sizeof(u_int32_t)];
-	u_int32_t *p = NULL, *lp = NULL; /* XXX */
+	u_int32_t mb[IOP_MAX_MSG_SIZE / sizeof(u_int32_t)], *p, *lp;
 	u_int rv, i, slen, tlen, size;
 	int frameleft, nxmits;
 	SLIST_HEAD(,iopl_tx) pending;
@@ -1593,7 +1592,7 @@ iopl_start(struct ifnet *ifp)
 		dm = tx->tx_dmamap;
 		rv = bus_dmamap_load_mbuf(sc->sc_dmat, dm, m,
 		    BUS_DMA_WRITE | BUS_DMA_NOWAIT);
-		if (!rv) {
+		if (rv == NULL) {
 			printf("%s: unable to load TX buffer; error = %d\n",
 			    sc->sc_dv.dv_xname, rv);
 			m_freem(m);
@@ -1869,7 +1868,7 @@ iopl_filter_generic(struct iopl_softc *sc, u_int64_t *tbl)
  * Handle control operations.
  */
 static int
-iopl_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+iopl_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct iopl_softc *sc;
 	struct ifaddr *ifa;
@@ -1930,7 +1929,7 @@ iopl_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		case SIOCGIFADDR:
 			ifr = (struct ifreq *)data;
 			memcpy(((struct sockaddr *)&ifr->ifr_data)->sa_data,
-			    CLLADDR(ifp->if_sadl), 6);
+			    LLADDR(ifp->if_sadl), 6);
 			break;
 
 		case SIOCSIFFLAGS:

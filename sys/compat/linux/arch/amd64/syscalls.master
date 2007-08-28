@@ -1,4 +1,4 @@
-	$NetBSD: syscalls.master,v 1.18 2007/03/14 12:44:39 njoly Exp $
+	$NetBSD: syscalls.master,v 1.15.6.1 2007/04/20 20:14:12 bouyer Exp $
 
 ;	@(#)syscalls.master	8.1 (Berkeley) 7/19/93
 
@@ -43,6 +43,7 @@
 #include <sys/systm.h>
 #include <sys/signal.h>
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/linux/common/linux_types.h>
@@ -77,7 +78,7 @@
 			    linux_off_t offset); }
 10	STD		{ int linux_sys_mprotect(const void *start, \
 			    unsigned long len, int prot); }
-11	NOARGS		{ int sys_munmap(void *addr, int len); }
+11	NOARGS		{ int sys_munmap(caddr_t addr, int len); }
 12	STD		{ int linux_sys_brk(char *nsize); }
 13	STD		{ int linux_sys_rt_sigaction(int signum, \
 			    const struct linux_sigaction *nsa, \
@@ -89,7 +90,7 @@
 			    size_t sigsetsize); }
 15	NOARGS		{ int linux_sys_rt_sigreturn(void); }
 16	STD		{ int linux_sys_ioctl(int fd, u_long com, \
-			    void *data); }
+			    caddr_t data); }
 17	STD		{ int linux_sys_pread(int fd, char *buf, \
 			    size_t nbyte, linux_off_t offset); }
 18	STD		{ int linux_sys_pwrite(int fd, char *buf, \
@@ -106,7 +107,7 @@
 24	STD		{ int linux_sys_sched_yield(void); }
 25	STD		{ void *linux_sys_mremap(void *old_address, \
 			    size_t old_size, size_t new_size, u_long flags); }
-26	STD		{ int linux_sys_msync(void *addr, int len, int fl); }
+26	STD		{ int linux_sys_msync(caddr_t addr, int len, int fl); }
 27	NOARGS		{ int sys_mincore(void *addr, size_t len, char *vec); }
 28	NOARGS		{ int sys_madvise(void *addr, size_t len, int behav); }
 #ifdef SYSVSHM
@@ -153,7 +154,7 @@
 			    const struct osockaddr *name, \
 			    unsigned int namelen); }
 50	NOARGS		{ int sys_listen(int s, int backlog); }
-51	STD		{ int linux_sys_getsockname(int fdec, void *asa, \
+51	STD		{ int linux_sys_getsockname(int fdec, caddr_t asa, \
 			    int *alen); }
 52	STD		{ int linux_sys_getpeername(int fdes, \
 			    struct sockaddr *asa, unsigned int *alen); }
@@ -315,8 +316,8 @@
 146	STD		{ int linux_sys_sched_get_priority_max(int policy); }
 147	STD		{ int linux_sys_sched_get_priority_min(int policy); }
 148	UNIMPL		sys_sched_rr_get_interval
-149	NOARGS		{ int sys_mlock(void *addr, size_t len); }
-150	NOARGS		{ int sys_munlock(void *addr, size_t len); }
+149	NOARGS		{ int sys_mlock(caddr_t addr, size_t len); }
+150	NOARGS		{ int sys_munlock(caddr_t addr, size_t len); }
 151	NOARGS		{ int sys_mlockall(int flags); }
 152	NOARGS		{ int sys_munlockall(void); }
 153	UNIMPL		vhangup

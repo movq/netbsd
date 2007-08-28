@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.99 2007/06/12 03:34:29 mhitch Exp $	*/
+/*	$NetBSD: locore.s,v 1.96.6.1 2007/06/18 09:31:09 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990 The Regents of the University of California.
@@ -758,7 +758,7 @@ ENTRY_NOPROFILE(lev1intr)
 	movl	_C_LABEL(stio_addr),%a0 |  get KVA of ST-IO area
 	moveb	#0, %a0@(SCU_SOFTINT)	|  Turn off software interrupt
 	addql	#1,_C_LABEL(intrcnt)+16	|  add another software interrupt
-	jbsr	_C_LABEL(softintr_dispatch) |  XXX handle software interrupts
+	jbsr	_C_LABEL(softint)	|  handle software interrupts
 	moveml	%sp@+,%d0-%d1/%a0-%a1
 	addql	#1,_C_LABEL(uvmexp)+UVMEXP_INTRS
 	jra	_ASM_LABEL(rei)
@@ -803,6 +803,7 @@ ENTRY_NOPROFILE(lev7intr)
  * point for coprocessor mid-instruction frames (type 9), but we also test
  * for bus error frames (type 10 and 11).
  */
+	BSS(ssir,1)
 ASENTRY_NOPROFILE(rei)
 #ifdef DEBUG
 	tstl	_C_LABEL(panicstr)	|  have we paniced?
@@ -1139,6 +1140,13 @@ ENTRY(qsetjmp)
 	movl	%sp@,%a0@		|  and return address
 	moveq	#0,%d0			|  return 0
 	rts
+
+	BSS(want_resched,4)
+
+/*
+ * Use common m68k process manipulation routines.
+ */
+#include <m68k/m68k/proc_subr.s>
 
 /*
  * Use common m68k process/lwp switch and context save subroutines.

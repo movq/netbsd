@@ -1,4 +1,4 @@
-/*	$NetBSD: ite.c,v 1.78 2007/07/11 18:59:18 he Exp $ */
+/*	$NetBSD: ite.c,v 1.75 2006/10/01 18:56:21 elad Exp $ */
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -83,7 +83,7 @@
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.78 2007/07/11 18:59:18 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite.c,v 1.75 2006/10/01 18:56:21 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -152,8 +152,6 @@ static char sample[20] = {
 	0,39,75,103,121,127,121,103,75,39,0,
 	-39,-75,-103,-121,-127,-121,-103,-75,-39
 };
-
-static callout_t repeat_ch;
 
 void iteputchar(int c, struct ite_softc *ip);
 void ite_putstr(const char * s, int len, dev_t dev);
@@ -425,8 +423,6 @@ iteinit(dev_t dev)
 	struct ite_softc *ip;
 	static int kbdmap_loaded = 0;
 
-	callout_init(&repeat_ch, 0);
-
 	ip = getitesp(dev);
 	if (ip->flags & ITE_INITED)
 		return;
@@ -561,7 +557,7 @@ itetty(dev_t dev)
 }
 
 int
-iteioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
+iteioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 {
 	struct iterepeat *irp;
 	struct ite_softc *ip;
@@ -668,7 +664,7 @@ itestart(struct tty *tp)
 		if (rbp->c_cc <= tp->t_lowat) {
 			if (tp->t_state & TS_ASLEEP) {
 				tp->t_state &= ~TS_ASLEEP;
-				wakeup((void *) rbp);
+				wakeup((caddr_t) rbp);
 			}
 			selwakeup(&tp->t_wsel);
 		}
@@ -862,6 +858,8 @@ ite_cnfilter(u_char c, enum caller caller)
 /* these are used to implement repeating keys.. */
 static u_char last_char;
 static u_char tout_pending;
+
+static struct callout repeat_ch = CALLOUT_INITIALIZER;
 
 /*ARGSUSED*/
 static void

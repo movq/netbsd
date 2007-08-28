@@ -1,4 +1,4 @@
-/*	$NetBSD: ipkdb_ipkdb.c,v 1.19 2007/01/29 01:52:44 hubertf Exp $	*/
+/*	$NetBSD: ipkdb_ipkdb.c,v 1.17 2006/09/13 10:07:42 elad Exp $	*/
 
 /*
  * Copyright (C) 1993-2000 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipkdb_ipkdb.c,v 1.19 2007/01/29 01:52:44 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipkdb_ipkdb.c,v 1.17 2006/09/13 10:07:42 elad Exp $");
 
 #include "opt_ipkdb.h"
 
@@ -50,6 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: ipkdb_ipkdb.c,v 1.19 2007/01/29 01:52:44 hubertf Exp
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/if_inarp.h>
+#include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/ip_var.h>
 #include <netinet/udp.h>
@@ -65,7 +66,7 @@ int ipkdbpanic = 0;
 #ifndef IPKDBKEY
 #error You must specify the IPKDBKEY option to use IPKDB.
 #else
-static char ipkdbkey[] = IPKDBKEY;
+static char *ipkdbkey = IPKDBKEY;
 #endif
 
 static struct ipkdb_if ipkdb_if;
@@ -84,7 +85,7 @@ static void outpkt __P((struct ipkdb_if *, char *, int, int, int));
 static void init __P((struct ipkdb_if *));
 static void *chksum __P((void *, int));
 static void getpkt __P((struct ipkdb_if *, char *, int *));
-static void putpkt __P((struct ipkdb_if *, const char *, int));
+static void putpkt __P((struct ipkdb_if *, char *, int));
 static int check_ipkdb __P((struct ipkdb_if *, struct in_addr *, char *, int));
 static int connectipkdb __P((struct ipkdb_if *, char *, int));
 static int hmac_init __P((void));
@@ -124,12 +125,10 @@ ipkdb_panic()
  */
 void
 ipkdbcopy(s, d, n)
-	const void *s;
-	void *d;
+	void *s, *d;
 	int n;
 {
-	const char *sp = s;
-	char *dp = d;
+	char *sp = s, *dp = d;
 
 	while (--n >= 0)
 		*dp++ = *sp++;
@@ -1113,7 +1112,7 @@ getpkt(ifp, buf, lp)
 static void
 putpkt(ifp, buf, l)
 	struct ipkdb_if *ifp;
-	const char *buf;
+	char *buf;
 	int l;
 {
 	setnl(ifp->pkt, ifp->seq++);

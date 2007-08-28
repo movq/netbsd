@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ural.c,v 1.24 2007/08/26 22:45:59 dyoung Exp $ */
+/*	$NetBSD: if_ural.c,v 1.18.2.1 2007/09/29 08:53:17 xtraeme Exp $ */
 /*	$FreeBSD: /repoman/r/ncvs/src/sys/dev/usb/if_ural.c,v 1.40 2006/06/02 23:14:40 sam Exp $	*/
 
 /*-
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ural.c,v 1.24 2007/08/26 22:45:59 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ural.c,v 1.18.2.1 2007/09/29 08:53:17 xtraeme Exp $");
 
 #include "bpfilter.h"
 
@@ -143,7 +143,7 @@ Static int		ural_tx_data(struct ural_softc *, struct mbuf *,
 Static void		ural_start(struct ifnet *);
 Static void		ural_watchdog(struct ifnet *);
 Static int		ural_reset(struct ifnet *);
-Static int		ural_ioctl(struct ifnet *, u_long, void *);
+Static int		ural_ioctl(struct ifnet *, u_long, caddr_t);
 Static void		ural_set_testmode(struct ural_softc *);
 Static void		ural_eeprom_read(struct ural_softc *, uint16_t, void *,
 			    int);
@@ -359,6 +359,9 @@ USB_MATCH(ural)
 {
 	USB_MATCH_START(ural, uaa);
 
+	if (uaa->iface != NULL)
+		return UMATCH_NONE;
+
 	return (usb_lookup(ural_devs, uaa->vendor, uaa->product) != NULL) ?
 	    UMATCH_VENDOR_PRODUCT : UMATCH_NONE;
 }
@@ -423,10 +426,10 @@ USB_ATTACH(ural)
 	}
 
 	usb_init_task(&sc->sc_task, ural_task, sc);
-	usb_callout_init(sc->sc_scan_ch);
+	callout_init(&sc->scan_ch);
 	sc->amrr.amrr_min_success_threshold = 1;
 	sc->amrr.amrr_min_success_threshold = 15;
-	usb_callout_init(sc->sc_amrr_ch);
+	callout_init(&sc->amrr_ch);
 
 	/* retrieve RT2570 rev. no */
 	sc->asic_rev = ural_read(sc, RAL_MAC_CSR0);
@@ -538,8 +541,8 @@ USB_DETACH(ural)
 
 	ural_stop(ifp, 1);
 	usb_rem_task(sc->sc_udev, &sc->sc_task);
-	usb_uncallout(sc->sc_scan_ch, ural_next_scan, sc);
-	usb_uncallout(sc->sc_amrr_ch, ural_amrr_timeout, sc);
+	callout_stop(&sc->scan_ch);
+	callout_stop(&sc->amrr_ch);
 
 	if (sc->amrr_xfer != NULL) {
 		usbd_free_xfer(sc->amrr_xfer);
@@ -555,6 +558,9 @@ USB_DETACH(ural)
 		usbd_abort_pipe(sc->sc_tx_pipeh);
 		usbd_close_pipe(sc->sc_tx_pipeh);
 	}
+
+	ural_free_rx_list(sc);
+	ural_free_tx_list(sc);
 
 #if NBPFILTER > 0
 	bpfdetach(ifp);
@@ -753,7 +759,7 @@ ural_task(void *arg)
 
 	case IEEE80211_S_SCAN:
 		ural_set_chan(sc, ic->ic_curchan);
-		usb_callout(sc->sc_scan_ch, hz / 5, ural_next_scan, sc);
+		callout_reset(&sc->scan_ch, hz / 5, ural_next_scan, sc);
 		break;
 
 	case IEEE80211_S_AUTH:
@@ -820,8 +826,8 @@ ural_newstate(struct ieee80211com *ic, enum ieee80211_state nstate,
 	struct ural_softc *sc = ic->ic_ifp->if_softc;
 
 	usb_rem_task(sc->sc_udev, &sc->sc_task);
-	usb_uncallout(sc->sc_scan_ch, ural_next_scan, sc);
-	usb_uncallout(sc->sc_amrr_ch, ural_amrr_timeout, sc);
+	callout_stop(&sc->scan_ch);
+	callout_stop(&sc->amrr_ch);
 
 	/* do it in a process context */
 	sc->sc_state = nstate;
@@ -1485,7 +1491,7 @@ ural_reset(struct ifnet *ifp)
 }
 
 Static int
-ural_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+ural_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct ural_softc *sc = ifp->if_softc;
 	struct ieee80211com *ic = &sc->sc_ic;
@@ -2145,7 +2151,7 @@ ural_init(struct ifnet *ifp)
 	ural_set_txantenna(sc, sc->tx_ant);
 	ural_set_rxantenna(sc, sc->rx_ant);
 
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, CLLADDR(ifp->if_sadl));
+	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
 	ural_set_macaddr(sc, ic->ic_myaddr);
 
 	/*
@@ -2315,7 +2321,7 @@ ural_amrr_start(struct ural_softc *sc, struct ieee80211_node *ni)
 	     i--);
 	ni->ni_txrate = i;
 
-	usb_callout(sc->sc_amrr_ch, hz, ural_amrr_timeout, sc);
+	callout_reset(&sc->amrr_ch, hz, ural_amrr_timeout, sc);
 }
 
 Static void
@@ -2372,5 +2378,5 @@ ural_amrr_update(usbd_xfer_handle xfer, usbd_private_handle priv,
 
 	ieee80211_amrr_choose(&sc->amrr, sc->sc_ic.ic_bss, &sc->amn);
 
-	usb_callout(sc->sc_amrr_ch, hz, ural_amrr_timeout, sc);
+	callout_reset(&sc->amrr_ch, hz, ural_amrr_timeout, sc);
 }

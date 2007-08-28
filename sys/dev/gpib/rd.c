@@ -1,4 +1,4 @@
-/*	$NetBSD: rd.c,v 1.17 2007/07/29 12:15:43 ad Exp $ */
+/*	$NetBSD: rd.c,v 1.13 2006/05/14 21:42:27 elad Exp $ */
 
 /*-
  * Copyright (c) 1996-2003 The NetBSD Foundation, Inc.
@@ -118,7 +118,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rd.c,v 1.17 2007/07/29 12:15:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rd.c,v 1.13 2006/05/14 21:42:27 elad Exp $");
 
 #include "rnd.h"
 
@@ -210,7 +210,7 @@ int	rderrthresh = RDRETRY-1;	/* when to start reporting errors */
 const struct rdidentinfo {
 	u_int16_t ri_hwid;		/* 2 byte HW id */
 	u_int16_t ri_maxunum;		/* maximum allowed unit number */
-	const char *ri_desc;		/* drive type description */
+	char	*ri_desc;		/* drive type description */
 	int	ri_nbpt;		/* DEV_BSIZE blocks per track */
 	int	ri_ntpc;		/* tracks per cylinder */
 	int	ri_ncyl;		/* cylinders per unit */
@@ -451,7 +451,7 @@ rdattach(parent, self, aux)
 	sc->sc_dk.dk_name = sc->sc_dev.dv_xname;
 	disk_attach(&sc->sc_dk);
 
-	callout_init(&sc->sc_restart_ch, 0);
+	callout_init(&sc->sc_restart_ch);
 
 	if (gpibregister(sc->sc_ic, sc->sc_slave, rdcallback, sc,
 	    &sc->sc_hdl)) {
@@ -508,10 +508,10 @@ rdgetinfo(sc)
 }
 
 int
-rdopen(dev, flags, mode, l)
+rdopen(dev, flags, mode, p)
 	dev_t dev;
 	int flags, mode;
-	struct lwp *l;
+	struct proc *p;
 {
 	struct rd_softc *sc;
 	int error, mask, part;
@@ -535,7 +535,7 @@ rdopen(dev, flags, mode, l)
 		sc->sc_flags |= RDF_OPENING;
 		error = rdgetinfo(sc);
 		sc->sc_flags &= ~RDF_OPENING;
-		wakeup((void *)sc);
+		wakeup((caddr_t)sc);
 		if (error)
 			return (error);
 	}
@@ -564,10 +564,10 @@ rdopen(dev, flags, mode, l)
 }
 
 int
-rdclose(dev, flag, mode, l)
+rdclose(dev, flag, mode, p)
 	dev_t dev;
 	int flag, mode;
-	struct lwp *l;
+	struct proc *p;
 {
 	struct rd_softc *sc;
 	struct disk *dk;
@@ -601,7 +601,7 @@ rdclose(dev, flag, mode, l)
 		}
 		splx(s);
 		sc->sc_flags &= ~(RDF_CLOSING | RDF_WLABEL);
-		wakeup((void *)sc);
+		wakeup((caddr_t)sc);
 	}
 	return (0);
 }
@@ -644,7 +644,7 @@ rdstrategy(bp)
 			}
 			if (sz < 0) {
 				bp->b_error = EINVAL;
-				goto done;
+				goto bad;
 			}
 			bp->b_bcount = dbtob(sz);
 		}
@@ -657,7 +657,7 @@ rdstrategy(bp)
 #endif
 		    !(bp->b_flags & B_READ) && !(sc->sc_flags & RDF_WLABEL)) {
 			bp->b_error = EROFS;
-			goto done;
+			goto bad;
 		}
 	}
 	bp->b_rawblkno = bn + offset;
@@ -669,6 +669,8 @@ rdstrategy(bp)
 	}
 	splx(s);
 	return;
+bad:
+	bp->b_flags |= B_ERROR;
 done:
 	biodone(bp);
 }
@@ -719,7 +721,7 @@ rdfinish(sc, bp)
 	sc->sc_active = 0;
 	if (sc->sc_flags & RDF_WANTED) {
 		sc->sc_flags &= ~RDF_WANTED;
-		wakeup((void *)&sc->sc_tab);
+		wakeup((caddr_t)&sc->sc_tab);
 	}
 	return (NULL);
 }
@@ -806,6 +808,7 @@ again:
 	printf("%s: rdstart err: cmd 0x%x sect %uld blk %" PRId64 " len %d\n",
 	       sc->sc_dev.dv_xname, sc->sc_ioc.c_cmd, sc->sc_ioc.c_addr,
 	       bp->b_blkno, sc->sc_resid);
+	bp->b_flags |= B_ERROR;
 	bp->b_error = EIO;
 	bp = rdfinish(sc, bp);
 	if (bp) {
@@ -863,6 +866,7 @@ rdintr(sc)
 				rdstart(sc);
 			return;
 		}
+		bp->b_flags |= B_ERROR;
 		bp->b_error = EIO;
 	}
 	if (rdfinish(sc, bp) != NULL)
@@ -1028,12 +1032,12 @@ rdwrite(dev, uio, flags)
 }
 
 int
-rdioctl(dev, cmd, data, flag, l)
+rdioctl(dev, cmd, data, flag, p)
 	dev_t dev;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 	int flag;
-	struct lwp *l;
+	struct proc *p;
 {
 	struct rd_softc *sc;
 	struct disklabel *lp;
@@ -1102,7 +1106,7 @@ rdgetdefaultlabel(sc, lp)
 {
 	int type = sc->sc_type;
 
-	memset((void *)lp, 0, sizeof(struct disklabel));
+	memset((caddr_t)lp, 0, sizeof(struct disklabel));
 
 	lp->d_type = DTYPE_GPIB;
 	lp->d_secsize = DEV_BSIZE;
@@ -1167,7 +1171,7 @@ int
 rddump(dev, blkno, va, size)
 	dev_t dev;
 	daddr_t blkno;
-	void *va;
+	caddr_t va;
 	size_t size;
 {
 	struct rd_softc *sc;

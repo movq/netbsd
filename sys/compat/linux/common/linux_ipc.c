@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_ipc.c,v 1.40 2007/06/17 18:17:46 dsl Exp $	*/
+/*	$NetBSD: linux_ipc.c,v 1.37 2006/09/13 19:55:49 manu Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_ipc.c,v 1.40 2007/06/17 18:17:46 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_ipc.c,v 1.37 2006/09/13 19:55:49 manu Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_sysv.h"
@@ -51,6 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_ipc.c,v 1.40 2007/06/17 18:17:46 dsl Exp $");
 #include <sys/systm.h>
 
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/linux/common/linux_types.h>
@@ -337,29 +338,45 @@ linux_sys_msgctl(l, v, retval)
 		syscallarg(int) cmd;
 		syscallarg(struct linux_msqid_ds *) buf;
 	} */ *uap = v;
-	struct msqid_ds bm;
+	struct proc *p = l->l_proc;
+	caddr_t sg;
+	struct sys___msgctl13_args nua;
+	struct msqid_ds *bmp, bm;
 	struct linux_msqid_ds lm;
 	int error;
 
+	SCARG(&nua, msqid) = SCARG(uap, msqid);
 	switch (SCARG(uap, cmd)) {
 	case LINUX_IPC_STAT:
-		error = msgctl1(l, SCARG(uap, msqid), IPC_STAT, &bm);
-		if (error == 0) {
-			bsd_to_linux_msqid_ds(&bm, &lm);
-			error = copyout(&lm, SCARG(uap, buf), sizeof lm);
-		}
-		return error;
+		sg = stackgap_init(p, 0);
+		bmp = stackgap_alloc(p, &sg, sizeof (struct msqid_ds));
+		SCARG(&nua, cmd) = IPC_STAT;
+		SCARG(&nua, buf) = bmp;
+		if ((error = sys___msgctl13(l, &nua, retval)))
+			return error;
+		if ((error = copyin(bmp, &bm, sizeof bm)))
+			return error;
+		bsd_to_linux_msqid_ds(&bm, &lm);
+		return copyout(&lm, SCARG(uap, buf), sizeof lm);
 	case LINUX_IPC_SET:
 		if ((error = copyin(SCARG(uap, buf), &lm, sizeof lm)))
 			return error;
 		linux_to_bsd_msqid_ds(&lm, &bm);
-		return msgctl1(l, SCARG(uap, msqid), IPC_SET, &bm);
+		sg = stackgap_init(p, 0);
+		bmp = stackgap_alloc(p, &sg, sizeof bm);
+		if ((error = copyout(&bm, bmp, sizeof bm)))
+			return error;
+		SCARG(&nua, cmd) = IPC_SET;
+		SCARG(&nua, buf) = bmp;
+		break;
 	case LINUX_IPC_RMID:
-		return msgctl1(l, SCARG(uap, msqid), IPC_RMID, NULL);
+		SCARG(&nua, cmd) = IPC_RMID;
+		SCARG(&nua, buf) = NULL;
 		break;
 	default:
 		return EINVAL;
 	}
+	return sys___msgctl13(l, &nua, retval);
 }
 #endif /* SYSVMSG */
 
@@ -409,7 +426,7 @@ linux_sys_shmat(l, v, retval)
 		return error;
 
 #ifndef __amd64__
-	if ((error = copyout(&retval[0], (void *) SCARG(uap, raddr),
+	if ((error = copyout(&retval[0], (caddr_t) SCARG(uap, raddr),
 	     sizeof retval[0])))
 		return error;
 
@@ -511,19 +528,28 @@ linux_sys_shmctl(l, v, retval)
 		syscallarg(int) cmd;
 		syscallarg(struct linux_shmid_ds *) buf;
 	} */ *uap = v;
-	struct shmid_ds bs;
+	struct proc *p = l->l_proc;
+	caddr_t sg;
+	struct sys___shmctl13_args nua;
+	struct shmid_ds *bsp, bs;
 	struct linux_shmid_ds ls;
 	struct linux_shmid64_ds ls64;
 	struct linux_shminfo64 lsi64;
 	struct linux_shm_info lsi;
 	int error, i, cmd;
 
+	SCARG(&nua, shmid) = SCARG(uap, shmid);
 	cmd = SCARG(uap, cmd);
 	switch (cmd) {
 	case LINUX_IPC_STAT:
 	case LINUX_SHM_STAT:
-		error = shmctl1(l, SCARG(uap, shmid), IPC_STAT, &bs);
-		if (error != 0)
+		sg = stackgap_init(p, 0);
+		bsp = stackgap_alloc(p, &sg, sizeof(struct shmid_ds));
+		SCARG(&nua, cmd) = IPC_STAT;
+		SCARG(&nua, buf) = bsp;
+		if ((error = sys___shmctl13(l, &nua, retval)))
+			return error;
+		if ((error = copyin(SCARG(&nua, buf), &bs, sizeof bs)))
 			return error;
 		bsd_to_linux_shmid_ds(&bs, &ls);
 		if (cmd == LINUX_SHM_STAT)
@@ -531,13 +557,18 @@ linux_sys_shmctl(l, v, retval)
 			    bs.shm_perm);
 		return copyout(&ls, SCARG(uap, buf), sizeof ls);
 
-	case LINUX_IPC_STAT | LINUX_IPC_64:
-	case LINUX_SHM_STAT | LINUX_IPC_64:
-		error = shmctl1(l, SCARG(uap, shmid), IPC_STAT, &bs);
-		if (error != 0)
+	case LINUX_IPC_STAT|LINUX_IPC_64:
+	case LINUX_SHM_STAT|LINUX_IPC_64:
+		sg = stackgap_init(p,0);
+		bsp = stackgap_alloc(p, &sg, sizeof(struct linux_shmid64_ds));
+		SCARG(&nua, cmd) = IPC_STAT;
+		SCARG(&nua, buf) = bsp;
+		if ((error = sys___shmctl13(l, &nua, retval)))
+			return error;
+		if ((error = copyin(SCARG(&nua, buf), &bs, sizeof bs)))
 			return error;
 		bsd_to_linux_shmid64_ds(&bs, &ls64);
-		if (cmd == (LINUX_SHM_STAT | LINUX_IPC_64)) {
+		if (cmd == (LINUX_SHM_STAT|LINUX_IPC_64)) {
 			retval[0] = IXSEQ_TO_IPCID(bs.shm_perm._key,
 						   bs.shm_perm);
 		}
@@ -547,16 +578,28 @@ linux_sys_shmctl(l, v, retval)
 		if ((error = copyin(SCARG(uap, buf), &ls, sizeof ls)))
 			return error;
 		linux_to_bsd_shmid_ds(&ls, &bs);
-		return shmctl1(l, SCARG(uap, shmid), IPC_SET, &bs);
+		sg = stackgap_init(p, 0);
+		bsp = stackgap_alloc(p, &sg, sizeof bs);
+		if ((error = copyout(&bs, bsp, sizeof bs)))
+			return error;
+		SCARG(&nua, cmd) = IPC_SET;
+		SCARG(&nua, buf) = bsp;
+		break;
 
 	case LINUX_IPC_RMID:
-		return shmctl1(l, SCARG(uap, shmid), IPC_RMID, NULL);
+		SCARG(&nua, cmd) = IPC_RMID;
+		SCARG(&nua, buf) = NULL;
+		break;
 
 	case LINUX_SHM_LOCK:
-		return shmctl1(l, SCARG(uap, shmid), SHM_LOCK, NULL);
+		SCARG(&nua, cmd) = SHM_LOCK;
+		SCARG(&nua, buf) = NULL;
+		break;
 
 	case LINUX_SHM_UNLOCK:
-		return shmctl1(l, SCARG(uap, shmid), SHM_UNLOCK, NULL);
+		SCARG(&nua, cmd) = SHM_UNLOCK;
+		SCARG(&nua, buf) = NULL;
+		break;
 
 	case LINUX_IPC_INFO:
 		memset(&lsi64, 0, sizeof lsi64);
@@ -585,5 +628,6 @@ linux_sys_shmctl(l, v, retval)
 #endif
 		return EINVAL;
 	}
+	return sys___shmctl13(l, &nua, retval);
 }
 #endif /* SYSVSHM */

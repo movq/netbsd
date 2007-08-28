@@ -1,4 +1,4 @@
-/*	$NetBSD: mscp_tape.c,v 1.31 2007/07/29 12:15:43 ad Exp $ */
+/*	$NetBSD: mscp_tape.c,v 1.29 2006/03/29 07:06:24 thorpej Exp $ */
 /*
  * Copyright (c) 1996 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mscp_tape.c,v 1.31 2007/07/29 12:15:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mscp_tape.c,v 1.29 2006/03/29 07:06:24 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -277,13 +277,16 @@ mtstrategy(bp)
 	unit = mtunit(bp->b_dev);
 	if (unit > mt_cd.cd_ndevs || (mt = mt_cd.cd_devs[unit]) == NULL) {
 		bp->b_error = ENXIO;
-		biodone(bp);
-		return;
+		goto bad;
 	}
 
 	mt->mt_waswrite = bp->b_flags & B_READ ? 0 : 1;
 	mscp_strategy(bp, device_parent(&mt->mt_dev));
 	return;
+
+bad:
+	bp->b_flags |= B_ERROR;
+	biodone(bp);
 }
 
 int
@@ -360,7 +363,7 @@ mtonline(usc, mp)
 {
 	struct mt_softc *mt = (void *)usc;
 
-	wakeup((void *)&mt->mt_state);
+	wakeup((caddr_t)&mt->mt_state);
 	if ((mp->mscp_status & M_ST_MASK) == M_ST_SUCCESS)
 		mt->mt_state = MT_ONLINE;
 
@@ -421,6 +424,7 @@ mtioerror(usc, mp, bp)
 			    mt_ioerrs[st-1]);
 		else
 			printf("%s: error %d\n", mt->mt_dev.dv_xname, st);
+		bp->b_flags |= B_ERROR;
 		bp->b_error = EROFS;
 	}
 
@@ -434,7 +438,7 @@ int
 mtioctl(dev, cmd, data, flag, l)
 	dev_t dev;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 	int flag;
 	struct lwp *l;
 {
@@ -473,7 +477,7 @@ int
 mtdump(dev, blkno, va, size)
 	dev_t	dev;
 	daddr_t blkno;
-	void *va;
+	caddr_t va;
 	size_t	size;
 {
 	return -1;

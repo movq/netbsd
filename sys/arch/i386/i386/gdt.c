@@ -1,4 +1,4 @@
-/*	$NetBSD: gdt.c,v 1.40 2007/08/07 12:00:25 ad Exp $	*/
+/*	$NetBSD: gdt.c,v 1.36 2005/12/24 20:07:10 perry Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -37,14 +37,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gdt.c,v 1.40 2007/08/07 12:00:25 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gdt.c,v 1.36 2005/12/24 20:07:10 perry Exp $");
 
 #include "opt_multiprocessor.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
-#include <sys/mutex.h>
+#include <sys/lock.h>
 #include <sys/user.h>
 
 #include <uvm/uvm.h>
@@ -56,7 +56,7 @@ int gdt_count;		/* number of GDT entries in use */
 int gdt_next;		/* next available slot for sweeping */
 int gdt_free;		/* next free slot; terminated with GNULL_SEL */
 
-static kmutex_t gdt_lock_store;
+struct lock gdt_lock_store;
 
 static inline void gdt_lock(void);
 static inline void gdt_unlock(void);
@@ -78,14 +78,14 @@ static inline void
 gdt_lock()
 {
 
-	mutex_enter(&gdt_lock_store);
+	(void) lockmgr(&gdt_lock_store, LK_EXCLUSIVE, NULL);
 }
 
 static inline void
 gdt_unlock()
 {
 
-	mutex_exit(&gdt_lock_store);
+	(void) lockmgr(&gdt_lock_store, LK_RELEASE, NULL);
 }
 
 void
@@ -115,7 +115,7 @@ gdt_init()
 	vaddr_t va;
 	struct cpu_info *ci = &cpu_info_primary;
 
-	mutex_init(&gdt_lock_store, MUTEX_DEFAULT, IPL_NONE);
+	lockinit(&gdt_lock_store, PZERO, "gdtlck", 0, 0);
 
 	max_len = MAXGDTSIZ * sizeof(gdt[0]);
 	min_len = MINGDTSIZ * sizeof(gdt[0]);
@@ -136,7 +136,6 @@ gdt_init()
 		pmap_kenter_pa(va, VM_PAGE_TO_PHYS(pg),
 		    VM_PROT_READ | VM_PROT_WRITE);
 	}
-	pmap_update(pmap_kernel());
 	memcpy(gdt, old_gdt, NGDT * sizeof(gdt[0]));
 	ci->ci_gdt = gdt;
 	setsegment(&ci->ci_gdt[GCPU_SEL].sd, ci, sizeof(struct cpu_info)-1,
@@ -167,7 +166,6 @@ gdt_alloc_cpu(struct cpu_info *ci)
 		pmap_kenter_pa(va, VM_PAGE_TO_PHYS(pg),
 		    VM_PROT_READ | VM_PROT_WRITE);
 	}
-	pmap_update(pmap_kernel());
 	memset(ci->ci_gdt, 0, min_len);
 	memcpy(ci->ci_gdt, gdt, gdt_count * sizeof(gdt[0]));
 	setsegment(&ci->ci_gdt[GCPU_SEL].sd, ci, sizeof(struct cpu_info)-1,
@@ -233,8 +231,6 @@ gdt_grow()
 			    VM_PROT_READ | VM_PROT_WRITE);
 		}
 	}
-
-	pmap_update(pmap_kernel());
 }
 
 /*
@@ -309,23 +305,22 @@ tss_free(int sel)
 /*
  * Caller must have pmap locked for both of these functions.
  */
-int
-ldt_alloc(union descriptor *ldtp, size_t len)
+void
+ldt_alloc(struct pmap *pmap, union descriptor *ldtp, size_t len)
 {
 	int slot;
 
 	slot = gdt_get_slot();
 	setgdt(slot, ldtp, len - 1, SDT_SYSLDT, SEL_KPL, 0, 0);
-
-	return GSEL(slot, SEL_KPL);
+	pmap->pm_ldt_sel = GSEL(slot, SEL_KPL);
 }
 
 void
-ldt_free(int sel)
+ldt_free(struct pmap *pmap)
 {
 	int slot;
 
-	slot = IDXSEL(sel);
+	slot = IDXSEL(pmap->pm_ldt_sel);
 
 	gdt_put_slot(slot);
 }

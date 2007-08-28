@@ -1,4 +1,4 @@
-/*	$NetBSD: uplcom.c,v 1.58 2007/08/18 20:23:04 sborrill Exp $	*/
+/*	$NetBSD: uplcom.c,v 1.50.2.1 2007/07/26 13:19:26 pavel Exp $	*/
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uplcom.c,v 1.58 2007/08/18 20:23:04 sborrill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uplcom.c,v 1.50.2.1 2007/07/26 13:19:26 pavel Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,6 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: uplcom.c,v 1.58 2007/08/18 20:23:04 sborrill Exp $")
 #include <dev/usb/usbdevs.h>
 #include <dev/usb/usb_quirks.h>
 
+#include <dev/usb/usbdevs.h>
 #include <dev/usb/ucomvar.h>
 
 #ifdef UPLCOM_DEBUG
@@ -135,7 +136,7 @@ Static	void uplcom_break(struct uplcom_softc *, int);
 Static	void uplcom_set_line_state(struct uplcom_softc *);
 Static	void uplcom_get_status(void *, int portno, u_char *lsr, u_char *msr);
 #if TODO
-Static	int  uplcom_ioctl(void *, int, u_long, void *, int, usb_proc_ptr );
+Static	int  uplcom_ioctl(void *, int, u_long, caddr_t, int, usb_proc_ptr );
 #endif
 Static	int  uplcom_param(void *, int, struct termios *);
 Static	int  uplcom_open(void *, int);
@@ -166,8 +167,6 @@ static const struct usb_devno uplcom_devs[] = {
 	{ USB_VENDOR_ATEN, USB_PRODUCT_ATEN_UC232A },
 	/* IOGEAR/ATEN UC-232A */
 	{ USB_VENDOR_PROLIFIC, USB_PRODUCT_PROLIFIC_PL2303 },
-	/* SMART Technologies USB to serial */
-	{ USB_VENDOR_PROLIFIC2, USB_PRODUCT_PROLIFIC2_PL2303 },
 	/* IOGEAR/ATENTRIPPLITE */
 	{ USB_VENDOR_TRIPPLITE, USB_PRODUCT_TRIPPLITE_U209 },
 	/* ELECOM UC-SGT */
@@ -194,8 +193,6 @@ static const struct usb_devno uplcom_devs[] = {
 	{ USB_VENDOR_SITECOM, USB_PRODUCT_SITECOM_CN104 },
 	/* Pharos USB GPS - Microsoft version */
 	{ USB_VENDOR_PROLIFIC, USB_PRODUCT_PROLIFIC_PL2303X },
-	/* Willcom WS002IN (DD) */
-	{ USB_VENDOR_NETINDEX, USB_PRODUCT_NETINDEX_WS002IN },
 };
 #define uplcom_lookup(v, p) usb_lookup(uplcom_devs, v, p)
 
@@ -206,7 +203,6 @@ static const struct {
 } uplcom_devs_ext[] = {
 	/* I/O DATA USB-RSAQ3 */
 	{ USB_VENDOR_PROLIFIC, USB_PRODUCT_PROLIFIC_RSAQ3, UPLCOM_TYPE_HX },
-	{ USB_VENDOR_NETINDEX, USB_PRODUCT_NETINDEX_WS002IN, UPLCOM_TYPE_HX },
 	/* I/O DATA USB-RSAQ5 */
 	{ USB_VENDOR_IODATA, USB_PRODUCT_IODATA_USBRSAQ5, UPLCOM_TYPE_HX },
 	{0, 0, 0}
@@ -219,6 +215,9 @@ USB_MATCH(uplcom)
 {
 	USB_MATCH_START(uplcom, uaa);
 
+	if (uaa->iface != NULL)
+		return (UMATCH_NONE);
+
 	return (uplcom_lookup(uaa->vendor, uaa->product) != NULL ?
 		UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
 }
@@ -227,6 +226,7 @@ USB_ATTACH(uplcom)
 {
 	USB_ATTACH_START(uplcom, sc, uaa);
 	usbd_device_handle dev = uaa->device;
+	usb_device_descriptor_t *ddesc;
 	usb_config_descriptor_t *cdesc;
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
@@ -259,6 +259,15 @@ USB_ATTACH(uplcom)
 		USB_ATTACH_ERROR_RETURN;
 	}
 
+	/* get the device descriptor */
+	ddesc = usbd_get_device_descriptor(sc->sc_udev);
+	if (ddesc == NULL) {
+		printf("%s: failed to get device descriptor\n",
+		    USBDEVNAME(sc->sc_dev));
+		sc->sc_dying = 1;
+		USB_ATTACH_ERROR_RETURN;
+	}
+
 	/* determine chip type */
 	for (i = 0; uplcom_devs_ext[i].vendor != 0; i++) {
 		if (uplcom_devs_ext[i].vendor == uaa->vendor &&
@@ -275,7 +284,7 @@ USB_ATTACH(uplcom)
 	 * The bcdDevice field should also distinguish these versions,
 	 * but who knows.
 	 */
-	if (uaa->release == 0x0300)
+	if (UGETW(ddesc->bcdDevice) == 0x0300)
 		sc->sc_type = UPLCOM_TYPE_HX;
 	else
 		sc->sc_type = UPLCOM_TYPE_0;
@@ -819,7 +828,7 @@ uplcom_get_status(void *addr, int portno, u_char *lsr, u_char *msr)
 
 #if TODO
 int
-uplcom_ioctl(void *addr, int portno, u_long cmd, void *data, int flag,
+uplcom_ioctl(void *addr, int portno, u_long cmd, caddr_t data, int flag,
 	     usb_proc_ptr p)
 {
 	struct uplcom_softc *sc = addr;

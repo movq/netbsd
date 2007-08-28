@@ -1,4 +1,4 @@
-/*	$NetBSD: mpt.h,v 1.6 2007/07/27 13:06:51 tron Exp $	*/
+/*	$NetBSD: mpt.h,v 1.5.24.1 2007/07/30 20:02:31 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001 by Greg Ansley

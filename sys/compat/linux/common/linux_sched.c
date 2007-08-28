@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_sched.c,v 1.42 2007/02/15 20:32:48 ad Exp $	*/
+/*	$NetBSD: linux_sched.c,v 1.37.2.1 2007/03/28 20:38:41 jdc Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_sched.c,v 1.42 2007/02/15 20:32:48 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_sched.c,v 1.37.2.1 2007/03/28 20:38:41 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/mount.h>
@@ -50,6 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_sched.c,v 1.42 2007/02/15 20:32:48 ad Exp $");
 #include <sys/systm.h>
 #include <sys/sysctl.h>
 #include <sys/malloc.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/wait.h>
 #include <sys/kauth.h>
@@ -170,7 +171,7 @@ linux_sys_sched_setparam(struct lwp *cl, void *v, register_t *retval)
 		if ((p = pfind(SCARG(uap, pid))) == NULL)
 			return ESRCH;
 		if (!(cl->l_proc == p ||
-		      kauth_authorize_generic(pc, KAUTH_GENERIC_ISSUSER, NULL) == 0 ||
+		      kauth_cred_geteuid(pc) == 0 ||
 		      kauth_cred_getuid(pc) == kauth_cred_getuid(p->p_cred) ||
 		      kauth_cred_geteuid(pc) == kauth_cred_getuid(p->p_cred) ||
 		      kauth_cred_getuid(pc) == kauth_cred_geteuid(p->p_cred) ||
@@ -203,7 +204,7 @@ linux_sys_sched_getparam(struct lwp *cl, void *v, register_t *retval)
 		if ((p = pfind(SCARG(uap, pid))) == NULL)
 			return ESRCH;
 		if (!(cl->l_proc == p ||
-		      kauth_authorize_generic(pc, KAUTH_GENERIC_ISSUSER, NULL) == 0 ||
+		      kauth_cred_geteuid(pc) == 0 ||
 		      kauth_cred_getuid(pc) == kauth_cred_getuid(p->p_cred) ||
 		      kauth_cred_geteuid(pc) == kauth_cred_getuid(p->p_cred) ||
 		      kauth_cred_getuid(pc) == kauth_cred_geteuid(p->p_cred) ||
@@ -245,7 +246,7 @@ linux_sys_sched_setscheduler(struct lwp *cl, void *v,
 		if ((p = pfind(SCARG(uap, pid))) == NULL)
 			return ESRCH;
 		if (!(cl->l_proc == p ||
-		      kauth_authorize_generic(pc, KAUTH_GENERIC_ISSUSER, NULL) == 0 ||
+		      kauth_cred_geteuid(pc) == 0 ||
 		      kauth_cred_getuid(pc) == kauth_cred_getuid(p->p_cred) ||
 		      kauth_cred_geteuid(pc) == kauth_cred_getuid(p->p_cred) ||
 		      kauth_cred_getuid(pc) == kauth_cred_geteuid(p->p_cred) ||
@@ -285,7 +286,7 @@ linux_sys_sched_getscheduler(cl, v, retval)
 		if ((p = pfind(SCARG(uap, pid))) == NULL)
 			return ESRCH;
 		if (!(cl->l_proc == p ||
-		      kauth_authorize_generic(pc, KAUTH_GENERIC_ISSUSER, NULL) == 0 ||
+		      kauth_cred_geteuid(pc) == 0 ||
 		      kauth_cred_getuid(pc) == kauth_cred_getuid(p->p_cred) ||
 		      kauth_cred_geteuid(pc) == kauth_cred_getuid(p->p_cred) ||
 		      kauth_cred_getuid(pc) == kauth_cred_geteuid(p->p_cred) ||
@@ -394,7 +395,6 @@ linux_sys_exit_group(l, v, retval)
 		 * care of hiding the zombies and reporting the exit code
 		 * properly.
 		 */
-		mutex_enter(&proclist_mutex);
       		LIST_FOREACH(e, &led->s->threads, threads) {
 			if (e->proc == p)
 				continue;
@@ -407,8 +407,6 @@ linux_sys_exit_group(l, v, retval)
 
 		/* Now, kill ourselves */
 		psignal(p, SIGKILL);
-		mutex_exit(&proclist_mutex);
-
 		return 0;
 
 	}
@@ -526,6 +524,9 @@ linux_sys_sched_getaffinity(l, v, retval)
 	} */ *uap = v;
 	int error;
 	int ret;
+	int ncpu;
+	int name[2];
+	size_t sz;
 	char *data;
 	int *retp;
 
@@ -543,7 +544,15 @@ linux_sys_sched_getaffinity(l, v, retval)
 	 * The result is a mask, the first CPU being in the least significant
 	 * bit.
 	 */
+	name[0] = CTL_HW;
+	name[1] = HW_NCPU;
+	sz = sizeof(ncpu);
+
+	if ((error = old_sysctl(&name[0], 2, &ncpu, &sz, NULL, 0, NULL)) != 0)
+		return error;
+
 	ret = (1 << ncpu) - 1;
+
 	data = malloc(SCARG(uap, len), M_TEMP, M_WAITOK|M_ZERO);
 	retp = (int *)&data[SCARG(uap, len) - sizeof(ret)];
 	*retp = ret;

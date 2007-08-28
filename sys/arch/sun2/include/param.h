@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.9 2007/03/16 18:39:21 tsutsui Exp $	*/
+/*	$NetBSD: param.h,v 1.8.24.1 2007/03/31 15:42:11 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993

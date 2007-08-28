@@ -1,4 +1,4 @@
-/*	$NetBSD: sysvbfs_vnops.c,v 1.13 2007/07/29 13:31:10 ad Exp $	*/
+/*	$NetBSD: sysvbfs_vnops.c,v 1.5.8.1 2007/02/17 23:27:46 tron Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -37,13 +37,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysvbfs_vnops.c,v 1.13 2007/07/29 13:31:10 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysvbfs_vnops.c,v 1.5.8.1 2007/02/17 23:27:46 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/resource.h>
 #include <sys/vnode.h>
 #include <sys/namei.h>
+#include <sys/vnode.h>
 #include <sys/dirent.h>
 #include <sys/malloc.h>
 #include <sys/lockf.h>
@@ -61,7 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: sysvbfs_vnops.c,v 1.13 2007/07/29 13:31:10 ad Exp $"
 #endif
 #define	ROUND_SECTOR(x)		(((x) + 511) & ~511)
 
-MALLOC_JUSTDEFINE(M_SYSVBFS_VNODE, "sysvbfs vnode", "sysvbfs vnode structures");
+MALLOC_DEFINE(M_SYSVBFS_VNODE, "sysvbfs vnode", "sysvbfs vnode structures");
 
 int
 sysvbfs_lookup(void *arg)
@@ -81,7 +82,7 @@ sysvbfs_lookup(void *arg)
 	const char *name = cnp->cn_nameptr;
 	int namelen = cnp->cn_namelen;
 	int error;
-	bool islastcn = cnp->cn_flags & ISLASTCN;
+	boolean_t islastcn = cnp->cn_flags & ISLASTCN;
 
 	DPRINTF("%s: %s op=%d %ld\n", __FUNCTION__, name, nameiop,
 	    cnp->cn_flags);
@@ -164,9 +165,9 @@ sysvbfs_create(void *arg)
 		goto unlock_exit;
 	}
 	bnode = (*a->a_vpp)->v_data;
-	bnode->update_ctime = true;
-	bnode->update_mtime = true;
-	bnode->update_atime = true;
+	bnode->update_ctime = TRUE;
+	bnode->update_mtime = TRUE;
+	bnode->update_atime = TRUE;
 
  unlock_exit:
 	/* unlock parent directory */
@@ -195,7 +196,7 @@ sysvbfs_open(void *arg)
 
 	if (!bfs_dirent_lookup_by_inode(bfs, inode->number, &dirent))
 		return ENOENT;
-	bnode->update_atime = true;
+	bnode->update_atime = TRUE;
 	if ((a->a_mode & FWRITE) && !(a->a_mode & O_APPEND)) {
 		bnode->size = 0;
 	} else {
@@ -394,7 +395,7 @@ sysvbfs_write(void *arg)
 	struct uio *uio = a->a_uio;
 	struct sysvbfs_node *bnode = v->v_data;
 	struct bfs_inode *inode = bnode->inode;
-	bool extended = false;
+	boolean_t extended = FALSE;
 	vsize_t sz;
 	void *win;
 	int err = 0;
@@ -411,7 +412,7 @@ sysvbfs_write(void *arg)
 	if (bnode->size < uio->uio_offset + uio->uio_resid) {
 		bnode->size = uio->uio_offset + uio->uio_resid;
 		uvm_vnp_setsize(v, bnode->size);
-		extended = true;
+		extended = TRUE;
 	}
 
 	while (uio->uio_resid > 0) {
@@ -428,7 +429,7 @@ sysvbfs_write(void *arg)
 	    (ROUND_SECTOR(bnode->size) >> DEV_BSHIFT) - 1;
 	inode->eof_offset_byte = bnode->data_block * DEV_BSIZE +
 	    bnode->size - 1;
-	bnode->update_mtime = true;
+	bnode->update_mtime = TRUE;
 
 	VN_KNOTE(v, NOTE_WRITE | (extended ? NOTE_EXTEND : 0));
 
@@ -498,7 +499,7 @@ sysvbfs_rename(void *arg)
 	}
 
 	KDASSERT(fvp->v_type == VREG);
-	KDASSERT(tvp == NULL ? true : tvp->v_type == VREG);
+	KDASSERT(tvp == NULL ? TRUE : tvp->v_type == VREG);
 
 	error = bfs_file_rename(bfs, from_name, to_name);
  out:
@@ -600,7 +601,6 @@ sysvbfs_reclaim(void *v)
 	LIST_REMOVE(bnode, link);
 	simple_unlock(&mntvnode_slock);
 	cache_purge(vp);
-	genfs_node_destroy(vp);
 	pool_put(&sysvbfs_node_pool, bnode);
 	vp->v_data = NULL;
 
@@ -624,7 +624,7 @@ sysvbfs_bmap(void *arg)
 	daddr_t blk;
 
 	DPRINTF("%s:\n", __FUNCTION__);
-	/* BFS algorithm is contiguous allocation */
+	/* BFS algorythm is contiguous allocation */
 	blk = inode->start_sector + a->a_bn;
 
 	if (blk * BFS_BSIZE > bmp->bfs->data_end)
@@ -659,6 +659,7 @@ sysvbfs_strategy(void *arg)
 		error = VOP_BMAP(v, b->b_lblkno, NULL, &b->b_blkno, NULL);
 		if (error) {
 			b->b_error = error;
+			b->b_flags |= B_ERROR;
 			biodone(b);
 			return error;
 		}
@@ -786,15 +787,15 @@ sysvbfs_update(struct vnode *vp, const struct timespec *acc,
 	memset(&attr, 0xff, sizeof attr);	/* Set VNOVAL all */
 	if (bnode->update_atime) {
 		attr.atime = acc ? acc->tv_sec : time_second;
-		bnode->update_atime = false;
+		bnode->update_atime = FALSE;
 	}
 	if (bnode->update_ctime) {
 		attr.ctime = time_second;
-		bnode->update_ctime = false;
+		bnode->update_ctime = FALSE;
 	}
 	if (bnode->update_mtime) {
 		attr.mtime = mod ? mod->tv_sec : time_second;
-		bnode->update_mtime = false;
+		bnode->update_mtime = FALSE;
 	}
 	bfs_inode_set_attr(bnode->bmp->bfs, bnode->inode, &attr);
 

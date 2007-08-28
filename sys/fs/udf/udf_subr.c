@@ -1,4 +1,4 @@
-/* $NetBSD: udf_subr.c,v 1.36 2007/07/29 13:31:11 ad Exp $ */
+/* $NetBSD: udf_subr.c,v 1.23.2.5 2007/11/04 01:19:50 xtraeme Exp $ */
 
 /*
  * Copyright (c) 2006 Reinoud Zandijk
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: udf_subr.c,v 1.36 2007/07/29 13:31:11 ad Exp $");
+__RCSID("$NetBSD: udf_subr.c,v 1.23.2.5 2007/11/04 01:19:50 xtraeme Exp $");
 #endif /* not lint */
 
 
@@ -1309,6 +1309,7 @@ udf_search_vat(struct udf_mount *ump, union udf_pmap *mapping)
 		if (vat_node) {
 			vput(vat_node->vnode);
 			udf_dispose_node(vat_node);
+			vat_node = NULL;
 		}
 		vat_loc--;	/* walk backwards */
 	} while (vat_loc >= early_vat_loc);
@@ -1500,7 +1501,7 @@ udf_read_rootdirs(struct udf_mount *ump, struct udf_args *args)
 	int dscr_type;
 	int error;
 
-	/* TODO implement FSD reading in separate function like integrity? */
+	/* TODO implement FSD reading in seperate function like integrity? */
 	/* get fileset descriptor sequence */
 	fsd_loc = ump->logical_vol->lv_fsd_loc;
 	fsd_len = udf_rw32(fsd_loc.len);
@@ -1863,9 +1864,6 @@ udf_dispose_node(struct udf_node *node)
 	/* remove from our hash lookup table */
 	udf_hashrem(node);
 
-	/* destroy genfs structures */
-	genfs_node_destroy(vp);
-
 	/* dissociate our udf_node from the vnode */
 	vp->v_data = NULL;
 
@@ -2008,7 +2006,7 @@ udf_get_node(struct udf_mount *ump, struct long_ad *node_icb_loc,
 		return error;
 	}
 
-	/* always return locked vnode */
+	/* allways return locked vnode */
 	if ((error = vn_lock(nvp, LK_EXCLUSIVE | LK_RETRY))) {
 		/* recycle vnode and unlock; simultanious will fail too */
 		ungetnewvnode(nvp);
@@ -2194,7 +2192,7 @@ udf_get_node(struct udf_mount *ump, struct long_ad *node_icb_loc,
 	genfs_node_init(nvp, &udf_genfsops);
 
 	/* don't forget to set vnode's v_size */
-	uvm_vnp_setsize(nvp, file_size);
+	nvp->v_size = file_size;
 
 	/* TODO ext attr and streamdir nodes */
 
@@ -2739,7 +2737,7 @@ udf_read_file_extent(struct udf_node *node,
 /*
  * Read file extent in the buffer.
  *
- * The splitup of the extent into separate request-buffers is to minimise
+ * The splitup of the extent into seperate request-buffers is to minimise
  * copying around as much as possible.
  */
 
@@ -2773,6 +2771,7 @@ udf_read_filebuf(struct udf_node *node, struct buf *buf)
 	if (sectors > FILEBUFSECT) {
 		printf("udf_read_filebuf: implementation limit on bufsize\n");
 		buf->b_error  = EIO;
+		buf->b_flags |= B_ERROR;
 		biodone(buf);
 		return;
 	}
@@ -2784,6 +2783,7 @@ udf_read_filebuf(struct udf_node *node, struct buf *buf)
 	error = udf_translate_file_extent(node, from, sectors, mapping);
 	if (error) {
 		buf->b_error  = error;
+		buf->b_flags |= B_ERROR;
 		biodone(buf);
 		goto out;
 	}
@@ -2794,13 +2794,14 @@ udf_read_filebuf(struct udf_node *node, struct buf *buf)
 		error = udf_read_internal(node, (uint8_t *) buf->b_data);
 		if (error) {
 			buf->b_error  = error;
+			buf->b_flags |= B_ERROR;
 		}
 		biodone(buf);
 		goto out;
 	}
 	DPRINTF(READ, ("\tnot intern\n"));
 
-	/* request read-in of data from disc scheduler */
+	/* request read-in of data from disc sheduler */
 	buf->b_resid = buf->b_bcount;
 	for (sector = 0; sector < sectors; sector++) {
 		buf_offset = sector * sector_size;
@@ -2840,7 +2841,7 @@ udf_read_filebuf(struct udf_node *node, struct buf *buf)
 			nestiobuf_setup(buf, nestbuf, buf_offset, rbuflen);
 			/* nestbuf is B_ASYNC */
 
-			/* CD schedules on raw blkno */
+			/* CD shedules on raw blkno */
 			nestbuf->b_blkno    = rblk;
 			nestbuf->b_proc     = NULL;
 			nestbuf->b_cylinder = 0;

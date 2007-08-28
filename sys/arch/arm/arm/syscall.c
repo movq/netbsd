@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.36 2007/08/15 12:07:24 ad Exp $	*/
+/*	$NetBSD: syscall.c,v 1.34 2006/07/19 21:11:40 ad Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2003 The NetBSD Foundation, Inc.
@@ -76,9 +76,11 @@
  * Created      : 09/11/94
  */
 
+#include "opt_ktrace.h"
+
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.36 2007/08/15 12:07:24 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.34 2006/07/19 21:11:40 ad Exp $");
 
 #include <sys/device.h>
 #include <sys/errno.h>
@@ -88,7 +90,9 @@ __KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.36 2007/08/15 12:07:24 ad Exp $");
 #include <sys/syscall.h>
 #include <sys/systm.h>
 #include <sys/user.h>
+#ifdef KTRACE
 #include <sys/ktrace.h>
+#endif
 
 #include <uvm/uvm_extern.h>
 
@@ -137,14 +141,14 @@ swi_handler(trapframe_t *frame)
 		ksi.ksi_signo = SIGILL;
 		ksi.ksi_code = ILL_ILLOPC;
 		ksi.ksi_addr = (u_int32_t *)(intptr_t) (frame->tf_pc-INSN_SIZE);
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 #if 0
 		/* maybe one day we'll do emulations */
 		(*l->l_proc->p_emul->e_trapsignal)(l, &ksi);
 #else
 		trapsignal(l, &ksi);
 #endif
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 		userret(l);
 		return;
 	}
@@ -226,7 +230,7 @@ syscall_plain(struct trapframe *frame, struct lwp *l, u_int32_t insn)
 	register_t *ap, *args, copyargs[MAXARGS], rval[2];
 	ksiginfo_t ksi;
 
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 
 	switch (insn & SWI_OS_MASK) { /* Which OS is the SWI from? */
 	case SWI_OS_ARM: /* ARM-defined SWIs */
@@ -358,7 +362,7 @@ syscall_plain(struct trapframe *frame, struct lwp *l, u_int32_t insn)
 		break;
 	}
 
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 	userret(l);
 }
 
@@ -372,7 +376,7 @@ syscall_fancy(struct trapframe *frame, struct lwp *l, u_int32_t insn)
 	register_t *ap, *args, copyargs[MAXARGS], rval[2];
 	ksiginfo_t ksi;
 
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 
 	switch (insn & SWI_OS_MASK) { /* Which OS is the SWI from? */
 	case SWI_OS_ARM: /* ARM-defined SWIs */
@@ -508,7 +512,7 @@ out:
 	}
 
 	trace_exit(l, code, args, rval, error);
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 	userret(l);
 }
 
@@ -518,6 +522,9 @@ child_return(arg)
 {
 	struct lwp *l = arg;
 	struct trapframe *frame = l->l_addr->u_pcb.pcb_tf;
+#ifdef KTRACE
+	struct proc *p = l->l_proc;
+#endif
 
 	frame->tf_r0 = 0;
 #ifdef __PROG32
@@ -526,7 +533,13 @@ child_return(arg)
 	frame->tf_r15 &= ~R15_FLAG_C;	/* carry bit */
 #endif
 
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 	userret(l);
-	ktrsysret(SYS_fork, 0, 0);
+#ifdef KTRACE
+	if (KTRPOINT(p, KTR_SYSRET)) {
+		KERNEL_PROC_LOCK(l);
+		ktrsysret(l, SYS_fork, 0, 0);
+		KERNEL_PROC_UNLOCK(l);
+	}
+#endif
 }

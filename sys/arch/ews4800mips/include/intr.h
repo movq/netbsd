@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.6 2007/06/17 06:04:27 tsutsui Exp $	*/
+/*	$NetBSD: intr.h,v 1.1 2005/12/29 15:20:08 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001, 2004 The NetBSD Foundation, Inc.
@@ -44,22 +44,20 @@
 #include <sys/queue.h>
 
 #define IPL_NONE	0	/* disable only this interrupt */
+
 #define IPL_SOFT	1	/* generic software interrupts (SI 0) */
 #define IPL_SOFTCLOCK	2	/* clock software interrupts (SI 0) */
 #define IPL_SOFTNET	3	/* network software interrupts (SI 1) */
 #define IPL_SOFTSERIAL	4	/* serial software interrupts (SI 1) */
+
 #define IPL_BIO		5	/* disable block I/O interrupts */
 #define IPL_NET		6	/* disable network interrupts */
 #define IPL_TTY		7	/* disable terminal interrupts */
-#define	IPL_LPT		IPL_TTY
-#define	IPL_VM		IPL_TTY
 #define IPL_SERIAL	7	/* disable serial interrupts */
 #define IPL_CLOCK	8	/* disable clock interrupts */
-#define	IPL_STATCLOCK	IPL_CLOCK
-#define	IPL_SCHED	IPL_CLOCK
 #define IPL_HIGH	8	/* disable all interrupts */
-#define	IPL_LOCK	IPL_HIGH
 
+#define _IPL_NSOFT	4
 #define _IPL_N		9
 
 #define _IPL_SI0_FIRST	IPL_SOFT
@@ -68,14 +66,7 @@
 #define _IPL_SI1_FIRST	IPL_SOFTNET
 #define _IPL_SI1_LAST	IPL_SOFTSERIAL
 
-#define	SI_SOFT		0
-#define	SI_SOFTCLOCK	1
-#define	SI_SOFTNET	2
-#define	SI_SOFTSERIAL	3
-
-#define	SI_NQUEUES	4
-
-#define	SI_QUEUENAMES {							\
+#define IPL_SOFTNAMES {							\
 	"misc",								\
 	"clock",							\
 	"net",								\
@@ -88,33 +79,40 @@
 #define IST_EDGE	2	/* edge-triggered */
 #define IST_LEVEL	3	/* level-triggered */
 
-#include <mips/locore.h>
+#ifdef _KERNEL
 
 extern const uint32_t *ipl_sr_bits;
+extern const uint32_t ipl_si_to_sr[_IPL_NSOFT];
 
+extern int		_splraise(int);
+extern int		_spllower(int);
+extern int		_splset(int);
+extern int		_splget(int);
+extern int		_splnone(int);
+extern int		_setsoftintr(int);
+extern int		_clrsoftintr(int);
+
+#define splhigh()	_splraise(ipl_sr_bits[IPL_HIGH])
 #define spl0()		(void) _spllower(0)
 #define splx(s)		(void) _splset(s)
+#define splbio()	_splraise(ipl_sr_bits[IPL_BIO])
+#define splnet()	_splraise(ipl_sr_bits[IPL_NET])
+#define spltty()	_splraise(ipl_sr_bits[IPL_TTY])
+#define splserial()	_splraise(ipl_sr_bits[IPL_SERIAL])
+#define splvm()		spltty()
+#define splclock()	_splraise(ipl_sr_bits[IPL_CLOCK])
+#define splstatclock()	splclock()
 
-typedef int ipl_t;
-typedef struct {
-	ipl_t _sr;
-} ipl_cookie_t;
+#define splsched()	splclock()
+#define spllock()	splhigh()
+#define spllpt()	spltty()
 
-static inline ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
+#define splsoft()	_splraise(ipl_sr_bits[IPL_SOFT])
+#define splsoftclock()	_splraise(ipl_sr_bits[IPL_SOFTCLOCK])
+#define splsoftnet()	_splraise(ipl_sr_bits[IPL_SOFTNET])
+#define splsoftserial()	_splraise(ipl_sr_bits[IPL_SOFTSERIAL])
 
-	return (ipl_cookie_t){._sr = ipl_sr_bits[ipl]};
-}
-
-static inline int
-splraiseipl(ipl_cookie_t icookie)
-{
-
-	return _splraise(icookie._sr);
-}
-
-#include <sys/spl.h>
+#define spllowersoftclock() _spllower(ipl_sr_bits[IPL_SOFTCLOCK])
 
 void intr_init(void);
 void intr_establish(int, int (*)(void *), void *);
@@ -122,4 +120,5 @@ void intr_disestablish(void *);
 
 #include <mips/softintr.h>
 
+#endif /* _KERNEL */
 #endif /* !_EWS4800MIPS_INTR_H_ */

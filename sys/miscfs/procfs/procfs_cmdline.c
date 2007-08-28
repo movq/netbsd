@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_cmdline.c,v 1.26 2007/02/17 22:31:44 pavel Exp $	*/
+/*	$NetBSD: procfs_cmdline.c,v 1.23 2006/11/16 01:33:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 Jaromir Dolecek <dolecek@ics.muni.cz>
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_cmdline.c,v 1.26 2007/02/17 22:31:44 pavel Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_cmdline.c,v 1.23 2006/11/16 01:33:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,7 +67,6 @@ procfs_docmdline(
 	size_t i, len, xlen, upper_bound;
 	struct uio auio;
 	struct iovec aiov;
-	struct vmspace *vm;
 	vaddr_t argv;
 	char *arg;
 
@@ -85,9 +84,10 @@ procfs_docmdline(
 	 * System processes also don't have a user stack.  This is what
 	 * ps(1) would display.
 	 */
-	if (P_ZOMBIE(p) || (p->p_flag & PK_SYSTEM) != 0) {
-		len = snprintf(arg, PAGE_SIZE, "(%s)", p->p_comm) + 1;
+	if (P_ZOMBIE(p) || (p->p_flag & P_SYSTEM) != 0) {
+		len = snprintf(arg, PAGE_SIZE, "(%s)", p->p_comm);
 		error = uiomove_frombuf(arg, len, uio);
+
 		free(arg, M_TEMP);
 		return (error);
 	}
@@ -101,10 +101,12 @@ procfs_docmdline(
 	/*
 	 * Lock the process down in memory.
 	 */
-	if ((error = proc_vmspace_getref(p, &vm)) != 0) {
+	/* XXXCDC: how should locking work here? */
+	if ((p->p_flag & P_WEXIT) || (p->p_vmspace->vm_refcnt < 1)) {
 		free(arg, M_TEMP);
-		return (error);
+		return (EFAULT);
 	}
+	p->p_vmspace->vm_refcnt++;	/* XXX */
 
 	/*
 	 * Read in the ps_strings structure.
@@ -117,7 +119,7 @@ procfs_docmdline(
 	auio.uio_resid = sizeof(pss);
 	auio.uio_rw = UIO_READ;
 	UIO_SETUP_SYSSPACE(&auio);
-	error = uvm_io(&vm->vm_map, &auio);
+	error = uvm_io(&p->p_vmspace->vm_map, &auio);
 	if (error)
 		goto bad;
 
@@ -132,7 +134,7 @@ procfs_docmdline(
 	auio.uio_resid = sizeof(argv);
 	auio.uio_rw = UIO_READ;
 	UIO_SETUP_SYSSPACE(&auio);
-	error = uvm_io(&vm->vm_map, &auio);
+	error = uvm_io(&p->p_vmspace->vm_map, &auio);
 	if (error)
 		goto bad;
 
@@ -154,7 +156,7 @@ procfs_docmdline(
 		auio.uio_resid = xlen;
 		auio.uio_rw = UIO_READ;
 		UIO_SETUP_SYSSPACE(&auio);
-		error = uvm_io(&vm->vm_map, &auio);
+		error = uvm_io(&p->p_vmspace->vm_map, &auio);
 		if (error)
 			goto bad;
 
@@ -162,6 +164,9 @@ procfs_docmdline(
 			if (arg[i] == '\0')
 				count--;	/* one full string */
 		}
+
+		if (count == 0)
+			i--;		/* exclude the final NUL */
 
 		if (len + i > uio->uio_offset) {
 			/* Have data in this page, copy it out */
@@ -176,7 +181,7 @@ procfs_docmdline(
 	/*
 	 * Release the process.
 	 */
-	uvmspace_free(vm);
+	uvmspace_free(p->p_vmspace);
 
 	free(arg, M_TEMP);
 	return (error);

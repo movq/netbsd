@@ -1,4 +1,4 @@
-/*	$NetBSD: synaptics.c,v 1.15 2007/03/25 20:28:03 mlelstv Exp $	*/
+/*	$NetBSD: synaptics.c,v 1.13.2.1 2007/04/01 16:05:13 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2005, Steve C. Woodford

@@ -1,4 +1,4 @@
-/*	$NetBSD: radeonfbreg.h,v 1.3 2007/01/03 19:47:17 macallan Exp $	*/
+/*	$NetBSD: radeonfbreg.h,v 1.2.10.1 2007/03/04 12:25:15 bouyer Exp $	*/
 
 /* $XFree86: xc/programs/Xserver/hw/xfree86/drivers/ati/radeon_reg.h,v 1.31 2003/11/10 18:41:23 tsi Exp $ */
 /*

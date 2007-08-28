@@ -1,4 +1,4 @@
-/*	$NetBSD: icp.c,v 1.25 2007/07/09 21:00:36 ad Exp $	*/
+/*	$NetBSD: icp.c,v 1.22 2006/11/16 01:32:51 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -83,7 +83,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: icp.c,v 1.25 2007/07/09 21:00:36 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: icp.c,v 1.22 2006/11/16 01:32:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -150,7 +150,7 @@ icp_init(struct icp_softc *icp, const char *intrstr)
 	SIMPLEQ_INIT(&icp->icp_ccb_queue);
 	SIMPLEQ_INIT(&icp->icp_ccb_freelist);
 	SIMPLEQ_INIT(&icp->icp_ucmd_queue);
-	callout_init(&icp->icp_wdog_callout, 0);
+	callout_init(&icp->icp_wdog_callout);
 
 	/*
 	 * Allocate a scratch area.
@@ -416,8 +416,7 @@ icp_init(struct icp_softc *icp, const char *intrstr)
 	/*
 	 * Count the controller, and we're done!
 	 */
-	if (icp_count++ == 0)
-		mutex_init(&icp_ioctl_mutex, MUTEX_DEFAULT, IPL_NONE);
+	icp_count++;
 
 	return (0);
 
@@ -785,7 +784,7 @@ icp_ucmd_intr(struct icp_ccb *ic)
 		    ICP_SCRATCH_UCMD, iu->iu_cnt,
 		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 		memcpy(ucmd->data,
-		    (char *)icp->icp_scr + ICP_SCRATCH_UCMD, iu->iu_cnt);
+		    icp->icp_scr + ICP_SCRATCH_UCMD, iu->iu_cnt);
 	}
 
 	icp->icp_ucmd_ccb = NULL;
@@ -1063,7 +1062,7 @@ icp_ccb_enqueue(struct icp_softc *icp, struct icp_ccb *ic)
 			icp->icp_ucmd_ccb = ic;
 
 			if (iu->iu_cnt != 0) {
-				memcpy((char *)icp->icp_scr + ICP_SCRATCH_UCMD,
+				memcpy(icp->icp_scr + ICP_SCRATCH_UCMD,
 				    ucmd->data, iu->iu_cnt);
 				bus_dmamap_sync(icp->icp_dmat,
 				    icp->icp_scr_dmamap,

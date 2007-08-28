@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_anon.c,v 1.45 2007/07/21 19:21:53 ad Exp $	*/
+/*	$NetBSD: uvm_anon.c,v 1.41 2006/11/01 10:18:27 yamt Exp $	*/
 
 /*
  *
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_anon.c,v 1.45 2007/07/21 19:21:53 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_anon.c,v 1.41 2006/11/01 10:18:27 yamt Exp $");
 
 #include "opt_uvmhist.h"
 
@@ -53,7 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_anon.c,v 1.45 2007/07/21 19:21:53 ad Exp $");
 #include <uvm/uvm_pdpolicy.h>
 
 static POOL_INIT(uvm_anon_pool, sizeof(struct vm_anon), 0, 0, 0, "anonpl",
-    &pool_allocator_nointr, IPL_NONE);
+    &pool_allocator_nointr);
 static struct pool_cache uvm_anon_pool_cache;
 
 static int uvm_anon_ctor(void *, void *, int);
@@ -195,10 +195,10 @@ uvm_anfree(struct vm_anon *anon)
 #if defined(VMSWAP)
 	if (pg == NULL && anon->an_swslot > 0) {
 		/* this page is no longer only in swap. */
-		mutex_enter(&uvm_swap_data_lock);
+		simple_lock(&uvm.swap_data_lock);
 		KASSERT(uvmexp.swpgonly > 0);
 		uvmexp.swpgonly--;
-		mutex_exit(&uvm_swap_data_lock);
+		simple_unlock(&uvm.swap_data_lock);
 	}
 #endif /* defined(VMSWAP) */
 
@@ -272,7 +272,7 @@ struct vm_page *
 uvm_anon_lockloanpg(struct vm_anon *anon)
 {
 	struct vm_page *pg;
-	bool locked = false;
+	boolean_t locked = FALSE;
 
 	LOCK_ASSERT(simple_lock_held(&anon->an_lock));
 
@@ -301,7 +301,7 @@ uvm_anon_lockloanpg(struct vm_anon *anon)
 				    simple_lock_try(&pg->uobject->vmobjlock);
 			} else {
 				/* object disowned before we got PQ lock */
-				locked = true;
+				locked = TRUE;
 			}
 			uvm_unlock_pageq();
 
@@ -345,10 +345,10 @@ uvm_anon_lockloanpg(struct vm_anon *anon)
  * fetch an anon's page.
  *
  * => anon must be locked, and is unlocked upon return.
- * => returns true if pagein was aborted due to lack of memory.
+ * => returns TRUE if pagein was aborted due to lack of memory.
  */
 
-bool
+boolean_t
 uvm_anon_pagein(struct vm_anon *anon)
 {
 	struct vm_page *pg;
@@ -378,10 +378,10 @@ uvm_anon_pagein(struct vm_anon *anon)
 		 * so again there's nothing to do.
 		 */
 
-		return false;
+		return FALSE;
 
 	default:
-		return true;
+		return TRUE;
 	}
 
 	/*
@@ -419,7 +419,7 @@ uvm_anon_pagein(struct vm_anon *anon)
 	if (uobj) {
 		simple_unlock(&uobj->vmobjlock);
 	}
-	return false;
+	return FALSE;
 }
 
 #endif /* defined(VMSWAP) */

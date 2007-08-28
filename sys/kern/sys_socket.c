@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_socket.c,v 1.51 2007/07/09 21:10:56 ad Exp $	*/
+/*	$NetBSD: sys_socket.c,v 1.49 2006/11/01 10:17:59 yamt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -32,10 +32,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_socket.c,v 1.51 2007/07/09 21:10:56 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_socket.c,v 1.49 2006/11/01 10:17:59 yamt Exp $");
 
 #include <sys/param.h>
-#include <sys/systm.h>
 #include <sys/systm.h>
 #include <sys/file.h>
 #include <sys/mbuf.h>
@@ -62,14 +61,8 @@ soo_read(struct file *fp, off_t *offset, struct uio *uio, kauth_cred_t cred,
     int flags)
 {
 	struct socket *so = (struct socket *) fp->f_data;
-	int error;
-
-	KERNEL_LOCK(1, curlwp);
-	error = (*so->so_receive)(so, (struct mbuf **)0,
-	    uio, (struct mbuf **)0, (struct mbuf **)0, (int *)0);
-	KERNEL_UNLOCK_ONE(curlwp);
-
-	return error;
+	return ((*so->so_receive)(so, (struct mbuf **)0,
+		uio, (struct mbuf **)0, (struct mbuf **)0, (int *)0));
 }
 
 /* ARGSUSED */
@@ -78,14 +71,8 @@ soo_write(struct file *fp, off_t *offset, struct uio *uio, kauth_cred_t cred,
     int flags)
 {
 	struct socket *so = (struct socket *) fp->f_data;
-	int error;
-
-	KERNEL_LOCK(1, curlwp);
-	error = (*so->so_send)(so, (struct mbuf *)0,
+	return (*so->so_send)(so, (struct mbuf *)0,
 		uio, (struct mbuf *)0, (struct mbuf *)0, 0, curlwp);
-	KERNEL_UNLOCK_ONE(curlwp);
-
-	return error;
 }
 
 int
@@ -93,9 +80,6 @@ soo_ioctl(struct file *fp, u_long cmd, void *data, struct lwp *l)
 {
 	struct socket *so = (struct socket *)fp->f_data;
 	struct proc *p = l->l_proc;
-	int error = 0;
-
-	KERNEL_LOCK(1, curlwp);
 
 	switch (cmd) {
 
@@ -104,7 +88,7 @@ soo_ioctl(struct file *fp, u_long cmd, void *data, struct lwp *l)
 			so->so_state |= SS_NBIO;
 		else
 			so->so_state &= ~SS_NBIO;
-		break;
+		return (0);
 
 	case FIOASYNC:
 		if (*(int *)data) {
@@ -116,15 +100,15 @@ soo_ioctl(struct file *fp, u_long cmd, void *data, struct lwp *l)
 			so->so_rcv.sb_flags &= ~SB_ASYNC;
 			so->so_snd.sb_flags &= ~SB_ASYNC;
 		}
-		break;
+		return (0);
 
 	case FIONREAD:
 		*(int *)data = so->so_rcv.sb_cc;
-		break;
+		return (0);
 
 	case FIONWRITE:
 		*(int *)data = so->so_snd.sb_cc;
-		break;
+		return (0);
 
 	case FIONSPACE:
 		/*
@@ -138,53 +122,42 @@ soo_ioctl(struct file *fp, u_long cmd, void *data, struct lwp *l)
 			*(int *)data = 0;
 		else
 			*(int *)data = sbspace(&so->so_snd);
-		break;
+		return (0);
 
 	case SIOCSPGRP:
 	case FIOSETOWN:
 	case TIOCSPGRP:
-		error = fsetown(p, &so->so_pgid, cmd, data);
-		break;
+		return fsetown(p, &so->so_pgid, cmd, data);
 
 	case SIOCGPGRP:
 	case FIOGETOWN:
 	case TIOCGPGRP:
-		error = fgetown(p, so->so_pgid, cmd, data);
-		break;
+		return fgetown(p, so->so_pgid, cmd, data);
 
 	case SIOCATMARK:
 		*(int *)data = (so->so_state&SS_RCVATMARK) != 0;
-		break;
-
-	default:
-		/*
-		 * Interface/routing/protocol specific ioctls:
-		 * interface and routing ioctls should have a
-		 * different entry since a socket's unnecessary
-		 */
-		if (IOCGROUP(cmd) == 'i')
-			error = ifioctl(so, cmd, data, l);
-		else if (IOCGROUP(cmd) == 'r')
-			error = rtioctl(cmd, data, l);
-		else
-			error = (*so->so_proto->pr_usrreq)(so, PRU_CONTROL,
-			    (struct mbuf *)cmd, (struct mbuf *)data, NULL, l);
-		break;
+		return (0);
 	}
-
-	KERNEL_UNLOCK_ONE(curlwp);
-
-	return error;
+	/*
+	 * Interface/routing/protocol specific ioctls:
+	 * interface and routing ioctls should have a
+	 * different entry since a socket's unnecessary
+	 */
+	if (IOCGROUP(cmd) == 'i')
+		return (ifioctl(so, cmd, data, l));
+	if (IOCGROUP(cmd) == 'r')
+		return (rtioctl(cmd, data, l));
+	return ((*so->so_proto->pr_usrreq)(so, PRU_CONTROL,
+	    (struct mbuf *)cmd, (struct mbuf *)data, (struct mbuf *)0, l));
 }
 
 int
 soo_fcntl(struct file *fp, u_int cmd, void *data, struct lwp *l)
 {
-
 	if (cmd == F_SETFL)
-		return 0;
+		return (0);
 	else
-		return EOPNOTSUPP;
+		return (EOPNOTSUPP);
 }
 
 int
@@ -192,10 +165,7 @@ soo_poll(struct file *fp, int events, struct lwp *l)
 {
 	struct socket *so = (struct socket *)fp->f_data;
 	int revents = 0;
-	int s;
-
-	KERNEL_LOCK(1, curlwp);
-	s = splsoftnet();
+	int s = splsoftnet();
 
 	if (events & (POLLIN | POLLRDNORM))
 		if (soreadable(so))
@@ -222,26 +192,18 @@ soo_poll(struct file *fp, int events, struct lwp *l)
 	}
 
 	splx(s);
-	KERNEL_UNLOCK_ONE(curlwp);
-
-	return revents;
+	return (revents);
 }
 
 int
 soo_stat(struct file *fp, struct stat *ub, struct lwp *l)
 {
 	struct socket *so = (struct socket *)fp->f_data;
-	int error;
 
-	memset((void *)ub, 0, sizeof(*ub));
+	memset((caddr_t)ub, 0, sizeof(*ub));
 	ub->st_mode = S_IFSOCK;
-
-	KERNEL_LOCK(1, curlwp);
-	error = (*so->so_proto->pr_usrreq)(so, PRU_SENSE,
-	    (struct mbuf *)ub, (struct mbuf *)0, (struct mbuf *)0, l);
-	KERNEL_UNLOCK_ONE(curlwp);
-
-	return error;
+	return ((*so->so_proto->pr_usrreq)(so, PRU_SENSE,
+	    (struct mbuf *)ub, (struct mbuf *)0, (struct mbuf *)0, l));
 }
 
 /* ARGSUSED */
@@ -250,11 +212,8 @@ soo_close(struct file *fp, struct lwp *l)
 {
 	int error = 0;
 
-	KERNEL_LOCK(1, curlwp);
 	if (fp->f_data)
 		error = soclose((struct socket *)fp->f_data);
 	fp->f_data = 0;
-	KERNEL_UNLOCK_ONE(curlwp);
-
-	return error;
+	return (error);
 }

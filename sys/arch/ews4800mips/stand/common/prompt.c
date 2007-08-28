@@ -1,4 +1,4 @@
-/*	$NetBSD: prompt.c,v 1.3 2007/02/22 05:31:54 thorpej Exp $	*/
+/*	$NetBSD: prompt.c,v 1.1 2005/12/29 15:20:09 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -168,21 +168,21 @@ prompt_reset(void)
 	printf(PROMPT);
 }
 
-bool
+boolean_t
 prompt_yesno(int interactive)
 {
 	int i;
 
 	if (!interactive)
-		return true;
+		return TRUE;
 	/* block until user input */
 	while (/*CONSTCOND*/1) {
 		if ((i = getchar()) == 0)
 			continue;
 		if (i == 'N' || i == 'n')
-			return false;
+			return FALSE;
 		if (i == 'Y' || i == 'y')
-			return true;
+			return TRUE;
 	}
 }
 

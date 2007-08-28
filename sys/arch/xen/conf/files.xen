@@ -1,4 +1,4 @@
-#	$NetBSD: files.xen,v 1.63 2007/07/07 05:13:17 tsutsui Exp $
+#	$NetBSD: files.xen,v 1.53.2.1 2007/06/10 20:48:44 bouyer Exp $
 #	NetBSD: files.x86,v 1.10 2003/10/08 17:30:00 bouyer Exp 
 #	NetBSD: files.i386,v 1.254 2004/03/25 23:32:10 jmc Exp 
 
@@ -22,9 +22,8 @@ defflag			NOREDZONE
 
 # Beep on halt
 defflag opt_beep.h		BEEP_ONHALT
-defparam opt_beep.h		BEEP_ONHALT_COUNT=3
-defparam opt_beep.h		BEEP_ONHALT_PITCH=1500
-defparam opt_beep.h		BEEP_ONHALT_PERIOD=250
+defparam opt_beep.h		BEEP_ONHALT_COUNT
+defparam opt_beep.h		BEEP_ONHALT_PITCH BEEP_ONHALT_PERIOD
 
 # PCI fixup options
 defflag opt_pcifixup.h  PCI_ADDR_FIXUP PCI_BUS_FIXUP
@@ -41,7 +40,6 @@ file	arch/i386/i386/db_trace.c	ddb
 file	kern/subr_disk_mbr.c		disk
 file	arch/xen/i386/gdt.c
 file	arch/xen/i386/hypervisor_machdep.c
-file	arch/xen/i386/idle_machdep.c
 file	arch/i386/i386/in_cksum.S	inet | inet6
 file	arch/i386/i386/ipkdb_glue.c	ipkdb
 file	arch/i386/i386/kgdb_machdep.c	kgdb
@@ -50,15 +48,15 @@ file	arch/xen/i386/identcpu.c
 file	arch/i386/i386/math_emulate.c	math_emulate
 file	arch/i386/i386/mem.c
 file	arch/i386/i386/mtrr_k6.c	mtrr
+file	netns/ns_cksum.c		ns
 file	arch/xen/i386/pmap.c
 file	arch/i386/i386/process_machdep.c
 file	arch/i386/i386/procfs_machdep.c	procfs
+file	arch/xen/i386/sys_machdep.c
 file	arch/i386/i386/syscall.c
 file	arch/xen/i386/trap.c
 file	arch/i386/i386/vm_machdep.c
 file	arch/xen/i386/xen_machdep.c
-file	arch/xen/i386/xen_intr.c
-file	arch/i386/i386/lock_stubs.S
 
 file	arch/xen/xen/xen_debug.c
 
@@ -105,7 +103,6 @@ file	arch/xen/x86/intr.c
 file	arch/x86/x86/ipi.c		multiprocessor
 file	arch/x86/x86/lock_machdep.c	lockdebug
 file	arch/x86/x86/softintr.c
-file	arch/x86/x86/sys_machdep.c
 file	arch/x86/x86/x86_machdep.c
 
 include	"arch/xen/conf/files.compat"
@@ -116,7 +113,6 @@ file	arch/xen/i386/bios32.c		bios32 needs-flag
 
 # i386 specific mainbus attributes
 define cpubus { [apid = -1] }
-define ioapicbus { [apid = -1] }
 define apmbus {}
 define pnpbiosbus {}
 define vesabiosbus {}  
@@ -128,7 +124,7 @@ define ipmibus {}
 # System bus types
 #
 
-device mainbus: cpubus, ioapicbus, hypervisorbus, bios32, ipmibus
+device mainbus: cpubus, hypervisorbus, bios32, ipmibus
 attach	mainbus at root
 file	arch/xen/i386/mainbus.c		mainbus
 
@@ -184,7 +180,6 @@ file	arch/xen/xen/xbd.c		xbd_hypervisor needs-flag
 
 include	"dev/wscons/files.wscons"
 include	"dev/wsfont/files.wsfont"
-include "dev/wsfb/files.wsfb"
 
 include	"dev/pckbport/files.pckbport"
 
@@ -194,7 +189,7 @@ include	"dev/pckbport/files.pckbport"
 include "dev/i2o/files.i2o"
 include "dev/pci/files.pci"
 include "dev/pci/files.agp"
-file 	arch/x86/pci/agp_machdep.c	agp
+file 	arch/i386/pci/agp_machdep.c	agp
 file	arch/xen/xen/pciide_machdep.c	pciide_common
 
 #
@@ -225,7 +220,7 @@ file    arch/i386/pci/pci_addr_fixup.c  pci_addr_fixup
 file	arch/x86/x86/apic.c		ioapic
 
 device ioapic
-attach ioapic at ioapicbus
+attach ioapic at cpubus
 file	arch/x86/x86/ioapic.c		ioapic needs-flag
 
 #IPMI device
@@ -241,15 +236,9 @@ file	arch/i386/pci/pchb.c		pchb			needs-flag
 file	arch/x86/pci/pchb_rnd.c		pchb & rnd
 
 # PCI-ISA bridges
-device	pcib: isabus
-attach	pcib at pci
-file	arch/xen/xen/pcib.c		pcib | ichlpcib
-
-# PCI-LPC bridges
-device	ichlpcib: isabus, sysmon_wdog
-attach	ichlpcib at pci
-file	arch/i386/pci/ichlpcib.c	ichlpcib
-
+device  pcib: isabus
+attach  pcib at pci
+file    arch/xen/xen/pcib.c            pcib
 
 # CPUS
 

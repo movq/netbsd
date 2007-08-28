@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdivar.h,v 1.81 2007/07/09 21:01:25 ad Exp $	*/
+/*	$NetBSD: usbdivar.h,v 1.79 2006/12/01 20:48:50 drochner Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usbdivar.h,v 1.11 1999/11/17 22:33:51 n_hibma Exp $	*/
 
 /*
@@ -107,7 +107,7 @@ struct usb_softc;
 struct usbd_bus {
 	/* Filled by HC driver */
 	USBBASEDEVICE		bdev; /* base device, host adapter */
-	const struct usbd_bus_methods *methods;
+	struct usbd_bus_methods	*methods;
 	u_int32_t		pipe_size; /* size of a pipe struct */
 	/* Filled by usb driver */
 	struct usbd_device     *root_hub;
@@ -126,7 +126,14 @@ struct usbd_bus {
 #define USBREV_2_0	4
 #define USBREV_STR { "unknown", "pre 1.0", "1.0", "1.1", "2.0" }
 
+#ifdef USB_USE_SOFTINTR
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	void		       *soft; /* soft interrupt cookie */
+#else
+	struct callout		softi;
+#endif
+#endif
+
 #if defined(__NetBSD__) || defined(__OpenBSD__)
 	bus_dma_tag_t		dmatag;	/* DMA tag */
 #endif
@@ -182,7 +189,7 @@ struct usbd_pipe {
 	int			interval;
 
 	/* Filled by HC driver. */
-	const struct usbd_pipe_methods *methods;
+	struct usbd_pipe_methods *methods;
 };
 
 struct usbd_xfer {

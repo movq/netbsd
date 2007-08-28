@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_sysctl.c,v 1.6 2007/08/15 12:07:30 ad Exp $ */
+/*	$NetBSD: linux32_sysctl.c,v 1.3 2006/09/23 22:12:00 manu Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -31,7 +31,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_sysctl.c,v 1.6 2007/08/15 12:07:30 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_sysctl.c,v 1.3 2006/09/23 22:12:00 manu Exp $");
+
+#include "opt_ktrace.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,8 +41,11 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_sysctl.c,v 1.6 2007/08/15 12:07:30 ad Exp $"
 #include <sys/proc.h>
 #include <sys/mount.h>
 #include <sys/sysctl.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
+#ifdef KTRACE
 #include <sys/ktrace.h>
+#endif
 
 #include <compat/netbsd32/netbsd32.h>
 
@@ -164,7 +169,8 @@ linux32_sys___sysctl(l, v, retval)
 	/*
 	 * Read sysctl arguments 
 	 */
-	if ((error = copyin(SCARG_P32(uap, lsp), &ls32, sizeof(ls32))) != 0)
+	if ((error = copyin(NETBSD32PTR64(SCARG(uap, lsp)), 
+	    &ls32, sizeof(ls32))) != 0)
 		return error;
 
 	/*
@@ -193,7 +199,10 @@ linux32_sys___sysctl(l, v, retval)
 	   ls32.nlen * sizeof(int))) != 0)
 		return error;
 
-	ktrmib(name, ls32.nlen);
+#ifdef KTRACE
+	if (KTRPOINT(l->l_proc, KTR_MIB))
+		ktrmib(l, name, ls32.nlen);
+#endif
 
 	if ((error = sysctl_lock(l, 
 	    NETBSD32PTR64(ls32.oldval), savelen)) != 0)

@@ -1,4 +1,4 @@
-/*	$NetBSD: ktrace.h,v 1.50 2007/08/27 13:33:45 dsl Exp $	*/
+/*	$NetBSD: ktrace.h,v 1.45 2006/10/22 18:19:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -33,8 +33,6 @@
 
 #ifndef _SYS_KTRACE_H_
 #define _SYS_KTRACE_H_
-
-#include <sys/mutex.h>
 
 /*
  * operations to ktrace system call  (KTROP(op))
@@ -85,7 +83,7 @@ struct ktr_header {
  * Test for kernel trace point
  */
 #define KTRPOINT(p, type)	\
-	(((p)->p_traceflag & (1<<(type))) != 0)
+	(((p)->p_traceflag & ((1<<(type))|KTRFAC_ACTIVE)) == (1<<(type)))
 
 /*
  * ktrace record types
@@ -213,8 +211,6 @@ struct ktr_mool {
 
 /*
  * KTR_SAUPCALL - scheduler activated upcall.
- *
- * The structure is no longer used, but retained for compatibility.
  */
 #define	KTR_SAUPCALL	13
 struct ktr_saupcall {
@@ -251,12 +247,14 @@ struct ktr_saupcall {
 #define KTRFAC_EXEC_ARG	(1<<KTR_EXEC_ARG)
 #define KTRFAC_EXEC_ENV	(1<<KTR_EXEC_ENV)
 #define KTRFAC_MOOL	(1<<KTR_MOOL)
+#define	KTRFAC_SAUPCALL	(1<<KTR_SAUPCALL)
 #define	KTRFAC_MIB	(1<<KTR_MIB)
 /*
  * trace flags (also in p_traceflags)
  */
 #define KTRFAC_ROOT	0x80000000	/* root set this trace */
 #define KTRFAC_INHERIT	0x40000000	/* pass trace flags to children */
+#define KTRFAC_ACTIVE	0x20000000	/* ktrace logging in progress, ignore */
 #define KTRFAC_TRC_EMUL	0x10000000	/* ktrace KTR_EMUL before next trace */
 #define	KTRFAC_VER_MASK	0x0f000000	/* record version mask */
 #define	KTRFAC_VER_SHIFT	24	/* record version shift */
@@ -278,151 +276,23 @@ __END_DECLS
 
 #else
 
-void ktrinit(void);
+void ktrcsw(struct lwp *, int, int);
+void ktremul(struct lwp *);
+void ktrgenio(struct lwp *, int, enum uio_rw, struct iovec *, int, int);
+void ktrnamei(struct lwp *, char *);
+void ktrpsig(struct lwp *, int, sig_t, const sigset_t *, const ksiginfo_t *);
+void ktrsyscall(struct lwp *, register_t, register_t,
+    const struct sysent *, register_t []);
+void ktrsysret(struct lwp *, register_t, int, register_t *);
+int ktruser(struct lwp *, const char *, void *, size_t, int);
+void ktrmmsg(struct lwp *, const void *, size_t);
+void ktrkmem(struct lwp *, int, const void *, size_t);
+void ktrmib(struct lwp *, const int *, u_int);
+void ktrmool(struct lwp *, const void *, size_t, const void *);
+void ktrsaupcall(struct lwp *, int, int, int, void *, void *);
+
 void ktrderef(struct proc *);
 void ktradref(struct proc *);
-
-extern kmutex_t ktrace_lock;
-extern int ktrace_on;
-
-int ktruser(const char *, void *, size_t, int);
-bool ktr_point(int);
-
-void ktr_csw(int, int);
-void ktr_emul(void);
-void ktr_geniov(int, enum uio_rw, struct iovec *, size_t, int);
-void ktr_genio(int, enum uio_rw, const void *, size_t, int);
-void ktr_mibio(int, enum uio_rw, const void *, size_t, int);
-void ktr_namei(const char *, size_t);
-void ktr_namei2(const char *, size_t, const char *, size_t);
-void ktr_psig(int, sig_t, const sigset_t *, const ksiginfo_t *);
-void ktr_syscall(register_t, register_t, const struct sysent *,
-    register_t []);
-void ktr_sysret(register_t, int, register_t *);
-void ktr_kuser(const char *, void *, size_t);
-void ktr_mmsg(const void *, size_t);
-void ktr_mib(const int *a , u_int b);
-void ktr_mool(const void *, size_t, const void *);
-void ktr_execarg(const void *, size_t);
-void ktr_execenv(const void *, size_t);
-
-static inline bool
-ktrpoint(int fac)
-{
-    return __predict_false(ktrace_on) && __predict_false(ktr_point(1 << fac));
-}
-
-static inline void
-ktrcsw(int a, int b)
-{
-	if (__predict_false(ktrace_on))
-		ktr_csw(a, b);
-}
-
-static inline void
-ktremul(void)
-{
-	if (__predict_false(ktrace_on))
-		ktr_emul();
-}
-
-static inline void
-ktrgenio(int a, enum uio_rw b, const void *c, size_t d, int e)
-{
-	if (__predict_false(ktrace_on))
-		ktr_genio(a, b, c, d, e);
-}
-
-static inline void
-ktrgeniov(int a, enum uio_rw b, struct iovec *c, int d, int e)
-{
-	if (__predict_false(ktrace_on))
-		ktr_genio(a, b, c, d, e);
-}
-
-static inline void
-ktrmibio(int a, enum uio_rw b, const void *c, size_t d, int e)
-{
-	if (__predict_false(ktrace_on))
-		ktr_mibio(a, b, c, d, e);
-}
-
-static inline void
-ktrnamei(const char *a, size_t b)
-{
-	if (__predict_false(ktrace_on))
-		ktr_namei(a, b);
-}
-
-static inline void
-ktrnamei2(const char *a, size_t b, const char *c, size_t d)
-{
-	if (__predict_false(ktrace_on))
-		ktr_namei2(a, b, c, d);
-}
-
-static inline void
-ktrpsig(int a, sig_t b, const sigset_t *c, const ksiginfo_t * d)
-{
-	if (__predict_false(ktrace_on))
-		ktr_psig(a, b, c, d);
-}
-
-static inline void
-ktrsyscall(register_t a, register_t b, const struct sysent *c, register_t d[])
-{
-	if (__predict_false(ktrace_on))
-		ktr_syscall(a, b, c, d);
-}
-
-static inline void
-ktrsysret(register_t a, int b, register_t *c)
-{
-	if (__predict_false(ktrace_on))
-		ktr_sysret(a, b, c);
-}
-
-static inline void
-ktrkuser(const char *a, void *b, size_t c)
-{
-	if (__predict_false(ktrace_on))
-		ktr_kuser(a, b, c);
-}
-
-static inline void
-ktrmmsg(const void *a, size_t b)
-{
-	if (__predict_false(ktrace_on))
-		ktr_mmsg(a, b);
-}
-
-static inline void
-ktrmib(const int *a , u_int b)
-{
-	if (__predict_false(ktrace_on))
-		ktr_mib(a, b);
-}
-
-static inline void
-ktrmool(const void *a, size_t b, const void *c)
-{
-	if (__predict_false(ktrace_on))
-		ktr_mool(a, b, c);
-}
-
-static inline void
-ktrexecarg(const void *a, size_t b)
-{
-	if (__predict_false(ktrace_on))
-		ktr_execarg(a, b);
-}
-
-static inline void
-ktrexecenv(const void *a, size_t b)
-{
-	if (__predict_false(ktrace_on))
-		ktr_execenv(a, b);
-}
 
 #endif	/* !_KERNEL */
 

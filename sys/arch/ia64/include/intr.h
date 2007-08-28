@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.3 2007/02/16 02:53:47 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.1 2006/04/07 14:21:18 cherry Exp $	*/
 
 /* XXX: cherry: To Be fixed when we switch on interrupts. */
 
@@ -10,12 +10,10 @@
 #define	IPL_NET		0	/* XXX: Placeholder */
 #define	IPL_TTY		0	/* XXX: Placeholder */
 #define	IPL_CLOCK	0	/* XXX: Placeholder */
-#define	IPL_STATCLOCK	0	/* XXX: Placeholder */
 #define	IPL_HIGH	0	/* XXX: Placeholder */
 #define	IPL_SERIAL	0	/* XXX: Placeholder */
-#define	IPL_SCHED	0	/* XXX: Placeholder */
-#define	IPL_LOCK	0	/* XXX: Placeholder */
-#define	IPL_VM		0	/* XXX: Placeholder */
+#define IPL_SCHED       0       /* XXX: Placeholder */
+#define	IPL_VM    	0	/* XXX: Placeholder */
 
 #define IPL_SOFTCLOCK   0	/* XXX: Placeholder */
 #define IPL_SOFTNET     0	/* XXX: Placeholder */
@@ -49,29 +47,14 @@ static __inline void spllower(int dummy) { }
 
 /*
  * Software interrupt masks
+ *
+ * NOTE: spllowersoftclock() is used by hardclock() to lower the priority from
+ * clock to softclock before it calls softclock().
  */
 
+#define spllowersoftclock() spllower(IPL_SOFTCLOCK)
 #define	splsoftclock() splraise(IPL_SOFTCLOCK)
 #define	splsoftnet()	splraise(IPL_SOFTNET)
 #define	splsoftserial()	splraise(IPL_SOFTSERIAL)
-
-typedef int ipl_t;
-typedef struct {
-	ipl_t _ipl;
-} ipl_cookie_t;
-
-static inline ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._ipl = ipl};
-}
-
-static inline int
-splraiseipl(ipl_cookie_t icookie)
-{
-
-	return splraise(icookie._ipl);
-}
 
 #endif /* ! _IA64_INTR_H_ */

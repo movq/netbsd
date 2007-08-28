@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bnxreg.h,v 1.2 2007/04/09 14:23:16 bouyer Exp $	*/
+/*	$NetBSD: if_bnxreg.h,v 1.1.4.3 2007/04/20 21:56:00 pavel Exp $	*/
 /*	$OpenBSD: if_bnxreg.h,v 1.17 2006/11/20 21:26:27 brad Exp $	*/
 
 /*-

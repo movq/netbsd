@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxx.h,v 1.2 2007/02/21 22:59:41 thorpej Exp $	*/
+/*	$NetBSD: bootxx.h,v 1.1 2005/12/29 15:20:09 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -38,6 +38,12 @@
 
 #ifdef _STANDALONE
 #include <lib/libkern/libkern.h>
+#endif
+
+#ifndef _STANDALONE
+typedef int boolean_t;
+#define	TRUE	1
+#define	FALSE	0
 #endif
 
 enum {

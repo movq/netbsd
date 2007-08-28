@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.145 2007/05/21 15:22:21 tsutsui Exp $	*/
+/*	$NetBSD: machdep.c,v 1.140 2006/10/21 05:54:31 mrg Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.145 2007/05/21 15:22:21 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.140 2006/10/21 05:54:31 mrg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
@@ -101,6 +101,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.145 2007/05/21 15:22:21 tsutsui Exp $"
 #include <sys/vnode.h>
 #include <sys/queue.h>
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/ksyms.h>
 
@@ -133,6 +134,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.145 2007/05/21 15:22:21 tsutsui Exp $"
 static void bootsync __P((void));
 static void call_sicallbacks __P((void));
 static void identifycpu __P((void));
+static void netintr __P((void));
 void	straymfpint __P((int, u_short));
 void	straytrap __P((int, u_short));
 
@@ -144,7 +146,7 @@ struct vm_map *exec_map = NULL;
 struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
-void *	msgbufaddr;
+caddr_t	msgbufaddr;
 vaddr_t	msgbufpa;
 
 int	physmem = MAXMEM;	/* max supported memory, changes to actual */
@@ -259,20 +261,20 @@ cpu_startup()
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
+				   16*NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, 0, false, NULL);
+				   VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
+				 FALSE, NULL);
 
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
@@ -428,7 +430,7 @@ cpu_reboot(howto, bootstr)
 	char	*bootstr;
 {
 	/* take a snap shot before clobbering any registers */
-	if (curlwp->l_addr)
+	if (curlwp && curlwp->l_addr)
 		savectx(&curlwp->l_addr->u_pcb);
 
 	boothowto = howto;
@@ -522,7 +524,7 @@ dumpsys()
 {
 	const struct bdevsw *bdev;
 	daddr_t	blkno;		/* Current block to write	*/
-	int	(*dump) __P((dev_t, daddr_t, void *, size_t));
+	int	(*dump) __P((dev_t, daddr_t, caddr_t, size_t));
 				/* Dumping function		*/
 	u_long	maddr;		/* PA being dumped		*/
 	int	segbytes;	/* Number of bytes in this seg.	*/
@@ -601,7 +603,7 @@ dumpsys()
 		 */
 		if (maddr != 0) { /* XXX kvtop chokes on this	*/
 			(void)pmap_map(dumpspace, maddr, maddr+n, VM_PROT_READ);
-			error = (*dump)(dumpdev, blkno, (void *)dumpspace, n);
+			error = (*dump)(dumpdev, blkno, (caddr_t)dumpspace, n);
 			if (error)
 				break;
 		}
@@ -694,11 +696,35 @@ u_short	evec;
 	       evec & 0xFFF, pc);
 }
 
+/*
+ * Simulated software interrupt handler
+ */
+void
+softint()
+{
+	if(ssir & SIR_NET) {
+		siroff(SIR_NET);
+		uvmexp.softs++;
+		netintr();
+	}
+	if(ssir & SIR_CLOCK) {
+		siroff(SIR_CLOCK);
+		uvmexp.softs++;
+		/* XXXX softclock(&frame.f_stackadj); */
+		softclock(NULL);
+	}
+	if (ssir & SIR_CBACK) {
+		siroff(SIR_CBACK);
+		uvmexp.softs++;
+		call_sicallbacks();
+	}
+}
+
 int	*nofault;
 
 int
 badbaddr(addr, size)
-	register void *addr;
+	register caddr_t addr;
 	int		 size;
 {
 	register int i;
@@ -730,6 +756,25 @@ badbaddr(addr, size)
 }
 
 /*
+ * Network interrupt handling
+ */
+static void
+netintr()
+{
+#define DONETISR(bit, fn) do {			\
+	if (netisr & (1 << bit)) {		\
+		netisr &= ~(1 << bit);		\
+		fn();				\
+	}					\
+} while (0)
+
+#include <net/netisr_dispatch.h>
+
+#undef DONETISR
+}
+
+
+/*
  * this is a handy package to have asynchronously executed
  * function calls executed at very low interrupt priority.
  * Example for use is keyboard repeat, where the repeat 
@@ -738,28 +783,17 @@ badbaddr(addr, size)
  * Note: the installed functions are currently called in a
  * LIFO fashion, might want to change this to FIFO
  * later.
- *
- * XXX: Some of functions which use this callback should be rewritten
- * XXX: to use MI softintr(9) directly.
  */
 struct si_callback {
 	struct si_callback *next;
 	void (*function) __P((void *rock1, void *rock2));
 	void *rock1, *rock2;
 };
-static void *si_callback_cookie;
 static struct si_callback *si_callbacks;
 static struct si_callback *si_free;
 #ifdef DIAGNOSTIC
 static int ncbd;	/* number of callback blocks dynamically allocated */
 #endif
-
-void init_sicallback(void)
-{
-
-	si_callback_cookie = softintr_establish(IPL_SOFT,
-	    (void (*)(void *))call_sicallbacks, NULL);
-}
 
 void add_sicallback (function, rock1, rock2)
 void	(*function) __P((void *rock1, void *rock2));
@@ -799,17 +833,8 @@ void	*rock1, *rock2;
 	/*
 	 * and cause a software interrupt (spl1). This interrupt might
 	 * happen immediately, or after returning to a safe enough level.
-	 *
-	 * XXX:
-	 * According to <machine/scu.h> and lev1intr() hander in locore.s,
-	 * at least _ATARIHW_ machines (ATARITT and HADES?) seem to have
-	 * some hardware support which can initiate real hardware interrupt
-	 * at ipl 1 for software interrupt. But as per <machine/mtpr.h>,
-	 * this feature was not used at all on setsoft*() calls and
-	 * traditional hp300 derived ssir (simulated software interrupt
-	 * request) on VAX REI emulation in locore.s is used.
 	 */
-	softintr_schedule(si_callback_cookie);
+	setsoftcback();
 }
 
 void rem_sicallback(function)
@@ -856,7 +881,7 @@ static void call_sicallbacks()
 			rock2    = si->rock2;
 			s = splhigh ();
 			if(si_callbacks)
-				softintr_schedule(si_callback_cookie);
+				setsoftcback();
 			si->next = si_free;
 			si_free  = si;
 			splx(s);

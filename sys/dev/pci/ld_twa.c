@@ -1,13 +1,11 @@
 /*	$wasabi: ld_twa.c,v 1.9 2006/02/14 18:44:37 jordanr Exp $	*/
-/*	$NetBSD: ld_twa.c,v 1.8 2007/08/07 08:00:46 simonb Exp $ */
-
+/*	$NetBSD: ld_twa.c,v 1.4 2006/11/16 01:33:09 christos Exp $ */
 /*-
- * Copyright (c) 2000, 2001, 2002, 2003, 2004 The NetBSD Foundation, Inc.
+ * Copyright (c) 2004 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Andrew Doran, and by Jason R. Thorpe and Jordan Rhody of Wasabi
- * Systems, Inc.
+ * by Jordan Rhody of Wasabi Systems, Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -43,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_twa.c,v 1.8 2007/08/07 08:00:46 simonb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_twa.c,v 1.4 2006/11/16 01:33:09 christos Exp $");
 
 #include "rnd.h"
 
@@ -56,7 +54,6 @@ __KERNEL_RCSID(0, "$NetBSD: ld_twa.c,v 1.8 2007/08/07 08:00:46 simonb Exp $");
 #include <sys/endian.h>
 #include <sys/dkio.h>
 #include <sys/disk.h>
-#include <sys/proc.h>
 #if NRND > 0
 #include <sys/rnd.h>
 #endif
@@ -85,7 +82,7 @@ struct ld_twa_softc {
 
 static void	ld_twa_attach(struct device *, struct device *, void *);
 static int	ld_twa_detach(struct device *, int);
-static int	ld_twa_dobio(struct ld_twa_softc *, void *, size_t, daddr_t,
+static int	ld_twa_dobio(struct ld_twa_softc *, void *, int, int,
 			     struct buf *);
 static int	ld_twa_dump(struct ld_softc *, void *, int, int);
 static int	ld_twa_flush(struct ld_softc *);
@@ -106,7 +103,8 @@ static const struct twa_callbacks ld_twa_callbacks = {
 };
 
 static int
-ld_twa_match(struct device *parent, struct cfdata *match, void *aux)
+ld_twa_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 
 	return (1);
@@ -152,8 +150,8 @@ ld_twa_detach(struct device *self, int flags)
 }
 
 static int
-ld_twa_dobio(struct ld_twa_softc *sc, void *data, size_t datasize,
-	     daddr_t blkno, struct buf *bp)
+ld_twa_dobio(struct ld_twa_softc *sc, void *data, int datasize,
+    int blkno, struct buf *bp)
 {
 	int rv;
 	struct twa_request	*tr;
@@ -223,6 +221,7 @@ ld_twa_handler(struct twa_request *tr)
 	status = tr->tr_command->command.cmd_pkt_9k.status;
 
 	if (status != 0) {
+		bp->b_flags |= B_ERROR;
 		bp->b_error = EIO;
 		bp->b_resid = bp->b_bcount;
 	} else {
@@ -238,14 +237,8 @@ static int
 ld_twa_dump(struct ld_softc *ld, void *data, int blkno, int blkcnt)
 {
 
-#if 0
-	/* XXX Unsafe right now. */
 	return (ld_twa_dobio((struct ld_twa_softc *)ld, data,
 	    blkcnt * ld->sc_secsize, blkno, NULL));
-#else
-	return EIO;
-#endif
-
 }
 
 

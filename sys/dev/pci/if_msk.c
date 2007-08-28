@@ -1,4 +1,4 @@
-/* $NetBSD: if_msk.c,v 1.10 2007/07/19 22:04:22 dsl Exp $ */
+/* $NetBSD: if_msk.c,v 1.3.4.2 2007/11/04 01:11:48 xtraeme Exp $ */
 /*	$OpenBSD: if_msk.c,v 1.42 2007/01/17 02:43:02 krw Exp $	*/
 
 /*
@@ -50,8 +50,6 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-
-#include <sys/cdefs.h>
 
 #include "bpfilter.h"
 #include "rnd.h"
@@ -110,7 +108,7 @@ void msk_rxeof(struct sk_if_softc *, u_int16_t, u_int32_t);
 void msk_txeof(struct sk_if_softc *, int);
 int msk_encap(struct sk_if_softc *, struct mbuf *, u_int32_t *);
 void msk_start(struct ifnet *);
-int msk_ioctl(struct ifnet *, u_long, void *);
+int msk_ioctl(struct ifnet *, u_long, caddr_t);
 int msk_init(struct ifnet *);
 void msk_init_yukon(struct sk_if_softc *);
 void msk_stop(struct ifnet *, int);
@@ -121,7 +119,7 @@ void msk_reset(struct sk_softc *);
 int msk_newbuf(struct sk_if_softc *, int, struct mbuf *, bus_dmamap_t);
 int msk_alloc_jumbo_mem(struct sk_if_softc *);
 void *msk_jalloc(struct sk_if_softc *);
-void msk_jfree(struct mbuf *, void *, size_t, void *);
+void msk_jfree(struct mbuf *, caddr_t, size_t, void *);
 int msk_init_rx_ring(struct sk_if_softc *);
 int msk_init_tx_ring(struct sk_if_softc *);
 
@@ -131,7 +129,7 @@ int msk_miibus_readreg(struct device *, int, int);
 void msk_miibus_writereg(struct device *, int, int, int);
 void msk_miibus_statchg(struct device *);
 
-void msk_setfilt(struct sk_if_softc *, void *, int);
+void msk_setfilt(struct sk_if_softc *, caddr_t, int);
 void msk_setmulti(struct sk_if_softc *);
 void msk_setpromisc(struct sk_if_softc *);
 void msk_tick(void *);
@@ -167,6 +165,7 @@ static const struct msk_product {
 	{ PCI_VENDOR_MARVELL,		PCI_PRODUCT_MARVELL_YUKON_C034 },
 	{ PCI_VENDOR_MARVELL,		PCI_PRODUCT_MARVELL_YUKON_C036 },
 	{ PCI_VENDOR_MARVELL,		PCI_PRODUCT_MARVELL_YUKON_C042 },
+	{ PCI_VENDOR_MARVELL,		PCI_PRODUCT_MARVELL_YUKON_CO55 },
 	{ PCI_VENDOR_MARVELL,		PCI_PRODUCT_MARVELL_YUKON_8035 },
 	{ PCI_VENDOR_MARVELL,		PCI_PRODUCT_MARVELL_YUKON_8036 },
 	{ PCI_VENDOR_MARVELL,		PCI_PRODUCT_MARVELL_YUKON_8038 },
@@ -326,9 +325,8 @@ msk_miibus_statchg(struct device *dev)
 #define HASH_BITS	6
   
 void
-msk_setfilt(struct sk_if_softc *sc_if, void *addrv, int slot)
+msk_setfilt(struct sk_if_softc *sc_if, caddr_t addr, int slot)
 {
-	char *addr = addrv;
 	int base = XM_RXFILT_ENTRY(slot);
 
 	SK_XM_WRITE_2(sc_if, base, *(u_int16_t *)(&addr[0]));
@@ -494,7 +492,7 @@ msk_newbuf(struct sk_if_softc *sc_if, int i, struct mbuf *m,
 	struct msk_rx_desc	*r;
 
 	if (m == NULL) {
-		void *buf = NULL;
+		caddr_t buf = NULL;
 
 		MGETHDR(m_new, M_DONTWAIT, MT_DATA);
 		if (m_new == NULL)
@@ -547,7 +545,7 @@ int
 msk_alloc_jumbo_mem(struct sk_if_softc *sc_if)
 {
 	struct sk_softc		*sc = sc_if->sk_softc;
-	char *ptr, *kva;
+	caddr_t			ptr, kva;
 	bus_dma_segment_t	seg;
 	int		i, rseg, state, error;
 	struct sk_jpool_entry   *entry;
@@ -562,7 +560,7 @@ msk_alloc_jumbo_mem(struct sk_if_softc *sc_if)
 	}
 
 	state = 1;
-	if (bus_dmamem_map(sc->sc_dmatag, &seg, rseg, MSK_JMEM, (void **)&kva,
+	if (bus_dmamem_map(sc->sc_dmatag, &seg, rseg, MSK_JMEM, &kva,
 			   BUS_DMA_NOWAIT)) {
 		aprint_error(": can't map dma buffers (%d bytes)", MSK_JMEM);
 		error = ENOBUFS;
@@ -586,8 +584,8 @@ msk_alloc_jumbo_mem(struct sk_if_softc *sc_if)
 	}
 
 	state = 4;
-	sc_if->sk_cdata.sk_jumbo_buf = (void *)kva;
-	DPRINTFN(1,("msk_jumbo_buf = %p\n", (void *)sc_if->sk_cdata.sk_jumbo_buf));
+	sc_if->sk_cdata.sk_jumbo_buf = (caddr_t)kva;
+	DPRINTFN(1,("msk_jumbo_buf = %p\n", (caddr_t)sc_if->sk_cdata.sk_jumbo_buf));
 
 	LIST_INIT(&sc_if->sk_jfree_listhead);
 	LIST_INIT(&sc_if->sk_jinuse_listhead);
@@ -656,7 +654,7 @@ msk_jalloc(struct sk_if_softc *sc_if)
  * Release a jumbo buffer.
  */
 void
-msk_jfree(struct mbuf *m, void *buf, size_t size, void *arg)
+msk_jfree(struct mbuf *m, caddr_t buf, size_t size, void *arg)
 {
 	struct sk_jpool_entry *entry;
 	struct sk_if_softc *sc;
@@ -714,7 +712,7 @@ msk_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 }
 
 int
-msk_ioctl(struct ifnet *ifp, u_long command, void *data)
+msk_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 {
 	struct sk_if_softc *sc_if = ifp->if_softc;
 	struct ifreq *ifr = (struct ifreq *) data;
@@ -992,7 +990,7 @@ msk_attach(struct device *parent, struct device *self, void *aux)
 	struct sk_softc *sc = (struct sk_softc *)parent;
 	struct skc_attach_args *sa = aux;
 	struct ifnet *ifp;
-	void *kva;
+	caddr_t kva;
 	bus_dma_segment_t seg;
 	int i, rseg;
 	u_int32_t chunk, val;
@@ -1116,7 +1114,7 @@ msk_attach(struct device *parent, struct device *self, void *aux)
 	} else
 		ifmedia_set(&sc_if->sk_mii.mii_media, IFM_ETHER|IFM_AUTO);
 
-	callout_init(&sc_if->sk_tick_ch, 0);
+	callout_init(&sc_if->sk_tick_ch);
 	callout_setfunc(&sc_if->sk_tick_ch, msk_tick, sc_if);
 	callout_schedule(&sc_if->sk_tick_ch, hz);
 
@@ -1178,7 +1176,7 @@ mskc_attach(struct device *parent, struct device *self, void *aux)
 	u_int8_t hw, skrs;
 	const char *revstr = NULL;
 	const struct sysctlnode *node;
-	void *kva;
+	caddr_t kva;
 	bus_dma_segment_t seg;
 	int rseg;
 

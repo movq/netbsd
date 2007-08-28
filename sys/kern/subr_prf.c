@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_prf.c,v 1.107 2007/07/29 09:38:01 pooka Exp $	*/
+/*	$NetBSD: subr_prf.c,v 1.103 2006/09/03 17:06:36 martin Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1988, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.107 2007/07/29 09:38:01 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.103 2006/09/03 17:06:36 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
@@ -99,6 +99,9 @@ struct simplelock kprintf_slock = SIMPLELOCK_INITIALIZER;
 /*
  * defines
  */
+
+/* max size buffer kprintf needs to print quad_t [size in base 8 + \0] */
+#define KPRINTF_BUFSIZE		(sizeof(quad_t) * NBBY / 3 + 2)
 
 
 /*
@@ -231,7 +234,7 @@ panic(const char *fmt, ...)
 			printf("Begin traceback...\n");
 			db_stack_trace_print(
 			    (db_expr_t)(intptr_t)__builtin_frame_address(0),
-			    true, 65535, "", printf);
+			    TRUE, 65535, "", printf);
 			printf("End traceback...\n");
 			intrace = 0;
 		} else
@@ -425,25 +428,7 @@ uprintf(const char *fmt, ...)
 	struct proc *p = curproc;
 	va_list ap;
 
-	/* mutex_enter(&proclist_mutex); XXXSMP */
-
-	if (p->p_lflag & PL_CONTROLT && p->p_session->s_ttyvp) {
-		/* No mutex needed; going to process TTY. */
-		va_start(ap, fmt);
-		kprintf(fmt, TOTTY, p->p_session->s_ttyp, NULL, ap);
-		va_end(ap);
-	}
-
-	/* mutex_exit(&proclist_mutex); XXXSMP */
-}
-
-void
-uprintf_locked(const char *fmt, ...)
-{
-	struct proc *p = curproc;
-	va_list ap;
-
-	if (p->p_lflag & PL_CONTROLT && p->p_session->s_ttyvp) {
+	if (p->p_flag & P_CONTROLT && p->p_session->s_ttyvp) {
 		/* No mutex needed; going to process TTY. */
 		va_start(ap, fmt);
 		kprintf(fmt, TOTTY, p->p_session->s_ttyp, NULL, ap);
@@ -469,18 +454,12 @@ uprintf_locked(const char *fmt, ...)
 tpr_t
 tprintf_open(struct proc *p)
 {
-	tpr_t cookie;
 
-	cookie = NULL;
-
-	/* mutex_enter(&proclist_mutex); XXXSMP */
-	if (p->p_lflag & PL_CONTROLT && p->p_session->s_ttyvp) {
+	if (p->p_flag & P_CONTROLT && p->p_session->s_ttyvp) {
 		SESSHOLD(p->p_session);
-		cookie = (tpr_t)p->p_session;
+		return ((tpr_t) p->p_session);
 	}
-	/* mutex_exit(&proclist_mutex) XXXSMP */
-
-	return cookie;
+	return ((tpr_t) NULL);
 }
 
 /*
@@ -509,7 +488,6 @@ tprintf(tpr_t tpr, const char *fmt, ...)
 	int s, flags = TOLOG;
 	va_list ap;
 
-	/* mutex_enter(&proclist_mutex); XXXSMP */
 	if (sess && sess->s_ttyvp && ttycheckoutq(sess->s_ttyp, 0)) {
 		flags |= TOTTY;
 		tp = sess->s_ttyp;
@@ -523,7 +501,6 @@ tprintf(tpr_t tpr, const char *fmt, ...)
 	va_end(ap);
 
 	KPRINTF_MUTEX_EXIT(s);
-	/* mutex_exit(&proclist_mutex);	XXXSMP */
 
 	logwakeup();
 }
@@ -857,6 +834,144 @@ vsnprintf(char *bf, size_t size, const char *fmt, va_list ap)
 	retval = kprintf(fmt, TOBUFONLY, &p, bf, ap);
 	*(p) = 0;	/* null terminate */
 	return(retval);
+}
+
+/*
+ * bitmask_snprintf: print an interpreted bitmask to a buffer
+ *
+ * => returns pointer to the buffer
+ */
+char *
+bitmask_snprintf(u_quad_t val, const char *p, char *bf, size_t buflen)
+{
+	char *bp, *q;
+	size_t left;
+	const char *sbase;
+	char snbuf[KPRINTF_BUFSIZE];
+	int base, bit, ch, len, sep;
+	u_quad_t field;
+
+	bp = bf;
+	memset(bf, 0, buflen);
+
+	/*
+	 * Always leave room for the trailing NULL.
+	 */
+	left = buflen - 1;
+
+	/*
+	 * Print the value into the buffer.  Abort if there's not
+	 * enough room.
+	 */
+	if (buflen < KPRINTF_BUFSIZE)
+		return (bf);
+
+	ch = *p++;
+	base = ch != '\177' ? ch : *p++;
+	sbase = base == 8 ? "%qo" : base == 10 ? "%qd" : base == 16 ? "%qx" : 0;
+	if (sbase == 0)
+		return (bf);	/* punt if not oct, dec, or hex */
+
+	snprintf(snbuf, sizeof(snbuf), sbase, val);
+	for (q = snbuf ; *q ; q++) {
+		*bp++ = *q;
+		left--;
+	}
+
+	/*
+	 * If the value we printed was 0 and we're using the old-style format,
+	 * or if we don't have room for "<x>", we're done.
+	 */
+	if (((val == 0) && (ch != '\177')) || left < 3)
+		return (bf);
+
+#define PUTBYTE(b, c, l) do {	\
+	*(b)++ = (c);		\
+	if (--(l) == 0)		\
+		goto out;	\
+} while (/*CONSTCOND*/ 0)
+#define PUTSTR(b, p, l) do {		\
+	int c;				\
+	while ((c = *(p)++) != 0) {	\
+		*(b)++ = c;		\
+		if (--(l) == 0)		\
+			goto out;	\
+	}				\
+} while (/*CONSTCOND*/ 0)
+
+	/*
+	 * Chris Torek's new bitmask format is identified by a leading \177
+	 */
+	sep = '<';
+	if (ch != '\177') {
+		/* old (standard) format. */
+		for (;(bit = *p++) != 0;) {
+			if (val & (1 << (bit - 1))) {
+				PUTBYTE(bp, sep, left);
+				for (; (ch = *p) > ' '; ++p) {
+					PUTBYTE(bp, ch, left);
+				}
+				sep = ',';
+			} else
+				for (; *p > ' '; ++p)
+					continue;
+		}
+	} else {
+		/* new quad-capable format; also does fields. */
+		field = val;
+		while ((ch = *p++) != '\0') {
+			bit = *p++;	/* now 0-origin */
+			switch (ch) {
+			case 'b':
+				if (((u_int)(val >> bit) & 1) == 0)
+					goto skip;
+				PUTBYTE(bp, sep, left);
+				PUTSTR(bp, p, left);
+				sep = ',';
+				break;
+			case 'f':
+			case 'F':
+				len = *p++;	/* field length */
+				field = (val >> bit) & ((1ULL << len) - 1);
+				if (ch == 'F')	/* just extract */
+					break;
+				PUTBYTE(bp, sep, left);
+				sep = ',';
+				PUTSTR(bp, p, left);
+				PUTBYTE(bp, '=', left);
+				sprintf(snbuf, sbase, field);
+				q = snbuf; PUTSTR(bp, q, left);
+				break;
+			case '=':
+			case ':':
+				/*
+				 * Here "bit" is actually a value instead,
+				 * to be compared against the last field.
+				 * This only works for values in [0..255],
+				 * of course.
+				 */
+				if ((int)field != bit)
+					goto skip;
+				if (ch == '=')
+					PUTBYTE(bp, '=', left);
+				PUTSTR(bp, p, left);
+				break;
+			default:
+			skip:
+				while (*p++ != '\0')
+					continue;
+				break;
+			}
+		}
+	}
+	if (sep != '<')
+		PUTBYTE(bp, '>', left);
+
+out:
+	return (bf);
+
+#undef PUTBYTE
+#undef PUTSTR
 }
 
 /*

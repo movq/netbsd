@@ -1,4 +1,4 @@
-/* $NetBSD: interrupt.c,v 1.74 2007/07/21 11:59:56 tsutsui Exp $ */
+/* $NetBSD: interrupt.c,v 1.69 2005/12/24 20:06:46 perry Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.74 2007/07/21 11:59:56 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: interrupt.c,v 1.69 2005/12/24 20:06:46 perry Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -206,8 +206,10 @@ void
 interrupt(unsigned long a0, unsigned long a1, unsigned long a2,
     struct trapframe *framep)
 {
+	static int microset_iter;	/* call cc_microset() once per sec. */
 	struct cpu_info *ci = curcpu();
 	struct cpu_softc *sc = ci->ci_softc;
+	struct lwp *l;
 
 	switch (a0) {
 	case ALPHA_INTR_XPROC:	/* interprocessor interrupt */
@@ -239,6 +241,23 @@ interrupt(unsigned long a0, unsigned long a1, unsigned long a2,
 		 */
 		sc->sc_evcnt_clock.ev_count++;
 		uvmexp.intrs++;
+		/*
+		 * Update the PCC frequency for use by microtime().
+		 */
+		if (
+#if defined(MULTIPROCESSOR)
+		    CPU_IS_PRIMARY(ci) &&
+#endif
+
+		    microset_iter-- == 0) {
+			microset_iter = hz - 1;
+			cc_microset_time = time;
+#if defined(MULTIPROCESSOR)
+			alpha_multicast_ipi(cpus_running,
+			    ALPHA_IPI_MICROSET);
+#endif
+			cc_microset(ci);
+		}
 		if (platform.clockintr) {
 			/*
 			 * Call hardclock().  This will also call
@@ -252,8 +271,8 @@ interrupt(unsigned long a0, unsigned long a1, unsigned long a2,
 			 * do so.
 			 */
 			if ((++ci->ci_schedstate.spc_schedticks & 0x3f) == 0 &&
-			    schedhz != 0)
-				schedclock(ci->ci_curlwp);
+			    (l = ci->ci_curlwp) != NULL && schedhz != 0)
+				schedclock(l);
 		}
 		break;
 
@@ -277,14 +296,14 @@ interrupt(unsigned long a0, unsigned long a1, unsigned long a2,
 		atomic_add_ulong(&sc->sc_evcnt_device.ev_count, 1);
 		atomic_add_ulong(&ci->ci_intrdepth, 1);
 
-		KERNEL_LOCK(1, NULL);
+		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 
 		uvmexp.intrs++;
 
 		scb = &scb_iovectab[SCB_VECTOIDX(a1 - SCB_IOVECBASE)];
 		(*scb->scb_func)(scb->scb_arg, a1);
 
-		KERNEL_UNLOCK_ONE(NULL);
+		KERNEL_UNLOCK();
 
 		atomic_sub_ulong(&ci->ci_intrdepth, 1);
 		break;
@@ -552,7 +571,7 @@ softintr_dispatch()
 		panic("softintr_dispatch: entry at ipl %ld", n);
 #endif
 
-	KERNEL_LOCK(1, NULL);
+	KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 
 #ifdef DEBUG
 	n = alpha_pal_rdps() & ALPHA_PSL_IPL_MASK;
@@ -592,31 +611,7 @@ softintr_dispatch()
 		}
 	}
 
-	KERNEL_UNLOCK_ONE(NULL);
-}
-
-static int
-ipl2si(int ipl)
-{
-	int si;
-
-	switch (ipl) {
-	case IPL_SOFTSERIAL:
-		si = SI_SOFTSERIAL;
-		break;
-	case IPL_SOFTNET:
-		si = SI_SOFTNET;
-		break;
-	case IPL_SOFTCLOCK:
-		si = SI_SOFTCLOCK;
-		break;
-	case IPL_SOFT:
-		si = SI_SOFT;
-		break;
-	default:
-		panic("ipl2si: %d", ipl);
-	}
-	return si;
+	KERNEL_UNLOCK();
 }
 
 /*
@@ -629,10 +624,11 @@ softintr_establish(int ipl, void (*func)(void *), void *arg)
 {
 	struct alpha_soft_intr *asi;
 	struct alpha_soft_intrhand *sih;
-	int si;
 
-	si = ipl2si(ipl);
-	asi = &alpha_soft_intrs[si];
+	if (__predict_false(ipl >= SI_NQUEUES || ipl < 0))
+		panic("softintr_establish");
+
+	asi = &alpha_soft_intrs[ipl];
 
 	sih = malloc(sizeof(*sih), M_DEVBUF, M_NOWAIT);
 	if (__predict_true(sih != NULL)) {
@@ -679,31 +675,4 @@ rlprintf(struct timeval *t, const char *fmt, ...)
 
 	if (ratecheck(t, msgperiod))
 		vprintf(fmt, ap);
-}
-
-const static uint8_t ipl2psl_table[] = {
-	[IPL_NONE] = ALPHA_PSL_IPL_0,
-	[IPL_SOFT] = ALPHA_PSL_IPL_SOFT,
-	[IPL_SOFTCLOCK] = IPL_SOFT,
-	[IPL_SOFTNET] = IPL_SOFT,
-	[IPL_SOFTSERIAL] = IPL_SOFT,
-	[IPL_BIO] = ALPHA_PSL_IPL_IO,
-	[IPL_NET] = ALPHA_PSL_IPL_IO,
-	[IPL_TTY] = ALPHA_PSL_IPL_IO,
-	/* IPL_LPT == IPL_TTY */
-	[IPL_VM] = ALPHA_PSL_IPL_IO,
-	[IPL_CLOCK] = ALPHA_PSL_IPL_CLOCK,
-	/* IPL_STATCLOCK == IPL_CLOCK */
-	/* IPL_IPI == IPL_CLOCK */
-	[IPL_HIGH] = ALPHA_PSL_IPL_HIGH,
-	/* IPL_SCHED == IPL_HIGH */
-	/* IPL_LOCK == IPL_HIGH */
-	[IPL_SERIAL] = ALPHA_PSL_IPL_IO,
-};
-
-ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._psl = ipl2psl_table[ipl]};
 }

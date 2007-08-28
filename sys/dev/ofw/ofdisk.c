@@ -1,4 +1,4 @@
-/*	$NetBSD: ofdisk.c,v 1.37 2007/07/29 12:15:43 ad Exp $	*/
+/*	$NetBSD: ofdisk.c,v 1.33 2006/03/29 07:10:25 thorpej Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofdisk.c,v 1.37 2007/07/29 12:15:43 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofdisk.c,v 1.33 2006/03/29 07:10:25 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -45,6 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: ofdisk.c,v 1.37 2007/07/29 12:15:43 ad Exp $");
 #include <sys/stat.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/conf.h>
 
 #include <dev/ofw/openfirm.h>
 
@@ -162,7 +163,8 @@ ofdisk_open(dev_t dev, int flags, int fmt, struct lwp *lwp)
 
 	part = DISKPART(dev);
 
-	mutex_enter(&of->sc_dk.dk_openlock);
+	if ((error = lockmgr(&of->sc_dk.dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
+		return (error);
 
 	/*
 	 * If there are wedges, and this is not RAW_PART, then we
@@ -224,10 +226,11 @@ ofdisk_open(dev_t dev, int flags, int fmt, struct lwp *lwp)
 	of->sc_dk.dk_openmask =
 	    of->sc_dk.dk_copenmask | of->sc_dk.dk_bopenmask;
 
+	(void) lockmgr(&of->sc_dk.dk_openlock, LK_RELEASE, NULL);
+	return 0;
 
-	error = 0;
  bad1:
-	mutex_exit(&of->sc_dk.dk_openlock);
+	(void) lockmgr(&of->sc_dk.dk_openlock, LK_RELEASE, NULL);
 	return (error);
 }
 
@@ -235,8 +238,10 @@ int
 ofdisk_close(dev_t dev, int flags, int fmt, struct lwp *l)
 {
 	struct ofdisk_softc *of = ofdisk_cd.cd_devs[DISKUNIT(dev)];
+	int error;
 
-	mutex_enter(&of->sc_dk.dk_openlock);
+	if ((error = lockmgr(&of->sc_dk.dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
+		return (error);
 
 	switch (fmt) {
 	case S_IFCHR:
@@ -259,7 +264,7 @@ ofdisk_close(dev_t dev, int flags, int fmt, struct lwp *l)
 		of->sc_ihandle = 0;
 	}
 
-	mutex_exit(&of->sc_dk.dk_openlock);
+	(void) lockmgr(&of->sc_dk.dk_openlock, LK_RELEASE, NULL);
 	return 0;
 }
 
@@ -301,6 +306,7 @@ ofdisk_strategy(struct buf *bp)
 
 	if (read < 0) {
 		bp->b_error = EIO;
+		bp->b_flags |= B_ERROR;
 		bp->b_resid = bp->b_bcount;
 	} else
 		bp->b_resid = bp->b_bcount - read;
@@ -334,7 +340,7 @@ ofdisk_write(dev_t dev, struct uio *uio, int flags)
 }
 
 int
-ofdisk_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+ofdisk_ioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct ofdisk_softc *of = ofdisk_cd.cd_devs[DISKUNIT(dev)];
 	int error;
@@ -382,7 +388,9 @@ ofdisk_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		if ((flag & FWRITE) == 0)
 			return EBADF;
 
-		mutex_enter(&of->sc_dk.dk_openlock);
+		if ((error = lockmgr(&of->sc_dk.dk_openlock, LK_EXCLUSIVE,
+				     NULL)) != 0)
+			return (error);
 
 		error = setdisklabel(of->sc_dk.dk_label,
 		    lp, /*of->sc_dk.dk_openmask */0,
@@ -396,7 +404,7 @@ ofdisk_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 			    DISKUNIT(dev), RAW_PART), ofdisk_strategy,
 			    of->sc_dk.dk_label, of->sc_dk.dk_cpulabel);
 
-		mutex_exit(&of->sc_dk.dk_openlock);
+		(void) lockmgr(&of->sc_dk.dk_openlock, LK_RELEASE, NULL);
 
 		return error;
 	}
@@ -459,7 +467,7 @@ ofdisk_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 }
 
 int
-ofdisk_dump(dev_t dev, daddr_t blkno, void *va, size_t size)
+ofdisk_dump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
 {
 	return EINVAL;
 }

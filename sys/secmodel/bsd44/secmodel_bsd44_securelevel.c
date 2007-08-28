@@ -1,4 +1,4 @@
-/* $NetBSD: secmodel_bsd44_securelevel.c,v 1.30 2007/07/09 21:11:31 ad Exp $ */
+/* $NetBSD: secmodel_bsd44_securelevel.c,v 1.18.2.3 2007/01/06 13:27:54 bouyer Exp $ */
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
  * All rights reserved.
@@ -11,7 +11,10 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Elad Efrat.
+ * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -35,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: secmodel_bsd44_securelevel.c,v 1.30 2007/07/09 21:11:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: secmodel_bsd44_securelevel.c,v 1.18.2.3 2007/01/06 13:27:54 bouyer Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_insecure.h"
@@ -54,9 +57,11 @@ __KERNEL_RCSID(0, "$NetBSD: secmodel_bsd44_securelevel.c,v 1.30 2007/07/09 21:11
 
 #include <secmodel/bsd44/securelevel.h>
 
-static int securelevel;
-
-static kauth_listener_t l_system, l_process, l_network, l_machdep, l_device;
+/*
+ * XXX after we remove all securelevel references from the kernel,
+ * XXX this goes static.
+ */
+int securelevel;
 
 /*
  * sysctl helper routine for securelevel. ensures that the value
@@ -77,7 +82,6 @@ secmodel_bsd44_sysctl_securelevel(SYSCTLFN_ARGS)
         
 	if (newsecurelevel < securelevel && l && l->l_proc->p_pid != 1)
 		return (EPERM);
-
 	securelevel = newsecurelevel;
 
 	return (error);
@@ -109,36 +113,24 @@ SYSCTL_SETUP(sysctl_security_bsd44_securelevel_setup,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "securelevel",
 		       SYSCTL_DESCR("System security level"),
-		       secmodel_bsd44_sysctl_securelevel, 0, NULL, 0,
+		       secmodel_bsd44_sysctl_securelevel, 0, &securelevel, 0,
 		       CTL_KERN, KERN_SECURELVL, CTL_EOL);
 }
 
 void
 secmodel_bsd44_securelevel_start(void)
 {
-	l_system = kauth_listen_scope(KAUTH_SCOPE_SYSTEM,
+	kauth_listen_scope(KAUTH_SCOPE_SYSTEM,
 	    secmodel_bsd44_securelevel_system_cb, NULL);
-	l_process = kauth_listen_scope(KAUTH_SCOPE_PROCESS,
+	kauth_listen_scope(KAUTH_SCOPE_PROCESS,
 	    secmodel_bsd44_securelevel_process_cb, NULL);
-	l_network = kauth_listen_scope(KAUTH_SCOPE_NETWORK,
+	kauth_listen_scope(KAUTH_SCOPE_NETWORK,
 	    secmodel_bsd44_securelevel_network_cb, NULL);
-	l_machdep = kauth_listen_scope(KAUTH_SCOPE_MACHDEP,
+	kauth_listen_scope(KAUTH_SCOPE_MACHDEP,
 	    secmodel_bsd44_securelevel_machdep_cb, NULL);
-	l_device = kauth_listen_scope(KAUTH_SCOPE_DEVICE,
+	kauth_listen_scope(KAUTH_SCOPE_DEVICE,
 	    secmodel_bsd44_securelevel_device_cb, NULL);
 }
-
-#if defined(_LKM)
-void
-secmodel_bsd44_securelevel_stop(void)
-{
-	kauth_unlisten_scope(l_system);
-	kauth_unlisten_scope(l_process);
-	kauth_unlisten_scope(l_network);
-	kauth_unlisten_scope(l_machdep);
-	kauth_unlisten_scope(l_device);
-}
-#endif /* _LKM */
 
 /*
  * kauth(9) listener
@@ -159,11 +151,6 @@ secmodel_bsd44_securelevel_system_cb(kauth_cred_t cred,
 	req = (enum kauth_system_req)arg0;
 
 	switch (action) {
-	case KAUTH_SYSTEM_CHSYSFLAGS:
-		if (securelevel < 1)
-			result = KAUTH_RESULT_ALLOW;
-		break;
-
 	case KAUTH_SYSTEM_TIME:
 		switch (req) {
 		case KAUTH_REQ_SYSTEM_TIME_BACKWARDS:
@@ -185,37 +172,6 @@ secmodel_bsd44_securelevel_system_cb(kauth_cred_t cred,
 	case KAUTH_SYSTEM_LKM:
 		if (securelevel < 1)
 			result = KAUTH_RESULT_ALLOW;
-		break;
-
-	case KAUTH_SYSTEM_MOUNT:
-		switch (req) {
-		case KAUTH_REQ_SYSTEM_MOUNT_NEW:
-			if (securelevel > 1)
-				break;
-
-			result = KAUTH_RESULT_ALLOW;
-			break;
-
-		case KAUTH_REQ_SYSTEM_MOUNT_UPDATE:
-			if (securelevel > 1) {
-				struct mount *mp = arg1;
-				u_long flags = (u_long)arg2;
-
-				/* Can only degrade from read/write to read-only. */
-				if (flags != (mp->mnt_flag | MNT_RDONLY | MNT_RELOAD |
-				    MNT_FORCE | MNT_UPDATE))
-					break;
-			}
-
-			result = KAUTH_RESULT_ALLOW;
-
-			break;
-
-		default:
-			result = KAUTH_RESULT_DEFER;
-			break;
-		}
-
 		break;
 
 	case KAUTH_SYSTEM_SYSCTL:
@@ -481,8 +437,7 @@ secmodel_bsd44_securelevel_device_cb(kauth_cred_t cred,
 					if (blkdev != NODEV) {
 						vfinddev(blkdev, VBLK, &bvp);
 						if (bvp != NULL)
-							d_type = (cdev->d_flag
-							    & D_TYPEMASK);
+							d_type = cdev->d_type;
 					}
 				}
 
@@ -493,7 +448,7 @@ secmodel_bsd44_securelevel_device_cb(kauth_cred_t cred,
 
 				bdev = bdevsw_lookup(dev);
 				if (bdev != NULL)
-					d_type = (bdev->d_flag & D_TYPEMASK);
+					d_type = bdev->d_type;
 
 				bvp = vp;
 

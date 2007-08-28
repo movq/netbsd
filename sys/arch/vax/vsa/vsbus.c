@@ -1,4 +1,4 @@
-/*	$NetBSD: vsbus.c,v 1.52 2007/03/04 19:21:56 christos Exp $ */
+/*	$NetBSD: vsbus.c,v 1.50 2005/12/11 12:19:37 christos Exp $ */
 /*
  * Copyright (c) 1996, 1999 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vsbus.c,v 1.52 2007/03/04 19:21:56 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vsbus.c,v 1.50 2005/12/11 12:19:37 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -306,9 +306,8 @@ vsbus_clrintr(mask)
  * Use the physical memory directly.
  */
 void
-vsbus_copytoproc(struct proc *p, void *fromv, void *tov, int len)
+vsbus_copytoproc(struct proc *p, caddr_t from, caddr_t to, int len)
 {
-	char *from = fromv, *to = tov;
 	struct pte *pte;
 	paddr_t pa;
 
@@ -330,7 +329,7 @@ vsbus_copytoproc(struct proc *p, void *fromv, void *tov, int len)
 		int cz = round_page((vaddr_t)to) - (vaddr_t)to;
 
 		pa = (pte->pg_pfn << VAX_PGSHIFT) | (PAGE_SIZE - cz) | KERNBASE;
-		bcopy(from, (void *)pa, min(cz, len));
+		bcopy(from, (caddr_t)pa, min(cz, len));
 		from += cz;
 		to += cz;
 		len -= cz;
@@ -338,7 +337,7 @@ vsbus_copytoproc(struct proc *p, void *fromv, void *tov, int len)
 	}
 	while (len > 0) {
 		pa = (pte->pg_pfn << VAX_PGSHIFT) | KERNBASE;
-		bcopy(from, (void *)pa, min(PAGE_SIZE, len));
+		bcopy(from, (caddr_t)pa, min(PAGE_SIZE, len));
 		from += PAGE_SIZE;
 		to += PAGE_SIZE;
 		len -= PAGE_SIZE;
@@ -347,9 +346,8 @@ vsbus_copytoproc(struct proc *p, void *fromv, void *tov, int len)
 }
 
 void
-vsbus_copyfromproc(struct proc *p, void *fromv, void *tov, int len)
+vsbus_copyfromproc(struct proc *p, caddr_t from, caddr_t to, int len)
 {
-	char *from = fromv, *to = tov;
 	struct pte *pte;
 	paddr_t pa;
 
@@ -371,7 +369,7 @@ vsbus_copyfromproc(struct proc *p, void *fromv, void *tov, int len)
 		int cz = round_page((vaddr_t)from) - (vaddr_t)from;
 
 		pa = (pte->pg_pfn << VAX_PGSHIFT) | (PAGE_SIZE - cz) | KERNBASE;
-		bcopy((void *)pa, to, min(cz, len));
+		bcopy((caddr_t)pa, to, min(cz, len));
 		from += cz;
 		to += cz;
 		len -= cz;
@@ -379,7 +377,7 @@ vsbus_copyfromproc(struct proc *p, void *fromv, void *tov, int len)
 	}
 	while (len > 0) {
 		pa = (pte->pg_pfn << VAX_PGSHIFT) | KERNBASE;
-		bcopy((void *)pa, to, min(PAGE_SIZE, len));
+		bcopy((caddr_t)pa, to, min(PAGE_SIZE, len));
 		from += PAGE_SIZE;
 		to += PAGE_SIZE;
 		len -= PAGE_SIZE;

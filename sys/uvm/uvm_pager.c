@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pager.c,v 1.85 2007/07/29 13:31:17 ad Exp $	*/
+/*	$NetBSD: uvm_pager.c,v 1.78 2006/09/15 15:51:13 yamt Exp $	*/
 
 /*
  *
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_pager.c,v 1.85 2007/07/29 13:31:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_pager.c,v 1.78 2006/09/15 15:51:13 yamt Exp $");
 
 #include "opt_uvmhist.h"
 #include "opt_readahead.h"
@@ -71,10 +71,10 @@ struct uvm_pagerops * const uvmpagerops[] = {
  */
 
 struct vm_map *pager_map;		/* XXX */
-kmutex_t pager_map_wanted_lock;
-bool pager_map_wanted;	/* locked by pager map */
+struct simplelock pager_map_wanted_lock;
+boolean_t pager_map_wanted;	/* locked by pager map */
 static vaddr_t emergva;
-static bool emerginuse;
+static boolean_t emerginuse;
 
 /*
  * uvm_pager_init: init pagers (at boot time)
@@ -92,16 +92,16 @@ uvm_pager_init(void)
 
 	sva = 0;
 	pager_map = uvm_km_suballoc(kernel_map, &sva, &eva, PAGER_MAP_SIZE, 0,
-	    false, NULL);
-	mutex_init(&pager_map_wanted_lock, MUTEX_DEFAULT, IPL_NONE);
-	pager_map_wanted = false;
+	    FALSE, NULL);
+	simple_lock_init(&pager_map_wanted_lock);
+	pager_map_wanted = FALSE;
 	emergva = uvm_km_alloc(kernel_map, round_page(MAXPHYS), 0,
 	    UVM_KMF_VAONLY);
 #if defined(DEBUG)
 	if (emergva == 0)
 		panic("emergva");
 #endif
-	emerginuse = false;
+	emerginuse = FALSE;
 
 	/*
 	 * init ASYNC I/O queue
@@ -134,7 +134,7 @@ uvm_pagermapin(struct vm_page **pps, int npages, int flags)
 	vaddr_t cva;
 	struct vm_page *pp;
 	vm_prot_t prot;
-	const bool pdaemon = curlwp == uvm.pagedaemon_lwp;
+	const boolean_t pdaemon = curproc == uvm.pagedaemon_proc;
 	UVMHIST_FUNC("uvm_pagermapin"); UVMHIST_CALLED(maphist);
 
 	UVMHIST_LOG(maphist,"(pps=0x%x, npages=%d)", pps, npages,0,0);
@@ -155,14 +155,15 @@ ReStart:
 	if (uvm_map(pager_map, &kva, size, NULL, UVM_UNKNOWN_OFFSET, 0,
 	    UVM_FLAG_NOMERGE | (pdaemon ? UVM_FLAG_NOWAIT : 0)) != 0) {
 		if (pdaemon) {
-			mutex_enter(&pager_map_wanted_lock);
+			simple_lock(&pager_map_wanted_lock);
 			if (emerginuse) {
-				mtsleep(&emergva, PVM | PNORELOCK, "emergva",
-				    0, &pager_map_wanted_lock);
+				UVM_UNLOCK_AND_WAIT(&emergva,
+				    &pager_map_wanted_lock, FALSE,
+				    "emergva", 0);
 				goto ReStart;
 			}
-			emerginuse = true;
-			mutex_exit(&pager_map_wanted_lock);
+			emerginuse = TRUE;
+			simple_unlock(&pager_map_wanted_lock);
 			kva = emergva;
 			/* The shift implicitly truncates to PAGE_SIZE */
 			KASSERT(npages <= (MAXPHYS >> PAGE_SHIFT));
@@ -172,11 +173,11 @@ ReStart:
 			UVMHIST_LOG(maphist,"<- NOWAIT failed", 0,0,0,0);
 			return(0);
 		}
-		mutex_enter(&pager_map_wanted_lock);
-		pager_map_wanted = true;
+		simple_lock(&pager_map_wanted_lock);
+		pager_map_wanted = TRUE;
 		UVMHIST_LOG(maphist, "  SLEEPING on pager_map",0,0,0,0);
-		mtsleep(pager_map, PVM | PNORELOCK, "pager_map", 0,
-		    &pager_map_wanted_lock);
+		UVM_UNLOCK_AND_WAIT(pager_map, &pager_map_wanted_lock, FALSE,
+		    "pager_map", 0);
 		goto ReStart;
 	}
 
@@ -216,21 +217,21 @@ uvm_pagermapout(vaddr_t kva, int npages)
 
 	pmap_kremove(kva, npages << PAGE_SHIFT);
 	if (kva == emergva) {
-		mutex_enter(&pager_map_wanted_lock);
-		emerginuse = false;
+		simple_lock(&pager_map_wanted_lock);
+		emerginuse = FALSE;
 		wakeup(&emergva);
-		mutex_exit(&pager_map_wanted_lock);
+		simple_unlock(&pager_map_wanted_lock);
 		return;
 	}
 
 	vm_map_lock(pager_map);
 	uvm_unmap_remove(pager_map, kva, kva + size, &entries, NULL, 0);
-	mutex_enter(&pager_map_wanted_lock);
+	simple_lock(&pager_map_wanted_lock);
 	if (pager_map_wanted) {
-		pager_map_wanted = false;
+		pager_map_wanted = FALSE;
 		wakeup(pager_map);
 	}
-	mutex_exit(&pager_map_wanted_lock);
+	simple_unlock(&pager_map_wanted_lock);
 	vm_map_unlock(pager_map);
 	if (entries)
 		uvm_unmap_detach(entries, 0);
@@ -250,8 +251,10 @@ uvm_aio_biodone1(struct buf *bp)
 	struct buf *mbp = bp->b_private;
 
 	KASSERT(mbp != bp);
-	if (bp->b_error != 0)
+	if (bp->b_flags & B_ERROR) {
+		mbp->b_flags |= B_ERROR;
 		mbp->b_error = bp->b_error;
+	}
 	mbp->b_resid -= bp->b_bcount;
 	putiobuf(bp);
 	if (mbp->b_resid == 0) {
@@ -272,7 +275,10 @@ uvm_aio_biodone(struct buf *bp)
 	/* reset b_iodone for when this is a single-buf i/o. */
 	bp->b_iodone = uvm_aio_aiodone;
 
-	workqueue_enqueue(uvm.aiodone_queue, &bp->b_work, NULL);
+	simple_lock(&uvm.aiodoned_lock);	/* locks uvm.aio_done */
+	TAILQ_INSERT_TAIL(&uvm.aio_done, bp, b_freelist);
+	wakeup(&uvm.aiodoned);
+	simple_unlock(&uvm.aiodoned_lock);
 }
 
 /*
@@ -288,11 +294,11 @@ uvm_aio_aiodone(struct buf *bp)
 	struct uvm_object *uobj;
 	struct simplelock *slock;
 	int s, i, error, swslot;
-	bool write, swap;
+	boolean_t write, swap;
 	UVMHIST_FUNC("uvm_aio_aiodone"); UVMHIST_CALLED(ubchist);
 	UVMHIST_LOG(ubchist, "bp %p", bp, 0,0,0);
 
-	error = bp->b_error;
+	error = (bp->b_flags & B_ERROR) ? (bp->b_error ? bp->b_error : EIO) : 0;
 	write = (bp->b_flags & B_READ) == 0;
 	/* XXXUBC B_NOCACHE is for swap pager, should be done differently */
 	if (write && !(bp->b_flags & B_NOCACHE) && bioops.io_pageiodone) {
@@ -453,11 +459,11 @@ uvm_aio_aiodone(struct buf *bp)
 		KASSERT(write);
 
 		/* these pages are now only in swap. */
-		mutex_enter(&uvm_swap_data_lock);
+		simple_lock(&uvm.swap_data_lock);
 		KASSERT(uvmexp.swpgonly + npages <= uvmexp.swpginuse);
 		if (error != ENOMEM)
 			uvmexp.swpgonly += npages;
-		mutex_exit(&uvm_swap_data_lock);
+		simple_unlock(&uvm.swap_data_lock);
 		if (error) {
 			if (error != ENOMEM)
 				uvm_swap_markbad(swslot, npages);
@@ -485,7 +491,7 @@ uvm_pageratop(vaddr_t kva)
 {
 	struct vm_page *pg;
 	paddr_t pa;
-	bool rv;
+	boolean_t rv;
 
 	rv = pmap_extract(pmap_kernel(), kva, &pa);
 	KASSERT(rv);

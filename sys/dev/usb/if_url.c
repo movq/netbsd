@@ -1,4 +1,4 @@
-/*	$NetBSD: if_url.c,v 1.28 2007/08/27 17:49:54 xtraeme Exp $	*/
+/*	$NetBSD: if_url.c,v 1.24 2006/12/01 20:56:42 drochner Exp $	*/
 /*
  * Copyright (c) 2001, 2002
  *     Shingo WATANABE <nabe@nabechan.org>.  All rights reserved.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_url.c,v 1.28 2007/08/27 17:49:54 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_url.c,v 1.24 2006/12/01 20:56:42 drochner Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -51,7 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_url.c,v 1.28 2007/08/27 17:49:54 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/rwlock.h>
+#include <sys/lock.h>
 #include <sys/mbuf.h>
 #include <sys/kernel.h>
 #include <sys/socket.h>
@@ -102,7 +102,7 @@ Static void url_txeof(usbd_xfer_handle, usbd_private_handle, usbd_status);
 Static void url_rxeof(usbd_xfer_handle, usbd_private_handle, usbd_status);
 Static void url_tick(void *);
 Static void url_tick_task(void *);
-Static int url_ioctl(struct ifnet *, u_long, void *);
+Static int url_ioctl(struct ifnet *, u_long, caddr_t);
 Static void url_stop_task(struct url_softc *);
 Static void url_stop(struct ifnet *, int);
 Static void url_watchdog(struct ifnet *);
@@ -170,6 +170,9 @@ USB_MATCH(url)
 {
 	USB_MATCH_START(url, uaa);
 
+	if (uaa->iface != NULL)
+		return (UMATCH_NONE);
+
 	return (url_lookup(uaa->vendor, uaa->product) != NULL ?
 		UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
 }
@@ -202,7 +205,7 @@ USB_ATTACH(url)
 	}
 
 	usb_init_task(&sc->sc_tick_task, url_tick_task, sc);
-	rw_init(&sc->sc_mii_rwlock);
+	lockinit(&sc->sc_mii_lock, PZERO, "urlmii", 0, 0);
 	usb_init_task(&sc->sc_stop_task, (void (*)(void *)) url_stop_task, sc);
 
 	/* get control interface */
@@ -374,7 +377,6 @@ USB_DETACH(url)
 
 	splx(s);
 
-	rw_destroy(&sc->sc_mii_rwlock);
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
 			   USBDEV(sc->sc_dev));
 
@@ -1092,7 +1094,7 @@ Static void url_intr()
 #endif
 
 Static int
-url_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+url_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct url_softc *sc = ifp->if_softc;
 	struct ifreq *ifr = (struct ifreq *)data;
@@ -1359,7 +1361,7 @@ url_lock_mii(struct url_softc *sc)
 			__func__));
 
 	sc->sc_refcnt++;
-	rw_enter(&sc->sc_mii_rwlock, RW_WRITER);
+	lockmgr(&sc->sc_mii_lock, LK_EXCLUSIVE, NULL);
 }
 
 Static void
@@ -1368,7 +1370,7 @@ url_unlock_mii(struct url_softc *sc)
 	DPRINTFN(0xff, ("%s: %s: enter\n", USBDEVNAME(sc->sc_dev),
 		       __func__));
 
-	rw_exit(&sc->sc_mii_rwlock);
+	lockmgr(&sc->sc_mii_lock, LK_RELEASE, NULL);
 	if (--sc->sc_refcnt < 0)
 		usb_detach_wakeup(USBDEV(sc->sc_dev));
 }

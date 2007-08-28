@@ -1,4 +1,4 @@
-/*	$NetBSD: dma.c,v 1.36 2007/07/12 20:33:02 he Exp $	*/
+/*	$NetBSD: dma.c,v 1.34 2006/07/21 10:01:39 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dma.c,v 1.36 2007/07/12 20:33:02 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dma.c,v 1.34 2006/07/21 10:01:39 tsutsui Exp $");
 
 #include <machine/hp300spu.h>	/* XXX param.h includes cpu.h */
 
@@ -222,7 +222,7 @@ dmaattach(struct device *parent, struct device *self, void *aux)
 	sc->sc_type = (rev == 'B') ? DMA_B : DMA_C;
 
 	TAILQ_INIT(&sc->sc_queue);
-	callout_init(&sc->sc_debug_ch, 0);
+	callout_init(&sc->sc_debug_ch);
 
 	for (i = 0; i < NDMACHAN; i++) {
 		dc = &sc->sc_chan[i];
@@ -275,7 +275,7 @@ dmacomputeipl(void)
 	 * Our interrupt level must be as high as the highest
 	 * device using DMA (i.e. splbio).
 	 */
-	sc->sc_ipl = PSLTOIPL(hp300_ipl2psl[IPL_BIO]);
+	sc->sc_ipl = PSLTOIPL(hp300_ipls[HP300_IPL_BIO]);
 	sc->sc_ih = intr_establish(dmaintr, sc, sc->sc_ipl, IPL_BIO);
 }
 

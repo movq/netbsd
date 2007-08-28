@@ -1,4 +1,4 @@
-/*	$NetBSD: filedesc.h,v 1.40 2007/07/09 21:11:32 ad Exp $	*/
+/*	$NetBSD: filedesc.h,v 1.36 2006/07/23 22:06:14 ad Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -35,7 +35,6 @@
 #define	_SYS_FILEDESC_H_
 
 #include <sys/lock.h>
-#include <sys/rwlock.h>
 
 /*
  * This structure is used for the management of descriptors.  It may be
@@ -89,10 +88,9 @@ struct filedesc {
 struct cwdinfo {
 	struct vnode	*cwdi_cdir;	/* current directory */
 	struct vnode	*cwdi_rdir;	/* root directory */
-	struct vnode	*cwdi_edir;	/* emulation root (if known) */
-	krwlock_t	cwdi_lock;	/* lock on entire struct */
 	u_short		cwdi_cmask;	/* mask for file creation */
 	u_short		cwdi_refcnt;	/* reference count */
+	struct simplelock cwdi_slock;	/* mutex */
 };
 
 
@@ -159,11 +157,6 @@ int	getcwd_common(struct vnode *, struct vnode *, char **, char *, int,
 
 int	closef(struct file *, struct lwp *);
 int	getsock(struct filedesc *, int, struct file **);
-
-struct stat;
-int	do_sys_fstat(struct lwp *, int, struct stat *);
-struct flock;
-int	do_fcntl_lock(struct lwp *, int, int, struct flock *);
 #endif /* _KERNEL */
 
 #endif /* !_SYS_FILEDESC_H_ */

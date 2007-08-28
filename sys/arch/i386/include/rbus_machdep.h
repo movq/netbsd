@@ -1,4 +1,4 @@
-/*	$NetBSD: rbus_machdep.h,v 1.7 2007/01/12 20:34:09 gdt Exp $	*/
+/*	$NetBSD: rbus_machdep.h,v 1.6.54.1 2007/03/28 20:28:20 jdc Exp $	*/
 
 /*
  * Copyright (c) 1999

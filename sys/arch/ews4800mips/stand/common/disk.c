@@ -1,4 +1,4 @@
-/*	$NetBSD: disk.c,v 1.4 2007/02/22 05:31:53 thorpej Exp $	*/
+/*	$NetBSD: disk.c,v 1.2 2006/08/26 14:13:40 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -55,7 +55,7 @@ struct devsw dkdevsw = {
 };
 
 struct disk {
-	bool active;
+	boolean_t active;
 	int type;	/* FD/HD */
 	int unit;
 	int format;	/* 2D/2HD */
@@ -65,13 +65,13 @@ struct disk {
 } __disk;
 
 void sector_init(void);
-bool __sector_rw(uint8_t *, int, int, int);
+boolean_t __sector_rw(uint8_t *, int, int, int);
 int __hd_rw(uint8_t *, int, int, int);
 int __fd_2d_rw(uint8_t *, int, int, int);
 int __fd_2hd_rw(uint8_t *, int, int, int);
 void __fd_progress_msg(int);
 
-bool
+boolean_t
 device_attach(int type, int unit, int partition)
 {
 
@@ -85,14 +85,14 @@ device_attach(int type, int unit, int partition)
 
 	__disk.partition = partition;
 
-	__disk.active = true;
+	__disk.active = TRUE;
 	__disk.offset = 0;
 
 	if (partition >= 0) {
 		if (!find_partition_start(__disk.partition, &__disk.offset)) {
 			printf("type %d, unit %d partition %d not found.\n",
 			    __disk.type, __disk.unit, __disk.partition);
-			return false;
+			return FALSE;
 		}
 	}
 	DEVICE_CAPABILITY.active_device = type;
@@ -108,14 +108,14 @@ device_attach(int type, int unit, int partition)
 		} else {
 			printf("unknown floppy disk format %d.\n",
 			    __disk.format);
-			return false;
+			return FALSE;
 		}
 	} else {
 		printf("unknown disk type %d.\n", __disk.type);
-		return false;
+		return FALSE;
 	}
 
-	return true;
+	return TRUE;
 }
 
 int
@@ -165,42 +165,42 @@ void
 sector_fini(void *self)
 {
 
-	__disk.active = false;
+	__disk.active = FALSE;
 }
 
-bool
+boolean_t
 sector_read_n(void *self, uint8_t *buf, int sector, int count)
 {
 
 	if (!__sector_rw(buf, sector, 0, count))
-		return false;
-	return true;
+		return FALSE;
+	return TRUE;
 }
 
-bool
+boolean_t
 sector_read(void *self, uint8_t *buf, int sector)
 {
 
 	return __sector_rw(buf, sector, 0, 1);
 }
 
-bool
+boolean_t
 sector_write_n(void *self, uint8_t *buf, int sector, int count)
 {
 
 	if (!__sector_rw(buf, sector, 0x1000, count))
-		return false;
-	return true;
+		return FALSE;
+	return TRUE;
 }
 
-bool
+boolean_t
 sector_write(void *self, uint8_t *buf, int sector)
 {
 
 	return __sector_rw(buf, sector, 0x1000, 1);
 }
 
-bool
+boolean_t
 __sector_rw(uint8_t *buf, int block, int flag, int count)
 {
 	int err;

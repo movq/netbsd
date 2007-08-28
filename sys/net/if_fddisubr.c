@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fddisubr.c,v 1.71 2007/08/26 23:07:16 dyoung Exp $	*/
+/*	$NetBSD: if_fddisubr.c,v 1.63.6.1 2006/12/18 14:43:31 tron Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -96,7 +96,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_fddisubr.c,v 1.71 2007/08/26 23:07:16 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_fddisubr.c,v 1.63.6.1 2006/12/18 14:43:31 tron Exp $");
 
 #include "opt_inet.h"
 #include "opt_atalk.h"
@@ -196,7 +196,7 @@ extern u_char	aarp_org_code[ 3 ];
 #define	FDDIADDR(ifp)		LLADDR((ifp)->if_sadl)
 
 static	int fddi_output(struct ifnet *, struct mbuf *,
-	    const struct sockaddr *, struct rtentry *);
+	    struct sockaddr *, struct rtentry *);
 static	void fddi_input(struct ifnet *, struct mbuf *);
 
 /*
@@ -205,16 +205,16 @@ static	void fddi_input(struct ifnet *, struct mbuf *);
  * Assumes that ifp is actually pointer to ethercom structure.
  */
 static int
-fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
+fddi_output(struct ifnet *ifp0, struct mbuf *m0, struct sockaddr *dst,
     struct rtentry *rt0)
 {
 	u_int16_t etype;
 	int error = 0, hdrcmplt = 0;
-	uint8_t esrc[6], edst[6];
+ 	u_char esrc[6], edst[6];
 	struct mbuf *m = m0;
 	struct rtentry *rt;
 	struct fddi_header *fh;
-	struct mbuf *mcopy = NULL;
+	struct mbuf *mcopy = (struct mbuf *)0;
 	struct ifnet *ifp = ifp0;
 	ALTQ_DECL(struct altq_pktattr pktattr;)
 
@@ -275,11 +275,12 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 
 #ifdef INET
 	case AF_INET: {
+#define SIN(x) ((struct sockaddr_in *)(x))
 		if (m->m_flags & M_BCAST)
                 	memcpy(edst, fddibroadcastaddr, sizeof(edst));
 		else if (m->m_flags & M_MCAST) {
-			ETHER_MAP_IP_MULTICAST(&satocsin(dst)->sin_addr,
-			    (char *)edst);
+			ETHER_MAP_IP_MULTICAST(&SIN(dst)->sin_addr,
+			    (caddr_t)edst)
 		} else if (!arpresolve(ifp, rt, m, dst, edst))
 			return (0);	/* if not yet resolved */
 		/* If broadcasting on a simplex interface, loopback a copy */
@@ -291,7 +292,7 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 #endif
 #ifdef INET6
 	case AF_INET6:
-		if (!nd6_storelladdr(ifp, rt, m, dst, edst, sizeof(edst))){
+		if (!nd6_storelladdr(ifp, rt, m, dst, (u_char *)edst)){
 			/* something bad happened */
 			return (0);
 		}
@@ -304,7 +305,7 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 		if (m->m_flags & M_BCAST)
                 	memcpy(edst, etherbroadcastaddr, sizeof(edst));
 		else {
-			void *tha = ar_tha(ah);
+			caddr_t tha = ar_tha(ah);
 
 			KASSERT(tha);
 			memcpy(edst, tha, sizeof(edst));
@@ -340,7 +341,7 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 #ifdef NETATALK
 	case AF_APPLETALK: {
 		struct at_ifaddr *aa;
-		if (!aarpresolve(ifp, m, (const struct sockaddr_at *)dst, edst)) {
+		if (!aarpresolve(ifp, m, (struct sockaddr_at *)dst, edst)) {
 #ifdef NETATALKDEBUG
 			printf("aarpresolv: failed\n");
 #endif
@@ -350,7 +351,7 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 		 * ifaddr is the first thing in at_ifaddr
 		 */
 		if ((aa = (struct at_ifaddr *)at_ifawithnet(
-		    (const struct sockaddr_at *)dst, ifp)) == NULL)
+		    (struct sockaddr_at *)dst, ifp)) == NULL)
 			goto bad;
 
 		/*
@@ -370,7 +371,7 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 			memcpy(llc.llc_snap_org_code, at_org_code,
 			    sizeof(at_org_code));
 			llc.llc_snap_ether_type = htons(ETHERTYPE_ATALK);
-			memcpy(mtod(m, void *), &llc, sizeof(struct llc));
+			memcpy(mtod(m, caddr_t), &llc, sizeof(struct llc));
 			etype = 0;
 		} else {
 			etype = htons(ETHERTYPE_ATALK);
@@ -382,13 +383,13 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 	case AF_ISO: {
 		int	snpalen;
 		struct	llc *l;
-		const struct sockaddr_dl *sdl;
+		struct sockaddr_dl *sdl;
 
-		if (rt && (sdl = satocsdl(rt->rt_gateway)) &&
+		if (rt && (sdl = (struct sockaddr_dl *)rt->rt_gateway) &&
 		    sdl->sdl_family == AF_LINK && sdl->sdl_alen > 0) {
-			memcpy(edst, CLLADDR(sdl), sizeof(edst));
+			memcpy(edst, LLADDR(sdl), sizeof(edst));
 		} else if ((error =
-			    iso_snparesolve(ifp, (const struct sockaddr_iso *)dst,
+			    iso_snparesolve(ifp, (struct sockaddr_iso *)dst,
 					    (char *)edst, &snpalen)) != 0)
 			goto bad; /* Not Resolved */
 		/* If broadcasting on a simplex interface, loopback a copy */
@@ -416,8 +417,7 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 
 	case pseudo_AF_HDRCMPLT:
 	{
-		const struct fddi_header *fh1 =
-		    (const struct fddi_header *)dst->sa_data;
+		struct fddi_header *fh1 = (struct fddi_header *)dst->sa_data;
 		hdrcmplt = 1;
 		memcpy(esrc, fh1->fddi_shost, sizeof (esrc));
 		/*FALLTHROUGH*/
@@ -425,8 +425,7 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 
 	case AF_LINK:
 	{
-		const struct fddi_header *fh1 =
-		    (const struct fddi_header *)dst->sa_data;
+		struct fddi_header *fh1 = (struct fddi_header *)dst->sa_data;
  		memcpy(edst, fh1->fddi_dhost, sizeof (edst));
 		if (*edst & 1)
 			m->m_flags |= (M_BCAST|M_MCAST);
@@ -436,9 +435,9 @@ fddi_output(struct ifnet *ifp0, struct mbuf *m0, const struct sockaddr *dst,
 
 	case AF_UNSPEC:
 	{
-		const struct ether_header *eh;
-		eh = (const struct ether_header *)dst->sa_data;
- 		memcpy(edst, eh->ether_dhost, sizeof(edst));
+		struct ether_header *eh;
+		eh = (struct ether_header *)dst->sa_data;
+ 		memcpy(edst, eh->ether_dhost, sizeof (edst));
 		if (*edst & 1)
 			m->m_flags |= (M_BCAST|M_MCAST);
 		etype = eh->ether_type;
@@ -565,7 +564,7 @@ fddi_input(struct ifnet *ifp, struct mbuf *m)
 			m->m_flags |= M_MCAST;
 		ifp->if_imcasts++;
 	} else if ((ifp->if_flags & IFF_PROMISC)
-	    && memcmp(FDDIADDR(ifp), (void *)fh->fddi_dhost,
+	    && memcmp(FDDIADDR(ifp), (caddr_t)fh->fddi_dhost,
 		    sizeof(fh->fddi_dhost)) != 0) {
 		m_freem(m);
 		return;
@@ -651,10 +650,6 @@ fddi_input(struct ifnet *ifp, struct mbuf *m)
 #endif
 #ifdef INET6
 		case ETHERTYPE_IPV6:
-#ifdef GATEWAY  
-			if (ip6flow_fastforward(m))
-				return;
-#endif
 			schednetisr(NETISR_IPV6);
 			inq = &ip6intrq;
 			break;
@@ -703,8 +698,8 @@ fddi_input(struct ifnet *ifp, struct mbuf *m)
 			    LLC_XID_BASIC_MINLEN + sizeof(struct fddi_header))
 				goto dropanyway;
 			l->llc_window = 0;
-			l->llc_fid = LLC_XID_FORMAT_BASIC;
-			l->llc_class = LLC_XID_CLASS_I;
+			l->llc_fid = 9;
+			l->llc_class = 1;
 			l->llc_dsap = l->llc_ssap = 0;
 			/* Fall through to */
 		case LLC_TEST:
@@ -762,7 +757,7 @@ fddi_input(struct ifnet *ifp, struct mbuf *m)
  * Perform common duties while attaching to interface list
  */
 void
-fddi_ifattach(struct ifnet *ifp, void *lla)
+fddi_ifattach(struct ifnet *ifp, caddr_t lla)
 {
 	struct ethercom *ec = (struct ethercom *)ifp;
 
@@ -786,7 +781,7 @@ fddi_ifattach(struct ifnet *ifp, void *lla)
 
 	LIST_INIT(&ec->ec_multiaddrs);
 	if_alloc_sadl(ifp);
-	sockaddr_dl_setaddr(ifp->if_sadl, lla, ifp->if_addrlen);
+	memcpy(LLADDR(ifp->if_sadl), lla, ifp->if_addrlen);
 
 	ifp->if_broadcastaddr = fddibroadcastaddr;
 #if NBPFILTER > 0

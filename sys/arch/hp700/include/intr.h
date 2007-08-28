@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.9 2007/05/18 12:54:46 skrll Exp $	*/
+/*	$NetBSD: intr.h,v 1.6 2006/02/16 20:17:13 perry Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001, 2002 The NetBSD Foundation, Inc.
@@ -83,43 +83,34 @@ extern int softnetmask;
 /* 
  * Add a mask to cpl, and return the old value of cpl.
  */
+static __inline int splraise __P((int)); 
 static __inline int  
-splraise(register int ncpl)
+splraise(ncpl)
+	register int ncpl;
 {
 	register int ocpl = cpl;
 
 	cpl = ocpl | ncpl;      
-
 	return (ocpl);  
 }
 
 /* spllower() is in locore.S */
-void spllower(int);
+void spllower __P((int));
  
+/*
+ * Software interrupt masks
+ *
+ * NOTE: splsoftclock() is used by hardclock() to lower the priority from
+ * clock to softclock before it calls softclock().
+ */
+#define	spllowersoftclock() spllower(imask[IPL_SOFTCLOCK])
+
 /*
  * Miscellaneous
  */
 #define	spl0()		spllower(0)
 #define	splx(x)		spllower(x)
-
-typedef int ipl_t;
-typedef struct {
-	ipl_t _ipl;
-} ipl_cookie_t;
-
-static inline ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._ipl = ipl};
-}
-
-static inline int
-splraiseipl(ipl_cookie_t icookie)
-{
-
-	return splraise(imask[icookie._ipl]);
-}
+#define	splraiseipl(x)	splraise(imask[x])
 
 #include <sys/spl.h>
 
@@ -166,11 +157,11 @@ do {									\
 	splx((s));							\
 } while (/*CONSTCOND*/ 0)
 
-void	*softintr_establish(int, void (*)(void *), void *);
-void	softintr_disestablish(void *);
-void	softintr_bootstrap(void);
-void	softintr_init(void);
-int	softintr_dispatch(void *);
+void	*softintr_establish __P((int, void (*)(void *), void *));
+void	softintr_disestablish __P((void *));
+void	softintr_bootstrap __P((void));
+void	softintr_init __P((void));
+int	softintr_dispatch __P((void *));
 
 #define	softintr_schedule(arg)						\
 do {									\
@@ -187,7 +178,7 @@ do {									\
 	hp700_softintr_unlock(__si, __s);				\
 } while (/*CONSTCOND*/ 0)
 
-void	hp700_intr_schedule(int);
+void	hp700_intr_schedule __P((int));
 
 #endif /* _LOCORE */
 

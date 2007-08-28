@@ -1,4 +1,4 @@
-/*	$NetBSD: pool.h,v 1.56 2007/03/12 18:18:37 ad Exp $	*/
+/*	$NetBSD: pool.h,v 1.54 2006/08/20 09:35:25 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -99,10 +99,6 @@ struct pool_cache {
 	unsigned long	pc_ngroups;	/* # cache groups */
 
 	unsigned long	pc_nitems;	/* # objects currently in cache */
-
-#if defined(_KERNEL)
-	void		*pc_freecheck;
-#endif
 };
 
 struct pool_allocator {
@@ -220,7 +216,6 @@ struct pool {
 
 #if defined(_KERNEL)
 	struct callback_entry pr_reclaimerentry;
-	void		*pr_freecheck;
 #endif
 };
 #endif /* __POOL_EXPOSE */
@@ -248,19 +243,18 @@ struct link_pool_init {	/* same as args to pool_init() */
 	int flags;
 	const char *wchan;
 	struct pool_allocator *palloc;
-	int ipl;
 };
-#define	POOL_INIT(pp, size, align, align_offset, flags, wchan, palloc, ipl)\
+#define	POOL_INIT(pp, size, align, align_offset, flags, wchan, palloc)	\
 struct pool pp;								\
 static const struct link_pool_init _link_ ## pp[1] = {			\
-	{ &pp, size, align, align_offset, flags, wchan, palloc, ipl }	\
+	{ &pp, size, align, align_offset, flags, wchan, palloc }	\
 };									\
 __link_set_add_rodata(pools, _link_ ## pp)
 
 void		pool_subsystem_init(void);
 
 void		pool_init(struct pool *, size_t, u_int, u_int,
-		    int, const char *, struct pool_allocator *, int);
+		    int, const char *, struct pool_allocator *);
 void		pool_destroy(struct pool *);
 
 void		pool_set_drain_hook(struct pool *,

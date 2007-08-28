@@ -1,4 +1,4 @@
-/*	$NetBSD: btkbd.c,v 1.7 2007/07/09 21:00:31 ad Exp $	*/
+/*	$NetBSD: btkbd.c,v 1.5 2006/11/16 01:32:48 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btkbd.c,v 1.7 2007/07/09 21:00:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btkbd.c,v 1.5 2006/11/16 01:32:48 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -124,7 +124,7 @@ CFATTACH_DECL(btkbd, sizeof(struct btkbd_softc),
 /* wskbd(4) accessops */
 static int	btkbd_enable(void *, int);
 static void	btkbd_set_leds(void *, int);
-static int	btkbd_ioctl(void *, unsigned long, void *, int, struct lwp *);
+static int	btkbd_ioctl(void *, unsigned long, caddr_t, int, struct lwp *);
 
 static const struct wskbd_accessops btkbd_accessops = {
 	btkbd_enable,
@@ -197,7 +197,7 @@ btkbd_attach(struct device *parent, struct device *self, void *aux)
 
 #ifdef WSDISPLAY_COMPAT_RAWKBD
 #ifdef BTKBD_REPEAT
-	callout_init(&sc->sc_repeat, 0);
+	callout_init(&sc->sc_repeat);
 	callout_setfunc(&sc->sc_repeat, btkbd_repeat, sc);
 #endif
 #endif
@@ -337,7 +337,7 @@ btkbd_set_leds(void *self, int leds)
 }
 
 static int
-btkbd_ioctl(void *self, unsigned long cmd, void *data, int flag,
+btkbd_ioctl(void *self, unsigned long cmd, caddr_t data, int flag,
     struct lwp *l)
 {
 	struct btkbd_softc *sc = (struct btkbd_softc *)self;

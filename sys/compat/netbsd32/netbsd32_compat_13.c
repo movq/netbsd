@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_13.c,v 1.22 2007/06/16 20:04:28 dsl Exp $	*/
+/*	$NetBSD: netbsd32_compat_13.c,v 1.15 2005/12/11 12:20:22 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_13.c,v 1.22 2007/06/16 20:04:28 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_13.c,v 1.15 2005/12/11 12:20:22 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -37,6 +37,7 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_13.c,v 1.22 2007/06/16 20:04:28 dsl 
 #include <sys/proc.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/netbsd32/netbsd32.h>
@@ -46,16 +47,63 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_13.c,v 1.22 2007/06/16 20:04:28 dsl 
 #include <compat/sys/signal.h>
 #include <compat/sys/signalvar.h>
 
-#include <compat/common/compat_sigaltstack.h>
-
 int
 compat_13_netbsd32_sigaltstack13(l, v, retval)
 	struct lwp *l;
 	void *v;
 	register_t *retval;
 {
-	struct compat_13_netbsd32_sigaltstack13_args *uap = v;
-	compat_sigaltstack(uap, netbsd32_sigaltstack13, SS_ONSTACK, SS_DISABLE);
+	struct proc *p = l->l_proc;
+	struct compat_13_netbsd32_sigaltstack13_args /* {
+		syscallarg(const netbsd32_sigaltstack13p_t) nss;
+		syscallarg(netbsd32_sigaltstack13p_t) oss;
+	} */ *uap = v;
+	struct compat_13_sys_sigaltstack_args ua;
+	struct sigaltstack13 ss13, *nss13up, *oss13up;
+	struct netbsd32_sigaltstack13 s32ss;
+	caddr_t sg;
+	int error;
+
+	if (!SCARG(uap, nss))
+		return (EINVAL);
+
+	sg = stackgap_init(p, 0);
+
+	SCARG(&ua, nss) = nss13up = stackgap_alloc(p, &sg, sizeof(*nss13up));
+	if (SCARG(uap, oss))
+		SCARG(&ua, oss) = oss13up = stackgap_alloc(p, &sg, sizeof(*oss13up));
+	else
+		SCARG(&ua, oss) = NULL;
+
+	error = copyin((caddr_t)NETBSD32PTR64(SCARG(uap, nss)),
+	    &s32ss, sizeof s32ss);
+	if (error)
+		return (error);
+	ss13.ss_sp = (char *)NETBSD32PTR64(s32ss.ss_sp);
+	ss13.ss_size = s32ss.ss_size;
+	ss13.ss_flags = s32ss.ss_flags;
+	error = copyout(&ss13, nss13up, sizeof *nss13up);
+	if (error)
+		return (error);
+
+	error = compat_13_sys_sigaltstack(l, &ua, retval);
+	if (error)
+		return (error);
+
+	if (SCARG(uap, oss)) {
+		error = copyin(nss13up, &ss13, sizeof *nss13up);
+		if (error)
+			return (error);
+		s32ss.ss_sp = (netbsd32_charp)(u_long)ss13.ss_sp;
+		s32ss.ss_size = ss13.ss_size;
+		s32ss.ss_flags = ss13.ss_flags;
+		error = copyout(&s32ss, (caddr_t)NETBSD32PTR64(SCARG(uap, nss)),
+		    sizeof s32ss);
+		if (error)
+			return (error);
+	}
+
+	return (0);
 }
 
 
@@ -65,6 +113,7 @@ compat_13_netbsd32_sigprocmask(l, v, retval)
 	void *v;
 	register_t *retval;
 {
+	struct proc *p = l->l_proc;
 	struct compat_13_netbsd32_sigprocmask_args /* {
 		syscallarg(int) how;
 		syscallarg(int) mask;
@@ -75,7 +124,7 @@ compat_13_netbsd32_sigprocmask(l, v, retval)
 
 	ness = SCARG(uap, mask);
 	native_sigset13_to_sigset(&ness, &nbss);
-	error = sigprocmask1(l, SCARG(uap, how), &nbss, &obss);
+	error = sigprocmask1(p, SCARG(uap, how), &nbss, &obss);
 	if (error)
 		return (error);
 	native_sigset_to_sigset13(&obss, &oess);
@@ -97,5 +146,5 @@ compat_13_netbsd32_sigsuspend(l, v, retval)
 
 	ess = SCARG(uap, mask);
 	native_sigset13_to_sigset(&ess, &bss);
-	return (sigsuspend1(l, &bss));
+	return (sigsuspend1(l->l_proc, &bss));
 }

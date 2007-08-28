@@ -1,4 +1,4 @@
-/*      $NetBSD: xbd_xenbus.c,v 1.20 2007/07/29 12:15:42 ad Exp $      */
+/*      $NetBSD: xbd_xenbus.c,v 1.14.10.3 2007/01/18 12:57:26 tron Exp $      */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xbd_xenbus.c,v 1.20 2007/07/29 12:15:42 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xbd_xenbus.c,v 1.14.10.3 2007/01/18 12:57:26 tron Exp $");
 
 #include "opt_xen.h"
 #include "rnd.h"
@@ -46,7 +46,6 @@ __KERNEL_RCSID(0, "$NetBSD: xbd_xenbus.c,v 1.20 2007/07/29 12:15:42 ad Exp $");
 #include <sys/fcntl.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
-#include <sys/proc.h>
 #include <sys/systm.h>
 #include <sys/stat.h>
 #include <sys/vnode.h>
@@ -503,11 +502,13 @@ again:
 		    rep->operation != BLKIF_OP_WRITE) {
 			printf("%s: bad operation %d from backend\n",
 			     sc->sc_dev.dv_xname, rep->operation);
+				bp->b_flags |= B_ERROR;
 				bp->b_error = EIO;
 				bp->b_resid = bp->b_bcount;
 				goto next;
 		}
 		if (rep->status != BLKIF_RSP_OKAY) {
+				bp->b_flags |= B_ERROR;
 				bp->b_error = EIO;
 				bp->b_resid = bp->b_bcount;
 				goto next;
@@ -567,12 +568,14 @@ xbdstrategy(struct buf *bp)
 	    (long)bp->b_bcount));
 
 	if (sc == NULL || sc->sc_shutdown) {
+		bp->b_flags |= B_ERROR;
 		bp->b_error = EIO;
 		biodone(bp);
 		return;
 	}
 	if (__predict_false((sc->sc_info & VDISK_READONLY) &&
 	    (bp->b_flags & B_READ) == 0)) {
+		bp->b_flags |= B_ERROR;
 		bp->b_error = EROFS;
 		biodone(bp);
 		return;
@@ -622,7 +625,7 @@ xbdwrite(dev_t dev, struct uio *uio, int flags)
 }
 
 int
-xbdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+xbdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct	xbd_xenbus_softc *sc = xbd_cd.cd_devs[DISKUNIT(dev)];
 	struct	dk_softc *dksc;
@@ -647,7 +650,7 @@ xbdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 }
 
 int
-xbddump(dev_t dev, daddr_t blkno, void *va, size_t size)
+xbddump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
 {
 	struct	xbd_xenbus_softc *sc = xbd_cd.cd_devs[DISKUNIT(dev)];
 
@@ -777,6 +780,7 @@ out:
 	return ret;
 
 err:
+	bp->b_flags |= B_ERROR;
 	bp->b_resid = bp->b_bcount;
 	biodone(bp);
 	return 0;

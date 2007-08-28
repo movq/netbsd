@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_var.h,v 1.150 2007/08/02 02:42:42 rmind Exp $	*/
+/*	$NetBSD: tcp_var.h,v 1.141 2006/10/21 10:08:54 yamt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -193,7 +193,7 @@ struct tcpcb {
 	int	t_family;		/* address family on the wire */
 	struct ipqehead segq;		/* sequencing queue */
 	int	t_segqlen;		/* length of the above */
-	callout_t t_timer[TCPT_NTIMERS];/* tcp timers */
+	struct callout t_timer[TCPT_NTIMERS];/* tcp timers */
 	short	t_state;		/* state of this connection */
 	short	t_rxtshift;		/* log(2) of rexmt exp. backoff */
 	uint32_t t_rxtcur;		/* current retransmit value */
@@ -227,7 +227,7 @@ struct tcpcb {
 	struct	mbuf *t_template;	/* skeletal packet for transmit */
 	struct	inpcb *t_inpcb;		/* back pointer to internet pcb */
 	struct	in6pcb *t_in6pcb;	/* back pointer to internet pcb */
-	callout_t t_delack_ch;		/* delayed ACK callout */
+	struct	callout t_delack_ch;	/* delayed ACK callout */
 /*
  * The following fields are used as in the protocol specification.
  * See RFC793, Dec. 1981, page 21.
@@ -262,10 +262,6 @@ struct tcpcb {
 					 * for slow start exponential to
 					 * linear switch
 					 */
-/* auto-sizing variables */
-	u_int rfbuf_cnt;		/* recv buffer autoscaling byte count */
-	uint32_t rfbuf_ts;		/* recv buffer autoscaling timestamp */
-
 /*
  * transmit timing stuff.  See below for scale of srtt and rttvar.
  * "Variance" is actually smoothed difference.
@@ -335,14 +331,6 @@ struct tcpcb {
 	uint8_t t_ecn_retries;		/* # of ECN setup retries */
 	
 	struct tcp_congctl *t_congctl;	/* per TCB congctl algorithm */
-
-	/* Keepalive per socket */
-	u_int	t_keepinit;
-	u_int	t_keepidle;
-	u_int	t_keepintvl;
-	u_int	t_keepcnt;
-	u_int	t_maxidle;		/* t_keepcnt * t_keepintvl */
-
 };
 
 /*
@@ -482,8 +470,17 @@ union syn_cache_sa {
 
 struct syn_cache {
 	TAILQ_ENTRY(syn_cache) sc_bucketq;	/* link on bucket list */
-	callout_t sc_timer;			/* rexmt timer */
-	struct route sc_route;
+	struct callout sc_timer;		/* rexmt timer */
+	union {					/* cached route */
+		struct route route4;
+#ifdef INET6
+		struct route_in6 route6;
+#endif
+	} sc_route_u;
+#define sc_route4	sc_route_u.route4
+#ifdef INET6
+#define sc_route6	sc_route_u.route6
+#endif
 	long sc_win;				/* advertised window */
 	int sc_bucketidx;			/* our bucket index */
 	u_int32_t sc_hash;
@@ -699,8 +696,7 @@ struct	tcpstat {
 #define	TCPCTL_STATS		30	/* TCP statistics */
 #define	TCPCTL_DEBUG		31	/* TCP debug sockets */
 #define	TCPCTL_DEBX		32	/* # of tcp debug sockets */
-#define	TCPCTL_DROP		33	/* drop tcp connection */
-#define	TCPCTL_MAXID		34
+#define	TCPCTL_MAXID		33
 
 #define	TCPCTL_NAMES { \
 	{ 0, 0 }, \
@@ -736,7 +732,6 @@ struct	tcpstat {
 	{ "stats", CTLTYPE_STRUCT }, \
 	{ "debug", CTLTYPE_STRUCT }, \
 	{ "debx", CTLTYPE_INT }, \
-	{ "drop", CTLTYPE_STRUCT }, \
 }
 
 #ifdef _KERNEL
@@ -748,7 +743,6 @@ extern	int tcp_do_sack;	/* SACK enabled/disabled? */
 extern	int tcp_do_win_scale;	/* RFC1323 window scaling enabled/disabled? */
 extern	int tcp_do_timestamps;	/* RFC1323 timestamps enabled/disabled? */
 extern	int tcp_mssdflt;	/* default seg size */
-extern	int tcp_minmss;		/* minimal seg size */
 extern	int tcp_init_win;	/* initial window */
 extern	int tcp_init_win_local;	/* initial window for local nets */
 extern	int tcp_mss_ifmtu;	/* take MSS from interface, not in_maxmtu */
@@ -780,20 +774,8 @@ extern	u_long syn_cache_count;
 #ifdef MBUFTRACE
 extern	struct mowner tcp_rx_mowner;
 extern	struct mowner tcp_tx_mowner;
-extern	struct mowner tcp_reass_mowner;
-extern	struct mowner tcp_sock_mowner;
-extern	struct mowner tcp_sock_rx_mowner;
-extern	struct mowner tcp_sock_tx_mowner;
 extern	struct mowner tcp_mowner;
 #endif
-
-extern int tcp_do_autorcvbuf;
-extern int tcp_autorcvbuf_inc;
-extern int tcp_autorcvbuf_max;
-extern int tcp_do_autosndbuf;
-extern int tcp_autosndbuf_inc;
-extern int tcp_autosndbuf_max;
-
 
 #define	TCPCTL_VARIABLES { \
 	{ 0 },					\
@@ -841,16 +823,16 @@ struct tcpcb *
 	 tcp_close(struct tcpcb *);
 int	 tcp_isdead(struct tcpcb *);
 #ifdef INET6
-void	 tcp6_ctlinput(int, const struct sockaddr *, void *);
+void	 tcp6_ctlinput(int, struct sockaddr *, void *);
 #endif
-void	 *tcp_ctlinput(int, const struct sockaddr *, void *);
+void	 *tcp_ctlinput(int, struct sockaddr *, void *);
 int	 tcp_ctloutput(int, struct socket *, int, int, struct mbuf **);
 struct tcpcb *
 	 tcp_disconnect(struct tcpcb *);
 struct tcpcb *
 	 tcp_drop(struct tcpcb *, int);
 #ifdef TCP_SIGNATURE
-int	 tcp_signature_apply(void *, void *, u_int);
+int	 tcp_signature_apply(void *, caddr_t, u_int);
 struct secasvar *tcp_signature_getsav(struct mbuf *, struct tcphdr *);
 int	 tcp_signature(struct mbuf *, struct tcphdr *, int, struct secasvar *,
 	    char *);
@@ -885,6 +867,7 @@ void	 tcp_mtudisc(struct inpcb *, int);
 struct ipqent *tcpipqent_alloc(void);
 void	 tcpipqent_free(struct ipqent *);
 
+int	 tcp_reass(struct tcpcb *, struct tcphdr *, struct mbuf *, int *);
 int	 tcp_respond(struct tcpcb *, struct mbuf *, struct mbuf *,
 	    struct tcphdr *, tcp_seq, tcp_seq, int);
 void	 tcp_rmx_rtt(struct tcpcb *);

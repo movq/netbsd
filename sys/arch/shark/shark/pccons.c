@@ -1,4 +1,4 @@
-/*      $NetBSD: pccons.c,v 1.33 2007/07/29 18:01:11 jmmv Exp $       */
+/*      $NetBSD: pccons.c,v 1.27.2.1 2007/07/30 12:33:01 liamjfoy Exp $       */
 
 /*
  * Copyright 1997
@@ -135,7 +135,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.33 2007/07/29 18:01:11 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.27.2.1 2007/07/30 12:33:01 liamjfoy Exp $");
 
 #include "opt_ddb.h"
 #include "opt_xserver.h"
@@ -163,7 +163,6 @@ __KERNEL_RCSID(0, "$NetBSD: pccons.c,v 1.33 2007/07/29 18:01:11 jmmv Exp $");
 
 #include <machine/cpu.h>
 #include <machine/intr.h>
-#include <machine/irqhandler.h>
 #include <machine/pio.h>
 
 #include <machine/pccons.h>
@@ -299,7 +298,7 @@ struct pc_softc
     } vs;
 };
 
-static callout_t async_update_ch;
+static struct callout async_update_ch = CALLOUT_INITIALIZER;
 
 /*
 ** Forward routine declarations
@@ -418,8 +417,8 @@ static unsigned int   addr_6845   = MONO_BASE;
 /* Define globals used when acting as console at boot time. 
 */
 static struct pc_softc bootSoftc;
-static u_char          attachCompleted = false;
-static u_char          actingConsole   = false;
+static u_char          attachCompleted = FALSE;
+static u_char          actingConsole   = FALSE;
 
 /* Our default debug settings, when debug is compiled in via config option 
 ** KERNEL_DEBUG that is.
@@ -912,7 +911,7 @@ pcprobe(struct device *parent,
     if (ia->ia_nirq < 1)
 	return (0);
 
-    if (actingConsole == false)
+    if (actingConsole == FALSE)
     {
         iobase = ia->ia_io[0].ir_addr;
         iot    = ia->ia_iot;
@@ -1006,7 +1005,7 @@ pcattach(struct device   *parent,
     ** If the keyboard isn't being used as a console device,
     ** map the register space.
     */
-    if (actingConsole == false)
+    if (actingConsole == FALSE)
     {
         KERN_DEBUG( pcdebug, KERN_DEBUG_INFO,
                    ("\npcattach: mapping io space\n"));
@@ -1078,7 +1077,7 @@ pcattach(struct device   *parent,
     **
     ** THIS MUST BE DONE BEFORE ANY MORE OUTPUT IS DONE.
     */
-    attachCompleted = true;
+    attachCompleted = TRUE;
 
     /* Update screen 
     */
@@ -1561,7 +1560,7 @@ pcintr(void *arg)
 **           Meaning           | DDDLLLLLLLLLLLLLGGGGGGGGCCCCCCCC
 **
 **           D - Command direction, in/out/both.
-**           L - Command argument length.
+**           L - Command arguement length.
 **           G - Command group, 't' used for tty.
 **           C - Actual command enumeration.
 ** 
@@ -1595,7 +1594,7 @@ pcintr(void *arg)
 int
 pcioctl(dev_t       dev, 
         u_long      cmd, 
-        void *    data, 
+        caddr_t     data, 
         int         flag, 
         struct lwp *l)
 {
@@ -1651,7 +1650,7 @@ pcioctl(dev_t       dev,
 		    }
 #endif
 		    sc->sc_flags &= ~SC_XMODE;
-                    async_update(sc, false);
+                    async_update(sc, FALSE);
 
 		    /*
 		     * throw away pending data so raw keycodes don't get
@@ -1715,7 +1714,7 @@ pcioctl(dev_t       dev,
                         {
                             /* Update rate in keyboard */
                             sc->kbd.sc_new_typematic_rate = rate;
-                            async_update(sc, false);
+                            async_update(sc, FALSE);
                         }        
                     }
                     else
@@ -1881,7 +1880,7 @@ pcstart(struct tty *tp)
         splx(s);
         cl  = &tp->t_outq;
         len = q_to_b(cl, buf, PCBURST);
-        sput(sc, buf, len, false);
+        sput(sc, buf, len, FALSE);
         s = spltty();
         
         tp->t_state &= ~TS_BUSY;
@@ -2045,9 +2044,7 @@ pccninit(struct consdev *cp)
 {
     int                s = splhigh();
 
-    callout_init(&async_update_ch, 0);
-
-    actingConsole = true;
+    actingConsole = TRUE;
     if (I8042_MAP(bootSoftc.kbd.sc_iot, CONKBDADDR, bootSoftc.kbd.sc_ioh))
     {
         panic("pccninit: kbd mapping failed");
@@ -2133,7 +2130,7 @@ pccnputc(dev_t  dev,
     ** otherwise we use the bootSoftc cause we are the console in boot
     ** sequence.
     */
-    if (attachCompleted == true)
+    if (attachCompleted == TRUE)
     {
         currentSC = pc_cd.cd_devs[PCUNIT(dev)];
     }
@@ -2145,11 +2142,11 @@ pccnputc(dev_t  dev,
     */
     if (c == '\n')
     {
-        sput(currentSC, "\r\n", 2, true);
+        sput(currentSC, "\r\n", 2, TRUE);
     }
     else
     {
-        sput(currentSC, &c, 1, true);
+        sput(currentSC, &c, 1, TRUE);
     }
 
     return;
@@ -2200,7 +2197,7 @@ pccngetc(dev_t dev)
     ** otherwise we use the bootSoftc cause we are the console in boot
     ** sequence.
     */
-    if (attachCompleted == true)
+    if (attachCompleted == TRUE)
     {
         currentSC = pc_cd.cd_devs[PCUNIT(dev)];
     }
@@ -2288,7 +2285,7 @@ pccnpollc(dev_t dev,
     ** otherwise we use the bootSoftc cause we are the console in boot
     ** sequence.
     */
-    if (attachCompleted == true)
+    if (attachCompleted == TRUE)
     {
         currentSC = pc_cd.cd_devs[PCUNIT(dev)];
     }
@@ -2881,7 +2878,7 @@ sput(struct pc_softc   *sc,
             scroll = 0;
             /* scroll check */
             if (crtat >= Crtat + sc->vs.nchr) {
-                if (nowait == false) {
+                if (nowait == FALSE) {
                     int s = spltty();
                     if (sc->kbd.sc_new_lock_state & SCROLL)
                         tsleep(&(sc->kbd.sc_new_lock_state),
@@ -3683,7 +3680,7 @@ xinterpret(struct pc_softc  *sc,
                     */
                     wakeup(&(sc->kbd.sc_new_lock_state));
                 }
-                async_update(sc, false);
+                async_update(sc, FALSE);
             }
         break;
     } /* End switch on scan code type */
@@ -3755,7 +3752,7 @@ sget(struct pc_softc *sc)
         }       
         else if (dt == KBR_EXTENDED)
         {
-            extended = true;
+            extended = TRUE;
         }
         else
         {
@@ -3824,7 +3821,7 @@ sget(struct pc_softc *sc)
                         }
                         /* Update external view of what happened.
                         */
-                        async_update(sc, false);
+                        async_update(sc, FALSE);
                     }
                 break;
                 /*
@@ -4154,7 +4151,7 @@ getDisplayInfo(struct display_info *displayInfP)
     if ((ihandle = get_shark_screen_ihandle()) != -1
        && (phandle = OF_instance_to_package(ihandle)) != -1)
     {
-	displayInfP->init = true;
+	displayInfP->init = TRUE;
 	
 	/* Linear frame buffer virtual and physical address */
 	if (OF_getprop(phandle, "address", &tempval, 

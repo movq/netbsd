@@ -1,4 +1,4 @@
-/* $NetBSD: atppc.c,v 1.23 2007/03/04 06:01:50 christos Exp $ */
+/* $NetBSD: atppc.c,v 1.21 2006/05/29 15:17:29 drochner Exp $ */
 
 /*
  * Copyright (c) 2001 Alcove - Nicolas Souchu
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atppc.c,v 1.23 2007/03/04 06:01:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atppc.c,v 1.21 2006/05/29 15:17:29 drochner Exp $");
 
 #include "opt_atppc.h"
 
@@ -68,7 +68,7 @@ int atppc_verbose = 1;
 
 /* List of supported chipsets detection routines */
 static int (*chipset_detect[])(struct atppc_softc *) = {
-/* XXX Add these LATER: maybe as separate devices?
+/* XXX Add these LATER: maybe as seperate devices?
 		atppc_pc873xx_detect,
 		atppc_smc37c66xgt_detect,
 		atppc_w83877f_detect,
@@ -131,7 +131,7 @@ static void atppc_fifo_write_error(struct atppc_softc * const,
 /* Miscellaneous */
 static int atppc_poll_str(const struct atppc_softc * const, const u_int8_t,
 	const u_int8_t);
-static int atppc_wait_interrupt(struct atppc_softc * const, const void *,
+static int atppc_wait_interrupt(struct atppc_softc * const, const caddr_t,
 	const u_int8_t);
 
 
@@ -2388,7 +2388,7 @@ atppc_poll_str(const struct atppc_softc * const atppc, const u_int8_t status,
 
 /* Wait for interrupt for MAXBUSYWAIT: returns 0 if acknowledge received. */
 static int
-atppc_wait_interrupt(struct atppc_softc * const atppc, const void *where,
+atppc_wait_interrupt(struct atppc_softc * const atppc, const caddr_t where,
 	const u_int8_t irqstat)
 {
 	int error = EIO;

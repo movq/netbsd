@@ -1,4 +1,4 @@
-/*	$NetBSD: ether_bpf.c,v 1.6 2007/08/26 23:07:15 dyoung Exp $	*/
+/*	$NetBSD: ether_bpf.c,v 1.4 2005/12/11 12:17:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1998
@@ -141,7 +141,7 @@ int EtherInit(ha)
 		return (0);
 	}
 
-#define _offsetof(t, m) ((int)((void *)&((t *)0)->m))
+#define _offsetof(t, m) ((int)((caddr_t)&((t *)0)->m))
 	sdllen = _offsetof(struct sockaddr_dl,
 			   sdl_data[0]) + strlen(BPF_IFNAME) + 6;
 	sdlp = malloc(sdllen);
@@ -151,7 +151,7 @@ int EtherInit(ha)
 		kvm_read(kvm, (u_long)ifap, &ifaddr, sizeof(struct ifaddr));
 		kvm_read(kvm, (u_long)ifaddr.ifa_addr, sdlp, sdllen);
 		if (sdlp->sdl_family == AF_LINK) {
-			memcpy(ha, CLLADDR(sdlp), 6);
+			memcpy(ha, LLADDR(sdlp), 6);
 			break;
 		}
 		ifap = ifaddr.ifa_list.tqe_next;

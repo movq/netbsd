@@ -1,4 +1,4 @@
-/*	$NetBSD: cdvar.h,v 1.27 2007/07/21 19:51:48 ad Exp $	*/
+/*	$NetBSD: cdvar.h,v 1.26 2005/12/11 12:23:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.  All rights reserved.
@@ -34,7 +34,7 @@
 struct cd_softc {
 	struct device sc_dev;
 	struct disk sc_dk;
-	kmutex_t sc_lock;
+	struct lock sc_lock;
 
 	int flags;
 #define	CDF_WLABEL	0x04		/* label is writable */

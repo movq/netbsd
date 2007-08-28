@@ -1,4 +1,4 @@
-/* $NetBSD: vm_machdep.c,v 1.95 2007/08/17 23:58:45 ad Exp $ */
+/* $NetBSD: vm_machdep.c,v 1.89 2006/08/30 21:25:22 matt Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.95 2007/08/17 23:58:45 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.89 2006/08/30 21:25:22 matt Exp $");
 #include "opt_coredump.h"
 
 #include <sys/param.h>
@@ -100,10 +100,19 @@ cpu_lwp_free(struct lwp *l, int proc)
 		fpusave_proc(l, 0);
 }
 
+
+/*
+ * cpu_exit is called as the last action during exit.
+ * We block interrupts and call switch_exit.  switch_exit switches
+ * to proc0's PCB and stack, then jumps into the middle of cpu_switch,
+ * as if it were switching from proc0.
+ */
 void
-cpu_lwp_free2(struct lwp *l)
+cpu_exit(struct lwp *l)
 {
-	(void) l;
+	(void) splhigh();
+	switch_exit(l, lwp_exit2);
+	/* NOTREACHED */
 }
 
 /*
@@ -111,7 +120,7 @@ cpu_lwp_free2(struct lwp *l)
  * Copy and update the pcb and trap frame, making the child ready to run.
  * 
  * Rig the child's kernel stack so that it will start out in
- * lwp_trampoline() and call child_return() with p2 as an
+ * proc_trampoline() and call child_return() with p2 as an
  * argument. This causes the newly-created child process to go
  * directly to user level with an apparent return value of 0 from
  * fork(), while the parent process returns normally.
@@ -131,8 +140,8 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	struct user *up = l2->l_addr;
 
 	l2->l_md.md_tf = l1->l_md.md_tf;
+
 	l2->l_md.md_flags = l1->l_md.md_flags & (MDP_FPUSED | MDP_FP_C);
-	l2->l_md.md_astpending = 0;
 
 	/*
 	 * Cache the physical address of the pcb, so we can
@@ -194,7 +203,16 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 		l2tf->tf_regs[FRAME_A3] = 0;		/* no error */
 		l2tf->tf_regs[FRAME_A4] = 1;		/* is child */
 
-		cpu_setfunc(l2, func, arg);
+		up->u_pcb.pcb_hw.apcb_ksp = (u_int64_t)l2tf;	
+		up->u_pcb.pcb_context[0] =
+		    (u_int64_t)func;			/* s0: pc */
+		up->u_pcb.pcb_context[1] =
+		    (u_int64_t)exception_return;	/* s1: ra */
+		up->u_pcb.pcb_context[2] =
+		    (u_int64_t)arg;			/* s2: arg */
+		up->u_pcb.pcb_context[7] =
+		    (u_int64_t)proc_trampoline;		/* ra: assembly magic */
+		up->u_pcb.pcb_context[8] = ALPHA_PSL_IPL_0; /* ps: IPL */
 	}
 }
 
@@ -214,10 +232,10 @@ cpu_setfunc(l, func, arg)
 	    (u_int64_t)exception_return;	/* s1: ra */
 	up->u_pcb.pcb_context[2] =
 	    (u_int64_t)arg;			/* s2: arg */
-	up->u_pcb.pcb_context[3] =
-	    (u_int64_t)l;			/* s3: lwp */
 	up->u_pcb.pcb_context[7] =
-	    (u_int64_t)lwp_trampoline;		/* ra: assembly magic */
+	    (u_int64_t)proc_trampoline;		/* ra: assembly magic */
+	up->u_pcb.pcb_context[8] = ALPHA_PSL_IPL_0; /* ps: IPL */
+
 }	
 
 /*
@@ -269,11 +287,11 @@ vmapbuf(struct buf *bp, vsize_t len)
 	off = (vaddr_t)bp->b_data - faddr;
 	len = round_page(off + len);
 	taddr = uvm_km_alloc(phys_map, len, 0, UVM_KMF_VAONLY|UVM_KMF_WAITVA);
-	bp->b_data = (void *)(taddr + off);
+	bp->b_data = (caddr_t)(taddr + off);
 	len = atop(len);
 	while (len--) {
 		if (pmap_extract(vm_map_pmap(&p->p_vmspace->vm_map), faddr,
-		    &pa) == false)
+		    &pa) == FALSE)
 			panic("vmapbuf: null page frame");
 		pmap_enter(vm_map_pmap(phys_map), taddr, trunc_page(pa),
 		    VM_PROT_READ|VM_PROT_WRITE, PMAP_WIRED);

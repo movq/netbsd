@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.47 2007/03/04 06:00:28 christos Exp $	*/
+/*	$NetBSD: cpu.h,v 1.45 2006/05/12 06:05:23 simonb Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -79,6 +79,7 @@ struct clockframe {
 };
 
 #define	CLKF_USERMODE(framep)	USERMODE((framep)->cf_if.if_regs.r_psr)
+#define	CLKF_BASEPRI(framep)	((framep)->cf_if.if_pl == imask[IPL_ZERO])
 #define	CLKF_PC(framep)		((framep)->cf_if.if_regs.r_pc)
 #define	CLKF_INTR(frame)	(0)	/* XXX should have an interrupt stack */
 
@@ -126,7 +127,7 @@ void	softnet(void *);
 void	icu_init(u_char *);
 
 /* vm_machdep.c */
-int	kvtop(void *);
+int	kvtop(caddr_t);
 
 #endif /* _KERNEL */
 

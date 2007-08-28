@@ -1,4 +1,4 @@
-/*	$NetBSD: slhci_intio.c,v 1.8 2007/08/15 03:53:09 kiyohara Exp $	*/
+/*	$NetBSD: slhci_intio.c,v 1.7 2005/12/11 12:19:37 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: slhci_intio.c,v 1.8 2007/08/15 03:53:09 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: slhci_intio.c,v 1.7 2005/12/11 12:19:37 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -63,14 +63,12 @@ __KERNEL_RCSID(0, "$NetBSD: slhci_intio.c,v 1.8 2007/08/15 03:53:09 kiyohara Exp
 
 static int  slhci_intio_match(struct device *, struct cfdata *, void *);
 static void slhci_intio_attach(struct device *, struct device *, void *);
-static void slhci_intio_enable_power(void *, enum power_change);
+static void slhci_intio_enable_power(void *, int);
 static void slhci_intio_enable_intr(void *, int);
+static int  slhci_intio_intr(void *);
 
 CFATTACH_DECL(slhci_intio, sizeof(struct slhci_intio_softc),
     slhci_intio_match, slhci_intio_attach, NULL, NULL);
-
-#define INTR_ON 	1
-#define INTR_OFF 	0
 
 static int
 slhci_intio_match(struct device *parent, struct cfdata *cf, void *aux)
@@ -146,11 +144,15 @@ slhci_intio_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	/* Initialize sc */
-	slhci_preinit(&sc->sc_sc, slhci_intio_enable_power, iot, ioh, 30, 
-	    SL11_IDX_DATA);
+	sc->sc_sc.sc_iot = iot;
+	sc->sc_sc.sc_ioh = ioh;
+	sc->sc_sc.sc_dmat = ia->ia_dmat;
+	sc->sc_sc.sc_enable_power = slhci_intio_enable_power;
+	sc->sc_sc.sc_enable_intr  = slhci_intio_enable_intr;
+	sc->sc_sc.sc_arg = sc;
 
 	/* Establish the interrupt handler */
-	if (intio_intr_establish(ia->ia_intr, "slhci", slhci_intr, sc)) {
+	if (intio_intr_establish(ia->ia_intr, "slhci", slhci_intio_intr, sc)) {
 		printf("%s: can't establish interrupt\n",
 			sc->sc_sc.sc_bus.bdev.dv_xname);
 		return;
@@ -160,15 +162,13 @@ slhci_intio_attach(struct device *parent, struct device *self, void *aux)
 	bus_space_write_1(iot, sc->sc_nch, NEREID_CTRL, NEREID_CTRL_RESET);
 	delay(40000);
 
-	slhci_intio_enable_intr(sc, INTR_ON);
-
 	/* Attach SL811HS/T */
-	if (slhci_attach(&sc->sc_sc))
+	if (slhci_attach(&sc->sc_sc, self))
 		return;
 }
 
 static void
-slhci_intio_enable_power(void *arg, enum power_change mode)
+slhci_intio_enable_power(void *arg, int mode)
 {
 	struct slhci_intio_softc *sc = arg;
 	bus_space_tag_t iot = sc->sc_sc.sc_iot;
@@ -199,3 +199,10 @@ slhci_intio_enable_intr(void *arg, int mode)
 			r & ~NEREID_CTRL_INTR);
 }
 
+static int
+slhci_intio_intr(void *arg)
+{
+	struct slhci_intio_softc *sc = arg;
+
+	return slhci_intr(&sc->sc_sc);
+}

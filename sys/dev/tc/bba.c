@@ -1,4 +1,4 @@
-/* $NetBSD: bba.c,v 1.31 2007/03/04 06:02:46 christos Exp $ */
+/* $NetBSD: bba.c,v 1.30 2006/03/31 07:34:31 he Exp $ */
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
 /* maxine/alpha baseboard audio (bba) */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bba.c,v 1.31 2007/03/04 06:02:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bba.c,v 1.30 2006/03/31 07:34:31 he Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,7 +74,7 @@ struct bba_mem {
 	struct bba_mem *next;
 	bus_addr_t addr;
 	bus_size_t size;
-	void *kva;
+	caddr_t kva;
 };
 
 struct bba_dma_state {
@@ -301,7 +301,7 @@ bba_allocm(void *addr, int direction, size_t size,
 	struct bba_softc *sc;
 	bus_dma_segment_t seg;
 	int rseg;
-	void *kva;
+	caddr_t kva;
 	struct bba_mem *m;
 	int w;
 	int state;
@@ -353,10 +353,10 @@ bba_freem(void *addr, void *ptr, struct malloc_type *pool)
 	struct bba_softc *sc;
 	struct bba_mem **mp, *m;
 	bus_dma_segment_t seg;
-	void *kva;
+	caddr_t kva;
 
 	sc = addr;
-	kva = (void *)addr;
+	kva = (caddr_t)addr;
 	for (mp = &sc->sc_mem_head; *mp && (*mp)->kva != kva;
 	    mp = &(*mp)->next)
 		continue;
@@ -630,10 +630,10 @@ bba_mappage(void *addr, void *mem, off_t offset, int prot)
 	struct bba_softc *sc;
 	struct bba_mem **mp;
 	bus_dma_segment_t seg;
-	void *kva;
+	caddr_t kva;
 
 	sc = addr;
-	kva = (void *)mem;
+	kva = (caddr_t)mem;
 	for (mp = &sc->sc_mem_head; *mp && (*mp)->kva != kva;
 	    mp = &(*mp)->next)
 		continue;

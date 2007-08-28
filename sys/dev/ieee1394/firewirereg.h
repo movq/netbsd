@@ -1,4 +1,4 @@
-/*	$NetBSD: firewirereg.h,v 1.6 2007/07/29 13:31:08 ad Exp $	*/
+/*	$NetBSD: firewirereg.h,v 1.3 2005/12/11 12:22:02 christos Exp $	*/
 /*-
  * Copyright (c) 2003 Hidetoshi Shimokawa
  * Copyright (c) 1998-2002 Katsushi Kobayashi and Hidetoshi Shimokawa
@@ -32,7 +32,7 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  * 
- * $FreeBSD: /repoman/r/ncvs/src/sys/dev/firewire/firewirereg.h,v 1.41 2007/03/16 05:39:33 simokawa Exp $
+ * $FreeBSD: /repoman/r/ncvs/src/sys/dev/firewire/firewirereg.h,v 1.37 2005/01/06 01:42:41 imp Exp $
  *
  */
 
@@ -158,7 +158,7 @@ struct firewire_comm{
 	uint32_t (*cyctimer) (struct  firewire_comm *);
 	void (*ibr) (struct firewire_comm *);
 	uint32_t (*set_bmr) (struct firewire_comm *, uint32_t);
-	int (*ioctl) (DEV_T, u_long, void *, int, fw_proc *);
+	int (*ioctl) (DEV_T, u_long, caddr_t, int, fw_proc *);
 	int (*irx_enable) (struct firewire_comm *, int);
 	int (*irx_disable) (struct firewire_comm *, int);
 	int (*itx_enable) (struct firewire_comm *, int);
@@ -202,7 +202,7 @@ struct fw_xferq {
 	STAILQ_HEAD(, fw_bulkxfer) stdma;
 	struct fw_bulkxfer *stproc;
 	struct selinfo rsel;
-	void *sc;
+	caddr_t sc;
 	void (*hand) (struct fw_xferq *);
 };
 
@@ -210,8 +210,8 @@ struct fw_bulkxfer{
 	int poffset;
 	struct mbuf *mbuf;
 	STAILQ_ENTRY(fw_bulkxfer) link;
-	void *start;
-	void *end;
+	caddr_t start;
+	caddr_t end;
 	int resp;
 };
 
@@ -225,7 +225,7 @@ struct fw_bind{
 };
 
 struct fw_xfer{
-	void *sc;
+	caddr_t sc;
 	struct firewire_comm *fc;
 	struct fw_xferq *q;
 	struct timeval tv;
@@ -288,9 +288,7 @@ struct fw_bind *fw_bindlookup (struct firewire_comm *, uint16_t, uint32_t);
 void fw_drain_txq (struct firewire_comm *);
 int fwdev_makedev (struct firewire_softc *);
 int fwdev_destroydev (struct firewire_softc *);
-#if defined(__FreeBSD__) && __FreeBSD_version >= 500000
-void fwdev_clone (void *, struct ucred *, char *, int, DEV_T *);
-#endif
+void fwdev_clone (void *, char *, int, DEV_T *);
 
 extern int firewire_debug;
 #if defined(__FreeBSD__)
@@ -321,6 +319,7 @@ extern struct cfdriver ieee1394if_cd;
 #define bio_offset b_blkno
 #endif
 #define bio_resid b_resid
+#define BIO_ERROR B_ERROR
 #define BIO_READ B_READ
 #define BIO_WRITE B_WRITE
 #define MIN(a,b) (((a)<(b))?(a):(b))

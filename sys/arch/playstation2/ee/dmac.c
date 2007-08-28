@@ -1,4 +1,4 @@
-/*	$NetBSD: dmac.c,v 1.7 2007/03/17 13:51:46 msaitoh Exp $	*/
+/*	$NetBSD: dmac.c,v 1.6 2005/12/24 23:24:01 perry Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dmac.c,v 1.7 2007/03/17 13:51:46 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dmac.c,v 1.6 2005/12/24 23:24:01 perry Exp $");
 
 #include "debug_playstation2.h"
 
@@ -77,7 +77,7 @@ STATIC vaddr_t __dmac_channel_base[_DMAC_NINTR] = {
 
 u_int32_t __dmac_enabled_channel;
 
-STATIC int __dmac_initialized;
+STATIC int __dmac_intialized;
 STATIC struct _ipl_dispatcher __dmac_dispatcher[_DMAC_NINTR];
 STATIC struct _ipl_holder __dmac_ipl_holder[_IPL_N];
 STATIC SLIST_HEAD(, _ipl_dispatcher) __dmac_dispatcher_head =
@@ -88,7 +88,7 @@ dmac_init()
 {
 	int i;
 
-	if (__dmac_initialized++)
+	if (__dmac_intialized++)
 		return;
 
 	/* disable DMAC */

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.18 2007/03/11 05:22:24 thorpej Exp $	*/
+/*	$NetBSD: intr.h,v 1.15 2006/10/06 18:16:46 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -49,49 +49,21 @@
 #include <amiga/include/mtpr.h>
 #include <m68k/psl.h>
 
-#define	IPL_NONE	0
-#define	IPL_SOFTCLOCK	1
-#define	IPL_SOFTNET	1
-#define	IPL_SOFTSERIAL	1
-#define	IPL_BIO		3
-#define	IPL_NET		4
-#define	IPL_TTY		5
-#define	IPL_SERIAL	6
-#define	IPL_LPT		7
-#define	IPL_VM		8
-#define	IPL_AUDIO	9
-#define	IPL_CLOCK	10
-#define	IPL_STATCLOCK	IPL_CLOCK
-#define	IPL_SCHED	IPL_HIGH
-#define	IPL_HIGH	11
-#define	IPL_LOCK	IPL_HIGH
-#define	_NIPL		12
+#define IPL_SOFTCLOCK 1
+#define IPL_SOFTSERIAL 1
+#define IPL_SOFTNET 1
 
-extern int ipl2spl_table[_NIPL];
+/* not used yet, should reflect psl.h */
+#define IPL_BIO		3
+#define IPL_NET		3
+#define IPL_SERIAL	4
+#define IPL_TTY		4
 
-typedef int ipl_t;
-typedef struct {
-	uint16_t _ipl;
-} ipl_cookie_t;
-
-static inline ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._ipl = ipl};
-}
-
-static inline int
-splraiseipl(ipl_cookie_t icookie)
-{
-
-	return _splraise(ipl2spl_table[icookie._ipl]);
-}
 
 #ifdef splaudio
 #undef splaudio
-#endif
 #define splaudio spl6
+#endif
 
 #define spllpt()	spl6()
 
@@ -102,9 +74,10 @@ splraiseipl(ipl_cookie_t icookie)
 #define	spl0()			_spl0()	/* we have real software interrupts */
 
 #define splnone()		spl0()
+#define	spllowersoftclock()	spl1()
+
 #define splsoftclock()		splraise1()
 #define splsoftnet()		splraise1()
-#define splsoftserial()		splraise1()
 #define splbio()		splraise3()
 #define splnet()		splraise3()
 
@@ -113,11 +86,13 @@ splraiseipl(ipl_cookie_t icookie)
  * drivers which need it (at the present only the coms) raise the variable to
  * their serial interrupt level.
  *
- * ipl2spl_table[IPL_SERIAL] is statically initialized in machdep.c
- * at the moment; should be some driver independent file.
+ * serialspl is statically initialized in machdep.c at the moment; should 
+ * be some driver independent file.
  */
 
-#define splserial()	_splraise(ipl2spl_table[IPL_SERIAL])
+extern uint16_t		amiga_serialspl;
+
+#define splserial()	_splraise(amiga_serialspl)
 #define spltty()	splraise4()
 #define	splvm()		splraise4()
 

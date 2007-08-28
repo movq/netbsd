@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_ioctl.c,v 1.15 2007/03/16 22:21:42 dsl Exp $	 */
+/*	$NetBSD: svr4_32_ioctl.c,v 1.11 2005/12/11 12:20:26 christos Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_ioctl.c,v 1.15 2007/03/16 22:21:42 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_ioctl.c,v 1.11 2005/12/11 12:20:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -48,10 +48,12 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_32_ioctl.c,v 1.15 2007/03/16 22:21:42 dsl Exp $
 #include <sys/termios.h>
 #include <sys/tty.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <net/if.h>
 #include <sys/malloc.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/sys/socket.h>
@@ -110,7 +112,7 @@ svr4_32_sys_ioctl(l, v, retval)
 	struct filedesc	*fdp;
 	u_long		 cmd;
 	int (*fun) __P((struct file *, struct lwp *, register_t *,
-			int, u_long, void *));
+			int, u_long, caddr_t));
 #ifdef DEBUG_SVR4
 	char		 dir[4];
 	char		 c;
@@ -161,5 +163,5 @@ svr4_32_sys_ioctl(l, v, retval)
 		return 0;	/* XXX: really ENOSYS */
 	}
 	return (*fun)(fp, l, retval, SCARG(uap, fd), cmd,
-		      SCARG_P32(uap, data));
+		      (caddr_t)(u_long)SCARG(uap, data));
 }

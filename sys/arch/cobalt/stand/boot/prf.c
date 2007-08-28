@@ -1,4 +1,4 @@
-/*	$NetBSD: prf.c,v 1.2 2007/08/03 13:15:57 tsutsui Exp $	*/
+/*	$NetBSD: prf.c,v 1.1.54.1 2007/08/28 19:27:03 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.

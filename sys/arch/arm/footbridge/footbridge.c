@@ -1,4 +1,4 @@
-/*	$NetBSD: footbridge.c,v 1.17 2007/01/06 16:18:18 christos Exp $	*/
+/*	$NetBSD: footbridge.c,v 1.16.24.1 2007/04/30 18:57:17 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1997,1998 Mark Brinicombe.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: footbridge.c,v 1.17 2007/01/06 16:18:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: footbridge.c,v 1.16.24.1 2007/04/30 18:57:17 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

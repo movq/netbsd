@@ -1,4 +1,4 @@
-/*	$NetBSD: amiga_init.c,v 1.97 2007/06/05 04:46:27 mhitch Exp $	*/
+/*	$NetBSD: amiga_init.c,v 1.92.16.2 2007/06/04 19:59:38 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1994 Michael L. Hitch
@@ -36,7 +36,7 @@
 #include "opt_devreload.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amiga_init.c,v 1.97 2007/06/05 04:46:27 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amiga_init.c,v 1.92.16.2 2007/06/04 19:59:38 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,6 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: amiga_init.c,v 1.97 2007/06/05 04:46:27 mhitch Exp $
 #include <sys/ioctl.h>
 #include <sys/select.h>
 #include <sys/tty.h>
+#include <sys/proc.h>
 #include <sys/buf.h>
 #include <sys/msgbuf.h>
 #include <sys/mbuf.h>
@@ -580,7 +581,7 @@ start_c(id, fphystart, fphysize, cphysize, esym_addr, flags, inh_sync,
 	/*
 	 * invalidate remainder of kernel PT
 	 */
-	while (pg < (pt_entry_t *) (ptpa + ptsize))
+	while (pg < (u_int *) (ptpa + ptsize))
 		*pg++ = PG_NV;
 
 	/*
@@ -999,7 +1000,7 @@ kernel_reload_write(uio)
 		/*
 		 * Pull in the exec header and check it.
 		 */
-		if ((error = uiomove((void *)&kernel_exec, sizeof(kernel_exec),
+		if ((error = uiomove((caddr_t)&kernel_exec, sizeof(kernel_exec),
 		     uio)) != 0)
 			return(error);
 		printf("loading kernel %ld+%ld+%ld+%ld\n", kernel_exec.a_text,

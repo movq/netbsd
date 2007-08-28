@@ -1,11 +1,11 @@
-/*	$NetBSD: spl.S,v 1.17 2007/08/05 10:50:26 ad Exp $	*/
+/*	$NetBSD: spl.S,v 1.13 2005/12/11 12:17:41 christos Exp $	*/
 
 /*
- * Copyright (c) 1998, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Charles M. Hannum and Andrew Doran.
+ * by Charles M. Hannum.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -38,7 +38,6 @@
 
 #include "opt_vm86.h"
 #include "opt_ddb.h"
-
 #include <machine/asm.h>
 #include <machine/trap.h>
 #include <machine/segments.h>
@@ -46,101 +45,34 @@
 
 #include "assym.h"
 
+	.data
+	.globl	_C_LABEL(netisr)
 	.text
 
+#if 0
+#if defined(PROF) || defined(GPROF)
 /*
- * int splraise(int s);
+ * XXXX TODO
  */
-ENTRY(splraise)
-	movl	4(%esp),%edx
-	movl	CPUVAR(ILEVEL),%eax
-	cmpl	%edx,%eax
-	ja	1f
-	movl	%edx,CPUVAR(ILEVEL)
-1:
+	.globl	_C_LABEL(splhigh), _C_LABEL(splx)
+
+	ALIGN_TEXT
+_C_LABEL(splhigh):
+	movl	$IPL_HIGH,%eax
+	xchgl	%eax,CPUVAR(ILEVEL)
 	ret
 
-/*
- * void softintr(int sir);
- *
- * Software interrupt registration.
- */
-ENTRY(softintr)
-	movl	4(%esp),%ecx
-	movl	$1,%eax
-	shll	%cl,%eax
-	orl	%eax,CPUVAR(IPENDING)
+	ALIGN_TEXT
+_C_LABEL(splx):
+	movl	4(%esp),%eax
+	movl	%eax,CPUVAR(ILEVEL)
+	testl	%eax,%eax
+	jnz	_C_LABEL(Xspllower)
 	ret
-
+#endif /* PROF || GPROF */
+#endif
+	
 /*
- * void spllower(int s);
- *
- * spllower() for i486 and Pentium.  Must be the same size as
- * i686_spllower().  This must use pushf/cli/popf as it is used
- * early in boot where interrupts are disabled via eflags/IE.
- */
-ENTRY(spllower)
-	movl	4(%esp), %ecx
-	cmpl	CPUVAR(ILEVEL), %ecx
-	jae	1f
-	movl	CPUVAR(IUNMASK)(,%ecx,4), %edx
-	pushf
-	cli
-	testl	CPUVAR(IPENDING), %edx
-	jnz	2f
-	movl	%ecx, CPUVAR(ILEVEL)
-	popf
-1:
-	ret
-2:
-	popf
-	jmp	_C_LABEL(Xspllower)
-	.align	32
-LABEL(spllower_end)
-
-/*
- * void	i686_spllower(int s);
- *
- * spllower() optimized for Pentium Pro and later, which have long
- * pipelines that will be stalled by pushf/cli/popf.  Must be the
- * same size as spllower().  Does not need to restore eflags/IE as
- * is patched in once autoconf is underway.
- *
- * For cmpxchg8b, edx/ecx are the high words and eax/ebx the low.
- *
- * edx : eax = old level / old ipending 
- * ecx : ebx = new level / old ipending
- */
-ENTRY(i686_spllower)
-	movl	4(%esp),%ecx
-	movl	CPUVAR(ILEVEL),%edx
-	cmpl	%edx,%ecx			/* new level is lower? */
-	pushl	%ebx
-	jae,pn	1f
-0:
-	movl	CPUVAR(IPENDING),%eax
-	testl	%eax,CPUVAR(IUNMASK)(,%ecx,4)	/* deferred interrupts? */
-	movl	%eax,%ebx
-	/*
-	 * On the P4 this jump is cheaper than patching in junk
-	 * using cmovnz.  Is cmpxchg expensive if it fails?
-	 */
-	jnz,pn	2f
-	cmpxchg8b CPUVAR(ISTATE)		/* swap in new ilevel */
-	jnz,pn	0b
-1:
-	popl	%ebx
-	ret
-2:
-	popl	%ebx
-LABEL(i686_spllower_patch)
-	jmp	_C_LABEL(Xspllower)
-	.align	32
-LABEL(i686_spllower_end)
-
-/*
- * void Xspllower(int s);
- * 
  * Process pending interrupts.
  *
  * Important registers:
@@ -156,8 +88,6 @@ LABEL(i686_spllower_end)
  * the sending CPU will never see the that CPU accept the IPI
  * (see pmap_tlb_shootnow).
  */
-	nop	/* Don't get confused with i686_spllower_end */
-
 IDTVEC(spllower)
 #if defined(DDB) || defined(GPROF)
 	pushl	%ebp
@@ -172,17 +102,10 @@ IDTVEC(spllower)
 #else /* defined(DDB) || defined(GPROF) */
 	movl	16(%esp),%ebx
 #endif /* defined(DDB) || defined(GPROF) */
-	movl	$.Lspllower_resume,%esi		# address to resume loop at
-	cli
-.Lspllower_resume:
-#if defined(DEBUG)
-	pushf
-	popl	%eax
-	testl	$PSL_I,%eax
-	jnz	.Lspllower_panic
-#endif /* defined(DEBUG) */
-	movl	%ebx,%eax		# get cpl
+	movl	$1f,%esi		# address to resume loop at
+1:	movl	%ebx,%eax		# get cpl
 	movl	CPUVAR(IUNMASK)(,%eax,4),%eax
+	cli
 	andl	CPUVAR(IPENDING),%eax		# any non-masked bits left?
 	jz	2f
 	bsrl	%eax,%eax
@@ -199,12 +122,6 @@ IDTVEC(spllower)
 	leave
 #endif /* defined(DDB) || defined(GPROF) */
 	ret
-#if defined(DEBUG)
-.Lspllower_panic:
-	pushl	$1f
-	call	_C_LABEL(panic)
-1:	.asciz	"SPLLOWER: INTERRUPT ENABLED"
-#endif /* defined(DEBUG) */
 
 /*
  * Handle return from interrupt after device handler finishes.
@@ -213,22 +130,14 @@ IDTVEC(spllower)
  *   ebx - cpl to restore
  *   esi - address to resume loop at
  *   edi - scratch for Xsoftnet
- *
- * called with interrupt disabled.
  */
 IDTVEC(doreti)
-	IDEPTH_DECR
 	popl	%ebx			# get previous priority
-	movl	$.Ldoreti_resume,%esi	# address to resume loop at
-.Ldoreti_resume:
-#if defined(DEBUG)
-	pushf
-	popl	%eax
-	testl	$PSL_I,%eax
-	jnz	.Ldoreti_panic
-#endif /* defined(DEBUG) */
-	movl	%ebx,%eax
+	decl	CPUVAR(IDEPTH)
+	movl	$1f,%esi		# address to resume loop at
+1:	movl	%ebx,%eax
 	movl	CPUVAR(IUNMASK)(,%eax,4),%eax
+	cli
 	andl	CPUVAR(IPENDING),%eax
 	jz	2f
 	bsrl    %eax,%eax               # slow, but not worth optimizing
@@ -268,9 +177,3 @@ IDTVEC(doreti)
 	call	_C_LABEL(pmap_load)
 	cli
 	jmp	.Ldoreti_checkast	/* recheck ASTs */
-#if defined(DEBUG)
-.Ldoreti_panic:
-	pushl	$1f
-	call	_C_LABEL(panic)
-1:	.asciz	"DORETI: INTERRUPT ENABLED"
-#endif /* defined(DEBUG) */

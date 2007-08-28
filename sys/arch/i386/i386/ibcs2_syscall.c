@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_syscall.c,v 1.36 2007/03/04 05:59:57 christos Exp $	*/
+/*	$NetBSD: ibcs2_syscall.c,v 1.34 2006/07/19 21:11:41 ad Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_syscall.c,v 1.36 2007/03/04 05:59:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_syscall.c,v 1.34 2006/07/19 21:11:41 ad Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_vm86.h"
@@ -46,6 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: ibcs2_syscall.c,v 1.36 2007/03/04 05:59:57 christos 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/savar.h>
 #include <sys/user.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
@@ -84,8 +85,8 @@ void
 ibcs2_syscall_plain(frame)
 	struct trapframe *frame;
 {
-	char *params;
-	const struct sysent *callp;
+	register caddr_t params;
+	register const struct sysent *callp;
 	struct lwp *l;
 	int error;
 	size_t argsize;
@@ -99,7 +100,7 @@ ibcs2_syscall_plain(frame)
 	if (IBCS2_HIGH_SYSCALL(code))
 		code = IBCS2_CVT_HIGH_SYSCALL(code);
 	callp = ibcs2_sysent;
-	params = (char *)frame->tf_esp + sizeof(int);
+	params = (caddr_t)frame->tf_esp + sizeof(int);
 
 	switch (code) {
 	case SYS_syscall:
@@ -117,7 +118,7 @@ ibcs2_syscall_plain(frame)
 	callp += code;
 	argsize = callp->sy_argsize;
 	if (argsize) {
-		error = copyin(params, (void *)args, argsize);
+		error = copyin(params, (caddr_t)args, argsize);
 		if (error)
 			goto bad;
 	}
@@ -125,9 +126,9 @@ ibcs2_syscall_plain(frame)
 	rval[0] = 0;
 	rval[1] = 0;
 
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 	error = (*callp->sy_call)(l, args, rval);
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);	
 
 	switch (error) {
 	case 0:
@@ -166,8 +167,8 @@ void
 ibcs2_syscall_fancy(frame)
 	struct trapframe *frame;
 {
-	char * params;
-	const struct sysent *callp;
+	register caddr_t params;
+	register const struct sysent *callp;
 	struct lwp *l;
 	int error;
 	size_t argsize;
@@ -181,7 +182,7 @@ ibcs2_syscall_fancy(frame)
 	if (IBCS2_HIGH_SYSCALL(code))
 		code = IBCS2_CVT_HIGH_SYSCALL(code);
 	callp = ibcs2_sysent;
-	params = (char *)frame->tf_esp + sizeof(int);
+	params = (caddr_t)frame->tf_esp + sizeof(int);
 
 	switch (code) {
 	case SYS_syscall:
@@ -199,12 +200,12 @@ ibcs2_syscall_fancy(frame)
 	callp += code;
 	argsize = callp->sy_argsize;
 	if (argsize) {
-		error = copyin(params, (void *)args, argsize);
+		error = copyin(params, (caddr_t)args, argsize);
 		if (error)
 			goto bad;
 	}
 
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 	if ((error = trace_enter(l, code, code, NULL, args)) != 0)
 		goto out;
 
@@ -212,7 +213,7 @@ ibcs2_syscall_fancy(frame)
 	rval[1] = 0;
 	error = (*callp->sy_call)(l, args, rval);
 out:
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 	switch (error) {
 	case 0:
 		frame->tf_eax = rval[0];

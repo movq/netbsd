@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_xattr.c,v 1.12 2007/04/03 16:11:31 hannken Exp $	*/
+/*	$NetBSD: vfs_xattr.c,v 1.9 2006/11/01 10:17:59 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_xattr.c,v 1.12 2007/04/03 16:11:31 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_xattr.c,v 1.9 2006/11/01 10:17:59 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -90,6 +90,7 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_xattr.c,v 1.12 2007/04/03 16:11:31 hannken Exp $
 #include <sys/extattr.h>
 #include <sys/xattr.h>
 #include <sys/sysctl.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/kauth.h>
 
@@ -114,7 +115,7 @@ extattr_check_cred(struct vnode *vp, int attrnamespace,
 		 * these requests come from kernel code (NOCRED case above)?
 		 */
 		return (kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-		    NULL));
+		    &l->l_acflag));
 
 	case EXTATTR_NAMESPACE_USER:
 		return (VOP_ACCESS(vp, access, cred, l));
@@ -158,6 +159,7 @@ sys_extattrctl(struct lwp *l, void *v, register_t *retval)
 	} */ *uap = v;
 	struct vnode *vp;
 	struct nameidata nd;
+	struct mount *mp;
 	char attrname[EXTATTR_MAXNAMELEN];
 	int error;
 
@@ -186,9 +188,18 @@ sys_extattrctl(struct lwp *l, void *v, register_t *retval)
 		return (error);
 	}
 
-	error = VFS_EXTATTRCTL(nd.ni_vp->v_mount, SCARG(uap, cmd), vp,
+	error = vn_start_write(nd.ni_vp, &mp, V_WAIT | V_PCATCH);
+	if (error) {
+		if (vp != NULL)
+			vput(vp);
+		return (error);
+	}
+
+	error = VFS_EXTATTRCTL(mp, SCARG(uap, cmd), vp,
 	    SCARG(uap, attrnamespace),
 	    SCARG(uap, attrname) != NULL ? attrname : NULL, l);
+
+	vn_finished_write(mp, 0);
 
 	if (vp != NULL)
 		vrele(vp);
@@ -213,11 +224,15 @@ static int
 extattr_set_vp(struct vnode *vp, int attrnamespace, const char *attrname,
     const void *data, size_t nbytes, struct lwp *l, register_t *retval)
 {
+	struct mount *mp;
 	struct uio auio;
 	struct iovec aiov;
 	ssize_t cnt;
 	int error;
 
+	error = vn_start_write(vp, &mp, V_WAIT | V_PCATCH);
+	if (error)
+		return (error);
 	VOP_LEASE(vp, l, l->l_cred, LEASE_WRITE);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 
@@ -243,6 +258,7 @@ extattr_set_vp(struct vnode *vp, int attrnamespace, const char *attrname,
 
  done:
 	VOP_UNLOCK(vp, 0);
+	vn_finished_write(mp, 0);
 	return (error);
 }
 
@@ -313,8 +329,12 @@ static int
 extattr_delete_vp(struct vnode *vp, int attrnamespace, const char *attrname,
     struct lwp *l)
 {
+	struct mount *mp;
 	int error;
 
+	error = vn_start_write(vp, &mp, V_WAIT | V_PCATCH);
+	if (error)
+		return (error);
 	VOP_LEASE(vp, l, l->l_cred, LEASE_WRITE);
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 
@@ -324,6 +344,7 @@ extattr_delete_vp(struct vnode *vp, int attrnamespace, const char *attrname,
 		    l->l_cred, l);
 
 	VOP_UNLOCK(vp, 0);
+	vn_finished_write(mp, 0);
 	return (error);
 }
 

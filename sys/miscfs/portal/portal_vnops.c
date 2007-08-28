@@ -1,4 +1,4 @@
-/*	$NetBSD: portal_vnops.c,v 1.74 2007/07/23 11:27:46 pooka Exp $	*/
+/*	$NetBSD: portal_vnops.c,v 1.68.2.2 2007/07/03 12:35:13 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: portal_vnops.c,v 1.74 2007/07/23 11:27:46 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: portal_vnops.c,v 1.68.2.2 2007/07/03 12:35:13 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,6 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: portal_vnops.c,v 1.74 2007/07/23 11:27:46 pooka Exp 
 #include <sys/socketvar.h>
 #include <sys/un.h>
 #include <sys/unpcb.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/kauth.h>
 
@@ -213,7 +214,6 @@ portal_lookup(v)
 	if (error)
 		goto bad;
 	fvp->v_type = VREG;
-	uvm_vnp_setsize(fvp, 0);
 	MALLOC(fvp->v_data, void *, sizeof(struct portalnode), M_TEMP,
 	    M_WAITOK);
 
@@ -390,8 +390,7 @@ portal_open(v)
 	pcred.pcr_uid = kauth_cred_geteuid(ap->a_cred);
 	pcred.pcr_gid = kauth_cred_getegid(ap->a_cred);
 	pcred.pcr_ngroups = kauth_cred_ngroups(ap->a_cred);
-	kauth_cred_getgroups(ap->a_cred, pcred.pcr_groups, pcred.pcr_ngroups,
-	    UIO_SYSSPACE);
+	kauth_cred_getgroups(ap->a_cred, pcred.pcr_groups, pcred.pcr_ngroups);
 	aiov[0].iov_base = &pcred;
 	aiov[0].iov_len = sizeof(pcred);
 	aiov[1].iov_base = pt->pt_arg;
@@ -537,6 +536,7 @@ portal_getattr(v)
 	vap->va_blocksize = DEV_BSIZE;
 	/* Make all times be current TOD. */
 	getnanotime(&vap->va_ctime);
+	vap->va_atime = vap->va_mtime = vap->va_ctime;
 	vap->va_atime = vap->va_mtime = vap->va_ctime;
 	vap->va_gen = 0;
 	vap->va_flags = 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_disks.c,v 1.67 2007/07/18 19:04:58 ad Exp $	*/
+/*	$NetBSD: rf_disks.c,v 1.64.2.1 2007/07/01 17:09:25 bouyer Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -67,7 +67,7 @@
  ***************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.67 2007/07/18 19:04:58 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.64.2.1 2007/07/01 17:09:25 bouyer Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -587,7 +587,7 @@ rf_ConfigureDisk(RF_Raid_t *raidPtr, char *bf, RF_RaidDisk_t *diskPtr,
 	}
 	(void) strcpy(diskPtr->devname, p);
 
-	l = raidPtr->engine_thread;
+	l = LIST_FIRST(&raidPtr->engine_thread->p_lwps);
 
 	/* Let's start by claiming the component is fine and well... */
 	diskPtr->status = rf_ds_optimal;
@@ -664,7 +664,7 @@ static int rf_check_label_vitals(RF_Raid_t *raidPtr, int row, int column,
 		fatal_error = 1;
 	}
 	if (mod_counter != ci_label->mod_counter) {
-		printf("%s has a different modification count: %d %d\n",
+		printf("%s has a different modfication count: %d %d\n",
 		       dev_name, mod_counter, ci_label->mod_counter);
 	}
 

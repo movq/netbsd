@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.c,v 1.39 2007/07/08 09:41:00 pooka Exp $	*/
+/*	$NetBSD: linux_machdep.c,v 1.35 2006/07/23 22:06:08 ad Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.39 2007/07/08 09:41:00 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.35 2006/07/23 22:06:08 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,6 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.39 2007/07/08 09:41:00 pooka Exp
 #include <sys/mount.h>
 #include <sys/vnode.h>
 #include <sys/device.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/filedesc.h>
 #include <sys/exec_elf.h>
@@ -124,12 +125,12 @@ setup_linux_rt_sigframe(struct trapframe *tf, int sig, const sigset_t *mask)
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
 	struct linux_rt_sigframe *sfp, sigframe;
-	int onstack, error;
+	int onstack;
 	int fsize, rndfsize;
 	extern char linux_rt_sigcode[], linux_rt_esigcode[];
 
 	/* Do we need to jump onto the signal stack? */
-	onstack = (l->l_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
+	onstack = (p->p_sigctx.ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
 		  (SIGACTION(p, sig).sa_flags & SA_ONSTACK) != 0;
 
 	/* Allocate space for the signal handler context.  */
@@ -138,10 +139,11 @@ setup_linux_rt_sigframe(struct trapframe *tf, int sig, const sigset_t *mask)
 
 	if (onstack)
 		sfp = (struct linux_rt_sigframe *)
-		    ((char *)l->l_sigstk.ss_sp + l->l_sigstk.ss_size);
+					((caddr_t)p->p_sigctx.ps_sigstk.ss_sp +
+						p->p_sigctx.ps_sigstk.ss_size);
 	else
 		sfp = (struct linux_rt_sigframe *)(alpha_pal_rdusp());
-	sfp = (struct linux_rt_sigframe *)((char *)sfp - rndfsize);
+	sfp = (struct linux_rt_sigframe *)((caddr_t)sfp - rndfsize);
 
 #ifdef DEBUG
 	if ((sigdebug & SDB_KSTACK) && (p->p_pid == sigpid))
@@ -186,12 +188,7 @@ setup_linux_rt_sigframe(struct trapframe *tf, int sig, const sigset_t *mask)
 	sigframe.info.lsi_pid = p->p_pid;
 	sigframe.info.lsi_uid = kauth_cred_geteuid(l->l_cred);	/* Use real uid here? */
 
-	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
-	error = copyout((void *)&sigframe, (void *)sfp, fsize);
-	mutex_enter(&p->p_smutex);
-
-	if (error != 0) {
+	if (copyout((caddr_t)&sigframe, (caddr_t)sfp, fsize) != 0) {
 #ifdef DEBUG
 		if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid)
 			printf("sendsig(%d): copyout failed on sig %d\n",
@@ -218,7 +215,7 @@ setup_linux_rt_sigframe(struct trapframe *tf, int sig, const sigset_t *mask)
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 }
 
 void setup_linux_sigframe(tf, sig, mask)
@@ -229,12 +226,12 @@ void setup_linux_sigframe(tf, sig, mask)
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
 	struct linux_sigframe *sfp, sigframe;
-	int onstack, error;
+	int onstack;
 	int fsize, rndfsize;
 	extern char linux_sigcode[], linux_esigcode[];
 
 	/* Do we need to jump onto the signal stack? */
-	onstack = (l->l_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
+	onstack = (p->p_sigctx.ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
 		  (SIGACTION(p, sig).sa_flags & SA_ONSTACK) != 0;
 
 	/* Allocate space for the signal handler context.  */
@@ -243,10 +240,11 @@ void setup_linux_sigframe(tf, sig, mask)
 
 	if (onstack)
 		sfp = (struct linux_sigframe *)
-		    ((char *)l->l_sigstk.ss_sp + l->l_sigstk.ss_size);
+					((caddr_t)p->p_sigctx.ps_sigstk.ss_sp +
+						p->p_sigctx.ps_sigstk.ss_size);
 	else
 		sfp = (struct linux_sigframe *)(alpha_pal_rdusp());
-	sfp = (struct linux_sigframe *)((char *)sfp - rndfsize);
+	sfp = (struct linux_sigframe *)((caddr_t)sfp - rndfsize);
 
 #ifdef DEBUG
 	if ((sigdebug & SDB_KSTACK) && (p->p_pid == sigpid))
@@ -257,7 +255,7 @@ void setup_linux_sigframe(tf, sig, mask)
 	/*
 	 * Build the signal context to be used by sigreturn.
 	 */
-	memset(&sigframe.sf_sc, 0, sizeof(struct linux_sigcontext));
+	memset(&sigframe.sf_sc, 0, sizeof(struct linux_ucontext));
 	sigframe.sf_sc.sc_onstack = onstack;
 	native_to_linux_old_sigset(&sigframe.sf_sc.sc_mask, mask);
 	sigframe.sf_sc.sc_pc = tf->tf_regs[FRAME_PC];
@@ -278,12 +276,7 @@ void setup_linux_sigframe(tf, sig, mask)
 	sigframe.sf_sc.sc_traparg_a1 = tf->tf_regs[FRAME_A1];
 	sigframe.sf_sc.sc_traparg_a2 = tf->tf_regs[FRAME_A2];
 
-	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
-	error = copyout((void *)&sigframe, (void *)sfp, fsize);
-	mutex_enter(&p->p_smutex);
-
-	if (error != 0) {
+	if (copyout((caddr_t)&sigframe, (caddr_t)sfp, fsize) != 0) {
 #ifdef DEBUG
 		if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid)
 			printf("sendsig(%d): copyout failed on sig %d\n",
@@ -310,7 +303,7 @@ void setup_linux_sigframe(tf, sig, mask)
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 }
 
 /*
@@ -383,22 +376,20 @@ int
 linux_restore_sigcontext(struct lwp *l, struct linux_sigcontext context,
 			 sigset_t *mask)
 {
-	struct proc *p = l->l_proc;
 
+	struct proc *p = l->l_proc;
 	/*
 	 * Linux doesn't (yet) have alternate signal stacks.
 	 * However, the OSF/1 sigcontext which they use has
 	 * an onstack member.  This could be needed in the future.
 	 */
-	mutex_enter(&p->p_smutex);
 	if (context.sc_onstack & LINUX_SA_ONSTACK)
-	    l->l_sigstk.ss_flags |= SS_ONSTACK;
+	    p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 	else
-	    l->l_sigstk.ss_flags &= ~SS_ONSTACK;
+	    p->p_sigctx.ps_sigstk.ss_flags &= ~SS_ONSTACK;
 
 	/* Reset the signal mask */
-	(void) sigprocmask1(l, SIG_SETMASK, mask, 0);
-	mutex_exit(&p->p_smutex);
+	(void) sigprocmask1(p, SIG_SETMASK, mask, 0);
 
 	/*
 	 * Check for security violations.
@@ -455,7 +446,7 @@ linux_sys_rt_sigreturn(l, v, retval)
 	/*
 	 * Fetch the frame structure.
 	 */
-	if (copyin((void *)sfp, &sigframe,
+	if (copyin((caddr_t)sfp, &sigframe,
 			sizeof(struct linux_rt_sigframe)) != 0)
 		return (EFAULT);
 
@@ -491,7 +482,7 @@ linux_sys_sigreturn(l, v, retval)
 	/*
 	 * Fetch the frame structure.
 	 */
-	if (copyin((void *)sfp, &frame, sizeof(struct linux_sigframe)) != 0)
+	if (copyin((caddr_t)sfp, &frame, sizeof(struct linux_sigframe)) != 0)
 		return(EFAULT);
 
 	/* Grab the signal mask. */
@@ -514,7 +505,7 @@ linux_machdepioctl(l, v, retval)
 	struct linux_sys_ioctl_args /* {
 		syscallarg(int) fd;
 		syscallarg(u_long) com;
-		syscallarg(void *) data;
+		syscallarg(caddr_t) data;
 	} */ *uap = v;
 	struct sys_ioctl_args bia;
 	u_long com;

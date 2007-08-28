@@ -1,4 +1,4 @@
-/*	$NetBSD: rfcomm.h,v 1.3 2007/04/21 06:15:23 plunky Exp $	*/
+/*	$NetBSD: rfcomm.h,v 1.2.2.1 2007/07/19 16:04:19 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -55,7 +55,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: rfcomm.h,v 1.3 2007/04/21 06:15:23 plunky Exp $
+ * $Id: rfcomm.h,v 1.2.2.1 2007/07/19 16:04:19 liamjfoy Exp $
  * $FreeBSD: src/sys/netgraph/bluetooth/include/ng_btsocket_rfcomm.h,v 1.4 2005/01/11 01:39:53 emax Exp $
  */
 

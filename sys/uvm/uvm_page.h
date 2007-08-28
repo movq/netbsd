@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_page.h,v 1.49 2007/07/21 19:21:55 ad Exp $	*/
+/*	$NetBSD: uvm_page.h,v 1.46 2006/09/15 15:51:13 yamt Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -141,7 +141,6 @@ struct vm_page {
 #if defined(UVM_PAGE_TRKOWN)
 	/* debugging fields to track page ownership */
 	pid_t			owner;		/* proc that set PG_BUSY */
-	lwpid_t			lowner;		/* lwp that set PG_BUSY */
 	const char		*owner_tag;	/* why it was set busy */
 #endif
 };
@@ -238,7 +237,7 @@ struct vm_physseg {
  * globals
  */
 
-extern bool vm_page_zero_enable;
+extern boolean_t vm_page_zero_enable;
 
 /*
  * physical memory config is stored in vm_physmem.
@@ -256,11 +255,14 @@ void uvm_page_init(vaddr_t *, vaddr_t *);
 void uvm_page_own(struct vm_page *, const char *);
 #endif
 #if !defined(PMAP_STEAL_MEMORY)
-bool uvm_page_physget(paddr_t *);
+boolean_t uvm_page_physget(paddr_t *);
 #endif
 void uvm_page_rehash(void);
 void uvm_page_recolor(int);
 void uvm_pageidlezero(void);
+
+int uvm_lock_fpageq(void);
+void uvm_unlock_fpageq(int);
 
 void uvm_pageactivate(struct vm_page *);
 vaddr_t uvm_pageboot_alloc(vsize_t);

@@ -1,7 +1,7 @@
-/*	$NetBSD: kern_ras.c,v 1.20 2007/08/15 12:07:33 ad Exp $	*/
+/*	$NetBSD: kern_ras.c,v 1.15 2006/11/01 10:17:58 yamt Exp $	*/
 
 /*-
- * Copyright (c) 2002, 2006 The NetBSD Foundation, Inc.
+ * Copyright (c) 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_ras.c,v 1.20 2007/08/15 12:07:33 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_ras.c,v 1.15 2006/11/01 10:17:58 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/lock.h>
@@ -45,6 +45,8 @@ __KERNEL_RCSID(0, "$NetBSD: kern_ras.c,v 1.20 2007/08/15 12:07:33 ad Exp $");
 #include <sys/pool.h>
 #include <sys/proc.h>
 #include <sys/ras.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
@@ -52,7 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_ras.c,v 1.20 2007/08/15 12:07:33 ad Exp $");
 #include <uvm/uvm_extern.h>
 
 POOL_INIT(ras_pool, sizeof(struct ras), 0, 0, 0, "raspl",
-    &pool_allocator_nointr, IPL_NONE);
+    &pool_allocator_nointr);
 
 #define MAX_RAS_PER_PROC	16
 
@@ -71,32 +73,31 @@ int ras_debug = 0;
  * otherwise we return -1.  If we do perform a restart, we
  * mark the sequence as hit.
  */
-void *
-ras_lookup(struct proc *p, void *addr)
+caddr_t
+ras_lookup(struct proc *p, caddr_t addr)
 {
 	struct ras *rp;
-	void *startaddr;
-
-	startaddr = (void *)-1;
 
 #ifdef DIAGNOSTIC
-	if (addr < (void *)VM_MIN_ADDRESS ||
-	    addr > (void *)VM_MAXUSER_ADDRESS)
-		return (startaddr);
+	if (addr < (caddr_t)VM_MIN_ADDRESS ||
+	    addr > (caddr_t)VM_MAXUSER_ADDRESS)
+		return ((caddr_t)-1);
 #endif
 
-	mutex_enter(&p->p_rasmutex);
+	simple_lock(&p->p_lock);
 	LIST_FOREACH(rp, &p->p_raslist, ras_list) {
 		if (addr > rp->ras_startaddr && addr < rp->ras_endaddr) {
 			rp->ras_hits++;
-			startaddr = rp->ras_startaddr;
+			simple_unlock(&p->p_lock);
+#ifdef DIAGNOSTIC
 			DPRINTF(("RAS hit: p=%p %p\n", p, addr));
-			break;
+#endif
+			return (rp->ras_startaddr);
 		}
 	}
-	mutex_exit(&p->p_rasmutex);
+	simple_unlock(&p->p_lock);
 
-	return (startaddr);
+	return ((caddr_t)-1);
 }
 
 /*
@@ -122,10 +123,10 @@ again:
 	 */
 
 	nras = 0;
-	mutex_enter(&p1->p_rasmutex);
+	simple_lock(&p1->p_lock);
 	LIST_FOREACH(rp, &p1->p_raslist, ras_list)
 		nras++;
-	mutex_exit(&p1->p_rasmutex);
+	simple_unlock(&p1->p_lock);
 
 	/*
 	 * allocate entries.
@@ -141,7 +142,7 @@ again:
 	 * copy entries.
 	 */
 
-	mutex_enter(&p1->p_rasmutex);
+	simple_lock(&p1->p_lock);
 	nrp = LIST_FIRST(&p2->p_raslist);
 	LIST_FOREACH(rp, &p1->p_raslist, ras_list) {
 		if (nrp == NULL)
@@ -150,7 +151,7 @@ again:
 		nrp->ras_endaddr = rp->ras_endaddr;
 		nrp = LIST_NEXT(nrp, ras_list);
 	}
-	mutex_exit(&p1->p_rasmutex);
+	simple_unlock(&p1->p_lock);
 
 	/*
 	 * if we lose a race, retry.
@@ -174,17 +175,15 @@ ras_purgeall(struct proc *p)
 {
 	struct ras *rp;
 
-	mutex_enter(&p->p_rasmutex);
+	simple_lock(&p->p_lock);
 	while (!LIST_EMPTY(&p->p_raslist)) {
 		rp = LIST_FIRST(&p->p_raslist);
                 DPRINTF(("RAS %p-%p, hits %d\n", rp->ras_startaddr,
                     rp->ras_endaddr, rp->ras_hits));
 		LIST_REMOVE(rp, ras_list);
-		mutex_exit(&p->p_rasmutex);
 		pool_put(&ras_pool, rp);
-		mutex_enter(&p->p_rasmutex);
 	}
-	mutex_exit(&p->p_rasmutex);
+	simple_unlock(&p->p_lock);
 
 	return (0);
 }
@@ -196,15 +195,15 @@ ras_purgeall(struct proc *p)
  * an error.
  */
 static int
-ras_install(struct proc *p, void *addr, size_t len)
+ras_install(struct proc *p, caddr_t addr, size_t len)
 {
 	struct ras *rp;
 	struct ras *newrp;
-	void *endaddr = (char *)addr + len;
+	caddr_t endaddr = addr + len;
 	int nras = 0;
 
-	if (addr < (void *)VM_MIN_ADDRESS ||
-	    endaddr > (void *)VM_MAXUSER_ADDRESS)
+	if (addr < (caddr_t)VM_MIN_ADDRESS ||
+	    endaddr > (caddr_t)VM_MAXUSER_ADDRESS)
 		return (EINVAL);
 
 	if (len <= 0)
@@ -212,19 +211,16 @@ ras_install(struct proc *p, void *addr, size_t len)
 
 	newrp = NULL;
 again:
-	mutex_enter(&p->p_rasmutex);
+	simple_lock(&p->p_lock);
 	LIST_FOREACH(rp, &p->p_raslist, ras_list) {
-		if (++nras >= ras_per_proc) {
-			mutex_exit(&p->p_rasmutex);
+		if (++nras >= ras_per_proc ||
+		    (addr < rp->ras_endaddr && endaddr > rp->ras_startaddr)) {
+			simple_unlock(&p->p_lock);
 			return (EINVAL);
-		}
-		if (addr < rp->ras_endaddr && endaddr > rp->ras_startaddr) {
-			mutex_exit(&p->p_rasmutex);
-			return (EEXIST);
 		}
 	}
 	if (newrp == NULL) {
-		mutex_exit(&p->p_rasmutex);
+		simple_unlock(&p->p_lock);
 		newrp = pool_get(&ras_pool, PR_WAITOK);
 		goto again;
 	}
@@ -232,7 +228,7 @@ again:
 	newrp->ras_endaddr = endaddr;
 	newrp->ras_hits = 0;
 	LIST_INSERT_HEAD(&p->p_raslist, newrp, ras_list);
-	mutex_exit(&p->p_rasmutex);
+	simple_unlock(&p->p_lock);
 
 	return (0);
 }
@@ -242,25 +238,22 @@ again:
  * match, otherwise we return an error.
  */
 static int
-ras_purge(struct proc *p, void *addr, size_t len)
+ras_purge(struct proc *p, caddr_t addr, size_t len)
 {
 	struct ras *rp;
-	void *endaddr = (char *)addr + len;
+	caddr_t endaddr = addr + len;
 	int error = ESRCH;
 
-	mutex_enter(&p->p_rasmutex);
+	simple_lock(&p->p_lock);
 	LIST_FOREACH(rp, &p->p_raslist, ras_list) {
 		if (addr == rp->ras_startaddr && endaddr == rp->ras_endaddr) {
 			LIST_REMOVE(rp, ras_list);
+			pool_put(&ras_pool, rp);
+			error = 0;
 			break;
 		}
 	}
-	mutex_exit(&p->p_rasmutex);
-
-	if (rp != NULL) {
-		pool_put(&ras_pool, rp);
-		error = 0;
-	}
+	simple_unlock(&p->p_lock);
 
 	return (error);
 }
@@ -275,12 +268,12 @@ sys_rasctl(struct lwp *l, void *v, register_t *retval)
 #if defined(__HAVE_RAS)
 
 	struct sys_rasctl_args /* {
-		syscallarg(void *) addr;
+		syscallarg(caddr_t) addr;
 		syscallarg(size_t) len;
 		syscallarg(int) op;
 	} */ *uap = v;
 	struct proc *p = l->l_proc;
-	void *addr;
+	caddr_t addr;
 	size_t len;
 	int op;
 	int error;
@@ -289,7 +282,7 @@ sys_rasctl(struct lwp *l, void *v, register_t *retval)
 	 * first, extract syscall args from the uap.
 	 */
 
-	addr = (void *)SCARG(uap, addr);
+	addr = (caddr_t)SCARG(uap, addr);
 	len = (size_t)SCARG(uap, len);
 	op = SCARG(uap, op);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_lwp.c,v 1.12 2007/03/20 09:11:04 cube Exp $	*/
+/*	$NetBSD: svr4_32_lwp.c,v 1.7 2005/12/11 12:20:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_lwp.c,v 1.12 2007/03/20 09:11:04 cube Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_lwp.c,v 1.7 2005/12/11 12:20:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -52,6 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_32_lwp.c,v 1.12 2007/03/20 09:11:04 cube Exp $"
 #include <sys/user.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/un.h>
 #include <sys/stat.h>
@@ -138,7 +139,7 @@ svr4_32_sys__lwp_info(l, v, retval)
 	TIMEVAL_TO_TIMESPEC(&p->p_stats->p_ru.ru_stime, &lwpinfo.lwp_stime);
 	TIMEVAL_TO_TIMESPEC(&p->p_stats->p_ru.ru_utime, &lwpinfo.lwp_utime);
 
-	if ((error = copyout(&lwpinfo, SCARG_P32(uap, lwpinfo),
+	if ((error = copyout(&lwpinfo, (caddr_t)(u_long)SCARG(uap, lwpinfo),
 			     sizeof(lwpinfo))) == -1)
 	       return error;
 	return 0;
@@ -164,7 +165,7 @@ svr4_32_sys__lwp_wait(l, v, retval)
 	struct sys__lwp_wait_args ap;
 
 	SCARG(&ap, wait_for) = SCARG(uap, wait_for);
-	SCARG(&ap, departed) = SCARG_P32(uap, departed_lwp);
+	SCARG(&ap, departed) = NETBSD32PTR64(SCARG(uap, departed_lwp));
 
 	return sys__lwp_wait(l, &ap, retval);
 }

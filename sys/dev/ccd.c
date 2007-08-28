@@ -1,7 +1,7 @@
-/*	$NetBSD: ccd.c,v 1.122 2007/07/29 12:50:17 ad Exp $	*/
+/*	$NetBSD: ccd.c,v 1.116.2.1 2007/07/01 17:09:24 bouyer Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1997, 1998, 1999, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1997, 1998, 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -125,7 +125,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ccd.c,v 1.122 2007/07/29 12:50:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ccd.c,v 1.116.2.1 2007/07/01 17:09:24 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -145,7 +145,7 @@ __KERNEL_RCSID(0, "$NetBSD: ccd.c,v 1.122 2007/07/29 12:50:17 ad Exp $");
 #include <sys/fcntl.h>
 #include <sys/vnode.h>
 #include <sys/conf.h>
-#include <sys/mutex.h>
+#include <sys/lock.h>
 #include <sys/queue.h>
 #include <sys/kauth.h>
 
@@ -196,7 +196,7 @@ static void	ccdintr(struct ccd_softc *, struct buf *);
 static int	ccdinit(struct ccd_softc *, char **, struct vnode **,
 		    struct lwp *);
 static struct ccdbuf *ccdbuffer(struct ccd_softc *, struct buf *,
-		    daddr_t, void *, long);
+		    daddr_t, caddr_t, long);
 static void	ccdgetdefaultlabel(struct ccd_softc *, struct disklabel *);
 static void	ccdgetdisklabel(dev_t);
 static void	ccdmakedisklabel(struct ccd_softc *);
@@ -255,14 +255,14 @@ ccdattach(int num)
 
 	/* Initialize the component buffer pool. */
 	pool_init(&ccd_cbufpool, sizeof(struct ccdbuf), 0,
-	    0, 0, "ccdpl", NULL, IPL_BIO);
+	    0, 0, "ccdpl", NULL);
 
 	/* Initialize per-softc structures. */
 	for (i = 0; i < num; i++) {
 		cs = &ccd_softc[i];
 		snprintf(cs->sc_xname, sizeof(cs->sc_xname), "ccd%d", i);
 		cs->sc_dkdev.dk_name = cs->sc_xname;	/* XXX */
-		mutex_init(&cs->sc_lock, MUTEX_DRIVER, IPL_NONE);
+		lockinit(&cs->sc_lock, PRIBIO, "ccdlk", 0, 0);
 		pseudo_disk_init(&cs->sc_dkdev);
 	}
 }
@@ -563,7 +563,8 @@ ccdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 		return (ENXIO);
 	cs = &ccd_softc[unit];
 
-	mutex_enter(&cs->sc_lock);
+	if ((error = lockmgr(&cs->sc_lock, LK_EXCLUSIVE, NULL)) != 0)
+		return (error);
 
 	lp = cs->sc_dkdev.dk_label;
 
@@ -604,7 +605,7 @@ ccdopen(dev_t dev, int flags, int fmt, struct lwp *l)
 	    cs->sc_dkdev.dk_copenmask | cs->sc_dkdev.dk_bopenmask;
 
  done:
-	mutex_exit(&cs->sc_lock);
+	(void) lockmgr(&cs->sc_lock, LK_RELEASE, NULL);
 	return (error);
 }
 
@@ -614,7 +615,7 @@ ccdclose(dev_t dev, int flags, int fmt, struct lwp *l)
 {
 	int unit = ccdunit(dev);
 	struct ccd_softc *cs;
-	int part;
+	int error = 0, part;
 
 #ifdef DEBUG
 	if (ccddebug & CCDB_FOLLOW)
@@ -625,7 +626,8 @@ ccdclose(dev_t dev, int flags, int fmt, struct lwp *l)
 		return (ENXIO);
 	cs = &ccd_softc[unit];
 
-	mutex_enter(&cs->sc_lock);
+	if ((error = lockmgr(&cs->sc_lock, LK_EXCLUSIVE, NULL)) != 0)
+		return (error);
 
 	part = DISKPART(dev);
 
@@ -647,7 +649,7 @@ ccdclose(dev_t dev, int flags, int fmt, struct lwp *l)
 			cs->sc_flags &= ~CCDF_VLABEL;
 	}
 
-	mutex_exit(&cs->sc_lock);
+	(void) lockmgr(&cs->sc_lock, LK_RELEASE, NULL);
 	return (0);
 }
 
@@ -671,6 +673,7 @@ ccdstrategy(struct buf *bp)
 			printf("ccdstrategy: unit %d: not inited\n", unit);
 #endif
 		bp->b_error = ENXIO;
+		bp->b_flags |= B_ERROR;
 		goto done;
 	}
 
@@ -712,7 +715,7 @@ ccdstart(struct ccd_softc *cs)
 	long bcount, rcount;
 	struct buf *bp;
 	struct ccdbuf *cbp;
-	char *addr;
+	caddr_t addr;
 	daddr_t bn;
 	SIMPLEQ_HEAD(, ccdbuf) cbufq;
 
@@ -765,7 +768,7 @@ ccdstart(struct ccd_softc *cs)
 			SIMPLEQ_REMOVE_HEAD(&cbufq, cb_q);
 			if ((cbp->cb_buf.b_flags & B_READ) == 0)
 				cbp->cb_buf.b_vp->v_numoutput++;
-			bdev_strategy(&cbp->cb_buf);
+			DEV_STRATEGY(&cbp->cb_buf);
 		}
 	}
 }
@@ -774,7 +777,7 @@ ccdstart(struct ccd_softc *cs)
  * Build a component buffer header.
  */
 static struct ccdbuf *
-ccdbuffer(struct ccd_softc *cs, struct buf *bp, daddr_t bn, void *addr,
+ccdbuffer(struct ccd_softc *cs, struct buf *bp, daddr_t bn, caddr_t addr,
     long bcount)
 {
 	struct ccdcinfo *ci;
@@ -884,7 +887,7 @@ ccdintr(struct ccd_softc *cs, struct buf *bp)
 	/*
 	 * Request is done for better or worse, wakeup the top half.
 	 */
-	if (bp->b_error != 0)
+	if (bp->b_flags & B_ERROR)
 		bp->b_resid = bp->b_bcount;
 	disk_unbusy(&cs->sc_dkdev, (bp->b_bcount - bp->b_resid),
 	    (bp->b_flags & B_READ));
@@ -919,8 +922,11 @@ ccdiodone(struct buf *vbp)
 	}
 #endif
 
-	if (cbp->cb_buf.b_error != 0) {
-		bp->b_error = cbp->cb_buf.b_error;
+	if (cbp->cb_buf.b_flags & B_ERROR) {
+		bp->b_flags |= B_ERROR;
+		bp->b_error = cbp->cb_buf.b_error ?
+		    cbp->cb_buf.b_error : EIO;
+
 		printf("%s: error %d on component %d\n",
 		       cs->sc_xname, bp->b_error, cbp->cb_comp);
 	}
@@ -981,10 +987,10 @@ ccdwrite(dev_t dev, struct uio *uio, int flags)
 }
 
 static int
-ccdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+ccdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	int unit = ccdunit(dev);
-	int s, i, j, lookedup = 0, error = 0;
+	int s, i, j, lookedup = 0, error;
 	int part, pmask;
 	struct ccd_softc *cs;
 	struct ccd_ioctl *ccio = (struct ccd_ioctl *)data;
@@ -1017,7 +1023,8 @@ ccdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 			return (EBADF);
 	}
 
-	mutex_enter(&cs->sc_lock);
+	if ((error = lockmgr(&cs->sc_lock, LK_EXCLUSIVE, NULL)) != 0)
+		return (error);
 
 	/* Must be initialized for these... */
 	switch (cmd) {
@@ -1303,7 +1310,7 @@ ccdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	}
 
  out:
-	mutex_exit(&cs->sc_lock);
+	(void) lockmgr(&cs->sc_lock, LK_RELEASE, NULL);
 	return (error);
 }
 
@@ -1342,7 +1349,7 @@ ccdsize(dev_t dev)
 }
 
 static int
-ccddump(dev_t dev, daddr_t blkno, void *va,
+ccddump(dev_t dev, daddr_t blkno, caddr_t va,
     size_t size)
 {
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ubsa.c,v 1.19 2007/03/13 13:51:55 drochner Exp $	*/
+/*	$NetBSD: ubsa.c,v 1.16.2.1 2007/02/21 13:22:55 tron Exp $	*/
 /*-
  * Copyright (c) 2002, Alexander Kabaev <kan.FreeBSD.org>.
  * All rights reserved.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ubsa.c,v 1.19 2007/03/13 13:51:55 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ubsa.c,v 1.16.2.1 2007/02/21 13:22:55 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -239,8 +239,6 @@ Static const struct usb_devno ubsa_devs[] = {
 	{ USB_VENDOR_OPTIONNV, USB_PRODUCT_OPTIONNV_MC3G },
 	{ USB_VENDOR_OPTIONNV, USB_PRODUCT_OPTIONNV_QUADUMTS2 },
 	{ USB_VENDOR_OPTIONNV, USB_PRODUCT_OPTIONNV_QUADUMTS },
-	/* AnyDATA ADU-E100H */
-	{ USB_VENDOR_ANYDATA, USB_PRODUCT_ANYDATA_ADU_E100H },
 };
 #define ubsa_lookup(v, p) usb_lookup(ubsa_devs, v, p)
 
@@ -249,6 +247,9 @@ USB_DECLARE_DRIVER(ubsa);
 USB_MATCH(ubsa)
 {
 	USB_MATCH_START(ubsa, uaa);
+
+	if (uaa->iface != NULL)
+		return (UMATCH_NONE);
 
 	return (ubsa_lookup(uaa->vendor, uaa->product) != NULL ?
 		UMATCH_VENDOR_PRODUCT : UMATCH_NONE);

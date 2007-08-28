@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_blkio.c,v 1.14 2007/03/04 06:01:22 christos Exp $	*/
+/*	$NetBSD: linux_blkio.c,v 1.12 2006/11/16 01:32:42 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_blkio.c,v 1.14 2007/03/04 06:01:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_blkio.c,v 1.12 2006/11/16 01:32:42 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,6 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_blkio.c,v 1.14 2007/03/04 06:01:22 christos Ex
 #include <sys/proc.h>
 #include <sys/disklabel.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/linux/common/linux_types.h>
@@ -87,9 +88,9 @@ linux_ioctl_blkio(struct lwp *l, struct linux_sys_ioctl_args *uap,
 		 * fails, it may be a disk without label; try to get
 		 * the default label and compute the size from it.
 		 */
-		error = ioctlf(fp, DIOCGPART, (void *)&partp, l);
+		error = ioctlf(fp, DIOCGPART, (caddr_t)&partp, l);
 		if (error != 0) {
-			error = ioctlf(fp, DIOCGDEFLABEL, (void *)&label, l);
+			error = ioctlf(fp, DIOCGDEFLABEL, (caddr_t)&label, l);
 			if (error != 0)
 				break;
 			size = label.d_nsectors * label.d_ntracks *
@@ -99,7 +100,7 @@ linux_ioctl_blkio(struct lwp *l, struct linux_sys_ioctl_args *uap,
 		error = copyout(&size, SCARG(uap, data), sizeof size);
 		break;
 	case LINUX_BLKSECTGET:
-		error = ioctlf(fp, DIOCGDEFLABEL, (void *)&label, l);
+		error = ioctlf(fp, DIOCGDEFLABEL, (caddr_t)&label, l);
 		if (error != 0)
 			break;
 		error = copyout(&label.d_secsize, SCARG(uap, data),

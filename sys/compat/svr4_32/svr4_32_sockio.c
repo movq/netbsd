@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_sockio.c,v 1.16 2007/05/29 21:32:28 christos Exp $	 */
+/*	$NetBSD: svr4_32_sockio.c,v 1.11 2005/12/11 12:20:26 christos Exp $	 */
 
 /*-
  * Copyright (c) 1995 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_sockio.c,v 1.16 2007/05/29 21:32:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_sockio.c,v 1.11 2005/12/11 12:20:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -48,14 +48,15 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_32_sockio.c,v 1.16 2007/05/29 21:32:28 christos
 #include <sys/termios.h>
 #include <sys/tty.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <net/if.h>
 #include <sys/malloc.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/sys/socket.h>
-#include <compat/sys/sockio.h>
 
 #include <compat/svr4_32/svr4_32_types.h>
 #include <compat/svr4_32/svr4_32_util.h>
@@ -98,7 +99,7 @@ svr4_32_sock_ioctl(fp, l, retval, fd, cmd, data)
 	register_t *retval;
 	int fd;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 {
 	int error;
 	int (*ctl)(struct file *, u_long, void *, struct lwp *) =
@@ -141,7 +142,7 @@ svr4_32_sock_ioctl(fp, l, retval, fd, cmd, data)
 
 	case SVR4_32_SIOCGIFFLAGS:
 		{
-			struct oifreq br;
+			struct ifreq br;
 			struct svr4_32_ifreq sr;
 
 			if ((error = copyin(data, &sr, sizeof(sr))) != 0)
@@ -165,20 +166,20 @@ svr4_32_sock_ioctl(fp, l, retval, fd, cmd, data)
 	case SVR4_32_SIOCGIFCONF:
 		{
 			struct svr4_32_ifconf sc;
-			struct oifconf ifc;
+			struct ifconf ifc;
 
 			if ((error = copyin(data, &sc, sizeof(sc))) != 0)
 				return error;
 
 			DPRINTF(("ifreq %ld svr4_32_ifreq %ld ifc_len %d\n",
-				(unsigned long)sizeof(struct oifreq),
+				(unsigned long)sizeof(struct ifreq),
 				(unsigned long)sizeof(struct svr4_32_ifreq),
 				sc.svr4_32_ifc_len));
 
 			ifc.ifc_len = sc.svr4_32_ifc_len;
-			ifc.ifc_buf = NETBSD32PTR64(sc.ifc_ifcu.ifcu_buf);
+			ifc.ifc_buf = (void *)(uintptr_t)sc.ifc_ifcu.ifcu_buf;
 
-			if ((error = (*ctl)(fp, OOSIOCGIFCONF, &ifc, l)) != 0)
+			if ((error = (*ctl)(fp, OSIOCGIFCONF, &ifc, l)) != 0)
 				return error;
 
 			DPRINTF(("SIOCGIFCONF\n"));

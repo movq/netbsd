@@ -1,4 +1,4 @@
-/* $NetBSD: mfi.c,v 1.8 2007/07/04 17:07:04 xtraeme Exp $ */
+/* $NetBSD: mfi.c,v 1.2.2.4 2007/05/08 10:45:18 pavel Exp $ */
 /* $OpenBSD: mfi.c,v 1.66 2006/11/28 23:59:45 dlg Exp $ */
 /*
  * Copyright (c) 2006 Marco Peereboom <marco@peereboom.us>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mfi.c,v 1.8 2007/07/04 17:07:04 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mfi.c,v 1.2.2.4 2007/05/08 10:45:18 pavel Exp $");
 
 #include "bio.h"
 
@@ -63,7 +63,7 @@ uint32_t	mfi_debug = 0
 
 void	mfi_scsipi_request(struct scsipi_channel *,
 		scsipi_adapter_req_t, void *);
-int	mfi_scsi_ioctl(struct scsipi_channel *, u_long, void *, int,
+int	mfi_scsi_ioctl(struct scsipi_channel *, u_long, caddr_t, int,
 		struct proc *);
 void	mfiminphys(struct buf *bp);
 
@@ -93,7 +93,7 @@ int		mfi_mgmt(struct mfi_softc *, uint32_t, uint32_t, uint32_t,
 void		mfi_mgmt_done(struct mfi_ccb *);
 
 #if NBIO > 0
-int		mfi_ioctl(struct device *, u_long, void *);
+int		mfi_ioctl(struct device *, u_long, caddr_t);
 int		mfi_ioctl_inq(struct mfi_softc *, struct bioc_inq *);
 int		mfi_ioctl_vol(struct mfi_softc *, struct bioc_vol *);
 int		mfi_ioctl_disk(struct mfi_softc *, struct bioc_disk *);
@@ -102,7 +102,10 @@ int		mfi_ioctl_blink(struct mfi_softc *sc, struct bioc_blink *);
 int		mfi_ioctl_setstate(struct mfi_softc *, struct bioc_setstate *);
 int		mfi_bio_hs(struct mfi_softc *, int, int, void *);
 int		mfi_create_sensors(struct mfi_softc *);
-int		mfi_sensor_gtredata(struct sysmon_envsys *, envsys_data_t *);
+int		mfi_sensor_gtredata(struct sysmon_envsys *,
+		    struct envsys_tre_data *);
+int		mfi_sensor_streinfo(struct sysmon_envsys *,
+		    struct envsys_basic_info *);
 #endif /* NBIO > 0 */
 
 struct mfi_ccb *
@@ -1286,7 +1289,7 @@ mfi_mgmt_done(struct mfi_ccb *ccb)
 
 
 int
-mfi_scsi_ioctl(struct scsipi_channel *chan, u_long cmd, void *arg,
+mfi_scsi_ioctl(struct scsipi_channel *chan, u_long cmd, caddr_t arg,
     int flag, struct proc *p)
 {
 		return (ENOTTY);
@@ -1294,7 +1297,7 @@ mfi_scsi_ioctl(struct scsipi_channel *chan, u_long cmd, void *arg,
 
 #if NBIO > 0
 int
-mfi_ioctl(struct device *dev, u_long cmd, void *addr)
+mfi_ioctl(struct device *dev, u_long cmd, caddr_t addr)
 {
 	struct mfi_softc	*sc = (struct mfi_softc *)dev;
 	int error = 0;
@@ -1855,34 +1858,51 @@ int
 mfi_create_sensors(struct mfi_softc *sc)
 {
 	int			i;
+	struct envsys_range env_ranges[2];
 	int nsensors = sc->sc_ld_cnt;
 
+	env_ranges[0].low = 0;
+	env_ranges[0].high = nsensors;
+	env_ranges[0].units = ENVSYS_DRIVE;
+	env_ranges[1].low = 1;
+	env_ranges[1].high = 0;
+	env_ranges[1].units = 0;
+
 	sc->sc_sensor_data =
-	    malloc(sizeof(struct envsys_data) * nsensors,
+	    malloc(sizeof(struct envsys_tre_data) * nsensors,
 		M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (sc->sc_sensor_data == NULL) {
 		aprint_error("%s: can't allocate envsys_tre_data\n",
 		    DEVNAME(sc));
 		return(ENOMEM);
 	}
-
+	sc->sc_sensor_info =
+	    malloc(sizeof(struct envsys_basic_info) * nsensors,
+		M_DEVBUF, M_NOWAIT | M_ZERO);
+	if (sc->sc_sensor_info == NULL) {
+		aprint_error("%s: can't allocate envsys_basic_info\n",
+		    DEVNAME(sc));
+		return(ENOMEM);
+	}
 	for (i = 0; i < nsensors; i++) {
 		sc->sc_sensor_data[i].sensor = i;
 		sc->sc_sensor_data[i].units = ENVSYS_DRIVE;
-		sc->sc_sensor_data[i].state = ENVSYS_SVALID;
-		sc->sc_sensor_data[i].monitor = true;
-		/* Enable monitoring for drive state changes */
-		sc->sc_sensor_data[i].flags |= ENVSYS_FMONDRVSTATE;
+		sc->sc_sensor_data[i].validflags = ENVSYS_FVALID;
+		sc->sc_sensor_data[i].warnflags = ENVSYS_WARN_OK;
+		sc->sc_sensor_info[i].sensor = i;
+		sc->sc_sensor_info[i].units = ENVSYS_DRIVE;
+		sc->sc_sensor_info[i].validflags = ENVSYS_FVALID;
 		/* logical drives */
-		snprintf(sc->sc_sensor_data[i].desc,
-		    sizeof(sc->sc_sensor_data[i].desc), "%s:%d",
+		snprintf(sc->sc_sensor_info[i].desc,
+		    sizeof(sc->sc_sensor_info[i].desc), "%s:%d",
 		    DEVNAME(sc), i);
 	}
-
-	sc->sc_envsys.sme_name = DEVNAME(sc);
+	sc->sc_ranges = env_ranges;
 	sc->sc_envsys.sme_cookie = sc;
 	sc->sc_envsys.sme_gtredata = mfi_sensor_gtredata;
+	sc->sc_envsys.sme_streinfo = mfi_sensor_streinfo;
 	sc->sc_envsys.sme_nsensors = sc->sc_ld_cnt;
+	sc->sc_envsys.sme_envsys_version = 1000;
 	if (sysmon_envsys_register(&sc->sc_envsys)) {
 		printf("%s: unable to register with sysmon\n", DEVNAME(sc));
 		return(1);
@@ -1891,17 +1911,17 @@ mfi_create_sensors(struct mfi_softc *sc)
 }
 
 int
-mfi_sensor_gtredata(struct sysmon_envsys *sme, envsys_data_t *edata)
+mfi_sensor_gtredata(struct sysmon_envsys *sme, struct envsys_tre_data *tred)
 {
 	struct mfi_softc	*sc = sme->sme_cookie;
 	struct bioc_vol		bv;
 	int s;
 
-	if (edata->sensor >= sc->sc_ld_cnt)
+	if (tred->sensor >= sc->sc_ld_cnt)
 		return EINVAL;
 
 	bzero(&bv, sizeof(bv));
-	bv.bv_volid = edata->sensor;
+	bv.bv_volid = tred->sensor;
 	s = splbio();
 	if (mfi_ioctl_vol(sc, &bv)) {
 		splx(s);
@@ -1911,29 +1931,36 @@ mfi_sensor_gtredata(struct sysmon_envsys *sme, envsys_data_t *edata)
 
 	switch(bv.bv_status) {
 	case BIOC_SVOFFLINE:
-		edata->value_cur = ENVSYS_DRIVE_FAIL;
-		edata->state = ENVSYS_SCRITICAL;
+		tred->cur.data_us = ENVSYS_DRIVE_FAIL;
+		tred->warnflags = ENVSYS_WARN_CRITOVER;
 		break;
 
 	case BIOC_SVDEGRADED:
-		edata->value_cur = ENVSYS_DRIVE_PFAIL;
-		edata->state = ENVSYS_SCRITICAL;
+		tred->cur.data_us = ENVSYS_DRIVE_PFAIL;
+		tred->warnflags = ENVSYS_WARN_OVER;
 		break;
 
 	case BIOC_SVSCRUB:
 	case BIOC_SVONLINE:
-		edata->value_cur = ENVSYS_DRIVE_ONLINE;
-		edata->state = ENVSYS_SVALID;
+		tred->cur.data_us = ENVSYS_DRIVE_ONLINE;
+		tred->warnflags = ENVSYS_WARN_OK;
 		break;
 
 	case BIOC_SVINVALID:
 		/* FALLTRHOUGH */
 	default:
-		edata->value_cur = 0; /* unknown */
-		edata->state = ENVSYS_SINVALID;
+		tred->cur.data_us = 0; /* unknown */
+		tred->warnflags = ENVSYS_WARN_CRITOVER;
 	}
-
+	tred->validflags = ENVSYS_FVALID | ENVSYS_FCURVALID;
+	tred->units = ENVSYS_DRIVE;
 	return 0;
 }
 
+int
+mfi_sensor_streinfo(struct sysmon_envsys *sme, struct envsys_basic_info *binfo)
+{
+	binfo->validflags = 0;
+	return 0;
+}
 #endif /* NBIO > 0 */

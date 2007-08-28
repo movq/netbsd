@@ -1,4 +1,4 @@
-/*	$NetBSD: intel_busclock.c,v 1.2 2007/07/01 20:12:36 xtraeme Exp $	*/
+/*	$NetBSD: intel_busclock.c,v 1.2.16.2 2007/09/12 10:05:04 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intel_busclock.c,v 1.2 2007/07/01 20:12:36 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intel_busclock.c,v 1.2.16.2 2007/09/12 10:05:04 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

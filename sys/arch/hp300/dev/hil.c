@@ -1,4 +1,4 @@
-/*	$NetBSD: hil.c,v 1.76 2007/03/04 11:55:04 tsutsui Exp $	*/
+/*	$NetBSD: hil.c,v 1.73 2006/09/09 11:12:53 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hil.c,v 1.76 2007/03/04 11:55:04 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hil.c,v 1.73 2006/09/09 11:12:53 tsutsui Exp $");
 
 #include "opt_compat_hpux.h"
 #include "ite.h"
@@ -208,9 +208,9 @@ hilattach(struct device *parent, struct device *self, void *aux)
 	 * Initialize loop information
 	 */
 	hilp->hl_addr = (struct hil_dev *)ia->ia_addr;
-	hilp->hl_cmdending = false;
+	hilp->hl_cmdending = FALSE;
 	hilp->hl_actdev = hilp->hl_cmddev = 0;
-	hilp->hl_cmddone = false;
+	hilp->hl_cmddone = FALSE;
 	hilp->hl_cmdbp = hilp->hl_cmdbuf;
 	hilp->hl_pollbp = hilp->hl_pollbuf;
 	hilp->hl_kbddev = 0;
@@ -468,7 +468,7 @@ hilread(dev_t dev, struct uio *uio, int flag)
 			return EWOULDBLOCK;
 		}
 		dptr->hd_flags |= HIL_ASLEEP;
-		if ((error = tsleep((void *)dptr,
+		if ((error = tsleep((caddr_t)dptr,
 		    TTIPRI | PCATCH, hilin, 0))) {
 			(void)spl0();
 			return error;
@@ -488,11 +488,10 @@ hilread(dev_t dev, struct uio *uio, int flag)
 }
 
 static int
-hilioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+hilioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct hil_softc *hilp;
 	struct hilloopdev *dptr;
-	uint8_t *buf;
 	int i;
 	u_char hold;
 	int error;
@@ -546,7 +545,7 @@ hilioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 #endif
 
 	hilp->hl_cmdbp = hilp->hl_cmdbuf;
-	memset((void *)hilp->hl_cmdbuf, 0, HILBUFSIZE);
+	memset((caddr_t)hilp->hl_cmdbuf, 0, HILBUFSIZE);
 	hilp->hl_cmddev = HILUNIT(dev);
 	error = 0;
 	switch (cmd) {
@@ -563,20 +562,18 @@ hilioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		/* Transfer the real time to the 8042 data buffer */
 		send_hil_cmd(hilp->hl_addr, (cmd & 0xFF), NULL, 0, NULL);
 		/* Read each byte of the real time */
-		buf = data;
 		for (i = 0; i < 5; i++) {
 			send_hil_cmd(hilp->hl_addr, HIL_READTIME + i, NULL,
 					0, &hold);
-			buf[4 - i] = hold;
+			data[4-i] = hold;
 		}
 		break;
 
 	case HILIOCRT:
-		buf = data;
 		for (i = 0; i < 4; i++) {
 			send_hil_cmd(hilp->hl_addr, (cmd & 0xFF) + i,
 					NULL, 0, &hold);
-			buf[i] = hold;
+			data[i] = hold;
 		}
 		break;
 
@@ -667,18 +664,17 @@ hilioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 #ifdef COMPAT_HPUX
 /* ARGSUSED */
 int
-hpuxhilioctl(dev_t dev, int cmd, void *data, int flag)
+hpuxhilioctl(dev_t dev, int cmd, caddr_t data, int flag)
 {
 	struct hil_softc *hilp;
 	struct hilloopdev *dptr;
-	uint8_t *buf;
 	int i;
 	u_char hold;
 
 	hilp = device_lookup(&hil_cd, HILLOOP(dev));
 
 	hilp->hl_cmdbp = hilp->hl_cmdbuf;
-	memset((void *)hilp->hl_cmdbuf, 0, HILBUFSIZE);
+	memset((caddr_t)hilp->hl_cmdbuf, 0, HILBUFSIZE);
 	hilp->hl_cmddev = HILUNIT(dev);
 	switch (cmd) {
 
@@ -732,28 +728,25 @@ hpuxhilioctl(dev_t dev, int cmd, void *data, int flag)
 		/* Transfer the real time to the 8042 data buffer */
 		send_hil_cmd(hilp->hl_addr, (cmd & 0xFF), NULL, 0, NULL);
 		/* Read each byte of the real time */
-		buf = data;
 		for (i = 0; i < 5; i++) {
 			send_hil_cmd(hilp->hl_addr, HIL_READTIME + i, NULL,
 					0, &hold);
-			buf[4 - i] = hold;
+			data[4-i] = hold;
 		}
 		break;
 
 	case EFTRT:
-		buf = data;
 		for (i = 0; i < 4; i++) {
 			send_hil_cmd(hilp->hl_addr, (cmd & 0xFF) + i,
 					NULL, 0, &hold);
-			buf[i] = hold;
+			data[i] = hold;
 		}
 		break;
 
 	case EFTRLC:
 	case EFTRCC:
-		buf = data;
 		send_hil_cmd(hilp->hl_addr, (cmd & 0xFF), NULL, 0, &hold);
-		*buf = hold;
+		*data = hold;
 		break;
 
 	case EFTSRPG:
@@ -1005,7 +998,7 @@ hil_process_int(struct hil_softc *hilp, u_char stat, u_char c)
 
 	case HIL_STATUS:			/* The status info. */
 		if (c & HIL_ERROR) {
-			hilp->hl_cmddone = true;
+			hilp->hl_cmddone = TRUE;
 			if (c == HIL_RECONFIG)
 				hilconfig(hilp);
 			break;
@@ -1014,7 +1007,7 @@ hil_process_int(struct hil_softc *hilp, u_char stat, u_char c)
 			if (c & HIL_POLLDATA)	/* End of data */
 				hilevent(hilp);
 			else			/* End of command */
-				hilp->hl_cmdending = true;
+				hilp->hl_cmdending = TRUE;
 			hilp->hl_actdev = 0;
 		} else {
 			if (c & HIL_POLLDATA) {	/* Start of polled data */
@@ -1037,8 +1030,8 @@ hil_process_int(struct hil_softc *hilp, u_char stat, u_char c)
 		else {
 			if (hilp->hl_cmddev != 0) {  /* Collecting cmd data */
 				if (hilp->hl_cmdending) {
-					hilp->hl_cmddone = true;
-					hilp->hl_cmdending = false;
+					hilp->hl_cmddone = TRUE;
+					hilp->hl_cmdending = FALSE;
 				} else
 					*hilp->hl_cmdbp++ = c;
 			}
@@ -1186,7 +1179,7 @@ hpuxhilevent(struct hil_softc *hilp, struct hilloopdev *dptr)
 	 */
 	if (dptr->hd_flags & HIL_ASLEEP) {
 		dptr->hd_flags &= ~HIL_ASLEEP;
-		wakeup((void *)dptr);
+		wakeup((caddr_t)dptr);
 	}
 	selnotify(&dptr->hd_selr, 0);
 }
@@ -1367,7 +1360,7 @@ hilkbdcngetc(int *statp)
 int
 hilkbdcnattach(bus_space_tag_t bst, bus_addr_t addr)
 {
-	void *va;
+	caddr_t va;
 	struct kbdmap *km;
 	bus_space_handle_t bsh;
 	u_char lang;
@@ -1809,7 +1802,7 @@ send_hildev_cmd(struct hil_softc *hilp, char device, char cmd)
 	 */
 	HILWAIT(hildevice);
 	WRITEHILCMD(hildevice, HIL_TRIGGER);
-	hilp->hl_cmddone = false;
+	hilp->hl_cmddone = FALSE;
 	do {
 		HILDATAWAIT(hildevice);
 		status = READHILSTAT(hildevice);

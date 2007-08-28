@@ -1,4 +1,4 @@
-/*	$NetBSD: sector.c,v 1.3 2007/02/22 05:31:53 thorpej Exp $	*/
+/*	$NetBSD: sector.c,v 1.1 2005/12/29 15:20:08 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sector.c,v 1.3 2007/02/22 05:31:53 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sector.c,v 1.1 2005/12/29 15:20:08 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,7 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: sector.c,v 1.3 2007/02/22 05:31:53 thorpej Exp $");
 struct sector_rw {
 	struct buf *buf;
 	void (*strategy)(struct buf *);
-	bool busy;
+	boolean_t busy;
 } __context;
 
 void *
@@ -57,7 +57,7 @@ sector_init(dev_t dev, void (*strat)(struct buf *))
 
 	if (rw->busy)
 		return 0;
-	rw->busy = true;
+	rw->busy = TRUE;
 	rw->strategy = strat;
 	rw->buf = geteblk(DEV_BSIZE);
 	rw->buf->b_dev = dev;
@@ -71,25 +71,25 @@ sector_fini(void *self)
 	struct sector_rw *rw = self;
 
 	brelse(rw->buf);
-	rw->busy = false;
+	rw->busy = FALSE;
 }
 
-bool
+boolean_t
 sector_read_n(void *self, uint8_t *buf, daddr_t sector, int count)
 {
 	int i;
 
 	for (i = 0; i < count; i++) {
 		if (!sector_read(self, buf, sector))
-			return false;
+			return FALSE;
 		buf += DEV_BSIZE;
 		sector++;
 	}
 
-	return true;
+	return TRUE;
 }
 
-bool
+boolean_t
 sector_read(void *self, uint8_t *buf, daddr_t sector)
 {
 	struct sector_rw *rw = self;
@@ -103,29 +103,29 @@ sector_read(void *self, uint8_t *buf, daddr_t sector)
 	rw->strategy(b);
 
 	if (biowait(b) != 0)
-		return false;
+		return FALSE;
 
 	memcpy(buf, b->b_data, DEV_BSIZE);
 
-	return true;
+	return TRUE;
 }
 
-bool
+boolean_t
 sector_write_n(void *self, uint8_t *buf, daddr_t sector, int count)
 {
 	int i;
 
 	for (i = 0; i < count; i++) {
 		if (!sector_write(self, buf, sector))
-			return false;
+			return FALSE;
 		buf += DEV_BSIZE;
 		sector++;
 	}
 
-	return true;
+	return TRUE;
 }
 
-bool
+boolean_t
 sector_write(void *self, uint8_t *buf, daddr_t sector)
 {
 	struct sector_rw *rw = self;
@@ -140,7 +140,7 @@ sector_write(void *self, uint8_t *buf, daddr_t sector)
 	rw->strategy(b);
 
 	if (biowait(b) != 0)
-		return false;
+		return FALSE;
 
-	return true;
+	return TRUE;
 }

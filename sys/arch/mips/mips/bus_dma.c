@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.20 2007/04/12 23:07:50 matt Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.17 2006/03/01 12:38:11 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2001 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.20 2007/04/12 23:07:50 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.17 2006/03/01 12:38:11 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -332,7 +332,7 @@ _bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map,
 	int seg, i, error, first;
 	bus_size_t minlen, resid;
 	struct iovec *iov;
-	void *addr;
+	caddr_t addr;
 
 	/*
 	 * Make sure that on error condition we return "no valid mappings."
@@ -353,7 +353,7 @@ _bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map,
 		 * until we have exhausted the residual count.
 		 */
 		minlen = resid < iov[i].iov_len ? resid : iov[i].iov_len;
-		addr = (void *)iov[i].iov_base;
+		addr = (caddr_t)iov[i].iov_base;
 
 		error = _bus_dmamap_load_buffer(t, map, addr, minlen,
 		    uio->uio_vmspace, flags, &lastaddr, &seg, first);
@@ -646,7 +646,7 @@ _bus_dmamem_free(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs)
  */
 int
 _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
-    size_t size, void **kvap, int flags)
+    size_t size, caddr_t *kvap, int flags)
 {
 	vaddr_t va;
 	bus_addr_t addr;
@@ -660,9 +660,9 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 	 */
 	if (nsegs == 1) {
 		if (flags & BUS_DMA_COHERENT)
-			*kvap = (void *)MIPS_PHYS_TO_KSEG1(segs[0].ds_addr);
+			*kvap = (caddr_t)MIPS_PHYS_TO_KSEG1(segs[0].ds_addr);
 		else
-			*kvap = (void *)MIPS_PHYS_TO_KSEG0(segs[0].ds_addr);
+			*kvap = (caddr_t)MIPS_PHYS_TO_KSEG0(segs[0].ds_addr);
 		return (0);
 	}
 
@@ -673,7 +673,7 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 	if (va == 0)
 		return (ENOMEM);
 
-	*kvap = (void *)va;
+	*kvap = (caddr_t)va;
 
 	for (curseg = 0; curseg < nsegs; curseg++) {
 		for (addr = segs[curseg].ds_addr;
@@ -696,7 +696,7 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
  * bus-specific DMA memory unmapping functions.
  */
 void
-_bus_dmamem_unmap(bus_dma_tag_t t, void *kva, size_t size)
+_bus_dmamem_unmap(bus_dma_tag_t t, caddr_t kva, size_t size)
 {
 
 #ifdef DIAGNOSTIC
@@ -708,8 +708,8 @@ _bus_dmamem_unmap(bus_dma_tag_t t, void *kva, size_t size)
 	 * Nothing to do if we mapped it with KSEG0 or KSEG1 (i.e.
 	 * not in KSEG2).
 	 */
-	if (kva >= (void *)MIPS_KSEG0_START &&
-	    kva < (void *)MIPS_KSEG2_START)
+	if (kva >= (caddr_t)MIPS_KSEG0_START &&
+	    kva < (caddr_t)MIPS_KSEG2_START)
 		return;
 
 	size = round_page(size);
@@ -727,7 +727,6 @@ _bus_dmamem_mmap(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
     off_t off, int prot, int flags)
 {
 	int i;
-	paddr_t pa;
 
 	for (i = 0; i < nsegs; i++) {
 #ifdef DIAGNOSTIC
@@ -744,9 +743,7 @@ _bus_dmamem_mmap(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 			continue;
 		}
 
-		pa = (paddr_t)segs[i].ds_addr + off;
-
-		return mips_btop(pa);
+		return (mips_btop((paddr_t)segs[i].ds_addr + off));
 	}
 
 	/* Page not found. */

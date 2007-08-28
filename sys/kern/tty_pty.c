@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_pty.c,v 1.101 2007/04/17 19:52:56 pooka Exp $	*/
+/*	$NetBSD: tty_pty.c,v 1.96 2006/11/01 10:17:59 yamt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_pty.c,v 1.101 2007/04/17 19:52:56 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_pty.c,v 1.96 2006/11/01 10:17:59 yamt Exp $");
 
 #include "opt_compat_sunos.h"
 #include "opt_ptm.h"
@@ -76,7 +76,7 @@ struct	pt_softc {
 
 static struct pt_softc **pt_softc = NULL;	/* pty array */
 static int maxptys = DEFAULT_MAXPTYS;	/* maximum number of ptys (sysctable) */
-kmutex_t pt_softc_mutex;
+struct simplelock pt_softc_mutex = SIMPLELOCK_INITIALIZER;
 int npty = 0;			/* for pstat -t */
 
 #define	PF_PKT		0x08		/* packet mode */
@@ -139,11 +139,11 @@ pty_isfree(int minor, int lock)
 {
 	struct pt_softc *pt = pt_softc[minor];
 	if (lock)
-		mutex_enter(&pt_softc_mutex);
+		simple_lock(&pt_softc_mutex);
 	minor = pt == NULL || pt->pt_tty == NULL ||
 	    pt->pt_tty->t_oproc == NULL;
 	if (lock)
-		mutex_exit(&pt_softc_mutex);
+		simple_unlock(&pt_softc_mutex);
 	return minor;
 }
 
@@ -193,13 +193,13 @@ pty_check(int ptn)
 		 * content to newly allocated, larger space; we also
 		 * need to be safe against pty_maxptys().
 		 */
-		mutex_enter(&pt_softc_mutex);
+		simple_lock(&pt_softc_mutex);
 
 		if (newnpty >= maxptys) {
 			/* limit cut away beneath us... */
 			newnpty = maxptys;
 			if (ptn >= newnpty) {
-				mutex_exit(&pt_softc_mutex);
+				simple_unlock(&pt_softc_mutex);
 				free(newpt, M_DEVBUF);
 				goto limit_reached;
 			}
@@ -220,7 +220,7 @@ pty_check(int ptn)
 			oldpt = newpt;
 		}
 
-		mutex_exit(&pt_softc_mutex);
+		simple_unlock(&pt_softc_mutex);
 		free(oldpt, M_DEVBUF);
 	}
 
@@ -236,7 +236,7 @@ pty_check(int ptn)
 
 	 	pti->pt_tty = ttymalloc();
 
-		mutex_enter(&pt_softc_mutex);
+		simple_lock(&pt_softc_mutex);
 
 		/*
 		 * Check the entry again - it might have been
@@ -250,7 +250,7 @@ pty_check(int ptn)
 			free(pti, M_DEVBUF);
 		}
 
-		mutex_exit(&pt_softc_mutex);
+		simple_unlock(&pt_softc_mutex);
 	}
 
 	return (0);
@@ -271,7 +271,7 @@ pty_maxptys(newmax, set)
 	 * We have to grab the pt_softc lock, so that we would pick correct
 	 * value of npty (might be modified in pty_check()).
 	 */
-	mutex_enter(&pt_softc_mutex);
+	simple_lock(&pt_softc_mutex);
 
 	/*
 	 * The value cannot be set to value lower than the highest pty
@@ -282,7 +282,7 @@ pty_maxptys(newmax, set)
 	else
 		newmax = 0;
 
-	mutex_exit(&pt_softc_mutex);
+	simple_unlock(&pt_softc_mutex);
 
 	return newmax;
 }
@@ -294,9 +294,6 @@ void
 ptyattach(n)
 	int n;
 {
-
-	mutex_init(&pt_softc_mutex, MUTEX_DEFAULT, IPL_NONE);
-
 	/* maybe should allow 0 => none? */
 	if (n <= 1)
 		n = DEFAULT_NPTYS;
@@ -331,8 +328,8 @@ ptsopen(dev_t dev, int flag, int devtype, struct lwp *l)
 		tp->t_cflag = TTYDEF_CFLAG;
 		tp->t_ispeed = tp->t_ospeed = TTYDEF_SPEED;
 		ttsetwater(tp);		/* would be done in xxparam() */
-	} else if (kauth_authorize_device_tty(l->l_cred, KAUTH_DEVICE_TTY_OPEN,
-	    tp) != 0)
+	} else if (ISSET(tp->t_state, TS_XCLUDE) &&
+	    kauth_cred_geteuid(l->l_cred) != 0)
 		return (EBUSY);
 	if (tp->t_oproc)			/* Ctrlr still around. */
 		SET(tp->t_state, TS_CARR_ON);
@@ -387,17 +384,15 @@ ptsread(dev, uio, flag)
 
 again:
 	if (pti->pt_flags & PF_REMOTE) {
-		while (isbackground(p, tp)) {	/* XXXSMP */
-			if (sigismasked(curlwp, SIGTTIN) ||
+		while (isbackground(p, tp)) {
+			if (sigismasked(p, SIGTTIN) ||
 			    p->p_pgrp->pg_jobc == 0 ||
-			    p->p_flag & PS_PPWAIT)
+			    p->p_flag & P_PPWAIT)
 				return (EIO);
-			mutex_enter(&proclist_mutex);
 			pgsignal(p->p_pgrp, SIGTTIN, 1);
-			mutex_exit(&proclist_mutex);
 			s = spltty();
 			TTY_LOCK(tp);
-			error = ttysleep(tp, (void *)&lbolt,
+			error = ttysleep(tp, (caddr_t)&lbolt,
 					 TTIPRI | PCATCH | PNORELOCK, ttybg, 0);
 			splx(s);
 			if (error)
@@ -411,7 +406,7 @@ again:
 				splx(s);
 				return (EWOULDBLOCK);
 			}
-			error = ttysleep(tp, (void *)&tp->t_canq,
+			error = ttysleep(tp, (caddr_t)&tp->t_canq,
 					 TTIPRI | PCATCH | PNORELOCK, ttyin, 0);
 			splx(s);
 			if (error)
@@ -496,7 +491,7 @@ ptsstart(tp)
 	}
 
 	selnotify(&pti->pt_selr, NOTE_SUBMIT);
-	wakeup((void *)&tp->t_outq.c_cf);
+	wakeup((caddr_t)&tp->t_outq.c_cf);
 }
 
 /*
@@ -521,11 +516,11 @@ ptsstop(tp, flush)
 	/* change of perspective */
 	if (flush & FREAD) {
 		selnotify(&pti->pt_selw, NOTE_SUBMIT);
-		wakeup((void *)&tp->t_rawq.c_cf);
+		wakeup((caddr_t)&tp->t_rawq.c_cf);
 	}
 	if (flush & FWRITE) {
 		selnotify(&pti->pt_selr, NOTE_SUBMIT);
-		wakeup((void *)&tp->t_outq.c_cf);
+		wakeup((caddr_t)&tp->t_outq.c_cf);
 	}
 }
 
@@ -541,11 +536,11 @@ ptcwakeup(tp, flag)
 	TTY_LOCK(tp);
 	if (flag & FREAD) {
 		selnotify(&pti->pt_selr, NOTE_SUBMIT);
-		wakeup((void *)&tp->t_outq.c_cf);
+		wakeup((caddr_t)&tp->t_outq.c_cf);
 	}
 	if (flag & FWRITE) {
 		selnotify(&pti->pt_selw, NOTE_SUBMIT);
-		wakeup((void *)&tp->t_rawq.c_cf);
+		wakeup((caddr_t)&tp->t_rawq.c_cf);
 	}
 	TTY_UNLOCK(tp);
 	splx(s);
@@ -640,7 +635,7 @@ ptcread(dev, uio, flag)
 				if (pti->pt_send & TIOCPKT_IOCTL) {
 					cc = min(uio->uio_resid,
 						sizeof(tp->t_termios));
-					uiomove((void *) &tp->t_termios,
+					uiomove((caddr_t) &tp->t_termios,
 						cc, uio);
 				}
 				pti->pt_send = 0;
@@ -666,7 +661,7 @@ ptcread(dev, uio, flag)
 			error = EWOULDBLOCK;
 			goto out;
 		}
-		error = ltsleep((void *)&tp->t_outq.c_cf, TTIPRI | PCATCH,
+		error = ltsleep((caddr_t)&tp->t_outq.c_cf, TTIPRI | PCATCH,
 				ttyin, 0, &tp->t_slock);
 		if (error)
 			goto out;
@@ -697,7 +692,7 @@ ptcread(dev, uio, flag)
 	if (tp->t_outq.c_cc <= tp->t_lowat) {
 		if (ISSET(tp->t_state, TS_ASLEEP)) {
 			CLR(tp->t_state, TS_ASLEEP);
-			wakeup((void *)&tp->t_outq);
+			wakeup((caddr_t)&tp->t_outq);
 		}
 		selnotify(&tp->t_wsel, NOTE_SUBMIT);
 	}
@@ -738,7 +733,7 @@ again:
 				cp = locbuf;
 				TTY_UNLOCK(tp);
 				splx(s);
-				error = uiomove((void *)cp, cc, uio);
+				error = uiomove((caddr_t)cp, cc, uio);
 				if (error)
 					return (error);
 				s = spltty();
@@ -760,7 +755,7 @@ again:
 		}
 		(void) putc(0, &tp->t_canq);
 		ttwakeup(tp);
-		wakeup((void *)&tp->t_canq);
+		wakeup((caddr_t)&tp->t_canq);
 		error = 0;
 		goto out;
 	}
@@ -770,7 +765,7 @@ again:
 			cp = locbuf;
 			TTY_UNLOCK(tp);
 			splx(s);
-			error = uiomove((void *)cp, cc, uio);
+			error = uiomove((caddr_t)cp, cc, uio);
 			if (error)
 				return (error);
 			s = spltty();
@@ -786,7 +781,7 @@ again:
 		while (cc > 0) {
 			if ((tp->t_rawq.c_cc + tp->t_canq.c_cc) >= TTYHOG - 2 &&
 			   (tp->t_canq.c_cc > 0 || !ISSET(tp->t_lflag, ICANON))) {
-				wakeup((void *)&tp->t_rawq);
+				wakeup((caddr_t)&tp->t_rawq);
 				goto block;
 			}
 			/* XXX - should change l_rint to be called with lock
@@ -822,7 +817,7 @@ block:
 		error = cnt == 0 ? EWOULDBLOCK : 0;
 		goto out;
 	}
-	error = ltsleep((void *)&tp->t_rawq.c_cf, TTOPRI | PCATCH | PNORELOCK,
+	error = ltsleep((caddr_t)&tp->t_rawq.c_cf, TTOPRI | PCATCH | PNORELOCK,
 		       ttyout, 0, &tp->t_slock);
 	splx(s);
 	if (error) {
@@ -1014,7 +1009,7 @@ int
 ptyioctl(dev, cmd, data, flag, l)
 	dev_t dev;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 	int flag;
 	struct lwp *l;
 {
@@ -1118,7 +1113,7 @@ ptyioctl(dev, cmd, data, flag, l)
 			break;
 
 		case TIOCSIG:
-			sig = (int)(long)*(void **)data;
+			sig = (int)(long)*(caddr_t *)data;
 			if (sig <= 0 || sig >= NSIG)
 				return (EINVAL);
 			TTY_LOCK(tp);
@@ -1128,9 +1123,7 @@ ptyioctl(dev, cmd, data, flag, l)
 			    (!ISSET(tp->t_lflag, NOKERNINFO)))
 				ttyinfo(tp, 1);
 			TTY_UNLOCK(tp);
-			mutex_enter(&proclist_mutex);
 			pgsignal(tp->t_pgrp, sig, 1);
-			mutex_exit(&proclist_mutex);
 			return(0);
 		}
 

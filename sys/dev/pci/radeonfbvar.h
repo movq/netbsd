@@ -1,4 +1,4 @@
-/* $NetBSD: radeonfbvar.h,v 1.6 2007/08/03 05:40:47 macallan Exp $ */
+/* $NetBSD: radeonfbvar.h,v 1.2.10.2 2007/03/04 12:35:35 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -29,7 +29,7 @@
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- */ 
+ */
 
 /*
  * ATI Technologies Inc. ("ATI") has not assisted in the creation of, and

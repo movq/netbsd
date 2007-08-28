@@ -1,4 +1,4 @@
-/*	$NetBSD: ata.c,v 1.90 2007/07/09 21:00:30 ad Exp $	*/
+/*	$NetBSD: ata.c,v 1.83 2006/11/16 01:32:47 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.  All rights reserved.
@@ -30,9 +30,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ata.c,v 1.90 2007/07/09 21:00:30 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ata.c,v 1.83 2006/11/16 01:32:47 christos Exp $");
 
-#include "opt_ata.h"
+#ifndef ATADEBUG
+#define ATADEBUG
+#endif /* ATADEBUG */
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,8 +79,7 @@ int atadebug_mask = 0;
 #define ATADEBUG_PRINT(args, level)
 #endif
 
-POOL_INIT(ata_xfer_pool, sizeof(struct ata_xfer), 0, 0, 0, "ataspl", NULL,
-    IPL_BIO);
+POOL_INIT(ata_xfer_pool, sizeof(struct ata_xfer), 0, 0, 0, "ataspl", NULL);
 
 /*
  * A queue of atabus instances, used to ensure the same bus probe order
@@ -155,7 +156,7 @@ ata_channel_attach(struct ata_channel *chp)
 	if (chp->ch_flags & ATACH_DISABLED)
 		return;
 
-	callout_init(&chp->ch_callout, 0);
+	callout_init(&chp->ch_callout);
 
 	TAILQ_INIT(&chp->ch_queue->queue_xfer);
 	chp->ch_queue->queue_freeze = 0;
@@ -366,6 +367,24 @@ atabus_thread(void *arg)
 }
 
 /*
+ * atabus_create_thread:
+ *
+ *	Helper routine to create the ATA bus worker thread.
+ */
+static void
+atabus_create_thread(void *arg)
+{
+	struct atabus_softc *sc = arg;
+	struct ata_channel *chp = sc->sc_chan;
+	int error;
+
+	if ((error = kthread_create1(atabus_thread, sc, &chp->ch_thread,
+				     "%s", sc->sc_dev.dv_xname)) != 0)
+		aprint_error("%s: unable to create kernel thread: error %d\n",
+		    sc->sc_dev.dv_xname, error);
+}
+
+/*
  * atabus_match:
  *
  *	Autoconfiguration match routine.
@@ -396,7 +415,6 @@ atabus_attach(struct device *parent, struct device *self, void *aux)
 	struct atabus_softc *sc = (void *) self;
 	struct ata_channel *chp = aux;
 	struct atabus_initq *initq;
-	int error;
 
 	sc->sc_chan = chp;
 
@@ -410,11 +428,7 @@ atabus_attach(struct device *parent, struct device *self, void *aux)
 	initq->atabus_sc = sc;
 	TAILQ_INSERT_TAIL(&atabus_initq_head, initq, atabus_initq);
 	config_pending_incr();
-
-	if ((error = kthread_create(PRI_NONE, 0, NULL, atabus_thread, sc,
-	    &chp->ch_thread, "%s", sc->sc_dev.dv_xname)) != 0)
-		aprint_error("%s: unable to create kernel thread: error %d\n",
-		    sc->sc_dev.dv_xname, error);
+	kthread_create(atabus_create_thread, sc);
 
 	sc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
 	    atabus_powerhook, sc);
@@ -563,7 +577,7 @@ ata_get_params(struct ata_drive_datas *drvp, u_int8_t flags,
 	int i;
 	u_int16_t *p;
 
-	ATADEBUG_PRINT(("%s\n", __func__), DEBUG_FUNCS);
+	ATADEBUG_PRINT(("ata_get_parms\n"), DEBUG_FUNCS);
 
 	memset(tb, 0, DEV_BSIZE);
 	memset(prms, 0, sizeof(struct ataparams));
@@ -597,50 +611,50 @@ ata_get_params(struct ata_drive_datas *drvp, u_int8_t flags,
 		ATADEBUG_PRINT(("ata_get_parms: ata_c.flags=0x%x\n",
 		    ata_c.flags), DEBUG_FUNCS|DEBUG_PROBE);
 		return CMD_ERR;
-	}
-	/* if we didn't read any data something is wrong */
-	if ((ata_c.flags & AT_XFDONE) == 0)
-		return CMD_ERR;
+	} else {
+		/* if we didn't read any data something is wrong */
+		if ((ata_c.flags & AT_XFDONE) == 0)
+			return CMD_ERR;
+		/* Read in parameter block. */
+		memcpy(prms, tb, sizeof(struct ataparams));
 
-	/* Read in parameter block. */
-	memcpy(prms, tb, sizeof(struct ataparams));
-
-	/*
-	 * Shuffle string byte order.
-	 * ATAPI NEC, Mitsumi and Pioneer drives and
-	 * old ATA TDK CompactFlash cards
-	 * have different byte order.
-	 */
+		/*
+		 * Shuffle string byte order.
+		 * ATAPI NEC, Mitsumi and Pioneer drives and
+		 * old ATA TDK CompactFlash cards
+		 * have different byte order.
+		 */
 #if BYTE_ORDER == BIG_ENDIAN
 # define M(n)	prms->atap_model[(n) ^ 1]
 #else
 # define M(n)	prms->atap_model[n]
 #endif
-	if (
+		if (
 #if BYTE_ORDER == BIG_ENDIAN
-	    !
+		    !
 #endif
-	    ((drvp->drive_flags & DRIVE_ATAPI) ?
-	     ((M(0) == 'N' && M(1) == 'E') ||
-	      (M(0) == 'F' && M(1) == 'X') ||
-	      (M(0) == 'P' && M(1) == 'i')) :
-	     ((M(0) == 'T' && M(1) == 'D' && M(2) == 'K'))))
-		return CMD_OK;
+		    ((drvp->drive_flags & DRIVE_ATAPI) ?
+		     ((M(0) == 'N' && M(1) == 'E') ||
+		      (M(0) == 'F' && M(1) == 'X') ||
+		      (M(0) == 'P' && M(1) == 'i')) :
+		     ((M(0) == 'T' && M(1) == 'D' && M(2) == 'K'))))
+			return CMD_OK;
 #undef M
-	for (i = 0; i < sizeof(prms->atap_model); i += 2) {
-		p = (u_int16_t *)(prms->atap_model + i);
-		*p = bswap16(*p);
-	}
-	for (i = 0; i < sizeof(prms->atap_serial); i += 2) {
-		p = (u_int16_t *)(prms->atap_serial + i);
-		*p = bswap16(*p);
-	}
-	for (i = 0; i < sizeof(prms->atap_revision); i += 2) {
-		p = (u_int16_t *)(prms->atap_revision + i);
-		*p = bswap16(*p);
-	}
+		for (i = 0; i < sizeof(prms->atap_model); i += 2) {
+			p = (u_int16_t *)(prms->atap_model + i);
+			*p = bswap16(*p);
+		}
+		for (i = 0; i < sizeof(prms->atap_serial); i += 2) {
+			p = (u_int16_t *)(prms->atap_serial + i);
+			*p = bswap16(*p);
+		}
+		for (i = 0; i < sizeof(prms->atap_revision); i += 2) {
+			p = (u_int16_t *)(prms->atap_revision + i);
+			*p = bswap16(*p);
+		}
 
-	return CMD_OK;
+		return CMD_OK;
+	}
 }
 
 int
@@ -1009,24 +1023,24 @@ ata_print_modes(struct ata_channel *chp)
 		drvp = &chp->ch_drive[drive];
 		if ((drvp->drive_flags & DRIVE) == 0 || drvp->drv_softc == NULL)
 			continue;
-		aprint_verbose("%s(%s:%d:%d): using PIO mode %d",
+		aprint_normal("%s(%s:%d:%d): using PIO mode %d",
 			drvp->drv_softc->dv_xname,
 			atac->atac_dev.dv_xname,
 			chp->ch_channel, drvp->drive, drvp->PIO_mode);
 #if NATA_DMA
 		if (drvp->drive_flags & DRIVE_DMA)
-			aprint_verbose(", DMA mode %d", drvp->DMA_mode);
+			aprint_normal(", DMA mode %d", drvp->DMA_mode);
 #if NATA_UDMA
 		if (drvp->drive_flags & DRIVE_UDMA) {
-			aprint_verbose(", Ultra-DMA mode %d", drvp->UDMA_mode);
+			aprint_normal(", Ultra-DMA mode %d", drvp->UDMA_mode);
 			if (drvp->UDMA_mode == 2)
-				aprint_verbose(" (Ultra/33)");
+				aprint_normal(" (Ultra/33)");
 			else if (drvp->UDMA_mode == 4)
-				aprint_verbose(" (Ultra/66)");
+				aprint_normal(" (Ultra/66)");
 			else if (drvp->UDMA_mode == 5)
-				aprint_verbose(" (Ultra/100)");
+				aprint_normal(" (Ultra/100)");
 			else if (drvp->UDMA_mode == 6)
-				aprint_verbose(" (Ultra/133)");
+				aprint_normal(" (Ultra/133)");
 		}
 #endif	/* NATA_UDMA */
 #endif	/* NATA_DMA */
@@ -1040,9 +1054,9 @@ ata_print_modes(struct ata_channel *chp)
 		    || (atac->atac_cap & ATAC_CAP_PIOBM)
 #endif
 		    )
-			aprint_verbose(" (using DMA)");
+			aprint_normal(" (using DMA)");
 #endif	/* NATA_DMA || NATA_PIOBM */
-		aprint_verbose("\n");
+		aprint_normal("\n");
 	}
 }
 
@@ -1095,7 +1109,7 @@ ata_downgrade_mode(struct ata_drive_datas *drvp, int flags)
 
 	(*atac->atac_set_modes)(chp);
 	ata_print_modes(chp);
-	/* reset the channel, which will schedule all drives for setup */
+	/* reset the channel, which will shedule all drives for setup */
 	ata_reset_channel(chp, flags | AT_RST_NOCMD);
 	return 1;
 }
@@ -1137,7 +1151,7 @@ ata_probe_caps(struct ata_drive_datas *drvp)
 			drvp->drive_flags &= ~DRIVE_CAP32;
 			splx(s);
 		} else {
-			aprint_verbose("%s: 32-bit data port\n",
+			aprint_normal("%s: 32-bit data port\n",
 			    drv_dev->dv_xname);
 		}
 	}
@@ -1146,7 +1160,7 @@ ata_probe_caps(struct ata_drive_datas *drvp)
 	    params.atap_ata_major != 0xffff) {
 		for (i = 14; i > 0; i--) {
 			if (params.atap_ata_major & (1 << i)) {
-				aprint_verbose("%s: ATA version %d\n",
+				aprint_normal("%s: ATA version %d\n",
 				    drv_dev->dv_xname, i);
 				drvp->ata_vers = i;
 				break;
@@ -1192,7 +1206,7 @@ ata_probe_caps(struct ata_drive_datas *drvp)
 				   AT_WAIT) != CMD_OK)
 					continue;
 			if (!printed) {
-				aprint_verbose("%s: drive supports PIO mode %d",
+				aprint_normal("%s: drive supports PIO mode %d",
 				    drv_dev->dv_xname, i + 3);
 				sep = ",";
 				printed = 1;
@@ -1230,7 +1244,7 @@ ata_probe_caps(struct ata_drive_datas *drvp)
 					continue;
 #endif
 			if (!printed) {
-				aprint_verbose("%s DMA mode %d", sep, i);
+				aprint_normal("%s DMA mode %d", sep, i);
 				sep = ",";
 				printed = 1;
 			}
@@ -1262,16 +1276,16 @@ ata_probe_caps(struct ata_drive_datas *drvp)
 						continue;
 #endif
 				if (!printed) {
-					aprint_verbose("%s Ultra-DMA mode %d",
+					aprint_normal("%s Ultra-DMA mode %d",
 					    sep, i);
 					if (i == 2)
-						aprint_verbose(" (Ultra/33)");
+						aprint_normal(" (Ultra/33)");
 					else if (i == 4)
-						aprint_verbose(" (Ultra/66)");
+						aprint_normal(" (Ultra/66)");
 					else if (i == 5)
-						aprint_verbose(" (Ultra/100)");
+						aprint_normal(" (Ultra/100)");
 					else if (i == 6)
-						aprint_verbose(" (Ultra/133)");
+						aprint_normal(" (Ultra/133)");
 					sep = ",";
 					printed = 1;
 				}
@@ -1290,7 +1304,7 @@ ata_probe_caps(struct ata_drive_datas *drvp)
 				break;
 			}
 		}
-		aprint_verbose("\n");
+		aprint_normal("\n");
 	}
 
 	s = splbio();
@@ -1398,7 +1412,7 @@ atabusclose(dev_t dev, int flag, int fmt,
 }
 
 int
-atabusioctl(dev_t dev, u_long cmd, void *addr, int flag,
+atabusioctl(dev_t dev, u_long cmd, caddr_t addr, int flag,
     struct lwp *l)
 {
 	struct atabus_softc *sc = atabus_cd.cd_devs[minor(dev)];

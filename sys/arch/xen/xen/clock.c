@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.39 2007/07/10 16:27:58 he Exp $	*/
+/*	$NetBSD: clock.c,v 1.34.2.2 2007/07/16 10:07:26 liamjfoy Exp $	*/
 
 /*
  *
@@ -34,7 +34,7 @@
 #include "opt_xen.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.39 2007/07/10 16:27:58 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.34.2.2 2007/07/16 10:07:26 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -94,7 +94,7 @@ static volatile uint64_t xen_clock_bias = 0;
 #ifdef DOM0OPS
 /* If we're dom0, send our time to Xen every minute or so. */
 int xen_timepush_ticks = 0;
-static callout_t xen_timepush_co;
+static struct callout xen_timepush_co = CALLOUT_INITIALIZER;
 #endif
 
 #define NS_PER_TICK (1000000000ULL/hz)
@@ -444,7 +444,7 @@ xen_delay(int n)
 static void
 xen_timepush(void *arg)
 {
-	callout_t *co = arg;
+	struct callout *co = arg;
 
 	resettodr();
 	if (xen_timepush_ticks > 0)
@@ -498,9 +498,6 @@ xen_initclocks()
 {
 	int evtch;
 
-#ifdef DOM0OPS
-	callout_init(&xen_timepush_co, 0);
-#endif
 	evtch = bind_virq_to_evtch(VIRQ_TIMER);
 	aprint_verbose("Xen clock: using event channel %d\n", evtch);
 
@@ -577,7 +574,7 @@ setstatclockrate(int arg)
 void
 idle_block(void)
 {
-	int r;
+	int s, r;
 
 	/*
 	 * We set the timer to when we expect the next timer
@@ -585,9 +582,9 @@ idle_block(void)
 	 * easily find out when we will have more work (callouts) to
 	 * process from hardclock.
 	 */
+	s = splclock();
 	r = HYPERVISOR_set_timer_op(processed_system_time + NS_PER_TICK);
+	splx(s);
 	if (r == 0)
 		HYPERVISOR_block();
-	else
-		__sti();
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: linux_sg.c,v 1.10 2007/03/04 06:01:24 christos Exp $ */
+/* $NetBSD: linux_sg.c,v 1.8 2006/09/13 00:51:12 christos Exp $ */
 
 /*
  * Copyright (c) 2004 Soren S. Jorvang.  All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_sg.c,v 1.10 2007/03/04 06:01:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_sg.c,v 1.8 2006/09/13 00:51:12 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_sg.c,v 1.10 2007/03/04 06:01:24 christos Exp $
 #include <dev/scsipi/scsipi_all.h>
 #include <dev/scsipi/scsiconf.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/linux/common/linux_types.h>
@@ -141,7 +142,7 @@ linux_ioctl_sg(struct lwp *l, struct linux_sys_ioctl_args *uap,
 		req.datalen = lreq.dxfer_len;
 		req.databuf = lreq.dxferp;
 
-		error = ioctlf(fp, SCIOCCOMMAND, (void *)&req, l);
+		error = ioctlf(fp, SCIOCCOMMAND, (caddr_t)&req, l);
 		if (error) {
 			DPRINTF(("SCIOCCOMMAND failed %d\n", error));
 			break;

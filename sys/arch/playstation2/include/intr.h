@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.5 2007/06/17 06:04:29 tsutsui Exp $	*/
+/*	$NetBSD: intr.h,v 1.3 2002/01/02 12:36:21 uch Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -43,7 +43,6 @@
 #include <sys/device.h>
 #include <sys/lock.h>
 #include <sys/queue.h>
-#include <mips/locore.h>
 
 /* Interrupt sharing types. */
 #define	IST_NONE		0	/* none */
@@ -97,6 +96,7 @@ extern u_int32_t __icu_mask[_IPL_N];
 #define	splsoftnet()		splraise(__icu_mask[IPL_SOFTNET])
 #define	splsoftserial()		splraise(__icu_mask[IPL_SOFTSERIAL])
 
+#define	spllowersoftclock()	splset(__icu_mask[IPL_SOFTCLOCK])
 void	spllowersofthigh(void);
 
 /*
@@ -151,13 +151,14 @@ extern struct playstation2_soft_intrhand *softnet_intrhand;
 
 #define	setsoftnet()	softintr_schedule(softnet_intrhand)
 
-int splraise(int);
-void splset(int);
-void spl0(void);
+extern int splraise(int);
+extern void splset(int);
+extern void spl0(void);
+extern int _splset(int);
 
 /* R5900 EI/DI instruction */
-int _intr_suspend(void);
-void _intr_resume(int);
+extern int _intr_suspend(void);
+extern void _intr_resume(int);
 
 #endif /* _KERNEL */
 #endif /* _PLAYSTATION2_INTR_H_ */

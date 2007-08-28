@@ -1,5 +1,5 @@
 /*	$OpenBSD: if_rum.c,v 1.40 2006/09/18 16:20:20 damien Exp $	*/
-/*	$NetBSD: if_rum.c,v 1.15 2007/08/26 22:45:59 dyoung Exp $	*/
+/*	$NetBSD: if_rum.c,v 1.3.2.4 2007/09/29 08:53:17 xtraeme Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 Damien Bergamini <damien.bergamini@free.fr>
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.15 2007/08/26 22:45:59 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.3.2.4 2007/09/29 08:53:17 xtraeme Exp $");
 
 #include "bpfilter.h"
 
@@ -80,7 +80,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.15 2007/08/26 22:45:59 dyoung Exp $");
 #ifdef RUM_DEBUG
 #define DPRINTF(x)	do { if (rum_debug) logprintf x; } while (0)
 #define DPRINTFN(n, x)	do { if (rum_debug >= (n)) logprintf x; } while (0)
-int rum_debug = 1;
+int rum_debug = 0;
 #else
 #define DPRINTF(x)
 #define DPRINTFN(n, x)
@@ -160,7 +160,7 @@ Static int		rum_tx_data(struct rum_softc *, struct mbuf *,
 			    struct ieee80211_node *);
 Static void		rum_start(struct ifnet *);
 Static void		rum_watchdog(struct ifnet *);
-Static int		rum_ioctl(struct ifnet *, u_long, void *);
+Static int		rum_ioctl(struct ifnet *, u_long, caddr_t);
 Static void		rum_eeprom_read(struct rum_softc *, uint16_t, void *,
 			    int);
 Static uint32_t		rum_read(struct rum_softc *, uint16_t);
@@ -239,6 +239,9 @@ USB_DECLARE_DRIVER(rum);
 USB_MATCH(rum)
 {
 	USB_MATCH_START(rum, uaa);
+
+	if (uaa->iface != NULL)
+		return UMATCH_NONE;
 
 	return (usb_lookup(rum_devs, uaa->vendor, uaa->product) != NULL) ?
 	    UMATCH_VENDOR_PRODUCT : UMATCH_NONE;
@@ -351,11 +354,11 @@ USB_ATTACH(rum)
 	}
 
 	usb_init_task(&sc->sc_task, rum_task, sc);
-	usb_callout_init(sc->sc_scan_ch);
+	callout_init(&sc->scan_ch);
 
 	sc->amrr.amrr_min_success_threshold =  1;
 	sc->amrr.amrr_max_success_threshold = 10;
-	usb_callout_init(sc->sc_amrr_ch);
+	callout_init(&sc->amrr_ch);
 
 	/* retrieve RT2573 rev. no */
 	for (ntries = 0; ntries < 1000; ntries++) {
@@ -477,15 +480,12 @@ USB_DETACH(rum)
 	struct ifnet *ifp = &sc->sc_if;
 	int s;
 
-	if (!ifp->if_softc)
-		return 0;
-
 	s = splusb();
 
 	rum_stop(ifp, 1);
 	usb_rem_task(sc->sc_udev, &sc->sc_task);
-	usb_uncallout(sc->sc_scan_ch, rum_next_scan, sc);
-	usb_uncallout(sc->sc_amrr_ch, rum_amrr_timeout, sc);
+	callout_stop(&sc->scan_ch);
+	callout_stop(&sc->amrr_ch);
 
 	if (sc->amrr_xfer != NULL) {
 		usbd_free_xfer(sc->amrr_xfer);
@@ -501,6 +501,9 @@ USB_DETACH(rum)
 		usbd_abort_pipe(sc->sc_tx_pipeh);
 		usbd_close_pipe(sc->sc_tx_pipeh);
 	}
+
+	rum_free_rx_list(sc);
+	rum_free_tx_list(sc);
 
 #if NBPFILTER > 0
 	bpfdetach(ifp);
@@ -700,7 +703,7 @@ rum_task(void *arg)
 
 	case IEEE80211_S_SCAN:
 		rum_set_chan(sc, ic->ic_curchan);
-		usb_callout(sc->sc_scan_ch, hz / 5, rum_next_scan, sc);
+		callout_reset(&sc->scan_ch, hz / 5, rum_next_scan, sc);
 		break;
 
 	case IEEE80211_S_AUTH:
@@ -748,8 +751,8 @@ rum_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 	struct rum_softc *sc = ic->ic_ifp->if_softc;
 
 	usb_rem_task(sc->sc_udev, &sc->sc_task);
-	usb_uncallout(sc->sc_scan_ch, rum_next_scan, sc);
-	usb_uncallout(sc->sc_amrr_ch, rum_amrr_timeout, sc);
+	callout_stop(&sc->scan_ch);
+	callout_stop(&sc->amrr_ch);
 
 	/* do it in a process context */
 	sc->sc_state = nstate;
@@ -871,7 +874,7 @@ rum_rxeof(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 
 	/* finalize mbuf */
 	m->m_pkthdr.rcvif = ifp;
-	m->m_data = (void *)(desc + 1);
+	m->m_data = (caddr_t)(desc + 1);
 	m->m_pkthdr.len = m->m_len = (le32toh(desc->flags) >> 16) & 0xfff;
 
 	s = splnet();
@@ -1140,8 +1143,7 @@ rum_tx_mgt(struct rum_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 		xferlen += 4;
 
 	DPRINTFN(10, ("sending msg frame len=%zu rate=%u xfer len=%u\n",
-	    (size_t)m0->m_pkthdr.len + RT2573_TX_DESC_SIZE,
-	    rate, xferlen));
+	    (size_t)m0->m_pkthdr.len + RT2573_TX_DESC_SIZE, rate, xferlen));
 
 	usbd_setup_xfer(data->xfer, sc->sc_tx_pipeh, data, data->buf, xferlen,
 	    USBD_FORCE_SHORT_XFER | USBD_NO_COPY, RUM_TX_TIMEOUT, rum_txeof);
@@ -1231,8 +1233,7 @@ rum_tx_data(struct rum_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 		xferlen += 4;
 
 	DPRINTFN(10, ("sending data frame len=%zu rate=%u xfer len=%u\n",
-	    (size_t)m0->m_pkthdr.len + RT2573_TX_DESC_SIZE,
-	    rate, xferlen));
+	    (size_t)m0->m_pkthdr.len + RT2573_TX_DESC_SIZE, rate, xferlen));
 
 	usbd_setup_xfer(data->xfer, sc->sc_tx_pipeh, data, data->buf, xferlen,
 	    USBD_FORCE_SHORT_XFER | USBD_NO_COPY, RUM_TX_TIMEOUT, rum_txeof);
@@ -1343,7 +1344,7 @@ rum_watchdog(struct ifnet *ifp)
 }
 
 Static int
-rum_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+rum_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct rum_softc *sc = ifp->if_softc;
 	struct ieee80211com *ic = &sc->sc_ic;
@@ -1982,7 +1983,7 @@ rum_init(struct ifnet *ifp)
 	/* clear STA registers */
 	rum_read_multi(sc, RT2573_STA_CSR0, sc->sta, sizeof sc->sta);
 
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, CLLADDR(ifp->if_sadl));
+	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
 	rum_set_macaddr(sc, ic->ic_myaddr);
 
 	/* initialize ASIC */
@@ -2185,7 +2186,7 @@ rum_amrr_start(struct rum_softc *sc, struct ieee80211_node *ni)
 	     i--);
 	ni->ni_txrate = i;
 
-	usb_callout(sc->sc_amrr_ch, hz, rum_amrr_timeout, sc);
+	callout_reset(&sc->amrr_ch, hz, rum_amrr_timeout, sc);
 }
 
 Static void
@@ -2241,7 +2242,7 @@ rum_amrr_update(usbd_xfer_handle xfer, usbd_private_handle priv,
 
 	ieee80211_amrr_choose(&sc->amrr, sc->sc_ic.ic_bss, &sc->amn);
 
-	usb_callout(sc->sc_amrr_ch, hz, rum_amrr_timeout, sc);
+	callout_reset(&sc->amrr_ch, hz, rum_amrr_timeout, sc);
 }
 
 int

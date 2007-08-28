@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.c,v 1.69 2007/03/04 05:59:57 christos Exp $	*/
+/*	$NetBSD: mem.c,v 1.67 2006/11/16 01:32:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -77,10 +77,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.69 2007/03/04 05:59:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.67 2006/11/16 01:32:38 christos Exp $");
 
 #include "opt_compat_netbsd.h"
-#include "opt_compat_freebsd.h"
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -90,7 +89,6 @@ __KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.69 2007/03/04 05:59:57 christos Exp $");
 #include <sys/proc.h>
 #include <sys/fcntl.h>
 #include <sys/conf.h>
-#include <sys/kauth.h>
 
 #include <machine/cpu.h>
 
@@ -99,7 +97,7 @@ __KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.69 2007/03/04 05:59:57 christos Exp $");
 #define	DEV_IO	14		/* iopl for compat_10 */
 
 extern char *vmmap;            /* poor name! */
-void *zeropage;
+caddr_t zeropage;
 
 dev_type_open(mmopen);
 dev_type_read(mmrw);
@@ -119,18 +117,11 @@ mmopen(dev_t dev, int flag, int mode, struct lwp *l)
 {
 
 	switch (minor(dev)) {
-#if defined(COMPAT_10) || defined(COMPAT_FREEBSD)
+#ifdef COMPAT_10
 	/* This is done by i386_iopl(3) now. */
 	case DEV_IO:
 		if (flag & FWRITE) {
 			struct trapframe *fp;
-			int error;
-
-			error = kauth_authorize_machdep(l->l_cred,
-			    KAUTH_MACHDEP_IOPL, NULL, NULL, NULL, NULL);
-			if (error)
-				return (error);
-
 			fp = curlwp->l_md.md_regs;
 			fp->tf_eflags |= PSL_IOPL;
 		}
@@ -160,7 +151,7 @@ mmrw(dev_t dev, struct uio *uio, int flags)
 		/* lock against other uses of shared vmmap */
 		while (physlock > 0) {
 			physlock++;
-			error = tsleep((void *)&physlock, PZERO | PCATCH,
+			error = tsleep((caddr_t)&physlock, PZERO | PCATCH,
 			    "mmrw", 0);
 			if (error)
 				return (error);
@@ -190,7 +181,7 @@ mmrw(dev_t dev, struct uio *uio, int flags)
 			pmap_update(pmap_kernel());
 			o = uio->uio_offset & PGOFSET;
 			c = min(uio->uio_resid, (int)(PAGE_SIZE - o));
-			error = uiomove((char *)vmmap + o, c, uio);
+			error = uiomove((caddr_t)vmmap + o, c, uio);
 			pmap_remove(pmap_kernel(), (vaddr_t)vmmap,
 			    (vaddr_t)vmmap + PAGE_SIZE);
 			pmap_update(pmap_kernel());
@@ -199,10 +190,10 @@ mmrw(dev_t dev, struct uio *uio, int flags)
 		case DEV_KMEM:
 			v = uio->uio_offset;
 			c = min(iov->iov_len, MAXPHYS);
-			if (!uvm_kernacc((void *)v, c,
+			if (!uvm_kernacc((caddr_t)v, c,
 			    uio->uio_rw == UIO_READ ? B_READ : B_WRITE))
 				return (EFAULT);
-			error = uiomove((void *)v, c, uio);
+			error = uiomove((caddr_t)v, c, uio);
 			break;
 
 		case DEV_NULL:
@@ -216,7 +207,7 @@ mmrw(dev_t dev, struct uio *uio, int flags)
 				return (0);
 			}
 			if (zeropage == NULL) {
-				zeropage = (void *)
+				zeropage = (caddr_t)
 				    malloc(PAGE_SIZE, M_TEMP, M_WAITOK);
 				memset(zeropage, 0, PAGE_SIZE);
 			}
@@ -230,7 +221,7 @@ mmrw(dev_t dev, struct uio *uio, int flags)
 	}
 	if (minor(dev) == DEV_MEM) {
 		if (physlock > 1)
-			wakeup((void *)&physlock);
+			wakeup((caddr_t)&physlock);
 		physlock = 0;
 	}
 	return (error);

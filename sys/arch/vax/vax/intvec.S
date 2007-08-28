@@ -1,4 +1,4 @@
-/*	$NetBSD: intvec.S,v 1.12 2007/04/06 17:45:41 matt Exp $   */
+/*	$NetBSD: intvec.S,v 1.10 2006/03/12 02:04:26 christos Exp $   */
 
 /*
  * Copyright (c) 1994, 1997 Ludd, University of Lule}, Sweden.
@@ -350,7 +350,9 @@ softintr_dispatch:
 	beql	3f			# nope return
 	pushl	%r7			# we need to use %r7 so save it
 	movl	%r0, %r7			# move first item to %r7
-1:	bbcc	$0,SH_PENDING(%r7),2f	# need call this one?
+1:	tstl	SH_PENDING(%r7)		# need call this one?
+	bneq	2f			# nope, go to next one
+	clrl	SH_PENDING(%r7)		# clear pending flag
 	pushl	SH_ARG(%r7)		# push function argument
 	calls	$1, *SH_FUNC(%r7)	# call function
 2:	movl	SH_NEXT(%r7), %r7		# get next handler

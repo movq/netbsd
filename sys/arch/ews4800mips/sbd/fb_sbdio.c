@@ -1,4 +1,4 @@
-/*	$NetBSD: fb_sbdio.c,v 1.5 2007/03/17 13:51:46 msaitoh Exp $	*/
+/*	$NetBSD: fb_sbdio.c,v 1.2 2006/04/12 19:38:22 jmmv Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
 #define WIRED_FB_TLB
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fb_sbdio.c,v 1.5 2007/03/17 13:51:46 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fb_sbdio.c,v 1.2 2006/04/12 19:38:22 jmmv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,7 +78,7 @@ void fb_sbdio_attach(struct device *, struct device *, void *);
 CFATTACH_DECL(fb_sbdio, sizeof(struct fb_softc),
     fb_sbdio_match, fb_sbdio_attach, NULL, NULL);
 
-int _fb_ioctl(void *, void *, u_long, void *, int, struct lwp *);
+int _fb_ioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
 paddr_t _fb_mmap(void *, void *, off_t, int);
 int _fb_alloc_screen(void *, const struct wsscreen_descr *, void **,
     int *, int *, long *);
@@ -203,7 +203,7 @@ fb_common_init(struct rasops_info *ri, struct ga *ga)
 	 * 128	 dark gray
 	 * 255	 white
 	 * other black
-	 * When CLUT isn't initialized for NetBSD, use black-red pair.
+	 * When CLUT isn't intialized for NetBSD, use black-red pair.
 	 */
 	ri->ri_flg = RI_CENTER | RI_CLEAR;
 	if (!ga_active)
@@ -276,7 +276,7 @@ fb_sbdio_cnattach(uint32_t mem, uint32_t reg, int flags)
 }
 
 int
-_fb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
+_fb_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct fb_softc *sc = v;
 	struct wsdisplay_fbinfo *fbinfo = (void *)data;
@@ -399,12 +399,12 @@ fb_pmap_enter(paddr_t fb_paddr, paddr_t reg_paddr,
 	reg_paddr = reg_paddr & ~MIPS3_WIRED_OFFMASK;
 	va = GA_FRB_ADDR;
 
-	if (mips3_wired_enter_page(va, fb_paddr, pgsize) == false) {
+	if (mips3_wired_enter_page(va, fb_paddr, pgsize) == FALSE) {
 		printf("cannot allocate fb memory\n");
 		return;
 	}
 
-	if (mips3_wired_enter_page(va + pgsize, reg_paddr, pgsize) == false) {
+	if (mips3_wired_enter_page(va + pgsize, reg_paddr, pgsize) == FALSE) {
 		printf("cannot allocate fb register\n");
 		return;
 	}

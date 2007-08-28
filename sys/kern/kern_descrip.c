@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_descrip.c,v 1.159 2007/07/09 21:10:51 ad Exp $	*/
+/*	$NetBSD: kern_descrip.c,v 1.147 2006/11/01 10:17:58 yamt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_descrip.c,v 1.159 2007/07/09 21:10:51 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_descrip.c,v 1.147 2006/11/01 10:17:58 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,6 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_descrip.c,v 1.159 2007/07/09 21:10:51 ad Exp $"
 #include <sys/kauth.h>
 
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 /*
@@ -70,11 +71,11 @@ __KERNEL_RCSID(0, "$NetBSD: kern_descrip.c,v 1.159 2007/07/09 21:10:51 ad Exp $"
 struct filelist	filehead;	/* head of list of open files */
 int		nfiles;		/* actual number of open files */
 POOL_INIT(file_pool, sizeof(struct file), 0, 0, 0, "filepl",
-    &pool_allocator_nointr, IPL_NONE);
+    &pool_allocator_nointr);
 POOL_INIT(cwdi_pool, sizeof(struct cwdinfo), 0, 0, 0, "cwdipl",
-    &pool_allocator_nointr, IPL_NONE);
+    &pool_allocator_nointr);
 POOL_INIT(filedesc0_pool, sizeof(struct filedesc0), 0, 0, 0, "fdescpl",
-    &pool_allocator_nointr, IPL_NONE);
+    &pool_allocator_nointr);
 
 /* Global file list lock */
 static struct simplelock filelist_slock = SIMPLELOCK_INITIALIZER;
@@ -433,84 +434,6 @@ fcntl_forfs(int fd, struct lwp *l, int cmd, void *arg)
 	return (error);
 }
 
-int
-do_fcntl_lock(struct lwp *l, int fd, int cmd, struct flock *fl)
-{
-	struct file *fp;
-	struct vnode *vp;
-	struct proc *p = l->l_proc;
-	int error, flg;
-
-	if ((fp = fd_getfile(p->p_fd, fd)) == NULL)
-		return (EBADF);
-
-	FILE_USE(fp);
-
-	if (fp->f_type != DTYPE_VNODE) {
-		error = EINVAL;
-		goto out;
-	}
-	vp = (struct vnode *)fp->f_data;
-	if (fl->l_whence == SEEK_CUR)
-		fl->l_start += fp->f_offset;
-
-	flg = F_POSIX;
-
-	switch (cmd) {
-
-	case F_SETLKW:
-		flg |= F_WAIT;
-		/* Fall into F_SETLK */
-
-	case F_SETLK:
-		switch (fl->l_type) {
-		case F_RDLCK:
-			if ((fp->f_flag & FREAD) == 0) {
-				error = EBADF;
-				goto out;
-			}
-			p->p_flag |= PK_ADVLOCK;
-			error = VOP_ADVLOCK(vp, p, F_SETLK, fl, flg);
-			goto out;
-
-		case F_WRLCK:
-			if ((fp->f_flag & FWRITE) == 0) {
-				error = EBADF;
-				goto out;
-			}
-			p->p_flag |= PK_ADVLOCK;
-			error = VOP_ADVLOCK(vp, p, F_SETLK, fl, flg);
-			goto out;
-
-		case F_UNLCK:
-			error = VOP_ADVLOCK(vp, p, F_UNLCK, fl, F_POSIX);
-			goto out;
-
-		default:
-			error = EINVAL;
-			goto out;
-		}
-
-	case F_GETLK:
-		if (fl->l_type != F_RDLCK &&
-		    fl->l_type != F_WRLCK &&
-		    fl->l_type != F_UNLCK) {
-			error = EINVAL;
-			goto out;
-		}
-		error = VOP_ADVLOCK(vp, p, F_GETLK, fl, F_POSIX);
-		break;
-
-	default:
-		error = EINVAL;
-		break;
-	}
-
-    out:
-	FILE_UNUSE(fp, l);
-	return error;
-}
-
 /*
  * The file control system call.
  */
@@ -526,7 +449,8 @@ sys_fcntl(struct lwp *l, void *v, register_t *retval)
 	struct filedesc *fdp;
 	struct file	*fp;
 	struct proc	*p;
-	int		fd, i, tmp, error, cmd, newmin;
+	struct vnode	*vp;
+	int		fd, i, tmp, error, flg, cmd, newmin;
 	struct flock	fl;
 
 	p = l->l_proc;
@@ -534,6 +458,7 @@ sys_fcntl(struct lwp *l, void *v, register_t *retval)
 	cmd = SCARG(uap, cmd);
 	fdp = p->p_fd;
 	error = 0;
+	flg = F_POSIX;
 
 	switch (cmd) {
 	case F_CLOSEM:
@@ -546,17 +471,6 @@ sys_fcntl(struct lwp *l, void *v, register_t *retval)
 	case F_MAXFD:
 		*retval = fdp->fd_lastfile;
 		return 0;
-
-	case F_SETLKW:
-	case F_SETLK:
-	case F_GETLK:
-		error = copyin(SCARG(uap, arg), &fl, sizeof(fl));
-		if (error)
-			return error;
-		error = do_fcntl_lock(l, fd, cmd, &fl);
-		if (cmd == F_GETLK && error == 0)
-			error = copyout(&fl, SCARG(uap, arg), sizeof(fl));
-		return error;
 
 	default:
 		/* Handled below */
@@ -650,6 +564,74 @@ sys_fcntl(struct lwp *l, void *v, register_t *retval)
 		error = (*fp->f_ops->fo_ioctl)(fp, FIOSETOWN, &tmp, l);
 		break;
 
+	case F_SETLKW:
+		flg |= F_WAIT;
+		/* Fall into F_SETLK */
+
+	case F_SETLK:
+		if (fp->f_type != DTYPE_VNODE) {
+			error = EINVAL;
+			goto out;
+		}
+		vp = (struct vnode *)fp->f_data;
+		/* Copy in the lock structure */
+		error = copyin(SCARG(uap, arg), &fl, sizeof(fl));
+		if (error)
+			goto out;
+		if (fl.l_whence == SEEK_CUR)
+			fl.l_start += fp->f_offset;
+		switch (fl.l_type) {
+		case F_RDLCK:
+			if ((fp->f_flag & FREAD) == 0) {
+				error = EBADF;
+				goto out;
+			}
+			p->p_flag |= P_ADVLOCK;
+			error = VOP_ADVLOCK(vp, p, F_SETLK, &fl, flg);
+			goto out;
+
+		case F_WRLCK:
+			if ((fp->f_flag & FWRITE) == 0) {
+				error = EBADF;
+				goto out;
+			}
+			p->p_flag |= P_ADVLOCK;
+			error = VOP_ADVLOCK(vp, p, F_SETLK, &fl, flg);
+			goto out;
+
+		case F_UNLCK:
+			error = VOP_ADVLOCK(vp, p, F_UNLCK, &fl, F_POSIX);
+			goto out;
+
+		default:
+			error = EINVAL;
+			goto out;
+		}
+
+	case F_GETLK:
+		if (fp->f_type != DTYPE_VNODE) {
+			error = EINVAL;
+			goto out;
+		}
+		vp = (struct vnode *)fp->f_data;
+		/* Copy in the lock structure */
+		error = copyin(SCARG(uap, arg), &fl, sizeof(fl));
+		if (error)
+			goto out;
+		if (fl.l_whence == SEEK_CUR)
+			fl.l_start += fp->f_offset;
+		if (fl.l_type != F_RDLCK &&
+		    fl.l_type != F_WRLCK &&
+		    fl.l_type != F_UNLCK) {
+			error = EINVAL;
+			goto out;
+		}
+		error = VOP_ADVLOCK(vp, p, F_GETLK, &fl, F_POSIX);
+		if (error)
+			goto out;
+		error = copyout(&fl, SCARG(uap, arg), sizeof(fl));
+		break;
+
 	default:
 		error = EINVAL;
 	}
@@ -734,27 +716,6 @@ sys_close(struct lwp *l, void *v, register_t *retval)
 
 /*
  * Return status information about a file descriptor.
- * Common function for compat code.
- */
-int
-do_sys_fstat(struct lwp *l, int fd, struct stat *sb)
-{
-	struct file	*fp;
-	int		error;
-
-	fp = fd_getfile(l->l_proc->p_fd, fd);
-	if (fp == NULL)
-		return EBADF;
-
-	FILE_USE(fp);
-	error = (*fp->f_ops->fo_stat)(fp, sb, l);
-	FILE_UNUSE(fp, l);
-
-	return error;
-}
-
-/*
- * Return status information about a file descriptor.
  */
 /* ARGSUSED */
 int
@@ -764,13 +725,26 @@ sys___fstat30(struct lwp *l, void *v, register_t *retval)
 		syscallarg(int)			fd;
 		syscallarg(struct stat *)	sb;
 	} */ *uap = v;
-	struct stat	sb;
+	int		fd;
+	struct filedesc	*fdp;
+	struct file	*fp;
+	struct proc	*p;
+	struct stat	ub;
 	int		error;
 
-	error = do_sys_fstat(l, SCARG(uap, fd), &sb);
+	p = l->l_proc;
+	fd = SCARG(uap, fd);
+	fdp = p->p_fd;
+
+	if ((fp = fd_getfile(fdp, fd)) == NULL)
+		return (EBADF);
+
+	FILE_USE(fp);
+	error = (*fp->f_ops->fo_stat)(fp, &ub, l);
+	FILE_UNUSE(fp, l);
 
 	if (error == 0)
-		error = copyout(&sb, SCARG(uap, sb), sizeof(sb));
+		error = copyout(&ub, SCARG(uap, sb), sizeof(ub));
 
 	return (error);
 }
@@ -1041,7 +1015,6 @@ falloc(struct lwp *l, struct file **resultfp, int *resultfd)
 void
 ffree(struct file *fp)
 {
-	kauth_cred_t cred;
 
 #ifdef DIAGNOSTIC
 	if (fp->f_usecount)
@@ -1050,15 +1023,13 @@ ffree(struct file *fp)
 
 	simple_lock(&filelist_slock);
 	LIST_REMOVE(fp, f_list);
-	cred = fp->f_cred;
+	kauth_cred_free(fp->f_cred);
 #ifdef DIAGNOSTIC
-	fp->f_cred = NULL;
 	fp->f_count = 0; /* What's the point? */
 #endif
 	nfiles--;
 	simple_unlock(&filelist_slock);
 	pool_put(&file_pool, fp);
-	kauth_cred_free(cred);
 }
 
 /*
@@ -1072,16 +1043,13 @@ cwdinit(struct proc *p)
 
 	cwdi = pool_get(&cwdi_pool, PR_WAITOK);
 
-	rw_init(&cwdi->cwdi_lock);
+	simple_lock_init(&cwdi->cwdi_slock);
 	cwdi->cwdi_cdir = p->p_cwdi->cwdi_cdir;
 	if (cwdi->cwdi_cdir)
 		VREF(cwdi->cwdi_cdir);
 	cwdi->cwdi_rdir = p->p_cwdi->cwdi_rdir;
 	if (cwdi->cwdi_rdir)
 		VREF(cwdi->cwdi_rdir);
-	cwdi->cwdi_edir = p->p_cwdi->cwdi_edir;
-	if (cwdi->cwdi_edir)
-		VREF(cwdi->cwdi_edir);
 	cwdi->cwdi_cmask =  p->p_cwdi->cwdi_cmask;
 	cwdi->cwdi_refcnt = 1;
 
@@ -1096,9 +1064,9 @@ cwdshare(struct proc *p1, struct proc *p2)
 {
 	struct cwdinfo *cwdi = p1->p_cwdi;
 
-	rw_enter(&cwdi->cwdi_lock, RW_WRITER);
+	simple_lock(&cwdi->cwdi_slock);
 	cwdi->cwdi_refcnt++;
-	rw_exit(&cwdi->cwdi_lock);
+	simple_unlock(&cwdi->cwdi_slock);
 	p2->p_cwdi = cwdi;
 }
 
@@ -1128,18 +1096,15 @@ cwdfree(struct cwdinfo *cwdi)
 {
 	int n;
 
-	rw_enter(&cwdi->cwdi_lock, RW_WRITER);
+	simple_lock(&cwdi->cwdi_slock);
 	n = --cwdi->cwdi_refcnt;
-	rw_exit(&cwdi->cwdi_lock);
+	simple_unlock(&cwdi->cwdi_slock);
 	if (n > 0)
 		return;
 
 	vrele(cwdi->cwdi_cdir);
 	if (cwdi->cwdi_rdir)
 		vrele(cwdi->cwdi_rdir);
-	if (cwdi->cwdi_edir)
-		vrele(cwdi->cwdi_edir);
-	rw_destroy(&cwdi->cwdi_lock);
 	pool_put(&cwdi_pool, cwdi);
 }
 
@@ -1409,7 +1374,7 @@ closef(struct file *fp, struct lwp *l)
 	 * If the descriptor was in a message, POSIX-style locks
 	 * aren't passed with the descriptor.
 	 */
-	if (p && (p->p_flag & PK_ADVLOCK) && fp->f_type == DTYPE_VNODE) {
+	if (p && (p->p_flag & P_ADVLOCK) && fp->f_type == DTYPE_VNODE) {
 		lf.l_whence = SEEK_SET;
 		lf.l_start = 0;
 		lf.l_len = 0;
@@ -1776,9 +1741,6 @@ fdcloseexec(struct lwp *l)
 	fdunshare(l);
 	cwdunshare(p);
 
-	if (p->p_cwdi->cwdi_edir)
-		vrele(p->p_cwdi->cwdi_edir);
-
 	fdp = p->p_fd;
 	for (fd = 0; fd <= fdp->fd_lastfile; fd++)
 		if (fdp->fd_ofileflags[fd] & UF_EXCLOSE)
@@ -1794,7 +1756,8 @@ fdcloseexec(struct lwp *l)
  */
 #define CHECK_UPTO 3
 int
-fdcheckstd(struct lwp *l)
+fdcheckstd(l)
+	struct lwp *l;
 {
 	struct proc *p;
 	struct nameidata nd;
@@ -1854,16 +1817,12 @@ restart:
 	if (devnullfp)
 		FILE_UNUSE(devnullfp, l);
 	if (closed[0] != '\0') {
-		mutex_enter(&proclist_lock);
 		pp = p->p_pptr;
-		mutex_enter(&pp->p_mutex);
 		log(LOG_WARNING, "set{u,g}id pid %d (%s) "
 		    "was invoked by uid %d ppid %d (%s) "
 		    "with fd %s closed\n",
 		    p->p_pid, p->p_comm, kauth_cred_geteuid(pp->p_cred),
 		    pp->p_pid, pp->p_comm, &closed[1]);
-		mutex_exit(&pp->p_mutex);
-		mutex_exit(&proclist_lock);
 	}
 	return (0);
 }
@@ -1925,24 +1884,17 @@ void
 fownsignal(pid_t pgid, int signo, int code, int band, void *fdescdata)
 {
 	struct proc *p1;
-	struct pgrp *pgrp;
 	ksiginfo_t ksi;
 
-	KSI_INIT(&ksi);
+	memset(&ksi, 0, sizeof(ksi));
 	ksi.ksi_signo = signo;
 	ksi.ksi_code = code;
 	ksi.ksi_band = band;
 
-	/*
-	 * Since we may be called from an interrupt context, we must use
-	 * the proclist_mutex.
-	 */
-	mutex_enter(&proclist_mutex);
-	if (pgid > 0 && (p1 = p_find(pgid, PFIND_LOCKED)))
+	if (pgid > 0 && (p1 = pfind(pgid)))
 		kpsignal(p1, &ksi, fdescdata);
-	else if (pgid < 0 && (pgrp = pg_find(-pgid, PFIND_LOCKED)))
-		kpgsignal(pgrp, &ksi, fdescdata, 0);
-	mutex_exit(&proclist_mutex);
+	else if (pgid < 0)
+		kgsignal(-pgid, &ksi, fdescdata);
 }
 
 int

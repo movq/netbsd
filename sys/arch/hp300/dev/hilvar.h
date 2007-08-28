@@ -1,4 +1,4 @@
-/*	$NetBSD: hilvar.h,v 1.23 2007/03/04 05:59:48 christos Exp $	*/
+/*	$NetBSD: hilvar.h,v 1.21 2005/12/11 12:17:14 christos Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -75,6 +75,11 @@
  *
  *	@(#)hilvar.h	8.1 (Berkeley) 6/10/93
  */
+
+#ifndef TRUE
+#define TRUE	1
+#define FALSE	0
+#endif
 
 #define NHILD		8		/* 7 actual + loop pseudo (dev 0) */
 #define NHILQ		8		/* must be <= sizeof(int) */
@@ -175,7 +180,7 @@ void	pollon(struct hil_dev *);
 #endif
 
 #ifdef COMPAT_HPUX
-int	hpuxhilioctl(dev_t, int, void *, int);
+int	hpuxhilioctl(dev_t, int, caddr_t, int);
 int	hildevno(dev_t);
 #endif /* COMPAT_HPUX */
 #endif /* _KERNEL */

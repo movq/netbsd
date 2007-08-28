@@ -1,4 +1,4 @@
-/*	$NetBSD: console.c,v 1.36 2007/04/12 13:10:59 jmcneill Exp $	*/
+/*	$NetBSD: console.c,v 1.32 2005/12/11 12:18:58 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.36 2007/04/12 13:10:59 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.32 2005/12/11 12:18:58 christos Exp $");
 
 #include "opt_kgdb.h"
 
@@ -56,8 +56,6 @@ __KERNEL_RCSID(0, "$NetBSD: console.c,v 1.36 2007/04/12 13:10:59 jmcneill Exp $"
 #include "zsc.h"
 #include "gio.h"
 #include "pckbc.h"
-#include "zskbd.h"
-#include "crmfb.h"
 
 #ifndef CONMODE
 #define CONMODE ((TTYDEF_CFLAG & ~(CSIZE | CSTOPB | PARENB)) | CS8) /* 8N1 */
@@ -67,10 +65,6 @@ int comcnmode = CONMODE;
 extern struct consdev zs_cn;
 
 extern void	zs_kgdb_init(void);
-extern void	zskbd_cnattach(int, int);
-#if (NCRMFB > 0)
-extern int	crmfb_probe(void);
-#endif
 
 void		kgdb_port_init(void);
 static int	zs_serial_init(const char *);
@@ -101,21 +95,7 @@ consinit()
 	case MACH_SGI_IP32:
 		if (mace_serial_init(consdev))
 			return;
-#if (NCRMFB > 0)
-		if (crmfb_probe()) {
-#if notyet
-#if (NPCKBC > 0)
-			/* XXX Hardcoded iotag, MACE address XXX */
-			pckbc_cnattach(SGIMIPS_BUS_SPACE_NORMAL,
-			    MACE_BASE + 0x320000, 8,
-			    PCKBC_KBD_SLOT);
-#endif
-#endif
-			return;
-		}
-#else
-		panic("this ip32 kernel does not contain framebuffer support.");
-#endif
+		panic("ip32 supports serial console only.  sorry.");
 		break;
 
 	default:
@@ -151,23 +131,20 @@ gio_video_init(const char *consdev)
 		 * XXX Assumes that if output is video()
 		 * input must be keyboard().
 		 */
-		if (gio_cnattach() != 0)
-			return (0);
+		gio_cnattach();
 
 		switch(mach_type) {
 		case MACH_SGI_IP12:
 		case MACH_SGI_IP20:
 #if (NZSKBD > 0)
-			/* XXX Hardcoded unit, channel */
-			zskbd_cnattach(0, 0);
+			/* Attach zskbd here */
 #endif
 			break;
 
 		case MACH_SGI_IP22:
 #if (NPCKBC > 0)
 			/* XXX Hardcoded iotag, HPC address XXX */
-			pckbc_cnattach(SGIMIPS_BUS_SPACE_HPC,
-			    HPC_BASE_ADDRESS_0 +
+			pckbc_cnattach(1, HPC_BASE_ADDRESS_0 +
 			    HPC3_PBUS_CH6_DEVREGS + IOC_KB_REGS, KBCMDP,
 			    PCKBC_KBD_SLOT);
 #endif

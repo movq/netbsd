@@ -1,4 +1,4 @@
-/*	$NetBSD: ewsms.c,v 1.4 2007/03/04 05:59:47 christos Exp $	*/
+/*	$NetBSD: ewsms.c,v 1.2 2006/11/12 19:00:43 plunky Exp $	*/
 
 /*
  * Copyright (c) 2004 Steve Rumble
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ewsms.c,v 1.4 2007/03/04 05:59:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ewsms.c,v 1.2 2006/11/12 19:00:43 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -114,7 +114,7 @@ static void ewsms_zsc_softint(struct zs_chanstate *);
 static void ewsms_wsmouse_input(struct ewsms_softc *);
 static int  ewsms_wsmouse_enable(void *);
 static void ewsms_wsmouse_disable(void *);
-static int  ewsms_wsmouse_ioctl(void *, u_long, void *, int, struct lwp *);
+static int  ewsms_wsmouse_ioctl(void *, u_long, caddr_t, int, struct lwp *);
 
 CFATTACH_DECL(ewsms_zsc, sizeof(struct ewsms_softc),
     ewsms_zsc_match, ewsms_zsc_attach, NULL, NULL);
@@ -317,7 +317,7 @@ static void
 ewsms_wsmouse_input(struct ewsms_softc *sc)
 {
 	u_int btns;
-	bool bl, bm, br;
+	boolean_t bl, bm, br;
 	int dx, dy;
 
 	btns = (uint8_t)sc->sc_packet[EWSMS_PACKET_SYNC] & EWSMS_SYNC_BTN_MASK;
@@ -370,7 +370,7 @@ ewsms_wsmouse_disable(void *cookie)
 }
 
 static int
-ewsms_wsmouse_ioctl(void *cookie, u_long cmd, void *data, int flag,
+ewsms_wsmouse_ioctl(void *cookie, u_long cmd, caddr_t data, int flag,
     struct lwp *l)
 {
 

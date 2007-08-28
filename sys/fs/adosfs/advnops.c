@@ -1,4 +1,4 @@
-/*	$NetBSD: advnops.c,v 1.24 2007/07/29 12:15:45 ad Exp $	*/
+/*	$NetBSD: advnops.c,v 1.21 2006/09/23 22:47:11 aymeric Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: advnops.c,v 1.24 2007/07/29 12:15:45 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: advnops.c,v 1.21 2006/09/23 22:47:11 aymeric Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -339,7 +339,7 @@ adosfs_read(v)
 		printf(" %" PRId64 "+%ld-%" PRId64 "+%ld", lbn, on, lbn, n);
 #endif
 		n = MIN(n, size - bp->b_resid);
-		error = uiomove((char *)bp->b_data + on +
+		error = uiomove(bp->b_data + on +
 				amp->bsize - amp->dbsize, (int)n, uio);
 		brelse(bp);
 	} while (error == 0 && uio->uio_resid > 0 && n != 0);
@@ -390,7 +390,7 @@ adosfs_strategy(v)
 #endif
 	bp = sp->a_bp;
 	if (bp->b_vp == NULL) {
-		bp->b_error = EIO;
+		bp->b_flags |= B_ERROR;
 		biodone(bp);
 		error = EIO;
 		goto reterr;
@@ -400,7 +400,7 @@ adosfs_strategy(v)
 	if (bp->b_blkno == bp->b_lblkno) {
 		error = VOP_BMAP(vp, bp->b_lblkno, NULL, &bp->b_blkno, NULL);
 		if (error) {
-			bp->b_flags = error;
+			bp->b_flags |= B_ERROR;
 			biodone(bp);
 			goto reterr;
 		}
@@ -891,7 +891,6 @@ adosfs_reclaim(v)
 		free(ap->tab, M_ANODE);
 	else if (vp->v_type == VLNK && ap->slinkto)
 		free(ap->slinkto, M_ANODE);
-	genfs_node_destroy(vp);
 	pool_put(&adosfs_node_pool, ap);
 	vp->v_data = NULL;
 	return(0);

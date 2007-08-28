@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.135 2007/07/29 12:15:39 ad Exp $	*/
+/*	$NetBSD: fd.c,v 1.126 2006/04/14 13:09:05 blymn Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -108,7 +108,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.135 2007/07/29 12:15:39 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.126 2006/04/14 13:09:05 blymn Exp $");
 
 #include "opt_ddb.h"
 #include "opt_md.h"
@@ -147,8 +147,8 @@ __KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.135 2007/07/29 12:15:39 ad Exp $");
 #define FDUNIT(dev)	(minor(dev) / 8)
 #define FDTYPE(dev)	(minor(dev) % 8)
 
-/* (mis)use device use flag to identify format operation */
-#define B_FORMAT B_DEVPRIVATE
+/* XXX misuse a flag to identify format operation */
+#define B_FORMAT B_XXX
 
 #define FD_DEBUG
 #ifdef FD_DEBUG
@@ -359,7 +359,7 @@ static void establish_chip_type(
 		bus_space_handle_t);
 
 #ifdef MEMORY_DISK_HOOKS
-int	fd_read_md_image(size_t *, void **);
+int	fd_read_md_image(size_t *, caddr_t *);
 #endif
 
 #define OBP_FDNAME	(CPU_ISSUN4M ? "SUNW,fdtwo" : "fd")
@@ -611,8 +611,8 @@ fdcattach(struct fdc_softc *fdc, int pri)
 	int drive_attached;
 	char code;
 
-	callout_init(&fdc->sc_timo_ch, 0);
-	callout_init(&fdc->sc_intr_ch, 0);
+	callout_init(&fdc->sc_timo_ch);
+	callout_init(&fdc->sc_intr_ch);
 
 	fdc->sc_state = DEVIDLE;
 	fdc->sc_itask = FDC_ITASK_NONE;
@@ -763,8 +763,8 @@ fdattach(struct device *parent, struct device *self, void *aux)
 	struct fd_type *type = fa->fa_deftype;
 	int drive = fa->fa_drive;
 
-	callout_init(&fd->sc_motoron_ch, 0);
-	callout_init(&fd->sc_motoroff_ch, 0);
+	callout_init(&fd->sc_motoron_ch);
+	callout_init(&fd->sc_motoroff_ch);
 
 	/* XXX Allow `flags' to override device type? */
 
@@ -828,7 +828,7 @@ fdstrategy(struct buf *bp)
 	      (bp->b_blkno * DEV_BSIZE) % FD_BSIZE(fd) != 0) &&
 	     (bp->b_flags & B_FORMAT) == 0)) {
 		bp->b_error = EINVAL;
-		goto done;
+		goto bad;
 	}
 
 	/* If it's a null transfer, return immediately. */
@@ -848,7 +848,7 @@ fdstrategy(struct buf *bp)
 		if (sz < 0) {
 			/* If past end of disk, return EINVAL. */
 			bp->b_error = EINVAL;
-			goto done;
+			goto bad;
 		}
 		/* Otherwise, truncate request. */
 		bp->b_bcount = sz << DEV_BSHIFT;
@@ -883,6 +883,8 @@ fdstrategy(struct buf *bp)
 	splx(s);
 	return;
 
+bad:
+	bp->b_flags |= B_ERROR;
 done:
 	/* Toss transfer; we're done early. */
 	biodone(bp);
@@ -1331,17 +1333,15 @@ fdc_c_hwintr(void *arg)
 			break;
 
 		if ((msr & NE7_NDM) == 0) {
-			/* Execution phase finished, get result. */
 			fdcresult(fdc);
 			fdc->sc_istatus = FDC_ISTATUS_DONE;
 			softintr_schedule(fdc->sc_sicookie);
+#ifdef FD_DEBUG
+			if (fdc_debug > 1)
+				printf("fdc: overrun: tc = %d\n", fdc->sc_tc);
+#endif
 			break;
 		}
-
-		if (fdc->sc_tc == 0)
-			/* For some reason the controller wants to transfer
-			   more data then what we want to transfer. */
-			panic("fdc: overrun");
 
 		/* Another byte can be transferred */
 		if ((msr & NE7_DIO) != 0)
@@ -1353,7 +1353,10 @@ fdc_c_hwintr(void *arg)
 
 		fdc->sc_data++;
 		if (--fdc->sc_tc == 0) {
+			fdc->sc_istatus = FDC_ISTATUS_DONE;
 			FTC_FLIP;
+			fdcresult(fdc);
+			softintr_schedule(fdc->sc_sicookie);
 			break;
 		}
 	}
@@ -1568,7 +1571,7 @@ loop:
 		read = bp->b_flags & B_READ;
 
 		/* Setup for pseudo DMA */
-		fdc->sc_data = (char *)bp->b_data + fd->sc_skip;
+		fdc->sc_data = bp->b_data + fd->sc_skip;
 		fdc->sc_tc = fd->sc_nbytes;
 
 		bus_space_write_1(fdc->sc_bustag, fdc->sc_handle,
@@ -1895,6 +1898,7 @@ fdcretry(struct fdc_softc *fdc)
 		}
 
 	failsilent:
+		bp->b_flags |= B_ERROR;
 		bp->b_error = error;
 		fdfinish(fd, bp);
 	}
@@ -1902,7 +1906,7 @@ fdcretry(struct fdc_softc *fdc)
 }
 
 int
-fdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
+fdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 {
 	struct fd_softc *fd;
 	struct fdc_softc *fdc;
@@ -2158,7 +2162,7 @@ fdformat(dev_t dev, struct ne7_fd_formb *finfo, struct proc *p)
 		      / DEV_BSIZE;
 
 	bp->b_bcount = sizeof(struct fd_idfield_data) * finfo->fd_formb_nsecs;
-	bp->b_data = (void *)finfo;
+	bp->b_data = (caddr_t)finfo;
 
 #ifdef FD_DEBUG
 	if (fdc_debug) {
@@ -2301,16 +2305,16 @@ fd_mountroot_hook(struct device *dev)
 #define FDMICROROOTSIZE ((2*18*80) << DEV_BSHIFT)
 
 int
-fd_read_md_image(size_t	*sizep, void *	*addrp)
+fd_read_md_image(size_t	*sizep, caddr_t	*addrp)
 {
 	struct buf buf, *bp = &buf;
 	dev_t dev;
 	off_t offset;
-	void *addr;
+	caddr_t addr;
 
 	dev = makedev(54,0);	/* XXX */
 
-	MALLOC(addr, void *, FDMICROROOTSIZE, M_DEVBUF, M_WAITOK);
+	MALLOC(addr, caddr_t, FDMICROROOTSIZE, M_DEVBUF, M_WAITOK);
 	*addrp = addr;
 
 	if (fdopen(dev, 0, S_IFCHR, NULL))
@@ -2329,7 +2333,7 @@ fd_read_md_image(size_t	*sizep, void *	*addrp)
 		bp->b_data = addr;
 		fdstrategy(bp);
 		while ((bp->b_flags & B_DONE) == 0) {
-			tsleep((void *)bp, PRIBIO + 1, "physio", 0);
+			tsleep((caddr_t)bp, PRIBIO + 1, "physio", 0);
 		}
 		if (bp->b_error)
 			panic("fd: mountroot: fdread error %d", bp->b_error);
@@ -2337,7 +2341,7 @@ fd_read_md_image(size_t	*sizep, void *	*addrp)
 		if (bp->b_resid != 0)
 			break;
 
-		addr = (char *)addr + DEV_BSIZE;
+		addr += DEV_BSIZE;
 		offset += DEV_BSIZE;
 		if (offset + DEV_BSIZE > FDMICROROOTSIZE)
 			break;

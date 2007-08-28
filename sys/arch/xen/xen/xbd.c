@@ -1,4 +1,4 @@
-/* $NetBSD: xbd.c,v 1.38 2007/07/22 08:50:27 ad Exp $ */
+/* $NetBSD: xbd.c,v 1.36 2006/05/05 19:25:26 jld Exp $ */
 
 /*
  *
@@ -33,7 +33,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xbd.c,v 1.38 2007/07/22 08:50:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xbd.c,v 1.36 2006/05/05 19:25:26 jld Exp $");
 
 #include "xbd_hypervisor.h"
 #include "rnd.h"
@@ -969,7 +969,7 @@ control_send(blkif_request_t *req, blkif_response_t *rsp)
  retry:
 	while ((req_prod - resp_cons) == BLKIF_RING_SIZE) {
 		/* XXX where is the wakeup ? */
-		tsleep((void *) &req_prod, PUSER | PCATCH,
+		tsleep((caddr_t) &req_prod, PUSER | PCATCH,
 		    "blkfront", 0);
 	}
 
@@ -995,7 +995,7 @@ control_send(blkif_request_t *req, blkif_response_t *rsp)
 	restore_flags(flags);
 
 	while (!blkif_control_rsp_valid) {
-		tsleep((void *)&blkif_control_rsp_valid, PUSER | PCATCH,
+		tsleep((caddr_t)&blkif_control_rsp_valid, PUSER | PCATCH,
 		    "blkfront", 0);
 	}
 
@@ -1252,6 +1252,7 @@ xbdstrategy(struct buf *bp)
 	    (long)bp->b_bcount));
 
 	if (xs == NULL || xs->sc_shutdown) {
+		bp->b_flags |= B_ERROR;
 		bp->b_error = EIO;
 		biodone(bp);
 		return;
@@ -1393,9 +1394,11 @@ xbdresume(void)
 		    pxr, pxr->xr_bp));
 		bp = pxr->xr_bp;
 		xs = getxbd_softc(bp->b_dev);
-		if (xs == NULL || xs->sc_shutdown)
+		if (xs == NULL || xs->sc_shutdown) {
+			bp->b_flags |= B_ERROR;
 			bp->b_error = EIO;
-		if (bp->b_error != 0) {
+		}
+		if (bp->b_flags & B_ERROR) {
 			pxr->xr_bdone -= pxr->xr_bqueue;
 			pxr->xr_bqueue = 0;
 			if (pxr->xr_bdone == 0) {
@@ -1447,6 +1450,7 @@ xbdstart(struct dk_softc *dksc, struct buf *bp)
 
 	xs = getxbd_softc(bp->b_dev);
 	if (xs == NULL || xs->sc_shutdown) {
+		bp->b_flags |= B_ERROR;
 		bp->b_error = EIO;
 		biodone(bp);
 		return 0;
@@ -1546,8 +1550,10 @@ xbd_response_handler(void *arg)
 			DIAGCONDPANIC(pxr->xr_bdone < 0,
 			    ("xbd_response_handler: pxr->xr_bdone < 0"));
 
-			if (__predict_false(ring_resp->status))
+			if (__predict_false(ring_resp->status)) {
+				pxr->xr_bp->b_flags |= B_ERROR;
 				pxr->xr_bp->b_error = EIO;
+			}
 
 			if (xr != pxr) {
 				PUT_XBDREQ(xr);
@@ -1559,11 +1565,12 @@ xbd_response_handler(void *arg)
 				bp = pxr->xr_bp;
 				xs = getxbd_softc(bp->b_dev);
 				if (xs == NULL) { /* don't fail bp if we're shutdown */
+					bp->b_flags |= B_ERROR;
 					bp->b_error = EIO;
 				}
 				DPRINTF(XBDB_IO, ("xbd_response_handler(%d): "
 					    "completed bp %p\n", i, bp));
-				if (bp->b_error != 0)
+				if (bp->b_flags & B_ERROR)
 					bp->b_resid = bp->b_bcount;
 				else
 					bp->b_resid = 0;
@@ -1597,7 +1604,7 @@ xbd_response_handler(void *arg)
 			memcpy(&blkif_control_rsp, ring_resp,
 			    sizeof(*ring_resp));
 			blkif_control_rsp_valid = 1;
-			wakeup((void *)&blkif_control_rsp_valid);
+			wakeup((caddr_t)&blkif_control_rsp_valid);
 			break;
 		default:
 			panic("unknown response");
@@ -1643,7 +1650,7 @@ xbdwrite(dev_t dev, struct uio *uio, int flags)
 }
 
 int
-xbdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+xbdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct	xbd_softc *xs;
 	struct	dk_softc *dksc;
@@ -1671,7 +1678,7 @@ xbdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 }
 
 int
-xbdioctl_cdev(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+xbdioctl_cdev(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	dev_t bdev;
 
@@ -1682,7 +1689,7 @@ xbdioctl_cdev(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 }
 
 int
-xbddump(dev_t dev, daddr_t blkno, void *va, size_t size)
+xbddump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
 {
 	struct	xbd_softc *xs;
 

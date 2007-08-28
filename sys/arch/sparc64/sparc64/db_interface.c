@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.97 2007/05/17 14:51:31 yamt Exp $ */
+/*	$NetBSD: db_interface.c,v 1.93 2006/10/21 03:16:05 mrg Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.97 2007/05/17 14:51:31 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.93 2006/10/21 03:16:05 mrg Exp $");
 
 #include "opt_ddb.h"
 
@@ -272,26 +272,26 @@ int	db_active = 0;
 extern char *trap_type[];
 
 void kdb_kbd_trap(struct trapframe64 *);
-void db_prom_cmd(db_expr_t, bool, db_expr_t, const char *);
-void db_lwp_cmd(db_expr_t, bool, db_expr_t, const char *);
-void db_proc_cmd(db_expr_t, bool, db_expr_t, const char *);
-void db_ctx_cmd(db_expr_t, bool, db_expr_t, const char *);
-void db_dump_pcb(db_expr_t, bool, db_expr_t, const char *);
-void db_dump_pv(db_expr_t, bool, db_expr_t, const char *);
-void db_setpcb(db_expr_t, bool, db_expr_t, const char *);
-void db_dump_dtlb(db_expr_t, bool, db_expr_t, const char *);
-void db_dump_itlb(db_expr_t, bool, db_expr_t, const char *);
-void db_dump_dtsb(db_expr_t, bool, db_expr_t, const char *);
-void db_dump_itsb(db_expr_t, bool, db_expr_t, const char *);
-void db_pmap_kernel(db_expr_t, bool, db_expr_t, const char *);
-void db_pload_cmd(db_expr_t, bool, db_expr_t, const char *);
-void db_pmap_cmd(db_expr_t, bool, db_expr_t, const char *);
-void db_lock_cmd(db_expr_t, bool, db_expr_t, const char *);
-void db_traptrace(db_expr_t, bool, db_expr_t, const char *);
-void db_watch(db_expr_t, bool, db_expr_t, const char *);
-void db_pm_extract(db_expr_t, bool, db_expr_t, const char *);
-void db_cpu_cmd(db_expr_t, bool, db_expr_t, const char *);
-void db_sir_cmd(db_expr_t, bool, db_expr_t, const char *);
+void db_prom_cmd(db_expr_t, int, db_expr_t, const char *);
+void db_lwp_cmd(db_expr_t, int, db_expr_t, const char *);
+void db_proc_cmd(db_expr_t, int, db_expr_t, const char *);
+void db_ctx_cmd(db_expr_t, int, db_expr_t, const char *);
+void db_dump_pcb(db_expr_t, int, db_expr_t, const char *);
+void db_dump_pv(db_expr_t, int, db_expr_t, const char *);
+void db_setpcb(db_expr_t, int, db_expr_t, const char *);
+void db_dump_dtlb(db_expr_t, int, db_expr_t, const char *);
+void db_dump_itlb(db_expr_t, int, db_expr_t, const char *);
+void db_dump_dtsb(db_expr_t, int, db_expr_t, const char *);
+void db_dump_itsb(db_expr_t, int, db_expr_t, const char *);
+void db_pmap_kernel(db_expr_t, int, db_expr_t, const char *);
+void db_pload_cmd(db_expr_t, int, db_expr_t, const char *);
+void db_pmap_cmd(db_expr_t, int, db_expr_t, const char *);
+void db_lock_cmd(db_expr_t, int, db_expr_t, const char *);
+void db_traptrace(db_expr_t, int, db_expr_t, const char *);
+void db_watch(db_expr_t, int, db_expr_t, const char *);
+void db_pm_extract(db_expr_t, int, db_expr_t, const char *);
+void db_cpu_cmd(db_expr_t, int, db_expr_t, const char *);
+void db_sir_cmd(db_expr_t, int, db_expr_t, const char *);
 
 #ifdef DDB
 static void db_dump_pmap(struct pmap *);
@@ -439,7 +439,7 @@ kdb_trap(int type, register struct trapframe64 *tf)
 		if ((unsigned)(tf->tf_out[6] + BIAS) > (unsigned)KERNBASE)
 			dbregs.db_fr = *(struct frame64 *)(tf->tf_out[6] + BIAS);
 		else
-			copyin((void *)(tf->tf_out[6] + BIAS), &dbregs.db_fr, sizeof(struct frame64));
+			copyin((caddr_t)(tf->tf_out[6] + BIAS), &dbregs.db_fr, sizeof(struct frame64));
 	} else {
 		struct frame32 tfr;
 		
@@ -447,7 +447,7 @@ kdb_trap(int type, register struct trapframe64 *tf)
 		if ((unsigned)(tf->tf_out[6]) > (unsigned)KERNBASE)
 			tfr = *(struct frame32 *)tf->tf_out[6];
 		else
-			copyin((void *)(tf->tf_out[6]), &tfr, sizeof(struct frame32));
+			copyin((caddr_t)(tf->tf_out[6]), &tfr, sizeof(struct frame32));
 		/* Now copy each field from the 32-bit value to the 64-bit value */
 		for (i=0; i<8; i++)
 			dbregs.db_fr.fr_local[i] = tfr.fr_local[i];
@@ -551,14 +551,14 @@ Debugger()
 }
 
 void
-db_prom_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_prom_cmd(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 
 	prom_abort();
 }
 
 void
-db_dump_dtlb(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_dump_dtlb(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 	extern void print_dtlb(void);
 
@@ -591,7 +591,7 @@ db_dump_dtlb(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 }
 
 void
-db_dump_itlb(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_dump_itlb(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 	extern void print_itlb(void);
 
@@ -624,7 +624,7 @@ db_dump_itlb(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 }
 
 void
-db_pload_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_pload_cmd(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 	static paddr_t oldaddr = -1;
 	int asi = ASI_PHYS_CACHED;
@@ -698,7 +698,7 @@ db_dump_pmap(struct pmap *pm)
 }
 
 void
-db_pmap_kernel(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_pmap_kernel(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 	extern struct pmap kernel_pmap_;
 	int i, j, full = 0;
@@ -740,7 +740,7 @@ db_pmap_kernel(db_expr_t addr, bool have_addr, db_expr_t count, const char *modi
 }
 
 void
-db_pm_extract(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_pm_extract(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 	if (have_addr) {
 		paddr_t pa;
@@ -754,7 +754,7 @@ db_pm_extract(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif
 }
 
 void
-db_pmap_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_pmap_cmd(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 	struct pmap* pm=NULL;
 	int i, j=0, full = 0;
@@ -767,10 +767,11 @@ db_pmap_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 				if (c == 'f')
 					full = 1;
 	}
-	if (curlwp && curlwp->l_proc->p_vmspace)
-		pm = curlwp->l_proc->p_vmspace->vm_map.pmap;
-	if (have_addr)
+	if (curlwp && curproc->p_vmspace)
+		pm = curproc->p_vmspace->vm_map.pmap;
+	if (have_addr) {
 		pm = (struct pmap*)addr;
+	}
 
 	db_printf("pmap %p: ctx %x refs %d physaddr %llx psegs %p\n",
 		pm, pm->pm_ctx, pm->pm_refs,
@@ -789,7 +790,7 @@ db_pmap_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 
 
 void
-db_lock_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_lock_cmd(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 #if 0
 	struct lock *l;
@@ -817,7 +818,7 @@ extern int tsbsize;
 void db_dump_tsb_common(pte_t *);
 
 void
-db_dump_dtsb(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_dump_dtsb(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 
 	db_printf("DTSB:\n");
@@ -825,7 +826,7 @@ db_dump_dtsb(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 }
 
 void
-db_dump_itsb(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_dump_itsb(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 
 	db_printf("ITSB:\n");
@@ -855,9 +856,9 @@ db_dump_tsb_common(pte_t *tsb)
 	}
 }
 
-void db_page_cmd(db_expr_t, bool, db_expr_t, const char *);
+void db_page_cmd(db_expr_t, int, db_expr_t, const char *);
 void
-db_page_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_page_cmd(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 
 	if (!have_addr) {
@@ -870,7 +871,7 @@ db_page_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 }
 
 void
-db_lwp_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_lwp_cmd(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 	struct lwp *l;
 
@@ -890,12 +891,12 @@ db_lwp_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 }
 
 void
-db_proc_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_proc_cmd(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 	struct proc *p = NULL;
 
 	if (curlwp)
-		p = curlwp->l_proc;
+		p = curproc;
 	if (have_addr) 
 		p = (struct proc*) addr;
 	if (p == NULL) {
@@ -916,7 +917,7 @@ db_proc_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 }
 
 void
-db_ctx_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_ctx_cmd(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 	struct proc *p;
 	struct lwp *l;
@@ -941,7 +942,7 @@ db_ctx_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 }
 
 void
-db_dump_pcb(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_dump_pcb(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 	struct pcb *pcb;
 	int i;
@@ -983,7 +984,7 @@ db_dump_pcb(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 
 
 void
-db_setpcb(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_setpcb(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 	struct proc *p, *pp;
 
@@ -1031,7 +1032,7 @@ db_print_trace_entry(struct traptrace *te, int i)
 }
 
 void
-db_traptrace(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_traptrace(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 	int i, start = 0, full = 0, reverse = 0;
 	struct traptrace *end;
@@ -1089,7 +1090,7 @@ db_traptrace(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
  * control register.  
  */
 void
-db_watch(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_watch(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 	int phys = 0;
 	int read = 0;
@@ -1184,14 +1185,15 @@ cpu_debug_dump(void)
 	struct cpu_info *ci;
 
 	for (ci = cpus; ci; ci = ci->ci_next) {
-		db_printf("cpu%d: self 0x%08lx lwp 0x%08lx pcb 0x%08lx\n",
+		db_printf("cpu%d: self 0x%08lx lwp 0x%08lx pcb 0x%08lx idle 0x%08lx\n",
 			  ci->ci_number, (u_long)ci->ci_self,
-			  (u_long)ci->ci_curlwp, (u_long)ci->ci_cpcb);
+			  (u_long)ci->ci_curlwp, (u_long)ci->ci_cpcb,
+			  (u_long)ci->ci_idle_u);
 	}
 }
 
 void
-db_cpu_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_cpu_cmd(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 #ifdef MULTIPROCESSOR
 	struct cpu_info *ci;
@@ -1230,7 +1232,7 @@ db_cpu_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 }
 
 void
-db_sir_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_sir_cmd(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 
 	__asm("sir; nop");
@@ -1238,7 +1240,7 @@ db_sir_cmd(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
 
 #include <uvm/uvm.h>
 
-void db_uvmhistdump(db_expr_t, bool, db_expr_t, const char *);
+void db_uvmhistdump(db_expr_t, int, db_expr_t, const char *);
 /*extern void uvmhist_dump(struct uvm_history *);*/
 #ifdef UVMHIST
 extern void uvmhist_dump(struct uvm_history *);
@@ -1246,14 +1248,14 @@ extern void uvmhist_dump(struct uvm_history *);
 extern struct uvm_history_head uvm_histories;
 
 void
-db_uvmhistdump(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_uvmhistdump(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 
 	uvmhist_dump(LIST_FIRST(&uvm_histories));
 }
 
 #if NESP_SBUS
-extern void db_esp(db_expr_t, bool, db_expr_t, const char*);
+extern void db_esp(db_expr_t, int, db_expr_t, const char*);
 #endif
 
 const struct db_command db_machine_command_table[] = {
@@ -1347,7 +1349,7 @@ db_branch_taken(int inst, db_addr_t pc, db_regs_t *regs)
     }
 }
 
-bool
+boolean_t
 db_inst_branch(int inst)
 {
     union instr insn;
@@ -1372,7 +1374,7 @@ db_inst_branch(int inst)
 }
 
 
-bool
+boolean_t
 db_inst_call(int inst)
 {
     union instr insn;
@@ -1392,7 +1394,7 @@ db_inst_call(int inst)
 }
 
 
-bool
+boolean_t
 db_inst_unconditional_flow_transfer(int inst)
 {
     union instr insn;
@@ -1420,14 +1422,14 @@ db_inst_unconditional_flow_transfer(int inst)
 }
 
 
-bool
+boolean_t
 db_inst_return(int inst)
 {
     return (inst == I_JMPLri(I_G0, I_O7, 8) ||		/* ret */
 	    inst == I_JMPLri(I_G0, I_I7, 8));		/* retl */
 }
 
-bool
+boolean_t
 db_inst_trap_return(int inst)
 {
     union instr insn;

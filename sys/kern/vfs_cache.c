@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_cache.c,v 1.70 2007/07/09 21:10:57 ad Exp $	*/
+/*	$NetBSD: vfs_cache.c,v 1.66.2.1 2007/02/17 23:27:47 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.70 2007/07/09 21:10:57 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.66.2.1 2007/02/17 23:27:47 tron Exp $");
 
 #include "opt_ddb.h"
 #include "opt_revcache.h"
@@ -46,7 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.70 2007/07/09 21:10:57 ad Exp $");
 #include <sys/errno.h>
 #include <sys/malloc.h>
 #include <sys/pool.h>
-#include <sys/mutex.h>
+#include <sys/lock.h>
 
 #define NAMECACHE_ENTER_REVERSE
 /*
@@ -87,14 +87,14 @@ TAILQ_HEAD(, namecache) nclruhead;		/* LRU chain */
 struct	nchstats nchstats;		/* cache effectiveness statistics */
 
 POOL_INIT(namecache_pool, sizeof(struct namecache), 0, 0, 0, "ncachepl",
-    &pool_allocator_nointr, IPL_NONE);
+    &pool_allocator_nointr);
 
 MALLOC_DEFINE(M_CACHE, "namecache", "Dynamically allocated cache entries");
 
 int doingcache = 1;			/* 1 => enable the cache */
 
 /* A single lock to protect cache insertion, removal and lookup */
-static kmutex_t namecache_lock;
+static struct simplelock namecache_slock = SIMPLELOCK_INITIALIZER;
 
 static void cache_remove(struct namecache *);
 static void cache_free(struct namecache *);
@@ -105,7 +105,7 @@ static void
 cache_remove(struct namecache *ncp)
 {
 
-	KASSERT(mutex_owned(&namecache_lock));
+	LOCK_ASSERT(simple_lock_held(&namecache_slock));
 
 	ncp->nc_dvp = NULL;
 	ncp->nc_vp = NULL;
@@ -143,7 +143,7 @@ cache_lookup_entry(const struct vnode *dvp, const struct componentname *cnp)
 	struct nchashhead *ncpp;
 	struct namecache *ncp;
 
-	KASSERT(mutex_owned(&namecache_lock));
+	LOCK_ASSERT(simple_lock_held(&namecache_slock));
 
 	ncpp = &nchashtbl[NCHASH(cnp, dvp)];
 
@@ -187,12 +187,12 @@ cache_lookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 	}
 
 	if (cnp->cn_namelen > NCHNAMLEN) {
-		/* Unlocked, but only for stats. */
+		/* XXXSMP - updating stats without lock; do we care? */
 		nchstats.ncs_long++;
 		cnp->cn_flags &= ~MAKEENTRY;
 		goto fail;
 	}
-	mutex_enter(&namecache_lock);
+	simple_lock(&namecache_slock);
 	ncp = cache_lookup_entry(dvp, cnp);
 	if (ncp == NULL) {
 		nchstats.ncs_miss++;
@@ -217,7 +217,7 @@ cache_lookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 				TAILQ_REMOVE(&nclruhead, ncp, nc_lru);
 				TAILQ_INSERT_TAIL(&nclruhead, ncp, nc_lru);
 			}
-			mutex_exit(&namecache_lock);
+			simple_unlock(&namecache_slock);
 			return (ENOENT);
 		} else {
 			nchstats.ncs_badhits++;
@@ -238,11 +238,11 @@ cache_lookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 	error = vget(vp, LK_NOWAIT);
 
 	/* Release the name cache mutex while we get reference to the vnode */
-	mutex_exit(&namecache_lock);
+	simple_unlock(&namecache_slock);
 
 #ifdef DEBUG
 	/*
-	 * since we released namecache_lock,
+	 * since we released namecache_slock,
 	 * we can't use this pointer any more.
 	 */
 	ncp = NULL;
@@ -271,13 +271,13 @@ cache_lookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 	 * Check that the lock succeeded.
 	 */
 	if (error) {
-		/* Unlocked, but only for stats. */
+		/* XXXSMP - updating stats without lock; do we care? */
 		nchstats.ncs_badhits++;
 		*vpp = NULL;
 		return (-1);
 	}
 
-	/* Unlocked, but only for stats. */
+	/* XXXSMP - updating stats without lock; do we care? */
 	nchstats.ncs_goodhits++;
 	*vpp = vp;
 	return (0);
@@ -292,7 +292,7 @@ remove:
 	cache_free(ncp);
 
 fail_wlock:
-	mutex_exit(&namecache_lock);
+	simple_unlock(&namecache_slock);
 fail:
 	*vpp = NULL;
 	return (-1);
@@ -313,12 +313,12 @@ cache_lookup_raw(struct vnode *dvp, struct vnode **vpp,
 	}
 
 	if (cnp->cn_namelen > NCHNAMLEN) {
-		/* Unlocked, but only for stats. */
+		/* XXXSMP - updating stats without lock; do we care? */
 		nchstats.ncs_long++;
 		cnp->cn_flags &= ~MAKEENTRY;
 		goto fail;
 	}
-	mutex_enter(&namecache_lock);
+	simple_lock(&namecache_slock);
 	ncp = cache_lookup_entry(dvp, cnp);
 	if (ncp == NULL) {
 		nchstats.ncs_miss++;
@@ -340,14 +340,14 @@ cache_lookup_raw(struct vnode *dvp, struct vnode **vpp,
 		 */
 		cnp->cn_flags |= ncp->nc_flags;
 		nchstats.ncs_neghits++;
-		mutex_exit(&namecache_lock);
+		simple_unlock(&namecache_slock);
 		return (ENOENT);
 	}
 
 	error = vget(vp, LK_NOWAIT);
 
 	/* Release the name cache mutex while we get reference to the vnode */
-	mutex_exit(&namecache_lock);
+	simple_unlock(&namecache_slock);
 
 	if (error) {
 		KASSERT(error == EBUSY);
@@ -363,7 +363,7 @@ cache_lookup_raw(struct vnode *dvp, struct vnode **vpp,
 	return 0;
 
 fail_wlock:
-	mutex_exit(&namecache_lock);
+	simple_unlock(&namecache_slock);
 fail:
 	*vpp = NULL;
 	return -1;
@@ -394,7 +394,7 @@ cache_revlookup(struct vnode *vp, struct vnode **dvpp, char **bpp, char *bufp)
 
 	nvcpp = &ncvhashtbl[NCVHASH(vp)];
 
-	mutex_enter(&namecache_lock);
+	simple_lock(&namecache_slock);
 	LIST_FOREACH(ncp, nvcpp, nc_vhash) {
 		if (ncp->nc_vp == vp &&
 		    (dvp = ncp->nc_dvp) != NULL &&
@@ -417,7 +417,7 @@ cache_revlookup(struct vnode *vp, struct vnode **dvpp, char **bpp, char *bufp)
 				bp -= ncp->nc_nlen;
 				if (bp <= bufp) {
 					*dvpp = NULL;
-					mutex_exit(&namecache_lock);
+					simple_unlock(&namecache_slock);
 					return (ERANGE);
 				}
 				memcpy(bp, ncp->nc_name, ncp->nc_nlen);
@@ -426,12 +426,12 @@ cache_revlookup(struct vnode *vp, struct vnode **dvpp, char **bpp, char *bufp)
 
 			/* XXX MP: how do we know dvp won't evaporate? */
 			*dvpp = dvp;
-			mutex_exit(&namecache_lock);
+			simple_unlock(&namecache_slock);
 			return (0);
 		}
 	}
 	nchstats.ncs_revmiss++;
-	mutex_exit(&namecache_lock);
+	simple_unlock(&namecache_slock);
  out:
 	*dvpp = NULL;
 	return (-1);
@@ -457,18 +457,18 @@ cache_enter(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 	/*
 	 * Free the cache slot at head of lru chain.
 	 */
-	mutex_enter(&namecache_lock);
+	simple_lock(&namecache_slock);
 
 	if (numcache < numvnodes) {
 		numcache++;
-		mutex_exit(&namecache_lock);
+		simple_unlock(&namecache_slock);
 		ncp = pool_get(&namecache_pool, PR_WAITOK);
 		memset(ncp, 0, sizeof(*ncp));
-		mutex_enter(&namecache_lock);
+		simple_lock(&namecache_slock);
 	} else if ((ncp = TAILQ_FIRST(&nclruhead)) != NULL) {
 		cache_remove(ncp);
 	} else {
-		mutex_exit(&namecache_lock);
+		simple_unlock(&namecache_slock);
 		return;
 	}
 
@@ -521,7 +521,7 @@ cache_enter(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 		nvcpp = &ncvhashtbl[NCVHASH(vp)];
 		LIST_INSERT_HEAD(nvcpp, ncp, nc_vhash);
 	}
-	mutex_exit(&namecache_lock);
+	simple_unlock(&namecache_slock);
 }
 
 /*
@@ -531,7 +531,6 @@ void
 nchinit(void)
 {
 
-	mutex_init(&namecache_lock, MUTEX_DEFAULT, IPL_NONE);
 	TAILQ_INIT(&nclruhead);
 	nchashtbl =
 	    hashinit(desiredvnodes, HASH_LIST, M_CACHE, M_WAITOK, &nchash);
@@ -561,7 +560,7 @@ nchreinit(void)
 #else
 	    hashinit(desiredvnodes/8, HASH_LIST, M_CACHE, M_WAITOK, &mask2);
 #endif
-	mutex_enter(&namecache_lock);
+	simple_lock(&namecache_slock);
 	oldhash1 = nchashtbl;
 	oldmask1 = nchash;
 	nchashtbl = hash1;
@@ -582,7 +581,7 @@ nchreinit(void)
 			ncp->nc_vhash.le_prev = NULL;
 		}
 	}
-	mutex_exit(&namecache_lock);
+	simple_unlock(&namecache_slock);
 	hashdone(oldhash1, M_CACHE);
 	hashdone(oldhash2, M_CACHE);
 }
@@ -596,7 +595,7 @@ cache_purge1(struct vnode *vp, const struct componentname *cnp, int flags)
 {
 	struct namecache *ncp, *ncnext;
 
-	mutex_enter(&namecache_lock);
+	simple_lock(&namecache_slock);
 	if (flags & PURGE_PARENTS) {
 		for (ncp = LIST_FIRST(&vp->v_nclist); ncp != NULL;
 		    ncp = ncnext) {
@@ -620,7 +619,7 @@ cache_purge1(struct vnode *vp, const struct componentname *cnp, int flags)
 			cache_free(ncp);
 		}
 	}
-	mutex_exit(&namecache_lock);
+	simple_unlock(&namecache_slock);
 }
 
 /*
@@ -632,7 +631,7 @@ cache_purgevfs(struct mount *mp)
 {
 	struct namecache *ncp, *nxtcp;
 
-	mutex_enter(&namecache_lock);
+	simple_lock(&namecache_slock);
 	for (ncp = TAILQ_FIRST(&nclruhead); ncp != NULL; ncp = nxtcp) {
 		nxtcp = TAILQ_NEXT(ncp, nc_lru);
 		if (ncp->nc_dvp == NULL || ncp->nc_dvp->v_mount != mp) {
@@ -642,7 +641,7 @@ cache_purgevfs(struct mount *mp)
 		cache_remove(ncp);
 		cache_free(ncp);
 	}
-	mutex_exit(&namecache_lock);
+	simple_unlock(&namecache_slock);
 }
 
 #ifdef DDB

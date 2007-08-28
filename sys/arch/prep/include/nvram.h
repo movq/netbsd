@@ -1,4 +1,4 @@
-/* $NetBSD: nvram.h,v 1.4 2007/03/21 04:13:53 garbled Exp $ */
+/* $NetBSD: nvram.h,v 1.2.12.2 2007/03/31 15:59:25 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.

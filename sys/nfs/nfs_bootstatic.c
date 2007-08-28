@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_bootstatic.c,v 1.5 2007/07/08 21:08:09 bouyer Exp $	*/
+/*	$NetBSD: nfs_bootstatic.c,v 1.3 2005/12/11 12:25:16 christos Exp $	*/
 
 /*
  *
@@ -33,7 +33,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_bootstatic.c,v 1.5 2007/07/08 21:08:09 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_bootstatic.c,v 1.3 2005/12/11 12:25:16 christos Exp $");
 
 #include "opt_nfs_boot.h"
 #include "opt_inet.h"
@@ -78,9 +78,6 @@ nfs_bootstatic(struct nfs_diskless *nd, struct lwp *lwp)
 	else
 		flags = 0;
 
-	if (flags & NFS_BOOTSTATIC_NOSTATIC)
-		return EOPNOTSUPP;
-
 	if (flags == 0) {
 #ifdef NFS_BOOTSTATIC_MYIP
 		nd->nd_myip.s_addr = inet_addr(NFS_BOOTSTATIC_MYIP);
@@ -96,7 +93,7 @@ nfs_bootstatic(struct nfs_diskless *nd, struct lwp *lwp)
 #endif
 #ifdef NFS_BOOTSTATIC_SERVADDR
 		sin = (struct sockaddr_in *) &nd->nd_root.ndm_saddr;
-		memset((void *)sin, 0, sizeof(*sin));
+		memset((caddr_t)sin, 0, sizeof(*sin));
 		sin->sin_len = sizeof(*sin);
 		sin->sin_family = AF_INET;
 		sin->sin_addr.s_addr = inet_addr(NFS_BOOTSTATIC_SERVADDR);

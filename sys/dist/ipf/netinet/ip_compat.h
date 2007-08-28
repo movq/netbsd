@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_compat.h,v 1.18 2007/06/16 10:52:27 martin Exp $	*/
+/*	$NetBSD: ip_compat.h,v 1.11.12.3 2007/07/16 11:05:40 liamjfoy Exp $	*/
 
 /*
  * Copyright (C) 1993-2001, 2003 by Darren Reed.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_machdep.c,v 1.32 2007/03/04 05:59:57 christos Exp $	*/
+/*	$NetBSD: ibcs2_machdep.c,v 1.30 2006/11/16 01:32:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.32 2007/03/04 05:59:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_machdep.c,v 1.30 2006/11/16 01:32:38 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_vm86.h"
@@ -106,7 +106,7 @@ ibcs2_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	u_long code = KSI_TRAPCODE(ksi);
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
-	int onstack, error;
+	int onstack;
 	/* XXX Need SCO sigframe format. */
 	struct sigframe_sigcontext *fp = getframe(l, sig, &onstack), frame;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
@@ -153,18 +153,12 @@ ibcs2_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	frame.sf_sc.sc_err = tf->tf_err;
 
 	/* Save signal stack. */
-	frame.sf_sc.sc_onstack = l->l_sigstk.ss_flags & SS_ONSTACK;
+	frame.sf_sc.sc_onstack = p->p_sigctx.ps_sigstk.ss_flags & SS_ONSTACK;
 
 	/* Save signal mask. */
 	frame.sf_sc.sc_mask = *mask;
 
-	sendsig_reset(l, sig);
-
-	mutex_exit(&p->p_smutex);
-	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
-
-	if (error != 0) {
+	if (copyout(&frame, fp, sizeof(frame)) != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
@@ -177,7 +171,7 @@ ibcs2_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 }
 
 int
@@ -197,7 +191,7 @@ ibcs2_sys_sysmachine(struct lwp *l, void *v, register_t *retval)
 #else
 		val = IBCS2_FP_387;		/* a real coprocessor */
 #endif
-		if ((error = copyout((void *)&val, (void *)SCARG(uap, arg),
+		if ((error = copyout((caddr_t)&val, (caddr_t)SCARG(uap, arg),
 				     sizeof(val))))
 			return error;
 		break;

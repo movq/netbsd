@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_wakecode.S,v 1.9 2007/04/28 14:03:00 joerg Exp $	*/
+/*	$NetBSD: acpi_wakecode.S,v 1.8 2006/06/20 22:36:58 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -94,11 +94,7 @@ wakeup_16:
 	pushl	$0
 	popfl
 
-	/* Only beep on reset if machdep.acpi_beep_on_reset=1 */
-	cmpb	$1,beep_on_reset
-	jne	nobeepon
 	call	beepon
-nobeepon:
 
 	/* Only reset the VBIOS if machdep.acpi_vbios_reset=1 */
 	cmpb	$1,vbios_reset
@@ -112,11 +108,7 @@ nobeepon:
 	movw	%ax,%ss
 novbiosreset:
 
-	/* Only beep on reset if machdep.acpi_beep_on_reset=1 */
-	cmpb	$1,beep_on_reset
-	jne	nobeepoff
 	call beepoff
-nobeepoff:
 
 	/* Get physical address of the code */
 	xorl	%esi,%esi
@@ -262,4 +254,3 @@ previous_gs:		.word 0
 previous_ss:		.word 0
 where_to_recover:	.long 0
 vbios_reset:		.byte 0
-beep_on_reset:		.byte 0

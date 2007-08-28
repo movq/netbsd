@@ -1,4 +1,4 @@
-/* $NetBSD: ultrix_syscalls.c,v 1.52 2007/03/04 06:01:39 christos Exp $ */
+/* $NetBSD: ultrix_syscalls.c,v 1.50 2006/07/13 23:48:08 pavel Exp $ */
 
 /*
  * System call names.
@@ -8,7 +8,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ultrix_syscalls.c,v 1.52 2007/03/04 06:01:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ultrix_syscalls.c,v 1.50 2006/07/13 23:48:08 pavel Exp $");
 
 #if defined(_KERNEL_OPT)
 #if defined(_KERNEL_OPT)
@@ -19,6 +19,7 @@ __KERNEL_RCSID(0, "$NetBSD: ultrix_syscalls.c,v 1.52 2007/03/04 06:01:39 christo
 #include <sys/systm.h>
 #include <sys/signal.h>
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <compat/ultrix/ultrix_syscallargs.h>
 #endif /* _KERNEL_OPT */
@@ -208,7 +209,7 @@ const char *const ultrix_syscallnames[] = {
 	"#167 (unimplemented)",		/* 167 = unimplemented */
 	"quotactl",			/* 168 = quotactl */
 	"exportfs",			/* 169 = exportfs */
-	"#170 (unimplemented { int ultrix_sys_mount ( char * special , char * dir , int rdonly , int type , void *data ) ; })",		/* 170 = unimplemented { int ultrix_sys_mount ( char * special , char * dir , int rdonly , int type , void *data ) ; } */
+	"#170 (unimplemented { int ultrix_sys_mount ( char * special , char * dir , int rdonly , int type , caddr_t data ) ; })",		/* 170 = unimplemented { int ultrix_sys_mount ( char * special , char * dir , int rdonly , int type , caddr_t data ) ; } */
 	"#171 (unimplemented 4 hdwconf)",		/* 171 = unimplemented 4 hdwconf */
 	"#172 (unimplemented msgctl)",		/* 172 = unimplemented msgctl */
 	"#173 (unimplemented msgget)",		/* 173 = unimplemented msgget */

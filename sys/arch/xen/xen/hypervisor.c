@@ -1,4 +1,4 @@
-/* $NetBSD: hypervisor.c,v 1.31 2007/03/06 12:35:39 yamt Exp $ */
+/* $NetBSD: hypervisor.c,v 1.28 2006/10/15 13:31:18 yamt Exp $ */
 
 /*
  * Copyright (c) 2005 Manuel Bouyer.
@@ -63,7 +63,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hypervisor.c,v 1.31 2007/03/06 12:35:39 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hypervisor.c,v 1.28 2006/10/15 13:31:18 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,7 +105,7 @@ __KERNEL_RCSID(0, "$NetBSD: hypervisor.c,v 1.31 2007/03/06 12:35:39 yamt Exp $")
 #endif /* DOM0OPS || XEN3 */
 #ifdef XEN3
 #include <machine/granttables.h>
-#include <machine/vcpuvar.h>
+#include <machine/cpuvar.h>
 #endif
 #if NPCI > 0
 #include <dev/pci/pcivar.h>
@@ -126,6 +126,12 @@ __KERNEL_RCSID(0, "$NetBSD: hypervisor.c,v 1.31 2007/03/06 12:35:39 yamt Exp $")
 #endif
 #endif /* NPCI */
 
+#if NXENBUS > 0
+#include <machine/xenbus.h>
+#endif
+#ifdef XEN3
+#include <machine/granttables.h>
+#endif
 #if NXENBUS > 0
 #include <machine/xenbus.h>
 #endif
@@ -180,7 +186,7 @@ union hypervisor_attach_cookie {
 #endif
 #endif /* NPCI */
 #ifdef XEN3
-	struct vcpu_attach_args hac_vcaa;
+	struct cpu_attach_args hac_caa;
 #endif
 };
 
@@ -249,12 +255,12 @@ hypervisor_attach(parent, self, aux)
 #ifdef XEN3
 	xengnt_init();
 
-	memset(&hac.hac_vcaa, 0, sizeof(hac.hac_vcaa));
-	hac.hac_vcaa.vcaa_name = "vcpu";
-	hac.hac_vcaa.vcaa_caa.cpu_number = 0;
-	hac.hac_vcaa.vcaa_caa.cpu_role = CPU_ROLE_SP;
-	hac.hac_vcaa.vcaa_caa.cpu_func = 0;
-	config_found_ia(self, "xendevbus", &hac.hac_vcaa, hypervisor_print);
+	memset(&hac.hac_caa, 0, sizeof(hac.hac_caa));
+	hac.hac_caa.caa_name = "vcpu";
+	hac.hac_caa.cpu_number = 0;
+	hac.hac_caa.cpu_role = CPU_ROLE_SP;
+	hac.hac_caa.cpu_func = 0;
+	config_found_ia(self, "xendevbus", &hac.hac_caa, hypervisor_print);
 #endif
 	init_events();
 

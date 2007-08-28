@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl8169.c,v 1.88 2007/08/27 14:48:54 dyoung Exp $	*/
+/*	$NetBSD: rtl8169.c,v 1.72.2.8 2007/05/16 20:44:59 jdc Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998-2003
@@ -143,6 +143,10 @@
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
+#include <dev/pci/pcireg.h>
+#include <dev/pci/pcivar.h>
+#include <dev/pci/pcidevs.h>
+
 #include <dev/ic/rtl81x9reg.h>
 #include <dev/ic/rtl81x9var.h>
 
@@ -157,7 +161,7 @@ static void re_rxeof(struct rtk_softc *);
 static void re_txeof(struct rtk_softc *);
 static void re_tick(void *);
 static void re_start(struct ifnet *);
-static int re_ioctl(struct ifnet *, u_long, void *);
+static int re_ioctl(struct ifnet *, u_long, caddr_t);
 static int re_init(struct ifnet *);
 static void re_stop(struct ifnet *, int);
 static void re_watchdog(struct ifnet *);
@@ -657,7 +661,7 @@ re_attach(struct rtk_softc *sc)
 	/* Load the map for the TX ring. */
 	if ((error = bus_dmamem_map(sc->sc_dmat, &sc->re_ldata.re_tx_listseg,
 	    sc->re_ldata.re_tx_listnseg, RE_TX_LIST_SZ(sc),
-	    (void **)&sc->re_ldata.re_tx_list,
+	    (caddr_t *)&sc->re_ldata.re_tx_list,
 	    BUS_DMA_COHERENT | BUS_DMA_NOWAIT)) != 0) {
 		aprint_error("%s: can't map tx list, error = %d\n",
 		    sc->sc_dev.dv_xname, error);
@@ -708,7 +712,7 @@ re_attach(struct rtk_softc *sc)
 	/* Load the map for the RX ring. */
 	if ((error = bus_dmamem_map(sc->sc_dmat, &sc->re_ldata.re_rx_listseg,
 	    sc->re_ldata.re_rx_listnseg, RE_RX_DMAMEM_SZ,
-	    (void **)&sc->re_ldata.re_rx_list,
+	    (caddr_t *)&sc->re_ldata.re_rx_list,
 	    BUS_DMA_COHERENT | BUS_DMA_NOWAIT)) != 0) {
 		aprint_error("%s: can't map rx list, error = %d\n",
 		    sc->sc_dev.dv_xname, error);
@@ -775,7 +779,7 @@ re_attach(struct rtk_softc *sc)
 	ifp->if_capenable = ifp->if_capabilities;
 	IFQ_SET_READY(&ifp->if_snd);
 
-	callout_init(&sc->rtk_tick_ch, 0);
+	callout_init(&sc->rtk_tick_ch);
 
 	/* Do MII setup */
 	sc->mii.mii_ifp = ifp;
@@ -828,7 +832,7 @@ re_attach(struct rtk_softc *sc)
 	bus_dmamap_destroy(sc->sc_dmat, sc->re_ldata.re_rx_list_map);
  fail_6:
 	bus_dmamem_unmap(sc->sc_dmat,
-	    (void *)sc->re_ldata.re_rx_list, RE_RX_DMAMEM_SZ);
+	    (caddr_t)sc->re_ldata.re_rx_list, RE_RX_DMAMEM_SZ);
  fail_5:
 	bus_dmamem_free(sc->sc_dmat,
 	    &sc->re_ldata.re_rx_listseg, sc->re_ldata.re_rx_listnseg);
@@ -846,7 +850,7 @@ re_attach(struct rtk_softc *sc)
 	bus_dmamap_destroy(sc->sc_dmat, sc->re_ldata.re_tx_list_map);
  fail_2:
 	bus_dmamem_unmap(sc->sc_dmat,
-	    (void *)sc->re_ldata.re_tx_list, RE_TX_LIST_SZ(sc));
+	    (caddr_t)sc->re_ldata.re_tx_list, RE_TX_LIST_SZ(sc));
  fail_1:
 	bus_dmamem_free(sc->sc_dmat,
 	    &sc->re_ldata.re_tx_listseg, sc->re_ldata.re_tx_listnseg);
@@ -918,7 +922,7 @@ re_detach(struct rtk_softc *sc)
 	bus_dmamap_unload(sc->sc_dmat, sc->re_ldata.re_rx_list_map);
 	bus_dmamap_destroy(sc->sc_dmat, sc->re_ldata.re_rx_list_map);
 	bus_dmamem_unmap(sc->sc_dmat,
-	    (void *)sc->re_ldata.re_rx_list, RE_RX_DMAMEM_SZ);
+	    (caddr_t)sc->re_ldata.re_rx_list, RE_RX_DMAMEM_SZ);
 	bus_dmamem_free(sc->sc_dmat,
 	    &sc->re_ldata.re_rx_listseg, sc->re_ldata.re_rx_listnseg);
 
@@ -932,7 +936,7 @@ re_detach(struct rtk_softc *sc)
 	bus_dmamap_unload(sc->sc_dmat, sc->re_ldata.re_tx_list_map);
 	bus_dmamap_destroy(sc->sc_dmat, sc->re_ldata.re_tx_list_map);
 	bus_dmamem_unmap(sc->sc_dmat,
-	    (void *)sc->re_ldata.re_tx_list, RE_TX_LIST_SZ(sc));
+	    (caddr_t)sc->re_ldata.re_tx_list, RE_TX_LIST_SZ(sc));
 	bus_dmamem_free(sc->sc_dmat,
 	    &sc->re_ldata.re_tx_listseg, sc->re_ldata.re_tx_listnseg);
 
@@ -1533,7 +1537,7 @@ re_start(struct ifnet *ifp)
 	uint32_t		cmdstat, re_flags;
 	int			ofree, idx, error, nsegs, seg;
 	int			startdesc, curdesc, lastdesc;
-	bool			pad;
+	boolean_t		pad;
 
 	sc = ifp->if_softc;
 	ofree = sc->re_ldata.re_txq_free;
@@ -1600,10 +1604,10 @@ re_start(struct ifnet *ifp)
 		}
 
 		nsegs = map->dm_nsegs;
-		pad = false;
+		pad = FALSE;
 		if (__predict_false(m->m_pkthdr.len <= RE_IP4CSUMTX_PADLEN &&
 		    (re_flags & RE_TDESC_CMD_IPCSUM) != 0)) {
-			pad = true;
+			pad = TRUE;
 			nsegs++;
 		}
 
@@ -1767,7 +1771,7 @@ static int
 re_init(struct ifnet *ifp)
 {
 	struct rtk_softc	*sc = ifp->if_softc;
-	const uint8_t		*enaddr;
+	uint8_t			*enaddr;
 	uint32_t		rxcfg = 0;
 	uint32_t		reg;
 	int error;
@@ -1826,7 +1830,7 @@ re_init(struct ifnet *ifp)
 	 * register write enable" mode to modify the ID registers.
 	 */
 	CSR_WRITE_1(sc, RTK_EECMD, RTK_EEMODE_WRITECFG);
-	enaddr = CLLADDR(ifp->if_sadl);
+	enaddr = LLADDR(ifp->if_sadl);
 	reg = enaddr[0] | (enaddr[1] << 8) |
 	    (enaddr[2] << 16) | (enaddr[3] << 24);
 	CSR_WRITE_4(sc, RTK_IDR0, reg);
@@ -1990,7 +1994,7 @@ re_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 }
 
 static int
-re_ioctl(struct ifnet *ifp, u_long command, void *data)
+re_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 {
 	struct rtk_softc	*sc = ifp->if_softc;
 	struct ifreq		*ifr = (struct ifreq *) data;

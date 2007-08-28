@@ -1,4 +1,4 @@
-/*	$NetBSD: kbms_sbdio.c,v 1.6 2007/06/29 16:09:04 tsutsui Exp $	*/
+/*	$NetBSD: kbms_sbdio.c,v 1.2 2006/11/12 19:00:43 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kbms_sbdio.c,v 1.6 2007/06/29 16:09:04 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kbms_sbdio.c,v 1.2 2006/11/12 19:00:43 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,14 +87,14 @@ CFATTACH_DECL(kbms_sbdio, sizeof(struct kbms_softc),
 
 int kbd_enable(void *, int);
 void kbd_set_leds(void *, int);
-int kbd_ioctl(void *, u_long, void *, int, struct lwp *);
+int kbd_ioctl(void *, u_long, caddr_t, int, struct lwp *);
 
 int mouse_enable(void *);
 void mouse_disable(void *);
-int mouse_ioctl(void *, u_long, void *, int, struct lwp *);
+int mouse_ioctl(void *, u_long, caddr_t, int, struct lwp *);
 
-bool kbd_init(struct kbms_softc *);
-bool kbd_reset(struct kbms_softc *, int);
+boolean_t kbd_init(struct kbms_softc *);
+boolean_t kbd_reset(struct kbms_softc *, int);
 
 void mouse_init(struct kbms_softc *);
 #ifdef MOUSE_DEBUG
@@ -160,15 +160,15 @@ kbms_sbdio_attach(struct device *parent, struct device *self, void *aux)
 
 	if (reg->kbd_csr  == kbms_consreg.kbd_csr &&
 	    reg->kbd_data == kbms_consreg.kbd_data)
-		ka.console = true;
+		ka.console = TRUE;
 	else
-		ka.console = false;
+		ka.console = FALSE;
 
 	ka.keymap = &kbd_keymapdata;
 	ka.accessops = &kbd_accessops;
 	ka.accesscookie = self;
 
-	if (kbd_init(sc) == false) {
+	if (kbd_init(sc) == FALSE) {
 		printf("keyboard not connected\n");
 		return;
 	}
@@ -259,7 +259,7 @@ do {									\
 	delay(1);							\
 } while (/*CONSTCOND*/ 0)
 
-bool
+boolean_t
 kbd_init(struct kbms_softc *sc)
 {
 	struct kbms_reg *reg = &sc->sc_reg;
@@ -289,13 +289,13 @@ kbd_init(struct kbms_softc *sc)
 
 	if (retry == 0) {
 		printf("keyboard initialize failed.\n");
-		return false;
+		return FALSE;
 	}
 
-	return true;
+	return TRUE;
 }
 
-bool
+boolean_t
 kbd_reset(struct kbms_softc *sc, int retry)
 {
 #define	__RETRY_LOOP(x, y)						\
@@ -330,10 +330,10 @@ do {									\
 	/* drain buffer */
 	(void)*reg->kbd_data;
 #undef __RETRY_LOOP
-	return true;
+	return TRUE;
  error:
 	printf("retry failed.\n");
-	return false;
+	return FALSE;
 }
 
 void
@@ -400,7 +400,7 @@ kbd_set_leds(void *arg, int leds)
 }
 
 int
-kbd_ioctl(void *arg, u_long cmd, void *data, int flag, struct lwp *l)
+kbd_ioctl(void *arg, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct kbms_softc *sc = arg;
 
@@ -438,11 +438,11 @@ kbd_sbdio_cnattach(uint32_t csr, uint32_t data)
 	reg->kbd_csr  = (void *)csr;
 	reg->kbd_data = (void *)data;
 
-	if (kbd_init(sc) == false)
-		return false;
+	if (kbd_init(sc) == FALSE)
+		return FALSE;
 
 	wskbd_cnattach(&kbd_consops, &kbms_consreg, &kbd_keymapdata);
-	return true;
+	return TRUE;
 }
 
 void
@@ -461,15 +461,14 @@ kbd_cngetc(void *arg, u_int *type, int *data)
 void
 kbd_cnpollc(void *arg, int on)
 {
-	static bool __polling = false;
+	static boolean_t __polling = FALSE;
 	static int s;
 
 	if (on && !__polling) {
 		s = splhigh();  /* Disable interrupt driven I/O */
-		__polling = true;
 	} else if (!on && __polling) {
-		__polling = false;
-		splx(s);        /* Enable interrupt driven I/O */
+		__polling = FALSE;
+	splx(s);        /* Enable interrupt driven I/O */
 	}
 }
 
@@ -489,7 +488,7 @@ mouse_disable(void *arg)
 }
 
 int
-mouse_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
+mouse_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 
 	return EPASSTHROUGH;

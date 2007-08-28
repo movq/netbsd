@@ -1,4 +1,4 @@
-/*	$NetBSD: union_subr.c,v 1.27 2007/07/23 08:52:47 pooka Exp $	*/
+/*	$NetBSD: union_subr.c,v 1.21.2.1 2007/02/17 23:27:46 tron Exp $	*/
 
 /*
  * Copyright (c) 1994
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: union_subr.c,v 1.27 2007/07/23 08:52:47 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: union_subr.c,v 1.21.2.1 2007/02/17 23:27:46 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,6 +92,10 @@ __KERNEL_RCSID(0, "$NetBSD: union_subr.c,v 1.27 2007/07/23 08:52:47 pooka Exp $"
 #include <uvm/uvm_extern.h>
 
 #include <fs/union/union.h>
+
+#ifdef DIAGNOSTIC
+#include <sys/proc.h>
+#endif
 
 /* must be power of two, otherwise change UNION_HASH() */
 #define NHASH 32
@@ -267,10 +271,8 @@ union_newsize(vp, uppersz, lowersz)
 	off_t sz;
 
 	/* only interested in regular files */
-	if (vp->v_type != VREG) {
-		uvm_vnp_setsize(vp, 0);
+	if (vp->v_type != VREG)
 		return;
-	}
 
 	un = VTOUNION(vp);
 	sz = VNOVAL;
@@ -339,11 +341,9 @@ union_allocvp(vpp, mp, undvp, dvp, cnp, uppervp, lowervp, docache)
 	int docache;
 {
 	int error;
-	struct vattr va;
 	struct union_node *un = NULL;
 	struct vnode *xlowervp = NULLVP;
 	struct union_mount *um = MOUNTTOUNIONMOUNT(mp);
-	voff_t uppersz, lowersz;
 	int hash = 0;
 	int vflag;
 	int try;
@@ -503,14 +503,6 @@ loop:
 		return (0);
 	}
 
-	uppersz = lowersz = VNOVAL;
-	if (uppervp != NULLVP)
-		if (VOP_GETATTR(uppervp, &va, FSCRED, NULL) == 0)
-			uppersz = va.va_size;
-	if (lowervp != NULLVP)
-		if (VOP_GETATTR(lowervp, &va, FSCRED, NULL) == 0)
-			lowersz = va.va_size;
-
 	if (docache) {
 		/*
 		 * otherwise lock the vp list while we call getnewvnode
@@ -548,18 +540,15 @@ loop:
 	un = VTOUNION(*vpp);
 	un->un_vnode = *vpp;
 	un->un_uppervp = uppervp;
+	un->un_uppersz = VNOVAL;
 	un->un_lowervp = lowervp;
+	un->un_lowersz = VNOVAL;
 	un->un_pvp = undvp;
 	if (undvp != NULLVP)
 		VREF(undvp);
 	un->un_dircache = 0;
 	un->un_openl = 0;
 	un->un_flags = UN_LOCKED;
-
-	un->un_uppersz = VNOVAL;
-	un->un_lowersz = VNOVAL;
-	union_newsize(*vpp, uppersz, lowersz);
-
 	if (un->un_uppervp)
 		un->un_flags |= UN_ULOCK;
 #ifdef DIAGNOSTIC
@@ -708,12 +697,17 @@ union_copyup(un, docopy, cred, l)
 	struct lwp *l;
 {
 	int error;
+	struct mount *mp;
 	struct vnode *lvp, *uvp;
 	struct vattr lvattr, uvattr;
 
-	error = union_vn_create(&uvp, un, l);
-	if (error)
+	if ((error = vn_start_write(un->un_dirvp, &mp, V_WAIT | V_PCATCH)) != 0)
 		return (error);
+	error = union_vn_create(&uvp, un, l);
+	if (error) {
+		vn_finished_write(mp, 0);
+		return (error);
+	}
 
 	/* at this point, uppervp is locked */
 	union_newupper(un, uvp);
@@ -749,6 +743,7 @@ union_copyup(un, docopy, cred, l)
 #endif
 
 	}
+	vn_finished_write(mp, 0);
 	union_vn_close(uvp, FWRITE, cred, l);
 
 	/*
@@ -851,12 +846,16 @@ union_mkshadow(um, dvp, cnp, vpp)
 	struct vattr va;
 	struct lwp *l = cnp->cn_lwp;
 	struct componentname cn;
+	struct mount *mp;
 
+	if ((error = vn_start_write(dvp, &mp, V_WAIT | V_PCATCH)) != 0)
+		return (error);
 	vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
 	error = union_relookup(um, dvp, vpp, cnp, &cn,
 			cnp->cn_nameptr, cnp->cn_namelen);
 	if (error) {
 		VOP_UNLOCK(dvp, 0);
+		vn_finished_write(mp, 0);
 		return (error);
 	}
 
@@ -865,6 +864,7 @@ union_mkshadow(um, dvp, cnp, vpp)
 		if (dvp != *vpp)
 			VOP_UNLOCK(dvp, 0);
 		vput(*vpp);
+		vn_finished_write(mp, 0);
 		*vpp = NULLVP;
 		return (EEXIST);
 	}
@@ -886,6 +886,7 @@ union_mkshadow(um, dvp, cnp, vpp)
 
 	vref(dvp);
 	error = VOP_MKDIR(dvp, vpp, &cn, &va);
+	vn_finished_write(mp, 0);
 	return (error);
 }
 
@@ -909,18 +910,24 @@ union_mkwhiteout(um, dvp, cnp, path)
 	struct lwp *l = cnp->cn_lwp;
 	struct vnode *wvp;
 	struct componentname cn;
+	struct mount *mp;
 
 	VOP_UNLOCK(dvp, 0);
+	if ((error = vn_start_write(dvp, &mp, V_WAIT | V_PCATCH)) != 0)
+		return (error);
 	vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
 	error = union_relookup(um, dvp, &wvp, cnp, &cn, path, strlen(path));
-	if (error)
+	if (error) {
+		vn_finished_write(mp, 0);
 		return (error);
+	}
 
 	if (wvp) {
 		VOP_ABORTOP(dvp, &cn);
 		if (dvp != wvp)
 			VOP_UNLOCK(dvp, 0);
 		vput(wvp);
+		vn_finished_write(mp, 0);
 		return (EEXIST);
 	}
 
@@ -930,6 +937,8 @@ union_mkwhiteout(um, dvp, cnp, path)
 	error = VOP_WHITEOUT(dvp, &cn, CREATE);
 	if (error)
 		VOP_ABORTOP(dvp, &cn);
+
+	vn_finished_write(mp, 0);
 
 	return (error);
 }

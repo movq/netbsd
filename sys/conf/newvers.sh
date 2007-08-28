@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: newvers.sh,v 1.48 2007/05/12 21:00:00 christos Exp $
+#	$NetBSD: newvers.sh,v 1.42 2005/12/11 12:20:30 christos Exp $
 #
 # Copyright (c) 1984, 1986, 1990, 1993
 #	The Regents of the University of California.  All rights reserved.
@@ -80,19 +80,13 @@ const char copyright[] =
 ${copyright}
 "\n";
 
-#if \
-    defined(__hppa__) || \
-    defined(__i386__) || \
-    defined(__sparc64__) || \
-    defined(__m68k__) || \
-    defined(__macppc__) || \
-    defined(__x86_64__)
+#ifdef notyet
 /*
  * NetBSD identity note.
  */
 #define	_S(TAG)	__STRING(TAG)
 __asm(
-	".section\t\".note.netbsd.ident\", \"\",@note\n"
+	".section\t\".note.netbsd.ident\", \"a\"\n"
 	"\t.p2align\t2\n"
 	"\t.long\t" _S(ELF_NOTE_NETBSD_NAMESZ) "\n"
 	"\t.long\t" _S(ELF_NOTE_NETBSD_DESCSZ) "\n"

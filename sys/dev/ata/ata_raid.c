@@ -1,4 +1,4 @@
-/*	$NetBSD: ata_raid.c,v 1.23 2007/07/09 21:00:30 ad Exp $	*/
+/*	$NetBSD: ata_raid.c,v 1.20.2.1 2007/03/31 16:38:04 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ata_raid.c,v 1.23 2007/07/09 21:00:30 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ata_raid.c,v 1.20.2.1 2007/03/31 16:38:04 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -52,7 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: ata_raid.c,v 1.23 2007/07/09 21:00:30 ad Exp $");
 #include <sys/fcntl.h>
 #include <sys/malloc.h>
 #include <sys/vnode.h>
-#include <sys/proc.h>
 
 #include <miscfs/specfs/specdev.h>
 
@@ -134,7 +133,7 @@ ata_raid_finalize(struct device *self)
 	static struct cfdata ataraid_cfdata = {
 		.cf_name = "ataraid",
 		.cf_atname = "ataraid",
-		.cf_unit = 0,
+		.cf_unit = DVUNIT_ANY,
 		.cf_fstate = FSTATE_STAR,
 	};
 	extern struct cfdriver ataraid_cd;

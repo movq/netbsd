@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_trantcp.c,v 1.31 2007/07/10 21:05:03 ad Exp $	*/
+/*	$NetBSD: smb_trantcp.c,v 1.27 2006/11/16 01:33:51 christos Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smb_trantcp.c,v 1.31 2007/07/10 21:05:03 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smb_trantcp.c,v 1.27 2006/11/16 01:33:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -148,17 +148,15 @@ nb_poll(struct nbpcb *nbp, int events, struct lwp *l)
 #endif
 }
 
-/* XXX WTF re-implemented select()? */
 static int
 nbssn_rselect(struct nbpcb *nbp, const struct timeval *tv, int events,
 	struct lwp *l)
 {
-	extern kcondvar_t select_cv;
-	extern kmutex_t select_lock;
 	struct timeval atv;
 	extern int nselcoll;
 	int ncoll;
 	int timo, error;
+	int s;
 
 	if (tv) {
 		atv = *tv;
@@ -170,13 +168,10 @@ nbssn_rselect(struct nbpcb *nbp, const struct timeval *tv, int events,
 	} else
 		timo = 0;
 
- 	mutex_enter(&select_lock);
  retry:
 	ncoll = nselcoll;
-	l->l_selflag = 1;
- 	mutex_exit(&select_lock);
+	l->l_flag |= L_SELECT;
 	error = nb_poll(nbp, events, l);
- 	mutex_enter(&select_lock);
 	if (error) {
 		error = 0;
 		goto done;
@@ -192,16 +187,20 @@ nbssn_rselect(struct nbpcb *nbp, const struct timeval *tv, int events,
 		}
 	}
 
-	if (l->l_selflag != 1 || nselcoll != ncoll)
+	s = splsched();
+	if ((l->l_flag & L_SELECT) == 0 || nselcoll != ncoll) {
+		splx(s);
 		goto retry;
-	l->l_selflag = 2;
-	error = cv_timedwait(&select_cv, &select_lock, timo);
+	}
+	l->l_flag &= ~L_SELECT;
+	error = tsleep((caddr_t)&selwait, PSOCK, "smbsel", timo);
+	splx(s);
+
 	if (error == 0)
 		goto retry;
 
 done:
-	l->l_selflag = 0;
-	mutex_exit(&select_lock);
+	l->l_flag &= ~L_SELECT;
 	/* select is not restarted after signals... */
 	if (error == ERESTART)
 		error = 0;
@@ -215,7 +214,7 @@ nb_intr(struct nbpcb *nbp, struct lwp *l)
 }
 
 static void
-nb_upcall(struct socket *so, void *arg, int waitflag)
+nb_upcall(struct socket *so, caddr_t arg, int waitflag)
 {
 	struct nbpcb *nbp = (void *)arg;
 
@@ -268,7 +267,7 @@ nb_connect_in(struct nbpcb *nbp, struct sockaddr_in *to, struct lwp *l)
 	if (error)
 		return error;
 	nbp->nbp_tso = so;
-	so->so_upcallarg = (void *)nbp;
+	so->so_upcallarg = (caddr_t)nbp;
 	so->so_upcall = nb_upcall;
 	so->so_rcv.sb_flags |= SB_UPCALL;
 	so->so_rcv.sb_timeo = NB_SNDTIMEO;
@@ -372,7 +371,7 @@ nbssn_rq_request(struct nbpcb *nbp, struct lwp *l)
 			error = ECONNABORTED;
 			break;
 		}
-		md_get_mem(mdp, (void *)&sin.sin_addr, 4, MB_MSYSTEM);
+		md_get_mem(mdp, (caddr_t)&sin.sin_addr, 4, MB_MSYSTEM);
 		md_get_uint16(mdp, &port);
 		sin.sin_port = port;
 		nbp->nbp_state = NBST_RETARGET;
@@ -400,7 +399,7 @@ nbssn_recvhdr(struct nbpcb *nbp, int *lenp,
 	u_int32_t len;
 	int error;
 
-	aio.iov_base = (void *)&len;
+	aio.iov_base = (caddr_t)&len;
 	aio.iov_len = sizeof(len);
 	auio.uio_iov = &aio;
 	auio.uio_iovcnt = 1;

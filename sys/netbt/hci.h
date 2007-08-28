@@ -1,4 +1,4 @@
-/*	$NetBSD: hci.h,v 1.10 2007/04/21 06:15:23 plunky Exp $	*/
+/*	$NetBSD: hci.h,v 1.7.2.2 2007/09/11 08:14:24 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -54,7 +54,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: hci.h,v 1.10 2007/04/21 06:15:23 plunky Exp $
+ * $Id: hci.h,v 1.7.2.2 2007/09/11 08:14:24 msaitoh Exp $
  * $FreeBSD: src/sys/netgraph/bluetooth/include/ng_hci.h,v 1.6 2005/01/07 01:45:43 imp Exp $
  */
 
@@ -1589,11 +1589,7 @@ typedef hci_status_rp	hci_enable_unit_under_test_rp;
 
 /* Ericsson specific FC */
 #define HCI_CMD_ERICSSON_WRITE_PCM_SETTINGS		0xFC07
-#define HCI_CMD_ERICSSON_SET_UART_BAUD_RATE		0xFC09
 #define HCI_CMD_ERICSSON_SET_SCO_DATA_PATH		0xFC1D
-
-/* Cambridge Silicon Radio specific FC */
-#define HCI_CMD_CSR_EXTN				0xFC00
 
 
 /**************************************************************************
@@ -1850,7 +1846,7 @@ typedef struct {
 	uint8_t		uclass[HCI_CLASS_SIZE];	/* unit class */
 	uint16_t	clock_offset;		/* clock offset */
 	int8_t		rssi;			/* rssi */
-} __attribute__ ((__packed__)) hci_rssi_response_ep;
+} __attribute__ ((__packed__)) hci_rssi_response;
 
 #define HCI_EVENT_READ_REMOTE_EXTENDED_FEATURES	0x23
 typedef struct {
@@ -2138,7 +2134,7 @@ struct hci_unit {
 		(struct hci_unit *);
 	void	(*hci_start_sco)	/* initiate sco output routine */
 		(struct hci_unit *);
-	ipl_cookie_t hci_ipl;		/* to block queue operations */
+	int	hci_ipl;		/* to block queue operations */
 
 	/* input queues */
 	void			*hci_rxint;	/* receive interrupt cookie */

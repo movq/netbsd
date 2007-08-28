@@ -1,4 +1,4 @@
-/*      $NetBSD: sgec.c,v 1.31 2007/08/27 14:48:55 dyoung Exp $ */
+/*      $NetBSD: sgec.c,v 1.27.24.2 2007/05/07 03:23:57 snj Exp $ */
 /*
  * Copyright (c) 1999 Ludd, University of Lule}, Sweden. All rights reserved.
  *
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sgec.c,v 1.31 2007/08/27 14:48:55 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sgec.c,v 1.27.24.2 2007/05/07 03:23:57 snj Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -78,7 +78,7 @@ __KERNEL_RCSID(0, "$NetBSD: sgec.c,v 1.31 2007/08/27 14:48:55 dyoung Exp $");
 
 static	void	zeinit(struct ze_softc *);
 static	void	zestart(struct ifnet *);
-static	int	zeioctl(struct ifnet *, u_long, void *);
+static	int	zeioctl(struct ifnet *, u_long, caddr_t);
 static	int	ze_add_rxbuf(struct ze_softc *, int);
 static	void	ze_setup(struct ze_softc *);
 static	void	zetimeout(struct ifnet *);
@@ -116,7 +116,7 @@ sgec_attach(sc)
 	}
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, &seg, rseg,
-	    sizeof(struct ze_cdata), (void **)&sc->sc_zedata,
+	    sizeof(struct ze_cdata), (caddr_t *)&sc->sc_zedata,
 	    BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
 		printf(": unable to map control data, error = %d\n", error);
 		goto fail_1;
@@ -256,7 +256,7 @@ sgec_attach(sc)
  fail_3:
 	bus_dmamap_destroy(sc->sc_dmat, sc->sc_cmap);
  fail_2:
-	bus_dmamem_unmap(sc->sc_dmat, (void *)sc->sc_zedata,
+	bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->sc_zedata,
 	    sizeof(struct ze_cdata));
  fail_1:
 	bus_dmamem_free(sc->sc_dmat, &seg, rseg);
@@ -536,7 +536,7 @@ int
 zeioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 {
 	struct ze_softc *sc = ifp->if_softc;
 	struct ifreq *ifr = (struct ifreq *)data;
@@ -672,7 +672,7 @@ ze_setup(sc)
 	struct ether_multistep step;
 	struct ze_cdata *zc = sc->sc_zedata;
 	struct ifnet *ifp = &sc->sc_if;
-	const u_int8_t *enaddr = CLLADDR(ifp->if_sadl);
+	u_int8_t *enaddr = LLADDR(ifp->if_sadl);
 	int j, idx, reg;
 
 	if (sc->sc_inq == (TXDESCS - 1)) {
