@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sysctl.c,v 1.210 2007/08/15 12:07:34 ad Exp $	*/
+/*	$NetBSD: kern_sysctl.c,v 1.206 2006/11/01 10:17:58 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -75,9 +75,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.210 2007/08/15 12:07:34 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.206 2006/11/01 10:17:58 yamt Exp $");
 
 #include "opt_defcorename.h"
+#include "opt_ktrace.h"
 #include "ksyms.h"
 
 #include <sys/param.h>
@@ -88,9 +89,12 @@ __KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.210 2007/08/15 12:07:34 ad Exp $")
 #include <sys/ksyms.h>
 #include <sys/malloc.h>
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/kauth.h>
+#ifdef KTRACE
 #include <sys/ktrace.h>
+#endif
 #include <machine/stdarg.h>
 
 #define	MAXDESCLEN	1024
@@ -149,8 +153,8 @@ __link_set_decl(sysctl_funcs, sysctl_setup_func);
  * memory, if there is one, so that it can be released more easily
  * from anywhere.
  */
-krwlock_t sysctl_treelock;
-void *sysctl_memaddr;
+struct lock sysctl_treelock;
+caddr_t sysctl_memaddr;
 size_t sysctl_memsize;
 
 /*
@@ -184,7 +188,16 @@ sysctl_copyin(struct lwp *l, const void *uaddr, void *kaddr, size_t len)
 
 	if (l != NULL) {
 		error = copyin(uaddr, kaddr, len);
-		ktrmibio(-1, UIO_WRITE, uaddr, len, error);
+#ifdef KTRACE
+		if (!error && KTRPOINT(l->l_proc, KTR_MIB)) {
+			struct iovec iov;
+
+			iov.iov_base = (void *)(vaddr_t)uaddr;
+			iov.iov_len = len;
+			ktrgenio(l, -1, UIO_WRITE, &iov, len, error);
+		}
+#endif
+
 	} else {
 		error = kcopy(uaddr, kaddr, len);
 	}
@@ -199,7 +212,15 @@ sysctl_copyout(struct lwp *l, const void *kaddr, void *uaddr, size_t len)
 
 	if (l != NULL) {
 		error = copyout(kaddr, uaddr, len);
-		ktrmibio(-1, UIO_READ, uaddr, len, error);
+#ifdef KTRACE
+		if (!error && KTRPOINT(l->l_proc, KTR_MIB)) {
+			struct iovec iov;
+
+			iov.iov_base = (void *)(vaddr_t)uaddr;
+			iov.iov_len = len;
+			ktrgenio(l, -1, UIO_READ, &iov, len, error);
+		}
+#endif
 	} else {
 		error = kcopy(kaddr, uaddr, len);
 	}
@@ -215,7 +236,15 @@ sysctl_copyinstr(struct lwp *l, const void *uaddr, void *kaddr,
 
 	if (l != NULL) {
 		error = copyinstr(uaddr, kaddr, len, done);
-		ktrmibio(-1, UIO_WRITE, uaddr, len, error);
+#ifdef KTRACE
+		if (!error && KTRPOINT(l->l_proc, KTR_MIB)) {
+			struct iovec iov;
+
+			iov.iov_base = (void *)(vaddr_t)uaddr;
+			iov.iov_len = len;
+			ktrgenio(l, -1, UIO_WRITE, &iov, len, error);
+		}
+#endif
 	} else {
 		error = copystr(uaddr, kaddr, len, done);
 	}
@@ -233,7 +262,7 @@ sysctl_init(void)
 {
 	sysctl_setup_func * const *sysctl_setup, f;
 
-	rw_init(&sysctl_treelock);
+	lockinit(&sysctl_treelock, PRIBIO|PCATCH, "sysctl", 0, 0);
 
 	/*
 	 * dynamic mib numbers start here
@@ -299,8 +328,10 @@ sys___sysctl(struct lwp *l, void *v, register_t *retval)
 	if (error)
 		return (error);
 
-	ktrmib(name, SCARG(uap, namelen));
-
+#ifdef KTRACE
+	if (KTRPOINT(l->l_proc, KTR_MIB)) 
+		ktrmib(l, name, SCARG(uap, namelen));
+#endif
 	/*
 	 * wire old so that copyout() is less likely to fail?
 	 */
@@ -354,9 +385,11 @@ sys___sysctl(struct lwp *l, void *v, register_t *retval)
 int
 sysctl_lock(struct lwp *l, void *oldp, size_t savelen)
 {
-	int error;
+	int error = 0;
 
-	rw_enter(&sysctl_treelock, RW_WRITER);	/* XXX write */
+	error = lockmgr(&sysctl_treelock, LK_EXCLUSIVE, NULL);
+	if (error)
+		return (error);
 
 	if (l != NULL && oldp != NULL && savelen) {
 
@@ -366,13 +399,13 @@ sysctl_lock(struct lwp *l, void *oldp, size_t savelen)
 		 */
 
 		if (uvmexp.wired + atop(savelen) > uvmexp.wiredmax) {
-			rw_exit(&sysctl_treelock);
+			lockmgr(&sysctl_treelock, LK_RELEASE, NULL);
 			return (ENOMEM);
 		}
 		error = uvm_vslock(l->l_proc->p_vmspace, oldp, savelen,
 				   VM_PROT_WRITE);
 		if (error) {
-			rw_exit(&sysctl_treelock);
+			(void) lockmgr(&sysctl_treelock, LK_RELEASE, NULL);
 			return (error);
 		}
 		sysctl_memaddr = oldp;
@@ -477,7 +510,7 @@ sysctl_unlock(struct lwp *l)
 		sysctl_memsize = 0;
 	}
 
-	rw_exit(&sysctl_treelock);	/* XXX write */
+	(void) lockmgr(&sysctl_treelock, LK_RELEASE, NULL);
 }
 
 /*
@@ -1448,7 +1481,7 @@ sysctl_lookup(SYSCTLFN_ARGS)
 	if (l != NULL && newp != NULL &&
 	    !(rnode->sysctl_flags & CTLFLAG_ANYWRITE) &&
 	    (error = kauth_authorize_generic(l->l_cred,
-	    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+	    KAUTH_GENERIC_ISSUSER, &l->l_acflag)) != 0)
 		return (error);
 
 	/*
@@ -1830,7 +1863,7 @@ sysctl_describe(SYSCTLFN_ARGS)
 		d->descr_num = node[i].sysctl_num;
 		d->descr_ver = node[i].sysctl_ver;
 		d->descr_len = sz; /* includes trailing nul */
-		sz = (char *)NEXT_DESCR(d) - (char *)d;
+		sz = (caddr_t)NEXT_DESCR(d) - (caddr_t)d;
 		if (oldp != NULL && left >= sz) {
 			error = sysctl_copyout(l, d, oldp, sz);
 			if (error)

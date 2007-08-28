@@ -1,4 +1,4 @@
-/*	$NetBSD: mmemcard.c,v 1.12 2007/07/29 13:31:08 ad Exp $	*/
+/*	$NetBSD: mmemcard.c,v 1.8 2006/03/28 17:38:24 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mmemcard.c,v 1.12 2007/07/29 13:31:08 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mmemcard.c,v 1.8 2006/03/28 17:38:24 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -320,11 +320,13 @@ mmemdetach(struct device *self, int flags)
 	 */
 	if ((bp = sc->sc_bp) != NULL) {
 		bp->b_error = EIO;
+		bp->b_flags |= B_ERROR;
 		bp->b_resid = bp->b_bcount;
 		biodone(bp);
 	}
 	while ((bp = BUFQ_GET(sc->sc_q)) != NULL) {
 		bp->b_error = EIO;
+		bp->b_flags |= B_ERROR;
 		bp->b_resid = bp->b_bcount;
 		biodone(bp);
 	}
@@ -699,7 +701,7 @@ mmemstrategy(struct buf *bp)
 			goto inval;		/* no read */
 	} else if (sc->sc_wacc == 0) {
 		bp->b_error = EROFS;		/* no write */
-		goto done;
+		goto bad;
 	}
 
 	if (bp->b_blkno & ~(~(daddr_t)0 >> (DEV_BSHIFT + 1 /* sign bit */))
@@ -744,6 +746,7 @@ mmemstrategy(struct buf *bp)
 	return;
 
 inval:	bp->b_error = EINVAL;
+bad:	bp->b_flags |= B_ERROR;
 done:	bp->b_resid = bp->b_bcount;
 	biodone(bp);
 }
@@ -866,12 +869,13 @@ mmemdone(struct mmem_softc *sc, struct mmem_pt *pt, int err)
 	KASSERT(bp);
 
 	if (err) {
-		bcnt = (char *)sc->sc_iobuf - (char *)bp->b_data;
+		bcnt = sc->sc_iobuf - bp->b_data;
 		bp->b_resid = bp->b_bcount - bcnt;
 
 		/* raise error if no block is read */
 		if (bcnt == 0) {
 			bp->b_error = err;
+			bp->b_flags |= B_ERROR;
 		}
 		goto term_xfer;
 	}
@@ -882,8 +886,7 @@ mmemdone(struct mmem_softc *sc, struct mmem_pt *pt, int err)
 		/* terminate current transfer */
 		sc->sc_bp = NULL;
 		s = splbio();
-		disk_unbusy(&pt->pt_dk,
-		    (char *)sc->sc_iobuf - (char *)bp->b_data,
+		disk_unbusy(&pt->pt_dk, sc->sc_iobuf - bp->b_data,
 		    sc->sc_stat == MMEM_READ);
 		biodone(bp);
 		splx(s);
@@ -913,7 +916,7 @@ mmemwrite(dev_t dev, struct uio *uio, int flags)
 }
 
 int
-mmemioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+mmemioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	int diskunit, unit, part;
 	struct mmem_softc *sc;

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mc.c,v 1.31 2007/03/05 21:17:27 he Exp $	*/
+/*	$NetBSD: if_mc.c,v 1.27.6.1 2006/12/15 13:24:30 tron Exp $	*/
 
 /*-
  * Copyright (c) 1997 David Huang <khym@azeotrope.org>
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.31 2007/03/05 21:17:27 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.27.6.1 2006/12/15 13:24:30 tron Exp $");
 
 #include "opt_ddb.h"
 #include "opt_inet.h"
@@ -67,6 +67,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.31 2007/03/05 21:17:27 he Exp $");
 
 
 
+#include <uvm/uvm_extern.h>
+
 #include "bpfilter.h"
 #if NBPFILTER > 0
 #include <net/bpf.h>
@@ -80,14 +82,14 @@ __KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.31 2007/03/05 21:17:27 he Exp $");
 hide void	mcwatchdog(struct ifnet *);
 hide int	mcinit(struct mc_softc *);
 hide int	mcstop(struct mc_softc *);
-hide int	mcioctl(struct ifnet *, u_long, void *);
+hide int	mcioctl(struct ifnet *, u_long, caddr_t);
 hide void	mcstart(struct ifnet *);
 hide void	mcreset(struct mc_softc *);
 
 integrate u_int	maceput(struct mc_softc *, struct mbuf *);
 integrate void	mc_tint(struct mc_softc *);
-integrate void	mace_read(struct mc_softc *, void *, int);
-integrate struct mbuf *mace_get(struct mc_softc *, void *, int);
+integrate void	mace_read(struct mc_softc *, caddr_t, int);
+integrate struct mbuf *mace_get(struct mc_softc *, caddr_t, int);
 static void mace_calcladrf(struct ethercom *, u_int8_t *);
 static inline u_int16_t ether_cmp(void *, void *);
 
@@ -169,7 +171,7 @@ mcsetup(struct mc_softc	*sc, u_int8_t *lladdr)
 }
 
 hide int
-mcioctl(struct ifnet *ifp, u_long cmd, void *data)
+mcioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct mc_softc *sc = ifp->if_softc;
 	struct ifaddr *ifa;
@@ -409,7 +411,7 @@ maceput(struct mc_softc *sc, struct mbuf *m)
 	u_int len, totlen = 0;
 	u_char *buff;
 
-	buff = (u_char*)sc->sc_txbuf + (sc->sc_txset == 0 ? 0 : 0x800);
+	buff = sc->sc_txbuf + (sc->sc_txset == 0 ? 0 : 0x800);
 
 	for (; m; m = n) {
 		u_char *data = mtod(m, u_char *);
@@ -568,7 +570,7 @@ mc_rint(struct mc_softc *sc)
 }
 
 integrate void
-mace_read(struct mc_softc *sc, void *pkt, int len)
+mace_read(struct mc_softc *sc, caddr_t pkt, int len)
 {
 	struct ifnet *ifp = &sc->sc_if;
 	struct mbuf *m;
@@ -608,7 +610,7 @@ mace_read(struct mc_softc *sc, void *pkt, int len)
  * we copy into clusters.
  */
 integrate struct mbuf *
-mace_get(struct mc_softc *sc, void *pkt, int totlen)
+mace_get(struct mc_softc *sc, caddr_t pkt, int totlen)
 {
 	struct mbuf *m;
 	struct mbuf *top, **mp;
@@ -642,8 +644,8 @@ mace_get(struct mc_softc *sc, void *pkt, int totlen)
 			len = MCLBYTES;
 		}
 		m->m_len = len = min(totlen, len);
-		memcpy(mtod(m, void *), pkt, len);
-		pkt = (char*)pkt + len;
+		memcpy(mtod(m, caddr_t), pkt, len);
+		pkt += len;
 		totlen -= len;
 		*mp = m;
 		mp = &m->m_next;

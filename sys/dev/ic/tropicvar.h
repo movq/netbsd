@@ -1,4 +1,4 @@
-/*	$NetBSD: tropicvar.h,v 1.12 2007/03/04 06:02:02 christos Exp $	*/
+/*	$NetBSD: tropicvar.h,v 1.11 2005/12/11 12:21:28 christos Exp $	*/
 
 /*
  * Mach Operating System
@@ -90,7 +90,7 @@ struct	tr_softc {
 	int sc_dhb16maxsz;	/* max. dbh size at 16MBIT ring speed */
 	int sc_maxmtu;		/* max. MTU supported by adapter */
 	unsigned char	sc_init_status;
-	void * tr_sleepevent;     	/* tr event signalled on successful */
+	caddr_t  tr_sleepevent;     	/* tr event signalled on successful */
 					/* open of adapter  */
 	unsigned short exsap_station;	/* station assigned by open sap cmd */
 
@@ -106,7 +106,7 @@ int tr_config(struct tr_softc *);
 int tr_attach(struct tr_softc *);
 int tr_intr(void *);
 void tr_init(void *);
-int tr_ioctl(struct ifnet *, u_long, void *);
+int tr_ioctl(struct ifnet *, u_long, caddr_t);
 void tr_stop(struct tr_softc *);
 int tr_reset(struct tr_softc *);
 void tr_sleep(struct tr_softc *);

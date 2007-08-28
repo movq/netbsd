@@ -1,4 +1,4 @@
-/* $NetBSD: vga.c,v 1.95 2007/07/28 20:28:56 mjf Exp $ */
+/* $NetBSD: vga.c,v 1.91.2.1 2007/07/30 12:40:49 liamjfoy Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -27,15 +27,15 @@
  * rights to redistribute these changes.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga.c,v 1.95 2007/07/28 20:28:56 mjf Exp $");
-
 /* for WSCONS_SUPPORT_PCVTFONTS */
 #include "opt_wsdisplay_compat.h"
 /* for WSDISPLAY_CUSTOM_BORDER */
 #include "opt_wsdisplay_border.h"
 /* for WSDISPLAY_CUSTOM_OUTPUT */
 #include "opt_wsmsgattrs.h"
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: vga.c,v 1.91.2.1 2007/07/30 12:40:49 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -279,7 +279,7 @@ const struct wsscreen_list vga_screenlist = {
 	_vga_scrlist_mono
 };
 
-static int	vga_ioctl(void *, void *, u_long, void *, int, struct lwp *);
+static int	vga_ioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
 static paddr_t	vga_mmap(void *, void *, off_t, int);
 static int	vga_alloc_screen(void *, const struct wsscreen_descr *,
 				 void **, int *, int *, long *);
@@ -565,7 +565,7 @@ vga_init(struct vga_config *vc, bus_space_tag_t iot, bus_space_tag_t memt)
 	LIST_INIT(&vc->screens);
 	vc->active = NULL;
 	vc->currenttype = vh->vh_mono ? &vga_25lscreen_mono : &vga_25lscreen;
-	callout_init(&vc->vc_switch_callout, 0);
+	callout_init(&vc->vc_switch_callout);
 
 	wsfont_init();
 	if (vga_no_builtinfont) {
@@ -789,7 +789,7 @@ vga_set_video(struct vga_config *vc, int state)
 }
 
 int
-vga_ioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
+vga_ioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct vga_config *vc = v;
 	struct vgascreen *scr = vs;

@@ -1,4 +1,4 @@
-/*      $NetBSD: opms.c,v 1.19 2007/03/04 06:00:43 christos Exp $        */
+/*      $NetBSD: opms.c,v 1.17 2006/03/29 04:16:47 thorpej Exp $        */
 
 /*
  * Copyright 1997
@@ -91,7 +91,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.19 2007/03/04 06:00:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.17 2006/03/29 04:16:47 thorpej Exp $");
 
 #include "opms.h"
 #if NOPMS > 1
@@ -123,6 +123,7 @@ __KERNEL_RCSID(0, "$NetBSD: opms.c,v 1.19 2007/03/04 06:00:43 christos Exp $");
 #include <machine/pio.h>
 #include <machine/mouse.h>
 
+#include <dev/isa/isavar.h>
 #include <shark/shark/i8042reg.h>
 
 /*
@@ -598,7 +599,7 @@ opmsread(dev, uio, flag)
         else
         {
             sc->sc_state |= PMS_ASLP;
-            error = tsleep((void *)sc, PZERO | PCATCH, "opmsread", 0);
+            error = tsleep((caddr_t)sc, PZERO | PCATCH, "opmsread", 0);
             if (error) 
             {
                 sc->sc_state &= ~PMS_ASLP;
@@ -674,7 +675,7 @@ int
 opmsioctl(dev, cmd, addr, flag, l)
     dev_t       dev;
     u_long      cmd;
-    void *    addr;
+    caddr_t     addr;
     int         flag;
     struct lwp *l;
 {
@@ -906,7 +907,7 @@ opmsintr(arg)
                         if (sc->sc_state & PMS_ASLP) 
                         {
                             sc->sc_state &= ~PMS_ASLP;
-                            wakeup((void *)sc);
+                            wakeup((caddr_t)sc);
                         }
                         /* Wakeup any selects waiting */
                         selwakeup(&sc->sc_rsel);

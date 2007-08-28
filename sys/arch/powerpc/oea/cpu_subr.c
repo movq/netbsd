@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_subr.c,v 1.32 2007/07/01 07:37:13 xtraeme Exp $	*/
+/*	$NetBSD: cpu_subr.c,v 1.28 2006/10/30 17:52:12 garbled Exp $	*/
 
 /*-
  * Copyright (c) 2001 Matt Thomas.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_subr.c,v 1.32 2007/07/01 07:37:13 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_subr.c,v 1.28 2006/10/30 17:52:12 garbled Exp $");
 
 #include "opt_ppcparam.h"
 #include "opt_multiprocessor.h"
@@ -62,7 +62,10 @@ static void cpu_probe_speed(struct cpu_info *);
 static void cpu_idlespin(void);
 #if NSYSMON_ENVSYS > 0
 static void cpu_tau_setup(struct cpu_info *);
-static int cpu_tau_gtredata(struct sysmon_envsys *, envsys_data_t *);
+static int cpu_tau_gtredata __P((struct sysmon_envsys *,
+    struct envsys_tre_data *));
+static int cpu_tau_streinfo __P((struct sysmon_envsys *,
+    struct envsys_basic_info *));
 #endif
 
 int cpu;
@@ -185,7 +188,6 @@ static const struct cputab models[] = {
 	{ "603",	MPC603,		REVFMT_MAJMIN },
 	{ "603e",	MPC603e,	REVFMT_MAJMIN },
 	{ "603ev",	MPC603ev,	REVFMT_MAJMIN },
-	{ "G2",		MPCG2,		REVFMT_MAJMIN },
 	{ "604",	MPC604,		REVFMT_MAJMIN },
 	{ "604e",	MPC604e,	REVFMT_MAJMIN },
 	{ "604ev",	MPC604ev,	REVFMT_MAJMIN },
@@ -200,7 +202,6 @@ static const struct cputab models[] = {
 	{ "7447A",	MPC7447A,	REVFMT_MAJMIN },
 	{ "7448",	MPC7448,	REVFMT_MAJMIN },
 	{ "8240",	MPC8240,	REVFMT_MAJMIN },
-	{ "8245",	MPC8245,	REVFMT_MAJMIN },
 	{ "970",	IBM970,		REVFMT_MAJMIN },
 	{ "970FX",	IBM970FX,	REVFMT_MAJMIN },
 	{ "",		0,		REVFMT_HEX }
@@ -283,7 +284,6 @@ cpu_probe_cache(void)
 	case MPC604:
 	case MPC8240:
 	case MPC8245:
-	case MPCG2:
 		curcpu()->ci_ci.dcache_size = 16 K;
 		curcpu()->ci_ci.icache_size = 16 K;
 		assoc = 4;
@@ -322,6 +322,7 @@ cpu_attach_common(struct device *self, int id)
 	struct cpu_info *ci;
 	u_int pvr, vers;
 
+	ncpus++;
 	ci = &cpu_info[id];
 #ifndef MULTIPROCESSOR
 	/*
@@ -371,9 +372,6 @@ cpu_attach_common(struct device *self, int id)
 #ifndef MULTIPROCESSOR
 		aprint_normal(" not configured\n");
 		return NULL;
-#else
-		mi_cpu_attach(ci);
-		break;
 #endif
 	}
 	return (ci);
@@ -427,7 +425,6 @@ cpu_setup(self, ci)
 	case MPC7410:
 	case MPC8240:
 	case MPC8245:
-	case MPCG2:
 		/* Select DOZE mode. */
 		hid0 &= ~(HID0_DOZE | HID0_NAP | HID0_SLEEP);
 		hid0 |= HID0_DOZE | HID0_DPM;
@@ -620,7 +617,7 @@ cpu_identify(char *str, size_t len)
 		major = minor <= 4 ? 1 : 2;
 		break;
 	default:
-		major = (pvr >>  4) & 0xf;
+		major = (pvr >>  8) & 0xf;
 		minor = (pvr >>  0) & 0xf;
 	}
 
@@ -873,29 +870,39 @@ cpu_probe_speed(struct cpu_info *ci)
 }
 
 #if NSYSMON_ENVSYS > 0
+const struct envsys_range cpu_tau_ranges[] = {
+	{ 0, 0, ENVSYS_STEMP}
+};
+
+struct envsys_basic_info cpu_tau_info[] = {
+	{ 0, ENVSYS_STEMP, "CPU temp", 0, 0, ENVSYS_FVALID}
+};
+
 void
 cpu_tau_setup(struct cpu_info *ci)
 {
 	struct {
 		struct sysmon_envsys sme;
-		envsys_data_t edata;
+		struct envsys_tre_data tau_info;
 	} *datap;
 	int error;
 
 	datap = malloc(sizeof(*datap), M_DEVBUF, M_WAITOK | M_ZERO);
 
-	datap->edata.sensor = 0;
-	datap->edata.units = ENVSYS_STEMP;
-	datap->edata.state = ENVSYS_SVALID;
-	(void)strlcpy(datap->edata.desc, "CPU Temp",
-	    sizeof(datap->edata.desc));
-
 	ci->ci_sysmon_cookie = &datap->sme;
 	datap->sme.sme_nsensors = 1;
-	datap->sme.sme_sensor_data = &datap->edata;
-	datap->sme.sme_name = ci->ci_dev->dv_xname;	
+	datap->sme.sme_envsys_version = 1000;
+	datap->sme.sme_ranges = cpu_tau_ranges;
+	datap->sme.sme_sensor_info = cpu_tau_info;
+	datap->sme.sme_sensor_data = &datap->tau_info;
+	
+	datap->sme.sme_sensor_data->sensor = 0;
+	datap->sme.sme_sensor_data->warnflags = ENVSYS_WARN_OK;
+	datap->sme.sme_sensor_data->validflags = ENVSYS_FVALID|ENVSYS_FCURVALID;
 	datap->sme.sme_cookie = ci;
 	datap->sme.sme_gtredata = cpu_tau_gtredata;
+	datap->sme.sme_streinfo = cpu_tau_streinfo;
+	datap->sme.sme_flags = 0;
 
 	if ((error = sysmon_envsys_register(&datap->sme)) != 0)
 		aprint_error("%s: unable to register with sysmon (%d)\n",
@@ -905,12 +912,12 @@ cpu_tau_setup(struct cpu_info *ci)
 
 /* Find the temperature of the CPU. */
 int
-cpu_tau_gtredata(struct sysmon_envsys *sme, envsys_data_t *edata)
+cpu_tau_gtredata(struct sysmon_envsys *sme, struct envsys_tre_data *tred)
 {
 	int i, threshold, count;
 
-	if (edata->sensor != 0) {
-		edata->state = ENVSYS_SINVALID;
+	if (tred->sensor != 0) {
+		tred->validflags = 0;
 		return 0;
 	}
 	
@@ -952,8 +959,18 @@ cpu_tau_gtredata(struct sysmon_envsys *sme, envsys_data_t *edata)
 	threshold += 2;
 
 	/* Convert the temperature in degrees C to microkelvin */
-	sme->sme_sensor_data->value_cur = (threshold * 1000000) + 273150000;
+	sme->sme_sensor_data->cur.data_us = (threshold * 1000000) + 273150000;
 	
+	*tred = *sme->sme_sensor_data;
+
 	return 0;
+}
+
+int
+cpu_tau_streinfo(struct sysmon_envsys *sme, struct envsys_basic_info *binfo)
+{
+
+	/* There is nothing to set here. */
+	return (EINVAL);
 }
 #endif /* NSYSMON_ENVSYS > 0 */

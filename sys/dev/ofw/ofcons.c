@@ -1,4 +1,4 @@
-/*	$NetBSD: ofcons.c,v 1.31 2007/07/09 21:00:52 ad Exp $	*/
+/*	$NetBSD: ofcons.c,v 1.29 2006/10/01 19:28:44 elad Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofcons.c,v 1.31 2007/07/09 21:00:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofcons.c,v 1.29 2006/10/01 19:28:44 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -110,7 +110,7 @@ ofcons_attach(parent, self, aux)
 
 	printf("\n");
 
-	callout_init(&sc->sc_poll_ch, 0);
+	callout_init(&sc->sc_poll_ch);
 }
 
 static void ofcons_start(struct tty *);
@@ -214,7 +214,7 @@ int
 ofcons_ioctl(dev, cmd, data, flag, l)
 	dev_t dev;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 	int flag;
 	struct lwp *l;
 {

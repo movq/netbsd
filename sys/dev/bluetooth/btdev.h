@@ -1,4 +1,4 @@
-/*	$NetBSD: btdev.h,v 1.6 2007/04/21 06:15:22 plunky Exp $	*/
+/*	$NetBSD: btdev.h,v 1.5.2.1 2007/07/19 16:04:20 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.

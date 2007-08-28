@@ -1,4 +1,4 @@
-/*	$NetBSD: com.c,v 1.262 2007/08/16 08:56:49 martin Exp $	*/
+/*	$NetBSD: com.c,v 1.256 2006/11/16 01:32:51 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2004 The NetBSD Foundation, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com.c,v 1.262 2007/08/16 08:56:49 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com.c,v 1.256 2006/11/16 01:32:51 christos Exp $");
 
 #include "opt_com.h"
 #include "opt_ddb.h"
@@ -190,8 +190,16 @@ void	comcnputc(dev_t, int);
 void	comcnpollc(dev_t, int);
 
 #define	integrate	static inline
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 void 	comsoft(void *);
-
+#else
+#ifndef __NO_SOFT_SERIAL_INTERRUPT
+void 	comsoft(void);
+#else
+void 	comsoft(void *);
+static struct callout comsoft_callout = CALLOUT_INITIALIZER;
+#endif
+#endif
 integrate void com_rxsoft(struct com_softc *, struct tty *);
 integrate void com_txsoft(struct com_softc *, struct tty *);
 integrate void com_stsoft(struct com_softc *, struct tty *);
@@ -237,6 +245,12 @@ static int ppscap =
 	PPS_CAPTURECLEAR |
 	PPS_OFFSETASSERT | PPS_OFFSETCLEAR;
 #endif /* !__HAVE_TIMECOUNTER */
+
+#ifndef __HAVE_GENERIC_SOFT_INTERRUPTS
+#ifdef __NO_SOFT_SERIAL_INTERRUPT
+volatile int	com_softintr_scheduled;
+#endif
+#endif
 
 #ifdef KGDB
 #include <sys/kgdb.h>
@@ -359,13 +373,19 @@ comprobe1(bus_space_tag_t iot, bus_space_handle_t ioh)
 static void
 com_enable_debugport(struct com_softc *sc)
 {
+	int s;
+
 	/* Turn on line break interrupt, set carrier. */
+	s = splserial();
+	COM_LOCK(sc);
 	sc->sc_ier = IER_ERXRDY;
 	if (sc->sc_type == COM_TYPE_PXA2x0)
 		sc->sc_ier |= IER_EUART | IER_ERXTOUT;
 	CSR_WRITE_1(&sc->sc_regs, COM_REG_IER, sc->sc_ier);
 	SET(sc->sc_mcr, MCR_DTR | MCR_RTS);
 	CSR_WRITE_1(&sc->sc_regs, COM_REG_MCR, sc->sc_mcr);
+	COM_UNLOCK(sc);
+	splx(s);
 }
 
 void
@@ -378,9 +398,7 @@ com_attach_subr(struct com_softc *sc)
 #endif
 	const char *fifo_msg = NULL;
 
-	aprint_naive("\n");
-
-	callout_init(&sc->sc_diag_callout, 0);
+	callout_init(&sc->sc_diag_callout);
 	simple_lock_init(&sc->sc_lock);
 
 	/* Disable interrupts before configuring the device. */
@@ -534,7 +552,9 @@ fifodone:
 	}
 #endif
 
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	sc->sc_si = softintr_establish(IPL_SOFTSERIAL, comsoft, sc);
+#endif
 
 #if NRND > 0 && defined(RND_COM)
 	rnd_attach_source(&sc->rnd_source, sc->sc_dev.dv_xname,
@@ -551,7 +571,7 @@ fifodone:
 	sc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
 	    com_power, sc);
 	if (sc->sc_powerhook == NULL)
-		aprint_error("%s: WARNING: unable to establish power hook\n",
+		printf("%s: WARNING: unable to establish power hook\n",
 			sc->sc_dev.dv_xname);
 
 	SET(sc->sc_hwflags, COM_HW_DEV_OK);
@@ -575,30 +595,30 @@ com_config(struct com_softc *sc)
 	if (sc->sc_type == COM_TYPE_HAYESP) {
 
 		/* Set 16550 compatibility mode */
-		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD1,
+		bus_space_write_1(iot, sc->sc_hayespioh, HAYESP_CMD1,
 				  HAYESP_SETMODE);
-		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD2,
+		bus_space_write_1(iot, sc->sc_hayespioh, HAYESP_CMD2,
 				  HAYESP_MODE_FIFO|HAYESP_MODE_RTS|
 				  HAYESP_MODE_SCALE);
 
 		/* Set RTS/CTS flow control */
-		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD1,
+		bus_space_write_1(iot, sc->sc_hayespioh, HAYESP_CMD1,
 				  HAYESP_SETFLOWTYPE);
-		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD2,
+		bus_space_write_1(iot, sc->sc_hayespioh, HAYESP_CMD2,
 				  HAYESP_FLOW_RTS);
-		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD2,
+		bus_space_write_1(iot, sc->sc_hayespioh, HAYESP_CMD2,
 				  HAYESP_FLOW_CTS);
 
 		/* Set flow control levels */
-		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD1,
+		bus_space_write_1(iot, sc->sc_hayespioh, HAYESP_CMD1,
 				  HAYESP_SETRXFLOW);
-		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD2,
+		bus_space_write_1(iot, sc->sc_hayespioh, HAYESP_CMD2,
 				  HAYESP_HIBYTE(HAYESP_RXHIWMARK));
-		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD2,
+		bus_space_write_1(iot, sc->sc_hayespioh, HAYESP_CMD2,
 				  HAYESP_LOBYTE(HAYESP_RXHIWMARK));
-		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD2,
+		bus_space_write_1(iot, sc->sc_hayespioh, HAYESP_CMD2,
 				  HAYESP_HIBYTE(HAYESP_RXLOWMARK));
-		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD2,
+		bus_space_write_1(iot, sc->sc_hayespioh, HAYESP_CMD2,
 				  HAYESP_LOBYTE(HAYESP_RXLOWMARK));
 	}
 #endif
@@ -643,8 +663,10 @@ com_detach(struct device *self, int flags)
 	tty_detach(sc->sc_tty);
 	ttyfree(sc->sc_tty);
 
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	/* Unhook the soft interrupt handler. */
 	softintr_disestablish(sc->sc_si);
+#endif
 
 #if NRND > 0 && defined(RND_COM)
 	/* Unhook the entropy source. */
@@ -977,7 +999,7 @@ comtty(dev_t dev)
 }
 
 int
-comioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+comioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct com_softc *sc = device_lookup(&com_cd, COMUNIT(dev));
 	struct tty *tp = sc->sc_tty;
@@ -1207,7 +1229,18 @@ com_schedrx(struct com_softc *sc)
 	sc->sc_rx_ready = 1;
 
 	/* Wake up the poller. */
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	softintr_schedule(sc->sc_si);
+#else
+#ifndef __NO_SOFT_SERIAL_INTERRUPT
+	setsoftserial();
+#else
+	if (!com_softintr_scheduled) {
+		com_softintr_scheduled = 1;
+		callout_reset(&comsoft_callout, 1, comsoft, NULL);
+	}
+#endif
+#endif
 }
 
 void
@@ -1597,9 +1630,9 @@ com_loadchannelregs(struct com_softc *sc)
 	CSR_WRITE_1(regsp, COM_REG_FIFO, sc->sc_fifo);
 #ifdef COM_HAYESP
 	if (sc->sc_type == COM_TYPE_HAYESP) {
-		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD1,
+		bus_space_write_1(iot, sc->sc_hayespioh, HAYESP_CMD1,
 		    HAYESP_SETPRESCALER);
-		bus_space_write_1(regsp->cr_iot, sc->sc_hayespioh, HAYESP_CMD2,
+		bus_space_write_1(iot, sc->sc_hayespioh, HAYESP_CMD2,
 		    sc->sc_prescaler);
 	}
 #endif
@@ -1931,6 +1964,7 @@ com_stsoft(struct com_softc *sc, struct tty *tp)
 #endif
 }
 
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 void
 comsoft(void *arg)
 {
@@ -1940,23 +1974,68 @@ comsoft(void *arg)
 	if (COM_ISALIVE(sc) == 0)
 		return;
 
-	tp = sc->sc_tty;
+	{
+#else
+void
+#ifndef __NO_SOFT_SERIAL_INTERRUPT
+comsoft(void)
+#else
+comsoft(void *arg)
+#endif
+{
+	struct com_softc	*sc;
+	struct tty	*tp;
+	int	unit;
+#ifdef __NO_SOFT_SERIAL_INTERRUPT
+	int s;
 
-	if (sc->sc_rx_ready) {
-		sc->sc_rx_ready = 0;
-		com_rxsoft(sc, tp);
+	s = splsoftserial();
+	com_softintr_scheduled = 0;
+#endif
+
+	for (unit = 0; unit < com_cd.cd_ndevs; unit++) {
+		sc = device_lookup(&com_cd, unit);
+		if (sc == NULL || !ISSET(sc->sc_hwflags, COM_HW_DEV_OK))
+			continue;
+
+		if (COM_ISALIVE(sc) == 0)
+			continue;
+
+		tp = sc->sc_tty;
+		if (tp == NULL)
+			continue;
+		if (!ISSET(tp->t_state, TS_ISOPEN) && tp->t_wopen == 0)
+			continue;
+#endif
+		tp = sc->sc_tty;
+
+		if (sc->sc_rx_ready) {
+			sc->sc_rx_ready = 0;
+			com_rxsoft(sc, tp);
+		}
+
+		if (sc->sc_st_check) {
+			sc->sc_st_check = 0;
+			com_stsoft(sc, tp);
+		}
+
+		if (sc->sc_tx_done) {
+			sc->sc_tx_done = 0;
+			com_txsoft(sc, tp);
+		}
 	}
 
-	if (sc->sc_st_check) {
-		sc->sc_st_check = 0;
-		com_stsoft(sc, tp);
-	}
-
-	if (sc->sc_tx_done) {
-		sc->sc_tx_done = 0;
-		com_txsoft(sc, tp);
-	}
+#ifndef __HAVE_GENERIC_SOFT_INTERRUPTS
+#ifdef __NO_SOFT_SERIAL_INTERRUPT
+	splx(s);
+#endif
+#endif
 }
+
+#ifdef __ALIGN_BRACKET_LEVEL_FOR_CTAGS
+	/* there has got to be a better way to do comsoft() */
+}}
+#endif
 
 int
 comintr(void *arg)
@@ -2207,7 +2286,18 @@ again:	do {
 	COM_UNLOCK(sc);
 
 	/* Wake up the poller. */
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	softintr_schedule(sc->sc_si);
+#else
+#ifndef __NO_SOFT_SERIAL_INTERRUPT
+	setsoftserial();
+#else
+	if (!com_softintr_scheduled) {
+		com_softintr_scheduled = 1;
+		callout_reset(&comsoft_callout, 1, comsoft, NULL);
+	}
+#endif
+#endif
 
 #if NRND > 0 && defined(RND_COM)
 	rnd_add_uint32(&sc->rnd_source, iir | lsr);

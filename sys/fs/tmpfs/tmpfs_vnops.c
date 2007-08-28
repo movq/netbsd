@@ -1,4 +1,4 @@
-/*	$NetBSD: tmpfs_vnops.c,v 1.39 2007/07/23 15:41:01 jmmv Exp $	*/
+/*	$NetBSD: tmpfs_vnops.c,v 1.32.2.3 2007/07/24 10:14:47 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tmpfs_vnops.c,v 1.39 2007/07/23 15:41:01 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tmpfs_vnops.c,v 1.32.2.3 2007/07/24 10:14:47 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/dirent.h>
@@ -222,8 +222,7 @@ tmpfs_lookup(void *v)
 			    (cnp->cn_nameiop == DELETE ||
 			    cnp->cn_nameiop == RENAME)) {
 				if ((dnode->tn_mode & S_ISTXT) != 0 &&
-				    kauth_authorize_generic(cnp->cn_cred,
-				     KAUTH_GENERIC_ISSUSER, NULL) != 0 &&
+				    kauth_cred_geteuid(cnp->cn_cred) != 0 &&
 				    kauth_cred_geteuid(cnp->cn_cred) != dnode->tn_uid &&
 				    kauth_cred_geteuid(cnp->cn_cred) != tnode->tn_uid)
 					return EPERM;
@@ -567,7 +566,7 @@ tmpfs_write(void *v)
 	struct uio *uio = ((struct vop_write_args *)v)->a_uio;
 	int ioflag = ((struct vop_write_args *)v)->a_ioflag;
 
-	bool extended;
+	boolean_t extended;
 	int error;
 	int flags;
 	off_t oldsize;
@@ -687,7 +686,7 @@ tmpfs_remove(void *v)
 	/* Free the directory entry we just deleted.  Note that the node
 	 * referred by it will not be removed until the vnode is really
 	 * reclaimed. */
-	tmpfs_free_dirent(tmp, de, true);
+	tmpfs_free_dirent(tmp, de, TRUE);
 
 	error = 0;
 
@@ -956,7 +955,7 @@ tmpfs_rename(void *v)
 		/* Free the directory entry we just deleted.  Note that the
 		 * node referred by it will not be removed until the vnode is
 		 * really reclaimed. */
-		tmpfs_free_dirent(VFS_TO_TMPFS(tvp->v_mount), de, true);
+		tmpfs_free_dirent(VFS_TO_TMPFS(tvp->v_mount), de, TRUE);
 	}
 
 	/* Notify listeners of tdvp about the change in the directory (either
@@ -1066,7 +1065,7 @@ tmpfs_rmdir(void *v)
 	/* Free the directory entry we just deleted.  Note that the node
 	 * referred by it will not be removed until the vnode is really
 	 * reclaimed. */
-	tmpfs_free_dirent(tmp, de, true);
+	tmpfs_free_dirent(tmp, de, TRUE);
 
 	/* Release the deleted vnode (will destroy the node, notify
 	 * interested parties and clean it from the cache). */
@@ -1238,18 +1237,16 @@ tmpfs_inactive(void *v)
 {
 	struct vnode *vp = ((struct vop_inactive_args *)v)->a_vp;
 	struct lwp *l = ((struct vop_inactive_args *)v)->a_l;
-	nlink_t links;
 
 	struct tmpfs_node *node;
 
 	KASSERT(VOP_ISLOCKED(vp));
 
 	node = VP_TO_TMPFS_NODE(vp);
-	links = node->tn_links;
 
 	VOP_UNLOCK(vp, 0);
 
-	if (links == 0)
+	if (node->tn_links == 0)
 		vrecycle(vp, NULL, l);
 
 	return 0;

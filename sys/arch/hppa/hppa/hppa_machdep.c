@@ -1,4 +1,4 @@
-/*	$NetBSD: hppa_machdep.c,v 1.9 2007/05/17 14:51:19 yamt Exp $	*/
+/*	$NetBSD: hppa_machdep.c,v 1.6 2006/10/25 11:06:02 skrll Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -34,15 +34,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hppa_machdep.c,v 1.9 2007/05/17 14:51:19 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hppa_machdep.c,v 1.6 2006/10/25 11:06:02 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/sa.h>
 #include <sys/lwp.h>
+#include <sys/savar.h>
 #include <sys/user.h>
 #include <sys/proc.h>
 #include <sys/ras.h>
-#include <sys/cpu.h>
 
 #include <sys/kernel.h>
 
@@ -60,6 +61,81 @@ char	machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
  * probably be moved here from hp700/hp700/machdep.c, seeing
  * that there's related code already in hppa/hppa/trap.S.
  */
+
+
+/*
+ * Scheduler activations upcall frame.  Pushed onto user stack before
+ * calling an SA upcall.
+ */
+
+struct saframe {
+	/* first 4 arguments passed in registers on entry to upcallcode */
+	void *		sa_arg;
+	int		sa_interrupted;	/* arg3 */
+	int		sa_events;	/* arg2 */
+	struct sa_t **	sa_sas;		/* arg1 */
+	int		sa_type;	/* arg0 */
+};
+
+/*
+ * cpu_upcall:
+ *
+ *      Send an an upcall to userland.
+ */
+
+void
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+	   void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct saframe *sf, frame;
+	struct trapframe *tf;
+	uintptr_t upva;
+	vaddr_t va;
+
+	tf = (struct trapframe *)l->l_md.md_regs;
+
+	frame.sa_type = type;
+	frame.sa_sas = sas;
+	frame.sa_events = nevents;
+	frame.sa_interrupted = ninterrupted;
+	frame.sa_arg = ap;
+
+	pmap_activate(l);
+	va = HPPA_FRAME_ROUND((uintptr_t)sp + sizeof(frame) + HPPA_FRAME_SIZE);
+	sf = (void *)(va - 32 - sizeof(frame));
+	if (copyout(&frame, sf, sizeof(frame)) != 0) {
+		/* Copying onto the stack didn't work. Die. */
+		sigexit(l, SIGILL);
+		/* NOTREACHED */
+	}
+
+	/*
+	 * Deal with the upcall function pointer being a PLABEL.
+	 */
+
+	upva = (uintptr_t)upcall;
+	if (upva & 2) {
+		upva &= ~3;
+		if (copyin((void *)(upva + 4), &tf->tf_t4, 4)) {
+			printf("copyin t4 failed\n");
+			sigexit(l, SIGILL);
+		}
+		if (copyin((void *)upva, &upcall, 4)) {
+			printf("copyin upcall failed\n");
+			sigexit(l, SIGILL);
+		}
+	}
+
+	tf->tf_iioq_head = (uintptr_t)upcall | HPPA_PC_PRIV_USER;
+	tf->tf_iioq_tail = tf->tf_iioq_head + 4;
+
+	tf->tf_sp = va;
+	tf->tf_arg0 = type;
+	tf->tf_arg1 = (uintptr_t)sas;
+	tf->tf_arg2 = nevents;
+	tf->tf_arg3 = ninterrupted;
+	tf->tf_rp = 0;
+}
 
 void
 cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
@@ -117,7 +193,7 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 #endif
 
 	ras_pc = (__greg_t)ras_lookup(l->l_proc,
-	    (void *)(gr[_REG_PCOQH] & ~HPPA_PC_PRIV_MASK));
+	    (caddr_t)(gr[_REG_PCOQH] & ~HPPA_PC_PRIV_MASK));
 	if (ras_pc != -1) {
 		ras_pc |= HPPA_PC_PRIV_USER;
 		gr[_REG_PCOQH] = ras_pc;
@@ -247,12 +323,10 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 			sizeof(l->l_addr->u_pcb.pcb_fpregs));
 	}
 
-	mutex_enter(&p->p_smutex);
 	if (flags & _UC_SETSTACK)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		l->l_proc->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 	if (flags & _UC_CLRSTACK)
-		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
-	mutex_exit(&p->p_smutex);
+		l->l_proc->p_sigctx.ps_sigstk.ss_flags &= ~SS_ONSTACK;
 
 	return 0;
 }
@@ -270,25 +344,10 @@ hppa_ras(struct lwp *l)
 
 	p = l->l_proc;
 	tf = l->l_md.md_regs;
-	rasaddr = (intptr_t)ras_lookup(p, (void *)tf->tf_iioq_head);
+	rasaddr = (intptr_t)ras_lookup(p, (caddr_t)tf->tf_iioq_head);
 	if (rasaddr != -1) {
 		rasaddr |= HPPA_PC_PRIV_USER;
 		tf->tf_iioq_head = rasaddr;
 		tf->tf_iioq_tail = rasaddr + 4;
-	}
-}
-
-void
-cpu_need_resched(struct cpu_info *ci, int flags)
-{
-	bool immed = (flags & RESCHED_IMMED) != 0;
-
-	if (want_resched && !immed)
-		return;
-	want_resched = 1;
-
-        if (ci->ci_curlwp != ci->ci_data.cpu_idlelwp) {
-		/* aston(ci->ci_curlwp); */
-		setsoftast();
 	}
 }

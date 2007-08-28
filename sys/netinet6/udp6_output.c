@@ -1,4 +1,4 @@
-/*	$NetBSD: udp6_output.c,v 1.30 2007/05/23 17:15:04 christos Exp $	*/
+/*	$NetBSD: udp6_output.c,v 1.26 2006/07/23 22:06:13 ad Exp $	*/
 /*	$KAME: udp6_output.c,v 1.43 2001/10/15 09:19:52 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udp6_output.c,v 1.30 2007/05/23 17:15:04 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udp6_output.c,v 1.26 2006/07/23 22:06:13 ad Exp $");
 
 #include "opt_inet.h"
 
@@ -109,8 +109,11 @@ __KERNEL_RCSID(0, "$NetBSD: udp6_output.c,v 1.30 2007/05/23 17:15:04 christos Ex
  */
 
 int
-udp6_output(struct in6pcb *in6p, struct mbuf *m, struct mbuf *addr6, 
-	struct mbuf *control, struct lwp *l)
+udp6_output(in6p, m, addr6, control, l)
+	struct in6pcb *in6p;
+	struct mbuf *m;
+	struct mbuf *addr6, *control;
+	struct lwp *l;
 {
 	u_int32_t ulen = m->m_pkthdr.len;
 	u_int32_t plen = sizeof(struct udphdr) + ulen;
@@ -135,7 +138,7 @@ udp6_output(struct in6pcb *in6p, struct mbuf *m, struct mbuf *addr6,
 
 	priv = 0;
 	if (l && !kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
-	    NULL))
+	    &l->l_acflag))
 		priv = 1;
 
 	if (addr6) {
@@ -235,8 +238,7 @@ udp6_output(struct in6pcb *in6p, struct mbuf *m, struct mbuf *addr6,
 
 		if (!IN6_IS_ADDR_V4MAPPED(faddr)) {
 			laddr = in6_selectsrc(sin6, optp,
-			    in6p->in6p_moptions,
-			    (struct route *)&in6p->in6p_route,
+			    in6p->in6p_moptions, &in6p->in6p_route,
 			    &in6p->in6p_laddr, &oifp, &error);
 			if (oifp && scope_ambiguous &&
 			    (error = in6_setscope(&sin6->sin6_addr,
@@ -329,7 +331,7 @@ udp6_output(struct in6pcb *in6p, struct mbuf *m, struct mbuf *addr6,
 	/*
 	 * Stuff checksum and output datagram.
 	 */
-	udp6 = (struct udphdr *)(mtod(m, char *) + hlen);
+	udp6 = (struct udphdr *)(mtod(m, caddr_t) + hlen);
 	udp6->uh_sport = in6p->in6p_lport; /* lport is always set in the PCB */
 	udp6->uh_dport = fport;
 	if (plen <= 0xffff)

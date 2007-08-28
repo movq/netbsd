@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.274 2007/08/22 17:52:16 pooka Exp $	*/
+/*	$NetBSD: param.h,v 1.244.2.7 2007/11/06 16:10:04 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -63,7 +63,7 @@
  *	2.99.9		(299000900)
  */
 
-#define	__NetBSD_Version__	499003000	/* NetBSD 4.99.30 */
+#define	__NetBSD_Version__	400000003	/* NetBSD 4.0_RC4 */
 
 #define __NetBSD_Prereq__(M,m,p) (((((M) * 100000000) + \
     (m) * 1000000) + (p) * 100) <= __NetBSD_Version__)
@@ -158,13 +158,6 @@
 #define	btodb(x)	((x) >> DEV_BSHIFT)
 
 /*
- * CPU cache values
- */
-#ifndef CACHE_LINE_SIZE
-#define	CACHE_LINE_SIZE		64
-#endif
-
-/*
  * Stack macros.  On most architectures, the stack grows down,
  * towards lower addresses; it is the rare architecture where
  * it grows up, towards higher addresses.
@@ -179,19 +172,19 @@
  */
 #if defined(_KERNEL) || defined(__EXPOSE_STACK)
 #ifdef __MACHINE_STACK_GROWS_UP
-#define	STACK_GROW(sp, _size)		(((char *)(void *)(sp)) + (_size))
-#define	STACK_SHRINK(sp, _size)		(((char *)(void *)(sp)) - (_size))
+#define	STACK_GROW(sp, _size)		(((caddr_t)(sp)) + (_size))
+#define	STACK_SHRINK(sp, _size)		(((caddr_t)(sp)) - (_size))
 #define	STACK_ALIGN(sp, bytes)	\
-	((char *)((((unsigned long)(sp)) + (bytes)) & ~(bytes)))
-#define	STACK_ALLOC(sp, _size)		((char *)(void *)(sp))
-#define	STACK_MAX(p, _size)		(((char *)(void *)(p)) + (_size))
+	((caddr_t)((((unsigned long)(sp)) + (bytes)) & ~(bytes)))
+#define	STACK_ALLOC(sp, _size)		((caddr_t)(sp))
+#define	STACK_MAX(p, _size)		(((caddr_t)(p)) + (_size))
 #else
-#define	STACK_GROW(sp, _size)		(((char *)(void *)(sp)) - (_size))
-#define	STACK_SHRINK(sp, _size)		(((char *)(void *)(sp)) + (_size))
+#define	STACK_GROW(sp, _size)		(((caddr_t)(sp)) - (_size))
+#define	STACK_SHRINK(sp, _size)		(((caddr_t)(sp)) + (_size))
 #define	STACK_ALIGN(sp, bytes)	\
-	((char *)(((unsigned long)(sp)) & ~(bytes)))
-#define	STACK_ALLOC(sp, _size)		(((char *)(void *)(sp)) - (_size))
-#define	STACK_MAX(p, _size)		((char *)(void *)(p))
+	((caddr_t)(((unsigned long)(sp)) & ~(bytes)))
+#define	STACK_ALLOC(sp, _size)		(((caddr_t)(sp)) - (_size))
+#define	STACK_MAX(p, _size)		((caddr_t)(p))
 #endif
 #endif /* defined(_KERNEL) || defined(__EXPOSE_STACK) */
 
@@ -216,9 +209,8 @@
 #define	PCATCH		0x100	/* OR'd with pri for tsleep to check signals */
 #define	PNORELOCK	0x200	/* OR'd with pri for cond_wait() to not relock
 				   the interlock */
-
-#define	PRI_NONE	(-1)
-
+#define PNOEXITERR     	0x400   /* OR'd with pri for tsleep to not exit
+				   with an error code when LWPs are exiting */
 #define	NBPW	sizeof(int)	/* number of bytes per word (integer) */
 
 #define	CMASK	022		/* default file mask: S_IWGRP|S_IWOTH */
@@ -267,8 +259,7 @@
 #define	howmany(x, y)	(((x)+((y)-1))/(y))
 #endif
 #define	roundup(x, y)	((((x)+((y)-1))/(y))*(y))
-#define	rounddown(x,y)	(((x)/(y))*(y))
-#define	roundup2(x, m)	(((x) + m - 1) & ~(m - 1))
+#define rounddown(x,y)	(((x)/(y))*(y))
 #define	powerof2(x)	((((x)-1)&(x))==0)
 
 /* Macros for min/max. */
@@ -348,14 +339,5 @@
 	    ((ms +0u) * hz) / 1000u)
 #endif
 #endif /* _KERNEL */
-
-/*
- * Minimum alignment of "struct lwp" needed by the architecture.
- * This counts when packing a lock byte into a word alongside a
- * pointer to an LWP.
- */
-#ifndef MIN_LWP_ALIGNMENT
-#define	MIN_LWP_ALIGNMENT	32
-#endif
 
 #endif /* !_SYS_PARAM_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: ata_raidreg.h,v 1.4 2007/03/27 00:10:20 garbled Exp $	*/
+/*	$NetBSD: ata_raidreg.h,v 1.3.24.1 2007/03/31 16:38:04 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2000,2001,2002 Søren Schmidt <sos@FreeBSD.org>

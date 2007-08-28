@@ -1,4 +1,4 @@
-/*	$NetBSD: undefined.c,v 1.29 2007/02/18 07:25:35 matt Exp $	*/
+/*	$NetBSD: undefined.c,v 1.27 2006/07/19 21:11:40 ad Exp $	*/
 
 /*
  * Copyright (c) 2001 Ben Harris.
@@ -54,7 +54,7 @@
 #include <sys/kgdb.h>
 #endif
 
-__KERNEL_RCSID(0, "$NetBSD: undefined.c,v 1.29 2007/02/18 07:25:35 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: undefined.c,v 1.27 2006/07/19 21:11:40 ad Exp $");
 
 #include <sys/malloc.h>
 #include <sys/queue.h>
@@ -64,6 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: undefined.c,v 1.29 2007/02/18 07:25:35 matt Exp $");
 #include <sys/user.h>
 #include <sys/syslog.h>
 #include <sys/vmmeter.h>
+#include <sys/savar.h>
 #ifdef FAST_FPE
 #include <sys/acct.h>
 #endif
@@ -154,9 +155,9 @@ gdb_trapper(u_int addr, u_int insn, struct trapframe *frame, int code)
 				ksi.ksi_code = TRAP_BRKPT;
 				ksi.ksi_addr = (u_int32_t *)addr;
 				ksi.ksi_trap = 0;
-				KERNEL_LOCK(1, l);
+				KERNEL_PROC_LOCK(l);
 				trapsignal(l, &ksi);
-				KERNEL_UNLOCK_LAST(l);
+				KERNEL_PROC_UNLOCK(l);
 				return 0;
 			}
 #ifdef KGDB
@@ -262,9 +263,9 @@ undefinedinstruction(trapframe_t *frame)
 			ksi.ksi_signo = SIGILL;
 			ksi.ksi_code = ILL_ILLOPC;
 			ksi.ksi_addr = (u_int32_t *)(intptr_t) fault_pc;
-			KERNEL_LOCK(1, l);
+			KERNEL_PROC_LOCK(l);
 			trapsignal(l, &ksi);
-			KERNEL_UNLOCK_LAST(l);
+			KERNEL_PROC_UNLOCK(l);
 			userret(l);
 			return;
 		}
@@ -363,9 +364,9 @@ undefinedinstruction(trapframe_t *frame)
 		ksi.ksi_code = ILL_ILLOPC;
 		ksi.ksi_addr = (u_int32_t *)fault_pc;
 		ksi.ksi_trap = fault_instruction;
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 		trapsignal(l, &ksi);
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 	}
 
 	if ((fault_code & FAULT_USER) == 0)
@@ -384,7 +385,7 @@ undefinedinstruction(trapframe_t *frame)
 			/*
 			 * We are being preempted.
 			 */
-			preempt();
+			preempt(0);
 		}
 
 		/* Invoke MI userret code */

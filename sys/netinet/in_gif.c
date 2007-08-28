@@ -1,4 +1,4 @@
-/*	$NetBSD: in_gif.c,v 1.56 2007/05/02 20:40:24 dyoung Exp $	*/
+/*	$NetBSD: in_gif.c,v 1.51 2006/11/23 04:07:07 rpaulo Exp $	*/
 /*	$KAME: in_gif.c,v 1.66 2001/07/29 04:46:09 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_gif.c,v 1.56 2007/05/02 20:40:24 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_gif.c,v 1.51 2006/11/23 04:07:07 rpaulo Exp $");
 
 #include "opt_inet.h"
 #include "opt_iso.h"
@@ -91,15 +91,12 @@ int
 in_gif_output(struct ifnet *ifp, int family, struct mbuf *m)
 {
 	struct gif_softc *sc = (struct gif_softc*)ifp;
+	struct sockaddr_in *dst = (struct sockaddr_in *)&sc->gif_ro.ro_dst;
 	struct sockaddr_in *sin_src = (struct sockaddr_in *)sc->gif_psrc;
 	struct sockaddr_in *sin_dst = (struct sockaddr_in *)sc->gif_pdst;
 	struct ip iphdr;	/* capsule IP header, host byte ordered */
 	int proto, error;
 	u_int8_t tos;
-	union {
-		struct sockaddr		dst;
-		struct sockaddr_in	dst4;
-	} u;
 
 	if (sin_src == NULL || sin_dst == NULL ||
 	    sin_src->sin_family != AF_INET ||
@@ -182,17 +179,34 @@ in_gif_output(struct ifnet *ifp, int family, struct mbuf *m)
 		return ENOBUFS;
 	bcopy(&iphdr, mtod(m, struct ip *), sizeof(struct ip));
 
-	sockaddr_in_init(&u.dst4, &sin_dst->sin_addr, 0);
-	if (rtcache_lookup(&sc->gif_ro, &u.dst) == NULL) {
-		m_freem(m);
-		return ENETUNREACH;
+	if (sc->gif_route_expire - time_second <= 0 ||
+	    dst->sin_family != sin_dst->sin_family ||
+	    !in_hosteq(dst->sin_addr, sin_dst->sin_addr)) {
+		/* cache route doesn't match */
+		bzero(dst, sizeof(*dst));
+		dst->sin_family = sin_dst->sin_family;
+		dst->sin_len = sizeof(struct sockaddr_in);
+		dst->sin_addr = sin_dst->sin_addr;
+		if (sc->gif_ro.ro_rt) {
+			RTFREE(sc->gif_ro.ro_rt);
+			sc->gif_ro.ro_rt = NULL;
+		}
 	}
 
-	/* If the route constitutes infinite encapsulation, punt. */
-	if (sc->gif_ro.ro_rt->rt_ifp == ifp) {
-		rtcache_free(&sc->gif_ro);
-		m_freem(m);
-		return ENETUNREACH;	/*XXX*/
+	if (sc->gif_ro.ro_rt == NULL) {
+		rtalloc(&sc->gif_ro);
+		if (sc->gif_ro.ro_rt == NULL) {
+			m_freem(m);
+			return ENETUNREACH;
+		}
+
+		/* if it constitutes infinite encapsulation, punt. */
+		if (sc->gif_ro.ro_rt->rt_ifp == ifp) {
+			m_freem(m);
+			return ENETUNREACH;	/*XXX*/
+		}
+
+		sc->gif_route_expire = time_second + GIF_ROUTE_TTL;
 	}
 
 	error = ip_output(m, NULL, &sc->gif_ro, 0, NULL, NULL);
@@ -360,7 +374,7 @@ gif_encapcheck4(struct mbuf *m, int off, int proto, void *arg)
 	/* sanity check done in caller */
 	sc = (struct gif_softc *)arg;
 
-	m_copydata(m, 0, sizeof(ip), (void *)&ip);
+	m_copydata(m, 0, sizeof(ip), (caddr_t)&ip);
 	ifp = ((m->m_flags & M_PKTHDR) != 0) ? m->m_pkthdr.rcvif : NULL;
 
 	return gif_validate4(&ip, sc, ifp);
@@ -400,7 +414,10 @@ in_gif_detach(struct gif_softc *sc)
 	if (error == 0)
 		sc->encap_cookie4 = NULL;
 
-	rtcache_free(&sc->gif_ro);
+	if (sc->gif_ro.ro_rt) {
+		RTFREE(sc->gif_ro.ro_rt);
+		sc->gif_ro.ro_rt = NULL;
+	}
 
 	return error;
 }

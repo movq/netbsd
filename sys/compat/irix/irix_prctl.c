@@ -1,4 +1,4 @@
-/*	$NetBSD: irix_prctl.c,v 1.37 2007/03/06 12:43:09 tsutsui Exp $ */
+/*	$NetBSD: irix_prctl.c,v 1.32 2006/07/23 22:06:08 ad Exp $ */
 
 /*-
  * Copyright (c) 2001-2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: irix_prctl.c,v 1.37 2007/03/06 12:43:09 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: irix_prctl.c,v 1.32 2006/07/23 22:06:08 ad Exp $");
 
 #include <sys/errno.h>
 #include <sys/types.h>
@@ -79,7 +79,7 @@ struct irix_sproc_child_args {
 	int isc_child_done;
 };
 static void irix_sproc_child __P((struct irix_sproc_child_args *));
-static int irix_sproc __P((void *, unsigned int, void *, void *, size_t,
+static int irix_sproc __P((void *, unsigned int, void *, caddr_t, size_t,
     pid_t, struct lwp *, register_t *));
 static struct irix_shared_regions_rec *irix_isrr_create __P((vaddr_t,
     vsize_t, int));
@@ -185,7 +185,7 @@ irix_sys_prctl(l, v, retval)
 			return 0;
 
 		pc = l->l_cred;
-		if (!(kauth_authorize_generic(pc, KAUTH_GENERIC_ISSUSER, NULL) == 0 || \
+		if (!(kauth_cred_geteuid(pc) == 0 || \
 		    kauth_cred_getuid(pc) == kauth_cred_getuid(target->p_cred) || \
 		    kauth_cred_geteuid(pc) == kauth_cred_getuid(target->p_cred) || \
 		    kauth_cred_getuid(pc) == kauth_cred_geteuid(target->p_cred) || \
@@ -218,7 +218,7 @@ irix_sys_pidsprocsp(l, v, retval)
 		syscallarg(void *) entry;
 		syscallarg(unsigned) inh;
 		syscallarg(void *) arg;
-		syscallarg(void *) sp;
+		syscallarg(caddr_t) sp;
 		syscallarg(irix_size_t) len;
 		syscallarg(irix_pid_t) pid;
 	} */ *uap = v;
@@ -240,7 +240,7 @@ irix_sys_sprocsp(l, v, retval)
 		syscallarg(void *) entry;
 		syscallarg(unsigned) inh;
 		syscallarg(void *) arg;
-		syscallarg(void *) sp;
+		syscallarg(caddr_t) sp;
 		syscallarg(irix_size_t) len;
 	} */ *uap = v;
 
@@ -271,7 +271,7 @@ irix_sproc(entry, inh, arg, sp, len, pid, l, retval)
 	void *entry;
 	unsigned int inh;
 	void *arg;
-	void *sp;
+	caddr_t sp;
 	size_t len;
 	pid_t pid;
 	struct lwp *l;
@@ -309,7 +309,7 @@ irix_sproc(entry, inh, arg, sp, len, pid, l, retval)
 		printf("Warning: unimplemented IRIX sproc flag PR_SDIR\n");
 
 	/*
-	 * If relevant, initialize the share group structure
+	 * If revelant, initialize the share group structure
 	 */
 	ied = (struct irix_emuldata *)(p->p_emuldata);
 	if (ied->ied_share_group == NULL) {
@@ -340,7 +340,7 @@ irix_sproc(entry, inh, arg, sp, len, pid, l, retval)
 			sp = p->p_vmspace->vm_maxsaddr;
 
 			/* Compute new stacks's bottom address */
-			sp = (void *)trunc_page((u_long)sp - len);
+			sp = (caddr_t)trunc_page((u_long)sp - len);
 		}
 
 		/* Now map the new stack */
@@ -364,13 +364,12 @@ irix_sproc(entry, inh, arg, sp, len, pid, l, retval)
 
 		/* Update stack parameters for the share group members */
 		ied = (struct irix_emuldata *)p->p_emuldata;
-		stacksize = ((char *)p->p_vmspace->vm_minsaddr - (char *)sp)
-		    / PAGE_SIZE;
+		stacksize = (p->p_vmspace->vm_minsaddr - sp) / PAGE_SIZE;
 
 
 		(void)lockmgr(&isg->isg_lock, LK_EXCLUSIVE, NULL);
 		LIST_FOREACH(iedp, &isg->isg_head, ied_sglist) {
-			iedp->ied_p->p_vmspace->vm_maxsaddr = (void *)sp;
+			iedp->ied_p->p_vmspace->vm_maxsaddr = (caddr_t)sp;
 			iedp->ied_p->p_vmspace->vm_ssize = stacksize;
 		}
 		(void)lockmgr(&isg->isg_lock, LK_RELEASE, NULL);
@@ -418,7 +417,7 @@ irix_sproc_child(isc)
 	struct irix_sproc_child_args *isc;
 {
 	struct proc *p2 = *isc->isc_proc;
-	struct lwp *l2 = curlwp;
+	struct lwp *l2 = proc_representative_lwp(p2);
 	int inh = isc->isc_inh;
 	struct lwp *lparent = isc->isc_parent_lwp;
 	struct proc *parent = lparent->l_proc;
@@ -581,7 +580,7 @@ irix_sys_procblk(l, v, retval)
 
 	/* May we stop it? */
 	pc = l->l_cred;
-	if (!(kauth_authorize_generic(pc, KAUTH_GENERIC_ISSUSER, NULL) == 0 || \
+	if (!(kauth_cred_geteuid(pc) == 0 || \
 	    kauth_cred_getuid(pc) == kauth_cred_getuid(target->p_cred) || \
 	    kauth_cred_geteuid(pc) == kauth_cred_getuid(target->p_cred) || \
 	    kauth_cred_getuid(pc) == kauth_cred_geteuid(target->p_cred) || \
@@ -631,7 +630,7 @@ irix_sys_procblk(l, v, retval)
 		LIST_FOREACH(iedp, &isg->isg_head, ied_sglist) {
 			/* Recall procblk for this process */
 			SCARG(&cup, pid) = iedp->ied_p->p_pid;
-			ied_lwp = proc_representative_lwp(iedp->ied_p, NULL, 0);
+			ied_lwp = proc_representative_lwp(iedp->ied_p);
 			error = irix_sys_procblk(ied_lwp, &cup, retval);
 			if (error != 0)
 				last_error = error;
@@ -675,7 +674,7 @@ irix_prda_init(p)
 	evc.ev_len = sizeof(struct irix_prda);
 	evc.ev_prot = UVM_PROT_RW;
 	evc.ev_proc = *vmcmd_map_zero;
-	l = proc_representative_lwp(p, NULL, 0);
+	l = proc_representative_lwp(p);
 
 	if ((error = (*evc.ev_proc)(l, &evc)) != 0)
 		return error;

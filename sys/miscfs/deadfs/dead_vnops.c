@@ -1,4 +1,4 @@
-/*	$NetBSD: dead_vnops.c,v 1.44 2007/07/29 13:31:11 ad Exp $	*/
+/*	$NetBSD: dead_vnops.c,v 1.41.2.2 2007/02/17 23:27:48 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dead_vnops.c,v 1.44 2007/07/29 13:31:11 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dead_vnops.c,v 1.41.2.2 2007/02/17 23:27:48 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -220,7 +220,7 @@ dead_strategy(v)
 		struct buf *a_bp;
 	} */ *ap = v;
 	if (ap->a_vp == NULL || !chkvnlock(ap->a_vp)) {
-		ap->a_bp->b_error = EIO;
+		ap->a_bp->b_flags |= B_ERROR;
 		biodone(ap->a_bp);
 		return (EIO);
 	}

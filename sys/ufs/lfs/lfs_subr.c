@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_subr.c,v 1.70 2007/05/15 14:35:29 tnn Exp $	*/
+/*	$NetBSD: lfs_subr.c,v 1.65.2.1 2007/06/05 20:35:01 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_subr.c,v 1.70 2007/05/15 14:35:29 tnn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_subr.c,v 1.65.2.1 2007/06/05 20:35:01 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -147,13 +147,13 @@ lfs_setup_resblks(struct lfs *fs)
 	 * Initialize pools for small types (XXX is BPP small?)
 	 */
 	pool_init(&fs->lfs_clpool, sizeof(struct lfs_cluster), 0, 0, 0,
-		"lfsclpl", &pool_allocator_nointr, IPL_NONE);
+		"lfsclpl", &pool_allocator_nointr);
 	pool_init(&fs->lfs_segpool, sizeof(struct segment), 0, 0, 0,
-		"lfssegpool", &pool_allocator_nointr, IPL_NONE);
+		"lfssegpool", &pool_allocator_nointr);
 	maxbpp = ((fs->lfs_sumsize - SEGSUM_SIZE(fs)) / sizeof(int32_t) + 2);
 	maxbpp = MIN(maxbpp, segsize(fs) / fs->lfs_fsize + 2);
 	pool_init(&fs->lfs_bpppool, maxbpp * sizeof(struct buf *), 0, 0, 0,
-		"lfsbpppl", &pool_allocator_nointr, IPL_NONE);
+		"lfsbpppl", &pool_allocator_nointr);
 }
 
 void
@@ -325,7 +325,7 @@ lfs_seglock(struct lfs *fs, unsigned long flags)
 	LFS_ENTER_LOG("seglock", __FILE__, __LINE__, 0, flags, curproc->p_pid);
 #endif
 	/* Drain fragment size changes out */
-	rw_enter(&fs->lfs_fraglock, RW_WRITER);
+	lockmgr(&fs->lfs_fraglock, LK_EXCLUSIVE, 0);
 
 	sp = fs->lfs_sp = pool_get(&fs->lfs_segpool, PR_WAITOK);
 	sp->bpp = pool_get(&fs->lfs_bpppool, PR_WAITOK);
@@ -562,7 +562,7 @@ lfs_segunlock(struct lfs *fs)
 			wakeup(&fs->lfs_seglock);
 		}
 		/* Reenable fragment size changes */
-		rw_exit(&fs->lfs_fraglock);
+		lockmgr(&fs->lfs_fraglock, LK_RELEASE, 0);
 		if (do_unmark_dirop)
 			lfs_unmark_dirop(fs);
 	} else if (fs->lfs_seglock == 0) {
@@ -608,7 +608,7 @@ lfs_writer_enter(struct lfs *fs, const char *wmesg)
 void
 lfs_writer_leave(struct lfs *fs)
 {
-	bool dowakeup;
+	boolean_t dowakeup;
 
 	ASSERT_MAYBE_SEGLOCK(fs);
 	simple_lock(&fs->lfs_interlock);

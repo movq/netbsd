@@ -1,4 +1,4 @@
-/*	$NetBSD: boca.c,v 1.48 2007/07/09 21:00:49 ad Exp $	*/
+/*	$NetBSD: boca.c,v 1.47 2006/11/16 01:33:00 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: boca.c,v 1.48 2007/07/09 21:00:49 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: boca.c,v 1.47 2006/11/16 01:33:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,7 +64,7 @@ struct boca_softc {
 	int sc_alive;			/* mask of slave units attached */
 	void *sc_slaves[NSLAVES];	/* com device unit numbers */
 	bus_space_handle_t sc_slaveioh[NSLAVES];
-	callout_t fixup;
+	struct callout fixup;
 };
 
 int bocaprobe(struct device *, struct cfdata *, void *);
@@ -187,7 +187,7 @@ bocaattach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_ih = isa_intr_establish(ia->ia_ic, ia->ia_irq[0].ir_irq,
 	    IST_EDGE, IPL_SERIAL, bocaintr, sc);
-	callout_init(&sc->fixup, 0);
+	callout_init(&sc->fixup);
 	callout_reset(&sc->fixup, hz/10, boca_fixup, sc);
 }
 

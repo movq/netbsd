@@ -1,4 +1,4 @@
-/*	$NetBSD: ppi.c,v 1.37 2007/07/12 20:39:01 he Exp $	*/
+/*	$NetBSD: ppi.c,v 1.34 2006/07/21 10:01:39 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ppi.c,v 1.37 2007/07/12 20:39:01 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ppi.c,v 1.34 2006/07/21 10:01:39 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -179,8 +179,8 @@ ppiattach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_slave = ha->ha_slave;
 
-	callout_init(&sc->sc_timo_ch, 0);
-	callout_init(&sc->sc_start_ch, 0);
+	callout_init(&sc->sc_timo_ch);
+	callout_init(&sc->sc_start_ch);
 
 	/* Initialize the hpib queue entry. */
 	sc->sc_hq.hq_softc = sc;
@@ -292,7 +292,7 @@ ppirw(dev_t dev, struct uio *uio)
 {
 	int unit = UNIT(dev);
 	struct ppi_softc *sc = ppi_cd.cd_devs[unit];
-	int s, s2, len, cnt;
+	int s, len, cnt;
 	char *cp;
 	int error = 0, gotdata = 0;
 	int buflen, ctlr, slave;
@@ -327,15 +327,14 @@ ppirw(dev_t dev, struct uio *uio)
 				break;
 		}
 again:
-		s = splsoftclock();
-		s2 = splbio();
+		s = splbio();
 		if ((sc->sc_flags & PPIF_UIO) &&
 		    hpibreq(device_parent(&sc->sc_dev), &sc->sc_hq) == 0)
 			(void) tsleep(sc, PRIBIO + 1, "ppirw", 0);
 		/*
 		 * Check if we timed out during sleep or uiomove
 		 */
-		splx(s2);
+		(void) spllowersoftclock();
 		if ((sc->sc_flags & PPIF_UIO) == 0) {
 #ifdef DEBUG
 			if (ppidebug & PDB_IO)
@@ -447,7 +446,7 @@ again:
 }
 
 static int
-ppiioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+ppiioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct ppi_softc *sc = ppi_cd.cd_devs[UNIT(dev)];
 	struct ppiparam *pp, *upp;

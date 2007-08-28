@@ -1,7 +1,7 @@
-/*	$NetBSD: subr_extent.c,v 1.68 2007/07/10 22:58:54 ad Exp $	*/
+/*	$NetBSD: subr_extent.c,v 1.61 2006/11/01 10:17:58 yamt Exp $	*/
 
 /*-
- * Copyright (c) 1996, 1998, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_extent.c,v 1.68 2007/07/10 22:58:54 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_extent.c,v 1.61 2006/11/01 10:17:58 yamt Exp $");
 
 #ifdef _KERNEL
 #include "opt_lockdebug.h"
@@ -53,6 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: subr_extent.c,v 1.68 2007/07/10 22:58:54 ad Exp $");
 #include <sys/time.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/lock.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -64,7 +65,6 @@ __KERNEL_RCSID(0, "$NetBSD: subr_extent.c,v 1.68 2007/07/10 22:58:54 ad Exp $");
 #include <sys/param.h>
 #include <sys/pool.h>
 #include <sys/extent.h>
-
 #include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -80,27 +80,34 @@ malloc(s, t, flags)		malloc(s)
 #define	\
 free(p, t)			free(p)
 #define	\
-cv_wait_sig(cv, lock)		(EWOULDBLOCK)
+tsleep(chan, pri, str, timo)	(EWOULDBLOCK)
+#define	\
+ltsleep(chan,pri,str,timo,lck)	(EWOULDBLOCK)
+#define	\
+wakeup(chan)			((void)0)
 #define	\
 pool_get(pool, flags)		malloc((pool)->pr_size,0,0)
 #define	\
 pool_put(pool, rp)		free(rp,0)
 #define	\
 panic(a)			printf(a)
-#define	mutex_init(a, b, c)
-#define	mutex_destroy(a)
-#define	mutex_enter(l)
-#define	mutex_exit(l)
-#define	cv_wait(cv, lock)
-#define	cv_broadcast(cv)
-#define	cv_init(a, b)
-#define	cv_destroy(a)
+#define	\
+splhigh()			(1)
+#define	\
+splx(s)				((void)(s))
+
+#define	\
+simple_lock_init(l)		((void)(l))
+#define	\
+simple_lock(l)			((void)(l))
+#define	\
+simple_unlock(l)		((void)(l))
 #define	KMEM_IS_RUNNING			(1)
-#define	IPL_VM				(0)
-#define	MUTEX_DRIVER			(0)
 #endif
 
 static struct pool expool;
+static struct simplelock expool_init_slock = SIMPLELOCK_INITIALIZER;
+static int expool_initialized;
 
 /*
  * Macro to align to an arbitrary power-of-two boundary.
@@ -110,28 +117,40 @@ static struct pool expool;
 
 /*
  * Create the extent_region pool.
+ * (This is deferred until one of our callers thinks we can malloc()).
  */
-void
-extent_init(void)
+
+static inline void
+expool_init(void)
 {
+
+	simple_lock(&expool_init_slock);
+	if (expool_initialized) {
+		simple_unlock(&expool_init_slock);
+		return;
+	}
 
 #if defined(_KERNEL)
 	pool_init(&expool, sizeof(struct extent_region), 0, 0, 0,
-	    "extent", NULL, IPL_VM);
+	    "extent", NULL);
 #else
 	expool.pr_size = sizeof(struct extent_region);
 #endif
+
+	expool_initialized = 1;
+	simple_unlock(&expool_init_slock);
 }
 
 /*
- * Allocate an extent region descriptor.  EXTENT MUST NOT BE LOCKED.
- * We will handle any locking we may need.
+ * Allocate an extent region descriptor.  EXTENT MUST NOT BE LOCKED,
+ * AS THIS FUNCTION MAY BLOCK!  We will handle any locking we may need.
  */
 static struct extent_region *
 extent_alloc_region_descriptor(struct extent *ex, int flags)
 {
 	struct extent_region *rp;
-	int exflags, error;
+	int exflags;
+	int s;
 
 	/*
 	 * If the kernel memory allocator is not yet running, we can't
@@ -144,15 +163,15 @@ extent_alloc_region_descriptor(struct extent *ex, int flags)
 	 * XXX Make a static, create-time flags word, so we don't
 	 * XXX have to lock to read it!
 	 */
-	mutex_enter(&ex->ex_lock);
+	simple_lock(&ex->ex_slock);
 	exflags = ex->ex_flags;
-	mutex_exit(&ex->ex_lock);
+	simple_unlock(&ex->ex_slock);
 
 	if (exflags & EXF_FIXED) {
 		struct extent_fixed *fex = (struct extent_fixed *)ex;
 
-		mutex_enter(&ex->ex_lock);
 		for (;;) {
+			simple_lock(&ex->ex_slock);
 			if ((rp = LIST_FIRST(&fex->fex_freelist)) != NULL) {
 				/*
 				 * Don't muck with flags after pulling it off
@@ -161,33 +180,31 @@ extent_alloc_region_descriptor(struct extent *ex, int flags)
 				 * need to remember that information.
 				 */
 				LIST_REMOVE(rp, er_link);
-				mutex_exit(&ex->ex_lock);
+				simple_unlock(&ex->ex_slock);
 				return (rp);
 			}
 			if (flags & EX_MALLOCOK) {
-				mutex_exit(&ex->ex_lock);
+				simple_unlock(&ex->ex_slock);
 				goto alloc;
 			}
 			if ((flags & EX_WAITOK) == 0) {
-				mutex_exit(&ex->ex_lock);
+				simple_unlock(&ex->ex_slock);
 				return (NULL);
 			}
 			ex->ex_flags |= EXF_FLWANTED;
-			if ((flags & EX_CATCH) != 0)
-				error = cv_wait_sig(&ex->ex_cv, &ex->ex_lock);
-			else {
-				cv_wait(&ex->ex_cv, &ex->ex_lock);
-				error = 0;
-			}
-			if (error != 0) {
-				mutex_exit(&ex->ex_lock);
+			if (ltsleep(&fex->fex_freelist,
+			    PNORELOCK| PRIBIO | ((flags & EX_CATCH) ? PCATCH : 0),
+			    "extnt", 0, &ex->ex_slock))
 				return (NULL);
-			}
 		}
 	}
 
  alloc:
+	s = splhigh();
+	if (expool_initialized == 0)
+		expool_init();
 	rp = pool_get(&expool, (flags & EX_WAITOK) ? PR_WAITOK : 0);
+	splx(s);
 
 	if (rp != NULL)
 		rp->er_flags = ER_ALLOC;
@@ -196,11 +213,13 @@ extent_alloc_region_descriptor(struct extent *ex, int flags)
 }
 
 /*
- * Free an extent region descriptor.  EXTENT _MUST_ BE LOCKED!
+ * Free an extent region descriptor.  EXTENT _MUST_ BE LOCKED!  This
+ * is safe as we do not block here.
  */
 static void
 extent_free_region_descriptor(struct extent *ex, struct extent_region *rp)
 {
+	int s;
 
 	if (ex->ex_flags & EXF_FIXED) {
 		struct extent_fixed *fex = (struct extent_fixed *)ex;
@@ -217,24 +236,31 @@ extent_free_region_descriptor(struct extent *ex, struct extent_region *rp)
 				LIST_INSERT_HEAD(&fex->fex_freelist, rp,
 				    er_link);
 				goto wake_em_up;
-			} else
+			} else {
+				s = splhigh();
 				pool_put(&expool, rp);
+				splx(s);
+			}
 		} else {
 			/* Clear all flags. */
 			rp->er_flags = 0;
 			LIST_INSERT_HEAD(&fex->fex_freelist, rp, er_link);
 		}
 
+		if (ex->ex_flags & EXF_FLWANTED) {
  wake_em_up:
-		ex->ex_flags &= ~EXF_FLWANTED;
-		cv_broadcast(&ex->ex_cv);
+			ex->ex_flags &= ~EXF_FLWANTED;
+			wakeup(&fex->fex_freelist);
+		}
 		return;
 	}
 
 	/*
 	 * We know it's dynamically allocated if we get here.
 	 */
+	s = splhigh();
 	pool_put(&expool, rp);
+	splx(s);
 }
 
 /*
@@ -242,17 +268,14 @@ extent_free_region_descriptor(struct extent *ex, struct extent_region *rp)
  */
 struct extent *
 extent_create(const char *name, u_long start, u_long end,
-    struct malloc_type *mtype, void *storage, size_t storagesize, int flags)
+    struct malloc_type *mtype, caddr_t storage, size_t storagesize, int flags)
 {
 	struct extent *ex;
-	char *cp = storage;
+	caddr_t cp = storage;
 	size_t sz = storagesize;
 	struct extent_region *rp;
 	int fixed_extent = (storage != NULL);
-
-#ifndef _KERNEL
-	extent_init();
-#endif
+	int s;
 
 #ifdef DIAGNOSTIC
 	/* Check arguments. */
@@ -298,6 +321,11 @@ extent_create(const char *name, u_long start, u_long end,
 			LIST_INSERT_HEAD(&fex->fex_freelist, rp, er_link);
 		}
 	} else {
+		s = splhigh();
+		if (expool_initialized == 0)
+			expool_init();
+		splx(s);
+
 		ex = (struct extent *)malloc(sizeof(struct extent),
 		    mtype, (flags & EX_WAITOK) ? M_WAITOK : M_NOWAIT);
 		if (ex == NULL)
@@ -305,8 +333,7 @@ extent_create(const char *name, u_long start, u_long end,
 	}
 
 	/* Fill in the extent descriptor and return it to the caller. */
-	mutex_init(&ex->ex_lock, MUTEX_DRIVER, IPL_VM);
-	cv_init(&ex->ex_cv, "extent");
+	simple_lock_init(&ex->ex_slock);
 	LIST_INIT(&ex->ex_regions);
 	ex->ex_name = name;
 	ex->ex_start = start;
@@ -343,9 +370,6 @@ extent_destroy(struct extent *ex)
 		LIST_REMOVE(orp, er_link);
 		extent_free_region_descriptor(ex, orp);
 	}
-
-	cv_destroy(&ex->ex_cv);
-	mutex_destroy(&ex->ex_lock);
 
 	/* If we're not a fixed extent, free the extent descriptor itself. */
 	if ((ex->ex_flags & EXF_FIXED) == 0)
@@ -526,8 +550,8 @@ extent_alloc_region(struct extent *ex, u_long start, u_long size, int flags)
 		return (ENOMEM);
 	}
 
-	mutex_enter(&ex->ex_lock);
  alloc_start:
+	simple_lock(&ex->ex_slock);
 
 	/*
 	 * Attempt to place ourselves in the desired area of the
@@ -564,18 +588,14 @@ extent_alloc_region(struct extent *ex, u_long start, u_long size, int flags)
 			 * do so.
 			 */
 			if (flags & EX_WAITSPACE) {
-				if ((flags & EX_CATCH) != 0)
-					error = cv_wait_sig(&ex->ex_cv,
-					    &ex->ex_lock);
-				else {
-					cv_wait(&ex->ex_cv, &ex->ex_lock);
-					error = 0;
-				}
+				ex->ex_flags |= EXF_WANTED;
+				error = ltsleep(ex,
+				    PNORELOCK | PRIBIO | ((flags & EX_CATCH) ? PCATCH : 0),
+				    "extnt", 0, &ex->ex_slock);
 				if (error == 0)
 					goto alloc_start;
-				mutex_exit(&ex->ex_lock);
 			} else {
-				mutex_exit(&ex->ex_lock);
+				simple_unlock(&ex->ex_slock);
 				error = EAGAIN;
 			}
 			extent_free_region_descriptor(ex, myrp);
@@ -595,7 +615,7 @@ extent_alloc_region(struct extent *ex, u_long start, u_long size, int flags)
 	 * at the beginning of the region list.  Insert ourselves.
 	 */
 	extent_insert_and_optimize(ex, start, size, flags, last, myrp);
-	mutex_exit(&ex->ex_lock);
+	simple_unlock(&ex->ex_slock);
 	return (0);
 }
 
@@ -679,7 +699,7 @@ extent_alloc_subregion1(struct extent *ex, u_long substart, u_long subend,
 	}
 
  alloc_start:
-	mutex_enter(&ex->ex_lock);
+	simple_lock(&ex->ex_slock);
 
 	/*
 	 * Keep a pointer to the last region we looked at so
@@ -723,11 +743,11 @@ extent_alloc_subregion1(struct extent *ex, u_long substart, u_long subend,
 		printf(
       "extent_alloc_subregion: extent `%s' (0x%lx - 0x%lx), alignment 0x%lx\n",
 		 ex->ex_name, ex->ex_start, ex->ex_end, alignment);
-		mutex_exit(&ex->ex_lock);
+		simple_unlock(&ex->ex_slock);
 		panic("extent_alloc_subregion: overflow after alignment");
 #else
 		extent_free_region_descriptor(ex, myrp);
-		mutex_exit(&ex->ex_lock);
+		simple_unlock(&ex->ex_slock);
 		return (EINVAL);
 #endif
 	}
@@ -959,17 +979,14 @@ skip:
 	 * if possible.
 	 */
 	if (flags & EX_WAITSPACE) {
-		if ((flags & EX_CATCH) != 0) {
-			error = cv_wait_sig(&ex->ex_cv, &ex->ex_lock);
-		} else {
-			cv_wait(&ex->ex_cv, &ex->ex_lock);
-			error = 0;
-		}
+		ex->ex_flags |= EXF_WANTED;
+		error = ltsleep(ex,
+		    PNORELOCK | PRIBIO | ((flags & EX_CATCH) ? PCATCH : 0),
+		    "extnt", 0, &ex->ex_slock);
 		if (error == 0)
 			goto alloc_start;
-		mutex_exit(&ex->ex_lock);
 	} else {
-		mutex_exit(&ex->ex_lock);
+		simple_unlock(&ex->ex_slock);
 		error = EAGAIN;
 	}
 
@@ -981,7 +998,7 @@ skip:
 	 * Insert ourselves into the region list.
 	 */
 	extent_insert_and_optimize(ex, newstart, size, flags, last, myrp);
-	mutex_exit(&ex->ex_lock);
+	simple_unlock(&ex->ex_slock);
 	*result = newstart;
 	return (0);
 }
@@ -1055,9 +1072,9 @@ extent_free(struct extent *ex, u_long start, u_long size, int flags)
 	 * XXX Make a static, create-time flags word, so we don't
 	 * XXX have to lock to read it!
 	 */
-	mutex_enter(&ex->ex_lock);
+	simple_lock(&ex->ex_slock);
 	coalesce = (ex->ex_flags & EXF_NOCOALESCE) == 0;
-	mutex_exit(&ex->ex_lock);
+	simple_unlock(&ex->ex_slock);
 
 	if (coalesce) {
 		/* Allocate a region descriptor. */
@@ -1066,7 +1083,7 @@ extent_free(struct extent *ex, u_long start, u_long size, int flags)
 			return (ENOMEM);
 	}
 
-	mutex_enter(&ex->ex_lock);
+	simple_lock(&ex->ex_slock);
 
 	/*
 	 * Find region and deallocate.  Several possibilities:
@@ -1149,7 +1166,7 @@ extent_free(struct extent *ex, u_long start, u_long size, int flags)
 	}
 
 	/* Region not found, or request otherwise invalid. */
-	mutex_exit(&ex->ex_lock);
+	simple_unlock(&ex->ex_slock);
 	extent_print(ex);
 	printf("extent_free: start 0x%lx, end 0x%lx\n", start, end);
 	panic("extent_free: region not found");
@@ -1157,8 +1174,11 @@ extent_free(struct extent *ex, u_long start, u_long size, int flags)
  done:
 	if (nrp != NULL)
 		extent_free_region_descriptor(ex, nrp);
-	cv_broadcast(&ex->ex_cv);
-	mutex_exit(&ex->ex_lock);
+	if (ex->ex_flags & EXF_WANTED) {
+		ex->ex_flags &= ~EXF_WANTED;
+		wakeup(ex);
+	}
+	simple_unlock(&ex->ex_slock);
 	return (0);
 }
 
@@ -1170,7 +1190,7 @@ extent_print(struct extent *ex)
 	if (ex == NULL)
 		panic("extent_print: NULL extent");
 
-	mutex_enter(&ex->ex_lock);
+	simple_lock(&ex->ex_slock);
 
 	printf("extent `%s' (0x%lx - 0x%lx), flags = 0x%x\n", ex->ex_name,
 	    ex->ex_start, ex->ex_end, ex->ex_flags);
@@ -1178,5 +1198,5 @@ extent_print(struct extent *ex)
 	LIST_FOREACH(rp, &ex->ex_regions, er_link)
 		printf("     0x%lx - 0x%lx\n", rp->er_start, rp->er_end);
 
-	mutex_exit(&ex->ex_lock);
+	simple_unlock(&ex->ex_slock);
 }

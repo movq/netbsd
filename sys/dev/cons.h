@@ -1,4 +1,4 @@
-/*	$NetBSD: cons.h,v 1.26 2007/01/13 18:39:35 cube Exp $	*/
+/*	$NetBSD: cons.h,v 1.25 2006/06/01 00:43:37 uwe Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -147,8 +147,7 @@ void	nullconsattach(int);
 
 #define	cons_init(n) { \
 	dev_init(n,cnprobe), dev_init(n,cninit), dev_init(n,cngetc), \
-	dev_init(n,cnputc), dev_init(n,cnpollc), NULL, NULL, NULL, \
-	0, 0 }
+	dev_init(n,cnputc), dev_init(n,cnpollc) }
 
 #define	cons_init_bell(n) { \
 	dev_init(n,cnprobe), dev_init(n,cninit), dev_init(n,cngetc), \

@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_vnops.c,v 1.59 2007/03/04 06:03:01 christos Exp $	*/
+/*	$NetBSD: smbfs_vnops.c,v 1.56.2.1 2007/02/17 23:27:45 tron Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_vnops.c,v 1.59 2007/03/04 06:03:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_vnops.c,v 1.56.2.1 2007/02/17 23:27:45 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -453,7 +453,7 @@ smbfs_setattr(v)
                 if (kauth_cred_geteuid(ap->a_cred) !=
 		    VTOSMBFS(vp)->sm_args.uid &&
                     (error = kauth_authorize_generic(ap->a_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL)) &&
+		    KAUTH_GENERIC_ISSUSER, &ap->a_l->l_acflag)) &&
                     ((vap->va_vaflags & VA_UTIMES_NULL) == 0 ||
                     (error = VOP_ACCESS(ap->a_vp, VWRITE, ap->a_cred, ap->a_l))))
                         return (error);
@@ -1115,7 +1115,7 @@ smbfs_advlock(v)
 		 * SMB header in later write requests, otherwise SMB server
 		 * returns EDEADLK. See also smb_rq_new() on SMB header setup.
 		 */
-		error = smbfs_smb_lock(np, lkop,(void *)1, start, end, &scred);
+		error = smbfs_smb_lock(np, lkop,(caddr_t)1, start, end, &scred);
 		if (error) {
 			ap->a_op = F_UNLCK;
 			lf_advlock(ap, &np->n_lockf, size);

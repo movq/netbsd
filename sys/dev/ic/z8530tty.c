@@ -1,4 +1,4 @@
-/*	$NetBSD: z8530tty.c,v 1.114 2007/07/09 21:00:41 ad Exp $	*/
+/*	$NetBSD: z8530tty.c,v 1.112 2006/10/01 20:31:50 elad Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994, 1995, 1996, 1997, 1998, 1999
@@ -137,7 +137,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: z8530tty.c,v 1.114 2007/07/09 21:00:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: z8530tty.c,v 1.112 2006/10/01 20:31:50 elad Exp $");
 
 #include "opt_kgdb.h"
 #include "opt_ntp.h"
@@ -349,7 +349,7 @@ zstty_attach(parent, self, aux)
 	int dtr_on;
 	int resetbit;
 
-	callout_init(&zst->zst_diag_ch, 0);
+	callout_init(&zst->zst_diag_ch);
 	cn_init_magic(&zstty_cnm_state);
 
 	tty_unit = device_unit(&zst->zst_dev);
@@ -793,7 +793,7 @@ int
 zsioctl(dev, cmd, data, flag, l)
 	dev_t dev;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 	int flag;
 	struct lwp *l;
 {
@@ -1072,7 +1072,7 @@ zsstart(tp)
 	if (tp->t_outq.c_cc <= tp->t_lowat) {
 		if (ISSET(tp->t_state, TS_ASLEEP)) {
 			CLR(tp->t_state, TS_ASLEEP);
-			wakeup((void *)&tp->t_outq);
+			wakeup((caddr_t)&tp->t_outq);
 		}
 		selwakeup(&tp->t_wsel);
 		if (tp->t_outq.c_cc == 0)

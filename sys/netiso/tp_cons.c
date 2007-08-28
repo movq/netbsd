@@ -1,4 +1,4 @@
-/*	$NetBSD: tp_cons.c,v 1.26 2007/03/26 22:49:22 hubertf Exp $	*/
+/*	$NetBSD: tp_cons.c,v 1.23 2006/11/16 01:33:51 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -68,14 +68,14 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tp_cons.c,v 1.26 2007/03/26 22:49:22 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tp_cons.c,v 1.23 2006/11/16 01:33:51 christos Exp $");
 
-#include <sys/param.h>
 #include "opt_iso.h"
 
 #ifdef ISO
 #ifdef TPCONS
 
+#include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/socket.h>
 #include <sys/domain.h>
@@ -91,6 +91,7 @@ __KERNEL_RCSID(0, "$NetBSD: tp_cons.c,v 1.26 2007/03/26 22:49:22 hubertf Exp $")
 #include <netiso/tp_stat.h>
 #include <netiso/tp_pcb.h>
 #include <netiso/tp_trace.h>
+#include <netiso/tp_stat.h>
 #include <netiso/tp_tpdu.h>
 #include <netiso/iso.h>
 #include <netiso/iso_errno.h>
@@ -117,7 +118,7 @@ tpcons_pcbconnect(void *v, struct mbuf *nam)
 	int             error;
 	if ((error = iso_pcbconnect(isop, nam)) != 0)
 		return error;
-	if ((isop->isop_chan = (void *) pk_attach((struct socket *) 0)) == 0) {
+	if ((isop->isop_chan = (caddr_t) pk_attach((struct socket *) 0)) == 0) {
 #ifdef ARGO_DEBUG
 		if (argo_debug[D_CCONS]) {
 			printf("tpcons_pcbconnect: no pklcd; returns 0x%x\n", error);
@@ -213,14 +214,14 @@ void
 tpcons_input(struct mbuf *m, ...)
 {
 	struct sockaddr *faddr, *laddr;
-	void *        channel;
+	caddr_t         channel;
 	va_list ap;
 	if (m == NULL)
 		return;
 	va_start(ap, m);
 	faddr = va_arg(ap, struct sockaddr *);
 	laddr = va_arg(ap, struct sockaddr *);
-	channel = va_arg(ap, void *);
+	channel = va_arg(ap, caddr_t);
 	va_end(ap);
 
 	m = (struct mbuf *) tp_inputprep(m);
@@ -281,7 +282,7 @@ tpcons_output(struct mbuf *m0, ...)
 	m->m_pkthdr.len = datalen;
 	if (isop->isop_chan == 0) {
 		/* got a restart maybe? */
-		if ((isop->isop_chan = (void *) pk_attach((struct socket *) 0)) == 0) {
+		if ((isop->isop_chan = (caddr_t) pk_attach((struct socket *) 0)) == 0) {
 #ifdef ARGO_DEBUG
 			if (argo_debug[D_CCONS]) {
 				printf("tpcons_output: no pklcd\n");
@@ -319,12 +320,12 @@ int
 tpcons_output_dg(struct mbuf *m0, ...)
 {
 	int             datalen;
-	void *        chan;
+	caddr_t         chan;
 	va_list		ap;
 
 	va_start(ap, m0);
 	datalen = va_arg(ap, int);
-	chan = va_arg(ap, void *);
+	chan = va_arg(ap, caddr_t);
 	va_end(ap);
 
 	return tpcons_output(m0, datalen,
@@ -332,6 +333,8 @@ tpcons_output_dg(struct mbuf *m0, ...)
 			     0);
 }
 #else
+
+#include <sys/param.h>
 
 struct mbuf;
 

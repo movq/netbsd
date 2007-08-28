@@ -1,4 +1,4 @@
-/*	$NetBSD: ka750.c,v 1.41 2007/03/04 06:01:01 christos Exp $ */
+/*	$NetBSD: ka750.c,v 1.40 2006/09/05 19:32:57 matt Exp $ */
 /*
  * Copyright (c) 1982, 1986, 1988 The Regents of the University of California.
  * All rights reserved.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ka750.c,v 1.41 2007/03/04 06:01:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ka750.c,v 1.40 2006/09/05 19:32:57 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -89,7 +89,7 @@ void	ctuattach(void);
 static	void ka750_clrf(void);
 static	void ka750_conf(void);
 static	void ka750_memerr(void);
-static	int ka750_mchk(void *);
+static	int ka750_mchk(caddr_t);
 
 
 struct	cpu_dep ka750_calls = {
@@ -106,7 +106,7 @@ struct	cpu_dep ka750_calls = {
 	ka750_clrf,
 };
 
-static	void *mcraddr[4];	/* XXX */
+static	caddr_t mcraddr[4];	/* XXX */
 
 void
 ka750_conf()
@@ -175,7 +175,7 @@ ka750_memenable(struct device *parent, struct device *self, void *aux)
 	struct mcr750 *mcr = (struct mcr750 *)sa->sa_ioh;
 	int k, l, m, cardinfo;
 	
-	mcraddr[device_unit(self)] = (void *)sa->sa_ioh;
+	mcraddr[device_unit(self)] = (caddr_t)sa->sa_ioh;
 
 	/* We will use this info for error reporting - later! */
 	cardinfo = mcr->mc_inf;
@@ -257,7 +257,7 @@ struct mc750frame {
 #define MC750_TBPAR	4		/* tbuf par bit in mcesr */
 
 int
-ka750_mchk(void *cmcf)
+ka750_mchk(caddr_t cmcf)
 {
 	register struct mc750frame *mcf = (struct mc750frame *)cmcf;
 	register int type = mcf->mc5_summary;

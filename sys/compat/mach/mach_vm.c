@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_vm.c,v 1.56 2007/08/15 12:07:30 ad Exp $ */
+/*	$NetBSD: mach_vm.c,v 1.53 2006/11/16 01:32:44 christos Exp $ */
 
 /*-
  * Copyright (c) 2002-2003 The NetBSD Foundation, Inc.
@@ -36,14 +36,17 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "opt_ktrace.h"
+
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_vm.c,v 1.56 2007/08/15 12:07:30 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_vm.c,v 1.53 2006/11/16 01:32:44 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
 #include <sys/mman.h>
 #include <sys/malloc.h>
 #include <sys/vnode.h>
@@ -204,7 +207,7 @@ mach_vm_allocate(args)
 	if (size == 0)
 		goto out;
 
-	SCARG(&cup, addr) = (void *)addr;
+	SCARG(&cup, addr) = (caddr_t)addr;
 	SCARG(&cup, len) = size;
 	SCARG(&cup, prot) = PROT_READ | PROT_WRITE;
 	SCARG(&cup, flags) = MAP_ANON;
@@ -246,7 +249,7 @@ mach_vm_deallocate(args)
 	    (void *)req->req_address, (long)req->req_size);
 #endif
 
-	SCARG(&cup, addr) = (void *)req->req_address;
+	SCARG(&cup, addr) = (caddr_t)req->req_address;
 	SCARG(&cup, len) = req->req_size;
 
 	if ((error = sys_munmap(tl, &cup, &rep->rep_retval)) != 0)
@@ -688,7 +691,7 @@ mach_vm_copy(args)
 	size_t *msglen = args->rsize;
 	char *tmpbuf;
 	int error;
-	char *src, *dst;
+	caddr_t src, dst;
 	size_t size;
 
 #ifdef DEBUG_MACH_VM
@@ -700,8 +703,8 @@ mach_vm_copy(args)
 	    (req->req_size & (PAGE_SIZE - 1)))
 		return mach_msg_error(args, EINVAL);
 
-	src = (void *)req->req_src;
-	dst = (void *)req->req_addr;
+	src = (caddr_t)req->req_src;
+	dst = (caddr_t)req->req_addr;
 	size = (size_t)req->req_size;
 
 	tmpbuf = malloc(PAGE_SIZE, M_TEMP, M_WAITOK);
@@ -779,8 +782,10 @@ mach_vm_read(args)
 		return mach_msg_error(args, EFAULT);
 	}
 
-	if (error == 0)
-		ktrmool(tbuf, size, (void *)va);
+#ifdef KTRACE
+	if (KTRPOINT(l->l_proc, KTR_MOOL) && error == 0)
+		ktrmool(l, tbuf, size, (void *)va);
+#endif
 
 	free(tbuf, M_WAITOK);
 
@@ -802,6 +807,9 @@ mach_vm_write(args)
 	mach_vm_write_request_t *req = args->smsg;
 	mach_vm_write_reply_t *rep = args->rmsg;
 	size_t *msglen = args->rsize;
+#ifdef KTRACE
+	struct lwp *l = args->l;
+#endif
 	struct lwp *tl = args->tl;
 	size_t size;
 	void *addr;
@@ -834,8 +842,10 @@ mach_vm_write(args)
 		return mach_msg_error(args, EFAULT);
 	}
 
-	if (error == 0)
-		ktrmool(tbuf, size, (void *)addr);
+#ifdef KTRACE
+	if (KTRPOINT(l->l_proc, KTR_MOOL) && error == 0)
+		ktrmool(l, tbuf, size, (void *)addr);
+#endif
 
 	free(tbuf, M_WAITOK);
 

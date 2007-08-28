@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_proto.c,v 1.77 2007/05/06 02:56:37 dyoung Exp $	*/
+/*	$NetBSD: in6_proto.c,v 1.68.2.1 2007/05/24 19:13:16 pavel Exp $	*/
 /*	$KAME: in6_proto.c,v 1.66 2000/10/10 15:35:47 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6_proto.c,v 1.77 2007/05/06 02:56:37 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6_proto.c,v 1.68.2.1 2007/05/24 19:13:16 pavel Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -147,252 +147,144 @@ __KERNEL_RCSID(0, "$NetBSD: in6_proto.c,v 1.77 2007/05/06 02:56:37 dyoung Exp $"
 DOMAIN_DEFINE(inet6domain);	/* forward declare and add to link set */
 
 const struct ip6protosw inet6sw[] = {
-{	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_IPV6,
-	.pr_init = ip6_init,
-	.pr_slowtimo = frag6_slowtimo,
-	.pr_drain = frag6_drain,
+{ 0,		&inet6domain,	IPPROTO_IPV6,	0,
+  0,		0,		0,		0,
+  0,
+  ip6_init,	0,		frag6_slowtimo,	frag6_drain,
 },
-{	.pr_type = SOCK_DGRAM,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_UDP,
-	.pr_flags = PR_ATOMIC|PR_ADDR|PR_PURGEIF,
-	.pr_input = udp6_input,
-	.pr_ctlinput = udp6_ctlinput,
-	.pr_ctloutput = ip6_ctloutput,
-	.pr_usrreq = udp6_usrreq,
-	.pr_init = udp6_init,
+{ SOCK_DGRAM,	&inet6domain,	IPPROTO_UDP,	PR_ATOMIC|PR_ADDR|PR_PURGEIF,
+  udp6_input,	0,		udp6_ctlinput,	ip6_ctloutput,
+  udp6_usrreq,	udp6_init,
+  0,		0,		0,
 },
-{	.pr_type = SOCK_STREAM,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_TCP,
-	.pr_flags = PR_CONNREQUIRED|PR_WANTRCVD|PR_LISTEN|PR_ABRTACPTDIS|PR_PURGEIF,
-	.pr_input = tcp6_input,
-	.pr_ctlinput = tcp6_ctlinput,
-	.pr_ctloutput = tcp_ctloutput,
-	.pr_usrreq = tcp_usrreq,
-#ifndef INET	/* don't call initialization and timeout routines twice */
-	.pr_init = tcp_init,
-	.pr_slowtimo = tcp_slowtimo,
-	.pr_drain = tcp_drain,
+{ SOCK_STREAM,	&inet6domain,	IPPROTO_TCP,	PR_CONNREQUIRED|PR_WANTRCVD|PR_LISTEN|PR_ABRTACPTDIS|PR_PURGEIF,
+  tcp6_input,	0,		tcp6_ctlinput,	tcp_ctloutput,
+  tcp_usrreq,
+#ifdef INET	/* don't call initialization and timeout routines twice */
+  0,		0,		0,		0,
+#else
+  tcp_init,	0,		tcp_slowtimo,	tcp_drain,
 #endif
 },
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_RAW,
-	.pr_flags = PR_ATOMIC|PR_ADDR|PR_PURGEIF,
-	.pr_input = rip6_input,
-	.pr_output = rip6_output,
-	.pr_ctlinput = rip6_ctlinput,
-	.pr_ctloutput = rip6_ctloutput,
-	.pr_usrreq = rip6_usrreq,
+{ SOCK_RAW,	&inet6domain,	IPPROTO_RAW,	PR_ATOMIC|PR_ADDR|PR_PURGEIF,
+  rip6_input,	rip6_output,	rip6_ctlinput,	rip6_ctloutput,
+  rip6_usrreq,
+  0,		0,		0,		0,
 },
-#ifdef GATEWAY
-{	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_IPV6,
-	.pr_slowtimo = ip6flow_slowtimo,
+{ SOCK_RAW,	&inet6domain,	IPPROTO_ICMPV6,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
+  icmp6_input,	rip6_output,	rip6_ctlinput,	rip6_ctloutput,
+  rip6_usrreq,
+  icmp6_init,	0,		0,		0,
 },
-#endif /* GATEWAY */
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_ICMPV6,
-	.pr_flags = PR_ATOMIC|PR_ADDR|PR_LASTHDR,
-	.pr_input = icmp6_input,
-	.pr_output = rip6_output,
-	.pr_ctlinput = rip6_ctlinput,
-	.pr_ctloutput = rip6_ctloutput,
-	.pr_usrreq = rip6_usrreq,
-	.pr_init = icmp6_init,
+{ SOCK_RAW,	&inet6domain,	IPPROTO_DSTOPTS,PR_ATOMIC|PR_ADDR,
+  dest6_input,	0,	 	0,		0,
+  0,
+  0,		0,		0,		0,
 },
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_DSTOPTS,
-	.pr_flags = PR_ATOMIC|PR_ADDR,
-	.pr_input = dest6_input,
+{ SOCK_RAW,	&inet6domain,	IPPROTO_ROUTING,PR_ATOMIC|PR_ADDR,
+  route6_input,	0,	 	0,		0,
+  0,
+  0,		0,		0,		0,
 },
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_ROUTING,
-	.pr_flags = PR_ATOMIC|PR_ADDR,
-	.pr_input = route6_input,
-},
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_FRAGMENT,
-	.pr_flags = PR_ATOMIC|PR_ADDR,
-	.pr_input = frag6_input,
+{ SOCK_RAW,	&inet6domain,	IPPROTO_FRAGMENT,PR_ATOMIC|PR_ADDR,
+  frag6_input,	0,	 	0,		0,
+  0,
+  0,		0,		0,		0,
 },
 #ifdef IPSEC
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_AH,
-	.pr_flags = PR_ATOMIC|PR_ADDR,
-	.pr_input = ah6_input,
-	.pr_ctlinput = ah6_ctlinput,
+{ SOCK_RAW,	&inet6domain,	IPPROTO_AH,	PR_ATOMIC|PR_ADDR,
+  ah6_input,	0,	 	ah6_ctlinput,	0,
+  0,
+  0,		0,		0,		0,
 },
 #ifdef IPSEC_ESP
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_ESP,
-	.pr_flags = PR_ATOMIC|PR_ADDR,
-	.pr_input = esp6_input,
-	.pr_ctlinput = esp6_ctlinput,
+{ SOCK_RAW,	&inet6domain,	IPPROTO_ESP,	PR_ATOMIC|PR_ADDR,
+  esp6_input,	0,	 	esp6_ctlinput,	0,
+  0,
+  0,		0,		0,		0,
 },
 #endif
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_IPCOMP,
-	.pr_flags = PR_ATOMIC|PR_ADDR,
-	.pr_input = ipcomp6_input,
+{ SOCK_RAW,	&inet6domain,	IPPROTO_IPCOMP,	PR_ATOMIC|PR_ADDR,
+  ipcomp6_input, 0,	 	0,		0,
+  0,
+  0,		0,		0,		0,
 },
 #endif /* IPSEC */
 #ifdef FAST_IPSEC
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_AH,
-	.pr_flags = PR_ATOMIC|PR_ADDR,
-	.pr_input = ipsec6_common_input,
-	.pr_ctlinput = ah6_ctlinput,
+{ SOCK_RAW,    &inet6domain,   IPPROTO_AH,     PR_ATOMIC|PR_ADDR,
+  ipsec6_common_input, 0,              ah6_ctlinput,   0,
+  0,
+  0,           0,              0,              0,      
 },
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_ESP,
-	.pr_flags = PR_ATOMIC|PR_ADDR,
-	.pr_input = ipsec6_common_input,
-	.pr_ctlinput = esp6_ctlinput,
+{ SOCK_RAW,    &inet6domain,   IPPROTO_ESP,    PR_ATOMIC|PR_ADDR,
+  ipsec6_common_input,    0,           esp6_ctlinput,  0,
+  0,
+  0,           0,              0,              0,              
 },
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_IPCOMP,
-	.pr_flags = PR_ATOMIC|PR_ADDR,
-	.pr_input = ipsec6_common_input,
+{ SOCK_RAW,    &inet6domain,   IPPROTO_IPCOMP, PR_ATOMIC|PR_ADDR,
+  ipsec6_common_input,    0,           0,              0,
+  0,
+  0,           0,              0,              0,              
 },
 #endif /* FAST_IPSEC */
 #ifdef INET
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_IPV4,
-	.pr_flags = PR_ATOMIC|PR_ADDR|PR_LASTHDR,
-	.pr_input = encap6_input,
-	.pr_output = rip6_output,
-	.pr_ctlinput = encap6_ctlinput,
-	.pr_ctloutput = rip6_ctloutput,
-	.pr_usrreq = rip6_usrreq,
-	.pr_init = encap_init,
+{ SOCK_RAW,	&inet6domain,	IPPROTO_IPV4,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
+  encap6_input,	rip6_output, 	encap6_ctlinput, rip6_ctloutput,
+  rip6_usrreq,
+  encap_init,	0,		0,		0,
 },
 #endif
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_IPV6,
-	.pr_flags = PR_ATOMIC|PR_ADDR|PR_LASTHDR,
-	.pr_input = encap6_input,
-	.pr_output = rip6_output,
-	.pr_ctlinput = encap6_ctlinput,
-	.pr_ctloutput = rip6_ctloutput,
-	.pr_usrreq = rip6_usrreq,
-	.pr_init = encap_init,
+{ SOCK_RAW,	&inet6domain,	IPPROTO_IPV6,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
+  encap6_input, rip6_output,	encap6_ctlinput, rip6_ctloutput,
+  rip6_usrreq,
+  encap_init,	0,		0,		0,
 },
 #if NETHERIP > 1
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_ETHERIP,
-	.pr_flags = PR_ATOMIC|PR_ADDR|PR_LASTHDR,
-	.pr_input = ip6_etherip_input,
-	.pr_output = rip6_output,
-	.pr_ctlinput = rip6_ctlinput,
-	.pr_ctloutput = rip6_ctloutput,
-	.pr_usrreq = rip6_usrreq,
+{ SOCK_RAW,	&inet6domain,	IPPROTO_ETHERIP,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
+  ip6_etherip_input,	rip6_output,	rip6_ctlinput,	rip6_ctloutput,
+  rip6_usrreq,
+  0,		0,		0,		0,
 },
 #endif
 #if NCARP > 0
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_CARP,
-	.pr_flags = PR_ATOMIC|PR_ADDR,
-	.pr_input = carp6_proto_input,
-	.pr_output = rip6_output,
-	.pr_ctloutput = rip6_ctloutput,
-	.pr_usrreq = rip6_usrreq,
+{ SOCK_RAW,	&inet6domain,	IPPROTO_CARP,	PR_ATOMIC|PR_ADDR,
+  carp6_proto_input,	rip6_output,	0,		rip6_ctloutput,
+  rip6_usrreq,
+  0,		0,		0,		0,
 },
 #endif /* NCARP */
 #ifdef ISO
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_EON,
-	.pr_flags = PR_ATOMIC|PR_ADDR|PR_LASTHDR,
-	.pr_input = encap6_input,
-	.pr_output = rip6_output,
-	.pr_ctlinput = encap6_ctlinput,
-	.pr_ctloutput = rip6_ctloutput,
-	.pr_usrreq = rip6_usrreq,
-	/*XXX*/
-	.pr_init = encap_init,
+{ SOCK_RAW,	&inet6domain,	IPPROTO_EON,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
+  encap6_input,	rip6_output,	encap6_ctlinput, rip6_ctloutput,
+  rip6_usrreq,	/*XXX*/
+  encap_init,	0,		0,		0,
 },
 #endif
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_protocol = IPPROTO_PIM,
-	.pr_flags = PR_ATOMIC|PR_ADDR|PR_LASTHDR,
-	.pr_input = pim6_input,
-	.pr_output = rip6_output,
-	.pr_ctloutput = rip6_ctloutput,
-	.pr_usrreq = rip6_usrreq,
+{ SOCK_RAW,     &inet6domain,	IPPROTO_PIM,	PR_ATOMIC|PR_ADDR|PR_LASTHDR,
+  pim6_input,	rip6_output,	0,              rip6_ctloutput,
+  rip6_usrreq,
+  0,            0,              0,              0,
 },
 /* raw wildcard */
-{	.pr_type = SOCK_RAW,
-	.pr_domain = &inet6domain,
-	.pr_flags = PR_ATOMIC|PR_ADDR|PR_LASTHDR,
-	.pr_input = rip6_input,
-	.pr_output = rip6_output,
-	.pr_ctloutput = rip6_ctloutput,
-	.pr_usrreq = rip6_usrreq,
-	.pr_init = rip6_init,
+{ SOCK_RAW,	&inet6domain,	0,		PR_ATOMIC|PR_ADDR|PR_LASTHDR,
+  rip6_input,	rip6_output,	0,		rip6_ctloutput,
+  rip6_usrreq,
+  rip6_init,	0,		0,		0,
 },
 };
 
-POOL_INIT(sockaddr_in6_pool, sizeof(struct sockaddr_in6), 0, 0, 0,
-    "sockaddr_in6_pool", NULL, IPL_NET);
-
 struct domain inet6domain = {
-	.dom_family = AF_INET6, .dom_name = "internet6",
-	.dom_init = NULL, .dom_externalize = NULL, .dom_dispose = NULL,
-	.dom_protosw = (const struct protosw *)inet6sw,
-	.dom_protoswNPROTOSW = (const struct protosw *)&inet6sw[sizeof(inet6sw)/sizeof(inet6sw[0])],
-	.dom_rtattach = rn_inithead,
-	.dom_rtoffset = offsetof(struct sockaddr_in6, sin6_addr) << 3,
-	.dom_maxrtkey = sizeof(struct sockaddr_in6),
-	.dom_ifattach = in6_domifattach, .dom_ifdetach = in6_domifdetach,
-	.dom_ifqueues = { &ip6intrq, NULL },
-	.dom_link = { NULL },
-	.dom_mowner = MOWNER_INIT("",""),
-	.dom_sa_pool = &sockaddr_in6_pool,
-	.dom_sa_len = sizeof(struct sockaddr_in6),
-	.dom_sa_cmpofs = offsetof(struct sockaddr_in6, sin6_addr),
-	.dom_sa_cmplen = sizeof(struct in6_addr),
-	.dom_rtcache = LIST_HEAD_INITIALIZER(inet6domain.dom_rtcache)
+	AF_INET6, "internet6", NULL, NULL, NULL,
+	(const struct protosw *)inet6sw,
+	(const struct protosw *)&inet6sw[sizeof(inet6sw)/sizeof(inet6sw[0])],
+	rn_inithead,
+	offsetof(struct sockaddr_in6, sin6_addr) << 3,
+	sizeof(struct sockaddr_in6),
+	in6_domifattach, in6_domifdetach,
+	{ &ip6intrq, NULL },
+	{ NULL },
+	MOWNER_INIT("","")
 };
-
-int
-sockaddr_in6_cmp(const struct sockaddr *lsa, const struct sockaddr *rsa)
-{
-	uint_fast8_t len;
-	const uint_fast8_t addrofs = offsetof(struct sockaddr_in6, sin6_addr),
-			   addrend = addrofs + sizeof(struct in6_addr);
-	int rc;
-	const struct sockaddr_in6 *lsin6, *rsin6;
-
-	lsin6 = satocsin6(lsa);
-	rsin6 = satocsin6(rsa);
-
-	len = MIN(addrend, MIN(lsin6->sin6_len, rsin6->sin6_len));
-
-	if (len > addrofs &&
-	    (rc = memcmp(&lsin6->sin6_addr, &rsin6->sin6_addr,
-	                  len - addrofs)) != 0)
-		return rc;
-
-	return lsin6->sin6_len - rsin6->sin6_len;
-}
 
 /*
  * Internet configuration info

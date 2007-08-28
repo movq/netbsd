@@ -1,7 +1,7 @@
-/*	$NetBSD: lockstat.c,v 1.10 2007/07/14 13:30:44 ad Exp $	*/
+/*	$NetBSD: lockstat.c,v 1.4 2006/11/16 01:32:45 christos Exp $	*/
 
 /*-
- * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2006 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -39,12 +39,10 @@
 /*
  * Lock statistics driver, providing kernel support for the lockstat(8)
  * command.
- *
- * XXX Timings for contention on sleep locks are currently incorrect.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lockstat.c,v 1.10 2007/07/14 13:30:44 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lockstat.c,v 1.4 2006/11/16 01:32:45 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -69,9 +67,9 @@ __KERNEL_RCSID(0, "$NetBSD: lockstat.c,v 1.10 2007/07/14 13:30:44 ad Exp $");
 #define	LOCKSTAT_HASH_SHIFT	2
 #endif
 
-#define	LOCKSTAT_MINBUFS	1000
-#define	LOCKSTAT_DEFBUFS	10000
-#define	LOCKSTAT_MAXBUFS	50000
+#define	LOCKSTAT_MINBUFS	100
+#define	LOCKSTAT_DEFBUFS	1000
+#define	LOCKSTAT_MAXBUFS	10000
 
 #define	LOCKSTAT_HASH_SIZE	64
 #define	LOCKSTAT_HASH_MASK	(LOCKSTAT_HASH_SIZE - 1)
@@ -103,9 +101,7 @@ volatile u_int	lockstat_enabled;
 uintptr_t	lockstat_csstart;
 uintptr_t	lockstat_csend;
 uintptr_t	lockstat_csmask;
-uintptr_t	lockstat_lamask;
-uintptr_t	lockstat_lockstart;
-uintptr_t	lockstat_lockend;
+uintptr_t	lockstat_lockaddr;
 
 /* Protected by lockstat_lock(). */
 struct simplelock lockstat_slock;
@@ -177,7 +173,7 @@ lockstat_unlock(int unbusy)
 void
 lockstat_init_tables(lsenable_t *le)
 {
-	int i, per, slop, cpuno;
+	int i, ncpu, per, slop, cpuno;
 	CPU_INFO_ITERATOR cii;
 	struct cpu_info *ci;
 	lscpu_t *lc;
@@ -185,11 +181,13 @@ lockstat_init_tables(lsenable_t *le)
 
 	KASSERT(!lockstat_enabled);
 
+	ncpu = 0;
 	for (CPU_INFO_FOREACH(cii, ci)) {
 		if (ci->ci_lockstat != NULL) {
 			free(ci->ci_lockstat, M_LOCKSTAT);
 			ci->ci_lockstat = NULL;
 		}
+		ncpu++;
 	}
 
 	if (le == NULL)
@@ -237,20 +235,21 @@ lockstat_start(lsenable_t *le)
 	else
 		lockstat_csmask = 0;
 
-	if ((le->le_flags & LE_LOCK) != 0)
-		lockstat_lamask = (uintptr_t)-1LL;
-	else
-		lockstat_lamask = 0;
-
 	lockstat_csstart = le->le_csstart;
 	lockstat_csend = le->le_csend;
-	lockstat_lockstart = le->le_lockstart;
-	lockstat_lockstart = le->le_lockstart;
-	lockstat_lockend = le->le_lockend;
-	mb_memory();
+	lockstat_lockaddr = le->le_lock;
+
+	/*
+	 * Force a write barrier.  XXX This may not be sufficient..
+	 */
+	lockstat_unlock(0);
+	tsleep(&lockstat_start, PPAUSE, "lockstat", mstohz(10));
+	(void)lockstat_lock(0);
+
 	getnanotime(&lockstat_stime);
 	lockstat_enabled = le->le_mask;
-	mb_write();
+	lockstat_unlock(0);
+	(void)lockstat_lock(0);
 }
 
 /*
@@ -269,7 +268,7 @@ lockstat_stop(lsdisable_t *ld)
 
 	/*
 	 * Set enabled false, force a write barrier, and wait for other CPUs
-	 * to exit lockstat_event().
+	 * to exit lockstat_event().  XXX This may not be sufficient..
 	 */
 	lockstat_enabled = 0;
 	lockstat_unlock(0);
@@ -363,7 +362,7 @@ lockstat_free(void)
  */
 void
 lockstat_event(uintptr_t lock, uintptr_t callsite, u_int flags, u_int count,
-	       uint64_t cycles)
+	       uint64_t time)
 {
 	lslist_t *ll;
 	lscpu_t *lc;
@@ -373,13 +372,12 @@ lockstat_event(uintptr_t lock, uintptr_t callsite, u_int flags, u_int count,
 
 	if ((flags & lockstat_enabled) != flags || count == 0)
 		return;
-	if (lock < lockstat_lockstart || lock > lockstat_lockend)
+	if (lockstat_lockaddr != 0 && lock != lockstat_lockaddr)
 		return;
 	if (callsite < lockstat_csstart || callsite > lockstat_csend)
 		return;
 
 	callsite &= lockstat_csmask;
-	lock &= lockstat_lamask;
 
 	/*
 	 * Find the table for this lock+callsite pair, and try to locate a
@@ -388,7 +386,7 @@ lockstat_event(uintptr_t lock, uintptr_t callsite, u_int flags, u_int count,
 	lc = curcpu()->ci_lockstat;
 	ll = &lc->lc_hash[LOCKSTAT_HASH(lock ^ callsite)];
 	event = (flags & LB_EVENT_MASK) - 1;
-	s = splhigh();
+	s = spllock();
 
 	LIST_FOREACH(lb, ll, lb_chain.list) {
 		if (lb->lb_lock == lock && lb->lb_callsite == callsite)
@@ -405,7 +403,7 @@ lockstat_event(uintptr_t lock, uintptr_t callsite, u_int flags, u_int count,
 			LIST_INSERT_HEAD(ll, lb, lb_chain.list);
 		}
 		lb->lb_counts[event] += count;
-		lb->lb_times[event] += cycles;
+		lb->lb_times[event] += time;
 	} else if ((lb = SLIST_FIRST(&lc->lc_free)) != NULL) {
 		/*
 		 * Pinch a new buffer and fill it out.
@@ -416,7 +414,7 @@ lockstat_event(uintptr_t lock, uintptr_t callsite, u_int flags, u_int count,
 		lb->lb_lock = lock;
 		lb->lb_callsite = callsite;
 		lb->lb_counts[event] = count;
-		lb->lb_times[event] = cycles;
+		lb->lb_times[event] = time;
 	} else {
 		/*
 		 * We didn't find a buffer and there were none free.
@@ -477,7 +475,7 @@ lockstat_close(dev_t dev, int flag, int mode,
  * Handle control operations.
  */
 int
-lockstat_ioctl(dev_t dev, u_long cmd, void *data,
+lockstat_ioctl(dev_t dev, u_long cmd, caddr_t data,
 	int flag, struct lwp *l)
 {
 	lsenable_t *le;
@@ -518,10 +516,8 @@ lockstat_ioctl(dev_t dev, u_long cmd, void *data,
 			le->le_csstart = 0;
 			le->le_csend = le->le_csstart - 1;
 		}
-		if ((le->le_flags & LE_ONE_LOCK) == 0) {
-			le->le_lockstart = 0;
-			le->le_lockend = le->le_lockstart - 1;
-		}
+		if ((le->le_flags & LE_ONE_LOCK) == 0)
+			le->le_lock = 0;
 		if ((le->le_mask & LB_EVENT_MASK) == 0)
 			return (EINVAL);
 		if ((le->le_mask & LB_LOCK_MASK) == 0)

@@ -1,7 +1,7 @@
-/*	$NetBSD: cac.c,v 1.41 2007/07/09 21:00:34 ad Exp $	*/
+/*	$NetBSD: cac.c,v 1.37 2006/11/28 20:29:14 ad Exp $	*/
 
 /*-
- * Copyright (c) 2000, 2006, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cac.c,v 1.41 2007/07/09 21:00:34 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cac.c,v 1.37 2006/11/28 20:29:14 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -100,7 +100,6 @@ cac_init(struct cac_softc *sc, const char *intrstr, int startfw)
 	bus_dma_segment_t seg;
 	struct cac_ccb *ccb;
 	int locs[CACCF_NLOCS];
-	char firm[8];
 
 	if (intrstr != NULL)
 		aprint_normal("%s: interrupting at %s\n", sc->sc_dv.dv_xname,
@@ -108,8 +107,6 @@ cac_init(struct cac_softc *sc, const char *intrstr, int startfw)
 
 	SIMPLEQ_INIT(&sc->sc_ccb_free);
 	SIMPLEQ_INIT(&sc->sc_ccb_queue);
-	mutex_init(&sc->sc_mutex, MUTEX_DRIVER, IPL_BIO);
-	cv_init(&sc->sc_ccb_cv, "cacccb");
 
         size = sizeof(struct cac_ccb) * CAC_MAX_CCBS;
 
@@ -121,7 +118,7 @@ cac_init(struct cac_softc *sc, const char *intrstr, int startfw)
 	}
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, &seg, rseg, size,
-	    (void **)&sc->sc_ccbs,
+	    (caddr_t *)&sc->sc_ccbs,
 	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
 		aprint_error("%s: unable to map CCBs, error = %d\n",
 		    sc->sc_dv.dv_xname, error);
@@ -181,10 +178,6 @@ cac_init(struct cac_softc *sc, const char *intrstr, int startfw)
 		return (-1);
 	}
 
-	strlcpy(firm, cinfo.firm_rev, 4+1);
-	printf("%s: %d channels, firmware <%s>\n", sc->sc_dv.dv_xname,
-	    cinfo.scsi_chips, firm);
-
 	sc->sc_nunits = cinfo.num_drvs;
 	for (i = 0; i < cinfo.num_drvs; i++) {
 		caca.caca_unit = i;
@@ -192,17 +185,14 @@ cac_init(struct cac_softc *sc, const char *intrstr, int startfw)
 		locs[CACCF_UNIT] = i;
 
 		config_found_sm_loc(&sc->sc_dv, "cac", locs, &caca,
-		    cac_print, config_stdsubmatch);
+				    cac_print, config_stdsubmatch);
 	}
 
 	/* Set our `shutdownhook' before we start any device activity. */
 	if (cac_sdh == NULL)
 		cac_sdh = shutdownhook_establish(cac_shutdown, NULL);
 
-	mutex_enter(&sc->sc_mutex);
 	(*sc->sc_cl.cl_intr_enable)(sc, CAC_INTR_ENABLE);
-	mutex_exit(&sc->sc_mutex);
-
 	return (0);
 }
 
@@ -252,24 +242,22 @@ cac_intr(void *cookie)
 {
 	struct cac_softc *sc;
 	struct cac_ccb *ccb;
-	int rv;
 
 	sc = (struct cac_softc *)cookie;
 
-	mutex_enter(&sc->sc_mutex);
+	if (!(*sc->sc_cl.cl_intr_pending)(sc)) {
+#ifdef DEBUG
+		printf("%s: spurious intr\n", sc->sc_dv.dv_xname);
+#endif
+		return (0);
+	}
 
-	if ((*sc->sc_cl.cl_intr_pending)(sc)) {
-		while ((ccb = (*sc->sc_cl.cl_completed)(sc)) != NULL) {
-			cac_ccb_done(sc, ccb);
-			cac_ccb_start(sc, NULL);
-		}
-		rv = 1;
-	} else
-		rv = 0;
+	while ((ccb = (*sc->sc_cl.cl_completed)(sc)) != NULL) {
+		cac_ccb_done(sc, ccb);
+		cac_ccb_start(sc, NULL);
+	}
 
-	mutex_exit(&sc->sc_mutex);
-
-	return (rv);
+	return (1);
 }
 
 /*
@@ -281,7 +269,7 @@ cac_cmd(struct cac_softc *sc, int command, void *data, int datasize,
 {
 	struct cac_ccb *ccb;
 	struct cac_sgb *sgb;
-	int i, rv, size, nsegs;
+	int s, i, rv, size, nsegs;
 
 	size = 0;
 
@@ -331,10 +319,9 @@ cac_cmd(struct cac_softc *sc, int command, void *data, int datasize,
 	ccb->ccb_flags = flags;
 	ccb->ccb_datasize = size;
 
-	mutex_enter(&sc->sc_mutex);
-
 	if (context == NULL) {
 		memset(&ccb->ccb_context, 0, sizeof(struct cac_context));
+		s = splbio();
 
 		/* Synchronous commands musn't wait. */
 		if ((*sc->sc_cl.cl_fifo_full)(sc)) {
@@ -350,32 +337,31 @@ cac_cmd(struct cac_softc *sc, int command, void *data, int datasize,
 		}
 	} else {
 		memcpy(&ccb->ccb_context, context, sizeof(struct cac_context));
+		s = splbio();
 		(void)cac_ccb_start(sc, ccb);
 		rv = 0;
 	}
 
-	mutex_exit(&sc->sc_mutex);
+	splx(s);
 	return (rv);
 }
 
 /*
- * Wait for the specified CCB to complete.
+ * Wait for the specified CCB to complete.  Must be called at splbio.
  */
 static int
 cac_ccb_poll(struct cac_softc *sc, struct cac_ccb *wantccb, int timo)
 {
 	struct cac_ccb *ccb;
 
-	KASSERT(mutex_owned(&sc->sc_mutex));
-
-	timo *= 1000;
+	timo *= 10;
 
 	do {
 		for (; timo != 0; timo--) {
 			ccb = (*sc->sc_cl.cl_completed)(sc);
 			if (ccb != NULL)
 				break;
-			DELAY(1);
+			DELAY(100);
 		}
 
 		if (timo == 0) {
@@ -390,13 +376,11 @@ cac_ccb_poll(struct cac_softc *sc, struct cac_ccb *wantccb, int timo)
 
 /*
  * Enqueue the specified command (if any) and attempt to start all enqueued
- * commands.
+ * commands.  Must be called at splbio.
  */
 static int
 cac_ccb_start(struct cac_softc *sc, struct cac_ccb *ccb)
 {
-
-	KASSERT(mutex_owned(&sc->sc_mutex));
 
 	if (ccb != NULL)
 		SIMPLEQ_INSERT_TAIL(&sc->sc_ccb_queue, ccb, ccb_chain);
@@ -425,8 +409,6 @@ cac_ccb_done(struct cac_softc *sc, struct cac_ccb *ccb)
 	int error;
 
 	error = 0;
-
-	KASSERT(mutex_owned(&sc->sc_mutex));
 
 #ifdef DIAGNOSTIC
 	if ((ccb->ccb_flags & CAC_CCB_ACTIVE) == 0)
@@ -467,8 +449,9 @@ static struct cac_ccb *
 cac_ccb_alloc(struct cac_softc *sc, int nosleep)
 {
 	struct cac_ccb *ccb;
+	int s;
 
-	mutex_enter(&sc->sc_mutex);
+	s = splbio();
 
 	for (;;) {
 		if ((ccb = SIMPLEQ_FIRST(&sc->sc_ccb_free)) != NULL) {
@@ -479,10 +462,10 @@ cac_ccb_alloc(struct cac_softc *sc, int nosleep)
 			ccb = NULL;
 			break;
 		}
-		cv_wait(&sc->sc_ccb_cv, &sc->sc_mutex);
+		tsleep(&sc->sc_ccb_free, PRIBIO, "cacccb", 0);
 	}
 
-	mutex_exit(&sc->sc_mutex);
+	splx(s);
 	return (ccb);
 }
 
@@ -492,13 +475,14 @@ cac_ccb_alloc(struct cac_softc *sc, int nosleep)
 static void
 cac_ccb_free(struct cac_softc *sc, struct cac_ccb *ccb)
 {
-
-	KASSERT(mutex_owned(&sc->sc_mutex));
+	int s;
 
 	ccb->ccb_flags = 0;
-	if (SIMPLEQ_EMPTY(&sc->sc_ccb_free))
-		cv_signal(&sc->sc_ccb_cv);
+	s = splbio();
 	SIMPLEQ_INSERT_HEAD(&sc->sc_ccb_free, ccb, ccb_chain);
+	if (SIMPLEQ_NEXT(ccb, ccb_chain) == NULL)
+		wakeup_one(&sc->sc_ccb_free);
+	splx(s);
 }
 
 /*
@@ -509,8 +493,6 @@ static int
 cac_l0_fifo_full(struct cac_softc *sc)
 {
 
-	KASSERT(mutex_owned(&sc->sc_mutex));
-
 	return (cac_inl(sc, CAC_REG_CMD_FIFO) == 0);
 }
 
@@ -518,10 +500,7 @@ static void
 cac_l0_submit(struct cac_softc *sc, struct cac_ccb *ccb)
 {
 
-	KASSERT(mutex_owned(&sc->sc_mutex));
-
-	bus_dmamap_sync(sc->sc_dmat, sc->sc_dmamap,
-	    (char *)ccb - (char *)sc->sc_ccbs,
+	bus_dmamap_sync(sc->sc_dmat, sc->sc_dmamap, (caddr_t)ccb - sc->sc_ccbs,
 	    sizeof(struct cac_ccb), BUS_DMASYNC_PREWRITE | BUS_DMASYNC_PREREAD);
 	cac_outl(sc, CAC_REG_CMD_FIFO, ccb->ccb_paddr);
 }
@@ -532,8 +511,6 @@ cac_l0_completed(struct cac_softc *sc)
 	struct cac_ccb *ccb;
 	paddr_t off;
 
-	KASSERT(mutex_owned(&sc->sc_mutex));
-
 	if ((off = cac_inl(sc, CAC_REG_DONE_FIFO)) == 0)
 		return (NULL);
 
@@ -542,7 +519,7 @@ cac_l0_completed(struct cac_softc *sc)
 		    sc->sc_dv.dv_xname, (long)off);
 
 	off = (off & ~3) - sc->sc_ccbs_paddr;
-	ccb = (struct cac_ccb *)((char *)sc->sc_ccbs + off);
+	ccb = (struct cac_ccb *)(sc->sc_ccbs + off);
 
 	bus_dmamap_sync(sc->sc_dmat, sc->sc_dmamap, off, sizeof(struct cac_ccb),
 	    BUS_DMASYNC_POSTWRITE | BUS_DMASYNC_POSTREAD);
@@ -557,16 +534,12 @@ static int
 cac_l0_intr_pending(struct cac_softc *sc)
 {
 
-	KASSERT(mutex_owned(&sc->sc_mutex));
-
 	return (cac_inl(sc, CAC_REG_INTR_PENDING) & CAC_INTR_ENABLE);
 }
 
 static void
 cac_l0_intr_enable(struct cac_softc *sc, int state)
 {
-
-	KASSERT(mutex_owned(&sc->sc_mutex));
 
 	cac_outl(sc, CAC_REG_INTR_MASK,
 	    state ? CAC_INTR_ENABLE : CAC_INTR_DISABLE);

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.29 2007/02/16 02:53:50 ad Exp $	*/
+/*	$NetBSD: intr.h,v 1.27 2006/07/13 17:50:37 garbled Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -47,14 +47,10 @@
 #define	IPL_NET		5	/* network */
 #define	IPL_SOFTSERIAL	4	/* software serial interrupt */
 #define	IPL_TTY		3	/* terminal */
-#define	IPL_LPT		IPL_TTY
 #define	IPL_VM		3	/* memory allocation */
 #define	IPL_AUDIO	2	/* audio */
 #define	IPL_CLOCK	1	/* clock */
-#define	IPL_STATCLOCK	IPL_CLOCK
 #define	IPL_HIGH	1	/* everything */
-#define	IPL_SCHED	IPL_HIGH
-#define	IPL_LOCK	IPL_HIGH
 #define	IPL_SERIAL	0	/* serial */
 #define	NIPL		10
 
@@ -129,6 +125,7 @@ extern struct intrsource intrsources[ICU_LEN];
 #define	LEGAL_IRQ(x)		((x) >= 0 && (x) < ICU_LEN && (x) != IRQ_SLAVE)
 #define	I8259_INTR_NUM		16
 #define	OPENPIC_INTR_NUM	((ICU_LEN)-(I8259_INTR_NUM))
+#define	CLKF_BASEPRI(frame)	((frame)->pri == 0)
 
 #define	PREP_INTR_REG	0xbffff000
 #define	INTR_VECTOR_REG	0xff0
@@ -144,33 +141,30 @@ extern struct intrsource intrsources[ICU_LEN];
 #define	CNT_SINT_SERIAL	31
 #define	CNT_CLOCK	0
 
+#define splbio()	splraise(imask[IPL_BIO])
+#define splnet()	splraise(imask[IPL_NET])
+#define spltty()	splraise(imask[IPL_TTY])
+#define splclock()	splraise(imask[IPL_CLOCK])
+#define splvm()		splraise(imask[IPL_VM])
+#define splaudio()	splraise(imask[IPL_AUDIO])
+#define	splserial()	splraise(imask[IPL_SERIAL])
+#define splstatclock()	splclock()
+#define	spllowersoftclock() spllower(imask[IPL_SOFTCLOCK])
+#define	splsoftclock()	splraise(imask[IPL_SOFTCLOCK])
+#define	splsoftnet()	splraise(imask[IPL_SOFTNET])
+#define	splsoftserial()	splraise(imask[IPL_SOFTSERIAL])
+
+#define spllpt()	spltty()
+
 #define setsoftclock()  softintr(SINT_CLOCK);
 #define setsoftnet()    softintr(SINT_NET);
 #define setsoftserial() softintr(SINT_SERIAL);
 
+#define	splhigh()	splraise(imask[IPL_HIGH])
+#define	splsched()	splhigh()
+#define	spllock()	splhigh()
 #define	splx(x)		spllower(x)
 #define	spl0()		spllower(0)
-
-typedef int ipl_t;
-typedef struct {
-	ipl_t _ipl;
-} ipl_cookie_t;
-
-static inline ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._ipl = ipl};
-}
-
-static inline int
-splraiseipl(ipl_cookie_t icookie)
-{
-
-	return splraise(imask[icookie._ipl]);
-}
-
-#include <sys/spl.h>
 
 #endif /* !_LOCORE */
 

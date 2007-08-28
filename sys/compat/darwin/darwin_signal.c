@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_signal.c,v 1.26 2007/06/17 20:15:19 dsl Exp $ */
+/*	$NetBSD: darwin_signal.c,v 1.22 2006/10/19 15:11:59 reinoud Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_signal.c,v 1.26 2007/06/17 20:15:19 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_signal.c,v 1.22 2006/10/19 15:11:59 reinoud Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -45,6 +45,7 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_signal.c,v 1.26 2007/06/17 20:15:19 dsl Exp $
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/signal.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/sys/signal.h>
@@ -73,43 +74,66 @@ darwin_sys_sigaction(l, v, retval)
 		syscallarg(struct darwin___sigaction *) nsa;
 		syscallarg(struct sigaction13 *) osa;
 	} */ *uap = v;
+	struct sys___sigaction_sigtramp_args cup;
 	struct darwin___sigaction dsa;
-	struct sigaction nsa, osa;
+	struct sigaction sa;
+	struct sigaction *nsa, *osa;
 	struct sigaction13 sa13;
+	struct proc *p = l->l_proc;
+	caddr_t sg = stackgap_init(p, 0);
 	int error;
 
 	if ((error = copyin(SCARG(uap, nsa), &dsa, sizeof(dsa))) != 0)
 		return error;
 
-	nsa.sa_handler = dsa.darwin_sa_handler.__sa_handler;
-	native_sigset13_to_sigset(&dsa.darwin_sa_mask, &nsa.sa_mask);
+	nsa = stackgap_alloc(p, &sg, sizeof(struct sigaction));
+	if (SCARG(uap, osa) != NULL)
+		osa = stackgap_alloc(p, &sg, sizeof(struct sigaction));
+	else
+		osa = NULL;
+
+	sa.sa_handler = dsa.darwin_sa_handler.__sa_handler;
+	native_sigset13_to_sigset(&dsa.darwin_sa_mask, &sa.sa_mask);
 	if (dsa.darwin_sa_flags & ~DARWIN_SA_ALLBITS) {
 		DPRINTF(("darwin_sys_sigaction: ignoring bits (flags = %x)\n",
 		    dsa.darwin_sa_flags));
 	}
-	nsa.sa_flags = dsa.darwin_sa_flags & DARWIN_SA_ALLBITS;
+	sa.sa_flags = dsa.darwin_sa_flags & DARWIN_SA_ALLBITS;
 
-	error = sigaction1(l, SCARG(uap, signum), &nsa, &osa,
-	    dsa.darwin_sa_tramp, 1);
-	if (error != 0)
+	if ((error = copyout(&sa, nsa, sizeof(sa))) != 0)
+		return error;
+
+	SCARG(&cup, signum) = SCARG(uap, signum);
+	SCARG(&cup, nsa) = nsa;
+	if (SCARG(uap, osa) != NULL)
+		SCARG(&cup, osa) = osa;
+	SCARG(&cup, tramp) = dsa.darwin_sa_tramp;
+	SCARG(&cup, vers) = 1;
+
+	if ((error = sys___sigaction_sigtramp(l, &cup, retval)) !=0)
 		return error;
 
 	if (SCARG(uap, osa) == NULL)
 		return 0;
 
-	/* XXX: The returned structure has a different type to that supplied */
-	sa13.osa_handler = osa.sa_handler;
-	sa13.osa_mask = osa.sa_mask.__bits[0];
-	native_sigset_to_sigset13(&osa.sa_mask, &sa13.osa_mask);
-	sa13.osa_flags = osa.sa_flags;
+	if ((error = copyin(SCARG(&cup, osa), &sa, sizeof(sa))) != 0)
+		return error;
 
-	return copyout(&sa13, SCARG(uap, osa), sizeof(sa13));
+	sa13.osa_handler = sa.sa_handler;
+	sa13.osa_mask = sa.sa_mask.__bits[0];
+	native_sigset_to_sigset13(&sa.sa_mask, &sa13.osa_mask);
+	sa13.osa_flags = sa.sa_flags;
+
+	if ((error = copyout(&sa13, SCARG(uap, osa), sizeof(sa13))) != 0)
+		return error;
+
+	return 0;
 }
 
 void
 darwin_trapsignal(l, ksi)
 	struct lwp *l;
-	struct ksiginfo *ksi;
+	const struct ksiginfo *ksi;
 {
 	if (mach_trapsignal1(l, ksi) != 0)
 		trapsignal(l, ksi);
@@ -138,7 +162,7 @@ darwin_tracesig(p, signo)
 
 	code[0] = MACH_SOFT_SIGNAL;
 	code[1] = signo;
-	l = proc_representative_lwp(p, NULL, 0);
+	l = proc_representative_lwp(p);
 	error = mach_exception(l, MACH_EXC_SOFTWARE, code);
 
 	/* Inhibit normal signal delivery */
@@ -156,24 +180,48 @@ darwin_sys_sigprocmask(l, v, retval)
 		syscallarg(sigset13_t *) set;
 		syscallarg(sigset13_t *) oset;
 	} */ *uap = v;
+	struct sys___sigprocmask14_args cup;
+	struct proc *p = l->l_proc;
 	int error;
-	sigset13_t kdset;
+	sigset13_t kdset, kdoset;
 	sigset_t kbset, kboset;
+	sigset_t *ubset = NULL;
+	sigset_t *uboset = NULL;
+
+	caddr_t sg = stackgap_init(p, 0);
+	ubset = stackgap_alloc(p, &sg, sizeof(*ubset));
+	if (SCARG(uap, oset) != NULL)
+		uboset = stackgap_alloc(p, &sg, sizeof(*uboset));
 
 	if (SCARG(uap, set) != NULL) {
 		error = copyin(SCARG(uap, set), &kdset, sizeof(kdset));
 		if (error != 0)
 			return error;
-		native_sigset13_to_sigset(&kdset, &kbset);
-		error = sigprocmask1(l, SCARG(uap, how), &kbset, &kboset);
-	} else
-		error = sigprocmask1(l, SCARG(uap, how), NULL, &kboset);
 
-	if (SCARG(uap, oset) == NULL || error != 0)
+		native_sigset13_to_sigset(&kdset, &kbset);
+
+		if ((error = copyout(&kbset, ubset, sizeof(kbset))) != 0)
+			return error;
+	}
+
+	SCARG(&cup, how) = SCARG(uap, how);
+	SCARG(&cup, set) = ubset;
+	SCARG(&cup, oset) = uboset;
+	if ((error = sys___sigprocmask14(l, &cup, retval)) != 0)
 		return error;
 
-	native_sigset_to_sigset13(&kboset, &kdset);
-	return copyout(&kdset, SCARG(uap, oset), sizeof(kdset));
+	if (SCARG(uap, oset) != NULL) {
+		if ((error = copyin(uboset, &kboset, sizeof(kboset))) != 0)
+			return error;
+
+		native_sigset_to_sigset13(&kboset, &kdoset);
+
+		if ((error = copyout(&kdoset,
+		    SCARG(uap, oset), sizeof(kdoset))) != 0)
+			return error;
+	}
+
+	return 0;
 }
 
 void
@@ -189,7 +237,7 @@ native_to_darwin_siginfo(ksi, dsi)
 	dsi->darwin_si_status = ksi->ksi_status;
 	dsi->darwin_si_addr = ksi->ksi_addr;
 	(void)memcpy(&dsi->darwin_si_value,
-	    &ksi->ksi_value, sizeof(dsi->darwin_si_value));
+	    &ksi->ksi_sigval, sizeof(dsi->darwin_si_value));
 	dsi->darwin_si_band = ksi->ksi_band;
 
 	return;

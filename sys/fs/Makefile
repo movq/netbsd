@@ -1,6 +1,5 @@
-#	$NetBSD: Makefile,v 1.16 2007/06/29 23:30:27 rumble Exp $
+#	$NetBSD: Makefile,v 1.13 2006/10/22 22:43:23 pooka Exp $
 
-SUBDIR=	adosfs cd9660 efs filecorefs hfs msdosfs ntfs puffs smbfs sysvbfs udf \
-	union
+SUBDIR=	adosfs cd9660 filecorefs msdosfs ntfs puffs smbfs sysvbfs udf union
 
 .include <bsd.kinc.mk>

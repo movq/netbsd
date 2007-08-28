@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_ioctl.c,v 1.39 2007/03/04 06:01:16 christos Exp $	*/
+/*	$NetBSD: ibcs2_ioctl.c,v 1.37 2006/11/16 01:32:42 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Scott Bartram
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_ioctl.c,v 1.39 2007/03/04 06:01:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_ioctl.c,v 1.37 2006/11/16 01:32:42 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,6 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: ibcs2_ioctl.c,v 1.39 2007/03/04 06:01:16 christos Ex
 #include <sys/unistd.h>
 
 #include <net/if.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/ibcs2/ibcs2_types.h>
@@ -339,7 +340,7 @@ ibcs2_sys_ioctl(l, v, retval)
 	struct ibcs2_sys_ioctl_args /* {
 		syscallarg(int) fd;
 		syscallarg(int) cmd;
-		syscallarg(void *) data;
+		syscallarg(caddr_t) data;
 	} */ *uap = v;
 	struct proc *p = l->l_proc;
 	struct filedesc *fdp = p->p_fd;
@@ -525,7 +526,7 @@ ibcs2_sys_ioctl(l, v, retval)
 	case IBCS2_FIONBIO:
 		if ((error = copyin(SCARG(uap, data), &t, sizeof(t))) != 0)
 			goto out;
-		error = (*ctl)(fp, FIONBIO, (void *)&t, l);
+		error = (*ctl)(fp, FIONBIO, (caddr_t)&t, l);
 		break;
 
 	default:
@@ -566,7 +567,7 @@ ibcs2_sys_gtty(struct lwp *l, void *v, register_t *retval)
 		goto out;
 	}
 
-	error = (*fp->f_ops->fo_ioctl)(fp, TIOCGETP, (void *)&tb, l);
+	error = (*fp->f_ops->fo_ioctl)(fp, TIOCGETP, (caddr_t)&tb, l);
 	if (error)
 		goto out;
 
@@ -577,7 +578,7 @@ ibcs2_sys_gtty(struct lwp *l, void *v, register_t *retval)
 	itb.sg_erase = tb.sg_erase;
 	itb.sg_kill = tb.sg_kill;
 	itb.sg_flags = tb.sg_flags & ~(IBCS2_GHUPCL|IBCS2_GXTABS);
-	return copyout((void *)&itb, SCARG(uap, tb), sizeof(itb));
+	return copyout((caddr_t)&itb, SCARG(uap, tb), sizeof(itb));
 out:
 	FILE_UNUSE(fp, l);
 	return error;

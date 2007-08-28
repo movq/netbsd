@@ -1,4 +1,4 @@
-/*	$NetBSD: omap_rtc.c,v 1.1 2007/01/06 00:59:45 christos Exp $	*/
+/*	$NetBSD: omap_rtc.c,v 1.1.6.2 2007/02/21 18:41:50 snj Exp $	*/
 
 /*
  * OMAP RTC driver, based on i80321_timer.c.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap_rtc.c,v 1.1 2007/01/06 00:59:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap_rtc.c,v 1.1.6.2 2007/02/21 18:41:50 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: rfcomm_upper.c,v 1.7 2007/07/09 21:11:10 ad Exp $	*/
+/*	$NetBSD: rfcomm_upper.c,v 1.1.18.1 2007/07/19 16:04:17 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rfcomm_upper.c,v 1.7 2007/07/09 21:11:10 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rfcomm_upper.c,v 1.1.18.1 2007/07/19 16:04:17 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -65,9 +65,9 @@ rfcomm_attach(struct rfcomm_dlc **handle,
 {
 	struct rfcomm_dlc *dlc;
 
-	KASSERT(handle != NULL);
-	KASSERT(proto != NULL);
-	KASSERT(upper != NULL);
+	KASSERT(handle);
+	KASSERT(proto);
+	KASSERT(upper);
 
 	dlc = malloc(sizeof(struct rfcomm_dlc), M_BLUETOOTH, M_NOWAIT | M_ZERO);
 	if (dlc == NULL)
@@ -89,7 +89,7 @@ rfcomm_attach(struct rfcomm_dlc **handle,
 
 	dlc->rd_lmodem = RFCOMM_MSC_RTC | RFCOMM_MSC_RTR | RFCOMM_MSC_DV;
 
-	callout_init(&dlc->rd_timeout, 0);
+	callout_init(&dlc->rd_timeout);
 	callout_setfunc(&dlc->rd_timeout, rfcomm_dlc_timeout, dlc);
 
 	*handle = dlc;
@@ -456,7 +456,7 @@ rfcomm_setopt(struct rfcomm_dlc *dlc, int opt, void *addr)
 		break;
 
 	default:
-		err = ENOPROTOOPT;
+		err = EINVAL;
 		break;
 	}
 	return err;

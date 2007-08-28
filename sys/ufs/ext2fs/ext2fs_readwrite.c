@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_readwrite.c,v 1.47 2007/06/05 12:31:33 yamt Exp $	*/
+/*	$NetBSD: ext2fs_readwrite.c,v 1.43 2006/05/14 21:32:21 elad Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_readwrite.c,v 1.47 2007/06/05 12:31:33 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_readwrite.c,v 1.43 2006/05/14 21:32:21 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -241,7 +241,7 @@ ext2fs_write(void *v)
 	vsize_t bytelen;
 	void *win;
 	off_t oldoff = 0;					/* XXX */
-	bool async;
+	boolean_t async;
 	int extended = 0;
 
 	ioflag = ap->a_ioflag;
@@ -286,9 +286,7 @@ ext2fs_write(void *v)
 	if (vp->v_type == VREG && p &&
 	    uio->uio_offset + uio->uio_resid >
 	    p->p_rlimit[RLIMIT_FSIZE].rlim_cur) {
-		mutex_enter(&proclist_mutex);
 		psignal(p, SIGXFSZ);
-		mutex_exit(&proclist_mutex);
 		return (EFBIG);
 	}
 	if (uio->uio_resid == 0)
@@ -305,9 +303,6 @@ ext2fs_write(void *v)
 			bytelen = MIN(fs->e2fs_bsize - blkoffset,
 			    uio->uio_resid);
 
-			if (vp->v_size < oldoff + bytelen) {
-				uvm_vnp_setwritesize(vp, oldoff + bytelen);
-			}
 			error = ufs_balloc_range(vp, uio->uio_offset,
 			    bytelen, ap->a_cred, 0);
 			if (error)
@@ -399,8 +394,7 @@ ext2fs_write(void *v)
 
 out:
 	ip->i_flag |= IN_CHANGE | IN_UPDATE;
-	if (resid > uio->uio_resid && ap->a_cred &&
-	    kauth_authorize_generic(ap->a_cred, KAUTH_GENERIC_ISSUSER, NULL))
+	if (resid > uio->uio_resid && ap->a_cred && kauth_cred_geteuid(ap->a_cred) != 0)
 		ip->i_e2fs_mode &= ~(ISUID | ISGID);
 	if (resid > uio->uio_resid)
 		VN_KNOTE(vp, NOTE_WRITE | (extended ? NOTE_EXTEND : 0));

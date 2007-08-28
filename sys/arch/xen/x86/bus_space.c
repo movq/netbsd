@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space.c,v 1.8 2007/03/04 06:01:10 christos Exp $	*/
+/*	$NetBSD: bus_space.c,v 1.6 2006/01/15 22:09:52 bouyer Exp $	*/
 /*	NetBSD: bus_space.c,v 1.2 2003/03/14 18:47:53 christos Exp 	*/
 
 /*-
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.8 2007/03/04 06:01:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_space.c,v 1.6 2006/01/15 22:09:52 bouyer Exp $");
 
 #include "opt_xen.h"
 
@@ -94,10 +94,10 @@ x86_bus_space_init()
 	 * and end of ISA hole -> end of RAM).
 	 */
 	ioport_ex = extent_create("ioport", 0x0, 0xffff, M_DEVBUF,
-	    (void *)ioport_ex_storage, sizeof(ioport_ex_storage),
+	    (caddr_t)ioport_ex_storage, sizeof(ioport_ex_storage),
 	    EX_NOCOALESCE|EX_NOWAIT);
 	iomem_ex = extent_create("iomem", 0x0, 0xffffffff, M_DEVBUF,
-	    (void *)iomem_ex_storage, sizeof(iomem_ex_storage),
+	    (caddr_t)iomem_ex_storage, sizeof(iomem_ex_storage),
 	    EX_NOCOALESCE|EX_NOWAIT);
 
 	/* We are privileged guest os - should have IO privileges. */
@@ -390,7 +390,7 @@ _x86_memio_unmap(t, bsh, size, adrp)
 			}
 #endif
 
-			if (pmap_extract_ma(pmap_kernel(), va, &bpa) == false) {
+			if (pmap_extract_ma(pmap_kernel(), va, &bpa) == FALSE) {
 				panic("_x86_memio_unmap:"
 				    " wrong virtual address");
 			}

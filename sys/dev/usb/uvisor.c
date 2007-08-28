@@ -1,4 +1,4 @@
-/*	$NetBSD: uvisor.c,v 1.35 2007/03/13 13:51:57 drochner Exp $	*/
+/*	$NetBSD: uvisor.c,v 1.33 2006/11/16 01:33:27 christos Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvisor.c,v 1.35 2007/03/13 13:51:57 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvisor.c,v 1.33 2006/11/16 01:33:27 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -202,6 +202,9 @@ USB_DECLARE_DRIVER(uvisor);
 USB_MATCH(uvisor)
 {
 	USB_MATCH_START(uvisor, uaa);
+
+	if (uaa->iface != NULL)
+		return (UMATCH_NONE);
 
 	DPRINTFN(20,("uvisor: vendor=0x%x, product=0x%x\n",
 		     uaa->vendor, uaa->product));
@@ -408,9 +411,8 @@ uvisor_detach(device_ptr_t self, int flags)
 		}
 	}
 
-	if (sc->sc_udev)
-		usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
-				   USBDEV(sc->sc_dev));
+	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
+			   USBDEV(sc->sc_dev));
 
 
 	return (rv);

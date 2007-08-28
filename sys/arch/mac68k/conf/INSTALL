@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.41 2007/06/02 12:07:03 tsutsui Exp $
+#	$NetBSD: INSTALL,v 1.39 2006/10/02 03:28:30 chs Exp $
 #
 # INSTALL
 
@@ -59,7 +59,7 @@ file-system 	KERNFS		# /kern
 #file-system	PTYFS		# /dev/pts/N support
 
 # Filesystem options
-#options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
+#options 	NFS_V2_ONLY	# Exclude NFS3 and NQNFS code to save space
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 # Networking options
@@ -94,6 +94,8 @@ config		netbsd	root on ? type ?
 #
 
 mainbus0 at root
+
+fpu0 at mainbus?			# Floating-Point Coprocessor support
 
 
 # Basic Bus Support

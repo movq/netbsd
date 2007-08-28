@@ -1,4 +1,4 @@
-/*	$NetBSD: protosw.h,v 1.42 2007/03/31 18:17:13 plunky Exp $	*/
+/*	$NetBSD: protosw.h,v 1.39 2006/08/27 23:55:16 christos Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -76,7 +76,7 @@ struct protosw {
 	int	(*pr_output)		/* output to protocol (from above) */
 			(struct mbuf *, ...);
 	void	*(*pr_ctlinput)		/* control input (from below) */
-			(int, const struct sockaddr *, void *);
+			(int, struct sockaddr *, void *);
 	int	(*pr_ctloutput)		/* control output (from above) */
 			(int, struct socket *, int, int, struct mbuf **);
 
@@ -159,7 +159,7 @@ struct protosw {
 #define	PRU_NREQ		23
 
 #ifdef PRUREQUESTS
-static const char * const prurequests[] = {
+const char * const prurequests[] = {
 	"ATTACH",	"DETACH",	"BIND",		"LISTEN",
 	"CONNECT",	"ACCEPT",	"DISCONNECT",	"SHUTDOWN",
 	"RCVD",		"SEND",		"ABORT",	"CONTROL",
@@ -173,7 +173,7 @@ static const char * const prurequests[] = {
  * The arguments to the ctlinput routine are
  *	(*protosw[].pr_ctlinput)(cmd, sa, arg);
  * where cmd is one of the commands below, sa is a pointer to a sockaddr,
- * and arg is an optional void *argument used within a protocol family.
+ * and arg is an optional caddr_t argument used within a protocol family.
  */
 #define	PRC_IFDOWN		0	/* interface transition */
 #define	PRC_ROUTEDEAD		1	/* select new route if possible ??? */
@@ -202,7 +202,7 @@ static const char * const prurequests[] = {
 	((cmd) >= PRC_REDIRECT_NET && (cmd) <= PRC_REDIRECT_TOSHOST)
 
 #ifdef PRCREQUESTS
-static const char * const prcrequests[] = {
+const char * const prcrequests[] = {
 	"IFDOWN", "ROUTEDEAD", "#2", "DEC-BIT-QUENCH2",
 	"QUENCH", "MSGSIZE", "HOSTDEAD", "#7",
 	"NET-UNREACH", "HOST-UNREACH", "PROTO-UNREACH", "PORT-UNREACH",
@@ -231,12 +231,15 @@ static const char * const prcrequests[] = {
 #define	PRCO_NCMDS	2
 
 #ifdef PRCOREQUESTS
-static const char * const prcorequests[] = {
+const char * const prcorequests[] = {
 	"GETOPT", "SETOPT",
 };
 #endif
 
 #ifdef _KERNEL
+extern const char * const prurequests[];
+extern const char * const prcrequests[];
+extern const char * const prcorequests[];
 /*
  * Monotonically increasing time values for slow and fast timers.
  */
@@ -259,8 +262,8 @@ struct sockaddr;
 const struct protosw *pffindproto(int, int, int);
 const struct protosw *pffindtype(int, int);
 struct domain *pffinddomain(int);
-void pfctlinput(int, const struct sockaddr *);
-void pfctlinput2(int, const struct sockaddr *, void *);
+void pfctlinput(int, struct sockaddr *);
+void pfctlinput2(int, struct sockaddr *, void *);
 #endif /* _KERNEL */
 
 #endif /* !_SYS_PROTOSW_H_ */

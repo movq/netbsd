@@ -1,4 +1,4 @@
-/*	$NetBSD: ahcisata_pci.c,v 1.1 2007/05/12 11:04:59 bouyer Exp $	*/
+/*	$NetBSD: ahcisata_pci.c,v 1.1.16.2 2007/08/31 20:09:25 pavel Exp $	*/
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahcisata_pci.c,v 1.1 2007/05/12 11:04:59 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahcisata_pci.c,v 1.1.16.2 2007/08/31 20:09:25 pavel Exp $");
 
 #include <sys/types.h>
 #include <sys/malloc.h>

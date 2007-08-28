@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_lkm.c,v 1.97 2007/03/04 06:03:05 christos Exp $	*/
+/*	$NetBSD: kern_lkm.c,v 1.95 2006/11/01 10:17:58 yamt Exp $	*/
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_lkm.c,v 1.97 2007/03/04 06:03:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_lkm.c,v 1.95 2006/11/01 10:17:58 yamt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_malloclog.h"
@@ -58,6 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_lkm.c,v 1.97 2007/03/04 06:03:05 christos Exp $
 #include <sys/malloc.h>
 #include <sys/mount.h>
 #include <sys/exec.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/conf.h>
 #include <sys/ksyms.h>
@@ -169,7 +170,7 @@ lkmopen(dev_t dev, int flag, int devtype, struct lwp *l)
 		 * Sleep pending unlock; we use tsleep() to allow
 		 * an alarm out of the open.
 		 */
-		error = tsleep((void *)&lkm_v, TTIPRI|PCATCH, "lkmopn", 0);
+		error = tsleep((caddr_t)&lkm_v, TTIPRI|PCATCH, "lkmopn", 0);
 		if (error)
 			return (error);
 	}
@@ -326,14 +327,14 @@ lkmclose(dev_t dev, int flag, int mode, struct lwp *l)
 	}
 
 	lkm_v &= ~LKM_ALLOC;
-	wakeup((void *)&lkm_v);	/* thundering herd "problem" here */
+	wakeup((caddr_t)&lkm_v);	/* thundering herd "problem" here */
 
 	return (0);		/* pseudo-device closed */
 }
 
 /*ARGSUSED*/
 int
-lkmioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+lkmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	int i, error = 0;
 	struct lmc_resrv *resrvp;
@@ -414,7 +415,7 @@ lkmioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 
 		/* copy in buffer full of data */
 		error = copyin(loadbufp->data,
-			       (char *)curp->area + curp->offset, i);
+			       (caddr_t)curp->area + curp->offset, i);
 		if (error)
 			break;
 
@@ -448,7 +449,7 @@ lkmioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 
 		/* copy in buffer full of data*/
 		if ((error = copyin(loadbufp->data,
-				   (char *)(curp->syms) + curp->sym_offset,
+				   (caddr_t)(curp->syms) + curp->sym_offset,
 				   i)) != 0)
 			break;
 
@@ -498,7 +499,7 @@ lkmioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 
 		if (curp->size - curp->offset > 0) {
 			/* The remainder must be bss, so we clear it */
-			memset((char *)curp->area + curp->offset, 0,
+			memset((caddr_t)curp->area + curp->offset, 0,
 			       curp->size - curp->offset);
 		}
 

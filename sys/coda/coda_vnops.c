@@ -1,4 +1,4 @@
-/*	$NetBSD: coda_vnops.c,v 1.62 2007/07/23 11:27:46 pooka Exp $	*/
+/*	$NetBSD: coda_vnops.c,v 1.50.8.3 2007/06/06 21:11:18 bouyer Exp $	*/
 
 /*
  *
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coda_vnops.c,v 1.62 2007/07/23 11:27:46 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coda_vnops.c,v 1.50.8.3 2007/06/06 21:11:18 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -492,7 +492,7 @@ coda_ioctl(void *v)
     struct vop_ioctl_args *ap = v;
     struct vnode *vp = ap->a_vp;
     int com = ap->a_command;
-    void *data = ap->a_data;
+    caddr_t data = ap->a_data;
     int flag = ap->a_fflag;
     kauth_cred_t cred = ap->a_cred;
     struct lwp  *l = ap->a_l;
@@ -1961,7 +1961,6 @@ make_coda_node(CodaFid *fid, struct mount *vfsp, short type)
 	vp->v_data = cp;
 	vp->v_type = type;
 	cp->c_vnode = vp;
-	uvm_vnp_setsize(vp, 0);
 	coda_save(cp);
 
     } else {

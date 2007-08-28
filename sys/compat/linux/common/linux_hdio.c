@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_hdio.c,v 1.13 2007/07/01 09:54:16 dsl Exp $	*/
+/*	$NetBSD: linux_hdio.c,v 1.10 2005/12/11 12:20:19 christos Exp $	*/
 
 /*
  * Copyright (c) 2000 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_hdio.c,v 1.13 2007/07/01 09:54:16 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_hdio.c,v 1.10 2005/12/11 12:20:19 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,6 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_hdio.c,v 1.13 2007/07/01 09:54:16 dsl Exp $");
 #include <dev/ic/wdcreg.h>
 #include <sys/ataio.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/linux/common/linux_types.h>
@@ -68,9 +69,11 @@ linux_ioctl_hdio(struct lwp *l, struct linux_sys_ioctl_args *uap,
 	struct proc *p = l->l_proc;
 	u_long com;
 	int error, error1;
+	caddr_t sg;
 	struct filedesc *fdp;
 	struct file *fp;
 	int (*ioctlf)(struct file *, u_long, void *, struct lwp *);
+	struct ataparams *atap, ata;
 	struct atareq req;
 	struct disklabel label, *labp;
 	struct partinfo partp;
@@ -90,28 +93,39 @@ linux_ioctl_hdio(struct lwp *l, struct linux_sys_ioctl_args *uap,
 	switch (com) {
 	case LINUX_HDIO_OBSOLETE_IDENTITY:
 	case LINUX_HDIO_GET_IDENTITY:
+		sg = stackgap_init(p, 0);
+		atap = stackgap_alloc(p, &sg, DEV_BSIZE);
+		if (atap == NULL) {
+			error = ENOMEM;
+			break;
+		}
+
 		req.flags = ATACMD_READ;
 		req.command = WDCC_IDENTIFY;
-		req.databuf = SCARG(uap, data);
-		/*
-		 * 142 is the size of the old structure used by Linux,
-		 * which doesn't seem to be defined anywhere anymore.
-		 * The new function should return the entire 512 byte area.
-		 */
-		req.datalen = com == LINUX_HDIO_GET_IDENTITY ? 512 : 142;
+		req.databuf = (caddr_t)atap;
+		req.datalen = DEV_BSIZE;
 		req.timeout = 1000;
-		error = ioctlf(fp, ATAIOCCOMMAND, &req, l);
+		error = ioctlf(fp, ATAIOCCOMMAND, (caddr_t)&req, l);
 		if (error != 0)
 			break;
 		if (req.retsts != ATACMD_OK)
-			error = EIO;
+			return EIO;
+		error = copyin(atap, &ata, sizeof ata);
+		if (error != 0)
+			break;
+		/*
+		 * 142 is the size of the old structure used by Linux,
+		 * which doesn't seem to be defined anywhere anymore.
+		 */
+		error = copyout(&ata, SCARG(uap, data),
+		    com == LINUX_HDIO_GET_IDENTITY ? sizeof ata : 142);
 		break;
 	case LINUX_HDIO_GETGEO:
 		error = linux_machdepioctl(l, uap, retval);
 		if (error == 0)
 			break;
-		error = ioctlf(fp, DIOCGDEFLABEL, (void *)&label, l);
-		error1 = ioctlf(fp, DIOCGPART, (void *)&partp, l);
+		error = ioctlf(fp, DIOCGDEFLABEL, (caddr_t)&label, l);
+		error1 = ioctlf(fp, DIOCGPART, (caddr_t)&partp, l);
 		if (error != 0 && error1 != 0) {
 			error = error1;
 			break;
@@ -128,8 +142,8 @@ linux_ioctl_hdio(struct lwp *l, struct linux_sys_ioctl_args *uap,
 		if (error == 0)
 			break;
 	case LINUX_HDIO_GETGEO_BIG_RAW:
-		error = ioctlf(fp, DIOCGDEFLABEL, (void *)&label, l);
-		error1 = ioctlf(fp, DIOCGPART, (void *)&partp, l);
+		error = ioctlf(fp, DIOCGDEFLABEL, (caddr_t)&label, l);
+		error1 = ioctlf(fp, DIOCGPART, (caddr_t)&partp, l);
 		if (error != 0 && error1 != 0) {
 			error = error1;
 			break;

@@ -1,4 +1,4 @@
-/*	$NetBSD: midi.c,v 1.55 2007/07/09 21:00:29 ad Exp $	*/
+/*	$NetBSD: midi.c,v 1.50.2.1 2007/06/18 08:23:20 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: midi.c,v 1.55 2007/07/09 21:00:29 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: midi.c,v 1.50.2.1 2007/06/18 08:23:20 liamjfoy Exp $");
 
 #include "midi.h"
 #include "sequencer.h"
@@ -102,8 +102,6 @@ void	midi_wakeup(int *);
 void	midi_initbuf(struct midi_buffer *);
 void	midi_xmt_asense(void *);
 void	midi_rcv_asense(void *);
-void	midi_softintr_rd(void *);
-void	midi_softintr_wr(void *);
 
 int	midiprobe(struct device *, struct cfdata *, void *);
 void	midiattach(struct device *, struct device *, void *);
@@ -213,15 +211,6 @@ mididetach(struct device *self, int flags)
 		evcnt_detach(&sc->rcv.incompleteMessages);
 	}
 
-	if (sc->sih_rd != NULL) {
-		softintr_disestablish(sc->sih_rd);
-		sc->sih_rd = NULL;
-	}
-	if (sc->sih_wr != NULL) {
-		softintr_disestablish(sc->sih_wr);
-		sc->sih_wr = NULL;
-	}
-
 	return (0);
 }
 
@@ -231,8 +220,8 @@ midi_attach(struct midi_softc *sc, struct device *parent)
 	struct midi_info mi;
 	int s;
 
-	callout_init(&sc->xmt_asense_co, 0);
-	callout_init(&sc->rcv_asense_co, 0);
+	callout_init(&sc->xmt_asense_co);
+	callout_init(&sc->rcv_asense_co);
 	callout_setfunc(&sc->xmt_asense_co, midi_xmt_asense, sc);
 	callout_setfunc(&sc->rcv_asense_co, midi_rcv_asense, sc);
 	simple_lock_init(&sc->out_lock);
@@ -241,10 +230,7 @@ midi_attach(struct midi_softc *sc, struct device *parent)
 	sc->isopen = 0;
 
 	sc->sc_dev = parent;
-
-	sc->sih_rd = softintr_establish(IPL_SOFTSERIAL, midi_softintr_rd, sc);
-	sc->sih_wr = softintr_establish(IPL_SOFTSERIAL, midi_softintr_wr, sc);
-
+	
 	s = splaudio();
 	simple_lock(&hwif_register_lock);
 	hwif_softc = sc;
@@ -662,38 +648,6 @@ protocol_violation:
 }
 
 void
-midi_softintr_rd(void *cookie)
-{
-	struct midi_softc *sc = cookie;
-	struct proc *p;
-
-	if (sc->async != NULL) {
-		mutex_enter(&proclist_mutex);
-		if ((p = sc->async) != NULL)
-			psignal(p, SIGIO);
-		mutex_exit(&proclist_mutex);
-	}
-	midi_wakeup(&sc->rchan);
-	selnotify(&sc->rsel, 0); /* filter will spin if locked */
-}
-
-void
-midi_softintr_wr(void *cookie)
-{
-	struct midi_softc *sc = cookie;
-	struct proc *p;
-
-	if (sc->async != NULL) {
-		mutex_enter(&proclist_mutex);
-		if ((p = sc->async) != NULL)
-			psignal(p, SIGIO);
-		mutex_exit(&proclist_mutex);
-	}
-	midi_wakeup(&sc->wchan);
-	selnotify(&sc->wsel, 0); /* filter will spin if locked */
-}
-
-void
 midi_in(void *addr, int data)
 {
 	struct midi_softc *sc = addr;
@@ -783,8 +737,11 @@ sxp_again:
 		MIDI_BUF_WRAP(idx);
 		MIDI_BUF_PRODUCER_WBACK(mb,buf);
 		MIDI_BUF_PRODUCER_WBACK(mb,idx);
+		midi_wakeup(&sc->rchan);
+		if (sc->async)
+			psignal(sc->async, SIGIO);
 		MIDI_IN_UNLOCK(sc,s);
-		softintr_schedule(sc->sih_rd);
+		selnotify(&sc->rsel, 0); /* filter will spin if locked */
 		break;
 	default: /* don't #ifdef this away, gcc will say FST_HUH not handled */
 		printf("midi_in: midi_fst returned %d?!\n", got);
@@ -1026,8 +983,11 @@ midi_rcv_asense(void *arg)
 		sc->rcv_eof = 1;
 		sc->rcv_quiescent = 0;
 		sc->rcv_expect_asense = 0;
+		midi_wakeup(&sc->rchan);
+		if (sc->async)
+			psignal(sc->async, SIGIO);
 		MIDI_IN_UNLOCK(sc,s);
-		softintr_schedule(sc->sih_rd);
+		selnotify(&sc->rsel, 0); /* filter will spin if locked */
 		return;
 	}
 	
@@ -1303,8 +1263,11 @@ midi_intr_out(struct midi_softc *sc)
 		sc->pbus = 0;
 		callout_schedule(&sc->xmt_asense_co, MIDI_XMT_ASENSE_PERIOD);
 	}
+	midi_wakeup(&sc->wchan);
+	if ( sc->async )
+		psignal(sc->async, SIGIO);
 	MIDI_OUT_UNLOCK(sc,s);
-	softintr_schedule(sc->sih_wr);
+	selnotify(&sc->wsel, 0); /* filter will spin if locked */
 
 #if defined(AUDIO_DEBUG) || defined(DIAGNOSTIC)
 	if ( error )
@@ -1477,7 +1440,7 @@ midiwrite(dev_t dev, struct uio *uio, int ioflag)
 				goto locked_exit;
 			}
 			if ( pollout ) {
-				preempt(); /* see midi_poll_output */
+				preempt(0); /* see midi_poll_output */
 				pollout = 0;
 			} else
 				error = midi_sleep(&sc->wchan, "mid wr",
@@ -1561,7 +1524,7 @@ midi_writebytes(int unit, u_char *bf, int cc)
 }
 
 int
-midiioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
+midiioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 {
 	int unit = MIDIUNIT(dev);
 	struct midi_softc *sc = midi_cd.cd_devs[unit];

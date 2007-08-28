@@ -1,4 +1,4 @@
-/*      $NetBSD: ip_etherip.c,v 1.5 2007/05/02 20:40:24 dyoung Exp $        */
+/*      $NetBSD: ip_etherip.c,v 1.1.2.1 2006/12/09 11:51:47 bouyer Exp $        */
 
 /*
  *  Copyright (c) 2006, Hans Rosenfeld <rosenfeld@grumpf.hope-2000.org>
@@ -93,15 +93,12 @@ int
 ip_etherip_output(struct ifnet *ifp, struct mbuf *m)
 {
 	struct etherip_softc *sc = (struct etherip_softc*)ifp->if_softc;
-	struct sockaddr_in *sin_src, *sin_dst;
+	struct sockaddr_in *dst, *sin_src, *sin_dst;
 	struct ip iphdr;        /* capsule IP header, host byte ordered */
 	struct etherip_header eiphdr;
 	int proto, error;
-	union {
-		struct sockaddr		dst;
-		struct sockaddr_in	dst4;
-	} u;
 
+	dst = (struct sockaddr_in *)&sc->sc_ro.ro_dst;
 	sin_src = (struct sockaddr_in *)sc->sc_src;
 	sin_dst = (struct sockaddr_in *)sc->sc_dst;
 
@@ -156,17 +153,34 @@ ip_etherip_output(struct ifnet *ifp, struct mbuf *m)
 		m = m_pullup(m, sizeof(struct ip));
 	memcpy(mtod(m, struct ip *), &iphdr, sizeof(struct ip));
 
-	sockaddr_in_init(&u.dst4, &sin_dst->sin_addr, 0);
-	if (rtcache_lookup(&sc->sc_ro, &u.dst) == NULL) {
-		m_freem(m);
-		return ENETUNREACH;
+	if (sc->sc_route_expire - time_second <= 0 ||
+	    dst->sin_family != sin_dst->sin_family ||
+	    !in_hosteq(dst->sin_addr, sin_dst->sin_addr)) {
+		/* cache route doesn't match */
+		memset(dst, 0, sizeof(struct sockaddr_in));
+		dst->sin_family = sin_dst->sin_family;
+		dst->sin_len    = sizeof(struct sockaddr_in);
+		dst->sin_addr   = sin_dst->sin_addr;
+		if (sc->sc_ro.ro_rt) {
+			RTFREE(sc->sc_ro.ro_rt);
+			sc->sc_ro.ro_rt = NULL;
+		}
 	}
 
-	/* if it constitutes infinite encapsulation, punt. */
-	if (sc->sc_ro.ro_rt->rt_ifp == ifp) {
-		rtcache_free(&sc->sc_ro);
-		m_freem(m);
-		return ENETUNREACH;     /*XXX*/
+	if (sc->sc_ro.ro_rt == NULL) {
+		rtalloc(&sc->sc_ro);
+		if (sc->sc_ro.ro_rt == NULL) {
+			m_freem(m);
+			return ENETUNREACH ;
+		}
+
+		/* if it constitutes infinite encapsulation, punt. */
+		if (sc->sc_ro.ro_rt->rt_ifp == ifp) {
+			m_freem(m);
+			return ENETUNREACH;     /*XXX*/
+		}
+
+		sc->sc_route_expire = time_second + ETHERIP_ROUTE_TTL;
 	}
 
 	error = ip_output(m, NULL, &sc->sc_ro, 0, NULL, NULL);

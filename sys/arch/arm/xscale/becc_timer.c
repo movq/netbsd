@@ -1,4 +1,4 @@
-/*	$NetBSD: becc_timer.c,v 1.11 2007/01/06 16:18:18 christos Exp $	*/
+/*	$NetBSD: becc_timer.c,v 1.10.4.1 2007/04/30 18:57:19 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: becc_timer.c,v 1.11 2007/01/06 16:18:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: becc_timer.c,v 1.10.4.1 2007/04/30 18:57:19 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

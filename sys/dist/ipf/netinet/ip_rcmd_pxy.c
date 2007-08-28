@@ -1,7 +1,7 @@
-/*	$NetBSD: ip_rcmd_pxy.c,v 1.9 2007/04/14 20:34:38 martin Exp $	*/
+/*	$NetBSD: ip_rcmd_pxy.c,v 1.8.12.2 2007/07/16 11:05:50 liamjfoy Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: ip_rcmd_pxy.c,v 1.9 2007/04/14 20:34:38 martin Exp $");
+__KERNEL_RCSID(1, "$NetBSD: ip_rcmd_pxy.c,v 1.8.12.2 2007/07/16 11:05:50 liamjfoy Exp $");
 
 /*
  * Copyright (C) 1998-2003 by Darren Reed

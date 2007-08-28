@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_mbuf.c,v 1.121 2007/03/12 18:18:34 ad Exp $	*/
+/*	$NetBSD: uipc_mbuf.c,v 1.116 2006/11/01 10:17:59 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2001 The NetBSD Foundation, Inc.
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf.c,v 1.121 2007/03/12 18:18:34 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf.c,v 1.116 2006/11/01 10:17:59 yamt Exp $");
 
 #include "opt_mbuftrace.h"
 #include "opt_ddb.h"
@@ -156,9 +156,8 @@ mbinit(void)
 	KASSERT(sizeof(struct mbuf) == MSIZE);
 
 	mclpool_allocator.pa_backingmap = mb_map;
-	pool_init(&mbpool, msize, 0, 0, 0, "mbpl", NULL, IPL_VM);
-	pool_init(&mclpool, mclbytes, 0, 0, 0, "mclpl", &mclpool_allocator,
-	    IPL_VM);
+	pool_init(&mbpool, msize, 0, 0, 0, "mbpl", NULL);
+	pool_init(&mclpool, mclbytes, 0, 0, 0, "mclpl", &mclpool_allocator);
 
 	pool_set_drain_hook(&mbpool, m_reclaim, NULL);
 	pool_set_drain_hook(&mclpool, m_reclaim, NULL);
@@ -269,7 +268,8 @@ sysctl_kern_mbuf_mowners(SYSCTLFN_ARGS)
 				error = ENOMEM;
 				break;
 			}
-			error = copyout(mo, (char *)oldp + len, sizeof(*mo));
+			error = copyout(mo, (caddr_t) oldp + len,
+					sizeof(*mo));
 			if (error)
 				break;
 		}
@@ -347,7 +347,7 @@ SYSCTL_SETUP(sysctl_kern_mbuf_setup, "sysctl kern.mbuf subtree setup")
 static void *
 mclpool_alloc(struct pool *pp, int flags)
 {
-	bool waitok = (flags & PR_WAITOK) ? true : false;
+	boolean_t waitok = (flags & PR_WAITOK) ? TRUE : FALSE;
 
 	return ((void *)uvm_km_alloc_poolpage(mb_map, waitok));
 }
@@ -426,7 +426,7 @@ m_getclr(int nowait, int type)
 	MGET(m, nowait, type);
 	if (m == 0)
 		return (NULL);
-	memset(mtod(m, void *), 0, MLEN);
+	memset(mtod(m, caddr_t), 0, MLEN);
 	return (m);
 }
 
@@ -583,11 +583,11 @@ m_copym0(struct mbuf *m, int off0, int len, int wait, int deep)
 				n->m_len = M_TRAILINGSPACE(n);
 				n->m_len = min(n->m_len, len);
 				n->m_len = min(n->m_len, m->m_len - off);
-				memcpy(mtod(n, void *), mtod(m, char *) + off,
+				memcpy(mtod(n, caddr_t), mtod(m, caddr_t) + off,
 				    (unsigned)n->m_len);
 			}
 		} else
-			memcpy(mtod(n, void *), mtod(m, char *) + off,
+			memcpy(mtod(n, caddr_t), mtod(m, caddr_t)+off,
 			    (unsigned)n->m_len);
 		if (len != M_COPYALL)
 			len -= n->m_len;
@@ -672,7 +672,7 @@ void
 m_copydata(struct mbuf *m, int off, int len, void *vp)
 {
 	unsigned	count;
-	void *		cp = vp;
+	caddr_t		cp = vp;
 
 	if (off < 0 || len < 0)
 		panic("m_copydata: off %d, len %d", off, len);
@@ -688,9 +688,9 @@ m_copydata(struct mbuf *m, int off, int len, void *vp)
 		if (m == NULL)
 			panic("m_copydata: m == NULL, len %d", len);
 		count = min(m->m_len - off, len);
-		memcpy(cp, mtod(m, char *) + off, count);
+		memcpy(cp, mtod(m, caddr_t) + off, count);
 		len -= count;
-		cp = (char *)cp + count;
+		cp += count;
 		off = 0;
 		m = m->m_next;
 	}
@@ -715,7 +715,7 @@ m_cat(struct mbuf *m, struct mbuf *n)
 			return;
 		}
 		/* splat the data from one into the other */
-		memcpy(mtod(m, char *) + m->m_len, mtod(n, void *),
+		memcpy(mtod(m, caddr_t) + m->m_len, mtod(n, caddr_t),
 		    (u_int)n->m_len);
 		m->m_len += n->m_len;
 		n = m_free(n);
@@ -839,7 +839,7 @@ m_pullup(struct mbuf *n, int len)
 	space = &m->m_dat[MLEN] - (m->m_data + m->m_len);
 	do {
 		count = min(min(max(len, max_protohdr), space), n->m_len);
-		memcpy(mtod(m, char *) + m->m_len, mtod(n, void *),
+		memcpy(mtod(m, caddr_t) + m->m_len, mtod(n, caddr_t),
 		  (unsigned)count);
 		len -= count;
 		m->m_len += count;
@@ -889,7 +889,7 @@ m_copyup(struct mbuf *n, int len, int dstoff)
 	space = &m->m_dat[MLEN] - (m->m_data + m->m_len);
 	do {
 		count = min(min(max(len, max_protohdr), space), n->m_len);
-		memcpy(mtod(m, char *) + m->m_len, mtod(n, void *),
+		memcpy(mtod(m, caddr_t) + m->m_len, mtod(n, caddr_t),
 		    (unsigned)count);
 		len -= count;
 		m->m_len += count;
@@ -975,7 +975,7 @@ extpacket:
 		MCLADDREFERENCE(m, n);
 		n->m_data = m->m_data + len;
 	} else {
-		memcpy(mtod(n, void *), mtod(m, char *) + len, remain);
+		memcpy(mtod(n, caddr_t), mtod(m, caddr_t) + len, remain);
 	}
 	n->m_len = remain;
 	m->m_len = len;
@@ -1043,9 +1043,9 @@ m_devget(char *buf, int totlen, int off0, struct ifnet *ifp,
 				len = m->m_len;
 		}
 		if (copy)
-			copy(cp, mtod(m, void *), (size_t)len);
+			copy(cp, mtod(m, caddr_t), (size_t)len);
 		else
-			memcpy(mtod(m, void *), cp, (size_t)len);
+			memcpy(mtod(m, caddr_t), cp, (size_t)len);
 		cp += len;
 		*mp = m;
 		mp = &m->m_next;
@@ -1312,7 +1312,7 @@ extend:
 		}
 		mlen = min(mlen, len);
 		if (flags & M_COPYBACK0_COPYBACK) {
-			memcpy(mtod(m, char *) + off, cp, (unsigned)mlen);
+			memcpy(mtod(m, caddr_t) + off, cp, (unsigned)mlen);
 			cp += mlen;
 		}
 		len -= mlen;
@@ -1359,7 +1359,7 @@ m_move_pkthdr(struct mbuf *to, struct mbuf *from)
  */
 int
 m_apply(struct mbuf *m, int off, int len,
-    int (*f)(void *, void *, unsigned int), void *arg)
+    int (*f)(void *, caddr_t, unsigned int), void *arg)
 {
 	unsigned int count;
 	int rval;
@@ -1378,7 +1378,7 @@ m_apply(struct mbuf *m, int off, int len,
 		KASSERT(m != NULL);
 		count = min(m->m_len - off, len);
 
-		rval = (*f)(arg, mtod(m, char *) + off, count);
+		rval = (*f)(arg, mtod(m, caddr_t) + off, count);
 		if (rval)
 			return (rval);
 
@@ -1425,13 +1425,13 @@ void
 m_print(const struct mbuf *m, const char *modif, void (*pr)(const char *, ...))
 {
 	char ch;
-	bool opt_c = false;
+	boolean_t opt_c = FALSE;
 	char buf[512];
 
 	while ((ch = *(modif++)) != '\0') {
 		switch (ch) {
 		case 'c':
-			opt_c = true;
+			opt_c = TRUE;
 			break;
 		}
 	}

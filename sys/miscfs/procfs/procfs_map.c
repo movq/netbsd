@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_map.c,v 1.32 2007/07/21 22:47:36 pooka Exp $	*/
+/*	$NetBSD: procfs_map.c,v 1.27 2006/11/16 01:33:38 christos Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.32 2007/07/21 22:47:36 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.27 2006/11/16 01:33:38 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -84,14 +84,16 @@ __KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.32 2007/07/21 22:47:36 pooka Exp $"
 #include <sys/vnode.h>
 #include <sys/malloc.h>
 #include <sys/namei.h>
-#include <sys/filedesc.h>
 #include <miscfs/procfs/procfs.h>
 
 #include <sys/lock.h>
 
 #include <uvm/uvm.h>
 
-#define BUFFERSIZE (64 * 1024)
+#define MEBUFFERSIZE 256
+
+extern int getcwd_common(struct vnode *, struct vnode *,
+			      char **, char *, int, int, struct lwp *);
 
 static int procfs_vnode_to_path(struct vnode *vp, char *path, int len,
 				struct lwp *curl, struct proc *p);
@@ -110,53 +112,41 @@ int
 procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 	     struct uio *uio, int linuxmode)
 {
+	size_t len;
 	int error;
-	struct vmspace *vm;
-	struct vm_map *map;
+	struct vm_map *map = &p->p_vmspace->vm_map;
 	struct vm_map_entry *entry;
-	char *buffer;
+	char mebuffer[MEBUFFERSIZE];
 	char *path;
 	struct vnode *vp;
 	struct vattr va;
 	dev_t dev;
 	long fileid;
-	size_t pos;
 
 	if (uio->uio_rw != UIO_READ)
-		return EOPNOTSUPP;
+		return (EOPNOTSUPP);
 
-	if (uio->uio_offset != 0) {
-		/*
-		 * we return 0 here, so that the second read returns EOF
-		 * we don't support reading from an offset because the
-		 * map could have changed between the two reads.
-		 */
-		return 0;
-	}
+	if (uio->uio_offset != 0)
+		return (0);
 
 	error = 0;
-
-	buffer = malloc(BUFFERSIZE, M_TEMP, M_WAITOK);
-	if (linuxmode != 0)
-		path = malloc(MAXPATHLEN * 4, M_TEMP, M_WAITOK);
-	else
-		path = NULL;
-
-	if ((error = proc_vmspace_getref(p, &vm)) != 0)
-		goto out;
-
-	map = &vm->vm_map;
-	vm_map_lock_read(map);
-
-	pos = 0;
-	for (entry = map->header.next; entry != &map->header;
-	    entry = entry->next) {
+	if (map != &curl->l_proc->p_vmspace->vm_map)
+		vm_map_lock_read(map);
+	for (entry = map->header.next;
+		((uio->uio_resid > 0) && (entry != &map->header));
+		entry = entry->next) {
 
 		if (UVM_ET_ISSUBMAP(entry))
 			continue;
 
 		if (linuxmode != 0) {
+			path = (char *)malloc(MAXPATHLEN * 4, M_TEMP, M_WAITOK);
+			if (path == NULL) {
+				error = ENOMEM;
+				break;
+			}
 			*path = 0;
+
 			dev = (dev_t)0;
 			fileid = 0;
 			if (UVM_ET_ISOBJ(entry) &&
@@ -171,7 +161,7 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 					    MAXPATHLEN * 4, curl, p);
 				}
 			}
-			pos += snprintf(buffer + pos, BUFFERSIZE - pos,
+			snprintf(mebuffer, sizeof(mebuffer),
 			    "%0*lx-%0*lx %c%c%c%c %0*lx %02x:%02x %ld     %s\n",
 			    (int)sizeof(void *) * 2,(unsigned long)entry->start,
 			    (int)sizeof(void *) * 2,(unsigned long)entry->end,
@@ -182,8 +172,9 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 			    (int)sizeof(void *) * 2,
 			    (unsigned long)entry->offset,
 			    major(dev), minor(dev), fileid, path);
+			free(path, M_TEMP);
 		} else {
-			pos += snprintf(buffer + pos, BUFFERSIZE - pos,
+			snprintf(mebuffer, sizeof(mebuffer),
 			    "0x%lx 0x%lx %c%c%c %c%c%c %s %s %d %d %d\n",
 			    entry->start, entry->end,
 			    (entry->protection & VM_PROT_READ) ? 'r' : '-',
@@ -199,25 +190,25 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 			    entry->inheritance, entry->wired_count,
 			    entry->advice);
 		}
+
+		len = strlen(mebuffer);
+		if (len > uio->uio_resid) {
+			error = EFBIG;
+			break;
+		}
+		error = uiomove(mebuffer, len, uio);
+		if (error)
+			break;
 	}
-
-	vm_map_unlock_read(map);
-	uvmspace_free(vm);
-
-	error = uiomove(buffer, pos, uio);
-out:
-	if (path != NULL)
-		free(path, M_TEMP);
-	if (buffer != NULL)
-		free(buffer, M_TEMP);
-
+	if (map != &curl->l_proc->p_vmspace->vm_map)
+		vm_map_unlock_read(map);
 	return error;
 }
 
 int
 procfs_validmap(struct lwp *l, struct mount *mp)
 {
-	return ((l->l_flag & LW_SYSTEM) == 0);
+	return ((l->l_proc->p_flag & P_SYSTEM) == 0);
 }
 
 /*

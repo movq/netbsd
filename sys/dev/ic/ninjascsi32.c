@@ -1,4 +1,4 @@
-/*	$NetBSD: ninjascsi32.c,v 1.11 2007/07/09 21:00:37 ad Exp $	*/
+/*	$NetBSD: ninjascsi32.c,v 1.8 2006/11/16 01:32:52 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2006 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ninjascsi32.c,v 1.11 2007/07/09 21:00:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ninjascsi32.c,v 1.8 2006/11/16 01:32:52 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,7 +46,6 @@ __KERNEL_RCSID(0, "$NetBSD: ninjascsi32.c,v 1.11 2007/07/09 21:00:37 ad Exp $");
 #include <sys/kernel.h>
 #include <sys/buf.h>
 #include <sys/scsiio.h>
-#include <sys/proc.h>
 
 #include <machine/bus.h>
 #include <machine/intr.h>
@@ -100,7 +99,7 @@ __KERNEL_RCSID(0, "$NetBSD: ninjascsi32.c,v 1.11 2007/07/09 21:00:37 ad Exp $");
 static void	njsc32_scsipi_request(struct scsipi_channel *,
 		    scsipi_adapter_req_t, void *);
 static void	njsc32_scsipi_minphys(struct buf *);
-static int	njsc32_scsipi_ioctl(struct scsipi_channel *, u_long, void *,
+static int	njsc32_scsipi_ioctl(struct scsipi_channel *, u_long, caddr_t,
 		    int, struct proc *);
 
 static void	njsc32_init(struct njsc32_softc *, int nosleep);
@@ -473,7 +472,7 @@ njsc32_init_cmds(struct njsc32_softc *sc)
 	}
 	if ((error = bus_dmamem_map(sc->sc_dmat, &sc->sc_cmdpg_seg,
 	    sc->sc_cmdpg_nsegs, sizeof(struct njsc32_dma_page),
-	    (void **)&sc->sc_cmdpg,
+	    (caddr_t *)&sc->sc_cmdpg,
 	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
 		printf("%s: unable to map cmd page, error = %d\n",
 		    sc->sc_dev.dv_xname, error);
@@ -529,7 +528,7 @@ njsc32_init_cmds(struct njsc32_softc *sc)
 
 	bus_dmamap_unload(sc->sc_dmat, sc->sc_dmamap_cmdpg);
 fail3:	bus_dmamap_destroy(sc->sc_dmat, sc->sc_dmamap_cmdpg);
-fail2:	bus_dmamem_unmap(sc->sc_dmat, (void *)sc->sc_cmdpg,
+fail2:	bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->sc_cmdpg,
 	    sizeof(struct njsc32_dma_page));
 fail1:	bus_dmamem_free(sc->sc_dmat, &sc->sc_cmdpg_seg, sc->sc_cmdpg_nsegs);
 
@@ -744,7 +743,7 @@ njsc32_detach(struct njsc32_softc *sc, int flags)
 
 		bus_dmamap_unload(sc->sc_dmat, sc->sc_dmamap_cmdpg);
 		bus_dmamap_destroy(sc->sc_dmat, sc->sc_dmamap_cmdpg);
-		bus_dmamem_unmap(sc->sc_dmat, (void *)sc->sc_cmdpg,
+		bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->sc_cmdpg,
 		    sizeof(struct njsc32_dma_page));
 		bus_dmamem_free(sc->sc_dmat, &sc->sc_cmdpg_seg,
 		    sc->sc_cmdpg_nsegs);
@@ -1401,7 +1400,7 @@ njsc32_reset_detected(struct njsc32_softc *sc)
 
 static int
 njsc32_scsipi_ioctl(struct scsipi_channel *chan, u_long cmd,
-    void *addr, int flag, struct proc *p)
+    caddr_t addr, int flag, struct proc *p)
 {
 	struct njsc32_softc *sc = (void *)chan->chan_adapter->adapt_dev;
 
@@ -1708,7 +1707,7 @@ njsc32_msgin(struct njsc32_softc *sc)
 	int cctl = 0;
 	u_int32_t ptr;	/* unsigned type ensures 2-complement calculation */
 	u_int32_t msgout = 0;
-	bool reload_params = FALSE;
+	boolean_t reload_params = FALSE;
 	struct njsc32_target *target;
 	int idx, period, offset;
 

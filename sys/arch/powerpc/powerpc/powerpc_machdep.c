@@ -1,4 +1,4 @@
-/*	$NetBSD: powerpc_machdep.c,v 1.34 2007/06/01 14:23:50 nisimura Exp $	*/
+/*	$NetBSD: powerpc_machdep.c,v 1.32 2006/10/21 05:54:32 mrg Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: powerpc_machdep.c,v 1.34 2007/06/01 14:23:50 nisimura Exp $");
+__KERNEL_RCSID(0, "$NetBSD: powerpc_machdep.c,v 1.32 2006/10/21 05:54:32 mrg Exp $");
 
 #include "opt_altivec.h"
 
@@ -42,6 +42,8 @@ __KERNEL_RCSID(0, "$NetBSD: powerpc_machdep.c,v 1.34 2007/06/01 14:23:50 nisimur
 #include <sys/exec.h>
 #include <sys/pool.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/signal.h>
 #include <sys/sysctl.h>
 #include <sys/ucontext.h>
@@ -52,9 +54,6 @@ int cpu_printfataltraps;
 #if defined(PPC_OEA) || defined(PPC_OEA64_BRIDGE)
 extern int powersave;
 #endif
-
-/* exported variable to be filled in by the bootloaders */
-char *booted_kernel;
 
 /*
  * Set set up registers on exec.
@@ -129,34 +128,6 @@ sysctl_machdep_powersave(SYSCTLFN_ARGS)
 }
 #endif
 
-static int
-sysctl_machdep_booted_device(SYSCTLFN_ARGS)
-{
-	struct sysctlnode node;
-
-	if (booted_device == NULL)
-		return (EOPNOTSUPP);
-
-	node = *rnode;
-	node.sysctl_data = booted_device->dv_xname;
-	node.sysctl_size = strlen(booted_device->dv_xname) + 1;
-	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
-}
-
-static int
-sysctl_machdep_booted_kernel(SYSCTLFN_ARGS)
-{
-	struct sysctlnode node;
-
-	if (booted_kernel == NULL || booted_kernel[0] == '\0')
-		return (EOPNOTSUPP);
-
-	node = *rnode;
-	node.sysctl_data = booted_kernel;
-	node.sysctl_size = strlen(booted_kernel) + 1;
-	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
-}
-
 SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 {
 
@@ -211,16 +182,6 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 		       CTLTYPE_STRING, "model", NULL,
 		       NULL, 0, cpu_model, 0,
 		       CTL_MACHDEP, CPU_MODEL, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_STRING, "booted_device", NULL,
-		       sysctl_machdep_booted_device, 0, NULL, 0,
-		       CTL_MACHDEP, CPU_BOOTED_DEVICE, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_STRING, "booted_kernel", NULL,
-		       sysctl_machdep_booted_kernel, 0, NULL, 0,
-		       CTL_MACHDEP, CPU_BOOTED_KERNEL, CTL_EOL);
 }
 
 /*
@@ -267,4 +228,26 @@ cpu_dumpconf(void)
 		dumpsize = dtoc(nblks - dumplo);
 	if (dumplo < nblks - ctod(dumpsize))
 		dumplo = nblks - ctod(dumpsize);
+}
+
+void 
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+	void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct trapframe *tf;
+
+	tf = trapframe(l);
+
+	/*
+	 * Build context to run handler in.
+	 */
+	tf->fixreg[1] = (register_t)((struct saframe *)sp - 1);
+	tf->lr = 0;
+	tf->fixreg[3] = (register_t)type;
+	tf->fixreg[4] = (register_t)sas;
+	tf->fixreg[5] = (register_t)nevents;
+	tf->fixreg[6] = (register_t)ninterrupted;
+	tf->fixreg[7] = (register_t)ap;
+	tf->srr0 = (register_t)upcall;
+	tf->srr1 &= ~PSL_SE;
 }

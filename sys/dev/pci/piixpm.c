@@ -1,4 +1,4 @@
-/* $NetBSD: piixpm.c,v 1.16 2007/08/27 15:57:13 xtraeme Exp $ */
+/* $NetBSD: piixpm.c,v 1.11 2006/11/16 01:33:10 christos Exp $ */
 /*	$OpenBSD: piixpm.c,v 1.20 2006/02/27 08:25:02 grange Exp $	*/
 
 /*
@@ -25,7 +25,7 @@
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
-#include <sys/rwlock.h>
+#include <sys/lock.h>
 #include <sys/proc.h>
 
 #include <machine/bus.h>
@@ -38,7 +38,9 @@
 
 #include <dev/i2c/i2cvar.h>
 
+#ifdef __HAVE_TIMECOUNTER
 #include <dev/ic/acpipmtimer.h>
+#endif
 
 #ifdef PIIXPM_DEBUG
 #define DPRINTF(x) printf x
@@ -64,10 +66,10 @@ struct piixpm_softc {
 	pcitag_t		sc_pcitag;
 
 	struct i2c_controller	sc_i2c_tag;
-	krwlock_t		sc_i2c_rwlock;
+	struct lock		sc_i2c_lock;
 	struct {
 		i2c_op_t     op;
-		void *      buf;
+		void *       buf;
 		size_t       len;
 		int          flags;
 		volatile int error;
@@ -116,14 +118,6 @@ piixpm_match(struct device *parent, struct cfdata *match,
 			return 1;
 		}
 		break;
-	case PCI_VENDOR_SERVERWORKS:
-		switch (PCI_PRODUCT(pa->pa_id)) {
-		case PCI_PRODUCT_SERVERWORKS_OSB4:
-		case PCI_PRODUCT_SERVERWORKS_CSB5:
-		case PCI_PRODUCT_SERVERWORKS_CSB6:
-		case PCI_PRODUCT_SERVERWORKS_HT1000SB:
-			return 1;
-		}
 	}
 
 	return 0;
@@ -136,19 +130,17 @@ piixpm_attach(struct device *parent, struct device *self, void *aux)
 	struct pci_attach_args *pa = aux;
 	struct i2cbus_attach_args iba;
 	pcireg_t base, conf;
+#ifdef __HAVE_TIMECOUNTER
 	pcireg_t pmmisc;
+#endif
 	pci_intr_handle_t ih;
-	char devinfo[256];
 	const char *intrstr = NULL;
 
 	sc->sc_pc = pa->pa_pc;
 	sc->sc_pcitag = pa->pa_tag;
 
 	aprint_naive("\n");
-
-	pci_devinfo(pa->pa_id, pa->pa_class, 0, devinfo, sizeof(devinfo));
-	aprint_normal("\n%s: %s (rev. 0x%02x)\n",
-		      device_xname(self), devinfo, PCI_REVISION(pa->pa_class));
+	aprint_normal(": Power Management Controller\n");
 
 	sc->sc_powerhook = powerhook_establish(sc->sc_dev.dv_xname,
 	    piixpm_powerhook, sc);
@@ -160,6 +152,7 @@ piixpm_attach(struct device *parent, struct device *self, void *aux)
 	conf = pci_conf_read(pa->pa_pc, pa->pa_tag, PIIX_SMB_HOSTC);
 	DPRINTF((": conf 0x%x", conf));
 
+#ifdef __HAVE_TIMECOUNTER
 	if ((PCI_VENDOR(pa->pa_id) != PCI_VENDOR_INTEL) ||
 	    (PCI_PRODUCT(pa->pa_id) != PCI_PRODUCT_INTEL_82371AB_PMC))
 		goto nopowermanagement;
@@ -189,6 +182,8 @@ piixpm_attach(struct device *parent, struct device *self, void *aux)
 		(PCI_REVISION(pa->pa_class) < 3) ? ACPIPMT_BADLATCH : 0 );
 
 nopowermanagement:
+#endif
+
 	if ((conf & PIIX_SMB_HOSTC_HSTEN) == 0) {
 		aprint_normal("%s: SMBus disabled\n", sc->sc_dev.dv_xname);
 		return;
@@ -227,7 +222,7 @@ nopowermanagement:
 	aprint_normal("\n");
 
 	/* Attach I2C bus */
-	rw_init(&sc->sc_i2c_rwlock);
+	lockinit(&sc->sc_i2c_lock, PRIBIO | PCATCH, "iiclk", 0, 0);
 	sc->sc_i2c_tag.ic_cookie = sc;
 	sc->sc_i2c_tag.ic_acquire_bus = piixpm_i2c_acquire_bus;
 	sc->sc_i2c_tag.ic_release_bus = piixpm_i2c_release_bus;
@@ -271,8 +266,7 @@ piixpm_i2c_acquire_bus(void *cookie, int flags)
 	if (cold || sc->sc_poll || (flags & I2C_F_POLL))
 		return (0);
 
-	rw_enter(&sc->sc_i2c_rwlock, RW_WRITER);
-	return 0;
+	return (lockmgr(&sc->sc_i2c_lock, LK_EXCLUSIVE, NULL));
 }
 
 void
@@ -283,7 +277,7 @@ piixpm_i2c_release_bus(void *cookie, int flags)
 	if (cold || sc->sc_poll || (flags & I2C_F_POLL))
 		return;
 
-	rw_exit(&sc->sc_i2c_rwlock);
+	lockmgr(&sc->sc_i2c_lock, LK_RELEASE, NULL);
 }
 
 int

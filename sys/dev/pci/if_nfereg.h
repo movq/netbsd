@@ -1,4 +1,4 @@
-/*	$NetBSD: if_nfereg.h,v 1.4 2007/02/28 17:40:11 tsutsui Exp $	*/
+/*	$NetBSD: if_nfereg.h,v 1.1.26.2 2007/10/07 15:48:27 pavel Exp $	*/
 /*	$OpenBSD: if_nfereg.h,v 1.16 2006/02/22 19:23:44 damien Exp $	*/
 
 /*-

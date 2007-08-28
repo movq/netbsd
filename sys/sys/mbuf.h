@@ -1,4 +1,4 @@
-/*	$NetBSD: mbuf.h,v 1.135 2007/03/04 06:03:41 christos Exp $	*/
+/*	$NetBSD: mbuf.h,v 1.133 2006/11/23 19:41:58 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999, 2001 The NetBSD Foundation, Inc.
@@ -130,7 +130,7 @@ struct mowner {
 struct m_hdr {
 	struct	mbuf *mh_next;		/* next buffer in chain */
 	struct	mbuf *mh_nextpkt;	/* next chain in queue/record */
-	char   *mh_data;		/* location of data */
+	caddr_t	mh_data;		/* location of data */
 	struct	mowner *mh_owner;	/* mbuf owner */
 	int	mh_len;			/* amount of data in this mbuf */
 	int	mh_flags;		/* flags; see below */
@@ -218,11 +218,11 @@ struct	pkthdr {
 
 /* description of external storage mapped into mbuf, valid if M_EXT set */
 struct _m_ext {
-	char  *ext_buf;		/* start of buffer */
-	void (*ext_free)		/* free routine if not the usual */
-	       (struct mbuf *, void *, size_t, void *);
-	void  *ext_arg;		/* argument for ext_free */
-	size_t ext_size;		/* size of buffer, for ext_free */
+	caddr_t	ext_buf;		/* start of buffer */
+	void	(*ext_free)		/* free routine if not the usual */
+		(struct mbuf *, caddr_t, size_t, void *);
+	void	*ext_arg;		/* argument for ext_free */
+	size_t	ext_size;		/* size of buffer, for ext_free */
 	struct malloc_type *ext_type;	/* malloc type */
 	struct mbuf *ext_nextref;
 	struct mbuf *ext_prevref;
@@ -578,7 +578,7 @@ do {									\
 #define	MEXTMALLOC(m, size, how)					\
 do {									\
 	(m)->m_ext.ext_buf =						\
-	    (void *)malloc((size), mbtypes[(m)->m_type], (how));	\
+	    (caddr_t)malloc((size), mbtypes[(m)->m_type], (how));	\
 	if ((m)->m_ext.ext_buf != NULL) {				\
 		(m)->m_data = (m)->m_ext.ext_buf;			\
 		(m)->m_flags = ((m)->m_flags & ~M_EXTCOPYFLAGS) |	\
@@ -594,7 +594,7 @@ do {									\
 
 #define	MEXTADD(m, buf, size, type, free, arg)				\
 do {									\
-	(m)->m_data = (m)->m_ext.ext_buf = (void *)(buf);		\
+	(m)->m_data = (m)->m_ext.ext_buf = (caddr_t)(buf);		\
 	(m)->m_flags = ((m)->m_flags & ~M_EXTCOPYFLAGS) | M_EXT;	\
 	(m)->m_ext.ext_size = (size);					\
 	(m)->m_ext.ext_free = (free);					\
@@ -913,7 +913,7 @@ struct	mbuf *m_split(struct mbuf *,int, int);
 struct	mbuf *m_getptr(struct mbuf *, int, int *);
 void	m_adj(struct mbuf *, int);
 int	m_apply(struct mbuf *, int, int,
-		int (*)(void *, void *, unsigned int), void *);
+		int (*)(void *, caddr_t, unsigned int), void *);
 void	m_cat(struct mbuf *,struct mbuf *);
 #ifdef MBUFTRACE
 void	m_claimm(struct mbuf *, struct mowner *);
@@ -932,7 +932,7 @@ void	m_move_pkthdr(struct mbuf *to, struct mbuf *from);
 
 /* Inline routines. */
 static __inline u_int m_length(struct mbuf *) __unused;
-static __inline void m_ext_free(struct mbuf *, bool) __unused;
+static __inline void m_ext_free(struct mbuf *, boolean_t) __unused;
 
 /* Packet tag routines */
 struct	m_tag *m_tag_get(int, int, int);
@@ -1002,7 +1002,7 @@ m_length(struct mbuf *m)
  * => called at splvm.
  */
 static __inline void
-m_ext_free(struct mbuf *m, bool dofree)
+m_ext_free(struct mbuf *m, boolean_t dofree)
 {
 
 	if (MCLISREFERENCED(m)) {

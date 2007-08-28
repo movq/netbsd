@@ -1,4 +1,4 @@
-/*	$NetBSD: fault.c,v 1.64 2007/02/18 07:25:35 matt Exp $	*/
+/*	$NetBSD: fault.c,v 1.62 2006/07/23 22:06:04 ad Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -81,11 +81,12 @@
 #include "opt_kgdb.h"
 
 #include <sys/types.h>
-__KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.64 2007/02/18 07:25:35 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.62 2006/07/23 22:06:04 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/savar.h>
 #include <sys/user.h>
 #include <sys/kernel.h>
 #include <sys/kauth.h>
@@ -174,9 +175,9 @@ static inline void
 call_trapsignal(struct lwp *l, ksiginfo_t *ksi)
 {
 
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 	TRAPSIGNAL(l, ksi);
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 }
 
 static inline int
@@ -378,8 +379,13 @@ data_abort_handler(trapframe_t *tf)
 			user = 1;
 			goto do_trapsignal;
 		}
-	} else
+	} else {
 		map = &l->l_proc->p_vmspace->vm_map;
+		if (l->l_flag & L_SA) {
+			l->l_savp->savp_faultaddr = (vaddr_t)far;
+			l->l_flag |= L_SA_PAGEFAULT;
+		}
+	}
 
 	/*
 	 * We need to know whether the page should be mapped
@@ -439,6 +445,8 @@ data_abort_handler(trapframe_t *tf)
 	last_fault_code = fsr;
 #endif
 	if (pmap_fault_fixup(map->pmap, va, ftype, user)) {
+		if (map != kernel_map)
+			l->l_flag &= ~L_SA_PAGEFAULT;
 		UVMHIST_LOG(maphist, " <- ref/mod emul", 0, 0, 0, 0);
 		goto out;
 	}
@@ -457,6 +465,9 @@ data_abort_handler(trapframe_t *tf)
 	pcb->pcb_onfault = NULL;
 	error = uvm_fault(map, va, ftype);
 	pcb->pcb_onfault = onfault;
+
+	if (map != kernel_map)
+		l->l_flag &= ~L_SA_PAGEFAULT;
 
 	if (__predict_true(error == 0)) {
 		if (user)
@@ -837,7 +848,15 @@ prefetch_abort_handler(trapframe_t *tf)
 		dab_fatal(tf, 0, tf->tf_pc, NULL, NULL);
 	}
 #endif
+	if (map != kernel_map && l->l_flag & L_SA) {
+		l->l_savp->savp_faultaddr = fault_pc;
+		l->l_flag |= L_SA_PAGEFAULT;
+	}
+
 	error = uvm_fault(map, va, VM_PROT_READ);
+
+	if (map != kernel_map)
+		l->l_flag &= ~L_SA_PAGEFAULT;
 
 	if (__predict_true(error == 0)) {
 		UVMHIST_LOG (maphist, " <- uvm", 0, 0, 0, 0);

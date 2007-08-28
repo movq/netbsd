@@ -1,4 +1,4 @@
-/*	$NetBSD: if_re_pci.c,v 1.29 2007/08/07 07:48:57 simonb Exp $	*/
+/*	$NetBSD: if_re_pci.c,v 1.21.2.4 2007/05/16 20:48:07 jdc Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998-2003
@@ -44,8 +44,6 @@
  * NetBSD bus-specific frontends for written by
  * Jonathan Stone <jonathan@netbsd.org>
  */
-
-#include <sys/cdefs.h>
 
 #include "bpfilter.h"
 #include "vlan.h"
@@ -184,7 +182,7 @@ re_pci_attach(struct device *parent, struct device *self, void *aux)
 	uint32_t		hwrev;
 	int			error = 0;
 	pcireg_t		pmreg, memtype;
-	bool			ioh_valid, memh_valid;
+	boolean_t		ioh_valid, memh_valid;
 	pcireg_t		command;
 	bus_space_tag_t		iot, memt;
 	bus_space_handle_t	ioh, memh;
@@ -278,7 +276,7 @@ re_pci_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_dmat = pa->pa_dmat;
 
 	/*
-	 * No power/enable/disable machinery for PCI attach;
+	 * No power/enable/disable machinery for PCI attac;
 	 * mark the card enabled now.
 	 */
 	sc->sc_flags |= RTK_ENABLED;

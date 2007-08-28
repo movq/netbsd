@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.c,v 1.15 2007/03/03 07:36:11 tsutsui Exp $	*/
+/*	$NetBSD: isr.c,v 1.12 2005/12/11 12:18:23 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.15 2007/03/03 07:36:11 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.12 2005/12/11 12:18:23 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,8 +54,9 @@ __KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.15 2007/03/03 07:36:11 tsutsui Exp $");
 
 #include <uvm/uvm_extern.h>
 
+#include <net/netisr.h>
+
 #include <machine/cpu.h>
-#include <machine/intr.h>
 
 #include <news68k/news68k/isr.h>
 
@@ -122,7 +123,7 @@ isrlink_autovec(int (*func)(void *), void *arg, int ipl, int priority)
 	 * at the head of the list.
 	 */
 	list = &isr_autovec[ipl];
-	if (LIST_EMPTY(list)) {
+	if (list->lh_first == NULL) {
 		LIST_INSERT_HEAD(list, newisr, isr_link);
 		return;
 	}
@@ -132,8 +133,8 @@ isrlink_autovec(int (*func)(void *), void *arg, int ipl, int priority)
 	 * and place ourselves after any ISRs with our current (or
 	 * higher) priority.
 	 */
-	for (curisr = LIST_FIRST(list); LIST_NEXT(curisr, isr_link) != NULL;
-	    curisr = LIST_NEXT(curisr, isr_link)) {
+	for (curisr = list->lh_first; curisr->isr_link.le_next != NULL;
+	    curisr = curisr->isr_link.le_next) {
 		if (newisr->isr_priority > curisr->isr_priority) {
 			LIST_INSERT_BEFORE(curisr, newisr, isr_link);
 			return;
@@ -214,7 +215,7 @@ isrdispatch_autovec(int evec)
 	uvmexp.intrs++;
 
 	list = &isr_autovec[ipl];
-	if (LIST_EMPTY(list)) {
+	if (list->lh_first == NULL) {
 		printf("isrdispatch_autovec: ipl %d unexpected\n", ipl);
 		if (++unexpected > 10)
 			panic("too many unexpected interrupts");
@@ -222,8 +223,7 @@ isrdispatch_autovec(int evec)
 	}
 
 	/* Give all the handlers a chance. */
-	for (isr = LIST_FIRST(list); isr != NULL;
-	    isr = LIST_NEXT(isr, isr_link))
+	for (isr = list->lh_first ; isr != NULL; isr = isr->isr_link.le_next)
 		handled |= (*isr->isr_func)(isr->isr_arg);
 
 	if (handled)
@@ -295,25 +295,24 @@ get_vector_entry(int entry)
 	return (void *)vectab[entry];
 }
 
-static const int ipl2psl_table[] = {
-	[IPL_NONE] = PSL_IPL0,
-	[IPL_SOFT] = PSL_IPL2,
-	[IPL_SOFTCLOCK] = PSL_IPL2,
-	[IPL_SOFTNET] = PSL_IPL2,
-	[IPL_SOFTSERIAL] = PSL_IPL2,
-	[IPL_BIO] = PSL_IPL4,
-	[IPL_NET] = PSL_IPL4,
-	[IPL_TTY] = PSL_IPL5,
-	/* IPL_LPT == IPL_TTY */
-	[IPL_VM] = PSL_IPL5,
-	[IPL_SERIAL] = PSL_IPL5,
-	[IPL_CLOCK] = PSL_IPL6,
-	[IPL_HIGH] = PSL_IPL7,
-};
-
-ipl_cookie_t
-makeiplcookie(ipl_t ipl)
+void
+netintr(void)
 {
+	int s, isr;
 
-	return (ipl_cookie_t){._psl = ipl2psl_table[ipl] | PSL_S};
+	s = splnet();
+	isr = netisr;
+	netisr = 0;
+	splx(s);
+
+#define DONETISR(bit, fn) do {		\
+	if (isr & (1 << bit)) {		\
+		fn();			\
+	}				\
+} while (0)
+
+#include <net/netisr_dispatch.h>
+
+#undef DONETISR
+
 }

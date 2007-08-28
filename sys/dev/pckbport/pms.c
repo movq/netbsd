@@ -1,4 +1,4 @@
-/* $NetBSD: pms.c,v 1.19 2007/07/19 22:18:54 dsl Exp $ */
+/* $NetBSD: pms.c,v 1.16 2006/11/16 01:33:20 christos Exp $ */
 
 /*-
  * Copyright (c) 2004 Kentaro Kurahone.
@@ -25,10 +25,10 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pms.c,v 1.19 2007/07/19 22:18:54 dsl Exp $");
-
 #include "opt_pms.h"
+
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: pms.c,v 1.16 2006/11/16 01:33:20 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,8 +82,9 @@ static int	pms_protocol(pckbport_tag_t, pckbport_slot_t);
 static void	do_enable(struct pms_softc *);
 static void	do_disable(struct pms_softc *);
 static void	pms_reset_thread(void*);
+static void	pms_spawn_reset_thread(void*);
 int	pms_enable(void *);
-int	pms_ioctl(void *, u_long, void *, int, struct lwp *);
+int	pms_ioctl(void *, u_long, caddr_t, int, struct lwp *);
 void	pms_disable(void *);
 #ifndef PMS_DISABLE_POWERHOOK
 void	pms_power(int, void *);
@@ -225,8 +226,7 @@ pmsattach(struct device *parent, struct device *self, void *aux)
 		printf("pmsattach: disable error\n");
 	pckbport_slot_enable(sc->sc_kbctag, sc->sc_kbcslot, 0);
 
-	kthread_create(PRI_NONE, 0, NULL, pms_reset_thread, sc,
-	    &sc->sc_event_thread, sc->sc_dev.dv_xname);
+	kthread_create(pms_spawn_reset_thread, sc);
 
 #ifndef PMS_DISABLE_POWERHOOK
 	sc->sc_powerhook = powerhook_establish(self->dv_xname, pms_power, sc);
@@ -372,7 +372,7 @@ pms_power(int why, void *v)
 #endif /* !PMS_DISABLE_POWERHOOK */
 
 int
-pms_ioctl(void *v, u_long cmd, void *data, int flag,
+pms_ioctl(void *v, u_long cmd, caddr_t data, int flag,
     struct lwp *l)
 {
 	struct pms_softc *sc = v;
@@ -406,6 +406,15 @@ pms_ioctl(void *v, u_long cmd, void *data, int flag,
 		return EPASSTHROUGH;
 	}
 	return 0;
+}
+
+static void
+pms_spawn_reset_thread(void *arg)
+{
+	struct pms_softc *sc = arg;
+
+	kthread_create1(pms_reset_thread, sc, &sc->sc_event_thread,
+	    sc->sc_dev.dv_xname);
 }
 
 static void

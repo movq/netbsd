@@ -38,14 +38,14 @@
  *		EXPERIMENTAL !!!
  *		================
  *
- *	$Id: isic_isapnp_tel_s0P.c,v 1.10 2007/03/04 06:02:14 christos Exp $
+ *	$Id: isic_isapnp_tel_s0P.c,v 1.8 2005/12/11 12:22:16 christos Exp $
  *
  *      last edit-date: [Fri Jan  5 11:38:29 2001]
  *
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isic_isapnp_tel_s0P.c,v 1.10 2007/03/04 06:02:14 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isic_isapnp_tel_s0P.c,v 1.8 2005/12/11 12:22:16 christos Exp $");
 
 #include "opt_isicpnp.h"
 #ifdef ISICPNP_TEL_S0_16_3_P
@@ -79,9 +79,11 @@ __KERNEL_RCSID(0, "$NetBSD: isic_isapnp_tel_s0P.c,v 1.10 2007/03/04 06:02:14 chr
 #include <machine/i4b_debug.h>
 #include <machine/i4b_ioctl.h>
 #else
+#include <netisdn/i4b_global.h>
 #include <netisdn/i4b_debug.h>
 #include <netisdn/i4b_ioctl.h>
 #include <netisdn/i4b_l2.h>
+#include <netisdn/i4b_l1l2.h>
 #endif
 
 #include <dev/ic/isic_l1.h>
@@ -285,21 +287,21 @@ isic_probe_s0163P(struct isa_device *dev, unsigned int iobase2)
 	switch(dev->id_iobase)
 	{
 		case 0x580:
-		        ISAC_BASE = (void *) 0x580 - 0x20;
-			HSCX_A_BASE = (void *) 0x180 - 0x20;
-			HSCX_B_BASE = (void *) 0x180;
+		        ISAC_BASE = (caddr_t) 0x580 - 0x20;
+			HSCX_A_BASE = (caddr_t) 0x180 - 0x20;
+			HSCX_B_BASE = (caddr_t) 0x180;
 			break;
 
 		case 0x500:
-		        ISAC_BASE = (void *) 0x500 - 0x20;
-			HSCX_A_BASE = (void *) 0x100 - 0x20;
-			HSCX_B_BASE = (void *) 0x100;
+		        ISAC_BASE = (caddr_t) 0x500 - 0x20;
+			HSCX_A_BASE = (caddr_t) 0x100 - 0x20;
+			HSCX_B_BASE = (caddr_t) 0x100;
 			break;
 
 		case 0x680:
-		        ISAC_BASE = (void *) 0x680 - 0x20;
-			HSCX_A_BASE = (void *) 0x280 - 0x20;
-			HSCX_B_BASE = (void *) 0x280;
+		        ISAC_BASE = (caddr_t) 0x680 - 0x20;
+			HSCX_A_BASE = (caddr_t) 0x280 - 0x20;
+			HSCX_B_BASE = (caddr_t) 0x280;
 			break;
 	}
 

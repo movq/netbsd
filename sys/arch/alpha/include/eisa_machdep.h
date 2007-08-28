@@ -1,4 +1,4 @@
-/* $NetBSD: eisa_machdep.h,v 1.8 2007/07/22 02:14:39 tsutsui Exp $ */
+/* $NetBSD: eisa_machdep.h,v 1.7.76.1 2007/08/21 20:00:29 liamjfoy Exp $ */
 
 /*
  * Copyright (c) 1996 Carnegie-Mellon University.

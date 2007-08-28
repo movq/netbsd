@@ -1,4 +1,4 @@
-/*	$NetBSD: vector.S,v 1.19 2007/06/28 20:50:31 bouyer Exp $	*/
+/*	$NetBSD: vector.S,v 1.15 2006/01/15 22:09:51 bouyer Exp $	*/
 /*	NetBSD: 1.13 2004/03/11 11:39:26 yamt Exp 	*/
 
 /*
@@ -194,31 +194,33 @@ IDTVEC(recurse_/**/name/**/num)						;\
 	subl	$4,%esp							;\
 	pushl	$T_ASTFLT		/* trap # for doing ASTs */	;\
 	INTRENTRY							;\
-	movl	$_C_LABEL(Xdoreti), %esi; /* we now have a trap frame, so loop using doreti instead */ ;\
 IDTVEC(resume_/**/name/**/num)						\
+	/*movl	%esp,%ecx*/						;\
 	movl	$IREENT_MAGIC,TF_ERR(%esp)				;\
-	pushl	%ebx							;\
+	movl	%ebx,%esi						;\
 	movl	CPUVAR(ISOURCES) + (num) * 4, %ebp			;\
+1:									\
+	pushl	%esi							;\
 	movl	$num,CPUVAR(ILEVEL)					;\
-	IDEPTH_INCR /* leaves old %esp on stack	*/			;\
 	STI(%eax)							;\
+	incl	CPUVAR(IDEPTH)						;\
 	movl	IS_HANDLERS(%ebp),%ebx					;\
 	LOCK_KERNEL							;\
 6:									\
+	pushl	%esp							;\
 	pushl	IH_ARG(%ebx)						;\
 	call	*IH_FUN(%ebx)		/* call it */			;\
-	addl	$4,%esp			/* toss the arg */		;\
+	addl	$8,%esp			/* toss the arg */		;\
 	movl	IH_IPL_NEXT(%ebx),%ebx	/* next handler in chain */	;\
 	testl	%ebx,%ebx						;\
 	jnz	6b							;\
-									\
+5:									\
 	UNLOCK_KERNEL							;\
 	CLI(%eax)							;\
 	unmask(num)			/* unmask it in hardware */	;\
 	late_ack(num)							;\
-	IDEPTH_DECR							;\
-	popl	%ebx							;\
-	jmp	*%esi			/* lower spl and do ASTs */	;\
+	STI(%eax)							;\
+	jmp	_C_LABEL(Xdoreti)	/* lower spl and do ASTs */	;\
 
 # Just unmasking the event isn't enouth, we also need to
 # reassert the event pending bit if needed. For now just call
@@ -304,8 +306,8 @@ _C_LABEL(xenev_stubs):
 #define EVCNTHI(x) _C_LABEL(x) + EV_EVCNTHI
 IDTVEC(softserial)
 	movl	$IPL_SOFTSERIAL, CPUVAR(ILEVEL)
-	IDEPTH_INCR
 	STI(%eax)
+	incl	CPUVAR(IDEPTH)
 #ifdef MULTIPROCESSOR
 	call	_C_LABEL(x86_softintlock)
 #endif
@@ -317,14 +319,13 @@ IDTVEC(softserial)
 #ifdef MULTIPROCESSOR
 	call	_C_LABEL(x86_softintunlock)
 #endif
-	CLI(%eax)
-	IDEPTH_DECR
+	decl	CPUVAR(IDEPTH)
 	jmp	*%esi
 
 IDTVEC(softnet)
 	movl	$IPL_SOFTNET, CPUVAR(ILEVEL)
-	IDEPTH_INCR
 	STI(%eax)
+	incl	CPUVAR(IDEPTH)
 #ifdef MULTIPROCESSOR
 	call	_C_LABEL(x86_softintlock)
 #endif
@@ -348,14 +349,13 @@ IDTVEC(softnet)
 #ifdef MULTIPROCESSOR
 	call	_C_LABEL(x86_softintunlock)
 #endif
-	CLI(%eax)
-	IDEPTH_DECR
+	decl	CPUVAR(IDEPTH)
 	jmp	*%esi
 
 IDTVEC(softclock)
 	movl	$IPL_SOFTCLOCK, CPUVAR(ILEVEL)
-	IDEPTH_INCR
 	STI(%eax)
+	incl	CPUVAR(IDEPTH)
 #ifdef MULTIPROCESSOR
 	call	_C_LABEL(x86_softintlock)
 #endif
@@ -368,15 +368,14 @@ IDTVEC(softclock)
 #ifdef MULTIPROCESSOR
 	call	_C_LABEL(x86_softintunlock)
 #endif
-	CLI(%eax)
-	IDEPTH_DECR
+	decl	CPUVAR(IDEPTH)
 	jmp	*%esi
 
 #if defined(DOM0OPS)
 IDTVEC(softxenevt)
 	movl	$IPL_SOFTXENEVT, CPUVAR(ILEVEL)
-	IDEPTH_INCR
 	STI(%eax)
+	incl	CPUVAR(IDEPTH)
 #ifdef MULTIPROCESSOR
 	call	_C_LABEL(x86_softintlock)
 #endif
@@ -386,8 +385,7 @@ IDTVEC(softxenevt)
 #ifdef MULTIPROCESSOR
 	call	_C_LABEL(x86_softintunlock)
 #endif
-	CLI(%eax)
-	IDEPTH_DECR
+	decl	CPUVAR(IDEPTH)
 	jmp	*%esi
 #endif /* defined(DOM0OPS) */
 
@@ -488,10 +486,9 @@ IDTVEC(trap10)
 	INTRENTRY
 	pushl	CPUVAR(ILEVEL)
 	pushl	%esp
-	pushl	$0			# dummy arg
 	incl	_C_LABEL(uvmexp)+V_TRAP
 	call	_C_LABEL(npxintr)
-	addl	$12,%esp
+	addl	$8,%esp
 	INTRFASTEXIT
 #else
 	ZTRAP(T_ARITHTRAP)
@@ -580,7 +577,6 @@ calltrap:
 	pushl	%esp
 	call	_C_LABEL(trap)
 	addl	$4,%esp
-.Lalltraps_checkusr:
 	testb	$CHK_UPL,TF_CS(%esp)
 	jnz	.Lalltraps_checkast
 #ifdef VM86
@@ -592,7 +588,6 @@ calltrap:
 .Lalltraps_checkast:
 	/* Check for ASTs on exit to user mode. */
 	CLI(%eax)
-	movl	CPUVAR(CURLWP),%eax
 	CHECK_ASTPENDING(%eax)
 	jz	3f
 5:	CLEAR_ASTPENDING(%eax)
@@ -607,24 +602,8 @@ calltrap:
 6:	STIC(%eax)
     	jz	4f
 	call	_C_LABEL(stipending)
-	testl	%eax,%eax
-	jz	4f
-	/* process pending interrupts */
-	CLI(%eax)
-	movl	CPUVAR(ILEVEL), %ebx
-	movl	$.Lalltraps_resume, %esi # address to resume loop at
-.Lalltraps_resume:
-	movl    %ebx,%eax		# get cpl
-	movl    CPUVAR(IUNMASK)(,%eax,4),%eax
-	andl    CPUVAR(IPENDING),%eax   # any non-masked bits left?
-	jz	7f
-	bsrl    %eax,%eax
-	btrl    %eax,CPUVAR(IPENDING)
-	movl    CPUVAR(ISOURCES)(,%eax,4),%eax
-	jmp     *IS_RESUME(%eax)
-7:	movl 	%ebx, CPUVAR(ILEVEL) #restore cpl
-	jmp 	.Lalltraps_checkusr
-	
+	#testl	%eax,%eax		/* XXXcl */
+	#jnz	1b
 4:
 #ifndef DIAGNOSTIC
 	INTRFASTEXIT
@@ -663,7 +642,6 @@ IDTVEC(trap0e)
 	call	_C_LABEL(trap)
 	addl	$4,%esp
 	addl	$4,%esp
-.Ltrap0e_checkusr:
 	testb	$CHK_UPL,TF_CS(%esp)
 	jnz	trap0e_checkast
 #ifdef VM86
@@ -675,7 +653,6 @@ IDTVEC(trap0e)
 trap0e_checkast:
 	/* Check for ASTs on exit to user mode. */
 	CLI(%eax)
-	movl	CPUVAR(CURLWP),%eax
 	CHECK_ASTPENDING(%eax)
 	jz	3f
 5:	CLEAR_ASTPENDING(%eax)
@@ -690,23 +667,8 @@ trap0e_checkast:
 6:	STIC(%eax)
     	jz	4f
 	call	_C_LABEL(stipending)
-	testl	%eax,%eax
-	jz	4f
-	/* process for pending interrupts */
-	CLI(%eax)
-	movl	CPUVAR(ILEVEL), %ebx
-	movl	$.Ltrap0e_resume, %esi # address to resume loop at
-.Ltrap0e_resume:
-	movl    %ebx,%eax		# get cpl
-	movl    CPUVAR(IUNMASK)(,%eax,4),%eax
-	andl    CPUVAR(IPENDING),%eax   # any non-masked bits left?
-	jz	7f
-	bsrl    %eax,%eax
-	btrl    %eax,CPUVAR(IPENDING)
-	movl    CPUVAR(ISOURCES)(,%eax,4),%eax
-	jmp     *IS_RESUME(%eax)
-7:	movl	%ebx, CPUVAR(ILEVEL) #restore cpl
-	jmp 	.Ltrap0e_checkusr
+	#testl	%eax,%eax		/* XXXcl */
+	#jnz	1b
 4:
 #ifndef DIAGNOSTIC
 	INTRFASTEXIT

@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_ptm.c,v 1.19 2007/03/26 22:52:44 hubertf Exp $	*/
+/*	$NetBSD: tty_ptm.c,v 1.15 2006/11/01 10:17:59 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_ptm.c,v 1.19 2007/03/26 22:52:44 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_ptm.c,v 1.15 2006/11/01 10:17:59 yamt Exp $");
 
 #include "opt_ptm.h"
 
@@ -52,6 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: tty_ptm.c,v 1.19 2007/03/26 22:52:44 hubertf Exp $")
 #include <sys/vnode.h>
 #include <sys/namei.h>
 #include <sys/signalvar.h>
+#include <sys/uio.h>
 #include <sys/filedesc.h>
 #include <sys/conf.h>
 #include <sys/poll.h>
@@ -91,15 +92,15 @@ pty_makedev(char ms, int minor)
 static dev_t
 pty_getfree(void)
 {
-	extern kmutex_t pt_softc_mutex;
+	extern struct simplelock pt_softc_mutex;
 	int i;
 
-	mutex_enter(&pt_softc_mutex);
+	simple_lock(&pt_softc_mutex);
 	for (i = 0; i < npty; i++) {
 		if (pty_isfree(i, 0))
 			break;
 	}
-	mutex_exit(&pt_softc_mutex);
+	simple_unlock(&pt_softc_mutex);
 	return pty_makedev('t', i);
 }
 
@@ -337,11 +338,9 @@ ptmopen(dev_t dev, int flag, int mode, struct lwp *l)
 			if ((error = pty_grant_slave(l, ttydev)) != 0) {
 				struct file *fp =
 				    fd_getfile(l->l_proc->p_fd, fd);
-				if (fp != NULL) {
-					FILE_UNUSE(fp, l);
-					fdremove(l->l_proc->p_fd, fd);
-					ffree(fp);
-				}
+				FILE_UNUSE(fp, l);
+				fdremove(l->l_proc->p_fd, fd);
+				ffree(fp);
 				return error;
 			}
 		}
@@ -364,7 +363,7 @@ ptmclose(dev_t dev, int flag, int mode, struct lwp *l)
 
 static int
 /*ARGSUSED*/
-ptmioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+ptmioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	int error;
 	dev_t newdev;
@@ -392,11 +391,9 @@ ptmioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	}
 bad:
 	fp = fd_getfile(p->p_fd, cfd);
-	if (fp != NULL) {
-		FILE_UNUSE(fp, l);
-		fdremove(p->p_fd, cfd);
-		ffree(fp);
-	}
+	FILE_UNUSE(fp, l);
+	fdremove(p->p_fd, cfd);
+	ffree(fp);
 	return error;
 }
 

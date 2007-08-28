@@ -1,4 +1,4 @@
-/*	$NetBSD: init_sysctl.c,v 1.105 2007/08/15 12:07:32 ad Exp $ */
+/*	$NetBSD: init_sysctl.c,v 1.93.2.1 2007/01/28 19:57:05 tron Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -37,19 +37,19 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.105 2007/08/15 12:07:32 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.93.2.1 2007/01/28 19:57:05 tron Exp $");
 
 #include "opt_sysv.h"
 #include "opt_multiprocessor.h"
 #include "opt_posix.h"
 #include "opt_compat_netbsd32.h"
+#include "opt_ktrace.h"
 #include "pty.h"
 #include "rnd.h"
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/sysctl.h>
-#include <sys/cpu.h>
 #include <sys/errno.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -73,7 +73,9 @@ __KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.105 2007/08/15 12:07:32 ad Exp $")
 #include <sys/device.h>
 #include <sys/stat.h>
 #include <sys/kauth.h>
+#ifdef KTRACE
 #include <sys/ktrace.h>
+#endif
 
 #ifdef COMPAT_NETBSD32
 #include <compat/netbsd32/netbsd32.h>
@@ -88,70 +90,16 @@ uid_t security_setidcore_owner = 0;
 gid_t security_setidcore_group = 0;
 mode_t security_setidcore_mode = (S_IRUSR|S_IWUSR);
 
-static const u_int sysctl_flagmap[] = {
-	PK_ADVLOCK, P_ADVLOCK,
-	PK_EXEC, P_EXEC,
-	PK_NOCLDWAIT, P_NOCLDWAIT,
-	PK_32, P_32,
-	PK_CLDSIGIGN, P_CLDSIGIGN,
-	PK_PAXMPROTECT, P_PAXMPROTECT,
-	PK_PAXNOMPROTECT, P_PAXNOMPROTECT,
-	PK_SYSTRACE, P_SYSTRACE,
-	PK_SUGID, P_SUGID,
-	0
-};
-
-static const u_int sysctl_sflagmap[] = {
-	PS_NOCLDSTOP, P_NOCLDSTOP,
-	PS_PPWAIT, P_PPWAIT,
-	PS_WEXIT, P_WEXIT,
-	PS_STOPFORK, P_STOPFORK,
-	PS_STOPEXEC, P_STOPEXEC,
-	PS_STOPEXIT, P_STOPEXIT,
-	0
-};
-
-static const u_int sysctl_slflagmap[] = {
-	PSL_TRACED, P_TRACED,
-	PSL_FSTRACE, P_FSTRACE,
-	PSL_CHTRACED, P_CHTRACED,
-	PSL_SYSCALL, P_SYSCALL,
-	0
-};
-
-static const u_int sysctl_lflagmap[] = {
-	PL_CONTROLT, P_CONTROLT,
-	0
-};
-
-static const u_int sysctl_stflagmap[] = {
-	PST_PROFIL, P_PROFIL,
-	0
-
-};
-
-static const u_int sysctl_lwpflagmap[] = {
-	LW_INMEM, P_INMEM,
-	LW_SINTR, P_SINTR,
-	LW_SYSTEM, P_SYSTEM,
-	0
-};
-
-static const u_int sysctl_lwpprflagmap[] = {
-	LPR_DETACHED, L_DETACHED,
-	0
-};
-
-
 /*
  * try over estimating by 5 procs/lwps
  */
 #define KERN_PROCSLOP	(5 * sizeof(struct kinfo_proc))
 #define KERN_LWPSLOP	(5 * sizeof(struct kinfo_lwp))
 
-static int dcopyout(struct lwp *, const void *, void *, size_t);
+#ifdef KTRACE
+int dcopyout(struct lwp *, const void *, void *, size_t);
 
-static int
+int
 dcopyout(l, kaddr, uaddr, len)
 	struct lwp *l;
 	const void *kaddr;
@@ -161,10 +109,37 @@ dcopyout(l, kaddr, uaddr, len)
 	int error;
 
 	error = copyout(kaddr, uaddr, len);
-	ktrmibio(-1, UIO_READ, uaddr, len, error);
+	if (!error && KTRPOINT(l->l_proc, KTR_MIB)) {
+		struct iovec iov;
 
+		iov.iov_base = uaddr;
+		iov.iov_len = len;
+		ktrgenio(l, -1, UIO_READ, &iov, len, 0);
+	}
 	return error;
 }
+#else /* !KTRACE */
+#define dcopyout(l, kaddr, uaddr, len) copyout(kaddr, uaddr, len)
+#endif /* KTRACE */
+#ifndef MULTIPROCESSOR
+#define	sysctl_ncpus()	(1)
+#else /* MULTIPROCESSOR */
+#ifndef CPU_INFO_FOREACH
+#define CPU_INFO_ITERATOR int
+#define CPU_INFO_FOREACH(cii, ci) cii = 0, ci = curcpu(); ci != NULL; ci = NULL
+#endif
+static int
+sysctl_ncpus(void)
+{
+	struct cpu_info *ci;
+	CPU_INFO_ITERATOR cii;
+
+	int ncpus = 0;
+	for (CPU_INFO_FOREACH(cii, ci))
+		ncpus++;
+	return (ncpus);
+}
+#endif /* MULTIPROCESSOR */
 
 #ifdef DIAGNOSTIC
 static int sysctl_kern_trigger_panic(SYSCTLFN_PROTO);
@@ -176,6 +151,7 @@ static int sysctl_kern_hostid(SYSCTLFN_PROTO);
 static int sysctl_setlen(SYSCTLFN_PROTO);
 static int sysctl_kern_clockrate(SYSCTLFN_PROTO);
 static int sysctl_kern_file(SYSCTLFN_PROTO);
+static int sysctl_kern_autonice(SYSCTLFN_PROTO);
 static int sysctl_msgbuf(SYSCTLFN_PROTO);
 static int sysctl_kern_defcorename(SYSCTLFN_PROTO);
 static int sysctl_kern_cptime(SYSCTLFN_PROTO);
@@ -199,7 +175,6 @@ static int sysctl_hw_usermem(SYSCTLFN_PROTO);
 static int sysctl_hw_cnmagic(SYSCTLFN_PROTO);
 static int sysctl_hw_ncpu(SYSCTLFN_PROTO);
 
-static u_int sysctl_map_flags(const u_int *, u_int);
 static void fill_kproc2(struct proc *, struct kinfo_proc2 *);
 static void fill_lwp(struct lwp *l, struct kinfo_lwp *kl);
 static void fill_file(struct kinfo_file *, const struct file *, struct proc *,
@@ -475,6 +450,20 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 		       CTLTYPE_STRUCT, "timex", NULL,
 		       sysctl_notavail, 0, NULL, 0,
 		       CTL_KERN, KERN_TIMEX, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "autonicetime",
+		       SYSCTL_DESCR("CPU clock seconds before non-root "
+				    "process priority is lowered"),
+		       sysctl_kern_autonice, 0, &autonicetime, 0,
+		       CTL_KERN, KERN_AUTONICETIME, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "autoniceval",
+		       SYSCTL_DESCR("Automatic reniced non-root process "
+				    "priority"),
+		       sysctl_kern_autonice, 0, &autoniceval, 0,
+		       CTL_KERN, KERN_AUTONICEVAL, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "rtc_offset",
@@ -1309,6 +1298,40 @@ sysctl_kern_file(SYSCTLFN_ARGS)
 }
 
 /*
+ * sysctl helper routine for kern.autonicetime and kern.autoniceval.
+ * asserts that the assigned value is in the correct range.
+ */
+static int
+sysctl_kern_autonice(SYSCTLFN_ARGS)
+{
+	int error, t = 0;
+	struct sysctlnode node;
+
+	node = *rnode;
+	t = *(int*)node.sysctl_data;
+	node.sysctl_data = &t;
+	error = sysctl_lookup(SYSCTLFN_CALL(&node));
+	if (error || newp == NULL)
+		return (error);
+
+	switch (node.sysctl_num) {
+	case KERN_AUTONICETIME:
+		if (t >= 0)
+			autonicetime = t;
+		break;
+	case KERN_AUTONICEVAL:
+		if (t < PRIO_MIN)
+			t = PRIO_MIN;
+		else if (t > PRIO_MAX)
+			t = PRIO_MAX;
+		autoniceval = t;
+		break;
+	}
+
+	return (0);
+}
+
+/*
  * sysctl helper routine for kern.msgbufsize and kern.msgbuf.  for the
  * former it merely checks the message buffer is set up.  for the latter,
  * it also copies out the data if necessary.
@@ -1441,7 +1464,7 @@ sysctl_kern_cptime(SYSCTLFN_ARGS)
 #else /* MULTIPROCESSOR */
 
 	uint64_t *cp_time = NULL;
-	int error, n = ncpu, i;
+	int error, n = sysctl_ncpus(), i;
 	struct cpu_info *ci;
 	CPU_INFO_ITERATOR cii;
 
@@ -1642,64 +1665,26 @@ sysctl_kern_lwp(SYSCTLFN_ARGS)
 	elem_size = name[1];
 	elem_count = name[2];
 
-	mutex_enter(&proclist_lock);
-	if (pid == -1) {
-		LIST_FOREACH(l2, &alllwp, l_list) {
-			if (buflen >= elem_size && elem_count > 0) {
-				lwp_lock(l2);
-				fill_lwp(l2, &klwp);
-				lwp_unlock(l2);
-
-				/*
-				 * Copy out elem_size, but not larger than
-				 * the size of a struct kinfo_proc2.
-				 *
-				 * XXX We should not be holding p_smutex, but
-				 * for now, the buffer is wired.  Fix later.
-				 */
-				error = dcopyout(l, &klwp, dp,
-				    min(sizeof(klwp), elem_size));
-				if (error)
-					goto cleanup;
-				dp += elem_size;
-				buflen -= elem_size;
-				elem_count--;
-			}
-			needed += elem_size;
+	p = pfind(pid);
+	if (p == NULL)
+		return (ESRCH);
+	LIST_FOREACH(l2, &p->p_lwps, l_sibling) {
+		if (buflen >= elem_size && elem_count > 0) {
+			fill_lwp(l2, &klwp);
+			/*
+			 * Copy out elem_size, but not larger than
+			 * the size of a struct kinfo_proc2.
+			 */
+			error = dcopyout(l, &klwp, dp,
+			    min(sizeof(klwp), elem_size));
+			if (error)
+				goto cleanup;
+			dp += elem_size;
+			buflen -= elem_size;
+			elem_count--;
 		}
-	} else {
-		p = p_find(pid, PFIND_LOCKED);
-		if (p == NULL) {
-			mutex_exit(&proclist_lock);
-			return (ESRCH);
-		}
-		mutex_enter(&p->p_smutex);	
-		LIST_FOREACH(l2, &p->p_lwps, l_sibling) {
-			if (buflen >= elem_size && elem_count > 0) {
-				lwp_lock(l2);
-				fill_lwp(l2, &klwp);
-				lwp_unlock(l2);
-
-				/*
-				 * Copy out elem_size, but not larger than
-				 * the size of a struct kinfo_proc2.
-				 *
-				 * XXX We should not be holding p_smutex, but
-				 * for now, the buffer is wired.  Fix later.
-				 */
-				error = dcopyout(l, &klwp, dp,
-				    min(sizeof(klwp), elem_size));
-				if (error)
-					goto cleanup;
-				dp += elem_size;
-				buflen -= elem_size;
-				elem_count--;
-			}
-			needed += elem_size;
-		}
-		mutex_exit(&p->p_smutex);
+		needed += elem_size;
 	}
-	mutex_exit(&proclist_lock);
 
 	if (where != NULL) {
 		*oldlenp = dp - where;
@@ -1877,7 +1862,7 @@ sysctl_kern_file2(SYSCTLFN_ARGS)
 		if (arg < -1)
 			/* -1 means all processes */
 			return (EINVAL);
-		mutex_enter(&proclist_lock);
+		proclist_lock_read();
 		PROCLIST_FOREACH(p, &allproc) {
 			if (p->p_stat == SIDL)
 				/* skip embryonic processes */
@@ -1910,7 +1895,7 @@ sysctl_kern_file2(SYSCTLFN_ARGS)
 				}
 			}
 		}
-		mutex_exit(&proclist_lock);
+		proclist_unlock_read();
 		break;
 	default:
 		return (EINVAL);
@@ -2011,7 +1996,7 @@ sysctl_doeproc(SYSCTLFN_ARGS)
 		eproc = NULL;
 		kproc2 = malloc(sizeof(*kproc2), M_TEMP, M_WAITOK);
 	}
-	mutex_enter(&proclist_lock);
+	proclist_lock_read();
 
 	pd = proclists;
 again:
@@ -2051,11 +2036,11 @@ again:
 
 		case KERN_PROC_TTY:
 			if (arg == (int) KERN_PROC_TTY_REVOKE) {
-				if ((p->p_lflag & PL_CONTROLT) == 0 ||
+				if ((p->p_flag & P_CONTROLT) == 0 ||
 				    p->p_session->s_ttyp == NULL ||
 				    p->p_session->s_ttyvp != NULL)
 					continue;
-			} else if ((p->p_lflag & PL_CONTROLT) == 0 ||
+			} else if ((p->p_flag & P_CONTROLT) == 0 ||
 			    p->p_session->s_ttyp == NULL) {
 				if ((dev_t)arg != KERN_PROC_TTY_NODEV)
 					continue;
@@ -2127,7 +2112,7 @@ again:
 	pd++;
 	if (pd->pd_list != NULL)
 		goto again;
-	mutex_exit(&proclist_lock);
+	proclist_unlock_read();
 
 	if (where != NULL) {
 		if (type == KERN_PROC)
@@ -2148,7 +2133,7 @@ again:
 		free(eproc, M_TEMP);
 	return 0;
  cleanup:
-	mutex_exit(&proclist_lock);
+	proclist_unlock_read();
  out:
 	if (kproc2)
 		free(kproc2, M_TEMP);
@@ -2197,7 +2182,7 @@ sysctl_kern_proc_args(SYSCTLFN_ARGS)
 		return (EINVAL);
 	}
 
-	mutex_enter(&proclist_lock);
+	proclist_lock_read();
 
 	/* check pid */
 	if ((p = p_find(pid, PFIND_LOCKED)) == NULL) {
@@ -2238,7 +2223,7 @@ sysctl_kern_proc_args(SYSCTLFN_ARGS)
 	 * Zombies don't have a stack, so we can't read their psstrings.
 	 * System processes also don't have a user stack.
 	 */
-	if (P_ZOMBIE(p) || (p->p_flag & PK_SYSTEM) != 0) {
+	if (P_ZOMBIE(p) || (p->p_flag & P_SYSTEM) != 0) {
 		error = EINVAL;
 		goto out_locked;
 	}
@@ -2247,7 +2232,7 @@ sysctl_kern_proc_args(SYSCTLFN_ARGS)
 	 * Lock the process down in memory.
 	 */
 	/* XXXCDC: how should locking work here? */
-	if ((l->l_flag & LW_WEXIT) || (p->p_vmspace->vm_refcnt < 1)) {
+	if ((p->p_flag & P_WEXIT) || (p->p_vmspace->vm_refcnt < 1)) {
 		error = EFAULT;
 		goto out_locked;
 	}
@@ -2263,7 +2248,7 @@ sysctl_kern_proc_args(SYSCTLFN_ARGS)
 	vmspace = p->p_vmspace;
 	vmspace->vm_refcnt++;	/* XXX */
 
-	mutex_exit(&proclist_lock);
+	proclist_unlock_read();
 
 	/*
 	 * Allocate a temporary buffer to hold the arguments.
@@ -2305,7 +2290,7 @@ sysctl_kern_proc_args(SYSCTLFN_ARGS)
 	}
 
 #ifdef COMPAT_NETBSD32
-	if (p->p_flag & PK_32)
+	if (p->p_flag & P_32)
 		len = sizeof(netbsd32_charp) * nargv;
 	else
 #endif
@@ -2336,7 +2321,7 @@ sysctl_kern_proc_args(SYSCTLFN_ARGS)
 		int j;
 
 #ifdef COMPAT_NETBSD32
-		if (p->p_flag & PK_32) {
+		if (p->p_flag & P_32) {
 			netbsd32_charp *argv32;
 
 			argv32 = (netbsd32_charp *)argv;
@@ -2400,7 +2385,7 @@ done:
 	return error;
 
 out_locked:
-	mutex_exit(&proclist_lock);
+	proclist_unlock_read();
 	return error;
 }
 
@@ -2484,7 +2469,7 @@ sysctl_kern_cpid(SYSCTLFN_ARGS)
 
 #else /* MULTIPROCESSOR */
 	uint64_t *cp_id = NULL;
-	int error, n = ncpu;
+	int error, n = sysctl_ncpus();
 	struct cpu_info *ci;
 	CPU_INFO_ITERATOR cii;
 
@@ -2605,8 +2590,10 @@ sysctl_hw_cnmagic(SYSCTLFN_ARGS)
 static int
 sysctl_hw_ncpu(SYSCTLFN_ARGS)
 {
+	int ncpu;
 	struct sysctlnode node;
 
+	ncpu = sysctl_ncpus();
 	node = *rnode;
 	node.sysctl_data = &ncpu;
 
@@ -2670,9 +2657,8 @@ static void
 fill_kproc2(struct proc *p, struct kinfo_proc2 *ki)
 {
 	struct tty *tp;
-	struct lwp *l, *l2;
-	struct timeval ut, st, rt;
-	sigset_t ss1, ss2;
+	struct lwp *l;
+	struct timeval ut, st;
 
 	memset(ki, 0, sizeof(*ki));
 
@@ -2685,16 +2671,11 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki)
 	ki->p_sigacts = PTRTOUINT64(p->p_sigacts);
 	ki->p_sess = PTRTOUINT64(p->p_session);
 	ki->p_tsess = 0;	/* may be changed if controlling tty below */
-	ki->p_ru = PTRTOUINT64(&p->p_stats->p_ru);
+	ki->p_ru = PTRTOUINT64(p->p_ru);
 
 	ki->p_eflag = 0;
 	ki->p_exitsig = p->p_exitsig;
-
-	ki->p_flag = sysctl_map_flags(sysctl_flagmap, p->p_flag);
-	ki->p_flag |= sysctl_map_flags(sysctl_sflagmap, p->p_sflag);
-	ki->p_flag |= sysctl_map_flags(sysctl_slflagmap, p->p_slflag);
-	ki->p_flag |= sysctl_map_flags(sysctl_lflagmap, p->p_lflag);
-	ki->p_flag |= sysctl_map_flags(sysctl_stflagmap, p->p_stflag);
+	ki->p_flag = p->p_flag;
 
 	ki->p_pid = p->p_pid;
 	if (p->p_pptr)
@@ -2715,11 +2696,10 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki)
 
 	ki->p_ngroups = kauth_cred_ngroups(p->p_cred);
 	kauth_cred_getgroups(p->p_cred, ki->p_groups,
-	    min(ki->p_ngroups, sizeof(ki->p_groups) / sizeof(ki->p_groups[0])),
-	    UIO_SYSSPACE);
+	    min(ki->p_ngroups, sizeof(ki->p_groups) / sizeof(ki->p_groups[0])));
 
 	ki->p_jobc = p->p_pgrp->pg_jobc;
-	if ((p->p_lflag & PL_CONTROLT) && (tp = p->p_session->s_ttyp)) {
+	if ((p->p_flag & P_CONTROLT) && (tp = p->p_session->s_ttyp)) {
 		ki->p_tdev = tp->t_dev;
 		ki->p_tpgid = tp->t_pgrp ? tp->t_pgrp->pg_id : NO_PGID;
 		ki->p_tsess = PTRTOUINT64(tp->t_session);
@@ -2728,8 +2708,10 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki)
 	}
 
 	ki->p_estcpu = p->p_estcpu;
-
-	mutex_enter(&p->p_smutex);
+	ki->p_rtime_sec = p->p_rtime.tv_sec;
+	ki->p_rtime_usec = p->p_rtime.tv_usec;
+	ki->p_cpticks = p->p_cpticks;
+	ki->p_pctcpu = p->p_pctcpu;
 
 	ki->p_uticks = p->p_uticks;
 	ki->p_sticks = p->p_sticks;
@@ -2738,21 +2720,11 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki)
 	ki->p_tracep = PTRTOUINT64(p->p_tracep);
 	ki->p_traceflag = p->p_traceflag;
 
+
+	memcpy(&ki->p_siglist, &p->p_sigctx.ps_siglist, sizeof(ki_sigset_t));
+	memcpy(&ki->p_sigmask, &p->p_sigctx.ps_sigmask, sizeof(ki_sigset_t));
 	memcpy(&ki->p_sigignore, &p->p_sigctx.ps_sigignore,sizeof(ki_sigset_t));
 	memcpy(&ki->p_sigcatch, &p->p_sigctx.ps_sigcatch, sizeof(ki_sigset_t));
-
-	ki->p_cpticks = 0;
-	ki->p_pctcpu = p->p_pctcpu;
-	ss1 = p->p_sigpend.sp_set;
-	LIST_FOREACH(l, &p->p_lwps, l_sibling) {
-		/* This is hardly correct, but... */
-		sigplusset(&l->l_sigpend.sp_set, &ss1);
-		sigplusset(&l->l_sigmask, &ss2);
-		ki->p_cpticks += l->l_cpticks;
-		ki->p_pctcpu += l->l_pctcpu;
-	}
-	memcpy(&ki->p_siglist, &ss1, sizeof(ki_sigset_t));
-	memcpy(&ki->p_sigmask, &ss2, sizeof(ki_sigset_t));
 
 	ki->p_stat = p->p_stat; /* Will likely be overridden by LWP status */
 	ki->p_realstat = p->p_stat;
@@ -2768,18 +2740,17 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki)
 	    min(sizeof ki->p_login - 1, sizeof p->p_session->s_login));
 
 	ki->p_nlwps = p->p_nlwps;
-	ki->p_realflag = ki->p_flag;
+	ki->p_nrlwps = p->p_nrlwps;
+	ki->p_realflag = p->p_flag;
 
 	if (p->p_stat == SIDL || P_ZOMBIE(p)) {
 		ki->p_vm_rssize = 0;
 		ki->p_vm_tsize = 0;
 		ki->p_vm_dsize = 0;
 		ki->p_vm_ssize = 0;
-		ki->p_nrlwps = 0;
 		l = NULL;
 	} else {
 		struct vmspace *vm = p->p_vmspace;
-		int tmp;
 
 		ki->p_vm_rssize = vm_resident_count(vm);
 		ki->p_vm_tsize = vm->vm_tsize;
@@ -2787,19 +2758,18 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki)
 		ki->p_vm_ssize = vm->vm_ssize;
 
 		/* Pick a "representative" LWP */
-		l = proc_representative_lwp(p, &tmp, 1);
-		lwp_lock(l);
-		ki->p_nrlwps = tmp;
-		ki->p_forw = 0;
-		ki->p_back = 0;
+		l = proc_representative_lwp(p);
+		ki->p_forw = PTRTOUINT64(l->l_forw);
+		ki->p_back = PTRTOUINT64(l->l_back);
 		ki->p_addr = PTRTOUINT64(l->l_addr);
 		ki->p_stat = l->l_stat;
-		ki->p_flag |= sysctl_map_flags(sysctl_lwpflagmap, l->l_flag);
+		ki->p_flag |= l->l_flag & P_SHARED;
 		ki->p_swtime = l->l_swtime;
 		ki->p_slptime = l->l_slptime;
-		if (l->l_stat == LSONPROC)
+		if (l->l_stat == LSONPROC) {
+			KDASSERT(l->l_cpu != NULL);
 			ki->p_schedflags = l->l_cpu->ci_schedstate.spc_flags;
-		else
+		} else
 			ki->p_schedflags = 0;
 		ki->p_holdcnt = l->l_holdcnt;
 		ki->p_priority = l->l_priority;
@@ -2807,8 +2777,9 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki)
 		if (l->l_wmesg)
 			strncpy(ki->p_wmesg, l->l_wmesg, sizeof(ki->p_wmesg));
 		ki->p_wchan = PTRTOUINT64(l->l_wchan);
-		lwp_unlock(l);
+
 	}
+
 	if (p->p_session->s_ttyvp)
 		ki->p_eflag |= EPROC_CTTY;
 	if (SESS_LEADER(p))
@@ -2817,17 +2788,13 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki)
 	/* XXX Is this double check necessary? */
 	if (P_ZOMBIE(p)) {
 		ki->p_uvalid = 0;
-		ki->p_rtime_sec = 0;
-		ki->p_rtime_usec = 0;
 	} else {
 		ki->p_uvalid = 1;
 
 		ki->p_ustart_sec = p->p_stats->p_start.tv_sec;
 		ki->p_ustart_usec = p->p_stats->p_start.tv_usec;
 
-		calcru(p, &ut, &st, NULL, &rt);
-		ki->p_rtime_sec = rt.tv_sec;
-		ki->p_rtime_usec = rt.tv_usec;
+		calcru(p, &ut, &st, 0);
 		ki->p_uutime_sec = ut.tv_sec;
 		ki->p_uutime_usec = ut.tv_usec;
 		ki->p_ustime_sec = st.tv_sec;
@@ -2845,13 +2812,8 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki)
 		ki->p_uru_msgsnd = p->p_stats->p_ru.ru_msgsnd;
 		ki->p_uru_msgrcv = p->p_stats->p_ru.ru_msgrcv;
 		ki->p_uru_nsignals = p->p_stats->p_ru.ru_nsignals;
-
-		ki->p_uru_nvcsw = 0;
-		ki->p_uru_nivcsw = 0;
-		LIST_FOREACH(l2, &p->p_lwps, l_sibling) {
-			ki->p_uru_nvcsw += (l->l_ncsw - l->l_nivcsw);
-			ki->p_uru_nivcsw += l->l_nivcsw;
-		}
+		ki->p_uru_nvcsw = p->p_stats->p_ru.ru_nvcsw;
+		ki->p_uru_nivcsw = p->p_stats->p_ru.ru_nivcsw;
 
 		timeradd(&p->p_stats->p_cru.ru_utime,
 			 &p->p_stats->p_cru.ru_stime, &ut);
@@ -2859,13 +2821,11 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki)
 		ki->p_uctime_usec = ut.tv_usec;
 	}
 #ifdef MULTIPROCESSOR
-	if (l != NULL)
+	if (l && l->l_cpu != NULL)
 		ki->p_cpuid = l->l_cpu->ci_cpuid;
 	else
 #endif
 		ki->p_cpuid = KI_NOCPU;
-
-	mutex_exit(&p->p_smutex);
 }
 
 /*
@@ -2874,21 +2834,21 @@ fill_kproc2(struct proc *p, struct kinfo_proc2 *ki)
 static void
 fill_lwp(struct lwp *l, struct kinfo_lwp *kl)
 {
-	struct proc *p = l->l_proc;
 
-	kl->l_forw = 0;
-	kl->l_back = 0;
+	kl->l_forw = PTRTOUINT64(l->l_forw);
+	kl->l_back = PTRTOUINT64(l->l_back);
 	kl->l_laddr = PTRTOUINT64(l);
 	kl->l_addr = PTRTOUINT64(l->l_addr);
 	kl->l_stat = l->l_stat;
 	kl->l_lid = l->l_lid;
-	kl->l_flag = sysctl_map_flags(sysctl_lwpprflagmap, l->l_prflag);
+	kl->l_flag = l->l_flag;
 
 	kl->l_swtime = l->l_swtime;
 	kl->l_slptime = l->l_slptime;
-	if (l->l_stat == LSONPROC)
+	if (l->l_stat == LSONPROC) {
+		KDASSERT(l->l_cpu != NULL);
 		kl->l_schedflags = l->l_cpu->ci_schedstate.spc_flags;
-	else
+	} else
 		kl->l_schedflags = 0;
 	kl->l_holdcnt = l->l_holdcnt;
 	kl->l_priority = l->l_priority;
@@ -2897,19 +2857,11 @@ fill_lwp(struct lwp *l, struct kinfo_lwp *kl)
 		strncpy(kl->l_wmesg, l->l_wmesg, sizeof(kl->l_wmesg));
 	kl->l_wchan = PTRTOUINT64(l->l_wchan);
 #ifdef MULTIPROCESSOR
-	kl->l_cpuid = l->l_cpu->ci_cpuid;
-#else
-	kl->l_cpuid = KI_NOCPU;
-#endif
-	kl->l_rtime_sec = l->l_rtime.tv_sec;
-	kl->l_rtime_usec = l->l_rtime.tv_usec;
-	kl->l_cpticks = l->l_cpticks;
-	kl->l_pctcpu = l->l_pctcpu;
-	kl->l_pid = p->p_pid;
-	if (l->l_name == NULL)
-		kl->l_name[0] = '\0';
+	if (l->l_cpu != NULL)
+		kl->l_cpuid = l->l_cpu->ci_cpuid;
 	else
-		strlcpy(kl->l_name, l->l_name, sizeof(kl->l_name));
+#endif
+		kl->l_cpuid = KI_NOCPU;
 }
 
 /*
@@ -2940,13 +2892,10 @@ fill_eproc(struct proc *p, struct eproc *ep)
 		ep->e_vm.vm_ssize = vm->vm_ssize;
 
 		/* Pick a "representative" LWP */
-		mutex_enter(&p->p_smutex);
-		l = proc_representative_lwp(p, NULL, 1);
-		lwp_lock(l);
+		l = proc_representative_lwp(p);
+
 		if (l->l_wmesg)
 			strncpy(ep->e_wmesg, l->l_wmesg, WMESGLEN);
-		lwp_unlock(l);
-		mutex_exit(&p->p_smutex);
 	}
 	if (p->p_pptr)
 		ep->e_ppid = p->p_pptr->p_pid;
@@ -2955,7 +2904,7 @@ fill_eproc(struct proc *p, struct eproc *ep)
 	ep->e_pgid = p->p_pgrp->pg_id;
 	ep->e_sid = ep->e_sess->s_sid;
 	ep->e_jobc = p->p_pgrp->pg_jobc;
-	if ((p->p_lflag & PL_CONTROLT) &&
+	if ((p->p_flag & P_CONTROLT) &&
 	    (tp = ep->e_sess->s_ttyp)) {
 		ep->e_tdev = tp->t_dev;
 		ep->e_tpgid = tp->t_pgrp ? tp->t_pgrp->pg_id : NO_PGID;
@@ -2969,16 +2918,4 @@ fill_eproc(struct proc *p, struct eproc *ep)
 	if (SESS_LEADER(p))
 		ep->e_flag |= EPROC_SLEADER;
 	strncpy(ep->e_login, ep->e_sess->s_login, MAXLOGNAME);
-}
-
-u_int
-sysctl_map_flags(const u_int *map, u_int word)
-{
-	u_int rv;
-
-	for (rv = 0; *map != 0; map += 2)
-		if ((word & map[0]) != 0)
-			rv |= map[1];
-
-	return rv;
 }

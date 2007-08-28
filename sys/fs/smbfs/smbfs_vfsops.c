@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_vfsops.c,v 1.70 2007/07/31 21:14:18 pooka Exp $	*/
+/*	$NetBSD: smbfs_vfsops.c,v 1.60.2.2 2007/04/12 19:34:24 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_vfsops.c,v 1.70 2007/07/31 21:14:18 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_vfsops.c,v 1.60.2.2 2007/04/12 19:34:24 bouyer Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_quota.h"
@@ -94,13 +94,25 @@ SYSCTL_SETUP(sysctl_vfs_samba_setup, "sysctl vfs.samba subtree setup")
 }
 #endif
 
-static MALLOC_JUSTDEFINE(M_SMBFSHASH, "SMBFS hash", "SMBFS hash table");
+static MALLOC_DEFINE(M_SMBFSHASH, "SMBFS hash", "SMBFS hash table");
 
-VFS_PROTOS(smbfs);
-
+int smbfs_mount(struct mount *, const char *, void *,
+		struct nameidata *, struct lwp *);
+int smbfs_quotactl(struct mount *, int, uid_t, void *, struct lwp *);
+int smbfs_root(struct mount *, struct vnode **);
 static int smbfs_setroot(struct mount *);
+int smbfs_start(struct mount *, int, struct lwp *);
+int smbfs_statvfs(struct mount *, struct statvfs *, struct lwp *);
+int smbfs_sync(struct mount *, int, kauth_cred_t, struct lwp *);
+int smbfs_unmount(struct mount *, int, struct lwp *);
+void smbfs_init(void);
+void smbfs_reinit(void);
+void smbfs_done(void);
 
-struct pool smbfs_node_pool;
+int smbfs_vget(struct mount *mp, ino_t ino, struct vnode **vpp);
+
+POOL_INIT(smbfs_node_pool, sizeof(struct smbnode), 0, 0, 0, "smbfsnopl",
+    &pool_allocator_nointr);
 extern struct vnodeopv_desc smbfs_vnodeop_opv_desc;
 
 static const struct vnodeopv_desc *smbfs_vnodeopv_descs[] = {
@@ -110,7 +122,6 @@ static const struct vnodeopv_desc *smbfs_vnodeopv_descs[] = {
 
 struct vfsops smbfs_vfsops = {
 	MOUNT_SMBFS,
-	sizeof (struct smbfs_args),
 	smbfs_mount,
 	smbfs_start,
 	smbfs_unmount,
@@ -127,7 +138,6 @@ struct vfsops smbfs_vfsops = {
 	(int (*) (void)) eopnotsupp, /* mountroot */
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
-	(void *)eopnotsupp,	/* vfs_suspendctl */
 	smbfs_vnodeopv_descs,
 	0,			/* vfs_refcount */
 	{ NULL, NULL },
@@ -135,10 +145,10 @@ struct vfsops smbfs_vfsops = {
 VFS_ATTACH(smbfs_vfsops);
 
 int
-smbfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
-    struct lwp *l)
+smbfs_mount(struct mount *mp, const char *path, void *data,
+    struct nameidata *ndp, struct lwp *l)
 {
-	struct smbfs_args *args = data; 	  /* holds data from mount request */
+	struct smbfs_args args; 	  /* will hold data from mount request */
 	struct smbmount *smp = NULL;
 	struct smb_vc *vcp;
 	struct smb_share *ssp = NULL;
@@ -146,29 +156,28 @@ smbfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
 	struct proc *p;
 	int error;
 
-	if (*data_len < sizeof *args)
-		return EINVAL;
-
 	p = l->l_proc;
 	if (mp->mnt_flag & MNT_GETARGS) {
 		smp = VFSTOSMBFS(mp);
 		if (smp == NULL)
 			return EIO;
-		*args = smp->sm_args;
-		*data_len = sizeof *args;
-		return 0;
+		return copyout(&smp->sm_args, data, sizeof(smp->sm_args));
 	}
 
 	if (mp->mnt_flag & MNT_UPDATE)
 		return EOPNOTSUPP;
 
-	if (args->version != SMBFS_VERSION) {
+	error = copyin(data, &args, sizeof(struct smbfs_args));
+	if (error)
+		return error;
+
+	if (args.version != SMBFS_VERSION) {
 		SMBVDEBUG("mount version mismatch: kernel=%d, mount=%d\n",
-		    SMBFS_VERSION, args->version);
+		    SMBFS_VERSION, args.version);
 		return EINVAL;
 	}
 	smb_makescred(&scred, l, l->l_cred);
-	error = smb_dev2share(args->dev_fd, SMBM_EXEC, &scred, &ssp);
+	error = smb_dev2share(args.dev_fd, SMBM_EXEC, &scred, &ssp);
 	if (error)
 		return error;
 	smb_share_unlock(ssp, 0);	/* keep ref, but unlock */
@@ -187,15 +196,15 @@ smbfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
 	lockinit(&smp->sm_hashlock, PVFS, "smbfsh", 0, 0);
 	smp->sm_share = ssp;
 	smp->sm_root = NULL;
-	smp->sm_args = *args;
-	smp->sm_caseopt = args->caseopt;
+	smp->sm_args = args;
+	smp->sm_caseopt = args.caseopt;
 	smp->sm_args.file_mode = (smp->sm_args.file_mode &
 			    (S_IRWXU|S_IRWXG|S_IRWXO)) | S_IFREG;
 	smp->sm_args.dir_mode  = (smp->sm_args.dir_mode &
 			    (S_IRWXU|S_IRWXG|S_IRWXO)) | S_IFDIR;
 
 	error = set_statvfs_info(path, UIO_USERSPACE, NULL, UIO_USERSPACE,
-	    mp->mnt_op->vfs_name, mp, l);
+	    mp, l);
 	if (error)
 		goto bad;
 	memset(mp->mnt_stat.f_mntfromname, 0, MNAMELEN);
@@ -359,12 +368,14 @@ smbfs_quotactl(struct mount *mp, int cmd, uid_t uid,
 void
 smbfs_init(void)
 {
-
+#ifdef _LKM
+	/* Need explicit attach if LKM */
 	malloc_type_attach(M_SMBNODENAME);
 	malloc_type_attach(M_SMBFSDATA);
 	malloc_type_attach(M_SMBFSHASH);
 	pool_init(&smbfs_node_pool, sizeof(struct smbnode), 0, 0, 0,
-	    "smbfsnopl", &pool_allocator_nointr, IPL_NONE);
+	    "smbfsnopl", &pool_allocator_nointr);
+#endif
 
 	SMBVDEBUG("init.\n");
 }
@@ -382,10 +393,13 @@ smbfs_done(void)
 
 	pool_destroy(&smbfs_node_pool);
 
+#ifdef _LKM
+	/* Need explicit detach if LKM */
 	pool_destroy(&smbfs_node_pool);
 	malloc_type_detach(M_SMBNODENAME);
 	malloc_type_detach(M_SMBFSDATA);
 	malloc_type_detach(M_SMBFSHASH);
+#endif
 
 	SMBVDEBUG("done.\n");
 }
@@ -450,7 +464,7 @@ loop:
 			
 		if ((vp->v_type == VNON || (np->n_flag & NMODIFIED) == 0) &&
 		    LIST_EMPTY(&vp->v_dirtyblkhd) &&
-		     UVM_OBJ_IS_CLEAN(&vp->v_uobj)) {
+		     vp->v_uobj.uo_npages == 0) {
 			simple_unlock(&vp->v_interlock);
 			continue;
 		}

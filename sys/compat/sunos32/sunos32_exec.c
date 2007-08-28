@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos32_exec.c,v 1.28 2007/03/16 22:21:42 dsl Exp $	 */
+/*	$NetBSD: sunos32_exec.c,v 1.25 2006/10/15 21:12:08 martin Exp $	 */
 
 /*
  * Copyright (c) 2001 Matthew R. Green
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos32_exec.c,v 1.28 2007/03/16 22:21:42 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos32_exec.c,v 1.25 2006/10/15 21:12:08 martin Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -41,8 +41,6 @@ __KERNEL_RCSID(0, "$NetBSD: sunos32_exec.c,v 1.28 2007/03/16 22:21:42 dsl Exp $"
 
 #include <uvm/uvm_extern.h>
 
-#include <compat/netbsd32/netbsd32.h>
-#include <compat/netbsd32/netbsd32_syscallargs.h>
 #include <compat/sunos32/sunos32.h>
 #include <compat/sunos32/sunos32_syscall.h>
 #include <compat/sunos32/sunos32_exec.h>
@@ -98,6 +96,5 @@ const struct emul emul_sunos = {
 	NULL,
 	uvm_default_mapaddr,
 	NULL,
-	0,
-	NULL,
+	NULL
 };

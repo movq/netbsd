@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_bootdhcp.c,v 1.35 2007/05/08 09:29:50 manu Exp $	*/
+/*	$NetBSD: nfs_bootdhcp.c,v 1.32.2.1 2007/05/13 10:30:54 jdc Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1997 The NetBSD Foundation, Inc.
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_bootdhcp.c,v 1.35 2007/05/08 09:29:50 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_bootdhcp.c,v 1.32.2.1 2007/05/13 10:30:54 jdc Exp $");
 
 #include "opt_nfs_boot.h"
 #include "opt_tftproot.h"
@@ -380,7 +380,7 @@ bootpcheck(m, context)
 	 * (doesn't allocate a cluster if necessary).
 	 */
 	bpc->replylen = m->m_pkthdr.len;
-	m_copydata(m, 0, bpc->replylen, (void *)bpc->replybuf);
+	m_copydata(m, 0, bpc->replylen, (caddr_t)bpc->replybuf);
 	bootp = bpc->replybuf;
 
 	/*
@@ -574,7 +574,7 @@ bootpc_call(nd, lwp)
 	 * Build the BOOTP reqest message.
 	 * Note: xid is host order! (opaque to server)
 	 */
-	memset((void *)bootp, 0, BOOTP_SIZE_MAX);
+	memset((caddr_t)bootp, 0, BOOTP_SIZE_MAX);
 	bootp->bp_op    = BOOTREQUEST;
 	bootp->bp_htype = hafmt;
 	bootp->bp_hlen  = halen;	/* Hardware address length */
@@ -809,7 +809,7 @@ bootp_extract(bootp, replylen, nd)
 
 		/* Server IP address. */
 		sin = (struct sockaddr_in *) &ndm->ndm_saddr;
-		memset((void *)sin, 0, sizeof(*sin));
+		memset((caddr_t)sin, 0, sizeof(*sin));
 		sin->sin_len = sizeof(*sin);
 		sin->sin_family = AF_INET;
 		sin->sin_addr = rootserver;

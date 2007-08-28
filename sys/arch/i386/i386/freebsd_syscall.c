@@ -1,4 +1,4 @@
-/*	$NetBSD: freebsd_syscall.c,v 1.27 2007/03/04 05:59:57 christos Exp $	*/
+/*	$NetBSD: freebsd_syscall.c,v 1.25 2006/07/19 21:11:41 ad Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -37,11 +37,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: freebsd_syscall.c,v 1.27 2007/03/04 05:59:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: freebsd_syscall.c,v 1.25 2006/07/19 21:11:41 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/savar.h>
 #include <sys/user.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
@@ -79,10 +80,10 @@ void
 freebsd_syscall_plain(frame)
 	struct trapframe *frame;
 {
-	char *params;
-	const struct sysent *callp;
+	register caddr_t params;
+	register const struct sysent *callp;
 	struct lwp *l;
-	struct proc *p;
+	register struct proc *p;
 	int error;
 	size_t argsize;
 	register_t code, args[8], rval[2];
@@ -94,7 +95,7 @@ freebsd_syscall_plain(frame)
 
 	code = frame->tf_eax;
 	callp = p->p_emul->e_sysent;
-	params = (char *)frame->tf_esp + sizeof(int);
+	params = (caddr_t)frame->tf_esp + sizeof(int);
 
 	switch (code) {
 	case SYS_syscall:
@@ -120,7 +121,7 @@ freebsd_syscall_plain(frame)
 	callp += code;
 	argsize = callp->sy_argsize;
 	if (argsize) {
-		error = copyin(params, (void *)args, argsize);
+		error = copyin(params, (caddr_t)args, argsize);
 		if (error)
 			goto bad;
 	}
@@ -128,9 +129,9 @@ freebsd_syscall_plain(frame)
 	rval[0] = 0;
 	rval[1] = frame->tf_edx; /* need to keep edx for shared FreeBSD bins */
 
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 	error = (*callp->sy_call)(l, args, rval);
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 
 	switch (error) {
 	case 0:
@@ -163,10 +164,10 @@ void
 freebsd_syscall_fancy(frame)
 	struct trapframe *frame;
 {
-	char *params;
-	const struct sysent *callp;
+	register caddr_t params;
+	register const struct sysent *callp;
 	struct lwp *l;
-	struct proc *p;
+	register struct proc *p;
 	int error;
 	size_t argsize;
 	register_t code, args[8], rval[2];
@@ -178,7 +179,7 @@ freebsd_syscall_fancy(frame)
 
 	code = frame->tf_eax;
 	callp = p->p_emul->e_sysent;
-	params = (char *)frame->tf_esp + sizeof(int);
+	params = (caddr_t)frame->tf_esp + sizeof(int);
 
 	switch (code) {
 	case SYS_syscall:
@@ -204,12 +205,12 @@ freebsd_syscall_fancy(frame)
 	callp += code;
 	argsize = callp->sy_argsize;
 	if (argsize) {
-		error = copyin(params, (void *)args, argsize);
+		error = copyin(params, (caddr_t)args, argsize);
 		if (error)
 			goto bad;
 	}
 
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 	if ((error = trace_enter(l, code, code, NULL, args)) != 0)
 		goto out;
 
@@ -217,7 +218,7 @@ freebsd_syscall_fancy(frame)
 	rval[1] = frame->tf_edx; /* need to keep edx for shared FreeBSD bins */
 	error = (*callp->sy_call)(l, args, rval);
 out:
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 	switch (error) {
 	case 0:
 		frame->tf_eax = rval[0];

@@ -1,4 +1,4 @@
-/*	$NetBSD: smc83c170reg.h,v 1.12 2007/02/16 13:43:00 tsutsui Exp $	*/
+/*	$NetBSD: smc83c170reg.h,v 1.11.12.1 2007/02/24 13:30:41 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

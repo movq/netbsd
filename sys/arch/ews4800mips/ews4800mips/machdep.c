@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.9 2007/07/23 17:55:39 tsutsui Exp $	*/
+/*	$NetBSD: machdep.c,v 1.2 2006/02/25 02:28:56 wiz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2004, 2005 The NetBSD Foundation, Inc.
@@ -34,14 +34,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.9 2007/07/23 17:55:39 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.2 2006/02/25 02:28:56 wiz Exp $");
 
 #include "opt_ddb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/buf.h>
 #include <sys/reboot.h>
@@ -101,25 +100,11 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 {
 	extern char kernel_text[], edata[], end[];
 	extern struct user *proc0paddr;
-	void *v;
+	caddr_t v;
 	int i;
 
 	/* Clear BSS */
-	if (bi == NULL || bi->bi_size != sizeof(struct bootinfo)) {
-		/*
-		 * No bootinfo, so assume we are loaded by
-		 * the firmware directly and have to clear BSS here.
-		 */
-		memset(edata, 0, end - edata);
-		/*
-		 * XXX
-		 * lwp0 and cpu_info_store are allocated in BSS
-		 * and initialized before mach_init() is called,
-		 * so restore them again.
-		 */
-		lwp0.l_cpu = &cpu_info_store;
-		cpu_info_store.ci_curlwp = &lwp0;
-	}
+	memset(edata, 0, end - edata);
 
 	/* Setup early-console with BIOS ROM routines */
 	rom_cons_init();
@@ -137,7 +122,7 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 
 	/* Fill mem_clusters and mem_cluster_cnt */
 	(*platform.mem_init)(kernel_text,
-	    (bi && bi->bi_nsym) ? (void *)bi->bi_esym : end);
+	    (bi && bi->bi_nsym) ? (caddr_t)bi->bi_esym : end);
 
 	/*
 	 * make sure that we don't call BIOS console from now
@@ -180,18 +165,18 @@ mach_init(int argc, char *argv[], struct bootinfo *bi)
 
 	pmap_bootstrap();
 
-	v = (void *)uvm_pageboot_alloc(USPACE);	/* proc0 USPACE */
+	v = (caddr_t)uvm_pageboot_alloc(USPACE);	/* proc0 USPACE */
 	lwp0.l_addr = proc0paddr = (struct user *) v;
-	lwp0.l_md.md_regs = (struct frame *)((char *)v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	lwp0.l_md.md_regs = (struct frame *)(v + USPACE) - 1;
+	curpcb = &lwp0.l_addr->u_pcb;
+	curpcb->pcb_context[11] = MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
 }
 
 void
 option(int argc, char *argv[], struct bootinfo *bi)
 {
 	extern char __boot_kernel_name[];
-	bool boot_device_set;
+	boolean_t boot_device_set;
 	char *p;
 	int i;
 
@@ -209,16 +194,16 @@ option(int argc, char *argv[], struct bootinfo *bi)
 		    (void *)bi->bi_ssym, (void *)bi->bi_esym);
 #endif
 	/* Parse option */
-	boot_device_set = false;
+	boot_device_set = FALSE;
 	for (i = 2; i < argc; i++) {
 		p = argv[i];
 		/* prompt for root device */
 		if (p[0] == '-' && p[1] == 'a')
-			boot_device_set = true;
+			boot_device_set = TRUE;
 
 		/* root device option. ex) -b=net:netbsd, -b=sd0k:netbsd */
 		if (p[0] == '-' && p[1] == 'b') {
-			boot_device_set = true;
+			boot_device_set = TRUE;
 			strcpy(__boot_kernel_name, p + 3);
 		}
 	}
@@ -256,12 +241,12 @@ cpu_startup(void)
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
+	    16 * NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 	/*
 	 * Allocate a submap for physio.
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    VM_PHYS_SIZE, 0, false, NULL);
+	    VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * (No need to allocate an mbuf cluster submap.  Mbuf clusters

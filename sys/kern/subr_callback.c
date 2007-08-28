@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_callback.c,v 1.5 2007/07/09 21:10:55 ad Exp $	*/
+/*	$NetBSD: subr_callback.c,v 1.4 2006/06/23 16:17:23 drochner Exp $	*/
 
 /*-
  * Copyright (c)2006 YAMAMOTO Takashi,
@@ -27,20 +27,21 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_callback.c,v 1.5 2007/07/09 21:10:55 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_callback.c,v 1.4 2006/06/23 16:17:23 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/callback.h>
 
+#define	CH_WANT	1
+
 void
-callback_head_init(struct callback_head *ch, int ipl)
+callback_head_init(struct callback_head *ch)
 {
 
 	memset(ch, 0, sizeof(struct callback_head));
-	mutex_init(&ch->ch_lock, MUTEX_DRIVER, ipl);
-	cv_init(&ch->ch_cv, "callback");
+	simple_lock_init(&ch->ch_lock);
 	TAILQ_INIT(&ch->ch_q);
 #if 0 /* already zero-initialized */
 	ch->ch_next = NULL;
@@ -51,39 +52,33 @@ callback_head_init(struct callback_head *ch, int ipl)
 }
 
 void
-callback_head_destroy(struct callback_head *ch)
-{
-
-	mutex_destroy(&ch->ch_lock);
-	cv_destroy(&ch->ch_cv);
-}
-
-void
 callback_register(struct callback_head *ch, struct callback_entry *ce,
     void *obj, int (*fn)(struct callback_entry *, void *, void *))
 {
 
 	ce->ce_func = fn;
 	ce->ce_obj = obj;
-	mutex_enter(&ch->ch_lock);
+	simple_lock(&ch->ch_lock);
 	TAILQ_INSERT_TAIL(&ch->ch_q, ce, ce_q);
 	ch->ch_nentries++;
-	mutex_exit(&ch->ch_lock);
+	simple_unlock(&ch->ch_lock);
 }
 
 void
 callback_unregister(struct callback_head *ch, struct callback_entry *ce)
 {
 
-	mutex_enter(&ch->ch_lock);
-	while (ch->ch_running > 0)
-		cv_wait(&ch->ch_cv, &ch->ch_lock);
+	simple_lock(&ch->ch_lock);
+	while (ch->ch_running > 0) {
+		ch->ch_flags |= CH_WANT;
+		ltsleep(&ch->ch_running, PVM, "recunreg", 0, &ch->ch_lock);
+	}
 	if (__predict_false(ch->ch_next == ce)) {
 		ch->ch_next = TAILQ_NEXT(ce, ce_q);
 	}
 	TAILQ_REMOVE(&ch->ch_q, ce, ce_q);
 	ch->ch_nentries--;
-	mutex_exit(&ch->ch_lock);
+	simple_unlock(&ch->ch_lock);
 }
 
 static int
@@ -109,21 +104,23 @@ static void
 callback_run_enter(struct callback_head *ch)
 {
 
-	mutex_enter(&ch->ch_lock);
+	simple_lock(&ch->ch_lock);
 	ch->ch_running++;
-	mutex_exit(&ch->ch_lock);
+	simple_unlock(&ch->ch_lock);
 }
 
 static void
 callback_run_leave(struct callback_head *ch)
 {
 
-	mutex_enter(&ch->ch_lock);
+	simple_lock(&ch->ch_lock);
 	KASSERT(ch->ch_running > 0);
 	ch->ch_running--;
-	if (ch->ch_running == 0)
-		cv_broadcast(&ch->ch_cv);
-	mutex_exit(&ch->ch_lock);
+	if (ch->ch_running == 0 && (ch->ch_flags & CH_WANT) != 0) {
+		ch->ch_flags &= ~CH_WANT;
+		wakeup(&ch->ch_running);
+	}
+	simple_unlock(&ch->ch_lock);
 }
 
 int

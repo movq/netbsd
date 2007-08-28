@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.c,v 1.51 2007/07/17 04:03:23 macallan Exp $	*/
+/*	$NetBSD: bus.c,v 1.46 2006/06/08 19:29:16 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.51 2007/07/17 04:03:23 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.46 2006/06/08 19:29:16 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,8 +62,6 @@ __KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.51 2007/07/17 04:03:23 macallan Exp $");
 #include <mips/cache.h>
 
 #include <sgimips/mace/macereg.h>
-
-#include "opt_sgimace.h"
 
 static int	_bus_dmamap_load_buffer(bus_dmamap_t, void *, bus_size_t,
 				struct vmspace *, int, vaddr_t *, int *, int);
@@ -116,14 +114,14 @@ bus_space_read_1(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o)
 
 	switch (t) {
 	case SGIMIPS_BUS_SPACE_NORMAL:
-		return *(volatile u_int8_t *)(vaddr_t)(h + o);
+		return *(volatile u_int8_t *)(h + o);
 	case SGIMIPS_BUS_SPACE_HPC:
-		return *(volatile u_int8_t *)(vaddr_t)(h + (o << 2) + 3);
+		return *(volatile u_int8_t *)(h + (o << 2) + 3);
 	case SGIMIPS_BUS_SPACE_MEM:
 	case SGIMIPS_BUS_SPACE_IO:
-		return *(volatile u_int8_t *)(vaddr_t)(h + (o | 3) - (o & 3));
+		return *(volatile u_int8_t *)(h + (o | 3) - (o & 3));
 	case SGIMIPS_BUS_SPACE_MACE:
-		return *(volatile u_int8_t *)(vaddr_t)(h + (o << 8) + 7);
+		return *(volatile u_int8_t *)(h + (o << 8) + 7);
 	default:
 		panic("no bus tag");
 	}
@@ -134,17 +132,17 @@ bus_space_write_1(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o, u_int8_
 {
 	switch (t) {
 	case SGIMIPS_BUS_SPACE_NORMAL:
-		*(volatile u_int8_t *)(vaddr_t)(h + o) = v;
+		*(volatile u_int8_t *)(h + o) = v;
 		break;
 	case SGIMIPS_BUS_SPACE_HPC:
-		*(volatile u_int8_t *)(vaddr_t)(h + (o << 2) + 3) = v;
+		*(volatile u_int8_t *)(h + (o << 2) + 3) = v;
 		break;
 	case SGIMIPS_BUS_SPACE_MEM:
 	case SGIMIPS_BUS_SPACE_IO:
-		*(volatile u_int8_t *)(vaddr_t)(h + (o | 3) - (o & 3)) = v;
+		*(volatile u_int8_t *)(h + (o | 3) - (o & 3)) = v;
 		break;
 	case SGIMIPS_BUS_SPACE_MACE:
-		*(volatile u_int8_t *)(vaddr_t)(h + (o << 8) + 7) = v;
+		*(volatile u_int8_t *)(h + (o << 8) + 7) = v;
 		break;
 	default:
 		panic("no bus tag");
@@ -160,12 +158,12 @@ bus_space_read_2(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o)
 
 	switch (t) {
 	case SGIMIPS_BUS_SPACE_NORMAL:
-		return *(volatile u_int16_t *)(vaddr_t)(h + o);
+		return *(volatile u_int16_t *)(h + o);
 	case SGIMIPS_BUS_SPACE_HPC:
-		return *(volatile u_int16_t *)(vaddr_t)(h + (o << 2) + 1);
+		return *(volatile u_int16_t *)(h + (o << 2) + 1);
 	case SGIMIPS_BUS_SPACE_MEM:
 	case SGIMIPS_BUS_SPACE_IO:
-		return *(volatile u_int16_t *)(vaddr_t)(h + (o | 2) - (o & 3));
+		return *(volatile u_int16_t *)(h + (o | 2) - (o & 3));
 	default:
 		panic("no bus tag");
 	}
@@ -176,14 +174,14 @@ bus_space_write_2(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o, u_int16
 {
 	switch (t) {
 	case SGIMIPS_BUS_SPACE_NORMAL:
-		*(volatile u_int16_t *)(vaddr_t)(h + o) = v;
+		*(volatile u_int16_t *)(h + o) = v;
 		break;
 	case SGIMIPS_BUS_SPACE_HPC:
-		*(volatile u_int16_t *)(vaddr_t)(h + (o << 2) + 1) = v;
+		*(volatile u_int16_t *)(h + (o << 2) + 1) = v;
 		break;
 	case SGIMIPS_BUS_SPACE_MEM:
 	case SGIMIPS_BUS_SPACE_IO:
-		*(volatile u_int16_t *)(vaddr_t)(h + (o | 2) - (o & 3)) = v;
+		*(volatile u_int16_t *)(h + (o | 2) - (o & 3)) = v;
 		break;
 	default:
 		panic("no bus tag");
@@ -196,26 +194,19 @@ u_int32_t
 bus_space_read_4(bus_space_tag_t tag, bus_space_handle_t bsh, bus_size_t o)
 {
 	u_int32_t reg;
-#ifdef MACE_NEEDS_DELAYS
 	int s;
-#endif
 
 	switch (tag) {
 		case SGIMIPS_BUS_SPACE_MACE:
-#ifdef MACE_NEEDS_DELAYS
 			s = splhigh();
 			delay(10);
-#endif
-			wbflush();
-			reg = (*(volatile u_int32_t *)(vaddr_t)(bsh + o));
-#ifdef MACE_NEEDS_DELAYS
+			reg = (*(volatile u_int32_t *)(bsh + o));
 			delay(10);
 			splx(s);
-#endif
 			break;
 		default:
 			wbflush();
-			reg = (*(volatile u_int32_t *)(vaddr_t)(bsh + o));
+			reg = (*(volatile u_int32_t *)(bsh + o));
 			break;
 	}
 	return reg;
@@ -226,25 +217,18 @@ void
 bus_space_write_4(bus_space_tag_t tag, bus_space_handle_t bsh,
 	bus_size_t o, u_int32_t v)
 {
-#ifdef MACE_NEEDS_DELAYS
 	int s;
-#endif
 
 	switch (tag) {
 		case SGIMIPS_BUS_SPACE_MACE:
-#ifdef MACE_NEEDS_DELAYS
 			s = splhigh();
 			delay(10);
-#endif
-			*(volatile u_int32_t *)(vaddr_t)((bsh) + (o)) = (v);
-			wbflush();
-#ifdef MACE_NEEDS_DELAYS
+			*(volatile u_int32_t *)((bsh) + (o)) = (v);
 			delay(10);
 			splx(s);
-#endif
 			break;
 		default:
-			*(volatile u_int32_t *)(vaddr_t)((bsh) + (o)) = (v);
+			*(volatile u_int32_t *)((bsh) + (o)) = (v);
 			wbflush(); /* XXX */
 			break;
 	}
@@ -259,12 +243,12 @@ bus_space_read_stream_2(bus_space_tag_t t, bus_space_handle_t h,
 
 	switch (t) {
 	case SGIMIPS_BUS_SPACE_NORMAL:
-		return *(volatile u_int16_t *)(vaddr_t)(h + o);
+		return *(volatile u_int16_t *)(h + o);
 	case SGIMIPS_BUS_SPACE_HPC:
-		return *(volatile u_int16_t *)(vaddr_t)(h + (o << 2) + 1);
+		return *(volatile u_int16_t *)(h + (o << 2) + 1);
 	case SGIMIPS_BUS_SPACE_MEM:
 	case SGIMIPS_BUS_SPACE_IO:
-		v = *(volatile u_int16_t *)(vaddr_t)(h + (o | 2) - (o & 3));
+		v = *(volatile u_int16_t *)(h + (o | 2) - (o & 3));
 		return htole16(v);
 	default:
 		panic("no bus tag");
@@ -276,32 +260,25 @@ bus_space_read_stream_4(bus_space_tag_t t, bus_space_handle_t bsh,
 	bus_size_t o)
 {
 	u_int32_t reg;
-#ifdef MACE_NEEDS_DELAYS
 	int s;
-#endif
 
 	switch (t) {
 		case SGIMIPS_BUS_SPACE_MACE:
-#ifdef MACE_NEEDS_DELAYS
 			s = splhigh();
 			delay(10);
-#endif
-			wbflush();
-			reg = (*(volatile u_int32_t *)(vaddr_t)(bsh + o));
-#ifdef MACE_NEEDS_DELAYS
+			reg = (*(volatile u_int32_t *)(bsh + o));
 			delay(10);
 			splx(s);
-#endif
 			break;
 		case SGIMIPS_BUS_SPACE_MEM:
 		case SGIMIPS_BUS_SPACE_IO:
 			wbflush();
-			reg = (*(volatile u_int32_t *)(vaddr_t)(bsh + o));
+			reg = (*(volatile u_int32_t *)(bsh + o));
 			reg = htole32(reg);
 			break;
 		default:
 			wbflush();
-			reg = (*(volatile u_int32_t *)(vaddr_t)(bsh + o));
+			reg = (*(volatile u_int32_t *)(bsh + o));
 			break;
 	}
 	return reg;
@@ -313,15 +290,15 @@ bus_space_write_stream_2(bus_space_tag_t t, bus_space_handle_t h,
 {
 	switch (t) {
 	case SGIMIPS_BUS_SPACE_NORMAL:
-		*(volatile u_int16_t *)(vaddr_t)(h + o) = v;
+		*(volatile u_int16_t *)(h + o) = v;
 		break;
 	case SGIMIPS_BUS_SPACE_HPC:
-		*(volatile u_int16_t *)(vaddr_t)(h + (o << 2) + 1) = v;
+		*(volatile u_int16_t *)(h + (o << 2) + 1) = v;
 		break;
 	case SGIMIPS_BUS_SPACE_MEM:
 	case SGIMIPS_BUS_SPACE_IO:
 		v = le16toh(v);
-		*(volatile u_int16_t *)(vaddr_t)(h + (o | 2) - (o & 3)) = v;
+		*(volatile u_int16_t *)(h + (o | 2) - (o & 3)) = v;
 		break;
 	default:
 		panic("no bus tag");
@@ -334,31 +311,24 @@ void
 bus_space_write_stream_4(bus_space_tag_t tag, bus_space_handle_t bsh,
 	bus_size_t o, u_int32_t v)
 {
-#ifdef MACE_NEEDS_DELAYS
 	int s;
-#endif
 
 	switch (tag) {
 		case SGIMIPS_BUS_SPACE_MACE:
-#ifdef MACE_NEEDS_DELAYS
 			s = splhigh();
 			delay(10);
-#endif
-			*(volatile u_int32_t *)(vaddr_t)((bsh) + (o)) = (v);
-			wbflush();
-#ifdef MACE_NEEDS_DELAYS
+			*(volatile u_int32_t *)((bsh) + (o)) = (v);
 			delay(10);
 			splx(s);
-#endif
 			break;
 		case SGIMIPS_BUS_SPACE_IO:
 		case SGIMIPS_BUS_SPACE_MEM:
 			v = le32toh(v);
-			*(volatile u_int32_t *)(vaddr_t)((bsh) + (o)) = (v);
+			*(volatile u_int32_t *)((bsh) + (o)) = (v);
 			wbflush(); /* XXX */
 			break;
 		default:
-			*(volatile u_int32_t *)(vaddr_t)((bsh) + (o)) = (v);
+			*(volatile u_int32_t *)((bsh) + (o)) = (v);
 			wbflush(); /* XXX */
 			break;
 	}
@@ -369,27 +339,18 @@ u_int64_t
 bus_space_read_8(bus_space_tag_t tag, bus_space_handle_t bsh, bus_size_t o)
 {
 	u_int64_t reg;
-#ifdef MACE_NEEDS_DELAYS
 	int s;
-#endif
-
-	/* see if we're properly aligned */
-	KASSERT((o & 7) == 0);
 
 	switch (tag) {
 		case SGIMIPS_BUS_SPACE_MACE:
-#ifdef MACE_NEEDS_DELAYS
 			s = splhigh();
 			delay(10);
-#endif
-			reg = mips3_ld( (u_int64_t *)(vaddr_t)(bsh + o));
-#ifdef MACE_NEEDS_DELAYS
+			reg = mips3_ld( (u_int64_t *)(bsh + o));
 			delay(10);
 			splx(s);
-#endif
 			break;
 		default:
-			reg = mips3_ld( (u_int64_t *)(vaddr_t)(bsh + o));
+			reg = mips3_ld( (u_int64_t *)(bsh + o));
 			break;
 	}
 	return reg;
@@ -398,27 +359,18 @@ bus_space_read_8(bus_space_tag_t tag, bus_space_handle_t bsh, bus_size_t o)
 void
 bus_space_write_8(bus_space_tag_t tag, bus_space_handle_t bsh, bus_size_t o, u_int64_t v)
 {
-#ifdef MACE_NEEDS_DELAYS
 	int s;
-#endif
-
-	/* see if we're properly aligned */
-	KASSERT((o & 7) == 0);
 
 	switch (tag) {
 		case SGIMIPS_BUS_SPACE_MACE:
-#ifdef MACE_NEEDS_DELAYS
 			s = splhigh();
 			delay(10);
-#endif
-			mips3_sd( (u_int64_t *)(vaddr_t)(bsh + o), v);
-#ifdef MACE_NEEDS_DELAYS
+			mips3_sd( (u_int64_t *)(bsh + o), v);
 			delay(10);
 			splx(s);
-#endif
 			break;
 		default:
-			mips3_sd( (u_int64_t *)(vaddr_t)(bsh + o), v);
+			mips3_sd( (u_int64_t *)(bsh + o), v);
 			break;
 	}
 }
@@ -570,8 +522,7 @@ _bus_dmamap_load_buffer(bus_dmamap_t map, void *buf, bus_size_t buflen,
 			int *segp, int first)
 {
 	bus_size_t sgsize;
-	bus_addr_t lastaddr, baddr, bmask;
-	paddr_t curaddr;
+	bus_addr_t curaddr, lastaddr, baddr, bmask;
 	vaddr_t vaddr = (vaddr_t)buf;
 	int seg;
 
@@ -751,7 +702,7 @@ _bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio,
 	int seg, i, error, first;
 	bus_size_t minlen, resid;
 	struct iovec *iov;
-	void *addr;
+	caddr_t addr;
 
 	/*
 	 * Make sure that on error condition we return "no valid mappings."
@@ -772,7 +723,7 @@ _bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio,
 		 * until we have exhausted the residual count.
 		 */
 		minlen = resid < iov[i].iov_len ? resid : iov[i].iov_len;
-		addr = (void *)iov[i].iov_base;
+		addr = (caddr_t)iov[i].iov_base;
 
 		error = _bus_dmamap_load_buffer(map, addr, minlen,
 		    uio->uio_vmspace, flags, &lastaddr, &seg, first);
@@ -839,7 +790,7 @@ _bus_dmamap_sync_mips1(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 
 #ifdef DIAGNOSTIC
 	if (offset >= map->dm_mapsize)
-		panic("_bus_dmamap_sync_mips1: bad offset %llu (map size is %llu)"
+		panic("_bus_dmamap_sync_mips1: bad offset %lu (map size is %lu)"
 		    , offset, map->dm_mapsize);
 	if (len == 0 || (offset + len) > map->dm_mapsize)
 		panic("_bus_dmamap_sync_mips1: bad length");
@@ -941,8 +892,8 @@ _bus_dmamap_sync_mips3(bus_dma_tag_t t, bus_dmamap_t map, bus_addr_t offset,
 
 #ifdef DIAGNOSTIC
 	if (offset >= map->dm_mapsize)
-		panic("_bus_dmamap_sync_mips3: bad offset %llu "
-		    "(map size is %llu)", offset, map->dm_mapsize);
+		panic("_bus_dmamap_sync_mips3: bad offset %lu "
+		    "(map size is %lu)", offset, map->dm_mapsize);
 	if (len == 0 || (offset + len) > map->dm_mapsize)
 		panic("_bus_dmamap_sync_mips3: bad length");
 #endif
@@ -1170,7 +1121,7 @@ _bus_dmamem_free(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs)
  */
 int
 _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
-		size_t size, void **kvap, int flags)
+		size_t size, caddr_t *kvap, int flags)
 {
 	vaddr_t va;
 	bus_addr_t addr;
@@ -1184,9 +1135,9 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 	 */
 	if (nsegs == 1) {
 		if (flags & BUS_DMA_COHERENT)
-			*kvap = (void *)MIPS_PHYS_TO_KSEG1(segs[0].ds_addr);
+			*kvap = (caddr_t)MIPS_PHYS_TO_KSEG1(segs[0].ds_addr);
 		else
-			*kvap = (void *)MIPS_PHYS_TO_KSEG0(segs[0].ds_addr);
+			*kvap = (caddr_t)MIPS_PHYS_TO_KSEG0(segs[0].ds_addr);
 		return 0;
 	}
 
@@ -1197,7 +1148,7 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 	if (va == 0)
 		return (ENOMEM);
 
-	*kvap = (void *)va;
+	*kvap = (caddr_t)va;
 
 	for (curseg = 0; curseg < nsegs; curseg++) {
 		for (addr = segs[curseg].ds_addr;
@@ -1222,7 +1173,7 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
  * bus-specific DMA memory unmapping functions.
  */
 void
-_bus_dmamem_unmap(bus_dma_tag_t t, void *kva, size_t size)
+_bus_dmamem_unmap(bus_dma_tag_t t, caddr_t kva, size_t size)
 {
 
 #ifdef DIAGNOSTIC
@@ -1234,8 +1185,8 @@ _bus_dmamem_unmap(bus_dma_tag_t t, void *kva, size_t size)
 	 * Nothing to do if we mapped it with KSEG0 or KSEG1 (i.e.
 	 * not in KSEG2).
 	 */
-	if (kva >= (void *)MIPS_KSEG0_START &&
-	    kva < (void *)MIPS_KSEG2_START)
+	if (kva >= (caddr_t)MIPS_KSEG0_START &&
+	    kva < (caddr_t)MIPS_KSEG2_START)
 		return;
 
 	size = round_page(size);
@@ -1269,11 +1220,7 @@ _bus_dmamem_mmap(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 			continue;
 		}
 
-#if defined(_MIPS_PADDR_T_64BIT) || defined(_LP64)
-		return mips_btop((segs[i].ds_addr + off) | PMAP_NOCACHE);
-#else
-		return mips_btop(segs[i].ds_addr + off);
-#endif
+		return mips_btop((caddr_t)segs[i].ds_addr + off);
 	}
 
 	/* Page not found. */

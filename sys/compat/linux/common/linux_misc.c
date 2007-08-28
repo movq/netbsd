@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_misc.c,v 1.183 2007/07/17 17:42:08 joerg Exp $	*/
+/*	$NetBSD: linux_misc.c,v 1.165.2.2 2007/04/20 20:26:04 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 1999 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.183 2007/07/17 17:42:08 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.165.2.2 2007/04/20 20:26:04 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ptrace.h"
@@ -84,11 +84,9 @@ __KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.183 2007/07/17 17:42:08 joerg Exp $
 #include <sys/mbuf.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
-#include <sys/prot.h>
 #include <sys/reboot.h>
 #include <sys/resource.h>
 #include <sys/resourcevar.h>
-#include <sys/select.h>
 #include <sys/signal.h>
 #include <sys/signalvar.h>
 #include <sys/socket.h>
@@ -99,7 +97,6 @@ __KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.183 2007/07/17 17:42:08 joerg Exp $
 #include <sys/wait.h>
 #include <sys/utsname.h>
 #include <sys/unistd.h>
-#include <sys/vfs_syscalls.h>
 #include <sys/swap.h>		/* for SWAP_ON */
 #include <sys/sysctl.h>		/* for KERN_DOMAINNAME */
 #include <sys/kauth.h>
@@ -107,6 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_misc.c,v 1.183 2007/07/17 17:42:08 joerg Exp $
 #include <sys/ptrace.h>
 #include <machine/ptrace.h>
 
+#include <sys/sa.h>
 #include <sys/syscall.h>
 #include <sys/syscallargs.h>
 
@@ -143,7 +141,6 @@ const int linux_ptrace_request_map[] = {
 # ifdef PT_STEP
 	LINUX_PTRACE_SINGLESTEP,	PT_STEP,
 # endif
-	LINUX_PTRACE_SYSCALL,	PT_SYSCALL,
 	-1
 };
 
@@ -193,23 +190,23 @@ static int linux_mmap __P((struct lwp *, struct linux_sys_mmap_args *,
  * to be converted in order for Linux binaries to get a valid signal
  * number out of it.
  */
-int
-bsd_to_linux_wstat(int st)
+void
+bsd_to_linux_wstat(st)
+	int *st;
 {
 
 	int sig;
 
-	if (WIFSIGNALED(st)) {
-		sig = WTERMSIG(st);
+	if (WIFSIGNALED(*st)) {
+		sig = WTERMSIG(*st);
 		if (sig >= 0 && sig < NSIG)
-			st= (st & ~0177) | native_to_linux_signo[sig];
-	} else if (WIFSTOPPED(st)) {
-		sig = WSTOPSIG(st);
+			*st= (*st& ~0177) | native_to_linux_signo[sig];
+	} else if (WIFSTOPPED(*st)) {
+		sig = WSTOPSIG(*st);
 		if (sig >= 0 && sig < NSIG)
-			st = (st & ~0xff00) |
+			*st = (*st & ~0xff00) |
 			    (native_to_linux_signo[sig] << 8);
 	}
-	return st;
 }
 
 /*
@@ -229,11 +226,19 @@ linux_sys_wait4(l, v, retval)
 		syscallarg(int) options;
 		syscallarg(struct rusage *) rusage;
 	} */ *uap = v;
-	int error, status, options, linux_options, was_zombie;
-	struct rusage ru;
+	struct proc *p = l->l_proc;
+	struct sys_wait4_args w4a;
+	int error, *status, tstat, options, linux_options;
+	caddr_t sg;
+
+	if (SCARG(uap, status) != NULL) {
+		sg = stackgap_init(p, 0);
+		status = (int *) stackgap_alloc(p, &sg, sizeof *status);
+	} else
+		status = NULL;
 
 	linux_options = SCARG(uap, options);
-	options = WOPTSCHECKED;
+	options = 0;
 	if (linux_options & ~(LINUX_WAIT4_KNOWNFLAGS))
 		return (EINVAL);
 
@@ -249,28 +254,29 @@ linux_sys_wait4(l, v, retval)
 	if (linux_options & LINUX_WAIT4_WNOTHREAD)
 		printf("WARNING: %s: linux process %d.%d called "
 		       "waitpid with __WNOTHREAD set!",
-		       __FILE__, l->l_proc->p_pid, l->l_lid);
+		       __FILE__, p->p_pid, l->l_lid);
 
 # endif
 
-	error = do_sys_wait(l, &SCARG(uap, pid), &status, options,
-	    SCARG(uap, rusage) != NULL ? &ru : NULL, &was_zombie);
+	SCARG(&w4a, pid) = SCARG(uap, pid);
+	SCARG(&w4a, status) = status;
+	SCARG(&w4a, options) = options;
+	SCARG(&w4a, rusage) = SCARG(uap, rusage);
 
-	retval[0] = SCARG(uap, pid);
-	if (SCARG(uap, pid) == 0)
+	if ((error = sys_wait4(l, &w4a, retval)))
 		return error;
 
-	sigdelset(&l->l_proc->p_sigpend.sp_set, SIGCHLD);	/* XXXAD ksiginfo leak */
+	sigdelset(&p->p_sigctx.ps_siglist, SIGCHLD);
 
-	if (SCARG(uap, rusage) != NULL)
-		error = copyout(&ru, SCARG(uap, rusage), sizeof(ru));
+	if (status != NULL) {
+		if ((error = copyin(status, &tstat, sizeof tstat)))
+			return error;
 
-	if (error == 0 && SCARG(uap, status) != NULL) {
-		status = bsd_to_linux_wstat(status);
-		error = copyout(&status, SCARG(uap, status), sizeof status);
+		bsd_to_linux_wstat(&tstat);
+		return copyout(&tstat, SCARG(uap, status), sizeof tstat);
 	}
 
-	return error;
+	return 0;
 }
 
 /*
@@ -294,7 +300,7 @@ linux_sys_brk(l, v, retval)
 
 	SCARG(&oba, nsize) = nbrk;
 
-	if ((void *) nbrk > vm->vm_daddr && sys_obreak(l, &oba, retval) == 0)
+	if ((caddr_t) nbrk > vm->vm_daddr && sys_obreak(l, &oba, retval) == 0)
 		ed->s->p_break = (char*)nbrk;
 	else
 		nbrk = ed->s->p_break;
@@ -317,18 +323,34 @@ linux_sys_statfs(l, v, retval)
 		syscallarg(const char *) path;
 		syscallarg(struct linux_statfs *) sp;
 	} */ *uap = v;
-	struct statvfs *sb;
+	struct proc *p = l->l_proc;
+	struct statvfs *btmp, *bsp;
 	struct linux_statfs ltmp;
+	struct sys_statvfs1_args bsa;
+	caddr_t sg;
 	int error;
 
-	sb = STATVFSBUF_GET();
-	error = do_sys_pstatvfs(l, SCARG(uap, path), ST_WAIT, sb);
-	if (error == 0) {
-		bsd_to_linux_statfs(sb, &ltmp);
-		error = copyout(&ltmp, SCARG(uap, sp), sizeof ltmp);
-	}
-	STATVFSBUF_PUT(sb);
+	sg = stackgap_init(p, 0);
+	bsp = stackgap_alloc(p, &sg, sizeof (struct statvfs));
 
+	CHECK_ALT_EXIST(l, &sg, SCARG(uap, path));
+
+	SCARG(&bsa, path) = SCARG(uap, path);
+	SCARG(&bsa, buf) = bsp;
+	SCARG(&bsa, flags) = ST_WAIT;
+
+	if ((error = sys_statvfs1(l, &bsa, retval)))
+		return error;
+
+	btmp = STATVFSBUF_GET();
+	error = copyin(bsp, btmp, sizeof(*btmp));
+	if (error) {
+		goto out;
+	}
+	bsd_to_linux_statfs(btmp, &ltmp);
+	error = copyout(&ltmp, SCARG(uap, sp), sizeof ltmp);
+out:
+	STATVFSBUF_PUT(btmp);
 	return error;
 }
 
@@ -342,18 +364,32 @@ linux_sys_fstatfs(l, v, retval)
 		syscallarg(int) fd;
 		syscallarg(struct linux_statfs *) sp;
 	} */ *uap = v;
-	struct statvfs *sb;
+	struct proc *p = l->l_proc;
+	struct statvfs *btmp, *bsp;
 	struct linux_statfs ltmp;
+	struct sys_fstatvfs1_args bsa;
+	caddr_t sg;
 	int error;
 
-	sb = STATVFSBUF_GET();
-	error = do_sys_fstatvfs(l, SCARG(uap, fd), ST_WAIT, sb);
-	if (error == 0) {
-		bsd_to_linux_statfs(sb, &ltmp);
-		error = copyout(&ltmp, SCARG(uap, sp), sizeof ltmp);
-	}
-	STATVFSBUF_PUT(sb);
+	sg = stackgap_init(p, 0);
+	bsp = stackgap_alloc(p, &sg, sizeof (struct statvfs));
 
+	SCARG(&bsa, fd) = SCARG(uap, fd);
+	SCARG(&bsa, buf) = bsp;
+	SCARG(&bsa, flags) = ST_WAIT;
+
+	if ((error = sys_fstatvfs1(l, &bsa, retval)))
+		return error;
+
+	btmp = STATVFSBUF_GET();
+	error = copyin(bsp, btmp, sizeof(*btmp));
+	if (error) {
+		goto out;
+	}
+	bsd_to_linux_statfs(btmp, &ltmp);
+	error = copyout(&ltmp, SCARG(uap, sp), sizeof ltmp);
+out:
+	STATVFSBUF_PUT(btmp);
 	return error;
 }
 
@@ -375,7 +411,11 @@ linux_sys_uname(struct lwp *l, void *v, register_t *retval)
 	strncpy(luts.l_nodename, hostname, sizeof(luts.l_nodename));
 	strncpy(luts.l_release, linux_release, sizeof(luts.l_release));
 	strncpy(luts.l_version, linux_version, sizeof(luts.l_version));
+# ifdef LINUX_UNAME_ARCH
 	strncpy(luts.l_machine, LINUX_UNAME_ARCH, sizeof(luts.l_machine));
+# else
+	strncpy(luts.l_machine, machine, sizeof(luts.l_machine));
+# endif
 	strncpy(luts.l_domainname, domainname, sizeof(luts.l_domainname));
 
 	return copyout(&luts, SCARG(uap, up), sizeof(luts));
@@ -553,7 +593,7 @@ linux_sys_mremap(l, v, retval)
 		}
 #if 0 /* notyet */
 		newva = SCARG(uap, new_address);
-		uvmflags = MAP_FIXED;
+		uvmflags = UVM_MREMAP_FIXED;
 #else /* notyet */
 		error = EOPNOTSUPP;
 		goto done;
@@ -562,7 +602,7 @@ linux_sys_mremap(l, v, retval)
 		uvmflags = 0;
 	} else {
 		newva = oldva;
-		uvmflags = MAP_FIXED;
+		uvmflags = UVM_MREMAP_FIXED;
 	}
 	p = l->l_proc;
 	map = &p->p_vmspace->vm_map;
@@ -581,7 +621,7 @@ linux_sys_msync(l, v, retval)
 	register_t *retval;
 {
 	struct linux_sys_msync_args /* {
-		syscallarg(void *) addr;
+		syscallarg(caddr_t) addr;
 		syscallarg(int) len;
 		syscallarg(int) fl;
 	} */ *uap = v;
@@ -685,13 +725,12 @@ linux_sys_times(l, v, retval)
 		struct linux_tms ltms;
 		struct rusage ru;
 
-		mutex_enter(&p->p_smutex);
-		calcru(p, &ru.ru_utime, &ru.ru_stime, NULL, NULL);
+		calcru(p, &ru.ru_utime, &ru.ru_stime, NULL);
 		ltms.ltms_utime = CONVTCK(ru.ru_utime);
 		ltms.ltms_stime = CONVTCK(ru.ru_stime);
+
 		ltms.ltms_cutime = CONVTCK(p->p_stats->p_cru.ru_utime);
 		ltms.ltms_cstime = CONVTCK(p->p_stats->p_cru.ru_stime);
-		mutex_exit(&p->p_smutex);
 
 		if ((error = copyout(&ltms, SCARG(uap, tms), sizeof ltms)))
 			return error;
@@ -732,9 +771,9 @@ linux_sys_getdents(l, v, retval)
 	} */ *uap = v;
 	struct dirent *bdp;
 	struct vnode *vp;
-	char *inp, *tbuf;		/* BSD-format */
+	caddr_t	inp, tbuf;		/* BSD-format */
 	int len, reclen;		/* BSD-format */
-	char *outp;			/* Linux-format */
+	caddr_t outp;			/* Linux-format */
 	int resid, linux_reclen = 0;	/* Linux-format */
 	struct file *fp;
 	struct uio auio;
@@ -798,7 +837,7 @@ again:
 		goto out;
 
 	inp = tbuf;
-	outp = (void *)SCARG(uap, dent);
+	outp = (caddr_t)SCARG(uap, dent);
 	resid = nbytes;
 	if ((len = buflen - auio.uio_resid) == 0)
 		goto eof;
@@ -844,7 +883,7 @@ again:
 			idb.d_reclen = (u_short)linux_reclen;
 		}
 		strcpy(idb.d_name, bdp->d_name);
-		if ((error = copyout((void *)&idb, outp, linux_reclen)))
+		if ((error = copyout((caddr_t)&idb, outp, linux_reclen)))
 			goto out;
 		/* advance past this real entry */
 		inp += reclen;
@@ -860,7 +899,7 @@ again:
 	}
 
 	/* if we squished out the whole block, try again */
-	if (outp == (void *)SCARG(uap, dent))
+	if (outp == (caddr_t)SCARG(uap, dent))
 		goto again;
 	fp->f_offset = off;	/* update the vnode offset */
 
@@ -916,8 +955,17 @@ linux_select1(l, retval, nfds, readfds, writefds, exceptfds, timeout)
 	fd_set *readfds, *writefds, *exceptfds;
 	struct timeval *timeout;
 {
-	struct timeval tv0, tv1, utv, *tv = NULL;
+	struct sys_select_args bsa;
+	struct proc *p = l->l_proc;
+	struct timeval tv0, tv1, utv, *tvp;
+	caddr_t sg;
 	int error;
+
+	SCARG(&bsa, nd) = nfds;
+	SCARG(&bsa, in) = readfds;
+	SCARG(&bsa, ou) = writefds;
+	SCARG(&bsa, ex) = exceptfds;
+	SCARG(&bsa, tv) = timeout;
 
 	/*
 	 * Store current time for computation of the amount of
@@ -931,6 +979,8 @@ linux_select1(l, retval, nfds, readfds, writefds, exceptfds, timeout)
 			 * The timeval was invalid.  Convert it to something
 			 * valid that will act as it does under Linux.
 			 */
+			sg = stackgap_init(p, 0);
+			tvp = stackgap_alloc(p, &sg, sizeof(utv));
 			utv.tv_sec += utv.tv_usec / 1000000;
 			utv.tv_usec %= 1000000;
 			if (utv.tv_usec < 0) {
@@ -939,14 +989,14 @@ linux_select1(l, retval, nfds, readfds, writefds, exceptfds, timeout)
 			}
 			if (utv.tv_sec < 0)
 				timerclear(&utv);
+			if ((error = copyout(&utv, tvp, sizeof(utv))))
+				return error;
+			SCARG(&bsa, tv) = tvp;
 		}
-		tv = &utv;
 		microtime(&tv0);
 	}
 
-	error = selcommon(l, retval, nfds, readfds, writefds, exceptfds,
-	    tv, NULL);
-
+	error = sys_select(l, &bsa, retval);
 	if (error) {
 		/*
 		 * See fs/select.c in the Linux kernel.  Without this,
@@ -1126,40 +1176,52 @@ linux_sys_getgroups16(l, v, retval)
 		syscallarg(int) gidsetsize;
 		syscallarg(linux_gid_t *) gidset;
 	} */ *uap = v;
-	linux_gid_t lset[16];
-	linux_gid_t *gidset;
-	unsigned int ngrps;
-	int i, n, j;
-	int error;
+	struct proc *p = l->l_proc;
+	caddr_t sg;
+	int n, error, i;
+	struct sys_getgroups_args bsa;
+	gid_t *bset, *kbset;
+	linux_gid_t *lset;
+	kauth_cred_t pc = l->l_cred;
 
-	ngrps = kauth_cred_ngroups(l->l_cred);
-	*retval = ngrps;
-	if (SCARG(uap, gidsetsize) == 0)
-		return 0;
-	if (SCARG(uap, gidsetsize) < ngrps)
+	n = SCARG(uap, gidsetsize);
+	if (n < 0)
 		return EINVAL;
-
-	gidset = SCARG(uap, gidset);
-	for (i = 0; i < (n = ngrps); i += n, gidset += n) {
-		n -= i;
-		if (n > __arraycount(lset))
-			n = __arraycount(lset);
-		for (j = 0; j < n; j++)
-			lset[j] = kauth_cred_group(l->l_cred, i + j);
-		error = copyout(lset, gidset, n * sizeof(lset[0]));
+	error = 0;
+	bset = kbset = NULL;
+	lset = NULL;
+	if (n > 0) {
+		n = min(kauth_cred_ngroups(pc), n);
+		sg = stackgap_init(p, 0);
+		bset = stackgap_alloc(p, &sg, n * sizeof (gid_t));
+		kbset = malloc(n * sizeof (gid_t), M_TEMP, M_WAITOK);
+		lset = malloc(n * sizeof (linux_gid_t), M_TEMP, M_WAITOK);
+		if (bset == NULL || kbset == NULL || lset == NULL)
+		{
+			error = ENOMEM;
+			goto out;
+		}
+		SCARG(&bsa, gidsetsize) = n;
+		SCARG(&bsa, gidset) = bset;
+		error = sys_getgroups(l, &bsa, retval);
 		if (error != 0)
-			return error;
-	}
-
-	return 0;
+			goto out;
+		error = copyin(bset, kbset, n * sizeof (gid_t));
+		if (error != 0)
+			goto out;
+		for (i = 0; i < n; i++)
+			lset[i] = (linux_gid_t)kbset[i];
+		error = copyout(lset, SCARG(uap, gidset),
+		    n * sizeof (linux_gid_t));
+	} else
+		*retval = kauth_cred_ngroups(pc);
+out:
+	if (kbset != NULL)
+		free(kbset, M_TEMP);
+	if (lset != NULL)
+		free(lset, M_TEMP);
+	return error;
 }
-
-/*
- * It is very unlikly that any problem using 16bit groups is written
- * to allow for more than 16 of them, so don't bother trying to
- * support that.
- */
-#define COMPAT_NGROUPS16 16
 
 int
 linux_sys_setgroups16(l, v, retval)
@@ -1171,30 +1233,45 @@ linux_sys_setgroups16(l, v, retval)
 		syscallarg(int) gidsetsize;
 		syscallarg(linux_gid_t *) gidset;
 	} */ *uap = v;
-	linux_gid_t lset[COMPAT_NGROUPS16];
-	kauth_cred_t ncred;
-	int error;
-	gid_t grbuf[COMPAT_NGROUPS16];
-	unsigned int i, ngroups = SCARG(uap, gidsetsize);
+	struct proc *p = l->l_proc;
+	caddr_t sg;
+	int n;
+	int error, i;
+	struct sys_setgroups_args bsa;
+	gid_t *bset, *kbset;
+	linux_gid_t *lset;
 
-	if (ngroups > COMPAT_NGROUPS16)
+	n = SCARG(uap, gidsetsize);
+	if (n < 0 || n > NGROUPS)
 		return EINVAL;
-	error = copyin(SCARG(uap, gidset), lset, ngroups);
-	if (error != 0)
-		return error;
-
-	for (i = 0; i < ngroups; i++)
-		grbuf[i] = lset[i];
-
-	ncred = kauth_cred_alloc();
-	error = kauth_cred_setgroups(ncred, grbuf, SCARG(uap, gidsetsize),
-	    -1, UIO_SYSSPACE);
-	if (error != 0) {
-		kauth_cred_free(ncred);
-		return error;
+	sg = stackgap_init(p, 0);
+	bset = stackgap_alloc(p, &sg, n * sizeof (gid_t));
+	lset = malloc(n * sizeof (linux_gid_t), M_TEMP, M_WAITOK);
+	kbset = malloc(n * sizeof (gid_t), M_TEMP, M_WAITOK);
+	if (bset == NULL || kbset == NULL || lset == NULL)
+	{
+		error = ENOMEM;
+		goto out;
 	}
+	error = copyin(SCARG(uap, gidset), lset, n * sizeof (linux_gid_t));
+	if (error != 0)
+		goto out;
+	for (i = 0; i < n; i++)
+		kbset[i] = (gid_t)lset[i];
+	error = copyout(kbset, bset, n * sizeof (gid_t));
+	if (error != 0)
+		goto out;
+	SCARG(&bsa, gidsetsize) = n;
+	SCARG(&bsa, gidset) = bset;
+	error = sys_setgroups(l, &bsa, retval);
 
-	return kauth_proc_setgroups(l, ncred);
+out:
+	if (lset != NULL)
+		free(lset, M_TEMP);
+	if (kbset != NULL)
+		free(kbset, M_TEMP);
+
+	return error;
 }
 
 #endif /* __i386__ || __m68k__ || COMPAT_LINUX32 */
@@ -1318,17 +1395,17 @@ linux_sys_ptrace(l, v, retval)
 
 			SCARG(&pta, req) = *ptr;
 			SCARG(&pta, pid) = SCARG(uap, pid);
-			SCARG(&pta, addr) = (void *)SCARG(uap, addr);
+			SCARG(&pta, addr) = (caddr_t)SCARG(uap, addr);
 			SCARG(&pta, data) = SCARG(uap, data);
 
 			/*
 			 * Linux ptrace(PTRACE_CONT, pid, 0, 0) means actually
 			 * to continue where the process left off previously.
-			 * The same thing is achieved by addr == (void *) 1
+			 * The same thing is achieved by addr == (caddr_t) 1
 			 * on NetBSD, so rewrite 'addr' appropriately.
 			 */
 			if (request == LINUX_PTRACE_CONT && SCARG(uap, addr)==0)
-				SCARG(&pta, addr) = (void *) 1;
+				SCARG(&pta, addr) = (caddr_t) 1;
 
 			error = sys_ptrace(l, &pta, retval);
 			if (error)
@@ -1337,7 +1414,7 @@ linux_sys_ptrace(l, v, retval)
 			case LINUX_PTRACE_PEEKTEXT:
 			case LINUX_PTRACE_PEEKDATA:
 				error = copyout (retval,
-				    (void *)SCARG(uap, data), 
+				    (caddr_t)SCARG(uap, data), 
 				    sizeof *retval);
 				*retval = SCARG(uap, data);
 				break;
@@ -1514,18 +1591,26 @@ linux_sys_getrlimit(l, v, retval)
 		syscallarg(struct orlimit *) rlp;
 # endif
 	} */ *uap = v;
+	struct proc *p = l->l_proc;
+	caddr_t sg = stackgap_init(p, 0);
+	struct sys_getrlimit_args ap;
+	struct rlimit rl;
 # ifdef LINUX_LARGEFILE64
 	struct rlimit orl;
 # else
 	struct orlimit orl;
 # endif
-	int which;
+	int error;
 
-	which = linux_to_bsd_limit(SCARG(uap, which));
-	if (which < 0)
-		return -which;
-
-	bsd_to_linux_rlimit(&orl, &l->l_proc->p_rlimit[which]);
+	SCARG(&ap, which) = linux_to_bsd_limit(SCARG(uap, which));
+	if ((error = SCARG(&ap, which)) < 0)
+		return -error;
+	SCARG(&ap, rlp) = stackgap_alloc(p, &sg, sizeof rl);
+	if ((error = sys_getrlimit(l, &ap, retval)) != 0)
+		return error;
+	if ((error = copyin(SCARG(&ap, rlp), &rl, sizeof(rl))) != 0)
+		return error;
+	bsd_to_linux_rlimit(&orl, &rl);
 
 	return copyout(&orl, SCARG(uap, rlp), sizeof(orl));
 }
@@ -1544,6 +1629,9 @@ linux_sys_setrlimit(l, v, retval)
 		syscallarg(struct orlimit *) rlp;
 # endif
 	} */ *uap = v;
+	struct proc *p = l->l_proc;
+	caddr_t sg = stackgap_init(p, 0);
+	struct sys_getrlimit_args ap;
 	struct rlimit rl;
 # ifdef LINUX_LARGEFILE64
 	struct rlimit orl;
@@ -1551,17 +1639,17 @@ linux_sys_setrlimit(l, v, retval)
 	struct orlimit orl;
 # endif
 	int error;
-	int which;
 
+	SCARG(&ap, which) = linux_to_bsd_limit(SCARG(uap, which));
+	SCARG(&ap, rlp) = stackgap_alloc(p, &sg, sizeof rl);
+	if ((error = SCARG(&ap, which)) < 0)
+		return -error;
 	if ((error = copyin(SCARG(uap, rlp), &orl, sizeof(orl))) != 0)
 		return error;
-
-	which = linux_to_bsd_limit(SCARG(uap, which));
-	if (which < 0)
-		return -which;
-
 	linux_to_bsd_rlimit(&rl, &orl);
-	return dosetrlimit(l, l->l_proc, which, &rl);
+	if ((error = copyout(&rl, SCARG(&ap, rlp), sizeof(rl))) != 0)
+		return error;
+	return sys_setrlimit(l, &ap, retval);
 }
 
 # if !defined(__mips__) && !defined(__amd64__)

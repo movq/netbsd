@@ -1,4 +1,4 @@
-/*	$NetBSD: firmload.c,v 1.7 2007/01/14 10:56:34 is Exp $	*/
+/*	$NetBSD: firmload.c,v 1.6.2.1 2007/02/08 22:32:36 tron Exp $	*/
 
 /*-
  * Copyright (c) 2005, 2006 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: firmload.c,v 1.7 2007/01/14 10:56:34 is Exp $");
+__KERNEL_RCSID(0, "$NetBSD: firmload.c,v 1.6.2.1 2007/02/08 22:32:36 tron Exp $");
 
 /*
  * The firmload API provides an interface for device drivers to access

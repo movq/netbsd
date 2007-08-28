@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.8 2007/07/20 13:41:53 hannken Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.7 2006/10/07 14:59:52 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.8 2007/07/20 13:41:53 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.7 2006/10/07 14:59:52 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -47,6 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.8 2007/07/20 13:41:53 hannken Exp $")
 void
 cpu_configure(void)
 {
+	intr_init();
 	calc_delayconst();
 
 	if (config_rootfound("elb", NULL) == NULL)

@@ -1,4 +1,4 @@
-/*	$NetBSD: cons_machdep.c,v 1.4 2007/08/25 00:25:44 tsutsui Exp $	*/
+/*	$NetBSD: cons_machdep.c,v 1.1 2005/12/29 15:20:08 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cons_machdep.c,v 1.4 2007/08/25 00:25:44 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cons_machdep.c,v 1.1 2005/12/29 15:20:08 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -118,9 +118,6 @@ void
 rom_cnputc(dev_t dev, int c)
 {
 	int i;
-	struct lwp *curlwp_save;
-
-	curlwp_save = curlwp;
 
 	switch (c) {
 	default:
@@ -158,8 +155,6 @@ rom_cnputc(dev_t dev, int c)
 		break;
 	}
 
-	curlwp = curlwp_save;
-
 	if (cons.y == CONS_HEIGHT)
 		cons.y = Y_INIT;
 }
@@ -167,27 +162,21 @@ rom_cnputc(dev_t dev, int c)
 int
 rom_cngetc(dev_t dev)
 {
-	int rval;
-	struct lwp *curlwp_save;
 
-	curlwp_save = curlwp;
-	rval = ROM_GETC();
-	curlwp = curlwp_save;
-
-	return rval;
+	return ROM_GETC();
 }
 
 void
 rom_cnpollc(dev_t dev, int on)
 {
-	static bool __polling = false;
+	static boolean_t __polling = FALSE;
 	static int s;
 
 	if (on && !__polling) {
 		s = splhigh();	/* Disable interrupt driven I/O */
-		__polling = true;
+		__polling = TRUE;
 	} else if (!on && __polling) {
-		__polling = false;
+		__polling = FALSE;
 		splx(s);	/* Enable interrupt driven I/O */
 	}
 }

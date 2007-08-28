@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.19 2007/03/11 05:22:25 thorpej Exp $	*/
+/*	$NetBSD: intr.h,v 1.15 2005/12/24 20:07:24 perry Exp $	*/
 
 /*
  * Copyright (C) 1997 Scott Reynolds
@@ -42,59 +42,50 @@
 /* watch out for side effects */
 #define splx(s)         ((s) & PSL_IPL ? _spl(s) : spl0())
 
-#define splsoft()	splraise1()
-#define splsoftnet()    splsoft()
-#define splsoftclock()	splsoft()
-#define splsoftserial()	splsoft()
-#define splbio()        splraise3()
-#define splnet()        splraise3()
-#define spltty()        splraise3()
-#define splserial()     splraise5()
-#define splvm()         splraise6()
-#define splclock()      splraise3()	/* ??? */
-#define splstatclock()  splclock()
+/****************************************************************/
+
 #define splhigh()       spl7()
+#define splserial()     _splraise(PSL_S|PSL_IPL5)
 #define splsched()      spl7()
-#define spllock()       spl7()
+#define spllock()	spl7()
+#define splclock()      _splraise(PSL_S|PSL_IPL3)
+#define splstatclock()  splclock()
+#define splvm()         _splraise(PSL_S|PSL_IPL6)
+#define spltty()        _splraise(PSL_S|PSL_IPL3)
+#define splbio()        _splraise(PSL_S|PSL_IPL3)
+#define splnet()        _splraise(PSL_S|PSL_IPL3)
+#define splsoftnet()    _splraise(PSL_S|PSL_IPL2)
+#define	splsoftclock()	splraise1()
+#define spllowersoftclock() spl1()
 
-#define spldma()        splraise6()
-
-/****************************************************************/
-
-#define	IPL_NONE	0
-#define	IPL_SOFTCLOCK	1
-#define	IPL_SOFTNET	2
-#define	IPL_SOFTSERIAL	3
-#define	IPL_SOFT	4
-#define	IPL_BIO		5
-#define	IPL_NET		6
-#define	IPL_TTY		7
-#define	IPL_SERIAL	8
-#define	IPL_VM		9
-#define	IPL_CLOCK	10
-#define	IPL_STATCLOCK	IPL_CLOCK
-#define	IPL_HIGH	11
-#define	IPL_LOCK	IPL_HIGH
-#define	IPL_SCHED	IPL_HIGH
-#define	NIPL		12
-
-typedef int ipl_t;
-typedef struct {
-	uint16_t _psl;
-} ipl_cookie_t;
-
-extern const int ipl2psl_table[NIPL];
-
-ipl_cookie_t makeiplcookie(ipl_t);
-
-static inline int
-splraiseipl(ipl_cookie_t icookie)
-{
-
-	return _splraise(icookie._psl);
-}
+#define spldma()        _splraise(PSL_S|PSL_IPL6)
 
 /****************************************************************/
+
+/*
+ * simulated software interrupt register
+ */
+extern volatile u_int8_t ssir;
+
+#define	SIR_NET		0x01
+#define	SIR_CLOCK	0x02
+#define	SIR_SERIAL	0x04
+#define SIR_DTMGR	0x08
+#define SIR_ADB		0x10
+
+#define	siron(mask)	\
+	__asm volatile ( "orb %1,%0" : "=m" (ssir) : "i" (mask))
+#define	siroff(mask)	\
+	__asm volatile ( "andb %1,%0" : "=m" (ssir) : "ir" (~(mask)));
+
+#define	setsoftnet()	siron(SIR_NET)
+#define	setsoftclock()	siron(SIR_CLOCK)
+#define	setsoftserial()	siron(SIR_SERIAL)
+#define	setsoftdtmgr()	siron(SIR_DTMGR)
+#define	setsoftadb()	siron(SIR_ADB)
+
+extern u_long allocate_sir(void (*)(void *),void *);
+extern void init_sir(void);
 
 /* locore.s */
 int	spl0(void);
@@ -105,8 +96,6 @@ extern volatile u_long *intrmask;
 #define INTR_ENABLE(x)		(*intrmask |= NEXT_I_BIT(x))
 #define INTR_DISABLE(x)		(*intrmask &= (~NEXT_I_BIT(x)))
 #define INTR_OCCURRED(x)	(*intrstat & NEXT_I_BIT(x))
-
-#include <m68k/softintr.h>
 
 #endif /* _KERNEL */
 

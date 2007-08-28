@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.6 2007/03/04 06:00:02 christos Exp $	*/
+/*	$NetBSD: machdep.c,v 1.3 2006/09/06 12:54:31 cherry Exp $	*/
 
 /*-
  * Copyright (c) 2003,2004 Marcel Moolenaar
@@ -100,6 +100,8 @@
 #include <sys/reboot.h>
 #include <sys/exec.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/msgbuf.h>
 #include <sys/ksyms.h>
 
@@ -138,7 +140,7 @@ struct vm_map *exec_map = NULL;
 struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
-void *msgbufaddr;
+caddr_t msgbufaddr;
 int	physmem;
 
 char	cpu_model[64];
@@ -286,13 +288,13 @@ cpu_startup()
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
+				   16 * NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, 0, false, NULL);
+				   VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * No need to allocate an mbuf cluster submap.  Mbuf clusters
@@ -675,7 +677,7 @@ ia64_init(void)
 	/*
 	 * Initialize error message buffer (at end of core).
 	 */
-	msgbufaddr = (void *) uvm_pageboot_alloc(MSGBUFSIZE);
+	msgbufaddr = (caddr_t) uvm_pageboot_alloc(MSGBUFSIZE);
 	initmsgbuf(msgbufaddr, MSGBUFSIZE);
 
 	/*
@@ -845,16 +847,16 @@ setregs(l, pack, stack)
 		 */
 
 		/* in0 = sp */
-		suword((void *)tf->tf_special.bspstore - 32, stack);
+		suword((caddr_t)tf->tf_special.bspstore - 32, stack);
 
 		/* in1 == *cleanup */
-		suword((void *)tf->tf_special.bspstore -  24, 0);
+		suword((caddr_t)tf->tf_special.bspstore -  24, 0);
 
 		/* in2 == *obj */
-		suword((void *)tf->tf_special.bspstore -  16, 0);
+		suword((caddr_t)tf->tf_special.bspstore -  16, 0);
 
 		/* in3 = ps_strings */		
-		suword((void *)tf->tf_special.bspstore - 8, 
+		suword((caddr_t)tf->tf_special.bspstore - 8, 
 		       (u_int64_t)l->l_proc->p_psstr); 
 
 	}
@@ -871,6 +873,12 @@ setregs(l, pack, stack)
 
 void
 sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
+{
+	return;
+}
+ 
+void 
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted, void *sas, void *ap, void *sp, sa_upcall_t upcall)
 {
 	return;
 }

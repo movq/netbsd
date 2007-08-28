@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.143 2007/07/09 20:52:17 ad Exp $	*/
+/*	$NetBSD: cpu.h,v 1.129.6.2 2007/09/12 10:05:02 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -39,6 +39,7 @@
 
 #ifdef _KERNEL
 #if defined(_KERNEL_OPT)
+#include "opt_enhanced_speedstep.h"
 #include "opt_multiprocessor.h"
 #include "opt_math_emulate.h"
 #include "opt_user_ldt.h"
@@ -53,9 +54,9 @@
 #include <machine/tss.h>
 #include <machine/intrdefs.h>
 #include <x86/cacheinfo.h>
-#include <x86/via_padlock.h>
 
 #include <sys/device.h>
+#include <sys/lock.h>			/* will also get LOCKDEBUG */
 #include <sys/cpu_data.h>
 #include <sys/cc_microtime.h>
 
@@ -71,7 +72,6 @@ struct pmap;
 struct cpu_info {
 	struct device *ci_dev;		/* pointer to our device */
 	struct cpu_info *ci_self;	/* self-pointer */
-	void	*ci_self150;		/* self + 0x150, see lock_stubs.S */
 	void	*ci_tlog_base;		/* Trap log base */
 	int32_t ci_tlog_offset;		/* Trap log current offset */
 	struct cpu_info *ci_next;	/* next cpu */
@@ -80,6 +80,7 @@ struct cpu_info {
 	 * Public members.
 	 */
 	struct lwp *ci_curlwp;		/* current owner of the processor */
+	struct simplelock ci_slock;	/* lock on this data structure */
 	cpuid_t ci_cpuid;		/* our CPU ID */
 	u_int ci_apicid;		/* our APIC ID */
 	struct cpu_data ci_data;	/* MI per-cpu data */
@@ -100,22 +101,16 @@ struct cpu_info {
 #define	TLBSTATE_LAZY	1	/* tlbs are valid but won't be kept uptodate */
 #define	TLBSTATE_STALE	2	/* we might have stale user tlbs */
 
+	struct pcb *ci_curpcb;		/* VA of current HW PCB */
+	struct pcb *ci_idle_pcb;	/* VA of current PCB */
+	int ci_idle_tss_sel;		/* TSS selector of idle PCB */
+
 	struct intrsource *ci_isources[MAX_INTR_SOURCES];
-	volatile int	ci_mtx_count;	/* Negative count of spin mutexes */
-	volatile int	ci_mtx_oldspl;	/* Old SPL at this ci_idepth */
-
-	/* The following must be aligned for cmpxchg8b. */
-	struct {
-		uint32_t	ipending;
-		int		ilevel;
-	} ci_istate __aligned(8);
-#define ci_ipending	ci_istate.ipending
-#define	ci_ilevel	ci_istate.ilevel
-
+	uint32_t	ci_ipending;
+	int		ci_ilevel;
 	int		ci_idepth;
 	uint32_t	ci_imask[NIPL];
 	uint32_t	ci_iunmask[NIPL];
-	void *		ci_intrstack;
 
 	paddr_t ci_idle_pcb_paddr;	/* PA of idle PCB */
 	uint32_t ci_flags;		/* flags; see below */
@@ -127,14 +122,13 @@ struct cpu_info {
 	uint32_t	ci_feature_flags;/* X86 %edx CPUID feature bits */
 	uint32_t	ci_feature2_flags;/* X86 %ecx CPUID feature bits */
 	uint32_t	ci_feature3_flags;/* X86 extended feature bits */
-	uint32_t	ci_padlock_flags;/* VIA PadLock feature bits */
 	uint32_t	ci_cpu_class;	 /* CPU class */
 	uint32_t	ci_brand_id;	 /* Intel brand id */
 	uint32_t	ci_vendor[4];	 /* vendor string */
 	uint32_t	ci_cpu_serial[3]; /* PIII serial number */
 	uint64_t	ci_tsc_freq;	 /* cpu cycles/second */
 
-	const struct cpu_functions *ci_func;  /* start/stop functions */
+	struct cpu_functions *ci_func;  /* start/stop functions */
 	void (*cpu_setup)(struct cpu_info *);
  					/* proc-dependant init */
 	void (*ci_info)(struct cpu_info *);
@@ -155,8 +149,6 @@ struct cpu_info {
 	char *ci_ddbipi_stack;
 
 	struct evcnt ci_ipi_events[X86_NIPI];
-
-	struct via_padlock	ci_vp;	/* VIA PadLock private storage */
 };
 
 /*
@@ -217,12 +209,18 @@ curcpu()
 
 #define CPU_IS_PRIMARY(ci)	((ci)->ci_flags & CPUF_PRIMARY)
 
-#define aston(l)		((l)->l_md.md_astpending = 1)
+#define aston(p)		((p)->p_md.md_astpending = 1)
 
 extern	struct cpu_info *cpu_info[X86_MAXPROCS];
 
 void cpu_boot_secondary_processors(void);
-void cpu_init_idle_lwps(void);
+void cpu_init_idle_pcbs(void);
+
+/*
+ * Preempt the current process if in interrupt from user mode,
+ * or after the current trap/syscall if in system mode.
+ */
+extern void need_resched(struct cpu_info *);
 
 #else /* !MULTIPROCESSOR */
 
@@ -236,27 +234,44 @@ void cpu_init_idle_lwps(void);
 #define	cpu_number()		0
 #define CPU_IS_PRIMARY(ci)	1
 
-#define aston(l)		((l)->l_md.md_astpending = 1)
+/*
+ * Preempt the current process if in interrupt from user mode,
+ * or after the current trap/syscall if in system mode.
+ */
+#define	need_resched(ci)						\
+do {									\
+	struct cpu_info *__ci = (ci);					\
+	__ci->ci_want_resched = 1;					\
+	if (__ci->ci_curlwp != NULL)					\
+		aston(__ci->ci_curlwp->l_proc);       			\
+} while (/*CONSTCOND*/0)
+
+#define aston(p)		((p)->p_md.md_astpending = 1)
 
 #endif /* MULTIPROCESSOR */
 
 extern uint32_t cpus_attached;
 
+#define	curpcb			curcpu()->ci_curpcb
 #define	curlwp			curcpu()->ci_curlwp
-#define	curpcb			(&curlwp->l_addr->u_pcb)
 
 /*
  * Arguments to hardclock, softclock and statclock
  * encapsulate the previous machine state in an opaque
  * clockframe; for now, use generic intrframe.
+ *
+ * Note: Since spllowersoftclock() does not actually unmask the currently
+ * running (hardclock) interrupt, CLKF_BASEPRI() *must* always be 0; otherwise
+ * we could stall hardclock ticks if another interrupt takes too long.
  */
 struct clockframe {
 	struct intrframe cf_if;
 };
 
 #define	CLKF_USERMODE(frame)	USERMODE((frame)->cf_if.if_cs, (frame)->cf_if.if_eflags)
+#define	CLKF_BASEPRI(frame)	(0)
 #define	CLKF_PC(frame)		((frame)->cf_if.if_eip)
-#define	CLKF_INTR(frame)	(curcpu()->ci_idepth > 0)
+#define	CLKF_INTR(frame)	(curcpu()->ci_idepth > 1)
 
 /*
  * This is used during profiling to integrate system time.  It can safely
@@ -269,13 +284,13 @@ struct clockframe {
  * buffer pages are invalid.  On the i386, request an ast to send us
  * through trap(), marking the proc as needing a profiling tick.
  */
-extern void	cpu_need_proftick(struct lwp *l);
+#define	need_proftick(p)	((p)->p_flag |= P_OWEUPC, aston(p))
 
 /*
- * Notify the LWP l that it has a signal pending, process as soon as
- * possible.
+ * Notify the current process (p) that it has a signal pending,
+ * process as soon as possible.
  */
-extern void	cpu_signotify(struct lwp *);
+#define	signotify(p)		aston(p)
 
 /*
  * We need a machine-independent name for this.
@@ -319,7 +334,6 @@ extern int biosbasemem;
 extern int biosextmem;
 extern unsigned int cpu_feature;
 extern unsigned int cpu_feature2;
-extern unsigned int cpu_feature_padlock;
 extern int cpu;
 extern int cpu_class;
 extern char cpu_brand_string[];
@@ -334,6 +348,7 @@ extern int i386_has_sse2;
 void	dumpconf(void);
 int	cpu_maxproc(void);
 void	cpu_reset(void);
+void	i386_init_pcb_tss_ldt(struct cpu_info *);
 void	i386_proc0_tss_ldt_init(void);
 
 extern int tmx86_has_longrun;
@@ -356,7 +371,7 @@ void	fillw(short, void *, size_t);
 
 struct pcb;
 void	savectx(struct pcb *);
-void	lwp_trampoline(void);
+void	proc_trampoline(void);
 
 /* clock.c */
 void	initrtclock(u_long);
@@ -374,7 +389,7 @@ void	npxsave_lwp(struct lwp *, int);
 void	npxsave_cpu(struct cpu_info *, int);
 
 /* vm_machdep.c */
-int kvtop(void *);
+int kvtop(caddr_t);
 
 #ifdef MATH_EMULATE
 /* math_emulate.c */
@@ -383,8 +398,8 @@ int	math_emulate(struct trapframe *, ksiginfo_t *);
 
 #ifdef USER_LDT
 /* sys_machdep.h */
-int	x86_get_ldt(struct lwp *, void *, register_t *);
-int	x86_set_ldt(struct lwp *, void *, register_t *);
+int	i386_get_ldt(struct lwp *, void *, register_t *);
+int	i386_set_ldt(struct lwp *, void *, register_t *);
 #endif
 
 /* isa_machdep.c */
@@ -404,6 +419,9 @@ void x86_bus_space_init(void);
 void x86_bus_space_mallocok(void);
 
 #include <machine/psl.h>	/* Must be after struct cpu_info declaration */
+
+/* est.c */
+void	est_init(int);
 
 #endif /* _KERNEL */
 

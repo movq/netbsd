@@ -1,4 +1,4 @@
-/* $NetBSD: if_skreg.h,v 1.11 2007/01/31 09:56:26 msaitoh Exp $ */
+/* $NetBSD: if_skreg.h,v 1.8.4.1 2007/08/26 12:01:19 liamjfoy Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.

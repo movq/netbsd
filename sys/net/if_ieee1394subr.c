@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ieee1394subr.c,v 1.35 2007/08/26 22:59:08 dyoung Exp $	*/
+/*	$NetBSD: if_ieee1394subr.c,v 1.32 2006/06/07 22:33:42 kardel Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ieee1394subr.c,v 1.35 2007/08/26 22:59:08 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ieee1394subr.c,v 1.32 2006/06/07 22:33:42 kardel Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -85,12 +85,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_ieee1394subr.c,v 1.35 2007/08/26 22:59:08 dyoung 
 
 #define	senderr(e)	do { error = (e); goto bad; } while(0/*CONSTCOND*/)
 
-static int  ieee1394_output(struct ifnet *, struct mbuf *,
-		const struct sockaddr *, struct rtentry *);
+static int  ieee1394_output(struct ifnet *, struct mbuf *, struct sockaddr *,
+		struct rtentry *);
 static struct mbuf *ieee1394_reass(struct ifnet *, struct mbuf *, u_int16_t);
 
 static int
-ieee1394_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
+ieee1394_output(struct ifnet *ifp, struct mbuf *m0, struct sockaddr *dst,
     struct rtentry *rt0)
 {
 	u_int16_t etype = 0;
@@ -194,8 +194,8 @@ ieee1394_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 #endif /* INET */
 #ifdef INET6
 	case AF_INET6:
-		if (unicast && (!nd6_storelladdr(ifp, rt, m0, dst,
-		    hwdst->iha_uid, IEEE1394_ADDR_LEN))) {
+		if (unicast &&
+		    (!nd6_storelladdr(ifp, rt, m0, dst, (u_char *)hwdst))) {
 			/* something bad happened */
 			return 0;
 		}
@@ -722,7 +722,7 @@ ieee1394_ifdetach(struct ifnet *ifp)
 }
 
 int
-ieee1394_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+ieee1394_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct ifreq *ifr = (struct ifreq *)data;
 	struct ifaddr *ifa = (struct ifaddr *)data;
@@ -759,7 +759,7 @@ ieee1394_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 
 	case SIOCGIFADDR:
 		memcpy(((struct sockaddr *)&ifr->ifr_data)->sa_data,
-		    CLLADDR(ifp->if_sadl), IEEE1394_ADDR_LEN);
+		    LLADDR(ifp->if_sadl), IEEE1394_ADDR_LEN);
 		    break;
 
 	case SIOCSIFMTU:

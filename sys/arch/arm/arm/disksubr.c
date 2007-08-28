@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.17 2007/07/29 12:15:36 ad Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.15 2006/11/25 11:59:56 scw Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -97,7 +97,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.17 2007/07/29 12:15:36 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.15 2006/11/25 11:59:56 scw Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -198,7 +198,7 @@ readdisklabel(dev, strat, lp, osdep)
 		goto done;
 	}
 	for (dlp = (struct disklabel *)bp->b_data;
-	    dlp <= (struct disklabel *)((char *)bp->b_data + lp->d_secsize - sizeof(*dlp));
+	    dlp <= (struct disklabel *)(bp->b_data + lp->d_secsize - sizeof(*dlp));
 	    dlp = (struct disklabel *)((char *)dlp + sizeof(long))) {
 		if (dlp->d_magic != DISKMAGIC || dlp->d_magic2 != DISKMAGIC) {
 			continue;
@@ -249,7 +249,7 @@ readdisklabel(dev, strat, lp, osdep)
 				} else
 					msg = "bad sector table corrupted";
 			}
-		} while (bp->b_error != 0 && (i += 2) < 10 &&
+		} while ((bp->b_flags & B_ERROR) && (i += 2) < 10 &&
 			i < lp->d_nsectors);
 	}
 
@@ -385,7 +385,7 @@ writedisklabel(dev, strat, lp, osdep)
 	if ((error = biowait(bp)))
 		goto done;
 	for (dlp = (struct disklabel *)bp->b_data;
-	    dlp <= (struct disklabel *)((char *)bp->b_data + lp->d_secsize - sizeof(*dlp));
+	    dlp <= (struct disklabel *)(bp->b_data + lp->d_secsize - sizeof(*dlp));
 	    dlp = (struct disklabel *)((char *)dlp + sizeof(long))) {
 		if (dlp->d_magic == DISKMAGIC && dlp->d_magic2 == DISKMAGIC &&
 		    dkcksum(dlp) == 0) {

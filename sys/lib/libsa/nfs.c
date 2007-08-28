@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs.c,v 1.41 2007/02/25 04:46:32 uwe Exp $	*/
+/*	$NetBSD: nfs.c,v 1.39 2006/01/25 18:27:23 christos Exp $	*/
 
 /*-
  *  Copyright (c) 1993 John Brezak
@@ -59,7 +59,7 @@
 #include "nfs.h"
 #include "rpc.h"
 
-/* Define our own NFS attributes */
+/* Define our own NFS attributes without NQNFS stuff. */
 struct nfsv2_fattrs {
 	n_long	fa_type;
 	n_long	fa_mode;
@@ -599,15 +599,14 @@ nfs_read(f, buf, size, resid)
 		if (cc == -1) {
 #ifdef NFS_DEBUG
 			if (debug)
-				printf("nfs_read: read: %s\n",
-				       strerror(errno));
+				printf("nfs_read: read: %s", strerror(errno));
 #endif
 			return (errno);	/* XXX - from nfs_readdata */
 		}
 		if (cc == 0) {
 #ifdef NFS_DEBUG
 			if (debug)
-				printf("nfs_read: hit EOF unexpectantly\n");
+				printf("nfs_read: hit EOF unexpectantly");
 #endif
 			goto ret;
 		}

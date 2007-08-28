@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_sysctl.c,v 1.25 2007/08/15 12:07:31 ad Exp $	*/
+/*	$NetBSD: netbsd32_sysctl.c,v 1.22 2006/09/23 22:12:00 manu Exp $	*/
 
 /*
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -32,10 +32,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_sysctl.c,v 1.25 2007/08/15 12:07:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_sysctl.c,v 1.22 2006/09/23 22:12:00 manu Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ddb.h"
+#include "opt_ktrace.h"
 #endif
 
 #include <sys/param.h>
@@ -46,11 +47,14 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_sysctl.c,v 1.25 2007/08/15 12:07:31 ad Exp 
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/vnode.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/proc.h>
 #include <sys/sysctl.h>
 #include <sys/dirent.h>
+#ifdef KTRACE
 #include <sys/ktrace.h>
+#endif
 
 #include <uvm/uvm_extern.h>
 
@@ -172,10 +176,10 @@ netbsd32___sysctl(l, v, retval)
 	/*
 	 * get and convert 32 bit size_t to native size_t
 	 */
-	namep = SCARG_P32(uap, name);
-	oldp = SCARG_P32(uap, old);
-	newp = SCARG_P32(uap, new);
-	oldlenp = SCARG_P32(uap, oldlenp);
+	namep = NETBSD32PTR64(SCARG(uap, name));
+	oldp = NETBSD32PTR64(SCARG(uap, old));
+	newp = NETBSD32PTR64(SCARG(uap, new));
+	oldlenp = NETBSD32PTR64(SCARG(uap, oldlenp));
 	oldlen = 0;
 	if (oldlenp != NULL) {
 		error = copyin(oldlenp, &netbsd32_oldlen,
@@ -198,7 +202,10 @@ netbsd32___sysctl(l, v, retval)
         if (error)
                 return (error);
 
-	ktrmib(name, SCARG(uap, namelen));
+#ifdef KTRACE
+	if (KTRPOINT(l->l_proc, KTR_MIB))
+		ktrmib(l, name, SCARG(uap, namelen));
+#endif
 
 	/*
 	 * wire old so that copyout() is less likely to fail?

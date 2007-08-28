@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.11 2007/06/04 23:15:01 xtraeme Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.9 2006/10/23 12:11:47 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.11 2007/06/04 23:15:01 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.9 2006/10/23 12:11:47 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -78,29 +78,33 @@ __KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.11 2007/06/04 23:15:01 xtraeme
 #include <machine/segments.h>
 #include <machine/fpu.h>
 
-static inline struct trapframe *process_frame(struct lwp *);
-static inline struct fxsave64 *process_fpframe(struct lwp *);
+static inline struct trapframe *process_frame __P((struct lwp *));
+static inline struct fxsave64 *process_fpframe __P((struct lwp *));
 #if 0
-static inline int verr_gdt(struct pmap *, int sel);
-static inline int verr_ldt(struct pmap *, int sel);
+static inline int verr_gdt __P((struct pmap *, int sel));
+static inline int verr_ldt __P((struct pmap *, int sel));
 #endif
 
 static inline struct trapframe *
-process_frame(struct lwp *l)
+process_frame(l)
+	struct lwp *l;
 {
 
 	return (l->l_md.md_regs);
 }
 
 static inline struct fxsave64 *
-process_fpframe(struct lwp *l)
+process_fpframe(l)
+	struct lwp *l;
 {
 
 	return (&l->l_addr->u_pcb.pcb_savefpu.fp_fxsave);
 }
 
 int
-process_read_regs(struct lwp *l, struct reg *regs)
+process_read_regs(l, regs)
+	struct lwp *l;
+	struct reg *regs;
 {
 	struct trapframe *tf = process_frame(l);
 
@@ -110,7 +114,9 @@ process_read_regs(struct lwp *l, struct reg *regs)
 }
 
 int
-process_read_fpregs(struct lwp *l, struct fpreg *regs)
+process_read_fpregs(l, regs)
+	struct lwp *l;
+	struct fpreg *regs;
 {
 	struct fxsave64 *frame = process_fpframe(l);
 
@@ -142,7 +148,9 @@ process_read_fpregs(struct lwp *l, struct fpreg *regs)
 }
 
 int
-process_write_regs(struct lwp *l, const struct reg *regp)
+process_write_regs(l, regp)
+	struct lwp *l;
+	const struct reg *regp;
 {
 	struct trapframe *tf = process_frame(l);
 	int error;
@@ -163,7 +171,9 @@ process_write_regs(struct lwp *l, const struct reg *regp)
 }
 
 int
-process_write_fpregs(struct lwp *l, const struct fpreg *regs)
+process_write_fpregs(l, regs)
+	struct lwp *l;
+	const struct fpreg *regs;
 {
 	struct fxsave64 *frame = process_fpframe(l);
 
@@ -178,7 +188,8 @@ process_write_fpregs(struct lwp *l, const struct fpreg *regs)
 }
 
 int
-process_sstep(struct lwp *l, int sstep)
+process_sstep(l, sstep)
+	struct lwp *l;
 {
 	struct trapframe *tf = process_frame(l);
 
@@ -191,7 +202,9 @@ process_sstep(struct lwp *l, int sstep)
 }
 
 int
-process_set_pc(struct lwp *l, void *addr)
+process_set_pc(l, addr)
+	struct lwp *l;
+	caddr_t addr;
 {
 	struct trapframe *tf = process_frame(l);
 

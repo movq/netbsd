@@ -1,4 +1,4 @@
-/*	$NetBSD: bootinfo.c,v 1.3 2007/08/03 13:15:56 tsutsui Exp $	*/
+/*	$NetBSD: bootinfo.c,v 1.2.24.1 2007/08/28 19:27:03 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.

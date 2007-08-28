@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ether.h,v 1.45 2007/03/04 06:03:15 christos Exp $	*/
+/*	$NetBSD: if_ether.h,v 1.43 2006/11/24 01:04:30 rpaulo Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -112,16 +112,16 @@ struct	ether_header {
  * and the low-order 23 bits are taken from the low end of the IP address.
  */
 #define ETHER_MAP_IP_MULTICAST(ipaddr, enaddr)				\
-	/* const struct in_addr *ipaddr; */				\
+	/* struct in_addr *ipaddr; */					\
 	/* u_int8_t enaddr[ETHER_ADDR_LEN]; */				\
-do {									\
+{									\
 	(enaddr)[0] = 0x01;						\
 	(enaddr)[1] = 0x00;						\
 	(enaddr)[2] = 0x5e;						\
-	(enaddr)[3] = ((const u_int8_t *)ipaddr)[1] & 0x7f;		\
-	(enaddr)[4] = ((const u_int8_t *)ipaddr)[2];			\
-	(enaddr)[5] = ((const u_int8_t *)ipaddr)[3];			\
-} while (/*CONSTCOND*/0)
+	(enaddr)[3] = ((u_int8_t *)ipaddr)[1] & 0x7f;			\
+	(enaddr)[4] = ((u_int8_t *)ipaddr)[2];				\
+	(enaddr)[5] = ((u_int8_t *)ipaddr)[3];				\
+}
 /*
  * Macro to map an IP6 multicast address to an Ethernet multicast address.
  * The high-order 16 bits of the Ethernet address are statically assigned,
@@ -133,10 +133,10 @@ do {									\
 {                                                                       \
 	(enaddr)[0] = 0x33;						\
 	(enaddr)[1] = 0x33;						\
-	(enaddr)[2] = ((const uint8_t *)ip6addr)[12];			\
-	(enaddr)[3] = ((const uint8_t *)ip6addr)[13];			\
-	(enaddr)[4] = ((const uint8_t *)ip6addr)[14];			\
-	(enaddr)[5] = ((const uint8_t *)ip6addr)[15];			\
+	(enaddr)[2] = ((u_int8_t *)ip6addr)[12];			\
+	(enaddr)[3] = ((u_int8_t *)ip6addr)[13];			\
+	(enaddr)[4] = ((u_int8_t *)ip6addr)[14];			\
+	(enaddr)[5] = ((u_int8_t *)ip6addr)[15];			\
 }
 #endif
 
@@ -173,7 +173,7 @@ extern const uint8_t ethermulticastaddr_slowprotocols[ETHER_ADDR_LEN];
 extern const uint8_t ether_ipmulticast_min[ETHER_ADDR_LEN];
 extern const uint8_t ether_ipmulticast_max[ETHER_ADDR_LEN];
 
-int	ether_ioctl(struct ifnet *, u_long, void *);
+int	ether_ioctl(struct ifnet *, u_long, caddr_t);
 int	ether_addmulti (struct ifreq *, struct ethercom *);
 int	ether_delmulti (struct ifreq *, struct ethercom *);
 int	ether_changeaddr (struct ifreq *, struct ethercom *);

@@ -1,4 +1,4 @@
-# 	$NetBSD: INSTALL,v 1.42 2007/06/25 13:22:46 tsutsui Exp $
+# 	$NetBSD: INSTALL,v 1.39.2.1 2007/02/24 13:32:50 bouyer Exp $
 
 #	config for bootable floppy kernel
 #
@@ -45,8 +45,7 @@ options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
 #options 	COMPAT_15		# NetBSD 1.5 binary compatibility
 #options 	COMPAT_16		# NetBSD 1.6 binary compatibility
 #options 	COMPAT_20		# NetBSD 2.0 binary compatibility
-#options 	COMPAT_30		# NetBSD 3.0 binary compatibility.
-#options 	COMPAT_40		# NetBSD 4.0 binary compatibility.
+#options 	COMPAT_30		# NetBSD 3.0 compatibility.
 options 	COMPAT_BSDPTY		# /dev/[pt]ty?? ptys.
 
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -68,7 +67,7 @@ file-system	MSDOSFS		# MS-DOS FAT file system
 #options 	NFSSERVER	# nfs server support
 #options 	QUOTA		# ffs quotas
 #options 	FFS_EI		# ffs endian independent support
-options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
+options 	NFS_V2_ONLY	# Exclude NFS3 and NQNFS code to save space
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 
 # Networking options

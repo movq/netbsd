@@ -1,4 +1,4 @@
-/*	$NetBSD: marvell_intr.h,v 1.11 2006/12/21 15:55:24 yamt Exp $	*/
+/*	$NetBSD: marvell_intr.h,v 1.10 2006/06/30 17:54:51 freza Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -473,24 +473,7 @@ void softintr_schedule(void *cookie);
  */
 #define	spl0()		spllower(IPL_NONE)
 
-typedef int ipl_t;
-typedef struct {
-	ipl_t _ipl;
-} ipl_cookie_t;
-
-static inline ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._ipl = ipl};
-}
-
-static inline int
-splraiseipl(ipl_cookie_t icookie)
-{
-
-	return splraise(icookie._ipl);
-}
+#define	splraiseipl(x)	splraise(x)
 
 #include <sys/spl.h>
 

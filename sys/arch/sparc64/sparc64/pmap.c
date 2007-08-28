@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.193 2007/08/25 19:16:11 martin Exp $	*/
+/*	$NetBSD: pmap.c,v 1.184.2.3 2007/08/31 09:26:11 liamjfoy Exp $	*/
 /*
  *
  * Copyright (C) 1996-1999 Eduardo Horvath.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.193 2007/08/25 19:16:11 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.184.2.3 2007/08/31 09:26:11 liamjfoy Exp $");
 
 #undef	NO_VCACHE /* Don't forget the locked TLB in dostart */
 #define	HWREF
@@ -407,6 +407,8 @@ static void pmap_alloc_bootargs(void)
 	memset(v, 0, 2*PAGE_SIZE);
 
 	cpu_args = (struct cpu_bootargs*)v;
+
+	cpu_args->cb_initstack = v + 2*PAGE_SIZE;
 }
 
 #if defined(MULTIPROCESSOR)
@@ -661,7 +663,7 @@ pmap_bootstrap(u_long kernelstart, u_long kernelend)
 			(void *)msgbufp));
 	}
 	msgbufmapped = 1;	/* enable message buffer */
-	initmsgbuf((void *)msgbufp, msgbufsiz);
+	initmsgbuf((caddr_t)msgbufp, msgbufsiz);
 
 	/*
 	 * Find out how much RAM we have installed.
@@ -1095,12 +1097,10 @@ pmap_bootstrap(u_long kernelstart, u_long kernelend)
 		cpus->ci_fplwp = NULL;
 		cpus->ci_spinup = main; /* Call main when we're running. */
 		cpus->ci_paddr = cpu0paddr;
+		cpus->ci_idle_u = (struct pcb *)IDLE_U_VA;
 		cpus->ci_cpcb = (struct pcb *)u0va;
+		cpus->ci_initstack = (void *)INITSTACK_VA;
 		proc0paddr = cpus->ci_cpcb;
-
-		lwp0.l_addr = (struct user*)u0va;
-		lwp0.l_md.md_tf = (struct trapframe64*)(u0va + USPACE
-		    - sizeof(struct trapframe64));
 
 		cpu0paddr += 128 * KB;
 
@@ -1112,7 +1112,7 @@ pmap_bootstrap(u_long kernelstart, u_long kernelend)
 			 ("Done inserting cpu_info into pmap_kernel()\n"));
 	}
 
-	vmmap = (vaddr_t)reserve_dumppages((void *)(u_long)vmmap);
+	vmmap = (vaddr_t)reserve_dumppages((caddr_t)(u_long)vmmap);
 
 	/*
 	 * Set up bounds of allocatable memory for vmstat et al.
@@ -1173,9 +1173,9 @@ pmap_init()
 	 * initialize the pmap pools.
 	 */
 	pool_init(&pmap_pmap_pool, sizeof(struct pmap), 0, 0, 0, "pmappl",
-	    &pool_allocator_nointr, IPL_NONE);
+	    &pool_allocator_nointr);
 	pool_init(&pmap_pv_pool, sizeof(struct pv_entry), 0, 0, 0, "pv_entry",
-	    &pool_allocator_nointr, IPL_NONE);
+	    &pool_allocator_nointr);
 
 	vm_first_phys = avail_start;
 	vm_num_phys = avail_end - avail_start;
@@ -1540,7 +1540,7 @@ pmap_kremove(va, size)
 	int64_t data;
 	paddr_t pa;
 	int rv;
-	bool flush = FALSE;
+	boolean_t flush = FALSE;
 
 	KASSERT(va < INTSTACK || va > EINTSTACK);
 	KASSERT(va < kdata || va > ekdata);
@@ -1614,9 +1614,9 @@ pmap_enter(pm, va, pa, prot, flags)
 	struct vm_page *pg, *opg, *ptpg;
 	int s, i, uncached = 0;
 	int size = PGSZ_8K; /* PMAP_SZ_TO_TTE(pa); */
-	bool wired = (flags & PMAP_WIRED) != 0;
-	bool wasmapped = FALSE;
-	bool dopv = TRUE;
+	boolean_t wired = (flags & PMAP_WIRED) != 0;
+	boolean_t wasmapped = FALSE;
+	boolean_t dopv = TRUE;
 
 	/*
 	 * Is this part of the permanent mappings?
@@ -1868,7 +1868,7 @@ pmap_remove(pm, va, endva)
 	struct vm_page *pg;
 	pv_entry_t pv;
 	int rv;
-	bool flush = FALSE;
+	boolean_t flush = FALSE;
 
 	/*
 	 * In here we should check each pseg and if there are no more entries,
@@ -2040,7 +2040,7 @@ pmap_protect(pm, sva, eva, prot)
  * Extract the physical page address associated
  * with the given map/virtual_address pair.
  */
-bool
+boolean_t
 pmap_extract(pm, va, pap)
 	struct pmap *pm;
 	vaddr_t va;
@@ -2066,7 +2066,7 @@ pmap_extract(pm, va, pap)
 			*pap = pa;
 		return TRUE;
 	} else if (pm == pmap_kernel() && va >= KSTACK_VA && va < (KSTACK_VA + 64*KB)) {
-		pa = (paddr_t)(curcpu()->ci_paddr - KSTACK_VA + va);
+		pa = (paddr_t)(curcpu()->ci_paddr - KSTACK_VA + va + 64*KB);
 		DPRINTF(PDB_EXTRACT, ("pmap_extract (kstack): va=%lx pa=%llx\n",
 		    (u_long)va, (unsigned long long)pa));
 		if (pap != NULL)
@@ -2173,7 +2173,7 @@ pmap_dumpsize()
  *	phys_ram_seg_t[phys_installed_size]  physical memory segments
  */
 int
-pmap_dumpmmu(int (*dump)(dev_t, daddr_t, void *, size_t), daddr_t blkno)
+pmap_dumpmmu(int (*dump)(dev_t, daddr_t, caddr_t, size_t), daddr_t blkno)
 {
 	kcore_seg_t	*kseg;
 	cpu_kcore_hdr_t	*kcpu;
@@ -2190,7 +2190,7 @@ pmap_dumpmmu(int (*dump)(dev_t, daddr_t, void *, size_t), daddr_t blkno)
 		*bp++ = *sp++;						\
 		if (bp >= ep) {						\
 			error = (*dump)(dumpdev, blkno,			\
-					(void *)buffer, dbtob(1));	\
+					(caddr_t)buffer, dbtob(1));	\
 			if (error != 0)					\
 				return (error);				\
 			++blkno;					\
@@ -2243,7 +2243,7 @@ pmap_dumpmmu(int (*dump)(dev_t, daddr_t, void *, size_t), daddr_t blkno)
 	}
 
 	if (bp != buffer)
-		error = (*dump)(dumpdev, blkno++, (void *)buffer, dbtob(1));
+		error = (*dump)(dumpdev, blkno++, (caddr_t)buffer, dbtob(1));
 
 	return (error);
 }
@@ -2328,7 +2328,7 @@ ptelookup_va(vaddr_t va)
  * Do whatever is needed to sync the MOD/REF flags
  */
 
-bool
+boolean_t
 pmap_clear_modify(pg)
 	struct vm_page *pg;
 {
@@ -2409,7 +2409,7 @@ pmap_clear_modify(pg)
 	return (changed);
 }
 
-bool
+boolean_t
 pmap_clear_reference(pg)
 	struct vm_page *pg;
 {
@@ -2491,7 +2491,7 @@ pmap_clear_reference(pg)
 	return (changed);
 }
 
-bool
+boolean_t
 pmap_is_modified(pg)
 	struct vm_page *pg;
 {
@@ -2538,7 +2538,7 @@ pmap_is_modified(pg)
 	return (i);
 }
 
-bool
+boolean_t
 pmap_is_referenced(pg)
 	struct vm_page *pg;
 {
@@ -2640,7 +2640,7 @@ pmap_page_protect(pg, prot)
 	pv_entry_t pv, npv, firstpv;
 	struct pmap *pmap;
 	vaddr_t va;
-	bool needflush = FALSE;
+	boolean_t needflush = FALSE;
 
 	DPRINTF(PDB_CHANGEPROT,
 	    ("pmap_page_protect: pg %p prot %x\n", pg, prot));

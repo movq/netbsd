@@ -1,4 +1,4 @@
-#	$NetBSD: files.omap,v 1.4 2007/01/06 00:59:45 christos Exp $
+#	$NetBSD: files.omap,v 1.4.6.5 2007/02/21 18:41:50 snj Exp $
 #
 # Configuration info for Texas Instruments OMAP CPU support
 # Based on xscale/files.pxa2x0

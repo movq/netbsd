@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_exec_ecoff.c,v 1.17 2007/04/22 08:29:58 dsl Exp $ */
+/* $NetBSD: osf1_exec_ecoff.c,v 1.14 2006/07/23 22:06:09 ad Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_exec_ecoff.c,v 1.17 2007/04/22 08:29:58 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_exec_ecoff.c,v 1.14 2006/07/23 22:06:09 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -164,7 +164,7 @@ osf1_copyargs(l, pack, arginfo, stackp, argp)
                         a->a_un.a_val |= OSF1_LDR_EXEC_SETUID_F;
                 if (pack->ep_vap->va_mode & S_ISGID)
                         a->a_un.a_val |= OSF1_LDR_EXEC_SETGID_F;
-	        if (l->l_proc->p_slflag & PSL_TRACED)
+	        if (l->l_proc->p_flag & P_TRACED)
                         a->a_un.a_val |= OSF1_LDR_EXEC_PTRACE_F;
 		a++;
 	}
@@ -202,7 +202,7 @@ osf1_exec_ecoff_dynamic(struct lwp *l, struct exec_package *epp)
 	 * includes /emul/osf1 if appropriate
 	 */
 	error = emul_find_interp(LIST_FIRST(&l->l_proc->p_lwps),
-		    epp, emul_arg->loader_name);
+	    epp->ep_esch->es_emul->e_path, emul_arg->loader_name);
 	if (error)
 		return error;
 
@@ -217,7 +217,7 @@ osf1_exec_ecoff_dynamic(struct lwp *l, struct exec_package *epp)
 	 * make sure the object type is amenable, then arrange to
 	 * load it up.
 	 */
-	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF | TRYEMULROOT, UIO_SYSSPACE,
+	NDINIT(&nd, LOOKUP, FOLLOW | LOCKLEAF, UIO_SYSSPACE,
 	    emul_arg->loader_name, l);
 	if ((error = namei(&nd)) != 0)
 		goto bad_no_vp;
@@ -254,7 +254,7 @@ osf1_exec_ecoff_dynamic(struct lwp *l, struct exec_package *epp)
 	/*
 	 * read the header, and make sure we got all of it.
 	 */
-        if ((error = vn_rdwr(UIO_READ, ldr_vp, (void *)&ldr_exechdr,
+        if ((error = vn_rdwr(UIO_READ, ldr_vp, (caddr_t)&ldr_exechdr,
 	    sizeof ldr_exechdr, 0, UIO_SYSSPACE, 0, l->l_cred,
 	    &resid, NULL)) != 0)
                 goto bad;

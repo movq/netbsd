@@ -1,4 +1,4 @@
-/*	$NetBSD: clnp_output.c,v 1.20 2007/05/02 20:40:28 dyoung Exp $	*/
+/*	$NetBSD: clnp_output.c,v 1.17 2006/08/29 23:40:14 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,7 +59,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clnp_output.c,v 1.20 2007/05/02 20:40:28 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clnp_output.c,v 1.17 2006/08/29 23:40:14 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -195,7 +195,7 @@ clnp_output(struct mbuf *m0, ...)
 	int             error = 0;	/* return value of function */
 	struct mbuf *m = m0;		/* mbuf for clnp header chain */
 	struct clnp_fixed *clnp;	/* ptr to fixed part of hdr */
-	char *hoff;			/* offset into header */
+	caddr_t hoff;			/* offset into header */
 	int             total_len;	/* total length of packet */
 	struct iso_addr *src;	/* ptr to source address */
 	struct iso_addr *dst;	/* ptr to destination address */
@@ -242,7 +242,7 @@ clnp_output(struct mbuf *m0, ...)
 			printf("\tclc_dst %s\n", clnp_iso_addrp(&clcp->clc_dst));
 			printf("\tisop_opts %p, clc_opts %p\n",
 			    isop->isop_options, clcp->clc_options);
-			if (isop->isop_route.ro_rt != NULL)
+			if (isop->isop_route.ro_rt)
 				printf("\tro_rt %p, rt_flags x%x\n",
 				    isop->isop_route.ro_rt,
 				    isop->isop_route.ro_rt->rt_flags);
@@ -352,7 +352,7 @@ clnp_output(struct mbuf *m0, ...)
 			printf("clnp_output: NEW clcp %p\n", clcp);
 		}
 #endif
-		bzero((void *) clcp, sizeof(struct clnp_cache));
+		bzero((caddr_t) clcp, sizeof(struct clnp_cache));
 
 		if (isop->isop_optindex)
 			oidx = mtod(isop->isop_optindex, struct clnp_optidx *);
@@ -466,7 +466,7 @@ clnp_output(struct mbuf *m0, ...)
 		if (argo_debug[D_OUTPUT]) {
 			printf("clnp_output: packet routed to %s\n",
 			    clnp_iso_addrp(
-				 &satocsiso(clcp->clc_firsthop)->siso_addr));
+				 &satosiso(clcp->clc_firsthop)->siso_addr));
 		}
 #endif
 
@@ -486,7 +486,7 @@ clnp_output(struct mbuf *m0, ...)
 		/*
 		 * Insert the source and destination address,
 		 */
-		hoff = (char *) clnp + sizeof(struct clnp_fixed);
+		hoff = (caddr_t) clnp + sizeof(struct clnp_fixed);
 		CLNP_INSERT_ADDR(hoff, *dst);
 		CLNP_INSERT_ADDR(hoff, *src);
 
@@ -494,10 +494,10 @@ clnp_output(struct mbuf *m0, ...)
 		 * Leave room for the segment part, if segmenting is selected
 		 */
 		if (clnp->cnf_type & CNF_SEG_OK) {
-			clcp->clc_segoff = hoff - (char *)clnp;
+			clcp->clc_segoff = hoff - (caddr_t) clnp;
 			hoff += sizeof(struct clnp_segment);
 		}
-		clnp->cnf_hdr_len = m->m_len = (u_char)(hoff - (char *)clnp);
+		clnp->cnf_hdr_len = m->m_len = (u_char) (hoff - (caddr_t) clnp);
 		hdrlen = clnp->cnf_hdr_len;
 
 #ifdef	DECBIT
@@ -508,7 +508,7 @@ clnp_output(struct mbuf *m0, ...)
 		 * the option was not specified previously
 		 */
 		if ((m->m_len + sizeof(qos_option)) < MLEN) {
-			bcopy((void *) qos_option, hoff, sizeof(qos_option));
+			bcopy((caddr_t) qos_option, hoff, sizeof(qos_option));
 			clnp->cnf_hdr_len += sizeof(qos_option);
 			hdrlen += sizeof(qos_option);
 			m->m_len += sizeof(qos_option);
@@ -559,8 +559,8 @@ clnp_output(struct mbuf *m0, ...)
 		seg_part.cng_id = htons(clnp_id++);
 		seg_part.cng_off = htons(0);
 		seg_part.cng_tot_len = htons(total_len);
-		(void)memcpy((char *)clnp + clcp->clc_segoff, &seg_part,
-		    sizeof(seg_part));
+		(void) bcopy((caddr_t) & seg_part, (caddr_t) clnp + clcp->clc_segoff,
+			     sizeof(seg_part));
 	}
 	if (total_len <= SN_MTU(clcp->clc_ifp, clcp->clc_rt)) {
 		HTOC(clnp->cnf_seglen_msb, clnp->cnf_seglen_lsb, total_len);
@@ -579,7 +579,7 @@ clnp_output(struct mbuf *m0, ...)
 			struct mbuf    *mdump = m;
 			printf("clnp_output: sending dg:\n");
 			while (mdump != NULL) {
-				dump_buf(mtod(mdump, void *), mdump->m_len);
+				dump_buf(mtod(mdump, caddr_t), mdump->m_len);
 				mdump = mdump->m_next;
 			}
 		}

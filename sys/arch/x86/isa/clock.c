@@ -1,4 +1,4 @@
-/*	$NetBSD: clock.c,v 1.9 2007/07/09 20:52:37 ad Exp $	*/
+/*	$NetBSD: clock.c,v 1.7 2006/11/16 01:32:39 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -121,7 +121,7 @@ WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.9 2007/07/09 20:52:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.7 2006/11/16 01:32:39 christos Exp $");
 
 /* #define CLOCKDEBUG */
 /* #define CLOCK_PARANOIA */
@@ -135,7 +135,6 @@ __KERNEL_RCSID(0, "$NetBSD: clock.c,v 1.9 2007/07/09 20:52:37 ad Exp $");
 #include <sys/timetc.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-#include <sys/mutex.h>
 
 #include <machine/cpu.h>
 #include <machine/intr.h>
@@ -193,7 +192,7 @@ int		gettick(void);
 void		sysbeep(int, int);
 static void     tickle_tc(void);
 
-static int	clockintr(void *, struct intrframe *);
+static int	clockintr(void *, struct intrframe);
 static void	rtcinit(void);
 static int	rtcget(mc_todregs *);
 static void	rtcput(mc_todregs *);
@@ -208,8 +207,7 @@ static volatile uint32_t i8254_lastcount;
 static volatile uint32_t i8254_offset;
 static volatile int i8254_ticked;
 
-/* to protect TC timer variables */
-static __cpu_simple_lock_t tmr_lock = __SIMPLELOCK_UNLOCKED;
+static struct simplelock tmr_lock = SIMPLELOCK_INITIALIZER;  /* protect TC timer variables */
 
 inline u_int mc146818_read(void *, u_int);
 inline void mc146818_write(void *, u_int, u_int);
@@ -336,7 +334,6 @@ void
 initrtclock(u_long freq)
 {
 	u_long tval;
-
 	/*
 	 * Compute timer_count, the count-down count the timer will be
 	 * set to.  Also, correctly round
@@ -380,9 +377,7 @@ startrtclock(void)
 	rtc_register();
 }
 
-/*
- * Must be called at splclock().
- */
+
 static void
 tickle_tc(void) 
 {
@@ -396,24 +391,24 @@ tickle_tc(void)
 		return;
 #endif
 	if (rtclock_tval && timecounter->tc_get_timecount == i8254_get_timecount) {
-		__cpu_simple_lock(&tmr_lock);
+		simple_lock(&tmr_lock);
 		if (i8254_ticked)
 			i8254_ticked    = 0;
 		else {
 			i8254_offset   += rtclock_tval;
 			i8254_lastcount = 0;
 		}
-		__cpu_simple_unlock(&tmr_lock);
+		simple_unlock(&tmr_lock);
 	}
 
 }
 
 static int
-clockintr(void *arg, struct intrframe *frame)
+clockintr(void *arg, struct intrframe frame)
 {
 	tickle_tc();
 
-	hardclock((struct clockframe *)frame);
+	hardclock((struct clockframe *)&frame);
 
 #if NMCA > 0
 	if (MCA_system) {
@@ -434,7 +429,8 @@ i8254_get_timecount(struct timecounter *tc)
 	/* Don't want someone screwing with the counter while we're here. */
 	flags = READ_FLAGS();
 	disable_intr();
-	__cpu_simple_lock(&tmr_lock);
+
+	simple_lock(&tmr_lock);
 
 	/* Select timer0 and latch counter value. */ 
 	outb(IO_TIMER1 + TIMER_MODE, TIMER_SEL0 | TIMER_LATCH);
@@ -451,9 +447,9 @@ i8254_get_timecount(struct timecounter *tc)
 	i8254_lastcount = count;
 	count += i8254_offset;
 
-	__cpu_simple_unlock(&tmr_lock);
-	WRITE_FLAGS(flags);
+	simple_unlock(&tmr_lock);
 
+	WRITE_FLAGS(flags);
 	return (count);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.213 2007/08/15 12:07:25 ad Exp $	*/
+/*	$NetBSD: trap.c,v 1.206.6.1 2007/06/11 12:24:51 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -78,9 +78,10 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.213 2007/08/15 12:07:25 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.206.6.1 2007/06/11 12:24:51 liamjfoy Exp $");
 
 #include "opt_cputype.h"	/* which mips CPU levels do we support? */
+#include "opt_ktrace.h"
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 
@@ -93,9 +94,12 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.213 2007/08/15 12:07:25 ad Exp $");
 #include <sys/syscall.h>
 #include <sys/user.h>
 #include <sys/buf.h>
+#ifdef KTRACE
 #include <sys/ktrace.h>
+#endif
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/kauth.h>
-#include <sys/cpu.h>
 
 #include <mips/cache.h>
 #include <mips/locore.h>
@@ -121,6 +125,8 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.213 2007/08/15 12:07:25 ad Exp $");
 #ifdef KGDB
 #include <sys/kgdb.h>
 #endif
+
+int want_resched;
 
 const char *trap_type[] = {
 	"external interrupt",
@@ -167,7 +173,7 @@ void MachFPTrap(u_int32_t, u_int32_t, vaddr_t, struct frame *);	/* XXX */
 #define DELAYBRANCH(x) ((int)(x)<0)
 
 /*
- * fork syscall returns directly to user process via lwp_trampoline(),
+ * fork syscall returns directly to user process via proc_trampoline,
  * which will be called the very first time when child gets running.
  */
 void
@@ -180,7 +186,10 @@ child_return(void *arg)
 	frame->f_regs[_R_V1] = 1;
 	frame->f_regs[_R_A3] = 0;
 	userret(l);
-	ktrsysret(SYS_fork, 0, 0);
+#ifdef KTRACE
+	if (KTRPOINT(l->l_proc, KTR_SYSRET))
+		ktrsysret(l, SYS_fork, 0, 0);
+#endif
 }
 
 #ifdef MIPS3_PLUS
@@ -346,7 +355,7 @@ trap(unsigned int status, unsigned int cause, vaddr_t vaddr, vaddr_t opc,
 		if (l == NULL || l->l_addr->u_pcb.pcb_onfault == NULL)
 			goto dopanic;
 		/* check for fuswintr() or suswintr() getting a page fault */
-		if (l->l_addr->u_pcb.pcb_onfault == (void *)fswintrberr) {
+		if (l->l_addr->u_pcb.pcb_onfault == (caddr_t)fswintrberr) {
 			frame->tf_regs[TF_EPC] = (int)fswintrberr;
 			return; /* KERN */
 		}
@@ -367,6 +376,11 @@ trap(unsigned int status, unsigned int cause, vaddr_t vaddr, vaddr_t opc,
 		map = &vm->vm_map;
 		va = trunc_page(vaddr);
 
+		if (l->l_flag & L_SA) {
+			l->l_savp->savp_faultaddr = (vaddr_t)vaddr;
+			l->l_flag |= L_SA_PAGEFAULT;
+		}
+
 		if (p->p_emul->e_fault)
 			rv = (*p->p_emul->e_fault)(p, va, ftype);
 		else
@@ -383,12 +397,13 @@ trap(unsigned int status, unsigned int cause, vaddr_t vaddr, vaddr_t opc,
 		 * the current limit and we need to reflect that as an access
 		 * error.
 		 */
-		if ((void *)va >= vm->vm_maxsaddr) {
+		if ((caddr_t)va >= vm->vm_maxsaddr) {
 			if (rv == 0)
 				uvm_grow(p, va);
 			else if (rv == EACCES)
 				rv = EFAULT;
 		}
+		l->l_flag &= ~L_SA_PAGEFAULT;
 		if (rv == 0) {
 			if (type & T_USER) {
 				userret(l);
@@ -505,11 +520,11 @@ trap(unsigned int status, unsigned int cause, vaddr_t vaddr, vaddr_t opc,
 			sa = trunc_page(va);
 			ea = round_page(va + sizeof(int) - 1);
 			rv = uvm_map_protect(&p->p_vmspace->vm_map,
-				sa, ea, VM_PROT_ALL, false);
+				sa, ea, VM_PROT_ALL, FALSE);
 			if (rv == 0) {
 				rv = suiword((void *)va, l->l_md.md_ss_instr);
 				(void)uvm_map_protect(&p->p_vmspace->vm_map,
-				sa, ea, VM_PROT_READ|VM_PROT_EXECUTE, false);
+				sa, ea, VM_PROT_READ|VM_PROT_EXECUTE, FALSE);
 			}
 		}
 		mips_icache_sync_all();		/* XXXJRT -- necessary? */
@@ -602,24 +617,30 @@ void
 ast(unsigned pc)	/* pc is program counter where to continue */
 {
 	struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
+	int sig;
 
-	while (l->l_md.md_astpending) {
+	while (p->p_md.md_astpending) {
 		uvmexp.softs++;
-		l->l_md.md_astpending = 0;
+		p->p_md.md_astpending = 0;
 
-		if (l->l_pflag & LP_OWEUPC) {
-			l->l_pflag &= ~LP_OWEUPC;
-			ADDUPROF(l);
+		if (p->p_flag & P_OWEUPC) {
+			p->p_flag &= ~P_OWEUPC;
+			ADDUPROF(p);
 		}
 
-		userret(l);
+		/* Take pending signals. */
+		while ((sig = CURSIG(l)) != 0)
+			postsig(sig);
 
-		if (curcpu()->ci_want_resched) {
+		if (want_resched) {
 			/*
 			 * We are being preempted.
 			 */
-			preempt();
+			preempt(0);
 		}
+
+		userret(l);
 	}
 }
 
@@ -653,7 +674,7 @@ mips_singlestep(struct lwp *l)
 	 * a RAS, and set the breakpoint just past it.
 	 */
 	if (!LIST_EMPTY(&p->p_raslist)) {
-		while (ras_lookup(p, (void *)va) != (void *)-1)
+		while (ras_lookup(p, (caddr_t)va) != (caddr_t)-1)
 			va += sizeof(int);
 	}
 
@@ -665,11 +686,11 @@ mips_singlestep(struct lwp *l)
 		sa = trunc_page(va);
 		ea = round_page(va + sizeof(int) - 1);
 		rv = uvm_map_protect(&p->p_vmspace->vm_map,
-		    sa, ea, VM_PROT_ALL, false);
+		    sa, ea, VM_PROT_ALL, FALSE);
 		if (rv == 0) {
 			rv = suiword((void *)va, MIPS_BREAK_SSTEP);
 			(void)uvm_map_protect(&p->p_vmspace->vm_map,
-			    sa, ea, VM_PROT_READ|VM_PROT_EXECUTE, false);
+			    sa, ea, VM_PROT_READ|VM_PROT_EXECUTE, FALSE);
 		}
 	}
 #if 0
@@ -736,6 +757,7 @@ extern char mips3_KernIntr[];
 extern char mips3_UserIntr[];
 extern char mips3_SystemCall[];
 int main(void *);	/* XXX */
+void mips_idle(void);	/* XXX */
 
 /*
  *  stack trace code, also useful to DDB one day
@@ -994,8 +1016,8 @@ static struct { void *addr; const char *name;} names[] = {
 	Name(mips3_UserIntr),
 #endif	/* MIPS3 && !MIPS3_5900 */
 
-	Name(cpu_idle),
-	Name(cpu_switchto),
+	Name(mips_idle),
+	Name(cpu_switch),
 	{0, 0}
 };
 

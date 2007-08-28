@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.5 2007/03/04 06:00:03 christos Exp $	*/
+/*	$NetBSD: machdep.c,v 1.2 2006/10/14 23:51:17 uwe Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.5 2007/03/04 06:00:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.2 2006/10/14 23:51:17 uwe Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -119,6 +119,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.5 2007/03/04 06:00:03 christos Exp $")
 #ifdef KGDB
 #include <sys/kgdb.h>
 #include <sh3/dev/scifvar.h>
+#endif
+#ifdef DDB
+#include <machine/db_machdep.h>
+#include <ddb/db_extern.h>
 #endif
 
 #if NKSYMS || defined(LKM) || defined(DDB)
@@ -207,7 +211,7 @@ landisk_startup(int howto, void *bi)
 	        size_t fssz;
 		fssz = sh3_round_page(mfs_initminiroot((void *)kernend));
 #ifdef MEMORY_DISK_DYNAMIC
-		md_root_setconf((void *)kernend, fssz);
+		md_root_setconf((caddr_t)kernend, fssz);
 #endif
 		kernend += fssz;
 	}
@@ -215,7 +219,7 @@ landisk_startup(int howto, void *bi)
 
 #ifdef KLOADER
 	/* copy boot parameter for kloader */
-	kloader_bootinfo_set(&kbootinfo, 0, NULL, NULL, true);
+	kloader_bootinfo_set(&kbootinfo, 0, NULL, NULL, TRUE);
 #endif
 
 	/* Load memory to UVM */

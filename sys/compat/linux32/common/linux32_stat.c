@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_stat.c,v 1.8 2007/04/22 08:29:57 dsl Exp $ */
+/*	$NetBSD: linux32_stat.c,v 1.1 2006/02/09 19:18:57 manu Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_stat.c,v 1.8 2007/04/22 08:29:57 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_stat.c,v 1.1 2006/02/09 19:18:57 manu Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -41,14 +41,12 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_stat.c,v 1.8 2007/04/22 08:29:57 dsl Exp $")
 #include <sys/signal.h>
 #include <sys/dirent.h>
 #include <sys/kernel.h>
-#include <sys/namei.h>
 #include <sys/fcntl.h>
-#include <sys/filedesc.h>
 #include <sys/select.h>
+#include <sys/sa.h>
 #include <sys/proc.h>
 #include <sys/ucred.h>
 #include <sys/swap.h>
-#include <sys/vfs_syscalls.h>
 
 #include <machine/types.h>
 
@@ -119,21 +117,35 @@ linux32_sys_stat64(l, v, retval)
 	        syscallarg(netbsd32_charp) path;
 	        syscallarg(linux32_statp) sp;
 	} */ *uap = v;
+	struct sys___stat30_args ua;
+	caddr_t sg = stackgap_init(l->l_proc, 0);
 	int error;
 	struct stat st;
 	struct linux32_stat64 st32;
+	struct stat *stp;
 	struct linux32_stat64 *st32p;
-	const char *path = SCARG_P32(uap, path);
 	
-	error = do_sys_stat(l, path, FOLLOW, &st);
-	if (error != 0)
+	NETBSD32TOP_UAP(path, const char);
+
+	CHECK_ALT_EXIST(l, &sg, SCARG(&ua, path));
+
+	stp = stackgap_alloc(l->l_proc, &sg, sizeof(*stp));
+	SCARG(&ua, ub) = stp;
+		
+	if ((error = sys___stat30(l, &ua, retval)) != 0)
 		return error;
 
+	if ((error = copyin(stp, &st, sizeof(st))) != 0)
+		return error;
+	
 	linux32_from_stat(&st, &st32);
 
-	st32p = SCARG_P32(uap, sp);
+	st32p = (struct linux32_stat64 *)(long)SCARG(uap, sp);
 
-	return copyout(&st32, st32p, sizeof(*st32p));
+	if ((error = copyout(&st32, st32p, sizeof(*st32p))) != 0)
+		return error;
+
+	return 0;
 }
 
 int
@@ -146,21 +158,35 @@ linux32_sys_lstat64(l, v, retval)
 	        syscallarg(netbsd32_charp) path;
 	        syscallarg(linux32_stat64p) sp;
 	} */ *uap = v;
+	struct sys___lstat30_args ua;
+	caddr_t sg = stackgap_init(l->l_proc, 0);
 	int error;
 	struct stat st;
 	struct linux32_stat64 st32;
+	struct stat *stp;
 	struct linux32_stat64 *st32p;
-	const char *path = SCARG_P32(uap, path);
 	
-	error = do_sys_stat(l, path, NOFOLLOW, &st);
-	if (error != 0)
+	NETBSD32TOP_UAP(path, const char);
+
+	CHECK_ALT_EXIST(l, &sg, SCARG(&ua, path));
+
+	stp = stackgap_alloc(l->l_proc, &sg, sizeof(*stp));
+	SCARG(&ua, ub) = stp;
+		
+	if ((error = sys___lstat30(l, &ua, retval)) != 0)
 		return error;
 
+	if ((error = copyin(stp, &st, sizeof(st))) != 0)
+		return error;
+	
 	linux32_from_stat(&st, &st32);
 
-	st32p = SCARG_P32(uap, sp);
+	st32p = (struct linux32_stat64 *)(long)SCARG(uap, sp);
 
-	return copyout(&st32, st32p, sizeof(*st32p));
+	if ((error = copyout(&st32, st32p, sizeof(*st32p))) != 0)
+		return error;
+
+	return 0;
 }
 
 int
@@ -173,18 +199,31 @@ linux32_sys_fstat64(l, v, retval)
 	        syscallarg(int) fd;
 	        syscallarg(linux32_stat64p) sp;
 	} */ *uap = v;
+	struct sys___fstat30_args ua;
+	caddr_t sg = stackgap_init(l->l_proc, 0);
 	int error;
 	struct stat st;
 	struct linux32_stat64 st32;
+	struct stat *stp;
 	struct linux32_stat64 *st32p;
+	
+	NETBSD32TO64_UAP(fd);
 
-	error = do_sys_fstat(l, SCARG(uap, fd), &st);
-	if (error != 0)
+	stp = stackgap_alloc(l->l_proc, &sg, sizeof(*stp));
+	SCARG(&ua, sb) = stp;
+		
+	if ((error = sys___fstat30(l, &ua, retval)) != 0)
 		return error;
 
+	if ((error = copyin(stp, &st, sizeof(st))) != 0)
+		return error;
+	
 	linux32_from_stat(&st, &st32);
 
-	st32p = SCARG_P32(uap, sp);
+	st32p = (struct linux32_stat64 *)(long)SCARG(uap, sp);
 
-	return copyout(&st32, st32p, sizeof(*st32p));
+	if ((error = copyout(&st32, st32p, sizeof(*st32p))) != 0)
+		return error;
+
+	return 0;
 }

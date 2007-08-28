@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.116 2007/08/06 21:26:54 adrianp Exp $
+# $NetBSD: GENERIC,v 1.113.2.2 2007/08/25 09:00:03 liamjfoy Exp $
 #
 # GENERIC machine description file
 # 
@@ -365,7 +365,7 @@ usb*	at ohci?
 
 # USB Hubs
 uhub*	at usb?
-uhub*	at uhub? port ?
+uhub*	at uhub? port ? configuration ? interface ?
 
 # USB HID device
 uhidev*	at uhub? port ? configuration ? interface ?

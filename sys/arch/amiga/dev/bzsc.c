@@ -1,4 +1,4 @@
-/*	$NetBSD: bzsc.c,v 1.42 2007/08/20 19:23:45 is Exp $ */
+/*	$NetBSD: bzsc.c,v 1.38 2006/03/29 04:16:45 thorpej Exp $ */
 
 /*
  * Copyright (c) 1997 Michael L. Hitch
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bzsc.c,v 1.42 2007/08/20 19:23:45 is Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bzsc.c,v 1.38 2006/03/29 04:16:45 thorpej Exp $");
 
 /*
  * Initial amiga Blizzard 1230-II driver by Daniel Widenfalk.  Conversion to
@@ -73,10 +73,6 @@ __KERNEL_RCSID(0, "$NetBSD: bzsc.c,v 1.42 2007/08/20 19:23:45 is Exp $");
 #include <amiga/dev/bzscvar.h>
 #include <amiga/dev/zbusvar.h>
 
-#ifdef __powerpc__
-#define badaddr(a)      badaddr_read(a, 2, NULL)
-#endif
-
 void	bzscattach(struct device *, struct device *, void *);
 int	bzscmatch(struct device *, struct cfdata *, void *);
 
@@ -92,7 +88,7 @@ void	bzsc_write_reg(struct ncr53c9x_softc *, int, u_char);
 int	bzsc_dma_isintr(struct ncr53c9x_softc *);
 void	bzsc_dma_reset(struct ncr53c9x_softc *);
 int	bzsc_dma_intr(struct ncr53c9x_softc *);
-int	bzsc_dma_setup(struct ncr53c9x_softc *, void **,
+int	bzsc_dma_setup(struct ncr53c9x_softc *, caddr_t *,
 	    size_t *, int, size_t *);
 void	bzsc_dma_go(struct ncr53c9x_softc *);
 void	bzsc_dma_stop(struct ncr53c9x_softc *);
@@ -147,7 +143,7 @@ bzscmatch(struct device *parent, struct cfdata *cf, void *aux)
 	if (!is_a1200())
 		return(0);			/* And not A1200 */
 	regs = &((volatile u_char *)zap->va)[0x10000];
-	if (badaddr((void *)__UNVOLATILE(regs)))
+	if (badaddr((caddr_t)__UNVOLATILE(regs)))
 		return(0);
 	regs[NCR_CFG1 * 2] = 0;
 	regs[NCR_CFG1 * 2] = NCRCFG1_PARENB | 7;
@@ -336,7 +332,7 @@ bzsc_dma_intr(struct ncr53c9x_softc *sc)
 }
 
 int
-bzsc_dma_setup(struct ncr53c9x_softc *sc, void **addr, size_t *len,
+bzsc_dma_setup(struct ncr53c9x_softc *sc, caddr_t *addr, size_t *len,
                int datain, size_t *dmasize)
 {
 	struct bzsc_softc *bsc = (struct bzsc_softc *)sc;
@@ -344,7 +340,7 @@ bzsc_dma_setup(struct ncr53c9x_softc *sc, void **addr, size_t *len,
 	u_char *ptr;
 	size_t xfer;
 
-	bsc->sc_dmaaddr = (char **)addr;
+	bsc->sc_dmaaddr = addr;
 	bsc->sc_pdmalen = len;
 	bsc->sc_datain = datain;
 	bsc->sc_dmasize = *dmasize;
@@ -375,7 +371,7 @@ bzsc_dma_setup(struct ncr53c9x_softc *sc, void **addr, size_t *len,
 	 * If unaligned address, read unaligned bytes into alignment buffer
 	 */
 	else if ((int)ptr & 1) {
-		pa = kvtop((void *)&bsc->sc_alignbuf);
+		pa = kvtop((caddr_t)&bsc->sc_alignbuf);
 		xfer = bsc->sc_dmasize = min(xfer, sizeof (bsc->sc_alignbuf));
 		NCR_DMA(("bzsc_dma_setup: align read by %d bytes\n", xfer));
 		bsc->sc_xfr_align = 1;
@@ -383,7 +379,7 @@ bzsc_dma_setup(struct ncr53c9x_softc *sc, void **addr, size_t *len,
 ++bzsc_cnt_dma;		/* number of DMA operations */
 
 	while (xfer < bsc->sc_dmasize) {
-		if ((pa + xfer) != kvtop((char*)*addr + xfer))
+		if ((pa + xfer) != kvtop(*addr + xfer))
 			break;
 		if ((bsc->sc_dmasize - xfer) < PAGE_SIZE)
 			xfer = bsc->sc_dmasize;

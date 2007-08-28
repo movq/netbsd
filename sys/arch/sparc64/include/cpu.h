@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.64 2007/08/25 19:16:10 martin Exp $ */
+/*	$NetBSD: cpu.h,v 1.59 2006/10/16 22:21:52 martin Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -114,12 +114,11 @@ struct cpu_info {
 	struct lwp		*ci_fplwp;
 
 	void			*ci_eintstack;
-
-	int			ci_mtx_count;
-	int			ci_mtx_oldspl;
+	struct pcb		*ci_idle_u;
 
 	/* Spinning up the CPU */
 	void			(*ci_spinup)(void);
+	void			*ci_initstack;
 	paddr_t			ci_paddr;
 
 	int			ci_number;
@@ -156,6 +155,8 @@ struct cpu_bootargs {
 	vaddr_t cb_ekdata;
 
 	paddr_t	cb_cpuinfo;
+
+	void	*cb_initstack;
 };
 
 extern struct cpu_bootargs *cpu_args;
@@ -227,6 +228,22 @@ struct clockframe {
 };
 
 #define	CLKF_USERMODE(framep)	(((framep)->t.tf_tstate & TSTATE_PRIV) == 0)
+/*
+ * XXX Disable CLKF_BASEPRI() for now.  If we use a counter-timer for
+ * the clock, the interrupt remains blocked until the interrupt handler
+ * returns and we write to the clear interrupt register.  If we use 
+ * %tick for the clock, we could get multiple interrupts, but the 
+ * currently enabled INTR_INTERLOCK will prevent the interrupt from being
+ * posted twice anyway.
+ * 
+ * Switching to %tick for all machines and disabling INTR_INTERLOCK
+ * in locore.s would allow us to take advantage of CLKF_BASEPRI().
+ */
+#if 0
+#define	CLKF_BASEPRI(framep)	(((framep)->t.tf_oldpil) == 0)
+#else
+#define	CLKF_BASEPRI(framep)	(0)
+#endif
 #define	CLKF_PC(framep)		((framep)->t.tf_pc)
 /* Since some files in sys/kern do not know BIAS, I'm using 0x7ff here */
 #define	CLKF_INTR(framep)						\
@@ -248,17 +265,23 @@ void setsoftint(void);
 void setsoftnet(void);
 
 /*
+ * Preempt the current process if in interrupt from user mode,
+ * or after the current trap/syscall if in system mode.
+ */
+#define	need_resched(ci)	(want_resched = 1, want_ast = 1)
+
+/*
  * Give a profiling tick to the current process when the user profiling
  * buffer pages are invalid.  On the sparc, request an ast to send us
  * through trap(), marking the proc as needing a profiling tick.
  */
-#define	cpu_need_proftick(l)	((l)->l_pflag |= LP_OWEUPC, want_ast = 1)
+#define	need_proftick(p)	((p)->p_flag |= P_OWEUPC, want_ast = 1)
 
 /*
- * Notify the current process (l) that it has a signal pending,
+ * Notify the current process (p) that it has a signal pending,
  * process as soon as possible.
  */
-#define	cpu_signotify(l)	(want_ast = 1)
+#define	signotify(p)		(want_ast = 1)
 
 /*
  * Interrupt handler chains.  Interrupt handlers should return 0 for
@@ -286,7 +309,7 @@ void	intr_establish(int level, struct intrhand *);
 struct dkbad;
 int isbad(struct dkbad *bt, int, int, int);
 /* machdep.c */
-void *	reserve_dumppages(void *);
+caddr_t	reserve_dumppages(caddr_t);
 /* clock.c */
 struct timeval;
 int	tickintr(void *);	/* level 10 (tick) interrupt code */
@@ -303,7 +326,7 @@ int	probeset(paddr_t, int, int, uint64_t);
 #define	 write_all_windows() __asm volatile("flushw" : : )
 #define	 write_user_windows() __asm volatile("flushw" : : )
 
-void 	lwp_trampoline(void);
+void 	proc_trampoline(void);
 struct pcb;
 void	snapshot(struct pcb *);
 struct frame *getfp(void);

@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_tty.c,v 1.35 2007/04/03 16:11:31 hannken Exp $	*/
+/*	$NetBSD: tty_tty.c,v 1.31 2006/11/01 10:17:59 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993, 1995
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_tty.c,v 1.35 2007/04/03 16:11:31 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_tty.c,v 1.31 2006/11/01 10:17:59 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,8 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: tty_tty.c,v 1.35 2007/04/03 16:11:31 hannken Exp $")
 #include <sys/conf.h>
 #include <sys/kauth.h>
 
-/* XXXSMP */
-#define cttyvp(p) ((p)->p_lflag & PL_CONTROLT ? (p)->p_session->s_ttyvp : NULL)
+#define cttyvp(p) ((p)->p_flag & P_CONTROLT ? (p)->p_session->s_ttyvp : NULL)
 
 /*ARGSUSED*/
 static int
@@ -99,36 +98,38 @@ static int
 cttywrite(dev_t dev, struct uio *uio, int flag)
 {
 	struct vnode *ttyvp = cttyvp(curproc);
+	struct mount *mp;
 	int error;
 
 	if (ttyvp == NULL)
 		return (EIO);
+	mp = NULL;
+	if (ttyvp->v_type != VCHR &&
+	    (error = vn_start_write(ttyvp, &mp, V_WAIT | V_PCATCH)) != 0)
+		return (error);
 	vn_lock(ttyvp, LK_EXCLUSIVE | LK_RETRY);
 	error = VOP_WRITE(ttyvp, uio, flag, NOCRED);
 	VOP_UNLOCK(ttyvp, 0);
+	vn_finished_write(mp, 0);
 	return (error);
 }
 
 /*ARGSUSED*/
 static int
-cttyioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
+cttyioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 {
 	struct vnode *ttyvp = cttyvp(l->l_proc);
-	int rv;
 
 	if (ttyvp == NULL)
 		return (EIO);
 	if (cmd == TIOCSCTTY)		/* XXX */
 		return (EINVAL);
 	if (cmd == TIOCNOTTY) {
-		mutex_enter(&proclist_lock);
 		if (!SESS_LEADER(l->l_proc)) {
-			l->l_proc->p_lflag &= ~PL_CONTROLT;
-			rv = 0;
+			l->l_proc->p_flag &= ~P_CONTROLT;
+			return (0);
 		} else
-			rv = EINVAL;
-		mutex_exit(&proclist_lock);
-		return (rv);
+			return (EINVAL);
 	}
 	return (VOP_IOCTL(ttyvp, cmd, addr, flag, NOCRED, l));
 }

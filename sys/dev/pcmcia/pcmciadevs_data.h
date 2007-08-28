@@ -1,10 +1,10 @@
-/*	$NetBSD: pcmciadevs_data.h,v 1.225 2007/08/20 00:32:38 kiyohara Exp $	*/
+/*	$NetBSD: pcmciadevs_data.h,v 1.223 2006/11/16 00:53:31 christos Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED.  DO NOT EDIT.
  *
  * generated from:
- *	NetBSD: pcmciadevs,v 1.222 2007/08/20 00:29:43 kiyohara Exp
+ *	NetBSD: pcmciadevs,v 1.220 2006/11/16 00:52:48 christos Exp
  */
 /* $FreeBSD: src/sys/dev/pccard/pccarddevs,v 1.20 2001/11/19 05:02:55 imp Exp $*/
 
@@ -209,13 +209,6 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    0,
 	    "Anycom",
 	    "Anycom Bluetooth CF Card LSE039",	}
-	,
-	{
-	    PCMCIA_VENDOR_ANYCOM, PCMCIA_PRODUCT_ANYCOM_LSE139,
-	    PCMCIA_CIS_ANYCOM_LSE139,
-	    0,
-	    "Anycom",
-	    "Anycom Bluetooth CF Card LSE139",	}
 	,
 	{
 	    PCMCIA_VENDOR_ARCHOS, PCMCIA_PRODUCT_ARCHOS_ARC_ATAPI,
@@ -804,13 +797,6 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    0,
 	    "Motorola Corporation",
 	    "Motorola Montana 33.6",	}
-	,
-	{
-	    PCMCIA_VENDOR_NECINFRONTIA, PCMCIA_PRODUCT_NECINFRONTIA_AX420N,
-	    PCMCIA_CIS_NECINFRONTIA_AX420N,
-	    0,
-	    "NEC Infrontia",
-	    "NEC Infrontia AX420N AirH Modem",	}
 	,
 	{
 	    PCMCIA_VENDOR_NEWMEDIA, PCMCIA_PRODUCT_NEWMEDIA_BASICS,
@@ -2179,14 +2165,6 @@ struct pcmcia_knowndev pcmcia_knowndevs[] = {
 	    PCMCIA_CIS_INVALID,
 	    0,
 	    "The Linksys Group",
-	    NULL,
-	},
-	{
-	    PCMCIA_VENDOR_NECINFRONTIA,
-	    PCMCIA_KNOWNDEV_NOPROD,
-	    PCMCIA_CIS_INVALID,
-	    0,
-	    "NEC Infrontia",
 	    NULL,
 	},
 	{

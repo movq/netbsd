@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_siginfo.h,v 1.5 2007/03/04 06:01:33 christos Exp $	 */
+/*	$NetBSD: svr4_siginfo.h,v 1.4 2002/06/19 17:33:01 eeh Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -101,7 +101,7 @@ typedef union svr4_siginfo {
 			} _child;
 
 			struct {
-				void *		_addr;
+				caddr_t		_addr;
 				int		_trap;
 			} _fault;
 		} _reason;

@@ -1,4 +1,4 @@
-/*	$NetBSD: unimpl_emul.S,v 1.3 2007/04/17 22:47:50 mhitch Exp $	*/
+/*	$NetBSD: unimpl_emul.S,v 1.2.72.1 2007/05/07 03:34:21 snj Exp $	*/
 
 /*
  * Copyright (c) 2001 Brandon Creighton.  All rights reserved.

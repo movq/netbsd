@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.20 2007/05/17 14:51:25 yamt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.16 2006/04/09 01:18:14 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.20 2007/05/17 14:51:25 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.16 2006/04/09 01:18:14 tsutsui Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kloader.h"
@@ -99,14 +99,14 @@ mach_init()
 {
 	extern char kernel_text[], edata[], end[];
 	extern struct user *proc0paddr;
-	void *kernend, *v;
+	caddr_t kernend, v;
 	paddr_t start;
 	size_t size;
 
 	/*
 	 * Clear the BSS segment.
 	 */
-	kernend = (void *)mips_round_page(end);
+	kernend = (caddr_t)mips_round_page(end);
 	memset(edata, 0, kernend - edata);
 
 	/* disable all interrupt */
@@ -162,12 +162,13 @@ mach_init()
 	/*
 	 * Allocate space for proc0's USPACE.
 	 */
-	v = (void *)uvm_pageboot_alloc(USPACE); 
+	v = (caddr_t)uvm_pageboot_alloc(USPACE); 
 	lwp0.l_addr = proc0paddr = (struct user *) v;
 	lwp0.l_md.md_regs = (struct frame *)(v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] = PSL_LOWIPL;	/* SR */
+	curpcb = &lwp0.l_addr->u_pcb;
+	curpcb->pcb_context[11] = PSL_LOWIPL;	/* SR */
 #ifdef IPL_ICU_MASK
-	proc0paddr->u_pcb.pcb_ppl = 0;
+	curpcb->pcb_ppl = 0;
 #endif
 }
 
@@ -194,12 +195,12 @@ cpu_startup()
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
+	    16 * NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 	/*
 	 * Allocate a submap for physio.
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    VM_PHYS_SIZE, 0, false, NULL);
+	    VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * (No need to allocate an mbuf cluster submap.  Mbuf clusters
@@ -235,7 +236,7 @@ cpu_reboot(int howto, char *bootstr)
 
 #ifdef KLOADER
 	/* No bootinfo is required. */
-	kloader_bootinfo_set(&kbi, 0, NULL, NULL, true);
+	kloader_bootinfo_set(&kbi, 0, NULL, NULL, TRUE);
 #ifndef KLOADER_KERNEL_PATH
 #define	KLOADER_KERNEL_PATH	"/netbsd"
 #endif

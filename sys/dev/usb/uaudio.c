@@ -1,4 +1,4 @@
-/*	$NetBSD: uaudio.c,v 1.110 2007/03/13 13:51:54 drochner Exp $	*/
+/*	$NetBSD: uaudio.c,v 1.107 2006/11/16 01:33:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uaudio.c,v 1.110 2007/03/13 13:51:54 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uaudio.c,v 1.107 2006/11/16 01:33:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,6 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: uaudio.c,v 1.110 2007/03/13 13:51:54 drochner Exp $"
 #include <sys/select.h>
 #include <sys/proc.h>
 #include <sys/vnode.h>
+#include <sys/device.h>
 #include <sys/poll.h>
 
 #include <sys/audioio.h>
@@ -197,7 +198,7 @@ struct terminal_list {
 
 struct io_terminal {
 	union {
-		const uaudio_cs_descriptor_t *desc;
+		const usb_descriptor_t *desc;
 		const struct usb_audio_input_terminal *it;
 		const struct usb_audio_output_terminal *ot;
 		const struct usb_audio_mixer_unit *mu;
@@ -366,11 +367,17 @@ USB_DECLARE_DRIVER(uaudio);
 
 USB_MATCH(uaudio)
 {
-	USB_IFMATCH_START(uaudio, uaa);
+	USB_MATCH_START(uaudio, uaa);
+	usb_interface_descriptor_t *id;
 
+	if (uaa->iface == NULL)
+		return UMATCH_NONE;
+
+	id = usbd_get_interface_descriptor(uaa->iface);
 	/* Trigger on the control interface. */
-	if (uaa->class != UICLASS_AUDIO ||
-	    uaa->subclass != UISUBCLASS_AUDIOCONTROL ||
+	if (id == NULL ||
+	    id->bInterfaceClass != UICLASS_AUDIO ||
+	    id->bInterfaceSubClass != UISUBCLASS_AUDIOCONTROL ||
 	    (usbd_get_quirks(uaa->device)->uq_flags & UQ_BAD_AUDIO))
 		return UMATCH_NONE;
 
@@ -379,7 +386,7 @@ USB_MATCH(uaudio)
 
 USB_ATTACH(uaudio)
 {
-	USB_IFATTACH_START(uaudio, sc, uaa);
+	USB_ATTACH_START(uaudio, sc, uaa);
 	usb_interface_descriptor_t *id;
 	usb_config_descriptor_t *cdesc;
 	char *devinfop;
@@ -649,7 +656,7 @@ Static struct usb_audio_cluster
 uaudio_get_cluster(int id, const struct io_terminal *iot)
 {
 	struct usb_audio_cluster r;
-	const uaudio_cs_descriptor_t *dp;
+	const usb_descriptor_t *dp;
 	int i;
 
 	for (i = 0; i < 25; i++) { /* avoid infinite loops */
@@ -1826,7 +1833,7 @@ uaudio_identify_ac(struct uaudio_softc *sc, const usb_config_descriptor_t *cdesc
 	struct io_terminal* iot;
 	const usb_interface_descriptor_t *id;
 	const struct usb_audio_control_descriptor *acdp;
-	const uaudio_cs_descriptor_t *dp;
+	const usb_descriptor_t *dp;
 	const struct usb_audio_output_terminal *pot;
 	struct terminal_list *tml;
 	const char *tbuf, *ibuf, *ibufend;
@@ -1867,7 +1874,7 @@ uaudio_identify_ac(struct uaudio_softc *sc, const usb_config_descriptor_t *cdesc
 
 	/* Scan through all the AC specific descriptors */
 	ibufend = ibuf + aclen;
-	dp = (const uaudio_cs_descriptor_t *)ibuf;
+	dp = (const usb_descriptor_t *)ibuf;
 	ndps = 0;
 	iot = malloc(sizeof(struct io_terminal) * 256, M_TEMP, M_NOWAIT | M_ZERO);
 	if (iot == NULL) {
@@ -1878,7 +1885,7 @@ uaudio_identify_ac(struct uaudio_softc *sc, const usb_config_descriptor_t *cdesc
 		ibuf += dp->bLength;
 		if (ibuf >= ibufend)
 			break;
-		dp = (const uaudio_cs_descriptor_t *)ibuf;
+		dp = (const usb_descriptor_t *)ibuf;
 		if (ibuf + dp->bLength > ibufend) {
 			free(iot, M_TEMP);
 			return USBD_INVAL;

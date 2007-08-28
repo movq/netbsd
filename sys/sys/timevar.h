@@ -1,4 +1,4 @@
-/*	$NetBSD: timevar.h,v 1.13 2007/08/07 11:39:18 ad Exp $	*/
+/*	$NetBSD: timevar.h,v 1.6 2006/07/23 22:06:14 ad Exp $	*/
 
 /*
  *  Copyright (c) 2005 The NetBSD Foundation.
@@ -80,7 +80,7 @@
  */
 struct 	ptimer {
 	union {
-		callout_t	pt_ch;
+		struct	callout	pt_ch;
 		struct {
 			LIST_ENTRY(ptimer)	pt_list;
 			int	pt_active;
@@ -177,15 +177,13 @@ int	hzto(struct timeval *);
 void	inittimecounter(void);
 int	itimerdecr(struct ptimer *, int);
 void	itimerfire(struct ptimer *);
-int	itimerfix(struct timeval *);
-int	itimespecfix(struct timespec *);
+int	itimerfix(struct timeval *tv);
 int	ppsratecheck(struct timeval *, int *, int);
 int	ratecheck(struct timeval *, const struct timeval *);
 void	realtimerexpire(void *);
 int	settime(struct proc *p, struct timespec *);
-int	nanosleep1(struct lwp *l, struct timespec *, struct timespec *);
-int	settimeofday1(const struct timeval *, bool,
-	    const void *, struct lwp *, bool);
+int	settimeofday1(const struct timeval *, const struct timezone *,
+	    struct proc *);
 int	timer_create1(timer_t *, clockid_t, struct sigevent *, copyin_t,
 	    struct lwp *);
 void	timer_gettime(struct ptimer *, struct itimerval *);
@@ -196,7 +194,6 @@ int	tstohz(struct timespec *);
 int	tvtohz(struct timeval *);
 int	inittimeleft(struct timeval *, struct timeval *);
 int	gettimeleft(struct timeval *, struct timeval *);
-void	timerupcall(struct lwp *);
 
 #ifdef __HAVE_TIMECOUNTER
 extern time_t time_second;	/* current second in the epoch */

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.h,v 1.9 2007/05/24 11:21:52 njoly Exp $ */
+/*	$NetBSD: linux_machdep.h,v 1.5.24.4 2007/05/30 18:20:35 riz Exp $ */
 
 /*-
  * Copyright (c) 2005 Emmanuel Dreyfus, all rights reserved.

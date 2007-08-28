@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuconf.h,v 1.13 2007/01/06 00:50:54 christos Exp $	*/
+/*	$NetBSD: cpuconf.h,v 1.12.24.1 2007/02/21 18:36:02 snj Exp $	*/
 
 /*
  * Copyright (c) 2002 Wasabi Systems, Inc.

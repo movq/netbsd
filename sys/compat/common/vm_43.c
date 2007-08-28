@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_43.c,v 1.15 2007/03/04 06:01:13 christos Exp $	*/
+/*	$NetBSD: vm_43.c,v 1.13 2006/11/16 01:32:41 christos Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -82,7 +82,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_43.c,v 1.15 2007/03/04 06:01:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_43.c,v 1.13 2006/11/16 01:32:41 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -94,6 +94,7 @@ __KERNEL_RCSID(0, "$NetBSD: vm_43.c,v 1.15 2007/03/04 06:01:13 christos Exp $");
 #include <sys/mman.h>
 
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <miscfs/specfs/specdev.h>
@@ -112,7 +113,7 @@ int
 compat_43_sys_mmap(struct lwp *l, void *v, register_t *retval)
 {
 	struct compat_43_sys_mmap_args /* {
-		syscallarg(void *) addr;
+		syscallarg(caddr_t) addr;
 		syscallarg(size_t) len;
 		syscallarg(int) prot;
 		syscallarg(int) flags;
@@ -120,7 +121,7 @@ compat_43_sys_mmap(struct lwp *l, void *v, register_t *retval)
 		syscallarg(long) pos;
 	} */ *uap = v;
 	struct sys_mmap_args /* {
-		syscallarg(void *) addr;
+		syscallarg(caddr_t) addr;
 		syscallarg(size_t) len;
 		syscallarg(int) prot;
 		syscallarg(int) flags;

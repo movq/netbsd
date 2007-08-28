@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2007/02/25 05:47:55 dyoung Exp $
+#	$NetBSD: Makefile,v 1.8 2003/01/06 17:40:36 lukem Exp $
 
 # Makefile for mac68k tags file and boot blocks
 
@@ -17,8 +17,7 @@ DMAC68K=mac68k dev include nubus obio
 .include "../../kern/Make.tags.inc"
 
 tags:
-	-rm -f ${TMAC68K}
-	-echo ${SMAC68K} ${SM68K} ${COMM} | xargs ctags -wdtf ${TMAC68K}
+	-ctags -wdtf ${TMAC68K} ${SMAC68K} ${SM68K} ${COMM}
 	egrep "^ENTRY(.*)|^ALTENTRY(.*)" ${AMAC68K} ${AM68K} | \
 	    sed "s;\([^:]*\):\([^(]*\)(\([^, )]*\)\(.*\);\3 \1 /^\2(\3\4$$/;" \
 	    >> ${TMAC68K}

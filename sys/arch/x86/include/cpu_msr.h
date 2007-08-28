@@ -1,4 +1,4 @@
-/* $NetBSD: cpu_msr.h,v 1.4 2007/03/25 02:27:16 xtraeme Exp $ */
+/* $NetBSD: cpu_msr.h,v 1.4.6.2 2007/04/20 20:31:27 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.

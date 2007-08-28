@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.36 2007/05/10 21:24:37 rumble Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.32 2006/11/17 21:01:03 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.36 2007/05/10 21:24:37 rumble Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.32 2006/11/17 21:01:03 tsutsui Exp $");
 
 #include "opt_ddb.h"
 
@@ -47,7 +47,6 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.36 2007/05/10 21:24:37 rumble Exp $")
 #include <machine/sysconf.h>
 #include <machine/machtype.h>
 #include <machine/autoconf.h>
-#include <machine/vmparam.h>	/* for PAGE_SIZE */
 
 #include <dev/pci/pcivar.h>
 
@@ -79,8 +78,8 @@ cpu_configure()
 	(*platform.bus_reset)();
 
 	printf("biomask %02x netmask %02x ttymask %02x clockmask %02x\n",
-	    ipl2spl_table[IPL_BIO] >> 8, ipl2spl_table[IPL_NET] >> 8, 
-	    ipl2spl_table[IPL_TTY] >> 8, ipl2spl_table[IPL_CLOCK] >> 8);
+	    splmasks[IPL_BIO] >> 8, splmasks[IPL_NET] >> 8, 
+	    splmasks[IPL_TTY] >> 8, splmasks[IPL_CLOCK] >> 8);
 
 	/*
 	 * Hardware interrupts will be enabled in cpu_initclocks(9)
@@ -96,7 +95,7 @@ cpu_configure()
  * 'dksc(0,1,0)netbsd'
  */
 void
-makebootdev(const char *cp)
+makebootdev(char *cp)
 {
 	if (booted_protocol != NULL)
 		return;
@@ -174,7 +173,7 @@ cpu_rootconf()
 
 /*
  * Try to determine the boot device and set up some device properties
- * to handle machine dependent quirks.
+ * to handle machine depedent quirks.
  */
 
 #define BUILTIN_AHC_P(pa)	\
@@ -192,41 +191,17 @@ device_register(struct device *dev, void *aux)
 		struct pci_attach_args *pa = aux;
 
 		if (BUILTIN_AHC_P(pa)) {
-			prop_bool_t usetd = prop_bool_create(true);
+			prop_bool_t usetd = prop_bool_create(TRUE);
 			KASSERT(usetd != NULL);
 
 			if (prop_dictionary_set(device_properties(dev),
 						"aic7xxx-use-target-defaults",
-						usetd) == false) {
+						usetd) == FALSE) {
 				printf("WARNING: unable to set "
 				    "aic7xxx-use-target-defaults property "
 				    "for %s\n", dev->dv_xname);
 			}
 			prop_object_release(usetd);
-		}
-	}
-
-	/*
-	 * The Set Engineering GIO Fast Ethernet controller has restrictions
-	 * on DMA boundaries.
-	 */
-	if (device_is_a(dev, "tl")) {
-		struct device *grandparent;
-		prop_number_t gfe_boundary;
-
-		grandparent = device_parent(parent);
-		if (grandparent != NULL && device_is_a(grandparent, "giopci")) {
-			gfe_boundary = prop_number_create_integer(PAGE_SIZE);
-			KASSERT(gfe_boundary != NULL);
-
-			if (prop_dictionary_set(device_properties(dev),
-			    "tl-dma-page-boundary", gfe_boundary) == false) {
-				printf("WARNING: unable to set "
-				    "tl-dma-page-boundary property "
-				    "for %s\n", dev->dv_xname);
-			}
-			prop_object_release(gfe_boundary);
-			return;
 		}
 	}
 		

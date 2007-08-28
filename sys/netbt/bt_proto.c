@@ -1,4 +1,4 @@
-/*	$NetBSD: bt_proto.c,v 1.8 2007/05/02 20:40:24 dyoung Exp $	*/
+/*	$NetBSD: bt_proto.c,v 1.5 2006/10/10 21:49:14 dogcow Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bt_proto.c,v 1.8 2007/05/02 20:40:24 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bt_proto.c,v 1.5 2006/10/10 21:49:14 dogcow Exp $");
 
 #include <sys/param.h>
 #include <sys/domain.h>
@@ -51,55 +51,66 @@ __KERNEL_RCSID(0, "$NetBSD: bt_proto.c,v 1.8 2007/05/02 20:40:24 dyoung Exp $");
 DOMAIN_DEFINE(btdomain);	/* forward declare and add to link set */
 
 const struct protosw btsw[] = {
-	{ /* raw HCI commands */
-		.pr_type = SOCK_RAW,
-		.pr_domain = &btdomain,
-		.pr_protocol = BTPROTO_HCI,
-		.pr_flags = (PR_ADDR | PR_ATOMIC),
-		.pr_ctloutput = hci_ctloutput,
-		.pr_usrreq = hci_usrreq,
-	},
-	{ /* HCI SCO data (audio) */
-		.pr_type = SOCK_SEQPACKET,
-		.pr_domain = &btdomain,
-		.pr_protocol = BTPROTO_SCO,
-		.pr_flags = (PR_CONNREQUIRED | PR_ATOMIC | PR_LISTEN),
-		.pr_ctloutput = sco_ctloutput,
-		.pr_usrreq = sco_usrreq,
-	},
-	{ /* L2CAP Connection Oriented */
-		.pr_type = SOCK_SEQPACKET,
-		.pr_domain = &btdomain,
-		.pr_protocol = BTPROTO_L2CAP,
-		.pr_flags = (PR_CONNREQUIRED | PR_ATOMIC | PR_LISTEN),
-		.pr_ctloutput = l2cap_ctloutput,
-		.pr_usrreq = l2cap_usrreq,
-	},
-	{ /* RFCOMM */
-		.pr_type = SOCK_STREAM,
-		.pr_domain = &btdomain,
-		.pr_protocol = BTPROTO_RFCOMM,
-		.pr_flags = (PR_CONNREQUIRED | PR_LISTEN | PR_WANTRCVD),
-		.pr_ctloutput = rfcomm_ctloutput,
-		.pr_usrreq = rfcomm_usrreq,
-	},
+    {	/* raw HCI commands */
+	SOCK_RAW,	&btdomain,
+	BTPROTO_HCI,	PR_ADDR | PR_ATOMIC,
+	NULL,		NULL,		NULL,		hci_ctloutput,
+	hci_usrreq,	NULL,		NULL,		NULL,
+	NULL,
+    },
+    {	/* HCI SCO data (audio) */
+	SOCK_SEQPACKET,	&btdomain,
+	BTPROTO_SCO,	PR_CONNREQUIRED | PR_ATOMIC | PR_LISTEN,
+	NULL,		NULL,		NULL,		sco_ctloutput,
+	sco_usrreq,	NULL,		NULL,		NULL,
+	NULL,
+    },
+    {	/* L2CAP Connection Oriented */
+	SOCK_SEQPACKET,	&btdomain,
+	BTPROTO_L2CAP,	PR_CONNREQUIRED | PR_ATOMIC | PR_LISTEN,
+	NULL,		NULL,		NULL,		l2cap_ctloutput,
+	l2cap_usrreq,	NULL,		NULL,		NULL,
+	NULL,
+    },
+#if 0
+    {	/* L2CAP Ping Requests */
+	SOCK_RAW,	&btdomain,
+	BTPROTO_L2CAP,	PR_ADDR | PR_ATOMIC,
+	NULL,		NULL,		NULL,		NULL,
+	NULL,		NULL,		NULL,		NULL,
+	NULL,
+    },
+    {	/* L2CAP Connectionless */
+	SOCK_DGRAM,	&btdomain,
+	BTPROTO_L2CAP,	PR_ADDR | PR_ATOMIC,
+	NULL,		NULL,		NULL,		NULL,
+	NULL,		NULL,		NULL,		NULL,
+	NULL,
+    },
+#endif
+    {	/* RFCOMM */
+	SOCK_STREAM,	&btdomain,
+	BTPROTO_RFCOMM,	PR_CONNREQUIRED | PR_LISTEN | PR_WANTRCVD,
+	NULL,		NULL,		NULL,		rfcomm_ctloutput,
+	rfcomm_usrreq,	NULL,		NULL,		NULL,
+	NULL,
+    }
 };
 
 struct domain btdomain = {
-	.dom_family = AF_BLUETOOTH,
-	.dom_name = "bluetooth",
-	.dom_init = NULL,
-	.dom_externalize = NULL,
-	.dom_dispose = NULL,
-	.dom_protosw = btsw,
-	.dom_protoswNPROTOSW = &btsw[sizeof(btsw)/sizeof(btsw[0])],
-	.dom_rtattach = NULL,
-	.dom_rtoffset = 32,
-	.dom_maxrtkey = sizeof(struct sockaddr_bt),
-	.dom_ifattach = NULL,
-	.dom_ifdetach = NULL,
-	.dom_ifqueues = { NULL, NULL },
-	.dom_link = { NULL },
-	.dom_mowner = MOWNER_INIT("",""),
-	.dom_rtcache = LIST_HEAD_INITIALIZER(btdomain.dom_rtcache)
+	AF_BLUETOOTH,			/* family */
+	"bluetooth",			/* name */
+	NULL,				/* init routine */
+	NULL,				/* externalise access rights */
+	NULL,				/* dispose of internalised rights */
+	btsw,				/* protosw */
+	&btsw[sizeof(btsw)/sizeof(btsw[0])],	/* NPROTOSW */
+	NULL,				/* attach to routing table */
+	32,				/* rtoffset */
+	sizeof(struct sockaddr_bt),	/* maxrtkey */
+	NULL,				/* attach af-data */
+	NULL,				/* detach af-data */
+	{ NULL, NULL },			/* queues */
+	{ NULL },			/* link */
+	MOWNER_INIT("","")		/* owner */
 };

@@ -1,4 +1,4 @@
-/*	$NetBSD: irix_exec.c,v 1.46 2007/03/06 12:43:08 tsutsui Exp $ */
+/*	$NetBSD: irix_exec.c,v 1.42 2005/12/11 12:20:12 christos Exp $ */
 
 /*-
  * Copyright (c) 2001-2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: irix_exec.c,v 1.46 2007/03/06 12:43:08 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: irix_exec.c,v 1.42 2005/12/11 12:20:12 christos Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_syscall_debug.h"
@@ -200,7 +200,7 @@ irix_e_proc_exit(p)
 	/*
 	 * Send SIGHUP to child process as requested using prctl(2)
 	 */
-	mutex_enter(&proclist_mutex);
+	proclist_lock_read();
 	PROCLIST_FOREACH(pp, &allproc) {
 		/* Select IRIX processes */
 		if (irix_check_exec(pp) == 0)
@@ -210,10 +210,10 @@ irix_e_proc_exit(p)
 		if (ied->ied_termchild && pp->p_pptr == p)
 			psignal(pp, native_to_svr4_signo[SIGHUP]);
 	}
-	mutex_exit(&proclist_mutex);
+	proclist_unlock_read();
 
 	/*
-	 * Remove the process from share group processes list, if relevant.
+	 * Remove the process from share group processes list, if revelant.
 	 */
 	ied = (struct irix_emuldata *)(p->p_emuldata);
 
@@ -288,5 +288,5 @@ irix_e_proc_fork(p, parent, forkflags)
 	ied2 = parent->p_emuldata;
 
 	(void) memcpy(ied1, ied2, (unsigned)
-	    ((char *)&ied1->ied_endcopy - (char *)&ied1->ied_startcopy));
+	    ((caddr_t)&ied1->ied_endcopy - (caddr_t)&ied1->ied_startcopy));
 }

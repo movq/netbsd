@@ -1,4 +1,4 @@
-/* $NetBSD: vga_ofbus.c,v 1.10 2007/07/30 13:02:01 jmmv Exp $ */
+/* $NetBSD: vga_ofbus.c,v 1.8 2005/12/11 12:19:05 christos Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga_ofbus.c,v 1.10 2007/07/30 13:02:01 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vga_ofbus.c,v 1.8 2005/12/11 12:19:05 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,12 +55,6 @@ struct vga_ofbus_softc {
 
 	int sc_phandle;
 };
-
-#if defined(SHARK) && (NPC > 0)
-/* For consistency with the conditionals used in ofw.c. */
-#elif (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
-extern int console_ihandle;
-#endif
 
 int	vga_ofbus_match (struct device *, struct cfdata *, void *);
 void	vga_ofbus_attach (struct device *, struct device *, void *);
@@ -103,7 +97,7 @@ int
 vga_ofbus_cnattach(bus_space_tag_t iot, bus_space_tag_t memt)
 {
 	int chosen_phandle;
-	int stdout_ihandle, stdout_phandle, ret;
+	int stdout_ihandle, stdout_phandle;
 	char buf[128];
 
 	stdout_phandle = 0;
@@ -134,13 +128,5 @@ vga_ofbus_cnattach(bus_space_tag_t iot, bus_space_tag_t memt)
 		       "screen device failed\n");
 	}
 
-	ret = vga_cnattach(iot, memt, WSDISPLAY_TYPE_ISAVGA, 1);
-#if defined(SHARK) && (NPC > 0)
-/* For consistency with the conditionals used in ofw.c. */
-#elif (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
-	if (ret == 0)
-		console_ihandle = stdout_ihandle;
-#endif
-
-	return ret;
+	return (vga_cnattach(iot, memt, WSDISPLAY_TYPE_ISAVGA, 1));
 }

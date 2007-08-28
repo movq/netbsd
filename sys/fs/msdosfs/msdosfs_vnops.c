@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_vnops.c,v 1.40 2007/07/29 21:17:41 rumble Exp $	*/
+/*	$NetBSD: msdosfs_vnops.c,v 1.34.2.1 2007/02/17 23:27:44 tron Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.40 2007/07/29 21:17:41 rumble Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.34.2.1 2007/02/17 23:27:44 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -390,7 +390,7 @@ msdosfs_setattr(v)
 			return (EROFS);
 		if (kauth_cred_geteuid(cred) != pmp->pm_uid &&
 		    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-		    NULL)) &&
+		    &ap->a_l->l_acflag)) &&
 		    ((vap->va_vaflags & VA_UTIMES_NULL) == 0 ||
 		    (error = VOP_ACCESS(ap->a_vp, VWRITE, cred, ap->a_l))))
 			return (error);
@@ -413,7 +413,7 @@ msdosfs_setattr(v)
 			return (EROFS);
 		if (kauth_cred_geteuid(cred) != pmp->pm_uid &&
 		    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-		    NULL)))
+		    &ap->a_l->l_acflag)))
 			return (error);
 		/* We ignore the read and execute bits. */
 		if (vap->va_mode & S_IWUSR)
@@ -431,7 +431,7 @@ msdosfs_setattr(v)
 			return (EROFS);
 		if (kauth_cred_geteuid(cred) != pmp->pm_uid &&
 		    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-		    NULL)))
+		    &ap->a_l->l_acflag)))
 			return (error);
 		if (vap->va_flags & SF_ARCHIVED)
 			dep->de_Attributes &= ~ATTR_ARCHIVE;
@@ -533,7 +533,7 @@ msdosfs_read(v)
 			brelse(bp);
 			return (error);
 		}
-		error = uiomove((char *)bp->b_data + on, (int) n, uio);
+		error = uiomove(bp->b_data + on, (int) n, uio);
 		brelse(bp);
 	} while (error == 0 && uio->uio_resid > 0 && n != 0);
 
@@ -570,7 +570,7 @@ msdosfs_write(v)
 	struct denode *dep = VTODE(vp);
 	struct msdosfsmount *pmp = dep->de_pmp;
 	kauth_cred_t cred = ap->a_cred;
-	bool async;
+	boolean_t async;
 
 #ifdef MSDOSFS_DEBUG
 	printf("msdosfs_write(vp %p, uio %p, ioflag %x, cred %p\n",
@@ -605,9 +605,7 @@ msdosfs_write(v)
 	 */
 	if (((uio->uio_offset + uio->uio_resid) >
 	    p->p_rlimit[RLIMIT_FSIZE].rlim_cur)) {
-		mutex_enter(&proclist_mutex);
 		psignal(p, SIGXFSZ);
-		mutex_exit(&proclist_mutex);
 		return (EFBIG);
 	}
 
@@ -1469,7 +1467,7 @@ msdosfs_readdir(v)
 	uio_off = uio->uio_offset;
 
 	if (ap->a_ncookies) {
-		nc = uio->uio_resid / _DIRENT_MINSIZE((struct dirent *)0);
+		nc = uio->uio_resid / 16;
 		cookies = malloc(nc * sizeof (off_t), M_TEMP, M_WAITOK);
 		*ap->a_cookies = cookies;
 	}
@@ -1553,8 +1551,8 @@ msdosfs_readdir(v)
 		 * Convert from dos directory entries to fs-independent
 		 * directory entries.
 		 */
-		for (dentp = (struct direntry *)((char *)bp->b_data + on);
-		     (char *)dentp < (char *)bp->b_data + on + n;
+		for (dentp = (struct direntry *)(bp->b_data + on);
+		     (char *)dentp < bp->b_data + on + n;
 		     dentp++, offset += sizeof(struct direntry)) {
 #if 0
 

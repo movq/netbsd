@@ -1,4 +1,4 @@
-/* $NetBSD: linux_syscallargs.h,v 1.29 2007/03/04 06:01:19 christos Exp $ */
+/* $NetBSD: linux_syscallargs.h,v 1.28 2006/09/01 21:19:44 matt Exp $ */
 
 /*
  * System call argument lists.
@@ -152,7 +152,7 @@ struct linux_sys_signal_args {
 struct linux_sys_ioctl_args {
 	syscallarg(int) fd;
 	syscallarg(u_long) com;
-	syscallarg(void *) data;
+	syscallarg(caddr_t) data;
 };
 
 struct linux_sys_fcntl_args {
@@ -176,7 +176,7 @@ struct linux_sys_sigsetmask_args {
 };
 
 struct linux_sys_sigsuspend_args {
-	syscallarg(void *) restart;
+	syscallarg(caddr_t) restart;
 	syscallarg(int) oldmask;
 	syscallarg(int) mask;
 };
@@ -240,7 +240,7 @@ struct linux_sys_reboot_args {
 
 struct linux_sys_readdir_args {
 	syscallarg(int) fd;
-	syscallarg(void *) dent;
+	syscallarg(caddr_t) dent;
 	syscallarg(unsigned int) count;
 };
 
@@ -318,7 +318,7 @@ struct linux_sys_ipc_args {
 	syscallarg(int) a1;
 	syscallarg(int) a2;
 	syscallarg(int) a3;
-	syscallarg(void *) ptr;
+	syscallarg(caddr_t) ptr;
 };
 
 struct linux_sys_sigreturn_args {
@@ -367,7 +367,7 @@ struct linux_sys_llseek_args {
 	syscallarg(int) fd;
 	syscallarg(u_int32_t) ohigh;
 	syscallarg(u_int32_t) olow;
-	syscallarg(void *) res;
+	syscallarg(caddr_t) res;
 	syscallarg(int) whence;
 };
 
@@ -386,7 +386,7 @@ struct linux_sys_select_args {
 };
 
 struct linux_sys_msync_args {
-	syscallarg(void *) addr;
+	syscallarg(caddr_t) addr;
 	syscallarg(int) len;
 	syscallarg(int) fl;
 };

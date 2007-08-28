@@ -1,4 +1,4 @@
-/* $NetBSD: osf1_socket.c,v 1.17 2007/06/30 15:31:50 dsl Exp $ */
+/* $NetBSD: osf1_socket.c,v 1.14 2006/06/26 21:23:57 mrg Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,15 +58,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_socket.c,v 1.17 2007/06/30 15:31:50 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_socket.c,v 1.14 2006/06/26 21:23:57 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/namei.h>
 #include <sys/proc.h>
 #include <sys/file.h>
-#include <sys/malloc.h>
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
@@ -95,14 +95,20 @@ osf1_sys_sendmsg_xopen(l, v, retval)
 	register_t *retval;
 {
 	struct osf1_sys_sendmsg_xopen_args *uap = v;
+	struct proc *p = l->l_proc;
+	struct sys_sendmsg_args a;
 	struct osf1_msghdr_xopen osf_msghdr;
 	struct osf1_iovec_xopen osf_iovec, *osf_iovec_ptr;
 	struct msghdr bsd_msghdr;
-	struct iovec *bsd_iovec;
+	struct iovec bsd_iovec, *bsd_iovec_ptr;
 	unsigned long leftovers;
-	int flags;
-	unsigned int i, iov_len;
+	caddr_t sg;
+	unsigned int i;
 	int error;
+
+	sg = stackgap_init(p, 0);
+
+	SCARG(&a, s) = SCARG(uap, s);
 
 	/*
 	 * translate msghdr structure
@@ -115,10 +121,40 @@ osf1_sys_sendmsg_xopen(l, v, retval)
 	if (error != 0)
 		return (error);
 
+        if (STACKGAPLEN < (bsd_msghdr.msg_iovlen * sizeof (struct iovec) +
+	    sizeof (struct msghdr)))
+{
+printf("sendmsg space\n");
+                return (EINVAL);
+}
+
+	SCARG(&a, msg) = stackgap_alloc(p, &sg, sizeof bsd_msghdr);
+	bsd_msghdr.msg_iov = stackgap_alloc(p, &sg,
+	    bsd_msghdr.msg_iovlen * sizeof (struct iovec));
+
+	if ((error = copyout(&bsd_msghdr, __UNCONST(SCARG(&a, msg)),
+	    sizeof bsd_msghdr)) != 0)
+		return (error);
+
+	osf_iovec_ptr = osf_msghdr.msg_iov;
+	bsd_iovec_ptr = bsd_msghdr.msg_iov;
+	for (i = 0; i < bsd_msghdr.msg_iovlen; i++) {
+		if ((error = copyin(&osf_iovec_ptr[i], &osf_iovec,
+		    sizeof osf_iovec)) != 0)
+			return (error);
+
+                bsd_iovec.iov_base = osf_iovec.iov_base;
+                bsd_iovec.iov_len = osf_iovec.iov_len;
+
+		if ((error = copyout(&bsd_iovec, &bsd_iovec_ptr[i],
+		    sizeof bsd_iovec)) != 0)
+			return (error);
+	}
+
 	/*
 	 * translate flags
 	 */
-	flags = emul_flags_translate(osf1_sendrecv_msg_flags_xtab,
+	SCARG(&a, flags) = emul_flags_translate(osf1_sendrecv_msg_flags_xtab,
 	    SCARG(uap, flags), &leftovers);
 	if (leftovers != 0)
 {
@@ -126,26 +162,7 @@ printf("sendmsg flags leftover: 0x%lx\n", leftovers);
 		return (EINVAL);
 }
 
-	iov_len = bsd_msghdr.msg_iovlen;
-	if (iov_len > IOV_MAX)
-		return EMSGSIZE;
-	bsd_iovec = malloc(iov_len * sizeof (struct iovec), M_IOV, M_WAITOK);
-	bsd_msghdr.msg_iov = bsd_iovec;
-
-	osf_iovec_ptr = osf_msghdr.msg_iov;
-	for (i = 0; i < iov_len; i++) {
-		error = copyin(&osf_iovec_ptr[i], &osf_iovec, sizeof osf_iovec);
-		if (error != 0) {
-			free(bsd_iovec, M_TEMP);
-			return (error);
-		}
-                bsd_iovec[i].iov_base = osf_iovec.iov_base;
-                bsd_iovec[i].iov_len = osf_iovec.iov_len;
-	}
-
-	error = do_sys_sendmsg(l, SCARG(uap, s), &bsd_msghdr, flags, retval);
-	free(bsd_iovec, M_TEMP);
-	return error;
+	return sys_sendmsg(l, &a, retval);
 }
 
 int

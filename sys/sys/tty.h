@@ -1,4 +1,4 @@
-/*	$NetBSD: tty.h,v 1.73 2007/03/04 06:03:42 christos Exp $	*/
+/*	$NetBSD: tty.h,v 1.71 2006/06/03 18:18:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -187,7 +187,7 @@ struct speedtab {
 
 /* Is tp controlling terminal for p? */
 #define	isctty(p, tp)							\
-	((p)->p_session == (tp)->t_session && (p)->p_lflag & PL_CONTROLT)
+	((p)->p_session == (tp)->t_session && (p)->p_flag & P_CONTROLT)
 
 /* Is p in background of tp? */
 #define	isbackground(p, tp)						\
@@ -222,7 +222,7 @@ int	 unputc(struct clist *);
 
 int	 nullmodem(struct tty *, int);
 int	 tputchar(int, int, struct tty *);
-int	 ttioctl(struct tty *, u_long, void *, int, struct lwp *);
+int	 ttioctl(struct tty *, u_long, caddr_t, int, struct lwp *);
 int	 ttread(struct tty *, struct uio *, int);
 void	 ttrstrt(void *);
 int	 ttpoll(struct tty *, int, struct lwp *);
@@ -271,7 +271,7 @@ void	clfree(struct clist *);
 #if defined(COMPAT_43) || defined(COMPAT_SUNOS) || defined(COMPAT_SVR4) || \
     defined(COMPAT_FREEBSD) || defined(COMPAT_OSF1) || defined(LKM)
 # define COMPAT_OLDTTY
-int 	ttcompat(struct tty *, u_long, void *, int, struct lwp *);
+int 	ttcompat(struct tty *, u_long, caddr_t, int, struct lwp *);
 #endif
 
 #endif /* _KERNEL */

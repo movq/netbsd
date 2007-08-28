@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_sysctl.c,v 1.31 2007/08/15 12:07:30 ad Exp $	*/
+/*	$NetBSD: linux_sysctl.c,v 1.24.2.1 2007/04/29 11:05:40 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -41,7 +41,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_sysctl.c,v 1.31 2007/08/15 12:07:30 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_sysctl.c,v 1.24.2.1 2007/04/29 11:05:40 bouyer Exp $");
+
+#if defined (_KERNEL_OPT)
+#include "opt_ktrace.h"
+#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,8 +53,11 @@ __KERNEL_RCSID(0, "$NetBSD: linux_sysctl.c,v 1.31 2007/08/15 12:07:30 ad Exp $")
 #include <sys/proc.h>
 #include <sys/mount.h>
 #include <sys/sysctl.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
+#ifdef KTRACE
 #include <sys/ktrace.h>
+#endif
 
 #include <compat/linux/common/linux_types.h>
 #include <compat/linux/common/linux_signal.h>
@@ -150,8 +157,10 @@ linux_sys___sysctl(struct lwp *l, void *v, register_t *retval)
 	if (error)
 		return (error);
 
-       ktrmib(name, ls.nlen);
-
+#ifdef KTRACE
+       if (KTRPOINT(l->l_proc, KTR_MIB))
+               ktrmib(l, name, ls.nlen);
+#endif
 	/*
 	 * wire old so that copyout() is less likely to fail?
 	 */

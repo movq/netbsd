@@ -1,4 +1,4 @@
-/*	$NetBSD: giovar.h,v 1.9 2007/02/19 20:14:30 rumble Exp $	*/
+/*	$NetBSD: giovar.h,v 1.7 2006/08/30 23:48:55 rumble Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -53,31 +53,25 @@ struct gio_attach_args {
 	bus_space_handle_t ga_ioh;
 	bus_dma_tag_t	ga_dmat;
 
-	int		ga_slot;	/* not valid if graphics */
-	u_int32_t	ga_addr;
+	int		ga_slot; /* (?) */
+	u_int32_t	ga_addr; /* (?) */
 
-	u_int32_t	ga_product;	/* not valid if graphics */
+	u_int32_t	ga_product;
 };
 
 
-#define GIO_SLOT_GFX		0
-#define GIO_SLOT_EXP0		1
-#define GIO_SLOT_EXP1		2
+#define GIO_SLOT_GFX	0
+#define GIO_SLOT_EXP0	1
+#define GIO_SLOT_EXP1	2
 
-#define GIO_ARB_RT		0x001	/* real-time device */
-#define GIO_ARB_LB		0x002	/* long-burst device */
+#define GIO_ARB_RT	0x01	/* real-time device */
+#define GIO_ARB_LB	0x02	/* long-burst device */
 
-#define GIO_ARB_MST		0x004	/* bus master enable */
-#define GIO_ARB_SLV		0x008	/* slave */
+#define GIO_ARB_MST	0x04	/* bus master enable */
+#define GIO_ARB_SLV	0x08	/* slave */
 
-#define GIO_ARB_PIPE		0x010	/* pipelining enable */
-#define GIO_ARB_NOPIPE		0x020	/* pipelining disable */
-
-#define GIO_ARB_32BIT		0x040	/* 32-bit transfers */
-#define GIO_ARB_64BIT		0x080	/* 64-bit transfers */
-
-#define GIO_ARB_HPC2_32BIT	0x100	/* 32-bit secondary HPC (ignores slot)*/
-#define GIO_ARB_HPC2_64BIT	0x200	/* 64-bit secondary HPC (ignores slot)*/
+#define GIO_ARB_PIPE	0x10	/* pipelining enable */
+#define GIO_ARB_NOPIPE	0x20	/* pipelining disable */
 
 int		gio_cnattach(void);
 int		gio_arb_config(int, uint32_t);

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_llseek.c,v 1.29 2007/03/04 06:01:23 christos Exp $	*/
+/*	$NetBSD: linux_llseek.c,v 1.27 2003/01/18 08:02:53 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_llseek.c,v 1.29 2007/03/04 06:01:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_llseek.c,v 1.27 2003/01/18 08:02:53 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,6 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_llseek.c,v 1.29 2007/03/04 06:01:23 christos E
 #include <sys/malloc.h>
 #include <sys/conf.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/linux/common/linux_types.h>
@@ -71,7 +72,7 @@ linux_sys_llseek(l, v, retval)
 		syscallarg(int) fd;
 		syscallarg(uint32_t) ohigh;
 		syscallarg(uint32_t) olow;
-		syscallarg(void *) res;
+		syscallarg(caddr_t) res;
 		syscallarg(int) whence;
 	} */ *uap = v;
 	struct sys_lseek_args bla;

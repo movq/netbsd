@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_machdep.c,v 1.30 2007/07/08 10:19:23 pooka Exp $	*/
+/*	$NetBSD: sig_machdep.c,v 1.26 2006/10/24 16:53:01 he Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.30 2007/07/08 10:19:23 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.26 2006/10/24 16:53:01 he Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_ppcarch.h"
@@ -41,6 +41,8 @@ __KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.30 2007/07/08 10:19:23 pooka Exp $
 #include <sys/param.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscallargs.h>
 #include <sys/systm.h>
 #include <sys/ucontext.h>
@@ -58,12 +60,12 @@ sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct lwp * const l = curlwp;
 	struct proc * const p = l->l_proc;
 	struct trapframe * const tf = trapframe(l);
-	struct sigaltstack *ss = &l->l_sigstk;
+	struct sigaltstack *ss = &p->p_sigctx.ps_sigstk;
 	const struct sigact_sigdesc *sd =
 	    &p->p_sigacts->sa_sigdesc[ksi->ksi_signo];
 	ucontext_t uc;
 	vaddr_t sp, sip, ucp;
-	int onstack, error;
+	int onstack;
 
 	if (sd->sd_vers < 2) {
 #ifdef COMPAT_16
@@ -95,20 +97,15 @@ sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	/* Save register context. */
 	uc.uc_flags = _UC_SIGMASK;
 	uc.uc_sigmask = *mask;
-	uc.uc_link = l->l_ctxlink;
+	uc.uc_link = NULL;
 	memset(&uc.uc_stack, 0, sizeof(uc.uc_stack));
-	sendsig_reset(l, ksi->ksi_signo);
-	mutex_exit(&p->p_smutex);
 	cpu_getmcontext(l, &uc.uc_mcontext, &uc.uc_flags);
 
 	/*
 	 * Copy the siginfo and ucontext onto the user's stack.
 	 */
-	error = (copyout(&ksi->ksi_info, (void *)sip, sizeof(ksi->ksi_info)) != 0 ||
-	    copyout(&uc, (void *)ucp, sizeof(uc)) != 0);
-	mutex_enter(&p->p_smutex);
-
-	if (error) {
+	if (copyout(&ksi->ksi_info, (caddr_t)sip, sizeof(ksi->ksi_info)) != 0 ||
+	    copyout(&uc, (caddr_t)ucp, sizeof(uc)) != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.

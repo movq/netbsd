@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_time.c,v 1.18 2007/05/13 11:04:11 dsl Exp $ */
+/*	$NetBSD: linux_time.c,v 1.14 2006/05/14 03:40:54 christos Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -37,17 +37,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_time.c,v 1.18 2007/05/13 11:04:11 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_time.c,v 1.14 2006/05/14 03:40:54 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/ucred.h>
-#include <sys/kauth.h>
 #include <sys/mount.h>
 #include <sys/signal.h>
 #include <sys/stdint.h>
 #include <sys/time.h>
-#include <sys/timetc.h>
 #include <sys/systm.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/lwp.h>
 #include <sys/proc.h>
@@ -115,7 +114,7 @@ linux_sys_settimeofday(l, v, retval)
 	register_t *retval;
 {
 	struct linux_sys_settimeofday_args /* {
-		syscallarg(struct timeval *) tp;
+		syscallarg(struct timeval *) tz;
 		syscallarg(struct timezone *) tzp;
 	} */ *uap = v;
 	int error = 0;
@@ -134,7 +133,7 @@ linux_sys_settimeofday(l, v, retval)
 		error = copyin(SCARG(uap, tzp), &linux_sys_tz, sizeof(linux_sys_tz));
 		if (error)
 			return (error);
-	}
+   }
 
 	return (0);
 }
@@ -185,21 +184,33 @@ linux_sys_clock_gettime(l, v, retval)
 		syscallarg(clockid_t) which;
 		syscallarg(struct linux_timespec *)tp;
 	} */ *uap = v;
-	struct timespec ts;
+	caddr_t sg;
+	struct proc *p = l->l_proc;
+	struct timespec *tp, ts;
 	struct linux_timespec lts;
+	int error;
+	clockid_t nwhich = 0;	/* XXX: GCC */
+	struct sys_clock_gettime_args sga;
 
-	switch (SCARG(uap, which)) {
-	case LINUX_CLOCK_REALTIME:
-		nanotime(&ts);
-		break;
-	case LINUX_CLOCK_MONOTONIC:
-		nanouptime(&ts);
-		break;
-	default:
-		return EINVAL;
-	}
+	error = linux_to_native_clockid(&nwhich, SCARG(uap, which));
+	if (error != 0)
+		return error;
+	sg = stackgap_init(p, 0);
+	tp = stackgap_alloc(p, &sg, sizeof *tp);
+
+	SCARG(&sga, clock_id) = nwhich;
+	SCARG(&sga, tp) = tp;
+
+	error = sys_clock_gettime(l, &sga, retval);
+	if (error != 0)
+		return error;
+
+	error = copyin(tp, &ts, sizeof ts);
+	if (error != 0)
+		return error;
 
 	native_to_linux_timespec(&lts, &ts);
+
 	return copyout(&lts, SCARG(uap, tp), sizeof lts);
 }
 
@@ -213,16 +224,17 @@ linux_sys_clock_settime(l, v, retval)
 		syscallarg(clockid_t) which;
 		syscallarg(struct linux_timespec *)tp;
 	} */ *uap = v;
-	struct timespec ts;
+	caddr_t sg;
+	struct proc *p = l->l_proc;
+	struct timespec *tp, ts;
 	struct linux_timespec lts;
 	int error;
+	clockid_t nwhich = 0;	/* XXX: GCC */
+	struct sys_clock_settime_args sta;
 
-	switch (SCARG(uap, which)) {
-	case LINUX_CLOCK_REALTIME:
-		break;
-	default:
-		return EINVAL;
-	}
+	error = linux_to_native_clockid(&nwhich, SCARG(uap, which));
+	if (error != 0)
+		return error;
 
 	error = copyin(SCARG(uap, tp), &lts, sizeof lts);
 	if (error != 0)
@@ -230,12 +242,16 @@ linux_sys_clock_settime(l, v, retval)
 
 	linux_to_native_timespec(&ts, &lts);
 
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_TIME,
-	    KAUTH_REQ_SYSTEM_TIME_SYSTEM, NULL, NULL, NULL);
+	sg = stackgap_init(p, 0);
+	tp = stackgap_alloc(p, &sg, sizeof *tp);
+	error = copyout(&ts, tp, sizeof ts);
 	if (error != 0)
-		return (error);
+		return error;
 
-	return settime(l->l_proc, &ts);
+	SCARG(&sta, clock_id) = nwhich;
+	SCARG(&sta, tp) = tp;
+
+	return sys_clock_settime(l, &sta, retval);
 }
 
 int
@@ -248,19 +264,41 @@ linux_sys_clock_getres(l, v, retval)
 		syscallarg(clockid_t) which;
 		syscallarg(struct linux_timespec *)tp;
 	} */ *uap = v;
-	struct timespec ts;
+	caddr_t sg;
+	struct proc *p = l->l_proc;
+	struct timespec *tp, ts;
 	struct linux_timespec lts;
 	int error;
 	clockid_t nwhich = 0;	/* XXX: GCC */
+	struct sys_clock_gettime_args sga;
 
 	error = linux_to_native_clockid(&nwhich, SCARG(uap, which));
-	if (error != 0 || SCARG(uap, tp) == NULL)
+	if (error != 0)
 		return error;
 
-	ts.tv_sec = 0;
-	ts.tv_nsec = 1000000000 / tc_getfrequency();
-	native_to_linux_timespec(&lts, &ts);
-	return copyout(&lts, SCARG(uap, tp), sizeof lts);
+	if (SCARG(uap, tp) != NULL) {
+		sg = stackgap_init(p, 0);
+		tp = stackgap_alloc(p, &sg, sizeof *tp);
+	} else
+		tp = NULL;
+
+	SCARG(&sga, clock_id) = nwhich;
+	SCARG(&sga, tp) = tp;
+
+	error = sys_clock_getres(l, &sga, retval);
+	if (error != 0)
+		return error;
+
+	if (tp != NULL) {
+		error = copyin(tp, &ts, sizeof ts);
+		if (error != 0)
+			return error;
+		native_to_linux_timespec(&lts, &ts);
+
+		return copyout(&lts, SCARG(uap, tp), sizeof lts);
+	}
+
+	return 0;
 }
 
 int
@@ -275,9 +313,13 @@ linux_sys_clock_nanosleep(l, v, retval)
 		syscallarg(struct linux_timespec) *rqtp;
 		syscallarg(struct linux_timespec) *rmtp;
 	} */ *uap = v;
+	caddr_t sg;
+	struct proc *p = l->l_proc;
+	struct timespec *rqtp, *rmtp;
 	struct linux_timespec lrqts, lrmts;
 	struct timespec rqts, rmts;
-	int error, error1;
+	int error;
+	struct sys_nanosleep_args sna;
 
 	if (SCARG(uap, flags) != 0)
 		return EINVAL;		/* XXX deal with TIMER_ABSTIME */
@@ -291,11 +333,33 @@ linux_sys_clock_nanosleep(l, v, retval)
 
 	linux_to_native_timespec(&rqts, &lrqts);
 
-	error = nanosleep1(l, &rqts, SCARG(uap, rmtp) ? &rmts : 0);
-	if (SCARG(uap, rmtp) == NULL || (error != 0 && error != EINTR))
+	sg = stackgap_init(p, 0);
+	rqtp = stackgap_alloc(p, &sg, sizeof *rqtp);
+	error = copyout(&rqts, rqtp, sizeof rqts);
+	if (error != 0)
 		return error;
 
-	native_to_linux_timespec(&lrmts, &rmts);
-	error1 = copyout(&lrmts, SCARG(uap, rmtp), sizeof lrmts);
-	return error1 ? error1 : error;
+	if (SCARG(uap, rmtp) != NULL)
+		rmtp = stackgap_alloc(p, &sg, sizeof *rmtp);
+	else
+		rmtp = NULL;
+
+	SCARG(&sna, rqtp) = rqtp;
+	SCARG(&sna, rmtp) = rmtp;
+
+	error = sys_nanosleep(l, &sna, retval);
+	if (error != 0)
+		return error;
+
+	if (rmtp != NULL) {
+		error = copyin(rmtp, &rmts, sizeof rmts);
+		if (error != 0)
+			return error;
+		native_to_linux_timespec(&lrmts, &rmts);
+		error = copyout(&lrmts, SCARG(uap, rmtp), sizeof lrmts);
+		if (error != 0)
+			return error;
+	}
+
+	return 0;
 }

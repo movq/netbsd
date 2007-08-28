@@ -1,4 +1,4 @@
-/*	$NetBSD: spkr.c,v 1.18 2007/03/04 05:59:42 christos Exp $	*/
+/*	$NetBSD: spkr.c,v 1.16 2006/03/29 04:16:45 thorpej Exp $	*/
 
 /*
  * spkr.c -- device driver for console speaker on 80386
@@ -10,7 +10,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spkr.c,v 1.18 2007/03/04 05:59:42 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spkr.c,v 1.16 2006/03/29 04:16:45 thorpej Exp $");
 
 #include "spkr.h"
 #if NSPKR > 0
@@ -136,6 +136,10 @@ rest(ticks)
  * except possibly at physical block boundaries.
  */
 
+typedef int	bool;
+#define TRUE	1
+#define FALSE	0
+
 #define toupper(c)	((c) - ' ' * (((c) >= 'a') && ((c) <= 'z')))
 #define isdigit(c)	(((c) >= '0') && ((c) <= '9'))
 #define dtoi(c)		((c) - '0')
@@ -194,8 +198,8 @@ playinit()
     whole = (hz * SECS_PER_MIN * WHOLE_NOTE) / DFLT_TEMPO;
     fill = NORMAL;
     value = DFLT_VALUE;
-    octtrack = false;
-    octprefix = true;	/* act as though there was an initial O(n) */
+    octtrack = FALSE;
+    octprefix = TRUE;	/* act as though there was an initial O(n) */
 }
 
 static void
@@ -290,7 +294,7 @@ playstring(cp, slen)
 		    pitch -= OCTAVE_NOTES;
 		}
 	    }
-	    octprefix = false;
+	    octprefix = FALSE;
 	    lastpitch = pitch;
 
 	    /* ...which may in turn be followed by an override time value */
@@ -312,13 +316,13 @@ playstring(cp, slen)
 	case 'O':
 	    if (slen > 0 && (cp[1] == 'N' || cp[1] == 'n'))
 	    {
-		octprefix = octtrack = false;
+		octprefix = octtrack = FALSE;
 		++cp;
 		slen--;
 	    }
 	    else if (slen > 0 && (cp[1] == 'L' || cp[1] == 'l'))
 	    {
-		octtrack = true;
+		octtrack = TRUE;
 		++cp;
 		slen--;
 	    }
@@ -327,20 +331,20 @@ playstring(cp, slen)
 		GETNUM(cp, octave);
 		if (octave >= NOCTAVES)
 		    octave = DFLT_OCTAVE;
-		octprefix = true;
+		octprefix = TRUE;
 	    }
 	    break;
 
 	case '>':
 	    if (octave < NOCTAVES - 1)
 		octave++;
-	    octprefix = true;
+	    octprefix = TRUE;
 	    break;
 
 	case '<':
 	    if (octave > 0)
 		octave--;
-	    octprefix = true;
+	    octprefix = TRUE;
 	    break;
 
 	case 'N':
@@ -517,7 +521,7 @@ int spkrclose(dev, flags, mode, p)
 int spkrioctl(dev, cmd, data, flag, p)
     dev_t dev;
     u_long cmd;
-    void *data;
+    caddr_t data;
     int	flag;
     struct proc *p;
 {
@@ -538,7 +542,7 @@ int spkrioctl(dev, cmd, data, flag, p)
     }
     else if (cmd == SPKRTUNE)
     {
-	tone_t  *tp = (tone_t *)(*(void **)data);
+	tone_t  *tp = (tone_t *)(*(caddr_t *)data);
 	tone_t ttp;
 	int error;
 

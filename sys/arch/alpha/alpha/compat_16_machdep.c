@@ -1,4 +1,4 @@
-/* $NetBSD: compat_16_machdep.c,v 1.11 2007/03/04 05:59:08 christos Exp $ */
+/* $NetBSD: compat_16_machdep.c,v 1.9 2005/12/11 12:16:10 christos Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -79,6 +79,7 @@
 #include <sys/signal.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
 #include <sys/systm.h>
 #include <sys/syscall.h>
 #include <sys/syscallargs.h>
@@ -92,7 +93,7 @@
 #include <machine/cpu.h>
 #include <machine/reg.h>
 
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.11 2007/03/04 05:59:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.9 2005/12/11 12:16:10 christos Exp $");
 
 
 #ifdef DEBUG
@@ -112,7 +113,7 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
 	struct sigacts *ps = p->p_sigacts;
-	int onstack, sig = ksi->ksi_signo, error;
+	int onstack, sig = ksi->ksi_signo;
 	struct sigframe_sigcontext *fp, frame;
 	struct trapframe *tf;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
@@ -147,7 +148,7 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	memset(frame.sf_sc.sc_xxx, 0, sizeof frame.sf_sc.sc_xxx); /* XXX */
 
 	/* Save signal stack. */
-	frame.sf_sc.sc_onstack = l->l_sigstk.ss_flags & SS_ONSTACK;
+	frame.sf_sc.sc_onstack = p->p_sigctx.ps_sigstk.ss_flags & SS_ONSTACK;
 
 	/* Save signal mask. */
 	frame.sf_sc.sc_mask = *mask;
@@ -168,12 +169,7 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	}
 #endif
 
-	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
-	error = copyout(&frame, (void *)fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
-
-	if (error != 0) {
+	if (copyout(&frame, (caddr_t)fp, sizeof(frame)) != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
@@ -225,7 +221,7 @@ sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 
 #ifdef DEBUG
 	if (sigdebug & SDB_FOLLOW)
@@ -274,7 +270,7 @@ compat_16_sys___sigreturn14(l, v, retval)
 	if (ALIGN(scp) != (u_int64_t)scp)
 		return (EINVAL);
 
-	if (copyin((void *)scp, &ksc, sizeof(ksc)) != 0)
+	if (copyin((caddr_t)scp, &ksc, sizeof(ksc)) != 0)
 		return (EFAULT);
 
 	if (ksc.sc_regs[R_ZERO] != 0xACEDBADE)		/* magic number */
@@ -296,15 +292,14 @@ compat_16_sys___sigreturn14(l, v, retval)
 	l->l_addr->u_pcb.pcb_fp.fpr_cr = ksc.sc_fpcr;
 	l->l_md.md_flags = ksc.sc_fp_control & MDP_FP_C;
 
-	mutex_enter(&p->p_smutex);
 	/* Restore signal stack. */
 	if (ksc.sc_onstack & SS_ONSTACK)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 	else
-		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags &= ~SS_ONSTACK;
+
 	/* Restore signal mask. */
-	(void) sigprocmask1(l, SIG_SETMASK, &ksc.sc_mask, 0);
-	mutex_exit(&p->p_smutex);
+	(void) sigprocmask1(p, SIG_SETMASK, &ksc.sc_mask, 0);
 
 #ifdef DEBUG
 	if (sigdebug & SDB_FOLLOW)

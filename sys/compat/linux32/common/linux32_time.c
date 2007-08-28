@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_time.c,v 1.13 2007/05/12 20:24:54 dsl Exp $ */
+/*	$NetBSD: linux32_time.c,v 1.6 2006/11/14 13:34:29 elad Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_time.c,v 1.13 2007/05/12 20:24:54 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_time.c,v 1.6 2006/11/14 13:34:29 elad Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -43,13 +43,11 @@ __KERNEL_RCSID(0, "$NetBSD: linux32_time.c,v 1.13 2007/05/12 20:24:54 dsl Exp $"
 #include <sys/kauth.h>
 #include <sys/kernel.h>
 #include <sys/fcntl.h>
-#include <sys/namei.h>
 #include <sys/select.h>
+#include <sys/sa.h>
 #include <sys/proc.h>
-#include <sys/resourcevar.h>
 #include <sys/ucred.h>
 #include <sys/swap.h>
-#include <sys/vfs_syscalls.h>
 
 #include <machine/types.h>
 
@@ -88,17 +86,19 @@ linux32_sys_gettimeofday(l, v, retval)
 	struct netbsd32_timeval tv32;
 	int error;
 
-	if (SCARG_P32(uap, tp) != NULL) {
+	if (NETBSD32PTR64(SCARG(uap, tp)) != NULL) {
 		microtime(&tv);
 		netbsd32_from_timeval(&tv, &tv32);
-		if ((error = copyout(&tv32, SCARG_P32(uap, tp), 
+		if ((error = copyout(&tv32, 
+		    (caddr_t)NETBSD32PTR64(SCARG(uap, tp)), 
 		    sizeof(tv32))) != 0)
 			return error;
 	}
 
 	/* timezone size does not change */
-	if (SCARG_P32(uap, tzp) != NULL) {
-		if ((error = copyout(&linux_sys_tz, SCARG_P32(uap, tzp), 
+	if (NETBSD32PTR64(SCARG(uap, tzp)) != NULL) {
+		if ((error = copyout(&linux_sys_tz,
+		    (caddr_t)NETBSD32PTR64(SCARG(uap, tzp)), 
 		    sizeof(linux_sys_tz))) != 0)
 			return error;
 	}
@@ -141,8 +141,8 @@ linux32_sys_time(l, v, retval)
 
         tt = (linux32_time_t)atv.tv_sec;
 
-        if (SCARG_P32(uap, t) && (error = copyout(&tt, 
-	    SCARG_P32(uap, t), sizeof(tt))))
+        if (SCARG(uap, t) && (error = copyout(&tt, 
+	    NETBSD32PTR64(SCARG(uap, t)), sizeof(tt))))
                 return error;
 
         retval[0] = tt;
@@ -150,12 +150,6 @@ linux32_sys_time(l, v, retval)
         return 0;
 }
 
-
-static inline linux32_clock_t
-timeval_to_clock_t(struct timeval *tv)
-{
-	return tv->tv_sec * hz + tv->tv_usec / (1000000 / hz);
-}
 
 int
 linux32_sys_times(l, v, retval)
@@ -167,27 +161,31 @@ linux32_sys_times(l, v, retval)
 		syscallarg(linux32_tmsp_t) tms;
 	} */ *uap = v;
 	struct linux32_tms ltms32;
+	struct linux_tms ltms;
+	struct linux_tms *ltmsp;
+	struct linux_sys_times_args ua;
+	caddr_t sg = stackgap_init(l->l_proc, 0);
+	int error;
 
-	struct timeval		 t;
-	struct rusage		 *ru;
-	struct proc		 *p = l->l_proc;
+	ltmsp = stackgap_alloc(l->l_proc, &sg, sizeof(*ltmsp));
+	SCARG(&ua, tms) = (struct times *)ltmsp;
 
-	ru = &p->p_stats->p_ru;
-	mutex_enter(&p->p_smutex);
-	calcru(p, &ru->ru_utime, &ru->ru_stime, NULL, NULL);
-	mutex_exit(&p->p_smutex);
+	if ((error = linux_sys_times(l, &ua, retval)) != 0)
+		return error;
 
-	ltms32.ltms32_utime = timeval_to_clock_t(&ru->ru_utime);
-	ltms32.ltms32_stime = timeval_to_clock_t(&ru->ru_stime);
+	if ((error = copyin(ltmsp, &ltms, sizeof(ltms))) != 0)
+		return error;
 
-	ru = &p->p_stats->p_cru;
-	ltms32.ltms32_cutime = timeval_to_clock_t(&ru->ru_utime);
-	ltms32.ltms32_cstime = timeval_to_clock_t(&ru->ru_stime);
+	ltms32.ltms32_utime = (linux32_clock_t)ltms.ltms_utime;
+	ltms32.ltms32_stime = (linux32_clock_t)ltms.ltms_stime;
+	ltms32.ltms32_cutime = (linux32_clock_t)ltms.ltms_cutime;
+	ltms32.ltms32_cstime = (linux32_clock_t)ltms.ltms_cstime;
 
-	microtime(&t);
-	*retval = timeval_to_clock_t(&t);
+	if ((error = copyout(&ltms32, 
+	    NETBSD32PTR64(SCARG(uap, tms)), sizeof(ltms32))) != 0)
+		return error;
 
-	return copyout(&ltms32, SCARG_P32(uap, tms), sizeof(ltms32));
+	return 0;
 }
 
 int
@@ -208,8 +206,9 @@ linux32_sys_stime(l, v, retval)
 	    NULL)) != 0)
 		return error;
 
-	if ((error = copyin(&tt32, SCARG_P32(uap, t), sizeof tt32)) != 0)
-		return error;
+	if ((error = copyin(&tt32, 
+	    NETBSD32PTR64(SCARG(uap, t)), 
+	    sizeof tt32)) != 0)
 
 	ts.tv_sec = (long)tt32;
 	ts.tv_nsec = 0;
@@ -227,23 +226,35 @@ linux32_sys_utime(l, v, retval)
 		syscallarg(const netbsd32_charp) path;
 		syscallarg(linux32_utimbufp_t) times;
 	} */ *uap = v;
+	struct proc *p = l->l_proc;
+        caddr_t sg = stackgap_init(p, 0);
+        struct sys_utimes_args ua;
         struct timeval tv[2], *tvp;
         struct linux32_utimbuf lut;
         int error;
 
-        if (SCARG_P32(uap, times) != NULL) {
-                if ((error = copyin(SCARG_P32(uap, times), &lut, sizeof lut)))
+	NETBSD32TOP_UAP(path, const char);
+        CHECK_ALT_EXIST(l, &sg, SCARG(&ua, path));
+
+
+        if (NETBSD32PTR64(SCARG(uap, times)) != NULL) {
+                if ((error = copyin(NETBSD32PTR64(SCARG(uap, times)), 
+		    &lut, sizeof lut)))
                         return error;
 
                 tv[0].tv_sec = (long)lut.l_actime;
                 tv[0].tv_usec = 0;
                 tv[1].tv_sec = (long)lut.l_modtime;
 		tv[1].tv_usec = 0;
-                tvp = tv;
+
+	        tvp = (struct timeval *) stackgap_alloc(p, &sg, sizeof(tv));
+
+                if ((error = copyout(tv, tvp, sizeof(tv))))
+                        return error;
+                SCARG(&ua, tptr) = tvp;
         } else {
-		tvp = NULL;
+               SCARG(&ua, tptr) = NULL;
 	}
                      
-        return do_sys_utimes(l, NULL, SCARG_P32(uap, path), FOLLOW,
-			    tvp, UIO_SYSSPACE);
+        return sys_utimes(l, &ua, retval);
 } 

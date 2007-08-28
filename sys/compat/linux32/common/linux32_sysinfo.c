@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_sysinfo.c,v 1.4 2007/07/21 23:39:46 xtraeme Exp $ */
+/*	$NetBSD: linux32_sysinfo.c,v 1.1 2006/09/13 19:55:49 manu Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -33,13 +33,13 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: linux32_sysinfo.c,v 1.4 2007/07/21 23:39:46 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_sysinfo.c,v 1.1 2006/09/13 19:55:49 manu Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/kernel.h>
+#include <sys/sa.h>
 #include <sys/dirent.h>
-#include <sys/proc.h>
 
 #include <sys/syscallargs.h>
 
@@ -90,6 +90,6 @@ linux32_sys_sysinfo(l, v, retval)
 	si.freebig = 0;
 	si.mem_unit = 1;
 
-	return (copyout(&si, SCARG_P32(uap, arg), sizeof si));
+	return (copyout(&si, NETBSD32PTR64(SCARG(uap, arg)), sizeof si));
 }
 

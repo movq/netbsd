@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_prof.c,v 1.41 2007/07/09 21:10:55 ad Exp $	*/
+/*	$NetBSD: subr_prof.c,v 1.36.2.1 2006/12/29 02:04:14 riz Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_prof.c,v 1.41 2007/07/09 21:10:55 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_prof.c,v 1.36.2.1 2006/12/29 02:04:14 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,6 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: subr_prof.c,v 1.41 2007/07/09 21:10:55 ad Exp $");
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/sysctl.h>
 
@@ -88,11 +89,12 @@ kmstartup(void)
 		p->tolimit = MAXARCS;
 	p->tossize = p->tolimit * sizeof(struct tostruct);
 	cp = (char *)malloc(p->kcountsize + p->fromssize + p->tossize,
-	    M_GPROF, M_NOWAIT | M_ZERO);
+	    M_GPROF, M_NOWAIT);
 	if (cp == 0) {
 		printf("No memory for profiling.\n");
 		return;
 	}
+	memset(cp, 0, p->kcountsize + p->tossize + p->fromssize);
 	p->tos = (struct tostruct *)cp;
 	cp += p->tossize;
 	p->kcount = (u_short *)cp;
@@ -145,12 +147,10 @@ sysctl_kern_profiling(SYSCTLFN_ARGS)
 		return (error);
 
 	if (node.sysctl_num == GPROF_STATE) {
-		mutex_spin_enter(&proc0.p_stmutex);
 		if (gp->state == GMON_PROF_OFF)
 			stopprofclock(&proc0);
 		else
 			startprofclock(&proc0);
-		mutex_spin_exit(&proc0.p_stmutex);
 	}
 
 	return (0);
@@ -218,32 +218,31 @@ int
 sys_profil(struct lwp *l, void *v, register_t *retval)
 {
 	struct sys_profil_args /* {
-		syscallarg(char *) samples;
+		syscallarg(caddr_t) samples;
 		syscallarg(u_int) size;
 		syscallarg(u_int) offset;
 		syscallarg(u_int) scale;
 	} */ *uap = v;
 	struct proc *p = l->l_proc;
 	struct uprof *upp;
+	int s;
 
 	if (SCARG(uap, scale) > (1 << 16))
 		return (EINVAL);
 	if (SCARG(uap, scale) == 0) {
-		mutex_spin_enter(&p->p_stmutex);
 		stopprofclock(p);
-		mutex_spin_exit(&p->p_stmutex);
 		return (0);
 	}
 	upp = &p->p_stats->p_prof;
 
 	/* Block profile interrupts while changing state. */
-	mutex_spin_enter(&p->p_stmutex);
+	s = splstatclock();
 	upp->pr_off = SCARG(uap, offset);
 	upp->pr_scale = SCARG(uap, scale);
 	upp->pr_base = SCARG(uap, samples);
 	upp->pr_size = SCARG(uap, size);
 	startprofclock(p);
-	mutex_spin_exit(&p->p_stmutex);
+	splx(s);
 
 	return (0);
 }
@@ -271,17 +270,12 @@ sys_profil(struct lwp *l, void *v, register_t *retval)
  * inaccurate.
  */
 void
-addupc_intr(struct lwp *l, u_long pc)
+addupc_intr(struct proc *p, u_long pc)
 {
 	struct uprof *prof;
-	struct proc *p;
-	void *addr;
+	caddr_t addr;
 	u_int i;
 	int v;
-
-	p = l->l_proc;
-
-	KASSERT(mutex_owned(&p->p_stmutex));
 
 	prof = &p->p_stats->p_prof;
 	if (pc < prof->pr_off ||
@@ -289,14 +283,11 @@ addupc_intr(struct lwp *l, u_long pc)
 		return;			/* out of range; ignore */
 
 	addr = prof->pr_base + i;
-	mutex_spin_exit(&p->p_stmutex);
 	if ((v = fuswintr(addr)) == -1 || suswintr(addr, v + 1) == -1) {
-		/* XXXSMP */
 		prof->pr_addr = pc;
 		prof->pr_ticks++;
-		cpu_need_proftick(l);
+		need_proftick(p);
 	}
-	mutex_spin_enter(&p->p_stmutex);
 }
 
 /*
@@ -304,39 +295,27 @@ addupc_intr(struct lwp *l, u_long pc)
  * update fails, we simply turn off profiling.
  */
 void
-addupc_task(struct lwp *l, u_long pc, u_int ticks)
+addupc_task(struct proc *p, u_long pc, u_int ticks)
 {
 	struct uprof *prof;
-	struct proc *p;
-	void *addr;
-	int error;
+	caddr_t addr;
 	u_int i;
 	u_short v;
 
-	p = l->l_proc;
-
-	if (ticks == 0)
-		return;
-
-	mutex_spin_enter(&p->p_stmutex);
-	prof = &p->p_stats->p_prof;
-
 	/* Testing P_PROFIL may be unnecessary, but is certainly safe. */
-	if ((p->p_stflag & PST_PROFIL) == 0 || pc < prof->pr_off ||
-	    (i = PC_TO_INDEX(pc, prof)) >= prof->pr_size) {
-		mutex_spin_exit(&p->p_stmutex);
+	if ((p->p_flag & P_PROFIL) == 0 || ticks == 0)
 		return;
-	}
+
+	prof = &p->p_stats->p_prof;
+	if (pc < prof->pr_off ||
+	    (i = PC_TO_INDEX(pc, prof)) >= prof->pr_size)
+		return;
 
 	addr = prof->pr_base + i;
-	mutex_spin_exit(&p->p_stmutex);
-	if ((error = copyin(addr, (void *)&v, sizeof(v))) == 0) {
+	if (copyin(addr, (caddr_t)&v, sizeof(v)) == 0) {
 		v += ticks;
-		error = copyout((void *)&v, addr, sizeof(v));
+		if (copyout((caddr_t)&v, addr, sizeof(v)) == 0)
+			return;
 	}
-	if (error != 0) {
-		mutex_spin_enter(&p->p_stmutex);
-		stopprofclock(p);
-		mutex_spin_exit(&p->p_stmutex);
-	}
+	stopprofclock(p);
 }

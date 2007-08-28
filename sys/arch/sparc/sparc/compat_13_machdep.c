@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_13_machdep.c,v 1.7 2007/02/09 21:55:12 ad Exp $ */
+/*	$NetBSD: compat_13_machdep.c,v 1.6 2005/11/14 19:11:24 uwe Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.7 2007/02/09 21:55:12 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.6 2005/11/14 19:11:24 uwe Exp $");
 
 #include "opt_compat_netbsd.h"
 
@@ -54,6 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.7 2007/02/09 21:55:12 ad Exp
 #include <compat/sys/signal.h>
 #include <compat/sys/signalvar.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 /*
@@ -80,10 +81,8 @@ compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 
 	/* First ensure consistent stack state (see sendsig). */
 	write_user_windows();
-	if (rwindow_save(l)) {
-		mutex_enter(&p->p_smutex);
+	if (rwindow_save(l))
 		sigexit(l, SIGILL);
-	}
 
 	if ((error = copyin(SCARG(uap, sigcntxp), &sc, sizeof sc)) != 0)
 		return (error);
@@ -105,15 +104,14 @@ compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 	tf->tf_out[0] = scp->sc_o0;
 	tf->tf_out[6] = scp->sc_sp;
 
-	mutex_enter(&p->p_smutex);
 	if (scp->sc_onstack & SS_ONSTACK)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 	else
-		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags &= ~SS_ONSTACK;
+
 	/* Restore signal mask */
 	native_sigset13_to_sigset(&scp->sc_mask, &mask);
-	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
-	mutex_exit(&p->p_smutex);
+	(void) sigprocmask1(p, SIG_SETMASK, &mask, 0);
 
 	return (EJUSTRETURN);
 }

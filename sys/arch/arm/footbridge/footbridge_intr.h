@@ -1,4 +1,4 @@
-/* 	$NetBSD: footbridge_intr.h,v 1.10 2007/03/09 06:45:20 thorpej Exp $	*/
+/* 	$NetBSD: footbridge_intr.h,v 1.8 2006/04/16 23:31:54 chris Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -172,28 +172,10 @@ void	_setsoftintr(int);
 #include <machine/irqhandler.h>
 
 #define	splsoft()	_splraise(IPL_SOFT)
+#define	splraiseipl(x)	_splraise(x)
 
 #define	spl0()		(void)_spllower(IPL_NONE)
 #define	spllowersoftclock() (void)_spllower(IPL_SOFTCLOCK)
-
-typedef uint8_t ipl_t;
-typedef struct {
-	ipl_t _ipl;
-} ipl_cookie_t;
-
-static inline ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._ipl = ipl};
-}
-
-static inline int
-splraiseipl(ipl_cookie_t icookie)
-{
-
-	return _splraise(icookie._ipl);
-}
 
 #include <sys/spl.h>
 

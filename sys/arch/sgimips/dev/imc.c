@@ -1,4 +1,4 @@
-/*	$NetBSD: imc.c,v 1.28 2007/02/19 20:14:30 rumble Exp $	*/
+/*	$NetBSD: imc.c,v 1.26 2006/08/30 23:44:52 rumble Exp $	*/
 
 /*
  * Copyright (c) 2001 Rafal K. Boni
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imc.c,v 1.28 2007/02/19 20:14:30 rumble Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imc.c,v 1.26 2006/08/30 23:44:52 rumble Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -159,7 +159,7 @@ imc_attach(struct device *parent, struct device *self, void *aux)
 	 * for now.
 	 */
 	if (mach_type == MACH_SGI_IP20 || (mach_type == MACH_SGI_IP22 &&
-	    mach_subtype == MACH_SGI_IP22_GUINNESS)) {
+	    mach_subtype == MACH_SGI_IP22_GUINESS)) {
 		reg |=  IMC_CPUCTRL1_HPCFX;
 		reg |=  IMC_CPUCTRL1_EXP0FX;
 		reg |=  IMC_CPUCTRL1_EXP1FX;
@@ -200,7 +200,7 @@ imc_attach(struct device *parent, struct device *self, void *aux)
 		reg |= IMC_GIO64ARB_ONEGIO | IMC_GIO64ARB_HPC64;
 
 		switch (mach_subtype) {
-		case MACH_SGI_IP22_GUINNESS:
+		case MACH_SGI_IP22_GUINESS:
 			/* XXX is MST mutually exclusive? */
 	        	reg |=  (IMC_GIO64ARB_EXP0RT	| IMC_GIO64ARB_EXP1RT);
 			reg |=  (IMC_GIO64ARB_EXP0MST	| IMC_GIO64ARB_EXP1MST);
@@ -375,26 +375,6 @@ imc_gio64_arb_config(int slot, uint32_t flags)
 		else if (slot == GIO_SLOT_EXP1)
 			reg &= ~IMC_GIO64ARB_EXP1PIPE;
 	}
-
-	if (flags & GIO_ARB_32BIT) {
-		if (slot == GIO_SLOT_EXP0)
-			reg &= ~IMC_GIO64ARB_EXP064;
-		else if (slot == GIO_SLOT_EXP1)
-			reg &= ~IMC_GIO64ARB_EXP164;
-	}
-
-	if (flags & GIO_ARB_64BIT) {
-		if (slot == GIO_SLOT_EXP0)
-			reg |= IMC_GIO64ARB_EXP064;
-		else if (slot == GIO_SLOT_EXP1)
-			reg |= IMC_GIO64ARB_EXP164;
-	}
-
-	if (flags & GIO_ARB_HPC2_32BIT)
-		reg &= ~IMC_GIO64ARB_HPCEXP64;
-
-	if (flags & GIO_ARB_HPC2_64BIT)
-		reg |= IMC_GIO64ARB_HPCEXP64;
 
 	bus_space_write_4(isc.iot, isc.ioh, IMC_GIO64ARB, reg);
 

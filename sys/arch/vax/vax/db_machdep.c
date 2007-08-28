@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.c,v 1.46 2007/03/04 06:00:58 christos Exp $	*/
+/*	$NetBSD: db_machdep.c,v 1.41 2005/12/11 12:19:36 christos Exp $	*/
 
 /* 
  * :set tabs=4
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_machdep.c,v 1.46 2007/03/04 06:00:58 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_machdep.c,v 1.41 2005/12/11 12:19:36 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -208,9 +208,9 @@ kdb_trap(struct trapframe *frame)
 
 	s = splhigh();
 	db_active++;
-	cnpollc(true);
+	cnpollc(TRUE);
 	db_trap(frame->trap, frame->code);
-	cnpollc(false);
+	cnpollc(FALSE);
 	db_active--;
 	splx(s);
 
@@ -255,7 +255,7 @@ db_read_bytes(addr, size, data)
 	register char	*data;
 {
 
-	memcpy(data, (void *)addr, size);
+	memcpy(data, (caddr_t)addr, size);
 }
 
 /*
@@ -268,7 +268,7 @@ db_write_bytes(addr, size, data)
 	register const char	*data;
 {
 
-	memcpy((void *)addr, data, size);
+	memcpy((caddr_t)addr, data, size);
 }
 
 void
@@ -414,7 +414,7 @@ db_dump_stack(VAX_CALLFRAME *fp, u_int stackbase,
 void
 db_stack_trace_print(addr, have_addr, count, modif, pr)
 	db_expr_t	addr;		/* Address parameter */
-	bool		have_addr;	/* True if addr is valid */
+	boolean_t	have_addr;	/* True if addr is valid */
 	db_expr_t	count;		/* Optional count */
 	const char	*modif;		/* pointer to flag modifier 't' */
 	void		(*pr) __P((const char *, ...)); /* Print function */
@@ -453,7 +453,7 @@ db_stack_trace_print(addr, have_addr, count, modif, pr)
 	 */
 	if (have_addr) {
 		if (trace_proc) {
-			p = p_find((int)addr, PFIND_LOCKED);
+			p = pfind((int)addr);
 			/* Try to be helpful by looking at it as if it were decimal */
 			if (p == NULL) {
 				u_int	tpid = 0;
@@ -468,7 +468,7 @@ db_stack_trace_print(addr, have_addr, count, modif, pr)
 					tpid = tpid * 10 + digit;
 					foo = foo << 4;
 				}
-				p = p_find(tpid, PFIND_LOCKED);
+				p = pfind(tpid);
 				if (p == NULL) {
 					(*pr)("	 No such process.\n");
 					return;
@@ -630,7 +630,7 @@ kdbrint(tkn)
 #ifdef MULTIPROCESSOR
 
 static void
-db_mach_cpu(db_expr_t addr, bool have_addr, db_expr_t count, const char *modif)
+db_mach_cpu(db_expr_t addr, int have_addr, db_expr_t count, const char *modif)
 {
 	struct cpu_mp_softc *sc;
 	struct cpu_info *ci;

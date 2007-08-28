@@ -1,4 +1,4 @@
-/*	$NetBSD: ym.c,v 1.31 2007/07/09 21:00:50 ad Exp $	*/
+/*	$NetBSD: ym.c,v 1.29 2006/09/24 03:53:09 jmcneill Exp $	*/
 
 /*-
  * Copyright (c) 1999-2002 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ym.c,v 1.31 2007/07/09 21:00:50 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ym.c,v 1.29 2006/09/24 03:53:09 jmcneill Exp $");
 
 #include "mpu_ym.h"
 #include "opt_ym.h"
@@ -99,6 +99,10 @@ __KERNEL_RCSID(0, "$NetBSD: ym.c,v 1.31 2007/07/09 21:00:50 ad Exp $");
 #endif
 #include <dev/isa/ymvar.h>
 #include <dev/isa/sbreg.h>
+
+#ifndef spllowersoftclock
+ #error "We depend on the new semantics of splsoftclock(9)."
+#endif
 
 /* Power management mode. */
 #ifndef YM_POWER_MODE
@@ -217,7 +221,7 @@ ym_attach(struct ym_softc *sc)
 	struct audio_attach_args arg;
 
 	ac = &sc->sc_ad1848.sc_ad1848;
-	callout_init(&sc->sc_powerdown_ch, 0);
+	callout_init(&sc->sc_powerdown_ch);
 
 	/* Mute the output to reduce noise during initialization. */
 	ym_mute(sc, SA3_VOL_L, 1);

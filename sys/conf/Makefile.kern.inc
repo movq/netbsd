@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.kern.inc,v 1.101 2007/05/28 12:06:24 tls Exp $
+#	$NetBSD: Makefile.kern.inc,v 1.94.2.4 2007/02/10 14:42:03 tron Exp $
 #
 # This file contains common `MI' targets and definitions and it is included
 # at the bottom of each `MD' ${MACHINE}/conf/Makefile.${MACHINE}.
@@ -89,7 +89,7 @@ AFLAGS+=	${CPUFLAGS} -D_LOCORE -Wa,-fatal-warnings
 CFLAGS+=	-fno-strict-aliasing
 .endif
 
-.if ${USE_FORT:Uno} == "yes"
+.if ${USE_SSP:Uno} == "yes"
 CFLAGS+=-fstack-protector -Wstack-protector --param ssp-buffer-size=1
 LDFLAGS+=-fstack-protector -Wstack-protector --param ssp-buffer-size=1
 .endif
@@ -373,11 +373,6 @@ lint: ${LOBJS}
 	${LINT} ${KERNLINTFLAGS} ${CPPFLAGS:M-[IDU]*} ${LOBJS}
 .endif
 
-# List of kernel images that will be installed into the root file system.
-# Some platforms may need to install more than one (e.g. a netbsd.aout file
-# to be loaded directly by the firmware), so this can be overriden by them.
-KERNIMAGES?=	netbsd
-
 .if !target(install)
 # The install target can be redefined by putting a
 # install-kernel-${MACHINE_NAME} target into /etc/mk.conf
@@ -385,12 +380,10 @@ MACHINE_NAME!=  uname -n
 install: install-kernel-${MACHINE_NAME}
 .if !target(install-kernel-${MACHINE_NAME})
 install-kernel-${MACHINE_NAME}:
-.for _K in ${KERNIMAGES}
-	rm -f ${DESTDIR}/o${_K}
-	ln ${DESTDIR}/${_K} ${DESTDIR}/o${_K}
-	cp ${_K} ${DESTDIR}/n${_K}
-	mv ${DESTDIR}/n${_K} ${DESTDIR}/${_K}
-.endfor
+	rm -f ${DESTDIR}/onetbsd
+	ln ${DESTDIR}/netbsd ${DESTDIR}/onetbsd
+	cp netbsd ${DESTDIR}/nnetbsd
+	mv ${DESTDIR}/nnetbsd ${DESTDIR}/netbsd
 .endif
 .endif
 
@@ -456,11 +449,9 @@ VARSTACK=dev/cgd.c kern/uipc_socket.c miscfs/genfs/genfs_vnops.c \
     nfs/nfs_bio.c ufs/ufs/ufs_inode.c ufs/ufs/ufs_lookup.c uvm/uvm_bio.c \
     uvm/uvm_pager.c dev/ic/aic7xxx.c dev/ic/aic79xx.c arch/xen/i386/gdt.c
 
-. if ${HAVE_GCC} > 3
 .for __varstack in ${VARSTACK}
 COPTS.${__varstack:T} += -Wno-stack-protector
 .endfor
-.endif
 
 AFLAGS+=	${AOPTS.${.IMPSRC:T}}
 CFLAGS+=	${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}}

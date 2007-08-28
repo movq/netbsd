@@ -1,4 +1,4 @@
-/*	$NetBSD: ddp_usrreq.c,v 1.25 2007/05/02 20:40:24 dyoung Exp $	 */
+/*	$NetBSD: ddp_usrreq.c,v 1.20 2006/11/16 01:33:44 christos Exp $	 */
 
 /*
  * Copyright (c) 1990,1991 Regents of The University of Michigan.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ddp_usrreq.c,v 1.25 2007/05/02 20:40:24 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ddp_usrreq.c,v 1.20 2006/11/16 01:33:44 christos Exp $");
 
 #include "opt_mbuftrace.h"
 
@@ -37,7 +37,6 @@ __KERNEL_RCSID(0, "$NetBSD: ddp_usrreq.c,v 1.25 2007/05/02 20:40:24 dyoung Exp $
 #include <sys/proc.h>
 #include <sys/mbuf.h>
 #include <sys/ioctl.h>
-#include <sys/queue.h>
 #include <sys/socket.h>
 #include <sys/socketvar.h>
 #include <sys/protosw.h>
@@ -89,7 +88,7 @@ ddp_usrreq(so, req, m, addr, rights, l)
 	ddp = sotoddpcb(so);
 
 	if (req == PRU_CONTROL) {
-		return (at_control((long) m, (void *) addr,
+		return (at_control((long) m, (caddr_t) addr,
 		    (struct ifnet *) rights, l));
 	}
 	if (req == PRU_PURGEIF) {
@@ -257,7 +256,8 @@ at_pcbsetaddr(ddp, addr, l)
 
 		if (sat->sat_addr.s_node != ATADDR_ANYNODE ||
 		    sat->sat_addr.s_net != ATADDR_ANYNET) {
-			TAILQ_FOREACH(aa, &at_ifaddr, aa_list) {
+			for (aa = at_ifaddr.tqh_first; aa;
+			    aa = aa->aa_list.tqe_next) {
 				if ((sat->sat_addr.s_net ==
 				    AA_SAT(aa)->sat_addr.s_net) &&
 				    (sat->sat_addr.s_node ==
@@ -274,11 +274,12 @@ at_pcbsetaddr(ddp, addr, l)
 
 			if (sat->sat_port < ATPORT_RESERVED && l &&
 			    kauth_authorize_generic(l->l_cred,
-			    KAUTH_GENERIC_ISSUSER, NULL))
+			    KAUTH_GENERIC_ISSUSER,
+			    &l->l_acflag))
 				return (EACCES);
 		}
 	} else {
-		bzero((void *) & lsat, sizeof(struct sockaddr_at));
+		bzero((caddr_t) & lsat, sizeof(struct sockaddr_at));
 		lsat.sat_len = sizeof(struct sockaddr_at);
 		lsat.sat_addr.s_node = ATADDR_ANYNODE;
 		lsat.sat_addr.s_net = ATADDR_ANYNET;
@@ -288,9 +289,9 @@ at_pcbsetaddr(ddp, addr, l)
 
 	if (sat->sat_addr.s_node == ATADDR_ANYNODE &&
 	    sat->sat_addr.s_net == ATADDR_ANYNET) {
-		if (TAILQ_EMPTY(&at_ifaddr))
-			return EADDRNOTAVAIL;
-		sat->sat_addr = AA_SAT(TAILQ_FIRST(&at_ifaddr))->sat_addr;
+		if (at_ifaddr.tqh_first == NULL)
+			return (EADDRNOTAVAIL);
+		sat->sat_addr = AA_SAT(at_ifaddr.tqh_first)->sat_addr;
 	}
 	ddp->ddp_lsat = *sat;
 
@@ -335,17 +336,16 @@ at_pcbconnect(ddp, addr, l)
 	struct mbuf    *addr;
 	struct lwp     *l;
 {
-	const struct sockaddr_at *cdst;
 	struct sockaddr_at *sat = mtod(addr, struct sockaddr_at *);
-	struct route *ro;
-	struct at_ifaddr *aa;
+	struct route   *ro;
+	struct at_ifaddr *aa = 0;
 	struct ifnet   *ifp;
 	u_short         hintnet = 0, net;
 
 	if (addr->m_len != sizeof(*sat))
-		return EINVAL;
+		return (EINVAL);
 	if (sat->sat_family != AF_APPLETALK) {
-		return EAFNOSUPPORT;
+		return (EAFNOSUPPORT);
 	}
 	/*
          * Under phase 2, network 0 means "the network".  We take "the
@@ -355,7 +355,7 @@ at_pcbconnect(ddp, addr, l)
 	if (sat->sat_addr.s_net == ATADDR_ANYNET
 	    && sat->sat_addr.s_node != ATADDR_ANYNODE) {
 		if (ddp->ddp_lsat.sat_port == ATADDR_ANYPORT) {
-			return EADDRNOTAVAIL;
+			return (EADDRNOTAVAIL);
 		}
 		hintnet = ddp->ddp_lsat.sat_addr.s_net;
 	}
@@ -365,61 +365,67 @@ at_pcbconnect(ddp, addr, l)
          * If we've changed our address, we may have an old "good looking"
          * route here.  Attempt to detect it.
          */
-	rtcache_check(ro);
-	if (ro->ro_rt != NULL) {
+	if (ro->ro_rt) {
 		if (hintnet) {
 			net = hintnet;
 		} else {
 			net = sat->sat_addr.s_net;
 		}
+		aa = 0;
 		if ((ifp = ro->ro_rt->rt_ifp) != NULL) {
-			TAILQ_FOREACH(aa, &at_ifaddr, aa_list) {
+			for (aa = at_ifaddr.tqh_first; aa;
+			    aa = aa->aa_list.tqe_next) {
 				if (aa->aa_ifp == ifp &&
 				    ntohs(net) >= ntohs(aa->aa_firstnet) &&
 				    ntohs(net) <= ntohs(aa->aa_lastnet)) {
 					break;
 				}
 			}
-		} else
-			aa = NULL;
-		cdst = satocsat(rtcache_getdst(ro));
-		if (aa == NULL || (cdst->sat_addr.s_net !=
+		}
+		if (aa == NULL || (satosat(&ro->ro_dst)->sat_addr.s_net !=
 		    (hintnet ? hintnet : sat->sat_addr.s_net) ||
-		    cdst->sat_addr.s_node != sat->sat_addr.s_node))
-			rtcache_free(ro);
+		    satosat(&ro->ro_dst)->sat_addr.s_node !=
+		    sat->sat_addr.s_node)) {
+			RTFREE(ro->ro_rt);
+			ro->ro_rt = (struct rtentry *) 0;
+		}
 	}
 	/*
          * If we've got no route for this interface, try to find one.
          */
-	if (ro->ro_rt == NULL) {
-		union {
-			struct sockaddr		dst;
-			struct sockaddr_at	dsta;
-		} u;
-
-		sockaddr_at_init(&u.dsta, &sat->sat_addr, 0);
-		if (hintnet)
-			u.dsta.sat_addr.s_net = hintnet;
-		rtcache_setdst(ro, &u.dst);
-
-		rtcache_init(ro);
+	if (ro->ro_rt == (struct rtentry *) 0 ||
+	    ro->ro_rt->rt_ifp == (struct ifnet *) 0) {
+		bzero(&ro->ro_dst, sizeof(struct sockaddr_at));
+		ro->ro_dst.sa_len = sizeof(struct sockaddr_at);
+		ro->ro_dst.sa_family = AF_APPLETALK;
+		if (hintnet) {
+			satosat(&ro->ro_dst)->sat_addr.s_net = hintnet;
+		} else {
+			satosat(&ro->ro_dst)->sat_addr.s_net =
+			    sat->sat_addr.s_net;
+		}
+		satosat(&ro->ro_dst)->sat_addr.s_node = sat->sat_addr.s_node;
+		rtalloc(ro);
 	}
 	/*
          * Make sure any route that we have has a valid interface.
          */
-	if (ro->ro_rt != NULL && (ifp = ro->ro_rt->rt_ifp) != NULL) {
-		TAILQ_FOREACH(aa, &at_ifaddr, aa_list) {
-			if (aa->aa_ifp == ifp)
+	aa = 0;
+	if (ro->ro_rt && (ifp = ro->ro_rt->rt_ifp)) {
+		for (aa = at_ifaddr.tqh_first; aa; aa = aa->aa_list.tqe_next) {
+			if (aa->aa_ifp == ifp) {
 				break;
+			}
 		}
-	} else
-		aa = NULL;
-	if (aa == NULL)
-		return ENETUNREACH;
+	}
+	if (aa == 0) {
+		return (ENETUNREACH);
+	}
 	ddp->ddp_fsat = *sat;
-	if (ddp->ddp_lsat.sat_port == ATADDR_ANYPORT)
-		return at_pcbsetaddr(ddp, NULL, l);
-	return 0;
+	if (ddp->ddp_lsat.sat_port == ATADDR_ANYPORT) {
+		return (at_pcbsetaddr(ddp, (struct mbuf *) 0, l));
+	}
+	return (0);
 }
 
 static void
@@ -452,12 +458,12 @@ at_pcballoc(so)
 	ddpcb = ddp;
 
 	ddp->ddp_socket = so;
-	so->so_pcb = (void *) ddp;
+	so->so_pcb = (caddr_t) ddp;
 #ifdef MBUFTRACE
 	so->so_rcv.sb_mowner = &atalk_rx_mowner;
 	so->so_snd.sb_mowner = &atalk_tx_mowner;
 #endif
-	return 0;
+	return (0);
 }
 
 static void
@@ -481,7 +487,9 @@ at_pcbdetach(so, ddp)
 			ddp->ddp_pnext->ddp_pprev = ddp->ddp_pprev;
 		}
 	}
-	rtcache_free(&ddp->ddp_route);
+	if (ddp->ddp_route.ro_rt) {
+		rtfree(ddp->ddp_route.ro_rt);
+	}
 	if (ddp->ddp_prev) {
 		ddp->ddp_prev->ddp_next = ddp->ddp_next;
 	} else {
@@ -510,9 +518,9 @@ ddp_search(
 	/*
          * Check for bad ports.
          */
-	if (to->sat_port < ATPORT_FIRST || to->sat_port >= ATPORT_LAST)
-		return NULL;
-
+	if (to->sat_port < ATPORT_FIRST || to->sat_port >= ATPORT_LAST) {
+		return (NULL);
+	}
 	/*
          * Make sure the local address matches the sent address.  What about
          * the interface?

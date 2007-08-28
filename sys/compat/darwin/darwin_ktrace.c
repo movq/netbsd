@@ -1,4 +1,4 @@
-/*	$NetBSD: darwin_ktrace.c,v 1.10 2007/08/15 12:07:27 ad Exp $ */
+/*	$NetBSD: darwin_ktrace.c,v 1.8 2006/11/16 01:32:42 christos Exp $ */
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -37,7 +37,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_ktrace.c,v 1.10 2007/08/15 12:07:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_ktrace.c,v 1.8 2006/11/16 01:32:42 christos Exp $");
+
+#include "opt_ktrace.h"
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -45,6 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_ktrace.c,v 1.10 2007/08/15 12:07:27 ad Exp $"
 #include <sys/mount.h>
 #include <sys/proc.h>
 #include <sys/ktrace.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/sys/signal.h>
@@ -58,10 +61,14 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_ktrace.c,v 1.10 2007/08/15 12:07:27 ad Exp $"
 int
 darwin_sys_utrace(struct lwp *l, void *v, register_t *retval)
 {
+#if defined(KTRACE)
 	struct darwin_sys_utrace_args /* {
 		syscallarg(void *) addr;
 		syscallarg(size_t) len;
 	} */ *uap = v;
 
-	return ktruser("darwin", SCARG(uap, addr), SCARG(uap, len), 0);
+	return ktruser(l, "darwin", SCARG(uap, addr), SCARG(uap, len), 0);
+#else
+	return 0;
+#endif
 }

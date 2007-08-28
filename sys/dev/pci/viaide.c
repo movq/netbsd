@@ -1,4 +1,4 @@
-/*	$NetBSD: viaide.c,v 1.41 2007/03/27 00:04:04 garbled Exp $	*/
+/*	$NetBSD: viaide.c,v 1.37.2.4 2007/10/11 21:52:36 pavel Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000, 2001 Manuel Bouyer.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: viaide.c,v 1.41 2007/03/27 00:04:04 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: viaide.c,v 1.37.2.4 2007/10/11 21:52:36 pavel Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -434,6 +434,7 @@ unknown:
 		case PCI_PRODUCT_AMD_PBC8111_IDE:
 			sc->sc_wdcdev.sc_atac.atac_udma_cap = 6;
 			break;
+		case PCI_PRODUCT_AMD_CS5536_IDE:
 		case PCI_PRODUCT_AMD_PBC766_IDE:
 		case PCI_PRODUCT_AMD_PBC768_IDE:
 			sc->sc_wdcdev.sc_atac.atac_udma_cap = 5;
@@ -467,10 +468,10 @@ unknown:
 		panic("via_chip_map: unknown vendor");
 	}
 
-	aprint_verbose("%s: bus-master DMA support present",
+	aprint_normal("%s: bus-master DMA support present",
 	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
 	pciide_mapreg_dma(sc, pa);
-	aprint_verbose("\n");
+	aprint_normal("\n");
 	sc->sc_wdcdev.sc_atac.atac_cap = ATAC_CAP_DATA16 | ATAC_CAP_DATA32;
 	if (sc->sc_dma_ok) {
 		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_DMA;
@@ -669,10 +670,10 @@ via_sata_chip_map_common(struct pciide_softc *sc, struct pci_attach_args *pa)
 	if (pciide_chipen(sc, pa) == 0)
 		return 0;
 
-	aprint_verbose("%s: bus-master DMA support present",
+	aprint_normal("%s: bus-master DMA support present",
 	    sc->sc_wdcdev.sc_atac.atac_dev.dv_xname);
 	pciide_mapreg_dma(sc, pa);
-	aprint_verbose("\n");
+	aprint_normal("\n");
 
 	if (sc->sc_dma_ok) {
 		sc->sc_wdcdev.sc_atac.atac_cap |= ATAC_CAP_UDMA | ATAC_CAP_DMA;

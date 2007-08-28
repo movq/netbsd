@@ -1,4 +1,4 @@
-/*	$NetBSD: ninjaata32reg.h,v 1.3 2007/01/10 09:00:00 itohy Exp $	*/
+/*	$NetBSD: ninjaata32reg.h,v 1.2.2.1 2007/03/08 18:29:17 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2006 ITOH Yasufumi <itohy@NetBSD.org>.

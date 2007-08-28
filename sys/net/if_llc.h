@@ -1,4 +1,4 @@
-/*	$NetBSD: if_llc.h,v 1.17 2006/12/10 11:35:36 is Exp $	*/
+/*	$NetBSD: if_llc.h,v 1.16.12.1 2006/12/18 14:41:29 tron Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993

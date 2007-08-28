@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_meter.c,v 1.47 2007/02/26 09:20:54 yamt Exp $	*/
+/*	$NetBSD: uvm_meter.c,v 1.43.2.1 2007/10/12 22:36:07 riz Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_meter.c,v 1.47 2007/02/26 09:20:54 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_meter.c,v 1.43.2.1 2007/10/12 22:36:07 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -83,19 +83,15 @@ static void uvm_total(struct vmtotal *);
 void
 uvm_meter(void)
 {
-	static int count;
-
-	if (++count >= 5) {
-		count = 0;
+	if ((time_second % 5) == 0)
 		uvm_loadav(&averunnable);
-	}
 	if (lwp0.l_slptime > (maxslp / 2))
-		uvm_kick_scheduler();
+		wakeup(&proc0);
 }
 
 /*
  * uvm_loadav: compute a tenex style load average of a quantity on
- * 1, 5, and 15 minute intervals.
+ * 1, 5, and 15 minute internvals.
  */
 static void
 uvm_loadav(struct loadavg *avg)
@@ -103,11 +99,12 @@ uvm_loadav(struct loadavg *avg)
 	int i, nrun;
 	struct lwp *l;
 
+	proclist_lock_read();
 	nrun = 0;
-
-	mutex_enter(&proclist_mutex);
 	LIST_FOREACH(l, &alllwp, l_list) {
-		if ((l->l_flag & (LW_SINTR | LW_SYSTEM)) != 0)
+		if ((l->l_flag & L_SINTR) != 0)
+			continue;
+		if ((l->l_proc->p_flag & P_SYSTEM) != 0)
 			continue;
 		switch (l->l_stat) {
 		case LSSLEEP:
@@ -120,8 +117,7 @@ uvm_loadav(struct loadavg *avg)
 			nrun++;
 		}
 	}
-	mutex_exit(&proclist_mutex);
-
+	proclist_unlock_read();
 	for (i = 0; i < 3; i++)
 		avg->ldavg[i] = (cexp[i] * avg->ldavg[i] +
 		    nrun * FSCALE * (FSCALE - cexp[i])) >> FSHIFT;
@@ -367,9 +363,10 @@ uvm_total(struct vmtotal *totalp)
 	/*
 	 * calculate process statistics
 	 */
-	mutex_enter(&proclist_mutex);
-	LIST_FOREACH(l, &alllwp, l_list) {
-		if (l->l_proc->p_flag & PK_SYSTEM)
+
+	proclist_lock_read();
+	    LIST_FOREACH(l, &alllwp, l_list) {
+		if (l->l_proc->p_flag & P_SYSTEM)
 			continue;
 		switch (l->l_stat) {
 		case 0:
@@ -377,8 +374,8 @@ uvm_total(struct vmtotal *totalp)
 
 		case LSSLEEP:
 		case LSSTOP:
-			if (l->l_flag & LW_INMEM) {
-				if (lwp_eprio(l) <= PZERO)
+			if (l->l_flag & L_INMEM) {
+				if (l->l_priority <= PZERO)
 					totalp->t_dw++;
 				else if (l->l_slptime < maxslp)
 					totalp->t_sl++;
@@ -391,7 +388,7 @@ uvm_total(struct vmtotal *totalp)
 		case LSRUN:
 		case LSONPROC:
 		case LSIDL:
-			if (l->l_flag & LW_INMEM)
+			if (l->l_flag & L_INMEM)
 				totalp->t_rq++;
 			else
 				totalp->t_sw++;
@@ -421,8 +418,7 @@ uvm_total(struct vmtotal *totalp)
 			totalp->t_pw++;
 #endif
 	}
-	mutex_exit(&proclist_mutex);
-
+	proclist_unlock_read();
 	/*
 	 * Calculate object memory usage statistics.
 	 */

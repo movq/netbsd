@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_types.h,v 1.4 2007/04/11 11:45:55 njoly Exp $ */
+/*	$NetBSD: linux32_types.h,v 1.3.2.1 2007/04/20 20:26:03 bouyer Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.

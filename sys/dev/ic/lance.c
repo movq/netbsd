@@ -1,4 +1,4 @@
-/*	$NetBSD: lance.c,v 1.38 2007/03/04 06:01:57 christos Exp $	*/
+/*	$NetBSD: lance.c,v 1.37 2006/11/16 01:32:51 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lance.c,v 1.38 2007/03/04 06:01:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lance.c,v 1.37 2006/11/16 01:32:51 christos Exp $");
 
 #include "bpfilter.h"
 #include "rnd.h"
@@ -126,7 +126,7 @@ void lance_mediastatus(struct ifnet *, struct ifmediareq *);
 static inline u_int16_t ether_cmp(void *, void *);
 
 void lance_stop(struct ifnet *, int);
-int lance_ioctl(struct ifnet *, u_long, void *);
+int lance_ioctl(struct ifnet *, u_long, caddr_t);
 void lance_watchdog(struct ifnet *);
 
 /*
@@ -365,7 +365,7 @@ lance_put(sc, boff, m)
 			MFREE(m, n);
 			continue;
 		}
-		(*sc->sc_copytobuf)(sc, mtod(m, void *), boff, len);
+		(*sc->sc_copytobuf)(sc, mtod(m, caddr_t), boff, len);
 		boff += len;
 		tlen += len;
 		MFREE(m, n);
@@ -408,7 +408,7 @@ lance_get(sc, boff, totlen)
 		}
 
 		if (m == m0) {
-			char *newdata = (char *)
+			caddr_t newdata = (caddr_t)
 			    ALIGN(m->m_data + sizeof(struct ether_header)) -
 			    sizeof(struct ether_header);
 			len -= newdata - m->m_data;
@@ -416,7 +416,7 @@ lance_get(sc, boff, totlen)
 		}
 
 		m->m_len = len = min(totlen, len);
-		(*sc->sc_copyfrombuf)(sc, mtod(m, void *), boff, len);
+		(*sc->sc_copyfrombuf)(sc, mtod(m, caddr_t), boff, len);
 		boff += len;
 
 		totlen -= len;
@@ -558,7 +558,7 @@ int
 lance_ioctl(ifp, cmd, data)
 	struct ifnet *ifp;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 {
 	struct lance_softc *sc = ifp->if_softc;
 	struct ifreq *ifr = (struct ifreq *)data;
@@ -692,7 +692,7 @@ lance_copytobuf_contig(sc, from, boff, len)
 	void *from;
 	int boff, len;
 {
-	char *buf = sc->sc_mem;
+	volatile caddr_t buf = sc->sc_mem;
 
 	/*
 	 * Just call memcpy() to do the work.
@@ -706,7 +706,7 @@ lance_copyfrombuf_contig(sc, to, boff, len)
 	void *to;
 	int boff, len;
 {
-	char *buf = sc->sc_mem;
+	volatile caddr_t buf = sc->sc_mem;
 
 	/*
 	 * Just call memcpy() to do the work.
@@ -719,7 +719,7 @@ lance_zerobuf_contig(sc, boff, len)
 	struct lance_softc *sc;
 	int boff, len;
 {
-	char *buf = sc->sc_mem;
+	volatile caddr_t buf = sc->sc_mem;
 
 	/*
 	 * Just let memset() do the work
@@ -747,8 +747,8 @@ lance_copytobuf_gap2(sc, fromv, boff, len)
 	int boff;
 	int len;
 {
-	volatile void *buf = sc->sc_mem;
-	void *from = fromv;
+	volatile caddr_t buf = sc->sc_mem;
+	caddr_t from = fromv;
 	volatile u_int16_t *bptr;
 
 	if (boff & 0x1) {
@@ -775,8 +775,8 @@ lance_copyfrombuf_gap2(sc, tov, boff, len)
 	void *tov;
 	int boff, len;
 {
-	volatile void *buf = sc->sc_mem;
-	void *to = tov;
+	volatile caddr_t buf = sc->sc_mem;
+	caddr_t to = tov;
 	volatile u_int16_t *bptr;
 	u_int16_t tmp;
 
@@ -804,7 +804,7 @@ lance_zerobuf_gap2(sc, boff, len)
 	struct lance_softc *sc;
 	int boff, len;
 {
-	volatile void *buf = sc->sc_mem;
+	volatile caddr_t buf = sc->sc_mem;
 	volatile u_int16_t *bptr;
 
 	if ((unsigned)boff & 0x1) {
@@ -834,9 +834,9 @@ lance_copytobuf_gap16(sc, fromv, boff, len)
 	int boff;
 	int len;
 {
-	volatile void *buf = sc->sc_mem;
-	void *from = fromv;
-	void *bptr;
+	volatile caddr_t buf = sc->sc_mem;
+	caddr_t from = fromv;
+	caddr_t bptr;
 	int xfer;
 
 	bptr = buf + ((boff << 1) & ~0x1f);
@@ -858,9 +858,9 @@ lance_copyfrombuf_gap16(sc, tov, boff, len)
 	void *tov;
 	int boff, len;
 {
-	volatile void *buf = sc->sc_mem;
-	void *to = tov;
-	void *bptr;
+	volatile caddr_t buf = sc->sc_mem;
+	caddr_t to = tov;
+	caddr_t bptr;
 	int xfer;
 
 	bptr = buf + ((boff << 1) & ~0x1f);
@@ -881,8 +881,8 @@ lance_zerobuf_gap16(sc, boff, len)
 	struct lance_softc *sc;
 	int boff, len;
 {
-	volatile void *buf = sc->sc_mem;
-	void *bptr;
+	volatile caddr_t buf = sc->sc_mem;
+	caddr_t bptr;
 	int xfer;
 
 	bptr = buf + ((boff << 1) & ~0x1f);

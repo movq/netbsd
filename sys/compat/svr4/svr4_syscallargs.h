@@ -1,4 +1,4 @@
-/* $NetBSD: svr4_syscallargs.h,v 1.75 2007/03/04 06:01:33 christos Exp $ */
+/* $NetBSD: svr4_syscallargs.h,v 1.74 2006/05/29 09:46:54 drochner Exp $ */
 
 /*
  * System call argument lists.
@@ -58,7 +58,7 @@ struct svr4_sys_mknod_args {
 };
 
 struct svr4_sys_break_args {
-	syscallarg(void *) nsize;
+	syscallarg(caddr_t) nsize;
 };
 
 struct svr4_sys_stat_args {
@@ -149,7 +149,7 @@ struct svr4_sys_semsys_args {
 struct svr4_sys_ioctl_args {
 	syscallarg(int) fd;
 	syscallarg(u_long) com;
-	syscallarg(void *) data;
+	syscallarg(caddr_t) data;
 };
 
 struct svr4_sys_utssys_args {

@@ -1,4 +1,4 @@
-/*	$NetBSD: vaxfp.h,v 1.6 2007/02/26 01:32:29 christos Exp $	*/
+/*	$NetBSD: vaxfp.h,v 1.5.24.1 2007/05/12 17:46:23 snj Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.

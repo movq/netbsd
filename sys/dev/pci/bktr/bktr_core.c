@@ -1,6 +1,6 @@
 /* $SourceForge: bktr_core.c,v 1.6 2003/03/11 23:11:22 thomasklausner Exp $ */
 
-/*	$NetBSD: bktr_core.c,v 1.43 2007/07/09 21:01:19 ad Exp $	*/
+/*	$NetBSD: bktr_core.c,v 1.40 2006/11/16 01:33:20 christos Exp $	*/
 /* $FreeBSD: src/sys/dev/bktr/bktr_core.c,v 1.114 2000/10/31 13:09:56 roger Exp$ */
 
 /*
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bktr_core.c,v 1.43 2007/07/09 21:01:19 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bktr_core.c,v 1.40 2006/11/16 01:33:20 christos Exp $");
 
 #include "opt_bktr.h"		/* Include any kernel config options */
 
@@ -453,7 +453,7 @@ static void	remote_read(bktr_ptr_t bktr, struct bktr_remote *remote);
 /*
  * ioctls common to both video & tuner.
  */
-static int	common_ioctl(bktr_ptr_t bktr, ioctl_cmd_t cmd, void *arg);
+static int	common_ioctl(bktr_ptr_t bktr, ioctl_cmd_t cmd, caddr_t arg);
 
 
 #if !defined(BKTR_USE_FREEBSD_SMBUS)
@@ -566,7 +566,7 @@ bktr_store_address(unit, BKTR_MEM_BUF,          sbuf);
 	if (sbuf != 0) {
 		bktr->bigbuf = sbuf;
 		bktr->alloc_pages = BROOKTREE_ALLOC_PAGES;
-		bzero((void *) bktr->bigbuf, BROOKTREE_ALLOC);
+		bzero((caddr_t) bktr->bigbuf, BROOKTREE_ALLOC);
 	} else {
 		bktr->alloc_pages = 0;
 	}
@@ -823,7 +823,9 @@ common_bktr_intr(void *arg)
 		}
 
 		/* If someone has a select() on /dev/vbi, inform them */
-		selwakeup(&bktr->vbi_select);
+		if (SEL_WAITING(&bktr->vbi_select)) {
+			selwakeup(&bktr->vbi_select);
+		}
 	}
 
 	/*
@@ -915,12 +917,10 @@ common_bktr_intr(void *arg)
 		 */
 
 		if (bktr->proc && !(bktr->signal & METEOR_SIG_MODE_MASK)) {
-			mutex_enter(&proclist_mutex);
 			PROC_LOCK(bktr->proc);
 			psignal(bktr->proc,
 				 bktr->signal&(~METEOR_SIG_MODE_MASK));
 			PROC_UNLOCK(bktr->proc);
-			mutex_exit(&proclist_mutex);
 		}
 
 		/*
@@ -1080,8 +1080,8 @@ vbi_open(bktr_ptr_t bktr)
 	bktr->vbi_sequence_number = 0;
 	bktr->vbi_read_blocked = FALSE;
 
-	bzero((void *) bktr->vbibuffer, VBI_BUFFER_SIZE);
-	bzero((void *) bktr->vbidata,  VBI_DATA_SIZE);
+	bzero((caddr_t) bktr->vbibuffer, VBI_BUFFER_SIZE);
+	bzero((caddr_t) bktr->vbidata,  VBI_DATA_SIZE);
 
 	return(0);
 }
@@ -1215,7 +1215,7 @@ video_read(bktr_ptr_t bktr, int unit, dev_t dev,
 
 	status = tsleep(BKTR_SLEEP, BKTRPRI, "captur", 0);
 	if (!status)		/* successful capture */
-		status = uiomove((void *)bktr->bigbuf, count, uio);
+		status = uiomove((caddr_t)bktr->bigbuf, count, uio);
 	else
 		printf ("%s: read: tsleep error %d\n",
 			bktr_name(bktr), status);
@@ -1265,11 +1265,11 @@ vbi_read(bktr_ptr_t bktr, struct uio *uio, int ioflag)
 		/* We need to wrap around */
 
 		readsize2 = VBI_BUFFER_SIZE - bktr->vbistart;
-		status = uiomove((char *)bktr->vbibuffer + bktr->vbistart, readsize2, uio);
-		status += uiomove((char *)bktr->vbibuffer, (readsize - readsize2), uio);
+		status = uiomove((caddr_t)bktr->vbibuffer + bktr->vbistart, readsize2, uio);
+		status += uiomove((caddr_t)bktr->vbibuffer, (readsize - readsize2), uio);
 	} else {
 		/* We do not need to wrap around */
-		status = uiomove((char *)bktr->vbibuffer + bktr->vbistart, readsize, uio);
+		status = uiomove((caddr_t)bktr->vbibuffer + bktr->vbistart, readsize, uio);
 	}
 
 	/* Update the number of bytes left to read */
@@ -1290,10 +1290,10 @@ vbi_read(bktr_ptr_t bktr, struct uio *uio, int ioflag)
  */
 #ifdef __FreeBSD__
 int
-video_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, void *arg, struct thread* td)
+video_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, caddr_t arg, struct thread* td)
 #else
 int
-video_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, void *arg,
+video_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, caddr_t arg,
     struct lwp* l)
 #endif
 {
@@ -1913,10 +1913,10 @@ video_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, void *arg,
  */
 #ifdef __FreeBSD__
 int
-tuner_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, void *arg, struct thread* td)
+tuner_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, caddr_t arg, struct thread* td)
 #else
 int
-tuner_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, void *arg,
+tuner_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, caddr_t arg,
     struct lwp* l)
 #endif
 {
@@ -2328,7 +2328,7 @@ tuner_ioctl(bktr_ptr_t bktr, int unit, ioctl_cmd_t cmd, void *arg,
  * common ioctls
  */
 static int
-common_ioctl(bktr_ptr_t bktr, ioctl_cmd_t cmd, void *arg)
+common_ioctl(bktr_ptr_t bktr, ioctl_cmd_t cmd, caddr_t arg)
 {
         int                           pixfmt;
 	unsigned int	              temp;
@@ -3645,7 +3645,7 @@ start_capture(bktr_ptr_t bktr, unsigned type)
 
 	/*  If requested, clear out capture buf first  */
 	if (bktr->clr_on_start && (bktr->video.addr == 0)) {
-		bzero((void *)bktr->bigbuf,
+		bzero((caddr_t)bktr->bigbuf,
 		      (size_t)bktr->rows * bktr->cols * bktr->frames *
 			pixfmt_table[bktr->pixfmt].public.Bpp);
 	}

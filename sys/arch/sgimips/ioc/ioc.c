@@ -1,4 +1,4 @@
-/* $NetBSD: ioc.c,v 1.6 2007/07/09 20:52:26 ad Exp $	 */
+/* $NetBSD: ioc.c,v 1.4 2005/12/11 12:18:53 christos Exp $	 */
 
 /*
  * Copyright (c) 2003 Christopher Sekiya
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ioc.c,v 1.6 2007/07/09 20:52:26 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ioc.c,v 1.4 2005/12/11 12:18:53 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,7 +82,7 @@ CFATTACH_DECL(ioc, sizeof(struct ioc_softc),
 	      ioc_match, ioc_attach, NULL, NULL);
 
 #if defined(BLINK)
-static callout_t ioc_blink_ch;
+static struct callout ioc_blink_ch = CALLOUT_INITIALIZER;
 static void     ioc_blink(void *);
 #endif
 
@@ -102,10 +102,6 @@ ioc_attach(struct device * parent, struct device * self, void *aux)
 	struct mainbus_attach_args *maa = aux;
 	u_int32_t       sysid;
 
-#ifdef BLINK
-	callout_init(&ioc_blink_ch, 0);
-#endif
-
 	sc->sc_iot = SGIMIPS_BUS_SPACE_HPC;
 
 	if (bus_space_map(sc->sc_iot, maa->ma_addr, 0,
@@ -117,12 +113,11 @@ ioc_attach(struct device * parent, struct device * self, void *aux)
 	if (sysid)
 		mach_subtype = MACH_SGI_IP22_FULLHOUSE;
 	else
-		mach_subtype = MACH_SGI_IP22_GUINNESS;
+		mach_subtype = MACH_SGI_IP22_GUINESS;
 
 	aprint_normal(": rev %d, machine %s, board rev %d\n",
 		   ((sysid & IOC_SYSID_CHIPREV) >> IOC_SYSID_CHIPREV_SHIFT),
-		    (sysid & IOC_SYSID_SYSTYPE) ? "Indigo2 (Fullhouse)" :
-		    "Indy (Guinness)",
+		    (sysid & IOC_SYSID_SYSTYPE) ? "Indigo2 (Fullhouse)" : "Indy (Guiness)",
 		   ((sysid & IOC_SYSID_BOARDREV) >> IOC_SYSID_BOARDREV_SHIFT));
 
 	/* Reset IOC */
@@ -140,7 +135,7 @@ ioc_attach(struct device * parent, struct device * self, void *aux)
 			  IOC_WRITE_ENET_AUTO | IOC_WRITE_ENET_UTP |
 			  IOC_WRITE_PC_UART2 | IOC_WRITE_PC_UART1);
 
-	if (mach_subtype == MACH_SGI_IP22_GUINNESS) {
+	if (mach_subtype == MACH_SGI_IP22_GUINESS) {
 		bus_space_write_4(sc->sc_iot, sc->sc_ioh, IOC_GCSEL, 0xff);
 		bus_space_write_4(sc->sc_iot, sc->sc_ioh, IOC_GCREG, 0xff);
 	}

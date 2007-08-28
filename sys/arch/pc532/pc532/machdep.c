@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.169 2007/07/08 10:19:23 pooka Exp $	*/
+/*	$NetBSD: machdep.c,v 1.165 2006/10/21 05:54:32 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1987, 1990 The Regents of the University of California.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.169 2007/07/08 10:19:23 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.165 2006/10/21 05:54:32 mrg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -99,6 +99,8 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.169 2007/07/08 10:19:23 pooka Exp $");
 #include <sys/mount.h>
 #include <sys/vnode.h>
 #include <sys/device.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscallargs.h>
 #include <sys/core.h>
 #include <sys/kcore.h>
@@ -202,7 +204,7 @@ cpu_startup(void)
 		    msgbuf_paddr + i * PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE);
 	pmap_update(pmap_kernel());
 
-	initmsgbuf((void *)msgbuf_vaddr, round_page(MSGBUFSIZE));
+	initmsgbuf((caddr_t)msgbuf_vaddr, round_page(MSGBUFSIZE));
 
 	printf("%s%s", copyright, version);
 	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
@@ -214,19 +216,19 @@ cpu_startup(void)
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
+				   16*NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, 0, false, NULL);
+				   VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, false, NULL);
+	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, FALSE, NULL);
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
@@ -273,7 +275,7 @@ getframe(struct lwp *l, int sig, int *onstack)
 
 	/* Allocate space for the signal handler context. */
 	if (*onstack)
-		return (void *)ss->ss_sp + ss->ss_size;
+		return (caddr_t)ss->ss_sp + ss->ss_size;
 	else
 		return (void *)l->l_md.md_regs->r_sp;
 }
@@ -332,7 +334,7 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	    | (p->p_sigctx.ps_sigstk.ss_flags & SS_ONSTACK)
 	    ? _UC_SETSTACK : _UC_CLRSTACK;
 	frame.sf_uc.uc_sigmask = *mask;
-	frame.sf_uc.uc_link = l->l_ctxlink;
+	frame.sf_uc.uc_link = NULL;
 	(void)memset(&frame.sf_uc.uc_stack, 0, sizeof(frame.sf_uc.uc_stack));
 	cpu_getmcontext(l, &frame.sf_uc.uc_mcontext, &frame.sf_uc.uc_flags);
 
@@ -368,6 +370,34 @@ sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	else
 #endif
 		sendsig_siginfo(ksi, mask);
+}
+
+void
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted, void *sas,
+    void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct saframe *sf, frame;
+	struct reg *regs;
+
+	regs = l->l_md.md_regs;
+
+	/* Build up and copy the SA frame. */
+	frame.sa_type = type;
+	frame.sa_sas = sas;
+	frame.sa_events = nevents;
+	frame.sa_interrupted = ninterrupted;
+	frame.sa_arg = ap;
+	frame.sa_ra = 0;
+
+	sf = (struct saframe *)sp - 1;
+	if (copyout(&frame, sf, sizeof(frame)) != 0) {
+		/* Copying onto the stack didn't work.  Die. */
+		sigexit(l, SIGILL);
+		/* NOTREACHED */
+	}
+
+	regs->r_sp = (int) sf;
+	regs->r_pc = (int) upcall;
 }
 
 void
@@ -548,7 +578,7 @@ static int
 cpu_dump(void)
 {
 	const struct bdevsw *bdev;
-	int (*dump)(dev_t, daddr_t, void *, size_t);
+	int (*dump)(dev_t, daddr_t, caddr_t, size_t);
 	long buf[dbtob(1) / sizeof (long)];
 	kcore_seg_t	*segp;
 	cpu_kcore_hdr_t	*cpuhdrp;
@@ -576,7 +606,7 @@ cpu_dump(void)
 	cpuhdrp->core_seg.start = 0;
 	cpuhdrp->core_seg.size = ctob(physmem);
 
-	return (dump(dumpdev, dumplo, (void *)buf, dbtob(1)));
+	return (dump(dumpdev, dumplo, (caddr_t)buf, dbtob(1)));
 }
 
 /*
@@ -647,7 +677,7 @@ dumpsys(void)
 	unsigned bytes, i, n;
 	int maddr, psize;
 	daddr_t blkno;
-	int (*dump)(dev_t, daddr_t, void *, size_t);
+	int (*dump)(dev_t, daddr_t, caddr_t, size_t);
 	int error;
 
 	if (dumpdev == NODEV)
@@ -698,7 +728,7 @@ dumpsys(void)
 			n =  BYTES_PER_DUMP;
 
 		(void) pmap_map(dumpspace, maddr, maddr + n, VM_PROT_READ);
-		error = (*dump)(dumpdev, blkno, (void *)dumpspace, n);
+		error = (*dump)(dumpdev, blkno, (caddr_t)dumpspace, n);
 		if (error)
 			break;
 		maddr += n;
@@ -774,7 +804,7 @@ alloc_pages(int pages)
 {
 	paddr_t p = avail_start;
 	avail_start += pages * PAGE_SIZE;
-	memset((void *) p, 0, pages * PAGE_SIZE);
+	memset((caddr_t) p, 0, pages * PAGE_SIZE);
 	return(p);
 }
 

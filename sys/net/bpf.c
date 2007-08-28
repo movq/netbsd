@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf.c,v 1.130 2007/07/11 21:26:53 xtraeme Exp $	*/
+/*	$NetBSD: bpf.c,v 1.125 2006/11/16 01:33:40 christos Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993
@@ -39,13 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bpf.c,v 1.130 2007/07/11 21:26:53 xtraeme Exp $");
-
-#if defined(_KERNEL_OPT)
-#include "opt_bpf.h"
-#include "sl.h"
-#include "strip.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: bpf.c,v 1.125 2006/11/16 01:33:40 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -84,8 +78,11 @@ __KERNEL_RCSID(0, "$NetBSD: bpf.c,v 1.130 2007/07/11 21:26:53 xtraeme Exp $");
 #include <netinet/in.h>
 #include <netinet/if_inarp.h>
 
-
-#include <compat/sys/sockio.h>
+#if defined(_KERNEL_OPT)
+#include "opt_bpf.h"
+#include "sl.h"
+#include "strip.h"
+#endif
 
 #ifndef BPF_BUFSIZE
 /*
@@ -115,7 +112,7 @@ struct bpf_stat	bpf_gstats;
  * Use a mutex to avoid a race condition between gathering the stats/peers
  * and opening/closing the device.
  */
-static kmutex_t bpf_mtx;
+struct simplelock bpf_slock;
 
 /*
  *  bpf_iflist is the list of interfaces; each corresponds to an ifnet
@@ -371,11 +368,11 @@ bpf_detachd(struct bpf_d *d)
 void
 bpfilterattach(int n)
 {
-	mutex_init(&bpf_mtx, MUTEX_DEFAULT, IPL_NONE);
+	simple_lock_init(&bpf_slock);
 
-	mutex_enter(&bpf_mtx);
+	simple_lock(&bpf_slock);
 	LIST_INIT(&bpf_list);
-	mutex_exit(&bpf_mtx);
+	simple_unlock(&bpf_slock);
 
 	bpf_gstats.bs_recv = 0;
 	bpf_gstats.bs_drop = 0;
@@ -402,11 +399,11 @@ bpfopen(dev_t dev, int flag, int mode, struct lwp *l)
 	d->bd_bufsize = bpf_bufsize;
 	d->bd_seesent = 1;
 	d->bd_pid = l->l_proc->p_pid;
-	callout_init(&d->bd_callout, 0);
+	callout_init(&d->bd_callout);
 
-	mutex_enter(&bpf_mtx);
+	simple_lock(&bpf_slock);
 	LIST_INSERT_HEAD(&bpf_list, d, bd_list);
-	mutex_exit(&bpf_mtx);
+	simple_unlock(&bpf_slock);
 
 	return fdclone(l, fp, fd, flag, &bpf_fileops, d);
 }
@@ -435,10 +432,9 @@ bpf_close(struct file *fp, struct lwp *l)
 		bpf_detachd(d);
 	splx(s);
 	bpf_freed(d);
-	mutex_enter(&bpf_mtx);
+	simple_lock(&bpf_slock);
 	LIST_REMOVE(d, bd_list);
-	mutex_exit(&bpf_mtx);
-	callout_destroy(&d->bd_callout);
+	simple_unlock(&bpf_slock);
 	free(d, M_DEVBUF);
 	fp->f_data = NULL;
 
@@ -567,6 +563,8 @@ bpf_wakeup(struct bpf_d *d)
 		fownsignal(d->bd_pgid, SIGIO, 0, 0, NULL);
 
 	selnotify(&d->bd_sel, 0);
+	/* XXX */
+	d->bd_sel.sel_pid = 0;
 }
 
 
@@ -798,9 +796,6 @@ bpf_ioctl(struct file *fp, u_long cmd, void *addr, struct lwp *l)
 	/*
 	 * Set interface name.
 	 */
-#ifdef OBIOCGETIF
-	case OBIOCGETIF:
-#endif
 	case BIOCGETIF:
 		if (d->bd_bif == 0)
 			error = EINVAL;
@@ -811,9 +806,6 @@ bpf_ioctl(struct file *fp, u_long cmd, void *addr, struct lwp *l)
 	/*
 	 * Set interface.
 	 */
-#ifdef OBIOCSETIF
-	case OBIOCSETIF:
-#endif
 	case BIOCSETIF:
 		error = bpf_setif(d, addr);
 		break;
@@ -1018,7 +1010,7 @@ bpf_setif(struct bpf_d *d, struct ifreq *ifr)
 		    strcmp(ifp->if_xname, ifr->ifr_name) != 0)
 			continue;
 		/* skip additional entry */
-		if ((void **)bp->bif_driverp != &ifp->if_bpf)
+		if ((caddr_t *)bp->bif_driverp != &ifp->if_bpf)
 			continue;
 		/*
 		 * We found the requested interface.
@@ -1453,7 +1445,7 @@ catchpacket(struct bpf_d *d, u_char *pkt, u_int pktlen, u_int snaplen,
 	/*
 	 * Append the bpf header.
 	 */
-	hp = (struct bpf_hdr *)((char *)d->bd_sbuf + curlen);
+	hp = (struct bpf_hdr *)(d->bd_sbuf + curlen);
 	hp->bh_tstamp = *tv;
 	hp->bh_datalen = pktlen;
 	hp->bh_hdrlen = hdrlen;
@@ -1610,7 +1602,7 @@ bpf_change_type(struct ifnet *ifp, u_int dlt, u_int hdrlen)
 	struct bpf_if *bp;
 
 	for (bp = bpf_iflist; bp != NULL; bp = bp->bif_next) {
-		if ((void **)bp->bif_driverp == &ifp->if_bpf)
+		if ((caddr_t *)bp->bif_driverp == &ifp->if_bpf)
 			break;
 	}
 	if (bp == NULL)
@@ -1743,7 +1735,7 @@ sysctl_net_bpf_peers(SYSCTLFN_ARGS)
 	if (elem_size < 1 || elem_count < 0)
 		return (EINVAL);
 
-	mutex_enter(&bpf_mtx);
+	simple_lock(&bpf_slock);
 	LIST_FOREACH(dp, &bpf_list, bd_list) {
 		if (len >= elem_size && elem_count > 0) {
 #define BPF_EXT(field)	dpe.bde_ ## field = dp->bd_ ## field
@@ -1778,7 +1770,7 @@ sysctl_net_bpf_peers(SYSCTLFN_ARGS)
 				elem_count--;
 		}
 	}
-	mutex_exit(&bpf_mtx);
+	simple_unlock(&bpf_slock);
 
 	*oldlenp = needed;
 

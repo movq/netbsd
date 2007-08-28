@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.25 2007/08/17 23:58:45 ad Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.15 2006/08/30 14:01:57 cube Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.25 2007/08/17 23:58:45 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.15 2006/08/30 14:01:57 cube Exp $");
 
 #include "opt_coredump.h"
 #include "opt_user_ldt.h"
@@ -108,14 +108,14 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.25 2007/08/17 23:58:45 ad Exp $");
 
 extern char x86_64_doubleflt_stack[];
 
-static void setredzone(struct lwp *);
+static void setredzone __P((struct lwp *));
 
 void
 cpu_proc_fork(struct proc *p1, struct proc *p2)
 {
 	p2->p_md.md_flags = p1->p_md.md_flags;
-	if (p1->p_flag & PK_32)
-		p2->p_flag |= PK_32;
+	if (p1->p_flag & P_32)
+		p2->p_flag |= P_32;
 }
 
 /*
@@ -123,7 +123,7 @@ cpu_proc_fork(struct proc *p1, struct proc *p2)
  * Copy and update the pcb and trap frame, making the child ready to run.
  * 
  * Rig the child's kernel stack so that it will start out in
- * lwp_trampoline() and call child_return() with l2 as an
+ * proc_trampoline() and call child_return() with l2 as an
  * argument. This causes the newly-created child process to go
  * directly to user level with an apparent return value of 0 from
  * fork(), while the parent process returns normally.
@@ -137,11 +137,16 @@ cpu_proc_fork(struct proc *p1, struct proc *p2)
  * accordingly.
  */
 void
-cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
-	     void (*func)(void *), void *arg)
+cpu_lwp_fork(l1, l2, stack, stacksize, func, arg)
+	struct lwp *l1, *l2;
+	void *stack;
+	size_t stacksize;
+	void (*func) __P((void *));
+	void *arg;
 {
 	struct pcb *pcb = &l2->l_addr->u_pcb;
 	struct trapframe *tf;
+	struct switchframe *sf;
 
 	/*
 	 * If fpuproc != p1, then the fpu h/w state is irrelevant and the
@@ -183,7 +188,6 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	    + PAGE_SIZE - 16;
 
 	l2->l_md.md_tss_sel = tss_alloc(pcb);
-	l2->l_md.md_astpending = 0;
 
 	/*
 	 * Copy the trapframe.
@@ -199,10 +203,18 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	if (stack != NULL)
 		tf->tf_rsp = (u_int64_t)stack + stacksize;
 
+	sf = (struct switchframe *)tf - 1;
+	sf->sf_r12 = (u_int64_t)func;
+	sf->sf_r13 = (u_int64_t)arg;
+	if (func == child_return && !(l2->l_proc->p_flag & P_32))
+		sf->sf_rip = (u_int64_t)child_trampoline;
+	else
+		sf->sf_rip = (u_int64_t)proc_trampoline;
+	pcb->pcb_rsp = (u_int64_t)sf;
+	pcb->pcb_rbp = 0;
+
 	pcb->pcb_fs = l1->l_addr->u_pcb.pcb_fs;
 	pcb->pcb_gs = l1->l_addr->u_pcb.pcb_fs;
-
-	cpu_setfunc(l2, func, arg);
 }
 
 void
@@ -214,22 +226,24 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 
 	sf->sf_r12 = (u_int64_t)func;
 	sf->sf_r13 = (u_int64_t)arg;
-	if (func == child_return && !(l->l_proc->p_flag & PK_32))
+	if (func == child_return && !(l->l_proc->p_flag & P_32))
 		sf->sf_rip = (u_int64_t)child_trampoline;
 	else
-		sf->sf_rip = (u_int64_t)lwp_trampoline;
+		sf->sf_rip = (u_int64_t)proc_trampoline;
 	pcb->pcb_rsp = (u_int64_t)sf;
-	pcb->pcb_rbp = (u_int64_t)l;
+	pcb->pcb_rbp = 0;
 }
 
 void
-cpu_swapin(struct lwp *l)
+cpu_swapin(l)
+	struct lwp *l;
 {
 	setredzone(l);
 }
 
 void
-cpu_swapout(struct lwp *l)
+cpu_swapout(l)
+	struct lwp *l;
 {
 
 	/*
@@ -247,13 +261,23 @@ cpu_lwp_free(struct lwp *l, int proc)
 
 	if (proc && l->l_md.md_flags & MDP_USEDMTRR)
 		mtrr_clean(l->l_proc);
-}
 
-void
-cpu_lwp_free2(struct lwp *l)
-{
 	/* Nuke the TSS. */
 	tss_free(l->l_md.md_tss_sel);
+}
+
+/*
+ * cpu_exit is called as the last action during exit.
+ *
+ * We clean up a little and then call switch_exit() with the old proc as an
+ * argument.  switch_exit() first switches to proc0's context, and finally
+ * jumps into switch() to wait for another process to wake up.
+ */
+void
+cpu_exit(struct lwp *l)
+{
+
+	switch_exit(l, lwp_exit2);
 }
 
 #ifdef COREDUMP
@@ -320,11 +344,12 @@ setredzone(struct lwp *l)
  * Convert kernel VA to physical address
  */
 int
-kvtop(void *addr)
+kvtop(addr)
+	register caddr_t addr;
 {
 	paddr_t pa;
 
-	if (pmap_extract(pmap_kernel(), (vaddr_t)addr, &pa) == false)
+	if (pmap_extract(pmap_kernel(), (vaddr_t)addr, &pa) == FALSE)
 		panic("kvtop: zero page frame");
 	return((int)pa);
 }
@@ -335,7 +360,9 @@ kvtop(void *addr)
  * do not need to pass an access_type to pmap_enter().   
  */
 void
-vmapbuf(struct buf *bp, vsize_t len)
+vmapbuf(bp, len)
+	struct buf *bp;
+	vsize_t len;
 {
 	vaddr_t faddr, taddr, off;
 	paddr_t fpa;
@@ -347,7 +374,7 @@ vmapbuf(struct buf *bp, vsize_t len)
 	off = (vaddr_t)bp->b_data - faddr;
 	len = round_page(off + len);
 	taddr = uvm_km_alloc(phys_map, len, 0, UVM_KMF_VAONLY | UVM_KMF_WAITVA);
-	bp->b_data = (void *)(taddr + off);
+	bp->b_data = (caddr_t)(taddr + off);
 	/*
 	 * The region is locked, so we expect that pmap_pte() will return
 	 * non-NULL.
@@ -374,7 +401,9 @@ vmapbuf(struct buf *bp, vsize_t len)
  * Unmap a previously-mapped user I/O request.
  */
 void
-vunmapbuf(struct buf *bp, vsize_t len)
+vunmapbuf(bp, len)
+	struct buf *bp;
+	vsize_t len;
 {
 	vaddr_t addr, off;
 

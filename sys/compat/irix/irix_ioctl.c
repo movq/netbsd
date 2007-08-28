@@ -1,4 +1,4 @@
-/*	$NetBSD: irix_ioctl.c,v 1.14 2007/05/13 15:57:39 dsl Exp $ */
+/*	$NetBSD: irix_ioctl.c,v 1.11 2006/07/31 20:52:13 bjh21 Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: irix_ioctl.c,v 1.14 2007/05/13 15:57:39 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: irix_ioctl.c,v 1.11 2006/07/31 20:52:13 bjh21 Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -49,6 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: irix_ioctl.c,v 1.14 2007/05/13 15:57:39 dsl Exp $");
 #include <sys/ioctl.h>
 #include <sys/vnode.h>
 #include <sys/types.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/conf.h>
 
@@ -79,17 +80,19 @@ irix_sys_ioctl(l, v, retval)
 	struct irix_sys_ioctl_args /* {
 		syscallarg(int) fd;
 		syscallarg(u_long) com;
-		syscallarg(void *) data;
+		syscallarg(caddr_t) data;
 	} */ *uap = v;
 	extern const struct cdevsw irix_usema_cdevsw;
 	struct proc *p = l->l_proc;
 	u_long	cmd;
-	void *data;
+	caddr_t data;
 	struct file *fp;
 	struct filedesc *fdp;
 	struct vnode *vp;
 	struct vattr vattr;
 	struct irix_ioctl_usrdata iiu;
+	struct irix_ioctl_usrdata *iiup;
+	caddr_t sg = stackgap_init(p, 0);
 	int error, val;
 
 	/*
@@ -111,10 +114,10 @@ irix_sys_ioctl(l, v, retval)
 	 * commands need to set the return value, which is normally
 	 * impossible in the file methods and lower. We do the job by
 	 * copying the retval address and the data argument to a
-	 * struct irix_ioctl_usrdata. The data argument
+	 * struct irix_ioctl_usrdata in the stackgap. The data argument
 	 * is set to the address of the structure, and the underlying
 	 * code will be able to retreive both data and the retval address
-	 * from the struct irix_ioctl_usrdata.
+	 * by fetching the struct irix_ioctl_usrdata.
 	 *
 	 * We also bypass the checks in sys_ioctl() because theses ioctl
 	 * are defined _IO but really are _IOR. XXX need security review.
@@ -131,10 +134,14 @@ irix_sys_ioctl(l, v, retval)
 			goto out;
 		}
 
+		iiup = stackgap_alloc(p, &sg, sizeof(iiu));
 		iiu.iiu_data = data;
 		iiu.iiu_retval = retval;
+		data = (caddr_t)iiup;
+		if ((error = copyout(&iiu, iiup, sizeof(iiu))) != 0)
+			goto out;
 
-		error = (*fp->f_ops->fo_ioctl)(fp, cmd, &iiu, l);
+		error = (*fp->f_ops->fo_ioctl)(fp, cmd, data, l);
 out:
 		FILE_UNUSE(fp, l);
 		return error;

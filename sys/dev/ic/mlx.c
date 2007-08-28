@@ -1,4 +1,4 @@
-/*	$NetBSD: mlx.c,v 1.52 2007/07/09 21:00:37 ad Exp $	*/
+/*	$NetBSD: mlx.c,v 1.48.2.1 2006/12/04 18:34:15 tron Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mlx.c,v 1.52 2007/07/09 21:00:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mlx.c,v 1.48.2.1 2006/12/04 18:34:15 tron Exp $");
 
 #include "ld.h"
 
@@ -125,6 +125,7 @@ static int	mlx_fw_message(struct mlx_softc *, int, int, int);
 static void	mlx_pause_action(struct mlx_softc *);
 static void	mlx_pause_done(struct mlx_ccb *);
 static void	mlx_periodic(struct mlx_softc *);
+static void	mlx_periodic_create(void *);
 static void	mlx_periodic_enquiry(struct mlx_ccb *);
 static void	mlx_periodic_eventlog_poll(struct mlx_softc *);
 static void	mlx_periodic_eventlog_respond(struct mlx_ccb *);
@@ -145,7 +146,7 @@ const struct cdevsw mlx_cdevsw = {
 };
 
 extern struct	cfdriver mlx_cd;
-static struct	lwp *mlx_periodic_lwp;
+static struct	proc *mlx_periodic_proc;
 static void	*mlx_sdh;
 
 static struct {
@@ -287,7 +288,7 @@ mlx_init(struct mlx_softc *mlx, const char *intrstr)
 	}
 
 	if ((rv = bus_dmamem_map(mlx->mlx_dmat, &seg, rseg, size,
-	    (void **)&mlx->mlx_sgls,
+	    (caddr_t *)&mlx->mlx_sgls,
 	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT)) != 0) {
 		printf("%s: unable to map sglists, rv = %d\n",
 		    mlx->mlx_dv.dv_xname, rv);
@@ -295,7 +296,7 @@ mlx_init(struct mlx_softc *mlx, const char *intrstr)
 	}
 
 	if ((rv = bus_dmamap_create(mlx->mlx_dmat, size, 1, size, 0,
-	    BUS_DMA_NOWAIT, &mlx->mlx_dmamap)) != 0) {
+	    BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW, &mlx->mlx_dmamap)) != 0) {
 		printf("%s: unable to create sglist DMA map, rv = %d\n",
 		    mlx->mlx_dv.dv_xname, rv);
 		return;
@@ -490,11 +491,6 @@ mlx_init(struct mlx_softc *mlx, const char *intrstr)
 	}
 #endif
 
-	/* Attach child devices and enable interrupts. */
-	mlx_configure(mlx, 0);
-	(*mlx->mlx_intaction)(mlx, 1);
-	mlx->mlx_flags |= MLXF_INITOK;
-
 	if (mlx_sdh == NULL) {
 		/*
 		 * Set our `shutdownhook' before we start any device
@@ -502,12 +498,15 @@ mlx_init(struct mlx_softc *mlx, const char *intrstr)
 		 */
 		mlx_sdh = shutdownhook_establish(mlx_shutdown, NULL);
 
-		/* Create a status monitoring thread. */
-		rv = kthread_create(PRI_NONE, 0, NULL, mlx_periodic_thread,
-		    NULL, &mlx_periodic_lwp, "mlxtask");
-		if (rv != 0)
-			printf("mlx_init: unable to create thread (%d)\n", rv);
+		/* Arrange to create a status monitoring thread. */
+		kthread_create(mlx_periodic_create, NULL);
 	}
+
+	/* Finally, attach child devices and enable interrupts. */
+	mlx_configure(mlx, 0);
+	(*mlx->mlx_intaction)(mlx, 1);
+
+	mlx->mlx_flags |= MLXF_INITOK;
 }
 
 /*
@@ -727,7 +726,7 @@ mlxclose(dev_t dev, int flag, int mode,
  * Handle control operations.
  */
 int
-mlxioctl(dev_t dev, u_long cmd, void *data, int flag,
+mlxioctl(dev_t dev, u_long cmd, caddr_t data, int flag,
     struct lwp *l)
 {
 	struct mlx_softc *mlx;
@@ -946,6 +945,23 @@ mlxioctl(dev_t dev, u_long cmd, void *data, int flag,
 	}
 
 	return (ENOTTY);	/* XXX shut up gcc */
+}
+
+/*
+ * Fire off commands to periodically check the status of connected drives.
+ * Check for commands that have timed out.
+ */
+static void
+mlx_periodic_create(void *cookie)
+{
+	int rv;
+
+	rv = kthread_create1(mlx_periodic_thread, NULL, &mlx_periodic_proc,
+	    "mlxtask");
+	if (rv == 0)
+		return;
+
+	printf("mlx_periodic_create: unable to create thread (%d)\n", rv);
 }
 
 static void
@@ -1927,7 +1943,7 @@ mlx_ccb_map(struct mlx_softc *mlx, struct mlx_ccb *mc, void *data, int size,
 	mc->mc_xfer_phys = xfer->dm_segs[0].ds_addr;
 
 	sgloff = MLX_SGL_SIZE * mc->mc_ident;
-	sge = (struct mlx_sgentry *)((char *)mlx->mlx_sgls + sgloff);
+	sge = (struct mlx_sgentry *)((caddr_t)mlx->mlx_sgls + sgloff);
 
 	for (i = 0; i < nsegs; i++, sge++) {
 		sge->sge_addr = htole32(xfer->dm_segs[i].ds_addr);

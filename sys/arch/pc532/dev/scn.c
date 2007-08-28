@@ -1,4 +1,4 @@
-/*	$NetBSD: scn.c,v 1.79 2007/03/04 06:00:28 christos Exp $ */
+/*	$NetBSD: scn.c,v 1.76 2006/10/01 20:31:50 elad Exp $ */
 
 /*
  * Copyright (c) 1991, 1992, 1993
@@ -85,7 +85,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scn.c,v 1.79 2007/03/04 06:00:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scn.c,v 1.76 2006/10/01 20:31:50 elad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -801,7 +801,7 @@ scnattach(struct device *parent, struct device *self, void *aux)
 	enum scntype scntype = SCNUNK;
 	const char *duart_type = "Unknown";
 	char *intrname;
-	bool console, first;
+	boolean_t console, first;
 
 	sc = (void *) self;
 	unit = device_unit(self);
@@ -1171,7 +1171,7 @@ scnopen(dev_t dev, int flag, int mode, struct lwp *l)
 				 * carrier up
 				 */
 			}
-			error = ttysleep(tp, (void *) & tp->t_rawq,
+			error = ttysleep(tp, (caddr_t) & tp->t_rawq,
 			    TTIPRI | PCATCH, ttopen, 0);
 			if (error) {
 				/* XXX should turn off chip if we're the only
@@ -1219,7 +1219,7 @@ scnclose(dev_t dev, int flag, int mode, struct lwp *l)
 	if ((tp->t_cflag & HUPCL) && (sc->sc_swflags & SCN_SW_SOFTCAR) == 0) {
 		SCN_OP_BIC(sc, sc->sc_op_dtr);
 		/* hold low for 1 second */
-		(void) tsleep((void *)sc, TTIPRI, ttclos, hz);
+		(void) tsleep((caddr_t)sc, TTIPRI, ttclos, hz);
 	}
 	SCN_CLRDIALOUT(sc);
 	ttyclose(tp);
@@ -1345,7 +1345,7 @@ scnintr(void *arg)
 
 	do {
 		/* Loop to pick up ALL pending interrupts for device. */
-		rs_work = false;
+		rs_work = FALSE;
 		rs_stat = duart->base[DU_ISR];
 
 /* channel a */
@@ -1363,7 +1363,7 @@ scnintr(void *arg)
 				}
 
 				(*tp0->t_linesw->l_start) (tp0);
-				rs_work = true;
+				rs_work = TRUE;
 			}
 		}
 		/* channel b */
@@ -1381,11 +1381,11 @@ scnintr(void *arg)
 				}
 
 				(*tp1->t_linesw->l_start) (tp1);
-				rs_work = true;
+				rs_work = TRUE;
 			}
 		}
 		if (rs_stat & INT_IP) {
-			rs_work = true;
+			rs_work = TRUE;
 			rs_ipcr = duart->base[DU_IPCR];
 
 			if (rs_ipcr & IPCR_DELTA_DCDA && tp0 != NULL) {
@@ -1625,7 +1625,7 @@ opbits(struct scn_softc *sc, int tioc_bits)
 }
 
 int
-scnioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+scnioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	int unit = DEV_UNIT(dev);
 	struct scn_softc *sc = SOFTC(unit);
@@ -1843,7 +1843,7 @@ scnstart(struct tty *tp)
 	if (tp->t_outq.c_cc <= tp->t_lowat) {
 		if (tp->t_state & TS_ASLEEP) {
 			tp->t_state &= ~TS_ASLEEP;
-			wakeup((void *) & tp->t_outq);
+			wakeup((caddr_t) & tp->t_outq);
 		}
 		if (tp->t_outq.c_cc == 0)	/* plb 11/8/95 - from
 						 * isa/com.c */

@@ -1,4 +1,4 @@
-/* $NetBSD: linux_mtio.c,v 1.4 2007/03/04 06:01:24 christos Exp $ */
+/* $NetBSD: linux_mtio.c,v 1.2 2005/12/11 12:20:19 christos Exp $ */
 
 /*
  * Copyright (c) 2005 Soren S. Jorvang.  All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_mtio.c,v 1.4 2007/03/04 06:01:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_mtio.c,v 1.2 2005/12/11 12:20:19 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -38,6 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_mtio.c,v 1.4 2007/03/04 06:01:24 christos Exp 
 
 #include <sys/mtio.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/linux/common/linux_types.h>
@@ -104,7 +105,7 @@ linux_ioctl_mtio(struct lwp *l, struct linux_sys_ioctl_args *uap,
 		
 		mt.mt_op = mtop_map[i].op;
 		mt.mt_count = lmtop.mt_count;
-		error = ioctlf(fp, MTIOCTOP, (void *)&mt, l);
+		error = ioctlf(fp, MTIOCTOP, (caddr_t)&mt, l);
 		break;
 	case LINUX_MTIOCGET:
 		lmtget.mt_type = LINUX_MT_ISUNKNOWN;

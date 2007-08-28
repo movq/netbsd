@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64570.c,v 1.36 2007/03/04 06:01:55 christos Exp $	*/
+/*	$NetBSD: hd64570.c,v 1.34 2006/11/16 01:32:51 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 Christian E. Hopps
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.36 2007/03/04 06:01:55 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.34 2006/11/16 01:32:51 christos Exp $");
 
 #include "bpfilter.h"
 #include "opt_inet.h"
@@ -169,13 +169,13 @@ static	void sca_port_starttx(sca_port_t *);
 static	void sca_port_up(sca_port_t *);
 static	void sca_port_down(sca_port_t *);
 
-static	int sca_output(struct ifnet *, struct mbuf *, const struct sockaddr *,
+static	int sca_output(struct ifnet *, struct mbuf *, struct sockaddr *,
 			    struct rtentry *);
-static	int sca_ioctl(struct ifnet *, u_long, void *);
+static	int sca_ioctl(struct ifnet *, u_long, caddr_t);
 static	void sca_start(struct ifnet *);
 static	void sca_watchdog(struct ifnet *);
 
-static struct mbuf *sca_mbuf_alloc(struct sca_softc *, void *, u_int);
+static struct mbuf *sca_mbuf_alloc(struct sca_softc *, caddr_t, u_int);
 
 #if SCA_DEBUG_LEVEL > 0
 static	void sca_frame_print(sca_port_t *, sca_desc_t *, u_int8_t *);
@@ -800,7 +800,7 @@ static int
 sca_output(
     struct ifnet *ifp,
     struct mbuf *m,
-    const struct sockaddr *dst,
+    struct sockaddr *dst,
     struct rtentry *rt0)
 {
 #ifdef ISO
@@ -929,7 +929,7 @@ static int
 sca_ioctl(ifp, cmd, addr)
      struct ifnet *ifp;
      u_long cmd;
-     void *addr;
+     caddr_t addr;
 {
 	struct ifreq *ifr;
 	struct ifaddr *ifa;
@@ -2011,7 +2011,7 @@ sca_port_starttx(sca_port_t *scp)
  * otherwise let the caller handle copying the data in.
  */
 static struct mbuf *
-sca_mbuf_alloc(struct sca_softc *sc, void *p, u_int len)
+sca_mbuf_alloc(struct sca_softc *sc, caddr_t p, u_int len)
 {
 	struct mbuf *m;
 
@@ -2037,7 +2037,7 @@ sca_mbuf_alloc(struct sca_softc *sc, void *p, u_int len)
 	if (p != NULL) {
 		/* XXX do we need to sync here? */
 		if (sc->sc_usedma)
-			memcpy(mtod(m, void *), p, len);
+			memcpy(mtod(m, caddr_t), p, len);
 		else
 			bus_space_read_region_1(sc->scu_memt, sc->scu_memh,
 			    sca_page_addr(sc, p), mtod(m, u_int8_t *), len);

@@ -1,4 +1,4 @@
-/* $NetBSD: wsconsio.h,v 1.88 2007/08/27 02:01:23 macallan Exp $ */
+/* $NetBSD: wsconsio.h,v 1.80 2006/06/19 15:44:45 gdamore Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -75,7 +75,7 @@ struct wscons_event {
 #define	WSCONS_EVENT_MOUSE_DELTA_W	14	/* W delta amount */
 #define	WSCONS_EVENT_MOUSE_ABSOLUTE_W	15	/* W location */
 
-#define WSCONS_EVENT_ASCII			13	/* data is an ASCII code */
+
 /*
  * Keyboard ioctls (0 - 31)
  */
@@ -103,7 +103,6 @@ struct wscons_event {
 #define	WSKBD_TYPE_MATRIXKP	19	/* Matrix keypads/buttons */
 #define	WSKBD_TYPE_EWS4800	20	/* NEC EWS4800 */
 #define	WSKBD_TYPE_BLUETOOTH	21	/* Bluetooth keyboard */
-#define	WSKBD_TYPE_ZAURUS	22	/* Sharp Zaurus keyboard */
 
 /* Manipulate the keyboard bell. */
 struct wskbd_bell_data {
@@ -203,8 +202,6 @@ struct wskbd_scroll_data {
 #define	WSMOUSE_TYPE_MAPLE	12	/* Dreamcast Maple mouse */
 #define	WSMOUSE_TYPE_SGI	13	/* SGI mouse */
 #define	WSMOUSE_TYPE_BLUETOOTH	14	/* Bluetooth mouse */
-#define WSMOUSE_TYPE_ADB	15	/* ADB mouse or touchpad */
-#define WSMOUSE_TYPE_PSEUDO	16	/* not actually a mouse */
 
 /* Set resolution.  Not applicable to all mouse types. */
 #define	WSMOUSEIO_SRES		_IOW('W', 33, u_int)
@@ -306,12 +303,6 @@ struct wsmouse_repeat {
 #define	WSDISPLAY_TYPE_STI	40	/* HP STI framebuffers */
 #define	WSDISPLAY_TYPE_HDLCD	41	/* Hitachi HD44780 based LCDs */
 #define	WSDISPLAY_TYPE_VESA	42	/* VESA BIOS framebuffer */
-#define	WSDISPLAY_TYPE_XILFB 	43 	/* Xilinx TFT cores */
-#define WSDISPLAY_TYPE_LIGHT	44	/* SGI Light (a.k.a. Entry/Starter) */
-#define WSDISPLAY_TYPE_GENFB	45	/* generic nondescript framebuffer */
-#define WSDISPLAY_TYPE_CRIME	46	/* SGI O2 */
-#define WSDISPLAY_TYPE_PXALCD	47	/* PXA2x0 LCD controller */
-#define WSDISPLAY_TYPE_AG10	48	/* Fujitsu AG-10e */
 
 /* Basic display information.  Not applicable to all display types. */
 struct wsdisplay_fbinfo {

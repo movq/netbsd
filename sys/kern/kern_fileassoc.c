@@ -1,4 +1,4 @@
-/* $NetBSD: kern_fileassoc.c,v 1.29 2007/05/15 19:47:45 elad Exp $ */
+/* $NetBSD: kern_fileassoc.c,v 1.12 2006/11/20 21:50:51 elad Exp $ */
 
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
@@ -12,7 +12,10 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Elad Efrat.
+ * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -28,9 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_fileassoc.c,v 1.29 2007/05/15 19:47:45 elad Exp $");
-
-#include "opt_fileassoc.h"
+__KERNEL_RCSID(0, "$NetBSD: kern_fileassoc.c,v 1.12 2006/11/20 21:50:51 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/mount.h>
@@ -43,42 +44,27 @@ __KERNEL_RCSID(0, "$NetBSD: kern_fileassoc.c,v 1.29 2007/05/15 19:47:45 elad Exp
 #include <sys/inttypes.h>
 #include <sys/errno.h>
 #include <sys/fileassoc.h>
-#include <sys/specificdata.h>
 #include <sys/hash.h>
 #include <sys/fstypes.h>
-#include <sys/kmem.h>
-#include <sys/once.h>
-
-#define	FILEASSOC_INITIAL_TABLESIZE	128
 
 static struct fileassoc_hash_entry *
 fileassoc_file_lookup(struct vnode *, fhandle_t *);
 static struct fileassoc_hash_entry *
 fileassoc_file_add(struct vnode *, fhandle_t *);
-static struct fileassoc_table *fileassoc_table_resize(struct fileassoc_table *);
-
-static specificdata_domain_t fileassoc_domain;
-static specificdata_key_t fileassoc_mountspecific_key;
-static ONCE_DECL(control);
 
 /*
  * Hook entry.
  * Includes the hook name for identification and private hook clear callback.
  */
-struct fileassoc {
-	LIST_ENTRY(fileassoc) list;
-	const char *name;			/* name. */
-	fileassoc_cleanup_cb_t cleanup_cb;	/* clear callback. */
-	specificdata_key_t key;
+struct fileassoc_hook {
+	const char *hook_name;			/* Hook name. */
+	fileassoc_cleanup_cb_t hook_cleanup_cb;	/* Hook clear callback. */
 };
 
-static LIST_HEAD(, fileassoc) fileassoc_list;
-
-/* An entry in the per-mount hash table. */
+/* An entry in the per-device hash table. */
 struct fileassoc_hash_entry {
 	fhandle_t *handle;				/* File handle */
-	specificdata_reference data;			/* Hooks. */
-	u_int nassocs;					/* # of hooks. */
+	void *hooks[FILEASSOC_NHOOKS];			/* Hooks. */
 	LIST_ENTRY(fileassoc_hash_entry) entries;	/* List pointer. */
 };
 
@@ -87,10 +73,17 @@ LIST_HEAD(fileassoc_hashhead, fileassoc_hash_entry);
 struct fileassoc_table {
 	struct fileassoc_hashhead *hash_tbl;
 	size_t hash_size;				/* Number of slots. */
+	struct mount *tbl_mntpt;
 	u_long hash_mask;
-	size_t hash_used;				/* # of used slots. */
-	specificdata_reference data;
+	void *tables[FILEASSOC_NHOOKS];
+	LIST_ENTRY(fileassoc_table) hash_list;		/* List pointer. */
 };
+
+struct fileassoc_hook fileassoc_hooks[FILEASSOC_NHOOKS];
+int fileassoc_nhooks;
+
+/* Global list of hash tables, one per device. */
+LIST_HEAD(, fileassoc_table) fileassoc_tables;
 
 /*
  * Hashing function: Takes a number modulus the mask to give back an
@@ -100,134 +93,54 @@ struct fileassoc_table {
 	(hash32_buf((handle), FHANDLE_SIZE(handle), HASH32_BUF_INIT) \
 	 & ((tbl)->hash_mask))
 
-static void *
-file_getdata(struct fileassoc_hash_entry *e, const struct fileassoc *assoc)
-{
-
-	return specificdata_getspecific(fileassoc_domain, &e->data,
-	    assoc->key);
-}
-
-static void
-file_setdata(struct fileassoc_hash_entry *e, const struct fileassoc *assoc,
-    void *data)
-{
-
-	specificdata_setspecific(fileassoc_domain, &e->data, assoc->key,
-	    data);
-}
-
-static void
-file_cleanup(struct fileassoc_hash_entry *e, const struct fileassoc *assoc)
-{
-	fileassoc_cleanup_cb_t cb;
-	void *data;
-
-	cb = assoc->cleanup_cb;
-	if (cb == NULL) {
-		return;
-	}
-	data = file_getdata(e, assoc);
-	(*cb)(data);
-}
-
-static void
-file_free(struct fileassoc_hash_entry *e)
-{
-	struct fileassoc *assoc;
-
-	LIST_REMOVE(e, entries);
-
-	LIST_FOREACH(assoc, &fileassoc_list, list) {
-		file_cleanup(e, assoc);
-	}
-	vfs_composefh_free(e->handle);
-	specificdata_fini(fileassoc_domain, &e->data);
-	kmem_free(e, sizeof(*e));
-}
-
-static void
-table_dtor(void *vp)
-{
-	struct fileassoc_table *tbl = vp;
-	struct fileassoc_hashhead *hh;
-	u_long i;
-
-	/* Remove all entries from the table and lists */
-	hh = tbl->hash_tbl;
-	for (i = 0; i < tbl->hash_size; i++) {
-		struct fileassoc_hash_entry *mhe;
-
-		while ((mhe = LIST_FIRST(&hh[i])) != NULL) {
-			file_free(mhe);
-		}
-	}
-
-	/* Remove hash table and sysctl node */
-	hashdone(tbl->hash_tbl, M_TEMP);
-	specificdata_fini(fileassoc_domain, &tbl->data);
-	kmem_free(tbl, sizeof(*tbl));
-}
-
 /*
  * Initialize the fileassoc subsystem.
  */
-static int
+void
 fileassoc_init(void)
 {
-	int error;
-
-	error = mount_specific_key_create(&fileassoc_mountspecific_key,
-	    table_dtor);
-	if (error) {
-		return error;
-	}
-	fileassoc_domain = specificdata_domain_create();
-
-	return 0;
+	memset(fileassoc_hooks, 0, sizeof(fileassoc_hooks));
+	fileassoc_nhooks = 0;
 }
 
 /*
  * Register a new hook.
  */
-int
-fileassoc_register(const char *name, fileassoc_cleanup_cb_t cleanup_cb,
-    fileassoc_t *result)
+fileassoc_t
+fileassoc_register(const char *name, fileassoc_cleanup_cb_t cleanup_cb)
 {
-	int error;
-	specificdata_key_t key;
-	struct fileassoc *assoc;
+	int i;
 
-	error = RUN_ONCE(&control, fileassoc_init);
-	if (error) {
-		return error;
-	}
-	error = specificdata_key_create(fileassoc_domain, &key, NULL);
-	if (error) {
-		return error;
-	}
-	assoc = kmem_alloc(sizeof(*assoc), KM_SLEEP);
-	assoc->name = name;
-	assoc->cleanup_cb = cleanup_cb;
-	assoc->key = key;
-	LIST_INSERT_HEAD(&fileassoc_list, assoc, list);
-	*result = assoc;
+	if (fileassoc_nhooks >= FILEASSOC_NHOOKS)
+		return (-1);
 
-	return 0;
+	for (i = 0; i < FILEASSOC_NHOOKS; i++)
+		if (fileassoc_hooks[i].hook_name == NULL)
+			break;
+
+	fileassoc_hooks[i].hook_name = name;
+	fileassoc_hooks[i].hook_cleanup_cb = cleanup_cb;
+
+	fileassoc_nhooks++;
+
+	return (i);
 }
 
 /*
  * Deregister a hook.
  */
 int
-fileassoc_deregister(fileassoc_t assoc)
+fileassoc_deregister(fileassoc_t id)
 {
+	if (id < 0 || id >= FILEASSOC_NHOOKS)
+		return (EINVAL);
 
-	LIST_REMOVE(assoc, list);
-	specificdata_key_delete(fileassoc_domain, assoc->key);
-	kmem_free(assoc, sizeof(*assoc));
+	fileassoc_hooks[id].hook_name = NULL;
+	fileassoc_hooks[id].hook_cleanup_cb = NULL;
 
-	return 0;
+	fileassoc_nhooks--;
+
+	return (0);
 }
 
 /*
@@ -236,13 +149,14 @@ fileassoc_deregister(fileassoc_t assoc)
 static struct fileassoc_table *
 fileassoc_table_lookup(struct mount *mp)
 {
-	int error;
+	struct fileassoc_table *tbl;
 
-	error = RUN_ONCE(&control, fileassoc_init);
-	if (error) {
-		return NULL;
+	LIST_FOREACH(tbl, &fileassoc_tables, hash_list) {
+		if (tbl->tbl_mntpt == mp)
+			return (tbl);
 	}
-	return mount_getspecific(mp, fileassoc_mountspecific_key);
+
+	return (NULL);
 }
 
 /*
@@ -260,42 +174,48 @@ fileassoc_file_lookup(struct vnode *vp, fhandle_t *hint)
 	fhandle_t *th;
 	int error;
 
-	tbl = fileassoc_table_lookup(vp->v_mount);
-	if (tbl == NULL) {
-		return NULL;
-	}
-
 	if (hint == NULL) {
 		error = vfs_composefh_alloc(vp, &th);
 		if (error)
 			return (NULL);
-	} else {
+	} else
 		th = hint;
+
+	tbl = fileassoc_table_lookup(vp->v_mount);
+	if (tbl == NULL) {
+		if (hint == NULL)
+			vfs_composefh_free(th);
+
+		return (NULL);
 	}
 
 	indx = FILEASSOC_HASH(tbl, th);
 	tble = &(tbl->hash_tbl[indx]);
 
 	LIST_FOREACH(e, tble, entries) {
-		if (((FHANDLE_FILEID(e->handle)->fid_len ==
+		if ((e != NULL) &&
+		    ((FHANDLE_FILEID(e->handle)->fid_len ==
 		     FHANDLE_FILEID(th)->fid_len)) &&
 		    (memcmp(FHANDLE_FILEID(e->handle), FHANDLE_FILEID(th),
 			   (FHANDLE_FILEID(th))->fid_len) == 0)) {
-			break;
+			if (hint == NULL)
+				vfs_composefh_free(th);
+
+			return (e);
 		}
 	}
 
 	if (hint == NULL)
 		vfs_composefh_free(th);
 
-	return e;
+	return (NULL);
 }
 
 /*
  * Return hook data associated with a vnode.
  */
 void *
-fileassoc_lookup(struct vnode *vp, fileassoc_t assoc)
+fileassoc_lookup(struct vnode *vp, fileassoc_t id)
 {
         struct fileassoc_hash_entry *mhe;
 
@@ -303,86 +223,31 @@ fileassoc_lookup(struct vnode *vp, fileassoc_t assoc)
         if (mhe == NULL)
                 return (NULL);
 
-        return file_getdata(mhe, assoc);
-}
-
-static struct fileassoc_table *
-fileassoc_table_resize(struct fileassoc_table *tbl)
-{
-	struct fileassoc_table *newtbl;
-	struct fileassoc_hashhead *hh;
-	u_long i;
-
-	/*
-	 * Allocate a new table. Like the condition in fileassoc_file_add(),
-	 * this is also temporary -- just double the number of slots.
-	 */
-	newtbl = kmem_zalloc(sizeof(*newtbl), KM_SLEEP);
-	newtbl->hash_size = (tbl->hash_size * 2);
-	if (newtbl->hash_size < tbl->hash_size)
-		newtbl->hash_size = tbl->hash_size;
-	newtbl->hash_tbl = hashinit(newtbl->hash_size, HASH_LIST, M_TEMP,
-	    M_WAITOK | M_ZERO, &newtbl->hash_mask);
-	newtbl->hash_used = 0;
-	specificdata_init(fileassoc_domain, &newtbl->data);
-
-	/* XXX we need to make sure nothing uses fileassoc here! */
-
-	hh = tbl->hash_tbl;
-	for (i = 0; i < tbl->hash_size; i++) {
-		struct fileassoc_hash_entry *mhe;
-
-		while ((mhe = LIST_FIRST(&hh[i])) != NULL) {
-			struct fileassoc_hashhead *vhh;
-			size_t indx;
-
-			LIST_REMOVE(mhe, entries);
-
-			indx = FILEASSOC_HASH(newtbl, mhe->handle);
-			vhh = &(newtbl->hash_tbl[indx]);
-
-			LIST_INSERT_HEAD(vhh, mhe, entries);
-
-			newtbl->hash_used++;
-		}
-	}
-
-	if (tbl->hash_used != newtbl->hash_used)
-		panic("fileassoc_table_resize: inconsistency detected! "
-		    "needed %zu entries, got %zu", tbl->hash_used,
-		    newtbl->hash_used);
-
-	hashdone(tbl->hash_tbl, M_TEMP);
-	specificdata_fini(fileassoc_domain, &tbl->data);
-	kmem_free(tbl, sizeof(*tbl));
-
-	return (newtbl);
+        return (mhe->hooks[id]);
 }
 
 /*
  * Create a new fileassoc table.
  */
-static struct fileassoc_table *
-fileassoc_table_add(struct mount *mp)
+int
+fileassoc_table_add(struct mount *mp, size_t size)
 {
 	struct fileassoc_table *tbl;
 
 	/* Check for existing table for device. */
-	tbl = fileassoc_table_lookup(mp);
-	if (tbl != NULL)
-		return (tbl);
+	if (fileassoc_table_lookup(mp) != NULL)
+		return (EEXIST);
 
-	/* Allocate and initialize a table. */
-	tbl = kmem_zalloc(sizeof(*tbl), KM_SLEEP);
-	tbl->hash_size = FILEASSOC_INITIAL_TABLESIZE;
-	tbl->hash_tbl = hashinit(tbl->hash_size, HASH_LIST, M_TEMP,
-	    M_WAITOK | M_ZERO, &tbl->hash_mask);
-	tbl->hash_used = 0;
-	specificdata_init(fileassoc_domain, &tbl->data);
+	/* Allocate and initialize a Veriexec hash table. */
+	tbl = malloc(sizeof(*tbl), M_TEMP, M_WAITOK | M_ZERO);
+	tbl->hash_size = size;
+	tbl->tbl_mntpt = mp;
+	tbl->hash_tbl = hashinit(size, HASH_LIST, M_TEMP,
+				 M_WAITOK | M_ZERO, &tbl->hash_mask);
 
-	mount_setspecific(mp, fileassoc_mountspecific_key, tbl);
+	LIST_INSERT_HEAD(&fileassoc_tables, tbl, hash_list);
 
-	return (tbl);
+	return (0);
 }
 
 /*
@@ -392,13 +257,42 @@ int
 fileassoc_table_delete(struct mount *mp)
 {
 	struct fileassoc_table *tbl;
+	struct fileassoc_hashhead *hh;
+	u_long i;
+	int j;
 
 	tbl = fileassoc_table_lookup(mp);
 	if (tbl == NULL)
 		return (EEXIST);
 
-	mount_setspecific(mp, fileassoc_mountspecific_key, NULL);
-	table_dtor(tbl);
+	/* Remove all entries from the table and lists */
+	hh = tbl->hash_tbl;
+	for (i = 0; i < tbl->hash_size; i++) {
+		struct fileassoc_hash_entry *mhe;
+
+		while (LIST_FIRST(&hh[i]) != NULL) {
+			mhe = LIST_FIRST(&hh[i]);
+			LIST_REMOVE(mhe, entries);
+
+			for (j = 0; j < fileassoc_nhooks; j++)
+				if (fileassoc_hooks[j].hook_cleanup_cb != NULL)
+					(fileassoc_hooks[j].hook_cleanup_cb)
+					    (mhe->hooks[j],
+					    FILEASSOC_CLEANUP_FILE);
+
+			vfs_composefh_free(mhe->handle);
+			free(mhe, M_TEMP);
+		}
+	}
+
+	for (j = 0; j < fileassoc_nhooks; j++)
+		if (fileassoc_hooks[j].hook_cleanup_cb != NULL)
+			(fileassoc_hooks[j].hook_cleanup_cb)(tbl->tables[j],
+			    FILEASSOC_CLEANUP_TABLE);
+
+	/* Remove hash table and sysctl node */
+	hashdone(tbl->hash_tbl, M_TEMP);
+	LIST_REMOVE(tbl, hash_list);
 
 	return (0);
 }
@@ -407,8 +301,7 @@ fileassoc_table_delete(struct mount *mp)
  * Run a callback for each hook entry in a table.
  */
 int
-fileassoc_table_run(struct mount *mp, fileassoc_t assoc, fileassoc_cb_t cb,
-    void *cookie)
+fileassoc_table_run(struct mount *mp, fileassoc_t id, fileassoc_cb_t cb)
 {
 	struct fileassoc_table *tbl;
 	struct fileassoc_hashhead *hh;
@@ -423,11 +316,8 @@ fileassoc_table_run(struct mount *mp, fileassoc_t assoc, fileassoc_cb_t cb,
 		struct fileassoc_hash_entry *mhe;
 
 		LIST_FOREACH(mhe, &hh[i], entries) {
-			void *data;
-
-			data = file_getdata(mhe, assoc);
-			if (data != NULL)
-				cb(data, cookie);
+			if (mhe->hooks[id] != NULL)
+				cb(mhe->hooks[id]);
 		}
 	}
 
@@ -438,27 +328,87 @@ fileassoc_table_run(struct mount *mp, fileassoc_t assoc, fileassoc_cb_t cb,
  * Clear a table for a given hook.
  */
 int
-fileassoc_table_clear(struct mount *mp, fileassoc_t assoc)
+fileassoc_table_clear(struct mount *mp, fileassoc_t id)
 {
 	struct fileassoc_table *tbl;
 	struct fileassoc_hashhead *hh;
+	fileassoc_cleanup_cb_t cleanup_cb;
 	u_long i;
 
 	tbl = fileassoc_table_lookup(mp);
 	if (tbl == NULL)
 		return (EEXIST);
 
+	cleanup_cb = fileassoc_hooks[id].hook_cleanup_cb;
+
 	hh = tbl->hash_tbl;
 	for (i = 0; i < tbl->hash_size; i++) {
 		struct fileassoc_hash_entry *mhe;
 
 		LIST_FOREACH(mhe, &hh[i], entries) {
-			file_cleanup(mhe, assoc);
-			file_setdata(mhe, assoc, NULL);
+			if ((mhe->hooks[id] != NULL) && cleanup_cb != NULL)
+				cleanup_cb(mhe->hooks[id],
+				    FILEASSOC_CLEANUP_FILE);
+
+			mhe->hooks[id] = NULL;
 		}
 	}
 
+	if ((tbl->tables[id] != NULL) && cleanup_cb != NULL)
+		cleanup_cb(tbl->tables[id], FILEASSOC_CLEANUP_TABLE);
+
+	tbl->tables[id] = NULL;
+
 	return (0);
+}
+
+/*
+ * Add hook-specific data on a fileassoc table.
+ */
+int
+fileassoc_tabledata_add(struct mount *mp, fileassoc_t id, void *data)
+{
+	struct fileassoc_table *tbl;
+
+	tbl = fileassoc_table_lookup(mp);
+	if (tbl == NULL)
+		return (EFAULT);
+
+	tbl->tables[id] = data;
+
+	return (0);
+}
+
+/*
+ * Clear hook-specific data on a fileassoc table.
+ */
+int
+fileassoc_tabledata_clear(struct mount *mp, fileassoc_t id)
+{
+	struct fileassoc_table *tbl;
+
+	tbl = fileassoc_table_lookup(mp);
+	if (tbl == NULL)
+		return (EFAULT);
+
+	tbl->tables[id] = NULL;
+
+	return (0);
+}
+
+/*
+ * Retrieve hook-specific data from a fileassoc table.
+ */
+void *
+fileassoc_tabledata_lookup(struct mount *mp, fileassoc_t id)
+{
+	struct fileassoc_table *tbl;
+
+	tbl = fileassoc_table_lookup(mp);
+	if (tbl == NULL)
+		return (NULL);
+
+	return (tbl->tables[id]);
 }
 
 /*
@@ -491,30 +441,18 @@ fileassoc_file_add(struct vnode *vp, fhandle_t *hint)
 
 	tbl = fileassoc_table_lookup(vp->v_mount);
 	if (tbl == NULL) {
-		tbl = fileassoc_table_add(vp->v_mount);
+		if (hint == NULL)
+			vfs_composefh_free(th);
+
+		return (NULL);
 	}
 
 	indx = FILEASSOC_HASH(tbl, th);
 	vhh = &(tbl->hash_tbl[indx]);
 
-	e = kmem_zalloc(sizeof(*e), KM_SLEEP);
+	e = malloc(sizeof(*e), M_TEMP, M_WAITOK | M_ZERO);
 	e->handle = th;
-	specificdata_init(fileassoc_domain, &e->data);
 	LIST_INSERT_HEAD(vhh, e, entries);
-
-	/*
-	 * This decides when we need to resize the table. For now,
-	 * resize it whenever we "filled" up the number of slots it
-	 * has. That's not really true unless of course we had zero
-	 * collisions. Think positive! :)
-	 */
-	if (++(tbl->hash_used) == tbl->hash_size) { 
-		struct fileassoc_table *newtbl;
-
-		newtbl = fileassoc_table_resize(tbl);
-		mount_setspecific(vp->v_mount, fileassoc_mountspecific_key,
-		    newtbl);
-	}
 
 	return (e);
 }
@@ -525,17 +463,21 @@ fileassoc_file_add(struct vnode *vp, fhandle_t *hint)
 int
 fileassoc_file_delete(struct vnode *vp)
 {
-	struct fileassoc_table *tbl;
 	struct fileassoc_hash_entry *mhe;
+	int i;
 
 	mhe = fileassoc_file_lookup(vp, NULL);
 	if (mhe == NULL)
 		return (ENOENT);
 
-	file_free(mhe);
+	LIST_REMOVE(mhe, entries);
 
-	tbl = fileassoc_table_lookup(vp->v_mount);
-	--(tbl->hash_used); /* XXX gc? */
+	for (i = 0; i < fileassoc_nhooks; i++)
+		if (fileassoc_hooks[i].hook_cleanup_cb != NULL)
+			(fileassoc_hooks[i].hook_cleanup_cb)(mhe->hooks[i],
+			    FILEASSOC_CLEANUP_FILE);
+
+	free(mhe, M_TEMP);
 
 	return (0);
 }
@@ -544,10 +486,9 @@ fileassoc_file_delete(struct vnode *vp)
  * Add a hook to a vnode.
  */
 int
-fileassoc_add(struct vnode *vp, fileassoc_t assoc, void *data)
+fileassoc_add(struct vnode *vp, fileassoc_t id, void *data)
 {
 	struct fileassoc_hash_entry *e;
-	void *olddata;
 
 	e = fileassoc_file_lookup(vp, NULL);
 	if (e == NULL) {
@@ -556,13 +497,10 @@ fileassoc_add(struct vnode *vp, fileassoc_t assoc, void *data)
 			return (ENOTDIR);
 	}
 
-	olddata = file_getdata(e, assoc);
-	if (olddata != NULL)
+	if (e->hooks[id] != NULL)
 		return (EEXIST);
 
-	file_setdata(e, assoc, data);
-
-	e->nassocs++;
+	e->hooks[id] = data;
 
 	return (0);
 }
@@ -571,18 +509,20 @@ fileassoc_add(struct vnode *vp, fileassoc_t assoc, void *data)
  * Clear a hook from a vnode.
  */
 int
-fileassoc_clear(struct vnode *vp, fileassoc_t assoc)
+fileassoc_clear(struct vnode *vp, fileassoc_t id)
 {
 	struct fileassoc_hash_entry *mhe;
+	fileassoc_cleanup_cb_t cleanup_cb;
 
 	mhe = fileassoc_file_lookup(vp, NULL);
 	if (mhe == NULL)
 		return (ENOENT);
 
-	file_cleanup(mhe, assoc);
-	file_setdata(mhe, assoc, NULL);
+	cleanup_cb = fileassoc_hooks[id].hook_cleanup_cb;
+	if ((mhe->hooks[id] != NULL) && cleanup_cb != NULL)
+		cleanup_cb(mhe->hooks[id], FILEASSOC_CLEANUP_FILE);
 
-	--(mhe->nassocs); /* XXX gc? */
+	mhe->hooks[id] = NULL;
 
 	return (0);
 }

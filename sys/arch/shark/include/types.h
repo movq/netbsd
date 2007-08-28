@@ -1,7 +1,7 @@
-/*	$NetBSD: types.h,v 1.7 2007/07/14 21:48:23 ad Exp $	*/
+/*	$NetBSD: types.h,v 1.5 2006/09/13 07:14:35 gdamore Exp $	*/
 
-#ifndef _SHARK_TYPES_H_
-#define	_SHARK_TYPES_H_
+#ifndef _ARM32_TYPES_H_
+#define	_ARM32_TYPES_H_
 
 #include <arm/arm32/types.h>
 
@@ -12,4 +12,4 @@
 #define	__HAVE_TIMECOUNTER
 #define	__HAVE_GENERIC_TODR
 
-#endif /* _SHARK_TYPES_H_ */
+#endif

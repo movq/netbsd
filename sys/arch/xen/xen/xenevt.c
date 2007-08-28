@@ -1,4 +1,4 @@
-/*      $NetBSD: xenevt.c,v 1.14 2007/06/08 22:06:18 jld Exp $      */
+/*      $NetBSD: xenevt.c,v 1.11.4.1 2007/07/16 10:11:59 liamjfoy Exp $      */
 
 /*
  * Copyright (c) 2005 Manuel Bouyer.
@@ -111,7 +111,7 @@ typedef uint16_t evtchn_port_t;
 struct xenevt_d {
 	struct simplelock lock;
 	STAILQ_ENTRY(xenevt_d) pendingq;
-	bool pending;
+	boolean_t pending;
 	evtchn_port_t ring[2048]; 
 	u_int ring_read; /* pointer of the reader */
 	u_int ring_write; /* pointer of the writer */
@@ -163,7 +163,7 @@ xenevt_event(int port)
 			simple_lock(&devevent_pending_lock);
 			STAILQ_INSERT_TAIL(&devevent_pending, d, pendingq);
 			simple_unlock(&devevent_pending_lock);
-			d->pending = true;
+			d->pending = TRUE;
 			softintr(SIR_XENEVT);
 		}
 	}
@@ -186,7 +186,7 @@ xenevt_notify()
 		simple_unlock(&devevent_pending_lock);
 		sti();
 
-		d->pending = false;
+		d->pending = FALSE;
 		xenevt_donotify(d);
 
 		cli();

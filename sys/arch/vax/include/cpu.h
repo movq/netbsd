@@ -1,4 +1,4 @@
-/*      $NetBSD: cpu.h,v 1.77 2007/05/17 14:51:33 yamt Exp $      */
+/*      $NetBSD: cpu.h,v 1.74 2006/09/05 19:32:57 matt Exp $      */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden
@@ -75,7 +75,7 @@ struct cpu_info;
 
 struct cpu_dep {
 	void	(*cpu_steal_pages)(void); /* pmap init before mm is on */
-	int	(*cpu_mchk)(void *);   /* Machine check handling */
+	int	(*cpu_mchk)(caddr_t);   /* Machine check handling */
 	void	(*cpu_memerr)(void); /* Memory subsystem errors */
 	    /* Autoconfiguration */
 	void	(*cpu_conf)(void);
@@ -132,14 +132,13 @@ struct cpu_info {
 	 */
 	struct cpu_data ci_data;	/* MI per-cpu data */
 	struct lwp *ci_curlwp;		/* current owner of the processor */
-	int ci_mtx_oldspl;		/* saved spl */
-	int ci_mtx_count;		/* negative count of mutexes */
 
 	/*
 	 * Private members.
 	 */
-	int ci_need_resched;		/* Should change process */
+	int ci_want_resched;		/* Should change process */
 	struct device *ci_dev;		/* device struct for this cpu */
+	long ci_exit;			/* Page to use while exiting */
 #if defined(MULTIPROCESSOR)
 	struct pcb *ci_pcb;		/* Idle PCB for this CPU */
 	vaddr_t ci_istack;		/* Interrupt stack location */
@@ -171,16 +170,13 @@ struct cpu_mp_softc {
 #define	curcpu()		((struct cpu_info *)mfpr(PR_SSP))
 #define	curlwp			(curcpu()->ci_curlwp)
 #define	cpu_number()		(curcpu()->ci_cpuid)
-#define	cpu_need_resched(ci, flags)		\
+#define	need_resched(ci)			\
 	do {					\
-		(ci)->ci_need_resched = 1;	\
+		(ci)->ci_want_resched = 1;	\
 		mtpr(AST_OK,PR_ASTLVL);		\
 	} while (/*CONSTCOND*/ 0)
-#define cpu_did_resched()	((void)(curcpu()->ci_need_resched = 0))
 #define	cpu_proc_fork(x, y)	do { } while (/*CONSCOND*/0)
 #define	cpu_lwp_free(l, f)	do { } while (/*CONSCOND*/0)
-#define	cpu_lwp_free2(l)	do { } while (/*CONSCOND*/0)
-#define	cpu_idle()		do { } while (/*CONSCOND*/0)
 #if defined(MULTIPROCESSOR)
 #define	CPU_IS_PRIMARY(ci)	((ci)->ci_flags & CI_MASTERCPU)
 
@@ -198,7 +194,7 @@ extern char vax_mp_tramp;
  * process as soon as possible.
  */
 
-#define cpu_signotify(l)     mtpr(AST_OK,PR_ASTLVL)
+#define signotify(p)     mtpr(AST_OK,PR_ASTLVL);
 
 
 /*
@@ -206,7 +202,7 @@ extern char vax_mp_tramp;
  * buffer pages are invalid.  On the hp300, request an ast to send us
  * through trap, marking the proc as needing a profiling tick.
  */
-#define cpu_need_proftick(l) do { (l)->l_pflag |= LP_OWEUPC; mtpr(AST_OK,PR_ASTLVL); } while (/*CONSTCOND*/ 0)
+#define need_proftick(p) {(p)->p_flag |= P_OWEUPC; mtpr(AST_OK,PR_ASTLVL); }
 
 /*
  * This defines the I/O device register space size in pages.
@@ -224,7 +220,7 @@ void	cpu_boot_secondary_processors(void);
 void	cpu_send_ipi(int, int);
 void	cpu_handle_ipi(void);
 #endif
-int	badaddr(void *, int);
+int	badaddr(caddr_t, int);
 void	dumpconf(void);
 void	dumpsys(void);
 void	swapconf(void);

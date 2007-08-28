@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.c,v 1.10 2007/03/05 16:39:21 he Exp $	*/
+/*	$NetBSD: mem.c,v 1.8 2005/12/11 12:16:03 christos Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -75,7 +75,7 @@
 #include "opt_compat_netbsd.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.10 2007/03/05 16:39:21 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.8 2005/12/11 12:16:03 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -91,7 +91,7 @@ __KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.10 2007/03/05 16:39:21 he Exp $");
 
 #include <uvm/uvm_extern.h>
 
-void *zeropage;
+caddr_t zeropage;
 int physlock;
 
 dev_type_read(mmrw);
@@ -137,10 +137,9 @@ mmrw(dev, uio, flags)
 			c = min(iov->iov_len, MAXPHYS);
 			/* XXX Should use pmap_find(). */
 			if (v < 0 ||
-			    (char *)v + c > 
-			    		(char*)MEMC_PHYS_BASE + ptoa(physmem))
+			    (caddr_t)v + c > MEMC_PHYS_BASE + ptoa(physmem))
 				return EFAULT;
-			error = uiomove((char*)MEMC_PHYS_BASE + uio->uio_offset,
+			error = uiomove(MEMC_PHYS_BASE + uio->uio_offset,
 					uio->uio_resid, uio);
 			continue;
 
@@ -148,13 +147,13 @@ mmrw(dev, uio, flags)
 			v = uio->uio_offset;
 			c = min(iov->iov_len, MAXPHYS);
 			/* Allow reading from physically mapped space. */
-			if (((void *)v >= MEMC_PHYS_BASE &&
-			     (char *)v + c <
-			     	(char*)MEMC_PHYS_BASE + ptoa(physmem)) ||
-			    uvm_kernacc((void *)v, c,
+			if (((caddr_t)v >= MEMC_PHYS_BASE &&
+			     (caddr_t)v + c <
+			                     MEMC_PHYS_BASE + ptoa(physmem)) ||
+			    uvm_kernacc((caddr_t)v, c,
 					uio->uio_rw == UIO_READ ?
 					B_READ : B_WRITE))
-				error = uiomove((void *)v, c, uio);
+				error = uiomove((caddr_t)v, c, uio);
 			else
 				return (EFAULT);
 			break;
@@ -173,7 +172,7 @@ mmrw(dev, uio, flags)
 				return (0);
 			}
 			if (zeropage == NULL) {
-				zeropage = (void *)
+				zeropage = (caddr_t)
 				    malloc(PAGE_SIZE, M_TEMP, M_WAITOK);
 				bzero(zeropage, PAGE_SIZE);
 			}
@@ -188,7 +187,7 @@ mmrw(dev, uio, flags)
 	if (minor(dev) == DEV_MEM) {
 /*unlock:*/
 		if (physlock > 1)
-			wakeup((void *)&physlock);
+			wakeup((caddr_t)&physlock);
 		physlock = 0;
 	}
 	return (error);

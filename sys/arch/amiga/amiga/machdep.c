@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.205 2007/07/14 21:48:17 ad Exp $	*/
+/*	$NetBSD: machdep.c,v 1.199 2006/10/23 15:15:52 yamt Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -85,7 +85,7 @@
 #include "opt_panicbutton.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.205 2007/07/14 21:48:17 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.199 2006/10/23 15:15:52 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -168,11 +168,16 @@ void fdintr(int);
 
 volatile unsigned int interrupt_depth = 0;
 
+/*
+ * patched by some devices at attach time (currently, only the coms)
+ */
+u_int16_t amiga_serialspl = PSL_S|PSL_IPL4;
+
 struct vm_map *exec_map = NULL;
 struct vm_map *mb_map = NULL;
 struct vm_map *phys_map = NULL;
 
-void *	msgbufaddr;
+caddr_t	msgbufaddr;
 paddr_t msgbufpa;
 
 int	machineid;
@@ -301,20 +306,20 @@ cpu_startup()
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
+				   16*NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, 0, false, NULL);
+				   VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
+				 FALSE, NULL);
 
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
@@ -512,7 +517,7 @@ cpu_reboot(howto, bootstr)
 	char *bootstr;
 {
 	/* take a snap shot before clobbering any registers */
-	if (curlwp->l_addr)
+	if (curlwp)
 		savectx(&curlwp->l_addr->u_pcb);
 
 	boothowto = howto;
@@ -657,7 +662,7 @@ dumpsys()
 	unsigned bytes, i, n, seg;
 	int     maddr, psize;
 	daddr_t blkno;
-	int     (*dump)(dev_t, daddr_t, void *, size_t);
+	int     (*dump)(dev_t, daddr_t, caddr_t, size_t);
 	int     error = 0;
 	kcore_seg_t *kseg_p;
 	cpu_kcore_hdr_t *chdr_p;
@@ -710,7 +715,7 @@ dumpsys()
 	seg = 0;
 	blkno = dumplo;
 	dump = bdev->d_dump;
-	error = (*dump) (dumpdev, blkno, (void *)dump_hdr, sizeof(dump_hdr));
+	error = (*dump) (dumpdev, blkno, (caddr_t)dump_hdr, sizeof(dump_hdr));
 	blkno += btodb(sizeof(dump_hdr));
 	for (i = 0; i < bytes && error == 0; i += n) {
 		/* Print out how many MBs we have to go. */
@@ -729,7 +734,7 @@ dumpsys()
 			++blkno;	/* XXX skip physical page 0 */
 		}
 		(void) pmap_map(dumpspace, maddr, maddr + n, VM_PROT_READ);
-		error = (*dump) (dumpdev, blkno, (void *) dumpspace, n);
+		error = (*dump) (dumpdev, blkno, (caddr_t) dumpspace, n);
 		if (error)
 			break;
 		maddr += n;
@@ -944,7 +949,7 @@ int	*nofault;
 
 int
 badaddr(addr)
-	register void *addr;
+	register caddr_t addr;
 {
 	register int i;
 	label_t	faultbuf;
@@ -964,7 +969,7 @@ badaddr(addr)
 
 int
 badbaddr(addr)
-	register void *addr;
+	register caddr_t addr;
 {
 	register int i;
 	label_t	faultbuf;
@@ -1029,7 +1034,7 @@ static int ncbd;	/* number of callback blocks dynamically allocated */
 #endif
 
 /*
- * these are generic soft interrupt wrappers; will be replaced
+ * these are __GENERIC_SOFT_INTERRUPT wrappers; will be replaced
  * once by the real thing once all drivers are converted.
  *
  * to help performance for converted drivers, the YYY_sicallback() function
@@ -1516,7 +1521,7 @@ int panicbutton = 1;	/* non-zero if panic buttons are enabled */
 int crashandburn = 0;
 int candbdelay = 50;	/* give em half a second */
 void candbtimer(void);
-callout_t candbtimer_ch;
+struct callout candbtimer_ch = CALLOUT_INITIALIZER;
 
 void
 candbtimer()
@@ -1616,23 +1621,3 @@ int _spllkm7() {
 #endif
 
 #endif
-
-int ipl2spl_table[_NIPL] = {
-	[IPL_NONE] = PSL_IPL0|PSL_S,
-	[IPL_SOFTCLOCK] = PSL_IPL1|PSL_S,
-	[IPL_BIO] = PSL_IPL3|PSL_S,
-	[IPL_NET] = PSL_IPL3|PSL_S,
-	[IPL_TTY] = PSL_IPL4|PSL_S,
-	[IPL_SERIAL] = PSL_IPL5|PSL_S,
-	[IPL_VM] = PSL_IPL4|PSL_S,
-	[IPL_SERIAL] = PSL_IPL4|PSL_S,	/* patched by some devices at attach
-					   time (currently, only the coms) */
-	[IPL_AUDIO] = PSL_IPL6|PSL_S,
-#if defined(LEV6_DEFER)
-	[IPL_CLOCK] = PSL_IPL4|PSL_S,
-	[IPL_HIGH] = PSL_IPL4|PSL_S,
-#else /* defined(LEV6_DEFER) */
-	[IPL_CLOCK] = PSL_IPL6|PSL_S,
-	[IPL_HIGH] = PSL_IPL7|PSL_S,
-#endif /* defined(LEV6_DEFER) */
-};

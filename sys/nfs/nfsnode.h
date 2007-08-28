@@ -1,4 +1,4 @@
-/*	 $NetBSD: nfsnode.h,v 1.66 2007/08/10 15:12:57 yamt Exp $	*/
+/*	 $NetBSD: nfsnode.h,v 1.58 2006/10/17 14:55:13 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,9 +37,6 @@
 
 #ifndef _NFS_NFSNODE_H_
 #define _NFS_NFSNODE_H_
-
-#include <sys/condvar.h>
-#include <sys/mutex.h>
 
 #ifndef _NFS_NFS_H_
 #include <nfs/nfs.h>
@@ -113,7 +110,7 @@ struct nfsnode_reg {
 	off_t nreg_pushedhi;		/* Last block in range */
 	off_t nreg_pushlo;		/* 1st block in commit range */
 	off_t nreg_pushhi;		/* Last block in range */
-	kmutex_t nreg_commitlock;	/* Serialize commits XXX */
+	struct lock nreg_commitlock;	/* Serialize commits XXX */
 	int nreg_commitflags;
 	int nreg_error;			/* Save write error value */
 };
@@ -180,6 +177,12 @@ struct nfsnode {
 	int			n_accerror;	/* Error last returned */
 	kauth_cred_t		n_rcred;
 	kauth_cred_t		n_wcred;
+
+	/* members below are only used by NQNFS */
+	CIRCLEQ_ENTRY(nfsnode)	n_timer;	/* Nqnfs timer chain */
+	u_quad_t		n_brev;		/* Modify rev when cached */
+	u_quad_t		n_lrev;		/* Modify rev for lease */
+	time_t			n_expiry;	/* Lease expiry time */
 };
 LIST_HEAD(nfsnodehashhead, nfsnode);
 
@@ -196,6 +199,9 @@ LIST_HEAD(nfsnodehashhead, nfsnode);
 #define	NFLUSHINPROG	0x0002	/* Avoid multiple calls to vinvalbuf() */
 #define	NMODIFIED	0x0004	/* Might have a modified buffer in bio */
 #define	NWRITEERR	0x0008	/* Flag write errors so close will know */
+#define	NQNFSNONCACHE	0x0020	/* Non-cachable lease */
+#define	NQNFSWRITE	0x0040	/* Write lease */
+#define	NQNFSEVICTED	0x0080	/* Has been evicted */
 #define	NACC		0x0100	/* Special file accessed */
 #define	NUPD		0x0200	/* Special file updated */
 #define	NCHG		0x0400	/* Special file times changed */
@@ -213,25 +219,19 @@ LIST_HEAD(nfsnodehashhead, nfsnode);
 #define VTONFS(vp)	((struct nfsnode *)(vp)->v_data)
 #define NFSTOV(np)	((np)->n_vnode)
 
-#ifdef _KERNEL
-
 /*
  * Per-nfsiod datas
  */
 struct nfs_iod {
-	kmutex_t nid_lock;
-	kcondvar_t nid_cv;
-	LIST_ENTRY(nfs_iod) nid_idle;
+	struct simplelock nid_slock;
+	struct proc *nid_proc;
+	struct proc *nid_want;
 	struct nfsmount *nid_mount;
-	bool nid_exiting;
-
-	LIST_ENTRY(nfs_iod) nid_all;
 };
 
-LIST_HEAD(nfs_iodlist, nfs_iod);
-extern kmutex_t nfs_iodlist_lock;
-extern struct nfs_iodlist nfs_iodlist_idle;
-extern struct nfs_iodlist nfs_iodlist_all;
+#ifdef _KERNEL
+
+extern struct nfs_iod nfs_asyncdaemon[NFS_MAXASYNCDAEMON];
 extern u_long nfsdirhashmask;
 
 /*

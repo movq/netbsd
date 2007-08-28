@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_ptrace.c,v 1.16 2007/07/09 21:10:46 ad Exp $ */
+/*	$NetBSD: linux_ptrace.c,v 1.13 2006/08/30 11:14:39 matt Exp $ */
 
 /*-
  * Copyright (c) 1999, 2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_ptrace.c,v 1.16 2007/07/09 21:10:46 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_ptrace.c,v 1.13 2006/08/30 11:14:39 matt Exp $");
 
 #include "opt_ptrace.h"
 
@@ -47,6 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_ptrace.c,v 1.16 2007/07/09 21:10:46 ad Exp $")
 #include <sys/proc.h>
 #include <sys/ptrace.h>
 #include <sys/systm.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <uvm/uvm_extern.h>
 
@@ -146,14 +147,14 @@ linux_sys_ptrace_arch(l, v, retval)	/* XXX Check me! (From NetBSD/i386) */
 	 * You can't do what you want to the process if:
 	 *	(1) It's not being traced at all,
 	 */
-	if (!ISSET(t->p_slflag, PSL_TRACED))	/* XXXSMP */
+	if (!ISSET(t->p_flag, P_TRACED))
 		return EPERM;
 
 	/*
 	 *	(2) it's being traced by procfs (which has
 	 *		 different signal delivery semantics),
 	 */
-	if (ISSET(t->p_slflag, PSL_FSTRACE))
+	if (ISSET(t->p_flag, P_FSTRACE))
 		return EBUSY;
 
 	/*
@@ -165,7 +166,7 @@ linux_sys_ptrace_arch(l, v, retval)	/* XXX Check me! (From NetBSD/i386) */
 	/*
 	 *	(4) it's not currently stopped.
 	 */
-	if (t->p_stat != SSTOP || !t->p_waited)
+	if (t->p_stat != SSTOP || !ISSET(t->p_flag, P_WAITED))
 		return EBUSY;
 
 	lt = LIST_FIRST(&t->p_lwps);
@@ -197,7 +198,7 @@ linux_sys_ptrace_arch(l, v, retval)	/* XXX Check me! (From NetBSD/i386) */
 		linux_regs->ldsisr = 0;
 		linux_regs->lresult = 0;
 
-		error = copyout(linux_regs, (void *)SCARG(uap, data),
+		error = copyout(linux_regs, (caddr_t)SCARG(uap, data),
 			 sizeof(struct linux_pt_regs));
 		goto out;
 
@@ -206,7 +207,7 @@ linux_sys_ptrace_arch(l, v, retval)	/* XXX Check me! (From NetBSD/i386) */
 		MALLOC(linux_regs, struct linux_pt_regs*, sizeof(*linux_regs),
 		    M_TEMP, M_WAITOK);
 
-		error = copyin((void *)SCARG(uap, data), linux_regs,
+		error = copyin((caddr_t)SCARG(uap, data), linux_regs,
 			 sizeof(struct linux_pt_regs));
 		if (error != 0)
 			goto out;
@@ -238,7 +239,7 @@ linux_sys_ptrace_arch(l, v, retval)	/* XXX Check me! (From NetBSD/i386) */
 
 		memcpy(linux_fpreg, fpregs,
 			min(32*sizeof(double), sizeof(struct fpreg)));
-		error = copyout(linux_fpreg, (void *)SCARG(uap, data),
+		error = copyout(linux_fpreg, (caddr_t)SCARG(uap, data),
 			 32*sizeof(double));
 		goto out;
 
@@ -247,7 +248,7 @@ linux_sys_ptrace_arch(l, v, retval)	/* XXX Check me! (From NetBSD/i386) */
 		    M_TEMP, M_WAITOK);
 		MALLOC(linux_fpreg, double *,
 		    32*sizeof(double), M_TEMP, M_WAITOK);
-		error = copyin((void *)SCARG(uap, data), linux_fpreg,
+		error = copyin((caddr_t)SCARG(uap, data), linux_fpreg,
 			 32*sizeof(double));
 		if (error != 0)
 			goto out;
@@ -266,7 +267,7 @@ linux_sys_ptrace_arch(l, v, retval)	/* XXX Check me! (From NetBSD/i386) */
 		if (error)
 			goto out;
 
-		uvm_lwp_hold(lt);	/* need full process info */
+		PHOLD(lt);	/* need full process info */
 		error = 0;
 		if ((addr < LUSR_OFF(lusr_startgdb)) ||
 		    (addr > LUSR_OFF(lu_comm_end)))
@@ -309,13 +310,13 @@ linux_sys_ptrace_arch(l, v, retval)	/* XXX Check me! (From NetBSD/i386) */
 			error = 1;
 		}
 
-		uvm_lwp_rele(lt);
+		PRELE(lt);
 
 		if (error)
 			goto out;
 
 		error = copyout (retval,
-		    (void *)SCARG(uap, data), sizeof retval);
+		    (caddr_t)SCARG(uap, data), sizeof retval);
 		*retval = SCARG(uap, data);
 
 		goto out;
@@ -329,7 +330,7 @@ linux_sys_ptrace_arch(l, v, retval)	/* XXX Check me! (From NetBSD/i386) */
 		if (error)
 			goto out;
 
-		uvm_lwp_hold(lt);       /* need full process info */
+		PHOLD(lt);       /* need full process info */
 		error = 0;
 		if ((addr < LUSR_OFF(lusr_startgdb)) ||
 		    (addr > LUSR_OFF(lu_comm_end)))
@@ -371,7 +372,7 @@ linux_sys_ptrace_arch(l, v, retval)	/* XXX Check me! (From NetBSD/i386) */
 			error = 1;
 		}
 
-		uvm_lwp_rele(lt);
+		PRELE(lt);
 
 		error = process_write_regs(lt,regs);
 		if (error)

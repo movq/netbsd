@@ -1,4 +1,4 @@
-/* $NetBSD: dksubr.c,v 1.31 2007/07/29 12:50:18 ad Exp $ */
+/* $NetBSD: dksubr.c,v 1.27.2.1 2007/07/01 17:09:24 bouyer Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 1999, 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dksubr.c,v 1.31 2007/07/29 12:50:18 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dksubr.c,v 1.27.2.1 2007/07/01 17:09:24 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -100,7 +100,9 @@ dk_open(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 	DPRINTF_FOLLOW(("dk_open(%s, %p, 0x%x, 0x%x)\n",
 	    di->di_dkname, dksc, dev, flags));
 
-	mutex_enter(&dk->dk_openlock);
+	if ((ret = lockmgr(&dk->dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
+		return ret;
+
 	part = DISKPART(dev);
 
 	/*
@@ -147,7 +149,7 @@ dk_open(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 	dk->dk_openmask = dk->dk_copenmask | dk->dk_bopenmask;
 
 done:
-	mutex_exit(&dk->dk_openlock);
+	lockmgr(&dk->dk_openlock, LK_RELEASE, NULL);
 	return ret;
 }
 
@@ -158,12 +160,14 @@ dk_close(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 {
 	int	part = DISKPART(dev);
 	int	pmask = 1 << part;
+	int	ret;
 	struct disk *dk = &dksc->sc_dkdev;
 
 	DPRINTF_FOLLOW(("dk_close(%s, %p, 0x%x, 0x%x)\n",
 	    di->di_dkname, dksc, dev, flags));
 
-	mutex_enter(&dk->dk_openlock);
+	if ((ret = lockmgr(&dk->dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
+		return ret;
 
 	switch (fmt) {
 	case S_IFCHR:
@@ -175,7 +179,7 @@ dk_close(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 	}
 	dk->dk_openmask = dk->dk_copenmask | dk->dk_bopenmask;
 
-	mutex_exit(&dk->dk_openlock);
+	lockmgr(&dk->dk_openlock, LK_RELEASE, NULL);
 	return 0;
 }
 
@@ -192,6 +196,7 @@ dk_strategy(struct dk_intf *di, struct dk_softc *dksc, struct buf *bp)
 	if (!(dksc->sc_flags & DKF_INITED)) {
 		DPRINTF_FOLLOW(("dk_strategy: not inited\n"));
 		bp->b_error  = ENXIO;
+		bp->b_flags |= B_ERROR;
 		biodone(bp);
 		return;
 	}
@@ -292,7 +297,7 @@ dk_size(struct dk_intf *di, struct dk_softc *dksc, dev_t dev)
 
 int
 dk_ioctl(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
-	    u_long cmd, void *data, int flag, struct lwp *l)
+	    u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct	disklabel *lp;
 	struct	disk *dk;
@@ -371,7 +376,11 @@ dk_ioctl(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 		lp = (struct disklabel *)data;
 
 		dk = &dksc->sc_dkdev;
-		mutex_enter(&dk->dk_openlock);
+		error = lockmgr(&dk->dk_openlock, LK_EXCLUSIVE, NULL);
+		if (error) {
+			break;
+		}
+
 		dksc->sc_flags |= DKF_LABELLING;
 
 		error = setdisklabel(dksc->sc_dkdev.dk_label,
@@ -388,7 +397,7 @@ dk_ioctl(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 		}
 
 		dksc->sc_flags &= ~DKF_LABELLING;
-		mutex_exit(&dk->dk_openlock);
+		error = lockmgr(&dk->dk_openlock, LK_RELEASE, NULL);
 		break;
 
 	case DIOCWLABEL:
@@ -507,7 +516,7 @@ static volatile int	dk_dumping = 0;
 /* ARGSUSED */
 int
 dk_dump(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
-    daddr_t blkno, void *va, size_t size)
+    daddr_t blkno, caddr_t va, size_t size)
 {
 
 	/*

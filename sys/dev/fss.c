@@ -1,4 +1,4 @@
-/*	$NetBSD: fss.c,v 1.34 2007/07/29 12:50:18 ad Exp $	*/
+/*	$NetBSD: fss.c,v 1.29.2.1 2007/03/04 14:26:51 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.34 2007/07/29 12:50:18 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.29.2.1 2007/03/04 14:26:51 bouyer Exp $");
 
 #include "fss.h"
 
@@ -65,7 +65,6 @@ __KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.34 2007/07/29 12:50:18 ad Exp $");
 #include <sys/uio.h>
 #include <sys/conf.h>
 #include <sys/kthread.h>
-#include <sys/fstrans.h>
 
 #include <miscfs/specfs/specdev.h>
 
@@ -139,7 +138,7 @@ static void fss_cluster_iodone(struct buf *);
 static void fss_read_cluster(struct fss_softc *, u_int32_t);
 static void fss_bs_thread(void *);
 static int fss_bs_io(struct fss_softc *, fss_io_type,
-    u_int32_t, off_t, int, void *);
+    u_int32_t, off_t, int, caddr_t);
 static u_int32_t *fss_bs_indir(struct fss_softc *, u_int32_t);
 
 const struct bdevsw fss_bdevsw = {
@@ -163,7 +162,7 @@ fssattach(int num)
 		sc->sc_unit = i;
 		sc->sc_bdev = NODEV;
 		simple_lock_init(&sc->sc_slock);
-		mutex_init(&sc->sc_lock, MUTEX_DRIVER, IPL_NONE);
+		lockinit(&sc->sc_lock, PRIBIO, "fsslock", 0, 0);
 		bufq_alloc(&sc->sc_bufq, "fcfs", 0);
 	}
 }
@@ -236,6 +235,7 @@ fss_strategy(struct buf *bp)
 		FSS_UNLOCK(sc, s);
 
 		bp->b_error = (sc == NULL ? ENODEV : EROFS);
+		bp->b_flags |= B_ERROR;
 		bp->b_resid = bp->b_bcount;
 		biodone(bp);
 		return;
@@ -243,7 +243,7 @@ fss_strategy(struct buf *bp)
 
 	bp->b_rawblkno = bp->b_blkno;
 	BUFQ_PUT(sc->sc_bufq, bp);
-	wakeup(&sc->sc_bs_lwp);
+	wakeup(&sc->sc_bs_proc);
 
 	FSS_UNLOCK(sc, s);
 }
@@ -261,7 +261,7 @@ fss_write(dev_t dev, struct uio *uio, int flags)
 }
 
 int
-fss_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+fss_ioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	int error;
 	struct fss_softc *sc;
@@ -273,29 +273,29 @@ fss_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 
 	switch (cmd) {
 	case FSSIOCSET:
-		mutex_enter(&sc->sc_lock);
+		lockmgr(&sc->sc_lock, LK_EXCLUSIVE, NULL);
 		if ((flag & FWRITE) == 0)
 			error = EPERM;
 		else if ((sc->sc_flags & FSS_ACTIVE) != 0)
 			error = EBUSY;
 		else
 			error = fss_create_snapshot(sc, fss, l);
-		mutex_exit(&sc->sc_lock);
+		lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 		break;
 
 	case FSSIOCCLR:
-		mutex_enter(&sc->sc_lock);
+		lockmgr(&sc->sc_lock, LK_EXCLUSIVE, NULL);
 		if ((flag & FWRITE) == 0)
 			error = EPERM;
 		else if ((sc->sc_flags & FSS_ACTIVE) == 0)
 			error = ENXIO;
 		else
 			error = fss_delete_snapshot(sc, l);
-		mutex_exit(&sc->sc_lock);
+		lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 		break;
 
 	case FSSIOCGET:
-		mutex_enter(&sc->sc_lock);
+		lockmgr(&sc->sc_lock, LK_EXCLUSIVE, NULL);
 		switch (sc->sc_flags & (FSS_PERSISTENT | FSS_ACTIVE)) {
 		case FSS_ACTIVE:
 			memcpy(fsg->fsg_mount, sc->sc_mntname, MNAMELEN);
@@ -317,7 +317,7 @@ fss_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 			error = ENXIO;
 			break;
 		}
-		mutex_exit(&sc->sc_lock);
+		lockmgr(&sc->sc_lock, LK_RELEASE, NULL);
 		break;
 
 	case FSSIOFSET:
@@ -345,7 +345,7 @@ fss_size(dev_t dev)
 }
 
 int
-fss_dump(dev_t dev, daddr_t blkno, void *va,
+fss_dump(dev_t dev, daddr_t blkno, caddr_t va,
     size_t size)
 {
 	return EROFS;
@@ -415,8 +415,8 @@ fss_softc_alloc(struct fss_softc *sc)
 	if (sc->sc_indir_data == NULL)
 		return(ENOMEM);
 
-	if ((error = kthread_create(PINOD, 0, NULL, fss_bs_thread, sc,
-	    &sc->sc_bs_lwp, "fssbs%d", sc->sc_unit)) != 0)
+	if ((error = kthread_create1(fss_bs_thread, sc, &sc->sc_bs_proc,
+	    "fssbs%d", sc->sc_unit)) != 0)
 		return error;
 
 	sc->sc_flags |= FSS_BS_THREAD;
@@ -434,9 +434,9 @@ fss_softc_free(struct fss_softc *sc)
 	if ((sc->sc_flags & FSS_BS_THREAD) != 0) {
 		FSS_LOCK(sc, s);
 		sc->sc_flags &= ~FSS_BS_THREAD;
-		wakeup(&sc->sc_bs_lwp);
-		while (sc->sc_bs_lwp != NULL)
-			ltsleep(&sc->sc_bs_lwp, PRIBIO, "fssthread", 0,
+		wakeup(&sc->sc_bs_proc);
+		while (sc->sc_bs_proc != NULL)
+			ltsleep(&sc->sc_bs_proc, PRIBIO, "fssthread", 0,
 			    &sc->sc_slock);
 		FSS_UNLOCK(sc, s);
 	}
@@ -741,7 +741,7 @@ fss_create_snapshot(struct fss_softc *sc, struct fss_set *fss, struct lwp *l)
 	 * Activate the snapshot.
 	 */
 
-	if ((error = vfs_suspend(sc->sc_mount, 0)) != 0)
+	if ((error = vfs_write_suspend(sc->sc_mount, PUSER|PCATCH, 0)) != 0)
 		goto bad;
 
 	microtime(&sc->sc_time);
@@ -752,7 +752,7 @@ fss_create_snapshot(struct fss_softc *sc, struct fss_set *fss, struct lwp *l)
 	if (error == 0)
 		sc->sc_flags |= FSS_ACTIVE;
 
-	vfs_resume(sc->sc_mount);
+	vfs_write_resume(sc->sc_mount);
 
 	if (error != 0)
 		goto bad;
@@ -822,7 +822,7 @@ fss_cluster_iodone(struct buf *bp)
 
 	FSS_LOCK(scp->fc_softc, s);
 
-	if (bp->b_error != 0)
+	if (bp->b_flags & B_ERROR)
 		fss_error(scp->fc_softc, "fs read error %d", bp->b_error);
 
 	if (--scp->fc_xfercount == 0)
@@ -840,7 +840,7 @@ static void
 fss_read_cluster(struct fss_softc *sc, u_int32_t cl)
 {
 	int s, todo, len;
-	char *addr;
+	caddr_t addr;
 	daddr_t dblk;
 	struct buf *bp;
 	struct fss_cache *scp, *scl;
@@ -889,7 +889,7 @@ restart:
 	addr = scp->fc_data;
 	if (cl == sc->sc_clcount-1) {
 		todo = sc->sc_clresid;
-		memset((char *)addr + todo, 0, FSS_CLSIZE(sc) - todo);
+		memset(addr+todo, 0, FSS_CLSIZE(sc)-todo);
 	} else
 		todo = FSS_CLSIZE(sc);
 	while (todo > 0) {
@@ -910,7 +910,7 @@ restart:
 		bp->b_private = scp;
 		bp->b_iodone = fss_cluster_iodone;
 
-		bdev_strategy(bp);
+		DEV_STRATEGY(bp);
 
 		FSS_LOCK(sc, s);
 		scp->fc_xfercount++;
@@ -932,7 +932,7 @@ restart:
 	setbit(sc->sc_copied, scp->fc_cluster);
 	FSS_UNLOCK(sc, s);
 
-	wakeup(&sc->sc_bs_lwp);
+	wakeup(&sc->sc_bs_proc);
 }
 
 /*
@@ -942,7 +942,7 @@ restart:
  */
 static int
 fss_bs_io(struct fss_softc *sc, fss_io_type rw,
-    u_int32_t cl, off_t off, int len, void *data)
+    u_int32_t cl, off_t off, int len, caddr_t data)
 {
 	int error;
 
@@ -952,7 +952,7 @@ fss_bs_io(struct fss_softc *sc, fss_io_type rw,
 
 	error = vn_rdwr((rw == FSS_READ ? UIO_READ : UIO_WRITE), sc->sc_bs_vp,
 	    data, len, off, UIO_SYSSPACE, IO_UNIT|IO_NODELOCKED,
-	    sc->sc_bs_lwp->l_cred, NULL, NULL);
+	    sc->sc_bs_proc->p_cred, NULL, NULL);
 	if (error == 0) {
 		simple_lock(&sc->sc_bs_vp->v_interlock);
 		error = VOP_PUTPAGES(sc->sc_bs_vp, trunc_page(off),
@@ -982,7 +982,7 @@ fss_bs_indir(struct fss_softc *sc, u_int32_t cl)
 	if (sc->sc_indir_dirty) {
 		FSS_STAT_INC(sc, indir_write);
 		if (fss_bs_io(sc, FSS_WRITE, sc->sc_indir_cur, 0,
-		    FSS_CLSIZE(sc), (void *)sc->sc_indir_data) != 0)
+		    FSS_CLSIZE(sc), (caddr_t)sc->sc_indir_data) != 0)
 			return NULL;
 		setbit(sc->sc_indir_valid, sc->sc_indir_cur);
 	}
@@ -993,7 +993,7 @@ fss_bs_indir(struct fss_softc *sc, u_int32_t cl)
 	if (isset(sc->sc_indir_valid, sc->sc_indir_cur)) {
 		FSS_STAT_INC(sc, indir_read);
 		if (fss_bs_io(sc, FSS_READ, sc->sc_indir_cur, 0,
-		    FSS_CLSIZE(sc), (void *)sc->sc_indir_data) != 0)
+		    FSS_CLSIZE(sc), (caddr_t)sc->sc_indir_data) != 0)
 			return NULL;
 	} else
 		memset(sc->sc_indir_data, 0, FSS_CLSIZE(sc));
@@ -1011,7 +1011,7 @@ fss_bs_thread(void *arg)
 {
 	int error, len, nfreed, nio, s;
 	long off;
-	char *addr;
+	caddr_t addr;
 	u_int32_t c, cl, ch, *indirp;
 	struct buf *bp, *nbp;
 	struct fss_softc *sc;
@@ -1029,12 +1029,12 @@ fss_bs_thread(void *arg)
 
 	for (;;) {
 		if (nfreed == 0 && nio == 0)
-			ltsleep(&sc->sc_bs_lwp, PVM-1, "fssbs", 0,
+			ltsleep(&sc->sc_bs_proc, PVM-1, "fssbs", 0,
 			    &sc->sc_slock);
 
 		if ((sc->sc_flags & FSS_BS_THREAD) == 0) {
-			sc->sc_bs_lwp = NULL;
-			wakeup(&sc->sc_bs_lwp);
+			sc->sc_bs_proc = NULL;
+			wakeup(&sc->sc_bs_proc);
 
 			FSS_UNLOCK(sc, s);
 
@@ -1083,6 +1083,7 @@ fss_bs_thread(void *arg)
 
 			if (error) {
 				bp->b_error = error;
+				bp->b_flags |= B_ERROR;
 				bp->b_resid = bp->b_bcount;
 			} else
 				bp->b_resid = 0;
@@ -1137,6 +1138,7 @@ fss_bs_thread(void *arg)
 
 		if (!FSS_ISVALID(sc)) {
 			bp->b_error = ENXIO;
+			bp->b_flags |= B_ERROR;
 			bp->b_resid = bp->b_bcount;
 			biodone(bp);
 			continue;
@@ -1161,11 +1163,12 @@ fss_bs_thread(void *arg)
 		nbp->b_dev = sc->sc_bdev;
 		nbp->b_vp = NULLVP;
 
-		bdev_strategy(nbp);
+		DEV_STRATEGY(nbp);
 
 		if (biowait(nbp) != 0) {
 			bp->b_resid = bp->b_bcount;
 			bp->b_error = nbp->b_error;
+			bp->b_flags |= B_ERROR;
 			biodone(bp);
 			FSS_LOCK(sc, s);
 			continue;
@@ -1208,7 +1211,7 @@ fss_bs_thread(void *arg)
 					    scp->fc_cluster == c)
 						break;
 				if (scp < scl)
-					memcpy(addr, (char *)scp->fc_data+off, len);
+					memcpy(addr, scp->fc_data+off, len);
 				else
 					memset(addr, 0, len);
 				continue;
@@ -1223,6 +1226,7 @@ fss_bs_thread(void *arg)
 			    off, len, addr)) != 0) {
 				bp->b_resid = bp->b_bcount;
 				bp->b_error = error;
+				bp->b_flags |= B_ERROR;
 				FSS_LOCK(sc, s);
 				break;
 			}

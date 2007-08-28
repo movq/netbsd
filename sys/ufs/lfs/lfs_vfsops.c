@@ -1,7 +1,7 @@
-/*	$NetBSD: lfs_vfsops.c,v 1.244 2007/07/31 21:14:20 pooka Exp $	*/
+/*	$NetBSD: lfs_vfsops.c,v 1.224.2.1 2007/06/05 20:35:02 bouyer Exp $	*/
 
 /*-
- * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_vfsops.c,v 1.244 2007/07/31 21:14:20 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_vfsops.c,v 1.224.2.1 2007/06/05 20:35:02 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -116,7 +116,7 @@ __KERNEL_RCSID(0, "$NetBSD: lfs_vfsops.c,v 1.244 2007/07/31 21:14:20 pooka Exp $
 #include <miscfs/genfs/genfs_node.h>
 
 static int lfs_gop_write(struct vnode *, struct vm_page **, int, int);
-static bool lfs_issequential_hole(const struct ufsmount *,
+static boolean_t lfs_issequential_hole(const struct ufsmount *,
     daddr_t, daddr_t);
 
 static int lfs_mountfs(struct vnode *, struct mount *, struct lwp *);
@@ -140,7 +140,6 @@ const struct vnodeopv_desc * const lfs_vnodeopv_descs[] = {
 
 struct vfsops lfs_vfsops = {
 	MOUNT_LFS,
-	sizeof (struct ufs_args),
 	lfs_mount,
 	ufs_start,
 	lfs_unmount,
@@ -157,7 +156,6 @@ struct vfsops lfs_vfsops = {
 	lfs_mountroot,
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
-	(void *)eopnotsupp,	/* vfs_suspendctl */
 	lfs_vnodeopv_descs,
 	0,
 	{ NULL, NULL },
@@ -183,10 +181,14 @@ static const struct ufs_ops lfs_ufsops = {
 /*
  * XXX Same structure as FFS inodes?  Should we share a common pool?
  */
-struct pool lfs_inode_pool;
-struct pool lfs_dinode_pool;
-struct pool lfs_inoext_pool;
-struct pool lfs_lbnentry_pool;
+POOL_INIT(lfs_inode_pool, sizeof(struct inode), 0, 0, 0, "lfsinopl",
+    &pool_allocator_nointr);
+POOL_INIT(lfs_dinode_pool, sizeof(struct ufs1_dinode), 0, 0, 0, "lfsdinopl",
+    &pool_allocator_nointr);
+POOL_INIT(lfs_inoext_pool, sizeof(struct lfs_inode_ext), 8, 0, 0, "lfsinoextpl",
+    &pool_allocator_nointr);
+POOL_INIT(lfs_lbnentry_pool, sizeof(struct lbnentry), 0, 0, 0, "lfslbnpool",
+    &pool_allocator_nointr);
 
 /*
  * The writer daemon.  UVM keeps track of how many dirty pages we are holding
@@ -219,8 +221,8 @@ lfs_writerd(void *arg)
 				nmp = CIRCLEQ_NEXT(mp, mnt_list);
 				continue;
 			}
-			if (strncmp(mp->mnt_stat.f_fstypename, MOUNT_LFS,
-			    sizeof(mp->mnt_stat.f_fstypename)) == 0) {
+			if (strncmp(&mp->mnt_stat.f_fstypename[0], MOUNT_LFS,
+				    MFSNAMELEN) == 0) {
 				fs = VFSTOUFS(mp)->um_lfs;
 				simple_lock(&fs->lfs_interlock);
 				fsflags = 0;
@@ -287,16 +289,17 @@ lfs_writerd(void *arg)
 void
 lfs_init()
 {
-
+#ifdef _LKM
 	malloc_type_attach(M_SEGMENT);
 	pool_init(&lfs_inode_pool, sizeof(struct inode), 0, 0, 0,
-	    "lfsinopl", &pool_allocator_nointr, IPL_NONE);
+	    "lfsinopl", &pool_allocator_nointr);
 	pool_init(&lfs_dinode_pool, sizeof(struct ufs1_dinode), 0, 0, 0,
-	    "lfsdinopl", &pool_allocator_nointr, IPL_NONE);
+	    "lfsdinopl", &pool_allocator_nointr);
 	pool_init(&lfs_inoext_pool, sizeof(struct lfs_inode_ext), 8, 0, 0,
-	    "lfsinoextpl", &pool_allocator_nointr, IPL_NONE);
+	    "lfsinoextpl", &pool_allocator_nointr);
 	pool_init(&lfs_lbnentry_pool, sizeof(struct lbnentry), 0, 0, 0,
-	    "lfslbnpool", &pool_allocator_nointr, IPL_NONE);
+	    "lfslbnpool", &pool_allocator_nointr);
+#endif
 	ufs_init();
 
 #ifdef DEBUG
@@ -314,13 +317,14 @@ lfs_reinit()
 void
 lfs_done()
 {
-
 	ufs_done();
+#ifdef _LKM
 	pool_destroy(&lfs_inode_pool);
 	pool_destroy(&lfs_dinode_pool);
 	pool_destroy(&lfs_inoext_pool);
 	pool_destroy(&lfs_lbnentry_pool);
 	malloc_type_detach(M_SEGMENT);
+#endif
 }
 
 /*
@@ -364,40 +368,37 @@ lfs_mountroot()
  * mount system call
  */
 int
-lfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
-    struct lwp *l)
+lfs_mount(struct mount *mp, const char *path, void *data, struct nameidata *ndp, struct lwp *l)
 {
-	struct nameidata nd;
 	struct vnode *devvp;
-	struct ufs_args *args = data;
+	struct ufs_args args;
 	struct ufsmount *ump = NULL;
 	struct lfs *fs = NULL;				/* LFS */
-	int error = 0, update;
+	int error, update;
 	mode_t accessmode;
-
-	if (*data_len < sizeof *args)
-		return EINVAL;
 
 	if (mp->mnt_flag & MNT_GETARGS) {
 		ump = VFSTOUFS(mp);
 		if (ump == NULL)
 			return EIO;
-		args->fspec = NULL;
-		*data_len = sizeof *args;
-		return 0;
+		args.fspec = NULL;
+		return copyout(&args, data, sizeof(args));
 	}
+	error = copyin(data, &args, sizeof (struct ufs_args));
+	if (error)
+		return (error);
 
 	update = mp->mnt_flag & MNT_UPDATE;
 
 	/* Check arguments */
-	if (args->fspec != NULL) {
+	if (args.fspec != NULL) {
 		/*
 		 * Look up the name and verify that it's sane.
 		 */
-		NDINIT(&nd, LOOKUP, FOLLOW, UIO_USERSPACE, args->fspec, l);
-		if ((error = namei(&nd)) != 0)
+		NDINIT(ndp, LOOKUP, FOLLOW, UIO_USERSPACE, args.fspec, l);
+		if ((error = namei(ndp)) != 0)
 			return (error);
-		devvp = nd.ni_vp;
+		devvp = ndp->ni_vp;
 
 		if (!update) {
 			/*
@@ -433,8 +434,7 @@ lfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
 	 * If mount by non-root, then verify that user has necessary
 	 * permissions on the device.
 	 */
-	if (error == 0 && kauth_authorize_generic(l->l_cred,
-	    KAUTH_GENERIC_ISSUSER, NULL) != 0) {
+	if (error == 0 && kauth_cred_geteuid(l->l_cred) != 0) {
 		accessmode = VREAD;
 		if (update ?
 		    (mp->mnt_iflag & IMNT_WANTRDWR) != 0 :
@@ -509,12 +509,12 @@ lfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
 				lfs_writesuper(fs, fs->lfs_sboffs[1]);
 			}
 		}
-		if (args->fspec == NULL)
+		if (args.fspec == NULL)
 			return EINVAL;
 	}
 
-	error = set_statvfs_info(path, UIO_USERSPACE, args->fspec,
-	    UIO_USERSPACE, mp->mnt_op->vfs_name, mp, l);
+	error = set_statvfs_info(path, UIO_USERSPACE, args.fspec,
+	    UIO_USERSPACE, mp, l);
 	if (error == 0)
 		(void)strncpy(fs->lfs_fsmnt, mp->mnt_stat.f_mntonname,
 			      sizeof(fs->lfs_fsmnt));
@@ -733,7 +733,7 @@ lfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	fs->lfs_sleepers = 0;
 	fs->lfs_pages = 0;
 	simple_lock_init(&fs->lfs_interlock);
-	rw_init(&fs->lfs_fraglock);
+	lockinit(&fs->lfs_fraglock, PINOD, "lfs_fraglock", 0, 0);
 	lockinit(&fs->lfs_iflock, PINOD, "lfs_iflock", 0, 0);
 	lockinit(&fs->lfs_stoplock, PINOD, "lfs_stoplock", 0, 0);
 
@@ -870,8 +870,7 @@ lfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 
 	/* Start the pagedaemon-anticipating daemon */
 	if (lfs_writer_daemon == 0 &&
-	    kthread_create(PRI_NONE, 0, NULL, lfs_writerd, NULL, NULL,
-	    "lfs_writer") != 0)
+	    kthread_create1(lfs_writerd, NULL, NULL, "lfs_writer") != 0)
 		panic("fork lfs_writer");
 
 	return (0);
@@ -979,7 +978,6 @@ lfs_unmount(struct mount *mp, int mntflags, struct lwp *l)
 	free(fs->lfs_suflags[1], M_SEGMENT);
 	free(fs->lfs_suflags, M_SEGMENT);
 	lfs_free_resblks(fs);
-	rw_destroy(&fs->lfs_fraglock);
 	free(fs, M_UFSMNT);
 	free(ump, M_UFSMNT);
 
@@ -1075,7 +1073,7 @@ lfs_sync(struct mount *mp, int waitfor, kauth_cred_t cred,
 	return (error);
 }
 
-extern kmutex_t ufs_hashlock;
+extern struct lock ufs_hashlock;
 
 /*
  * Look up an LFS dinode number to find its incore vnode.  If not already
@@ -1113,7 +1111,6 @@ lfs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 			&fs->lfs_interlock);
 	simple_unlock(&fs->lfs_interlock);
 
-retry:
 	if ((*vpp = ufs_ihashget(dev, ino, LK_EXCLUSIVE)) != NULL)
 		return (0);
 
@@ -1122,12 +1119,12 @@ retry:
 		 return (error);
 	}
 
-	mutex_enter(&ufs_hashlock);
-	if (ufs_ihashget(dev, ino, 0) != NULL) {
-		mutex_exit(&ufs_hashlock);
-		ungetnewvnode(vp);
-		goto retry;
-	}
+	do {
+		if ((*vpp = ufs_ihashget(dev, ino, LK_EXCLUSIVE)) != NULL) {
+			ungetnewvnode(vp);
+			return (0);
+		}
+	} while (lockmgr(&ufs_hashlock, LK_EXCLUSIVE|LK_SLEEPFAIL, 0));
 
 	/* Translate the inode number to a disk address. */
 	if (ino == LFS_IFILE_INUM)
@@ -1144,8 +1141,8 @@ retry:
 		brelse(bp);
 		if (daddr == LFS_UNUSED_DADDR) {
 			*vpp = NULLVP;
-			mutex_exit(&ufs_hashlock);
 			ungetnewvnode(vp);
+			lockmgr(&ufs_hashlock, LK_RELEASE, 0);
 			return (ENOENT);
 		}
 	}
@@ -1161,7 +1158,7 @@ retry:
 	 */
 	ip = VTOI(vp);
 	ufs_ihashins(ip);
-	mutex_exit(&ufs_hashlock);
+	lockmgr(&ufs_hashlock, LK_RELEASE, 0);
 
 	/*
 	 * XXX
@@ -1478,7 +1475,7 @@ SYSCTL_SETUP(sysctl_vfs_lfs_setup, "sysctl vfs.lfs subtree setup")
  * Since blocks will be written to the new segment anyway,
  * we don't care about current daddr of them.
  */
-static bool
+static boolean_t
 lfs_issequential_hole(const struct ufsmount *ump,
     daddr_t daddr0, daddr_t daddr1)
 {
@@ -1497,15 +1494,15 @@ lfs_issequential_hole(const struct ufsmount *ump,
 	 * treat UNWRITTENs and all resident blocks as 'contiguous'
 	 */
 	if (daddr0 != 0 && daddr1 != 0)
-		return true;
+		return TRUE;
 
 	/*
 	 * both are in hole?
 	 */
 	if (daddr0 == 0 && daddr1 == 0)
-		return true; /* all holes are 'contiguous' for us. */
+		return TRUE; /* all holes are 'contiguous' for us. */
 
-	return false;
+	return FALSE;
 }
 
 /*
@@ -1757,6 +1754,7 @@ lfs_gop_write(struct vnode *vp, struct vm_page **pgs, int npages,
 		UVMHIST_LOG(ubchist, "skipbytes %d", skipbytes, 0,0,0);
 		s = splbio();
 		if (error) {
+			mbp->b_flags |= B_ERROR;
 			mbp->b_error = error;
 		}
 		mbp->b_resid -= skipbytes;

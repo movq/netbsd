@@ -1,4 +1,4 @@
-/*	$NetBSD: maple.c,v 1.34 2007/07/09 20:52:09 ad Exp $	*/
+/*	$NetBSD: maple.c,v 1.31 2005/12/11 12:17:06 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: maple.c,v 1.34 2007/07/09 20:52:09 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: maple.c,v 1.31 2005/12/11 12:17:06 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -115,6 +115,7 @@ __KERNEL_RCSID(0, "$NetBSD: maple.c,v 1.34 2007/07/09 20:52:09 ad Exp $");
  */
 static int	maplematch(struct device *, struct cfdata *, void *);
 static void	mapleattach(struct device *, struct device *, void *);
+static void	maple_create_event_thread(void *);
 static void	maple_scanbus(struct maple_softc *);
 static char *	maple_unit_name(char *, int port, int subunit);
 static void	maple_begin_txbuf(struct maple_softc *);
@@ -244,15 +245,22 @@ mapleattach(struct device *parent, struct device *self, void *aux)
 	maple_polling = 1;
 	maple_scanbus(sc);
 
-	callout_init(&sc->maple_callout_ch, 0);
+	callout_init(&sc->maple_callout_ch);
 
 	sc->sc_intrhand = sysasic_intr_establish(SYSASIC_EVENT_MAPLE_DMADONE,
-	    IPL_MAPLE, SYSASIC_IRL9, maple_intr, sc);
+	    IPL_MAPLE, maple_intr, sc);
 
 	config_pending_incr();	/* create thread before mounting root */
+	kthread_create(maple_create_event_thread, sc);
+}
 
-	if (kthread_create(PRI_NONE, 0, NULL, maple_event_thread, sc,
-	    &sc->event_thread, "%s", sc->sc_dev.dv_xname) == 0)
+static void
+maple_create_event_thread(void *arg)
+{
+	struct maple_softc *sc = arg;
+
+	if (kthread_create1(maple_event_thread, sc, &sc->event_thread,
+	    "%s", sc->sc_dev.dv_xname) == 0)
 		return;
 
 	panic("%s: unable to create event thread", sc->sc_dev.dv_xname);
@@ -1641,7 +1649,7 @@ mapleclose(dev_t dev, int flag, int mode, struct lwp *l)
 
 int
 maple_unit_ioctl(struct device *dev, struct maple_unit *u, u_long cmd,
-    void *data, int flag, struct lwp *l)
+    caddr_t data, int flag, struct lwp *l)
 {
 	struct maple_softc *sc = (struct maple_softc *)dev;
 
@@ -1660,7 +1668,7 @@ maple_unit_ioctl(struct device *dev, struct maple_unit *u, u_long cmd,
 }
 
 int
-mapleioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+mapleioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct maple_softc *sc;
 	struct maple_unit *u;

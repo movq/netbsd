@@ -1,4 +1,4 @@
-/*	$NetBSD: zx.c,v 1.19 2007/03/04 06:02:41 christos Exp $	*/
+/*	$NetBSD: zx.c,v 1.17 2006/03/29 04:16:50 thorpej Exp $	*/
 
 /*
  *  Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zx.c,v 1.19 2007/03/04 06:02:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zx.c,v 1.17 2006/03/29 04:16:50 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -184,7 +184,7 @@ zx_attach(struct device *parent, struct device *self, void *args)
 		printf("%s: can't map bits\n", self->dv_xname);
 		return;
 	}
-	fb->fb_pixels = (void *)bus_space_vaddr(bt, bh);
+	fb->fb_pixels = (caddr_t)bus_space_vaddr(bt, bh);
 	sc->sc_pixels = (u_int32_t *)fb->fb_pixels;
 
 	if (sbus_bus_map(bt, sa->sa_slot, sa->sa_offset + ZX_OFF_LC_SS0_USR,
@@ -298,7 +298,7 @@ zxclose(dev_t dev, int flags, int mode, struct lwp *l)
 }
 
 int
-zxioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
+zxioctl(dev_t dev, u_long cmd, caddr_t data, int flags, struct lwp *l)
 {
 	struct zx_softc *sc;
 	struct fbcmap *cm;
@@ -476,7 +476,7 @@ zxioctl(dev_t dev, u_long cmd, void *data, int flags, struct lwp *l)
 	default:
 #ifdef DEBUG
 		log(LOG_NOTICE, "zxioctl(0x%lx) (%s[%d])\n", cmd,
-		    l->l_proc->p_comm, l->l_proc->p_pid);
+		    p->p_comm, p->p_pid);
 #endif
 		return (ENOTTY);
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_extattr.c,v 1.15 2007/07/10 09:50:09 hannken Exp $	*/
+/*	$NetBSD: ufs_extattr.c,v 1.10.8.1 2007/02/17 23:27:52 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999-2002 Robert N. M. Watson
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ufs_extattr.c,v 1.15 2007/07/10 09:50:09 hannken Exp $");
+__RCSID("$NetBSD: ufs_extattr.c,v 1.10.8.1 2007/02/17 23:27:52 tron Exp $");
 
 #include "opt_ffs.h"
 
@@ -70,12 +70,13 @@ __RCSID("$NetBSD: ufs_extattr.c,v 1.15 2007/07/10 09:50:09 hannken Exp $");
 
 #include <ufs/ufs/dir.h>
 #include <ufs/ufs/extattr.h>
+#include <ufs/ufs/quota.h>
 #include <ufs/ufs/ufsmount.h>
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufs_bswap.h>
 #include <ufs/ufs/ufs_extern.h>
 
-static MALLOC_JUSTDEFINE(M_UFS_EXTATTR, "ufs_extattr","ufs extended attribute");
+static MALLOC_DEFINE(M_UFS_EXTATTR, "ufs_extattr", "ufs extended attribute");
 
 int ufs_extattr_sync = 1;
 
@@ -604,7 +605,7 @@ ufs_extattr_enable(struct ufsmount *ump, int attrnamespace,
 
 	auio.uio_iov = &aiov;
 	auio.uio_iovcnt = 1;
-	aiov.iov_base = (void *) &attribute->uele_fileheader;
+	aiov.iov_base = (caddr_t) &attribute->uele_fileheader;
 	aiov.iov_len = sizeof(struct ufs_extattr_fileheader);
 	auio.uio_resid = sizeof(struct ufs_extattr_fileheader);
 	auio.uio_offset = (off_t) 0;
@@ -711,7 +712,7 @@ ufs_extattrctl(struct mount *mp, int cmd, struct vnode *filename_vp,
 	 * Only privileged processes can configure extended attributes.
 	 */
 	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
-	    NULL)) != 0) {
+	    &l->l_acflag)) != 0) {
 		if (filename_vp != NULL)
 			VOP_UNLOCK(filename_vp, 0);
 		return (error);
@@ -1296,18 +1297,4 @@ ufs_extattr_vnode_inactive(struct vnode *vp, struct lwp *l)
 		    uele->uele_attrname, lwp0.l_cred, l);
 
 	ufs_extattr_uepm_unlock(ump);
-}
-
-void
-ufs_extattr_init()
-{
-
-	malloc_type_attach(M_UFS_EXTATTR);
-}
-
-void
-ufs_extattr_done()
-{
-
-	malloc_type_detach(M_UFS_EXTATTR);
 }

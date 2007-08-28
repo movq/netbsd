@@ -1,4 +1,4 @@
-/*	$NetBSD: wd.c,v 1.7 2007/08/03 13:15:57 tsutsui Exp $	*/
+/*	$NetBSD: wd.c,v 1.5.24.1 2007/08/28 19:27:03 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.

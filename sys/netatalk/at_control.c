@@ -1,4 +1,4 @@
-/*	$NetBSD: at_control.c,v 1.19 2007/07/09 21:11:01 ad Exp $	 */
+/*	$NetBSD: at_control.c,v 1.16 2006/10/25 23:30:35 elad Exp $	 */
 
 /*
  * Copyright (c) 1990,1994 Regents of The University of Michigan.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at_control.c,v 1.19 2007/07/09 21:11:01 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at_control.c,v 1.16 2006/10/25 23:30:35 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,7 +74,7 @@ static void aa_clean __P((void));
 int
 at_control(cmd, data, ifp, l)
 	u_long          cmd;
-	void *        data;
+	caddr_t         data;
 	struct ifnet   *ifp;
 	struct lwp     *l;
 {
@@ -176,7 +176,7 @@ at_control(cmd, data, ifp, l)
 			if (aa == NULL)
 				return (ENOBUFS);
 
-			callout_init(&aa->aa_probe_ch, 0);
+			callout_init(&aa->aa_probe_ch);
 
 			if ((aa0 = at_ifaddr.tqh_first) != NULL) {
 				/*
@@ -595,7 +595,7 @@ at_ifinit(ifp, aa, sat)
 	 * interface about it, just in case it needs to adjust something.
 	 */
 	if (ifp->if_ioctl &&
-	    (error = (*ifp->if_ioctl) (ifp, SIOCSIFADDR, (void *) aa))) {
+	    (error = (*ifp->if_ioctl) (ifp, SIOCSIFADDR, (caddr_t) aa))) {
 		/*
 		 * of course this could mean that it objects violently
 		 * so if it does, we back out again..
@@ -680,7 +680,8 @@ at_ifinit(ifp, aa, sat)
  * check whether a given address is a broadcast address for us..
  */
 int
-at_broadcast(const struct sockaddr_at *sat)
+at_broadcast(sat)
+	struct sockaddr_at *sat;
 {
 	struct at_ifaddr *aa;
 

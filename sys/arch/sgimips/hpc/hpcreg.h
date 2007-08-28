@@ -1,4 +1,4 @@
-/*	$NetBSD: hpcreg.h,v 1.19 2007/02/19 20:14:30 rumble Exp $	*/
+/*	$NetBSD: hpcreg.h,v 1.14 2005/12/11 12:18:53 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Rafal K. Boni
@@ -37,7 +37,7 @@
 #define HPC_BASE_ADDRESS_0	0x1fb80000	/* Primary onboard */
 #define HPC_BASE_ADDRESS_1	0x1fb00000
 #define HPC_BASE_ADDRESS_2	0x1f980000
-#define HPC_BASE_ADDRESS_3	0x1f900000	/* NB: Never supported in h/w */
+#define HPC_BASE_ADDRESS_3	0x1f900000
 
 /*
  * HPC3 descriptor layout.
@@ -142,15 +142,15 @@ struct hpc_dma_desc {
 #define HPC3_SCSI1_DMACFG	0x00001010	/* DMA configururation */
 #define HPC3_SCSI1_PIOCFG	0x00001014	/* PIO configururation */
 
-/* HPC3_SCSIx_CTL "SCSI control register" flags: */
-#define HPC3_SCSI_DMACTL_IRQ    0x01 /* IRQ asserted, dma done or parity */
-#define HPC3_SCSI_DMACTL_ENDIAN 0x02 /* DMA endian mode, 0=BE, 1=LE */
-#define HPC3_SCSI_DMACTL_DIR    0x04 /* DMA direction, 0=dev->mem, 1=mem->dev */
-#define HPC3_SCSI_DMACTL_FLUSH  0x08 /* Flush DMA FIFO's */
-#define HPC3_SCSI_DMACTL_ACTIVE 0x10 /* DMA channel is active */
-#define HPC3_SCSI_DMACTL_AMASK  0x20 /* DMA active inhibits PIO */
-#define HPC3_SCSI_DMACTL_RESET  0x40 /* Reset dma channel and ext. controller */
-#define HPC3_SCSI_DMACTL_PERR   0x80 /* Parity error: interface to controller */
+/* These are only valid for SCSI/ENETR, PBUS uses different definitions */
+#define HPC3_DMACTL_IRQ    0x01 /* IRQ asserted, either dma done or parity */
+#define HPC3_DMACTL_ENDIAN 0x02 /* DMA endian mode, 0=BE, 1=LE */
+#define HPC3_DMACTL_DIR    0x04 /* DMA direction, 0=dev->mem, 1=mem->dev */
+#define HPC3_DMACTL_FLUSH  0x08 /* Flush DMA FIFO's */
+#define HPC3_DMACTL_ACTIVE 0x10 /* DMA channel is active */
+#define HPC3_DMACTL_AMASK  0x20 /* DMA active inhibits PIO */
+#define HPC3_DMACTL_RESET  0x40 /* Resets dma channel and external controller */
+#define HPC3_DMACTL_PERR   0x80 /* Parity error on interface to controller */
 
 /* HPC_PBUS_CHx_CTL read: */
 #define HPC3_PBUS_DMACTL_IRQ	0x01 /* IRQ asserted, DMA done */
@@ -195,9 +195,9 @@ struct hpc_dma_desc {
 
 #define HPC3_ENETR_DMACFG	0x00001018	/* Recv: DMA configururation */
 
-#define	HPC3_ENETR_DMACFG_D1(_x) (((_x) << 0) & 0x000f)	/* D1 gio_clk cycles */
-#define	HPC3_ENETR_DMACFG_D2(_x) (((_x) << 4) & 0x00f0)	/* D2 gio_clk cycles */
-#define	HPC3_ENETR_DMACFG_D3(_x) (((_x) << 8) & 0x0f00)	/* D3 gio_clk cycles */
+#define	HPC3_ENETR_DMACFG_D1	0x0000f		/* DMA D1 state cycles */
+#define	HPC3_ENETR_DMACFG_D2	0x000f0		/* DMA D2 state cycles */
+#define	HPC3_ENETR_DMACFG_D3	0x00f00		/* DMA D3 state cycles */
 #define	HPC3_ENETR_DMACFG_WRCTL	0x01000		/* Enable IPG write */
 
 /*
@@ -205,15 +205,11 @@ struct hpc_dma_desc {
  * don't set them, the Seeq gets wonky pretty often.
  */
 #define	HPC3_ENETR_DMACFG_FIX_RXDC 0x02000	/* Clear EOP bits on RXDC */
-#define	HPC3_ENETR_DMACFG_FIX_EOP  0x04000	/* Enable rxintr timeout */
+#define	HPC3_ENETR_DMACFG_FIX_EOP 0x04000	/* Enable rxintr timeout */
 #define	HPC3_ENETR_DMACFG_FIX_INTR 0x08000	/* Enable EOP timeout */
-#define	HPC3_ENETR_DMACFG_TIMEOUT  0x30000	/* Timeout value for above two*/
+#define	HPC3_ENETR_DMACFG_TIMO	0x30000		/* Timeout for above two */
 
 #define HPC3_ENETR_PIOCFG	0x0000101c	/* Recv: PIO configururation */
-
-#define HPC3_ENETR_PIOCFG_P1(_x) (((_x) << 0) & 0x000f)	/* P1 gio_clk cycles */
-#define HPC3_ENETR_PIOCFG_P2(_x) (((_x) << 4) & 0x00f0)	/* P2 gio_clk cycles */
-#define HPC3_ENETR_PIOCFG_P3(_x) (((_x) << 8) & 0x0f00)	/* P3 gio_clk cycles */
 
 #define HPC3_ENETX_CBP		0x00002000	/* Xmit: Current buffer ptr */
 #define HPC3_ENETX_NDBP		0x00002004	/* Xmit: Next descriptor ptr */
@@ -257,8 +253,7 @@ struct hpc_dma_desc {
 
 #define HPC3_GIO_MISC		0x00030004	/* GIO64 misc register */
 
-#define HPC3_EEPROM_DATA	0x0003000b	/* Serial EEPROM data reg. */
-						/* (byte) */
+#define HPC3_EEPROM_DATA	0x00030008	/* Serial EEPROM data reg. */
 
 #define HPC3_GIO_BUSERR		0x00030010	/* GIO64 bus error intr stat */
 
@@ -406,10 +401,20 @@ struct hpc_dma_desc {
 #define HPC1_SCSI0_DMACFG	0x00000010	/* DMA configuration */
 #define HPC1_SCSI0_GIO		0x00001008	/* GIO DMA FIFO pointer */
 #define HPC1_SCSI0_PIOCFG	0x00001014	/* PIO configuration */
-#define HPC1_SCSI_DMACTL_RESET  0x01 /* Reset dma channel and ext. controller */
-#define HPC1_SCSI_DMACTL_FLUSH  0x02 /* Flush DMA FIFO's */
-#define HPC1_SCSI_DMACTL_DIR	0x10 /* DMA direction: 1=dev->mem, 0=mem->dev */
-#define HPC1_SCSI_DMACTL_ACTIVE 0x80 /* DMA channel is active */
+#define HPC1_SCSI1_REGS		0x00012000	/* SCSI channel 1 registers */
+#define HPC1_SCSI1_REGS_SIZE	0x00001fff
+#define HPC1_SCSI1_CBP		0x00000000	/* Current buffer ptr */
+#define HPC1_SCSI1_NDBP		0x00000004	/* Next descriptor ptr */
+#define HPC1_SCSI1_BC		0x00001000	/* DMA byte count & flags */
+#define HPC1_SCSI1_CTL		0x00001004	/* DMA control flags */
+#define HPC1_SCSI1_GIO		0x00001008	/* GIO DMA FIFO pointer */
+#define HPC1_SCSI1_DEV		0x0000100c	/* Device DMA FIFO pointer */
+#define HPC1_SCSI1_DMACFG	0x00001010	/* DMA configuration */
+#define HPC1_SCSI1_PIOCFG	0x00001014	/* PIO configuration */
+#define HPC1_DMACTL_RESET  0x01 /* Resets dma channel and external controller */
+#define HPC1_DMACTL_FLUSH  0x02 /* Flush DMA FIFO's */
+#define HPC1_DMACTL_DIR	  0x10 /* DMA direction ~HPC3: 1=dev->mem, 0=mem->dev */
+#define HPC1_DMACTL_ACTIVE 0x80 /* DMA channel is active */
 #define HPC1_ENET_REGS		0x00000000	/* Ethernet registers */
 #define HPC1_ENET_REGS_SIZE	0x00000100
 #define HPC1_ENET_INTDELAY	0x0000002c	/* Interrupt Delay Count */
@@ -450,9 +455,8 @@ struct hpc_dma_desc {
 #define HPC1_LPT_DMACFG		0x00000014	/* DMA Configuration */
 #define HPC1_LPT_DEVREGS	0x00000132	/* Ext. Parallel Registers */
 #define	HPC1_LPT_DEVREGS_SIZE	0x00000001	/* Size of External Registers */
-
-/* AUX regs on the primary HPC */
-#define HPC1_AUX_REGS		0x000001bf	/* EEPROM/LED Control (byte) */
+#define HPC1_AUX_REGS		0x1fb801bc	/* Serial EEPROM/LED Control */
+#define HPC1_AUX_REGS_SIZE	0x00000001	/* One Byte */
 #define HPC1_AUX_CONSLED	0x01		/* Console LED */
 
 #endif	/* _ARCH_SGIMIPS_HPC_HPCREG_H_ */

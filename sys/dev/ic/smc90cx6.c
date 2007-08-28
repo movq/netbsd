@@ -1,4 +1,4 @@
-/*	$NetBSD: smc90cx6.c,v 1.48 2007/07/11 19:15:02 he Exp $ */
+/*	$NetBSD: smc90cx6.c,v 1.45 2005/12/24 20:27:30 perry Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1998 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smc90cx6.c,v 1.48 2007/07/11 19:15:02 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smc90cx6.c,v 1.45 2005/12/24 20:27:30 perry Exp $");
 
 /* #define BAHSOFTCOPY */
 #define BAHRETRANSMIT /**/
@@ -137,7 +137,7 @@ void	bah_reset(struct bah_softc *);
 void	bah_stop(struct bah_softc *);
 void	bah_start(struct ifnet *);
 int	bahintr(void *);
-int	bah_ioctl(struct ifnet *, unsigned long, void *);
+int	bah_ioctl(struct ifnet *, unsigned long, caddr_t);
 void	bah_watchdog(struct ifnet *);
 void	bah_srint(void *vsc);
 static	void bah_tint(struct bah_softc *, int);
@@ -220,7 +220,7 @@ bah_attach_subr(sc)
 		(void (*)(void *))bah_start, ifp);
 #endif
 
-	callout_init(&sc->sc_recon_ch, 0);
+	callout_init(&sc->sc_recon_ch);
 }
 
 /*
@@ -458,7 +458,7 @@ bah_start(ifp)
 	for (mp = m; mp; mp = mp->m_next) {
 		if ((len = mp->m_len)) {		/* YAMS */
 			bus_space_write_region_1(bst_m, mem, bah_ram_ptr,
-			    mtod(mp, void *), len);
+			    mtod(mp, caddr_t), len);
 
 			bah_ram_ptr += len;
 		}
@@ -796,7 +796,7 @@ bahintr(arg)
 			/*
 			 * If less than 2 seconds per reconfig:
 			 *	If ARC_EXCESSIVE_RECONFIGS
-			 *	since last burst, complain and set threshold for
+			 *	since last burst, complain and set treshold for
 			 *	warnings to ARC_EXCESSIVE_RECONS_REWARN.
 			 *
 			 * This allows for, e.g., new stations on the cable, or
@@ -910,7 +910,7 @@ int
 bah_ioctl(ifp, command, data)
 	struct ifnet *ifp;
 	u_long command;
-	void *data;
+	caddr_t data;
 {
 	struct bah_softc *sc;
 	struct ifaddr *ifa;

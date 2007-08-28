@@ -1,4 +1,4 @@
-/*	$NetBSD: scsipi_base.c,v 1.145 2007/07/09 21:01:21 ad Exp $	*/
+/*	$NetBSD: scsipi_base.c,v 1.142 2006/11/26 05:01:09 itohy Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002, 2003, 2004 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.145 2007/07/09 21:01:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsipi_base.c,v 1.142 2006/11/26 05:01:09 itohy Exp $");
 
 #include "opt_scsi.h"
 
@@ -104,7 +104,7 @@ scsipi_init(void)
 
 	/* Initialize the scsipi_xfer pool. */
 	pool_init(&scsipi_xfer_pool, sizeof(struct scsipi_xfer), 0,
-	    0, 0, "scxspl", NULL, IPL_BIO);
+	    0, 0, "scxspl", NULL);
 	if (pool_prime(&scsipi_xfer_pool,
 	    PAGE_SIZE / sizeof(struct scsipi_xfer)) == ENOMEM) {
 		printf("WARNING: not enough memory for scsipi_xfer_pool\n");
@@ -119,7 +119,6 @@ scsipi_init(void)
 int
 scsipi_channel_init(struct scsipi_channel *chan)
 {
-	struct scsipi_adapter *adapt = chan->chan_adapter;
 	int i;
 
 	/* Initialize shared data. */
@@ -135,14 +134,7 @@ scsipi_channel_init(struct scsipi_channel *chan)
 	/*
 	 * Create the asynchronous completion thread.
 	 */
-	if (kthread_create(PRI_NONE, 0, NULL, scsipi_completion_thread, chan,
-	    &chan->chan_thread, "%s", chan->chan_name)) {
-		printf("%s: unable to create completion thread for "
-		    "channel %d\n", adapt->adapt_dev->dv_xname,
-		    chan->chan_channel);
-		panic("scsipi_channel_init");
-	}
-
+	kthread_create(scsipi_create_completion_thread, chan);
 	return (0);
 }
 
@@ -477,7 +469,7 @@ scsipi_get_xs(struct scsipi_periph *periph, int flags)
 
 	if (xs != NULL) {
 		memset(xs, 0, sizeof(*xs));
-		callout_init(&xs->xs_callout, 0);
+		callout_init(&xs->xs_callout);
 		xs->xs_periph = periph;
 		xs->xs_control = flags;
 		xs->xs_status = 0;
@@ -1882,7 +1874,7 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 		 * process must NOT be swapped out, as the device will
 		 * be accessing the stack.
 		 */
-		uvm_lwp_hold(curlwp);
+		PHOLD(curlwp);
 	}
 
 	xs->xs_status &= ~XS_STS_DONE;
@@ -2029,7 +2021,7 @@ scsipi_execute_xs(struct scsipi_xfer *xs)
 	 */
  free_xs:
 	if (xs->xs_control & XS_CTL_DATA_ONSTACK)
-		uvm_lwp_rele(curlwp);
+		PRELE(curlwp);
 
 	s = splbio();
 	scsipi_put_xs(xs);
@@ -2088,8 +2080,9 @@ scsipi_completion_thread(void *arg)
 			    ADAPTER_REQ_GROW_RESOURCES, NULL);
 			scsipi_channel_thaw(chan, 1);
 			splx(s);
-			if (chan->chan_tflags & SCSIPI_CHANT_GROWRES)
-				kpause("scsizzz", FALSE, hz/10, NULL);
+			if (chan->chan_tflags & SCSIPI_CHANT_GROWRES) {
+				preempt(1);
+			}
 			continue;
 		}
 		if (chan->chan_tflags & SCSIPI_CHANT_KICK) {
@@ -2129,6 +2122,27 @@ scsipi_completion_thread(void *arg)
 
 	kthread_exit(0);
 }
+
+/*
+ * scsipi_create_completion_thread:
+ *
+ *	Callback to actually create the completion thread.
+ */
+void
+scsipi_create_completion_thread(void *arg)
+{
+	struct scsipi_channel *chan = arg;
+	struct scsipi_adapter *adapt = chan->chan_adapter;
+
+	if (kthread_create1(scsipi_completion_thread, chan,
+	    &chan->chan_thread, "%s", chan->chan_name)) {
+		printf("%s: unable to create completion thread for "
+		    "channel %d\n", adapt->adapt_dev->dv_xname,
+		    chan->chan_channel);
+		panic("scsipi_create_completion_thread");
+	}
+}
+
 /*
  * scsipi_thread_call_callback:
  *

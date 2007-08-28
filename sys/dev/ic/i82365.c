@@ -1,4 +1,4 @@
-/*	$NetBSD: i82365.c,v 1.99 2007/07/09 21:00:36 ad Exp $	*/
+/*	$NetBSD: i82365.c,v 1.97 2006/11/16 01:32:51 christos Exp $	*/
 
 /*
  * Copyright (c) 2004 Charles M. Hannum.  All rights reserved.
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82365.c,v 1.99 2007/07/09 21:00:36 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82365.c,v 1.97 2006/11/16 01:32:51 christos Exp $");
 
 #define	PCICDEBUG
 
@@ -100,6 +100,7 @@ void	pcic_deactivate_card(struct pcic_handle *);
 void	pcic_chip_do_mem_map(struct pcic_handle *, int);
 void	pcic_chip_do_io_map(struct pcic_handle *, int);
 
+void	pcic_create_event_thread(void *);
 void	pcic_event_thread(void *);
 
 void	pcic_queue_event(struct pcic_handle *, int);
@@ -397,7 +398,6 @@ pcic_attach_socket(h)
 	struct pcmciabus_attach_args paa;
 	struct pcic_softc *sc = (struct pcic_softc *)h->ph_parent;
 	int locs[PCMCIABUSCF_NLOCS];
-	char cs[4];
 
 	/* initialize the rest of the handle */
 
@@ -432,14 +432,7 @@ pcic_attach_socket(h)
 		panic("pcic_attach_socket: event thread");
 #endif
 	config_pending_incr();
-	snprintf(cs, sizeof(cs), "%d,%d", h->chip, h->socket);
-
-	if (kthread_create(PRI_NONE, 0, NULL, pcic_event_thread, h,
-	    &h->event_thread, "%s,%s", h->ph_parent->dv_xname, cs)) {
-		printf("%s: unable to create event thread for sock 0x%02x\n",
-		    h->ph_parent->dv_xname, h->sock);
-		panic("pcic_attach_socket");
-	}
+	kthread_create(pcic_create_event_thread, h);
 }
 
 /*
@@ -483,7 +476,7 @@ pcic_attach_socket_finish(h)
 	reg = PCIC_CSC_INTR_CD_ENABLE;
 	if (sc->irq == -1) {
 		if (sc->poll_established == 0) {
-			callout_init(&sc->poll_ch, 0);
+			callout_init(&sc->poll_ch);
 			callout_reset(&sc->poll_ch, hz / 2, pcic_poll_intr, sc);
 			sc->poll_established = 1;
 		}
@@ -524,6 +517,23 @@ pcic_attach_socket_finish(h)
 }
 
 void
+pcic_create_event_thread(arg)
+	void *arg;
+{
+	struct pcic_handle *h = arg;
+	char cs[4];
+
+	snprintf(cs, sizeof(cs), "%d,%d", h->chip, h->socket);
+
+	if (kthread_create1(pcic_event_thread, h, &h->event_thread,
+	    "%s,%s", h->ph_parent->dv_xname, cs)) {
+		printf("%s: unable to create event thread for sock 0x%02x\n",
+		    h->ph_parent->dv_xname, h->sock);
+		panic("pcic_create_event_thread");
+	}
+}
+
+void
 pcic_event_thread(arg)
 	void *arg;
 {
@@ -555,7 +565,7 @@ pcic_event_thread(arg)
 		} else {
 			splx(s);
 			/* sleep .25s to be enqueued chatterling interrupts */
-			(void) tsleep((void *)pcic_event_thread, PWAIT,
+			(void) tsleep((caddr_t)pcic_event_thread, PWAIT,
 			    "pcicss", hz/4);
 		}
 		s = splhigh();

@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64461video.c,v 1.41 2007/07/09 20:52:14 ad Exp $	*/
+/*	$NetBSD: hd64461video.c,v 1.37 2006/08/18 00:41:57 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2004 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64461video.c,v 1.41 2007/07/09 20:52:14 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64461video.c,v 1.37 2006/08/18 00:41:57 uwe Exp $");
 
 #include "opt_hd64461video.h"
 // #define HD64461VIDEO_HWACCEL
@@ -138,7 +138,7 @@ STATIC void hd64461video_get_clut(struct hd64461video_chip *, int, int,
 STATIC int hd64461video_power(void *, int, long, void *);
 STATIC void hd64461video_off(struct hd64461video_chip *);
 STATIC void hd64461video_on(struct hd64461video_chip *);
-STATIC void hd64461video_display_onoff(void *, bool);
+STATIC void hd64461video_display_onoff(void *, boolean_t);
 STATIC void hd64461video_display_on(void *);
 
 #if notyet
@@ -155,7 +155,7 @@ STATIC void hd64461video_dump(void) __attribute__((__unused__));
 CFATTACH_DECL(hd64461video, sizeof(struct hd64461video_softc),
     hd64461video_match, hd64461video_attach, NULL, NULL);
 
-STATIC int hd64461video_ioctl(void *, u_long, void *, int, struct lwp *);
+STATIC int hd64461video_ioctl(void *, u_long, caddr_t, int, struct lwp *);
 STATIC paddr_t hd64461video_mmap(void *, off_t, int);
 
 #ifdef HD64461VIDEO_HWACCEL
@@ -419,7 +419,7 @@ hd64461video_hwaccel_init(struct hd64461video_chip *hvc)
 
 /* hpcfb ops */
 STATIC int
-hd64461video_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
+hd64461video_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct hd64461video_softc *sc = (struct hd64461video_softc *)v;
 	struct hpcfb_fbconf *hf = &sc->sc_vc->hf;
@@ -935,7 +935,7 @@ hd64461video_font_load(struct hd64461video_softc *sc)
 		break;
 	}
 
-	sc->sc_font.loaded = true;
+	sc->sc_font.loaded = TRUE;
 }
 #endif /* HD64461VIDEO_HWACCEL */
 
@@ -995,7 +995,7 @@ hd64461video_update_videochip_status(struct hd64461video_chip *hvc)
 		break;
 	}
 
-	callout_init(&hvc->unblank_ch, 0);
+	callout_init(&hvc->unblank_ch);
 	hvc->blanked = 0;
 
 	width = bootinfo->fb_width;
@@ -1183,7 +1183,7 @@ hd64461video_off(struct hd64461video_chip *vc)
 	callout_stop(&vc->unblank_ch);
 
 	/* turn off display in LCDC */
-	hd64461video_display_onoff(vc, false);
+	hd64461video_display_onoff(vc, FALSE);
 
 	/* turn off the LCD */
 	config_hook_call(CONFIG_HOOK_POWERCONTROL,
@@ -1206,18 +1206,18 @@ hd64461video_on(struct hd64461video_chip *vc)
 		callout_reset(&vc->unblank_ch, hz/2,
 		    hd64461video_display_on, vc);
 	else
-		hd64461video_display_onoff(vc, true);
+		hd64461video_display_onoff(vc, TRUE);
 }
 
 STATIC void
 hd64461video_display_on(void *arg)
 {
 
-	hd64461video_display_onoff(arg, true);
+	hd64461video_display_onoff(arg, TRUE);
 }
 
 STATIC void
-hd64461video_display_onoff(void *arg, bool on)
+hd64461video_display_onoff(void *arg, boolean_t on)
 {
 	/* struct hd64461video_chip *vc = arg; */
 	uint16_t r;

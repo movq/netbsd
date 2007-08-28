@@ -1,7 +1,7 @@
-/*	$NetBSD: iopvar.h,v 1.20 2007/07/09 21:00:33 ad Exp $	*/
+/*	$NetBSD: iopvar.h,v 1.16 2005/12/11 12:21:23 christos Exp $	*/
 
 /*-
- * Copyright (c) 2000, 2001, 2002, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000, 2001, 2002 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -39,9 +39,6 @@
 #ifndef _I2O_IOPVAR_H_
 #define	_I2O_IOPVAR_H_
 
-#include <sys/mutex.h>
-#include <sys/condvar.h>
-
 /*
  * Transfer descriptor.
  */
@@ -62,7 +59,6 @@ struct iop_msg {
 	u_int			im_tctx;	/* Transaction context */
 	void			*im_dvcontext;	/* Un*x device context */
 	struct i2o_reply	*im_rb;		/* Reply buffer */
-	kcondvar_t		im_cv;		/* Notifier */
 	u_int			im_reqstatus;	/* Status from reply */
 	u_int			im_detstatus;	/* Detailed status code */
 	struct iop_xfer		im_xfer[IOP_MAX_MSG_XFERS];
@@ -88,7 +84,6 @@ struct iop_initiator {
 	void	(*ii_adjqparam)(struct device *, int);
 
 	struct	device *ii_dv;
-	kcondvar_t ii_cv;
 	int	ii_flags;
 	int	ii_ictx;		/* Initiator context */
 	int	ii_tid;
@@ -122,12 +117,11 @@ struct iop_softc {
 
 	struct iop_msg	*sc_ims;	/* Message wrappers */
 	SLIST_HEAD(, iop_msg) sc_im_freelist; /* Free wrapper list */
-	kmutex_t	sc_intrlock;	/* Interrupt level lock */
 
 	bus_dmamap_t	sc_rep_dmamap;	/* Reply frames DMA map */
 	int		sc_rep_size;	/* Reply frames size */
 	bus_addr_t	sc_rep_phys;	/* Reply frames PA */
-	void *		sc_rep;		/* Reply frames VA */
+	caddr_t		sc_rep;		/* Reply frames VA */
 
 	int		sc_maxib;	/* Max inbound (-> IOP) queue depth */
 	int		sc_maxob;	/* Max outbound (<- IOP) queue depth */
@@ -140,9 +134,8 @@ struct iop_softc {
 	int		sc_nlctent;	/* Number of LCT entries */
 	int		sc_flags;	/* IOP-wide flags */
 	u_int32_t	sc_chgind;	/* Configuration change indicator */
-	kmutex_t	sc_conflock;	/* Configuration lock */
-	kcondvar_t	sc_confcv;	/* Configuration CV */
-	lwp_t		*sc_reconf_thread;/* Auto reconfiguration process */
+	struct lock	sc_conflock;	/* Configuration lock */
+	struct proc	*sc_reconf_proc;/* Auto reconfiguration process */
 	LIST_HEAD(, iop_initiator) sc_iilist;/* Initiator list */
 	int		sc_nii;		/* Total number of initiators */
 	int		sc_nuii;	/* Number of utility initiators */
@@ -150,7 +143,7 @@ struct iop_softc {
 	struct iop_initiator sc_eventii;/* IOP event handler */
 	bus_dmamap_t	sc_scr_dmamap;  /* Scratch DMA map */
 	bus_dma_segment_t sc_scr_seg[1];/* Scratch DMA segment */
-	void *		sc_scr;		/* Scratch memory VA */
+	caddr_t		sc_scr;		/* Scratch memory VA */
 
 	bus_space_tag_t	sc_bus_memt;	/* Parent bus memory tag */
 	bus_space_tag_t	sc_bus_iot;	/* Parent but I/O tag */

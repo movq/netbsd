@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.14 2007/07/29 12:15:35 ad Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.12 2006/11/25 13:09:14 scw Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.14 2007/07/29 12:15:35 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.12 2006/11/25 13:09:14 scw Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -87,7 +87,7 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 		goto done;
 	}
 
-	dlp = (struct disklabel *)((char*)bp->b_data + LABELOFFSET);
+	dlp = (struct disklabel *)(bp->b_data + LABELOFFSET);
 	if (dlp->d_magic == DISKMAGIC) {
 		if (dkcksum(dlp))
 			msg = "NetBSD disk label corrupted";
@@ -130,7 +130,7 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 				} else
 					msg = "bad sector table corrupted";
 			}
-		} while (bp->b_error != 0 && (i += 2) < 10 &&
+		} while ((bp->b_flags & B_ERROR) && (i += 2) < 10 &&
 			i < lp->d_nsectors);
 	}
 
@@ -216,7 +216,7 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *), struct disklabel *lp,
 	if ((error = biowait(bp)) != 0)
 		goto done;
 
-	dlp = (struct disklabel *)((char*)bp->b_data + LABELOFFSET);
+	dlp = (struct disklabel *)(bp->b_data + LABELOFFSET);
 	*dlp = *lp;     /* struct assignment */
 
 	bp->b_flags &= ~(B_READ|B_DONE);

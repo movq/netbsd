@@ -1,4 +1,4 @@
-/* $NetBSD: ega.c,v 1.23 2007/07/28 20:28:57 mjf Exp $ */
+/* $NetBSD: ega.c,v 1.20.12.1 2007/07/30 12:40:50 liamjfoy Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ega.c,v 1.23 2007/07/28 20:28:57 mjf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ega.c,v 1.20.12.1 2007/07/30 12:40:50 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -86,7 +86,7 @@ struct ega_config {
 	void (*switchcb)(void *, int, int);
 	void *switchcbarg;
 
-	callout_t switch_callout;
+	struct callout switch_callout;
 };
 
 struct ega_softc {
@@ -210,7 +210,7 @@ const struct wsscreen_list ega_screenlist = {
 	_ega_scrlist_mono
 };
 
-static int ega_ioctl(void *, void *, u_long, void *, int, struct proc *);
+static int ega_ioctl(void *, void *, u_long, caddr_t, int, struct proc *);
 static paddr_t ega_mmap(void *, void *, off_t, int);
 static int ega_alloc_screen(void *, const struct wsscreen_descr *,
 			    void **, int *, int *, long *);
@@ -431,7 +431,7 @@ ega_init(vc, iot, memt, mono)
 	LIST_INIT(&vc->screens);
 	vc->active = NULL;
 	vc->currenttype = vh->vh_mono ? &ega_stdscreen_mono : &ega_stdscreen;
-	callout_init(&vc->switch_callout, 0);
+	callout_init(&vc->switch_callout);
 
 	vc->vc_fonts[0] = &ega_builtinfont;
 	for (i = 1; i < 4; i++)
@@ -589,7 +589,7 @@ ega_ioctl(v, vs, cmd, data, flag, p)
 	void *v;
 	void *vs;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 	int flag;
 	struct proc *p;
 {

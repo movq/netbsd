@@ -1,4 +1,4 @@
-/*	$NetBSD: asc.c,v 1.50 2007/07/09 20:52:20 ad Exp $	*/
+/*	$NetBSD: asc.c,v 1.47 2005/12/11 12:18:03 christos Exp $	*/
 
 /*
  * Copyright (C) 1997 Scott Reynolds
@@ -64,9 +64,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: asc.c,v 1.50 2007/07/09 20:52:20 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: asc.c,v 1.47 2005/12/11 12:18:03 christos Exp $");
 
 #include <sys/types.h>
+#include <sys/cdefs.h>
 #include <sys/errno.h>
 #include <sys/time.h>
 #include <sys/systm.h>
@@ -177,7 +178,7 @@ ascattach(struct device *parent, struct device *self, void *aux)
 	}
 	sc->sc_open = 0;
 	sc->sc_ringing = 0;
-	callout_init(&sc->sc_bell_ch, 0);
+	callout_init(&sc->sc_bell_ch);
 
 	for (i = 0; i < 256; i++) {	/* up part of wave, four voices? */
 		asc_wave_tab[i] = i / 4;
@@ -249,7 +250,7 @@ ascwrite(dev_t dev, struct uio *uio, int ioflag)
 }
 
 int
-ascioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+ascioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct asc_softc *sc;
 	int error;

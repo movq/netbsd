@@ -1,4 +1,4 @@
-/*	$NetBSD: bthidev.c,v 1.9 2007/07/09 21:00:31 ad Exp $	*/
+/*	$NetBSD: bthidev.c,v 1.7.2.1 2007/07/19 16:04:20 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bthidev.c,v 1.9 2007/07/09 21:00:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bthidev.c,v 1.7.2.1 2007/07/19 16:04:20 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -186,7 +186,7 @@ bthidev_attach(struct device *parent, struct device *self, void *aux)
 	 * Init softc
 	 */
 	LIST_INIT(&sc->sc_list);
-	callout_init(&sc->sc_reconnect, 0);
+	callout_init(&sc->sc_reconnect);
 	callout_setfunc(&sc->sc_reconnect, bthidev_timeout, sc);
 	sc->sc_state = BTHID_CLOSED;
 	sc->sc_flags = BTHID_CONNECTING;

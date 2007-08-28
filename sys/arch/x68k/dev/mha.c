@@ -1,4 +1,4 @@
-/*	$NetBSD: mha.c,v 1.45 2007/05/12 06:31:19 isaki Exp $	*/
+/*	$NetBSD: mha.c,v 1.41 2006/03/08 23:46:24 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1996-1999 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mha.c,v 1.45 2007/05/12 06:31:19 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mha.c,v 1.41 2006/03/08 23:46:24 lukem Exp $");
 
 #include "opt_ddb.h"
 
@@ -280,7 +280,7 @@ extern struct cfdriver mha_cd;
 /*
  * returns non-zero value if a controller is found.
  */
-int
+int 
 mhamatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct intio_attach_args *ia = aux;
@@ -310,7 +310,7 @@ mhamatch(struct device *parent, struct cfdata *cf, void *aux)
 
 struct mha_softc *tmpsc;
 
-void
+void 
 mhaattach(struct device *parent, struct device *self, void *aux)
 {
 	struct mha_softc *sc = (void *)self;
@@ -318,12 +318,12 @@ mhaattach(struct device *parent, struct device *self, void *aux)
 
 	tmpsc = sc;	/* XXX */
 
-	printf(": Mankai Mach-2 Fast SCSI Host Adaptor\n");
+	printf (": Mankai Mach-2 Fast SCSI Host Adaptor\n");
 
 	SPC_TRACE(("mhaattach  "));
 	sc->sc_state = SPC_INIT;
 	sc->sc_iobase = INTIO_ADDR(ia->ia_addr + 0x80); /* XXX */
-	intio_map_allocate_region(device_parent(parent), ia, INTIO_MAP_ALLOCATE);
+	intio_map_allocate_region (device_parent(parent), ia, INTIO_MAP_ALLOCATE);
 				/* XXX: FAKE  */
 	sc->sc_dmat = ia->ia_dmat;
 
@@ -333,7 +333,7 @@ mhaattach(struct device *parent, struct device *self, void *aux)
 
 	sc->sc_id = IODEVbase->io_sram[0x70] & 0x7; /* XXX */
 
-	intio_intr_establish(ia->ia_intr, "mha", mhaintr, sc);
+	intio_intr_establish (ia->ia_intr, "mha", mhaintr, sc);
 
 	mha_init(sc);	/* Init chip and driver */
 
@@ -381,16 +381,17 @@ mhaattach(struct device *parent, struct device *self, void *aux)
 	WAR = WA_MCSBUFWIN;
 
 	/* drop off */
-	while (SSR & SS_IREQUEST) {
-		(void) ISCSR;
-	}
+	while (SSR & SS_IREQUEST)
+	  {
+	    (void) ISCSR;
+	  }
 
 	CMR = CMD_SET_UP_REG;	/* setup reg cmd. */
 
 	SPC_TRACE(("waiting for intr..."));
 	while (!(SSR & SS_IREQUEST))
-		delay(10);
-	mhaintr(sc);
+	  delay(10);
+	mhaintr	(sc);
 
 	tmpsc = NULL;
 
@@ -398,7 +399,7 @@ mhaattach(struct device *parent, struct device *self, void *aux)
 }
 
 #if 0
-void
+void 
 mha_reset(struct mha_softc *sc)
 {
 	u_short	dummy;
@@ -423,7 +424,7 @@ printf("done.\n");
 /*
  * Pull the SCSI RST line for 500us.
  */
-void
+void 
 mha_scsi_reset(struct mha_softc *sc)
 {
 
@@ -435,7 +436,7 @@ mha_scsi_reset(struct mha_softc *sc)
 /*
  * Initialize mha SCSI driver.
  */
-void
+void 
 mha_init(struct mha_softc *sc)
 {
 	struct acb *acb;
@@ -509,7 +510,7 @@ mha_init(struct mha_softc *sc)
 	sc->sc_state = SPC_IDLE;
 }
 
-void
+void 
 mha_free_acb(struct mha_softc *sc, struct acb *acb, int flags)
 {
 	int s;
@@ -570,13 +571,14 @@ mhaselect(struct mha_softc *sc, u_char target, u_char lun, u_char *cmd,
 	WAIT;
 #if 1
 	SPC_MISC(("[cmd:"));
-	for (i = 0; i < clen; i++) {
-		unsigned c = cmd[i];
-		if (i == 1)
-			c |= lun << 5;
-		SPC_MISC((" %02x", c));
-		sc->sc_pcx[i] = c;
-	}
+	for (i = 0; i < clen; i++)
+	  {
+	    unsigned c = cmd[i];
+	    if (i == 1)
+	      c |= lun << 5;
+	    SPC_MISC((" %02x", c));
+	    sc->sc_pcx[i] = c;
+	  }
 	SPC_MISC(("], target=%d\n", target));
 #else
 	memcpy(sc->sc_pcx, cmd, clen);
@@ -676,7 +678,7 @@ abort:
  * This function is called by the higher level SCSI-driver to queue/run
  * SCSI-commands.
  */
-void
+void 
 mha_scsi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
     void *arg)
 {
@@ -758,7 +760,7 @@ mha_scsi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 /*
  * Adjust transfer size in buffer structure
  */
-void
+void 
 mha_minphys(struct buf *bp)
 {
 
@@ -769,7 +771,7 @@ mha_minphys(struct buf *bp)
 /*
  * Used when interrupt driven I/O isn't allowed, e.g. during boot.
  */
-void
+void 
 mha_poll(struct mha_softc *sc, struct acb *acb)
 {
 	struct scsipi_xfer *xs = acb->xs;
@@ -801,7 +803,7 @@ mha_poll(struct mha_softc *sc, struct acb *acb)
 
 	if (count == 0) {
 		SPC_MISC(("mha_poll: timeout"));
-		mha_timeout((void *)acb);
+		mha_timeout((caddr_t)acb);
 	}
 	splx(s);
 	scsipi_done(xs);
@@ -814,7 +816,7 @@ mha_poll(struct mha_softc *sc, struct acb *acb)
 /*
  * Set synchronous transfer offset and period.
  */
-inline void
+inline void 
 mha_setsync(struct mha_softc *sc, struct spc_tinfo *ti)
 {
 }
@@ -825,7 +827,7 @@ mha_setsync(struct mha_softc *sc, struct spc_tinfo *ti)
  * save us an unecessary interrupt just to get things going.  Should only be
  * called when state == SPC_IDLE and at bio pl.
  */
-void
+void 
 mha_sched(struct mha_softc *sc)
 {
 	struct scsipi_periph *periph;
@@ -873,7 +875,7 @@ mha_sched(struct mha_softc *sc)
 /*
  * POST PROCESSING OF SCSI_CMD (usually current)
  */
-void
+void 
 mha_done(struct mha_softc *sc, struct acb *acb)
 {
 	struct scsipi_xfer *xs = acb->xs;
@@ -974,7 +976,7 @@ mha_done(struct mha_softc *sc, struct acb *acb)
 	scsipi_done(xs);
 }
 
-void
+void 
 mha_dequeue(struct mha_softc *sc, struct acb *acb)
 {
 
@@ -1006,7 +1008,7 @@ mha_dequeue(struct mha_softc *sc, struct acb *acb)
  * The SCSI bus is already in the MSGI phase and there is a message byte
  * on the bus, along with an asserted REQ signal.
  */
-void
+void 
 mha_msgin(struct mha_softc *sc)
 {
 	int v;
@@ -1293,7 +1295,7 @@ printf("%s: unimplemented message: %d\n", sc->sc_dev.dv_xname, sc->sc_imess[0]);
 /*
  * Send the highest priority, scheduled message.
  */
-void
+void 
 mha_msgout(struct mha_softc *sc)
 {
 #if (SPC_USE_SYNCHRONOUS || SPC_USE_WIDE)
@@ -1565,10 +1567,6 @@ mha_dataout_pio(struct mha_softc *sc, u_char *p, int n)
 	return total_n - n;
 }
 
-/*
- * dw: DMA word
- * cw: CMR word
- */
 static int
 mha_dataio_dma(int dw, int cw, struct mha_softc *sc, u_char *p, int n)
 {
@@ -1643,7 +1641,7 @@ mha_datain(struct mha_softc *sc, u_char *p, int n)
  * Deficiencies (for now):
  * 1) always uses programmed I/O
  */
-int
+int 
 mhaintr(void *arg)
 {
 	struct mha_softc *sc = arg;
@@ -1750,7 +1748,7 @@ mhaintr(void *arg)
 					if (sc->sc_dmasize == 0)
 						break;
 					bus_dmamap_sync(sc->sc_dmat,
-							sc->sc_dmamap,
+							sc->sc_dmamap, 
 							0, sc->sc_dmasize,
 							BUS_DMASYNC_POSTREAD);
 					memcpy(sc->sc_p, sc->sc_dmabuf,
@@ -1761,7 +1759,7 @@ mhaintr(void *arg)
 					if (sc->sc_dmasize == 0)
 						break;
 					bus_dmamap_sync(sc->sc_dmat,
-							sc->sc_dmamap,
+							sc->sc_dmamap, 
 							0, sc->sc_dmasize,
 							BUS_DMASYNC_POSTWRITE);
 					sc->sc_dmasize = 0;
@@ -1931,7 +1929,7 @@ mhaintr(void *arg)
 	return 1;
 }
 
-void
+void 
 mha_abort(struct mha_softc *sc, struct acb *acb)
 {
 	acb->flags |= ACB_ABORTED;
@@ -1951,7 +1949,7 @@ mha_abort(struct mha_softc *sc, struct acb *acb)
 	}
 }
 
-void
+void 
 mha_timeout(void *arg)
 {
 	struct acb *acb = (struct acb *)arg;
@@ -1996,10 +1994,10 @@ mha_timeout(void *arg)
  * directly called from the driver or from the kernel debugger.
  */
 
-void
+void 
 mha_show_scsi_cmd(struct acb *acb)
 {
-	u_char *b = (u_char *)&acb->cmd;
+	u_char  *b = (u_char *)&acb->cmd;
 	struct scsipi_periph *periph = acb->xs->xs_periph;
 	int i;
 
@@ -2015,7 +2013,7 @@ mha_show_scsi_cmd(struct acb *acb)
 		printf("RESET\n");
 }
 
-void
+void 
 mha_print_acb(struct acb *acb)
 {
 
@@ -2025,7 +2023,7 @@ mha_print_acb(struct acb *acb)
 	mha_show_scsi_cmd(acb);
 }
 
-void
+void 
 mha_print_active_acb(void)
 {
 	struct acb *acb;
@@ -2044,7 +2042,7 @@ mha_print_active_acb(void)
 		mha_print_acb(acb);
 }
 
-void
+void 
 mha_dump_driver(struct mha_softc *sc)
 {
 	struct spc_tinfo *ti;

@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.6 2007/08/15 12:07:27 ad Exp $     */
+/*	$NetBSD: syscall.c,v 1.2 2006/07/19 21:11:47 ad Exp $     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -33,7 +33,7 @@
  /* All bugs are subject to removal without further notice */
 		
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.6 2007/08/15 12:07:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.2 2006/07/19 21:11:47 ad Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -45,7 +45,11 @@ __KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.6 2007/08/15 12:07:27 ad Exp $");
 #include <sys/systm.h>
 #include <sys/signalvar.h>
 #include <sys/exec.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
+#ifdef  KTRACE
 #include <sys/ktrace.h>
+#endif
 #include <sys/pool.h>
 
 #include <uvm/uvm_extern.h>
@@ -115,20 +119,17 @@ syscall_plain(struct trapframe *frame)
 
 	rval[0] = 0;
 	rval[1] = frame->r1;
+	KERNEL_PROC_LOCK(l);
 	if (callp->sy_narg) {
 		err = copyin((char*)frame->ap + 4, args, callp->sy_argsize);
-		if (err)
+		if (err) {
+			KERNEL_PROC_UNLOCK(l);
 			goto bad;
+		}
 	}
 
-	if ((callp->sy_flags & SYCALL_MPSAFE) != 0) {
-		err = (*callp->sy_call)(curlwp, args, rval);
-	} else {
-		KERNEL_LOCK(1, l);
-		err = (*callp->sy_call)(curlwp, args, rval);
-		KERNEL_UNLOCK_LAST(l);
-	}
-
+	err = (*callp->sy_call)(curlwp, args, rval);
+	KERNEL_PROC_UNLOCK(l);
 	exptr = l->l_addr->u_pcb.framep;
 
 	TDB(("return %s pc %lx, psl %lx, sp %lx, pid %d, err %d r0 %d, r1 %d, "
@@ -196,24 +197,21 @@ syscall_fancy(struct trapframe *frame)
 
 	rval[0] = 0;
 	rval[1] = frame->r1;
+	KERNEL_PROC_LOCK(l);
 	if (callp->sy_narg) {
 		err = copyin((char*)frame->ap + 4, args, callp->sy_argsize);
-		if (err)
+		if (err) {
+			KERNEL_PROC_UNLOCK(l);
 			goto bad;
+		}
 	}
 
-	KERNEL_LOCK(1, l);
 	if ((err = trace_enter(l, frame->code, frame->code, NULL, args)) != 0)
 		goto out;
 
-	if ((callp->sy_flags & SYCALL_MPSAFE) == 0) {
-		err = (*callp->sy_call)(curlwp, args, rval);
- out:
- 		KERNEL_UNLOCK_LAST(l);
-	} else {
- 		KERNEL_UNLOCK_LAST(l);
-		err = (*callp->sy_call)(curlwp, args, rval);
-	}
+	err = (*callp->sy_call)(curlwp, args, rval);
+out:
+	KERNEL_PROC_UNLOCK(l);
 	exptr = l->l_addr->u_pcb.framep;
 	TDB(("return %s pc %lx, psl %lx, sp %lx, pid %d, err %d r0 %d, r1 %d, "
 	    "frame %p\n", syscallnames[exptr->code], exptr->pc, exptr->psl,
@@ -249,7 +247,14 @@ child_return(void *arg)
 {
         struct lwp *l = arg;
 
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 	userret(l, l->l_addr->u_pcb.framep, 0);
-	ktrsysret(SYS_fork, 0, 0);
+
+#ifdef KTRACE
+	if (KTRPOINT(l->l_proc, KTR_SYSRET)) {
+		KERNEL_PROC_LOCK(l);
+		ktrsysret(l, SYS_fork, 0, 0);
+		KERNEL_PROC_UNLOCK(l);
+	}
+#endif
 }

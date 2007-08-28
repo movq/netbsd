@@ -1,4 +1,4 @@
-/*	$NetBSD: adlookup.c,v 1.9 2006/12/09 16:11:50 chs Exp $	*/
+/*	$NetBSD: adlookup.c,v 1.8.12.1 2007/02/17 23:27:43 tron Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adlookup.c,v 1.9 2006/12/09 16:11:50 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adlookup.c,v 1.8.12.1 2007/02/17 23:27:43 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

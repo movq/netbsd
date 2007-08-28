@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_13_machdep.c,v 1.19 2007/03/04 05:59:57 christos Exp $	*/
+/*	$NetBSD: compat_13_machdep.c,v 1.17 2006/11/16 01:32:38 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.19 2007/03/04 05:59:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.17 2006/11/16 01:32:38 christos Exp $");
 
 #include "opt_vm86.h"
 
@@ -48,6 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.19 2007/03/04 05:59:57 chris
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/sys/signal.h>
@@ -74,7 +75,7 @@ compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 	 * program jumps out of a signal handler.
 	 */
 	scp = SCARG(uap, sigcntxp);
-	if (copyin((void *)scp, &context, sizeof(*scp)) != 0)
+	if (copyin((caddr_t)scp, &context, sizeof(*scp)) != 0)
 		return (EFAULT);
 
 	/* Restore register context. */
@@ -120,16 +121,15 @@ compat_13_sys_sigreturn(struct lwp *l, void *v, register_t *retval)
 	tf->tf_esp = context.sc_esp;
 	tf->tf_ss = context.sc_ss;
 
-	mutex_enter(&p->p_smutex);
 	/* Restore signal stack. */
 	if (context.sc_onstack & SS_ONSTACK)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 	else
-		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags &= ~SS_ONSTACK;
+
 	/* Restore signal mask. */
 	native_sigset13_to_sigset(&context.sc_mask, &mask);
-	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
-	mutex_exit(&p->p_smutex);
+	(void) sigprocmask1(p, SIG_SETMASK, &mask, 0);
 
 	return (EJUSTRETURN);
 }

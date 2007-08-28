@@ -1,4 +1,4 @@
-/*	$NetBSD: coda_psdev.c,v 1.36 2007/03/04 06:01:11 christos Exp $	*/
+/*	$NetBSD: coda_psdev.c,v 1.34 2006/11/16 01:32:41 christos Exp $	*/
 
 /*
  *
@@ -54,7 +54,7 @@
 /* These routines are the device entry points for Venus. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coda_psdev.c,v 1.36 2007/03/04 06:01:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coda_psdev.c,v 1.34 2006/11/16 01:32:41 christos Exp $");
 
 extern int coda_nc_initialized;    /* Set if cache has been initialized */
 
@@ -113,13 +113,13 @@ const struct cdevsw vcoda_cdevsw = {
 
 struct vmsg {
     struct queue vm_chain;
-    void *	 vm_data;
+    caddr_t	 vm_data;
     u_short	 vm_flags;
     u_short      vm_inSize;	/* Size is at most 5000 bytes */
     u_short	 vm_outSize;
     u_short	 vm_opcode; 	/* copied from data to save ptr lookup */
     int		 vm_unique;
-    void *	 vm_sleep;	/* Not used by Mach. */
+    caddr_t	 vm_sleep;	/* Not used by Mach. */
 };
 
 #define	VM_READ	    1
@@ -200,10 +200,10 @@ vc_nb_close(dev_t dev, int flag, int mode, struct lwp *l)
      * XXX Freeze syncer.  Must do this before locking the
      * mount point.  See dounmount for details().
      */
-    mutex_enter(&syncer_mutex);
+    lockmgr(&syncer_lock, LK_EXCLUSIVE, NULL);
     VTOC(mi->mi_rootvp)->c_flags |= C_UNMOUNTING;
     if (vfs_busy(mi->mi_vfsp, 0, 0)) {
-	mutex_exit(&syncer_mutex);
+	lockmgr(&syncer_lock, LK_RELEASE, NULL);
 	return (EBUSY);
     }
     coda_unmounting(mi->mi_vfsp);
@@ -217,8 +217,8 @@ vc_nb_close(dev_t dev, int flag, int mode, struct lwp *l)
 	/* Free signal request messages and don't wakeup cause
 	   no one is waiting. */
 	if (vmp->vm_opcode == CODA_SIGNAL) {
-	    CODA_FREE((void *)vmp->vm_data, (u_int)VC_IN_NO_DATA);
-	    CODA_FREE((void *)vmp, (u_int)sizeof(struct vmsg));
+	    CODA_FREE((caddr_t)vmp->vm_data, (u_int)VC_IN_NO_DATA);
+	    CODA_FREE((caddr_t)vmp, (u_int)sizeof(struct vmsg));
 	    continue;
 	}
 	outstanding_upcalls++;
@@ -292,8 +292,8 @@ vc_nb_read(dev_t dev, struct uio *uiop, int flag)
 	if (codadebug)
 	    myprintf(("vcread: signal msg (%d, %d)\n",
 		      vmp->vm_opcode, vmp->vm_unique));
-	CODA_FREE((void *)vmp->vm_data, (u_int)VC_IN_NO_DATA);
-	CODA_FREE((void *)vmp, (u_int)sizeof(struct vmsg));
+	CODA_FREE((caddr_t)vmp->vm_data, (u_int)VC_IN_NO_DATA);
+	CODA_FREE((caddr_t)vmp, (u_int)sizeof(struct vmsg));
 	return(error);
     }
 
@@ -323,7 +323,7 @@ vc_nb_write(dev_t dev, struct uio *uiop, int flag)
 
     /* Peek at the opcode, unique without transfering the data. */
     uiop->uio_rw = UIO_WRITE;
-    error = uiomove((void *)tbuf, sizeof(int) * 2, uiop);
+    error = uiomove((caddr_t)tbuf, sizeof(int) * 2, uiop);
     if (error) {
 	myprintf(("vcwrite: error (%d) on uiomove\n", error));
 	return(EINVAL);
@@ -340,7 +340,7 @@ vc_nb_write(dev_t dev, struct uio *uiop, int flag)
 
 	/* get the rest of the data. */
 	uiop->uio_rw = UIO_WRITE;
-	error = uiomove((void *)&pbuf.coda_purgeuser.oh.result, sizeof(pbuf) - (sizeof(int)*2), uiop);
+	error = uiomove((caddr_t)&pbuf.coda_purgeuser.oh.result, sizeof(pbuf) - (sizeof(int)*2), uiop);
 	if (error) {
 	    myprintf(("vcwrite: error (%d) on uiomove (Op %ld seq %ld)\n",
 		      error, opcode, seq));
@@ -382,7 +382,7 @@ vc_nb_write(dev_t dev, struct uio *uiop, int flag)
 
     tbuf[0] = uiop->uio_resid; 	/* Save this value. */
     uiop->uio_rw = UIO_WRITE;
-    error = uiomove((void *) &out->result, vmp->vm_outSize - (sizeof(int) * 2), uiop);
+    error = uiomove((caddr_t) &out->result, vmp->vm_outSize - (sizeof(int) * 2), uiop);
     if (error) {
 	myprintf(("vcwrite: error (%d) on uiomove (op %ld seq %ld)\n",
 		  error, opcode, seq));
@@ -401,7 +401,7 @@ vc_nb_write(dev_t dev, struct uio *uiop, int flag)
 }
 
 int
-vc_nb_ioctl(dev_t dev, u_long cmd, void *addr, int flag,
+vc_nb_ioctl(dev_t dev, u_long cmd, caddr_t addr, int flag,
     struct lwp *l)
 {
     ENTRY;
@@ -547,7 +547,7 @@ struct coda_clstat coda_clstat;
 
 int
 coda_call(struct coda_mntinfo *mntinfo, int inSize, int *outSize,
-	void *buffer)
+	caddr_t buffer)
 {
 	struct vcomm *vcp;
 	struct vmsg *vmp;
@@ -557,7 +557,7 @@ coda_call(struct coda_mntinfo *mntinfo, int inSize, int *outSize,
 	struct proc *p = l->l_proc;
 	sigset_t psig_omask;
 	int i;
-	psig_omask = l->l_sigmask;	/* XXXSA */
+	psig_omask = l->l_proc->p_sigctx.ps_siglist;	/* array assignment */
 #endif
 	if (mntinfo == NULL) {
 	    /* Unlikely, but could be a race condition with a dying warden */
@@ -615,49 +615,46 @@ coda_call(struct coda_mntinfo *mntinfo, int inSize, int *outSize,
 	    error = tsleep(&vmp->vm_sleep, (coda_call_sleep|coda_pcatch), "coda_call", hz*2);
 	    if (error == 0)
 	    	break;
-	    mutex_enter(&p->p_smutex);
-	    if (error == EWOULDBLOCK) {
+	    else if (error == EWOULDBLOCK) {
 #ifdef	CODA_VERBOSE
 		    printf("coda_call: tsleep TIMEOUT %d sec\n", 2+2*i);
 #endif
-    	    } else if (sigispending(l, SIGIO)) {
-		    sigaddset(&l->l_sigmask, SIGIO);
+    	    } else if (sigismember(&p->p_sigctx.ps_siglist, SIGIO)) {
+		    sigaddset(&p->p_sigctx.ps_sigmask, SIGIO);
 #ifdef	CODA_VERBOSE
 		    printf("coda_call: tsleep returns %d SIGIO, cnt %d\n", error, i);
 #endif
-    	    } else if (sigispending(l, SIGALRM)) {
-		    sigaddset(&l->l_sigmask, SIGALRM);
+    	    } else if (sigismember(&p->p_sigctx.ps_siglist, SIGALRM)) {
+		    sigaddset(&p->p_sigctx.ps_sigmask, SIGALRM);
 #ifdef	CODA_VERBOSE
 		    printf("coda_call: tsleep returns %d SIGALRM, cnt %d\n", error, i);
 #endif
 	    } else {
 		    sigset_t tmp;
-		    tmp = p->p_sigpend.sp_set;	/* array assignment */
-		    sigminusset(&l->l_sigmask, &tmp);
+		    tmp = p->p_sigctx.ps_siglist;	/* array assignment */
+		    sigminusset(&p->p_sigctx.ps_sigmask, &tmp);
 
 #ifdef	CODA_VERBOSE
 		    printf("coda_call: tsleep returns %d, cnt %d\n", error, i);
 		    printf("coda_call: siglist = %x.%x.%x.%x, sigmask = %x.%x.%x.%x, mask %x.%x.%x.%x\n",
-			    p->p_sigpend.sp_set.__bits[0], p->p_sigpend.sp_set.__bits[1],
-			    p->p_sigpend.sp_set.__bits[2], p->p_sigpend.sp_set.__bits[3],
-			    l->l_sigmask.__bits[0], l->l_sigmask.__bits[1],
-			    l->l_sigmask.__bits[2], l->l_sigmask.__bits[3],
+			    p->p_sigctx.ps_siglist.__bits[0], p->p_sigctx.ps_siglist.__bits[1],
+			    p->p_sigctx.ps_siglist.__bits[2], p->p_sigctx.ps_siglist.__bits[3],
+			    p->p_sigctx.ps_sigmask.__bits[0], p->p_sigctx.ps_sigmask.__bits[1],
+			    p->p_sigctx.ps_sigmask.__bits[2], p->p_sigctx.ps_sigmask.__bits[3],
 			    tmp.__bits[0], tmp.__bits[1], tmp.__bits[2], tmp.__bits[3]);
 #endif
-		    mutex_exit(&p->p_smutex);
 		    break;
 #ifdef	notyet
-		    sigminusset(&l->l_sigmask, &p->p_sigpend.sp_set);
+		    sigminusset(&p->p_sigctx.ps_sigmask, &p->p_sigctx.ps_siglist);
 		    printf("coda_call: siglist = %x.%x.%x.%x, sigmask = %x.%x.%x.%x\n",
-			    p->p_sigpend.sp_set.__bits[0], p->p_sigpend.sp_set.__bits[1],
-			    p->p_sigpend.sp_set.__bits[2], p->p_sigpend.sp_set.__bits[3],
-			    l->l_sigmask.__bits[0], l->l_sigmask.__bits[1],
-			    l->l_sigmask.__bits[2], l->l_sigmask.__bits[3]);
+			    p->p_sigctx.ps_siglist.__bits[0], p->p_sigctx.ps_siglist.__bits[1],
+			    p->p_sigctx.ps_siglist.__bits[2], p->p_sigctx.ps_siglist.__bits[3],
+			    p->p_sigctx.ps_sigmask.__bits[0], p->p_sigctx.ps_sigmask.__bits[1],
+			    p->p_sigctx.ps_sigmask.__bits[2], p->p_sigctx.ps_sigmask.__bits[3]);
 #endif
 	    }
-	    mutex_exit(&p->p_smutex);
 	} while (error && i++ < 128 && VC_OPEN(vcp));
-	l->l_sigmask = psig_omask;	/* XXXSA */
+	p->p_sigctx.ps_siglist = psig_omask;	/* array assignment */
 #else
 	(void) tsleep(&vmp->vm_sleep, coda_call_sleep, "coda_call", 0);
 #endif

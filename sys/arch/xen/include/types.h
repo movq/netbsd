@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.6 2007/07/14 21:48:24 ad Exp $	*/
+/*	$NetBSD: types.h,v 1.3.8.1 2007/06/10 20:48:43 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -56,10 +56,7 @@ typedef int		pmc_evid_t;
 typedef __uint64_t	pmc_ctr_t;
 typedef int		register_t;
 
-typedef	volatile unsigned char		__cpu_simple_lock_t;
-
-/* __cpu_simple_lock_t used to be a full word. */
-#define	__CPU_SIMPLE_LOCK_PAD
+typedef	volatile int		__cpu_simple_lock_t;
 
 #define	__SIMPLELOCK_LOCKED	1
 #define	__SIMPLELOCK_UNLOCKED	0
@@ -72,6 +69,7 @@ typedef	volatile unsigned char		__cpu_simple_lock_t;
 #define	__HAVE_SYSCALL_INTERN
 #define	__HAVE_MINIMAL_EMUL
 #define	__HAVE_OLD_DISKLABEL
+#define	__HAVE_GENERIC_SOFT_INTERRUPTS
 #define	__HAVE_CPU_MAXPROC
 
 #if defined(_KERNEL)

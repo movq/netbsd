@@ -1,4 +1,4 @@
-/*	$NetBSD: pfvar.h,v 1.15 2007/08/07 10:02:40 yamt Exp $	*/
+/*	$NetBSD: pfvar.h,v 1.12 2006/06/07 22:33:38 kardel Exp $	*/
 /*	$OpenBSD: pfvar.h,v 1.213 2005/03/03 07:13:39 dhartmei Exp $ */
 
 /*
@@ -1216,7 +1216,7 @@ struct pfioc_state_kill {
 struct pfioc_states {
 	int	ps_len;
 	union {
-		void *		 psu_buf;
+		caddr_t		 psu_buf;
 		struct pf_state	*psu_states;
 	} ps_u;
 #define ps_buf		ps_u.psu_buf
@@ -1226,7 +1226,7 @@ struct pfioc_states {
 struct pfioc_src_nodes {
 	int	psn_len;
 	union {
-		void *		 psu_buf;
+		caddr_t		 psu_buf;
 		struct pf_src_node	*psu_src_nodes;
 	} psn_u;
 #define psn_buf		psn_u.psu_buf
@@ -1459,8 +1459,8 @@ extern u_int16_t		 pf_cksum_fixup(u_int16_t, u_int16_t, u_int16_t,
 
 extern struct ifnet		*sync_ifp;
 extern struct pf_rule		 pf_default_rule;
-extern void			 pf_addrcpy(struct pf_addr *,
-				    const struct pf_addr *, u_int8_t);
+extern void			 pf_addrcpy(struct pf_addr *, struct pf_addr *,
+				    u_int8_t);
 void				 pf_rm_rule(struct pf_rulequeue *,
 				    struct pf_rule *);
 
@@ -1471,7 +1471,7 @@ int	pf_test(int, struct ifnet *, struct mbuf **, struct ether_header *);
 #ifdef INET6
 int	pf_test6(int, struct ifnet *, struct mbuf **, struct ether_header *);
 void	pf_poolmask(struct pf_addr *, struct pf_addr*,
-	    struct pf_addr *, const struct pf_addr *, u_int8_t);
+	    struct pf_addr *, struct pf_addr *, u_int8_t);
 void	pf_addr_inc(struct pf_addr *, sa_family_t);
 #endif /* INET6 */
 
@@ -1608,6 +1608,20 @@ int pfil_ifaddr_wrapper(void *, struct mbuf **, struct ifnet *, int);
 #define	PRIu32	"u"	/* XXX */
 #endif
 #if !defined(__OpenBSD__)
+#if !defined(__NetBSD__)
+#include <sys/kernel.h> /* mono_time */
+static __inline void getmicrouptime(struct timeval *);
+static __inline void
+getmicrouptime(struct timeval *tvp)
+{
+	int s;
+
+	s = splclock();
+	*tvp = mono_time;
+	splx(s);
+}
+#define	time_second	time.tv_sec
+#endif /* !__NetBSD__ */
 #define	m_copym2	m_dup
 #define	pool_allocator_oldnointr	pool_allocator_nointr
 #endif /* !__OpenBSD__ */

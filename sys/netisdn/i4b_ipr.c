@@ -27,7 +27,7 @@
  *	i4b_ipr.c - isdn4bsd IP over raw HDLC ISDN network driver
  *	---------------------------------------------------------
  *
- *	$Id: i4b_ipr.c,v 1.27 2007/07/09 21:11:14 ad Exp $
+ *	$Id: i4b_ipr.c,v 1.24 2006/11/16 01:33:49 christos Exp $
  *
  * $FreeBSD$
  *
@@ -59,7 +59,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.27 2007/07/09 21:11:14 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_ipr.c,v 1.24 2006/11/16 01:33:49 christos Exp $");
 
 #include "irip.h"
 #include "opt_irip.h"
@@ -245,10 +245,10 @@ enum ipr_states {
 #endif
 PDEVSTATIC void iripattach(void *);
 PSEUDO_SET(iripattach, i4b_ipr);
-static int irpioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, void *data);
+static int irpioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, caddr_t data);
 #else
 PDEVSTATIC void iripattach __P((void));
-static int iripioctl(struct ifnet *ifp, u_long cmd, void *data);
+static int iripioctl(struct ifnet *ifp, u_long cmd, caddr_t data);
 #endif
 
 #ifdef __bsdi__
@@ -257,7 +257,7 @@ static int iprwatchdog(int unit);
 static void iprwatchdog(struct ifnet *ifp);
 #endif
 static void ipr_tx_queue_empty(void *);
-static int iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst, struct rtentry *rtp);
+static int iripoutput(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst, struct rtentry *rtp);
 static void iripclearqueues(struct ipr_softc *sc);
 static void ipr_set_linktab(void *softc, isdn_link_t *ilt);
 static void ipr_activity(void *softc, int rxtx);
@@ -332,7 +332,7 @@ iripattach()
 #endif
 
 #if defined(__NetBSD__) && __NetBSD_Version__ >= 104230000
-		callout_init(&sc->sc_callout, 0);
+		callout_init(&sc->sc_callout);
 #endif
 
 		sc->sc_if.if_mtu = I4BIPRMTU;
@@ -414,7 +414,7 @@ iripattach()
  *	output a packet to the ISDN B-channel
  *---------------------------------------------------------------------------*/
 static int
-iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
+iripoutput(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
 	 struct rtentry *rtp)
 {
 	struct ipr_softc *sc;
@@ -562,10 +562,10 @@ iripoutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
  *---------------------------------------------------------------------------*/
 #ifdef __FreeBSD__
 static int
-iripioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, void *data)
+iripioctl(struct ifnet *ifp, IOCTL_CMD_T cmd, caddr_t data)
 #else
 static int
-iripioctl(struct ifnet *ifp, u_long cmd, void *data)
+iripioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 #endif
 {
 #if defined(__FreeBSD__) || defined(__bsdi__)

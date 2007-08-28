@@ -1,4 +1,4 @@
-# $NetBSD: XEN2_DOM0,v 1.31 2007/08/26 17:05:24 xtraeme Exp $
+# $NetBSD: XEN2_DOM0,v 1.18.2.5 2007/08/31 20:09:27 pavel Exp $
 
 include 	"arch/xen/conf/std.xen"
 
@@ -60,7 +60,7 @@ options 	DDB_ONPANIC=1	# see also sysctl(8): `ddb.onpanic'
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 #options 	KGDB		# remote debugger
 #options 	KGDB_DEVNAME="\"com\"",KGDB_DEVADDR=0x2f8,KGDB_DEVRATE=57600
-#makeoptions	DEBUG="-g"	# compile full symbol table
+makeoptions	DEBUG="-g"	# compile full symbol table
 
 # Compatibility options
 options 	COMPAT_NOMID	# NetBSD 0.8, 386BSD, and BSDI
@@ -74,7 +74,6 @@ options 	COMPAT_15	# NetBSD 1.5
 options 	COMPAT_16	# NetBSD 1.6
 options 	COMPAT_20	# NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
-options 	COMPAT_40	# NetBSD 4.0
 options 	COMPAT_43	# 4.3BSD, 386BSD, and BSDI
 options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -164,6 +163,7 @@ options 	PCIVERBOSE	# verbose PCI device autoconfig messages
 #options 	PCI_CONFIG_DUMP	# verbosely dump PCI config space
 options 	SCSIVERBOSE	# human readable SCSI error messages
 options 	USBVERBOSE	# verbose USB device autoconfig messages
+options 	I2OVERBOSE	# verbose I2O driver messages
 
 options 	NFS_BOOT_DHCP,NFS_BOOT_BOOTPARAM,NFS_BOOT_BOOTSTATIC
 #options 	NFS_BOOTSTATIC_MYIP="\"169.254.1.2\""
@@ -205,25 +205,16 @@ xencons*	at hypervisor?		# Xen virtual console
 #sd*		at hypervisor?		# Xen vbd (sd identity)
 #cd*		at hypervisor?		# Xen vbd (cd identity)
 
-# PCI bus support
 pci*		at hypervisor? bus ?
 pci*		at pchb? bus ?
-
-# PCI bridges
-#ichlpcib* at pci? dev ? function ?	# Intel ICH PCI-ISA w/ timecounter,
-					# watchdog and SpeedStep support
 pcib*	at pci? dev ? function ?	# PCI-ISA bridges
 pchb*	at pci? dev ? function ?	# PCI-Host bridges
 ppb*	at pci? dev ? function ?	# PCI-PCI bridges
-# XXX 'puc's aren't really bridges, but there's no better place for them here
-puc*	at pci? dev ? function ?	# PCI "universal" comm. cards
 
 agp* 	at pchb?
 
-# ISA bus support
-#isa0	at ichlpcib?
-isa0	at pcib?
-isa0	at hypervisor?
+# XXX 'puc's aren't really bridges, but there's no better place for them here
+puc*	at pci? dev ? function ?	# PCI "universal" comm. cards
 
 # Serial Devices
 
@@ -262,8 +253,9 @@ amdpm*	at pci? dev ? function ?	# RNG and SMBus 1.0 interface
 # LM7[89] and compatible hardware monitors
 #lm0	at isa?	port 0x290		# other common: 0x280, 0x310, 0xc00
 
-# VIA VT82C686A/VT8231 Hardware Monitor and Power Management TImer
-#viaenv*	at pci? dev ? function ?
+# VIA VT82C686A hardware monitor
+#viapm*	at pci? dev ? function ?
+#viaenv* at viapm?
 
 
 # PCI network interfaces
@@ -461,6 +453,10 @@ ld*	at mlx? unit ?
 
 icpsp*	at icp? unit ?			# SCSI pass-through
 
+# ISA bus support
+isa0	at pcib?
+isa0	at hypervisor?
+
 # wscons
 pckbc0		at isa?			# pc keyboard controller
 pckbd*		at pckbc?		# PC keyboard
@@ -490,7 +486,7 @@ usb*    at uhci?
 
 # USB Hubs
 uhub*   at usb?
-uhub*   at uhub? port ?
+uhub*   at uhub? port ? configuration ? interface ?
 
 # USB HID device
 uhidev* at uhub? port ? configuration ? interface ?
@@ -653,15 +649,13 @@ midi*	at midibus?
 # Bluetooth Controller and Device support
 
 # Bluetooth PCMCIA Controllers
-#bt3c* at pcmcia? function ?		# 3Com 3CRWB6096-A
-#btbc* at pcmcia? function ?		# AnyCom BlueCard LSE041/039/139
+# bt3c* at pcmcia? function ?             # 3Com 3CRWB6096-A
 
 # Bluetooth USB Controllers
-ubt* at uhub? port ?
+ubt* at uhub? port ? configuration ? interface ?
 
 # Bluetooth Device Hub
 #bthub* at bt3c?
-#bthub* at btbh?
 bthub* at ubt?
 
 # Bluetooth HID support

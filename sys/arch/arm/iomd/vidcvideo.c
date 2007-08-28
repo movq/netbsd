@@ -1,4 +1,4 @@
-/* $NetBSD: vidcvideo.c,v 1.31 2007/03/04 05:59:38 christos Exp $ */
+/* $NetBSD: vidcvideo.c,v 1.29 2006/10/21 14:24:46 bjh21 Exp $ */
 
 /*
  * Copyright (c) 2001 Reinoud Zandijk
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: vidcvideo.c,v 1.31 2007/03/04 05:59:38 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vidcvideo.c,v 1.29 2006/10/21 14:24:46 bjh21 Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,6 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: vidcvideo.c,v 1.31 2007/03/04 05:59:38 christos Exp 
 #include <uvm/uvm_extern.h>
 #include <arm/arm32/pmap.h>
 #include <arm/cpufunc.h>
+#include <machine/intr.h>
 
 /* for vidc_mode ... needs to be MI indepenent one day */
 #include <arm/iomd/vidc.h>
@@ -154,7 +155,7 @@ static const struct wsscreen_list vidcvideo_screenlist = {
 	_vidcvideo_scrlist
 };
 
-static int	vidcvideoioctl(void *, void *, u_long, void *, int,
+static int	vidcvideoioctl(void *, void *, u_long, caddr_t, int,
     struct lwp *);
 static paddr_t	vidcvideommap(void *, void *, off_t, int);
 
@@ -392,7 +393,7 @@ vidcvideo_attach(struct device *parent, struct device *self, void *aux)
 
 
 static int
-vidcvideoioctl(void *v, void *vs, u_long cmd, void *data, int flag,
+vidcvideoioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag,
     struct lwp *l)
 {
 	struct vidcvideo_softc *sc = v;

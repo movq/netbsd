@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.34 2007/08/15 12:07:26 ad Exp $	*/
+/*	$NetBSD: syscall.c,v 1.31 2006/07/19 21:11:45 ad Exp $	*/
 
 /*
  * Copyright (C) 2002 Matt Thomas
@@ -33,6 +33,7 @@
  */
 
 #include "opt_altivec.h"
+#include "opt_ktrace.h"
 #include "opt_multiprocessor.h"
 /* DO NOT INCLUDE opt_compat_XXX.h */
 /* If needed, they will be included by file that includes this one */
@@ -42,7 +43,11 @@
 #include <sys/reboot.h>
 #include <sys/systm.h>
 #include <sys/user.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
+#ifdef KTRACE
 #include <sys/ktrace.h>
+#endif
 
 #include <uvm/uvm_extern.h>
 
@@ -52,7 +57,7 @@
 
 #define	FIRSTARG	3		/* first argument is in reg 3 */
 #define	NARGREG		8		/* 8 args are in registers */
-#define	MOREARGS(sp)	((void *)((uintptr_t)(sp) + 8)) /* more args go here */
+#define	MOREARGS(sp)	((caddr_t)((uintptr_t)(sp) + 8)) /* more args go here */
 
 #ifndef EMULNAME
 #include <sys/syscall.h>
@@ -60,15 +65,18 @@
 #define EMULNAME(x)	(x)
 #define EMULNAMEU(x)	(x)
 
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.34 2007/08/15 12:07:26 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.31 2006/07/19 21:11:45 ad Exp $");
 
 void
 child_return(void *arg)
 {
 	struct lwp * const l = arg;
+#ifdef KTRACE
+	struct proc * const p = l->l_proc;
+#endif
 	struct trapframe * const tf = trapframe(l);
 
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 
 	tf->fixreg[FIRSTARG] = 0;
 	tf->fixreg[FIRSTARG + 1] = 1;
@@ -76,7 +84,13 @@ child_return(void *arg)
 	tf->srr1 &= ~(PSL_FP|PSL_VEC);	/* Disable FP & AltiVec, as we can't
 					   be them. */
 	l->l_addr->u_pcb.pcb_fpcpu = NULL;
-	ktrsysret(SYS_fork, 0, 0);
+#ifdef	KTRACE
+	if (KTRPOINT(p, KTR_SYSRET)) {
+		KERNEL_PROC_LOCK(l);
+		ktrsysret(l, SYS_fork, 0, 0);
+		KERNEL_PROC_UNLOCK(l);
+	}
+#endif
 	/* Profiling?							XXX */
 	curcpu()->ci_schedstate.spc_curpriority = l->l_priority;
 }
@@ -136,11 +150,11 @@ EMULNAME(syscall_plain)(struct trapframe *frame)
 
 	if (argsize > n * sizeof(register_t)) {
 		memcpy(args, params, n * sizeof(register_t));
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 		error = copyin(MOREARGS(frame->fixreg[1]),
 		       args + n,
 		       argsize - n * sizeof(register_t));
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 		if (error)
 			goto bad;
 		params = args;
@@ -150,13 +164,13 @@ EMULNAME(syscall_plain)(struct trapframe *frame)
 	rval[1] = 0;
 
 	if ((callp->sy_flags & SYCALL_MPSAFE) == 0) {
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 	}
 
 	error = (*callp->sy_call)(l, params, rval);
 
 	if ((callp->sy_flags & SYCALL_MPSAFE) == 0) {
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 	}
 	switch (error) {
 	case 0:
@@ -211,7 +225,7 @@ EMULNAME(syscall_fancy)(struct trapframe *frame)
 
 	LWP_CACHE_CREDS(l, p);
 
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 	curcpu()->ci_ev_scalls.ev_count++;
 
 	code = frame->fixreg[0];
@@ -300,7 +314,7 @@ out:
 		frame->cr |= 0x10000000;
 		break;
 	}
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 	trace_exit(l, realcode, params, rval, error);
 	userret(l, frame);
 }

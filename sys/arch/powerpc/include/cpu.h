@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.58 2007/06/01 14:23:50 nisimura Exp $	*/
+/*	$NetBSD: cpu.h,v 1.52 2006/08/31 18:18:17 matt Exp $	*/
 
 /*
  * Copyright (C) 1999 Wolfgang Solfrank.
@@ -65,6 +65,7 @@ struct cpu_info {
 	struct pmap *ci_curpm;
 	struct lwp *ci_fpulwp;
 	struct lwp *ci_veclwp;
+	struct pcb *ci_idle_pcb;	/* PA of our idle pcb */
 	int ci_cpuid;
 
 	volatile int ci_astpending;
@@ -75,8 +76,6 @@ struct cpu_info {
 	volatile int ci_iactive;
 	volatile int ci_ipending;
 	int ci_intrdepth;
-	int ci_mtx_oldspl;
-	int ci_mtx_count;
 	char *ci_intstk;
 #define	CPUSAVE_LEN	8
 	register_t ci_tempsave[CPUSAVE_LEN];
@@ -281,17 +280,19 @@ cntlzw(uint32_t val)
 })
 #endif /* PPC_IBM4XX || PPC_IBM403 */
 
+/*
+ * CLKF_BASEPRI is dependent on the underlying interrupt code
+ * and can not be defined here.  It should be defined in
+ * <machine/intr.h>
+ */
 #define	CLKF_USERMODE(frame)	(((frame)->srr1 & PSL_PR) != 0)
 #define	CLKF_PC(frame)		((frame)->srr0)
 #define	CLKF_INTR(frame)	((frame)->depth > 0)
 
 #define	LWP_PC(l)		(trapframe(l)->srr0)
 
-#define	cpu_swapin(p)
 #define	cpu_swapout(p)
 #define	cpu_proc_fork(p1, p2)
-#define	cpu_idle()		(curcpu()->ci_idlespin())
-#define cpu_lwp_free2(l)
 
 extern int powersave;
 extern int cpu_timebase;
@@ -312,17 +313,16 @@ void unmapiodev(vaddr_t, vsize_t);
 
 #define	DELAY(n)		delay(n)
 
-#define	cpu_need_resched(ci, v)	(ci->ci_want_resched = ci->ci_astpending = 1)
-#define	cpu_did_resched()	((void)(curcpu()->ci_want_resched = 0))
-#define	cpu_need_proftick(l)	((l)->l_pflag |= LP_OWEUPC, curcpu()->ci_astpending = 1)
-#define	cpu_signotify(l)	(curcpu()->ci_astpending = 1)	/* XXXSMP */
+#define	need_resched(ci)	(ci->ci_want_resched = 1, ci->ci_astpending = 1)
+#define	need_proftick(p)	((p)->p_flag |= P_OWEUPC, curcpu()->ci_astpending = 1)
+#define	signotify(p)		(curcpu()->ci_astpending = 1)
 
 #if defined(PPC_OEA) || defined(PPC_OEA64) || defined (PPC_OEA64_BRIDGE)
 void oea_init(void (*)(void));
 void oea_startup(const char *);
 void oea_dumpsys(void);
 void oea_install_extint(void (*)(void));
-paddr_t kvtop(void *); 
+paddr_t kvtop(caddr_t); 
 void softnet(int);
 
 extern paddr_t msgbuf_paddr;
@@ -357,10 +357,8 @@ void __syncicache(void *, size_t);
 #define	CPU_CACHEINFO		5
 #define	CPU_ALTIVEC		6
 #define	CPU_MODEL		7
-#define	CPU_POWERSAVE		8	/* int: use CPU powersave mode */
-#define	CPU_BOOTED_DEVICE	9	/* string: device we booted from */
-#define	CPU_BOOTED_KERNEL	10	/* string: kernel we booted */
-#define	CPU_MAXID		11	/* number of valid machdep ids */
+#define	CPU_POWERSAVE		8
+#define	CPU_MAXID		9
 
 #define	CTL_MACHDEP_NAMES { \
 	{ 0, 0 }, \

@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_fstore.c,v 1.10 2007/03/09 16:23:01 tsutsui Exp $	*/
+/*	$NetBSD: fpu_fstore.c,v 1.9.24.1 2007/03/31 15:40:39 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1995 Ken Nakata
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fpu_fstore.c,v 1.10 2007/03/09 16:23:01 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu_fstore.c,v 1.9.24.1 2007/03/31 15:40:39 bouyer Exp $");
 
 #include <sys/types.h>
 #include <sys/signal.h>

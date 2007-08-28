@@ -1,4 +1,4 @@
-/*	$NetBSD: gdt.c,v 1.11 2007/06/04 23:15:00 xtraeme Exp $	*/
+/*	$NetBSD: gdt.c,v 1.9 2005/12/24 20:06:47 perry Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gdt.c,v 1.11 2007/06/04 23:15:00 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gdt.c,v 1.9 2005/12/24 20:06:47 perry Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -66,12 +66,12 @@ int gdt_free;		/* next free slot; terminated with GNULL_SEL */
 
 struct lock gdt_lock_store;
 
-static inline void gdt_lock(void);
-static inline void gdt_unlock(void);
-void gdt_init(void);
-void gdt_grow(void);
-int gdt_get_slot(void);
-void gdt_put_slot(int);
+static inline void gdt_lock __P((void));
+static inline void gdt_unlock __P((void));
+void gdt_init __P((void));
+void gdt_grow __P((void));
+int gdt_get_slot __P((void));
+void gdt_put_slot __P((int));
 
 /*
  * Lock and unlock the GDT, to avoid races in case gdt_{ge,pu}t_slot() sleep
@@ -83,22 +83,25 @@ void gdt_put_slot(int);
  * reclaim it.
  */
 static inline void
-gdt_lock(void)
+gdt_lock()
 {
 
-	(void)lockmgr(&gdt_lock_store, LK_EXCLUSIVE, NULL);
+	(void) lockmgr(&gdt_lock_store, LK_EXCLUSIVE, NULL);
 }
 
 static inline void
-gdt_unlock(void)
+gdt_unlock()
 {
 
-	(void)lockmgr(&gdt_lock_store, LK_RELEASE, NULL);
+	(void) lockmgr(&gdt_lock_store, LK_RELEASE, NULL);
 }
 
 void
-set_mem_gdt(struct mem_segment_descriptor *sd, void *base, size_t limit,
-	    int type, int dpl, int gran, int def32, int is64)
+set_mem_gdt(sd, base, limit, type, dpl, gran, def32, is64)
+	struct mem_segment_descriptor *sd;
+	void *base;
+	size_t limit;
+	int type, dpl, gran, def32, is64;
 {
 #if 0
 	CPU_INFO_ITERATOR cii;
@@ -118,8 +121,11 @@ set_mem_gdt(struct mem_segment_descriptor *sd, void *base, size_t limit,
 }
 
 void
-set_sys_gdt(struct sys_segment_descriptor *sd, void *base, size_t limit,
-	    int type, int dpl, int gran)
+set_sys_gdt(sd, base, limit, type, dpl, gran)
+	struct sys_segment_descriptor *sd;
+	void *base;
+	size_t limit;
+	int type, dpl, gran;
 {
 #if 0
 	CPU_INFO_ITERATOR cii;
@@ -143,7 +149,7 @@ set_sys_gdt(struct sys_segment_descriptor *sd, void *base, size_t limit,
  * Initialize the GDT.
  */
 void
-gdt_init(void)
+gdt_init()
 {
 	char *old_gdt;
 	struct vm_page *pg;
@@ -188,7 +194,7 @@ gdt_alloc_cpu(struct cpu_info *ci)
 #if 0
         ci->ci_gdt = (char *)uvm_km_valloc(kernel_map, MAXGDTSIZ);
         uvm_map_pageable(kernel_map, (vaddr_t)ci->ci_gdt,
-            (vaddr_t)ci->ci_gdt + MINGDTSIZ, false, false);
+            (vaddr_t)ci->ci_gdt + MINGDTSIZ, FALSE, FALSE);
         memset(ci->ci_gdt, 0, MINGDTSIZ);
         memcpy(ci->ci_gdt, gdtstore,
 	   DYNSEL_START + gdt_dyncount * sizeof(struct sys_segment_descriptor));
@@ -228,7 +234,7 @@ gdt_reload_cpu(struct cpu_info *ci)
  * Grow or shrink the GDT.
  */
 void
-gdt_grow(void)
+gdt_grow()
 {
 	size_t old_len, new_len;
 	struct vm_page *pg;
@@ -260,7 +266,7 @@ gdt_grow(void)
  *    the new slots.
  */
 int
-gdt_get_slot(void)
+gdt_get_slot()
 {
 	int slot;
 	struct sys_segment_descriptor *gdt;
@@ -296,7 +302,8 @@ gdt_get_slot(void)
  * Deallocate a GDT slot, putting it on the free list.
  */
 void
-gdt_put_slot(int slot)
+gdt_put_slot(slot)
+	int slot;
 {
 	struct sys_segment_descriptor *gdt;
 
@@ -313,7 +320,8 @@ gdt_put_slot(int slot)
 }
 
 int
-tss_alloc(struct pcb *pcb)
+tss_alloc(pcb)
+	struct pcb *pcb;
 {
 	int slot;
 	struct sys_segment_descriptor *gdt;
@@ -353,7 +361,10 @@ tss_free(int sel)
 }
 
 void
-ldt_alloc(struct pmap *pmap, char *ldt, size_t len)
+ldt_alloc(pmap, ldt, len)
+	struct pmap *pmap;
+	char *ldt;
+	size_t len;
 {
 	int slot;
 	struct sys_segment_descriptor *gdt;
@@ -366,7 +377,8 @@ ldt_alloc(struct pmap *pmap, char *ldt, size_t len)
 }
 
 void
-ldt_free(struct pmap *pmap)
+ldt_free(pmap)
+	struct pmap *pmap;
 {
 	int slot;
 

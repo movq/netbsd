@@ -1,4 +1,4 @@
-/*	$NetBSD: trap_subr.s,v 1.12 2007/06/12 03:34:30 mhitch Exp $	*/
+/*	$NetBSD: trap_subr.s,v 1.11.24.1 2007/06/18 09:31:07 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993

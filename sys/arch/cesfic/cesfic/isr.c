@@ -1,4 +1,4 @@
-/*	$NetBSD: isr.c,v 1.7 2007/03/05 13:06:43 tsutsui Exp $	*/
+/*	$NetBSD: isr.c,v 1.5 2005/12/11 12:17:04 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.7 2007/03/05 13:06:43 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.5 2005/12/11 12:17:04 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,6 +60,8 @@ __KERNEL_RCSID(0, "$NetBSD: isr.c,v 1.7 2007/03/05 13:06:43 tsutsui Exp $");
 typedef LIST_HEAD(, isr) isr_list_t;
 isr_list_t isr_list[NISR];
 
+u_short	cesfic_bioipl, cesfic_netipl, cesfic_ttyipl, cesfic_impipl;
+
 extern	int intrcnt[];		/* from locore.s */
 
 void	isrcomputeipl __P((void));
@@ -73,6 +75,10 @@ isrinit()
 	for (i = 0; i < NISR; ++i) {
 		LIST_INIT(&isr_list[i]);
 	}
+
+	/* Default interrupt priorities. */
+	cesfic_bioipl = cesfic_netipl = cesfic_ttyipl = cesfic_impipl =
+	    (PSL_S|PSL_IPL3);
 }
 
 /*
@@ -84,10 +90,10 @@ isrcomputeipl()
 {
 	struct isr *isr;
 	int ipl;
-	int biospl, netspl, ttyspl, vmspl;
 
 	/* Start with low values. */
-	biospl = netspl = ttyspl = vmspl = (PSL_S|PSL_IPL3);
+	cesfic_bioipl = cesfic_netipl = cesfic_ttyipl = cesfic_impipl =
+	    (PSL_S|PSL_IPL3);
 
 	for (ipl = 0; ipl < NISR; ipl++) {
 		for (isr = isr_list[ipl].lh_first; isr != NULL;
@@ -98,19 +104,19 @@ isrcomputeipl()
 			 */
 			switch (isr->isr_priority) {
 			case ISRPRI_BIO:
-				if (ipl > PSLTOIPL(biospl))
-					biospl = IPLTOPSL(ipl);
+				if (ipl > PSLTOIPL(cesfic_bioipl))
+					cesfic_bioipl = IPLTOPSL(ipl);
 				break;
 
 			case ISRPRI_NET:
-				if (ipl > PSLTOIPL(netspl))
-					netspl = IPLTOPSL(ipl);
+				if (ipl > PSLTOIPL(cesfic_netipl))
+					cesfic_netipl = IPLTOPSL(ipl);
 				break;
 
 			case ISRPRI_TTY:
 			case ISRPRI_TTYNOBUF:
-				if (ipl > PSLTOIPL(ttyspl))
-					ttyspl = IPLTOPSL(ipl);
+				if (ipl > PSLTOIPL(cesfic_ttyipl))
+					cesfic_ttyipl = IPLTOPSL(ipl);
 				break;
 
 			default:
@@ -121,22 +127,17 @@ isrcomputeipl()
 	}
 
 	/*
-	 * Enforce `bio <= net <= tty <= vm'
+	 * Enforce `bio <= net <= tty <= imp'
 	 */
 
-	if (netspl < biospl)
-		netspl = biospl;
+	if (cesfic_netipl < cesfic_bioipl)
+		cesfic_netipl = cesfic_bioipl;
 
-	if (ttyspl < netspl)
-		ttyspl = netspl;
+	if (cesfic_ttyipl < cesfic_netipl)
+		cesfic_ttyipl = cesfic_netipl;
 
-	if (vmspl < ttyspl)
-		vmspl = ttyspl;
-
-	ipl2spl_table[IPL_BIO] = biospl;
-	ipl2spl_table[IPL_NET] = netspl;
-	ipl2spl_table[IPL_TTY] = ttyspl;
-	ipl2spl_table[IPL_VM] = vmspl;
+	if (cesfic_impipl < cesfic_ttyipl)
+		cesfic_impipl = cesfic_ttyipl;
 }
 
 void
@@ -144,17 +145,13 @@ isrprintlevels()
 {
 
 #ifdef DEBUG
-	printf("psl: bio = 0x%x, net = 0x%x, tty = 0x%x, vm = 0x%x\n",
-	    ipl2spl_table[IPL_BIO],
-	    ipl2spl_table[IPL_NET],
-	    ipl2spl_table[IPL_TTY],
-	    ipl2spl_table[IPL_VM]);
+	printf("psl: bio = 0x%x, net = 0x%x, tty = 0x%x, imp = 0x%x\n",
+	    cesfic_bioipl, cesfic_netipl, cesfic_ttyipl, cesfic_impipl);
 #endif
 
 	printf("interrupt levels: bio = %d, net = %d, tty = %d\n",
-	    PSLTOIPL(ipl2spl_table[IPL_BIO]),
-	    PSLTOIPL(ipl2spl_table[IPL_NET]),
-	    PSLTOIPL(ipl2spl_table[IPL_TTY]));
+	    PSLTOIPL(cesfic_bioipl), PSLTOIPL(cesfic_netipl),
+	    PSLTOIPL(cesfic_ttyipl));
 }
 
 /*
@@ -296,19 +293,18 @@ isrdispatch(evec)
 		printf("isrdispatch: stray level %d interrupt\n", ipl);
 }
 
-int ipl2spl_table[NIPL] = {
-	[IPL_NONE] = PSL_S|PSL_IPL0,
-	[IPL_SOFTCLOCK] = PSL_S|PSL_IPL1,
-	[IPL_SOFTNET] = PSL_S|PSL_IPL1,
-	[IPL_SOFTSERIAL] = PSL_S|PSL_IPL1,
-	[IPL_SOFT] = PSL_S|PSL_IPL1,
-	[IPL_BIO] = PSL_S|PSL_IPL3,
-	[IPL_NET] = PSL_S|PSL_IPL3,
-	[IPL_TTY] = PSL_S|PSL_IPL3,
-	[IPL_VM] = PSL_S|PSL_IPL3,
-	[IPL_CLOCK] = PSL_S|PSL_IPL6,
-	[IPL_STATCLOCK] = PSL_S|PSL_IPL6,
-	[IPL_HIGH] = PSL_S|PSL_IPL6,
-	[IPL_SCHED] = PSL_S|PSL_IPL6,
-	[IPL_LOCK] = PSL_S|PSL_IPL6,
-};
+void netintr(void);
+
+void
+netintr()
+{
+#define DONETISR(bit, fn) do {			\
+		if (netisr & (1 << bit))	\
+			netisr &= ~(1 << bit);	\
+			fn();			\
+		} while(0)
+
+#include <net/netisr_dispatch.h>
+
+#undef DONETISR
+}

@@ -1,4 +1,4 @@
-/*	$NetBSD: ms.c,v 1.18 2007/07/11 19:13:23 he Exp $	*/
+/*	$NetBSD: ms.c,v 1.16 2005/12/11 12:16:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ms.c,v 1.18 2007/07/11 19:13:23 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ms.c,v 1.16 2005/12/11 12:16:54 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -103,7 +103,7 @@ mouseattach(cnt)
 {
 	printf("1 mouse configured\n");
 	ms_softc[0].ms_emul3b = 1;
-	callout_init(&ms_softc[0].ms_delay_ch, 0);
+	callout_init(&ms_softc[0].ms_delay_ch);
 	return(NMOUSE);
 }
 
@@ -376,7 +376,7 @@ int
 msioctl(dev, cmd, data, flag, l)
 dev_t			dev;
 u_long			cmd;
-register void *	data;
+register caddr_t 	data;
 int			flag;
 struct lwp		*l;
 {

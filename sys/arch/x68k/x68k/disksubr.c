@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.30 2007/07/29 12:15:42 ad Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.27 2006/11/25 11:59:58 scw Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.30 2007/07/29 12:15:42 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.27 2006/11/25 11:59:58 scw Exp $");
 
 #include "opt_compat_netbsd.h"
 
@@ -108,8 +108,7 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *),
 		goto dodospart;
 	}
 	for (dlp = (struct disklabel *)bp->b_data;
-	     dlp <= (struct disklabel *)
-		((char *)bp->b_data + labelsz - sizeof(*dlp));
+	     dlp <= (struct disklabel *)(bp->b_data + labelsz - sizeof(*dlp));
 	     dlp = (struct disklabel *)((uint8_t *)dlp + sizeof(long))) {
 		if (dlp->d_magic != DISKMAGIC || dlp->d_magic2 != DISKMAGIC) {
 			if (msg == NULL)
@@ -153,10 +152,10 @@ dodospart:
 
 	/* XXX how do we check veracity/bounds of this? */
 	if (dp)
-		memcpy(dp, (char *)bp->b_data + sizeof(*dp) /*DOSPARTOFF*/,
+		memcpy(dp, bp->b_data + sizeof(*dp) /*DOSPARTOFF*/,
 		    NDOSPART * sizeof(*dp));
 	else
-		dp = (void *)((char *)bp->b_data + sizeof(*dp) /*DOSPARTOFF*/);
+		dp = (void*) (bp->b_data + sizeof(*dp) /*DOSPARTOFF*/);
 
 	/* if BSD disklabel does not exist, fall back to Human68k partition */
 	if (msg != NULL) {
@@ -238,7 +237,7 @@ dobadsect:
 				} else
 					msg = "bad sector table corrupted";
 			}
-		} while (bp->b_error != 0 && (i += 2) < 10 &&
+		} while ((bp->b_flags & B_ERROR) && (i += 2) < 10 &&
 			i < lp->d_nsectors);
 	}
 
@@ -297,8 +296,8 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
 			npp->p_cpg = opp->p_cpg;
 		}
 	}
-	nlp->d_checksum = 0;
-	nlp->d_checksum = dkcksum(nlp);
+ 	nlp->d_checksum = 0;
+ 	nlp->d_checksum = dkcksum(nlp);
 	*olp = *nlp;
 	return (0);
 }
@@ -343,8 +342,7 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *),
 		goto dodospart;
 	error = ESRCH;
 	for (dlp = (struct disklabel *)bp->b_data;
-	     dlp <= (struct disklabel *)
-		((char *)bp->b_data + labelsz - sizeof(*dlp));
+	     dlp <= (struct disklabel *)(bp->b_data + labelsz - sizeof(*dlp));
 	     dlp = (struct disklabel *)((char *)dlp + sizeof(long))) {
 		if (dlp->d_magic == DISKMAGIC && dlp->d_magic2 == DISKMAGIC &&
 		    dkcksum(dlp) == 0) {

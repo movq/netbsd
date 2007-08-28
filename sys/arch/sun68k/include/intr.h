@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.14 2007/03/11 06:25:08 tsutsui Exp $	*/
+/*	$NetBSD: intr.h,v 1.9 2006/10/05 14:24:10 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2001 Matt Fredette.
@@ -37,52 +37,36 @@
 #include <m68k/psl.h>
 
 /*
- * Interrupt levels.
+ * Interrupt levels.  Right now these correspond to real
+ * hardware levels, but I don't think anything counts on
+ * that (yet?).
  */
-#define	IPL_NONE	0
-#define	IPL_SOFTCLOCK	1
-#define	IPL_SOFTNET	2
-#define	IPL_BIO		3
-#define	IPL_NET		4
-#define	IPL_SOFTSERIAL	5
-#define	IPL_TTY		6
-#define	IPL_LPT		7
-#define	IPL_VM		8
-#if 0
-#define	IPL_AUDIO	9
-#endif
-#define	IPL_CLOCK	10
-#define	IPL_STATCLOCK	11
-#define	IPL_SERIAL	12
-#define	IPL_SCHED	13
-#define	IPL_HIGH	14
-#define	IPL_LOCK	15
-#if 0
-#define	IPL_IPI		16
-#endif
-
 #define _IPL_SOFT_LEVEL1	1
 #define _IPL_SOFT_LEVEL2	2
 #define _IPL_SOFT_LEVEL3	3
 #define _IPL_SOFT_LEVEL_MIN	1
 #define _IPL_SOFT_LEVEL_MAX	3
 
+#define	IPL_NONE	0
+#define	IPL_SOFT_LEVEL1	(PSL_S|PSL_IPL1)
+#define	IPL_SOFT_LEVEL2	(PSL_S|PSL_IPL2)
+#define	IPL_SOFT_LEVEL3	(PSL_S|PSL_IPL3)
+#define	IPL_SOFTCLOCK	IPL_SOFT_LEVEL1
+#define	IPL_SOFTNET	IPL_SOFT_LEVEL1
+#define	IPL_BIO		(PSL_S|PSL_IPL2)
+#define	IPL_NET		(PSL_S|PSL_IPL3)
+#define	IPL_SOFTSERIAL	IPL_SOFT_LEVEL3
+#define	IPL_TTY		(PSL_S|PSL_IPL4)
+#define	IPL_VM		(PSL_S|PSL_IPL4)
+/* Intersil or Am9513 clock hardware interrupts (hard-wired at 5) */
+#define	IPL_CLOCK	(PSL_S|PSL_IPL5)
+#define	IPL_STATCLOCK	IPL_CLOCK
+#define	IPL_SCHED	(PSL_S|PSL_IPL7)
+#define	IPL_HIGH	(PSL_S|PSL_IPL7)
+#define	IPL_LOCK	(PSL_S|PSL_IPL7)
+#define	IPL_SERIAL	(PSL_S|PSL_IPL6)
+
 #ifdef _KERNEL
-
-typedef int ipl_t;
-typedef struct {
-	uint16_t _psl;
-} ipl_cookie_t;
-
-ipl_cookie_t makeiplcookie(ipl_t ipl);
-
-static inline int
-splraiseipl(ipl_cookie_t icookie)
-{
-
-	return _splraise(icookie._psl);
-}
-
 LIST_HEAD(sh_head, softintr_handler);
 
 struct softintr_head {
@@ -95,7 +79,7 @@ struct softintr_handler {
 	LIST_ENTRY(softintr_handler) sh_link;
 	void (*sh_func)(void *);
 	void *sh_arg;
-	volatile int sh_pending;
+	int sh_pending;
 };
 
 void softintr_init(void);
@@ -110,9 +94,10 @@ static __inline void
 softintr_schedule(void *arg)
 {
 	struct softintr_handler * const sh = arg;
-
-	sh->sh_pending = 1;
-	isr_soft_request(sh->sh_head->shd_ipl);
+	if (sh->sh_pending == 0) {
+		sh->sh_pending = 1;
+		isr_soft_request(sh->sh_head->shd_ipl);
+	}
 }
 
 extern void *softnet_cookie;
@@ -156,43 +141,17 @@ _getsr(void)
 #define splx(x)	_spl(x)
 
 /* IPL used by soft interrupts: netintr(), softclock() */
-#define splsoftclock()  splraise1()
-#define splsoftnet()    splraise1()
-#define	splsoftserial()	splraise3()
-
-/* Highest block device (strategy) IPL. */
-#define splbio()        splraise2()
-
-/* Highest network interface IPL. */
-#define splnet()        splraise3()
-
-/* Highest tty device IPL. */
-#define spltty()        splraise4()
-
-/*
- * Requirement: imp >= (highest network, tty, or disk IPL)
- * This is used mostly in the VM code.
- * Note that the VM code runs at spl7 during kernel
- * initialization, and later at spl0, so we have to 
- * use splraise to avoid enabling interrupts early.
- */
-#define splvm()         splraise4()
-
-/* Intersil or Am9513 clock hardware interrupts (hard-wired at 5) */
-#define splclock()      splraise5()
-#define splstatclock()  splclock()
+#define	spllowersoftclock() spl1()
 
 /* Zilog Serial hardware interrupts (hard-wired at 6) */
-#define splzs()		splraise6()
-#define splserial()	splraise6()
-
-/* Block out all interrupts (except NMI of course). */
-#define splhigh()       spl7()
-#define splsched()      spl7()
-#define spllock()	spl7()
+#define splzs()		spl6()
 
 /* This returns true iff the spl given is spl0. */
 #define	is_spl0(s)	(((s) & PSL_IPL7) == 0)
+
+#define	splraiseipl(x)	_splraise(x)
+
+#include <sys/spl.h>
 
 #endif	/* _KERNEL */
 

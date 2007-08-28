@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_tz.c,v 1.23 2007/07/09 21:00:30 ad Exp $ */
+/* $NetBSD: acpi_tz.c,v 1.20 2006/11/16 01:32:47 christos Exp $ */
 
 /*
  * Copyright (c) 2003 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_tz.c,v 1.23 2007/07/09 21:00:30 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_tz.c,v 1.20 2006/11/16 01:32:47 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,7 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: acpi_tz.c,v 1.23 2007/07/09 21:00:30 ad Exp $");
 #include <sys/device.h>
 #include <sys/callout.h>
 #include <sys/proc.h>
-#include <sys/mutex.h>
+#include <sys/lock.h>
 #include <dev/sysmon/sysmonvar.h>
 
 #include <dev/acpi/acpica.h>
@@ -68,6 +68,10 @@ __KERNEL_RCSID(0, "$NetBSD: acpi_tz.c,v 1.23 2007/07/09 21:00:30 ad Exp $");
 /* sensor indexes */
 #define ATZ_SENSOR_TEMP	0	/* thermal zone temperature */
 #define ATZ_NUMSENSORS	1	/* number of sensors */
+
+static const struct envsys_range acpitz_ranges[] = {
+	{ 0, 1,	ATZ_SENSOR_TEMP },
+};
 
 static int	acpitz_match(struct device *, struct cfdata *, void *);
 static void	acpitz_attach(struct device *, struct device *, void *);
@@ -106,9 +110,10 @@ struct acpitz_softc {
 	struct acpi_devnode *sc_devnode;
 	struct acpitz_zone sc_zone;
 	struct callout sc_callout;
-	struct envsys_data sc_data[ATZ_NUMSENSORS];
+	struct envsys_tre_data sc_data[ATZ_NUMSENSORS];
+	struct envsys_basic_info sc_info[ATZ_NUMSENSORS];
 	struct sysmon_envsys sc_sysmon;
-	kmutex_t sc_mtx;
+	struct simplelock sc_slock;
 	int sc_active;		/* active cooling level */
 	int sc_flags;
 	int sc_rate;		/* tz poll rate */
@@ -129,6 +134,10 @@ static void	acpitz_notify_handler(ACPI_HANDLE, UINT32, void *);
 static int	acpitz_get_integer(struct acpitz_softc *, const char *, UINT32 *);
 static void	acpitz_tick(void *);
 static void	acpitz_init_envsys(struct acpitz_softc *);
+static int	acpitz_gtredata(struct sysmon_envsys *,
+				struct envsys_tre_data *);
+static int	acpitz_streinfo(struct sysmon_envsys *,
+				struct envsys_basic_info *);
 
 CFATTACH_DECL(acpitz, sizeof(struct acpitz_softc), acpitz_match,
     acpitz_attach, NULL, NULL);
@@ -137,7 +146,8 @@ CFATTACH_DECL(acpitz, sizeof(struct acpitz_softc), acpitz_match,
  * acpitz_match: autoconf(9) match routine
  */
 static int
-acpitz_match(struct device *parent, struct cfdata *match, void *aux)
+acpitz_match(struct device *parent, struct cfdata *match,
+    void *aux)
 {
 	struct acpi_attach_args *aa = aux;
 
@@ -157,8 +167,6 @@ acpitz_attach(struct device *parent, struct device *self, void *aux)
 	struct acpi_attach_args *aa = aux;
 	ACPI_STATUS rv;
 	ACPI_INTEGER v;
-
-	mutex_init(&sc->sc_mtx, MUTEX_DRIVER, IPL_NONE);
 
 #if 0
 	sc->sc_flags = ATZ_F_VERBOSE;
@@ -196,7 +204,7 @@ acpitz_attach(struct device *parent, struct device *self, void *aux)
 		return;
 	}
 
-	callout_init(&sc->sc_callout, 0);
+	callout_init(&sc->sc_callout);
 	callout_reset(&sc->sc_callout, sc->sc_zone.tzp * hz / 10,
 	    acpitz_tick, sc);
 
@@ -237,10 +245,9 @@ acpitz_get_status(void *opaque)
 	 * that K = C + 273.2 rather than the nominal 273.15 used by envsys(4),
 	 * so we correct for that too.
 	 */
-	sc->sc_data[ATZ_SENSOR_TEMP].value_cur =
+	sc->sc_data[ATZ_SENSOR_TEMP].cur.data_us =
 	    sc->sc_zone.tmp * 100000 - 50000;
-	sc->sc_data[ATZ_SENSOR_TEMP].state = ENVSYS_SVALID;
-	sc->sc_data[ATZ_SENSOR_TEMP].monitor = true;
+	sc->sc_data[ATZ_SENSOR_TEMP].validflags |= ENVSYS_FCURVALID;
 
 	if (sc->sc_flags & ATZ_F_VERBOSE)
 		acpitz_print_status(sc);
@@ -276,19 +283,14 @@ acpitz_get_status(void *opaque)
 		if (flags != sc->sc_flags) {
 			int changed = (sc->sc_flags ^ flags) & flags;
 			sc->sc_flags = flags;
-			if (changed & ATZ_F_CRITICAL) {
-				sc->sc_data[ATZ_SENSOR_TEMP].state =
-				    ENVSYS_SCRITICAL;
+			if (changed & ATZ_F_CRITICAL)
 				printf("%s: zone went critical at temp %sC\n",
 				    sc->sc_dev.dv_xname,
 				    acpitz_celcius_string(tmp));
-			} else if (changed & ATZ_F_HOT) {
-				sc->sc_data[ATZ_SENSOR_TEMP].state =
-				    ENVSYS_SWARNOVER;
+			else if (changed & ATZ_F_HOT)
 				printf("%s: zone went hot at temp %sC\n",
 				    sc->sc_dev.dv_xname,
 				    acpitz_celcius_string(tmp));
-			}
 		}
 
 		/* power on fans */
@@ -436,6 +438,7 @@ acpitz_get_zone(void *opaque, int verbose)
 		rv = acpi_eval_struct(sc->sc_devnode->ad_handle, buf,
 		    &sc->sc_zone.al[i]);
 		if (ACPI_FAILURE(rv)) {
+			printf("failed getting _AL%d", i);
 			sc->sc_zone.al[i].Pointer = NULL;
 			continue;
 		}
@@ -582,27 +585,58 @@ acpitz_init_envsys(struct acpitz_softc *sc)
 {
 	int i;
 
+	simple_lock_init(&sc->sc_slock);
+
 	for (i = 0; i < ATZ_NUMSENSORS; i++) {
-		sc->sc_data[i].sensor = i;
-		sc->sc_data[i].state = ENVSYS_SVALID;
-		sc->sc_data[i].flags = 
-		    (ENVSYS_FMONCRITICAL|ENVSYS_FMONWARNOVER);
+		sc->sc_data[i].sensor = sc->sc_info[i].sensor = i;
+		sc->sc_data[i].validflags = ENVSYS_FVALID;
+		sc->sc_info[i].validflags = ENVSYS_FVALID;
+		sc->sc_data[i].warnflags = ENVSYS_WARN_OK;
 	}
 #define INITDATA(index, unit, string) \
 	sc->sc_data[index].units = unit;				   \
-	snprintf(sc->sc_data[index].desc, sizeof(sc->sc_data[index].desc), \
+	sc->sc_info[index].units = unit;				   \
+	snprintf(sc->sc_info[index].desc, sizeof(sc->sc_info[index].desc), \
 	    "%s %s", sc->sc_dev.dv_xname, string);
 
 	INITDATA(ATZ_SENSOR_TEMP, ENVSYS_STEMP, "temperature");
 
 	/* hook into sysmon */
+	sc->sc_sysmon.sme_ranges = acpitz_ranges;
+	sc->sc_sysmon.sme_sensor_info = sc->sc_info;
 	sc->sc_sysmon.sme_sensor_data = sc->sc_data;
-	sc->sc_sysmon.sme_name = sc->sc_dev.dv_xname;
 	sc->sc_sysmon.sme_cookie = sc;
+	sc->sc_sysmon.sme_gtredata = acpitz_gtredata;
+	sc->sc_sysmon.sme_streinfo = acpitz_streinfo;
 	sc->sc_sysmon.sme_nsensors = ATZ_NUMSENSORS;
-	sc->sc_sysmon.sme_flags = SME_DISABLE_GTREDATA;
+	sc->sc_sysmon.sme_envsys_version = 1000;
 
 	if (sysmon_envsys_register(&sc->sc_sysmon))
 		printf("%s: unable to register with sysmon\n",
 		    sc->sc_dev.dv_xname);
+}
+
+int
+acpitz_gtredata(struct sysmon_envsys *sme, struct envsys_tre_data *tred)
+{
+	struct acpitz_softc *sc = sme->sme_cookie;
+
+	simple_lock(&sc->sc_slock);
+
+	*tred = sc->sc_data[tred->sensor];
+
+	simple_unlock(&sc->sc_slock);
+
+	return 0;
+}
+
+static int
+acpitz_streinfo(struct sysmon_envsys *sme,
+    struct envsys_basic_info *binfo)
+{
+
+	/* XXX not implemented */
+	binfo->validflags = 0;
+
+	return 0;
 }

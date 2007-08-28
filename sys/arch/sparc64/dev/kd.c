@@ -1,4 +1,4 @@
-/*	$NetBSD: kd.c,v 1.44 2007/03/04 06:00:49 christos Exp $	*/
+/*	$NetBSD: kd.c,v 1.42 2006/10/15 20:57:13 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.44 2007/03/04 06:00:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kd.c,v 1.42 2006/10/15 20:57:13 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -273,7 +273,7 @@ kdpoll(dev_t dev, int events, struct lwp *l)
 }
 
 int
-kdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+kdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct kd_softc *kd;
 	struct tty *tp;
@@ -315,10 +315,9 @@ static void
 kdstart(struct tty *tp)
 {
 	struct clist *cl;
-	int s1, s2;
+	register int s;
 
-	s1 = splsoftclock();
-	s2 = spltty();
+	s = spltty();
 	if (tp->t_state & (TS_BUSY|TS_TTSTOP|TS_TIMEOUT))
 		goto out;
 
@@ -326,11 +325,11 @@ kdstart(struct tty *tp)
 	if (cl->c_cc) {
 		if (kd_is_console) {
 			tp->t_state |= TS_BUSY;
-			if (s1 == 0) {
+			if (s == 0) {
 				/* called at level zero - update screen now. */
-				splx(s2);
+				(void) spllowersoftclock();
 				kd_putfb(tp);
-				s2 = spltty();
+				(void) spltty();
 				tp->t_state &= ~TS_BUSY;
 			} else {
 				/* called at interrupt level - do it later */
@@ -350,13 +349,12 @@ kdstart(struct tty *tp)
 	if (cl->c_cc <= tp->t_lowat) {
 		if (tp->t_state & TS_ASLEEP) {
 			tp->t_state &= ~TS_ASLEEP;
-			wakeup((void *)cl);
+			wakeup((caddr_t)cl);
 		}
 		selwakeup(&tp->t_wsel);
 	}
 out:
-	splx(s2);
-	splx(s1);
+	splx(s);
 }
 
 /*

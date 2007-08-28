@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec_elf32.c,v 1.79 2007/04/22 08:29:57 dsl Exp $	*/
+/*	$NetBSD: linux_exec_elf32.c,v 1.76 2006/11/16 01:32:42 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2000, 2001 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.79 2007/04/22 08:29:57 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.76 2006/11/16 01:32:42 christos Exp $");
 
 #ifndef ELFSIZE
 /* XXX should die */
@@ -63,6 +63,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_exec_elf32.c,v 1.79 2007/04/22 08:29:57 dsl Ex
 #include <sys/kauth.h>
 
 #include <sys/mman.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <machine/cpu.h>
@@ -332,12 +333,12 @@ ELFNAME2(linux,signature)(l, epp, eh, itp)
 		if (np->n_type != ELF_NOTE_TYPE_ABI_TAG ||
 		    np->n_namesz != ELF_NOTE_ABI_NAMESZ ||
 		    np->n_descsz != ELF_NOTE_ABI_DESCSZ ||
-		    memcmp((void *)(np + 1), ELF_NOTE_ABI_NAME,
+		    memcmp((caddr_t)(np + 1), ELF_NOTE_ABI_NAME,
 		    ELF_NOTE_ABI_NAMESZ))
 			goto next;
 
 		/* Make sure the OS is Linux. */
-		abi = (u_int32_t *)((char *)np + sizeof(Elf_Nhdr) +
+		abi = (u_int32_t *)((caddr_t)np + sizeof(Elf_Nhdr) +
 		    np->n_namesz);
 		if (abi[0] == ELF_NOTE_ABI_OS_LINUX)
 			error = 0;
@@ -392,7 +393,8 @@ ELFNAME2(linux,probe)(struct lwp *l, struct exec_package *epp, void *eh,
 	}
 
 	if (itp) {
-		if ((error = emul_find_interp(l, epp, itp)))
+		if ((error = emul_find_interp(l, epp->ep_esch->es_emul->e_path,
+		    itp)))
 			return (error);
 	}
 	DPRINTF(("linux_probe: returning 0\n"));

@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.h,v 1.36 2007/03/06 14:42:44 tsutsui Exp $	*/
+/*	$NetBSD: bus.h,v 1.33 2005/12/11 12:16:59 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -85,7 +85,7 @@ typedef u_long	bus_size_t;
  * Access methods for bus resources and address space.
  */
 typedef struct atari_bus_space	*bus_space_tag_t;
-typedef u_long			bus_space_handle_t;
+typedef caddr_t			bus_space_handle_t;
 
 #define	BUS_SPACE_MAP_CACHEABLE		0x01
 #define	BUS_SPACE_MAP_LINEAR		0x02
@@ -649,8 +649,6 @@ struct atari_bus_dma_tag {
 	(void)((t)->_dmamap_sync ?				\
 	    (*(t)->_dmamap_sync)((t), (p), (o), (l), (ops)) : (void)0)
 
-#define bus_dmatag_subregion(t, mna, mxa, nt, f) EOPNOTSUPP
-#define bus_dmatag_destroy(t)
 
 /*
  *	bus_dmamap_t
@@ -706,8 +704,8 @@ int	bus_dmamem_alloc_range __P((bus_dma_tag_t tag, bus_size_t size,
 void	bus_dmamem_free __P((bus_dma_tag_t tag, bus_dma_segment_t *segs,
 	    int nsegs));
 int	bus_dmamem_map __P((bus_dma_tag_t tag, bus_dma_segment_t *segs,
-	    int nsegs, size_t size, void **kvap, int flags));
-void	bus_dmamem_unmap __P((bus_dma_tag_t tag, void *kva,
+	    int nsegs, size_t size, caddr_t *kvap, int flags));
+void	bus_dmamem_unmap __P((bus_dma_tag_t tag, caddr_t kva,
 	    size_t size));
 paddr_t	bus_dmamem_mmap __P((bus_dma_tag_t tag, bus_dma_segment_t *segs,
 	    int nsegs, off_t off, int prot, int flags));

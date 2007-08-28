@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.109 2007/06/02 06:23:57 tsutsui Exp $	*/
+/*	$NetBSD: machdep.c,v 1.104 2006/10/21 05:54:33 mrg Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.109 2007/06/02 06:23:57 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.104 2006/10/21 05:54:33 mrg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -100,6 +100,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.109 2007/06/02 06:23:57 tsutsui Exp $"
 #include <sys/core.h>
 #include <sys/kcore.h>
 #include <sys/vnode.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/ksyms.h>
 #ifdef	KGDB
@@ -144,7 +145,7 @@ struct vm_map *phys_map = NULL;
 
 int	physmem;
 int	fputype;
-void *	msgbufaddr;
+caddr_t	msgbufaddr;
 
 /* Virtual page frame for /dev/mem (see mem.c) */
 vaddr_t vmmap;
@@ -217,9 +218,12 @@ consinit(void)
 void 
 cpu_startup(void)
 {
-	char *v;
+	caddr_t v;
 	vaddr_t minaddr, maxaddr;
 	char pbuf[9];
+
+	if (fputype != FPU_NONE)
+		m68k_make_fpu_idle_frame();
 
 	/*
 	 * Initialize message buffer (for kernel printf).
@@ -228,8 +232,8 @@ cpu_startup(void)
 	 * Its mapping was prepared in pmap_bootstrap().
 	 * Also, offset some to avoid PROM scribbles.
 	 */
-	v = (char *)KERNBASE;
-	msgbufaddr = v + MSGBUFOFF;
+	v = (caddr_t) KERNBASE;
+	msgbufaddr = (caddr_t)(v + MSGBUFOFF);
 	initmsgbuf(msgbufaddr, MSGBUFSIZE);
 
 	/*
@@ -255,20 +259,20 @@ cpu_startup(void)
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
+				   16*NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, 0, false, NULL);
+				   VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
+				 FALSE, NULL);
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
@@ -358,13 +362,13 @@ identifycpu(void)
 	case ID_SUN3X_80:
 		cpu_string = "80";  	/* Hydra */
 		delay_divisor = 102;	/* 20 MHz */
-		cpu_has_vme = false;
+		cpu_has_vme = FALSE;
 		break;
 
 	case ID_SUN3X_470:
 		cpu_string = "470"; 	/* Pegasus */
 		delay_divisor = 62; 	/* 33 MHz */
-		cpu_has_vme = true;
+		cpu_has_vme = TRUE;
 		break;
 
 	default:

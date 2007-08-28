@@ -1,4 +1,4 @@
-/*	$NetBSD: if_xennet.c,v 1.51 2007/08/26 22:32:46 dyoung Exp $	*/
+/*	$NetBSD: if_xennet.c,v 1.48 2006/05/27 19:54:59 bouyer Exp $	*/
 
 /*
  *
@@ -33,7 +33,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xennet.c,v 1.51 2007/08/26 22:32:46 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xennet.c,v 1.48 2006/05/27 19:54:59 bouyer Exp $");
 
 #include "opt_inet.h"
 #include "opt_nfs_boot.h"
@@ -181,7 +181,7 @@ static void xennet_ctrlif_rx(ctrl_msg_t *, unsigned long);
 static int xennet_driver_count_connected(void);
 static void xennet_driver_status_change(netif_fe_driver_status_t *);
 static void xennet_interface_status_change(netif_fe_interface_status_t *);
-static void xennet_rx_mbuf_free(struct mbuf *, void *, size_t, void *);
+static void xennet_rx_mbuf_free(struct mbuf *, caddr_t, size_t, void *);
 static int xen_network_handler(void *);
 static void network_tx_buf_gc(struct xennet_softc *);
 static void network_alloc_rx_buffers(struct xennet_softc *);
@@ -194,7 +194,7 @@ static int xennet_mediachange (struct ifnet *);
 static void xennet_mediastatus(struct ifnet *, struct ifmediareq *);
 #endif
 void xennet_start(struct ifnet *);
-int  xennet_ioctl(struct ifnet *ifp, u_long cmd, void *data);
+int  xennet_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data);
 void xennet_watchdog(struct ifnet *ifp);
 
 CFATTACH_DECL(xennet_hypervisor, sizeof(struct xennet_softc),
@@ -662,7 +662,7 @@ xennet_rx_push_buffer(struct xennet_softc *sc, int id)
 }
 
 static void
-xennet_rx_mbuf_free(struct mbuf *m, void *buf, size_t size, void *arg)
+xennet_rx_mbuf_free(struct mbuf *m, caddr_t buf, size_t size, void *arg)
 {
 	union xennet_bufarray *xb = (union xennet_bufarray *)arg;
 	struct xennet_softc *sc = xb->xb_rx.xbrx_sc;
@@ -765,7 +765,7 @@ xen_network_handler(void *arg)
 		if ((ifp->if_flags & IFF_PROMISC) == 0) {
 			struct ether_header *eh = pktp;
 			if (ETHER_IS_MULTICAST(eh->ether_dhost) == 0 &&
-			    memcmp(CLLADDR(ifp->if_sadl), eh->ether_dhost,
+			    memcmp(LLADDR(ifp->if_sadl), eh->ether_dhost,
 			    ETHER_ADDR_LEN) != 0) {
 				xennet_rx_push_buffer(sc, rx->id);
 				m_freem(m);
@@ -1104,7 +1104,7 @@ xennet_softstart(void *arg)
 			}
 			IFQ_DEQUEUE(&ifp->if_snd, m);
 
-			m_copydata(m, 0, m->m_pkthdr.len, mtod(new_m, void *));
+			m_copydata(m, 0, m->m_pkthdr.len, mtod(new_m, caddr_t));
 			new_m->m_len = new_m->m_pkthdr.len = m->m_pkthdr.len;
 
 			m_freem(m);
@@ -1177,7 +1177,7 @@ xennet_softstart(void *arg)
 }
 
 int
-xennet_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+xennet_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 #ifdef mediacode
 	struct ifreq *ifr = (struct ifreq *)data;
@@ -1299,17 +1299,14 @@ xennet_bootstatic_callback(struct nfs_diskless *nd)
 	nd->nd_mask.s_addr = ntohl(xcp.xcp_netinfo.xi_ip[3]);
 
 	sin = (struct sockaddr_in *) &nd->nd_root.ndm_saddr;
-	memset((void *)sin, 0, sizeof(*sin));
+	memset((caddr_t)sin, 0, sizeof(*sin));
 	sin->sin_len = sizeof(*sin);
 	sin->sin_family = AF_INET;
 	sin->sin_addr.s_addr = ntohl(xcp.xcp_netinfo.xi_ip[1]);
 
-	if (nd->nd_myip.s_addr == 0)
-		return NFS_BOOTSTATIC_NOSTATIC;
-	else
-		return (NFS_BOOTSTATIC_HAS_MYIP|NFS_BOOTSTATIC_HAS_GWIP|
-		    NFS_BOOTSTATIC_HAS_MASK|NFS_BOOTSTATIC_HAS_SERVADDR|
-		    NFS_BOOTSTATIC_HAS_SERVER);
+	return (NFS_BOOTSTATIC_HAS_MYIP|NFS_BOOTSTATIC_HAS_GWIP|
+	    NFS_BOOTSTATIC_HAS_MASK|NFS_BOOTSTATIC_HAS_SERVADDR|
+	    NFS_BOOTSTATIC_HAS_SERVER);
 }
 #endif /* defined(NFS_BOOT_BOOTSTATIC) */
 

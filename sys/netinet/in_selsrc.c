@@ -1,4 +1,4 @@
-/*	$NetBSD: in_selsrc.c,v 1.5 2007/02/22 08:08:40 dyoung Exp $	*/
+/*	$NetBSD: in_selsrc.c,v 1.3.4.1 2007/03/04 14:03:58 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2005 David Young.  All rights reserved.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_selsrc.c,v 1.5 2007/02/22 08:08:40 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_selsrc.c,v 1.3.4.1 2007/03/04 14:03:58 bouyer Exp $");
 
 #include "opt_inet.h"
 #include "opt_inet_conf.h"

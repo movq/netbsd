@@ -1,4 +1,4 @@
-/* $NetBSD: linux_syscall.c,v 1.22 2007/03/04 05:59:10 christos Exp $ */
+/* $NetBSD: linux_syscall.c,v 1.20 2006/07/19 21:11:39 ad Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -96,11 +96,13 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.22 2007/03/04 05:59:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_syscall.c,v 1.20 2006/07/19 21:11:39 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/user.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
@@ -158,7 +160,7 @@ linux_syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 
 	LWP_CACHE_CREDS(l, p);
 
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 
 	uvmexp.syscalls++;
 	l->l_md.md_tf = framep;
@@ -182,7 +184,7 @@ linux_syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	nargs = callp->sy_narg + hidden;
 	switch (nargs) {
 	default:
-		error = copyin((void *)alpha_pal_rdusp(), &copyargs[6],
+		error = copyin((caddr_t)alpha_pal_rdusp(), &copyargs[6],
 		    (nargs - 6) * sizeof(u_int64_t));
 		if (error)
 			goto bad;
@@ -229,7 +231,7 @@ linux_syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 		break;
 	}
 
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 	userret(l);
 }
 
@@ -245,7 +247,7 @@ linux_syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
 
 	LWP_CACHE_CREDS(l, p);
 
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 
 	uvmexp.syscalls++;
 	l->l_md.md_tf = framep;
@@ -269,7 +271,7 @@ linux_syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	nargs = callp->sy_narg + hidden;
 	switch (nargs) {
 	default:
-		error = copyin((void *)alpha_pal_rdusp(), &copyargs[6],
+		error = copyin((caddr_t)alpha_pal_rdusp(), &copyargs[6],
 		    (nargs - 6) * sizeof(u_int64_t));
 		if (error) {
 			args = copyargs;
@@ -322,7 +324,7 @@ out:
 		break;
 	}
 
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 
 	trace_exit(l, code, args, rval, error);
 

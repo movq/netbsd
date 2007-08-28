@@ -1,4 +1,4 @@
-/*	$NetBSD: synapticsreg.h,v 1.5 2007/01/17 23:14:03 uwe Exp $	*/
+/*	$NetBSD: synapticsreg.h,v 1.4 2005/12/11 12:23:22 christos Exp $	*/
 
 /*
  * Copyright (c) 2005, Steve C. Woodford
@@ -38,11 +38,9 @@
 #ifndef _DEV_PCKBCPORT_SYNAPTICSREG_H_
 #define _DEV_PCKBCPORT_SYNAPTICSREG_H_
 
-/* Synaptics information queries. */
+/* Synaptics PS/2 commands. */
 #define SYNAPTICS_IDENTIFY_TOUCHPAD	0x0
-#define SYNAPTICS_READ_MODE		0x1
 #define SYNAPTICS_READ_CAPABILITIES	0x2
-#define SYNAPTICS_READ_MODEL_ID		0x3
 #define SYNAPTICS_EXTENDED_QUERY	0x9
 
 /* Magic numbers. */
@@ -51,7 +49,7 @@
 
 /* Capability bits. */
 #define SYNAPTICS_CAP_EXTENDED		(1 << 15)
-#define SYNAPTICS_CAP_EXTNUM		(1 << 14 | 1 << 13 | 1 << 12)
+#define SYNAPTICS_CAP_EXTNUM		(1 << 14 | 1 << 13)
 #define SYNAPTICS_CAP_MBUTTON		(1 << 10)
 #define SYNAPTICS_CAP_PASSTHROUGH	(1 << 7)
 #define SYNAPTICS_CAP_SLEEP		(1 << 4)

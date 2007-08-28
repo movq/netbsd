@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.131 2007/08/17 23:58:46 ad Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.126 2006/10/17 18:21:29 dogcow Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.131 2007/08/17 23:58:46 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.126 2006/10/17 18:21:29 dogcow Exp $");
 
 #include "opt_user_ldt.h"
 #include "opt_largepages.h"
@@ -126,7 +126,7 @@ cpu_proc_fork(struct proc *p1, struct proc *p2)
  * Copy and update the pcb and trap frame, making the child ready to run.
  *
  * Rig the child's kernel stack so that it will start out in
- * lwp_trampoline() and call child_return() with l2 as an
+ * proc_trampoline() and call child_return() with l2 as an
  * argument. This causes the newly-created child process to go
  * directly to user level with an apparent return value of 0 from
  * fork(), while the parent process returns normally.
@@ -145,6 +145,7 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 {
 	struct pcb *pcb = &l2->l_addr->u_pcb;
 	struct trapframe *tf;
+	struct switchframe *sf;
 
 #if NNPX > 0
 	/*
@@ -181,7 +182,6 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	pcb->pcb_tss.tss_esp0 = USER_TO_UAREA(l2->l_addr) + KSTACK_SIZE - 16;
 
 	l2->l_md.md_tss_sel = tss_alloc(pcb);
-	l2->l_md.md_astpending = 0;
 
 	/*
 	 * Copy the trapframe.
@@ -198,7 +198,12 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	if (stack != NULL)
 		tf->tf_esp = (u_int)stack + stacksize;
 
-	cpu_setfunc(l2, func, arg);
+	sf = (struct switchframe *)tf - 1;
+	sf->sf_esi = (int)func;
+	sf->sf_ebx = (int)arg;
+	sf->sf_eip = (int)proc_trampoline;
+	pcb->pcb_esp = (int)sf;
+	pcb->pcb_ebp = 0;
 }
 
 void
@@ -210,9 +215,9 @@ cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
 
 	sf->sf_esi = (int)func;
 	sf->sf_ebx = (int)arg;
-	sf->sf_eip = (int)lwp_trampoline;
+	sf->sf_eip = (int)proc_trampoline;
 	pcb->pcb_esp = (int)sf;
-	pcb->pcb_ebp = (int)l;
+	pcb->pcb_ebp = 0;
 }	
 
 void
@@ -237,8 +242,8 @@ cpu_swapout(struct lwp *l)
 
 /*
  * cpu_lwp_free is called from exit() to let machine-dependent
- * code free machine-dependent resources.  Note that this routine
- * must not block.
+ * code free machine-dependent resources that should be cleaned
+ * while we can still block and have process associated with us
  */
 void
 cpu_lwp_free(struct lwp *l, int proc)
@@ -254,15 +259,6 @@ cpu_lwp_free(struct lwp *l, int proc)
 	if (proc && l->l_proc->p_md.md_flags & MDP_USEDMTRR)
 		mtrr_clean(l->l_proc);
 #endif
-}
-
-/*
- * cpu_lwp_free2 is called when an LWP is being reaped.  This routine
- * may block.
- */
-void
-cpu_lwp_free2(struct lwp *l)
-{
 
 	/* Nuke the TSS. */
 	tss_free(l->l_md.md_tss_sel);
@@ -340,11 +336,11 @@ setredzone(struct lwp *l)
  * Convert kernel VA to physical address
  */
 int
-kvtop(register void *addr)
+kvtop(register caddr_t addr)
 {
 	paddr_t pa;
 
-	if (pmap_extract(pmap_kernel(), (vaddr_t)addr, &pa) == false)
+	if (pmap_extract(pmap_kernel(), (vaddr_t)addr, &pa) == FALSE)
 		panic("kvtop: zero page frame");
 	return (int)pa;
 }
@@ -366,7 +362,7 @@ vmapbuf(struct buf *bp, vsize_t len)
 	off = (vaddr_t)bp->b_data - faddr;
 	len = round_page(off + len);
 	taddr = uvm_km_alloc(phys_map, len, 0, UVM_KMF_VAONLY|UVM_KMF_WAITVA);
-	bp->b_data = (void *)(taddr + off);
+	bp->b_data = (caddr_t)(taddr + off);
 	/*
 	 * The region is locked, so we expect that pmap_pte() will return
 	 * non-NULL.

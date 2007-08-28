@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.19 2007/02/26 23:53:12 garbled Exp $
+#	$NetBSD: Makefile,v 1.18.24.1 2007/03/04 14:17:10 bouyer Exp $
 
 INCSDIR= /usr/include/prep
 

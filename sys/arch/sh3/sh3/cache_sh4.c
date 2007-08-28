@@ -1,4 +1,4 @@
-/*	$NetBSD: cache_sh4.c,v 1.17 2007/03/29 01:51:49 uwe Exp $	*/
+/*	$NetBSD: cache_sh4.c,v 1.16.2.1 2007/04/20 20:38:15 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cache_sh4.c,v 1.17 2007/03/29 01:51:49 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cache_sh4.c,v 1.16.2.1 2007/04/20 20:38:15 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

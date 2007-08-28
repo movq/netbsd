@@ -1,4 +1,4 @@
-/*	$NetBSD: ms_kbc.c,v 1.9 2007/03/04 06:00:24 christos Exp $	*/
+/*	$NetBSD: ms_kbc.c,v 1.7 2005/12/11 12:18:23 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001 Izumi Tsutsui.  All rights reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ms_kbc.c,v 1.9 2007/03/04 06:00:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ms_kbc.c,v 1.7 2005/12/11 12:18:23 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -53,7 +53,7 @@ int ms_kbc_intr(void *);
 
 static int ms_kbc_enable(void *);
 static void ms_kbc_disable(void *);
-static int ms_kbc_ioctl(void *, u_long, void *, int, struct lwp *);
+static int ms_kbc_ioctl(void *, u_long, caddr_t, int, struct lwp *);
 
 CFATTACH_DECL(ms_kbc, sizeof(struct ms_softc),
     ms_kbc_match, ms_kbc_attach, NULL, NULL);
@@ -92,7 +92,7 @@ ms_kbc_attach(struct device *parent, struct device *self, void *aux)
 
 	ms_kbc_init(sc);
 
-	isrlink_autovec(ms_kbc_intr, (void *)sc, ipl, IPL_TTY);
+	isrlink_autovec(ms_kbc_intr, (void *)sc, ipl, ISRPRI_TTY);
 
 	wsa.accessops = &ms_kbc_accessops;
 	wsa.accesscookie = sc;
@@ -150,7 +150,7 @@ ms_kbc_disable(void *v)
 }
 
 static int
-ms_kbc_ioctl(void *v, u_long cmd, void *data, int flag, struct lwp *l)
+ms_kbc_ioctl(void *v, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 
 	return EPASSTHROUGH;

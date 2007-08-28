@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.11 2007/03/04 10:02:42 tsutsui Exp $	*/
+/*	$NetBSD: param.h,v 1.9 2005/12/06 16:52:14 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -80,6 +80,11 @@
 #define	_NEWS68K_PARAM_H_
 
 /*
+ * Interrupt glue.
+ */
+#include <machine/intr.h>
+
+/*
  * Machine dependent constants for m68k NEWS.
  */
 #define	_MACHINE	news68k
@@ -114,8 +119,6 @@
 #define	NKMEMPAGES_MAX_DEFAULT	((4 * 1024 * 1024) >> PAGE_SHIFT)
 
 #if defined(_KERNEL) && !defined(_LOCORE)
-#include <machine/intr.h>
-
 #define	delay(us)	_delay((us) << 8)
 #define DELAY(us)	delay(us)
 

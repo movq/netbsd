@@ -1,4 +1,4 @@
-/* $NetBSD: atomic.h,v 1.9 2007/03/24 17:50:17 christos Exp $ */
+/* $NetBSD: atomic.h,v 1.7 2005/12/28 19:09:29 perry Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -38,44 +38,33 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _I386_ATOMIC_H_
-#define _I386_ATOMIC_H_
+#ifndef _ATOMIC_H_
+#define _ATOMIC_H_
 
 #ifndef _LOCORE
 
-static __inline unsigned long x86_atomic_testset_ul(volatile uint32_t *,
-    unsigned long);
 static __inline unsigned long
-x86_atomic_testset_ul(volatile uint32_t *__ptr, unsigned long __val) {
-	__asm volatile ("xchgl %0,(%2)" :"=r" (__val):"0" (__val),"r" (__ptr));
-	return __val;
+x86_atomic_testset_ul (volatile uint32_t *ptr, unsigned long val) {
+    __asm volatile ("xchgl %0,(%2)" :"=r" (val):"0" (val),"r" (ptr));
+    return val;
 }
 
-static __inline int x86_atomic_testset_i(volatile int *, int);
 static __inline int
-x86_atomic_testset_i(volatile int *__ptr, int __val) {
-	__asm volatile ("xchgl %0,(%2)" :"=r" (__val):"0" (__val),"r" (__ptr));
-	return __val;
+x86_atomic_testset_i (volatile int *ptr, int val) {
+    __asm volatile ("xchgl %0,(%2)" :"=r" (val):"0" (val),"r" (ptr));
+    return val;
 }
 
-static __inline uint8_t x86_atomic_testset_b(volatile uint8_t *, uint8_t);
-static __inline uint8_t
-x86_atomic_testset_b(volatile uint8_t *__ptr, uint8_t __val) {
-	__asm volatile ("xchgb %0,(%2)" :"=A" (__val):"0" (__val),"r" (__ptr));
-	return __val;
-}
-
-static __inline void x86_atomic_setbits_l(volatile uint32_t *, unsigned long);
 static __inline void
-x86_atomic_setbits_l(volatile uint32_t *__ptr, unsigned long __bits) {
-	__asm volatile("lock ; orl %1,%0" :  "=m" (*__ptr) : "ir" (__bits));
+x86_atomic_setbits_l (volatile uint32_t *ptr, unsigned long bits) {
+    __asm volatile("lock ; orl %1,%0" :  "=m" (*ptr) : "ir" (bits));
 }
 
-static __inline void x86_atomic_clearbits_l(volatile uint32_t *, unsigned long);
 static __inline void
-x86_atomic_clearbits_l(volatile uint32_t *__ptr, unsigned long __bits) {
-	__asm volatile("lock ; andl %1,%0" :  "=m" (*__ptr) : "ir" (~__bits));
+x86_atomic_clearbits_l (volatile uint32_t *ptr, unsigned long bits) {
+    __asm volatile("lock ; andl %1,%0" :  "=m" (*ptr) : "ir" (~bits));
 }
 
 #endif
 #endif
+

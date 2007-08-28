@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pdpolicy_clockpro.c,v 1.9 2007/08/01 14:49:55 yamt Exp $	*/
+/*	$NetBSD: uvm_pdpolicy_clockpro.c,v 1.6 2006/11/28 13:14:53 yamt Exp $	*/
 
 /*-
  * Copyright (c)2005, 2006 YAMAMOTO Takashi,
@@ -43,7 +43,7 @@
 #else /* defined(PDSIM) */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_pdpolicy_clockpro.c,v 1.9 2007/08/01 14:49:55 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_pdpolicy_clockpro.c,v 1.6 2006/11/28 13:14:53 yamt Exp $");
 
 #include "opt_ddb.h"
 
@@ -89,8 +89,7 @@ int clockpro_hashfactor = CLOCKPRO_HASHFACTOR;
 
 PDPOL_EVCNT_DEFINE(nresrecordobj)
 PDPOL_EVCNT_DEFINE(nresrecordanon)
-PDPOL_EVCNT_DEFINE(nreslookupobj)
-PDPOL_EVCNT_DEFINE(nreslookupanon)
+PDPOL_EVCNT_DEFINE(nreslookup)
 PDPOL_EVCNT_DEFINE(nresfoundobj)
 PDPOL_EVCNT_DEFINE(nresfoundanon)
 PDPOL_EVCNT_DEFINE(nresanonfree)
@@ -452,7 +451,7 @@ nonresident_rotate(struct bucket *b)
 	}
 }
 
-static bool
+static boolean_t
 nonresident_lookupremove(objid_t obj, off_t idx)
 {
 	struct bucket *b = nonresident_getbucket(obj, idx);
@@ -463,10 +462,10 @@ nonresident_lookupremove(objid_t obj, off_t idx)
 	for (i = 0; i < BUCKETSIZE; i++) {
 		if (b->pages[i] == cookie) {
 			b->pages[i] = NONRES_COOKIE_INVAL;
-			return true;
+			return TRUE;
 		}
 	}
-	return false;
+	return FALSE;
 }
 
 static objid_t
@@ -498,16 +497,12 @@ pageidx(struct vm_page *pg)
 	return pg->offset >> PAGE_SHIFT;
 }
 
-static bool
+static boolean_t
 nonresident_pagelookupremove(struct vm_page *pg)
 {
-	bool found = nonresident_lookupremove(pageobj(pg), pageidx(pg));
+	boolean_t found = nonresident_lookupremove(pageobj(pg), pageidx(pg));
 
-	if (pg->uobject) {
-		PDPOL_EVCNT_INCR(nreslookupobj);
-	} else {
-		PDPOL_EVCNT_INCR(nreslookupanon);
-	}
+	PDPOL_EVCNT_INCR(nreslookup);
 	if (found) {
 		if (pg->uobject) {
 			PDPOL_EVCNT_INCR(nresfoundobj);
@@ -616,7 +611,7 @@ clockpro_tune(void)
 static void
 clockpro_movereferencebit(struct vm_page *pg)
 {
-	bool referenced;
+	boolean_t referenced;
 
 	referenced = pmap_clear_reference(pg);
 	if (referenced) {
@@ -708,8 +703,8 @@ static void
 clockpro_pageenqueue(struct vm_page *pg)
 {
 	struct clockpro_state * const s = &clockpro;
-	bool hot;
-	bool speculative = (pg->pqflags & PQ_SPECULATIVE) != 0; /* XXX */
+	boolean_t hot;
+	boolean_t speculative = (pg->pqflags & PQ_SPECULATIVE) != 0; /* XXX */
 
 	KASSERT((~pg->pqflags & (PQ_INITIALREF|PQ_SPECULATIVE)) != 0);
 	UVM_LOCK_ASSERT_PAGEQ();
@@ -718,7 +713,7 @@ clockpro_pageenqueue(struct vm_page *pg)
 	s->s_npages++;
 	pg->pqflags &= ~(PQ_HOT|PQ_TEST);
 	if (speculative) {
-		hot = false;
+		hot = FALSE;
 		PDPOL_EVCNT_INCR(speculativeenqueue);
 	} else {
 		hot = nonresident_pagelookupremove(pg);
@@ -1139,7 +1134,7 @@ uvmpdpol_estimatepageable(int *active, int *inactive)
 	}
 }
 
-bool
+boolean_t
 uvmpdpol_pageisqueued_p(struct vm_page *pg)
 {
 
@@ -1214,15 +1209,15 @@ uvmpdpol_balancequeue(int swap_shortage)
 	DPRINTF("%s: done=%d\n", __func__, swap_shortage - todo);
 }
 
-bool
+boolean_t
 uvmpdpol_needsscan_p(void)
 {
 	struct clockpro_state * const s = &clockpro;
 
 	if (s->s_ncold < s->s_coldtarget) {
-		return true;
+		return TRUE;
 	}
-	return false;
+	return FALSE;
 }
 
 void

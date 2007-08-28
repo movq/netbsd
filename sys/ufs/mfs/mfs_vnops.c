@@ -1,4 +1,4 @@
-/*	$NetBSD: mfs_vnops.c,v 1.45 2007/07/29 13:31:16 ad Exp $	*/
+/*	$NetBSD: mfs_vnops.c,v 1.43 2006/05/14 21:32:45 elad Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mfs_vnops.c,v 1.45 2007/07/29 13:31:16 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mfs_vnops.c,v 1.43 2006/05/14 21:32:45 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -145,9 +145,9 @@ mfs_strategy(void *v)
 	mfsp = VTOMFS(vp);
 	/* check for mini-root access */
 	if (mfsp->mfs_proc == NULL) {
-		void *base;
+		caddr_t base;
 
-		base = (char *)mfsp->mfs_baseoff + (bp->b_blkno << DEV_BSHIFT);
+		base = mfsp->mfs_baseoff + (bp->b_blkno << DEV_BSHIFT);
 		if (bp->b_flags & B_READ)
 			memcpy(bp->b_data, base, bp->b_bcount);
 		else
@@ -167,7 +167,7 @@ mfs_strategy(void *v)
 		biodone(bp);
 	} else {
 		BUFQ_PUT(mfsp->mfs_buflist, bp);
-		wakeup((void *)vp);
+		wakeup((caddr_t)vp);
 	}
 	return (0);
 }
@@ -178,14 +178,16 @@ mfs_strategy(void *v)
  * Trivial on the HP since buffer has already been mapping into KVA space.
  */
 void
-mfs_doio(struct buf *bp, void *base)
+mfs_doio(struct buf *bp, caddr_t base)
 {
-	base = (char *)base + (bp->b_blkno << DEV_BSHIFT);
+	base += (bp->b_blkno << DEV_BSHIFT);
 	if (bp->b_flags & B_READ)
 		bp->b_error = copyin(base, bp->b_data, bp->b_bcount);
 	else
 		bp->b_error = copyout(bp->b_data, base, bp->b_bcount);
-	if (bp->b_error == 0)
+	if (bp->b_error)
+		bp->b_flags |= B_ERROR;
+	else
 		bp->b_resid = 0;
 	biodone(bp);
 }
@@ -236,7 +238,7 @@ mfs_close(void *v)
 	 */
 	while ((bp = BUFQ_GET(mfsp->mfs_buflist)) != NULL) {
 		mfs_doio(bp, mfsp->mfs_baseoff);
-		wakeup((void *)bp);
+		wakeup((caddr_t)bp);
 	}
 	/*
 	 * On last close of a memory filesystem
@@ -257,7 +259,7 @@ mfs_close(void *v)
 	 * Send a request to the filesystem server to exit.
 	 */
 	mfsp->mfs_shutdown = 1;
-	wakeup((void *)vp);
+	wakeup((caddr_t)vp);
 	return (0);
 }
 

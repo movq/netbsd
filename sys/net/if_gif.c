@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gif.c,v 1.70 2007/07/14 21:02:40 ad Exp $	*/
+/*	$NetBSD: if_gif.c,v 1.64 2006/11/23 04:07:07 rpaulo Exp $	*/
 /*	$KAME: if_gif.c,v 1.76 2001/08/20 02:01:02 kjc Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.70 2007/07/14 21:02:40 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.64 2006/11/23 04:07:07 rpaulo Exp $");
 
 #include "opt_inet.h"
 #include "opt_iso.h"
@@ -91,6 +91,9 @@ __KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.70 2007/07/14 21:02:40 ad Exp $");
 #include <net/net_osdep.h>
 
 void	gifattach(int);
+#ifndef __HAVE_GENERIC_SOFT_INTERRUPTS
+static void	gifnetisr(void);
+#endif
 static void	gifintr(void *);
 #ifdef ISO
 static struct mbuf *gif_eon_encap(struct mbuf *);
@@ -186,7 +189,6 @@ gif_clone_destroy(struct ifnet *ifp)
 	bpfdetach(ifp);
 #endif
 	if_detach(ifp);
-	rtcache_free(&sc->gif_ro);
 
 	free(sc, M_DEVBUF);
 
@@ -233,7 +235,7 @@ gif_encapcheck(struct mbuf *m, int off, int proto, void *arg)
 	if (m->m_pkthdr.len < sizeof(ip))
 		return 0;
 
-	m_copydata(m, 0, sizeof(ip), (void *)&ip);
+	m_copydata(m, 0, sizeof(ip), (caddr_t)&ip);
 
 	switch (ip.ip_v) {
 #ifdef INET
@@ -259,7 +261,7 @@ gif_encapcheck(struct mbuf *m, int off, int proto, void *arg)
 #endif
 
 int
-gif_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
+gif_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
     struct rtentry *rt)
 {
 	struct gif_softc *sc = (struct gif_softc*)ifp;
@@ -327,7 +329,12 @@ gif_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	}
 	splx(s);
 
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	softintr_schedule(sc->gif_si);
+#else
+	/* XXX bad spl level? */
+	gifnetisr();
+#endif
 	error = 0;
 
   end:
@@ -336,6 +343,19 @@ gif_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 		ifp->if_oerrors++;
 	return error;
 }
+
+#ifndef __HAVE_GENERIC_SOFT_INTERRUPTS
+static void
+gifnetisr(void)
+{
+	struct gif_softc *sc;
+
+	for (sc = LIST_FIRST(&gif_softc_list); sc != NULL;
+	     sc = LIST_NEXT(sc, gif_list)) {
+		gifintr(sc);
+	}
+}
+#endif
 
 static void
 gifintr(void *arg)
@@ -477,7 +497,7 @@ gif_input(struct mbuf *m, int af, struct ifnet *ifp)
 
 /* XXX how should we handle IPv6 scope on SIOC[GS]IFPHYADDR? */
 int
-gif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+gif_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct lwp *l = curlwp;	/* XXX */
 	struct gif_softc *sc  = (struct gif_softc*)ifp;
@@ -668,7 +688,7 @@ gif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		}
 		if (src->sa_len > size)
 			return EINVAL;
-		memcpy(dst, src, src->sa_len);
+		bcopy((caddr_t)src, (caddr_t)dst, src->sa_len);
 		break;
 
 	case SIOCGIFPDSTADDR:
@@ -700,7 +720,7 @@ gif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		}
 		if (src->sa_len > size)
 			return EINVAL;
-		memcpy(dst, src, src->sa_len);
+		bcopy((caddr_t)src, (caddr_t)dst, src->sa_len);
 		break;
 
 	case SIOCGLIFPHYADDR:
@@ -716,7 +736,7 @@ gif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		size = sizeof(((struct if_laddrreq *)data)->addr);
 		if (src->sa_len > size)
 			return EINVAL;
-		memcpy(dst, src, src->sa_len);
+		bcopy((caddr_t)src, (caddr_t)dst, src->sa_len);
 
 		/* copy dst */
 		src = sc->gif_pdst;
@@ -725,7 +745,7 @@ gif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		size = sizeof(((struct if_laddrreq *)data)->dstaddr);
 		if (src->sa_len > size)
 			return EINVAL;
-		memcpy(dst, src, src->sa_len);
+		bcopy((caddr_t)src, (caddr_t)dst, src->sa_len);
 		break;
 
 	case SIOCSIFFLAGS:
@@ -751,7 +771,8 @@ gif_set_tunnel(struct ifnet *ifp, struct sockaddr *src, struct sockaddr *dst)
 
 	s = splsoftnet();
 
-	LIST_FOREACH(sc2, &gif_softc_list, gif_list) {
+	for (sc2 = LIST_FIRST(&gif_softc_list); sc2 != NULL;
+	     sc2 = LIST_NEXT(sc2, gif_list)) {
 		if (sc2 == sc)
 			continue;
 		if (!sc2->gif_pdst || !sc2->gif_psrc)
@@ -762,8 +783,8 @@ gif_set_tunnel(struct ifnet *ifp, struct sockaddr *src, struct sockaddr *dst)
 		    sc2->gif_psrc->sa_len != src->sa_len)
 			continue;
 		/* can't configure same pair of address onto two gifs */
-		if (memcmp(sc2->gif_pdst, dst, dst->sa_len) == 0 &&
-		    memcmp(sc2->gif_psrc, src, src->sa_len) == 0) {
+		if (bcmp(sc2->gif_pdst, dst, dst->sa_len) == 0 &&
+		    bcmp(sc2->gif_psrc, src, src->sa_len) == 0) {
 			error = EADDRNOTAVAIL;
 			goto bad;
 		}
@@ -771,10 +792,12 @@ gif_set_tunnel(struct ifnet *ifp, struct sockaddr *src, struct sockaddr *dst)
 		/* XXX both end must be valid? (I mean, not 0.0.0.0) */
 	}
 
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	if (sc->gif_si) {
 		softintr_disestablish(sc->gif_si);
 		sc->gif_si = NULL;
 	}
+#endif
 
 	/* XXX we can detach from both, but be polite just in case */
 	if (sc->gif_psrc)
@@ -791,20 +814,22 @@ gif_set_tunnel(struct ifnet *ifp, struct sockaddr *src, struct sockaddr *dst)
 #endif
 		}
 
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	sc->gif_si = softintr_establish(IPL_SOFTNET, gifintr, sc);
 	if (sc->gif_si == NULL) {
 		error = ENOMEM;
 		goto bad;
 	}
+#endif
 
 	osrc = sc->gif_psrc;
 	sa = (struct sockaddr *)malloc(src->sa_len, M_IFADDR, M_WAITOK);
-	memcpy(sa, src, src->sa_len);
+	bcopy((caddr_t)src, (caddr_t)sa, src->sa_len);
 	sc->gif_psrc = sa;
 
 	odst = sc->gif_pdst;
 	sa = (struct sockaddr *)malloc(dst->sa_len, M_IFADDR, M_WAITOK);
-	memcpy(sa, dst, dst->sa_len);
+	bcopy((caddr_t)dst, (caddr_t)sa, dst->sa_len);
 	sc->gif_pdst = sa;
 
 	switch (sc->gif_psrc->sa_family) {
@@ -824,17 +849,17 @@ gif_set_tunnel(struct ifnet *ifp, struct sockaddr *src, struct sockaddr *dst)
 	}
 	if (error) {
 		/* rollback */
-		free((void *)sc->gif_psrc, M_IFADDR);
-		free((void *)sc->gif_pdst, M_IFADDR);
+		free((caddr_t)sc->gif_psrc, M_IFADDR);
+		free((caddr_t)sc->gif_pdst, M_IFADDR);
 		sc->gif_psrc = osrc;
 		sc->gif_pdst = odst;
 		goto bad;
 	}
 
 	if (osrc)
-		free((void *)osrc, M_IFADDR);
+		free((caddr_t)osrc, M_IFADDR);
 	if (odst)
-		free((void *)odst, M_IFADDR);
+		free((caddr_t)odst, M_IFADDR);
 
 	if (sc->gif_psrc && sc->gif_pdst)
 		ifp->if_flags |= IFF_RUNNING;
@@ -845,10 +870,12 @@ gif_set_tunnel(struct ifnet *ifp, struct sockaddr *src, struct sockaddr *dst)
 	return 0;
 
  bad:
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	if (sc->gif_si) {
 		softintr_disestablish(sc->gif_si);
 		sc->gif_si = NULL;
 	}
+#endif
 	if (sc->gif_psrc && sc->gif_pdst)
 		ifp->if_flags |= IFF_RUNNING;
 	else
@@ -866,16 +893,18 @@ gif_delete_tunnel(struct ifnet *ifp)
 
 	s = splsoftnet();
 
+#ifdef __HAVE_GENERIC_SOFT_INTERRUPTS
 	if (sc->gif_si) {
 		softintr_disestablish(sc->gif_si);
 		sc->gif_si = NULL;
 	}
+#endif
 	if (sc->gif_psrc) {
-		free((void *)sc->gif_psrc, M_IFADDR);
+		free((caddr_t)sc->gif_psrc, M_IFADDR);
 		sc->gif_psrc = NULL;
 	}
 	if (sc->gif_pdst) {
-		free((void *)sc->gif_pdst, M_IFADDR);
+		free((caddr_t)sc->gif_pdst, M_IFADDR);
 		sc->gif_pdst = NULL;
 	}
 	/* it is safe to detach from both */
@@ -922,7 +951,7 @@ gif_eon_encap(struct mbuf *m)
 		struct mbuf mhead;
 		memset(&mhead, 0, sizeof(mhead));
 		ehdr->cksum = 0;
-		mhead.m_data = (void *)ehdr;
+		mhead.m_data = (caddr_t)ehdr;
 		mhead.m_len = sizeof(*ehdr);
 		mhead.m_next = 0;
 		iso_gen_csum(&mhead, offsetof(struct eonhdr, cksum),

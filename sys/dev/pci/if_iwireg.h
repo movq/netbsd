@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iwireg.h,v 1.17 2006/12/20 16:30:20 skrll Exp $ */
+/*	$NetBSD: if_iwireg.h,v 1.16.6.1 2006/12/29 18:50:39 riz Exp $ */
 
 /*-
  * Copyright (c) 2004, 2005

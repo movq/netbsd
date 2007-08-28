@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw.c,v 1.40 2007/08/13 02:04:51 tsutsui Exp $	*/
+/*	$NetBSD: ofw.c,v 1.35 2005/12/08 22:41:44 yamt Exp $	*/
 
 /*
  * Copyright 1997
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw.c,v 1.40 2007/08/13 02:04:51 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw.c,v 1.35 2005/12/08 22:41:44 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,7 +59,6 @@ __KERNEL_RCSID(0, "$NetBSD: ofw.c,v 1.40 2007/08/13 02:04:51 tsutsui Exp $");
 #include <machine/bootconfig.h>
 #include <machine/cpu.h>
 #include <machine/intr.h>
-#include <machine/irqhandler.h>
 
 #include <dev/ofw/openfirm.h>
 #include <machine/ofw.h>
@@ -77,8 +76,6 @@ __KERNEL_RCSID(0, "$NetBSD: ofw.c,v 1.40 2007/08/13 02:04:51 tsutsui Exp $");
 
 #include "pc.h"
 #include "isadma.h"
-#include "igsfb_ofbus.h"
-#include "vga_ofbus.h"
 
 #define IO_VIRT_BASE (OFW_VIRT_BASE + OFW_VIRT_SIZE)
 #define IO_VIRT_SIZE 0x01000000
@@ -102,6 +99,7 @@ extern BootConfig bootconfig;	/* temporary, I hope */
 
 #ifdef	DIAGNOSTIC
 /* NOTE: These variables will be removed, well some of them */
+extern u_int spl_mask;
 extern u_int current_mask;
 #endif
 
@@ -149,13 +147,6 @@ paddr_t msgbufphys;
 static vaddr_t  virt_freeptr;	    
 
 int ofw_callbacks = 0;		/* debugging counter */
-
-#if defined(SHARK) && (NPC > 0)
-/* For consistency with the conditionals used in this file. */
-#elif (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
-int console_ihandle = 0;
-static void reset_screen(void);
-#endif
 
 /**************************************************************/
 
@@ -337,7 +328,7 @@ ofw_boot(howto, bootstr)
 
 #ifdef DIAGNOSTIC
 	printf("boot: howto=%08x curlwp=%p\n", howto, curlwp);
-	printf("current_mask=%08x\n", current_mask);
+	printf("current_mask=%08x spl_mask=%08x\n", current_mask, spl_mask);
 
 	printf("ipl_bio=%08x ipl_net=%08x ipl_tty=%08x ipl_vm=%08x\n",
 	    irqmasks[IPL_BIO], irqmasks[IPL_NET], irqmasks[IPL_TTY],
@@ -414,8 +405,6 @@ ofw_boot(howto, bootstr)
 			*ap1 = 0;
 #if defined(SHARK) && (NPC > 0)
 		shark_screen_cleanup(0);
-#elif (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
-		reset_screen();
 #endif
 		OF_boot(str);
 		/*NOTREACHED*/
@@ -425,8 +414,6 @@ ofw_exit:
 	printf("Calling OF_exit...\n");
 #if defined(SHARK) && (NPC > 0)
 	shark_screen_cleanup(1);
-#elif (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
-	reset_screen();
 #endif
 	OF_exit();
 	/*NOTREACHED*/
@@ -1797,6 +1784,7 @@ ofw_claimvirt(va, size, align)
 	return(va);
 }
 
+
 /* Return -1 if no mapping. */
 paddr_t
 ofw_gettranslation(va)
@@ -1807,17 +1795,13 @@ ofw_gettranslation(va)
 	int mode;
 	int exists;
 
-#ifdef OFW_DEBUG
-	printf("ofw_gettranslation (%x) --> ", (uint32_t)va);
-#endif
+	/*printf("ofw_gettranslation (%x) --> ", va);*/
 	exists = 0;	    /* gets set to true if translation exists */
 	if (OF_call_method("translate", mmu_ihandle, 1, 3, va, &pa, &mode,
 	    &exists) != 0)
 		return(-1);
 
-#ifdef OFW_DEBUG
-	printf("%d %x\n", exists, (uint32_t)pa);
-#endif
+	/*printf("%x\n", exists ? pa : -1);*/
 	return(exists ? pa : -1);
 }
 
@@ -1831,10 +1815,7 @@ ofw_settranslation(va, pa, size, mode)
 {
 	int mmu_ihandle = ofw_mmu_ihandle();
 
-#ifdef OFW_DEBUG
-	printf("ofw_settranslation (%x, %x, %x, %x) --> void", (uint32_t)va,
-	    (uint32_t)pa, (uint32_t)size, (uint32_t)mode);
-#endif
+/*printf("ofw_settranslation (%x, %x, %x, %x) --> void", va, pa, size, mode);*/
 	if (OF_call_method("map", mmu_ihandle, 4, 0, pa, va, size, mode) != 0)
 		panic("ofw_settranslation failed");
 }
@@ -2009,17 +1990,3 @@ ofw_initallocator(void)
 {
     
 }
-
-#if defined(SHARK) && (NPC > 0)
-/* For consistency with the conditionals used in this file. */
-#elif (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0)
-static void
-reset_screen()
-{
-
-	if ((console_ihandle == 0) || (console_ihandle == -1))
-		return;
-
-	OF_call_method("install", console_ihandle, 0, 0);
-}
-#endif /* (NIGSFB_OFBUS > 0) || (NVGA_OFBUS > 0) */

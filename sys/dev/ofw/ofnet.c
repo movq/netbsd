@@ -1,4 +1,4 @@
-/*	$NetBSD: ofnet.c,v 1.40 2007/07/09 21:00:52 ad Exp $	*/
+/*	$NetBSD: ofnet.c,v 1.37 2006/05/14 21:42:28 elad Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofnet.c,v 1.40 2007/07/09 21:00:52 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofnet.c,v 1.37 2006/05/14 21:42:28 elad Exp $");
 
 #include "ofnet.h"
 #include "opt_inet.h"
@@ -96,7 +96,7 @@ static void ofnet_init (struct ofnet_softc *);
 static void ofnet_stop (struct ofnet_softc *);
 
 static void ofnet_start (struct ifnet *);
-static int ofnet_ioctl (struct ifnet *, u_long, void *);
+static int ofnet_ioctl (struct ifnet *, u_long, caddr_t);
 static void ofnet_watchdog (struct ifnet *);
 
 static int
@@ -152,7 +152,7 @@ ofnet_attach(struct device *parent, struct device *self, void *aux)
 		panic("ofnet_attach: no mac-address");
 	printf(": address %s\n", ether_sprintf(myaddr));
 
-	callout_init(&of->sc_callout, 0);
+	callout_init(&of->sc_callout);
 
 	bcopy(of->sc_dev.dv_xname, ifp->if_xname, IFNAMSIZ);
 	ifp->if_softc = of;
@@ -245,7 +245,7 @@ ofnet_read(struct ofnet_softc *of)
 			 * XXX then so does other code in this driver.
 			 */
 			if (head == NULL) {
-				char *newdata = (char *)ALIGN(m->m_data +
+				caddr_t newdata = (caddr_t)ALIGN(m->m_data +
 				      sizeof(struct ether_header)) -
 				    sizeof(struct ether_header);
 				l -= newdata - m->m_data;
@@ -366,7 +366,7 @@ ofnet_start(struct ifnet *ifp)
 }
 
 static int
-ofnet_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+ofnet_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct ofnet_softc *of = ifp->if_softc;
 	struct ifaddr *ifa = (struct ifaddr *)data;

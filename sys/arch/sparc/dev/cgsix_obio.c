@@ -1,4 +1,4 @@
-/*	$NetBSD: cgsix_obio.c,v 1.21 2007/03/04 06:00:43 christos Exp $ */
+/*	$NetBSD: cgsix_obio.c,v 1.18 2006/03/29 04:16:47 thorpej Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cgsix_obio.c,v 1.21 2007/03/04 06:00:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cgsix_obio.c,v 1.18 2006/03/29 04:16:47 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -135,8 +135,6 @@ cgsixattach(struct device *parent, struct device *self, void *aux)
 
 	fb_setsize_eeprom(fb, fb->fb_type.fb_depth, 1152, 900);
 
-	sc->sc_ramsize = 1024 * 1024;	/* All our cgsix's are 1MB */
-
 	/*
 	 * Dunno what the PROM has mapped, though obviously it must have
 	 * the video RAM mapped.  Just map what we care about for ourselves
@@ -202,8 +200,8 @@ cgsixattach(struct device *parent, struct device *self, void *aux)
 	constype = (fb->fb_flags & FB_PFOUR) ? EE_CONS_P4OPT : EE_CONS_COLOR;
 
 	/*
-	 * Check to see if this is the console if there's no eeprom info
-	 * to be found, or if it's the correct framebuffer type.
+	 * Assume this is the console if there's no eeprom info
+	 * to be found.
 	 */
 	if (eep == NULL || eep->eeConsole == constype)
 		isconsole = fb_is_console(0);
@@ -211,15 +209,16 @@ cgsixattach(struct device *parent, struct device *self, void *aux)
 		isconsole = 0;
 
 	if (isconsole && cgsix_use_rasterconsole) {
+		int ramsize = fb->fb_type.fb_height * fb->fb_linebytes;
 		if (bus_space_map(oba->oba_bustag,
 				  oba->oba_paddr + CGSIX_RAM_OFFSET,
-				  sc->sc_ramsize,
+				  ramsize,
 				  BUS_SPACE_MAP_LINEAR,
 				  &bh) != 0) {
 			printf("%s: cannot map pixels\n", self->dv_xname);
 			return;
 		}
-		sc->sc_fb.fb_pixels = (void *)bh;
+		sc->sc_fb.fb_pixels = (caddr_t)bh;
 	}
 
 	cg6attach(sc, name, isconsole);

@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC.MP,v 1.9 2007/03/06 21:47:47 bouyer Exp $
+#	$NetBSD: GENERIC.MP,v 1.8.8.1 2007/03/09 06:59:19 riz Exp $
 #
 #	GENERIC.MP -- Generic, plus enable Multiprocessor support.
 #

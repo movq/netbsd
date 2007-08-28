@@ -1,4 +1,4 @@
-#	$NetBSD: majors.hp700,v 1.21 2006/12/06 10:27:00 skrll Exp $
+#	$NetBSD: majors.hp700,v 1.20.2.1 2006/12/09 11:50:23 bouyer Exp $
 #
 # Device majors for hp700
 #

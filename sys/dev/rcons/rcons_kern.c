@@ -1,4 +1,4 @@
-/*	$NetBSD: rcons_kern.c,v 1.19 2007/07/09 21:01:20 ad Exp $ */
+/*	$NetBSD: rcons_kern.c,v 1.17 2005/12/11 12:23:44 christos Exp $ */
 
 /*
  * Copyright (c) 1991, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rcons_kern.c,v 1.19 2007/07/09 21:01:20 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rcons_kern.c,v 1.17 2005/12/11 12:23:44 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -108,7 +108,7 @@ rcons_output(tp)
 	if (tp->t_outq.c_cc <= tp->t_lowat) {
 		if (tp->t_state&TS_ASLEEP) {
 			tp->t_state &= ~TS_ASLEEP;
-			wakeup((void *)&tp->t_outq);
+			wakeup((caddr_t)&tp->t_outq);
 		}
 		selwakeup(&tp->t_wsel);
 	}
@@ -177,7 +177,7 @@ rcons_init(rc, clear)
 {
 	mydevicep = rc;
 
-	callout_init(&rc->rc_belltmr_ch, 0);
+	callout_init(&rc->rc_belltmr_ch);
 
 	/* Initialize operations set, clear screen and turn cursor on */
 	rcons_init_ops(rc);

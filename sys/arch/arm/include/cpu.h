@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.45 2007/08/04 09:49:51 ad Exp $	*/
+/*	$NetBSD: cpu.h,v 1.40 2006/08/05 22:54:28 bjh21 Exp $	*/
 
 /*
  * Copyright (c) 1994-1996 Mark Brinicombe.
@@ -67,7 +67,7 @@
 	{ "booted_kernel", CTLTYPE_STRING }, \
 	{ "console_device", CTLTYPE_STRUCT }, \
 	{ "powersave", CTLTYPE_INT }, \
-}
+}    
 
 #ifdef _KERNEL
 
@@ -116,9 +116,6 @@ extern int cpu_do_powersave;
 #define IRQdisable __set_cpsr_c(I32_bit, I32_bit);
 #define IRQenable __set_cpsr_c(I32_bit, 0);
 #endif	/* _LOCORE */
-#else
-#define IRQdisable set_r15(R15_IRQ_DISABLE, R15_IRQ_DISABLE);
-#define IRQenable set_r15(R15_IRQ_DISABLE, 0);
 #endif
 
 #ifndef _LOCORE
@@ -134,6 +131,15 @@ extern int cpu_do_powersave;
 #else
 #define CLKF_USERMODE(frame)	((frame->cf_if.if_r15 & R15_MODE) == R15_MODE_USR)
 #endif
+
+/*
+ * CLKF_BASEPRI: True if we were at spl0 before the interrupt.
+ *
+ * This is hard-wired to 0 on the ARM, since spllowersoftclock() might
+ * not actually be able to unblock the interrupt, which would cause us
+ * to run the softclock interrupts with hardclock blocked.
+ */
+#define CLKF_BASEPRI(frame)	0
 
 /*
  * CLKF_INTR: True if we took the interrupt from inside another
@@ -211,14 +217,11 @@ void	arm32_vector_init(vaddr_t, int);
 struct cpu_info {
 	struct cpu_data ci_data;	/* MI per-cpu data */
 	struct device *ci_dev;		/* Device corresponding to this CPU */
-	cpuid_t ci_cpuid;
 	u_int32_t ci_arm_cpuid;		/* aggregate CPU id */
 	u_int32_t ci_arm_cputype;	/* CPU type */
 	u_int32_t ci_arm_cpurev;	/* CPU revision */
 	u_int32_t ci_ctrl;		/* The CPU control register */
 	struct evcnt ci_arm700bugcount;
-	int32_t ci_mtx_count;
-	int ci_mtx_oldspl;
 #ifdef MULTIPROCESSOR
 	MP_CPU_INFO_MEMBERS
 #endif
@@ -248,25 +251,21 @@ extern int astpending;
  * process as soon as possible.
  */
 
-#define cpu_signotify(l)            setsoftast()
+#define signotify(p)            setsoftast()
 
 /*
  * Preempt the current process if in interrupt from user mode,
  * or after the current trap/syscall if in system mode.
  */
 extern int want_resched;	/* resched() was called */
+#define	need_resched(ci)	(want_resched = 1, setsoftast())
 
 /*
  * Give a profiling tick to the current process when the user profiling
  * buffer pages are invalid.  On the i386, request an ast to send us
  * through trap(), marking the proc as needing a profiling tick.
  */
-#define	cpu_need_proftick(l)	((l)->l_pflag |= LP_OWEUPC, setsoftast())
-
-/*
- * reset want_resched, it's been processed.
- */
-#define	cpu_did_resched()	do { want_resched = 0; } while(0)
+#define	need_proftick(p)	((p)->p_flag |= P_OWEUPC, setsoftast())
 
 #ifndef acorn26
 /*
@@ -274,8 +273,10 @@ extern int want_resched;	/* resched() was called */
  */
 
 struct device;
-void	cpu_attach(struct device *);
+void	cpu_attach	__P((struct device *));
+int	cpu_alloc_idlepcb	__P((struct cpu_info *));
 #endif
+
 
 /*
  * Random cruft
@@ -284,24 +285,24 @@ void	cpu_attach(struct device *);
 struct lwp;
 
 /* locore.S */
-void atomic_set_bit(u_int *, u_int);
-void atomic_clear_bit(u_int *, u_int);
+void atomic_set_bit	__P((u_int *address, u_int setmask));
+void atomic_clear_bit	__P((u_int *address, u_int clearmask));
 
 /* cpuswitch.S */
 struct pcb;
-void	savectx(struct pcb *);
+void	savectx		__P((struct pcb *pcb));
 
 /* ast.c */
-void userret(register struct lwp *);
+void userret		__P((register struct lwp *p));
 
 /* machdep.h */
-void bootsync(void);
+void bootsync		__P((void));
 
 /* fault.c */
-int badaddr_read(void *, size_t, void *);
+int badaddr_read	__P((void *, size_t, void *));
 
 /* syscall.c */
-void swi_handler(trapframe_t *);
+void swi_handler	__P((trapframe_t *));
 
 #endif	/* !_LOCORE */
 

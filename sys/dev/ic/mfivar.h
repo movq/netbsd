@@ -1,4 +1,4 @@
-/* $NetBSD: mfivar.h,v 1.5 2007/07/01 07:37:14 xtraeme Exp $ */
+/* $NetBSD: mfivar.h,v 1.2.2.4 2007/05/08 10:45:18 pavel Exp $ */
 /* $OpenBSD: mfivar.h,v 1.28 2006/08/31 18:18:46 marco Exp $ */
 /*
  * Copyright (c) 2006 Marco Peereboom <marco@peereboom.us>
@@ -43,7 +43,7 @@ struct mfi_mem {
 	bus_dmamap_t		am_map;
 	bus_dma_segment_t	am_seg;
 	size_t			am_size;
-	void *			am_kva;
+	caddr_t			am_kva;
 };
 
 #define MFIMEM_MAP(_am)		((_am)->am_map)
@@ -118,7 +118,7 @@ struct mfi_softc {
 	}			sc_ld[MFI_MAX_LD];
 
 	/* scsi ioctl from sd device */
-	int			(*sc_ioctl)(struct device *, u_long, void *);
+	int			(*sc_ioctl)(struct device *, u_long, caddr_t);
 
 	/* firmware determined max, totals and other information*/
 	uint32_t		sc_max_cmds;
@@ -146,6 +146,8 @@ struct mfi_softc {
 	struct mfi_ccb_list	sc_ccb_freeq;
 
 	struct sysmon_envsys    sc_envsys;
+#define sc_ranges       sc_envsys.sme_ranges
+#define sc_sensor_info  sc_envsys.sme_sensor_info
 #define sc_sensor_data  sc_envsys.sme_sensor_data
 
 };

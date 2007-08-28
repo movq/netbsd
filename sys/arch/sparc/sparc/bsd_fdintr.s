@@ -1,4 +1,4 @@
-/*	$NetBSD: bsd_fdintr.s,v 1.26 2007/06/21 09:45:54 jnemeth Exp $ */
+/*	$NetBSD: bsd_fdintr.s,v 1.25.24.1 2007/06/25 09:45:26 liamjfoy Exp $ */
 
 /*
  * Copyright (c) 1995 Paul Kranenburg

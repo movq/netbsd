@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_process.c,v 1.127 2007/07/21 19:21:53 ad Exp $	*/
+/*	$NetBSD: sys_process.c,v 1.116 2006/11/28 17:58:10 elad Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -93,7 +93,7 @@
 #include "opt_ktrace.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_process.c,v 1.127 2007/07/21 19:21:53 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_process.c,v 1.116 2006/11/28 17:58:10 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -105,7 +105,9 @@ __KERNEL_RCSID(0, "$NetBSD: sys_process.c,v 1.127 2007/07/21 19:21:53 ad Exp $")
 #include <sys/ras.h>
 #include <sys/malloc.h>
 #include <sys/kauth.h>
+
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <uvm/uvm_extern.h>
@@ -122,65 +124,38 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 	struct sys_ptrace_args /* {
 		syscallarg(int) req;
 		syscallarg(pid_t) pid;
-		syscallarg(void *) addr;
+		syscallarg(caddr_t) addr;
 		syscallarg(int) data;
 	} */ *uap = v;
 	struct proc *p = l->l_proc;
-	struct lwp *lt;
+	struct lwp *lt, *lr;
 	struct proc *t;				/* target process */
 	struct uio uio;
 	struct iovec iov;
 	struct ptrace_io_desc piod;
 	struct ptrace_lwpinfo pl;
 	struct vmspace *vm;
-	int error, write, tmp, req, pheld;
-	ksiginfo_t ksi;
+	int s, error, write, tmp;
 #ifdef COREDUMP
 	char *path;
 #endif
 
-	error = 0;
-	req = SCARG(uap, req);
-
-	/*
-	 * If attaching or detaching, we need to get a write hold on the
-	 * proclist lock so that we can re-parent the target process.
-	 */
-	mutex_enter(&proclist_lock);
-
 	/* "A foolish consistency..." XXX */
-	if (req == PT_TRACE_ME)
+	if (SCARG(uap, req) == PT_TRACE_ME)
 		t = p;
 	else {
+
 		/* Find the process we're supposed to be operating on. */
-		if ((t = p_find(SCARG(uap, pid), PFIND_LOCKED)) == NULL) {
-			mutex_exit(&proclist_lock);
+		if ((t = pfind(SCARG(uap, pid))) == NULL)
 			return (ESRCH);
-		}
-
-		/* XXX elad - this should be in pfind(). */
-		error = kauth_authorize_process(l->l_cred, KAUTH_PROCESS_CANSEE,
-		    t, NULL, NULL, NULL);
-		if (error) {
-			mutex_exit(&proclist_lock);
-			return (ESRCH);
-		}
 	}
 
-	/*
-	 * Grab a reference on the process to prevent it from execing or
-	 * exiting.
-	 */
-	mutex_enter(&t->p_mutex);
-	error = proc_addref(t);
-	if (error != 0) {
-		mutex_exit(&t->p_mutex);
-		mutex_exit(&proclist_lock);
-		return error;
-	}
+	/* Can't trace a process that's currently exec'ing. */
+	if ((t->p_flag & P_INEXEC) != 0)
+		return EAGAIN;
 
 	/* Make sure we can operate on it. */
-	switch (req) {
+	switch (SCARG(uap, req)) {
 	case  PT_TRACE_ME:
 		/* Saying that you're being traced is always legal. */
 		break;
@@ -190,45 +165,54 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 		 * You can't attach to a process if:
 		 *	(1) it's the process that's doing the attaching,
 		 */
-		if (t->p_pid == p->p_pid) {
-			error = EINVAL;
-			break;
-		}
+		if (t->p_pid == p->p_pid)
+			return (EINVAL);
 
 		/*
 		 *  (2) it's a system process
 		 */
-		if (t->p_flag & PK_SYSTEM) {
-			error = EPERM;
-			break;
-		}
+		if (t->p_flag & P_SYSTEM)
+			return (EPERM);
 
 		/*
 		 *	(3) it's already being traced, or
 		 */
-		if (ISSET(t->p_slflag, PSL_TRACED)) {
-			error = EBUSY;
-			break;
-		}
+		if (ISSET(t->p_flag, P_TRACED))
+			return (EBUSY);
 
 		/*
-		 * 	(4) the tracer is chrooted, and its root directory is
-		 * 	    not at or above the root directory of the tracee
+		 *	(4) the security model prevents it, or
 		 */
-		mutex_exit(&t->p_mutex);	/* XXXSMP */
-		tmp = proc_isunder(t, l);
-		mutex_enter(&t->p_mutex);	/* XXXSMP */
-		if (!tmp) {
-			error = EPERM;
-			break;
-		}
+		error = kauth_authorize_process(l->l_cred,
+		    KAUTH_PROCESS_CANPTRACE, t, KAUTH_ARG(SCARG(uap, req)),
+		    NULL, NULL);
+		if (error)
+			return (error);
+
+		/*
+		 *	(5) the tracer is chrooted, and its root directory is
+		 *	    not at or above the root directory of the tracee
+		 */
+		if (!proc_isunder(t, l))
+			return EPERM;
 		break;
 
 	case  PT_READ_I:
 	case  PT_READ_D:
 	case  PT_WRITE_I:
 	case  PT_WRITE_D:
+	case  PT_CONTINUE:
 	case  PT_IO:
+	case  PT_KILL:
+	case  PT_DETACH:
+	case  PT_LWPINFO:
+	case  PT_SYSCALL:
+#ifdef COREDUMP
+	case  PT_DUMPCORE:
+#endif
+#ifdef PT_STEP
+	case  PT_STEP:
+#endif
 #ifdef PT_GETREGS
 	case  PT_GETREGS:
 #endif
@@ -241,51 +225,25 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 #ifdef PT_SETFPREGS
 	case  PT_SETFPREGS:
 #endif
+
 #ifdef __HAVE_PTRACE_MACHDEP
 	PTRACE_MACHDEP_REQUEST_CASES
 #endif
-		/*
-		 * You can't read/write the memory or registers of a process
-		 * if the tracer is chrooted, and its root directory is not at
-		 * or above the root directory of the tracee.
-		 */
-		mutex_exit(&t->p_mutex);	/* XXXSMP */
-		tmp = proc_isunder(t, l);
-		mutex_enter(&t->p_mutex);	/* XXXSMP */
-		if (!tmp) {
-			error = EPERM;
-			break;
-		}
-		/*FALLTHROUGH*/
 
-	case  PT_CONTINUE:
-	case  PT_KILL:
-	case  PT_DETACH:
-	case  PT_LWPINFO:
-	case  PT_SYSCALL:
-#ifdef COREDUMP
-	case  PT_DUMPCORE:
-#endif
-#ifdef PT_STEP
-	case  PT_STEP:
-#endif
 		/*
 		 * You can't do what you want to the process if:
 		 *	(1) It's not being traced at all,
 		 */
-		if (!ISSET(t->p_slflag, PSL_TRACED)) {
-			error = EPERM;
-			break;
-		}
+		if (!ISSET(t->p_flag, P_TRACED))
+			return (EPERM);
 
 		/*
 		 *	(2) it's being traced by procfs (which has
 		 *	    different signal delivery semantics),
 		 */
-		if (ISSET(t->p_slflag, PSL_FSTRACE)) {
+		if (ISSET(t->p_flag, P_FSTRACE)) {
 			uprintf("file system traced\n");
-			error = EBUSY;
-			break;
+			return (EBUSY);
 		}
 
 		/*
@@ -293,59 +251,22 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 		 */
 		if (t->p_pptr != p) {
 			uprintf("parent %d != %d\n", t->p_pptr->p_pid, p->p_pid);
-			error = EBUSY;
-			break;
+			return (EBUSY);
 		}
 
 		/*
 		 *	(4) it's not currently stopped.
 		 */
-		if (t->p_stat != SSTOP || !t->p_waited /* XXXSMP */) {
+		if (t->p_stat != SSTOP || !ISSET(t->p_flag, P_WAITED)) {
 			uprintf("stat %d flag %d\n", t->p_stat,
-			    !t->p_waited);
-			error = EBUSY;
-			break;
+			    !ISSET(t->p_flag, P_WAITED));
+			return (EBUSY);
 		}
 		break;
 
 	default:			/* It was not a legal request. */
-		error = EINVAL;
-		break;
+		return (EINVAL);
 	}
-
-	if (error == 0)
-		error = kauth_authorize_process(l->l_cred,
-		    KAUTH_PROCESS_CANPTRACE, t, KAUTH_ARG(req),
-		    NULL, NULL);
-
-	if (error != 0) {
-		mutex_exit(&proclist_lock);
-		proc_delref(t);
-		mutex_exit(&t->p_mutex);
-		return error;
-	}
-
-	/*
-	 * Which locks do we need held? XXX Ugly.
-	 */
-	switch (req) {
-#ifdef PT_STEP
-	case PT_STEP:
-#endif
-	case PT_CONTINUE:
-	case PT_DETACH:
-	case PT_KILL:
-	case PT_SYSCALL:
-	case PT_ATTACH:
-		pheld = 1;
-		break;
-	default:
-		mutex_exit(&proclist_lock);
-		mutex_exit(&t->p_mutex);
-		pheld = 0;
-		break;
-	}
-
 
 	/* Do single-step fixup if needed. */
 	FIX_SSTEP(t);
@@ -358,24 +279,20 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 	 * this; memory access will be fine, but register access will
 	 * be weird.
 	 */
-	mutex_enter(&t->p_smutex);
-	lt = proc_representative_lwp(t, NULL, 1);
-	lwp_addref(lt);
-	mutex_exit(&t->p_smutex);
+
+	lt = proc_representative_lwp(t);
 
 	/* Now do the operation. */
 	write = 0;
 	*retval = 0;
 	tmp = 0;
 
-	switch (req) {
+	switch (SCARG(uap, req)) {
 	case  PT_TRACE_ME:
 		/* Just set the trace flag. */
-		mutex_enter(&t->p_smutex);
-		SET(t->p_slflag, PSL_TRACED);
-		mutex_exit(&t->p_smutex);
+		SET(t->p_flag, P_TRACED);
 		t->p_opptr = t->p_pptr;
-		break;
+		return (0);
 
 	case  PT_WRITE_I:		/* XXX no separate I and D spaces */
 	case  PT_WRITE_D:
@@ -383,19 +300,17 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 		/*
 		 * Can't write to a RAS
 		 */
-		if (ras_lookup(t, SCARG(uap, addr)) != (void *)-1) {
-			error = EACCES;
-			break;
+		if (!LIST_EMPTY(&t->p_raslist) &&
+		    (ras_lookup(t, SCARG(uap, addr)) != (caddr_t)-1)) {
+			return (EACCES);
 		}
 #endif
 		write = 1;
 		tmp = SCARG(uap, data);
-		/* FALLTHROUGH */
-
 	case  PT_READ_I:		/* XXX no separate I and D spaces */
 	case  PT_READ_D:
 		/* write = 0 done above. */
-		iov.iov_base = (void *)&tmp;
+		iov.iov_base = (caddr_t)&tmp;
 		iov.iov_len = sizeof(tmp);
 		uio.uio_iov = &iov;
 		uio.uio_iovcnt = 1;
@@ -404,15 +319,35 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 		uio.uio_rw = write ? UIO_WRITE : UIO_READ;
 		UIO_SETUP_SYSSPACE(&uio);
 
+		error = kauth_authorize_process(l->l_cred,
+		    KAUTH_PROCESS_CANPTRACE, t, KAUTH_ARG(SCARG(uap, req)),
+		    NULL, NULL);
+		if (error)
+			return (error);
+
+		if (!proc_isunder(t, l))
+			return (EPERM);
+
 		error = process_domem(l, lt, &uio);
 		if (!write)
 			*retval = tmp;
-		break;
+		return (error);
 
 	case  PT_IO:
 		error = copyin(SCARG(uap, addr), &piod, sizeof(piod));
 		if (error)
-			break;
+			return (error);
+		iov.iov_base = piod.piod_addr;
+		iov.iov_len = piod.piod_len;
+		uio.uio_iov = &iov;
+		uio.uio_iovcnt = 1;
+		uio.uio_offset = (off_t)(unsigned long)piod.piod_offs;
+		uio.uio_resid = piod.piod_len;
+		error = proc_vmspace_getref(l->l_proc, &vm);
+		if (error) {
+			return error;
+		}
+		uio.uio_vmspace = vm;
 		switch (piod.piod_op) {
 		case PIOD_READ_D:
 		case PIOD_READ_I:
@@ -420,53 +355,38 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 			break;
 		case PIOD_WRITE_D:
 		case PIOD_WRITE_I:
-#if defined(__HAVE_RAS)
-			/*
-			 * Can't write to a RAS
-			 */
-			if (!LIST_EMPTY(&t->p_raslist) &&
-			    (ras_lookup(t, SCARG(uap, addr)) != (void *)-1)) {
-				return (EACCES);
-			}
-#endif
 			uio.uio_rw = UIO_WRITE;
 			break;
 		default:
-			error = EINVAL;
-			break;
+			return (EINVAL);
 		}
+
+		error = kauth_authorize_process(l->l_cred,
+		    KAUTH_PROCESS_CANPTRACE, t, KAUTH_ARG(SCARG(uap, req)),
+		    NULL, NULL);
 		if (error)
-			break;
-		error = proc_vmspace_getref(l->l_proc, &vm);
-		if (error)
-			break;
-		iov.iov_base = piod.piod_addr;
-		iov.iov_len = piod.piod_len;
-		uio.uio_iov = &iov;
-		uio.uio_iovcnt = 1;
-		uio.uio_offset = (off_t)(unsigned long)piod.piod_offs;
-		uio.uio_resid = piod.piod_len;
-		uio.uio_vmspace = vm;
+			return (error);
+
+		if (!proc_isunder(t, l))
+			return (EPERM);
 
 		error = process_domem(l, lt, &uio);
 		piod.piod_len -= uio.uio_resid;
 		(void) copyout(&piod, SCARG(uap, addr), sizeof(piod));
 		uvmspace_free(vm);
-		break;
+		return (error);
 
 #ifdef COREDUMP
 	case  PT_DUMPCORE:
 		if ((path = SCARG(uap, addr)) != NULL) {
 			char *dst;
 			int len = SCARG(uap, data);
-			if (len < 0 || len >= MAXPATHLEN) {
-				error = EINVAL;
-				break;
-			}
+			if (len < 0 || len >= MAXPATHLEN)
+				return EINVAL;
 			dst = malloc(len + 1, M_TEMP, M_WAITOK);
 			if ((error = copyin(path, dst, len)) != 0) {
 				free(dst, M_TEMP);
-				break;
+				return error;
 			}
 			path = dst;
 			path[len] = '\0';
@@ -474,7 +394,7 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 		error = coredump(lt, path);
 		if (path)
 			free(path, M_TEMP);
-		break;
+		return error;
 #endif
 
 #ifdef PT_STEP
@@ -489,23 +409,21 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 	case  PT_CONTINUE:
 	case  PT_SYSCALL:
 	case  PT_DETACH:
-		mutex_enter(&t->p_smutex);
-		if (req == PT_SYSCALL) {
-			if (!ISSET(t->p_slflag, PSL_SYSCALL)) {
-				SET(t->p_slflag, PSL_SYSCALL);
+		if (SCARG(uap, req) == PT_SYSCALL) {
+			if (!ISSET(t->p_flag, P_SYSCALL)) {
+				SET(t->p_flag, P_SYSCALL);
 #ifdef __HAVE_SYSCALL_INTERN
 				(*t->p_emul->e_syscall_intern)(t);
 #endif
 			}
 		} else {
-			if (ISSET(t->p_slflag, PSL_SYSCALL)) {
-				CLR(t->p_slflag, PSL_SYSCALL);
+			if (ISSET(t->p_flag, P_SYSCALL)) {
+				CLR(t->p_flag, P_SYSCALL);
 #ifdef __HAVE_SYSCALL_INTERN
 				(*t->p_emul->e_syscall_intern)(t);
 #endif
 			}
 		}
-		mutex_exit(&t->p_smutex);
 
 		/*
 		 * From the 4.4BSD PRM:
@@ -520,39 +438,30 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 		 */
 
 		/* Check that the data is a valid signal number or zero. */
-		if (SCARG(uap, data) < 0 || SCARG(uap, data) >= NSIG) {
-			error = EINVAL;
-			break;
-		}
+		if (SCARG(uap, data) < 0 || SCARG(uap, data) >= NSIG)
+			return (EINVAL);
 
-		uvm_lwp_hold(lt);
+		PHOLD(lt);
 
 		/* If the address parameter is not (int *)1, set the pc. */
 		if ((int *)SCARG(uap, addr) != (int *)1)
-			if ((error = process_set_pc(lt, SCARG(uap, addr))) != 0) {
-				uvm_lwp_rele(lt);
-				break;
-			}
+			if ((error = process_set_pc(lt, SCARG(uap, addr))) != 0)
+				goto relebad;
 
 #ifdef PT_STEP
 		/*
 		 * Arrange for a single-step, if that's requested and possible.
 		 */
-		error = process_sstep(lt, req == PT_STEP);
-		if (error) {
-			uvm_lwp_rele(lt);
-			break;
-		}
+		error = process_sstep(lt, SCARG(uap, req) == PT_STEP);
+		if (error)
+			goto relebad;
 #endif
 
-		uvm_lwp_rele(lt);
+		PRELE(lt);
 
-		if (req == PT_DETACH) {
-			mutex_enter(&t->p_smutex);
-			CLR(t->p_slflag, PSL_TRACED|PSL_FSTRACE|PSL_SYSCALL);
-			mutex_exit(&t->p_smutex);
-
+		if (SCARG(uap, req) == PT_DETACH) {
 			/* give process back to original parent or init */
+			s = proclist_lock_write();
 			if (t->p_opptr != t->p_pptr) {
 				struct proc *pp = t->p_opptr;
 				proc_reparent(t, pp ? pp : initproc);
@@ -560,28 +469,34 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 
 			/* not being traced any more */
 			t->p_opptr = NULL;
+			proclist_unlock_write(s);
+			CLR(t->p_flag, P_TRACED|P_WAITED|P_SYSCALL|P_FSTRACE);
 		}
 
 	sendsig:
 		/* Finally, deliver the requested signal (or none). */
-		mutex_enter(&proclist_mutex);
-		mutex_enter(&t->p_smutex);
 		if (t->p_stat == SSTOP) {
-			/*
-			 * Unstop the process.  If it needs to take a
-			 * signal, make all efforts to ensure that at
-			 * an LWP runs to see it.
-			 */
 			t->p_xstat = SCARG(uap, data);
-			proc_unstop(t);
-		} else if (SCARG(uap, data) != 0) {
-			KSI_INIT_EMPTY(&ksi);
-			ksi.ksi_signo = SCARG(uap, data);
-			kpsignal2(t, &ksi);
+			SCHED_LOCK(s);
+			lr = proc_unstop(t);
+			/*
+			 * If the target needs to take a signal, there
+			 * is no running LWP that will see it, and
+			 * there is a LWP sleeping interruptably, then
+			 * get it moving.
+			 */
+			if (lr && (t->p_xstat != 0))
+			    setrunnable(lr);
+			SCHED_UNLOCK(s);
+		} else {
+			if (SCARG(uap, data) != 0)
+				psignal(t, SCARG(uap, data));
 		}
-		mutex_exit(&t->p_smutex);
-		mutex_exit(&proclist_mutex);
-		break;
+		return (0);
+
+	relebad:
+		PRELE(lt);
+		return (error);
 
 	case  PT_KILL:
 		/* just send the process a KILL signal. */
@@ -597,53 +512,43 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 		 *   proc gets to see all the action.
 		 * Stop the target.
 		 */
+		SET(t->p_flag, P_TRACED);
+		s = proclist_lock_write();
 		t->p_opptr = t->p_pptr;
 		if (t->p_pptr != p) {
-			mutex_enter(&t->p_pptr->p_smutex);
-			t->p_pptr->p_slflag |= PSL_CHTRACED;
-			mutex_exit(&t->p_pptr->p_smutex);
+			t->p_pptr->p_flag |= P_CHTRACED;
 			proc_reparent(t, p);
 		}
-		mutex_enter(&t->p_smutex);
-		SET(t->p_slflag, PSL_TRACED);
-		mutex_exit(&t->p_smutex);
+		proclist_unlock_write(s);
 		SCARG(uap, data) = SIGSTOP;
 		goto sendsig;
 
 	case PT_LWPINFO:
-		if (SCARG(uap, data) != sizeof(pl)) {
-			error = EINVAL;
-			break;
-		}
+		if (SCARG(uap, data) != sizeof(pl))
+			return (EINVAL);
 		error = copyin(SCARG(uap, addr), &pl, sizeof(pl));
 		if (error)
-			break;
+			return (error);
 		tmp = pl.pl_lwpid;
-		lwp_delref(lt);
-		mutex_enter(&t->p_smutex);
 		if (tmp == 0)
 			lt = LIST_FIRST(&t->p_lwps);
 		else {
-			lt = lwp_find(p, tmp);
-			if (lt == NULL) {
-				mutex_exit(&t->p_smutex);
-				error = ESRCH;
-				break;
-			}
+			LIST_FOREACH(lt, &t->p_lwps, l_sibling)
+				if (lt->l_lid == tmp)
+					break;
+			if (lt == NULL)
+				return (ESRCH);
 			lt = LIST_NEXT(lt, l_sibling);
 		}
 		pl.pl_lwpid = 0;
 		pl.pl_event = 0;
 		if (lt) {
-			lwp_addref(lt);
 			pl.pl_lwpid = lt->l_lid;
 			if (lt->l_lid == t->p_sigctx.ps_lwp)
 				pl.pl_event = PL_EVENT_SIGNAL;
 		}
-		mutex_exit(&t->p_smutex);
 
-		error = copyout(&pl, SCARG(uap, addr), sizeof(pl));
-		break;
+		return copyout(&pl, SCARG(uap, addr), sizeof(pl));
 
 #ifdef PT_SETREGS
 	case  PT_SETREGS:
@@ -656,23 +561,19 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 #if defined(PT_SETREGS) || defined(PT_GETREGS)
 		tmp = SCARG(uap, data);
 		if (tmp != 0 && t->p_nlwps > 1) {
-			lwp_delref(lt);
-			mutex_enter(&t->p_smutex);
-			lt = lwp_find(t, tmp);
-			if (lt == NULL) {
-				mutex_exit(&t->p_smutex);
-				error = ESRCH;
-				break;
-			}
-			lwp_addref(lt);
-			mutex_exit(&t->p_smutex);
+			LIST_FOREACH(lt, &t->p_lwps, l_sibling)
+			    if (lt->l_lid == tmp)
+				    break;
+			if (lt == NULL)
+				return (ESRCH);
 		}
-		if (!process_validregs(lt))
-			error = EINVAL;
+		if (!process_validregs(proc_representative_lwp(t)))
+			return (EINVAL);
 		else {
 			error = proc_vmspace_getref(l->l_proc, &vm);
-			if (error)
-				break;
+			if (error) {
+				return error;
+			}
 			iov.iov_base = SCARG(uap, addr);
 			iov.iov_len = sizeof(struct reg);
 			uio.uio_iov = &iov;
@@ -682,10 +583,19 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 			uio.uio_rw = write ? UIO_WRITE : UIO_READ;
 			uio.uio_vmspace = vm;
 
+			error = kauth_authorize_process(l->l_cred,
+			    KAUTH_PROCESS_CANPTRACE, t, 
+			    KAUTH_ARG(SCARG(uap, req)), NULL, NULL);
+			if (error)
+				return (error);
+
+			if (!proc_isunder(t, l))
+				return (EPERM);
+
 			error = process_doregs(l, lt, &uio);
 			uvmspace_free(vm);
+			return error;
 		}
-		break;
 #endif
 
 #ifdef PT_SETFPREGS
@@ -699,23 +609,19 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 #if defined(PT_SETFPREGS) || defined(PT_GETFPREGS)
 		tmp = SCARG(uap, data);
 		if (tmp != 0 && t->p_nlwps > 1) {
-			lwp_delref(lt);
-			mutex_enter(&t->p_smutex);
-			lt = lwp_find(t, tmp);
-			if (lt == NULL) {
-				mutex_exit(&t->p_smutex);
-				error = ESRCH;
-				break;
-			}
-			lwp_addref(lt);
-			mutex_exit(&t->p_smutex);
+			LIST_FOREACH(lt, &t->p_lwps, l_sibling)
+			    if (lt->l_lid == tmp)
+				    break;
+			if (lt == NULL)
+				return (ESRCH);
 		}
-		if (!process_validfpregs(lt))
-			error = EINVAL;
+		if (!process_validfpregs(proc_representative_lwp(t)))
+			return (EINVAL);
 		else {
 			error = proc_vmspace_getref(l->l_proc, &vm);
-			if (error)
-				break;
+			if (error) {
+				return error;
+			}
 			iov.iov_base = SCARG(uap, addr);
 			iov.iov_len = sizeof(struct fpreg);
 			uio.uio_iov = &iov;
@@ -725,34 +631,42 @@ sys_ptrace(struct lwp *l, void *v, register_t *retval)
 			uio.uio_rw = write ? UIO_WRITE : UIO_READ;
 			uio.uio_vmspace = vm;
 
+			error = kauth_authorize_process(l->l_cred,
+			    KAUTH_PROCESS_CANPTRACE, t,
+			    KAUTH_ARG(SCARG(uap, req)), NULL, NULL);
+			if (error)
+				return (error);
+
+			if (!proc_isunder(t, l))
+				return (EPERM);
+
 			error = process_dofpregs(l, lt, &uio);
 			uvmspace_free(vm);
+			return error;
 		}
-		break;
 #endif
 
 #ifdef __HAVE_PTRACE_MACHDEP
 	PTRACE_MACHDEP_REQUEST_CASES
-		error = ptrace_machdep_dorequest(l, lt,
-		    req, SCARG(uap, addr), SCARG(uap, data));
-		break;
+		error = kauth_authorize_process(l->l_cred,
+		    KAUTH_PROCESS_CANPTRACE, t, KAUTH_ARG(SCARG(uap, req)),
+		    NULL, NULL);
+		if (error)
+			return (error);
+
+		if (!proc_isunder(t, l))
+			return (EPERM);
+
+		return (ptrace_machdep_dorequest(l, lt,
+		    SCARG(uap, req), SCARG(uap, addr),
+		    SCARG(uap, data)));
 #endif
 	}
 
-	if (lt != NULL)
-		lwp_delref(lt);
-
-	if (pheld) {
-		proc_delref(t);
-		mutex_exit(&t->p_mutex);
-		mutex_exit(&proclist_lock);
-	} else {
-		mutex_enter(&t->p_mutex);
-		proc_delref(t);
-		mutex_exit(&t->p_mutex);
-	}
-
-	return error;
+#ifdef DIAGNOSTIC
+	panic("ptrace: impossible");
+#endif
+	return 0;
 }
 
 int
@@ -769,6 +683,9 @@ process_doregs(struct lwp *curl /*tracer*/,
 	if (uio->uio_offset < 0 || uio->uio_offset > (off_t)sizeof(r))
 		return EINVAL;
 
+	if (ISSET(l->l_proc->p_flag, P_INEXEC))
+		return (EAGAIN);
+
 	kl = sizeof(r);
 	kv = (char *)&r;
 
@@ -777,7 +694,7 @@ process_doregs(struct lwp *curl /*tracer*/,
 	if ((size_t)kl > uio->uio_resid)
 		kl = uio->uio_resid;
 
-	uvm_lwp_hold(l);
+	PHOLD(l);
 
 	error = process_read_regs(l, &r);
 	if (error == 0)
@@ -789,7 +706,7 @@ process_doregs(struct lwp *curl /*tracer*/,
 			error = process_write_regs(l, &r);
 	}
 
-	uvm_lwp_rele(l);
+	PRELE(l);
 
 	uio->uio_offset = 0;
 	return (error);
@@ -803,7 +720,7 @@ process_validregs(struct lwp *l)
 {
 
 #if defined(PT_SETREGS) || defined(PT_GETREGS)
-	return ((l->l_flag & LW_SYSTEM) == 0);
+	return ((l->l_proc->p_flag & P_SYSTEM) == 0);
 #else
 	return (0);
 #endif
@@ -823,6 +740,9 @@ process_dofpregs(struct lwp *curl /*tracer*/,
 	if (uio->uio_offset < 0 || uio->uio_offset > (off_t)sizeof(r))
 		return EINVAL;
 
+	if (ISSET(l->l_proc->p_flag, P_INEXEC))
+		return (EAGAIN);
+
 	kl = sizeof(r);
 	kv = (char *)&r;
 
@@ -831,7 +751,7 @@ process_dofpregs(struct lwp *curl /*tracer*/,
 	if ((size_t)kl > uio->uio_resid)
 		kl = uio->uio_resid;
 
-	uvm_lwp_hold(l);
+	PHOLD(l);
 
 	error = process_read_fpregs(l, &r);
 	if (error == 0)
@@ -843,7 +763,7 @@ process_dofpregs(struct lwp *curl /*tracer*/,
 			error = process_write_fpregs(l, &r);
 	}
 
-	uvm_lwp_rele(l);
+	PRELE(l);
 
 	uio->uio_offset = 0;
 	return (error);
@@ -857,7 +777,7 @@ process_validfpregs(struct lwp *l)
 {
 
 #if defined(PT_SETFPREGS) || defined(PT_GETFPREGS)
-	return ((l->l_flag & LW_SYSTEM) == 0);
+	return ((l->l_proc->p_flag & P_SYSTEM) == 0);
 #else
 	return (0);
 #endif
@@ -889,14 +809,17 @@ process_domem(struct lwp *curl /*tracer*/,
 	addr = uio->uio_offset;
 #endif
 
+	if (ISSET(p->p_flag, P_INEXEC))
+		return (EAGAIN);
+
 	vm = p->p_vmspace;
 
-	mutex_enter(&vm->vm_map.misc_lock);
-	if ((l->l_flag & LW_WEXIT) || vm->vm_refcnt < 1)
+	simple_lock(&vm->vm_map.ref_lock);
+	if ((p->p_flag & P_WEXIT) || vm->vm_refcnt < 1)
 		error = EFAULT;
 	if (error == 0)
 		p->p_vmspace->vm_refcnt++;  /* XXX */
-	mutex_exit(&vm->vm_map.misc_lock);
+	simple_unlock(&vm->vm_map.ref_lock);
 	if (error != 0)
 		return (error);
 	error = uvm_io(&vm->vm_map, uio);
@@ -914,34 +837,24 @@ process_domem(struct lwp *curl /*tracer*/,
 void
 process_stoptrace(struct lwp *l)
 {
-	struct proc *p = l->l_proc, *pp;
+	int s;
+	struct proc *p = l->l_proc;
 
-	/* XXXSMP proc_stop -> child_psignal -> kpsignal2 -> pool_get */ 
-	KERNEL_LOCK(1, l);
-
-	mutex_enter(&proclist_mutex);
-	mutex_enter(&p->p_smutex);
-	pp = p->p_pptr;
-	if (pp->p_pid == 1) {
-		CLR(p->p_slflag, PSL_SYSCALL);	/* XXXSMP */
-		mutex_exit(&p->p_smutex);
-		mutex_exit(&proclist_mutex);
-		KERNEL_UNLOCK_ONE(l);
+	if (p->p_pptr->p_pid == 1) {
+		CLR(p->p_flag, P_SYSCALL);
 		return;
 	}
 
 	p->p_xstat = SIGTRAP;
-	proc_stop(p, 1, SIGSTOP);
-	KERNEL_UNLOCK_ALL(l, &l->l_biglocks);
-	mutex_exit(&proclist_mutex);
+	child_psignal(p);
 
-	/*
-	 * Call issignal() once only, to have it take care of the
-	 * pending stop.  Signal processing will take place as usual
-	 * from userret().
-	 */
-	(void)issignal(l);
-	mutex_exit(&p->p_smutex);
-	KERNEL_LOCK(l->l_biglocks - 1, l);
+	SCHED_LOCK(s);
+
+	proc_stop(p, 1);
+
+	mi_switch(l, NULL);
+	SCHED_ASSERT_UNLOCKED();
+
+	splx(s);
 }
-#endif	/* KTRACE || PTRACE */
+#endif /* KTRACE || PTRACE */

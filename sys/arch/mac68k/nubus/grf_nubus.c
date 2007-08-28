@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_nubus.c,v 1.73 2007/03/05 21:13:36 he Exp $	*/
+/*	$NetBSD: grf_nubus.c,v 1.70 2005/12/24 20:07:15 perry Exp $	*/
 
 /*
  * Copyright (c) 1995 Allen Briggs.  All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_nubus.c,v 1.73 2007/03/05 21:13:36 he Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_nubus.c,v 1.70 2005/12/24 20:07:15 perry Exp $");
 
 #include <sys/param.h>
 
@@ -50,7 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: grf_nubus.c,v 1.73 2007/03/05 21:13:36 he Exp $");
 #include <mac68k/nubus/nubus.h>
 #include <mac68k/dev/grfvar.h>
 
-static void	load_image_data(void *, struct image_data *);
+static void	load_image_data(caddr_t, struct image_data *);
 
 static void	grfmv_intr_generic_write1(void *);
 static void	grfmv_intr_generic_write4(void *);
@@ -69,9 +69,6 @@ static void	grfmv_intr_vimage(void *);
 static void	grfmv_intr_gvimage(void *);
 static void	grfmv_intr_radius_gsc(void *);
 static void	grfmv_intr_radius_gx(void *);
-static void	grfmv_intr_relax_200(void *);
-static void	grfmv_intr_mvc(void *);
-static void	grfmv_intr_viltro_340(void *);
 
 static int	grfmv_mode(struct grf_softc *, int, void *);
 static int	grfmv_match(struct device *, struct cfdata *, void *);
@@ -81,27 +78,25 @@ CFATTACH_DECL(macvid, sizeof(struct grfbus_softc),
     grfmv_match, grfmv_attach, NULL, NULL);
 
 static void
-load_image_data(void *	data, struct image_data *image)
+load_image_data(caddr_t	data, struct image_data *image)
 {
-	char *d = (char*)data;
-
-	memcpy(&image->size,       d     , 4);
-	memcpy(&image->offset,     d +  4, 4);
-	memcpy(&image->rowbytes,   d +  8, 2);
-	memcpy(&image->top,        d + 10, 2);
-	memcpy(&image->left,       d + 12, 2);
-	memcpy(&image->bottom,     d + 14, 2);
-	memcpy(&image->right,      d + 16, 2);
-	memcpy(&image->version,    d + 18, 2);
-	memcpy(&image->packType,   d + 20, 2);
-	memcpy(&image->packSize,   d + 22, 4);
-	memcpy(&image->hRes,       d + 26, 4);
-	memcpy(&image->vRes,       d + 30, 4);
-	memcpy(&image->pixelType,  d + 34, 2);
-	memcpy(&image->pixelSize,  d + 36, 2);
-	memcpy(&image->cmpCount,   d + 38, 2);
-	memcpy(&image->cmpSize,    d + 40, 2);
-	memcpy(&image->planeBytes, d + 42, 4);
+	memcpy(&image->size,       data     , 4);
+	memcpy(&image->offset,     data +  4, 4);
+	memcpy(&image->rowbytes,   data +  8, 2);
+	memcpy(&image->top,        data + 10, 2);
+	memcpy(&image->left,       data + 12, 2);
+	memcpy(&image->bottom,     data + 14, 2);
+	memcpy(&image->right,      data + 16, 2);
+	memcpy(&image->version,    data + 18, 2);
+	memcpy(&image->packType,   data + 20, 2);
+	memcpy(&image->packSize,   data + 22, 4);
+	memcpy(&image->hRes,       data + 26, 4);
+	memcpy(&image->vRes,       data + 30, 4);
+	memcpy(&image->pixelType,  data + 34, 2);
+	memcpy(&image->pixelSize,  data + 36, 2);
+	memcpy(&image->cmpCount,   data + 38, 2);
+	memcpy(&image->cmpSize,    data + 40, 2);
+	memcpy(&image->planeBytes, data + 42, 4);
 }
 
 
@@ -188,14 +183,14 @@ bad:
 	}
 
 	if (nubus_get_ind_data(sc->sc_tag, sc->sc_handle, &sc->sc_slot,
-	    &dirent, (void *)&image_store, sizeof(struct image_data)) <= 0) {
+	    &dirent, (caddr_t)&image_store, sizeof(struct image_data)) <= 0) {
 		printf(": probe failed to get indirect mode data.\n");
 		goto bad;
 	}
 
 	/* Need to load display info (and driver?), etc... (?) */
 
-	load_image_data((void *)&image_store, &image);
+	load_image_data((caddr_t)&image_store, &image);
 
 	gm = &sc->curr_mode;
 	gm->mode_id = mode;
@@ -207,7 +202,7 @@ bad:
 	gm->hres = image.hRes;
 	gm->vres = image.vRes;
 	gm->fbsize = gm->height * gm->rowbytes;
-	gm->fbbase = (void *)(sc->sc_handle.base);	/* XXX evil hack */
+	gm->fbbase = (caddr_t)(sc->sc_handle.base);	/* XXX evil hack */
 	gm->fboff = image.offset;
 
 	strncpy(cardname, nubus_get_card_name(sc->sc_tag, sc->sc_handle,
@@ -306,10 +301,6 @@ bad:
 	case NUBUS_DRHW_LAPIS:
 		add_nubus_intr(na->slot, grfmv_intr_lapis, sc);
 		break;
-	case NUBUS_DRHW_RELAX200:
-		add_nubus_intr(na->slot, grfmv_intr_relax_200, sc);
-		break;
-	case NUBUS_DRHW_BAER:
 	case NUBUS_DRHW_FORMAC:
 		add_nubus_intr(na->slot, grfmv_intr_formac, sc);
 		break;
@@ -340,12 +331,6 @@ bad:
 		sc->cli_offset = 0xa00014;
 		sc->cli_value = 0;
 		add_nubus_intr(na->slot, grfmv_intr_generic_write4, sc);
-		break;
-	case NUBUS_DRHW_MVC:
-		add_nubus_intr(na->slot, grfmv_intr_mvc, sc);
-		break;
-	case NUBUS_DRHW_VILTRO340:
-		add_nubus_intr(na->slot, grfmv_intr_viltro_340, sc);
 		break;
 	default:
 		printf("%s: Unknown video card ID 0x%x --",
@@ -662,8 +647,7 @@ grfmv_intr_lapis(void *vsc)
 }
 
 /*
- * Routine to clear interrupts for the Formac ProNitron 80.IVb
- * and Color Card II
+ * Routine to clear interrupts for the Formac Color Card II
  */
 /*ARGSUSED*/
 static void
@@ -727,46 +711,4 @@ grfmv_intr_radius_gx(void *vsc)
 
 	bus_space_write_1(sc->sc_tag, sc->sc_handle, 0x600000, 0x00);
 	bus_space_write_1(sc->sc_tag, sc->sc_handle, 0x600000, 0x20);
-}
-
-/*
- * Routine to clear interrupts for the Relax 19" model 200.
- */
-/*ARGSUSED*/
-static void
-grfmv_intr_relax_200(void *vsc)
-{
-	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
-	unsigned long	scratch;
-
-	/* The board ROM driver code has a tst.l here. */
-	scratch = bus_space_read_4(sc->sc_tag, sc->sc_handle, 0x000D0040);
-}
-
-/*
- * Routine to clear interrupts for the Apple Mac II Monochrome Video Card.
- */
-/*ARGSUSED*/
-static void
-grfmv_intr_mvc(void *vsc)
-{
-	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
-
-	bus_space_write_4(sc->sc_tag, sc->sc_handle, 0x00040000, 0);
-	bus_space_write_4(sc->sc_tag, sc->sc_handle, 0x00020000, 0);	
-}
-
-/*
- * Routine to clear interrupts for the VillageTronic Mac Picasso 340.
- */
-/*ARGSUSED*/
-static void
-grfmv_intr_viltro_340(void *vsc)
-{
-	struct grfbus_softc *sc = (struct grfbus_softc *)vsc;
-	u_int8_t scratch;
-
-	/* Yes, two read accesses to the same spot. */
-	scratch = bus_space_read_1(sc->sc_tag, sc->sc_handle, 0x0500);
-	scratch = bus_space_read_1(sc->sc_tag, sc->sc_handle, 0x0500);
 }

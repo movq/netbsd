@@ -1,4 +1,4 @@
-/*	$NetBSD: l2cap_lower.c,v 1.6 2007/04/21 06:15:23 plunky Exp $	*/
+/*	$NetBSD: l2cap_lower.c,v 1.1.18.1 2007/07/19 16:04:17 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: l2cap_lower.c,v 1.6 2007/04/21 06:15:23 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: l2cap_lower.c,v 1.1.18.1 2007/07/19 16:04:17 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -121,6 +121,7 @@ l2cap_recv_frame(struct mbuf *m, struct hci_link *link)
 	DPRINTFN(5, "(%s) received packet (%d bytes)\n",
 		    link->hl_unit->hci_devname, hdr.length);
 
+	// wasnt this checked in hci_acl_recv() already?
 	if (hdr.length != m->m_pkthdr.len)
 		goto failed;
 
@@ -130,7 +131,7 @@ l2cap_recv_frame(struct mbuf *m, struct hci_link *link)
 	}
 
 	if (hdr.dcid == L2CAP_CLT_CID) {
-		m_freem(m);	/* TODO */
+		m_freem(m);	// TODO
 		return;
 	}
 
@@ -193,8 +194,8 @@ l2cap_start(struct l2cap_channel *chan)
 
 	MBUFQ_DEQUEUE(&chan->lc_txq, m);
 
-	KASSERT(chan->lc_link != NULL);
-	KASSERT(m != NULL);
+	KASSERT(chan->lc_link);
+	KASSERT(m);
 
 	DPRINTFN(5, "CID #%d sending packet (%d bytes)\n",
 		chan->lc_lcid, m->m_pkthdr.len);

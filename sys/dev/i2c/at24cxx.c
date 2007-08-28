@@ -1,4 +1,4 @@
-/*	$NetBSD: at24cxx.c,v 1.7 2007/01/12 08:47:43 imp Exp $	*/
+/*	$NetBSD: at24cxx.c,v 1.5 2006/03/29 06:41:24 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -52,11 +52,8 @@
 
 /*
  * AT24Cxx EEPROM I2C address:
+ *
  *	101 0xxx
- * (and others depending on the exact model)  The bigger 8-bit parts
- * decode multiple addresses.  The bigger 16-bit parts do too (those
- * larger than 512kb).  Be sure to check the datasheet of your EEPROM
- * because there's much variation between models.
  */
 #define	AT24CXX_ADDRMASK	0x78
 #define	AT24CXX_ADDR		0x50
@@ -92,7 +89,7 @@ dev_type_write(seeprom_write);
 
 const struct cdevsw seeprom_cdevsw = {
 	seeprom_open, seeprom_close, seeprom_read, seeprom_write, noioctl,
-	nostop, notty, nopoll, nommap, nokqfilter, D_OTHER
+	nostop, notty, nopoll, nommap, nokqfilter
 };
 
 static int seeprom_wait_idle(struct seeprom_softc *);
@@ -128,12 +125,8 @@ seeprom_attach(struct device *parent, struct device *self, void *aux)
 	 * using the bottom 1, 2, or 3 to select the 256-byte
 	 * super-page.
 	 *
-	 * The AT24C32/64/128/256/512 EEPROMs use a 2 byte command
-	 * word and decode all of the i2c address bits.
-	 *
-	 * The AT24C1024 EEPROMs use a 2 byte command and also do bank
-	 * switching to select the proper super-page.  This isn't
-	 * supported by this driver.
+	 * The AT24C32/64 EEPROMs use a 2 byte command word and
+	 * decode all of the i2c address bits.
 	 */
 	sc->sc_size = ia->ia_size;
 	switch (sc->sc_size) {
@@ -147,9 +140,6 @@ seeprom_attach(struct device *parent, struct device *self, void *aux)
 
 	case 4096:		/* 32Kbit */
 	case 8192:		/* 64Kbit */
-	case 16384:		/* 128Kbit */
-	case 32768:		/* 256Kbit */
-	case 65536:		/* 512Kbit */
 		sc->sc_cmdlen = 2;
 		break;
 

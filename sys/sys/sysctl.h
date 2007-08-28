@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.h,v 1.170 2007/05/17 14:51:43 yamt Exp $	*/
+/*	$NetBSD: sysctl.h,v 1.165 2006/11/25 21:40:06 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -239,7 +239,7 @@ struct ctlname {
 #define	KERN_PROC2		47	/* struct: process entries */
 #define	KERN_PROC_ARGS		48	/* struct: process argv/env */
 #define	KERN_FSCALE		49	/* int: fixpt FSCALE */
-#define	KERN_CCPU		50	/* old: fixpt ccpu */
+#define	KERN_CCPU		50	/* int: fixpt ccpu */
 #define	KERN_CP_TIME		51	/* struct: CPU time counters */
 #define	KERN_OLDSYSVIPC_INFO	52	/* old: number of valid kern ids */
 #define	KERN_MSGBUF		53	/* kernel message buffer */
@@ -326,7 +326,7 @@ struct ctlname {
 	{ "proc2", CTLTYPE_STRUCT }, \
 	{ "proc_args", CTLTYPE_STRING }, \
 	{ "fscale", CTLTYPE_INT }, \
-	{ 0, 0 }, \
+	{ "ccpu", CTLTYPE_INT }, \
 	{ "cp_time", CTLTYPE_STRUCT }, \
 	{ 0, 0 }, \
 	{ "msgbuf", CTLTYPE_STRUCT }, \
@@ -391,23 +391,6 @@ struct clockinfo {
 #define	KERN_PROC_TTY_NODEV	NODEV		/* no controlling tty */
 #define	KERN_PROC_TTY_REVOKE	((dev_t)-2)	/* revoked tty */
 
-struct ki_pcred {
-	void		*p_pad;
-	uid_t		p_ruid;		/* Real user id */
-	uid_t		p_svuid;	/* Saved effective user id */
-	gid_t		p_rgid;		/* Real group id */
-	gid_t		p_svgid;	/* Saved effective group id */
-	int		p_refcnt;	/* Number of references */
-};
-
-struct ki_ucred {
-	uint32_t	cr_ref;			/* reference count */
-	uid_t		cr_uid;			/* effective user id */
-	gid_t		cr_gid;			/* effective group id */
-	uint32_t	cr_ngroups;		/* number of groups */
-	gid_t		cr_groups[NGROUPS];	/* groups */
-};
-
 /*
  * KERN_PROC subtype ops return arrays of augmented proc structures:
  */
@@ -416,8 +399,8 @@ struct kinfo_proc {
 	struct	eproc {
 		struct	proc *e_paddr;		/* address of proc */
 		struct	session *e_sess;	/* session pointer */
-		struct	ki_pcred e_pcred;	/* process credentials */
-		struct	ki_ucred e_ucred;	/* current credentials */
+		struct	pcred e_pcred;		/* process credentials */
+		struct	ucred e_ucred;		/* current credentials */
 		struct	vmspace e_vm;		/* address space */
 		pid_t	e_ppid;			/* parent process id */
 		pid_t	e_pgid;			/* process group id */
@@ -458,7 +441,6 @@ struct kinfo_proc {
 #define	KI_WMESGLEN	8
 #define	KI_MAXLOGNAME	24	/* extra for 8 byte alignment */
 #define	KI_MAXEMULLEN	16
-#define	KI_LNAMELEN	20	/* extra 4 for alignment */
 
 #define KI_NOCPU	(~(uint64_t)0)
 
@@ -585,50 +567,6 @@ struct kinfo_proc2 {
 };
 
 /*
- * Compat flags for kinfo_proc, kinfo_proc2.  Not guarenteed to be stable.
- * Some of them used to be shared with LWP flags.
- * XXXAD Trim to the minimum necessary...
- */
-
-#define	P_ADVLOCK		0x00000001
-#define	P_CONTROLT		0x00000002
-#define	L_INMEM			0x00000004
-#define	P_INMEM		     /* 0x00000004 */	L_INMEM
-#define	P_NOCLDSTOP		0x00000008
-#define	P_PPWAIT		0x00000010
-#define	P_PROFIL		0x00000020
-#define	L_SELECT		0x00000040
-#define	P_SELECT	     /* 0x00000040 */	L_SELECT
-#define	L_SINTR			0x00000080
-#define	P_SINTR		     /* 0x00000080 */	L_SINTR
-#define	P_SUGID			0x00000100
-#define	P_SYSTEM		0x00000200
-#define	L_SA			0x00000400
-#define	P_SA		     /* 0x00000400 */	L_SA
-#define	P_TRACED		0x00000800
-#define	P_WAITED		0x00001000
-#define	P_WEXIT			0x00002000
-#define	P_EXEC			0x00004000
-#define	P_OWEUPC		0x00008000
-#define	P_FSTRACE		0x00010000
-#define	P_NOCLDWAIT		0x00020000
-#define	P_32			0x00040000
-#define	P_CLDSIGIGN		0x00080000
-#define	P_SYSTRACE		0x00200000
-#define	P_CHTRACED		0x00400000
-#define	P_STOPFORK		0x00800000
-#define	P_STOPEXEC		0x01000000
-#define	P_STOPEXIT		0x02000000
-#define	P_SYSCALL		0x04000000
-#define	P_PAXMPROTECT		0x08000000
-#define	P_PAXNOMPROTECT		0x10000000
-
-/*
- * LWP compat flags.
- */
-#define	L_DETACHED		0x00800000
-
-/*
  * KERN_LWP structure. See notes on KERN_PROC2 about adding elements.
  */
 struct kinfo_lwp {
@@ -650,12 +588,6 @@ struct kinfo_lwp {
 	char	l_wmesg[KI_WMESGLEN];	/* wchan message */
 	uint64_t l_wchan;		/* PTR: sleep address. */
 	uint64_t l_cpuid;		/* LONG: CPU id */
-	uint32_t l_rtime_sec;		/* STRUCT TIMEVAL: Real time. */
-	uint32_t l_rtime_usec;		/* STRUCT TIMEVAL: Real time. */
-	uint32_t l_cpticks;		/* INT: ticks during l_swtime */
-	uint32_t l_pctcpu;		/* FIXPT_T: cpu usage for ps */
-	uint32_t l_pid;			/* PID_T: process identifier */
-	char	l_name[KI_LNAMELEN];	/* CHAR[]: name, may be empty */
 };
 
 /*

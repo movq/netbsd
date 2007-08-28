@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_12.c,v 1.27 2007/04/30 09:20:19 dsl Exp $	*/
+/*	$NetBSD: netbsd32_compat_12.c,v 1.20 2005/12/11 12:20:22 christos Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_12.c,v 1.27 2007/04/30 09:20:19 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_12.c,v 1.20 2005/12/11 12:20:22 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -42,6 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_12.c,v 1.27 2007/04/30 09:20:19 dsl 
 #include <sys/proc.h>
 #include <sys/stat.h>
 #include <sys/swap.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/sys/stat.h>
@@ -109,7 +110,7 @@ compat_12_netbsd32_msync(l, v, retval)
 	} */ *uap = v;
 	struct sys___msync13_args ua;
 
-	NETBSD32TOP_UAP(addr, void *);
+	NETBSD32TOX64_UAP(addr, caddr_t);
 	NETBSD32TOX_UAP(len, size_t);
 	SCARG(&ua, flags) = MS_SYNC | MS_INVALIDATE;
 	return (sys___msync13(l, &ua, retval));
@@ -127,7 +128,7 @@ compat_12_netbsd32_oswapon(l, v, retval)
 	struct sys_swapctl_args ua;
 
 	SCARG(&ua, cmd) = SWAP_ON;
-	SCARG(&ua, arg) = SCARG_P32(uap, name);
+	SCARG(&ua, arg) = (void *)NETBSD32PTR64(SCARG(uap, name));
 	SCARG(&ua, misc) = 0;	/* priority */
 	return (sys_swapctl(l, &ua, retval));
 }
@@ -138,6 +139,7 @@ compat_12_netbsd32_stat12(l, v, retval)
 	void *v;
 	register_t *retval;
 {
+	struct proc *p = l->l_proc;
 	struct compat_12_netbsd32_stat12_args /* {
 		syscallarg(const netbsd32_charp) path;
 		syscallarg(netbsd32_stat12p_t) ub;
@@ -146,16 +148,19 @@ compat_12_netbsd32_stat12(l, v, retval)
 	struct stat12 sb12;
 	struct stat12 *sp12 = &sb12;
 	struct compat_12_sys_stat_args ua;
+	caddr_t sg;
 	int rv;
 
 	NETBSD32TOP_UAP(path, const char);
 	SCARG(&ua, ub) = &sb12;
+	sg = stackgap_init(p, 0);
+	CHECK_ALT_EXIST(l, &sg, SCARG(&ua, path));
 
 	rv = compat_12_sys_stat(l, &ua, retval);
 	if (rv)
 		return (rv);
 
-	sp32 = SCARG_P32(uap, ub);
+	sp32 = (struct netbsd32_stat12 *)NETBSD32PTR64(SCARG(uap, ub));
 	netbsd32_stat12_to_netbsd32(sp12, &sb32);
 
 	return (copyout(&sb32, sp32, sizeof sb32));
@@ -183,7 +188,7 @@ compat_12_netbsd32_fstat12(l, v, retval)
 	if (rv)
 		return (rv);
 
-	sp32 = SCARG_P32(uap, sb);
+	sp32 = (struct netbsd32_stat12 *)NETBSD32PTR64(SCARG(uap, sb));
 	netbsd32_stat12_to_netbsd32(sp12, &sb32);
 
 	return (copyout(&sb32, sp32, sizeof sb32));
@@ -195,6 +200,7 @@ compat_12_netbsd32_lstat12(l, v, retval)
 	void *v;
 	register_t *retval;
 {
+	struct proc *p = l->l_proc;
 	struct compat_12_netbsd32_lstat12_args /* {
 		syscallarg(const netbsd32_charp) path;
 		syscallarg(netbsd32_stat12p_t) ub;
@@ -203,16 +209,19 @@ compat_12_netbsd32_lstat12(l, v, retval)
 	struct stat12 sb12;
 	struct stat12 *sp12 = &sb12;
 	struct compat_12_sys_lstat_args ua;
+	caddr_t sg;
 	int rv;
 
 	NETBSD32TOP_UAP(path, const char);
 	SCARG(&ua, ub) = &sb12;
+	sg = stackgap_init(p, 0);
+	CHECK_ALT_EXIST(l, &sg, SCARG(&ua, path));
 
 	rv = compat_12_sys_lstat(l, &ua, retval);
 	if (rv)
 		return (rv);
 
-	sp32 = SCARG_P32(uap, ub);
+	sp32 = (struct netbsd32_stat12 *)NETBSD32PTR64(SCARG(uap, ub));
 	netbsd32_stat12_to_netbsd32(sp12, &sb32);
 
 	return (copyout(&sb32, sp32, sizeof sb32));

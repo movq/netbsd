@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.143 2007/05/17 14:51:32 yamt Exp $ */
+/*	$NetBSD: trap.c,v 1.139 2006/10/20 18:26:26 martin Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.143 2007/05/17 14:51:32 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.139 2006/10/20 18:26:26 martin Exp $");
 
 #define NEW_FPSTATE
 
@@ -64,6 +64,8 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.143 2007/05/17 14:51:32 yamt Exp $");
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/ras.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/resource.h>
@@ -528,7 +530,7 @@ extern void db_printf(const char * , ...);
 			} else {
 				newfplwp = curlwp;
 				/* force other cpus to give up this fpstate */
-				if (newfplwp->l_md.md_fpstate)
+				if (curlwp->l_md.md_fpstate)
 					save_and_clear_fpstate(newfplwp);
 			}
 			if (fplwp != newfplwp) {
@@ -619,8 +621,12 @@ badtrap:
 
 	case T_AST:
 #if 1
-		if (want_resched)
-			preempt();
+		if (want_resched) {
+			extern int sadebug;
+			if (sadebug)
+				printf("trap: T_AST, preempt\n");
+			preempt(0);
+		}
 		want_ast = 0;
 #endif
 		break;	/* the work is all in userret() */
@@ -760,7 +766,7 @@ badtrap:
 		fplwp = NULL;
 		/* tf->tf_psr &= ~PSR_EF; */	/* share_fpu will do this */
 		if (l->l_md.md_fpstate->fs_qsize == 0) {
-			error = copyin((void *)pc,
+			error = copyin((caddr_t)pc,
 			    &l->l_md.md_fpstate->fs_queue[0].fq_instr,
 			    sizeof(int));
 			if (error) {
@@ -796,7 +802,7 @@ badtrap:
 
 	case T_BREAKPOINT:
 		if (LIST_EMPTY(&p->p_raslist) ||
-		    (ras_lookup(p, (void *)(intptr_t)tf->tf_pc) == (void *)-1)) {
+		    (ras_lookup(p, (caddr_t)(intptr_t)tf->tf_pc) == (caddr_t)-1)) {
 			sig = SIGTRAP;
 			KSI_INIT_TRAP(&ksi);
 			ksi.ksi_trap = type;
@@ -856,10 +862,10 @@ badtrap:
 		break;
 	}
 	if (sig != 0) {
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 		ksi.ksi_signo = sig;
 		trapsignal(l, &ksi);
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 	}
 	userret(l, pc, sticks);
 	share_fpu(l, tf);
@@ -920,7 +926,7 @@ rwindow_save(struct lwp *l)
 			}
 #endif
 			rwdest += BIAS;
-			if (copyout((void *)&rw[i], (void *)(u_long)rwdest,
+			if (copyout((caddr_t)&rw[i], (caddr_t)(u_long)rwdest,
 				    sizeof(*rw))) {
 #ifdef DEBUG
 			if (rwindow_debug & (RW_ERR | RW_64))
@@ -933,7 +939,7 @@ rwindow_save(struct lwp *l)
 #ifdef DEBUG
 			if (rwindow_debug & RW_64) {
 				printf("Finished copyout(%p, %p, %lx)\n",
-					(void *)&rw[i], (void *)(long)rwdest,
+					(caddr_t)&rw[i], (caddr_t)(long)rwdest,
                                 	sizeof(*rw));
 				Debugger();
 			}
@@ -947,7 +953,7 @@ rwindow_save(struct lwp *l)
 				rwstack.rw_in[j] = (int)rw[i].rw_in[j];
 			}
 			/* Must truncate rwdest */
-			if (copyout(&rwstack, (void *)(u_long)(u_int)rwdest,
+			if (copyout(&rwstack, (caddr_t)(u_long)(u_int)rwdest,
 				    sizeof(rwstack))) {
 #ifdef DEBUG
 				if (rwindow_debug & RW_ERR)
@@ -1061,10 +1067,10 @@ data_access_fault(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 			printf("NULL proc\n");
 		else
 			printf("pid %d(%s); sigmask %x, sigcatch %x\n",
-			       l->l_proc->p_pid, l->l_proc->p_comm,
+			       curproc->p_pid, curproc->p_comm,
 				/* XXX */
-			       l->l_sigmask.__bits[0], 
-			       l->l_proc->p_sigctx.ps_sigcatch.__bits[0]);
+			       curproc->p_sigctx.ps_sigmask.__bits[0], 
+			       curproc->p_sigctx.ps_sigcatch.__bits[0]);
 	}
 #endif
 
@@ -1107,9 +1113,6 @@ data_access_fault(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 			 * hard to find, so better panic now with a helpfull
 			 * message.
 			 */
-			/*
-			 * XXXMRG in yamt-idlelwp world this seems unlikely?
-			 */
 			if (curlwp == NULL) {
 				panic("cpu%d: kernel data access fault "
 				    "accessing 0x%lx at pc 0x%lx\n",
@@ -1129,8 +1132,13 @@ data_access_fault(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 				return;
 			goto kfault;
 		}
-	} else
+	} else {
 		l->l_md.md_tf = tf;
+		if (l->l_flag & L_SA) {
+			l->l_savp->savp_faultaddr = addr;
+			l->l_flag |= L_SA_PAGEFAULT;
+		}
+	}
 
 	vm = p->p_vmspace;
 	/* alas! must call the horrible vm code */
@@ -1155,7 +1163,7 @@ data_access_fault(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 	 * the current limit and we need to reflect that as an access
 	 * error.
 	 */
-	if ((void *)va >= vm->vm_maxsaddr) {
+	if ((caddr_t)va >= vm->vm_maxsaddr) {
 		if (rv == 0)
 			uvm_grow(p, va);
 		else if (rv == EACCES)
@@ -1228,6 +1236,7 @@ kfault:
 		trapsignal(l, &ksi);
 	}
 	if ((tstate & TSTATE_PRIV) == 0) {
+		l->l_flag &= ~L_SA_PAGEFAULT;
 		userret(l, pc, sticks);
 		share_fpu(l, tf);
 	}
@@ -1335,7 +1344,7 @@ data_access_error(struct trapframe64 *tf, unsigned int type, vaddr_t afva,
 			printf("pid %d(%s); sigmask %x, sigcatch %x\n",
 			       curproc->p_pid, curproc->p_comm,
 				/* XXX */
-			       curlwp->l_sigmask.__bits[0], 
+			       curproc->p_sigctx.ps_sigmask.__bits[0], 
 			       curproc->p_sigctx.ps_sigcatch.__bits[0]);
 	}
 #endif
@@ -1491,7 +1500,7 @@ text_access_fault(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 	 * the current limit and we need to reflect that as an access
 	 * error.
 	 */
-	if ((void *)va >= vm->vm_maxsaddr) {
+	if ((caddr_t)va >= vm->vm_maxsaddr) {
 		if (rv == 0)
 			uvm_grow(p, va);
 	}
@@ -1641,7 +1650,7 @@ text_access_error(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 		else
 			printf("pid %d(%s); sigmask %x, sigcatch %x\n",
 			       curproc->p_pid, curproc->p_comm,
-			       curlwp->l_sigmask.__bits[0], 
+			       curproc->p_sigctx.ps_sigmask.__bits[0], 
 			       curproc->p_sigctx.ps_sigcatch.__bits[0]);
 	}
 #endif
@@ -1671,7 +1680,7 @@ text_access_error(struct trapframe64 *tf, unsigned int type, vaddr_t pc,
 	 * the current limit and we need to reflect that as an access
 	 * error.
 	 */
-	if ((void *)va >= vm->vm_maxsaddr) {
+	if ((caddr_t)va >= vm->vm_maxsaddr) {
 		if (rv == 0)
 			uvm_grow(p, va);
 		else if (rv == EACCES)

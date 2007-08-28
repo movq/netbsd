@@ -1,4 +1,4 @@
-/*	$NetBSD: newport.c,v 1.10 2007/03/04 06:00:39 christos Exp $	*/
+/*	$NetBSD: newport.c,v 1.7 2006/04/12 19:38:23 jmmv Exp $	*/
 
 /*
  * Copyright (c) 2003 Ilpo Ruotsalainen
@@ -30,14 +30,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: newport.c,v 1.10 2007/03/04 06:00:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: newport.c,v 1.7 2006/04/12 19:38:23 jmmv Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
-
-#include <machine/sysconf.h>
 
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wsdisplayvar.h>
@@ -89,7 +87,7 @@ static void newport_eraserows(void *, int, int, long);
 static int  newport_allocattr(void *, int, int, int, long *);
 
 /* accessops */
-static int     newport_ioctl(void *, void *, u_long, void *, int,
+static int     newport_ioctl(void *, void *, u_long, caddr_t, int,
     struct lwp *);
 static paddr_t newport_mmap(void *, void *, off_t, int);
 static int     newport_alloc_screen(void *, const struct wsscreen_descr *,
@@ -573,18 +571,14 @@ newport_match(struct device *parent, struct cfdata *self, void *aux)
 	    ga->ga_addr != 0x1f800000 && ga->ga_addr != 0x1fc00000)
 		return 0;
 
+	/* newport doesn't respond with correct product id, empirically
+	 * both empty slots and newports seem to yield this result */
+	if (ga->ga_product != 0x04)
+		return 0;
+
 	/* Don't do the destructive probe if we're already attached */
 	if (newport_is_console && ga->ga_addr == newport_console_dc.dc_addr)
 		return 1;
-
-	if (platform.badaddr(
-	    (void *)(ga->ga_ioh + NEWPORT_REX3_OFFSET + REX3_REG_XSTARTI),
-	    sizeof(uint32_t)))
-		return 0;
-	if (platform.badaddr(
-	    (void *)(ga->ga_ioh + NEWPORT_REX3_OFFSET + REX3_REG_XSTART),
-	    sizeof(uint32_t)))
-		return 0;
 
 	/* Ugly, this probe is destructive, blame SGI... */
 	/* XXX Should be bus_space_peek/bus_space_poke XXX */
@@ -861,7 +855,7 @@ newport_allocattr(void *c, int fg, int bg, int flags, long *attr)
 /**** wsdisplay accessops ****/
 
 static int
-newport_ioctl(void *c, void *vs, u_long cmd, void *data, int flag,
+newport_ioctl(void *c, void *vs, u_long cmd, caddr_t data, int flag,
 	struct lwp *l)
 {
 	struct newport_softc *sc = c;

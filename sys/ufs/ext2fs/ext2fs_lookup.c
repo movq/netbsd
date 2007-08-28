@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_lookup.c,v 1.51 2007/07/21 19:06:22 ad Exp $	*/
+/*	$NetBSD: ext2fs_lookup.c,v 1.46.2.1 2007/02/17 23:27:52 tron Exp $	*/
 
 /*
  * Modified for NetBSD 1.2E
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_lookup.c,v 1.51 2007/07/21 19:06:22 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_lookup.c,v 1.46.2.1 2007/02/17 23:27:52 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -60,7 +60,6 @@ __KERNEL_RCSID(0, "$NetBSD: ext2fs_lookup.c,v 1.51 2007/07/21 19:06:22 ad Exp $"
 #include <sys/malloc.h>
 #include <sys/dirent.h>
 #include <sys/kauth.h>
-#include <sys/lwp.h>
 
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufsmount.h>
@@ -146,7 +145,7 @@ ext2fs_readdir(void *v)
 	struct dirent dstd;
 	struct uio auio;
 	struct iovec aiov;
-	void *dirbuf;
+	caddr_t dirbuf;
 	off_t off = uio->uio_offset;
 	off_t *cookies = NULL;
 	int nc = 0, ncookies = 0;
@@ -190,7 +189,7 @@ ext2fs_readdir(void *v)
 			if(dstd.d_reclen > uio->uio_resid) {
 				break;
 			}
-			if ((error = uiomove((void *)&dstd, dstd.d_reclen, uio)) != 0) {
+			if ((error = uiomove((caddr_t)&dstd, dstd.d_reclen, uio)) != 0) {
 				break;
 			}
 			off = off + e2d_reclen;
@@ -359,7 +358,7 @@ ext2fs_lookup(void *v)
 searchloop:
 	while (dp->i_offset < endsearch) {
 		if (curcpu()->ci_schedstate.spc_flags & SPCF_SHOULDYIELD)
-			preempt();
+			preempt(1);
 		/*
 		 * If necessary, get the next directory block.
 		 */
@@ -598,7 +597,7 @@ found:
 		 * implements append-only directories.
 		 */
 		if ((dp->i_e2fs_mode & ISVTX) &&
-		    kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL) &&
+		    kauth_cred_geteuid(cred) != 0 &&
 		    kauth_cred_geteuid(cred) != dp->i_e2fs_uid &&
 		    VTOI(tdp)->i_e2fs_uid != kauth_cred_geteuid(cred)) {
 			vput(tdp);
@@ -780,7 +779,7 @@ ext2fs_direnter(struct inode *ip, struct vnode *dvp, struct componentname *cnp)
 		newdir.e2d_reclen = h2fs16(dirblksiz);
 		auio.uio_resid = newentrysize;
 		aiov.iov_len = newentrysize;
-		aiov.iov_base = (void *)&newdir;
+		aiov.iov_base = (caddr_t)&newdir;
 		auio.uio_iov = &aiov;
 		auio.uio_iovcnt = 1;
 		auio.uio_rw = UIO_WRITE;
@@ -837,7 +836,7 @@ ext2fs_direnter(struct inode *ip, struct vnode *dvp, struct componentname *cnp)
 		dsize = EXT2FS_DIRSIZ(nep->e2d_namlen);
 		spacefree += fs2h16(nep->e2d_reclen) - dsize;
 		loc += fs2h16(nep->e2d_reclen);
-		memcpy((void *)ep, (void *)nep, dsize);
+		memcpy((caddr_t)ep, (caddr_t)nep, dsize);
 	}
 	/*
 	 * Update the pointer fields in the previous entry (if any),
@@ -861,7 +860,7 @@ ext2fs_direnter(struct inode *ip, struct vnode *dvp, struct componentname *cnp)
 		ep->e2d_reclen = h2fs16(dsize);
 		ep = (struct ext2fs_direct *)((char *)ep + dsize);
 	}
-	memcpy((void *)ep, (void *)&newdir, (u_int)newentrysize);
+	memcpy((caddr_t)ep, (caddr_t)&newdir, (u_int)newentrysize);
 	error = VOP_BWRITE(bp);
 	dp->i_flag |= IN_CHANGE | IN_UPDATE;
 	if (!error && dp->i_endoff && dp->i_endoff < ext2fs_size(dp))
@@ -967,7 +966,7 @@ ext2fs_dirempty(struct inode *ip, ino_t parentino, kauth_cred_t cred)
 #define	MINDIRSIZ (sizeof (struct ext2fs_dirtemplate) / 2)
 
 	for (off = 0; off < ext2fs_size(ip); off += fs2h16(dp->e2d_reclen)) {
-		error = vn_rdwr(UIO_READ, ITOV(ip), (void *)dp, MINDIRSIZ, off,
+		error = vn_rdwr(UIO_READ, ITOV(ip), (caddr_t)dp, MINDIRSIZ, off,
 		   UIO_SYSSPACE, IO_NODELOCKED, cred, &count, NULL);
 		/*
 		 * Since we read MINDIRSIZ, residual must
@@ -1030,7 +1029,7 @@ ext2fs_checkpath(struct inode *source, struct inode *target,
 			error = ENOTDIR;
 			break;
 		}
-		error = vn_rdwr(UIO_READ, vp, (void *)&dirbuf,
+		error = vn_rdwr(UIO_READ, vp, (caddr_t)&dirbuf,
 			sizeof (struct ext2fs_dirtemplate), (off_t)0,
 			UIO_SYSSPACE, IO_NODELOCKED, cred, (size_t *)0,
 			NULL);

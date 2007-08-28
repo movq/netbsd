@@ -1,4 +1,4 @@
-/* $NetBSD: tslcd.c,v 1.9 2007/03/04 05:59:45 christos Exp $ */
+/* $NetBSD: tslcd.c,v 1.7 2006/08/31 17:53:19 matt Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tslcd.c,v 1.9 2007/03/04 05:59:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tslcd.c,v 1.7 2006/08/31 17:53:19 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,6 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: tslcd.c,v 1.9 2007/03/04 05:59:45 christos Exp $");
 #include <sys/device.h>
 #include <sys/callout.h>
 #include <sys/select.h>
+#include <sys/conf.h>
 
 #include <machine/bus.h>
 #include <machine/autoconf.h>
@@ -324,7 +325,7 @@ int
 tslcdioctl(dev, cmd, data, flag, l)
 	dev_t dev;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 	int flag;
 	struct lwp *l;
 {

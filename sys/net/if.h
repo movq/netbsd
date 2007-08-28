@@ -1,4 +1,4 @@
-/*	$NetBSD: if.h,v 1.124 2007/05/29 21:32:29 christos Exp $	*/
+/*	$NetBSD: if.h,v 1.121 2006/11/23 19:41:58 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -244,7 +244,7 @@ struct ifnet {				/* and the entries */
 	TAILQ_HEAD(, ifaddr) if_addrlist; /* linked list of addresses per if */
 	char	if_xname[IFNAMSIZ];	/* external name (name + unit) */
 	int	if_pcount;		/* number of promiscuous listeners */
-	void *	if_bpf;			/* packet filter structure */
+	caddr_t	if_bpf;			/* packet filter structure */
 	u_short	if_index;		/* numeric abbreviation for this if */
 	short	if_timer;		/* time 'til if_watchdog called */
 	short	if_flags;		/* up/down, broadcast, etc. */
@@ -255,14 +255,14 @@ struct ifnet {				/* and the entries */
 	 * corresponding NULL stub in if.c.
 	 */
 	int	(*if_output)		/* output routine (enqueue) */
-		    (struct ifnet *, struct mbuf *, const struct sockaddr *,
+		    (struct ifnet *, struct mbuf *, struct sockaddr *,
 		     struct rtentry *);
 	void	(*if_input)		/* input routine (from h/w driver) */
 		    (struct ifnet *, struct mbuf *);
 	void	(*if_start)		/* initiate output routine */
 		    (struct ifnet *);
 	int	(*if_ioctl)		/* ioctl routine */
-		    (struct ifnet *, u_long, void *);
+		    (struct ifnet *, u_long, caddr_t);
 	int	(*if_init)		/* init routine */
 		    (struct ifnet *);
 	void	(*if_stop)		/* stop routine */
@@ -280,7 +280,7 @@ struct ifnet {				/* and the entries */
 	uint64_t if_capabilities;	/* interface capabilities */
 	uint64_t if_capenable;		/* capabilities enabled */
 	union {
-		void *		carp_s;	/* carp structure (used by !carp ifs) */
+		caddr_t		carp_s;	/* carp structure (used by !carp ifs) */
 		struct ifnet	*carp_d;/* ptr to carpdev (used by carp ifs) */
 	} if_carp_ptr;
 #define if_carp		if_carp_ptr.carp_s
@@ -537,13 +537,12 @@ struct	ifreq {
 		struct	sockaddr ifru_addr;
 		struct	sockaddr ifru_dstaddr;
 		struct	sockaddr ifru_broadaddr;
-		struct	sockaddr_storage ifru_space;
 		short	ifru_flags;
 		int	ifru_metric;
 		int	ifru_mtu;
 		int	ifru_dlt;
 		u_int	ifru_value;
-		void *	ifru_data;
+		caddr_t	ifru_data;
 		struct {
 			uint32_t	b_buflen;
 			void		*b_buf;
@@ -612,7 +611,7 @@ struct  ifdrv {
 struct	ifconf {
 	int	ifc_len;		/* size of associated buffer */
 	union {
-		void *	ifcu_buf;
+		caddr_t	ifcu_buf;
 		struct	ifreq *ifcu_req;
 	} ifc_ifcu;
 #define	ifc_buf	ifc_ifcu.ifcu_buf	/* buffer address */
@@ -744,7 +743,7 @@ do {									\
 			(pattr)->pattr_class = (*(ifq)->altq_classify)	\
 				((ifq)->altq_clfier, (m), (af));	\
 		(pattr)->pattr_af = (af);				\
-		(pattr)->pattr_hdr = mtod((m), void *);		\
+		(pattr)->pattr_hdr = mtod((m), caddr_t);		\
 	}								\
 } while (/*CONSTCOND*/ 0)
 #else /* ! ALTQ */
@@ -808,9 +807,9 @@ void	if_down(struct ifnet *);
 void	if_link_state_change(struct ifnet *, int);
 void	if_slowtimo(void *);
 void	if_up(struct ifnet *);
-int	ifconf(u_long, void *);
+int	ifconf(u_long, caddr_t);
 void	ifinit(void);
-int	ifioctl(struct socket *, u_long, void *, struct lwp *);
+int	ifioctl(struct socket *, u_long, caddr_t, struct lwp *);
 int	ifpromisc(struct ifnet *, int);
 struct	ifnet *ifunit(const char *);
 
@@ -836,10 +835,10 @@ int	ifq_enqueue(struct ifnet *, struct mbuf * ALTQ_COMMA
 int	ifq_enqueue2(struct ifnet *, struct ifqueue *, struct mbuf * ALTQ_COMMA
     ALTQ_DECL(struct altq_pktattr *));
 
-int	loioctl(struct ifnet *, u_long, void *);
+int	loioctl(struct ifnet *, u_long, caddr_t);
 void	loopattach(int);
 int	looutput(struct ifnet *,
-	   struct mbuf *, const struct sockaddr *, struct rtentry *);
+	   struct mbuf *, struct sockaddr *, struct rtentry *);
 void	lortrequest(int, struct rtentry *, struct rt_addrinfo *);
 
 /*
@@ -847,10 +846,10 @@ void	lortrequest(int, struct rtentry *, struct rt_addrinfo *);
  * an interface is going away without having to burn a flag.
  */
 int	if_nulloutput(struct ifnet *, struct mbuf *,
-	    const struct sockaddr *, struct rtentry *);
+	    struct sockaddr *, struct rtentry *);
 void	if_nullinput(struct ifnet *, struct mbuf *);
 void	if_nullstart(struct ifnet *);
-int	if_nullioctl(struct ifnet *, u_long, void *);
+int	if_nullioctl(struct ifnet *, u_long, caddr_t);
 int	if_nullinit(struct ifnet *);
 void	if_nullstop(struct ifnet *, int);
 void	if_nullwatchdog(struct ifnet *);

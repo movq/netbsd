@@ -1,4 +1,4 @@
-/* $NetBSD: pmap.c,v 1.9 2007/07/16 23:48:04 macallan Exp $ */
+/* $NetBSD: pmap.c,v 1.4 2006/09/15 15:51:12 yamt Exp $ */
 
 
 /*-
@@ -92,7 +92,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.9 2007/07/16 23:48:04 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.4 2006/09/15 15:51:12 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -158,7 +158,7 @@ static uint64_t *pmap_ridmap;
 struct lock pmap_rid_lock;
 
 
-bool		pmap_initialized;	/* Has pmap_init completed? */
+boolean_t	pmap_initialized;	/* Has pmap_init completed? */
 u_long		pmap_pages_stolen;	/* instrumentation */
 
 struct pmap kernel_pmap_store;	/* the kernel's pmap (proc0) */
@@ -187,7 +187,7 @@ struct pool_allocator pmap_pv_page_allocator = {
 	pmap_pv_page_alloc, pmap_pv_page_free, 0,
 };
 
-bool pmap_poolpage_alloc(paddr_t *);
+boolean_t pmap_poolpage_alloc(paddr_t *);
 void pmap_poolpage_free(paddr_t);
 
 /*
@@ -261,7 +261,7 @@ static pmap_t	pmap_install(pmap_t);
 static struct ia64_lpte *pmap_find_kpte(vaddr_t);
 
 static void
-pmap_set_pte(struct ia64_lpte *, vaddr_t, vaddr_t, bool, bool);
+pmap_set_pte(struct ia64_lpte *, vaddr_t, vaddr_t, boolean_t, boolean_t);
 static void
 pmap_free_pte(struct ia64_lpte *pte, vaddr_t va);
 
@@ -336,7 +336,7 @@ pmap_steal_memory(vsize_t size, vaddr_t *vstartp, vaddr_t *vendp)
 #endif
 
 	for (lcv = 0; lcv < vm_nphysseg; lcv++) {
-		if (uvm.page_init_done == true)
+		if (uvm.page_init_done == TRUE)
 			panic("pmap_steal_memory: called _after_ bootstrap");
 
 #if 0
@@ -382,7 +382,7 @@ pmap_steal_memory(vsize_t size, vaddr_t *vstartp, vaddr_t *vendp)
 		}
 
 		va = IA64_PHYS_TO_RR7(pa);
-		memset((void *)va, 0, size);
+		memset((caddr_t)va, 0, size);
 		pmap_pages_stolen += npgs;
 		return (va);
 	}
@@ -419,7 +419,7 @@ pmap_steal_vhpt_memory(vsize_t size)
 #endif
 
 	for (lcv = 0; lcv < vm_nphysseg; lcv++) {
-		if (uvm.page_init_done == true)
+		if (uvm.page_init_done == TRUE)
 			panic("pmap_vhpt_steal_memory: called _after_ bootstrap");
 
 #if 1
@@ -515,7 +515,7 @@ pmap_steal_vhpt_memory(vsize_t size)
 	 */
 	pa = ptoa(vhpt_start);
 	va = IA64_PHYS_TO_RR7(pa);
-	memset((void *)va, 0, size);
+	memset((caddr_t)va, 0, size);
 	pmap_pages_stolen += npgs;
 	return (va);
 }
@@ -646,8 +646,9 @@ pmap_bootstrap()
 	 * Initialize the pmap pools and list.
 	 */
 	pmap_ncpuids = pmap_ridmax;
-	pool_init(&pmap_pmap_pool, sizeof(struct pmap), 0, 0, 0, "pmappl",
-	    &pool_allocator_nointr, IPL_NONE); /* This may block. */
+	pool_init(&pmap_pmap_pool,
+		  sizeof(struct pmap), 0, 0, 0, "pmappl",
+		  &pool_allocator_nointr); /* This may block. */
 
 	/* XXX: Need to convert ia64_kptdir[][] to a pool. ????*/
 
@@ -655,11 +656,11 @@ pmap_bootstrap()
 	 * XXX: We should be using regular vm_alloced mem for regular, non-kernel ptesl
 	 */
 
-	pool_init(&pmap_ia64_lpte_pool, sizeof (struct ia64_lpte),
-	    sizeof(void *), 0, 0, "ptpl", NULL, IPL_NONE); 
+	pool_init(&pmap_ia64_lpte_pool, sizeof (struct ia64_lpte), sizeof(void *), 0, 0, "ptpl",
+		  NULL); 
 
-	pool_init(&pmap_pv_pool, sizeof (struct pv_entry), sizeof(void *),
-	    0, 0, "pvpl", &pmap_pv_page_allocator, IPL_NONE);
+	pool_init(&pmap_pv_pool, sizeof (struct pv_entry), sizeof(void *), 0, 0, "pvpl",
+	    &pmap_pv_page_allocator);
 
 	TAILQ_INIT(&pmap_all_pmaps);
 
@@ -811,7 +812,7 @@ pmap_init(void)
 	/*
 	 * Now it is safe to enable pv entry recording.
 	 */
-	pmap_initialized = true;
+	pmap_initialized = TRUE;
 
 }
 
@@ -827,7 +828,7 @@ vtophys(va)
 {
 	paddr_t pa;
 
-	if (pmap_extract(pmap_kernel(), va, &pa) == true)
+	if (pmap_extract(pmap_kernel(), va, &pa) == TRUE)
 		return (pa);
 	return (0);
 }
@@ -935,7 +936,7 @@ void
 pmap_zero_page(paddr_t phys)
 {
 	vaddr_t va = IA64_PHYS_TO_RR7(phys);
-	bzero((void *) va, PAGE_SIZE);
+	bzero((caddr_t) va, PAGE_SIZE);
 }
 
 /*
@@ -952,7 +953,7 @@ pmap_copy_page(paddr_t psrc, paddr_t pdst)
 {
 	vaddr_t vsrc = IA64_PHYS_TO_RR7(psrc);
 	vaddr_t vdst = IA64_PHYS_TO_RR7(pdst);
-	bcopy((void *) vsrc, (void *) vdst, PAGE_SIZE);
+	bcopy((caddr_t) vsrc, (caddr_t) vdst, PAGE_SIZE);
 }
 
 
@@ -1056,7 +1057,7 @@ pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot)
         else
                 pmap_enter_vhpt(pte, va);
         pmap_pte_prot(pmap_kernel(), pte, prot);
-        pmap_set_pte(pte, va, pa, false, false);
+        pmap_set_pte(pte, va, pa, FALSE, FALSE);
 
 }
 
@@ -1245,7 +1246,7 @@ pmap_protect(pmap_t pmap, vaddr_t sva, vaddr_t eva, vm_prot_t prot)
  *	Extract the physical address associated with the given
  *	pmap/virtual address pair.
  */
-bool
+boolean_t
 pmap_extract(pmap_t pmap, vaddr_t va, paddr_t *pap)
 {
         struct ia64_lpte *pte;
@@ -1259,10 +1260,10 @@ pmap_extract(pmap_t pmap, vaddr_t va, paddr_t *pap)
         if (pte != NULL && pmap_present(pte))
                 pap = (paddr_t *) pmap_ppn(pte);
 	else
-		return false;	
+		return FALSE;	
         pmap_install(oldpmap);
         simple_unlock(pmap->pm_slock);
-        return true;
+        return TRUE;
 
 }
 
@@ -1271,10 +1272,10 @@ pmap_extract(pmap_t pmap, vaddr_t va, paddr_t *pap)
  *
  *	Clear the modify bits on the specified physical page.
  */
-bool
+boolean_t
 pmap_clear_modify(struct vm_page *pg)
 {
-	bool rv = false;
+	boolean_t rv = FALSE;
 	struct ia64_lpte *pte;
 	pmap_t oldpmap;
 	pv_entry_t pv;
@@ -1288,7 +1289,7 @@ pmap_clear_modify(struct vm_page *pg)
 		pte = pmap_find_vhpt(pv->pv_va);
 		KASSERT(pte != NULL);
 		if (pmap_dirty(pte)) {
-			rv = true;
+			rv = TRUE;
 			pmap_clear_dirty(pte);
 			pmap_invalidate_page(pv->pv_pmap, pv->pv_va);
 		}
@@ -1359,10 +1360,10 @@ pmap_reference(pmap_t pmap)
  *
  *	Clear the reference bit on the specified physical page.
  */
-bool
+boolean_t
 pmap_clear_reference(struct vm_page *pg)
 {
-	return (false);
+	return (FALSE);
 }
 
 /*
@@ -1375,7 +1376,7 @@ pmap_clear_reference(struct vm_page *pg)
  *	Note: no locking is necessary in this function.
  */
 paddr_t
-pmap_phys_address(paddr_t ppn)
+pmap_phys_address(int ppn)
 {
 
 	return (ia64_ptob(ppn));
@@ -1403,7 +1404,7 @@ pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
         vaddr_t opa;
         struct ia64_lpte origpte;
         struct ia64_lpte *pte;
-        bool managed, wired;
+        boolean_t managed, wired;
 	struct vm_page *pg;
 	int error = 0;
 
@@ -1415,7 +1416,7 @@ pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
                         
         va &= ~PAGE_MASK;
 
-        managed = false;
+        managed = FALSE;
 
 	wired = (flags & PMAP_WIRED) !=0;
 
@@ -1462,7 +1463,7 @@ pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
                 else if (!wired && pmap_wired(&origpte))
                         pmap->pm_stats.wired_count--;
 
-                managed = (pmap_managed(&origpte)) ? true : false;
+                managed = (pmap_managed(&origpte)) ? TRUE : FALSE;
 
 
                 /*
@@ -1491,7 +1492,7 @@ pmap_enter(pmap_t pmap, vaddr_t va, paddr_t pa, vm_prot_t prot, int flags)
 
         if ((flags & (PG_FAKE)) == 0) {
                 pmap_insert_entry(pmap, va, pg);
-                managed = true;
+                managed = TRUE;
         }
 
         /*
@@ -1775,7 +1776,7 @@ pmap_pte_prot(pmap_t pm, struct ia64_lpte *pte, vm_prot_t prot)
  */
 static void
 pmap_set_pte(struct ia64_lpte *pte, vaddr_t va, vaddr_t pa,
-    bool wired, bool managed)
+    boolean_t wired, boolean_t managed)
 {
 
         pte->pte &= PTE_PROT_MASK | PTE_PL_MASK | PTE_AR_MASK;
@@ -2124,7 +2125,7 @@ pmap_pv_page_free(struct pool *pp, void *v)
  *	Allocate a single page from the VM system and return the
  *	physical address for that page.
  */
-bool
+boolean_t
 pmap_poolpage_alloc(paddr_t *pap)
 {
 	struct vm_page *pg;
@@ -2144,9 +2145,9 @@ pmap_poolpage_alloc(paddr_t *pap)
 		simple_unlock(&pg->mdpage.pv_slock);
 #endif
 		*pap = pa;
-		return (true);
+		return (TRUE);
 	}
-	return (false);
+	return (FALSE);
 }
 
 /*

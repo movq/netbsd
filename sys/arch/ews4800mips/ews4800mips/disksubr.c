@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.5 2007/06/29 16:41:31 tsutsui Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.2 2006/11/25 11:59:58 scw Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.5 2007/06/29 16:41:31 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.2 2006/11/25 11:59:58 scw Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,8 +62,8 @@ readdisklabel(dev_t dev, void (*strategy)(struct buf *), struct disklabel *d,
 	uint8_t buf[DEV_BSIZE];
 	struct pdinfo_sector *pdinfo = &ux->pdinfo;
 	struct vtoc_sector *vtoc = &ux->vtoc;
-	bool disklabel_available = false;
-	bool vtoc_available = false;
+	boolean_t disklabel_available = FALSE;
+	boolean_t vtoc_available = FALSE;
 	void *rwops;
 
 	if ((rwops = sector_init(dev, strategy)) == 0)
@@ -71,21 +71,22 @@ readdisklabel(dev_t dev, void (*strategy)(struct buf *), struct disklabel *d,
 
 	/* Read VTOC */
 	if (!pdinfo_sector(rwops, pdinfo) || !pdinfo_sanity(pdinfo)) {
-		DPRINTF("%s: PDINFO not found.\n", __func__);
+		DPRINTF("%s: PDINFO not found.\n", __FUNCTION__);
 	} else if (vtoc_sector(rwops, vtoc, pdinfo->logical_sector) &&
 	    vtoc_sanity(vtoc)) {
-		vtoc_available = true;
+		vtoc_available = TRUE;
 
 		/* Read BSD DISKLABEL (if any) */
 		sector_read(rwops, buf, LABELSECTOR);
 		if (disklabel_sanity((struct disklabel *)buf)) {
-			disklabel_available = true;
+			disklabel_available = TRUE;
 			memcpy(d, buf, sizeof(struct disklabel));
 		} else {
-			DPRINTF("%s: no BSD disklabel.\n", __func__);
+			DPRINTF("%s: no BSD disklabel.\n", __FUNCTION__);
 		}
 	} else {
-		DPRINTF("%s: PDINFO found, but VTOC not found.\n", __func__);
+		DPRINTF("%s: PDINFO found, but VTOC not found.\n",
+		    __FUNCTION__);
 	}
 	sector_fini(rwops);
 
@@ -93,10 +94,10 @@ readdisklabel(dev_t dev, void (*strategy)(struct buf *), struct disklabel *d,
 	if (!disklabel_available) {
 		if (vtoc_available) {
 			DPRINTF("%s: creating disklabel from VTOC.\n",
-			    __func__);
+			    __FUNCTION__);
 		} else {
 			DPRINTF("%s: no VTOC. creating default disklabel.\n",
-			    __func__);
+			    __FUNCTION__);
 			vtoc_set_default(ux, d);
 		}
 		disklabel_set_default(d);
@@ -134,7 +135,8 @@ writedisklabel(dev_t dev, void (*strategy)(struct buf *), struct disklabel *d,
 
 	/* 1. Update VTOC */
 	disklabel_to_vtoc(ux, d);
-	DPRINTF("%s: logical_sector=%d\n", __func__, ux->pdinfo.logical_sector);
+	DPRINTF("%s: logical_sector=%d\n", __FUNCTION__,
+	    ux->pdinfo.logical_sector);
 
 	if ((rwops = sector_init(dev, strategy)) == 0)
 		return ENOMEM;
@@ -150,7 +152,7 @@ writedisklabel(dev_t dev, void (*strategy)(struct buf *), struct disklabel *d,
 	memset(buf, 0, sizeof buf);
 	memcpy(buf, d, sizeof *d);
 	if (!sector_write(rwops, buf, LABELSECTOR)) {
-		DPRINTF("%s: failed to write disklabel.\n", __func__);
+		DPRINTF("%s: failed to write disklabel.\n", __FUNCTION__);
 		err = EIO;
 	}
 	sector_fini(rwops);

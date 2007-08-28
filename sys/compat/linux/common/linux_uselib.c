@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_uselib.c,v 1.22 2007/04/30 09:20:19 dsl Exp $	*/
+/*	$NetBSD: linux_uselib.c,v 1.18 2006/11/16 01:32:42 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_uselib.c,v 1.22 2007/04/30 09:20:19 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_uselib.c,v 1.18 2006/11/16 01:32:42 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,6 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: linux_uselib.c,v 1.22 2007/04/30 09:20:19 dsl Exp $"
 #include <sys/exec_elf.h>
 
 #include <sys/mman.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <machine/cpu.h>
@@ -93,6 +94,7 @@ linux_sys_uselib(struct lwp *l, void *v, register_t *retval)
 	struct linux_sys_uselib_args /* {
 		syscallarg(const char *) path;
 	} */ *uap = v;
+	caddr_t sg;
 	long bsize, dsize, tsize, taddr, baddr, daddr;
 	struct nameidata ni;
 	struct vnode *vp;
@@ -101,14 +103,17 @@ linux_sys_uselib(struct lwp *l, void *v, register_t *retval)
 	int i, magic, error;
 	size_t rem;
 
-	NDINIT(&ni, LOOKUP, FOLLOW | TRYEMULROOT, UIO_USERSPACE, SCARG(uap, path), l);
+	sg = stackgap_init(l->l_proc, 0);
+	CHECK_ALT_EXIST(l, &sg, SCARG(uap, path));
+
+	NDINIT(&ni, LOOKUP, FOLLOW, UIO_USERSPACE, SCARG(uap, path), l);
 
 	if ((error = namei(&ni)))
 		return error;
 
 	vp = ni.ni_vp;
 
-	if ((error = vn_rdwr(UIO_READ, vp, (void *) &hdr, LINUX_AOUT_HDR_SIZE,
+	if ((error = vn_rdwr(UIO_READ, vp, (caddr_t) &hdr, LINUX_AOUT_HDR_SIZE,
 			     0, UIO_SYSSPACE, IO_NODELOCKED, l->l_cred,
 			     &rem, NULL))) {
 		vrele(vp);

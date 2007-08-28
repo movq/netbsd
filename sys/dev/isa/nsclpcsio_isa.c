@@ -1,4 +1,4 @@
-/* $NetBSD: nsclpcsio_isa.c,v 1.17 2007/07/01 07:37:20 xtraeme Exp $ */
+/* $NetBSD: nsclpcsio_isa.c,v 1.15 2006/11/16 01:33:00 christos Exp $ */
 
 /*
  * Copyright (c) 2002
@@ -27,12 +27,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nsclpcsio_isa.c,v 1.17 2007/07/01 07:37:20 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nsclpcsio_isa.c,v 1.15 2006/11/16 01:33:00 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
-#include <sys/mutex.h>
+#include <sys/lock.h>
 #include <sys/gpio.h>
 #include <machine/bus.h>
 
@@ -57,9 +57,10 @@ struct nsclpcsio_softc {
 	bus_space_tag_t sc_iot, sc_gpio_iot, sc_tms_iot;
 	bus_space_handle_t sc_ioh, sc_gpio_ioh, sc_tms_ioh;
 
-	envsys_data_t sc_data[3];
+	struct envsys_tre_data sc_data[3];
+	struct envsys_basic_info sc_info[3];
 	struct sysmon_envsys sc_sysmon;
-	kmutex_t sc_lock;
+	struct simplelock sc_lock;
 
 #if NGPIO > 0
 	/* GPIO */
@@ -78,12 +79,17 @@ struct nsclpcsio_softc {
 CFATTACH_DECL(nsclpcsio_isa, sizeof(struct nsclpcsio_softc),
     nsclpcsio_isa_match, nsclpcsio_isa_attach, NULL, NULL);
 
+static const struct envsys_range tms_ranges[] = {
+	{ 0, 2, ENVSYS_STEMP },
+};
+
 static u_int8_t nsread(bus_space_tag_t, bus_space_handle_t, int);
 static void nswrite(bus_space_tag_t, bus_space_handle_t, int, u_int8_t);
 static int nscheck(bus_space_tag_t, int);
 
 static void tms_update(struct nsclpcsio_softc *, int);
-static int tms_gtredata(struct sysmon_envsys *, envsys_data_t *);
+static int tms_gtredata(struct sysmon_envsys *, struct envsys_tre_data *);
+static int tms_streinfo(struct sysmon_envsys *, struct envsys_basic_info *);
 
 #if NGPIO > 0
 static void nsclpcsio_gpio_init(struct nsclpcsio_softc *);
@@ -198,7 +204,7 @@ nsclpcsio_isa_attach(struct device *parent, struct device *self,
 	sc->sc_ioh = ioh;
 	printf(": NSC PC87366 rev. %d\n", nsread(iot, ioh, 0x27));
 
-	mutex_init(&sc->sc_lock, MUTEX_DRIVER, IPL_NONE);
+	simple_lock_init(&sc->sc_lock);
 
 	nswrite(iot, ioh, 0x07, 0x07); /* select gpio */
 
@@ -260,12 +266,12 @@ nsclpcsio_isa_attach(struct device *parent, struct device *self,
 
 	/* Initialize sensor meta data */
 	for (i = 0; i < 3; i++) {
-		sc->sc_data[i].sensor = i;
-		sc->sc_data[i].units =ENVSYS_STEMP;
+		sc->sc_data[i].sensor = sc->sc_info[i].sensor = i;
+		sc->sc_data[i].units = sc->sc_info[i].units = ENVSYS_STEMP;
 	}
-	strcpy(sc->sc_data[0].desc, "TSENS1");
-	strcpy(sc->sc_data[1].desc, "TSENS2");
-	strcpy(sc->sc_data[2].desc, "TNSC");
+	strcpy(sc->sc_info[0].desc, "TSENS1");
+	strcpy(sc->sc_info[1].desc, "TSENS2");
+	strcpy(sc->sc_info[2].desc, "TNSC");
 
 	/* Get initial set of sensor values. */
 	for (i = 0; i < 3; i++)
@@ -274,11 +280,16 @@ nsclpcsio_isa_attach(struct device *parent, struct device *self,
 	/*
 	 * Hook into the System Monitor.
 	 */
-	sc->sc_sysmon.sme_name = sc->sc_dev.dv_xname;
+	sc->sc_sysmon.sme_ranges = tms_ranges;
+	sc->sc_sysmon.sme_sensor_info = sc->sc_info;
 	sc->sc_sysmon.sme_sensor_data = sc->sc_data;
 	sc->sc_sysmon.sme_cookie = sc;
+
 	sc->sc_sysmon.sme_gtredata = tms_gtredata;
+	sc->sc_sysmon.sme_streinfo = tms_streinfo;
+
 	sc->sc_sysmon.sme_nsensors = 3;
+	sc->sc_sysmon.sme_envsys_version = 1000;
 
 	if (sysmon_envsys_register(&sc->sc_sysmon))
 		printf("%s: unable to register with sysmon\n",
@@ -306,7 +317,7 @@ tms_update(sc, chan)
 	u_int8_t status;
 	int8_t temp, ctemp; /* signed!! */
 
-	mutex_enter(&sc->sc_lock);
+	simple_lock(&sc->sc_lock);
 
 	nswrite(iot, ioh, 0x07, 0x0e); /* select tms */
 
@@ -315,39 +326,32 @@ tms_update(sc, chan)
 	status = bus_space_read_1(iot, ioh, 0x0a); /* config/status */
 	if (status & 0x01) {
 		/* enabled */
-		sc->sc_data[chan].state = ENVSYS_SVALID;
-	} else {
-		sc->sc_data[chan].state = ENVSYS_SINVALID;
-		mutex_exit(&sc->sc_lock);
+		sc->sc_info[chan].validflags = ENVSYS_FVALID;
+	}else {
+		sc->sc_info[chan].validflags = 0;
+		simple_unlock(&sc->sc_lock);
 		return;
 	}
-
-	/* enable monitoring */
-	sc->sc_data[chan].monitor = true;
-	sc->sc_data[chan].flags = 
-	    (ENVSYS_FMONWARNUNDER|ENVSYS_FMONWARNOVER|ENVSYS_FMONCRITOVER);
 
 	/*
 	 * If the channel is enabled, it is considered valid.
 	 * An "open circuit" might be temporary.
 	 */
-#if 0
-	sc->sc_data[chan].state = ENVSYS_SVALID;
+	sc->sc_data[chan].validflags = ENVSYS_FVALID;
 	if (status & 0x40) {
 		/*
 		 * open circuit
 		 * XXX should have a warning for it
 		 */
 		sc->sc_data[chan].warnflags = ENVSYS_WARN_OK; /* XXX */
-		mutex_exit(&sc->sc_lock);
+		simple_unlock(&sc->sc_lock);
 		return;
 	}
-#endif
 
 	/* get current temperature in signed degree celsius */
 	temp = bus_space_read_1(iot, ioh, 0x0b);
-	sc->sc_data[chan].value_cur = (int)temp * 1000000 + 273150000;
-	sc->sc_data[chan].state = ENVSYS_SVALID;
+	sc->sc_data[chan].cur.data_us = (int)temp * 1000000 + 273150000;
+	sc->sc_data[chan].validflags |= ENVSYS_FCURVALID;
 
 	if (status & 0x0e) { /* any temperature warning? */
 		/*
@@ -361,21 +365,21 @@ tms_update(sc, chan)
 		 * software, and only reset the bits if the reason is gone.
 		 */
 		if (status & 0x02) { /* low limit */
-			sc->sc_data[chan].state = ENVSYS_SWARNUNDER;
+			sc->sc_data[chan].warnflags = ENVSYS_WARN_UNDER;
 			/* read low limit */
 			ctemp = bus_space_read_1(iot, ioh, 0x0d);
 			if (temp <= ctemp) /* still valid, don't reset */
 				status &= ~0x02;
 		}
 		if (status & 0x04) { /* high limit */
-			sc->sc_data[chan].state = ENVSYS_SWARNOVER;
+			sc->sc_data[chan].warnflags = ENVSYS_WARN_OVER;
 			/* read high limit */
 			ctemp = bus_space_read_1(iot, ioh, 0x0c);
 			if (temp >= ctemp) /* still valid, don't reset */
 				status &= ~0x04;
 		}
 		if (status & 0x08) { /* overtemperature */
-			sc->sc_data[chan].state = ENVSYS_SCRITOVER;
+			sc->sc_data[chan].warnflags = ENVSYS_WARN_CRITOVER;
 			/* read overtemperature limit */
 			ctemp = bus_space_read_1(iot, ioh, 0x0e);
 			if (temp >= ctemp) /* still valid, don't reset */
@@ -387,17 +391,34 @@ tms_update(sc, chan)
 			bus_space_write_1(iot, ioh, 0x0a, status);
 	}
 
-	mutex_exit(&sc->sc_lock);
+	simple_unlock(&sc->sc_lock);
 
 	return;
 }
 
 static int
-tms_gtredata(struct sysmon_envsys *sme, envsys_data_t *data)
+tms_gtredata(sme, data)
+	struct sysmon_envsys *sme;
+	struct envsys_tre_data *data;
 {
 	struct nsclpcsio_softc *sc = sme->sme_cookie;
 
 	tms_update(sc, data->sensor);
+
+	*data = sc->sc_data[data->sensor];
+	return (0);
+}
+
+static int
+tms_streinfo(struct sysmon_envsys *sme,
+    struct envsys_basic_info *info)
+{
+#if 0
+	struct nsclpcsio_softc *sc = sme->sme_cookie;
+#endif
+	/* XXX Not implemented */
+	info->validflags = 0;
+
 	return (0);
 }
 
@@ -499,7 +520,7 @@ nsclpcsio_gpio_pin_ctl(void *aux, int pin, int flags)
 	struct nsclpcsio_softc *sc = (struct nsclpcsio_softc *)aux;
 	u_int8_t conf;
 
-	mutex_enter(&sc->sc_lock);
+	simple_lock(&sc->sc_lock);
 
 	nswrite(sc->sc_iot, sc->sc_ioh, 0x07, 0x07); /* select gpio */
 	nsclpcsio_gpio_pin_select(sc, pin);
@@ -516,7 +537,7 @@ nsclpcsio_gpio_pin_ctl(void *aux, int pin, int flags)
 
 	nswrite(sc->sc_iot, sc->sc_ioh, 0xf1, conf);
 
-	mutex_exit(&sc->sc_lock);
+	simple_unlock(&sc->sc_lock);
 
 	return;
 }

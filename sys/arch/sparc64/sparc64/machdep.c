@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.200 2007/07/09 20:52:32 ad Exp $ */
+/*	$NetBSD: machdep.c,v 1.193.2.2 2007/10/04 20:32:15 pavel Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.200 2007/07/09 20:52:32 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.193.2.2 2007/10/04 20:32:15 pavel Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -92,6 +92,8 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.200 2007/07/09 20:52:32 ad Exp $");
 #include <sys/signalvar.h>
 #include <sys/proc.h>
 #include <sys/user.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/buf.h>
 #include <sys/device.h>
 #include <sys/ras.h>
@@ -107,7 +109,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.200 2007/07/09 20:52:32 ad Exp $");
 #include <sys/syscallargs.h>
 #include <sys/exec.h>
 #include <sys/ucontext.h>
-#include <sys/cpu.h>
 
 #include <uvm/uvm.h>
 
@@ -155,7 +156,7 @@ extern vaddr_t avail_end;
 
 int	physmem;
 
-extern	void *msgbufaddr;
+extern	caddr_t msgbufaddr;
 
 /*
  * Maximum number of DMA segments we'll allow in dmamem_load()
@@ -186,11 +187,14 @@ cpu_startup()
 	int opmapdebug = pmapdebug;
 #endif
 	vaddr_t minaddr, maxaddr;
+	extern struct user *proc0paddr;
 	char pbuf[9];
 
 #ifdef DEBUG
 	pmapdebug = 0;
 #endif
+
+	lwp0.l_addr = proc0paddr;
 
 	/*
 	 * Good {morning,afternoon,evening,night}.
@@ -250,7 +254,7 @@ setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 #endif
 
 	/* Clear the P_32 flag. */
-	l->l_proc->p_flag &= ~PK_32;
+	l->l_proc->p_flag &= ~P_32;
 
 	/* Don't allow misaligned code by default */
 	l->l_proc->p_md.md_flags &= ~MDP_FIXALIGN;
@@ -447,17 +451,18 @@ void *
 getframe(struct lwp *l, int sig, int *onstack)
 {
 	struct proc *p = l->l_proc;
+	struct sigctx *ctx = &p->p_sigctx;
 	struct trapframe64 *tf = l->l_md.md_tf;
 
 	/*
 	 * Compute new user stack addresses, subtract off
 	 * one signal frame, and align.
 	 */
-	*onstack = (l->l_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0
+	*onstack = (ctx->ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0
 	    && (SIGACTION(p, sig).sa_flags & SA_ONSTACK) != 0;
 
 	if (*onstack)
-		return ((char *)l->l_sigstk.ss_sp + l->l_sigstk.ss_size);
+		return ((caddr_t)ctx->ps_sigstk.ss_sp + ctx->ps_sigstk.ss_size);
 	else
 		return (void *)((uintptr_t)tf->tf_out[6] + STACK_OFFSET);
 }
@@ -473,7 +478,7 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
 	struct sigacts *ps = p->p_sigacts;
-	int onstack, error;
+	int onstack;
 	int sig = ksi->ksi_signo;
 	ucontext_t uc;
 	long ucsz;
@@ -497,14 +502,11 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	}
 
 	uc.uc_flags = _UC_SIGMASK |
-	    ((l->l_sigstk.ss_flags & SS_ONSTACK)
+	    ((p->p_sigctx.ps_sigstk.ss_flags & SS_ONSTACK)
 		? _UC_SETSTACK : _UC_CLRSTACK);
 	uc.uc_sigmask = *mask;
-	uc.uc_link = l->l_ctxlink;
+	uc.uc_link = NULL;
 	memset(&uc.uc_stack, 0, sizeof(uc.uc_stack));
-
-	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);	
 	cpu_getmcontext(l, &uc.uc_mcontext, &uc.uc_flags);
 	ucsz = (char *)&uc.__uc_pad - (char *)&uc;
 
@@ -518,13 +520,10 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	 * C stack frame.
 	 */
 	newsp = (struct rwindow *)((u_long)fp - CCFSZ);
-	error = (copyout(&ksi->ksi_info, &fp->sf_si, sizeof(ksi->ksi_info)) != 0 ||
+	if (copyout(&ksi->ksi_info, &fp->sf_si, sizeof(ksi->ksi_info)) != 0 ||
 	    copyout(&uc, &fp->sf_uc, ucsz) != 0 ||
 	    copyout(&tf->tf_out[6], &newsp->rw_in[6],
-	    sizeof(tf->tf_out[6])) != 0);
-	mutex_enter(&p->p_smutex);
-
-	if (error) {
+	    sizeof(tf->tf_out[6])) != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
@@ -543,7 +542,7 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 }
 
 void
@@ -555,6 +554,45 @@ sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	else
 #endif
 		sendsig_siginfo(ksi, mask);
+}
+
+/*
+ * Set the lwp to begin execution in the upcall handler.  The upcall
+ * handler will then simply call the upcall routine and then exit.
+ *
+ * Because we have a bunch of different signal trampolines, the first
+ * two instructions in the signal trampoline call the upcall handler.
+ * Signal dispatch should skip the first two instructions in the signal
+ * trampolines.
+ */
+void 
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+	void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+       	struct trapframe64 *tf;
+	vaddr_t addr;
+
+	tf = l->l_md.md_tf;
+	addr = (vaddr_t) upcall;
+
+	/* Arguments to the upcall... */
+	tf->tf_out[0] = type;
+	tf->tf_out[1] = (vaddr_t) sas;
+	tf->tf_out[2] = nevents;
+	tf->tf_out[3] = ninterrupted;
+	tf->tf_out[4] = (vaddr_t) ap;
+
+	/*
+	 * Ensure the stack is double-word aligned, and provide a
+	 * valid C call frame.
+	 */
+	sp = (void *)(((vaddr_t)sp & ~0xf) - CCFSZ);
+
+	/* Arrange to begin execution at the upcall handler. */
+	tf->tf_pc = addr;
+	tf->tf_npc = addr + 4;
+	tf->tf_out[6] = (vaddr_t)sp - STACK_OFFSET;
+	tf->tf_out[7] = -1;		/* "you lose" if upcall returns */
 }
 
 int	waittime = -1;
@@ -691,12 +729,12 @@ cpu_dumpconf()
 #define	BYTES_PER_DUMP	(PAGE_SIZE)	/* must be a multiple of pagesize */
 static vaddr_t dumpspace;
 
-void *
-reserve_dumppages(void *p)
+caddr_t
+reserve_dumppages(caddr_t p)
 {
 
 	dumpspace = (vaddr_t)p;
-	return (char *)p + BYTES_PER_DUMP;
+	return (p + BYTES_PER_DUMP);
 }
 
 /*
@@ -708,9 +746,9 @@ dumpsys()
 	const struct bdevsw *bdev;
 	register int psize;
 	daddr_t blkno;
-	register int (*dump)(dev_t, daddr_t, void *, size_t);
+	register int (*dump)(dev_t, daddr_t, caddr_t, size_t);
 	int j, error = 0;
-	unsigned long todo;
+	uint64_t todo;
 	register struct mem_region *mp;
 
 	/* copy registers to memory */
@@ -759,11 +797,14 @@ dumpsys()
 
 	for (mp = &phys_installed[0], j = 0; j < phys_installed_size;
 			j++, mp = &phys_installed[j]) {
-		unsigned i = 0, n;
+		uint64_t i = 0, n;
 		paddr_t maddr = mp->start;
 
-#if 0
-		/* Remind me: why don't we dump page 0 ? */
+#if 1
+		/*
+		 * work around pmap_extract() bug: it returns failure
+		 * when the resulting PA is 0.
+		 */
 		if (maddr == 0) {
 			/* Skip first page at physical address 0 */
 			maddr += PAGE_SIZE;
@@ -778,11 +819,11 @@ dumpsys()
 
 			/* print out how many MBs we still have to dump */
 			if ((todo % (1024*1024)) == 0)
-				printf("%ld ", todo / (1024*1024));
+				printf("%" PRIu64 " ", todo / (1024*1024));
 			pmap_kenter_pa(dumpspace, maddr, VM_PROT_READ);
 			pmap_update(pmap_kernel());
 			error = (*dump)(dumpdev, blkno,
-					(void *)dumpspace, (int)n);
+					(caddr_t)dumpspace, (int)n);
 			pmap_kremove(dumpspace, n);
 			pmap_update(pmap_kernel());
 			if (error)
@@ -1171,7 +1212,7 @@ _bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio,
 		 * Lock the part of the user address space involved
 		 *    in the transfer.
 		 */
-		uvm_lwp_hold(p);
+		PHOLD(p);
 		if (__predict_false(uvm_vslock(p->p_vmspace, vaddr, buflen,
 			    (uio->uio_rw == UIO_WRITE) ?
 			    VM_PROT_WRITE : VM_PROT_READ) != 0)) {
@@ -1205,7 +1246,7 @@ _bus_dmamap_load_uio(bus_dma_tag_t t, bus_dmamap_t map, struct uio *uio,
 			i++;
 		}
 		uvm_vsunlock(p->p_vmspace, bp->b_data, todo);
-		uvm_lwp_rele(p);
+		PRELE(p);
  		if (buflen > 0 && i >= MAX_DMA_SEGS) 
 			/* Exceeded the size of our dmamap */
 			return EFBIG;
@@ -1408,7 +1449,7 @@ _bus_dmamem_free(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs)
  */
 int
 _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
-	size_t size, void **kvap, int flags)
+	size_t size, caddr_t *kvap, int flags)
 {
 	vaddr_t va, sva;
 	int r, cbit;
@@ -1444,7 +1485,7 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
 	if (va + size != sva + oversize)
 		uvm_unmap(kernel_map, va + size, sva + oversize);
 
-	*kvap = (void *)va;
+	*kvap = (caddr_t)va;
 	return (0);
 }
 
@@ -1453,7 +1494,7 @@ _bus_dmamem_map(bus_dma_tag_t t, bus_dma_segment_t *segs, int nsegs,
  * bus-specific DMA memory unmapping functions.
  */
 void
-_bus_dmamem_unmap(bus_dma_tag_t t, void *kva, size_t size)
+_bus_dmamem_unmap(bus_dma_tag_t t, caddr_t kva, size_t size)
 {
 
 #ifdef DIAGNOSTIC
@@ -1761,10 +1802,8 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 
 	/* First ensure consistent stack state (see sendsig). */ /* XXX? */
 	write_user_windows();
-	if (rwindow_save(l)) {
-		mutex_enter(&l->l_proc->p_smutex);
+	if ((l->l_flag & L_SA_SWITCHING) == 0 && rwindow_save(l))
 		sigexit(l, SIGILL);
-	}
 
 	/* For now: Erase any random indicators for optional state. */
 	(void)memset(mcp, 0, sizeof (*mcp));
@@ -1801,7 +1840,7 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 #endif /* __arch64__ */
 
 	if ((ras_pc = (__greg_t)ras_lookup(l->l_proc,
-	    (void *) gr[_REG_PC])) != -1) {
+	    (caddr_t) gr[_REG_PC])) != -1) {
 		gr[_REG_PC] = ras_pc;
 		gr[_REG_nPC] = ras_pc + 4;
 	}
@@ -1848,14 +1887,11 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 {
 	const __greg_t *gr = mcp->__gregs;
 	struct trapframe64 *tf = l->l_md.md_tf;
-	struct proc *p = l->l_proc;
 
 	/* First ensure consistent stack state (see sendsig). */
 	write_user_windows();
-	if (rwindow_save(l)) {
-		mutex_enter(&p->p_smutex);
+	if (rwindow_save(l))
 		sigexit(l, SIGILL);
-	}
 
 	if ((flags & _UC_CPU) != 0) {
 		/*
@@ -1928,35 +1964,17 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		mcp->__fpregs.__fpu_q = NULL;	/* `Need more info.' */
 		mcp->__fpregs.__fpu_qcnt = 0 /*fs.fs_qsize*/; /* See above */
 #endif
+
 	}
 
 	/* XXX mcp->__xrs */
 	/* XXX mcp->__asrs */
 
-	mutex_enter(&p->p_smutex);
 	if (flags & _UC_SETSTACK)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		l->l_proc->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 	if (flags & _UC_CLRSTACK)
-		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
-	mutex_exit(&p->p_smutex);
+		l->l_proc->p_sigctx.ps_sigstk.ss_flags &= ~SS_ONSTACK;
 
 	return (0);
 }
 
-/*
- * Preempt the current process if in interrupt from user mode,
- * or after the current trap/syscall if in system mode.
- */
-void
-cpu_need_resched(struct cpu_info *ci, int flags)
-{
-
-	ci->ci_want_resched = 1;
-	ci->ci_want_ast = 1;
-
-#if defined(MULTIPROCESSOR)
-	/* Just interrupt the target CPU, so it can notice its AST */
-	if ((flags & RESCHED_IMMED) || ci->ci_cpuid != cpu_number())
-		sparc64_send_ipi(ci->ci_upaid, sparc64_ipi_nop);
-#endif
-}

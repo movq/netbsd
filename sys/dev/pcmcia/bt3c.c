@@ -1,4 +1,4 @@
-/* $NetBSD: bt3c.c,v 1.10 2007/07/23 18:08:20 plunky Exp $ */
+/* $NetBSD: bt3c.c,v 1.6 2006/11/16 01:33:20 christos Exp $ */
 
 /*-
  * Copyright (c) 2005 Iain D. Hibbert,
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bt3c.c,v 1.10 2007/07/23 18:08:20 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bt3c.c,v 1.6 2006/11/16 01:33:20 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -511,14 +511,13 @@ bt3c_intr(void *arg)
 /*
  * load firmware for the device
  *
- * The firmware file is a plain ASCII file in the Motorola S-Record format,
- * with lines in the format:
+ * The firmware file is a plain ASCII file containing lines in the format:
  *
  *	S<Digit><Len><Address><Data1><Data2>...<DataN><Checksum>
  *
- * <Digit>:	0	header
- *		3	data record (4 byte address)
- *		7	boot record (4 byte address)
+ * <Digit>:	0	start ?
+ *		3	data line
+ *		7	finish ?
  *
  * <Len>:	1 byte, and is the number of bytes in the rest of the line
  * <Address>:	4 byte address (only 2 bytes are valid for bt3c I think)
@@ -573,7 +572,6 @@ bt3c_load_firmware(struct bt3c_softc *sc)
 	if (size > 10 * 1024) {	/* sanity check */
 		printf("%s: firmware file seems WAY too big!\n",
 			sc->sc_dev.dv_xname);
-		firmware_close(fh);
 		return EFBIG;
 	}
 #endif
@@ -631,7 +629,7 @@ bt3c_load_firmware(struct bt3c_softc *sc)
 		/* extract relevant data */
 		switch (line[1]) {
 		case '0':
-			/* we ignore the header */
+			/* I dont know what this is */
 			break;
 
 		case '3':
@@ -656,11 +654,7 @@ bt3c_load_firmware(struct bt3c_softc *sc)
 			break;
 
 		case '7':
-			/*
-			 * for some reason we ignore this record
-			 * and boot from 0x3000 which happens to
-			 * be the first record in the file.
-			 */
+			/* I dont know what this is */
 			break;
 
 		default:
@@ -886,7 +880,7 @@ bt3c_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_unit.hci_start_cmd = bt3c_start;
 	sc->sc_unit.hci_start_acl = bt3c_start;
 	sc->sc_unit.hci_start_sco = bt3c_start;
-	sc->sc_unit.hci_ipl = makeiplcookie(IPL_TTY);
+	sc->sc_unit.hci_ipl = IPL_TTY;
 	hci_attach(&sc->sc_unit);
 
 	/* establish a power change hook */
@@ -974,7 +968,7 @@ bt3c_power(int why, void *arg)
 			sc->sc_unit.hci_start_cmd = bt3c_start;
 			sc->sc_unit.hci_start_acl = bt3c_start;
 			sc->sc_unit.hci_start_sco = bt3c_start;
-			sc->sc_unit.hci_ipl = makeiplcookie(IPL_TTY);
+			sc->sc_unit.hci_ipl = IPL_TTY;
 			hci_attach(&sc->sc_unit);
 		}
 		break;

@@ -1,4 +1,4 @@
-/* $NetBSD: syscall.c,v 1.27 2007/08/15 12:07:23 ad Exp $ */
+/* $NetBSD: syscall.c,v 1.23 2006/07/19 21:11:39 ad Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -94,17 +94,23 @@
  * rights to redistribute these changes.
  */
 
+#include "opt_ktrace.h"
+
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.27 2007/08/15 12:07:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.23 2006/07/19 21:11:39 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/user.h>
 #include <sys/signal.h>
 #include <sys/syscall.h>
+#ifdef KTRACE
 #include <sys/ktrace.h>
+#endif
 
 #include <uvm/uvm_extern.h>
 
@@ -148,7 +154,7 @@ syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	u_int64_t *args, copyargs[10];				/* XXX */
 	u_int hidden, nargs;
 	struct proc *p = l->l_proc;
-	bool needlock;
+	boolean_t needlock;
 
 	LWP_CACHE_CREDS(l, p);
 
@@ -178,7 +184,7 @@ syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	nargs = callp->sy_narg + hidden;
 	switch (nargs) {
 	default:
-		error = copyin((void *)alpha_pal_rdusp(), &copyargs[6],
+		error = copyin((caddr_t)alpha_pal_rdusp(), &copyargs[6],
 		    (nargs - 6) * sizeof(u_int64_t));
 		if (error)
 			goto bad;
@@ -207,11 +213,11 @@ syscall_plain(struct lwp *l, u_int64_t code, struct trapframe *framep)
 
 	needlock = (callp->sy_flags & SYCALL_MPSAFE) == 0;
 	if (needlock) {
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 	}
 	error = (*callp->sy_call)(l, args, rval);
 	if (needlock) {
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 	}
 
 	switch (error) {
@@ -247,7 +253,7 @@ syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
 
 	LWP_CACHE_CREDS(l, p);
 
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 
 	uvmexp.syscalls++;
 	l->l_md.md_tf = framep;
@@ -275,11 +281,11 @@ syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	nargs = callp->sy_narg + hidden;
 	switch (nargs) {
 	default:
-		error = copyin((void *)alpha_pal_rdusp(), &copyargs[6],
+		error = copyin((caddr_t)alpha_pal_rdusp(), &copyargs[6],
 		    (nargs - 6) * sizeof(u_int64_t));
 		if (error) {
 			args = copyargs;
-			KERNEL_UNLOCK_LAST(l);
+			KERNEL_PROC_UNLOCK(l);
 			goto bad;
 		}
 	case 6:	
@@ -309,7 +315,7 @@ syscall_fancy(struct lwp *l, u_int64_t code, struct trapframe *framep)
 	rval[1] = 0;
 	error = (*callp->sy_call)(l, args, rval);
 out:
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 	switch (error) {
 	case 0:
 		framep->tf_regs[FRAME_V0] = rval[0];
@@ -340,12 +346,21 @@ void
 child_return(void *arg)
 {
 	struct lwp *l = arg;
+#ifdef KTRACE
+	struct proc *p = l->l_proc;
+#endif
 
 	/*
 	 * Return values in the frame set by cpu_fork().
 	 */
 
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 	userret(l);
-	ktrsysret(SYS_fork, 0, 0);
+#ifdef KTRACE
+	if (KTRPOINT(p, KTR_SYSRET)) {
+		KERNEL_PROC_LOCK(l);
+		ktrsysret(l, SYS_fork, 0, 0);
+		KERNEL_PROC_UNLOCK(l);
+	}
+#endif
 }

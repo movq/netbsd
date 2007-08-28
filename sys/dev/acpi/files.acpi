@@ -1,10 +1,10 @@
-#	$NetBSD: files.acpi,v 1.46 2007/08/23 10:04:07 tnn Exp $
+#	$NetBSD: files.acpi,v 1.40.6.1 2007/05/13 06:52:53 pavel Exp $
 
 include "dev/acpi/acpica/files.acpica"
 
 defflag	opt_acpi.h	ACPIVERBOSE ACPI_DEBUG ACPI_ACTIVATE_DEV
 			ACPI_DSDT_OVERRIDE ACPI_SCANPCI
-defparam opt_acpi.h	ACPI_DSDT_FILE := "\"/dev/null\""
+defparam opt_acpi.h	ACPI_DSDT_FILE
 
 define	acpiapmbus { }
 define	acpinodebus { }
@@ -20,7 +20,7 @@ file	dev/acpi/acpi_quirks.c		acpi
 file	dev/acpi/acpi_timer.c		acpi
 
 # ACPI/apm emulation.
-attach  apm at acpiapmbus with acpiapm: sysmon_envsys
+attach  apm at acpiapmbus with acpiapm
 file	dev/acpi/acpi_apm.c		acpiapm
 
 # ACPI Embedded Controller
@@ -95,15 +95,6 @@ file	dev/acpi/attimer_acpi.c		attimer_acpi
 # Yamaha OPL3-SAx
 attach	ym at acpinodebus with ym_acpi
 file	dev/acpi/ym_acpi.c		ym_acpi
-
-# High Precision Event Timer
-attach 	hpet at acpinodebus with hpet_acpi
-file 	dev/acpi/hpet_acpi.c		hpet_acpi
-
-# ASUS AI Booster Hardware monitor
-device	aiboost: sysmon_envsys
-attach	aiboost at acpinodebus
-file	dev/acpi/aiboost.c		aiboost
 
 # Abit uGuru 2005
 attach	ug at acpinodebus with ug_acpi

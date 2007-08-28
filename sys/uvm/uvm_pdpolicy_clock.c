@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pdpolicy_clock.c,v 1.8 2007/02/22 06:05:01 thorpej Exp $	*/
+/*	$NetBSD: uvm_pdpolicy_clock.c,v 1.5 2006/11/01 10:18:27 yamt Exp $	*/
 /*	NetBSD: uvm_pdaemon.c,v 1.72 2006/01/05 10:47:33 yamt Exp $	*/
 
 /*
@@ -74,7 +74,7 @@
 #else /* defined(PDSIM) */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_pdpolicy_clock.c,v 1.8 2007/02/22 06:05:01 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_pdpolicy_clock.c,v 1.5 2006/11/01 10:18:27 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -110,8 +110,8 @@ struct uvmpdpol_globalstate {
 };
 
 struct uvmpdpol_scanstate {
-	bool ss_first;
-	bool ss_anonreact, ss_filereact, ss_execreact;
+	boolean_t ss_first;
+	boolean_t ss_anonreact, ss_filereact, ss_execreact;
 	struct vm_page *ss_nextpg;
 };
 
@@ -127,6 +127,7 @@ clock_tune(void)
 {
 	struct uvmpdpol_globalstate *s = &pdpol_state;
 
+	s->s_inactarg = 
 	s->s_inactarg = UVM_PCTPARAM_APPLY(&s->s_inactivepct,
 	    s->s_active + s->s_inactive);
 	if (s->s_inactarg <= uvmexp.freetarg) {
@@ -140,9 +141,9 @@ uvmpdpol_scaninit(void)
 	struct uvmpdpol_globalstate *s = &pdpol_state;
 	struct uvmpdpol_scanstate *ss = &pdpol_scanstate;
 	int t;
-	bool anonunder, fileunder, execunder;
-	bool anonover, fileover, execover;
-	bool anonreact, filereact, execreact;
+	boolean_t anonunder, fileunder, execunder;
+	boolean_t anonover, fileover, execover;
+	boolean_t anonreact, filereact, execreact;
 
 	/*
 	 * decide which types of pages we want to reactivate instead of freeing
@@ -160,13 +161,13 @@ uvmpdpol_scaninit(void)
 	filereact = fileunder || (!fileover && (anonover || execover));
 	execreact = execunder || (!execover && (anonover || fileover));
 	if (filereact && execreact && (anonreact || uvm_swapisfull())) {
-		anonreact = filereact = execreact = false;
+		anonreact = filereact = execreact = FALSE;
 	}
 	ss->ss_anonreact = anonreact;
 	ss->ss_filereact = filereact;
 	ss->ss_execreact = execreact;
 
-	ss->ss_first = true;
+	ss->ss_first = TRUE;
 }
 
 struct vm_page *
@@ -183,7 +184,7 @@ uvmpdpol_selectvictim(void)
 
 		if (ss->ss_first) {
 			pg = TAILQ_FIRST(&pdpol_state.s_inactiveq);
-			ss->ss_first = false;
+			ss->ss_first = FALSE;
 		} else {
 			pg = ss->ss_nextpg;
 			if (pg != NULL && (pg->pqflags & PQ_INACTIVE) == 0) {
@@ -343,7 +344,7 @@ uvmpdpol_anfree(struct vm_anon *an)
 {
 }
 
-bool
+boolean_t
 uvmpdpol_pageisqueued_p(struct vm_page *pg)
 {
 
@@ -406,7 +407,7 @@ uvmpdpol_reinit(void)
 {
 }
 
-bool
+boolean_t
 uvmpdpol_needsscan_p(void)
 {
 

@@ -1,7 +1,7 @@
-/*	$NetBSD: lfs_alloc.c,v 1.101 2007/07/10 09:50:08 hannken Exp $	*/
+/*	$NetBSD: lfs_alloc.c,v 1.99 2006/11/16 01:33:53 christos Exp $	*/
 
 /*-
- * Copyright (c) 1999, 2000, 2001, 2002, 2003, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_alloc.c,v 1.101 2007/07/10 09:50:08 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_alloc.c,v 1.99 2006/11/16 01:33:53 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -95,7 +95,7 @@ __KERNEL_RCSID(0, "$NetBSD: lfs_alloc.c,v 1.101 2007/07/10 09:50:08 hannken Exp 
 #include <ufs/lfs/lfs.h>
 #include <ufs/lfs/lfs_extern.h>
 
-extern kmutex_t ufs_hashlock;
+extern struct lock ufs_hashlock;
 
 /* Constants for inode free bitmap */
 #define BMSHIFT 5	/* 2 ** 5 = 32 */
@@ -280,7 +280,7 @@ lfs_ialloc(struct lfs *fs, struct vnode *pvp, ino_t new_ino, int new_gen,
 	ASSERT_NO_SEGLOCK(fs);
 
 	vp = *vpp;
-	mutex_enter(&ufs_hashlock);
+	lockmgr(&ufs_hashlock, LK_EXCLUSIVE, 0);
 	/* Create an inode to associate with the vnode. */
 	lfs_vcreate(pvp->v_mount, new_ino, vp);
 
@@ -300,7 +300,7 @@ lfs_ialloc(struct lfs *fs, struct vnode *pvp, ino_t new_ino, int new_gen,
 
 	/* Insert into the inode hash table. */
 	ufs_ihashins(ip);
-	mutex_exit(&ufs_hashlock);
+	lockmgr(&ufs_hashlock, LK_RELEASE, 0);
 
 	ufs_vinit(vp->v_mount, lfs_specop_p, lfs_fifoop_p, vpp);
 	vp = *vpp;
@@ -322,6 +322,9 @@ lfs_vcreate(struct mount *mp, ino_t ino, struct vnode *vp)
 	struct inode *ip;
 	struct ufs1_dinode *dp;
 	struct ufsmount *ump;
+#ifdef QUOTA
+	int i;
+#endif
 
 	/* Get a pointer to the private mount structure. */
 	ump = VFSTOUFS(mp);
@@ -348,7 +351,8 @@ lfs_vcreate(struct mount *mp, ino_t ino, struct vnode *vp)
 	ip->i_lfs_nbtree = 0;
 	LIST_INIT(&ip->i_lfs_segdhd);
 #ifdef QUOTA
-	ufsquota_init(ip);
+	for (i = 0; i < MAXQUOTAS; i++)
+		ip->i_dquot[i] = NODQUOT;
 #endif
 #ifdef DEBUG
 	if (ino == LFS_IFILE_INUM)

@@ -1,4 +1,4 @@
-/* $NetBSD: au_wired_space.c,v 1.5 2007/03/04 06:00:11 christos Exp $ */
+/* $NetBSD: au_wired_space.c,v 1.3 2006/03/16 14:23:19 simonb Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: au_wired_space.c,v 1.5 2007/03/04 06:00:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: au_wired_space.c,v 1.3 2006/03/16 14:23:19 simonb Exp $");
 
 /*
  * This provides mappings for the upper I/O regions used on some
@@ -98,7 +98,7 @@ typedef struct au_wired_cookie {
 	paddr_t		c_pbase;
 	int		c_flags;
 	int		c_swswap;
-	bool		c_hwswap;
+	boolean_t	c_hwswap;
 	struct extent	*c_extent;
 	long		c_exstore[AU_WIRED_EXTENT_SZ/sizeof (long)];
 } au_wired_cookie_t;
@@ -649,7 +649,7 @@ au_wired_space_init(bus_space_tag_t bst, const char *name,
 
 	/* allocate extent manager */
 	c->c_extent = extent_create(name, start, start + size, M_DEVBUF,
-	    (void *)c->c_exstore, sizeof (c->c_exstore), EX_NOWAIT);
+	    (caddr_t)c->c_exstore, sizeof (c->c_exstore), EX_NOWAIT);
 	if (c->c_extent == NULL)
 		panic("au_wired_space_init: %s: cannot create extent", name);
 

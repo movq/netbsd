@@ -1,4 +1,4 @@
-/*	$NetBSD: sco_upper.c,v 1.6 2007/03/30 20:47:03 plunky Exp $	*/
+/*	$NetBSD: sco_upper.c,v 1.4 2006/11/16 01:33:45 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sco_upper.c,v 1.6 2007/03/30 20:47:03 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sco_upper.c,v 1.4 2006/11/16 01:33:45 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -62,9 +62,9 @@ sco_attach(struct sco_pcb **handle,
 {
 	struct sco_pcb *pcb;
 
-	KASSERT(handle != NULL);
-	KASSERT(proto != NULL);
-	KASSERT(upper != NULL);
+	KASSERT(handle);
+	KASSERT(proto);
+	KASSERT(upper);
 
 	pcb = malloc(sizeof(struct sco_pcb), M_BLUETOOTH,
 			M_NOWAIT | M_ZERO);
@@ -230,7 +230,7 @@ sco_detach(struct sco_pcb **handle)
 {
 	struct sco_pcb *pcb;
 
-	KASSERT(handle != NULL);
+	KASSERT(handle);
 	pcb = *handle;
 	*handle = NULL;
 
@@ -325,7 +325,6 @@ sco_setopt(struct sco_pcb *pcb, int opt, void *addr)
 
 	switch (opt) {
 	default:
-		err = ENOPROTOOPT;
 		break;
 	}
 

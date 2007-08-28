@@ -1,4 +1,4 @@
-#	$NetBSD: files.ofppc,v 1.27 2007/05/21 13:39:31 tsutsui Exp $
+#	$NetBSD: files.ofppc,v 1.24 2005/12/11 12:18:29 christos Exp $
 #
 # NetBSD/ofppc configuration info
 #
@@ -24,8 +24,6 @@ file	dev/cons.c
 file	dev/cninit.c
 
 file	arch/powerpc/powerpc/procfs_machdep.c	procfs
-file	arch/powerpc/powerpc/softintr.c
-
 #
 # CPU specific OpenFirmware code
 #
@@ -62,12 +60,11 @@ include "dev/wsfont/files.wsfont"
 # Workstation Console support
 #
 include "dev/wscons/files.wscons"
-include "dev/wsfb/files.wsfb"
 
 #
 # PCI bus support
 #
-include "dev/pci/files.pci"
+file	dev/pci/pcibusprint.c
 
 #
 # ISA bus support
@@ -84,8 +81,6 @@ file	arch/ofppc/ofppc/mainbus.c		mainbus
 device	cpu
 attach	cpu at mainbus
 file	arch/ofppc/ofppc/cpu.c			cpu
-
-include "arch/powerpc/conf/files.rtas"
 
 #
 # Support for generic OpenFirmware driver configurations.  This is

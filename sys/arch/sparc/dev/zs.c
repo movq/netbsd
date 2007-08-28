@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.106 2007/03/14 19:31:45 jdc Exp $	*/
+/*	$NetBSD: zs.c,v 1.104 2006/02/26 05:36:15 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.106 2007/03/14 19:31:45 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.104 2006/02/26 05:36:15 thorpej Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -81,7 +81,6 @@ __KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.106 2007/03/14 19:31:45 jdc Exp $");
 
 #include "kbd.h"
 #include "ms.h"
-#include "wskbd.h"
 
 /*
  * Some warts needed by z8530tty.c -
@@ -400,7 +399,6 @@ zs_attach(struct zsc_softc *zsc, struct zsdevice *zsd, int pri)
 	struct zs_chanstate *cs;
 	int s, channel;
 	static int didintr, prevpri;
-	int ch0_is_cons = 0;
 
 	if (zsd == NULL) {
 		printf("configuration incomplete\n");
@@ -423,7 +421,6 @@ zs_attach(struct zsc_softc *zsc, struct zsdevice *zsd, int pri)
 	for (channel = 0; channel < 2; channel++) {
 		struct zschan *zc;
 		struct device *child;
-		int hwflags;
 
 		zsc_args.channel = channel;
 		cs = &zsc->zsc_cs_store[channel];
@@ -437,33 +434,15 @@ zs_attach(struct zsc_softc *zsc, struct zsdevice *zsd, int pri)
 
 		zc = (channel == 0) ? &zsd->zs_chan_a : &zsd->zs_chan_b;
 
-		hwflags = zs_console_flags(zsc->zsc_promunit,
+		zsc_args.hwflags = zs_console_flags(zsc->zsc_promunit,
 						    zsc->zsc_node,
 						    channel);
 
-#if NWSKBD == 0	
-		/* Not using wscons console, so always set console flags.*/
-		zsc_args.hwflags = hwflags;
 		if (zsc_args.hwflags & ZS_HWFLAG_CONSOLE) {
 			zsc_args.hwflags |= ZS_HWFLAG_USE_CONSDEV;
 			zsc_args.consdev = &zs_consdev;
 		}
-#else
-		/* If we are unit 1, then this is the "real" console.
-		 * Remember this in order to set up the keyboard and
-		 * mouse line disciplines for SUN4 machines below.
-		 * Also, don't set the console flags, otherwise we
-		 * tell zstty_attach() to attach as console.
-		 */
-		if (zsc->zsc_promunit == 1) {
-			if ((hwflags & ZS_HWFLAG_CONSOLE_INPUT) != 0 &&
-			    !channel) {
-				ch0_is_cons = 1;
-			}
-		} else {
-			zsc_args.hwflags = hwflags;
-		}
-#endif
+
 		if ((zsc_args.hwflags & ZS_HWFLAG_CONSOLE_INPUT) != 0) {
 			zs_conschan_get = zc;
 		}
@@ -516,14 +495,10 @@ zs_attach(struct zsc_softc *zsc, struct zsdevice *zsd, int pri)
 		 * If this was a zstty it has a keyboard
 		 * property on it we need to attach the
 		 * sunkbd and sunms line disciplines.
-		 * There are no properties on SUN4 machines.
-		 * For them, check if we have set the
-		 * ch0_is_cons variable above.
 		 */
-		if ((child != NULL) &&
-		    (device_is_a(child, "zstty")) && (
-		    (CPU_ISSUN4 && ch0_is_cons) || (!CPU_ISSUN4 &&
-		    (prom_getproplen(zsc->zsc_node, "keyboard") == 0))))
+		if ((child != NULL)
+		    && (device_is_a(child, "zstty"))
+		    && (prom_getproplen(zsc->zsc_node, "keyboard") == 0))
 		{
 			struct kbd_ms_tty_attach_args kma;
 			struct tty *tp = zstty_get_tty_from_dev(child);

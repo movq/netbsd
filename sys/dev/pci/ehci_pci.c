@@ -1,4 +1,4 @@
-/*	$NetBSD: ehci_pci.c,v 1.30 2007/08/04 10:36:06 tsutsui Exp $	*/
+/*	$NetBSD: ehci_pci.c,v 1.26.2.1 2007/07/09 09:59:34 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ehci_pci.c,v 1.30 2007/08/04 10:36:06 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ehci_pci.c,v 1.26.2.1 2007/07/09 09:59:34 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -162,7 +162,7 @@ ehci_pci_attach(struct device *parent, struct device *self, void *aux)
 	case PCI_USBREV_1_0:
 	case PCI_USBREV_1_1:
 		sc->sc.sc_bus.usbrev = USBREV_UNKNOWN;
-		aprint_verbose("%s: pre-2.0 USB rev\n", devname);
+		aprint_normal("%s: pre-2.0 USB rev\n", devname);
 		return;
 	case PCI_USBREV_2_0:
 		sc->sc.sc_bus.usbrev = USBREV_2_0;
@@ -182,15 +182,8 @@ ehci_pci_attach(struct device *parent, struct device *self, void *aux)
 		    "vendor 0x%04x", PCI_VENDOR(pa->pa_id));
 
 	/* Enable workaround for dropped interrupts as required */
-	switch (sc->sc.sc_id_vendor) {
-	case PCI_VENDOR_ATI:
-	case PCI_VENDOR_VIATECH:
+	if (sc->sc.sc_id_vendor == PCI_VENDOR_VIATECH)
 		sc->sc.sc_flags |= EHCIF_DROPPED_INTR_WORKAROUND;
-		aprint_normal("%s: dropped intr workaround enabled\n", devname);
-		break;
-	default:
-		break;
-	}
 
 	/*
 	 * Find companion controllers.  According to the spec they always
@@ -210,20 +203,17 @@ ehci_pci_attach(struct device *parent, struct device *self, void *aux)
 
 	ehci_get_ownership(&sc->sc, pc, tag);
 
-	/*
-	 * Establish our powerhook before ehci_init() does its powerhook.
-	 */
-	sc->sc_powerhook = powerhook_establish(
-	    USBDEVNAME(sc->sc.sc_bus.bdev) , ehci_pci_powerhook, sc);
-	if (sc->sc_powerhook == NULL)
-		aprint_error("%s: couldn't establish powerhook\n",
-		    devname);
-
 	r = ehci_init(&sc->sc);
 	if (r != USBD_NORMAL_COMPLETION) {
 		aprint_error("%s: init failed, error=%d\n", devname, r);
 		return;
 	}
+
+	sc->sc_powerhook = powerhook_establish(
+	    USBDEVNAME(sc->sc.sc_bus.bdev) , ehci_pci_powerhook, sc);
+	if (sc->sc_powerhook == NULL)
+		aprint_error("%s: couldn't establish powerhook\n",
+		    devname);
 
 	/* Attach usb device. */
 	sc->sc.sc_child = config_found((void *)sc, &sc->sc.sc_bus,
@@ -332,7 +322,7 @@ ehci_get_ownership(ehci_softc_t *sc, pci_chipset_tag_t pc, pcitag_t tag)
 		pci_conf_write(pc, tag, addr + PCI_EHCI_USBLEGSUP, 0);
 		pci_conf_write(pc, tag, addr + PCI_EHCI_USBLEGCTLSTS, 0);
 	} else {
-		aprint_verbose("%s: BIOS has given up ownership\n", devname);
+		aprint_normal("%s: BIOS has given up ownership\n", devname);
 	}
 }
 

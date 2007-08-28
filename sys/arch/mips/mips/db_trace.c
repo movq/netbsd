@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.34 2007/05/17 14:51:23 yamt Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.29 2006/09/06 23:58:20 ad Exp $	*/
 
 /*
  * Mach Operating System
@@ -27,19 +27,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.34 2007/05/17 14:51:23 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.29 2006/09/06 23:58:20 ad Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/user.h>
-#include <sys/cpu.h>
 
 #include <mips/mips_opcode.h>
 
 #include <machine/db_machdep.h>
-
 #include <ddb/db_interface.h>
 #include <ddb/db_output.h>
 #include <ddb/db_variables.h>
@@ -61,7 +59,7 @@ vaddr_t getreg_val(db_expr_t regno);
 		 ((int *)(&((struct mips_kernel_state *)0)->sp) - (int *)0):  \
 	 -1)
 
-db_sym_t localsym(db_sym_t sym, bool isreg, int *lex_level);
+db_sym_t localsym(db_sym_t sym, boolean_t isreg, int *lex_level);
 
 /*
  * Machine register set.
@@ -134,7 +132,7 @@ const struct db_variable db_regs[] = {
 const struct db_variable * const db_eregs = db_regs + sizeof(db_regs)/sizeof(db_regs[0]);
 
 void
-db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
+db_stack_trace_print(db_expr_t addr, int have_addr, db_expr_t count,
     const char *modif, void (*pr)(const char *, ...))
 {
 #ifndef DDB_TRACE
@@ -164,7 +162,7 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 		return;
 	}	
 	l = LIST_FIRST(&p->p_lwps); /* XXX NJWLWP */
-	if (!(l->l_flag & LW_INMEM)) {
+	if (!(l->l_flag & L_INMEM)) {
 		(*pr)("swapped out\n");
 		return;
 	}
@@ -173,7 +171,7 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 	(*pr)("at %p\n", pcb);
 
 	stacktrace_subr(0,0,0,0,	/* no args known */
-			(int)cpu_switchto,
+			(int)cpu_switch,
 			pcb->pcb_context[8],
 			pcb->pcb_context[9],
 			pcb->pcb_context[10],
@@ -190,7 +188,7 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 	InstFmt i;
 	int stacksize;
 	db_addr_t offset;
-	const char *name;
+	char *name;
 	extern char verylocore[];
 
 	pc = ddb_regs.f_regs[_R_PC];

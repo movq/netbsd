@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.36 2007/02/16 02:53:51 ad Exp $ */
+/*	$NetBSD: psl.h,v 1.33 2006/05/04 12:18:54 yamt Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -366,22 +366,9 @@ static __inline int name(void) \
 }
 #endif
 
-typedef uint8_t ipl_t;
-typedef struct {
-	ipl_t _ipl;
-} ipl_cookie_t;
-
-static inline ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._ipl = ipl};
-}
-
 static __inline int __attribute__((__unused__))
-splraiseipl(ipl_cookie_t icookie)
+splraiseipl(int newpil)
 {
-	int newpil = icookie._ipl;
 	int oldpil;
 
 	/*
@@ -396,6 +383,8 @@ splraiseipl(ipl_cookie_t icookie)
 }
 
 SPL(spl0, 0)
+
+SPL(spllowersoftclock, 1)
 
 SPLHOLD(splsoftint, 1)
 #define	splsoftclock	splsoftint
@@ -451,6 +440,7 @@ SPLHOLD(splhigh, PIL_HIGH)
 /* splx does not have a return value */
 #ifdef SPLDEBUG
 #define	spl0()	spl0X(__FILE__, __LINE__)
+#define	spllowersoftclock() spllowersoftclockX(__FILE__, __LINE__)
 #define	splsoftint()	splsoftintX(__FILE__, __LINE__)
 #define	splsoftserial()	splsoftserialX(__FILE__, __LINE__)
 #define	splausoft()	splausoftX(__FILE__, __LINE__)

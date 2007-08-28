@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.66 2007/03/08 02:24:40 tsutsui Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.65 2006/03/28 17:38:25 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.66 2007/03/08 02:24:40 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.65 2006/03/28 17:38:25 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,7 +80,6 @@ void
 cpu_configure(void)
 {
 
-	softintr_init();
 	mrg_init();		/* Init Mac ROM Glue */
 	startrtclock();		/* start before ADB attached */
 

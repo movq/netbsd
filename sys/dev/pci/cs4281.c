@@ -1,4 +1,4 @@
-/*	$NetBSD: cs4281.c,v 1.34 2007/06/15 13:26:57 joerg Exp $	*/
+/*	$NetBSD: cs4281.c,v 1.33.2.1 2007/06/18 11:45:33 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 2000 Tatoku Ogaito.  All rights reserved.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs4281.c,v 1.34 2007/06/15 13:26:57 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs4281.c,v 1.33.2.1 2007/06/18 11:45:33 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.h,v 1.128 2007/07/21 19:20:39 ad Exp $	*/
+/*	$NetBSD: conf.h,v 1.125 2006/11/04 09:30:00 elad Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -55,12 +55,10 @@ struct vnode;
 /*
  * Types for d_type
  */
-#define D_OTHER		0x0000
-#define	D_TAPE		0x0001
-#define	D_DISK		0x0002
-#define	D_TTY		0x0003
-#define	D_TYPEMASK	0x00ff
-#define	D_MPSAFE	0x0100
+#define D_OTHER	0
+#define	D_TAPE	1
+#define	D_DISK	2
+#define	D_TTY	3
 
 /*
  * Block device switch table
@@ -69,10 +67,10 @@ struct bdevsw {
 	int		(*d_open)(dev_t, int, int, struct lwp *);
 	int		(*d_close)(dev_t, int, int, struct lwp *);
 	void		(*d_strategy)(struct buf *);
-	int		(*d_ioctl)(dev_t, u_long, void *, int, struct lwp *);
-	int		(*d_dump)(dev_t, daddr_t, void *, size_t);
+	int		(*d_ioctl)(dev_t, u_long, caddr_t, int, struct lwp *);
+	int		(*d_dump)(dev_t, daddr_t, caddr_t, size_t);
 	int		(*d_psize)(dev_t);
-	int		d_flag;
+	int		d_type;
 };
 
 /*
@@ -83,16 +81,24 @@ struct cdevsw {
 	int		(*d_close)(dev_t, int, int, struct lwp *);
 	int		(*d_read)(dev_t, struct uio *, int);
 	int		(*d_write)(dev_t, struct uio *, int);
-	int		(*d_ioctl)(dev_t, u_long, void *, int, struct lwp *);
+	int		(*d_ioctl)(dev_t, u_long, caddr_t, int, struct lwp *);
 	void		(*d_stop)(struct tty *, int);
 	struct tty *	(*d_tty)(dev_t);
 	int		(*d_poll)(dev_t, int, struct lwp *);
 	paddr_t		(*d_mmap)(dev_t, off_t, int);
 	int		(*d_kqfilter)(dev_t, struct knote *);
-	int		d_flag;
+	int		d_type;
 };
 
 #ifdef _KERNEL
+
+#define DEV_STRATEGY(bp) \
+	do { \
+		const struct bdevsw *bdev = bdevsw_lookup((bp)->b_dev); \
+		if (bdev == NULL) \
+			panic("DEV_STRATEGY: block device not found"); \
+		(*bdev->d_strategy)((bp)); \
+	} while (/*CONSTCOND*/0)
 
 int devsw_attach(const char *, const struct bdevsw *, int *,
 		 const struct cdevsw *, int *);
@@ -107,13 +113,13 @@ int cdevsw_lookup_major(const struct cdevsw *);
 #define	dev_type_read(n)	int n (dev_t, struct uio *, int)
 #define	dev_type_write(n)	int n (dev_t, struct uio *, int)
 #define	dev_type_ioctl(n) \
-		int n (dev_t, u_long, void *, int, struct lwp *)
+		int n (dev_t, u_long, caddr_t, int, struct lwp *)
 #define	dev_type_stop(n)	void n (struct tty *, int)
 #define	dev_type_tty(n)		struct tty * n (dev_t)
 #define	dev_type_poll(n)	int n (dev_t, int, struct lwp *)
 #define	dev_type_mmap(n)	paddr_t n (dev_t, off_t, int)
 #define	dev_type_strategy(n)	void n (struct buf *)
-#define	dev_type_dump(n)	int n (dev_t, daddr_t, void *, size_t)
+#define	dev_type_dump(n)	int n (dev_t, daddr_t, caddr_t, size_t)
 #define	dev_type_size(n)	int n (dev_t)
 #define	dev_type_kqfilter(n)	int n (dev_t, struct knote *)
 
@@ -141,28 +147,6 @@ int cdevsw_lookup_major(const struct cdevsw *);
 #define	nulldump	((dev_type_dump((*)))nullop)
 #define	nullkqfilter	((dev_type_kqfilter((*)))eopnotsupp)
 
-/* device access wrappers. */
-
-dev_type_open(bdev_open);
-dev_type_close(bdev_close);
-dev_type_strategy(bdev_strategy);
-dev_type_ioctl(bdev_ioctl);
-dev_type_dump(bdev_dump);
-
-dev_type_open(cdev_open);
-dev_type_close(cdev_close);
-dev_type_read(cdev_read);
-dev_type_write(cdev_write);
-dev_type_ioctl(cdev_ioctl);
-dev_type_stop(cdev_stop);
-dev_type_tty(cdev_tty);
-dev_type_poll(cdev_poll);
-dev_type_mmap(cdev_mmap);
-dev_type_kqfilter(cdev_kqfilter);
-
-int	cdev_type(dev_t);
-int	bdev_type(dev_t);
-
 /* symbolic sleep message strings */
 extern	const char devopn[], devio[], devwait[], devin[], devout[];
 extern	const char devioc[], devcls[];
@@ -183,7 +167,7 @@ struct linesw {
 	int	(*l_close)	(struct tty *, int);
 	int	(*l_read)	(struct tty *, struct uio *, int);
 	int	(*l_write)	(struct tty *, struct uio *, int);
-	int	(*l_ioctl)	(struct tty *, u_long, void *, int,
+	int	(*l_ioctl)	(struct tty *, u_long, caddr_t, int,
 				    struct lwp *);
 	int	(*l_rint)	(int, struct tty *);
 	int	(*l_start)	(struct tty *);
@@ -207,10 +191,9 @@ void	       ttyldisc_release(struct linesw *);
 #define	ttyerrstart ((int (*)(struct tty *))enodev)
 
 int	ttyerrpoll (struct tty *, int, struct lwp *);
-int	ttynullioctl(struct tty *, u_long, void *, int, struct lwp *);
+int	ttynullioctl(struct tty *, u_long, caddr_t, int, struct lwp *);
 
 int	iskmemdev(dev_t);
-int	seltrue_kqfilter(dev_t, struct knote *);
 #endif
 
 #ifdef _KERNEL
@@ -232,7 +215,6 @@ struct devsw_conv {
 };
 
 #ifdef _KERNEL
-void devsw_init(void);
 const char *devsw_blk2name(int);
 int devsw_name2blk(const char *, char *, size_t);
 dev_t devsw_chr2blk(dev_t);

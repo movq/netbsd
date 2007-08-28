@@ -1,4 +1,4 @@
-/*	$NetBSD: ibcs2_exec.c,v 1.68 2007/04/22 08:29:56 dsl Exp $	*/
+/*	$NetBSD: ibcs2_exec.c,v 1.65 2006/08/30 15:22:45 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1998 Scott Bartram
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ibcs2_exec.c,v 1.68 2007/04/22 08:29:56 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ibcs2_exec.c,v 1.65 2006/08/30 15:22:45 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_syscall_debug.h"
@@ -113,8 +113,7 @@ const struct emul emul_ibcs2 = {
 
 	uvm_default_mapaddr,
 	NULL,	/* e_usertrap */
-	0,	/* e_ucsize */
-	NULL,	/* e_startlwp */
+	NULL,	/* e_sa */
 };
 
 /*
@@ -127,7 +126,7 @@ ibcs2_e_proc_exec(p, epp)
 	struct proc *p;
 	struct exec_package *epp;
 {
-	if (epp->ep_esch->es_makecmds == exec_ibcs2_xout_makecmds)
+	if (epp->ep_es->es_makecmds == exec_ibcs2_xout_makecmds)
 		p->p_emuldata = IBCS2_EXEC_XENIX;
 	else
 		p->p_emuldata = IBCS2_EXEC_OTHER;

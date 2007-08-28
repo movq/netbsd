@@ -1,4 +1,4 @@
-/* $NetBSD: wskbd.c,v 1.105 2007/08/06 03:07:52 macallan Exp $ */
+/* $NetBSD: wskbd.c,v 1.98 2006/11/16 01:33:31 christos Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wskbd.c,v 1.105 2007/08/06 03:07:52 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wskbd.c,v 1.98 2006/11/16 01:33:31 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -166,7 +166,7 @@ struct wskbd_softc {
 #endif
 
 	int	sc_repeating;		/* we've called timeout() */
-	callout_t sc_repeat_ch;
+	struct callout sc_repeat_ch;
 	u_int	sc_repeat_type;
 	int	sc_repeat_value;
 
@@ -218,7 +218,7 @@ static void wskbd_attach(struct device *, struct device *, void *);
 static int  wskbd_detach(struct device *, int);
 static int  wskbd_activate(struct device *, enum devact);
 
-static int  wskbd_displayioctl(struct device *, u_long, void *, int,
+static int  wskbd_displayioctl(struct device *, u_long, caddr_t, int,
 			      struct lwp *);
 #if NWSDISPLAY > 0
 static int  wskbd_set_display(struct device *, struct wsevsrc *);
@@ -236,7 +236,7 @@ static void change_displayparam(struct wskbd_softc *, int, int, int);
 static void wskbd_holdscreen(struct wskbd_softc *, int);
 #endif
 
-static int wskbd_do_ioctl_sc(struct wskbd_softc *, u_long, void *, int,
+static int wskbd_do_ioctl_sc(struct wskbd_softc *, u_long, caddr_t, int,
 			     struct lwp *);
 static void wskbd_deliver_event(struct wskbd_softc *sc, u_int type, int value);
 
@@ -249,7 +249,7 @@ static int wskbd_mux_close(struct wsevsrc *);
 #endif
 
 static int wskbd_do_open(struct wskbd_softc *, struct wseventvar *);
-static int wskbd_do_ioctl(struct device *, u_long, void *, int, struct lwp *);
+static int wskbd_do_ioctl(struct device *, u_long, caddr_t, int, struct lwp *);
 
 CFATTACH_DECL(wskbd, sizeof (struct wskbd_softc),
     wskbd_match, wskbd_attach, wskbd_detach, wskbd_activate);
@@ -414,7 +414,7 @@ wskbd_attach(struct device *parent, struct device *self, void *aux)
 		wskbd_update_layout(sc->id, ap->keymap->layout);
 	}
 
-	callout_init(&sc->sc_repeat_ch, 0);
+	callout_init(&sc->sc_repeat_ch);
 
 	sc->id->t_sc = sc;
 
@@ -720,26 +720,14 @@ wskbd_holdscreen(struct wskbd_softc *sc, int hold)
 	if (sc->sc_base.me_dispdv != NULL) {
 		wsdisplay_kbdholdscreen(sc->sc_base.me_dispdv, hold);
 		new_state = sc->sc_ledstate;
-		if (hold) {
-#ifdef WSDISPLAY_SCROLLSUPPORT
-			sc->sc_scroll_data.mode = WSKBD_SCROLL_MODE_HOLD;
-#endif
+		if (hold)
 			new_state |= WSKBD_LED_SCROLL;
-		} else {
-#ifdef WSDISPLAY_SCROLLSUPPORT
-			sc->sc_scroll_data.mode = WSKBD_SCROLL_MODE_NORMAL;
-#endif
+		else
 			new_state &= ~WSKBD_LED_SCROLL;
-		}
 		if (new_state != sc->sc_ledstate) {
 			(*sc->sc_accessops->set_leds)(sc->sc_accesscookie,
 						      new_state);
 			sc->sc_ledstate = new_state;
-#ifdef WSDISPLAY_SCROLLSUPPORT
-			if (!hold)
-				wsdisplay_scroll(sc->sc_base.me_dispdv,
-				    WSDISPLAY_SCROLL_RESET);
-#endif
 		}
 	}
 }
@@ -910,14 +898,14 @@ wskbdread(dev_t dev, struct uio *uio, int flags)
 }
 
 int
-wskbdioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+wskbdioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	return (wskbd_do_ioctl(wskbd_cd.cd_devs[minor(dev)], cmd, data, flag,l));
 }
 
 /* A wrapper around the ioctl() workhorse to make reference counting easy. */
 int
-wskbd_do_ioctl(struct device *dv, u_long cmd, void *data, int flag,
+wskbd_do_ioctl(struct device *dv, u_long cmd, caddr_t data, int flag,
 	struct lwp *l)
 {
 	struct wskbd_softc *sc = (struct wskbd_softc *)dv;
@@ -931,7 +919,7 @@ wskbd_do_ioctl(struct device *dv, u_long cmd, void *data, int flag,
 }
 
 int
-wskbd_do_ioctl_sc(struct wskbd_softc *sc, u_long cmd, void *data, int flag,
+wskbd_do_ioctl_sc(struct wskbd_softc *sc, u_long cmd, caddr_t data, int flag,
 		  struct lwp *l)
 {
 
@@ -976,7 +964,7 @@ wskbd_do_ioctl_sc(struct wskbd_softc *sc, u_long cmd, void *data, int flag,
  * Some of these have no real effect in raw mode, however.
  */
 static int
-wskbd_displayioctl(struct device *dev, u_long cmd, void *data, int flag,
+wskbd_displayioctl(struct device *dev, u_long cmd, caddr_t data, int flag,
 	struct lwp *l)
 {
 #ifdef WSDISPLAY_SCROLLSUPPORT
@@ -1008,7 +996,7 @@ wskbd_displayioctl(struct device *dev, u_long cmd, void *data, int flag,
 		if ((flag & FWRITE) == 0)
 			return (EACCES);
 		return ((*sc->sc_accessops->ioctl)(sc->sc_accesscookie,
-		    WSKBDIO_COMPLEXBELL, (void *)&sc->sc_bell_data, flag, l));
+		    WSKBDIO_COMPLEXBELL, (caddr_t)&sc->sc_bell_data, flag, l));
 
 	case WSKBDIO_COMPLEXBELL:
 		if ((flag & FWRITE) == 0)
@@ -1016,7 +1004,7 @@ wskbd_displayioctl(struct device *dev, u_long cmd, void *data, int flag,
 		ubdp = (struct wskbd_bell_data *)data;
 		SETBELL(ubdp, ubdp, &sc->sc_bell_data);
 		return ((*sc->sc_accessops->ioctl)(sc->sc_accesscookie,
-		    WSKBDIO_COMPLEXBELL, (void *)ubdp, flag, l));
+		    WSKBDIO_COMPLEXBELL, (caddr_t)ubdp, flag, l));
 
 	case WSKBDIO_SETBELL:
 		if ((flag & FWRITE) == 0)
@@ -1036,7 +1024,7 @@ getbell:
 
 	case WSKBDIO_SETDEFAULTBELL:
 		if (p && (error = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+		    KAUTH_GENERIC_ISSUSER, &l->l_acflag)) != 0)
 			return (error);
 		kbdp = &wskbd_default_bell_data;
 		goto setbell;
@@ -1075,7 +1063,7 @@ getkeyrepeat:
 
 	case WSKBDIO_SETDEFAULTKEYREPEAT:
 		if ((error = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+		    KAUTH_GENERIC_ISSUSER, &l->l_acflag)) != 0)
 			return (error);
 		kkdp = &wskbd_default_keyrepeat_data;
 		goto setkeyrepeat;
@@ -1282,10 +1270,10 @@ wskbd_set_display(struct device *dv, struct wsevsrc *me)
 	}
 
 	if (displaydv)
-		aprint_verbose("%s: connecting to %s\n",
+		printf("%s: connecting to %s\n",
 		       sc->sc_base.me_dv.dv_xname, displaydv->dv_xname);
 	else
-		aprint_verbose("%s: disconnecting from %s\n",
+		printf("%s: disconnecting from %s\n",
 		       sc->sc_base.me_dv.dv_xname, odisplaydv->dv_xname);
 
 	return (0);
@@ -1593,7 +1581,7 @@ wskbd_translate(struct wskbd_internal *id, u_int type, int value)
 		update_leds(id);
 		return (0);
 	}
-	
+
 	if (sc != NULL) {
 		if (value < 0 || value >= sc->sc_maplen) {
 #ifdef DEBUG

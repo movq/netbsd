@@ -1,4 +1,4 @@
-/*	$NetBSD: frameasm.h,v 1.4 2007/05/21 08:10:39 fvdl Exp $	*/
+/*	$NetBSD: frameasm.h,v 1.1 2003/04/26 18:39:40 fvdl Exp $	*/
 
 #ifndef _AMD64_MACHINE_FRAMEASM_H
 #define _AMD64_MACHINE_FRAMEASM_H
@@ -82,11 +82,13 @@
 	pushq	%r13			;
 
 
-#define CHECK_ASTPENDING(reg)	cmpq	$0, reg				; \
+#define CHECK_ASTPENDING(reg)	movq	CPUVAR(CURLWP),reg		; \
+				cmpq	$0, reg				; \
 				je	99f				; \
-				cmpl	$0, L_MD_ASTPENDING(reg)	; \
+				movq	L_PROC(reg), reg		; \
+				cmpl	$0, P_MD_ASTPENDING(reg)	; \
 				99:
 
-#define CLEAR_ASTPENDING(reg)	movl	$0, L_MD_ASTPENDING(reg)
+#define CLEAR_ASTPENDING(reg)	movl	$0, P_MD_ASTPENDING(reg)
 
 #endif /* _AMD64_MACHINE_FRAMEASM_H */

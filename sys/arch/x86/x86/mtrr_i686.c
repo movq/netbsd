@@ -1,4 +1,4 @@
-/*	$NetBSD: mtrr_i686.c,v 1.9 2007/03/20 18:05:25 drochner Exp $ */
+/*	$NetBSD: mtrr_i686.c,v 1.8.2.1 2007/10/29 14:08:03 liamjfoy Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mtrr_i686.c,v 1.9 2007/03/20 18:05:25 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mtrr_i686.c,v 1.8.2.1 2007/10/29 14:08:03 liamjfoy Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -156,8 +156,14 @@ static void
 i686_mtrr_reload(int synch)
 {
 	int i;
-	uint32_t cr0, cr3, cr4;
-	uint32_t origcr0, origcr4;
+	/* XXX cr0 is 64-bit on amd64 too, but the upper bits are
+	 * unused and must be zero so it does not matter too
+	 * much. Need to change the prototypes of l/rcr0 too if you
+	 * want to correct it. */
+	uint32_t cr0;
+	vaddr_t cr3, cr4;
+	uint32_t origcr0;
+	vaddr_t origcr4;
 #ifdef MULTIPROCESSOR
 	uint32_t mymask = 1 << cpu_number();
 #endif
@@ -598,8 +604,7 @@ i686_mtrr_setone(struct mtrr *mtrrp, struct proc *p)
 		curhigh = curlow + mtrr_var[i].len;
 		if (low == curlow && high == curhigh &&
 		    (!(mtrr_var[i].flags & MTRR_PRIVATE) ||
-		     ((mtrrp->flags & MTRR_PRIVATE) && (p != NULL) &&
-		      (mtrr_var[i].owner == p->p_pid)))) {
+		     mtrr_var[i].owner == p->p_pid)) {
 			freep = &mtrr_var[i];
 			break;
 		}
@@ -607,8 +612,7 @@ i686_mtrr_setone(struct mtrr *mtrrp, struct proc *p)
 		    (low >= curlow && low < curhigh)) &&
 	 	    ((mtrr_var[i].type != mtrrp->type) ||
 		     ((mtrr_var[i].flags & MTRR_PRIVATE) &&
- 		      (!(mtrrp->flags & MTRR_PRIVATE) || (p == NULL) ||
-		       (mtrr_var[i].owner != p->p_pid))))) {
+		      mtrr_var[i].owner != p->p_pid))) {
 			return EBUSY;
 		}
 	}
@@ -616,7 +620,7 @@ i686_mtrr_setone(struct mtrr *mtrrp, struct proc *p)
 		return EBUSY;
 	mtrrp->flags &= ~MTRR_CANTSET;
 	*freep = *mtrrp;
-	freep->owner = (mtrrp->flags & MTRR_PRIVATE) ? p->p_pid : 0;
+	freep->owner = mtrrp->flags & MTRR_PRIVATE ? p->p_pid : 0;
 
 	return 0;
 }

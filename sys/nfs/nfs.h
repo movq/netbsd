@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs.h,v 1.67 2007/06/02 03:32:51 yamt Exp $	*/
+/*	$NetBSD: nfs.h,v 1.60 2006/09/04 08:27:49 yamt Exp $	*/
 /*
  * Copyright (c) 1989, 1993, 1995
  *	The Regents of the University of California.  All rights reserved.
@@ -35,13 +35,6 @@
 
 #ifndef _NFS_NFS_H_
 #define _NFS_NFS_H_
-
-#ifdef _KERNEL
-#include <sys/condvar.h>
-#include <sys/fstypes.h>
-#include <sys/mbuf.h>
-#include <sys/mutex.h>
-#endif
 
 /*
  * Tunable constants for nfs
@@ -102,9 +95,6 @@
 
 #define	NFS_MAXUIDHASH	64		/* Max. # of hashed uid entries/mp */
 
-#define	NFS_DEFDEADTHRESH NFS_NEVERDEAD	/* Default nm_deadthresh */
-#define	NFS_NEVERDEAD	9		/* Greater than max. nm_timeouts */
-
 #ifdef _KERNEL
 extern int nfs_niothreads;              /* Number of async_daemons desired */
 #ifndef NFS_DEFAULT_NIOTHREADS
@@ -140,7 +130,7 @@ extern int nfs_niothreads;              /* Number of async_daemons desired */
  * Oddballs
  */
 #define NFS_CMPFH(n, f, s) \
-	((n)->n_fhsize == (s) && !memcmp((void *)(n)->n_fhp,  (void *)(f),  (s)))
+	((n)->n_fhsize == (s) && !memcmp((caddr_t)(n)->n_fhp,  (caddr_t)(f),  (s)))
 #ifdef NFS_V2_ONLY
 #define NFS_ISV3(v)	(0)
 #else
@@ -199,7 +189,7 @@ struct export_args {
  */
 struct nfsd_args {
 	int	sock;		/* Socket to serve */
-	void *	name;		/* Client addr for connection based sockets */
+	caddr_t	name;		/* Client addr for connection based sockets */
 	int	namelen;	/* Length of name */
 };
 
@@ -235,13 +225,6 @@ struct mountd_exports_list {
 };
 
 /*
- * try to keep nfsstats, which is exposed to userland via sysctl,
- * compatible after NQNFS removal.
- * 26 is the old value of NFS_NPROCS, which includes NQNFS procedures.
- */
-#define	NFSSTATS_NPROCS	26
-
-/*
  * Stats structure
  */
 struct nfsstats {
@@ -261,9 +244,9 @@ struct nfsstats {
 	int	readlink_bios;
 	int	biocache_readdirs;
 	int	readdir_bios;
-	int	rpccnt[NFSSTATS_NPROCS];
+	int	rpccnt[NFS_NPROCS];
 	int	rpcretries;
-	int	srvrpccnt[NFSSTATS_NPROCS];
+	int	srvrpccnt[NFS_NPROCS];
 	int	srvrpc_errs;
 	int	srv_errs;
 	int	rpcrequests;
@@ -274,9 +257,9 @@ struct nfsstats {
 	int	srvcache_idemdonehits;
 	int	srvcache_nonidemdonehits;
 	int	srvcache_misses;
-	int	__srvnqnfs_leases;	/* unused */
-	int	__srvnqnfs_maxleases;	/* unused */
-	int	__srvnqnfs_getleases;	/* unused */
+	int	srvnqnfs_leases;
+	int	srvnqnfs_maxleases;
+	int	srvnqnfs_getleases;
 	int	srvvop_writes;
 };
 
@@ -333,7 +316,7 @@ struct nfsreq {
 	struct mbuf	*r_mreq;
 	struct mbuf	*r_mrep;
 	struct mbuf	*r_md;
-	void *		r_dpos;
+	caddr_t		r_dpos;
 	struct nfsmount *r_nmp;
 	u_int32_t	r_xid;
 	int		r_flags;	/* flags on request, see below */
@@ -358,6 +341,7 @@ extern TAILQ_HEAD(nfsreqhead, nfsreq) nfs_reqq;
 #define	R_SOCKERR	0x10		/* Fatal error on socket */
 #define	R_TPRINTFMSG	0x20		/* Did a tprintf msg. */
 #define	R_MUSTRESEND	0x40		/* Must resend request */
+#define	R_GETONEREP	0x80		/* Probe for one reply only */
 #define	R_REXMITTED	0x100		/* retransmitted after reconnect */
 
 /*
@@ -391,14 +375,14 @@ extern TAILQ_HEAD(nfsreqhead, nfsreq) nfs_reqq;
  * Macros for storing/retrieving cookies into directory buffers.
  */
 #define NFS_STASHCOOKIE(dp,off) \
-	*((off_t *)((char *)(dp) + (dp)->d_reclen - sizeof (off_t))) = off
+	*((off_t *)((caddr_t)(dp) + (dp)->d_reclen - sizeof (off_t))) = off
 #define NFS_GETCOOKIE(dp) \
-	(*((off_t *)((char *)(dp) + (dp)->d_reclen - sizeof (off_t))))
+	(*((off_t *)((caddr_t)(dp) + (dp)->d_reclen - sizeof (off_t))))
 #define NFS_STASHCOOKIE32(dp, val) \
-	*((u_int32_t *)((char *)(dp) + (dp)->d_reclen - sizeof (off_t) - \
+	*((u_int32_t *)((caddr_t)(dp) + (dp)->d_reclen - sizeof (off_t) - \
 	    sizeof (int))) = val
 #define NFS_GETCOOKIE32(dp) \
-	(*((u_int32_t *)((char *)(dp) + (dp)->d_reclen - sizeof (off_t) - \
+	(*((u_int32_t *)((caddr_t)(dp) + (dp)->d_reclen - sizeof (off_t) - \
 	    sizeof (int))))
 
 /*
@@ -440,8 +424,7 @@ struct nfsuid {
 #endif
 
 struct nfssvc_sock {
-	kmutex_t ns_lock;
-	kcondvar_t ns_cv;
+	struct simplelock ns_lock;
 	TAILQ_ENTRY(nfssvc_sock) ns_chain;	/* List of all nfssvc_sock's */
 	TAILQ_ENTRY(nfssvc_sock) ns_pending;	/* List of pending sockets */
 	TAILQ_HEAD(, nfsuid) ns_uidlruhead;
@@ -471,6 +454,7 @@ struct nfssvc_sock {
 #define	SLP_NEEDQ	0x04
 #define	SLP_DISCONN	0x08
 #define	SLP_BUSY	0x10
+#define	SLP_WANT	0x20
 #define	SLP_LASTFRAG	0x40
 #define	SLP_SENDING	0x80
 
@@ -478,6 +462,7 @@ extern TAILQ_HEAD(nfssvc_sockhead, nfssvc_sock) nfssvc_sockhead;
 extern struct nfssvc_sockhead nfssvc_sockpending;
 extern int nfssvc_sockhead_flag;
 #define	SLP_INIT	0x01
+#define	SLP_WANTINIT	0x02
 
 /*
  * One of these structures is allocated for each nfsd.
@@ -485,7 +470,6 @@ extern int nfssvc_sockhead_flag;
 struct nfsd {
 	TAILQ_ENTRY(nfsd) nfsd_chain;	/* List of all nfsd's */
 	SLIST_ENTRY(nfsd) nfsd_idle;	/* List of idle nfsd's */
-	kcondvar_t	nfsd_cv;
 	int		nfsd_flag;	/* NFSD_ flags */
 	struct nfssvc_sock *nfsd_slp;	/* Current socket */
 	int		nfsd_authlen;	/* Authenticator len */
@@ -529,7 +513,7 @@ struct nfsrv_descript {
 	struct mbuf		*nd_mreq;	/* Reply mbuf list */
 	struct mbuf		*nd_nam;	/* and socket addr */
 	struct mbuf		*nd_nam2;	/* return socket addr */
-	void *			nd_dpos;	/* Current dissect pos */
+	caddr_t			nd_dpos;	/* Current dissect pos */
 	u_int32_t		nd_procnum;	/* RPC # */
 	int			nd_stable;	/* storage type */
 	int			nd_flag;	/* nd_flag */
@@ -548,12 +532,12 @@ struct nfsrv_descript {
 #define ND_CHECK	0x04
 #define ND_LEASE	(ND_READ | ND_WRITE | ND_CHECK)
 #define ND_NFSV3	0x08
+#define ND_NQNFS	0x10
 #define ND_KERBNICK	0x20
 #define ND_KERBFULL	0x40
 #define ND_KERBAUTH	(ND_KERBNICK | ND_KERBFULL)
 
-extern kmutex_t nfsd_lock;
-extern kcondvar_t nfsd_initcv;
+extern struct simplelock nfsd_slock;
 extern TAILQ_HEAD(nfsdhead, nfsd) nfsd_head;
 extern SLIST_HEAD(nfsdidlehead, nfsd) nfsd_idle_head;
 extern int nfsd_head_flag;
@@ -568,7 +552,7 @@ extern int nfs_numasync;
  */
 #define NFSW_CONTIG(o, n) \
 		((o)->nd_eoff >= (n)->nd_off && \
-		 !memcmp((void *)&(o)->nd_fh, (void *)&(n)->nd_fh, NFSX_V3FH))
+		 !memcmp((caddr_t)&(o)->nd_fh, (caddr_t)&(n)->nd_fh, NFSX_V3FH))
 
 /*
  * Defines for WebNFS

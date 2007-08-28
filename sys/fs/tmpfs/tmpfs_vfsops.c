@@ -1,4 +1,4 @@
-/*	$NetBSD: tmpfs_vfsops.c,v 1.27 2007/08/03 13:00:19 pooka Exp $	*/
+/*	$NetBSD: tmpfs_vfsops.c,v 1.17 2006/11/16 01:33:37 christos Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006 The NetBSD Foundation, Inc.
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tmpfs_vfsops.c,v 1.27 2007/08/03 13:00:19 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tmpfs_vfsops.c,v 1.17 2006/11/16 01:33:37 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -58,16 +58,15 @@ __KERNEL_RCSID(0, "$NetBSD: tmpfs_vfsops.c,v 1.27 2007/08/03 13:00:19 pooka Exp 
 #include <sys/stat.h>
 #include <sys/systm.h>
 #include <sys/vnode.h>
-#include <sys/proc.h>
 
 #include <fs/tmpfs/tmpfs.h>
 
-MALLOC_JUSTDEFINE(M_TMPFSMNT, "tmpfs mount", "tmpfs mount structures");
+MALLOC_DEFINE(M_TMPFSMNT, "tmpfs mount", "tmpfs mount structures");
 
 /* --------------------------------------------------------------------- */
 
-static int	tmpfs_mount(struct mount *, const char *, void *, size_t *,
-		    struct lwp *);
+static int	tmpfs_mount(struct mount *, const char *, void *,
+		    struct nameidata *, struct lwp *);
 static int	tmpfs_start(struct mount *, int, struct lwp *);
 static int	tmpfs_unmount(struct mount *, int, struct lwp *);
 static int	tmpfs_root(struct mount *, struct vnode **);
@@ -86,18 +85,15 @@ static int	tmpfs_snapshot(struct mount *, struct vnode *,
 /* --------------------------------------------------------------------- */
 
 static int
-tmpfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
-    struct lwp *l)
+tmpfs_mount(struct mount *mp, const char *path, void *data,
+    struct nameidata *ndp, struct lwp *l)
 {
 	int error;
 	ino_t nodes;
 	size_t pages;
 	struct tmpfs_mount *tmp;
 	struct tmpfs_node *root;
-	struct tmpfs_args *args = data;
-
-	if (*data_len < sizeof *args)
-		return EINVAL;
+	struct tmpfs_args args;
 
 	/* Handle retrieval of mount point arguments. */
 	if (mp->mnt_flag & MNT_GETARGS) {
@@ -105,18 +101,26 @@ tmpfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
 			return EIO;
 		tmp = VFS_TO_TMPFS(mp);
 
-		args->ta_version = TMPFS_ARGS_VERSION;
-		args->ta_nodes_max = tmp->tm_nodes_max;
-		args->ta_size_max = tmp->tm_pages_max * PAGE_SIZE;
+		args.ta_version = TMPFS_ARGS_VERSION;
+		args.ta_nodes_max = tmp->tm_nodes_max;
+		args.ta_size_max = tmp->tm_pages_max * PAGE_SIZE;
 
 		root = tmp->tm_root;
-		args->ta_root_uid = root->tn_uid;
-		args->ta_root_gid = root->tn_gid;
-		args->ta_root_mode = root->tn_mode;
+		args.ta_root_uid = root->tn_uid;
+		args.ta_root_gid = root->tn_gid;
+		args.ta_root_mode = root->tn_mode;
 
-		*data_len = sizeof *args;
-		return 0;
+		return copyout(&args, data, sizeof(args));
 	}
+
+	/* Verify that we have parameters, as they are required. */
+	if (data == NULL)
+		return EINVAL;
+
+	/* Get the mount parameters. */
+	error = copyin(data, &args, sizeof(args));
+	if (error != 0)
+		return error;
 
 	if (mp->mnt_flag & MNT_UPDATE) {
 		/* XXX: There is no support yet to update file system
@@ -125,29 +129,29 @@ tmpfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
 		return EOPNOTSUPP;
 	}
 
-	if (args->ta_version != TMPFS_ARGS_VERSION)
+	if (args.ta_version != TMPFS_ARGS_VERSION)
 		return EINVAL;
 
 	/* Do not allow mounts if we do not have enough memory to preserve
 	 * the minimum reserved pages. */
-	if (tmpfs_mem_info(true) < TMPFS_PAGES_RESERVED)
+	if (tmpfs_mem_info(TRUE) < TMPFS_PAGES_RESERVED)
 		return EINVAL;
 
 	/* Get the maximum number of memory pages this file system is
 	 * allowed to use, based on the maximum size the user passed in
 	 * the mount structure.  A value of zero is treated as if the
 	 * maximum available space was requested. */
-	if (args->ta_size_max < PAGE_SIZE || args->ta_size_max >= SIZE_MAX)
+	if (args.ta_size_max < PAGE_SIZE || args.ta_size_max >= SIZE_MAX)
 		pages = SIZE_MAX;
 	else
-		pages = args->ta_size_max / PAGE_SIZE +
-		    (args->ta_size_max % PAGE_SIZE == 0 ? 0 : 1);
+		pages = args.ta_size_max / PAGE_SIZE +
+		    (args.ta_size_max % PAGE_SIZE == 0 ? 0 : 1);
 	KASSERT(pages > 0);
 
-	if (args->ta_nodes_max <= 3)
+	if (args.ta_nodes_max <= 3)
 		nodes = 3 + pages * PAGE_SIZE / 1024;
 	else
-		nodes = args->ta_nodes_max;
+		nodes = args.ta_nodes_max;
 	KASSERT(nodes >= 3);
 
 	/* Allocate the tmpfs mount structure and fill it. */
@@ -169,8 +173,8 @@ tmpfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
 	tmpfs_str_pool_init(&tmp->tm_str_pool, tmp);
 
 	/* Allocate the root node. */
-	error = tmpfs_alloc_node(tmp, VDIR, args->ta_root_uid,
-	    args->ta_root_gid, args->ta_root_mode & ALLPERMS, NULL, NULL,
+	error = tmpfs_alloc_node(tmp, VDIR, args.ta_root_uid,
+	    args.ta_root_gid, args.ta_root_mode & ALLPERMS, NULL, NULL,
 	    VNOVAL, l->l_proc, &root);
 	KASSERT(error == 0 && root != NULL);
 	tmp->tm_root = root;
@@ -178,12 +182,10 @@ tmpfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
 	mp->mnt_data = tmp;
 	mp->mnt_flag |= MNT_LOCAL;
 	mp->mnt_stat.f_namemax = MAXNAMLEN;
-	mp->mnt_fs_bshift = PAGE_SHIFT;
-	mp->mnt_dev_bshift = DEV_BSHIFT;
 	vfs_getnewfsid(mp);
 
 	return set_statvfs_info(path, UIO_USERSPACE, "tmpfs", UIO_SYSSPACE,
-	    mp->mnt_op->vfs_name, mp, l);
+	    mp, l);
 }
 
 /* --------------------------------------------------------------------- */
@@ -236,7 +238,7 @@ tmpfs_unmount(struct mount *mp, int mntflags, struct lwp *l)
 
 				nde = TAILQ_NEXT(de, td_entries);
 				KASSERT(de->td_node->tn_vnode == NULL);
-				tmpfs_free_dirent(tmp, de, false);
+				tmpfs_free_dirent(tmp, de, FALSE);
 				de = nde;
 				node->tn_size -= sizeof(struct tmpfs_dirent);
 			}
@@ -305,7 +307,7 @@ tmpfs_vget(struct mount *mp, ino_t ino,
 static int
 tmpfs_fhtovp(struct mount *mp, struct fid *fhp, struct vnode **vpp)
 {
-	bool found;
+	boolean_t found;
 	struct tmpfs_fid tfh;
 	struct tmpfs_mount *tmp;
 	struct tmpfs_node *node;
@@ -320,11 +322,11 @@ tmpfs_fhtovp(struct mount *mp, struct fid *fhp, struct vnode **vpp)
 	if (tfh.tf_id >= tmp->tm_nodes_max)
 		return EINVAL;
 
-	found = false;
+	found = FALSE;
 	LIST_FOREACH(node, &tmp->tm_nodes_used, tn_entries) {
 		if (node->tn_id == tfh.tf_id &&
 		    node->tn_gen == tfh.tf_gen) {
-			found = true;
+			found = TRUE;
 			break;
 		}
 	}
@@ -409,7 +411,9 @@ static void
 tmpfs_init(void)
 {
 
+#ifdef _LKM
 	malloc_type_attach(M_TMPFSMNT);
+#endif
 }
 
 /* --------------------------------------------------------------------- */
@@ -418,7 +422,9 @@ static void
 tmpfs_done(void)
 {
 
+#ifdef _LKM
 	malloc_type_detach(M_TMPFSMNT);
+#endif
 }
 
 /* --------------------------------------------------------------------- */
@@ -450,7 +456,6 @@ const struct vnodeopv_desc * const tmpfs_vnodeopv_descs[] = {
 
 struct vfsops tmpfs_vfsops = {
 	MOUNT_TMPFS,			/* vfs_name */
-	sizeof (struct tmpfs_args),
 	tmpfs_mount,			/* vfs_mount */
 	tmpfs_start,			/* vfs_start */
 	tmpfs_unmount,			/* vfs_unmount */
@@ -467,7 +472,6 @@ struct vfsops tmpfs_vfsops = {
 	NULL,				/* vfs_mountroot */
 	tmpfs_snapshot,			/* vfs_snapshot */
 	vfs_stdextattrctl,		/* vfs_extattrctl */
-	(void *)eopnotsupp,		/* vfs_suspendctl */
 	tmpfs_vnodeopv_descs,
 	0,				/* vfs_refcount */
 	{ NULL, NULL },

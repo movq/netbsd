@@ -1,4 +1,4 @@
-/*	$NetBSD: omap_start.S,v 1.1 2007/01/06 00:29:52 christos Exp $ */
+/*	$NetBSD: omap_start.S,v 1.1.6.2 2007/02/21 18:27:18 snj Exp $ */
 
 /*
  * Machine dependant startup code for OMAP boards.

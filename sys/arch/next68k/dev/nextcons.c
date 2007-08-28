@@ -1,4 +1,4 @@
-/*	$NetBSD: nextcons.c,v 1.9 2007/01/24 13:08:14 hubertf Exp $	*/
+/*	$NetBSD: nextcons.c,v 1.8 2005/12/11 12:18:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 Darrin B. Jewell
@@ -31,7 +31,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nextcons.c,v 1.9 2007/01/24 13:08:14 hubertf Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nextcons.c,v 1.8 2005/12/11 12:18:25 christos Exp $");
+
+#include <sys/cdefs.h>
 
 #include <sys/param.h>
 #include <sys/systm.h>

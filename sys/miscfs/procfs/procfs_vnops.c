@@ -1,40 +1,4 @@
-/*	$NetBSD: procfs_vnops.c,v 1.158 2007/07/22 13:37:13 pooka Exp $	*/
-
-/*-
- * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
- * All rights reserved.
- *
- * This code is derived from software contributed to The NetBSD Foundation
- * by Andrew Doran.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. All advertising materials mentioning features or use of this software
- *    must display the following acknowledgement:
- *	This product includes software developed by the NetBSD
- *	Foundation, Inc. and its contributors.
- * 4. Neither the name of The NetBSD Foundation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
- * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
- * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+/*	$NetBSD: procfs_vnops.c,v 1.140.2.7 2007/09/27 17:47:47 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1993, 1995
@@ -112,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_vnops.c,v 1.158 2007/07/22 13:37:13 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_vnops.c,v 1.140.2.7 2007/09/27 17:47:47 xtraeme Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -181,7 +145,6 @@ static const struct proc_target {
 	{ DT_LNK, N("cwd"),	PFScwd,		NULL },
 	{ DT_LNK, N("root"),	PFSchroot,	NULL },
 	{ DT_LNK, N("emul"),	PFSemul,	NULL },
-	{ DT_REG, N("statm"),	PFSstatm,	procfs_validfile_linux },
 #ifdef __HAVE_PROCFS_MACHDEP
 	PROCFS_MACHDEP_NODETYPE_DEFNS
 #endif
@@ -201,8 +164,6 @@ static const struct proc_target proc_root_targets[] = {
 	{ DT_REG, N("uptime"),      PFSuptime,         procfs_validfile_linux },
 	{ DT_REG, N("mounts"),	    PFSmounts,	       procfs_validfile_linux },
 	{ DT_REG, N("devices"),     PFSdevices,        procfs_validfile_linux },
-	{ DT_REG, N("stat"),	    PFScpustat,        procfs_validfile_linux },
-	{ DT_REG, N("loadavg"),	    PFSloadavg,        procfs_validfile_linux },
 #undef N
 };
 static const int nproc_root_targets =
@@ -320,20 +281,22 @@ procfs_open(v)
 	struct proc *p2;
 	int error;
 
-	if ((error = procfs_proc_lock(pfs->pfs_pid, &p2, ENOENT)) != 0)
-		return error;
-
 	l1 = ap->a_l;				/* tracer */
+	p2 = PFIND(pfs->pfs_pid);		/* traced */
+
+	if (p2 == NULL)
+		return (ENOENT);		/* was ESRCH, jsp */
+
+	if (ISSET(p2->p_flag, P_INEXEC))
+		return (EAGAIN);
 
 #define	M2K(m)	(((m) & FREAD) && ((m) & FWRITE) ? \
 		 KAUTH_REQ_PROCESS_CANPROCFS_RW : \
 		 (m) & FWRITE ? KAUTH_REQ_PROCESS_CANPROCFS_WRITE : \
 		 KAUTH_REQ_PROCESS_CANPROCFS_READ)
 
-	mutex_enter(&p2->p_mutex);
 	error = kauth_authorize_process(l1->l_cred, KAUTH_PROCESS_CANPROCFS,
 	    p2, pfs, KAUTH_ARG(M2K(ap->a_mode)), NULL);
-	mutex_exit(&p2->p_mutex);
 	if (error)
 		return (error);
 
@@ -342,10 +305,8 @@ procfs_open(v)
 	switch (pfs->pfs_type) {
 	case PFSmem:
 		if (((pfs->pfs_flags & FWRITE) && (ap->a_mode & O_EXCL)) ||
-		    ((pfs->pfs_flags & O_EXCL) && (ap->a_mode & FWRITE))) {
-			error = EBUSY;
-			break;
-		}
+		    ((pfs->pfs_flags & O_EXCL) && (ap->a_mode & FWRITE)))
+			return (EBUSY);
 
 		if (!proc_isunder(p2, l1))
 			return (EPERM);
@@ -366,8 +327,7 @@ procfs_open(v)
 		break;
 	}
 
-	procfs_proc_unlock(p2);
-	return (error);
+	return (0);
 }
 
 /*
@@ -414,7 +374,7 @@ procfs_close(v)
  * the vnode by calling vgone().  this may
  * be overkill and a waste of time since the
  * chances are that the process will still be
- * there.
+ * there and PFIND is not free.
  *
  * (vp) is locked on entry, but must be unlocked on exit.
  */
@@ -428,16 +388,10 @@ procfs_inactive(v)
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct pfsnode *pfs = VTOPFS(vp);
-	struct proc *p;
-	int error;
 
 	VOP_UNLOCK(vp, 0);
-
-	error = procfs_proc_lock(pfs->pfs_pid, &p, ESRCH);
-	if (error != 0 && (vp->v_flag & VXLOCK) == 0)
+	if (PFIND(pfs->pfs_pid) == NULL && (vp->v_flag & VXLOCK) == 0)
 		vgone(vp);
-	else
-		procfs_proc_unlock(p);
 
 	return (0);
 }
@@ -566,8 +520,6 @@ procfs_dir(pfstype t, struct lwp *caller, struct proc *target,
 	struct vnode *vp, *rvp = caller->l_proc->p_cwdi->cwdi_rdir;
 	char *bp;
 
-	LOCK_ASSERT(mutex_owned(&target->p_mutex));
-
 	bp = bpp ? *bpp : NULL;
 
 	switch (t) {
@@ -598,22 +550,14 @@ procfs_dir(pfstype t, struct lwp *caller, struct proc *target,
 
 	if (rvp == NULL)
 		rvp = rootvnode;
-	mutex_exit(&target->p_mutex);	/* XXXSMP */
 	if (vp == NULL || getcwd_common(vp, rvp, bp ? &bp : NULL, path,
 	    len / 2, 0, caller) != 0) {
 		vp = NULL;
 		if (bpp) {
-/* 
-			if (t == PFSexe) {
-				snprintf(path, len, "%s/%d/file"
-				    mp->mnt_stat.f_mntonname, pfs->pfs_pid);
-			} else */ {
-				bp = *bpp;
-				*--bp = '/';
-			}
+			bp = *bpp;
+			*--bp = '/';
 		}
 	}
-	mutex_enter(&target->p_mutex);	/* XXXSMP */
 
 	if (bpp)
 		*bpp = bp;
@@ -643,7 +587,6 @@ procfs_getattr(v)
 	struct pfsnode *pfs = VTOPFS(ap->a_vp);
 	struct vattr *vap = ap->a_vap;
 	struct proc *procp;
-	char *path;
 	int error;
 
 	/* first check the process still exists */
@@ -651,44 +594,20 @@ procfs_getattr(v)
 	case PFSroot:
 	case PFScurproc:
 	case PFSself:
-		procp = NULL;
+		procp = 0;
 		break;
 
 	default:
-		error = procfs_proc_lock(pfs->pfs_pid, &procp, ENOENT);
-		if (error != 0)
-			return (error);
-		break;
-	}
-
-	switch (pfs->pfs_type) {
-	case PFScwd:
-	case PFSchroot:
-	case PFSexe:
-		MALLOC(path, char *, MAXPATHLEN + 4, M_TEMP,
-		    M_WAITOK|M_CANFAIL);
-		if (path == NULL && procp != NULL) {
-			procfs_proc_unlock(procp);
-			return (ENOMEM);
-		}
-		break;
-
-	default:
-		path = NULL;
+		procp = PFIND(pfs->pfs_pid);
+		if (procp == NULL)
+			return (ENOENT);
 		break;
 	}
 
 	if (procp != NULL) {
-		mutex_enter(&procp->p_mutex);
-		error = kauth_authorize_process(kauth_cred_get(),
-		    KAUTH_PROCESS_CANSEE, procp, NULL, NULL, NULL);
-		mutex_exit(&procp->p_mutex);
-		if (error != 0) {
-		    	procfs_proc_unlock(procp);
-		    	if (path != NULL)
-		    		free(path, M_TEMP);
+		if (kauth_authorize_process(kauth_cred_get(),
+		    KAUTH_PROCESS_CANSEE, procp, NULL, NULL, NULL) != 0)
 			return (ENOENT);
-		}
 	}
 
 	error = 0;
@@ -732,7 +651,7 @@ procfs_getattr(v)
 		 * privilege, then rip away read/write permission so
 		 * that only root can gain access.
 		 */
-		if (procp->p_flag & PK_SUGID)
+		if (procp->p_flag & P_SUGID)
 			vap->va_mode &= ~(S_IRUSR|S_IWUSR);
 		/* FALLTHROUGH */
 	case PFSctl:
@@ -744,7 +663,6 @@ procfs_getattr(v)
 	case PFSmaps:
 	case PFScmdline:
 	case PFSemul:
-	case PFSstatm:
 		vap->va_nlink = 1;
 		vap->va_uid = kauth_cred_geteuid(procp->p_cred);
 		vap->va_gid = kauth_cred_getegid(procp->p_cred);
@@ -754,8 +672,6 @@ procfs_getattr(v)
 	case PFScpuinfo:
 	case PFSuptime:
 	case PFSmounts:
-	case PFScpustat:
-	case PFSloadavg:
 		vap->va_nlink = 1;
 		vap->va_uid = vap->va_gid = 0;
 		break;
@@ -799,12 +715,10 @@ procfs_getattr(v)
 	case PFSfd:
 		if (pfs->pfs_fd != -1) {
 			struct file *fp;
+			struct proc *pown;
 
-			fp = fd_getfile(procp->p_fd, pfs->pfs_fd);
-			if (fp == NULL) {
-				error = EBADF;
-				break;
-			}
+			if ((error = procfs_getfp(pfs, &pown, &fp)) != 0)
+				return error;
 			FILE_USE(fp);
 			vap->va_nlink = 1;
 			vap->va_uid = kauth_cred_geteuid(fp->f_cred);
@@ -818,7 +732,7 @@ procfs_getattr(v)
 				vap->va_bytes = vap->va_size = 0;
 				break;
 			}
-			FILE_UNUSE(fp, curlwp);
+			FILE_UNUSE(fp, proc_representative_lwp(pown));
 			break;
 		}
 		/*FALLTHROUGH*/
@@ -863,9 +777,6 @@ procfs_getattr(v)
 	case PFScpuinfo:
 	case PFSuptime:
 	case PFSmounts:
-	case PFScpustat:
-	case PFSloadavg:
-	case PFSstatm:
 		vap->va_bytes = vap->va_size = 0;
 		break;
 	case PFSmap:
@@ -881,18 +792,21 @@ procfs_getattr(v)
 	case PFScwd:
 	case PFSchroot:
 	case PFSexe: {
-		char *bp;
+		char *path, *bp;
 
+		MALLOC(path, char *, MAXPATHLEN + 4, M_TEMP,
+		    M_WAITOK|M_CANFAIL);
+		if (path == NULL)
+			return (ENOMEM);
 		vap->va_nlink = 1;
 		vap->va_uid = 0;
 		vap->va_gid = 0;
 		bp = path + MAXPATHLEN;
 		*--bp = '\0';
-		mutex_enter(&procp->p_mutex);
 		(void)procfs_dir(pfs->pfs_type, curlwp, procp, &bp, path,
 		     MAXPATHLEN);
-		mutex_exit(&procp->p_mutex);
 		vap->va_bytes = vap->va_size = strlen(bp);
+		free(path, M_TEMP);
 		break;
 	}
 
@@ -909,11 +823,6 @@ procfs_getattr(v)
 	default:
 		panic("procfs_getattr");
 	}
-
-	if (procp != NULL)
-		procfs_proc_unlock(procp);
-	if (path != NULL)
-		free(path, M_TEMP);
 
 	return (error);
 }
@@ -998,12 +907,11 @@ procfs_lookup(v)
 	const char *pname = cnp->cn_nameptr;
 	const struct proc_target *pt = NULL;
 	struct vnode *fvp;
-	pid_t pid, vnpid;
+	pid_t pid;
 	struct pfsnode *pfs;
 	struct proc *p = NULL;
 	struct lwp *l = NULL;
-	int i, error;
-	pfstype type;
+	int i, error, iscurproc = 0, isself = 0;
 
 	*vpp = NULL;
 
@@ -1025,6 +933,15 @@ procfs_lookup(v)
 		if (cnp->cn_flags & ISDOTDOT)
 			return (EIO);
 
+		iscurproc = CNEQ(cnp, "curproc", 7);
+		isself = CNEQ(cnp, "self", 4);
+
+		if (iscurproc || isself) {
+			error = procfs_allocvp(dvp->v_mount, vpp, 0,
+			    iscurproc ? PFScurproc : PFSself, -1);
+			return (error);
+		}
+
 		for (i = 0; i < nproc_root_targets; i++) {
 			pt = &proc_root_targets[i];
 			/*
@@ -1040,28 +957,17 @@ procfs_lookup(v)
 
 		if (i != nproc_root_targets) {
 			error = procfs_allocvp(dvp->v_mount, vpp, 0,
-			    pt->pt_pfstype, -1, NULL);
+			    pt->pt_pfstype, -1);
 			return (error);
 		}
 
-		if (CNEQ(cnp, "curproc", 7)) {
-			pid = curproc->p_pid;
-			vnpid = 0;
-			type = PFScurproc;
-		} else if (CNEQ(cnp, "self", 4)) {
-			pid = curproc->p_pid;
-			vnpid = 0;
-			type = PFSself;
-		} else {
-			pid = (pid_t)atoi(pname, cnp->cn_namelen);
-			vnpid = pid;
-			type = PFSproc;
-		}
+		pid = (pid_t)atoi(pname, cnp->cn_namelen);
 
-		if (procfs_proc_lock(pid, &p, ESRCH) != 0)
+		p = PFIND(pid);
+		if (p == NULL)
 			break;
-		error = procfs_allocvp(dvp->v_mount, vpp, vnpid, type, -1, p);
-		procfs_proc_unlock(p);
+
+		error = procfs_allocvp(dvp->v_mount, vpp, pid, PFSproc, -1);
 		return (error);
 
 	case PFSproc:
@@ -1078,51 +984,38 @@ procfs_lookup(v)
 			return (error);
 		}
 
-		if (procfs_proc_lock(pfs->pfs_pid, &p, ESRCH) != 0)
+		p = PFIND(pfs->pfs_pid);
+		if (p == NULL)
 			break;
+		l = proc_representative_lwp(p);
 
 		for (pt = proc_targets, i = 0; i < nproc_targets; pt++, i++) {
-			struct lwp *plwp;
-			int found;
-
-			mutex_enter(&p->p_smutex);
-			plwp = proc_representative_lwp(p, NULL, 1);
-			lwp_addref(plwp);
-			mutex_exit(&p->p_smutex);
-			found = cnp->cn_namelen == pt->pt_namlen &&
+			if (cnp->cn_namelen == pt->pt_namlen &&
 			    memcmp(pt->pt_name, pname, cnp->cn_namelen) == 0 &&
-			    (pt->pt_valid == NULL
-			      || (*pt->pt_valid)(plwp, dvp->v_mount));
-			lwp_delref(plwp);
-			if (found)
-				break;
+			    (pt->pt_valid == NULL || (p != NULL &&
+			      (*pt->pt_valid)(proc_representative_lwp(p),
+					      dvp->v_mount))))
+				goto found;
 		}
-		if (i == nproc_targets) {
-			procfs_proc_unlock(p);
-			break;
-		}
+		break;
+
+	found:
 		if (pt->pt_pfstype == PFSfile) {
 			fvp = p->p_textvp;
 			/* We already checked that it exists. */
 			VREF(fvp);
 			vn_lock(fvp, LK_EXCLUSIVE | LK_RETRY);
 			*vpp = fvp;
-			procfs_proc_unlock(p);
 			return (0);
 		}
 
 		error = procfs_allocvp(dvp->v_mount, vpp, pfs->pfs_pid,
-		    pt->pt_pfstype, -1, p);
-		procfs_proc_unlock(p);
+		    pt->pt_pfstype, -1);
 		return (error);
 
 	case PFSfd: {
 		int fd;
 		struct file *fp;
-
-		if ((error = procfs_proc_lock(pfs->pfs_pid, &p, ENOENT)) != 0)
-			return error;
-
 		/*
 		 * do the .. dance. We unlock the directory, and then
 		 * get the proc dir. That will automatically return ..
@@ -1131,21 +1024,14 @@ procfs_lookup(v)
 		if (cnp->cn_flags & ISDOTDOT) {
 			VOP_UNLOCK(dvp, 0);
 			error = procfs_allocvp(dvp->v_mount, vpp, pfs->pfs_pid,
-			    PFSproc, -1, p);
+			    PFSproc, -1);
 			vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
-			procfs_proc_unlock(p);
 			return (error);
 		}
 		fd = atoi(pname, cnp->cn_namelen);
-
-		mutex_enter(&p->p_mutex);
-		fp = fd_getfile(p->p_fd, fd);
-		mutex_exit(&p->p_mutex);
-		if (fp == NULL) {
-			procfs_proc_unlock(p);
+		p = PFIND(pfs->pfs_pid);
+		if (p == NULL || (fp = fd_getfile(p->p_fd, fd)) == NULL)
 			return ENOENT;
-		}
-
 		FILE_USE(fp);
 
 		switch (fp->f_type) {
@@ -1167,10 +1053,9 @@ procfs_lookup(v)
 		symlink:
 			FILE_UNUSE(fp, l);
 			error = procfs_allocvp(dvp->v_mount, vpp, pfs->pfs_pid,
-			    PFSfd, fd, p);
+			    PFSfd, fd);
 			break;
 		}
-		procfs_proc_unlock(p);
 		return error;
 	}
 	default:
@@ -1235,9 +1120,9 @@ procfs_root_readdir_callback(struct proc *p, void *arg)
 	    UIO_MX - offsetof(struct dirent, d_name), "%ld", (long)p->p_pid);
 	d.d_type = DT_DIR;
 
-	mutex_exit(&proclist_lock);
+	proclist_unlock_read();
 	error = uiomove(&d, UIO_MX, uiop);
-	mutex_enter(&proclist_lock);
+	proclist_lock_read();
 	if (error) {
 		ctxp->error = error;
 		return -1;
@@ -1285,7 +1170,6 @@ procfs_readdir(v)
 	struct vnode *vp;
 	const struct proc_target *pt;
 	struct procfs_root_readdir_ctx ctx;
-	struct lwp *l;
 
 	vp = ap->a_vp;
 	pfs = VTOPFS(vp);
@@ -1313,7 +1197,8 @@ procfs_readdir(v)
 		if (i >= nproc_targets)
 			return 0;
 
-		if (procfs_proc_lock(pfs->pfs_pid, &p, ESRCH) != 0)
+		p = PFIND(pfs->pfs_pid);
+		if (p == NULL)
 			break;
 
 		if (ap->a_ncookies) {
@@ -1325,14 +1210,9 @@ procfs_readdir(v)
 
 		for (pt = &proc_targets[i];
 		     uio->uio_resid >= UIO_MX && i < nproc_targets; pt++, i++) {
-			if (pt->pt_valid) {
-				/* XXXSMP locking */
-				mutex_enter(&p->p_smutex);
-				l = proc_representative_lwp(p, NULL, 1);
-				mutex_exit(&p->p_smutex);
-				if ((*pt->pt_valid)(l, vp->v_mount) == 0)
-					continue;
-			}
+			if (pt->pt_valid &&
+			    (*pt->pt_valid)(proc_representative_lwp(p), vp->v_mount) == 0)
+				continue;
 
 			d.d_fileno = PROCFS_FILENO(pfs->pfs_pid,
 			    pt->pt_pfstype, -1);
@@ -1346,7 +1226,6 @@ procfs_readdir(v)
 				*cookies++ = i + 1;
 		}
 
-		procfs_proc_unlock(p);
 	    	break;
 	}
 	case PFSfd: {
@@ -1355,22 +1234,19 @@ procfs_readdir(v)
 		struct file *fp;
 		int lim, nc = 0;
 
-		if ((error = procfs_proc_lock(pfs->pfs_pid, &p, ESRCH)) != 0)
-			return error;
+		p = PFIND(pfs->pfs_pid);
+		if (p == NULL)
+			return ESRCH;
 
 		if (kauth_authorize_process(kauth_cred_get(),
-		    KAUTH_PROCESS_CANSEE, p, NULL, NULL, NULL) != 0) {
-		    	procfs_proc_unlock(p);
+		    KAUTH_PROCESS_CANSEE, p, NULL, NULL, NULL) != 0)
 			return ESRCH;
-		}
 
-		fdp = p->p_fd;	/* XXXSMP */
+		fdp = p->p_fd;
 
 		lim = min((int)p->p_rlimit[RLIMIT_NOFILE].rlim_cur, maxfiles);
-		if (i >= lim) {
-		    	procfs_proc_unlock(p);
+		if (i >= lim)
 			return 0;
-		}
 
 		if (ap->a_ncookies) {
 			ncookies = min(ncookies, (fdp->fd_nfiles + 2 - i));
@@ -1413,7 +1289,6 @@ procfs_readdir(v)
 			nc++;
 		}
 		ncookies = nc;
-		procfs_proc_unlock(p);
 		break;
 	}
 
@@ -1554,71 +1429,58 @@ procfs_readlink(v)
 	else if (pfs->pfs_fileno == PROCFS_FILENO(pfs->pfs_pid, PFScwd, -1) ||
 	    pfs->pfs_fileno == PROCFS_FILENO(pfs->pfs_pid, PFSchroot, -1) ||
 	    pfs->pfs_fileno == PROCFS_FILENO(pfs->pfs_pid, PFSexe, -1)) {
-		if ((error = procfs_proc_lock(pfs->pfs_pid, &pown, ESRCH)) != 0)
-			return error;
+		pown = PFIND(pfs->pfs_pid);
+		if (pown == NULL)
+			return (ESRCH);
 		MALLOC(path, char *, MAXPATHLEN + 4, M_TEMP,
 		    M_WAITOK|M_CANFAIL);
-		if (path == NULL) {
-			procfs_proc_unlock(pown);
+		if (path == NULL)
 			return (ENOMEM);
-		}
 		bp = path + MAXPATHLEN;
 		*--bp = '\0';
-		mutex_enter(&pown->p_mutex);
 		(void)procfs_dir(PROCFS_TYPE(pfs->pfs_fileno), curlwp, pown,
 		    &bp, path, MAXPATHLEN);
-		mutex_exit(&pown->p_mutex);
-		procfs_proc_unlock(pown);
 		len = strlen(bp);
 	} else {
 		struct file *fp;
 		struct vnode *vxp, *vp;
 
-		if ((error = procfs_proc_lock(pfs->pfs_pid, &pown, ESRCH)) != 0)
+		if ((error = procfs_getfp(pfs, &pown, &fp)) != 0)
 			return error;
-
-		mutex_enter(&pown->p_mutex);
-		fp = fd_getfile(pown->p_fd, pfs->pfs_fd);
-		mutex_exit(&pown->p_mutex);
-		if (fp == NULL) {
-			procfs_proc_unlock(pown);
-			return EBADF;
-		}
-
 		FILE_USE(fp);
 		switch (fp->f_type) {
 		case DTYPE_VNODE:
 			vxp = (struct vnode *)fp->f_data;
 			if (vxp->v_type != VDIR) {
-				FILE_UNUSE(fp, curlwp);
-				error = EINVAL;
-				break;
+				FILE_UNUSE(fp, proc_representative_lwp(pown));
+				return EINVAL;
 			}
 			if ((path = malloc(MAXPATHLEN, M_TEMP, M_WAITOK))
 			    == NULL) {
-				FILE_UNUSE(fp, curlwp);
-				error = ENOMEM;
-				break;
+				FILE_UNUSE(fp, proc_representative_lwp(pown));
+				return ENOMEM;
 			}
 			bp = path + MAXPATHLEN;
 			*--bp = '\0';
 
-			/*
-			 * XXX: kludge to avoid locking against ourselves
-			 * in getcwd()
-			 */
-			if (vxp->v_tag == VT_PROCFS) {
-				*--bp = '/';
-			} else {
-				vp = curproc->p_cwdi->cwdi_rdir; /* XXXSMP */
-				if (vp == NULL)
-					vp = rootvnode;
-				error = getcwd_common(vxp, vp, &bp, path,
-				    MAXPATHLEN / 2, 0, curlwp);
+ 			/*
+ 			 * XXX: kludge to avoid locking against ourselves
+ 			 * in getcwd()
+ 			 */
+ 			if (vxp->v_tag == VT_PROCFS) {
+ 				*--bp = '/';
+ 			} else {
+ 				vp = curproc->p_cwdi->cwdi_rdir; /* XXXSMP */
+ 				if (vp == NULL)
+ 					vp = rootvnode;
+ 				error = getcwd_common(vxp, vp, &bp, path,
+ 				    MAXPATHLEN / 2, 0, curlwp);
+ 			}
+			FILE_UNUSE(fp, proc_representative_lwp(pown));
+			if (error) {
+				free(path, M_TEMP);
+				return error;
 			}
-			FILE_UNUSE(fp, curlwp);
-			if (error)
-				break;
 			len = strlen(bp);
 			break;
 
@@ -1631,14 +1493,11 @@ procfs_readlink(v)
 			break;
 
 		default:
-			error = EINVAL;
-			break;
-		}	
-		procfs_proc_unlock(pown);
+			return EINVAL;
+		}
 	}
 
-	if (error == 0)
-		error = uiomove(bp, len, ap->a_uio);
+	error = uiomove(bp, len, ap->a_uio);
 	if (path)
 		free(path, M_TEMP);
 	return error;

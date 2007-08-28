@@ -1,4 +1,4 @@
-/*	$NetBSD: rl.c,v 1.35 2007/07/29 12:15:44 ad Exp $	*/
+/*	$NetBSD: rl.c,v 1.30 2006/03/29 18:17:36 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2000 Ludd, University of Lule}, Sweden. All rights reserved.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rl.c,v 1.35 2007/07/29 12:15:44 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rl.c,v 1.30 2006/03/29 18:17:36 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -306,7 +306,9 @@ rlopen(dev_t dev, int flag, int fmt, struct lwp *l)
 
 	part = DISKPART(dev);
 
-	mutex_enter(&rc->rc_disk.dk_openlock);
+	if ((error = lockmgr(&rc->rc_disk.dk_openlock, LK_EXCLUSIVE,
+			     NULL)) != 0)
+		return (error);
 
 	/*
 	 * If there are wedges, and this is not RAW_PART, then we
@@ -361,20 +363,24 @@ rlopen(dev_t dev, int flag, int fmt, struct lwp *l)
 		break;
 	}
 	rc->rc_disk.dk_openmask |= mask;
-	error = 0;
+	(void) lockmgr(&rc->rc_disk.dk_openlock, LK_RELEASE, NULL);
+	return 0;
+
  bad1:
-	mutex_exit(&rc->rc_disk.dk_openlock);
+	(void) lockmgr(&rc->rc_disk.dk_openlock, LK_RELEASE, NULL);
 	return (error);
 }
 
 int
 rlclose(dev_t dev, int flag, int fmt, struct lwp *l)
 {
-	int unit = DISKUNIT(dev);
+	int error, unit = DISKUNIT(dev);
 	struct rl_softc *rc = rl_cd.cd_devs[unit];
 	int mask = (1 << DISKPART(dev));
 
-	mutex_enter(&rc->rc_disk.dk_openlock);
+	if ((error = lockmgr(&rc->rc_disk.dk_openlock, LK_EXCLUSIVE,
+			     NULL)) != 0)
+		return (error);
 
 	switch (fmt) {
 	case S_IFCHR:
@@ -389,7 +395,7 @@ rlclose(dev_t dev, int flag, int fmt, struct lwp *l)
 
 	if (rc->rc_disk.dk_openmask == 0)
 		rc->rc_state = DK_CLOSED; /* May change pack */
-	mutex_exit(&rc->rc_disk.dk_openlock);
+	(void) lockmgr(&rc->rc_disk.dk_openlock, LK_RELEASE, NULL);
 	return 0;
 }
 
@@ -406,6 +412,7 @@ rlstrategy(struct buf *bp)
 	unit = DISKUNIT(bp->b_dev);
 	if (unit > rl_cd.cd_ndevs || (rc = rl_cd.cd_devs[unit]) == NULL) {
 		bp->b_error = ENXIO;
+		bp->b_flags |= B_ERROR;
 		goto done;
 	}
 	if (rc->rc_state != DK_OPEN) /* How did we end up here at all? */
@@ -433,7 +440,7 @@ done:	biodone(bp);
 }
 
 int
-rlioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
+rlioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 {
 	struct rl_softc *rc = rl_cd.cd_devs[DISKUNIT(dev)];
 	struct disklabel *lp = rc->rc_disk.dk_label;
@@ -483,7 +490,9 @@ rlioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 		if ((flag & FWRITE) == 0)
 			err = EBADF;
 		else {
-			mutex_enter(&rc->rc_disk.dk_openlock);
+			if ((err = lockmgr(&rc->rc_disk.dk_openlock,
+					   LK_EXCLUSIVE, NULL)) != 0)
+				break;
 			err = ((
 #ifdef __HAVE_OLD_DISKLABEL
 			       cmd == ODIOCSDINFO ||
@@ -491,7 +500,8 @@ rlioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 			       cmd == DIOCSDINFO) ?
 			    setdisklabel(lp, tp, 0, 0) :
 			    writedisklabel(dev, rlstrategy, lp, 0));
-			mutex_exit(&rc->rc_disk.dk_openlock);
+			(void) lockmgr(&rc->rc_disk.dk_openlock,
+				       LK_RELEASE, NULL);
 		}
 		break;
 	}
@@ -554,7 +564,7 @@ rlsize(dev_t dev)
 }
 
 int
-rldump(dev_t dev, daddr_t blkno, void *va, size_t size)
+rldump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
 {
 	/* Not likely... */
 	return 0;
@@ -610,6 +620,7 @@ rlcintr(void *arg)
 		int error = (cs & RLCS_ERRMSK) >> 10;
 
 		printf("%s: %s\n", sc->sc_dev.dv_xname, rlerr[error]);
+		bp->b_flags |= B_ERROR;
 		bp->b_error = EIO;
 		bp->b_resid = bp->b_bcount;
 		sc->sc_bytecnt = 0;
@@ -691,7 +702,7 @@ rlcstart(struct rlc_softc *sc, struct buf *ob)
 	RL_WREG(RL_BA, (sc->sc_dmam->dm_segs[0].ds_addr & 0xffff));
 
 	/* Count up vars */
-	sc->sc_bufaddr = (char *)sc->sc_bufaddr + (blks*DEV_BSIZE);
+	sc->sc_bufaddr += (blks*DEV_BSIZE);
 	sc->sc_diskblk += blks;
 	sc->sc_bytecnt -= (blks*DEV_BSIZE);
 

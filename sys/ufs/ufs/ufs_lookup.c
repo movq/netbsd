@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_lookup.c,v 1.91 2007/07/23 14:58:04 pooka Exp $	*/
+/*	$NetBSD: ufs_lookup.c,v 1.80.2.2 2007/02/17 23:27:53 tron Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_lookup.c,v 1.91 2007/07/23 14:58:04 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_lookup.c,v 1.80.2.2 2007/02/17 23:27:53 tron Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ffs.h"
@@ -53,8 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_lookup.c,v 1.91 2007/07/23 14:58:04 pooka Exp $"
 #include <sys/vnode.h>
 #include <sys/kernel.h>
 #include <sys/kauth.h>
-#include <sys/fstrans.h>
-#include <sys/lwp.h>
 
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/dir.h>
@@ -171,8 +169,6 @@ ufs_lookup(void *v)
 		return (error);
 	}
 
-	fstrans_start(vdp->v_mount, FSTRANS_SHARED);
-
 	/*
 	 * Suppress search for slots unless creating
 	 * file and at end of pathname, in which case
@@ -248,7 +244,7 @@ ufs_lookup(void *v)
 		dp->i_offset = dp->i_diroff;
 		if ((entryoffsetinblock = dp->i_offset & bmask) &&
 		    (error = ufs_blkatoff(vdp, (off_t)dp->i_offset, NULL, &bp)))
-			goto out;
+			return (error);
 		numdirpasses = 2;
 		nchstats.ncs_2passes++;
 	}
@@ -259,7 +255,7 @@ ufs_lookup(void *v)
 searchloop:
 	while (dp->i_offset < endsearch) {
 		if (curcpu()->ci_schedstate.spc_flags & SPCF_SHOULDYIELD)
-			preempt();
+			preempt(1);
 		/*
 		 * If necessary, get the next directory block.
 		 */
@@ -269,11 +265,11 @@ searchloop:
 			error = ufs_blkatoff(vdp, (off_t)dp->i_offset, NULL,
 			    &bp);
 			if (error)
-				goto out;
+				return (error);
 			entryoffsetinblock = 0;
 		}
 		/*
-		 * If still looking for a slot, and at a DIRBLKSIZ
+		 * If still looking for a slot, and at a DIRBLKSIZE
 		 * boundary, have to start looking for free space again.
 		 */
 		if (slotstatus == NONE &&
@@ -426,7 +422,7 @@ notfound:
 		 */
 		error = VOP_ACCESS(vdp, VWRITE, cred, cnp->cn_lwp);
 		if (error)
-			goto out;
+			return (error);
 		/*
 		 * Return an indication of where the new directory
 		 * entry should be put.  If we didn't find a slot,
@@ -470,16 +466,14 @@ notfound:
 		 * information cannot be used.
 		 */
 		cnp->cn_flags |= SAVENAME;
-		error = EJUSTRETURN;
-		goto out;
+		return (EJUSTRETURN);
 	}
 	/*
 	 * Insert name into cache (as non-existent) if appropriate.
 	 */
 	if ((cnp->cn_flags & MAKEENTRY) && nameiop != CREATE)
 		cache_enter(vdp, *vpp, cnp);
-	error = ENOENT;
-	goto out;
+	return (ENOENT);
 
 found:
 	if (numdirpasses == 2)
@@ -515,7 +509,7 @@ found:
 		 */
 		error = VOP_ACCESS(vdp, VWRITE, cred, cnp->cn_lwp);
 		if (error)
-			goto out;
+			return (error);
 		/*
 		 * Return pointer to current entry in dp->i_offset,
 		 * and distance past previous entry (if there
@@ -529,8 +523,7 @@ found:
 		if (dp->i_number == foundino) {
 			VREF(vdp);
 			*vpp = vdp;
-			error = 0;
-			goto out;
+			return (0);
 		}
 		if (flags & ISDOTDOT)
 			VOP_UNLOCK(vdp, 0); /* race to get the inode */
@@ -538,7 +531,7 @@ found:
 		if (flags & ISDOTDOT)
 			vn_lock(vdp, LK_EXCLUSIVE | LK_RETRY);
 		if (error)
-			goto out;
+			return (error);
 		/*
 		 * If directory is "sticky", then user must own
 		 * the directory, or the file in it, else she
@@ -546,17 +539,14 @@ found:
 		 * implements append-only directories.
 		 */
 		if ((dp->i_mode & ISVTX) &&
-		    kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-		     NULL) != 0 &&
+		    kauth_cred_geteuid(cred) != 0 &&
 		    kauth_cred_geteuid(cred) != dp->i_uid &&
 		    VTOI(tdp)->i_uid != kauth_cred_geteuid(cred)) {
 			vput(tdp);
-			error = EPERM;
-			goto out;
+			return (EPERM);
 		}
 		*vpp = tdp;
-		error = 0;
-		goto out;
+		return (0);
 	}
 
 	/*
@@ -568,26 +558,23 @@ found:
 	if (nameiop == RENAME && (flags & ISLASTCN)) {
 		error = VOP_ACCESS(vdp, VWRITE, cred, cnp->cn_lwp);
 		if (error)
-			goto out;
+			return (error);
 		/*
 		 * Careful about locking second inode.
 		 * This can only occur if the target is ".".
 		 */
-		if (dp->i_number == foundino) {
-			error = EISDIR;
-			goto out;
-		}
+		if (dp->i_number == foundino)
+			return (EISDIR);
 		if (flags & ISDOTDOT)
 			VOP_UNLOCK(vdp, 0); /* race to get the inode */
 		error = VFS_VGET(vdp->v_mount, foundino, &tdp);
 		if (flags & ISDOTDOT)
 			vn_lock(vdp, LK_EXCLUSIVE | LK_RETRY);
 		if (error)
-			goto out;
+			return (error);
 		*vpp = tdp;
 		cnp->cn_flags |= SAVENAME;
-		error = 0;
-		goto out;
+		return (0);
 	}
 
 	/*
@@ -615,7 +602,7 @@ found:
 		error = VFS_VGET(vdp->v_mount, foundino, &tdp);
 		vn_lock(pdp, LK_EXCLUSIVE | LK_RETRY);
 		if (error) {
-			goto out;
+			return error;
 		}
 		*vpp = tdp;
 	} else if (dp->i_number == foundino) {
@@ -624,7 +611,7 @@ found:
 	} else {
 		error = VFS_VGET(vdp->v_mount, foundino, &tdp);
 		if (error)
-			goto out;
+			return (error);
 		*vpp = tdp;
 	}
 
@@ -633,11 +620,7 @@ found:
 	 */
 	if (cnp->cn_flags & MAKEENTRY)
 		cache_enter(vdp, *vpp, cnp);
-	error = 0;
-
-out:
-	fstrans_done(vdp->v_mount);
-	return error;
+	return (0);
 }
 
 void
@@ -803,7 +786,8 @@ ufs_direnter(struct vnode *dvp, struct vnode *tvp, struct direct *dirp,
 			}
 		}
 		blkoff = dp->i_offset & (ump->um_mountp->mnt_stat.f_iosize - 1);
-		memcpy((char *)bp->b_data + blkoff, dirp, newentrysize);
+		memcpy((caddr_t)bp->b_data + blkoff, (caddr_t)dirp,
+		    newentrysize);
 #ifdef UFS_DIRHASH
 		if (dp->i_dirhash != NULL) {
 			ufsdirhash_newblk(dp, dp->i_offset);
@@ -822,7 +806,7 @@ ufs_direnter(struct vnode *dvp, struct vnode *tvp, struct direct *dirp,
 			blkoff += dirblksiz;
 			while (blkoff < bp->b_bcount) {
 				((struct direct *)
-				   ((char *)bp->b_data + blkoff))->d_reclen = dirblksiz;
+				   (bp->b_data + blkoff))->d_reclen = dirblksiz;
 				blkoff += dirblksiz;
 			}
 			if (softdep_setup_directory_add(bp, dp, dp->i_offset,
@@ -872,7 +856,7 @@ ufs_direnter(struct vnode *dvp, struct vnode *tvp, struct direct *dirp,
 	/*
 	 * Increase size of directory if entry eats into new space.
 	 * This should never push the size past a new multiple of
-	 * DIRBLKSIZ.
+	 * DIRBLKSIZE.
 	 *
 	 * N.B. - THIS IS AN ARTIFACT OF 4.2 AND SHOULD NEVER HAPPEN.
 	 */
@@ -934,9 +918,9 @@ ufs_direnter(struct vnode *dvp, struct vnode *tvp, struct direct *dirp,
 #endif
 		if (DOINGSOFTDEP(dvp))
 			softdep_change_directoryentry_offset(dp, dirbuf,
-			    (void *)nep, (void *)ep, dsize);
+			    (caddr_t)nep, (caddr_t)ep, dsize);
 		else
-			memcpy((void *)ep, (void *)nep, dsize);
+			memcpy((caddr_t)ep, (caddr_t)nep, dsize);
 	}
 	/*
 	 * Here, `ep' points to a directory entry containing `dsize' in-use
@@ -978,7 +962,7 @@ ufs_direnter(struct vnode *dvp, struct vnode *tvp, struct direct *dirp,
 	    dirp->d_reclen == spacefree))
 		ufsdirhash_add(dp, dirp, dp->i_offset + ((char *)ep - dirbuf));
 #endif
-	memcpy((void *)ep, (void *)dirp, (u_int)newentrysize);
+	memcpy((caddr_t)ep, (caddr_t)dirp, (u_int)newentrysize);
 #ifdef UFS_DIRHASH
 	if (dp->i_dirhash != NULL)
 		ufsdirhash_checkblock(dp, dirbuf -
@@ -987,7 +971,7 @@ ufs_direnter(struct vnode *dvp, struct vnode *tvp, struct direct *dirp,
 #endif
 	if (DOINGSOFTDEP(dvp)) {
 		softdep_setup_directory_add(bp, dp,
-		    dp->i_offset + (char *)ep - dirbuf,
+		    dp->i_offset + (caddr_t)ep - dirbuf,
 			ufs_rw32(dirp->d_ino, needswap), newdirbp, 0);
 		bdwrite(bp);
 	} else {
@@ -1186,7 +1170,7 @@ ufs_dirempty(struct inode *ip, ino_t parentino, kauth_cred_t cred)
 
 	for (off = 0; off < ip->i_size;
 	    off += ufs_rw16(dp->d_reclen, needswap)) {
-		error = vn_rdwr(UIO_READ, ITOV(ip), (void *)dp, MINDIRSIZ, off,
+		error = vn_rdwr(UIO_READ, ITOV(ip), (caddr_t)dp, MINDIRSIZ, off,
 		   UIO_SYSSPACE, IO_NODELOCKED, cred, &count, NULL);
 		/*
 		 * Since we read MINDIRSIZ, residual must
@@ -1260,7 +1244,7 @@ ufs_checkpath(struct inode *source, struct inode *target, kauth_cred_t cred)
 			error = ENOTDIR;
 			break;
 		}
-		error = vn_rdwr(UIO_READ, vp, (void *)&dirbuf,
+		error = vn_rdwr(UIO_READ, vp, (caddr_t)&dirbuf,
 		    sizeof (struct dirtemplate), (off_t)0, UIO_SYSSPACE,
 		    IO_NODELOCKED, cred, NULL, NULL);
 		if (error != 0)

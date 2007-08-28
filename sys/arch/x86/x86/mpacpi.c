@@ -1,4 +1,4 @@
-/*	$NetBSD: mpacpi.c,v 1.49 2007/08/10 14:34:56 joerg Exp $	*/
+/*	$NetBSD: mpacpi.c,v 1.44.2.2 2007/10/14 00:32:19 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpacpi.c,v 1.49 2007/08/10 14:34:56 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpacpi.c,v 1.44.2.2 2007/10/14 00:32:19 xtraeme Exp $");
 
 #include "acpi.h"
 #include "opt_acpi.h"
@@ -78,8 +78,6 @@ __KERNEL_RCSID(0, "$NetBSD: mpacpi.c,v 1.49 2007/08/10 14:34:56 joerg Exp $");
 #include "ioapic.h"
 #include "lapic.h"
 
-#include "locators.h"
-
 #define ACPI_STA_OK (ACPI_STA_DEV_PRESENT|ACPI_STA_DEV_ENABLED|ACPI_STA_DEV_OK)
 
 /* XXX room for PCI-to-PCI bus */
@@ -97,8 +95,9 @@ static TAILQ_HEAD(, mpacpi_pcibus) mpacpi_pcibusses;
 
 #endif
 
-static int mpacpi_cpuprint(void *, const char *);
-static int mpacpi_ioapicprint(void *, const char *);
+static int mpacpi_print(void *, const char *);
+static int mpacpi_submatch(struct device *, struct cfdata *,
+	const int *, void *);
 
 /* acpi_madt_walk callbacks */
 static ACPI_STATUS mpacpi_count(APIC_HEADER *, void *);
@@ -135,6 +134,8 @@ static int mpacpi_maxpci;
 static int mpacpi_npciroots;
 #endif
 
+struct mp_intr_map *mpacpi_sci_override;
+
 static int mpacpi_intr_index;
 static paddr_t mpacpi_lapic_base = LAPIC_BASE;
 
@@ -142,25 +143,23 @@ int mpacpi_step;
 int mpacpi_force;
 
 static int
-mpacpi_cpuprint(void *aux, const char *pnp)
+mpacpi_print(void *aux, const char *pnp)
 {
-	struct cpu_attach_args *caa = aux;
-
+	struct cpu_attach_args * caa = (struct cpu_attach_args *) aux;
 	if (pnp)
-		printf("cpu at %s", pnp);
-	printf(" apid %d", caa->cpu_number);
+		printf("%s at %s:",caa->caa_name, pnp);
 	return (UNCONF);
 }
 
 static int
-mpacpi_ioapicprint(void *aux, const char *pnp)
+mpacpi_submatch(struct device *parent, struct cfdata *cf,
+	const int *ldesc, void *aux)
 {
-	struct apic_attach_args *aaa = aux;
+	struct cpu_attach_args * caa = (struct cpu_attach_args *) aux;
+	if (strcmp(caa->caa_name, cf->cf_name))
+		return 0;
 
-	if (pnp)
-		printf("ioapic at %s", pnp);
-	printf(" apid %d", aaa->apic_id);
-	return (UNCONF);
+	return (config_match(parent, cf, aux));
 }
 
 /*
@@ -226,12 +225,9 @@ mpacpi_nonpci_intr(APIC_HEADER *hdrp, void *aux)
 		break;
 	case APIC_XRUPT_OVERRIDE:
 		isa_ovr = (MADT_INTERRUPT_OVERRIDE *)hdrp;
-		if (mp_verbose) {
-			printf("mpacpi: ISA interrupt override %d -> %d (%d/%d)\n",
-			    isa_ovr->Source, isa_ovr->Interrupt,
-			    isa_ovr->Polarity,
-			    isa_ovr->TriggerMode);
-		}
+		if (mp_verbose)
+			printf("mpacpi: ISA interrupt override  %d -> %d\n",
+			    isa_ovr->Source, isa_ovr->Interrupt);
 		if (isa_ovr->Source > 15 || isa_ovr->Source == 2 ||
 		    (isa_ovr->Source == 0 && isa_ovr->Interrupt == 2 &&
 			(acpi_softc->sc_quirks & ACPI_QUIRK_IRQ0)))
@@ -289,6 +285,9 @@ mpacpi_nonpci_intr(APIC_HEADER *hdrp, void *aux)
 		if (pic->pic_type == PIC_IOAPIC)
 			((struct ioapic_softc *)pic)->sc_pins[pin].ip_map = mpi;
 #endif
+		if (isa_ovr->Source == AcpiGbl_FADT->SciInt)
+			mpacpi_sci_override = mpi;
+			
 	default:
 		break;
 	}
@@ -331,7 +330,6 @@ mpacpi_config_cpu(APIC_HEADER *hdrp, void *aux)
 	MADT_PROCESSOR_APIC *p;
 	struct cpu_attach_args caa;
 	int cpunum = 0;
-	int locs[CPUBUSCF_NLOCS];
 
 #if defined(MULTIPROCESSOR) || defined(IOAPIC)
 	if (mpacpi_ncpu > 1)
@@ -345,11 +343,11 @@ mpacpi_config_cpu(APIC_HEADER *hdrp, void *aux)
 				caa.cpu_role = CPU_ROLE_AP;
 			else
 				caa.cpu_role = CPU_ROLE_BP;
+			caa.caa_name = "cpu";
 			caa.cpu_number = p->LocalApicId;
 			caa.cpu_func = &mp_cpu_funcs;
-			locs[CPUBUSCF_APID] = caa.cpu_number;
-			config_found_sm_loc(parent, "cpubus", locs,
-				&caa, mpacpi_cpuprint, config_stdsubmatch);
+			config_found_sm_loc(parent, "cpubus", NULL,
+				&caa, mpacpi_print, mpacpi_submatch);
 		}
 	}
 	return AE_OK;
@@ -361,24 +359,23 @@ mpacpi_config_ioapic(APIC_HEADER *hdrp, void *aux)
 	struct device *parent = aux;
 	struct apic_attach_args aaa;
 	MADT_IO_APIC *p;
-	int locs[IOAPICBUSCF_NLOCS];
 
 	if (hdrp->Type == APIC_IO) {
 		p = (MADT_IO_APIC *)hdrp;
+		aaa.aaa_name = "ioapic";
 		aaa.apic_id = p->IoApicId;
 		aaa.apic_address = p->Address;
 		aaa.apic_version = -1;
 		aaa.flags = IOAPIC_VWIRE;
 		aaa.apic_vecbase = p->Interrupt;
-		locs[IOAPICBUSCF_APID] = aaa.apic_id;
-		config_found_sm_loc(parent, "ioapicbus", locs, &aaa,
-			mpacpi_ioapicprint, config_stdsubmatch);
+		config_found_sm_loc(parent, "cpubus", NULL, &aaa,
+			mpacpi_print, mpacpi_submatch);
 	}
 	return AE_OK;
 }
 
 int
-mpacpi_scan_apics(struct device *self, int *ncpup, int *napic)
+mpacpi_scan_apics(struct device *self, int *ncpu, int *napic)
 {
 	int rv = 0;
 
@@ -410,7 +407,7 @@ mpacpi_scan_apics(struct device *self, int *ncpup, int *napic)
 #endif
 	rv = 1;
 done:
-	*ncpup = mpacpi_ncpu;
+	*ncpu = mpacpi_ncpu;
 	*napic = mpacpi_nioapic;
 	acpi_madt_unmap();
 	return rv;

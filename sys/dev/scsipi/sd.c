@@ -1,4 +1,4 @@
-/*	$NetBSD: sd.c,v 1.265 2007/08/03 13:56:37 tsutsui Exp $	*/
+/*	$NetBSD: sd.c,v 1.258.2.1 2007/07/31 21:47:15 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003, 2004 The NetBSD Foundation, Inc.
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sd.c,v 1.265 2007/08/03 13:56:37 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sd.c,v 1.258.2.1 2007/07/31 21:47:15 liamjfoy Exp $");
 
 #include "opt_scsi.h"
 #include "rnd.h"
@@ -240,7 +240,7 @@ sdattach(struct device *parent, struct device *self, void *aux)
 
 	bufq_alloc(&sd->buf_queue, BUFQ_DISK_DEFAULT_STRAT, BUFQ_SORT_RAWBLOCK);
 
-	callout_init(&sd->sc_callout, 0);
+	callout_init(&sd->sc_callout);
 
 	/*
 	 * Store information needed to contact our base driver
@@ -426,7 +426,8 @@ sdopen(dev_t dev, int flag, int fmt, struct lwp *l)
 
 	part = SDPART(dev);
 
-	mutex_enter(&sd->sc_dk.dk_openlock);
+	if ((error = lockmgr(&sd->sc_dk.dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
+		return (error);
 
 	/*
 	 * If there are wedges, and this is not RAW_PART, then we
@@ -567,7 +568,7 @@ sdopen(dev_t dev, int flag, int fmt, struct lwp *l)
 	    sd->sc_dk.dk_copenmask | sd->sc_dk.dk_bopenmask;
 
 	SC_DEBUG(periph, SCSIPI_DB3, ("open complete\n"));
-	mutex_exit(&sd->sc_dk.dk_openlock);
+	(void) lockmgr(&sd->sc_dk.dk_openlock, LK_RELEASE, NULL);
 	return (0);
 
  bad3:
@@ -585,7 +586,7 @@ sdopen(dev_t dev, int flag, int fmt, struct lwp *l)
 		scsipi_adapter_delref(adapt);
 
  bad1:
-	mutex_exit(&sd->sc_dk.dk_openlock);
+	(void) lockmgr(&sd->sc_dk.dk_openlock, LK_RELEASE, NULL);
 	return (error);
 }
 
@@ -600,8 +601,11 @@ sdclose(dev_t dev, int flag, int fmt, struct lwp *l)
 	struct scsipi_periph *periph = sd->sc_periph;
 	struct scsipi_adapter *adapt = periph->periph_channel->chan_adapter;
 	int part = SDPART(dev);
+	int error;
 
-	mutex_enter(&sd->sc_dk.dk_openlock);
+	if ((error = lockmgr(&sd->sc_dk.dk_openlock, LK_EXCLUSIVE, NULL)) != 0)
+		return (error);
+
 	switch (fmt) {
 	case S_IFCHR:
 		sd->sc_dk.dk_copenmask &= ~(1 << part);
@@ -641,7 +645,7 @@ sdclose(dev_t dev, int flag, int fmt, struct lwp *l)
 		scsipi_adapter_delref(adapt);
 	}
 
-	mutex_exit(&sd->sc_dk.dk_openlock);
+	(void) lockmgr(&sd->sc_dk.dk_openlock, LK_RELEASE, NULL);
 	return (0);
 }
 
@@ -658,7 +662,7 @@ sdstrategy(struct buf *bp)
 	struct disklabel *lp;
 	daddr_t blkno;
 	int s;
-	bool sector_aligned;
+	boolean_t sector_aligned;
 
 	SC_DEBUG(sd->sc_periph, SCSIPI_DB2, ("sdstrategy "));
 	SC_DEBUG(sd->sc_periph, SCSIPI_DB1,
@@ -672,7 +676,7 @@ sdstrategy(struct buf *bp)
 			bp->b_error = EIO;
 		else
 			bp->b_error = ENODEV;
-		goto done;
+		goto bad;
 	}
 
 	lp = sd->sc_dk.dk_label;
@@ -688,7 +692,7 @@ sdstrategy(struct buf *bp)
 	}
 	if (!sector_aligned || bp->b_blkno < 0) {
 		bp->b_error = EINVAL;
-		goto done;
+		goto bad;
 	}
 	/*
 	 * If it's a null transfer, return immediatly
@@ -745,6 +749,8 @@ sdstrategy(struct buf *bp)
 	splx(s);
 	return;
 
+bad:
+	bp->b_flags |= B_ERROR;
 done:
 	/*
 	 * Correctly set the buf to indicate a completed xfer
@@ -794,7 +800,7 @@ sdstart(struct scsipi_periph *periph)
 		 */
 		if (periph->periph_flags & PERIPH_WAITING) {
 			periph->periph_flags &= ~PERIPH_WAITING;
-			wakeup((void *)periph);
+			wakeup((caddr_t)periph);
 			return;
 		}
 
@@ -807,6 +813,7 @@ sdstart(struct scsipi_periph *periph)
 		    (periph->periph_flags & PERIPH_MEDIA_LOADED) == 0)) {
 			if ((bp = BUFQ_GET(sd->buf_queue)) != NULL) {
 				bp->b_error = EIO;
+				bp->b_flags |= B_ERROR;
 				bp->b_resid = bp->b_bcount;
 				biodone(bp);
 				continue;
@@ -941,7 +948,8 @@ sddone(struct scsipi_xfer *xs, int error)
 		bp->b_resid = xs->resid;
 		if (error) {
 			/* on a read/write error bp->b_resid is zero, so fix */
-			bp->b_resid = bp->b_bcount;
+			bp->b_resid  =bp->b_bcount;
+			bp->b_flags |= B_ERROR;
 		}
 
 		disk_unbusy(&sd->sc_dk, bp->b_bcount - bp->b_resid,
@@ -1002,7 +1010,7 @@ sdwrite(dev_t dev, struct uio *uio, int ioflag)
  * Knows about the internals of this device
  */
 static int
-sdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
+sdioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 {
 	struct sd_softc *sd = sd_cd.cd_devs[SDUNIT(dev)];
 	struct scsipi_periph *periph = sd->sc_periph;
@@ -1091,7 +1099,9 @@ sdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 #endif
 		lp = (struct disklabel *)addr;
 
-		mutex_enter(&sd->sc_dk.dk_openlock);
+		if ((error = lockmgr(&sd->sc_dk.dk_openlock,
+				     LK_EXCLUSIVE, NULL)) != 0)
+			goto bad;
 		sd->flags |= SDF_LABELLING;
 
 		error = setdisklabel(sd->sc_dk.dk_label,
@@ -1109,7 +1119,8 @@ sdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 		}
 
 		sd->flags &= ~SDF_LABELLING;
-		mutex_exit(&sd->sc_dk.dk_openlock);
+		(void) lockmgr(&sd->sc_dk.dk_openlock, LK_RELEASE, NULL);
+bad:
 #ifdef __HAVE_OLD_DISKLABEL
 		if (newlabel != NULL)
 			free(newlabel, M_TEMP);
@@ -1481,7 +1492,7 @@ static int sddoingadump;
  * at offset 'dumplo' into the partition.
  */
 static int
-sddump(dev_t dev, daddr_t blkno, void *va, size_t size)
+sddump(dev_t dev, daddr_t blkno, caddr_t va, size_t size)
 {
 	struct sd_softc *sd;	/* disk unit to do the I/O */
 	struct disklabel *lp;	/* disk's disklabel */
@@ -1587,7 +1598,7 @@ sddump(dev_t dev, daddr_t blkno, void *va, size_t size)
 		/* update block count */
 		totwrt -= nwrt;
 		blkno += nwrt;
-		va = (char *)va + sectorsize * nwrt;
+		va += sectorsize * nwrt;
 	}
 	sddoingadump = 0;
 	return (0);
@@ -1678,37 +1689,24 @@ sd_read_capacity(struct scsipi_periph *periph, int *blksize, int flags)
 	union {
 		struct scsipi_read_capacity_10_data data;
 		struct scsipi_read_capacity_16_data data16;
-	} *datap;
-	uint64_t rv;
+	} data;
 
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.cmd.opcode = READ_CAPACITY_10;
 
 	/*
-	 * Don't allocate data buffer on stack;
-	 * The lower driver layer might use the same stack and
-	 * if it uses region which is in the same cacheline,
-	 * cache flush ops against the data buffer won't work properly.
-	 */
-	datap = malloc(sizeof(*datap), M_TEMP, M_WAITOK);
-	if (datap == NULL)
-		return 0;
-
-	/*
 	 * If the command works, interpret the result as a 4 byte
 	 * number of blocks
 	 */
-	rv = 0;
-	memset(datap, 0, sizeof(datap->data));
+	memset(&data.data, 0, sizeof(data.data));
 	if (scsipi_command(periph, (void *)&cmd.cmd, sizeof(cmd.cmd),
-	    (void *)datap, sizeof(datap->data), SCSIPIRETRIES, 20000, NULL,
-	    flags | XS_CTL_DATA_IN | XS_CTL_SILENT) != 0)
-		goto out;
+	    (void *)&data.data, sizeof(data.data), SCSIPIRETRIES, 20000, NULL,
+	    flags | XS_CTL_DATA_IN | XS_CTL_DATA_ONSTACK | XS_CTL_SILENT) != 0)
+		return (0);
 
-	if (_4btol(datap->data.addr) != 0xffffffff) {
-		*blksize = _4btol(datap->data.length);
-		rv = _4btol(datap->data.addr) + 1;
-		goto out;
+	if (_4btol(data.data.addr) != 0xffffffff) {
+		*blksize = _4btol(data.data.length);
+		return (_4btol(data.data.addr) + 1);
 	}
 
 	/*
@@ -1719,20 +1717,17 @@ sd_read_capacity(struct scsipi_periph *periph, int *blksize, int flags)
 	memset(&cmd, 0, sizeof(cmd));
 	cmd.cmd16.opcode = READ_CAPACITY_16;
 	cmd.cmd16.byte2 = SRC16_SERVICE_ACTION;
-	_lto4b(sizeof(datap->data16), cmd.cmd16.len);
+	_lto4b(sizeof(data.data16), cmd.cmd16.len);
 
-	memset(datap, 0, sizeof(datap->data16));
+	memset(&data.data16, 0, sizeof(data.data16));
 	if (scsipi_command(periph, (void *)&cmd.cmd16, sizeof(cmd.cmd16),
-	    (void *)datap, sizeof(datap->data16), SCSIPIRETRIES, 20000, NULL,
-	    flags | XS_CTL_DATA_IN | XS_CTL_SILENT) != 0)
-		goto out;
+	    (void *)&data.data16, sizeof(data.data16), SCSIPIRETRIES, 20000,
+	    NULL,
+	    flags | XS_CTL_DATA_IN | XS_CTL_DATA_ONSTACK | XS_CTL_SILENT) != 0)
+		return (0);
 
-	*blksize = _4btol(datap->data16.length);
-	rv = _8btol(datap->data16.addr) + 1;
-
- out:
-	free(datap, M_TEMP);
-	return rv;
+	*blksize = _4btol(data.data16.length);
+	return (_8btol(data.data16.addr) + 1);
 }
 
 static int

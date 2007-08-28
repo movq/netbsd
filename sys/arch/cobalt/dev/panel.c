@@ -1,4 +1,4 @@
-/* $NetBSD: panel.c,v 1.13 2007/07/09 20:52:09 ad Exp $ */
+/* $NetBSD: panel.c,v 1.10 2006/04/06 11:50:19 tsutsui Exp $ */
 
 /*
  * Copyright (c) 2002 Dennis I. Chernoivanov
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: panel.c,v 1.13 2007/07/09 20:52:09 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: panel.c,v 1.10 2006/04/06 11:50:19 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: panel.c,v 1.13 2007/07/09 20:52:09 ad Exp $");
 #include <sys/device.h>
 #include <sys/callout.h>
 #include <sys/select.h>
+#include <sys/conf.h>
 
 #include <machine/bus.h>
 #include <machine/autoconf.h>
@@ -141,7 +142,7 @@ panel_attach(struct device *parent, struct device *self, void *aux)
 
 	lcdkp_attach_subr(&sc->sc_kp);
 
-	callout_init(&sc->sc_callout, 0);
+	callout_init(&sc->sc_callout);
 
 	printf("\n");
 }
@@ -233,7 +234,7 @@ panelwrite(dev_t dev, struct uio *uio, int flag)
 }
 
 int
-panelioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+panelioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct panel_softc *sc = device_lookup(&panel_cd, minor(dev));
 

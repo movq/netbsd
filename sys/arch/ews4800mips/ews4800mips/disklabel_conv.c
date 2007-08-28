@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel_conv.c,v 1.3 2007/02/22 05:31:53 thorpej Exp $	*/
+/*	$NetBSD: disklabel_conv.c,v 1.1 2005/12/29 15:20:08 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disklabel_conv.c,v 1.3 2007/02/22 05:31:53 thorpej Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disklabel_conv.c,v 1.1 2005/12/29 15:20:08 tsutsui Exp $");
 
 #include <sys/systm.h>
 #include <sys/param.h>
@@ -280,13 +280,13 @@ vtoc_to_disklabel(struct cpu_disklabel *ux, struct disklabel *d)
 	d->d_checksum = dkcksum(d);
 }
 
-bool
+boolean_t
 disklabel_sanity(struct disklabel *d)
 {
 
 	if (d->d_magic != DISKMAGIC || d->d_magic2 != DISKMAGIC ||
 	    dkcksum(d) != 0)
-		return false;
+		return FALSE;
 
-	return true;
+	return TRUE;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: hmevar.h,v 1.15 2007/03/04 06:01:55 christos Exp $	*/
+/*	$NetBSD: hmevar.h,v 1.14 2005/12/11 12:21:26 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -46,14 +46,14 @@
 
 struct hme_ring {
 	/* Ring Descriptors */
-	void *		rb_membase;	/* Packet buffer: CPU address */
+	caddr_t		rb_membase;	/* Packet buffer: CPU address */
 	bus_addr_t	rb_dmabase;	/* Packet buffer: DMA address */
-	void *		rb_txd;		/* Transmit descriptors */
+	caddr_t		rb_txd;		/* Transmit descriptors */
 	bus_addr_t	rb_txddma;	/* DMA address of same */
-	void *		rb_rxd;		/* Receive descriptors */
+	caddr_t		rb_rxd;		/* Receive descriptors */
 	bus_addr_t	rb_rxddma;	/* DMA address of same */
-	void *		rb_txbuf;	/* Transmit buffers */
-	void *		rb_rxbuf;	/* Receive buffers */
+	caddr_t		rb_txbuf;	/* Transmit buffers */
+	caddr_t		rb_rxbuf;	/* Receive buffers */
 	int		rb_ntbuf;	/* # of transmit buffers */
 	int		rb_nrbuf;	/* # of receive buffers */
 

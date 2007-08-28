@@ -1,4 +1,4 @@
-/* $NetBSD: if_bce.c,v 1.17 2007/07/19 22:04:22 dsl Exp $	 */
+/* $NetBSD: if_bce.c,v 1.12 2006/11/16 01:33:08 christos Exp $	 */
 
 /*
  * Copyright (c) 2003 Clifford Wright. All rights reserved.
@@ -34,11 +34,8 @@
  * Cliff Wright cliff@snipe444.org
  */
 
-#include <sys/cdefs.h>
-
 #include "bpfilter.h"
 #include "vlan.h"
-#include "rnd.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,9 +54,6 @@
 
 #if NBPFILTER > 0
 #include <net/bpf.h>
-#endif
-#if NRND > 0
-#include <sys/rnd.h>
 #endif
 
 #include <dev/pci/pcireg.h>
@@ -141,10 +135,7 @@ struct bce_softc {
 	u_int32_t		bce_txin;	/* last tx descriptor seen */
 	int			bce_txsfree;	/* no. tx slots available */
 	int			bce_txsnext;	/* next available tx slot */
-	callout_t		bce_timeout;
-#if NRND > 0
-	rndsource_element_t	rnd_source;
-#endif
+	struct callout		bce_timeout;
 };
 
 /* for ring descriptors */
@@ -169,7 +160,7 @@ do {									\
 
 static	int	bce_probe(struct device *, struct cfdata *, void *);
 static	void	bce_attach(struct device *, struct device *, void *);
-static	int	bce_ioctl(struct ifnet *, u_long, void *);
+static	int	bce_ioctl(struct ifnet *, u_long, caddr_t);
 static	void	bce_start(struct ifnet *);
 static	void	bce_watchdog(struct ifnet *);
 static	int	bce_intr(void *);
@@ -285,7 +276,7 @@ bce_attach(struct device *parent, struct device *self, void *aux)
 	pci_chipset_tag_t pc = pa->pa_pc;
 	pci_intr_handle_t ih;
 	const char     *intrstr = NULL;
-	void *        kva;
+	caddr_t         kva;
 	bus_dma_segment_t seg;
 	int             rseg;
 	u_int32_t       command;
@@ -302,16 +293,7 @@ bce_attach(struct device *parent, struct device *self, void *aux)
 	KASSERT(bp != NULL);
 
 	sc->bce_pa = *pa;
-
-	/* BCM440x can only address 30 bits (1GB) */
-	if (bus_dmatag_subregion(pa->pa_dmat, 0, (1 << 30),
-			        &(sc->bce_dmatag), BUS_DMA_NOWAIT) != 0)
-	{
-		APRINT_ERROR("WARNING: %s failed to restrict dma range,"
-			     " falling back to parent bus dma range\n",
-			     sc->bce_dev.dv_xname);
-		sc->bce_dmatag = pa->pa_dmat;
-	}
+	sc->bce_dmatag = pa->pa_dmat;
 
 #if __NetBSD_Version__ >= 106120000
 	 aprint_naive(": Ethernet controller\n");
@@ -429,7 +411,7 @@ bce_attach(struct device *parent, struct device *self, void *aux)
 	}
 	/* save the ring space in softc */
 	sc->bce_rx_ring = (struct bce_dma_slot *) kva;
-	sc->bce_tx_ring = (struct bce_dma_slot *) ((char *)kva + PAGE_SIZE);
+	sc->bce_tx_ring = (struct bce_dma_slot *) (kva + PAGE_SIZE);
 
 	/* Create the transmit buffer DMA maps. */
 	for (i = 0; i < BCE_NTXDESC; i++) {
@@ -509,16 +491,12 @@ bce_attach(struct device *parent, struct device *self, void *aux)
 	printf("%s: Ethernet address %s\n", sc->bce_dev.dv_xname,
 	       ether_sprintf(sc->enaddr));
 	ether_ifattach(ifp, sc->enaddr);
-#if NRND > 0
-	rnd_attach_source(&sc->rnd_source, sc->bce_dev.dv_xname,
-	    RND_TYPE_NET, 0);
-#endif
-	callout_init(&sc->bce_timeout, 0);
+	callout_init(&sc->bce_timeout);
 }
 
 /* handle media, and ethernet requests */
 static int
-bce_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+bce_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct bce_softc *sc = ifp->if_softc;
 	struct ifreq   *ifr = (struct ifreq *) data;
@@ -758,10 +736,6 @@ bce_intr(void *xsc)
 	if (handled) {
 		if (wantinit)
 			bce_init(ifp);
-#if NRND > 0
-		if (RND_ENABLED(&sc->rnd_source))
-			rnd_add_uint32(&sc->rnd_source, intstatus);
-#endif
 		/* Try to get more packets going. */
 		bce_start(ifp);
 	}
@@ -836,8 +810,8 @@ bce_rxintr(struct bce_softc *sc)
 			if (m == NULL)
 				goto dropit;
 			m->m_data += 2;
-			memcpy(mtod(m, void *),
-			 mtod(sc->bce_cdata.bce_rx_chain[i], void *), len);
+			memcpy(mtod(m, caddr_t),
+			 mtod(sc->bce_cdata.bce_rx_chain[i], caddr_t), len);
 			sc->bce_cdata.bce_rx_chain[i]->m_data -= 30;	/* MAGIC */
 		} else {
 			m = sc->bce_cdata.bce_rx_chain[i];

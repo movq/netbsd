@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.136 2007/08/21 02:48:16 kiyohara Exp $
+# $NetBSD: GENERIC,v 1.131.2.1 2007/06/05 20:50:02 bouyer Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include 	"arch/prep/conf/std.prep"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.136 $"
+#ident		"GENERIC-$Revision: 1.131.2.1 $"
 
 maxusers	32
 
@@ -312,7 +312,6 @@ wdc*	at pnpbus?
 # PCI IDE controllers
 pciide*		at pci? dev ? function ? flags 0x0000
 hptide*		at pci? dev ? function ?
-slide*		at pci? dev ? function ?
 
 #fdc0 at pnpbus?	# standard ISA floppy controller
 #fd0 at fdc0 drive ?
@@ -407,17 +406,13 @@ ukphy*	at mii? phy ?			# generic unknown PHYs
 #uhci*	at pci? dev ? function ?	# Universal Host Controller (Intel)
 #ohci*	at pci? dev ? function ?	# Open Host Controller
 
-# PCMCIA USB controllers
-slhci*	at pcmcia? function ?		# ScanLogic SL811HS
-
 # USB bus support
 #usb*	at uhci?
 #usb*	at ohci?
-#usb*	at slhci?
 
 # USB Hubs
 #uhub*	at usb?
-#uhub*	at uhub? port ?
+#uhub*	at uhub? port ? configuration ? interface ?
 
 # USB HID device
 #uhidev*	at uhub? port ? configuration ? interface ?

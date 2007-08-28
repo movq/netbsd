@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_vnops.c,v 1.74 2007/03/04 06:03:43 christos Exp $	*/
+/*	$NetBSD: ext2fs_vnops.c,v 1.69.2.1 2007/02/17 23:27:52 tron Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_vnops.c,v 1.74 2007/03/04 06:03:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_vnops.c,v 1.69.2.1 2007/02/17 23:27:52 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -350,15 +350,12 @@ ext2fs_setattr(void *v)
 			return (EROFS);
 		if (kauth_cred_geteuid(cred) != ip->i_e2fs_uid &&
 		    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-		    NULL)))
+		    &l->l_acflag)))
 			return (error);
 #ifdef EXT2FS_SYSTEM_FLAGS
-		if (kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-		    NULL) == 0) {
+		if (kauth_cred_geteuid(cred) == 0) {
 			if ((ip->i_e2fs_flags &
-			    (EXT2_APPEND | EXT2_IMMUTABLE)) &&
-			    kauth_authorize_system(l->l_cred,
-			     KAUTH_SYSTEM_CHSYSFLAGS, 0, NULL, NULL, NULL))
+			    (EXT2_APPEND | EXT2_IMMUTABLE)) && securelevel > 0)
 				return (EPERM);
 			ip->i_e2fs_flags &= ~(EXT2_APPEND | EXT2_IMMUTABLE);
 			ip->i_e2fs_flags |=
@@ -414,7 +411,7 @@ ext2fs_setattr(void *v)
 			return (EROFS);
 		if (kauth_cred_geteuid(cred) != ip->i_e2fs_uid &&
 			(error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, 
-			NULL)) &&
+			&l->l_acflag)) &&
 			((vap->va_vaflags & VA_UTIMES_NULL) == 0 ||
 			(error = VOP_ACCESS(vp, VWRITE, cred, l))))
 			return (error);
@@ -450,9 +447,9 @@ ext2fs_chmod(struct vnode *vp, int mode, kauth_cred_t cred, struct lwp *l)
 
 	if (kauth_cred_geteuid(cred) != ip->i_e2fs_uid &&
 	    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
-	    NULL)))
+	    &l->l_acflag)))
 		return (error);
-	if (kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL)) {
+	if (kauth_cred_geteuid(cred)) {
 		if (vp->v_type != VDIR && (mode & S_ISTXT))
 			return (EFTYPE);
 		if ((kauth_cred_ismember_gid(cred, ip->i_e2fs_gid, &ismember) != 0 ||
@@ -491,7 +488,8 @@ ext2fs_chown(struct vnode *vp, uid_t uid, gid_t gid, kauth_cred_t cred,
  	    (gid != ip->i_e2fs_gid &&
 	    !(kauth_cred_getegid(cred) == gid ||
 	    (kauth_cred_ismember_gid(cred, gid, &ismember) == 0 && ismember)))) &&
-	    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL)))
+	    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
+	    &l->l_acflag)))
 		return (error);
 	ogid = ip->i_e2fs_gid;
 	ouid = ip->i_e2fs_uid;
@@ -500,11 +498,9 @@ ext2fs_chown(struct vnode *vp, uid_t uid, gid_t gid, kauth_cred_t cred,
 	ip->i_e2fs_uid = uid;
 	if (ouid != uid || ogid != gid)
 		ip->i_flag |= IN_CHANGE;
-	if (ouid != uid && kauth_authorize_generic(cred,
-	    KAUTH_GENERIC_ISSUSER, NULL) != 0)
+	if (ouid != uid && kauth_cred_geteuid(cred) != 0)
 		ip->i_e2fs_mode &= ~ISUID;
-	if (ogid != gid && kauth_authorize_generic(cred,
-	    KAUTH_GENERIC_ISSUSER, NULL) != 0)
+	if (ogid != gid && kauth_cred_geteuid(cred) != 0)
 		ip->i_e2fs_mode &= ~ISGID;
 	return (0);
 }
@@ -867,9 +863,7 @@ abortit:
 		 * otherwise the destination may not be changed (except by
 		 * root). This implements append-only directories.
 		 */
-		if ((dp->i_e2fs_mode & S_ISTXT) &&
-		    kauth_authorize_generic(tcnp->cn_cred,
-		     KAUTH_GENERIC_ISSUSER, NULL) != 0 &&
+		if ((dp->i_e2fs_mode & S_ISTXT) && kauth_cred_geteuid(tcnp->cn_cred) != 0 &&
 		    kauth_cred_geteuid(tcnp->cn_cred) != dp->i_e2fs_uid &&
 		    xp->i_e2fs_uid != kauth_cred_geteuid(tcnp->cn_cred)) {
 			error = EPERM;
@@ -980,7 +974,7 @@ abortit:
 			KASSERT(dp != NULL);
 			dp->i_e2fs_nlink--;
 			dp->i_flag |= IN_CHANGE;
-			error = vn_rdwr(UIO_READ, fvp, (void *)&dirbuf,
+			error = vn_rdwr(UIO_READ, fvp, (caddr_t)&dirbuf,
 				sizeof (struct ext2fs_dirtemplate), (off_t)0,
 				UIO_SYSSPACE, IO_NODELOCKED,
 				tcnp->cn_cred, (size_t *)0, NULL);
@@ -994,7 +988,7 @@ abortit:
 				} else {
 					dirbuf.dotdot_ino = h2fs32(newparent);
 					(void) vn_rdwr(UIO_WRITE, fvp,
-					    (void *)&dirbuf,
+					    (caddr_t)&dirbuf,
 					    sizeof (struct dirtemplate),
 					    (off_t)0, UIO_SYSSPACE,
 					    IO_NODELOCKED|IO_SYNC,
@@ -1110,7 +1104,7 @@ ext2fs_mkdir(void *v)
 		dirtemplate.dotdot_type = EXT2_FT_DIR;
 	}
 	dirtemplate.dotdot_name[0] = dirtemplate.dotdot_name[1] = '.';
-	error = vn_rdwr(UIO_WRITE, tvp, (void *)&dirtemplate,
+	error = vn_rdwr(UIO_WRITE, tvp, (caddr_t)&dirtemplate,
 	    sizeof (dirtemplate), (off_t)0, UIO_SYSSPACE,
 	    IO_NODELOCKED|IO_SYNC, cnp->cn_cred, (size_t *)0, NULL);
 	if (error) {
@@ -1314,7 +1308,7 @@ ext2fs_advlock(void *v)
 {
 	struct vop_advlock_args /* {
 		struct vnode *a_vp;
-		void * a_id;
+		caddr_t  a_id;
 		int  a_op;
 		struct flock *a_fl;
 		int  a_flags;
@@ -1498,7 +1492,6 @@ ext2fs_reclaim(void *v)
 		return (error);
 	if (ip->i_din.e2fs_din != NULL)
 		pool_put(&ext2fs_dinode_pool, ip->i_din.e2fs_din);
-	genfs_node_destroy(vp);
 	pool_put(&ext2fs_inode_pool, vp->v_data);
 	vp->v_data = NULL;
 	return (0);

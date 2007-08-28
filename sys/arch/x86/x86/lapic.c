@@ -1,4 +1,4 @@
-/* $NetBSD: lapic.c,v 1.21 2007/08/07 11:28:26 ad Exp $ */
+/* $NetBSD: lapic.c,v 1.18 2006/11/16 01:32:39 christos Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lapic.c,v 1.21 2007/08/07 11:28:26 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lapic.c,v 1.18 2006/11/16 01:32:39 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_mpbios.h"		/* for MPDEBUG */
@@ -78,7 +78,7 @@ __KERNEL_RCSID(0, "$NetBSD: lapic.c,v 1.21 2007/08/07 11:28:26 ad Exp $");
 void		lapic_delay(int);
 void		lapic_microtime(struct timeval *);
 static u_int32_t lapic_gettick(void);
-void		lapic_clockintr(void *, struct intrframe *);
+void		lapic_clockintr(void *, struct intrframe);
 static void 	lapic_map(paddr_t);
 
 static void lapic_hwmask(struct pic *, int);
@@ -238,7 +238,7 @@ u_int64_t lapic_frac_cycle_per_usec;
 u_int32_t lapic_delaytab[26];
 
 void
-lapic_clockintr(void *arg, struct intrframe *frame)
+lapic_clockintr(void *arg, struct intrframe frame)
 {
 #if defined(I586_CPU) || defined(I686_CPU) || defined(__x86_64__)
 #ifndef __HAVE_TIMECOUNTER
@@ -333,7 +333,7 @@ lapic_clockintr(void *arg, struct intrframe *frame)
 #endif /* !__HAVE_TIMECOUNTER */
 #endif /* I586_CPU || I686_CPU || __x86_64__ */
 
-	hardclock((struct clockframe *)frame);
+	hardclock((struct clockframe *)&frame);
 }
 
 #if !defined(__HAVE_TIMECOUNTER) && defined(NTP)
@@ -390,7 +390,7 @@ lapic_calibrate_timer(ci)
 	int i;
 	char tbuf[9];
 
-	aprint_verbose("%s: calibrating local timer\n", ci->ci_dev->dv_xname);
+	printf("%s: calibrating local timer\n", ci->ci_dev->dv_xname);
 
 	/*
 	 * Configure timer to one-shot, interrupt masked,
@@ -432,8 +432,7 @@ lapic_calibrate_timer(ci)
 
 	humanize_number(tbuf, sizeof(tbuf), tmp, "Hz", 1000);
 
-	aprint_verbose("%s: apic clock running at %s\n",
-	    ci->ci_dev->dv_xname, tbuf);
+	printf("%s: apic clock running at %s\n", ci->ci_dev->dv_xname, tbuf);
 
 	if (lapic_per_second != 0) {
 		/*
@@ -576,13 +575,10 @@ x86_ipi(vec,target,dl)
 	i82489_writereg(LAPIC_ICRLO,
 	    (target & LAPIC_DEST_MASK) | vec | dl | LAPIC_LVL_ASSERT);
 
-#ifdef DIAGNOSTIC
 	i82489_icr_wait();
+
 	result = (i82489_readreg(LAPIC_ICRLO) & LAPIC_DLSTAT_BUSY) ? EBUSY : 0;
-#else
-	/* Don't wait - if it doesn't go, we're in big trouble anyway. */
-        result = 0;
-#endif
+
 	splx(s);
 
 	return result;

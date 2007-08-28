@@ -1,4 +1,4 @@
-/* $NetBSD: wsdisplay_compat_usl.c,v 1.41 2007/07/09 21:01:26 ad Exp $ */
+/* $NetBSD: wsdisplay_compat_usl.c,v 1.37.2.1 2007/01/06 13:20:26 bouyer Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsdisplay_compat_usl.c,v 1.41 2007/07/09 21:01:26 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsdisplay_compat_usl.c,v 1.37.2.1 2007/01/06 13:20:26 bouyer Exp $");
 
 #include "opt_compat_freebsd.h"
 #include "opt_compat_netbsd.h"
@@ -61,8 +61,8 @@ struct usl_syncdata {
 	int s_frsig; /* unused */
 	void (*s_callback)(void *, int, int);
 	void *s_cbarg;
-	callout_t s_attach_ch;
-	callout_t s_detach_ch;
+	struct callout s_attach_ch;
+	struct callout s_detach_ch;
 };
 
 static int usl_sync_init(struct wsscreen *, struct usl_syncdata **,
@@ -109,8 +109,8 @@ usl_sync_init(struct wsscreen *scr, struct usl_syncdata **sdp,
 	sd->s_acqsig = acqsig;
 	sd->s_relsig = relsig;
 	sd->s_frsig = frsig;
-	callout_init(&sd->s_attach_ch, 0);
-	callout_init(&sd->s_detach_ch, 0);
+	callout_init(&sd->s_attach_ch);
+	callout_init(&sd->s_detach_ch);
 	res = wsscreen_attach_sync(scr, &usl_syncops, sd);
 	if (res) {
 		free(sd, M_DEVBUF);
@@ -138,11 +138,7 @@ usl_sync_done(struct usl_syncdata *sd)
 static int
 usl_sync_check(struct usl_syncdata *sd)
 {
-	int rv;
-	mutex_enter(&proclist_mutex);	/* XXXSMP */
-	rv = (sd->s_proc == p_find(sd->s_pid, PFIND_LOCKED));
-	mutex_exit(&proclist_mutex);	/* XXXSMP */
-	if (rv)
+	if (sd->s_proc == pfind(sd->s_pid))
 		return (1);
 	printf("usl_sync_check: process %d died\n", sd->s_pid);
 	usl_sync_done(sd);
@@ -180,9 +176,7 @@ usl_detachproc(void *cookie, int waitok,
 	sd->s_callback = callback;
 	sd->s_cbarg = cbarg;
 	sd->s_flags |= SF_DETACHPENDING;
-	mutex_enter(&proclist_mutex);
 	psignal(sd->s_proc, sd->s_relsig);
-	mutex_exit(&proclist_mutex);
 	callout_reset(&sd->s_detach_ch, wscompat_usl_synctimeout * hz,
 	    usl_detachtimeout, sd);
 
@@ -242,9 +236,7 @@ usl_attachproc(void *cookie, int waitok,
 	sd->s_callback = callback;
 	sd->s_cbarg = cbarg;
 	sd->s_flags |= SF_ATTACHPENDING;
-	mutex_enter(&proclist_mutex);
 	psignal(sd->s_proc, sd->s_acqsig);
-	mutex_exit(&proclist_mutex);
 	callout_reset(&sd->s_attach_ch, wscompat_usl_synctimeout * hz,
 	    usl_attachtimeout, sd);
 
@@ -289,7 +281,7 @@ usl_attachtimeout(void *arg)
 }
 
 int
-wsdisplay_usl_ioctl1(struct wsdisplay_softc *sc, u_long cmd, void *data,
+wsdisplay_usl_ioctl1(struct wsdisplay_softc *sc, u_long cmd, caddr_t data,
     int flag, struct lwp *l)
 {
 	int idx, maxidx;
@@ -360,7 +352,7 @@ wsdisplay_usl_ioctl1(struct wsdisplay_softc *sc, u_long cmd, void *data,
 
 int
 wsdisplay_usl_ioctl2(struct wsdisplay_softc *sc, struct wsscreen *scr,
-		     u_long cmd, void *data, int flag, struct lwp *l)
+		     u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct proc *p = l->l_proc;
 	int intarg = 0, res;

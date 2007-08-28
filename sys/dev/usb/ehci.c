@@ -1,4 +1,4 @@
-/*	$NetBSD: ehci.c,v 1.124 2007/08/15 04:00:33 kiyohara Exp $ */
+/*	$NetBSD: ehci.c,v 1.118.2.1 2007/02/21 13:26:41 tron Exp $ */
 
 /*
  * Copyright (c) 2004,2005 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ehci.c,v 1.124 2007/08/15 04:00:33 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ehci.c,v 1.118.2.1 2007/02/21 13:26:41 tron Exp $");
 
 #include "ohci.h"
 #include "uhci.h"
@@ -188,6 +188,8 @@ Static void		ehci_noop(usbd_pipe_handle pipe);
 
 Static int		ehci_str(usb_string_descriptor_t *, int, const char *);
 Static void		ehci_pcd(ehci_softc_t *, usbd_xfer_handle);
+Static void		ehci_pcd_able(ehci_softc_t *, int);
+Static void		ehci_pcd_enable(void *);
 Static void		ehci_disown(ehci_softc_t *, int, int);
 
 Static ehci_soft_qh_t  *ehci_alloc_sqh(ehci_softc_t *);
@@ -242,7 +244,7 @@ Static void		ehci_dump_exfer(struct ehci_xfer *);
 	} while (0)
 #define ehci_active_intr_list(ex) ((ex)->inext.le_prev != NULL)
 
-Static const struct usbd_bus_methods ehci_bus_methods = {
+Static struct usbd_bus_methods ehci_bus_methods = {
 	ehci_open,
 	ehci_softintr,
 	ehci_poll,
@@ -252,7 +254,7 @@ Static const struct usbd_bus_methods ehci_bus_methods = {
 	ehci_freex,
 };
 
-Static const struct usbd_pipe_methods ehci_root_ctrl_methods = {
+Static struct usbd_pipe_methods ehci_root_ctrl_methods = {
 	ehci_root_ctrl_transfer,
 	ehci_root_ctrl_start,
 	ehci_root_ctrl_abort,
@@ -261,7 +263,7 @@ Static const struct usbd_pipe_methods ehci_root_ctrl_methods = {
 	ehci_root_ctrl_done,
 };
 
-Static const struct usbd_pipe_methods ehci_root_intr_methods = {
+Static struct usbd_pipe_methods ehci_root_intr_methods = {
 	ehci_root_intr_transfer,
 	ehci_root_intr_start,
 	ehci_root_intr_abort,
@@ -270,7 +272,7 @@ Static const struct usbd_pipe_methods ehci_root_intr_methods = {
 	ehci_root_intr_done,
 };
 
-Static const struct usbd_pipe_methods ehci_device_ctrl_methods = {
+Static struct usbd_pipe_methods ehci_device_ctrl_methods = {
 	ehci_device_ctrl_transfer,
 	ehci_device_ctrl_start,
 	ehci_device_ctrl_abort,
@@ -279,7 +281,7 @@ Static const struct usbd_pipe_methods ehci_device_ctrl_methods = {
 	ehci_device_ctrl_done,
 };
 
-Static const struct usbd_pipe_methods ehci_device_intr_methods = {
+Static struct usbd_pipe_methods ehci_device_intr_methods = {
 	ehci_device_intr_transfer,
 	ehci_device_intr_start,
 	ehci_device_intr_abort,
@@ -288,7 +290,7 @@ Static const struct usbd_pipe_methods ehci_device_intr_methods = {
 	ehci_device_intr_done,
 };
 
-Static const struct usbd_pipe_methods ehci_device_bulk_methods = {
+Static struct usbd_pipe_methods ehci_device_bulk_methods = {
 	ehci_device_bulk_transfer,
 	ehci_device_bulk_start,
 	ehci_device_bulk_abort,
@@ -297,7 +299,7 @@ Static const struct usbd_pipe_methods ehci_device_bulk_methods = {
 	ehci_device_bulk_done,
 };
 
-Static const struct usbd_pipe_methods ehci_device_isoc_methods = {
+Static struct usbd_pipe_methods ehci_device_isoc_methods = {
 	ehci_device_isoc_transfer,
 	ehci_device_isoc_start,
 	ehci_device_isoc_abort,
@@ -306,7 +308,7 @@ Static const struct usbd_pipe_methods ehci_device_isoc_methods = {
 	ehci_device_isoc_done,
 };
 
-static const uint8_t revbits[EHCI_MAX_POLLRATE] = {
+static uint8_t revbits[EHCI_MAX_POLLRATE] = {
 0x00,0x40,0x20,0x60,0x10,0x50,0x30,0x70,0x08,0x48,0x28,0x68,0x18,0x58,0x38,0x78,
 0x04,0x44,0x24,0x64,0x14,0x54,0x34,0x74,0x0c,0x4c,0x2c,0x6c,0x1c,0x5c,0x3c,0x7c,
 0x02,0x42,0x22,0x62,0x12,0x52,0x32,0x72,0x0a,0x4a,0x2a,0x6a,0x1a,0x5a,0x3a,0x7a,
@@ -334,7 +336,7 @@ ehci_init(ehci_softc_t *sc)
 	sc->sc_offs = EREAD1(sc, EHCI_CAPLENGTH);
 
 	vers = EREAD2(sc, EHCI_HCIVERSION);
-	aprint_verbose("%s: EHCI version %x.%x\n", USBDEVNAME(sc->sc_bus.bdev),
+	aprint_normal("%s: EHCI version %x.%x\n", USBDEVNAME(sc->sc_bus.bdev),
 	       vers >> 8, vers & 0xff);
 
 	sparams = EREAD4(sc, EHCI_HCSPARAMS);
@@ -342,7 +344,7 @@ ehci_init(ehci_softc_t *sc)
 	sc->sc_npcomp = EHCI_HCS_N_PCC(sparams);
 	ncomp = EHCI_HCS_N_CC(sparams);
 	if (ncomp != sc->sc_ncomp) {
-		aprint_verbose("%s: wrong number of companions (%d != %d)\n",
+		aprint_error("%s: wrong number of companions (%d != %d)\n",
 		       USBDEVNAME(sc->sc_bus.bdev),
 		       ncomp, sc->sc_ncomp);
 #if NOHCI == 0 || NUHCI == 0
@@ -492,6 +494,7 @@ ehci_init(ehci_softc_t *sc)
 	sc->sc_async_head = sqh;
 	EOWRITE4(sc, EHCI_ASYNCLISTADDR, sqh->physaddr | EHCI_LINK_QH);
 
+	usb_callout_init(sc->sc_tmo_pcd);
 	usb_callout_init(sc->sc_tmo_intrlist);
 
 	lockinit(&sc->sc_doorbell_lock, PZERO, "ehcidb", 0, 0);
@@ -604,6 +607,13 @@ ehci_intr1(ehci_softc_t *sc)
 	}
 	if (eintrs & EHCI_STS_PCD) {
 		ehci_pcd(sc, sc->sc_intrxfer);
+		/*
+		 * Disable PCD interrupt for now, because it will be
+		 * on until the port has been reset.
+		 */
+		ehci_pcd_able(sc, 0);
+		/* Do not allow RHSC interrupts > 1 per second */
+                usb_callout(sc->sc_tmo_pcd, hz, ehci_pcd_enable, sc);
 		eintrs &= ~EHCI_STS_PCD;
 	}
 
@@ -620,6 +630,24 @@ ehci_intr1(ehci_softc_t *sc)
 	return (1);
 }
 
+void
+ehci_pcd_able(ehci_softc_t *sc, int on)
+{
+	DPRINTFN(4, ("ehci_pcd_able: on=%d\n", on));
+	if (on)
+		sc->sc_eintrs |= EHCI_STS_PCD;
+	else
+		sc->sc_eintrs &= ~EHCI_STS_PCD;
+	EOWRITE4(sc, EHCI_USBINTR, sc->sc_eintrs);
+}
+
+void
+ehci_pcd_enable(void *v_sc)
+{
+	ehci_softc_t *sc = v_sc;
+
+	ehci_pcd_able(sc, 1);
+}
 
 void
 ehci_pcd(ehci_softc_t *sc, usbd_xfer_handle xfer)
@@ -923,6 +951,7 @@ ehci_detach(struct ehci_softc *sc, int flags)
 		return (rv);
 
 	usb_uncallout(sc->sc_tmo_intrlist, ehci_intrlist_timeout, sc);
+	usb_uncallout(sc->sc_tmo_pcd, ehci_pcd_enable, sc);
 
 	if (sc->sc_powerhook != NULL)
 		powerhook_disestablish(sc->sc_powerhook);
@@ -948,9 +977,9 @@ ehci_activate(device_ptr_t self, enum devact act)
 		return (EOPNOTSUPP);
 
 	case DVACT_DEACTIVATE:
-		sc->sc_dying = 1;
 		if (sc->sc_child != NULL)
 			rv = config_deactivate(sc->sc_child);
+		sc->sc_dying = 1;
 		break;
 	}
 	return (rv);
@@ -1561,7 +1590,7 @@ Static usb_device_descriptor_t ehci_devd = {
 	1			/* # of configurations */
 };
 
-Static const usb_device_qualifier_t ehci_odevd = {
+Static usb_device_qualifier_t ehci_odevd = {
 	USB_DEVICE_DESCRIPTOR_SIZE,
 	UDESC_DEVICE_QUALIFIER,	/* type */
 	{0x00, 0x02},		/* USB version */
@@ -1573,7 +1602,7 @@ Static const usb_device_qualifier_t ehci_odevd = {
 	0
 };
 
-Static const usb_config_descriptor_t ehci_confd = {
+Static usb_config_descriptor_t ehci_confd = {
 	USB_CONFIG_DESCRIPTOR_SIZE,
 	UDESC_CONFIG,
 	{USB_CONFIG_DESCRIPTOR_SIZE +
@@ -1582,11 +1611,11 @@ Static const usb_config_descriptor_t ehci_confd = {
 	1,
 	1,
 	0,
-	UC_ATTR_MBO | UC_SELF_POWERED,
+	UC_SELF_POWERED,
 	0			/* max power */
 };
 
-Static const usb_interface_descriptor_t ehci_ifcd = {
+Static usb_interface_descriptor_t ehci_ifcd = {
 	USB_INTERFACE_DESCRIPTOR_SIZE,
 	UDESC_INTERFACE,
 	0,
@@ -1598,7 +1627,7 @@ Static const usb_interface_descriptor_t ehci_ifcd = {
 	0
 };
 
-Static const usb_endpoint_descriptor_t ehci_endpd = {
+Static usb_endpoint_descriptor_t ehci_endpd = {
 	USB_ENDPOINT_DESCRIPTOR_SIZE,
 	UDESC_ENDPOINT,
 	UE_DIR_IN | EHCI_INTR_ENDPT,
@@ -1607,7 +1636,7 @@ Static const usb_endpoint_descriptor_t ehci_endpd = {
 	12
 };
 
-Static const usb_hub_descriptor_t ehci_hubd = {
+Static usb_hub_descriptor_t ehci_hubd = {
 	USB_HUB_DESCRIPTOR_SIZE,
 	UDESC_HUB,
 	0,
@@ -1757,12 +1786,7 @@ ehci_root_ctrl_start(usbd_xfer_handle xfer)
 			totlen = 1;
 			switch (value & 0xff) {
 			case 0: /* Language table */
-				if (len > 0)
-					*(u_int8_t *)buf = 4;
-				if (len >=  4) {
-		USETW(((usb_string_descriptor_t *)buf)->bString[0], 0x0409);
-					totlen = 4;
-				}
+				totlen = ehci_str(buf, len, "\001");
 				break;
 			case 1: /* Vendor */
 				totlen = ehci_str(buf, len, sc->sc_vendor);
@@ -1882,6 +1906,10 @@ ehci_root_ctrl_start(usbd_xfer_handle xfer)
 		case UHF_C_PORT_SUSPEND:
 		case UHF_C_PORT_OVER_CURRENT:
 		case UHF_C_PORT_RESET:
+			/* Enable RHSC interrupt if condition is cleared. */
+			if ((OREAD4(sc, port) >> 16) == 0)
+				ehci_pcd_able(sc, 1);
+			break;
 		default:
 			break;
 		}

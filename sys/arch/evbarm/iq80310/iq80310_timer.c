@@ -1,4 +1,4 @@
-/*	$NetBSD: iq80310_timer.c,v 1.20 2007/02/19 02:08:12 briggs Exp $	*/
+/*	$NetBSD: iq80310_timer.c,v 1.19.24.1 2007/03/04 12:15:38 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iq80310_timer.c,v 1.20 2007/02/19 02:08:12 briggs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iq80310_timer.c,v 1.19.24.1 2007/03/04 12:15:38 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: j6x0tp.c,v 1.20 2007/07/11 22:17:55 uwe Exp $ */
+/*	$NetBSD: j6x0tp.c,v 1.15 2006/11/12 19:00:42 plunky Exp $ */
 
 /*
  * Copyright (c) 2003 Valeriy E. Ushakov
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: j6x0tp.c,v 1.20 2007/07/11 22:17:55 uwe Exp $");
+__KERNEL_RCSID(0, "$NetBSD: j6x0tp.c,v 1.15 2006/11/12 19:00:42 plunky Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -59,6 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: j6x0tp.c,v 1.20 2007/07/11 22:17:55 uwe Exp $");
 #include <sh3/dev/adcvar.h>
 
 
+#define J6X0TP_DEBUG
 #if 0 /* XXX: disabled in favor of local version that uses printf_nolog */
 #define DPRINTF_ENABLE
 #define DPRINTF_DEBUG	j6x0tp_debug
@@ -132,20 +133,20 @@ static void	j6x0tp_attach(struct device *, struct device *, void *);
 
 /* wsmouse accessops */
 static int	j6x0tp_wsmouse_enable(void *);
-static int	j6x0tp_wsmouse_ioctl(void *, u_long, void *, int,
+static int	j6x0tp_wsmouse_ioctl(void *, u_long, caddr_t, int,
 				     struct lwp *);
 static void	j6x0tp_wsmouse_disable(void *);
 
 /* wskbd accessops */
 static int	j6x0tp_wskbd_enable(void *, int);
 static void	j6x0tp_wskbd_set_leds(void *, int);
-static int	j6x0tp_wskbd_ioctl(void *, u_long, void *, int,
+static int	j6x0tp_wskbd_ioctl(void *, u_long, caddr_t, int,
 				   struct lwp *);
 
 /* internal driver routines */
 static void	j6x0tp_enable(struct j6x0tp_softc *);
 static void	j6x0tp_disable(struct j6x0tp_softc *);
-static int	j6x0tp_enable_child(struct j6x0tp_softc *, int, int);
+static int	j6x0tp_set_enable(struct j6x0tp_softc *, int, int);
 static int	j6x0tp_intr(void *);
 static void	j6x0tp_start_polling(void *);
 static void	j6x0tp_stop_polling(struct j6x0tp_softc *);
@@ -235,6 +236,12 @@ j6x0tp_match(struct device *parent, struct cfdata *cf, void *aux)
 }
 
 
+/*
+ * Attach the touch panel driver and its ws* children.
+ *
+ * Note that we have to use submatch to distinguish between children
+ * because ws{kbd,mouse}_match match unconditionally.
+ */
 static void
 j6x0tp_attach(struct device *parent, struct device *self, void *aux)
 {
@@ -268,10 +275,10 @@ j6x0tp_attach(struct device *parent, struct device *self, void *aux)
 	/* init calibration, set default parameters */
 	tpcalib_init(&sc->sc_tpcalib);
 	tpcalib_ioctl(&sc->sc_tpcalib, WSMOUSEIO_SCALIBCOORDS,
-		      (void *)__UNCONST(&j6x0tp_default_calib), 0, 0);
+		      (caddr_t)__UNCONST(&j6x0tp_default_calib), 0, 0);
 
 	/* used when in polling mode */
-	callout_init(&sc->sc_touch_ch, 0);
+	callout_init(&sc->sc_touch_ch);
 
 	/* establish interrupt handler, but disable until opened */
 	intc_intr_establish(SH7709_INTEVT2_IRQ3, IST_EDGE, IPL_TTY,
@@ -288,7 +295,7 @@ static void
 j6x0tp_enable(struct j6x0tp_softc *sc)
 {
 
-	DPRINTFN(2, ("%s: enable\n", device_xname(&sc->sc_dev)));
+	DPRINTFN(2, ("%s: enable\n", sc->sc_dev.dv_xname));
 	intc_intr_enable(SH7709_INTEVT2_IRQ3);
 }
 
@@ -301,14 +308,14 @@ static void
 j6x0tp_disable(struct j6x0tp_softc *sc)
 {
 
-	DPRINTFN(2, ("%s: disable\n", device_xname(&sc->sc_dev)));
+	DPRINTFN(2, ("%s: disable\n", sc->sc_dev.dv_xname));
 	intc_intr_disable(SH7709_INTEVT2_IRQ3);
 	callout_stop(&sc->sc_touch_ch);
 }
 
 
 static int
-j6x0tp_enable_child(struct j6x0tp_softc *sc, int child, int on)
+j6x0tp_set_enable(struct j6x0tp_softc *sc, int on, int child)
 {
 	int s = spltty();
 
@@ -332,8 +339,8 @@ j6x0tp_wsmouse_enable(void *self)
 {
 	struct j6x0tp_softc *sc = (struct j6x0tp_softc *)self;
 
-	DPRINTFN(1, ("%s: wsmouse enable\n", device_xname(&sc->sc_dev)));
-	return (j6x0tp_enable_child(sc, J6X0TP_WSMOUSE_ENABLED, 1));
+	DPRINTFN(1, ("%s: wsmouse enable\n", sc->sc_dev.dv_xname));
+	return (j6x0tp_set_enable(sc, 1, J6X0TP_WSMOUSE_ENABLED));
 }
 
 
@@ -342,8 +349,8 @@ j6x0tp_wsmouse_disable(void *self)
 {
 	struct j6x0tp_softc *sc = (struct j6x0tp_softc *)self;
 
-	DPRINTFN(1, ("%s: wsmouse disable\n", device_xname(&sc->sc_dev)));
-	j6x0tp_enable_child(sc, J6X0TP_WSMOUSE_ENABLED, 0);
+	DPRINTFN(1, ("%s: wsmouse disable\n", sc->sc_dev.dv_xname));
+	j6x0tp_set_enable(sc, 0, J6X0TP_WSMOUSE_ENABLED);
 }
 
 
@@ -352,9 +359,9 @@ j6x0tp_wskbd_enable(void *self, int on)
 {
 	struct j6x0tp_softc *sc = (struct j6x0tp_softc *)self;
 
-	DPRINTFN(1, ("%s: wskbd %sable\n", device_xname(&sc->sc_dev),
+	DPRINTFN(1, ("%s: wskbd %sable\n", sc->sc_dev.dv_xname,
 		     on ? "en" : "dis"));
-	return (j6x0tp_enable_child(sc, J6X0TP_WSKBD_ENABLED, on));
+	return (j6x0tp_set_enable(sc, on, J6X0TP_WSKBD_ENABLED));
 }
 
 
@@ -370,14 +377,13 @@ j6x0tp_intr(void *self)
 	irr0 = _reg_read_1(SH7709_IRR0);
 	if ((irr0 & IRR0_IRQ3) == 0) {
 #ifdef DIAGNOSTIC
-		printf("%s: irr0 %02x?\n", device_xname(&sc->sc_dev), irr0);
+		printf("%s: irr0 %02x?\n", sc->sc_dev.dv_xname, irr0);
 #endif
 		return (0);
 	}
 
 	if (!sc->sc_enabled) {
-		DPRINTFN(1, ("%s: intr: !sc_enabled\n",
-			     device_xname(&sc->sc_dev)));
+		DPRINTFN(1, ("%s: intr: !sc_enabled\n", sc->sc_dev.dv_xname));
 		intc_intr_disable(SH7709_INTEVT2_IRQ3);
 		goto served;
 	}
@@ -405,7 +411,7 @@ j6x0tp_intr(void *self)
 
 		if (--tremor_timeout == 0) {
 			DPRINTF(("%s: tremor timeout!\n",
-				 device_xname(&sc->sc_dev)));
+				 sc->sc_dev.dv_xname));
 			goto served;
 		}
 	} while (steady < TREMOR_THRESHOLD);
@@ -421,7 +427,7 @@ j6x0tp_intr(void *self)
 		callout_reset(&sc->sc_touch_ch, hz/32,
 			      j6x0tp_start_polling, sc);
 	} else
-		DPRINTFN(1, ("%s: tremor\n", device_xname(&sc->sc_dev)));
+		DPRINTFN(1, ("%s: tremor\n", sc->sc_dev.dv_xname));
   served:
 	/* clear the interrupt (XXX: protect access?) */
 	_reg_write_1(SH7709_IRR0, irr0 & ~IRR0_IRQ3);
@@ -447,13 +453,13 @@ j6x0tp_start_polling(void *self)
 	phdr = _reg_read_1(SH7709_PHDR);
 	if ((phdr & PHDR_TP_PEN_DOWN) == 0) {
 		DPRINTFN(2, ("%s: start: pen is not down\n",
-			     device_xname(&sc->sc_dev)));
+			     sc->sc_dev.dv_xname));
 		j6x0tp_stop_polling(sc);
 	}
 
 	j6x0tp_get_raw_xy(&rawx, &rawy);
 	DPRINTFN(2, ("%s: start: %4d %4d -> ",
-		     device_xname(&sc->sc_dev), rawx, rawy));
+		     sc->sc_dev.dv_xname, rawx, rawy));
 
 	do_mouse = sc->sc_enabled & J6X0TP_WSMOUSE_ENABLED;
 #ifdef J6X0TP_WSMOUSE_EXCLUSIVE
@@ -494,7 +500,7 @@ j6x0tp_stop_polling(struct j6x0tp_softc *sc)
 {
 	uint8_t irr0;
 
-	DPRINTFN(2, ("%s: stop\n", device_xname(&sc->sc_dev)));
+	DPRINTFN(2, ("%s: stop\n", sc->sc_dev.dv_xname));
 
 	/* clear pending interrupt signal before re-enabling the interrupt */
 	irr0 = _reg_read_1(SH7709_IRR0);
@@ -520,7 +526,7 @@ j6x0tp_callout_wskbd(void *self)
 
 	if (!sc->sc_enabled) {
 		DPRINTFN(1, ("%s: wskbd callout: !sc_enabled\n",
-			     device_xname(&sc->sc_dev)));
+			     sc->sc_dev.dv_xname));
 		splx(s);
 		return;
 	}
@@ -556,7 +562,7 @@ j6x0tp_callout_wsmouse(void *self)
 
 	if (!sc->sc_enabled) {
 		DPRINTFN(1, ("%s: wsmouse callout: !sc_enabled\n",
-			     device_xname(&sc->sc_dev)));
+			     sc->sc_dev.dv_xname));
 		splx(s);
 		return;
 	}
@@ -586,7 +592,7 @@ j6x0tp_wsmouse_input(struct j6x0tp_softc *sc, int rawx, int rawy)
 	tpcalib_trans(&sc->sc_tpcalib, rawx, rawy, &x, &y);
 		
 	DPRINTFN(3, ("%s: %4d %4d -> %3d %3d\n",
-		     device_xname(&sc->sc_dev), rawx, rawy, x, y));
+		     sc->sc_dev.dv_xname, rawx, rawy, x, y));
 
 	wsmouse_input(sc->sc_wsmousedev,
 			1,	/* button */
@@ -652,7 +658,7 @@ j6x0tp_get_hard_icon(int rawx, int rawy)
 
 
 static int
-j6x0tp_wsmouse_ioctl(void *self, u_long cmd, void *data, int flag,
+j6x0tp_wsmouse_ioctl(void *self, u_long cmd, caddr_t data, int flag,
 		     struct lwp *l)
 {
 	struct j6x0tp_softc *sc = (struct j6x0tp_softc *)self;
@@ -662,7 +668,7 @@ j6x0tp_wsmouse_ioctl(void *self, u_long cmd, void *data, int flag,
 
 
 static int
-j6x0tp_wskbd_ioctl(void *self, u_long cmd, void *data, int flag,
+j6x0tp_wskbd_ioctl(void *self, u_long cmd, caddr_t data, int flag,
 		     struct lwp *l)
 {
 	/* struct j6x0tp_softc *sc = (struct j6x0tp_softc *)self; */

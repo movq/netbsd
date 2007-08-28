@@ -1,4 +1,4 @@
-/*	$NetBSD: if_atu.c,v 1.27 2007/07/16 15:55:38 dyoung Exp $ */
+/*	$NetBSD: if_atu.c,v 1.23 2006/11/16 01:33:26 christos Exp $ */
 /*	$OpenBSD: if_atu.c,v 1.48 2004/12/30 01:53:21 dlg Exp $ */
 /*
  * Copyright (c) 2003, 2004
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atu.c,v 1.27 2007/07/16 15:55:38 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atu.c,v 1.23 2006/11/16 01:33:26 christos Exp $");
 
 #include "bpfilter.h"
 
@@ -175,7 +175,7 @@ int	atu_newbuf(struct atu_softc *, struct atu_chain *, struct mbuf *);
 void	atu_rxeof(usbd_xfer_handle, usbd_private_handle, usbd_status);
 void	atu_txeof(usbd_xfer_handle, usbd_private_handle, usbd_status);
 void	atu_start(struct ifnet *);
-int	atu_ioctl(struct ifnet *, u_long, void *);
+int	atu_ioctl(struct ifnet *, u_long, caddr_t);
 int	atu_init(struct ifnet *);
 void	atu_stop(struct ifnet *, int);
 void	atu_watchdog(struct ifnet *);
@@ -497,8 +497,8 @@ atu_start_scan(struct atu_softc *sc)
 
 #ifdef ATU_DEBUG
 	if (atudebug) {
-		DPRINTFN(20, ("%s: scan cmd len=%02zx\n",
-		    USBDEVNAME(sc->atu_dev), sizeof(Scan)));
+		DPRINTFN(20, ("%s: scan cmd len=%02lx\n",
+		    USBDEVNAME(sc->atu_dev), (unsigned long)sizeof(Scan)));
 	}
 #endif /* ATU_DEBUG */
 
@@ -660,8 +660,8 @@ atu_initial_config(struct atu_softc *sc)
 
 #ifdef ATU_DEBUG
 	if (atudebug) {
-		DPRINTFN(20, ("%s: configlen=%02zx\n", USBDEVNAME(sc->atu_dev),
-		    sizeof(cmd)));
+		DPRINTFN(20, ("%s: configlen=%02lx\n", USBDEVNAME(sc->atu_dev),
+		    (unsigned long)sizeof(cmd)));
 	}
 #endif /* ATU_DEBUG */
 
@@ -803,7 +803,7 @@ atu_internal_firmware(struct device *arg)
 	 * Uploading firmware is done with the DFU (Device Firmware Upgrade)
 	 * interface. See "Universal Serial Bus - Device Class Specification
 	 * for Device Firmware Upgrade" pdf for details of the protocol.
-	 * Maybe this could be moved to a separate 'firmware driver' once more
+	 * Maybe this could be moved to a seperate 'firmware driver' once more
 	 * device drivers need it... For now we'll just do it here.
 	 *
 	 * Just for your information, the Atmel's DFU descriptor looks like
@@ -819,7 +819,7 @@ atu_internal_firmware(struct device *arg)
 	 */
 
 	/* Choose the right firmware for the device */
-	for (i = 0; i < __arraycount(atu_radfirm); i++)
+	for (i = 0; i < sizeof(atu_radfirm)/sizeof(atu_radfirm[0]); i++)
 		if (sc->atu_radio == atu_radfirm[i].atur_type) {
 			firm = atu_radfirm[i].atur_internal;
 			bytes_left = atu_radfirm[i].atur_internal_sz;
@@ -921,7 +921,7 @@ atu_external_firmware(struct device *arg)
 	int	block_size, block = 0, err, i;
 	size_t	bytes_left = 0;
 
-	for (i = 0; i < __arraycount(atu_radfirm); i++)
+	for (i = 0; i < sizeof(atu_radfirm)/sizeof(atu_radfirm[0]); i++)
 		if (sc->atu_radio == atu_radfirm[i].atur_type) {
 			firm = atu_radfirm[i].atur_external;
 			bytes_left = atu_radfirm[i].atur_external_sz;
@@ -1024,7 +1024,10 @@ USB_MATCH(atu)
 	USB_MATCH_START(atu, uaa);
 	int			i;
 
-	for (i = 0; i < __arraycount(atu_devs); i++) {
+	if (!uaa->iface)
+		return(UMATCH_NONE);
+
+	for (i = 0; i < sizeof(atu_devs)/sizeof(atu_devs[0]); i++) {
 		struct atu_type *t = &atu_devs[i];
 
 		if (uaa->vendor == t->atu_vid &&
@@ -1199,7 +1202,7 @@ USB_ATTACH(atu)
 	 * look up the radio_type for the device
 	 * basically does the same as USB_MATCH
 	 */
-	for (i = 0; i < __arraycount(atu_devs); i++) {
+	for (i = 0; i < sizeof(atu_devs)/sizeof(atu_devs[0]); i++) {
 		struct atu_type *t = &atu_devs[i];
 
 		if (uaa->vendor == t->atu_vid &&
@@ -1233,6 +1236,8 @@ USB_ATTACH(atu)
 		 */
 		USB_ATTACH_SUCCESS_RETURN;
 	}
+
+	uaa->iface = sc->atu_iface;
 
 	if (mode != MODE_NETCARD) {
 		DPRINTFN(15, ("%s: device needs external firmware\n",
@@ -1318,7 +1323,8 @@ atu_complete_attach(struct atu_softc *sc)
 
 #ifdef ATU_DEBUG
 	/* DEBUG : try to get firmware version */
-	err = atu_get_mib(sc, MIB_FW_VERSION, sizeof(fw), 0, (u_int8_t *)&fw);
+	err = atu_get_mib(sc, MIB_FW_VERSION, sizeof(fw), 0,
+	    (u_int8_t *)&fw);
 	if (!err) {
 		DPRINTFN(15, ("%s: firmware: maj:%d min:%d patch:%d "
 		    "build:%d\n", USBDEVNAME(sc->atu_dev), fw.major, fw.minor,
@@ -2081,7 +2087,7 @@ atu_debug_print(struct atu_softc *sc)
 #endif /* ATU_DEBUG */
 
 int
-atu_ioctl(struct ifnet *ifp, u_long command, void *data)
+atu_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 {
 	struct atu_softc	*sc = ifp->if_softc;
 	struct ifreq		*ifr = (struct ifreq *)data;

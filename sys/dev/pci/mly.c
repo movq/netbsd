@@ -1,4 +1,4 @@
-/*	$NetBSD: mly.c,v 1.35 2007/07/09 21:00:57 ad Exp $	*/
+/*	$NetBSD: mly.c,v 1.32.2.1 2006/12/04 18:34:15 tron Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mly.c,v 1.35 2007/07/09 21:00:57 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mly.c,v 1.32.2.1 2006/12/04 18:34:15 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -123,9 +123,9 @@ static void	mly_check_event(struct mly_softc *);
 static void	mly_complete_event(struct mly_softc *, struct mly_ccb *);
 static void	mly_complete_rescan(struct mly_softc *, struct mly_ccb *);
 static int	mly_dmamem_alloc(struct mly_softc *, int, bus_dmamap_t *,
-				 void **, bus_addr_t *, bus_dma_segment_t *);
+				 caddr_t *, bus_addr_t *, bus_dma_segment_t *);
 static void	mly_dmamem_free(struct mly_softc *, int, bus_dmamap_t,
-				void *, bus_dma_segment_t *);
+				caddr_t, bus_dma_segment_t *);
 static int	mly_enable_mmbox(struct mly_softc *);
 static void	mly_fetch_event(struct mly_softc *);
 static int	mly_get_controllerinfo(struct mly_softc *);
@@ -138,6 +138,7 @@ static void	mly_release_ccbs(struct mly_softc *);
 static int	mly_scan_btl(struct mly_softc *, int, int);
 static void	mly_scan_channel(struct mly_softc *, int);
 static void	mly_thread(void *);
+static void	mly_thread_create(void *);
 
 static int	mly_ccb_alloc(struct mly_softc *, struct mly_ccb **);
 static void	mly_ccb_complete(struct mly_softc *, struct mly_ccb *);
@@ -152,7 +153,7 @@ static int	mly_ccb_wait(struct mly_softc *, struct mly_ccb *, int);
 static void	mly_get_xfer_mode(struct mly_softc *, int,
 				  struct scsipi_xfer_mode *);
 static void	mly_scsipi_complete(struct mly_softc *, struct mly_ccb *);
-static int	mly_scsipi_ioctl(struct scsipi_channel *, u_long, void *,
+static int	mly_scsipi_ioctl(struct scsipi_channel *, u_long, caddr_t,
 				 int, struct proc *);
 static void	mly_scsipi_minphys(struct buf *);
 static void	mly_scsipi_request(struct scsipi_channel *,
@@ -399,7 +400,7 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 	 * Allocate and map the scatter/gather lists.
 	 */
 	rv = mly_dmamem_alloc(mly, MLY_SGL_SIZE * MLY_MAX_CCBS,
-	    &mly->mly_sg_dmamap, (void **)&mly->mly_sg,
+	    &mly->mly_sg_dmamap, (caddr_t *)&mly->mly_sg,
 	    &mly->mly_sg_busaddr, &mly->mly_sg_seg);
 	if (rv) {
 		printf("%s: unable to allocate S/G maps\n",
@@ -412,7 +413,7 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 	 * Allocate and map the memory mailbox.
 	 */
 	rv = mly_dmamem_alloc(mly, sizeof(struct mly_mmbox),
-	    &mly->mly_mmbox_dmamap, (void **)&mly->mly_mmbox,
+	    &mly->mly_mmbox_dmamap, (caddr_t *)&mly->mly_mmbox,
 	    &mly->mly_mmbox_busaddr, &mly->mly_mmbox_seg);
 	if (rv) {
 		printf("%s: unable to allocate mailboxes\n",
@@ -549,12 +550,9 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 	/*
 	 * Finally, create our monitoring thread.
 	 */
+	kthread_create(mly_thread_create, mly);
+
 	mly->mly_state |= MLY_STATE_INITOK;
-	rv = kthread_create(PRI_NONE, 0, NULL, mly_thread, mly,
-	    &mly->mly_thread, "%s", mly->mly_dv.dv_xname);
- 	if (rv != 0)
-		printf("%s: unable to create thread (%d)\n",
-		    mly->mly_dv.dv_xname, rv);
 	return;
 
  bad:
@@ -562,11 +560,11 @@ mly_attach(struct device *parent, struct device *self, void *aux)
 		mly_release_ccbs(mly);
 	if (state > 1)
 		mly_dmamem_free(mly, sizeof(struct mly_mmbox),
-		    mly->mly_mmbox_dmamap, (void *)mly->mly_mmbox,
+		    mly->mly_mmbox_dmamap, (caddr_t)mly->mly_mmbox,
 		    &mly->mly_mmbox_seg);
 	if (state > 0)
 		mly_dmamem_free(mly, MLY_SGL_SIZE * MLY_MAX_CCBS,
-		    mly->mly_sg_dmamap, (void *)mly->mly_sg,
+		    mly->mly_sg_dmamap, (caddr_t)mly->mly_sg,
 		    &mly->mly_sg_seg);
 }
 
@@ -1254,6 +1252,25 @@ mly_process_event(struct mly_softc *mly, struct mly_event *me)
 }
 
 /*
+ * Create the monitoring thread.  Called after the standard kernel threads
+ * have been created.
+ */
+static void
+mly_thread_create(void *cookie)
+{
+	struct mly_softc *mly;
+	int rv;
+
+	mly = cookie;
+
+	rv = kthread_create1(mly_thread, mly, &mly->mly_thread, "%s",
+	    mly->mly_dv.dv_xname);
+ 	if (rv != 0)
+		printf("%s: unable to create thread (%d)\n",
+		    mly->mly_dv.dv_xname, rv);
+}
+
+/*
  * Perform periodic activities.
  */
 static void
@@ -1400,7 +1417,7 @@ mly_ccb_submit(struct mly_softc *mly, struct mly_ccb *mc)
 		mly_outb(mly, mly->mly_idbr, MLY_HM_CMDSENT);
 	} else {
 		pkt = &mly->mly_mmbox->mmm_command[mly->mly_mmbox_cmd_idx];
-		off = (char *)pkt - (char *)mly->mly_mmbox;
+		off = (caddr_t)pkt - (caddr_t)mly->mly_mmbox;
 
 		bus_dmamap_sync(mly->mly_dmat, mly->mly_mmbox_dmamap,
 		    off, sizeof(mly->mly_mmbox->mmm_command[0]),
@@ -1482,7 +1499,7 @@ mly_intr(void *cookie)
 	if (mly_odbr_true(mly, MLY_AM_STSREADY)) {
 		for (;;) {
 			sp = &mly->mly_mmbox->mmm_status[mly->mly_mmbox_sts_idx];
-			off = (char *)sp - (char *)mly->mly_mmbox;
+			off = (caddr_t)sp - (caddr_t)mly->mly_mmbox;
 
 			bus_dmamap_sync(mly->mly_dmat, mly->mly_mmbox_dmamap,
 			    off, sizeof(mly->mly_mmbox->mmm_command[0]),
@@ -1633,7 +1650,7 @@ mly_alloc_ccbs(struct mly_softc *mly)
 	 */
 	rv = mly_dmamem_alloc(mly,
 	    mly->mly_ncmds * sizeof(union mly_cmd_packet),
-	    &mly->mly_pkt_dmamap, (void **)&mly->mly_pkt,
+	    &mly->mly_pkt_dmamap, (caddr_t *)&mly->mly_pkt,
 	    &mly->mly_pkt_busaddr, &mly->mly_pkt_seg);
 	if (rv)
 		return (rv);
@@ -1682,7 +1699,7 @@ mly_release_ccbs(struct mly_softc *mly)
 
 	/* Release the packet storage. */
 	mly_dmamem_free(mly, mly->mly_ncmds * sizeof(union mly_cmd_packet),
-	    mly->mly_pkt_dmamap, (void *)mly->mly_pkt, &mly->mly_pkt_seg);
+	    mly->mly_pkt_dmamap, (caddr_t)mly->mly_pkt, &mly->mly_pkt_seg);
 }
 
 /*
@@ -2071,7 +2088,7 @@ mly_get_xfer_mode(struct mly_softc *mly, int bus, struct scsipi_xfer_mode *xm)
  * ioctl hook; used here only to initiate low-level rescans.
  */
 static int
-mly_scsipi_ioctl(struct scsipi_channel *chan, u_long cmd, void *data,
+mly_scsipi_ioctl(struct scsipi_channel *chan, u_long cmd, caddr_t data,
     int flag, struct proc *p)
 {
 	struct mly_softc *mly;
@@ -2188,7 +2205,7 @@ mly_padstr(char *dst, const char *src, int len)
  */
 static int
 mly_dmamem_alloc(struct mly_softc *mly, int size, bus_dmamap_t *dmamap,
-		 void **kva, bus_addr_t *paddr, bus_dma_segment_t *seg)
+		 caddr_t *kva, bus_addr_t *paddr, bus_dma_segment_t *seg)
 {
 	int rseg, rv, state;
 
@@ -2244,7 +2261,7 @@ mly_dmamem_alloc(struct mly_softc *mly, int size, bus_dmamap_t *dmamap,
  */
 static void
 mly_dmamem_free(struct mly_softc *mly, int size, bus_dmamap_t dmamap,
-		void *kva, bus_dma_segment_t *seg)
+		caddr_t kva, bus_dma_segment_t *seg)
 {
 
 	bus_dmamap_unload(mly->mly_dmat, dmamap);
@@ -2291,7 +2308,7 @@ mlyclose(dev_t dev, int flag, int mode,
  * Handle control operations.
  */
 int
-mlyioctl(dev_t dev, u_long cmd, void *data, int flag,
+mlyioctl(dev_t dev, u_long cmd, caddr_t data, int flag,
     struct lwp *l)
 {
 	struct mly_softc *mly;

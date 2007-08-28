@@ -1,4 +1,4 @@
-/* $NetBSD: i82596.c,v 1.17 2007/08/26 22:45:56 dyoung Exp $ */
+/* $NetBSD: i82596.c,v 1.14.8.1 2007/04/20 20:11:09 bouyer Exp $ */
 
 /*
  * Copyright (c) 2003 Jochen Kunz.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i82596.c,v 1.17 2007/08/26 22:45:56 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i82596.c,v 1.14.8.1 2007/04/20 20:11:09 bouyer Exp $");
 
 /* autoconfig and device stuff */
 #include <sys/param.h>
@@ -90,7 +90,7 @@ static void iee_mediastatus(struct ifnet *, struct ifmediareq *);
 
 /* interface routines to upper protocols */
 static void iee_start(struct ifnet *);			/* initiate output */
-static int iee_ioctl(struct ifnet *, u_long, void *);	/* ioctl routine */
+static int iee_ioctl(struct ifnet *, u_long, caddr_t);	/* ioctl routine */
 static int iee_init(struct ifnet *);			/* init routine */
 static void iee_stop(struct ifnet *, int);		/* stop routine */
 static void iee_watchdog(struct ifnet *);		/* timer routine */
@@ -420,7 +420,7 @@ iee_cb_setup(struct iee_softc *sc, uint32_t cmd)
 	case IEE_CB_CMD_NOP:	/* NOP CMD */
 		break;
 	case IEE_CB_CMD_IAS:	/* Individual Address Setup */
-		memcpy(__UNVOLATILE(cb->cb_ind_addr), CLLADDR(ifp->if_sadl),
+		memcpy(__UNVOLATILE(cb->cb_ind_addr), LLADDR(ifp->if_sadl),
 		    ETHER_ADDR_LEN);
 		break;
 	case IEE_CB_CMD_CONF:	/* Configure */
@@ -641,7 +641,7 @@ iee_start(struct ifnet *ifp)
 				continue;
 			}
 			m_copydata(sc->sc_tx_mbuf[t], 0,
-			    sc->sc_tx_mbuf[t]->m_pkthdr.len, mtod(m, void *));
+			    sc->sc_tx_mbuf[t]->m_pkthdr.len, mtod(m, caddr_t));
 			m->m_pkthdr.len = sc->sc_tx_mbuf[t]->m_pkthdr.len;
 			m->m_len = sc->sc_tx_mbuf[t]->m_pkthdr.len;
 			m_freem(sc->sc_tx_mbuf[t]);
@@ -695,7 +695,7 @@ iee_start(struct ifnet *ifp)
 
 /* ioctl routine */
 int
-iee_ioctl(struct ifnet *ifp, u_long cmd, void *data)
+iee_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct iee_softc *sc = ifp->if_softc;
 	int s;

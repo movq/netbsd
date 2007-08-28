@@ -1,4 +1,4 @@
-/*	$NetBSD: radix.h,v 1.19 2007/06/09 03:07:21 dyoung Exp $	*/
+/*	$NetBSD: radix.h,v 1.17 2006/10/22 20:55:09 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1993
@@ -121,6 +121,9 @@ struct radix_node_head {
 		(const void *v, const void *mask, struct radix_node_head *head);
 	struct	radix_node *(*rnh_matchpkt)	/* locate based on packet hdr */
 		(const void *v, struct radix_node_head *head);
+	int	(*rnh_walktree)			/* traverse tree */
+		(struct radix_node_head *,
+		     int (*)(struct radix_node *, void *), void *);
 	struct	radix_node rnh_nodes[3];	/* empty tree for common case */
 };
 
@@ -145,8 +148,6 @@ struct radix_node
 	 *rn_addmask(const void *, int, int),
 	 *rn_addroute(const void *, const void *, struct radix_node_head *,
 			struct radix_node [2]),
-	 *rn_delete1(const void *, const void *, struct radix_node_head *,
-			struct radix_node *),
 	 *rn_delete(const void *, const void *, struct radix_node_head *),
 	 *rn_insert(const void *, struct radix_node_head *, int *,
 			struct radix_node [2]),

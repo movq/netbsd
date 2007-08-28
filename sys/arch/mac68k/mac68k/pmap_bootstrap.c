@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_bootstrap.c,v 1.70 2007/08/01 23:48:24 dogcow Exp $	*/
+/*	$NetBSD: pmap_bootstrap.c,v 1.65 2006/11/20 19:58:38 hauke Exp $	*/
 
 /* 
  * Copyright (c) 1991, 1993
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.70 2007/08/01 23:48:24 dogcow Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.65 2006/11/20 19:58:38 hauke Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -53,6 +53,8 @@ __KERNEL_RCSID(0, "$NetBSD: pmap_bootstrap.c,v 1.70 2007/08/01 23:48:24 dogcow E
 #include <machine/cpu.h>
 #include <machine/pmap.h>
 #include <machine/autoconf.h>
+
+#include <ufs/mfs/mfs_extern.h>
 
 #include <mac68k/mac68k/macrom.h>
 
@@ -90,7 +92,7 @@ extern u_int32_t	videorowbytes;
 extern u_int32_t	videosize;
 static u_int32_t	newvideoaddr;
 
-extern void *	ROMBase;
+extern caddr_t	ROMBase;
 
 /*
  * Special purpose kernel virtual addresses, used for mapping
@@ -100,9 +102,8 @@ extern void *	ROMBase;
  *	vmmap:		/dev/mem, crash dumps, parity error checking
  *	msgbufaddr:	kernel message buffer
  */
-void *CADDR1, *CADDR2;
-char *vmmap;
-void *msgbufaddr;
+caddr_t		CADDR1, CADDR2, vmmap;
+extern caddr_t	msgbufaddr;
 
 void	pmap_bootstrap(paddr_t, paddr_t);
 void	bootstrap_mac68k(int);
@@ -397,7 +398,7 @@ pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
 	}
 
 	protopte = (pt_entry_t)ROMBase | PG_RO | PG_V;
-	ROMBase = (void *)PTE2VA(pte);
+	ROMBase = (caddr_t)PTE2VA(pte);
 	epte = &pte[ROMMAPSIZE];
 	while (pte < epte) {
 		*pte++ = protopte;
@@ -430,7 +431,7 @@ pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
 	Sysptmap = PA2VA(kptmpa, pt_entry_t *);
 	/*
 	 * Sysmap: kernel page table (as mapped through Sysptmap)
-	 * Allocated at the end of KVA space.
+	 * Immediately follows `nptpages' of static kernel page table.
 	 */
 	Sysmap = (pt_entry_t *)m68k_ptob((NPTEPG - 2) * NPTEPG);
 
@@ -543,13 +544,13 @@ pmap_bootstrap(paddr_t nextpa, paddr_t firstpa)
 	{
 		vaddr_t va = virtual_avail;
 
-		CADDR1 = (void *)va;
+		CADDR1 = (caddr_t)va;
 		va += PAGE_SIZE;
-		CADDR2 = (void *)va;
+		CADDR2 = (caddr_t)va;
 		va += PAGE_SIZE;
-		vmmap = (void *)va;
+		vmmap = (caddr_t)va;
 		va += PAGE_SIZE;
-		msgbufaddr = (void *)va;
+		msgbufaddr = (caddr_t)va;
 		va += m68k_round_page(MSGBUFSIZE);
 		virtual_avail = va;
 	}
@@ -563,7 +564,7 @@ bootstrap_mac68k(int tc)
 #endif
 	extern int *esym;
 	paddr_t nextpa;
-	void *oldROMBase;
+	caddr_t oldROMBase;
 
 	if (mac68k_machine.do_graybars)
 		printf("Bootstrapping NetBSD/mac68k.\n");

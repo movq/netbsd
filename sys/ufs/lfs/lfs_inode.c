@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_inode.c,v 1.111 2007/07/10 09:50:08 hannken Exp $	*/
+/*	$NetBSD: lfs_inode.c,v 1.106 2006/10/14 09:17:26 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_inode.c,v 1.111 2007/07/10 09:50:08 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_inode.c,v 1.106 2006/10/14 09:17:26 yamt Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -256,6 +256,10 @@ lfs_truncate(struct vnode *ovp, off_t length, int ioflag,
 		oip->i_flag |= IN_CHANGE | IN_UPDATE;
 		return (lfs_update(ovp, NULL, NULL, 0));
 	}
+#ifdef QUOTA
+	if ((error = getinoquota(oip)) != 0)
+		return (error);
+#endif
 	fs = oip->i_lfs;
 	lfs_imtime(fs);
 	osize = oip->i_size;
@@ -280,12 +284,12 @@ lfs_truncate(struct vnode *ovp, off_t length, int ioflag,
 				off_t eob;
 
 				eob = blkroundup(fs, osize);
-				uvm_vnp_setwritesize(ovp, eob);
 				error = ufs_balloc_range(ovp, osize,
 				    eob - osize, cred, aflags);
 				if (error)
 					return error;
 				if (ioflag & IO_SYNC) {
+					ovp->v_size = eob;
 					simple_lock(&ovp->v_interlock);
 					VOP_PUTPAGES(ovp,
 					    trunc_page(osize & fs->lfs_bmask),
@@ -293,7 +297,6 @@ lfs_truncate(struct vnode *ovp, off_t length, int ioflag,
 					    PGO_CLEANIT | PGO_SYNCIO);
 				}
 			}
-			uvm_vnp_setwritesize(ovp, length);
 			error = ufs_balloc_range(ovp, length - 1, 1, cred,
 						 aflags);
 			if (error) {
@@ -437,7 +440,7 @@ lfs_truncate(struct vnode *ovp, off_t length, int ioflag,
 	 * freeing blocks.  lastiblock values are also normalized to -1
 	 * for calls to lfs_indirtrunc below.
 	 */
-	memcpy((void *)newblks, (void *)&oip->i_ffs1_db[0], sizeof newblks);
+	memcpy((caddr_t)newblks, (caddr_t)&oip->i_ffs1_db[0], sizeof newblks);
 	for (level = TRIPLE; level >= SINGLE; level--)
 		if (lastiblock[level] < 0) {
 			newblks[NDADDR+level] = 0;
@@ -759,8 +762,8 @@ lfs_indirtrunc(struct inode *ip, daddr_t lbn, daddr_t dbn,
 	bap = (int32_t *)bp->b_data;	/* XXX ondisk32 */
 	if (lastbn >= 0) {
 		copy = (int32_t *)lfs_malloc(fs, fs->lfs_bsize, LFS_NB_IBLOCK);
-		memcpy((void *)copy, (void *)bap, (u_int)fs->lfs_bsize);
-		memset((void *)&bap[last + 1], 0,
+		memcpy((caddr_t)copy, (caddr_t)bap, (u_int)fs->lfs_bsize);
+		memset((caddr_t)&bap[last + 1], 0,
 		/* XXX ondisk32 */
 		  (u_int)(NINDIR(fs) - (last + 1)) * sizeof (int32_t));
 		error = VOP_BWRITE(bp);

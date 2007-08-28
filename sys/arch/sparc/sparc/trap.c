@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.172 2007/03/04 06:00:47 christos Exp $ */
+/*	$NetBSD: trap.c,v 1.170 2006/07/23 22:06:07 ad Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.172 2007/03/04 06:00:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.170 2006/07/23 22:06:07 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_svr4.h"
@@ -67,6 +67,8 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.172 2007/03/04 06:00:47 christos Exp $");
 #include <sys/resource.h>
 #include <sys/signal.h>
 #include <sys/wait.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall.h>
 #include <sys/syslog.h>
 #include <sys/kauth.h>
@@ -417,9 +419,9 @@ badtrap:
 #endif
 
 		if (fs == NULL) {
-			KERNEL_LOCK(1, l);
+			KERNEL_PROC_LOCK(l);
 			fs = malloc(sizeof *fs, M_SUBPROC, M_WAITOK);
-			KERNEL_UNLOCK_LAST(l);
+			KERNEL_PROC_UNLOCK(l);
 			*fs = initfpstate;
 			l->l_md.md_fpstate = fs;
 		}
@@ -495,16 +497,14 @@ badtrap:
 	}
 
 	case T_WINOF:
-		KERNEL_LOCK(1, l);
-		if (rwindow_save(l)) {
-			mutex_enter(&p->p_smutex);
+		KERNEL_PROC_LOCK(l);
+		if (rwindow_save(l))
 			sigexit(l, SIGILL);
-		}
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 		break;
 
 #define read_rw(src, dst) \
-	copyin((void *)(src), (void *)(dst), sizeof(struct rwindow))
+	copyin((caddr_t)(src), (caddr_t)(dst), sizeof(struct rwindow))
 
 	case T_RWRET:
 		/*
@@ -515,7 +515,7 @@ badtrap:
 		 * nsaved to -1.  If we decide to deliver a signal on
 		 * our way out, we will clear nsaved.
 		 */
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 		if (pcb->pcb_uw || pcb->pcb_nsaved)
 			panic("trap T_RWRET 1");
 #ifdef DEBUG
@@ -524,14 +524,12 @@ badtrap:
 				cpuinfo.ci_cpuid, p->p_comm, p->p_pid,
 				tf->tf_out[6]);
 #endif
-		if (read_rw(tf->tf_out[6], &pcb->pcb_rw[0])) {
-			mutex_enter(&p->p_smutex);
+		if (read_rw(tf->tf_out[6], &pcb->pcb_rw[0]))
 			sigexit(l, SIGILL);
-		}
 		if (pcb->pcb_nsaved)
 			panic("trap T_RWRET 2");
 		pcb->pcb_nsaved = -1;		/* mark success */
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 		break;
 
 	case T_WINUF:
@@ -544,7 +542,7 @@ badtrap:
 		 * in the pcb.  The restore's window may still be in
 		 * the CPU; we need to force it out to the stack.
 		 */
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 #ifdef DEBUG
 		if (rwindow_debug)
 			printf("cpu%d:%s[%d]: rwindow: T_WINUF 0: pcb<-stack: 0x%x\n",
@@ -552,31 +550,27 @@ badtrap:
 				tf->tf_out[6]);
 #endif
 		write_user_windows();
-		if (rwindow_save(l) || read_rw(tf->tf_out[6], &pcb->pcb_rw[0])) {
-			mutex_enter(&p->p_smutex);
+		if (rwindow_save(l) || read_rw(tf->tf_out[6], &pcb->pcb_rw[0]))
 			sigexit(l, SIGILL);
-		}
 #ifdef DEBUG
 		if (rwindow_debug)
 			printf("cpu%d:%s[%d]: rwindow: T_WINUF 1: pcb<-stack: 0x%x\n",
 				cpuinfo.ci_cpuid, p->p_comm, p->p_pid,
 				pcb->pcb_rw[0].rw_in[6]);
 #endif
-		if (read_rw(pcb->pcb_rw[0].rw_in[6], &pcb->pcb_rw[1])) {
-			mutex_enter(&p->p_smutex);
+		if (read_rw(pcb->pcb_rw[0].rw_in[6], &pcb->pcb_rw[1]))
 			sigexit(l, SIGILL);
-		}
 		if (pcb->pcb_nsaved)
 			panic("trap T_WINUF");
 		pcb->pcb_nsaved = -1;		/* mark success */
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 		break;
 
 	case T_ALIGN:
 		if ((p->p_md.md_flags & MDP_FIXALIGN) != 0) {
-			KERNEL_LOCK(1, l);
+			KERNEL_PROC_LOCK(l);
 			n = fixalign(l, tf);
-			KERNEL_UNLOCK_LAST(l);
+			KERNEL_PROC_UNLOCK(l);
 			if (n == 0) {
 				ADVANCE;
 				break;
@@ -598,7 +592,7 @@ badtrap:
 		 * will not match once fpu_cleanup does its job, so
 		 * we must not save again later.)
 		 */
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 		if (l != cpuinfo.fplwp)
 			panic("fpe without being the FP user");
 		FPU_LOCK(s);
@@ -606,7 +600,7 @@ badtrap:
 		cpuinfo.fplwp = NULL;
 		l->l_md.md_fpu = NULL;
 		FPU_UNLOCK(s);
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 		/* tf->tf_psr &= ~PSR_EF; */	/* share_fpu will do this */
 		if ((code = fpu_cleanup(l, l->l_md.md_fpstate)) != 0) {
 			sig = SIGFPE;
@@ -658,12 +652,10 @@ badtrap:
 	case T_FLUSHWIN:
 		write_user_windows();
 #ifdef probably_slower_since_this_is_usually_false
-		KERNEL_LOCK(1, l);
-		if (pcb->pcb_nsaved && rwindow_save(p)) {
-			mutex_enter(&p->p_smutex);
+		KERNEL_PROC_LOCK(l);
+		if (pcb->pcb_nsaved && rwindow_save(p))
 			sigexit(l, SIGILL);
-		}
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 #endif
 		ADVANCE;
 		break;
@@ -703,10 +695,10 @@ badtrap:
 		break;
 	}
 	if (sig != 0) {
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 		ksi.ksi_signo = sig;
 		trapsignal(l, &ksi);
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 	}
 	userret(l, pc, sticks);
 	share_fpu(l, tf);
@@ -746,7 +738,7 @@ rwindow_save(struct lwp *l)
 		if (rwindow_debug)
 			printf(" [%d]0x%x", cpuinfo.ci_cpuid, rw[1].rw_in[6]);
 #endif
-		if (copyout((void *)rw, (void *)rw[1].rw_in[6],
+		if (copyout((caddr_t)rw, (caddr_t)rw[1].rw_in[6],
 		    sizeof *rw))
 			return (-1);
 		rw++;
@@ -807,7 +799,7 @@ mem_access_fault(unsigned type, int ser, u_int v, int pc, int psr,
 	sticks = p->p_sticks;
 
 	if ((psr & PSR_PS) == 0)
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 
 #ifdef FPU_DEBUG
 	if ((tf->tf_psr & PSR_EF) != 0) {
@@ -886,8 +878,13 @@ mem_access_fault(unsigned type, int ser, u_int v, int pc, int psr,
 				return;
 			goto kfault;
 		}
-	} else
+	} else {
 		l->l_md.md_tf = tf;
+		if (l->l_flag & L_SA) {
+			l->l_savp->savp_faultaddr = (vaddr_t)v;
+			l->l_flag |= L_SA_PAGEFAULT;
+		}
+	}
 
 	/*
 	 * mmu_pagein returns -1 if the page is already valid, in which
@@ -913,7 +910,7 @@ mem_access_fault(unsigned type, int ser, u_int v, int pc, int psr,
 	 * the current limit and we need to reflect that as an access
 	 * error.
 	 */
-	if ((void *)va >= vm->vm_maxsaddr
+	if ((caddr_t)va >= vm->vm_maxsaddr
 #ifdef COMPAT_SUNOS
 	    && !(p->p_emul == &emul_sunos && va < USRSTACK -
 		 (vaddr_t)p->p_limit->pl_rlimit[RLIMIT_STACK].rlim_cur +
@@ -974,7 +971,8 @@ kfault:
 	}
 out:
 	if ((psr & PSR_PS) == 0) {
-		KERNEL_UNLOCK_LAST(l);
+		l->l_flag &= ~L_SA_PAGEFAULT;
+		KERNEL_PROC_UNLOCK(l);
 		userret(l, pc, sticks);
 		share_fpu(l, tf);
 	}
@@ -1055,9 +1053,9 @@ mem_access_fault4m(unsigned type, u_int sfsr, u_int sfva, struct trapframe *tf)
 	}
 
 	if ((psr & PSR_PS) == 0)
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 	else
-		KERNEL_LOCK(1, NULL);
+		KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 
 	/*
 	 * Figure out what to pass the VM code. We cannot ignore the sfva
@@ -1188,13 +1186,18 @@ mem_access_fault4m(unsigned type, u_int sfsr, u_int sfva, struct trapframe *tf)
 		if (va >= KERNBASE) {
 			rv = uvm_fault(kernel_map, va, atype);
 			if (rv == 0) {
-				KERNEL_UNLOCK_ONE(NULL);
+				KERNEL_UNLOCK();
 				return;
 			}
 			goto kfault;
 		}
-	} else
+	} else {
 		l->l_md.md_tf = tf;
+		if (l->l_flag & L_SA) {
+			l->l_savp->savp_faultaddr = (vaddr_t)sfva;
+			l->l_flag |= L_SA_PAGEFAULT;
+		}
+	}
 
 	vm = p->p_vmspace;
 
@@ -1208,7 +1211,7 @@ mem_access_fault4m(unsigned type, u_int sfsr, u_int sfva, struct trapframe *tf)
 	 * the current limit and we need to reflect that as an access
 	 * error.
 	 */
-	if (rv == 0 && (void *)va >= vm->vm_maxsaddr)
+	if (rv == 0 && (caddr_t)va >= vm->vm_maxsaddr)
 		uvm_grow(p, va);
 	if (rv != 0) {
 		/*
@@ -1232,7 +1235,7 @@ kfault:
 			tf->tf_pc = onfault;
 			tf->tf_npc = onfault + 4;
 			tf->tf_out[0] = (rv == EACCES) ? EFAULT : rv;
-			KERNEL_UNLOCK_ONE(NULL);
+			KERNEL_UNLOCK();
 			return;
 		}
 		KSI_INIT_TRAP(&ksi);
@@ -1255,15 +1258,27 @@ kfault:
 	}
 out:
 	if ((psr & PSR_PS) == 0) {
-		KERNEL_UNLOCK_LAST(l);
+		l->l_flag &= ~L_SA_PAGEFAULT;
+		KERNEL_PROC_UNLOCK(l);
 out_nounlock:
 		userret(l, pc, sticks);
 		share_fpu(l, tf);
 	}
 	else
-		KERNEL_UNLOCK_ONE(NULL);
+		KERNEL_UNLOCK();
 }
 #endif /* SUN4M */
+
+/*
+ * XXX This is a terrible name.
+ */
+void
+upcallret(struct lwp *l)
+{
+
+	KERNEL_PROC_UNLOCK(l);
+	userret(l, l->l_md.md_tf->tf_pc, 0);
+}
 
 /*
  * Start a new LWP
@@ -1283,7 +1298,7 @@ startlwp(void *arg)
 #endif
 	pool_put(&lwp_uc_pool, uc);
 
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 	userret(l, l->l_md.md_tf->tf_pc, 0);
 }
 

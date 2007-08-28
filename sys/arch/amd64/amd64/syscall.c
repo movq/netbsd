@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.25 2007/08/15 12:07:24 ad Exp $	*/
+/*	$NetBSD: syscall.c,v 1.21 2006/08/26 20:05:25 ad Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -37,13 +37,17 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.25 2007/08/15 12:07:24 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.21 2006/08/26 20:05:25 ad Exp $");
+
+#include "opt_ktrace.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/user.h>
 #include <sys/signal.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/ktrace.h>
 #include <sys/systrace.h>
 #include <sys/syscall.h>
@@ -63,14 +67,23 @@ child_return(void *arg)
 {
 	struct lwp *l = arg;
 	struct trapframe *tf = l->l_md.md_regs;
+#ifdef KTRACE
+	struct proc *p = l->l_proc;
+#endif
 
 	tf->tf_rax = 0;
 	tf->tf_rflags &= ~PSL_C;
 
-	KERNEL_UNLOCK_LAST(l);
+	KERNEL_PROC_UNLOCK(l);
 
 	userret(l);
-	ktrsysret(SYS_fork, 0, 0);
+#ifdef KTRACE
+	if (KTRPOINT(p, KTR_SYSRET)) {
+		KERNEL_PROC_LOCK(l);
+		ktrsysret(l, SYS_fork, 0, 0);
+		KERNEL_PROC_UNLOCK(l);
+	}
+#endif
 }
 
 void
@@ -91,7 +104,7 @@ syscall_intern(struct proc *p)
 static void
 syscall_plain(struct trapframe *frame)
 {
-	void *params;
+	caddr_t params;
 	const struct sysent *callp;
 	struct proc *p;
 	struct lwp *l;
@@ -147,8 +160,8 @@ syscall_plain(struct trapframe *frame)
 		}
 		if (argsize > 6) {
 			argsize -= 6;
-			params = (char *)frame->tf_rsp + sizeof(register_t);
-			error = copyin(params, (void *)&args[6],
+			params = (caddr_t)frame->tf_rsp + sizeof(register_t);
+			error = copyin(params, (caddr_t)&args[6],
 					argsize << 3);
 			if (error != 0)
 				goto bad;
@@ -161,9 +174,9 @@ syscall_plain(struct trapframe *frame)
 	if (callp->sy_flags & SYCALL_MPSAFE)
 		error = (*callp->sy_call)(l, argp, rval);
 	else {
-		KERNEL_LOCK(1, l);
+		KERNEL_PROC_LOCK(l);
 		error = (*callp->sy_call)(l, argp, rval);
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 	}
 
 	switch (error) {
@@ -198,7 +211,7 @@ syscall_plain(struct trapframe *frame)
 static void
 syscall_fancy(struct trapframe *frame)
 {
-	void *params;
+	caddr_t params;
 	const struct sysent *callp;
 	struct proc *p;
 	struct lwp *l;
@@ -254,17 +267,17 @@ syscall_fancy(struct trapframe *frame)
 		}
 		if (argsize > 6) {
 			argsize -= 6;
-			params = (char *)frame->tf_rsp + sizeof(register_t);
-			error = copyin(params, (void *)&args[6],
+			params = (caddr_t)frame->tf_rsp + sizeof(register_t);
+			error = copyin(params, (caddr_t)&args[6],
 					argsize << 3);
 			if (error != 0)
 				goto bad;
 		}
 	}
 
-	KERNEL_LOCK(1, l);
+	KERNEL_PROC_LOCK(l);
 	if ((error = trace_enter(l, code, code, NULL, argp)) != 0) {
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 		goto out;
 	}
 
@@ -272,11 +285,11 @@ syscall_fancy(struct trapframe *frame)
 	rval[1] = 0;
 
 	if (callp->sy_flags & SYCALL_MPSAFE) {
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 		error = (*callp->sy_call)(l, argp, rval);
 	} else {
 		error = (*callp->sy_call)(l, argp, rval);
-		KERNEL_UNLOCK_LAST(l);
+		KERNEL_PROC_UNLOCK(l);
 	}
 out:
 	switch (error) {

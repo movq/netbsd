@@ -1,4 +1,4 @@
-/*	$NetBSD: if_uralvar.h,v 1.8 2007/06/09 12:13:12 kiyohara Exp $ */
+/*	$NetBSD: if_uralvar.h,v 1.6 2006/10/31 21:53:41 joerg Exp $ */
 /*	$OpenBSD: if_ralvar.h,v 1.2 2005/05/13 18:42:50 damien Exp $  */
 
 /*-
@@ -104,8 +104,8 @@ struct ural_softc {
 
 	struct ieee80211_beacon_offsets sc_bo;
 
-	usb_callout_t		sc_scan_ch;
-	usb_callout_t		sc_amrr_ch;
+	struct callout		scan_ch;
+	struct callout		amrr_ch;
 
 	int			sc_tx_timer;
 
@@ -125,7 +125,7 @@ struct ural_softc {
 	int			nb_ant;
 
 #if NBPFILTER > 0
-	void *			sc_drvbpf;
+	caddr_t			sc_drvbpf;
 
 	union {
 		struct ural_rx_radiotap_header th;

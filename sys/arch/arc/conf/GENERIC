@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.149 2007/08/22 12:43:00 tsutsui Exp $
+# $NetBSD: GENERIC,v 1.145.2.2 2007/08/25 09:00:03 liamjfoy Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/arc/conf/std.arc"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.149 $"
+#ident		"GENERIC-$Revision: 1.145.2.2 $"
 
 maxusers	32		# estimated number of users
 
@@ -89,8 +89,7 @@ options 	COMPAT_14	# NetBSD 1.4,
 options 	COMPAT_15	# NetBSD 1.5,
 options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_20	# NetBSD 2.0,
-options 	COMPAT_30	# NetBSD 3.0,
-options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
@@ -411,7 +410,6 @@ pseudo-device	swcrypto		# software crypto implementation
 pseudo-device	ccd		4	# concatenated/striped disk devices
 #pseudo-device	cgd		4	# cryptographic disk devices
 pseudo-device	raid		8	# RAIDframe disk driver
-#options 	RAID_AUTOCONFIG
 # Options to enable various other RAIDframe RAID types.
 #options 	RF_INCLUDE_EVENODD=1
 #options 	RF_INCLUDE_RAID5_RS=1

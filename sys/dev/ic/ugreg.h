@@ -1,4 +1,4 @@
-/* $NetBSD: ugreg.h,v 1.1 2007/05/08 16:48:38 xtraeme Exp $ */
+/* $NetBSD: ugreg.h,v 1.1.2.3 2007/05/13 22:13:28 pavel Exp $ */
 
 /*
  * Copyright (c) 2007 Mihai Chelaru <kefren@netbsd.ro>

@@ -1,4 +1,4 @@
-/*	$NetBSD: uhid.c,v 1.76 2007/03/04 06:02:49 christos Exp $	*/
+/*	$NetBSD: uhid.c,v 1.72.2.1 2007/04/06 18:43:52 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhid.c,v 1.76 2007/03/04 06:02:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhid.c,v 1.72.2.1 2007/04/06 18:43:52 bouyer Exp $");
 
 #include "opt_compat_netbsd.h"
 
@@ -122,7 +122,7 @@ Static void uhid_intr(struct uhidev *, void *, u_int len);
 
 Static int uhid_do_read(struct uhid_softc *, struct uio *uio, int);
 Static int uhid_do_write(struct uhid_softc *, struct uio *uio, int);
-Static int uhid_do_ioctl(struct uhid_softc*, u_long, void *, int, struct lwp *);
+Static int uhid_do_ioctl(struct uhid_softc*, u_long, caddr_t, int, struct lwp *);
 
 USB_DECLARE_DRIVER(uhid);
 
@@ -252,9 +252,7 @@ uhid_intr(struct uhidev *addr, void *data, u_int len)
 	selnotify(&sc->sc_rsel, 0);
 	if (sc->sc_async != NULL) {
 		DPRINTFN(3, ("uhid_intr: sending SIGIO %p\n", sc->sc_async));
-		mutex_enter(&proclist_mutex);
 		psignal(sc->sc_async, SIGIO);
-		mutex_exit(&proclist_mutex);
 	}
 }
 
@@ -421,7 +419,7 @@ uhidwrite(dev_t dev, struct uio *uio, int flag)
 }
 
 int
-uhid_do_ioctl(struct uhid_softc *sc, u_long cmd, void *addr,
+uhid_do_ioctl(struct uhid_softc *sc, u_long cmd, caddr_t addr,
     int flag, struct lwp *l)
 {
 	struct usb_ctl_report_desc *rd;
@@ -539,12 +537,12 @@ uhid_do_ioctl(struct uhid_softc *sc, u_long cmd, void *addr,
 
 	case USB_GET_DEVICEINFO:
 		usbd_fill_deviceinfo(sc->sc_hdev.sc_parent->sc_udev,
-			             (struct usb_device_info *)addr, 0);
+			             (struct usb_device_info *)addr, 1);
 		break;
 #ifdef COMPAT_30
 	case USB_GET_DEVICEINFO_OLD:
 		usbd_fill_deviceinfo_old(sc->sc_hdev.sc_parent->sc_udev,
-					 (struct usb_device_info_old *)addr, 0);
+					 (struct usb_device_info_old *)addr, 1);
 
 		break;
 #endif
@@ -566,7 +564,7 @@ uhid_do_ioctl(struct uhid_softc *sc, u_long cmd, void *addr,
 }
 
 int
-uhidioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
+uhidioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 {
 	struct uhid_softc *sc;
 	int error;

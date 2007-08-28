@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_siginfo.h,v 1.3 2007/03/04 07:54:10 christos Exp $	 */
+/*	$NetBSD: svr4_32_siginfo.h,v 1.1 2001/02/06 16:37:58 eeh Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.

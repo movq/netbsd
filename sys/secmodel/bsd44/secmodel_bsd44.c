@@ -1,4 +1,4 @@
-/* $NetBSD: secmodel_bsd44.c,v 1.10 2007/01/16 11:53:00 elad Exp $ */
+/* $NetBSD: secmodel_bsd44.c,v 1.4 2006/10/06 23:01:12 elad Exp $ */
 /*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
  * All rights reserved.
@@ -11,7 +11,10 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ *      This product includes software developed by Elad Efrat.
+ * 4. The name of the author may not be used to endorse or promote products
  *    derived from this software without specific prior written permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
@@ -27,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: secmodel_bsd44.c,v 1.10 2007/01/16 11:53:00 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: secmodel_bsd44.c,v 1.4 2006/10/06 23:01:12 elad Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -82,7 +85,7 @@ SYSCTL_SETUP(sysctl_security_bsd44_setup,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "securelevel",
 		       SYSCTL_DESCR("System security level"),
-		       secmodel_bsd44_sysctl_securelevel, 0, NULL, 0,
+		       secmodel_bsd44_sysctl_securelevel, 0, &securelevel, 0,
 		       CTL_CREATE, CTL_EOL);
 
 	sysctl_createv(clog, 0, &rnode, NULL,
@@ -94,34 +97,14 @@ SYSCTL_SETUP(sysctl_security_bsd44_setup,
 		       CTL_CREATE, CTL_EOL);
 }
 
+/*
+ * Start the traditional NetBSD security model.
+ */
 void
-secmodel_bsd44_start(void)
+secmodel_start(void)
 {
 	secmodel_bsd44_init();
 
 	secmodel_bsd44_suser_start();
 	secmodel_bsd44_securelevel_start();
-
-	secmodel_register();
 }
-
-#if defined(_LKM)
-void
-secmodel_bsd44_stop(void)
-{
-	secmodel_bsd44_suser_stop();
-	secmodel_bsd44_securelevel_stop();
-
-	secmodel_deregister();
-}
-#endif /* _LKM */
-
-#if !defined(_LKM)
-void
-secmodel_start(void)
-{
-	secmodel_bsd44_start();
-}
-#endif /* !_LKM */
-
-

@@ -1,4 +1,4 @@
-/* $NetBSD: kern_tc.c,v 1.20 2007/08/17 21:20:24 ad Exp $ */
+/* $NetBSD: kern_tc.c,v 1.16 2006/11/01 10:17:58 yamt Exp $ */
 
 /*-
  * ----------------------------------------------------------------------------
@@ -11,7 +11,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("$FreeBSD: src/sys/kern/kern_tc.c,v 1.166 2005/09/19 22:16:31 andre Exp $"); */
-__KERNEL_RCSID(0, "$NetBSD: kern_tc.c,v 1.20 2007/08/17 21:20:24 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_tc.c,v 1.16 2006/11/01 10:17:58 yamt Exp $");
 
 #include "opt_ntp.h"
 
@@ -129,7 +129,7 @@ sysctl_kern_timecounter_hardware(SYSCTLFN_ARGS)
 		return error;
 
 	if (l != NULL && (error = kauth_authorize_generic(l->l_cred, 
-	    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+	    KAUTH_GENERIC_ISSUSER, &l->l_acflag)) != 0)
 		return (error);
 
 	/* XXX locking */
@@ -280,10 +280,8 @@ binuptime(struct bintime *bt)
 	do {
 		th = timehands;
 		gen = th->th_generation;
-		mb_read();
 		*bt = th->th_offset;
 		bintime_addx(bt, th->th_scale * tc_delta(th));
-		mb_read();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -346,9 +344,7 @@ getbinuptime(struct bintime *bt)
 	do {
 		th = timehands;
 		gen = th->th_generation;
-		mb_read();
 		*bt = th->th_offset;
-		mb_read();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -362,9 +358,7 @@ getnanouptime(struct timespec *tsp)
 	do {
 		th = timehands;
 		gen = th->th_generation;
-		mb_read();
 		bintime2timespec(&th->th_offset, tsp);
-		mb_read();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -378,9 +372,7 @@ getmicrouptime(struct timeval *tvp)
 	do {
 		th = timehands;
 		gen = th->th_generation;
-		mb_read();
 		bintime2timeval(&th->th_offset, tvp);
-		mb_read();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -394,9 +386,7 @@ getbintime(struct bintime *bt)
 	do {
 		th = timehands;
 		gen = th->th_generation;
-		mb_read();
 		*bt = th->th_offset;
-		mb_read();
 	} while (gen == 0 || gen != th->th_generation);
 	bintime_add(bt, &timebasebin);
 }
@@ -411,9 +401,7 @@ getnanotime(struct timespec *tsp)
 	do {
 		th = timehands;
 		gen = th->th_generation;
-		mb_read();
 		*tsp = th->th_nanotime;
-		mb_read();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -427,9 +415,7 @@ getmicrotime(struct timeval *tvp)
 	do {
 		th = timehands;
 		gen = th->th_generation;
-		mb_read();
 		*tvp = th->th_microtime;
-		mb_read();
 	} while (gen == 0 || gen != th->th_generation);
 }
 
@@ -448,14 +434,14 @@ tc_init(struct timecounter *tc)
 	u /= 10;
 	if (u > hz && tc->tc_quality >= 0) {
 		tc->tc_quality = -2000;
-		aprint_verbose(
-		    "timecounter: Timecounter \"%s\" frequency %ju Hz",
+		if (bootverbose) {
+			printf("timecounter: Timecounter \"%s\" frequency %ju Hz",
 			    tc->tc_name, (uintmax_t)tc->tc_frequency);
-		aprint_verbose(" -- Insufficient hz, needs at least %u\n", u);
+			printf(" -- Insufficient hz, needs at least %u\n", u);
+		}
 	} else if (tc->tc_quality >= 0 || bootverbose) {
-		aprint_verbose(
-		    "timecounter: Timecounter \"%s\" frequency %ju Hz "
-		    "quality %d\n", tc->tc_name, (uintmax_t)tc->tc_frequency,
+		printf("timecounter: Timecounter \"%s\" frequency %ju Hz quality %d\n",
+		    tc->tc_name, (uintmax_t)tc->tc_frequency,
 		    tc->tc_quality);
 	}
 
@@ -536,18 +522,15 @@ tc_windup(void)
 	time_t t;
 
 	s_update = 0;
-
 	/*
 	 * Make the next timehands a copy of the current one, but do not
 	 * overwrite the generation or next pointer.  While we update
-	 * the contents, the generation must be zero.  Ensure global
-	 * visibility of the generation before proceeding.
+	 * the contents, the generation must be zero.
 	 */
 	tho = timehands;
 	th = tho->th_next;
 	ogen = th->th_generation;
 	th->th_generation = 0;
-	mb_write();
 	bcopy(tho, th, offsetof(struct timehands, th_generation));
 
 	/*
@@ -642,21 +625,15 @@ tc_windup(void)
 	}
 	/*
 	 * Now that the struct timehands is again consistent, set the new
-	 * generation number, making sure to not make it zero.  Ensure
-	 * changes are globally visible before changing.
+	 * generation number, making sure to not make it zero.
 	 */
 	if (++ogen == 0)
 		ogen = 1;
-	mb_write();
 	th->th_generation = ogen;
 
-	/*
-	 * Go live with the new struct timehands.  Ensure changes are
-	 * globally visible before changing.
-	 */
+	/* Go live with the new struct timehands. */
 	time_second = th->th_microtime.tv_sec;
 	time_uptime = th->th_offset.sec;
-	mb_write();
 	timehands = th;
 }
 
@@ -723,7 +700,7 @@ SYSCTL_PROC(_kern_timecounter, OID_AUTO, choice, CTLTYPE_STRING | CTLFLAG_RD,
  */
 
 int
-pps_ioctl(u_long cmd, void *data, struct pps_state *pps)
+pps_ioctl(u_long cmd, caddr_t data, struct pps_state *pps)
 {
 	pps_params_t *app;
 	pps_info_t *pipi;
@@ -926,8 +903,7 @@ inittimecounter(void)
 	else
 		tc_tick = 1;
 	p = (tc_tick * 1000000) / hz;
-	aprint_verbose("timecounter: Timecounters tick every %d.%03u msec\n",
-	    p / 1000, p % 1000);
+	printf("timecounter: Timecounters tick every %d.%03u msec\n", p / 1000, p % 1000);
 
 	/* warm up new timecounter (again) and get rolling. */
 	(void)timecounter->tc_get_timecount(timecounter);

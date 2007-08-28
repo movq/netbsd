@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.c,v 1.43 2007/07/08 10:19:21 pooka Exp $	*/
+/*	$NetBSD: netbsd32_machdep.c,v 1.30.2.1 2007/01/06 13:18:16 bouyer Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.43 2007/07/08 10:19:21 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.30.2.1 2007/01/06 13:18:16 bouyer Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_coredump.h"
@@ -65,7 +65,6 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.43 2007/07/08 10:19:21 pooka 
 #include <machine/mtrr.h>
 #include <machine/netbsd32_machdep.h>
 #include <machine/sysarch.h>
-#include <machine/userret.h>
 
 #include <compat/netbsd32/netbsd32.h>
 #include <compat/netbsd32/netbsd32_exec.h>
@@ -75,7 +74,7 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.43 2007/07/08 10:19:21 pooka 
 const char	machine32[] = "i386";
 const char	machine_arch32[] = "i386";	
 
-extern void (osyscall_return)(void);
+extern void (osyscall_return) __P((void));
 
 static int x86_64_get_mtrr32(struct lwp *, void *, register_t *);
 static int x86_64_set_mtrr32(struct lwp *, void *, register_t *);
@@ -135,7 +134,7 @@ netbsd32_setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 	pcb->pcb_savefpu.fp_fxsave.fx_mxcsr_mask = __INITIAL_MXCSR_MASK__;
 
 
-	p->p_flag |= PK_32;
+	p->p_flag |= P_32;
 
 	tf = l->l_md.md_regs;
 	tf->tf_ds = LSEL(LUDATA32_SEL, SEL_UPL);
@@ -170,20 +169,21 @@ netbsd32_sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	int sig = ksi->ksi_signo;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
 	struct netbsd32_sigframe_sigcontext *fp, frame;
-	int onstack, error;
+	int onstack;
 	struct sigacts *ps = p->p_sigacts;
 
 	tf = l->l_md.md_regs;
 
 	/* Do we need to jump onto the signal stack? */
 	onstack =
-	    (l->l_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
+	    (p->p_sigctx.ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
 	    (SIGACTION(p, sig).sa_flags & SA_ONSTACK) != 0;
 
 	/* Allocate space for the signal handler context. */
 	if (onstack)
 		fp = (struct netbsd32_sigframe_sigcontext *)
-		    ((char *)l->l_sigstk.ss_sp + l->l_sigstk.ss_size);
+		    ((caddr_t)p->p_sigctx.ps_sigstk.ss_sp +
+					  p->p_sigctx.ps_sigstk.ss_size);
 	else
 		fp = (struct netbsd32_sigframe_sigcontext *)tf->tf_rsp;
 	fp--;
@@ -225,18 +225,12 @@ netbsd32_sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	frame.sf_sc.sc_err = tf->tf_err;
 
 	/* Save signal stack. */
-	frame.sf_sc.sc_onstack = l->l_sigstk.ss_flags & SS_ONSTACK;
+	frame.sf_sc.sc_onstack = p->p_sigctx.ps_sigstk.ss_flags & SS_ONSTACK;
 
 	/* Save signal mask. */
 	frame.sf_sc.sc_mask = *mask;
 
-	sendsig_reset(l, sig);
-
-	mutex_exit(&p->p_smutex);
-	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
-
-	if (error != 0) {
+	if (copyout(&frame, fp, sizeof frame) != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
@@ -261,7 +255,7 @@ netbsd32_sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 }
 #endif
 
@@ -271,7 +265,7 @@ netbsd32_sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct lwp *l = curlwp;
 	struct proc *p = l->l_proc;
 	struct sigacts *ps = p->p_sigacts;
-	int onstack, error;
+	int onstack;
 	int sig = ksi->ksi_signo;
 	struct netbsd32_sigframe_siginfo *fp, frame;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
@@ -279,13 +273,14 @@ netbsd32_sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* Do we need to jump onto the signal stack? */
 	onstack =
-	    (l->l_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
+	    (p->p_sigctx.ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
 	    (SIGACTION(p, sig).sa_flags & SA_ONSTACK) != 0;
 
 	/* Allocate space for the signal handler context. */
 	if (onstack)
 		fp = (struct netbsd32_sigframe_siginfo *)
-		    ((char *)l->l_sigstk.ss_sp + l->l_sigstk.ss_size);
+		    ((caddr_t)p->p_sigctx.ps_sigstk.ss_sp +
+					  p->p_sigctx.ps_sigstk.ss_size);
 	else
 		fp = (struct netbsd32_sigframe_siginfo *)tf->tf_rsp;
 
@@ -310,18 +305,13 @@ netbsd32_sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	netbsd32_si_to_si32(&frame.sf_si, (const siginfo_t *)&ksi->ksi_info);
 	frame.sf_uc.uc_flags = _UC_SIGMASK;
 	frame.sf_uc.uc_sigmask = *mask;
-	frame.sf_uc.uc_link = (uint32_t)(uintptr_t)l->l_ctxlink;
-	frame.sf_uc.uc_flags |= (l->l_sigstk.ss_flags & SS_ONSTACK)
+	frame.sf_uc.uc_link = 0;
+	frame.sf_uc.uc_flags |= (p->p_sigctx.ps_sigstk.ss_flags & SS_ONSTACK)
 	    ? _UC_SETSTACK : _UC_CLRSTACK;
 	memset(&frame.sf_uc.uc_stack, 0, sizeof(frame.sf_uc.uc_stack));
-	sendsig_reset(l, sig);
-
-	mutex_exit(&p->p_smutex);
 	cpu_getmcontext32(l, &frame.sf_uc.uc_mcontext, &frame.sf_uc.uc_flags);
-	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
 
-	if (error != 0) {
+	if (copyout(&frame, fp, sizeof(frame)) != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
@@ -346,7 +336,7 @@ netbsd32_sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 }
 
 void
@@ -367,8 +357,8 @@ compat_16_netbsd32___sigreturn14(struct lwp *l, void *v, register_t *retval)
 		syscallarg(netbsd32_sigcontextp_t) sigcntxp;
 	} */ *uap = v;
 	struct netbsd32_sigcontext *scp, context;
-	struct proc *p = l->l_proc;
 	struct trapframe *tf;
+	struct proc *p = l->l_proc;
 	int error;
 
 	/*
@@ -376,8 +366,8 @@ compat_16_netbsd32___sigreturn14(struct lwp *l, void *v, register_t *retval)
 	 * It is unsafe to keep track of it ourselves, in the event that a
 	 * program jumps out of a signal handler.
 	 */
-	scp = NETBSD32PTR64(SCARG(uap, sigcntxp));
-	if (copyin(scp, &context, sizeof(*scp)) != 0)
+	scp = (struct netbsd32_sigcontext *)(uintptr_t)SCARG(uap, sigcntxp);
+	if (copyin((caddr_t)scp, &context, sizeof(*scp)) != 0)
 		return (EFAULT);
 
 	/* Restore register context. */
@@ -408,15 +398,14 @@ compat_16_netbsd32___sigreturn14(struct lwp *l, void *v, register_t *retval)
 	tf->tf_rsp = context.sc_esp;
 	tf->tf_ss = context.sc_ss;
 
-	mutex_enter(&p->p_smutex);
 	/* Restore signal stack. */
 	if (context.sc_onstack & SS_ONSTACK)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 	else
-		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags &= ~SS_ONSTACK;
+
 	/* Restore signal mask. */
-	(void) sigprocmask1(l, SIG_SETMASK, &context.sc_mask, 0);
-	mutex_exit(&p->p_smutex);
+	(void) sigprocmask1(p, SIG_SETMASK, &context.sc_mask, 0);
 
 	return (EJUSTRETURN);
 }
@@ -580,7 +569,10 @@ netbsd32_process_read_fpregs(struct lwp *l, struct fpreg32 *regs)
 }
 
 int
-netbsd32_sysarch(struct lwp *l, void *v, register_t *retval)
+netbsd32_sysarch(l, v, retval)
+	struct lwp *l;
+	void *v;
+	register_t *retval;
 {
 	struct netbsd32_sysarch_args /* {
 		syscallarg(int) op;
@@ -589,17 +581,19 @@ netbsd32_sysarch(struct lwp *l, void *v, register_t *retval)
 	int error;
 
 	switch (SCARG(uap, op)) {
-		case X86_IOPL:
-			error = x86_iopl(l,
-			    NETBSD32PTR64(SCARG(uap, parms)), retval);
+		case X86_64_IOPL:
+			error = x86_64_iopl(l,
+			    (void *)(uintptr_t)SCARG(uap, parms), retval);
 			break;
-		case X86_GET_MTRR:
+		case X86_64_GET_MTRR:
 			error = x86_64_get_mtrr32(l,
-			    NETBSD32PTR64(SCARG(uap, parms)), retval);
+			    (void *)(uintptr_t)SCARG(uap, parms),
+			    retval);
 			break;
-		case X86_SET_MTRR:
+		case X86_64_SET_MTRR:
 			error = x86_64_set_mtrr32(l,
-			    NETBSD32PTR64(SCARG(uap, parms)), retval);
+			    (void *)(uintptr_t)SCARG(uap, parms),
+			    retval);
 			break;
 		default:
 			error = EINVAL;
@@ -802,7 +796,6 @@ cpu_setmcontext32(struct lwp *l, const mcontext32_t *mcp, unsigned int flags)
 {
 	struct trapframe *tf = l->l_md.md_regs;
 	const __greg32_t *gr = mcp->__gregs;
-	struct proc *p = l->l_proc;
 	int error;
 
 	/* Restore register context, if any. */
@@ -845,14 +838,10 @@ cpu_setmcontext32(struct lwp *l, const mcontext32_t *mcp, unsigned int flags)
 		/* If not set already. */
 		l->l_md.md_flags |= MDP_USEDFPU;
 	}
-
-	mutex_enter(&p->p_smutex);
 	if (flags & _UC_SETSTACK)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		l->l_proc->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 	if (flags & _UC_CLRSTACK)
-		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
-	mutex_exit(&p->p_smutex);
-
+		l->l_proc->p_sigctx.ps_sigstk.ss_flags &= ~SS_ONSTACK;
 	return (0);
 }
 
@@ -885,7 +874,7 @@ cpu_getmcontext32(struct lwp *l, mcontext32_t *mcp, unsigned int *flags)
 	gr[_REG32_ERR]    = tf->tf_err;
 
 	if ((ras_eip = (__greg32_t)(uintptr_t)ras_lookup(l->l_proc,
-	    (void *) (uintptr_t)gr[_REG32_EIP])) != -1)
+	    (caddr_t) (uintptr_t)gr[_REG32_EIP])) != -1)
 		gr[_REG32_EIP] = ras_eip;
 
 	*flags |= _UC_CPU;
@@ -898,21 +887,6 @@ cpu_getmcontext32(struct lwp *l, mcontext32_t *mcp, unsigned int *flags)
 		    sizeof (mcp->__fpregs));
 		*flags |= _UC_FPU;
 	}
-}
-
-void
-startlwp32(void *arg)
-{
-	int err;
-	ucontext32_t *uc = arg;
-	struct lwp *l = curlwp;
-
-	err = cpu_setmcontext32(l, &uc->uc_mcontext, uc->uc_flags);
-	pool_put(&lwp_uc_pool, uc);
-
-	KERNEL_UNLOCK_LAST(l);
-
-	userret(l);
 }
 
 /*
@@ -959,6 +933,42 @@ check_mcontext32(const mcontext32_t *mcp, struct trapframe *tf)
 	if (gr[_REG32_EIP] >= VM_MAXUSER_ADDRESS32)
 		return EINVAL;
 	return 0;
+}
+
+void
+netbsd32_cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+    void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct trapframe *tf;
+	struct netbsd32_saframe *sf, frame;
+
+	tf = l->l_md.md_regs;
+
+	frame.sa_type = type;
+	frame.sa_sas = (uintptr_t)sas;
+	frame.sa_events = nevents;
+	frame.sa_interrupted = ninterrupted;
+	frame.sa_arg = (uintptr_t)ap;
+	frame.sa_ra = 0;
+
+	sf = (struct netbsd32_saframe *)sp - 1;
+	if (copyout(&frame, sf, sizeof(frame)) != 0) {
+		sigexit(l, SIGILL);
+		/* NOTREACHED */
+	}
+
+	tf->tf_rip = (uintptr_t)upcall;
+	tf->tf_rsp = (uintptr_t)sf;
+	tf->tf_rbp = 0;
+	tf->tf_gs = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_fs = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_es = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_ds = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_cs = GSEL(GUCODE32_SEL, SEL_UPL);
+	tf->tf_ss = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_rflags &= ~(PSL_T|PSL_VM|PSL_AC);
+
+	l->l_md.md_flags |= MDP_IRET;
 }
 
 vaddr_t

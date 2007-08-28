@@ -1,4 +1,4 @@
-/*	$NetBSD: lpt.c,v 1.70 2007/07/09 21:00:37 ad Exp $	*/
+/*	$NetBSD: lpt.c,v 1.68 2006/11/16 01:32:51 christos Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994 Charles M. Hannum.
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lpt.c,v 1.70 2007/07/09 21:00:37 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lpt.c,v 1.68 2006/11/16 01:32:51 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -118,7 +118,7 @@ lpt_attach_subr(sc)
 
 	bus_space_write_1(iot, ioh, lpt_control, LPC_NINIT);
 
-	callout_init(&sc->sc_wakeup_ch, 0);
+	callout_init(&sc->sc_wakeup_ch);
 
 	sc->sc_dev_ok = 1;
 }
@@ -179,7 +179,7 @@ lptopen(dev_t dev, int flag, int mode, struct lwp *l)
 		}
 
 		/* wait 1/4 second, give up if we get a signal */
-		error = tsleep((void *)sc, LPTPRI | PCATCH, "lptopen", STEP);
+		error = tsleep((caddr_t)sc, LPTPRI | PCATCH, "lptopen", STEP);
 		if (error != EWOULDBLOCK) {
 			sc->sc_state = 0;
 			return error;
@@ -295,7 +295,7 @@ lptpushbytes(sc)
 					tic = tic + tic + 1;
 					if (tic > TIMEOUT)
 						tic = TIMEOUT;
-					error = tsleep((void *)sc,
+					error = tsleep((caddr_t)sc,
 					    LPTPRI | PCATCH, "lptpsh", tic);
 					if (error != EWOULDBLOCK)
 						return error;
@@ -328,7 +328,7 @@ lptpushbytes(sc)
 				(void) lptintr(sc);
 				splx(s);
 			}
-			error = tsleep((void *)sc, LPTPRI | PCATCH,
+			error = tsleep((caddr_t)sc, LPTPRI | PCATCH,
 			    "lptwrite2", 0);
 			if (error)
 				return error;
@@ -402,14 +402,14 @@ lptintr(arg)
 
 	if (sc->sc_count == 0) {
 		/* none, wake up the top half to get more */
-		wakeup((void *)sc);
+		wakeup((caddr_t)sc);
 	}
 
 	return 1;
 }
 
 int
-lptioctl(dev_t dev, u_long cmd, void *data,
+lptioctl(dev_t dev, u_long cmd, caddr_t data,
     int flag, struct lwp *l)
 {
 	return ENODEV;

@@ -1,4 +1,4 @@
-/*	$NetBSD: dpt.c,v 1.57 2007/07/09 21:00:35 ad Exp $	*/
+/*	$NetBSD: dpt.c,v 1.54.2.1 2006/12/04 18:34:15 tron Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dpt.c,v 1.57 2007/07/09 21:00:35 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dpt.c,v 1.54.2.1 2006/12/04 18:34:15 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -88,7 +88,6 @@ __KERNEL_RCSID(0, "$NetBSD: dpt.c,v 1.57 2007/07/09 21:00:35 ad Exp $");
 #include <sys/endian.h>
 #include <sys/conf.h>
 #include <sys/kauth.h>
-#include <sys/proc.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -357,7 +356,7 @@ dpt_init(struct dpt_softc *sc, const char *intrstr)
 	}
 
 	if ((rv = bus_dmamem_map(sc->sc_dmat, &seg, rseg, mapsize,
-	    (void **)&sc->sc_ccbs, BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
+	    (caddr_t *)&sc->sc_ccbs, BUS_DMA_NOWAIT|BUS_DMA_COHERENT)) != 0) {
 		aprint_error("%s: unable to map CCBs, rv = %d\n",
 		    sc->sc_dv.dv_xname, rv);
 		return;
@@ -377,9 +376,9 @@ dpt_init(struct dpt_softc *sc, const char *intrstr)
 		return;
 	}
 
-	sc->sc_stp = (struct eata_sp *)((char *)sc->sc_ccbs + sc->sc_stpoff);
+	sc->sc_stp = (struct eata_sp *)((caddr_t)sc->sc_ccbs + sc->sc_stpoff);
 	sc->sc_stppa = sc->sc_dmamap->dm_segs[0].ds_addr + sc->sc_stpoff;
-	sc->sc_scr = (char *)sc->sc_ccbs + sc->sc_scroff;
+	sc->sc_scr = (caddr_t)sc->sc_ccbs + sc->sc_scroff;
 	sc->sc_scrpa = sc->sc_dmamap->dm_segs[0].ds_addr + sc->sc_scroff;
 	sc->sc_stp->sp_ccbid = -1;
 
@@ -1126,7 +1125,7 @@ dptopen(dev_t dev, int flag, int mode, struct lwp *l)
 }
 
 int
-dptioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+dptioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct dpt_softc *sc;
 	int rv;
@@ -1349,7 +1348,7 @@ dpt_passthrough(struct dpt_softc *sc, struct eata_ucp *ucp, struct lwp *l)
 	/*
 	 * Start the command and sleep on completion.
 	 */
-	uvm_lwp_hold(curlwp);
+	PHOLD(curlwp);	/* XXXJRT curlwp */
 	bus_dmamap_sync(sc->sc_dmat, sc->sc_dmamap, CCB_OFF(sc, ccb),
 	    sizeof(struct dpt_ccb), BUS_DMASYNC_PREWRITE);
 	s = splbio();
@@ -1359,7 +1358,7 @@ dpt_passthrough(struct dpt_softc *sc, struct eata_ucp *ucp, struct lwp *l)
 		panic("%s: dpt_cmd failed", sc->sc_dv.dv_xname);
 	tsleep(ccb, PWAIT, "dptucmd", 0);
 	splx(s);
-	uvm_lwp_rele(curlwp);
+	PRELE(curlwp);	/* XXXJRT curlwp */
 
 	/*
 	 * Sync up the DMA map and copy out results.

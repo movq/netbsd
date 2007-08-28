@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.h,v 1.12 2007/03/12 01:33:50 uwe Exp $	*/
+/*	$NetBSD: lock.h,v 1.10 2006/01/03 01:29:46 uwe Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -66,9 +66,7 @@ __cpu_simple_lock(__cpu_simple_lock_t *alp)
 	 __asm volatile(
 		"1:	tas.b	%0	\n"
 		"	bf	1b	\n"
-		: "=m" (*alp)
-		: /* no inputs */
-		: "cc");
+		: "=m" (*alp));
 }
 
 static __inline int
@@ -78,10 +76,9 @@ __cpu_simple_lock_try(__cpu_simple_lock_t *alp)
 
 	__asm volatile(
 		"	tas.b	%0	\n"
-		"	movt	%1	\n"
-		: "=m" (*alp), "=r" (__rv)
-		: /* no inputs */
-		: "cc");
+		"	mov	#0, %1	\n"
+		"	rotcl	%1	\n"
+		: "=m" (*alp), "=r" (__rv));
 
 	return (__rv);
 }
@@ -91,24 +88,6 @@ __cpu_simple_unlock(__cpu_simple_lock_t *alp)
 {
 
 	*alp = __SIMPLELOCK_UNLOCKED;
-}
-
-static __inline void
-mb_read(void)
-{
-	__asm volatile("" : : : "memory");
-}
-
-static __inline void
-mb_write(void)
-{
-	__asm volatile("" : : : "memory");
-}
-
-static __inline void
-mb_memory(void)
-{
-	__asm volatile("" : : : "memory");
 }
 
 #endif /* !_SH3_LOCK_H_ */

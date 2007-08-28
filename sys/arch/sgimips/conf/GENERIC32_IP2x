@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC32_IP2x,v 1.68 2007/08/06 21:26:56 adrianp Exp $
+#	$NetBSD: GENERIC32_IP2x,v 1.59.2.2 2007/08/25 09:00:08 liamjfoy Exp $
 #
 # GENERIC32_IP2x machine description file
 # 
@@ -29,7 +29,7 @@ makeoptions	TEXTADDR=0x88069000	# entry point
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC32-IP2x-$Revision: 1.68 $"
+#ident		"GENERIC32-IP2x-$Revision: 1.59.2.2 $"
 
 maxusers	32
 
@@ -117,7 +117,6 @@ file-system	CODA		# Coda File System; also needs vcoda (below)
 file-system	PTYFS		# /dev/pts/N support
 #file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
-file-system	EFS		# Silicon Graphics Extent File System
 
 # File system options
 options 	QUOTA		# UFS quotas
@@ -222,14 +221,11 @@ hpc0 		at gio? addr 0x1fb80000
 hpc1 		at gio? addr 0x1fb00000
 hpc2 		at gio? addr 0x1f980000
 
-newport*	at gio?			# Newport (NG1) graphics
+newport*	at gio? slot ?
 wsdisplay* 	at newport? console ?
 
-grtwo*		at gio?			# Express (GR2) graphics
+grtwo*		at gio? slot ?
 wsdisplay*	at grtwo? console ?
-
-light*		at gio?			# Light/Starter/Entry (LG1/LG2) graphics
-wsdisplay*	at light? console ?
 
 # PCI Fast Ethernet cards glued to the GIO bus
 giopci*		at gio? slot?
@@ -239,13 +235,13 @@ options		PCI_NETBSD_CONFIGURE
 tlp*		at pci? dev ? function ? # Phobos G100/130/160 Fast Ethernet
 lxtphy*		at mii? phy ?		 # Level One LXT-970 PHYs 
 
-tl*		at pci? dev ? function ? # Set Engineering GIO Fast Ethernet
-nsphy*		at mii? phy ?		 # NS83840 PHYs
-tlphy*		at mii? phy ?		 # ThunderLAN PHY (unused)
+#XXX tl(4) appears to have an issue with bulk transmits on this board.
+#tl*		at pci? dev ? function ? # Set Engineering GIO Fast Ethernet
+#nsphy*		at mii? phy ?		 # NS83840 PHYs
 
 # HPC devices
-sq* 		at hpc? offset ?	# On-board ethernet / E++ adapter
-wdsc* 		at hpc? offset ?	# On-board SCSI / GIO32 SCSI adapter
+sq* 		at hpc0 offset ?
+wdsc* 		at hpc0 offset ?
 dpclock*	at hpc0 offset ?	# IP12 / IP20
 dsclock*	at hpc0 offset ?	# IP22 / 24
 haltwo*         at hpc0 offset ?	# IP22 / 24

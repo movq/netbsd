@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.115 2007/06/12 03:34:45 mhitch Exp $	*/
+/*	$NetBSD: trap.c,v 1.110.8.2 2007/09/11 08:01:34 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -83,7 +83,7 @@
 #include "opt_fpu_emulate.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.115 2007/06/12 03:34:45 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.110.8.2 2007/09/11 08:01:34 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -94,6 +94,8 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.115 2007/06/12 03:34:45 mhitch Exp $");
 #include <sys/resourcevar.h>
 #include <sys/syslog.h>
 #include <sys/syscall.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/user.h>
 #include <sys/userret.h>
 #include <sys/kauth.h>
@@ -248,10 +250,10 @@ userret(l, pc, oticks)
 	/*
 	 * If profiling, charge recent system time.
 	 */
-	if (p->p_stflag & PST_PROFIL) {
+	if (p->p_flag & P_PROFIL) {
 		extern int psratio;
 
-		addupc_task(l, pc, (int)(p->p_sticks - oticks) * psratio);
+		addupc_task(p, pc, (int)(p->p_sticks - oticks) * psratio);
 	}
 	curcpu()->ci_schedstate.spc_curpriority = l->l_priority = l->l_usrpri;
 }
@@ -400,16 +402,21 @@ trapmmufault(type, code, v, fp, l, sticks)
 	     mmutype == MMU_68040 ? (code & SSW_TMMASK) == FC_SUPERD :
 	     (code & (SSW_DF|FC_SUPERD)) == (SSW_DF|FC_SUPERD))))
 		map = kernel_map;
-	else
+	else {
 		map = &vm->vm_map;
+		if (l->l_flag & L_SA) {
+			l->l_savp->savp_faultaddr = (vaddr_t)v;
+			l->l_flag |= L_SA_PAGEFAULT;
+		}
+	}
 
 	if (
 #ifdef M68060
 	    machineid & AMIGA_68060 ? code & FSLW_RW_W :
 #endif
-	    mmutype == MMU_68040 ? (code & SSW_RW040) == 0 :
-	    (code & (SSW_DF|SSW_RW)) == SSW_DF)
-							/* what about RMW? */
+	    mmutype == MMU_68040 ? (code & (SSW_LK|SSW_RW040)) != SSW_RW040 :
+	    ((code & SSW_DF) != 0 &&
+	    ((code & SSW_RW) == 0 || (code & SSW_RM) != 0)))
 		ftype = VM_PROT_WRITE;
 	else
 		ftype = VM_PROT_READ;
@@ -497,11 +504,12 @@ trapmmufault(type, code, v, fp, l, sticks)
 	 * error.
 	 */
 	if (rv == 0) {
-		if (map != kernel_map && (void *)va >= vm->vm_maxsaddr)
+		if (map != kernel_map && (caddr_t)va >= vm->vm_maxsaddr)
 			uvm_grow(p, va); 
 
 		if (type == T_MMUFLT)
 			return;
+		l->l_flag &= ~L_SA_PAGEFAULT;
 		userret(l, fp->f_pc, sticks);
 		return;
 	}
@@ -534,6 +542,7 @@ nogo:
 	trapsignal(l, &ksi);
 	if ((type & T_USER) == 0)
 		return;
+	l->l_flag &= ~L_SA_PAGEFAULT;
 	userret(l, fp->f_pc, sticks);
 }
 /*
@@ -559,6 +568,8 @@ trap(fp, type, code, v)
 	KSI_INIT_TRAP(&ksi);
 	ksi.ksi_trap = type & ~T_USER;
 
+	if (l == NULL)
+		l = &lwp0;
 	p = l->l_proc;
 
 	if (USERMODE(fp->f_sr)) {
@@ -681,13 +692,10 @@ trap(fp, type, code, v)
 		printf("pid %d: kernel %s exception\n", p->p_pid,
 		    type==T_COPERR ? "coprocessor" : "format");
 #endif
-		mutex_enter(&p->p_smutex);
 		SIGACTION(p, SIGILL).sa_handler = SIG_DFL;
 		sigdelset(&p->p_sigctx.ps_sigignore, SIGILL);
 		sigdelset(&p->p_sigctx.ps_sigcatch, SIGILL);
-		sigdelset(&l->l_sigmask, SIGILL);
-		mutex_exit(&p->p_smutex);
-
+		sigdelset(&p->p_sigctx.ps_sigmask, SIGILL);
 		ksi.ksi_signo = SIGILL;
 		ksi.ksi_addr = (void *)(int)fp->f_format;
 				/* XXX was ILL_RESAD_FAULT */
@@ -737,12 +745,12 @@ trap(fp, type, code, v)
 	case T_ASTFLT|T_USER:
 		astpending = 0;
 		spl0();
-		if (l->l_pflag & LP_OWEUPC) {
-			l->l_pflag &= ~LP_OWEUPC;
-			ADDUPROF(l);
+		if (p->p_flag & P_OWEUPC) {
+			p->p_flag &= ~P_OWEUPC;
+			ADDUPROF(p);
 		}
-		if (curcpu()->ci_want_resched)
-			preempt();
+		if (want_resched)
+			preempt(0);
 
 		userret(l, fp->f_pc, sticks);
 		return;
@@ -751,8 +759,8 @@ trap(fp, type, code, v)
 	 */
 	case T_MMUFLT:
 		if (l && l->l_addr &&
-		    (l->l_addr->u_pcb.pcb_onfault == (void *)fubail ||
-		    l->l_addr->u_pcb.pcb_onfault == (void *)subail)) {
+		    (l->l_addr->u_pcb.pcb_onfault == (caddr_t)fubail ||
+		    l->l_addr->u_pcb.pcb_onfault == (caddr_t)subail)) {
 			trapcpfault(l, fp);
 			return;
 		}
@@ -871,7 +879,7 @@ _write_back (wb, wb_sts, wb_data, wb_addr, wb_map)
 
 	if ((wb_sts & WBS_TMMASK) == FC_USERD &&
 	    !curpcb->pcb_onfault) {
-	    	curpcb->pcb_onfault = (void *) _wb_fault;
+	    	curpcb->pcb_onfault = (caddr_t) _wb_fault;
 	}
 
 	switch(wb_sts & WBS_SZMASK) {
@@ -895,7 +903,7 @@ _write_back (wb, wb_sts, wb_data, wb_addr, wb_map)
 		break;
 
 	}
-	if (curpcb->pcb_onfault == (void *) _wb_fault)
+	if (curpcb->pcb_onfault == (caddr_t) _wb_fault)
 		curpcb->pcb_onfault = NULL;
 	if ((wb_sts & WBS_TMMASK) != FC_USERD)
 		__asm volatile ("movec %0,%%dfc\n" : : "d" (FC_USERD));

@@ -1,12 +1,12 @@
-/*	$NetBSD: kern_kthread.c,v 1.18 2007/07/10 23:06:56 ad Exp $	*/
+/*	$NetBSD: kern_kthread.c,v 1.15 2003/01/18 10:06:26 thorpej Exp $	*/
 
 /*-
- * Copyright (c) 1998, 1999, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
  * by Jason R. Thorpe of the Numerical Aerospace Simulation Facility,
- * NASA Ames Research Center, and by Andrew Doran.
+ * NASA Ames Research Center.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -38,17 +38,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_kthread.c,v 1.18 2007/07/10 23:06:56 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_kthread.c,v 1.15 2003/01/18 10:06:26 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/kthread.h>
 #include <sys/proc.h>
-#include <sys/sched.h>
-#include <sys/kmem.h>
-
-#include <uvm/uvm_extern.h>
+#include <sys/wait.h>
+#include <sys/malloc.h>
+#include <sys/queue.h>
 
 /*
  * note that stdarg.h and the ansi style va_start macro is used for both
@@ -57,90 +56,43 @@ __KERNEL_RCSID(0, "$NetBSD: kern_kthread.c,v 1.18 2007/07/10 23:06:56 ad Exp $")
  */
 #include <machine/stdarg.h>
 
+int	kthread_create_now;
+
 /*
  * Fork a kernel thread.  Any process can request this to be done.
+ * The VM space and limits, etc. will be shared with proc0.
  */
 int
-kthread_create(pri_t pri, int flag, struct cpu_info *ci,
-	       void (*func)(void *), void *arg,
-	       lwp_t **lp, const char *fmt, ...)
+kthread_create1(void (*func)(void *), void *arg,
+    struct proc **newpp, const char *fmt, ...)
 {
-	lwp_t *l;
-	vaddr_t uaddr;
-	bool inmem;
+	struct proc *p2;
 	int error;
 	va_list ap;
 
-	inmem = uvm_uarea_alloc(&uaddr);
-	if (uaddr == 0)
-		return ENOMEM;
-	error = newlwp(&lwp0, &proc0, uaddr, inmem, LWP_DETACHED, NULL, 0,
-	    func, arg, &l);
-	if (error) {
-		uvm_uarea_free(uaddr);
-		return error;
-	}
-	uvm_lwp_hold(l);
-	if (fmt != NULL) {
-		l->l_name = kmem_alloc(MAXCOMLEN, KM_SLEEP);
-		if (l->l_name == NULL) {
-			lwp_exit(l);
-			return ENOMEM;
-		}
-		va_start(ap, fmt);
-		vsnprintf(l->l_name, MAXCOMLEN, fmt, ap);
-		va_end(ap);
-	}
+	/* First, create the new process. */
+	error = fork1(&lwp0, FORK_SHAREVM | FORK_SHARECWD | FORK_SHAREFILES |
+	    FORK_SHARESIGS, SIGCHLD, NULL, 0, func, arg, NULL, &p2);
+	if (__predict_false(error != 0))
+		return (error);
 
 	/*
-	 * Set parameters.
+	 * Mark it as a system process and not a candidate for
+	 * swapping.  Set P_NOCLDWAIT so that children are reparented
+	 * to init(8) when they exit.  init(8) can easily wait them
+	 * out for us.
 	 */
-	if ((flag & KTHREAD_INTR) != 0) {
-		KASSERT((flag & KTHREAD_MPSAFE) != 0);
-	}
+	p2->p_flag |= P_SYSTEM | P_NOCLDWAIT;
+	LIST_FIRST(&p2->p_lwps)->l_flag |= L_INMEM;
 
-	mutex_enter(&proc0.p_smutex);
-	lwp_lock(l);
-	if (pri == PRI_NONE) {
-		/* Minimum kernel priority level. */
-		pri = PUSER - 1;
-	}
-	l->l_usrpri = pri;
-	l->l_priority = pri;
-	if (ci != NULL) {
-		if (ci != l->l_cpu) {
-			lwp_unlock_to(l, ci->ci_schedstate.spc_mutex);
-			lwp_lock(l);
-		}
-		l->l_flag |= LW_BOUND;
-		l->l_cpu = ci;
-	}
-	if ((flag & KTHREAD_INTR) != 0)
-		l->l_flag |= LW_INTR;
-	if ((flag & KTHREAD_MPSAFE) != 0)
-		l->l_pflag |= LP_MPSAFE;
-
-	/*
-	 * Set the new LWP running, unless the caller has requested
-	 * otherwise.
-	 */
-	if ((flag & KTHREAD_IDLE) == 0) {
-		l->l_stat = LSRUN;
-		sched_enqueue(l, false);
-	}
-
-	/*
-	 * The LWP is not created suspended or stopped and cannot be set
-	 * into those states later, so must be considered runnable.
-	 */
-	proc0.p_nrlwps++;
-	lwp_unlock(l);
-	mutex_exit(&proc0.p_smutex);
+	/* Name it as specified. */
+	va_start(ap, fmt);
+	vsnprintf(p2->p_comm, MAXCOMLEN, fmt, ap);
+	va_end(ap);
 
 	/* All done! */
-	if (lp != NULL)
-		*lp = l;
-
+	if (newpp != NULL)
+		*newpp = p2;
 	return (0);
 }
 
@@ -151,37 +103,70 @@ kthread_create(pri_t pri, int flag, struct cpu_info *ci,
 void
 kthread_exit(int ecode)
 {
-	const char *name;
-	lwp_t *l = curlwp;
 
-	/* We can't do much with the exit code, so just report it. */
-	if (ecode != 0) {
-		if ((name = l->l_name) == NULL)
-			name = "unnamed";
-		printf("WARNING: kthread `%s' (%d) exits with status %d\n",
-		    name, l->l_lid, ecode);
-	}
+	/*
+	 * XXX What do we do with the exit code?  Should we even bother
+	 * XXX with it?  The parent (proc0) isn't going to do much with
+	 * XXX it.
+	 */
+	if (ecode != 0)
+		printf("WARNING: thread `%s' (%d) exits with status %d\n",
+		    curproc->p_comm, curproc->p_pid, ecode);
 
-	/* And exit.. */
-	lwp_exit(l);
+	exit1(curlwp, W_EXITCODE(ecode, 0));
 
 	/*
 	 * XXX Fool the compiler.  Making exit1() __noreturn__ is a can
 	 * XXX of worms right now.
 	 */
-	for (;;)
-		;
+	for (;;);
 }
 
+struct kthread_q {
+	SIMPLEQ_ENTRY(kthread_q) kq_q;
+	void (*kq_func)(void *);
+	void *kq_arg;
+};
+
+SIMPLEQ_HEAD(, kthread_q) kthread_q = SIMPLEQ_HEAD_INITIALIZER(kthread_q);
+
 /*
- * Destroy an inactive kthread.  The kthread must be in the LSIDL state.
+ * Defer the creation of a kernel thread.  Once the standard kernel threads
+ * and processes have been created, this queue will be run to callback to
+ * the caller to create threads for e.g. file systems and device drivers.
  */
 void
-kthread_destroy(lwp_t *l)
+kthread_create(void (*func)(void *), void *arg)
 {
+	struct kthread_q *kq;
 
-	KASSERT((l->l_flag & LW_SYSTEM) != 0);
-	KASSERT(l->l_stat == LSIDL);
+	if (kthread_create_now) {
+		(*func)(arg);
+		return;
+	}
 
-	lwp_exit(l);
+	kq = malloc(sizeof(*kq), M_TEMP, M_NOWAIT);
+	if (kq == NULL)
+		panic("unable to allocate kthread_q");
+	memset(kq, 0, sizeof(*kq));
+
+	kq->kq_func = func;
+	kq->kq_arg = arg;
+
+	SIMPLEQ_INSERT_TAIL(&kthread_q, kq, kq_q);
+}
+
+void
+kthread_run_deferred_queue(void)
+{
+	struct kthread_q *kq;
+
+	/* No longer need to defer kthread creation. */
+	kthread_create_now = 1;
+
+	while ((kq = SIMPLEQ_FIRST(&kthread_q)) != NULL) {
+		SIMPLEQ_REMOVE_HEAD(&kthread_q, kq_q);
+		(*kq->kq_func)(kq->kq_arg);
+		free(kq, M_TEMP);
+	}
 }

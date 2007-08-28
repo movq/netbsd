@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_thread.c,v 1.41 2007/05/17 14:51:37 yamt Exp $ */
+/*	$NetBSD: mach_thread.c,v 1.38 2006/11/16 01:32:44 christos Exp $ */
 
 /*-
  * Copyright (c) 2002-2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_thread.c,v 1.41 2007/05/17 14:51:37 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_thread.c,v 1.38 2006/11/16 01:32:44 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -49,6 +49,8 @@ __KERNEL_RCSID(0, "$NetBSD: mach_thread.c,v 1.41 2007/05/17 14:51:37 yamt Exp $"
 #include <sys/proc.h>
 #include <sys/resource.h>
 #include <sys/resourcevar.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 
 #include <compat/mach/mach_types.h>
 #include <compat/mach/mach_message.h>
@@ -115,19 +117,22 @@ mach_sys_swtch_pri(struct lwp *l, void *v, register_t *retval)
 		syscallarg(int) pri;
 	} */ *uap = v;
 #endif
+	int s;
 
 	/*
 	 * Copied from preempt(9). We cannot just call preempt
 	 * because we want to return mi_switch(9) return value.
 	 */
-	KERNEL_UNLOCK_ALL(l, &l->l_biglocks);
-	lwp_lock(l);
-	if (l->l_stat == LSONPROC) {
-		l->l_priority = l->l_usrpri;
-		l->l_proc->p_stats->p_ru.ru_nivcsw++;	/* XXXSMP */
-	}
-	*retval = mi_switch(l);
-	KERNEL_LOCK(l->l_biglocks, l);
+	SCHED_LOCK(s);
+	l->l_priority = l->l_usrpri;
+	l->l_stat = LSRUN;
+	setrunqueue(l);
+	l->l_proc->p_stats->p_ru.ru_nivcsw++;
+	*retval = mi_switch(l, NULL);
+	SCHED_ASSERT_UNLOCKED();
+	splx(s);
+	if ((l->l_flag & L_SA) != 0 && *retval != 0)
+		sa_preempt(l);
 
 	return 0;
 }
@@ -187,6 +192,7 @@ mach_thread_create_running(args)
 	int flags;
 	int error;
 	int inmem;
+	int s;
 	int end_offset;
 
 	/* Sanity check req_count */
@@ -209,22 +215,17 @@ mach_thread_create_running(args)
 	flags = 0;
 	if ((error = newlwp(l, p, uaddr, inmem, flags, NULL, 0,
 	    mach_create_thread_child, (void *)&mctc, &mctc.mctc_lwp)) != 0)
-	{
-		uvm_uarea_free(uaddr);
 		return mach_msg_error(args, error);
-	}
 
 	/*
 	 * Make the child runnable.
 	 */
-	mutex_enter(&p->p_smutex);
-	lwp_lock(mctc.mctc_lwp);
+	SCHED_LOCK(s);
 	mctc.mctc_lwp->l_private = 0;
 	mctc.mctc_lwp->l_stat = LSRUN;
-	sched_enqueue(mctc.mctc_lwp, false);
+	setrunqueue(mctc.mctc_lwp);
 	p->p_nrlwps++;
-	lwp_unlock(mctc.mctc_lwp);
-	mutex_exit(&p->p_smutex);
+	SCHED_UNLOCK(s);
 
 	/*
 	 * Get the child's kernel port
@@ -409,13 +410,9 @@ mach_thread_suspend(args)
 	size_t *msglen = args->rsize;
 	struct lwp *l = args->l;
 	struct lwp *tl = args->tl;
-	struct proc *p = tl->l_proc;
 	int error;
 
-	mutex_enter(&p->p_mutex);
-	lwp_lock(tl);
 	error = lwp_suspend(l, tl);
-	mutex_exit(&p->p_mutex);
 
 	*msglen = sizeof(*rep);
 	mach_set_header(rep, req, *msglen);
@@ -433,12 +430,8 @@ mach_thread_resume(args)
 	mach_thread_resume_reply_t *rep = args->rmsg;
 	size_t *msglen = args->rsize;
 	struct lwp *tl = args->tl;
-	struct proc *p = tl->l_proc;
 
-	mutex_enter(&p->p_mutex);
-	lwp_lock(tl);
 	lwp_continue(tl);
-	mutex_exit(&p->p_mutex);
 
 	*msglen = sizeof(*rep);
 	mach_set_header(rep, req, *msglen);

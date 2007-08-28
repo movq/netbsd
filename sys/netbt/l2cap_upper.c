@@ -1,4 +1,4 @@
-/*	$NetBSD: l2cap_upper.c,v 1.8 2007/04/29 20:23:36 msaitoh Exp $	*/
+/*	$NetBSD: l2cap_upper.c,v 1.1.18.1 2007/07/19 16:04:20 liamjfoy Exp $	*/
 
 /*-
  * Copyright (c) 2005 Iain Hibbert.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: l2cap_upper.c,v 1.8 2007/04/29 20:23:36 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: l2cap_upper.c,v 1.1.18.1 2007/07/19 16:04:20 liamjfoy Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -55,7 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: l2cap_upper.c,v 1.8 2007/04/29 20:23:36 msaitoh Exp 
  * l2cap_attach(handle, btproto, upper)
  *
  *	attach new l2cap_channel to handle, populate
- *	with reasonable defaults
+ *	with with reasonable defaults
  */
 int
 l2cap_attach(struct l2cap_channel **handle,
@@ -63,9 +63,9 @@ l2cap_attach(struct l2cap_channel **handle,
 {
 	struct l2cap_channel *chan;
 
-	KASSERT(handle != NULL);
-	KASSERT(proto != NULL);
-	KASSERT(upper != NULL);
+	KASSERT(handle);
+	KASSERT(proto);
+	KASSERT(upper);
 
 	chan = malloc(sizeof(struct l2cap_channel), M_BLUETOOTH,
 			M_NOWAIT | M_ZERO);
@@ -455,9 +455,17 @@ l2cap_setopt(struct l2cap_channel *chan, int opt, void *addr)
 		break;
 
 	case SO_L2CAP_OQOS:	/* set Outgoing QoS flow spec */
+		// XXX
+		// memcpy(&chan->lc_oqos, addr, sizeof(l2cap_qos_t));
+		//break;
+
 	case SO_L2CAP_FLUSH:	/* set Outgoing Flush Timeout */
+		// XXX
+		// chan->lc_flush = *(uint16_t *)addr;
+		//break;
+
 	default:
-		err = ENOPROTOOPT;
+		err = EINVAL;
 		break;
 	}
 

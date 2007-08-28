@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.19 2007/07/20 13:41:53 hannken Exp $	*/
+/*	$NetBSD: machdep.c,v 1.16 2006/11/29 19:56:46 freza Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.19 2007/07/20 13:41:53 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.16 2006/11/29 19:56:46 freza Exp $");
 
 #include "opt_explora.h"
 #include "ksyms.h"
@@ -315,7 +315,7 @@ cpu_startup(void)
 	/*
 	 * Initialize error message buffer (before start of kernel)
 	 */
-	initmsgbuf((void *)msgbuf, round_page(MSGBUFSIZE));
+	initmsgbuf((caddr_t)msgbuf, round_page(MSGBUFSIZE));
 
 	printf("%s%s", copyright, version);
 	printf("NCD Explora451\n");
@@ -329,13 +329,13 @@ cpu_startup(void)
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
+				 16*NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 VM_PHYS_SIZE, 0, false, NULL);
+				 VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * No need to allocate an mbuf cluster submap.  Mbuf clusters
@@ -354,18 +354,16 @@ cpu_startup(void)
 
 	pn = prop_number_create_integer(ctob(physmem));
 	KASSERT(pn != NULL);
-	if (prop_dictionary_set(board_properties, "mem-size", pn) == false)
+	if (prop_dictionary_set(board_properties, "mem-size", pn) == FALSE)
 		panic("setting mem-size");
 	prop_object_release(pn);
 
 	pn = prop_number_create_integer(cpuspeed);
 	KASSERT(pn != NULL);
 	if (prop_dictionary_set(board_properties, "processor-frequency",
-				pn) == false)
+				pn) == FALSE)
 		panic("setting processor-frequency");
 	prop_object_release(pn);
-
-	intr_init();
 }
 
 int

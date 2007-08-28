@@ -1,4 +1,4 @@
-/*	$NetBSD: extent.h,v 1.16 2007/07/09 21:11:32 ad Exp $	*/
+/*	$NetBSD: extent.h,v 1.14 2006/03/08 04:43:00 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1998 The NetBSD Foundation, Inc.
@@ -41,8 +41,6 @@
 
 #include <sys/lock.h>
 #include <sys/queue.h>
-#include <sys/mutex.h>
-#include <sys/condvar.h>
 
 struct extent_region {
 	LIST_ENTRY(extent_region) er_link;	/* link in region list */
@@ -56,8 +54,7 @@ struct extent_region {
 
 struct extent {
 	const char *ex_name;		/* name of extent */
-	kmutex_t ex_lock;		/* lock on this extent */
-	kcondvar_t ex_cv;		/* synchronization */
+	struct simplelock ex_slock;	/* lock on this extent */
 					/* allocated regions in extent */
 	LIST_HEAD(, extent_region) ex_regions;
 	u_long	ex_start;		/* start of extent */
@@ -70,16 +67,17 @@ struct extent_fixed {
 	struct extent	fex_extent;	/* MUST BE FIRST */
 					/* freelist of region descriptors */
 	LIST_HEAD(, extent_region) fex_freelist;
-	void *		fex_storage;	/* storage space for descriptors */
+	caddr_t		fex_storage;	/* storage space for descriptors */
 	size_t		fex_storagesize; /* size of storage space */
 };
 
 /* ex_flags; for internal use only */
 #define EXF_FIXED	0x01		/* extent uses fixed storage */
 #define EXF_NOCOALESCE	0x02		/* coalescing of regions not allowed */
+#define EXF_WANTED	0x04		/* someone asleep on extent */
 #define EXF_FLWANTED	0x08		/* someone asleep on freelist */
 
-#define EXF_BITS	"\20\4FLWANTED\2NOCOALESCE\1FIXED"
+#define EXF_BITS	"\20\4FLWANTED\3WANTED\2NOCOALESCE\1FIXED"
 
 /* misc. flags passed to extent functions */
 #define EX_NOWAIT	0x00		/* not safe to sleep */
@@ -107,7 +105,7 @@ struct extent_fixed {
 struct malloc_type;
 
 struct	extent *extent_create(const char *, u_long, u_long,
-	    struct malloc_type *, void *, size_t, int);
+	    struct malloc_type *, caddr_t, size_t, int);
 void	extent_destroy(struct extent *);
 int	extent_alloc_subregion1(struct extent *, u_long, u_long,
 	    u_long, u_long, u_long, u_long, int, u_long *);
@@ -119,7 +117,6 @@ int	extent_alloc1(struct extent *, u_long, u_long, u_long, u_long, int,
 int	extent_alloc(struct extent *, u_long, u_long, u_long, int, u_long *);
 int	extent_free(struct extent *, u_long, u_long, int);
 void	extent_print(struct extent *);
-void	extent_init(void);
 
 #endif /* _KERNEL || _EXTENT_TESTING */
 

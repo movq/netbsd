@@ -1,4 +1,4 @@
-/*	$NetBSD: elf2pef.c,v 1.13 2006/12/09 22:02:24 chs Exp $	*/
+/*	$NetBSD: elf2pef.c,v 1.12.22.1 2007/01/12 23:26:38 bouyer Exp $	*/
 
 /*-
  * Copyright (C) 1997-1998 Kazuki Sakamoto (sakamoto@NetBSD.org)

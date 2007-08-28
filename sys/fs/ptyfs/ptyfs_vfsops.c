@@ -1,4 +1,4 @@
-/*	$NetBSD: ptyfs_vfsops.c,v 1.28 2007/07/31 21:14:18 pooka Exp $	*/
+/*	$NetBSD: ptyfs_vfsops.c,v 1.21.2.1 2007/02/17 23:27:44 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ptyfs_vfsops.c,v 1.28 2007/07/31 21:14:18 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ptyfs_vfsops.c,v 1.21.2.1 2007/02/17 23:27:44 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,9 +61,19 @@ __KERNEL_RCSID(0, "$NetBSD: ptyfs_vfsops.c,v 1.28 2007/07/31 21:14:18 pooka Exp 
 #include <fs/ptyfs/ptyfs.h>
 #include <miscfs/specfs/specdev.h>
 
-MALLOC_JUSTDEFINE(M_PTYFSMNT, "ptyfs mount", "ptyfs mount structures");
+MALLOC_DEFINE(M_PTYFSMNT, "ptyfs mount", "ptyfs mount structures");
 
-VFS_PROTOS(ptyfs);
+void	ptyfs_init(void);
+void	ptyfs_reinit(void);
+void	ptyfs_done(void);
+int	ptyfs_mount(struct mount *, const char *, void *, struct nameidata *,
+    struct lwp *);
+int	ptyfs_start(struct mount *, int, struct lwp *);
+int	ptyfs_unmount(struct mount *, int, struct lwp *);
+int	ptyfs_statvfs(struct mount *, struct statvfs *, struct lwp *);
+int	ptyfs_quotactl(struct mount *, int, uid_t, void *, struct lwp *);
+int	ptyfs_sync(struct mount *, int, kauth_cred_t, struct lwp *);
+int	ptyfs_vget(struct mount *, ino_t, struct vnode **);
 
 static int ptyfs__allocvp(struct ptm_pty *, struct lwp *, struct vnode **,
     dev_t, char);
@@ -178,8 +188,9 @@ ptyfs__getvattr(struct ptm_pty *pt, struct lwp *l, struct vattr *vattr)
 void
 ptyfs_init(void)
 {
-
+#ifdef _LKM
 	malloc_type_attach(M_PTYFSMNT);
+#endif
 	ptyfs_hashinit();
 }
 
@@ -192,24 +203,22 @@ ptyfs_reinit(void)
 void
 ptyfs_done(void)
 {
-
-	ptyfs_hashdone();
+#ifdef _LKM
 	malloc_type_detach(M_PTYFSMNT);
+#endif
+	ptyfs_hashdone();
 }
 
 /*
  * Mount the Pseudo tty params filesystem
  */
 int
-ptyfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
-    struct lwp *l)
+ptyfs_mount(struct mount *mp, const char *path, void *data,
+    struct nameidata *ndp, struct lwp *l)
 {
 	int error = 0;
 	struct ptyfsmount *pmnt;
-	struct ptyfs_args *args = data;
-
-	if (*data_len < sizeof *args)
-		return EINVAL;
+	struct ptyfs_args args;
 
 	if (UIO_MX & (UIO_MX - 1)) {
 		log(LOG_ERR, "ptyfs: invalid directory entry size");
@@ -220,11 +229,10 @@ ptyfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
 		pmnt = VFSTOPTY(mp);
 		if (pmnt == NULL)
 			return EIO;
-		args->version = PTYFS_ARGSVERSION;
-		args->mode = pmnt->pmnt_mode;
-		args->gid = pmnt->pmnt_gid;
-		*data_len = sizeof *args;
-		return 0;
+		args.version = PTYFS_ARGSVERSION;
+		args.mode = pmnt->pmnt_mode;
+		args.gid = pmnt->pmnt_gid;
+		return copyout(&args, data, sizeof(args));
 	}
 
 	/* Don't allow more than one mount */
@@ -234,19 +242,30 @@ ptyfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
 	if (mp->mnt_flag & MNT_UPDATE)
 		return EOPNOTSUPP;
 
-	if (args->version != PTYFS_ARGSVERSION)
+	if (data != NULL) {
+		error = copyin(data, &args, sizeof args);
+		if (error != 0)
+			return error;
+
+		if (args.version != PTYFS_ARGSVERSION)
+			return EINVAL;
+	} else {
+		/*
+		 * Arguments are mandatory.
+		 */
 		return EINVAL;
+	}
 
 	pmnt = malloc(sizeof(struct ptyfsmount), M_UFSMNT, M_WAITOK);
 
 	mp->mnt_data = pmnt;
-	pmnt->pmnt_gid = args->gid;
-	pmnt->pmnt_mode = args->mode;
+	pmnt->pmnt_gid = args.gid;
+	pmnt->pmnt_mode = args.mode;
 	mp->mnt_flag |= MNT_LOCAL;
 	vfs_getnewfsid(mp);
 
 	if ((error = set_statvfs_info(path, UIO_USERSPACE, "ptyfs",
-	    UIO_SYSSPACE, mp->mnt_op->vfs_name, mp, l)) != 0) {
+	    UIO_SYSSPACE, mp, l)) != 0) {
 		free(pmnt, M_UFSMNT);
 		return error;
 	}
@@ -381,7 +400,6 @@ const struct vnodeopv_desc * const ptyfs_vnodeopv_descs[] = {
 
 struct vfsops ptyfs_vfsops = {
 	MOUNT_PTYFS,
-	sizeof (struct ptyfs_args),
 	ptyfs_mount,
 	ptyfs_start,
 	ptyfs_unmount,
@@ -399,7 +417,6 @@ struct vfsops ptyfs_vfsops = {
 	(int (*)(struct mount *, struct vnode *, struct timespec *))eopnotsupp,
 	(int (*)(struct mount *, int, struct vnode *, int, const char *,
 	    struct lwp *))eopnotsupp,
-	(void *)eopnotsupp,		/* vfs_suspendctl */
 	ptyfs_vnodeopv_descs,
 	0,
 	{ NULL, NULL },

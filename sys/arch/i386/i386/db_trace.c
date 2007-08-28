@@ -1,4 +1,4 @@
-/*	$NetBSD: db_trace.c,v 1.57 2007/08/05 19:27:45 ad Exp $	*/
+/*	$NetBSD: db_trace.c,v 1.50 2006/11/22 13:29:03 yamt Exp $	*/
 
 /* 
  * Mach Operating System
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.57 2007/08/05 19:27:45 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_trace.c,v 1.50 2006/11/22 13:29:03 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -115,7 +115,7 @@ struct i386_frame {
 db_addr_t	db_trap_symbol_value = 0;
 db_addr_t	db_syscall_symbol_value = 0;
 db_addr_t	db_kdintr_symbol_value = 0;
-bool		db_trace_symbols_found = false;
+boolean_t	db_trace_symbols_found = FALSE;
 
 #if 0
 static void
@@ -129,7 +129,7 @@ db_find_trace_symbols(void)
 		db_kdintr_symbol_value = (db_addr_t) value;
 	if (db_value_of_name("_syscall", &value))
 		db_syscall_symbol_value = (db_addr_t) value;
-	db_trace_symbols_found = true;
+	db_trace_symbols_found = TRUE;
 }
 #endif
 
@@ -144,11 +144,11 @@ db_numargs(int *retaddrp)
 	int	args;
 	extern char	etext[];
 
-	argp = (int *)db_get_value((int)retaddrp, 4, false);
+	argp = (int *)db_get_value((int)retaddrp, 4, FALSE);
 	if (argp < (int *)VM_MIN_KERNEL_ADDRESS || argp > (int *)etext) {
 		args = 5;
 	} else {
-		inst = db_get_value((int)argp, 4, false);
+		inst = db_get_value((int)argp, 4, FALSE);
 		if ((inst & 0xff) == 0x59)	/* popl %ecx */
 			args = 1;
 		else if ((inst & 0xffff) == 0xc483)	/* addl %n, %esp */
@@ -274,9 +274,9 @@ db_nextframe(
 	switch (is_trap) {
 	    case NONE:
 		*ip = (db_addr_t)
-			db_get_value((int)*retaddr, 4, false);
+			db_get_value((int)*retaddr, 4, FALSE);
 		fp = (struct i386_frame *)
-			db_get_value((int)*nextframe, 4, false);
+			db_get_value((int)*nextframe, 4, FALSE);
 		if (fp == NULL)
 			return 0;
 		*nextframe = (int *)&fp->f_frame;
@@ -316,12 +316,7 @@ db_nextframe(
 			break;
 		case INTERRUPT:
 			(*pr)("--- interrupt ---\n");
-			/*
-			 * Get intrframe address as saved when switching
-			 * to interrupt stack, and convert to trapframe
-			 * (add 4).  See frame.h.
-			 */
-			tf = (struct trapframe *)(*(argp - 1) + 4);
+			tf = (struct trapframe *)argp;
 			break;
 		}
 		*ip = (db_addr_t)tf->tf_eip;
@@ -345,8 +340,8 @@ db_nextframe(
 	    && traptype == INTERRUPT) {
 		for (i = 0; i < 4; i++) {
 			ifp = (struct intrframe *)(argp + i);
-			err = db_get_value((int)&ifp->__if_err, 4, false);
-			trapno = db_get_value((int)&ifp->__if_trapno, 4, false);
+			err = db_get_value((int)&ifp->__if_err, 4, FALSE);
+			trapno = db_get_value((int)&ifp->__if_trapno, 4, FALSE);
 			if ((err == 0 || err == IREENT_MAGIC) && trapno == T_ASTFLT) {
 				*nextframe = (int *)ifp - 1;
 				break;
@@ -362,38 +357,17 @@ db_nextframe(
 	return 1;
 }
 
-static bool
-db_intrstack_p(const void *vp)
-{
-	const struct cpu_info *ci;
-	CPU_INFO_ITERATOR cii;
-
-	for (CPU_INFO_FOREACH(cii, ci)) {
-		const char *cp = ci->ci_intrstack;
-
-		if (cp == NULL) {
-			continue;
-		}
-		if ((cp - INTRSTACKSIZE + 4) <= (const char *)vp &&
-		    (const char *)vp <= cp) {
-			return true;
-		}
-	}
-	return false;
-}
-
 void
-db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
+db_stack_trace_print(db_expr_t addr, boolean_t have_addr, db_expr_t count,
 		     const char *modif, void (*pr)(const char *, ...))
 {
 	int *frame, *lastframe;
 	int *retaddr, *arg0;
 	int		*argp;
 	db_addr_t	callpc;
-	int		is_trap = NONE;
-	bool		kernel_only = true;
-	bool		trace_thread = false;
-	bool		lwpaddr = false;
+	int		is_trap;
+	boolean_t	kernel_only = TRUE;
+	boolean_t	trace_thread = FALSE;
 
 #if 0
 	if (!db_trace_symbols_found)
@@ -405,14 +379,10 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 		char c;
 
 		while ((c = *cp++) != 0) {
-			if (c == 'a') {
-				lwpaddr = true;
-				trace_thread = true;
-			}
 			if (c == 't')
-				trace_thread = true;
+				trace_thread = TRUE;
 			if (c == 'u')
-				kernel_only = false;
+				kernel_only = FALSE;
 		}
 	}
 
@@ -424,21 +394,14 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 			struct proc *p;
 			struct user *u;
 			struct lwp *l;
-			if (lwpaddr) {
-				l = (struct lwp *)addr;
-				p = l->l_proc;
-				(*pr)("trace: pid %d ", p->p_pid);
-			} else {
-				(*pr)("trace: pid %d ", (int)addr);
-				p = p_find(addr, PFIND_LOCKED);
-				if (p == NULL) {
-					(*pr)("not found\n");
-					return;
-				}
-				l = proc_representative_lwp(p, NULL, 0);
-			}
-			(*pr)("lid %d ", l->l_lid);
-			if (!(l->l_flag & LW_INMEM)) {
+			(*pr)("trace: pid %d ", (int)addr);
+			p = p_find(addr, PFIND_LOCKED);
+			if (p == NULL) {
+				(*pr)("not found\n");
+				return;
+			}	
+			l = proc_representative_lwp(p); /* XXX NJWLWP */
+			if (!(l->l_flag & L_INMEM)) {
 				(*pr)("swapped out\n");
 				return;
 			}
@@ -446,18 +409,18 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 			if (p == curproc && l == curlwp) {
 				frame = (int *)ddb_regs.tf_ebp;
 				callpc = (db_addr_t)ddb_regs.tf_eip;
-				(*pr)("at %p\n", frame);
+				(*pr)(" at %p\n", frame);
 			} else {
 				frame = (int *)u->u_pcb.pcb_ebp;
 				callpc = (db_addr_t)
-				    db_get_value((int)(frame + 1), 4, false);
-				(*pr)("at %p\n", frame);
+				    db_get_value((int)(frame + 1), 4, FALSE);
+				(*pr)(" at %p\n", frame);
 				frame = (int *)*frame; /* XXXfvdl db_get_value? */
 			}
 		} else {
 			frame = (int *)addr;
 			callpc = (db_addr_t)
-			    db_get_value((int)(frame + 1), 4, false);
+			    db_get_value((int)(frame + 1), 4, FALSE);
 			frame = (int *)*frame; /* XXXfvdl db_get_value? */
 		}
 	}
@@ -481,7 +444,7 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 
 		if (lastframe == 0 && sym == (db_sym_t)0) {
 			/* Symbol not found, peek at code */
-			int	instr = db_get_value(callpc, 4, false);
+			int	instr = db_get_value(callpc, 4, FALSE);
 
 			offset = 1;
 			if ((instr & 0x00ffffff) == 0x00e58955 ||
@@ -514,7 +477,7 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 		while (narg) {
 			if (argnp)
 				(*pr)("%s=", *argnp++);
-			(*pr)("%lx", db_get_value((int)argp, 4, false));
+			(*pr)("%lx", db_get_value((int)argp, 4, FALSE));
 			argp++;
 			if (--narg != 0)
 				(*pr)(",");
@@ -529,7 +492,7 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 
 			lastframe = (int *)fp;
 			callpc = (db_addr_t)
-			    db_get_value((db_addr_t)&fp->f_retaddr, 4, false);
+			    db_get_value((db_addr_t)&fp->f_retaddr, 4, FALSE);
 			continue;
 		}
 
@@ -541,10 +504,7 @@ db_stack_trace_print(db_expr_t addr, bool have_addr, db_expr_t count,
 
 		if (INKERNEL((int)frame)) {
 			/* staying in kernel */
-			if (!db_intrstack_p(frame) &&
-			    db_intrstack_p(lastframe)) {
-				(*pr)("--- switch to interrupt stack ---\n");
-			} else if (frame < lastframe ||
+			if (frame < lastframe ||
 			    (frame == lastframe && callpc == lastcallpc)) {
 				(*pr)("Bad frame pointer: %p\n", frame);
 				break;

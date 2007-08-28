@@ -1,4 +1,4 @@
-/*	$NetBSD: omap_nobyteacc_io.S,v 1.1 2007/01/06 00:29:52 christos Exp $ */
+/*	$NetBSD: omap_nobyteacc_io.S,v 1.1.6.2 2007/02/21 18:27:17 snj Exp $ */
 
 /*
  * Redistribution and use in source and binary forms, with or without

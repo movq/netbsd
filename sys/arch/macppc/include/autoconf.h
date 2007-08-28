@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.12 2007/07/14 21:48:21 ad Exp $	*/
+/*	$NetBSD: autoconf.h,v 1.8.24.1 2007/03/08 18:59:18 bouyer Exp $	*/
 
 /*-
  * Copyright (C) 1998	Internet Research Institute, Inc.
@@ -54,6 +54,7 @@ int badaddr __P((void *, int));
 
 /* these are in autoconf.c */
 int getnodebyname __P((int, const char *));
+int OF_interpret __P((const char *cmd, int nreturns, ...));
 
 /* these are in clock.c */
 void calc_delayconst __P((void));
@@ -66,7 +67,7 @@ void identifycpu __P((char *));
 void initppc __P((u_int, u_int, char *));
 void install_extint __P((void (*) __P((void)))); 
 void *mapiodev __P((paddr_t, psize_t));
-paddr_t kvtop __P((void *));
+paddr_t kvtop __P((caddr_t));
 
 /* these are in extintr.c */
 void ext_intr __P((void));
@@ -83,6 +84,14 @@ int adbkbd_cnattach(void);
 /* these are in dev/ofb.c */
 int ofb_is_console __P((void));
 int ofb_cnattach __P((void));
+
+#ifndef __HAVE_GENERIC_SOFT_INTERRUPTS
+/* these are in dev/zs.c */
+int zssoft __P((void *));
+
+/* these are in ../../dev/ic/com.c */
+void comsoft __P((void));
+#endif
 
 extern int console_node;
 extern int console_instance;

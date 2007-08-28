@@ -1,4 +1,4 @@
-/*	$NetBSD: locore2.c,v 1.17 2007/03/04 06:00:52 christos Exp $	*/
+/*	$NetBSD: locore2.c,v 1.15 2005/12/11 12:19:16 christos Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.17 2007/03/04 06:00:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore2.c,v 1.15 2005/12/11 12:19:16 christos Exp $");
 
 #include "opt_ddb.h"
 
@@ -198,7 +198,7 @@ _vm_init(void)
 	 */
 	proc0paddr = (struct user *) nextva;
 	nextva += USPACE;
-	memset((void *)proc0paddr, 0, USPACE);
+	memset((caddr_t)proc0paddr, 0, USPACE);
 	lwp0.l_addr = proc0paddr;
 
 	/*
@@ -237,14 +237,14 @@ _verify_hardware(void)
 		cpu_match++;
 		cpu_string = "{120,170}";
 		delay_divisor = 205;	/* 10 MHz */
-		cpu_has_multibus = true;
+		cpu_has_multibus = TRUE;
 		break;
 
 	case ID_SUN2_50 :
 		cpu_match++;
 		cpu_string = "50";
 		delay_divisor = 205;	/* 10 MHz */
-		cpu_has_vme = true;
+		cpu_has_vme = TRUE;
 		break;
 
 	default:

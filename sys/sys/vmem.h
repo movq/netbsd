@@ -1,4 +1,4 @@
-/*	$NetBSD: vmem.h,v 1.7 2007/07/09 21:11:34 ad Exp $	*/
+/*	$NetBSD: vmem.h,v 1.4 2006/10/16 13:09:42 yamt Exp $	*/
 
 /*-
  * Copyright (c)2006 YAMAMOTO Takashi,
@@ -32,7 +32,9 @@
 #include <sys/types.h>
 
 #if !defined(_KERNEL)
-#include <stdbool.h>
+typedef int boolean_t;
+#define	TRUE	1
+#define	FALSE	0
 #endif /* !defined(_KERNEL) */
 
 typedef struct vmem vmem_t;
@@ -46,7 +48,7 @@ typedef size_t vmem_size_t;
 vmem_t *vmem_create(const char *, vmem_addr_t, vmem_size_t, vmem_size_t,
     vmem_addr_t (*)(vmem_t *, vmem_size_t, vmem_size_t *, vm_flag_t),
     void (*)(vmem_t *, vmem_addr_t, vmem_size_t), vmem_t *, vmem_size_t,
-    vm_flag_t, int);
+    vm_flag_t);
 void vmem_destroy(vmem_t *);
 vmem_addr_t vmem_alloc(vmem_t *, vmem_size_t, vm_flag_t);
 void vmem_free(vmem_t *, vmem_addr_t, vmem_size_t);
@@ -55,8 +57,7 @@ vmem_addr_t vmem_xalloc(vmem_t *, vmem_size_t, vmem_size_t, vmem_size_t,
 void vmem_xfree(vmem_t *, vmem_addr_t, vmem_size_t);
 vmem_addr_t vmem_add(vmem_t *, vmem_addr_t, vmem_size_t, vm_flag_t);
 vmem_size_t vmem_roundup_size(vmem_t *, vmem_size_t);
-bool vmem_reap(vmem_t *);
-void vmem_rehash_start(void);
+boolean_t vmem_reap(vmem_t *);
 
 /* vm_flag_t */
 #define	VM_SLEEP	0x00000001

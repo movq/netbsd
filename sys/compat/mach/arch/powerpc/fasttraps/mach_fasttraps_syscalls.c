@@ -1,4 +1,4 @@
-/* $NetBSD: mach_fasttraps_syscalls.c,v 1.12 2007/02/09 21:55:22 ad Exp $ */
+/* $NetBSD: mach_fasttraps_syscalls.c,v 1.11 2005/12/11 12:20:21 christos Exp $ */
 
 /*
  * System call names.
@@ -8,7 +8,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_fasttraps_syscalls.c,v 1.12 2007/02/09 21:55:22 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_fasttraps_syscalls.c,v 1.11 2005/12/11 12:20:21 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include <sys/param.h>
@@ -16,6 +16,7 @@ __KERNEL_RCSID(0, "$NetBSD: mach_fasttraps_syscalls.c,v 1.12 2007/02/09 21:55:22
 #include <sys/signal.h>
 #include <sys/mount.h>
 #include <sys/poll.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <compat/mach/mach_types.h>
 #include <compat/mach/arch/powerpc/fasttraps/mach_fasttraps_syscallargs.h>

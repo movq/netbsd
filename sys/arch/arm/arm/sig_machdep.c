@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_machdep.c,v 1.33 2007/07/08 10:19:22 pooka Exp $	*/
+/*	$NetBSD: sig_machdep.c,v 1.28 2006/10/22 15:31:26 peter Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -45,7 +45,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.33 2007/07/08 10:19:22 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.28 2006/10/22 15:31:26 peter Exp $");
 
 #include <sys/mount.h>		/* XXX only needed by syscallargs.h */
 #include <sys/proc.h>
@@ -54,6 +54,8 @@ __KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.33 2007/07/08 10:19:22 pooka Exp $
 #include <sys/systm.h>
 #include <sys/user.h>
 #include <sys/ras.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/ucontext.h>
 
 #include <arm/armreg.h>
@@ -69,13 +71,14 @@ void *
 getframe(struct lwp *l, int sig, int *onstack)
 {
 	struct proc *p = l->l_proc;
+	struct sigctx *ctx = &p->p_sigctx;
 	struct trapframe *tf = process_frame(l);
 
 	/* Do we need to jump onto the signal stack? */
-	*onstack = (l->l_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0
+	*onstack = (ctx->ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0
 	    && (SIGACTION(p, sig).sa_flags & SA_ONSTACK) != 0;
 	if (*onstack)
-		return (char *)l->l_sigstk.ss_sp + l->l_sigstk.ss_size;
+		return (char *)ctx->ps_sigstk.ss_sp + ctx->ps_sigstk.ss_size;
 	return (void *)tf->tf_usr_sp;
 }
 
@@ -97,7 +100,7 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct sigacts *ps = p->p_sigacts;
 	struct trapframe *tf;
 	struct sigframe_siginfo *fp, frame;
-	int onstack, error;
+	int onstack;
 	int sig = ksi->ksi_signo;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
 
@@ -128,18 +131,13 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	frame.sf_si._info = ksi->ksi_info;
 	frame.sf_uc.uc_flags = _UC_SIGMASK;
 	frame.sf_uc.uc_sigmask = *mask;
-	frame.sf_uc.uc_link = l->l_ctxlink;
-	frame.sf_uc.uc_flags |= (l->l_sigstk.ss_flags & SS_ONSTACK)
+	frame.sf_uc.uc_link = NULL;
+	frame.sf_uc.uc_flags |= (p->p_sigctx.ps_sigstk.ss_flags & SS_ONSTACK)
 	    ? _UC_SETSTACK : _UC_CLRSTACK;
 	memset(&frame.sf_uc.uc_stack, 0, sizeof(frame.sf_uc.uc_stack));
-	sendsig_reset(l, sig);
-
-	mutex_exit(&p->p_smutex);
 	cpu_getmcontext(l, &frame.sf_uc.uc_mcontext, &frame.sf_uc.uc_flags);
-	error = copyout(&frame, fp, sizeof(frame));
-	mutex_enter(&p->p_smutex);
 
-	if (error != 0) {
+	if (copyout(&frame, fp, sizeof(frame)) != 0) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
@@ -173,7 +171,7 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 }
 
 void
@@ -217,7 +215,7 @@ cpu_getmcontext(l, mcp, flags)
 	gr[_REG_CPSR] = tf->tf_spsr;
 
 	if ((ras_pc = (__greg_t)ras_lookup(l->l_proc,
-	    (void *) gr[_REG_PC])) != -1)
+	    (caddr_t) gr[_REG_PC])) != -1)
 		gr[_REG_PC] = ras_pc;
 
 	*flags |= _UC_CPU;
@@ -237,7 +235,6 @@ cpu_setmcontext(l, mcp, flags)
 {
 	struct trapframe *tf = process_frame(l);
 	const __greg_t *gr = mcp->__gregs;
-	struct proc *p = l->l_proc;
 
 	if ((flags & _UC_CPU) != 0) {
 		/* Restore General Register context. */
@@ -270,13 +267,10 @@ cpu_setmcontext(l, mcp, flags)
 		arm_fpe_setcontext(p, (struct fpreg *)(void *)&mcp->__fpregs);
 	}
 #endif
-
-	mutex_enter(&p->p_smutex);
 	if (flags & _UC_SETSTACK)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		l->l_proc->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 	if (flags & _UC_CLRSTACK)
-		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
-	mutex_exit(&p->p_smutex);
+		l->l_proc->p_sigctx.ps_sigstk.ss_flags &= ~SS_ONSTACK;
 
 	return (0);
 }

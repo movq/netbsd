@@ -1,4 +1,4 @@
-/*     $NetBSD: buf.h,v 1.96 2007/07/29 13:53:46 ad Exp $ */
+/*	$NetBSD: buf.h,v 1.90 2006/11/14 15:50:00 reinoud Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -134,7 +134,7 @@ struct buf {
 	int	b_resid;		/* Remaining I/O. */
 	dev_t	b_dev;			/* Device associated with buffer. */
 	struct {
-		void *	b_addr;		/* Memory, superblocks, indirect etc. */
+		caddr_t	b_addr;		/* Memory, superblocks, indirect etc. */
 	} b_un;
 	daddr_t	b_blkno;		/* Underlying physical block number
 					   (partition relative) */
@@ -175,7 +175,6 @@ do {									\
 	LIST_INIT(&(bp)->b_dep);					\
 	simple_lock_init(&(bp)->b_interlock);				\
 	(bp)->b_dev = NODEV;						\
-	(bp)->b_error = 0;						\
 	BIO_SETPRIO((bp), BPRIO_DEFAULT);				\
 } while (/*CONSTCOND*/0)
 
@@ -200,6 +199,7 @@ do {									\
 #define	B_DELWRI	0x00000080	/* Delay I/O until buffer reused. */
 #define	B_DIRTY		0x00000100	/* Dirty page to be pushed out async. */
 #define	B_DONE		0x00000200	/* I/O completed. */
+#define	B_ERROR		0x00000800	/* I/O error occurred. */
 #define	B_GATHERED	0x00001000	/* LFS: already in a segment. */
 #define	B_INVAL		0x00002000	/* Does not contain valid info. */
 #define	B_LOCKED	0x00004000	/* Locked in core (not reusable). */
@@ -211,15 +211,13 @@ do {									\
 #define	B_TAPE		0x00200000	/* Magnetic tape I/O. */
 #define	B_WANTED	0x00800000	/* Process wants this buffer. */
 #define	B_WRITE		0x00000000	/* Write buffer (pseudo flag). */
-#define	B_FSPRIVATE	0x01000000	/* File system private flag. */
-#define	B_DEVPRIVATE	0x02000000	/* Device driver private flag. */
+#define	B_XXX		0x02000000	/* Debugging flag. */
 #define	B_VFLUSH	0x04000000	/* Buffer is being synced. */
 
 #define BUF_FLAGBITS \
     "\20\1AGE\3ASYNC\4BAD\5BUSY\6SCANNED\7CALL\10DELWRI" \
-    "\11DIRTY\12DONE\15GATHERED\16INVAL\17LOCKED\20NOCACHE" \
-    "\22CACHE\23PHYS\24RAW\25READ\26TAPE\30WANTED\31FSPRIVATE\32DEVPRIVATE" \
-    "\33VFLUSH"
+    "\11DIRTY\12DONE\14ERROR\15GATHERED\16INVAL\17LOCKED\20NOCACHE" \
+    "\22CACHE\23PHYS\24RAW\25READ\26TAPE\30WANTED\32XXX\33VFLUSH"
 
 
 /*

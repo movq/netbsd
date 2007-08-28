@@ -1,4 +1,4 @@
-/*	$NetBSD: crl.c,v 1.21 2007/07/29 12:15:41 ad Exp $	*/
+/*	$NetBSD: crl.c,v 1.19 2005/12/11 12:19:36 christos Exp $	*/
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: crl.c,v 1.21 2007/07/29 12:15:41 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: crl.c,v 1.19 2005/12/11 12:19:36 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -161,8 +161,8 @@ crlrw(dev, uio, flag)
 		while ((bp->b_flags & B_DONE) == 0)
 			(void) tsleep(bp, PRIBIO, "crlrw", 0);
 		splx(s);
-		if (bp->b_error != 0) {
-			error = bp->b_error;
+		if (bp->b_flags & B_ERROR) {
+			error = EIO;
 			break;
 		}
 		if (uio->uio_rw == UIO_READ) {
@@ -172,7 +172,7 @@ crlrw(dev, uio, flag)
 		}
 	}
 	crltab.crl_state &= ~CRL_BUSY;
-	wakeup((void *)&crltab);
+	wakeup((caddr_t)&crltab);
 	return (error);
 }
 
@@ -234,7 +234,7 @@ crlintr(arg)
 			bp->b_flags |= B_DONE;
 		}
 		crltab.crl_active = 0;
-		wakeup((void *)bp);
+		wakeup((caddr_t)bp);
 		break;
 
 	case CRL_S_XCONT:
@@ -254,8 +254,7 @@ crlintr(arg)
 	case CRL_S_ABORT:
 		crltab.crl_active = CRL_F_RETSTS;
 		mtpr(STXCS_IE | CRL_F_RETSTS, PR_STXCS);
-		bp->b_flags |= B_DONE;
-		bp->b_error = EIO;
+		bp->b_flags |= B_DONE|B_ERROR;
 		break;
 
 	case CRL_S_RETSTS:
@@ -266,9 +265,8 @@ crlintr(arg)
 	case CRL_S_HNDSHK:
 		printf("crl: hndshk error\n");	/* dump out some status too? */
 		crltab.crl_active = 0;
-		bp->b_flags |= B_DONE;
-		bp->b_error = EIO;
-		wakeup((void *)bp);
+		bp->b_flags |= B_DONE|B_ERROR;
+		wakeup((caddr_t)bp);
 		break;
 
 	case CRL_S_HWERR:

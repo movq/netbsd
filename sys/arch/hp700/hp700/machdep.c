@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.38 2007/07/12 14:15:36 skrll Exp $	*/
+/*	$NetBSD: machdep.c,v 1.32 2006/10/18 14:00:31 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.38 2007/07/12 14:15:36 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.32 2006/10/18 14:00:31 skrll Exp $");
 
 #include "opt_cputype.h"
 #include "opt_ddb.h"
@@ -104,6 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.38 2007/07/12 14:15:36 skrll Exp $");
 #include <sys/ksyms.h>
 
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <uvm/uvm_page.h>
@@ -149,7 +150,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.38 2007/07/12 14:15:36 skrll Exp $");
 /*
  * Different kinds of flags used throughout the kernel.
  */
-void *msgbufaddr;
+caddr_t msgbufaddr;
 
 /*
  * cache configuration, for most machines is the same
@@ -472,7 +473,7 @@ hppa_init(paddr_t start)
 	p = &os_hpmc;
 	if (pdc_call((iodcio_t)pdc, 0, PDC_INSTR, PDC_INSTR_DFLT, p))
 		*p = 0x08000240;
-	p[7] = ((char *) &os_hpmc_cont_end) - ((char *) &os_hpmc_cont);
+	p[7] = ((caddr_t) &os_hpmc_cont_end) - ((caddr_t) &os_hpmc_cont);
 	p[6] = (u_int) &os_hpmc_cont;
 	p[5] = -(p[0] + p[1] + p[2] + p[3] + p[4] + p[6] + p[7]);
 	p = &os_hpmc_cont;
@@ -700,10 +701,10 @@ hppa_init(paddr_t start)
 	/* we hope this won't fail */
 	hp700_io_extent = extent_create("io",
 	    HPPA_IOSPACE, 0xffffffff, M_DEVBUF,
-	    (void *)hp700_io_extent_store, sizeof(hp700_io_extent_store),
+	    (caddr_t)hp700_io_extent_store, sizeof(hp700_io_extent_store),
 	    EX_NOCOALESCE|EX_NOWAIT);
 
-	vstart = round_page(start);
+	vstart = hppa_round_page(start);
 	vend = VM_MAX_KERNEL_ADDRESS;
 
 	/*
@@ -713,16 +714,16 @@ hppa_init(paddr_t start)
 	physmem = totalphysmem;
 
 	/* Allocate the msgbuf. */
-	msgbufaddr = (void *) vstart;
+	msgbufaddr = (caddr_t) vstart;
 	vstart += MSGBUFSIZE;
-	vstart = round_page(vstart);
+	vstart = hppa_round_page(vstart);
 
 	/* Allocate the 24-bit DMA region. */
 	dma24_ex = extent_create("dma24", vstart, vstart + DMA24_SIZE, M_DEVBUF,
-	    (void *)dma24_ex_storage, sizeof(dma24_ex_storage),
+	    (caddr_t)dma24_ex_storage, sizeof(dma24_ex_storage),
 	    EX_NOCOALESCE|EX_NOWAIT);
 	vstart += DMA24_SIZE;
-	vstart = round_page(vstart);
+	vstart = hppa_round_page(vstart);
 
 	/* Allocate and initialize the BTLB slots array. */
 	btlb_slots = (struct btlb_slot *) ALIGN(vstart);
@@ -746,7 +747,7 @@ do {									\
 	BTLB_SLOTS(vinfo.num_c, BTLB_SLOT_CBTLB | BTLB_SLOT_VARIABLE_RANGE);
 #undef BTLB_SLOTS
 	btlb_slots_count = (btlb_slot - btlb_slots);
-	vstart = round_page((vaddr_t) btlb_slot);
+	vstart = hppa_round_page((vaddr_t) btlb_slot);
 	
 	/* Calculate the OS_TOC handler checksum. */
 	p = (u_int *) &os_toc;
@@ -755,7 +756,7 @@ do {									\
 
 	/* Install the OS_TOC handler. */
 	PAGE0->ivec_toc = os_toc;
-	PAGE0->ivec_toclen = ((char *) &os_toc_end) - ((char *) &os_toc);
+	PAGE0->ivec_toclen = ((caddr_t) &os_toc_end) - ((caddr_t) &os_toc);
 
 	pmap_bootstrap(&vstart, &vend);
 
@@ -820,12 +821,12 @@ do {									\
 	 * works because, currently, the mainbus.c bus_space 
 	 * implementation directly-maps things in I/O space.
 	 */
-	hp700_kgdb_attached = false;
+	hp700_kgdb_attached = FALSE;
 #if NCOM > 0
 	if (!strcmp(KGDB_DEVNAME, "com")) {
 		int com_gsc_kgdb_attach(void);
 		if (com_gsc_kgdb_attach() == 0)
-			hp700_kgdb_attached = true;
+			hp700_kgdb_attached = TRUE;
 	}
 #endif /* NCOM > 0 */
 #endif /* KGDB */
@@ -880,16 +881,16 @@ cpu_startup(void)
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
+	    16*NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    VM_PHYS_SIZE, 0, false, NULL);
+	    VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, false, NULL);
+	    nmbclusters * mclbytes, VM_MAP_INTRSAFE, FALSE, NULL);
 
 #ifdef PMAPDEBUG
 	pmapdebug = opmapdebug;
@@ -1109,15 +1110,15 @@ hppa_btlb_insert(pa_space_t space, vaddr_t va, paddr_t pa, vsize_t *sizep,
 	case TLB_AR_KRW:
 	case TLB_AR_UR:
 	case TLB_AR_URW:
-		need_dbtlb = true;
-		need_ibtlb = false;
+		need_dbtlb = TRUE;
+		need_ibtlb = FALSE;
 		break;
 	case TLB_AR_KRX:
 	case TLB_AR_KRWX:
 	case TLB_AR_URX:
 	case TLB_AR_URWX:
-		need_dbtlb = true;
-		need_ibtlb = true;
+		need_dbtlb = TRUE;
+		need_ibtlb = TRUE;
 		break;
 	default:
 		panic("btlb_insert: bad tlbprot");
@@ -1230,9 +1231,9 @@ hppa_btlb_insert(pa_space_t space, vaddr_t va, paddr_t pa, vsize_t *sizep,
 		 * Note what slots we no longer need.
 		 */
 		if (btlb_slot->btlb_slot_flags & BTLB_SLOT_DBTLB)
-			need_dbtlb = false;
+			need_dbtlb = FALSE;
 		if (btlb_slot->btlb_slot_flags & BTLB_SLOT_IBTLB)
-			need_ibtlb = false;
+			need_ibtlb = FALSE;
 	}
 
 	/* Success. */
@@ -1590,7 +1591,7 @@ cpu_dump(void)
 	if (bdev == NULL)
 		return (-1);
 
-	return (*bdev->d_dump)(dumpdev, dumplo, (void *)buf, dbtob(1));
+	return (*bdev->d_dump)(dumpdev, dumplo, (caddr_t)buf, dbtob(1));
 }
 
 /*
@@ -1603,9 +1604,9 @@ dumpsys(void)
 {
 	const struct bdevsw *bdev;
 	int psize, bytes, i, n;
-	char *maddr;
+	caddr_t maddr;
 	daddr_t blkno;
-	int (*dump)(dev_t, daddr_t, void *, size_t);
+	int (*dump)(dev_t, daddr_t, caddr_t, size_t);
 	int error;
 
 	if (dumpdev == NODEV)
@@ -1691,8 +1692,6 @@ setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 {
 	struct proc *p = l->l_proc;
 	struct trapframe *tf = l->l_md.md_regs;
-	pmap_t pmap = p->p_vmspace->vm_map.pmap;
-	pa_space_t space = pmap->pmap_space;
 	struct pcb *pcb = &l->l_addr->u_pcb;
 
 	tf->tf_flags = TFF_SYS|TFF_LAST;
@@ -1701,17 +1700,6 @@ setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 	tf->tf_rp = 0;
 	tf->tf_arg0 = (u_long)p->p_psstr;
 	tf->tf_arg1 = tf->tf_arg2 = 0; /* XXX dynload stuff */
-
-	tf->tf_sr7 = HPPA_SID_KERNEL;
-
-	/* Load all of the user's space registers. */
-	tf->tf_sr0 = tf->tf_sr1 = tf->tf_sr2 = tf->tf_sr3 =
-	tf->tf_sr4 = tf->tf_sr5 = tf->tf_sr6 = space;
-
-	tf->tf_iisq_head = tf->tf_iisq_tail = space;
-
-	/* Load the protection regsiters. */
-	tf->tf_pidr1 = tf->tf_pidr2 = pmap->pmap_pid;
 
 	/* reset any of the pending FPU exceptions */
 	hppa_fpu_flush(l);
@@ -1724,9 +1712,9 @@ setregs(struct lwp *l, struct exec_package *pack, u_long stack)
 	/* setup terminal stack frame */
 	stack = (u_long)STACK_ALIGN(stack, 63);
 	tf->tf_r3 = stack;
-	suword((void *)(stack), 0);
+	suword((caddr_t)(stack), 0);
 	stack += HPPA_FRAME_SIZE;
-	suword((void *)(stack + HPPA_FRAME_PSP), 0);
+	suword((caddr_t)(stack + HPPA_FRAME_PSP), 0);
 	tf->tf_sp = stack;
 }
 

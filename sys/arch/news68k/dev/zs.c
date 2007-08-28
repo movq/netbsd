@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.25 2007/05/20 05:50:25 tsutsui Exp $	*/
+/*	$NetBSD: zs.c,v 1.23 2006/03/29 04:16:46 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.25 2007/05/20 05:50:25 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.23 2006/03/29 04:16:46 thorpej Exp $");
 
 #include "opt_ddb.h"
 
@@ -111,6 +111,8 @@ struct zsdevice {
 	struct	zschan zs_chan_a;
 };
 
+static u_char zs_sir;
+
 /* Default speed for all channels */
 static int zs_defspeed = 9600;
 
@@ -152,6 +154,7 @@ CFATTACH_DECL(zsc, sizeof(struct zsc_softc),
     zs_match, zs_attach, NULL, NULL);
 
 static int zshard(void *);
+void zssoft(void *);
 #if 0
 static int zs_get_speed(struct zs_chanstate *);
 #endif
@@ -209,6 +212,7 @@ zs_attach(struct device *parent, struct device *self, void *aux)
 	for (channel = 0; channel < 2; channel++) {
 		zsc_args.channel = channel;
 		cs = &zsc->zsc_cs_store[channel];
+		simple_lock_init(&cs->cs_lock);
 
 		zsc->zsc_cs[channel] = cs;
 		zc = (channel == 0) ? &zs->zs_chan_a : &zs->zs_chan_b;
@@ -229,7 +233,6 @@ zs_attach(struct device *parent, struct device *self, void *aux)
 			zsc_args.hwflags = 0;
 		}
 
-		simple_lock_init(&cs->cs_lock);
 		cs->cs_defcflag = zs_def_cflag;
 
 		cs->cs_channel = channel;
@@ -272,8 +275,6 @@ zs_attach(struct device *parent, struct device *self, void *aux)
 	 * Now safe to install interrupt handlers.
 	 */
 	hb_intr_establish(zs_init_reg[2], zshard, ZSHARD_PRI, zsc);
-	zsc->zsc_softintr_cookie = softintr_establish(IPL_SOFTSERIAL,
-	    (void (*)(void *))zsc_intr_soft, zsc);
 
 	/*
 	 * Set the master interrupt enable and interrupt vector.
@@ -287,6 +288,8 @@ zs_attach(struct device *parent, struct device *self, void *aux)
 	zs_write_reg(cs, 9, zs_init_reg[9]);
 	splx(s);
 
+	if (zs_sir == 0)
+		zs_sir = allocate_sir(zssoft, zsc);
 }
 
 static int
@@ -317,10 +320,30 @@ zshard(void *arg)
 
 	/* We are at splzs here, so no need to lock. */
 	if (zsc->zsc_cs[0]->cs_softreq || zsc->zsc_cs[1]->cs_softreq) {
-		softintr_schedule(zsc->zsc_softintr_cookie);
+		setsoftint(zs_sir);
 	}
 
 	return rval;
+}
+
+/*
+ * Shared among the all chips. We have to look at all of them.
+ */
+void
+zssoft(void *arg)
+{
+	struct zsc_softc *zsc;
+	int s, unit;
+
+	/* Make sure we call the tty layer at spltty. */
+	s = spltty();
+	for (unit = 0; unit < zsc_cd.cd_ndevs; unit++) {
+		zsc = zsc_cd.cd_devs[unit];
+		if (zsc == NULL)
+			continue;
+		(void) zsc_intr_soft(zsc);
+	}
+	splx(s);
 }
 
 /*

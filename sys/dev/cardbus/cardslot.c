@@ -1,4 +1,4 @@
-/*	$NetBSD: cardslot.c,v 1.35 2007/07/09 21:00:31 ad Exp $	*/
+/*	$NetBSD: cardslot.c,v 1.33 2006/11/16 01:32:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 and 2000
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cardslot.c,v 1.35 2007/07/09 21:00:31 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cardslot.c,v 1.33 2006/11/16 01:32:48 christos Exp $");
 
 #include "opt_cardslot.h"
 
@@ -68,6 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: cardslot.c,v 1.35 2007/07/09 21:00:31 ad Exp $");
 STATIC void cardslotattach(struct device *, struct device *, void *);
 
 STATIC int cardslotmatch(struct device *, struct cfdata *, void *);
+static void create_slot_manager(void *);
 static void cardslot_event_thread(void *arg);
 
 STATIC int cardslot_cb_print(void *aux, const char *pcic);
@@ -122,7 +123,7 @@ cardslotattach(struct device *parent, struct device *self,
 					      cardslot_cb_print);
 		if (csc) {
 			/* cardbus found */
-			DPRINTF(("%s: found cardbus on %s\n", __func__,
+			DPRINTF(("cardslotattach: found cardbus on %s\n",
 				 sc->sc_dev.dv_xname));
 			sc->sc_cb_softc = csc;
 		}
@@ -133,7 +134,7 @@ cardslotattach(struct device *parent, struct device *self,
 			cardslot_16_print, cardslot_16_submatch);
 		if (psc) {
 			/* pcmcia 16-bit bus found */
-			DPRINTF(("%s: found 16-bit pcmcia bus\n", __func__));
+			DPRINTF(("cardslotattach: found 16-bit pcmcia bus\n"));
 			sc->sc_16_softc = psc;
 			/*
 			 * XXX:
@@ -145,23 +146,17 @@ cardslotattach(struct device *parent, struct device *self,
 
 	if (csc != NULL || psc != NULL) {
 		config_pending_incr();
-		if (kthread_create(PRI_NONE, 0, NULL, cardslot_event_thread,
-		    sc, &sc->sc_event_thread, "%s", sc->sc_dev.dv_xname)) {
-			printf("%s: unable to create thread for slot %d\n",
-			    sc->sc_dev.dv_xname, sc->sc_slot);
-			panic("cardslotattach");
-		}
-		sc->sc_th_enable = 1;
+		kthread_create(create_slot_manager, (void *)sc);
 	}
 
 	if (csc && (csc->sc_cf->cardbus_ctrl)(csc->sc_cc, CARDBUS_CD)) {
-		DPRINTF(("%s: CardBus card found\n", __func__));
+		DPRINTF(("cardslotattach: CardBus card found\n"));
 		/* attach deferred */
 		cardslot_event_throw(sc, CARDSLOT_EVENT_INSERTION_CB);
 	}
 
 	if (psc && (psc->pct->card_detect)(psc->pch)) {
-		DPRINTF(("%s: 16-bit card found\n", __func__));
+		DPRINTF(("cardbusattach: 16-bit card found\n"));
 		/* attach deferred */
 		cardslot_event_throw(sc, CARDSLOT_EVENT_INSERTION_16);
 	}
@@ -170,11 +165,13 @@ cardslotattach(struct device *parent, struct device *self,
 
 
 STATIC int
-cardslot_cb_print(void *aux, const char *pnp)
+cardslot_cb_print(aux, pnp)
+	void *aux;
+	const char *pnp;
 {
 	struct cbslot_attach_args *cba = aux;
 
-	if (pnp != NULL) {
+	if (pnp) {
 		aprint_normal("cardbus at %s subordinate bus %d",
 		    pnp, cba->cba_bus);
 	}
@@ -206,12 +203,33 @@ static int
 cardslot_16_print(void *arg, const char *pnp)
 {
 
-	if (pnp != NULL) {
+	if (pnp) {
 		aprint_normal("pcmciabus at %s", pnp);
 	}
 
 	return UNCONF;
 }
+
+
+
+
+static void
+create_slot_manager(arg)
+	void *arg;
+{
+	struct cardslot_softc *sc = (struct cardslot_softc *)arg;
+
+	sc->sc_th_enable = 1;
+
+	if (kthread_create1(cardslot_event_thread, sc, &sc->sc_event_thread,
+	    "%s", sc->sc_dev.dv_xname)) {
+		printf("%s: unable to create event thread for slot %d\n",
+		    sc->sc_dev.dv_xname, sc->sc_slot);
+		panic("create_slot_manager");
+	}
+}
+
+
 
 
 /*
@@ -221,7 +239,9 @@ cardslot_16_print(void *arg, const char *pnp)
  *   of a slot is changed, it should be noticed using this function.
  */
 void
-cardslot_event_throw(struct cardslot_softc *sc, int ev)
+cardslot_event_throw(sc, ev)
+	struct cardslot_softc *sc;
+	int ev;
 {
 	struct cardslot_event *ce;
 

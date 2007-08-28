@@ -1,4 +1,4 @@
-/* $NetBSD: if_vge.c,v 1.36 2007/07/09 21:00:56 ad Exp $ */
+/* $NetBSD: if_vge.c,v 1.33.2.1 2007/06/18 09:59:23 liamjfoy Exp $ */
 
 /*-
  * Copyright (c) 2004
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vge.c,v 1.36 2007/07/09 21:00:56 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vge.c,v 1.33.2.1 2007/06/18 09:59:23 liamjfoy Exp $");
 
 /*
  * VIA Networking Technologies VT612x PCI gigabit ethernet NIC driver.
@@ -207,7 +207,7 @@ struct vge_softc {
 	int			sc_if_flags;
 	int			sc_link;
 	int			sc_camidx;
-	callout_t		sc_timeout;
+	struct callout		sc_timeout;
 
 	bus_dmamap_t		sc_cddmamap;
 #define sc_cddma		sc_cddmamap->dm_segs[0].ds_addr
@@ -310,7 +310,7 @@ static void vge_txeof(struct vge_softc *);
 static int vge_intr(void *);
 static void vge_tick(void *);
 static void vge_start(struct ifnet *);
-static int vge_ioctl(struct ifnet *, u_long, void *);
+static int vge_ioctl(struct ifnet *, u_long, caddr_t);
 static int vge_init(struct ifnet *);
 static void vge_stop(struct vge_softc *);
 static void vge_watchdog(struct ifnet *);
@@ -398,7 +398,7 @@ vge_m_defrag(struct mbuf *mold, int flags)
 		mn->m_len = MIN(sz, MCLBYTES);
 
 		m_copydata(mold, mold->m_pkthdr.len - sz, mn->m_len,
-		     mtod(mn, void *));
+		     mtod(mn, caddr_t));
 
 		sz -= mn->m_len;
 
@@ -845,7 +845,7 @@ vge_allocmem(struct vge_softc *sc)
 	/* Map the memory to kernel VA space */
 
 	error = bus_dmamem_map(sc->sc_dmat, &seg, nseg,
-	    sizeof(struct vge_control_data), (void **)&sc->sc_control_data,
+	    sizeof(struct vge_control_data), (caddr_t *)&sc->sc_control_data,
 	    BUS_DMA_NOWAIT);
 	if (error) {
 		aprint_error("%s: could not map control data dma memory\n",
@@ -922,7 +922,7 @@ vge_allocmem(struct vge_softc *sc)
  fail_4:
 	bus_dmamap_destroy(sc->sc_dmat, sc->sc_cddmamap);
  fail_3:
-	bus_dmamem_unmap(sc->sc_dmat, (void *)sc->sc_control_data,
+	bus_dmamem_unmap(sc->sc_dmat, (caddr_t)sc->sc_control_data,
 	    sizeof(struct vge_control_data));
  fail_2:
 	bus_dmamem_free(sc->sc_dmat, &seg, nseg);
@@ -1069,7 +1069,7 @@ vge_attach(struct device *parent, struct device *self, void *aux)
 	if_attach(ifp);
 	ether_ifattach(ifp, eaddr);
 
-	callout_init(&sc->sc_timeout, 0);
+	callout_init(&sc->sc_timeout);
 	callout_setfunc(&sc->sc_timeout, vge_tick, sc);
 
 	/*
@@ -2042,7 +2042,7 @@ vge_miibus_statchg(struct device *self)
 }
 
 static int
-vge_ioctl(struct ifnet *ifp, u_long command, void *data)
+vge_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 {
 	struct vge_softc *sc;
 	struct ifreq *ifr;

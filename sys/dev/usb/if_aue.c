@@ -1,4 +1,4 @@
-/*	$NetBSD: if_aue.c,v 1.102 2007/07/12 20:39:56 rmind Exp $	*/
+/*	$NetBSD: if_aue.c,v 1.99 2006/11/16 01:33:26 christos Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_aue.c,v 1.102 2007/07/12 20:39:56 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_aue.c,v 1.99 2006/11/16 01:33:26 christos Exp $");
 
 #if defined(__NetBSD__)
 #include "opt_inet.h"
@@ -249,7 +249,7 @@ Static void aue_txeof(usbd_xfer_handle, usbd_private_handle, usbd_status);
 Static void aue_tick(void *);
 Static void aue_tick_task(void *);
 Static void aue_start(struct ifnet *);
-Static int aue_ioctl(struct ifnet *, u_long, void *);
+Static int aue_ioctl(struct ifnet *, u_long, caddr_t);
 Static void aue_init(void *);
 Static void aue_stop(struct aue_softc *);
 Static void aue_watchdog(struct ifnet *);
@@ -267,7 +267,7 @@ Static void aue_lock_mii(struct aue_softc *);
 Static void aue_unlock_mii(struct aue_softc *);
 
 Static void aue_setmulti(struct aue_softc *);
-Static u_int32_t aue_crc(void *);
+Static u_int32_t aue_crc(caddr_t);
 Static void aue_reset(struct aue_softc *);
 
 Static int aue_csr_read_1(struct aue_softc *, int);
@@ -580,10 +580,9 @@ aue_miibus_statchg(device_ptr_t dev)
 #define AUE_BITS	6
 
 Static u_int32_t
-aue_crc(void *addrv)
+aue_crc(caddr_t addr)
 {
 	u_int32_t		idx, bit, data, crc;
-	char *addr = addrv;
 
 	/* Compute CRC for the address value. */
 	crc = 0xFFFFFFFF; /* initial value */
@@ -712,6 +711,9 @@ aue_reset(struct aue_softc *sc)
 USB_MATCH(aue)
 {
 	USB_MATCH_START(aue, uaa);
+
+	if (uaa->iface != NULL)
+		return (UMATCH_NONE);
 
 	return (aue_lookup(uaa->vendor, uaa->product) != NULL ?
 		UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
@@ -1554,7 +1556,7 @@ aue_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 }
 
 Static int
-aue_ioctl(struct ifnet *ifp, u_long command, void *data)
+aue_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 {
 	struct aue_softc	*sc = ifp->if_softc;
 	struct ifaddr 		*ifa = (struct ifaddr *)data;
@@ -1619,7 +1621,7 @@ aue_ioctl(struct ifnet *ifp, u_long command, void *data)
 		if (error == ENETRESET) {
 			if (ifp->if_flags & IFF_RUNNING) {
 #if defined(__NetBSD__)
-				workqueue_enqueue(sc->wqp,&sc->wk, NULL);
+				workqueue_enqueue(sc->wqp,&sc->wk);
 				/* XXX */
 #else
 				aue_init(sc);

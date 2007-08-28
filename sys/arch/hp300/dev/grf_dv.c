@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_dv.c,v 1.37 2007/03/04 11:53:21 tsutsui Exp $	*/
+/*	$NetBSD: grf_dv.c,v 1.35 2006/07/21 18:40:58 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -117,7 +117,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_dv.c,v 1.37 2007/03/04 11:53:21 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_dv.c,v 1.35 2006/07/21 18:40:58 tsutsui Exp $");
 
 #include "opt_compat_hpux.h"
 
@@ -152,8 +152,8 @@ __KERNEL_RCSID(0, "$NetBSD: grf_dv.c,v 1.37 2007/03/04 11:53:21 tsutsui Exp $");
 
 #include "ite.h"
 
-static int	dv_init(struct grf_data *, int, uint8_t *);
-static int	dv_mode(struct grf_data *, int, void *);
+static int	dv_init(struct grf_data *, int, caddr_t);
+static int	dv_mode(struct grf_data *, int, caddr_t);
 static void	dv_reset(struct dvboxfb *);
 
 static int	dvbox_intio_match(struct device *, struct cfdata *, void *);
@@ -176,7 +176,7 @@ static struct grfsw dvbox_grfsw = {
 };
 
 static int dvconscode;
-static void *dvconaddr;
+static caddr_t dvconaddr;
 
 #if NITE > 0
 static void	dvbox_init(struct ite_data *);
@@ -204,7 +204,7 @@ dvbox_intio_match(struct device *parent, struct cfdata *match, void *aux)
 	if (strcmp("fb",ia->ia_modname) != 0)
 		return 0;
 
-	if (badaddr((void *)ia->ia_addr))
+	if (badaddr((caddr_t)ia->ia_addr))
 		return 0;
 
 	grf = (struct grfreg *)ia->ia_addr;
@@ -222,9 +222,9 @@ dvbox_intio_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct grfdev_softc *sc = (struct grfdev_softc *)self;
 	struct intio_attach_args *ia = aux;
-	void *grf;
+	caddr_t grf;
 
-	grf = (void *)ia->ia_addr;
+	grf = (caddr_t)ia->ia_addr;
 	sc->sc_scode = -1;	/* XXX internal i/o */
 
 	sc->sc_isconsole = (sc->sc_scode == dvconscode);
@@ -249,7 +249,7 @@ dvbox_dio_attach(struct device *parent, struct device *self, void *aux)
 	struct grfdev_softc *sc = (struct grfdev_softc *)self;
 	struct dio_attach_args *da = aux;
 	bus_space_handle_t bsh;
-	void *grf;
+	caddr_t grf;
 
 	sc->sc_scode = da->da_scode;
 	if (sc->sc_scode == dvconscode)
@@ -274,7 +274,7 @@ dvbox_dio_attach(struct device *parent, struct device *self, void *aux)
  * Returns 0 if hardware not present, non-zero ow.
  */
 static int
-dv_init(struct grf_data *gp, int scode, uint8_t *addr)
+dv_init(struct grf_data *gp, int scode, caddr_t addr)
 {
 	struct dvboxfb *dbp;
 	struct grfinfo *gi = &gp->g_display;
@@ -285,9 +285,9 @@ dv_init(struct grf_data *gp, int scode, uint8_t *addr)
 	 * no need to repeat this.
 	 */
 	if (scode != dvconscode) {
-		dbp = (struct dvboxfb *)addr;
+		dbp = (struct dvboxfb *) addr;
 		if (ISIIOVA(addr))
-			gi->gd_regaddr = (void *)IIOP(addr);
+			gi->gd_regaddr = (caddr_t) IIOP(addr);
 		else
 			gi->gd_regaddr = dio_scodetopa(scode);
 		gi->gd_regsize = 0x20000;
@@ -295,16 +295,16 @@ dv_init(struct grf_data *gp, int scode, uint8_t *addr)
 		gi->gd_fbheight = (dbp->fbhmsb << 8) | dbp->fbhlsb;
 		gi->gd_fbsize = gi->gd_fbwidth * gi->gd_fbheight;
 			fboff = (dbp->fbomsb << 8) | dbp->fbolsb;
-		gi->gd_fbaddr = (void *)(*(addr + fboff) << 16);
-		if ((vaddr_t)gi->gd_regaddr >= DIOIIBASE) {
+		gi->gd_fbaddr = (caddr_t) (*((u_char *)addr + fboff) << 16);
+		if (gi->gd_regaddr >= (caddr_t)DIOIIBASE) {
 			/*
 			 * For DIO II space the fbaddr just computed is
 			 * the offset from the select code base (regaddr)
 			 * of the framebuffer.  Hence it is also implicitly
 			 * the size of the set.
 			 */
-			gi->gd_regsize = (int)gi->gd_fbaddr;
-			gi->gd_fbaddr += (int)gi->gd_regaddr;
+			gi->gd_regsize = (int) gi->gd_fbaddr;
+			gi->gd_fbaddr += (int) gi->gd_regaddr;
 			gp->g_regkva = addr;
 			gp->g_fbkva = addr + gi->gd_regsize;
 		} else {
@@ -381,7 +381,7 @@ dv_reset(struct dvboxfb *dbp)
  * Return a UNIX error number or 0 for success.
  */
 static int
-dv_mode(struct grf_data *gp, int cmd, void *data)
+dv_mode(struct grf_data *gp, int cmd, caddr_t data)
 {
 	struct dvboxfb *dbp;
 	int error = 0;
@@ -667,7 +667,7 @@ int
 dvboxcnattach(bus_space_tag_t bst, bus_addr_t addr, int scode)
 {
 	bus_space_handle_t bsh;
-	void *va;
+	caddr_t va;
 	struct grfreg *grf;
 	struct grf_data *gp = &grf_cn;
 	int size;

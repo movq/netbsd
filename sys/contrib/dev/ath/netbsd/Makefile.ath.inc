@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.ath.inc,v 1.14 2007/04/08 09:36:31 scw Exp $
+#	$NetBSD: Makefile.ath.inc,v 1.13.2.1 2007/07/19 14:38:23 liamjfoy Exp $
 
 # Rules for building a HAL on various platforms.  We put them here
 # to centralize them all in one place.

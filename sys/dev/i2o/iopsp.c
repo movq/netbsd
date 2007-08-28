@@ -1,7 +1,7 @@
-/*	$NetBSD: iopsp.c,v 1.28 2007/06/16 12:32:12 ad Exp $	*/
+/*	$NetBSD: iopsp.c,v 1.25 2006/11/16 01:32:50 christos Exp $	*/
 
 /*-
- * Copyright (c) 2000, 2001, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -42,7 +42,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iopsp.c,v 1.28 2007/06/16 12:32:12 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iopsp.c,v 1.25 2006/11/16 01:32:50 christos Exp $");
+
+#include "opt_i2o.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,6 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: iopsp.c,v 1.28 2007/06/16 12:32:12 ad Exp $");
 #include <sys/endian.h>
 #include <sys/malloc.h>
 #include <sys/scsiio.h>
+#include <sys/lock.h>
 
 #include <sys/bswap.h>
 #include <machine/bus.h>
@@ -73,7 +76,7 @@ static void	iopsp_adjqparam(struct device *, int);
 static void	iopsp_attach(struct device *, struct device *, void *);
 static void	iopsp_intr(struct device *, struct iop_msg *, void *);
 static int	iopsp_ioctl(struct scsipi_channel *, u_long,
-			    void *, int, struct proc *);
+			    caddr_t, int, struct proc *);
 static int	iopsp_match(struct device *, struct cfdata *, void *);
 static int	iopsp_rescan(struct iopsp_softc *);
 static int	iopsp_reconfig(struct device *);
@@ -128,7 +131,9 @@ iopsp_attach(struct device *parent, struct device *self, void *aux)
 		} p;
 	} __attribute__ ((__packed__)) param;
 	int fc, rv;
+#ifdef I2OVERBOSE
 	int size;
+#endif
 
 	ia = (struct iop_attach_args *)aux;
 	sc = device_private(self);
@@ -163,6 +168,7 @@ iopsp_attach(struct device *parent, struct device *self, void *aux)
 	if (rv != 0)
 		goto bad;
 
+#ifdef I2OVERBOSE
 	printf("%s: ", sc->sc_dv.dv_xname);
 	if (fc)
 		printf("FC");
@@ -171,6 +177,7 @@ iopsp_attach(struct device *parent, struct device *self, void *aux)
 	printf(", max sync rate %dMHz, initiator ID %d\n",
 	    (u_int32_t)le64toh(param.p.sci.maxsyncrate) / 1000,
 	    le32toh(param.p.sci.initiatorid));
+#endif
 
 	sc->sc_openings = 1;
 
@@ -192,12 +199,14 @@ iopsp_attach(struct device *parent, struct device *self, void *aux)
 	sc->sc_channel.chan_id = le32toh(param.p.sci.initiatorid);
 	sc->sc_channel.chan_flags = SCSIPI_CHAN_NOSETTLE;
 
+#ifdef I2OVERBOSE
 	/*
 	 * Allocate the target map.  Currently used for informational
 	 * purposes only.
 	 */
 	size = sc->sc_channel.chan_ntargets * sizeof(struct iopsp_target);
 	sc->sc_targetmap = malloc(size, M_DEVBUF, M_NOWAIT|M_ZERO);
+#endif
 
  	/* Build the two maps, and attach to scsipi. */
 	if (iopsp_reconfig(self) != 0) {
@@ -227,17 +236,16 @@ iopsp_reconfig(struct device *dv)
 		struct	i2o_param_read_results prr;
 		struct	i2o_param_scsi_device_info sdi;
 	} __attribute__ ((__packed__)) param;
-	u_int tid, nent, i, targ, lun, size, rv, bptid;
+	u_int tid, nent, i, targ, lun, size, s, rv, bptid;
 	u_short *tidmap;
-	void *tofree;
+#ifdef I2OVERBOSE
 	struct iopsp_target *it;
 	int syncrate;
+#endif
 
 	sc = (struct iopsp_softc *)dv;
 	iop = (struct iop_softc *)device_parent(&sc->sc_dv);
 	sc_chan = &sc->sc_channel;
-
-	KASSERT(mutex_owned(&iop->sc_conflock));
 
 	/* Anything to do? */
 	if (iop->sc_chgind == sc->sc_chgind)
@@ -252,8 +260,10 @@ iopsp_reconfig(struct device *dv)
 	if ((tidmap = malloc(size, M_DEVBUF, M_WAITOK|M_ZERO)) == NULL)
 		return (ENOMEM);
 
+#ifdef I2OVERBOSE
 	for (i = 0; i < sc_chan->chan_ntargets; i++)
 		sc->sc_targetmap[i].it_flags &= ~IT_PRESENT;
+#endif
 
 	/*
 	 * A quick hack to handle Intel's stacked bus port arrangement.
@@ -291,6 +301,7 @@ iopsp_reconfig(struct device *dv)
 		}
 #endif
 
+#ifdef I2OVERBOSE
 		/*
 		 * If we've already described this target, and nothing has
 		 * changed, then don't describe it again.
@@ -313,9 +324,11 @@ iopsp_reconfig(struct device *dv)
 				printf("synchronous at %dMHz, offset 0x%x\n",
 				    it->it_syncrate, it->it_offset);
 		}
+#endif
 
 		/* Ignore the device if it's in use by somebody else. */
 		if ((le32toh(le->usertid) & 4095) != I2O_TID_NONE) {
+#ifdef I2OVERBOSE
 			if (sc->sc_tidmap == NULL ||
 			    IOPSP_TIDMAP(sc->sc_tidmap, targ, lun) !=
 			    IOPSP_TID_INUSE)
@@ -323,23 +336,24 @@ iopsp_reconfig(struct device *dv)
 				    " tid %d\n", sc->sc_dv.dv_xname,
 				    targ, lun, tid,
 				    le32toh(le->usertid) & 4095);
+#endif
 			IOPSP_TIDMAP(tidmap, targ, lun) = IOPSP_TID_INUSE;
 		} else
 			IOPSP_TIDMAP(tidmap, targ, lun) = (u_short)tid;
 	}
 
+#ifdef I2OVERBOSE
 	for (i = 0; i < sc_chan->chan_ntargets; i++)
 		if ((sc->sc_targetmap[i].it_flags & IT_PRESENT) == 0)
 			sc->sc_targetmap[i].it_width = 0;
+#endif
 
 	/* Swap in the new map and return. */
-	mutex_spin_enter(&iop->sc_intrlock);
-	tofree = sc->sc_tidmap;
+	s = splbio();
+	if (sc->sc_tidmap != NULL)
+		free(sc->sc_tidmap, M_DEVBUF);
 	sc->sc_tidmap = tidmap;
-	mutex_spin_exit(&iop->sc_intrlock);
-
-	if (tofree != NULL)
-		free(tofree, M_DEVBUF);
+	splx(s);
 	sc->sc_chgind = iop->sc_chgind;
 	return (0);
 }
@@ -357,7 +371,14 @@ iopsp_rescan(struct iopsp_softc *sc)
 
 	iop = (struct iop_softc *)device_parent(&sc->sc_dv);
 
-	mutex_enter(&iop->sc_conflock);
+	rv = lockmgr(&iop->sc_conflock, LK_EXCLUSIVE, NULL);
+	if (rv != 0) {
+#ifdef I2ODEBUG
+		printf("iopsp_rescan: unable to acquire lock\n");
+#endif
+		return (rv);
+	}
+
 	im = iop_msg_alloc(iop, IM_WAIT);
 
 	mf.msgflags = I2O_MSGFLAGS(i2o_hba_bus_scan);
@@ -374,7 +395,7 @@ iopsp_rescan(struct iopsp_softc *sc)
 	if ((rv = iop_lct_get(iop)) == 0)
 		rv = iopsp_reconfig(&sc->sc_dv);
 
-	mutex_exit(&iop->sc_conflock);
+	lockmgr(&iop->sc_conflock, LK_RELEASE, NULL);
 	return (rv);
 }
 
@@ -522,9 +543,10 @@ iopsp_scsi_abort(struct iopsp_softc *sc, int atid, struct iop_msg *aim)
 	mf.msgtctx = im->im_tctx;
 	mf.tctxabort = aim->im_tctx;
 
+	s = splbio();
 	rv = iop_msg_post(iop, im, &mf, 30000);
+	splx(s);
 	iop_msg_free(iop, im);
-
 	return (rv);
 }
 #endif
@@ -611,7 +633,7 @@ iopsp_intr(struct device *dv, struct iop_msg *im, void *reply)
  * ioctl hook; used here only to initiate low-level rescans.
  */
 static int
-iopsp_ioctl(struct scsipi_channel *chan, u_long cmd, void *data,
+iopsp_ioctl(struct scsipi_channel *chan, u_long cmd, caddr_t data,
     int flag, struct proc *p)
 {
 	int rv;
@@ -623,7 +645,7 @@ iopsp_ioctl(struct scsipi_channel *chan, u_long cmd, void *data,
 		 * maps built.  Locking would stop re-configuration, but we
 		 * want to fake success.
 		 */
-		if (curlwp != &lwp0)
+		if (p != &proc0)
 			rv = iopsp_rescan(
 			   (struct iopsp_softc *)chan->chan_adapter->adapt_dev);
 		else
@@ -645,13 +667,12 @@ static void
 iopsp_adjqparam(struct device *dv, int mpi)
 {
 	struct iopsp_softc *sc;
-	struct iop_softc *iop;
+	int s;
 
-	sc = device_private(dv);
-	iop = device_private(device_parent(dv));
+	sc = (struct iopsp_softc *)dv;
 
-	mutex_spin_enter(&iop->sc_intrlock);
+	s = splbio();
 	sc->sc_adapter.adapt_openings += mpi - sc->sc_openings;
 	sc->sc_openings = mpi;
-	mutex_spin_exit(&iop->sc_intrlock);
+	splx(s);
 }

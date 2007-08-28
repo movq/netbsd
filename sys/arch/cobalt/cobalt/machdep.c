@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.87 2007/08/10 17:44:18 tsutsui Exp $	*/
+/*	$NetBSD: machdep.c,v 1.75.4.2 2007/11/04 16:30:55 pavel Exp $	*/
 
 /*
  * Copyright (c) 2006 Izumi Tsutsui.
@@ -53,7 +53,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.87 2007/08/10 17:44:18 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.75.4.2 2007/11/04 16:30:55 pavel Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -118,8 +118,8 @@ char	*bootinfo = NULL;	/* pointer to bootinfo structure */
 char	bootstring[512];	/* Boot command */
 int	netboot;		/* Are we netbooting? */
 
-char	*nfsroot_bstr = NULL;
-char	*root_bstr = NULL;
+char *	nfsroot_bstr = NULL;
+char *	root_bstr = NULL;
 int	bootunit = -1;
 int	bootpart = -1;
 
@@ -143,7 +143,7 @@ int mem_cluster_cnt;
 
 void	mach_init(unsigned int, u_int, char*);
 void	decode_bootstring(void);
-static char *strtok_light(char *, const char);
+static char *	strtok_light(char *, const char);
 static u_int read_board_id(void);
 
 /*
@@ -152,7 +152,7 @@ static u_int read_board_id(void);
  */
 int	safepri = MIPS1_PSL_LOWIPL;
 
-extern char *esym;
+extern caddr_t esym;
 extern struct user *proc0paddr;
 
 
@@ -163,52 +163,32 @@ extern struct user *proc0paddr;
 void
 mach_init(unsigned int memsize, u_int bim, char *bip)
 {
-	char *kernend, *v;
+	caddr_t kernend, v;
 	u_long first, last;
 	extern char edata[], end[];
 	const char *bi_msg;
 #if NKSYMS || defined(DDB) || defined(LKM)
 	int nsym = 0;
-	char *ssym = 0;
+	caddr_t ssym = 0;
 	struct btinfo_symtab *bi_syms;
 #endif
 	struct btinfo_howto *bi_howto;
 
 	/*
-	 * Clear the BSS segment (if needed).
+	 * Clear the BSS segment.
 	 */
+#if NKSYMS || defined(DDB) || defined(LKM)
 	if (memcmp(((Elf_Ehdr *)end)->e_ident, ELFMAG, SELFMAG) == 0 &&
 	    ((Elf_Ehdr *)end)->e_ident[EI_CLASS] == ELFCLASS) {
 		esym = end;
-#if NKSYMS || defined(DDB) || defined(LKM)
 		esym += ((Elf_Ehdr *)end)->e_entry;
-#endif
-		kernend = (char *)mips_round_page(esym);
-		/*
-		 * We don't have to clear BSS here
-		 * since our bootloader already does it.
-		 */
-#if 0
+		kernend = (caddr_t)mips_round_page(esym);
 		memset(edata, 0, end - edata);
+	} else
 #endif
-	} else {
-		kernend = (void *)mips_round_page(end);
-		/*
-		 * No symbol table, so assume we are loaded by
-		 * the firmware directly with "bfd" command.
-		 * The firmware loader doesn't clear BSS of
-		 * a loaded kernel, so do it here.
-		 */
+	{
+		kernend = (caddr_t)mips_round_page(end);
 		memset(edata, 0, kernend - edata);
-
-		/*
-		 * XXX
-		 * lwp0 and cpu_info_store are allocated in BSS
-		 * and initialized before mach_init() is called,
-		 * so restore them again.
-		 */
-		lwp0.l_cpu = &cpu_info_store;
-		cpu_info_store.ci_curlwp = &lwp0;
 	}
 
 	/* Check for valid bootinfo passed from bootstrap */
@@ -230,9 +210,9 @@ mach_init(unsigned int memsize, u_int bim, char *bip)
 	/* Load symbol table if present */
 	if (bi_syms != NULL) {
 		nsym = bi_syms->nsym;
-		ssym = (void *)bi_syms->ssym;
-		esym = (void *)bi_syms->esym;
-		kernend = (void *)mips_round_page(esym);
+		ssym = (caddr_t)bi_syms->ssym;
+		esym = (caddr_t)bi_syms->esym;
+		kernend = (caddr_t)mips_round_page(esym);
 	}
 #endif
 
@@ -334,11 +314,11 @@ mach_init(unsigned int memsize, u_int bim, char *bip)
 	/*
 	 * Allocate space for proc0's USPACE.
 	 */
-	v = (char *)uvm_pageboot_alloc(USPACE);
+	v = (caddr_t)uvm_pageboot_alloc(USPACE);
 	lwp0.l_addr = proc0paddr = (struct user *)v;
 	lwp0.l_md.md_regs = (struct frame *)(v + USPACE) - 1;
-	proc0paddr->u_pcb.pcb_context[11] =
-	    MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
+	curpcb = &lwp0.l_addr->u_pcb;
+	curpcb->pcb_context[11] = MIPS_INT_MASK | MIPS_SR_INT_IE; /* SR */
 }
 
 /*
@@ -364,12 +344,12 @@ cpu_startup(void)
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    16 * NCARGS, VM_MAP_PAGEABLE, false, NULL);
+	    16 * NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 	/*
 	 * Allocate a submap for physio.
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-	    VM_PHYS_SIZE, 0, false, NULL);
+	    VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * (No need to allocate an mbuf cluster submap.  Mbuf clusters
@@ -462,11 +442,11 @@ cpu_reboot(int howto, char *bootstr)
 #define ELCR_WRITE(reg, val)	\
     bus_space_write_1(icu_bst, elcr_bsh, (reg), (val))
 
-const uint32_t mips_ipl_si_to_sr[SI_NQUEUES] = {
-	[SI_SOFT] = MIPS_SOFT_INT_MASK_0,
-	[SI_SOFTCLOCK] = MIPS_SOFT_INT_MASK_0,
-	[SI_SOFTNET] = MIPS_SOFT_INT_MASK_1,
-	[SI_SOFTSERIAL] = MIPS_SOFT_INT_MASK_1,
+const uint32_t mips_ipl_si_to_sr[_IPL_NSOFT] = {
+	MIPS_SOFT_INT_MASK_0,			/* IPL_SOFT */
+	MIPS_SOFT_INT_MASK_0,			/* IPL_SOFTCLOCK */
+	MIPS_SOFT_INT_MASK_1,			/* IPL_SOFTNET */
+	MIPS_SOFT_INT_MASK_1,			/* IPL_SOFTSERIAL */
 };
 
 u_int icu_imen;
@@ -694,9 +674,32 @@ cpu_intr(uint32_t status, uint32_t cause, uint32_t pc, uint32_t ipending)
 	uvmexp.intrs++;
 
 	if (ipending & MIPS_INT_MASK_5) {
-		/* call the common MIPS3 clock interrupt handler */
+
+		/* call the common MIPS3 clock interrupt handler */ 
 		cf.pc = pc;
 		cf.sr = status;
+
+		if ((status & MIPS_INT_MASK) == MIPS_INT_MASK) {
+			if ((ipending & MIPS_INT_MASK &
+			     ~MIPS_INT_MASK_5) == 0) {
+				/*
+				 * If all interrupts were enabled and
+				 * there is no pending interrupts,
+				 * set MIPS_SR_INT_IE so that
+				 * spllowersoftclock(9) in hardclock(9)
+				 * works properly.
+				 */
+				_splset(MIPS_SR_INT_IE);
+			} else {
+				/*
+				 * If there are any pending interrputs,
+				 * clear MIPS_SR_INT_IE in cf.sr so that
+				 * spllowersoftclock(9) in hardclock(9) will
+				 * not happen.
+				 */
+				cf.sr &= ~MIPS_SR_INT_IE;
+			}
+		}
 		mips3_clockintr(&cf);
 
 		cause &= ~MIPS_INT_MASK_5;
@@ -780,7 +783,7 @@ decode_bootstring(void)
 	char *equ;
 	int i;
 
-	/* break apart bootstring on ' ' boundries and itterate */
+	/* break apart bootstring on ' ' boundries  and itterate*/
 	work = strtok_light(bootstring, ' ');
 	while (work != '\0') {
 		/* if starts with '-', we got options, walk its decode */
@@ -793,12 +796,12 @@ decode_bootstring(void)
 		} else
 
 		/* if it has a '=' its an assignment, switch and set */
-		if ((equ = strchr(work, '=')) != '\0') {
-			if (memcmp("nfsroot=", work, 8) == 0) {
-				nfsroot_bstr = (equ + 1);
+		if ((equ = strchr(work,'=')) != '\0') {
+			if(0 == memcmp("nfsroot=", work, 8)) {
+				nfsroot_bstr = (equ +1);
 			} else
-			if (memcmp("root=", work, 5) == 0) {
-				root_bstr = (equ + 1);
+			if(0 == memcmp("root=", work, 5)) {
+				root_bstr = (equ +1);
 			}
 		} else
 
@@ -817,12 +820,15 @@ decode_bootstring(void)
 	if (root_bstr != NULL) {
 		/* this should be of the form "/dev/hda1" */
 		/* [abcd][1234]    drive partition  linux probe order */
-		if ((memcmp("/dev/hd", root_bstr, 7) == 0) &&
+		if ((memcmp("/dev/hd",root_bstr,7) == 0) &&
 		    (strlen(root_bstr) == 9) ){
 			bootunit = root_bstr[7] - 'a';
 			bootpart = root_bstr[8] - '1';
 		}
 	}
+
+	if (nfsroot_bstr != NULL)
+		netboot = 1;
 }
 
 
@@ -835,16 +841,16 @@ strtok_light(char *str, const char sep)
 
 	if (str != NULL)
 		proc = str;
-	if (proc == NULL)	/* end of string return NULL */
+	if (proc == NULL)  /* end of string return NULL */
 		return proc;
 
 	head = proc;
 
-	work = strchr(proc, sep);
-	if (work == NULL) {	/* we hit the end */
+	work = strchr (proc, sep);
+	if (work == NULL) {  /* we hit the end */
 		proc = work;
 	} else {
-		proc = (work + 1);
+		proc = (work +1 );
 		*work = '\0';
 	}
 
@@ -880,7 +886,7 @@ lookup_bootinfo(int type)
 
 /*
  * Get board ID of cobalt models.
- *
+ * 
  * The board ID info is stored at the PCI config register
  * on the PCI-ISA bridge part of the VIA VT82C586 chipset.
  * We can't use pci_conf_read(9) yet here, so read it directly.
@@ -906,26 +912,5 @@ read_board_id(void)
 	reg = *pcicfg_data;
 	*pcicfg_addr = 0;
 
-	return COBALT_BOARD_ID(reg);
-}
-
-static const int ipl2spl_table[] = {
-	[IPL_NONE] = 0,
-	[IPL_SOFTCLOCK] = MIPS_SOFT_INT_MASK_0,
-	[IPL_SOFTNET] = MIPS_SOFT_INT_MASK_0|MIPS_SOFT_INT_MASK_1,
-	[IPL_SOFTSERIAL] = MIPS_SOFT_INT_MASK_0|MIPS_SOFT_INT_MASK_1,
-	[IPL_BIO] = SPLBIO,
-	[IPL_NET] = SPLNET,
-	[IPL_TTY] = SPLTTY,
-	[IPL_VM] = SPLCLOCK,
-	[IPL_CLOCK] = SPLCLOCK,
-	[IPL_STATCLOCK] = SPLCLOCK,
-	[IPL_HIGH] = MIPS_INT_MASK,
-};
-
-ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._spl = ipl2spl_table[ipl]};
+	return COBALT_BOARD_ID(reg); 
 }

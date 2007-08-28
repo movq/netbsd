@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.9 2007/07/30 12:25:14 jmmv Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.6.24.1 2007/10/24 22:23:54 xtraeme Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.9 2007/07/30 12:25:14 jmmv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.6.24.1 2007/10/24 22:23:54 xtraeme Exp $");
 
 #include "opt_md.h"
 
@@ -57,7 +57,6 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.9 2007/07/30 12:25:14 jmmv Exp $");
 #include <sys/malloc.h>
 #include <machine/bootconfig.h>
 #include <machine/intr.h>
-#include <machine/irqhandler.h>
 
 #include "isa.h"
 
@@ -187,7 +186,6 @@ cpu_configure()
 #if NISA > 0 && !defined(SHARK)
 	isa_intr_init();
 #endif
-	softintr_init();
 
 	config_rootfound("mainbus", NULL);
 #if defined(OFWGENCFG) || defined(SHARK)

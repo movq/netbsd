@@ -1,4 +1,4 @@
-/*	$NetBSD: esp_pcmcia.c,v 1.32 2007/07/09 21:01:19 ad Exp $	*/
+/*	$NetBSD: esp_pcmcia.c,v 1.29 2006/11/16 01:33:20 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2004 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esp_pcmcia.c,v 1.32 2007/07/09 21:01:19 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esp_pcmcia.c,v 1.29 2006/11/16 01:33:20 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -103,7 +103,7 @@ void	esp_pcmcia_write_reg(struct ncr53c9x_softc *, int, u_char);
 int	esp_pcmcia_dma_isintr(struct ncr53c9x_softc *);
 void	esp_pcmcia_dma_reset(struct ncr53c9x_softc *);
 int	esp_pcmcia_dma_intr(struct ncr53c9x_softc *);
-int	esp_pcmcia_dma_setup(struct ncr53c9x_softc *, void **,
+int	esp_pcmcia_dma_setup(struct ncr53c9x_softc *, caddr_t *,
 	    size_t *, int, size_t *);
 void	esp_pcmcia_dma_go(struct ncr53c9x_softc *);
 void	esp_pcmcia_dma_stop(struct ncr53c9x_softc *);
@@ -180,14 +180,22 @@ esp_pcmcia_attach(struct device *parent, struct device *self,
 	esc->sc_ioh = cfe->iospace[0].handle.ioh;
 	esp_pcmcia_init(esc);
 
-	printf("%s", self->dv_xname);
+	error = esp_pcmcia_enable(self, 1);
+	if (error)
+		goto fail;
 
 	sc->sc_adapter.adapt_minphys = minphys;
 	sc->sc_adapter.adapt_request = ncr53c9x_scsipi_request;
 	sc->sc_adapter.adapt_enable = esp_pcmcia_enable;
+	sc->sc_adapter.adapt_refcnt = 1;
 
 	ncr53c9x_attach(sc);
+	scsipi_adapter_delref(&sc->sc_adapter);
 	esc->sc_state = ESP_PCMCIA_ATTACHED;
+	return;
+
+fail:
+	pcmcia_function_unconfigure(pf);
 }
 
 void
@@ -201,7 +209,7 @@ esp_pcmcia_init(esc)
 	sc->sc_glue = &esp_pcmcia_glue;
 
 #ifdef ESP_PCMCIA_POLL
-	callout_init(&esc->sc_poll_ch, 0);
+	callout_init(&esc->sc_poll_ch);
 #endif
 
 	sc->sc_rev = NCR_VARIANT_ESP406;
@@ -412,14 +420,14 @@ esp_pcmcia_dma_intr(sc)
 int
 esp_pcmcia_dma_setup(sc, addr, len, datain, dmasize)
 	struct ncr53c9x_softc *sc;
-	void **addr;
+	caddr_t *addr;
 	size_t *len;
 	int datain;
 	size_t *dmasize;
 {
 	struct esp_pcmcia_softc *esc = (struct esp_pcmcia_softc *)sc;
 
-	esc->sc_dmaaddr = (void *)addr;
+	esc->sc_dmaaddr = addr;
 	esc->sc_pdmalen = len;
 	esc->sc_datain = datain;
 	esc->sc_dmasize = *dmasize;

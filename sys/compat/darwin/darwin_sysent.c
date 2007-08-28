@@ -1,4 +1,4 @@
-/* $NetBSD: darwin_sysent.c,v 1.50 2007/02/09 21:55:16 ad Exp $ */
+/* $NetBSD: darwin_sysent.c,v 1.49 2005/12/11 12:19:56 christos Exp $ */
 
 /*
  * System call switch table.
@@ -8,7 +8,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: darwin_sysent.c,v 1.50 2007/02/09 21:55:16 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: darwin_sysent.c,v 1.49 2005/12/11 12:19:56 christos Exp $");
 
 #include "opt_ktrace.h"
 #include "opt_nfsserver.h"
@@ -22,6 +22,7 @@ __KERNEL_RCSID(0, "$NetBSD: darwin_sysent.c,v 1.50 2007/02/09 21:55:16 ad Exp $"
 #include <sys/systm.h>
 #include <sys/signal.h>
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <compat/common/compat_file.h>
 #include <compat/sys/signal.h>

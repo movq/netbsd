@@ -1,4 +1,4 @@
-/*	$NetBSD: bio.c,v 1.1 2007/05/01 17:20:11 bouyer Exp $ */
+/*	$NetBSD: bio.c,v 1.1.4.2 2007/05/08 10:45:04 pavel Exp $ */
 /*	$OpenBSD: bio.c,v 1.9 2007/03/20 02:35:55 marco Exp $	*/
 
 /*
@@ -28,7 +28,7 @@
 /* A device controller ioctl tunnelling device.  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bio.c,v 1.1 2007/05/01 17:20:11 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bio.c,v 1.1.4.2 2007/05/08 10:45:04 pavel Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -38,7 +38,6 @@ __KERNEL_RCSID(0, "$NetBSD: bio.c,v 1.1 2007/05/01 17:20:11 bouyer Exp $");
 #include <sys/malloc.h>
 #include <sys/queue.h>
 #include <sys/systm.h>
-#include <sys/mutex.h>
 #include <sys/proc.h>
 #include <sys/kauth.h>
 
@@ -47,15 +46,14 @@ __KERNEL_RCSID(0, "$NetBSD: bio.c,v 1.1 2007/05/01 17:20:11 bouyer Exp $");
 struct bio_mapping {
 	LIST_ENTRY(bio_mapping) bm_link;
 	struct device *bm_dev;
-	int (*bm_ioctl)(struct device *, u_long, void *);
+	int (*bm_ioctl)(struct device *, u_long, caddr_t);
 };
 
 LIST_HEAD(, bio_mapping) bios = LIST_HEAD_INITIALIZER(bios);
-static kmutex_t bio_lock;
 
 void	bioattach(int);
 int	bioclose(dev_t, int, int, struct lwp *);
-int	bioioctl(dev_t, u_long, void *, int, struct lwp *);
+int	bioioctl(dev_t, u_long, caddr_t, int, struct lwp *);
 int	bioopen(dev_t, int, int, struct lwp *);
 
 int	bio_delegate_ioctl(struct bio_mapping *, u_long, void *);
@@ -71,7 +69,6 @@ const struct cdevsw bio_cdevsw = {
 void
 bioattach(int nunits)
 {
-	mutex_init(&bio_lock, MUTEX_DRIVER, IPL_BIO);
 }
 
 int
@@ -87,12 +84,12 @@ bioclose(dev_t dev, int flags, int mode, struct lwp *l)
 }
 
 int
-bioioctl(dev_t dev, u_long cmd, void *addr, int flag, struct  lwp *l)
+bioioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct  lwp *l)
 {
 	struct bio_locate *locate;
 	struct bio_common *common;
 	char name[16];
-	int error;
+	int error, s;
 
 	switch(cmd) {
 	case BIOCLOCATE:
@@ -151,32 +148,33 @@ bioioctl(dev_t dev, u_long cmd, void *addr, int flag, struct  lwp *l)
 
 	default:
 		common = (struct bio_common *)addr;
-		mutex_enter(&bio_lock);
+		s = splbio();
 		if (!bio_validate(common->bc_cookie)) {
-			mutex_exit(&bio_lock);
+			splx(s);
 			return (ENOENT);
 		}
-		mutex_exit(&bio_lock);
 		error =  bio_delegate_ioctl(
 		    (struct bio_mapping *)common->bc_cookie, cmd, addr);
+		splx(s);
 		return (error);
 	}
 	return (0);
 }
 
 int
-bio_register(struct device *dev, int (*ioctl)(struct device *, u_long, void *))
+bio_register(struct device *dev, int (*ioctl)(struct device *, u_long, caddr_t))
 {
 	struct bio_mapping *bm;
+	int s;
 
 	MALLOC(bm, struct bio_mapping *, sizeof *bm, M_DEVBUF, M_NOWAIT);
 	if (bm == NULL)
 		return (ENOMEM);
 	bm->bm_dev = dev;
 	bm->bm_ioctl = ioctl;
-	mutex_enter(&bio_lock);
+	s = splbio();
 	LIST_INSERT_HEAD(&bios, bm, bm_link);
-	mutex_exit(&bio_lock);
+	splx(s);
 	return (0);
 }
 
@@ -184,8 +182,9 @@ void
 bio_unregister(struct device *dev)
 {
 	struct bio_mapping *bm, *next;
+	int s;
 
-	mutex_enter(&bio_lock);
+	s = splbio();
 	for (bm = LIST_FIRST(&bios); bm != NULL; bm = next) {
 		next = LIST_NEXT(bm, bm_link);
 
@@ -194,22 +193,23 @@ bio_unregister(struct device *dev)
 			free(bm, M_DEVBUF);
 		}
 	}
-	mutex_exit(&bio_lock);
+	splx(s);
 }
 
 struct bio_mapping *
 bio_lookup(char *name)
 {
 	struct bio_mapping *bm;
+	int s;
 
-	mutex_enter(&bio_lock);
+	s = splbio();
 	LIST_FOREACH(bm, &bios, bm_link) {
 		if (strcmp(name, bm->bm_dev->dv_xname) == 0) {
-			mutex_exit(&bio_lock);
+			splx(s);
 			return (bm);
 		}
 	}
-	mutex_exit(&bio_lock);
+	splx(s);
 	return (NULL);
 }
 

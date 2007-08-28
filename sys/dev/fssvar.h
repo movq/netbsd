@@ -1,7 +1,7 @@
-/*	$NetBSD: fssvar.h,v 1.16 2007/07/09 21:00:28 ad Exp $	*/
+/*	$NetBSD: fssvar.h,v 1.13 2006/03/14 15:07:29 chs Exp $	*/
 
 /*-
- * Copyright (c) 2003, 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2003 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -138,13 +138,13 @@ struct fss_cache {
 	struct fss_softc *fc_softc;	/* Backlink to our softc */
 	volatile int	fc_xfercount;	/* Number of outstanding transfers */
 	u_int32_t	fc_cluster;	/* Cluster number of this entry */
-	void *		fc_data;	/* Data */
+	caddr_t		fc_data;	/* Data */
 };
 
 struct fss_softc {
 	int		sc_unit;	/* Logical unit number */
 	struct simplelock sc_slock;	/* Protect this softc */
-	kmutex_t	sc_lock;	/* Sleep lock for fss_ioctl */
+	struct lock	sc_lock;	/* Sleep lock for fss_ioctl */
 	volatile int	sc_flags;	/* Flags */
 #define FSS_ACTIVE	0x01		/* Snapshot is active */
 #define FSS_ERROR	0x02		/* I/O error occurred */
@@ -162,7 +162,7 @@ struct fss_softc {
 	off_t		sc_bs_size;	/* Its size in bytes */
 	int		sc_bs_bshift;	/* Shift of backing store block */
 	u_int32_t	sc_bs_bmask;	/* Mask of backing store block */
-	struct lwp	*sc_bs_lwp;	/* Our kernel thread */
+	struct proc	*sc_bs_proc;	/* Our kernel thread */
 	int		sc_clshift;	/* Shift of cluster size */
 	u_int32_t	sc_clmask;	/* Mask of cluster size */
 	u_int32_t	sc_clcount;	/* # clusters in file system */

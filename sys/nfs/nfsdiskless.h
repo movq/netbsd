@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsdiskless.h,v 1.26 2007/07/08 21:08:09 bouyer Exp $	*/
+/*	$NetBSD: nfsdiskless.h,v 1.24.24.1 2007/05/13 10:30:08 jdc Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1997 The NetBSD Foundation, Inc.
@@ -98,7 +98,6 @@ extern int (*nfs_bootstatic_callback)(struct nfs_diskless *);
 #define	NFS_BOOTSTATIC_HAS_MASK		0x04
 #define	NFS_BOOTSTATIC_HAS_SERVADDR	0x08
 #define	NFS_BOOTSTATIC_HAS_SERVER	0x10
-#define	NFS_BOOTSTATIC_NOSTATIC		0x20
 #endif /* _KERNEL */
 
 #endif /* _NFS_NFSDISKLESS_H_ */

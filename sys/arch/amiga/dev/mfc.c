@@ -1,4 +1,4 @@
-/*	$NetBSD: mfc.c,v 1.46 2007/03/04 05:59:23 christos Exp $ */
+/*	$NetBSD: mfc.c,v 1.44 2006/10/01 20:31:49 elad Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -28,6 +28,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+
+#include "opt_kgdb.h"
+
 /*
  * Copyright (c) 1994 Michael L. Hitch
  *
@@ -55,7 +58,7 @@
 #include "opt_kgdb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mfc.c,v 1.46 2007/03/04 05:59:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mfc.c,v 1.44 2006/10/01 20:31:49 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -66,6 +69,7 @@ __KERNEL_RCSID(0, "$NetBSD: mfc.c,v 1.46 2007/03/04 05:59:23 christos Exp $");
 #include <sys/file.h>
 #include <sys/malloc.h>
 #include <sys/uio.h>
+#include <sys/kernel.h>
 #include <sys/syslog.h>
 #include <sys/queue.h>
 #include <sys/conf.h>
@@ -549,7 +553,7 @@ mfcsopen(dev_t dev, int flag, int mode, struct lwp *l)
 	 */
 	while ((tp->t_state & TS_CARR_ON) == 0 && (tp->t_cflag & CLOCAL) == 0) {
 		tp->t_wopen++;
-		error = ttysleep(tp, (void *)&tp->t_rawq,
+		error = ttysleep(tp, (caddr_t)&tp->t_rawq,
 		    TTIPRI | PCATCH, ttopen, 0);
 		tp->t_wopen--;
 		if (error) {
@@ -656,7 +660,7 @@ mfcstty(dev_t dev)
 }
 
 int
-mfcsioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+mfcsioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	register struct tty *tp;
 	register int error;
@@ -828,7 +832,7 @@ mfcsstart(struct tty *tp)
 	if (cc <= tp->t_lowat) {
 		if (tp->t_state & TS_ASLEEP) {
 			tp->t_state &= ~TS_ASLEEP;
-			wakeup((void *) & tp->t_outq);
+			wakeup((caddr_t) & tp->t_outq);
 		}
 		selwakeup(&tp->t_wsel);
 	}

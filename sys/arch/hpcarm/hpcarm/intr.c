@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.13 2007/08/08 10:43:03 tsutsui Exp $	*/
+/*	$NetBSD: intr.c,v 1.10 2005/12/11 12:17:33 christos Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.13 2007/08/08 10:43:03 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.10 2005/12/11 12:17:33 christos Exp $");
 
 #include "opt_irqstats.h"
 
@@ -106,13 +106,6 @@ setsoftnet(void)
 
 int astpending;
 
-void    set_spl_masks(void);
-
-int current_spl_level = _SPL_HIGH;
-u_int spl_masks[_SPL_LEVELS + 1];
-u_int spl_smasks[_SPL_LEVELS];
-int safepri = _SPL_0;
-
 /* Handle software interrupts */
 
 void
@@ -152,6 +145,16 @@ dosoftints(void)
 	}
 }
 
+/* This is interrupt / SPL related */
+
+void    set_spl_masks(void);
+int     ipl_to_spl(int);
+
+int current_spl_level = _SPL_HIGH;
+u_int spl_masks[_SPL_LEVELS + 1];
+u_int spl_smasks[_SPL_LEVELS];
+int safepri = _SPL_0;
+
 void
 set_spl_masks(void)
 {
@@ -185,12 +188,10 @@ set_spl_masks(void)
 }
 
 int
-ipl_to_spl(ipl_t ipl)
+ipl_to_spl(int ipl)
 {
 
 	switch (ipl) {
-	case IPL_NONE:
-		return _SPL_0;
 	case IPL_SOFTCLOCK:
 		return _SPL_SOFTCLOCK;
 	case IPL_SOFTNET:
@@ -209,14 +210,12 @@ ipl_to_spl(ipl_t ipl)
 		return _SPL_AUDIO;
 	case IPL_CLOCK:
 		return _SPL_CLOCK;
-	case IPL_STATCLOCK:
-		return _SPL_STATCLOCK;
 	case IPL_HIGH:
 		return _SPL_HIGH;
 	case IPL_SERIAL:
 		return _SPL_SERIAL;
 	default:
-		panic("bogus ipl %d", ipl);
+		panic("bogus ipl");
 	}
 }
 
@@ -229,7 +228,7 @@ dump_spl_masks(void)
 	int loop;
 
 	for (loop = 0; loop < _SPL_LEVELS; ++loop) {
-		printf("spl_masks[%d]=%08x spl_smasks[%d]=%08x\n", loop,
+		printf("spl_mask[%d]=%08x splsmask[%d]=%08x\n", loop,
 		    spl_masks[loop], loop, spl_smasks[loop]);
 	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ugen.c,v 1.92 2007/03/04 06:02:49 christos Exp $	*/
+/*	$NetBSD: ugen.c,v 1.88.2.2 2007/04/06 18:43:50 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1998, 2004 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ugen.c,v 1.92 2007/03/04 06:02:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ugen.c,v 1.88.2.2 2007/04/06 18:43:50 bouyer Exp $");
 
 #include "opt_ugen_bulk_ra_wb.h"
 #include "opt_compat_netbsd.h"
@@ -199,7 +199,7 @@ Static void ugen_bulkwb_intr(usbd_xfer_handle xfer, usbd_private_handle addr,
 Static int ugen_do_read(struct ugen_softc *, int, struct uio *, int);
 Static int ugen_do_write(struct ugen_softc *, int, struct uio *, int);
 Static int ugen_do_ioctl(struct ugen_softc *, int, u_long,
-			 void *, int, struct lwp *);
+			 caddr_t, int, struct lwp *);
 Static int ugen_set_config(struct ugen_softc *sc, int configno);
 Static usb_config_descriptor_t *ugen_get_cdesc(struct ugen_softc *sc,
 					       int index, int *lenp);
@@ -1383,7 +1383,7 @@ ugen_get_alt_index(struct ugen_softc *sc, int ifaceidx)
 
 Static int
 ugen_do_ioctl(struct ugen_softc *sc, int endpt, u_long cmd,
-	      void *addr, int flag, struct lwp *l)
+	      caddr_t addr, int flag, struct lwp *l)
 {
 	struct ugen_endpoint *sce;
 	usbd_status err;
@@ -1721,7 +1721,7 @@ ugen_do_ioctl(struct ugen_softc *sc, int endpt, u_long cmd,
 		cdesc = ugen_get_cdesc(sc, fd->ufd_config_index, &len);
 		if (len > fd->ufd_size)
 			len = fd->ufd_size;
-		iov.iov_base = (void *)fd->ufd_data;
+		iov.iov_base = (caddr_t)fd->ufd_data;
 		iov.iov_len = len;
 		uio.uio_iov = &iov;
 		uio.uio_iovcnt = 1;
@@ -1766,7 +1766,7 @@ ugen_do_ioctl(struct ugen_softc *sc, int endpt, u_long cmd,
 		if (len < 0 || len > 32767)
 			return (EINVAL);
 		if (len != 0) {
-			iov.iov_base = (void *)ur->ucr_data;
+			iov.iov_base = (caddr_t)ur->ucr_data;
 			iov.iov_len = len;
 			uio.uio_iov = &iov;
 			uio.uio_iovcnt = 1;
@@ -1804,12 +1804,12 @@ ugen_do_ioctl(struct ugen_softc *sc, int endpt, u_long cmd,
 	}
 	case USB_GET_DEVICEINFO:
 		usbd_fill_deviceinfo(sc->sc_udev,
-				     (struct usb_device_info *)addr, 0);
+				     (struct usb_device_info *)addr, 1);
 		break;
 #ifdef COMPAT_30
 	case USB_GET_DEVICEINFO_OLD:
 		usbd_fill_deviceinfo_old(sc->sc_udev,
-					 (struct usb_device_info_old *)addr, 0);
+					 (struct usb_device_info_old *)addr, 1);
 
 		break;
 #endif
@@ -1820,7 +1820,7 @@ ugen_do_ioctl(struct ugen_softc *sc, int endpt, u_long cmd,
 }
 
 int
-ugenioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
+ugenioctl(dev_t dev, u_long cmd, caddr_t addr, int flag, struct lwp *l)
 {
 	int endpt = UGENENDPOINT(dev);
 	struct ugen_softc *sc;

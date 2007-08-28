@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.32 2007/06/12 03:34:32 mhitch Exp $	*/
+/*	$NetBSD: trap.c,v 1.27.8.2 2007/06/18 09:31:06 liamjfoy Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -78,7 +78,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.32 2007/06/12 03:34:32 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.27.8.2 2007/06/18 09:31:06 liamjfoy Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
@@ -94,6 +94,8 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.32 2007/06/12 03:34:32 mhitch Exp $");
 #include <sys/kernel.h>
 #include <sys/signalvar.h>
 #include <sys/resourcevar.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall.h>
 #include <sys/syslog.h>
 #include <sys/user.h>
@@ -214,9 +216,9 @@ userret(struct lwp *l, struct trapframe *tf, u_quad_t oticks)
 	/*
 	 * If profiling, charge system time to the trapped pc.
 	 */
-	if (p->p_stflag & PST_PROFIL) {
+	if (p->p_flag & P_PROFIL) {
 		extern int psratio;
-		addupc_task(l, tf->tf_pc,
+		addupc_task(p, tf->tf_pc,
 		            (int)(p->p_sticks - oticks) * psratio);
 	}
 
@@ -257,6 +259,8 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 	KSI_INIT_TRAP(&ksi);
 	ksi.ksi_trap = type & ~T_USER;
 
+	if (l == NULL)
+		l = &lwp0;
 	p = l->l_proc;
 
 #ifdef	DIAGNOSTIC
@@ -345,14 +349,10 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 		printf("pid %d: kernel %s exception\n", p->p_pid,
 		       type==T_COPERR ? "coprocessor" : "format");
 		type |= T_USER;
-
-		mutex_enter(&p->p_smutex);
 		SIGACTION(p, SIGILL).sa_handler = SIG_DFL;
 		sigdelset(&p->p_sigctx.ps_sigignore, SIGILL);
 		sigdelset(&p->p_sigctx.ps_sigcatch, SIGILL);
-		sigdelset(&l->l_sigmask, SIGILL);
-		mutex_exit(&p->p_smutex);
-
+		sigdelset(&p->p_sigctx.ps_sigmask, SIGILL);
 		ksi.ksi_signo = SIGILL;
 		ksi.ksi_addr = (void *)(int)tf->tf_format;
 		ksi.ksi_code = (type == T_COPERR) ?
@@ -458,12 +458,12 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 	case T_ASTFLT|T_USER:	/* user async trap */
 		astpending = 0;
 		/* T_SSIR is not used on a Sun2. */
-		if (l->l_pflag & LP_OWEUPC) {
-			l->l_pflag &= ~LP_OWEUPC;
-			ADDUPROF(l);
+		if (p->p_flag & P_OWEUPC) {
+			p->p_flag &= ~P_OWEUPC;
+			ADDUPROF(p);
 		}
-		if (curcpu()->ci_want_resched)
-			preempt();
+		if (want_resched)
+			preempt(0);
 		goto douret;
 
 	case T_MMUFLT:		/* kernel mode page fault */
@@ -480,8 +480,8 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 		 * If we were doing profiling ticks or other user mode
 		 * stuff from interrupt code, Just Say No.
 		 */
-		if (l->l_addr->u_pcb.pcb_onfault == (void *)fubail ||
-		    l->l_addr->u_pcb.pcb_onfault == (void *)subail)
+		if (l->l_addr->u_pcb.pcb_onfault == (caddr_t)fubail ||
+		    l->l_addr->u_pcb.pcb_onfault == (caddr_t)subail)
 		{
 #ifdef	DEBUG
 			if (mmudebug & MDB_CPFAULT) {
@@ -520,6 +520,9 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 			/* supervisor mode fault */
 			if ((l->l_addr->u_pcb.pcb_onfault == NULL) || KDFAULT(code))
 				map = kernel_map;
+		} else if (l->l_flag & L_SA) {
+			l->l_savp->savp_faultaddr = (vaddr_t)v;
+			l->l_flag |= L_SA_PAGEFAULT;
 		}
 
 		if (WRFAULT(code))
@@ -557,8 +560,11 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 		 * error.
 		 */
 		if (rv == 0) {
-			if (map != kernel_map && (void *)va >= vm->vm_maxsaddr)
+			if (map != kernel_map && (caddr_t)va >= vm->vm_maxsaddr)
 				uvm_grow(p, va);
+
+			if ((type & T_USER) != 0)
+				l->l_flag &= ~L_SA_PAGEFAULT;
 			goto finish;
 		}
 		if (rv == EACCES) {
@@ -581,6 +587,7 @@ trap(struct trapframe *tf, int type, u_int code, u_int v)
 			       map, va, ftype, rv);
 			goto dopanic;
 		}
+		l->l_flag &= ~L_SA_PAGEFAULT;
 		ksi.ksi_addr = (void *)v;
 		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",

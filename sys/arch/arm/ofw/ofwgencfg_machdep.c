@@ -1,4 +1,4 @@
-/*	$NetBSD: ofwgencfg_machdep.c,v 1.11 2007/03/08 20:48:39 matt Exp $	*/
+/*	$NetBSD: ofwgencfg_machdep.c,v 1.10 2006/10/26 22:49:36 bjh21 Exp $	*/
 
 /*
  * Copyright 1997
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofwgencfg_machdep.c,v 1.11 2007/03/08 20:48:39 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofwgencfg_machdep.c,v 1.10 2006/10/26 22:49:36 bjh21 Exp $");
 
 #include "opt_ddb.h"
 
@@ -63,7 +63,6 @@ __KERNEL_RCSID(0, "$NetBSD: ofwgencfg_machdep.c,v 1.11 2007/03/08 20:48:39 matt 
 #include <machine/bootconfig.h>
 #include <machine/cpu.h>
 #include <machine/intr.h>
-#include <machine/irqhandler.h>
 #include <arm/arm32/machdep.h>
 #include <arm/undefined.h>
 

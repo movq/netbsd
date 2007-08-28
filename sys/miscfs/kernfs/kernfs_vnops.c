@@ -1,4 +1,4 @@
-/*	$NetBSD: kernfs_vnops.c,v 1.132 2006/12/28 09:12:38 elad Exp $	*/
+/*	$NetBSD: kernfs_vnops.c,v 1.128.2.1 2007/02/17 23:27:49 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kernfs_vnops.c,v 1.132 2006/12/28 09:12:38 elad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kernfs_vnops.c,v 1.128.2.1 2007/02/17 23:27:49 tron Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ipsec.h"
@@ -830,7 +830,7 @@ kernfs_getattr(v)
 	vap->va_size = 0;
 	vap->va_blocksize = DEV_BSIZE;
 	/* Make all times be current TOD, except for the "boottime" node. */
-	if (kfs->kfs_kt->kt_namlen == 8 &&
+	if (kfs->kfs_kt && kfs->kfs_kt->kt_namlen == 8 &&
 	    !memcmp(kfs->kfs_kt->kt_name, "boottime", 8)) {
 		TIMEVAL_TO_TIMESPEC(&boottime, &vap->va_ctime);
 	} else {

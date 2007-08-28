@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs_vnops.c,v 1.35 2007/07/29 13:31:09 ad Exp $	*/
+/*	$NetBSD: ntfs_vnops.c,v 1.30.2.1 2007/02/17 23:27:44 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ntfs_vnops.c,v 1.35 2007/07/29 13:31:09 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ntfs_vnops.c,v 1.30.2.1 2007/02/17 23:27:44 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -296,7 +296,6 @@ ntfs_reclaim(void *v)
 		ip->i_devvp = NULL;
 	}
 
-	genfs_node_destroy(vp);
 	ntfs_frele(fp);
 	ntfs_ntput(ip);
 	vp->v_data = NULL;
@@ -371,10 +370,10 @@ ntfs_strategy(void *v)
 			if (error) {
 				printf("ntfs_strategy: ntfs_readattr failed\n");
 				bp->b_error = error;
+				bp->b_flags |= B_ERROR;
 			}
 
-			memset((char *)bp->b_data + toread, 0,
-			    bp->b_bcount - toread);
+			bzero(bp->b_data + toread, bp->b_bcount - toread);
 		}
 	} else {
 		size_t tmp;
@@ -383,6 +382,7 @@ ntfs_strategy(void *v)
 		if (ntfs_cntob(bp->b_blkno) + bp->b_bcount >= fp->f_size) {
 			printf("ntfs_strategy: CAN'T EXTEND FILE\n");
 			bp->b_error = error = EFBIG;
+			bp->b_flags |= B_ERROR;
 		} else {
 			towrite = MIN(bp->b_bcount,
 				fp->f_size - ntfs_cntob(bp->b_blkno));
@@ -396,6 +396,7 @@ ntfs_strategy(void *v)
 			if (error) {
 				printf("ntfs_strategy: ntfs_writeattr fail\n");
 				bp->b_error = error;
+				bp->b_flags |= B_ERROR;
 			}
 		}
 	}
@@ -701,8 +702,11 @@ ntfs_readdir(void *v)
 #endif
 
 		dprintf(("ntfs_readdir: %d cookies\n",ncookies));
+		if (!VMSPACE_IS_KERNEL_P(uio->uio_vmspace) ||
+		    uio->uio_iovcnt != 1)
+			panic("ntfs_readdir: unexpected uio from NFS server");
 		dpStart = (struct dirent *)
-		     ((char *)uio->uio_iov->iov_base -
+		     ((caddr_t)uio->uio_iov->iov_base -
 			 (uio->uio_offset - off));
 #if defined(__FreeBSD__)
 		MALLOC(cookies, u_long *, ncookies * sizeof(u_long),
@@ -712,7 +716,7 @@ ntfs_readdir(void *v)
 #endif
 		for (dp = dpStart, cookiep = cookies, i=0;
 		     i < ncookies;
-		     dp = (struct dirent *)((char *) dp + dp->d_reclen), i++) {
+		     dp = (struct dirent *)((caddr_t) dp + dp->d_reclen), i++) {
 			off += dp->d_reclen;
 			*cookiep++ = (u_int) off;
 		}

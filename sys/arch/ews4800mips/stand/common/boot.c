@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.5 2007/02/22 05:31:53 thorpej Exp $	*/
+/*	$NetBSD: boot.c,v 1.3 2006/02/25 02:28:56 wiz Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -69,7 +69,7 @@ struct cmd_batch_tab cmd_batch_tab[] = {
 struct ipl_args ipl_args;
 struct device_capability DEVICE_CAPABILITY;
 void set_device_capability(void);
-bool guess_boot_kernel(char *, size_t, int);
+boolean_t guess_boot_kernel(char *, size_t, int);
 extern int kernel_binary_size;
 
 void
@@ -118,16 +118,16 @@ main(int a0, int v0, int v1)
 	printf("\n[non-interactive mode]\n");
 	args[0] = "boot";
 	args[1] = boot_kernel;
-	cmd_boot(2, args, false);
+	cmd_boot(2, args, FALSE);
  prompt:
 
 	printf("\ntype \"help\" for help.\n");
-	console_cursor(true);
+	console_cursor(TRUE);
 	prompt();
 	/* NOTREACHED */
 }
 
-bool
+boolean_t
 guess_boot_kernel(char *name, size_t len, int pri)
 {
 	extern struct vtoc_sector vtoc;
@@ -135,21 +135,21 @@ guess_boot_kernel(char *name, size_t len, int pri)
 	int i, unit;
 
 	if (!DEVICE_CAPABILITY.active)
-		return false;
+		return FALSE;
 
 	unit = DEVICE_CAPABILITY.booted_unit;
 
 	switch (DEVICE_CAPABILITY.booted_device) {
 	default:
-		return false;
+		return FALSE;
 	case NVSRAM_BOOTDEV_FLOPPYDISK:
 		strncpy(name, "fd:netbsd", len);	/* ustarfs */
-		return true;
+		return TRUE;
 
 	case NVSRAM_BOOTDEV_HARDDISK:
 		snprintf(name, len, "sd%d:netbsd", unit); /* ustarfs */
 		if (!read_vtoc())
-			return true;
+			return TRUE;
 
 		partition = vtoc.partition;
 		for (i = 0; i < VTOC_MAXPARTITIONS; i++, partition++) {
@@ -157,9 +157,9 @@ guess_boot_kernel(char *name, size_t len, int pri)
 				continue;
 			/* ffs */
 			snprintf(name, len, "sd%d%c:netbsd", unit, 'a' + i);
-			return true;
+			return TRUE;
 		}
-		return true;
+		return TRUE;
 
 	case NVSRAM_BOOTDEV_CGMT:
 		break;
@@ -168,16 +168,16 @@ guess_boot_kernel(char *name, size_t len, int pri)
 	case NVSRAM_BOOTDEV_NETWORK_T_AND_D:
 		if (kernel_binary_size) {
 			strncpy(name, "mem:", len);	/* datafs */
-			return true;
+			return TRUE;
 		}
 		if (DEVICE_CAPABILITY.network_enabled) {
 			strncpy(name, "nfs:netbsd", len);	/* nfs */
-			return true;
+			return TRUE;
 		}
 		break;
 	}
 
-	return false;
+	return FALSE;
 }
 
 int
@@ -295,26 +295,26 @@ set_device_capability(void)
 
 	switch (SBD_INFO->machine) {
 	case MACHINE_TR2A:
-		DEVICE_CAPABILITY.active = true;
+		DEVICE_CAPABILITY.active = TRUE;
 		/* boot has LANCE driver */
-		DEVICE_CAPABILITY.network_enabled = true;
+		DEVICE_CAPABILITY.network_enabled = TRUE;
 		break;
 	case MACHINE_TR2:
-		DEVICE_CAPABILITY.active = true;
+		DEVICE_CAPABILITY.active = TRUE;
 		break;
 	default:
-		DEVICE_CAPABILITY.active = false;
+		DEVICE_CAPABILITY.active = FALSE;
 		break;
 	}
 
-	DEVICE_CAPABILITY.fd_enabled = true;	/* always enabled */
+	DEVICE_CAPABILITY.fd_enabled = TRUE;	/* always enabled */
 
 	if (DEVICE_CAPABILITY.active) {
 		/*
 		 * When NETWORK IPL, FD IPL doesn't activate ROM DISK routine.
 		 */
 		if (DEVICE_CAPABILITY.booted_device == NVSRAM_BOOTDEV_HARDDISK)
-			DEVICE_CAPABILITY.disk_enabled = true;
+			DEVICE_CAPABILITY.disk_enabled = TRUE;
 	}
 
 	printf("FD[%c] DISK[%c] NETWORK[%c] COMPILED[%c]\n",

@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_bmap.c,v 1.45 2007/05/17 07:26:22 hannken Exp $	*/
+/*	$NetBSD: ufs_bmap.c,v 1.40 2006/04/04 17:12:57 pavel Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_bmap.c,v 1.45 2007/05/17 07:26:22 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_bmap.c,v 1.40 2006/04/04 17:12:57 pavel Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -47,7 +47,6 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_bmap.c,v 1.45 2007/05/17 07:26:22 hannken Exp $"
 #include <sys/mount.h>
 #include <sys/resourcevar.h>
 #include <sys/trace.h>
-#include <sys/fstrans.h>
 
 #include <miscfs/specfs/specdev.h>
 
@@ -56,13 +55,13 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_bmap.c,v 1.45 2007/05/17 07:26:22 hannken Exp $"
 #include <ufs/ufs/ufs_extern.h>
 #include <ufs/ufs/ufs_bswap.h>
 
-static bool
+static boolean_t
 ufs_issequential(const struct ufsmount *ump, daddr_t daddr0, daddr_t daddr1)
 {
 
 	/* for ufs, blocks in a hole is not 'contiguous'. */
 	if (daddr0 == 0)
-		return false;
+		return FALSE;
 
 	return (daddr0 + ump->um_seqinc == daddr1);
 }
@@ -82,8 +81,6 @@ ufs_bmap(void *v)
 		daddr_t *a_bnp;
 		int *a_runp;
 	} */ *ap = v;
-	int error;
-
 	/*
 	 * Check for underlying vnode requests and ensure that logical
 	 * to physical mapping is requested.
@@ -93,11 +90,8 @@ ufs_bmap(void *v)
 	if (ap->a_bnp == NULL)
 		return (0);
 
-	fstrans_start(ap->a_vp->v_mount, FSTRANS_SHARED);
-	error = ufs_bmaparray(ap->a_vp, ap->a_bn, ap->a_bnp, NULL, NULL,
-	    ap->a_runp, ufs_issequential);
-	fstrans_done(ap->a_vp->v_mount);
-	return error;
+	return (ufs_bmaparray(ap->a_vp, ap->a_bn, ap->a_bnp, NULL, NULL,
+	    ap->a_runp, ufs_issequential));
 }
 
 /*

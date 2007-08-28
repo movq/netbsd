@@ -1,4 +1,4 @@
-/* $NetBSD: locore.s,v 1.27 2007/06/12 03:34:30 mhitch Exp $ */
+/* $NetBSD: locore.s,v 1.23.24.1 2007/06/18 09:31:08 liamjfoy Exp $ */
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -316,8 +316,7 @@ Lenab1:
 /* set kernel stack, user SP, lwp0, and initial pcb */
 	movl	_C_LABEL(proc0paddr),%a1 | get lwp0 pcb addr
 	lea	%a1@(USPACE-4),%sp	| set kernel stack to end of area
-	lea	_C_LABEL(lwp0),%a2	| initialize lwp0.l_addr
-	movl	%a2,_C_LABEL(curlwp)	|   and curlwp so that
+	lea	_C_LABEL(lwp0),%a2	| initialize lwp0.l_addr so that
 	movl	%a1,%a2@(L_ADDR)	|   we don't deref NULL in trap()
 	movl	#USRSTACK-4,%a2
 	movl	%a2,%usp		| init user SP
@@ -867,6 +866,7 @@ ENTRY_NOPROFILE(lev5intr)
  * This code is complicated by the fact that sendsig may have been called
  * necessitating a stack cleanup.
  */
+BSS(ssir,1)
 
 ASENTRY_NOPROFILE(rei)
 	tstl	_C_LABEL(astpending)	| AST pending?
@@ -956,6 +956,11 @@ Ldorte:
  * Use common m68k support routines.
  */
 #include <m68k/m68k/support.s>
+
+/*
+ * Use common m68k process manipulation routines.
+ */
+#include <m68k/m68k/proc_subr.s>
 
 /*
  * Use common m68k process/lwp switch and context save subroutines.
@@ -1204,6 +1209,8 @@ nullrp:
 
 GLOBAL(memavail)
 	.long	0
+GLOBAL(want_resched)
+	.long   0
 GLOBAL(proc0paddr)
 	.long	0
 GLOBAL(bootdev)

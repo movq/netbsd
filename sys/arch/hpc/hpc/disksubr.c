@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.17 2007/07/29 12:15:38 ad Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.15 2006/11/25 11:59:56 scw Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.17 2007/07/29 12:15:38 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.15 2006/11/25 11:59:56 scw Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,13 +67,12 @@ mbr_findslice(struct mbr_partition *dp, struct buf *bp)
 	int i;
 
 	/* Note: Magic number is little-endian. */
-	mbrmagicp = (uint16_t *)((char*)bp->b_data + MBR_MAGIC_OFFSET);
+	mbrmagicp = (uint16_t *)(bp->b_data + MBR_MAGIC_OFFSET);
 	if (*mbrmagicp != MBR_MAGIC)
 		return (NO_MBR_SIGNATURE);
 
 	/* XXX how do we check veracity/bounds of this? */
-	memcpy(dp, (char*)bp->b_data + MBR_PART_OFFSET,
-		MBR_PART_COUNT * sizeof(*dp));
+	memcpy(dp, bp->b_data + MBR_PART_OFFSET, MBR_PART_COUNT * sizeof(*dp));
 
 	/* look for NetBSD partition */
 	for (i = 0; i < MBR_PART_COUNT; i++) {
@@ -249,8 +248,7 @@ nombrpart:
 		goto done;
 	}
 	for (dlp = (struct disklabel *)bp->b_data;
-	    dlp <= (struct disklabel *)((char*)bp->b_data +
-		lp->d_secsize - sizeof(*dlp));
+	    dlp <= (struct disklabel *)(bp->b_data + lp->d_secsize - sizeof(*dlp));
 	    dlp = (struct disklabel *)((char *)dlp + sizeof(long))) {
 		if (dlp->d_magic != DISKMAGIC || dlp->d_magic2 != DISKMAGIC) {
 			if (msg == NULL)
@@ -301,7 +299,7 @@ nombrpart:
 				} else
 					msg = "bad sector table corrupted";
 			}
-		} while (bp->b_error != 0 && (i += 2) < 10 &&
+		} while ((bp->b_flags & B_ERROR) && (i += 2) < 10 &&
 			i < lp->d_nsectors);
 	}
 
@@ -432,8 +430,7 @@ nombrpart:
 	if ((error = biowait(bp)) != 0)
 		goto done;
 	for (dlp = (struct disklabel *)bp->b_data;
-	    dlp <= (struct disklabel *)((char *)bp->b_data +
-		lp->d_secsize - sizeof(*dlp));
+	    dlp <= (struct disklabel *)(bp->b_data + lp->d_secsize - sizeof(*dlp));
 	    dlp = (struct disklabel *)((char *)dlp + sizeof(long))) {
 		if (dlp->d_magic == DISKMAGIC && dlp->d_magic2 == DISKMAGIC &&
 		    dkcksum(dlp) == 0) {

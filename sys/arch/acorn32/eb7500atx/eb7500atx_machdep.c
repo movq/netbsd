@@ -1,4 +1,4 @@
-/*	$NetBSD: eb7500atx_machdep.c,v 1.7 2007/08/13 02:04:50 tsutsui Exp $	*/
+/*	$NetBSD: eb7500atx_machdep.c,v 1.6 2006/10/24 21:03:13 bjh21 Exp $	*/
 
 /*
  * Copyright (c) 2000-2002 Reinoud Zandijk.
@@ -54,7 +54,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.7 2007/08/13 02:04:50 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: eb7500atx_machdep.c,v 1.6 2006/10/24 21:03:13 bjh21 Exp $");
 
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -234,6 +234,7 @@ extern void dumpsys(void);
 
 /* NOTE: These variables will be removed, well some of them */
 
+extern u_int spl_mask;
 extern u_int current_mask;
 
 void

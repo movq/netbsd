@@ -1,4 +1,4 @@
-/*	$NetBSD: if_upl.c,v 1.29 2007/03/13 13:51:54 drochner Exp $	*/
+/*	$NetBSD: if_upl.c,v 1.26 2006/11/16 01:33:26 christos Exp $	*/
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_upl.c,v 1.29 2007/03/13 13:51:54 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_upl.c,v 1.26 2006/11/16 01:33:26 christos Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -198,12 +198,12 @@ Static void upl_intr(usbd_xfer_handle, usbd_private_handle, usbd_status);
 Static void upl_rxeof(usbd_xfer_handle, usbd_private_handle, usbd_status);
 Static void upl_txeof(usbd_xfer_handle, usbd_private_handle, usbd_status);
 Static void upl_start(struct ifnet *);
-Static int upl_ioctl(struct ifnet *, u_long, void *);
+Static int upl_ioctl(struct ifnet *, u_long, caddr_t);
 Static void upl_init(void *);
 Static void upl_stop(struct upl_softc *);
 Static void upl_watchdog(struct ifnet *);
 
-Static int upl_output(struct ifnet *, struct mbuf *, const struct sockaddr *,
+Static int upl_output(struct ifnet *, struct mbuf *, struct sockaddr *,
 		      struct rtentry *);
 Static void upl_input(struct ifnet *, struct mbuf *);
 
@@ -214,6 +214,9 @@ USB_MATCH(upl)
 {
 	USB_MATCH_START(upl, uaa);
 	struct upl_type			*t;
+
+	if (uaa->iface != NULL)
+		return (UMATCH_NONE);
 
 	for (t = sc_devs; t->upl_vid != 0; t++)
 		if (uaa->vendor == t->upl_vid && uaa->product == t->upl_did)
@@ -849,7 +852,7 @@ upl_intr(usbd_xfer_handle xfer, usbd_private_handle priv,
 }
 
 Static int
-upl_ioctl(struct ifnet *ifp, u_long command, void *data)
+upl_ioctl(struct ifnet *ifp, u_long command, caddr_t data)
 {
 	struct upl_softc	*sc = ifp->if_softc;
 	struct ifaddr 		*ifa = (struct ifaddr *)data;
@@ -1011,7 +1014,7 @@ upl_stop(struct upl_softc *sc)
 }
 
 Static int
-upl_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
+upl_output(struct ifnet *ifp, struct mbuf *m, struct sockaddr *dst,
     struct rtentry *rt0)
 {
 	int s, len, error;

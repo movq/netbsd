@@ -1,4 +1,4 @@
-/*	$NetBSD: swwdog.c,v 1.7 2007/07/09 21:01:23 ad Exp $	*/
+/*	$NetBSD: swwdog.c,v 1.4 2005/12/11 12:23:56 christos Exp $	*/
 
 /*
  * Copyright (c) 2004, 2005 Steven M. Bellovin
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: swwdog.c,v 1.7 2007/07/09 21:01:23 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: swwdog.c,v 1.4 2005/12/11 12:23:56 christos Exp $");
 
 /*
  *
@@ -42,6 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: swwdog.c,v 1.7 2007/07/09 21:01:23 ad Exp $");
  */
 #include <sys/param.h>
 #include <sys/callout.h>
+#include <sys/cdefs.h>
 #include <sys/device.h>
 #include <sys/kernel.h>
 #include <sys/reboot.h>
@@ -73,7 +74,7 @@ int swwdog_reboot = 0;		/* set for panic instead of reboot */
 #define	SWDOG_DEFAULT	60		/* 60-second default period */
 
 void
-swwdogattach(int count __unused)
+swwdogattach(int count)
 {
 	int i;
 
@@ -87,7 +88,7 @@ swwdogattach(int count __unused)
 		sc->sc_smw.smw_setmode = swwdog_setmode;
 		sc->sc_smw.smw_tickle = swwdog_tickle;
 		sc->sc_smw.smw_period = SWDOG_DEFAULT;
-		callout_init(&sc->sc_c, 0);
+		callout_init(&sc->sc_c);
 		callout_setfunc(&sc->sc_c, swwdog_panic, sc);
 
 		if (sysmon_wdog_register(&sc->sc_smw) == 0)

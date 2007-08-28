@@ -1,4 +1,4 @@
-/*	$NetBSD: icp_ioctl.c,v 1.16 2007/03/11 22:16:32 ad Exp $	*/
+/*	$NetBSD: icp_ioctl.c,v 1.13.2.1 2006/12/04 18:34:15 tron Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: icp_ioctl.c,v 1.16 2007/03/11 22:16:32 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: icp_ioctl.c,v 1.13.2.1 2006/12/04 18:34:15 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -106,7 +106,8 @@ const struct cdevsw icp_cdevsw = {
 
 extern struct cfdriver icp_cd;
 
-kmutex_t icp_ioctl_mutex;
+static struct lock icp_ioctl_mutex =
+    LOCK_INITIALIZER(PRIBIO|PCATCH, "icplk", 0, 0);
 
 static int
 icpopen(dev_t dev, int flag, int mode, struct lwp *l)
@@ -119,12 +120,13 @@ icpopen(dev_t dev, int flag, int mode, struct lwp *l)
 }
 
 static int
-icpioctl(dev_t dev, u_long cmd, void *data, int flag,
+icpioctl(dev_t dev, u_long cmd, caddr_t data, int flag,
     struct lwp *l)
 {
-	int error = 0;
+	int error;
 
-	mutex_enter(&icp_ioctl_mutex);
+	if ((error = lockmgr(&icp_ioctl_mutex, LK_EXCLUSIVE, NULL)) != 0)
+		return (error);
 
 	switch (cmd) {
 	case GDT_IOCTL_GENERAL:
@@ -293,7 +295,7 @@ icpioctl(dev_t dev, u_long cmd, void *data, int flag,
 		error = ENOTTY;
 	}
 
-	mutex_exit(&icp_ioctl_mutex);
+	(void) lockmgr(&icp_ioctl_mutex, LK_RELEASE, NULL);
 
 	return (error);
 }

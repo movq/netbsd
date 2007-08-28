@@ -1,4 +1,4 @@
-/*	$NetBSD: libkern.h,v 1.70 2007/07/29 11:46:02 ad Exp $	*/
+/*	$NetBSD: libkern.h,v 1.67 2006/10/08 03:14:55 thorpej Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -235,6 +235,12 @@ tolower(int ch)
     ((size_t)(unsigned long)(&(((type *)0)->member)))
 #endif
 
+#if defined(__STDC__) && __GNUC_PREREQ__(3, 0)
+#define bool	_Bool
+#define true	1
+#define false	0
+#endif
+
 /* Prototypes for non-quad routines. */
 /* XXX notyet #ifdef _STANDALONE */
 int	 bcmp __P((const void *, const void *, size_t));
@@ -281,11 +287,12 @@ char	*strstr __P((const char *, const char *));
  * ffs is an instruction on vax.
  */
 int	 ffs __P((int));
-#if __GNUC_PREREQ__(2, 95) && (!defined(__vax__) || __GNUC_PREREQ__(4,1))
+#if __GNUC_PREREQ__(2, 95) && !defined(__vax__)
 #define	ffs(x)		__builtin_ffs(x)
 #endif
 
-void	 __assert __P((const char *, const char *, int, const char *));
+void	 __assert __P((const char *, const char *, int, const char *))
+	    __attribute__((__noreturn__));
 unsigned int
 	bcdtobin __P((unsigned int));
 unsigned int

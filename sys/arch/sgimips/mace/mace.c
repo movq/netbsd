@@ -1,4 +1,4 @@
-/*	$NetBSD: mace.c,v 1.12 2007/07/09 20:52:27 ad Exp $	*/
+/*	$NetBSD: mace.c,v 1.8 2005/11/26 06:18:40 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2003 Christopher Sekiya
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mace.c,v 1.12 2007/07/09 20:52:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mace.c,v 1.8 2005/11/26 06:18:40 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -109,7 +109,7 @@ CFATTACH_DECL(mace, sizeof(struct mace_softc),
     mace_match, mace_attach, NULL, NULL);
 
 #if defined(BLINK)
-static callout_t mace_blink_ch;
+static struct callout mace_blink_ch = CALLOUT_INITIALIZER;
 static void	mace_blink(void *);
 #endif
 
@@ -133,10 +133,6 @@ mace_attach(struct device *parent, struct device *self, void *aux)
 	struct mainbus_attach_args *ma = aux;
 	u_int32_t scratch;
 
-#ifdef BLINK
-	callout_init(&mace_blink_ch, 0);
-#endif
-
 	sc->iot = SGIMIPS_BUS_SPACE_MACE;
 	sc->dmat = &sgimips_default_bus_dma_tag;
 
@@ -158,7 +154,7 @@ mace_attach(struct device *parent, struct device *self, void *aux)
 	}
 
 	if ((bus_dmamem_map(sc->dmat, &sc->seg, sc->nsegs, 32768,
-	    (void **)&sc->isa_ringbuffer, BUS_DMA_NOWAIT | BUS_DMA_COHERENT))
+	    (caddr_t *)&sc->isa_ringbuffer, BUS_DMA_NOWAIT | BUS_DMA_COHERENT))
 	    != 0) {
 		printf(": unable to map control data\n");
 		return;
@@ -193,15 +189,13 @@ mace_attach(struct device *parent, struct device *self, void *aux)
 	    bus_space_read_8(sc->iot, sc->ioh, MACE_ISA_INT_MASK));
 
 	/*
-	 * Turn on most ISA interrupts.  These are actually masked and
+	 * Turn on all ISA interrupts.  These are actually masked and
 	 * registered via the CRIME, as the MACE ISA interrupt mask is
 	 * really whacky and nigh on impossible to map to a sane autoconfig
-	 * scheme.  We do, however, turn off the count/compare timer and RTC
-	 * interrupts as they are unused and conflict with the PS/2
-	 * keyboard and mouse interrupts.
+	 * scheme.
 	 */
 
-	bus_space_write_8(sc->iot, sc->ioh, MACE_ISA_INT_MASK, 0xffff0aff);
+	bus_space_write_8(sc->iot, sc->ioh, MACE_ISA_INT_MASK, 0xffffffff);
 	bus_space_write_8(sc->iot, sc->ioh, MACE_ISA_INT_STATUS, 0);
 
 	/* set up LED for solid green or blink, if that's your fancy */

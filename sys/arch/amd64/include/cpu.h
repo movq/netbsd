@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.24 2007/05/21 08:10:39 fvdl Exp $	*/
+/*	$NetBSD: cpu.h,v 1.12.8.1 2007/06/05 20:28:11 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -53,14 +53,13 @@
 #include <x86/cacheinfo.h>
 
 #include <sys/device.h>
-#include <sys/simplelock.h>
+#include <sys/lock.h>
 #include <sys/cpu_data.h>
 #include <sys/cc_microtime.h>
 
 struct cpu_info {
 	struct device *ci_dev;
 	struct cpu_info *ci_self;
-	void *ci_self200;		/* self + 0x200, see lock_stubs.S */
 	struct cpu_data ci_data;	/* MI per-cpu data */
 	struct cc_microtime_state ci_cc;/* cc_microtime state */
 	struct cpu_info *ci_next;
@@ -77,18 +76,13 @@ struct cpu_info {
 
 	volatile u_int32_t ci_tlb_ipi_mask;
 
+	struct pcb *ci_curpcb;
+	struct pcb *ci_idle_pcb;
+	int ci_idle_tss_sel;
+
 	struct intrsource *ci_isources[MAX_INTR_SOURCES];
-	volatile int	ci_mtx_count;	/* Negative count of spin mutexes */
-	volatile int	ci_mtx_oldspl;	/* Old SPL at this ci_idepth */
-
-	/* The following must be aligned for cmpxchg8b. */
-	struct {
-		uint32_t	ipending;
-		int		ilevel;
-	} ci_istate __aligned(8);
-#define ci_ipending	ci_istate.ipending
-#define	ci_ilevel	ci_istate.ilevel
-
+	u_int32_t	ci_ipending;
+	int		ci_ilevel;
 	int		ci_idepth;
 	u_int32_t	ci_imask[NIPL];
 	u_int32_t	ci_iunmask[NIPL];
@@ -98,13 +92,13 @@ struct cpu_info {
 	u_int32_t	ci_ipis;
 
 	u_int32_t	ci_feature_flags;
-	uint32_t	ci_feature2_flags;
+	u_int32_t	ci_feature2_flags;
 	u_int32_t	ci_signature;
 	u_int64_t	ci_tsc_freq;
 
-	const struct cpu_functions *ci_func;
-	void (*cpu_setup)(struct cpu_info *);
-	void (*ci_info)(struct cpu_info *);
+	struct cpu_functions *ci_func;
+	void (*cpu_setup) __P((struct cpu_info *));
+	void (*ci_info) __P((struct cpu_info *));
 
 	int		ci_want_resched;
 	int		ci_astpending;
@@ -158,9 +152,15 @@ extern struct cpu_info *cpu_info_list;
 
 extern struct cpu_info *cpu_info[X86_MAXPROCS];
 
-void cpu_boot_secondary_processors(void);
-void cpu_init_idle_lwps(void);    
+void cpu_boot_secondary_processors __P((void));
+void cpu_init_idle_pcbs __P((void));    
 
+
+/*      
+ * Preempt the current process if in interrupt from user mode,
+ * or after the current trap/syscall if in system mode.
+ */
+extern void need_resched __P((struct cpu_info *));
 
 #else /* !MULTIPROCESSOR */
 
@@ -177,14 +177,27 @@ extern struct cpu_info cpu_info_primary;
 #define	cpu_number()		0
 #define CPU_IS_PRIMARY(ci)	1
 
+/*
+ * Preempt the current process if in interrupt from user mode,
+ * or after the current trap/syscall if in system mode.
+ */
+
+#define need_resched(ci)						\
+do {									\
+	struct cpu_info *__ci = (ci);					\
+	__ci->ci_want_resched = 1;					\
+	if (__ci->ci_curlwp != NULL)					\
+		aston(__ci->ci_curlwp->l_proc);				\
+} while (/*CONSTCOND*/0)
+
 #endif
 
-#define aston(l)	((l)->l_md.md_astpending = 1)
+#define aston(p)	((p)->p_md.md_astpending = 1)
 
 extern u_int32_t cpus_attached;
 
+#define curpcb		curcpu()->ci_curpcb
 #define curlwp		curcpu()->ci_curlwp
-#define curpcb		(&curlwp->l_addr->u_pcb)
 
 /*
  * Arguments to hardclock, softclock and statclock
@@ -196,6 +209,7 @@ struct clockframe {
 };
 
 #define	CLKF_USERMODE(frame)	USERMODE((frame)->cf_if.if_cs, (frame)->cf_if.if_rflags)
+#define CLKF_BASEPRI(frame)	(0)
 #define CLKF_PC(frame)		((frame)->cf_if.if_rip)
 #define CLKF_INTR(frame)	(curcpu()->ci_idepth > 1)
 
@@ -210,17 +224,18 @@ struct clockframe {
  * buffer pages are invalid.  On the i386, request an ast to send us
  * through trap(), marking the proc as needing a profiling tick.
  */
-extern void cpu_need_proftick(struct lwp *);
+#define	need_proftick(p)	((p)->p_flag |= P_OWEUPC, aston(p))
 
 /*
- * Notify an LWP that it has a signal pending, process as soon as possible.
+ * Notify the current process (p) that it has a signal pending,
+ * process as soon as possible.
  */
-extern void cpu_signotify(struct lwp *);
+#define	signotify(p)		aston(p)
 
 /*
  * We need a machine-independent name for this.
  */
-extern void (*delay_func)(int);
+extern void (*delay_func) __P((int));
 
 #define DELAY(x)		(*delay_func)(x)
 #define delay(x)		(*delay_func)(x)
@@ -240,48 +255,52 @@ extern int cpuid_level;
 
 /* identcpu.c */
 
-void	identifycpu(struct cpu_info *);
-void cpu_probe_features(struct cpu_info *);
+void	identifycpu __P((struct cpu_info *));
+void cpu_probe_features __P((struct cpu_info *));
 
 /* machdep.c */
-void	dumpconf(void);
-int	cpu_maxproc(void);
-void	cpu_reset(void);
-void	x86_64_proc0_tss_ldt_init(void);
-void	x86_64_init_pcb_tss_ldt(struct cpu_info *);
-void	cpu_proc_fork(struct proc *, struct proc *);
+void	dumpconf __P((void));
+int	cpu_maxproc __P((void));
+void	cpu_reset __P((void));
+void	x86_64_proc0_tss_ldt_init __P((void));
+void	x86_64_init_pcb_tss_ldt __P((struct cpu_info *));
+void	cpu_proc_fork __P((struct proc *, struct proc *));
 
 struct region_descriptor;
-void	lgdt(struct region_descriptor *);
-void	fillw(short, void *, size_t);
+void	lgdt __P((struct region_descriptor *));
+void	fillw __P((short, void *, size_t));
 
 struct pcb;
-void	savectx(struct pcb *);
-void	lwp_trampoline(void);
-void	child_trampoline(void);
+void	savectx __P((struct pcb *));
+void	switch_exit __P((struct lwp *, void (*)(struct lwp *)));
+void	proc_trampoline __P((void));
+void	child_trampoline __P((void));
 
 /* clock.c */
-void	initrtclock(u_long);
-void	startrtclock(void);
-void	i8254_delay(int);
-void	i8254_microtime(struct timeval *);
-void	i8254_initclocks(void);
+void	initrtclock __P((u_long));
+void	startrtclock __P((void));
+void	i8254_delay __P((int));
+void	i8254_microtime __P((struct timeval *));
+void	i8254_initclocks __P((void));
 
-void cpu_init_msrs(struct cpu_info *);
+void cpu_init_msrs __P((struct cpu_info *));
 
 
 /* vm_machdep.c */
-int kvtop(void *);
+int kvtop __P((caddr_t));
 
 /* trap.c */
-void	child_return(void *);
+void	child_return __P((void *));
 
 /* consinit.c */
-void kgdb_port_init(void);
+void kgdb_port_init __P((void));
 
 /* bus_machdep.c */
-void x86_bus_space_init(void);
-void x86_bus_space_mallocok(void);
+void x86_bus_space_init __P((void));
+void x86_bus_space_mallocok __P((void));
+
+/* powernow_k8.c */
+void k8_powernow_init(void);
 
 #endif /* _KERNEL */
 

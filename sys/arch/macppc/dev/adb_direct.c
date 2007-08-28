@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_direct.c,v 1.38 2007/07/09 20:52:21 ad Exp $	*/
+/*	$NetBSD: adb_direct.c,v 1.35 2006/11/24 22:04:23 wiz Exp $	*/
 
 /* From: adb_direct.c 2.02 4/18/97 jpw */
 
@@ -60,9 +60,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb_direct.c,v 1.38 2007/07/09 20:52:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb_direct.c,v 1.35 2006/11/24 22:04:23 wiz Exp $");
 
 #include <sys/param.h>
+#include <sys/cdefs.h>
 #include <sys/systm.h>
 #include <sys/callout.h>
 #include <sys/device.h>
@@ -220,8 +221,8 @@ int	tickle_count = 0;		/* how many tickles seen for this packet? */
 int	tickle_serial = 0;		/* the last packet tickled */
 int	adb_cuda_serial = 0;		/* the current packet */
 
-struct callout adb_cuda_tickle_ch;
-struct callout adb_soft_intr_ch;
+struct callout adb_cuda_tickle_ch = CALLOUT_INITIALIZER;
+struct callout adb_soft_intr_ch = CALLOUT_INITIALIZER;
 
 volatile u_char *Via1Base;
 extern int adb_polling;			/* Are we polling? */
@@ -242,7 +243,7 @@ int	send_adb_cuda __P((u_char *, u_char *, adbComp *, volatile void *, int));
 void	adb_intr_cuda_test __P((void));
 void	adb_cuda_tickle __P((void));
 void	adb_pass_up __P((struct adbCommand *));
-void	adb_op_comprout __P((void *, volatile int *, int));
+void	adb_op_comprout __P((caddr_t, volatile int *, int));
 void	adb_reinit __P((void));
 int	count_adbs __P((void));
 int	get_ind_adb_info __P((ADBDataBlock *, int));
@@ -990,13 +991,6 @@ adb_reinit(void)
 	int saveptr;		/* point to next free relocation address */
 	int device;
 	int nonewtimes;		/* times thru loop w/o any new devices */
-	static bool callo;
-
-	if (!callo) {
-		callo = true;
-		callout_init(&adb_cuda_tickle_ch, 0);
-		callout_init(&adb_soft_intr_ch, 0);
-	}
 
 	/* Make sure we are not interrupted while building the table. */
 	if (adbHardware != ADB_HW_PMU)	/* ints must be on for PMU? */
@@ -1362,7 +1356,7 @@ adb_op_sync(Ptr buffer, adbComp *compRout, Ptr data, short command)
  * function is done.
  */
 void
-adb_op_comprout(void *buffer, volatile int *compdata, int cmd)
+adb_op_comprout(caddr_t buffer, volatile int *compdata, int cmd)
 {
 	volatile int *p = compdata;
 

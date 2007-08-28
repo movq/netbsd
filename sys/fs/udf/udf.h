@@ -1,4 +1,4 @@
-/* $NetBSD: udf.h,v 1.9 2007/01/04 02:02:40 reinoud Exp $ */
+/* $NetBSD: udf.h,v 1.8.2.1 2007/01/04 19:51:47 bouyer Exp $ */
 
 /*
  * Copyright (c) 2006 Reinoud Zandijk

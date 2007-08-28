@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos32_machdep.c,v 1.24 2007/03/04 07:54:07 christos Exp $	*/
+/*	$NetBSD: sunos32_machdep.c,v 1.19 2006/02/11 17:57:32 cdi Exp $	*/
 /* from: NetBSD: sunos_machdep.c,v 1.14 2001/01/29 01:37:56 mrg Exp 	*/
 
 /*
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos32_machdep.c,v 1.24 2007/03/04 07:54:07 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos32_machdep.c,v 1.19 2006/02/11 17:57:32 cdi Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ddb.h"
@@ -52,6 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: sunos32_machdep.c,v 1.24 2007/03/04 07:54:07 christo
 #include <sys/malloc.h>
 #include <sys/select.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <compat/sunos/sunos.h>
 #include <compat/sunos/sunos_syscallargs.h>
@@ -119,9 +120,7 @@ sunos32_setregs(l, pack, stack)
 	p->p_md.md_flags &= ~MDP_FIXALIGN;
 
 	/* Mark this as a 32-bit emulation */
-	mutex_enter(&p->p_mutex);
-	p->p_flag |= PK_32;
-	mutex_exit(&p->p_mutex);
+	p->p_flag |= P_32;
 
 	/* Setup the ev_out32 hook */
 #if NFIRM_EVENTS > 0
@@ -174,7 +173,7 @@ sunos32_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct sunos32_sigframe sf;
 	struct sunos32_sigcontext *scp;
 	uint32_t addr, oldsp32;
-	int onstack, error; 
+	int onstack; 
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
 
 	tf = l->l_md.md_tf;
@@ -187,12 +186,12 @@ sunos32_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	 * one signal frame, and align.
 	 */
 	onstack =
-	    (l->l_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
+	    (p->p_sigctx.ps_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0 &&
 	    (SIGACTION(p, sig).sa_flags & SA_ONSTACK) != 0;
 
 	if (onstack)
 		fp = (struct sunos32_sigframe *)
-		     ((char *)l->l_sigstk.ss_sp + l->l_sigstk.ss_size);
+		     ((caddr_t)p->p_sigctx.ps_sigstk.ss_sp + p->p_sigctx.ps_sigstk.ss_size);
 	else
 		fp = (struct sunos32_sigframe *)oldsp;
 
@@ -201,13 +200,11 @@ sunos32_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 #ifdef DEBUG
 	sigpid = p->p_pid;
 	if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid) {
-		mutex_exit(&p->p_smutex);
 		printf("sunos32_sendsig: %s[%d] sig %d newusp %p scp %p oldsp %p\n",
 		    p->p_comm, p->p_pid, sig, fp, &fp->sf_sc, oldsp);
 #ifdef DDB
 		if (sigdebug & SDB_DDB) Debugger();
 #endif
-		mutex_enter(&p->p_smutex);
 	}
 #endif
 	/*
@@ -226,7 +223,7 @@ sunos32_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	/*
 	 * Build the signal context to be used by sigreturn.
 	 */
-	sf.sf_sc.sc_onstack = l->l_sigstk.ss_flags & SS_ONSTACK;
+	sf.sf_sc.sc_onstack = p->p_sigctx.ps_sigstk.ss_flags & SS_ONSTACK;
 	native_sigset_to_sigset13(mask, &sf.sf_sc.sc_mask);
 	sf.sf_sc.sc_sp = (u_int)(u_long)oldsp;
 	sf.sf_sc.sc_pc = tf->tf_pc;
@@ -244,8 +241,6 @@ sunos32_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	 * joins seamlessly with the frame it was in when the signal occurred,
 	 * so that the debugger and _longjmp code can back up through it.
 	 */
-	sendsig_reset(l, sig);
-	mutex_exit(&p->p_smutex);
 	newsp = (struct rwindow32 *)((long)fp - sizeof(struct rwindow32));
 	write_user_windows();
 #ifdef DEBUG
@@ -253,23 +248,19 @@ sunos32_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	    printf("sunos32_sendsig: saving sf to %p, setting stack pointer %p to %p\n",
 		   fp, &(((struct rwindow32 *)newsp)->rw_in[6]), oldsp);
 #endif
-	error = (rwindow_save(l) || copyout((void *)&sf, (void *)fp, sizeof sf) || 
-	    copyout((void *)&oldsp32, &(((struct rwindow32 *)newsp)->rw_in[6]), sizeof oldsp32));
-	mutex_enter(&p->p_smutex);
-	if (error) {
+	if (rwindow_save(l) || copyout((caddr_t)&sf, (caddr_t)fp, sizeof sf) || 
+	    copyout((caddr_t)&oldsp32, &(((struct rwindow32 *)newsp)->rw_in[6]), sizeof oldsp32)) {
 		/*
 		 * Process has trashed its stack; give it an illegal
 		 * instruction to halt it in its tracks.
 		 */
 #ifdef DEBUG
-		mutex_exit(&p->p_smutex);
 		if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid)
 			printf("sunos32_sendsig: window save or copyout error\n");
 		printf("sunos32_sendsig: stack was trashed trying to send sig %d, sending SIGILL\n", sig);
 #ifdef DDB
 		if (sigdebug & SDB_DDB) Debugger();
 #endif
-		mutex_enter(&p->p_smutex);
 #endif
 		sigexit(l, SIGILL);
 		/* NOTREACHED */
@@ -291,13 +282,11 @@ sunos32_sendsig(const ksiginfo_t *ksi, const sigset_t *mask)
 	tf->tf_out[6] = (uint64_t)(u_int)(u_long)newsp;
 #ifdef DEBUG
 	if ((sigdebug & SDB_KSTACK) && p->p_pid == sigpid) {
-		mutex_exit(&p->p_smutex);
 		printf("sunos32_sendsig: about to return to catcher %p thru %p\n", 
 		       catcher, (void *)(u_long)addr);
 #ifdef DDB
 		if (sigdebug & SDB_DDB) Debugger();
 #endif
-		mutex_enter(&p->p_smutex);
 	}
 #endif
 }
@@ -318,10 +307,8 @@ sunos32_sys_sigreturn(l, v, retval)
 
 	/* First ensure consistent stack state (see sendsig). */
 	write_user_windows();
-	if (rwindow_save(l)) {
-		mutex_enter(&p->p_smutex);
+	if (rwindow_save(l))
 		sigexit(l, SIGILL);
-	}
 #ifdef DEBUG
 	if (sigdebug & SDB_FOLLOW) {
 		printf("sunos32_sigreturn: %s[%d], sigcntxp %p\n",
@@ -333,7 +320,7 @@ sunos32_sys_sigreturn(l, v, retval)
 #endif
 
 	scp = (struct sunos32_sigcontext *)(u_long)SCARG(uap, sigcntxp);
-	if ((vaddr_t)scp & 3 || (copyin((void *)scp, &sc, sizeof sc) != 0))
+	if ((vaddr_t)scp & 3 || (copyin((caddr_t)scp, &sc, sizeof sc) != 0))
 		return (EFAULT);
 	scp = &sc;
 
@@ -370,15 +357,14 @@ sunos32_sys_sigreturn(l, v, retval)
 	}
 #endif
 
-	mutex_enter(&p->p_smutex);
 	if (scp->sc_onstack & SS_ONSTACK)
-		l->l_sigstk.ss_flags |= SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags |= SS_ONSTACK;
 	else
-		l->l_sigstk.ss_flags &= ~SS_ONSTACK;
+		p->p_sigctx.ps_sigstk.ss_flags &= ~SS_ONSTACK;
+
 	/* Restore signal mask */
 	native_sigset13_to_sigset(&scp->sc_mask, &mask);
-	(void) sigprocmask1(l, SIG_SETMASK, &mask, 0);
-	mutex_exit(&p->p_smutex);
+	(void) sigprocmask1(p, SIG_SETMASK, &mask, 0);
 
 	return (EJUSTRETURN);
 }
@@ -398,7 +384,7 @@ ev_out32(struct firm_event *e, int n, struct uio *uio)
 		e32.value = e->value;
 		e32.time.tv_sec = e->time.tv_sec;
 		e32.time.tv_usec = e->time.tv_usec;
-		error = uiomove((void *)&e32, sizeof(e32), uio);
+		error = uiomove((caddr_t)&e32, sizeof(e32), uio);
 		e++;
 	}
 	return (error);

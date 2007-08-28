@@ -1,4 +1,4 @@
-/*	$NetBSD: net_osdep.h,v 1.17 2007/03/04 06:03:17 christos Exp $	*/
+/*	$NetBSD: net_osdep.h,v 1.15 2006/09/23 15:17:58 elad Exp $	*/
 /*	$KAME: net_osdep.h,v 1.51 2001/07/06 06:21:43 itojun Exp $	*/
 
 /*
@@ -82,7 +82,7 @@
  *	NetBSD
  *		struct lwp *l;
  *		if (l != NULL && kauth_authorize_generic(l->l_cred, 
- *		    KAUTH_GENERIC_ISSUSER, NULL) == 0)
+ *		    KAUTH_GENERIC_ISSUSER, &l->l_acflag) == 0)
  *			privileged;
  *	FreeBSD 3
  *		struct proc *p;
@@ -104,7 +104,7 @@
  *
  * - bpf:
  *	OpenBSD, NetBSD 1.5, BSDI [34]
- *		need void ** (= if_bpf **) and struct ifnet *
+ *		need caddr_t * (= if_bpf **) and struct ifnet *
  *	FreeBSD 2, FreeBSD 3, NetBSD post-1.5N
  *		need only struct ifnet * as argument
  *

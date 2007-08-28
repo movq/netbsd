@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.67 2007/06/12 03:34:32 mhitch Exp $	*/
+/*	$NetBSD: trap.c,v 1.61.8.2 2007/09/11 08:01:37 msaitoh Exp $	*/
 
 /*
  * This file was taken from mvme68k/mvme68k/trap.c
@@ -84,7 +84,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.67 2007/06/12 03:34:32 mhitch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.61.8.2 2007/09/11 08:01:37 msaitoh Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
@@ -99,6 +99,8 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.67 2007/06/12 03:34:32 mhitch Exp $");
 #include <sys/kernel.h>
 #include <sys/signalvar.h>
 #include <sys/resourcevar.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall.h>
 #include <sys/syslog.h>
 #include <sys/user.h>
@@ -192,7 +194,7 @@ short	exframesize[] = {
 #define	KDFAULT_040(c)	(cputype == CPU_68040 && \
 			 ((c) & SSW4_TMMASK) == SSW4_TMKD)
 #define	WRFAULT_040(c)	(cputype == CPU_68040 && \
-			 ((c) & SSW4_RW) == 0)
+			 ((c) & (SSW4_LK|SSW4_RW)) != SSW4_RW)
 #else
 #define	KDFAULT_040(c)	0
 #define	WRFAULT_040(c)	0
@@ -202,7 +204,8 @@ short	exframesize[] = {
 #define	KDFAULT_OTH(c)	(cputype <= CPU_68030 && \
 			 ((c) & (SSW_DF|SSW_FCMASK)) == (SSW_DF|FC_SUPERD))
 #define	WRFAULT_OTH(c)	(cputype <= CPU_68030 && \
-			 ((c) & (SSW_DF|SSW_RW)) == SSW_DF)
+			 (((c) & SSW_DF) != 0 && \
+			 ((((c) & SSW_RW) == 0) || (((c) & SSW_RM) != 0))))
 #else
 #define	KDFAULT_OTH(c)	0
 #define	WRFAULT_OTH(c)	0
@@ -219,6 +222,12 @@ int mmupid = -1;
 #define MDB_WBFAILED	4
 #define MDB_ISPID(p)	((p) == mmupid)
 #endif
+
+
+#define NSIR	32
+void (*sir_routines[NSIR])(void *);
+void *sir_args[NSIR];
+int next_sir;
 
 /*
  * trap and syscall both need the following work done before returning
@@ -241,10 +250,10 @@ again:
 	/*
 	 * If profiling, charge system time to the trapped pc.
 	 */
-	if (p->p_stflag & PST_PROFIL) {
+	if (p->p_flag & P_PROFIL) {
 		extern int psratio;
 
-		addupc_task(l, fp->f_pc,
+		addupc_task(p, fp->f_pc,
 			    (int)(p->p_sticks - oticks) * psratio);
 	}
 #ifdef M68040
@@ -309,6 +318,7 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 	ksiginfo_t ksi;
 	int s;
 	u_quad_t sticks = 0 /* XXX initialiser works around compiler bug */;
+	int bit;
 	static int panicking = 0;
 
 	uvmexp.traps++;
@@ -317,6 +327,8 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 	KSI_INIT_TRAP(&ksi);
 	ksi.ksi_trap = type & ~T_USER;
 
+	if (l == NULL)
+		l = &lwp0;
 	p = l->l_proc;
 
 #ifdef DIAGNOSTIC
@@ -404,14 +416,10 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 		printf("pid %d: kernel %s exception\n", p->p_pid,
 		       type==T_COPERR ? "coprocessor" : "format");
 		type |= T_USER;
-
-		mutex_enter(&p->p_smutex);
 		SIGACTION(p, SIGILL).sa_handler = SIG_DFL;
 		sigdelset(&p->p_sigctx.ps_sigignore, SIGILL);
 		sigdelset(&p->p_sigctx.ps_sigcatch, SIGILL);
-		sigdelset(&l->l_sigmask, SIGILL);
-		mutex_exit(&p->p_smutex);
-
+		sigdelset(&p->p_sigctx.ps_sigmask, SIGILL);
 		ksi.ksi_signo = SIGILL;
 		ksi.ksi_addr = (void *)(int)fp->f_format;
 				/* XXX was ILL_RESAD_FAULT */
@@ -576,9 +584,13 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 
 	case T_SSIR:		/* software interrupt */
 	case T_SSIR|T_USER:
-
-		softintr_dispatch();
-
+		while ((bit = ffs(ssir))) {
+			--bit;
+			ssir &= ~(1 << bit);
+			uvmexp.softs++;
+			if (sir_routines[bit])
+				sir_routines[bit](sir_args[bit]);
+		}
 		/*
 		 * If this was not an AST trap, we are all done.
 		 */
@@ -587,12 +599,12 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 			return;
 		}
 		spl0();
-		if (l->l_pflag & LP_OWEUPC) {
-			l->l_pflag &= ~LP_OWEUPC;
-			ADDUPROF(l);
+		if (p->p_flag & P_OWEUPC) {
+			p->p_flag &= ~P_OWEUPC;
+			ADDUPROF(p);
 		}
-		if (curcpu()->ci_want_resched)
-			preempt();
+		if (want_resched)
+			preempt(0);
 		goto out;
 
 	case T_MMUFLT:		/* kernel mode page fault */
@@ -630,8 +642,13 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 		if ((type & T_USER) == 0 &&
 		    ((l->l_addr->u_pcb.pcb_onfault == 0) || KDFAULT(code)))
 			map = kernel_map;
-		else
+		else {
 			map = vm ? &vm->vm_map : kernel_map;
+			if (l->l_flag & L_SA) {
+				l->l_savp->savp_faultaddr = (vaddr_t)v;
+				l->l_flag |= L_SA_PAGEFAULT;
+			}
+		}
 
 		if (WRFAULT(code))
 			ftype = VM_PROT_WRITE;
@@ -682,7 +699,7 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 		 * error.
 		 */
 		if (rv == 0) {
-			if (map != kernel_map && (void *)va >= vm->vm_maxsaddr)
+			if (map != kernel_map && (caddr_t)va >= vm->vm_maxsaddr)
 				uvm_grow(p, va);
 
 			if (type == T_MMUFLT) {
@@ -692,6 +709,7 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 #endif
 				return;
 			}
+			l->l_flag &= ~L_SA_PAGEFAULT;
 			goto out;
 		}
 		if (rv == EACCES) {
@@ -708,6 +726,7 @@ trap(struct frame *fp, int type, unsigned code, unsigned v)
 			       type, code);
 			goto dopanic;
 		}
+		l->l_flag &= ~L_SA_PAGEFAULT;
 		ksi.ksi_addr = (void *)v;
 		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
@@ -754,7 +773,7 @@ writeback(struct frame *fp, int docachepush)
 	struct proc *p = l->l_proc;
 	int err = 0;
 	u_int fa;
-	void *oonfault = l->l_addr->u_pcb.pcb_onfault;
+	caddr_t oonfault = l->l_addr->u_pcb.pcb_onfault;
 	paddr_t pa;
 
 #ifdef DEBUG
@@ -797,7 +816,7 @@ writeback(struct frame *fp, int docachepush)
 			    VM_PROT_WRITE|PMAP_WIRED);
 			pmap_update(pmap_kernel());
 			fa = (u_int)&vmmap[(f->f_fa & PGOFSET) & ~0xF];
-			bcopy((void *)&f->f_pd0, (void *)fa, 16);
+			bcopy((caddr_t)&f->f_pd0, (caddr_t)fa, 16);
 			(void) pmap_extract(pmap_kernel(), (vaddr_t)fa, &pa);
 			DCFL(pa);
 			pmap_remove(pmap_kernel(), (vaddr_t)vmmap,
@@ -822,9 +841,9 @@ writeback(struct frame *fp, int docachepush)
 		wbstats.move16s++;
 #endif
 		if (KDFAULT(f->f_wb1s))
-			bcopy((void *)&f->f_pd0, (void *)(f->f_fa & ~0xF), 16);
+			bcopy((caddr_t)&f->f_pd0, (caddr_t)(f->f_fa & ~0xF), 16);
 		else
-			err = suline((void *)(f->f_fa & ~0xF), (void *)&f->f_pd0);
+			err = suline((caddr_t)(f->f_fa & ~0xF), (caddr_t)&f->f_pd0);
 		if (err) {
 			fa = f->f_fa & ~0xF;
 #ifdef DEBUG
@@ -856,7 +875,7 @@ writeback(struct frame *fp, int docachepush)
 			if (KDFAULT(f->f_wb1s))
 				*(long *)f->f_wb1a = wb1d;
 			else
-				err = suword((void *)f->f_wb1a, wb1d);
+				err = suword((caddr_t)f->f_wb1a, wb1d);
 			break;
 		case SSW4_SZB:
 			off = 24 - off;
@@ -865,7 +884,7 @@ writeback(struct frame *fp, int docachepush)
 			if (KDFAULT(f->f_wb1s))
 				*(char *)f->f_wb1a = wb1d;
 			else
-				err = subyte((void *)f->f_wb1a, wb1d);
+				err = subyte((caddr_t)f->f_wb1a, wb1d);
 			break;
 		case SSW4_SZW:
 			off = (off + 16) % 32;
@@ -874,7 +893,7 @@ writeback(struct frame *fp, int docachepush)
 			if (KDFAULT(f->f_wb1s))
 				*(short *)f->f_wb1a = wb1d;
 			else
-				err = susword((void *)f->f_wb1a, wb1d);
+				err = susword((caddr_t)f->f_wb1a, wb1d);
 			break;
 		}
 		if (err) {
@@ -906,19 +925,19 @@ writeback(struct frame *fp, int docachepush)
 			if (KDFAULT(f->f_wb2s))
 				*(long *)f->f_wb2a = f->f_wb2d;
 			else
-				err = suword((void *)f->f_wb2a, f->f_wb2d);
+				err = suword((caddr_t)f->f_wb2a, f->f_wb2d);
 			break;
 		case SSW4_SZB:
 			if (KDFAULT(f->f_wb2s))
 				*(char *)f->f_wb2a = f->f_wb2d;
 			else
-				err = subyte((void *)f->f_wb2a, f->f_wb2d);
+				err = subyte((caddr_t)f->f_wb2a, f->f_wb2d);
 			break;
 		case SSW4_SZW:
 			if (KDFAULT(f->f_wb2s))
 				*(short *)f->f_wb2a = f->f_wb2d;
 			else
-				err = susword((void *)f->f_wb2a, f->f_wb2d);
+				err = susword((caddr_t)f->f_wb2a, f->f_wb2d);
 			break;
 		}
 		if (err) {
@@ -946,19 +965,19 @@ writeback(struct frame *fp, int docachepush)
 			if (KDFAULT(f->f_wb3s))
 				*(long *)f->f_wb3a = f->f_wb3d;
 			else
-				err = suword((void *)f->f_wb3a, f->f_wb3d);
+				err = suword((caddr_t)f->f_wb3a, f->f_wb3d);
 			break;
 		case SSW4_SZB:
 			if (KDFAULT(f->f_wb3s))
 				*(char *)f->f_wb3a = f->f_wb3d;
 			else
-				err = subyte((void *)f->f_wb3a, f->f_wb3d);
+				err = subyte((caddr_t)f->f_wb3a, f->f_wb3d);
 			break;
 		case SSW4_SZW:
 			if (KDFAULT(f->f_wb3s))
 				*(short *)f->f_wb3a = f->f_wb3d;
 			else
-				err = susword((void *)f->f_wb3a, f->f_wb3d);
+				err = susword((caddr_t)f->f_wb3a, f->f_wb3d);
 			break;
 #ifdef DEBUG
 		case SSW4_SZLN:
@@ -1018,11 +1037,37 @@ dumpwb(int num, u_short s, u_int a, u_int d)
 	       num, a, d, f7sz[(s & SSW4_SZMASK) >> 5],
 	       f7tt[(s & SSW4_TTMASK) >> 3], f7tm[s & SSW4_TMMASK]);
 	printf("               PA ");
-	if (pmap_extract(p->p_vmspace->vm_map.pmap, (vaddr_t)a, &pa) == false)
+	if (pmap_extract(p->p_vmspace->vm_map.pmap, (vaddr_t)a, &pa) == FALSE)
 		printf("<invalid address>");
 	else
-		printf("%lx, current value %lx", pa, fuword((void *)a));
+		printf("%lx, current value %lx", pa, fuword((caddr_t)a));
 	printf("\n");
 }
 #endif
 #endif
+
+/*
+ * Allocation routines for software interrupts.
+ */
+u_long
+allocate_sir(void (*proc)(void *), void *arg)
+{
+	int bit;
+
+	if( next_sir >= NSIR )
+		panic("allocate_sir: none left");
+	bit = next_sir++;
+	sir_routines[bit] = proc;
+	sir_args[bit] = arg;
+	return (1 << bit);
+}
+
+void
+init_sir(void)
+{
+	extern void netintr(void);
+
+	sir_routines[0] = (void (*)(void *))netintr;
+	sir_routines[1] = softclock;
+	next_sir = 2;
+}

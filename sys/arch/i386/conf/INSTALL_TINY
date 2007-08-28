@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL_TINY,v 1.111 2007/06/16 12:35:57 ad Exp $
+#	$NetBSD: INSTALL_TINY,v 1.107.2.1 2007/01/28 20:05:41 tron Exp $
 #
 #	This kernel should be derived from INSTALL (which is derived
 #	from GENERIC) with some features commented out.
@@ -91,7 +91,6 @@ no options	EXEC_AOUT	# we don't a.out support
 #options 	COMPAT_16	# NetBSD 1.6
 #options 	COMPAT_20	# NetBSD 2.0
 #options 	COMPAT_30	# NetBSD 3.0 compatibility.
-#options 	COMPAT_40	# NetBSD 4.0
 #options 	COMPAT_43	# 4.3BSD, 386BSD, and BSDI
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -123,7 +122,7 @@ file-system 	MSDOSFS		# MS-DOS file system
 # Filesystem options
 #options 	QUOTA		# UFS quotas
 #options 	NFSSERVER	# Network File System server
-options 	NFS_V2_ONLY	# Exclude NFS3 code to save space
+options 	NFS_V2_ONLY	# Exclude NFS3 and NQNFS code to save space
 options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 #options 	EXT2FS_SYSTEM_FLAGS # makes ext2fs file flags (append and
 				# immutable) behave as system flags.
@@ -149,6 +148,7 @@ options 	INET		# IP + ICMP + TCP + UDP
 #options 	PCI_CONFIG_DUMP	# verbosely dump PCI config space
 #options 	PCMCIAVERBOSE	# verbose PCMCIA configuration messages
 #options 	SCSIVERBOSE	# human readable SCSI error messages
+#options 	I2OVERBOSE	# verbose I2O driver messages
 
 # Squeeze...
 options 	NVNODE=50

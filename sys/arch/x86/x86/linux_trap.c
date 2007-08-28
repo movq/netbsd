@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_trap.c,v 1.4 2007/02/09 21:55:14 ad Exp $	*/
+/*	$NetBSD: linux_trap.c,v 1.3 2006/03/17 06:31:58 erh Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -41,11 +41,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_trap.c,v 1.4 2007/02/09 21:55:14 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_trap.c,v 1.3 2006/03/17 06:31:58 erh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/user.h>
 #include <sys/acct.h>
 #include <sys/kernel.h>
@@ -134,7 +136,7 @@ static const int linux_x86_vec_to_sig[] = {
 #define ASIZE(a) (sizeof(a) / sizeof(a[0]))
 
 void
-linux_trapsignal(struct lwp *l, ksiginfo_t *ksi)
+linux_trapsignal(struct lwp *l, const ksiginfo_t *ksi)
 {
 
 	switch (ksi->ksi_signo) {

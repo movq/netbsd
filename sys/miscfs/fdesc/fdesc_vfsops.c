@@ -1,4 +1,4 @@
-/*	$NetBSD: fdesc_vfsops.c,v 1.69 2007/07/31 21:14:15 pooka Exp $	*/
+/*	$NetBSD: fdesc_vfsops.c,v 1.62.2.1 2007/02/17 23:27:48 tron Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.69 2007/07/31 21:14:15 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.62.2.1 2007/02/17 23:27:48 tron Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -63,23 +63,29 @@ __KERNEL_RCSID(0, "$NetBSD: fdesc_vfsops.c,v 1.69 2007/07/31 21:14:15 pooka Exp 
 
 #include <miscfs/fdesc/fdesc.h>
 
-VFS_PROTOS(fdesc);
+int	fdesc_mount(struct mount *, const char *, void *,
+			 struct nameidata *, struct lwp *);
+int	fdesc_start(struct mount *, int, struct lwp *);
+int	fdesc_unmount(struct mount *, int, struct lwp *);
+int	fdesc_quotactl(struct mount *, int, uid_t, void *,
+			    struct lwp *);
+int	fdesc_statvfs(struct mount *, struct statvfs *, struct lwp *);
+int	fdesc_sync(struct mount *, int, kauth_cred_t, struct lwp *);
+int	fdesc_vget(struct mount *, ino_t, struct vnode **);
 
 /*
  * Mount the per-process file descriptors (/dev/fd)
  */
 int
-fdesc_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
-    struct lwp *l)
+fdesc_mount(struct mount *mp, const char *path, void *data,
+    struct nameidata *ndp, struct lwp *l)
 {
 	int error = 0;
 	struct fdescmount *fmp;
 	struct vnode *rvp;
 
-	if (mp->mnt_flag & MNT_GETARGS) {
-		*data_len = 0;
+	if (mp->mnt_flag & MNT_GETARGS)
 		return 0;
-	}
 	/*
 	 * Update is a no-op
 	 */
@@ -101,7 +107,7 @@ fdesc_mount(struct mount *mp, const char *path, void *data, size_t *data_len,
 	vfs_getnewfsid(mp);
 
 	error = set_statvfs_info(path, UIO_USERSPACE, "fdesc", UIO_SYSSPACE,
-	    mp->mnt_op->vfs_name, mp, l);
+	    mp, l);
 	VOP_UNLOCK(rvp, 0);
 	return error;
 }
@@ -123,7 +129,12 @@ fdesc_unmount(struct mount *mp, int mntflags, struct lwp *l)
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
 
-	if (rtvp->v_usecount > 1 && (mntflags & MNT_FORCE) == 0)
+	/*
+	 * Clear out buffer cache.  I don't think we
+	 * ever get anything cached at this level at the
+	 * moment, but who knows...
+	 */
+	if (rtvp->v_usecount > 1)
 		return (EBUSY);
 	if ((error = vflush(mp, rtvp, flags)) != 0)
 		return (error);
@@ -272,7 +283,6 @@ const struct vnodeopv_desc * const fdesc_vnodeopv_descs[] = {
 
 struct vfsops fdesc_vfsops = {
 	MOUNT_FDESC,
-	0,
 	fdesc_mount,
 	fdesc_start,
 	fdesc_unmount,
@@ -289,7 +299,6 @@ struct vfsops fdesc_vfsops = {
 	NULL,				/* vfs_mountroot */
 	(int (*)(struct mount *, struct vnode *, struct timespec *)) eopnotsupp,
 	vfs_stdextattrctl,
-	(void *)eopnotsupp,		/* vfs_suspendctl */
 	fdesc_vnodeopv_descs,
 	0,
 	{ NULL, NULL},

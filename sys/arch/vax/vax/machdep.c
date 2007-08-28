@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.158 2007/03/04 06:01:01 christos Exp $	 */
+/* $NetBSD: machdep.c,v 1.153 2006/10/25 07:04:13 he Exp $	 */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -83,7 +83,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.158 2007/03/04 06:01:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.153 2006/10/25 07:04:13 he Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
@@ -108,8 +108,10 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.158 2007/03/04 06:01:01 christos Exp $
 #include <sys/device.h>
 #include <sys/exec.h>
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/ptrace.h>
+#include <sys/savar.h>
 #include <sys/ksyms.h>
 
 #include <dev/cons.h>
@@ -145,7 +147,7 @@ extern vaddr_t virtual_avail, virtual_end;
 char		machine[] = MACHINE;		/* from <machine/param.h> */
 char		machine_arch[] = MACHINE_ARCH;	/* from <machine/param.h> */
 char		cpu_model[100];
-void *		msgbufaddr;
+caddr_t		msgbufaddr;
 int		physmem;
 int		*symtab_start;
 int		*symtab_end;
@@ -208,7 +210,7 @@ cpu_startup()
 	 * At most one process with the full length is allowed.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 NCARGS, VM_MAP_PAGEABLE, false, NULL);
+				 NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 
 #if VAX46 || VAX48 || VAX49 || VAX53 || VAXANY
 	/*
@@ -216,7 +218,7 @@ cpu_startup()
 	 * number of processes doing physio at any one time.
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				   VM_PHYS_SIZE, 0, false, NULL);
+				   VM_PHYS_SIZE, 0, FALSE, NULL);
 #endif
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
@@ -326,7 +328,7 @@ consinit()
 	KASSERT(iospace != 0);
 	iomap_ex = extent_create("iomap", iospace + VAX_NBPG,
 	    iospace + ((IOSPSZ * VAX_NBPG) - 1), M_DEVBUF,
-	    (void *) iomap_ex_storage, sizeof(iomap_ex_storage),
+	    (caddr_t) iomap_ex_storage, sizeof(iomap_ex_storage),
 	    EX_NOCOALESCE|EX_NOWAIT);
 #ifdef DEBUG
 	iospace_inited = 1;
@@ -505,12 +507,12 @@ process_write_regs(l, regs)
 int
 process_set_pc(l, addr)
 	struct	lwp *l;
-	void *addr;
+	caddr_t addr;
 {
 	struct	trapframe *tf;
 	void	*ptr;
 
-	if ((l->l_flag & LW_INMEM) == 0)
+	if ((l->l_flag & L_INMEM) == 0)
 		return (EIO);
 
 	ptr = (char *) l->l_addr->u_pcb.framep;
@@ -528,7 +530,7 @@ process_sstep(l, sstep)
 	void	       *ptr;
 	struct trapframe *tf;
 
-	if ((l->l_flag & LW_INMEM) == 0)
+	if ((l->l_flag & L_INMEM) == 0)
 		return (EIO);
 
 	ptr = l->l_addr->u_pcb.framep;
@@ -670,15 +672,61 @@ void	krnunlock(void);
 void
 krnlock()
 {
-	KERNEL_LOCK(1, NULL);
+	KERNEL_LOCK(LK_CANRECURSE|LK_EXCLUSIVE);
 }
 
 void
 krnunlock()
 {
-	KERNEL_UNLOCK_ONE(NULL);
+	KERNEL_UNLOCK();
 }
 #endif
+
+void
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+    void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct trapframe *tf = l->l_addr->u_pcb.framep;
+	uint32_t saframe[11], *fp = saframe;
+
+	sp = (void *)((uintptr_t)sp - sizeof(saframe));
+
+	/*
+	 * We don't bother to save the callee's register mask
+	 * since the function is never expected to return.
+	 */
+
+	/*
+	 * Fake a CALLS stack frame.
+	 */
+	*fp++ = 0;			/* condition handler */
+	*fp++ = 0x20000000;		/* saved regmask & PSW */
+	*fp++ = 0;			/* saved AP */
+	*fp++ = 0;			/* saved FP, new call stack */
+	*fp++ = 0;			/* saved PC, new call stack */
+
+	/*
+	 * Now create the argument list.
+	 */
+	*fp++ = 5;			/* argc = 5 */
+	*fp++ = type;
+	*fp++ = (uintptr_t) sas;
+	*fp++ = nevents;
+	*fp++ = ninterrupted;
+	*fp++ = (uintptr_t) ap;
+
+	if (copyout(&saframe, sp, sizeof(saframe)) != 0) {
+		/* Copying onto the stack didn't work, die. */
+		sigexit(l, SIGILL);
+		/* NOTREACHED */
+	}
+
+	tf->ap = (uintptr_t) sp + 20;
+	tf->sp = (long) sp;
+	tf->fp = (long) sp;
+	tf->pc = (long) upcall + 2;
+	tf->psl = (long) PSL_U | PSL_PREVU;
+}
 
 void
 cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)

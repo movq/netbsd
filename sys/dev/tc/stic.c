@@ -1,4 +1,4 @@
-/*	$NetBSD: stic.c,v 1.41 2007/07/21 19:06:21 ad Exp $	*/
+/*	$NetBSD: stic.c,v 1.36.2.1 2006/12/04 18:34:16 tron Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.41 2007/07/21 19:06:21 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.36.2.1 2006/12/04 18:34:16 tron Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -85,8 +85,6 @@ __KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.41 2007/07/21 19:06:21 ad Exp $");
 #include <sys/callout.h>
 #include <sys/conf.h>
 #include <sys/kauth.h>
-#include <sys/lwp.h>
-#include <sys/event.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -160,7 +158,7 @@ __KERNEL_RCSID(0, "$NetBSD: stic.c,v 1.41 2007/07/21 19:06:21 ad Exp $");
 	tc_wmb();				\
    } while (0)
 
-static int	sticioctl(void *, void *, u_long, void *, int, struct lwp *);
+static int	sticioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
 static int	stic_alloc_screen(void *, const struct wsscreen_descr *,
 				  void **, int *, int *, long *);
 static void	stic_free_screen(void *, void *);
@@ -446,7 +444,7 @@ stic_attach(struct device *self, struct stic_info *si, int console)
 	} else
 		si->si_unit = -1;
 
-	callout_init(&si->si_switch_callout, 0);
+	callout_init(&si->si_switch_callout);
 
 	/*
 	 * Allocate backing for the console.  We could trawl back through
@@ -561,7 +559,7 @@ stic_clear_screen(struct stic_info *si)
 }
 
 static int
-sticioctl(void *v, void *vs, u_long cmd, void *data, int flag, struct lwp *l)
+sticioctl(void *v, void *vs, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	struct stic_info *si;
 	int s;
@@ -1047,7 +1045,7 @@ stic_putchar(void *cookie, int r, int c, u_int uc, long attr)
 	r *= font->fontheight;
 	c *= font->fontwidth;
 	uc = (uc - font->firstchar) * font->stride * font->fontheight;
-	fr = (u_short *)((char *)font->data + uc);
+	fr = (u_short *)((caddr_t)font->data + uc);
 	bgcolor = DUPBYTE0((attr & 0xf0) >> 4);
 	fgcolor = DUPBYTE0(attr & 0x0f);
 

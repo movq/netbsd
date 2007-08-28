@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.43 2007/04/25 12:53:46 matt Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.40 2006/11/25 11:59:58 scw Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1988 Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.43 2007/04/25 12:53:46 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.40 2006/11/25 11:59:58 scw Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,7 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.43 2007/04/25 12:53:46 matt Exp $");
 #include <ufs/ufs/dinode.h>	/* XXX for fs.h */
 #include <ufs/ffs/fs.h>		/* XXX for BBSIZE & SBSIZE */
 
-static const char *compat_label(dev_t dev, void (*strat)(struct buf *bp),
+char *compat_label(dev_t dev, void (*strat)(struct buf *bp),
 	struct disklabel *lp, struct cpu_disklabel *osdep);
 #endif /* COMPAT_ULTRIX */
 
@@ -96,7 +96,7 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *),
 	if (biowait(bp)) {
 		msg = "I/O error";
 	} else {
-		dlp = (struct disklabel *)((char *)bp->b_data + LABELOFFSET);
+		dlp = (struct disklabel *)(bp->b_data + LABELOFFSET);
 		if (dlp->d_magic != DISKMAGIC || dlp->d_magic2 != DISKMAGIC) {
 			msg = "no disk label";
 		} else if (dlp->d_npartitions > MAXPARTITIONS ||
@@ -129,7 +129,7 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *),
  * Given a buffer bp, try and interpret it as an Ultrix disk label,
  * putting the partition info into a native NetBSD label
  */
-const char *
+char *
 compat_label(dev, strat, lp, osdep)
 	dev_t dev;
 	void (*strat)(struct buf *bp);
@@ -138,8 +138,7 @@ compat_label(dev, strat, lp, osdep)
 {
 	dec_disklabel *dlp;
 	struct buf *bp = NULL;
-	const char *msg = NULL;
-	uint8_t *dp = bp->b_data;
+	char *msg = NULL;
 
 	bp = geteblk((int)lp->d_secsize);
 	bp->b_dev = dev;
@@ -154,8 +153,8 @@ compat_label(dev, strat, lp, osdep)
 		goto done;
 	}
 
-	for (dlp = (dec_disklabel *)dp;
-	    dlp <= (dec_disklabel *)(dp+DEV_BSIZE-sizeof(*dlp));
+	for (dlp = (dec_disklabel *)bp->b_data;
+	    dlp <= (dec_disklabel *)(bp->b_data+DEV_BSIZE-sizeof(*dlp));
 	    dlp = (dec_disklabel *)((char *)dlp + sizeof(long))) {
 
 		int part;
@@ -173,7 +172,7 @@ compat_label(dev, strat, lp, osdep)
 		lp->d_interleave = 1;
 		lp->d_flags = 0;
 		lp->d_bbsize = BBSIZE;
-		lp->d_sbsize = 8192;
+		lp->d_sbsize = SBSIZE;
 		for (part = 0;
 		     part <((MAXPARTITIONS<DEC_NUM_DISK_PARTS) ?
 		            MAXPARTITIONS : DEC_NUM_DISK_PARTS);
@@ -261,7 +260,7 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *),
 	(*strat)(bp);
 	if ((error = biowait(bp)))
 		goto done;
-	dlp = (struct disklabel *)((char *)bp->b_data + LABELOFFSET);
+	dlp = (struct disklabel *)(bp->b_data + LABELOFFSET);
 	bcopy(lp, dlp, sizeof(struct disklabel));
 	bp->b_flags &= ~(B_READ|B_DONE);
 	bp->b_flags |= B_WRITE;
@@ -299,7 +298,7 @@ disk_reallymapin(struct buf *bp, struct pte *map, int reg, int flag)
 	volatile pt_entry_t *io;
 	pt_entry_t *pte;
 	int pfnum, npf, o;
-	void *addr;
+	caddr_t addr;
 
 	o = (int)bp->b_data & VAX_PGOFSET;
 	npf = vax_btoc(bp->b_bcount + o) + 1;

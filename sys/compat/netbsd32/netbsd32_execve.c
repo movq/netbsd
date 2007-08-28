@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_execve.c,v 1.30 2007/04/22 08:29:58 dsl Exp $	*/
+/*	$NetBSD: netbsd32_execve.c,v 1.26 2006/03/07 03:32:06 thorpej Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_execve.c,v 1.30 2007/04/22 08:29:58 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_execve.c,v 1.26 2006/03/07 03:32:06 thorpej Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -39,6 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_execve.c,v 1.30 2007/04/22 08:29:58 dsl Exp
 #include <sys/vnode.h>
 #include <sys/file.h>
 #include <sys/filedesc.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/proc.h>
 #include <sys/exec.h>
@@ -69,8 +70,12 @@ netbsd32_execve(struct lwp *l, void *v, register_t *retval)
 		syscallarg(netbsd32_charpp) argp;
 		syscallarg(netbsd32_charpp) envp;
 	} */ *uap = v;
-	const char *path = SCARG_P32(uap, path);
+	caddr_t sg;
+	const char *path = NETBSD32PTR64(SCARG(uap, path));
 
-	return execve1(l, path, SCARG_P32(uap, argp),
-	    SCARG_P32(uap, envp), netbsd32_execve_fetch_element);
+	sg = stackgap_init(l->l_proc, 0);
+	CHECK_ALT_EXIST(l, &sg, path);
+
+	return execve1(l, path, NETBSD32PTR64(SCARG(uap, argp)),
+	    NETBSD32PTR64(SCARG(uap, envp)), netbsd32_execve_fetch_element);
 }

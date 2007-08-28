@@ -1,4 +1,4 @@
-/* $NetBSD: i4b_l2.c,v 1.23 2007/07/09 21:11:14 ad Exp $ */
+/* $NetBSD: i4b_l2.c,v 1.20 2006/11/16 01:33:49 christos Exp $ */
 
 /*
  * Copyright (c) 1997, 2000 Hellmuth Michaelis. All rights reserved.
@@ -29,7 +29,7 @@
  *      i4b_l2.c - ISDN layer 2 (Q.921)
  *	-------------------------------
  *
- *	$Id: i4b_l2.c,v 1.23 2007/07/09 21:11:14 ad Exp $
+ *	$Id: i4b_l2.c,v 1.20 2006/11/16 01:33:49 christos Exp $
  *
  * $FreeBSD$
  *
@@ -38,7 +38,7 @@
  *---------------------------------------------------------------------------*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i4b_l2.c,v 1.23 2007/07/09 21:11:14 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i4b_l2.c,v 1.20 2006/11/16 01:33:49 christos Exp $");
 
 #ifdef __FreeBSD__
 #include "i4bq921.h"
@@ -73,6 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: i4b_l2.c,v 1.23 2007/07/09 21:11:14 ad Exp $");
 #include <netisdn/i4b_mbuf.h>
 #include <netisdn/i4b_global.h>
 
+#include <netisdn/i4b_l2.h>
 #include <netisdn/i4b_l2fsm.h>
 
 /* this layers debug level */
@@ -234,10 +235,10 @@ isdn_layer2_status_ind(l2_softc_t *l2sc, struct isdn_l3_driver *drv, int status,
 			i4b_l2_unit_init(l2sc);
 
 			/* initialize the callout handles for timeout routines */
-			callout_init(&l2sc->T200_callout, 0);
-			callout_init(&l2sc->T202_callout, 0);
-			callout_init(&l2sc->T203_callout, 0);
-			callout_init(&l2sc->IFQU_callout, 0);
+			callout_init(&l2sc->T200_callout);
+			callout_init(&l2sc->T202_callout);
+			callout_init(&l2sc->T203_callout);
+			callout_init(&l2sc->IFQU_callout);
 
 			break;
 
@@ -280,7 +281,7 @@ isdn_layer2_status_ind(l2_softc_t *l2sc, struct isdn_l3_driver *drv, int status,
 /*---------------------------------------------------------------------------*
  *	MDL_COMMAND_REQ from layer 3
  *---------------------------------------------------------------------------*/
-int i4b_mdl_command_req(struct isdn_l3_driver *drv, int command, void *parm)
+int i4b_mdl_command_req(struct isdn_l3_driver *drv, int command, void * parm)
 {
 	struct l2_softc *sc = (l2_softc_t*)drv->l1_token;
 

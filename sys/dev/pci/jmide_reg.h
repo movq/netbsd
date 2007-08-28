@@ -1,4 +1,4 @@
-/*      $NetBSD: jmide_reg.h,v 1.1 2007/05/15 17:53:46 bouyer Exp $    */
+/*      $NetBSD: jmide_reg.h,v 1.1.16.2 2007/08/31 20:09:25 pavel Exp $    */
 
 /*
  * Copyright (c) 2007 Manuel Bouyer.

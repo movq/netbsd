@@ -1,4 +1,4 @@
-/*	$NetBSD: wdsc.c,v 1.22 2007/05/06 23:49:57 rumble Exp $	*/
+/*	$NetBSD: wdsc.c,v 1.17 2006/10/01 22:02:55 bjh21 Exp $	*/
 
 /*
  * Copyright (c) 2001 Wayne Knowles
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdsc.c,v 1.22 2007/05/06 23:49:57 rumble Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdsc.c,v 1.17 2006/10/01 22:02:55 bjh21 Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,8 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: wdsc.c,v 1.22 2007/05/06 23:49:57 rumble Exp $");
 #include <machine/cpu.h>
 #include <machine/bus.h>
 #include <machine/autoconf.h>
-#include <machine/machtype.h>
-#include <machine/sysconf.h>
 
 #include <sgimips/hpc/hpcvar.h>
 #include <sgimips/hpc/hpcreg.h>
@@ -83,7 +81,7 @@ int	wdsc_match	(struct device *, struct cfdata *, void *);
 CFATTACH_DECL(wdsc, sizeof(struct wdsc_softc),
     wdsc_match, wdsc_attach, NULL, NULL);
 
-int	wdsc_dmasetup	(struct wd33c93_softc *, void **,size_t *,
+int	wdsc_dmasetup	(struct wd33c93_softc *, caddr_t *,size_t *,
 				int, size_t *);
 int	wdsc_dmago	(struct wd33c93_softc *);
 void	wdsc_dmastop	(struct wd33c93_softc *);
@@ -92,42 +90,15 @@ int	wdsc_dmaintr	(void *);
 int	wdsc_scsiintr	(void *);
 
 /*
- * Match for SCSI devices on the onboard and GIO32 adapter WD33C93 chips
+ * Match for SCSI devices on the onboard WD33C93 chip
  */
 int
 wdsc_match(struct device *pdp, struct cfdata *cf, void *auxp)
 {
 	struct hpc_attach_args *haa = auxp;
 
-	if (strcmp(haa->ha_name, cf->cf_name) == 0) {
-		uint32_t reset, asr, reg;
-
-		reset = MIPS_PHYS_TO_KSEG1(haa->ha_sh + haa->ha_dmaoff +
-		    haa->hpc_regs->scsi0_ctl);
-		asr = MIPS_PHYS_TO_KSEG1(haa->ha_sh + haa->ha_devoff);
-
-		/* XXX: hpc1 offset due to SGIMIPS_BUS_SPACE_HPC brain damage */
-		asr = (asr + 3) & ~0x3;
-
-		if (platform.badaddr((void *)reset, sizeof(reset)))
-			return (0);
-
-		*(volatile uint32_t *)reset = haa->hpc_regs->scsi_dmactl_reset;
-		delay(1000);
-		*(volatile uint32_t *)reset = 0x0;
-
-		if (platform.badaddr((void *)asr, sizeof(asr)))
-			return (0);
-
-		reg = *(volatile uint32_t *)asr;
-		if (haa->hpc_regs->revision == 3) {
-			if ((reg & 0xff) == SBIC_ASR_INT)
-				return (1);
-		} else {
-			if (((reg >> 8) & 0xff) == SBIC_ASR_INT)
-				return (1);
-		}
-	}
+	if (strcmp(haa->ha_name, cf->cf_name) == 0)
+		return (1);
 
 	return (0);
 }
@@ -176,8 +147,8 @@ wdsc_attach(struct device *pdp, struct device *dp, void *auxp)
 	sc->sc_adapter.adapt_minphys = minphys;
 
 	sc->sc_id = 0;					/* Host ID = 0 */
-	sc->sc_clkfreq = 200;				/* 20MHz */
-	sc->sc_dmamode = SBIC_CTL_BURST_DMA;
+	sc->sc_clkfreq = wsc->sc_hpcdma.hpc->clk_freq;
+	sc->sc_dmamode = SBIC_CTL_DMA;
 
 	evcnt_attach_dynamic(&wsc->sc_intrcnt, EVCNT_TYPE_INTR, NULL,
 			     sc->sc_dev.dv_xname, "intr");
@@ -199,7 +170,7 @@ wdsc_attach(struct device *pdp, struct device *dp, void *auxp)
  * Requires splbio() interrupts to be disabled by the caller
  */
 int
-wdsc_dmasetup(struct wd33c93_softc *dev, void **addr, size_t *len, int datain, size_t *dmasize)
+wdsc_dmasetup(struct wd33c93_softc *dev, caddr_t *addr, size_t *len, int datain, size_t *dmasize)
 {
 	struct wdsc_softc *wsc = (void *)dev;
 	struct hpc_dma_softc *dsc = &wsc->sc_hpcdma;
@@ -225,12 +196,10 @@ wdsc_dmasetup(struct wd33c93_softc *dev, void **addr, size_t *len, int datain, s
 		wsc->sc_flags |= WDSC_DMA_MAPLOADED;
 
 		if (datain) {
-			dsc->sc_dmacmd =
-			    wsc->sc_hpcdma.hpc->scsi_dma_datain_cmd;
+			dsc->sc_dmacmd = wsc->sc_hpcdma.hpc->dma_datain_cmd;
 			dsc->sc_flags |= HPCDMA_READ;
 		} else {
-			dsc->sc_dmacmd =
-			    wsc->sc_hpcdma.hpc->scsi_dma_dataout_cmd;
+			dsc->sc_dmacmd = wsc->sc_hpcdma.hpc->dma_dataout_cmd;
 			dsc->sc_flags &= ~HPCDMA_READ;
 		}
 	}

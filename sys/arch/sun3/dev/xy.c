@@ -1,4 +1,4 @@
-/*	$NetBSD: xy.c,v 1.61 2007/07/29 12:15:40 ad Exp $	*/
+/*	$NetBSD: xy.c,v 1.57 2006/07/23 22:06:07 ad Exp $	*/
 
 /*
  *
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xy.c,v 1.61 2007/07/29 12:15:40 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xy.c,v 1.57 2006/07/23 22:06:07 ad Exp $");
 
 #undef XYC_DEBUG		/* full debug */
 #undef XYC_DIAG			/* extra sanity checks */
@@ -171,7 +171,7 @@ int	xyc_remove_iorq(struct xyc_softc *);
 int	xyc_reset(struct xyc_softc *, int, struct xy_iorq *, int,
 	    struct xy_softc *);
 inline void xyc_rqinit(struct xy_iorq *, struct xyc_softc *, struct xy_softc *,
-	    int, u_long, int, void *, struct buf *);
+	    int, u_long, int, caddr_t, struct buf *);
 void	xyc_rqtopb(struct xy_iorq *, struct xy_iopb *, int, int);
 void	xyc_start(struct xyc_softc *, struct xy_iorq *);
 int	xyc_startbuf(struct xyc_softc *, struct xy_softc *, struct buf *);
@@ -434,7 +434,7 @@ xycattach(struct device *parent, struct device *self, void *aux)
 	evcnt_attach_dynamic(&xyc->sc_intrcnt, EVCNT_TYPE_INTR, NULL,
 	    xyc->sc_dev.dv_xname, "intr");
 
-	callout_init(&xyc->sc_tick_ch, 0);
+	callout_init(&xyc->sc_tick_ch);
 
 	/* now we must look for disks using autoconfig */
 	for (xa.driveno = 0; xa.driveno < XYC_MAXDEV; xa.driveno++)
@@ -717,7 +717,7 @@ xyclose(dev_t dev, int flag, int fmt, struct lwp *l)
  * xydump: crash dump system
  */
 int 
-xydump(dev_t dev, daddr_t blkno, void *va, size_t sz)
+xydump(dev_t dev, daddr_t blkno, caddr_t va, size_t sz)
 {
 	int     unit, part;
 	struct xy_softc *xy;
@@ -752,7 +752,7 @@ xydump(dev_t dev, daddr_t blkno, void *va, size_t sz)
  * xyioctl: ioctls on XY drives.   based on ioctl's of other netbsd disks.
  */
 int 
-xyioctl(dev_t dev, u_long command, void *addr, int flag, struct lwp *l)
+xyioctl(dev_t dev, u_long command, caddr_t addr, int flag, struct lwp *l)
 {
 	struct xy_softc *xy;
 	struct xd_iocmd *xio;
@@ -828,7 +828,7 @@ xyioctl(dev_t dev, u_long command, void *addr, int flag, struct lwp *l)
 	case DIOSXDCMD:
 		xio = (struct xd_iocmd *) addr;
 		if ((error = kauth_authorize_generic(l->l_cred,
-		    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
+		    KAUTH_GENERIC_ISSUSER, &l->l_acflag)) != 0)
 			return (error);
 		return (xyc_ioctlcmd(xy, dev, xio));
 
@@ -964,18 +964,18 @@ xystrategy(struct buf *bp)
 	    bp->b_blkno < 0 ||
 	    (bp->b_bcount % xy->sc_dk.dk_label->d_secsize) != 0) {
 		bp->b_error = EINVAL;
-		goto done;
+		goto bad;
 	}
 
 	/* There should always be an open first. */
 	if (xy->state == XY_DRIVE_UNKNOWN) {
 		bp->b_error = EIO;
-		goto done;
+		goto bad;
 	}
 	if (xy->state != XY_DRIVE_ONLINE && DISKPART(bp->b_dev) != RAW_PART) {
 		/* no I/O to unlabeled disks, unless raw partition */
 		bp->b_error = EIO;
-		goto done;
+		goto bad;
 	}
 	/* short circuit zero length request */
 
@@ -1021,6 +1021,8 @@ xystrategy(struct buf *bp)
 	splx(s);
 	return;
 
+bad:				/* tells upper layers we have an error */
+	bp->b_flags |= B_ERROR;
 done:				/* tells upper layers we are done with this
 				 * buf */
 	bp->b_resid = bp->b_bcount;
@@ -1065,7 +1067,7 @@ xycintr(void *v)
 
 inline void 
 xyc_rqinit(struct xy_iorq *rq, struct xyc_softc *xyc, struct xy_softc *xy,
-    int md, u_long blk, int cnt, void *db, struct buf *bp)
+    int md, u_long blk, int cnt, caddr_t db, struct buf *bp)
 {
 	rq->xyc = xyc;
 	rq->xy = xy;
@@ -1197,7 +1199,7 @@ xyc_startbuf(struct xyc_softc *xycsc, struct xy_softc *xysc, struct buf *bp)
 	struct xy_iorq *iorq;
 	struct xy_iopb *iopb;
 	u_long  block;
-	void *dbuf;
+	caddr_t dbuf;
 
 	iorq = xysc->xyrq;
 	iopb = iorq->iopb;
@@ -1572,6 +1574,7 @@ xyc_reset(struct xyc_softc *xycsc, int quiet, struct xy_iorq *blastmode,
 			switch (XY_STATE(iorq->mode)) {
 			case XY_SUB_NORM:
 			    iorq->buf->b_error = EIO;
+			    iorq->buf->b_flags |= B_ERROR;
 			    iorq->buf->b_resid =
 			       iorq->sectcnt * XYFM_BPS;
 				/* Sun3: map/unmap regardless of B_PHYS */
@@ -1742,6 +1745,7 @@ xyc_remove_iorq(struct xyc_softc *xycsc)
 			bp = iorq->buf;
 			if (errs) {
 				bp->b_error = EIO;
+				bp->b_flags |= B_ERROR;
 				bp->b_resid = iorq->sectcnt * XYFM_BPS;
 			} else {
 				bp->b_resid = 0;	/* done */
@@ -1910,7 +1914,7 @@ int
 xyc_ioctlcmd(struct xy_softc *xy, dev_t dev, struct xd_iocmd *xio)
 {
 	int     s, err, rqno;
-	void *dvmabuf = NULL;
+	void * dvmabuf = NULL;
 	struct xyc_softc *xycsc;
 
 	/* check sanity of requested command */

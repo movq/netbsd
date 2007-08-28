@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_device.c,v 1.50 2007/06/24 22:56:58 christos Exp $	*/
+/*	$NetBSD: uvm_device.c,v 1.48 2006/09/03 21:37:22 christos Exp $	*/
 
 /*
  *
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_device.c,v 1.50 2007/06/24 22:56:58 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_device.c,v 1.48 2006/09/03 21:37:22 christos Exp $");
 
 #include "opt_uvmhist.h"
 
@@ -141,7 +141,7 @@ udv_attach(void *arg, vm_prot_t accessprot,
 	 * Negative offsets on the object are not allowed.
 	 */
 
-	if (off != UVM_UNKNOWN_OFFSET && off < 0)
+	if (off < 0)
 		return(NULL);
 
 	/*
@@ -187,7 +187,7 @@ udv_attach(void *arg, vm_prot_t accessprot,
 
 			if (lcv->u_flags & UVM_DEVICE_HOLD) {
 				lcv->u_flags |= UVM_DEVICE_WANTED;
-				UVM_UNLOCK_AND_WAIT(lcv, &udv_lock, false,
+				UVM_UNLOCK_AND_WAIT(lcv, &udv_lock, FALSE,
 				    "udv_attach",0);
 				continue;
 			}
@@ -315,7 +315,7 @@ again:
 	if (udv->u_flags & UVM_DEVICE_HOLD) {
 		udv->u_flags |= UVM_DEVICE_WANTED;
 		simple_unlock(&uobj->vmobjlock);
-		UVM_UNLOCK_AND_WAIT(udv, &udv_lock, false, "udv_detach",0);
+		UVM_UNLOCK_AND_WAIT(udv, &udv_lock, FALSE, "udv_detach",0);
 		goto again;
 	}
 

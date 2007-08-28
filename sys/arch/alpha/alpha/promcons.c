@@ -1,4 +1,4 @@
-/* $NetBSD: promcons.c,v 1.32 2007/07/09 20:51:59 ad Exp $ */
+/* $NetBSD: promcons.c,v 1.30 2006/10/01 19:28:43 elad Exp $ */
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: promcons.c,v 1.32 2007/07/09 20:51:59 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: promcons.c,v 1.30 2006/10/01 19:28:43 elad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -77,7 +77,7 @@ void	promstart(struct tty *);
 void	promtimeout(void *);
 int	promparam(struct tty *, struct termios *);
 
-struct callout prom_ch;
+struct callout prom_ch = CALLOUT_INITIALIZER;
 
 int
 promopen(dev_t dev, int flag, int mode, struct lwp *l)
@@ -86,12 +86,6 @@ promopen(dev_t dev, int flag, int mode, struct lwp *l)
 	struct tty *tp;
 	int s;
 	int error = 0, setuptimeout = 0;
-	static bool callo;
-
-	if (!callo) {
-		callout_init(&prom_ch, 0);
-		callo = true;
-	}
  
 	if (!pmap_uses_prom_console() || unit >= 1)
 		return ENXIO;
@@ -175,7 +169,7 @@ prompoll(dev_t dev, int events, struct lwp *l)
 }
 
 int
-promioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+promioctl(dev_t dev, u_long cmd, caddr_t data, int flag, struct lwp *l)
 {
 	int unit = minor(dev);
 	struct tty *tp = prom_tty[unit];
@@ -205,7 +199,7 @@ promstart(struct tty *tp)
 	if (tp->t_outq.c_cc <= tp->t_lowat) {
 		if (tp->t_state & TS_ASLEEP) {
 			tp->t_state &= ~TS_ASLEEP;
-			wakeup((void *)&tp->t_outq);
+			wakeup((caddr_t)&tp->t_outq);
 		}
 		selwakeup(&tp->t_wsel);
 	}

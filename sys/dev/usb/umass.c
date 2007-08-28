@@ -1,4 +1,4 @@
-/*	$NetBSD: umass.c,v 1.124 2007/03/13 13:51:56 drochner Exp $	*/
+/*	$NetBSD: umass.c,v 1.122 2006/11/16 01:33:27 christos Exp $	*/
 
 /*
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -131,7 +131,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umass.c,v 1.124 2007/03/13 13:51:56 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umass.c,v 1.122 2006/11/16 01:33:27 christos Exp $");
 
 #include "atapibus.h"
 #include "scsibus.h"
@@ -258,17 +258,22 @@ Static void umass_dump_buffer(struct umass_softc *sc, u_int8_t *buffer,
 
 USB_MATCH(umass)
 {
-	USB_IFMATCH_START(umass, uaa);
+	USB_MATCH_START(umass, uaa);
 	const struct umass_quirk *quirk;
+	usb_interface_descriptor_t *id;
+
+	if (uaa->iface == NULL)
+		return (UMATCH_NONE);
 
 	quirk = umass_lookup(uaa->vendor, uaa->product);
 	if (quirk != NULL)
 		return (quirk->uq_match);
 
-	if (uaa->class != UICLASS_MASS)
+	id = usbd_get_interface_descriptor(uaa->iface);
+	if (id == NULL || id->bInterfaceClass != UICLASS_MASS)
 		return (UMATCH_NONE);
 
-	switch (uaa->subclass) {
+	switch (id->bInterfaceSubClass) {
 	case UISUBCLASS_RBC:
 	case UISUBCLASS_SFF8020I:
 	case UISUBCLASS_QIC157:
@@ -280,7 +285,7 @@ USB_MATCH(umass)
 		return (UMATCH_IFACECLASS);
 	}
 
-	switch (uaa->proto) {
+	switch (id->bInterfaceProtocol) {
 	case UIPROTO_MASS_CBI_I:
 	case UIPROTO_MASS_CBI:
 	case UIPROTO_MASS_BBB_OLD:
@@ -295,7 +300,7 @@ USB_MATCH(umass)
 
 USB_ATTACH(umass)
 {
-	USB_IFATTACH_START(umass, sc, uaa);
+	USB_ATTACH_START(umass, sc, uaa);
 	const struct umass_quirk *quirk;
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
@@ -329,8 +334,12 @@ USB_ATTACH(umass)
 		sc->sc_busquirks = 0;
 	}
 
+	id = usbd_get_interface_descriptor(sc->sc_iface);
+	if (id == NULL)
+		USB_ATTACH_ERROR_RETURN;
+
 	if (sc->sc_wire == UMASS_WPROTO_UNSPEC) {
-		switch (uaa->proto) {
+		switch (id->bInterfaceProtocol) {
 		case UIPROTO_MASS_CBI:
 			sc->sc_wire = UMASS_WPROTO_CBI;
 			break;
@@ -345,13 +354,13 @@ USB_ATTACH(umass)
 			DPRINTF(UDMASS_GEN,
 				("%s: Unsupported wire protocol %u\n",
 				USBDEVNAME(sc->sc_dev),
-				uaa->proto));
+				id->bInterfaceProtocol));
 			USB_ATTACH_ERROR_RETURN;
 		}
 	}
 
 	if (sc->sc_cmd == UMASS_CPROTO_UNSPEC) {
-		switch (uaa->subclass) {
+		switch (id->bInterfaceSubClass) {
 		case UISUBCLASS_SCSI:
 			sc->sc_cmd = UMASS_CPROTO_SCSI;
 			break;
@@ -370,7 +379,7 @@ USB_ATTACH(umass)
 			DPRINTF(UDMASS_GEN,
 				("%s: Unsupported command protocol %u\n",
 				USBDEVNAME(sc->sc_dev),
-				uaa->subclass));
+				id->bInterfaceSubClass));
 			USB_ATTACH_ERROR_RETURN;
 		}
 	}
@@ -435,7 +444,6 @@ USB_ATTACH(umass)
 	 * The endpoint addresses are not fixed, so we have to read them
 	 * from the device descriptors of the current interface.
 	 */
-	id = usbd_get_interface_descriptor(sc->sc_iface);
 	for (i = 0 ; i < id->bNumEndpoints ; i++) {
 		ed = usbd_interface2endpoint_descriptor(sc->sc_iface, i);
 		if (ed == NULL) {
@@ -1306,12 +1314,6 @@ umass_cbi_adsc(struct umass_softc *sc, char *buffer, int buflen,
 	KASSERT(sc->sc_wire & (UMASS_WPROTO_CBI|UMASS_WPROTO_CBI_I),
 		("sc->sc_wire == 0x%02x wrong for umass_cbi_adsc\n",
 		sc->sc_wire));
-
-	if ((sc->sc_cmd == UMASS_CPROTO_RBC) &&
-	    (sc->sc_quirks & UMASS_QUIRK_RBC_PAD_TO_12) != 0 && buflen < 12) {
-		(void)memset(buffer + buflen, 0, 12 - buflen);
-		buflen = 12;
-	}
 
 	sc->sc_req.bmRequestType = UT_WRITE_CLASS_INTERFACE;
 	sc->sc_req.bRequest = UR_CBI_ADSC;

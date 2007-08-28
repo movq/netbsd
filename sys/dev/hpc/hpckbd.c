@@ -1,4 +1,4 @@
-/*	$NetBSD: hpckbd.c,v 1.22 2007/03/04 06:01:47 christos Exp $ */
+/*	$NetBSD: hpckbd.c,v 1.20 2006/11/16 01:32:50 christos Exp $ */
 
 /*-
  * Copyright (c) 1999-2001 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpckbd.c,v 1.22 2007/03/04 06:01:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpckbd.c,v 1.20 2006/11/16 01:32:50 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -57,6 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: hpckbd.c,v 1.22 2007/03/04 06:01:47 christos Exp $")
 #include <dev/wscons/wsksymdef.h>
 #include <dev/wscons/wsconsio.h>
 #include <dev/wscons/wskbdvar.h>
+#include <dev/wscons/wsksymdef.h>
 #include <dev/wscons/wsksymvar.h>
 #include <dev/pckbport/wskbdmap_mfii.h>
 #ifdef WSDISPLAY_COMPAT_RAWKBD
@@ -117,7 +118,7 @@ CFATTACH_DECL(hpckbd, sizeof(struct hpckbd_softc),
 /* wskbd accessopts */
 int	hpckbd_enable(void *, int);
 void	hpckbd_set_leds(void *, int);
-int	hpckbd_ioctl(void *, u_long, void *, int, struct lwp *);
+int	hpckbd_ioctl(void *, u_long, caddr_t, int, struct lwp *);
 
 /* consopts */
 struct	hpckbd_core hpckbd_consdata;
@@ -467,7 +468,7 @@ hpckbd_set_leds(void *arg, int leds)
 }
 
 int
-hpckbd_ioctl(void *arg, u_long cmd, void *data, int flag,
+hpckbd_ioctl(void *arg, u_long cmd, caddr_t data, int flag,
 	     struct lwp *l)
 {
 #ifdef WSDISPLAY_COMPAT_RAWKBD

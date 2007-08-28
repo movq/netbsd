@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_ioctl.c,v 1.30 2007/03/04 06:01:33 christos Exp $	 */
+/*	$NetBSD: svr4_ioctl.c,v 1.27 2005/12/11 12:20:26 christos Exp $	 */
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_ioctl.c,v 1.30 2007/03/04 06:01:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_ioctl.c,v 1.27 2005/12/11 12:20:26 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -48,10 +48,12 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_ioctl.c,v 1.30 2007/03/04 06:01:33 christos Exp
 #include <sys/termios.h>
 #include <sys/tty.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <net/if.h>
 #include <sys/malloc.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/sys/socket.h>
@@ -110,7 +112,7 @@ svr4_sys_ioctl(l, v, retval)
 	u_long		 cmd;
 	int		 error;
 	int (*fun) __P((struct file *, struct lwp *, register_t *,
-			int, u_long, void *));
+			int, u_long, caddr_t));
 #ifdef DEBUG_SVR4
 	char		 dir[4];
 	char		 c;

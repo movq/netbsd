@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_ntptime.c,v 1.43 2007/03/04 06:03:05 christos Exp $	*/
+/*	$NetBSD: kern_ntptime.c,v 1.41 2006/11/01 10:17:58 yamt Exp $	*/
 #include <sys/types.h> 	/* XXX to get __HAVE_TIMECOUNTER, remove
 			   after all ports are converted. */
 #ifdef __HAVE_TIMECOUNTER
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("$FreeBSD: src/sys/kern/kern_ntptime.c,v 1.59 2005/05/28 14:34:41 rwatson Exp $"); */
-__KERNEL_RCSID(0, "$NetBSD: kern_ntptime.c,v 1.43 2007/03/04 06:03:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_ntptime.c,v 1.41 2006/11/01 10:17:58 yamt Exp $");
 
 #include "opt_ntp.h"
 #include "opt_compat_netbsd.h"
@@ -56,6 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_ntptime.c,v 1.43 2007/03/04 06:03:05 christos E
 #include <sys/kauth.h>
 
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <machine/cpu.h>
@@ -242,7 +243,7 @@ sys_ntp_adjtime(l, v, retval)
 	struct timex ntv;
 	int error = 0;
 
-	error = copyin((void *)SCARG(uap, tp), (void *)&ntv, sizeof(ntv));
+	error = copyin((caddr_t)SCARG(uap, tp), (caddr_t)&ntv, sizeof(ntv));
 	if (error != 0)
 		return (error);
 
@@ -253,7 +254,7 @@ sys_ntp_adjtime(l, v, retval)
 
 	ntp_adjtime1(&ntv);
 
-	error = copyout((void *)&ntv, (void *)SCARG(uap, tp), sizeof(ntv));
+	error = copyout((caddr_t)&ntv, (caddr_t)SCARG(uap, tp), sizeof(ntv));
 	if (!error)
 		*retval = ntp_timestatus();
 
@@ -903,7 +904,7 @@ hardpps(struct timespec *tsp,		/* time at PPS */
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_ntptime.c,v 1.43 2007/03/04 06:03:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_ntptime.c,v 1.41 2006/11/01 10:17:58 yamt Exp $");
 
 #include "opt_ntp.h"
 #include "opt_compat_netbsd.h"
@@ -922,6 +923,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_ntptime.c,v 1.43 2007/03/04 06:03:05 christos E
 #include <sys/kauth.h>
 
 #include <sys/mount.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <machine/cpu.h>
@@ -1011,7 +1013,7 @@ sys_ntp_adjtime(l, v, retval)
 	struct timex ntv;
 	int error = 0;
 
-	error = copyin((void *)SCARG(uap, tp), (void *)&ntv, sizeof(ntv));
+	error = copyin((caddr_t)SCARG(uap, tp), (caddr_t)&ntv, sizeof(ntv));
 	if (error != 0)
 		return (error);
 
@@ -1022,7 +1024,7 @@ sys_ntp_adjtime(l, v, retval)
 
 	ntp_adjtime1(&ntv);
 
-	error = copyout((void *)&ntv, (void *)SCARG(uap, tp), sizeof(ntv));
+	error = copyout((caddr_t)&ntv, (caddr_t)SCARG(uap, tp), sizeof(ntv));
 	if (error == 0)
 		*retval = ntp_timestatus();
 
@@ -1154,7 +1156,7 @@ sys___ntp_gettime30(struct lwp *l, void *v, register_t *retval)
 	if (SCARG(uap, ntvp)) {
 		ntp_gettime(&ntv);
 
-		error = copyout((void *)&ntv, (void *)SCARG(uap, ntvp),
+		error = copyout((caddr_t)&ntv, (caddr_t)SCARG(uap, ntvp),
 				sizeof(ntv));
 	}
 	if (!error) {
@@ -1180,7 +1182,7 @@ compat_30_sys_ntp_gettime(struct lwp *l, void *v, register_t *retval)
 		ontv.maxerror = ntv.maxerror;
 		ontv.esterror = ntv.esterror;
 
-		error = copyout((void *)&ontv, (void *)SCARG(uap, ntvp),
+		error = copyout((caddr_t)&ontv, (caddr_t)SCARG(uap, ntvp),
 				sizeof(ontv));
  	}
 	if (!error)

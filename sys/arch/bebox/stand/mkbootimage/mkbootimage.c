@@ -1,4 +1,4 @@
-/*	$NetBSD: mkbootimage.c,v 1.7 2006/12/09 22:02:24 chs Exp $	*/
+/*	$NetBSD: mkbootimage.c,v 1.6.22.1 2007/01/12 23:26:38 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.

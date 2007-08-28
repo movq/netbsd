@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_pglist.c,v 1.38 2007/07/21 19:21:55 ad Exp $	*/
+/*	$NetBSD: uvm_pglist.c,v 1.36 2006/09/15 15:51:13 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_pglist.c,v 1.38 2007/07/21 19:21:55 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_pglist.c,v 1.36 2006/09/15 15:51:13 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -232,7 +232,7 @@ uvm_pglistalloc_contig(int num, paddr_t low, paddr_t high, paddr_t alignment,
 {
 	int fl, psi;
 	struct vm_physseg *ps;
-	int error;
+	int s, error;
 
 	/* Default to "lose". */
 	error = ENOMEM;
@@ -240,7 +240,7 @@ uvm_pglistalloc_contig(int num, paddr_t low, paddr_t high, paddr_t alignment,
 	/*
 	 * Block all memory allocation and lock the free list.
 	 */
-	mutex_spin_enter(&uvm_fpageqlock);
+	s = uvm_lock_fpageq();
 
 	/* Are there even any free pages? */
 	if (uvmexp.free <= (uvmexp.reserve_pagedaemon + uvmexp.reserve_kernel))
@@ -279,7 +279,7 @@ out:
 	 */
 
 	uvm_kick_pdaemon();
-	mutex_spin_exit(&uvm_fpageqlock);
+	uvm_unlock_fpageq(s);
 	return (error);
 }
 
@@ -327,7 +327,7 @@ static int
 uvm_pglistalloc_simple(int num, paddr_t low, paddr_t high,
     struct pglist *rlist, int waitok)
 {
-	int fl, psi, error;
+	int fl, psi, s, error;
 	struct vm_physseg *ps;
 
 	/* Default to "lose". */
@@ -337,7 +337,7 @@ again:
 	/*
 	 * Block all memory allocation and lock the free list.
 	 */
-	mutex_spin_enter(&uvm_fpageqlock);
+	s = uvm_lock_fpageq();
 
 	/* Are there even any free pages? */
 	if (uvmexp.free <= (uvmexp.reserve_pagedaemon + uvmexp.reserve_kernel))
@@ -371,8 +371,7 @@ out:
 	 */
 
 	uvm_kick_pdaemon();
-	mutex_spin_exit(&uvm_fpageqlock);
-
+	uvm_unlock_fpageq(s);
 	if (error) {
 		if (waitok) {
 			/* XXX perhaps some time limitation? */
@@ -435,14 +434,15 @@ void
 uvm_pglistfree(struct pglist *list)
 {
 	struct vm_page *pg;
+	int s;
 
 	/*
 	 * Lock the free list and free each page.
 	 */
 
-	mutex_spin_enter(&uvm_fpageqlock);
+	s = uvm_lock_fpageq();
 	while ((pg = TAILQ_FIRST(list)) != NULL) {
-		bool iszero;
+		boolean_t iszero;
 
 		KASSERT(!uvmpdpol_pageisqueued_p(pg));
 		TAILQ_REMOVE(list, pg, pageq);
@@ -467,5 +467,5 @@ uvm_pglistfree(struct pglist *list)
 			uvm.page_idle_zero = vm_page_zero_enable;
 		STAT_DECR(uvm_pglistalloc_npages);
 	}
-	mutex_spin_exit(&uvm_fpageqlock);
+	uvm_unlock_fpageq(s);
 }

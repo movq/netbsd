@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gfe.c,v 1.24 2007/08/26 22:45:57 dyoung Exp $	*/
+/*	$NetBSD: if_gfe.c,v 1.20 2006/03/29 06:55:32 thorpej Exp $	*/
 
 /*
  * Copyright (c) 2002 Allegro Networks, Inc., Wasabi Systems, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gfe.c,v 1.24 2007/08/26 22:45:57 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gfe.c,v 1.20 2006/03/29 06:55:32 thorpej Exp $");
 
 #include "opt_inet.h"
 #include "bpfilter.h"
@@ -151,7 +151,7 @@ STATIC int gfe_dmamem_alloc(struct gfe_softc *, struct gfe_dmamem *, int,
 	size_t, int);
 STATIC void gfe_dmamem_free(struct gfe_softc *, struct gfe_dmamem *);
 
-STATIC int gfe_ifioctl (struct ifnet *, u_long, void *);
+STATIC int gfe_ifioctl (struct ifnet *, u_long, caddr_t);
 STATIC void gfe_ifstart (struct ifnet *);
 STATIC void gfe_ifwatchdog (struct ifnet *);
 
@@ -245,7 +245,7 @@ gfe_attach(struct device *parent, struct device *self, void *aux)
 		aprint_error(": failed to map registers\n");
 	}
 
-	callout_init(&sc->sc_co, 0);
+	callout_init(&sc->sc_co);
 
 	data = bus_space_read_4(sc->sc_gt_memt, sc->sc_gt_memh, ETH_EPAR);
 	phyaddr = ETH_EPAR_PhyAD_GET(data, sc->sc_macno);
@@ -426,7 +426,7 @@ gfe_dmamem_free(struct gfe_softc *sc, struct gfe_dmamem *gdm)
 }
 
 int
-gfe_ifioctl(struct ifnet *ifp, u_long cmd, void *data)
+gfe_ifioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
 	struct gfe_softc * const sc = ifp->if_softc;
 	struct ifreq *ifr = (struct ifreq *) data;
@@ -777,7 +777,7 @@ gfe_rx_get(struct gfe_softc *sc, enum gfe_rxprio rxprio)
 		    (rxq->rxq_cmdsts & RX_STS_M) == 0 ||
 		    (rxq->rxq_cmdsts & RX_STS_HE) ||
 		    (eh->ether_dhost[0] & 1) != 0 ||
-		    memcmp(eh->ether_dhost, CLLADDR(ifp->if_sadl),
+		    memcmp(eh->ether_dhost, LLADDR(ifp->if_sadl),
 			ETHER_ADDR_LEN) == 0) {
 			(*ifp->if_input)(ifp, m);
 			m = NULL;
@@ -1120,7 +1120,7 @@ gfe_tx_enqueue(struct gfe_softc *sc, enum gfe_txprio txprio)
 	intrmask = sc->sc_intrmask;
 
 	m_copydata(m, 0, m->m_pkthdr.len,
-	    (char *)txq->txq_buf_mem.gdm_kva + (int)txq->txq_outptr);
+	    txq->txq_buf_mem.gdm_kva + txq->txq_outptr);
 	bus_dmamap_sync(sc->sc_dmat, txq->txq_buf_mem.gdm_map,
 	    txq->txq_outptr, buflen, BUS_DMASYNC_PREWRITE);
 	txd->ed_bufptr = htogt32(txq->txq_buf_busaddr + txq->txq_outptr);
@@ -1881,7 +1881,7 @@ gfe_hash_fill(struct gfe_softc *sc)
 	GE_FUNC_ENTER(sc, "gfe_hash_fill");
 
 	error = gfe_hash_entry_op(sc, GE_HASH_ADD, GE_RXPRIO_HI,
-	    CLLADDR(sc->sc_ec.ec_if.if_sadl));
+	    LLADDR(sc->sc_ec.ec_if.if_sadl));
 	if (error)
 		GE_FUNC_EXIT(sc, "!");
 		return error;

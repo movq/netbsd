@@ -1,4 +1,4 @@
-/*	$NetBSD: auich.c,v 1.117 2007/03/04 06:02:16 christos Exp $	*/
+/*	$NetBSD: auich.c,v 1.115 2006/11/16 01:33:08 christos Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2004, 2005 The NetBSD Foundation, Inc.
@@ -118,7 +118,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auich.c,v 1.117 2007/03/04 06:02:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auich.c,v 1.115 2006/11/16 01:33:08 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -147,7 +147,7 @@ __KERNEL_RCSID(0, "$NetBSD: auich.c,v 1.117 2007/03/04 06:02:16 christos Exp $")
 
 struct auich_dma {
 	bus_dmamap_t map;
-	void *addr;
+	caddr_t addr;
 	bus_dma_segment_t segs[1];
 	int nsegs;
 	size_t size;
@@ -190,7 +190,7 @@ struct auich_softc {
 	int sc_codecnum;
 	int sc_codectype;
 	enum ac97_host_flags sc_codecflags;
-	bool sc_spdif;
+	boolean_t sc_spdif;
 
 	/* DMA scatter-gather lists. */
 	bus_dmamap_t sc_cddmamap;
@@ -303,7 +303,7 @@ static int	auich_read_codec(void *, uint8_t, uint16_t *);
 static int	auich_write_codec(void *, uint8_t, uint16_t);
 static int	auich_reset_codec(void *);
 static enum ac97_host_flags	auich_flags_codec(void *);
-static void	auich_spdif_event(void *, bool);
+static void	auich_spdif_event(void *, boolean_t);
 
 static const struct audio_hw_if auich_hw_if = {
 	auich_open,
@@ -911,7 +911,7 @@ auich_flags_codec(void *v)
 }
 
 static void
-auich_spdif_event(void *addr, bool flag)
+auich_spdif_event(void *addr, boolean_t flag)
 {
 	struct auich_softc *sc;
 
@@ -1422,7 +1422,7 @@ auich_trigger_output(void *v, void *start, void *end, int blksize,
 		return EINVAL;
 	}
 
-	size = (size_t)((char *)end - (char *)start);
+	size = (size_t)((caddr_t)end - (caddr_t)start);
 
 	sc->pcmo.intr = intr;
 	sc->pcmo.arg = arg;
@@ -1458,7 +1458,7 @@ auich_trigger_input(void *v, void *start, void *end, int blksize,
 		return EINVAL;
 	}
 
-	size = (size_t)((char *)end - (char *)start);
+	size = (size_t)((caddr_t)end - (caddr_t)start);
 
 	sc->pcmi.intr = intr;
 	sc->pcmi.arg = arg;
@@ -1573,7 +1573,7 @@ auich_alloc_cdata(struct auich_softc *sc)
 
 	if ((error = bus_dmamem_map(sc->dmat, &seg, rseg,
 				    sizeof(struct auich_cdata),
-				    (void **) &sc->sc_cdata,
+				    (caddr_t *) &sc->sc_cdata,
 				    sc->sc_dmamap_flags)) != 0) {
 		printf("%s: unable to map control data, error = %d\n",
 		    sc->sc_dev.dv_xname, error);
@@ -1605,7 +1605,7 @@ auich_alloc_cdata(struct auich_softc *sc)
  fail_3:
 	bus_dmamap_destroy(sc->dmat, sc->sc_cddmamap);
  fail_2:
-	bus_dmamem_unmap(sc->dmat, (void *) sc->sc_cdata,
+	bus_dmamem_unmap(sc->dmat, (caddr_t) sc->sc_cdata,
 	    sizeof(struct auich_cdata));
  fail_1:
 	bus_dmamem_free(sc->dmat, &seg, rseg);

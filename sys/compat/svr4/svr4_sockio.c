@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_sockio.c,v 1.30 2007/05/29 21:32:28 christos Exp $	 */
+/*	$NetBSD: svr4_sockio.c,v 1.26 2006/11/16 01:32:44 christos Exp $	 */
 
 /*-
  * Copyright (c) 1995 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_sockio.c,v 1.30 2007/05/29 21:32:28 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_sockio.c,v 1.26 2006/11/16 01:32:44 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -48,14 +48,15 @@ __KERNEL_RCSID(0, "$NetBSD: svr4_sockio.c,v 1.30 2007/05/29 21:32:28 christos Ex
 #include <sys/termios.h>
 #include <sys/tty.h>
 #include <sys/socket.h>
+#include <sys/ioctl.h>
 #include <sys/mount.h>
 #include <net/if.h>
 #include <sys/malloc.h>
 
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 
 #include <compat/sys/socket.h>
-#include <compat/sys/sockio.h>
 
 #include <compat/svr4/svr4_types.h>
 #include <compat/svr4/svr4_util.h>
@@ -93,7 +94,7 @@ bsd_to_svr4_flags(bf)
 
 int
 svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
-    int fd, u_long cmd, void *data)
+    int fd, u_long cmd, caddr_t data)
 {
 	int error;
 	int (*ctl)(struct file *, u_long,  void *, struct lwp *) =
@@ -163,7 +164,7 @@ svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 
 	case SVR4_SIOCGIFFLAGS:
 		{
-			struct oifreq br;
+			struct ifreq br;
 			struct svr4_ifreq sr;
 
 			if ((error = copyin(data, &sr, sizeof(sr))) != 0)
@@ -173,7 +174,7 @@ svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 			    sizeof(br.ifr_name));
 
 			if ((error = (*ctl)(fp, SIOCGIFFLAGS,
-					    (void *) &br, l)) != 0) {
+					    (caddr_t) &br, l)) != 0) {
 				DPRINTF(("SIOCGIFFLAGS %s: error %d\n",
 					 sr.svr4_ifr_name, error));
 				return error;
@@ -193,12 +194,12 @@ svr4_sock_ioctl(struct file *fp, struct lwp *l, register_t *retval,
 				return error;
 
 			DPRINTF(("ifreq %ld svr4_ifreq %ld ifc_len %d\n",
-				(unsigned long)sizeof(struct oifreq),
+				(unsigned long)sizeof(struct ifreq),
 				(unsigned long)sizeof(struct svr4_ifreq),
 				sc.svr4_ifc_len));
 
-			if ((error = (*ctl)(fp, OOSIOCGIFCONF,
-					    (void *) &sc, l)) != 0)
+			if ((error = (*ctl)(fp, OSIOCGIFCONF,
+					    (caddr_t) &sc, l)) != 0)
 				return error;
 
 			DPRINTF(("SIOCGIFCONF\n"));

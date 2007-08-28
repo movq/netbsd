@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_congctl.c,v 1.13 2007/07/11 21:34:16 xtraeme Exp $	*/
+/*	$NetBSD: tcp_congctl.c,v 1.12 2006/11/16 01:33:45 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2001, 2005, 2006 The NetBSD Foundation, Inc.
@@ -142,7 +142,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_congctl.c,v 1.13 2007/07/11 21:34:16 xtraeme Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_congctl.c,v 1.12 2006/11/16 01:33:45 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_tcp_debug.h"
@@ -160,7 +160,7 @@ __KERNEL_RCSID(0, "$NetBSD: tcp_congctl.c,v 1.13 2007/07/11 21:34:16 xtraeme Exp
 #include <sys/pool.h>
 #include <sys/domain.h>
 #include <sys/kernel.h>
-#include <sys/mutex.h>
+#include <sys/lock.h>
 
 #include <net/if.h>
 #include <net/route.h>
@@ -230,7 +230,7 @@ struct tcp_congctlent {
 };
 TAILQ_HEAD(, tcp_congctlent) tcp_congctlhd;
 
-static kmutex_t tcp_congctl_mtx;
+struct simplelock tcp_congctl_slock;
 
 void
 tcp_congctl_init(void)
@@ -238,7 +238,7 @@ tcp_congctl_init(void)
 	int r;
 	
 	TAILQ_INIT(&tcp_congctlhd);
-	mutex_init(&tcp_congctl_mtx, MUTEX_DEFAULT, IPL_NONE);
+	simple_lock_init(&tcp_congctl_slock);
 
 	/* Base algorithms. */
 	r = tcp_congctl_register("reno", &tcp_reno_ctl);
@@ -324,11 +324,11 @@ tcp_congctl_select(struct tcpcb *tp, const char *name)
 	TAILQ_FOREACH(tccp, &tcp_congctlhd, congctl_ent)
 		if (!strcmp(name, tccp->congctl_name)) {
 			if (tp) {
-				mutex_enter(&tcp_congctl_mtx);
+				simple_lock(&tcp_congctl_slock);
 				tp->t_congctl->refcnt--;
 				tp->t_congctl = tccp->congctl_ctl;
 				tp->t_congctl->refcnt++;
-				mutex_exit(&tcp_congctl_mtx);
+				simple_unlock(&tcp_congctl_slock);
 			} else {
 				tcp_congctl_global = tccp->congctl_ctl;
 				strlcpy(tcp_congctl_global_name,

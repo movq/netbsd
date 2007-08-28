@@ -1,4 +1,4 @@
-/* $NetBSD: hd44780_subr.c,v 1.11 2007/07/10 22:53:29 ad Exp $ */
+/* $NetBSD: hd44780_subr.c,v 1.9.12.1 2007/11/04 17:03:13 pavel Exp $ */
 
 /*
  * Copyright (c) 2002 Dennis I. Chernoivanov
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd44780_subr.c,v 1.11 2007/07/10 22:53:29 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd44780_subr.c,v 1.9.12.1 2007/11/04 17:03:13 pavel Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -88,7 +88,7 @@ const struct wsdisplay_emulops hlcd_emulops = {
 	hlcd_allocattr
 };
 
-static int	hlcd_ioctl(void *, void *, u_long, void *, int, struct lwp *);
+static int	hlcd_ioctl(void *, void *, u_long, caddr_t, int, struct lwp *);
 static paddr_t	hlcd_mmap(void *, void *, off_t, int);
 static int	hlcd_alloc_screen(void *, const struct wsscreen_descr *,
 		    void **, int *, int *, long *);
@@ -161,10 +161,11 @@ hlcd_copycols(id, row, srccol, dstcol, ncols)
 		ncols = hdscr->hlcd_sc->sc_cols - srccol;
 
 	if (row > 0 && (hdscr->hlcd_sc->sc_flags & (HD_MULTILINE|HD_MULTICHIP)))
-		bcopy(&hdscr->image[hdscr->hlcd_sc->sc_cols * row + srccol],
-		    &hdscr->image[hdscr->hlcd_sc->sc_cols * row + dstcol], ncols);
+		memmove(&hdscr->image[hdscr->hlcd_sc->sc_cols * row + dstcol],
+		    &hdscr->image[hdscr->hlcd_sc->sc_cols * row + srccol],
+		    ncols);
 	else
-		bcopy(&hdscr->image[srccol], &hdscr->image[dstcol], ncols);
+		memmove(&hdscr->image[dstcol], &hdscr->image[srccol], ncols);
 }
 
 
@@ -200,7 +201,7 @@ hlcd_copyrows(id, srcrow, dstrow, nrows)
 
 	if (!(hdscr->hlcd_sc->sc_flags & (HD_MULTILINE|HD_MULTICHIP)))
 		return;
-	bcopy(&hdscr->image[srcrow * ncols], &hdscr->image[dstrow * ncols],
+	memmove(&hdscr->image[dstrow * ncols], &hdscr->image[srcrow * ncols],
 	    nrows * ncols);
 }
 
@@ -232,7 +233,7 @@ hlcd_ioctl(v, vs, cmd, data, flag, l)
 	void *v;
 	void *vs;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 	int flag;
 	struct lwp *l;
 {
@@ -429,7 +430,7 @@ hd44780_attach_subr(sc)
 	memset(sc->sc_screen.image, ' ', PAGE_SIZE);
 	sc->sc_curscr = NULL;
 	sc->sc_curchip = 0;
-	callout_init(&sc->redraw, 0);
+	callout_init(&sc->redraw);
 	callout_setfunc(&sc->redraw, hlcd_redraw, sc);
 }
 
@@ -507,7 +508,7 @@ int
 hd44780_ioctl_subr(sc, cmd, data)
 	struct hd44780_chip *sc;
 	u_long cmd;
-	void *data;
+	caddr_t data;
 {
 	u_int8_t tmp;
 	int error = 0;
@@ -703,6 +704,7 @@ hd44780_ddram_redraw(sc, en, io)
 
 	hd44780_ir_write(sc, en, cmd_clear());
 	hd44780_ir_write(sc, en, cmd_rethome());
+	hd44780_ir_write(sc, en, cmd_ddramset(HD_ROW1_ADDR));
 	for (i = 0; (i < io->len) && (i < sc->sc_cols); i++) {
 		hd44780_dr_write(sc, en, io->buf[i]);
 	}

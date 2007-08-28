@@ -1,4 +1,4 @@
-/*  $NetBSD: if_wpireg.h,v 1.5 2007/07/18 18:49:17 degroote Exp $    */
+/*  $NetBSD: if_wpireg.h,v 1.2.2.1 2007/07/27 10:12:58 liamjfoy Exp $    */
 
 /*-
  * Copyright (c) 2006

@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.122 2007/05/21 15:06:18 tsutsui Exp $	*/
+/*	$NetBSD: machdep.c,v 1.116 2006/10/21 05:54:32 mrg Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.122 2007/05/21 15:06:18 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.116 2006/10/21 05:54:32 mrg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_hpux.h"
@@ -104,6 +104,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.122 2007/05/21 15:06:18 tsutsui Exp $"
 #include <sys/core.h>
 #include <sys/kcore.h>
 #include <sys/vnode.h>
+#include <sys/sa.h>
 #include <sys/syscallargs.h>
 #include <sys/ksyms.h>
 
@@ -157,6 +158,7 @@ struct vm_map *phys_map = NULL;
  */
 struct	mvmeprom_brdid  boardid;
 
+caddr_t	msgbufaddr;		/* KVA of message buffer */
 paddr_t msgbufpa;		/* PA of message buffer */
 
 int	maxmem;			/* max memory per process */
@@ -192,7 +194,7 @@ void	initcpu __P((void));
 void	dumpsys __P((void));
 
 int	cpu_dumpsize __P((void));
-int	cpu_dump __P((int (*)(dev_t, daddr_t, void *, size_t), daddr_t *));
+int	cpu_dump __P((int (*)(dev_t, daddr_t, caddr_t, size_t), daddr_t *));
 void	cpu_init_kcore_hdr __P((void));
 u_long	cpu_dump_mempagecnt __P((void));
 int	cpu_exec_aout_makecmds __P((struct lwp *, struct exec_package *));
@@ -513,19 +515,19 @@ cpu_startup()
 	 * limits the number of processes exec'ing at any time.
 	 */
 	exec_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 16*NCARGS, VM_MAP_PAGEABLE, false, NULL);
+				 16*NCARGS, VM_MAP_PAGEABLE, FALSE, NULL);
 	/*
 	 * Allocate a submap for physio
 	 */
 	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
-				 VM_PHYS_SIZE, 0, false, NULL);
+				 VM_PHYS_SIZE, 0, FALSE, NULL);
 
 	/*
 	 * Finally, allocate mbuf cluster submap.
 	 */
 	mb_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
 				 nmbclusters * mclbytes, VM_MAP_INTRSAFE,
-				 false, NULL);
+				 FALSE, NULL);
 
 #ifdef DEBUG
 	pmapdebug = opmapdebug;
@@ -730,7 +732,7 @@ cpu_reboot(howto, bootstr)
 {
 
 	/* take a snap shot before clobbering any registers */
-	if (curlwp->l_addr)
+	if (curlwp && curlwp->l_addr)
 		savectx(&curlwp->l_addr->u_pcb);
 
 	/* Save the RB_SBOOT flag. */
@@ -886,7 +888,7 @@ cpu_dump_mempagecnt()
  */
 int
 cpu_dump(dump, blknop)
-	int (*dump) __P((dev_t, daddr_t, void *, size_t)); 
+	int (*dump) __P((dev_t, daddr_t, caddr_t, size_t)); 
 	daddr_t *blknop;
 {
 	int buf[MDHDRSIZE / sizeof(int)]; 
@@ -903,7 +905,7 @@ cpu_dump(dump, blknop)
 	kseg->c_size = MDHDRSIZE - ALIGN(sizeof(kcore_seg_t));
 
 	memcpy(chdr, &cpu_kcore_hdr, sizeof(cpu_kcore_hdr_t));
-	error = (*dump)(dumpdev, *blknop, (void *)buf, sizeof(buf));
+	error = (*dump)(dumpdev, *blknop, (caddr_t)buf, sizeof(buf));
 	*blknop += btodb(sizeof(buf));
 	return (error);
 }
@@ -972,7 +974,7 @@ dumpsys()
 	u_long maddr;
 	int psize;
 	daddr_t blkno;
-	int (*dump) __P((dev_t, daddr_t, void *, size_t));
+	int (*dump) __P((dev_t, daddr_t, caddr_t, size_t));
 	int error;
 
 	/* XXX Should save registers. */
@@ -1080,7 +1082,7 @@ void
 initcpu()
 {
 #if defined(M68060)
-	extern void *vectab[256];
+	extern caddr_t vectab[256];
 #if defined(M060SP)
 	extern u_int8_t I_CALL_TOP[];
 	extern u_int8_t FP_CALL_TOP[];
@@ -1187,29 +1189,4 @@ cpu_exec_aout_makecmds(l, epp)
     struct exec_package *epp;
 {
     return ENOEXEC;
-}
-
-const static int ipl2psl_table[] = {
-	[IPL_NONE] = PSL_IPL0,
-	[IPL_SOFT] = PSL_IPL1,
-	[IPL_SOFTCLOCK] = PSL_IPL1,
-	[IPL_SOFTNET] = PSL_IPL1,
-	[IPL_SOFTSERIAL] = PSL_IPL1,
-	[IPL_BIO] = PSL_IPL2,
-	[IPL_NET] = PSL_IPL3,
-	[IPL_TTY] = PSL_IPL3,
-	/* IPL_LPT == IPL_TTY */
-	[IPL_VM] = PSL_IPL3,
-	[IPL_SERIAL] = PSL_IPL4,
-	[IPL_CLOCK] = PSL_IPL5,
-	[IPL_HIGH] = PSL_IPL7,
-	/* IPL_SCHED == IPL_HIGH */
-	/* IPL_LOCK == IPL_HIGH */
-};
-
-ipl_cookie_t
-makeiplcookie(ipl_t ipl)
-{
-
-	return (ipl_cookie_t){._psl = ipl2psl_table[ipl] | PSL_S};
 }
