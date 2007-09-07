@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_mutex.c,v 1.31 2007/08/16 14:53:45 ad Exp $	*/
+/*	$NetBSD: pthread_mutex.c,v 1.32 2007/09/07 14:09:28 ad Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2003, 2006, 2007 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_mutex.c,v 1.31 2007/08/16 14:53:45 ad Exp $");
+__RCSID("$NetBSD: pthread_mutex.c,v 1.32 2007/09/07 14:09:28 ad Exp $");
 
 #include <errno.h>
 #include <limits.h>
@@ -46,6 +46,8 @@ __RCSID("$NetBSD: pthread_mutex.c,v 1.31 2007/08/16 14:53:45 ad Exp $");
 
 #include "pthread.h"
 #include "pthread_int.h"
+
+#ifndef	PTHREAD__HAVE_ATOMIC
 
 static int pthread_mutex_lock_slow(pthread_t, pthread_mutex_t *);
 
@@ -369,10 +371,6 @@ pthread_mutex_unlock(pthread_mutex_t *mutex)
 		self->pt_mutexhint = NULL;
 
 	pthread_spinlock(&mutex->ptm_interlock);
-	if (PTQ_EMPTY(&mutex->ptm_blocked)) {
-		pthread_spinunlock(&mutex->ptm_interlock);
-		return 0;
-	}
 	pthread__unpark_all(self, &mutex->ptm_interlock, &mutex->ptm_blocked);
 	return 0;
 }
@@ -475,3 +473,5 @@ pthread_once(pthread_once_t *once_control, void (*routine)(void))
 
 	return 0;
 }
+
+#endif	/* !PTHREAD__HAVE_ATOMIC */
