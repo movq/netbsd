@@ -1,4 +1,4 @@
-/*      $Id: gcc_compat.c,v 1.1 2007/09/20 13:08:48 abs Exp $     */
+/*      $Id: gcc_compat.c,v 1.1.1.1 2007/09/20 13:08:48 abs Exp $     */
 /*
  * Copyright (c) 2004 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.

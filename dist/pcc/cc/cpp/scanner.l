@@ -1,5 +1,5 @@
 %{
-/*	$Id: scanner.l,v 1.1 2007/09/20 13:08:49 abs Exp $	*/
+/*	$Id: scanner.l,v 1.1.1.1 2007/09/20 13:08:49 abs Exp $	*/
 
 /*
  * Copyright (c) 2004 Anders Magnusson. All rights reserved.

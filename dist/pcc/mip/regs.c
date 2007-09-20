@@ -1,4 +1,4 @@
-/*	$Id: regs.c,v 1.1 2007/09/20 13:08:50 abs Exp $	*/
+/*	$Id: regs.c,v 1.1.1.1 2007/09/20 13:08:50 abs Exp $	*/
 /*
  * Copyright (c) 2005 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.

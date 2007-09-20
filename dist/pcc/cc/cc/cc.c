@@ -1,4 +1,4 @@
-/*	$Id: cc.c,v 1.1 2007/09/20 13:08:48 abs Exp $	*/
+/*	$Id: cc.c,v 1.1.1.1 2007/09/20 13:08:48 abs Exp $	*/
 /*
  * Copyright(C) Caldera International Inc. 2001-2002. All rights reserved.
  *

@@ -1,4 +1,4 @@
-/*	$Id: optim2.c,v 1.1 2007/09/20 13:08:50 abs Exp $	*/
+/*	$Id: optim2.c,v 1.1.1.1 2007/09/20 13:08:50 abs Exp $	*/
 /*
  * Copyright (c) 2004 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.

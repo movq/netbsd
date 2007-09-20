@@ -1,4 +1,4 @@
-/*	$Id: init.c,v 1.1 2007/09/20 13:08:48 abs Exp $	*/
+/*	$Id: init.c,v 1.1.1.1 2007/09/20 13:08:48 abs Exp $	*/
 
 /*
  * Copyright (c) 2004, 2007 Anders Magnusson (ragge@ludd.ltu.se).
