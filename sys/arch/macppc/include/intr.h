@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.24.14.5 2007/10/03 19:24:16 garbled Exp $	*/
+/*	$NetBSD: intr.h,v 1.24.14.6 2007/10/10 18:41:31 garbled Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -50,12 +50,7 @@
 #define ICU_LEN		64
 
 #ifdef MULTIPROCESSOR
-#define MACPPC_IPI_HALT		0x0001
-#define MACPPC_IPI_FLUSH_FPU	0x0002
-#define MACPPC_IPI_FLUSH_VEC	0x0004
-
 struct cpu_info;
-void macppc_send_ipi(volatile struct cpu_info *, u_long);
 #endif /* MULTIPROCESSOR */
 
 #endif /* _LOCORE */
@@ -64,5 +59,6 @@ void macppc_send_ipi(volatile struct cpu_info *, u_long);
 int init_ohare(void);
 int init_heathrow(void);
 int init_grandcentral(void);
+void setup_hammerhead_ipi(void);
 
 #endif /* _MACPPC_INTR_H_ */
