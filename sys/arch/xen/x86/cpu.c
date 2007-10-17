@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.13 2007/10/08 20:06:18 ad Exp $	*/
+/*	$NetBSD: cpu.c,v 1.1.2.1 2007/10/17 21:08:20 bouyer Exp $	*/
 /* NetBSD: cpu.c,v 1.18 2004/02/20 17:35:01 yamt Exp  */
 
 /*-
@@ -72,7 +72,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.13 2007/10/08 20:06:18 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.1.2.1 2007/10/17 21:08:20 bouyer Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -103,11 +103,10 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.13 2007/10/08 20:06:18 ad Exp $");
 #include <machine/segments.h>
 #include <machine/gdt.h>
 #include <machine/mtrr.h>
-#include <machine/tlog.h>
 #include <machine/pio.h>
 
 #ifdef XEN3
-#include <machine/vcpuvar.h>
+#include <xen/vcpuvar.h>
 #endif
 
 #if NLAPIC > 0
@@ -121,7 +120,6 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.13 2007/10/08 20:06:18 ad Exp $");
 #endif
 
 #include <dev/ic/mc146818reg.h>
-#include <i386/isa/nvram.h>
 #include <dev/isa/isareg.h>
 
 int     cpu_match(struct device *, struct cfdata *, void *);
@@ -137,11 +135,10 @@ struct cpu_softc {
 	struct cpu_info *sc_info;	/* pointer to CPU info */
 };
 
-int mp_cpu_start(struct cpu_info *); 
+int mp_cpu_start(struct cpu_info *);
 void mp_cpu_start_cleanup(struct cpu_info *);
 const struct cpu_functions mp_cpu_funcs = { mp_cpu_start, NULL,
-					    mp_cpu_start_cleanup };
-
+				      mp_cpu_start_cleanup };
 
 CFATTACH_DECL(cpu, sizeof(struct cpu_softc),
     cpu_match, cpu_attach, NULL, NULL);
@@ -155,27 +152,31 @@ CFATTACH_DECL(vcpu, sizeof(struct cpu_softc),
  * CPU, on uniprocessors).  The CPU info list is initialized to
  * point at it.
  */
+#ifdef TRAPLOG
+#include <machine/tlog.h>
 struct tlog tlog_primary;
+#endif
 struct cpu_info cpu_info_primary = {
 	.ci_self = &cpu_info_primary,
+#ifndef __x86_64__
 	.ci_self150 = (uint8_t *)&cpu_info_primary + 0x150,
+#endif
 	.ci_curlwp = &lwp0,
 #ifdef TRAPLOG
 	.ci_tlog = &tlog_primary,
 #endif
+
 };
 struct cpu_info phycpu_info_primary = {
 	.ci_self = &phycpu_info_primary,
+#ifndef __x86_64__
 	.ci_self150 = (uint8_t *)&phycpu_info_primary + 0x150,
-	.ci_curlwp = &lwp0,
+#endif
 };
 
 struct cpu_info *cpu_info_list = &cpu_info_primary;
 
 static void	cpu_set_tss_gates(struct cpu_info *ci);
-#if !defined(XEN)
-static void	cpu_init_tss(struct i386tss *, void *, void *);
-#endif
 
 u_int32_t cpus_attached = 0;
 
@@ -401,7 +402,9 @@ cpu_attach_common(parent, self, aux)
 #endif
 	ci->ci_func = caa->cpu_func;
 
+#ifndef __x86_64__
 	simple_lock_init(&ci->ci_slock);
+#endif
 
 	if (caa->cpu_role == CPU_ROLE_AP) {
 #if defined(MULTIPROCESSOR)
@@ -420,8 +423,10 @@ cpu_attach_common(parent, self, aux)
 	}
 
 	pmap_reference(pmap_kernel());
+#ifndef __x86_64__
 	ci->ci_pmap = pmap_kernel();
 	ci->ci_tlbstate = TLBSTATE_STALE;
+#endif
 
 	/* further PCB init done later. */
 
@@ -529,22 +534,6 @@ cpu_init(ci)
 			lcr4(rcr4() | CR4_OSXMMEXCPT);
 	}
 #endif /* I686_CPU */
-#ifdef MTRR
-	if (strcmp((char *)(ci->ci_vendor), "AuthenticAMD") == 0) {
-		/*
-		 * Must be a K6-2 Step >= 7 or a K6-III.
-		 */
-		if (CPUID2FAMILY(ci->ci_signature) == 5) {
-			if (CPUID2MODEL(ci->ci_signature) > 8 ||
-			    (CPUID2MODEL(ci->ci_signature) == 8 &&
-			     CPUID2STEPPING(ci->ci_signature) >= 7)) {
-				mtrr_funcs = &k6_mtrr_funcs;
-				k6_mtrr_init_first();
-				mtrr_init_cpu(ci);
-			}
-		}
-	}
-#endif /* MTRR */
 
 #ifdef MULTIPROCESSOR
 	ci->ci_flags |= CPUF_RUNNING;
@@ -671,6 +660,8 @@ cpu_hatch(void *v)
 
 	cpu_probe_features(ci);
 	cpu_feature &= ci->ci_feature_flags;
+	/* not on Xen... */
+	cpu_feature &= ~(CPUID_PGE|CPUID_PSE|CPUID_MTRR|CPUID_FXSR|CPUID_NOX);
 
 #ifdef DEBUG
 	if (ci->ci_flags & CPUF_PRESENT)
@@ -757,25 +748,6 @@ cpu_copy_trampoline()
 #endif
 
 
-#ifndef XEN
-static void
-cpu_init_tss(struct i386tss *tss, void *stack, void *func)
-{
-	memset(tss, 0, sizeof *tss);
-	tss->tss_esp0 = tss->tss_esp = (int)((char *)stack + USPACE - 16);
-	tss->tss_ss0 = GSEL(GDATA_SEL, SEL_KPL);
-	tss->__tss_cs = GSEL(GCODE_SEL, SEL_KPL);
-	tss->tss_fs = GSEL(GCPU_SEL, SEL_KPL);
-	tss->tss_gs = tss->__tss_es = tss->__tss_ds =
-	    tss->__tss_ss = GSEL(GDATA_SEL, SEL_KPL);
-	tss->tss_cr3 = pmap_kernel()->pm_pdirpa;
-	tss->tss_esp = (int)((char *)stack + USPACE - 16);
-	tss->tss_ldt = GSEL(GLDT_SEL, SEL_KPL);
-	tss->__tss_eflags = PSL_MBO | PSL_NT;	/* XXX not needed? */
-	tss->__tss_eip = (int)func;
-}
-#endif
-
 /* XXX */
 #define IDTVEC(name)	__CONCAT(X, name)
 typedef void (vector)(void);
@@ -788,20 +760,6 @@ extern int ddb_vec;
 static void
 cpu_set_tss_gates(struct cpu_info *ci)
 {
-#ifndef XEN
-	struct segment_descriptor sd;
-
-	ci->ci_doubleflt_stack = (char *)uvm_km_alloc(kernel_map, USPACE, 0,
-	    UVM_KMF_WIRED);
-	cpu_init_tss(&ci->ci_doubleflt_tss, ci->ci_doubleflt_stack,
-	    IDTVEC(tss_trap08));
-	setsegment(&sd, &ci->ci_doubleflt_tss, sizeof(struct i386tss) - 1,
-	    SDT_SYS386TSS, SEL_KPL, 0, 0);
-	ci->ci_gdt[GTRAPTSS_SEL].sd = sd;
-	setgate(&idt[8], NULL, 0, SDT_SYSTASKGT, SEL_KPL,
-	    GSEL(GTRAPTSS_SEL, SEL_KPL));
-#endif
-
 #if defined(DDB) && defined(MULTIPROCESSOR)
 	/*
 	 * Set up separate handler for the DDB IPI, so that it doesn't
@@ -824,10 +782,10 @@ cpu_set_tss_gates(struct cpu_info *ci)
 #endif
 }
 
-
 int
 mp_cpu_start(struct cpu_info *ci)
 {
+#if 0
 #if NLAPIC > 0
 	int error;
 #endif
@@ -879,16 +837,30 @@ mp_cpu_start(struct cpu_info *ci)
 		}
 	}
 #endif
+#endif /* 0 */
 	return 0;
 }
 
 void
 mp_cpu_start_cleanup(struct cpu_info *ci)
 {
+#if 0
 	/*
 	 * Ensure the NVRAM reset byte contains something vaguely sane.
 	 */
 
 	outb(IO_RTC, NVRAM_RESET);
 	outb(IO_RTC+1, NVRAM_RESET_RST);
+#endif
 }
+
+#ifdef __x86_64__
+
+void
+cpu_init_msrs(struct cpu_info *ci)
+{
+	HYPERVISOR_set_segment_base (SEGBASE_FS, 0);
+	HYPERVISOR_set_segment_base (SEGBASE_GS_KERNEL, (u_int64_t) ci);
+	HYPERVISOR_set_segment_base (SEGBASE_GS_USER, 0);
+}
+#endif	/* __x86_64__ */
