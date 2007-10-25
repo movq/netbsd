@@ -1,4 +1,4 @@
-/* $NetBSD: ofwpci.c,v 1.2 2007/10/17 19:56:12 garbled Exp $ */
+/* $NetBSD: ofwpci.c,v 1.3 2007/10/25 16:55:50 garbled Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofwpci.c,v 1.2 2007/10/17 19:56:12 garbled Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofwpci.c,v 1.3 2007/10/25 16:55:50 garbled Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -107,7 +107,7 @@ ofwpci_match(struct device *parent, struct cfdata *cf, void *aux)
 		return 0;
 
 	memset(name, 0, sizeof(name));
-	OF_getprop(ca->ca_node, "device-type", name, sizeof(name));
+	OF_getprop(ca->ca_node, "device_type", name, sizeof(name));
 	if (strcmp(name, "pci") != 0)
 		return 0;
 
