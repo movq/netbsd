@@ -24,7 +24,7 @@
  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
- * $Id: compat.c,v 1.1 2007/10/27 14:43:39 ragge Exp $
+ * $Id: compat.c,v 1.1.1.1 2007/10/27 14:43:39 ragge Exp $
  */
 
 #include <string.h>
