@@ -37,7 +37,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: newgrp.c,v 1.3 2007/10/05 14:48:10 christos Exp $");
+__RCSID("$NetBSD: newgrp.c,v 1.3.2.1 2007/10/28 03:13:37 ginsbach Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -233,21 +233,28 @@ addgrp(gid_t group)
 {
 	int i, ngroups, ngroupsmax, rval;
 	gid_t *groups;
+	gid_t ogroup;
 
 	rval = 0;
+
+	ogroup = getegid();
+	if (group == ogroup)
+		return rval;		/* nothing to do */
 
 	ngroupsmax = (int)sysconf(_SC_NGROUPS_MAX);
 	if (ngroupsmax < 0)
 		ngroupsmax = NGROUPS_MAX;
 
 	groups = malloc(ngroupsmax * sizeof(*groups));
-	if (groups == NULL)
+	if (groups == NULL) {
+		warn(NULL);
 		return -1;
+	}
 
 	ngroups = getgroups(ngroupsmax, groups);
 	if (ngroups < 0) {
 		free(groups);
-		err(1, "getgroups");
+		warn("getgroups");
 		return -1;
 	}
 
@@ -292,11 +299,11 @@ addgrp(gid_t group)
 	 */
 
 	/* search for new egid in supplemental group list */
-	for (i = 0; i < ngroups && group[i] != group; i++)
+	for (i = 0; i < ngroups && groups[i] != group; i++)
 		continue;
 
 	/* remove new egid from supplemental group list */
-	if (i != ngroup) {
+	if (i != ngroups) {
 		for (--ngroups; i < ngroups; i++)
 			groups[i] = groups[i + 1];
 	}
@@ -306,8 +313,8 @@ addgrp(gid_t group)
 		continue;
 
 	/* add old egid from supplemental group list */
-	if (i == ngroups && ngroups < maxngroups) {
-		groups[ngroups++] = egid;
+	if (i == ngroups && ngroups < ngroupsmax) {
+		groups[ngroups++] = ogroup;
 		if (setgroups(ngroups, groups) < 0) {
 			warn("setgroups");
 			rval = -1;
