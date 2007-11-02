@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.12.48.1 2007/10/26 15:43:31 joerg Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.12.48.2 2007/11/02 13:34:50 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.12.48.1 2007/10/26 15:43:31 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.12.48.2 2007/11/02 13:34:50 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,7 +50,6 @@ static struct btinfo_bootpath *bi_path;
 
 #include <dev/cons.h>
 #include <machine/pio.h>
-
 
 /*
  * Determine i/o configuration for a machine.
