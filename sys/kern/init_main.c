@@ -1,4 +1,4 @@
-/*	$NetBSD: init_main.c,v 1.325 2007/11/07 00:19:08 ad Exp $	*/
+/*	$NetBSD: init_main.c,v 1.323 2007/10/19 12:16:41 ad Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1992, 1993
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.325 2007/11/07 00:19:08 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.323 2007/10/19 12:16:41 ad Exp $");
 
 #include "opt_ipsec.h"
 #include "opt_multiprocessor.h"
@@ -130,7 +130,6 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.325 2007/11/07 00:19:08 ad Exp $");
 #include <sys/extent.h>
 #include <sys/disk.h>
 #include <sys/mqueue.h>
-#include <sys/msgbuf.h>
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
 #endif
@@ -365,9 +364,6 @@ main(void)
 
 	/* Initialize I/O statistics. */
 	iostat_init();
-
-	/* Initialize the log device. */
-	loginit();
 
 	/* Initialize the file systems. */
 #ifdef NVNODE_IMPLICIT
@@ -644,17 +640,17 @@ main(void)
 
 	/* Create the pageout daemon kernel thread. */
 	uvm_swap_init();
-	if (kthread_create(PRI_PGDAEMON, 0, NULL, uvm_pageout,
+	if (kthread_create(PVM, 0, NULL, uvm_pageout,
 	    NULL, NULL, "pgdaemon"))
 		panic("fork pagedaemon");
 
 	/* Create the filesystem syncer kernel thread. */
-	if (kthread_create(PRI_IOFLUSH, 0, NULL, sched_sync, NULL, NULL, "ioflush"))
+	if (kthread_create(PINOD, 0, NULL, sched_sync, NULL, NULL, "ioflush"))
 		panic("fork syncer");
 
 	/* Create the aiodone daemon kernel thread. */
 	if (workqueue_create(&uvm.aiodone_queue, "aiodoned",
-	    uvm_aiodone_worker, NULL, PRI_VM, IPL_BIO, 0))
+	    uvm_aiodone_worker, NULL, PVM, IPL_BIO, 0))
 		panic("fork aiodoned");
 
 	vmem_rehash_start();

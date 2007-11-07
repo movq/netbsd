@@ -1,4 +1,4 @@
-/*	$NetBSD: rump.c,v 1.17 2007/11/07 12:11:30 pooka Exp $	*/
+/*	$NetBSD: rump.c,v 1.15 2007/11/04 18:43:55 pooka Exp $	*/
 
 /*
  * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
@@ -485,17 +485,6 @@ rump_vfs_vptofh(struct vnode *vp, struct fid *fid, size_t *fidsize)
 {
 
 	return VFS_VPTOFH(vp, fid, fidsize);
-}
-
-/*ARGSUSED*/
-void
-rump_vfs_syncwait(struct mount *mp)
-{
-	int n;
-
-	n = buf_syncwait();
-	if (n)
-		printf("syncwait: unsynced buffers: %d\n", n);
 }
 
 void

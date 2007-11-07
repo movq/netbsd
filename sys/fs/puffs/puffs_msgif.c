@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_msgif.c,v 1.52 2007/11/07 00:23:20 ad Exp $	*/
+/*	$NetBSD: puffs_msgif.c,v 1.51 2007/11/04 17:32:34 pooka Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_msgif.c,v 1.52 2007/11/07 00:23:20 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puffs_msgif.c,v 1.51 2007/11/04 17:32:34 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/fstrans.h>
@@ -76,7 +76,8 @@ struct puffs_msgpark {
 #define PARKFLAG_CALL		0x10
 #define PARKFLAG_WANTREPLY	0x20
 
-static pool_cache_t parkpc;
+static struct pool_cache parkpc;
+static struct pool parkpool;
 
 static int
 makepark(void *arg, void *obj, int flags)
@@ -102,15 +103,17 @@ void
 puffs_msgif_init()
 {
 
-	parkpc = pool_cache_init(sizeof(struct puffs_msgpark), 0, 0, 0,
-	    "puffprkl", NULL, IPL_NONE, makepark, nukepark, NULL);
+	pool_init(&parkpool, sizeof(struct puffs_msgpark), 0, 0, 0,
+	    "puffprkl", &pool_allocator_nointr, IPL_NONE);
+	pool_cache_init(&parkpc, &parkpool, makepark, nukepark, NULL);
 }
 
 void
 puffs_msgif_destroy()
 {
 
-	pool_cache_destroy(parkpc);
+	pool_cache_destroy(&parkpc);
+	pool_destroy(&parkpool);
 }
 
 static int alloced;
@@ -120,7 +123,7 @@ puffs_msgpark_alloc(int waitok)
 {
 	struct puffs_msgpark *park;
 
-	park = pool_cache_get(parkpc, waitok ? PR_WAITOK : PR_NOWAIT);
+	park = pool_cache_get(&parkpc, waitok ? PR_WAITOK : PR_NOWAIT);
 	if (park == NULL)
 		return park;
 
@@ -158,7 +161,7 @@ puffs_msgpark_release1(struct puffs_msgpark *park, int howmany)
 		alloced--;
 		if (preq)
 			kmem_free(preq, park->park_maxlen);
-		pool_cache_put(parkpc, park);
+		pool_cache_put(&parkpc, park);
 	}
 }
 #define puffs_msgpark_release(a) puffs_msgpark_release1(a, 1)

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_proc.c,v 1.122 2007/11/07 00:23:22 ad Exp $	*/
+/*	$NetBSD: kern_proc.c,v 1.120 2007/10/24 14:50:41 ad Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2006, 2007 The NetBSD Foundation, Inc.
@@ -69,7 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_proc.c,v 1.122 2007/11/07 00:23:22 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_proc.c,v 1.120 2007/10/24 14:50:41 ad Exp $");
 
 #include "opt_kstack.h"
 #include "opt_maxuprc.h"
@@ -312,7 +312,7 @@ proc0_init(void)
 	mutex_init(&p->p_mutex, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&l->l_swaplock, MUTEX_DEFAULT, IPL_NONE);
 
-	rw_init(&p->p_reflock);
+	cv_init(&p->p_refcv, "drainref");
 	cv_init(&p->p_waitcv, "wait");
 	cv_init(&p->p_lwpcv, "lwpwait");
 
@@ -323,6 +323,7 @@ proc0_init(void)
 	p->p_nlwps = 1;
 	p->p_nrlwps = 1;
 	p->p_nlwpid = l->l_lid;
+	p->p_refcnt = 1;
 
 	pid_table[0].pt_proc = p;
 	LIST_INSERT_HEAD(&allproc, p, p_list);
@@ -358,13 +359,13 @@ proc0_init(void)
 	l->l_syncobj = &sched_syncobj;
 	l->l_refcnt = 1;
 	l->l_cpu = curcpu();
-	l->l_priority = PRI_USER + NPRI_USER - 1;
-	l->l_inheritedprio = -1;
-	l->l_class = SCHED_OTHER;
+	l->l_priority = PUSER;
+	l->l_usrpri = PUSER;
+	l->l_inheritedprio = MAXPRI;
 	SLIST_INIT(&l->l_pi_lenders);
 	l->l_name = __UNCONST("swapper");
 
-	callout_init(&l->l_timeout_ch, CALLOUT_MPSAFE);
+	callout_init(&l->l_timeout_ch, 0);
 	callout_setfunc(&l->l_timeout_ch, sleepq_timeout, l);
 	cv_init(&l->l_sigcv, "sigwait");
 
@@ -1373,6 +1374,64 @@ proc_crmod_leave(kauth_cred_t scred, kauth_cred_t fcred, bool sugid)
 		if (oc != scred)
 			kauth_cred_free(oc);
 	}
+}
+
+/*
+ * Acquire a reference on a process, to prevent it from exiting or execing.
+ */
+int
+proc_addref(struct proc *p)
+{
+
+	KASSERT(mutex_owned(&p->p_mutex));
+
+	if (p->p_refcnt <= 0)
+		return EAGAIN;
+	p->p_refcnt++;
+
+	return 0;
+}
+
+/*
+ * Release a reference on a process.
+ */
+void
+proc_delref(struct proc *p)
+{
+
+	KASSERT(mutex_owned(&p->p_mutex));
+
+	if (p->p_refcnt < 0) {
+		if (++p->p_refcnt == 0)
+			cv_broadcast(&p->p_refcv);
+	} else {
+		p->p_refcnt--;
+		KASSERT(p->p_refcnt != 0);
+	}
+}
+
+/*
+ * Wait for all references on the process to drain, and prevent new
+ * references from being acquired.
+ */
+void
+proc_drainrefs(struct proc *p)
+{
+
+	KASSERT(mutex_owned(&p->p_mutex));
+	KASSERT(p->p_refcnt >= 0);
+
+	/*
+	 * The process itself holds the last reference.  Once it's released,
+	 * no new references will be granted.  If we have already locked out
+	 * new references (refcnt <= 0), potentially due to a failed exec,
+	 * there is nothing more to do.
+	 */
+	if (p->p_refcnt == 0)
+		return;
+	p->p_refcnt = 1 - p->p_refcnt;
+	while (p->p_refcnt != 0)
+		cv_wait(&p->p_refcv, &p->p_mutex);
 }
 
 /*

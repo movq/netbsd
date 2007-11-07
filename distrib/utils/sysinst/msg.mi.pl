@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.pl,v 1.58 2007/10/21 20:21:02 pavel Exp $	*/
+/*	$NetBSD: msg.mi.pl,v 1.60 2008/02/04 01:54:56 riz Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.mi.pl,v 1.36 2004/04/17 18:55:35 atatat Exp       */
 
@@ -729,6 +729,9 @@ message set_man_pages
 message set_misc
 {Inne}
 
+message set_tests
+{Test programs}
+
 message set_text_tools
 {Narzedzia Przetwarzania Tekstu}
 
@@ -908,6 +911,7 @@ message Password_cipher {Kodowanie hasel}
 message DES {DES}
 message MD5 {MD5}
 message Blowfish_2_7_round {Blowfish 2^7 round}
+message SHA1 {SHA1}
 message do_not_change {nie zmieniaj}
 message Device {Urzadzenie}
 message File_system {SystemPlikow}

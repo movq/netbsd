@@ -1,4 +1,4 @@
-/*	$NetBSD: fdisk.c,v 1.107 2007/10/28 10:02:08 tsutsui Exp $ */
+/*	$NetBSD: fdisk.c,v 1.110 2007/11/29 23:19:25 dsl Exp $ */
 
 /*
  * Mach Operating System
@@ -39,24 +39,13 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: fdisk.c,v 1.107 2007/10/28 10:02:08 tsutsui Exp $");
+__RCSID("$NetBSD: fdisk.c,v 1.110 2007/11/29 23:19:25 dsl Exp $");
 #endif /* not lint */
 
 #define MBRPTYPENAMES
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/stat.h>
-
-#if HAVE_NBTOOL_CONFIG_H
-#include <nbinclude/sys/disklabel.h>
-#include <nbinclude/sys/bootblock.h>
-#else
-#include <sys/disklabel.h>
-#include <sys/bootblock.h>
-#include <sys/ioctl.h>
-#include <sys/sysctl.h>
-#endif /* HAVE_NBTOOL_CONFIG_H */
-
 #include <ctype.h>
 #include <err.h>
 #include <errno.h>
@@ -70,11 +59,28 @@ __RCSID("$NetBSD: fdisk.c,v 1.107 2007/10/28 10:02:08 tsutsui Exp $");
 #include <unistd.h>
 #include <vis.h>
 
-#if HAVE_NBTOOL_CONFIG_H
-#include "../../include/disktab.h"
-#else
+#if !HAVE_NBTOOL_CONFIG_H
+#include <sys/disklabel.h>
+#include <sys/bootblock.h>
+#include <sys/ioctl.h>
+#include <sys/sysctl.h>
 #include <disktab.h>
 #include <util.h>
+#else
+#include <nbinclude/sys/disklabel.h>
+#include <nbinclude/sys/bootblock.h>
+#include "../../include/disktab.h"
+/* We enforce -F, so none of these possibly undefined items can be needed */
+#define opendisk(path, fl, buf, buflen, cooked) (-1)
+#ifndef DIOCGDEFLABEL
+#define DIOCGDEFLABEL 0
+#endif
+#ifndef DIOCGDINFO
+#define DIOCGDINFO 0
+#endif
+#ifndef DIOCWLABEL
+#define DIOCWLABEL 0
+#endif
 #endif /* HAVE_NBTOOL_CONFIG_H */
 
 #define	DEFAULT_BOOTDIR		"/usr/mdec"
@@ -189,7 +195,13 @@ int b_flag;		/* Set cyl, heads, secs (as c/h/s) */
 int B_flag;		/* Edit/install bootselect code */
 int E_flag;		/* extended partition number */
 int b_cyl, b_head, b_sec;  /* b_flag values. */
+
+#if !HAVE_NBTOOL_CONFIG_H
 int F_flag = 0;
+#else
+/* Tool - force 'file' mode to avoid unsupported functions and ioctls */
+int F_flag = 1;
+#endif
 
 struct mbr_sector bootcode[8192 / sizeof (struct mbr_sector)];
 int bootsize;		/* actual size of bootcode */
@@ -207,7 +219,7 @@ void	print_s0(int);
 void	print_part(struct mbr_sector *, int, daddr_t);
 void	print_mbr_partition(struct mbr_sector *, int, daddr_t, daddr_t, int);
 void	print_pbr(daddr_t, int, uint8_t);
-int	is_all_zero(const char *, size_t);
+int	is_all_zero(const unsigned char *, size_t);
 void	printvis(int, const char *, const char *, size_t);
 int	read_boot(const char *, void *, size_t, int);
 void	init_sector0(int);
@@ -247,10 +259,10 @@ daddr_t	get_default_boot(void);
 void	set_default_boot(daddr_t);
 #endif
 
-#if !HAVE_NBTOOL_CONFIG_H
 static void
 initvar_disk(const char **diskp)
 {
+#if !HAVE_NBTOOL_CONFIG_H
 	int mib[2];
 	size_t len;
 	char *root_device;
@@ -263,8 +275,8 @@ initvar_disk(const char **diskp)
 		return;
 
 	*diskp = root_device;
-}
 #endif /* HAVE_NBTOOL_CONFIG_H */
+}
 
 int
 main(int argc, char *argv[])
@@ -280,10 +292,6 @@ main(int argc, char *argv[])
 #endif
 
 	int csysid, cstart, csize;	/* For the b_flag. */
-
-#if !HAVE_NBTOOL_CONFIG_H
-	initvar_disk(&disk);
-#endif /* HAVE_NBTOOL_CONFIG_H */
 
 	a_flag = i_flag = u_flag = sh_flag = f_flag = s_flag = b_flag = 0;
 	v_flag = 0;
@@ -393,13 +401,6 @@ main(int argc, char *argv[])
 	argc -= optind;
 	argv += optind;
 
-#if HAVE_NBTOOL_CONFIG_H
-	if (disk_file == NULL && argc > 0)
-		disk_file = argv[0];
-	else if (disk_file == NULL)
-		usage();
-#endif /* HAVE_NBTOOL_CONFIG_H */
-
 	if (disk_type != NULL && getdiskbyname(disk_type) == NULL)
 		errx(EXIT_FAILURE, "bad disktype");
 
@@ -421,8 +422,15 @@ main(int argc, char *argv[])
 		usage();
 	}
 
+	if (argc > 1)
+		usage();
+
 	if (argc > 0)
 		disk = argv[0];
+	else if (!F_flag) {
+		/* Default to boot device */
+		initvar_disk(&disk);
+	}
 
 	if (open_disk(B_flag || a_flag || i_flag || u_flag) < 0)
 		exit(1);
@@ -516,11 +524,7 @@ usage(void)
 		"[-s id/start/size[/bootmenu]]] \\\n"
 		"%*s[-t disktab] [-T disktype] \\\n"
 		"%*s[-c bootcode] "
-#if !HAVE_NBTOOL_CONFIG_H
 		"[-r|-w file] [device]\n"
-#else
-		"[-r|-w] file\n"
-#endif /* HAVE_NBTOOL_CONFIG_H */
 		"\t-a change active partition\n"
 		"\t-f force - not interactive\n"
 		"\t-i initialise MBR code\n"
@@ -529,7 +533,8 @@ usage(void)
 		"\t-v verbose output, -v -v more verbose still\n"
 		"\t-B update bootselect options\n"
 		"\t-F treat device as a regular file\n"
-		"\t-S output as shell defines\n",
+		"\t-S output as shell defines\n"
+		"\t-r and -w access 'file' for non-destructive testing\n",
 		getprogname(), indent, "", indent, "", indent, "");
 	exit(1);
 }
@@ -787,7 +792,7 @@ printvis(int indent, const char *label, const char *buf, size_t size)
 
 /* Check whether a buffer contains all bytes zero */
 int
-is_all_zero(const char *p, size_t size)
+is_all_zero(const unsigned char *p, size_t size)
 {
 
 	while (size-- > 0) {
@@ -845,7 +850,7 @@ print_pbr(daddr_t sector, int indent, uint8_t part_type)
 	}
 
 	/* all bytes identical? */
-	p = (char *)&pboot;
+	p = (unsigned char *)&pboot;
 	endp = p + sizeof(pboot);
 	val = *p;
 	ok = 0;
@@ -859,7 +864,7 @@ print_pbr(daddr_t sector, int indent, uint8_t part_type)
 		PBR_ERROR("All bytes are identical (0x%02x)\n", val);
 
 	if (pboot.mbr_magic != LE_MBR_MAGIC)
-		PBR_ERROR("Bad magic number (0x%04x)>\n",
+		PBR_ERROR("Bad magic number (0x%04x)\n",
 			le16toh(pboot.mbr_magic));
 
 #if 0
@@ -2260,25 +2265,26 @@ int
 open_disk(int update)
 {
 	static char namebuf[MAXPATHLEN + 1];
+	int flags = update && disk_file == NULL ? O_RDWR : O_RDONLY;
 
-#if HAVE_NBTOOL_CONFIG_H
-	strlcpy(namebuf, disk_file, sizeof(namebuf));
-	if ((fd = open(disk_file, update ? O_RDWR : O_RDONLY, 0)) == -1) {
-		warn("%s", disk_file);
-		return -1;
+	if (!F_flag) {
+		fd = opendisk(disk, flags, namebuf, sizeof(namebuf), 0);
+		if (fd < 0) {
+			if (errno == ENODEV)
+				warnx("%s is not a character device", namebuf);
+			else
+				warn("cannot opendisk %s", namebuf);
+			return (-1);
+		}
+		disk = namebuf;
+	} else {
+		fd = open(disk, flags, 0);
+		if (fd == -1) {
+			warn("cannot open %s", disk);
+			return -1;
+		}
 	}
-#else
-	fd = opendisk(disk, update && disk_file == NULL ? O_RDWR : O_RDONLY,
-	    namebuf, sizeof(namebuf), 0);
-	if (fd < 0) {
-		if (errno == ENODEV)
-			warnx("%s is not a character device", namebuf);
-		else
-			warn("%s", namebuf);
-		return (-1);
-	}
-#endif /* HAVE_NBTOOL_CONFIG_H */
-	disk = namebuf;
+
 	if (get_params() == -1) {
 		close(fd);
 		fd = -1;
@@ -2359,12 +2365,6 @@ get_params(void)
 		disklabel.d_ncylinders = dos_cylinders;
 		disklabel.d_ntracks = dos_heads;
 		disklabel.d_nsectors = dos_sectors;
-#if HAVE_NBTOOL_CONFIG_H
-	} else {
-		warnx("no disklabel specified");
-		return -1;
-	}
-#else
 	} else if (ioctl(fd, DIOCGDEFLABEL, &disklabel) == -1) {
 		warn("DIOCGDEFLABEL");
 		if (ioctl(fd, DIOCGDINFO, &disklabel) == -1) {
@@ -2372,7 +2372,7 @@ get_params(void)
 			return (-1);
 		}
 	}
-#endif /* HAVE_NBTOOL_CONFIG_H */
+
 	disksectors = disklabel.d_secperunit;
 	cylinders = disklabel.d_ncylinders;
 	heads = disklabel.d_ntracks;
@@ -2518,10 +2518,8 @@ write_mbr(void)
 	 * sector 0. (e.g. empty disk)
 	 */
 	flag = 1;
-#if !HAVE_NBTOOL_CONFIG_H
 	if (wfd == fd && F_flag == 0 && ioctl(wfd, DIOCWLABEL, &flag) < 0)
 		warn("DIOCWLABEL");
-#endif /* HAVE_NBTOOL_CONFIG_H */
 	if (write_disk(0, &mboot) == -1) {
 		warn("Can't write fdisk partition table");
 		goto protect_label;
@@ -2541,11 +2539,9 @@ write_mbr(void)
 	}
 	rval = 0;
     protect_label:
-#if !HAVE_NBTOOL_CONFIG_H
 	flag = 0;
 	if (wfd == fd && F_flag == 0 && ioctl(wfd, DIOCWLABEL, &flag) < 0)
 		warn("DIOCWLABEL");
-#endif /* HAVE_NBTOOL_CONFIG_H */
 	return rval;
 }
 

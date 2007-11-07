@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.md.es,v 1.2 2005/08/26 16:32:33 xtraeme Exp $	*/
+/*	$NetBSD: msg.md.es,v 1.4 2008/02/02 05:34:03 itohy Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -37,18 +37,12 @@
  *
  */
 
-/* sparc machine dependent messages, english */
+/* sparc64 machine dependent messages, english */
 
 
 message md_hello
 {Si ha iniciado desde disquette, ahora debería retirar el disco.
 
-}
-
-message fullpart
-{Ahora vamos a instalar NetBSD en el disco %s. Debería escoger
-entre instalar NetBSD en el disco entero o en una parte del disco.
-¿Que le gustaría hacer?
 }
 
 message dobootblks
