@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.fr,v 1.99 2007/10/21 21:20:16 degroote Exp $	*/
+/*	$NetBSD: msg.mi.fr,v 1.101 2008/02/04 01:54:56 riz Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -803,6 +803,9 @@ message set_man_pages
 message set_misc
 {Divers}
 
+message set_tests
+{Test programs}
+
 message set_text_tools
 {Outils de manipulation de textes}
 
@@ -1006,6 +1009,7 @@ message Password_cipher {Chiffre du mot de passe}
 message DES {DES}
 message MD5 {MD5}
 message Blowfish_2_7_round {Blowfish à 2^7 rondes}
+message SHA1 {SHA1}
 message do_not_change {ne rien changer}
 message Device {Périphérique}
 message File_system {Système de fichiers}

@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.16 2006/02/26 10:25:52 dsl Exp $	*/
+/*	$NetBSD: md.h,v 1.18 2008/02/04 08:42:41 chris Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -51,13 +51,11 @@
 /*
  *  Default filesets to fetch and install during installation
  *  or upgrade. The standard sets are:
- *      base etc comp games man misc text xbase xcomp xetc xfont xserver
+ *      base etc comp games man misc tests text xbase xcomp xetc xfont xserver
  */
 
 #define SET_KERNEL_1_NAME	"kern-GENERIC"
-#define SET_KERNEL_2_NAME	"kern-RPC_WSCONS"
-#define SET_KERNEL_3_NAME	"kern-NC"
-#define SET_KERNEL_4_NAME	"kern-NC_WSCONS"
+#define SET_KERNEL_2_NAME	"kern-NC"
 
 /*
  * Machine-specific command to write a new label to a disk.

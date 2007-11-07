@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_lwp.c,v 1.29 2007/11/07 00:56:27 ad Exp $	*/
+/*	$NetBSD: sys_lwp.c,v 1.26 2007/09/06 23:59:01 ad Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_lwp.c,v 1.29 2007/11/07 00:56:27 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_lwp.c,v 1.26 2007/09/06 23:59:01 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -106,10 +106,11 @@ sys__lwp_create(struct lwp *l, void *v, register_t *retval)
 		return ENOMEM;
 	}
 
-	error = lwp_create(l, p, uaddr, inmem, SCARG(uap, flags) & LWP_DETACHED,
-	    NULL, 0, p->p_emul->e_startlwp, newuc, &l2, l->l_class);
+	error = newlwp(l, p, uaddr, inmem,
+	    SCARG(uap, flags) & LWP_DETACHED,
+	    NULL, 0, p->p_emul->e_startlwp, newuc, &l2);
 	if (error) {
-		uvm_uarea_free(uaddr, curcpu());
+		uvm_uarea_free(uaddr);
 		pool_put(&lwp_uc_pool, newuc);
 		return error;
 	}
@@ -553,7 +554,7 @@ lwp_park(struct timespec *ts, const void *hint)
 	}
 	lwp_unlock_to(l, sq->sq_mutex);
 	l->l_biglocks = 0;
-	sleepq_enqueue(sq, wchan, "parked", &lwp_park_sobj);
+	sleepq_enqueue(sq, l->l_usrpri, wchan, "parked", &lwp_park_sobj);
 	error = sleepq_block(timo, true);
 	switch (error) {
 	case EWOULDBLOCK:
@@ -733,78 +734,4 @@ sys__lwp_unpark_all(struct lwp *l, void *v, register_t *retval)
 		uvm_kick_scheduler();
 
 	return 0;
-}
-
-int
-sys__lwp_setname(struct lwp *l, void *v, register_t *retval)
-{
-	struct sys__lwp_setname_args /* {
-		syscallarg(lwpid_t)		target;
-		syscallarg(const char *)	name;
-	} */ *uap = v;
-	char *name, *oname;
-	proc_t *p;
-	lwp_t *t;
-	int error;
-
-	name = kmem_alloc(MAXCOMLEN, KM_SLEEP);
-	if (name == NULL)
-		return ENOMEM;
-	error = copyinstr(SCARG(uap, name), name, MAXCOMLEN, NULL);
-	switch (error) {
-	case ENAMETOOLONG:
-	case 0:
-		name[MAXCOMLEN - 1] = '\0';
-		break;
-	default:
-		kmem_free(name, MAXCOMLEN);
-		return error;
-	}
-
-	p = curproc;
-	mutex_enter(&p->p_smutex);
-	if ((t = lwp_find(p, SCARG(uap, target))) == NULL) {
-		mutex_exit(&p->p_smutex);
-		kmem_free(name, MAXCOMLEN);
-		return ESRCH;
-	}
-	lwp_lock(t);
-	oname = t->l_name;
-	t->l_name = name;
-	lwp_unlock(t);
-	mutex_exit(&p->p_smutex);
-
-	if (oname != NULL)
-		kmem_free(oname, MAXCOMLEN);
-
-	return 0;
-}
-
-int
-sys__lwp_getname(struct lwp *l, void *v, register_t *retval)
-{
-	struct sys__lwp_getname_args /* {
-		syscallarg(lwpid_t)		target;
-		syscallarg(char *)		name;
-		syscallarg(size_t)		len;
-	} */ *uap = v;
-	char name[MAXCOMLEN];
-	proc_t *p;
-	lwp_t *t;
-
-	p = curproc;
-	mutex_enter(&p->p_smutex);
-	if ((t = lwp_find(p, SCARG(uap, target))) == NULL) {
-		mutex_exit(&p->p_smutex);
-		return ESRCH;
-	}
-	lwp_lock(t);
-	if (t->l_name == NULL)
-		name[0] = '\0';
-	else
-		strcpy(name, t->l_name);
-	lwp_unlock(t);
-	mutex_exit(&p->p_smutex);
-
-	return copyoutstr(name, SCARG(uap, name), SCARG(uap, len), NULL);
 }

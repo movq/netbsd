@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.148 2007/10/21 20:21:02 pavel Exp $	*/
+/*	$NetBSD: util.c,v 1.151 2008/02/04 01:54:56 riz Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -115,6 +115,7 @@ distinfo dist_list[] = {
 	{"games",		SET_GAMES,		MSG_set_games, NULL},
 	{"man",			SET_MAN_PAGES,		MSG_set_man_pages, NULL},
 	{"misc",		SET_MISC,		MSG_set_misc, NULL},
+	{"tests",		SET_TESTS,		MSG_set_tests, NULL},
 	{"text",		SET_TEXT_TOOLS,		MSG_set_text_tools, NULL},
 
 	{NULL,			SET_GROUP,		MSG_set_X11, NULL},
@@ -188,6 +189,9 @@ init_set_status(int minimal)
 	i = strlen(msg_some); if (i > len) {len = i; longest = msg_some; }
 	i = strlen(msg_none); if (i > len) {len = i; longest = msg_none; }
 	select_menu_width = snprintf(NULL, 0, msg_cur_distsets_row, "",longest);
+
+	/* Give the md code a chance to choose the right kernel, etc. */
+	md_init_set_status(minimal);
 }
 
 int
@@ -1179,6 +1183,15 @@ set_crypt_type(void)
 		    "default:\n"
 		    "  localcipher = blowfish,7\n"
 		    "  ypcipher = blowfish,7\n");
+		fclose(pwc);
+		break;
+	case 4:	/* sha1 */
+		rename(fn, target_expand("/etc/passwd.conf.pre-sysinst"));
+		pwc = fopen(fn, "w");
+		fprintf(pwc,
+		    "default:\n"
+		    "  localcipher = sha1\n"
+		    "  ypcipher = sha1\n");
 		fclose(pwc);
 		break;
 	}
