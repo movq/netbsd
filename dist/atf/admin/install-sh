@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: install-sh,v 1.1 2007/11/12 14:50:55 jmmv Exp $
+# $NetBSD: install-sh,v 1.1.1.1 2007/11/12 14:50:55 jmmv Exp $
 # This script now also installs multiple files, but might choke on installing
 # multiple files with spaces in the file names.
 #
