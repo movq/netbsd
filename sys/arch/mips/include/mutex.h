@@ -1,4 +1,4 @@
-/*	$NetBSD: mutex.h,v 1.2.24.1 2007/11/21 21:53:22 joerg Exp $	*/
+/*	$NetBSD: mutex.h,v 1.2.24.2 2007/12/03 16:14:05 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2007 The NetBSD Foundation, Inc.
@@ -65,9 +65,11 @@ struct kmutex {
 #define	MUTEX_RECEIVE(mtx)		mb_read()
 #define	MUTEX_GIVE(mtx)			mb_memory()
 
-#define	MUTEX_CAS(p, o, n)		_lock_cas((p), (o), (n))
+#define	MUTEX_CAS(p, o, n)		\
+    (_atomic_cas_ulong((volatile unsigned long *)(p), (o), (n)) == (o))
 
-int	_lock_cas(volatile uintptr_t *, uintptr_t, uintptr_t);
+unsigned long	_atomic_cas_ulong(volatile unsigned long *,
+    unsigned long, unsigned long);
 
 #endif	/* __MUTEX_PRIVATE */
 
