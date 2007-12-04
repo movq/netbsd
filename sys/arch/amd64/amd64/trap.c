@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.39 2007/12/02 16:37:58 ad Exp $	*/
+/*	$NetBSD: trap.c,v 1.39.2.1 2007/12/04 13:02:50 ad Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.39 2007/12/02 16:37:58 ad Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.39.2.1 2007/12/04 13:02:50 ad Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -433,7 +433,6 @@ copyfault:
 			goto copyefault;
 
 		cr2 = rcr2();
-		KERNEL_LOCK(1, NULL);
 		goto faultcommon;
 
 	case T_PAGEFLT|T_USER: {	/* page fault */
@@ -447,7 +446,6 @@ copyfault:
 		if (p->p_emul->e_usertrap != NULL &&
 		    (*p->p_emul->e_usertrap)(l, cr2, frame) != 0)
 			return;
-		KERNEL_LOCK(1, l);
 faultcommon:
 		vm = p->p_vmspace;
 		if (vm == NULL)
@@ -490,8 +488,6 @@ faultcommon:
 				uvm_grow(p, va);
 
 			if (type == T_PAGEFLT) {
-				KERNEL_UNLOCK_ONE(NULL);
-
 				/*
 				 * we need to switch pmap now if we're in
 				 * the middle of copyin/out.
@@ -505,7 +501,6 @@ faultcommon:
 					pmap_load();
 				return;
 			}
-			KERNEL_UNLOCK_LAST(l);
 			goto out;
 		}
 		KSI_INIT_TRAP(&ksi);
@@ -518,10 +513,8 @@ faultcommon:
 			ksi.ksi_code = SEGV_MAPERR;
 
 		if (type == T_PAGEFLT) {
-			if (pcb->pcb_onfault != 0) {
-				KERNEL_UNLOCK_ONE(NULL);
+			if (pcb->pcb_onfault != 0)
 				goto copyfault;
-			}
 			printf("uvm_fault(%p, 0x%lx, %d) -> %x\n",
 			    map, va, ftype, error);
 			goto we_re_toast;
@@ -541,10 +534,6 @@ faultcommon:
 			ksi.ksi_signo = SIGSEGV;
 		}
 		(*p->p_emul->e_trapsignal)(l, &ksi);
-		if (type == T_PAGEFLT)
-			KERNEL_UNLOCK_ONE(NULL);
-		else
-			KERNEL_UNLOCK_LAST(l);
 		break;
 	}
 
@@ -574,9 +563,7 @@ faultcommon:
 				ksi.ksi_code = TRAP_BRKPT;
 			else
 				ksi.ksi_code = TRAP_TRACE;
-			KERNEL_LOCK(1, l);
 			(*p->p_emul->e_trapsignal)(l, &ksi);
-			KERNEL_UNLOCK_LAST(l);
 		}
 		break;
 
@@ -610,9 +597,7 @@ out:
 	userret(l);
 	return;
 trapsignal:
-	KERNEL_LOCK(1, l);
 	(*p->p_emul->e_trapsignal)(l, &ksi);
-	KERNEL_UNLOCK_LAST(l);
 	userret(l);
 }
 
@@ -625,9 +610,6 @@ startlwp(void *arg)
 
 	err = cpu_setmcontext(l, &uc->uc_mcontext, uc->uc_flags);
 	pool_put(&lwp_uc_pool, uc);
-
-	KERNEL_UNLOCK_LAST(l);
-
 	userret(l);
 }
 
