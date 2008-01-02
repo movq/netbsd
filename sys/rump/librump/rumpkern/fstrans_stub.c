@@ -1,4 +1,4 @@
-/*	$NetBSD: fstrans_stub.c,v 1.4 2008/01/02 11:49:05 ad Exp $	*/
+/*	$NetBSD: fstrans_stub.c,v 1.5 2008/01/02 18:15:14 pooka Exp $	*/
 
 /*
  * Copyright (c) 2007 Antti Kantee.  All Rights Reserved.
@@ -86,6 +86,20 @@ fscow_run(struct buf *bp, bool data_valid)
 {
 
 	return 0;
+}
+
+int
+vfs_suspend(struct mount *mp, int nowait)
+{
+
+	return ENOSYS;
+}
+
+void
+vfs_resume(struct mount *mp)
+{
+
+	panic("%s: impossible", __func__);
 }
 
 int
